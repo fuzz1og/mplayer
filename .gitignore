@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-electron
+release
+.DS_Store
+*.log
+.vscode
+.idea
+.trae
+
+# AI 配置目录
+.claude/
+
+# 本地配置（包含敏感 API 地址）
+.env
+.env.local
+.env.*.local

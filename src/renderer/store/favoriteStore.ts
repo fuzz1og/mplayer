@@ -1,0 +1,149 @@
+import { create } from 'zustand';
+import { favoriteService } from '@/renderer/services/favoriteService';
+import { cacheService } from '@/renderer/services/cacheService';
+import { musicApi } from '@/main/api/musicApi';
+import type { Song, SongBase } from '@/shared/types/song';
+
+interface FavoriteState {
+  favoriteIds: string[];
+  favorites: Song[];
+  loading: boolean;
+  error: string | null;
+
+  // Actions
+  loadFavorites: () => Promise<void>;
+  toggleFavorite: (song: Song) => Promise<boolean>;
+  isFavorite: (songId: string) => boolean;
+  addFavorite: (song: Song) => Promise<void>;
+  removeFavorite: (songId: string) => Promise<void>;
+  refreshSongUrls: (song: SongBase) => Promise<Song | null>;
+}
+
+export const useFavoriteStore = create<FavoriteState>((set, get) => ({
+  favoriteIds: [],
+  favorites: [],
+  loading: false,
+  error: null,
+
+  refreshSongUrls: async (song: SongBase): Promise<Song | null> => {
+    try {
+      // 尝试从缓存获取URL
+      const cachedUrl = await cacheService.getUrlCache(song.id);
+      if (cachedUrl) {
+        return {
+          ...song,
+          url: cachedUrl.url,
+          cover: cachedUrl.cover,
+          lrc: cachedUrl.lrc
+        };
+      }
+
+      // 如果缓存中没有，通过搜索获取最新URL
+      const searchResults = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
+      if (searchResults.length > 0) {
+        // 找到匹配的歌曲
+        const matchedSong = searchResults.find(s => s.id === song.id) || searchResults[0];
+
+        // 缓存URL
+        await cacheService.setUrlCache(song.id, {
+          url: matchedSong.url,
+          cover: matchedSong.cover,
+          lrc: matchedSong.lrc
+        });
+
+        return matchedSong;
+      }
+      return null;
+    } catch (error) {
+      console.error('刷新歌曲URL失败:', error);
+      return null;
+    }
+  },
+
+  loadFavorites: async () => {
+    set({ loading: true, error: null });
+    try {
+      const songBases = await favoriteService.getFavorites();
+      const refreshPromises = songBases.map(songBase => get().refreshSongUrls(songBase));
+      const refreshedSongs = await Promise.all(refreshPromises);
+      const validSongs = refreshedSongs.filter((song): song is Song => song !== null);
+      const ids = validSongs.map(s => s.id);
+      set({
+        favorites: validSongs,
+        favoriteIds: ids,
+        loading: false
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : '加载收藏失败',
+        loading: false
+      });
+    }
+  },
+
+  toggleFavorite: async (song: Song) => {
+    const { favoriteIds } = get();
+    const isCurrentlyFavorite = favoriteIds.includes(song.id);
+
+    try {
+      if (isCurrentlyFavorite) {
+        await favoriteService.removeFavorite(song.id);
+        set((state) => {
+          const newIds = state.favoriteIds.filter(id => id !== song.id);
+          const newFavorites = state.favorites.filter(f => f.id !== song.id);
+          return { favoriteIds: newIds, favorites: newFavorites };
+        });
+        return false;
+      } else {
+        await favoriteService.addFavorite(song);
+        set((state) => {
+          const newIds = [...state.favoriteIds, song.id];
+          const newFavorites = [...state.favorites, song];
+          return { favoriteIds: newIds, favorites: newFavorites };
+        });
+        return true;
+      }
+    } catch (error) {
+      console.error('收藏操作失败:', error);
+      throw error;
+    }
+  },
+
+  isFavorite: (songId: string) => {
+    return get().favoriteIds.includes(songId);
+  },
+
+  addFavorite: async (song: Song) => {
+    const { favoriteIds } = get();
+    if (favoriteIds.includes(song.id)) return;
+
+    try {
+      await favoriteService.addFavorite(song);
+      set((state) => {
+        const newIds = [...state.favoriteIds, song.id];
+        const newFavorites = [...state.favorites, song];
+        return { favoriteIds: newIds, favorites: newFavorites };
+      });
+    } catch (error) {
+      console.error('添加收藏失败:', error);
+      throw error;
+    }
+  },
+
+  removeFavorite: async (songId: string) => {
+    const { favoriteIds } = get();
+    if (!favoriteIds.includes(songId)) return;
+
+    try {
+      await favoriteService.removeFavorite(songId);
+      set((state) => {
+        const newIds = state.favoriteIds.filter(id => id !== songId);
+        const newFavorites = state.favorites.filter(f => f.id !== songId);
+        return { favoriteIds: newIds, favorites: newFavorites };
+      });
+    } catch (error) {
+      console.error('移除收藏失败:', error);
+      throw error;
+    }
+  }
+}));
