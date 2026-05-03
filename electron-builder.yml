@@ -1,0 +1,21 @@
+appId: com.mplayer.app
+productName: MPlayer
+forceCodeSigning: false
+files:
+  - dist/**/*
+  - dist-electron/**/*
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+    - target: portable
+      arch:
+        - x64
+  verifyUpdateCodeSignature: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
