@@ -1,4 +1,4 @@
-import { ipcRenderer } from 'electron';
+const { ipcRenderer } = window.require('electron');
 import type { Song, SongBase } from '@/shared/types/song';
 
 export interface FavoriteService {

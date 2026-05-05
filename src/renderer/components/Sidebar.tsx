@@ -7,7 +7,8 @@ import {
   ListMusic,
   Settings,
   Download,
-  FolderOpen
+  FolderOpen,
+  Headphones
 } from 'lucide-react';
 
 interface NavItem {
@@ -36,6 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
 
   const playlistItems: NavItem[] = [
     { key: 'playlists', icon: <ListMusic size={18} />, label: '我的歌单' },
+    { key: 'queue', icon: <Headphones size={18} />, label: '试听列表' },
   ];
 
   const handleClick = (key: string) => {

@@ -367,3 +367,30 @@ html, body, #root {
   border-radius: 50%;
   cursor: pointer;
 }
+
+/* PlayerBar 按钮通用样式 */
+.player-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.player-btn:hover {
+  background-color: var(--hover-bg);
+}
+
+.player-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.player-btn-accent:hover {
+  background-color: var(--hover-bg);
+  color: var(--accent-color);
+}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Heart, MoreHorizontal, Clock, Download, Trash2, ListMusic } from 'lucide-react';
+import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic } from 'lucide-react';
 import type { Song } from '@/shared/types/song';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import BatchAddToPlaylistModal from './BatchAddToPlaylistModal';
@@ -26,13 +26,6 @@ interface SongListProps {
   enableBatchAddToPlaylist?: boolean;
   onBatchAddToPlaylist?: (songs: Song[]) => void;
 }
-
-const formatDuration = (seconds: number): string => {
-  if (!seconds || isNaN(seconds)) return '--:--';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-};
 
 const SongList: React.FC<SongListProps> = ({
   songs,
@@ -318,10 +311,7 @@ const SongList: React.FC<SongListProps> = ({
             <div style={{ width: '50px', textAlign: 'center' }}>#</div>
           )}
           <div style={{ flex: 1 }}>标题</div>
-          <div style={{ width: '25%' }}>专辑</div>
-          <div style={{ width: '80px', textAlign: 'right' }}>
-            <Clock size={14} style={{ verticalAlign: 'middle' }} />
-          </div>
+          <div style={{ width: '120px' }}>专辑</div>
           <div style={{ width: '100px', textAlign: 'center' }}>操作</div>
         </div>
       )}
@@ -432,6 +422,7 @@ const SongList: React.FC<SongListProps> = ({
                     <img
                       src={song.cover}
                       alt={song.name}
+                      loading="lazy"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   ) : (
@@ -502,9 +493,34 @@ const SongList: React.FC<SongListProps> = ({
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
                       marginTop: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
                     }}
                   >
-                    {song.artist}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {song.artist}
+                    </span>
+                    {song.sourceType === 'netease' && (
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '2px 5px',
+                        borderRadius: '3px',
+                        backgroundColor: '#FF6B6B',
+                        color: 'white',
+                        flexShrink: 0,
+                      }}>网易云</span>
+                    )}
+                    {song.sourceType === 'qq' && (
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '2px 5px',
+                        borderRadius: '3px',
+                        backgroundColor: '#49B8FF',
+                        color: 'white',
+                        flexShrink: 0,
+                      }}>QQ</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -512,29 +528,15 @@ const SongList: React.FC<SongListProps> = ({
               {/* 专辑 */}
               <div
                 style={{
-                  width: '25%',
+                  width: '120px',
                   fontSize: '13px',
                   color: 'var(--text-secondary)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
-                  paddingRight: '16px',
                 }}
               >
                 {song.album}
-              </div>
-
-              {/* 时长 */}
-              <div
-                style={{
-                  width: '80px',
-                  textAlign: 'right',
-                  fontSize: '13px',
-                  color: 'var(--text-tertiary)',
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {formatDuration(song.duration || 0)}
               </div>
 
               {/* 操作按钮 */}

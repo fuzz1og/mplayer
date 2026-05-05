@@ -1,5 +1,5 @@
-import { ipcRenderer } from 'electron';
-import type { Song } from '@/shared/types/song';
+const { ipcRenderer } = window.require('electron');
+import type { Song, SongBase } from '@/shared/types/song';
 
 export interface HistoryService {
   addToHistory(song: Song): Promise<number>;
@@ -10,33 +10,43 @@ export interface HistoryService {
 
 class HistoryServiceImpl implements HistoryService {
   async addToHistory(song: Song): Promise<number> {
-    console.log('[historyService] addToHistory 被调用，song:', song.name, 'song.id:', song.id, 'sourceType:', song.sourceType);
     return ipcRenderer.invoke('history:add', song);
   }
 
   async getHistory(limit: number = 100): Promise<Song[]> {
-    console.log('[historyService] getHistory 被调用，limit:', limit);
     const history = await ipcRenderer.invoke('history:get', limit);
-    const songs = history.map((h: any) => h.song as Song);
+    const songBases = history.map((h: any) => h.song as SongBase);
 
-    console.log('[historyService] 从主进程获取到', songs.length, '条记录');
+    const uniqueMap = new Map<string, SongBase>();
+    songBases.forEach((s: SongBase) => uniqueMap.set(s.id, s));
 
-    // 使用Map去重，保持最后一条记录
-    const songMap = new Map<string, Song>(songs.map((s: Song) => [s.id, s]));
-    const uniqueSongs = Array.from(songMap.values());
+    const songsWithCover = await Promise.all(
+      Array.from(uniqueMap.values()).map(async (songBase) => {
+        try {
+          const result = await ipcRenderer.invoke(
+            'musicApi:searchSongs',
+            `${songBase.name} ${songBase.artist}`,
+            1,
+            songBase.sourceType
+          );
+          if (result.success && result.data.length > 0) {
+            return result.data[0];
+          }
+        } catch (e) {
+          console.error('获取历史封面失败:', e);
+        }
+        return { ...songBase, url: '', cover: '', lrc: '' } as Song;
+      })
+    );
 
-    console.log('[historyService] 去重后', uniqueSongs.length, '条记录');
-
-    return uniqueSongs;
+    return songsWithCover;
   }
 
   async clearHistory(): Promise<void> {
-    console.log('[historyService] clearHistory 被调用');
     return ipcRenderer.invoke('history:clear');
   }
 
   async removeFromHistory(songId: string): Promise<void> {
-    console.log('[historyService] removeFromHistory 被调用，songId:', songId);
     return ipcRenderer.invoke('history:remove', songId);
   }
 }

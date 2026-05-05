@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Repeat, Repeat1, Shuffle, ArrowRight } from 'lucide-react';
-
-export type PlayMode = 'sequential' | 'list-loop' | 'single-loop' | 'shuffle';
+import type { PlayMode } from '@/shared/types/player';
 
 interface PlayModeButtonProps {
   mode: PlayMode;

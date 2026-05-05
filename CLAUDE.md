@@ -18,9 +18,9 @@ npm run electron:build:mac   # Build for macOS
 npm run electron:build:linux # Build for Linux
 npm run lint             # ESLint with --max-warnings 0
 npm run typecheck        # tsc --noEmit (type checking only)
+npm run test             # Run vitest (watch mode)
+npm run test:run         # Run vitest (single run)
 ```
-
-No test framework is configured.
 
 ## Architecture
 
@@ -41,7 +41,8 @@ The app uses `contextIsolation: false` and `nodeIntegration: true` — the rende
 
 ### Renderer Process (`src/renderer/`)
 
-- **`App.tsx`** — Root component. Page routing via `useState<PageType>` (no router).
+- **`App.tsx`** — Root layout component. Uses React Router's `<Outlet />` to render child routes.
+- **`router/index.tsx`** — React Router configuration with `createHashRouter`. All pages use lazy loading.
 - **`store/`** — Zustand stores: playerStore, searchStore, favoriteStore, downloadStore.
 - **`services/`** — Service singletons: audioPlayer, searchService, lyricsService, favoriteService, historyService, playlistService, cacheService.
 - **`pages/`** — Discover, Favorites, History, Playlists, Settings, Lyrics, PlaylistDetail, HotlistDetail.
@@ -50,9 +51,19 @@ The app uses `contextIsolation: false` and `nodeIntegration: true` — the rende
 - **`hooks/`** — useLazyLoad.
 - **`styles/`** — global.css.
 
+### Music API IPC Channels
+
+- `musicApi:getAudioUrl` — Get real audio URL from redirect
+- `musicApi:searchSongs` — Search songs by keyword
+- `musicApi:getNeteaseHotlist` — Get NetEase hotlist
+- `musicApi:getQQHotlist` — Get QQ Music hotlist
+
+**Note**: renderer should call these via `ipcRenderer.invoke()` instead of importing `musicApi` directly.
+
 ### Shared (`src/shared/types/`)
 
 - **`song.ts`** — Type definitions: SongBase, Song, Favorite, PlayHistory, Playlist, PlaylistSong.
+- **`player.ts`** — Type definitions: PlayMode.
 
 ### Build & Packaging
 
@@ -64,9 +75,27 @@ The app uses `contextIsolation: false` and `nodeIntegration: true` — the rende
 - UI: Ant Design 5 with Chinese locale (`zhCN`).
 - Icons: lucide-react.
 - All UI text in Chinese.
-- No React Router — state-driven navigation.
+- React Router with HashRouter for navigation.
 - Store actions call IPC via `ipcRenderer.invoke()`.
 - IPC channels: `domain:action` naming (e.g., `cache:getSong`, `settings:setDownloadPath`).
+- **ipcRenderer access**: Must use `const { ipcRenderer } = window.require('electron')` instead of static import, because Vite marks `electron` as external.
+
+### Route Configuration
+
+Routes are defined in `src/renderer/router/index.tsx`:
+
+| Path | Component | Description |
+|------|-----------|-------------|
+| `/` | App (layout) | Root layout with sidebar, topbar, playerbar |
+| `/discover` | DiscoverPage | Main discovery page with search results |
+| `/hotlist/:type` | HotlistDetailPage | Hotlist detail (netease/qq) |
+| `/favorites` | FavoritesPage | User's favorite songs |
+| `/history` | HistoryPage | Play history |
+| `/playlists` | PlaylistsPage | User's playlists |
+| `/playlist/:id` | PlaylistDetailPage | Playlist detail |
+| `/settings` | SettingsPage | App settings |
+| `/local` | ComingSoon | Local music (planned) |
+| `/download` | ComingSoon | Download manager (planned) |
 
 ### API Configuration
 

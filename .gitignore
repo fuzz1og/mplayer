@@ -7,6 +7,7 @@ release
 .vscode
 .idea
 .trae
+docs/
 
 # AI 配置目录
 .claude/

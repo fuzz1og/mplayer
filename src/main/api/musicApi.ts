@@ -22,18 +22,12 @@ const apiClient = axios.create({
   },
   httpAgent,
   httpsAgent,
-  headers: (() => {
-    const baseUrl = config.API_BASE_URL;
-    const origin = baseUrl ? new URL(baseUrl).origin : '';
-    return {
-      'accept': 'application/json, text/javascript, */*; q=0.01',
-      'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'origin': origin,
-      'referer': origin ? `${origin}/` : '',
-      'x-requested-with': 'XMLHttpRequest'
-    };
-  })(),
+  headers: {
+    'accept': 'application/json, text/javascript, */*; q=0.01',
+    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    'x-requested-with': 'XMLHttpRequest'
+  },
   timeout: 30000
 });
 
@@ -109,11 +103,7 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
     const response = await apiClient.post('', params);
     const songs: Partial<Song>[] = response.data.data || [];
 
-    console.log('搜索API返回原始数据示例:', songs[0]);
-
-    // 处理每个歌曲数据，补全 URL
     const processedSongs = songs.map(song => processSong(song, sourceType));
-    console.log('处理后的歌曲示例:', processedSongs[0]);
 
     // 缓存结果
     cacheManager.setSearchCache(keyword, page, sourceType, processedSongs);
@@ -145,9 +135,10 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
         maxRedirects: 5,
         validateStatus: (status) => status < 400
       });
+
       // 获取最终重定向后的 URL
-      const finalUrl = response.request?.responseURL || response.request?.res?.responseUrl || fullUrl;
-      console.log('getAudioUrl - 原始URL:', fullUrl, '最终URL:', finalUrl);
+      let finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || fullUrl;
+      console.log('[MusicApi] getAudioUrl - 原始URL:', fullUrl, '最终URL:', finalUrl);
 
       // 缓存URL结果
       cacheManager.setAudioUrlCache(fullUrl, finalUrl);
@@ -207,13 +198,27 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
     }
 
     const promises = keywords.map(keyword =>
-      this.searchSongs(keyword, 1, sourceType)
+      this.searchSongs(keyword, 1, sourceType).catch(error => {
+        console.error(`搜索关键词 "${keyword}" 失败:`, error);
+        return []; // 返回空数组表示该关键词搜索失败
+      })
     );
-    const results = await Promise.all(promises);
+
+    // 使用 Promise.allSettled() 替代 Promise.all()
+    const settledResults = await Promise.allSettled(promises);
+
     const batchResult: Record<string, Song[]> = {};
     keywords.forEach((keyword, index) => {
-      batchResult[keyword] = results[index];
+      const result = settledResults[index];
+      if (result.status === 'fulfilled') {
+        batchResult[keyword] = result.value;
+      } else {
+        console.error(`搜索关键词 "${keyword}" 失败:`, result.reason);
+        batchResult[keyword] = [];
+      }
     });
+
+    console.log(`批量搜索完成: ${keywords.length} 个关键词，${Object.values(batchResult).filter(songs => songs.length > 0).length} 个成功`);
 
     // 缓存结果
     cacheManager.setBatchSearchCache(keywords, sourceType, batchResult);
@@ -223,17 +228,19 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
   async getNeteaseHotlist(): Promise<HotlistSong[]> {
     // 尝试从缓存获取
     const cachedData = cacheManager.getHotlistCache('netease');
-    if (cachedData) {
+    if (cachedData && cachedData.length > 0) {
       console.log('网易热榜从缓存获取');
       return cachedData;
     }
 
     try {
+      console.log('[MusicApi] getNeteaseHotlist 开始请求');
       // 创建专门的客户端来请求网易云音乐，设置正确的请求头
       const neteaseClient = axios.create({
         headers: {
           'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8'
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         },
         timeout: 30000
       });
@@ -281,7 +288,7 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
   async getQQHotlist(): Promise<HotlistSong[]> {
     // 尝试从缓存获取
     const cachedData = cacheManager.getHotlistCache('qq');
-    if (cachedData) {
+    if (cachedData && cachedData.length > 0) {
       console.log('QQ热榜从缓存获取');
       return cachedData;
     }

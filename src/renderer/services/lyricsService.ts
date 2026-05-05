@@ -1,14 +1,16 @@
-import { ipcRenderer } from 'electron';
+const { ipcRenderer } = window.require('electron');
 
 class LyricsService {
   async getLyrics(lrcUrl: string): Promise<string> {
     try {
-      // 通过 IPC 调用主进程获取歌词
-      const lyrics = await ipcRenderer.invoke('lyrics:get', lrcUrl);
-      return lyrics;
+      const result = await ipcRenderer.invoke('lyrics:get', lrcUrl);
+      if (result.success && result.data) {
+        return result.data;
+      }
+      return '';
     } catch (error) {
       console.error('通过 IPC 获取歌词失败:', error);
-      throw error;
+      return '';
     }
   }
 }

@@ -8,11 +8,39 @@ interface LyricsPageProps {
 }
 
 const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
-  const { lyrics, position, currentSong, seek } = usePlayerStore();
+  const { lyrics, lyricsLoading, position, currentSong, seek } = usePlayerStore();
 
   const handleLyricClick = (time: number) => {
     seek(time);
   };
+
+  if (!currentSong) {
+    return (
+      <div style={{
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'column',
+        gap: '16px'
+      }}>
+        <span style={{ color: '#636E72', fontSize: '16px' }}>暂无播放中的歌曲</span>
+        <button
+          onClick={onBack}
+          style={{
+            padding: '8px 16px',
+            background: 'var(--primary-color)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer'
+          }}
+        >
+          返回
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -157,12 +185,38 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
         </div>
 
         {/* 歌词显示区域 */}
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <LyricsDisplay
-            lrcContent={lyrics}
-            currentTime={position}
-            onLyricClick={handleLyricClick}
-          />
+        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+          {lyricsLoading ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%'
+            }}>
+              <span style={{ color: '#636E72', fontSize: '14px' }}>歌词加载中...</span>
+            </div>
+          ) : (
+            <>
+              <LyricsDisplay
+                lrcContent={lyrics || ''}
+                currentTime={isNaN(position) ? 0 : position}
+                onLyricClick={handleLyricClick}
+              />
+              {!lyrics && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '20px',
+                  left: 0,
+                  right: 0,
+                  textAlign: 'center',
+                  fontSize: '12px',
+                  color: '#999'
+                }}>
+                  当前歌曲暂无歌词
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>

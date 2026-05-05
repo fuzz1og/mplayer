@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session } from 'electron';
 import path from 'path';
 import fs from 'fs';
 
@@ -20,6 +20,65 @@ import { getCacheManager } from './cache/cacheManager';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { musicApi } from './api/musicApi';
+
+// IPC通信管理器
+class IPCManager {
+  private pendingRequests: Map<string, { resolve: Function, reject: Function, timeout: NodeJS.Timeout }> = new Map();
+  private requestId = 0;
+
+  constructor(private mainWindow: BrowserWindow) {}
+
+  // 生成唯一请求ID
+  private generateRequestId(): string {
+    return `${Date.now()}-${++this.requestId}`;
+  }
+
+  // 发送请求并等待确认
+  public async sendRequest(channel: string, data: any, timeout: number = 30000): Promise<any> {
+    const requestId = this.generateRequestId();
+
+    return new Promise((resolve, reject) => {
+      // 设置超时
+      const timeoutId = setTimeout(() => {
+        this.pendingRequests.delete(requestId);
+        reject(new Error(`IPC请求超时: ${channel}`));
+      }, timeout);
+
+      // 存储待处理请求
+      this.pendingRequests.set(requestId, { resolve, reject, timeout: timeoutId });
+
+      // 发送请求
+      this.mainWindow.webContents.send(channel, {
+        requestId,
+        data
+      });
+    });
+  }
+
+  // 处理确认消息
+  public handleAck(requestId: string, success: boolean, data: any, error: string) {
+    const pending = this.pendingRequests.get(requestId);
+    if (!pending) return;
+
+    // 清除超时
+    clearTimeout(pending.timeout);
+    this.pendingRequests.delete(requestId);
+
+    if (success) {
+      pending.resolve(data);
+    } else {
+      pending.reject(new Error(error || 'IPC通信失败'));
+    }
+  }
+
+  // 添加确认处理器
+  public setupAckHandlers() {
+    // 通用确认处理器
+    ipcMain.on('ipc:ack', (_, payload) => {
+      this.handleAck(payload.requestId, payload.success, payload.data, payload.error);
+    });
+  }
+}
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -109,22 +168,18 @@ function setupIPC() {
 
   // 历史记录相关 IPC
   ipcMain.handle('history:add', (_event, song: any) => {
-    console.log('[main.ts] history:add 被调用，song:', song?.name, 'song.id:', song?.id);
     return db.addToPlayHistory(song);
   });
 
   ipcMain.handle('history:get', (_event, limit?: number) => {
-    console.log('[main.ts] history:get 被调用，limit:', limit);
     return db.getPlayHistory(limit);
   });
 
   ipcMain.handle('history:clear', () => {
-    console.log('[main.ts] history:clear 被调用');
     return db.clearPlayHistory();
   });
 
   ipcMain.handle('history:remove', (_event, songId: string) => {
-    console.log('[main.ts] history:remove 被调用，songId:', songId);
     return db.removeFromPlayHistory(songId);
   });
 
@@ -173,10 +228,62 @@ function setupIPC() {
       console.log('主进程获取歌词:', lrcUrl);
       const lyrics = await musicApi.getLyrics(lrcUrl);
       console.log('主进程获取歌词成功，长度:', lyrics.length);
-      return lyrics;
+      return { success: true, data: lyrics };
     } catch (error) {
       console.error('主进程获取歌词失败:', error);
-      throw error;
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  // 获取音频URL IPC (renderer 调用)
+  ipcMain.handle('musicApi:getAudioUrl', async (_event, audioUrl: string) => {
+    try {
+      const url = await musicApi.getAudioUrl(audioUrl);
+      return { success: true, data: url };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  // 搜索歌曲 IPC (renderer 调用)
+  ipcMain.handle('musicApi:searchSongs', async (_event, keyword: string, page: number, sourceType: 'netease' | 'qq') => {
+    try {
+      const songs = await musicApi.searchSongs(keyword, page, sourceType);
+      return { success: true, data: songs };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  // 获取网易云热榜 IPC
+  ipcMain.handle('musicApi:getNeteaseHotlist', async () => {
+    try {
+      console.log('[IPC] getNeteaseHotlist 开始');
+      const hotlist = await musicApi.getNeteaseHotlist();
+      console.log('[IPC] getNeteaseHotlist 完成，数量:', hotlist.length);
+      if (!hotlist || hotlist.length === 0) {
+        return { success: false, error: '获取网易热榜返回空数据' };
+      }
+      return { success: true, data: hotlist };
+    } catch (error) {
+      console.error('[IPC] getNeteaseHotlist 失败:', error);
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  // 获取QQ音乐热榜 IPC
+  ipcMain.handle('musicApi:getQQHotlist', async () => {
+    try {
+      console.log('[IPC] getQQHotlist 开始');
+      const hotlist = await musicApi.getQQHotlist();
+      console.log('[IPC] getQQHotlist 完成，数量:', hotlist.length);
+      if (!hotlist || hotlist.length === 0) {
+        return { success: false, error: '获取QQ热榜返回空数据' };
+      }
+      return { success: true, data: hotlist };
+    } catch (error) {
+      console.error('[IPC] getQQHotlist 失败:', error);
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
     }
   });
 
@@ -232,7 +339,27 @@ function setupIPC() {
   });
 }
 
+// 为图片请求补充 Cache-Control 头，利用 Chromium 内置 HTTP 缓存
+// 只在服务器未返回 Cache-Control 时才注入，避免覆盖 CDN 已有的更优缓存策略
+function setupImageCache() {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const contentType = details.responseHeaders?.['content-type']?.[0] || '';
+    const isImage = contentType.startsWith('image/');
+    const hasCacheControl = details.responseHeaders?.['cache-control']?.[0];
+
+    if (isImage && !hasCacheControl) {
+      details.responseHeaders = {
+        ...details.responseHeaders,
+        'Cache-Control': ['public, max-age=604800']
+      };
+    }
+
+    callback({ responseHeaders: details.responseHeaders });
+  });
+}
+
 app.whenReady().then(async () => {
+  setupImageCache();
   const mainWindow = createWindow();
 
   // 获取保存的下载目录，如果没有则使用默认的 Downloads 目录
@@ -260,6 +387,10 @@ app.whenReady().then(async () => {
       mainWindow.webContents.send('download:error', { task, error: error.message });
     }
   });
+
+  // 设置IPC管理器
+  const ipcManager = new IPCManager(mainWindow);
+  ipcManager.setupAckHandlers();
 
   // 设置 IPC 处理器
   setupIPC();

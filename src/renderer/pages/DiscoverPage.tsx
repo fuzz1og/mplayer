@@ -1,7 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Sparkles, TrendingUp, Disc, Radio } from 'lucide-react';
-import { musicApi } from '@/main/api/musicApi';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Sparkles, TrendingUp, Disc, Radio, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useSearchStore } from '@/renderer/store/searchStore';
+import { searchService } from '@/renderer/services/searchService';
+import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import { useDownloadStore } from '@/renderer/store/downloadStore';
+import { useLazyLoad } from '@/renderer/hooks/useLazyLoad';
+import SongList from '@/renderer/components/SongList';
 import type { Song } from '@/shared/types/song';
+const { ipcRenderer } = window.require('electron');
 
 // 热榜歌曲类型
 interface HotlistSong {
@@ -12,13 +20,6 @@ interface HotlistSong {
   cover: string;
   album: string;
 }
-
-interface DiscoverPageProps {
-  onPlay: (song: Song) => void;
-  onNavigateToHotlistDetail: (type: 'netease' | 'qq') => void;
-}
-
-
 
 const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: string; onClickAction?: () => void }> = ({
   icon,
@@ -72,27 +73,42 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: s
   </div>
 );
 
-const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlay, onNavigateToHotlistDetail }) => {
+const DiscoverPage: React.FC = () => {
+  const navigate = useNavigate();
   const [hotlist, setHotlist] = useState<HotlistSong[]>([]);
   const [hotlistLoading, setHotlistLoading] = useState(true);
-
   const [qqHotlist, setQQHotlist] = useState<HotlistSong[]>([]);
   const [qqHotlistLoading, setQQHotlistLoading] = useState(true);
+
+  const { songs, loading, currentKeyword, hasMore, error } = useSearchStore();
+  const { currentSong, isPlaying, play } = usePlayerStore();
+
+  const handleLoadMore = useCallback(() => {
+    searchService.loadMore();
+  }, []);
+
+  const { triggerRef } = useLazyLoad({
+    onLoadMore: handleLoadMore,
+    hasMore,
+    loading,
+  });
+  const { favoriteIds, toggleFavorite } = useFavoriteStore();
+  const { addSingleDownload, addBatchDownload } = useDownloadStore();
 
   // 加载网易热榜数据
   useEffect(() => {
     const loadHotlist = async () => {
       try {
         setHotlistLoading(true);
-        const data = await musicApi.getNeteaseHotlist();
-        setHotlist(data.slice(0, 20)); // 只显示前20首
+        const result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
+        const data = result.success ? result.data : [];
+        setHotlist(data.slice(0, 20));
       } catch (error) {
         console.error('加载网易热榜失败:', error);
       } finally {
         setHotlistLoading(false);
       }
     };
-
     loadHotlist();
   }, []);
 
@@ -101,34 +117,209 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlay, onNavigateToHotlist
     const loadQQHotlist = async () => {
       try {
         setQQHotlistLoading(true);
-        const data = await musicApi.getQQHotlist();
-        setQQHotlist(data.slice(0, 20)); // 只显示前20首
+        const result = await ipcRenderer.invoke('musicApi:getQQHotlist');
+        const data = result.success ? result.data : [];
+        setQQHotlist(data.slice(0, 20));
       } catch (error) {
         console.error('加载QQ音乐热榜失败:', error);
       } finally {
         setQQHotlistLoading(false);
       }
     };
-
     loadQQHotlist();
   }, []);
 
   // 处理热榜歌曲点击
   const handleHotlistSongClick = async (song: HotlistSong, sourceType: 'netease' | 'qq' = 'netease') => {
     try {
-      // 使用歌曲名 + 歌手名作为关键词搜索
       const keyword = `${song.name} ${song.artists}`;
-      const searchResults = await musicApi.searchSongs(keyword, 1, sourceType);
-
+      const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, sourceType);
+      const searchResults = result.success ? result.data : [];
       if (searchResults.length > 0) {
-        // 播放第一首匹配的歌曲
-        onPlay(searchResults[0]);
+        await play(searchResults[0]);
       }
     } catch (error) {
       console.error('搜索歌曲失败:', error);
     }
   };
 
+  const handlePlaySong = async (song: Song) => {
+    await play(song);
+  };
+
+  const handleToggleFavorite = async (song: Song) => {
+    try {
+      await toggleFavorite(song);
+    } catch (error) {
+      console.error('收藏操作失败:', error);
+    }
+  };
+
+  const handleDownload = async (song: Song) => {
+    try {
+      const task = await ipcRenderer.invoke('download:start', song);
+      if (task) {
+        addSingleDownload(task);
+      }
+    } catch (error) {
+      console.error('下载失败:', error);
+    }
+  };
+
+  const handleBatchDownload = async (selectedSongs: Song[]) => {
+    try {
+      const tasks = await ipcRenderer.invoke('download:startBatch', selectedSongs);
+      if (tasks && Array.isArray(tasks)) {
+        addBatchDownload(tasks);
+      }
+    } catch (error) {
+      console.error('批量下载失败:', error);
+    }
+  };
+
+  const handleAddToPlaylist = (song: Song) => {
+    console.log('添加到歌单:', song.name);
+  };
+
+  const handleBatchAddToPlaylist = (selectedSongs: Song[]) => {
+    console.log('批量添加到歌单:', selectedSongs.length);
+  };
+
+  const handleBackFromSearch = () => {
+    useSearchStore.getState().reset();
+  };
+
+  // 如果有搜索关键词，显示搜索结果
+  if (currentKeyword && songs.length > 0) {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        {/* 搜索结果导航栏 */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            padding: '12px 24px',
+            borderBottom: '1px solid var(--divider-color)',
+            backgroundColor: 'var(--content-bg)',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+            height: '60px',
+          }}
+        >
+          <button
+            onClick={handleBackFromSearch}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              padding: '10px',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              color: 'var(--text-secondary)',
+              transition: 'all 0.2s ease',
+              fontSize: '14px',
+              fontWeight: 500,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.transform = 'translateX(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = 'var(--text-secondary)';
+              e.currentTarget.style.transform = 'translateX(0)';
+            }}
+          >
+            <ArrowLeft size={16} />
+            <span>返回</span>
+          </button>
+          <h1
+            style={{
+              fontSize: '20px',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              flex: 1,
+              margin: 0,
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            搜索结果: {currentKeyword}
+          </h1>
+          <div style={{ width: '140px' }} />
+        </div>
+
+        {/* 搜索结果内容 */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+          {error && (
+            <div
+              style={{
+                padding: '12px 16px',
+                backgroundColor: '#FF6B6B20',
+                borderRadius: '8px',
+                color: '#FF6B6B',
+                marginBottom: '16px',
+                fontSize: '14px',
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          <SongList
+            songs={songs}
+            currentSongId={currentSong?.id}
+            isPlaying={isPlaying}
+            favoriteIds={favoriteIds}
+            onPlay={handlePlaySong}
+            onToggleFavorite={handleToggleFavorite}
+            showCheckbox={true}
+            enableBatchDownload={true}
+            onBatchDownload={handleBatchDownload}
+            onDownload={handleDownload}
+            enableBatchAddToPlaylist={true}
+            onBatchAddToPlaylist={handleBatchAddToPlaylist}
+            onAddToPlaylist={handleAddToPlaylist}
+          />
+
+          {/* 滚动加载触发器 */}
+          {hasMore && (
+            <div ref={triggerRef} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+              {loading ? '加载中...' : '上滑加载更多'}
+            </div>
+          )}
+          {!hasMore && songs.length > 0 && (
+            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+              没有更多歌曲了
+            </div>
+          )}
+
+          {!loading && songs.length === 0 && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '60px 20px',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+              <div>未找到相关歌曲</div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 默认显示发现页内容
   return (
     <div style={{ padding: '24px', height: '100%', overflow: 'auto' }}>
       {/* Banner 区域 */}
@@ -168,7 +359,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlay, onNavigateToHotlist
           icon={<TrendingUp size={22} />}
           title="排行榜"
           action="查看全部"
-          onClickAction={() => onNavigateToHotlistDetail('netease')}
+          onClickAction={() => navigate('/hotlist/netease')}
         />
         <div
           style={{
@@ -187,7 +378,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlay, onNavigateToHotlist
               cursor: 'pointer',
               transition: 'all 0.15s ease',
             }}
-            onClick={() => onNavigateToHotlistDetail('netease')}
+            onClick={() => navigate('/hotlist/netease')}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--accent-color)';
               e.currentTarget.style.transform = 'translateY(-2px)';
@@ -231,7 +422,6 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlay, onNavigateToHotlist
             </div>
             <div>
               {hotlistLoading ? (
-                // 加载占位符
                 Array.from({ length: 5 }).map((_, index) => (
                   <div
                     key={`placeholder-${index}`}
@@ -275,7 +465,6 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlay, onNavigateToHotlist
                   </div>
                 ))
               ) : (
-                // 实际歌曲列表
                 hotlist.slice(0, 5).map((song) => (
                   <div
                     key={song.id}
@@ -333,7 +522,7 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlay, onNavigateToHotlist
               cursor: 'pointer',
               transition: 'all 0.15s ease',
             }}
-            onClick={() => onNavigateToHotlistDetail('qq')}
+            onClick={() => navigate('/hotlist/qq')}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--accent-color)';
               e.currentTarget.style.transform = 'translateY(-2px)';
@@ -377,7 +566,6 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlay, onNavigateToHotlist
             </div>
             <div>
               {qqHotlistLoading ? (
-                // 加载占位符
                 Array.from({ length: 5 }).map((_, index) => (
                   <div
                     key={`qq-placeholder-${index}`}
@@ -421,7 +609,6 @@ const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlay, onNavigateToHotlist
                   </div>
                 ))
               ) : (
-                // 实际歌曲列表
                 qqHotlist.slice(0, 5).map((song) => (
                   <div
                     key={song.id}
