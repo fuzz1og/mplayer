@@ -19,22 +19,32 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const activeLineRef = useRef<HTMLDivElement>(null);
 
+  const safeCurrentTime = typeof currentTime === 'number' && !isNaN(currentTime) ? currentTime : 0;
+
   const parsedLyrics: ParsedLyrics = useMemo(() => {
     if (!lrcContent) {
       return { lines: [], hasTranslation: false };
     }
-    return parseLRC(lrcContent);
+    try {
+      return parseLRC(lrcContent);
+    } catch {
+      return { lines: [], hasTranslation: false };
+    }
   }, [lrcContent]);
 
   const currentLineIndex = useMemo(() => {
-    return findCurrentLyricIndex(parsedLyrics.lines, currentTime);
-  }, [parsedLyrics.lines, currentTime]);
+    if (!parsedLyrics?.lines || parsedLyrics.lines.length === 0) return -1;
+    return findCurrentLyricIndex(parsedLyrics.lines, safeCurrentTime);
+  }, [parsedLyrics.lines, safeCurrentTime]);
 
   useEffect(() => {
-    if (activeLineRef.current && containerRef.current) {
-      const container = containerRef.current;
-      const activeLine = activeLineRef.current;
+    if (currentLineIndex < 0 || !activeLineRef.current || !containerRef.current) {
+      return;
+    }
+    const container = containerRef.current;
+    const activeLine = activeLineRef.current;
 
+    try {
       const containerRect = container.getBoundingClientRect();
       const activeLineRect = activeLine.getBoundingClientRect();
 
@@ -44,6 +54,8 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
         top: scrollTop,
         behavior: 'smooth'
       });
+    } catch {
+      // 忽略滚动错误
     }
   }, [currentLineIndex]);
 

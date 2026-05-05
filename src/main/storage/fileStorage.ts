@@ -38,32 +38,141 @@ class FileStorage {
   }
 
   private loadData(): void {
-    if (fs.existsSync(this.dataFile)) {
-      try {
-        const fileContent = fs.readFileSync(this.dataFile, 'utf-8');
-        const loadedData = JSON.parse(fileContent);
-        this.data = {
-          favorites: loadedData.favorites || [],
-          playHistory: loadedData.playHistory || [],
-          playlists: loadedData.playlists || [],
-          playlistSongs: loadedData.playlistSongs || [],
-          settings: loadedData.settings || {}
-        };
-        this.data.favorites.forEach(f => f.createdAt = new Date(f.createdAt));
-        this.data.playHistory.forEach(h => h.playedAt = new Date(h.playedAt));
-        this.data.playlists.forEach(p => p.createdAt = new Date(p.createdAt));
-      } catch (error) {
-        console.error('加载数据失败:', error);
+    try {
+      if (fs.existsSync(this.dataFile)) {
+        const jsonData = fs.readFileSync(this.dataFile, 'utf-8');
+        const parsedData = JSON.parse(jsonData);
+
+        // 验证数据完整性
+        if (!this.validateDataIntegrity(parsedData)) {
+          throw new Error('数据完整性验证失败');
+        }
+
+        // 转换日期字符串为Date对象
+        this.data = this.convertDates(parsedData);
+      } else {
+        this.data = this.getInitialData();
       }
+    } catch (error) {
+      console.error('加载数据失败，使用默认数据:', error);
+      this.data = this.getInitialData();
     }
   }
 
   private saveData(): void {
+    if (!this.initialized) return;
+
     try {
-      fs.writeFileSync(this.dataFile, JSON.stringify(this.data, null, 2));
+      this.writeWithTransaction(this.data);
     } catch (error) {
       console.error('保存数据失败:', error);
+      // 这里可以添加更详细的错误处理和用户通知
     }
+  }
+
+  private writeWithTransaction(data: StorageData): Promise<void> {
+    const tempPath = this.dataFile + '.tmp';
+    const backupPath = this.dataFile + '.backup';
+
+    return new Promise((resolve, reject) => {
+      try {
+        // 1. 创建当前文件的备份
+        if (fs.existsSync(this.dataFile)) {
+          fs.copyFileSync(this.dataFile, backupPath);
+        }
+
+        // 2. 写入临时文件
+        const jsonData = JSON.stringify(data, null, 2);
+        fs.writeFileSync(tempPath, jsonData, 'utf-8');
+
+        // 3. 确保临时文件写入成功
+        if (!fs.existsSync(tempPath)) {
+          throw new Error('临时文件写入失败');
+        }
+
+        // 4. 原子性替换原文件
+        fs.renameSync(tempPath, this.dataFile);
+
+        // 5. 清理备份文件（可选，可保留作为历史备份）
+        if (fs.existsSync(backupPath)) {
+          fs.unlinkSync(backupPath);
+        }
+
+        resolve();
+
+      } catch (error) {
+        // 发生错误时尝试恢复备份
+        if (fs.existsSync(backupPath)) {
+          try {
+            fs.renameSync(backupPath, this.dataFile);
+            console.log('数据恢复成功');
+          } catch (restoreError) {
+            console.error('数据恢复失败:', restoreError);
+          }
+        }
+
+        // 清理临时文件
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+
+        reject(error);
+      }
+    });
+  }
+
+  private validateDataIntegrity(data: StorageData): boolean {
+    // 验证基本数据结构
+    if (!data || typeof data !== 'object') return false;
+
+    const requiredKeys = ['favorites', 'playHistory', 'playlists', 'playlistSongs', 'settings'];
+    for (const key of requiredKeys) {
+      if (!(key in data)) return false;
+    }
+
+    // 验证数组类型
+    if (!Array.isArray(data.favorites) ||
+        !Array.isArray(data.playHistory) ||
+        !Array.isArray(data.playlists) ||
+        !Array.isArray(data.playlistSongs)) {
+      return false;
+    }
+
+    // 验证settings对象
+    if (typeof data.settings !== 'object') return false;
+
+    return true;
+  }
+
+  private convertDates(data: any): StorageData {
+    const converted = {
+      favorites: (data.favorites || []).map((f: any) => ({
+        ...f,
+        createdAt: new Date(f.createdAt)
+      })),
+      playHistory: (data.playHistory || []).map((h: any) => ({
+        ...h,
+        playedAt: new Date(h.playedAt)
+      })),
+      playlists: (data.playlists || []).map((p: any) => ({
+        ...p,
+        createdAt: new Date(p.createdAt)
+      })),
+      playlistSongs: data.playlistSongs || [],
+      settings: data.settings || {}
+    };
+
+    return converted as StorageData;
+  }
+
+  private getInitialData(): StorageData {
+    return {
+      favorites: [],
+      playHistory: [],
+      playlists: [],
+      playlistSongs: [],
+      settings: {}
+    };
   }
 
   // Favorites
@@ -111,10 +220,18 @@ class FileStorage {
   // Play History
   async addToPlayHistory(song: Song): Promise<number> {
     const id = Date.now();
+    const songBase: SongBase = {
+      id: song.id,
+      name: song.name,
+      artist: song.artist,
+      album: song.album,
+      duration: song.duration,
+      sourceType: song.sourceType
+    };
     const historyItem: PlayHistory = {
       id,
       songId: song.id,
-      song: song,
+      song: songBase,
       playedAt: new Date()
     };
 
@@ -172,13 +289,47 @@ class FileStorage {
   }
 
   async deletePlaylist(playlistId: number): Promise<void> {
-    this.data.playlists = this.data.playlists.filter(p => p.id !== playlistId);
-    this.data.playlistSongs = this.data.playlistSongs.filter(ps => ps.playlistId !== playlistId);
-    this.saveData();
+    // 验证歌单是否存在
+    const playlist = this.data.playlists.find(p => p.id === playlistId);
+    if (!playlist) {
+      throw new Error(`歌单不存在: ${playlistId}`);
+    }
+
+    // 获取歌单中的所有歌曲用于日志记录
+    const playlistSongs = this.data.playlistSongs.filter(ps => ps.playlistId === playlistId);
+
+    // 执行事务性删除
+    try {
+      // 1. 删除歌单歌曲关联
+      this.data.playlistSongs = this.data.playlistSongs.filter(ps => ps.playlistId !== playlistId);
+
+      // 2. 删除歌单本身
+      this.data.playlists = this.data.playlists.filter(p => p.id !== playlistId);
+
+      // 3. 保存更改
+      this.saveData();
+
+      console.log(`歌单删除完成: ${playlist.name}, 删除 ${playlistSongs.length} 首歌曲`);
+    } catch (error) {
+      console.error('删除歌单失败:', error);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      throw new Error(`删除歌单失败: ${errorMessage}`);
+    }
   }
 
   // Playlist Songs
   async addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
+    // 验证歌单是否存在
+    const playlist = this.data.playlists.find(p => p.id === playlistId);
+    if (!playlist) {
+      throw new Error(`歌单不存在: ${playlistId}`);
+    }
+
+    // 验证歌曲数据完整性
+    if (!this.validateSongData(song)) {
+      throw new Error('歌曲数据不完整');
+    }
+
     // 检查歌曲是否已经存在于歌单中
     const existing = this.data.playlistSongs.find(
       ps => ps.playlistId === playlistId && ps.songId === song.id
@@ -187,9 +338,13 @@ class FileStorage {
       return existing.id!;
     }
 
-    const maxOrder = this.data.playlistSongs
-      .filter(ps => ps.playlistId === playlistId)
-      .reduce((max, ps) => Math.max(max, ps.order), -1);
+    // 检查歌单容量限制（可选）
+    const currentSongs = this.data.playlistSongs.filter(ps => ps.playlistId === playlistId);
+    if (currentSongs.length >= 1000) { // 限制1000首歌
+      throw new Error('歌单已达到最大容量限制');
+    }
+
+    const maxOrder = currentSongs.reduce((max, ps) => Math.max(max, ps.order), -1);
 
     const id = Date.now();
     const playlistSong: PlaylistSong = {
@@ -203,6 +358,10 @@ class FileStorage {
     this.data.playlistSongs.push(playlistSong);
     this.saveData();
     return id;
+  }
+
+  private validateSongData(song: Song): boolean {
+    return !!(song.id && song.name && song.artist && song.url);
   }
 
   async removeSongFromPlaylist(playlistId: number, songId: string): Promise<void> {

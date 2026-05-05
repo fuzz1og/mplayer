@@ -1,52 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { Play, ArrowLeft, Edit2, Music } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { playlistService } from '@/renderer/services/playlistService';
 import SongList from '@/renderer/components/SongList';
 import type { Song, Playlist } from '@/shared/types/song';
 
-interface PlaylistDetailPageProps {
-  playlistId?: number;
-  onPlay: (song: Song) => void;
-  onBack: () => void;
-  onDownload?: (song: Song) => void;
-  onBatchDownload?: (songs: Song[]) => void;
-  onAddToPlaylist?: (song: Song) => void;
-}
+const PlaylistDetailPage: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const playlistId = id ? parseInt(id, 10) : undefined;
 
-const PlaylistDetailPage: React.FC<PlaylistDetailPageProps> = ({
-  playlistId,
-  onPlay,
-  onBack,
-  onDownload,
-  onBatchDownload,
-  onAddToPlaylist
-}) => {
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [loading, setLoading] = useState(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
-  const { currentSong, isPlaying, setCurrentPlaylist } = usePlayerStore();
+
+  const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
 
   const loadData = async () => {
+    if (!playlistId) return;
+
     setLoading(true);
     try {
-      if (playlistId !== undefined) {
-        const [playlistData, songsData] = await Promise.all([
-          playlistService.getPlaylist(playlistId),
-          playlistService.getPlaylistSongs(playlistId)
-        ]);
-        setPlaylist(playlistData || null);
-        setSongs(songsData);
-        if (playlistData) {
-          setEditName(playlistData.name);
-          setEditDesc(playlistData.description || '');
-        }
-      }
+      const playlistData = await playlistService.getPlaylist(playlistId);
+      setPlaylist(playlistData || null);
+
+      const songsData = await playlistService.getPlaylistSongs(playlistId);
+      setSongs(songsData);
     } catch (error) {
-      console.error('加载歌单失败:', error);
+      console.error('加载歌单详情失败:', error);
     } finally {
       setLoading(false);
     }
@@ -56,42 +41,24 @@ const PlaylistDetailPage: React.FC<PlaylistDetailPageProps> = ({
     loadData();
   }, [playlistId]);
 
-  const handlePlayAll = () => {
+  const handlePlay = async (song: Song) => {
+    await play(song);
+  };
+
+  const handlePlayAll = async () => {
     if (songs.length > 0) {
       setCurrentPlaylist(songs, 0);
-      onPlay(songs[0]);
+      await handlePlay(songs[0]);
     }
   };
 
-  const handlePlaySong = (song: Song) => {
-    const songIndex = songs.findIndex(s => s.id === song.id);
-    setCurrentPlaylist(songs, songIndex >= 0 ? songIndex : 0);
-    onPlay(song);
-  };
+  const handleEditPlaylist = async () => {
+    if (!playlistId || !editName.trim()) return;
 
-  const handleBatchDelete = async (selectedSongs: Song[]) => {
-    try {
-      if (playlistId !== undefined) {
-        for (const song of selectedSongs) {
-          await playlistService.removeSongFromPlaylist(playlistId, song.id);
-        }
-      }
-      setSongs(prev => prev.filter(s => !selectedSongs.find(sel => sel.id === s.id)));
-    } catch (error) {
-      console.error('批量删除失败:', error);
-    }
-  };
-
-  const handleBatchAddToPlaylist = (selectedSongs: Song[]) => {
-    console.log('批量加入歌单:', selectedSongs);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editName.trim() || !playlistId) return;
     try {
       await playlistService.updatePlaylist(playlistId, {
         name: editName.trim(),
-        description: editDesc.trim() || undefined
+        description: editDesc.trim()
       });
       setIsEditModalVisible(false);
       loadData();
@@ -100,195 +67,135 @@ const PlaylistDetailPage: React.FC<PlaylistDetailPageProps> = ({
     }
   };
 
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <div style={{ color: 'var(--text-tertiary)' }}>加载中...</div>
+      </div>
+    );
+  }
 
-
-  return (
-    <div style={{ padding: '24px', height: '100%', overflow: 'auto' }}>
-      <button
-        onClick={onBack}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '8px 12px',
-          backgroundColor: 'transparent',
-          border: 'none',
-          color: 'var(--text-secondary)',
-          fontSize: '14px',
-          cursor: 'pointer',
-          borderRadius: '6px',
-          transition: 'all 0.15s ease',
-          marginBottom: '16px',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-          e.currentTarget.style.color = 'var(--text-primary)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-          e.currentTarget.style.color = 'var(--text-secondary)';
-        }}
-      >
-        <ArrowLeft size={18} />
-        返回
-      </button>
-
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          gap: '24px',
-          marginBottom: '32px',
-          paddingBottom: '24px',
-          borderBottom: '1px solid var(--divider-color)',
-        }}
-      >
-        <div
+  if (!playlist) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <div style={{ fontSize: '18px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+          歌单不存在
+        </div>
+        <button
+          onClick={() => navigate('/playlists')}
           style={{
-            width: '180px',
-            height: '180px',
-            borderRadius: '8px',
-            background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 8px 24px rgba(245, 87, 108, 0.3)',
-            flexShrink: 0,
+            padding: '8px 16px',
+            backgroundColor: 'var(--accent-color)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
           }}
         >
-          <Music size={64} color="white" />
-        </div>
+          返回歌单列表
+        </button>
+      </div>
+    );
+  }
 
-        <div style={{ flex: 1, paddingBottom: '8px' }}>
-          <div
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* 页面标题 */}
+      <div
+        style={{
+          padding: '24px 24px 16px',
+          borderBottom: '1px solid var(--divider-color)',
+          backgroundColor: 'var(--content-bg)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+          <button
+            onClick={() => navigate('/playlists')}
             style={{
-              fontSize: '12px',
-              color: 'var(--text-tertiary)',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              marginBottom: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 12px',
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-secondary)',
+              fontSize: '14px',
             }}
           >
-            歌单
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <h1
-              style={{
-                fontSize: '32px',
-                fontWeight: 700,
-                color: 'var(--text-primary)',
-                margin: 0,
-              }}
-            >
-              {playlist?.name || '歌单'}
-            </h1>
-            {playlist && (
+            <ArrowLeft size={16} />
+            返回
+          </button>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Music size={24} color="var(--accent-color)" />
+              <h1 style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                {playlist.name}
+              </h1>
               <button
-                onClick={() => setIsEditModalVisible(true)}
+                onClick={() => {
+                  setEditName(playlist.name);
+                  setEditDesc(playlist.description || '');
+                  setIsEditModalVisible(true);
+                }}
                 style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
+                  padding: '4px 8px',
                   backgroundColor: 'transparent',
-                  border: 'none',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '4px',
                   cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--text-tertiary)',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-                  e.currentTarget.style.color = 'var(--text-primary)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.color = 'var(--text-tertiary)';
+                  color: 'var(--text-secondary)',
                 }}
               >
-                <Edit2 size={18} />
+                <Edit2 size={14} />
               </button>
+            </div>
+            {playlist.description && (
+              <p style={{ fontSize: '14px', color: 'var(--text-tertiary)', margin: '8px 0 0 36px' }}>
+                {playlist.description}
+              </p>
             )}
           </div>
-          <div
+          <button
+            onClick={handlePlayAll}
+            disabled={songs.length === 0}
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              backgroundColor: 'var(--accent-color)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '20px',
+              cursor: songs.length > 0 ? 'pointer' : 'not-allowed',
+              opacity: songs.length > 0 ? 1 : 0.5,
               fontSize: '14px',
-              color: 'var(--text-secondary)',
-              marginBottom: '16px',
+              fontWeight: 500,
             }}
           >
-            {playlist?.description || `共 ${songs.length} 首歌曲`}
-          </div>
-
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button
-              onClick={handlePlayAll}
-              disabled={songs.length === 0}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 24px',
-                backgroundColor: songs.length > 0 ? 'var(--primary-color)' : 'var(--text-light)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '24px',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: songs.length > 0 ? 'pointer' : 'not-allowed',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                if (songs.length > 0) {
-                  e.currentTarget.style.backgroundColor = 'var(--primary-hover)';
-                  e.currentTarget.style.transform = 'scale(1.02)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = songs.length > 0 ? 'var(--primary-color)' : 'var(--text-light)';
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              <Play size={18} fill="white" />
-              播放全部
-            </button>
-          </div>
+            <Play size={16} />
+            播放全部
+          </button>
+        </div>
+        <div style={{ fontSize: '14px', color: 'var(--text-tertiary)' }}>
+          {songs.length} 首歌曲
         </div>
       </div>
 
-      {loading ? (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '60px 20px',
-            color: 'var(--text-tertiary)',
-          }}
-        >
-          <div style={{ fontSize: '14px' }}>加载中...</div>
-        </div>
-      ) : (
+      {/* 歌曲列表 */}
+      <div style={{ flex: 1, overflow: 'auto' }}>
         <SongList
           songs={songs}
           currentSongId={currentSong?.id}
           isPlaying={isPlaying}
-          favoriteIds={[]}
-          onPlay={handlePlaySong}
-          showCheckbox={true}
-          enableBatchDownload={onDownload !== undefined && onBatchDownload !== undefined}
-          onBatchDownload={onBatchDownload}
-          onDownload={onDownload}
-          enableBatchDelete={true}
-          onBatchDelete={handleBatchDelete}
-          enableBatchAddToPlaylist={true}
-          onBatchAddToPlaylist={handleBatchAddToPlaylist}
-          onAddToPlaylist={onAddToPlaylist}
-          emptyText="暂无歌曲"
+          onPlay={handlePlay}
+          showCheckbox={false}
+          emptyText="歌单暂无歌曲"
         />
-      )}
+      </div>
 
+      {/* 编辑歌单弹窗 */}
       {isEditModalVisible && (
         <div
           style={{
@@ -312,75 +219,47 @@ const PlaylistDetailPage: React.FC<PlaylistDetailPageProps> = ({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3
-              style={{
-                fontSize: '18px',
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-                marginBottom: '20px',
-              }}
-            >
+            <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>
               编辑歌单
             </h3>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: '13px',
-                  color: 'var(--text-secondary)',
-                  marginBottom: '6px',
-                }}
-              >
-                歌单名称
-              </label>
-              <input
-                type="text"
-                placeholder="请输入歌单名称"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  outline: 'none',
-                  backgroundColor: 'var(--bg-color)',
-                }}
-              />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                  歌单名称
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                  歌单描述
+                </label>
+                <textarea
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
             </div>
-
-            <div style={{ marginBottom: '24px' }}>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: '13px',
-                  color: 'var(--text-secondary)',
-                  marginBottom: '6px',
-                }}
-              >
-                歌单描述（可选）
-              </label>
-              <textarea
-                placeholder="请输入歌单描述"
-                value={editDesc}
-                onChange={(e) => setEditDesc(e.target.value)}
-                rows={3}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  outline: 'none',
-                  backgroundColor: 'var(--bg-color)',
-                  resize: 'none',
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
               <button
                 onClick={() => setIsEditModalVisible(false)}
                 style={{
@@ -391,23 +270,20 @@ const PlaylistDetailPage: React.FC<PlaylistDetailPageProps> = ({
                   borderRadius: '6px',
                   fontSize: '14px',
                   cursor: 'pointer',
-                  transition: 'all 0.15s ease',
                 }}
               >
                 取消
               </button>
               <button
-                onClick={handleSaveEdit}
-                disabled={!editName.trim()}
+                onClick={handleEditPlaylist}
                 style={{
                   padding: '8px 16px',
-                  backgroundColor: editName.trim() ? 'var(--primary-color)' : 'var(--text-light)',
+                  backgroundColor: 'var(--accent-color)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
                   fontSize: '14px',
-                  cursor: editName.trim() ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.15s ease',
+                  cursor: 'pointer',
                 }}
               >
                 保存

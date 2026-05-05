@@ -11,10 +11,12 @@ npm run electron:build:mac   # Build for macOS
 npm run electron:build:linux # Build for Linux
 npm run lint             # ESLint --max-warnings 0
 npm run typecheck        # tsc --noEmit
+npm run test             # Run vitest (watch mode)
+npm run test:run         # Run vitest (single run)
 ```
 
 ## Build Order
-`lint -> typecheck -> build` (run lint/typecheck before build)
+`lint -> typecheck -> test:run -> build` (run lint/typecheck/test before build)
 
 ## Architecture
 - **Main process**: `src/main/` - Electron entry, IPC handlers, HTTP client, cache (disk + memory), storage, download service
@@ -27,6 +29,15 @@ npm run typecheck        # tsc --noEmit
 - UI: Ant Design 5 with Chinese locale (`zhCN`)
 - Icons: lucide-react
 - IPC channels: `domain:action` naming (e.g., `cache:getSong`, `settings:setDownloadPath`)
+- **ipcRenderer访问**：必须使用 `const { ipcRenderer } = window.require('electron')` 而非 `import { ipcRenderer } from 'electron'`，因为Vite将electron标记为external
+
+## Music API IPC Channels
+- `musicApi:getAudioUrl` — 获取真实音频URL
+- `musicApi:searchSongs` — 搜索歌曲
+- `musicApi:getNeteaseHotlist` — 网易云热榜
+- `musicApi:getQQHotlist` — QQ音乐热榜
+
+**Renderer进程必须通过ipcRenderer.invoke()调用**，禁止直接import musicApi。
 
 ## API Configuration
 The app requires an external music API. Two ways to configure:

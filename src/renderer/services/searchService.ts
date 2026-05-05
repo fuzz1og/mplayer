@@ -1,6 +1,6 @@
-import { musicApi } from '@/main/api/musicApi';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { dedupeSongs } from '@/renderer/utils/songDedupe';
+const { ipcRenderer } = window.require('electron');
 
 const DEBOUNCE_DELAY = 300;
 
@@ -19,7 +19,8 @@ class SearchService {
     store.setError(null);
 
     try {
-      const songs = await musicApi.searchSongs(keyword, page, store.sourceType);
+      const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, page, store.sourceType);
+      const songs = result.success ? result.data : [];
 
       if (page === 1) {
         store.setSongs(songs, true);

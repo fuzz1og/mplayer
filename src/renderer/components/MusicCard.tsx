@@ -57,6 +57,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
           <img
             src={cover}
             alt={title}
+            loading="lazy"
             style={{
               width: '100%',
               height: '100%',

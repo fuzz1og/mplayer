@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
@@ -60,5 +61,11 @@ export default defineConfig({
         assetFileNames: 'assets/[name]-[hash].[ext]'
       }
     }
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    include: ['src/renderer/__tests__/**/*.test.ts'],
+    setupFiles: ['src/renderer/__tests__/setup.ts']
   }
 });

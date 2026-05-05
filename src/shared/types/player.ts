@@ -1,0 +1,1 @@
+export type PlayMode = 'sequential' | 'list-loop' | 'single-loop' | 'shuffle';

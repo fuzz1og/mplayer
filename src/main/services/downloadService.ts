@@ -53,12 +53,10 @@ class DownloadService {
 
   private setupIpcHandlers(): void {
     ipcMain.handle('download:start', async (_event, song: Song) => {
-      console.log('[DownloadService] 收到下载请求:', song);
       return this.addDownload(song);
     });
 
     ipcMain.handle('download:startBatch', async (_event, songs: Song[]) => {
-      console.log('[DownloadService] 收到批量下载请求, 歌曲数量:', songs.length);
       return this.addBatchDownloads(songs);
     });
 
@@ -76,7 +74,6 @@ class DownloadService {
   }
 
   addDownload(song: Song): DownloadTask {
-    console.log('[DownloadService] addDownload 被调用, song:', song);
     const id = `${song.id}_${Date.now()}`;
     const task: DownloadTask = {
       id,
@@ -87,7 +84,6 @@ class DownloadService {
 
     this.tasks.set(id, task);
     this.queue.push(id);
-    console.log('[DownloadService] 任务已添加到队列, taskId:', id, '队列长度:', this.queue.length);
 
     this.processQueue();
 
@@ -99,48 +95,91 @@ class DownloadService {
     const now = Date.now();
 
     songs.forEach((song, index) => {
-      const id = `${song.id}_${now}_${index}`;
-      const task: DownloadTask = {
-        id,
-        song,
-        progress: 0,
-        status: 'pending'
-      };
+      try {
+        // 验证歌曲数据
+        if (!song.id || !song.name || !song.url) {
+          console.error(`歌曲数据不完整，跳过下载: ${song.name || '未知'}`);
+          return;
+        }
 
-      this.tasks.set(id, task);
-      this.queue.push(id);
-      tasks.push(task);
+        const id = `${song.id}_${now}_${index}`;
+        const task: DownloadTask = {
+          id,
+          song,
+          progress: 0,
+          status: 'pending'
+        };
+
+        this.tasks.set(id, task);
+        this.queue.push(id);
+        tasks.push(task);
+      } catch (error) {
+        console.error(`创建下载任务失败 [${song.name}]:`, error);
+      }
     });
 
-    this.processQueue();
+    if (tasks.length > 0) {
+      this.processQueue();
+      console.log(`批量下载任务创建成功: ${tasks.length}/${songs.length} 个任务`);
+    } else {
+      console.warn('没有有效的下载任务被创建');
+    }
 
     return tasks;
   }
 
   private async processQueue(): Promise<void> {
-    console.log('[DownloadService] processQueue 被调用, 队列长度:', this.queue.length, '活动下载数:', this.activeDownloads.size);
     while (this.queue.length > 0 && this.activeDownloads.size < this.maxConcurrentDownloads) {
       const taskId = this.queue.shift();
       if (!taskId) continue;
 
       const task = this.tasks.get(taskId);
-      console.log('[DownloadService] 处理任务:', taskId, '任务状态:', task?.status);
       if (!task || task.status === 'completed' || task.status === 'error') {
-        console.log('[DownloadService] 任务跳过:', taskId);
         continue;
       }
 
       this.activeDownloads.add(taskId);
-      console.log('[DownloadService] 开始下载文件:', taskId);
-      this.downloadFile(task).finally(() => {
+
+      // 添加错误处理和重试机制
+      this.downloadFileWithRetry(task).finally(() => {
         this.activeDownloads.delete(taskId);
         this.processQueue();
       });
     }
   }
 
+  private async downloadFileWithRetry(task: DownloadTask, maxRetries: number = 3): Promise<void> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await this.downloadFile(task);
+        return; // 成功则返回
+      } catch (error) {
+        lastError = error as Error;
+
+        if (attempt < maxRetries) {
+          // 指数退避重试
+          const delay = Math.pow(2, attempt) * 1000;
+          const errorMessage = error instanceof Error ? error.message : '未知错误';
+          console.log(`下载失败 [${task.song.name}], ${attempt + 1}/${maxRetries} 重试, ${delay}ms后重试:`, errorMessage);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    // 所有重试都失败
+    if (lastError) {
+      task.status = 'error';
+      task.error = `下载失败 (重试 ${maxRetries} 次后): ${lastError.message}`;
+      this.tasks.set(task.id, task);
+
+      // 通知错误
+      this.notifyError(task, lastError);
+    }
+  }
+
   private async downloadFile(task: DownloadTask): Promise<void> {
-    console.log('[DownloadService] downloadFile 开始, task:', task.id, 'song.url:', task.song.url);
     task.status = 'downloading';
     this.tasks.set(task.id, task);
 
@@ -151,14 +190,11 @@ class DownloadService {
       }
 
       // 获取真实的音频 URL（处理重定向）
-      console.log('[DownloadService] 正在获取真实音频 URL...');
       let realUrl = task.song.url;
       try {
         realUrl = await musicApi.getAudioUrl(task.song.url);
-        console.log('[DownloadService] 真实音频 URL:', realUrl);
       } catch (urlError) {
         console.error('[DownloadService] 获取真实音频 URL 失败:', urlError);
-        // 使用原始 URL 继续
       }
 
       if (!realUrl) {
@@ -167,7 +203,25 @@ class DownloadService {
 
       const fileName = this.sanitizeFileName(`${task.song.name} - ${task.song.artist}.mp3`);
       const filePath = path.join(this.downloadPath, fileName);
-      console.log('[DownloadService] 下载路径:', filePath);
+
+      // 检查下载路径是否存在
+      if (!fs.existsSync(this.downloadPath)) {
+        try {
+          fs.mkdirSync(this.downloadPath, { recursive: true });
+        } catch (dirError) {
+          throw new Error(`无法创建下载目录: ${dirError instanceof Error ? dirError.message : '未知错误'}`);
+        }
+      }
+
+      // 检查文件路径长度限制
+      if (filePath.length > 240) { // 留一些余量给文件系统
+        const shortName = this.sanitizeFileName(`${task.song.name.substring(0, 50)} - ${task.song.artist.substring(0, 30)}.mp3`);
+        const newFilePath = path.join(this.downloadPath, shortName);
+        // 使用新路径
+        task.filePath = newFilePath;
+      } else {
+        task.filePath = filePath;
+      }
 
       const response = await axios({
         method: 'GET',

@@ -27,6 +27,19 @@ interface CacheStats {
   urlsCount: number;
 }
 
+interface CacheConsistencyReport {
+  inconsistencies: string[];
+  totalFiles: number;
+  corruptedFiles: number;
+  orphanedFiles: number;
+}
+
+interface RepairResult {
+  fixedIssues: number;
+  removedFiles: number;
+  errors: string[];
+}
+
 export class CacheManager {
   private cacheDir: string;
   private maxCacheSize: number;
@@ -405,6 +418,231 @@ export class CacheManager {
     } catch (error) {
       console.error('清除所有缓存失败:', error);
     }
+  }
+
+  async checkCacheConsistency(): Promise<CacheConsistencyReport> {
+    const report: CacheConsistencyReport = {
+      inconsistencies: [],
+      totalFiles: 0,
+      corruptedFiles: 0,
+      orphanedFiles: 0
+    };
+
+    try {
+      // 检查缓存索引文件是否存在
+      if (!fs.existsSync(this.indexFile)) {
+        report.inconsistencies.push('缓存索引文件不存在');
+        return report;
+      }
+
+      const index = { ...this.cacheIndex };
+      report.totalFiles = Object.keys(index).length;
+
+      // 检查每个缓存项
+      for (const [key, cacheItem] of Object.entries(index)) {
+        let filePath: string;
+        switch (cacheItem.type) {
+          case 'songs':
+            filePath = path.join(this.cacheDir, 'songs', `${key}.json`);
+            break;
+          case 'cover':
+            filePath = path.join(this.cacheDir, 'covers', `${key}.jpg`);
+            break;
+          case 'audio':
+            filePath = path.join(this.cacheDir, 'audio', `${key}.mp3`);
+            break;
+          case 'url':
+            filePath = path.join(this.cacheDir, 'urls', `${key}.json`);
+            break;
+          default:
+            report.inconsistencies.push(`未知缓存类型: ${key} (${cacheItem.type})`);
+            continue;
+        }
+
+        // 检查文件是否存在
+        if (!fs.existsSync(filePath)) {
+          report.inconsistencies.push(`缓存文件丢失: ${key}`);
+          report.orphanedFiles++;
+          continue;
+        }
+
+        // 检查文件完整性
+        try {
+          const stats = fs.statSync(filePath);
+          if (stats.size !== cacheItem.size) {
+            report.inconsistencies.push(`文件大小不匹配: ${key} (期望: ${cacheItem.size}, 实际: ${stats.size})`);
+            report.corruptedFiles++;
+          }
+
+          // 检查过期时间
+          if (cacheItem.time) {
+            const age = Date.now() - cacheItem.time;
+            const maxAge = cacheItem.type === 'url'
+              ? this.urlExpireHours * 3600 * 1000
+              : this.cacheExpireDays * 24 * 3600 * 1000;
+
+            if (age > maxAge && cacheItem.type !== 'cover') {
+              report.inconsistencies.push(`缓存已过期: ${key} (${Math.floor(age / (24 * 3600 * 1000))}天前)`);
+            }
+          }
+
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '未知错误';
+          report.inconsistencies.push(`文件访问错误: ${key} (${errorMessage})`);
+          report.corruptedFiles++;
+        }
+      }
+
+      // 检查孤立文件（存在于缓存目录但不在索引中）
+      const checkDirectory = (subdir: string, extension: string) => {
+        const dirPath = path.join(this.cacheDir, subdir);
+        if (!fs.existsSync(dirPath)) return;
+
+        const files = fs.readdirSync(dirPath);
+        for (const filename of files) {
+          if (!filename.endsWith(extension)) continue;
+
+          const key = filename.replace(extension, '');
+          const found = Object.keys(this.cacheIndex).some(indexKey => indexKey === key);
+          if (!found) {
+            report.inconsistencies.push(`孤立文件: ${subdir}/${filename}`);
+            report.orphanedFiles++;
+          }
+        }
+      };
+
+      checkDirectory('songs', '.json');
+      checkDirectory('covers', '.jpg');
+      checkDirectory('audio', '.mp3');
+      checkDirectory('urls', '.json');
+
+    } catch (error) {
+      console.error('缓存一致性检查失败:', error);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      report.inconsistencies.push(`检查过程出错: ${errorMessage}`);
+    }
+
+    return report;
+  }
+
+  async repairCacheConsistency(): Promise<RepairResult> {
+    const result: RepairResult = {
+      fixedIssues: 0,
+      removedFiles: 0,
+      errors: []
+    };
+
+    try {
+      await this.checkCacheConsistency();
+
+      // 修复缓存索引
+      let indexModified = false;
+
+      for (const [key, cacheItem] of Object.entries(this.cacheIndex)) {
+        let filePath: string;
+        switch (cacheItem.type) {
+          case 'songs':
+            filePath = path.join(this.cacheDir, 'songs', `${key}.json`);
+            break;
+          case 'cover':
+            filePath = path.join(this.cacheDir, 'covers', `${key}.jpg`);
+            break;
+          case 'audio':
+            filePath = path.join(this.cacheDir, 'audio', `${key}.mp3`);
+            break;
+          case 'url':
+            filePath = path.join(this.cacheDir, 'urls', `${key}.json`);
+            break;
+          default:
+            continue;
+        }
+
+        // 删除丢失文件的索引项
+        if (!fs.existsSync(filePath)) {
+          delete this.cacheIndex[key];
+          indexModified = true;
+          result.fixedIssues++;
+          continue;
+        }
+
+        // 删除过期缓存
+        if (cacheItem.time) {
+          const age = Date.now() - cacheItem.time;
+          const maxAge = cacheItem.type === 'url'
+            ? this.urlExpireHours * 3600 * 1000
+            : this.cacheExpireDays * 24 * 3600 * 1000;
+
+          if (age > maxAge && cacheItem.type !== 'cover') {
+            try {
+              fs.unlinkSync(filePath);
+              delete this.cacheIndex[key];
+              indexModified = true;
+              result.removedFiles++;
+              result.fixedIssues++;
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : '未知错误';
+              result.errors.push(`删除过期文件失败 ${filePath}: ${errorMessage}`);
+            }
+          }
+        }
+      }
+
+      // 删除孤立文件
+      const checkAndRemoveOrphanedFiles = (subdir: string, extension: string) => {
+        const dirPath = path.join(this.cacheDir, subdir);
+        if (!fs.existsSync(dirPath)) return;
+
+        const files = fs.readdirSync(dirPath);
+        for (const filename of files) {
+          if (!filename.endsWith(extension)) continue;
+
+          const key = filename.replace(extension, '');
+          const found = Object.keys(this.cacheIndex).some(indexKey => indexKey === key);
+          if (!found) {
+            try {
+              fs.unlinkSync(path.join(dirPath, filename));
+              result.removedFiles++;
+              result.fixedIssues++;
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : '未知错误';
+              result.errors.push(`删除孤立文件失败 ${filename}: ${errorMessage}`);
+            }
+          }
+        }
+      };
+
+      checkAndRemoveOrphanedFiles('songs', '.json');
+      checkAndRemoveOrphanedFiles('covers', '.jpg');
+      checkAndRemoveOrphanedFiles('audio', '.mp3');
+      checkAndRemoveOrphanedFiles('urls', '.json');
+
+      // 保存修复后的索引
+      if (indexModified) {
+        this.saveIndex();
+      }
+
+    } catch (error) {
+      console.error('缓存修复失败:', error);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      result.errors.push(`修复过程出错: ${errorMessage}`);
+    }
+
+    return result;
+  }
+
+  startConsistencyCheck(interval: number = 3600000): NodeJS.Timeout {
+    return setInterval(async () => {
+      try {
+        const report = await this.checkCacheConsistency();
+        if (report.inconsistencies.length > 0) {
+          console.warn('发现缓存不一致，开始自动修复...', report);
+          const repairResult = await this.repairCacheConsistency();
+          console.log('缓存修复完成:', repairResult);
+        }
+      } catch (error) {
+        console.error('定期缓存检查失败:', error);
+      }
+    }, interval);
   }
 }
 

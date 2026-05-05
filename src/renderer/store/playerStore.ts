@@ -1,11 +1,9 @@
 import { create } from 'zustand';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import { lyricsService } from '@/renderer/services/lyricsService';
-import { musicApi } from '@/main/api/musicApi';
 import type { Song } from '@/shared/types/song';
-import { ipcRenderer } from 'electron';
-
-export type PlayMode = 'sequential' | 'list-loop' | 'single-loop' | 'shuffle';
+import type { PlayMode } from '@/shared/types/player';
+const { ipcRenderer } = window.require('electron');
 
 interface PlayerStoreState {
   currentSong: Song | null;
@@ -39,9 +37,40 @@ interface PlayerStoreActions {
   playNext: () => void;
   playPrevious: () => void;
   setCurrentPlaylist: (playlist: Song[], currentIndex?: number) => void;
+  removeFromQueue: (index: number) => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => void;
+  clearQueue: () => void;
 }
 
 export type PlayerStore = PlayerStoreState & PlayerStoreActions;
+
+const QUEUE_STORAGE_KEY = 'mplayer_queue';
+
+const persistQueue = (state: PlayerStoreState) => {
+  try {
+    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify({
+      playlist: state.currentPlaylist,
+      index: state.currentPlaylistIndex,
+    }));
+  } catch (e) {
+    console.error('持久化播放队列失败:', e);
+  }
+};
+
+const loadQueue = (): { playlist: Song[]; index: number } => {
+  try {
+    const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (Array.isArray(data.playlist)) {
+        return { playlist: data.playlist, index: data.index ?? -1 };
+      }
+    }
+  } catch (e) {
+    console.error('加载播放队列失败:', e);
+  }
+  return { playlist: [], index: -1 };
+};
 
 const getInitialPlayMode = (): PlayMode => {
   const saved = localStorage.getItem('playMode');
@@ -73,11 +102,12 @@ const audioPlayer = getGlobalPlayer({
     });
   },
   onEnd: () => {
-    console.log('播放结束，根据播放模式处理');
     const state = usePlayerStore.getState();
     state.playNext();
   }
 });
+
+const initialQueue = loadQueue();
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   currentSong: null,
@@ -91,14 +121,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   lyrics: '',
   lyricsLoading: false,
   playMode: getInitialPlayMode(),
-  currentPlaylist: [],
-  currentPlaylistIndex: -1,
+  currentPlaylist: initialQueue.playlist,
+  currentPlaylistIndex: initialQueue.index,
 
   play: async (song: Song) => {
     const { isLoading, currentSong } = get();
 
     if (isLoading && currentSong?.id === song.id) {
-      console.log('play() 被忽略，正在加载同一首歌');
       return;
     }
 
@@ -112,12 +141,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         lyricsLoading: false
       });
 
-      console.log('playerStore.play() 开始加载歌曲:', song.name, '原始URL:', song.url);
-
       let realUrl = song.url;
       try {
-        realUrl = await musicApi.getAudioUrl(song.url);
-        console.log('真实音频 URL:', realUrl);
+        const result = await ipcRenderer.invoke('musicApi:getAudioUrl', song.url);
+        if (result.success) {
+          realUrl = result.data;
+        }
       } catch (urlError) {
         console.error('获取真实音频 URL 失败:', urlError);
       }
@@ -127,36 +156,51 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
 
       const songWithRealUrl = { ...song, url: realUrl };
-      console.log('开始加载音频:', realUrl);
       await audioPlayer.load(songWithRealUrl);
 
-      console.log('playerStore.play() 歌曲加载完成，准备播放');
-      console.log('当前音频状态:', audioPlayer.getState());
       audioPlayer.play();
-      console.log('播放命令已发送');
 
       const duration = audioPlayer.getDuration();
 
       set({
         duration: duration,
-        isLoading: false
+        isLoading: false,
+        isPlaying: true
       });
 
-      console.log('开始获取歌词，song.lrc:', song.lrc);
-      if (song.lrc && song.lrc.trim() !== '') {
+      if (!song.lrc || song.lrc.trim() === '') {
         set({ lyricsLoading: true });
         try {
-          console.log('正在请求歌词URL:', song.lrc);
-          const lyricsContent = await lyricsService.getLyrics(song.lrc);
-          console.log('歌词获取成功，内容长度:', lyricsContent.length);
-          set({ lyrics: lyricsContent, lyricsLoading: false });
+          const result = await ipcRenderer.invoke(
+            'musicApi:searchSongs',
+            `${song.name} ${song.artist}`,
+            1,
+            song.sourceType
+          );
+          if (result.success && result.data.length > 0) {
+            const freshSong = result.data[0];
+            if (freshSong.lrc && freshSong.lrc.trim() !== '') {
+              const lyricsContent = await lyricsService.getLyrics(freshSong.lrc);
+              set({ lyrics: lyricsContent, lyricsLoading: false });
+            } else {
+              set({ lyrics: '', lyricsLoading: false });
+            }
+          } else {
+            set({ lyrics: '', lyricsLoading: false });
+          }
         } catch (lyricsError) {
           console.error('获取歌词失败:', lyricsError);
           set({ lyrics: '', lyricsLoading: false });
         }
       } else {
-        console.log('歌曲没有歌词URL，跳过获取');
-        set({ lyrics: '', lyricsLoading: false });
+        set({ lyricsLoading: true });
+        try {
+          const lyricsContent = await lyricsService.getLyrics(song.lrc);
+          set({ lyrics: lyricsContent, lyricsLoading: false });
+        } catch (lyricsError) {
+          console.error('获取歌词失败:', lyricsError);
+          set({ lyrics: '', lyricsLoading: false });
+        }
       }
 
       await ipcRenderer.invoke('history:add', song);
@@ -172,6 +216,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       } else {
         set({ currentPlaylistIndex: index });
       }
+      persistQueue(get());
 
     } catch (error) {
       set({
@@ -184,10 +229,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   pause: () => {
     audioPlayer.pause();
+    set({ isPlaying: false });
   },
 
   resume: () => {
     audioPlayer.play();
+    set({ isPlaying: true });
   },
 
   stop: () => {
@@ -199,6 +246,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       duration: 0,
       currentPlaylistIndex: -1
     });
+    persistQueue(get());
   },
 
   seek: (position: number) => {
@@ -248,7 +296,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const { currentPlaylist, currentPlaylistIndex, playMode, currentSong } = get();
 
     if (currentPlaylist.length === 0 || currentPlaylistIndex === -1) {
-      console.log('播放列表为空，停止播放');
       get().stop();
       return;
     }
@@ -256,21 +303,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     switch (playMode) {
       case 'single-loop':
         if (currentSong) {
-          console.log('单曲循环，重新播放当前歌曲');
           get().play(currentSong);
         }
         break;
 
       case 'shuffle':
         const randomIndex = Math.floor(Math.random() * currentPlaylist.length);
-        console.log('随机播放，选择索引:', randomIndex);
         set({ currentPlaylistIndex: randomIndex });
         get().play(currentPlaylist[randomIndex]);
         break;
 
       case 'list-loop':
         const nextIndexLoop = (currentPlaylistIndex + 1) % currentPlaylist.length;
-        console.log('列表循环，下一首索引:', nextIndexLoop);
         set({ currentPlaylistIndex: nextIndexLoop });
         get().play(currentPlaylist[nextIndexLoop]);
         break;
@@ -279,11 +323,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       default:
         if (currentPlaylistIndex < currentPlaylist.length - 1) {
           const nextIndex = currentPlaylistIndex + 1;
-          console.log('顺序播放，下一首索引:', nextIndex);
           set({ currentPlaylistIndex: nextIndex });
           get().play(currentPlaylist[nextIndex]);
         } else {
-          console.log('顺序播放结束');
           get().stop();
         }
         break;
@@ -315,7 +357,80 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylist: playlist,
       currentPlaylistIndex: currentIndex
     });
-  }
+    persistQueue(get());
+  },
+
+  removeFromQueue: (index: number) => {
+    const { currentPlaylist, currentPlaylistIndex } = get();
+    if (index < 0 || index >= currentPlaylist.length) return;
+
+    const newPlaylist = currentPlaylist.filter((_, i) => i !== index);
+    let newIndex = currentPlaylistIndex;
+
+    if (newPlaylist.length === 0) {
+      get().stop();
+      persistQueue({ ...get(), currentPlaylist: [], currentPlaylistIndex: -1 });
+      return;
+    }
+
+    if (index === currentPlaylistIndex) {
+      // 移除的是当前播放歌曲，播放下一首
+      const nextSong = newPlaylist[index] || newPlaylist[0];
+      set({
+        currentPlaylist: newPlaylist,
+        currentPlaylistIndex: index < newPlaylist.length ? index : 0,
+      });
+      persistQueue(get());
+      get().play(nextSong);
+      return;
+    }
+
+    if (index < currentPlaylistIndex) {
+      newIndex = currentPlaylistIndex - 1;
+    }
+
+    set({
+      currentPlaylist: newPlaylist,
+      currentPlaylistIndex: newIndex,
+    });
+    persistQueue(get());
+  },
+
+  reorderQueue: (fromIndex: number, toIndex: number) => {
+    const { currentPlaylist, currentPlaylistIndex } = get();
+    if (fromIndex < 0 || fromIndex >= currentPlaylist.length) return;
+    if (toIndex < 0 || toIndex >= currentPlaylist.length) return;
+    if (fromIndex === toIndex) return;
+
+    const newPlaylist = [...currentPlaylist];
+    const [moved] = newPlaylist.splice(fromIndex, 1);
+    newPlaylist.splice(toIndex, 0, moved);
+
+    // 同步更新 currentPlaylistIndex
+    let newIndex = currentPlaylistIndex;
+    if (currentPlaylistIndex === fromIndex) {
+      newIndex = toIndex;
+    } else if (fromIndex < currentPlaylistIndex && toIndex >= currentPlaylistIndex) {
+      newIndex = currentPlaylistIndex - 1;
+    } else if (fromIndex > currentPlaylistIndex && toIndex <= currentPlaylistIndex) {
+      newIndex = currentPlaylistIndex + 1;
+    }
+
+    set({
+      currentPlaylist: newPlaylist,
+      currentPlaylistIndex: newIndex,
+    });
+    persistQueue(get());
+  },
+
+  clearQueue: () => {
+    get().stop();
+    set({
+      currentPlaylist: [],
+      currentPlaylistIndex: -1,
+    });
+    persistQueue(get());
+  },
 }));
 
 export function destroyPlayer(): void {

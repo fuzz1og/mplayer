@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Settings, Trash2, Database, Info, HardDrive, FileAudio, Image, Link, Music, Folder, RefreshCw } from 'lucide-react';
 import { message } from 'antd';
 import { cacheService, CacheStats } from '@/renderer/services/cacheService';
-import { ipcRenderer } from 'electron';
+const { ipcRenderer } = window.require('electron');
 
 const SettingsPage: React.FC = () => {
   const [stats, setStats] = useState<CacheStats>({

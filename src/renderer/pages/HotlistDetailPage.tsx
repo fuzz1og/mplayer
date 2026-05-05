@@ -1,17 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { musicApi } from '@/main/api/musicApi';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
+import { usePlayerStore } from '@/renderer/store/playerStore';
 import type { Song } from '@/shared/types/song';
-
-interface HotlistDetailPageProps {
-  onBack?: () => void;
-  onPlay: (song: Song) => void;
-  hotlistType: 'netease' | 'qq';
-  onDownload?: (song: Song) => void;
-  onBatchDownload?: (songs: Song[]) => void;
-  onAddToPlaylist?: (song: Song) => void;
-  onBatchAddToPlaylist?: (songs: Song[]) => void;
-}
+const { ipcRenderer } = window.require('electron');
 
 // 热榜歌曲类型
 interface HotlistSong {
@@ -23,10 +16,16 @@ interface HotlistSong {
   album: string;
 }
 
-const HotlistDetailPage: React.FC<HotlistDetailPageProps> = ({ onBack: _onBack, onPlay, hotlistType, onDownload, onBatchDownload, onAddToPlaylist, onBatchAddToPlaylist }) => {
+const HotlistDetailPage: React.FC = () => {
+  const { type } = useParams<{ type: 'netease' | 'qq' }>();
+  const navigate = useNavigate();
+  const hotlistType = type || 'netease';
+
   const [hotlist, setHotlist] = useState<HotlistSong[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { play, currentSong, isPlaying } = usePlayerStore();
 
   // 加载热榜数据
   useEffect(() => {
@@ -36,18 +35,21 @@ const HotlistDetailPage: React.FC<HotlistDetailPageProps> = ({ onBack: _onBack, 
         setError(null);
         let data;
         if (hotlistType === 'netease') {
-          data = await musicApi.getNeteaseHotlist();
+          const result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
+          data = result.success ? result.data : [];
         } else {
-          data = await musicApi.getQQHotlist();
+          const result = await ipcRenderer.invoke('musicApi:getQQHotlist');
+          data = result.success ? result.data : [];
         }
 
         // 为QQ音乐热榜的歌曲获取专辑图片
         if (hotlistType === 'qq' && data.length > 0) {
           const songsWithCovers = await Promise.all(
-            data.map(async (song) => {
+            data.map(async (song: HotlistSong) => {
               try {
                 const keyword = `${song.name} ${song.artists}`;
-                const searchResults = await musicApi.searchSongs(keyword, 1, 'qq');
+                const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, 'qq');
+                const searchResults = result.success ? result.data : [];
                 if (searchResults.length > 0) {
                   return {
                     ...song,
@@ -75,8 +77,6 @@ const HotlistDetailPage: React.FC<HotlistDetailPageProps> = ({ onBack: _onBack, 
     loadHotlist();
   }, [hotlistType]);
 
-
-
   // 转换热榜歌曲为Song类型
   const convertToSongs = (hotlistSongs: HotlistSong[]): Song[] => {
     return hotlistSongs.map(song => ({
@@ -85,129 +85,128 @@ const HotlistDetailPage: React.FC<HotlistDetailPageProps> = ({ onBack: _onBack, 
       artist: song.artists,
       album: song.album,
       cover: song.cover,
-      url: '', // 热榜数据中没有音频URL，需要通过搜索获取
-      duration: 0, // 热榜数据中没有时长信息
-      lrc: '', // 热榜数据中没有歌词信息
+      url: '',
+      duration: 0,
+      lrc: '',
       sourceType: hotlistType
     }));
   };
 
+  const handlePlay = async (song: Song) => {
+    const keyword = `${song.name} ${song.artist}`;
+    const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, hotlistType);
+    const searchResults = result.success ? result.data : [];
+    if (searchResults.length > 0) {
+      await play(searchResults[0]);
+    }
+  };
+
   return (
-    <div style={{ padding: '24px', height: '100%', overflow: 'auto' }}>
-      {/* 热榜标题 */}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* 导航栏 */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
-          marginBottom: '32px',
+          gap: '16px',
+          padding: '12px 24px',
+          borderBottom: '1px solid var(--divider-color)',
+          backgroundColor: 'var(--content-bg)',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+          height: '60px',
         }}
       >
-        <div
+        <button
+          onClick={() => navigate('/discover')}
           style={{
-            width: '80px',
-            height: '80px',
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            padding: '10px',
             borderRadius: '8px',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontWeight: 600,
-            fontSize: '20px',
+            gap: '6px',
+            color: 'var(--text-secondary)',
+            transition: 'all 0.2s ease',
+            fontSize: '14px',
+            fontWeight: 500,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+            e.currentTarget.style.color = 'var(--text-primary)';
+            e.currentTarget.style.transform = 'translateX(-2px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.color = 'var(--text-secondary)';
+            e.currentTarget.style.transform = 'translateX(0)';
           }}
         >
-          热榜
-        </div>
-        <div>
-          <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-            {hotlistType === 'netease' ? '网易云音乐热歌榜' : 'QQ音乐热歌榜'}
-          </h1>
-          <p style={{ fontSize: '14px', color: 'var(--text-tertiary)' }}>
-            实时更新，最热门的{hotlistType === 'netease' ? '50' : '20'}首歌曲
-          </p>
-        </div>
+          <ArrowLeft size={16} />
+          <span>返回</span>
+        </button>
+        <h1
+          style={{
+            fontSize: '20px',
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+            flex: 1,
+            margin: 0,
+            textAlign: 'center',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {hotlistType === 'netease' ? '网易云音乐热歌榜' : 'QQ音乐热歌榜'}
+        </h1>
+        <div style={{ width: '140px' }} />
       </div>
 
-      {/* 热榜歌曲列表 */}
-      {loading ? (
+      {/* 内容区域 */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+        {/* 热榜标题 */}
         <div
           style={{
-            backgroundColor: 'var(--content-bg)',
-            borderRadius: '8px',
-            padding: '24px',
-            border: '1px solid var(--border-color)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            marginBottom: '32px',
           }}
         >
-          {/* 热榜标题骨架屏 */}
           <div
             style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '8px',
+              background: hotlistType === 'netease'
+                ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                : 'linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px',
-              marginBottom: '32px',
+              justifyContent: 'center',
+              color: 'white',
+              fontWeight: 600,
+              fontSize: '20px',
             }}
           >
-            <div
-              style={{
-                width: '80px',
-                height: '80px',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                backgroundSize: '200% 200%',
-                animation: 'skeletonLoading 1.5s ease-in-out infinite',
-              }}
-            />
-            <div style={{ flex: 1 }}>
-              <div
-                style={{
-                  width: '60%',
-                  height: '28px',
-                  borderRadius: '4px',
-                  background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                  backgroundSize: '200% 200%',
-                  animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                  marginBottom: '8px',
-                }}
-              />
-              <div
-                style={{
-                  width: '40%',
-                  height: '14px',
-                  borderRadius: '4px',
-                  background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                  backgroundSize: '200% 200%',
-                  animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                  animationDelay: '0.2s',
-                }}
-              />
-            </div>
+            热榜
           </div>
-
-          {/* 歌曲列表骨架屏 */}
           <div>
-            {/* 表头 */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: '12px 16px',
-                borderBottom: '1px solid var(--divider-color)',
-                fontSize: '12px',
-                color: 'var(--text-tertiary)',
-                fontWeight: 500,
-                marginBottom: '8px',
-              }}
-            >
-              <div style={{ width: '40px', textAlign: 'center' }}></div>
-              <div style={{ width: '50px', textAlign: 'center' }}>#</div>
-              <div style={{ flex: 1 }}>标题</div>
-              <div style={{ width: '25%' }}>专辑</div>
-              <div style={{ width: '80px', textAlign: 'right' }}>时长</div>
-              <div style={{ width: '100px', textAlign: 'center' }}>操作</div>
-            </div>
+            <h2 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+              {hotlistType === 'netease' ? '网易云音乐热歌榜' : 'QQ音乐热歌榜'}
+            </h2>
+            <p style={{ fontSize: '14px', color: 'var(--text-tertiary)' }}>
+              实时更新，最热门的{hotlistType === 'netease' ? '50' : '20'}首歌曲
+            </p>
+          </div>
+        </div>
 
-            {/* 歌曲行骨架屏 */}
+        {/* 热榜歌曲列表 */}
+        {loading ? (
+          <div>
+            {/* 骨架屏 */}
             {Array.from({ length: 10 }).map((_, index) => (
               <div
                 key={`skeleton-${index}`}
@@ -219,19 +218,6 @@ const HotlistDetailPage: React.FC<HotlistDetailPageProps> = ({ onBack: _onBack, 
                   marginBottom: '8px',
                 }}
               >
-                <div style={{ width: '40px', textAlign: 'center' }}>
-                  <div
-                    style={{
-                      width: '16px',
-                      height: '16px',
-                      borderRadius: '4px',
-                      background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                      backgroundSize: '200% 200%',
-                      animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                      margin: '0 auto',
-                    }}
-                  />
-                </div>
                 <div style={{ width: '50px', textAlign: 'center' }}>
                   <div
                     style={{
@@ -281,168 +267,65 @@ const HotlistDetailPage: React.FC<HotlistDetailPageProps> = ({ onBack: _onBack, 
                     />
                   </div>
                 </div>
-                <div style={{ width: '25%' }}>
-                  <div
-                    style={{
-                      width: '80%',
-                      height: '13px',
-                      borderRadius: '2px',
-                      background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                      backgroundSize: '200% 200%',
-                      animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                      animationDelay: '0.2s',
-                    }}
-                  />
-                </div>
-                <div style={{ width: '80px', textAlign: 'right' }}>
-                  <div
-                    style={{
-                      width: '40px',
-                      height: '13px',
-                      borderRadius: '2px',
-                      background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                      backgroundSize: '200% 200%',
-                      animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                      animationDelay: '0.3s',
-                      marginLeft: 'auto',
-                    }}
-                  />
-                </div>
-                <div style={{ width: '100px', textAlign: 'center' }}>
-                  <div
-                    style={{
-                      width: '16px',
-                      height: '16px',
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                      backgroundSize: '200% 200%',
-                      animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                      animationDelay: '0.4s',
-                      margin: '0 auto',
-                    }}
-                  />
-                </div>
               </div>
             ))}
+            <style>{`
+              @keyframes skeletonLoading {
+                0% {
+                  background-position: 200% 0;
+                }
+                100% {
+                  background-position: -200% 0;
+                }
+              }
+            `}</style>
           </div>
-
-          <style>{`
-            @keyframes skeletonLoading {
-              0% {
-                background-position: 200% 0;
-              }
-              100% {
-                background-position: -200% 0;
-              }
-            }
-          `}</style>
-        </div>
-      ) : error ? (
-        <div
-          style={{
-            padding: '24px',
-            backgroundColor: '#FF6B6B20',
-            borderRadius: '8px',
-            color: '#FF6B6B',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ fontSize: '32px', marginBottom: '16px' }}>❌</div>
-          <div style={{ fontSize: '16px', marginBottom: '8px' }}>{error}</div>
-          <button
-            onClick={() => {
-              setLoading(true);
-              const loadFunction = hotlistType === 'netease' ? musicApi.getNeteaseHotlist : musicApi.getQQHotlist;
-              loadFunction().then(setHotlist).catch(console.error).finally(() => setLoading(false));
-            }}
+        ) : error ? (
+          <div
             style={{
-              marginTop: '16px',
-              padding: '8px 16px',
-              backgroundColor: '#FF6B6B',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
+              padding: '24px',
+              backgroundColor: '#FF6B6B20',
+              borderRadius: '8px',
+              color: '#FF6B6B',
+              textAlign: 'center',
             }}
           >
-            重试
-          </button>
-        </div>
-      ) : (
-        <div
-          style={{
-            backgroundColor: 'var(--content-bg)',
-            borderRadius: '8px',
-            padding: '24px',
-            border: '1px solid var(--border-color)',
-          }}
-        >
+            <div style={{ fontSize: '32px', marginBottom: '16px' }}>❌</div>
+            <div style={{ fontSize: '16px', marginBottom: '8px' }}>{error}</div>
+            <button
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const result = hotlistType === 'netease'
+                    ? await ipcRenderer.invoke('musicApi:getNeteaseHotlist')
+                    : await ipcRenderer.invoke('musicApi:getQQHotlist');
+                  const data = result.success ? result.data : [];
+                  setHotlist(data);
+                } catch (error) {
+                  console.error(error);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              style={{
+                marginTop: '16px',
+                padding: '8px 16px',
+                backgroundColor: '#FF6B6B',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              重试
+            </button>
+          </div>
+        ) : (
           <SongList
             songs={convertToSongs(hotlist)}
-            onPlay={async (song) => {
-              // 使用歌曲名 + 歌手名作为关键词搜索
-              const keyword = `${song.name} ${song.artist}`;
-              const searchResults = await musicApi.searchSongs(keyword, 1, hotlistType);
-
-              if (searchResults.length > 0) {
-                // 播放第一首匹配的歌曲
-                onPlay(searchResults[0]);
-              }
-            }}
-            onDownload={async (song) => {
-              // 使用歌曲名 + 歌手名作为关键词搜索
-              const keyword = `${song.name} ${song.artist}`;
-              const searchResults = await musicApi.searchSongs(keyword, 1, hotlistType);
-
-              if (searchResults.length > 0 && onDownload) {
-                // 下载第一首匹配的歌曲
-                onDownload(searchResults[0]);
-              }
-            }}
-            onBatchDownload={async (songs) => {
-              // 为每首歌曲搜索并下载
-              if (!onBatchDownload) return;
-
-              const searchPromises = songs.map(async (song) => {
-                const keyword = `${song.name} ${song.artist}`;
-                const searchResults = await musicApi.searchSongs(keyword, 1, hotlistType);
-                return searchResults.length > 0 ? searchResults[0] : null;
-              });
-
-              const searchResults = await Promise.all(searchPromises);
-              const validSongs = searchResults.filter((song): song is Song => song !== null);
-
-              if (validSongs.length > 0) {
-                onBatchDownload(validSongs);
-              }
-            }}
-            onAddToPlaylist={async (song) => {
-              // 使用歌曲名 + 歌手名作为关键词搜索
-              const keyword = `${song.name} ${song.artist}`;
-              const searchResults = await musicApi.searchSongs(keyword, 1, hotlistType);
-
-              if (searchResults.length > 0 && onAddToPlaylist) {
-                // 加入歌单第一首匹配的歌曲
-                onAddToPlaylist(searchResults[0]);
-              }
-            }}
-            onBatchAddToPlaylist={async (songs) => {
-              // 为每首歌曲搜索并加入歌单
-              if (!onBatchAddToPlaylist) return;
-
-              const searchPromises = songs.map(async (song) => {
-                const keyword = `${song.name} ${song.artist}`;
-                const searchResults = await musicApi.searchSongs(keyword, 1, hotlistType);
-                return searchResults.length > 0 ? searchResults[0] : null;
-              });
-
-              const searchResults = await Promise.all(searchPromises);
-              const validSongs = searchResults.filter((song): song is Song => song !== null);
-
-              if (validSongs.length > 0) {
-                onBatchAddToPlaylist(validSongs);
-              }
-            }}
+            currentSongId={currentSong?.id}
+            isPlaying={isPlaying}
+            onPlay={handlePlay}
             showHeader={true}
             showIndex={true}
             showCheckbox={true}
@@ -450,8 +333,8 @@ const HotlistDetailPage: React.FC<HotlistDetailPageProps> = ({ onBack: _onBack, 
             enableBatchAddToPlaylist={true}
             emptyText="暂无热榜歌曲"
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

@@ -47,9 +47,7 @@ export class AudioPlayer {
     }
   }
 
-  async load(song: Song): Promise<void> {
-    console.log('AudioPlayer.load 被调用, song:', song.name, 'url:', song.url);
-
+async load(song: Song): Promise<void> {
     if (this.howl) {
       this.howl.unload();
       this.howl = null;
@@ -70,7 +68,6 @@ export class AudioPlayer {
         html5: true,
         volume: this.volume / 100,
         onload: () => {
-          console.log('AudioPlayer onload 回调触发');
           const duration = this.howl?.duration() || 0;
           this.callbacks.onDurationChange?.(duration);
           this.setState('paused');
@@ -106,11 +103,8 @@ export class AudioPlayer {
   }
 
   play(): void {
-    console.log('AudioPlayer.play() 被调用, current state:', this.state);
     if (this.howl && this.state !== 'playing') {
       this.howl.play();
-    } else {
-      console.log('AudioPlayer.play() 被忽略, 原因:', !this.howl ? 'howl is null' : 'already playing');
     }
   }
 
