@@ -7,7 +7,7 @@ import { useCachedCover } from '@/renderer/services/coverCacheService';
 
 const CachedCoverImage: React.FC<{ coverUrl: string; alt: string; style: React.CSSProperties }> = ({ coverUrl, alt, style }) => {
   const src = useCachedCover(coverUrl);
-  return <img src={src} alt={alt} style={style} />;
+  return <img src={src} alt={alt} loading="lazy" style={style} />;
 };
 
 interface SongListProps {
