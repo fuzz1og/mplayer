@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ListMusic, Plus, FolderOpen } from 'lucide-react';
-import { Modal } from 'antd';
+import { Modal, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { playlistService } from '@/renderer/services/playlistService';
 import MusicCard from '@/renderer/components/MusicCard';
@@ -29,6 +29,25 @@ const PlaylistsPage: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleDeletePlaylist = (playlist: Playlist) => {
+    Modal.confirm({
+      title: '删除歌单',
+      content: `确定要删除歌单「${playlist.name}」吗？此操作不可撤销。`,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await playlistService.deletePlaylist(playlist.id);
+          loadData();
+        } catch (error) {
+          console.error('删除歌单失败:', error);
+          message.error('删除失败，请重试');
+        }
+      },
+    });
+  };
 
   const handleCreatePlaylist = async () => {
     if (!newPlaylistName.trim()) return;
@@ -121,6 +140,7 @@ const PlaylistsPage: React.FC = () => {
                 title={playlist.name}
                 subtitle={playlist.description || '暂无描述'}
                 onClick={() => navigate(`/playlist/${playlist.id}`)}
+                onDelete={() => handleDeletePlaylist(playlist)}
               />
             ))}
           </div>
