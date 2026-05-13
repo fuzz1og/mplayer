@@ -193,4 +193,4 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
   );
 };
 
-export default TopBar;
+export default React.memo(TopBar);

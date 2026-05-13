@@ -433,6 +433,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 }));
 
+// Sync state to tray when currentSong or isPlaying changes
+// NOTE: ipcRenderer is already imported at line 6
+usePlayerStore.subscribe((state) => {
+  if (state.currentSong) {
+    ipcRenderer.send('tray:state', {
+      songName: state.currentSong.name,
+      artist: state.currentSong.artist,
+      isPlaying: state.isPlaying,
+    });
+  }
+});
+
 export function destroyPlayer(): void {
   destroyGlobalPlayer();
 }

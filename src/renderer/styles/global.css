@@ -394,3 +394,20 @@ html, body, #root {
   background-color: var(--hover-bg);
   color: var(--accent-color);
 }
+
+/* Vertical slide-in for modals */
+@keyframes slideInDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* === Migrated Inline Animations === */
+@keyframes soundBar {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

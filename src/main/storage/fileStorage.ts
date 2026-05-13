@@ -388,6 +388,27 @@ class FileStorage {
     }
   }
 
+  async reorderSongIds(playlistId: number, songIds: string[]): Promise<void> {
+    const existing = this.data.playlistSongs.filter(ps => ps.playlistId === playlistId);
+    const existingMap = new Map(existing.map(ps => [ps.songId, ps]));
+
+    const newPlaylistSongs = songIds.map((songId, index) => {
+      const existingItem = existingMap.get(songId);
+      if (existingItem) {
+        return { ...existingItem, order: index };
+      }
+      return null;
+    }).filter(Boolean) as PlaylistSong[];
+
+    const remainingIds = new Set(songIds);
+    const remaining = existing.filter(ps => !remainingIds.has(ps.songId));
+    const allSongs = [...newPlaylistSongs, ...remaining];
+
+    this.data.playlistSongs = this.data.playlistSongs.filter(ps => ps.playlistId !== playlistId);
+    this.data.playlistSongs.push(...allSongs);
+    this.saveData();
+  }
+
   // Settings
   async setSetting<T>(key: string, value: T): Promise<void> {
     this.ensureInitialized();

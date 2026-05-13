@@ -205,4 +205,4 @@ const MusicCard: React.FC<MusicCardProps> = ({
   );
 };
 
-export default MusicCard;
+export default React.memo(MusicCard);

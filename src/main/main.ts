@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, session } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, globalShortcut } from 'electron';
 import path from 'path';
 import fs from 'fs';
 
@@ -20,10 +20,11 @@ import { getCacheManager } from './cache/cacheManager';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { musicApi } from './api/musicApi';
+import { TrayManager } from './tray/trayManager';
 
 // IPC通信管理器
 class IPCManager {
-  private pendingRequests: Map<string, { resolve: Function, reject: Function, timeout: NodeJS.Timeout }> = new Map();
+  private pendingRequests: Map<string, { resolve: (value: any) => void, reject: (reason?: any) => void, timeout: NodeJS.Timeout }> = new Map();
   private requestId = 0;
 
   constructor(private mainWindow: BrowserWindow) {}
@@ -220,7 +221,10 @@ function setupIPC() {
     await db.updatePlaylistSongOrder(playlistId, songId, order);
   });
 
-
+  ipcMain.handle('playlist:reorderFull', async (_event, playlistId: number, songIds: string[]) => {
+    await db.reorderSongIds(playlistId, songIds);
+    return { success: true };
+  });
 
   // 歌词获取 IPC
   ipcMain.handle('lyrics:get', async (_event, lrcUrl: string) => {
@@ -337,6 +341,10 @@ function setupIPC() {
       return { success: false, error: error instanceof Error ? error.message : '未知错误' };
     }
   });
+
+  ipcMain.handle('app:quit', () => {
+    app.quit();
+  });
 }
 
 // 为图片请求补充 Cache-Control 头，利用 Chromium 内置 HTTP 缓存
@@ -356,6 +364,19 @@ function setupImageCache() {
 
     callback({ responseHeaders: details.responseHeaders });
   });
+}
+
+function setupGlobalShortcuts(mainWindow: BrowserWindow) {
+  const sendAction = (type: string) => {
+    mainWindow.webContents.send('shortcut:action', { type });
+  };
+
+  globalShortcut.register('MediaPlayPause', () => sendAction('playPause'));
+  globalShortcut.register('MediaNextTrack', () => sendAction('next'));
+  globalShortcut.register('MediaPreviousTrack', () => sendAction('prev'));
+  globalShortcut.register('CommandOrControl+Alt+Space', () => sendAction('playPause'));
+  globalShortcut.register('CommandOrControl+Alt+Right', () => sendAction('next'));
+  globalShortcut.register('CommandOrControl+Alt+Left', () => sendAction('prev'));
 }
 
 app.whenReady().then(async () => {
@@ -395,6 +416,27 @@ app.whenReady().then(async () => {
   // 设置 IPC 处理器
   setupIPC();
 
+  const trayManager = new TrayManager();
+  trayManager.create(mainWindow);
+
+  setupGlobalShortcuts(mainWindow);
+
+  // Tray state sync from renderer
+  ipcMain.on('tray:state', (_event, state: { songName: string; artist: string; isPlaying: boolean }) => {
+    trayManager.updateSongInfo(state.songName, state.artist);
+    trayManager.updatePlayState(state.isPlaying);
+    trayManager.refreshMenu(mainWindow);
+  });
+
+  // Tray action handler (minimize, etc.)
+  ipcMain.on('tray:action', (_event, payload: { type: string }) => {
+    if (payload.type === 'minimize') {
+      mainWindow.hide();
+      return;
+    }
+    mainWindow.webContents.send('tray:action', payload);
+  });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -406,4 +448,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
