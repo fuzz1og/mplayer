@@ -109,9 +109,10 @@ const PlaylistDetailPage: React.FC = () => {
   const handleBatchDelete = async (selectedSongs: Song[]) => {
     if (!playlistId) return;
     try {
-      for (const song of selectedSongs) {
-        await playlistService.removeSongFromPlaylist(playlistId, song.id);
-      }
+      await Promise.all(selectedSongs.map(song =>
+        playlistService.removeSongFromPlaylist(playlistId, song.id)
+      ));
+      setSelectedIds([]);
       loadData();
       message.success(`已移除 ${selectedSongs.length} 首歌曲`);
     } catch (error) {
