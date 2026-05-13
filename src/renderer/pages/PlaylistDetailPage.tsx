@@ -26,7 +26,7 @@ const PlaylistDetailPage: React.FC = () => {
   const refreshPlaylistSongs = async (songs: Song[]): Promise<Song[]> => {
     const results = await Promise.allSettled(
       songs.map(async (song) => {
-        const cached = await cacheService.getUrlCache(song.id);
+        const cached: { url: string; cover: string; lrc: string } | null = await cacheService.getUrlCache(song.id);
         if (cached) {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
         }
@@ -35,7 +35,7 @@ const PlaylistDetailPage: React.FC = () => {
         const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
         if (!result.success || !result.data.length) return song;
 
-        const fresh = result.data.find((s: Song) => s.id === song.id) || result.data[0];
+        const fresh = result.data.find((s: Song) => s.id === song.id) || song;
 
         await cacheService.setUrlCache(song.id, {
           url: fresh.url,
