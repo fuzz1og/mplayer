@@ -3,6 +3,12 @@ import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic } from 'lucide
 import type { Song } from '@/shared/types/song';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import BatchAddToPlaylistModal from './BatchAddToPlaylistModal';
+import { useCachedCover } from '@/renderer/services/coverCacheService';
+
+const CachedCoverImage: React.FC<{ coverUrl: string; alt: string; style: React.CSSProperties }> = ({ coverUrl, alt, style }) => {
+  const src = useCachedCover(coverUrl);
+  return <img src={src} alt={alt} style={style} />;
+};
 
 interface SongListProps {
   songs: Song[];
@@ -431,10 +437,9 @@ const SongList: React.FC<SongListProps> = ({
                   }}
                 >
                   {song.cover ? (
-                    <img
-                      src={song.cover}
+                    <CachedCoverImage
+                      coverUrl={song.cover}
                       alt={song.name}
-                      loading="lazy"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   ) : (
