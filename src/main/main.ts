@@ -343,7 +343,7 @@ function setupIPC() {
   });
 
   ipcMain.handle('app:quit', () => {
-    app.quit();
+    app.exit();
   });
 }
 
