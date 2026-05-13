@@ -17,10 +17,11 @@ export async function cacheCoverImage(coverUrl: string): Promise<void> {
   inFlight.add(coverUrl);
   try {
     const response = await fetch(coverUrl);
+    if (!response.ok) return;
     const buffer = Buffer.from(await response.arrayBuffer());
     await cacheService.setCoverCache(coverUrl, buffer);
-  } catch {
-    // 静默失败
+  } catch (error) {
+    console.error('缓存封面失败:', error);
   } finally {
     inFlight.delete(coverUrl);
   }
