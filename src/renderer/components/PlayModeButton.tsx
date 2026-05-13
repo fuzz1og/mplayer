@@ -108,4 +108,4 @@ const PlayModeButton: React.FC<PlayModeButtonProps> = ({ mode, onModeChange, siz
   );
 };
 
-export default PlayModeButton;
+export default React.memo(PlayModeButton);

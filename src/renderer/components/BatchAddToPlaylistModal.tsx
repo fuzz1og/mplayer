@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, ListMusic } from 'lucide-react';
-import { message } from 'antd';
+import { message, Modal } from 'antd';
 import { playlistService } from '@/renderer/services/playlistService';
+import { filterDuplicates } from '@/renderer/utils/songDedupe';
 import type { Song, Playlist } from '@/shared/types/song';
 
 interface BatchAddToPlaylistModalProps {
@@ -42,15 +43,51 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
   const handleAddToPlaylist = async (playlistId: number) => {
     setAdding(true);
     try {
-      for (const song of songs) {
+      const existingSongs = await playlistService.getPlaylistSongs(playlistId);
+      const filtered = filterDuplicates(existingSongs, songs);
+
+      const skipCount = filtered.duplicates.length;
+      const conflictCount = filtered.conflicts.length;
+
+      if (filtered.ok.length === 0 && filtered.conflicts.length === 0) {
+        message.info('所有歌曲已存在于该歌单中');
+        setAdding(false);
+        return;
+      }
+
+      if (conflictCount > 0) {
+        Modal.confirm({
+          title: '同名歌曲',
+          content: `有 ${conflictCount} 首歌曲同名但来自不同平台，是否继续添加？`,
+          okText: '继续添加',
+          cancelText: '取消',
+          onOk: async () => {
+            const toAdd = [...filtered.ok, ...filtered.conflicts];
+            for (const song of toAdd) {
+              await playlistService.addSongToPlaylist(playlistId, song);
+            }
+            const msg = skipCount > 0
+              ? `已跳过 ${skipCount} 首重复歌曲，添加 ${toAdd.length} 首`
+              : `已添加 ${toAdd.length} 首歌曲`;
+            message.success(msg);
+            onClose();
+            if (onSuccess) onSuccess();
+          },
+        });
+        setAdding(false);
+        return;
+      }
+
+      for (const song of filtered.ok) {
         await playlistService.addSongToPlaylist(playlistId, song);
       }
+      const msg = skipCount > 0
+        ? `已跳过 ${skipCount} 首重复歌曲，添加 ${filtered.ok.length} 首`
+        : `已添加 ${filtered.ok.length} 首歌曲`;
+      message.success(msg);
       onClose();
-      if (onSuccess) {
-        onSuccess();
-      }
+      if (onSuccess) onSuccess();
     } catch (error) {
-      console.error('添加到歌单失败:', error);
       message.error('添加失败，请重试');
     } finally {
       setAdding(false);
@@ -84,7 +121,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-          animation: 'slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          animation: 'slideInDown 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -314,20 +351,6 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
           </div>
         )}
 
-        <style>{`
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-          @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-          }
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
       </div>
     </div>
   );

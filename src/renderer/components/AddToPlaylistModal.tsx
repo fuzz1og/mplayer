@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, ListMusic } from 'lucide-react';
-import { message } from 'antd';
+import { message, Modal } from 'antd';
 import { playlistService } from '@/renderer/services/playlistService';
+import { checkDuplicate, type DupResult } from '@/renderer/utils/songDedupe';
 import type { Song, Playlist } from '@/shared/types/song';
 
 interface AddToPlaylistModalProps {
@@ -21,12 +22,20 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [dupResults, setDupResults] = useState<Map<number, DupResult>>(new Map());
 
   const loadData = async () => {
     setLoading(true);
     try {
       const playlistsData = await playlistService.getPlaylists();
       setPlaylists(playlistsData);
+
+      const results = new Map<number, DupResult>();
+      for (const p of playlistsData) {
+        const songs = await playlistService.getPlaylistSongs(p.id);
+        results.set(p.id, checkDuplicate(songs, song));
+      }
+      setDupResults(results);
     } catch (error) {
       console.error('加载歌单失败:', error);
     } finally {
@@ -41,14 +50,36 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   }, [isVisible]);
 
   const handleAddToPlaylist = async (playlistId: number) => {
+    const dup = dupResults.get(playlistId);
+    if (dup?.status === 'duplicate') {
+      message.warning('该歌曲已存在于歌单中');
+      return;
+    }
+    if (dup?.status === 'nameConflict') {
+      Modal.confirm({
+        title: '同名歌曲',
+        content: `该歌单已有同名歌曲「${song.name}」（来自${dup.existingSong?.sourceType === 'netease' ? '网易云' : 'QQ'}），是否继续添加？`,
+        okText: '继续添加',
+        cancelText: '取消',
+        onOk: async () => {
+          try {
+            await playlistService.addSongToPlaylist(playlistId, song);
+            message.success(`已添加到歌单`);
+            onClose();
+            if (onSuccess) onSuccess();
+          } catch (error) {
+            message.error('添加失败，请重试');
+          }
+        },
+      });
+      return;
+    }
+
     try {
       await playlistService.addSongToPlaylist(playlistId, song);
       onClose();
-      if (onSuccess) {
-        onSuccess();
-      }
+      if (onSuccess) onSuccess();
     } catch (error) {
-      console.error('添加到歌单失败:', error);
       message.error('添加失败，请重试');
     }
   };
@@ -100,7 +131,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-          animation: 'slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          animation: 'slideInDown 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -258,63 +289,47 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                   <div style={{ fontSize: '14px' }}>暂无歌单</div>
                 </div>
               ) : (
-                playlists.map((playlist) => (
-                  <div
-                    key={playlist.id}
-                    onClick={() => handleAddToPlaylist(playlist.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-                      e.currentTarget.style.transform = 'translateX(4px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                      e.currentTarget.style.transform = 'translateX(0)';
-                    }}
-                  >
+                playlists.map((playlist) => {
+                  const dup = dupResults.get(playlist.id);
+                  const isDisabled = dup?.status === 'duplicate';
+                  return (
                     <div
+                      key={playlist.id}
+                      onClick={() => !isDisabled && handleAddToPlaylist(playlist.id)}
                       style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '6px',
-                        backgroundColor: 'var(--hover-bg)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
+                        display: 'flex', alignItems: 'center', gap: '12px', padding: '12px',
+                        borderRadius: '8px', cursor: isDisabled ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.15s ease', opacity: isDisabled ? 0.5 : 1,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isDisabled) {
+                          e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+                          e.currentTarget.style.transform = 'translateX(4px)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isDisabled) {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                          e.currentTarget.style.transform = 'translateX(0)';
+                        }
                       }}
                     >
-                      <ListMusic size={20} color="var(--text-tertiary)" />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontSize: '14px',
-                          fontWeight: 500,
-                          color: 'var(--text-primary)',
-                        }}
-                      >
-                        {playlist.name}
+                      <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: 'var(--hover-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <ListMusic size={20} color={isDisabled ? 'var(--text-tertiary)' : 'var(--text-primary)'} />
                       </div>
-                      <div
-                        style={{
-                          fontSize: '12px',
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        {playlist.description || '歌单'}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 500, color: isDisabled ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
+                          {playlist.name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {dup?.status === 'duplicate' && <span style={{ color: '#FF6B6B' }}>已存在</span>}
+                          {dup?.status === 'nameConflict' && <span style={{ color: '#F0A500' }}>同名（不同平台）</span>}
+                          {(!dup || dup?.status === 'ok') && (playlist.description || '歌单')}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}
@@ -365,16 +380,6 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
         </div>
       </div>
 
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideIn {
-          from { transform: translateY(-20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 };

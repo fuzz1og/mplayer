@@ -1,16 +1,78 @@
 import React, { useEffect, useState } from 'react';
-import { Play, ArrowLeft, Edit2, Music, Download } from 'lucide-react';
+import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 const { ipcRenderer } = window.require('electron');
 import { message } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownloadStore } from '@/renderer/store/downloadStore';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useCachedCover } from '@/renderer/services/coverCacheService';
 import { playlistService } from '@/renderer/services/playlistService';
-import SongList from '@/renderer/components/SongList';
 import type { Song, Playlist } from '@/shared/types/song';
 import { cacheService } from '@/renderer/services/cacheService';
 
-const { ipcRenderer } = window.require('electron');
+const SortableSongRow: React.FC<{
+  song: Song; index: number; isCurrentSong: boolean; isPlaying: boolean;
+  onPlay: (song: Song) => void; onRemove: (song: Song) => void; onDownload: (song: Song) => void;
+}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
+  const coverSrc = useCachedCover(song.cover);
+
+  return (
+    <div ref={setNodeRef}
+      style={{
+        display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer',
+        backgroundColor: isDragging ? 'var(--hover-bg)' : (isCurrentSong ? 'rgba(116, 185, 255, 0.1)' : 'transparent'),
+        opacity: isDragging ? 0.7 : 1,
+        transform: CSS.Transform.toString(transform),
+        transition: transition || undefined,
+      }}
+      onDoubleClick={() => onPlay(song)}
+    >
+      <div style={{ width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span {...attributes} {...listeners} style={{ cursor: 'grab', display: 'flex', color: 'var(--text-tertiary)' }}>
+          <GripVertical size={14} />
+        </span>
+      </div>
+      <div style={{ width: '30px', textAlign: 'center' }}>
+        {isCurrentSong && isPlaying ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+            <span style={{ width: '3px', height: '12px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite' }} />
+            <span style={{ width: '3px', height: '16px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
+            <span style={{ width: '3px', height: '10px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+          </div>
+        ) : (
+          <span style={{ fontSize: '13px', color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-tertiary)' }}>{index + 1}</span>
+        )}
+      </div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+        <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
+          {song.cover ? <img src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: '14px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {song.name}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {song.artist}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '4px' }}>
+        <button onClick={(e) => { e.stopPropagation(); onDownload(song); }}
+          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
+          <Download size={14} />
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); onRemove(song); }}
+          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+});
 
 const PlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -26,7 +88,11 @@ const PlaylistDetailPage: React.FC = () => {
 
   const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
   const { addSingleDownload, addBatchDownload } = useDownloadStore();
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isReordering, setIsReordering] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
 
   const refreshPlaylistSongs = async (songs: Song[]): Promise<Song[]> => {
     const results = await Promise.allSettled(
@@ -100,18 +166,6 @@ const PlaylistDetailPage: React.FC = () => {
     }
   };
 
-  const handleBatchDownload = async (selectedSongs: Song[]) => {
-    try {
-      const tasks = await ipcRenderer.invoke('download:startBatch', selectedSongs);
-      if (tasks && Array.isArray(tasks)) {
-        addBatchDownload(tasks);
-      }
-    } catch (error) {
-      console.error('批量下载失败:', error);
-      message.error('批量下载失败，请重试');
-    }
-  };
-
   const handleDownloadAll = async () => {
     if (songs.length === 0) return;
     try {
@@ -137,18 +191,33 @@ const PlaylistDetailPage: React.FC = () => {
     }
   };
 
-  const handleBatchDelete = async (selectedSongs: Song[]) => {
-    if (!playlistId) return;
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !playlistId) return;
+
+    const songIds = songs.map(s => s.id);
+    const oldIndex = songIds.indexOf(String(active.id));
+    const newIndex = songIds.indexOf(String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newSongIds = [...songIds];
+    const [moved] = newSongIds.splice(oldIndex, 1);
+    newSongIds.splice(newIndex, 0, moved);
+
+    // Optimistically update UI
+    const newSongs = [...songs];
+    const [movedSong] = newSongs.splice(oldIndex, 1);
+    newSongs.splice(newIndex, 0, movedSong);
+    setSongs(newSongs);
+
+    setIsReordering(true);
     try {
-      await Promise.all(selectedSongs.map(song =>
-        playlistService.removeSongFromPlaylist(playlistId, song.id)
-      ));
-      setSelectedIds([]);
-      loadData();
-      message.success(`已移除 ${selectedSongs.length} 首歌曲`);
+      await playlistService.bulkReorderPlaylistSongs(playlistId, newSongIds);
     } catch (error) {
-      console.error('批量移除失败:', error);
-      message.error('批量移除失败，请重试');
+      console.error('Reorder failed:', error);
+      loadData();
+    } finally {
+      setIsReordering(false);
     }
   };
 
@@ -306,23 +375,34 @@ const PlaylistDetailPage: React.FC = () => {
 
       {/* 歌曲列表 */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        <SongList
-          songs={songs}
-          currentSongId={currentSong?.id}
-          isPlaying={isPlaying}
-          onPlay={handlePlay}
-          showCheckbox={true}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-          enableBatchDownload={true}
-          onBatchDownload={handleBatchDownload}
-          enableBatchDelete={true}
-          onBatchDelete={handleBatchDelete}
-          onDownload={handleDownload}
-          showRemoveFromPlaylist={true}
-          onRemoveFromPlaylist={handleRemoveFromPlaylist}
-          emptyText="歌单暂无歌曲"
-        />
+        {isReordering && (
+          <div style={{ padding: '8px 16px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+            正在保存排序...
+          </div>
+        )}
+        {/* Table header */}
+        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--divider-color)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
+          <div style={{ width: '40px', textAlign: 'center' }}></div>
+          <div style={{ width: '30px', textAlign: 'center' }}>#</div>
+          <div style={{ flex: 1 }}>标题</div>
+          <div style={{ width: '100px', textAlign: 'center' }}>操作</div>
+        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={songs.map(s => s.id)} strategy={verticalListSortingStrategy}>
+            {songs.map((song, index) => (
+              <SortableSongRow
+                key={song.id}
+                song={song}
+                index={index}
+                isCurrentSong={currentSong?.id === song.id}
+                isPlaying={isPlaying}
+                onPlay={handlePlay}
+                onRemove={handleRemoveFromPlaylist}
+                onDownload={handleDownload}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
       </div>
 
       {/* 编辑歌单弹窗 */}

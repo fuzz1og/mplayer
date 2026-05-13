@@ -1,26 +1,11 @@
 import React from 'react';
-import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  Volume1,
-  VolumeX,
-  ListMusic,
-  Heart,
-} from 'lucide-react';
+import { ListMusic, Heart } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
-import PlayModeButton from './PlayModeButton';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
-
-const formatTime = (seconds: number): string => {
-  if (!seconds || isNaN(seconds)) return '00:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-};
+import PlayerControls from './PlayerControls';
+import PlayerProgress from './PlayerProgress';
+import PlayerVolume from './PlayerVolume';
 
 interface PlayerBarProps {
   className?: string;
@@ -56,18 +41,8 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
     }
   };
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVolume(Number(e.target.value));
-  };
-
-  const handleProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    seek(Number(e.target.value));
-  };
-
-  const getVolumeIcon = () => {
-    if (volume === 0) return <VolumeX size={20} />;
-    if (volume < 50) return <Volume1 size={20} />;
-    return <Volume2 size={20} />;
+  const handleVolumeChange = (vol: number) => {
+    setVolume(vol);
   };
 
   return (
@@ -212,221 +187,29 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           maxWidth: '500px',
         }}
       >
-        {/* 控制按钮 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '16px',
-          }}
-        >
-          {/* 播放模式 */}
-          <PlayModeButton
-            mode={playMode}
-            onModeChange={setPlayMode}
-            size={18}
-          />
+        <PlayerControls
+          isPlaying={isPlaying}
+          hasCurrentSong={!!currentSong}
+          playMode={playMode}
+          onPlayPause={handlePlayPause}
+          onPrev={playPrevious}
+          onNext={playNext}
+          onModeChange={setPlayMode}
+        />
 
-          {/* 上一首 */}
-          <button
-            onClick={playPrevious}
-            disabled={!currentSong}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              cursor: currentSong ? 'pointer' : 'not-allowed',
-              padding: '8px',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: currentSong ? 'var(--text-primary)' : 'var(--text-tertiary)',
-              transition: 'all 0.15s ease',
-              opacity: currentSong ? 1 : 0.5,
-            }}
-            onMouseEnter={(e) => {
-              if (currentSong) {
-                e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            <SkipBack size={22} fill="currentColor" />
-          </button>
-
-          {/* 播放/暂停 */}
-          <button
-            onClick={handlePlayPause}
-            disabled={!currentSong}
-            style={{
-              border: 'none',
-              background: 'var(--primary-color)',
-              cursor: currentSong ? 'pointer' : 'not-allowed',
-              padding: '12px',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 2px 8px rgba(45, 52, 54, 0.3)',
-              opacity: currentSong ? 1 : 0.5,
-            }}
-            onMouseEnter={(e) => {
-              if (currentSong) {
-                e.currentTarget.style.transform = 'scale(1.05)';
-                e.currentTarget.style.background = 'var(--primary-hover)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'scale(1)';
-              e.currentTarget.style.background = 'var(--primary-color)';
-            }}
-          >
-            {isPlaying ? (
-              <Pause size={24} fill="white" />
-            ) : (
-              <Play size={24} fill="white" style={{ marginLeft: '2px' }} />
-            )}
-          </button>
-
-          {/* 下一首 */}
-          <button
-            onClick={playNext}
-            disabled={!currentSong}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              cursor: currentSong ? 'pointer' : 'not-allowed',
-              padding: '8px',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: currentSong ? 'var(--text-primary)' : 'var(--text-tertiary)',
-              transition: 'all 0.15s ease',
-              opacity: currentSong ? 1 : 0.5,
-            }}
-            onMouseEnter={(e) => {
-              if (currentSong) {
-                e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            <SkipForward size={22} fill="currentColor" />
-          </button>
-        </div>
-
-        {/* 进度条 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            width: '100%',
-          }}
-        >
-          <span
-            style={{
-              fontSize: '11px',
-              color: 'var(--text-tertiary)',
-              minWidth: '36px',
-              textAlign: 'right',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {formatTime(position)}
-          </span>
-          <input
-            type="range"
-            min={0}
-            max={duration || 100}
-            value={position}
-            onChange={handleProgressChange}
-            disabled={!currentSong}
-            style={{
-              flex: 1,
-              height: '4px',
-              WebkitAppearance: 'none',
-              appearance: 'none',
-              background: `linear-gradient(to right, var(--accent-color) ${(position / (duration || 1)) * 100}%, var(--border-color) ${(position / (duration || 1)) * 100}%)`,
-              borderRadius: '2px',
-              outline: 'none',
-              cursor: currentSong ? 'pointer' : 'not-allowed',
-            }}
-          />
-          <span
-            style={{
-              fontSize: '11px',
-              color: 'var(--text-tertiary)',
-              minWidth: '36px',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {formatTime(duration)}
-          </span>
-        </div>
-      </div>
-
-      {/* 右侧 - 音量控制 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          width: '140px',
-          minWidth: '140px',
-          justifyContent: 'flex-end',
-        }}
-      >
-        <button
-          onClick={() => setVolume(volume === 0 ? 80 : 0)}
-          style={{
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            padding: '6px',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-secondary)',
-            transition: 'all 0.15s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = 'var(--text-primary)';
-            e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'var(--text-secondary)';
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-        >
-          {getVolumeIcon()}
-        </button>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={volume}
-          onChange={handleVolumeChange}
-          style={{
-            width: '80px',
-            height: '4px',
-            WebkitAppearance: 'none',
-            appearance: 'none',
-            background: `linear-gradient(to right, var(--text-secondary) ${volume}%, var(--border-color) ${volume}%)`,
-            borderRadius: '2px',
-            outline: 'none',
-            cursor: 'pointer',
-          }}
+        <PlayerProgress
+          position={position}
+          duration={duration}
+          hasCurrentSong={!!currentSong}
+          onSeek={seek}
         />
       </div>
+
+      <PlayerVolume
+        volume={volume}
+        onVolumeChange={handleVolumeChange}
+        onToggleMute={() => setVolume(volume === 0 ? 80 : 0)}
+      />
     </div>
   );
 };

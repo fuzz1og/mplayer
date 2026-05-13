@@ -11,6 +11,7 @@ export interface PlaylistService {
   removeSongFromPlaylist(playlistId: number, songId: string): Promise<void>;
   getPlaylistSongs(playlistId: number): Promise<Song[]>;
   reorderPlaylistSongs(playlistId: number, songIds: string[]): Promise<void>;
+  bulkReorderPlaylistSongs(playlistId: number, songIds: string[]): Promise<void>;
 }
 
 class PlaylistServiceImpl implements PlaylistService {
@@ -77,6 +78,10 @@ class PlaylistServiceImpl implements PlaylistService {
     if (song) {
       await ipcRenderer.invoke('playlist:updateSongsOrder', playlistId, songId, order);
     }
+  }
+
+  async bulkReorderPlaylistSongs(playlistId: number, songIds: string[]): Promise<void> {
+    return ipcRenderer.invoke('playlist:reorderFull', playlistId, songIds);
   }
 }
 
