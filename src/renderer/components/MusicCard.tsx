@@ -29,6 +29,11 @@ const MusicCard: React.FC<MusicCardProps> = ({
   const { width, imgHeight } = sizeMap[size];
   const [isHovered, setIsHovered] = useState(false);
 
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete?.();
+  };
+
   return (
     <div
       style={{
@@ -38,12 +43,12 @@ const MusicCard: React.FC<MusicCardProps> = ({
       }}
       onClick={onClick}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-4px)';
         setIsHovered(true);
+        e.currentTarget.style.transform = 'translateY(-4px)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
         setIsHovered(false);
+        e.currentTarget.style.transform = 'translateY(0)';
       }}
     >
       {/* 封面区域 */}
@@ -103,7 +108,6 @@ const MusicCard: React.FC<MusicCardProps> = ({
               justifyContent: 'center',
               opacity: 0,
               transition: 'opacity 0.2s ease',
-              pointerEvents: 'none',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.opacity = '1';
@@ -129,7 +133,6 @@ const MusicCard: React.FC<MusicCardProps> = ({
                 justifyContent: 'center',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
                 transition: 'transform 0.15s ease',
-                pointerEvents: 'auto',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'scale(1.1)';
@@ -143,12 +146,10 @@ const MusicCard: React.FC<MusicCardProps> = ({
           </div>
         )}
 
-        {onDelete && isHovered && (
+        {/* 删除按钮 */}
+        {onDelete && (
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
+            onClick={handleDelete}
             style={{
               position: 'absolute',
               top: '8px',
@@ -156,19 +157,14 @@ const MusicCard: React.FC<MusicCardProps> = ({
               width: '28px',
               height: '28px',
               borderRadius: '50%',
-              backgroundColor: 'rgba(0,0,0,0.6)',
+              backgroundColor: 'rgba(0,0,0,0.5)',
               border: 'none',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 10,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.8)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.6)';
+              opacity: isHovered ? 1 : 0,
+              transition: 'opacity 0.2s ease',
             }}
           >
             <Trash2 size={14} color="white" />

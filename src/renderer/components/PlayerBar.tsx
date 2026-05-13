@@ -13,6 +13,7 @@ import {
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import PlayModeButton from './PlayModeButton';
+import { useCachedCover } from '@/renderer/services/coverCacheService';
 
 const formatTime = (seconds: number): string => {
   if (!seconds || isNaN(seconds)) return '00:00';
@@ -44,6 +45,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
   } = usePlayerStore();
 
   const { isFavorite, toggleFavorite } = useFavoriteStore();
+  const coverSrc = useCachedCover(currentSong?.cover ?? '');
 
   const handlePlayPause = () => {
     if (!currentSong) return;
@@ -107,7 +109,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
         >
           {currentSong?.cover ? (
             <img
-              src={currentSong.cover}
+              src={coverSrc}
               alt={currentSong.name}
               style={{
                 width: '100%',
