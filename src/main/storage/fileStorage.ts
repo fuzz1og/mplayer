@@ -59,15 +59,9 @@ class FileStorage {
     }
   }
 
-  private saveData(): void {
+  private async saveData(): Promise<void> {
     if (!this.initialized) return;
-
-    try {
-      this.writeWithTransaction(this.data);
-    } catch (error) {
-      console.error('保存数据失败:', error);
-      // 这里可以添加更详细的错误处理和用户通知
-    }
+    await this.writeWithTransaction(this.data);
   }
 
   private writeWithTransaction(data: StorageData): Promise<void> {
@@ -198,13 +192,13 @@ class FileStorage {
     };
 
     this.data.favorites.push(favorite);
-    this.saveData();
+    await this.saveData();
     return id;
   }
 
   async removeFavorite(songId: string): Promise<void> {
     this.data.favorites = this.data.favorites.filter(f => f.songId !== songId);
-    this.saveData();
+    await this.saveData();
   }
 
   async isFavorite(songId: string): Promise<boolean> {
@@ -236,7 +230,7 @@ class FileStorage {
     };
 
     this.data.playHistory.push(historyItem);
-    this.saveData();
+    await this.saveData();
     return id;
   }
 
@@ -248,12 +242,12 @@ class FileStorage {
 
   async clearPlayHistory(): Promise<void> {
     this.data.playHistory = [];
-    this.saveData();
+    await this.saveData();
   }
 
   async removeFromPlayHistory(songId: string): Promise<void> {
     this.data.playHistory = this.data.playHistory.filter(h => h.songId !== songId);
-    this.saveData();
+    await this.saveData();
   }
 
   // Playlists
@@ -267,7 +261,7 @@ class FileStorage {
     };
 
     this.data.playlists.push(playlist);
-    this.saveData();
+    await this.saveData();
     return id;
   }
 
@@ -284,7 +278,7 @@ class FileStorage {
     const index = this.data.playlists.findIndex(p => p.id === playlistId);
     if (index !== -1) {
       this.data.playlists[index] = { ...this.data.playlists[index], ...playlist };
-      this.saveData();
+      await this.saveData();
     }
   }
 
@@ -307,7 +301,7 @@ class FileStorage {
       this.data.playlists = this.data.playlists.filter(p => p.id !== playlistId);
 
       // 3. 保存更改
-      this.saveData();
+      await this.saveData();
 
       console.log(`歌单删除完成: ${playlist.name}, 删除 ${playlistSongs.length} 首歌曲`);
     } catch (error) {
@@ -356,7 +350,7 @@ class FileStorage {
     };
 
     this.data.playlistSongs.push(playlistSong);
-    this.saveData();
+    await this.saveData();
     return id;
   }
 
@@ -368,7 +362,7 @@ class FileStorage {
     this.data.playlistSongs = this.data.playlistSongs.filter(
       ps => !(ps.playlistId === playlistId && ps.songId === songId)
     );
-    this.saveData();
+    await this.saveData();
   }
 
   async getPlaylistSongs(playlistId: number): Promise<SongBase[]> {
@@ -384,7 +378,7 @@ class FileStorage {
     );
     if (item) {
       item.order = order;
-      this.saveData();
+      await this.saveData();
     }
   }
 
@@ -406,14 +400,14 @@ class FileStorage {
 
     this.data.playlistSongs = this.data.playlistSongs.filter(ps => ps.playlistId !== playlistId);
     this.data.playlistSongs.push(...allSongs);
-    this.saveData();
+    await this.saveData();
   }
 
   // Settings
   async setSetting<T>(key: string, value: T): Promise<void> {
     this.ensureInitialized();
     this.data.settings[key] = value;
-    this.saveData();
+    await this.saveData();
   }
 
   async getSetting<T>(key: string): Promise<T | undefined> {

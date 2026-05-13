@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 const { ipcRenderer } = window.require('electron');
-import { message } from 'antd';
+import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownloadStore } from '@/renderer/store/downloadStore';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -16,7 +16,8 @@ import { cacheService } from '@/renderer/services/cacheService';
 const SortableSongRow: React.FC<{
   song: Song; index: number; isCurrentSong: boolean; isPlaying: boolean;
   onPlay: (song: Song) => void; onRemove: (song: Song) => void; onDownload: (song: Song) => void;
-}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload }) => {
+  isSelected: boolean; onToggleSelect: (songId: string) => void;
+}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, isSelected, onToggleSelect }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
   const coverSrc = useCachedCover(song.cover);
 
@@ -31,7 +32,16 @@ const SortableSongRow: React.FC<{
       }}
       onDoubleClick={() => onPlay(song)}
     >
-      <div style={{ width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: '30px', textAlign: 'center' }}>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect(song.id)}
+          onClick={(e) => e.stopPropagation()}
+          style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--accent-color)' }}
+        />
+      </div>
+      <div style={{ width: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span {...attributes} {...listeners} style={{ cursor: 'grab', display: 'flex', color: 'var(--text-tertiary)' }}>
           <GripVertical size={14} />
         </span>
@@ -89,6 +99,7 @@ const PlaylistDetailPage: React.FC = () => {
   const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
   const { addSingleDownload, addBatchDownload } = useDownloadStore();
   const [isReordering, setIsReordering] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -143,6 +154,11 @@ const PlaylistDetailPage: React.FC = () => {
     loadData();
   }, [playlistId]);
 
+  // Clear selections when loading new data
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [playlistId]);
+
   const handlePlay = async (song: Song) => {
     await play(song);
   };
@@ -178,6 +194,57 @@ const PlaylistDetailPage: React.FC = () => {
       message.error('下载全部失败，请重试');
     }
   };
+
+  const handleBatchDownload = async () => {
+    const toDownload = songs.filter(s => selectedIds.includes(s.id));
+    if (toDownload.length === 0) return;
+    try {
+      const tasks = await ipcRenderer.invoke('download:startBatch', toDownload);
+      if (tasks && Array.isArray(tasks)) {
+        addBatchDownload(tasks);
+        message.success(`已添加 ${tasks.length} 首歌曲到下载队列`);
+      }
+    } catch (error) {
+      message.error('批量下载失败');
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedIds.length === 0) return;
+    Modal.confirm({
+      title: '批量移除',
+      content: `确定要从歌单移除选中的 ${selectedIds.length} 首歌曲吗？`,
+      okText: '移除',
+      cancelText: '取消',
+      onOk: async () => {
+        if (!playlistId) return;
+        try {
+          for (const songId of selectedIds) {
+            await playlistService.removeSongFromPlaylist(playlistId, songId);
+          }
+          setSelectedIds([]);
+          loadData();
+          message.success(`已移除 ${selectedIds.length} 首歌曲`);
+        } catch (error) {
+          message.error('批量移除失败');
+        }
+      },
+    });
+  };
+
+  const handleToggleSelect = useCallback((songId: string) => {
+    setSelectedIds(prev =>
+      prev.includes(songId) ? prev.filter(id => id !== songId) : [...prev, songId]
+    );
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    if (selectedIds.length === songs.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(songs.map(s => s.id));
+    }
+  }, [songs, selectedIds.length]);
 
   const handleRemoveFromPlaylist = async (song: Song) => {
     if (!playlistId) return;
@@ -380,9 +447,31 @@ const PlaylistDetailPage: React.FC = () => {
             正在保存排序...
           </div>
         )}
+        {/* Batch action bar */}
+        {selectedIds.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(116, 185, 255, 0.08)', borderBottom: '1px solid var(--divider-color)', fontSize: '13px' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>已选择 {selectedIds.length} 项</span>
+            <button onClick={handleBatchDownload}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12px' }}>
+              <Download size={12} /> 批量下载
+            </button>
+            <button onClick={handleBatchDelete}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', color: '#FF6B6B', fontSize: '12px' }}>
+              <Trash2 size={12} /> 批量移除
+            </button>
+          </div>
+        )}
         {/* Table header */}
         <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--divider-color)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
-          <div style={{ width: '40px', textAlign: 'center' }}></div>
+          <div style={{ width: '30px', textAlign: 'center' }}>
+            <input
+              type="checkbox"
+              checked={songs.length > 0 && selectedIds.length === songs.length}
+              onChange={handleSelectAll}
+              style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--accent-color)' }}
+            />
+          </div>
+          <div style={{ width: '30px', textAlign: 'center' }}></div>
           <div style={{ width: '30px', textAlign: 'center' }}>#</div>
           <div style={{ flex: 1 }}>标题</div>
           <div style={{ width: '100px', textAlign: 'center' }}>操作</div>
@@ -396,6 +485,8 @@ const PlaylistDetailPage: React.FC = () => {
                 index={index}
                 isCurrentSong={currentSong?.id === song.id}
                 isPlaying={isPlaying}
+                isSelected={selectedIds.includes(song.id)}
+                onToggleSelect={handleToggleSelect}
                 onPlay={handlePlay}
                 onRemove={handleRemoveFromPlaylist}
                 onDownload={handleDownload}
