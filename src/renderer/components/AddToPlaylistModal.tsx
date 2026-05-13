@@ -19,6 +19,8 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 }) => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -48,6 +50,26 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
     } catch (error) {
       console.error('添加到歌单失败:', error);
       message.error('添加失败，请重试');
+    }
+  };
+
+  const handleCreateAndAdd = async () => {
+    if (!newPlaylistName.trim()) return;
+
+    setCreating(true);
+    try {
+      const newId = await playlistService.createPlaylist(newPlaylistName.trim());
+      await playlistService.addSongToPlaylist(newId, song);
+      message.success(`已添加到歌单「${newPlaylistName.trim()}」`);
+      onClose();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (error) {
+      console.error('创建并添加失败:', error);
+      message.error('操作失败，请重试');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -296,6 +318,50 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
               )}
             </div>
           )}
+        </div>
+
+        {/* 新建歌单 */}
+        <div style={{
+          marginTop: '16px',
+          paddingTop: '16px',
+          borderTop: '1px solid var(--divider-color)',
+        }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              value={newPlaylistName}
+              onChange={(e) => setNewPlaylistName(e.target.value)}
+              placeholder="新建歌单..."
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                fontSize: '14px',
+                backgroundColor: 'var(--bg-color)',
+                color: 'var(--text-primary)',
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreateAndAdd();
+              }}
+            />
+            <button
+              onClick={handleCreateAndAdd}
+              disabled={creating || !newPlaylistName.trim()}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: 'var(--accent-color)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                cursor: creating || !newPlaylistName.trim() ? 'not-allowed' : 'pointer',
+                opacity: creating || !newPlaylistName.trim() ? 0.5 : 1,
+              }}
+            >
+              {creating ? '创建中...' : '创建并添加'}
+            </button>
+          </div>
         </div>
       </div>
 
