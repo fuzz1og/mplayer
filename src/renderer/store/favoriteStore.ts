@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { favoriteService } from '@/renderer/services/favoriteService';
 import { cacheService } from '@/renderer/services/cacheService';
+import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import type { Song, SongBase } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
 
@@ -50,6 +51,8 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
           cover: matchedSong.cover,
           lrc: matchedSong.lrc
         });
+
+        cacheCoverImage(matchedSong.cover).catch(() => {});
 
         return matchedSong;
       }
