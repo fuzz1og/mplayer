@@ -5,6 +5,9 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { playlistService } from '@/renderer/services/playlistService';
 import SongList from '@/renderer/components/SongList';
 import type { Song, Playlist } from '@/shared/types/song';
+import { cacheService } from '@/renderer/services/cacheService';
+
+const { ipcRenderer } = window.require('electron');
 
 const PlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +23,33 @@ const PlaylistDetailPage: React.FC = () => {
 
   const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
 
+  const refreshPlaylistSongs = async (songs: Song[]): Promise<Song[]> => {
+    const results = await Promise.allSettled(
+      songs.map(async (song) => {
+        const cached = await cacheService.getUrlCache(song.id);
+        if (cached) {
+          return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
+        }
+
+        const keyword = `${song.name} ${song.artist}`;
+        const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
+        if (!result.success || !result.data.length) return song;
+
+        const fresh = result.data.find((s: Song) => s.id === song.id) || result.data[0];
+
+        await cacheService.setUrlCache(song.id, {
+          url: fresh.url,
+          cover: fresh.cover,
+          lrc: fresh.lrc,
+        });
+
+        return { ...song, url: fresh.url, cover: fresh.cover, lrc: fresh.lrc };
+      })
+    );
+
+    return results.map((r, i) => (r.status === 'fulfilled' ? r.value : songs[i]));
+  };
+
   const loadData = async () => {
     if (!playlistId) return;
 
@@ -29,7 +59,8 @@ const PlaylistDetailPage: React.FC = () => {
       setPlaylist(playlistData || null);
 
       const songsData = await playlistService.getPlaylistSongs(playlistId);
-      setSongs(songsData);
+      const refreshedSongs = await refreshPlaylistSongs(songsData);
+      setSongs(refreshedSongs);
     } catch (error) {
       console.error('加载歌单详情失败:', error);
     } finally {
