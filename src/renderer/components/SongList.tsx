@@ -25,6 +25,8 @@ interface SongListProps {
   onAddToPlaylist?: (song: Song) => void;
   enableBatchAddToPlaylist?: boolean;
   onBatchAddToPlaylist?: (songs: Song[]) => void;
+  showRemoveFromPlaylist?: boolean;
+  onRemoveFromPlaylist?: (song: Song) => void;
 }
 
 const SongList: React.FC<SongListProps> = ({
@@ -47,7 +49,9 @@ const SongList: React.FC<SongListProps> = ({
   onBatchDelete,
   onAddToPlaylist,
   enableBatchAddToPlaylist = false,
-  onBatchAddToPlaylist
+  onBatchAddToPlaylist,
+  showRemoveFromPlaylist = false,
+  onRemoveFromPlaylist,
 }) => {
   // 内部状态管理（当外部没有提供时）
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
@@ -99,6 +103,14 @@ const SongList: React.FC<SongListProps> = ({
     if (onAddToPlaylist && selectedSongForPlaylist) {
       onAddToPlaylist(selectedSongForPlaylist);
     }
+  };
+
+  const handleRemoveFromPlaylist = (song: Song, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onRemoveFromPlaylist) {
+      onRemoveFromPlaylist(song);
+    }
+    setActiveDropdown(null);
   };
 
   const handleToggleSelect = (songId: string) => {
@@ -635,6 +647,41 @@ const SongList: React.FC<SongListProps> = ({
                           padding: '4px',
                         }}
                       >
+                        {showRemoveFromPlaylist && onRemoveFromPlaylist && (
+                          <>
+                            <button
+                              onClick={(e) => handleRemoveFromPlaylist(song, e)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                width: '100%',
+                                padding: '8px 12px',
+                                border: 'none',
+                                background: 'transparent',
+                                cursor: 'pointer',
+                                borderRadius: '4px',
+                                fontSize: '13px',
+                                color: '#FF6B6B',
+                                transition: 'all 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.1)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                              }}
+                            >
+                              <Trash2 size={14} />
+                              从歌单移除
+                            </button>
+                            <div style={{
+                              height: '1px',
+                              backgroundColor: 'var(--divider-color)',
+                              margin: '4px 0',
+                            }} />
+                          </>
+                        )}
                         <button
                           onClick={(e) => handleAddToPlaylistClick(song, e)}
                           style={{
