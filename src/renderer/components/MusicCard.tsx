@@ -1,5 +1,5 @@
-import React from 'react';
-import { Play } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play, Trash2 } from 'lucide-react';
 
 interface MusicCardProps {
   title: string;
@@ -7,6 +7,7 @@ interface MusicCardProps {
   cover?: string;
   onClick?: () => void;
   onPlay?: () => void;
+  onDelete?: () => void;
   size?: 'small' | 'medium' | 'large';
 }
 
@@ -16,6 +17,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
   cover,
   onClick,
   onPlay,
+  onDelete,
   size = 'medium'
 }) => {
   const sizeMap = {
@@ -25,6 +27,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
   };
 
   const { width, imgHeight } = sizeMap[size];
+  const [isHovered, setIsHovered] = useState(false);
 
   return (
     <div
@@ -36,9 +39,11 @@ const MusicCard: React.FC<MusicCardProps> = ({
       onClick={onClick}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-4px)';
+        setIsHovered(true);
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = 'translateY(0)';
+        setIsHovered(false);
       }}
     >
       {/* 封面区域 */}
@@ -98,6 +103,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
               justifyContent: 'center',
               opacity: 0,
               transition: 'opacity 0.2s ease',
+              pointerEvents: 'none',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.opacity = '1';
@@ -123,6 +129,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
                 justifyContent: 'center',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
                 transition: 'transform 0.15s ease',
+                pointerEvents: 'auto',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'scale(1.1)';
@@ -134,6 +141,38 @@ const MusicCard: React.FC<MusicCardProps> = ({
               <Play size={20} color="var(--primary-color)" fill="var(--primary-color)" />
             </button>
           </div>
+        )}
+
+        {onDelete && isHovered && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(0,0,0,0.6)',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.8)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.6)';
+            }}
+          >
+            <Trash2 size={14} color="white" />
+          </button>
         )}
       </div>
 
