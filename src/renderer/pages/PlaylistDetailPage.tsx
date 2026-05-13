@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Play, ArrowLeft, Edit2, Music } from 'lucide-react';
+import { Play, ArrowLeft, Edit2, Music, Download } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
+const { ipcRenderer } = window.require('electron');
+import { message } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useDownloadStore } from '@/renderer/store/downloadStore';
 import { playlistService } from '@/renderer/services/playlistService';
 import SongList from '@/renderer/components/SongList';
 import type { Song, Playlist } from '@/shared/types/song';
@@ -19,6 +22,8 @@ const PlaylistDetailPage: React.FC = () => {
   const [editDesc, setEditDesc] = useState('');
 
   const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
+  const { addSingleDownload, addBatchDownload } = useDownloadStore();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const loadData = async () => {
     if (!playlistId) return;
@@ -49,6 +54,70 @@ const PlaylistDetailPage: React.FC = () => {
     if (songs.length > 0) {
       setCurrentPlaylist(songs, 0);
       await handlePlay(songs[0]);
+    }
+  };
+
+  const handleDownload = async (song: Song) => {
+    try {
+      const task = await ipcRenderer.invoke('download:start', song);
+      if (task) {
+        addSingleDownload(task);
+      }
+    } catch (error) {
+      console.error('下载失败:', error);
+      message.error('下载失败，请重试');
+    }
+  };
+
+  const handleBatchDownload = async (selectedSongs: Song[]) => {
+    try {
+      const tasks = await ipcRenderer.invoke('download:startBatch', selectedSongs);
+      if (tasks && Array.isArray(tasks)) {
+        addBatchDownload(tasks);
+      }
+    } catch (error) {
+      console.error('批量下载失败:', error);
+      message.error('批量下载失败，请重试');
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    if (songs.length === 0) return;
+    try {
+      const tasks = await ipcRenderer.invoke('download:startBatch', songs);
+      if (tasks && Array.isArray(tasks)) {
+        addBatchDownload(tasks);
+      }
+    } catch (error) {
+      console.error('下载全部失败:', error);
+      message.error('下载全部失败，请重试');
+    }
+  };
+
+  const handleRemoveFromPlaylist = async (song: Song) => {
+    if (!playlistId) return;
+    try {
+      await playlistService.removeSongFromPlaylist(playlistId, song.id);
+      loadData();
+      message.success(`已从歌单移除「${song.name}」`);
+    } catch (error) {
+      console.error('从歌单移除失败:', error);
+      message.error('移除失败，请重试');
+    }
+  };
+
+  const handleBatchDelete = async (selectedSongs: Song[]) => {
+    if (!playlistId) return;
+    try {
+      await Promise.all(selectedSongs.map(song =>
+        playlistService.removeSongFromPlaylist(playlistId, song.id)
+      ));
+      setSelectedIds([]);
+      loadData();
+      message.success(`已移除 ${selectedSongs.length} 首歌曲`);
+    } catch (error) {
+      console.error('批量移除失败:', error);
+      message.error('批量移除失败，请重试');
     }
   };
 
@@ -177,6 +246,27 @@ const PlaylistDetailPage: React.FC = () => {
             <Play size={16} />
             播放全部
           </button>
+          <button
+            onClick={handleDownloadAll}
+            disabled={songs.length === 0}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              backgroundColor: 'transparent',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '20px',
+              cursor: songs.length > 0 ? 'pointer' : 'not-allowed',
+              opacity: songs.length > 0 ? 1 : 0.5,
+              fontSize: '14px',
+              fontWeight: 500,
+            }}
+          >
+            <Download size={16} />
+            下载全部
+          </button>
         </div>
         <div style={{ fontSize: '14px', color: 'var(--text-tertiary)' }}>
           {songs.length} 首歌曲
@@ -190,7 +280,16 @@ const PlaylistDetailPage: React.FC = () => {
           currentSongId={currentSong?.id}
           isPlaying={isPlaying}
           onPlay={handlePlay}
-          showCheckbox={false}
+          showCheckbox={true}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          enableBatchDownload={true}
+          onBatchDownload={handleBatchDownload}
+          enableBatchDelete={true}
+          onBatchDelete={handleBatchDelete}
+          onDownload={handleDownload}
+          showRemoveFromPlaylist={true}
+          onRemoveFromPlaylist={handleRemoveFromPlaylist}
           emptyText="歌单暂无歌曲"
         />
       </div>

@@ -113,6 +113,14 @@ const SongList: React.FC<SongListProps> = ({
     }
   };
 
+  const handleRemoveFromPlaylist = (song: Song, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onRemoveFromPlaylist) {
+      onRemoveFromPlaylist(song);
+    }
+    setActiveDropdown(null);
+  };
+
   const handleToggleSelect = (songId: string) => {
     if (selectedIds.includes(songId)) {
       onSelectionChange(selectedIds.filter(id => id !== songId));
