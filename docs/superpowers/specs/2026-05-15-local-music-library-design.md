@@ -28,8 +28,9 @@
 ### 数据模型
 
 ```typescript
-// src/shared/types/song.ts — 新增 sourceType
-export type SourceType = 'netease' | 'qq' | 'local';
+// src/shared/types/song.ts — sourceType 行内联合类型新增 'local'
+// 现有: sourceType: 'netease' | 'qq'
+// 改为: sourceType: 'netease' | 'qq' | 'local'
 
 // 新增
 export interface LocalFolder {
@@ -106,12 +107,13 @@ interface LocalMusicStore {
 
 | 通道 | 方向 | payload | 返回 |
 |---|---|---|---|
-| `localMusic:addFolder` | R→M | `{ path: string }` | `LocalFolder` |
+| `localMusic:addFolder` | R→M | `{ path: string }` | `{ folder: LocalFolder; songs: Song[] }` |
 | `localMusic:removeFolder` | R→M | `{ path: string }` | `void` |
 | `localMusic:getFolders` | R→M | — | `LocalFolder[]` |
 | `localMusic:getSongs` | R→M | `{ folderPath?: string }` | `Song[]` |
 | `localMusic:refresh` | R→M | — | `{ folders: LocalFolder[], songs: Song[] }` |
 | `localMusic:folderChanged` | M→R | `{ type: 'add'\|'remove', folderPath: string, songs?: LocalSong[], songIds?: string[] }` | — |
+| `localMusic:scanProgress` | M→R | `{ folderPath: string, current: number, total: number }` | — |
 
 ### 渲染层 — LocalStore
 
@@ -183,20 +185,6 @@ if (song.sourceType !== 'local') {
 
 **`src/renderer/services/audioPlayer.ts`** — Howler 已支持 file:// URL，无需改动。
 
-### Song 类型兼容
-
-将 `sourceType` 从联合类型字面量改为类型别名：
-
-```typescript
-// 现有
-sourceType: 'netease' | 'qq';
-
-// 改为
-sourceType: 'netease' | 'qq' | 'local';
-```
-
-这确保所有使用 `Song` 的地方自动兼容本地歌曲。
-
 ## 数据流
 
 ```
@@ -231,7 +219,7 @@ sourceType: 'netease' | 'qq' | 'local';
 1. **非音频文件混入**：只处理 .mp3/.flac/.wav/.ogg 扩展名，其余跳过
 2. **损坏的音频文件**：`music-metadata` 解析失败时跳过该文件，不中断整个扫描
 3. **大量文件（>10000）**：扫描可能耗时数秒，通过 scanProgress 回调给用户反馈
-4. **文件被外部改名/移动**：fs.watch 的 rename 事件，通过路径判断处理
+4. **文件被外部改名/移动**：rename 事件触发两次（旧路径 remove + 新路径 add），防抖窗口内匹配新旧路径对，不产生净变更
 5. **扫描过程中文件夹被移除**：检查路径存在性，失败时从列表中移除
 6. **重复添加同一文件夹**：`addFolder` 检查路径是否已存在，已存在则跳过
 7. **无 ID3 标签**：使用文件名作为歌名、文件夹名作为艺术家、未知作为专辑
