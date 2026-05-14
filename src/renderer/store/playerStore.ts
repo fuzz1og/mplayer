@@ -142,14 +142,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       });
 
       let realUrl = song.url;
-      try {
-        const result = await ipcRenderer.invoke('musicApi:getAudioUrl', song.url);
-        if (result.success) {
-          realUrl = result.data;
+
+      if (song.sourceType !== 'local') {
+        try {
+          const result = await ipcRenderer.invoke('musicApi:getAudioUrl', song.url);
+          if (result.success) {
+            realUrl = result.data;
+          }
+        } catch (urlError) {
+          console.error('获取真实音频 URL 失败:', urlError);
         }
-      } catch (urlError) {
-        console.error('获取真实音频 URL 失败:', urlError);
       }
+      // local 歌曲直接使用 song.url（file:// 路径），无需获取真实 URL
 
       if (!realUrl) {
         throw new Error('无法获取音频 URL');
