@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Headphones, Trash2, GripVertical, ListMusic } from 'lucide-react';
 import { Modal } from 'antd';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -7,7 +7,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
+import { cacheService } from '@/renderer/services/cacheService';
 import type { Song } from '@/shared/types/song';
+const { ipcRenderer } = window.require('electron');
 
 interface SortableItemProps {
   song: Song;
@@ -79,13 +81,57 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
   );
 });
 
+const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
+  const results = await Promise.allSettled(
+    songs.map(async (song) => {
+      try {
+        const cached: { url: string; cover: string; lrc: string } | null = await cacheService.getUrlCache(song.id);
+        if (cached) {
+          return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
+        }
+        const keyword = `${song.name} ${song.artist}`;
+        const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
+        if (!result.success || !result.data.length) return song;
+        const fresh = result.data.find((s: Song) => s.id === song.id) || result.data[0];
+        await cacheService.setUrlCache(song.id, {
+          url: fresh.url,
+          cover: fresh.cover,
+          lrc: fresh.lrc,
+        });
+        return { ...song, url: fresh.url, cover: fresh.cover, lrc: fresh.lrc };
+      } catch {
+        return song;
+      }
+    })
+  );
+  return results.map((r, i) => (r.status === 'fulfilled' ? r.value : songs[i]));
+};
+
 const QueuePage: React.FC = () => {
-  const { currentPlaylist, currentSong, isPlaying, play, removeFromQueue, reorderQueue, clearQueue } = usePlayerStore();
+  const { currentPlaylist, currentSong, isPlaying, play, removeFromQueue, reorderQueue, clearQueue, setCurrentPlaylist } = usePlayerStore();
   const [showBatchModal, setShowBatchModal] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    const doRefresh = async () => {
+      if (currentPlaylist.length === 0) return;
+      const refreshed = await refreshQueueSongs(currentPlaylist);
+      if (cancelled) return;
+      const hasChanges = refreshed.some((s, i) =>
+        s.url !== currentPlaylist[i]?.url || s.cover !== currentPlaylist[i]?.cover
+      );
+      if (hasChanges) {
+        const { currentPlaylistIndex } = usePlayerStore.getState();
+        setCurrentPlaylist(refreshed, currentPlaylistIndex);
+      }
+    };
+    doRefresh();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;

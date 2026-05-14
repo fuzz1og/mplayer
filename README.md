@@ -23,6 +23,7 @@
 - [x] 四种播放模式（顺序/列表循环/单曲循环/随机）
 - [x] 音量控制与进度拖动
 - [x] 歌词显示（点击封面进入全屏歌词）
+- [x] 全局快捷键（MediaPlayPause / Ctrl+Alt+Space 等）
 
 ### 收藏与历史
 
@@ -33,6 +34,8 @@
 
 - [x] 创建/删除歌单
 - [x] 添加/移除歌曲
+- [x] 拖拽排序（歌曲重排，立即保存）
+- [x] 多选批量操作（批量下载/批量移除）
 - [x] 歌单详情查看
 - [x] 歌单歌曲 URL 自动刷新（缓存有效 12 小时）
 
@@ -43,6 +46,17 @@
 - [x] 音频文件缓存（最多保留最近 10 首）
 - [x] 缓存统计与一键清除
 
+### 系统托盘
+
+- [x] 托盘图标与右键菜单（播放/暂停/上一首/下一首/显示窗口/退出）
+- [x] 托盘通知显示当前歌曲信息
+
+### 播放队列
+
+- [x] 拖拽排序（@dnd-kit）
+- [x] 保存队列为歌单
+- [x] 清空队列
+
 ### 下载功能
 
 - [x] 单曲/批量下载
@@ -52,6 +66,7 @@
 
 - [x] 缓存管理（查看统计/一键清除）
 - [x] 下载目录设置（选择/重置）
+- [x] API 地址配置
 - [x] 关于页面
 
 ## 快速开始
@@ -66,8 +81,13 @@ npm run electron:dev
 # 生产构建
 npm run build
 
-# 打包应用
+# 打包应用（当前平台）
 npm run electron:build
+
+# 打包应用（指定平台）
+npm run electron:build:win   # Windows (.exe)
+npm run electron:build:mac   # macOS (.dmg)
+npm run electron:build:linux # Linux (.AppImage)
 
 # 代码检查
 npm run lint
@@ -83,13 +103,15 @@ src/
 │   ├── api/                 # API 调用 (音乐搜索/热榜)
 │   ├── cache/               # 缓存管理
 │   ├── storage/             # 数据持久化
-│   └── services/            # 核心服务 (下载)
+│   ├── services/            # 核心服务 (下载)
+│   └── tray/                # 系统托盘管理
 ├── renderer/                # React 渲染进程
-│   ├── components/          # 公共组件 (PlayerBar/SongList等)
+│   ├── components/          # 公共组件 (PlayerBar/SongListVirtual等)
 │   ├── pages/               # 页面组件
 │   ├── store/               # Zustand 状态管理
 │   ├── services/            # 业务服务 (cacheService/coverCacheService等)
-│   └── hooks/               # 自定义 Hooks
+│   ├── hooks/               # 自定义 Hooks (useGlobalShortcuts等)
+│   └── utils/               # 工具函数 (songDedupe等)
 └── shared/                  # 共享类型定义
 ```
 
@@ -101,6 +123,10 @@ src/
 - 多级缓存机制提升性能（URL/封面/音频三缓存）
 - 封面磁盘缓存，网络图片永久存储避免裂图
 - 歌单歌曲 URL 自动刷新，过期链接无缝恢复
+- 虚拟滚动渲染（@tanstack/react-virtual），流畅处理大量歌曲列表
+- 拖拽排序（@dnd-kit），歌单与播放队列随心排列
+- 全局快捷键与系统托盘，后台播放便捷控制
+- 歌曲自动去重，避免重复添加
 - 中文界面，本土化体验
 
 ## 使用服务

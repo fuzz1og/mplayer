@@ -137,15 +137,18 @@ const PlaylistDetailPage: React.FC = () => {
 
     setLoading(true);
     try {
-      const playlistData = await playlistService.getPlaylist(playlistId);
+      const [playlistData, songsData] = await Promise.all([
+        playlistService.getPlaylist(playlistId),
+        playlistService.getPlaylistSongs(playlistId),
+      ]);
       setPlaylist(playlistData || null);
-
-      const songsData = await playlistService.getPlaylistSongs(playlistId);
-      const refreshedSongs = await refreshPlaylistSongs(songsData);
-      setSongs(refreshedSongs);
+      setSongs(songsData);
+      setLoading(false);
+      if (songsData && songsData.length > 0) {
+        refreshPlaylistSongs(songsData).then(setSongs).catch(console.error);
+      }
     } catch (error) {
       console.error('加载歌单详情失败:', error);
-    } finally {
       setLoading(false);
     }
   };
@@ -303,15 +306,7 @@ const PlaylistDetailPage: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ color: 'var(--text-tertiary)' }}>加载中...</div>
-      </div>
-    );
-  }
-
-  if (!playlist) {
+  if (!playlist && !loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <div style={{ fontSize: '18px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
@@ -337,7 +332,7 @@ const PlaylistDetailPage: React.FC = () => {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* 页面标题 */}
-      <div
+      {playlist && <div
         style={{
           padding: '24px 24px 16px',
           borderBottom: '1px solid var(--divider-color)',
@@ -438,10 +433,51 @@ const PlaylistDetailPage: React.FC = () => {
         <div style={{ fontSize: '14px', color: 'var(--text-tertiary)' }}>
           {songs.length} 首歌曲
         </div>
-      </div>
+      </div>}
 
       {/* 歌曲列表 */}
       <div style={{ flex: 1, overflow: 'auto' }}>
+        {loading && songs.length === 0 ? (
+          <div style={{ padding: '24px' }}>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={`sk-${i}`} style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px', marginBottom: '8px' }}>
+                <div style={{ width: '30px', textAlign: 'center' }}>
+                  <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+                </div>
+                <div style={{ width: '30px', textAlign: 'center' }}>
+                  <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+                </div>
+                <div style={{ width: '30px', textAlign: 'center' }}>
+                  <div style={{ width: '20px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+                </div>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '4px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ width: '70%', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', marginBottom: '4px' }} />
+                    <div style={{ width: '50%', height: '12px', borderRadius: '2px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', animationDelay: '0.1s' }} />
+                  </div>
+                </div>
+                <div style={{ width: '100px', display: 'flex', justifyContent: 'center', gap: '4px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
+                </div>
+              </div>
+            ))}
+            <style>{`
+              @keyframes skeletonLoading {
+                0% { background-position: 200% 0; }
+                100% { background-position: -200% 0; }
+              }
+            `}</style>
+          </div>
+        ) : songs.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', color: 'var(--text-tertiary)' }}>
+            <Music size={48} />
+            <div style={{ fontSize: '14px', marginTop: '16px' }}>歌单暂无歌曲</div>
+            <div style={{ fontSize: '12px', marginTop: '8px', color: 'var(--text-tertiary)' }}>去发现音乐添加歌曲吧</div>
+          </div>
+        ) : (
+          <>
         {isReordering && (
           <div style={{ padding: '8px 16px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
             正在保存排序...
@@ -494,7 +530,9 @@ const PlaylistDetailPage: React.FC = () => {
             ))}
           </SortableContext>
         </DndContext>
-      </div>
+        </>
+        )}
+        </div>
 
       {/* 编辑歌单弹窗 */}
       {isEditModalVisible && (
