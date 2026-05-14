@@ -67,7 +67,14 @@ class LocalMusicService {
         duration: metadata.format.duration || 0,
         sourceType: 'local',
         filePath,
-        coverBase64: undefined,
+        coverBase64: (() => {
+          if (tag.picture && tag.picture.length > 0) {
+            const pic = tag.picture[0];
+            const base64 = Buffer.from(pic.data).toString('base64');
+            return `data:${pic.format};base64,${base64}`;
+          }
+          return undefined;
+        })(),
         format: ext,
         fileSize: stats.size,
       };
