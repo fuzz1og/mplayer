@@ -132,6 +132,7 @@ class LocalMusicService {
 
   async removeFolder(folderPath: string): Promise<void> {
     this.ensureInitialized();
+    this.stopWatching(folderPath);
     this.store.folders = this.store.folders.filter(f => f.path !== folderPath);
     this.saveStore();
   }
@@ -203,6 +204,7 @@ class LocalMusicService {
   }
 
   startWatchingAll(onChange: (type: 'add' | 'remove', songs: LocalSong[], songIds: string[]) => void): void {
+    this.ensureInitialized();
     for (const folder of this.store.folders) {
       this.startWatching(folder.path, onChange);
     }
