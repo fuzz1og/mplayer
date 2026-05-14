@@ -21,6 +21,7 @@ import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { musicApi } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
+import { getLocalMusicService } from './services/localMusicService';
 
 // IPC通信管理器
 class IPCManager {
@@ -287,6 +288,54 @@ function setupIPC() {
       return { success: true, data: hotlist };
     } catch (error) {
       console.error('[IPC] getQQHotlist 失败:', error);
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  // 本地音乐 IPC
+  ipcMain.handle('localMusic:addFolder', async (_event, folderPath: string) => {
+    try {
+      const result = await getLocalMusicService().addFolder(folderPath);
+      return { success: true, data: result };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  ipcMain.handle('localMusic:removeFolder', async (_event, folderPath: string) => {
+    try {
+      getLocalMusicService().removeFolder(folderPath);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  ipcMain.handle('localMusic:getFolders', async () => {
+    try {
+      const folders = await getLocalMusicService().getFolders();
+      return { success: true, data: folders };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  ipcMain.handle('localMusic:getSongs', async (_event, folderPath?: string) => {
+    try {
+      const songs = await getLocalMusicService().getSongs(folderPath);
+      return { success: true, data: songs };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  ipcMain.handle('localMusic:refresh', async () => {
+    try {
+      await getLocalMusicService().refresh();
+      const folders = await getLocalMusicService().getFolders();
+      const songs = await getLocalMusicService().getSongs();
+      return { success: true, data: { folders, songs } };
+    } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : '未知错误' };
     }
   });
