@@ -163,6 +163,50 @@ class LocalMusicService {
     }
     this.watchers.clear();
   }
+
+  startWatching(folderPath: string, onChange: (type: 'add' | 'remove', songs: LocalSong[], songIds: string[]) => void): void {
+    if (this.watchers.has(folderPath)) return;
+
+    const watcher = fs.watch(folderPath, { recursive: true }, (eventType, filename) => {
+      if (!filename) return;
+      const fullPath = path.join(folderPath, filename);
+      const isSupported = this.isSupportedFormat(fullPath);
+
+      if (eventType === 'rename') {
+        const exists = fs.existsSync(fullPath);
+        if (exists && isSupported) {
+          this.parseFile(fullPath).then(song => {
+            if (song) onChange('add', [song], []);
+          });
+        } else if (!exists) {
+          onChange('remove', [], [fullPath]);
+        }
+      }
+    });
+
+    this.watchers.set(folderPath, watcher);
+  }
+
+  stopWatching(folderPath: string): void {
+    const watcher = this.watchers.get(folderPath);
+    if (watcher) {
+      watcher.close();
+      this.watchers.delete(folderPath);
+    }
+  }
+
+  startWatchingAll(onChange: (type: 'add' | 'remove', songs: LocalSong[], songIds: string[]) => void): void {
+    for (const folder of this.store.folders) {
+      this.startWatching(folder.path, onChange);
+    }
+  }
+
+  stopWatchingAll(): void {
+    for (const watcher of this.watchers.values()) {
+      watcher.close();
+    }
+    this.watchers.clear();
+  }
 }
 
 let serviceInstance: LocalMusicService | null = null;
