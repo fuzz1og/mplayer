@@ -109,7 +109,7 @@ function createWindow() {
   return mainWindow;
 }
 
-function setupIPC() {
+function setupIPC(mainWindow: BrowserWindow) {
   // 缓存相关 IPC
   ipcMain.handle('cache:getSong', (_event, keyword: string) => {
     return getCacheManager().getSongCache(keyword);
@@ -296,6 +296,12 @@ function setupIPC() {
   ipcMain.handle('localMusic:addFolder', async (_event, folderPath: string) => {
     try {
       const result = await getLocalMusicService().addFolder(folderPath);
+      // 启动新添加文件夹的监视
+      getLocalMusicService().startWatching(folderPath, (type, songs, songIds) => {
+        mainWindow.webContents.send('localMusic:folderChanged', {
+          type, folderPath, songs, songIds,
+        });
+      });
       return { success: true, data: result };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : '未知错误' };
@@ -463,7 +469,18 @@ app.whenReady().then(async () => {
   ipcManager.setupAckHandlers();
 
   // 设置 IPC 处理器
-  setupIPC();
+  setupIPC(mainWindow);
+
+  // 对每个已有文件夹单独启动监视，确保 folderPath 正确传递
+  getLocalMusicService().getFolders().then((existingFolders) => {
+    for (const folder of existingFolders) {
+      getLocalMusicService().startWatching(folder.path, (type, songs, songIds) => {
+        mainWindow.webContents.send('localMusic:folderChanged', {
+          type, folderPath: folder.path, songs, songIds,
+        });
+      });
+    }
+  });
 
   const trayManager = new TrayManager();
   trayManager.create(mainWindow);
