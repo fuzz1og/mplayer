@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Search, X, User } from 'lucide-react';
-import CustomDropdown from './CustomDropdown';
 
 interface TopBarProps {
   onSearch: (keyword: string) => void;
@@ -8,6 +7,11 @@ interface TopBarProps {
   sourceType: 'netease' | 'qq';
   onSourceTypeChange: (type: 'netease' | 'qq') => void;
 }
+
+const SOURCE_CONFIG = {
+  netease: { label: '网易云', accent: '#E74C3C', bg: 'rgba(231, 76, 60, 0.12)' },
+  qq: { label: 'QQ 音乐', accent: '#1DB954', bg: 'rgba(29, 185, 84, 0.12)' },
+} as const;
 
 const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange }) => {
   const [searchValue, setSearchValue] = useState('');
@@ -28,11 +32,6 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
   const clearSearch = () => {
     setSearchValue('');
   };
-
-  const sourceOptions = [
-    { value: 'netease', label: '网易' },
-    { value: 'qq', label: 'QQ' },
-  ];
 
   return (
     <header
@@ -65,28 +64,73 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
             alignItems: 'center',
             backgroundColor: isFocused ? 'var(--bg-color)' : '#F8F9FA',
             border: `1px solid ${isFocused ? 'var(--accent-color)' : 'transparent'}`,
-            borderRadius: '20px',
-            padding: '8px 4px 8px 16px',
-            transition: 'all 0.2s ease',
+            borderRadius: '24px',
+            padding: '6px 4px 6px 6px',
+            transition: 'all 0.25s ease',
+            boxShadow: isFocused ? '0 0 0 3px rgba(116, 185, 255, 0.15)' : 'none',
           }}
         >
-          {/* 音乐源选择器 */}
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <CustomDropdown
-              value={sourceType}
-              options={sourceOptions}
-              onChange={(value) => onSourceTypeChange(value as 'netease' | 'qq')}
-            />
-            {/* 分隔线 */}
-            <div
-              style={{
-                width: '1px',
-                height: '20px',
-                backgroundColor: 'var(--border-color)',
-                marginLeft: '12px',
-              }}
-            />
+          {/* 音乐源分段切换器 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px',
+              backgroundColor: 'var(--hover-bg)',
+              borderRadius: '18px',
+              padding: '2px',
+              flexShrink: 0,
+            }}
+          >
+            {(Object.entries(SOURCE_CONFIG) as [string, typeof SOURCE_CONFIG[keyof typeof SOURCE_CONFIG]][]).map(([key, config]) => {
+              const isActive = sourceType === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => onSourceTypeChange(key as 'netease' | 'qq')}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '16px',
+                    fontSize: '12px',
+                    fontWeight: isActive ? 600 : 400,
+                    letterSpacing: '0.02em',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: isActive ? config.accent : 'transparent',
+                    color: isActive ? '#fff' : 'var(--text-tertiary)',
+                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                    position: 'relative',
+                    boxShadow: isActive ? `0 1px 4px ${config.accent}44` : 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = config.bg;
+                      e.currentTarget.style.color = config.accent;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = 'var(--text-tertiary)';
+                    }
+                  }}
+                >
+                  {config.label}
+                </button>
+              );
+            })}
           </div>
+
+          {/* 分隔线 */}
+          <div
+            style={{
+              width: '1px',
+              height: '18px',
+              backgroundColor: 'var(--border-color)',
+              margin: '0 8px',
+              flexShrink: 0,
+            }}
+          />
 
           {/* 搜索框 */}
           <div
@@ -100,7 +144,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
             <Search
               size={18}
               color={isFocused ? 'var(--accent-color)' : 'var(--text-tertiary)'}
-              style={{ marginRight: '10px', flexShrink: 0 }}
+              style={{ marginRight: '10px', flexShrink: 0, transition: 'color 0.2s ease' }}
             />
             <input
               type="text"
@@ -117,7 +161,10 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                 background: 'transparent',
                 fontSize: '14px',
                 color: 'var(--text-primary)',
-              }}
+                '::placeholder': {
+                  color: 'var(--text-tertiary)',
+                },
+              } as React.CSSProperties}
             />
             {searchValue && (
               <button
@@ -129,11 +176,22 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                   border: 'none',
                   background: 'transparent',
                   cursor: 'pointer',
-                  padding: '2px',
-                  marginLeft: '8px',
+                  padding: '4px',
+                  marginLeft: '4px',
+                  borderRadius: '50%',
+                  color: 'var(--text-tertiary)',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--hover-bg)';
+                  e.currentTarget.style.color = 'var(--text-primary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'var(--text-tertiary)';
                 }}
               >
-                <X size={16} color="var(--text-tertiary)" />
+                <X size={16} />
               </button>
             )}
           </div>
