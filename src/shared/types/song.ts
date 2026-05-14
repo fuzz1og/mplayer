@@ -4,7 +4,7 @@ export interface SongBase {
   artist: string;
   album: string;
   duration: number;
-  sourceType: 'netease' | 'qq';
+  sourceType: 'netease' | 'qq' | 'local';
 }
 
 export interface Song extends SongBase {
@@ -44,4 +44,24 @@ export interface PlaylistSong {
   songId: string;
   order: number;
   song: Song;
+}
+
+export interface LocalFolder {
+  path: string;
+  name: string;
+  songCount: number;
+  lastScanned: Date;
+}
+
+export interface LocalSong {
+  id: string;
+  name: string;
+  artist: string;
+  album: string;
+  duration: number;
+  sourceType: 'local';
+  filePath: string;
+  coverBase64?: string;
+  format: string;
+  fileSize: number;
 }
