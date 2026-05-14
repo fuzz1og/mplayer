@@ -62,17 +62,16 @@ export interface LocalSong {
 
 ```
 localMusicService
-├── scan(folderPath)        → 递归扫描目录，解析 ID3，返回 LocalSong[]
-├── scanAll()               → 扫描所有已保存的文件夹
 ├── addFolder(path)         → 添加文件夹并扫描
-├── removeFolder(path)      → 移除文件夹及其歌曲记录
-├── getFolders()            → 返回文件夹列表
-├── getSongs(folderPath?)   → 返回歌曲列表（可选按文件夹过滤）
-├── refresh()               → 增量刷新：重新扫描 + 清理已删除
-├── getSongById(id)         → 获取单首本地歌曲
-├── startWatching()         → 启动所有已添加文件夹的 fs.watch
-├── stopWatching()          → 停止所有监视
-└── destroy()               → 清理资源
+├── removeFolder(path)       → 移除文件夹（停止监视 + 删除记录）
+├── getFolders()             → 返回文件夹列表
+├── getSongs(folderPath?)    → 返回歌曲列表（LocalSong[]，可选按文件夹过滤）
+├── refresh()                → 重新扫描所有文件夹
+├── startWatching(path, cb)  → 对指定文件夹启动 fs.watch
+├── stopWatching(path)       → 停止指定文件夹的监视
+├── startWatchingAll(cb)    → 对所有已有文件夹启动监视（ensureInitialized 后调用）
+├── stopWatchingAll()        → 停止所有监视
+└── destroy()               → 清理所有监视器
 ```
 
 **内部状态**（独立 JSON 文件持久化，路径 `userData/data/local-music.json`）：
@@ -95,25 +94,23 @@ interface LocalMusicStore {
 3. 主进程接收路径，递归遍历目录
 4. 对每个音频文件调用 `music-metadata` 解析 ID3
 5. 收集结果写入 `local-music.json`
-6. 注册 `fs.watch` 监视该文件夹
-7. 返回扫描结果给渲染进程
+6. IPC 返回 `{ folder, songs }` 后，主进程对该文件夹启动 `fs.watch` 监视
+7. app 启动时，对 `local-music.json` 中所有已有文件夹逐个启动监视器
 
 **文件监视**：
-- 检测到新增文件 → 解析 ID3 → 追加到 store → 推送 `localMusic:folderChanged({ type: 'add', songs })`
-- 检测到删除文件 → 从 store 移除 → 推送 `localMusic:folderChanged({ type: 'remove', songIds })`
-- 使用防抖（300ms）避免批量操作时频繁触发
+- 检测到新增文件 → 解析 ID3 → 追加到 store → 推送 `localMusic:folderChanged({ type: 'add', folderPath, songs })`
+- 检测到删除文件 → 从 store 移除 → 推送 `localMusic:folderChanged({ type: 'remove', folderPath, songIds })`
 
 ### IPC 通道
 
 | 通道 | 方向 | payload | 返回 |
 |---|---|---|---|
-| `localMusic:addFolder` | R→M | `{ path: string }` | `{ folder: LocalFolder; songs: Song[] }` |
+| `localMusic:addFolder` | R→M | `{ path: string }` | `{ folder: LocalFolder; songs: LocalSong[] }` |
 | `localMusic:removeFolder` | R→M | `{ path: string }` | `void` |
 | `localMusic:getFolders` | R→M | — | `LocalFolder[]` |
-| `localMusic:getSongs` | R→M | `{ folderPath?: string }` | `Song[]` |
-| `localMusic:refresh` | R→M | — | `{ folders: LocalFolder[], songs: Song[] }` |
+| `localMusic:getSongs` | R→M | `{ folderPath?: string }` | `LocalSong[]` |
+| `localMusic:refresh` | R→M | — | `{ folders: LocalFolder[], songs: LocalSong[] }` |
 | `localMusic:folderChanged` | M→R | `{ type: 'add'\|'remove', folderPath: string, songs?: LocalSong[], songIds?: string[] }` | — |
-| `localMusic:scanProgress` | M→R | `{ folderPath: string, current: number, total: number }` | — |
 
 ### 渲染层 — LocalStore
 
@@ -126,19 +123,20 @@ interface LocalStoreState {
   currentFolder: string | null;
   isScanning: boolean;
   scanProgress: { current: number; total: number } | null;
+  initialized: boolean;
 
   // actions
-  addFolder: () => Promise<void>;
+  initialize: () => Promise<void>;      // 页面挂载时调用一次，获取所有数据
+  addFolder: () => Promise<void>;      // 调用 dialog:openDirectory 后发送 addFolder IPC
   removeFolder: (path: string) => Promise<void>;
-  loadAll: () => Promise<void>;
   refresh: () => Promise<void>;
   setCurrentFolder: (path: string | null) => void;
 }
 ```
 
-- `loadAll()` 在页面挂载时调用，获取所有文件夹和歌曲
+- `initialize()` 在页面挂载时调用（双检锁防止重复初始化和并发调用）
 - `addFolder()` 先调用 `dialog:openDirectory`，再发送 `localMusic:addFolder`
-- IPC `localMusic:folderChanged` 事件监听在 store 初始化时注册，自动更新状态
+- `localMusic:folderChanged` 事件监听在 `create()` 调用时注册（只注册一次），自动更新状态
 
 ### 页面 — LocalMusicPage
 
@@ -192,12 +190,12 @@ if (song.sourceType !== 'local') {
 ─────────────────────────────────────────────────────────
 点击"选择文件夹" → dialog:openDirectory
                  → 获取路径
-                 → localMusic:addFolder  → LocalMusicService.scan()
-                                          → 递归扫描目录
-                                          → music-metadata 解析 ID3
-                                          → 写入 local-music.json
-                                          → fs.watch 注册
-                                          ← LocalFolder + Song[]
+→ localMusic:addFolder  → LocalMusicService.scanFolder()
+                                           → 递归扫描目录
+                                           → music-metadata 解析 ID3
+                                           → 写入 local-music.json
+                                           → fs.watch 注册
+                                           ← LocalFolder + LocalSong[]
                  ← localStore 更新
                  → UI 渲染歌曲列表
 
@@ -218,12 +216,12 @@ if (song.sourceType !== 'local') {
 
 1. **非音频文件混入**：只处理 .mp3/.flac/.wav/.ogg 扩展名，其余跳过
 2. **损坏的音频文件**：`music-metadata` 解析失败时跳过该文件，不中断整个扫描
-3. **大量文件（>10000）**：扫描可能耗时数秒，通过 scanProgress 回调给用户反馈
-4. **文件被外部改名/移动**：rename 事件触发两次（旧路径 remove + 新路径 add），防抖窗口内匹配新旧路径对，不产生净变更
-5. **扫描过程中文件夹被移除**：检查路径存在性，失败时从列表中移除
+3. **大量文件（>10000）**：扫描可能耗时数秒，UI 显示"扫描中..."状态，扫描完成后一次性更新列表
+4. **文件被外部改名/移动**：rename 事件触发两次（旧路径 remove + 新路径 add），renderer 根据 songIds 过滤移除，根据 songs 添加新的
+5. **扫描过程中文件夹被移除**：`refresh()` 对已删除的文件夹重新扫描会产生空结果，不会报错
 6. **重复添加同一文件夹**：`addFolder` 检查路径是否已存在，已存在则跳过
 7. **无 ID3 标签**：使用文件名作为歌名、文件夹名作为艺术家、未知作为专辑
-8. **ID3 封面过大**：base64 编码后可能很大，限制封面缓存 max 500KB
+8. **ID3 封面**：提取为 base64 data URI，直接作为 Song.cover 使用；部分文件封面较大，可考虑后置
 
 ## 依赖
 
