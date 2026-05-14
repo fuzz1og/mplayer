@@ -29,6 +29,7 @@
     "fs-extra": "^11.2.0",
     "howler": "^2.2.4",
     "lucide-react": "^1.7.0",
+    "music-metadata": "^11.12.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.14.2",
