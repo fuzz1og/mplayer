@@ -61,7 +61,7 @@ function normalizeUrl(url: string | undefined): string {
 /**
  * 处理歌曲数据，补全所有 URL 字段
  */
-function processSong(song: any, sourceType: 'netease' | 'qq' = 'netease'): Song {
+function processSong(song: any, sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Song {
   return {
     id: song.id || song.songid || '',
     name: song.name || song.songname || '',
@@ -86,7 +86,7 @@ interface HotlistSong {
 }
 
 export const musicApi = {
-async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq' = 'netease'): Promise<Song[]> {
+async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Promise<Song[]> {
     // 尝试从缓存获取
     const cachedData = cacheManager.getSearchCache(keyword, page, sourceType);
     if (cachedData) {
@@ -189,7 +189,7 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
     return lyrics;
   },
 
-  async batchSearch(keywords: string[], sourceType: 'netease' | 'qq' = 'netease'): Promise<Record<string, Song[]>> {
+  async batchSearch(keywords: string[], sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Promise<Record<string, Song[]>> {
     // 尝试从缓存获取
     const cachedData = cacheManager.getBatchSearchCache(keywords, sourceType);
     if (cachedData) {

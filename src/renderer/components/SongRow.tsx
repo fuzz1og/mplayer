@@ -106,6 +106,7 @@ const SongRow: React.FC<SongRowProps> = ({
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.artist}</span>
             {song.sourceType === 'netease' && <span style={{ fontSize: '10px', padding: '2px 5px', borderRadius: '3px', backgroundColor: '#FF6B6B', color: 'white', flexShrink: 0 }}>网易云</span>}
             {song.sourceType === 'qq' && <span style={{ fontSize: '10px', padding: '2px 5px', borderRadius: '3px', backgroundColor: '#49B8FF', color: 'white', flexShrink: 0 }}>QQ</span>}
+            {song.sourceType === 'kugou' && <span style={{ fontSize: '10px', padding: '2px 5px', borderRadius: '3px', backgroundColor: '#FF8C00', color: 'white', flexShrink: 0 }}>酷狗</span>}
           </div>
         </div>
       </div>
