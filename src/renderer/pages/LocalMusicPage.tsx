@@ -26,7 +26,7 @@ const LocalMusicPage: React.FC = () => {
   }, []);
 
   const displayedSongs = currentFolder
-    ? songs.filter(s => s.url.includes(currentFolder))
+    ? songs.filter(s => s.url.includes(currentFolder.replace(/\\/g, '/')))
     : songs;
 
   const handlePlay = (song: Song) => {
