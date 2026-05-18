@@ -251,7 +251,7 @@ function setupIPC(mainWindow: BrowserWindow) {
   });
 
   // 搜索歌曲 IPC (renderer 调用)
-  ipcMain.handle('musicApi:searchSongs', async (_event, keyword: string, page: number, sourceType: 'netease' | 'qq') => {
+  ipcMain.handle('musicApi:searchSongs', async (_event, keyword: string, page: number, sourceType: 'netease' | 'qq' | 'kugou') => {
     try {
       const songs = await musicApi.searchSongs(keyword, page, sourceType);
       return { success: true, data: songs };
