@@ -4,13 +4,14 @@ import { Search, X, User } from 'lucide-react';
 interface TopBarProps {
   onSearch: (keyword: string) => void;
   searchLoading?: boolean;
-  sourceType: 'netease' | 'qq';
-  onSourceTypeChange: (type: 'netease' | 'qq') => void;
+  sourceType: 'netease' | 'qq' | 'kugou';
+  onSourceTypeChange: (type: 'netease' | 'qq' | 'kugou') => void;
 }
 
 const SOURCE_CONFIG = {
   netease: { label: '网易云', accent: '#E74C3C', bg: 'rgba(231, 76, 60, 0.12)' },
   qq: { label: 'QQ 音乐', accent: '#1DB954', bg: 'rgba(29, 185, 84, 0.12)' },
+  kugou: { label: '酷狗', accent: '#FF8C00', bg: 'rgba(255, 140, 0, 0.12)' },
 } as const;
 
 const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange }) => {
@@ -87,7 +88,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
               return (
                 <button
                   key={key}
-                  onClick={() => onSourceTypeChange(key as 'netease' | 'qq')}
+                  onClick={() => onSourceTypeChange(key as 'netease' | 'qq' | 'kugou')}
                   style={{
                     padding: '4px 12px',
                     borderRadius: '16px',
