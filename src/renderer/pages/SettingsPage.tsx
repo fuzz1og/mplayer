@@ -1,8 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, Trash2, Database, Info, HardDrive, FileAudio, Image, Link, Music, Folder, RefreshCw } from 'lucide-react';
+import { Settings, Trash2, Database, Info, HardDrive, FileAudio, Image, Link, Music, Folder, RefreshCw, Shield } from 'lucide-react';
 import { message } from 'antd';
 import { cacheService, CacheStats } from '@/renderer/services/cacheService';
 const { ipcRenderer } = window.require('electron');
+
+interface ProxyConfig {
+  enabled: boolean;
+  protocol: 'http' | 'https';
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+}
 
 const SettingsPage: React.FC = () => {
   const [stats, setStats] = useState<CacheStats>({
@@ -17,6 +26,13 @@ const SettingsPage: React.FC = () => {
   const [downloadPath, setDownloadPath] = useState<string>('');
   const [apiUrl, setApiUrl] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+
+  const [proxyEnabled, setProxyEnabled] = useState(false);
+  const [proxyProtocol, setProxyProtocol] = useState<'http' | 'https'>('http');
+  const [proxyHost, setProxyHost] = useState('');
+  const [proxyPort, setProxyPort] = useState('8080');
+  const [proxyUsername, setProxyUsername] = useState('');
+  const [proxyPassword, setProxyPassword] = useState('');
 
   const loadStats = async () => {
     try {
@@ -42,6 +58,45 @@ const SettingsPage: React.FC = () => {
       setApiUrl(url);
     } catch (error) {
       console.error('加载API地址失败:', error);
+    }
+  };
+
+  const loadProxyConfig = async () => {
+    try {
+      const proxy: ProxyConfig = await ipcRenderer.invoke('settings:getProxy');
+      setProxyEnabled(proxy.enabled);
+      setProxyProtocol(proxy.protocol);
+      setProxyHost(proxy.host);
+      setProxyPort(String(proxy.port));
+      setProxyUsername(proxy.username || '');
+      setProxyPassword(proxy.password || '');
+    } catch (error) {
+      console.error('加载代理设置失败:', error);
+    }
+  };
+
+  const handleSaveProxy = async () => {
+    setIsSaving(true);
+    try {
+      const proxyConfig: ProxyConfig = {
+        enabled: proxyEnabled,
+        protocol: proxyProtocol,
+        host: proxyHost,
+        port: parseInt(proxyPort, 10) || 8080,
+      };
+      if (proxyUsername) proxyConfig.username = proxyUsername;
+      if (proxyPassword) proxyConfig.password = proxyPassword;
+      const result = await ipcRenderer.invoke('settings:setProxy', proxyConfig);
+      if (result.success) {
+        message.success('代理设置已保存并立即生效');
+      } else {
+        message.error('保存失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('保存代理设置失败:', error);
+      message.error('保存失败');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -115,6 +170,7 @@ const SettingsPage: React.FC = () => {
     loadStats();
     loadDownloadPath();
     loadApiUrl();
+    loadProxyConfig();
   }, []);
 
   const handleClearCache = async () => {
@@ -608,6 +664,206 @@ const SettingsPage: React.FC = () => {
             }}
           >
             设置音乐搜索/播放所需的 API 服务地址，保存后需重启应用生效
+          </div>
+        </div>
+      </section>
+
+      {/* 网络代理设置 */}
+      <section style={{ marginBottom: '32px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginBottom: '20px',
+          }}
+        >
+          <Shield size={20} color="var(--accent-color)" />
+          <h2
+            style={{
+              fontSize: '18px',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+            }}
+          >
+            网络代理设置
+          </h2>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: 'var(--content-bg)',
+            borderRadius: '12px',
+            padding: '24px',
+            border: '1px solid var(--border-color)',
+          }}
+        >
+          <div style={{ marginBottom: '16px' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                marginBottom: '16px',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={proxyEnabled}
+                onChange={(e) => setProxyEnabled(e.target.checked)}
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  accentColor: 'var(--accent-color)',
+                  cursor: 'pointer',
+                }}
+              />
+              <span style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                启用代理
+              </span>
+            </label>
+
+            {proxyEnabled && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <div style={{ flex: '0 0 80px' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>协议</div>
+                    <select
+                      value={proxyProtocol}
+                      onChange={(e) => setProxyProtocol(e.target.value as 'http' | 'https')}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        backgroundColor: 'var(--bg-color)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        color: 'var(--text-primary)',
+                        outline: 'none',
+                      }}
+                    >
+                      <option value="http">HTTP</option>
+                      <option value="https">HTTPS</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>主机地址</div>
+                    <input
+                      type="text"
+                      value={proxyHost}
+                      onChange={(e) => setProxyHost(e.target.value)}
+                      placeholder="例如: 127.0.0.1"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        backgroundColor: 'var(--bg-color)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        color: 'var(--text-primary)',
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: '0 0 100px' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>端口</div>
+                    <input
+                      type="number"
+                      value={proxyPort}
+                      onChange={(e) => setProxyPort(e.target.value)}
+                      placeholder="8080"
+                      min={1}
+                      max={65535}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        backgroundColor: 'var(--bg-color)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        color: 'var(--text-primary)',
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>用户名 (可选)</div>
+                    <input
+                      type="text"
+                      value={proxyUsername}
+                      onChange={(e) => setProxyUsername(e.target.value)}
+                      placeholder="proxy username"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        backgroundColor: 'var(--bg-color)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        color: 'var(--text-primary)',
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>密码 (可选)</div>
+                    <input
+                      type="password"
+                      value={proxyPassword}
+                      onChange={(e) => setProxyPassword(e.target.value)}
+                      placeholder="proxy password"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        backgroundColor: 'var(--bg-color)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        color: 'var(--text-primary)',
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={handleSaveProxy}
+              disabled={isSaving}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 16px',
+                backgroundColor: 'var(--accent-color)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: isSaving ? 'not-allowed' : 'pointer',
+                opacity: isSaving ? 0.7 : 1,
+              }}
+            >
+              保存代理设置
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: '12px',
+              fontSize: '12px',
+              color: 'var(--text-tertiary)',
+            }}
+          >
+            配置后立即生效，无需重启应用。默认不使用系统代理。
           </div>
         </div>
       </section>

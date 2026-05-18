@@ -19,9 +19,10 @@ if (!app.isPackaged) {
 import { getCacheManager } from './cache/cacheManager';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
-import { musicApi } from './api/musicApi';
+import { musicApi, getApiClient } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
+import { updateApiClientAgents, applyElectronProxy, type ProxyConfig } from './proxy';
 
 // IPC通信管理器
 class IPCManager {
@@ -397,6 +398,25 @@ function setupIPC(mainWindow: BrowserWindow) {
     }
   });
 
+  // 代理设置
+  ipcMain.handle('settings:getProxy', async () => {
+    const saved = await db.getSetting<ProxyConfig>('proxyConfig');
+    return saved || { enabled: false, host: '', port: 8080, protocol: 'http' };
+  });
+
+  ipcMain.handle('settings:setProxy', async (_event, proxyConfig: ProxyConfig) => {
+    try {
+      await db.setSetting('proxyConfig', proxyConfig);
+      const apiClient = getApiClient();
+      updateApiClientAgents(apiClient, proxyConfig);
+      applyElectronProxy(proxyConfig);
+      return { success: true };
+    } catch (error) {
+      console.error('设置代理失败:', error);
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
   ipcMain.handle('app:quit', () => {
     app.exit();
   });
@@ -463,6 +483,20 @@ app.whenReady().then(async () => {
       mainWindow.webContents.send('download:error', { task, error: error.message });
     }
   });
+
+  // 加载代理设置并应用（必须在 setupIPC 之前，因为 setupIPC 中的 getApiClient 需要 proxy 模块就绪）
+  try {
+    const savedProxy = await db.getSetting<ProxyConfig>('proxyConfig');
+    if (savedProxy) {
+      updateApiClientAgents(getApiClient(), savedProxy);
+      applyElectronProxy(savedProxy);
+    } else {
+      applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
+    }
+  } catch (error) {
+    console.error('加载代理设置失败:', error);
+    applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
+  }
 
   // 设置IPC管理器
   const ipcManager = new IPCManager(mainWindow);

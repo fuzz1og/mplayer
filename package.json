@@ -28,6 +28,8 @@
     "dotenv": "^17.4.2",
     "fs-extra": "^11.2.0",
     "howler": "^2.2.4",
+    "http-proxy-agent": "^9.0.0",
+    "https-proxy-agent": "^9.0.0",
     "lucide-react": "^1.7.0",
     "music-metadata": "^11.12.3",
     "react": "^18.2.0",

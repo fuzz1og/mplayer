@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
 import { ipcMain, BrowserWindow } from 'electron';
-import { musicApi } from '../api/musicApi';
+import { musicApi, getApiClient } from '../api/musicApi';
 import type { Song } from '@/shared/types/song';
 
 export interface DownloadTask {
@@ -223,9 +223,12 @@ class DownloadService {
         task.filePath = filePath;
       }
 
+      const apiClient = getApiClient();
       const response = await axios({
         method: 'GET',
         url: realUrl,
+        httpAgent: apiClient.defaults.httpAgent,
+        httpsAgent: apiClient.defaults.httpsAgent,
         responseType: 'stream',
         timeout: 60000,
         onDownloadProgress: (progressEvent) => {

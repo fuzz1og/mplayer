@@ -59,6 +59,15 @@ First play downloads to `cache/audio/` (max 10). Subsequent plays use cache. Met
 ## Download
 Custom path in Settings. Progress via IPC: `download:progress`, `download:complete`, `download:error`. Default: system Downloads folder.
 
+## Network Proxy
+- **Config**: Settings → 网络代理设置 — enable toggle, protocol (HTTP/HTTPS), host, port, optional auth
+- **Default**: `proxy: false` — bypasses system proxy (direct connection)
+- **Immediate effect**: saved settings apply without restart
+- **IPC channels**: `settings:getProxy` (read `ProxyConfig`), `settings:setProxy` (save + apply)
+- **Architecture**: `src/main/proxy.ts` — `ProxyManager` with `updateApiClientAgents()` / `applyElectronProxy()`
+- **Coverage**: all HTTP paths — `apiClient` (search/audio/lyrics), `neteaseClient`/`qqClient` (hotlists), `downloadService` (file download), Electron `session.setProxy()` (renderer fetch for cover images)
+- **Agents**: uses `http-proxy-agent` / `https-proxy-agent` packages for proxied connections, plain `http.Agent`/`https.Agent` with keepAlive when disabled
+
 ## Local Music Library
 - `src/main/services/localMusicService.ts` — `LocalMusicService` class: folder scanning (music-metadata), ID3 parsing, fs.watch file monitoring
 - `src/renderer/store/localStore.ts` — `useLocalStore`: Zustand store for local music UI state
