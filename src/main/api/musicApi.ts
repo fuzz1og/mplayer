@@ -1,27 +1,20 @@
-import axios from 'axios';
-import http from 'http';
-import https from 'https';
+import axios, { type AxiosInstance } from 'axios';
 import type { Song } from '@/shared/types/song';
 import { cacheManager } from './memoryCacheManager';
 import { getCacheManager } from '../cache/cacheManager';
 import { config } from '../config';
-
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  maxSockets: 10
-});
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 10
-});
+import { getHttpAgent, getHttpsAgent } from '../proxy';
 
 const apiClient = axios.create({
   get baseURL() {
     return config.API_BASE_URL;
   },
-  httpAgent,
-  httpsAgent,
+  get httpAgent() {
+    return getHttpAgent();
+  },
+  get httpsAgent() {
+    return getHttpsAgent();
+  },
   headers: {
     'accept': 'application/json, text/javascript, */*; q=0.01',
     'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -30,6 +23,10 @@ const apiClient = axios.create({
   },
   timeout: 30000
 });
+
+export function getApiClient(): AxiosInstance {
+  return apiClient;
+}
 
 /**
  * 补全 URL，确保返回完整的绝对 URL
@@ -237,6 +234,8 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
       console.log('[MusicApi] getNeteaseHotlist 开始请求');
       // 创建专门的客户端来请求网易云音乐，设置正确的请求头
       const neteaseClient = axios.create({
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
         headers: {
           'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
           'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -303,12 +302,14 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
 
       // 创建一个新的axios实例，设置适当的请求头
       const qqClient = axios.create({
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
         headers: {
           'Accept': '*/*',
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
         },
         timeout: 30000,
-        responseType: 'text' // 明确指定响应类型为文本，以便正确处理JSONP
+        responseType: 'text'
       });
 
       const response = await qqClient.get(url);

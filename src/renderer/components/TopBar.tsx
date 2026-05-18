@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, X, User } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Search, X, User, ChevronDown } from 'lucide-react';
 
 interface TopBarProps {
   onSearch: (keyword: string) => void;
@@ -8,15 +8,29 @@ interface TopBarProps {
   onSourceTypeChange: (type: 'netease' | 'qq' | 'kugou') => void;
 }
 
-const SOURCE_CONFIG = {
-  netease: { label: '网易云', accent: '#E74C3C', bg: 'rgba(231, 76, 60, 0.12)' },
-  qq: { label: 'QQ 音乐', accent: '#1DB954', bg: 'rgba(29, 185, 84, 0.12)' },
-  kugou: { label: '酷狗', accent: '#FF8C00', bg: 'rgba(255, 140, 0, 0.12)' },
-} as const;
+type SourceKey = 'netease' | 'qq' | 'kugou';
+
+const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string; dot: string }> = {
+  netease: { label: '网易云', accent: '#E74C3C', dot: '#E74C3C' },
+  qq: { label: 'QQ', accent: '#1DB954', dot: '#1DB954' },
+  kugou: { label: '酷狗', accent: '#FF8C00', dot: '#FF8C00' },
+};
 
 const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange }) => {
   const [searchValue, setSearchValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleSearch = () => {
     if (searchValue.trim()) {
@@ -34,6 +48,8 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
     setSearchValue('');
   };
 
+  const currentSource = SOURCE_CONFIG[sourceType];
+
   return (
     <header
       style={{
@@ -49,7 +65,6 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
         zIndex: 100,
       }}
     >
-      {/* 左侧 - 搜索框 */}
       <div
         style={{
           display: 'flex',
@@ -58,7 +73,6 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
           flex: 1,
         }}
       >
-        {/* 整体容器 - 音乐源选择器 + 搜索框 */}
         <div
           style={{
             display: 'flex',
@@ -71,58 +85,126 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
             boxShadow: isFocused ? '0 0 0 3px rgba(116, 185, 255, 0.15)' : 'none',
           }}
         >
-          {/* 音乐源分段切换器 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '2px',
-              backgroundColor: 'var(--hover-bg)',
-              borderRadius: '18px',
-              padding: '2px',
-              flexShrink: 0,
-            }}
-          >
-            {(Object.entries(SOURCE_CONFIG) as [string, typeof SOURCE_CONFIG[keyof typeof SOURCE_CONFIG]][]).map(([key, config]) => {
-              const isActive = sourceType === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => onSourceTypeChange(key as 'netease' | 'qq' | 'kugou')}
-                  style={{
-                    padding: '4px 12px',
-                    borderRadius: '16px',
-                    fontSize: '12px',
-                    fontWeight: isActive ? 600 : 400,
-                    letterSpacing: '0.02em',
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: isActive ? config.accent : 'transparent',
-                    color: isActive ? '#fff' : 'var(--text-tertiary)',
-                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                    position: 'relative',
-                    boxShadow: isActive ? `0 1px 4px ${config.accent}44` : 'none',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = config.bg;
-                      e.currentTarget.style.color = config.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = 'var(--text-tertiary)';
-                    }
-                  }}
-                >
-                  {config.label}
-                </button>
-              );
-            })}
+          <div ref={dropdownRef} style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '6px',
+                padding: '4px 10px 4px 10px',
+                width: '94px',
+                borderRadius: '16px',
+                fontSize: '12px',
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: `${currentSource.accent}14`,
+                color: currentSource.accent,
+                transition: 'all 0.2s ease',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = `${currentSource.accent}24`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = `${currentSource.accent}14`;
+              }}
+            >
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: currentSource.dot,
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ flex: 1, textAlign: 'center' }}>{currentSource.label}</span>
+              <ChevronDown
+                size={12}
+                style={{
+                  transition: 'transform 0.25s ease',
+                  transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  flexShrink: 0,
+                }}
+              />
+            </button>
+
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                left: '0',
+                minWidth: '120px',
+                backgroundColor: 'var(--content-bg)',
+                borderRadius: '10px',
+                border: '1px solid var(--border-color)',
+                boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+                padding: '4px',
+                opacity: dropdownOpen ? 1 : 0,
+                visibility: dropdownOpen ? 'visible' : 'hidden',
+                transform: dropdownOpen ? 'translateY(0) scale(1)' : 'translateY(-4px) scale(0.96)',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                transformOrigin: 'top left',
+                zIndex: 200,
+              }}
+            >
+              {(Object.entries(SOURCE_CONFIG) as [SourceKey, typeof SOURCE_CONFIG[SourceKey]][]).map(([key, config], idx) => {
+                const isActive = sourceType === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      onSourceTypeChange(key);
+                      setDropdownOpen(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      backgroundColor: isActive ? `${config.accent}10` : 'transparent',
+                      color: isActive ? config.accent : 'var(--text-primary)',
+                      fontSize: '13px',
+                      fontWeight: isActive ? 600 : 400,
+                      transition: 'all 0.15s ease',
+                      animation: dropdownOpen ? `dropdownItemFade 0.25s ease ${idx * 0.04}s both` : 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor: config.dot,
+                        flexShrink: 0,
+                      }}
+                    />
+                    {config.label}
+                    {isActive && (
+                      <span style={{ marginLeft: 'auto', fontSize: '10px', color: config.accent }}>
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* 分隔线 */}
           <div
             style={{
               width: '1px',
@@ -133,7 +215,6 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
             }}
           />
 
-          {/* 搜索框 */}
           <div
             style={{
               display: 'flex',
@@ -162,9 +243,6 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                 background: 'transparent',
                 fontSize: '14px',
                 color: 'var(--text-primary)',
-                '::placeholder': {
-                  color: 'var(--text-tertiary)',
-                },
               } as React.CSSProperties}
             />
             {searchValue && (
@@ -199,7 +277,6 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
         </div>
       </div>
 
-      {/* 右侧 - 用户信息 */}
       <div
         style={{
           display: 'flex',
