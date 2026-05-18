@@ -145,7 +145,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSourceTypeChange = (newType: 'netease' | 'qq') => {
+  const handleSourceTypeChange = (newType: 'netease' | 'qq' | 'kugou') => {
     setSourceType(newType);
     if (currentKeyword) {
       searchService.search(currentKeyword);
