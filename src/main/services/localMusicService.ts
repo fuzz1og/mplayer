@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import * as mm from 'music-metadata';
 import { app } from 'electron';
 import type { LocalFolder, LocalSong } from '@/shared/types/song';
 
@@ -10,10 +9,19 @@ interface FolderData {
   path: string;
   name: string;
   songs: LocalSong[];
+  lastScanned: string;
 }
 
 interface LocalMusicStore {
   folders: FolderData[];
+}
+
+let mmModule: typeof import('music-metadata') | null = null;
+async function getMusicMetadata(): Promise<typeof import('music-metadata')> {
+  if (!mmModule) {
+    mmModule = await import('music-metadata');
+  }
+  return mmModule;
 }
 
 class LocalMusicService {
@@ -53,6 +61,7 @@ class LocalMusicService {
 
   private async parseFile(filePath: string): Promise<LocalSong | null> {
     try {
+      const mm = await getMusicMetadata();
       const metadata = await mm.parseFile(filePath);
       const stats = fs.statSync(filePath);
       const ext = path.extname(filePath).toLowerCase().slice(1);
@@ -109,7 +118,7 @@ class LocalMusicService {
     const existing = this.store.folders.find(f => f.path === folderPath);
     if (existing) {
       return {
-        folder: { path: existing.path, name: existing.name, songCount: existing.songs.length, lastScanned: new Date() },
+        folder: { path: existing.path, name: existing.name, songCount: existing.songs.length, lastScanned: new Date(existing.lastScanned) },
         songs: existing.songs,
       };
     }
@@ -119,13 +128,14 @@ class LocalMusicService {
       path: folderPath,
       name: path.basename(folderPath),
       songs,
+      lastScanned: new Date().toISOString(),
     };
 
     this.store.folders.push(folderData);
     this.saveStore();
 
     return {
-      folder: { path: folderPath, name: folderData.name, songCount: songs.length, lastScanned: new Date() },
+      folder: { path: folderPath, name: folderData.name, songCount: songs.length, lastScanned: new Date(folderData.lastScanned) },
       songs,
     };
   }
@@ -143,7 +153,7 @@ class LocalMusicService {
       path: f.path,
       name: f.name,
       songCount: f.songs.length,
-      lastScanned: new Date(),
+      lastScanned: new Date(f.lastScanned),
     }));
   }
 
@@ -161,6 +171,7 @@ class LocalMusicService {
     for (const folder of this.store.folders) {
       const songs = await this.scanFolder(folder.path);
       folder.songs = songs;
+      folder.lastScanned = new Date().toISOString();
     }
     this.saveStore();
   }
