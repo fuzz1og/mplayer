@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
 import { musicApi, getApiClient } from '../api/musicApi';
 import type { Song } from '@/shared/types/song';
 
@@ -36,8 +36,6 @@ class DownloadService {
     if (!fs.existsSync(this.downloadPath)) {
       fs.mkdirSync(this.downloadPath, { recursive: true });
     }
-
-    this.setupIpcHandlers();
   }
 
   updateDownloadPath(newPath: string): void {
@@ -49,28 +47,6 @@ class DownloadService {
 
   getDownloadPath(): string {
     return this.downloadPath;
-  }
-
-  private setupIpcHandlers(): void {
-    ipcMain.handle('download:start', async (_event, song: Song) => {
-      return this.addDownload(song);
-    });
-
-    ipcMain.handle('download:startBatch', async (_event, songs: Song[]) => {
-      return this.addBatchDownloads(songs);
-    });
-
-    ipcMain.handle('download:cancel', async (_event, taskId: string) => {
-      return this.cancelDownload(taskId);
-    });
-
-    ipcMain.handle('download:getTasks', () => {
-      return this.getAllTasks();
-    });
-
-    ipcMain.handle('download:clearCompleted', () => {
-      return this.clearCompleted();
-    });
   }
 
   addDownload(song: Song): DownloadTask {
