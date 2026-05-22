@@ -228,7 +228,6 @@ app.whenReady().then(async () => {
   registerIpcHandler('playlist:updateSongsOrder', (playlistId: number, songId: string, order: number) => db.updatePlaylistSongOrder(playlistId, songId, order));
   registerIpcHandler('playlist:reorderFull', async (playlistId: number, songIds: string[]) => {
     await db.reorderSongIds(playlistId, songIds);
-    return { success: true };
   });
 
   // 歌词 & 音乐 API IPC
