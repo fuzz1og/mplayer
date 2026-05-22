@@ -12,6 +12,8 @@ const PlaylistDetailPage = lazy(() => import('@/renderer/pages/PlaylistDetailPag
 const SettingsPage = lazy(() => import('@/renderer/pages/SettingsPage'));
 const QueuePage = lazy(() => import('@/renderer/pages/QueuePage'));
 const LocalMusicPage = lazy(() => import('@/renderer/pages/LocalMusicPage'));
+const ArtistListPage = lazy(() => import('@/renderer/pages/ArtistListPage'));
+const ArtistDetailPage = lazy(() => import('@/renderer/pages/ArtistDetailPage'));
 
 // 加载状态组件
 const Loading = () => (
@@ -135,6 +137,22 @@ export const router = createHashRouter([
         element: (
           <Suspense fallback={<Loading />}>
             <LocalMusicPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'artists',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <ArtistListPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'artist/:id',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <ArtistDetailPage />
           </Suspense>
         ),
       },
