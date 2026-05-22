@@ -53,6 +53,17 @@ export interface LocalFolder {
   lastScanned: Date;
 }
 
+export interface Artist {
+  id: string;
+  name: string;
+  picUrl: string;
+  alias: string[];
+  trans?: string;
+  albumSize: number;
+  musicSize: number;
+  sourceType: string;
+}
+
 export interface LocalSong {
   id: string;
   name: string;
