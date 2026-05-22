@@ -3,6 +3,7 @@ import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/render
 import { lyricsService } from '@/renderer/services/lyricsService';
 import type { Song } from '@/shared/types/song';
 import type { PlayMode } from '@/shared/types/player';
+import { IpcClient } from '@/renderer/services/IpcClient';
 const { ipcRenderer } = window.require('electron');
 
 interface PlayerStoreState {
@@ -145,10 +146,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       if (song.sourceType !== 'local') {
         try {
-          const result = await ipcRenderer.invoke('musicApi:getAudioUrl', song.url);
-          if (result.success) {
-            realUrl = result.data;
-          }
+          realUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
         } catch (urlError) {
           console.error('获取真实音频 URL 失败:', urlError);
         }
@@ -175,14 +173,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       if (!song.lrc || song.lrc.trim() === '') {
         set({ lyricsLoading: true });
         try {
-          const result = await ipcRenderer.invoke(
+          const searchResults = await IpcClient.invoke<Song[]>(
             'musicApi:searchSongs',
             `${song.name} ${song.artist}`,
             1,
             song.sourceType
           );
-          if (result.success && result.data.length > 0) {
-            const freshSong = result.data[0];
+          if (searchResults.length > 0) {
+            const freshSong = searchResults[0];
             if (freshSong.lrc && freshSong.lrc.trim() !== '') {
               const lyricsContent = await lyricsService.getLyrics(freshSong.lrc);
               set({ lyrics: lyricsContent, lyricsLoading: false });
@@ -207,7 +205,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       }
 
-      await ipcRenderer.invoke('history:add', song);
+      await IpcClient.invoke('history:add', song);
 
       const playlist = get().currentPlaylist;
       const index = playlist.findIndex(s => s.id === song.id);
