@@ -12,6 +12,7 @@ import { useCachedCover } from '@/renderer/services/coverCacheService';
 import { playlistService } from '@/renderer/services/playlistService';
 import type { Song, Playlist } from '@/shared/types/song';
 import { cacheService } from '@/renderer/services/cacheService';
+import { resolveSongUrls } from '@/renderer/utils/songResolver';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
 const SortableSongRow: React.FC<{
@@ -119,11 +120,10 @@ const PlaylistDetailPage: React.FC = () => {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
         }
 
-        const keyword = `${song.name} ${song.artist}`;
-        const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
-        if (!result.success || !result.data.length) return song;
+        const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
+        if (searchResults.length === 0) return song;
 
-        const fresh = result.data.find((s: Song) => s.id === song.id) || song;
+        const fresh = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
 
         await cacheService.setUrlCache(song.id, {
           url: fresh.url,

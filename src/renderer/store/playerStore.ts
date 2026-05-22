@@ -4,6 +4,7 @@ import { lyricsService } from '@/renderer/services/lyricsService';
 import type { Song } from '@/shared/types/song';
 import type { PlayMode } from '@/shared/types/player';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { resolveSongUrls } from '@/renderer/utils/songResolver';
 const { ipcRenderer } = window.require('electron');
 
 interface PlayerStoreState {
@@ -173,12 +174,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       if (!song.lrc || song.lrc.trim() === '') {
         set({ lyricsLoading: true });
         try {
-          const searchResults = await IpcClient.invoke<Song[]>(
-            'musicApi:searchSongs',
-            `${song.name} ${song.artist}`,
-            1,
-            song.sourceType
-          );
+          const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
           if (searchResults.length > 0) {
             const freshSong = searchResults[0];
             if (freshSong.lrc && freshSong.lrc.trim() !== '') {
