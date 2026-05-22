@@ -105,7 +105,7 @@ class CacheManager {
   /**
    * 获取热榜缓存
    */
-  getHotlistCache(type: 'netease' | 'qq'): any[] | null {
+  getHotlistCache(type: string): any[] | null {
     const key = this.generateKey('hotlist', type);
     return this.get<any[]>(key);
   }
@@ -113,7 +113,7 @@ class CacheManager {
   /**
    * 设置热榜缓存
    */
-  setHotlistCache(type: 'netease' | 'qq', data: any[]): void {
+  setHotlistCache(type: string, data: any[]): void {
     const key = this.generateKey('hotlist', type);
     this.set(key, data, this.defaultExpirations.hotlist);
   }
