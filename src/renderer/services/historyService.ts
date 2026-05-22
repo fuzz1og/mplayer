@@ -1,4 +1,4 @@
-const { ipcRenderer } = window.require('electron');
+import { IpcClient } from './IpcClient';
 import type { Song, SongBase } from '@/shared/types/song';
 
 export interface HistoryService {
@@ -10,11 +10,11 @@ export interface HistoryService {
 
 class HistoryServiceImpl implements HistoryService {
   async addToHistory(song: Song): Promise<number> {
-    return ipcRenderer.invoke('history:add', song);
+    return IpcClient.invoke<number>('history:add', song);
   }
 
   async getHistory(limit: number = 100): Promise<Song[]> {
-    const history = await ipcRenderer.invoke('history:get', limit);
+    const history = await IpcClient.invoke<any[]>('history:get', limit);
     const songBases = history.map((h: any) => h.song as SongBase);
 
     const uniqueMap = new Map<string, SongBase>();
@@ -23,14 +23,9 @@ class HistoryServiceImpl implements HistoryService {
     const songsWithCover = await Promise.all(
       Array.from(uniqueMap.values()).map(async (songBase) => {
         try {
-          const result = await ipcRenderer.invoke(
-            'musicApi:searchSongs',
-            `${songBase.name} ${songBase.artist}`,
-            1,
-            songBase.sourceType
-          );
-          if (result.success && result.data.length > 0) {
-            return result.data[0];
+          const songs = await IpcClient.invoke<Song[]>('musicApi:searchSongs', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
+          if (songs.length > 0) {
+            return songs[0];
           }
         } catch (e) {
           console.error('获取历史封面失败:', e);
@@ -43,11 +38,11 @@ class HistoryServiceImpl implements HistoryService {
   }
 
   async clearHistory(): Promise<void> {
-    return ipcRenderer.invoke('history:clear');
+    return IpcClient.invoke<void>('history:clear');
   }
 
   async removeFromHistory(songId: string): Promise<void> {
-    return ipcRenderer.invoke('history:remove', songId);
+    return IpcClient.invoke<void>('history:remove', songId);
   }
 }
 
