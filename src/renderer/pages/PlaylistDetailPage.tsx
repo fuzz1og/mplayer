@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2 } from 'lucide-react';
+import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 const { ipcRenderer } = window.require('electron');
 import { message, Modal } from 'antd';
@@ -12,6 +12,7 @@ import { useCachedCover } from '@/renderer/services/coverCacheService';
 import { playlistService } from '@/renderer/services/playlistService';
 import type { Song, Playlist } from '@/shared/types/song';
 import { cacheService } from '@/renderer/services/cacheService';
+import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
 const SortableSongRow: React.FC<{
   song: Song; index: number; isCurrentSong: boolean; isPlaying: boolean;
@@ -104,6 +105,7 @@ const PlaylistDetailPage: React.FC = () => {
   const { addSingleDownload, addBatchDownload } = useDownloadStore();
   const [isReordering, setIsReordering] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [importModalVisible, setImportModalVisible] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -433,6 +435,25 @@ const PlaylistDetailPage: React.FC = () => {
             <Download size={16} />
             下载全部
           </button>
+          <button
+            onClick={() => setImportModalVisible(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              backgroundColor: 'transparent',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '20px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 500,
+            }}
+          >
+            <Upload size={16} />
+            导入
+          </button>
         </div>
         <div style={{ fontSize: '14px', color: 'var(--text-tertiary)' }}>
           {songs.length} 首歌曲
@@ -635,6 +656,14 @@ const PlaylistDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+      <ImportPlaylistModal
+        open={importModalVisible}
+        playlistId={playlistId!}
+        playlistName={playlist?.name || ''}
+        existingSongs={songs}
+        onClose={() => setImportModalVisible(false)}
+        onImported={loadData}
+      />
     </div>
   );
 };
