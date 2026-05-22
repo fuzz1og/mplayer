@@ -1,4 +1,4 @@
-const { ipcRenderer } = window.require('electron');
+import { IpcClient } from './IpcClient';
 import type { Song, SongBase } from '@/shared/types/song';
 
 export interface FavoriteService {
@@ -15,19 +15,19 @@ class FavoriteServiceImpl implements FavoriteService {
     if (isAlreadyFavorite) {
       throw new Error('歌曲已在收藏列表中');
     }
-    return ipcRenderer.invoke('favorite:add', song);
+    return IpcClient.invoke<number>('favorite:add', song);
   }
 
   async removeFavorite(songId: string): Promise<void> {
-    return ipcRenderer.invoke('favorite:remove', songId);
+    return IpcClient.invoke<void>('favorite:remove', songId);
   }
 
   async isFavorite(songId: string): Promise<boolean> {
-    return ipcRenderer.invoke('favorite:isFavorite', songId);
+    return IpcClient.invoke<boolean>('favorite:isFavorite', songId);
   }
 
   async getFavorites(): Promise<SongBase[]> {
-    return ipcRenderer.invoke('favorite:getAll');
+    return IpcClient.invoke<SongBase[]>('favorite:getAll');
   }
 
   async toggleFavorite(song: Song): Promise<boolean> {
