@@ -237,8 +237,9 @@ app.whenReady().then(async () => {
   registerIpcHandler('musicApi:batchSearch', (keywords: string[], sourceType: 'netease' | 'qq' | 'kugou') => musicApi.batchSearch(keywords, sourceType));
   registerIpcHandler('musicApi:getNeteaseHotlist', () => musicApi.getNeteaseHotlist());
   registerIpcHandler('musicApi:getQQHotlist', () => musicApi.getQQHotlist());
-  registerIpcHandler('musicApi:getNeteaseArtists', (catId: number, initial: number, offset: number, limit: number) => musicApi.getNeteaseArtists(catId, initial, offset, limit));
+  registerIpcHandler('musicApi:getNeteaseArtists', (catId: number) => musicApi.getNeteaseArtists(catId));
   registerIpcHandler('musicApi:getArtistSongs', (artistId: string, offset: number, limit: number, order: string) => musicApi.getNeteaseArtistSongs(artistId, offset, limit, order as 'hot' | 'time'));
+  registerIpcHandler('musicApi:searchArtists', (keyword: string, limit: number) => musicApi.searchNeteaseArtists(keyword, limit));
 
   // 本地音乐 IPC
   registerIpcHandler('localMusic:addFolder', async (folderPath: string) => {

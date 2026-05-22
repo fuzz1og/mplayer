@@ -8,7 +8,8 @@ import {
   Settings,
   Download,
   FolderOpen,
-  Headphones
+  Headphones,
+  Mic2
 } from 'lucide-react';
 
 interface NavItem {
@@ -26,6 +27,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
   const mainNavItems: NavItem[] = [
     { key: 'discover', icon: <Compass size={18} />, label: '发现音乐' },
+    { key: 'artists', icon: <Mic2 size={18} />, label: '歌手' },
   ];
 
   const myMusicItems: NavItem[] = [
