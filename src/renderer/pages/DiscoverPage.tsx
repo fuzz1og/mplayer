@@ -5,8 +5,8 @@ import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
-import { useDownloadStore } from '@/renderer/store/downloadStore';
 import { useLazyLoad } from '@/renderer/hooks/useLazyLoad';
+import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import type { Song } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
@@ -93,7 +93,7 @@ const DiscoverPage: React.FC = () => {
     loading,
   });
   const { favoriteIds, toggleFavorite } = useFavoriteStore();
-  const { addSingleDownload, addBatchDownload } = useDownloadStore();
+  const { download, downloadBatch } = useDownload();
 
   // 加载网易热榜数据
   useEffect(() => {
@@ -152,28 +152,6 @@ const DiscoverPage: React.FC = () => {
       await toggleFavorite(song);
     } catch (error) {
       console.error('收藏操作失败:', error);
-    }
-  };
-
-  const handleDownload = async (song: Song) => {
-    try {
-      const task = await ipcRenderer.invoke('download:start', song);
-      if (task) {
-        addSingleDownload(task);
-      }
-    } catch (error) {
-      console.error('下载失败:', error);
-    }
-  };
-
-  const handleBatchDownload = async (selectedSongs: Song[]) => {
-    try {
-      const tasks = await ipcRenderer.invoke('download:startBatch', selectedSongs);
-      if (tasks && Array.isArray(tasks)) {
-        addBatchDownload(tasks);
-      }
-    } catch (error) {
-      console.error('批量下载失败:', error);
     }
   };
 
@@ -280,8 +258,8 @@ const DiscoverPage: React.FC = () => {
             onToggleFavorite={handleToggleFavorite}
             showCheckbox={true}
             enableBatchDownload={true}
-            onBatchDownload={handleBatchDownload}
-            onDownload={handleDownload}
+            onBatchDownload={downloadBatch}
+            onDownload={download}
             enableBatchAddToPlaylist={true}
             onBatchAddToPlaylist={handleBatchAddToPlaylist}
             onAddToPlaylist={handleAddToPlaylist}
