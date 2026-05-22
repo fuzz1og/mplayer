@@ -1,3 +1,4 @@
+import { Song } from '@/shared/types/song';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { dedupeSongs } from '@/renderer/utils/songDedupe';
 const { ipcRenderer } = window.require('electron');
@@ -68,6 +69,18 @@ class SearchService {
 
   reset(): void {
     useSearchStore.getState().reset();
+  }
+
+  async batchSearch(
+    keywords: string[],
+    sourceType: 'netease' | 'qq' | 'kugou' = 'netease'
+  ): Promise<Record<string, Song[]>> {
+    const result = await ipcRenderer.invoke('musicApi:batchSearch', keywords, sourceType);
+    if (!result.success) {
+      console.error('批量搜索失败:', result.error);
+      return {};
+    }
+    return result.data;
   }
 }
 

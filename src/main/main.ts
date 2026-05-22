@@ -261,6 +261,16 @@ function setupIPC(mainWindow: BrowserWindow) {
     }
   });
 
+  // 批量搜索歌曲 IPC (renderer 调用)
+  ipcMain.handle('musicApi:batchSearch', async (_event, keywords: string[], sourceType: 'netease' | 'qq' | 'kugou') => {
+    try {
+      const results = await musicApi.batchSearch(keywords, sourceType);
+      return { success: true, data: results };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
   // 获取网易云热榜 IPC
   ipcMain.handle('musicApi:getNeteaseHotlist', async () => {
     try {
