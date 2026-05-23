@@ -1,4 +1,4 @@
-const { ipcRenderer } = window.require('electron');
+import { IpcClient } from './IpcClient';
 import type { Song, Playlist } from '@/shared/types/song';
 
 export interface PlaylistService {
@@ -16,11 +16,11 @@ export interface PlaylistService {
 
 class PlaylistServiceImpl implements PlaylistService {
   async createPlaylist(name: string, description?: string): Promise<number> {
-    return ipcRenderer.invoke('playlist:create', name, description);
+    return IpcClient.invoke<number>('playlist:create', name, description);
   }
 
   async deletePlaylist(playlistId: number): Promise<void> {
-    return ipcRenderer.invoke('playlist:delete', playlistId);
+    return IpcClient.invoke<void>('playlist:delete', playlistId);
   }
 
   async updatePlaylist(playlistId: number, updates: Partial<Playlist>): Promise<void> {
@@ -28,15 +28,15 @@ class PlaylistServiceImpl implements PlaylistService {
     if (!playlist) {
       throw new Error('歌单不存在');
     }
-    return ipcRenderer.invoke('playlist:update', playlistId, { ...playlist, ...updates });
+    return IpcClient.invoke<void>('playlist:update', playlistId, { ...playlist, ...updates });
   }
 
   async getPlaylists(): Promise<Playlist[]> {
-    return ipcRenderer.invoke('playlist:getAll');
+    return IpcClient.invoke<Playlist[]>('playlist:getAll');
   }
 
   async getPlaylist(playlistId: number): Promise<Playlist | undefined> {
-    return ipcRenderer.invoke('playlist:get', playlistId);
+    return IpcClient.invoke<Playlist | undefined>('playlist:get', playlistId);
   }
 
   async addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
@@ -44,15 +44,15 @@ class PlaylistServiceImpl implements PlaylistService {
     if (!playlist) {
       throw new Error('歌单不存在');
     }
-    return ipcRenderer.invoke('playlist:addSong', playlistId, song);
+    return IpcClient.invoke<number>('playlist:addSong', playlistId, song);
   }
 
   async removeSongFromPlaylist(playlistId: number, songId: string): Promise<void> {
-    return ipcRenderer.invoke('playlist:removeSong', playlistId, songId);
+    return IpcClient.invoke<void>('playlist:removeSong', playlistId, songId);
   }
 
   async getPlaylistSongs(playlistId: number): Promise<Song[]> {
-    const songs = await ipcRenderer.invoke('playlist:getSongs', playlistId);
+    const songs = await IpcClient.invoke<Song[]>('playlist:getSongs', playlistId);
     return songs as Song[];
   }
 
@@ -76,12 +76,12 @@ class PlaylistServiceImpl implements PlaylistService {
 
     const song = songMap.get(songId);
     if (song) {
-      await ipcRenderer.invoke('playlist:updateSongsOrder', playlistId, songId, order);
+      await IpcClient.invoke<void>('playlist:updateSongsOrder', playlistId, songId, order);
     }
   }
 
   async bulkReorderPlaylistSongs(playlistId: number, songIds: string[]): Promise<void> {
-    return ipcRenderer.invoke('playlist:reorderFull', playlistId, songIds);
+    return IpcClient.invoke<void>('playlist:reorderFull', playlistId, songIds);
   }
 }
 

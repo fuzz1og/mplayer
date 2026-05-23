@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Heart, Play } from 'lucide-react';
-const { ipcRenderer } = window.require('electron');
-import { message } from 'antd';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
-import { useDownloadStore } from '@/renderer/store/downloadStore';
+import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import type { Song } from '@/shared/types/song';
@@ -12,7 +10,7 @@ import type { Song } from '@/shared/types/song';
 const FavoritesPage: React.FC = () => {
   const { favorites, loadFavorites, toggleFavorite } = useFavoriteStore();
   const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
-  const { addSingleDownload, addBatchDownload } = useDownloadStore();
+  const { download, downloadBatch } = useDownload();
 
   const [batchModalVisible, setBatchModalVisible] = useState(false);
   const [selectedSongsForPlaylist, setSelectedSongsForPlaylist] = useState<Song[]>([]);
@@ -37,30 +35,6 @@ const FavoritesPage: React.FC = () => {
     if (favorites.length > 0) {
       setCurrentPlaylist(favorites, 0);
       await handlePlay(favorites[0]);
-    }
-  };
-
-  const handleBatchDownload = async (selectedSongs: Song[]) => {
-    try {
-      const tasks = await ipcRenderer.invoke('download:startBatch', selectedSongs);
-      if (tasks && Array.isArray(tasks)) {
-        addBatchDownload(tasks);
-      }
-    } catch (error) {
-      console.error('批量下载失败:', error);
-      message.error('批量下载失败，请重试');
-    }
-  };
-
-  const handleDownload = async (song: Song) => {
-    try {
-      const task = await ipcRenderer.invoke('download:start', song);
-      if (task) {
-        addSingleDownload(task);
-      }
-    } catch (error) {
-      console.error('下载失败:', error);
-      message.error('下载失败，请重试');
     }
   };
 
@@ -127,8 +101,8 @@ const FavoritesPage: React.FC = () => {
           favoriteIds={favorites.map(s => s.id)}
           onPlay={handlePlay}
           onToggleFavorite={handleToggleFavorite}
-          onDownload={handleDownload}
-          onBatchDownload={handleBatchDownload}
+          onDownload={download}
+          onBatchDownload={downloadBatch}
           onAddToPlaylist={handleAddToPlaylist}
           onBatchAddToPlaylist={handleBatchAddToPlaylist}
           showCheckbox={true}
