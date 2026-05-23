@@ -1,10 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { Modal, Input, Button, Progress, message } from 'antd';
+import { Modal, Input, Button, Progress, message, Tabs } from 'antd';
 import { Upload, Check, X, Clock } from 'lucide-react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { importSongs, parseSongList, type SourceType, type ProgressState, type ImportResult } from '@/renderer/services/importService';
+import { importSongs, importFromLink, parseSongList, parsePlaylistUrl, type SourceType, type ProgressState, type ImportResult } from '@/renderer/services/importService';
+import LinkImportForm from './LinkImportForm';
+import LinkPreviewTable from './LinkPreviewTable';
 import type { Song } from '@/shared/types/song';
 
 const SOURCE_LABELS: Record<SourceType, string> = {
@@ -74,8 +76,20 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
   onImported,
 }) => {
   const [step, setStep] = useState<'input' | 'progress' | 'result'>('input');
+  const [importMode, setImportMode] = useState<'text' | 'link'>('text');
+
+  // 文本导入状态
   const [text, setText] = useState('');
   const [sourceOrder, setSourceOrder] = useState<SourceType[]>(['netease', 'qq', 'kugou']);
+
+  // 链接导入状态
+  const [linkUrl, setLinkUrl] = useState('');
+  const [parsedLinkSongs, setParsedLinkSongs] = useState<Song[]>([]);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [selectedSongIds, setSelectedSongIds] = useState<Set<string>>(new Set());
+
+  // 共享状态
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [importing, setImporting] = useState(false);
@@ -125,19 +139,88 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     }
   }, [text, sourceOrder, playlistId, existingSongs]);
 
+  // 链接解析处理
+  const handleParseLink = useCallback(async () => {
+    if (!linkUrl.trim()) {
+      message.warning('请输入链接');
+      return;
+    }
+
+    const urlInfo = parsePlaylistUrl(linkUrl);
+    if (!urlInfo) {
+      setLinkError('请输入有效的网易云歌单链接');
+      return;
+    }
+
+    setLinkLoading(true);
+    setLinkError(null);
+
+    try {
+      const { musicApi } = await import('@/main/api/musicApi');
+      const songs = await musicApi.getPlaylistSongsFromThirdParty(linkUrl);
+
+      if (songs.length === 0) {
+        setLinkError('歌单不存在或没有歌曲');
+        return;
+      }
+
+      setParsedLinkSongs(songs);
+      setSelectedSongIds(new Set(songs.map(song => song.id)));
+    } catch (error) {
+      console.error('解析链接失败:', error);
+      setLinkError('解析链接失败，请检查网络连接');
+    } finally {
+      setLinkLoading(false);
+    }
+  }, [linkUrl]);
+
+  // 链接导入处理
+  const handleLinkImport = useCallback(async () => {
+    if (selectedSongIds.size === 0) {
+      message.warning('请选择要导入的歌曲');
+      return;
+    }
+
+    setStep('progress');
+    setImporting(true);
+
+    try {
+      const finalResult = await importFromLink(
+        playlistId,
+        linkUrl,
+        selectedSongIds,
+        existingSongs,
+        (state) => setProgress(state)
+      );
+      setResult(finalResult);
+      setStep('result');
+    } catch (error) {
+      message.error('导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      setStep('input');
+    } finally {
+      setImporting(false);
+    }
+  }, [playlistId, linkUrl, selectedSongIds, existingSongs]);
+
   const handleDone = () => {
     if (result && result.successes.length > 0) {
       onImported();
     }
     setStep('input');
+    setImportMode('text');
     setText('');
+    setLinkUrl('');
+    setParsedLinkSongs([]);
+    setSelectedSongIds(new Set());
+    setLinkError(null);
     setProgress(null);
     setResult(null);
     setSourceOrder(['netease', 'qq', 'kugou']);
     onClose();
   };
 
-  const renderInput = () => (
+  // 渲染文本导入表单
+  const renderTextImportForm = () => (
     <div>
       <div style={{ marginBottom: '12px', fontSize: '14px', color: 'var(--text-secondary)' }}>
         粘贴歌曲列表到歌单「{playlistName}」，每行一首
@@ -164,6 +247,64 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
           </SortableContext>
         </DndContext>
       </div>
+    </div>
+  );
+
+  // 渲染链接导入表单
+  const renderLinkImportForm = () => (
+    <div>
+      <LinkImportForm
+        linkUrl={linkUrl}
+        onLinkUrlChange={setLinkUrl}
+        onParse={handleParseLink}
+        loading={linkLoading}
+        error={linkError}
+      />
+      {parsedLinkSongs.length > 0 && (
+        <div style={{ marginTop: '16px' }}>
+          <LinkPreviewTable
+            songs={parsedLinkSongs}
+            onConfirm={(ids) => {
+              setSelectedSongIds(ids);
+              handleLinkImport();
+            }}
+            onCancel={() => {
+              setParsedLinkSongs([]);
+              setSelectedSongIds(new Set());
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  // 渲染输入步骤
+  const renderInput = () => (
+    <div>
+      <Tabs
+        activeKey={importMode}
+        onChange={(key) => setImportMode(key as 'text' | 'link')}
+        items={[
+          {
+            key: 'text',
+            label: '文本导入',
+            children: renderTextImportForm()
+          },
+          {
+            key: 'link',
+            label: '链接导入',
+            children: renderLinkImportForm()
+          }
+        ]}
+      />
+      {importMode === 'text' && (
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
+          <Button onClick={onClose}>取消</Button>
+          <Button type="primary" onClick={handleStartImport} style={{ backgroundColor: 'var(--accent-color)' }}>
+            开始导入
+          </Button>
+        </div>
+      )}
     </div>
   );
 
@@ -271,17 +412,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
       }
       destroyOnClose
     >
-      {step === 'input' && (
-        <>
-          {renderInput()}
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
-            <Button onClick={onClose}>取消</Button>
-            <Button type="primary" onClick={handleStartImport} style={{ backgroundColor: 'var(--accent-color)' }}>
-              开始导入
-            </Button>
-          </div>
-        </>
-      )}
+      {step === 'input' && renderInput()}
       {step === 'progress' && renderProgress()}
       {step === 'result' && (
         <>
