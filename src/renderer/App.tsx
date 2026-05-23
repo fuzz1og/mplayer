@@ -162,6 +162,7 @@ const App: React.FC = () => {
     if (path.startsWith('/history')) return 'history';
     if (path.startsWith('/playlists') || path.startsWith('/playlist/')) return 'playlists';
     if (path.startsWith('/queue')) return 'queue';
+    if (path.startsWith('/download')) return 'download';
     if (path.startsWith('/settings')) return 'settings';
     return 'discover';
   };
