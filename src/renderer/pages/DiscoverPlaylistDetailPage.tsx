@@ -21,13 +21,14 @@ const formatPlayCount = (count: number): string => {
 const DiscoverPlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { play, currentSong, isPlaying } = usePlayerStore();
+  const { play, currentSong, isPlaying, setCurrentPlaylist } = usePlayerStore();
 
   const [playlist, setPlaylist] = useState<DiscoverPlaylist | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [songsLoading, setSongsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [songsError, setSongsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -52,13 +53,17 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
     const loadSongs = async () => {
       try {
         setSongsLoading(true);
+        setSongsError(null);
         const playlistUrl = `https://music.163.com/#/playlist?id=${id}`;
         const result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', playlistUrl);
         if (result.success && result.data) {
           setSongs(result.data);
+        } else {
+          setSongsError('加载歌曲失败，请稍后重试');
         }
       } catch (error) {
         console.error('加载歌单歌曲失败:', error);
+        setSongsError('加载歌曲失败，请稍后重试');
       } finally {
         setSongsLoading(false);
       }
@@ -72,6 +77,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
 
   const handlePlayAll = async () => {
     if (songs.length > 0) {
+      setCurrentPlaylist(songs, 0);
       await play(songs[0]);
     }
   };
@@ -186,6 +192,10 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
 
         {songsLoading ? (
           <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '40px' }}>正在加载歌曲列表...</div>
+        ) : songsError ? (
+          <div style={{ padding: '12px 16px', backgroundColor: '#FF6B6B20', borderRadius: '8px', color: '#FF6B6B', textAlign: 'center' }}>
+            {songsError}
+          </div>
         ) : (
           <SongList songs={songs} currentSongId={currentSong?.id} isPlaying={isPlaying} onPlay={handlePlay} showHeader={true} showIndex={true} showCheckbox={true} enableBatchDownload={true} enableBatchAddToPlaylist={true} emptyText="暂无歌曲数据" />
         )}

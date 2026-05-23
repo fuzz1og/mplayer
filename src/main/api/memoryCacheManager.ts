@@ -154,15 +154,15 @@ class CacheManager {
    * 获取批量搜索缓存
    */
   getBatchSearchCache(keywords: string[], sourceType: string): Record<string, Song[]> | null {
-    const key = this.generateKey('batchSearch', keywords.sort().join(','), sourceType);
+    const key = this.generateKey('batchSearch', [...keywords].sort().join(','), sourceType);
     return this.get<Record<string, Song[]>>(key);
   }
-  
+
   /**
    * 设置批量搜索缓存
    */
   setBatchSearchCache(keywords: string[], sourceType: string, data: Record<string, Song[]>): void {
-    const key = this.generateKey('batchSearch', keywords.sort().join(','), sourceType);
+    const key = this.generateKey('batchSearch', [...keywords].sort().join(','), sourceType);
     this.set(key, data, this.defaultExpirations.batchSearch);
   }
 
