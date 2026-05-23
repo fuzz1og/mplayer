@@ -618,7 +618,7 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
         playCount: p.playCount || 0,
         trackCount: p.trackCount || 0,
         creator: { nickname: p.creator?.nickname || '' },
-        tags: p.tags || [],
+        tags: (p.tags || []).map((t: any) => typeof t === "string" ? t : t.name || ""),
         description: p.description || ''
       }));
 
@@ -662,7 +662,7 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
         `https://music.163.com/api/playlist/detail?id=${id}`
       );
 
-      const p = response.data.playlist;
+      const p = response.data.result || response.data.playlist;
       if (!p) return null;
 
       const playlist: DiscoverPlaylist = {
@@ -672,7 +672,7 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
         playCount: p.playCount || 0,
         trackCount: p.trackCount || 0,
         creator: { nickname: p.creator?.nickname || '' },
-        tags: p.tags || [],
+        tags: (p.tags || []).map((t: any) => typeof t === "string" ? t : t.name || ""),
         description: p.description || ''
       };
 
