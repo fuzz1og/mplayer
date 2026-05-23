@@ -1,6 +1,5 @@
 import React from 'react';
 import { Input, Button, Alert } from 'antd';
-import { Link, Loader2 } from 'lucide-react';
 
 interface LinkImportFormProps {
   linkUrl: string;
