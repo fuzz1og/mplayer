@@ -376,5 +376,15 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
       console.error('获取QQ音乐热榜失败:', error);
       return [];
     }
+  },
+
+  async getPlaylistSongsFromThirdParty(linkUrl: string): Promise<Song[]> {
+    const response = await apiClient.post('', new URLSearchParams({
+      input: linkUrl,
+      filter: 'link',
+      type: 'netease'
+    }));
+    const songs: Partial<Song>[] = response.data.data || [];
+    return songs.map(song => processSong(song, 'netease'));
   }
 };
