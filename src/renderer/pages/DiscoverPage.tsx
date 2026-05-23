@@ -8,7 +8,8 @@ import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownloadStore } from '@/renderer/store/downloadStore';
 import { useLazyLoad } from '@/renderer/hooks/useLazyLoad';
 import SongList from '@/renderer/components/SongList';
-import type { Song } from '@/shared/types/song';
+import DiscoverPlaylistCard from '@/renderer/components/DiscoverPlaylistCard';
+import type { Song, DiscoverPlaylist } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
 
 // 热榜歌曲类型
@@ -79,6 +80,8 @@ const DiscoverPage: React.FC = () => {
   const [hotlistLoading, setHotlistLoading] = useState(true);
   const [qqHotlist, setQQHotlist] = useState<HotlistSong[]>([]);
   const [qqHotlistLoading, setQQHotlistLoading] = useState(true);
+  const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
+  const [playlistsLoading, setPlaylistsLoading] = useState(true);
 
   const { songs, loading, currentKeyword, hasMore, error } = useSearchStore();
   const { currentSong, isPlaying, play } = usePlayerStore();
@@ -127,6 +130,23 @@ const DiscoverPage: React.FC = () => {
       }
     };
     loadQQHotlist();
+  }, []);
+
+  // 加载热门歌单数据
+  useEffect(() => {
+    const loadPlaylists = async () => {
+      try {
+        setPlaylistsLoading(true);
+        const result = await ipcRenderer.invoke('musicApi:getNeteasePlaylists', '全部', 'hot', 0, 10);
+        const data = result.success ? result.data : { playlists: [] };
+        setPlaylists(data.playlists || []);
+      } catch (error) {
+        console.error('加载热门歌单失败:', error);
+      } finally {
+        setPlaylistsLoading(false);
+      }
+    };
+    loadPlaylists();
   }, []);
 
   // 处理热榜歌曲点击
@@ -677,25 +697,50 @@ const DiscoverPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 推荐歌单 - 功能开发中 */}
+      {/* 热门歌单 */}
       <section style={{ marginBottom: '40px' }}>
         <SectionHeader
           icon={<Sparkles size={22} />}
-          title="推荐歌单"
+          title="热门歌单"
+          action="更多"
+          onClickAction={() => navigate('/playlists/discover')}
         />
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '120px',
-            backgroundColor: 'var(--content-bg)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)',
-            color: 'var(--text-tertiary)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, 1fr)',
+            gap: '16px',
           }}
         >
-          <span>推荐歌单功能开发中...</span>
+          {playlistsLoading ? (
+            Array.from({ length: 10 }).map((_, index) => (
+              <div key={`playlist-skeleton-${index}`}>
+                <div
+                  style={{
+                    paddingTop: '100%',
+                    borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                    backgroundSize: '200% 200%',
+                    animation: 'skeletonLoading 1.5s ease-in-out infinite',
+                  }}
+                />
+                <div
+                  style={{
+                    height: '14px',
+                    marginTop: '8px',
+                    borderRadius: '2px',
+                    background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                    backgroundSize: '200% 200%',
+                    animation: 'skeletonLoading 1.5s ease-in-out infinite',
+                  }}
+                />
+              </div>
+            ))
+          ) : (
+            playlists.slice(0, 10).map(playlist => (
+              <DiscoverPlaylistCard key={playlist.id} playlist={playlist} />
+            ))
+          )}
         </div>
       </section>
 
