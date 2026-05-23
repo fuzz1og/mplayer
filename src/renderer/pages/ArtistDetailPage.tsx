@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Search } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import { searchService } from '@/renderer/services/searchService';
 import type { Song } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
 
@@ -81,7 +82,7 @@ const ArtistDetailPage: React.FC = () => {
         }}
       >
         <button
-          onClick={() => navigate('/artists')}
+          onClick={() => navigate(-1)}
           style={{
             border: 'none',
             background: 'transparent',
@@ -213,12 +214,34 @@ const ArtistDetailPage: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
                   {stateName || `歌手 (ID: ${artistId})`}
                 </div>
-                <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-                  共 {total || '--'} 首歌曲
+                <div style={{ fontSize: '14px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span>共 {total || '--'} 首歌曲</span>
+                  <button
+                    onClick={() => {
+                      if (stateName) {
+                        searchService.search(stateName);
+                        navigate('/discover');
+                      }
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      color: 'var(--accent-color)',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                    }}
+                  >
+                    <Search size={12} />
+                    换源获取更多歌曲
+                  </button>
                 </div>
               </div>
               <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
