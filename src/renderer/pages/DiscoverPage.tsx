@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Sparkles, TrendingUp, Disc, Radio, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Sparkles, TrendingUp, Disc, Radio, ArrowLeft, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
-import { useLazyLoad } from '@/renderer/hooks/useLazyLoad';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
-import type { Song } from '@/shared/types/song';
+import type { Song, Artist } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
 
 // 热榜歌曲类型
@@ -80,6 +79,10 @@ const DiscoverPage: React.FC = () => {
   const [qqHotlist, setQQHotlist] = useState<HotlistSong[]>([]);
   const [qqHotlistLoading, setQQHotlistLoading] = useState(true);
 
+  const [activeTab, setActiveTab] = useState<'songs' | 'artists'>('songs');
+  const [artistResults, setArtistResults] = useState<Artist[]>([]);
+  const [artistLoading, setArtistLoading] = useState(false);
+
   const { songs, loading, currentKeyword, hasMore, error } = useSearchStore();
   const { currentSong, isPlaying, play } = usePlayerStore();
 
@@ -87,11 +90,25 @@ const DiscoverPage: React.FC = () => {
     searchService.loadMore();
   }, []);
 
-  const { triggerRef } = useLazyLoad({
-    onLoadMore: handleLoadMore,
-    hasMore,
-    loading,
-  });
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // 滚动到底部时加载更多
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      if (loading || !hasMore) return;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      if (scrollTop + clientHeight >= scrollHeight - 200) {
+        handleLoadMore();
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [loading, hasMore, handleLoadMore]);
+
   const { favoriteIds, toggleFavorite } = useFavoriteStore();
   const { download, downloadBatch } = useDownload();
 
@@ -129,6 +146,33 @@ const DiscoverPage: React.FC = () => {
     loadQQHotlist();
   }, []);
 
+  // 搜索关键词变化时重置 tab
+  useEffect(() => {
+    setActiveTab('songs');
+    setArtistResults([]);
+  }, [currentKeyword]);
+
+  // 切换到歌手 tab 或关键词变化时搜索歌手
+  useEffect(() => {
+    if (!currentKeyword || activeTab !== 'artists') return;
+    let cancelled = false;
+    const searchArtists = async () => {
+      setArtistLoading(true);
+      try {
+        const result = await ipcRenderer.invoke('musicApi:searchArtists', currentKeyword, 30);
+        if (!cancelled) {
+          setArtistResults(result.success ? result.data : []);
+        }
+      } catch {
+        if (!cancelled) setArtistResults([]);
+      } finally {
+        if (!cancelled) setArtistLoading(false);
+      }
+    };
+    searchArtists();
+    return () => { cancelled = true; };
+  }, [currentKeyword, activeTab]);
+
   // 处理热榜歌曲点击
   const handleHotlistSongClick = async (song: HotlistSong, sourceType: 'netease' | 'qq' = 'netease') => {
     try {
@@ -165,10 +209,12 @@ const DiscoverPage: React.FC = () => {
 
   const handleBackFromSearch = () => {
     useSearchStore.getState().reset();
+    setArtistResults([]);
+    setActiveTab('songs');
   };
 
   // 如果有搜索关键词，显示搜索结果
-  if (currentKeyword && songs.length > 0) {
+  if (currentKeyword && (songs.length > 0 || artistResults.length > 0)) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 搜索结果导航栏 */}
@@ -232,8 +278,54 @@ const DiscoverPage: React.FC = () => {
           <div style={{ width: '140px' }} />
         </div>
 
+        {/* Tab 栏 */}
+        <div
+          style={{
+            display: 'flex',
+            gap: '4px',
+            padding: '0 24px',
+            borderBottom: '1px solid var(--divider-color)',
+            backgroundColor: 'var(--content-bg)',
+          }}
+        >
+          {[
+            { key: 'songs' as const, label: '单曲', count: songs.length },
+            { key: 'artists' as const, label: '歌手', count: artistResults.length },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                padding: '10px 20px',
+                border: 'none',
+                borderBottom: activeTab === tab.key ? '2px solid var(--accent-color)' : '2px solid transparent',
+                background: 'transparent',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: activeTab === tab.key ? 600 : 400,
+                color: activeTab === tab.key ? 'var(--accent-color)' : 'var(--text-secondary)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span style={{
+                  marginLeft: '6px',
+                  fontSize: '11px',
+                  padding: '1px 6px',
+                  borderRadius: '10px',
+                  backgroundColor: activeTab === tab.key ? 'var(--accent-color)' : 'var(--hover-bg)',
+                  color: activeTab === tab.key ? 'white' : 'var(--text-tertiary)',
+                }}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
         {/* 搜索结果内容 */}
-        <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+        <div ref={scrollContainerRef} style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
           {error && (
             <div
               style={{
@@ -249,48 +341,155 @@ const DiscoverPage: React.FC = () => {
             </div>
           )}
 
-          <SongList
-            songs={songs}
-            currentSongId={currentSong?.id}
-            isPlaying={isPlaying}
-            favoriteIds={favoriteIds}
-            onPlay={handlePlaySong}
-            onToggleFavorite={handleToggleFavorite}
-            showCheckbox={true}
-            enableBatchDownload={true}
-            onBatchDownload={downloadBatch}
-            onDownload={download}
-            enableBatchAddToPlaylist={true}
-            onBatchAddToPlaylist={handleBatchAddToPlaylist}
-            onAddToPlaylist={handleAddToPlaylist}
-          />
+          {activeTab === 'songs' && (
+            <>
+              <SongList
+                songs={songs}
+                currentSongId={currentSong?.id}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handlePlaySong}
+                onToggleFavorite={handleToggleFavorite}
+                showCheckbox={true}
+                enableBatchDownload={true}
+                onBatchDownload={downloadBatch}
+                onDownload={download}
+                enableBatchAddToPlaylist={true}
+                onBatchAddToPlaylist={handleBatchAddToPlaylist}
+                onAddToPlaylist={handleAddToPlaylist}
+              />
 
-          {/* 滚动加载触发器 */}
-          {hasMore && (
-            <div ref={triggerRef} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-              {loading ? '加载中...' : '上滑加载更多'}
-            </div>
-          )}
-          {!hasMore && songs.length > 0 && (
-            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-              没有更多歌曲了
-            </div>
+              {/* 滚动加载提示 */}
+              {hasMore && loading && (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                  加载中...
+                </div>
+              )}
+              {!hasMore && songs.length > 0 && (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                  没有更多歌曲了
+                </div>
+              )}
+
+              {!loading && songs.length === 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '60px 20px',
+                    color: 'var(--text-tertiary)',
+                  }}
+                >
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>&#128269;</div>
+                  <div>未找到相关歌曲</div>
+                </div>
+              )}
+            </>
           )}
 
-          {!loading && songs.length === 0 && (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '60px 20px',
-                color: 'var(--text-tertiary)',
-              }}
-            >
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
-              <div>未找到相关歌曲</div>
-            </div>
+          {activeTab === 'artists' && (
+            <>
+              {artistLoading ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                      padding: '16px 12px', borderRadius: '12px',
+                      backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)',
+                    }}>
+                      <div style={{
+                        width: '80px', height: '80px', borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                        backgroundSize: '200% 200%',
+                        animation: 'shimmer 1.5s ease-in-out infinite',
+                      }} />
+                      <div style={{
+                        width: '60px', height: '14px', borderRadius: '2px',
+                        background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                        backgroundSize: '200% 200%',
+                        animation: 'shimmer 1.5s ease-in-out infinite',
+                      }} />
+                    </div>
+                  ))}
+                  <style>{`
+                    @keyframes shimmer {
+                      0% { background-position: 200% 0; }
+                      100% { background-position: -200% 0; }
+                    }
+                  `}</style>
+                </div>
+              ) : artistResults.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+                  {artistResults.map((artist) => (
+                    <div
+                      key={artist.id}
+                      onClick={() => navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } })}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                        padding: '16px 12px', borderRadius: '12px', cursor: 'pointer',
+                        transition: 'all 0.2s ease', backgroundColor: 'var(--content-bg)',
+                        border: '1px solid var(--border-color)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-4px)';
+                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)';
+                        e.currentTarget.style.borderColor = 'var(--accent-color)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.borderColor = 'var(--border-color)';
+                      }}
+                    >
+                      <div style={{
+                        width: '80px', height: '80px', borderRadius: '50%',
+                        overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0,
+                      }}>
+                        {artist.picUrl ? (
+                          <img
+                            src={artist.picUrl}
+                            alt={artist.name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div style={{
+                            width: '100%', height: '100%', display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: '28px', color: 'var(--text-tertiary)',
+                          }}>
+                            {artist.name.charAt(0)}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{
+                        fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)',
+                        textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap', width: '100%',
+                      }}>
+                        {artist.name}
+                      </div>
+                      <div style={{
+                        fontSize: '11px', color: 'var(--text-tertiary)',
+                        display: 'flex', gap: '8px',
+                      }}>
+                        {artist.musicSize > 0 && <span>{artist.musicSize}首单曲</span>}
+                        {artist.albumSize > 0 && <span>{artist.albumSize}张专辑</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  justifyContent: 'center', padding: '60px 20px', color: 'var(--text-tertiary)',
+                }}>
+                  <User size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                  <div>未找到相关歌手</div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

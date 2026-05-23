@@ -26,7 +26,7 @@ class SearchService {
         store.setSongs(songs, true);
         store.setCurrentKeyword(keyword);
         store.setPage(page);
-        store.setHasMore(songs.length === 10);
+        store.setHasMore(songs.length >= 10);
       } else {
         const currentSongs = store.songs;
         const uniqueSongs = dedupeSongs(currentSongs, songs);
@@ -36,7 +36,7 @@ class SearchService {
           store.setPage(page);
         }
 
-        store.setHasMore(songs.length === 10);
+        store.setHasMore(songs.length >= 10);
       }
     } catch (error) {
       store.setError(error instanceof Error ? error.message : '搜索失败');
