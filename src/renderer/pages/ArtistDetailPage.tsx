@@ -221,9 +221,9 @@ const ArtistDetailPage: React.FC = () => {
                 <div style={{ fontSize: '14px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <span>共 {total || '--'} 首歌曲</span>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (stateName) {
-                        searchService.search(stateName);
+                        await searchService.search(stateName);
                         navigate('/discover');
                       }
                     }}
