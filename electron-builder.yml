@@ -4,7 +4,11 @@ forceCodeSigning: false
 files:
   - dist/**/*
   - dist-electron/**/*
+  - resources/icon.png
+  - resources/icon.ico
+  - resources/icon_tray.png
 win:
+  icon: resources/icon.ico
   target:
     - target: nsis
       arch:

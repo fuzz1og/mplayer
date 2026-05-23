@@ -3,7 +3,7 @@ import { favoriteService } from '@/renderer/services/favoriteService';
 import { cacheService } from '@/renderer/services/cacheService';
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import type { Song, SongBase } from '@/shared/types/song';
-const { ipcRenderer } = window.require('electron');
+import { resolveSongUrls } from '@/renderer/utils/songResolver';
 
 interface FavoriteState {
   favoriteIds: string[];
@@ -40,10 +40,10 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
       }
 
       // 如果缓存中没有，通过搜索获取最新URL
-      const result = await ipcRenderer.invoke('musicApi:searchSongs', `${song.name} ${song.artist}`, 1, song.sourceType);
-      if (result.success && result.data.length > 0) {
+      const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
+      if (searchResults.length > 0) {
         // 找到匹配的歌曲
-        const matchedSong = result.data.find((s: Song) => s.id === song.id) || result.data[0];
+        const matchedSong = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
 
         // 缓存URL
         await cacheService.setUrlCache(song.id, {

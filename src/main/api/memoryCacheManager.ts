@@ -105,7 +105,7 @@ class CacheManager {
   /**
    * 获取热榜缓存
    */
-  getHotlistCache(type: 'netease' | 'qq'): any[] | null {
+  getHotlistCache(type: string): any[] | null {
     const key = this.generateKey('hotlist', type);
     return this.get<any[]>(key);
   }
@@ -113,7 +113,7 @@ class CacheManager {
   /**
    * 设置热榜缓存
    */
-  setHotlistCache(type: 'netease' | 'qq', data: any[]): void {
+  setHotlistCache(type: string, data: any[]): void {
     const key = this.generateKey('hotlist', type);
     this.set(key, data, this.defaultExpirations.hotlist);
   }
@@ -154,16 +154,48 @@ class CacheManager {
    * 获取批量搜索缓存
    */
   getBatchSearchCache(keywords: string[], sourceType: string): Record<string, Song[]> | null {
-    const key = this.generateKey('batchSearch', keywords.sort().join(','), sourceType);
+    const key = this.generateKey('batchSearch', [...keywords].sort().join(','), sourceType);
     return this.get<Record<string, Song[]>>(key);
   }
-  
+
   /**
    * 设置批量搜索缓存
    */
   setBatchSearchCache(keywords: string[], sourceType: string, data: Record<string, Song[]>): void {
-    const key = this.generateKey('batchSearch', keywords.sort().join(','), sourceType);
+    const key = this.generateKey('batchSearch', [...keywords].sort().join(','), sourceType);
     this.set(key, data, this.defaultExpirations.batchSearch);
+  }
+
+  /**
+   * 获取歌单列表缓存
+   */
+  getPlaylistListCache(cat: string, order: string, offset: number, limit: number): any | null {
+    const key = this.generateKey('playlistList', cat, order, offset, limit);
+    return this.get<any>(key);
+  }
+
+  /**
+   * 设置歌单列表缓存
+   */
+  setPlaylistListCache(cat: string, order: string, offset: number, limit: number, data: any): void {
+    const key = this.generateKey('playlistList', cat, order, offset, limit);
+    this.set(key, data, 5 * 60 * 1000); // 5 minutes TTL
+  }
+
+  /**
+   * 获取歌单详情缓存
+   */
+  getPlaylistDetailCache(id: number): any | null {
+    const key = this.generateKey('playlistDetail', id);
+    return this.get<any>(key);
+  }
+
+  /**
+   * 设置歌单详情缓存
+   */
+  setPlaylistDetailCache(id: number, data: any): void {
+    const key = this.generateKey('playlistDetail', id);
+    this.set(key, data, 5 * 60 * 1000); // 5 minutes TTL
   }
 }
 

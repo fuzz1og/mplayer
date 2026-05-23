@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useDownload } from '@/renderer/hooks/useDownload';
 import type { Song } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
 
@@ -26,6 +27,7 @@ const HotlistDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const { play, currentSong, isPlaying } = usePlayerStore();
+  const { download, downloadBatch } = useDownload();
 
   // 加载热榜数据
   useEffect(() => {
@@ -330,6 +332,8 @@ const HotlistDetailPage: React.FC = () => {
             showIndex={true}
             showCheckbox={true}
             enableBatchDownload={true}
+            onDownload={download}
+            onBatchDownload={downloadBatch}
             enableBatchAddToPlaylist={true}
             emptyText="暂无热榜歌曲"
           />
