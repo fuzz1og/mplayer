@@ -156,8 +156,15 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     setLinkError(null);
 
     try {
-      const { musicApi } = await import('@/main/api/musicApi');
-      const songs = await musicApi.getPlaylistSongsFromThirdParty(linkUrl);
+      const { ipcRenderer } = window.require('electron');
+      const result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', linkUrl);
+
+      if (!result.success) {
+        setLinkError(result.error || '解析链接失败');
+        return;
+      }
+
+      const songs = result.data || [];
 
       if (songs.length === 0) {
         setLinkError('歌单不存在或没有歌曲');
@@ -175,8 +182,8 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
   }, [linkUrl]);
 
   // 链接导入处理
-  const handleLinkImport = useCallback(async () => {
-    if (selectedSongIds.size === 0) {
+  const handleLinkImport = useCallback(async (selectedIds: Set<number>) => {
+    if (selectedIds.size === 0) {
       message.warning('请选择要导入的歌曲');
       return;
     }
@@ -188,7 +195,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
       const finalResult = await importFromLink(
         playlistId,
         linkUrl,
-        selectedSongIds,
+        selectedIds,
         existingSongs,
         (state) => setProgress(state)
       );
@@ -200,7 +207,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     } finally {
       setImporting(false);
     }
-  }, [playlistId, linkUrl, selectedSongIds, existingSongs]);
+  }, [playlistId, linkUrl, existingSongs]);
 
   const handleDone = () => {
     if (result && result.successes.length > 0) {
@@ -266,7 +273,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
             songs={parsedLinkSongs}
             onConfirm={(ids) => {
               setSelectedSongIds(ids);
-              handleLinkImport();
+              handleLinkImport(ids);
             }}
             onCancel={() => {
               setParsedLinkSongs([]);

@@ -13,12 +13,19 @@ vi.mock('@/renderer/services/importService', async (importOriginal) => {
   };
 });
 
-// Mock musicApi for dynamic import in modal
-vi.mock('@/main/api/musicApi', () => ({
-  musicApi: {
-    getPlaylistSongsFromThirdParty: vi.fn(),
-  },
-}));
+// Mock electron ipcRenderer
+const mockInvoke = vi.fn();
+const originalRequire = window.require;
+window.require = vi.fn((module: string) => {
+  if (module === 'electron') {
+    return {
+      ipcRenderer: {
+        invoke: mockInvoke,
+      },
+    };
+  }
+  return originalRequire(module);
+});
 
 // Mock dnd-kit
 vi.mock('@dnd-kit/core', () => ({
@@ -136,9 +143,7 @@ describe('ImportWorkflow Integration', () => {
       skips: [],
     };
 
-    (musicApi.getPlaylistSongsFromThirdParty as ReturnType<typeof vi.fn>).mockResolvedValue(
-      mockSongs
-    );
+    mockInvoke.mockResolvedValue({ success: true, data: mockSongs });
     (importFromLink as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
     render(<ImportPlaylistModal {...defaultProps} />);
@@ -179,9 +184,7 @@ describe('ImportWorkflow Integration', () => {
   });
 
   it('should handle link parse failure', async () => {
-    (musicApi.getPlaylistSongsFromThirdParty as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error('Network error')
-    );
+    mockInvoke.mockRejectedValue(new Error('Network error'));
 
     render(<ImportPlaylistModal {...defaultProps} />);
 

@@ -248,7 +248,8 @@ export async function importFromLink(
     // 逐个添加到歌单
     for (let i = 0; i < toImport.length; i++) {
       const song = toImport[i];
-      statuses[i] = { line: `${song.name} - ${song.artist}`, status: 'searching' };
+      const statusIndex = skips.length + i;
+      statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'searching' };
       updateProgress({ currentLine: `${song.name} - ${song.artist}` });
 
       try {
@@ -258,14 +259,14 @@ export async function importFromLink(
           song,
           source: song.sourceType || 'netease'
         });
-        statuses[i] = { line: `${song.name} - ${song.artist}`, status: 'found', source: song.sourceType };
+        statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'found', source: song.sourceType };
       } catch (error) {
         console.error(`添加到歌单失败: ${song.name}`, error);
         failures.push({
           line: `${song.name} - ${song.artist}`,
           reason: '添加到歌单时出错'
         });
-        statuses[i] = { line: `${song.name} - ${song.artist}`, status: 'failed' };
+        statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'failed' };
       }
 
       updateProgress({ found: successes.length, failed: failures.length });
