@@ -1,4 +1,4 @@
-const { ipcRenderer } = window.require('electron');
+import { IpcClient } from './IpcClient';
 
 export interface CacheStats {
   totalSize: number;
@@ -11,95 +11,43 @@ export interface CacheStats {
 
 class CacheService {
   async getSongCache(keyword: string): Promise<any[] | null> {
-    try {
-      return await ipcRenderer.invoke('cache:getSong', keyword);
-    } catch (error) {
-      console.error('获取歌曲缓存失败:', error);
-      return null;
-    }
+    return IpcClient.invoke<any[]>('cache:getSong', keyword);
   }
 
   async setSongCache(keyword: string, songs: any[]): Promise<void> {
-    try {
-      await ipcRenderer.invoke('cache:setSong', keyword, songs);
-    } catch (error) {
-      console.error('设置歌曲缓存失败:', error);
-    }
+    await IpcClient.invoke<void>('cache:setSong', keyword, songs);
   }
 
   async getCoverCache(coverUrl: string): Promise<string | null> {
-    try {
-      return await ipcRenderer.invoke('cache:getCover', coverUrl);
-    } catch (error) {
-      console.error('获取封面缓存失败:', error);
-      return null;
-    }
+    return IpcClient.invoke<string | null>('cache:getCover', coverUrl);
   }
 
   async setCoverCache(coverUrl: string, imageData: Buffer): Promise<void> {
-    try {
-      await ipcRenderer.invoke('cache:setCover', coverUrl, imageData);
-    } catch (error) {
-      console.error('设置封面缓存失败:', error);
-    }
+    await IpcClient.invoke<void>('cache:setCover', coverUrl, imageData);
   }
 
   async getAudioCache(audioUrl: string): Promise<string | null> {
-    try {
-      return await ipcRenderer.invoke('cache:getAudio', audioUrl);
-    } catch (error) {
-      console.error('获取音频缓存失败:', error);
-      return null;
-    }
+    return IpcClient.invoke<string | null>('cache:getAudio', audioUrl);
   }
 
   async setAudioCache(audioUrl: string, audioData: Buffer): Promise<void> {
-    try {
-      await ipcRenderer.invoke('cache:setAudio', audioUrl, audioData);
-    } catch (error) {
-      console.error('设置音频缓存失败:', error);
-    }
+    await IpcClient.invoke<void>('cache:setAudio', audioUrl, audioData);
   }
 
   async getUrlCache(songId: string): Promise<any | null> {
-    try {
-      return await ipcRenderer.invoke('cache:getUrl', songId);
-    } catch (error) {
-      console.error('获取URL缓存失败:', error);
-      return null;
-    }
+    return IpcClient.invoke<any | null>('cache:getUrl', songId);
   }
 
   async setUrlCache(songId: string, urlData: any): Promise<void> {
-    try {
-      await ipcRenderer.invoke('cache:setUrl', songId, urlData);
-    } catch (error) {
-      console.error('设置URL缓存失败:', error);
-    }
+    await IpcClient.invoke<void>('cache:setUrl', songId, urlData);
   }
 
   async clearAllCache(): Promise<void> {
-    try {
-      await ipcRenderer.invoke('cache:clear');
-    } catch (error) {
-      console.error('清除缓存失败:', error);
-    }
+    await IpcClient.invoke<void>('cache:clear');
   }
 
   async getCacheStats(): Promise<CacheStats> {
-    try {
-      return await ipcRenderer.invoke('cache:getStats');
-    } catch (error) {
-      console.error('获取缓存统计失败:', error);
-      return {
-        totalSize: 0,
-        fileCount: 0,
-        songsCount: 0,
-        coversCount: 0,
-        audioCount: 0,
-        urlsCount: 0
-      };
-    }
+    return IpcClient.invoke<CacheStats>('cache:getStats');
   }
 
   formatSize(bytes: number): string {

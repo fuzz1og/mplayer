@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
-const { ipcRenderer } = window.require('electron');
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
-import { useDownloadStore } from '@/renderer/store/downloadStore';
+import { useDownload } from '@/renderer/hooks/useDownload';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -12,6 +11,7 @@ import { useCachedCover } from '@/renderer/services/coverCacheService';
 import { playlistService } from '@/renderer/services/playlistService';
 import type { Song, Playlist } from '@/shared/types/song';
 import { cacheService } from '@/renderer/services/cacheService';
+import { resolveSongUrls } from '@/renderer/utils/songResolver';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
 const SortableSongRow: React.FC<{
@@ -102,7 +102,7 @@ const PlaylistDetailPage: React.FC = () => {
   const [editDesc, setEditDesc] = useState('');
 
   const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
-  const { addSingleDownload, addBatchDownload } = useDownloadStore();
+  const { download, downloadBatch } = useDownload();
   const [isReordering, setIsReordering] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -119,11 +119,10 @@ const PlaylistDetailPage: React.FC = () => {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
         }
 
-        const keyword = `${song.name} ${song.artist}`;
-        const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
-        if (!result.success || !result.data.length) return song;
+        const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
+        if (searchResults.length === 0) return song;
 
-        const fresh = result.data.find((s: Song) => s.id === song.id) || song;
+        const fresh = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
 
         await cacheService.setUrlCache(song.id, {
           url: fresh.url,
@@ -180,26 +179,14 @@ const PlaylistDetailPage: React.FC = () => {
   };
 
   const handleDownload = async (song: Song) => {
-    try {
-      const task = await ipcRenderer.invoke('download:start', song);
-      if (task) {
-        addSingleDownload(task);
-      }
-    } catch (error) {
-      console.error('下载失败:', error);
-      message.error('下载失败，请重试');
-    }
+    await download(song);
   };
 
   const handleDownloadAll = async () => {
     if (songs.length === 0) return;
     try {
-      const tasks = await ipcRenderer.invoke('download:startBatch', songs);
-      if (tasks && Array.isArray(tasks)) {
-        addBatchDownload(tasks);
-      }
+      await downloadBatch(songs);
     } catch (error) {
-      console.error('下载全部失败:', error);
       message.error('下载全部失败，请重试');
     }
   };
@@ -208,11 +195,8 @@ const PlaylistDetailPage: React.FC = () => {
     const toDownload = songs.filter(s => selectedIds.includes(s.id));
     if (toDownload.length === 0) return;
     try {
-      const tasks = await ipcRenderer.invoke('download:startBatch', toDownload);
-      if (tasks && Array.isArray(tasks)) {
-        addBatchDownload(tasks);
-        message.success(`已添加 ${tasks.length} 首歌曲到下载队列`);
-      }
+      await downloadBatch(toDownload);
+      message.success(`已添加 ${toDownload.length} 首歌曲到下载队列`);
     } catch (error) {
       message.error('批量下载失败');
     }

@@ -156,6 +156,7 @@ const App: React.FC = () => {
   const getActiveSidebarKey = () => {
     const path = location.pathname;
     if (path.startsWith('/discover') || path.startsWith('/hotlist')) return 'discover';
+    if (path.startsWith('/artists') || path.startsWith('/artist/')) return 'artists';
     if (path.startsWith('/favorites')) return 'favorites';
     if (path.startsWith('/history')) return 'history';
     if (path.startsWith('/playlists') || path.startsWith('/playlist/')) return 'playlists';
