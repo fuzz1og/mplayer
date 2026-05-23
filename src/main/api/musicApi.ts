@@ -4,6 +4,7 @@ import { cacheManager } from './memoryCacheManager';
 import { getCacheManager } from '../cache/cacheManager';
 import { config } from '../config';
 import { getHttpAgent, getHttpsAgent } from '../proxy';
+import { beforeRequest, getAntiScrapeHeaders } from './antiScrape';
 
 const apiClient = axios.create({
   get baseURL() {
@@ -346,15 +347,11 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
 
     try {
       console.log('[MusicApi] getNeteaseHotlist 开始请求');
-      // 创建专门的客户端来请求网易云音乐，设置正确的请求头
+      await beforeRequest();
       const neteaseClient = axios.create({
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
-        headers: {
-          'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
+        headers: getAntiScrapeHeaders('https://music.163.com/'),
         timeout: 30000
       });
 
@@ -504,12 +501,14 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
       const url = `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?newsong=1&tpl=3&page=detail&date=${dateStr}&topid=4&type=top&song_begin=0&song_num=20&g_tk=5381&jsonpCallback=MusicJsonCallbacktoplist&loginUin=0&hostUin=0&format=jsonp&inCharset=GB2312&outCharset=utf-8&notice=0&platform=mac&needNewCode=0`;
 
       // 创建一个新的axios实例，设置适当的请求头
+      await beforeRequest();
       const qqClient = axios.create({
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
         headers: {
+          ...getAntiScrapeHeaders('https://y.qq.com/'),
           'Accept': '*/*',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+          'Referer': 'https://y.qq.com/',
         },
         timeout: 30000,
         responseType: 'text'
