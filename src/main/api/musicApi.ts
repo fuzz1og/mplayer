@@ -82,6 +82,120 @@ interface HotlistSong {
   album: string;
 }
 
+// 歌手名字 → 头像地址缓存（用于 HTML 爬取分类 tab 时补图）
+const artistPicCache = new Map<string, string>();
+
+function createNeteaseClient() {
+  return axios.create({
+    httpAgent: getHttpAgent(),
+    httpsAgent: getHttpsAgent(),
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Referer': 'https://music.163.com/',
+    },
+    timeout: 30000
+  });
+}
+
+async function fetchNeteaseArtistsByApi(offset: number, limit: number, initial: number): Promise<{ artists: Artist[]; total: number; more: boolean }> {
+  const cacheKey = `artists_api_${offset}_${limit}_${initial}`;
+  const cached = cacheManager.getSearchCache(cacheKey, 1, 'netease');
+  if (cached && (cached as any).artists) {
+    return cached as unknown as { artists: Artist[]; total: number; more: boolean };
+  }
+
+  try {
+    const neteaseClient = createNeteaseClient();
+    const params = new URLSearchParams({
+      offset: String(offset),
+      limit: String(limit),
+      initial: String(initial),
+    });
+    const response = await neteaseClient.get(`https://music.163.com/api/v1/artist/list?${params.toString()}`);
+    const data = response.data;
+    const rawArtists: any[] = data?.artists || [];
+    const more: boolean = data?.more || false;
+
+    const artists: Artist[] = rawArtists.map((a: any) => ({
+      id: String(a.id),
+      name: a.name || '',
+      picUrl: a.picUrl || a.img1v1Url || '',
+      alias: a.alias || [],
+      trans: a.trans || undefined,
+      albumSize: a.albumSize || 0,
+      musicSize: a.musicSize || 0,
+      sourceType: 'netease'
+    }));
+
+    // 缓存歌手头像地址，供分类 tab 爬取时补图
+    for (const a of artists) {
+      if (a.picUrl && !artistPicCache.has(a.name)) {
+        artistPicCache.set(a.name, a.picUrl);
+      }
+    }
+
+    const result = { artists, total: artists.length, more };
+    cacheManager.setSearchCache(cacheKey, 1, 'netease', result as any);
+    return result;
+  } catch (error) {
+    console.error('获取歌手列表失败:', error);
+    return { artists: [], total: 0, more: false };
+  }
+}
+
+async function fetchNeteaseArtistsByHtml(catId: number): Promise<{ artists: Artist[]; total: number; more: boolean }> {
+  const cacheKey = `artists_html_${catId}`;
+  const cached = cacheManager.getSearchCache(cacheKey, 1, 'netease');
+  if (cached && (cached as any).artists) {
+    return cached as unknown as { artists: Artist[]; total: number; more: boolean };
+  }
+
+  try {
+    const neteaseClient = createNeteaseClient();
+    const response = await neteaseClient.get(`https://music.163.com/discover/artist/cat?id=${catId}`);
+    const html = response.data;
+
+    const artistBoxMatch = html.match(/id="m-artist-box">(.*?)<\/ul>/s);
+    if (!artistBoxMatch) {
+      console.error('未找到歌手列表数据');
+      return { artists: [], total: 0, more: false };
+    }
+
+    const box = artistBoxMatch[1];
+    const itemRegex = /<li[^>]*>(.*?)<\/li>/gs;
+    const artists: Artist[] = [];
+    let itemMatch;
+
+    while ((itemMatch = itemRegex.exec(box)) !== null) {
+      const item = itemMatch[1];
+      const nameMatch = item.match(/<a[^>]*href="\s*\/artist\?id=(\d+)"[^>]*class="nm[^"]*"[^>]*>([^<]+)<\/a>/);
+      if (!nameMatch) continue;
+
+      const imgMatch = item.match(/<img src="([^"]+)"/);
+      const name = nameMatch[2].trim();
+      const picUrl = imgMatch?.[1] || artistPicCache.get(name) || '';
+
+      artists.push({
+        id: nameMatch[1],
+        name,
+        picUrl,
+        alias: [],
+        trans: undefined,
+        albumSize: 0,
+        musicSize: 0,
+        sourceType: 'netease'
+      });
+    }
+
+    const result = { artists, total: artists.length, more: false };
+    cacheManager.setSearchCache(cacheKey, 1, 'netease', result as any);
+    return result;
+  } catch (error) {
+    console.error('获取歌手列表失败:', error);
+    return { artists: [], total: 0, more: false };
+  }
+}
+
 export const musicApi = {
 async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Promise<Song[]> {
     // 尝试从缓存获取
@@ -284,64 +398,11 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
     }
   },
 
-  async getNeteaseArtists(catId: number = 1001): Promise<{ artists: Artist[]; more: boolean }> {
-    const cacheKey = `artists_html_${catId}`;
-    const cached = cacheManager.getSearchCache(cacheKey, 1, 'netease');
-    if (cached && (cached as any).artists) {
-      return cached as unknown as { artists: Artist[]; more: boolean };
+  async getNeteaseArtists(cat: number = 1001, offset: number = 0, limit: number = 100, initial: number = -1): Promise<{ artists: Artist[]; total: number; more: boolean }> {
+    if (cat === 0) {
+      return fetchNeteaseArtistsByApi(offset, limit, initial);
     }
-
-    try {
-      const neteaseClient = axios.create({
-        httpAgent: getHttpAgent(),
-        httpsAgent: getHttpsAgent(),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://music.163.com/',
-        },
-        timeout: 30000
-      });
-
-      const response = await neteaseClient.get(`https://music.163.com/discover/artist/cat?id=${catId}`);
-      const html = response.data;
-
-      const artistBoxMatch = html.match(/id="m-artist-box">(.*?)<\/ul>/s);
-      if (!artistBoxMatch) {
-        console.error('未找到歌手列表数据');
-        return { artists: [], more: false };
-      }
-
-      const box = artistBoxMatch[1];
-      const itemRegex = /<li[^>]*>(.*?)<\/li>/gs;
-      const artists: Artist[] = [];
-      let itemMatch;
-
-      while ((itemMatch = itemRegex.exec(box)) !== null) {
-        const item = itemMatch[1];
-        const nameMatch = item.match(/<a[^>]*href="\s*\/artist\?id=(\d+)"[^>]*class="nm[^"]*"[^>]*>([^<]+)<\/a>/);
-        if (!nameMatch) continue;
-
-        const imgMatch = item.match(/<img src="([^"]+)"/);
-
-        artists.push({
-          id: nameMatch[1],
-          name: nameMatch[2].trim(),
-          picUrl: imgMatch ? imgMatch[1] : '',
-          alias: [],
-          trans: undefined,
-          albumSize: 0,
-          musicSize: 0,
-          sourceType: 'netease'
-        });
-      }
-
-      const result = { artists, more: false };
-      cacheManager.setSearchCache(cacheKey, 1, 'netease', result as any);
-      return result;
-    } catch (error) {
-      console.error('获取歌手列表失败:', error);
-      return { artists: [], more: false };
-    }
+    return fetchNeteaseArtistsByHtml(cat);
   },
 
   async searchNeteaseArtists(keyword: string, limit: number = 30): Promise<Artist[]> {
