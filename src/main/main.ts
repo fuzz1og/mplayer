@@ -86,9 +86,11 @@ class IPCManager {
 }
 
 function createWindow() {
+  const iconPath = path.join(app.getAppPath(), 'resources', 'icon.png');
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -237,7 +239,7 @@ app.whenReady().then(async () => {
   registerIpcHandler('musicApi:batchSearch', (keywords: string[], sourceType: 'netease' | 'qq' | 'kugou') => musicApi.batchSearch(keywords, sourceType));
   registerIpcHandler('musicApi:getNeteaseHotlist', () => musicApi.getNeteaseHotlist());
   registerIpcHandler('musicApi:getQQHotlist', () => musicApi.getQQHotlist());
-  registerIpcHandler('musicApi:getNeteaseArtists', (catId: number) => musicApi.getNeteaseArtists(catId));
+  registerIpcHandler('musicApi:getNeteaseArtists', (cat: number, offset: number, limit: number, initial: number) => musicApi.getNeteaseArtists(cat, offset, limit, initial));
   registerIpcHandler('musicApi:getArtistSongs', (artistId: string, offset: number, limit: number, order: string) => musicApi.getNeteaseArtistSongs(artistId, offset, limit, order as 'hot' | 'time'));
   registerIpcHandler('musicApi:searchArtists', (keyword: string, limit: number) => musicApi.searchNeteaseArtists(keyword, limit));
 
