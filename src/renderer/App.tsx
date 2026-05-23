@@ -155,8 +155,9 @@ const App: React.FC = () => {
   // 根据路径获取当前活跃的侧边栏项
   const getActiveSidebarKey = () => {
     const path = location.pathname;
-    if (path.startsWith('/discover') || path.startsWith('/hotlist')) return 'discover';
+    if (path.startsWith('/discover') || path.startsWith('/hotlist') || path.startsWith('/discover-playlist')) return 'discover';
     if (path.startsWith('/artists') || path.startsWith('/artist/')) return 'artists';
+    if (path.startsWith('/local')) return 'local';
     if (path.startsWith('/favorites')) return 'favorites';
     if (path.startsWith('/history')) return 'history';
     if (path.startsWith('/playlists') || path.startsWith('/playlist/')) return 'playlists';
