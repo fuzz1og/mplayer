@@ -165,6 +165,38 @@ class CacheManager {
     const key = this.generateKey('batchSearch', keywords.sort().join(','), sourceType);
     this.set(key, data, this.defaultExpirations.batchSearch);
   }
+
+  /**
+   * 获取歌单列表缓存
+   */
+  getPlaylistListCache(cat: string, order: string, offset: number, limit: number): any | null {
+    const key = this.generateKey('playlistList', cat, order, offset, limit);
+    return this.get<any>(key);
+  }
+
+  /**
+   * 设置歌单列表缓存
+   */
+  setPlaylistListCache(cat: string, order: string, offset: number, limit: number, data: any): void {
+    const key = this.generateKey('playlistList', cat, order, offset, limit);
+    this.set(key, data, 5 * 60 * 1000); // 5 minutes TTL
+  }
+
+  /**
+   * 获取歌单详情缓存
+   */
+  getPlaylistDetailCache(id: number): any | null {
+    const key = this.generateKey('playlistDetail', id);
+    return this.get<any>(key);
+  }
+
+  /**
+   * 设置歌单详情缓存
+   */
+  setPlaylistDetailCache(id: number, data: any): void {
+    const key = this.generateKey('playlistDetail', id);
+    this.set(key, data, 5 * 60 * 1000); // 5 minutes TTL
+  }
 }
 
 // 导出单例实例
