@@ -76,3 +76,14 @@ export interface LocalSong {
   format: string;
   fileSize: number;
 }
+
+export interface DiscoverPlaylist {
+  id: number;
+  name: string;
+  coverImgUrl: string;
+  playCount: number;
+  trackCount: number;
+  creator: { nickname: string };
+  tags: string[];
+  description: string;
+}
