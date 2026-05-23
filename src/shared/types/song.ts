@@ -53,6 +53,17 @@ export interface LocalFolder {
   lastScanned: Date;
 }
 
+export interface Artist {
+  id: string;
+  name: string;
+  picUrl: string;
+  alias: string[];
+  trans?: string;
+  albumSize: number;
+  musicSize: number;
+  sourceType: string;
+}
+
 export interface LocalSong {
   id: string;
   name: string;
@@ -64,4 +75,15 @@ export interface LocalSong {
   coverBase64?: string;
   format: string;
   fileSize: number;
+}
+
+export interface DiscoverPlaylist {
+  id: number;
+  name: string;
+  coverImgUrl: string;
+  playCount: number;
+  trackCount: number;
+  creator: { nickname: string };
+  tags: string[];
+  description: string;
 }
