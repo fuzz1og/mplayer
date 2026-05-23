@@ -303,6 +303,36 @@ function setupIPC(mainWindow: BrowserWindow) {
     }
   });
 
+  // 获取网易云歌单列表 IPC
+  ipcMain.handle('musicApi:getNeteasePlaylists', async (_event, cat: string, order: string, offset: number, limit: number) => {
+    try {
+      const result = await musicApi.getNeteasePlaylists(cat, order, offset, limit);
+      return { success: true, data: result };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  // 获取网易云歌单详情 IPC
+  ipcMain.handle('musicApi:getNeteasePlaylistDetail', async (_event, id: number) => {
+    try {
+      const result = await musicApi.getNeteasePlaylistDetail(id);
+      return { success: true, data: result };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
+  // 通过第三方API获取歌单歌曲 IPC
+  ipcMain.handle('musicApi:getPlaylistSongsFromThirdParty', async (_event, playlistUrl: string) => {
+    try {
+      const songs = await musicApi.getPlaylistSongsFromThirdParty(playlistUrl);
+      return { success: true, data: songs };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' };
+    }
+  });
+
   // 本地音乐 IPC
   ipcMain.handle('localMusic:addFolder', async (_event, folderPath: string) => {
     try {
