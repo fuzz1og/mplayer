@@ -253,14 +253,13 @@ const ArtistListPage: React.FC = () => {
         ))}
       </div>
 
-      {!isAllMode && (
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', gap: '4px',
-            padding: '6px 24px', borderBottom: '1px solid var(--divider-color)',
-            backgroundColor: 'var(--content-bg)', flexWrap: 'wrap',
-          }}
-        >
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          padding: '6px 24px', borderBottom: '1px solid var(--divider-color)',
+          backgroundColor: 'var(--content-bg)', flexWrap: 'wrap',
+        }}
+      >
           {INITIALS.map((init) => (
             <button
               key={init.value}
@@ -285,7 +284,6 @@ const ArtistListPage: React.FC = () => {
             </button>
           ))}
         </div>
-      )}
 
       <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
         {loading ? (
