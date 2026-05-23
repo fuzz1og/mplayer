@@ -5,6 +5,34 @@ import type { Song } from '@/shared/types/song';
 
 export type SourceType = 'netease' | 'qq' | 'kugou';
 
+export interface PlaylistUrlInfo {
+  type: 'netease' | 'netease-short';
+  id?: string;
+  url?: string;
+}
+
+export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
+  if (!url || typeof url !== 'string') {
+    return null;
+  }
+
+  const trimmedUrl = url.trim();
+
+  // Full NetEase URL: https://music.163.com/#/playlist?id=xxx or https://music.163.com/playlist?id=xxx
+  const neteaseMatch = trimmedUrl.match(/music\.163\.com.*[?&]id=(\d+)/);
+  if (neteaseMatch) {
+    return { type: 'netease', id: neteaseMatch[1] };
+  }
+
+  // Short link: http://163cn.tv/xxx or https://163cn.tv/xxx
+  const shortMatch = trimmedUrl.match(/(?:https?:\/\/)?163cn\.tv\/\w+/);
+  if (shortMatch) {
+    return { type: 'netease-short', url: trimmedUrl };
+  }
+
+  return null;
+}
+
 export interface ParsedLine {
   raw: string;
   name: string;
