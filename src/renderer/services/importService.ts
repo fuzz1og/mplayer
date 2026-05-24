@@ -5,6 +5,41 @@ import type { Song } from '@/shared/types/song';
 
 export type SourceType = 'netease' | 'qq' | 'kugou';
 
+export interface PlaylistUrlInfo {
+  type: 'netease' | 'netease-short' | 'qq';
+  id?: string;
+  url?: string;
+}
+
+export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
+  if (!url || typeof url !== 'string') {
+    return null;
+  }
+
+  const trimmedUrl = url.trim();
+
+  // Full NetEase URL: https://music.163.com/#/playlist?id=xxx or https://music.163.com/playlist?id=xxx
+  const neteaseMatch = trimmedUrl.match(/music\.163\.com.*[?&]id=(\d+)/);
+  if (neteaseMatch) {
+    return { type: 'netease', id: neteaseMatch[1] };
+  }
+
+  // Short link: http://163cn.tv/xxx or https://163cn.tv/xxx
+  const shortMatch = trimmedUrl.match(/(?:https?:\/\/)?163cn\.tv\/\w+/);
+  if (shortMatch) {
+    return { type: 'netease-short', url: trimmedUrl };
+  }
+
+  // QQ Music URL: https://c6.y.qq.com/base/fcgi-bin/u?__=xxx or similar
+  // Note: unmeta.cn auto-detects the source from the URL
+  const qqMatch = trimmedUrl.match(/(?:https?:\/\/)?(?:c\d+\.y\.qq\.com|y\.qq\.com).*[?&]__=[^&]+/);
+  if (qqMatch) {
+    return { type: 'qq', url: trimmedUrl };
+  }
+
+  return null;
+}
+
 export interface ParsedLine {
   raw: string;
   name: string;
@@ -160,4 +195,84 @@ export async function importSongs(
   }
 
   return { successes: addedSuccesses, failures, skips };
+}
+
+export async function importFromLink(
+  playlistId: number,
+  songs: Song[],
+  selectedSongIds: Set<string>,
+  existingSongs: Song[],
+  onProgress: (state: ProgressState) => void
+): Promise<ImportResult> {
+  const successes: ImportResult['successes'] = [];
+  const failures: ImportResult['failures'] = [];
+  const skips: ImportResult['skips'] = [];
+
+  // 初始化进度状态
+  const statuses: ProgressState['statuses'] = [];
+  const updateProgress = (partial: Partial<ProgressState> = {}) => {
+    onProgress({
+      total: selectedSongIds.size,
+      found: successes.length,
+      skipped: skips.length,
+      failed: failures.length,
+      currentLine: '',
+      currentSource: '',
+      statuses: [...statuses],
+      ...partial,
+    });
+  };
+
+  // 筛选用户选择的歌曲
+  const selectedSongs = songs.filter(song => selectedSongIds.has(song.id));
+
+  if (selectedSongs.length === 0) {
+    updateProgress();
+    return { successes, failures, skips };
+  }
+
+  // 检查重复歌曲
+  const existingNames = new Set(existingSongs.map(s => s.name));
+  const toImport: Song[] = [];
+
+  for (const song of selectedSongs) {
+    if (existingNames.has(song.name)) {
+      skips.push({ line: `${song.name} - ${song.artist}`, reason: '已在歌单中' });
+      statuses.push({ line: `${song.name} - ${song.artist}`, status: 'skipped' });
+    } else {
+      toImport.push(song);
+      statuses.push({ line: `${song.name} - ${song.artist}`, status: 'pending' });
+    }
+  }
+
+  updateProgress({ skipped: skips.length });
+
+  // 逐个添加到歌单
+  for (let i = 0; i < toImport.length; i++) {
+    const song = toImport[i];
+    const statusIndex = skips.length + i;
+    statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'searching' };
+    updateProgress({ currentLine: `${song.name} - ${song.artist}` });
+
+    try {
+      await playlistService.addSongToPlaylist(playlistId, song);
+      successes.push({
+        line: `${song.name} - ${song.artist}`,
+        song,
+        source: song.sourceType || 'netease'
+      });
+      statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'found', source: song.sourceType };
+    } catch (error) {
+      console.error(`添加到歌单失败: ${song.name}`, error);
+      failures.push({
+        line: `${song.name} - ${song.artist}`,
+        reason: '添加到歌单时出错'
+      });
+      statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'failed' };
+    }
+
+    updateProgress({ found: successes.length, failed: failures.length });
+  }
+
+  return { successes, failures, skips };
 }
