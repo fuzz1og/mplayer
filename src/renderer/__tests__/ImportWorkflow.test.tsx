@@ -152,7 +152,7 @@ describe('ImportWorkflow Integration', () => {
     fireEvent.click(screen.getByText('链接导入'));
 
     // Input URL
-    const input = screen.getByPlaceholderText('请输入网易云歌单链接');
+    const input = screen.getByPlaceholderText('请输入歌单链接（支持网易云和QQ音乐）');
     fireEvent.change(input, {
       target: { value: 'https://music.163.com/#/playlist?id=123' },
     });
@@ -192,7 +192,7 @@ describe('ImportWorkflow Integration', () => {
     fireEvent.click(screen.getByText('链接导入'));
 
     // Input URL
-    const input = screen.getByPlaceholderText('请输入网易云歌单链接');
+    const input = screen.getByPlaceholderText('请输入歌单链接（支持网易云和QQ音乐）');
     fireEvent.change(input, {
       target: { value: 'https://music.163.com/#/playlist?id=123' },
     });

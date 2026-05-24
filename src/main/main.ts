@@ -304,10 +304,10 @@ function setupIPC(mainWindow: BrowserWindow) {
   });
 
   // 获取第三方歌单歌曲 IPC
-  ipcMain.handle('musicApi:getPlaylistSongsFromThirdParty', async (_event, playlistUrl: string) => {
+  ipcMain.handle('musicApi:getPlaylistSongsFromThirdParty', async (_event, playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' = 'netease') => {
     try {
-      console.log('[IPC] getPlaylistSongsFromThirdParty 开始, url:', playlistUrl);
-      const songs = await musicApi.getPlaylistSongsFromThirdParty(playlistUrl);
+      console.log('[IPC] getPlaylistSongsFromThirdParty 开始, url:', playlistUrl, 'sourceType:', sourceType);
+      const songs = await musicApi.getPlaylistSongsFromThirdParty(playlistUrl, sourceType);
       console.log('[IPC] getPlaylistSongsFromThirdParty 完成，数量:', songs.length);
       return { success: true, data: songs };
     } catch (error) {

@@ -378,13 +378,50 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
     }
   },
 
-  async getPlaylistSongsFromThirdParty(linkUrl: string): Promise<Song[]> {
-    const response = await apiClient.post('', new URLSearchParams({
-      input: linkUrl,
-      filter: 'link',
-      type: 'netease'
-    }));
-    const songs: Partial<Song>[] = response.data.data || [];
-    return songs.map(song => processSong(song, 'netease'));
+  async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Promise<Song[]> {
+    try {
+      const response = await axios.post(
+        'https://sss.unmeta.cn/songlist?detailed=false&format=song-singer&order=normal',
+        `url=${encodeURIComponent(playlistUrl)}`,
+        {
+          httpAgent: getHttpAgent(),
+          httpsAgent: getHttpsAgent(),
+          headers: {
+            'accept': 'application/json, text/javascript, */*; q=0.01',
+            'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'content-type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://music.unmeta.cn/',
+            'Origin': 'https://music.unmeta.cn'
+          },
+          timeout: 30000
+        }
+      );
+
+      const data = response.data;
+      if (data.code !== 1 || !data.data?.songs) {
+        console.error('[MusicApi] getPlaylistSongsFromThirdParty 失败:', data.msg);
+        return [];
+      }
+
+      const keywords = data.data.songs.map((s: string) => s.trim()).filter(Boolean);
+      console.log('[MusicApi] getPlaylistSongsFromThirdParty 歌曲数量:', keywords.length, '源:', sourceType);
+
+      const searchResults = await this.batchSearch(keywords, sourceType);
+
+      const songs: Song[] = [];
+      for (const keyword of keywords) {
+        const results = searchResults[keyword];
+        if (results && results.length > 0) {
+          songs.push(results[0]);
+        }
+      }
+
+      console.log('[MusicApi] getPlaylistSongsFromThirdParty 搜索成功，数量:', songs.length);
+      return songs;
+    } catch (error) {
+      console.error('[MusicApi] getPlaylistSongsFromThirdParty 失败:', error);
+      return [];
+    }
   }
 };

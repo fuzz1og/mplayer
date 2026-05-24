@@ -19,20 +19,21 @@ const LinkImportForm: React.FC<LinkImportFormProps> = ({
   return (
     <div>
       <div style={{ marginBottom: '12px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-        通过网易云歌单链接导入歌曲
+        通过歌单链接导入歌曲
       </div>
       <div style={{ marginBottom: '8px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
         支持的格式：
       </div>
       <div style={{ marginBottom: '12px', fontSize: '12px', color: 'var(--text-tertiary)', lineHeight: '1.6' }}>
-        <div>• https://music.163.com/#/playlist?id=xxx</div>
-        <div>• https://music.163.com/playlist?id=xxx</div>
-        <div>• http://163cn.tv/xxx</div>
+        <div>• 网易云: https://music.163.com/#/playlist?id=xxx</div>
+        <div>• 网易云: https://music.163.com/playlist?id=xxx</div>
+        <div>• 网易云短链接: http://163cn.tv/xxx</div>
+        <div>• QQ音乐: https://c6.y.qq.com/base/fcgi-bin/u?__=xxx</div>
       </div>
       <Input
         value={linkUrl}
         onChange={(e) => onLinkUrlChange(e.target.value)}
-        placeholder="请输入网易云歌单链接"
+        placeholder="请输入歌单链接（支持网易云和QQ音乐）"
         style={{ fontSize: '14px', marginBottom: '12px' }}
         disabled={loading}
       />

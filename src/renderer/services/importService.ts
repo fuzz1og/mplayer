@@ -6,7 +6,7 @@ import type { Song } from '@/shared/types/song';
 export type SourceType = 'netease' | 'qq' | 'kugou';
 
 export interface PlaylistUrlInfo {
-  type: 'netease' | 'netease-short';
+  type: 'netease' | 'netease-short' | 'qq';
   id?: string;
   url?: string;
 }
@@ -28,6 +28,12 @@ export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
   const shortMatch = trimmedUrl.match(/(?:https?:\/\/)?163cn\.tv\/\w+/);
   if (shortMatch) {
     return { type: 'netease-short', url: trimmedUrl };
+  }
+
+  // QQ Music URL: https://c6.y.qq.com/base/fcgi-bin/u?__=xxx or similar
+  const qqMatch = trimmedUrl.match(/(?:https?:\/\/)?(?:c\d+\.y\.qq\.com|y\.qq\.com).*[?&]__=\w+/);
+  if (qqMatch) {
+    return { type: 'qq', url: trimmedUrl };
   }
 
   return null;
