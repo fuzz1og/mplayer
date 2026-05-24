@@ -14,7 +14,7 @@ describe('LinkImportForm', () => {
 
   it('should render link input', () => {
     render(<LinkImportForm {...defaultProps} />);
-    expect(screen.getByPlaceholderText('请输入网易云歌单链接')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('请输入歌单链接（支持网易云和QQ音乐）')).toBeInTheDocument();
   });
 
   it('should render parse button', () => {
@@ -26,7 +26,7 @@ describe('LinkImportForm', () => {
     const onLinkUrlChange = vi.fn();
     render(<LinkImportForm {...defaultProps} onLinkUrlChange={onLinkUrlChange} />);
 
-    const input = screen.getByPlaceholderText('请输入网易云歌单链接');
+    const input = screen.getByPlaceholderText('请输入歌单链接（支持网易云和QQ音乐）');
     fireEvent.change(input, { target: { value: 'https://music.163.com/#/playlist?id=123' } });
 
     expect(onLinkUrlChange).toHaveBeenCalledWith('https://music.163.com/#/playlist?id=123');

@@ -148,7 +148,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
 
     const urlInfo = parsePlaylistUrl(linkUrl);
     if (!urlInfo) {
-      setLinkError('请输入有效的网易云歌单链接');
+      setLinkError('请输入有效的歌单链接（支持网易云和QQ音乐）');
       return;
     }
 
@@ -156,8 +156,12 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     setLinkError(null);
 
     try {
+      console.log('[LinkImport] 开始解析链接:', linkUrl);
+      console.log('[LinkImport] URL 解析结果:', urlInfo);
       const { ipcRenderer } = window.require('electron');
-      const result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', linkUrl);
+      const sourceType = urlInfo.type === 'qq' ? 'qq' : 'netease';
+      const result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', linkUrl, sourceType);
+      console.log('[LinkImport] IPC 调用结果:', result);
 
       if (!result.success) {
         setLinkError(result.error || '解析链接失败');
@@ -174,7 +178,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
       setParsedLinkSongs(songs);
       setSelectedSongIds(new Set(songs.map(song => song.id)));
     } catch (error) {
-      console.error('解析链接失败:', error);
+      console.error('[LinkImport] 解析链接失败:', error);
       setLinkError('解析链接失败，请检查网络连接');
     } finally {
       setLinkLoading(false);
