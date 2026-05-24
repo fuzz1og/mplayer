@@ -182,7 +182,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
   }, [linkUrl]);
 
   // 链接导入处理
-  const handleLinkImport = useCallback(async (selectedIds: Set<number>) => {
+  const handleLinkImport = useCallback(async (selectedIds: Set<string>) => {
     if (selectedIds.size === 0) {
       message.warning('请选择要导入的歌曲');
       return;
@@ -194,7 +194,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     try {
       const finalResult = await importFromLink(
         playlistId,
-        linkUrl,
+        parsedLinkSongs,
         selectedIds,
         existingSongs,
         (state) => setProgress(state)
@@ -207,7 +207,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     } finally {
       setImporting(false);
     }
-  }, [playlistId, linkUrl, existingSongs]);
+  }, [playlistId, parsedLinkSongs, existingSongs]);
 
   const handleDone = () => {
     if (result && result.successes.length > 0) {

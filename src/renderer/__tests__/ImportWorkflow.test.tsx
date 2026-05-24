@@ -176,7 +176,7 @@ describe('ImportWorkflow Integration', () => {
     // Verify import was called correctly
     expect(importFromLink).toHaveBeenCalledWith(
       1,
-      'https://music.163.com/#/playlist?id=123',
+      mockSongs,
       new Set(['100']),
       [],
       expect.any(Function)
