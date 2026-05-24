@@ -1,7 +1,6 @@
 import { searchService } from '@/renderer/services/searchService';
 import { playlistService } from '@/renderer/services/playlistService';
 import { findBestMatch } from '@/renderer/utils/songMatcher';
-import { musicApi } from '@/main/api/musicApi';
 import type { Song } from '@/shared/types/song';
 
 export type SourceType = 'netease' | 'qq' | 'kugou';
@@ -193,7 +192,7 @@ export async function importSongs(
 
 export async function importFromLink(
   playlistId: number,
-  linkUrl: string,
+  songs: Song[],
   selectedSongIds: Set<string>,
   existingSongs: Song[],
   onProgress: (state: ProgressState) => void
@@ -217,67 +216,55 @@ export async function importFromLink(
     });
   };
 
-  try {
-    // 调用第三方 API 获取歌单歌曲
-    const allSongs = await musicApi.getPlaylistSongsFromThirdParty(linkUrl);
+  // 筛选用户选择的歌曲
+  const selectedSongs = songs.filter(song => selectedSongIds.has(song.id));
 
-    if (allSongs.length === 0) {
-      updateProgress();
-      return { successes, failures, skips };
+  if (selectedSongs.length === 0) {
+    updateProgress();
+    return { successes, failures, skips };
+  }
+
+  // 检查重复歌曲
+  const existingNames = new Set(existingSongs.map(s => s.name));
+  const toImport: Song[] = [];
+
+  for (const song of selectedSongs) {
+    if (existingNames.has(song.name)) {
+      skips.push({ line: `${song.name} - ${song.artist}`, reason: '已在歌单中' });
+      statuses.push({ line: `${song.name} - ${song.artist}`, status: 'skipped' });
+    } else {
+      toImport.push(song);
+      statuses.push({ line: `${song.name} - ${song.artist}`, status: 'pending' });
+    }
+  }
+
+  updateProgress({ skipped: skips.length });
+
+  // 逐个添加到歌单
+  for (let i = 0; i < toImport.length; i++) {
+    const song = toImport[i];
+    const statusIndex = skips.length + i;
+    statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'searching' };
+    updateProgress({ currentLine: `${song.name} - ${song.artist}` });
+
+    try {
+      await playlistService.addSongToPlaylist(playlistId, song);
+      successes.push({
+        line: `${song.name} - ${song.artist}`,
+        song,
+        source: song.sourceType || 'netease'
+      });
+      statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'found', source: song.sourceType };
+    } catch (error) {
+      console.error(`添加到歌单失败: ${song.name}`, error);
+      failures.push({
+        line: `${song.name} - ${song.artist}`,
+        reason: '添加到歌单时出错'
+      });
+      statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'failed' };
     }
 
-    // 筛选用户选择的歌曲
-    const selectedSongs = allSongs.filter(song => selectedSongIds.has(song.id));
-
-    // 检查重复歌曲
-    const existingNames = new Set(existingSongs.map(s => s.name));
-    const toImport: Song[] = [];
-
-    for (const song of selectedSongs) {
-      if (existingNames.has(song.name)) {
-        skips.push({ line: `${song.name} - ${song.artist}`, reason: '已在歌单中' });
-        statuses.push({ line: `${song.name} - ${song.artist}`, status: 'skipped' });
-      } else {
-        toImport.push(song);
-        statuses.push({ line: `${song.name} - ${song.artist}`, status: 'pending' });
-      }
-    }
-
-    updateProgress({ skipped: skips.length });
-
-    // 逐个添加到歌单
-    for (let i = 0; i < toImport.length; i++) {
-      const song = toImport[i];
-      const statusIndex = skips.length + i;
-      statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'searching' };
-      updateProgress({ currentLine: `${song.name} - ${song.artist}` });
-
-      try {
-        await playlistService.addSongToPlaylist(playlistId, song);
-        successes.push({
-          line: `${song.name} - ${song.artist}`,
-          song,
-          source: song.sourceType || 'netease'
-        });
-        statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'found', source: song.sourceType };
-      } catch (error) {
-        console.error(`添加到歌单失败: ${song.name}`, error);
-        failures.push({
-          line: `${song.name} - ${song.artist}`,
-          reason: '添加到歌单时出错'
-        });
-        statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'failed' };
-      }
-
-      updateProgress({ found: successes.length, failed: failures.length });
-    }
-  } catch (error) {
-    console.error('链接导入失败:', error);
-    failures.push({
-      line: linkUrl,
-      reason: error instanceof Error ? error.message : '未知错误'
-    });
-    updateProgress({ failed: failures.length });
+    updateProgress({ found: successes.length, failed: failures.length });
   }
 
   return { successes, failures, skips };
