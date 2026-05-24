@@ -43,6 +43,24 @@ describe('parsePlaylistUrl', () => {
     const result = parsePlaylistUrl('');
     expect(result).toBeNull();
   });
+
+  it('should recognize QQ Music URL with subdomain', () => {
+    const url = 'https://c6.y.qq.com/base/fcgi-bin/u?__=test123';
+    const result = parsePlaylistUrl(url);
+    expect(result).toEqual({ type: 'qq', url });
+  });
+
+  it('should recognize QQ Music URL with different subdomain', () => {
+    const url = 'https://c10.y.qq.com/something?__=abc';
+    const result = parsePlaylistUrl(url);
+    expect(result).toEqual({ type: 'qq', url });
+  });
+
+  it('should recognize QQ Music URL without subdomain', () => {
+    const url = 'https://y.qq.com/base/fcgi-bin/u?__=xyz';
+    const result = parsePlaylistUrl(url);
+    expect(result).toEqual({ type: 'qq', url });
+  });
 });
 
 describe('importFromLink', () => {

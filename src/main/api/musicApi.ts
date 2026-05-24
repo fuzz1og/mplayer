@@ -380,6 +380,8 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
 
   async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Promise<Song[]> {
     try {
+      // Note: unmeta.cn auto-detects the music source from the URL
+      // sourceType is used for local search (batchSearch) after getting song names
       const response = await axios.post(
         'https://sss.unmeta.cn/songlist?detailed=false&format=song-singer&order=normal',
         `url=${encodeURIComponent(playlistUrl)}`,
