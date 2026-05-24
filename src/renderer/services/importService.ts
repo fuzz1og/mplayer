@@ -31,7 +31,8 @@ export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
   }
 
   // QQ Music URL: https://c6.y.qq.com/base/fcgi-bin/u?__=xxx or similar
-  const qqMatch = trimmedUrl.match(/(?:https?:\/\/)?(?:c\d+\.y\.qq\.com|y\.qq\.com).*[?&]__=\w+/);
+  // Note: unmeta.cn auto-detects the source from the URL
+  const qqMatch = trimmedUrl.match(/(?:https?:\/\/)?(?:c\d+\.y\.qq\.com|y\.qq\.com).*[?&]__=[^&]+/);
   if (qqMatch) {
     return { type: 'qq', url: trimmedUrl };
   }
