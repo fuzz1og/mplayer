@@ -1,10 +1,9 @@
 import axios, { type AxiosInstance } from 'axios';
-import type { Song, Artist, DiscoverPlaylist } from '@/shared/types/song';
+import type { Song } from '@/shared/types/song';
 import { cacheManager } from './memoryCacheManager';
 import { getCacheManager } from '../cache/cacheManager';
 import { config } from '../config';
 import { getHttpAgent, getHttpsAgent } from '../proxy';
-import { beforeRequest, getAntiScrapeHeaders } from './antiScrape';
 
 const apiClient = axios.create({
   get baseURL() {
@@ -81,120 +80,6 @@ interface HotlistSong {
   rank: number;
   cover: string;
   album: string;
-}
-
-// 歌手名字 → 头像地址缓存（用于 HTML 爬取分类 tab 时补图）
-const artistPicCache = new Map<string, string>();
-
-function createNeteaseClient() {
-  return axios.create({
-    httpAgent: getHttpAgent(),
-    httpsAgent: getHttpsAgent(),
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Referer': 'https://music.163.com/',
-    },
-    timeout: 30000
-  });
-}
-
-async function fetchNeteaseArtistsByApi(offset: number, limit: number, initial: number): Promise<{ artists: Artist[]; total: number; more: boolean }> {
-  const cacheKey = `artists_api_${offset}_${limit}_${initial}`;
-  const cached = cacheManager.getSearchCache(cacheKey, 1, 'netease');
-  if (cached && (cached as any).artists) {
-    return cached as unknown as { artists: Artist[]; total: number; more: boolean };
-  }
-
-  try {
-    const neteaseClient = createNeteaseClient();
-    const params = new URLSearchParams({
-      offset: String(offset),
-      limit: String(limit),
-      initial: String(initial),
-    });
-    const response = await neteaseClient.get(`https://music.163.com/api/v1/artist/list?${params.toString()}`);
-    const data = response.data;
-    const rawArtists: any[] = data?.artists || [];
-    const more: boolean = data?.more || false;
-
-    const artists: Artist[] = rawArtists.map((a: any) => ({
-      id: String(a.id),
-      name: a.name || '',
-      picUrl: a.picUrl || a.img1v1Url || '',
-      alias: a.alias || [],
-      trans: a.trans || undefined,
-      albumSize: a.albumSize || 0,
-      musicSize: a.musicSize || 0,
-      sourceType: 'netease'
-    }));
-
-    // 缓存歌手头像地址，供分类 tab 爬取时补图
-    for (const a of artists) {
-      if (a.picUrl && !artistPicCache.has(a.name)) {
-        artistPicCache.set(a.name, a.picUrl);
-      }
-    }
-
-    const result = { artists, total: artists.length, more };
-    cacheManager.setSearchCache(cacheKey, 1, 'netease', result as any);
-    return result;
-  } catch (error) {
-    console.error('获取歌手列表失败:', error);
-    return { artists: [], total: 0, more: false };
-  }
-}
-
-async function fetchNeteaseArtistsByHtml(catId: number): Promise<{ artists: Artist[]; total: number; more: boolean }> {
-  const cacheKey = `artists_html_${catId}`;
-  const cached = cacheManager.getSearchCache(cacheKey, 1, 'netease');
-  if (cached && (cached as any).artists) {
-    return cached as unknown as { artists: Artist[]; total: number; more: boolean };
-  }
-
-  try {
-    const neteaseClient = createNeteaseClient();
-    const response = await neteaseClient.get(`https://music.163.com/discover/artist/cat?id=${catId}`);
-    const html = response.data;
-
-    const artistBoxMatch = html.match(/id="m-artist-box">(.*?)<\/ul>/s);
-    if (!artistBoxMatch) {
-      console.error('未找到歌手列表数据');
-      return { artists: [], total: 0, more: false };
-    }
-
-    const box = artistBoxMatch[1];
-    const itemRegex = /<li[^>]*>(.*?)<\/li>/gs;
-    const artists: Artist[] = [];
-    let itemMatch;
-
-    while ((itemMatch = itemRegex.exec(box)) !== null) {
-      const item = itemMatch[1];
-      const nameMatch = item.match(/<a[^>]*href="\s*\/artist\?id=(\d+)"[^>]*class="nm[^"]*"[^>]*>([^<]+)<\/a>/);
-      if (!nameMatch) continue;
-
-      const imgMatch = item.match(/<img src="([^"]+)"/);
-      const name = nameMatch[2].trim();
-      const picUrl = imgMatch?.[1] || artistPicCache.get(name) || '';
-
-      artists.push({
-        id: nameMatch[1],
-        name,
-        picUrl,
-        alias: [],
-        trans: undefined,
-        albumSize: 0,
-        musicSize: 0,
-        sourceType: 'netease'
-      });
-    }
-
-    const result = { artists, total: artists.length, more: false };
-    cacheManager.setSearchCache(cacheKey, 1, 'netease', result as any);
-    return result;
-  } catch (error) {
-    console.error('获取歌手列表失败:', error);
-    return { artists: [], total: 0, more: false };
-  }
 }
 
 export const musicApi = {
@@ -347,11 +232,15 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
 
     try {
       console.log('[MusicApi] getNeteaseHotlist 开始请求');
-      await beforeRequest();
+      // 创建专门的客户端来请求网易云音乐，设置正确的请求头
       const neteaseClient = axios.create({
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
-        headers: getAntiScrapeHeaders('https://music.163.com/'),
+        headers: {
+          'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
         timeout: 30000
       });
 
@@ -395,95 +284,6 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
     }
   },
 
-  async getNeteaseArtists(cat: number = 1001, offset: number = 0, limit: number = 100, initial: number = -1): Promise<{ artists: Artist[]; total: number; more: boolean }> {
-    if (cat === 0) {
-      return fetchNeteaseArtistsByApi(offset, limit, initial);
-    }
-    return fetchNeteaseArtistsByHtml(cat);
-  },
-
-  async searchNeteaseArtists(keyword: string, limit: number = 30): Promise<Artist[]> {
-    const cacheKey = `search_artists_${keyword}_${limit}`;
-    const cached = cacheManager.getSearchCache(cacheKey, 1, 'netease');
-    if (cached && Array.isArray(cached)) {
-      return cached as unknown as Artist[];
-    }
-
-    try {
-      const neteaseClient = axios.create({
-        httpAgent: getHttpAgent(),
-        httpsAgent: getHttpsAgent(),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://music.163.com/',
-        },
-        timeout: 30000
-      });
-
-      const response = await neteaseClient.get(`https://music.163.com/api/search/get?s=${encodeURIComponent(keyword)}&type=100&limit=${limit}`);
-      const data = response.data;
-      const rawArtists: any[] = data?.result?.artists || [];
-
-      const artists: Artist[] = rawArtists.map((a: any) => ({
-        id: String(a.id),
-        name: a.name || '',
-        picUrl: a.picUrl || '',
-        alias: a.alias || [],
-        trans: a.trans || undefined,
-        albumSize: a.albumSize || 0,
-        musicSize: a.musicSize || 0,
-        sourceType: 'netease'
-      }));
-
-      cacheManager.setSearchCache(cacheKey, 1, 'netease', artists as any);
-      return artists;
-    } catch (error) {
-      console.error('搜索歌手失败:', error);
-      return [];
-    }
-  },
-
-  async getNeteaseArtistSongs(artistId: string, offset: number = 0, limit: number = 50, order: 'hot' | 'time' = 'hot'): Promise<{ songs: Song[]; total: number }> {
-    const cacheKey = `artist_songs_${artistId}_${offset}_${limit}_${order}`;
-    const cached = cacheManager.getSearchCache(cacheKey, 1, 'netease');
-    if (cached && (cached as any).songs) {
-      return cached as unknown as { songs: Song[]; total: number };
-    }
-
-    try {
-      const neteaseClient = axios.create({
-        httpAgent: getHttpAgent(),
-        httpsAgent: getHttpsAgent(),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://music.163.com/',
-        },
-        timeout: 30000
-      });
-
-      const response = await neteaseClient.get(`https://music.163.com/api/v1/artist/songs?id=${artistId}&offset=${offset}&limit=${limit}&order=${order}`);
-      const data = response.data;
-      const rawSongs: any[] = data.songs || [];
-      const total = data.total || 0;
-
-      const songs: Song[] = rawSongs.map((song: any) => processSong({
-        id: String(song.id),
-        name: song.name,
-        artist: (song.artists || []).map((a: any) => a.name).join('/'),
-        album: song.album?.name || '',
-        cover: song.album?.picUrl || '',
-        duration: song.dt || song.duration || 0,
-      }, 'netease'));
-
-      const result = { songs, total };
-      cacheManager.setSearchCache(cacheKey, 1, 'netease', result as any);
-      return result;
-    } catch (error) {
-      console.error('获取歌手歌曲失败:', error);
-      return { songs: [], total: 0 };
-    }
-  },
-
   async getQQHotlist(): Promise<HotlistSong[]> {
     // 尝试从缓存获取
     const cachedData = cacheManager.getHotlistCache('qq');
@@ -501,14 +301,12 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
       const url = `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?newsong=1&tpl=3&page=detail&date=${dateStr}&topid=4&type=top&song_begin=0&song_num=20&g_tk=5381&jsonpCallback=MusicJsonCallbacktoplist&loginUin=0&hostUin=0&format=jsonp&inCharset=GB2312&outCharset=utf-8&notice=0&platform=mac&needNewCode=0`;
 
       // 创建一个新的axios实例，设置适当的请求头
-      await beforeRequest();
       const qqClient = axios.create({
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
         headers: {
-          ...getAntiScrapeHeaders('https://y.qq.com/'),
           'Accept': '*/*',
-          'Referer': 'https://y.qq.com/',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
         },
         timeout: 30000,
         responseType: 'text'
@@ -580,123 +378,23 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
     }
   },
 
-  async getNeteasePlaylists(
-    cat: string = '全部',
-    order: string = 'hot',
-    offset: number = 0,
-    limit: number = 35
-  ): Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }> {
-    const cacheKey = `playlistList_${cat}_${order}_${offset}_${limit}`;
-    const cached = cacheManager.get<any>(cacheKey);
-    if (cached) {
-      console.log('[MusicApi] getNeteasePlaylists 从缓存获取');
-      return cached;
-    }
-
+  async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Promise<Song[]> {
     try {
-      const neteaseClient = axios.create({
-        httpAgent: getHttpAgent(),
-        httpsAgent: getHttpsAgent(),
-        headers: {
-          'accept': 'application/json, text/javascript, */*; q=0.01',
-          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://music.163.com/'
-        },
-        timeout: 30000
-      });
-
-      const response = await neteaseClient.get(
-        `https://music.163.com/api/playlist/list?cat=${encodeURIComponent(cat)}&order=${order}&offset=${offset}&limit=${limit}`
-      );
-
-      const data = response.data;
-      const playlists: DiscoverPlaylist[] = (data.playlists || []).map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        coverImgUrl: p.coverImgUrl || '',
-        playCount: p.playCount || 0,
-        trackCount: p.trackCount || 0,
-        creator: { nickname: p.creator?.nickname || '' },
-        tags: (p.tags || []).map((t: any) => typeof t === "string" ? t : t.name || ""),
-        description: p.description || ''
-      }));
-
-      const result = {
-        playlists,
-        total: data.total || 0,
-        more: data.more || false
-      };
-
-      cacheManager.set(cacheKey, result, 5 * 60 * 1000);
-      console.log('[MusicApi] getNeteasePlaylists 获取成功，数量:', playlists.length);
-      return result;
-    } catch (error) {
-      console.error('[MusicApi] getNeteasePlaylists 失败:', error);
-      return { playlists: [], total: 0, more: false };
-    }
-  },
-
-  async getNeteasePlaylistDetail(id: number): Promise<DiscoverPlaylist | null> {
-    const cacheKey = `playlistDetail_${id}`;
-    const cached = cacheManager.get<any>(cacheKey);
-    if (cached) {
-      console.log('[MusicApi] getNeteasePlaylistDetail 从缓存获取');
-      return cached;
-    }
-
-    try {
-      const neteaseClient = axios.create({
-        httpAgent: getHttpAgent(),
-        httpsAgent: getHttpsAgent(),
-        headers: {
-          'accept': 'application/json, text/javascript, */*; q=0.01',
-          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://music.163.com/'
-        },
-        timeout: 30000
-      });
-
-      const response = await neteaseClient.get(
-        `https://music.163.com/api/playlist/detail?id=${id}`
-      );
-
-      const p = response.data.result || response.data.playlist;
-      if (!p) return null;
-
-      const playlist: DiscoverPlaylist = {
-        id: p.id,
-        name: p.name,
-        coverImgUrl: p.coverImgUrl || '',
-        playCount: p.playCount || 0,
-        trackCount: p.trackCount || 0,
-        creator: { nickname: p.creator?.nickname || '' },
-        tags: (p.tags || []).map((t: any) => typeof t === "string" ? t : t.name || ""),
-        description: p.description || ''
-      };
-
-      cacheManager.set(cacheKey, playlist, 5 * 60 * 1000);
-      console.log('[MusicApi] getNeteasePlaylistDetail 获取成功:', playlist.name);
-      return playlist;
-    } catch (error) {
-      console.error('[MusicApi] getNeteasePlaylistDetail 失败:', error);
-      return null;
-    }
-  },
-
-  async getPlaylistSongsFromThirdParty(playlistUrl: string): Promise<Song[]> {
-    try {
+      // Note: unmeta.cn auto-detects the music source from the URL
+      // sourceType is used for local search (batchSearch) after getting song names
       const response = await axios.post(
         'https://sss.unmeta.cn/songlist?detailed=false&format=song-singer&order=normal',
         `url=${encodeURIComponent(playlistUrl)}`,
         {
+          httpAgent: getHttpAgent(),
+          httpsAgent: getHttpsAgent(),
           headers: {
             'accept': 'application/json, text/javascript, */*; q=0.01',
             'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
             'content-type': 'application/x-www-form-urlencoded',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://music.163.com/'
+            'Referer': 'https://music.unmeta.cn/',
+            'Origin': 'https://music.unmeta.cn'
           },
           timeout: 30000
         }
@@ -709,9 +407,9 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
       }
 
       const keywords = data.data.songs.map((s: string) => s.trim()).filter(Boolean);
-      console.log('[MusicApi] getPlaylistSongsFromThirdParty 歌曲数量:', keywords.length);
+      console.log('[MusicApi] getPlaylistSongsFromThirdParty 歌曲数量:', keywords.length, '源:', sourceType);
 
-      const searchResults = await this.batchSearch(keywords, 'netease');
+      const searchResults = await this.batchSearch(keywords, sourceType);
 
       const songs: Song[] = [];
       for (const keyword of keywords) {
