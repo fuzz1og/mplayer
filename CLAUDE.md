@@ -166,7 +166,3 @@ Registered in `main.ts` via `globalShortcut.register()`:
 - `SongListVirtual` component uses `@tanstack/react-virtual` `useVirtualizer`
 - Threshold: renders normally for < 30 items, virtualized for 30+
 - Each row delegated to `SongRow` component (memoized with custom comparator)
-
-## Rules
-
-- `docs/` 文件夹内容不得提交到 Git（已在 .gitignore 中排除，包含设计文档和规格说明等本地资料）
