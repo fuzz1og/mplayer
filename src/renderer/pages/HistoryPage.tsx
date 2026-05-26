@@ -1,17 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { History, Trash2 } from 'lucide-react';
-const { ipcRenderer } = window.require('electron');
 import { message } from 'antd';
 import { historyService } from '@/renderer/services/historyService';
 import { usePlayerStore } from '@/renderer/store/playerStore';
-import { useDownloadStore } from '@/renderer/store/downloadStore';
+import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import type { Song } from '@/shared/types/song';
 
 const HistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Song[]>([]);
   const { currentSong, isPlaying, play } = usePlayerStore();
-  const { addSingleDownload, addBatchDownload } = useDownloadStore();
+  const { download, downloadBatch } = useDownload();
 
   const loadHistory = async () => {
     try {
@@ -38,30 +37,6 @@ const HistoryPage: React.FC = () => {
     } catch (error) {
       console.error('清空播放历史失败:', error);
       message.error('清空失败，请重试');
-    }
-  };
-
-  const handleDownload = async (song: Song) => {
-    try {
-      const task = await ipcRenderer.invoke('download:start', song);
-      if (task) {
-        addSingleDownload(task);
-      }
-    } catch (error) {
-      console.error('下载失败:', error);
-      message.error('下载失败，请重试');
-    }
-  };
-
-  const handleBatchDownload = async (selectedSongs: Song[]) => {
-    try {
-      const tasks = await ipcRenderer.invoke('download:startBatch', selectedSongs);
-      if (tasks && Array.isArray(tasks)) {
-        addBatchDownload(tasks);
-      }
-    } catch (error) {
-      console.error('批量下载失败:', error);
-      message.error('批量下载失败，请重试');
     }
   };
 
@@ -118,8 +93,8 @@ const HistoryPage: React.FC = () => {
           currentSongId={currentSong?.id}
           isPlaying={isPlaying}
           onPlay={handlePlay}
-          onDownload={handleDownload}
-          onBatchDownload={handleBatchDownload}
+          onDownload={download}
+          onBatchDownload={downloadBatch}
           onAddToPlaylist={handleAddToPlaylist}
           showCheckbox={true}
           enableBatchDownload={true}

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { LocalFolder, LocalSong, Song } from '@/shared/types/song';
+import { IpcClient } from '@/renderer/services/IpcClient';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -56,17 +57,14 @@ export const useLocalStore = create<LocalStore>((set, get) => {
       initializing = true;
       try {
         const [foldersResult, songsResult] = await Promise.all([
-          ipcRenderer.invoke('localMusic:getFolders'),
-          ipcRenderer.invoke('localMusic:getSongs'),
+          IpcClient.invoke<LocalFolder[]>('localMusic:getFolders'),
+          IpcClient.invoke<LocalSong[]>('localMusic:getSongs'),
         ]);
-
-        if (foldersResult.success && songsResult.success) {
-          set({
-            folders: foldersResult.data,
-            songs: songsResult.data.map(localSongToSong),
-            initialized: true,
-          });
-        }
+        set({
+          folders: foldersResult,
+          songs: songsResult.map(localSongToSong),
+          initialized: true,
+        });
       } catch (error) {
         console.error('初始化本地音乐失败:', error);
       } finally {
@@ -75,25 +73,20 @@ export const useLocalStore = create<LocalStore>((set, get) => {
     },
 
     addFolder: async () => {
-      const result = await ipcRenderer.invoke('dialog:openDirectory');
+      const result = await IpcClient.invoke<{ canceled: boolean; filePaths: string[] }>('dialog:openDirectory');
       if (result.canceled || !result.filePaths.length) return;
 
       const folderPath = result.filePaths[0];
       set({ isScanning: true });
 
       try {
-        const addResult = await ipcRenderer.invoke('localMusic:addFolder', folderPath);
-        if (addResult.success) {
-          const { folder, songs } = addResult.data;
-          set(state => ({
-            folders: [...state.folders.filter(f => f.path !== folder.path), folder],
-            songs: [...state.songs, ...songs.map(localSongToSong)],
-            isScanning: false,
-            currentFolder: folder.path,
-          }));
-        } else {
-          set({ isScanning: false });
-        }
+        const { folder, songs } = await IpcClient.invoke<{ folder: LocalFolder; songs: LocalSong[] }>('localMusic:addFolder', folderPath);
+        set(state => ({
+          folders: [...state.folders.filter(f => f.path !== folder.path), folder],
+          songs: [...state.songs, ...songs.map(localSongToSong)],
+          isScanning: false,
+          currentFolder: folder.path,
+        }));
       } catch (error) {
         console.error('添加文件夹失败:', error);
         set({ isScanning: false });
@@ -102,15 +95,13 @@ export const useLocalStore = create<LocalStore>((set, get) => {
 
     removeFolder: async (path: string) => {
       try {
-        const result = await ipcRenderer.invoke('localMusic:removeFolder', path);
-        if (result.success) {
-          const normalizedPath = path.replace(/\\/g, '/');
-          set(state => ({
-            folders: state.folders.filter(f => f.path !== path),
-            songs: state.songs.filter(s => !s.url.includes(normalizedPath)),
-            currentFolder: state.currentFolder === path ? null : state.currentFolder,
-          }));
-        }
+        await IpcClient.invoke('localMusic:removeFolder', path);
+        const normalizedPath = path.replace(/\\/g, '/');
+        set(state => ({
+          folders: state.folders.filter(f => f.path !== path),
+          songs: state.songs.filter(s => !s.url.includes(normalizedPath)),
+          currentFolder: state.currentFolder === path ? null : state.currentFolder,
+        }));
       } catch (error) {
         console.error('移除文件夹失败:', error);
       }
@@ -119,16 +110,12 @@ export const useLocalStore = create<LocalStore>((set, get) => {
     refresh: async () => {
       set({ isScanning: true });
       try {
-        const result = await ipcRenderer.invoke('localMusic:refresh');
-        if (result.success) {
-          set({
-            folders: result.data.folders,
-            songs: result.data.songs.map(localSongToSong),
-            isScanning: false,
-          });
-        } else {
-          set({ isScanning: false });
-        }
+        const { folders, songs } = await IpcClient.invoke<{ folders: LocalFolder[]; songs: LocalSong[] }>('localMusic:refresh');
+        set({
+          folders,
+          songs: songs.map(localSongToSong),
+          isScanning: false,
+        });
       } catch (error) {
         console.error('刷新失败:', error);
         set({ isScanning: false });
