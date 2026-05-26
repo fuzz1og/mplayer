@@ -19,12 +19,16 @@ class SearchService {
     store.setLoading(true);
     store.setError(null);
 
+    if (page === 1) {
+      store.setSongs([], true);
+      store.setCurrentKeyword(keyword);
+    }
+
     try {
       const songs = await IpcClient.invoke<Song[]>('musicApi:searchSongs', keyword, page, store.sourceType);
 
       if (page === 1) {
         store.setSongs(songs, true);
-        store.setCurrentKeyword(keyword);
         store.setPage(page);
         store.setHasMore(songs.length >= 10);
       } else {
