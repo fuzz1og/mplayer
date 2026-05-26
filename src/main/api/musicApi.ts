@@ -377,6 +377,110 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
       return [];
     }
   },
+  async getNeteasePlaylists(
+    cat: string = '全部',
+    order: string = 'hot',
+    offset: number = 0,
+    limit: number = 35
+  ): Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }> {
+    const cacheKey = `playlistList_${cat}_${order}_${offset}_${limit}`;
+    const cached = cacheManager.get<any>(cacheKey);
+    if (cached) {
+      console.log('[MusicApi] getNeteasePlaylists 从缓存获取');
+      return cached;
+    }
+
+    try {
+      const neteaseClient = axios.create({
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'accept': 'application/json, text/javascript, */*; q=0.01',
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://music.163.com/'
+        },
+        timeout: 30000
+      });
+
+      const response = await neteaseClient.get(
+        `https://music.163.com/api/playlist/list?cat=${encodeURIComponent(cat)}&order=${order}&offset=${offset}&limit=${limit}`
+      );
+
+      const data = response.data;
+      const playlists: DiscoverPlaylist[] = (data.playlists || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        coverImgUrl: p.coverImgUrl || '',
+        playCount: p.playCount || 0,
+        trackCount: p.trackCount || 0,
+        creator: { nickname: p.creator?.nickname || '' },
+        tags: (p.tags || []).map((t: any) => typeof t === "string" ? t : t.name || ""),
+        description: p.description || ''
+      }));
+
+      const result = {
+        playlists,
+        total: data.total || 0,
+        more: data.more || false
+      };
+
+      cacheManager.set(cacheKey, result, 5 * 60 * 1000);
+      console.log('[MusicApi] getNeteasePlaylists 获取成功，数量:', playlists.length);
+      return result;
+    } catch (error) {
+      console.error('[MusicApi] getNeteasePlaylists 失败:', error);
+      return { playlists: [], total: 0, more: false };
+    }
+  },
+
+  async getNeteasePlaylistDetail(id: number): Promise<DiscoverPlaylist | null> {
+    const cacheKey = `playlistDetail_${id}`;
+    const cached = cacheManager.get<any>(cacheKey);
+    if (cached) {
+      console.log('[MusicApi] getNeteasePlaylistDetail 从缓存获取');
+      return cached;
+    }
+
+    try {
+      const neteaseClient = axios.create({
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'accept': 'application/json, text/javascript, */*; q=0.01',
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://music.163.com/'
+        },
+        timeout: 30000
+      });
+
+      const response = await neteaseClient.get(
+        `https://music.163.com/api/playlist/detail?id=${id}`
+      );
+
+      const p = response.data.result || response.data.playlist;
+      if (!p) return null;
+
+      const playlist: DiscoverPlaylist = {
+        id: p.id,
+        name: p.name,
+        coverImgUrl: p.coverImgUrl || '',
+        playCount: p.playCount || 0,
+        trackCount: p.trackCount || 0,
+        creator: { nickname: p.creator?.nickname || '' },
+        tags: (p.tags || []).map((t: any) => typeof t === "string" ? t : t.name || ""),
+        description: p.description || ''
+      };
+
+      cacheManager.set(cacheKey, playlist, 5 * 60 * 1000);
+      console.log('[MusicApi] getNeteasePlaylistDetail 获取成功:', playlist.name);
+      return playlist;
+    } catch (error) {
+      console.error('[MusicApi] getNeteasePlaylistDetail 失败:', error);
+      return null;
+    }
+  },
 
   async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Promise<Song[]> {
     try {
