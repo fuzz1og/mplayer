@@ -300,7 +300,7 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
         toplist: {
           module: 'musicToplist.ToplistInfoServer',
           method: 'GetDetail',
-          param: { topid: 4, num: 20 }
+          param: { topid: 4, num: 100 }
         }
       });
 

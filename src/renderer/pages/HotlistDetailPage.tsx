@@ -44,30 +44,8 @@ const HotlistDetailPage: React.FC = () => {
           data = result.success ? result.data : [];
         }
 
-        // 为QQ音乐热榜的歌曲获取专辑图片
-        if (hotlistType === 'qq' && data.length > 0) {
-          const songsWithCovers = await Promise.all(
-            data.map(async (song: HotlistSong) => {
-              try {
-                const keyword = `${song.name} ${song.artists}`;
-                const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, 'qq');
-                const searchResults = result.success ? result.data : [];
-                if (searchResults.length > 0) {
-                  return {
-                    ...song,
-                    cover: searchResults[0].cover
-                  };
-                }
-              } catch (error) {
-                console.error('获取歌曲封面失败:', error);
-              }
-              return song;
-            })
-          );
-          setHotlist(songsWithCovers);
-        } else {
-          setHotlist(data);
-        }
+        // QQ音乐热榜现在直接返回封面，不需要额外请求
+        setHotlist(data);
       } catch (error) {
         console.error(`加载${hotlistType === 'netease' ? '网易' : 'QQ'}热榜失败:`, error);
         setError('加载热榜失败，请稍后重试');
