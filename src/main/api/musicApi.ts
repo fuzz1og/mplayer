@@ -294,78 +294,61 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
     }
 
     try {
-      // 获取当前日期，格式为 YYYY-MM-DD
-      const today = new Date();
-      const dateStr = today.toISOString().split('T')[0];
+      // 使用新的 API 端点
+      const requestBody = JSON.stringify({
+        comm: { ct: 24 },
+        toplist: {
+          module: 'musicToplist.ToplistInfoServer',
+          method: 'GetDetail',
+          param: { topid: 4, num: 20 }
+        }
+      });
 
-      // 构建请求URL
-      const url = `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?newsong=1&tpl=3&page=detail&date=${dateStr}&topid=4&type=top&song_begin=0&song_num=20&g_tk=5381&jsonpCallback=MusicJsonCallbacktoplist&loginUin=0&hostUin=0&format=jsonp&inCharset=GB2312&outCharset=utf-8&notice=0&platform=mac&needNewCode=0`;
-
-      // 创建一个新的axios实例，设置适当的请求头
       await beforeRequest();
       const qqClient = axios.create({
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
         headers: {
           ...getAntiScrapeHeaders('https://y.qq.com/'),
-          'Accept': '*/*',
+          'Content-Type': 'application/json',
           'Referer': 'https://y.qq.com/',
         },
         timeout: 30000,
-        responseType: 'text'
+        responseType: 'json'
       });
 
-      const response = await qqClient.get(url);
+      const response = await qqClient.post('https://u.y.qq.com/cgi-bin/musicu.fcg', requestBody);
       const data = response.data;
 
-      // 确保数据是字符串类型
-      const dataStr = typeof data === 'string' ? data : JSON.stringify(data);
-
-      // 解析JSONP格式的数据
-      const jsonpMatch = dataStr.match(/MusicJsonCallbacktoplist\(([\s\S]*)\)\s*$/);
-
-      if (!jsonpMatch || !jsonpMatch[1]) {
-        throw new Error('无法解析QQ音乐热榜数据，JSONP格式不正确');
+      // 检查响应
+      if (!data || data.code !== 0 || !data.toplist?.data?.data?.song) {
+        throw new Error('获取QQ音乐热榜数据失败');
       }
 
-      // 解析JSON数据
-      let jsonString = jsonpMatch[1].trim();
-
-      if (!jsonString.startsWith('{') && !jsonString.startsWith('[')) {
-        throw new Error('JSON字符串格式不正确');
-      }
-
-      const jsonData = JSON.parse(jsonString);
-
-      // 检查songlist字段
-      const songlist = jsonData.songlist || [];
+      const songlist = data.toplist.data.data.song;
 
       if (!Array.isArray(songlist)) {
-        throw new Error('无法解析QQ音乐热榜数据，songlist不是数组');
+        throw new Error('无法解析QQ音乐热榜数据，song不是数组');
       }
 
       // 转换为热榜歌曲格式
       const hotlistSongs: HotlistSong[] = [];
 
       for (let index = 0; index < songlist.length; index++) {
-        const item = songlist[index];
+        const song = songlist[index];
 
         try {
-          const songData = item.data;
-
-          if (!songData) {
+          if (!song) {
             continue;
           }
 
-          const artists = songData.singer?.map((singer: any) => singer.name).join('/') || '';
-
           hotlistSongs.push({
-            id: songData.id?.toString() || '',
-            name: songData.name || '',
-            artists: artists,
-            rank: index + 1,
-            cover: '', // QQ音乐热榜卡片不显示封面
-            album: songData.album?.name || ''
+            id: song.songId?.toString() || '',
+            name: song.title || '',
+            artists: song.singerName || '',
+            rank: song.rank || index + 1,
+            cover: song.cover || '',
+            album: '' // API 中没有专辑信息
           });
         } catch {
           // 跳过处理失败的歌曲
