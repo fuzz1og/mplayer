@@ -285,7 +285,7 @@ const DiscoverPage: React.FC = () => {
   };
 
   // 如果有搜索关键词，显示搜索结果
-  if (currentKeyword && (songs.length > 0 || artistResults.length > 0)) {
+  if (currentKeyword && (songs.length > 0 || artistResults.length > 0 || loading || error)) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 搜索结果导航栏 */}
@@ -767,6 +767,18 @@ const DiscoverPage: React.FC = () => {
                       gap: '8px',
                       padding: '5px 0',
                       borderBottom: index < 2 ? '1px solid var(--divider-color)' : 'none',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s ease',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleHotlistSongClick(song, 'netease');
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
                     }}
                   >
                     <span
