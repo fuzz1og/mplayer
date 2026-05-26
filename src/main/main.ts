@@ -241,7 +241,7 @@ app.whenReady().then(async () => {
   registerIpcHandler('musicApi:getQQHotlist', () => musicApi.getQQHotlist());
   registerIpcHandler('musicApi:getNeteasePlaylists', (cat: string, order: string, offset: number, limit: number) => musicApi.getNeteasePlaylists(cat, order, offset, limit));
   registerIpcHandler('musicApi:getNeteasePlaylistDetail', (id: number) => musicApi.getNeteasePlaylistDetail(id));
-  registerIpcHandler('musicApi:getPlaylistSongsFromThirdParty', (playlistUrl: string) => musicApi.getPlaylistSongsFromThirdParty(playlistUrl));
+  registerIpcHandler('musicApi:getPlaylistSongsFromThirdParty', (playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' = 'netease') => musicApi.getPlaylistSongsFromThirdParty(playlistUrl, sourceType));
   registerIpcHandler('musicApi:getNeteaseArtists', (cat: number, offset: number, limit: number, initial: number) => musicApi.getNeteaseArtists(cat, offset, limit, initial));
   registerIpcHandler('musicApi:getArtistSongs', (artistId: string, offset: number, limit: number, order: string) => musicApi.getNeteaseArtistSongs(artistId, offset, limit, order as 'hot' | 'time'));
   registerIpcHandler('musicApi:searchArtists', (keyword: string, limit: number) => musicApi.searchNeteaseArtists(keyword, limit));

@@ -5,6 +5,7 @@ import { getCacheManager } from '../cache/cacheManager';
 import { config } from '../config';
 import { getHttpAgent, getHttpsAgent } from '../proxy';
 
+import { beforeRequest, getAntiScrapeHeaders } from "./antiScrape";
 const apiClient = axios.create({
   get baseURL() {
     return config.API_BASE_URL;
@@ -301,12 +302,14 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
       const url = `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?newsong=1&tpl=3&page=detail&date=${dateStr}&topid=4&type=top&song_begin=0&song_num=20&g_tk=5381&jsonpCallback=MusicJsonCallbacktoplist&loginUin=0&hostUin=0&format=jsonp&inCharset=GB2312&outCharset=utf-8&notice=0&platform=mac&needNewCode=0`;
 
       // 创建一个新的axios实例，设置适当的请求头
+      await beforeRequest();
       const qqClient = axios.create({
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
         headers: {
+          ...getAntiScrapeHeaders('https://y.qq.com/'),
           'Accept': '*/*',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+          'Referer': 'https://y.qq.com/',
         },
         timeout: 30000,
         responseType: 'text'
@@ -377,6 +380,7 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
       return [];
     }
   },
+
   async getNeteasePlaylists(
     cat: string = '全部',
     order: string = 'hot',
