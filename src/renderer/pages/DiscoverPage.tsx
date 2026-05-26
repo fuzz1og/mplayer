@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, TrendingUp, Disc, Radio, ArrowLeft, User } from 'lucide-react';
+import { Sparkles, TrendingUp, ArrowLeft, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -73,14 +73,27 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: s
   </div>
 );
 
+// 缓存发现页数据，避免重复加载
+const discoverCache = {
+  hotlist: null as HotlistSong[] | null,
+  neteaseNewSongList: null as HotlistSong[] | null,
+  qqHotlist: null as HotlistSong[] | null,
+  qqNewSongList: null as HotlistSong[] | null,
+  playlists: null as DiscoverPlaylist[] | null,
+};
+
 const DiscoverPage: React.FC = () => {
   const navigate = useNavigate();
-  const [hotlist, setHotlist] = useState<HotlistSong[]>([]);
-  const [hotlistLoading, setHotlistLoading] = useState(true);
-  const [qqHotlist, setQQHotlist] = useState<HotlistSong[]>([]);
-  const [qqHotlistLoading, setQQHotlistLoading] = useState(true);
-  const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
-  const [playlistsLoading, setPlaylistsLoading] = useState(true);
+  const [hotlist, setHotlist] = useState<HotlistSong[]>(discoverCache.hotlist || []);
+  const [hotlistLoading, setHotlistLoading] = useState(!discoverCache.hotlist);
+  const [neteaseNewSongList, setNeteaseNewSongList] = useState<HotlistSong[]>(discoverCache.neteaseNewSongList || []);
+  const [neteaseNewSongListLoading, setNeteaseNewSongListLoading] = useState(!discoverCache.neteaseNewSongList);
+  const [qqHotlist, setQQHotlist] = useState<HotlistSong[]>(discoverCache.qqHotlist || []);
+  const [qqHotlistLoading, setQQHotlistLoading] = useState(!discoverCache.qqHotlist);
+  const [qqNewSongList, setQqNewSongList] = useState<HotlistSong[]>(discoverCache.qqNewSongList || []);
+  const [qqNewSongListLoading, setQqNewSongListLoading] = useState(!discoverCache.qqNewSongList);
+  const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>(discoverCache.playlists || []);
+  const [playlistsLoading, setPlaylistsLoading] = useState(!discoverCache.playlists);
 
   const [activeTab, setActiveTab] = useState<'songs' | 'artists'>('songs');
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
@@ -117,12 +130,14 @@ const DiscoverPage: React.FC = () => {
 
   // 加载网易热榜数据
   useEffect(() => {
+    if (discoverCache.hotlist) return; // 已有缓存，跳过加载
     const loadHotlist = async () => {
       try {
         setHotlistLoading(true);
         const result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
         const data = result.success ? result.data : [];
         setHotlist(data.slice(0, 20));
+        discoverCache.hotlist = data.slice(0, 20);
       } catch (error) {
         console.error('加载网易热榜失败:', error);
       } finally {
@@ -132,14 +147,35 @@ const DiscoverPage: React.FC = () => {
     loadHotlist();
   }, []);
 
+  // 加载网易新歌榜数据
+  useEffect(() => {
+    if (discoverCache.neteaseNewSongList) return; // 已有缓存，跳过加载
+    const loadNeteaseNewSongList = async () => {
+      try {
+        setNeteaseNewSongListLoading(true);
+        const result = await ipcRenderer.invoke('musicApi:getNeteaseNewSongList');
+        const data = result.success ? result.data : [];
+        setNeteaseNewSongList(data.slice(0, 20));
+        discoverCache.neteaseNewSongList = data.slice(0, 20);
+      } catch (error) {
+        console.error('加载网易新歌榜失败:', error);
+      } finally {
+        setNeteaseNewSongListLoading(false);
+      }
+    };
+    loadNeteaseNewSongList();
+  }, []);
+
   // 加载QQ音乐热榜数据
   useEffect(() => {
+    if (discoverCache.qqHotlist) return; // 已有缓存，跳过加载
     const loadQQHotlist = async () => {
       try {
         setQQHotlistLoading(true);
         const result = await ipcRenderer.invoke('musicApi:getQQHotlist');
         const data = result.success ? result.data : [];
         setQQHotlist(data.slice(0, 20));
+        discoverCache.qqHotlist = data.slice(0, 20);
       } catch (error) {
         console.error('加载QQ音乐热榜失败:', error);
       } finally {
@@ -149,14 +185,35 @@ const DiscoverPage: React.FC = () => {
     loadQQHotlist();
   }, []);
 
+  // 加载QQ音乐新歌榜数据
+  useEffect(() => {
+    if (discoverCache.qqNewSongList) return; // 已有缓存，跳过加载
+    const loadQQNewSongList = async () => {
+      try {
+        setQqNewSongListLoading(true);
+        const result = await ipcRenderer.invoke('musicApi:getQQNewSongList');
+        const data = result.success ? result.data : [];
+        setQqNewSongList(data.slice(0, 20));
+        discoverCache.qqNewSongList = data.slice(0, 20);
+      } catch (error) {
+        console.error('加载QQ音乐新歌榜失败:', error);
+      } finally {
+        setQqNewSongListLoading(false);
+      }
+    };
+    loadQQNewSongList();
+  }, []);
+
   // 加载热门歌单数据
   useEffect(() => {
+    if (discoverCache.playlists) return; // 已有缓存，跳过加载
     const loadPlaylists = async () => {
       try {
         setPlaylistsLoading(true);
         const result = await ipcRenderer.invoke('musicApi:getNeteasePlaylists', '全部', 'hot', 0, 10);
         const data = result.success ? result.data : { playlists: [] };
         setPlaylists(data.playlists || []);
+        discoverCache.playlists = data.playlists || [];
       } catch (error) {
         console.error('加载热门歌单失败', error);
       } finally {
@@ -165,10 +222,6 @@ const DiscoverPage: React.FC = () => {
     };
     loadPlaylists();
   }, []);
-
-
-  // 处理热榜歌曲点击
-  const handleHotlistSongClick = async (song: HotlistSong, sourceType: 'netease' | 'qq' = 'netease') => {
 
   // 切换到歌手 tab 或关键词变化时搜索歌手
   useEffect(() => {
@@ -190,6 +243,9 @@ const DiscoverPage: React.FC = () => {
     searchArtists();
     return () => { cancelled = true; };
   }, [currentKeyword, activeTab]);
+
+  // 处理热榜歌曲点击
+  const handleHotlistSongClick = async (song: HotlistSong, sourceType: 'netease' | 'qq' = 'netease') => {
     try {
       const keyword = `${song.name} ${song.artists}`;
       const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, sourceType);
@@ -514,361 +570,6 @@ const DiscoverPage: React.FC = () => {
   // 默认显示发现页内容
   return (
     <div style={{ padding: '24px', height: '100%', overflow: 'auto' }}>
-      {/* Banner 区域 */}
-      <div
-        style={{
-          height: '200px',
-          borderRadius: '12px',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: '32px',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.08\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
-          }}
-        />
-        <div style={{ textAlign: 'center', color: 'white', zIndex: 1 }}>
-          <h1 style={{ fontSize: '32px', fontWeight: 700, marginBottom: '8px' }}>
-            发现好音乐
-          </h1>
-          <p style={{ fontSize: '16px', opacity: 0.9 }}>
-            探索无限可能，聆听世界声音
-          </p>
-        </div>
-      </div>
-
-      {/* 排行榜 */}
-      <section style={{ marginBottom: '40px' }}>
-        <SectionHeader
-          icon={<TrendingUp size={22} />}
-          title="排行榜"
-          action="查看全部"
-          onClickAction={() => navigate('/hotlist/netease')}
-        />
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: '20px',
-          }}
-        >
-          {/* 网易热榜卡片 */}
-          <div
-            style={{
-              backgroundColor: 'var(--content-bg)',
-              borderRadius: '8px',
-              padding: '16px',
-              border: '1px solid var(--border-color)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-            onClick={() => navigate('/hotlist/netease')}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--accent-color)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border-color)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                marginBottom: '12px',
-              }}
-            >
-              <div
-                style={{
-                  width: '60px',
-                  height: '60px',
-                  borderRadius: '6px',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontWeight: 600,
-                }}
-              >
-                热榜
-              </div>
-              <div>
-                <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  网易热榜
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                  实时更新，最热门的50首歌曲
-                </div>
-              </div>
-            </div>
-            <div>
-              {hotlistLoading ? (
-                Array.from({ length: 5 }).map((_, index) => (
-                  <div
-                    key={`placeholder-${index}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '8px 0',
-                      borderBottom: index < 4 ? '1px solid var(--divider-color)' : 'none',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '20px',
-                        height: '14px',
-                        backgroundColor: 'var(--divider-color)',
-                        borderRadius: '2px',
-                        animation: 'pulse 1.5s ease-in-out infinite',
-                      }}
-                    />
-                    <span
-                      style={{
-                        flex: 1,
-                        height: '13px',
-                        backgroundColor: 'var(--divider-color)',
-                        borderRadius: '2px',
-                        animation: 'pulse 1.5s ease-in-out infinite',
-                        animationDelay: '0.1s',
-                      }}
-                    />
-                    <span
-                      style={{
-                        width: '80px',
-                        height: '12px',
-                        backgroundColor: 'var(--divider-color)',
-                        borderRadius: '2px',
-                        animation: 'pulse 1.5s ease-in-out infinite',
-                        animationDelay: '0.2s',
-                      }}
-                    />
-                  </div>
-                ))
-              ) : (
-                hotlist.slice(0, 5).map((song) => (
-                  <div
-                    key={song.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '8px 0',
-                      borderBottom: song.rank < 5 ? '1px solid var(--divider-color)' : 'none',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '20px',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        color: song.rank <= 3 ? '#FF4D4F' : 'var(--text-tertiary)',
-                      }}
-                    >
-                      {song.rank}
-                    </span>
-                    <span
-                      style={{
-                        flex: 1,
-                        fontSize: '13px',
-                        color: 'var(--text-primary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {song.name}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '12px',
-                        color: 'var(--text-tertiary)',
-                      }}
-                    >
-                      {song.artists}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* QQ音乐热榜卡片 */}
-          <div
-            style={{
-              backgroundColor: 'var(--content-bg)',
-              borderRadius: '8px',
-              padding: '16px',
-              border: '1px solid var(--border-color)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-            onClick={() => navigate('/hotlist/qq')}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--accent-color)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border-color)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                marginBottom: '12px',
-              }}
-            >
-              <div
-                style={{
-                  width: '60px',
-                  height: '60px',
-                  borderRadius: '6px',
-                  background: 'linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontWeight: 600,
-                }}
-              >
-                热榜
-              </div>
-              <div>
-                <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  QQ音乐热榜
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                  实时更新，最热门的20首歌曲
-                </div>
-              </div>
-            </div>
-            <div>
-              {qqHotlistLoading ? (
-                Array.from({ length: 5 }).map((_, index) => (
-                  <div
-                    key={`qq-placeholder-${index}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '8px 0',
-                      borderBottom: index < 4 ? '1px solid var(--divider-color)' : 'none',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '20px',
-                        height: '14px',
-                        backgroundColor: 'var(--divider-color)',
-                        borderRadius: '2px',
-                        animation: 'pulse 1.5s ease-in-out infinite',
-                      }}
-                    />
-                    <span
-                      style={{
-                        flex: 1,
-                        height: '13px',
-                        backgroundColor: 'var(--divider-color)',
-                        borderRadius: '2px',
-                        animation: 'pulse 1.5s ease-in-out infinite',
-                        animationDelay: '0.1s',
-                      }}
-                    />
-                    <span
-                      style={{
-                        width: '80px',
-                        height: '12px',
-                        backgroundColor: 'var(--divider-color)',
-                        borderRadius: '2px',
-                        animation: 'pulse 1.5s ease-in-out infinite',
-                        animationDelay: '0.2s',
-                      }}
-                    />
-                  </div>
-                ))
-              ) : (
-                qqHotlist.slice(0, 5).map((song) => (
-                  <div
-                    key={song.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '8px 0',
-                      borderBottom: song.rank < 5 ? '1px solid var(--divider-color)' : 'none',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.15s ease',
-                    }}
-                    onClick={() => handleHotlistSongClick(song, 'qq')}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '20px',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        color: song.rank <= 3 ? '#FF4D4F' : 'var(--text-tertiary)',
-                      }}
-                    >
-                      {song.rank}
-                    </span>
-                    <span
-                      style={{
-                        flex: 1,
-                        fontSize: '13px',
-                        color: 'var(--text-primary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {song.name}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '12px',
-                        color: 'var(--text-tertiary)',
-                      }}
-                    >
-                      {song.artists}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-          <style>{`
-            @keyframes pulse {
-              0%, 100% {
-                opacity: 0.6;
-              }
-              50% {
-                opacity: 1;
-              }
-            }
-          `}</style>
-        </div>
-      </section>
-
       {/* 热门歌单 */}
       <section style={{ marginBottom: '40px' }}>
         <SectionHeader
@@ -916,47 +617,764 @@ const DiscoverPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 新碟上架 - 功能开发中 */}
+      {/* 排行榜 */}
       <section style={{ marginBottom: '40px' }}>
         <SectionHeader
-          icon={<Disc size={22} />}
-          title="新碟上架"
+          icon={<TrendingUp size={22} />}
+          title="排行榜"
+          action="查看全部"
+          onClickAction={() => navigate('/hotlist/netease')}
         />
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '120px',
-            backgroundColor: 'var(--content-bg)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)',
-            color: 'var(--text-tertiary)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
+            gap: '20px',
           }}
         >
-          <span>新碟上架功能开发中...</span>
-        </div>
-      </section>
+          {/* 网易热榜卡片 */}
+          <div
+            style={{
+              display: 'flex',
+              backgroundColor: 'var(--content-bg)',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              border: '1px solid var(--border-color)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              height: '150px',
+            }}
+            onClick={() => navigate('/hotlist/netease')}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--accent-color)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-color)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            {/* 左侧封面图 */}
+            <div
+              style={{
+                width: '150px',
+                height: '150px',
+                flexShrink: 0,
+                background: 'linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 50%, #16213e 100%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              {/* 背景装饰 */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'radial-gradient(circle at 30% 30%, rgba(102, 126, 234, 0.3) 0%, transparent 60%)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  left: '10px',
+                  fontSize: '24px',
+                  opacity: 0.6,
+                  color: 'white',
+                }}
+              >
+                ♪♪♪
+              </div>
+              <div
+                style={{
+                  fontSize: '36px',
+                  fontWeight: 800,
+                  color: 'white',
+                  textShadow: '2px 2px 8px rgba(0,0,0,0.5)',
+                  zIndex: 1,
+                  letterSpacing: '4px',
+                }}
+              >
+                热歌
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: 'rgba(255,255,255,0.8)',
+                  fontSize: '11px',
+                  backgroundColor: 'rgba(0,0,0,0.3)',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                }}
+              >
+                <span>🎧</span>
+                <span>{hotlist.length > 0 ? '50首' : '加载中'}</span>
+              </div>
+            </div>
 
-      {/* 电台推荐 - 功能开发中 */}
-      <section>
-        <SectionHeader
-          icon={<Radio size={22} />}
-          title="热门电台"
-        />
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '120px',
-            backgroundColor: 'var(--content-bg)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)',
-            color: 'var(--text-tertiary)',
-          }}
-        >
-          <span>热门电台功能开发中...</span>
+            {/* 右侧歌曲列表 */}
+            <div style={{ flex: 1, padding: '12px 16px', overflow: 'hidden' }}>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                网易热歌榜
+              </div>
+              {hotlistLoading ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={`placeholder-${index}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 0',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '16px',
+                        height: '14px',
+                        backgroundColor: 'var(--divider-color)',
+                        borderRadius: '2px',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                      }}
+                    />
+                    <span
+                      style={{
+                        flex: 1,
+                        height: '12px',
+                        backgroundColor: 'var(--divider-color)',
+                        borderRadius: '2px',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                        animationDelay: '0.1s',
+                      }}
+                    />
+                  </div>
+                ))
+              ) : (
+                hotlist.slice(0, 3).map((song, index) => (
+                  <div
+                    key={song.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '5px 0',
+                      borderBottom: index < 2 ? '1px solid var(--divider-color)' : 'none',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '16px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: song.rank <= 3 ? '#FF4D4F' : 'var(--text-tertiary)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {song.rank}
+                    </span>
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: '12px',
+                        color: 'var(--text-primary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {song.name}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--text-tertiary)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {song.artists}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* QQ音乐热榜卡片 */}
+          <div
+            style={{
+              display: 'flex',
+              backgroundColor: 'var(--content-bg)',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              border: '1px solid var(--border-color)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              height: '150px',
+            }}
+            onClick={() => navigate('/hotlist/qq')}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--accent-color)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-color)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            {/* 左侧封面图 */}
+            <div
+              style={{
+                width: '150px',
+                height: '150px',
+                flexShrink: 0,
+                background: 'linear-gradient(135deg, #1a3a2e 0%, #0f2027 50%, #203a43 100%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              {/* 背景装饰 */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'radial-gradient(circle at 70% 30%, rgba(78, 205, 196, 0.3) 0%, transparent 60%)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  left: '10px',
+                  fontSize: '24px',
+                  opacity: 0.6,
+                  color: 'white',
+                }}
+              >
+                ♪♪♪
+              </div>
+              <div
+                style={{
+                  fontSize: '36px',
+                  fontWeight: 800,
+                  color: 'white',
+                  textShadow: '2px 2px 8px rgba(0,0,0,0.5)',
+                  zIndex: 1,
+                  letterSpacing: '4px',
+                }}
+              >
+                热歌
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: 'rgba(255,255,255,0.8)',
+                  fontSize: '11px',
+                  backgroundColor: 'rgba(0,0,0,0.3)',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                }}
+              >
+                <span>🎧</span>
+                <span>{qqHotlist.length > 0 ? '100首' : '加载中'}</span>
+              </div>
+            </div>
+
+            {/* 右侧歌曲列表 */}
+            <div style={{ flex: 1, padding: '12px 16px', overflow: 'hidden' }}>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                QQ音乐热歌榜
+              </div>
+              {qqHotlistLoading ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={`qq-placeholder-${index}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 0',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '16px',
+                        height: '14px',
+                        backgroundColor: 'var(--divider-color)',
+                        borderRadius: '2px',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                      }}
+                    />
+                    <span
+                      style={{
+                        flex: 1,
+                        height: '12px',
+                        backgroundColor: 'var(--divider-color)',
+                        borderRadius: '2px',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                        animationDelay: '0.1s',
+                      }}
+                    />
+                  </div>
+                ))
+              ) : (
+                qqHotlist.slice(0, 3).map((song, index) => (
+                  <div
+                    key={song.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '5px 0',
+                      borderBottom: index < 2 ? '1px solid var(--divider-color)' : 'none',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s ease',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleHotlistSongClick(song, 'qq');
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '16px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: song.rank <= 3 ? '#FF4D4F' : 'var(--text-tertiary)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {song.rank}
+                    </span>
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: '12px',
+                        color: 'var(--text-primary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {song.name}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--text-tertiary)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {song.artists}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* 网易新歌榜卡片 */}
+          <div
+            style={{
+              display: 'flex',
+              backgroundColor: 'var(--content-bg)',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              border: '1px solid var(--border-color)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              height: '150px',
+            }}
+            onClick={() => navigate('/hotlist/netease_new')}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--accent-color)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-color)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            {/* 左侧封面图 */}
+            <div
+              style={{
+                width: '150px',
+                height: '150px',
+                flexShrink: 0,
+                background: 'linear-gradient(135deg, #4a1942 0%, #2d1b4e 50%, #1a1a2e 100%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'radial-gradient(circle at 50% 50%, rgba(156, 39, 176, 0.3) 0%, transparent 60%)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  left: '10px',
+                  fontSize: '24px',
+                  opacity: 0.6,
+                  color: 'white',
+                }}
+              >
+                ♪♪♪
+              </div>
+              <div
+                style={{
+                  fontSize: '36px',
+                  fontWeight: 800,
+                  color: 'white',
+                  textShadow: '2px 2px 8px rgba(0,0,0,0.5)',
+                  zIndex: 1,
+                  letterSpacing: '4px',
+                }}
+              >
+                新歌
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: 'rgba(255,255,255,0.8)',
+                  fontSize: '11px',
+                  backgroundColor: 'rgba(0,0,0,0.3)',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                }}
+              >
+                <span>🎧</span>
+                <span>{neteaseNewSongList.length > 0 ? '100首' : '加载中'}</span>
+              </div>
+            </div>
+
+            {/* 右侧歌曲列表 */}
+            <div style={{ flex: 1, padding: '12px 16px', overflow: 'hidden' }}>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                网易新歌榜
+              </div>
+              {neteaseNewSongListLoading ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={`placeholder-${index}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 0',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '16px',
+                        height: '14px',
+                        backgroundColor: 'var(--divider-color)',
+                        borderRadius: '2px',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                      }}
+                    />
+                    <span
+                      style={{
+                        flex: 1,
+                        height: '12px',
+                        backgroundColor: 'var(--divider-color)',
+                        borderRadius: '2px',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                        animationDelay: '0.1s',
+                      }}
+                    />
+                  </div>
+                ))
+              ) : (
+                neteaseNewSongList.slice(0, 3).map((song, index) => (
+                  <div
+                    key={song.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '5px 0',
+                      borderBottom: index < 2 ? '1px solid var(--divider-color)' : 'none',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s ease',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleHotlistSongClick(song, 'netease');
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '16px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: song.rank <= 3 ? '#FF4D4F' : 'var(--text-tertiary)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {song.rank}
+                    </span>
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: '12px',
+                        color: 'var(--text-primary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {song.name}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--text-tertiary)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {song.artists}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* QQ音乐新歌榜卡片 */}
+          <div
+            style={{
+              display: 'flex',
+              backgroundColor: 'var(--content-bg)',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              border: '1px solid var(--border-color)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              height: '150px',
+            }}
+            onClick={() => navigate('/hotlist/qq_new')}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--accent-color)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-color)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            {/* 左侧封面图 */}
+            <div
+              style={{
+                width: '150px',
+                height: '150px',
+                flexShrink: 0,
+                background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #1e3c72 100%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'radial-gradient(circle at 50% 50%, rgba(33, 150, 243, 0.3) 0%, transparent 60%)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  left: '10px',
+                  fontSize: '24px',
+                  opacity: 0.6,
+                  color: 'white',
+                }}
+              >
+                ♪♪♪
+              </div>
+              <div
+                style={{
+                  fontSize: '36px',
+                  fontWeight: 800,
+                  color: 'white',
+                  textShadow: '2px 2px 8px rgba(0,0,0,0.5)',
+                  zIndex: 1,
+                  letterSpacing: '4px',
+                }}
+              >
+                新歌
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: 'rgba(255,255,255,0.8)',
+                  fontSize: '11px',
+                  backgroundColor: 'rgba(0,0,0,0.3)',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                }}
+              >
+                <span>🎧</span>
+                <span>{qqNewSongList.length > 0 ? '100首' : '加载中'}</span>
+              </div>
+            </div>
+
+            {/* 右侧歌曲列表 */}
+            <div style={{ flex: 1, padding: '12px 16px', overflow: 'hidden' }}>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                QQ音乐新歌榜
+              </div>
+              {qqNewSongListLoading ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={`qq-placeholder-${index}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 0',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '16px',
+                        height: '14px',
+                        backgroundColor: 'var(--divider-color)',
+                        borderRadius: '2px',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                      }}
+                    />
+                    <span
+                      style={{
+                        flex: 1,
+                        height: '12px',
+                        backgroundColor: 'var(--divider-color)',
+                        borderRadius: '2px',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                        animationDelay: '0.1s',
+                      }}
+                    />
+                  </div>
+                ))
+              ) : (
+                qqNewSongList.slice(0, 3).map((song, index) => (
+                  <div
+                    key={song.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '5px 0',
+                      borderBottom: index < 2 ? '1px solid var(--divider-color)' : 'none',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s ease',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleHotlistSongClick(song, 'qq');
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '16px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: song.rank <= 3 ? '#FF4D4F' : 'var(--text-tertiary)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {song.rank}
+                    </span>
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: '12px',
+                        color: 'var(--text-primary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {song.name}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--text-tertiary)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {song.artists}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+          <style>{`
+            @keyframes pulse {
+              0%, 100% {
+                opacity: 0.6;
+              }
+              50% {
+                opacity: 1;
+              }
+            }
+          `}</style>
         </div>
       </section>
     </div>

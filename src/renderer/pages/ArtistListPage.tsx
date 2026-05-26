@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { pinyin } from 'pinyin-pro';
 import type { Artist } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
 
@@ -18,27 +17,7 @@ const CATEGORIES = [
   { label: '韩国', id: 7001 },
 ];
 
-const INITIALS = [
-  { label: '全部', value: '' },
-  { label: 'A', value: 'a' }, { label: 'B', value: 'b' }, { label: 'C', value: 'c' },
-  { label: 'D', value: 'd' }, { label: 'E', value: 'e' }, { label: 'F', value: 'f' },
-  { label: 'G', value: 'g' }, { label: 'H', value: 'h' }, { label: 'I', value: 'i' },
-  { label: 'J', value: 'j' }, { label: 'K', value: 'k' }, { label: 'L', value: 'l' },
-  { label: 'M', value: 'm' }, { label: 'N', value: 'n' }, { label: 'O', value: 'o' },
-  { label: 'P', value: 'p' }, { label: 'Q', value: 'q' }, { label: 'R', value: 'r' },
-  { label: 'S', value: 's' }, { label: 'T', value: 't' }, { label: 'U', value: 'u' },
-  { label: 'V', value: 'v' }, { label: 'W', value: 'w' }, { label: 'X', value: 'x' },
-  { label: 'Y', value: 'y' }, { label: 'Z', value: 'z' },
-  { label: '#', value: '#' },
-];
-
 const PAGE_SIZE = 100;
-
-function letterToInitial(letter: string): number {
-  if (!letter) return -1;
-  if (letter === '#') return 37;
-  return letter.charCodeAt(0) - 'a'.charCodeAt(0);
-}
 
 const ArtistCard: React.FC<{ artist: Artist; onClick: () => void }> = ({ artist, onClick }) => (
   <div
@@ -105,14 +84,13 @@ const ArtistListPage: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [category, setCategory] = useState(0);
-  const [initialFilter, setInitialFilter] = useState('');
   const loadingMoreRef = useRef(false);
 
   const currentCat = CATEGORIES[category];
   const isAllMode = currentCat.id === 0;
 
   // "全部" tab: 使用 API 分页加载
-  const loadAllArtists = useCallback(async (initial: string, reset: boolean) => {
+  const loadAllArtists = useCallback(async (reset: boolean) => {
     if (reset) {
       setLoading(true);
       setArtists([]);
@@ -124,8 +102,7 @@ const ArtistListPage: React.FC = () => {
     loadingMoreRef.current = true;
     try {
       const currentOffset = reset ? 0 : artists.length;
-      const apiInitial = letterToInitial(initial);
-      const r = await ipcRenderer.invoke('musicApi:getNeteaseArtists', 0, currentOffset, PAGE_SIZE, apiInitial);
+      const r = await ipcRenderer.invoke('musicApi:getNeteaseArtists', 0, currentOffset, PAGE_SIZE, -1);
       const data = r.success ? r.data : { artists: [], more: false };
       setArtists(prev => reset ? data.artists : [...prev, ...data.artists]);
       setHasMore(data.more);
@@ -143,7 +120,7 @@ const ArtistListPage: React.FC = () => {
   const loadCategoryArtists = useCallback(async (catId: number) => {
     setLoading(true);
     try {
-      const r = await ipcRenderer.invoke('musicApi:getNeteaseArtists', catId);
+      const r = await ipcRenderer.invoke('musicApi:getNeteaseArtists', catId, 0, 100, -1);
       const data = r.success ? r.data : { artists: [], more: false };
       setArtists(data.artists);
       setHasMore(false);
@@ -157,20 +134,12 @@ const ArtistListPage: React.FC = () => {
 
   // 切换分类
   useEffect(() => {
-    setInitialFilter('');
     if (isAllMode) {
-      loadAllArtists('', true);
+      loadAllArtists(true);
     } else {
       loadCategoryArtists(currentCat.id);
     }
   }, [category]);
-
-  // "全部" tab: 切换字母筛选时重新加载
-  useEffect(() => {
-    if (isAllMode) {
-      loadAllArtists(initialFilter, true);
-    }
-  }, [initialFilter]);
 
   // "全部" tab: 滚动到底加载更多
   useEffect(() => {
@@ -181,38 +150,15 @@ const ArtistListPage: React.FC = () => {
       if (loading || loadingMore || !hasMore) return;
       const { scrollTop, scrollHeight, clientHeight } = container;
       if (scrollTop + clientHeight >= scrollHeight - 200) {
-        loadAllArtists(initialFilter, false);
+        loadAllArtists(false);
       }
     };
 
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [isAllMode, loading, loadingMore, hasMore, initialFilter, loadAllArtists]);
+  }, [isAllMode, loading, loadingMore, hasMore, loadAllArtists]);
 
-  const getPinyinInitial = (name: string): string => {
-    const first = name.charAt(0);
-    if (/[a-zA-Z]/.test(first)) return first.toLowerCase();
-    if (/[0-9]/.test(first)) return '#';
-    const py = pinyin(first, { pattern: 'first', toneType: 'none' });
-    const ch = py.charAt(0);
-    if (ch >= 'a' && ch <= 'z') return ch;
-    return '#';
-  };
-
-  const handleInitialClick = (value: string) => {
-    setInitialFilter(value);
-  };
-
-  // 分类 tab 的客户端字母筛选
-  const displayed = useMemo(() => {
-    if (isAllMode) return artists;
-    if (!initialFilter) return artists;
-    return artists.filter((a) => {
-      const init = getPinyinInitial(a.name);
-      if (initialFilter === '#') return init === '#';
-      return init === initialFilter;
-    });
-  }, [artists, initialFilter, isAllMode]);
+  const displayed = artists;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -252,38 +198,6 @@ const ArtistListPage: React.FC = () => {
           </button>
         ))}
       </div>
-
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          padding: '6px 24px', borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)', flexWrap: 'wrap',
-        }}
-      >
-          {INITIALS.map((init) => (
-            <button
-              key={init.value}
-              onClick={() => handleInitialClick(init.value)}
-              style={{
-                padding: '2px 8px', borderRadius: '4px', border: 'none',
-                cursor: 'pointer', fontSize: '12px',
-                fontWeight: initialFilter === init.value ? 600 : 400,
-                color: initialFilter === init.value ? 'var(--accent-color)' : 'var(--text-tertiary)',
-                backgroundColor: initialFilter === init.value ? 'rgba(116,185,255,0.12)' : 'transparent',
-                transition: 'all 0.15s ease',
-                fontFamily: init.label === '全部' ? 'inherit' : 'monospace',
-              }}
-              onMouseEnter={(e) => {
-                if (initialFilter !== init.value) e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-              }}
-              onMouseLeave={(e) => {
-                if (initialFilter !== init.value) e.currentTarget.style.backgroundColor = 'transparent';
-              }}
-            >
-              {init.label}
-            </button>
-          ))}
-        </div>
 
       <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
         {loading ? (
