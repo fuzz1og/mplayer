@@ -1,7 +1,7 @@
 import { Song } from '@/shared/types/song';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { dedupeSongs } from '@/renderer/utils/songDedupe';
-const { ipcRenderer } = window.require('electron');
+import { IpcClient } from './IpcClient';
 
 const DEBOUNCE_DELAY = 300;
 
@@ -20,14 +20,13 @@ class SearchService {
     store.setError(null);
 
     try {
-      const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, page, store.sourceType);
-      const songs = result.success ? result.data : [];
+      const songs = await IpcClient.invoke<Song[]>('musicApi:searchSongs', keyword, page, store.sourceType);
 
       if (page === 1) {
         store.setSongs(songs, true);
         store.setCurrentKeyword(keyword);
         store.setPage(page);
-        store.setHasMore(songs.length === 10);
+        store.setHasMore(songs.length >= 10);
       } else {
         const currentSongs = store.songs;
         const uniqueSongs = dedupeSongs(currentSongs, songs);
@@ -37,7 +36,7 @@ class SearchService {
           store.setPage(page);
         }
 
-        store.setHasMore(songs.length === 10);
+        store.setHasMore(songs.length >= 10);
       }
     } catch (error) {
       store.setError(error instanceof Error ? error.message : '搜索失败');
@@ -75,12 +74,12 @@ class SearchService {
     keywords: string[],
     sourceType: 'netease' | 'qq' | 'kugou' = 'netease'
   ): Promise<Record<string, Song[]>> {
-    const result = await ipcRenderer.invoke('musicApi:batchSearch', keywords, sourceType);
-    if (!result.success) {
-      console.error('批量搜索失败:', result.error);
+    try {
+      return await IpcClient.invoke<Record<string, Song[]>>('musicApi:batchSearch', keywords, sourceType);
+    } catch (error) {
+      console.error('批量搜索失败:', error);
       return {};
     }
-    return result.data;
   }
 }
 

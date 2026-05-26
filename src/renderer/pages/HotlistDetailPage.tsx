@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useDownload } from '@/renderer/hooks/useDownload';
 import type { Song } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
 
@@ -17,7 +18,7 @@ interface HotlistSong {
 }
 
 const HotlistDetailPage: React.FC = () => {
-  const { type } = useParams<{ type: 'netease' | 'qq' }>();
+  const { type } = useParams<{ type: 'netease' | 'netease_new' | 'qq' | 'qq_new' }>();
   const navigate = useNavigate();
   const hotlistType = type || 'netease';
 
@@ -26,6 +27,7 @@ const HotlistDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const { play, currentSong, isPlaying } = usePlayerStore();
+  const { download, downloadBatch } = useDownload();
 
   // 加载热榜数据
   useEffect(() => {
@@ -37,37 +39,23 @@ const HotlistDetailPage: React.FC = () => {
         if (hotlistType === 'netease') {
           const result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
           data = result.success ? result.data : [];
-        } else {
+        } else if (hotlistType === 'netease_new') {
+          const result = await ipcRenderer.invoke('musicApi:getNeteaseNewSongList');
+          data = result.success ? result.data : [];
+        } else if (hotlistType === 'qq') {
           const result = await ipcRenderer.invoke('musicApi:getQQHotlist');
+          data = result.success ? result.data : [];
+        } else if (hotlistType === 'qq_new') {
+          const result = await ipcRenderer.invoke('musicApi:getQQNewSongList');
+          data = result.success ? result.data : [];
+        } else {
+          const result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
           data = result.success ? result.data : [];
         }
 
-        // 为QQ音乐热榜的歌曲获取专辑图片
-        if (hotlistType === 'qq' && data.length > 0) {
-          const songsWithCovers = await Promise.all(
-            data.map(async (song: HotlistSong) => {
-              try {
-                const keyword = `${song.name} ${song.artists}`;
-                const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, 'qq');
-                const searchResults = result.success ? result.data : [];
-                if (searchResults.length > 0) {
-                  return {
-                    ...song,
-                    cover: searchResults[0].cover
-                  };
-                }
-              } catch (error) {
-                console.error('获取歌曲封面失败:', error);
-              }
-              return song;
-            })
-          );
-          setHotlist(songsWithCovers);
-        } else {
-          setHotlist(data);
-        }
+        setHotlist(data);
       } catch (error) {
-        console.error(`加载${hotlistType === 'netease' ? '网易' : 'QQ'}热榜失败:`, error);
+        console.error(`加载热榜失败:`, error);
         setError('加载热榜失败，请稍后重试');
       } finally {
         setLoading(false);
@@ -88,13 +76,14 @@ const HotlistDetailPage: React.FC = () => {
       url: '',
       duration: 0,
       lrc: '',
-      sourceType: hotlistType
+      sourceType: (hotlistType === 'netease_new' ? 'netease' : hotlistType === 'qq_new' ? 'qq' : hotlistType) as 'netease' | 'qq'
     }));
   };
 
   const handlePlay = async (song: Song) => {
     const keyword = `${song.name} ${song.artist}`;
-    const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, hotlistType);
+    const sourceType = hotlistType === 'netease_new' ? 'netease' : hotlistType === 'qq_new' ? 'qq' : hotlistType;
+    const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, sourceType);
     const searchResults = result.success ? result.data : [];
     if (searchResults.length > 0) {
       await play(searchResults[0]);
@@ -159,7 +148,10 @@ const HotlistDetailPage: React.FC = () => {
             textOverflow: 'ellipsis',
           }}
         >
-          {hotlistType === 'netease' ? '网易云音乐热歌榜' : 'QQ音乐热歌榜'}
+          {hotlistType === 'netease' ? '网易云音乐热歌榜' :
+           hotlistType === 'netease_new' ? '网易云音乐新歌榜' :
+           hotlistType === 'qq_new' ? 'QQ音乐新歌榜' :
+           'QQ音乐热歌榜'}
         </h1>
         <div style={{ width: '140px' }} />
       </div>
@@ -180,7 +172,7 @@ const HotlistDetailPage: React.FC = () => {
               width: '80px',
               height: '80px',
               borderRadius: '8px',
-              background: hotlistType === 'netease'
+              background: hotlistType === 'netease' || hotlistType === 'netease_new'
                 ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
                 : 'linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)',
               display: 'flex',
@@ -195,10 +187,13 @@ const HotlistDetailPage: React.FC = () => {
           </div>
           <div>
             <h2 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-              {hotlistType === 'netease' ? '网易云音乐热歌榜' : 'QQ音乐热歌榜'}
+              {hotlistType === 'netease' ? '网易云音乐热歌榜' :
+               hotlistType === 'netease_new' ? '网易云音乐新歌榜' :
+               hotlistType === 'qq_new' ? 'QQ音乐新歌榜' :
+               'QQ音乐热歌榜'}
             </h2>
             <p style={{ fontSize: '14px', color: 'var(--text-tertiary)' }}>
-              实时更新，最热门的{hotlistType === 'netease' ? '50' : '20'}首歌曲
+              实时更新，最热门的100首歌曲
             </p>
           </div>
         </div>
@@ -330,6 +325,8 @@ const HotlistDetailPage: React.FC = () => {
             showIndex={true}
             showCheckbox={true}
             enableBatchDownload={true}
+            onDownload={download}
+            onBatchDownload={downloadBatch}
             enableBatchAddToPlaylist={true}
             emptyText="暂无热榜歌曲"
           />

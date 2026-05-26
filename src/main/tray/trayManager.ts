@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage } from 'electron';
+import path from 'path';
 
 export class TrayManager {
   private tray: Tray | null = null;
@@ -6,29 +7,8 @@ export class TrayManager {
   private isPlaying: boolean = false;
 
   create(mainWindow: BrowserWindow): void {
-    const iconSize = 16;
-    const canvas = Buffer.alloc(iconSize * iconSize * 4);
-
-    for (let y = 0; y < iconSize; y++) {
-      for (let x = 0; x < iconSize; x++) {
-        const idx = (y * iconSize + x) * 4;
-        const inTriangle = x >= 4 && x <= 12 && y >= 3 && y <= 12 &&
-          y >= (3 + (x - 4) * 0.9) && y <= (12 - (x - 4) * 0.9);
-        if (inTriangle) {
-          canvas[idx] = 116;
-          canvas[idx + 1] = 185;
-          canvas[idx + 2] = 255;
-          canvas[idx + 3] = 255;
-        } else {
-          canvas[idx + 3] = 0;
-        }
-      }
-    }
-
-    const icon = nativeImage.createFromBuffer(
-      Buffer.from(canvas),
-      { width: iconSize, height: iconSize }
-    );
+    const iconPath = path.join(app.getAppPath(), 'resources', 'icon_tray.png');
+    const icon = nativeImage.createFromPath(iconPath);
 
     this.tray = new Tray(icon);
     this.tray.setToolTip(this.tooltip);
@@ -73,7 +53,7 @@ export class TrayManager {
       {
         label: '✕ 退出',
         click: () => {
-          app.quit();
+          app.exit();
         },
       },
     ]);
