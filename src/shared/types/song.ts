@@ -4,7 +4,7 @@ export interface SongBase {
   artist: string;
   album: string;
   duration: number;
-  sourceType: 'netease' | 'qq' | 'kugou' | 'local';
+  sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' | 'local';
 }
 
 export interface Song extends SongBase {

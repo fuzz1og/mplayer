@@ -7,13 +7,15 @@ files:
   - resources/icon.png
   - resources/icon.ico
   - resources/icon_tray.png
+  - "!**/__tests__/**"
+  - "!**/*.test.*"
+  - "!**/*.spec.*"
 win:
   icon: resources/icon.ico
   target:
     - target: nsis
       arch:
         - x64
-        - ia32
     - target: portable
       arch:
         - x64
