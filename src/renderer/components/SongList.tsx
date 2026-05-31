@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Download, Trash2, ListMusic } from 'lucide-react';
 import type { Song } from '@/shared/types/song';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import BatchAddToPlaylistModal from './BatchAddToPlaylistModal';
 import SongRow from './SongRow';
+import SongListSkeleton from './SongListSkeleton';
 
 interface SongListProps {
   songs: Song[];
@@ -18,6 +19,7 @@ interface SongListProps {
   selectedIds?: string[];
   onSelectionChange?: (selectedIds: string[]) => void;
   emptyText?: string;
+  loading?: boolean;
   enableBatchDownload?: boolean;
   onBatchDownload?: (songs: Song[]) => void;
   onDownload?: (song: Song) => void;
@@ -43,6 +45,7 @@ const SongList: React.FC<SongListProps> = ({
   selectedIds: externalSelectedIds,
   onSelectionChange: externalOnSelectionChange,
   emptyText = '暂无歌曲',
+  loading = false,
   enableBatchDownload = false,
   onBatchDownload,
   onDownload,
@@ -69,38 +72,39 @@ const SongList: React.FC<SongListProps> = ({
   const selectedIds = externalSelectedIds !== undefined ? externalSelectedIds : internalSelectedIds;
   const onSelectionChange = externalOnSelectionChange || setInternalSelectedIds;
 
-  const handleToggleDropdown = (songId: string, e: React.MouseEvent) => {
+  const handleToggleDropdown = useCallback((songId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     console.log('[SongList] 更多按钮被点击, songId:', songId);
-    setActiveDropdown(activeDropdown === songId ? null : songId);
-  };
+    setActiveDropdown(prev => prev === songId ? null : songId);
+  }, []);
 
-  const handleCloseDropdown = (e: React.MouseEvent) => {
+  const handleCloseDropdown = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setActiveDropdown(null);
-  };
+  }, []);
 
-  const handleAddToPlaylistClick = (song: Song, e?: React.MouseEvent) => {
+  const handleAddToPlaylistClick = useCallback((song: Song, e?: React.MouseEvent) => {
     e?.stopPropagation();
     console.log('[SongList] 加入歌单按钮被点击, song:', song);
     setSelectedSongForPlaylist(song);
     setShowAddToPlaylistModal(true);
     setActiveDropdown(null);
-  };
+  }, []);
 
-  const handleAddToPlaylistSuccess = () => {
+  const handleToggleSelect = useCallback((songId: string) => {
+    const current = selectedIds;
+    if (current.includes(songId)) {
+      onSelectionChange(current.filter(id => id !== songId));
+    } else {
+      onSelectionChange([...current, songId]);
+    }
+  }, [selectedIds, onSelectionChange]);
+
+  const handleAddToPlaylistSuccess = useCallback(() => {
     if (onAddToPlaylist && selectedSongForPlaylist) {
       onAddToPlaylist(selectedSongForPlaylist);
     }
-  };
-
-  const handleToggleSelect = (songId: string) => {
-    if (selectedIds.includes(songId)) {
-      onSelectionChange(selectedIds.filter(id => id !== songId));
-    } else {
-      onSelectionChange([...selectedIds, songId]);
-    }
-  };
+  }, [onAddToPlaylist, selectedSongForPlaylist]);
 
   const handleToggleSelectAll = () => {
     if (selectedIds.length === songs.length) {
@@ -137,6 +141,9 @@ const SongList: React.FC<SongListProps> = ({
   const showBatchActionBar = (enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && selectedIds.length > 0;
 
   if (songs.length === 0) {
+    if (loading) {
+      return <SongListSkeleton showCheckbox={showCheckbox} showIndex={showIndex} />;
+    }
     return (
       <div
         style={{

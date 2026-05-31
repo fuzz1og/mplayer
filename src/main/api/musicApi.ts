@@ -169,10 +169,42 @@ export const musicApi = {
     return songs;
   },
 
+  async fetchSodaSharePage(trackId: string): Promise<{ audioUrl: string; name: string; artist: string; cover: string } | null> {
+    const shareUrl = `https://music.douyin.com/qishui/share/track?track_id=${trackId}`;
+    try {
+      const response = await axios.get(shareUrl, {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+        },
+        timeout: 15000,
+      });
+      const html = response.data;
+      const match = html.match(/_ROUTER_DATA\s*=\s*({[\s\S]*?});/);
+      if (!match) return null;
+      const data = JSON.parse(match[1]);
+      const audio = data?.loaderData?.track_page?.audioWithLyricsOption;
+      if (!audio?.url) return null;
+      return {
+        audioUrl: decodeURIComponent(audio.url),
+        name: audio.trackName || '',
+        artist: audio.artistName || '',
+        cover: audio.coverURL || '',
+      };
+    } catch {
+      return null;
+    }
+  },
+
   /**
-   * 获取汽水音乐音频 URL (调用 track_v2 API)
+   * 获取汽水音乐音频直链（用于下载）
+   * 优先用分享页 _ROUTER_DATA（无需Cookie），fallback 到 track_v2
    */
   async getSodaAudioUrl(trackId: string): Promise<string> {
+    const page = await this.fetchSodaSharePage(trackId);
+    if (page?.audioUrl) return page.audioUrl;
+
     const params = new URLSearchParams();
     params.set('track_id', trackId);
     params.set('media_type', 'track');
@@ -210,6 +242,40 @@ export const musicApi = {
       console.error('获取汽水音乐音频 URL 失败:', error);
       return '';
     }
+  },
+
+  /**
+   * 获取汽水音乐播放用 URL（下载到缓存，返回 file:// 路径，避免渲染器 CORS 问题）
+   */
+  async getSodaPlayableUrl(trackId: string): Promise<string> {
+    const remoteUrl = await this.getSodaAudioUrl(trackId);
+    if (!remoteUrl) return '';
+
+    const cached = getCacheManager().getAudioCache(`soda_${trackId}`);
+    if (cached) {
+      return 'file:///' + cached.replace(/\\/g, '/');
+    }
+
+    try {
+      const dl = await axios.get(remoteUrl, {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      });
+      const audioData = Buffer.from(dl.data);
+      getCacheManager().setAudioCache(`soda_${trackId}`, audioData);
+      const cachedFile = getCacheManager().getAudioCache(`soda_${trackId}`);
+      if (cachedFile) {
+        return 'file:///' + cachedFile.replace(/\\/g, '/');
+      }
+    } catch (dlErr) {
+      console.error('下载汽水音频到缓存失败，回退直链:', dlErr);
+    }
+    return remoteUrl;
   },
 
   /**
