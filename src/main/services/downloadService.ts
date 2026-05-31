@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import NodeID3 from 'node-id3';
+import MP3Tag from 'mp3tag.js';
 import { BrowserWindow } from 'electron';
 import { musicApi, getApiClient } from '../api/musicApi';
 import type { Song } from '@/shared/types/song';
@@ -45,25 +45,51 @@ class DownloadService {
 
   private async writeMetadata(song: Song, filePath: string): Promise<void> {
     try {
+      const buffer = fs.readFileSync(filePath);
+      const mp3tag = new MP3Tag(buffer);
+      mp3tag.read();
+      if (mp3tag.error) {
+        console.error('[DownloadService] 读取音频标签失败:', mp3tag.error);
+        return;
+      }
+
+      mp3tag.tags.title = song.name || '';
+      mp3tag.tags.artist = song.artist || '';
+      mp3tag.tags.album = song.album || '';
+
+      if (!mp3tag.tags.v2) {
+        (mp3tag.tags as unknown as Record<string, unknown>).v2 = {};
+      }
+
+      mp3tag.tags.v2!.TIT2 = song.name || '';
+      mp3tag.tags.v2!.TPE1 = song.artist || '';
+      mp3tag.tags.v2!.TALB = song.album || '';
+
       const coverInfo = await this.fetchCoverAsBuffer(song.cover);
-      const tags: Record<string, unknown> = {
-        title: song.name || '',
-        artist: song.artist || '',
-        album: song.album || '',
-        performerInfo: song.artist || '',
-      };
       if (coverInfo) {
-        tags.image = {
-          mime: coverInfo.mime,
-          type: { id: 3 },
+        mp3tag.tags.v2!.APIC = [{
+          format: coverInfo.mime,
+          type: 3,
           description: 'Cover',
-          imageBuffer: coverInfo.buffer,
-        };
+          data: Array.from(coverInfo.buffer),
+        }];
       }
-      const result = NodeID3.write(tags, filePath);
-      if (result instanceof Error) {
-        console.error('[DownloadService] 写入ID3标签失败:', result.message);
+
+      const isM4a = filePath.endsWith('.m4a');
+      mp3tag.save({
+        id3v2: { padding: isM4a ? 0 : 2048 },
+      });
+
+      if (mp3tag.error) {
+        console.error('[DownloadService] 写入ID3标签失败:', mp3tag.error);
+        return;
       }
+
+      const outBuf = mp3tag.buffer instanceof ArrayBuffer
+        ? Buffer.from(mp3tag.buffer)
+        : mp3tag.buffer;
+      fs.writeFileSync(filePath, outBuf);
+      console.log('[DownloadService] ID3元数据写入成功:', filePath);
     } catch (err) {
       console.error('[DownloadService] 写入ID3标签异常:', err);
     }
