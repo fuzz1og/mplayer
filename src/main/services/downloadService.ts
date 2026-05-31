@@ -160,17 +160,26 @@ class DownloadService {
     this.tasks.set(task.id, task);
 
     try {
-      if (!task.song.url) {
-        console.error('[DownloadService] 歌曲URL为空, song:', task.song);
-        throw new Error('歌曲URL为空');
-      }
+      let realUrl: string;
 
-      // 获取真实的音频 URL（处理重定向）
-      let realUrl = task.song.url;
-      try {
-        realUrl = await musicApi.getAudioUrl(task.song.url);
-      } catch (urlError) {
-        console.error('[DownloadService] 获取真实音频 URL 失败:', urlError);
+      if (task.song.sourceType === 'soda') {
+        try {
+          realUrl = await musicApi.getSodaAudioUrl(task.song.id);
+        } catch (urlError) {
+          console.error('[DownloadService] 获取汽水音乐音频 URL 失败:', urlError);
+          realUrl = '';
+        }
+      } else {
+        if (!task.song.url) {
+          console.error('[DownloadService] 歌曲URL为空, song:', task.song);
+          throw new Error('歌曲URL为空');
+        }
+        realUrl = task.song.url;
+        try {
+          realUrl = await musicApi.getAudioUrl(task.song.url);
+        } catch (urlError) {
+          console.error('[DownloadService] 获取真实音频 URL 失败:', urlError);
+        }
       }
 
       if (!realUrl) {

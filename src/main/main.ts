@@ -235,15 +235,17 @@ app.whenReady().then(async () => {
   // 歌词 & 音乐 API IPC
   registerIpcHandler('lyrics:get', (lrcUrl: string) => musicApi.getLyrics(lrcUrl));
   registerIpcHandler('musicApi:getAudioUrl', (audioUrl: string) => musicApi.getAudioUrl(audioUrl));
-  registerIpcHandler('musicApi:searchSongs', (keyword: string, page: number, sourceType: 'netease' | 'qq' | 'kugou') => musicApi.searchSongs(keyword, page, sourceType));
-  registerIpcHandler('musicApi:batchSearch', (keywords: string[], sourceType: 'netease' | 'qq' | 'kugou') => musicApi.batchSearch(keywords, sourceType));
+  registerIpcHandler('musicApi:getSodaAudioUrl', (trackId: string) => musicApi.getSodaAudioUrl(trackId));
+  registerIpcHandler('musicApi:parseSodaShareLink', (link: string) => musicApi.parseSodaShareLink(link));
+  registerIpcHandler('musicApi:searchSongs', (keyword: string, page: number, sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda') => musicApi.searchSongs(keyword, page, sourceType));
+  registerIpcHandler('musicApi:batchSearch', (keywords: string[], sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda') => musicApi.batchSearch(keywords, sourceType));
   registerIpcHandler('musicApi:getNeteaseHotlist', () => musicApi.getNeteaseHotlist());
   registerIpcHandler('musicApi:getNeteaseNewSongList', () => musicApi.getNeteaseNewSongList());
   registerIpcHandler('musicApi:getQQHotlist', () => musicApi.getQQHotlist());
   registerIpcHandler('musicApi:getQQNewSongList', () => musicApi.getQQNewSongList());
   registerIpcHandler('musicApi:getNeteasePlaylists', (cat: string, order: string, offset: number, limit: number) => musicApi.getNeteasePlaylists(cat, order, offset, limit));
   registerIpcHandler('musicApi:getNeteasePlaylistDetail', (id: number) => musicApi.getNeteasePlaylistDetail(id));
-  registerIpcHandler('musicApi:getPlaylistSongsFromThirdParty', (playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' = 'netease') => musicApi.getPlaylistSongsFromThirdParty(playlistUrl, sourceType));
+  registerIpcHandler('musicApi:getPlaylistSongsFromThirdParty', (playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease') => musicApi.getPlaylistSongsFromThirdParty(playlistUrl, sourceType));
   registerIpcHandler('musicApi:getNeteaseArtists', (cat: number, offset: number, limit: number, initial: number) => musicApi.getNeteaseArtists(cat, offset, limit, initial));
   registerIpcHandler('musicApi:getArtistSongs', (artistId: string, offset: number, limit: number, order: string) => musicApi.getNeteaseArtistSongs(artistId, offset, limit, order));
   registerIpcHandler('musicApi:searchArtists', (keyword: string, limit: number) => musicApi.searchNeteaseArtists(keyword, limit));

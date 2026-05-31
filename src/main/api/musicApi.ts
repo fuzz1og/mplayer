@@ -74,7 +74,7 @@ function normalizeUrl(url: string | undefined): string {
 /**
  * 处理歌曲数据，补全所有 URL 字段
  */
-function processSong(song: any, sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Song {
+function processSong(song: any, sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease'): Song {
   return {
     id: song.id || song.songid || '',
     name: song.name || song.songname || '',
@@ -99,8 +99,197 @@ interface HotlistSong {
 }
 
 export const musicApi = {
-async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Promise<Song[]> {
-    // 尝试从缓存获取
+  /**
+   * 构建汽水音乐封面 URL
+   */
+  sodaBuildImageUrl(urlCover: { urls?: string[]; uri?: string } | undefined): string {
+    if (!urlCover || !urlCover.urls || urlCover.urls.length === 0) return '';
+    let cover = (urlCover.urls[0] || '').trim();
+    const uri = (urlCover.uri || '').trim();
+    if (uri && !cover.includes(uri)) cover += uri;
+    if (cover && !cover.includes('~')) cover += '~c5_375x375.jpg';
+    return cover;
+  },
+
+  /**
+   * 搜索汽水音乐 (直接调用 api.qishui.com)
+   * 注：搜索结果不含 audio_url，播放时需通过 getSodaAudioUrl 获取
+   */
+  async searchSongsSoda(keyword: string, page: number = 1): Promise<Song[]> {
+    const cacheKey = `soda_search_${keyword}_${page}`;
+    const cached = cacheManager.getSearchCache(cacheKey, page, 'soda');
+    if (cached) return cached;
+
+    const params = new URLSearchParams();
+    params.set('q', keyword);
+    params.set('cursor', String((page - 1) * 20));
+    params.set('search_method', 'input');
+    params.set('aid', '386088');
+    params.set('device_platform', 'web');
+    params.set('channel', 'pc_web');
+
+    const apiURL = 'https://api.qishui.com/luna/pc/search/track?' + params.toString();
+    const response = await axios.get(apiURL, {
+      httpAgent: getHttpAgent(),
+      httpsAgent: getHttpsAgent(),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+      },
+      timeout: 15000,
+    });
+
+    const data = response.data;
+    const songs: Song[] = [];
+
+    if (data.result_groups && data.result_groups.length > 0) {
+      for (const item of data.result_groups[0].data || []) {
+        const track = item.entity?.track;
+        if (!track || !track.id) continue;
+
+        const artist = (track.artists || []).map((a: { name: string }) => a.name).join(' / ');
+        const cover = this.sodaBuildImageUrl(track.album?.url_cover);
+        const albumName = track.album?.name || '';
+        const duration = track.duration ? Math.floor(track.duration / 1000) : 0;
+
+        songs.push({
+          id: track.id,
+          name: track.name || '',
+          artist,
+          album: albumName,
+          url: '',
+          cover,
+          lrc: '',
+          duration,
+          sourceType: 'soda',
+        });
+      }
+    }
+
+    cacheManager.setSearchCache(cacheKey, page, 'soda', songs);
+    return songs;
+  },
+
+  /**
+   * 获取汽水音乐音频 URL (调用 track_v2 API)
+   */
+  async getSodaAudioUrl(trackId: string): Promise<string> {
+    const params = new URLSearchParams();
+    params.set('track_id', trackId);
+    params.set('media_type', 'track');
+    params.set('aid', '386088');
+    params.set('device_platform', 'web');
+    params.set('channel', 'pc_web');
+
+    const apiURL = 'https://api.qishui.com/luna/pc/track_v2?' + params.toString();
+    try {
+      const response = await axios.get(apiURL, {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+        },
+        timeout: 15000,
+      });
+
+      const data = response.data;
+      const track = data.track || data.track_info;
+      if (!track) return '';
+
+      const playInfoList = track.audio_info?.play_info_list || [];
+      if (playInfoList.length === 0) return '';
+
+      const best = playInfoList.reduce((a: any, b: any) =>
+        (a.size || 0) > (b.size || 0) ? a : b
+      );
+      const audioUrl = best.main_play_url || best.backup_play_url || '';
+      if (!audioUrl) return '';
+
+      const auth = best.play_auth || '';
+      return auth ? `${audioUrl}?play_auth=${encodeURIComponent(auth)}` : audioUrl;
+    } catch (error) {
+      console.error('获取汽水音乐音频 URL 失败:', error);
+      return '';
+    }
+  },
+
+  /**
+   * 解析汽水音乐分享链接，返回歌曲信息
+   * 支持格式：https://qishui.douyin.com/s/xxx 和 https://music.douyin.com/qishui/share/track?track_id=xxx
+   */
+  async parseSodaShareLink(link: string): Promise<Song | null> {
+    try {
+      let trackId = '';
+
+      // 直接从链接提取 track_id
+      const directMatch = link.match(/track_id=(\d+)/);
+      if (directMatch) {
+        trackId = directMatch[1];
+      } else {
+        // 短链接：发起请求跟随重定向获取最终 URL
+        const response = await axios.get(link, {
+          httpAgent: getHttpAgent(),
+          httpsAgent: getHttpsAgent(),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+          },
+          maxRedirects: 10,
+          timeout: 15000,
+        });
+        const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || link;
+        const urlMatch = finalUrl.match(/track_id=(\d+)/);
+        if (!urlMatch) return null;
+        trackId = urlMatch[1];
+      }
+
+      if (!trackId) return null;
+
+      // 用 track_v2 获取元数据
+      const params = new URLSearchParams();
+      params.set('track_id', trackId);
+      params.set('media_type', 'track');
+      params.set('aid', '386088');
+      params.set('device_platform', 'web');
+      params.set('channel', 'pc_web');
+
+      const v2Response = await axios.get('https://api.qishui.com/luna/pc/track_v2?' + params.toString(), {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+        },
+        timeout: 15000,
+      });
+
+      const track = v2Response.data.track || v2Response.data.track_info;
+      if (!track || !track.id) return null;
+
+      const artist = (track.artists || []).map((a: { name: string }) => a.name).join(' / ');
+      const cover = this.sodaBuildImageUrl(track.album?.url_cover);
+      const albumName = track.album?.name || '';
+      const duration = track.duration ? Math.floor(track.duration / 1000) : 0;
+
+      return {
+        id: track.id,
+        name: track.name || '',
+        artist,
+        album: albumName,
+        url: '',
+        cover,
+        lrc: '',
+        duration,
+        sourceType: 'soda',
+      };
+    } catch (error) {
+      console.error('解析汽水音乐分享链接失败:', error);
+      return null;
+    }
+  },
+
+  async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease'): Promise<Song[]> {
+    if (sourceType === 'soda') {
+      return this.searchSongsSoda(keyword, page);
+    }
+
     const cachedData = cacheManager.getSearchCache(keyword, page, sourceType);
     if (cachedData) {
       console.log('搜索结果从缓存获取');
@@ -118,7 +307,6 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
 
     const processedSongs = songs.map(song => processSong(song, sourceType));
 
-    // 缓存结果
     cacheManager.setSearchCache(keyword, page, sourceType, processedSongs);
     return processedSongs;
   },
@@ -202,7 +390,7 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
     return lyrics;
   },
 
-  async batchSearch(keywords: string[], sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Promise<Record<string, Song[]>> {
+  async batchSearch(keywords: string[], sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease'): Promise<Record<string, Song[]>> {
     // 尝试从缓存获取
     const cachedData = cacheManager.getBatchSearchCache(keywords, sourceType);
     if (cachedData) {
@@ -832,7 +1020,7 @@ async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq
     }
   },
 
-  async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' = 'netease'): Promise<Song[]> {
+  async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease'): Promise<Song[]> {
     try {
       // Note: unmeta.cn auto-detects the music source from the URL
       // sourceType is used for local search (batchSearch) after getting song names
