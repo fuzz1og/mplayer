@@ -1,11 +1,13 @@
 import axios, { type AxiosInstance } from 'axios';
-import type { Song, DiscoverPlaylist } from '@/shared/types/song';
+import type { Song, DiscoverPlaylist, SongGroup } from '@/shared/types/song';
 import { cacheManager } from './memoryCacheManager';
 import { getCacheManager } from '../cache/cacheManager';
 import { config } from '../config';
 import { getHttpAgent, getHttpsAgent } from '../proxy';
 
 import { beforeRequest, getAntiScrapeHeaders } from "./antiScrape";
+
+type SourceKey = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
 
 // 歌手头像缓存，供分类 tab 爬取时补图
 const artistPicCache = new Map<string, string>();
@@ -74,7 +76,7 @@ function normalizeUrl(url: string | undefined): string {
 /**
  * 处理歌曲数据，补全所有 URL 字段
  */
-function processSong(song: any, sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease'): Song {
+function processSong(song: any, sourceType: SourceKey = 'netease'): Song {
   return {
     id: song.id || song.songid || '',
     name: song.name || song.songname || '',
@@ -328,7 +330,7 @@ export const musicApi = {
     }
   },
 
-  async searchSongs(keyword: string, page: number = 1, sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease'): Promise<Song[]> {
+  async searchSongs(keyword: string, page: number = 1, sourceType: SourceKey = 'netease'): Promise<Song[]> {
     if (sourceType === 'soda') {
       return this.searchSongsSoda(keyword, page);
     }
@@ -433,7 +435,7 @@ export const musicApi = {
     return lyrics;
   },
 
-  async batchSearch(keywords: string[], sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease'): Promise<Record<string, Song[]>> {
+  async batchSearch(keywords: string[], sourceType: SourceKey = 'netease'): Promise<Record<string, Song[]>> {
     // 尝试从缓存获取
     const cachedData = cacheManager.getBatchSearchCache(keywords, sourceType);
     if (cachedData) {
@@ -1063,7 +1065,35 @@ export const musicApi = {
     }
   },
 
-  async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease'): Promise<Song[]> {
+  groupIntoSongGroups(allSongs: Song[]): SongGroup[] {
+    const map = new Map<string, SongGroup>();
+    for (const song of allSongs) {
+      const key = `${song.name.trim().toLowerCase()}|${song.artist.trim().toLowerCase()}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.songs.push(song);
+      } else {
+        map.set(key, { key, name: song.name, artist: song.artist, songs: [song] });
+      }
+    }
+    return Array.from(map.values());
+  },
+
+  async searchAllSources(keyword: string, page: number = 1): Promise<SongGroup[]> {
+    const sources: SourceKey[] = ['netease', 'qq', 'kugou', 'migu', 'kuwo', 'qianqian', 'soda'];
+    const results = await Promise.allSettled(
+      sources.map(src => this.searchSongs(keyword, page, src))
+    );
+    const allSongs: Song[] = [];
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        allSongs.push(...r.value);
+      }
+    }
+    return this.groupIntoSongGroups(allSongs);
+  },
+
+  async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: SourceKey = 'netease'): Promise<Song[]> {
     try {
       // Note: unmeta.cn auto-detects the music source from the URL
       // sourceType is used for local search (batchSearch) after getting song names
