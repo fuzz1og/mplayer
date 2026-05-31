@@ -18,7 +18,7 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
-              external: ['electron', 'music-metadata']
+              external: ['electron', 'music-metadata', 'node-id3', 'iconv-lite']
             }
           },
           define: {

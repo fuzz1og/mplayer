@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
+import NodeID3 from 'node-id3';
 import { BrowserWindow } from 'electron';
 import { musicApi, getApiClient } from '../api/musicApi';
 import type { Song } from '@/shared/types/song';
@@ -28,6 +29,45 @@ class DownloadService {
   private maxConcurrentDownloads: number = 3;
   private downloadPath: string = '';
   private callbacks: DownloadOptions = { downloadPath: '' };
+
+  private async fetchCoverAsBuffer(coverUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
+    if (!coverUrl) return null;
+    try {
+      const res = await axios.get(coverUrl, {
+        responseType: 'arraybuffer',
+        timeout: 10000,
+      });
+      return { buffer: Buffer.from(res.data), mime: res.headers['content-type'] || 'image/jpeg' };
+    } catch {
+      return null;
+    }
+  }
+
+  private async writeMetadata(song: Song, filePath: string): Promise<void> {
+    try {
+      const coverInfo = await this.fetchCoverAsBuffer(song.cover);
+      const tags: Record<string, unknown> = {
+        title: song.name || '',
+        artist: song.artist || '',
+        album: song.album || '',
+        performerInfo: song.artist || '',
+      };
+      if (coverInfo) {
+        tags.image = {
+          mime: coverInfo.mime,
+          type: { id: 3 },
+          description: 'Cover',
+          imageBuffer: coverInfo.buffer,
+        };
+      }
+      const result = NodeID3.write(tags, filePath);
+      if (result instanceof Error) {
+        console.error('[DownloadService] 写入ID3标签失败:', result.message);
+      }
+    } catch (err) {
+      console.error('[DownloadService] 写入ID3标签异常:', err);
+    }
+  }
 
   initialize(options: DownloadOptions): void {
     this.downloadPath = options.downloadPath;
@@ -256,6 +296,9 @@ class DownloadService {
           reject(error);
         });
       });
+
+      // 写入ID3元数据（title/artist/album/封面等）
+      await this.writeMetadata(task.song, filePath);
 
     } catch (error) {
       console.error('[DownloadService] 下载失败:', error);
