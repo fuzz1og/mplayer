@@ -1,4 +1,4 @@
-import { Song } from '@/shared/types/song';
+import { Song, SongGroup } from '@/shared/types/song';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { dedupeSongs } from '@/renderer/utils/songDedupe';
 import { IpcClient } from './IpcClient';
@@ -44,6 +44,35 @@ class SearchService {
       }
     } catch (error) {
       store.setError(error instanceof Error ? error.message : '搜索失败');
+    } finally {
+      store.setLoading(false);
+    }
+  }
+
+  async searchAll(keyword: string, page: number = 1): Promise<void> {
+    const store = useSearchStore.getState();
+
+    if (!keyword.trim()) {
+      store.reset();
+      return;
+    }
+
+    store.setLoading(true);
+    store.setError(null);
+
+    if (page === 1) {
+      store.setGroups([], true);
+      store.setCurrentKeyword(keyword);
+    }
+
+    try {
+      const groups = await IpcClient.invoke<SongGroup[]>('musicApi:searchAllSources', keyword, page);
+
+      store.setGroups(groups, page !== 1);
+      store.setPage(page);
+      store.setHasMore(groups.length > 0);
+    } catch (error) {
+      store.setError(error instanceof Error ? error.message : '全部搜索失败');
     } finally {
       store.setLoading(false);
     }
