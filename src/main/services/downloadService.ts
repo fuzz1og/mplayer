@@ -44,7 +44,6 @@ class DownloadService {
   }
 
   private async writeMetadata(song: Song, filePath: string): Promise<void> {
-    if (!filePath.endsWith('.mp3')) return;
     try {
       const coverInfo = await this.fetchCoverAsBuffer(song.cover);
       const tags: Record<string, unknown> = {
