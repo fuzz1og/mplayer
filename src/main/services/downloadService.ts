@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
+import MP3Tag from 'mp3tag.js';
 import { BrowserWindow } from 'electron';
 import { musicApi, getApiClient } from '../api/musicApi';
 import type { Song } from '@/shared/types/song';
@@ -28,6 +29,71 @@ class DownloadService {
   private maxConcurrentDownloads: number = 3;
   private downloadPath: string = '';
   private callbacks: DownloadOptions = { downloadPath: '' };
+
+  private async fetchCoverAsBuffer(coverUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
+    if (!coverUrl) return null;
+    try {
+      const res = await axios.get(coverUrl, {
+        responseType: 'arraybuffer',
+        timeout: 10000,
+      });
+      return { buffer: Buffer.from(res.data), mime: res.headers['content-type'] || 'image/jpeg' };
+    } catch {
+      return null;
+    }
+  }
+
+  private async writeMetadata(song: Song, filePath: string): Promise<void> {
+    try {
+      const buffer = fs.readFileSync(filePath);
+      const mp3tag = new MP3Tag(buffer);
+      mp3tag.read();
+      if (mp3tag.error) {
+        console.error('[DownloadService] 读取音频标签失败:', mp3tag.error);
+        return;
+      }
+
+      mp3tag.tags.title = song.name || '';
+      mp3tag.tags.artist = song.artist || '';
+      mp3tag.tags.album = song.album || '';
+
+      if (!mp3tag.tags.v2) {
+        (mp3tag.tags as unknown as Record<string, unknown>).v2 = {};
+      }
+
+      mp3tag.tags.v2!.TIT2 = song.name || '';
+      mp3tag.tags.v2!.TPE1 = song.artist || '';
+      mp3tag.tags.v2!.TALB = song.album || '';
+
+      const coverInfo = await this.fetchCoverAsBuffer(song.cover);
+      if (coverInfo) {
+        mp3tag.tags.v2!.APIC = [{
+          format: coverInfo.mime,
+          type: 3,
+          description: 'Cover',
+          data: Array.from(coverInfo.buffer),
+        }];
+      }
+
+      const isM4a = filePath.endsWith('.m4a');
+      mp3tag.save({
+        id3v2: { padding: isM4a ? 0 : 2048 },
+      });
+
+      if (mp3tag.error) {
+        console.error('[DownloadService] 写入ID3标签失败:', mp3tag.error);
+        return;
+      }
+
+      const outBuf = mp3tag.buffer instanceof ArrayBuffer
+        ? Buffer.from(mp3tag.buffer)
+        : mp3tag.buffer;
+      fs.writeFileSync(filePath, outBuf);
+      console.log('[DownloadService] ID3元数据写入成功:', filePath);
+    } catch (err) {
+      console.error('[DownloadService] 写入ID3标签异常:', err);
+    }
+  }
 
   initialize(options: DownloadOptions): void {
     this.downloadPath = options.downloadPath;
@@ -190,28 +256,6 @@ class DownloadService {
         throw new Error('无法获取音频 URL');
       }
 
-      const fileName = this.sanitizeFileName(`${task.song.name} - ${task.song.artist}.mp3`);
-      const filePath = path.join(this.downloadPath, fileName);
-
-      // 检查下载路径是否存在
-      if (!fs.existsSync(this.downloadPath)) {
-        try {
-          fs.mkdirSync(this.downloadPath, { recursive: true });
-        } catch (dirError) {
-          throw new Error(`无法创建下载目录: ${dirError instanceof Error ? dirError.message : '未知错误'}`);
-        }
-      }
-
-      // 检查文件路径长度限制
-      if (filePath.length > 240) { // 留一些余量给文件系统
-        const shortName = this.sanitizeFileName(`${task.song.name.substring(0, 50)} - ${task.song.artist.substring(0, 30)}.mp3`);
-        const newFilePath = path.join(this.downloadPath, shortName);
-        // 使用新路径
-        task.filePath = newFilePath;
-      } else {
-        task.filePath = filePath;
-      }
-
       const apiClient = getApiClient();
       const response = await axios({
         method: 'GET',
@@ -230,6 +274,34 @@ class DownloadService {
           }
         }
       });
+
+      const ct = response.headers['content-type'] || '';
+      let ext = '.mp3';
+      if (ct.includes('audio/mpeg')) ext = '.mp3';
+      else if (ct.includes('audio/mp4') || ct.includes('video/mp4')) ext = '.m4a';
+      else if (ct.includes('audio/flac')) ext = '.flac';
+      else if (ct.includes('audio/ogg')) ext = '.ogg';
+
+      const fileName = this.sanitizeFileName(`${task.song.name} - ${task.song.artist}${ext}`);
+      const filePath = path.join(this.downloadPath, fileName);
+
+      // 检查下载路径是否存在
+      if (!fs.existsSync(this.downloadPath)) {
+        try {
+          fs.mkdirSync(this.downloadPath, { recursive: true });
+        } catch (dirError) {
+          throw new Error(`无法创建下载目录: ${dirError instanceof Error ? dirError.message : '未知错误'}`);
+        }
+      }
+
+      // 检查文件路径长度限制
+      if (filePath.length > 240) {
+        const shortName = this.sanitizeFileName(`${task.song.name.substring(0, 50)} - ${task.song.artist.substring(0, 30)}${ext}`);
+        const newFilePath = path.join(this.downloadPath, shortName);
+        task.filePath = newFilePath;
+      } else {
+        task.filePath = filePath;
+      }
 
       const writer = fs.createWriteStream(filePath);
       response.data.pipe(writer);
@@ -256,6 +328,9 @@ class DownloadService {
           reject(error);
         });
       });
+
+      // 写入ID3元数据（title/artist/album/封面等）
+      await this.writeMetadata(task.song, filePath);
 
     } catch (error) {
       console.error('[DownloadService] 下载失败:', error);

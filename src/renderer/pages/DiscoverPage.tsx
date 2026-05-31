@@ -422,6 +422,7 @@ const DiscoverPage: React.FC = () => {
                 onPlay={handlePlaySong}
                 onToggleFavorite={handleToggleFavorite}
                 showCheckbox={true}
+                loading={loading}
                 enableBatchDownload={true}
                 onBatchDownload={downloadBatch}
                 onDownload={download}
