@@ -137,24 +137,31 @@ const App: React.FC = () => {
 
   const handleSearch = (value: string) => {
     console.log('[App] 搜索开始，关键词:', value);
-    searchService.search(value);
-
-    // 如果当前不在发现页，跳转到发现页显示搜索结果
-    // 注意：需要先导航再搜索，或者搜索后立即导航
+    const { sourceMode } = useSearchStore.getState();
+    if (sourceMode === 'all') {
+      searchService.searchAll(value);
+    } else {
+      searchService.search(value);
+    }
     if (location.pathname !== '/discover') {
       navigate('/discover');
     }
   };
 
   const handleSourceTypeChange = (newType: SourceKey) => {
-    if (newType === 'all') {
+    const isAll = newType === 'all';
+    if (isAll) {
       setSourceMode('all');
     } else {
       setSourceType(newType);
       setSourceMode('single');
     }
     if (currentKeyword) {
-      searchService.search(currentKeyword);
+      if (isAll) {
+        searchService.searchAll(currentKeyword);
+      } else {
+        searchService.search(currentKeyword);
+      }
     }
   };
 
