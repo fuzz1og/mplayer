@@ -44,6 +44,7 @@ class DownloadService {
   }
 
   private async writeMetadata(song: Song, filePath: string): Promise<void> {
+    if (!filePath.endsWith('.mp3')) return;
     try {
       const coverInfo = await this.fetchCoverAsBuffer(song.cover);
       const tags: Record<string, unknown> = {
@@ -230,28 +231,6 @@ class DownloadService {
         throw new Error('无法获取音频 URL');
       }
 
-      const fileName = this.sanitizeFileName(`${task.song.name} - ${task.song.artist}.mp3`);
-      const filePath = path.join(this.downloadPath, fileName);
-
-      // 检查下载路径是否存在
-      if (!fs.existsSync(this.downloadPath)) {
-        try {
-          fs.mkdirSync(this.downloadPath, { recursive: true });
-        } catch (dirError) {
-          throw new Error(`无法创建下载目录: ${dirError instanceof Error ? dirError.message : '未知错误'}`);
-        }
-      }
-
-      // 检查文件路径长度限制
-      if (filePath.length > 240) { // 留一些余量给文件系统
-        const shortName = this.sanitizeFileName(`${task.song.name.substring(0, 50)} - ${task.song.artist.substring(0, 30)}.mp3`);
-        const newFilePath = path.join(this.downloadPath, shortName);
-        // 使用新路径
-        task.filePath = newFilePath;
-      } else {
-        task.filePath = filePath;
-      }
-
       const apiClient = getApiClient();
       const response = await axios({
         method: 'GET',
@@ -270,6 +249,34 @@ class DownloadService {
           }
         }
       });
+
+      const ct = response.headers['content-type'] || '';
+      let ext = '.mp3';
+      if (ct.includes('audio/mpeg')) ext = '.mp3';
+      else if (ct.includes('audio/mp4') || ct.includes('video/mp4')) ext = '.m4a';
+      else if (ct.includes('audio/flac')) ext = '.flac';
+      else if (ct.includes('audio/ogg')) ext = '.ogg';
+
+      const fileName = this.sanitizeFileName(`${task.song.name} - ${task.song.artist}${ext}`);
+      const filePath = path.join(this.downloadPath, fileName);
+
+      // 检查下载路径是否存在
+      if (!fs.existsSync(this.downloadPath)) {
+        try {
+          fs.mkdirSync(this.downloadPath, { recursive: true });
+        } catch (dirError) {
+          throw new Error(`无法创建下载目录: ${dirError instanceof Error ? dirError.message : '未知错误'}`);
+        }
+      }
+
+      // 检查文件路径长度限制
+      if (filePath.length > 240) {
+        const shortName = this.sanitizeFileName(`${task.song.name.substring(0, 50)} - ${task.song.artist.substring(0, 30)}${ext}`);
+        const newFilePath = path.join(this.downloadPath, shortName);
+        task.filePath = newFilePath;
+      } else {
+        task.filePath = filePath;
+      }
 
       const writer = fs.createWriteStream(filePath);
       response.data.pipe(writer);
