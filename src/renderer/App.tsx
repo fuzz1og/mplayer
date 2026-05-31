@@ -9,7 +9,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownloadStore, type DownloadTask } from '@/renderer/store/downloadStore';
 import { useGlobalShortcuts } from '@/renderer/hooks/useGlobalShortcuts';
 import Sidebar from '@/renderer/components/Sidebar';
-import TopBar from '@/renderer/components/TopBar';
+import TopBar, { SourceKey } from '@/renderer/components/TopBar';
 import PlayerBar from '@/renderer/components/PlayerBar';
 import DownloadProgressModal from '@/renderer/components/DownloadProgressModal';
 import LyricsPage from '@/renderer/pages/LyricsPage';
@@ -25,7 +25,8 @@ const App: React.FC = () => {
     loading,
     currentKeyword,
     sourceType,
-    setSourceType
+    setSourceType,
+    setSourceMode
   } = useSearchStore();
 
   const { loadFavorites } = useFavoriteStore();
@@ -145,8 +146,13 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSourceTypeChange = (newType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda') => {
-    setSourceType(newType);
+  const handleSourceTypeChange = (newType: SourceKey) => {
+    if (newType === 'all') {
+      setSourceMode('all');
+    } else {
+      setSourceType(newType);
+      setSourceMode('single');
+    }
     if (currentKeyword) {
       searchService.search(currentKeyword);
     }
