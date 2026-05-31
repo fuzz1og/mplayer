@@ -8,14 +8,14 @@ export interface SearchState {
   hasMore: boolean;
   page: number;
   currentKeyword: string;
-  sourceType: 'netease' | 'qq' | 'kugou';
+  sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
   error: string | null;
   setSongs: (songs: Song[], replace?: boolean) => void;
   setLoading: (loading: boolean) => void;
   setHasMore: (hasMore: boolean) => void;
   setPage: (page: number) => void;
   setCurrentKeyword: (keyword: string) => void;
-  setSourceType: (type: 'netease' | 'qq' | 'kugou') => void;
+  setSourceType: (type: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda') => void;
   setError: (error: string | null) => void;
   reset: () => void;
 }
@@ -41,7 +41,7 @@ export const useSearchStore = create<SearchState>((set) => ({
   setHasMore: (hasMore: boolean) => set({ hasMore }),
   setPage: (page: number) => set({ page }),
   setCurrentKeyword: (keyword: string) => set({ currentKeyword: keyword }),
-  setSourceType: (type: 'netease' | 'qq' | 'kugou') => set({ sourceType: type }),
+  setSourceType: (type: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda') => set({ sourceType: type }),
   setError: (error: string | null) => set({ error }),
   reset: () => set({
     songs: [],
