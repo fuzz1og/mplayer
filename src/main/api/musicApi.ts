@@ -198,7 +198,7 @@ export const musicApi = {
   },
 
   /**
-   * 获取汽水音乐音频 URL
+   * 获取汽水音乐音频直链（用于下载）
    * 优先用分享页 _ROUTER_DATA（无需Cookie），fallback 到 track_v2
    */
   async getSodaAudioUrl(trackId: string): Promise<string> {
@@ -242,6 +242,40 @@ export const musicApi = {
       console.error('获取汽水音乐音频 URL 失败:', error);
       return '';
     }
+  },
+
+  /**
+   * 获取汽水音乐播放用 URL（下载到缓存，返回 file:// 路径，避免渲染器 CORS 问题）
+   */
+  async getSodaPlayableUrl(trackId: string): Promise<string> {
+    const remoteUrl = await this.getSodaAudioUrl(trackId);
+    if (!remoteUrl) return '';
+
+    const cached = getCacheManager().getAudioCache(`soda_${trackId}`);
+    if (cached) {
+      return 'file:///' + cached.replace(/\\/g, '/');
+    }
+
+    try {
+      const dl = await axios.get(remoteUrl, {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      });
+      const audioData = Buffer.from(dl.data);
+      getCacheManager().setAudioCache(`soda_${trackId}`, audioData);
+      const cachedFile = getCacheManager().getAudioCache(`soda_${trackId}`);
+      if (cachedFile) {
+        return 'file:///' + cachedFile.replace(/\\/g, '/');
+      }
+    } catch (dlErr) {
+      console.error('下载汽水音频到缓存失败，回退直链:', dlErr);
+    }
+    return remoteUrl;
   },
 
   /**
