@@ -22,6 +22,8 @@ interface SongRowProps {
   onToggleSelect?: (songId: string) => void;
   onToggleDropdown?: (songId: string, e: React.MouseEvent) => void;
   onCloseDropdown?: (e: React.MouseEvent) => void;
+  compact?: boolean;
+  style?: React.CSSProperties;
 }
 
 const SongRow: React.FC<SongRowProps> = ({
@@ -29,7 +31,7 @@ const SongRow: React.FC<SongRowProps> = ({
   showIndex, showCheckbox, isSelected, showRemoveFromPlaylist,
   activeDropdown, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onRemoveFromPlaylist, onToggleSelect,
-  onToggleDropdown, onCloseDropdown,
+  onToggleDropdown, onCloseDropdown, compact = false, style,
 }) => {
   const coverSrc = useCachedCover(song.cover);
 
@@ -39,11 +41,12 @@ const SongRow: React.FC<SongRowProps> = ({
       style={{
         display: 'flex',
         alignItems: 'center',
-        padding: '10px 16px',
+        padding: compact ? '8px 12px' : '10px 16px',
         borderRadius: '6px',
         cursor: 'pointer',
         transition: 'all 0.15s ease',
         backgroundColor: isCurrentSong ? 'rgba(116, 185, 255, 0.1)' : 'transparent',
+        ...style,
       }}
       onMouseEnter={(e) => {
         if (!isCurrentSong) {
@@ -116,9 +119,11 @@ const SongRow: React.FC<SongRowProps> = ({
         </div>
       </div>
       {/* Album */}
-      <div style={{ width: '120px', fontSize: '13px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {song.album}
-      </div>
+      {!compact && (
+        <div style={{ width: '120px', fontSize: '13px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {song.album}
+        </div>
+      )}
       {/* Actions */}
       <div style={{ width: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
         {onToggleFavorite && (
