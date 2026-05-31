@@ -3,7 +3,7 @@ import { playlistService } from '@/renderer/services/playlistService';
 import { findBestMatch } from '@/renderer/utils/songMatcher';
 import type { Song } from '@/shared/types/song';
 
-export type SourceType = 'netease' | 'qq' | 'kugou';
+export type SourceType = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
 
 export interface PlaylistUrlInfo {
   type: 'netease' | 'netease-short' | 'qq';

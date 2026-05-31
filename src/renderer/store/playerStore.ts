@@ -145,7 +145,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       let realUrl = song.url;
 
-      if (song.sourceType !== 'local') {
+      if (song.sourceType === 'soda') {
+        try {
+          realUrl = await IpcClient.invoke<string>('musicApi:getSodaAudioUrl', song.id);
+        } catch (urlError) {
+          console.error('获取汽水音乐音频 URL 失败:', urlError);
+        }
+      } else if (song.sourceType !== 'local') {
         try {
           realUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
         } catch (urlError) {

@@ -13,12 +13,20 @@ const SOURCE_LABELS: Record<SourceType, string> = {
   netease: '网易云',
   qq: 'QQ',
   kugou: '酷狗',
+  migu: '咪咕',
+  kuwo: '酷我',
+  qianqian: '千千',
+  soda: '汽水',
 };
 
 const SOURCE_COLORS: Record<SourceType, string> = {
   netease: '#FF6B6B',
   qq: '#49B8FF',
   kugou: '#FF8C00',
+  migu: '#C20C0C',
+  kuwo: '#FF6F00',
+  qianqian: '#00A1D6',
+  soda: '#1E90FF',
 };
 
 interface DraggableSourceProps {
@@ -80,14 +88,14 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
 
   // 文本导入状态
   const [text, setText] = useState('');
-  const [sourceOrder, setSourceOrder] = useState<SourceType[]>(['netease', 'qq', 'kugou']);
+  const [sourceOrder, setSourceOrder] = useState<SourceType[]>(['netease', 'qq', 'kugou', 'migu', 'kuwo', 'qianqian', 'soda']);
 
   // 链接导入状态
   const [linkUrl, setLinkUrl] = useState('');
   const [parsedLinkSongs, setParsedLinkSongs] = useState<Song[]>([]);
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
-  const [selectedSongIds, setSelectedSongIds] = useState<Set<string>>(new Set());
+  const [, setSelectedSongIds] = useState<Set<string>>(new Set());
 
   // 共享状态
   const [progress, setProgress] = useState<ProgressState | null>(null);
@@ -176,7 +184,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
       }
 
       setParsedLinkSongs(songs);
-      setSelectedSongIds(new Set(songs.map(song => song.id)));
+      setSelectedSongIds(new Set(songs.map((song: { id: string }) => song.id)));
     } catch (error) {
       console.error('[LinkImport] 解析链接失败:', error);
       setLinkError('解析链接失败，请检查网络连接');
@@ -226,7 +234,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     setLinkError(null);
     setProgress(null);
     setResult(null);
-    setSourceOrder(['netease', 'qq', 'kugou']);
+    setSourceOrder(['netease', 'qq', 'kugou', 'migu', 'kuwo', 'qianqian', 'soda']);
     onClose();
   };
 

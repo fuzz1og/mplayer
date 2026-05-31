@@ -76,7 +76,7 @@ class SearchService {
 
   async batchSearch(
     keywords: string[],
-    sourceType: 'netease' | 'qq' | 'kugou' = 'netease'
+    sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease'
   ): Promise<Record<string, Song[]>> {
     try {
       return await IpcClient.invoke<Record<string, Song[]>>('musicApi:batchSearch', keywords, sourceType);

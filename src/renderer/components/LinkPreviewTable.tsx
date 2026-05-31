@@ -12,6 +12,10 @@ const sourceColorMap: Record<string, string> = {
   netease: '#FF6B6B',
   qq: '#49B8FF',
   kugou: '#FF8C00',
+  migu: '#C20C0C',
+  kuwo: '#FF6F00',
+  qianqian: '#00A1D6',
+  soda: '#1E90FF',
   local: '#999999',
 };
 
@@ -19,6 +23,10 @@ const sourceLabelMap: Record<string, string> = {
   netease: '网易云',
   qq: 'QQ',
   kugou: '酷狗',
+  migu: '咪咕',
+  kuwo: '酷我',
+  qianqian: '千千',
+  soda: '汽水',
   local: '本地',
 };
 
