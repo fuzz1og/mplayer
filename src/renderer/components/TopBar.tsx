@@ -4,13 +4,14 @@ import { Search, X, User, ChevronDown } from 'lucide-react';
 interface TopBarProps {
   onSearch: (keyword: string) => void;
   searchLoading?: boolean;
-  sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
-  onSourceTypeChange: (type: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda') => void;
+  sourceType: SourceKey;
+  onSourceTypeChange: (type: SourceKey) => void;
 }
 
-type SourceKey = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
+export type SourceKey = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' | 'all';
 
 const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string; dot: string }> = {
+  all: { label: '全部', accent: '#6C5CE7', dot: '#6C5CE7' },
   netease: { label: '网易云', accent: '#E74C3C', dot: '#E74C3C' },
   qq: { label: 'QQ', accent: '#1DB954', dot: '#1DB954' },
   kugou: { label: '酷狗', accent: '#FF8C00', dot: '#FF8C00' },
