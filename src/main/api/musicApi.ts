@@ -214,69 +214,46 @@ export const musicApi = {
 
   /**
    * 解析汽水音乐分享链接，返回歌曲信息
+   * 原理：抓分享页 HTML，提取 _ROUTER_DATA JSON，获取歌曲信息 + 音频直链
    * 支持格式：https://qishui.douyin.com/s/xxx 和 https://music.douyin.com/qishui/share/track?track_id=xxx
    */
   async parseSodaShareLink(link: string): Promise<Song | null> {
     try {
-      let trackId = '';
-
-      // 直接从链接提取 track_id
-      const directMatch = link.match(/track_id=(\d+)/);
-      if (directMatch) {
-        trackId = directMatch[1];
-      } else {
-        // 短链接：发起请求跟随重定向获取最终 URL
-        const response = await axios.get(link, {
-          httpAgent: getHttpAgent(),
-          httpsAgent: getHttpsAgent(),
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
-          },
-          maxRedirects: 10,
-          timeout: 15000,
-        });
-        const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || link;
-        const urlMatch = finalUrl.match(/track_id=(\d+)/);
-        if (!urlMatch) return null;
-        trackId = urlMatch[1];
-      }
-
-      if (!trackId) return null;
-
-      // 用 track_v2 获取元数据
-      const params = new URLSearchParams();
-      params.set('track_id', trackId);
-      params.set('media_type', 'track');
-      params.set('aid', '386088');
-      params.set('device_platform', 'web');
-      params.set('channel', 'pc_web');
-
-      const v2Response = await axios.get('https://api.qishui.com/luna/pc/track_v2?' + params.toString(), {
+      const response = await axios.get(link, {
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
         },
+        maxRedirects: 10,
         timeout: 15000,
       });
 
-      const track = v2Response.data.track || v2Response.data.track_info;
-      if (!track || !track.id) return null;
+      const html = response.data;
+      const match = html.match(/_ROUTER_DATA\s*=\s*({[\s\S]*?});/);
+      if (!match) return null;
 
-      const artist = (track.artists || []).map((a: { name: string }) => a.name).join(' / ');
-      const cover = this.sodaBuildImageUrl(track.album?.url_cover);
-      const albumName = track.album?.name || '';
-      const duration = track.duration ? Math.floor(track.duration / 1000) : 0;
+      const data = JSON.parse(match[1]);
+      const audio = data?.loaderData?.track_page?.audioWithLyricsOption;
+      if (!audio || !audio.trackName) return null;
+
+      const trackInfo = audio.trackInfo || {};
+      const album = trackInfo.album || {};
+      const cover = audio.coverURL || '';
+      const audioUrl = audio.url ? decodeURIComponent(audio.url) : '';
+      const artistName = audio.artistName || '';
+      const albumName = album.name || '';
+      const trackId = data?.loaderData?.track_page?.track_id || trackInfo.id || '';
 
       return {
-        id: track.id,
-        name: track.name || '',
-        artist,
+        id: String(trackId),
+        name: audio.trackName || '',
+        artist: artistName,
         album: albumName,
-        url: '',
+        url: audioUrl,
         cover,
         lrc: '',
-        duration,
+        duration: trackInfo.duration ? Math.floor(trackInfo.duration / 1000) : 0,
         sourceType: 'soda',
       };
     } catch (error) {

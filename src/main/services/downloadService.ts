@@ -163,11 +163,15 @@ class DownloadService {
       let realUrl: string;
 
       if (task.song.sourceType === 'soda') {
-        try {
-          realUrl = await musicApi.getSodaAudioUrl(task.song.id);
-        } catch (urlError) {
-          console.error('[DownloadService] 获取汽水音乐音频 URL 失败:', urlError);
-          realUrl = '';
+        if (task.song.url) {
+          realUrl = task.song.url;
+        } else {
+          try {
+            realUrl = await musicApi.getSodaAudioUrl(task.song.id);
+          } catch (urlError) {
+            console.error('[DownloadService] 获取汽水音乐音频 URL 失败:', urlError);
+            realUrl = '';
+          }
         }
       } else {
         if (!task.song.url) {
