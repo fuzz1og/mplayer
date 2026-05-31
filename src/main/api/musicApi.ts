@@ -169,10 +169,42 @@ export const musicApi = {
     return songs;
   },
 
+  async fetchSodaSharePage(trackId: string): Promise<{ audioUrl: string; name: string; artist: string; cover: string } | null> {
+    const shareUrl = `https://music.douyin.com/qishui/share/track?track_id=${trackId}`;
+    try {
+      const response = await axios.get(shareUrl, {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+        },
+        timeout: 15000,
+      });
+      const html = response.data;
+      const match = html.match(/_ROUTER_DATA\s*=\s*({[\s\S]*?});/);
+      if (!match) return null;
+      const data = JSON.parse(match[1]);
+      const audio = data?.loaderData?.track_page?.audioWithLyricsOption;
+      if (!audio?.url) return null;
+      return {
+        audioUrl: decodeURIComponent(audio.url),
+        name: audio.trackName || '',
+        artist: audio.artistName || '',
+        cover: audio.coverURL || '',
+      };
+    } catch {
+      return null;
+    }
+  },
+
   /**
-   * 获取汽水音乐音频 URL (调用 track_v2 API)
+   * 获取汽水音乐音频 URL
+   * 优先用分享页 _ROUTER_DATA（无需Cookie），fallback 到 track_v2
    */
   async getSodaAudioUrl(trackId: string): Promise<string> {
+    const page = await this.fetchSodaSharePage(trackId);
+    if (page?.audioUrl) return page.audioUrl;
+
     const params = new URLSearchParams();
     params.set('track_id', trackId);
     params.set('media_type', 'track');
