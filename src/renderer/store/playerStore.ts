@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import { lyricsService } from '@/renderer/services/lyricsService';
 import type { Song } from '@/shared/types/song';
@@ -160,6 +161,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           realUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
         } catch (urlError) {
           console.error('获取真实音频 URL 失败:', urlError);
+          message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');
         }
       }
       // local 歌曲直接使用 song.url（file:// 路径），无需获取真实 URL
