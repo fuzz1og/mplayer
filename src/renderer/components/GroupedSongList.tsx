@@ -7,6 +7,7 @@ import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 
 type FlatItem =
   | { type: 'group'; group: SongGroup }
@@ -16,18 +17,24 @@ interface GroupedSongListProps {
   onPlay: (song: Song) => void;
   onAddToPlaylist: (song: Song) => void;
   onToggleFavorite: (song: Song) => void;
+  onDownload?: (song: Song) => void;
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
   loading?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 const GroupedSongList: React.FC<GroupedSongListProps> = ({
   onPlay,
   onAddToPlaylist,
   onToggleFavorite,
+  onDownload,
   selectedIds,
   onSelectionChange,
   loading = false,
+  hasMore = false,
+  onLoadMore,
 }) => {
   const groups = useSearchStore(s => s.groups);
   const expandedKeys = useSearchStore(s => s.expandedKeys);
@@ -42,18 +49,20 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const expandedSet = useMemo(() => new Set(expandedKeys), [expandedKeys]);
+
   const flatItems = useMemo(() => {
     const items: FlatItem[] = [];
     for (const group of groups) {
       items.push({ type: 'group', group });
-      if (expandedKeys.includes(group.key)) {
+      if (expandedSet.has(group.key)) {
         for (let i = 0; i < group.songs.length; i++) {
           items.push({ type: 'song', groupKey: group.key, song: group.songs[i], index: i });
         }
       }
     }
     return items;
-  }, [groups, expandedKeys]);
+  }, [groups, expandedSet]);
 
   const rowVirtualizer = useVirtualizer({
     count: flatItems.length,
@@ -64,6 +73,8 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
     },
     overscan: 5,
   });
+
+  useInfiniteScroll(scrollRef, { onLoadMore: onLoadMore ?? (() => {}), loading, hasMore });
 
   const handleToggleDropdown = useCallback((songId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -81,16 +92,11 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
     }
   }, [onPlay]);
 
-  const handleSongPlay = useCallback((song: Song) => {
-    onPlay(song);
-  }, [onPlay]);
-
   const handleToggleSelect = useCallback((songId: string) => {
-    if (selectedIds.includes(songId)) {
-      onSelectionChange(selectedIds.filter(id => id !== songId));
-    } else {
-      onSelectionChange([...selectedIds, songId]);
-    }
+    const next = selectedIds.includes(songId)
+      ? selectedIds.filter(id => id !== songId)
+      : [...selectedIds, songId];
+    onSelectionChange(next);
   }, [selectedIds, onSelectionChange]);
 
   const allExpanded = groups.length > 0 && expandedKeys.length === groups.length;
@@ -104,6 +110,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   }, [allExpanded, expandAll, collapseAll]);
 
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   if (loading && groups.length === 0) {
     return <SongListSkeleton showCheckbox={true} showIndex={false} />;
@@ -137,7 +144,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
                 <GroupHeaderRow
                   key={item.group.key}
                   group={item.group}
-                  isExpanded={expandedKeys.includes(item.group.key)}
+                  isExpanded={expandedSet.has(item.group.key)}
                   onToggle={() => toggleGroup(item.group.key)}
                   onPlayFirst={() => handlePlayFirst(item.group)}
                   style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: `${virtualItem.size}px`, transform: `translateY(${virtualItem.start}px)` }}
@@ -154,12 +161,12 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
                 isFavorite={favoriteSet.has(item.song.id)}
                 showIndex={false}
                 showCheckbox={true}
-                isSelected={selectedIds.includes(item.song.id)}
+                isSelected={selectedSet.has(item.song.id)}
                 showRemoveFromPlaylist={false}
                 activeDropdown={activeDropdown}
-                onPlay={handleSongPlay}
+                onPlay={onPlay}
                 onToggleFavorite={onToggleFavorite}
-                onDownload={undefined}
+                onDownload={onDownload}
                 onAddToPlaylist={onAddToPlaylist}
                 onToggleSelect={handleToggleSelect}
                 onToggleDropdown={handleToggleDropdown}
@@ -170,6 +177,16 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
             );
           })}
         </div>
+        {hasMore && loading && (
+          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+            加载中...
+          </div>
+        )}
+        {!hasMore && groups.length > 0 && (
+          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+            没有更多歌曲了
+          </div>
+        )}
       </div>
     </div>
   );

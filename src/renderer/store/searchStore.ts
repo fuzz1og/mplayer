@@ -3,7 +3,6 @@ import { dedupeSongs } from '@/renderer/utils/songDedupe';
 import type { Song, SongGroup } from '@/shared/types/song';
 
 type SingleSourceType = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
-type SourceMode = 'all' | 'single';
 export type SourceKey = SingleSourceType | 'all';
 
 export interface SearchState {
@@ -16,7 +15,6 @@ export interface SearchState {
   error: string | null;
   groups: SongGroup[];
   expandedKeys: string[];
-  sourceMode: SourceMode;
   setSongs: (songs: Song[], replace?: boolean) => void;
   setLoading: (loading: boolean) => void;
   setHasMore: (hasMore: boolean) => void;
@@ -25,7 +23,6 @@ export interface SearchState {
   setSourceType: (type: SourceKey) => void;
   setError: (error: string | null) => void;
   setGroups: (groups: SongGroup[], replace?: boolean) => void;
-  setSourceMode: (mode: SourceMode) => void;
   toggleGroup: (key: string) => void;
   expandAll: () => void;
   collapseAll: () => void;
@@ -42,7 +39,6 @@ export const useSearchStore = create<SearchState>((set) => ({
   error: null,
   groups: [],
   expandedKeys: [],
-  sourceMode: 'all',
 
   setSongs: (songs: Song[], replace: boolean = true) => set((state) => {
     if (replace) {
@@ -65,14 +61,16 @@ export const useSearchStore = create<SearchState>((set) => ({
     for (const g of groups) {
       const existing = map.get(g.key);
       if (existing) {
-        existing.songs.push(...g.songs);
+        const existingIds = new Set<string>();
+        for (const s of existing.songs) existingIds.add(s.id);
+        const newSongs = g.songs.filter(s => !existingIds.has(s.id));
+        existing.songs.push(...newSongs);
       } else {
         map.set(g.key, { ...g, songs: [...g.songs] });
       }
     }
     return { groups: Array.from(map.values()) };
   }),
-  setSourceMode: (mode) => set({ sourceMode: mode }),
   toggleGroup: (key) => set((state) => ({
     expandedKeys: state.expandedKeys.includes(key)
       ? state.expandedKeys.filter(k => k !== key)
@@ -85,7 +83,6 @@ export const useSearchStore = create<SearchState>((set) => ({
     groups: [],
     expandedKeys: [],
     sourceType: 'all',
-    sourceMode: 'all',
     loading: false,
     hasMore: true,
     page: 1,
