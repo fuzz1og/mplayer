@@ -26,7 +26,6 @@ const SkeletonRow: React.FC<{ showCheckbox: boolean; showIndex: boolean }> = ({ 
         <div className="skeleton-shimmer" style={{ width: '45%', height: '14px', borderRadius: '3px' }} />
         <div className="skeleton-shimmer" style={{ width: '30%', height: '12px', borderRadius: '3px' }} />
       </div>
-      <div className="skeleton-shimmer" style={{ width: '120px', height: '12px', borderRadius: '3px', display: 'none' }} />
     </div>
   </div>
 );

@@ -4,20 +4,19 @@ import type { SourceKey } from '@/renderer/store/searchStore';
 
 interface TopBarProps {
   onSearch: (keyword: string) => void;
-  searchLoading?: boolean;
   sourceType: SourceKey;
   onSourceTypeChange: (type: SourceKey) => void;
 }
 
-const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string; dot: string }> = {
-  all: { label: '全部', accent: '#6C5CE7', dot: '#6C5CE7' },
-  netease: { label: '网易云', accent: '#E74C3C', dot: '#E74C3C' },
-  qq: { label: 'QQ', accent: '#1DB954', dot: '#1DB954' },
-  kugou: { label: '酷狗', accent: '#FF8C00', dot: '#FF8C00' },
-  migu: { label: '咪咕', accent: '#C20C0C', dot: '#C20C0C' },
-  kuwo: { label: '酷我', accent: '#FF6F00', dot: '#FF6F00' },
-  qianqian: { label: '千千', accent: '#00A1D6', dot: '#00A1D6' },
-  soda: { label: '汽水', accent: '#1E90FF', dot: '#1E90FF' },
+const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
+  all: { label: '全部', accent: '#6C5CE7' },
+  netease: { label: '网易云', accent: '#E74C3C' },
+  qq: { label: 'QQ', accent: '#1DB954' },
+  kugou: { label: '酷狗', accent: '#FF8C00' },
+  migu: { label: '咪咕', accent: '#C20C0C' },
+  kuwo: { label: '酷我', accent: '#FF6F00' },
+  qianqian: { label: '千千', accent: '#00A1D6' },
+  soda: { label: '汽水', accent: '#1E90FF' },
 };
 
 const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange }) => {
@@ -122,7 +121,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                   width: '6px',
                   height: '6px',
                   borderRadius: '50%',
-                  backgroundColor: currentSource.dot,
+                  backgroundColor: currentSource.accent,
                   flexShrink: 0,
                 }}
               />
@@ -193,7 +192,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                         width: '6px',
                         height: '6px',
                         borderRadius: '50%',
-                        backgroundColor: config.dot,
+                        backgroundColor: config.accent,
                         flexShrink: 0,
                       }}
                     />

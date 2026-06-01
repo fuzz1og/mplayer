@@ -23,7 +23,6 @@ const App: React.FC = () => {
   const [showLyrics, setShowLyrics] = useState(false);
 
   const {
-    loading,
     currentKeyword,
     sourceType,
     setSourceType,
@@ -135,29 +134,28 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const handleSearch = (value: string) => {
-    console.log('[App] 搜索开始，关键词:', value);
+  const dispatchSearch = (keyword: string) => {
     const { sourceType } = useSearchStore.getState();
     if (sourceType === 'all') {
-      searchService.searchAll(value);
+      searchService.searchAll(keyword);
     } else {
-      searchService.search(value);
+      searchService.search(keyword);
     }
+  };
+
+  const handleSearch = (value: string) => {
+    console.log('[App] 搜索开始，关键词:', value);
+    dispatchSearch(value);
     if (location.pathname !== '/discover') {
       navigate('/discover');
     }
   };
 
   const handleSourceTypeChange = (newType: SourceKey) => {
-    const isAll = newType === 'all';
     useSearchStore.getState().reset();
-    setSourceType(isAll ? 'all' : newType);
+    setSourceType(newType);
     if (currentKeyword) {
-      if (isAll) {
-        searchService.searchAll(currentKeyword);
-      } else {
-        searchService.search(currentKeyword);
-      }
+      dispatchSearch(currentKeyword);
     }
   };
 
@@ -204,7 +202,6 @@ const App: React.FC = () => {
         {/* 顶部导航栏 */}
         <TopBar
           onSearch={handleSearch}
-          searchLoading={loading}
           sourceType={sourceType}
           onSourceTypeChange={handleSourceTypeChange}
         />
