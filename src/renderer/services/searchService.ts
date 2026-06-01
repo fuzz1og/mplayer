@@ -7,7 +7,16 @@ const DEBOUNCE_DELAY = 300;
 class SearchService {
   private debounceTimer: NodeJS.Timeout | null = null;
 
-  async search(keyword: string, page: number = 1): Promise<void> {
+  /**
+   * 通用搜索骨架，处理 loading/error/page 逻辑
+   */
+  private async doSearch<T>(
+    keyword: string,
+    page: number,
+    invoke: () => Promise<T>,
+    apply: (result: T, isFirstPage: boolean) => void,
+    errorMsg: string,
+  ): Promise<void> {
     const store = useSearchStore.getState();
 
     if (!keyword.trim()) {
@@ -19,69 +28,68 @@ class SearchService {
     store.setError(null);
 
     if (page === 1) {
-      store.setSongs([], true);
       store.setCurrentKeyword(keyword);
     }
 
     try {
-      const songs = await IpcClient.invoke<Song[]>('musicApi:searchSongs', keyword, page, store.sourceType);
-
-      if (page === 1) {
-        store.setSongs(songs, true);
-        store.setPage(page);
-        store.setHasMore(songs.length >= 10);
-      } else {
-        if (songs.length > 0) {
-          store.setSongs(songs, false);
-          store.setPage(page);
-        }
-        store.setHasMore(songs.length >= 10);
-      }
+      const result = await invoke();
+      apply(result, page === 1);
+      store.setPage(page);
     } catch (error) {
-      store.setError(error instanceof Error ? error.message : '搜索失败');
+      store.setError(error instanceof Error ? error.message : errorMsg);
     } finally {
       store.setLoading(false);
     }
   }
 
+  async search(keyword: string, page: number = 1): Promise<void> {
+    const store = useSearchStore.getState();
+    const sourceType = store.sourceType;
+
+    if (page === 1) {
+      store.setSongs([], true);
+    }
+
+    await this.doSearch<Song[]>(
+      keyword,
+      page,
+      () => IpcClient.invoke('musicApi:searchSongs', keyword, page, sourceType),
+      (songs, isFirstPage) => {
+        if (isFirstPage) {
+          store.setSongs(songs, true);
+        } else {
+          store.setSongs(songs, false);
+        }
+        store.setHasMore(songs.length >= 10);
+      },
+      '搜索失败',
+    );
+  }
+
   async searchAll(keyword: string, page: number = 1): Promise<void> {
     const store = useSearchStore.getState();
 
-    if (!keyword.trim()) {
-      store.reset();
-      return;
-    }
-
-    store.setLoading(true);
-    store.setError(null);
-
     if (page === 1) {
       store.setGroups([], true);
-      store.setCurrentKeyword(keyword);
     }
 
-    try {
-      const groups = await IpcClient.invoke<SongGroup[]>('musicApi:searchAllSources', keyword, page);
-
-      if (page === 1) {
-        store.setGroups(groups, true);
-        store.setPage(page);
-        store.setHasMore(groups.length > 0);
-      } else {
-        // 加载更多：检查是否有实际新增内容
-        const prevGroups = store.groups;
-        const prevTotalSongs = prevGroups.reduce((sum, g) => sum + g.songs.length, 0);
-        store.setGroups(groups, false);
-        const newTotalSongs = store.groups.reduce((sum, g) => sum + g.songs.length, 0);
-        const hasNewContent = newTotalSongs > prevTotalSongs;
-        store.setPage(page);
-        store.setHasMore(hasNewContent);
-      }
-    } catch (error) {
-      store.setError(error instanceof Error ? error.message : '全部搜索失败');
-    } finally {
-      store.setLoading(false);
-    }
+    await this.doSearch<SongGroup[]>(
+      keyword,
+      page,
+      () => IpcClient.invoke('musicApi:searchAllSources', keyword, page),
+      (groups, isFirstPage) => {
+        if (isFirstPage) {
+          store.setGroups(groups, true);
+          store.setHasMore(groups.length > 0);
+        } else {
+          const prevTotal = store.groups.reduce((sum, g) => sum + g.songs.length, 0);
+          store.setGroups(groups, false);
+          const newTotal = store.groups.reduce((sum, g) => sum + g.songs.length, 0);
+          store.setHasMore(newTotal > prevTotal);
+        }
+      },
+      '全部搜索失败',
+    );
   }
 
   debouncedSearch(keyword: string): void {
