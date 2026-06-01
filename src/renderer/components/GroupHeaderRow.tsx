@@ -13,8 +13,7 @@ interface GroupHeaderRowProps {
 const GroupHeaderRow: React.FC<GroupHeaderRowProps> = ({
   group, isExpanded, onToggle, onPlayFirst, style,
 }) => {
-  const sourceSet = new Set(group.songs.map(s => s.sourceType));
-  const sourceCount = sourceSet.size;
+  const sourceCount = new Set(group.songs.map(s => s.sourceType)).size;
 
   return (
     <div
