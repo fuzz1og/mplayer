@@ -103,6 +103,8 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
     }
   }, [allExpanded, expandAll, collapseAll]);
 
+  const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
+
   if (loading && groups.length === 0) {
     return <SongListSkeleton showCheckbox={true} showIndex={false} />;
   }
@@ -115,8 +117,6 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
       </div>
     );
   }
-
-  const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
