@@ -151,6 +151,7 @@ const App: React.FC = () => {
 
   const handleSourceTypeChange = (newType: SourceKey) => {
     const isAll = newType === 'all';
+    useSearchStore.getState().reset();
     setSourceType(isAll ? 'all' : newType);
     setSourceMode(isAll ? 'all' : 'single');
     if (currentKeyword) {

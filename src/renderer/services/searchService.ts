@@ -90,13 +90,17 @@ class SearchService {
 
   async loadMore(): Promise<void> {
     const store = useSearchStore.getState();
-    const { currentKeyword, page, hasMore, loading } = store;
+    const { currentKeyword, page, hasMore, loading, sourceMode } = store;
 
     if (!currentKeyword || !hasMore || loading) {
       return;
     }
 
-    await this.search(currentKeyword, page + 1);
+    if (sourceMode === 'all') {
+      await this.searchAll(currentKeyword, page + 1);
+    } else {
+      await this.search(currentKeyword, page + 1);
+    }
   }
 
   reset(): void {
