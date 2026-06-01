@@ -23,7 +23,6 @@ const App: React.FC = () => {
   const [showLyrics, setShowLyrics] = useState(false);
 
   const {
-    loading,
     currentKeyword,
     sourceType,
     setSourceType,
@@ -203,7 +202,6 @@ const App: React.FC = () => {
         {/* 顶部导航栏 */}
         <TopBar
           onSearch={handleSearch}
-          searchLoading={loading}
           sourceType={sourceType}
           onSourceTypeChange={handleSourceTypeChange}
         />
