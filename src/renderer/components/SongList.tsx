@@ -3,6 +3,20 @@ import { Download, Trash2, ListMusic } from 'lucide-react';
 import type { Song } from '@/shared/types/song';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import BatchAddToPlaylistModal from './BatchAddToPlaylistModal';
+
+const batchBtnStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  padding: '8px 16px',
+  color: 'white',
+  border: 'none',
+  borderRadius: '20px',
+  fontSize: '13px',
+  fontWeight: 500,
+  cursor: 'pointer',
+  transition: 'all 0.15s ease',
+};
 import SongRow from './SongRow';
 import SongListSkeleton from './SongListSkeleton';
 
@@ -74,7 +88,6 @@ const SongList: React.FC<SongListProps> = ({
 
   const handleToggleDropdown = useCallback((songId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    console.log('[SongList] 更多按钮被点击, songId:', songId);
     setActiveDropdown(prev => prev === songId ? null : songId);
   }, []);
 
@@ -85,7 +98,6 @@ const SongList: React.FC<SongListProps> = ({
 
   const handleAddToPlaylistClick = useCallback((song: Song, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    console.log('[SongList] 加入歌单按钮被点击, song:', song);
     setSelectedSongForPlaylist(song);
     setShowAddToPlaylistModal(true);
     setActiveDropdown(null);
@@ -193,26 +205,9 @@ const SongList: React.FC<SongListProps> = ({
               {enableBatchDownload && (
                 <button
                   onClick={handleBatchDownload}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 16px',
-                    backgroundColor: 'var(--primary-color)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '20px',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--primary-hover)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--primary-color)';
-                  }}
+                  style={{ ...batchBtnStyle, backgroundColor: 'var(--primary-color)' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--primary-hover)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--primary-color)'; }}
                 >
                   <Download size={16} />
                   批量下载
@@ -221,26 +216,9 @@ const SongList: React.FC<SongListProps> = ({
               {enableBatchAddToPlaylist && (
                 <button
                   onClick={handleBatchAddToPlaylist}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 16px',
-                    backgroundColor: '#4ECDC4',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '20px',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#45B7AA';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#4ECDC4';
-                  }}
+                  style={{ ...batchBtnStyle, backgroundColor: '#4ECDC4' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#45B7AA'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#4ECDC4'; }}
                 >
                   <ListMusic size={16} />
                   批量加入歌单
@@ -249,26 +227,9 @@ const SongList: React.FC<SongListProps> = ({
               {enableBatchDelete && (
                 <button
                   onClick={handleBatchDelete}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 16px',
-                    backgroundColor: '#FF6B6B',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '20px',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#EE5A6F';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#FF6B6B';
-                  }}
+                  style={{ ...batchBtnStyle, backgroundColor: '#FF6B6B' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EE5A6F'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FF6B6B'; }}
                 >
                   <Trash2 size={16} />
                   批量删除
