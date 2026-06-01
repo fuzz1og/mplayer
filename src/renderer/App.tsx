@@ -27,7 +27,6 @@ const App: React.FC = () => {
     currentKeyword,
     sourceType,
     setSourceType,
-    setSourceMode
   } = useSearchStore();
 
   const { loadFavorites } = useFavoriteStore();
@@ -138,8 +137,8 @@ const App: React.FC = () => {
 
   const handleSearch = (value: string) => {
     console.log('[App] 搜索开始，关键词:', value);
-    const { sourceMode } = useSearchStore.getState();
-    if (sourceMode === 'all') {
+    const { sourceType } = useSearchStore.getState();
+    if (sourceType === 'all') {
       searchService.searchAll(value);
     } else {
       searchService.search(value);
@@ -153,7 +152,6 @@ const App: React.FC = () => {
     const isAll = newType === 'all';
     useSearchStore.getState().reset();
     setSourceType(isAll ? 'all' : newType);
-    setSourceMode(isAll ? 'all' : 'single');
     if (currentKeyword) {
       if (isAll) {
         searchService.searchAll(currentKeyword);

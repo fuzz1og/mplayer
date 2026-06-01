@@ -6,6 +6,7 @@ import { searchService } from '@/renderer/services/searchService';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
+import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import SongList from '@/renderer/components/SongList';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
 import DiscoverPlaylistCard from '@/renderer/components/DiscoverPlaylistCard';
@@ -100,7 +101,8 @@ const DiscoverPage: React.FC = () => {
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
   const [artistLoading, setArtistLoading] = useState(false);
 
-  const { songs, groups, loading, currentKeyword, hasMore, error, sourceMode } = useSearchStore();
+  const { songs, groups, loading, currentKeyword, hasMore, error, sourceType } = useSearchStore();
+  const isAllMode = sourceType === 'all';
   const { currentSong, isPlaying, play } = usePlayerStore();
 
   const handleLoadMore = useCallback(() => {
@@ -109,22 +111,7 @@ const DiscoverPage: React.FC = () => {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // 滚动到底部时加载更多
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      if (loading || !hasMore) return;
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      if (scrollTop + clientHeight >= scrollHeight - 200) {
-        handleLoadMore();
-      }
-    };
-
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [loading, hasMore, handleLoadMore]);
+  useInfiniteScroll(scrollContainerRef, { onLoadMore: handleLoadMore, loading, hasMore });
 
   const { favoriteIds, toggleFavorite } = useFavoriteStore();
   const { download, downloadBatch } = useDownload();
@@ -414,15 +401,18 @@ const DiscoverPage: React.FC = () => {
           )}
 
           {activeTab === 'songs' && (
-            sourceMode === 'all' ? (
+            isAllMode ? (
               <>
                 <GroupedSongList
                   onPlay={handlePlaySong}
                   onAddToPlaylist={handleAddToPlaylist}
                   onToggleFavorite={handleToggleFavorite}
+                  onDownload={download}
                   selectedIds={[]}
                   onSelectionChange={() => {}}
                   loading={loading}
+                  hasMore={hasMore}
+                  onLoadMore={handleLoadMore}
                 />
               </>
             ) : (
