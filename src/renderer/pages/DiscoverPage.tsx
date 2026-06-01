@@ -100,7 +100,7 @@ const DiscoverPage: React.FC = () => {
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
   const [artistLoading, setArtistLoading] = useState(false);
 
-  const { songs, loading, currentKeyword, hasMore, error, sourceMode } = useSearchStore();
+  const { songs, groups, loading, currentKeyword, hasMore, error, sourceMode } = useSearchStore();
   const { currentSong, isPlaying, play } = usePlayerStore();
 
   const handleLoadMore = useCallback(() => {
@@ -286,7 +286,7 @@ const DiscoverPage: React.FC = () => {
   };
 
   // 如果有搜索关键词，显示搜索结果
-  if (currentKeyword && (songs.length > 0 || artistResults.length > 0 || loading || error)) {
+  if (currentKeyword && (songs.length > 0 || groups.length > 0 || artistResults.length > 0 || loading || error)) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 搜索结果导航栏 */}
