@@ -240,6 +240,7 @@ app.whenReady().then(async () => {
   registerIpcHandler('musicApi:parseSodaShareLink', (link: string) => musicApi.parseSodaShareLink(link));
   registerIpcHandler('musicApi:searchSongs', (keyword: string, page: number, sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda') => musicApi.searchSongs(keyword, page, sourceType));
   registerIpcHandler('musicApi:batchSearch', (keywords: string[], sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda') => musicApi.batchSearch(keywords, sourceType));
+  registerIpcHandler('musicApi:searchAllSources', (keyword: string, page: number) => musicApi.searchAllSources(keyword, page));
   registerIpcHandler('musicApi:getNeteaseHotlist', () => musicApi.getNeteaseHotlist());
   registerIpcHandler('musicApi:getNeteaseNewSongList', () => musicApi.getNeteaseNewSongList());
   registerIpcHandler('musicApi:getQQHotlist', () => musicApi.getQQHotlist());
