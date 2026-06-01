@@ -10,6 +10,7 @@ import { useDownloadStore, type DownloadTask } from '@/renderer/store/downloadSt
 import { useGlobalShortcuts } from '@/renderer/hooks/useGlobalShortcuts';
 import Sidebar from '@/renderer/components/Sidebar';
 import TopBar from '@/renderer/components/TopBar';
+import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
 import DownloadProgressModal from '@/renderer/components/DownloadProgressModal';
 import LyricsPage from '@/renderer/pages/LyricsPage';
@@ -25,7 +26,7 @@ const App: React.FC = () => {
     loading,
     currentKeyword,
     sourceType,
-    setSourceType
+    setSourceType,
   } = useSearchStore();
 
   const { loadFavorites } = useFavoriteStore();
@@ -136,19 +137,27 @@ const App: React.FC = () => {
 
   const handleSearch = (value: string) => {
     console.log('[App] 搜索开始，关键词:', value);
-    searchService.search(value);
-
-    // 如果当前不在发现页，跳转到发现页显示搜索结果
-    // 注意：需要先导航再搜索，或者搜索后立即导航
+    const { sourceType } = useSearchStore.getState();
+    if (sourceType === 'all') {
+      searchService.searchAll(value);
+    } else {
+      searchService.search(value);
+    }
     if (location.pathname !== '/discover') {
       navigate('/discover');
     }
   };
 
-  const handleSourceTypeChange = (newType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda') => {
-    setSourceType(newType);
+  const handleSourceTypeChange = (newType: SourceKey) => {
+    const isAll = newType === 'all';
+    useSearchStore.getState().reset();
+    setSourceType(isAll ? 'all' : newType);
     if (currentKeyword) {
-      searchService.search(currentKeyword);
+      if (isAll) {
+        searchService.searchAll(currentKeyword);
+      } else {
+        searchService.search(currentKeyword);
+      }
     }
   };
 

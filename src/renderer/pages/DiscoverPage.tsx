@@ -6,7 +6,9 @@ import { searchService } from '@/renderer/services/searchService';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
+import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import SongList from '@/renderer/components/SongList';
+import GroupedSongList from '@/renderer/components/GroupedSongList';
 import DiscoverPlaylistCard from '@/renderer/components/DiscoverPlaylistCard';
 import type { Song, Artist, DiscoverPlaylist } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
@@ -99,7 +101,8 @@ const DiscoverPage: React.FC = () => {
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
   const [artistLoading, setArtistLoading] = useState(false);
 
-  const { songs, loading, currentKeyword, hasMore, error } = useSearchStore();
+  const { songs, groups, loading, currentKeyword, hasMore, error, sourceType } = useSearchStore();
+  const isAllMode = sourceType === 'all';
   const { currentSong, isPlaying, play } = usePlayerStore();
 
   const handleLoadMore = useCallback(() => {
@@ -108,22 +111,7 @@ const DiscoverPage: React.FC = () => {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // 滚动到底部时加载更多
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      if (loading || !hasMore) return;
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      if (scrollTop + clientHeight >= scrollHeight - 200) {
-        handleLoadMore();
-      }
-    };
-
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [loading, hasMore, handleLoadMore]);
+  useInfiniteScroll(scrollContainerRef, { onLoadMore: handleLoadMore, loading, hasMore });
 
   const { favoriteIds, toggleFavorite } = useFavoriteStore();
   const { download, downloadBatch } = useDownload();
@@ -285,7 +273,7 @@ const DiscoverPage: React.FC = () => {
   };
 
   // 如果有搜索关键词，显示搜索结果
-  if (currentKeyword && (songs.length > 0 || artistResults.length > 0 || loading || error)) {
+  if (currentKeyword && (songs.length > 0 || groups.length > 0 || artistResults.length > 0 || loading || error)) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 搜索结果导航栏 */}
@@ -413,52 +401,68 @@ const DiscoverPage: React.FC = () => {
           )}
 
           {activeTab === 'songs' && (
-            <>
-              <SongList
-                songs={songs}
-                currentSongId={currentSong?.id}
-                isPlaying={isPlaying}
-                favoriteIds={favoriteIds}
-                onPlay={handlePlaySong}
-                onToggleFavorite={handleToggleFavorite}
-                showCheckbox={true}
-                loading={loading}
-                enableBatchDownload={true}
-                onBatchDownload={downloadBatch}
-                onDownload={download}
-                enableBatchAddToPlaylist={true}
-                onBatchAddToPlaylist={handleBatchAddToPlaylist}
-                onAddToPlaylist={handleAddToPlaylist}
-              />
+            isAllMode ? (
+              <>
+                <GroupedSongList
+                  onPlay={handlePlaySong}
+                  onAddToPlaylist={handleAddToPlaylist}
+                  onToggleFavorite={handleToggleFavorite}
+                  onDownload={download}
+                  selectedIds={[]}
+                  onSelectionChange={() => {}}
+                  loading={loading}
+                  hasMore={hasMore}
+                  onLoadMore={handleLoadMore}
+                />
+              </>
+            ) : (
+              <>
+                <SongList
+                  songs={songs}
+                  currentSongId={currentSong?.id}
+                  isPlaying={isPlaying}
+                  favoriteIds={favoriteIds}
+                  onPlay={handlePlaySong}
+                  onToggleFavorite={handleToggleFavorite}
+                  showCheckbox={true}
+                  loading={loading}
+                  enableBatchDownload={true}
+                  onBatchDownload={downloadBatch}
+                  onDownload={download}
+                  enableBatchAddToPlaylist={true}
+                  onBatchAddToPlaylist={handleBatchAddToPlaylist}
+                  onAddToPlaylist={handleAddToPlaylist}
+                />
 
-              {/* 滚动加载提示 */}
-              {hasMore && loading && (
-                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-                  加载中...
-                </div>
-              )}
-              {!hasMore && songs.length > 0 && (
-                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-                  没有更多歌曲了
-                </div>
-              )}
+                {/* 滚动加载提示 */}
+                {hasMore && loading && (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                    加载中...
+                  </div>
+                )}
+                {!hasMore && songs.length > 0 && (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                    没有更多歌曲了
+                  </div>
+                )}
 
-              {!loading && songs.length === 0 && (
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '60px 20px',
-                    color: 'var(--text-tertiary)',
-                  }}
-                >
-                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>&#128269;</div>
-                  <div>未找到相关歌曲</div>
-                </div>
-              )}
-            </>
+                {!loading && songs.length === 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '60px 20px',
+                      color: 'var(--text-tertiary)',
+                    }}
+                  >
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>&#128269;</div>
+                    <div>未找到相关歌曲</div>
+                  </div>
+                )}
+              </>
+            )
           )}
 
           {activeTab === 'artists' && (

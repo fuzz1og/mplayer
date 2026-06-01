@@ -77,6 +77,13 @@ export interface LocalSong {
   fileSize: number;
 }
 
+export interface SongGroup {
+  key: string;
+  name: string;
+  artist: string;
+  songs: Song[];
+}
+
 export interface DiscoverPlaylist {
   id: number;
   name: string;

@@ -1,7 +1,70 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic } from 'lucide-react';
 import type { Song } from '@/shared/types/song';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
+
+interface DropdownMenuProps {
+  song: Song;
+  triggerRef: React.RefObject<HTMLElement | null>;
+  showRemoveFromPlaylist: boolean;
+  onClose?: (e: React.MouseEvent) => void;
+  onAddToPlaylist?: (song: Song) => void;
+  onDownload?: (song: Song) => void;
+  onRemoveFromPlaylist?: (song: Song) => void;
+}
+
+const DropdownMenu: React.FC<DropdownMenuProps> = ({
+  song, triggerRef, showRemoveFromPlaylist, onClose, onAddToPlaylist, onDownload, onRemoveFromPlaylist,
+}) => {
+  const [pos, setPos] = useState({ top: 0, right: 0 });
+
+  useEffect(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+  }, [triggerRef]);
+
+  return createPortal(
+    <>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }} onClick={onClose} />
+      <div
+        style={{
+          position: 'fixed',
+          top: `${pos.top}px`,
+          right: `${pos.right}px`,
+          backgroundColor: 'var(--bg-color)',
+          border: '1px solid var(--divider-color)',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          zIndex: 10000,
+          minWidth: '120px',
+          padding: '4px',
+        }}
+      >
+        {showRemoveFromPlaylist && onRemoveFromPlaylist && (
+          <>
+            <button onClick={(e) => { e.stopPropagation(); onRemoveFromPlaylist(song); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '4px', fontSize: '13px', color: '#FF6B6B' }}>
+              <Trash2 size={14} /> 从歌单移除
+            </button>
+            <div style={{ height: '1px', backgroundColor: 'var(--divider-color)', margin: '4px 0' }} />
+          </>
+        )}
+        <button onClick={(e) => { e.stopPropagation(); onAddToPlaylist?.(song); }}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '4px', fontSize: '13px', color: 'var(--text-primary)' }}>
+          <ListMusic size={14} /> 加入歌单
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); onDownload?.(song); }}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '4px', fontSize: '13px', color: 'var(--text-primary)' }}>
+          <Download size={14} /> 下载
+        </button>
+      </div>
+    </>,
+    document.body
+  );
+};
 
 interface SongRowProps {
   song: Song;
@@ -22,6 +85,8 @@ interface SongRowProps {
   onToggleSelect?: (songId: string) => void;
   onToggleDropdown?: (songId: string, e: React.MouseEvent) => void;
   onCloseDropdown?: (e: React.MouseEvent) => void;
+  compact?: boolean;
+  style?: React.CSSProperties;
 }
 
 const SongRow: React.FC<SongRowProps> = ({
@@ -29,9 +94,10 @@ const SongRow: React.FC<SongRowProps> = ({
   showIndex, showCheckbox, isSelected, showRemoveFromPlaylist,
   activeDropdown, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onRemoveFromPlaylist, onToggleSelect,
-  onToggleDropdown, onCloseDropdown,
+  onToggleDropdown, onCloseDropdown, compact = false, style,
 }) => {
   const coverSrc = useCachedCover(song.cover);
+  const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div
@@ -39,11 +105,12 @@ const SongRow: React.FC<SongRowProps> = ({
       style={{
         display: 'flex',
         alignItems: 'center',
-        padding: '10px 16px',
+        padding: compact ? '8px 12px' : '10px 16px',
         borderRadius: '6px',
         cursor: 'pointer',
         transition: 'all 0.15s ease',
         backgroundColor: isCurrentSong ? 'rgba(116, 185, 255, 0.1)' : 'transparent',
+        ...style,
       }}
       onMouseEnter={(e) => {
         if (!isCurrentSong) {
@@ -116,9 +183,11 @@ const SongRow: React.FC<SongRowProps> = ({
         </div>
       </div>
       {/* Album */}
-      <div style={{ width: '120px', fontSize: '13px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {song.album}
-      </div>
+      {!compact && (
+        <div style={{ width: '120px', fontSize: '13px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {song.album}
+        </div>
+      )}
       {/* Actions */}
       <div style={{ width: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
         {onToggleFavorite && (
@@ -133,34 +202,22 @@ const SongRow: React.FC<SongRowProps> = ({
         )}
         <div style={{ position: 'relative' }}>
           <button
+            ref={dropdownTriggerRef}
             onClick={(e) => onToggleDropdown?.(song.id, e)}
             style={{ border: 'none', background: activeDropdown === song.id ? 'var(--hover-bg)' : 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: activeDropdown === song.id ? 'var(--text-secondary)' : 'var(--text-tertiary)', transition: 'all 0.15s ease' }}
           >
             <MoreHorizontal size={16} />
           </button>
           {activeDropdown === song.id && (
-            <>
-              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }} onClick={onCloseDropdown} />
-              <div style={{ position: 'absolute', top: '100%', right: '0', marginTop: '4px', backgroundColor: 'var(--bg-color)', border: '1px solid var(--divider-color)', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', zIndex: 100, minWidth: '120px', padding: '4px' }}>
-                {showRemoveFromPlaylist && onRemoveFromPlaylist && (
-                  <>
-                    <button onClick={(e) => { e.stopPropagation(); onRemoveFromPlaylist(song); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '4px', fontSize: '13px', color: '#FF6B6B' }}>
-                      <Trash2 size={14} /> 从歌单移除
-                    </button>
-                    <div style={{ height: '1px', backgroundColor: 'var(--divider-color)', margin: '4px 0' }} />
-                  </>
-                )}
-                <button onClick={(e) => { e.stopPropagation(); onAddToPlaylist?.(song); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '4px', fontSize: '13px', color: 'var(--text-primary)' }}>
-                  <ListMusic size={14} /> 加入歌单
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); onDownload?.(song); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '4px', fontSize: '13px', color: 'var(--text-primary)' }}>
-                  <Download size={14} /> 下载
-                </button>
-              </div>
-            </>
+            <DropdownMenu
+              song={song}
+              triggerRef={dropdownTriggerRef}
+              showRemoveFromPlaylist={showRemoveFromPlaylist}
+              onClose={onCloseDropdown}
+              onAddToPlaylist={onAddToPlaylist}
+              onDownload={onDownload}
+              onRemoveFromPlaylist={onRemoveFromPlaylist}
+            />
           )}
         </div>
       </div>
@@ -168,13 +225,4 @@ const SongRow: React.FC<SongRowProps> = ({
   );
 };
 
-export default React.memo(SongRow, (prev, next) => {
-  return (
-    prev.song.id === next.song.id &&
-    prev.isCurrentSong === next.isCurrentSong &&
-    prev.isPlaying === next.isPlaying &&
-    prev.isFavorite === next.isFavorite &&
-    prev.isSelected === next.isSelected &&
-    prev.activeDropdown === next.activeDropdown
-  );
-});
+export default React.memo(SongRow);

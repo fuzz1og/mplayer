@@ -1,6 +1,5 @@
-import { Song } from '@/shared/types/song';
+import { Song, SongGroup } from '@/shared/types/song';
 import { useSearchStore } from '@/renderer/store/searchStore';
-import { dedupeSongs } from '@/renderer/utils/songDedupe';
 import { IpcClient } from './IpcClient';
 
 const DEBOUNCE_DELAY = 300;
@@ -32,18 +31,54 @@ class SearchService {
         store.setPage(page);
         store.setHasMore(songs.length >= 10);
       } else {
-        const currentSongs = store.songs;
-        const uniqueSongs = dedupeSongs(currentSongs, songs);
-
-        if (uniqueSongs.length > 0) {
+        if (songs.length > 0) {
           store.setSongs(songs, false);
           store.setPage(page);
         }
-
         store.setHasMore(songs.length >= 10);
       }
     } catch (error) {
       store.setError(error instanceof Error ? error.message : '搜索失败');
+    } finally {
+      store.setLoading(false);
+    }
+  }
+
+  async searchAll(keyword: string, page: number = 1): Promise<void> {
+    const store = useSearchStore.getState();
+
+    if (!keyword.trim()) {
+      store.reset();
+      return;
+    }
+
+    store.setLoading(true);
+    store.setError(null);
+
+    if (page === 1) {
+      store.setGroups([], true);
+      store.setCurrentKeyword(keyword);
+    }
+
+    try {
+      const groups = await IpcClient.invoke<SongGroup[]>('musicApi:searchAllSources', keyword, page);
+
+      if (page === 1) {
+        store.setGroups(groups, true);
+        store.setPage(page);
+        store.setHasMore(groups.length > 0);
+      } else {
+        // 加载更多：检查是否有实际新增内容
+        const prevGroups = store.groups;
+        const prevTotalSongs = prevGroups.reduce((sum, g) => sum + g.songs.length, 0);
+        store.setGroups(groups, false);
+        const newTotalSongs = store.groups.reduce((sum, g) => sum + g.songs.length, 0);
+        const hasNewContent = newTotalSongs > prevTotalSongs;
+        store.setPage(page);
+        store.setHasMore(hasNewContent);
+      }
+    } catch (error) {
+      store.setError(error instanceof Error ? error.message : '全部搜索失败');
     } finally {
       store.setLoading(false);
     }
@@ -61,13 +96,17 @@ class SearchService {
 
   async loadMore(): Promise<void> {
     const store = useSearchStore.getState();
-    const { currentKeyword, page, hasMore, loading } = store;
+    const { currentKeyword, page, hasMore, loading, sourceType } = store;
 
     if (!currentKeyword || !hasMore || loading) {
       return;
     }
 
-    await this.search(currentKeyword, page + 1);
+    if (sourceType === 'all') {
+      await this.searchAll(currentKeyword, page + 1);
+    } else {
+      await this.search(currentKeyword, page + 1);
+    }
   }
 
   reset(): void {
