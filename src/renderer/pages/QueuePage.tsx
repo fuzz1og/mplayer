@@ -7,6 +7,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
+import SourceBadge from '@/renderer/components/SourceBadge';
 import { cacheService } from '@/renderer/services/cacheService';
 import type { Song } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
@@ -65,14 +66,7 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.artist}</span>
-            {song.sourceType === 'netease' && <span style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#FF6B6B', color: 'white', flexShrink: 0, lineHeight: '1.4' }}>网易云</span>}
-            {song.sourceType === 'qq' && <span style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#49B8FF', color: 'white', flexShrink: 0, lineHeight: '1.4' }}>QQ</span>}
-            {song.sourceType === 'kugou' && <span style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#FF8C00', color: 'white', flexShrink: 0, lineHeight: '1.4' }}>酷狗</span>}
-            {song.sourceType === 'migu' && <span style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#C20C0C', color: 'white', flexShrink: 0, lineHeight: '1.4' }}>咪咕</span>}
-            {song.sourceType === 'kuwo' && <span style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#FF6F00', color: 'white', flexShrink: 0, lineHeight: '1.4' }}>酷我</span>}
-            {song.sourceType === 'qianqian' && <span style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#00A1D6', color: 'white', flexShrink: 0, lineHeight: '1.4' }}>千千</span>}
-            {song.sourceType === 'soda' && <span style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#1E90FF', color: 'white', flexShrink: 0, lineHeight: '1.4' }}>汽水</span>}
-            {song.sourceType === 'local' && <span style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#00B894', color: 'white', flexShrink: 0, lineHeight: '1.4' }}>本地</span>}
+            <SourceBadge sourceType={song.sourceType} style={{ padding: '1px 4px', lineHeight: '1.4' }} />
           </div>
         </div>
       </div>
