@@ -4,6 +4,7 @@ import type { Song, SongGroup } from '@/shared/types/song';
 
 type SingleSourceType = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
 type SourceMode = 'all' | 'single';
+export type SourceKey = SingleSourceType | 'all';
 
 export interface SearchState {
   songs: Song[];
@@ -11,7 +12,7 @@ export interface SearchState {
   hasMore: boolean;
   page: number;
   currentKeyword: string;
-  sourceType: SingleSourceType;
+  sourceType: SourceKey;
   error: string | null;
   groups: SongGroup[];
   expandedKeys: string[];
@@ -21,7 +22,7 @@ export interface SearchState {
   setHasMore: (hasMore: boolean) => void;
   setPage: (page: number) => void;
   setCurrentKeyword: (keyword: string) => void;
-  setSourceType: (type: SingleSourceType) => void;
+  setSourceType: (type: SourceKey) => void;
   setError: (error: string | null) => void;
   setGroups: (groups: SongGroup[], replace?: boolean) => void;
   setSourceMode: (mode: SourceMode) => void;
@@ -37,7 +38,7 @@ export const useSearchStore = create<SearchState>((set) => ({
   hasMore: true,
   page: 1,
   currentKeyword: '',
-  sourceType: 'netease',
+  sourceType: 'all',
   error: null,
   groups: [],
   expandedKeys: [],
@@ -55,7 +56,7 @@ export const useSearchStore = create<SearchState>((set) => ({
   setHasMore: (hasMore: boolean) => set({ hasMore }),
   setPage: (page: number) => set({ page }),
   setCurrentKeyword: (keyword: string) => set({ currentKeyword: keyword }),
-  setSourceType: (type: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda') => set({ sourceType: type }),
+  setSourceType: (type: SourceKey) => set({ sourceType: type }),
   setError: (error: string | null) => set({ error }),
   setGroups: (groups, replace = true) => set((state) => {
     if (replace) return { groups };
@@ -83,6 +84,7 @@ export const useSearchStore = create<SearchState>((set) => ({
     songs: [],
     groups: [],
     expandedKeys: [],
+    sourceType: 'all',
     sourceMode: 'all',
     loading: false,
     hasMore: true,
