@@ -386,6 +386,12 @@ export const musicApi = {
       let finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || fullUrl;
       console.log('[MusicApi] getAudioUrl - 原始URL:', fullUrl, '最终URL:', finalUrl);
 
+      // 检查是否是错误响应（API 服务器返回 data:text/html 格式的错误消息）
+      if (finalUrl.startsWith('data:text/html')) {
+        const errorMsg = typeof response.data === 'string' ? response.data : '获取音频失败';
+        throw new Error(errorMsg);
+      }
+
       // 缓存URL结果
       cacheManager.setAudioUrlCache(fullUrl, finalUrl);
 
