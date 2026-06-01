@@ -164,7 +164,7 @@ const SongList: React.FC<SongListProps> = ({
   return (
     <div style={{ width: '100%' }}>
       {/* 批量操作按钮栏 */}
-      {(enableBatchDownload || enableBatchDelete) && (
+      {(enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (
         <div
           style={{
             height: showBatchActionBar ? '56px' : '0px',
