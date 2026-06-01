@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, X, User, ChevronDown } from 'lucide-react';
+import type { SourceKey } from '@/renderer/store/searchStore';
 
 interface TopBarProps {
   onSearch: (keyword: string) => void;
@@ -7,8 +8,6 @@ interface TopBarProps {
   sourceType: SourceKey;
   onSourceTypeChange: (type: SourceKey) => void;
 }
-
-export type SourceKey = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' | 'all';
 
 const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string; dot: string }> = {
   all: { label: '全部', accent: '#6C5CE7', dot: '#6C5CE7' },
