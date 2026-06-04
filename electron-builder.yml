@@ -1,6 +1,10 @@
 appId: com.mplayer.app
 productName: MPlayer
 forceCodeSigning: false
+publish:
+  provider: github
+  owner: t0nyst4
+  repo: mplayer
 files:
   - dist/**/*
   - dist-electron/**/*
@@ -25,3 +29,19 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+mac:
+  icon: resources/icon.png
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+linux:
+  icon: resources/icon.png
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64

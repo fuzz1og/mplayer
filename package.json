@@ -1,11 +1,12 @@
 {
   "name": "mplayer",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A minimalist desktop music player built with Electron, React and TypeScript",
+  "author": { "name": "t0nyst4", "email": "t0nyst4@users.noreply.github.com" },
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "prebuild": "taskkill /f /im MPlayer.exe 2>nul & node -e \"require('fs').rmSync('dist',{recursive:true,force:true});require('fs').rmSync('dist-electron',{recursive:true,force:true})\"",
+    "prebuild": "node scripts/prebuild.js",
     "build": "npm run prebuild && tsc && vite build",
     "preview": "vite preview",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
@@ -27,6 +28,7 @@
     "antd": "^5.12.0",
     "axios": "^1.6.2",
     "dotenv": "^17.4.2",
+    "electron-updater": "^6.8.3",
     "fs-extra": "^11.2.0",
     "howler": "^2.2.4",
     "http-proxy-agent": "^9.0.0",
