@@ -2,7 +2,7 @@
   "name": "mplayer",
   "version": "1.2.0",
   "description": "A minimalist desktop music player built with Electron, React and TypeScript",
-  "author": "t0nyst4",
+  "author": { "name": "t0nyst4", "email": "t0nyst4@users.noreply.github.com" },
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
