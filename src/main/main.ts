@@ -1,3 +1,4 @@
+import './env'; // 必须第一个 import，设置 ELECTRON_GET_USE_PROXY
 import { app, BrowserWindow, ipcMain, dialog, session, globalShortcut } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -16,6 +17,7 @@ if (!app.isPackaged) {
   }
 }
 
+
 import { getCacheManager } from './cache/cacheManager';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
@@ -24,6 +26,7 @@ import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
 import { updateApiClientAgents, applyElectronProxy, type ProxyConfig } from './proxy';
 import { registerIpcHandler, registerIpcHandlerSimple } from './ipc/registerHandler';
+import { updateService } from './services/updateService';
 import type { Song } from '@/shared/types/song';
 
 // IPC通信管理器
@@ -301,6 +304,13 @@ app.whenReady().then(async () => {
 
   // 应用 IPC
   registerIpcHandlerSimple('app:quit', () => app.exit());
+
+  // 更新 IPC
+  updateService.setMainWindow(mainWindow);
+  registerIpcHandler('update:check', () => updateService.checkForUpdates());
+  registerIpcHandler('update:download', () => updateService.downloadUpdate());
+  registerIpcHandlerSimple('update:install', () => updateService.quitAndInstall());
+  registerIpcHandlerSimple('update:getVersion', () => updateService.getVersion());
 
   // 下载 IPC（移自 downloadService）
   registerIpcHandlerSimple('download:start', (song: Song) => downloadService.addDownload(song));
