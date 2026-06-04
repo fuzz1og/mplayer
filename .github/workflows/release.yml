@@ -42,7 +42,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Publish release with auto-generated notes
-        run: gh release edit ${{ github.ref_name }} --draft=false --generate-notes
+      - name: Generate release notes and publish
+        run: |
+          TAG="${{ github.ref_name }}"
+          REPO="${{ github.repository }}"
+
+          # Generate release notes via GitHub API
+          NOTES=$(gh api repos/$REPO/releases/generate-notes -f tag_name="$TAG" --jq '.body')
+
+          # Update release: set notes + publish (draft=false)
+          gh api repos/$REPO/releases/tags/$TAG \
+            -X PATCH \
+            -f body="$NOTES" \
+            -F draft=false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
