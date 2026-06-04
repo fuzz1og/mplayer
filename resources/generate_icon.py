@@ -7,7 +7,7 @@ import struct
 import os
 import math
 
-SIZE = 256
+SIZE = 1024
 
 
 def draw_gradient_bg(size):
