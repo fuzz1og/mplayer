@@ -16,3 +16,6 @@ docs/
 .env
 .env.local
 .env.*.local
+
+.opencode/
+.superpowers/

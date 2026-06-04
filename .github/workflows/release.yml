@@ -1,0 +1,54 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            args: --win
+          - os: macos-latest
+            args: --mac
+          - os: ubuntu-latest
+            args: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - run: npx tsc && npx vite build
+
+      - run: npx electron-builder ${{ matrix.args }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate release notes and publish
+        run: |
+          TAG="${{ github.ref_name }}"
+          # Generate release notes and save to file
+          gh api repos/${{ github.repository }}/releases/generate-notes \
+            -f tag_name="$TAG" --jq '.body' > release-notes.md
+          # Publish release with generated notes
+          gh release edit "$TAG" --notes-file release-notes.md --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

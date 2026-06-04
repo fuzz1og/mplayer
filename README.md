@@ -1,117 +1,40 @@
-# MPlayer - 极简音乐播放器
+# MPlayer
 
-> **免责声明：本项目仅供个人学习 Electron、React、TypeScript 等技术使用，不包含任何商业目的。请在 24 小时内删除。所有音乐资源版权归原作者所有。**
+> 本项目仅供个人学习 Electron、React、TypeScript 等技术使用，不包含任何商业目的。所有音乐资源版权归原作者所有。
 
-一个基于 Electron + React + TypeScript 的桌面音乐播放器，支持网易云音乐和QQ音乐双源搜索与播放。
+基于 Electron + React + TypeScript 的桌面音乐播放器，支持多音乐源搜索与播放（网易云、QQ、酷狗、咪咕、酷我、千千、Soda）。
 
 ## 技术栈
 
-- **前端框架**: React 18 + TypeScript
-- **桌面框架**: Electron 28
-- **构建工具**: Vite 5
-- **状态管理**: Zustand
-- **UI 组件库**: Ant Design 5
-- **音频处理**: Howler.js
-- **HTTP 客户端**: Axios
-- **打包工具**: electron-builder
+- Electron 28 + React 18 + TypeScript + Vite 5
+- Zustand（状态管理）、Ant Design 5（UI）、Howler.js（音频）
+- @tanstack/react-virtual（虚拟滚动）、@dnd-kit（拖拽排序）
+- electron-builder（打包）、electron-updater（自动更新）
 
-## 已实现功能
+## 功能
 
-### 音乐播放
-
-- [x] 搜索播放（网易云/QQ音乐双源）
-- [x] 热歌榜展示（网易云热歌榜、QQ音乐热歌榜）
-- [x] 播放控制（播放/暂停/上一首/下一首）
-- [x] 四种播放模式（顺序/列表循环/单曲循环/随机）
-- [x] 音量控制与进度拖动
-- [x] 歌词显示（点击封面进入全屏歌词）
-- [x] 全局快捷键（MediaPlayPause / Ctrl+Alt+Space 等）
-- [x] 搜索结果标签页（歌曲/歌手分类筛选）
-- [x] 歌手页（分类浏览、A-Z 拼音筛选、歌手详情）
-
-### 收藏与历史
-
-- [x] 歌曲收藏（单首/批量）
-- [x] 播放历史（自动记录/查看/清空/删除单条）
-
-### 歌单管理
-
-- [x] 创建/删除歌单
-- [x] 添加/移除歌曲
-- [x] 拖拽排序（歌曲重排，立即保存）
-- [x] 多选批量操作（批量下载/批量移除）
-- [x] 歌单详情查看
-- [x] 歌单歌曲 URL 自动刷新（缓存有效 12 小时）
-- [x] 歌单导入（文本粘贴 + 链接导入，模糊匹配自动匹配歌曲）
-
-### 发现歌单
-
-- [x] 推荐歌单浏览（分类标签切换、无限滚动加载）
-- [x] 歌单详情查看与一键保存到本地
-
-### 缓存系统
-
-- [x] 歌曲 URL 缓存（12h TTL，歌单/收藏共用）
-- [x] 封面图片磁盘缓存（永久存储，防裂图）
-- [x] 音频文件缓存（最多保留最近 10 首）
-- [x] 缓存统计与一键清除
-
-### 系统托盘
-
-- [x] 托盘图标与右键菜单（播放/暂停/上一首/下一首/显示窗口/退出）
-- [x] 托盘通知显示当前歌曲信息
-
-### 播放队列
-
-- [x] 拖拽排序（@dnd-kit）
-- [x] 保存队列为歌单
-- [x] 清空队列
-
-### 下载功能
-
-- [x] 单曲/批量下载
-- [x] 下载进度弹窗
-
-### 本地音乐库
-
-- [x] 扫描本地文件夹，递归查找音频文件（mp3/flac/wav/ogg）
-- [x] 解析 ID3 标签（歌名/艺术家/专辑/封面/时长）
-- [x] 文件夹结构浏览（按文件夹筛选）
-- [x] 文件变更自动监视（新增/删除实时更新）
-- [x] 本地文件直接播放（file:// 协议）
-- [x] 元数据持久化（重启后保留扫描结果）
-
-### 设置
-
-- [x] 缓存管理（查看统计/一键清除）
-- [x] 下载目录设置（选择/重置）
-- [x] API 地址配置
-- [x] 网络代理设置（HTTP/HTTPS，支持认证，立即生效）
-- [x] 关于页面
+| 分类 | 功能 |
+|------|------|
+| 播放 | 多源搜索、热歌榜、播放控制、四种模式、音量/进度、歌词、全局快捷键 |
+| 搜索 | 歌曲/歌手标签页分类、歌手浏览（分类筛选）、歌手详情 |
+| 收藏 | 单首收藏 |
+| 历史 | 自动记录、查看/清空/删除 |
+| 歌单 | 创建/删除、拖拽排序、批量操作、URL 自动刷新、文本/链接导入 |
+| 发现 | 推荐歌单浏览（分类标签、无限滚动）、一键保存 |
+| 缓存 | URL（12h）、封面（永久磁盘）、音频（最近 10 首）、统计/清除 |
+| 托盘 | 右键菜单、歌曲信息提示 |
+| 队列 | 拖拽排序、保存为歌单 |
+| 下载 | 单曲/批量、进度弹窗 |
+| 本地音乐 | 文件夹扫描、ID3 解析、文件变更监视 |
+| 设置 | 缓存管理、下载目录、API 地址、网络代理、检查更新 |
 
 ## 快速开始
 
 ```bash
-# 安装依赖
 npm install
-
-# 开发模式
-npm run electron:dev
-
-# 生产构建
-npm run build
-
-# 打包应用（当前平台）
-npm run electron:build
-
-# 打包应用（指定平台）
-npm run electron:build:win   # Windows (.exe)
-npm run electron:build:mac   # macOS (.dmg)
-npm run electron:build:linux # Linux (.AppImage)
-
-# 代码检查
-npm run lint
-npm run typecheck
+npm run electron:dev    # 开发模式
+npm run build           # 生产构建
+npm run electron:build  # 打包应用（当前平台）
 ```
 
 ## 项目结构
@@ -119,104 +42,47 @@ npm run typecheck
 ```
 src/
 ├── main/                    # Electron 主进程
-│   ├── main.ts              # 入口文件
-│   ├── api/                 # API 调用 (音乐搜索/热榜)
-│   ├── cache/               # 缓存管理
-│   ├── proxy.ts             # 网络代理管理器（动态切换代理）
-│   ├── storage/             # 数据持久化
-│   ├── services/            # 核心服务 (下载、本地音乐扫描)
-│   └── tray/                # 系统托盘管理
+│   ├── main.ts              # 入口（窗口、IPC、快捷键、托盘）
+│   ├── api/                 # HTTP 客户端（搜索、热榜、反爬）
+│   ├── cache/               # 磁盘缓存
+│   ├── storage/             # 数据持久化（db.ts）
+│   ├── ipc/                 # IPC 注册工具
+│   ├── services/            # 下载、本地音乐扫描
+│   └── tray/                # 系统托盘
 ├── renderer/                # React 渲染进程
-│   ├── components/          # 公共组件 (PlayerBar/SongListVirtual等)
-│   ├── pages/               # 页面组件
-│   ├── store/               # Zustand 状态管理
-│   ├── services/            # 业务服务 (cacheService/coverCacheService等)
-│   ├── hooks/               # 自定义 Hooks (useGlobalShortcuts等)
-│   └── utils/               # 工具函数 (songDedupe等)
+│   ├── components/          # 组件（PlayerBar, SongList, Modals 等）
+│   ├── pages/               # 页面（Discover, Favorites, History, Playlists 等）
+│   ├── store/               # Zustand stores
+│   ├── services/            # 业务服务（audioPlayer, cacheService 等）
+│   ├── hooks/               # 自定义 Hooks
+│   └── utils/               # 工具函数（songDedupe, lyricsParser 等）
 └── shared/                  # 共享类型定义
 ```
 
-## 功能亮点
+## API 配置
 
-- 支持网易云和QQ音乐双音乐源搜索
-- 搜索结果歌曲/歌手标签页分类浏览
-- 多种播放模式满足不同场景
-- 批量操作支持（批量下载、批量收藏、批量删除）
-- 多级缓存机制提升性能（URL/封面/音频三缓存）
-- 封面磁盘缓存，网络图片永久存储避免裂图
-- 歌单歌曲 URL 自动刷新，过期链接无缝恢复
-- 虚拟滚动渲染（@tanstack/react-virtual），流畅处理大量歌曲列表
-- 拖拽排序（@dnd-kit），歌单与播放队列随心排列
-- 全局快捷键与系统托盘，后台播放便捷控制
-- 歌曲自动去重，避免重复添加
-- 歌单导入（文本粘贴 / 链接导入，模糊匹配）
-- 发现歌单浏览（分类标签、无限滚动）
-- 歌手浏览（分类、A-Z 拼音筛选、歌手详情页）
-- 中文界面，本土化体验
-- 本地音乐导入，离线也能播放
-- 网络代理支持（HTTP/HTTPS，可配置认证，立即生效）
-- 反爬机制（UA 轮换、速率限制、随机延迟、完整浏览器指纹）
+1. **用户配置**（优先级最高）：设置页 → API 设置 → 填入地址 → 保存重启
+2. **开发配置**：项目根目录创建 `.env.local`，填入 `MUSIC_API_URL=https://your-api-server.com/`
 
-## 使用服务
+需要兼容的接口：`/search`、`/toplist`、`/url`、`/lyric`、`/playlist/catlist`、`/playlist/hot`、`/playlist/detail`
 
-本项目的音乐 API 地址有两种配置方式：
+## 发布
 
-### 用户配置（优先级最高）
-
-1. 打开应用设置页面
-2. 在「API 设置」中填入音乐 API 服务地址
-3. 保存后重启应用生效
-
-### 开发配置
-
-开发者可在项目根目录创建 `.env.local` 文件：
+推送 tag 自动触发 GitHub Actions 构建：
 
 ```bash
-MUSIC_API_URL=https://your-api-server.com/
+git tag v1.x.x
+git push origin v1.x.x
 ```
 
-> 注意：`.env.local` 不会被提交到 Git，仅开发时使用。打包后会自动忽略。
-
-### API 要求
-
-API 服务需要兼容以下接口：
-
-- 音乐搜索：`GET /search?keyword=xxx&type=xxx`
-- 热歌榜：`GET /toplist?type=xxx`
-- 播放链接：`GET /url?id=xxx`
-- 歌词：`GET /lyric?id=xxx`
-- 歌单分类：`GET /playlist/catlist`
-- 推荐歌单：`GET /playlist/hot?cat=xxx&limit=xxx&offset=xxx`
-- 歌单详情：`GET /playlist/detail?id=xxx`
+三平台（Windows/macOS/Linux）产物自动上传到 GitHub Releases。应用内设置页可检查更新并一键安装。
 
 ## 免责声明
 
-> ⚠️ **重要声明**
+1. 个人学习项目，禁止商用
+2. 不存储任何音乐文件，资源来自第三方服务
+3. 内置反爬机制仅用于降低请求频率，不用于绕过安全措施
 
-1. **个人学习项目**: 本项目仅供个人学习 Electron、React、TypeScript 等技术使用，不包含任何商业目的。
+## 许可证
 
-2. **版权声明**: 本项目不存储任何音乐文件，所有音乐资源均来自第三方服务提供商。用户通过本软件播放的音乐内容版权归原始作者所有。
-
-3. **使用风险**: 使用本软件在线播放或下载音乐可能涉及版权问题，请确保您拥有相关音乐的使用权限或仅将其用于个人欣赏。
-
-4. **禁止商用**: 禁止使用本项目进行任何商业活动，包括但不限于捆绑推广、广告变现等。
-
-5. **第三方 API**: 本项目依赖第三方音乐 API 代理服务，非网易云音乐或 QQ 音乐官方提供。网易云音乐官方开放平台（`developer.music.163.com`）为 B2B 付费服务，不提供免费开发者接口。
-
-6. **反爬声明**: 本项目内置反爬机制（User-Agent 轮换、速率限制等），仅用于降低对第三方服务的请求频率，不用于绕过任何安全措施。
-
-## 开源许可证
-
-本项目采用 [MIT](LICENSE) 许可证开源。
-
-### 您可以
-
-- ✅ 复制、分发本项目
-- ✅ 用于个人学习目的
-- ✅ 修改本项目
-- ✅ 商业使用
-
-### 限制
-
-- 本软件按"原样"提供，不提供任何明示或暗示的保证
-- 使用本项目即表示您同意上述免责声明中的条款
+[MIT](LICENSE)
