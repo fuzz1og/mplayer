@@ -168,14 +168,16 @@ const LocalMusicPage: React.FC = () => {
         {/* 右侧歌曲列表 */}
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {displayedSongs.length > 0 ? (
-            <SongList
-              songs={displayedSongs}
-              currentSongId={currentSongId}
-              isPlaying={isPlaying}
-              onPlay={handlePlay}
-              showHeader={false}
-              emptyText="该文件夹下暂无歌曲"
-            />
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <SongList
+                songs={displayedSongs}
+                currentSongId={currentSongId}
+                isPlaying={isPlaying}
+                onPlay={handlePlay}
+                showHeader={false}
+                emptyText="该文件夹下暂无歌曲"
+              />
+            </div>
           ) : (
             <div
               style={{
