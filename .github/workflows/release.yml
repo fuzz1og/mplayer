@@ -45,15 +45,10 @@ jobs:
       - name: Generate release notes and publish
         run: |
           TAG="${{ github.ref_name }}"
-          REPO="${{ github.repository }}"
-
-          # Generate release notes via GitHub API
-          NOTES=$(gh api repos/$REPO/releases/generate-notes -f tag_name="$TAG" --jq '.body')
-
-          # Update release: set notes + publish (draft=false)
-          gh api repos/$REPO/releases/tags/$TAG \
-            -X PATCH \
-            -f body="$NOTES" \
-            -F draft=false
+          # Generate release notes and save to file
+          gh api repos/${{ github.repository }}/releases/generate-notes \
+            -f tag_name="$TAG" --jq '.body' > release-notes.md
+          # Publish release with generated notes
+          gh release edit "$TAG" --notes-file release-notes.md --draft=false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
