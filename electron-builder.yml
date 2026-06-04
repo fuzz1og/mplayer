@@ -5,6 +5,7 @@ publish:
   provider: github
   owner: t0nyst4
   repo: mplayer
+  releaseType: release
 files:
   - dist/**/*
   - dist-electron/**/*
