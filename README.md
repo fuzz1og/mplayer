@@ -9,7 +9,7 @@
 - Electron 28 + React 18 + TypeScript + Vite 5
 - Zustand（状态管理）、Ant Design 5（UI）、Howler.js（音频）
 - @tanstack/react-virtual（虚拟滚动）、@dnd-kit（拖拽排序）
-- electron-builder（打包）
+- electron-builder（打包）、electron-updater（自动更新）
 
 ## 功能
 
@@ -26,7 +26,7 @@
 | 队列 | 拖拽排序、保存为歌单 |
 | 下载 | 单曲/批量、进度弹窗 |
 | 本地音乐 | 文件夹扫描、ID3 解析、文件变更监视 |
-| 设置 | 缓存管理、下载目录、API 地址、网络代理 |
+| 设置 | 缓存管理、下载目录、API 地址、网络代理、检查更新 |
 
 ## 快速开始
 
@@ -65,6 +65,17 @@ src/
 2. **开发配置**：项目根目录创建 `.env.local`，填入 `MUSIC_API_URL=https://your-api-server.com/`
 
 需要兼容的接口：`/search`、`/toplist`、`/url`、`/lyric`、`/playlist/catlist`、`/playlist/hot`、`/playlist/detail`
+
+## 发布
+
+推送 tag 自动触发 GitHub Actions 构建：
+
+```bash
+git tag v1.x.x
+git push origin v1.x.x
+```
+
+三平台（Windows/macOS/Linux）产物自动上传到 GitHub Releases。应用内设置页可检查更新并一键安装。
 
 ## 免责声明
 

@@ -37,6 +37,7 @@ Electron, `contextIsolation: false`, `nodeIntegration: true`. Renderer imports m
 | `ipc/registerHandler.ts` | `registerIpcHandler` / `registerIpcHandlerSimple` helpers |
 | `services/downloadService.ts` | Download with progress callbacks |
 | `services/localMusicService.ts` | Local music library scanning |
+| `services/updateService.ts` | Auto-update via electron-updater |
 | `tray/trayManager.ts` | System tray + context menu |
 
 ### Renderer Process (`src/renderer/`)
@@ -89,8 +90,11 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 **App** — renderer→main:
 `quit`
 
+**Update** — renderer→main:
+`check`, `download`, `install`, `getVersion`
+
 **Push (main→renderer)**:
-`download:progress`, `download:complete`, `download:error`, `localMusic:folderChanged`, `tray:action`, `shortcut:action`
+`download:progress`, `download:complete`, `download:error`, `localMusic:folderChanged`, `tray:action`, `shortcut:action`, `update:status`
 
 **One-way (renderer→main, `on`)**:
 `tray:state`, `tray:action`
