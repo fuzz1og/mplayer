@@ -30,7 +30,7 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run build
+      - run: npx tsc && npx vite build
 
       - run: npx electron-builder ${{ matrix.args }} --publish always
         env:

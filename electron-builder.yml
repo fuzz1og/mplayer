@@ -30,7 +30,7 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
 mac:
-  icon: resources/icon.ico
+  icon: resources/icon.png
   target:
     - target: dmg
       arch:
