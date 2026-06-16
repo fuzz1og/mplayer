@@ -636,8 +636,7 @@ export class CacheManager {
         const report = await this.checkCacheConsistency();
         if (report.inconsistencies.length > 0) {
           console.warn('发现缓存不一致，开始自动修复...', report);
-          const repairResult = await this.repairCacheConsistency();
-          console.log('缓存修复完成:', repairResult);
+          await this.repairCacheConsistency();
         }
       } catch (error) {
         console.error('定期缓存检查失败:', error);

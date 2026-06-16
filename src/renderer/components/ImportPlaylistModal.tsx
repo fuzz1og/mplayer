@@ -164,12 +164,9 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     setLinkError(null);
 
     try {
-      console.log('[LinkImport] 开始解析链接:', linkUrl);
-      console.log('[LinkImport] URL 解析结果:', urlInfo);
       const { ipcRenderer } = window.require('electron');
       const sourceType = urlInfo.type === 'qq' ? 'qq' : 'netease';
       const result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', linkUrl, sourceType);
-      console.log('[LinkImport] IPC 调用结果:', result);
 
       if (!result.success) {
         setLinkError(result.error || '解析链接失败');

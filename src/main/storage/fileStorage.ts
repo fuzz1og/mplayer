@@ -99,7 +99,6 @@ class FileStorage {
         if (fs.existsSync(backupPath)) {
           try {
             fs.renameSync(backupPath, this.dataFile);
-            console.log('数据恢复成功');
           } catch (restoreError) {
             console.error('数据恢复失败:', restoreError);
           }
@@ -289,9 +288,6 @@ class FileStorage {
       throw new Error(`歌单不存在: ${playlistId}`);
     }
 
-    // 获取歌单中的所有歌曲用于日志记录
-    const playlistSongs = this.data.playlistSongs.filter(ps => ps.playlistId === playlistId);
-
     // 执行事务性删除
     try {
       // 1. 删除歌单歌曲关联
@@ -302,8 +298,6 @@ class FileStorage {
 
       // 3. 保存更改
       await this.saveData();
-
-      console.log(`歌单删除完成: ${playlist.name}, 删除 ${playlistSongs.length} 首歌曲`);
     } catch (error) {
       console.error('删除歌单失败:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
