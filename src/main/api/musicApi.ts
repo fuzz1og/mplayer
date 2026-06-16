@@ -337,7 +337,6 @@ export const musicApi = {
 
     const cachedData = cacheManager.getSearchCache(keyword, page, sourceType);
     if (cachedData) {
-      console.log('搜索结果从缓存获取');
       return cachedData;
     }
 
@@ -363,14 +362,12 @@ export const musicApi = {
     // 优先检查音频文件缓存
     const cachedAudioFile = getCacheManager().getAudioCache(fullUrl);
     if (cachedAudioFile) {
-      console.log('音频文件从缓存获取:', cachedAudioFile);
       return 'file://' + cachedAudioFile;
     }
 
     // 尝试从URL缓存获取
     const cachedData = cacheManager.getAudioUrlCache(fullUrl);
     if (cachedData) {
-      console.log('音频URL从缓存获取');
       // 也尝试缓存音频文件
       this.downloadAndCacheAudio(cachedData);
       return cachedData;
@@ -384,7 +381,6 @@ export const musicApi = {
 
       // 获取最终重定向后的 URL
       let finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || fullUrl;
-      console.log('[MusicApi] getAudioUrl - 原始URL:', fullUrl, '最终URL:', finalUrl);
 
       // 检查是否是错误响应（API 服务器返回 data:text/html 格式的错误消息）
       if (finalUrl.startsWith('data:text/html')) {
@@ -407,7 +403,6 @@ export const musicApi = {
 
   async downloadAndCacheAudio(audioUrl: string): Promise<void> {
     try {
-      console.log('开始下载并缓存音频:', audioUrl);
       const response = await apiClient.get(audioUrl, {
         responseType: 'arraybuffer',
         timeout: 120000,
@@ -416,7 +411,6 @@ export const musicApi = {
       const audioData = Buffer.from(response.data);
       getCacheManager().setAudioCache(audioUrl, audioData);
       getCacheManager().trimAudioCache(10);
-      console.log('音频缓存成功, 大小:', audioData.length);
     } catch (error) {
       console.error('音频缓存失败:', error);
     }
@@ -429,7 +423,6 @@ export const musicApi = {
     // 尝试从缓存获取
     const cachedData = cacheManager.getLyricsCache(fullUrl);
     if (cachedData) {
-      console.log('歌词从缓存获取');
       return cachedData;
     }
 
@@ -445,7 +438,6 @@ export const musicApi = {
     // 尝试从缓存获取
     const cachedData = cacheManager.getBatchSearchCache(keywords, sourceType);
     if (cachedData) {
-      console.log('批量搜索结果从缓存获取');
       return cachedData;
     }
 
@@ -469,8 +461,6 @@ export const musicApi = {
         batchResult[keyword] = [];
       }
     });
-
-    console.log(`批量搜索完成: ${keywords.length} 个关键词，${Object.values(batchResult).filter(songs => songs.length > 0).length} 个成功`);
 
     // 缓存结果
     cacheManager.setBatchSearchCache(keywords, sourceType, batchResult);
@@ -651,12 +641,10 @@ export const musicApi = {
     // 尝试从缓存获取
     const cachedData = cacheManager.getHotlistCache('netease');
     if (cachedData && cachedData.length > 0) {
-      console.log('网易热榜从缓存获取');
       return cachedData;
     }
 
     try {
-      console.log('[MusicApi] getNeteaseHotlist 开始请求');
       // 使用 API 获取新歌榜数据（ID: 3778678 是热歌榜）
       const neteaseClient = axios.create({
         httpAgent: getHttpAgent(),
@@ -694,8 +682,6 @@ export const musicApi = {
         };
       });
 
-      console.log('网易热榜数据获取成功，共', hotlistSongs.length, '首歌曲');
-
       // 缓存结果
       cacheManager.setHotlistCache('netease', hotlistSongs);
       return hotlistSongs;
@@ -709,12 +695,10 @@ export const musicApi = {
     // 尝试从缓存获取
     const cachedData = cacheManager.getHotlistCache('netease_new');
     if (cachedData && cachedData.length > 0) {
-      console.log('网易新歌榜从缓存获取');
       return cachedData;
     }
 
     try {
-      console.log('[MusicApi] getNeteaseNewSongList 开始请求');
       const neteaseClient = axios.create({
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
@@ -751,8 +735,6 @@ export const musicApi = {
         };
       });
 
-      console.log('网易新歌榜数据获取成功，共', hotlistSongs.length, '首歌曲');
-
       // 缓存结果
       cacheManager.setHotlistCache('netease_new', hotlistSongs);
       return hotlistSongs;
@@ -766,7 +748,6 @@ export const musicApi = {
     // 尝试从缓存获取
     const cachedData = cacheManager.getHotlistCache('qq');
     if (cachedData && cachedData.length > 0) {
-      console.log('QQ热榜从缓存获取');
       return cachedData;
     }
 
@@ -804,7 +785,6 @@ export const musicApi = {
 
       // 如果今天的数据还没有更新（code不为0），尝试使用昨天的日期
       if (jsonData.code !== 0) {
-        console.log('[MusicApi] QQ热榜今天数据未更新，尝试使用昨天日期');
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().split('T')[0];
@@ -868,7 +848,6 @@ export const musicApi = {
     // 尝试从缓存获取
     const cachedData = cacheManager.getHotlistCache('qq_new');
     if (cachedData && cachedData.length > 0) {
-      console.log('QQ新歌榜从缓存获取');
       return cachedData;
     }
 
@@ -906,7 +885,6 @@ export const musicApi = {
 
       // 如果今天的数据还没有更新（code不为0），尝试使用昨天的日期
       if (jsonData.code !== 0) {
-        console.log('[MusicApi] QQ新歌榜今天数据未更新，尝试使用昨天日期');
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().split('T')[0];
@@ -975,7 +953,6 @@ export const musicApi = {
     const cacheKey = `playlistList_${cat}_${order}_${offset}_${limit}`;
     const cached = cacheManager.get<any>(cacheKey);
     if (cached) {
-      console.log('[MusicApi] getNeteasePlaylists 从缓存获取');
       return cached;
     }
 
@@ -1015,7 +992,6 @@ export const musicApi = {
       };
 
       cacheManager.set(cacheKey, result, 5 * 60 * 1000);
-      console.log('[MusicApi] getNeteasePlaylists 获取成功，数量:', playlists.length);
       return result;
     } catch (error) {
       console.error('[MusicApi] getNeteasePlaylists 失败:', error);
@@ -1027,7 +1003,6 @@ export const musicApi = {
     const cacheKey = `playlistDetail_${id}`;
     const cached = cacheManager.get<any>(cacheKey);
     if (cached) {
-      console.log('[MusicApi] getNeteasePlaylistDetail 从缓存获取');
       return cached;
     }
 
@@ -1063,7 +1038,6 @@ export const musicApi = {
       };
 
       cacheManager.set(cacheKey, playlist, 5 * 60 * 1000);
-      console.log('[MusicApi] getNeteasePlaylistDetail 获取成功:', playlist.name);
       return playlist;
     } catch (error) {
       console.error('[MusicApi] getNeteasePlaylistDetail 失败:', error);
@@ -1128,7 +1102,6 @@ export const musicApi = {
       }
 
       const keywords = data.data.songs.map((s: string) => s.trim()).filter(Boolean);
-      console.log('[MusicApi] getPlaylistSongsFromThirdParty 歌曲数量:', keywords.length, '源:', sourceType);
 
       const searchResults = await this.batchSearch(keywords, sourceType);
 
@@ -1140,7 +1113,6 @@ export const musicApi = {
         }
       }
 
-      console.log('[MusicApi] getPlaylistSongsFromThirdParty 搜索成功，数量:', songs.length);
       return songs;
     } catch (error) {
       console.error('[MusicApi] getPlaylistSongsFromThirdParty 失败:', error);

@@ -259,12 +259,12 @@ const DiscoverPage: React.FC = () => {
     }
   };
 
-  const handleAddToPlaylist = (song: Song) => {
-    console.log('添加到歌单:', song.name);
+  const handleAddToPlaylist = (_song: Song) => {
+    // 添加到歌单
   };
 
-  const handleBatchAddToPlaylist = (selectedSongs: Song[]) => {
-    console.log('批量添加到歌单:', selectedSongs.length);
+  const handleBatchAddToPlaylist = (_selectedSongs: Song[]) => {
+    // 批量添加到歌单
   };
 
   const handleBackFromSearch = () => {

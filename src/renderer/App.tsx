@@ -55,8 +55,8 @@ const App: React.FC = () => {
 
   // IPC通信机制
   useEffect(() => {
-    const handleIPCResponse = (_event: any, { requestId, success, data, error }: any) => {
-      console.log('收到IPC响应:', { requestId, success, data, error });
+    const handleIPCResponse = (_event: any, _payload: any) => {
+      // IPC response handler
     };
 
     const handleIPCError = (_event: any, error: string) => {
@@ -144,7 +144,6 @@ const App: React.FC = () => {
   };
 
   const handleSearch = (value: string) => {
-    console.log('[App] 搜索开始，关键词:', value);
     dispatchSearch(value);
     if (location.pathname !== '/discover') {
       navigate('/discover');
