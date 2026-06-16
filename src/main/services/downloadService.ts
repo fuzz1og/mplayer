@@ -37,7 +37,7 @@ class DownloadService {
         responseType: 'arraybuffer',
         timeout: 10000,
       });
-      return { buffer: Buffer.from(res.data), mime: res.headers['content-type'] || 'image/jpeg' };
+      return { buffer: Buffer.from(res.data), mime: String(res.headers['content-type'] || 'image/jpeg') };
     } catch {
       return null;
     }
@@ -275,7 +275,7 @@ class DownloadService {
         }
       });
 
-      const ct = response.headers['content-type'] || '';
+      const ct = String(response.headers['content-type'] || '');
       let ext = '.mp3';
       if (ct.includes('audio/mpeg')) ext = '.mp3';
       else if (ct.includes('audio/mp4') || ct.includes('video/mp4')) ext = '.m4a';
