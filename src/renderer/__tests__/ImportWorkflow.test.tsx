@@ -120,7 +120,7 @@ describe('ImportWorkflow Integration', () => {
     expect(importSongs).toHaveBeenCalledWith(
       1,
       'Test Song - Artist',
-      ['netease', 'qq', 'kugou'],
+      ['netease', 'qq', 'kugou', 'migu', 'kuwo', 'qianqian', 'soda'],
       [],
       expect.any(Function)
     );
