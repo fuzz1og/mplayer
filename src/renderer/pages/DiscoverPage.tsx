@@ -11,6 +11,7 @@ import SongList from '@/renderer/components/SongList';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
 import HotlistCard from '@/renderer/components/HotlistCard';
 import DiscoverPlaylistCard from '@/renderer/components/DiscoverPlaylistCard';
+import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import type { Song, Artist, DiscoverPlaylist } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
 
@@ -101,6 +102,10 @@ const DiscoverPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'songs' | 'artists'>('songs');
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
   const [artistLoading, setArtistLoading] = useState(false);
+
+  // 加入歌单弹窗状态
+  const [batchModalVisible, setBatchModalVisible] = useState(false);
+  const [selectedSongsForPlaylist, setSelectedSongsForPlaylist] = useState<Song[]>([]);
 
   const { songs, groups, loading, currentKeyword, hasMore, error, sourceType } = useSearchStore();
   const isAllMode = sourceType === 'all';
@@ -259,12 +264,14 @@ const DiscoverPage: React.FC = () => {
     }
   };
 
-  const handleAddToPlaylist = (_song: Song) => {
-    // 添加到歌单
+  const handleAddToPlaylist = (song: Song) => {
+    setSelectedSongsForPlaylist([song]);
+    setBatchModalVisible(true);
   };
 
-  const handleBatchAddToPlaylist = (_selectedSongs: Song[]) => {
-    // 批量添加到歌单
+  const handleBatchAddToPlaylist = (selectedSongs: Song[]) => {
+    setSelectedSongsForPlaylist(selectedSongs);
+    setBatchModalVisible(true);
   };
 
   const handleBackFromSearch = () => {
@@ -275,6 +282,10 @@ const DiscoverPage: React.FC = () => {
 
   // 如果有搜索关键词，显示搜索结果
   if (currentKeyword && (songs.length > 0 || groups.length > 0 || artistResults.length > 0 || loading || error)) {
+    // 搜索结果时自动展开所有分组
+    if (groups.length > 0 && useSearchStore.getState().expandedKeys.length === 0) {
+      useSearchStore.getState().expandAll();
+    }
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 搜索结果导航栏 */}
@@ -701,6 +712,16 @@ const DiscoverPage: React.FC = () => {
           `}</style>
         </div>
       </section>
+
+      {/* 批量加入歌单弹窗 */}
+      <BatchAddToPlaylistModal
+        isVisible={batchModalVisible}
+        songs={selectedSongsForPlaylist}
+        onClose={() => {
+          setBatchModalVisible(false);
+          setSelectedSongsForPlaylist([]);
+        }}
+      />
     </div>
   );
 };
