@@ -12,56 +12,16 @@ type SourceKey = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'so
 // 歌手头像缓存，供分类 tab 爬取时补图
 const artistPicCache = new Map<string, string>();
 
-// 模块级单例 axios 客户端
-let _neteaseClient: AxiosInstance | null = null;
-let _qqClient: AxiosInstance | null = null;
-let _sodaClient: AxiosInstance | null = null;
-
-function getNeteaseClient(): AxiosInstance {
-  if (!_neteaseClient) {
-    _neteaseClient = axios.create({
-      httpAgent: getHttpAgent(),
-      httpsAgent: getHttpsAgent(),
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://music.163.com/',
-      },
-      timeout: 30000
-    });
-  }
-  return _neteaseClient;
-}
-
-function getQQClient(): AxiosInstance {
-  if (!_qqClient) {
-    _qqClient = axios.create({
-      httpAgent: getHttpAgent(),
-      httpsAgent: getHttpsAgent(),
-      headers: {
-        ...getAntiScrapeHeaders('https://y.qq.com/'),
-        'Accept': '*/*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Referer': 'https://y.qq.com/',
-      },
-      timeout: 30000,
-      responseType: 'text'
-    });
-  }
-  return _qqClient;
-}
-
-function getSodaClient(): AxiosInstance {
-  if (!_sodaClient) {
-    _sodaClient = axios.create({
-      httpAgent: getHttpAgent(),
-      httpsAgent: getHttpsAgent(),
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
-      },
-      timeout: 15000,
-    });
-  }
-  return _sodaClient;
+function createNeteaseClient() {
+  return axios.create({
+    httpAgent: getHttpAgent(),
+    httpsAgent: getHttpsAgent(),
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Referer': 'https://music.163.com/',
+    },
+    timeout: 30000
+  });
 }
 const apiClient = axios.create({
   get baseURL() {
@@ -171,7 +131,14 @@ export const musicApi = {
     params.set('channel', 'pc_web');
 
     const apiURL = 'https://api.qishui.com/luna/pc/search/track?' + params.toString();
-    const response = await getSodaClient().get(apiURL);
+    const response = await axios.get(apiURL, {
+      httpAgent: getHttpAgent(),
+      httpsAgent: getHttpsAgent(),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+      },
+      timeout: 15000,
+    });
 
     const data = response.data;
     const songs: Song[] = [];
@@ -207,7 +174,14 @@ export const musicApi = {
   async fetchSodaSharePage(trackId: string): Promise<{ audioUrl: string; name: string; artist: string; cover: string } | null> {
     const shareUrl = `https://music.douyin.com/qishui/share/track?track_id=${trackId}`;
     try {
-      const response = await getSodaClient().get(shareUrl);
+      const response = await axios.get(shareUrl, {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+        },
+        timeout: 15000,
+      });
       const html = response.data;
       const match = html.match(/_ROUTER_DATA\s*=\s*({[\s\S]*?});/);
       if (!match) return null;
@@ -242,7 +216,14 @@ export const musicApi = {
 
     const apiURL = 'https://api.qishui.com/luna/pc/track_v2?' + params.toString();
     try {
-      const response = await getSodaClient().get(apiURL);
+      const response = await axios.get(apiURL, {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+        },
+        timeout: 15000,
+      });
 
       const data = response.data;
       const track = data.track || data.track_info;
@@ -278,7 +259,12 @@ export const musicApi = {
     }
 
     try {
-      const dl = await getSodaClient().get(remoteUrl, {
+      const dl = await axios.get(remoteUrl, {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
         responseType: 'arraybuffer',
         timeout: 30000,
       });
@@ -301,8 +287,14 @@ export const musicApi = {
    */
   async parseSodaShareLink(link: string): Promise<Song | null> {
     try {
-      const response = await getSodaClient().get(link, {
+      const response = await axios.get(link, {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+        },
         maxRedirects: 10,
+        timeout: 15000,
       });
 
       const html = response.data;
@@ -370,7 +362,7 @@ export const musicApi = {
     // 优先检查音频文件缓存
     const cachedAudioFile = getCacheManager().getAudioCache(fullUrl);
     if (cachedAudioFile) {
-      return 'file:///' + cachedAudioFile.replace(/\\/g, '/');
+      return 'file://' + cachedAudioFile;
     }
 
     // 尝试从URL缓存获取
@@ -483,7 +475,7 @@ export const musicApi = {
     }
 
     try {
-      const neteaseClient = getNeteaseClient();
+      const neteaseClient = createNeteaseClient();
       const response = await neteaseClient.get(`https://music.163.com/api/search/get/web?s=${encodeURIComponent(keyword)}&type=100&limit=${limit}`);
       const data = response.data;
       const rawArtists: any[] = data?.result?.artists || [];
@@ -522,7 +514,7 @@ export const musicApi = {
     }
 
     try {
-      const neteaseClient = getNeteaseClient();
+      const neteaseClient = createNeteaseClient();
       const params = new URLSearchParams({
         offset: String(offset),
         limit: String(limit),
@@ -568,7 +560,7 @@ export const musicApi = {
     }
 
     try {
-      const neteaseClient = getNeteaseClient();
+      const neteaseClient = createNeteaseClient();
       const response = await neteaseClient.get(`https://music.163.com/discover/artist/cat?id=${catId}`);
       const html = response.data;
 
@@ -621,7 +613,7 @@ export const musicApi = {
     }
 
     try {
-      const neteaseClient = getNeteaseClient();
+      const neteaseClient = createNeteaseClient();
       const response = await neteaseClient.get(`https://music.163.com/api/v1/artist/songs?id=${artistId}&offset=${offset}&limit=${limit}&order=${order}`);
       const data = response.data;
       const rawSongs: any[] = data.songs || [];
@@ -645,26 +637,28 @@ export const musicApi = {
     }
   },
 
-  async getNeteaseHotlist(): Promise<HotlistSong[]> {
-    // 尝试从缓存获取
-    const cachedData = cacheManager.getHotlistCache('netease');
+  /**
+   * 网易云音乐排行榜通用方法
+   * @param playlistId 歌单 ID（热歌榜 3778678，新歌榜 3779629）
+   * @param cacheKey 缓存键
+   */
+  async getNeteaseToplist(playlistId: number, cacheKey: string): Promise<HotlistSong[]> {
+    const cachedData = cacheManager.getHotlistCache(cacheKey);
     if (cachedData && cachedData.length > 0) {
       return cachedData;
     }
 
     try {
-      // 使用 API 获取新歌榜数据（ID: 3778678 是热歌榜）
-      // 使用 API 获取歌单详情
-      const response = await getNeteaseClient().get('https://music.163.com/api/playlist/detail?id=3778678');
+      const neteaseClient = createNeteaseClient();
+      const response = await neteaseClient.get(`https://music.163.com/api/playlist/detail?id=${playlistId}`);
       const data = response.data;
 
       if (data.code !== 200 || !data.result?.tracks) {
-        throw new Error('获取网易热榜数据失败');
+        throw new Error(`获取网易排行榜数据失败 (playlistId=${playlistId})`);
       }
 
       const tracks = data.result.tracks;
 
-      // 转换为热榜歌曲格式
       const hotlistSongs: HotlistSong[] = tracks.map((song: any, index: number) => {
         const artists = song.artists.map((artist: any) => artist.name).join('/');
         const cover = song.album?.picUrl || '';
@@ -679,229 +673,131 @@ export const musicApi = {
         };
       });
 
-      // 缓存结果
-      cacheManager.setHotlistCache('netease', hotlistSongs);
+      cacheManager.setHotlistCache(cacheKey, hotlistSongs);
       return hotlistSongs;
     } catch (error) {
-      console.error('获取网易热榜失败:', error);
+      console.error(`获取网易排行榜失败 (cacheKey=${cacheKey}):`, error);
       return [];
     }
   },
 
+  async getNeteaseHotlist(): Promise<HotlistSong[]> {
+    return this.getNeteaseToplist(3778678, 'netease');
+  },
+
   async getNeteaseNewSongList(): Promise<HotlistSong[]> {
-    // 尝试从缓存获取
-    const cachedData = cacheManager.getHotlistCache('netease_new');
+    return this.getNeteaseToplist(3779629, 'netease_new');
+  },
+
+  /**
+   * QQ 音乐排行榜通用方法
+   * @param topid 榜单 ID（热歌榜 26，新歌榜 27）
+   * @param cacheKey 缓存键
+   */
+  async getQQToplist(topid: number, cacheKey: string): Promise<HotlistSong[]> {
+    const cachedData = cacheManager.getHotlistCache(cacheKey);
     if (cachedData && cachedData.length > 0) {
       return cachedData;
     }
 
     try {
-      // 使用 API 获取新歌榜详情（ID: 3779629）
-      const response = await getNeteaseClient().get('https://music.163.com/api/playlist/detail?id=3779629');
-      const data = response.data;
+      // 获取当前日期，格式为 YYYY-MM-DD
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0];
 
-      if (data.code !== 200 || !data.result?.tracks) {
-        throw new Error('获取网易新歌榜数据失败');
-      }
+      // 使用旧 API 端点获取 albummid，用于构建封面 URL
+      const url = `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?newsong=1&tpl=3&page=detail&date=${dateStr}&topid=${topid}&type=top&song_begin=0&song_num=100&g_tk=5381&format=json&inCharset=utf-8&outCharset=utf-8&notice=0`;
 
-      const tracks = data.result.tracks;
-
-      // 转换为热榜歌曲格式
-      const hotlistSongs: HotlistSong[] = tracks.map((song: any, index: number) => {
-        const artists = song.artists.map((artist: any) => artist.name).join('/');
-        const cover = song.album?.picUrl || '';
-
-        return {
-          id: song.id.toString(),
-          name: song.name,
-          artists: artists,
-          rank: index + 1,
-          cover: cover,
-          album: song.album?.name || ''
-        };
+      await beforeRequest();
+      const qqClient = axios.create({
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          ...getAntiScrapeHeaders('https://y.qq.com/'),
+          'Accept': '*/*',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Referer': 'https://y.qq.com/',
+        },
+        timeout: 30000,
+        responseType: 'text'
       });
 
+      let response = await qqClient.get(url);
+      let data = response.data;
+
+      // 确保数据是字符串类型
+      let dataStr = typeof data === 'string' ? data : JSON.stringify(data);
+
+      // 解析JSON格式的数据
+      let jsonData = JSON.parse(dataStr);
+
+      // 如果今天的数据还没有更新（code不为0），尝试使用昨天的日期
+      if (jsonData.code !== 0) {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const yesterdayUrl = url.replace(dateStr, yesterdayStr);
+        response = await qqClient.get(yesterdayUrl);
+        data = response.data;
+        dataStr = typeof data === 'string' ? data : JSON.stringify(data);
+        jsonData = JSON.parse(dataStr);
+      }
+
+      // 检查songlist字段
+      const songlist = jsonData.songlist || [];
+
+      if (!Array.isArray(songlist)) {
+        throw new Error(`无法解析QQ音乐排行榜数据 (topid=${topid})，songlist不是数组`);
+      }
+
+      // 转换为热榜歌曲格式
+      const hotlistSongs: HotlistSong[] = [];
+
+      for (let index = 0; index < songlist.length; index++) {
+        const item = songlist[index];
+
+        try {
+          const songData = item.data;
+
+          if (!songData) {
+            continue;
+          }
+
+          const artists = songData.singer?.map((singer: any) => singer.name).join('/') || '';
+          // 通过 album.mid 构建封面 URL，确保所有歌曲都有封面
+          const albumMid = songData.album?.mid || '';
+          const cover = albumMid
+            ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}_1.jpg`
+            : '';
+
+          hotlistSongs.push({
+            id: songData.id?.toString() || '',
+            name: songData.name || '',
+            artists: artists,
+            rank: index + 1,
+            cover: cover,
+            album: songData.album?.name || ''
+          });
+        } catch {
+          // 跳过处理失败的歌曲
+        }
+      }
+
       // 缓存结果
-      cacheManager.setHotlistCache('netease_new', hotlistSongs);
+      cacheManager.setHotlistCache(cacheKey, hotlistSongs);
       return hotlistSongs;
     } catch (error) {
-      console.error('获取网易新歌榜失败:', error);
+      console.error(`获取QQ音乐排行榜失败 (cacheKey=${cacheKey}):`, error);
       return [];
     }
   },
 
   async getQQHotlist(): Promise<HotlistSong[]> {
-    // 尝试从缓存获取
-    const cachedData = cacheManager.getHotlistCache('qq');
-    if (cachedData && cachedData.length > 0) {
-      return cachedData;
-    }
-
-    try {
-      // 获取当前日期，格式为 YYYY-MM-DD
-      const today = new Date();
-      const dateStr = today.toISOString().split('T')[0];
-
-      // 使用旧 API 端点获取 albummid，用于构建封面 URL
-      // topid=26 是热歌榜
-      const url = `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?newsong=1&tpl=3&page=detail&date=${dateStr}&topid=26&type=top&song_begin=0&song_num=100&g_tk=5381&format=json&inCharset=utf-8&outCharset=utf-8&notice=0`;
-
-      await beforeRequest();
-      let response = await getQQClient().get(url);
-      let data = response.data;
-
-      // 确保数据是字符串类型
-      let dataStr = typeof data === 'string' ? data : JSON.stringify(data);
-
-      // 解析JSON格式的数据
-      let jsonData = JSON.parse(dataStr);
-
-      // 如果今天的数据还没有更新（code不为0），尝试使用昨天的日期
-      if (jsonData.code !== 0) {
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
-        const yesterdayUrl = url.replace(dateStr, yesterdayStr);
-        response = await getQQClient().get(yesterdayUrl);
-        data = response.data;
-        dataStr = typeof data === 'string' ? data : JSON.stringify(data);
-        jsonData = JSON.parse(dataStr);
-      }
-
-      // 检查songlist字段
-      const songlist = jsonData.songlist || [];
-
-      if (!Array.isArray(songlist)) {
-        throw new Error('无法解析QQ音乐热榜数据，songlist不是数组');
-      }
-
-      // 转换为热榜歌曲格式
-      const hotlistSongs: HotlistSong[] = [];
-
-      for (let index = 0; index < songlist.length; index++) {
-        const item = songlist[index];
-
-        try {
-          const songData = item.data;
-
-          if (!songData) {
-            continue;
-          }
-
-          const artists = songData.singer?.map((singer: any) => singer.name).join('/') || '';
-          // 通过 album.mid 构建封面 URL，确保所有歌曲都有封面
-          const albumMid = songData.album?.mid || '';
-          const cover = albumMid
-            ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}_1.jpg`
-            : '';
-
-          hotlistSongs.push({
-            id: songData.id?.toString() || '',
-            name: songData.name || '',
-            artists: artists,
-            rank: index + 1,
-            cover: cover,
-            album: songData.album?.name || ''
-          });
-        } catch {
-          // 跳过处理失败的歌曲
-        }
-      }
-
-      // 缓存结果
-      cacheManager.setHotlistCache('qq', hotlistSongs);
-      return hotlistSongs;
-    } catch (error) {
-      console.error('获取QQ音乐热榜失败:', error);
-      return [];
-    }
+    return this.getQQToplist(26, 'qq');
   },
 
   async getQQNewSongList(): Promise<HotlistSong[]> {
-    // 尝试从缓存获取
-    const cachedData = cacheManager.getHotlistCache('qq_new');
-    if (cachedData && cachedData.length > 0) {
-      return cachedData;
-    }
-
-    try {
-      // 获取当前日期，格式为 YYYY-MM-DD
-      const today = new Date();
-      const dateStr = today.toISOString().split('T')[0];
-
-      // 使用旧 API 端点获取 albummid，用于构建封面 URL
-      // topid=27 是新歌榜
-      const url = `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?newsong=1&tpl=3&page=detail&date=${dateStr}&topid=27&type=top&song_begin=0&song_num=100&g_tk=5381&format=json&inCharset=utf-8&outCharset=utf-8&notice=0`;
-
-      await beforeRequest();
-      let response = await getQQClient().get(url);
-      let data = response.data;
-
-      // 确保数据是字符串类型
-      let dataStr = typeof data === 'string' ? data : JSON.stringify(data);
-
-      // 解析JSON格式的数据
-      let jsonData = JSON.parse(dataStr);
-
-      // 如果今天的数据还没有更新（code不为0），尝试使用昨天的日期
-      if (jsonData.code !== 0) {
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
-        const yesterdayUrl = url.replace(dateStr, yesterdayStr);
-        response = await getQQClient().get(yesterdayUrl);
-        data = response.data;
-        dataStr = typeof data === 'string' ? data : JSON.stringify(data);
-        jsonData = JSON.parse(dataStr);
-      }
-
-      // 检查songlist字段
-      const songlist = jsonData.songlist || [];
-
-      if (!Array.isArray(songlist)) {
-        throw new Error('无法解析QQ音乐新歌榜数据，songlist不是数组');
-      }
-
-      // 转换为热榜歌曲格式
-      const hotlistSongs: HotlistSong[] = [];
-
-      for (let index = 0; index < songlist.length; index++) {
-        const item = songlist[index];
-
-        try {
-          const songData = item.data;
-
-          if (!songData) {
-            continue;
-          }
-
-          const artists = songData.singer?.map((singer: any) => singer.name).join('/') || '';
-          // 通过 album.mid 构建封面 URL，确保所有歌曲都有封面
-          const albumMid = songData.album?.mid || '';
-          const cover = albumMid
-            ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}_1.jpg`
-            : '';
-
-          hotlistSongs.push({
-            id: songData.id?.toString() || '',
-            name: songData.name || '',
-            artists: artists,
-            rank: index + 1,
-            cover: cover,
-            album: songData.album?.name || ''
-          });
-        } catch {
-          // 跳过处理失败的歌曲
-        }
-      }
-
-      // 缓存结果
-      cacheManager.setHotlistCache('qq_new', hotlistSongs);
-      return hotlistSongs;
-    } catch (error) {
-      console.error('获取QQ音乐新歌榜失败:', error);
-      return [];
-    }
+    return this.getQQToplist(27, 'qq_new');
   },
 
   async getNeteasePlaylists(
@@ -917,7 +813,19 @@ export const musicApi = {
     }
 
     try {
-      const response = await getNeteaseClient().get(
+      const neteaseClient = axios.create({
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'accept': 'application/json, text/javascript, */*; q=0.01',
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://music.163.com/'
+        },
+        timeout: 30000
+      });
+
+      const response = await neteaseClient.get(
         `https://music.163.com/api/playlist/list?cat=${encodeURIComponent(cat)}&order=${order}&offset=${offset}&limit=${limit}`
       );
 
@@ -955,7 +863,19 @@ export const musicApi = {
     }
 
     try {
-      const response = await getNeteaseClient().get(
+      const neteaseClient = axios.create({
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+        headers: {
+          'accept': 'application/json, text/javascript, */*; q=0.01',
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://music.163.com/'
+        },
+        timeout: 30000
+      });
+
+      const response = await neteaseClient.get(
         `https://music.163.com/api/playlist/detail?id=${id}`
       );
 
