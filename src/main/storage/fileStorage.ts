@@ -23,6 +23,11 @@ class FileStorage {
   };
   private initialized: boolean = false;
 
+  // 防抖写入机制
+  private isDirty: boolean = false;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly SAVE_DELAY: number = 200; // 200ms 防抖延迟
+
   private ensureInitialized(): void {
     if (this.initialized) return;
     const userDataPath = app.getPath('userData');
@@ -61,7 +66,54 @@ class FileStorage {
 
   private async saveData(): Promise<void> {
     if (!this.initialized) return;
-    await this.writeWithTransaction(this.data);
+
+    // 标记为脏数据
+    this.isDirty = true;
+
+    // 清除之前的定时器（防抖）
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+
+    // 设置新的定时器
+    this.saveTimer = setTimeout(async () => {
+      try {
+        if (this.isDirty) {
+          await this.writeWithTransaction(this.data);
+          this.isDirty = false;
+        }
+      } catch (error) {
+        console.error('防抖写入失败:', error);
+      } finally {
+        this.saveTimer = null;
+      }
+    }, this.SAVE_DELAY);
+  }
+
+  /**
+   * 立即写入数据（用于应用退出时）
+   * 跳过防抖机制，确保数据不丢失
+   */
+  async flushSave(): Promise<void> {
+    if (!this.initialized) return;
+
+    // 清除防抖定时器
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+
+    // 如果有脏数据，立即写入
+    if (this.isDirty) {
+      try {
+        await this.writeWithTransaction(this.data);
+        this.isDirty = false;
+      } catch (error) {
+        console.error('立即写入失败:', error);
+        throw error;
+      }
+    }
   }
 
   private writeWithTransaction(data: StorageData): Promise<void> {
