@@ -37,7 +37,7 @@ class DownloadService {
         responseType: 'arraybuffer',
         timeout: 10000,
       });
-      return { buffer: Buffer.from(res.data), mime: res.headers['content-type'] || 'image/jpeg' };
+      return { buffer: Buffer.from(res.data), mime: String(res.headers['content-type'] || 'image/jpeg') };
     } catch {
       return null;
     }
@@ -89,7 +89,6 @@ class DownloadService {
         ? Buffer.from(mp3tag.buffer)
         : mp3tag.buffer;
       fs.writeFileSync(filePath, outBuf);
-      console.log('[DownloadService] ID3元数据写入成功:', filePath);
     } catch (err) {
       console.error('[DownloadService] 写入ID3标签异常:', err);
     }
@@ -162,7 +161,6 @@ class DownloadService {
 
     if (tasks.length > 0) {
       this.processQueue();
-      console.log(`批量下载任务创建成功: ${tasks.length}/${songs.length} 个任务`);
     } else {
       console.warn('没有有效的下载任务被创建');
     }
@@ -203,8 +201,6 @@ class DownloadService {
         if (attempt < maxRetries) {
           // 指数退避重试
           const delay = Math.pow(2, attempt) * 1000;
-          const errorMessage = error instanceof Error ? error.message : '未知错误';
-          console.log(`下载失败 [${task.song.name}], ${attempt + 1}/${maxRetries} 重试, ${delay}ms后重试:`, errorMessage);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
@@ -275,7 +271,7 @@ class DownloadService {
         }
       });
 
-      const ct = response.headers['content-type'] || '';
+      const ct = String(response.headers['content-type'] || '');
       let ext = '.mp3';
       if (ct.includes('audio/mpeg')) ext = '.mp3';
       else if (ct.includes('audio/mp4') || ct.includes('video/mp4')) ext = '.m4a';
@@ -308,7 +304,6 @@ class DownloadService {
 
       await new Promise<void>((resolve, reject) => {
         writer.on('finish', () => {
-          console.log('[DownloadService] 下载完成:', filePath);
           task.status = 'completed';
           task.progress = 100;
           task.filePath = filePath;
