@@ -362,7 +362,7 @@ export const musicApi = {
     // 优先检查音频文件缓存
     const cachedAudioFile = getCacheManager().getAudioCache(fullUrl);
     if (cachedAudioFile) {
-      return 'file://' + cachedAudioFile;
+      return 'file:///' + cachedAudioFile.replace(/\\/g, '/');
     }
 
     // 尝试从URL缓存获取
