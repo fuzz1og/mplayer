@@ -183,38 +183,44 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         isPlaying: true
       });
 
+      // Fire-and-forget: 歌词获取不阻塞播放
       if (!song.lrc || song.lrc.trim() === '') {
         set({ lyricsLoading: true });
-        try {
-          const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
-          if (searchResults.length > 0) {
-            const freshSong = searchResults[0];
-            if (freshSong.lrc && freshSong.lrc.trim() !== '') {
-              const lyricsContent = await lyricsService.getLyrics(freshSong.lrc);
-              set({ lyrics: lyricsContent, lyricsLoading: false });
-            } else {
-              set({ lyrics: '', lyricsLoading: false });
+        resolveSongUrls(song.name, song.artist, song.sourceType)
+          .then((searchResults) => {
+            if (searchResults.length > 0) {
+              const freshSong = searchResults[0];
+              if (freshSong.lrc && freshSong.lrc.trim() !== '') {
+                return lyricsService.getLyrics(freshSong.lrc);
+              }
             }
-          } else {
+            return '';
+          })
+          .then((lyricsContent) => {
+            set({ lyrics: lyricsContent, lyricsLoading: false });
+          })
+          .catch((lyricsError) => {
+            console.error('获取歌词失败:', lyricsError);
             set({ lyrics: '', lyricsLoading: false });
-          }
-        } catch (lyricsError) {
-          console.error('获取歌词失败:', lyricsError);
-          set({ lyrics: '', lyricsLoading: false });
-        }
+          });
       } else {
         set({ lyricsLoading: true });
-        try {
-          const lyricsContent = await lyricsService.getLyrics(song.lrc);
-          set({ lyrics: lyricsContent, lyricsLoading: false });
-        } catch (lyricsError) {
-          console.error('获取歌词失败:', lyricsError);
-          set({ lyrics: '', lyricsLoading: false });
-        }
+        lyricsService.getLyrics(song.lrc)
+          .then((lyricsContent) => {
+            set({ lyrics: lyricsContent, lyricsLoading: false });
+          })
+          .catch((lyricsError) => {
+            console.error('获取歌词失败:', lyricsError);
+            set({ lyrics: '', lyricsLoading: false });
+          });
       }
 
-      await IpcClient.invoke('history:add', song);
+      // Fire-and-forget: 历史记录写入不阻塞播放
+      IpcClient.invoke('history:add', song).catch((err) => {
+        console.error('写入播放历史失败:', err);
+      });
 
+      // 同步更新队列（本地操作，无 IPC 开销）
       const playlist = get().currentPlaylist;
       const index = playlist.findIndex(s => s.id === song.id);
       if (index === -1) {
