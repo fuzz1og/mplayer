@@ -26,10 +26,25 @@ export class UpdateService {
     this.mainWindow = window;
   }
 
-  // 从 DB 读代理，设到 process.env，供 @electron/get 使用
+  // 从 DB 读代理，配置到 electron-updater 的专用 session
   async syncProxyEnv() {
     try {
       const config = await db.getSetting<ProxyConfig>('proxyConfig');
+
+      // 配置 electron-updater 的专用 session 代理
+      // electron-updater 使用 session.fromPartition("electron-updater")
+      // 而不是 session.defaultSession
+      const netSession = autoUpdater.netSession;
+      if (netSession) {
+        if (config?.enabled && config.host) {
+          const proxyRules = `${config.protocol}=${config.host}:${config.port}`;
+          await netSession.setProxy({ proxyRules });
+        } else {
+          await netSession.setProxy({ proxyRules: 'direct://' });
+        }
+      }
+
+      // 同时设置环境变量供 @electron/get 使用（下载 Electron 二进制文件时）
       if (config?.enabled && config.host) {
         const proxyUrl = `${config.protocol}://${config.host}:${config.port}`;
         process.env.HTTP_PROXY = proxyUrl;
@@ -45,7 +60,7 @@ export class UpdateService {
         delete process.env.ELECTRON_GET_USE_PROXY;
       }
     } catch (err) {
-      // ignore proxy sync errors
+      console.error('同步代理设置失败:', err);
     }
   }
 
