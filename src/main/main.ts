@@ -185,6 +185,21 @@ app.whenReady().then(async () => {
     if (savedProxy) {
       updateApiClientAgents(getApiClient(), savedProxy);
       applyElectronProxy(savedProxy);
+      // 同时配置 electron-updater 的专用 session
+      try {
+        const { autoUpdater } = require('electron-updater');
+        const updaterSession = autoUpdater.netSession;
+        if (updaterSession) {
+          if (savedProxy.enabled && savedProxy.host) {
+            const proxyRules = `http=${savedProxy.host}:${savedProxy.port};https=${savedProxy.host}:${savedProxy.port}`;
+            await updaterSession.setProxy({ proxyRules });
+          } else {
+            await updaterSession.setProxy({ proxyRules: 'direct://' });
+          }
+        }
+      } catch (updaterErr) {
+        console.error('electron-updater session 代理配置失败:', updaterErr);
+      }
     } else {
       applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
     }

@@ -12,6 +12,9 @@ vi.mock('electron-updater', () => ({
     checkForUpdates: vi.fn(),
     downloadUpdate: vi.fn(),
     quitAndInstall: vi.fn(),
+    netSession: {
+      setProxy: vi.fn().mockResolvedValue(undefined),
+    },
   },
 }));
 
@@ -21,6 +24,11 @@ vi.mock('electron', () => ({
     getVersion: vi.fn().mockReturnValue('1.0.0'),
   },
   BrowserWindow: vi.fn(),
+  session: {
+    defaultSession: {
+      setProxy: vi.fn().mockResolvedValue(undefined),
+    },
+  },
 }));
 
 // Mock database

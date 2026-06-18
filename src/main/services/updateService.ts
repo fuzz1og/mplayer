@@ -1,5 +1,5 @@
 import { autoUpdater } from 'electron-updater';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, session } from 'electron';
 import { db } from '../storage/db';
 import type { ProxyConfig } from '../proxy';
 
@@ -33,15 +33,22 @@ export class UpdateService {
 
       // 配置 electron-updater 的专用 session 代理
       // electron-updater 使用 session.fromPartition("electron-updater")
-      // 而不是 session.defaultSession
       const netSession = autoUpdater.netSession;
       if (netSession) {
         if (config?.enabled && config.host) {
-          const proxyRules = `${config.protocol}=${config.host}:${config.port}`;
+          const proxyRules = `http=${config.host}:${config.port};https=${config.host}:${config.port}`;
           await netSession.setProxy({ proxyRules });
         } else {
           await netSession.setProxy({ proxyRules: 'direct://' });
         }
+      }
+
+      // 同时配置 defaultSession（作为兜底）
+      if (config?.enabled && config.host) {
+        const proxyRules = `${config.protocol}=${config.host}:${config.port}`;
+        await session.defaultSession.setProxy({ proxyRules });
+      } else {
+        await session.defaultSession.setProxy({ proxyRules: 'direct://' });
       }
 
       // 同时设置环境变量供 @electron/get 使用（下载 Electron 二进制文件时）

@@ -64,7 +64,7 @@ export function updateApiClientAgents(apiClient: AxiosInstance, config: ProxyCon
 export async function applyElectronProxy(config: ProxyConfig) {
   try {
     if (config.enabled && config.host) {
-      const rules = `${config.protocol}=${config.host}:${config.port}`;
+      const rules = `http=${config.host}:${config.port};https=${config.host}:${config.port}`;
       await session.defaultSession.setProxy({ proxyRules: rules });
     } else {
       await session.defaultSession.setProxy({ proxyRules: 'direct://' });
