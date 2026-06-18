@@ -1,4 +1,4 @@
-import { autoUpdater, UpdateInfo } from 'electron-updater';
+import { autoUpdater } from 'electron-updater';
 import { app, BrowserWindow } from 'electron';
 import { db } from '../storage/db';
 import type { ProxyConfig } from '../proxy';
@@ -14,41 +14,12 @@ export interface UpdateStatus {
 export class UpdateService {
   private mainWindow: BrowserWindow | null = null;
   private status: UpdateStatus = { status: 'idle' };
+  private checkListeners: Array<() => void> = [];
+  private downloadListeners: Array<() => void> = [];
 
   constructor() {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
-
-    autoUpdater.on('checking-for-update', () => {
-      this.updateStatus({ status: 'checking' });
-    });
-    autoUpdater.on('update-available', (info: UpdateInfo) => {
-      this.updateStatus({
-        status: 'available',
-        version: info.version,
-        releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : undefined,
-      });
-    });
-    autoUpdater.on('update-not-available', () => {
-      this.updateStatus({ status: 'not-available' });
-    });
-    autoUpdater.on('download-progress', (progress: any) => {
-      this.updateStatus({
-        status: 'downloading',
-        progress: {
-          percent: progress.percent,
-          bytesPerSecond: progress.bytesPerSecond,
-          transferred: progress.transferred,
-          total: progress.total,
-        },
-      });
-    });
-    autoUpdater.on('update-downloaded', () => {
-      this.updateStatus({ status: 'downloaded' });
-    });
-    autoUpdater.on('error', (err: Error) => {
-      this.updateStatus({ status: 'error', error: err.message });
-    });
   }
 
   setMainWindow(window: BrowserWindow) {
@@ -83,7 +54,22 @@ export class UpdateService {
     this.mainWindow?.webContents.send('update:status', status);
   }
 
+  // 清理事件监听器
+  private cleanupCheckListeners() {
+    this.checkListeners.forEach(cleanup => cleanup());
+    this.checkListeners = [];
+  }
+
+  private cleanupDownloadListeners() {
+    this.downloadListeners.forEach(cleanup => cleanup());
+    this.downloadListeners = [];
+  }
+
   async checkForUpdates(timeoutMs = 10000): Promise<UpdateStatus> {
+    // 清理之前的监听器
+    this.cleanupCheckListeners();
+
+    // 确保代理设置已同步
     await this.syncProxyEnv();
 
     try {
@@ -92,9 +78,20 @@ export class UpdateService {
           reject(new Error('检查更新超时，请检查网络连接'));
         }, timeoutMs);
 
-        autoUpdater.once('update-available', () => { clearTimeout(timer); resolve(); });
-        autoUpdater.once('update-not-available', () => { clearTimeout(timer); resolve(); });
-        autoUpdater.once('error', (err: Error) => { clearTimeout(timer); reject(err); });
+        const onAvailable = () => { clearTimeout(timer); resolve(); };
+        const onNotAvailable = () => { clearTimeout(timer); resolve(); };
+        const onError = (err: Error) => { clearTimeout(timer); reject(err); };
+
+        autoUpdater.once('update-available', onAvailable);
+        autoUpdater.once('update-not-available', onNotAvailable);
+        autoUpdater.once('error', onError);
+
+        // 保存清理函数
+        this.checkListeners.push(() => {
+          autoUpdater.removeListener('update-available', onAvailable);
+          autoUpdater.removeListener('update-not-available', onNotAvailable);
+          autoUpdater.removeListener('error', onError);
+        });
 
         autoUpdater.checkForUpdates().catch((err: any) => {
           clearTimeout(timer);
@@ -103,21 +100,41 @@ export class UpdateService {
       });
     } catch (err: any) {
       this.updateStatus({ status: 'error', error: err.message });
+    } finally {
+      // 清理监听器
+      this.cleanupCheckListeners();
     }
 
     return this.status;
   }
 
   async downloadUpdate(timeoutMs = 120000): Promise<void> {
+    // 清理之前的监听器
+    this.cleanupDownloadListeners();
+
     try {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('下载超时')), timeoutMs);
-        autoUpdater.once('update-downloaded', () => { clearTimeout(timer); resolve(); });
-        autoUpdater.once('error', (err: Error) => { clearTimeout(timer); reject(err); });
+
+        const onDownloaded = () => { clearTimeout(timer); resolve(); };
+        const onError = (err: Error) => { clearTimeout(timer); reject(err); };
+
+        autoUpdater.once('update-downloaded', onDownloaded);
+        autoUpdater.once('error', onError);
+
+        // 保存清理函数
+        this.downloadListeners.push(() => {
+          autoUpdater.removeListener('update-downloaded', onDownloaded);
+          autoUpdater.removeListener('error', onError);
+        });
+
         autoUpdater.downloadUpdate().catch((err: any) => { clearTimeout(timer); reject(err); });
       });
     } catch (err: any) {
       this.updateStatus({ status: 'error', error: err.message });
+    } finally {
+      // 清理监听器
+      this.cleanupDownloadListeners();
     }
   }
 
