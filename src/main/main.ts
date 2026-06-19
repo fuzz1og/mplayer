@@ -21,10 +21,10 @@ if (!app.isPackaged) {
 import { getCacheManager } from './cache/cacheManager';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
-import { musicApi } from './api/musicApi';
+import { musicApi, getApiClient } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
-import { buildAgents, applyElectronProxy, type ProxyConfig } from './proxy';
+import { updateApiClientAgents, applyElectronProxy, type ProxyConfig } from './proxy';
 import { registerIpcHandler, registerIpcHandlerSimple } from './ipc/registerHandler';
 import { updateService } from './services/updateService';
 import type { Song } from '@/shared/types/song';
@@ -189,14 +189,29 @@ app.whenReady().then(async () => {
   try {
     const savedProxy = await db.getSetting<ProxyConfig>('proxyConfig');
     if (savedProxy) {
-      buildAgents(savedProxy);
-      await applyElectronProxy(savedProxy);
+      updateApiClientAgents(getApiClient(), savedProxy);
+      applyElectronProxy(savedProxy);
+      // 同时配置 electron-updater 的专用 session
+      try {
+        const { autoUpdater } = require('electron-updater');
+        const updaterSession = autoUpdater.netSession;
+        if (updaterSession) {
+          if (savedProxy.enabled && savedProxy.host) {
+            const proxyRules = `http=${savedProxy.host}:${savedProxy.port};https=${savedProxy.host}:${savedProxy.port}`;
+            await updaterSession.setProxy({ proxyRules });
+          } else {
+            await updaterSession.setProxy({ proxyRules: 'direct://' });
+          }
+        }
+      } catch (updaterErr) {
+        console.error('electron-updater session 代理配置失败:', updaterErr);
+      }
     } else {
-      await applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
+      applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
     }
   } catch (error) {
     console.error('加载代理设置失败:', error);
-    await applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
+    applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
   }
 
   // 设置IPC管理器
@@ -304,8 +319,8 @@ app.whenReady().then(async () => {
   });
   registerIpcHandler('settings:setProxy', async (proxyConfig: ProxyConfig) => {
     await db.setSetting('proxyConfig', proxyConfig);
-    buildAgents(proxyConfig);
-    await applyElectronProxy(proxyConfig);
+    updateApiClientAgents(getApiClient(), proxyConfig);
+    applyElectronProxy(proxyConfig);
   });
 
   // 应用 IPC
@@ -370,8 +385,6 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('will-quit', async () => {
-  // 确保所有待写入的数据都保存到磁盘
-  await db.flushSave();
+app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
