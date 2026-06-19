@@ -105,7 +105,12 @@ class DownloadService {
   }
 
   updateDownloadPath(newPath: string): void {
-    this.downloadPath = newPath;
+    // 验证路径不包含 .. 遍历，且是绝对路径
+    const resolved = path.resolve(newPath);
+    if (resolved.includes('..') || !path.isAbsolute(resolved)) {
+      throw new Error('下载路径无效');
+    }
+    this.downloadPath = resolved;
     if (!fs.existsSync(this.downloadPath)) {
       fs.mkdirSync(this.downloadPath, { recursive: true });
     }
@@ -291,22 +296,20 @@ class DownloadService {
       }
 
       // 检查文件路径长度限制
+      let actualFilePath = filePath;
       if (filePath.length > 240) {
         const shortName = this.sanitizeFileName(`${task.song.name.substring(0, 50)} - ${task.song.artist.substring(0, 30)}${ext}`);
-        const newFilePath = path.join(this.downloadPath, shortName);
-        task.filePath = newFilePath;
-      } else {
-        task.filePath = filePath;
+        actualFilePath = path.join(this.downloadPath, shortName);
       }
+      task.filePath = actualFilePath;
 
-      const writer = fs.createWriteStream(filePath);
+      const writer = fs.createWriteStream(actualFilePath);
       response.data.pipe(writer);
 
       await new Promise<void>((resolve, reject) => {
         writer.on('finish', () => {
           task.status = 'completed';
           task.progress = 100;
-          task.filePath = filePath;
           this.tasks.set(task.id, task);
           this.callbacks.onComplete?.(task);
           this.notifyComplete(task);
@@ -325,7 +328,7 @@ class DownloadService {
       });
 
       // 写入ID3元数据（title/artist/album/封面等）
-      await this.writeMetadata(task.song, filePath);
+      await this.writeMetadata(task.song, actualFilePath);
 
     } catch (error) {
       console.error('[DownloadService] 下载失败:', error);
@@ -381,7 +384,7 @@ class DownloadService {
   }
 
   private sanitizeFileName(fileName: string): string {
-    return fileName.replace(/[<>:"/\\|?*]/g, '_');
+    return fileName.replace(/[<>:"/\\|?*]/g, '_').replace(/\.\./g, '_');
   }
 
   private notifyProgress(task: DownloadTask): void {
