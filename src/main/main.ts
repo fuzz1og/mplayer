@@ -21,10 +21,10 @@ if (!app.isPackaged) {
 import { getCacheManager } from './cache/cacheManager';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
-import { musicApi, getApiClient } from './api/musicApi';
+import { musicApi } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
-import { updateApiClientAgents, applyElectronProxy, type ProxyConfig } from './proxy';
+import { buildAgents, applyElectronProxy, type ProxyConfig } from './proxy';
 import { registerIpcHandler, registerIpcHandlerSimple } from './ipc/registerHandler';
 import { updateService } from './services/updateService';
 import type { Song } from '@/shared/types/song';
@@ -114,6 +114,12 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // 关闭时隐藏到托盘，而不是退出
+  mainWindow.on('close', (event) => {
+    event.preventDefault();
+    mainWindow.hide();
+  });
+
   return mainWindow;
 }
 
@@ -183,14 +189,14 @@ app.whenReady().then(async () => {
   try {
     const savedProxy = await db.getSetting<ProxyConfig>('proxyConfig');
     if (savedProxy) {
-      updateApiClientAgents(getApiClient(), savedProxy);
-      applyElectronProxy(savedProxy);
+      buildAgents(savedProxy);
+      await applyElectronProxy(savedProxy);
     } else {
-      applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
+      await applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
     }
   } catch (error) {
     console.error('加载代理设置失败:', error);
-    applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
+    await applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
   }
 
   // 设置IPC管理器
@@ -298,8 +304,8 @@ app.whenReady().then(async () => {
   });
   registerIpcHandler('settings:setProxy', async (proxyConfig: ProxyConfig) => {
     await db.setSetting('proxyConfig', proxyConfig);
-    updateApiClientAgents(getApiClient(), proxyConfig);
-    applyElectronProxy(proxyConfig);
+    buildAgents(proxyConfig);
+    await applyElectronProxy(proxyConfig);
   });
 
   // 应用 IPC
@@ -364,6 +370,8 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('will-quit', () => {
+app.on('will-quit', async () => {
+  // 确保所有待写入的数据都保存到磁盘
+  await db.flushSave();
   globalShortcut.unregisterAll();
 });

@@ -453,7 +453,8 @@ class FileStorage {
   async setSetting<T>(key: string, value: T): Promise<void> {
     this.ensureInitialized();
     this.data.settings[key] = value;
-    await this.saveData();
+    // 设置项需要立即写入磁盘，避免防抖导致重启后丢失
+    await this.writeWithTransaction(this.data);
   }
 
   async getSetting<T>(key: string): Promise<T | undefined> {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 const { ipcRenderer } = window.require('electron');
-import { message, Modal } from 'antd';
+import { message } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -99,40 +99,6 @@ const App: React.FC = () => {
   }, [updateTask]);
 
   useGlobalShortcuts();
-
-  // Close-to-tray behavior
-  useEffect(() => {
-    const handleClose = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      Modal.confirm({
-        title: '关闭确认',
-        content: '关闭后播放将停止。是否最小化到托盘继续播放？',
-        okText: '最小化到托盘',
-        cancelText: '取消',
-        onOk: () => {
-          ipcRenderer.send('tray:action', { type: 'minimize' });
-        },
-        onCancel: () => {},
-        footer: (_, { OkBtn, CancelBtn }) => (
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-            <CancelBtn />
-            <button onClick={async () => {
-              Modal.destroyAll();
-              await ipcRenderer.invoke('app:quit');
-            }} style={{ padding: '4px 16px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', color: '#FF6B6B' }}>
-              退出
-            </button>
-            <OkBtn />
-          </div>
-        ),
-      });
-    };
-
-    window.addEventListener('beforeunload', handleClose);
-    return () => {
-      window.removeEventListener('beforeunload', handleClose);
-    };
-  }, []);
 
   const dispatchSearch = (keyword: string) => {
     const { sourceType } = useSearchStore.getState();

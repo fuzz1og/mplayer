@@ -16,6 +16,7 @@ export default defineConfig({
         },
         vite: {
           build: {
+            target: 'esnext',
             outDir: 'dist-electron',
             rollupOptions: {
               external: ['electron', 'music-metadata', 'mp3tag.js']

@@ -109,6 +109,7 @@ export class UpdateService {
   }
 
   async downloadUpdate(timeoutMs = 120000): Promise<void> {
+    await this.syncProxyEnv();
     try {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('下载超时')), timeoutMs);
