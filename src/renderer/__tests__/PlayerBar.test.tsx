@@ -59,8 +59,15 @@ describe('PlayerBar', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (usePlayerStore as any).mockReturnValue(mockPlayerStore);
-    (useFavoriteStore as any).mockReturnValue(mockFavoriteStore);
+    // 支持选择器调用：usePlayerStore(selector) 返回 selector(store)
+    (usePlayerStore as any).mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') return selector(mockPlayerStore);
+      return mockPlayerStore;
+    });
+    (useFavoriteStore as any).mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') return selector(mockFavoriteStore);
+      return mockFavoriteStore;
+    });
   });
 
   it('应该渲染播放器栏', () => {
@@ -69,9 +76,13 @@ describe('PlayerBar', () => {
   });
 
   it('应该显示当前歌曲信息', () => {
-    (usePlayerStore as any).mockReturnValue({
+    const storeWithSong = {
       ...mockPlayerStore,
       currentSong: { id: '1', name: '稻香', artist: '周杰伦', album: '魔杰座' }
+    };
+    (usePlayerStore as any).mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') return selector(storeWithSong);
+      return storeWithSong;
     });
 
     render(<PlayerBar />);

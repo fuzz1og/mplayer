@@ -385,12 +385,15 @@ const DiscoverPage: React.FC = () => {
     loadData();
   };
 
-  // 如果有搜索关键词，显示搜索结果
-  if (currentKeyword && (songs.length > 0 || groups.length > 0 || artistResults.length > 0 || loading || error)) {
-    // 搜索结果时自动展开所有分组
-    if (groups.length > 0 && useSearchStore.getState().expandedKeys.length === 0) {
+  // 搜索结果时自动展开所有分组（使用 useEffect 避免渲染阶段副作用）
+  useEffect(() => {
+    if (currentKeyword && groups.length > 0 && useSearchStore.getState().expandedKeys.length === 0) {
       useSearchStore.getState().expandAll();
     }
+  }, [currentKeyword, groups.length]);
+
+  // 如果有搜索关键词，显示搜索结果
+  if (currentKeyword && (songs.length > 0 || groups.length > 0 || artistResults.length > 0 || loading || error)) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 搜索结果导航栏 */}
