@@ -114,6 +114,12 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // 关闭时隐藏到托盘，而不是退出
+  mainWindow.on('close', (event) => {
+    event.preventDefault();
+    mainWindow.hide();
+  });
+
   return mainWindow;
 }
 
