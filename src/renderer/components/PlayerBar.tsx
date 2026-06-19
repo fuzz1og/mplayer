@@ -99,7 +99,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(135deg, #E8E8E8 0%, #F0F0F0 100%)',
+                background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)',
               }}
             >
               <ListMusic size={24} color="var(--text-tertiary)" />

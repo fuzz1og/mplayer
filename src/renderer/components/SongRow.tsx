@@ -47,7 +47,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
         {showRemoveFromPlaylist && onRemoveFromPlaylist && (
           <>
             <button onClick={(e) => { e.stopPropagation(); onRemoveFromPlaylist(song); }}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '4px', fontSize: '13px', color: '#FF6B6B' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '4px', fontSize: '13px', color: 'var(--danger-color)' }}>
               <Trash2 size={14} /> 从歌单移除
             </button>
             <div style={{ height: '1px', backgroundColor: 'var(--divider-color)', margin: '4px 0' }} />
@@ -155,7 +155,7 @@ const SongRow: React.FC<SongRowProps> = ({
           {song.cover ? (
             <img src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #E8E8E8 0%, #F0F0F0 100%)' }} />
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)' }} />
           )}
           <div
             style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s ease' }}

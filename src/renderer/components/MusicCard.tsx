@@ -82,7 +82,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'linear-gradient(135deg, #E8E8E8 0%, #F5F5F5 100%)',
+              background: 'linear-gradient(135deg, var(--border-color) 0%, var(--hover-bg) 100%)',
             }}
           >
             <div

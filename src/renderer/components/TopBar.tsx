@@ -80,7 +80,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
           style={{
             display: 'flex',
             alignItems: 'center',
-            backgroundColor: isFocused ? 'var(--bg-color)' : '#F8F9FA',
+            backgroundColor: isFocused ? 'var(--bg-color)' : 'var(--input-bg)',
             border: `1px solid ${isFocused ? 'var(--accent-color)' : 'transparent'}`,
             borderRadius: '24px',
             padding: '6px 4px 6px 6px',

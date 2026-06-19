@@ -49,7 +49,7 @@ const GroupHeaderRow: React.FC<GroupHeaderRowProps> = ({
         style={{
           display: 'flex', alignItems: 'center', gap: '4px',
           padding: '4px 10px', border: 'none', borderRadius: '12px',
-          backgroundColor: '#6C5CE7', color: 'white',
+          backgroundColor: 'var(--accent-color)', color: 'white',
           fontSize: '11px', fontWeight: 600, cursor: 'pointer',
           transition: 'opacity 0.15s', whiteSpace: 'nowrap', flexShrink: 0,
         }}
