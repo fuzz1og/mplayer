@@ -26,6 +26,11 @@ export function registerIpcHandlerSimple<T, A extends any[] = []>(
   handler: (...args: A) => T
 ): void {
   ipcMain.handle(channel, (_event, ...args: A) => {
-    return handler(...args);
+    try {
+      return handler(...args);
+    } catch (error) {
+      console.error(`[IPC] ${channel} 失败:`, error);
+      throw error;
+    }
   });
 }
