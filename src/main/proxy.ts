@@ -28,7 +28,8 @@ function createPlainAgents() {
 }
 
 function createProxiedAgents(config: ProxyConfig) {
-  const proxyUrl = `${config.protocol}://${config.host}:${config.port}`;
+  const auth = config.username ? `${config.username}:${config.password || ''}@` : '';
+  const proxyUrl = `${config.protocol}://${auth}${config.host}:${config.port}`;
   const httpAgent = new HttpProxyAgent(proxyUrl, DEFAULT_KEEPALIVE_OPTS);
   const httpsAgent = new HttpsProxyAgent(proxyUrl, DEFAULT_KEEPALIVE_OPTS);
   return { httpAgent: httpAgent as unknown as http.Agent, httpsAgent: httpsAgent as unknown as https.Agent };
