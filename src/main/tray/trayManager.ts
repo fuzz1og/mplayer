@@ -53,7 +53,7 @@ export class TrayManager {
       {
         label: '✕ 退出',
         click: () => {
-          app.exit();
+          app.quit();
         },
       },
     ]);

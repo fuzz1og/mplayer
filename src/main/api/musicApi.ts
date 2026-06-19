@@ -185,7 +185,12 @@ export const musicApi = {
       const html = response.data;
       const match = html.match(/_ROUTER_DATA\s*=\s*({[\s\S]*?});/);
       if (!match) return null;
-      const data = JSON.parse(match[1]);
+      const data = JSON.parse(match[1], (_key, value) => {
+        if (_key === '__proto__' || _key === 'constructor' || _key === 'prototype') {
+          return undefined;
+        }
+        return value;
+      });
       const audio = data?.loaderData?.track_page?.audioWithLyricsOption;
       if (!audio?.url) return null;
       return {
@@ -301,7 +306,12 @@ export const musicApi = {
       const match = html.match(/_ROUTER_DATA\s*=\s*({[\s\S]*?});/);
       if (!match) return null;
 
-      const data = JSON.parse(match[1]);
+      const data = JSON.parse(match[1], (_key, value) => {
+        if (_key === '__proto__' || _key === 'constructor' || _key === 'prototype') {
+          return undefined;
+        }
+        return value;
+      });
       const audio = data?.loaderData?.track_page?.audioWithLyricsOption;
       if (!audio || !audio.trackName) return null;
 

@@ -291,9 +291,12 @@ const HotlistDetailPage: React.FC = () => {
               onClick={async () => {
                 setLoading(true);
                 try {
-                  const result = hotlistType === 'netease'
-                    ? await ipcRenderer.invoke('musicApi:getNeteaseHotlist')
-                    : await ipcRenderer.invoke('musicApi:getQQHotlist');
+                  let result;
+                  if (hotlistType === 'netease' || hotlistType === 'netease_new') {
+                    result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
+                  } else {
+                    result = await ipcRenderer.invoke('musicApi:getQQHotlist');
+                  }
                   const data = result.success ? result.data : [];
                   setHotlist(data);
                 } catch (error) {

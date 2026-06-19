@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import LyricsDisplay from '@/renderer/components/LyricsDisplay';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -9,6 +9,15 @@ interface LyricsPageProps {
 
 const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const { lyrics, lyricsLoading, position, currentSong, seek } = usePlayerStore();
+
+  // Escape 键关闭歌词页面
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onBack();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onBack]);
 
   const handleLyricClick = (time: number) => {
     seek(time);
