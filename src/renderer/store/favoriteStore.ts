@@ -67,12 +67,25 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const songBases = await favoriteService.getFavorites();
-      const refreshPromises = songBases.map(songBase => get().refreshSongUrls(songBase));
-      const refreshedSongs = await Promise.all(refreshPromises);
-      const validSongs = refreshedSongs.filter((song): song is Song => song !== null);
-      const ids = validSongs.map(s => s.id);
+      // 先从缓存加载，不主动刷新 URL（避免启动时无代理导致大量网络请求失败）
+      const cachedSongs: Song[] = [];
+      for (const songBase of songBases) {
+        const cachedUrl = await cacheService.getUrlCache(songBase.id);
+        if (cachedUrl) {
+          cachedSongs.push({
+            ...songBase,
+            url: cachedUrl.url,
+            cover: cachedUrl.cover,
+            lrc: cachedUrl.lrc
+          });
+        } else {
+          // 缓存中没有的歌曲，保留原始数据（URL 可能为空）
+          cachedSongs.push(songBase as Song);
+        }
+      }
+      const ids = cachedSongs.map(s => s.id);
       set({
-        favorites: validSongs,
+        favorites: cachedSongs,
         favoriteIds: ids,
         loading: false
       });
