@@ -509,9 +509,9 @@ const DiscoverPage: React.FC = () => {
             <div
               style={{
                 padding: '12px 16px',
-                backgroundColor: '#FF6B6B20',
+                backgroundColor: 'var(--danger-bg)',
                 borderRadius: '8px',
-                color: '#FF6B6B',
+                color: 'var(--danger-color)',
                 marginBottom: '16px',
                 fontSize: '14px',
               }}
@@ -738,7 +738,7 @@ const DiscoverPage: React.FC = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
             gap: '16px',
           }}
         >
@@ -767,7 +767,7 @@ const DiscoverPage: React.FC = () => {
               </div>
             ))
           ) : playlistsError ? (
-            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: '#FF6B6B', backgroundColor: '#FF6B6B10', borderRadius: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: '8px' }}>
               {playlistsError}
             </div>
           ) : (
@@ -845,7 +845,7 @@ const DiscoverPage: React.FC = () => {
             onSongClick={handleHotlistSongClick}
           />
           {(hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError) && (
-            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: '#FF6B6B', backgroundColor: '#FF6B6B10', borderRadius: '8px', fontSize: '14px' }}>
+            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: '8px', fontSize: '14px' }}>
               {hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError}
             </div>
           )}

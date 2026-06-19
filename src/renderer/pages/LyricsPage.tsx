@@ -33,7 +33,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
         flexDirection: 'column',
         gap: '16px'
       }}>
-        <span style={{ color: '#636E72', fontSize: '16px' }}>暂无播放中的歌曲</span>
+        <span style={{ color: 'var(--text-secondary)', fontSize: '16px' }}>暂无播放中的歌曲</span>
         <button
           onClick={onBack}
           style={{
@@ -202,7 +202,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
               justifyContent: 'center',
               height: '100%'
             }}>
-              <span style={{ color: '#636E72', fontSize: '14px' }}>歌词加载中...</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>歌词加载中...</span>
             </div>
           ) : (
             <>
@@ -219,7 +219,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
                   right: 0,
                   textAlign: 'center',
                   fontSize: '12px',
-                  color: '#999'
+                  color: 'var(--text-tertiary)'
                 }}>
                   当前歌曲暂无歌词
                 </div>
