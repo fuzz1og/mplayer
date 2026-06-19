@@ -30,14 +30,21 @@ test.describe('音乐播放模块', () => {
     await searchInput.press('Enter');
     await page.waitForTimeout(3000);
 
+    // 展开分组（如果有）
+    const expandBtn = page.getByText('全部展开');
+    if (await expandBtn.isVisible()) {
+      await expandBtn.click();
+      await page.waitForTimeout(1000);
+    }
+
     // 双击第一首歌曲触发播放
-    const firstSong = page.locator('text=稻香').first();
+    const firstSong = page.locator('div').filter({ hasText: '屋顶' }).first();
     await firstSong.dblclick();
     await page.waitForTimeout(2000);
 
     // 验证播放器栏显示了歌曲信息
     const playerText = await page.textContent('body');
-    expect(playerText).toContain('稻香');
+    expect(playerText).toContain('屋顶');
 
     await page.screenshot({ path: 'e2e/screenshots/playback-playing.png' });
   });

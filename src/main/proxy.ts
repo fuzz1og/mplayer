@@ -3,8 +3,6 @@ import https from 'https';
 import { HttpProxyAgent } from 'http-proxy-agent';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { session } from 'electron';
-import type { AxiosInstance } from 'axios';
-import { db } from './storage/db';
 
 export interface ProxyConfig {
   enabled: boolean;
@@ -28,7 +26,8 @@ function createPlainAgents() {
 }
 
 function createProxiedAgents(config: ProxyConfig) {
-  const proxyUrl = `${config.protocol}://${config.host}:${config.port}`;
+  const auth = config.username ? `${config.username}:${config.password || ''}@` : '';
+  const proxyUrl = `${config.protocol}://${auth}${config.host}:${config.port}`;
   const httpAgent = new HttpProxyAgent(proxyUrl, DEFAULT_KEEPALIVE_OPTS);
   const httpsAgent = new HttpsProxyAgent(proxyUrl, DEFAULT_KEEPALIVE_OPTS);
   return { httpAgent: httpAgent as unknown as http.Agent, httpsAgent: httpsAgent as unknown as https.Agent };
@@ -55,12 +54,6 @@ export function getHttpsAgent(): https.Agent {
   return currentHttpsAgent;
 }
 
-export function updateApiClientAgents(apiClient: AxiosInstance, config: ProxyConfig) {
-  const { httpAgent, httpsAgent } = buildAgents(config);
-  apiClient.defaults.httpAgent = httpAgent;
-  apiClient.defaults.httpsAgent = httpsAgent;
-}
-
 export async function applyElectronProxy(config: ProxyConfig) {
   try {
     if (config.enabled && config.host) {
@@ -71,28 +64,6 @@ export async function applyElectronProxy(config: ProxyConfig) {
     }
   } catch (err) {
     console.error('设置Electron代理失败:', err);
-  }
-}
-
-export async function reloadProxyFromSettings(apiClient: AxiosInstance) {
-  try {
-    const savedConfig = await db.getSetting<ProxyConfig>('proxyConfig');
-    if (savedConfig) {
-      updateApiClientAgents(apiClient, savedConfig);
-      applyElectronProxy(savedConfig);
-    } else {
-      const defaultConfig: ProxyConfig = {
-        enabled: false, host: '', port: 8080, protocol: 'http'
-      };
-      updateApiClientAgents(apiClient, defaultConfig);
-      applyElectronProxy(defaultConfig);
-    }
-  } catch (err) {
-    console.error('加载代理设置失败:', err);
-    const defaultConfig: ProxyConfig = {
-      enabled: false, host: '', port: 8080, protocol: 'http'
-    };
-    buildAgents(defaultConfig);
   }
 }
 

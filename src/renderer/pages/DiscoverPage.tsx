@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, TrendingUp, ArrowLeft, User } from 'lucide-react';
+import { Sparkles, TrendingUp, ArrowLeft, User, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -99,6 +99,13 @@ const DiscoverPage: React.FC = () => {
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>(discoverCache.playlists || []);
   const [playlistsLoading, setPlaylistsLoading] = useState(!discoverCache.playlists);
 
+  // 错误状态
+  const [hotlistError, setHotlistError] = useState<string | null>(null);
+  const [neteaseNewSongListError, setNeteaseNewSongListError] = useState<string | null>(null);
+  const [qqHotlistError, setQQHotlistError] = useState<string | null>(null);
+  const [qqNewSongListError, setQqNewSongListError] = useState<string | null>(null);
+  const [playlistsError, setPlaylistsError] = useState<string | null>(null);
+
   const [activeTab, setActiveTab] = useState<'songs' | 'artists'>('songs');
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
   const [artistLoading, setArtistLoading] = useState(false);
@@ -128,12 +135,14 @@ const DiscoverPage: React.FC = () => {
     const loadHotlist = async () => {
       try {
         setHotlistLoading(true);
+        setHotlistError(null);
         const result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
         const data = result.success ? result.data : [];
         setHotlist(data.slice(0, 20));
         discoverCache.hotlist = data.slice(0, 20);
       } catch (error) {
         console.error('加载网易热榜失败:', error);
+        setHotlistError('加载网易热榜失败');
       } finally {
         setHotlistLoading(false);
       }
@@ -147,12 +156,14 @@ const DiscoverPage: React.FC = () => {
     const loadNeteaseNewSongList = async () => {
       try {
         setNeteaseNewSongListLoading(true);
+        setNeteaseNewSongListError(null);
         const result = await ipcRenderer.invoke('musicApi:getNeteaseNewSongList');
         const data = result.success ? result.data : [];
         setNeteaseNewSongList(data.slice(0, 20));
         discoverCache.neteaseNewSongList = data.slice(0, 20);
       } catch (error) {
         console.error('加载网易新歌榜失败:', error);
+        setNeteaseNewSongListError('加载网易新歌榜失败');
       } finally {
         setNeteaseNewSongListLoading(false);
       }
@@ -166,12 +177,14 @@ const DiscoverPage: React.FC = () => {
     const loadQQHotlist = async () => {
       try {
         setQQHotlistLoading(true);
+        setQQHotlistError(null);
         const result = await ipcRenderer.invoke('musicApi:getQQHotlist');
         const data = result.success ? result.data : [];
         setQQHotlist(data.slice(0, 20));
         discoverCache.qqHotlist = data.slice(0, 20);
       } catch (error) {
         console.error('加载QQ音乐热榜失败:', error);
+        setQQHotlistError('加载QQ音乐热榜失败');
       } finally {
         setQQHotlistLoading(false);
       }
@@ -185,12 +198,14 @@ const DiscoverPage: React.FC = () => {
     const loadQQNewSongList = async () => {
       try {
         setQqNewSongListLoading(true);
+        setQqNewSongListError(null);
         const result = await ipcRenderer.invoke('musicApi:getQQNewSongList');
         const data = result.success ? result.data : [];
         setQqNewSongList(data.slice(0, 20));
         discoverCache.qqNewSongList = data.slice(0, 20);
       } catch (error) {
         console.error('加载QQ音乐新歌榜失败:', error);
+        setQqNewSongListError('加载QQ音乐新歌榜失败');
       } finally {
         setQqNewSongListLoading(false);
       }
@@ -204,12 +219,14 @@ const DiscoverPage: React.FC = () => {
     const loadPlaylists = async () => {
       try {
         setPlaylistsLoading(true);
+        setPlaylistsError(null);
         const result = await ipcRenderer.invoke('musicApi:getNeteasePlaylists', '全部', 'hot', 0, 10);
         const data = result.success ? result.data : { playlists: [] };
         setPlaylists(data.playlists || []);
         discoverCache.playlists = data.playlists || [];
       } catch (error) {
         console.error('加载热门歌单失败', error);
+        setPlaylistsError('加载热门歌单失败');
       } finally {
         setPlaylistsLoading(false);
       }
@@ -278,6 +295,94 @@ const DiscoverPage: React.FC = () => {
     useSearchStore.getState().reset();
     setArtistResults([]);
     setActiveTab('songs');
+  };
+
+  const handleRefresh = () => {
+    // 清除缓存
+    discoverCache.hotlist = null;
+    discoverCache.neteaseNewSongList = null;
+    discoverCache.qqHotlist = null;
+    discoverCache.qqNewSongList = null;
+    discoverCache.playlists = null;
+
+    // 设置 loading 状态并清除错误
+    setHotlistLoading(true);
+    setNeteaseNewSongListLoading(true);
+    setQQHotlistLoading(true);
+    setQqNewSongListLoading(true);
+    setPlaylistsLoading(true);
+    setHotlistError(null);
+    setNeteaseNewSongListError(null);
+    setQQHotlistError(null);
+    setQqNewSongListError(null);
+    setPlaylistsError(null);
+
+    // 重新请求数据
+    const loadData = async () => {
+      try {
+        const [hotlistRes, newSongRes, qqHotRes, qqNewRes, playlistRes] = await Promise.allSettled([
+          ipcRenderer.invoke('musicApi:getNeteaseHotlist'),
+          ipcRenderer.invoke('musicApi:getNeteaseNewSongList'),
+          ipcRenderer.invoke('musicApi:getQQHotlist'),
+          ipcRenderer.invoke('musicApi:getQQNewSongList'),
+          ipcRenderer.invoke('musicApi:getNeteasePlaylists', '全部', 'hot', 0, 10),
+        ]);
+
+        // 网易热榜
+        if (hotlistRes.status === 'fulfilled' && hotlistRes.value.success) {
+          const data = hotlistRes.value.data;
+          setHotlist(data.slice(0, 20));
+          discoverCache.hotlist = data.slice(0, 20);
+        } else {
+          setHotlistError('加载网易热榜失败');
+        }
+
+        // 网易新歌榜
+        if (newSongRes.status === 'fulfilled' && newSongRes.value.success) {
+          const data = newSongRes.value.data;
+          setNeteaseNewSongList(data.slice(0, 20));
+          discoverCache.neteaseNewSongList = data.slice(0, 20);
+        } else {
+          setNeteaseNewSongListError('加载网易新歌榜失败');
+        }
+
+        // QQ热榜
+        if (qqHotRes.status === 'fulfilled' && qqHotRes.value.success) {
+          const data = qqHotRes.value.data;
+          setQQHotlist(data.slice(0, 20));
+          discoverCache.qqHotlist = data.slice(0, 20);
+        } else {
+          setQQHotlistError('加载QQ音乐热榜失败');
+        }
+
+        // QQ新歌榜
+        if (qqNewRes.status === 'fulfilled' && qqNewRes.value.success) {
+          const data = qqNewRes.value.data;
+          setQqNewSongList(data.slice(0, 20));
+          discoverCache.qqNewSongList = data.slice(0, 20);
+        } else {
+          setQqNewSongListError('加载QQ音乐新歌榜失败');
+        }
+
+        // 热门歌单
+        if (playlistRes.status === 'fulfilled' && playlistRes.value.success) {
+          const data = playlistRes.value.data;
+          setPlaylists(data.playlists || []);
+          discoverCache.playlists = data.playlists || [];
+        } else {
+          setPlaylistsError('加载热门歌单失败');
+        }
+      } catch (error) {
+        console.error('刷新数据失败:', error);
+      } finally {
+        setHotlistLoading(false);
+        setNeteaseNewSongListLoading(false);
+        setQQHotlistLoading(false);
+        setQqNewSongListLoading(false);
+        setPlaylistsLoading(false);
+      }
+    };
+    loadData();
   };
 
   // 如果有搜索关键词，显示搜索结果
@@ -587,6 +692,38 @@ const DiscoverPage: React.FC = () => {
   // 默认显示发现页内容
   return (
     <div style={{ padding: '24px', height: '100%', overflow: 'auto' }}>
+      {/* 刷新按钮 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+        <button
+          onClick={handleRefresh}
+          disabled={hotlistLoading || neteaseNewSongListLoading || qqHotlistLoading || qqNewSongListLoading || playlistsLoading}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 16px',
+            background: 'var(--content-bg)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            color: 'var(--text-secondary)',
+            fontSize: '13px',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--accent-color)';
+            e.currentTarget.style.color = 'var(--accent-color)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border-color)';
+            e.currentTarget.style.color = 'var(--text-secondary)';
+          }}
+        >
+          <RefreshCw size={14} />
+          <span>刷新</span>
+        </button>
+      </div>
+
       {/* 热门歌单 */}
       <section style={{ marginBottom: '40px' }}>
         <SectionHeader
@@ -626,6 +763,10 @@ const DiscoverPage: React.FC = () => {
                 />
               </div>
             ))
+          ) : playlistsError ? (
+            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: '#FF6B6B', backgroundColor: '#FF6B6B10', borderRadius: '8px' }}>
+              {playlistsError}
+            </div>
           ) : (
             playlists.slice(0, 10).map(playlist => (
               <DiscoverPlaylistCard key={playlist.id} playlist={playlist} />
@@ -700,6 +841,11 @@ const DiscoverPage: React.FC = () => {
             sourceType="qq"
             onSongClick={handleHotlistSongClick}
           />
+          {(hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError) && (
+            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: '#FF6B6B', backgroundColor: '#FF6B6B10', borderRadius: '8px', fontSize: '14px' }}>
+              {hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError}
+            </div>
+          )}
           <style>{`
             @keyframes pulse {
               0%, 100% {

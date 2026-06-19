@@ -3,7 +3,8 @@ import path from 'path';
 import axios from 'axios';
 import MP3Tag from 'mp3tag.js';
 import { BrowserWindow } from 'electron';
-import { musicApi, getApiClient } from '../api/musicApi';
+import { musicApi } from '../api/musicApi';
+import { getHttpAgent, getHttpsAgent } from '../proxy';
 import type { Song } from '@/shared/types/song';
 
 export interface DownloadTask {
@@ -252,12 +253,11 @@ class DownloadService {
         throw new Error('无法获取音频 URL');
       }
 
-      const apiClient = getApiClient();
       const response = await axios({
         method: 'GET',
         url: realUrl,
-        httpAgent: apiClient.defaults.httpAgent,
-        httpsAgent: apiClient.defaults.httpsAgent,
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
         responseType: 'stream',
         timeout: 60000,
         onDownloadProgress: (progressEvent) => {

@@ -47,9 +47,10 @@
   },
   "overrides": {
     "tar": "^7.5.16",
-    "esbuild": "^0.28.1"
+    "esbuild": "0.25.2"
   },
   "devDependencies": {
+    "esbuild": "0.25.2",
     "@playwright/test": "^1.61.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
