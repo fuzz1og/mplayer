@@ -17,7 +17,7 @@ const PlayerVolume: React.FC<PlayerVolumeProps> = React.memo(({
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '140px', minWidth: '140px', justifyContent: 'flex-end' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '80px', maxWidth: '140px', justifyContent: 'flex-end' }}>
       <button onClick={onToggleMute} aria-label={volume === 0 ? '取消静音' : '静音'}
         style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
         {getVolumeIcon()}
