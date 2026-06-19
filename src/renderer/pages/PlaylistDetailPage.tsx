@@ -209,13 +209,14 @@ const PlaylistDetailPage: React.FC = () => {
       cancelText: '取消',
       onOk: async () => {
         if (!playlistId) return;
+        const count = selectedIds.length;
         try {
           for (const songId of selectedIds) {
             await playlistService.removeSongFromPlaylist(playlistId, songId);
           }
           setSelectedIds([]);
           loadData();
-          message.success(`已移除 ${selectedIds.length} 首歌曲`);
+          message.success(`已移除 ${count} 首歌曲`);
         } catch (error) {
           message.error('批量移除失败');
         }
