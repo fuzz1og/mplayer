@@ -292,6 +292,13 @@ export const musicApi = {
    */
   async parseSodaShareLink(link: string): Promise<Song | null> {
     try {
+      // SSRF 防护：仅允许汽水音乐/抖音域名
+      const allowedHosts = ['qishui.douyin.com', 'music.douyin.com'];
+      const url = new URL(link);
+      if (!allowedHosts.some(h => url.hostname === h || url.hostname.endsWith('.' + h))) {
+        throw new Error('不支持的链接域名');
+      }
+
       const response = await axios.get(link, {
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),

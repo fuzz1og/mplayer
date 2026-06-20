@@ -27,9 +27,9 @@ class DownloadService {
   private tasks: Map<string, DownloadTask> = new Map();
   private queue: string[] = [];
   private activeDownloads: Set<string> = new Set();
+  private abortControllers: Map<string, AbortController> = new Map();
   private maxConcurrentDownloads: number = 3;
   private downloadPath: string = '';
-  private callbacks: DownloadOptions = { downloadPath: '' };
 
   private async fetchCoverAsBuffer(coverUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
     if (!coverUrl) return null;
@@ -97,7 +97,6 @@ class DownloadService {
 
   initialize(options: DownloadOptions): void {
     this.downloadPath = options.downloadPath;
-    this.callbacks = options;
 
     if (!fs.existsSync(this.downloadPath)) {
       fs.mkdirSync(this.downloadPath, { recursive: true });
@@ -258,6 +257,9 @@ class DownloadService {
         throw new Error('无法获取音频 URL');
       }
 
+      const controller = new AbortController();
+      this.abortControllers.set(task.id, controller);
+
       const response = await axios({
         method: 'GET',
         url: realUrl,
@@ -265,12 +267,12 @@ class DownloadService {
         httpsAgent: getHttpsAgent(),
         responseType: 'stream',
         timeout: 60000,
+        signal: controller.signal,
         onDownloadProgress: (progressEvent) => {
           if (progressEvent.total) {
             const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             task.progress = progress;
             this.tasks.set(task.id, task);
-            this.callbacks.onProgress?.(task);
             this.notifyProgress(task);
           }
         }
@@ -283,8 +285,15 @@ class DownloadService {
       else if (ct.includes('audio/flac')) ext = '.flac';
       else if (ct.includes('audio/ogg')) ext = '.ogg';
 
-      const fileName = this.sanitizeFileName(`${task.song.name} - ${task.song.artist}${ext}`);
-      const filePath = path.join(this.downloadPath, fileName);
+      let fileName = this.sanitizeFileName(`${task.song.name} - ${task.song.artist}${ext}`);
+      let filePath = path.join(this.downloadPath, fileName);
+      // 重复文件名防覆盖：追加序号
+      let counter = 1;
+      while (fs.existsSync(filePath)) {
+        fileName = this.sanitizeFileName(`${task.song.name} - ${task.song.artist} (${counter})${ext}`);
+        filePath = path.join(this.downloadPath, fileName);
+        counter++;
+      }
 
       // 检查下载路径是否存在
       if (!fs.existsSync(this.downloadPath)) {
@@ -311,7 +320,6 @@ class DownloadService {
           task.status = 'completed';
           task.progress = 100;
           this.tasks.set(task.id, task);
-          this.callbacks.onComplete?.(task);
           this.notifyComplete(task);
           resolve();
         });
@@ -321,7 +329,6 @@ class DownloadService {
           task.status = 'error';
           task.error = error.message;
           this.tasks.set(task.id, task);
-          this.callbacks.onError?.(task, error);
           this.notifyError(task, error);
           reject(error);
         });
@@ -335,7 +342,6 @@ class DownloadService {
       task.status = 'error';
       task.error = error instanceof Error ? error.message : '下载失败';
       this.tasks.set(task.id, task);
-      this.callbacks.onError?.(task, error instanceof Error ? error : new Error('下载失败'));
       this.notifyError(task, error instanceof Error ? error : new Error('下载失败'));
     }
   }
@@ -349,10 +355,18 @@ class DownloadService {
       this.queue.splice(queueIndex, 1);
     }
 
-    if (task.status === 'downloading') {
+    // 中止 HTTP 流
+    const controller = this.abortControllers.get(taskId);
+    if (controller) {
+      controller.abort();
+      this.abortControllers.delete(taskId);
+    }
+
+    if (task.status === 'downloading' || task.status === 'pending') {
       task.status = 'error';
       task.error = '已取消';
       this.tasks.set(taskId, task);
+      this.notifyError(task, new Error('已取消'));
     }
 
     return true;
