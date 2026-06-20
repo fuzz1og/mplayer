@@ -29,6 +29,9 @@ import { registerIpcHandler, registerIpcHandlerSimple } from './ipc/registerHand
 import { updateService } from './services/updateService';
 import type { Song } from '@/shared/types/song';
 
+// 标记是否正在退出（托盘退出时设置，防止 close 事件拦截退出）
+let isQuitting = false;
+
 function createWindow() {
   const iconPath = path.join(app.getAppPath(), 'resources', 'icon.png');
   const mainWindow = new BrowserWindow({
@@ -59,8 +62,10 @@ function createWindow() {
 
   // 关闭时隐藏到托盘，而不是退出
   mainWindow.on('close', (event) => {
-    event.preventDefault();
-    mainWindow.hide();
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
   });
 
   return mainWindow;
@@ -333,6 +338,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// 在退出流程开始时设置标志，让 close 事件不再拦截
+app.on('before-quit', () => {
+  isQuitting = true;
 });
 
 app.on('will-quit', () => {
