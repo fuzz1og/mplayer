@@ -50,6 +50,14 @@
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s ease;
   --transition-slow: 0.35s ease;
+
+  /* 语义色 */
+  --danger-color: #FF6B6B;
+  --danger-bg: #FF6B6B20;
+  --warning-color: #FDCB6E;
+  --success-color: #00B894;
+  --input-bg: #F8F9FA;
+  --skeleton-shimmer-color: rgba(200, 200, 200, 0.15);
 }
 
 /* 重置样式 */
@@ -420,5 +428,61 @@ html, body, #root {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+/* 骨架屏动画 */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes skeletonLoading {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--skeleton-shimmer-color) 25%, rgba(200, 200, 200, 0.3) 50%, var(--skeleton-shimmer-color) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-loading {
+  animation: skeletonLoading 1.5s ease-in-out infinite;
+}
+
+.animate-pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* 焦点可见样式 */
+:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* 响应式布局 */
+@media (max-width: 1024px) {
+  :root {
+    --sidebar-width: 60px;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 0px;
   }
 }

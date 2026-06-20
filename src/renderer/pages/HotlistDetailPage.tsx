@@ -279,9 +279,9 @@ const HotlistDetailPage: React.FC = () => {
           <div
             style={{
               padding: '24px',
-              backgroundColor: '#FF6B6B20',
+              backgroundColor: 'var(--danger-bg)',
               borderRadius: '8px',
-              color: '#FF6B6B',
+              color: 'var(--danger-color)',
               textAlign: 'center',
             }}
           >
@@ -291,9 +291,12 @@ const HotlistDetailPage: React.FC = () => {
               onClick={async () => {
                 setLoading(true);
                 try {
-                  const result = hotlistType === 'netease'
-                    ? await ipcRenderer.invoke('musicApi:getNeteaseHotlist')
-                    : await ipcRenderer.invoke('musicApi:getQQHotlist');
+                  let result;
+                  if (hotlistType === 'netease' || hotlistType === 'netease_new') {
+                    result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
+                  } else {
+                    result = await ipcRenderer.invoke('musicApi:getQQHotlist');
+                  }
                   const data = result.success ? result.data : [];
                   setHotlist(data);
                 } catch (error) {
@@ -305,7 +308,7 @@ const HotlistDetailPage: React.FC = () => {
               style={{
                 marginTop: '16px',
                 padding: '8px 16px',
-                backgroundColor: '#FF6B6B',
+                backgroundColor: 'var(--danger-color)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',

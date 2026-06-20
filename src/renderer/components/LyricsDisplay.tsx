@@ -72,7 +72,7 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
         }}
       >
         <span style={{ 
-          color: '#2D3436', 
+          color: 'var(--text-primary)', 
           fontSize: '14px',
           textShadow: '0 1px 2px rgba(255, 255, 255, 0.8)'
         }}>
@@ -125,7 +125,7 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
                 style={{
                   fontSize: isActive ? '20px' : '17px',
                   fontWeight: isActive ? 700 : 500,
-                  color: isActive ? '#2D3436' : isPast ? '#636E72' : '#4A5568',
+                  color: isActive ? 'var(--text-primary)' : isPast ? 'var(--text-secondary)' : 'var(--text-secondary)',
                   lineHeight: '1.8',
                   transition: 'all 0.3s ease',
                   textShadow: isActive 

@@ -215,7 +215,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: 'linear-gradient(135deg, #E8E8E8 0%, #F0F0F0 100%)',
+                  background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)',
                 }}
               >
                 <ListMusic size={20} color="#999" />
@@ -322,7 +322,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                           {playlist.name}
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {dup?.status === 'duplicate' && <span style={{ color: '#FF6B6B' }}>已存在</span>}
+                          {dup?.status === 'duplicate' && <span style={{ color: 'var(--danger-color)' }}>已存在</span>}
                           {dup?.status === 'nameConflict' && <span style={{ color: '#F0A500' }}>同名（不同平台）</span>}
                           {(!dup || dup?.status === 'ok') && (playlist.description || '歌单')}
                         </div>

@@ -190,7 +190,7 @@ const HotlistCard: React.FC<HotlistCardProps> = ({
                   width: '16px',
                   fontSize: '13px',
                   fontWeight: 600,
-                  color: song.rank <= 3 ? '#FF4D4F' : 'var(--text-tertiary)',
+                  color: song.rank <= 3 ? 'var(--danger-color)' : 'var(--text-tertiary)',
                   textAlign: 'center',
                 }}
               >

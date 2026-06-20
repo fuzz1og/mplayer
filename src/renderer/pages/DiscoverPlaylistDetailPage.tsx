@@ -193,7 +193,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
         {songsLoading ? (
           <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '40px' }}>正在加载歌曲列表...</div>
         ) : songsError ? (
-          <div style={{ padding: '12px 16px', backgroundColor: '#FF6B6B20', borderRadius: '8px', color: '#FF6B6B', textAlign: 'center' }}>
+          <div style={{ padding: '12px 16px', backgroundColor: 'var(--danger-bg)', borderRadius: '8px', color: 'var(--danger-color)', textAlign: 'center' }}>
             {songsError}
           </div>
         ) : (

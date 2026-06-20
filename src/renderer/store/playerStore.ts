@@ -184,10 +184,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       });
 
       // Fire-and-forget: 歌词获取不阻塞播放
+      // 记录当前歌曲ID，用于防止竞态条件
+      const requestingSongId = song.id;
       if (!song.lrc || song.lrc.trim() === '') {
         set({ lyricsLoading: true });
         resolveSongUrls(song.name, song.artist, song.sourceType)
           .then((searchResults) => {
+            // 如果用户已切歌，丢弃旧结果
+            if (get().currentSong?.id !== requestingSongId) return null;
             if (searchResults.length > 0) {
               const freshSong = searchResults[0];
               if (freshSong.lrc && freshSong.lrc.trim() !== '') {
@@ -197,21 +201,32 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             return '';
           })
           .then((lyricsContent) => {
-            set({ lyrics: lyricsContent, lyricsLoading: false });
+            // 再次检查：如果用户已切歌，丢弃旧结果
+            if (lyricsContent !== null && get().currentSong?.id === requestingSongId) {
+              set({ lyrics: lyricsContent, lyricsLoading: false });
+            } else if (lyricsContent === null) {
+              set({ lyricsLoading: false });
+            }
           })
           .catch((lyricsError) => {
             console.error('获取歌词失败:', lyricsError);
-            set({ lyrics: '', lyricsLoading: false });
+            if (get().currentSong?.id === requestingSongId) {
+              set({ lyrics: '', lyricsLoading: false });
+            }
           });
       } else {
         set({ lyricsLoading: true });
         lyricsService.getLyrics(song.lrc)
           .then((lyricsContent) => {
-            set({ lyrics: lyricsContent, lyricsLoading: false });
+            if (get().currentSong?.id === requestingSongId) {
+              set({ lyrics: lyricsContent, lyricsLoading: false });
+            }
           })
           .catch((lyricsError) => {
             console.error('获取歌词失败:', lyricsError);
-            set({ lyrics: '', lyricsLoading: false });
+            if (get().currentSong?.id === requestingSongId) {
+              set({ lyrics: '', lyricsLoading: false });
+            }
           });
       }
 
@@ -451,13 +466,21 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
 // Sync state to tray when currentSong or isPlaying changes
 // NOTE: ipcRenderer is already imported at line 6
+let lastTraySongId = '';
+let lastTrayIsPlaying: boolean | null = null;
 usePlayerStore.subscribe((state) => {
   if (state.currentSong) {
-    ipcRenderer.send('tray:state', {
-      songName: state.currentSong.name,
-      artist: state.currentSong.artist,
-      isPlaying: state.isPlaying,
-    });
+    const songChanged = state.currentSong.id !== lastTraySongId;
+    const playStateChanged = state.isPlaying !== lastTrayIsPlaying;
+    if (songChanged || playStateChanged) {
+      lastTraySongId = state.currentSong.id;
+      lastTrayIsPlaying = state.isPlaying;
+      ipcRenderer.send('tray:state', {
+        songName: state.currentSong.name,
+        artist: state.currentSong.artist,
+        isPlaying: state.isPlaying,
+      });
+    }
   }
 });
 

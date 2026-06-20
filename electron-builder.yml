@@ -14,6 +14,13 @@ files:
   - "!**/__tests__/**"
   - "!**/*.test.*"
   - "!**/*.spec.*"
+  - "!dist/*.exe"
+  - "!dist/*.7z"
+  - "!dist/*.zip"
+  - "!dist/builder-*"
+  - "!dist/win-unpacked/**"
+  - "!dist/mac/**"
+  - "!dist/linux*/**"
 win:
   icon: resources/icon.ico
   target:
