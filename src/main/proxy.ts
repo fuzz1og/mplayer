@@ -25,8 +25,18 @@ function createPlainAgents() {
   };
 }
 
+function validateProxyConfig(config: ProxyConfig): boolean {
+  if (!config.enabled) return true;
+  // host 只允许合法主机名/IP，防止注入代理规则
+  if (config.host && !/^[a-zA-Z0-9._-]+$/.test(config.host)) return false;
+  // port 必须是 1-65535 的整数
+  if (config.port && (config.port < 1 || config.port > 65535 || !Number.isInteger(config.port))) return false;
+  return true;
+}
+
 function createProxiedAgents(config: ProxyConfig) {
-  const auth = config.username ? `${config.username}:${config.password || ''}@` : '';
+  // 对用户名/密码进行 URL 编码，防止特殊字符导致 URL 解析错误
+  const auth = config.username ? `${encodeURIComponent(config.username)}:${encodeURIComponent(config.password || '')}@` : '';
   const proxyUrl = `${config.protocol}://${auth}${config.host}:${config.port}`;
   const httpAgent = new HttpProxyAgent(proxyUrl, DEFAULT_KEEPALIVE_OPTS);
   const httpsAgent = new HttpsProxyAgent(proxyUrl, DEFAULT_KEEPALIVE_OPTS);
@@ -35,6 +45,13 @@ function createProxiedAgents(config: ProxyConfig) {
 
 export function buildAgents(config: ProxyConfig) {
   if (config.enabled && config.host) {
+    if (!validateProxyConfig(config)) {
+      console.error('[Proxy] 代理配置无效，忽略代理设置');
+      const agents = createPlainAgents();
+      currentHttpAgent = agents.httpAgent;
+      currentHttpsAgent = agents.httpsAgent;
+      return agents;
+    }
     const agents = createProxiedAgents(config);
     currentHttpAgent = agents.httpAgent;
     currentHttpsAgent = agents.httpsAgent;
@@ -57,6 +74,11 @@ export function getHttpsAgent(): https.Agent {
 export async function applyElectronProxy(config: ProxyConfig) {
   try {
     if (config.enabled && config.host) {
+      if (!validateProxyConfig(config)) {
+        console.error('[Proxy] 代理配置无效，忽略代理设置');
+        await session.defaultSession.setProxy({ proxyRules: 'direct://' });
+        return;
+      }
       const rules = `http=${config.host}:${config.port};https=${config.host}:${config.port}`;
       await session.defaultSession.setProxy({ proxyRules: rules });
     } else {

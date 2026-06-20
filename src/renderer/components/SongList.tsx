@@ -216,7 +216,7 @@ const SongList: React.FC<SongListProps> = ({
               {enableBatchAddToPlaylist && (
                 <button
                   onClick={handleBatchAddToPlaylist}
-                  style={{ ...batchBtnStyle, backgroundColor: '#4ECDC4' }}
+                  style={{ ...batchBtnStyle, backgroundColor: 'var(--accent-color)' }}
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#45B7AA'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#4ECDC4'; }}
                 >
@@ -227,7 +227,7 @@ const SongList: React.FC<SongListProps> = ({
               {enableBatchDelete && (
                 <button
                   onClick={handleBatchDelete}
-                  style={{ ...batchBtnStyle, backgroundColor: '#FF6B6B' }}
+                  style={{ ...batchBtnStyle, backgroundColor: 'var(--danger-color)' }}
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EE5A6F'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FF6B6B'; }}
                 >

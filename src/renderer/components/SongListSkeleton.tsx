@@ -35,24 +35,11 @@ const SongListSkeleton: React.FC<SongListSkeletonProps> = ({
   showCheckbox = false,
   showIndex = true,
 }) => (
-  <>
-    <style>{`
-      .skeleton-shimmer {
-        background: linear-gradient(90deg, var(--hover-bg) 25%, rgba(200,200,200,0.15) 50%, var(--hover-bg) 75%);
-        background-size: 200% 100%;
-        animation: shimmer 1.5s ease-in-out infinite;
-      }
-      @keyframes shimmer {
-        0% { background-position: 200% 0; }
-        100% { background-position: -200% 0; }
-      }
-    `}</style>
-    <div style={{ padding: '8px 0' }}>
-      {Array.from({ length: rowCount }).map((_, i) => (
-        <SkeletonRow key={i} showCheckbox={showCheckbox} showIndex={showIndex} />
-      ))}
-    </div>
-  </>
+  <div style={{ padding: '8px 0' }}>
+    {Array.from({ length: rowCount }).map((_, i) => (
+      <SkeletonRow key={i} showCheckbox={showCheckbox} showIndex={showIndex} />
+    ))}
+  </div>
 );
 
 export default SongListSkeleton;

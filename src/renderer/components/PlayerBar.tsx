@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { ListMusic, Heart } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -13,37 +13,36 @@ interface PlayerBarProps {
 }
 
 const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
-  const {
-    currentSong,
-    isPlaying,
-    volume,
-    position,
-    duration,
-    playMode,
-    pause,
-    resume,
-    seek,
-    setVolume,
-    setPlayMode,
-    playNext,
-    playPrevious
-  } = usePlayerStore();
+  // 使用选择器拆分订阅，避免 position 每 250ms 变化导致整个 PlayerBar 重渲染
+  const currentSong = usePlayerStore(s => s.currentSong);
+  const isPlaying = usePlayerStore(s => s.isPlaying);
+  const volume = usePlayerStore(s => s.volume);
+  const position = usePlayerStore(s => s.position);
+  const duration = usePlayerStore(s => s.duration);
+  const playMode = usePlayerStore(s => s.playMode);
+  const pause = usePlayerStore(s => s.pause);
+  const resume = usePlayerStore(s => s.resume);
+  const seek = usePlayerStore(s => s.seek);
+  const setVolume = usePlayerStore(s => s.setVolume);
+  const setPlayMode = usePlayerStore(s => s.setPlayMode);
+  const playNext = usePlayerStore(s => s.playNext);
+  const playPrevious = usePlayerStore(s => s.playPrevious);
 
   const { isFavorite, toggleFavorite } = useFavoriteStore();
   const coverSrc = useCachedCover(currentSong?.cover ?? '');
 
-  const handlePlayPause = () => {
+  const handlePlayPause = useCallback(() => {
     if (!currentSong) return;
     if (isPlaying) {
       pause();
     } else {
       resume();
     }
-  };
+  }, [currentSong, isPlaying, pause, resume]);
 
-  const handleVolumeChange = (vol: number) => {
+  const handleVolumeChange = useCallback((vol: number) => {
     setVolume(vol);
-  };
+  }, [setVolume]);
 
   return (
     <div
@@ -100,7 +99,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(135deg, #E8E8E8 0%, #F0F0F0 100%)',
+                background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)',
               }}
             >
               <ListMusic size={24} color="var(--text-tertiary)" />

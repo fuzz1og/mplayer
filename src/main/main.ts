@@ -29,64 +29,8 @@ import { registerIpcHandler, registerIpcHandlerSimple } from './ipc/registerHand
 import { updateService } from './services/updateService';
 import type { Song } from '@/shared/types/song';
 
-// IPC通信管理器
-class IPCManager {
-  private pendingRequests: Map<string, { resolve: (value: any) => void, reject: (reason?: any) => void, timeout: NodeJS.Timeout }> = new Map();
-  private requestId = 0;
-
-  constructor(private mainWindow: BrowserWindow) {}
-
-  // 生成唯一请求ID
-  private generateRequestId(): string {
-    return `${Date.now()}-${++this.requestId}`;
-  }
-
-  // 发送请求并等待确认
-  public async sendRequest(channel: string, data: any, timeout: number = 30000): Promise<any> {
-    const requestId = this.generateRequestId();
-
-    return new Promise((resolve, reject) => {
-      // 设置超时
-      const timeoutId = setTimeout(() => {
-        this.pendingRequests.delete(requestId);
-        reject(new Error(`IPC请求超时: ${channel}`));
-      }, timeout);
-
-      // 存储待处理请求
-      this.pendingRequests.set(requestId, { resolve, reject, timeout: timeoutId });
-
-      // 发送请求
-      this.mainWindow.webContents.send(channel, {
-        requestId,
-        data
-      });
-    });
-  }
-
-  // 处理确认消息
-  public handleAck(requestId: string, success: boolean, data: any, error: string) {
-    const pending = this.pendingRequests.get(requestId);
-    if (!pending) return;
-
-    // 清除超时
-    clearTimeout(pending.timeout);
-    this.pendingRequests.delete(requestId);
-
-    if (success) {
-      pending.resolve(data);
-    } else {
-      pending.reject(new Error(error || 'IPC通信失败'));
-    }
-  }
-
-  // 添加确认处理器
-  public setupAckHandlers() {
-    // 通用确认处理器
-    ipcMain.on('ipc:ack', (_, payload) => {
-      this.handleAck(payload.requestId, payload.success, payload.data, payload.error);
-    });
-  }
-}
+// 标记是否正在退出（托盘退出时设置，防止 close 事件拦截退出）
+let isQuitting = false;
 
 function createWindow() {
   const iconPath = path.join(app.getAppPath(), 'resources', 'icon.png');
@@ -105,7 +49,9 @@ function createWindow() {
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-    mainWindow.webContents.openDevTools();
+    if (!app.isPackaged) {
+      mainWindow.webContents.openDevTools();
+    }
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
@@ -116,8 +62,10 @@ function createWindow() {
 
   // 关闭时隐藏到托盘，而不是退出
   mainWindow.on('close', (event) => {
-    event.preventDefault();
-    mainWindow.hide();
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
   });
 
   return mainWindow;
@@ -214,10 +162,6 @@ app.whenReady().then(async () => {
     applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
   }
 
-  // 设置IPC管理器
-  const ipcManager = new IPCManager(mainWindow);
-  ipcManager.setupAckHandlers();
-
   // 缓存 IPC (同步)
   registerIpcHandlerSimple('cache:getSong', (keyword: string) => getCacheManager().getSongCache(keyword));
   registerIpcHandlerSimple('cache:setSong', (keyword: string, songs: any[]) => getCacheManager().setSongCache(keyword, songs));
@@ -312,7 +256,13 @@ app.whenReady().then(async () => {
     return { path: defaultPath };
   });
   registerIpcHandlerSimple('settings:getApiUrl', () => db.getSetting('apiUrl') || '');
-  registerIpcHandler('settings:setApiUrl', (url: string) => db.setSetting('apiUrl', url));
+  registerIpcHandler('settings:setApiUrl', (url: string) => {
+    // 仅允许 http/https 协议，防止 file:// 等危险协议
+    if (url && !/^https?:\/\/.+/.test(url)) {
+      throw new Error('API URL 必须以 http:// 或 https:// 开头');
+    }
+    return db.setSetting('apiUrl', url);
+  });
   registerIpcHandlerSimple('settings:getProxy', async () => {
     const saved = await db.getSetting<ProxyConfig>('proxyConfig');
     return saved || { enabled: false, host: '', port: 8080, protocol: 'http' };
@@ -324,7 +274,7 @@ app.whenReady().then(async () => {
   });
 
   // 应用 IPC
-  registerIpcHandlerSimple('app:quit', () => app.exit());
+  registerIpcHandlerSimple('app:quit', () => app.quit());
 
   // 更新 IPC
   updateService.setMainWindow(mainWindow);
@@ -358,18 +308,23 @@ app.whenReady().then(async () => {
 
   // Tray state sync from renderer
   ipcMain.on('tray:state', (_event, state: { songName: string; artist: string; isPlaying: boolean }) => {
-    trayManager.updateSongInfo(state.songName, state.artist);
-    trayManager.updatePlayState(state.isPlaying);
+    // 截断并过滤控制字符，防止恶意内容注入托盘
+    const sanitize = (s: string) => (s || '').replace(/[\x00-\x1f\x7f]/g, '').slice(0, 100);
+    trayManager.updateSongInfo(sanitize(state.songName), sanitize(state.artist));
+    trayManager.updatePlayState(!!state.isPlaying);
     trayManager.refreshMenu(mainWindow);
   });
 
-  // Tray action handler (minimize, etc.)
+  // Tray action handler (minimize, etc.) - 仅允许已知类型
+  const TRAY_ACTION_TYPES = new Set(['minimize']);
   ipcMain.on('tray:action', (_event, payload: { type: string }) => {
     if (payload.type === 'minimize') {
       mainWindow.hide();
       return;
     }
-    mainWindow.webContents.send('tray:action', payload);
+    if (TRAY_ACTION_TYPES.has(payload.type)) {
+      mainWindow.webContents.send('tray:action', payload);
+    }
   });
 
   app.on('activate', () => {
@@ -385,6 +340,20 @@ app.on('window-all-closed', () => {
   }
 });
 
+// 在退出流程开始时设置标志，让 close 事件不再拦截
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  // 确保防抖写入的数据落盘
+  try {
+    const { fileStorage } = require('./storage/fileStorage');
+    if (fileStorage && typeof fileStorage.flushSave === 'function') {
+      fileStorage.flushSave();
+    }
+  } catch {
+    // ignore
+  }
 });
