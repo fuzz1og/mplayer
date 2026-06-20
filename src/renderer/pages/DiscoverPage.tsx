@@ -385,12 +385,15 @@ const DiscoverPage: React.FC = () => {
     loadData();
   };
 
-  // 如果有搜索关键词，显示搜索结果
-  if (currentKeyword && (songs.length > 0 || groups.length > 0 || artistResults.length > 0 || loading || error)) {
-    // 搜索结果时自动展开所有分组
-    if (groups.length > 0 && useSearchStore.getState().expandedKeys.length === 0) {
+  // 搜索结果时自动展开所有分组（使用 useEffect 避免渲染阶段副作用）
+  useEffect(() => {
+    if (currentKeyword && groups.length > 0 && useSearchStore.getState().expandedKeys.length === 0) {
       useSearchStore.getState().expandAll();
     }
+  }, [currentKeyword, groups.length]);
+
+  // 如果有搜索关键词，显示搜索结果
+  if (currentKeyword && (songs.length > 0 || groups.length > 0 || artistResults.length > 0 || loading || error)) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 搜索结果导航栏 */}
@@ -506,9 +509,9 @@ const DiscoverPage: React.FC = () => {
             <div
               style={{
                 padding: '12px 16px',
-                backgroundColor: '#FF6B6B20',
+                backgroundColor: 'var(--danger-bg)',
                 borderRadius: '8px',
-                color: '#FF6B6B',
+                color: 'var(--danger-color)',
                 marginBottom: '16px',
                 fontSize: '14px',
               }}
@@ -735,7 +738,7 @@ const DiscoverPage: React.FC = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
             gap: '16px',
           }}
         >
@@ -764,7 +767,7 @@ const DiscoverPage: React.FC = () => {
               </div>
             ))
           ) : playlistsError ? (
-            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: '#FF6B6B', backgroundColor: '#FF6B6B10', borderRadius: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: '8px' }}>
               {playlistsError}
             </div>
           ) : (
@@ -842,7 +845,7 @@ const DiscoverPage: React.FC = () => {
             onSongClick={handleHotlistSongClick}
           />
           {(hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError) && (
-            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: '#FF6B6B', backgroundColor: '#FF6B6B10', borderRadius: '8px', fontSize: '14px' }}>
+            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: '8px', fontSize: '14px' }}>
               {hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError}
             </div>
           )}

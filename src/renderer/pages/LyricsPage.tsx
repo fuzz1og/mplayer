@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import LyricsDisplay from '@/renderer/components/LyricsDisplay';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -9,6 +9,15 @@ interface LyricsPageProps {
 
 const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const { lyrics, lyricsLoading, position, currentSong, seek } = usePlayerStore();
+
+  // Escape 键关闭歌词页面
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onBack();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onBack]);
 
   const handleLyricClick = (time: number) => {
     seek(time);
@@ -24,7 +33,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
         flexDirection: 'column',
         gap: '16px'
       }}>
-        <span style={{ color: '#636E72', fontSize: '16px' }}>暂无播放中的歌曲</span>
+        <span style={{ color: 'var(--text-secondary)', fontSize: '16px' }}>暂无播放中的歌曲</span>
         <button
           onClick={onBack}
           style={{
@@ -193,7 +202,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
               justifyContent: 'center',
               height: '100%'
             }}>
-              <span style={{ color: '#636E72', fontSize: '14px' }}>歌词加载中...</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>歌词加载中...</span>
             </div>
           ) : (
             <>
@@ -210,7 +219,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
                   right: 0,
                   textAlign: 'center',
                   fontSize: '12px',
-                  color: '#999'
+                  color: 'var(--text-tertiary)'
                 }}>
                   当前歌曲暂无歌词
                 </div>

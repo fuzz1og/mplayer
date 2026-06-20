@@ -23,6 +23,10 @@ const PlayerProgress: React.FC<PlayerProgressProps> = React.memo(({
     </span>
     <input
       type="range" min={0} max={duration || 100} value={position}
+      aria-label="播放进度"
+      aria-valuemin={0}
+      aria-valuemax={duration || 100}
+      aria-valuenow={position}
       onChange={(e) => onSeek(Number(e.target.value))}
       disabled={!hasCurrentSong}
       style={{

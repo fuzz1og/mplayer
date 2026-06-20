@@ -13,6 +13,13 @@ export async function getCoverSrc(coverUrl: string): Promise<string> {
 
 export async function cacheCoverImage(coverUrl: string): Promise<void> {
   if (!coverUrl || coverUrl.startsWith('file://')) return;
+  // 仅允许 http/https 协议，防止 file:// 等协议读取本地文件
+  try {
+    const parsed = new URL(coverUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+  } catch {
+    return;
+  }
   if (inFlight.has(coverUrl)) return;
   inFlight.add(coverUrl);
   try {

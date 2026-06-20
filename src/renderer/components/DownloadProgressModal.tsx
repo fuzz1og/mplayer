@@ -132,7 +132,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    background: 'linear-gradient(135deg, #E8E8E8 0%, #F0F0F0 100%)',
+                    background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)',
                   }}
                 >
                   <Music size={24} color="#999" />
@@ -223,8 +223,8 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
               style={{
                 marginTop: '12px',
                 padding: '10px 12px',
-                backgroundColor: '#fff2f0',
-                border: '1px solid #ffccc7',
+                backgroundColor: 'var(--danger-bg)',
+                border: '1px solid var(--danger-color)',
                 borderRadius: '6px',
                 fontSize: '12px',
                 color: '#ff4d4f',

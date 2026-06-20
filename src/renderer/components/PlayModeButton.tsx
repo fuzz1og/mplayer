@@ -43,6 +43,8 @@ const PlayModeButton: React.FC<PlayModeButtonProps> = ({ mode, onModeChange, siz
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <button
         onClick={handleClick}
+        aria-label={`播放模式: ${config.label}`}
+        aria-expanded={showTooltip}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
         style={{

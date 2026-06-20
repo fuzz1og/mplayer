@@ -40,8 +40,8 @@ const HistoryPage: React.FC = () => {
     }
   };
 
-  const handleAddToPlaylist = (song: Song) => {
-    message.success(`已成功将 "${song.name}" 加入歌单！`);
+  const handleAddToPlaylist = (_song: Song) => {
+    // SongList 内部的 AddToPlaylistModal 已处理添加逻辑，此处无需额外操作
   };
 
   return (
