@@ -502,3 +502,20 @@ button:focus-visible,
     --sidebar-width: 0px;
   }
 }
+
+/* ── 向后兼容别名 ── */
+:root {
+  --accent-color: var(--accent);
+  --border-color: var(--border-default);
+  --hover-bg: var(--bg-hover);
+  --content-bg: var(--bg-surface);
+  --divider-color: var(--border-subtle);
+  --bg-color: var(--bg-base);
+  --danger-color: var(--danger);
+  --primary-color: var(--accent);
+  --danger-bg: var(--danger-subtle);
+  --active-bg: var(--bg-active);
+  --primary-hover: var(--accent-hover);
+  --player-bar-bg: var(--bg-player);
+  --text-light: var(--gray-300);
+}
