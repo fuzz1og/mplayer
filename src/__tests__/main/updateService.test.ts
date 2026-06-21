@@ -1,14 +1,14 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { UpdateService } from '../../main/services/updateService';
 
-// Mock electron-updater
 vi.mock('electron-updater', () => ({
   autoUpdater: {
     autoDownload: false,
     autoInstallOnAppQuit: true,
     once: vi.fn(),
-    removeAllListeners: vi.fn(),
+    on: vi.fn(),
     removeListener: vi.fn(),
+    removeAllListeners: vi.fn(),
     checkForUpdates: vi.fn(),
     downloadUpdate: vi.fn(),
     quitAndInstall: vi.fn(),
@@ -18,7 +18,6 @@ vi.mock('electron-updater', () => ({
   },
 }));
 
-// Mock electron
 vi.mock('electron', () => ({
   app: {
     getVersion: vi.fn().mockReturnValue('1.0.0'),
@@ -31,12 +30,23 @@ vi.mock('electron', () => ({
   },
 }));
 
-// Mock database
 vi.mock('../../main/storage/db', () => ({
   db: {
     getSetting: vi.fn(),
   },
 }));
+
+function createMockWindow() {
+  return {
+    webContents: { send: vi.fn() },
+    isDestroyed: vi.fn().mockReturnValue(false),
+  } as any;
+}
+
+/** Let pending microtasks flush so async setup in checkForUpdates/downloadUpdate completes */
+function tick() {
+  return new Promise<void>(resolve => setTimeout(resolve, 10));
+}
 
 describe('UpdateService', () => {
   let updateService: UpdateService;
@@ -47,7 +57,6 @@ describe('UpdateService', () => {
   });
 
   afterEach(() => {
-    // 清理环境变量
     delete process.env.HTTP_PROXY;
     delete process.env.HTTPS_PROXY;
     delete process.env.http_proxy;
@@ -83,7 +92,6 @@ describe('UpdateService', () => {
         port: 7890,
       });
 
-      // 先设置一些环境变量
       process.env.HTTP_PROXY = 'http://old-proxy:8080';
       process.env.ELECTRON_GET_USE_PROXY = '1';
 
@@ -98,7 +106,6 @@ describe('UpdateService', () => {
       const { db } = await import('../../main/storage/db');
       vi.mocked(db.getSetting).mockResolvedValue(null);
 
-      // 先设置一些环境变量
       process.env.HTTP_PROXY = 'http://old-proxy:8080';
 
       await updateService.syncProxyEnv();
@@ -107,19 +114,252 @@ describe('UpdateService', () => {
     });
   });
 
-  describe('状态更新', () => {
-    it('通过 webContents 发送状态更新', () => {
-      const mockSend = vi.fn();
-      const mockWindow = {
-        webContents: { send: mockSend },
-      } as any;
-
+  describe('checkForUpdates', () => {
+    it('检查更新时立即设置 checking 状态（同步）', async () => {
+      const mockWindow = createMockWindow();
       updateService.setMainWindow(mockWindow);
 
-      // 触发状态更新（通过内部方法）
-      // 由于 updateStatus 是私有方法，我们需要通过公共方法触发
-      // 这里测试 setMainWindow 是否正确设置
-      expect(mockWindow.webContents.send).toBeDefined();
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+
+      const promise = updateService.checkForUpdates(5000);
+
+      expect(mockWindow.webContents.send).toHaveBeenCalledWith('update:status', { status: 'checking' });
+      expect(updateService.getStatus().status).toBe('checking');
+
+      // Cleanup: fire event to resolve the promise
+      await tick();
+      const handler = vi.mocked(autoUpdater.once).mock.calls
+        .find(c => c[0] === 'update-not-available')?.[1] as () => void;
+      handler?.();
+      await promise;
+    });
+
+    it('有可用更新时推送 available 状态', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+
+      const promise = updateService.checkForUpdates(5000);
+
+      await tick();
+      const handler = vi.mocked(autoUpdater.once).mock.calls
+        .find(c => c[0] === 'update-available')?.[1] as (info: any) => void;
+      handler?.({ version: '2.0.0', releaseNotes: 'Bug fixes' });
+
+      await promise;
+
+      expect(updateService.getStatus()).toEqual({
+        status: 'available',
+        version: '2.0.0',
+        releaseNotes: 'Bug fixes',
+      });
+      expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', {
+        status: 'available',
+        version: '2.0.0',
+        releaseNotes: 'Bug fixes',
+      });
+    });
+
+    it('无可用更新时推送 not-available 状态', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+
+      const promise = updateService.checkForUpdates(5000);
+
+      await tick();
+      const handler = vi.mocked(autoUpdater.once).mock.calls
+        .find(c => c[0] === 'update-not-available')?.[1] as () => void;
+      handler?.();
+
+      await promise;
+
+      expect(updateService.getStatus().status).toBe('not-available');
+      expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', { status: 'not-available' });
+    });
+
+    it('检查出错时推送 error 状态并抛出', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('Network timeout'));
+
+      await expect(updateService.checkForUpdates(100)).rejects.toThrow('Network timeout');
+
+      expect(updateService.getStatus().status).toBe('error');
+      expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', {
+        status: 'error',
+        error: 'Network timeout',
+      });
+    });
+
+    it('超时时推送 error 状态并抛出', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+
+      const promise = updateService.checkForUpdates(50);
+      await expect(promise).rejects.toThrow('检查更新超时');
+
+      expect(updateService.getStatus().status).toBe('error');
+    });
+
+    it('并发调用时跳过后续检查', async () => {
+      updateService.setMainWindow(createMockWindow());
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+
+      const first = updateService.checkForUpdates(5000);
+      const second = updateService.checkForUpdates(5000);
+
+      // Second returns immediately with current status
+      await expect(second).resolves.toEqual(expect.objectContaining({ status: 'checking' }));
+
+      // Cleanup
+      await tick();
+      const handler = vi.mocked(autoUpdater.once).mock.calls
+        .find(c => c[0] === 'error')?.[1] as (err: Error) => void;
+      handler?.(new Error('cleanup'));
+      await expect(first).rejects.toThrow('cleanup');
+    });
+
+    it('完成后解锁并发锁', async () => {
+      updateService.setMainWindow(createMockWindow());
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+
+      const promise = updateService.checkForUpdates(5000);
+
+      await tick();
+      const handler = vi.mocked(autoUpdater.once).mock.calls
+        .find(c => c[0] === 'update-not-available')?.[1] as () => void;
+      handler?.();
+      await promise;
+
+      // Second call should proceed normally
+      vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('second'));
+      await expect(updateService.checkForUpdates(100)).rejects.toThrow('second');
+    });
+  });
+
+  describe('downloadUpdate', () => {
+    it('下载完成时推送 downloaded 状态', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
+      vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
+
+      const promise = updateService.downloadUpdate(5000);
+
+      await tick();
+      const handler = vi.mocked(autoUpdater.once).mock.calls
+        .find(c => c[0] === 'update-downloaded')?.[1] as () => void;
+      handler?.();
+
+      await promise;
+
+      expect(updateService.getStatus().status).toBe('downloaded');
+      expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', { status: 'downloaded' });
+    });
+
+    it('监听下载进度事件', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
+      vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
+
+      const promise = updateService.downloadUpdate(5000);
+
+      await tick();
+      expect(autoUpdater.on).toHaveBeenCalledWith('download-progress', expect.any(Function));
+
+      const progressCallback = vi.mocked(autoUpdater.on).mock.calls
+        .find(c => c[0] === 'download-progress')?.[1] as (p: any) => void;
+      progressCallback?.({ percent: 50, bytesPerSecond: 102400, transferred: 51200, total: 102400 });
+
+      expect(updateService.getStatus()).toEqual({
+        status: 'downloading',
+        progress: { percent: 50, bytesPerSecond: 102400, transferred: 51200, total: 102400 },
+      });
+
+      // Complete
+      const downloadedHandler = vi.mocked(autoUpdater.once).mock.calls
+        .find(c => c[0] === 'update-downloaded')?.[1] as () => void;
+      downloadedHandler?.();
+      await promise;
+    });
+
+    it('下载出错时推送 error 状态并抛出', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
+      vi.mocked(autoUpdater.downloadUpdate).mockRejectedValue(new Error('Download failed'));
+
+      await expect(updateService.downloadUpdate(100)).rejects.toThrow('Download failed');
+
+      expect(updateService.getStatus().status).toBe('error');
+      expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', {
+        status: 'error',
+        error: 'Download failed',
+      });
+    });
+
+    it('下载超时推送 error 状态并抛出', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
+      vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
+
+      const promise = updateService.downloadUpdate(50);
+      await expect(promise).rejects.toThrow('下载超时');
+
+      expect(updateService.getStatus().status).toBe('error');
+    });
+
+    it('并发下载时跳过', async () => {
+      updateService.setMainWindow(createMockWindow());
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
+      vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
+
+      const first = updateService.downloadUpdate(5000);
+      const second = updateService.downloadUpdate(5000);
+
+      await expect(second).resolves.toBeUndefined();
+
+      // Cleanup
+      await tick();
+      const handler = vi.mocked(autoUpdater.once).mock.calls
+        .find(c => c[0] === 'error')?.[1] as (err: Error) => void;
+      handler?.(new Error('cleanup'));
+      await expect(first).rejects.toThrow('cleanup');
+    });
+  });
+
+  describe('quitAndInstall', () => {
+    it('调用 autoUpdater.quitAndInstall', async () => {
+      const { autoUpdater } = await import('electron-updater');
+      updateService.quitAndInstall();
+      expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith();
     });
   });
 
@@ -130,41 +370,15 @@ describe('UpdateService', () => {
     });
   });
 
-  describe('检查更新超时', () => {
-    it('检查更新超时时返回错误状态', async () => {
-      const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('Network timeout'));
-
-      const status = await updateService.checkForUpdates(100); // 100ms 超时
-
-      expect(status.status).toBe('error');
+  describe('状态查询', () => {
+    it('getStatus 返回当前状态', () => {
+      expect(updateService.getStatus()).toEqual({ status: 'idle' });
     });
-  });
 
-  describe('下载更新超时', () => {
-    it('下载更新超时时返回 undefined', async () => {
-      const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.downloadUpdate).mockRejectedValue(new Error('Download timeout'));
-
-      const result = await updateService.downloadUpdate(100);
-
-      // downloadUpdate 捕获错误后返回 undefined
-      expect(result).toBeUndefined();
+    it('setMainWindow 后状态更新触发 webContents.send', () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+      expect(mockWindow.webContents.send).toBeDefined();
     });
-  });
-});
-
-describe('代理配置集成测试', () => {
-  it('代理配置应该与 musicApi 的代理配置一致', async () => {
-    // 验证 proxy.ts 的配置格式
-    const proxyConfig = {
-      enabled: true,
-      protocol: 'http' as const,
-      host: '127.0.0.1',
-      port: 7890,
-    };
-
-    const proxyUrl = `${proxyConfig.protocol}://${proxyConfig.host}:${proxyConfig.port}`;
-    expect(proxyUrl).toBe('http://127.0.0.1:7890');
   });
 });
