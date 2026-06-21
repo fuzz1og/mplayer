@@ -29,27 +29,20 @@ const MusicCard: React.FC<MusicCardProps> = ({
   const { width, imgHeight } = sizeMap[size];
   const [isHovered, setIsHovered] = useState(false);
 
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onDelete?.();
-  };
-
   return (
     <div
       style={{
         width: `${width}px`,
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'transform 0.2s ease',
+        transition: 'transform var(--duration-normal) var(--ease-out)',
+        transform: isHovered ? 'translateY(-3px)' : 'translateY(0)',
       }}
       onClick={onClick}
-      onMouseEnter={(e) => {
-        setIsHovered(true);
-        e.currentTarget.style.transform = 'translateY(-4px)';
-      }}
-      onMouseLeave={(e) => {
-        setIsHovered(false);
-        e.currentTarget.style.transform = 'translateY(0)';
-      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
     >
       {/* 封面区域 */}
       <div
@@ -57,10 +50,11 @@ const MusicCard: React.FC<MusicCardProps> = ({
           position: 'relative',
           width: '100%',
           height: `${imgHeight}px`,
-          borderRadius: '8px',
+          borderRadius: 'var(--radius-md)',
           overflow: 'hidden',
-          backgroundColor: 'var(--hover-bg)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+          backgroundColor: 'var(--skeleton-base)',
+          boxShadow: isHovered ? 'var(--shadow-lg)' : 'var(--shadow-sm)',
+          transition: 'box-shadow var(--duration-normal) var(--ease-out)',
         }}
       >
         {cover ? (
@@ -68,11 +62,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
             src={cover}
             alt={title}
             loading="lazy"
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         ) : (
           <div
@@ -82,15 +72,15 @@ const MusicCard: React.FC<MusicCardProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'linear-gradient(135deg, var(--border-color) 0%, var(--hover-bg) 100%)',
+              background: 'linear-gradient(135deg, var(--gray-100) 0%, var(--gray-200) 100%)',
             }}
           >
             <div
               style={{
                 width: '40%',
                 height: '40%',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #D0D0D0 0%, #E0E0E0 100%)',
+                borderRadius: 'var(--radius-full)',
+                background: 'linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%)',
               }}
             />
           </div>
@@ -99,49 +89,28 @@ const MusicCard: React.FC<MusicCardProps> = ({
         {/* 播放按钮覆盖层 */}
         {onPlay && (
           <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundColor: 'rgba(0,0,0,0.4)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: 0,
-              transition: 'opacity 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.opacity = '1';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '0';
-            }}
+            className="play-overlay"
+            style={{ opacity: isHovered ? 1 : 0 }}
           >
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPlay();
-              }}
+              onClick={(e) => { e.stopPropagation(); onPlay(); }}
+              aria-label="播放"
               style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '50%',
-                backgroundColor: 'rgba(255,255,255,0.95)',
+                width: '44px',
+                height: '44px',
+                borderRadius: 'var(--radius-full)',
+                backgroundColor: 'var(--bg-surface)',
                 border: 'none',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                transition: 'transform 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.1)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
+                boxShadow: 'var(--shadow-lg)',
+                transition: 'transform var(--duration-fast) var(--ease-out)',
+                transform: isHovered ? 'scale(1.08)' : 'scale(1)',
               }}
             >
-              <Play size={20} color="var(--primary-color)" fill="var(--primary-color)" />
+              <Play size={18} color="var(--text-primary)" fill="var(--text-primary)" style={{ marginLeft: '2px' }} />
             </button>
           </div>
         )}
@@ -149,39 +118,42 @@ const MusicCard: React.FC<MusicCardProps> = ({
         {/* 删除按钮 */}
         {onDelete && (
           <button
-            onClick={handleDelete}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            aria-label="删除"
             style={{
               position: 'absolute',
-              top: '8px',
-              right: '8px',
+              top: 'var(--space-2)',
+              right: 'var(--space-2)',
               width: '28px',
               height: '28px',
-              borderRadius: '50%',
+              borderRadius: 'var(--radius-full)',
               backgroundColor: 'rgba(0,0,0,0.5)',
+              backdropFilter: 'blur(4px)',
               border: 'none',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               opacity: isHovered ? 1 : 0,
-              transition: 'opacity 0.2s ease',
+              transition: 'opacity var(--duration-fast)',
             }}
           >
-            <Trash2 size={14} color="white" />
+            <Trash2 size={13} color="white" />
           </button>
         )}
       </div>
 
       {/* 文字信息 */}
-      <div style={{ marginTop: '10px' }}>
+      <div style={{ marginTop: 'var(--space-2)', padding: '0 var(--space-1)' }}>
         <div
           style={{
-            fontSize: '14px',
-            fontWeight: 500,
+            fontSize: 'var(--text-sm)',
+            fontWeight: 'var(--weight-medium)',
             color: 'var(--text-primary)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
+            lineHeight: 'var(--leading-tight)',
           }}
         >
           {title}
@@ -189,12 +161,12 @@ const MusicCard: React.FC<MusicCardProps> = ({
         {subtitle && (
           <div
             style={{
-              fontSize: '12px',
-              color: 'var(--text-secondary)',
+              fontSize: 'var(--text-xs)',
+              color: 'var(--text-tertiary)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              marginTop: '4px',
+              marginTop: '2px',
             }}
           >
             {subtitle}
