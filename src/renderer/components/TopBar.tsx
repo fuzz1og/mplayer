@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, X, User, ChevronDown } from 'lucide-react';
+import { Search, X, ChevronDown } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
 
 interface TopBarProps {
@@ -9,7 +9,7 @@ interface TopBarProps {
 }
 
 const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
-  all: { label: '全部', accent: '#6C5CE7' },
+  all: { label: '全部', accent: '#8B5CF6' },
   netease: { label: '网易云', accent: '#E74C3C' },
   qq: { label: 'QQ', accent: '#1DB954' },
   kugou: { label: '酷狗', accent: '#FF8C00' },
@@ -36,91 +36,68 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
   }, []);
 
   const handleSearch = () => {
-    if (searchValue.trim()) {
-      onSearch(searchValue.trim());
-    }
+    if (searchValue.trim()) onSearch(searchValue.trim());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
-
-  const clearSearch = () => {
-    setSearchValue('');
+    if (e.key === 'Enter') handleSearch();
   };
 
   const currentSource = SOURCE_CONFIG[sourceType];
 
+  const searchBoxStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    backgroundColor: isFocused ? 'var(--bg-surface)' : 'var(--input-bg)',
+    border: `1px solid ${isFocused ? 'var(--accent)' : 'var(--border-subtle)'}`,
+    borderRadius: 'var(--radius-full)',
+    padding: '6px 4px 6px 6px',
+    transition: 'all var(--duration-normal) var(--ease-out)',
+    boxShadow: isFocused ? '0 0 0 3px var(--accent-subtle)' : 'var(--shadow-xs)',
+  };
+
   return (
     <header
       style={{
-        height: '60px',
-        backgroundColor: 'var(--content-bg)',
-        borderBottom: '1px solid var(--border-color)',
+        height: 'var(--topbar-height)',
+        backgroundColor: 'var(--bg-surface)',
+        borderBottom: '1px solid var(--border-subtle)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 24px',
+        padding: '0 var(--space-6)',
         position: 'sticky',
         top: 0,
         zIndex: 100,
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          flex: 1,
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            backgroundColor: isFocused ? 'var(--bg-color)' : 'var(--input-bg)',
-            border: `1px solid ${isFocused ? 'var(--accent-color)' : 'transparent'}`,
-            borderRadius: '24px',
-            padding: '6px 4px 6px 6px',
-            transition: 'all 0.25s ease',
-            boxShadow: isFocused ? '0 0 0 3px rgba(116, 185, 255, 0.15)' : 'none',
-          }}
-        >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flex: 1 }}>
+        <div style={searchBoxStyle}>
+          {/* 来源选择器 */}
           <div ref={dropdownRef} style={{ position: 'relative', flexShrink: 0 }}>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
                 gap: '6px',
-                padding: '4px 10px 4px 10px',
-                width: '94px',
-                borderRadius: '16px',
-                fontSize: '12px',
-                fontWeight: 600,
-                letterSpacing: '0.02em',
+                padding: '5px 10px',
+                width: '90px',
+                borderRadius: 'var(--radius-full)',
+                fontSize: 'var(--text-xs)',
+                fontWeight: 'var(--weight-semibold)',
                 border: 'none',
                 cursor: 'pointer',
-                backgroundColor: `${currentSource.accent}14`,
+                backgroundColor: `${currentSource.accent}12`,
                 color: currentSource.accent,
-                transition: 'all 0.2s ease',
-                whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = `${currentSource.accent}24`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = `${currentSource.accent}14`;
+                transition: 'all var(--duration-fast) var(--ease-out)',
               }}
             >
               <span
                 style={{
                   width: '6px',
                   height: '6px',
-                  borderRadius: '50%',
+                  borderRadius: 'var(--radius-full)',
                   backgroundColor: currentSource.accent,
                   flexShrink: 0,
                 }}
@@ -129,107 +106,96 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
               <ChevronDown
                 size={12}
                 style={{
-                  transition: 'transform 0.25s ease',
+                  transition: 'transform var(--duration-normal) var(--ease-out)',
                   transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                   flexShrink: 0,
                 }}
               />
             </button>
 
-            <div
-              style={{
-                position: 'absolute',
-                top: 'calc(100% + 6px)',
-                left: '0',
-                minWidth: '120px',
-                backgroundColor: 'var(--content-bg)',
-                borderRadius: '10px',
-                border: '1px solid var(--border-color)',
-                boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-                padding: '4px',
-                opacity: dropdownOpen ? 1 : 0,
-                visibility: dropdownOpen ? 'visible' : 'hidden',
-                transform: dropdownOpen ? 'translateY(0) scale(1)' : 'translateY(-4px) scale(0.96)',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                transformOrigin: 'top left',
-                zIndex: 200,
-              }}
-            >
-              {(Object.entries(SOURCE_CONFIG) as [SourceKey, typeof SOURCE_CONFIG[SourceKey]][]).map(([key, config], idx) => {
-                const isActive = sourceType === key;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      onSourceTypeChange(key);
-                      setDropdownOpen(false);
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      width: '100%',
-                      padding: '8px 12px',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      backgroundColor: isActive ? `${config.accent}10` : 'transparent',
-                      color: isActive ? config.accent : 'var(--text-primary)',
-                      fontSize: '13px',
-                      fontWeight: isActive ? 600 : 400,
-                      transition: 'all 0.15s ease',
-                      animation: dropdownOpen ? `dropdownItemFade 0.25s ease ${idx * 0.04}s both` : 'none',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '50%',
-                        backgroundColor: config.accent,
-                        flexShrink: 0,
+            {/* 下拉菜单 */}
+            {dropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: 0,
+                  minWidth: '130px',
+                  backgroundColor: 'var(--bg-surface)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-default)',
+                  boxShadow: 'var(--shadow-xl)',
+                  padding: 'var(--space-1)',
+                  zIndex: 200,
+                  animation: 'scaleIn var(--duration-fast) var(--ease-out)',
+                }}
+              >
+                {(Object.entries(SOURCE_CONFIG) as [SourceKey, typeof SOURCE_CONFIG[SourceKey]][]).map(([key, config]) => {
+                  const isActive = sourceType === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        onSourceTypeChange(key);
+                        setDropdownOpen(false);
                       }}
-                    />
-                    {config.label}
-                    {isActive && (
-                      <span style={{ marginLeft: 'auto', fontSize: '10px', color: config.accent }}>
-                        ✓
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--space-2)',
+                        width: '100%',
+                        padding: '7px var(--space-3)',
+                        border: 'none',
+                        borderRadius: 'var(--radius-xs)',
+                        cursor: 'pointer',
+                        backgroundColor: isActive ? `${config.accent}10` : 'transparent',
+                        color: isActive ? config.accent : 'var(--text-primary)',
+                        fontSize: 'var(--text-sm)',
+                        fontWeight: isActive ? 'var(--weight-semibold)' : 'var(--weight-normal)',
+                        transition: 'background var(--duration-fast)',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: 'var(--radius-full)',
+                          backgroundColor: config.accent,
+                          flexShrink: 0,
+                        }}
+                      />
+                      {config.label}
+                      {isActive && <span style={{ marginLeft: 'auto', fontSize: '10px', color: config.accent }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
+          {/* 分隔线 */}
           <div
             style={{
               width: '1px',
-              height: '18px',
-              backgroundColor: 'var(--border-color)',
-              margin: '0 8px',
+              height: '16px',
+              backgroundColor: 'var(--border-default)',
+              margin: '0 var(--space-2)',
               flexShrink: 0,
             }}
           />
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              flex: 1,
-              padding: '0 8px',
-            }}
-          >
+          {/* 搜索输入 */}
+          <div style={{ display: 'flex', alignItems: 'center', flex: 1, padding: '0 var(--space-2)' }}>
             <Search
-              size={18}
-              color={isFocused ? 'var(--accent-color)' : 'var(--text-tertiary)'}
-              style={{ marginRight: '10px', flexShrink: 0, transition: 'color 0.2s ease' }}
+              size={16}
+              color={isFocused ? 'var(--accent)' : 'var(--text-tertiary)'}
+              style={{ marginRight: 'var(--space-2)', flexShrink: 0, transition: 'color var(--duration-fast)' }}
             />
             <input
               type="text"
@@ -239,97 +205,31 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
               onKeyDown={handleKeyDown}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
+              aria-label="搜索音乐、歌手、专辑"
               style={{
                 flex: 1,
                 border: 'none',
                 outline: 'none',
                 background: 'transparent',
-                fontSize: '14px',
+                fontSize: 'var(--text-sm)',
                 color: 'var(--text-primary)',
               } as React.CSSProperties}
             />
             {searchValue && (
               <button
-                onClick={clearSearch}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  marginLeft: '4px',
-                  borderRadius: '50%',
-                  color: 'var(--text-tertiary)',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--hover-bg)';
-                  e.currentTarget.style.color = 'var(--text-primary)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = 'var(--text-tertiary)';
-                }}
+                onClick={() => setSearchValue('')}
+                aria-label="清除搜索"
+                className="player-btn"
+                style={{ padding: 'var(--space-1)' }}
               >
-                <X size={16} />
+                <X size={14} />
               </button>
             )}
           </div>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '20px',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            cursor: 'pointer',
-            padding: '6px 12px',
-            borderRadius: '20px',
-            transition: 'background-color 0.15s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-        >
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #74B9FF 0%, #0984E3 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <User size={18} color="white" />
-          </div>
-          <span
-            style={{
-              fontSize: '14px',
-              color: 'var(--text-secondary)',
-              fontWeight: 500,
-            }}
-          >
-            用户
-          </span>
         </div>
       </div>
     </header>
   );
 };
 
-export default React.memo(TopBar);
+export default TopBar;
