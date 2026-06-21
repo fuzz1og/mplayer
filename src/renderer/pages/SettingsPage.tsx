@@ -349,7 +349,7 @@ const SettingsPage: React.FC = () => {
                 textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: '24px', marginBottom: '4px' }}>📁</div>
+              <div style={{ fontSize: 'var(--text-2xl)', marginBottom: '4px' }}>📁</div>
               <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
                 缓存文件数
               </div>
@@ -366,7 +366,7 @@ const SettingsPage: React.FC = () => {
                 textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: '24px', marginBottom: '4px' }}>📊</div>
+              <div style={{ fontSize: 'var(--text-2xl)', marginBottom: '4px' }}>📊</div>
               <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
                 缓存使用率
               </div>
@@ -438,7 +438,7 @@ const SettingsPage: React.FC = () => {
                   {item.icon}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  <div style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)', marginBottom: '4px' }}>
                     {item.label}
                   </div>
                   <div
@@ -459,7 +459,7 @@ const SettingsPage: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                <div style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: 'var(--text-secondary)' }}>
                   {item.count} 个
                 </div>
               </div>
@@ -479,7 +479,7 @@ const SettingsPage: React.FC = () => {
               color: stats.fileCount > 0 ? '#FF6B6B' : 'var(--text-tertiary)',
               border: `1px solid ${stats.fileCount > 0 ? '#FF6B6B' : 'var(--border-color)'}`,
               borderRadius: '8px',
-              fontSize: '14px',
+              fontSize: 'var(--text-base)',
               fontWeight: 500,
               cursor: stats.fileCount > 0 ? 'pointer' : 'not-allowed',
               transition: 'all 0.15s ease',
@@ -534,7 +534,7 @@ const SettingsPage: React.FC = () => {
           <div style={{ marginBottom: '16px' }}>
             <div
               style={{
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 color: 'var(--text-secondary)',
                 marginBottom: '8px',
               }}
@@ -555,7 +555,7 @@ const SettingsPage: React.FC = () => {
                   backgroundColor: 'var(--bg-color)',
                   border: '1px solid var(--border-color)',
                   borderRadius: '8px',
-                  fontSize: '13px',
+                  fontSize: 'var(--text-sm)',
                   color: 'var(--text-primary)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -576,7 +576,7 @@ const SettingsPage: React.FC = () => {
                   color: 'white',
                   border: 'none',
                   borderRadius: '8px',
-                  fontSize: '14px',
+                  fontSize: 'var(--text-base)',
                   fontWeight: 500,
                   cursor: isSaving ? 'not-allowed' : 'pointer',
                   opacity: isSaving ? 0.7 : 1,
@@ -598,7 +598,7 @@ const SettingsPage: React.FC = () => {
                   color: 'var(--text-secondary)',
                   border: '1px solid var(--border-color)',
                   borderRadius: '8px',
-                  fontSize: '14px',
+                  fontSize: 'var(--text-base)',
                   fontWeight: 500,
                   cursor: isSaving ? 'not-allowed' : 'pointer',
                   opacity: isSaving ? 0.7 : 1,
@@ -664,7 +664,7 @@ const SettingsPage: React.FC = () => {
           <div style={{ marginBottom: '16px' }}>
             <div
               style={{
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 color: 'var(--text-secondary)',
                 marginBottom: '8px',
               }}
@@ -689,7 +689,7 @@ const SettingsPage: React.FC = () => {
                   backgroundColor: 'var(--bg-color)',
                   border: '1px solid var(--border-color)',
                   borderRadius: '8px',
-                  fontSize: '13px',
+                  fontSize: 'var(--text-sm)',
                   color: 'var(--text-primary)',
                   outline: 'none',
                 }}
@@ -706,7 +706,7 @@ const SettingsPage: React.FC = () => {
                   color: '#fff',
                   border: 'none',
                   borderRadius: '8px',
-                  fontSize: '14px',
+                  fontSize: 'var(--text-base)',
                   fontWeight: 500,
                   cursor: isSaving ? 'not-allowed' : 'pointer',
                   opacity: isSaving ? 0.7 : 1,
@@ -778,7 +778,7 @@ const SettingsPage: React.FC = () => {
                   cursor: 'pointer',
                 }}
               />
-              <span style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>
+              <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)', fontWeight: 500 }}>
                 启用代理
               </span>
             </label>
@@ -787,7 +787,7 @@ const SettingsPage: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <div style={{ flex: '0 0 80px' }}>
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>协议</div>
+                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '4px' }}>协议</div>
                     <select
                       value={proxyProtocol}
                       onChange={(e) => setProxyProtocol(e.target.value as 'http' | 'https')}
@@ -797,7 +797,7 @@ const SettingsPage: React.FC = () => {
                         backgroundColor: 'var(--bg-color)',
                         border: '1px solid var(--border-color)',
                         borderRadius: '8px',
-                        fontSize: '13px',
+                        fontSize: 'var(--text-sm)',
                         color: 'var(--text-primary)',
                         outline: 'none',
                       }}
@@ -807,7 +807,7 @@ const SettingsPage: React.FC = () => {
                     </select>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>主机地址</div>
+                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '4px' }}>主机地址</div>
                     <input
                       type="text"
                       value={proxyHost}
@@ -819,14 +819,14 @@ const SettingsPage: React.FC = () => {
                         backgroundColor: 'var(--bg-color)',
                         border: '1px solid var(--border-color)',
                         borderRadius: '8px',
-                        fontSize: '13px',
+                        fontSize: 'var(--text-sm)',
                         color: 'var(--text-primary)',
                         outline: 'none',
                       }}
                     />
                   </div>
                   <div style={{ flex: '0 0 100px' }}>
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>端口</div>
+                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '4px' }}>端口</div>
                     <input
                       type="number"
                       value={proxyPort}
@@ -840,7 +840,7 @@ const SettingsPage: React.FC = () => {
                         backgroundColor: 'var(--bg-color)',
                         border: '1px solid var(--border-color)',
                         borderRadius: '8px',
-                        fontSize: '13px',
+                        fontSize: 'var(--text-sm)',
                         color: 'var(--text-primary)',
                         outline: 'none',
                       }}
@@ -850,7 +850,7 @@ const SettingsPage: React.FC = () => {
 
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>用户名 (可选)</div>
+                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '4px' }}>用户名 (可选)</div>
                     <input
                       type="text"
                       value={proxyUsername}
@@ -862,14 +862,14 @@ const SettingsPage: React.FC = () => {
                         backgroundColor: 'var(--bg-color)',
                         border: '1px solid var(--border-color)',
                         borderRadius: '8px',
-                        fontSize: '13px',
+                        fontSize: 'var(--text-sm)',
                         color: 'var(--text-primary)',
                         outline: 'none',
                       }}
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>密码 (可选)</div>
+                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '4px' }}>密码 (可选)</div>
                     <input
                       type="password"
                       value={proxyPassword}
@@ -881,7 +881,7 @@ const SettingsPage: React.FC = () => {
                         backgroundColor: 'var(--bg-color)',
                         border: '1px solid var(--border-color)',
                         borderRadius: '8px',
-                        fontSize: '13px',
+                        fontSize: 'var(--text-sm)',
                         color: 'var(--text-primary)',
                         outline: 'none',
                       }}
@@ -905,7 +905,7 @@ const SettingsPage: React.FC = () => {
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 fontWeight: 500,
                 cursor: isSaving ? 'not-allowed' : 'pointer',
                 opacity: isSaving ? 0.7 : 1,
@@ -959,7 +959,7 @@ const SettingsPage: React.FC = () => {
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div>
-              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+              <div style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)', marginBottom: '4px' }}>
                 当前版本
               </div>
               <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -978,7 +978,7 @@ const SettingsPage: React.FC = () => {
                 color: isCheckingUpdate ? 'var(--text-secondary)' : '#fff',
                 border: 'none',
                 borderRadius: '8px',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 fontWeight: 500,
                 cursor: isCheckingUpdate ? 'not-allowed' : 'pointer',
                 transition: 'all 0.15s ease',
@@ -1002,10 +1002,10 @@ const SettingsPage: React.FC = () => {
               }}
             >
               <div>
-                <div style={{ fontSize: '14px', fontWeight: 500, color: '#00B894', marginBottom: '4px' }}>
+                <div style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: '#00B894', marginBottom: '4px' }}>
                   发现新版本 v{latestVersion}
                 </div>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
                   点击下载按钮开始下载更新
                 </div>
               </div>
@@ -1017,7 +1017,7 @@ const SettingsPage: React.FC = () => {
                   color: '#fff',
                   border: 'none',
                   borderRadius: '8px',
-                  fontSize: '14px',
+                  fontSize: 'var(--text-base)',
                   fontWeight: 500,
                   cursor: 'pointer',
                 }}
@@ -1030,7 +1030,7 @@ const SettingsPage: React.FC = () => {
 
           {updateStatus === 'downloading' && (
             <div style={{ padding: '16px', backgroundColor: '#0984E320', borderRadius: '8px', border: '1px solid #0984E340' }}>
-              <div style={{ fontSize: '14px', fontWeight: 500, color: '#0984E3', marginBottom: '8px' }}>
+              <div style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: '#0984E3', marginBottom: '8px' }}>
                 正在下载更新...
               </div>
               <div style={{ height: '8px', backgroundColor: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
@@ -1056,7 +1056,7 @@ const SettingsPage: React.FC = () => {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <CheckCircle size={18} color="#6C5CE7" />
-                <div style={{ fontSize: '14px', fontWeight: 500, color: '#6C5CE7' }}>
+                <div style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: '#6C5CE7' }}>
                   更新已下载完成，点击安装并重启
                 </div>
               </div>
@@ -1068,7 +1068,7 @@ const SettingsPage: React.FC = () => {
                   color: '#fff',
                   border: 'none',
                   borderRadius: '8px',
-                  fontSize: '14px',
+                  fontSize: 'var(--text-base)',
                   fontWeight: 500,
                   cursor: 'pointer',
                 }}
@@ -1081,7 +1081,7 @@ const SettingsPage: React.FC = () => {
           {updateStatus === 'not-available' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 0' }}>
               <CheckCircle size={16} color="#00B894" />
-              <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+              <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)' }}>
                 已是最新版本
               </span>
             </div>
@@ -1090,7 +1090,7 @@ const SettingsPage: React.FC = () => {
           {updateStatus === 'error' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 0' }}>
               <AlertCircle size={16} color="#FF6B6B" />
-              <span style={{ fontSize: '14px', color: '#FF6B6B' }}>
+              <span style={{ fontSize: 'var(--text-base)', color: '#FF6B6B' }}>
                 检查更新失败，请检查网络连接
               </span>
             </div>
@@ -1152,7 +1152,7 @@ const SettingsPage: React.FC = () => {
               <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
                 MPlayer
               </div>
-              <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+              <div style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)' }}>
                 简约优雅的音乐播放器
               </div>
             </div>
@@ -1163,7 +1163,7 @@ const SettingsPage: React.FC = () => {
               display: 'grid',
               gridTemplateColumns: 'repeat(2, 1fr)',
               gap: '12px',
-              fontSize: '14px',
+              fontSize: 'var(--text-base)',
             }}
           >
             <div style={{ color: 'var(--text-secondary)' }}>
@@ -1226,7 +1226,7 @@ const SettingsPage: React.FC = () => {
               清除缓存
             </h3>
 
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>
+            <p style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)', marginBottom: '24px' }}>
               确定要清除所有缓存吗？此操作不可恢复。
             </p>
 
@@ -1239,7 +1239,7 @@ const SettingsPage: React.FC = () => {
                   color: 'var(--text-secondary)',
                   border: '1px solid var(--border-color)',
                   borderRadius: '6px',
-                  fontSize: '14px',
+                  fontSize: 'var(--text-base)',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                 }}
@@ -1254,7 +1254,7 @@ const SettingsPage: React.FC = () => {
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
-                  fontSize: '14px',
+                  fontSize: 'var(--text-base)',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                 }}

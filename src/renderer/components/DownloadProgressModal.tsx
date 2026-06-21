@@ -144,7 +144,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
-                  fontSize: '14px',
+                  fontSize: 'var(--text-base)',
                   fontWeight: 500,
                   color: 'var(--text-primary)',
                   overflow: 'hidden',
@@ -156,7 +156,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
               </div>
               <div
                 style={{
-                  fontSize: '12px',
+                  fontSize: 'var(--text-xs)',
                   color: 'var(--text-secondary)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -226,7 +226,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 backgroundColor: 'var(--danger-bg)',
                 border: '1px solid var(--danger-color)',
                 borderRadius: '6px',
-                fontSize: '12px',
+                fontSize: 'var(--text-xs)',
                 color: '#ff4d4f',
               }}
             >
@@ -476,13 +476,13 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
               {/* 进度 */}
               <div style={{ width: '50px', textAlign: 'right' }}>
                 {task.status === 'downloading' ? (
-                  <span style={{ fontSize: '12px', color: 'var(--primary-color)' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--primary-color)' }}>
                     {task.progress}%
                   </span>
                 ) : (
                   <span
                     style={{
-                      fontSize: '12px',
+                      fontSize: 'var(--text-xs)',
                       color: getStatusColor(task.status),
                     }}
                   >

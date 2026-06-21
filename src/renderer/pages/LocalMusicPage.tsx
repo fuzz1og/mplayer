@@ -50,10 +50,10 @@ const LocalMusicPage: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <FolderOpen size={24} color="var(--accent-color)" />
-            <h1 style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
               本地音乐
             </h1>
-            <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
+            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
               {folders.length} 个文件夹 · {songs.length} 首歌
             </span>
           </div>
@@ -71,7 +71,7 @@ const LocalMusicPage: React.FC = () => {
                 border: 'none',
                 borderRadius: '20px',
                 cursor: isScanning ? 'not-allowed' : 'pointer',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 fontWeight: 500,
                 opacity: isScanning ? 0.7 : 1,
               }}
@@ -92,7 +92,7 @@ const LocalMusicPage: React.FC = () => {
                 border: '1px solid var(--border-color)',
                 borderRadius: '20px',
                 cursor: isScanning ? 'not-allowed' : 'pointer',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 fontWeight: 500,
                 opacity: isScanning ? 0.7 : 1,
               }}
@@ -159,7 +159,7 @@ const LocalMusicPage: React.FC = () => {
             </div>
           ))}
           {folders.length === 0 && (
-            <div style={{ color: 'var(--text-tertiary)', fontSize: '13px', padding: '12px' }}>
+            <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '12px' }}>
               暂无文件夹，点击上方按钮添加
             </div>
           )}
@@ -191,7 +191,7 @@ const LocalMusicPage: React.FC = () => {
             >
               <FolderOpen size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
               <div style={{ fontSize: '16px', marginBottom: '8px' }}>暂无歌曲</div>
-              <div style={{ fontSize: '14px' }}>点击上方按钮选择文件夹开始导入音乐</div>
+              <div style={{ fontSize: 'var(--text-base)' }}>点击上方按钮选择文件夹开始导入音乐</div>
             </div>
           )}
         </div>

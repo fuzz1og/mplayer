@@ -36,14 +36,14 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: s
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: '20px',
+      marginBottom: 'var(--space-5)',
     }}
   >
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
       <span style={{ color: 'var(--accent-color)' }}>{icon}</span>
       <h2
         style={{
-          fontSize: '20px',
+          fontSize: 'var(--text-xl)',
           fontWeight: 600,
           color: 'var(--text-primary)',
         }}
@@ -54,13 +54,13 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: s
     {action && (
       <button
         style={{
-          fontSize: '13px',
+          fontSize: 'var(--text-sm)',
           color: 'var(--text-secondary)',
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
           padding: '4px 8px',
-          borderRadius: '4px',
+          borderRadius: 'var(--radius-xs)',
           transition: 'all 0.15s ease',
         }}
         onClick={onClickAction}
@@ -401,8 +401,8 @@ const DiscoverPage: React.FC = () => {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '16px',
-            padding: '12px 24px',
+            gap: 'var(--space-4)',
+            padding: 'var(--space-3) var(--space-6)',
             borderBottom: '1px solid var(--divider-color)',
             backgroundColor: 'var(--content-bg)',
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
@@ -415,14 +415,14 @@ const DiscoverPage: React.FC = () => {
               border: 'none',
               background: 'transparent',
               cursor: 'pointer',
-              padding: '10px',
-              borderRadius: '8px',
+              padding: 'var(--space-3)',
+              borderRadius: 'var(--radius-md)',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: 'var(--space-2)',
               color: 'var(--text-secondary)',
               transition: 'all 0.2s ease',
-              fontSize: '14px',
+              fontSize: 'var(--text-base)',
               fontWeight: 500,
             }}
             onMouseEnter={(e) => {
@@ -441,7 +441,7 @@ const DiscoverPage: React.FC = () => {
           </button>
           <h1
             style={{
-              fontSize: '20px',
+              fontSize: 'var(--text-xl)',
               fontWeight: 600,
               color: 'var(--text-primary)',
               flex: 1,
@@ -461,8 +461,8 @@ const DiscoverPage: React.FC = () => {
         <div
           style={{
             display: 'flex',
-            gap: '4px',
-            padding: '0 24px',
+            gap: 'var(--space-1)',
+            padding: '0 var(--space-6)',
             borderBottom: '1px solid var(--divider-color)',
             backgroundColor: 'var(--content-bg)',
           }}
@@ -475,12 +475,12 @@ const DiscoverPage: React.FC = () => {
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               style={{
-                padding: '10px 20px',
+                padding: 'var(--space-3) var(--space-5)',
                 border: 'none',
                 borderBottom: activeTab === tab.key ? '2px solid var(--accent-color)' : '2px solid transparent',
                 background: 'transparent',
                 cursor: 'pointer',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 fontWeight: activeTab === tab.key ? 600 : 400,
                 color: activeTab === tab.key ? 'var(--accent-color)' : 'var(--text-secondary)',
                 transition: 'all 0.15s ease',
@@ -489,7 +489,7 @@ const DiscoverPage: React.FC = () => {
               {tab.label}
               {tab.count > 0 && (
                 <span style={{
-                  marginLeft: '6px',
+                  marginLeft: 'var(--space-2)',
                   fontSize: '11px',
                   padding: '1px 6px',
                   borderRadius: '10px',
@@ -510,10 +510,10 @@ const DiscoverPage: React.FC = () => {
               style={{
                 padding: '12px 16px',
                 backgroundColor: 'var(--danger-bg)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 color: 'var(--danger-color)',
                 marginBottom: '16px',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
               }}
             >
               {error}
@@ -556,12 +556,12 @@ const DiscoverPage: React.FC = () => {
 
                 {/* 滚动加载提示 */}
                 {hasMore && loading && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>
                     加载中...
                   </div>
                 )}
                 {!hasMore && songs.length > 0 && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>
                     没有更多歌曲了
                   </div>
                 )}
@@ -588,10 +588,10 @@ const DiscoverPage: React.FC = () => {
           {activeTab === 'artists' && (
             <>
               {artistLoading ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 'var(--space-4)' }}>
                   {Array.from({ length: 6 }).map((_, i) => (
                     <div key={i} style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)',
                       padding: '16px 12px', borderRadius: '12px',
                       backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)',
                     }}>
@@ -617,13 +617,13 @@ const DiscoverPage: React.FC = () => {
                   `}</style>
                 </div>
               ) : artistResults.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 'var(--space-4)' }}>
                   {artistResults.map((artist) => (
                     <div
                       key={artist.id}
                       onClick={() => navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } })}
                       style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)',
                         padding: '16px 12px', borderRadius: '12px', cursor: 'pointer',
                         transition: 'all 0.2s ease', backgroundColor: 'var(--content-bg)',
                         border: '1px solid var(--border-color)',
@@ -660,7 +660,7 @@ const DiscoverPage: React.FC = () => {
                         )}
                       </div>
                       <div style={{
-                        fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)',
+                        fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)',
                         textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap', width: '100%',
                       }}>
@@ -703,14 +703,14 @@ const DiscoverPage: React.FC = () => {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
+            gap: 'var(--space-2)',
             padding: '8px 16px',
             background: 'var(--content-bg)',
             border: '1px solid var(--border-color)',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
             cursor: 'pointer',
             color: 'var(--text-secondary)',
-            fontSize: '13px',
+            fontSize: 'var(--text-sm)',
             transition: 'all 0.2s ease',
           }}
           onMouseEnter={(e) => {
@@ -739,7 +739,7 @@ const DiscoverPage: React.FC = () => {
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-            gap: '16px',
+            gap: 'var(--space-4)',
           }}
         >
           {playlistsLoading ? (
@@ -748,7 +748,7 @@ const DiscoverPage: React.FC = () => {
                 <div
                   style={{
                     paddingTop: '100%',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
                     backgroundSize: '200% 200%',
                     animation: 'skeletonLoading 1.5s ease-in-out infinite',
@@ -767,7 +767,7 @@ const DiscoverPage: React.FC = () => {
               </div>
             ))
           ) : playlistsError ? (
-            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: 'var(--radius-md)' }}>
               {playlistsError}
             </div>
           ) : (
@@ -845,7 +845,7 @@ const DiscoverPage: React.FC = () => {
             onSongClick={handleHotlistSongClick}
           />
           {(hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError) && (
-            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: '8px', fontSize: '14px' }}>
+            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-base)' }}>
               {hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError}
             </div>
           )}

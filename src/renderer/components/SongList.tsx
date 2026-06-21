@@ -12,7 +12,7 @@ const batchBtnStyle: React.CSSProperties = {
   color: 'white',
   border: 'none',
   borderRadius: '20px',
-  fontSize: '13px',
+  fontSize: 'var(--text-sm)',
   fontWeight: 500,
   cursor: 'pointer',
   transition: 'all 0.15s ease',
@@ -168,7 +168,7 @@ const SongList: React.FC<SongListProps> = ({
         }}
       >
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎵</div>
-        <div style={{ fontSize: '14px' }}>{emptyText}</div>
+        <div style={{ fontSize: 'var(--text-base)' }}>{emptyText}</div>
       </div>
     );
   }
@@ -193,12 +193,12 @@ const SongList: React.FC<SongListProps> = ({
               justifyContent: 'space-between',
               padding: '12px 16px',
               backgroundColor: 'var(--hover-bg)',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               transform: showBatchActionBar ? 'translateY(0)' : 'translateY(-10px)',
               transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
-            <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)' }}>
               已选择 {selectedIds.length} 首歌曲
             </span>
             <div style={{ display: 'flex', gap: '12px' }}>
@@ -248,7 +248,7 @@ const SongList: React.FC<SongListProps> = ({
             alignItems: 'center',
             padding: '12px 16px',
             borderBottom: '1px solid var(--divider-color)',
-            fontSize: '12px',
+            fontSize: 'var(--text-xs)',
             color: 'var(--text-tertiary)',
             fontWeight: 500,
           }}

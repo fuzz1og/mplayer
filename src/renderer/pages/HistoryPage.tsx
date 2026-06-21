@@ -57,10 +57,10 @@ const HistoryPage: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <History size={24} color="var(--accent-color)" />
-            <h1 style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
               播放历史
             </h1>
-            <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
+            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
               {history.length} 首歌曲
             </span>
           </div>
@@ -77,7 +77,7 @@ const HistoryPage: React.FC = () => {
               border: '1px solid var(--border-color)',
               borderRadius: '20px',
               cursor: history.length > 0 ? 'pointer' : 'not-allowed',
-              fontSize: '14px',
+              fontSize: 'var(--text-base)',
             }}
           >
             <Trash2 size={16} />

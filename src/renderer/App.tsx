@@ -144,7 +144,7 @@ const App: React.FC = () => {
       style={{
         display: 'flex',
         height: '100vh',
-        backgroundColor: 'var(--bg-color)',
+        backgroundColor: 'var(--bg-base)',
       }}
     >
       {/* 左侧导航栏 */}
@@ -176,7 +176,7 @@ const App: React.FC = () => {
           style={{
             flex: 1,
             overflow: 'hidden',
-            backgroundColor: 'var(--bg-color)',
+            backgroundColor: 'var(--bg-base)',
           }}
         >
           {showLyrics ? (
