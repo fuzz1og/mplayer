@@ -22,6 +22,7 @@ export class UpdateService {
   constructor() {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.forceDevUpdateConfig = true;
   }
 
   setMainWindow(window: BrowserWindow) {

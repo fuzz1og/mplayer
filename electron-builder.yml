@@ -3,7 +3,7 @@ productName: MPlayer
 forceCodeSigning: false
 publish:
   provider: github
-  owner: t0nyst4
+  owner: fuzz1og
   repo: mplayer
 files:
   - dist/**/*
