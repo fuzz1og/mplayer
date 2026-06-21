@@ -263,9 +263,12 @@ const DiscoverPage: React.FC = () => {
       const searchResults = result.success ? result.data : [];
       if (searchResults.length > 0) {
         await play(searchResults[0]);
+      } else {
+        message.warning('未找到可播放的音源，请检查 API 配置');
       }
     } catch (error) {
       console.error('搜索歌曲失败:', error);
+      message.error('播放失败，请检查网络连接和 API 设置');
     }
   };
 

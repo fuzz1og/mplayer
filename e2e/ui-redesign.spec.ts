@@ -119,7 +119,7 @@ test.describe('UI 交互验证', () => {
     }
   });
 
-  test('发现页排行榜歌曲点击', async () => {
+  test('发现页排行榜歌曲点击有反馈', async () => {
     await page.getByRole('complementary').getByText('发现音乐').click();
     await page.waitForTimeout(2000);
 
@@ -135,6 +135,15 @@ test.describe('UI 交互验证', () => {
     if (await songRow.isVisible()) {
       await songRow.click();
       await page.waitForTimeout(3000);
+
+      // 验证有反馈：要么播放成功（播放器显示歌名），要么显示错误提示
+      const playerHasSong = await page.getByText('未播放').isHidden().catch(() => false);
+      const hasWarning = await page.locator('.ant-message-notice').isVisible().catch(() => false);
+      const hasErrorMsg = await page.getByText('未找到可播放的音源').isVisible().catch(() => false)
+        || await page.getByText('播放失败').isVisible().catch(() => false);
+
+      // 至少有一种反馈
+      expect(playerHasSong || hasWarning || hasErrorMsg).toBeTruthy();
       await page.screenshot({ path: 'e2e/screenshots/ui-hotlist-click.png' });
     }
   });
