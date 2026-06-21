@@ -49,7 +49,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
     margin: '1px var(--space-2)',
     borderRadius: 'var(--radius-sm)',
     cursor: 'pointer',
-    transition: 'all var(--duration-fast) var(--ease-out)',
+    transition: 'background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)',
     backgroundColor: isActive ? 'var(--bg-active)' : 'transparent',
     color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
     fontWeight: isActive ? 'var(--weight-medium)' : 'var(--weight-normal)',
@@ -79,6 +79,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
         onClick={() => onPageChange(item.key)}
         style={navItemStyle(isActive)}
         aria-current={isActive ? 'page' : undefined}
+        onMouseEnter={(e) => {
+          if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+        }}
+        onMouseLeave={(e) => {
+          if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+        }}
       >
         {isActive && (
           <div

@@ -474,6 +474,27 @@ button:focus-visible,
   50% { opacity: 0.5; }
 }
 
+@keyframes soundBar {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1); }
+}
+
+@keyframes dropdownItemFade {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes skeletonLoading {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+@keyframes slideInDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 .fade-in { animation: fadeIn var(--duration-normal) var(--ease-out); }
 .slide-up { animation: slideUp var(--duration-slow) var(--ease-out); }
 .slide-in { animation: slideIn var(--duration-slow) var(--ease-out); }
@@ -512,10 +533,10 @@ button:focus-visible,
   --divider-color: var(--border-subtle);
   --bg-color: var(--bg-base);
   --danger-color: var(--danger);
-  --primary-color: var(--accent);
+  --primary-color: #2D3436;
   --danger-bg: var(--danger-subtle);
   --active-bg: var(--bg-active);
-  --primary-hover: var(--accent-hover);
+  --primary-hover: #1A1E1F;
   --player-bar-bg: var(--bg-player);
   --text-light: var(--gray-300);
 }
