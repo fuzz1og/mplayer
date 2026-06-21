@@ -75,8 +75,8 @@ test.describe.serial('高级场景', () => {
     await searchInput.press('Enter');
     await page.waitForTimeout(3000);
 
-    // 切换到歌手标签
-    await page.getByRole('button', { name: '歌手' }).click();
+    // 切换到歌手标签（排除侧边栏的同名按钮）
+    await page.locator('main').getByRole('button', { name: '歌手' }).click();
     await page.waitForTimeout(2000);
 
     await page.screenshot({ path: 'e2e/screenshots/adv-artist-tab.png' });
