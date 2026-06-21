@@ -49,7 +49,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
     display: 'flex',
     alignItems: 'center',
     backgroundColor: isFocused ? 'var(--bg-surface)' : 'var(--input-bg)',
-    border: `1px solid ${isFocused ? 'var(--accent)' : 'var(--border-subtle)'}`,
+    border: `1px solid ${isFocused ? 'var(--accent)' : 'var(--input-border)'}`,
     borderRadius: 'var(--radius-full)',
     padding: '6px 4px 6px 6px',
     transition: 'all var(--duration-normal) var(--ease-out)',
@@ -130,7 +130,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                   animation: 'scaleIn var(--duration-fast) var(--ease-out)',
                 }}
               >
-                {(Object.entries(SOURCE_CONFIG) as [SourceKey, typeof SOURCE_CONFIG[SourceKey]][]).map(([key, config]) => {
+                {(Object.entries(SOURCE_CONFIG) as [SourceKey, typeof SOURCE_CONFIG[SourceKey]][]).map(([key, config], idx) => {
                   const isActive = sourceType === key;
                   return (
                     <button
@@ -153,6 +153,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                         fontSize: 'var(--text-sm)',
                         fontWeight: isActive ? 'var(--weight-semibold)' : 'var(--weight-normal)',
                         transition: 'background var(--duration-fast)',
+                        animation: dropdownOpen ? `dropdownItemFade var(--duration-normal) var(--ease-out) ${idx * 0.04}s both` : 'none',
                       }}
                       onMouseEnter={(e) => {
                         if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
