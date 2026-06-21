@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 const { ipcRenderer } = window.require('electron');
 import { message } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
@@ -21,6 +21,47 @@ const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [showLyrics, setShowLyrics] = useState(false);
+
+  // History navigation management
+  const historyStack = useRef<string[]>([location.pathname]);
+  const historyIndex = useRef(0);
+  const isNavigating = useRef(false);
+
+  useEffect(() => {
+    if (isNavigating.current) {
+      isNavigating.current = false;
+      return;
+    }
+    const path = location.pathname;
+    if (historyStack.current[historyIndex.current] !== path) {
+      historyStack.current = historyStack.current.slice(0, historyIndex.current + 1);
+      historyStack.current.push(path);
+      historyIndex.current = historyStack.current.length - 1;
+    }
+  }, [location.pathname]);
+
+  const canGoBack = historyIndex.current > 0;
+  const canGoForward = historyIndex.current < historyStack.current.length - 1;
+
+  const handleBack = useCallback(() => {
+    if (historyIndex.current > 0) {
+      historyIndex.current--;
+      isNavigating.current = true;
+      navigate(historyStack.current[historyIndex.current]);
+    }
+  }, [navigate]);
+
+  const handleForward = useCallback(() => {
+    if (historyIndex.current < historyStack.current.length - 1) {
+      historyIndex.current++;
+      isNavigating.current = true;
+      navigate(historyStack.current[historyIndex.current]);
+    }
+  }, [navigate]);
+
+  const handleRefresh = useCallback(() => {
+    navigate(0);
+  }, [navigate]);
 
   const {
     currentKeyword,
@@ -169,6 +210,11 @@ const App: React.FC = () => {
           onSearch={handleSearch}
           sourceType={sourceType}
           onSourceTypeChange={handleSourceTypeChange}
+          onBack={handleBack}
+          onForward={handleForward}
+          onRefresh={handleRefresh}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
         />
 
         {/* 页面内容 - 由React Router渲染 */}

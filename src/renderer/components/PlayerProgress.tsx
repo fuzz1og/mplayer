@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 
 interface PlayerProgressProps {
   position: number;
@@ -16,29 +16,88 @@ const formatTime = (seconds: number): string => {
 
 const PlayerProgress: React.FC<PlayerProgressProps> = React.memo(({
   position, duration, hasCurrentSong, onSeek,
-}) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', minWidth: '36px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-      {formatTime(position)}
-    </span>
-    <input
-      type="range" min={0} max={duration || 100} value={position}
-      aria-label="播放进度"
-      aria-valuemin={0}
-      aria-valuemax={duration || 100}
-      aria-valuenow={position}
-      onChange={(e) => onSeek(Number(e.target.value))}
-      disabled={!hasCurrentSong}
-      style={{
-        flex: 1, height: '4px', WebkitAppearance: 'none', appearance: 'none',
-        background: `linear-gradient(to right, var(--accent-color) ${(position / (duration || 1)) * 100}%, var(--border-color) ${(position / (duration || 1)) * 100}%)`,
-        borderRadius: '2px', outline: 'none', cursor: hasCurrentSong ? 'pointer' : 'not-allowed',
-      }}
-    />
-    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', minWidth: '36px', fontVariantNumeric: 'tabular-nums' }}>
-      {formatTime(duration)}
-    </span>
-  </div>
-));
+}) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  const progress = duration > 0 ? (position / duration) * 100 : 0;
+
+  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!hasCurrentSong || !trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percent = Math.max(0, Math.min(1, x / rect.width));
+    onSeek(percent * duration);
+  }, [hasCurrentSong, duration, onSeek]);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
+      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', minWidth: '36px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+        {formatTime(position)}
+      </span>
+      <div
+        ref={trackRef}
+        onClick={handleClick}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        style={{
+          flex: 1,
+          height: isHovered ? '20px' : '16px',
+          display: 'flex',
+          alignItems: 'center',
+          cursor: hasCurrentSong ? 'pointer' : 'not-allowed',
+          position: 'relative',
+        }}
+        role="slider"
+        aria-label="播放进度"
+        aria-valuemin={0}
+        aria-valuemax={duration || 100}
+        aria-valuenow={position}
+      >
+        {/* Track background */}
+        <div
+          style={{
+            width: '100%',
+            height: isHovered ? '6px' : '4px',
+            backgroundColor: 'var(--border-default)',
+            borderRadius: '2px',
+            overflow: 'hidden',
+            transition: 'height 150ms ease',
+          }}
+        >
+          {/* Filled portion */}
+          <div
+            style={{
+              width: `${progress}%`,
+              height: '100%',
+              backgroundColor: 'var(--accent)',
+              borderRadius: '2px',
+              transition: 'width 100ms linear',
+            }}
+          />
+        </div>
+        {/* Thumb (visible on hover) */}
+        {isHovered && hasCurrentSong && (
+          <div
+            style={{
+              position: 'absolute',
+              left: `calc(${progress}% - 5px)`,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: '10px',
+              height: '10px',
+              backgroundColor: 'var(--accent)',
+              borderRadius: '50%',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+            }}
+          />
+        )}
+      </div>
+      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', minWidth: '36px', fontVariantNumeric: 'tabular-nums' }}>
+        {formatTime(duration)}
+      </span>
+    </div>
+  );
+});
 
 export default PlayerProgress;

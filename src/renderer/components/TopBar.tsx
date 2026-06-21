@@ -1,11 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, X, ChevronDown } from 'lucide-react';
+import { Search, X, ChevronDown, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
 
 interface TopBarProps {
   onSearch: (keyword: string) => void;
   sourceType: SourceKey;
   onSourceTypeChange: (type: SourceKey) => void;
+  onBack?: () => void;
+  onForward?: () => void;
+  onRefresh?: () => void;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
 }
 
 const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
@@ -19,7 +24,7 @@ const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
   soda: { label: '汽水', accent: '#1E90FF' },
 };
 
-const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange }) => {
+const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange, onBack, onForward, onRefresh, canGoBack, canGoForward }) => {
   const [searchValue, setSearchValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -72,6 +77,35 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flex: 1 }}>
+        {/* 导航按钮 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexShrink: 0 }}>
+          <button
+            onClick={onBack}
+            disabled={!canGoBack}
+            className="player-btn"
+            aria-label="后退"
+            style={{ opacity: canGoBack ? 1 : 0.3, cursor: canGoBack ? 'pointer' : 'not-allowed' }}
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <button
+            onClick={onForward}
+            disabled={!canGoForward}
+            className="player-btn"
+            aria-label="前进"
+            style={{ opacity: canGoForward ? 1 : 0.3, cursor: canGoForward ? 'pointer' : 'not-allowed' }}
+          >
+            <ArrowRight size={16} />
+          </button>
+          <button
+            onClick={onRefresh}
+            className="player-btn"
+            aria-label="刷新"
+          >
+            <RotateCw size={16} />
+          </button>
+        </div>
+
         <div style={searchBoxStyle}>
           {/* 来源选择器 */}
           <div ref={dropdownRef} style={{ position: 'relative', flexShrink: 0 }}>

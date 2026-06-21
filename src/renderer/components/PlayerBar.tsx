@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
-import { ListMusic, Heart } from 'lucide-react';
+const { ipcRenderer } = window.require('electron');
+import { ListMusic, Heart, Download, Mic } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
@@ -40,6 +41,12 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
     setVolume(vol);
   }, [setVolume]);
 
+  const handleDownload = useCallback(() => {
+    if (currentSong) {
+      ipcRenderer.invoke('download:start', currentSong);
+    }
+  }, [currentSong]);
+
   return (
     <div
       className={className}
@@ -57,7 +64,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
         zIndex: 10,
       }}
     >
-      {/* 左侧 - 歌曲信息 */}
+      {/* 左侧 - 封面 + 歌曲信息 */}
       <div
         style={{
           display: 'flex',
@@ -82,7 +89,6 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
             cursor: onCoverClick ? 'pointer' : 'default',
             border: 'none',
             padding: 0,
-            position: 'relative',
           }}
         >
           {currentSong?.cover ? (
@@ -132,27 +138,12 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
               marginTop: '2px',
             }}
           >
-            {currentSong?.artist || '—'}
+            {currentSong ? `${currentSong.artist}` : '—'}
           </div>
         </div>
-
-        {/* 收藏按钮 */}
-        <button
-          onClick={() => currentSong && toggleFavorite(currentSong)}
-          disabled={!currentSong}
-          aria-label={fav ? '取消收藏' : '收藏'}
-          aria-pressed={fav}
-          className="player-btn"
-          style={{
-            color: fav ? 'var(--accent)' : 'var(--text-tertiary)',
-            opacity: currentSong ? 1 : 0.3,
-          }}
-        >
-          <Heart size={16} fill={fav ? 'currentColor' : 'none'} />
-        </button>
       </div>
 
-      {/* 中间 - 播放控制 */}
+      {/* 中间 - 控制按钮 + 进度条 */}
       <div
         style={{
           flex: 1,
@@ -180,11 +171,58 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
         />
       </div>
 
-      <PlayerVolume
-        volume={volume}
-        onVolumeChange={handleVolumeChange}
-        onToggleMute={() => setVolume(volume === 0 ? 80 : 0)}
-      />
+      {/* 右侧 - 功能按钮 */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-2)',
+        }}
+      >
+        {/* 收藏按钮 */}
+        <button
+          onClick={() => currentSong && toggleFavorite(currentSong)}
+          disabled={!currentSong}
+          aria-label={fav ? '取消收藏' : '收藏'}
+          aria-pressed={fav}
+          className="player-btn"
+          style={{
+            color: fav ? 'var(--accent)' : 'var(--text-tertiary)',
+            opacity: currentSong ? 1 : 0.3,
+          }}
+        >
+          <Heart size={16} fill={fav ? 'currentColor' : 'none'} />
+        </button>
+
+        {/* 歌词按钮 */}
+        <button
+          onClick={onCoverClick}
+          disabled={!currentSong}
+          aria-label="歌词"
+          className="player-btn"
+          style={{ opacity: currentSong ? 1 : 0.3 }}
+        >
+          <Mic size={16} />
+        </button>
+
+        {/* 下载按钮 */}
+        <button
+          onClick={handleDownload}
+          disabled={!currentSong}
+          aria-label="下载"
+          className="player-btn"
+          style={{ opacity: currentSong ? 1 : 0.3 }}
+        >
+          <Download size={16} />
+        </button>
+
+        {/* 音量控制 */}
+        <PlayerVolume
+          volume={volume}
+          onVolumeChange={handleVolumeChange}
+          onToggleMute={() => setVolume(volume === 0 ? 80 : 0)}
+        />
+      </div>
     </div>
   );
 };

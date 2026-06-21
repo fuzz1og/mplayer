@@ -18,13 +18,13 @@
   --gray-800: #3A3A3C;
   --gray-900: #1C1C1E;
 
-  /* 品牌色 — Spotify 绿 */
-  --green-50: #E8F5E9;
-  --green-100: #C8E6C9;
-  --green-400: #66BB6A;
-  --green-500: #1DB954;
-  --green-600: #1AA34A;
-  --green-700: #15803D;
+  /* 品牌色 — 经典蓝 */
+  --blue-50: #E3F2FD;
+  --blue-100: #BBDEFB;
+  --blue-400: #42A5F5;
+  --blue-500: #74B9FF;
+  --blue-600: #5BA3F5;
+  --blue-700: #3D8BE0;
 
   /* 危险色 */
   --red-50: #FEF2F2;
@@ -117,7 +117,7 @@
   --text-tertiary: var(--gray-400);
   --text-disabled: var(--gray-300);
   --text-inverse: #FFFFFF;
-  --text-link: var(--green-600);
+  --text-link: var(--blue-600);
 
   /* 边框 */
   --border-default: var(--gray-200);
@@ -125,11 +125,11 @@
   --border-strong: var(--gray-300);
 
   /* 交互色 */
-  --accent: var(--green-500);
-  --accent-hover: var(--green-600);
-  --accent-active: var(--green-700);
-  --accent-subtle: var(--green-50);
-  --accent-text: var(--green-600);
+  --accent: var(--blue-500);
+  --accent-hover: var(--blue-600);
+  --accent-active: var(--blue-700);
+  --accent-subtle: var(--blue-50);
+  --accent-text: var(--blue-600);
 
   --danger: var(--red-500);
   --danger-hover: var(--red-600);

@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Compass,
-  Music,
   Heart,
   History,
   ListMusic,
@@ -130,20 +129,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
           gap: 'var(--space-3)',
         }}
       >
-        <div
+        <img
+          src="/icon.png"
+          alt="MPlayer"
           style={{
             width: '36px',
             height: '36px',
             borderRadius: 'var(--radius-md)',
-            background: 'linear-gradient(135deg, var(--accent) 0%, var(--green-400) 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: 'var(--shadow-sm)',
+            objectFit: 'contain',
           }}
-        >
-          <Music size={18} color="white" />
-        </div>
+        />
         <span
           style={{
             fontSize: 'var(--text-lg)',
@@ -185,7 +180,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
       <div
         style={{
           padding: 'var(--space-2) 0',
-          borderTop: '1px solid var(--border-subtle)',
+          marginTop: 'auto',
         }}
       >
         {renderNavItem({
