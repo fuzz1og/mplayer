@@ -386,7 +386,7 @@ export const musicApi = {
     const cachedData = cacheManager.getAudioUrlCache(fullUrl);
     if (cachedData) {
       // 也尝试缓存音频文件
-      this.downloadAndCacheAudio(cachedData);
+      this.downloadAndCacheAudio(cachedData, fullUrl);
       return cachedData;
     }
 
@@ -414,7 +414,7 @@ export const musicApi = {
       return finalUrl;
     } catch (error) {
       console.error('getAudioUrl 失败:', error);
-      return fullUrl;
+      throw error;
     }
   },
 
