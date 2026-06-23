@@ -179,6 +179,7 @@ app.whenReady().then(async () => {
   registerIpcHandler('favorite:remove', (songId: string) => db.removeFavorite(songId));
   registerIpcHandler('favorite:isFavorite', (songId: string) => db.isFavorite(songId));
   registerIpcHandler('favorite:getAll', () => db.getFavorites());
+  registerIpcHandler('favorite:updateSongData', (songId: string, songData: any) => db.updateFavoriteSongData(songId, songData));
 
   // 历史记录 IPC
   registerIpcHandler('history:add', (song: any) => db.addToPlayHistory(song));
@@ -196,6 +197,7 @@ app.whenReady().then(async () => {
   registerIpcHandler('playlist:removeSong', (playlistId: number, songId: string) => db.removeSongFromPlaylist(playlistId, songId));
   registerIpcHandler('playlist:getSongs', (playlistId: number) => db.getPlaylistSongs(playlistId));
   registerIpcHandler('playlist:updateSongsOrder', (playlistId: number, songId: string, order: number) => db.updatePlaylistSongOrder(playlistId, songId, order));
+  registerIpcHandler('playlist:updateSongData', (playlistId: number, songId: string, songData: any) => db.updatePlaylistSongData(playlistId, songId, songData));
   registerIpcHandler('playlist:reorderFull', async (playlistId: number, songIds: string[]) => {
     await db.reorderSongIds(playlistId, songIds);
   });

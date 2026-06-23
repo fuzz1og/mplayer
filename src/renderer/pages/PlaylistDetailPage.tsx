@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+const { ipcRenderer } = window.require('electron');
 import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
@@ -122,11 +123,21 @@ const PlaylistDetailPage: React.FC = () => {
 
         const fresh = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
 
+        // 写入缓存
         await cacheService.setUrlCache(song.id, {
           url: fresh.url,
           cover: fresh.cover,
           lrc: fresh.lrc,
         });
+
+        // 写回 DB（下次启动不用重新搜索）
+        if (playlistId) {
+          ipcRenderer.invoke('playlist:updateSongData', playlistId, song.id, {
+            url: fresh.url,
+            cover: fresh.cover,
+            lrc: fresh.lrc,
+          }).catch(() => {}); // fire-and-forget
+        }
 
         return { ...song, url: fresh.url, cover: fresh.cover, lrc: fresh.lrc };
       })

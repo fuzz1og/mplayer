@@ -247,6 +247,14 @@ class FileStorage {
     return id;
   }
 
+  async updateFavoriteSongData(songId: string, songData: Partial<Song>): Promise<void> {
+    const favorite = this.data.favorites.find(f => f.songId === songId);
+    if (favorite) {
+      favorite.song = { ...favorite.song, ...songData } as SongBase;
+      await this.saveData();
+    }
+  }
+
   async removeFavorite(songId: string): Promise<void> {
     this.data.favorites = this.data.favorites.filter(f => f.songId !== songId);
     await this.saveData();
@@ -424,6 +432,16 @@ class FileStorage {
     );
     if (item) {
       item.order = order;
+      await this.saveData();
+    }
+  }
+
+  async updatePlaylistSongData(playlistId: number, songId: string, songData: Partial<Song>): Promise<void> {
+    const item = this.data.playlistSongs.find(
+      ps => ps.playlistId === playlistId && ps.songId === songId
+    );
+    if (item) {
+      item.song = { ...item.song, ...songData } as Song;
       await this.saveData();
     }
   }

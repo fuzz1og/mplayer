@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+const { ipcRenderer } = window.require('electron');
 import { favoriteService } from '@/renderer/services/favoriteService';
 import { cacheService } from '@/renderer/services/cacheService';
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
@@ -45,12 +46,19 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
         // 找到匹配的歌曲
         const matchedSong = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
 
-        // 缓存URL
+        // 写入缓存
         await cacheService.setUrlCache(song.id, {
           url: matchedSong.url,
           cover: matchedSong.cover,
           lrc: matchedSong.lrc
         });
+
+        // 写回 DB（下次启动不用重新搜索）
+        ipcRenderer.invoke('favorite:updateSongData', song.id, {
+          url: matchedSong.url,
+          cover: matchedSong.cover,
+          lrc: matchedSong.lrc
+        }).catch(() => {}); // fire-and-forget
 
         cacheCoverImage(matchedSong.cover).catch(() => {});
 
