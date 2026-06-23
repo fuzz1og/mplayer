@@ -14,6 +14,7 @@ import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
 import DownloadProgressModal from '@/renderer/components/DownloadProgressModal';
 import LyricsPage from '@/renderer/pages/LyricsPage';
+import { clearDiscoverCache } from '@/renderer/pages/DiscoverPage';
 
 import './styles/global.css';
 
@@ -24,7 +25,7 @@ const App: React.FC = () => {
 
   // History navigation management
   const historyStack = useRef<string[]>([location.pathname]);
-  const historyIndex = useRef(0);
+  const [historyIndex, setHistoryIndex] = useState(0);
   const isNavigating = useRef(false);
 
   useEffect(() => {
@@ -33,33 +34,36 @@ const App: React.FC = () => {
       return;
     }
     const path = location.pathname;
-    if (historyStack.current[historyIndex.current] !== path) {
-      historyStack.current = historyStack.current.slice(0, historyIndex.current + 1);
+    if (historyStack.current[historyIndex] !== path) {
+      historyStack.current = historyStack.current.slice(0, historyIndex + 1);
       historyStack.current.push(path);
-      historyIndex.current = historyStack.current.length - 1;
+      setHistoryIndex(historyStack.current.length - 1);
     }
-  }, [location.pathname]);
+  }, [location.pathname, historyIndex]);
 
-  const canGoBack = historyIndex.current > 0;
-  const canGoForward = historyIndex.current < historyStack.current.length - 1;
+  const canGoBack = historyIndex > 0;
+  const canGoForward = historyIndex < historyStack.current.length - 1;
 
   const handleBack = useCallback(() => {
-    if (historyIndex.current > 0) {
-      historyIndex.current--;
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
       isNavigating.current = true;
-      navigate(historyStack.current[historyIndex.current]);
+      setHistoryIndex(newIndex);
+      navigate(historyStack.current[newIndex]);
     }
-  }, [navigate]);
+  }, [navigate, historyIndex]);
 
   const handleForward = useCallback(() => {
-    if (historyIndex.current < historyStack.current.length - 1) {
-      historyIndex.current++;
+    if (historyIndex < historyStack.current.length - 1) {
+      const newIndex = historyIndex + 1;
       isNavigating.current = true;
-      navigate(historyStack.current[historyIndex.current]);
+      setHistoryIndex(newIndex);
+      navigate(historyStack.current[newIndex]);
     }
-  }, [navigate]);
+  }, [navigate, historyIndex]);
 
   const handleRefresh = useCallback(() => {
+    clearDiscoverCache();
     navigate(0);
   }, [navigate]);
 

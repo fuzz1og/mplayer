@@ -87,6 +87,14 @@ const discoverCache = {
   playlists: null as DiscoverPlaylist[] | null,
 };
 
+export const clearDiscoverCache = () => {
+  discoverCache.hotlist = null;
+  discoverCache.neteaseNewSongList = null;
+  discoverCache.qqHotlist = null;
+  discoverCache.qqNewSongList = null;
+  discoverCache.playlists = null;
+};
+
 const DiscoverPage: React.FC = () => {
   const navigate = useNavigate();
   const [hotlist, setHotlist] = useState<HotlistSong[]>(discoverCache.hotlist || []);
