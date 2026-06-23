@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useButtonHover } from '@/renderer/hooks/useButtonHover';
 
 interface HotlistSong {
   id: string;
@@ -36,6 +37,7 @@ const HotlistCard: React.FC<HotlistCardProps> = ({
   onSongClick,
 }) => {
   const navigate = useNavigate();
+  const songHoverProps = useButtonHover({ hoverBg: 'var(--bg-hover)', leaveBg: 'transparent' });
 
   return (
     <div
@@ -158,8 +160,8 @@ const HotlistCard: React.FC<HotlistCardProps> = ({
                 transition: 'background var(--duration-fast)',
               }}
               onClick={(e) => { e.stopPropagation(); onSongClick(song, sourceType); }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              onMouseEnter={songHoverProps.handleMouseEnter}
+              onMouseLeave={songHoverProps.handleMouseLeave}
             >
               <span
                 style={{

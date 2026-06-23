@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, X, ChevronDown, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
+import { useButtonHover } from '@/renderer/hooks/useButtonHover';
 
 interface TopBarProps {
   onSearch: (keyword: string) => void;
@@ -29,6 +30,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
   const [isFocused, setIsFocused] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownHoverProps = useButtonHover({ hoverBg: 'var(--bg-hover)', leaveBg: 'transparent' });
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -189,12 +191,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                         transition: 'background var(--duration-fast)',
                         animation: dropdownOpen ? `dropdownItemFade var(--duration-normal) var(--ease-out) ${idx * 0.04}s both` : 'none',
                       }}
-                      onMouseEnter={(e) => {
-                        if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
+                      {...(!isActive ? { onMouseEnter: dropdownHoverProps.handleMouseEnter, onMouseLeave: dropdownHoverProps.handleMouseLeave } : {})}
                     >
                       <span
                         style={{

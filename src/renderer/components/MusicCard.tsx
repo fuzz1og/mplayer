@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Play, Trash2 } from 'lucide-react';
+import { useButtonHover } from '@/renderer/hooks/useButtonHover';
 
 interface MusicCardProps {
   title: string;
@@ -28,6 +29,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
 
   const { width, imgHeight } = sizeMap[size];
   const [isHovered, setIsHovered] = useState(false);
+  const deleteHoverProps = useButtonHover({ hoverBg: 'rgba(220,38,38,0.8)', leaveBg: 'rgba(0,0,0,0.5)' });
 
   return (
     <div
@@ -136,8 +138,8 @@ const MusicCard: React.FC<MusicCardProps> = ({
               justifyContent: 'center',
               transition: 'background var(--duration-fast)',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(220,38,38,0.8)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.5)'; }}
+            onMouseEnter={deleteHoverProps.handleMouseEnter}
+            onMouseLeave={deleteHoverProps.handleMouseLeave}
           >
             <Trash2 size={13} color="white" />
           </button>

@@ -10,7 +10,7 @@ type ButtonHoverConfig = {
 export const useButtonHover = (config: ButtonHoverConfig = {}) => {
   const { hoverBg = 'var(--hover-bg)', hoverColor, leaveBg = 'transparent', leaveColor } = config;
 
-  const handleMouseEnter: MouseEventHandler<HTMLButtonElement> = useCallback((e) => {
+  const handleMouseEnter: MouseEventHandler<HTMLElement> = useCallback((e) => {
     if (hoverColor) {
       e.currentTarget.style.color = hoverColor;
     }
@@ -19,7 +19,7 @@ export const useButtonHover = (config: ButtonHoverConfig = {}) => {
     }
   }, [hoverBg, hoverColor]);
 
-  const handleMouseLeave: MouseEventHandler<HTMLButtonElement> = useCallback((e) => {
+  const handleMouseLeave: MouseEventHandler<HTMLElement> = useCallback((e) => {
     if (leaveColor) {
       e.currentTarget.style.color = leaveColor;
     }
