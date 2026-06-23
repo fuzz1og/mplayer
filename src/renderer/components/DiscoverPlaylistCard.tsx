@@ -1,16 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { DiscoverPlaylist } from '@/shared/types/song';
+import { formatPlayCount } from '@/renderer/utils/format';
 
 interface DiscoverPlaylistCardProps {
   playlist: DiscoverPlaylist;
 }
-
-const formatPlayCount = (count: number): string => {
-  if (count >= 100000000) return `${(count / 100000000).toFixed(1)}亿`;
-  if (count >= 10000) return `${(count / 10000).toFixed(1)}万`;
-  return count.toString();
-};
 
 const DiscoverPlaylistCard: React.FC<DiscoverPlaylistCardProps> = ({ playlist }) => {
   const navigate = useNavigate();

@@ -6,17 +6,8 @@ import SongList from '@/renderer/components/SongList';
 import { playlistService } from '@/renderer/services/playlistService';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import type { Song, DiscoverPlaylist } from '@/shared/types/song';
+import { formatPlayCount } from '@/renderer/utils/format';
 const { ipcRenderer } = window.require('electron');
-
-const formatPlayCount = (count: number): string => {
-  if (count >= 100000000) {
-    return `${(count / 100000000).toFixed(1)}亿`;
-  }
-  if (count >= 10000) {
-    return `${(count / 10000).toFixed(1)}万`;
-  }
-  return count.toString();
-};
 
 const DiscoverPlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
