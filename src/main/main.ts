@@ -44,6 +44,7 @@ function createWindow() {
       webSecurity: false
     },
     titleBarStyle: 'hiddenInset',
+    autoHideMenuBar: true,
     show: false
   });
 

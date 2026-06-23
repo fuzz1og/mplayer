@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { message } from 'antd';
-import { Sparkles, TrendingUp, ArrowLeft, User, RefreshCw } from 'lucide-react';
+import { Sparkles, TrendingUp, ArrowLeft, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -299,94 +299,6 @@ const DiscoverPage: React.FC = () => {
     useSearchStore.getState().reset();
     setArtistResults([]);
     setActiveTab('songs');
-  };
-
-  const handleRefresh = () => {
-    // 清除缓存
-    discoverCache.hotlist = null;
-    discoverCache.neteaseNewSongList = null;
-    discoverCache.qqHotlist = null;
-    discoverCache.qqNewSongList = null;
-    discoverCache.playlists = null;
-
-    // 设置 loading 状态并清除错误
-    setHotlistLoading(true);
-    setNeteaseNewSongListLoading(true);
-    setQQHotlistLoading(true);
-    setQqNewSongListLoading(true);
-    setPlaylistsLoading(true);
-    setHotlistError(null);
-    setNeteaseNewSongListError(null);
-    setQQHotlistError(null);
-    setQqNewSongListError(null);
-    setPlaylistsError(null);
-
-    // 重新请求数据
-    const loadData = async () => {
-      try {
-        const [hotlistRes, newSongRes, qqHotRes, qqNewRes, playlistRes] = await Promise.allSettled([
-          ipcRenderer.invoke('musicApi:getNeteaseHotlist'),
-          ipcRenderer.invoke('musicApi:getNeteaseNewSongList'),
-          ipcRenderer.invoke('musicApi:getQQHotlist'),
-          ipcRenderer.invoke('musicApi:getQQNewSongList'),
-          ipcRenderer.invoke('musicApi:getNeteasePlaylists', '全部', 'hot', 0, 10),
-        ]);
-
-        // 网易热榜
-        if (hotlistRes.status === 'fulfilled' && hotlistRes.value.success) {
-          const data = hotlistRes.value.data;
-          setHotlist(data.slice(0, 20));
-          discoverCache.hotlist = data.slice(0, 20);
-        } else {
-          setHotlistError('加载网易热榜失败');
-        }
-
-        // 网易新歌榜
-        if (newSongRes.status === 'fulfilled' && newSongRes.value.success) {
-          const data = newSongRes.value.data;
-          setNeteaseNewSongList(data.slice(0, 20));
-          discoverCache.neteaseNewSongList = data.slice(0, 20);
-        } else {
-          setNeteaseNewSongListError('加载网易新歌榜失败');
-        }
-
-        // QQ热榜
-        if (qqHotRes.status === 'fulfilled' && qqHotRes.value.success) {
-          const data = qqHotRes.value.data;
-          setQQHotlist(data.slice(0, 20));
-          discoverCache.qqHotlist = data.slice(0, 20);
-        } else {
-          setQQHotlistError('加载QQ音乐热榜失败');
-        }
-
-        // QQ新歌榜
-        if (qqNewRes.status === 'fulfilled' && qqNewRes.value.success) {
-          const data = qqNewRes.value.data;
-          setQqNewSongList(data.slice(0, 20));
-          discoverCache.qqNewSongList = data.slice(0, 20);
-        } else {
-          setQqNewSongListError('加载QQ音乐新歌榜失败');
-        }
-
-        // 热门歌单
-        if (playlistRes.status === 'fulfilled' && playlistRes.value.success) {
-          const data = playlistRes.value.data;
-          setPlaylists(data.playlists || []);
-          discoverCache.playlists = data.playlists || [];
-        } else {
-          setPlaylistsError('加载热门歌单失败');
-        }
-      } catch (error) {
-        console.error('刷新数据失败:', error);
-      } finally {
-        setHotlistLoading(false);
-        setNeteaseNewSongListLoading(false);
-        setQQHotlistLoading(false);
-        setQqNewSongListLoading(false);
-        setPlaylistsLoading(false);
-      }
-    };
-    loadData();
   };
 
   // 搜索结果时自动展开所有分组（使用 useEffect 避免渲染阶段副作用）
@@ -699,38 +611,6 @@ const DiscoverPage: React.FC = () => {
   // 默认显示发现页内容
   return (
     <div style={{ padding: '24px', height: '100%', overflow: 'auto' }}>
-      {/* 刷新按钮 */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-        <button
-          onClick={handleRefresh}
-          disabled={hotlistLoading || neteaseNewSongListLoading || qqHotlistLoading || qqNewSongListLoading || playlistsLoading}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-            padding: '8px 16px',
-            background: 'var(--content-bg)',
-            border: '1px solid var(--border-color)',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-            color: 'var(--text-secondary)',
-            fontSize: 'var(--text-sm)',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'var(--accent-color)';
-            e.currentTarget.style.color = 'var(--accent-color)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-color)';
-            e.currentTarget.style.color = 'var(--text-secondary)';
-          }}
-        >
-          <RefreshCw size={14} />
-          <span>刷新</span>
-        </button>
-      </div>
-
       {/* 热门歌单 */}
       <section style={{ marginBottom: '40px' }}>
         <SectionHeader
