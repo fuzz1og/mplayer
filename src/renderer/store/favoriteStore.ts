@@ -67,8 +67,10 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const songBases = await favoriteService.getFavorites();
-      // 先从缓存加载，不主动刷新 URL（避免启动时无代理导致大量网络请求失败）
+      // 先从缓存加载，然后异步刷新缺失 URL 的歌曲
       const cachedSongs: Song[] = [];
+      const needsRefresh: SongBase[] = [];
+
       for (const songBase of songBases) {
         const cachedUrl = await cacheService.getUrlCache(songBase.id);
         if (cachedUrl) {
@@ -79,16 +81,38 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
             lrc: cachedUrl.lrc
           });
         } else {
-          // 缓存中没有的歌曲，保留原始数据（URL 可能为空）
+          // 缓存中没有，先加入列表（URL 为空），后续异步刷新
           cachedSongs.push(songBase as Song);
+          needsRefresh.push(songBase);
         }
       }
+
       const ids = cachedSongs.map(s => s.id);
       set({
         favorites: cachedSongs,
         favoriteIds: ids,
         loading: false
       });
+
+      // 异步刷新缺失 URL 的歌曲（不阻塞界面加载）
+      if (needsRefresh.length > 0) {
+        const refreshResults = await Promise.allSettled(
+          needsRefresh.map(songBase => get().refreshSongUrls(songBase))
+        );
+
+        // 用刷新后的结果更新收藏列表
+        const updatedFavorites = get().favorites.map(fav => {
+          const result = refreshResults.find((r, i) =>
+            r.status === 'fulfilled' && r.value && needsRefresh[i].id === fav.id
+          );
+          if (result && result.status === 'fulfilled' && result.value) {
+            return result.value;
+          }
+          return fav;
+        });
+
+        set({ favorites: updatedFavorites });
+      }
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : '加载收藏失败',

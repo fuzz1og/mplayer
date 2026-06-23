@@ -130,7 +130,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
         }}
       >
         <img
-          src="/icon.png"
+          src="./icon.png"
           alt="MPlayer"
           style={{
             width: '36px',

@@ -408,8 +408,8 @@ export const musicApi = {
       // 缓存URL结果
       cacheManager.setAudioUrlCache(fullUrl, finalUrl);
 
-      // 后台下载并缓存音频文件
-      this.downloadAndCacheAudio(finalUrl);
+      // 后台下载并缓存音频文件（传递原始 URL 作为缓存 key）
+      this.downloadAndCacheAudio(finalUrl, fullUrl);
 
       return finalUrl;
     } catch (error) {
@@ -418,7 +418,7 @@ export const musicApi = {
     }
   },
 
-  async downloadAndCacheAudio(audioUrl: string): Promise<void> {
+  async downloadAndCacheAudio(audioUrl: string, originalUrl?: string): Promise<void> {
     try {
       const response = await apiClient.get(audioUrl, {
         responseType: 'arraybuffer',
@@ -426,7 +426,8 @@ export const musicApi = {
         maxRedirects: 5
       });
       const audioData = Buffer.from(response.data);
-      getCacheManager().setAudioCache(audioUrl, audioData);
+      // 使用原始 URL 作为缓存 key，与 getAudioUrl 的查询 key 一致
+      getCacheManager().setAudioCache(originalUrl || audioUrl, audioData);
       getCacheManager().trimAudioCache(10);
     } catch (error) {
       console.error('音频缓存失败:', error);
