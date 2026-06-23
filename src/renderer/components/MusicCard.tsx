@@ -134,9 +134,10 @@ const MusicCard: React.FC<MusicCardProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              opacity: isHovered ? 1 : 0,
-              transition: 'opacity var(--duration-fast)',
+              transition: 'background var(--duration-fast)',
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(220,38,38,0.8)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.5)'; }}
           >
             <Trash2 size={13} color="white" />
           </button>
