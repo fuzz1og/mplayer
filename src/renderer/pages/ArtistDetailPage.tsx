@@ -144,46 +144,28 @@ const ArtistDetailPage: React.FC = () => {
                 }}
               >
                 <div style={{ width: '50px', textAlign: 'center' }}>
-                  <div style={{
+                  <div className="skeleton-shimmer" style={{
                     width: '20px', height: '14px', borderRadius: '2px',
-                    background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                    backgroundSize: '200% 200%',
-                    animation: 'shimmer 1.5s ease-in-out infinite',
                     margin: '0 auto',
                   }} />
                 </div>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
+                  <div className="skeleton-shimmer" style={{
                     width: '40px', height: '40px', borderRadius: '4px',
-                    background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                    backgroundSize: '200% 200%',
-                    animation: 'shimmer 1.5s ease-in-out infinite',
                   }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{
+                    <div className="skeleton-shimmer" style={{
                       width: '70%', height: '14px', borderRadius: '2px',
-                      background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                      backgroundSize: '200% 200%',
-                      animation: 'shimmer 1.5s ease-in-out infinite',
                       marginBottom: '4px',
                     }} />
-                    <div style={{
+                    <div className="skeleton-shimmer" style={{
                       width: '50%', height: '12px', borderRadius: '2px',
-                      background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                      backgroundSize: '200% 200%',
-                      animation: 'shimmer 1.5s ease-in-out infinite',
                       animationDelay: '0.1s',
                     }} />
                   </div>
                 </div>
               </div>
             ))}
-            <style>{`
-              @keyframes shimmer {
-                0% { background-position: 200% 0; }
-                100% { background-position: -200% 0; }
-              }
-            `}</style>
           </div>
         ) : (
           <>

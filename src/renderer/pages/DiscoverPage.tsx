@@ -519,26 +519,14 @@ const DiscoverPage: React.FC = () => {
                       padding: '16px 12px', borderRadius: '12px',
                       backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)',
                     }}>
-                      <div style={{
+                      <div className="skeleton-shimmer" style={{
                         width: '80px', height: '80px', borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                        backgroundSize: '200% 200%',
-                        animation: 'shimmer 1.5s ease-in-out infinite',
                       }} />
-                      <div style={{
+                      <div className="skeleton-shimmer" style={{
                         width: '60px', height: '14px', borderRadius: '2px',
-                        background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                        backgroundSize: '200% 200%',
-                        animation: 'shimmer 1.5s ease-in-out infinite',
                       }} />
                     </div>
                   ))}
-                  <style>{`
-                    @keyframes shimmer {
-                      0% { background-position: 200% 0; }
-                      100% { background-position: -200% 0; }
-                    }
-                  `}</style>
                 </div>
               ) : artistResults.length > 0 ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 'var(--space-4)' }}>
