@@ -73,7 +73,7 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
       >
         <span style={{ 
           color: 'var(--text-primary)', 
-          fontSize: '14px',
+          fontSize: 'var(--text-base)',
           textShadow: '0 1px 2px rgba(255, 255, 255, 0.8)'
         }}>
           暂无歌词

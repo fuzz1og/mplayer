@@ -59,8 +59,14 @@ class CacheManager {
   
   /**
    * 设置缓存数据
+   * 空数据（空数组、空字符串、null、undefined）不缓存，避免 API 失败后空数据被缓存导致不重试
    */
   set<T>(key: string, data: T, expiration: number): void {
+    // 拒绝缓存空数据
+    if (data === null || data === undefined) return;
+    if (Array.isArray(data) && data.length === 0) return;
+    if (typeof data === 'string' && data.trim() === '') return;
+
     this.cache.set(key, {
       data,
       timestamp: Date.now(),

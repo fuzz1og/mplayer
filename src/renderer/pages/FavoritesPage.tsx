@@ -61,10 +61,10 @@ const FavoritesPage: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Heart size={24} color="var(--accent-color)" />
-            <h1 style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
               我的收藏
             </h1>
-            <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
+            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
               {favorites.length} 首歌曲
             </span>
           </div>
@@ -82,7 +82,7 @@ const FavoritesPage: React.FC = () => {
               borderRadius: '20px',
               cursor: favorites.length > 0 ? 'pointer' : 'not-allowed',
               opacity: favorites.length > 0 ? 1 : 0.5,
-              fontSize: '14px',
+              fontSize: 'var(--text-base)',
               fontWeight: 500,
             }}
           >

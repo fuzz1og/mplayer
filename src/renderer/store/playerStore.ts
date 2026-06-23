@@ -162,12 +162,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         } catch (urlError) {
           console.error('获取真实音频 URL 失败:', urlError);
           message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');
+          realUrl = ''; // 失败时清空，避免使用过期 URL
         }
       }
       // local 歌曲直接使用 song.url（file:// 路径），无需获取真实 URL
 
       if (!realUrl) {
-        throw new Error('无法获取音频 URL');
+        set({ isLoading: false });
+        throw new Error('无法获取音频 URL，可能网络不稳定或歌曲已下架');
       }
 
       const songWithRealUrl = { ...song, url: realUrl };

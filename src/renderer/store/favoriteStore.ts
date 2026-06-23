@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+const { ipcRenderer } = window.require('electron');
 import { favoriteService } from '@/renderer/services/favoriteService';
 import { cacheService } from '@/renderer/services/cacheService';
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
@@ -45,12 +46,19 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
         // 找到匹配的歌曲
         const matchedSong = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
 
-        // 缓存URL
+        // 写入缓存
         await cacheService.setUrlCache(song.id, {
           url: matchedSong.url,
           cover: matchedSong.cover,
           lrc: matchedSong.lrc
         });
+
+        // 写回 DB（下次启动不用重新搜索）
+        ipcRenderer.invoke('favorite:updateSongData', song.id, {
+          url: matchedSong.url,
+          cover: matchedSong.cover,
+          lrc: matchedSong.lrc
+        }).catch(() => {}); // fire-and-forget
 
         cacheCoverImage(matchedSong.cover).catch(() => {});
 
@@ -67,8 +75,10 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const songBases = await favoriteService.getFavorites();
-      // 先从缓存加载，不主动刷新 URL（避免启动时无代理导致大量网络请求失败）
+      // 先从缓存加载，然后异步刷新缺失 URL 的歌曲
       const cachedSongs: Song[] = [];
+      const needsRefresh: SongBase[] = [];
+
       for (const songBase of songBases) {
         const cachedUrl = await cacheService.getUrlCache(songBase.id);
         if (cachedUrl) {
@@ -79,16 +89,57 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
             lrc: cachedUrl.lrc
           });
         } else {
-          // 缓存中没有的歌曲，保留原始数据（URL 可能为空）
+          // 缓存中没有，先加入列表（URL 为空），后续异步刷新
           cachedSongs.push(songBase as Song);
+          needsRefresh.push(songBase);
         }
       }
+
       const ids = cachedSongs.map(s => s.id);
       set({
         favorites: cachedSongs,
         favoriteIds: ids,
         loading: false
       });
+
+      // 异步刷新缺失 URL 的歌曲（不阻塞界面加载）
+      if (needsRefresh.length > 0) {
+        // Bug #8: 限制并发请求数，避免请求风暴
+        const CONCURRENT_LIMIT = 5;
+        const refreshResults: PromiseSettledResult<Song | null>[] = [];
+        for (let i = 0; i < needsRefresh.length; i += CONCURRENT_LIMIT) {
+          const batch = needsRefresh.slice(i, i + CONCURRENT_LIMIT);
+          const batchResults = await Promise.allSettled(
+            batch.map(songBase => get().refreshSongUrls(songBase))
+          );
+          refreshResults.push(...batchResults);
+        }
+
+        // Bug #5: 用 Map<id, result> 查找，避免索引错位
+        const resultMap = new Map<string, Song>();
+        refreshResults.forEach((r, i) => {
+          if (r.status === 'fulfilled' && r.value) {
+            resultMap.set(needsRefresh[i].id, r.value);
+          }
+        });
+
+        // Bug #12: 合并时检查当前状态，避免竞态覆盖用户修改
+        const currentFavorites = get().favorites;
+        const currentIds = new Set(currentFavorites.map(f => f.id));
+        const updatedFavorites = currentFavorites.map(fav => {
+          const refreshed = resultMap.get(fav.id);
+          if (refreshed && currentIds.has(fav.id)) {
+            return refreshed;
+          }
+          return fav;
+        });
+
+        // Bug #6: 同时更新 favoriteIds，保持两者同步
+        set({
+          favorites: updatedFavorites,
+          favoriteIds: updatedFavorites.map(f => f.id),
+        });
+      }
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : '加载收藏失败',

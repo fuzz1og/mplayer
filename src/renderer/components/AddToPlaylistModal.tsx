@@ -186,7 +186,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
             gap: '12px',
             padding: '12px',
             backgroundColor: 'var(--hover-bg)',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
             marginBottom: '20px',
           }}
         >
@@ -227,7 +227,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 fontWeight: 500,
                 color: 'var(--text-primary)',
                 overflow: 'hidden',
@@ -239,7 +239,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
             </div>
             <div
               style={{
-                fontSize: '12px',
+                fontSize: 'var(--text-xs)',
                 color: 'var(--text-secondary)',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -269,7 +269,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                 color: 'var(--text-tertiary)',
               }}
             >
-              <div style={{ fontSize: '14px' }}>加载中...</div>
+              <div style={{ fontSize: 'var(--text-base)' }}>加载中...</div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -286,7 +286,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                   }}
                 >
                   <ListMusic size={32} style={{ marginBottom: '12px' }} />
-                  <div style={{ fontSize: '14px' }}>暂无歌单</div>
+                  <div style={{ fontSize: 'var(--text-base)' }}>暂无歌单</div>
                 </div>
               ) : (
                 playlists.map((playlist) => {
@@ -298,7 +298,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                       onClick={() => !isDisabled && handleAddToPlaylist(playlist.id)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: '12px', padding: '12px',
-                        borderRadius: '8px', cursor: isDisabled ? 'not-allowed' : 'pointer',
+                        borderRadius: 'var(--radius-md)', cursor: isDisabled ? 'not-allowed' : 'pointer',
                         transition: 'all 0.15s ease', opacity: isDisabled ? 0.5 : 1,
                       }}
                       onMouseEnter={(e) => {
@@ -318,10 +318,10 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                         <ListMusic size={20} color={isDisabled ? 'var(--text-tertiary)' : 'var(--text-primary)'} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 500, color: isDisabled ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
+                        <div style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: isDisabled ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
                           {playlist.name}
                         </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           {dup?.status === 'duplicate' && <span style={{ color: 'var(--danger-color)' }}>已存在</span>}
                           {dup?.status === 'nameConflict' && <span style={{ color: '#F0A500' }}>同名（不同平台）</span>}
                           {(!dup || dup?.status === 'ok') && (playlist.description || '歌单')}
@@ -352,7 +352,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                 padding: '8px 12px',
                 border: '1px solid var(--border-color)',
                 borderRadius: '6px',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 backgroundColor: 'var(--bg-color)',
                 color: 'var(--text-primary)',
               }}
@@ -369,7 +369,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 cursor: creating || !newPlaylistName.trim() ? 'not-allowed' : 'pointer',
                 opacity: creating || !newPlaylistName.trim() ? 0.5 : 1,
               }}

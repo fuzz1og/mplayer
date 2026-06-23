@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, TrendingUp, ArrowLeft, User, RefreshCw } from 'lucide-react';
+import { message } from 'antd';
+import { Sparkles, TrendingUp, ArrowLeft, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -36,14 +37,14 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: s
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: '20px',
+      marginBottom: 'var(--space-5)',
     }}
   >
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
       <span style={{ color: 'var(--accent-color)' }}>{icon}</span>
       <h2
         style={{
-          fontSize: '20px',
+          fontSize: 'var(--text-xl)',
           fontWeight: 600,
           color: 'var(--text-primary)',
         }}
@@ -54,13 +55,13 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: s
     {action && (
       <button
         style={{
-          fontSize: '13px',
+          fontSize: 'var(--text-sm)',
           color: 'var(--text-secondary)',
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
           padding: '4px 8px',
-          borderRadius: '4px',
+          borderRadius: 'var(--radius-xs)',
           transition: 'all 0.15s ease',
         }}
         onClick={onClickAction}
@@ -84,6 +85,14 @@ const discoverCache = {
   qqHotlist: null as HotlistSong[] | null,
   qqNewSongList: null as HotlistSong[] | null,
   playlists: null as DiscoverPlaylist[] | null,
+};
+
+export const clearDiscoverCache = () => {
+  discoverCache.hotlist = null;
+  discoverCache.neteaseNewSongList = null;
+  discoverCache.qqHotlist = null;
+  discoverCache.qqNewSongList = null;
+  discoverCache.playlists = null;
 };
 
 const DiscoverPage: React.FC = () => {
@@ -263,9 +272,12 @@ const DiscoverPage: React.FC = () => {
       const searchResults = result.success ? result.data : [];
       if (searchResults.length > 0) {
         await play(searchResults[0]);
+      } else {
+        message.warning('未找到可播放的音源，请检查 API 配置');
       }
     } catch (error) {
       console.error('搜索歌曲失败:', error);
+      message.error('播放失败，请检查网络连接和 API 设置');
     }
   };
 
@@ -297,94 +309,6 @@ const DiscoverPage: React.FC = () => {
     setActiveTab('songs');
   };
 
-  const handleRefresh = () => {
-    // 清除缓存
-    discoverCache.hotlist = null;
-    discoverCache.neteaseNewSongList = null;
-    discoverCache.qqHotlist = null;
-    discoverCache.qqNewSongList = null;
-    discoverCache.playlists = null;
-
-    // 设置 loading 状态并清除错误
-    setHotlistLoading(true);
-    setNeteaseNewSongListLoading(true);
-    setQQHotlistLoading(true);
-    setQqNewSongListLoading(true);
-    setPlaylistsLoading(true);
-    setHotlistError(null);
-    setNeteaseNewSongListError(null);
-    setQQHotlistError(null);
-    setQqNewSongListError(null);
-    setPlaylistsError(null);
-
-    // 重新请求数据
-    const loadData = async () => {
-      try {
-        const [hotlistRes, newSongRes, qqHotRes, qqNewRes, playlistRes] = await Promise.allSettled([
-          ipcRenderer.invoke('musicApi:getNeteaseHotlist'),
-          ipcRenderer.invoke('musicApi:getNeteaseNewSongList'),
-          ipcRenderer.invoke('musicApi:getQQHotlist'),
-          ipcRenderer.invoke('musicApi:getQQNewSongList'),
-          ipcRenderer.invoke('musicApi:getNeteasePlaylists', '全部', 'hot', 0, 10),
-        ]);
-
-        // 网易热榜
-        if (hotlistRes.status === 'fulfilled' && hotlistRes.value.success) {
-          const data = hotlistRes.value.data;
-          setHotlist(data.slice(0, 20));
-          discoverCache.hotlist = data.slice(0, 20);
-        } else {
-          setHotlistError('加载网易热榜失败');
-        }
-
-        // 网易新歌榜
-        if (newSongRes.status === 'fulfilled' && newSongRes.value.success) {
-          const data = newSongRes.value.data;
-          setNeteaseNewSongList(data.slice(0, 20));
-          discoverCache.neteaseNewSongList = data.slice(0, 20);
-        } else {
-          setNeteaseNewSongListError('加载网易新歌榜失败');
-        }
-
-        // QQ热榜
-        if (qqHotRes.status === 'fulfilled' && qqHotRes.value.success) {
-          const data = qqHotRes.value.data;
-          setQQHotlist(data.slice(0, 20));
-          discoverCache.qqHotlist = data.slice(0, 20);
-        } else {
-          setQQHotlistError('加载QQ音乐热榜失败');
-        }
-
-        // QQ新歌榜
-        if (qqNewRes.status === 'fulfilled' && qqNewRes.value.success) {
-          const data = qqNewRes.value.data;
-          setQqNewSongList(data.slice(0, 20));
-          discoverCache.qqNewSongList = data.slice(0, 20);
-        } else {
-          setQqNewSongListError('加载QQ音乐新歌榜失败');
-        }
-
-        // 热门歌单
-        if (playlistRes.status === 'fulfilled' && playlistRes.value.success) {
-          const data = playlistRes.value.data;
-          setPlaylists(data.playlists || []);
-          discoverCache.playlists = data.playlists || [];
-        } else {
-          setPlaylistsError('加载热门歌单失败');
-        }
-      } catch (error) {
-        console.error('刷新数据失败:', error);
-      } finally {
-        setHotlistLoading(false);
-        setNeteaseNewSongListLoading(false);
-        setQQHotlistLoading(false);
-        setQqNewSongListLoading(false);
-        setPlaylistsLoading(false);
-      }
-    };
-    loadData();
-  };
-
   // 搜索结果时自动展开所有分组（使用 useEffect 避免渲染阶段副作用）
   useEffect(() => {
     if (currentKeyword && groups.length > 0 && useSearchStore.getState().expandedKeys.length === 0) {
@@ -401,8 +325,8 @@ const DiscoverPage: React.FC = () => {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '16px',
-            padding: '12px 24px',
+            gap: 'var(--space-4)',
+            padding: 'var(--space-3) var(--space-6)',
             borderBottom: '1px solid var(--divider-color)',
             backgroundColor: 'var(--content-bg)',
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
@@ -415,14 +339,14 @@ const DiscoverPage: React.FC = () => {
               border: 'none',
               background: 'transparent',
               cursor: 'pointer',
-              padding: '10px',
-              borderRadius: '8px',
+              padding: 'var(--space-3)',
+              borderRadius: 'var(--radius-md)',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: 'var(--space-2)',
               color: 'var(--text-secondary)',
               transition: 'all 0.2s ease',
-              fontSize: '14px',
+              fontSize: 'var(--text-base)',
               fontWeight: 500,
             }}
             onMouseEnter={(e) => {
@@ -441,7 +365,7 @@ const DiscoverPage: React.FC = () => {
           </button>
           <h1
             style={{
-              fontSize: '20px',
+              fontSize: 'var(--text-xl)',
               fontWeight: 600,
               color: 'var(--text-primary)',
               flex: 1,
@@ -461,8 +385,8 @@ const DiscoverPage: React.FC = () => {
         <div
           style={{
             display: 'flex',
-            gap: '4px',
-            padding: '0 24px',
+            gap: 'var(--space-1)',
+            padding: '0 var(--space-6)',
             borderBottom: '1px solid var(--divider-color)',
             backgroundColor: 'var(--content-bg)',
           }}
@@ -475,12 +399,12 @@ const DiscoverPage: React.FC = () => {
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               style={{
-                padding: '10px 20px',
+                padding: 'var(--space-3) var(--space-5)',
                 border: 'none',
                 borderBottom: activeTab === tab.key ? '2px solid var(--accent-color)' : '2px solid transparent',
                 background: 'transparent',
                 cursor: 'pointer',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 fontWeight: activeTab === tab.key ? 600 : 400,
                 color: activeTab === tab.key ? 'var(--accent-color)' : 'var(--text-secondary)',
                 transition: 'all 0.15s ease',
@@ -489,7 +413,7 @@ const DiscoverPage: React.FC = () => {
               {tab.label}
               {tab.count > 0 && (
                 <span style={{
-                  marginLeft: '6px',
+                  marginLeft: 'var(--space-2)',
                   fontSize: '11px',
                   padding: '1px 6px',
                   borderRadius: '10px',
@@ -510,10 +434,10 @@ const DiscoverPage: React.FC = () => {
               style={{
                 padding: '12px 16px',
                 backgroundColor: 'var(--danger-bg)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 color: 'var(--danger-color)',
                 marginBottom: '16px',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
               }}
             >
               {error}
@@ -556,12 +480,12 @@ const DiscoverPage: React.FC = () => {
 
                 {/* 滚动加载提示 */}
                 {hasMore && loading && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>
                     加载中...
                   </div>
                 )}
                 {!hasMore && songs.length > 0 && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>
                     没有更多歌曲了
                   </div>
                 )}
@@ -588,42 +512,30 @@ const DiscoverPage: React.FC = () => {
           {activeTab === 'artists' && (
             <>
               {artistLoading ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 'var(--space-4)' }}>
                   {Array.from({ length: 6 }).map((_, i) => (
                     <div key={i} style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)',
                       padding: '16px 12px', borderRadius: '12px',
                       backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)',
                     }}>
-                      <div style={{
+                      <div className="skeleton-shimmer" style={{
                         width: '80px', height: '80px', borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                        backgroundSize: '200% 200%',
-                        animation: 'shimmer 1.5s ease-in-out infinite',
                       }} />
-                      <div style={{
+                      <div className="skeleton-shimmer" style={{
                         width: '60px', height: '14px', borderRadius: '2px',
-                        background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
-                        backgroundSize: '200% 200%',
-                        animation: 'shimmer 1.5s ease-in-out infinite',
                       }} />
                     </div>
                   ))}
-                  <style>{`
-                    @keyframes shimmer {
-                      0% { background-position: 200% 0; }
-                      100% { background-position: -200% 0; }
-                    }
-                  `}</style>
                 </div>
               ) : artistResults.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 'var(--space-4)' }}>
                   {artistResults.map((artist) => (
                     <div
                       key={artist.id}
                       onClick={() => navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } })}
                       style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)',
                         padding: '16px 12px', borderRadius: '12px', cursor: 'pointer',
                         transition: 'all 0.2s ease', backgroundColor: 'var(--content-bg)',
                         border: '1px solid var(--border-color)',
@@ -660,7 +572,7 @@ const DiscoverPage: React.FC = () => {
                         )}
                       </div>
                       <div style={{
-                        fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)',
+                        fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)',
                         textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap', width: '100%',
                       }}>
@@ -695,38 +607,6 @@ const DiscoverPage: React.FC = () => {
   // 默认显示发现页内容
   return (
     <div style={{ padding: '24px', height: '100%', overflow: 'auto' }}>
-      {/* 刷新按钮 */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-        <button
-          onClick={handleRefresh}
-          disabled={hotlistLoading || neteaseNewSongListLoading || qqHotlistLoading || qqNewSongListLoading || playlistsLoading}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '8px 16px',
-            background: 'var(--content-bg)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            color: 'var(--text-secondary)',
-            fontSize: '13px',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'var(--accent-color)';
-            e.currentTarget.style.color = 'var(--accent-color)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-color)';
-            e.currentTarget.style.color = 'var(--text-secondary)';
-          }}
-        >
-          <RefreshCw size={14} />
-          <span>刷新</span>
-        </button>
-      </div>
-
       {/* 热门歌单 */}
       <section style={{ marginBottom: '40px' }}>
         <SectionHeader
@@ -739,7 +619,7 @@ const DiscoverPage: React.FC = () => {
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-            gap: '16px',
+            gap: 'var(--space-4)',
           }}
         >
           {playlistsLoading ? (
@@ -748,7 +628,7 @@ const DiscoverPage: React.FC = () => {
                 <div
                   style={{
                     paddingTop: '100%',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
                     backgroundSize: '200% 200%',
                     animation: 'skeletonLoading 1.5s ease-in-out infinite',
@@ -767,7 +647,7 @@ const DiscoverPage: React.FC = () => {
               </div>
             ))
           ) : playlistsError ? (
-            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: 'var(--radius-md)' }}>
               {playlistsError}
             </div>
           ) : (
@@ -845,7 +725,7 @@ const DiscoverPage: React.FC = () => {
             onSongClick={handleHotlistSongClick}
           />
           {(hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError) && (
-            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: '8px', fontSize: '14px' }}>
+            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-base)' }}>
               {hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError}
             </div>
           )}

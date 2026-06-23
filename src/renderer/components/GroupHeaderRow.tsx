@@ -35,9 +35,9 @@ const GroupHeaderRow: React.FC<GroupHeaderRowProps> = ({
         }}>
           {group.name}
         </span>
-        <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>-</span>
+        <span style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>-</span>
         <span style={{
-          fontSize: '13px', color: 'var(--text-secondary)',
+          fontSize: 'var(--text-sm)', color: 'var(--text-secondary)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {group.artist}

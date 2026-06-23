@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 const { ipcRenderer } = window.require('electron');
 import { message } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
@@ -14,6 +14,7 @@ import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
 import DownloadProgressModal from '@/renderer/components/DownloadProgressModal';
 import LyricsPage from '@/renderer/pages/LyricsPage';
+import { clearDiscoverCache } from '@/renderer/pages/DiscoverPage';
 
 import './styles/global.css';
 
@@ -21,6 +22,50 @@ const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [showLyrics, setShowLyrics] = useState(false);
+
+  // History navigation management
+  const historyStack = useRef<string[]>([location.pathname]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  const isNavigating = useRef(false);
+
+  useEffect(() => {
+    if (isNavigating.current) {
+      isNavigating.current = false;
+      return;
+    }
+    const path = location.pathname;
+    if (historyStack.current[historyIndex] !== path) {
+      historyStack.current = historyStack.current.slice(0, historyIndex + 1);
+      historyStack.current.push(path);
+      setHistoryIndex(historyStack.current.length - 1);
+    }
+  }, [location.pathname, historyIndex]);
+
+  const canGoBack = historyIndex > 0;
+  const canGoForward = historyIndex < historyStack.current.length - 1;
+
+  const handleBack = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      isNavigating.current = true;
+      setHistoryIndex(newIndex);
+      navigate(historyStack.current[newIndex]);
+    }
+  }, [navigate, historyIndex]);
+
+  const handleForward = useCallback(() => {
+    if (historyIndex < historyStack.current.length - 1) {
+      const newIndex = historyIndex + 1;
+      isNavigating.current = true;
+      setHistoryIndex(newIndex);
+      navigate(historyStack.current[newIndex]);
+    }
+  }, [navigate, historyIndex]);
+
+  const handleRefresh = useCallback(() => {
+    clearDiscoverCache();
+    navigate(0);
+  }, [navigate]);
 
   const {
     currentKeyword,
@@ -144,7 +189,7 @@ const App: React.FC = () => {
       style={{
         display: 'flex',
         height: '100vh',
-        backgroundColor: 'var(--bg-color)',
+        backgroundColor: 'var(--bg-base)',
       }}
     >
       {/* 左侧导航栏 */}
@@ -169,6 +214,11 @@ const App: React.FC = () => {
           onSearch={handleSearch}
           sourceType={sourceType}
           onSourceTypeChange={handleSourceTypeChange}
+          onBack={handleBack}
+          onForward={handleForward}
+          onRefresh={handleRefresh}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
         />
 
         {/* 页面内容 - 由React Router渲染 */}
@@ -176,7 +226,7 @@ const App: React.FC = () => {
           style={{
             flex: 1,
             overflow: 'hidden',
-            backgroundColor: 'var(--bg-color)',
+            backgroundColor: 'var(--bg-base)',
           }}
         >
           {showLyrics ? (

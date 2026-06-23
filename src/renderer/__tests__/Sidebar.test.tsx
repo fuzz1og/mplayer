@@ -22,8 +22,8 @@ describe('Sidebar', () => {
 
   it('应该高亮当前页面', () => {
     render(<Sidebar {...defaultProps} currentPage="discover" />);
-    const discoverItem = screen.getByText('发现音乐').closest('div');
-    expect(discoverItem).toHaveStyle({ backgroundColor: 'var(--active-bg)' });
+    const discoverItem = screen.getByText('发现音乐').closest('button');
+    expect(discoverItem).toHaveStyle({ backgroundColor: 'var(--bg-active)' });
   });
 
   it('应该点击导航到对应页面', () => {
@@ -51,8 +51,8 @@ describe('Sidebar', () => {
 
   it('应该显示当前页面高亮', () => {
     render(<Sidebar {...defaultProps} currentPage="favorites" />);
-    const favoritesItem = screen.getByText('我的收藏').closest('div');
-    expect(favoritesItem).toHaveStyle({ backgroundColor: 'var(--active-bg)' });
+    const favoritesItem = screen.getByText('我的收藏').closest('button');
+    expect(favoritesItem).toHaveStyle({ backgroundColor: 'var(--bg-active)' });
   });
 
   it('应该点击其他页面', () => {

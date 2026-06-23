@@ -76,10 +76,10 @@ const PlaylistsPage: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <ListMusic size={24} color="var(--accent-color)" />
-            <h1 style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
               我的歌单
             </h1>
-            <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
+            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
               {playlists.length} 个歌单
             </span>
           </div>
@@ -95,7 +95,7 @@ const PlaylistsPage: React.FC = () => {
               border: 'none',
               borderRadius: '20px',
               cursor: 'pointer',
-              fontSize: '14px',
+              fontSize: 'var(--text-base)',
               fontWeight: 500,
             }}
           >
@@ -123,8 +123,8 @@ const PlaylistsPage: React.FC = () => {
             }}
           >
             <FolderOpen size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-            <div style={{ fontSize: '16px', marginBottom: '8px' }}>暂无歌单</div>
-            <div style={{ fontSize: '14px' }}>点击上方按钮创建第一个歌单</div>
+            <div style={{ fontSize: 'var(--text-lg)', marginBottom: '8px' }}>暂无歌单</div>
+            <div style={{ fontSize: 'var(--text-base)' }}>点击上方按钮创建第一个歌单</div>
           </div>
         ) : (
           <div
@@ -162,7 +162,7 @@ const PlaylistsPage: React.FC = () => {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px 0' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: 'var(--text-base)', color: 'var(--text-secondary)' }}>
               歌单名称 *
             </label>
             <input
@@ -175,12 +175,12 @@ const PlaylistsPage: React.FC = () => {
                 padding: '8px 12px',
                 border: '1px solid var(--border-color)',
                 borderRadius: '6px',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
               }}
             />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: 'var(--text-base)', color: 'var(--text-secondary)' }}>
               歌单描述
             </label>
             <textarea
@@ -193,7 +193,7 @@ const PlaylistsPage: React.FC = () => {
                 padding: '8px 12px',
                 border: '1px solid var(--border-color)',
                 borderRadius: '6px',
-                fontSize: '14px',
+                fontSize: 'var(--text-base)',
                 resize: 'vertical',
               }}
             />

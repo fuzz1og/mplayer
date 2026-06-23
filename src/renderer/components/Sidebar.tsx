@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Compass,
-  Music,
   Heart,
   History,
   ListMusic,
@@ -16,7 +15,6 @@ interface NavItem {
   key: string;
   icon: React.ReactNode;
   label: string;
-  children?: NavItem[];
 }
 
 interface SidebarProps {
@@ -42,40 +40,49 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
     { key: 'queue', icon: <Headphones size={18} />, label: '试听列表' },
   ];
 
-  const handleClick = (key: string) => {
-    onPageChange(key);
+  const navItemStyle = (isActive: boolean): React.CSSProperties => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-3)',
+    padding: '9px var(--space-4)',
+    margin: '1px var(--space-2)',
+    borderRadius: 'var(--radius-sm)',
+    cursor: 'pointer',
+    transition: 'background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)',
+    backgroundColor: isActive ? 'var(--bg-active)' : 'transparent',
+    color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+    fontWeight: isActive ? 'var(--weight-medium)' : 'var(--weight-normal)',
+    fontSize: 'var(--text-sm)',
+    position: 'relative',
+    border: 'none',
+    width: 'calc(100% - var(--space-4))',
+    textAlign: 'left' as const,
+  });
+
+  const sectionLabelStyle: React.CSSProperties = {
+    padding: 'var(--space-2) var(--space-4)',
+    fontSize: 'var(--text-xs)',
+    color: 'var(--text-tertiary)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: '0.5px',
+    textTransform: 'uppercase' as const,
+    userSelect: 'none',
   };
 
   const renderNavItem = (item: NavItem) => {
     const isActive = currentPage === item.key;
 
     return (
-      <div
+      <button
         key={item.key}
-        onClick={() => handleClick(item.key)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          padding: '10px 16px',
-          margin: '2px 8px',
-          borderRadius: '6px',
-          cursor: 'pointer',
-          transition: 'all 0.15s ease',
-          backgroundColor: isActive ? 'var(--active-bg)' : 'transparent',
-          color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-          fontWeight: isActive ? 500 : 400,
-          position: 'relative',
-        }}
+        onClick={() => onPageChange(item.key)}
+        style={navItemStyle(isActive)}
+        aria-current={isActive ? 'page' : undefined}
         onMouseEnter={(e) => {
-          if (!isActive) {
-            e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-          }
+          if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
         }}
         onMouseLeave={(e) => {
-          if (!isActive) {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }
+          if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
         }}
       >
         {isActive && (
@@ -87,60 +94,57 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
               transform: 'translateY(-50%)',
               width: '3px',
               height: '16px',
-              backgroundColor: 'var(--accent-color)',
-              borderRadius: '0 2px 2px 0',
+              backgroundColor: 'var(--accent)',
+              borderRadius: 'var(--radius-full)',
             }}
           />
         )}
-        <span style={{ display: 'flex', alignItems: 'center' }}>
+        <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           {item.icon}
         </span>
-        <span style={{ fontSize: '14px' }}>{item.label}</span>
-      </div>
+        <span>{item.label}</span>
+      </button>
     );
   };
 
   return (
     <aside
       style={{
-        width: '200px',
+        width: 'var(--sidebar-width)',
         height: '100%',
-        backgroundColor: 'var(--sidebar-bg)',
-        borderRight: '1px solid var(--border-color)',
+        backgroundColor: 'var(--bg-sidebar)',
+        borderRight: '1px solid var(--border-subtle)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        flexShrink: 0,
       }}
     >
       {/* Logo */}
       <div
         style={{
-          padding: '20px 16px',
+          padding: 'var(--space-5) var(--space-4)',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
-          borderBottom: '1px solid var(--divider-color)',
+          gap: 'var(--space-3)',
         }}
       >
-        <div
+        <img
+          src="./icon.png"
+          alt="MPlayer"
           style={{
             width: '36px',
             height: '36px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #2D3436 0%, #636E72 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            borderRadius: 'var(--radius-md)',
+            objectFit: 'contain',
           }}
-        >
-          <Music size={20} color="white" />
-        </div>
+        />
         <span
           style={{
-            fontSize: '18px',
-            fontWeight: 600,
+            fontSize: 'var(--text-lg)',
+            fontWeight: 'var(--weight-bold)',
             color: 'var(--text-primary)',
-            letterSpacing: '0.5px',
+            letterSpacing: '-0.3px',
           }}
         >
           MPlayer
@@ -148,58 +152,35 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
       </div>
 
       {/* 导航内容 */}
-      <div
+      <nav
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '12px 0',
+          padding: 'var(--space-2) 0',
         }}
+        aria-label="主导航"
       >
         {/* 发现音乐 */}
-        <div style={{ marginBottom: '8px' }}>
-          {mainNavItems.map(renderNavItem)}
-        </div>
+        <div>{mainNavItems.map(renderNavItem)}</div>
 
         {/* 我的音乐 */}
-        <div style={{ marginTop: '16px' }}>
-          <div
-            style={{
-              padding: '8px 16px',
-              fontSize: '11px',
-              color: 'var(--text-tertiary)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              fontWeight: 500,
-            }}
-          >
-            我的音乐
-          </div>
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <div style={sectionLabelStyle}>我的音乐</div>
           {myMusicItems.map(renderNavItem)}
         </div>
 
         {/* 歌单 */}
-        <div style={{ marginTop: '16px' }}>
-          <div
-            style={{
-              padding: '8px 16px',
-              fontSize: '11px',
-              color: 'var(--text-tertiary)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              fontWeight: 500,
-            }}
-          >
-            歌单
-          </div>
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <div style={sectionLabelStyle}>歌单</div>
           {playlistItems.map(renderNavItem)}
         </div>
-      </div>
+      </nav>
 
       {/* 底部设置 */}
       <div
         style={{
-          padding: '12px 0',
-          borderTop: '1px solid var(--divider-color)',
+          padding: 'var(--space-2) 0',
+          marginTop: 'auto',
         }}
       >
         {renderNavItem({

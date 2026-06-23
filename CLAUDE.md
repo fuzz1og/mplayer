@@ -51,7 +51,7 @@ Electron, `contextIsolation: false`, `nodeIntegration: true`. Renderer imports m
 | `pages/` | Discover, Favorites, History, Playlists, Queue, Settings, LocalMusic, PlaylistDetail, HotlistDetail, ArtistList, ArtistDetail, DiscoverPlaylistList, DiscoverPlaylistDetail, LyricsPage (unrouted) |
 | `components/` | Sidebar, TopBar, PlayerBar, SongList, SongListVirtual, SongRow, SongListSkeleton, GroupedSongList, GroupHeaderRow, PlayerControls, PlayerProgress, PlayerVolume, MusicCard, HotlistCard, DiscoverPlaylistCard, SourceBadge, AddToPlaylistModal, BatchAddToPlaylistModal, DownloadProgressModal, ImportPlaylistModal, LinkImportForm, LinkPreviewTable, PlayModeButton, CustomDropdown, LyricsDisplay |
 | `hooks/` | useLazyLoad, useGlobalShortcuts, useInfiniteScroll, useDownload, useButtonHover |
-| `utils/` | songDedupe, songMatcher, songResolver, lyricsParser |
+| `utils/` | songDedupe, songMatcher, songResolver, lyricsParser, format |
 
 ### IPC Channels
 
@@ -127,6 +127,12 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 - Virtual scrolling: `@tanstack/react-virtual` (threshold: 30 items).
 - Drag-and-drop: `@dnd-kit/core` + `@dnd-kit/sortable`.
 - Song dedup: `songDedupe.ts` (by id or name|artist composite key).
+
+## Worktree Rules
+
+- **在 worktree 内调试或跑测试时，必须在 worktree 内构建和运行**，不要 cd 到主分支目录执行。worktree 是隔离的，主分支的 `dist/`、`node_modules/.vite/` 等缓存与 worktree 代码不一致，会导致难以排查的 bug。
+- 构建命令（`npm run build`、`npm run electron:dev`、`npx playwright test`）必须在 worktree 根目录下执行。
+- 如果 worktree 缺少 `node_modules`，先在 worktree 内执行 `npm install`，不要从主分支复制。
 
 ## API Configuration
 
