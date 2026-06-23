@@ -7,6 +7,7 @@ import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 
 type FlatItem =
@@ -27,7 +28,7 @@ interface GroupedSongListProps {
 
 const GroupedSongList: React.FC<GroupedSongListProps> = ({
   onPlay,
-  onAddToPlaylist,
+  // onAddToPlaylist is not used directly - handleAddToPlaylistClick wraps it
   onToggleFavorite,
   onDownload,
   selectedIds,
@@ -47,6 +48,8 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   const favoriteIds = useFavoriteStore(s => s.favoriteIds);
 
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<Song | null>(null);
+  const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const expandedSet = useMemo(() => new Set(expandedKeys), [expandedKeys]);
@@ -83,6 +86,12 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
 
   const handleCloseDropdown = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    setActiveDropdown(null);
+  }, []);
+
+  const handleAddToPlaylistClick = useCallback((song: Song) => {
+    setSelectedSongForPlaylist(song);
+    setShowAddToPlaylistModal(true);
     setActiveDropdown(null);
   }, []);
 
@@ -167,7 +176,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
                 onPlay={onPlay}
                 onToggleFavorite={onToggleFavorite}
                 onDownload={onDownload}
-                onAddToPlaylist={onAddToPlaylist}
+                onAddToPlaylist={handleAddToPlaylistClick}
                 onToggleSelect={handleToggleSelect}
                 onToggleDropdown={handleToggleDropdown}
                 onCloseDropdown={handleCloseDropdown}
@@ -188,6 +197,19 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
           </div>
         )}
       </div>
+
+      {/* 加入歌单弹窗 */}
+      {selectedSongForPlaylist && (
+        <AddToPlaylistModal
+          song={selectedSongForPlaylist}
+          isVisible={showAddToPlaylistModal}
+          onClose={() => {
+            setShowAddToPlaylistModal(false);
+            setSelectedSongForPlaylist(null);
+          }}
+          onSuccess={() => {}}
+        />
+      )}
     </div>
   );
 };

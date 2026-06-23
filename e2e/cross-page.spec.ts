@@ -74,12 +74,15 @@ test.describe('跨页面交互', () => {
     await moreBtn.click();
     await page.waitForTimeout(500);
 
-    // 4. 点击"加入歌单"
-    await page.getByText('加入歌单', { exact: true }).click();
+    // 4. 点击下拉菜单中的"加入歌单"
+    const dropdownBtn = page.locator('button').filter({ hasText: '加入歌单' }).first();
+    await expect(dropdownBtn).toBeVisible();
+    await dropdownBtn.click();
     await page.waitForTimeout(1000);
 
-    // 5. 验证弹窗
-    await expect(page.getByText('加入歌单').first()).toBeVisible();
+    // 5. 验证弹窗显示 — 弹窗内有"新建歌单"输入框
+    const newPlaylistInput = page.getByPlaceholder('新建歌单...');
+    await expect(newPlaylistInput).toBeVisible();
 
     // 6. 关闭弹窗
     await page.keyboard.press('Escape');

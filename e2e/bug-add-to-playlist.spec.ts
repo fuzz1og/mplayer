@@ -41,11 +41,14 @@ test('搜索结果页加入歌单功能验证', async () => {
   await moreBtn.click();
   await page.waitForTimeout(1000);
 
-  // 4. 点击"加入歌单"
-  await page.getByText('加入歌单', { exact: true }).click();
+  // 4. 点击下拉菜单中的"加入歌单"按钮
+  const dropdownBtn = page.locator('button').filter({ hasText: '加入歌单' }).first();
+  await expect(dropdownBtn).toBeVisible();
+  await dropdownBtn.click();
   await page.waitForTimeout(2000);
 
-  // 5. 验证弹窗显示
-  await expect(page.getByText('加入歌单').first()).toBeVisible();
+  // 5. 验证弹窗显示 — 弹窗内有"新建歌单"输入框（下拉菜单没有）
   await page.screenshot({ path: 'e2e/screenshots/bug-add-modal.png' });
+  const newPlaylistInput = page.getByPlaceholder('新建歌单...');
+  await expect(newPlaylistInput).toBeVisible();
 });
