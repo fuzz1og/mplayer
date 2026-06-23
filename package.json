@@ -1,6 +1,6 @@
 {
   "name": "mplayer",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "A minimalist desktop music player built with Electron, React and TypeScript",
   "author": {
     "name": "t0nyst4",
