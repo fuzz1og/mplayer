@@ -30,6 +30,28 @@ const PlayerProgress: React.FC<PlayerProgressProps> = React.memo(({
     onSeek(percent * duration);
   }, [hasCurrentSong, duration, onSeek]);
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!hasCurrentSong) return;
+    switch (e.key) {
+      case 'ArrowRight':
+        e.preventDefault();
+        onSeek(Math.min(position + 5, duration));
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        onSeek(Math.max(position - 5, 0));
+        break;
+      case 'Home':
+        e.preventDefault();
+        onSeek(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        onSeek(Math.max(0, duration - 1));
+        break;
+    }
+  }, [hasCurrentSong, position, duration, onSeek]);
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
       <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', minWidth: '36px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -38,8 +60,10 @@ const PlayerProgress: React.FC<PlayerProgressProps> = React.memo(({
       <div
         ref={trackRef}
         onClick={handleClick}
+        onKeyDown={handleKeyDown}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
+        tabIndex={hasCurrentSong ? 0 : -1}
         style={{
           flex: 1,
           height: isHovered ? '20px' : '16px',
@@ -47,12 +71,14 @@ const PlayerProgress: React.FC<PlayerProgressProps> = React.memo(({
           alignItems: 'center',
           cursor: hasCurrentSong ? 'pointer' : 'not-allowed',
           position: 'relative',
+          outline: 'none',
         }}
         role="slider"
         aria-label="播放进度"
         aria-valuemin={0}
         aria-valuemax={duration || 100}
         aria-valuenow={position}
+        aria-disabled={!hasCurrentSong}
       >
         {/* Track background */}
         <div

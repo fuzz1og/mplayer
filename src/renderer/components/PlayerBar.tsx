@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 const { ipcRenderer } = window.require('electron');
 import { ListMusic, Heart, Download, Mic } from 'lucide-react';
+import { message } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
@@ -43,7 +44,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
 
   const handleDownload = useCallback(() => {
     if (currentSong) {
-      ipcRenderer.invoke('download:start', currentSong);
+      ipcRenderer.invoke('download:start', currentSong).catch(() => message.error('下载失败'));
     }
   }, [currentSong]);
 

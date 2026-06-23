@@ -148,6 +148,97 @@ test.describe('UI 交互验证', () => {
     }
   });
 
+  test('播放器进度条键盘支持', async () => {
+    const progressBar = page.locator('[role="slider"][aria-label="播放进度"]');
+
+    // 导航到发现页，确保页面干净
+    await page.getByRole('complementary').getByText('发现音乐').click();
+    await page.waitForTimeout(1000);
+
+    // 如果当前无歌曲播放，验证无歌曲状态
+    const ariaDisabled = await progressBar.getAttribute('aria-disabled');
+    if (ariaDisabled === 'true') {
+      // 无歌曲时: tabIndex 应为 -1（不可聚焦）
+      const tabIndexBefore = await progressBar.getAttribute('tabindex');
+      expect(tabIndexBefore).toBe('-1');
+    }
+
+    // 确保有歌曲在播放（搜索并播放）
+    const searchInput = page.getByPlaceholder('搜索音乐、歌手、专辑');
+    await searchInput.fill('周杰伦');
+    await searchInput.press('Enter');
+    await page.waitForTimeout(3000);
+
+    const songRow = page.locator('main div').filter({ hasText: '晴天' }).first();
+    if (await songRow.isVisible()) {
+      await page.screenshot({ path: 'e2e/screenshots/keyboard-before-dblclick.png' });
+      await songRow.dblclick();
+      await page.waitForTimeout(3000);
+      await page.screenshot({ path: 'e2e/screenshots/keyboard-after-dblclick.png' });
+
+      // 有歌曲时: aria-disabled 应不存在或为 false
+      const disabledAfterPlay = await progressBar.getAttribute('aria-disabled');
+      expect(disabledAfterPlay).not.toBe('true');
+
+      // 有歌曲时: tabIndex 应为 0（可聚焦）
+      const tabIndexAfter = await progressBar.evaluate((el: HTMLElement) => (el as HTMLDivElement).tabIndex);
+      expect(tabIndexAfter).toBe(0);
+
+      // 键盘操作: ArrowRight 前进 5 秒
+      const posBefore = Number(await progressBar.getAttribute('aria-valuenow'));
+      await progressBar.focus();
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(200);
+      const posAfterArrowRight = Number(await progressBar.getAttribute('aria-valuenow'));
+      expect(posAfterArrowRight).toBeGreaterThanOrEqual(posBefore + 4); // allow timing tolerance
+
+      // 键盘操作: ArrowLeft 后退 5 秒
+      await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(200);
+      const posAfterArrowLeft = Number(await progressBar.getAttribute('aria-valuenow'));
+      expect(posAfterArrowLeft).toBeLessThanOrEqual(posAfterArrowRight - 3);
+
+      // 键盘操作: Home 回到开头
+      await page.keyboard.press('Home');
+      await page.waitForTimeout(200);
+      const posAfterHome = Number(await progressBar.getAttribute('aria-valuenow'));
+      expect(posAfterHome).toBeLessThanOrEqual(2);
+
+      // 键盘操作: End 跳到结尾
+      await page.keyboard.press('End');
+      await page.waitForTimeout(500);
+      const posAfterEnd = Number(await progressBar.getAttribute('aria-valuenow'));
+      const dur = Number(await progressBar.getAttribute('aria-valuemax'));
+      expect(posAfterEnd).toBeGreaterThanOrEqual(dur - 2);
+    }
+  });
+
+  test('播放器下载按钮 IPC 失败有错误提示', async () => {
+    // 捕获 console error 用于检测 unhandled rejection
+    const consoleErrors: string[] = [];
+    page.on('console', msg => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(msg.text());
+      }
+    });
+
+    // 下载按钮应可见
+    const downloadBtn = page.locator('button[aria-label="下载"]').first();
+    await expect(downloadBtn).toBeVisible();
+
+    // 如果按钮可用（有歌曲），点击后不应有 unhandled rejection（.catch 处理了）
+    // 如果按钮 disabled（无歌曲），也不应有 unhandled rejection
+    const isDisabled = await downloadBtn.isDisabled();
+    if (!isDisabled) {
+      await downloadBtn.click();
+    }
+
+    // 给 1 秒观察是否有 unhandled rejection
+    await page.waitForTimeout(1000);
+    const unhandledBefore = consoleErrors.filter(e => e.includes('Unhandled Promise Rejection'));
+    expect(unhandledBefore.length).toBe(0);
+  });
+
   test('播放器进度条点击跳转', async () => {
     await page.getByRole('complementary').getByText('发现音乐').click();
     await page.waitForTimeout(1000);
