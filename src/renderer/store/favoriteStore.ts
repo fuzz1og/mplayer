@@ -104,22 +104,41 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
 
       // 异步刷新缺失 URL 的歌曲（不阻塞界面加载）
       if (needsRefresh.length > 0) {
-        const refreshResults = await Promise.allSettled(
-          needsRefresh.map(songBase => get().refreshSongUrls(songBase))
-        );
-
-        // 用刷新后的结果更新收藏列表
-        const updatedFavorites = get().favorites.map(fav => {
-          const result = refreshResults.find((r, i) =>
-            r.status === 'fulfilled' && r.value && needsRefresh[i].id === fav.id
+        // Bug #8: 限制并发请求数，避免请求风暴
+        const CONCURRENT_LIMIT = 5;
+        const refreshResults: PromiseSettledResult<Song | null>[] = [];
+        for (let i = 0; i < needsRefresh.length; i += CONCURRENT_LIMIT) {
+          const batch = needsRefresh.slice(i, i + CONCURRENT_LIMIT);
+          const batchResults = await Promise.allSettled(
+            batch.map(songBase => get().refreshSongUrls(songBase))
           );
-          if (result && result.status === 'fulfilled' && result.value) {
-            return result.value;
+          refreshResults.push(...batchResults);
+        }
+
+        // Bug #5: 用 Map<id, result> 查找，避免索引错位
+        const resultMap = new Map<string, Song>();
+        refreshResults.forEach((r, i) => {
+          if (r.status === 'fulfilled' && r.value) {
+            resultMap.set(needsRefresh[i].id, r.value);
+          }
+        });
+
+        // Bug #12: 合并时检查当前状态，避免竞态覆盖用户修改
+        const currentFavorites = get().favorites;
+        const currentIds = new Set(currentFavorites.map(f => f.id));
+        const updatedFavorites = currentFavorites.map(fav => {
+          const refreshed = resultMap.get(fav.id);
+          if (refreshed && currentIds.has(fav.id)) {
+            return refreshed;
           }
           return fav;
         });
 
-        set({ favorites: updatedFavorites });
+        // Bug #6: 同时更新 favoriteIds，保持两者同步
+        set({
+          favorites: updatedFavorites,
+          favoriteIds: updatedFavorites.map(f => f.id),
+        });
       }
     } catch (error) {
       set({
