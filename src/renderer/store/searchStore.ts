@@ -78,15 +78,15 @@ export const useSearchStore = create<SearchState>((set) => ({
   })),
   expandAll: () => set((state) => ({ expandedKeys: state.groups.map(g => g.key) })),
   collapseAll: () => set({ expandedKeys: [] }),
-  reset: () => set({
+  reset: () => set((state) => ({
     songs: [],
     groups: [],
     expandedKeys: [],
-    sourceType: 'all',
+    sourceType: state.sourceType,
     loading: false,
     hasMore: true,
     page: 1,
     currentKeyword: '',
     error: null,
-  })
+  }))
 }));
