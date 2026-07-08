@@ -109,12 +109,13 @@ export async function importSongs(
     });
   };
 
-  const existingNames = new Set(existingSongs.map(s => s.name));
+  const existingKeys = new Set(existingSongs.map(s => `${s.name}|${s.artist || ''}`));
 
   const toSearch: { index: number; parsed: ParsedLine }[] = [];
 
   for (let i = 0; i < lines.length; i++) {
-    if (existingNames.has(lines[i].name)) {
+    const key = `${lines[i].name}|${lines[i].artist || ''}`;
+    if (existingKeys.has(key)) {
       skips.push({ line: lines[i].raw, reason: '已在歌单中' });
       statuses[i] = { line: lines[i].raw, status: 'skipped' };
       updateProgress({ skipped: skips.length });
@@ -232,15 +233,15 @@ export async function importFromLink(
   }
 
   // 检查重复歌曲
-  const existingNames = new Set(existingSongs.map(s => s.name));
-  const toImport: Song[] = [];
+  const existingKeys = new Set(existingSongs.map(s => `${s.name}|${s.artist || ''}`));
+  const toImport: { song: Song; statusIndex: number }[] = [];
 
   for (const song of selectedSongs) {
-    if (existingNames.has(song.name)) {
+    if (existingKeys.has(`${song.name}|${song.artist || ''}`)) {
       skips.push({ line: `${song.name} - ${song.artist}`, reason: '已在歌单中' });
       statuses.push({ line: `${song.name} - ${song.artist}`, status: 'skipped' });
     } else {
-      toImport.push(song);
+      toImport.push({ song, statusIndex: statuses.length });
       statuses.push({ line: `${song.name} - ${song.artist}`, status: 'pending' });
     }
   }
@@ -249,8 +250,7 @@ export async function importFromLink(
 
   // 逐个添加到歌单
   for (let i = 0; i < toImport.length; i++) {
-    const song = toImport[i];
-    const statusIndex = skips.length + i;
+    const { song, statusIndex } = toImport[i];
     statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'searching' };
     updateProgress({ currentLine: `${song.name} - ${song.artist}` });
 

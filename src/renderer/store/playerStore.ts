@@ -65,8 +65,10 @@ const loadQueue = (): { playlist: Song[]; index: number } => {
     const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
     if (raw) {
       const data = JSON.parse(raw);
-      if (Array.isArray(data.playlist)) {
-        return { playlist: data.playlist, index: data.index ?? -1 };
+      if (Array.isArray(data.playlist) && data.playlist.length > 0) {
+        const index = data.index ?? -1;
+        const clampedIndex = index >= 0 && index < data.playlist.length ? index : -1;
+        return { playlist: data.playlist, index: clampedIndex };
       }
     }
   } catch (e) {
@@ -82,6 +84,8 @@ const getInitialPlayMode = (): PlayMode => {
   }
   return 'list-loop';
 };
+
+let playGeneration = 0;
 
 const audioPlayer = getGlobalPlayer({
   onStateChange: (state) => {
@@ -113,7 +117,9 @@ const audioPlayer = getGlobalPlayer({
 const initialQueue = loadQueue();
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
-  currentSong: null,
+  currentSong: initialQueue.index >= 0 && initialQueue.index < initialQueue.playlist.length
+    ? initialQueue.playlist[initialQueue.index]
+    : null,
   isPlaying: false,
   isLoading: false,
   volume: audioPlayer.getVolume(),
@@ -133,6 +139,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (isLoading && currentSong?.id === song.id) {
       return;
     }
+
+    const generation = ++playGeneration;
 
     try {
       set({
@@ -162,10 +170,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         } catch (urlError) {
           console.error('获取真实音频 URL 失败:', urlError);
           message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');
-          realUrl = ''; // 失败时清空，避免使用过期 URL
+          realUrl = '';
         }
       }
-      // local 歌曲直接使用 song.url（file:// 路径），无需获取真实 URL
+
+      if (generation !== playGeneration) {
+        set({ isLoading: false });
+        return;
+      }
 
       if (!realUrl) {
         set({ isLoading: false });
@@ -174,6 +186,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       const songWithRealUrl = { ...song, url: realUrl };
       await audioPlayer.load(songWithRealUrl);
+
+      if (generation !== playGeneration) {
+        set({ isLoading: false });
+        return;
+      }
 
       audioPlayer.play();
 
@@ -336,15 +353,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     switch (playMode) {
       case 'single-loop':
         if (currentSong) {
-          get().play(currentSong);
+          audioPlayer.seek(0);
+          audioPlayer.play();
+          set({ position: 0, isPlaying: true, error: null });
         }
         break;
 
-      case 'shuffle':
-        const randomIndex = Math.floor(Math.random() * currentPlaylist.length);
+      case 'shuffle': {
+        let randomIndex = currentPlaylistIndex;
+        if (currentPlaylist.length > 1) {
+          do {
+            randomIndex = Math.floor(Math.random() * currentPlaylist.length);
+          } while (randomIndex === currentPlaylistIndex);
+        }
         set({ currentPlaylistIndex: randomIndex });
         get().play(currentPlaylist[randomIndex]);
         break;
+      }
 
       case 'list-loop':
         const nextIndexLoop = (currentPlaylistIndex + 1) % currentPlaylist.length;
@@ -373,7 +398,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     if (playMode === 'shuffle') {
-      const randomIndex = Math.floor(Math.random() * currentPlaylist.length);
+      let randomIndex = currentPlaylistIndex;
+      if (currentPlaylist.length > 1) {
+        do {
+          randomIndex = Math.floor(Math.random() * currentPlaylist.length);
+        } while (randomIndex === currentPlaylistIndex);
+      }
       set({ currentPlaylistIndex: randomIndex });
       get().play(currentPlaylist[randomIndex]);
     } else {

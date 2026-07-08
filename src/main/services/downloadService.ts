@@ -34,6 +34,12 @@ class DownloadService {
   private async fetchCoverAsBuffer(coverUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
     if (!coverUrl) return null;
     try {
+      const url = new URL(coverUrl);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    } catch {
+      return null;
+    }
+    try {
       const res = await axios.get(coverUrl, {
         responseType: 'arraybuffer',
         timeout: 10000,
@@ -279,6 +285,9 @@ class DownloadService {
       });
 
       const ct = String(response.headers['content-type'] || '');
+      if (ct.includes('text/html') || ct.includes('application/json')) {
+        throw new Error('服务器返回了非音频内容，可能链接已失效');
+      }
       let ext = '.mp3';
       if (ct.includes('audio/mpeg')) ext = '.mp3';
       else if (ct.includes('audio/mp4') || ct.includes('video/mp4')) ext = '.m4a';
@@ -398,7 +407,11 @@ class DownloadService {
   }
 
   private sanitizeFileName(fileName: string): string {
-    return fileName.replace(/[<>:"/\\|?*]/g, '_').replace(/\.\./g, '_');
+    return fileName
+      .replace(/[\x00-\x1f\x7f]/g, '')
+      .replace(/[<>:"/\\|?*]/g, '_')
+      .replace(/\.\./g, '_')
+      .trim();
   }
 
   private notifyProgress(task: DownloadTask): void {

@@ -57,27 +57,7 @@ class PlaylistServiceImpl implements PlaylistService {
   }
 
   async reorderPlaylistSongs(playlistId: number, songIds: string[]): Promise<void> {
-    const songs = await this.getPlaylistSongs(playlistId);
-    const songMap = new Map(songs.map(s => [s.id, s]));
-
-    let order = 0;
-    for (const songId of songIds) {
-      const song = songMap.get(songId);
-      if (song) {
-        await this.updatePlaylistSongOrder(playlistId, songId, order);
-        order++;
-      }
-    }
-  }
-
-  private async updatePlaylistSongOrder(playlistId: number, songId: string, order: number): Promise<void> {
-    const songs = await this.getPlaylistSongs(playlistId);
-    const songMap = new Map(songs.map(s => [s.id, s]));
-
-    const song = songMap.get(songId);
-    if (song) {
-      await IpcClient.invoke<void>('playlist:updateSongsOrder', playlistId, songId, order);
-    }
+    return this.bulkReorderPlaylistSongs(playlistId, songIds);
   }
 
   async bulkReorderPlaylistSongs(playlistId: number, songIds: string[]): Promise<void> {
