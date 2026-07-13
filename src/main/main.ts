@@ -248,9 +248,9 @@ app.whenReady().then(async () => {
 
   // 设置 IPC
   registerIpcHandlerSimple('settings:getDownloadPath', () => downloadService.getDownloadPath());
-  registerIpcHandler('settings:setDownloadPath', async (path: string) => {
-    downloadService.updateDownloadPath(path);
-    await db.setSetting('downloadPath', path);
+  registerIpcHandler('settings:setDownloadPath', async (inputPath: string) => {
+    downloadService.updateDownloadPath(inputPath);
+    await db.setSetting('downloadPath', downloadService.getDownloadPath());
   });
   registerIpcHandler('settings:resetDownloadPath', async () => {
     const defaultPath = app.getPath('downloads');

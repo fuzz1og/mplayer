@@ -85,7 +85,7 @@ class SearchService {
           const prevTotal = store.groups.reduce((sum, g) => sum + g.songs.length, 0);
           store.setGroups(groups, false);
           const newTotal = store.groups.reduce((sum, g) => sum + g.songs.length, 0);
-          store.setHasMore(newTotal > prevTotal);
+          store.setHasMore(newTotal > prevTotal && groups.length > 0);
         }
       },
       '全部搜索失败',

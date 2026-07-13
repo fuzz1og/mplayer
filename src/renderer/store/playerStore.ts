@@ -65,8 +65,10 @@ const loadQueue = (): { playlist: Song[]; index: number } => {
     const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
     if (raw) {
       const data = JSON.parse(raw);
-      if (Array.isArray(data.playlist)) {
-        return { playlist: data.playlist, index: data.index ?? -1 };
+      if (Array.isArray(data.playlist) && data.playlist.length > 0) {
+        const index = data.index ?? -1;
+        const clampedIndex = index >= 0 && index < data.playlist.length ? index : -1;
+        return { playlist: data.playlist, index: clampedIndex };
       }
     }
   } catch (e) {
@@ -82,6 +84,8 @@ const getInitialPlayMode = (): PlayMode => {
   }
   return 'list-loop';
 };
+
+let playGeneration = 0;
 
 const audioPlayer = getGlobalPlayer({
   onStateChange: (state) => {
@@ -111,9 +115,6 @@ const audioPlayer = getGlobalPlayer({
 });
 
 const initialQueue = loadQueue();
-
-// --- 播放取消机制 ---
-let playGeneration = 0;
 
 // --- URL 预解析缓存 ---
 const prefetchedUrls = new Map<string, string>();
@@ -171,7 +172,9 @@ function prefetchNextUrl(state: PlayerStoreState): void {
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
-  currentSong: null,
+  currentSong: initialQueue.index >= 0 && initialQueue.index < initialQueue.playlist.length
+    ? initialQueue.playlist[initialQueue.index]
+    : null,
   isPlaying: false,
   isLoading: false,
   volume: audioPlayer.getVolume(),
@@ -192,7 +195,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
 
-    const gen = ++playGeneration;
+    const generation = ++playGeneration;
     audioPlayer.cancelLoad();
 
     try {
@@ -234,7 +237,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       }
 
-      if (gen !== playGeneration) return;
+      if (generation !== playGeneration) {
+        set({ isLoading: false });
+        return;
+      }
 
       if (!realUrl) {
         set({ isLoading: false });
@@ -244,7 +250,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const songWithRealUrl = { ...song, url: realUrl };
       await audioPlayer.load(songWithRealUrl);
 
-      if (gen !== playGeneration) return;
+      if (generation !== playGeneration) {
+        set({ isLoading: false });
+        return;
+      }
 
       audioPlayer.play();
 
@@ -322,7 +331,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       persistQueue(get());
 
     } catch (error) {
-      if (gen !== playGeneration) return;
+      if (generation !== playGeneration) return;
       set({
         error: error instanceof Error ? error.message : '播放失败',
         isLoading: false,
@@ -407,15 +416,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     switch (playMode) {
       case 'single-loop':
         if (currentSong) {
-          get().play(currentSong);
+          audioPlayer.seek(0);
+          audioPlayer.play();
+          set({ position: 0, isPlaying: true, error: null });
         }
         break;
 
-      case 'shuffle':
-        const randomIndex = Math.floor(Math.random() * currentPlaylist.length);
+      case 'shuffle': {
+        let randomIndex = currentPlaylistIndex;
+        if (currentPlaylist.length > 1) {
+          do {
+            randomIndex = Math.floor(Math.random() * currentPlaylist.length);
+          } while (randomIndex === currentPlaylistIndex);
+        }
         set({ currentPlaylistIndex: randomIndex });
         get().play(currentPlaylist[randomIndex]);
         break;
+      }
 
       case 'list-loop':
         const nextIndexLoop = (currentPlaylistIndex + 1) % currentPlaylist.length;
@@ -444,7 +461,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     if (playMode === 'shuffle') {
-      const randomIndex = Math.floor(Math.random() * currentPlaylist.length);
+      let randomIndex = currentPlaylistIndex;
+      if (currentPlaylist.length > 1) {
+        do {
+          randomIndex = Math.floor(Math.random() * currentPlaylist.length);
+        } while (randomIndex === currentPlaylistIndex);
+      }
       set({ currentPlaylistIndex: randomIndex });
       get().play(currentPlaylist[randomIndex]);
     } else {
