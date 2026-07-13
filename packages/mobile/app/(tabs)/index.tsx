@@ -1,8 +1,9 @@
 import { useEffect, useCallback } from 'react';
 import {
-  View, Text, FlatList, Image, StyleSheet, ActivityIndicator, TouchableOpacity,
+  View, Text, FlatList, Image, StyleSheet, TouchableOpacity,
 } from 'react-native';
 import { router } from 'expo-router';
+import LoadingState from '../../components/LoadingState';
 import { useDiscoverStore, HotlistItem } from '../../stores/discoverStore';
 import { usePlayerStore } from '../../stores/playerStore';
 
@@ -26,7 +27,7 @@ export default function DiscoverPage() {
   return (
     <View style={styles.container}>
       {loading ? (
-        <ActivityIndicator color="#e74c3c" style={{ marginTop: 40 }} />
+        <LoadingState />
       ) : (
         <FlatList
           data={SECTIONS}

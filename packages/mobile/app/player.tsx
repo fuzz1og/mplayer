@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, FlatList,
+  Modal, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
@@ -17,11 +18,13 @@ export default function PlayerPage() {
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const currentTime = usePlayerStore(s => s.currentTime);
   const duration = usePlayerStore(s => s.duration);
+  const queue = usePlayerStore(s => s.queue);
   const next = usePlayerStore(s => s.next);
   const prev = usePlayerStore(s => s.prev);
 
   const [lyricLines, setLyricLines] = useState<LyricLine[]>([]);
   const [currentLineIdx, setCurrentLineIdx] = useState(-1);
+  const [showQueue, setShowQueue] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -52,6 +55,26 @@ export default function PlayerPage() {
     }
   }, [currentTime, lyricLines, currentLineIdx]);
 
+  function moveToTop(index: number) {
+    const state = usePlayerStore.getState();
+    const q = [...state.queue];
+    const [item] = q.splice(index, 1);
+    q.unshift(item);
+    usePlayerStore.setState({ queue: q });
+  }
+
+  function removeFromQueue(index: number) {
+    const state = usePlayerStore.getState();
+    const q = [...state.queue];
+    const removed = q.splice(index, 1)[0];
+    if (state.currentSong && state.currentSong.id === removed.id) {
+      const nextSong = q[Math.min(index, q.length - 1)] || null;
+      usePlayerStore.setState({ queue: q, currentSong: nextSong, currentTime: 0 });
+    } else {
+      usePlayerStore.setState({ queue: q });
+    }
+  }
+
   if (!song) return null;
 
   return (
@@ -80,6 +103,9 @@ export default function PlayerPage() {
       <View style={styles.infoWrap}>
         <Text style={styles.title}>{song.name}</Text>
         <Text style={styles.artist}>{song.artist}</Text>
+        <TouchableOpacity onPress={() => setShowQueue(true)} style={styles.queueBtn}>
+          <Text style={styles.queueBtnText}>查看队列 ({queue.length})</Text>
+        </TouchableOpacity>
       </View>
 
       {/* 歌词 */}
@@ -135,6 +161,68 @@ export default function PlayerPage() {
           <Ionicons name="play-skip-forward" size={32} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {/* 队列弹窗 */}
+      <Modal
+        visible={showQueue}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowQueue(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>播放队列</Text>
+              <TouchableOpacity onPress={() => setShowQueue(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={queue}
+              keyExtractor={(item, index) => `${item.id}-${index}`}
+              renderItem={({ item, index }) => {
+                const isCurrent = song?.id === item.id;
+                return (
+                  <TouchableOpacity
+                    style={styles.queueItem}
+                    onPress={() => {
+                      usePlayerStore.getState().setQueue(queue, index);
+                      setShowQueue(false);
+                    }}
+                    onLongPress={() => {
+                      Alert.alert(
+                        item.name,
+                        undefined,
+                        [
+                          { text: '取消', style: 'cancel' },
+                          { text: '移到顶部', onPress: () => moveToTop(index) },
+                          { text: '移除', style: 'destructive', onPress: () => removeFromQueue(index) },
+                        ],
+                      );
+                    }}
+                  >
+                    <View style={styles.queueItemInfo}>
+                      <Text
+                        style={[styles.queueItemName, isCurrent && styles.queueItemActive]}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text style={styles.queueItemArtist}>{item.artist}</Text>
+                    </View>
+                    {isCurrent && (
+                      <Ionicons name="play" size={16} color="#e74c3c" />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>队列为空</Text>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -165,4 +253,40 @@ const styles = StyleSheet.create({
   lyricsList: { height: 120, marginTop: 16, marginHorizontal: 24 },
   lyricLine: { color: '#666', fontSize: 14, textAlign: 'center', marginVertical: 4 },
   lyricLineActive: { color: '#e74c3c', fontSize: 15, fontWeight: '600' },
+  queueBtn: { marginTop: 12 },
+  queueBtnText: { color: '#e74c3c', fontSize: 14 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1a1a2e',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '60%',
+    paddingBottom: 32,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#16213e',
+  },
+  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  queueItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#16213e',
+  },
+  queueItemInfo: { flex: 1, marginRight: 12 },
+  queueItemName: { color: '#fff', fontSize: 15 },
+  queueItemActive: { color: '#e74c3c' },
+  queueItemArtist: { color: '#888', fontSize: 12, marginTop: 2 },
+  emptyText: { color: '#666', textAlign: 'center', marginTop: 40 },
 });

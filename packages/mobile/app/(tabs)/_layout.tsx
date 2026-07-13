@@ -93,6 +93,13 @@ export default function TabLayout() {
             title: '收藏',
           }}
         />
+        <Tabs.Screen
+          name="history"
+          options={{
+            title: '历史',
+            href: null,
+          }}
+        />
       </Tabs>
     </View>
   );

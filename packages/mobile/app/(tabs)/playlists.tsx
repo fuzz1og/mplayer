@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import EmptyState from '../../components/EmptyState';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import type { Playlist } from '../../stores/playlistStore';
 
@@ -77,11 +78,7 @@ export default function PlaylistsPage() {
       </View>
 
       {playlists.length === 0 ? (
-        <View style={styles.empty}>
-          <Ionicons name="list-outline" size={64} color="#444" />
-          <Text style={styles.emptyText}>还没有歌单</Text>
-          <Text style={styles.emptyHint}>点击右上角 + 创建歌单</Text>
-        </View>
+        <EmptyState icon="list-outline" title="还没有歌单" subtitle="点击右上角 + 创建歌单" />
       ) : (
         <FlatList
           data={playlists}
@@ -187,16 +184,6 @@ const styles = StyleSheet.create({
   rowInfo: { flex: 1 },
   rowName: { color: '#fff', fontSize: 15, fontWeight: '500' },
   rowMeta: { color: '#888', fontSize: 12, marginTop: 3 },
-
-  // empty
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 80,
-  },
-  emptyText: { color: '#888', fontSize: 16, marginTop: 12 },
-  emptyHint: { color: '#555', fontSize: 13, marginTop: 6 },
 
   // modal
   modalOverlay: {

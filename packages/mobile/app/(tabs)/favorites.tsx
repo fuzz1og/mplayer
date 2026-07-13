@@ -1,6 +1,6 @@
-import { View, Text, FlatList, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, FlatList, StyleSheet } from 'react-native';
 import SongRow from '../../components/SongRow';
+import EmptyState from '../../components/EmptyState';
 import { useFavoriteStore } from '../../stores/favoriteStore';
 import { usePlayerStore } from '../../stores/playerStore';
 
@@ -12,12 +12,7 @@ export default function FavoritesPage() {
   };
 
   if (favorites.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="heart-outline" size={64} color="#555" />
-        <Text style={styles.emptyText}>还没有收藏歌曲</Text>
-      </View>
-    );
+    return <EmptyState icon="heart-outline" title="还没有收藏歌曲" />;
   }
 
   return (
@@ -42,6 +37,4 @@ export default function FavoritesPage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
   list: { paddingBottom: 100 },
-  emptyContainer: { flex: 1, backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' },
-  emptyText: { color: '#888', fontSize: 16, marginTop: 12 },
 });
