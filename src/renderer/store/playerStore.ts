@@ -116,6 +116,61 @@ const audioPlayer = getGlobalPlayer({
 
 const initialQueue = loadQueue();
 
+// --- URL 预解析缓存 ---
+const prefetchedUrls = new Map<string, string>();
+
+/**
+ * 获取队列中下一首歌（不改变播放状态）
+ * 导出供测试使用
+ */
+export function getNextSongInQueue(state: PlayerStoreState): Song | null {
+  const { currentPlaylist, currentPlaylistIndex, playMode, currentSong } = state;
+  if (currentPlaylist.length === 0 || currentPlaylistIndex === -1 || !currentSong) {
+    return null;
+  }
+
+  switch (playMode) {
+    case 'single-loop':
+      return currentSong;
+    case 'shuffle': {
+      if (currentPlaylist.length <= 1) return currentSong;
+      let next: Song;
+      do {
+        next = currentPlaylist[Math.floor(Math.random() * currentPlaylist.length)];
+      } while (next.id === currentSong.id && currentPlaylist.length > 1);
+      return next;
+    }
+    case 'list-loop':
+      return currentPlaylist[(currentPlaylistIndex + 1) % currentPlaylist.length];
+    case 'sequential':
+    default:
+      if (currentPlaylistIndex < currentPlaylist.length - 1) {
+        return currentPlaylist[currentPlaylistIndex + 1];
+      }
+      return null;
+  }
+}
+
+/**
+ * 后台预解析下一首歌的 URL（fire-and-forget）
+ */
+function prefetchNextUrl(state: PlayerStoreState): void {
+  const nextSong = getNextSongInQueue(state);
+  if (!nextSong || nextSong.sourceType === 'local') return;
+  if (!nextSong.url) return;
+
+  const cacheKey = `${nextSong.sourceType}:${nextSong.url}`;
+  if (prefetchedUrls.has(cacheKey)) return;
+
+  IpcClient.invoke<string>('musicApi:getAudioUrl', nextSong.url)
+    .then((resolvedUrl) => {
+      if (resolvedUrl) {
+        prefetchedUrls.set(cacheKey, resolvedUrl);
+      }
+    })
+    .catch(() => {});
+}
+
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   currentSong: initialQueue.index >= 0 && initialQueue.index < initialQueue.playlist.length
     ? initialQueue.playlist[initialQueue.index]
@@ -141,6 +196,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     const generation = ++playGeneration;
+    audioPlayer.cancelLoad();
 
     try {
       set({
@@ -165,12 +221,19 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           }
         }
       } else if (song.sourceType !== 'local') {
-        try {
-          realUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
-        } catch (urlError) {
-          console.error('获取真实音频 URL 失败:', urlError);
-          message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');
-          realUrl = '';
+        const cacheKey = `${song.sourceType}:${song.url}`;
+        const prefetched = prefetchedUrls.get(cacheKey);
+        if (prefetched) {
+          realUrl = prefetched;
+          prefetchedUrls.delete(cacheKey);
+        } else {
+          try {
+            realUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
+          } catch (urlError) {
+            console.error('获取真实音频 URL 失败:', urlError);
+            message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');
+            realUrl = '';
+          }
         }
       }
 
@@ -202,14 +265,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         isPlaying: true
       });
 
+      prefetchNextUrl(get());
+
       // Fire-and-forget: 歌词获取不阻塞播放
-      // 记录当前歌曲ID，用于防止竞态条件
       const requestingSongId = song.id;
       if (!song.lrc || song.lrc.trim() === '') {
         set({ lyricsLoading: true });
         resolveSongUrls(song.name, song.artist, song.sourceType)
           .then((searchResults) => {
-            // 如果用户已切歌，丢弃旧结果
             if (get().currentSong?.id !== requestingSongId) return null;
             if (searchResults.length > 0) {
               const freshSong = searchResults[0];
@@ -220,7 +283,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             return '';
           })
           .then((lyricsContent) => {
-            // 再次检查：如果用户已切歌，丢弃旧结果
             if (lyricsContent !== null && get().currentSong?.id === requestingSongId) {
               set({ lyrics: lyricsContent, lyricsLoading: false });
             } else if (lyricsContent === null) {
@@ -269,6 +331,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       persistQueue(get());
 
     } catch (error) {
+      if (generation !== playGeneration) return;
       set({
         error: error instanceof Error ? error.message : '播放失败',
         isLoading: false,
