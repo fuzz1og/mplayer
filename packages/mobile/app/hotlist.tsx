@@ -3,13 +3,13 @@ import {
   View,
   FlatList,
   StyleSheet,
-  ActivityIndicator,
   RefreshControl,
   Text,
 } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { musicApi } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
+import LoadingState from '../components/LoadingState';
 import SongRow from '../components/SongRow';
 
 interface HotlistSong {
@@ -100,7 +100,7 @@ export default function HotlistPage() {
         }}
       />
       {loading ? (
-        <ActivityIndicator color="#e74c3c" style={{ marginTop: 40 }} />
+        <LoadingState />
       ) : (
         <FlatList
           data={songs}

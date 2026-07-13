@@ -2,6 +2,7 @@ import { Audio } from 'expo-av';
 import { musicApi } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
+import { updateNotification, clearNotification } from './notificationService';
 
 let sound: Audio.Sound | null = null;
 
@@ -45,6 +46,7 @@ export async function playSong(song: Song): Promise<void> {
     );
 
     sound = newSound;
+    await updateNotification(song, true);
     sound.setOnPlaybackStatusUpdate((status) => {
       if (!status.isLoaded) return;
       usePlayerStore.getState().setCurrentTime(status.positionMillis / 1000);
@@ -73,9 +75,13 @@ export async function togglePlay(): Promise<void> {
   if (state.isPlaying) {
     await sound.pauseAsync();
     usePlayerStore.getState().pause();
+    const song = usePlayerStore.getState().currentSong;
+    if (song) await updateNotification(song, false);
   } else {
     await sound.playAsync();
     usePlayerStore.getState().resume();
+    const song = usePlayerStore.getState().currentSong;
+    if (song) await updateNotification(song, true);
   }
 }
 
@@ -90,4 +96,5 @@ export async function cleanup(): Promise<void> {
     await sound.unloadAsync();
     sound = null;
   }
+  await clearNotification();
 }

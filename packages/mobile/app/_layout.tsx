@@ -1,6 +1,23 @@
-import { Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { Stack, useRouter } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { setupNotificationChannel } from '../services/notificationService';
 
 export default function RootLayout() {
+  const router = useRouter();
+
+  useEffect(() => {
+    setupNotificationChannel();
+
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data;
+      if (data?.songId) {
+        router.push('/player');
+      }
+    });
+
+    return () => sub.remove();
+  }, []);
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
