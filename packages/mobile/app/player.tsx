@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import {
   View, Text, Image, TouchableOpacity, StyleSheet, Dimensions,
 } from 'react-native';
@@ -17,7 +17,6 @@ export default function PlayerPage() {
   const duration = usePlayerStore(s => s.duration);
   const next = usePlayerStore(s => s.next);
   const prev = usePlayerStore(s => s.prev);
-  const [lyrics, setLyrics] = useState<string[]>([]);
 
   useEffect(() => {
     if (!song) router.back();

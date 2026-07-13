@@ -14,7 +14,7 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: false,
         }}
-        tabBar={({ state, descriptors, navigation }) => (
+        tabBar={({ state, navigation }) => (
           <View style={tabBarStyles.container}>
             {state.routes.map((route, i) => {
               const isFocused = state.index === i;

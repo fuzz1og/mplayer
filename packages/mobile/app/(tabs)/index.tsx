@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, Image, StyleSheet, ActivityIndicator,
+  View, Text, FlatList, Image, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { useDiscoverStore, HotlistItem } from '../../stores/discoverStore';
 
