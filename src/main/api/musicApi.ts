@@ -372,7 +372,7 @@ export const musicApi = {
     return processedSongs;
   },
 
-  async getAudioUrl(audioUrl: string): Promise<string> {
+  async getAudioUrl(audioUrl: string, signal?: AbortSignal): Promise<string> {
     const fullUrl = normalizeUrl(audioUrl);
     if (!fullUrl) return '';
 
@@ -385,37 +385,57 @@ export const musicApi = {
     // 尝试从URL缓存获取
     const cachedData = cacheManager.getAudioUrlCache(fullUrl);
     if (cachedData) {
-      // 也尝试缓存音频文件
       this.downloadAndCacheAudio(cachedData, fullUrl);
       return cachedData;
     }
 
-    try {
-      const response = await apiClient.get(fullUrl, {
-        maxRedirects: 5,
-        validateStatus: (status) => status < 400
-      });
+    // 带重试的 URL 解析（最多 3 次尝试，指数退避）
+    const MAX_RETRIES = 2;
+    const BASE_TIMEOUT = 5000;
+    const MAX_REDIRECTS = 3;
 
-      // 获取最终重定向后的 URL
-      let finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || fullUrl;
-
-      // 检查是否是错误响应（API 服务器返回 data:text/html 格式的错误消息）
-      if (finalUrl.startsWith('data:text/html')) {
-        const errorMsg = typeof response.data === 'string' ? response.data : '获取音频失败';
-        throw new Error(errorMsg);
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
       }
 
-      // 缓存URL结果
-      cacheManager.setAudioUrlCache(fullUrl, finalUrl);
+      try {
+        const response = await apiClient.get(fullUrl, {
+          maxRedirects: MAX_REDIRECTS,
+          validateStatus: (status) => status < 400,
+          timeout: BASE_TIMEOUT,
+          signal: signal as any,
+        });
 
-      // 后台下载并缓存音频文件（传递原始 URL 作为缓存 key）
-      this.downloadAndCacheAudio(finalUrl, fullUrl);
+        let finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || fullUrl;
 
-      return finalUrl;
-    } catch (error) {
-      console.error('getAudioUrl 失败:', error);
-      throw error;
+        if (finalUrl.startsWith('data:text/html')) {
+          const errorMsg = typeof response.data === 'string' ? response.data : '获取音频失败';
+          throw new Error(errorMsg);
+        }
+
+        cacheManager.setAudioUrlCache(fullUrl, finalUrl);
+        this.downloadAndCacheAudio(finalUrl, fullUrl);
+
+        return finalUrl;
+      } catch (error: any) {
+        if (error.name === 'AbortError' || signal?.aborted) {
+          throw error;
+        }
+
+        const isLastAttempt = attempt === MAX_RETRIES;
+        if (isLastAttempt) {
+          console.error('getAudioUrl 失败（已重试', MAX_RETRIES, '次）:', error);
+          return fullUrl;
+        }
+
+        const delay = 500 * Math.pow(2, attempt);
+        console.warn(`getAudioUrl 第 ${attempt + 1} 次失败，${delay}ms 后重试:`, error.message);
+        await new Promise(r => setTimeout(r, delay));
+      }
     }
+
+    return fullUrl;
   },
 
   async downloadAndCacheAudio(audioUrl: string, originalUrl?: string): Promise<void> {
@@ -428,7 +448,7 @@ export const musicApi = {
       const audioData = Buffer.from(response.data);
       // 使用原始 URL 作为缓存 key，与 getAudioUrl 的查询 key 一致
       getCacheManager().setAudioCache(originalUrl || audioUrl, audioData);
-      getCacheManager().trimAudioCache(10);
+      // 不再固定裁剪到 10 个文件，由 checkCacheSize() 按 100MB 空间限制自动 LRU 裁剪
     } catch (error) {
       console.error('音频缓存失败:', error);
     }

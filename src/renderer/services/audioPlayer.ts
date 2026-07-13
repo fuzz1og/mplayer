@@ -18,6 +18,7 @@ export class AudioPlayer {
   private callbacks: AudioPlayerCallbacks = {};
   private positionInterval: NodeJS.Timeout | null = null;
   private volume: number = 80;
+  private loadIdCounter: number = 0;
 
   constructor(callbacks: AudioPlayerCallbacks = {}) {
     this.callbacks = callbacks;
@@ -56,6 +57,8 @@ async load(song: Song): Promise<void> {
     this.currentSong = song;
     this.setState('loading');
 
+    const loadId = ++this.loadIdCounter;
+
     return new Promise((resolve, reject) => {
       if (!song.url) {
         this.setState('error');
@@ -66,33 +69,43 @@ async load(song: Song): Promise<void> {
       this.howl = new Howl({
         src: [song.url],
         html5: true,
+        // 绕过 Howler 的 URL 扩展名 codec 检测
+        // API URL 以 .php 结尾，Howler 提取 "php" 作为扩展名导致 "No codec support" 错误
+        format: ['mp3', 'flac', 'm4a', 'ogg', 'wav', 'aac'],
         volume: this.volume / 100,
         onload: () => {
+          if (loadId !== this.loadIdCounter) return;
           const duration = this.howl?.duration() || 0;
           this.callbacks.onDurationChange?.(duration);
           this.setState('paused');
           resolve();
         },
         onplay: () => {
+          if (loadId !== this.loadIdCounter) return;
           this.setState('playing');
         },
         onpause: () => {
+          if (loadId !== this.loadIdCounter) return;
           this.setState('paused');
         },
         onstop: () => {
+          if (loadId !== this.loadIdCounter) return;
           this.setState('paused');
         },
         onend: () => {
+          if (loadId !== this.loadIdCounter) return;
           this.setState('paused');
           this.callbacks.onEnd?.();
         },
         onloaderror: (_id, error) => {
+          if (loadId !== this.loadIdCounter) return;
           this.setState('error');
           const err = new Error(`加载音频失败: ${error}`);
           this.callbacks.onLoadError?.(err);
           reject(err);
         },
         onplayerror: (_id, error) => {
+          if (loadId !== this.loadIdCounter) return;
           this.setState('error');
           const err = new Error(`播放音频失败: ${error}`);
           this.callbacks.onLoadError?.(err);
@@ -100,6 +113,14 @@ async load(song: Song): Promise<void> {
         }
       });
     });
+  }
+
+  cancelLoad(): void {
+    this.loadIdCounter++;
+    if (this.howl) {
+      this.howl.unload();
+      this.howl = null;
+    }
   }
 
   play(): void {
