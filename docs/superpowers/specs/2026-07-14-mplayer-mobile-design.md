@@ -93,45 +93,54 @@ mplayer/
 Root Layout (Stack)
 ├── (tabs)                    # Tab Navigator
 │   ├── index.tsx             # 发现页 (默认)
+│   ├── search.tsx            # 搜索结果页 (href: null，Tab 隐藏)
 │   ├── playlists.tsx         # 歌单页
-│   └── favorites.tsx         # 收藏页
+│   ├── favorites.tsx         # 收藏页
+│   └── history.tsx           # 播放历史 (href: null，Tab 隐藏)
 ├── player.tsx                # 全屏播放器 (Stack modal)
-└── settings.tsx              # 设置页 (Stack push)
+├── settings.tsx              # 设置页 (Stack push)
+├── hotlist.tsx               # 排行榜详情 (Stack push)
+└── playlist/[id].tsx         # 歌单详情 (动态路由)
 ```
 
 ### 布局
 
 ```
 ┌───────────────────────────┐
-│  [搜索栏...]           ⚙️ │  ← TopBar (所有 tabs 公共)
+│  [搜索栏...]           ⚙️ │  ← TopBar (常驻所有视图)
 ├───────────────────────────┤
 │                           │
-│    Tab 页面内容            │
-│                           │
+│    Tab 页面内容            │  ← 路由切换 (发现/歌单/收藏/搜索)
+│    (发现/歌单/收藏/搜索结果) │
 │                           │
 ├───────────────────────────┤
-│  ◀⏯    歌曲名 - 歌手  ▶︎  │  ← 迷你播放栏 (吸底, 常驻)
+│  ◀⏯    歌曲名 - 歌手  ▶︎  │  ← 迷你播放栏 (常驻, 无歌曲时灰色占位)
 ├──────┬──────┬────────────┤
-│  发现 │ 歌单 │   收藏     │  ← Tab Bar (3 items)
+│  发现 │ 歌单 │   收藏     │  ← Tab Bar (搜索/历史页隐藏动画下移)
 └──────┴──────┴────────────┘
 ```
 
-- 迷你播放栏：点击 → 全屏播放器页
-- 全屏播放器：底部弹出，含歌词、进度条、播放模式、队列
-- 搜索栏：输入后展开搜索结果（push 搜索页）
+- 迷你播放栏：常驻在 Tab Bar 上方，点击 → 全屏播放器页；无歌曲时显示"未在播放"
+- 全屏播放器：底部弹出，含歌词、进度条、播放模式、队列管理
+- 搜索栏：在 TopBar 常驻输入，提交后 Tab 内容区切换至搜索结果页（无重复搜索框），搜索结果页 TopBar 左侧有 ← 返回按钮
+- Tab Bar：进入搜索页时动画下移隐藏 200ms，PlayerBar 保持在最底部
+- 排行榜详情页：从发现页排行榜标题点击进入，显示完整榜单
+- 播放历史：代码可路由的隐藏 Tab，用于自动记录播放历史
 
-### 页面清单 (P0-P2)
+### 页面清单
 
-| 页面 | 优先级 | 说明 |
-|------|--------|------|
-| 发现页 | P0 | 排行榜卡片列表，歌单推荐 |
-| 迷你播放栏 | P0 | 吸底常驻，显示当前歌曲 |
-| 全屏播放器 | P0 | 播放/暂停/切歌/进度/歌词 |
-| 搜索页 | P1 | 多源搜索聚合结果 |
-| 歌单列表/详情 | P1 | 用户歌单 CRUD |
-| 收藏页 | P1 | 收藏歌曲列表 |
-| 排行详情页 | P1 | 第三方排行榜/歌单详情 |
-| 设置页 | P2 | API URL, UI 设置 |
+| 页面 | 路径 | 状态 | 说明 |
+|------|------|------|------|
+| 发现页 | (tabs)/index | ✅ P0 | 4 排行榜卡片(Top 5)，标题可点进详情 |
+| 迷你播放栏 | components/PlayerBar | ✅ P0 | 常驻 Tab 上方，无歌曲占位 |
+| 全屏播放器 | /player | ✅ P0/P1/P2 | 封面/歌词/进度/控制/队列管理 |
+| 搜索页 | (tabs)/search | ✅ P1 | 多源搜索聚合结果，Tab 内容视图 |
+| 歌单列表/详情 | (tabs)/playlists, /playlist/[id] | ✅ P1 | 用户歌单 CRUD + 详情 |
+| 收藏页 | (tabs)/favorites | ✅ P1 | 收藏歌曲列表 |
+| 排行详情页 | /hotlist | ✅ P1 | 第三方排行榜完整榜单 |
+| 设置页 | /settings | ✅ P2 | API URL 配置、播放模式、版本信息 |
+| 播放历史 | (tabs)/history | ✅ P2 | FIFO 200 条上限，隐藏 Tab |
+| 后台播放通知 | services/notificationService | ✅ P2 | Android 通知栏控制、后台续播 |
 
 ## 数据流
 
@@ -154,28 +163,29 @@ Root Layout (Stack)
 - 音频 URL 通过 `musicApi.getAudioUrl()` 获取后直接传给 `expo-av`
 - 缓存复用 core 的内存缓存，持久化通过 AsyncStorage
 
-## 音频播放策略 (阶段一)
+## 音频播放策略
 
 - 使用 `expo-av` `Audio.Sound` 实例
 - 在线播放，不实现下载/磁盘缓存
-- 后台播放通过 `Audio.setAudioModeAsync({ staysActiveInBackground: true })`
-- 不实现跨应用通知栏控制 (阶段二)
+- 后台播放通过 `Audio.setAudioModeAsync({ staysActiveInBackground: true })` + Android Notification Channel
+- 通知栏控制：歌曲名、歌手、播放/暂停（P2 实现）
 - 出错处理：监听 `onPlaybackStatusUpdate`，自动播下一首
+- 汽水音乐特殊处理：`musicApi.getSodaAudioUrl(song.id)` 解析后播放
 
 ## 数据持久化
 
 | 数据类型 | 存储方式 | 备注 |
 |----------|----------|------|
-| 收藏歌曲 | AsyncStorage key `favorites` | JSON 数组 |
-| 歌单 | AsyncStorage key `playlists` | JSON 数组 |
-| 播放历史 | AsyncStorage key `history` | FIFO 上限 200 |
-| 播放队列 | AsyncStorage key `queue` | 队列持久化 |
-| 设置 | AsyncStorage key `settings` | API URL, 播放模式等 |
-| 上次播放位置 | AsyncStorage key `player-progress` | 恢复续播 |
+| 收藏歌曲 | AsyncStorage key `favorites` | JSON 数组 | ✅ |
+| 歌单 | AsyncStorage key `playlists` | JSON 数组 | ✅ |
+| 播放历史 | AsyncStorage key `history` | FIFO 上限 200 | ✅ |
+| 设置 | AsyncStorage key `settings` | API URL, 播放模式 | ✅ |
+| 播放队列 | AsyncStorage key `queue` | 队列持久化 | ❌ 待实现 |
+| 上次播放位置 | AsyncStorage key `player-progress` | 恢复续播 | ❌ 待实现 |
 
 ## 阶段划分
 
-### P0 — 骨架 (预计 2-3 天)
+### P0 — 骨架 ✅
 1. monorepo 搭建 (npm workspaces)
 2. core 包创建 + 类型定义 + musicApi 提取
 3. Expo 项目初始化 + expo-router tab 布局
@@ -183,21 +193,22 @@ Root Layout (Stack)
 5. 基础播放器 (expo-av 播放/暂停/切歌)
 6. TopBar + 迷你播放栏 + 全屏播放器壳
 
-### P1 — 功能补齐 (预计 3-5 天)
-1. 搜索功能 (多源搜索聚合)
+### P1 — 功能补齐 ✅
+1. 搜索功能 (多源搜索聚合) + TopBar 常驻搜索
 2. 歌单 CRUD + 歌单详情
 3. 收藏功能
-4. 全屏播放器完善 (进度条、歌词)
+4. 全屏播放器完善 (进度条、歌词、队列管理)
 5. 排行榜详情页
 
-### P2 — 完善 (预计 2-3 天)
+### P2 — 完善 ✅
 1. 设置页
 2. 后台播放 + 通知控制
 3. 播放历史
-4. 视觉打磨 (加载态、空态、错误态)
+4. 视觉打磨 (统一加载态、空态、错误态)
 5. 播放队列管理
 
 ### 后续
+- 队列持久化、上次播放位置恢复
 - Local Music / 下载
 - Android 桌面 Widget
 - Android Auto
