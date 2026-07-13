@@ -3,12 +3,16 @@ import SongRow from '../../components/SongRow';
 import EmptyState from '../../components/EmptyState';
 import { useFavoriteStore } from '../../stores/favoriteStore';
 import { usePlayerStore } from '../../stores/playerStore';
+import { playSong } from '../../services/audioPlayer';
 
 export default function FavoritesPage() {
   const { favorites } = useFavoriteStore();
 
   const handlePlay = (index: number) => {
+    if (favorites.length === 0) return;
     usePlayerStore.getState().setQueue(favorites, index);
+    const song = favorites[index];
+    if (song) playSong(song);
   };
 
   if (favorites.length === 0) {

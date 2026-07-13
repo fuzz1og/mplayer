@@ -66,8 +66,9 @@ export default function PlayerPage() {
   function removeFromQueue(index: number) {
     const state = usePlayerStore.getState();
     const q = [...state.queue];
-    const removed = q.splice(index, 1)[0];
-    if (state.currentSong && state.currentSong.id === removed.id) {
+    q.splice(index, 1);
+    const currentIdx = state.queue.findIndex(s => s.id === state.currentSong?.id);
+    if (currentIdx === index) {
       const nextSong = q[Math.min(index, q.length - 1)] || null;
       usePlayerStore.setState({ queue: q, currentSong: nextSong, currentTime: 0 });
     } else {
@@ -132,7 +133,7 @@ export default function PlayerPage() {
         <Slider
           style={{ width: width - 48 }}
           minimumValue={0}
-          maximumValue={duration || 1}
+          maximumValue={Math.max(duration, 1)}
           value={currentTime}
           onSlidingComplete={seekTo}
           minimumTrackTintColor="#e74c3c"
@@ -228,6 +229,7 @@ export default function PlayerPage() {
 }
 
 function formatTime(sec: number): string {
+  if (!isFinite(sec) || sec < 0) return '0:00';
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;

@@ -16,7 +16,10 @@ export const useFavoriteStore = create<FavoriteStore>()(
       favorites: [],
 
       addFavorite: (song) => {
-        set((state) => ({ favorites: [song, ...state.favorites] }));
+        set((state) => {
+          if (state.favorites.some((s) => s.id === song.id)) return state;
+          return { favorites: [song, ...state.favorites] };
+        });
       },
 
       removeFavorite: (songId) => {

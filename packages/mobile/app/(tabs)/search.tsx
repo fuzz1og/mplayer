@@ -12,9 +12,11 @@ import { useSearchStore } from '../../stores/searchStore';
 import SongRow from '../../components/SongRow';
 
 export default function SearchPage() {
-  const { q } = useLocalSearchParams<{ q: string }>();
+  const params = useLocalSearchParams<{ q: string }>();
+  const q = Array.isArray(params.q) ? params.q[0] : params.q;
   const results = useSearchStore((s) => s.results);
   const loading = useSearchStore((s) => s.loading);
+  const error = useSearchStore((s) => s.error);
   const search = useSearchStore((s) => s.search);
   const query = useSearchStore((s) => s.query);
 
@@ -28,6 +30,11 @@ export default function SearchPage() {
     <View style={styles.container}>
       {loading ? (
         <ActivityIndicator color="#e74c3c" style={{ marginTop: 40 }} />
+      ) : error ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color="#e74c3c" />
+          <Text style={[styles.emptyText, { color: '#e74c3c' }]}>{error}</Text>
+        </View>
       ) : results.length > 0 ? (
         <FlatList
           data={results}

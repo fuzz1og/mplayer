@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   View,
   Text,
@@ -7,8 +6,10 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { Song, SourceKey } from '@mplayer/core';
+import { type Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
+import { useFavoriteStore } from '../stores/favoriteStore';
+import { playSong } from '../services/audioPlayer';
 
 interface SongRowProps {
   song: Song;
@@ -47,19 +48,28 @@ export default function SongRow({
   showSource = false,
   defaultFavorited = false,
 }: SongRowProps) {
-  const [favorited, setFavorited] = useState(defaultFavorited);
+  const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
+  const addFavorite = useFavoriteStore((s) => s.addFavorite);
+  const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
+
+  const favorited = defaultFavorited || isFav;
 
   const handlePress = () => {
     if (onPress) {
       onPress(song);
     } else {
       usePlayerStore.getState().setQueue([song], 0);
+      playSong(song);
     }
   };
 
   const handleFavorite = (e: any) => {
     e.stopPropagation();
-    setFavorited(!favorited);
+    if (favorited) {
+      removeFavorite(song.id);
+    } else {
+      addFavorite(song);
+    }
   };
 
   const sourceKey = song.sourceType as SourceKey;

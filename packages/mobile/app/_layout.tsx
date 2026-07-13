@@ -7,7 +7,7 @@ export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    setupNotificationChannel();
+    setupNotificationChannel().catch(() => {});
 
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data;

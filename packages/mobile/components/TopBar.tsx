@@ -1,19 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
-import { useSearchStore } from '../stores/searchStore';
 
 export default function TopBar() {
   const pathname = usePathname();
   const isSearchTab = pathname === '/search';
-  const storeQuery = useSearchStore(s => s.query);
   const [searchText, setSearchText] = useState('');
-
-  // 回到搜索 tab 时同步 store 中的查询词
-  useEffect(() => {
-    if (isSearchTab) setSearchText(storeQuery);
-  }, [isSearchTab]);
 
   const handleSubmit = () => {
     const trimmed = searchText.trim();

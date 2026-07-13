@@ -16,7 +16,7 @@ export async function initAudio(): Promise<void> {
   });
 }
 
-export async function playSong(song: Song): Promise<void> {
+export async function playSong(song: Song, retryCount = 0): Promise<void> {
   try {
     // 解析音频 URL
     let audioUrl = song.url;
@@ -40,6 +40,8 @@ export async function playSong(song: Song): Promise<void> {
       sound = null;
     }
 
+    if (!audioUrl.startsWith('http')) throw new Error('no playable URL');
+
     const { sound: newSound } = await Audio.Sound.createAsync(
       { uri: audioUrl },
       { shouldPlay: true, progressUpdateIntervalMillis: 250 }
@@ -61,10 +63,16 @@ export async function playSong(song: Song): Promise<void> {
     });
   } catch (err) {
     console.error('playSong error:', err);
+    const nextRetryCount = retryCount + 1;
+    const queue = usePlayerStore.getState().queue;
+    if (nextRetryCount > queue.length) {
+      console.error('playSong: max retries reached, stopping');
+      return;
+    }
     // 出错自动切下一首
     usePlayerStore.getState().next();
     const nextSong = usePlayerStore.getState().currentSong;
-    if (nextSong) playSong(nextSong);
+    if (nextSong) playSong(nextSong, nextRetryCount);
   }
 }
 

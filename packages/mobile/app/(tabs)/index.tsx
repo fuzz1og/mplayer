@@ -6,12 +6,14 @@ import { router } from 'expo-router';
 import LoadingState from '../../components/LoadingState';
 import { useDiscoverStore, HotlistItem } from '../../stores/discoverStore';
 import { usePlayerStore } from '../../stores/playerStore';
+import { playSong as playAudio } from '../../services/audioPlayer';
+import type { SourceKey } from '@mplayer/core';
 
 const SECTIONS = [
-  { key: 'neteaseHotlist' as const, title: '网易云音乐 · 热歌榜' },
-  { key: 'qqHotlist' as const, title: 'QQ 音乐 · 热歌榜' },
-  { key: 'neteaseNew' as const, title: '网易云音乐 · 新歌榜' },
-  { key: 'qqNew' as const, title: 'QQ 音乐 · 新歌榜' },
+  { key: 'neteaseHotlist' as const, title: '网易云音乐 · 热歌榜', sourceType: 'netease' as SourceKey },
+  { key: 'qqHotlist' as const, title: 'QQ 音乐 · 热歌榜', sourceType: 'qq' as SourceKey },
+  { key: 'neteaseNew' as const, title: '网易云音乐 · 新歌榜', sourceType: 'netease' as SourceKey },
+  { key: 'qqNew' as const, title: 'QQ 音乐 · 新歌榜', sourceType: 'qq' as SourceKey },
 ];
 
 export default function DiscoverPage() {
@@ -37,6 +39,7 @@ export default function DiscoverPage() {
               title={item.title}
               songs={getSongs(item.key)}
               routeKey={item.key}
+              sourceType={item.sourceType}
             />
           )}
         />
@@ -45,7 +48,7 @@ export default function DiscoverPage() {
   );
 }
 
-function SectionCard({ title, songs, routeKey }: { title: string; songs: HotlistItem[]; routeKey: string }) {
+function SectionCard({ title, songs, routeKey, sourceType }: { title: string; songs: HotlistItem[]; routeKey: string; sourceType: SourceKey }) {
   const playSong = useCallback((song: HotlistItem) => {
     const s = {
       id: song.id,
@@ -56,10 +59,11 @@ function SectionCard({ title, songs, routeKey }: { title: string; songs: Hotlist
       url: '',
       lrc: '',
       duration: 0,
-      sourceType: 'netease' as const,
+      sourceType,
     };
     usePlayerStore.getState().setQueue([s], 0);
-  }, []);
+    playAudio(s);
+  }, [sourceType]);
 
   return (
     <View style={styles.section}>

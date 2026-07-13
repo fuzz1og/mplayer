@@ -4,6 +4,7 @@ import SongRow from '../../components/SongRow';
 import EmptyState from '../../components/EmptyState';
 import { useHistoryStore } from '../../stores/historyStore';
 import { usePlayerStore } from '../../stores/playerStore';
+import { playSong } from '../../services/audioPlayer';
 
 export default function HistoryPage() {
   const { history, clearHistory } = useHistoryStore();
@@ -11,6 +12,8 @@ export default function HistoryPage() {
   const handlePlay = (index: number) => {
     if (history.length === 0) return;
     usePlayerStore.getState().setQueue(history, index);
+    const song = history[index];
+    if (song) playSong(song);
   };
 
   if (history.length === 0) {

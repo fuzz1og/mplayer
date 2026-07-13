@@ -4,6 +4,7 @@ import type { Song } from '@mplayer/core';
 interface PlayerState {
   currentSong: Song | null;
   queue: Song[];
+  currentIndex: number;
   isPlaying: boolean;
   currentTime: number;
   duration: number;
@@ -21,6 +22,7 @@ interface PlayerState {
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentSong: null,
   queue: [],
+  currentIndex: -1,
   isPlaying: false,
   currentTime: 0,
   duration: 0,
@@ -30,24 +32,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   resume: () => set({ isPlaying: true }),
 
   next: () => {
-    const { queue, currentSong } = get();
-    if (queue.length === 0 || !currentSong) return;
-    const idx = queue.findIndex(s => s.id === currentSong.id);
-    const nextIdx = (idx + 1) % queue.length;
-    set({ currentSong: queue[nextIdx], isPlaying: true, currentTime: 0 });
+    const { queue, currentIndex } = get();
+    if (queue.length === 0 || currentIndex < 0) return;
+    const nextIdx = (currentIndex + 1) % queue.length;
+    set({ currentSong: queue[nextIdx], currentIndex: nextIdx, isPlaying: true, currentTime: 0 });
   },
 
   prev: () => {
-    const { queue, currentSong } = get();
-    if (queue.length === 0 || !currentSong) return;
-    const idx = queue.findIndex(s => s.id === currentSong.id);
-    const prevIdx = (idx - 1 + queue.length) % queue.length;
-    set({ currentSong: queue[prevIdx], isPlaying: true, currentTime: 0 });
+    const { queue, currentIndex } = get();
+    if (queue.length === 0 || currentIndex < 0) return;
+    const prevIdx = (currentIndex - 1 + queue.length) % queue.length;
+    set({ currentSong: queue[prevIdx], currentIndex: prevIdx, isPlaying: true, currentTime: 0 });
   },
 
   setQueue: (songs, startIndex = 0) => {
     if (songs.length === 0) return;
-    set({ queue: songs, currentSong: songs[startIndex], isPlaying: true, currentTime: 0 });
+    const idx = Math.max(0, Math.min(startIndex, songs.length - 1));
+    set({ queue: songs, currentSong: songs[idx], currentIndex: idx, isPlaying: true, currentTime: 0 });
   },
 
   setCurrentTime: (time) => set({ currentTime: time }),
