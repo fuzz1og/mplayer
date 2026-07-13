@@ -10,31 +10,33 @@ export default function TabLayout() {
     <View style={styles.container}>
       <StatusBar style="light" />
       <TopBar />
-      <PlayerBar />
       <Tabs
         screenOptions={{
           headerShown: false,
         }}
         tabBar={({ state, navigation }) => (
-          <View style={tabBarStyles.container}>
-            {state.routes.map((route, i) => {
-              const isFocused = state.index === i;
-              const onPress = () => { navigation.navigate(route.name); };
-              const icons: Record<string, string> = { index: 'compass-outline', playlists: 'list-outline', favorites: 'heart-outline' };
-              const labels: Record<string, string> = { index: '发现', playlists: '歌单', favorites: '收藏' };
-              return (
-                <TouchableOpacity key={route.key} onPress={onPress} style={tabBarStyles.tab}>
-                  <Ionicons
-                    name={icons[route.name] as any}
-                    size={22}
-                    color={isFocused ? '#e74c3c' : '#888'}
-                  />
-                  <Text style={{ color: isFocused ? '#e74c3c' : '#888', fontSize: 11, marginTop: 2 }}>
-                    {labels[route.name]}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View>
+            <PlayerBar />
+            <View style={tabBarStyles.container}>
+              {state.routes.map((route, i) => {
+                const isFocused = state.index === i;
+                const onPress = () => { navigation.navigate(route.name); };
+                const icons: Record<string, string> = { index: 'compass-outline', playlists: 'list-outline', favorites: 'heart-outline' };
+                const labels: Record<string, string> = { index: '发现', playlists: '歌单', favorites: '收藏' };
+                return (
+                  <TouchableOpacity key={route.key} onPress={onPress} style={tabBarStyles.tab}>
+                    <Ionicons
+                      name={icons[route.name] as any}
+                      size={22}
+                      color={isFocused ? '#e74c3c' : '#888'}
+                    />
+                    <Text style={{ color: isFocused ? '#e74c3c' : '#888', fontSize: 11, marginTop: 2 }}>
+                      {labels[route.name]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         )}
       >
@@ -42,6 +44,13 @@ export default function TabLayout() {
           name="index"
           options={{
             title: '发现',
+          }}
+        />
+        <Tabs.Screen
+          name="search"
+          options={{
+            title: '搜索',
+            href: null, // 隐藏 tab 图标
           }}
         />
         <Tabs.Screen

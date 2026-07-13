@@ -1,8 +1,26 @@
+import { useState, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
+import { useSearchStore } from '../stores/searchStore';
 
 export default function TopBar() {
+  const pathname = usePathname();
+  const isSearchTab = pathname === '/search';
+  const storeQuery = useSearchStore(s => s.query);
+  const [searchText, setSearchText] = useState('');
+
+  // 回到搜索 tab 时同步 store 中的查询词
+  useEffect(() => {
+    if (isSearchTab) setSearchText(storeQuery);
+  }, [isSearchTab]);
+
+  const handleSubmit = () => {
+    const trimmed = searchText.trim();
+    if (!trimmed) return;
+    router.replace(`/search?q=${encodeURIComponent(trimmed)}`);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.searchBar}>
@@ -11,7 +29,15 @@ export default function TopBar() {
           style={styles.input}
           placeholder="搜索歌曲..."
           placeholderTextColor="#666"
-          onFocus={() => router.push('/search')}
+          value={searchText}
+          onChangeText={setSearchText}
+          onSubmitEditing={handleSubmit}
+          returnKeyType="search"
+          onFocus={() => {
+            if (!isSearchTab) {
+              router.push('/search');
+            }
+          }}
         />
       </View>
       <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
