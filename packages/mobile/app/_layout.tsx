@@ -1,9 +1,11 @@
-import { Stack } from "expo-router";
+import { Stack } from 'expo-router';
 
 export default function RootLayout() {
   return (
-    <Stack>
-      <Stack.Screen name="index" options={{ title: "MPlayer" }} />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="player" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="settings" options={{ presentation: 'push' }} />
     </Stack>
   );
 }
