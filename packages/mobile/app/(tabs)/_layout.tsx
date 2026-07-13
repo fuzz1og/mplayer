@@ -1,9 +1,61 @@
-import { Tabs } from 'expo-router';
+import { useEffect, useRef } from 'react';
+import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
+
+const TAB_HEIGHT = 56;
+
+function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) {
+  const pathname = usePathname();
+  const isSearch = pathname === '/search';
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(slideAnim, {
+      toValue: isSearch ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [isSearch]);
+
+  const translateY = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, TAB_HEIGHT],
+  });
+
+  return (
+    <View>
+      <PlayerBar />
+      <Animated.View style={{ transform: [{ translateY }] }}>
+        <View style={tabBarStyles.container}>
+          {state.routes.map((route: any, i: number) => {
+            // 搜索 tab 不显示 tab 按钮
+            if (route.name === 'search') return null;
+            const isFocused = state.index === i;
+            const onPress = () => { navigation.navigate(route.name); };
+            const icons: Record<string, string> = { index: 'compass-outline', playlists: 'list-outline', favorites: 'heart-outline' };
+            const labels: Record<string, string> = { index: '发现', playlists: '歌单', favorites: '收藏' };
+            return (
+              <TouchableOpacity key={route.key} onPress={onPress} style={tabBarStyles.tab}>
+                <Ionicons
+                  name={icons[route.name] as any}
+                  size={22}
+                  color={isFocused ? '#e74c3c' : '#888'}
+                />
+                <Text style={{ color: isFocused ? '#e74c3c' : '#888', fontSize: 11, marginTop: 2 }}>
+                  {labels[route.name]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
 
 export default function TabLayout() {
   return (
@@ -14,31 +66,7 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: false,
         }}
-        tabBar={({ state, navigation }) => (
-          <View>
-            <PlayerBar />
-            <View style={tabBarStyles.container}>
-              {state.routes.map((route, i) => {
-                const isFocused = state.index === i;
-                const onPress = () => { navigation.navigate(route.name); };
-                const icons: Record<string, string> = { index: 'compass-outline', playlists: 'list-outline', favorites: 'heart-outline' };
-                const labels: Record<string, string> = { index: '发现', playlists: '歌单', favorites: '收藏' };
-                return (
-                  <TouchableOpacity key={route.key} onPress={onPress} style={tabBarStyles.tab}>
-                    <Ionicons
-                      name={icons[route.name] as any}
-                      size={22}
-                      color={isFocused ? '#e74c3c' : '#888'}
-                    />
-                    <Text style={{ color: isFocused ? '#e74c3c' : '#888', fontSize: 11, marginTop: 2 }}>
-                      {labels[route.name]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        )}
+        tabBar={(props) => <AnimatedTabBar {...props} />}
       >
         <Tabs.Screen
           name="index"

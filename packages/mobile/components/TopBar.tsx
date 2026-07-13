@@ -24,6 +24,11 @@ export default function TopBar() {
   return (
     <View style={styles.container}>
       <View style={styles.searchBar}>
+        {isSearchTab && (
+          <TouchableOpacity onPress={() => router.replace('/')} style={{ marginRight: 4 }}>
+            <Ionicons name="arrow-back" size={20} color="#ccc" />
+          </TouchableOpacity>
+        )}
         <Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} />
         <TextInput
           style={styles.input}
