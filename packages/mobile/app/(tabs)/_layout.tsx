@@ -36,8 +36,8 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
             if (route.name === 'search') return null;
             const isFocused = state.index === i;
             const onPress = () => { navigation.navigate(route.name); };
-            const icons: Record<string, string> = { index: 'compass-outline', playlists: 'list-outline', favorites: 'heart-outline' };
-            const labels: Record<string, string> = { index: '发现', playlists: '歌单', favorites: '收藏' };
+            const icons: Record<string, string> = { index: 'compass-outline', playlists: 'list-outline', favorites: 'heart-outline', history: 'time-outline' };
+            const labels: Record<string, string> = { index: '发现', playlists: '歌单', favorites: '收藏', history: '历史' };
             return (
               <TouchableOpacity key={route.key} onPress={onPress} style={tabBarStyles.tab}>
                 <Ionicons
@@ -97,7 +97,6 @@ export default function TabLayout() {
           name="history"
           options={{
             title: '历史',
-            href: null,
           }}
         />
       </Tabs>
