@@ -20,8 +20,17 @@ export async function playSong(song: Song): Promise<void> {
     // 解析音频 URL
     let audioUrl = song.url;
     if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
-      const resolved = await musicApi.getAudioUrl(audioUrl);
-      audioUrl = resolved || audioUrl;
+      // 汽水音乐需特殊处理
+      if (song.sourceType === 'soda' && song.id) {
+        const sodaUrl = await musicApi.getSodaAudioUrl(song.id);
+        if (sodaUrl.startsWith('http://') || sodaUrl.startsWith('https://')) {
+          audioUrl = sodaUrl;
+        }
+      }
+      if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
+        const resolved = await musicApi.getAudioUrl(audioUrl);
+        audioUrl = resolved || audioUrl;
+      }
     }
 
     // 卸载旧实例

@@ -10,6 +10,7 @@ export default function TabLayout() {
     <View style={styles.container}>
       <StatusBar style="light" />
       <TopBar />
+      <PlayerBar />
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -56,7 +57,6 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
-      <PlayerBar />
     </View>
   );
 }

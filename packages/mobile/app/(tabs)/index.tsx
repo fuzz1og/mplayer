@@ -1,8 +1,10 @@
 import { useEffect, useCallback } from 'react';
 import {
-  View, Text, FlatList, Image, StyleSheet, ActivityIndicator,
+  View, Text, FlatList, Image, StyleSheet, ActivityIndicator, TouchableOpacity,
 } from 'react-native';
+import { router } from 'expo-router';
 import { useDiscoverStore, HotlistItem } from '../../stores/discoverStore';
+import { usePlayerStore } from '../../stores/playerStore';
 
 const SECTIONS = [
   { key: 'neteaseHotlist' as const, title: '网易云音乐 · 热歌榜' },
@@ -33,6 +35,7 @@ export default function DiscoverPage() {
             <SectionCard
               title={item.title}
               songs={getSongs(item.key)}
+              routeKey={item.key}
             />
           )}
         />
@@ -41,19 +44,36 @@ export default function DiscoverPage() {
   );
 }
 
-function SectionCard({ title, songs }: { title: string; songs: HotlistItem[] }) {
+function SectionCard({ title, songs, routeKey }: { title: string; songs: HotlistItem[]; routeKey: string }) {
+  const playSong = useCallback((song: HotlistItem) => {
+    const s = {
+      id: song.id,
+      name: song.name,
+      artist: song.artists,
+      album: song.album,
+      cover: song.cover,
+      url: '',
+      lrc: '',
+      duration: 0,
+      sourceType: 'netease' as const,
+    };
+    usePlayerStore.getState().setQueue([s], 0);
+  }, []);
+
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <TouchableOpacity onPress={() => router.push(`/hotlist?key=${routeKey}&title=${encodeURIComponent(title)}`)}>
+        <Text style={styles.sectionTitle}>{title} ›</Text>
+      </TouchableOpacity>
       {songs.slice(0, 5).map((song, i) => (
-        <View key={song.id + String(i)} style={styles.songRow}>
+        <TouchableOpacity key={song.id + String(i)} style={styles.songRow} onPress={() => playSong(song)}>
           <Text style={styles.rank}>{i + 1}</Text>
           <Image source={{ uri: song.cover }} style={styles.cover} />
           <View style={styles.songInfo}>
             <Text style={styles.songName} numberOfLines={1}>{song.name}</Text>
             <Text style={styles.songArtist} numberOfLines={1}>{song.artists}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
       ))}
     </View>
   );

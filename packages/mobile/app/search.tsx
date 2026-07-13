@@ -6,12 +6,12 @@ import {
   FlatList,
   StyleSheet,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSearchStore } from '../stores/searchStore';
 import SongRow from '../components/SongRow';
-import type { SongGroup } from '@mplayer/core';
 
 export default function SearchPage() {
   const [inputValue, setInputValue] = useState('');
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#16213e',
     marginHorizontal: 12,
-    marginTop: 12,
+    marginTop: Platform.OS === 'android' ? 48 : 12,
     marginBottom: 8,
     borderRadius: 10,
     paddingHorizontal: 12,
