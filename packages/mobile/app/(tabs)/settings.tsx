@@ -9,8 +9,9 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
-import type { PlayMode } from '../stores/settingsStore';
+import { setApiBaseUrl as setCoreApiBaseUrl } from '@mplayer/core';
+import { useSettingsStore, PLAY_MODES } from '../../stores/settingsStore';
+import type { PlayMode } from '../../stores/settingsStore';
 
 export default function SettingsPage() {
   const storeApiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
@@ -23,6 +24,7 @@ export default function SettingsPage() {
 
   const handleSaveUrl = () => {
     setApiBaseUrl(localUrl.trim());
+    setCoreApiBaseUrl(localUrl.trim());
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   };

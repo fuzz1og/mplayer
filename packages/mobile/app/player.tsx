@@ -25,7 +25,9 @@ export default function PlayerPage() {
   const [lyricLines, setLyricLines] = useState<LyricLine[]>([]);
   const [currentLineIdx, setCurrentLineIdx] = useState(-1);
   const [showQueue, setShowQueue] = useState(false);
+  const [showLyrics, setShowLyrics] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const lyricsFlatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     if (!song) router.back();
@@ -51,6 +53,7 @@ export default function PlayerPage() {
       setCurrentLineIdx(idx);
       if (idx >= 0) {
         try { flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 }); } catch {}
+        try { lyricsFlatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 }); } catch {}
       }
     }
   }, [currentTime, lyricLines, currentLineIdx]);
@@ -86,82 +89,117 @@ export default function PlayerPage() {
         headerStyle: { backgroundColor: '#1a1a2e' },
         headerTintColor: '#fff',
         headerLeft: () => (
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.replace('/')}>
             <Ionicons name="chevron-down" size={28} color="#fff" />
+          </TouchableOpacity>
+        ),
+        headerRight: () => (
+          <TouchableOpacity onPress={() => setShowLyrics(v => !v)}>
+            <Text style={{ color: '#e74c3c', fontSize: 16, fontWeight: '600' }}>
+              {showLyrics ? '封' : '词'}
+            </Text>
           </TouchableOpacity>
         ),
       }} />
 
-      {/* 专辑封面 */}
-      <View style={styles.coverWrap}>
-        <Image
-          source={{ uri: song.cover || 'https://via.placeholder.com/300' }}
-          style={styles.cover}
-        />
-      </View>
-
-      {/* 歌曲信息 */}
-      <View style={styles.infoWrap}>
-        <Text style={styles.title}>{song.name}</Text>
-        <Text style={styles.artist}>{song.artist}</Text>
-        <TouchableOpacity onPress={() => setShowQueue(true)} style={styles.queueBtn}>
-          <Text style={styles.queueBtnText}>查看队列 ({queue.length})</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 歌词 */}
-      {lyricLines.length > 0 && (
-        <FlatList
-          ref={flatListRef}
-          data={lyricLines}
-          keyExtractor={(_, i) => String(i)}
-          style={styles.lyricsList}
-          renderItem={({ item, index }) => (
-            <Text style={[
-              styles.lyricLine,
-              index === currentLineIdx && styles.lyricLineActive
-            ]}>
-              {item.text}
-            </Text>
+      {showLyrics ? (
+        /* 全屏歌词视图 */
+        <View style={styles.lyricsFullWrap}>
+          {lyricLines.length > 0 ? (
+            <FlatList
+              ref={lyricsFlatListRef}
+              data={lyricLines}
+              keyExtractor={(_, i) => String(i)}
+              style={styles.lyricsFullList}
+              contentContainerStyle={styles.lyricsFullContent}
+              renderItem={({ item, index }) => (
+                <Text style={[
+                  styles.lyricLine,
+                  index === currentLineIdx && styles.lyricLineActive
+                ]}>
+                  {item.text}
+                </Text>
+              )}
+              showsVerticalScrollIndicator={false}
+            />
+          ) : (
+            <Text style={{ color: '#666', fontSize: 16 }}>暂无歌词</Text>
           )}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
-
-      {/* 进度条 */}
-      <View style={styles.progressWrap}>
-        <Slider
-          style={{ width: width - 48 }}
-          minimumValue={0}
-          maximumValue={Math.max(duration, 1)}
-          value={currentTime}
-          onSlidingComplete={seekTo}
-          minimumTrackTintColor="#e74c3c"
-          maximumTrackTintColor="#444"
-          thumbTintColor="#e74c3c"
-        />
-        <View style={styles.timeRow}>
-          <Text style={styles.time}>{formatTime(currentTime)}</Text>
-          <Text style={styles.time}>{formatTime(duration)}</Text>
         </View>
-      </View>
+      ) : (
+        <>
+          {/* 专辑封面 */}
+          <View style={styles.coverWrap}>
+            <Image
+              source={{ uri: song.cover || 'https://via.placeholder.com/300' }}
+              style={styles.cover}
+            />
+          </View>
 
-      {/* 控制按钮 */}
-      <View style={styles.controls}>
-        <TouchableOpacity onPress={prev}>
-          <Ionicons name="play-skip-back" size={32} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={togglePlay} style={styles.playBtn}>
-          <Ionicons
-            name={isPlaying ? 'pause-circle' : 'play-circle'}
-            size={64}
-            color="#e74c3c"
-          />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={next}>
-          <Ionicons name="play-skip-forward" size={32} color="#fff" />
-        </TouchableOpacity>
-      </View>
+          {/* 歌曲信息 */}
+          <View style={styles.infoWrap}>
+            <Text style={styles.title}>{song.name}</Text>
+            <Text style={styles.artist}>{song.artist}</Text>
+            <TouchableOpacity onPress={() => setShowQueue(true)} style={styles.queueBtn}>
+              <Text style={styles.queueBtnText}>查看队列 ({queue.length})</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 歌词 */}
+          {lyricLines.length > 0 && (
+            <FlatList
+              ref={flatListRef}
+              data={lyricLines}
+              keyExtractor={(_, i) => String(i)}
+              style={styles.lyricsList}
+              renderItem={({ item, index }) => (
+                <Text style={[
+                  styles.lyricLine,
+                  index === currentLineIdx && styles.lyricLineActive
+                ]}>
+                  {item.text}
+                </Text>
+              )}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+
+          {/* 进度条 */}
+          <View style={styles.progressWrap}>
+            <Slider
+              style={{ width: width - 48 }}
+              minimumValue={0}
+              maximumValue={Math.max(duration, 1)}
+              value={currentTime}
+              onSlidingComplete={seekTo}
+              minimumTrackTintColor="#e74c3c"
+              maximumTrackTintColor="#444"
+              thumbTintColor="#e74c3c"
+            />
+            <View style={styles.timeRow}>
+              <Text style={styles.time}>{formatTime(currentTime)}</Text>
+              <Text style={styles.time}>{formatTime(duration)}</Text>
+            </View>
+          </View>
+
+          {/* 控制按钮 */}
+          <View style={styles.controls}>
+            <TouchableOpacity onPress={prev}>
+              <Ionicons name="play-skip-back" size={32} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={togglePlay} style={styles.playBtn}>
+              <Ionicons
+                name={isPlaying ? 'pause-circle' : 'play-circle'}
+                size={64}
+                color="#e74c3c"
+              />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={next}>
+              <Ionicons name="play-skip-forward" size={32} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
 
       {/* 队列弹窗 */}
       <Modal
@@ -291,4 +329,18 @@ const styles = StyleSheet.create({
   queueItemActive: { color: '#e74c3c' },
   queueItemArtist: { color: '#888', fontSize: 12, marginTop: 2 },
   emptyText: { color: '#666', textAlign: 'center', marginTop: 40 },
+  // 全屏歌词视图样式
+  lyricsFullWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  lyricsFullList: {
+    height: 400,
+    width: '100%',
+  },
+  lyricsFullContent: {
+    paddingVertical: 20,
+  },
 });
