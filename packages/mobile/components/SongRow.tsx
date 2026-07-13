@@ -15,6 +15,7 @@ interface SongRowProps {
   rank?: number;
   onPress?: (song: Song) => void;
   showSource?: boolean;
+  defaultFavorited?: boolean;
 }
 
 const SOURCE_COLORS: Record<SourceKey, string> = {
@@ -44,8 +45,9 @@ export default function SongRow({
   rank,
   onPress,
   showSource = false,
+  defaultFavorited = false,
 }: SongRowProps) {
-  const [favorited, setFavorited] = useState(false);
+  const [favorited, setFavorited] = useState(defaultFavorited);
 
   const handlePress = () => {
     if (onPress) {

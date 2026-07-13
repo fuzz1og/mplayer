@@ -1,12 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, Image, TouchableOpacity, StyleSheet, Dimensions,
+  View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, seekTo } from '../services/audioPlayer';
+import { parseLRC, musicApi, findCurrentLyricIndex } from '@mplayer/core';
+import type { LyricLine } from '@mplayer/core';
 
 const { width } = Dimensions.get('window');
 
@@ -18,9 +20,37 @@ export default function PlayerPage() {
   const next = usePlayerStore(s => s.next);
   const prev = usePlayerStore(s => s.prev);
 
+  const [lyricLines, setLyricLines] = useState<LyricLine[]>([]);
+  const [currentLineIdx, setCurrentLineIdx] = useState(-1);
+  const flatListRef = useRef<FlatList>(null);
+
   useEffect(() => {
     if (!song) router.back();
   }, [song]);
+
+  // 加载歌词
+  useEffect(() => {
+    if (!song?.lrc) { setLyricLines([]); return; }
+    musicApi.getLyrics(song.lrc).then(lrc => {
+      const parsed = parseLRC(lrc);
+      setLyricLines(parsed.lines);
+    }).catch(() => setLyricLines([]));
+  }, [song?.lrc]);
+
+  // 更新当前高亮歌词行
+  useEffect(() => {
+    if (lyricLines.length === 0) {
+      if (currentLineIdx !== -1) setCurrentLineIdx(-1);
+      return;
+    }
+    const idx = findCurrentLyricIndex(lyricLines, currentTime);
+    if (idx !== currentLineIdx) {
+      setCurrentLineIdx(idx);
+      if (idx >= 0) {
+        try { flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 }); } catch {}
+      }
+    }
+  }, [currentTime, lyricLines, currentLineIdx]);
 
   if (!song) return null;
 
@@ -51,6 +81,25 @@ export default function PlayerPage() {
         <Text style={styles.title}>{song.name}</Text>
         <Text style={styles.artist}>{song.artist}</Text>
       </View>
+
+      {/* 歌词 */}
+      {lyricLines.length > 0 && (
+        <FlatList
+          ref={flatListRef}
+          data={lyricLines}
+          keyExtractor={(_, i) => String(i)}
+          style={styles.lyricsList}
+          renderItem={({ item, index }) => (
+            <Text style={[
+              styles.lyricLine,
+              index === currentLineIdx && styles.lyricLineActive
+            ]}>
+              {item.text}
+            </Text>
+          )}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       {/* 进度条 */}
       <View style={styles.progressWrap}>
@@ -113,4 +162,7 @@ const styles = StyleSheet.create({
     gap: 40,
   },
   playBtn: { marginHorizontal: 8 },
+  lyricsList: { height: 120, marginTop: 16, marginHorizontal: 24 },
+  lyricLine: { color: '#666', fontSize: 14, textAlign: 'center', marginVertical: 4 },
+  lyricLineActive: { color: '#e74c3c', fontSize: 15, fontWeight: '600' },
 });
