@@ -36,11 +36,45 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish:
-    needs: build
+  # Mobile Android APK
+  mobile-android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci --ignore-scripts
+      - run: npm run core:build
+      - name: Prebuild Android native project
+        working-directory: packages/mobile
+        run: npx expo prebuild --platform android --clean
+        env:
+          EXPO_DEBUG: 1
+      - name: Build APK (release)
+        working-directory: packages/mobile/android
+        run: ./gradlew assembleRelease
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mplayer-mobile-apk
+          path: packages/mobile/android/app/build/outputs/apk/release/*.apk
+
+  publish:
+    needs: [build, mobile-android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mplayer-mobile-apk
 
       - name: Generate release notes and publish
         run: |
@@ -50,5 +84,9 @@ jobs:
             -f tag_name="$TAG" --jq '.body' > release-notes.md
           # Publish release with generated notes
           gh release edit "$TAG" --notes-file release-notes.md --draft=false
+          # Upload APK to release assets
+          for apk in *.apk; do
+            [ -f "$apk" ] && gh release upload "$TAG" "$apk" --clobber
+          done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
