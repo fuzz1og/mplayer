@@ -47,7 +47,7 @@ export default function PlayerBar() {
       {currentSong && (
         <View style={styles.controls}>
           <TouchableOpacity
-            onPress={(e) => { e.stopPropagation(); prev(); }}
+            onPress={(e) => { e.stopPropagation(); prev(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
           >
             <Ionicons name="play-skip-back" size={24} color="#fff" />
@@ -63,7 +63,7 @@ export default function PlayerBar() {
             />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={(e) => { e.stopPropagation(); next(); }}
+            onPress={(e) => { e.stopPropagation(); next(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
           >
             <Ionicons name="play-skip-forward" size={24} color="#fff" />

@@ -146,6 +146,14 @@ export default function PlayerPage() {
     if (newSong) playSong(newSong);
   };
 
+  const dismissWithAnimation = () => {
+    Animated.timing(panY, {
+      toValue: Dimensions.get('window').height,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => router.back());
+  };
+
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gs) => {
@@ -180,145 +188,144 @@ export default function PlayerPage() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']} {...panResponder.panHandlers}>
       <StatusBar style="light" />
-      <Stack.Screen options={{
-        headerShown: true,
-        title: '',
-        headerStyle: { backgroundColor: '#1a1a2e' },
-        headerTintColor: '#fff',
-        headerLeft: () => (
-          <TouchableOpacity onPress={() => router.back()}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <Animated.View style={{ flex: 1, alignItems: 'center', transform: [{ translateY: panY }] }}>
+        {/* 自定义顶部栏 */}
+        <View style={styles.customHeader}>
+          <TouchableOpacity onPress={dismissWithAnimation}>
             <Ionicons name="chevron-down" size={28} color="#fff" />
           </TouchableOpacity>
-        ),
-        headerRight: () => (
           <TouchableOpacity onPress={() => setShowLyrics(v => !v)}>
             <Text style={{ color: '#e74c3c', fontSize: 16, fontWeight: '600' }}>
               {showLyrics ? '封' : '词'}
             </Text>
           </TouchableOpacity>
-        ),
-      }} />
-
-      {showLyrics ? (
-        /* 全屏歌词视图 */
-        <View style={styles.lyricsFullWrap}>
-          {lyricLines.length > 0 ? (
-            <FlatList
-              ref={lyricsFlatListRef}
-              data={lyricLines}
-              style={styles.lyricsFullList}
-              contentContainerStyle={styles.lyricsFullContent}
-              renderItem={({ item, index }) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => seekTo(item.time)}
-                  style={{ paddingVertical: 4 }}
-                >
-                  <Text style={[
-                    styles.lyricsFullLine,
-                    index === currentLineIdx && styles.lyricsFullLineActive
-                  ]}>
-                    {item.text}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              showsVerticalScrollIndicator={false}
-            />
-          ) : (
-            <Text style={{ color: '#666', fontSize: 16 }}>暂无歌词</Text>
-          )}
         </View>
-      ) : (
-        <Animated.View style={{ flex: 1, alignItems: 'center', transform: [{ translateY: panY }] }}>
-          {/* 专辑封面 */}
-          <View style={styles.coverWrap}>
-            <Animated.Image
-              source={{ uri: song.cover || 'https://via.placeholder.com/300' }}
-              style={[styles.cover, { transform: [{ rotate: spin }] }]}
-            />
-          </View>
 
-          {/* 歌曲信息 */}
-          <View style={styles.infoWrap}>
-            <Text style={styles.title}>{song.name}</Text>
-            <Text style={styles.artist}>{song.artist}</Text>
-          </View>
-
-          {/* 歌词 */}
-          {lyricLines.length > 0 && (
-            <FlatList
-              ref={flatListRef}
-              data={lyricLines}
-              style={styles.lyricsList}
-              renderItem={({ item, index }) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => seekTo(item.time)}
-                >
-                  <Text style={[
-                    styles.lyricLine,
-                    index === currentLineIdx && styles.lyricLineActive
-                  ]}>
-                    {item.text}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              showsVerticalScrollIndicator={false}
-            />
-          )}
-
-          {/* 进度条 */}
-          <View style={styles.progressWrap}>
-            <Slider
-              style={{ width: width - 48 }}
-              minimumValue={0}
-              maximumValue={Math.max(duration, 1)}
-              value={currentTime}
-              onSlidingComplete={seekTo}
-              minimumTrackTintColor="#e74c3c"
-              maximumTrackTintColor="#444"
-              thumbTintColor="#e74c3c"
-            />
-            <View style={styles.timeRow}>
-              <Text style={styles.time}>{formatTime(currentTime)}</Text>
-              <Text style={styles.time}>{formatTime(duration)}</Text>
-            </View>
-          </View>
-
-          {/* 控制按钮 */}
-          <View style={styles.controls}>
-            <TouchableOpacity onPress={handlePrev}>
-              <Ionicons name="play-skip-back" size={32} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={togglePlay} style={styles.playBtn}>
-              <Ionicons
-                name={isPlaying ? 'pause-circle' : 'play-circle'}
-                size={64}
-                color="#e74c3c"
+        {showLyrics ? (
+          /* 全屏歌词视图 */
+          <View style={styles.lyricsFullWrap}>
+            {lyricLines.length > 0 ? (
+              <FlatList
+                ref={lyricsFlatListRef}
+                data={lyricLines}
+                style={styles.lyricsFullList}
+                contentContainerStyle={styles.lyricsFullContent}
+                renderItem={({ item, index }) => (
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => seekTo(item.time)}
+                    style={{ paddingVertical: 4 }}
+                  >
+                    <Text style={[
+                      styles.lyricsFullLine,
+                      index === currentLineIdx && styles.lyricsFullLineActive
+                    ]}>
+                      {item.text}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                showsVerticalScrollIndicator={false}
               />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleNext}>
-              <Ionicons name="play-skip-forward" size={32} color="#fff" />
-            </TouchableOpacity>
+            ) : (
+              <Text style={{ color: '#666', fontSize: 16 }}>暂无歌词</Text>
+            )}
           </View>
+        ) : (
+          <>
+            {/* 唱片封面 */}
+            <View style={styles.coverWrap}>
+              <Animated.Image
+                source={{ uri: song.cover || 'https://via.placeholder.com/300' }}
+                style={[styles.cover, { transform: [{ rotate: spin }] }]}
+              />
+              {/* 唱片中心标签 */}
+              <View style={styles.vinylCenter} />
+            </View>
 
-          {/* 操作按钮行 */}
-          <View style={styles.actionRow}>
-            <TouchableOpacity onPress={cyclePlayMode} style={styles.actionBtn}>
-              <MaterialCommunityIcons name={MODE_ICONS[playMode] as any} size={24} color="#e74c3c" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={toggleFavorite} style={styles.actionBtn}>
-              <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={24} color={isFav ? '#e74c3c' : '#fff'} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleAddToPlaylist} style={styles.actionBtn}>
-              <Ionicons name="add-circle-outline" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleDownload} style={styles.actionBtn}>
-              <Ionicons name="download-outline" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      )}
+            {/* 歌曲信息 */}
+            <View style={styles.infoWrap}>
+              <Text style={styles.title}>{song.name}</Text>
+              <Text style={styles.artist}>{song.artist}</Text>
+            </View>
+
+            {/* 歌词 */}
+            {lyricLines.length > 0 && (
+              <FlatList
+                ref={flatListRef}
+                data={lyricLines}
+                style={styles.lyricsList}
+                renderItem={({ item, index }) => (
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => seekTo(item.time)}
+                  >
+                    <Text style={[
+                      styles.lyricLine,
+                      index === currentLineIdx && styles.lyricLineActive
+                    ]}>
+                      {item.text}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                showsVerticalScrollIndicator={false}
+              />
+            )}
+
+            {/* 进度条 */}
+            <View style={styles.progressWrap}>
+              <Slider
+                style={{ width: width - 48 }}
+                minimumValue={0}
+                maximumValue={Math.max(duration, 1)}
+                value={currentTime}
+                onSlidingComplete={seekTo}
+                minimumTrackTintColor="#e74c3c"
+                maximumTrackTintColor="#444"
+                thumbTintColor="#e74c3c"
+              />
+              <View style={styles.timeRow}>
+                <Text style={styles.time}>{formatTime(currentTime)}</Text>
+                <Text style={styles.time}>{formatTime(duration)}</Text>
+              </View>
+            </View>
+
+            {/* 控制按钮 */}
+            <View style={styles.controls}>
+              <TouchableOpacity onPress={handlePrev}>
+                <Ionicons name="play-skip-back" size={32} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={togglePlay} style={styles.playBtn}>
+                <Ionicons
+                  name={isPlaying ? 'pause-circle' : 'play-circle'}
+                  size={64}
+                  color="#e74c3c"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleNext}>
+                <Ionicons name="play-skip-forward" size={32} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 操作按钮行 */}
+            <View style={styles.actionRow}>
+              <TouchableOpacity onPress={cyclePlayMode} style={styles.actionBtn}>
+                <MaterialCommunityIcons name={MODE_ICONS[playMode] as any} size={24} color="#e74c3c" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={toggleFavorite} style={styles.actionBtn}>
+                <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={24} color={isFav ? '#e74c3c' : '#fff'} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleAddToPlaylist} style={styles.actionBtn}>
+                <Ionicons name="add-circle-outline" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDownload} style={styles.actionBtn}>
+                <Ionicons name="download-outline" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -332,8 +339,43 @@ function formatTime(sec: number): string {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e', alignItems: 'center' },
-  coverWrap: { marginTop: 20 },
-  cover: { width: 240, height: 240, borderRadius: 16 },
+  customHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: 16,
+    height: 44,
+  },
+  coverWrap: {
+    marginTop: 20,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  cover: {
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    borderWidth: 2,
+    borderColor: '#333',
+  },
+  vinylCenter: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e74c3c',
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
   infoWrap: { marginTop: 24, alignItems: 'center' },
   title: { color: '#fff', fontSize: 20, fontWeight: '700' },
   artist: { color: '#888', fontSize: 14, marginTop: 6 },
