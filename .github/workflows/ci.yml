@@ -1,4 +1,4 @@
-# CI — typecheck + build on every push
+# CI — typecheck + lint + build on every push
 
 on:
   push:
@@ -20,6 +20,48 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
-      # Mobile
+      # Mobile typecheck
       - run: npm run core:build
       - run: npx tsc --noEmit --project packages/mobile/tsconfig.json
+
+  # Mobile web export — verify Metro bundle for web
+  mobile-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run core:build
+      - name: Expo export (web)
+        working-directory: packages/mobile
+        run: npx expo export --platform web
+
+  # Mobile Android APK
+  mobile-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci --ignore-scripts
+      - run: npm run core:build
+      - name: Prebuild Android native project
+        working-directory: packages/mobile
+        run: npx expo prebuild --platform android --no-install
+      - name: Build APK (release)
+        working-directory: packages/mobile/android
+        run: ./gradlew assembleRelease
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mplayer-mobile-apk
+          path: packages/mobile/android/app/build/outputs/apk/release/*.apk
