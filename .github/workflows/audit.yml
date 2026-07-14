@@ -1,0 +1,55 @@
+name: Weekly Audit
+
+on:
+  schedule:
+    - cron: 17 6 * * 1
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Run npm audit
+        id: audit
+        continue-on-error: true
+        run: |
+          npm audit --audit-level=moderate 2>&1 | tee audit-output.txt
+
+      - name: Check for critical/high vulnerabilities
+        id: check
+        run: |
+          if grep -q "critical\|high" audit-output.txt 2>/dev/null; then
+            echo "has_vulns=true" >> "$GITHUB_OUTPUT"
+            sed -n '/# npm audit report/,$p' audit-output.txt > report.txt
+          else
+            echo "has_vulns=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create issue for vulnerabilities
+        if: steps.check.outputs.has_vulns == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('report.txt', 'utf8');
+            const date = new Date().toISOString().split('T')[0];
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Security] npm audit found vulnerabilities (${date})`,
+              body: `## Weekly npm audit report\n\n**Date:** ${date}\n\n\`\`\`\n${report.slice(0, 6000)}\n\`\`\`\n\nReview and fix these vulnerabilities at:\n\`npm audit fix\`\n\n---\n\n_This issue was automatically created by the weekly audit workflow._`,
+              labels: ['security'],
+            });
