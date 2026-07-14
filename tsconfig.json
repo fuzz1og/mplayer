@@ -20,6 +20,6 @@
     }
   },
   "include": ["src"],
-  "exclude": ["src/renderer/__tests__"],
+  "exclude": ["src/renderer/__tests__", "packages"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
