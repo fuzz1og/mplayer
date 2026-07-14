@@ -29,7 +29,7 @@
     "@tanstack/react-virtual": "^3.13.24",
     "@types/howler": "^2.2.12",
     "antd": "^5.12.0",
-    "axios": "^1.6.2",
+    "axios": "^1.18.1",
     "dotenv": "^17.4.2",
     "electron-updater": "^6.8.3",
     "fs-extra": "^11.2.0",
