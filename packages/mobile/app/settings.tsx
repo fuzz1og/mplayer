@@ -9,18 +9,22 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { setApiBaseUrl as setCoreApiBaseUrl, musicApi } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
 
 export default function SettingsPage() {
   const storeApiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
+  const storeProxyUrl = useSettingsStore((s) => s.proxyUrl);
   const storePlayMode = useSettingsStore((s) => s.playMode);
   const setApiBaseUrl = useSettingsStore((s) => s.setApiBaseUrl);
+  const setStoreProxyUrl = useSettingsStore((s) => s.setProxyUrl);
   const setPlayMode = useSettingsStore((s) => s.setPlayMode);
 
   const [localUrl, setLocalUrl] = useState(storeApiBaseUrl);
+  const [localProxyUrl, setLocalProxyUrl] = useState(storeProxyUrl);
   const [saved, setSaved] = useState(false);
+  const [proxySaved, setProxySaved] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
 
@@ -36,11 +40,13 @@ export default function SettingsPage() {
     setTesting(true);
     setTestResult(null);
     try {
-      // 先设置 API 地址，再用和实际请求相同的 axios 路径测试
+      // 先用临时 URL 测试, 成功才保存
       const baseUrl = localUrl.trim().replace(/\/+$/, '');
-      setApiBaseUrl(baseUrl);
       setCoreApiBaseUrl(baseUrl);
-      await musicApi.searchSongs('test', 1, 'netease');
+      const ok = await musicApi.healthCheck();
+      if (!ok) throw new Error('health check failed');
+      // 测试通过, 持久化
+      setApiBaseUrl(baseUrl);
       setTestResult('success');
     } catch {
       setTestResult('fail');
@@ -52,6 +58,14 @@ export default function SettingsPage() {
 
   const handlePlayModeChange = (mode: PlayMode) => {
     setPlayMode(mode);
+  };
+
+  const handleSaveProxy = () => {
+    const url = localProxyUrl.trim();
+    setStoreProxyUrl(url);
+    setCoreProxyUrl(url);
+    setProxySaved(true);
+    setTimeout(() => setProxySaved(false), 1500);
   };
 
   return (
@@ -112,6 +126,39 @@ export default function SettingsPage() {
               />
               <Text style={styles.saveBtnText}>
                 {testing ? '测试中...' : testResult === 'success' ? '连接成功' : testResult === 'fail' ? '连接失败' : '测试连接'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 代理设置 */}
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>代理设置</Text>
+            <Text style={styles.label}>代理地址（可选，留空=直连）</Text>
+            <TextInput
+              style={styles.input}
+              value={localProxyUrl}
+              onChangeText={setLocalProxyUrl}
+              placeholder="http://127.0.0.1:8080"
+              placeholderTextColor="#555"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <TouchableOpacity
+              style={[styles.saveBtn, proxySaved && styles.saveBtnSaved]}
+              onPress={handleSaveProxy}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={proxySaved ? 'checkmark-circle' : 'save-outline'}
+                size={18}
+                color="#fff"
+                style={styles.btnIcon}
+              />
+              <Text style={styles.saveBtnText}>
+                {proxySaved ? '已保存' : '保存代理'}
               </Text>
             </TouchableOpacity>
           </View>

@@ -5,8 +5,25 @@ import { cacheManager } from './memoryCacheManager.js';
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 
 let API_BASE_URL = 'http://localhost:3000';
+let PROXY_URL = '';
 export function setApiBaseUrl(url: string): void { API_BASE_URL = url; }
 export function getApiBaseUrl(): string { return API_BASE_URL; }
+export function setProxyUrl(url: string): void {
+  PROXY_URL = url;
+  if (url) {
+    try {
+      const parsed = new URL(url);
+      apiClient.defaults.proxy = {
+        host: parsed.hostname,
+        port: parseInt(parsed.port) || (parsed.protocol === 'https:' ? 443 : 80),
+        protocol: parsed.protocol.replace(':', '') as 'http' | 'https',
+      };
+    } catch { apiClient.defaults.proxy = false; }
+  } else {
+    apiClient.defaults.proxy = false;
+  }
+}
+export function getProxyUrl(): string { return PROXY_URL; }
 
 // 歌手头像缓存，供分类 tab 爬取时补图
 const artistPicCache = new Map<string, string>();
@@ -30,6 +47,7 @@ const apiClient = axios.create({
     'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
     'x-requested-with': 'XMLHttpRequest'
   },
+  proxy: false,
   timeout: 30000
 });
 
@@ -349,7 +367,7 @@ export const musicApi = {
           signal: signal as any,
         });
 
-        let finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || fullUrl;
+        const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || fullUrl;
 
         if (finalUrl.startsWith('data:text/html')) {
           const errorMsg = typeof response.data === 'string' ? response.data : '获取音频失败';
@@ -928,6 +946,21 @@ export const musicApi = {
     } catch (error) {
       console.error('[MusicApi] getPlaylistSongsFromThirdParty 失败:', error);
       return [];
+    }
+  },
+
+  async healthCheck(): Promise<boolean> {
+    try {
+      const params = new URLSearchParams();
+      params.append('input', '稻香');
+      params.append('filter', 'name');
+      params.append('type', 'netease');
+      params.append('page', '1');
+      const response = await apiClient.post('', params, { timeout: 8000 });
+      const data = response.data?.data;
+      return Array.isArray(data) && data.length > 0;
+    } catch {
+      return false;
     }
   }
 };
