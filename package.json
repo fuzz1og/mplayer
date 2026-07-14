@@ -47,7 +47,7 @@
     "music-metadata": "^11.12.3",
     "pinyin-pro": "^3.28.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react-dom": "^19.2.7",
     "react-router-dom": "^7.14.2",
     "zustand": "^4.4.7"
   },
@@ -61,7 +61,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/fs-extra": "^11.0.4",
     "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
+    "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.61.1",
     "@typescript-eslint/parser": "^8.61.1",
     "@vitejs/plugin-react": "^4.2.1",
