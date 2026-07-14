@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, FlatList,
-  PanResponder,
+  View, Text, TouchableOpacity, StyleSheet, Dimensions, FlatList,
+  PanResponder, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -10,7 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
-import { togglePlay, seekTo } from '../services/audioPlayer';
+import { togglePlay, seekTo, playSong } from '../services/audioPlayer';
 import { showAddToPlaylistPicker } from '../utils/playlistUtils';
 import { parseLRC, musicApi, findCurrentLyricIndex } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
@@ -37,6 +37,29 @@ export default function PlayerPage() {
   const [showLyrics, setShowLyrics] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const lyricsFlatListRef = useRef<FlatList>(null);
+  const rotation = useRef(new Animated.Value(0)).current;
+  const panY = useRef(new Animated.Value(0)).current;
+
+  // 唱片旋转动画
+  useEffect(() => {
+    if (isPlaying) {
+      Animated.loop(
+        Animated.timing(rotation, {
+          toValue: 1,
+          duration: 8000,
+          useNativeDriver: true,
+        })
+      ).start();
+    } else {
+      rotation.stopAnimation();
+    }
+    return () => rotation.stopAnimation();
+  }, [isPlaying, rotation]);
+
+  const spin = rotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const MODE_ICONS: Record<PlayMode, string> = {
     '顺序播放': 'repeat',
@@ -111,18 +134,42 @@ export default function PlayerPage() {
     // 下载功能即将推出
   };
 
+  const handlePrev = () => {
+    prev();
+    const newSong = usePlayerStore.getState().currentSong;
+    if (newSong) playSong(newSong);
+  };
+
+  const handleNext = () => {
+    next();
+    const newSong = usePlayerStore.getState().currentSong;
+    if (newSong) playSong(newSong);
+  };
+
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gs) => {
         return (Math.abs(gs.dx) > 30 && Math.abs(gs.dy) < 20) || Math.abs(gs.dy) > 30;
       },
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) panY.setValue(gs.dy);
+      },
       onPanResponderRelease: (_, gs) => {
         if (gs.dy > 80) {
-          router.back();
-        } else if (gs.dx < -50 && Math.abs(gs.dy) < 20) {
-          setShowLyrics(true);
-        } else if (gs.dx > 50 && Math.abs(gs.dy) < 20) {
-          setShowLyrics(false);
+          Animated.timing(panY, {
+            toValue: Dimensions.get('window').height,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => router.back());
+        } else {
+          Animated.spring(panY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+          if (Math.abs(gs.dy) < 20) {
+            if (gs.dx < -50) setShowLyrics(true);
+            else if (gs.dx > 50) setShowLyrics(false);
+          }
         }
       },
     })
@@ -182,12 +229,12 @@ export default function PlayerPage() {
           )}
         </View>
       ) : (
-        <>
+        <Animated.View style={{ flex: 1, alignItems: 'center', transform: [{ translateY: panY }] }}>
           {/* 专辑封面 */}
           <View style={styles.coverWrap}>
-            <Image
+            <Animated.Image
               source={{ uri: song.cover || 'https://via.placeholder.com/300' }}
-              style={styles.cover}
+              style={[styles.cover, { transform: [{ rotate: spin }] }]}
             />
           </View>
 
@@ -195,24 +242,6 @@ export default function PlayerPage() {
           <View style={styles.infoWrap}>
             <Text style={styles.title}>{song.name}</Text>
             <Text style={styles.artist}>{song.artist}</Text>
-          </View>
-
-          {/* 进度条 */}
-          <View style={styles.progressWrap}>
-            <Slider
-              style={{ width: width - 48 }}
-              minimumValue={0}
-              maximumValue={Math.max(duration, 1)}
-              value={currentTime}
-              onSlidingComplete={seekTo}
-              minimumTrackTintColor="#e74c3c"
-              maximumTrackTintColor="#444"
-              thumbTintColor="#e74c3c"
-            />
-            <View style={styles.timeRow}>
-              <Text style={styles.time}>{formatTime(currentTime)}</Text>
-              <Text style={styles.time}>{formatTime(duration)}</Text>
-            </View>
           </View>
 
           {/* 歌词 */}
@@ -238,9 +267,27 @@ export default function PlayerPage() {
             />
           )}
 
+          {/* 进度条 */}
+          <View style={styles.progressWrap}>
+            <Slider
+              style={{ width: width - 48 }}
+              minimumValue={0}
+              maximumValue={Math.max(duration, 1)}
+              value={currentTime}
+              onSlidingComplete={seekTo}
+              minimumTrackTintColor="#e74c3c"
+              maximumTrackTintColor="#444"
+              thumbTintColor="#e74c3c"
+            />
+            <View style={styles.timeRow}>
+              <Text style={styles.time}>{formatTime(currentTime)}</Text>
+              <Text style={styles.time}>{formatTime(duration)}</Text>
+            </View>
+          </View>
+
           {/* 控制按钮 */}
           <View style={styles.controls}>
-            <TouchableOpacity onPress={prev}>
+            <TouchableOpacity onPress={handlePrev}>
               <Ionicons name="play-skip-back" size={32} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity onPress={togglePlay} style={styles.playBtn}>
@@ -250,7 +297,7 @@ export default function PlayerPage() {
                 color="#e74c3c"
               />
             </TouchableOpacity>
-            <TouchableOpacity onPress={next}>
+            <TouchableOpacity onPress={handleNext}>
               <Ionicons name="play-skip-forward" size={32} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -270,7 +317,7 @@ export default function PlayerPage() {
               <Ionicons name="download-outline" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
-        </>
+        </Animated.View>
       )}
     </SafeAreaView>
   );

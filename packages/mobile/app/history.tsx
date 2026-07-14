@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import SongRow from '../components/SongRow';
 import EmptyState from '../components/EmptyState';
+import PlayerBar from '../components/PlayerBar';
 import { useHistoryStore } from '../stores/historyStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
@@ -18,40 +19,44 @@ export default function HistoryPage() {
     if (song) playSong(song);
   };
 
-  if (history.length === 0) {
-    return <EmptyState icon="time-outline" title="还没有播放记录" />;
-  }
-
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar style="light" />
-      <Stack.Screen options={{
-        title: '播放历史',
-        headerStyle: { backgroundColor: '#1a1a2e' },
-        headerTintColor: '#fff',
-        headerShadowVisible: false,
-      }} />
-      <FlatList
-        data={history}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>播放历史</Text>
-            <TouchableOpacity onPress={clearHistory} style={styles.clearBtn}>
-              <Text style={styles.clearText}>清空</Text>
-            </TouchableOpacity>
-          </View>
-        }
-        renderItem={({ item, index }) => (
-          <SongRow
-            song={item}
-            showSource
-            onPress={() => handlePlay(index)}
+    <View style={styles.container}>
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <StatusBar style="light" />
+        <Stack.Screen options={{
+          title: '播放历史',
+          headerShown: true,
+          headerStyle: { backgroundColor: '#1a1a2e' },
+          headerTintColor: '#fff',
+          headerShadowVisible: false,
+        }} />
+        {history.length === 0 ? (
+          <EmptyState icon="time-outline" title="还没有播放记录" />
+        ) : (
+          <FlatList
+            data={history}
+            keyExtractor={(item, index) => `${item.id}-${index}`}
+            ListHeaderComponent={
+              <View style={styles.header}>
+                <Text style={styles.headerTitle}>播放历史</Text>
+                <TouchableOpacity onPress={clearHistory} style={styles.clearBtn}>
+                  <Text style={styles.clearText}>清空</Text>
+                </TouchableOpacity>
+              </View>
+            }
+            renderItem={({ item, index }) => (
+              <SongRow
+                song={item}
+                showSource
+                onPress={() => handlePlay(index)}
+              />
+            )}
+            contentContainerStyle={styles.list}
           />
         )}
-        contentContainerStyle={styles.list}
-      />
-    </SafeAreaView>
+      </SafeAreaView>
+      <PlayerBar />
+    </View>
   );
 }
 
