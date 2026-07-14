@@ -1,7 +1,8 @@
 import { Audio } from 'expo-av';
-import { musicApi } from '@mplayer/core';
+import { musicApi, getApiBaseUrl } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
+import { useHistoryStore } from '../stores/historyStore';
 import { updateNotification, clearNotification } from './notificationService';
 
 let sound: Audio.Sound | null = null;
@@ -20,19 +21,25 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
   try {
     // 解析音频 URL
     let audioUrl = song.url;
+    console.log(`[playSong] start: id=${song.id}, sourceType=${song.sourceType}, url=${audioUrl}, retry=${retryCount}`);
     if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
       // 汽水音乐需特殊处理
       if (song.sourceType === 'soda' && song.id) {
         const sodaUrl = await musicApi.getSodaAudioUrl(song.id);
+        console.log(`[playSong] sodaUrl result: ${sodaUrl}`);
         if (sodaUrl.startsWith('http://') || sodaUrl.startsWith('https://')) {
           audioUrl = sodaUrl;
         }
       }
       if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
+        console.log(`[playSong] calling getAudioUrl with: ${audioUrl}`);
         const resolved = await musicApi.getAudioUrl(audioUrl);
+        console.log(`[playSong] getAudioUrl returned: ${resolved}`);
         audioUrl = resolved || audioUrl;
       }
     }
+
+    console.log(`[playSong] final audioUrl: ${audioUrl}`);
 
     // 卸载旧实例
     if (sound) {
@@ -48,6 +55,7 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
     );
 
     sound = newSound;
+    useHistoryStore.getState().addHistory(song);
     await updateNotification(song, true);
     sound.setOnPlaybackStatusUpdate((status) => {
       if (!status.isLoaded) return;
@@ -62,7 +70,8 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
       }
     });
   } catch (err) {
-    console.error('playSong error:', err);
+    console.error(`[playSong] error for song ${song.id} (${song.name}):`, err);
+    console.log(`[playSong] apiBaseUrl=${getApiBaseUrl()}, song.url=${song.url}`);
     const nextRetryCount = retryCount + 1;
     const queue = usePlayerStore.getState().queue;
     if (nextRetryCount > queue.length) {

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, router, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import SongRow from '../../components/SongRow';
 import type { Song } from '@mplayer/core';
@@ -20,6 +22,9 @@ export default function PlaylistDetailPage() {
   const renamePlaylist = usePlaylistStore((s) => s.renamePlaylist);
 
   const playlist = playlists.find((p) => p.id === id);
+
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
 
   const handleRemoveSong = useCallback(
     (song: Song) => {
@@ -37,17 +42,16 @@ export default function PlaylistDetailPage() {
 
   const handleRename = useCallback(() => {
     if (!playlist) return;
-    Alert.prompt(
-      '重命名歌单',
-      '请输入新的名称',
-      (name) => {
-        const trimmed = name.trim();
-        if (trimmed) renamePlaylist(playlist.id, trimmed);
-      },
-      'plain-text',
-      playlist.name,
-    );
-  }, [playlist, renamePlaylist]);
+    setRenameValue(playlist.name);
+    setRenameModalVisible(true);
+  }, [playlist]);
+
+  const handleRenameConfirm = () => {
+    const trimmed = renameValue.trim();
+    if (!trimmed || !playlist) return;
+    renamePlaylist(playlist.id, trimmed);
+    setRenameModalVisible(false);
+  };
 
   if (!playlist) {
     return (
@@ -94,6 +98,56 @@ export default function PlaylistDetailPage() {
           contentContainerStyle={styles.list}
         />
       )}
+
+      <Modal
+        visible={renameModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenameModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setRenameModalVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalContent}
+            activeOpacity={1}
+            onPress={() => {}}
+          >
+            <Text style={styles.modalTitle}>重命名歌单</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="输入歌单名称"
+              placeholderTextColor="#666"
+              value={renameValue}
+              onChangeText={setRenameValue}
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => {
+                  setRenameValue('');
+                  setRenameModalVisible(false);
+                }}
+              >
+                <Text style={styles.cancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.confirmBtn,
+                  !renameValue.trim() && { opacity: 0.4 },
+                ]}
+                onPress={handleRenameConfirm}
+                disabled={!renameValue.trim()}
+              >
+                <Text style={styles.confirmText}>确认</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -108,4 +162,54 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   emptyText: { color: '#888', fontSize: 16, marginTop: 12 },
+
+  // modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#16213e',
+    borderRadius: 14,
+    padding: 24,
+    width: '80%',
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalInput: {
+    backgroundColor: '#2a2a4a',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    color: '#fff',
+    fontSize: 15,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    marginTop: 20,
+    gap: 12,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#2a2a4a',
+    alignItems: 'center',
+  },
+  cancelText: { color: '#888', fontSize: 15 },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#e74c3c',
+    alignItems: 'center',
+  },
+  confirmText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

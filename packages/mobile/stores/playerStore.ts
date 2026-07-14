@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Song } from '@mplayer/core';
+import { useSettingsStore } from './settingsStore';
 
 interface PlayerState {
   currentSong: Song | null;
@@ -27,13 +28,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentTime: 0,
   duration: 0,
 
-  play: (song) => set({ currentSong: song, isPlaying: true }),
+  play: (song) => set({ currentSong: song, isPlaying: true, currentTime: 0 }),
   pause: () => set({ isPlaying: false }),
   resume: () => set({ isPlaying: true }),
 
   next: () => {
     const { queue, currentIndex } = get();
     if (queue.length === 0 || currentIndex < 0) return;
+    const playMode = useSettingsStore.getState().playMode;
+
+    if (playMode === '单曲循环') {
+      // 重复同一首
+      set({ currentTime: 0, isPlaying: true });
+      return;
+    }
+
+    if (playMode === '随机播放') {
+      const idx = Math.floor(Math.random() * queue.length);
+      set({ currentSong: queue[idx], currentIndex: idx, isPlaying: true, currentTime: 0 });
+      return;
+    }
+
+    // 顺序播放 / 列表循环
     const nextIdx = (currentIndex + 1) % queue.length;
     set({ currentSong: queue[nextIdx], currentIndex: nextIdx, isPlaying: true, currentTime: 0 });
   },

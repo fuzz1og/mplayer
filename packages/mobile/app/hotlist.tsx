@@ -11,6 +11,8 @@ import { musicApi } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
 import LoadingState from '../components/LoadingState';
 import SongRow from '../components/SongRow';
+import { playSong } from '../services/audioPlayer';
+import { usePlayerStore } from '../stores/playerStore';
 
 interface HotlistSong {
   id: string;
@@ -105,7 +107,25 @@ export default function HotlistPage() {
         <FlatList
           data={songs}
           keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => <SongRow song={item} rank={index + 1} />}
+          renderItem={({ item, index }) => (
+            <SongRow
+              song={item}
+              rank={index + 1}
+              onPress={async (song) => {
+                // 热榜数据不含 url, 搜索补齐
+                let url = song.url;
+                if (!url) {
+                  try {
+                    const results = await musicApi.searchSongs(song.name, 1, song.sourceType);
+                    url = results[0]?.url || '';
+                  } catch {}
+                }
+                const s = { ...song, url };
+                usePlayerStore.getState().setQueue([s], 0);
+                playSong(s);
+              }}
+            />
+          )}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

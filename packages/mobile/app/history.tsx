@@ -1,6 +1,7 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
 import SongRow from '../components/SongRow';
 import EmptyState from '../components/EmptyState';
 import { useHistoryStore } from '../stores/historyStore';
@@ -22,23 +23,25 @@ export default function HistoryPage() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar style="light" />
       <Stack.Screen options={{
         title: '播放历史',
         headerStyle: { backgroundColor: '#1a1a2e' },
         headerTintColor: '#fff',
         headerShadowVisible: false,
       }} />
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>播放历史</Text>
-        <TouchableOpacity onPress={clearHistory} style={styles.clearBtn}>
-          <Ionicons name="trash-outline" size={18} color="#e74c3c" />
-          <Text style={styles.clearText}>清空</Text>
-        </TouchableOpacity>
-      </View>
       <FlatList
         data={history}
         keyExtractor={(item, index) => `${item.id}-${index}`}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>播放历史</Text>
+            <TouchableOpacity onPress={clearHistory} style={styles.clearBtn}>
+              <Text style={styles.clearText}>清空</Text>
+            </TouchableOpacity>
+          </View>
+        }
         renderItem={({ item, index }) => (
           <SongRow
             song={item}
@@ -48,7 +51,7 @@ export default function HistoryPage() {
         )}
         contentContainerStyle={styles.list}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

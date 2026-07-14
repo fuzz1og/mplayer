@@ -17,10 +17,10 @@ export default function ArtistDetailPage() {
     if (!id) return;
     let cancelled = false;
     (async () => {
-      const r = await musicApi.getNeteaseArtists(1001, 0, 50);
+      const results = await musicApi.searchNeteaseArtists(id, 1);
       if (cancelled) return;
-      const a = (r.artists || []).find((x: any) => String(x.id) === id);
-      setArtist(a || { id, name: '未知歌手' });
+      const a = results[0] || null;
+      if (a) setArtist({ ...a, id: a.id });
       if (a?.name) {
         const s = await musicApi.searchSongs(a.name, 1, 'netease');
         if (!cancelled) setSongs(s);

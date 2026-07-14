@@ -1,14 +1,21 @@
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import {
+  View, Text, Image, TouchableOpacity, StyleSheet,
+  Modal, FlatList,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { usePlayerStore } from '../stores/playerStore';
-import { togglePlay } from '../services/audioPlayer';
+import { togglePlay, playSong } from '../services/audioPlayer';
 
 export default function PlayerBar() {
   const currentSong = usePlayerStore(s => s.currentSong);
   const isPlaying = usePlayerStore(s => s.isPlaying);
+  const queue = usePlayerStore(s => s.queue);
   const next = usePlayerStore(s => s.next);
   const prev = usePlayerStore(s => s.prev);
+  const setQueue = usePlayerStore(s => s.setQueue);
+  const [showQueue, setShowQueue] = useState(false);
 
   return (
     <TouchableOpacity
@@ -64,7 +71,7 @@ export default function PlayerBar() {
           <TouchableOpacity
             onPress={(e) => {
               e.stopPropagation();
-              router.push('/player');
+              setShowQueue(true);
             }}
             style={styles.btn}
           >
@@ -72,6 +79,50 @@ export default function PlayerBar() {
           </TouchableOpacity>
         </View>
       )}
+      {/* 队列弹窗 */}
+      <Modal
+        visible={showQueue}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowQueue(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>播放队列 ({queue.length})</Text>
+              <TouchableOpacity onPress={() => setShowQueue(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={queue}
+              keyExtractor={(item, i) => `${item.id}-${i}`}
+              renderItem={({ item, index }) => {
+                const isCurrent = currentSong?.id === item.id;
+                return (
+                  <TouchableOpacity
+                    style={styles.queueItem}
+                    onPress={() => {
+                      setQueue(queue, index);
+                      playSong(item);
+                      setShowQueue(false);
+                    }}
+                  >
+                    <View style={styles.queueItemInfo}>
+                      <Text style={[styles.queueItemName, isCurrent && styles.queueItemActive]} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.queueItemArtist}>{item.artist}</Text>
+                    </View>
+                    {isCurrent && <Ionicons name="play" size={16} color="#e74c3c" />}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={<Text style={styles.emptyText}>队列为空</Text>}
+            />
+          </View>
+        </View>
+      </Modal>
     </TouchableOpacity>
   );
 }
@@ -113,4 +164,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btn: { padding: 4 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1a1a2e',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '60%',
+    paddingBottom: 32,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#16213e',
+  },
+  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  queueItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#16213e',
+  },
+  queueItemInfo: { flex: 1, marginRight: 12 },
+  queueItemName: { color: '#fff', fontSize: 15 },
+  queueItemActive: { color: '#e74c3c' },
+  queueItemArtist: { color: '#888', fontSize: 12, marginTop: 2 },
+  emptyText: { color: '#666', textAlign: 'center', marginTop: 40 },
 });

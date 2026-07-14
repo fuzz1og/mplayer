@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { type Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
-import { usePlaylistStore } from '../stores/playlistStore';
+import { showAddToPlaylistPicker } from '../utils/playlistUtils';
 import { playSong } from '../services/audioPlayer';
 
 interface SongRowProps {
@@ -54,33 +54,12 @@ export default function SongRow({
 
   const favorited = defaultFavorited || isFav;
   const [showActions, setShowActions] = useState(false);
+  const [pressingAction, setPressingAction] = useState(false);
 
-  const handleMore = (e: any) => {
-    e.stopPropagation();
+  const handleMore = () => {
     setShowActions(true);
-  };
-
-  const handleAddToPlaylist = () => {
-    setShowActions(false);
-    const { playlists, addSong } = usePlaylistStore.getState();
-    if (playlists.length === 0) {
-      Alert.alert('提示', '暂无歌单，请先在歌单页面创建', [{ text: '好的' }]);
-      return;
-    }
-    Alert.alert(
-      '加入歌单',
-      undefined,
-      [
-        ...playlists.map((p: { id: string; name: string }) => ({
-          text: p.name,
-          onPress: () => {
-            addSong(p.id, song);
-            Alert.alert('已加入', `已加入歌单「${p.name}」`);
-          },
-        })),
-        { text: '取消', style: 'cancel' },
-      ],
-    );
+    setPressingAction(true);
+    setTimeout(() => setPressingAction(false), 100);
   };
 
   const handleDownload = () => {
@@ -94,12 +73,14 @@ export default function SongRow({
   };
 
   const MORE_ACTIONS = [
-    { key: 'playlist', icon: 'list-outline', label: '加入歌单', onPress: handleAddToPlaylist },
+    { key: 'playlist', icon: 'list-outline', label: '加入歌单', onPress: () => showAddToPlaylistPicker(song) },
     { key: 'download', icon: 'download-outline', label: '下载', onPress: handleDownload },
     { key: 'artist', icon: 'person-outline', label: '搜索歌手', onPress: handleSearchArtist },
   ];
 
   const handlePress = () => {
+    if (pressingAction) return;
+    console.log(`[SongRow] handlePress: id=${song.id}, name=${song.name}, url=${song.url}, sourceType=${song.sourceType}`);
     if (onPress) {
       onPress(song);
     } else {
@@ -108,8 +89,9 @@ export default function SongRow({
     }
   };
 
-  const handleFavorite = (e: any) => {
-    e.stopPropagation();
+  const handleFavorite = () => {
+    setPressingAction(true);
+    setTimeout(() => setPressingAction(false), 100);
     if (favorited) {
       removeFavorite(song.id);
     } else {

@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { musicApi } from '@mplayer/core';
-import type { SourceKey, DiscoverPlaylist } from '@mplayer/core';
+import type { Song, SourceKey, DiscoverPlaylist } from '@mplayer/core';
 import LoadingState from './LoadingState';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
 import { usePlayerStore } from '../stores/playerStore';
@@ -59,13 +59,13 @@ export default function DiscoverTabs() {
         showsHorizontalScrollIndicator={false}
       >
         <View style={{ width: SCREEN_WIDTH }}>
-          <HotlistContent />
+          {activeIndex === 0 && <HotlistContent />}
         </View>
         <View style={{ width: SCREEN_WIDTH }}>
-          <PlaylistContent />
+          {activeIndex >= 1 && <PlaylistContent />}
         </View>
         <View style={{ width: SCREEN_WIDTH }}>
-          <ArtistContent />
+          {activeIndex >= 2 && <ArtistContent />}
         </View>
       </ScrollView>
     </View>
@@ -108,18 +108,23 @@ function HotlistContent() {
 }
 
 function SectionCard({ title, songs, routeKey, sourceType }: { title: string; songs: HotlistItem[]; routeKey: string; sourceType: SourceKey }) {
-  const playSong = useCallback((song: HotlistItem) => {
-    const s = {
-      id: song.id,
-      name: song.name,
-      artist: song.artists,
-      album: song.album,
-      cover: song.cover,
-      url: '',
-      lrc: '',
-      duration: 0,
-      sourceType,
-    };
+  const playSong = useCallback(async (item: HotlistItem) => {
+    let s: Song;
+    try {
+      // 热榜数据不含 url, 先搜索获取完整 Song
+      const results = await musicApi.searchSongs(item.name, 1, sourceType);
+      s = results[0] || {
+        id: item.id, name: item.name, artist: item.artists,
+        album: item.album, cover: item.cover, url: '',
+        lrc: '', duration: 0, sourceType,
+      };
+    } catch {
+      s = {
+        id: item.id, name: item.name, artist: item.artists,
+        album: item.album, cover: item.cover, url: '',
+        lrc: '', duration: 0, sourceType,
+      };
+    }
     usePlayerStore.getState().setQueue([s], 0);
     playAudio(s);
   }, [sourceType]);

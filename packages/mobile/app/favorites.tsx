@@ -1,5 +1,7 @@
-import { View, FlatList, StyleSheet } from 'react-native';
+import { FlatList, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import SongRow from '../components/SongRow';
 import EmptyState from '../components/EmptyState';
 import { useFavoriteStore } from '../stores/favoriteStore';
@@ -21,7 +23,8 @@ export default function FavoritesPage() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar style="light" />
       <Stack.Screen options={{
         title: '我的收藏',
         headerStyle: { backgroundColor: '#1a1a2e' },
@@ -41,7 +44,7 @@ export default function FavoritesPage() {
         )}
         contentContainerStyle={styles.list}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

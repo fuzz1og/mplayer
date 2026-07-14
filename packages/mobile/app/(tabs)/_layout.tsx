@@ -1,24 +1,33 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, LayoutChangeEvent } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
 
-const TAB_HEIGHT = 56;
+const TAB_HEIGHT = 80;
 
 function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) {
   const pathname = usePathname();
   const isSearch = pathname === '/search';
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const heightAnim = useRef(new Animated.Value(0)).current;
+  const [contentHeight, setContentHeight] = useState(0);
 
   useEffect(() => {
-    Animated.timing(slideAnim, {
-      toValue: isSearch ? 1 : 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: isSearch ? 1 : 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(heightAnim, {
+        toValue: isSearch ? 1 : 0,
+        duration: 200,
+        useNativeDriver: false,
+      }),
+    ]).start();
   }, [isSearch]);
 
   const translateY = slideAnim.interpolate({
@@ -26,10 +35,20 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
     outputRange: [0, TAB_HEIGHT],
   });
 
+  const containerHeight = heightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [contentHeight || 150, 0],
+  });
+
+  const onLayout = (e: LayoutChangeEvent) => {
+    const h = e.nativeEvent.layout.height;
+    if (h > 0 && h !== contentHeight) setContentHeight(h);
+  };
+
   return (
-    <View>
-      <PlayerBar />
-      <Animated.View style={{ transform: [{ translateY }] }}>
+    <Animated.View style={{ overflow: 'hidden', height: containerHeight }}>
+      <Animated.View style={{ transform: [{ translateY }] }} onLayout={onLayout}>
+        <PlayerBar />
         <View style={tabBarStyles.container}>
           {state.routes.map((route: any, i: number) => {
             // 搜索 tab 不显示 tab 按钮
@@ -53,7 +72,7 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
           })}
         </View>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 

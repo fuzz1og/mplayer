@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { setupNotificationChannel } from '../services/notificationService';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 
 export default function RootLayout() {
@@ -27,6 +27,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (apiBaseUrl) {
       setCoreApiBaseUrl(apiBaseUrl);
+      console.log(`[RootLayout] synced apiBaseUrl: ${getApiBaseUrl()}`);
     }
   }, [apiBaseUrl]);
 

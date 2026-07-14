@@ -4,9 +4,12 @@ import { cacheManager } from './memoryCacheManager.js';
 
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 
-let API_BASE_URL = 'http://localhost:3000';
+let API_BASE_URL = 'http://localhost:3000/';
 let PROXY_URL = '';
-export function setApiBaseUrl(url: string): void { API_BASE_URL = url; }
+export function setApiBaseUrl(url: string): void {
+  API_BASE_URL = url.endsWith('/') ? url : url + '/';
+  apiClient.defaults.baseURL = API_BASE_URL;
+}
 export function getApiBaseUrl(): string { return API_BASE_URL; }
 export function setProxyUrl(url: string): void {
   PROXY_URL = url;

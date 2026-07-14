@@ -51,7 +51,7 @@ export default function DiscoverPlaylistDetailPage() {
           <View style={styles.header}>
             <Image source={{ uri: playlist.coverImgUrl }} style={styles.cover} />
             <Text style={styles.name}>{playlist.name}</Text>
-            <Text style={styles.creator}>{playlist.creator.nickname}</Text>
+            <Text style={styles.creator}>{playlist.creator?.nickname ?? '未知'}</Text>
             <View style={styles.metaRow}>
               <Text style={styles.meta}>播放: {(playlist.playCount / 10000).toFixed(0)}万</Text>
               <Text style={styles.meta}>歌曲: {playlist.trackCount}首</Text>
