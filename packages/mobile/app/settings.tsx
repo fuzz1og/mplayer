@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { setApiBaseUrl as setCoreApiBaseUrl } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, musicApi } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
 
@@ -36,12 +36,12 @@ export default function SettingsPage() {
     setTesting(true);
     setTestResult(null);
     try {
+      // 先设置 API 地址，再用和实际请求相同的 axios 路径测试
       const baseUrl = localUrl.trim().replace(/\/+$/, '');
-      const response = await fetch(`${baseUrl}/search?input=test&limit=1`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000),
-      });
-      setTestResult(response.ok ? 'success' : 'fail');
+      setApiBaseUrl(baseUrl);
+      setCoreApiBaseUrl(baseUrl);
+      await musicApi.searchSongs('test', 1, 'netease');
+      setTestResult('success');
     } catch {
       setTestResult('fail');
     } finally {

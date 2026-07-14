@@ -19,7 +19,6 @@ export async function setupNotificationChannel(): Promise<void> {
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
       name: '音乐播放',
       importance: Notifications.AndroidImportance.HIGH,
-      vibration: false,
       sound: null,
     });
   }
