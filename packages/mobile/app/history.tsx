@@ -1,10 +1,11 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import SongRow from '../../components/SongRow';
-import EmptyState from '../../components/EmptyState';
-import { useHistoryStore } from '../../stores/historyStore';
-import { usePlayerStore } from '../../stores/playerStore';
-import { playSong } from '../../services/audioPlayer';
+import SongRow from '../components/SongRow';
+import EmptyState from '../components/EmptyState';
+import { useHistoryStore } from '../stores/historyStore';
+import { usePlayerStore } from '../stores/playerStore';
+import { playSong } from '../services/audioPlayer';
 
 export default function HistoryPage() {
   const { history, clearHistory } = useHistoryStore();
@@ -22,6 +23,12 @@ export default function HistoryPage() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{
+        title: '播放历史',
+        headerStyle: { backgroundColor: '#1a1a2e' },
+        headerTintColor: '#fff',
+        headerShadowVisible: false,
+      }} />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>播放历史</Text>
         <TouchableOpacity onPress={clearHistory} style={styles.clearBtn}>
@@ -70,5 +77,5 @@ const styles = StyleSheet.create({
     color: '#e74c3c',
     fontSize: 14,
   },
-  list: { paddingBottom: 100 },
+  list: {},
 });

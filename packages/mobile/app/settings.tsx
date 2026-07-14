@@ -10,8 +10,8 @@ import {
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { setApiBaseUrl as setCoreApiBaseUrl } from '@mplayer/core';
-import { useSettingsStore, PLAY_MODES } from '../../stores/settingsStore';
-import type { PlayMode } from '../../stores/settingsStore';
+import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
+import type { PlayMode } from '../stores/settingsStore';
 
 export default function SettingsPage() {
   const storeApiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
@@ -21,12 +21,33 @@ export default function SettingsPage() {
 
   const [localUrl, setLocalUrl] = useState(storeApiBaseUrl);
   const [saved, setSaved] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
 
   const handleSaveUrl = () => {
     setApiBaseUrl(localUrl.trim());
     setCoreApiBaseUrl(localUrl.trim());
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+  };
+
+  const handleTestConnection = async () => {
+    if (!localUrl.trim()) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const baseUrl = localUrl.trim().replace(/\/+$/, '');
+      const response = await fetch(`${baseUrl}/search?input=test&limit=1`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000),
+      });
+      setTestResult(response.ok ? 'success' : 'fail');
+    } catch {
+      setTestResult('fail');
+    } finally {
+      setTesting(false);
+      setTimeout(() => setTestResult(null), 3000);
+    }
   };
 
   const handlePlayModeChange = (mode: PlayMode) => {
@@ -74,6 +95,22 @@ export default function SettingsPage() {
               />
               <Text style={styles.saveBtnText}>
                 {saved ? '已保存' : '保存'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.testBtn, testResult === 'success' && styles.testBtnSuccess, testResult === 'fail' && styles.testBtnFail]}
+              onPress={handleTestConnection}
+              disabled={testing || !localUrl.trim()}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={testing ? 'sync-outline' : testResult === 'success' ? 'checkmark-circle' : testResult === 'fail' ? 'close-circle' : 'flash-outline'}
+                size={18}
+                color="#fff"
+                style={styles.btnIcon}
+              />
+              <Text style={styles.saveBtnText}>
+                {testing ? '测试中...' : testResult === 'success' ? '连接成功' : testResult === 'fail' ? '连接失败' : '测试连接'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -190,6 +227,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  testBtn: { backgroundColor: '#2a2a4a', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, marginTop: 8 },
+  testBtnSuccess: { backgroundColor: '#27ae60' },
+  testBtnFail: { backgroundColor: '#c0392b' },
   radioItem: {
     flexDirection: 'row',
     alignItems: 'center',

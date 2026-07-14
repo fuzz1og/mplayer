@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, FlatList,
-  Modal, Alert,
+  Modal, Alert, PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import { usePlayerStore } from '../stores/playerStore';
+import { useFavoriteStore } from '../stores/favoriteStore';
+import { usePlaylistStore } from '../stores/playlistStore';
 import { togglePlay, seekTo } from '../services/audioPlayer';
 import { parseLRC, musicApi, findCurrentLyricIndex } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
+import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
+import type { PlayMode } from '../stores/settingsStore';
 
 const { width } = Dimensions.get('window');
 
@@ -19,8 +23,13 @@ export default function PlayerPage() {
   const currentTime = usePlayerStore(s => s.currentTime);
   const duration = usePlayerStore(s => s.duration);
   const queue = usePlayerStore(s => s.queue);
+  const isFav = useFavoriteStore(s => s.isFavorite(song?.id || ''));
+  const addFavorite = useFavoriteStore(s => s.addFavorite);
+  const removeFavorite = useFavoriteStore(s => s.removeFavorite);
   const next = usePlayerStore(s => s.next);
   const prev = usePlayerStore(s => s.prev);
+  const playMode = useSettingsStore(s => s.playMode);
+  const setPlayMode = useSettingsStore(s => s.setPlayMode);
 
   const [lyricLines, setLyricLines] = useState<LyricLine[]>([]);
   const [currentLineIdx, setCurrentLineIdx] = useState(-1);
@@ -28,6 +37,19 @@ export default function PlayerPage() {
   const [showLyrics, setShowLyrics] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const lyricsFlatListRef = useRef<FlatList>(null);
+
+  const MODE_ICONS: Record<PlayMode, string> = {
+    '顺序播放': 'repeat',
+    '单曲循环': 'repeat-one',
+    '列表循环': 'repeat',
+    '随机播放': 'shuffle',
+  };
+
+  const cyclePlayMode = () => {
+    const idx = PLAY_MODES.indexOf(playMode);
+    const next = PLAY_MODES[(idx + 1) % PLAY_MODES.length];
+    setPlayMode(next);
+  };
 
   useEffect(() => {
     if (!song) router.back();
@@ -79,10 +101,58 @@ export default function PlayerPage() {
     }
   }
 
+  const toggleFavorite = () => {
+    if (!song) return;
+    if (isFav) removeFavorite(song.id);
+    else addFavorite(song);
+  };
+
+  const handleAddToPlaylist = () => {
+    if (!song) return;
+    const { playlists, addSong } = usePlaylistStore.getState();
+    if (playlists.length === 0) {
+      Alert.alert('提示', '暂无歌单，请先在歌单页面创建', [{ text: '好的' }]);
+      return;
+    }
+    Alert.alert(
+      '加入歌单',
+      undefined,
+      [
+        ...playlists.map((p: { id: string; name: string }) => ({
+          text: p.name,
+          onPress: () => {
+            addSong(p.id, song!);
+            Alert.alert('已加入', `已加入歌单「${p.name}」`);
+          },
+        })),
+        { text: '取消', style: 'cancel' },
+      ],
+    );
+  };
+
+  const handleDownload = () => {
+    Alert.alert('提示', '下载功能即将推出');
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gs) => {
+        return Math.abs(gs.dx) > 30 && Math.abs(gs.dy) < 20;
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dx > 50) {
+          setShowLyrics(true);
+        } else if (gs.dx < -50) {
+          setShowLyrics(false);
+        }
+      },
+    })
+  ).current;
+
   if (!song) return null;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...panResponder.panHandlers}>
       <Stack.Screen options={{
         headerShown: true,
         title: '',
@@ -184,6 +254,9 @@ export default function PlayerPage() {
 
           {/* 控制按钮 */}
           <View style={styles.controls}>
+            <TouchableOpacity onPress={cyclePlayMode}>
+              <Ionicons name={MODE_ICONS[playMode] as any} size={24} color="#e74c3c" />
+            </TouchableOpacity>
             <TouchableOpacity onPress={prev}>
               <Ionicons name="play-skip-back" size={32} color="#fff" />
             </TouchableOpacity>
@@ -196,6 +269,19 @@ export default function PlayerPage() {
             </TouchableOpacity>
             <TouchableOpacity onPress={next}>
               <Ionicons name="play-skip-forward" size={32} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* 操作按钮行 */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity onPress={toggleFavorite} style={styles.actionBtn}>
+              <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={24} color={isFav ? '#e74c3c' : '#fff'} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleAddToPlaylist} style={styles.actionBtn}>
+              <Ionicons name="add-circle-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleDownload} style={styles.actionBtn}>
+              <Ionicons name="download-outline" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
         </>
@@ -290,6 +376,14 @@ const styles = StyleSheet.create({
     gap: 40,
   },
   playBtn: { marginHorizontal: 8 },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    gap: 24,
+  },
+  actionBtn: { padding: 8 },
   lyricsList: { height: 120, marginTop: 16, marginHorizontal: 24 },
   lyricLine: { color: '#666', fontSize: 14, textAlign: 'center', marginVertical: 4 },
   lyricLineActive: { color: '#e74c3c', fontSize: 15, fontWeight: '600' },

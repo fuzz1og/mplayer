@@ -23,6 +23,9 @@ export default function RootLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="player" options={{ presentation: 'modal' }} />
       <Stack.Screen name="hotlist" />
+      <Stack.Screen name="settings" />
+      <Stack.Screen name="favorites" />
+      <Stack.Screen name="history" />
     </Stack>
   );
 }

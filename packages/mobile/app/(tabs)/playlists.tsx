@@ -11,9 +11,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import EmptyState from '../../components/EmptyState';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import type { Playlist } from '../../stores/playlistStore';
+
+const BUILT_IN = [
+  { key: 'favorites', icon: 'heart' as const, label: '收藏', desc: '我喜欢的歌曲' },
+  { key: 'history', icon: 'time-outline' as const, label: '播放历史', desc: '最近播放的歌曲' },
+];
 
 function formatDate(ts: number): string {
   const d = new Date(ts);
@@ -77,16 +81,38 @@ export default function PlaylistsPage() {
         </TouchableOpacity>
       </View>
 
-      {playlists.length === 0 ? (
-        <EmptyState icon="list-outline" title="还没有歌单" subtitle="点击右上角 + 创建歌单" />
-      ) : (
-        <FlatList
-          data={playlists}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-        />
-      )}
+      <FlatList
+        data={playlists}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={styles.list}
+        ListHeaderComponent={() => (
+          <>
+            {BUILT_IN.map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                style={styles.row}
+                activeOpacity={0.6}
+                onPress={() => router.push(item.key === 'favorites' ? '/favorites' : '/history')}
+              >
+                <View style={[styles.iconWrap, { backgroundColor: '#2a2a4a' }]}>
+                  <Ionicons name={item.icon} size={24} color="#e74c3c" />
+                </View>
+                <View style={styles.rowInfo}>
+                  <Text style={styles.rowName}>{item.label}</Text>
+                  <Text style={styles.rowMeta}>{item.desc}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#555" />
+              </TouchableOpacity>
+            ))}
+            {playlists.length > 0 && (
+              <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+                <Text style={{ color: '#888', fontSize: 13 }}>我的歌单</Text>
+              </View>
+            )}
+          </>
+        )}
+      />
 
       <Modal
         visible={modalVisible}

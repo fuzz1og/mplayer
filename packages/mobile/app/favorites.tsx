@@ -1,9 +1,10 @@
 import { View, FlatList, StyleSheet } from 'react-native';
-import SongRow from '../../components/SongRow';
-import EmptyState from '../../components/EmptyState';
-import { useFavoriteStore } from '../../stores/favoriteStore';
-import { usePlayerStore } from '../../stores/playerStore';
-import { playSong } from '../../services/audioPlayer';
+import { Stack } from 'expo-router';
+import SongRow from '../components/SongRow';
+import EmptyState from '../components/EmptyState';
+import { useFavoriteStore } from '../stores/favoriteStore';
+import { usePlayerStore } from '../stores/playerStore';
+import { playSong } from '../services/audioPlayer';
 
 export default function FavoritesPage() {
   const { favorites } = useFavoriteStore();
@@ -21,6 +22,12 @@ export default function FavoritesPage() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{
+        title: '我的收藏',
+        headerStyle: { backgroundColor: '#1a1a2e' },
+        headerTintColor: '#fff',
+        headerShadowVisible: false,
+      }} />
       <FlatList
         data={favorites}
         keyExtractor={(item) => item.id}
@@ -40,5 +47,5 @@ export default function FavoritesPage() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
-  list: { paddingBottom: 100 },
+  list: {},
 });
