@@ -52,7 +52,6 @@
     "zustand": "^4.4.7"
   },
   "overrides": {
-    "tar": "^7.5.16",
     "esbuild": "0.25.2"
   },
   "devDependencies": {
