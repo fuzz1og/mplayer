@@ -597,16 +597,20 @@ export const musicApi = {
         });
       }
 
-      // 对 HTML 解析后仍缺图的歌手，单请求补图 (冷门歌手兜底)
-      await Promise.all(artists.map(async (a) => {
-        if (a.picUrl) return;
-        try {
-          const detailRes = await neteaseClient.get(`https://music.163.com/api/artist?id=${a.id}`);
-          const detail = detailRes.data?.artist;
-          a.picUrl = detail?.picUrl || detail?.img1v1Url || '';
-          if (a.picUrl) artistPicCache.set(a.name, a.picUrl);
-        } catch {}
-      }));
+      // 对 HTML 解析后仍缺图的歌手，限制并发补图 (冷门歌手兜底)
+      const CONCURRENCY = 6;
+      const artistsNeedingPic = artists.filter(a => !a.picUrl);
+      for (let i = 0; i < artistsNeedingPic.length; i += CONCURRENCY) {
+        const batch = artistsNeedingPic.slice(i, i + CONCURRENCY);
+        await Promise.all(batch.map(async (a) => {
+          try {
+            const detailRes = await neteaseClient.get(`https://music.163.com/api/artist?id=${a.id}`);
+            const detail = detailRes.data?.artist;
+            a.picUrl = detail?.picUrl || detail?.img1v1Url || '';
+            if (a.picUrl) artistPicCache.set(a.name, a.picUrl);
+          } catch {}
+        }));
+      }
 
       const result = { artists, total: artists.length, more: false };
       cacheManager.setSearchCache(cacheKey, 1, 'netease', result as any);

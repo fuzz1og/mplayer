@@ -16,6 +16,8 @@ const SOURCE_LABELS: Record<SourceOption, string> = {
   local: '本地',
 };
 
+let searchSeq = 0;
+
 interface SearchState {
   query: string;
   results: SongGroup[];
@@ -40,6 +42,7 @@ export const useSearchStore = create<SearchState>((set, get) => ({
 
   search: async (query: string) => {
     if (!query.trim()) return;
+    const seq = ++searchSeq;
     set({ query, loading: true, error: null, results: [], page: 1, hasMore: true });
     try {
       const source = useSourceStore.getState().selectedSource;
@@ -55,25 +58,30 @@ export const useSearchStore = create<SearchState>((set, get) => ({
           songs,
         }];
       }
+      if (searchSeq !== seq) return; // 有更新查询，丢弃此结果
       set({ results, loading: false, hasMore: results.some(g => g.songs.length > 0) });
     } catch (err) {
+      if (searchSeq !== seq) return;
       console.error('搜索失败:', err);
       set({ loading: false, error: '搜索失败，请重试' });
     }
   },
 
   loadMore: async () => {
-    const { loadingMore, hasMore, query, page, results } = get();
-    if (loadingMore || !hasMore || !query.trim()) return;
+    const state = get();
+    if (state.loadingMore || !state.hasMore || !state.query.trim()) return;
     set({ loadingMore: true });
+    const seq = searchSeq;
+    const currentQuery = state.query;
+    const currentPage = state.page;
     try {
-      const nextPage = page + 1;
+      const nextPage = currentPage + 1;
       const source = useSourceStore.getState().selectedSource;
       let newResults: SongGroup[];
       if (source === 'all') {
-        newResults = await musicApi.searchAllSources(query, nextPage);
+        newResults = await musicApi.searchAllSources(currentQuery, nextPage);
       } else {
-        const songs = await musicApi.searchSongs(query, nextPage, source as SourceKey);
+        const songs = await musicApi.searchSongs(currentQuery, nextPage, source as SourceKey);
         newResults = [{
           key: source,
           name: SOURCE_LABELS[source],
@@ -81,20 +89,31 @@ export const useSearchStore = create<SearchState>((set, get) => ({
           songs,
         }];
       }
-      // 合并结果: 追加到对应源的分组 (不做去重, 保留同 ID 歌曲)
-      const merged = results.map(g => {
+      const s = get();
+      if (searchSeq !== seq || s.query !== currentQuery) return; // 查询已重置
+
+      // 合并: 保留现有分组，追加同组，新增不在当前结果里的组
+      const existingKeys = new Set(s.results.map(g => g.key));
+      const merged = s.results.map(g => {
         const same = newResults.find(n => n.key === g.key);
         return same ? { ...g, songs: [...g.songs, ...same.songs] } : g;
       });
+      for (const n of newResults) {
+        if (!existingKeys.has(n.key)) {
+          merged.push(n);
+        }
+      }
       const hasMoreResults = newResults.some(g => g.songs.length > 0);
       set({ results: merged, page: nextPage, loadingMore: false, hasMore: hasMoreResults });
     } catch (err) {
+      if (searchSeq !== seq) return;
       console.error('加载更多失败:', err);
       set({ loadingMore: false });
     }
   },
 
   clear: () => {
+    searchSeq++;
     set({ query: '', results: [], loading: false, error: null, page: 1, hasMore: true, loadingMore: false });
   },
 }));

@@ -44,15 +44,21 @@ export default function PlayerOverlay({ onClose }: Props) {
   const rotation = useRef(new Animated.Value(0)).current;
   const panY = useRef(new Animated.Value(Dimensions.get('window').height)).current;
   const lyricCache = useRef(new Map<string, LyricLine[]>()).current;
+  const onCloseRef = useRef(onClose);
+  const slideAnim = useRef<Animated.CompositeAnimation | null>(null);
+  onCloseRef.current = onClose;
 
   // 滑入动画
   useEffect(() => {
-    Animated.spring(panY, {
+    const anim = Animated.spring(panY, {
       toValue: 0,
       useNativeDriver: true,
       tension: 50,
       friction: 10,
-    }).start();
+    });
+    slideAnim.current = anim;
+    anim.start();
+    return () => anim.stop();
   }, []);
 
   // 唱片旋转动画
@@ -90,7 +96,7 @@ export default function PlayerOverlay({ onClose }: Props) {
   };
 
   useEffect(() => {
-    if (!song) onClose();
+    if (!song) onCloseRef.current();
   }, [song]);
 
   // 加载歌词
@@ -153,7 +159,7 @@ export default function PlayerOverlay({ onClose }: Props) {
       toValue: Dimensions.get('window').height,
       duration: 200,
       useNativeDriver: true,
-    }).start(() => onClose());
+    }).start(() => onCloseRef.current());
   };
 
   const panResponder = useRef(
@@ -170,7 +176,7 @@ export default function PlayerOverlay({ onClose }: Props) {
             toValue: Dimensions.get('window').height,
             duration: 200,
             useNativeDriver: true,
-          }).start(() => onClose());
+          }).start(() => onCloseRef.current());
         } else {
           Animated.spring(panY, {
             toValue: 0,

@@ -1,11 +1,12 @@
 import { Audio } from 'expo-av';
-import { musicApi, getApiBaseUrl } from '@mplayer/core';
+import { musicApi } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { updateNotification, clearNotification } from './notificationService';
 
 let sound: Audio.Sound | null = null;
+let playingPromise: Promise<void> | null = null;
 
 export async function initAudio(): Promise<void> {
   await Audio.setAudioModeAsync({
@@ -18,55 +19,50 @@ export async function initAudio(): Promise<void> {
 }
 
 export async function playSong(song: Song, retryCount = 0): Promise<void> {
-  try {
-    // 解析音频 URL
-    let audioUrl = song.url;
-    console.log(`[playSong] start: id=${song.id}, name=${song.name}, sourceType=${song.sourceType}, url=${audioUrl}, retry=${retryCount}`);
+  // 排队而非并发: 等上一个 playSong 完成
+  while (playingPromise) {
+    try { await playingPromise; } catch { break; }
+  }
 
-    // url 为空时按名字搜索补齐
+  const run = async (): Promise<void> => {
+    let audioUrl = song.url;
+
     if (!audioUrl || (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://'))) {
       if (song.name) {
         const searchResults = await musicApi.searchSongs(song.name, 1, song.sourceType);
         if (searchResults.length > 0) {
           audioUrl = searchResults[0].url || audioUrl;
-          // 用完整搜索结果更新 currentSong (补齐 lrc、cover 等字段)
+          // 只补字段, 不替换 currentSong 的 id
           const store = usePlayerStore.getState();
           if (store.currentIndex >= 0 && store.queue[store.currentIndex]?.id === song.id) {
             const updatedQueue = [...store.queue];
-            updatedQueue[store.currentIndex] = searchResults[0];
-            usePlayerStore.setState({ queue: updatedQueue, currentSong: searchResults[0] });
+            const merged = { ...updatedQueue[store.currentIndex], ...searchResults[0], id: song.id };
+            updatedQueue[store.currentIndex] = merged;
+            usePlayerStore.setState({ queue: updatedQueue, currentSong: merged });
           }
-          console.log(`[playSong] searchSongs resolved url: ${audioUrl}`);
         }
       }
     }
 
-    if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
-      // 汽水音乐需特殊处理
+    if (!audioUrl || (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://'))) {
       if (song.sourceType === 'soda' && song.id) {
         const sodaUrl = await musicApi.getSodaAudioUrl(song.id);
-        console.log(`[playSong] sodaUrl result: ${sodaUrl}`);
-        if (sodaUrl.startsWith('http://') || sodaUrl.startsWith('https://')) {
+        if (sodaUrl?.startsWith('http://') || sodaUrl?.startsWith('https://')) {
           audioUrl = sodaUrl;
         }
       }
-      if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
-        console.log(`[playSong] calling getAudioUrl with: ${audioUrl}`);
+      if (!audioUrl?.startsWith('http://') && !audioUrl?.startsWith('https://')) {
         const resolved = await musicApi.getAudioUrl(audioUrl);
-        console.log(`[playSong] getAudioUrl returned: ${resolved}`);
         audioUrl = resolved || audioUrl;
       }
     }
 
-    console.log(`[playSong] final audioUrl: ${audioUrl}`);
+    if (!audioUrl?.startsWith('http')) throw new Error('no playable URL');
 
-    // 卸载旧实例
     if (sound) {
       await sound.unloadAsync();
       sound = null;
     }
-
-    if (!audioUrl.startsWith('http')) throw new Error('no playable URL');
 
     const { sound: newSound } = await Audio.Sound.createAsync(
       { uri: audioUrl },
@@ -85,22 +81,24 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
       if (status.didJustFinish) {
         usePlayerStore.getState().next();
         const nextSong = usePlayerStore.getState().currentSong;
-        if (nextSong) playSong(nextSong);
+        if (nextSong) run();
       }
     });
+  };
+
+  try {
+    playingPromise = run();
+    await playingPromise;
   } catch (err) {
     console.error(`[playSong] error for song ${song.id} (${song.name}):`, err);
-    console.log(`[playSong] apiBaseUrl=${getApiBaseUrl()}, song.url=${song.url}`);
     const nextRetryCount = retryCount + 1;
     const queue = usePlayerStore.getState().queue;
-    if (nextRetryCount > queue.length) {
-      console.error('playSong: max retries reached, stopping');
-      return;
-    }
-    // 出错自动切下一首
+    if (nextRetryCount >= queue.length) return;
     usePlayerStore.getState().next();
     const nextSong = usePlayerStore.getState().currentSong;
-    if (nextSong) playSong(nextSong, nextRetryCount);
+    if (nextSong) await playSong(nextSong, nextRetryCount);
+  } finally {
+    playingPromise = null;
   }
 }
 

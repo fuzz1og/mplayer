@@ -52,7 +52,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       return;
     }
 
-    // 顺序播放 / 列表循环
+    if (playMode === '顺序播放') {
+      const nextIdx = currentIndex + 1;
+      if (nextIdx >= queue.length) {
+        // 播完停止
+        set({ isPlaying: false, currentTime: 0 });
+        return;
+      }
+      set({ currentSong: queue[nextIdx], currentIndex: nextIdx, isPlaying: true, currentTime: 0 });
+      return;
+    }
+
+    // 列表循环
     const nextIdx = (currentIndex + 1) % queue.length;
     set({ currentSong: queue[nextIdx], currentIndex: nextIdx, isPlaying: true, currentTime: 0 });
   },
@@ -60,6 +71,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   prev: () => {
     const { queue, currentIndex } = get();
     if (queue.length === 0 || currentIndex < 0) return;
+    const playMode = useSettingsStore.getState().playMode;
+
+    if (playMode === '单曲循环') {
+      set({ currentTime: 0, isPlaying: true });
+      return;
+    }
+
+    if (playMode === '随机播放') {
+      const idx = Math.floor(Math.random() * queue.length);
+      set({ currentSong: queue[idx], currentIndex: idx, isPlaying: true, currentTime: 0 });
+      return;
+    }
+
     const prevIdx = (currentIndex - 1 + queue.length) % queue.length;
     set({ currentSong: queue[prevIdx], currentIndex: prevIdx, isPlaying: true, currentTime: 0 });
   },

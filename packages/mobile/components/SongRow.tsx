@@ -16,7 +16,6 @@ interface SongRowProps {
   rank?: number;
   onPress?: (song: Song) => void;
   showSource?: boolean;
-  defaultFavorited?: boolean;
   queueSongs?: Song[];
 }
 
@@ -47,14 +46,13 @@ export default function SongRow({
   rank,
   onPress,
   showSource = false,
-  defaultFavorited = false,
   queueSongs,
 }: SongRowProps) {
   const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
   const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
 
-  const favorited = defaultFavorited || isFav;
+  const favorited = isFav;
   const [showActions, setShowActions] = useState(false);
   const [pressingAction, setPressingAction] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -119,10 +117,13 @@ export default function SongRow({
         <Text style={styles.rank}>{rank}</Text>
       )}
 
-      <Image
-        source={{ uri: song.cover }}
-        style={styles.cover}
-      />
+      {song.cover ? (
+        <Image source={{ uri: song.cover }} style={styles.cover} />
+      ) : (
+        <View style={[styles.cover, styles.coverPlaceholder]}>
+          <Ionicons name="musical-note" size={22} color="#555" />
+        </View>
+      )}
 
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>
@@ -203,6 +204,11 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 6,
     marginRight: 12,
+  },
+  coverPlaceholder: {
+    backgroundColor: '#16213e',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   info: {
     flex: 1,

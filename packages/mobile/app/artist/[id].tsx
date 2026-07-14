@@ -42,18 +42,23 @@ export default function ArtistDetailPage() {
     if (!id) return;
     let cancelled = false;
     (async () => {
-      const artistName = name || id;
-      const [artistResults, songResult] = await Promise.all([
-        musicApi.searchNeteaseArtists(artistName, 1),
-        musicApi.getNeteaseArtistSongs(id as string, 0, 50),
-      ]);
-      if (cancelled) return;
-      setSongs(songResult.songs);
-      songTotalRef.current = songResult.total;
-      setHasMore(songResult.songs.length < songResult.total);
-      const info = artistResults[0] || null;
-      setArtist({ ...info, name: info?.name || artistName, picUrl: info?.picUrl || '' });
-      if (!cancelled) setLoading(false);
+      try {
+        const artistName = name || id;
+        const [artistResults, songResult] = await Promise.all([
+          musicApi.searchNeteaseArtists(artistName, 1),
+          musicApi.getNeteaseArtistSongs(id as string, 0, 50),
+        ]);
+        if (cancelled) return;
+        setSongs(songResult.songs);
+        songTotalRef.current = songResult.total;
+        setHasMore(songResult.songs.length < songResult.total);
+        const info = artistResults[0] || null;
+        setArtist({ ...info, name: info?.name || artistName, picUrl: info?.picUrl || '' });
+      } catch (e: any) {
+        console.error('[ArtistDetail] load error:', e.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
     return () => { cancelled = true; };
   }, [id, name]);
@@ -80,7 +85,7 @@ export default function ArtistDetailPage() {
                 </View>
               )}
               <Text style={styles.name}>{artist?.name || '未知歌手'}</Text>
-              {songs.length > 0 && <Text style={styles.subtitle}>共 {songs.length} 首歌曲</Text>}
+              {songTotalRef.current > 0 && <Text style={styles.subtitle}>共 {songTotalRef.current} 首歌曲</Text>}
             </View>
           )}
           renderItem={({ item }) => <SongRow song={item} showSource queueSongs={songs} />}

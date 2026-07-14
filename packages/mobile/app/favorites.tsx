@@ -40,7 +40,6 @@ export default function FavoritesPage() {
               <SongRow
                 song={item}
                 showSource
-                defaultFavorited
                 onPress={() => handlePlay(index)}
               />
             )}

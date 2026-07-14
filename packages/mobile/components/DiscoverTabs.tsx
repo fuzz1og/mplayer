@@ -60,7 +60,7 @@ export default function DiscoverTabs() {
         showsHorizontalScrollIndicator={false}
       >
         <View style={{ width: SCREEN_WIDTH }}>
-          {activeIndex === 0 && <HotlistContent />}
+          <HotlistContent />
         </View>
         <View style={{ width: SCREEN_WIDTH }}>
           {activeIndex >= 1 && <PlaylistContent />}
@@ -163,6 +163,7 @@ function PlaylistContent() {
   const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const offsetRef = useRef(0);
@@ -191,18 +192,32 @@ function PlaylistContent() {
     let cancelled = false;
     musicApi.getNeteasePlaylists('全部', 'hot', 0, 20)
       .then(r => {
-        console.log('[PlaylistContent] API ok, playlists:', r.playlists.length, 'first:', r.playlists[0]?.name, 'coverField:', r.playlists[0]?.coverImgUrl?.slice(0, 30));
         if (!cancelled) {
           setPlaylists(r.playlists);
           setHasMore(r.more);
         }
       })
-      .catch((e: any) => { console.error('[PlaylistContent] API error:', e.message); })
-      .finally(() => { if (!cancelled) { console.log('[PlaylistContent] done, loading=false'); setLoading(false); } });
+      .catch(() => { if (!cancelled) setLoadingError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
   if (loading) return <LoadingState />;
+  if (loadingError) {
+    return (
+      <FlatList
+        style={styles.tabContent}
+        contentContainerStyle={styles.tabContentInner}
+        data={[]}
+        renderItem={() => null}
+        ListEmptyComponent={
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 }}>
+            <Text style={{ color: '#e74c3c', fontSize: 14 }}>加载失败，下拉重试</Text>
+          </View>
+        }
+      />
+    );
+  }
 
   const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
     <TouchableOpacity
@@ -243,6 +258,7 @@ function ArtistContent() {
   const CARD_COLS = 3;
   const [artists, setArtists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
@@ -268,18 +284,24 @@ function ArtistContent() {
     let cancelled = false;
     musicApi.getNeteaseArtists(0, 0, 30)
       .then(r => {
-        console.log('[ArtistContent] API ok, artists:', r.artists.length, 'first:', r.artists[0]?.name, 'picUrl:', r.artists[0]?.picUrl?.slice(0, 40));
         if (!cancelled) {
           setArtists(r.artists);
           setHasMore(r.more);
         }
       })
-      .catch((e: any) => { console.error('[ArtistContent] API error:', e.message); })
-      .finally(() => { if (!cancelled) { console.log('[ArtistContent] done, loading=false'); setLoading(false); } });
+      .catch(() => { if (!cancelled) setLoadingError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
   if (loading) return <LoadingState />;
+  if (loadingError) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 }}>
+        <Text style={{ color: '#e74c3c', fontSize: 14 }}>加载失败，下拉重试</Text>
+      </View>
+    );
+  }
 
   const renderItem = ({ item: a }: { item: any }) => (
     <TouchableOpacity
