@@ -212,7 +212,7 @@ const SettingsPage: React.FC = () => {
     }, 15000);
     try {
       await ipcRenderer.invoke('update:check');
-    } catch {
+    } catch (_e) {
       // handled by update:status push
     } finally {
       clearTimeout(safetyTimer);
@@ -223,7 +223,7 @@ const SettingsPage: React.FC = () => {
     setUpdateStatus('downloading');
     try {
       await ipcRenderer.invoke('update:download');
-    } catch {
+    } catch (_e) {
       // handled by update:status push
     }
   };

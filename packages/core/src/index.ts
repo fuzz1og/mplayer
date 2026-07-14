@@ -1,0 +1,11 @@
+export * from './types/index.js';
+export { cacheManager } from './api/memoryCacheManager.js';
+export { RateLimiter, beforeRequest, getAntiScrapeHeaders } from './api/antiScrape.js';
+export type { AntiScrapeHeaders } from './api/antiScrape.js';
+export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, setProxyUrl, getProxyUrl, warmUpArtistPicCache } from './api/musicApi.js';
+export { dedupeSongs } from './utils/songDedupe.js';
+export { calculateSimilarity, findBestMatch } from './utils/songMatcher.js';
+export { resolveSongUrls } from './utils/songResolver.js';
+export { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from './utils/lyricsParser.js';
+export type { LyricLine, ParsedLyrics } from './utils/lyricsParser.js';
+export { formatPlayCount } from './utils/format.js';

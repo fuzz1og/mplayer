@@ -87,7 +87,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
       message.success(msg);
       onClose();
       if (onSuccess) onSuccess();
-    } catch {
+    } catch (_error) {
       message.error('添加失败，请重试');
     } finally {
       setAdding(false);
