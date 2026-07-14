@@ -71,7 +71,6 @@ vi.mock('antd', async () => {
 });
 
 import { importSongs, importFromLink } from '@/renderer/services/importService';
-import { musicApi } from '@/main/api/musicApi';
 
 describe('ImportWorkflow Integration', () => {
   const defaultProps = {

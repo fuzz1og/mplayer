@@ -67,24 +67,6 @@ async function disableProxy() {
   await page.waitForTimeout(1000);
 }
 
-async function getUpdateStatus(): Promise<{
-  isChecking: boolean;
-  hasError: boolean;
-  errorMessage: string | null;
-  hasSuccess: boolean;
-}> {
-  const bodyText = await page.textContent('body') || '';
-  const isChecking = bodyText.includes('检查中...');
-  const hasError = bodyText.includes('检查更新失败') || bodyText.includes('超时');
-  const hasSuccess = bodyText.includes('已是最新版本') || bodyText.includes('发现新版本');
-  let errorMessage = null;
-  if (hasError) {
-    const match = bodyText.match(/检查更新失败[，,]([^。]+)/);
-    errorMessage = match ? match[1] : '检查更新失败';
-  }
-  return { isChecking, hasError, errorMessage, hasSuccess };
-}
-
 async function checkUpdate(): Promise<{ isChecking: boolean; hasError: boolean; hasSuccess: boolean }> {
   const checkUpdateBtn = page.getByRole('button', { name: '检查更新' });
   await checkUpdateBtn.click();
