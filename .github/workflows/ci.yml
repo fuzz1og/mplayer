@@ -56,7 +56,7 @@ jobs:
       - run: npm run core:build
       - name: Prebuild Android native project
         working-directory: packages/mobile
-        run: npx expo prebuild --platform android --no-install
+        run: npx expo prebuild --platform android
       - name: Build APK (release)
         working-directory: packages/mobile/android
         run: ./gradlew assembleRelease

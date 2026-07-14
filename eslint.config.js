@@ -4,7 +4,7 @@ const globals = require('globals');
 module.exports = tseslint.config(
   // Global ignores
   {
-    ignores: ['dist/', 'dist-electron/', 'node_modules/', 'src/main/api/musicApi.ts', 'src/main/storage/fileStorage.ts'],
+    ignores: ['dist/', 'dist-electron/', 'node_modules/', 'packages/core/dist/', '.expo/', 'packages/mobile/.expo/', 'src/main/api/musicApi.ts', 'src/main/storage/fileStorage.ts'],
   },
   // Base recommended rules
   ...tseslint.configs.recommended,
@@ -21,7 +21,7 @@ module.exports = tseslint.config(
     },
     rules: {
       'no-console': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-require-imports': 'off',
       'no-case-declarations': 'off',

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 describe('播放流程性能对比', () => {
   // 模拟 IPC 延迟

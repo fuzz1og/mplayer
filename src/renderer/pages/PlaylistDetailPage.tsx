@@ -195,7 +195,7 @@ const PlaylistDetailPage: React.FC = () => {
     if (songs.length === 0) return;
     try {
       await downloadBatch(songs);
-    } catch (error) {
+    } catch (_error) {
       message.error('下载全部失败，请重试');
     }
   };
@@ -206,7 +206,7 @@ const PlaylistDetailPage: React.FC = () => {
     try {
       await downloadBatch(toDownload);
       message.success(`已添加 ${toDownload.length} 首歌曲到下载队列`);
-    } catch (error) {
+    } catch (_error) {
       message.error('批量下载失败');
     }
   };
@@ -228,7 +228,7 @@ const PlaylistDetailPage: React.FC = () => {
           setSelectedIds([]);
           loadData();
           message.success(`已移除 ${count} 首歌曲`);
-        } catch (error) {
+        } catch (_error) {
           message.error('批量移除失败');
         }
       },

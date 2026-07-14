@@ -67,7 +67,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
             message.success(`已添加到歌单`);
             onClose();
             if (onSuccess) onSuccess();
-          } catch (error) {
+          } catch (_error) {
             message.error('添加失败，请重试');
           }
         },
@@ -79,7 +79,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
       await playlistService.addSongToPlaylist(playlistId, song);
       onClose();
       if (onSuccess) onSuccess();
-    } catch (error) {
+    } catch (_error) {
       message.error('添加失败，请重试');
     }
   };
