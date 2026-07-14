@@ -26,6 +26,8 @@ export default function RootLayout() {
       <Stack.Screen name="settings" />
       <Stack.Screen name="favorites" />
       <Stack.Screen name="history" />
+      <Stack.Screen name="discover-playlist/[id]" />
+      <Stack.Screen name="artist/[id]" />
     </Stack>
   );
 }

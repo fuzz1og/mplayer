@@ -59,6 +59,7 @@ export default function SettingsPage() {
       <Stack.Screen
         options={{
           title: '设置',
+          headerShown: true,
           headerStyle: { backgroundColor: '#1a1a2e' },
           headerTintColor: '#fff',
         }}

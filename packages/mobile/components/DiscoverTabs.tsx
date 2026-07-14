@@ -36,14 +36,17 @@ export default function DiscoverTabs() {
 
   return (
     <View style={styles.container}>
-      {/* Tab header */}
+      {/* Bubble tab header */}
       <View style={styles.tabHeader}>
         {TABS.map((t, i) => (
-          <TouchableOpacity key={t.key} onPress={() => onTabPress(i)} style={styles.tabItem}>
+          <TouchableOpacity
+            key={t.key}
+            onPress={() => onTabPress(i)}
+            style={[styles.tabItem, activeIndex === i && styles.tabItemActive]}
+          >
             <Text style={[styles.tabLabel, activeIndex === i && styles.tabLabelActive]}>
               {t.label}
             </Text>
-            {activeIndex === i && <View style={styles.tabIndicator} />}
           </TouchableOpacity>
         ))}
       </View>
@@ -165,24 +168,27 @@ function PlaylistContent() {
   return (
     <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentInner}>
       <View style={styles.grid}>
-        {playlists.map(p => (
-          <TouchableOpacity
-            key={p.id}
-            style={styles.gridCard}
-            activeOpacity={0.7}
-            onPress={() => { const p0 = p; router.push(`/discover-playlist/${p0.id}` as any); }}
-          >
-            {p.coverImgUrl ? (
-              <Image source={{ uri: p.coverImgUrl }} style={styles.gridCover} />
-            ) : (
-              <View style={[styles.gridCover, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-                <Ionicons name="list-outline" size={32} color="#555" />
-              </View>
-            )}
-            <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
-            <Text style={styles.gridMeta}>{p.playCount ? `${(p.playCount / 10000).toFixed(0)}万` : ''}</Text>
-          </TouchableOpacity>
-        ))}
+        {playlists.map(p => {
+          const cardW = (SCREEN_WIDTH - 12 * 2 - 10) / 2;
+          return (
+            <TouchableOpacity
+              key={p.id}
+              style={[styles.gridCard, { width: cardW }]}
+              activeOpacity={0.7}
+              onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
+            >
+              {p.coverImgUrl ? (
+                <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
+              ) : (
+                <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
+                  <Ionicons name="list-outline" size={32} color="#555" />
+                </View>
+              )}
+              <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
+              <Text style={styles.gridMeta}>{p.playCount ? `${(p.playCount / 10000).toFixed(0)}万` : ''}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </ScrollView>
   );
@@ -231,19 +237,33 @@ function ArtistContent() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
+  // Bubble tab header
   tabHeader: {
     flexDirection: 'row',
     backgroundColor: '#1a1a2e',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a4a',
-    height: 44,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
   },
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  tabLabel: { color: '#888', fontSize: 15 },
-  tabLabelActive: { color: '#e74c3c', fontWeight: '600' },
-  tabIndicator: {
-    position: 'absolute', bottom: 0, height: 2, width: 40,
-    backgroundColor: '#e74c3c', borderRadius: 1,
+  tabItem: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#2a2a4a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabItemActive: {
+    backgroundColor: '#e74c3c',
+  },
+  tabLabel: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  tabLabelActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
   tabContent: { flex: 1 },
   tabContentInner: { paddingBottom: 24 },
@@ -286,16 +306,14 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    gap: 10,
   },
   gridCard: {
-    width: (SCREEN_WIDTH - 36) / 2,
-    marginBottom: 16,
-    marginRight: 12,
+    marginBottom: 4,
   },
   gridCover: {
-    width: '100%',
-    height: (SCREEN_WIDTH - 36) / 2,
     borderRadius: 10,
     backgroundColor: '#16213e',
   },
@@ -314,10 +332,11 @@ const styles = StyleSheet.create({
   artistGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingTop: 12,
   },
   artistCard: {
-    width: (SCREEN_WIDTH - 48) / 3,
+    width: (SCREEN_WIDTH - 24) / 3,
     alignItems: 'center',
     marginBottom: 20,
   },
