@@ -16,12 +16,12 @@ export default function TopBar() {
 
   return (
     <View style={styles.container}>
+      {isSearchTab && (
+        <TouchableOpacity onPress={() => router.replace('/')} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={22} color="#ccc" />
+        </TouchableOpacity>
+      )}
       <View style={styles.searchBar}>
-        {isSearchTab && (
-          <TouchableOpacity onPress={() => router.replace('/')} style={{ marginRight: 4 }}>
-            <Ionicons name="arrow-back" size={20} color="#ccc" />
-          </TouchableOpacity>
-        )}
         <Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} />
         <TextInput
           style={styles.input}
@@ -71,5 +71,9 @@ const styles = StyleSheet.create({
   settingsBtn: {
     marginLeft: 12,
     padding: 4,
+  },
+  backBtn: {
+    padding: 4,
+    marginRight: 8,
   },
 });

@@ -1,14 +1,14 @@
+import { useState } from 'react';
 import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
+  View, Text, Image, TouchableOpacity, StyleSheet,
+  Modal, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { type Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
+import { usePlaylistStore } from '../stores/playlistStore';
 import { playSong } from '../services/audioPlayer';
 
 interface SongRowProps {
@@ -53,6 +53,51 @@ export default function SongRow({
   const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
 
   const favorited = defaultFavorited || isFav;
+  const [showActions, setShowActions] = useState(false);
+
+  const handleMore = (e: any) => {
+    e.stopPropagation();
+    setShowActions(true);
+  };
+
+  const handleAddToPlaylist = () => {
+    setShowActions(false);
+    const { playlists, addSong } = usePlaylistStore.getState();
+    if (playlists.length === 0) {
+      Alert.alert('提示', '暂无歌单，请先在歌单页面创建', [{ text: '好的' }]);
+      return;
+    }
+    Alert.alert(
+      '加入歌单',
+      undefined,
+      [
+        ...playlists.map((p: { id: string; name: string }) => ({
+          text: p.name,
+          onPress: () => {
+            addSong(p.id, song);
+            Alert.alert('已加入', `已加入歌单「${p.name}」`);
+          },
+        })),
+        { text: '取消', style: 'cancel' },
+      ],
+    );
+  };
+
+  const handleDownload = () => {
+    setShowActions(false);
+    Alert.alert('提示', '下载功能即将推出');
+  };
+
+  const handleSearchArtist = () => {
+    setShowActions(false);
+    router.push(`/search?q=${encodeURIComponent(song.artist)}`);
+  };
+
+  const MORE_ACTIONS = [
+    { key: 'playlist', icon: 'list-outline', label: '加入歌单', onPress: handleAddToPlaylist },
+    { key: 'download', icon: 'download-outline', label: '下载', onPress: handleDownload },
+    { key: 'artist', icon: 'person-outline', label: '搜索歌手', onPress: handleSearchArtist },
+  ];
 
   const handlePress = () => {
     if (onPress) {
@@ -75,7 +120,8 @@ export default function SongRow({
   const sourceKey = song.sourceType as SourceKey;
 
   return (
-    <TouchableOpacity
+    <>
+      <TouchableOpacity
       style={styles.container}
       onPress={handlePress}
       activeOpacity={0.6}
@@ -117,7 +163,27 @@ export default function SongRow({
           color={favorited ? '#e74c3c' : '#666'}
         />
       </TouchableOpacity>
+      <TouchableOpacity onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Ionicons name="ellipsis-vertical" size={18} color="#666" />
+      </TouchableOpacity>
     </TouchableOpacity>
+
+    <Modal visible={showActions} animationType="slide" transparent onRequestClose={() => setShowActions(false)}>
+      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowActions(false)}>
+        <View style={styles.actionSheet}>
+          <Text style={styles.actionSheetTitle} numberOfLines={1}>{song.name}</Text>
+          {MORE_ACTIONS.map(a => (
+            <TouchableOpacity key={a.key} style={styles.actionItem} onPress={a.onPress}>
+              <Ionicons name={a.icon as any} size={22} color="#fff" />
+              <Text style={styles.actionLabel}>{a.label}</Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity style={styles.actionCancel} onPress={() => setShowActions(false)}>
+            <Text style={styles.cancelText}>取消</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 
@@ -170,5 +236,52 @@ const styles = StyleSheet.create({
   },
   favoriteBtn: {
     padding: 4,
+  },
+  moreBtn: {
+    padding: 4,
+    marginLeft: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  actionSheet: {
+    backgroundColor: '#16213e',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 32,
+  },
+  actionSheetTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  actionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#2a2a4a',
+  },
+  actionLabel: {
+    color: '#fff',
+    fontSize: 16,
+    marginLeft: 12,
+  },
+  actionCancel: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: '#2a2a4a',
+    alignItems: 'center',
+  },
+  cancelText: {
+    color: '#888',
+    fontSize: 16,
   },
 });
