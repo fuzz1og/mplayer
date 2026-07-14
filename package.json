@@ -32,7 +32,7 @@
     "axios": "^1.6.2",
     "dotenv": "^17.4.2",
     "electron-updater": "^6.8.3",
-    "fs-extra": "^11.2.0",
+    "fs-extra": "^11.3.6",
     "howler": "^2.2.4",
     "http-proxy-agent": "^9.0.0",
     "https-proxy-agent": "^9.0.0",
