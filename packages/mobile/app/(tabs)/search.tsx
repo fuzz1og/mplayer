@@ -9,22 +9,33 @@ import {
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSearchStore } from '../../stores/searchStore';
+import { useSourceStore } from '../../stores/sourceStore';
 import SongRow from '../../components/SongRow';
+import LoadMoreFooter from '../../components/LoadMoreFooter';
 
 export default function SearchPage() {
   const params = useLocalSearchParams<{ q: string }>();
   const q = Array.isArray(params.q) ? params.q[0] : params.q;
   const results = useSearchStore((s) => s.results);
   const loading = useSearchStore((s) => s.loading);
+  const loadingMore = useSearchStore((s) => s.loadingMore);
+  const hasMore = useSearchStore((s) => s.hasMore);
   const error = useSearchStore((s) => s.error);
   const search = useSearchStore((s) => s.search);
+  const loadMore = useSearchStore((s) => s.loadMore);
   const query = useSearchStore((s) => s.query);
+  const source = useSourceStore((s) => s.selectedSource);
 
   useEffect(() => {
     if (q && q !== query) {
       search(q);
     }
   }, [q]);
+
+  // 切换源时重新搜索
+  useEffect(() => {
+    if (q) search(q);
+  }, [source]);
 
   return (
     <View style={styles.container}>
@@ -45,11 +56,14 @@ export default function SearchPage() {
                 {group.name}
                 {group.artist ? <Text style={styles.groupArtist}> — {group.artist}</Text> : null}
               </Text>
-              {group.songs.map((song) => (
-                <SongRow key={song.id} song={song} showSource />
+              {group.songs.map((song, i) => (
+                <SongRow key={`${song.id}-${i}`} song={song} showSource queueSongs={group.songs} />
               ))}
             </View>
           )}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={results.length > 0} />}
         />
       ) : (
         <View style={styles.emptyContainer}>

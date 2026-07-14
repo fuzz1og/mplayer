@@ -9,6 +9,7 @@ interface PlayerState {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  showPlayer: boolean;
   // actions
   play: (song: Song) => void;
   pause: () => void;
@@ -18,6 +19,7 @@ interface PlayerState {
   setQueue: (songs: Song[], startIndex?: number) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (dur: number) => void;
+  setShowPlayer: (show: boolean) => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -27,6 +29,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaying: false,
   currentTime: 0,
   duration: 0,
+  showPlayer: false,
 
   play: (song) => set({ currentSong: song, isPlaying: true, currentTime: 0 }),
   pause: () => set({ isPlaying: false }),
@@ -69,4 +72,5 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setCurrentTime: (time) => set({ currentTime: time }),
   setDuration: (dur) => set({ duration: dur }),
+  setShowPlayer: (show) => set({ showPlayer: show }),
 }));

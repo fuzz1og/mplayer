@@ -4,7 +4,6 @@ import {
   Modal, FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong } from '../services/audioPlayer';
 
@@ -15,12 +14,13 @@ export default function PlayerBar() {
   const next = usePlayerStore(s => s.next);
   const prev = usePlayerStore(s => s.prev);
   const setQueue = usePlayerStore(s => s.setQueue);
+  const setShowPlayer = usePlayerStore(s => s.setShowPlayer);
   const [showQueue, setShowQueue] = useState(false);
 
   return (
     <TouchableOpacity
       style={[styles.container, !currentSong && styles.containerEmpty]}
-      onPress={() => currentSong && router.push('/player')}
+      onPress={() => currentSong && setShowPlayer(true)}
       activeOpacity={0.8}
       disabled={!currentSong}
     >

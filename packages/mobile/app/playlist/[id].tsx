@@ -9,10 +9,13 @@ import {
   Modal,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import SongRow from '../../components/SongRow';
+import PlayerBar from '../../components/PlayerBar';
 import type { Song } from '@mplayer/core';
 
 export default function PlaylistDetailPage() {
@@ -56,98 +59,109 @@ export default function PlaylistDetailPage() {
   if (!playlist) {
     return (
       <View style={styles.container}>
-        <Stack.Screen options={{ title: '歌单' }} />
-        <View style={styles.empty}>
-          <Ionicons name="alert-circle-outline" size={48} color="#555" />
-          <Text style={styles.emptyText}>歌单不存在</Text>
-        </View>
+        <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+          <Stack.Screen options={{ title: '歌单', headerShown: true }} />
+          <View style={styles.empty}>
+            <Ionicons name="alert-circle-outline" size={48} color="#555" />
+            <Text style={styles.emptyText}>歌单不存在</Text>
+          </View>
+        </SafeAreaView>
+        <PlayerBar />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: playlist.name,
-          headerRight: () => (
-            <TouchableOpacity onPress={handleRename} style={{ marginRight: 4 }}>
-              <Ionicons name="pencil-outline" size={20} color="#ccc" />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-
-      {playlist.songs.length === 0 ? (
-        <View style={styles.empty}>
-          <Ionicons name="musical-notes-outline" size={64} color="#444" />
-          <Text style={styles.emptyText}>歌单是空的</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={playlist.songs}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              activeOpacity={1}
-              onLongPress={() => handleRemoveSong(item)}
-            >
-              <SongRow song={item} showSource />
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={styles.list}
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <StatusBar style="light" />
+        <Stack.Screen
+          options={{
+            title: playlist.name,
+            headerShown: true,
+            headerStyle: { backgroundColor: '#1a1a2e' },
+            headerTintColor: '#fff',
+            headerShadowVisible: false,
+            headerRight: () => (
+              <TouchableOpacity onPress={handleRename} style={{ marginRight: 4 }}>
+                <Ionicons name="pencil-outline" size={20} color="#ccc" />
+              </TouchableOpacity>
+            ),
+          }}
         />
-      )}
 
-      <Modal
-        visible={renameModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRenameModalVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setRenameModalVisible(false)}
+        {playlist.songs.length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="musical-notes-outline" size={64} color="#444" />
+            <Text style={styles.emptyText}>歌单是空的</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={playlist.songs}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                activeOpacity={1}
+                onLongPress={() => handleRemoveSong(item)}
+              >
+                <SongRow song={item} showSource queueSongs={playlist.songs} />
+              </TouchableOpacity>
+            )}
+            contentContainerStyle={styles.list}
+          />
+        )}
+
+        <Modal
+          visible={renameModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setRenameModalVisible(false)}
         >
           <TouchableOpacity
-            style={styles.modalContent}
+            style={styles.modalOverlay}
             activeOpacity={1}
-            onPress={() => {}}
+            onPress={() => setRenameModalVisible(false)}
           >
-            <Text style={styles.modalTitle}>重命名歌单</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="输入歌单名称"
-              placeholderTextColor="#666"
-              value={renameValue}
-              onChangeText={setRenameValue}
-              autoFocus
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => {
-                  setRenameValue('');
-                  setRenameModalVisible(false);
-                }}
-              >
-                <Text style={styles.cancelText}>取消</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.confirmBtn,
-                  !renameValue.trim() && { opacity: 0.4 },
-                ]}
-                onPress={handleRenameConfirm}
-                disabled={!renameValue.trim()}
-              >
-                <Text style={styles.confirmText}>确认</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.modalContent}
+              activeOpacity={1}
+              onPress={() => {}}
+            >
+              <Text style={styles.modalTitle}>重命名歌单</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="输入歌单名称"
+                placeholderTextColor="#666"
+                value={renameValue}
+                onChangeText={setRenameValue}
+                autoFocus
+              />
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={() => {
+                    setRenameValue('');
+                    setRenameModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.cancelText}>取消</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.confirmBtn,
+                    !renameValue.trim() && { opacity: 0.4 },
+                  ]}
+                  onPress={handleRenameConfirm}
+                  disabled={!renameValue.trim()}
+                >
+                  <Text style={styles.confirmText}>确认</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        </Modal>
+      </SafeAreaView>
+      <PlayerBar />
     </View>
   );
 }

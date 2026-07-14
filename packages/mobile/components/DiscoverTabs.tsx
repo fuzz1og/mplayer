@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions,
-  Image,
+  Image, FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { musicApi } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist } from '@mplayer/core';
 import LoadingState from './LoadingState';
+import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong as playAudio } from '../services/audioPlayer';
@@ -108,26 +109,27 @@ function HotlistContent() {
 }
 
 function SectionCard({ title, songs, routeKey, sourceType }: { title: string; songs: HotlistItem[]; routeKey: string; sourceType: SourceKey }) {
-  const playSong = useCallback(async (item: HotlistItem) => {
+  const toSong = (item: HotlistItem): Song => ({
+    id: item.id, name: item.name, artist: item.artists,
+    album: item.album, cover: item.cover, url: '',
+    lrc: '', duration: 0, sourceType,
+  });
+
+  const playSong = useCallback(async (item: HotlistItem, idx: number) => {
     let s: Song;
     try {
       // 热榜数据不含 url, 先搜索获取完整 Song
       const results = await musicApi.searchSongs(item.name, 1, sourceType);
-      s = results[0] || {
-        id: item.id, name: item.name, artist: item.artists,
-        album: item.album, cover: item.cover, url: '',
-        lrc: '', duration: 0, sourceType,
-      };
+      s = results[0] || toSong(item);
     } catch {
-      s = {
-        id: item.id, name: item.name, artist: item.artists,
-        album: item.album, cover: item.cover, url: '',
-        lrc: '', duration: 0, sourceType,
-      };
+      s = toSong(item);
     }
-    usePlayerStore.getState().setQueue([s], 0);
+    const songQueue: Song[] = songs.map(toSong);
+    // 当前歌曲替换为搜索结果(含 lrc、url 等)
+    songQueue[idx] = s;
+    usePlayerStore.getState().setQueue(songQueue, idx);
     playAudio(s);
-  }, [sourceType]);
+  }, [sourceType, songs]);
 
   return (
     <View style={styles.section}>
@@ -135,7 +137,7 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
         <Text style={styles.sectionTitle}>{title} ›</Text>
       </TouchableOpacity>
       {songs.slice(0, 5).map((song, i) => (
-        <TouchableOpacity key={song.id + String(i)} style={styles.songRow} onPress={() => playSong(song)}>
+        <TouchableOpacity key={song.id + String(i)} style={styles.songRow} onPress={() => playSong(song, i)}>
           <Text style={styles.rank}>{i + 1}</Text>
           {song.cover ? (
             <Image source={{ uri: song.cover }} style={styles.cover} />
@@ -156,87 +158,158 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
 
 /* ===== 歌单 Tab ===== */
 function PlaylistContent() {
+  const CARD_GAP = 10;
+  const CARD_COLS = 2;
+  const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const offsetRef = useRef(0);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextOffset = offsetRef.current + 20;
+      const r = await musicApi.getNeteasePlaylists('全部', 'hot', nextOffset, 20);
+      if (r.playlists.length > 0) {
+        setPlaylists(prev => [...prev, ...r.playlists]);
+        offsetRef.current = nextOffset;
+        setHasMore(r.more);
+      } else {
+        setHasMore(false);
+      }
+    } catch (e: any) {
+      console.error('[PlaylistContent] loadMore error:', e.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore]);
 
   useEffect(() => {
     let cancelled = false;
     musicApi.getNeteasePlaylists('全部', 'hot', 0, 20)
-      .then(r => { if (!cancelled) setPlaylists(r.playlists); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then(r => {
+        console.log('[PlaylistContent] API ok, playlists:', r.playlists.length, 'first:', r.playlists[0]?.name, 'coverField:', r.playlists[0]?.coverImgUrl?.slice(0, 30));
+        if (!cancelled) {
+          setPlaylists(r.playlists);
+          setHasMore(r.more);
+        }
+      })
+      .catch((e: any) => { console.error('[PlaylistContent] API error:', e.message); })
+      .finally(() => { if (!cancelled) { console.log('[PlaylistContent] done, loading=false'); setLoading(false); } });
     return () => { cancelled = true; };
   }, []);
 
   if (loading) return <LoadingState />;
 
+  const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
+    <TouchableOpacity
+      style={[styles.gridCard, { width: cardW }]}
+      activeOpacity={0.7}
+      onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
+    >
+      {p.coverImgUrl ? (
+        <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
+      ) : (
+        <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
+          <Ionicons name="list-outline" size={32} color="#555" />
+        </View>
+      )}
+      <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
+      <Text style={styles.gridMeta}>{p.playCount ? `${(p.playCount / 10000).toFixed(0)}万` : ''}</Text>
+    </TouchableOpacity>
+  );
+
   return (
-    <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentInner}>
-      <View style={styles.grid}>
-        {playlists.map(p => {
-          const cardW = (SCREEN_WIDTH - 12 * 2 - 10) / 2;
-          return (
-            <TouchableOpacity
-              key={p.id}
-              style={[styles.gridCard, { width: cardW }]}
-              activeOpacity={0.7}
-              onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
-            >
-              {p.coverImgUrl ? (
-                <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
-              ) : (
-                <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-                  <Ionicons name="list-outline" size={32} color="#555" />
-                </View>
-              )}
-              <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
-              <Text style={styles.gridMeta}>{p.playCount ? `${(p.playCount / 10000).toFixed(0)}万` : ''}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </ScrollView>
+    <FlatList
+      style={styles.tabContent}
+      contentContainerStyle={styles.tabContentInner}
+      data={playlists}
+      keyExtractor={(item) => String(item.id)}
+      renderItem={renderItem}
+      numColumns={CARD_COLS}
+      columnWrapperStyle={{ gap: CARD_GAP }}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={playlists.length > 0} />}
+    />
   );
 }
 
 /* ===== 歌手 Tab ===== */
 function ArtistContent() {
+  const CARD_COLS = 3;
   const [artists, setArtists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const r = await musicApi.getNeteaseArtists(0, artists.length, 30);
+      if (r.artists.length > 0) {
+        setArtists(prev => [...prev, ...r.artists]);
+        setHasMore(r.more);
+      } else {
+        setHasMore(false);
+      }
+    } catch (e: any) {
+      console.error('[ArtistContent] loadMore error:', e.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, artists.length]);
 
   useEffect(() => {
     let cancelled = false;
-    musicApi.getNeteaseArtists(1001, 0, 30)
-      .then(r => { if (!cancelled) setArtists(r.artists); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
+    musicApi.getNeteaseArtists(0, 0, 30)
+      .then(r => {
+        console.log('[ArtistContent] API ok, artists:', r.artists.length, 'first:', r.artists[0]?.name, 'picUrl:', r.artists[0]?.picUrl?.slice(0, 40));
+        if (!cancelled) {
+          setArtists(r.artists);
+          setHasMore(r.more);
+        }
+      })
+      .catch((e: any) => { console.error('[ArtistContent] API error:', e.message); })
+      .finally(() => { if (!cancelled) { console.log('[ArtistContent] done, loading=false'); setLoading(false); } });
     return () => { cancelled = true; };
   }, []);
 
   if (loading) return <LoadingState />;
 
+  const renderItem = ({ item: a }: { item: any }) => (
+    <TouchableOpacity
+      style={styles.artistCard}
+      activeOpacity={0.7}
+      onPress={() => router.push(`/artist/${a.id}?name=${encodeURIComponent(a.name)}` as any)}
+    >
+      {a.picUrl ? (
+        <Image source={{ uri: a.picUrl }} style={styles.artistAvatar} />
+      ) : (
+        <View style={[styles.artistAvatar, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
+          <Ionicons name="person" size={28} color="#555" />
+        </View>
+      )}
+      <Text style={styles.artistName} numberOfLines={1}>{a.name}</Text>
+    </TouchableOpacity>
+  );
+
   return (
-    <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentInner}>
-      <View style={styles.artistGrid}>
-        {artists.map(a => (
-          <TouchableOpacity
-            key={a.id}
-            style={styles.artistCard}
-            activeOpacity={0.7}
-            onPress={() => router.push(`/artist/${a.id}` as any)}
-          >
-            {a.cover ? (
-              <Image source={{ uri: a.cover }} style={styles.artistAvatar} />
-            ) : (
-              <View style={[styles.artistAvatar, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-                <Ionicons name="person" size={28} color="#555" />
-              </View>
-            )}
-            <Text style={styles.artistName} numberOfLines={1}>{a.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </ScrollView>
+    <FlatList
+      style={styles.tabContent}
+      contentContainerStyle={styles.tabContentInner}
+      data={artists}
+      keyExtractor={(item) => item.id}
+      renderItem={renderItem}
+      numColumns={CARD_COLS}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={artists.length > 0} />}
+    />
   );
 }
 

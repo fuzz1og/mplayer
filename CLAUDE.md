@@ -163,9 +163,12 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 | Component | Role |
 |-----------|------|
 | `TopBar` | Logo + search bar + settings button |
-| `PlayerBar` | Mini player bar above tab bar |
-| `SongRow` | Reusable song row (cover, name, artist, favorite, more actions) |
-| `DiscoverTabs` | Swipeable tab container: Hotlist / Playlists / Artists |
+| `PlayerBar` | Mini player bar above tab bar, queue management |
+| `PlayerOverlay` | Full-screen player overlay (song info + controls + lyrics) |
+| `SongRow` | Reusable song row (cover, name, artist, favorite, more actions, bottom sheet) |
+| `DiscoverTabs` | Swipeable tab container: Hotlist / Playlists (grid with infinite scroll) / Artists (grid with infinite scroll) |
+| `AddToPlaylistModal` | Modal for adding songs to user playlists |
+| `LoadMoreFooter` | Shared infinite scroll footer (loading spinner / "全部加载" text) |
 | `EmptyState` | Empty state placeholder |
 | `LoadingState` | Loading spinner |
 
@@ -178,8 +181,9 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 | `favoriteStore` | AsyncStorage | favorites, favoriteIds |
 | `historyStore` | AsyncStorage | history (max 200) |
 | `playlistStore` | AsyncStorage | playlists |
-| `searchStore` | No | results, loading, error, query |
+| `searchStore` | No | results, loading, error, query, page, hasMore, loadingMore |
 | `discoverStore` | No | hotlist data (netease/qq hot & new) |
+| `sourceStore` | AsyncStorage | selectedSource (搜索源切换) |
 
 #### Services (`packages/mobile/services/`)
 
@@ -195,6 +199,8 @@ Common types and API client shared between desktop and mobile.
 ```
 packages/core/src/
 ├── api/musicApi.ts       # Axios client for music API (search, lyrics, hotlist, etc.)
+│                          # warmUpArtistPicCache — 预缓存热门歌手头像
+│                          # fetchNeteaseArtistsByHtml — HTML 爬取 + 逐歌手 API 补图兜底
 ├── types/index.ts        # Song, SourceKey, LyricLine, etc.
 ├── utils/
 │   ├── lyricsParser.ts   # parseLRC, findCurrentLyricIndex
@@ -221,7 +227,7 @@ npm run core:build        # Build @mplayer/core (regenerate dist/ with type decl
 - State management: Zustand stores, some with `persist` middleware (AsyncStorage).
 - Navigation: expo-router Stack + Tabs.
 - Audio: expo-av (Audio.Sound), no Howler.js.
-- Gestures: PanResponder (not react-native-gesture-handler).
+- Gestures: PanResponder + Animated (swipeable tabs, swipe-down-to-close player).
 
 ## tsconfig Strictness
 

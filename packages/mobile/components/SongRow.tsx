@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { type Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
-import { showAddToPlaylistPicker } from '../utils/playlistUtils';
+import AddToPlaylistModal from './AddToPlaylistModal';
 import { playSong } from '../services/audioPlayer';
 
 interface SongRowProps {
@@ -17,6 +17,7 @@ interface SongRowProps {
   onPress?: (song: Song) => void;
   showSource?: boolean;
   defaultFavorited?: boolean;
+  queueSongs?: Song[];
 }
 
 const SOURCE_COLORS: Record<SourceKey, string> = {
@@ -47,6 +48,7 @@ export default function SongRow({
   onPress,
   showSource = false,
   defaultFavorited = false,
+  queueSongs,
 }: SongRowProps) {
   const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
@@ -55,6 +57,7 @@ export default function SongRow({
   const favorited = defaultFavorited || isFav;
   const [showActions, setShowActions] = useState(false);
   const [pressingAction, setPressingAction] = useState(false);
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
 
   const handleMore = () => {
     setShowActions(true);
@@ -73,16 +76,20 @@ export default function SongRow({
   };
 
   const MORE_ACTIONS = [
-    { key: 'playlist', icon: 'list-outline', label: '加入歌单', onPress: () => showAddToPlaylistPicker(song) },
+    { key: 'playlist', icon: 'list-outline', label: '加入歌单', onPress: () => { setShowActions(false); setShowPlaylistModal(true); } },
     { key: 'download', icon: 'download-outline', label: '下载', onPress: handleDownload },
     { key: 'artist', icon: 'person-outline', label: '搜索歌手', onPress: handleSearchArtist },
   ];
 
   const handlePress = () => {
     if (pressingAction) return;
-    console.log(`[SongRow] handlePress: id=${song.id}, name=${song.name}, url=${song.url}, sourceType=${song.sourceType}`);
+    console.log(`[SongRow] handlePress: id=${song.id}, name=${song.name}`);
     if (onPress) {
       onPress(song);
+    } else if (queueSongs) {
+      const idx = queueSongs.findIndex(s => s.id === song.id);
+      usePlayerStore.getState().setQueue(queueSongs, Math.max(0, idx));
+      playSong(song);
     } else {
       usePlayerStore.getState().setQueue([song], 0);
       playSong(song);
@@ -166,6 +173,11 @@ export default function SongRow({
         </View>
       </TouchableOpacity>
     </Modal>
+    <AddToPlaylistModal
+      visible={showPlaylistModal}
+      song={song}
+      onClose={() => setShowPlaylistModal(false)}
+    />
     </>
   );
 }

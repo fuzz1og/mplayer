@@ -6,11 +6,14 @@ import {
   RefreshControl,
   Text,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { musicApi } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
 import LoadingState from '../components/LoadingState';
 import SongRow from '../components/SongRow';
+import PlayerBar from '../components/PlayerBar';
 import { playSong } from '../services/audioPlayer';
 import { usePlayerStore } from '../stores/playerStore';
 
@@ -78,63 +81,72 @@ export default function HotlistPage() {
   if (!config) {
     return (
       <View style={styles.container}>
-        <Stack.Screen
-          options={{
-            title: title || '未知榜单',
-            headerStyle: { backgroundColor: '#1a1a2e' },
-            headerTintColor: '#fff',
-            headerShadowVisible: false,
-          }}
-        />
-        <Text style={styles.errorText}>未知榜单类型</Text>
+        <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+          <Stack.Screen
+            options={{
+              title: title || '未知榜单',
+              headerShown: true,
+              headerStyle: { backgroundColor: '#1a1a2e' },
+              headerTintColor: '#fff',
+              headerShadowVisible: false,
+            }}
+          />
+          <Text style={styles.errorText}>未知榜单类型</Text>
+        </SafeAreaView>
+        <PlayerBar />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: title || '',
-          headerStyle: { backgroundColor: '#1a1a2e' },
-          headerTintColor: '#fff',
-          headerShadowVisible: false,
-        }}
-      />
-      {loading ? (
-        <LoadingState />
-      ) : (
-        <FlatList
-          data={songs}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => (
-            <SongRow
-              song={item}
-              rank={index + 1}
-              onPress={async (song) => {
-                // 热榜数据不含 url, 搜索补齐
-                let url = song.url;
-                if (!url) {
-                  try {
-                    const results = await musicApi.searchSongs(song.name, 1, song.sourceType);
-                    url = results[0]?.url || '';
-                  } catch {}
-                }
-                const s = { ...song, url };
-                usePlayerStore.getState().setQueue([s], 0);
-                playSong(s);
-              }}
-            />
-          )}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor="#e74c3c"
-            />
-          }
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <StatusBar style="light" />
+        <Stack.Screen
+          options={{
+            title: title || '',
+            headerShown: true,
+            headerStyle: { backgroundColor: '#1a1a2e' },
+            headerTintColor: '#fff',
+            headerShadowVisible: false,
+          }}
         />
-      )}
+        {loading ? (
+          <LoadingState />
+        ) : (
+          <FlatList
+            data={songs}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item, index }) => (
+              <SongRow
+                song={item}
+                rank={index + 1}
+                onPress={async (song) => {
+                  // 热榜数据不含 url, 搜索补齐
+                  let url = song.url;
+                  if (!url) {
+                    try {
+                      const results = await musicApi.searchSongs(song.name, 1, song.sourceType);
+                      url = results[0]?.url || '';
+                    } catch {}
+                  }
+                  const s = { ...song, url };
+                  usePlayerStore.getState().setQueue(songs, index);
+                  playSong(s);
+                }}
+              />
+            )}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#e74c3c"
+              />
+            }
+          />
+        )}
+      </SafeAreaView>
+      <PlayerBar />
     </View>
   );
 }

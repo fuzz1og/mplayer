@@ -46,10 +46,11 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
   };
 
   return (
-    <Animated.View style={{ overflow: 'hidden', height: containerHeight }}>
-      <Animated.View style={{ transform: [{ translateY }] }} onLayout={onLayout}>
-        <PlayerBar />
-        <View style={tabBarStyles.container}>
+    <View>
+      <PlayerBar />
+      <Animated.View style={{ overflow: 'hidden', height: containerHeight }}>
+        <Animated.View style={{ transform: [{ translateY }] }} onLayout={onLayout}>
+          <View style={tabBarStyles.container}>
           {state.routes.map((route: any, i: number) => {
             // 搜索 tab 不显示 tab 按钮
             if (route.name === 'search') return null;
@@ -73,6 +74,7 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
         </View>
       </Animated.View>
     </Animated.View>
+    </View>
   );
 }
 

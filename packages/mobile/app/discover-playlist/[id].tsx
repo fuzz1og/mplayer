@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react';
 import {
   View, Text, Image, FlatList, StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { musicApi, type Song } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import SongRow from '../../components/SongRow';
+import PlayerBar from '../../components/PlayerBar';
 
 export default function DiscoverPlaylistDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -35,7 +38,7 @@ export default function DiscoverPlaylistDetailPage() {
   if (!playlist) {
     return (
       <View style={styles.empty}>
-        <Stack.Screen options={{ title: '歌单详情' }} />
+        <Stack.Screen options={{ title: '歌单详情', headerShown: true }} />
         <Text style={{ color: '#666', fontSize: 16 }}>歌单不存在</Text>
       </View>
     );
@@ -43,31 +46,35 @@ export default function DiscoverPlaylistDetailPage() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: playlist.name, headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }} />
-      <FlatList
-        data={songs}
-        keyExtractor={(item, i) => `${item.id}-${i}`}
-        ListHeaderComponent={() => (
-          <View style={styles.header}>
-            <Image source={{ uri: playlist.coverImgUrl }} style={styles.cover} />
-            <Text style={styles.name}>{playlist.name}</Text>
-            <Text style={styles.creator}>{playlist.creator?.nickname ?? '未知'}</Text>
-            <View style={styles.metaRow}>
-              <Text style={styles.meta}>播放: {(playlist.playCount / 10000).toFixed(0)}万</Text>
-              <Text style={styles.meta}>歌曲: {playlist.trackCount}首</Text>
-            </View>
-            {playlist.tags.length > 0 && (
-              <View style={styles.tagsRow}>
-                {playlist.tags.map(t => (
-                  <View key={t} style={styles.tag}><Text style={styles.tagText}>{t}</Text></View>
-                ))}
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <StatusBar style="light" />
+        <Stack.Screen options={{ title: playlist.name, headerShown: true, headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }} />
+        <FlatList
+          data={songs}
+          keyExtractor={(item, i) => `${item.id}-${i}`}
+          ListHeaderComponent={() => (
+            <View style={styles.header}>
+              <Image source={{ uri: playlist.coverImgUrl }} style={styles.cover} />
+              <Text style={styles.name}>{playlist.name}</Text>
+              <Text style={styles.creator}>{playlist.creator?.nickname ?? '未知'}</Text>
+              <View style={styles.metaRow}>
+                <Text style={styles.meta}>播放: {(playlist.playCount / 10000).toFixed(0)}万</Text>
+                <Text style={styles.meta}>歌曲: {playlist.trackCount}首</Text>
               </View>
-            )}
-          </View>
-        )}
-        renderItem={({ item }) => <SongRow song={item} showSource />}
-        contentContainerStyle={styles.list}
-      />
+              {playlist.tags.length > 0 && (
+                <View style={styles.tagsRow}>
+                  {playlist.tags.map(t => (
+                    <View key={t} style={styles.tag}><Text style={styles.tagText}>{t}</Text></View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+          renderItem={({ item }) => <SongRow song={item} showSource queueSongs={songs} />}
+          contentContainerStyle={styles.list}
+        />
+      </SafeAreaView>
+      <PlayerBar />
     </View>
   );
 }

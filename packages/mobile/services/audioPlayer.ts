@@ -21,7 +21,26 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
   try {
     // 解析音频 URL
     let audioUrl = song.url;
-    console.log(`[playSong] start: id=${song.id}, sourceType=${song.sourceType}, url=${audioUrl}, retry=${retryCount}`);
+    console.log(`[playSong] start: id=${song.id}, name=${song.name}, sourceType=${song.sourceType}, url=${audioUrl}, retry=${retryCount}`);
+
+    // url 为空时按名字搜索补齐
+    if (!audioUrl || (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://'))) {
+      if (song.name) {
+        const searchResults = await musicApi.searchSongs(song.name, 1, song.sourceType);
+        if (searchResults.length > 0) {
+          audioUrl = searchResults[0].url || audioUrl;
+          // 用完整搜索结果更新 currentSong (补齐 lrc、cover 等字段)
+          const store = usePlayerStore.getState();
+          if (store.currentIndex >= 0 && store.queue[store.currentIndex]?.id === song.id) {
+            const updatedQueue = [...store.queue];
+            updatedQueue[store.currentIndex] = searchResults[0];
+            usePlayerStore.setState({ queue: updatedQueue, currentSong: searchResults[0] });
+          }
+          console.log(`[playSong] searchSongs resolved url: ${audioUrl}`);
+        }
+      }
+    }
+
     if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
       // 汽水音乐需特殊处理
       if (song.sourceType === 'soda' && song.id) {

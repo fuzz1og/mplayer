@@ -31,9 +31,26 @@ export function getProxyUrl(): string { return PROXY_URL; }
 // 歌手头像缓存，供分类 tab 爬取时补图
 const artistPicCache = new Map<string, string>();
 
+/** 预热热门歌手头像缓存 (top 100)，供 HTML 爬取分类歌手时补图 */
+export async function warmUpArtistPicCache(): Promise<void> {
+  if (artistPicCache.size > 50) return;
+  try {
+    const neteaseClient = createNeteaseClient();
+    const res = await neteaseClient.get('https://music.163.com/api/v1/artist/list?offset=0&limit=100&initial=-1');
+    const rawArtists: any[] = res.data?.artists || [];
+    for (const a of rawArtists) {
+      const picUrl = a.picUrl || a.img1v1Url || '';
+      if (picUrl && !artistPicCache.has(a.name)) artistPicCache.set(a.name, picUrl);
+    }
+  } catch (e) {
+    console.error('[warmUpArtistPicCache] 预热失败:', e);
+  }
+}
+
 function createNeteaseClient() {
   return axios.create({
     headers: {
+      'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Referer': 'https://music.163.com/',
     },
@@ -550,7 +567,7 @@ export const musicApi = {
 
       const artistBoxMatch = html.match(/id="m-artist-box">(.*?)<\/ul>/s);
       if (!artistBoxMatch) {
-        console.error('未找到歌手列表数据');
+        console.error('[musicApi] fetchNeteaseArtistsByHtml 未找到歌手列表数据');
         return { artists: [], total: 0, more: false };
       }
 
@@ -579,6 +596,17 @@ export const musicApi = {
           sourceType: 'netease'
         });
       }
+
+      // 对 HTML 解析后仍缺图的歌手，单请求补图 (冷门歌手兜底)
+      await Promise.all(artists.map(async (a) => {
+        if (a.picUrl) return;
+        try {
+          const detailRes = await neteaseClient.get(`https://music.163.com/api/artist?id=${a.id}`);
+          const detail = detailRes.data?.artist;
+          a.picUrl = detail?.picUrl || detail?.img1v1Url || '';
+          if (a.picUrl) artistPicCache.set(a.name, a.picUrl);
+        } catch {}
+      }));
 
       const result = { artists, total: artists.length, more: false };
       cacheManager.setSearchCache(cacheKey, 1, 'netease', result as any);
@@ -965,5 +993,9 @@ export const musicApi = {
     } catch {
       return false;
     }
+  },
+
+  async warmUpArtistPicCache(): Promise<void> {
+    return warmUpArtistPicCache();
   }
 };
