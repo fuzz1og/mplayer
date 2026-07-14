@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: electron
+      - dependency-name: "@types/electron*"
+    labels:
+      - dependencies
+    commit-message:
+      prefix: fix
+      prefix-development: chore
+      include: scope
