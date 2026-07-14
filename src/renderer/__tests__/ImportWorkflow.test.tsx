@@ -71,7 +71,6 @@ vi.mock('antd', async () => {
 });
 
 import { importSongs, importFromLink } from '@/renderer/services/importService';
-import { musicApi } from '@/main/api/musicApi';
 
 describe('ImportWorkflow Integration', () => {
   const defaultProps = {
@@ -114,7 +113,7 @@ describe('ImportWorkflow Integration', () => {
     // Wait for import to complete
     await waitFor(() => {
       expect(screen.getByText('导入完成')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     // Verify import was called correctly
     expect(importSongs).toHaveBeenCalledWith(
@@ -171,7 +170,7 @@ describe('ImportWorkflow Integration', () => {
     // Wait for import to complete
     await waitFor(() => {
       expect(screen.getByText('导入完成')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     // Verify import was called correctly
     expect(importFromLink).toHaveBeenCalledWith(

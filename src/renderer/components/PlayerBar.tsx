@@ -35,7 +35,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
 
   const handlePlayPause = useCallback(() => {
     if (!currentSong) return;
-    isPlaying ? pause() : resume();
+    if (isPlaying) pause(); else resume();
   }, [currentSong, isPlaying, pause, resume]);
 
   const handleVolumeChange = useCallback((vol: number) => {
