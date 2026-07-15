@@ -6,8 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { Stack } from 'expo-router';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -24,6 +26,62 @@ export default function SettingsPage() {
   const [proxySaved, setProxySaved] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
+
+  const currentVersion = Constants.expoConfig?.version || '0.0.0';
+
+  // 更新检查状态
+  const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'available' | 'not-available' | 'error'>('idle');
+  const [latestVersion, setLatestVersion] = useState('');
+  const [releaseNotes, setReleaseNotes] = useState('');
+  const [apkUrl, setApkUrl] = useState('');
+
+  function compareVersions(a: string, b: string): number {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const na = pa[i] || 0;
+      const nb = pb[i] || 0;
+      if (na > nb) return 1;
+      if (na < nb) return -1;
+    }
+    return 0;
+  }
+
+  const handleCheckUpdate = async () => {
+    setUpdateState('checking');
+    try {
+      const res = await fetch('https://gitee.com/api/v5/repos/aris3104/mplayer/releases');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const list = await res.json();
+      if (!list || list.length === 0) {
+        // 还没有任何发布版本
+        setUpdateState('not-available');
+        setTimeout(() => setUpdateState('idle'), 2000);
+        return;
+      }
+      const latest = list[0];
+      const remoteVer = latest.tag_name.replace(/^v/i, '');
+      if (compareVersions(remoteVer, currentVersion) > 0) {
+        setLatestVersion(remoteVer);
+        setReleaseNotes(latest.body || '');
+        const apkAsset = latest.assets?.find((a: any) =>
+          a.name?.endsWith('.apk') || a.content_type?.includes('apk')
+        );
+        setApkUrl(apkAsset?.browser_download_url || '');
+        setUpdateState('available');
+      } else {
+        setUpdateState('not-available');
+        setTimeout(() => setUpdateState('idle'), 2000);
+      }
+    } catch {
+      setUpdateState('error');
+      setTimeout(() => setUpdateState('idle'), 2000);
+    }
+  };
+
+  const handleUpdate = () => {
+    if (apkUrl) Linking.openURL(apkUrl);
+  };
 
   const handleSaveUrl = () => {
     setApiBaseUrl(localUrl.trim());
@@ -157,13 +215,63 @@ export default function SettingsPage() {
           </View>
         </View>
 
+        {/* 检查更新 */}
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>检查更新</Text>
+            {updateState === 'idle' && (
+              <>
+                <TouchableOpacity style={styles.saveBtn} onPress={handleCheckUpdate} activeOpacity={0.7}>
+                  <Ionicons name="refresh-outline" size={18} color="#fff" style={styles.btnIcon} />
+                  <Text style={styles.saveBtnText}>检查更新</Text>
+                </TouchableOpacity>
+                <Text style={styles.hintText}>点击检查是否有新版本可用</Text>
+              </>
+            )}
+            {updateState === 'checking' && (
+              <>
+                <View style={[styles.saveBtn, { backgroundColor: '#555' }]}>
+                  <Ionicons name="sync-outline" size={18} color="#fff" style={styles.btnIcon} />
+                  <Text style={styles.saveBtnText}>检查中...</Text>
+                </View>
+              </>
+            )}
+            {updateState === 'available' && (
+              <>
+                <Text style={styles.updateAvailableText}>发现新版本 v{latestVersion}</Text>
+                {releaseNotes ? (
+                  <Text style={styles.releaseNotes} numberOfLines={4}>
+                    {releaseNotes}
+                  </Text>
+                ) : null}
+                <TouchableOpacity style={styles.saveBtn} onPress={handleUpdate} activeOpacity={0.7}>
+                  <Ionicons name="download-outline" size={18} color="#fff" style={styles.btnIcon} />
+                  <Text style={styles.saveBtnText}>立即更新</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {updateState === 'not-available' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="checkmark-circle" size={20} color="#27ae60" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#27ae60', fontSize: 14 }}>已是最新版本</Text>
+              </View>
+            )}
+            {updateState === 'error' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="close-circle" size={20} color="#c0392b" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#c0392b', fontSize: 14 }}>检查失败，请检查网络</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
         {/* 关于 */}
         <View style={styles.section}>
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>关于</Text>
             <View style={styles.aboutRow}>
               <Text style={styles.aboutLabel}>应用版本</Text>
-              <Text style={styles.aboutValue}>1.0.0</Text>
+              <Text style={styles.aboutValue}>{currentVersion}</Text>
             </View>
           </View>
         </View>
@@ -266,5 +374,23 @@ const styles = StyleSheet.create({
   aboutValue: {
     color: '#fff',
     fontSize: 15,
+  },
+  hintText: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  updateAvailableText: {
+    color: '#27ae60',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  releaseNotes: {
+    color: '#aaa',
+    fontSize: 12,
+    marginBottom: 12,
+    lineHeight: 18,
   },
 });
