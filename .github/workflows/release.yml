@@ -189,7 +189,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git tag -f "$TAG"
-            git push origin "$TAG"
+            git push origin "$TAG" --force
           fi
 
           # Generate release notes
