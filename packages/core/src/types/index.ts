@@ -1,5 +1,7 @@
 export type SourceKey = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' | 'local';
 
+export type AudioTag = 'valid' | 'preview' | 'invalid';
+
 export interface SongBase {
   id: string;
   name: string;
@@ -13,6 +15,7 @@ export interface Song extends SongBase {
   url: string;
   cover: string;
   lrc: string;
+  audioTag?: AudioTag;      // 搜索探测结果：无标记=未探测/正常, preview=片段, invalid=无法播放
 }
 
 export interface Favorite {

@@ -3,6 +3,7 @@ import { musicApi } from '@mplayer/core';
 import type { SongGroup, SourceKey } from '@mplayer/core';
 import { useSourceStore } from './sourceStore';
 import type { SourceOption } from './sourceStore';
+import { probeAudio } from '../services/audioProbe';
 
 const SOURCE_LABELS: Record<SourceOption, string> = {
   all: '全部',
@@ -58,8 +59,11 @@ export const useSearchStore = create<SearchState>((set, get) => ({
           songs,
         }];
       }
-      if (searchSeq !== seq) return; // 有更新查询，丢弃此结果
+      if (searchSeq !== seq) return;
       set({ results, loading: false, hasMore: results.some(g => g.songs.length > 0) });
+
+      // 非阻塞探测：异步 probe 每首歌的音频大小/可用性
+      probeResults(results, seq);
     } catch (err) {
       if (searchSeq !== seq) return;
       console.error('搜索失败:', err);
@@ -117,3 +121,24 @@ export const useSearchStore = create<SearchState>((set, get) => ({
     set({ query: '', results: [], loading: false, error: null, page: 1, hasMore: true, loadingMore: false });
   },
 }));
+
+/** 并发探测搜索结果中每首歌的音频状态，更新 audioTag */
+async function probeResults(groups: SongGroup[], seq: number) {
+  const allSongs = groups.flatMap(g => g.songs);
+  const BATCH_SIZE = 5;
+
+  for (let i = 0; i < allSongs.length; i += BATCH_SIZE) {
+    const batch = allSongs.slice(i, i + BATCH_SIZE);
+    await Promise.allSettled(
+      batch.map(async (song) => {
+        if (searchSeq !== seq) return;
+        const tag = await probeAudio(song);
+        if (searchSeq !== seq) return;
+        (song as any).audioTag = tag;
+      })
+    );
+    // 每批完成后刷新 store 触发重渲染
+    if (searchSeq !== seq) return;
+    useSearchStore.setState({});
+  }
+}
