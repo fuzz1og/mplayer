@@ -142,6 +142,17 @@ export default function SongRow({
         </View>
       )}
 
+      {song.audioTag === 'preview' && (
+        <View style={styles.tagBadgePreview}>
+          <Text style={styles.tagText}>片段</Text>
+        </View>
+      )}
+      {song.audioTag === 'invalid' && (
+        <View style={styles.tagBadgeInvalid}>
+          <Text style={styles.tagText}>无效</Text>
+        </View>
+      )}
+
       <TouchableOpacity
         onPress={handleFavorite}
         style={styles.favoriteBtn}
@@ -231,6 +242,25 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   sourceText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  tagBadgePreview: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 8,
+    backgroundColor: '#e67e22',
+  },
+  tagBadgeInvalid: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 8,
+    backgroundColor: '#e74c3c',
+  },
+  tagText: {
     color: '#fff',
     fontSize: 10,
     fontWeight: '600',
