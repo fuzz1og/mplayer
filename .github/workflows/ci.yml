@@ -48,17 +48,6 @@ jobs:
         run: npx expo prebuild --platform android --clean
         env:
           EXPO_DEBUG: 1
-      - name: Copy icon fonts to Android assets (lowercase names)
-        working-directory: packages/mobile
-        run: |
-          ICON_FONTS_DIR="../../node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts"
-          ASSETS_DIR="android/app/src/main/assets/fonts"
-          mkdir -p "$ASSETS_DIR"
-          for f in "$ICON_FONTS_DIR"/*.ttf; do
-            name=$(basename "$f" | tr '[:upper:]' '[:lower:]')
-            cp "$f" "$ASSETS_DIR/$name"
-          done
-          echo "Copied $(ls -1 "$ASSETS_DIR"/*.ttf 2>/dev/null | wc -l) icon fonts to $ASSETS_DIR"
       - name: Build APK (release)
         working-directory: packages/mobile/android
         run: ./gradlew assembleRelease
