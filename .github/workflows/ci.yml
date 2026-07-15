@@ -65,8 +65,9 @@ jobs:
       - name: Eager bundle JS + assets
         working-directory: packages/mobile
         run: |
-          JSON=$(node scripts/eager-bundle-android.cjs)
-          echo "__EXPO_EAGER_BUNDLE_OPTIONS=$JSON" >> "$GITHUB_ENV"
+          mkdir -p dist-eager
+          node scripts/eager-bundle-android.cjs dist-eager/eager-options.json
+          echo "__EXPO_EAGER_BUNDLE_OPTIONS=$(cat dist-eager/eager-options.json)" >> "$GITHUB_ENV"
       - name: Build APK (release)
         working-directory: packages/mobile/android
         run: ./gradlew assembleRelease
