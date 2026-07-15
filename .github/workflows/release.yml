@@ -284,8 +284,13 @@ jobs:
 
           echo "Gitee release ID: $RELEASE_ID"
           if [ -z "$RELEASE_ID" ]; then
-            echo "No Gitee release created — check GITEE_TOKEN and repo permissions"
-            exit 0
+            echo "Release already exists — fetching existing release ID"
+            RELEASE_ID=$(curl -s "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/tags/$TAG?access_token=$GITEE_TOKEN"               --connect-timeout 10 --max-time 30 | jq -r '.id // empty')
+            echo "Existing release ID: $RELEASE_ID"
+            if [ -z "$RELEASE_ID" ]; then
+              echo "No Gitee release found — check GITEE_TOKEN and repo permissions"
+              exit 0
+            fi
           fi
 
           # Upload each asset to Gitee
