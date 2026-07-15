@@ -11,10 +11,8 @@ let currentPlayId = 0;
 
 export async function initAudio(): Promise<void> {
   await Audio.setAudioModeAsync({
-    allowsRecordingIOS: false,
     staysActiveInBackground: true,
-    playsInSilentModeIOS: true,
-    shouldDuckAndroid: true,
+    shouldDuckAndroid: false,
     playThroughEarpieceAndroid: false,
   });
 }
@@ -87,6 +85,15 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
     await updateNotification(song, true);
     sound.setOnPlaybackStatusUpdate((status) => {
       if (!status.isLoaded) return;
+
+      // 系统音频焦点打断同步（PauseOthers 自动暂停/恢复 sound）
+      const s = usePlayerStore.getState();
+      if (status.isPlaying && !s.isPlaying) {
+        s.resume();
+      } else if (!status.isPlaying && s.isPlaying && !status.didJustFinish) {
+        s.pause();
+      }
+
       usePlayerStore.getState().setCurrentTime(status.positionMillis / 1000);
       usePlayerStore.getState().setDuration(
         (status.durationMillis ?? 0) / 1000

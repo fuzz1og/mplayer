@@ -252,7 +252,6 @@ export default function PlayerOverlay({ onClose }: Props) {
                 {/* 唱臂 */}
                 <View style={styles.tonearmPivot} />
                 <View style={styles.tonearmRod} />
-                <View style={styles.tonearmHead} />
               </View>
             </View>
 
@@ -428,26 +427,16 @@ const styles = StyleSheet.create({
     transformOrigin: 'top',
     zIndex: 9,
   },
-  tonearmHead: {
-    position: 'absolute',
-    top: 138,
-    left: 138,
-    width: 8,
-    height: 8,
-    borderRadius: 1,
-    backgroundColor: '#777',
-    zIndex: 11,
-  },
-  infoWrap: { marginTop: 24, alignItems: 'center' },
+  infoWrap: { marginTop: 12, alignItems: 'center' },
   title: { color: '#fff', fontSize: 20, fontWeight: '700' },
   artist: { color: '#888', fontSize: 14, marginTop: 6 },
-  progressWrap: { marginTop: 32, alignItems: 'center' },
+  progressWrap: { marginTop: 16, alignItems: 'center' },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', width: width - 48, marginTop: 4 },
   time: { color: '#666', fontSize: 12 },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 16,
     gap: 40,
   },
   playBtn: { marginHorizontal: 8 },
