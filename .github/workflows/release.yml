@@ -259,15 +259,17 @@ jobs:
           # Ensure tag exists on Gitee
           curl -s -X POST "https://gitee.com/api/v5/repos/$GITEE_REPO/tags" \
             -H "Content-Type: application/json" \
+            --connect-timeout 10 --max-time 30 \
             -d "{
               \"access_token\": \"$GITEE_TOKEN\",
               \"tag_name\": \"$TAG\",
               \"refs\": \"master\"
-            }" || true
+            }" || echo "Tag creation skipped (may already exist)"
 
           # Create release on Gitee
           RELEASE_ID=$(curl -s -X POST "https://gitee.com/api/v5/repos/$GITEE_REPO/releases" \
             -H "Content-Type: application/json" \
+            --connect-timeout 10 --max-time 30 \
             -d "{
               \"access_token\": \"$GITEE_TOKEN\",
               \"tag_name\": \"$TAG\",
@@ -277,6 +279,10 @@ jobs:
             }" | jq -r '.id // empty')
 
           echo "Gitee release ID: $RELEASE_ID"
+          if [ -z "$RELEASE_ID" ]; then
+            echo "No Gitee release created — check GITEE_TOKEN and repo permissions"
+            exit 0
+          fi
 
           # Upload each asset to Gitee
           for file in ./assets/*; do
@@ -284,6 +290,8 @@ jobs:
             echo "Uploading: $(basename "$file")"
             curl -s -X POST \
               "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_file" \
+              --connect-timeout 10 --max-time 120 \
               -F "access_token=$GITEE_TOKEN" \
               -F "file=@$file"
+            echo " (done)"
           done
