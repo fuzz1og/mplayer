@@ -14,7 +14,7 @@
     "icon": "../../resources/icon.png",
     "android": {
       "package": "com.mplayer.mobile",
-      "versionCode": 12,
+      "versionCode": 13,
       "adaptiveIcon": {
         "foregroundImage": "../../resources/icon.png",
         "backgroundColor": "#1a1a2e"
