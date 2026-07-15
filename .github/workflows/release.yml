@@ -90,3 +90,59 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sync-to-gitee:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all release assets
+        run: |
+          TAG="${{ github.ref_name }}"
+          gh release download "$TAG" --dir ./assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync release to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: aris3104/mplayer
+        run: |
+          TAG="${{ github.ref_name }}"
+
+          # Generate release notes
+          BODY=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+            -f tag_name="$TAG" --jq '.body')
+
+          # Ensure tag exists on Gitee
+          curl -s -X POST "https://gitee.com/api/v5/repos/$GITEE_REPO/tags" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"access_token\": \"$GITEE_TOKEN\",
+              \"tag_name\": \"$TAG\",
+              \"refs\": \"master\"
+            }" || true
+
+          # Create release on Gitee
+          RELEASE_ID=$(curl -s -X POST "https://gitee.com/api/v5/repos/$GITEE_REPO/releases" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"access_token\": \"$GITEE_TOKEN\",
+              \"tag_name\": \"$TAG\",
+              \"name\": \"$TAG\",
+              \"body\": $(echo "$BODY" | jq -Rs '.'),
+              \"prerelease\": false
+            }" | jq -r '.id // empty')
+
+          echo "Gitee release ID: $RELEASE_ID"
+
+          # Upload each asset to Gitee
+          for file in ./assets/*; do
+            [ -f "$file" ] || continue
+            echo "Uploading: $(basename "$file")"
+            curl -s -X POST \
+              "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_file" \
+              -F "access_token=$GITEE_TOKEN" \
+              -F "file=@$file"
+          done
