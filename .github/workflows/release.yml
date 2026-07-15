@@ -56,6 +56,17 @@ jobs:
         run: npx expo prebuild --platform android --clean
         env:
           EXPO_DEBUG: 1
+      - name: Eager bundle JS + assets
+        working-directory: packages/mobile
+        run: |
+          mkdir -p dist-eager
+          npx @expo/cli export:embed \
+            --platform android \
+            --dev false \
+            --eager \
+            --bundle-output "$(pwd)/dist-eager/index.bundle" \
+            --assets-dest "$(pwd)/dist-eager/assets"
+          echo "__EXPO_EAGER_BUNDLE_OPTIONS=--bundle-output $(pwd)/dist-eager/index.bundle --assets-dest $(pwd)/dist-eager/assets" >> "$GITHUB_ENV"
       - name: Build APK (release)
         working-directory: packages/mobile/android
         run: ./gradlew assembleRelease
