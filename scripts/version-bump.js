@@ -2,7 +2,11 @@
  * version-bump.js — Unified version number manager.
  *
  * Canon source: root package.json "version"
- * Syncs to: packages/mobile/app.json, android/build.gradle, mobile/package.json, core/package.json
+ * Syncs to: packages/mobile/app.json (expo.version + android.versionCode),
+ *           packages/mobile/package.json, packages/core/package.json
+ *
+ * Android versionCode is stored in app.json (standard Expo practice).
+ * expo prebuild generates build.gradle from app.json at build time.
  *
  * Usage:
  *   node scripts/version-bump.js          # Dry-run: show current versions
@@ -20,40 +24,41 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 
-// Which files to sync, each with a read/write strategy
+// Files to sync, each with read/write strategy
 const TARGETS = [
   // Root package.json (canon)
   {
     file: 'package.json',
-    readVersion: (data) => data.version,
-    writeVersion: (data, v) => { data.version = v; },
+    read: (data) => ({ version: data.version }),
+    write: (data, v) => { data.version = v; },
   },
-  // Mobile app.json (expo.version)
+  // Mobile app.json (expo.version + android.versionCode for Expo)
   {
     file: 'packages/mobile/app.json',
-    readVersion: (data) => data.expo?.version,
-    writeVersion: (data, v) => { if (data.expo) data.expo.version = v; },
+    read: (data) => ({
+      version: data.expo?.version,
+      versionCode: data.expo?.android?.versionCode,
+    }),
+    write: (data, ver, vc) => {
+      if (data.expo) {
+        data.expo.version = ver;
+        if (data.expo.android) data.expo.android.versionCode = vc;
+      }
+    },
   },
   // Mobile workspace package.json
   {
     file: 'packages/mobile/package.json',
-    readVersion: (data) => data.version,
-    writeVersion: (data, v) => { data.version = v; },
+    read: (data) => ({ version: data.version }),
+    write: (data, v) => { data.version = v; },
   },
   // Core workspace package.json
   {
     file: 'packages/core/package.json',
-    readVersion: (data) => data.version,
-    writeVersion: (data, v) => { data.version = v; },
+    read: (data) => ({ version: data.version }),
+    write: (data, v) => { data.version = v; },
   },
 ];
-
-// Android build.gradle — special handling (gradle DSL, not JSON)
-const GRADLE_FILE = 'packages/mobile/android/app/build.gradle';
-// Regex for versionName "x.y.z"
-const VERSION_NAME_RE = /(versionName\s+)"(\d+\.\d+\.\d+)"/;
-// Regex for versionCode <integer>
-const VERSION_CODE_RE = /(versionCode\s+)(\d+)/;
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(path.join(ROOT, filePath), 'utf8'));
@@ -63,24 +68,12 @@ function writeJson(filePath, data) {
   fs.writeFileSync(path.join(ROOT, filePath), JSON.stringify(data, null, 2) + '\n', 'utf8');
 }
 
-function readGradle() {
-  return fs.readFileSync(path.join(ROOT, GRADLE_FILE), 'utf8');
-}
-
-function writeGradle(content) {
-  fs.writeFileSync(path.join(ROOT, GRADLE_FILE), content, 'utf8');
-}
-
 function parseVersion(str) {
   const parts = str.split('.').map(Number);
   if (parts.length !== 3 || parts.some(isNaN)) return null;
   return { major: parts[0], minor: parts[1], patch: parts[2], raw: str };
 }
 
-/**
- * Read current versions from all targets.
- * Returns { entries: [{label, file, version, raw}], canon: parseVersion(...) }
- */
 function readAll() {
   const canon = readJson('package.json');
   const canonV = parseVersion(canon.version);
@@ -88,37 +81,33 @@ function readAll() {
 
   for (const t of TARGETS) {
     const data = readJson(t.file);
-    const ver = t.readVersion(data);
+    const e = t.read(data);
     entries.push({
       label: t.file.replace(/^packages\//, ''),
       file: t.file,
-      version: ver,
+      version: e.version,
+      versionCode: e.versionCode,
       raw: data,
     });
   }
 
-  // Gradle
-  const gradleContent = readGradle();
-  const vnMatch = gradleContent.match(VERSION_NAME_RE);
-  const vcMatch = gradleContent.match(VERSION_CODE_RE);
-  entries.push({
-    label: 'android/build.gradle',
-    file: GRADLE_FILE,
-    version: vnMatch ? vnMatch[2] : null,
-    versionCode: vcMatch ? parseInt(vcMatch[2], 10) : null,
-    raw: gradleContent,
-  });
-
-  return { canon: canonV, canonRaw: canon, entries };
+  return { canon: canonV, entries };
 }
 
-function printSummary(all, newVersion) {
+function printSummary(all, ver, vc) {
   console.log(`\n  Version status:`);
-  console.log(`  root package.json  → ${all.canon.raw}${newVersion ? ` → ${newVersion}` : ''}`);
+  console.log(`  root package.json  → ${all.canon.raw}${ver ? ` → ${ver}` : ''}`);
   for (const e of all.entries) {
-    const arrow = newVersion && e.file !== GRADLE_FILE ? ` → ${newVersion}` : '';
-    const vc = e.versionCode !== undefined ? `  (versionCode: ${e.versionCode})` : '';
-    console.log(`  ${e.label.padEnd(22)} ${e.version || '—'}${arrow}${vc}`);
+    let line = `  ${e.label.padEnd(22)} ${e.version || '—'}`;
+    if (ver && e.versionCode !== undefined) {
+      line += `  → ${ver}`;
+    }
+    if (e.versionCode !== undefined) {
+      line += `  (versionCode: ${e.versionCode}`;
+      if (vc) line += ` → ${vc}`;
+      line += ')';
+    }
+    console.log(line);
   }
 }
 
@@ -129,7 +118,7 @@ function runCheck() {
 
   for (const e of all.entries) {
     if (e.version !== canon) {
-      console.log(`  MISMATCH: ${e.label} has "${e.version}", canon is "${canon}"`);
+      console.log(`  MISMATCH: ${e.label} version "${e.version}", canon "${canon}"`);
       ok = false;
     } else {
       console.log(`  OK:        ${e.label} = ${e.version}`);
@@ -146,60 +135,40 @@ function runBump(newVer) {
   }
 
   const all = readAll();
-  const oldVer = all.canon.raw;
 
-  // 1. Update root package.json
-  all.canonRaw.version = newVer;
-  writeJson('package.json', all.canonRaw);
+  // Find current versionCode from app.json
+  const appJsonEntry = all.entries.find(e => e.file === 'packages/mobile/app.json');
+  const oldCode = appJsonEntry?.versionCode || 1;
+  const newCode = oldCode + 1;
 
-  // 2. Update JSON targets
+  // Update all targets
   for (const e of all.entries) {
-    if (e.file === GRADLE_FILE) continue; // handled separately
-    // Skip if file doesn't have writable target
     const t = TARGETS.find(t => t.file === e.file);
     if (!t) continue;
-    t.writeVersion(e.raw, newVer);
+    if (e.versionCode !== undefined) {
+      t.write(e.raw, newVer, newCode);
+    } else {
+      t.write(e.raw, newVer);
+    }
     writeJson(e.file, e.raw);
   }
 
-  // 3. Update Gradle: versionName + versionCode
-  let gradleContent = all.entries.find(e => e.file === GRADLE_FILE).raw;
-
-  // versionName
-  gradleContent = gradleContent.replace(VERSION_NAME_RE, (_, prefix) => {
-    return `${prefix}"${newVer}"`;
-  });
-
-  // versionCode: increment by 1 (always)
-  const oldCode = all.entries.find(e => e.file === GRADLE_FILE).versionCode || 1;
-  const newCode = oldCode + 1;
-  gradleContent = gradleContent.replace(VERSION_CODE_RE, (_, prefix) => {
-    return `${prefix}${newCode}`;
-  });
-
-  writeGradle(gradleContent);
-
-  // 4. Summary
-  console.log(`\n  ✓ Version bumped: ${oldVer} → ${newVer}`);
-  printSummary(all, newVer);
+  console.log(`\n  ✓ Version bumped: ${all.canon.raw} → ${newVer}`);
+  printSummary(all, newVer, newCode);
   console.log(`  versionCode: ${oldCode} → ${newCode}\n`);
   console.log(`  Staged changes:`);
-  console.log(`    package.json`);
   for (const e of all.entries) {
     console.log(`    ${e.file}`);
   }
-  console.log(`    packages/mobile/android/app/build.gradle`);
 }
 
 function runDry() {
   const all = readAll();
   console.log(`  Current versions:`);
   for (const e of all.entries) {
-    if (e.versionCode !== undefined) {
-      console.log(`  ${e.label.padEnd(22)} ${e.version}  (versionCode: ${e.versionCode})`);
-    } else {
-      console.log(`  ${e.label.padEnd(22)} ${e.version}`);
-    }
+    const line = `  ${e.label.padEnd(22)} ${e.version || '—'}`;
+    const vc = e.versionCode !== undefined ? `  (versionCode: ${e.versionCode})` : '';
+    console.log(line + vc);
   }
   console.log(`\n  Canon source: package.json version = ${all.canon.raw}`);
 }
