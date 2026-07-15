@@ -32,8 +32,8 @@ const FONT_FAMILY_MAP = {
   'Foundation.ttf': 'foundation',
   'Ionicons.ttf': 'ionicons',
   'MaterialCommunityIcons.ttf': 'material-community',
-  'MaterialIcons.ttf': 'Material Icons',
-  'Octicons.ttf': 'Octicons',
+  'MaterialIcons.ttf': 'material',
+  'Octicons.ttf': 'octicons',
   'SimpleLineIcons.ttf': 'simple-line-icons',
   'Zocial.ttf': 'zocial',
 };
