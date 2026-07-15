@@ -276,7 +276,8 @@ jobs:
               \"tag_name\": \"$TAG\",
               \"name\": \"$TAG\",
               \"body\": $(echo "$BODY" | jq -Rs '.'),
-              \"prerelease\": false
+              \"prerelease\": false,
+              \"target_commitish\": \"master\"
             }")
           echo "Gitee response: $RELEASE_RESP"
           RELEASE_ID=$(echo "$RELEASE_RESP" | jq -r '.id // empty')
