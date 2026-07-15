@@ -1,36 +1,24 @@
 /**
  * Pre-bundle Android JS + assets for eager Gradle build.
- * Replicates exportEagerAsync but preserves sourcemapOutput for key matching.
+ * Writes __EXPO_EAGER_BUNDLE_OPTIONS JSON to a temp file for CI to read.
+ *
+ * Note: sourcemapOutput is intentionally omitted here. If included, the eager
+ * key matches Gradle's key, but Gradle's createBundleReleaseJsAndAssets
+ * fails on sourcemap post-processing after the eager copy. By omitting it,
+ * the key doesn't match → Gradle re-bundles (fast with warm Metro cache).
  */
 const fs = require('fs');
 const path = require('path');
-const { resolveEagerOptionsAsync, getExportEmbedOptionsKey } = require('@expo/cli/build/src/export/embed/resolveOptions');
-const { exportEmbedInternalAsync } = require('@expo/cli/build/src/export/embed/exportEmbedAsync');
+const { exportEagerAsync } = require('@expo/cli/build/src/export/embed/exportEager');
 
 const projectRoot = process.cwd();
 const outFile = process.argv[2] || path.join(projectRoot, 'dist-eager', 'eager-options.json');
 
-const sourcemapOutput = path.join(
-  projectRoot,
-  'android', 'app', 'build', 'intermediates', 'sourcemaps', 'react', 'release',
-  'index.android.bundle.packager.map'
-);
-
 (async () => {
-  // Ensure the sourcemap directory exists before bundling (Gradle would create it,
-  // but our eager step runs before Gradle).
-  fs.mkdirSync(path.dirname(sourcemapOutput), { recursive: true });
-
-  const options = await resolveEagerOptionsAsync(projectRoot, {
+  const result = await exportEagerAsync(projectRoot, {
     dev: false,
     platform: 'android',
-    sourcemapOutput,
-    resetCache: false,
   });
-
-  await exportEmbedInternalAsync(projectRoot, options);
-
-  const result = { options, key: getExportEmbedOptionsKey(options) };
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
   fs.writeFileSync(outFile, JSON.stringify(result));
   console.log('Eager options written to', outFile);
