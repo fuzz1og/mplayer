@@ -296,11 +296,17 @@ jobs:
           # Upload each asset to Gitee
           for file in ./assets/*; do
             [ -f "$file" ] || continue
-            echo "Uploading: $(basename "$file")"
-            curl -s -X POST \
-              "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_file" \
+            BASE=$(basename "$file")
+            echo "Uploading: $BASE"
+            UPLOAD_RESP=$(curl -s -X POST \
+              "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
               --connect-timeout 10 --max-time 600 \
               -F "access_token=$GITEE_TOKEN" \
-              -F "file=@$file"
-            echo " (done)"
+              -F "file=@$file")
+            DL_URL=$(echo "$UPLOAD_RESP" | jq -r '.browser_download_url // empty')
+            if [ -n "$DL_URL" ]; then
+              echo "OK $BASE → $DL_URL"
+            else
+              echo "FAIL $BASE — $UPLOAD_RESP"
+            fi
           done
