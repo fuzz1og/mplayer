@@ -2,9 +2,9 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type PlayMode = '顺序播放' | '单曲循环' | '随机播放' | '列表循环';
+export type PlayMode = '单曲循环' | '随机播放' | '列表循环';
 
-export const PLAY_MODES: PlayMode[] = ['顺序播放', '单曲循环', '列表循环', '随机播放'];
+export const PLAY_MODES: PlayMode[] = ['单曲循环', '列表循环', '随机播放'];
 
 interface SettingsState {
   apiBaseUrl: string;
@@ -20,7 +20,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       apiBaseUrl: '',
       proxyUrl: '',
-      playMode: '顺序播放',
+      playMode: '列表循环',
       setApiBaseUrl: (url) => set({ apiBaseUrl: url }),
       setProxyUrl: (url) => set({ proxyUrl: url }),
       setPlayMode: (mode) => set({ playMode: mode }),

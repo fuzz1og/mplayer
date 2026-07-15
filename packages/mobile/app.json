@@ -25,6 +25,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-av",
       "./plugins/withVectorIconsFonts",
       [
         "expo-build-properties",

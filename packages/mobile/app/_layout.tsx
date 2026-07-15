@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { Stack } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { setupNotificationChannel } from '../services/notificationService';
+import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
@@ -15,11 +16,25 @@ export default function RootLayout() {
   const setShowPlayer = usePlayerStore(s => s.setShowPlayer);
 
   useEffect(() => {
+    initAudio().catch(() => {});
     setupNotificationChannel().catch(() => {});
 
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data;
-      if (data?.songId) {
+      const actionId = response.actionIdentifier;
+
+      if (actionId === 'play-pause') {
+        togglePlay();
+      } else if (actionId === 'next') {
+        usePlayerStore.getState().next();
+        const nextSong = usePlayerStore.getState().currentSong;
+        if (nextSong) playSong(nextSong);
+      } else if (actionId === 'prev') {
+        usePlayerStore.getState().prev();
+        const prevSong = usePlayerStore.getState().currentSong;
+        if (prevSong) playSong(prevSong);
+      } else if (data?.songId) {
+        // 点击通知正文 → 打开播放器
         setShowPlayer(true);
       }
     });
