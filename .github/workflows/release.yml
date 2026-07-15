@@ -267,7 +267,8 @@ jobs:
             }" || echo "Tag creation skipped (may already exist)"
 
           # Create release on Gitee
-          RELEASE_ID=$(curl -s -X POST "https://gitee.com/api/v5/repos/$GITEE_REPO/releases" \
+          echo "--- Creating Gitee release for $TAG ---"
+          RELEASE_RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/$GITEE_REPO/releases" \
             -H "Content-Type: application/json" \
             --connect-timeout 10 --max-time 30 \
             -d "{
@@ -276,7 +277,9 @@ jobs:
               \"name\": \"$TAG\",
               \"body\": $(echo "$BODY" | jq -Rs '.'),
               \"prerelease\": false
-            }" | jq -r '.id // empty')
+            }")
+          echo "Gitee response: $RELEASE_RESP"
+          RELEASE_ID=$(echo "$RELEASE_RESP" | jq -r '.id // empty')
 
           echo "Gitee release ID: $RELEASE_ID"
           if [ -z "$RELEASE_ID" ]; then
