@@ -7,6 +7,7 @@ import { updateNotification, clearNotification } from './notificationService';
 
 let sound: Audio.Sound | null = null;
 let playingPromise: Promise<void> | null = null;
+let currentPlayId = 0;
 
 export async function initAudio(): Promise<void> {
   await Audio.setAudioModeAsync({
@@ -19,10 +20,20 @@ export async function initAudio(): Promise<void> {
 }
 
 export async function playSong(song: Song, retryCount = 0): Promise<void> {
-  // 排队而非并发: 等上一个 playSong 完成
+  const playId = ++currentPlayId;
+
+  // 立即停掉当前声音 — 不等旧 run() 完成
+  if (sound) {
+    await sound.unloadAsync();
+    sound = null;
+  }
+
+  // 等上一个 playSong 完成（旧 run() 检测到 playId 变化后会退出）
   while (playingPromise) {
     try { await playingPromise; } catch { break; }
   }
+
+  if (playId !== currentPlayId) return;
 
   const run = async (): Promise<void> => {
     let audioUrl = song.url;
@@ -30,9 +41,9 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
     if (!audioUrl || (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://'))) {
       if (song.name) {
         const searchResults = await musicApi.searchSongs(song.name, 1, song.sourceType);
+        if (playId !== currentPlayId) throw 'cancelled';
         if (searchResults.length > 0) {
           audioUrl = searchResults[0].url || audioUrl;
-          // 只补字段, 不替换 currentSong 的 id
           const store = usePlayerStore.getState();
           if (store.currentIndex >= 0 && store.queue[store.currentIndex]?.id === song.id) {
             const updatedQueue = [...store.queue];
@@ -47,27 +58,29 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
     if (!audioUrl || (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://'))) {
       if (song.sourceType === 'soda' && song.id) {
         const sodaUrl = await musicApi.getSodaAudioUrl(song.id);
+        if (playId !== currentPlayId) throw 'cancelled';
         if (sodaUrl?.startsWith('http://') || sodaUrl?.startsWith('https://')) {
           audioUrl = sodaUrl;
         }
       }
       if (!audioUrl?.startsWith('http://') && !audioUrl?.startsWith('https://')) {
         const resolved = await musicApi.getAudioUrl(audioUrl);
+        if (playId !== currentPlayId) throw 'cancelled';
         audioUrl = resolved || audioUrl;
       }
     }
 
     if (!audioUrl?.startsWith('http')) throw new Error('no playable URL');
 
-    if (sound) {
-      await sound.unloadAsync();
-      sound = null;
-    }
-
     const { sound: newSound } = await Audio.Sound.createAsync(
       { uri: audioUrl },
       { shouldPlay: true, progressUpdateIntervalMillis: 250 }
     );
+
+    if (playId !== currentPlayId) {
+      await newSound.unloadAsync();
+      throw 'cancelled';
+    }
 
     sound = newSound;
     useHistoryStore.getState().addHistory(song);
@@ -79,6 +92,7 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
         (status.durationMillis ?? 0) / 1000
       );
       if (status.didJustFinish) {
+        if (playId !== currentPlayId) return;
         usePlayerStore.getState().next();
         const nextSong = usePlayerStore.getState().currentSong;
         if (nextSong) run();
@@ -90,6 +104,7 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
     playingPromise = run();
     await playingPromise;
   } catch (err) {
+    if (err === 'cancelled') return;
     console.error(`[playSong] error for song ${song.id} (${song.name}):`, err);
     const nextRetryCount = retryCount + 1;
     const queue = usePlayerStore.getState().queue;

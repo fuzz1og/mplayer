@@ -4,6 +4,7 @@ import type { Song } from '@mplayer/core';
 
 const CHANNEL_ID = 'music-playback';
 const NOTIFICATION_ID = 'music-playback';
+const CATEGORY_ID = 'music-playback-controls';
 
 // 处理前台通知行为
 Notifications.setNotificationHandler({
@@ -22,6 +23,25 @@ export async function setupNotificationChannel(): Promise<void> {
       sound: null,
     });
   }
+
+  // 注册通知分类（含操作按钮）
+  await Notifications.setNotificationCategoryAsync(CATEGORY_ID, [
+    {
+      identifier: 'prev',
+      buttonTitle: '上一首',
+      options: { opensAppToForeground: false },
+    },
+    {
+      identifier: 'play-pause',
+      buttonTitle: '播放/暂停',
+      options: { opensAppToForeground: false },
+    },
+    {
+      identifier: 'next',
+      buttonTitle: '下一首',
+      options: { opensAppToForeground: false },
+    },
+  ]);
 }
 
 export async function updateNotification(song: Song | null, isPlaying: boolean): Promise<void> {
@@ -37,6 +57,7 @@ export async function updateNotification(song: Song | null, isPlaying: boolean):
       subtitle: song.artist,
       body: isPlaying ? `${song.artist} · ${song.album}` : `已暂停 · ${song.artist}`,
       data: { songId: song.id, isPlaying },
+      categoryIdentifier: CATEGORY_ID,
       ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
     },
     trigger: null,
