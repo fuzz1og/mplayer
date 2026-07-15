@@ -10,16 +10,13 @@ import {
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi } from '@mplayer/core';
-import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
-import type { PlayMode } from '../stores/settingsStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 export default function SettingsPage() {
   const storeApiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
   const storeProxyUrl = useSettingsStore((s) => s.proxyUrl);
-  const storePlayMode = useSettingsStore((s) => s.playMode);
   const setApiBaseUrl = useSettingsStore((s) => s.setApiBaseUrl);
   const setStoreProxyUrl = useSettingsStore((s) => s.setProxyUrl);
-  const setPlayMode = useSettingsStore((s) => s.setPlayMode);
 
   const [localUrl, setLocalUrl] = useState(storeApiBaseUrl);
   const [localProxyUrl, setLocalProxyUrl] = useState(storeProxyUrl);
@@ -54,10 +51,6 @@ export default function SettingsPage() {
       setTesting(false);
       setTimeout(() => setTestResult(null), 3000);
     }
-  };
-
-  const handlePlayModeChange = (mode: PlayMode) => {
-    setPlayMode(mode);
   };
 
   const handleSaveProxy = () => {
@@ -161,41 +154,6 @@ export default function SettingsPage() {
                 {proxySaved ? '已保存' : '保存代理'}
               </Text>
             </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* 播放模式 */}
-        <View style={styles.section}>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>播放模式</Text>
-            {PLAY_MODES.map((mode, index) => {
-              const active = storePlayMode === mode;
-              return (
-                <TouchableOpacity
-                  key={mode}
-                  style={[
-                    styles.radioItem,
-                    index < PLAY_MODES.length - 1 && styles.radioItemBorder,
-                  ]}
-                  onPress={() => handlePlayModeChange(mode)}
-                  activeOpacity={0.6}
-                >
-                  <Ionicons
-                    name={active ? 'radio-button-on' : 'radio-button-off'}
-                    size={20}
-                    color={active ? '#e74c3c' : '#666'}
-                  />
-                  <Text
-                    style={[
-                      styles.radioLabel,
-                      active && styles.radioLabelActive,
-                    ]}
-                  >
-                    {mode}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
           </View>
         </View>
 

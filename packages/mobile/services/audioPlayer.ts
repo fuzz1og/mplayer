@@ -102,7 +102,7 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
         if (playId !== currentPlayId) return;
         usePlayerStore.getState().next();
         const nextSong = usePlayerStore.getState().currentSong;
-        if (nextSong) run();
+        if (nextSong) playSong(nextSong);
       }
     });
   };
