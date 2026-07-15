@@ -62,12 +62,14 @@ jobs:
         run: npx expo prebuild --platform android --clean
         env:
           EXPO_DEBUG: 1
-      - name: Eager bundle JS + assets
+      - name: Copy vector icon fonts to Android assets
         working-directory: packages/mobile
         run: |
-          mkdir -p dist-eager
-          node scripts/eager-bundle-android.cjs dist-eager/eager-options.json
-          echo "__EXPO_EAGER_BUNDLE_OPTIONS=$(cat dist-eager/eager-options.json)" >> "$GITHUB_ENV"
+          ANDROID_ASSETS="android/app/src/main/assets/fonts"
+          ICON_FONTS="../../node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts"
+          mkdir -p "$ANDROID_ASSETS"
+          cp "$ICON_FONTS"/*.ttf "$ANDROID_ASSETS/"
+          echo "Copied $(ls -1 "$ANDROID_ASSETS"/*.ttf 2>/dev/null | wc -l) icon fonts to $ANDROID_ASSETS"
       - name: Build APK (release)
         working-directory: packages/mobile/android
         run: ./gradlew assembleRelease
