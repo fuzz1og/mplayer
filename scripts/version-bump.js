@@ -163,7 +163,6 @@ function runBump(newVer) {
   }
 
   // 3. Update Gradle: versionName + versionCode
-  const oldParsed = all.canon;
   let gradleContent = all.entries.find(e => e.file === GRADLE_FILE).raw;
 
   // versionName
