@@ -53,14 +53,21 @@ export default function SettingsPage() {
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
     try {
-      const res = await fetch('https://gitee.com/api/v5/repos/aris3104/mplayer/releases/latest');
+      const res = await fetch('https://gitee.com/api/v5/repos/aris3104/mplayer/releases');
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      const remoteVer = data.tag_name.replace(/^v/i, '');
+      const list = await res.json();
+      if (!list || list.length === 0) {
+        // 还没有任何发布版本
+        setUpdateState('not-available');
+        setTimeout(() => setUpdateState('idle'), 2000);
+        return;
+      }
+      const latest = list[0];
+      const remoteVer = latest.tag_name.replace(/^v/i, '');
       if (compareVersions(remoteVer, currentVersion) > 0) {
         setLatestVersion(remoteVer);
-        setReleaseNotes(data.body || '');
-        const apkAsset = data.assets?.find((a: any) =>
+        setReleaseNotes(latest.body || '');
+        const apkAsset = latest.assets?.find((a: any) =>
           a.name?.endsWith('.apk') || a.content_type?.includes('apk')
         );
         setApkUrl(apkAsset?.browser_download_url || '');
