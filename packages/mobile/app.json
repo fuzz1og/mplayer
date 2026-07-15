@@ -9,10 +9,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mplayer.mobile",
-      "infoPlist": {
-        "UIBackgroundModes": ["audio"]
-      }
+      "bundleIdentifier": "com.mplayer.mobile"
     },
     "android": {
       "package": "com.mplayer.mobile"
