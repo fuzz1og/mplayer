@@ -3,13 +3,17 @@ name: Build & Release
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: 'New version (e.g. 1.4.0). Auto-bump all files, commit, create tag, then build all platforms.'
+        required: false
       platform:
-        description: 'Build platform'
+        description: 'Target platform (only for test builds without version)'
         type: choice
         options:
-          - mobile-only
           - all
-        default: mobile-only
+          - desktop-only
+          - mobile-only
+        default: all
   push:
     tags:
       - 'v*'
@@ -18,8 +22,47 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    if: ${{ github.event.inputs.platform != 'mobile-only' || github.event_name == 'push' }}
+  # ── Create version tag (dispatch with version only) ──
+  # Pushes a tag which triggers a second workflow run that does the actual build.
+  # This keeps the build logic unified: tag push = build.
+  create-tag:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Bump version across all files
+        run: node scripts/version-bump.js ${{ inputs.version }}
+
+      - name: Commit and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: bump version to ${{ inputs.version }}"
+          git tag v${{ inputs.version }}
+          git push origin v${{ inputs.version }}
+
+  # ════════════════════════════════════════════════════════
+  # Build jobs — run on tag push OR dispatch without version
+  # ════════════════════════════════════════════════════════
+
+  # ── Desktop (Electron) build ──
+  build-desktop:
+    if: |
+      !failure() && !cancelled()
+      && (github.event_name == 'push'
+          || (github.event_name == 'workflow_dispatch' && inputs.version == '' && inputs.platform != 'mobile-only'))
     strategy:
       matrix:
         include:
@@ -42,15 +85,28 @@ jobs:
 
       - run: npx tsc && npx vite build
 
-      - run: npx electron-builder ${{ matrix.args }} --publish always
+      # Tag push = official release → publish
+      - name: Build + publish to GitHub Releases
+        if: github.event_name == 'push'
+        run: npx electron-builder ${{ matrix.args }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Mobile Android APK
-  mobile-android:
+      # Dispatch (test build) → build only, no publish
+      - name: Build only (test)
+        if: github.event_name != 'push'
+        run: npx electron-builder ${{ matrix.args }}
+
+  # ── Mobile Android APK ──
+  build-mobile:
+    if: |
+      !failure() && !cancelled()
+      && (github.event_name == 'push'
+          || (github.event_name == 'workflow_dispatch' && inputs.version == '' && inputs.platform != 'desktop-only'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -59,44 +115,73 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+
       - run: npm ci --ignore-scripts
       - run: npm run core:build
+
       - name: Prebuild Android native project
         working-directory: packages/mobile
         run: npx expo prebuild --platform android --clean
         env:
           EXPO_DEBUG: 1
+
       - name: Build APK (release)
         working-directory: packages/mobile/android
         run: ./gradlew assembleRelease
         env:
           GRADLE_OPTS: "-Xmx4096m"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: mplayer-mobile-apk
           path: packages/mobile/android/app/build/outputs/apk/release/*.apk
 
+  # ── Publish release ──
   publish:
-    needs: [build, mobile-android]
-    if: ${{ always() && !cancelled() && needs.mobile-android.result == 'success' }}
+    needs: [build-desktop, build-mobile]
+    if: |
+      always() && !cancelled()
+      && needs.build-mobile.result == 'success'
+      && (github.event_name == 'push' || inputs.version == '')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Download APK artifact
         uses: actions/download-artifact@v4
         with:
           name: mplayer-mobile-apk
 
-      - name: Generate release notes and publish
+      - name: Create or edit release
         run: |
-          TAG="${{ github.ref_name }}"
-          # Generate release notes and save to file
+          TAG="${{ steps.tag.outputs.tag }}"
+
+          if [ -z "$TAG" ]; then
+            echo "No tag — skipping release publish"
+            exit 0
+          fi
+
+          # Generate release notes
           gh api repos/${{ github.repository }}/releases/generate-notes \
             -f tag_name="$TAG" --jq '.body' > release-notes.md
-          # Publish release with generated notes
-          gh release edit "$TAG" --notes-file release-notes.md --draft=false
+
+          # Create if not exists, otherwise edit
+          if gh release view "$TAG" &>/dev/null; then
+            gh release edit "$TAG" --notes-file release-notes.md --draft=false
+          else
+            gh release create "$TAG" --notes-file release-notes.md --draft=false
+          fi
+
           # Upload APK to release assets
           for apk in *.apk; do
             [ -f "$apk" ] && gh release upload "$TAG" "$apk" --clobber
@@ -104,26 +189,39 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # ── Sync release assets to Gitee ──
   sync-to-gitee:
     needs: publish
-    if: ${{ always() && !cancelled() && needs.publish.result == 'success' }}
+    if: |
+      always() && !cancelled() && needs.publish.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download all release assets
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${{ steps.tag.outputs.tag }}"
+          [ -z "$TAG" ] && exit 0
           gh release download "$TAG" --dir ./assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sync release to Gitee
+        if: steps.tag.outputs.tag != ''
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_REPO: aris3104/mplayer
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${{ steps.tag.outputs.tag }}"
 
           # Generate release notes
           BODY=$(gh api repos/${{ github.repository }}/releases/generate-notes \
