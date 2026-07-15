@@ -83,7 +83,6 @@ export default function PlayerOverlay({ onClose }: Props) {
   });
 
   const MODE_ICONS: Record<PlayMode, string> = {
-    '顺序播放': 'repeat',
     '单曲循环': 'repeat-once',
     '列表循环': 'repeat',
     '随机播放': 'shuffle',

@@ -19,7 +19,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-av"
+      "expo-av",
+      "./plugins/withVectorIconsFonts"
     ],
     "experiments": {
       "typedRoutes": true
