@@ -17,6 +17,10 @@ const sourcemapOutput = path.join(
 );
 
 (async () => {
+  // Ensure the sourcemap directory exists before bundling (Gradle would create it,
+  // but our eager step runs before Gradle).
+  fs.mkdirSync(path.dirname(sourcemapOutput), { recursive: true });
+
   const options = await resolveEagerOptionsAsync(projectRoot, {
     dev: false,
     platform: 'android',
