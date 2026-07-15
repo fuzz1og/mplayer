@@ -23,11 +23,12 @@ permissions:
 
 jobs:
   # ── Create version tag (dispatch with version only) ──
-  # Pushes a tag which triggers a second workflow run that does the actual build.
-  # This keeps the build logic unified: tag push = build.
   create-tag:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
     runs-on: ubuntu-latest
+    outputs:
+      commit_sha: ${{ steps.commit.outputs.sha }}
+      tag: v${{ inputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,14 +45,17 @@ jobs:
       - name: Bump version across all files
         run: node scripts/version-bump.js ${{ inputs.version }}
 
-      - name: Commit and push tag
+      - name: Commit and create tag
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "chore: bump version to ${{ inputs.version }}"
-          git tag v${{ inputs.version }}
-          git push origin v${{ inputs.version }}
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git tag -f v${{ inputs.version }}
+          # Push commit only — don't push tag (avoids duplicate tag-push workflow)
+          git push origin HEAD
 
   # ════════════════════════════════════════════════════════
   # Build jobs — run on tag push OR dispatch without version
@@ -59,10 +63,11 @@ jobs:
 
   # ── Desktop (Electron) build ──
   build-desktop:
+    needs: [create-tag]
     if: |
       !failure() && !cancelled()
       && (github.event_name == 'push'
-          || (github.event_name == 'workflow_dispatch' && inputs.version == '' && inputs.platform != 'mobile-only'))
+          || (github.event_name == 'workflow_dispatch' && inputs.platform != 'mobile-only'))
     strategy:
       matrix:
         include:
@@ -75,6 +80,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Use bumped commit when dispatched with version, else default
+          ref: ${{ needs.create-tag.outputs.commit_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -85,27 +93,30 @@ jobs:
 
       - run: npx tsc && npx vite build
 
-      # Tag push = official release → publish
+      # Tag push or dispatch with version = official release → publish
       - name: Build + publish to GitHub Releases
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.version != ''
         run: npx electron-builder ${{ matrix.args }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Dispatch (test build) → build only, no publish
+      # Dispatch without version (test build) → build only
       - name: Build only (test)
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' && inputs.version == ''
         run: npx electron-builder ${{ matrix.args }}
 
   # ── Mobile Android APK ──
   build-mobile:
+    needs: [create-tag]
     if: |
       !failure() && !cancelled()
       && (github.event_name == 'push'
-          || (github.event_name == 'workflow_dispatch' && inputs.version == '' && inputs.platform != 'desktop-only'))
+          || (github.event_name == 'workflow_dispatch' && inputs.platform != 'desktop-only'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-tag.outputs.commit_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -143,7 +154,7 @@ jobs:
     if: |
       always() && !cancelled()
       && needs.build-mobile.result == 'success'
-      && (github.event_name == 'push' || inputs.version == '')
+      && (github.event_name == 'push' || inputs.version != '')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -153,6 +164,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ inputs.version }}" ]; then
+            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=" >> "$GITHUB_OUTPUT"
           fi
@@ -169,6 +182,14 @@ jobs:
           if [ -z "$TAG" ]; then
             echo "No tag — skipping release publish"
             exit 0
+          fi
+
+          # Push tag for dispatch-with-version (create-tag only creates it locally)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -f "$TAG"
+            git push origin "$TAG"
           fi
 
           # Generate release notes
@@ -203,6 +224,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ inputs.version }}" ]; then
+            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=" >> "$GITHUB_OUTPUT"
           fi
