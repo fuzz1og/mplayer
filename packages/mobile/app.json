@@ -11,8 +11,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mplayer.mobile"
     },
+    "icon": "../../resources/icon.png",
     "android": {
-      "package": "com.mplayer.mobile"
+      "package": "com.mplayer.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "../../resources/icon.png",
+        "backgroundColor": "#1a1a2e"
+      }
     },
     "web": {
       "bundler": "metro"
@@ -20,7 +25,15 @@
     "plugins": [
       "expo-router",
       "expo-av",
-      "./plugins/withVectorIconsFonts"
+      "./plugins/withVectorIconsFonts",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
