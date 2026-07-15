@@ -7,7 +7,8 @@ const VECTOR_ICONS_FONTS_DIR = path.join(
   '..',
   'build',
   'vendor',
-  'fonts'
+  'react-native-vector-icons',
+  'Fonts'
 );
 
 /**
