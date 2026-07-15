@@ -47,19 +47,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
 
     if (playMode === '随机播放') {
-      const idx = Math.floor(Math.random() * queue.length);
-      set({ currentSong: queue[idx], currentIndex: idx, isPlaying: true, currentTime: 0 });
-      return;
-    }
-
-    if (playMode === '顺序播放') {
-      const nextIdx = currentIndex + 1;
-      if (nextIdx >= queue.length) {
-        // 播完停止
-        set({ isPlaying: false, currentTime: 0 });
+      if (queue.length <= 1) {
+        set({ currentTime: 0, isPlaying: true });
         return;
       }
-      set({ currentSong: queue[nextIdx], currentIndex: nextIdx, isPlaying: true, currentTime: 0 });
+      let idx: number;
+      do { idx = Math.floor(Math.random() * queue.length); }
+      while (idx === currentIndex);
+      set({ currentSong: queue[idx], currentIndex: idx, isPlaying: true, currentTime: 0 });
       return;
     }
 
