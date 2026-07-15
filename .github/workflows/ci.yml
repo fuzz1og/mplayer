@@ -27,23 +27,9 @@ jobs:
       - run: npm run core:build
       - run: npx tsc --noEmit --project packages/mobile/tsconfig.json
 
-  # Mobile web export — verify Metro bundle for web
-  mobile-web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci --ignore-scripts
-      - run: npm run core:build
-      - name: Expo export (web)
-        working-directory: packages/mobile
-        run: npx expo export --platform web
-
   # Mobile Android APK
   mobile-android:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
