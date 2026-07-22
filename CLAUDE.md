@@ -249,11 +249,66 @@ npx tsc --noEmit --project packages/mobile/tsconfig.json
 
 ## Testing
 
-- **Unit tests**: Vitest with jsdom environment. Tests in `src/renderer/__tests__/` and `src/__tests__/`.
-- **Setup**: `src/renderer/__tests__/setup.ts` mocks `electron` module (`ipcRenderer.invoke`, `ipcRenderer.on`). Ant Design's `matchMedia` is also mocked.
-- **Globals**: `describe`, `it`, `expect` are available without import (`globals: true` in vitest config).
-- **E2E**: Playwright tests in `e2e/`. Use `npx vite --config vite.test.config.ts --port 5174` as test server.
+### Desktop (Electron)
+
+**Renderer tests**: Vitest + jsdom + @testing-library/react. Test files in `src/renderer/__tests__/` and `src/__tests__/`.
+- **Config**: `vite.config.ts` — `test` section (`globals: true`, `environment: 'jsdom'`)
+- **Setup**: `src/renderer/__tests__/setup.ts` — mocks `electron` (ipcRenderer.invoke/on/send, clipboard, shell), `window.matchMedia` for Ant Design
+- **Globals**: `describe`, `it`, `expect` available without import
+- **Factories**: `src/renderer/__tests__/factories.ts` — `createSong()`, `createLocalSong()` for test data
+- **IPC mock pattern**: `vi.mock('@/renderer/services/IpcClient')` in store integration tests
+
+```bash
+npx vitest run                    # renderer tests (single run)
+npx vitest                        # renderer tests (watch mode)
+```
+
+**Main process tests**: Vitest + node environment. Test files in `src/__tests__/main/`.
+- **Config**: `vitest.main.config.ts` — `environment: 'node'`, `include: ['src/__tests__/main/**']`
+- **Setup**: `src/__tests__/main/setup.ts` — global `vi.mock('electron', ...)` covering app/BrowserWindow/ipcMain/dialog/session/globalShortcut/Tray/Menu/nativeImage
+- **Per-file override**: Test files can call `vi.mock('electron', ...)` again to override specific APIs
+
+```bash
+npx vitest run --config vitest.main.config.ts   # main process tests
+```
+
+**Constructor injection for testability**: 3 files accept optional `userDataPath` to avoid `app.getPath('userData')` dependency:
+- `src/main/cache/cacheManager.ts` — `constructor(userDataPath?: string)`
+- `src/main/storage/fileStorage.ts` — `constructor(userDataPath?: string)`
+- `src/main/services/localMusicService.ts` — `constructor(userDataPath?: string)`
+
+Pass a temp dir in tests, omit in production to fallback to `app.getPath`.
+
+### Core (`packages/core/`)
+
+```bash
+npm run core:build                # build before running tests
+npx vitest run --config packages/core/vitest.config.ts
+```
+
+### Mobile (`packages/mobile/`)
+
+- **Config**: `packages/mobile/vitest.config.ts` — `environment: 'node'`
+- **Setup**: `packages/mobile/__tests__/setup.ts` — mocks AsyncStorage, react-native Alert, @mplayer/core musicApi
+- **Store tests**: Pure zustand `getState/setState` pattern — no persistence dependency in unit tests
+
+```bash
+npx vitest run --config packages/mobile/vitest.config.ts
+```
+
+### E2E
+
+Playwright tests in `e2e/`. Use `npx vite --config vite.test.config.ts --port 5174` as test server.
 - **Mobile E2E**: Not yet set up (requires Detox or Maestro). Manual testing via Expo.
+
+### Verification order
+
+```bash
+npx vitest run                           # renderer
+npx vitest run --config vitest.main.config.ts   # main
+npx vitest run --config packages/mobile/vitest.config.ts  # mobile
+npx vitest run --config packages/core/vitest.config.ts    # core
+```
 
 ## Prebuild Script
 

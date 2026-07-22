@@ -30,10 +30,16 @@ class LocalMusicService {
   private store: LocalMusicStore = { folders: [] };
   private watchers: Map<string, fs.FSWatcher> = new Map();
   private initialized: boolean = false;
+  private userDataPath?: string;
+
+  constructor(userDataPath?: string) {
+    this.userDataPath = userDataPath;
+  }
 
   private ensureInitialized(): void {
     if (this.initialized) return;
-    this.dataDir = path.join(app.getPath('userData'), 'data');
+    const resolved = this.userDataPath ?? app.getPath('userData');
+    this.dataDir = path.join(resolved, 'data');
     this.storeFile = path.join(this.dataDir, 'local-music.json');
     this.loadStore();
     this.initialized = true;
