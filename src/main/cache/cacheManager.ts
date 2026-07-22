@@ -48,9 +48,9 @@ export class CacheManager {
   private cacheIndex: CacheIndex = {};
   private indexFile: string;
 
-  constructor() {
-    const userDataPath = app.getPath('userData');
-    this.cacheDir = path.join(userDataPath, 'cache');
+  constructor(userDataPath?: string) {
+    const resolved = userDataPath ?? app.getPath('userData');
+    this.cacheDir = path.join(resolved, 'cache');
     this.maxCacheSize = MAX_CACHE_SIZE;
     this.cacheExpireDays = CACHE_EXPIRE_DAYS;
     this.urlExpireHours = URL_EXPIRE_HOURS;
