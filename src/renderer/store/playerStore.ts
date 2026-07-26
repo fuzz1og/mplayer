@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
-import { lyricsService } from '@/renderer/services/lyricsService';
 import type { Song } from '@/shared/types/song';
 import type { PlayMode } from '@/shared/types/player';
 import { IpcClient } from '@/renderer/services/IpcClient';
@@ -277,7 +276,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             if (searchResults.length > 0) {
               const freshSong = searchResults[0];
               if (freshSong.lrc && freshSong.lrc.trim() !== '') {
-                return lyricsService.getLyrics(freshSong.lrc);
+                return IpcClient.invoke<string>('lyrics:get', freshSong.lrc);
               }
             }
             return '';
@@ -297,7 +296,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           });
       } else {
         set({ lyricsLoading: true });
-        lyricsService.getLyrics(song.lrc)
+        IpcClient.invoke<string>('lyrics:get', song.lrc)
           .then((lyricsContent) => {
             if (get().currentSong?.id === requestingSongId) {
               set({ lyrics: lyricsContent, lyricsLoading: false });

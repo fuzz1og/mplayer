@@ -1,8 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Settings, Trash2, Database, Info, HardDrive, FileAudio, Image, Link, Music, Folder, RefreshCw, Shield, Download, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { message } from 'antd';
-import { cacheService, CacheStats } from '@/renderer/services/cacheService';
+import { IpcClient } from '@/renderer/services/IpcClient';
 const { ipcRenderer } = window.require('electron');
+
+interface CacheStats {
+  totalSize: number;
+  fileCount: number;
+  songsCount: number;
+  coversCount: number;
+  audioCount: number;
+  urlsCount: number;
+}
 
 interface ProxyConfig {
   enabled: boolean;
@@ -42,7 +51,7 @@ const SettingsPage: React.FC = () => {
 
   const loadStats = async () => {
     try {
-      const data = await cacheService.getCacheStats();
+      const data = await IpcClient.invoke<CacheStats>('cache:getStats');
       setStats(data);
     } catch (error) {
       console.error('加载缓存统计失败:', error);
@@ -234,7 +243,7 @@ const SettingsPage: React.FC = () => {
 
   const handleClearCache = async () => {
     try {
-      await cacheService.clearAllCache();
+      await IpcClient.invoke<void>('cache:clear');
       setShowClearConfirm(false);
       loadStats();
     } catch (error) {

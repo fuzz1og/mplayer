@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { X, ListMusic } from 'lucide-react';
 import { message, Modal } from 'antd';
-import { playlistService } from '@/renderer/services/playlistService';
 import { filterDuplicates } from '@/renderer/utils/songDedupe';
+import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@/shared/types/song';
+
+async function addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
+  const playlist = await IpcClient.invoke<Playlist | undefined>('playlist:get', playlistId);
+  if (!playlist) throw new Error('歌单不存在');
+  return IpcClient.invoke<number>('playlist:addSong', playlistId, song);
+}
 
 interface BatchAddToPlaylistModalProps {
   songs: Song[];
@@ -25,7 +31,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
   const loadData = async () => {
     setLoading(true);
     try {
-      const playlistsData = await playlistService.getPlaylists();
+      const playlistsData = await IpcClient.invoke<Playlist[]>('playlist:getAll');
       setPlaylists(playlistsData);
     } catch (error) {
       console.error('加载歌单失败:', error);
@@ -43,7 +49,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
   const handleAddToPlaylist = async (playlistId: number) => {
     setAdding(true);
     try {
-      const existingSongs = await playlistService.getPlaylistSongs(playlistId);
+      const existingSongs = await IpcClient.invoke<Song[]>('playlist:getSongs', playlistId);
       const filtered = filterDuplicates(existingSongs, songs);
 
       const skipCount = filtered.duplicates.length;
@@ -64,7 +70,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
           onOk: async () => {
             const toAdd = [...filtered.ok, ...filtered.conflicts];
             for (const song of toAdd) {
-              await playlistService.addSongToPlaylist(playlistId, song);
+              await addSongToPlaylist(playlistId, song);
             }
             const msg = skipCount > 0
               ? `已跳过 ${skipCount} 首重复歌曲，添加 ${toAdd.length} 首`
@@ -79,7 +85,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
       }
 
       for (const song of filtered.ok) {
-        await playlistService.addSongToPlaylist(playlistId, song);
+        await addSongToPlaylist(playlistId, song);
       }
       const msg = skipCount > 0
         ? `已跳过 ${skipCount} 首重复歌曲，添加 ${filtered.ok.length} 首`
