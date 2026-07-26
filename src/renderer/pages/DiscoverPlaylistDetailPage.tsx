@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Play } from 'lucide-react';
 import { Modal, message } from 'antd';
 import SongList from '@/renderer/components/SongList';
-import { playlistService } from '@/renderer/services/playlistService';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, DiscoverPlaylist } from '@/shared/types/song';
 import { formatPlayCount } from '@/renderer/utils/format';
 const { ipcRenderer } = window.require('electron');
@@ -83,14 +83,15 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
       onOk: async () => {
         try {
           setSaving(true);
-          const playlistId = await playlistService.createPlaylist(
+          const playlistId = await IpcClient.invoke<number>(
+            'playlist:create',
             playlist.name,
             playlist.description || `来自网易云歌单: ${playlist.name}`
           );
           let addedCount = 0;
           for (const song of songs) {
             try {
-              await playlistService.addSongToPlaylist(playlistId, song);
+              await IpcClient.invoke<number>('playlist:addSong', playlistId, song);
               addedCount++;
             } catch (e) {
               console.error('添加歌曲失败:', song.name, e);

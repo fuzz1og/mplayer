@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 const { ipcRenderer } = window.require('electron');
-import { favoriteService } from '@/renderer/services/favoriteService';
-import { cacheService } from '@/renderer/services/cacheService';
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
+import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, SongBase } from '@/shared/types/song';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
 
@@ -30,7 +29,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
   refreshSongUrls: async (song: SongBase): Promise<Song | null> => {
     try {
       // 尝试从缓存获取URL
-      const cachedUrl = await cacheService.getUrlCache(song.id);
+      const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
       if (cachedUrl) {
         return {
           ...song,
@@ -47,7 +46,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
         const matchedSong = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
 
         // 写入缓存
-        await cacheService.setUrlCache(song.id, {
+        await IpcClient.invoke<void>('cache:setUrl', song.id, {
           url: matchedSong.url,
           cover: matchedSong.cover,
           lrc: matchedSong.lrc
@@ -74,13 +73,13 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
   loadFavorites: async () => {
     set({ loading: true, error: null });
     try {
-      const songBases = await favoriteService.getFavorites();
+      const songBases = await IpcClient.invoke<SongBase[]>('favorite:getAll');
       // 先从缓存加载，然后异步刷新缺失 URL 的歌曲
       const cachedSongs: Song[] = [];
       const needsRefresh: SongBase[] = [];
 
       for (const songBase of songBases) {
-        const cachedUrl = await cacheService.getUrlCache(songBase.id);
+        const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', songBase.id);
         if (cachedUrl) {
           cachedSongs.push({
             ...songBase,
@@ -154,7 +153,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
 
     try {
       if (isCurrentlyFavorite) {
-        await favoriteService.removeFavorite(song.id);
+        await IpcClient.invoke<void>('favorite:remove', song.id);
         set((state) => {
           const newIds = state.favoriteIds.filter(id => id !== song.id);
           const newFavorites = state.favorites.filter(f => f.id !== song.id);
@@ -162,7 +161,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
         });
         return false;
       } else {
-        await favoriteService.addFavorite(song);
+        await IpcClient.invoke<number>('favorite:add', song);
         set((state) => {
           const newIds = [...state.favoriteIds, song.id];
           const newFavorites = [...state.favorites, song];
@@ -185,7 +184,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
     if (favoriteIds.includes(song.id)) return;
 
     try {
-      await favoriteService.addFavorite(song);
+      await IpcClient.invoke<number>('favorite:add', song);
       set((state) => {
         const newIds = [...state.favoriteIds, song.id];
         const newFavorites = [...state.favorites, song];
@@ -202,7 +201,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
     if (!favoriteIds.includes(songId)) return;
 
     try {
-      await favoriteService.removeFavorite(songId);
+      await IpcClient.invoke<void>('favorite:remove', songId);
       set((state) => {
         const newIds = state.favoriteIds.filter(id => id !== songId);
         const newFavorites = state.favorites.filter(f => f.id !== songId);
