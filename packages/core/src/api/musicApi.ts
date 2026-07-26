@@ -1,8 +1,8 @@
 import axios, { type AxiosInstance } from 'axios';
 import type { Song, SourceKey, SongGroup, DiscoverPlaylist } from '../types/index.js';
 import { cacheManager } from './memoryCacheManager.js';
-
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
+import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
 let PROXY_URL = '';
@@ -27,6 +27,18 @@ export function setProxyUrl(url: string): void {
   }
 }
 export function getProxyUrl(): string { return PROXY_URL; }
+
+export interface ProxyAgents {
+  httpAgent: Agent;
+  httpsAgent: Agent;
+}
+
+let _proxyAgentsProvider: (() => ProxyAgents) | null = null;
+export function injectProxyAgents(provider: () => ProxyAgents): void {
+  _proxyAgentsProvider = provider;
+  Object.defineProperty(apiClient.defaults, 'httpAgent', { get: () => _proxyAgentsProvider!().httpAgent, configurable: true });
+  Object.defineProperty(apiClient.defaults, 'httpsAgent', { get: () => _proxyAgentsProvider!().httpsAgent, configurable: true });
+}
 
 // 歌手头像缓存，供分类 tab 爬取时补图
 const artistPicCache = new Map<string, string>();
