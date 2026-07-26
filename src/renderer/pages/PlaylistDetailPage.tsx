@@ -10,9 +10,8 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import SourceBadge from '@/renderer/components/SourceBadge';
-import { playlistService } from '@/renderer/services/playlistService';
+import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@/shared/types/song';
-import { cacheService } from '@/renderer/services/cacheService';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
@@ -113,7 +112,7 @@ const PlaylistDetailPage: React.FC = () => {
   const refreshPlaylistSongs = async (songs: Song[]): Promise<Song[]> => {
     const results = await Promise.allSettled(
       songs.map(async (song) => {
-        const cached: { url: string; cover: string; lrc: string } | null = await cacheService.getUrlCache(song.id);
+        const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
         if (cached) {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
         }
@@ -124,7 +123,7 @@ const PlaylistDetailPage: React.FC = () => {
         const fresh = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
 
         // 写入缓存
-        await cacheService.setUrlCache(song.id, {
+        await IpcClient.invoke<void>('cache:setUrl', song.id, {
           url: fresh.url,
           cover: fresh.cover,
           lrc: fresh.lrc,
@@ -152,8 +151,8 @@ const PlaylistDetailPage: React.FC = () => {
     setLoading(true);
     try {
       const [playlistData, songsData] = await Promise.all([
-        playlistService.getPlaylist(playlistId),
-        playlistService.getPlaylistSongs(playlistId),
+        IpcClient.invoke<Playlist | undefined>('playlist:get', playlistId),
+        IpcClient.invoke<Song[]>('playlist:getSongs', playlistId),
       ]);
       setPlaylist(playlistData || null);
       setSongs(songsData);
@@ -223,7 +222,7 @@ const PlaylistDetailPage: React.FC = () => {
         const count = selectedIds.length;
         try {
           for (const songId of selectedIds) {
-            await playlistService.removeSongFromPlaylist(playlistId, songId);
+            await IpcClient.invoke<void>('playlist:removeSong', playlistId, songId);
           }
           setSelectedIds([]);
           loadData();
@@ -252,7 +251,7 @@ const PlaylistDetailPage: React.FC = () => {
   const handleRemoveFromPlaylist = async (song: Song) => {
     if (!playlistId) return;
     try {
-      await playlistService.removeSongFromPlaylist(playlistId, song.id);
+      await IpcClient.invoke<void>('playlist:removeSong', playlistId, song.id);
       loadData();
       message.success(`已从歌单移除「${song.name}」`);
     } catch (error) {
@@ -282,7 +281,7 @@ const PlaylistDetailPage: React.FC = () => {
 
     setIsReordering(true);
     try {
-      await playlistService.bulkReorderPlaylistSongs(playlistId, newSongIds);
+      await IpcClient.invoke<void>('playlist:reorderFull', playlistId, newSongIds);
     } catch (error) {
       console.error('Reorder failed:', error);
       loadData();
@@ -295,10 +294,9 @@ const PlaylistDetailPage: React.FC = () => {
     if (!playlistId || !editName.trim()) return;
 
     try {
-      await playlistService.updatePlaylist(playlistId, {
-        name: editName.trim(),
-        description: editDesc.trim()
-      });
+      const playlist = await IpcClient.invoke<Playlist | undefined>('playlist:get', playlistId);
+      if (!playlist) throw new Error('歌单不存在');
+      await IpcClient.invoke<void>('playlist:update', playlistId, { ...playlist, name: editName.trim(), description: editDesc.trim() });
       setIsEditModalVisible(false);
       loadData();
     } catch (error) {

@@ -9,8 +9,10 @@ release
 .trae
 docs/
 
-# AI 配置目录
-.claude/
+# AI 配置目录（只忽略个人数据）
+.claude/plans/
+.claude/session-extract/
+.claude/worktrees/
 
 # 本地配置（包含敏感 API 地址）
 .env
