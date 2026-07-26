@@ -8,7 +8,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import SourceBadge from '@/renderer/components/SourceBadge';
-import { cacheService } from '@/renderer/services/cacheService';
+import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
 
@@ -87,7 +87,7 @@ const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
   const results = await Promise.allSettled(
     songs.map(async (song) => {
       try {
-        const cached: { url: string; cover: string; lrc: string } | null = await cacheService.getUrlCache(song.id);
+        const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
         if (cached) {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
         }
@@ -95,7 +95,7 @@ const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
         const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
         if (!result.success || !result.data.length) return song;
         const fresh = result.data.find((s: Song) => s.id === song.id) || result.data[0];
-        await cacheService.setUrlCache(song.id, {
+        await IpcClient.invoke<void>('cache:setUrl', song.id, {
           url: fresh.url,
           cover: fresh.cover,
           lrc: fresh.lrc,

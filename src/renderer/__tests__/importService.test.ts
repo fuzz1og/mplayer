@@ -1,10 +1,10 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { parsePlaylistUrl, importFromLink } from '../services/importService';
 
-// Mock playlistService
-vi.mock('@/renderer/services/playlistService', () => ({
-  playlistService: {
-    addSongToPlaylist: vi.fn().mockResolvedValue(1)
+// Mock IpcClient
+vi.mock('@/renderer/services/IpcClient', () => ({
+  IpcClient: {
+    invoke: vi.fn()
   }
 }));
 
@@ -68,8 +68,14 @@ describe('importFromLink', () => {
   const mockExistingSongs = [{ id: '1', name: 'Existing Song', artist: 'Artist' } as any];
   const mockOnProgress = vi.fn();
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { IpcClient } = await import('@/renderer/services/IpcClient');
+    (IpcClient.invoke as any).mockImplementation((channel: string) => {
+      if (channel === 'playlist:get') return Promise.resolve({ id: 1, name: 'Test' });
+      if (channel === 'playlist:addSong') return Promise.resolve(1);
+      return Promise.resolve(undefined);
+    });
   });
 
   it('应该成功导入链接中的歌曲', async () => {
