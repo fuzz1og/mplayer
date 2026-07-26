@@ -2,6 +2,7 @@ import './env'; // 必须第一个 import，设置 ELECTRON_GET_USE_PROXY
 import { app, BrowserWindow, ipcMain, dialog, session, globalShortcut } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import axios from 'axios';
 
 // 开发模式下加载 .env.local
 if (!app.isPackaged) {
@@ -21,13 +22,41 @@ if (!app.isPackaged) {
 import { getCacheManager } from './cache/cacheManager';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
-import { musicApi, getApiClient } from './api/musicApi';
+import { musicApi as coreMusicApi, injectProxyAgents } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
-import { updateApiClientAgents, applyElectronProxy, type ProxyConfig } from './proxy';
+import { applyElectronProxy, type ProxyConfig } from './proxy';
 import { registerIpcHandler, registerIpcHandlerSimple } from './ipc/registerHandler';
 import { updateService } from './services/updateService';
 import type { Song } from '@/shared/types/song';
+
+// 扩展 musicApi：添加主进程特有的音频缓存方法
+const musicApi = {
+  ...coreMusicApi,
+  async getSodaPlayableUrl(trackId: string): Promise<string> {
+    const remoteUrl = await coreMusicApi.getSodaAudioUrl(trackId);
+    if (!remoteUrl) return '';
+    const cached = getCacheManager().getAudioCache(`soda_${trackId}`);
+    if (cached) return 'file:///' + cached.replace(/\\/g, '/');
+    try {
+      const proxy = require('./proxy');
+      const dl = await axios.get(remoteUrl, {
+        httpAgent: proxy.getHttpAgent(),
+        httpsAgent: proxy.getHttpsAgent(),
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      });
+      const audioData = Buffer.from(dl.data);
+      getCacheManager().setAudioCache(`soda_${trackId}`, audioData);
+      const cachedFile = getCacheManager().getAudioCache(`soda_${trackId}`);
+      if (cachedFile) return 'file:///' + cachedFile.replace(/\\/g, '/');
+    } catch (dlErr) {
+      console.error('下载汽水音频到缓存失败，回退直链:', dlErr);
+    }
+    return remoteUrl;
+  },
+};
 
 // 标记是否正在退出（托盘退出时设置，防止 close 事件拦截退出）
 let isQuitting = false;
@@ -138,7 +167,11 @@ app.whenReady().then(async () => {
   try {
     const savedProxy = await db.getSetting<ProxyConfig>('proxyConfig');
     if (savedProxy) {
-      updateApiClientAgents(getApiClient(), savedProxy);
+      const proxy = require('./proxy');
+      injectProxyAgents(() => ({
+        httpAgent: proxy.getHttpAgent(),
+        httpsAgent: proxy.getHttpsAgent(),
+      }));
       applyElectronProxy(savedProxy);
       // 同时配置 electron-updater 的专用 session
       try {
@@ -272,7 +305,8 @@ app.whenReady().then(async () => {
   });
   registerIpcHandler('settings:setProxy', async (proxyConfig: ProxyConfig) => {
     await db.setSetting('proxyConfig', proxyConfig);
-    updateApiClientAgents(getApiClient(), proxyConfig);
+    const proxy = require('./proxy');
+    proxy.buildAgents(proxyConfig);
     applyElectronProxy(proxyConfig);
   });
 
