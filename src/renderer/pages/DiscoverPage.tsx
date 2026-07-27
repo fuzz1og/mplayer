@@ -8,6 +8,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
+import { useDiscoverData } from '@/renderer/hooks/useDiscoverData';
 import SongList from '@/renderer/components/SongList';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
 import HotlistCard from '@/renderer/components/HotlistCard';
@@ -16,61 +17,24 @@ import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistMod
 import type { Song, Artist, DiscoverPlaylist } from '@/shared/types/song';
 const { ipcRenderer } = window.require('electron');
 
-// 热榜歌曲类型
 interface HotlistSong {
-  id: string;
-  name: string;
-  artists: string;
-  rank: number;
-  cover: string;
-  album: string;
+  id: string; name: string; artists: string; rank: number; cover: string; album: string;
 }
 
 const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: string; onClickAction?: () => void }> = ({
-  icon,
-  title,
-  action,
-  onClickAction
+  icon, title, action, onClickAction
 }) => (
-  <div
-    style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 'var(--space-5)',
-    }}
-  >
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
       <span style={{ color: 'var(--accent-color)' }}>{icon}</span>
-      <h2
-        style={{
-          fontSize: 'var(--text-xl)',
-          fontWeight: 600,
-          color: 'var(--text-primary)',
-        }}
-      >
-        {title}
-      </h2>
+      <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h2>
     </div>
     {action && (
       <button
-        style={{
-          fontSize: 'var(--text-sm)',
-          color: 'var(--text-secondary)',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          padding: '4px 8px',
-          borderRadius: 'var(--radius-xs)',
-          transition: 'all 0.15s ease',
-        }}
+        style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: 'var(--radius-xs)', transition: 'all 0.15s ease' }}
         onClick={onClickAction}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.color = 'var(--accent-color)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.color = 'var(--text-secondary)';
-        }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-color)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
       >
         {action} →
       </button>
@@ -78,193 +42,42 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: s
   </div>
 );
 
-// 缓存发现页数据，避免重复加载
-const discoverCache = {
-  hotlist: null as HotlistSong[] | null,
-  neteaseNewSongList: null as HotlistSong[] | null,
-  qqHotlist: null as HotlistSong[] | null,
-  qqNewSongList: null as HotlistSong[] | null,
-  playlists: null as DiscoverPlaylist[] | null,
-};
-
-export const clearDiscoverCache = () => {
-  discoverCache.hotlist = null;
-  discoverCache.neteaseNewSongList = null;
-  discoverCache.qqHotlist = null;
-  discoverCache.qqNewSongList = null;
-  discoverCache.playlists = null;
-};
-
 const DiscoverPage: React.FC = () => {
   const navigate = useNavigate();
-  const [hotlist, setHotlist] = useState<HotlistSong[]>(discoverCache.hotlist || []);
-  const [hotlistLoading, setHotlistLoading] = useState(!discoverCache.hotlist);
-  const [neteaseNewSongList, setNeteaseNewSongList] = useState<HotlistSong[]>(discoverCache.neteaseNewSongList || []);
-  const [neteaseNewSongListLoading, setNeteaseNewSongListLoading] = useState(!discoverCache.neteaseNewSongList);
-  const [qqHotlist, setQQHotlist] = useState<HotlistSong[]>(discoverCache.qqHotlist || []);
-  const [qqHotlistLoading, setQQHotlistLoading] = useState(!discoverCache.qqHotlist);
-  const [qqNewSongList, setQqNewSongList] = useState<HotlistSong[]>(discoverCache.qqNewSongList || []);
-  const [qqNewSongListLoading, setQqNewSongListLoading] = useState(!discoverCache.qqNewSongList);
-  const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>(discoverCache.playlists || []);
-  const [playlistsLoading, setPlaylistsLoading] = useState(!discoverCache.playlists);
+  const { songs, groups, loading, currentKeyword, hasMore, error, sourceType } = useSearchStore();
+  const isAllMode = sourceType === 'all';
+  const { currentSong, isPlaying, play } = usePlayerStore();
+  const { favoriteIds, toggleFavorite } = useFavoriteStore();
+  const { download, downloadBatch } = useDownload();
 
-  // 错误状态
-  const [hotlistError, setHotlistError] = useState<string | null>(null);
-  const [neteaseNewSongListError, setNeteaseNewSongListError] = useState<string | null>(null);
-  const [qqHotlistError, setQQHotlistError] = useState<string | null>(null);
-  const [qqNewSongListError, setQqNewSongListError] = useState<string | null>(null);
-  const [playlistsError, setPlaylistsError] = useState<string | null>(null);
+  const hotlist = useDiscoverData<HotlistSong[]>('musicApi:getNeteaseHotlist');
+  const newSongs = useDiscoverData<HotlistSong[]>('musicApi:getNeteaseNewSongList');
+  const qqHotlist = useDiscoverData<HotlistSong[]>('musicApi:getQQHotlist');
+  const qqNewSongs = useDiscoverData<HotlistSong[]>('musicApi:getQQNewSongList');
+  const playlists = useDiscoverData<{ playlists: DiscoverPlaylist[] }>('musicApi:getNeteasePlaylists', '全部', 'hot', 0, 10);
 
   const [activeTab, setActiveTab] = useState<'songs' | 'artists'>('songs');
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
   const [artistLoading, setArtistLoading] = useState(false);
-
-  // 加入歌单弹窗状态
   const [batchModalVisible, setBatchModalVisible] = useState(false);
   const [selectedSongsForPlaylist, setSelectedSongsForPlaylist] = useState<Song[]>([]);
 
-  const { songs, groups, loading, currentKeyword, hasMore, error, sourceType } = useSearchStore();
-  const isAllMode = sourceType === 'all';
-  const { currentSong, isPlaying, play } = usePlayerStore();
-
-  const handleLoadMore = useCallback(() => {
-    searchService.loadMore();
-  }, []);
-
+  const handleLoadMore = useCallback(() => { searchService.loadMore(); }, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-
   useInfiniteScroll(scrollContainerRef, { onLoadMore: handleLoadMore, loading, hasMore });
-
-  const { favoriteIds, toggleFavorite } = useFavoriteStore();
-  const { download, downloadBatch } = useDownload();
-
-  // 加载网易热榜数据
-  useEffect(() => {
-    if (discoverCache.hotlist) return; // 已有缓存，跳过加载
-    const loadHotlist = async () => {
-      try {
-        setHotlistLoading(true);
-        setHotlistError(null);
-        const result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
-        const data = result.success ? result.data : [];
-        setHotlist(data.slice(0, 20));
-        discoverCache.hotlist = data.slice(0, 20);
-      } catch (error) {
-        console.error('加载网易热榜失败:', error);
-        setHotlistError('加载网易热榜失败');
-      } finally {
-        setHotlistLoading(false);
-      }
-    };
-    loadHotlist();
-  }, []);
-
-  // 加载网易新歌榜数据
-  useEffect(() => {
-    if (discoverCache.neteaseNewSongList) return; // 已有缓存，跳过加载
-    const loadNeteaseNewSongList = async () => {
-      try {
-        setNeteaseNewSongListLoading(true);
-        setNeteaseNewSongListError(null);
-        const result = await ipcRenderer.invoke('musicApi:getNeteaseNewSongList');
-        const data = result.success ? result.data : [];
-        setNeteaseNewSongList(data.slice(0, 20));
-        discoverCache.neteaseNewSongList = data.slice(0, 20);
-      } catch (error) {
-        console.error('加载网易新歌榜失败:', error);
-        setNeteaseNewSongListError('加载网易新歌榜失败');
-      } finally {
-        setNeteaseNewSongListLoading(false);
-      }
-    };
-    loadNeteaseNewSongList();
-  }, []);
-
-  // 加载QQ音乐热榜数据
-  useEffect(() => {
-    if (discoverCache.qqHotlist) return; // 已有缓存，跳过加载
-    const loadQQHotlist = async () => {
-      try {
-        setQQHotlistLoading(true);
-        setQQHotlistError(null);
-        const result = await ipcRenderer.invoke('musicApi:getQQHotlist');
-        const data = result.success ? result.data : [];
-        setQQHotlist(data.slice(0, 20));
-        discoverCache.qqHotlist = data.slice(0, 20);
-      } catch (error) {
-        console.error('加载QQ音乐热榜失败:', error);
-        setQQHotlistError('加载QQ音乐热榜失败');
-      } finally {
-        setQQHotlistLoading(false);
-      }
-    };
-    loadQQHotlist();
-  }, []);
-
-  // 加载QQ音乐新歌榜数据
-  useEffect(() => {
-    if (discoverCache.qqNewSongList) return; // 已有缓存，跳过加载
-    const loadQQNewSongList = async () => {
-      try {
-        setQqNewSongListLoading(true);
-        setQqNewSongListError(null);
-        const result = await ipcRenderer.invoke('musicApi:getQQNewSongList');
-        const data = result.success ? result.data : [];
-        setQqNewSongList(data.slice(0, 20));
-        discoverCache.qqNewSongList = data.slice(0, 20);
-      } catch (error) {
-        console.error('加载QQ音乐新歌榜失败:', error);
-        setQqNewSongListError('加载QQ音乐新歌榜失败');
-      } finally {
-        setQqNewSongListLoading(false);
-      }
-    };
-    loadQQNewSongList();
-  }, []);
-
-  // 加载热门歌单数据
-  useEffect(() => {
-    if (discoverCache.playlists) return; // 已有缓存，跳过加载
-    const loadPlaylists = async () => {
-      try {
-        setPlaylistsLoading(true);
-        setPlaylistsError(null);
-        const result = await ipcRenderer.invoke('musicApi:getNeteasePlaylists', '全部', 'hot', 0, 10);
-        const data = result.success ? result.data : { playlists: [] };
-        setPlaylists(data.playlists || []);
-        discoverCache.playlists = data.playlists || [];
-      } catch (error) {
-        console.error('加载热门歌单失败', error);
-        setPlaylistsError('加载热门歌单失败');
-      } finally {
-        setPlaylistsLoading(false);
-      }
-    };
-    loadPlaylists();
-  }, []);
 
   // 切换到歌手 tab 或关键词变化时搜索歌手
   useEffect(() => {
     if (!currentKeyword || activeTab !== 'artists') return;
     let cancelled = false;
-    const searchArtists = async () => {
-      setArtistLoading(true);
-      try {
-        const result = await ipcRenderer.invoke('musicApi:searchArtists', currentKeyword, 30);
-        if (!cancelled) {
-          setArtistResults(result.success ? result.data : []);
-        }
-      } catch {
-        if (!cancelled) setArtistResults([]);
-      } finally {
-        if (!cancelled) setArtistLoading(false);
-      }
-    };
-    searchArtists();
+    setArtistLoading(true);
+    ipcRenderer.invoke('musicApi:searchArtists', currentKeyword, 30)
+      .then((result: any) => { if (!cancelled) setArtistResults(result.success ? result.data : []); })
+      .catch(() => { if (!cancelled) setArtistResults([]); })
+      .finally(() => { if (!cancelled) setArtistLoading(false); });
     return () => { cancelled = true; };
   }, [currentKeyword, activeTab]);
 
-  // 处理热榜歌曲点击
   const handleHotlistSongClick = async (song: HotlistSong, sourceType: 'netease' | 'qq' = 'netease') => {
     try {
       const keyword = `${song.name} ${song.artists}`;
@@ -281,27 +94,14 @@ const DiscoverPage: React.FC = () => {
     }
   };
 
-  const handlePlaySong = async (song: Song) => {
-    await play(song);
-  };
+  const handlePlaySong = async (song: Song) => { await play(song); };
 
   const handleToggleFavorite = async (song: Song) => {
-    try {
-      await toggleFavorite(song);
-    } catch (error) {
-      console.error('收藏操作失败:', error);
-    }
+    try { await toggleFavorite(song); } catch (error) { console.error('收藏操作失败:', error); }
   };
 
-  const handleAddToPlaylist = (song: Song) => {
-    setSelectedSongsForPlaylist([song]);
-    setBatchModalVisible(true);
-  };
-
-  const handleBatchAddToPlaylist = (selectedSongs: Song[]) => {
-    setSelectedSongsForPlaylist(selectedSongs);
-    setBatchModalVisible(true);
-  };
+  const handleAddToPlaylist = (song: Song) => { setSelectedSongsForPlaylist([song]); setBatchModalVisible(true); };
+  const handleBatchAddToPlaylist = (selectedSongs: Song[]) => { setSelectedSongsForPlaylist(selectedSongs); setBatchModalVisible(true); };
 
   const handleBackFromSearch = () => {
     useSearchStore.getState().reset();
@@ -309,12 +109,18 @@ const DiscoverPage: React.FC = () => {
     setActiveTab('songs');
   };
 
-  // 搜索结果时自动展开所有分组（使用 useEffect 避免渲染阶段副作用）
   useEffect(() => {
     if (currentKeyword && groups.length > 0 && useSearchStore.getState().expandedKeys.length === 0) {
       useSearchStore.getState().expandAll();
     }
   }, [currentKeyword, groups.length]);
+
+  const hotlistData = (hotlist.data || []).slice(0, 20);
+  const newSongsData = (newSongs.data || []).slice(0, 20);
+  const qqHotlistData = (qqHotlist.data || []).slice(0, 20);
+  const qqNewSongsData = (qqNewSongs.data || []).slice(0, 20);
+  const playlistsData = playlists.data?.playlists?.slice(0, 10) || [];
+  const anyError = hotlist.error || newSongs.error || qqHotlist.error || qqNewSongs.error || playlists.error;
 
   // 如果有搜索关键词，显示搜索结果
   if (currentKeyword && (songs.length > 0 || groups.length > 0 || artistResults.length > 0 || loading || error)) {
@@ -622,7 +428,7 @@ const DiscoverPage: React.FC = () => {
             gap: 'var(--space-4)',
           }}
         >
-          {playlistsLoading ? (
+          {playlists.loading ? (
             Array.from({ length: 10 }).map((_, index) => (
               <div key={`playlist-skeleton-${index}`}>
                 <div
@@ -646,12 +452,12 @@ const DiscoverPage: React.FC = () => {
                 />
               </div>
             ))
-          ) : playlistsError ? (
+          ) : playlists.error ? (
             <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: 'var(--radius-md)' }}>
-              {playlistsError}
+              {playlists.error}
             </div>
           ) : (
-            playlists.slice(0, 10).map(playlist => (
+            playlistsData.map(playlist => (
               <DiscoverPlaylistCard key={playlist.id} playlist={playlist} />
             ))
           )}
@@ -680,8 +486,8 @@ const DiscoverPage: React.FC = () => {
             radialGradient="radial-gradient(circle at 30% 30%, rgba(102, 126, 234, 0.3) 0%, transparent 60%)"
             badgeText="50首"
             route="/hotlist/netease"
-            songs={hotlist}
-            loading={hotlistLoading}
+            songs={hotlistData}
+            loading={hotlist.loading}
             sourceType="netease"
             onSongClick={handleHotlistSongClick}
           />
@@ -693,8 +499,8 @@ const DiscoverPage: React.FC = () => {
             radialGradient="radial-gradient(circle at 70% 30%, rgba(78, 205, 196, 0.3) 0%, transparent 60%)"
             badgeText="100首"
             route="/hotlist/qq"
-            songs={qqHotlist}
-            loading={qqHotlistLoading}
+            songs={qqHotlistData}
+            loading={qqHotlist.loading}
             sourceType="qq"
             onSongClick={handleHotlistSongClick}
           />
@@ -706,8 +512,8 @@ const DiscoverPage: React.FC = () => {
             radialGradient="radial-gradient(circle at 50% 50%, rgba(156, 39, 176, 0.3) 0%, transparent 60%)"
             badgeText="100首"
             route="/hotlist/netease_new"
-            songs={neteaseNewSongList}
-            loading={neteaseNewSongListLoading}
+            songs={newSongsData}
+            loading={newSongs.loading}
             sourceType="netease"
             onSongClick={handleHotlistSongClick}
           />
@@ -719,14 +525,14 @@ const DiscoverPage: React.FC = () => {
             radialGradient="radial-gradient(circle at 50% 50%, rgba(33, 150, 243, 0.3) 0%, transparent 60%)"
             badgeText="100首"
             route="/hotlist/qq_new"
-            songs={qqNewSongList}
-            loading={qqNewSongListLoading}
+            songs={qqNewSongsData}
+            loading={qqNewSongs.loading}
             sourceType="qq"
             onSongClick={handleHotlistSongClick}
           />
-          {(hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError) && (
+          {(anyError) && (
             <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-base)' }}>
-              {hotlistError || neteaseNewSongListError || qqHotlistError || qqNewSongListError}
+              {anyError}
             </div>
           )}
           <style>{`
