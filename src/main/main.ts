@@ -207,7 +207,7 @@ app.whenReady().then(async () => {
   registerLocalMusicIpc(mainWindow);
   registerDialogIpc();
   registerSettingsIpc();
-  registerUpdateIpc();
+  registerUpdateIpc(mainWindow);
   registerDownloadIpc();
   registerAppIpc();
 
