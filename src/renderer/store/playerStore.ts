@@ -5,6 +5,7 @@ import type { Song } from '@/shared/types/song';
 import type { PlayMode } from '@/shared/types/player';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
+import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
 const { ipcRenderer } = window.require('electron');
 
 interface PlayerStoreState {
@@ -46,44 +47,6 @@ interface PlayerStoreActions {
 
 export type PlayerStore = PlayerStoreState & PlayerStoreActions;
 
-const QUEUE_STORAGE_KEY = 'mplayer_queue';
-
-const persistQueue = (state: PlayerStoreState) => {
-  try {
-    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify({
-      playlist: state.currentPlaylist,
-      index: state.currentPlaylistIndex,
-    }));
-  } catch (e) {
-    console.error('持久化播放队列失败:', e);
-  }
-};
-
-const loadQueue = (): { playlist: Song[]; index: number } => {
-  try {
-    const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
-    if (raw) {
-      const data = JSON.parse(raw);
-      if (Array.isArray(data.playlist) && data.playlist.length > 0) {
-        const index = data.index ?? -1;
-        const clampedIndex = index >= 0 && index < data.playlist.length ? index : -1;
-        return { playlist: data.playlist, index: clampedIndex };
-      }
-    }
-  } catch (e) {
-    console.error('加载播放队列失败:', e);
-  }
-  return { playlist: [], index: -1 };
-};
-
-const getInitialPlayMode = (): PlayMode => {
-  const saved = localStorage.getItem('playMode');
-  if (saved && ['sequential', 'list-loop', 'single-loop', 'shuffle'].includes(saved)) {
-    return saved as PlayMode;
-  }
-  return 'list-loop';
-};
-
 let playGeneration = 0;
 
 const audioPlayer = getGlobalPlayer({
@@ -123,31 +86,7 @@ const prefetchedUrls = new Map<string, string>();
  * 导出供测试使用
  */
 export function getNextSongInQueue(state: PlayerStoreState): Song | null {
-  const { currentPlaylist, currentPlaylistIndex, playMode, currentSong } = state;
-  if (currentPlaylist.length === 0 || currentPlaylistIndex === -1 || !currentSong) {
-    return null;
-  }
-
-  switch (playMode) {
-    case 'single-loop':
-      return currentSong;
-    case 'shuffle': {
-      if (currentPlaylist.length <= 1) return currentSong;
-      let next: Song;
-      do {
-        next = currentPlaylist[Math.floor(Math.random() * currentPlaylist.length)];
-      } while (next.id === currentSong.id && currentPlaylist.length > 1);
-      return next;
-    }
-    case 'list-loop':
-      return currentPlaylist[(currentPlaylistIndex + 1) % currentPlaylist.length];
-    case 'sequential':
-    default:
-      if (currentPlaylistIndex < currentPlaylist.length - 1) {
-        return currentPlaylist[currentPlaylistIndex + 1];
-      }
-      return null;
-  }
+  return getNextSong(state.currentPlaylist, state.currentPlaylistIndex, state.playMode, state.currentSong);
 }
 
 /**
@@ -327,7 +266,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       } else {
         set({ currentPlaylistIndex: index });
       }
-      persistQueue(get());
+      persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
 
     } catch (error) {
       if (generation !== playGeneration) return;
@@ -358,7 +297,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       duration: 0,
       currentPlaylistIndex: -1
     });
-    persistQueue(get());
+    persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
   },
 
   seek: (position: number) => {
@@ -401,7 +340,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   setPlayMode: (mode: PlayMode) => {
     set({ playMode: mode });
-    localStorage.setItem('playMode', mode);
+    persistPlayMode(mode);
   },
 
   playNext: () => {
@@ -482,7 +421,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylist: playlist,
       currentPlaylistIndex: currentIndex
     });
-    persistQueue(get());
+    persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
   },
 
   removeFromQueue: (index: number) => {
@@ -494,7 +433,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     if (newPlaylist.length === 0) {
       get().stop();
-      persistQueue({ ...get(), currentPlaylist: [], currentPlaylistIndex: -1 });
+      persistQueue([], -1);
       return;
     }
 
@@ -505,7 +444,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         currentPlaylist: newPlaylist,
         currentPlaylistIndex: index < newPlaylist.length ? index : 0,
       });
-      persistQueue(get());
+      persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
       get().play(nextSong);
       return;
     }
@@ -518,7 +457,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylist: newPlaylist,
       currentPlaylistIndex: newIndex,
     });
-    persistQueue(get());
+    persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
   },
 
   reorderQueue: (fromIndex: number, toIndex: number) => {
@@ -545,7 +484,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylist: newPlaylist,
       currentPlaylistIndex: newIndex,
     });
-    persistQueue(get());
+    persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
   },
 
   clearQueue: () => {
@@ -554,7 +493,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylist: [],
       currentPlaylistIndex: -1,
     });
-    persistQueue(get());
+    persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
   },
 }));
 

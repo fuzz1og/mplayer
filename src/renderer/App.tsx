@@ -14,7 +14,6 @@ import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
 import DownloadProgressModal from '@/renderer/components/DownloadProgressModal';
 import LyricsPage from '@/renderer/pages/LyricsPage';
-import { clearDiscoverCache } from '@/renderer/pages/DiscoverPage';
 
 import './styles/global.css';
 
@@ -63,7 +62,6 @@ const App: React.FC = () => {
   }, [navigate, historyIndex]);
 
   const handleRefresh = useCallback(() => {
-    clearDiscoverCache();
     navigate(0);
   }, [navigate]);
 
