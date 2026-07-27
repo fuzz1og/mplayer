@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, ListMusic } from 'lucide-react';
 import { message, Modal } from 'antd';
-import { checkDuplicate, type DupResult } from '@/renderer/utils/songDedupe';
+import { checkDuplicate, type DupResult } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song, Playlist } from '@/shared/types/song';
+import type { Song, Playlist } from '@mplayer/core';
 
 interface AddToPlaylistModalProps {
   song: Song;

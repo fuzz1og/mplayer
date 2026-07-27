@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { Song, SongGroup } from '@/shared/types/song';
+import type { Song, SongGroup } from '@mplayer/core';
 import GroupHeaderRow from '@/renderer/components/GroupHeaderRow';
 import SongRow from '@/renderer/components/SongRow';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';

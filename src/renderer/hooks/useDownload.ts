@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useDownloadStore } from '@/renderer/store/downloadStore';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { DownloadTask } from '@/renderer/store/downloadStore';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 export function useDownload() {
   const { addSingleDownload, addBatchDownload } = useDownloadStore();

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { DiscoverPlaylist } from '@/shared/types/song';
-import { formatPlayCount } from '@/renderer/utils/format';
+import type { DiscoverPlaylist } from '@mplayer/core';
+import { formatPlayCount } from '@mplayer/core';
 
 interface DiscoverPlaylistCardProps {
   playlist: DiscoverPlaylist;
