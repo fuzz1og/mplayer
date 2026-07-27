@@ -4,6 +4,7 @@ import { downloadService } from '../services/downloadService';
 import { updateService } from '../services/updateService';
 import { db } from '../storage/db';
 import { applyElectronProxy, type ProxyConfig } from '../proxy';
+import type { BrowserWindow } from 'electron';
 
 export function registerDialogIpc(): void {
   registerIpcHandlerSimple('dialog:openDirectory', () => dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }));
@@ -40,7 +41,8 @@ export function registerSettingsIpc(): void {
   });
 }
 
-export function registerUpdateIpc(): void {
+export function registerUpdateIpc(mainWindow: BrowserWindow): void {
+  updateService.setMainWindow(mainWindow);
   registerIpcHandler('update:check', () => updateService.checkForUpdates());
   registerIpcHandler('update:download', () => updateService.downloadUpdate());
   registerIpcHandlerSimple('update:install', () => updateService.quitAndInstall());
