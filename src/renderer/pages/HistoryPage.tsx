@@ -5,7 +5,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song, SongBase } from '@/shared/types/song';
+import type { Song, SongBase } from '@mplayer/core';
 
 const HistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Song[]>([]);

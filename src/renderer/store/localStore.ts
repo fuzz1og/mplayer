@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { LocalFolder, LocalSong, Song } from '@/shared/types/song';
+import type { LocalFolder, LocalSong, Song } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 
 const { ipcRenderer } = window.require('electron');

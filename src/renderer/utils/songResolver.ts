@@ -1,5 +1,5 @@
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 export async function resolveSongUrls(
   name: string,

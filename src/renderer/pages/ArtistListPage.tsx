@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import type { Artist } from '@/shared/types/song';
+import type { Artist } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
 const CATEGORIES = [

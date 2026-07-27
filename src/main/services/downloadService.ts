@@ -5,7 +5,7 @@ import MP3Tag from 'mp3tag.js';
 import { BrowserWindow } from 'electron';
 import { musicApi } from '../api/musicApi';
 import { getHttpAgent, getHttpsAgent } from '../proxy';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 export interface DownloadTask {
   id: string;

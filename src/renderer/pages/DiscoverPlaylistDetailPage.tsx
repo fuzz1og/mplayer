@@ -5,8 +5,8 @@ import { Modal, message } from 'antd';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song, DiscoverPlaylist } from '@/shared/types/song';
-import { formatPlayCount } from '@/renderer/utils/format';
+import type { Song, DiscoverPlaylist } from '@mplayer/core';
+import { formatPlayCount } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
 const DiscoverPlaylistDetailPage: React.FC = () => {

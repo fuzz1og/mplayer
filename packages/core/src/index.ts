@@ -4,7 +4,8 @@ export { RateLimiter, beforeRequest, getAntiScrapeHeaders } from './api/antiScra
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
 export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents } from './api/musicApi.js';
 export type { ProxyAgents } from './api/musicApi.js';
-export { dedupeSongs } from './utils/songDedupe.js';
+export { dedupeSongs, checkDuplicate, filterDuplicates } from './utils/songDedupe.js';
+export type { DupStatus, DupResult, FilterResult } from './utils/songDedupe.js';
 export { calculateSimilarity, findBestMatch } from './utils/songMatcher.js';
 export { resolveSongUrls } from './utils/songResolver.js';
 export { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from './utils/lyricsParser.js';

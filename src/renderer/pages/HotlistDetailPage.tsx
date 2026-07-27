@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
 // 热榜歌曲类型

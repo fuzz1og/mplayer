@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateSimilarity, findBestMatch } from '../utils/songMatcher';
+import { calculateSimilarity, findBestMatch } from '@mplayer/core';
 
 describe('songMatcher', () => {
   describe('calculateSimilarity', () => {

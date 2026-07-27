@@ -7,7 +7,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { importSongs, importFromLink, parseSongList, parsePlaylistUrl, type SourceType, type ProgressState, type ImportResult } from '@/renderer/services/importService';
 import LinkImportForm from './LinkImportForm';
 import LinkPreviewTable from './LinkPreviewTable';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 const SOURCE_LABELS: Record<SourceType, string> = {
   netease: '网易云',

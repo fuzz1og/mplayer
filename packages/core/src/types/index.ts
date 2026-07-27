@@ -95,3 +95,6 @@ export interface DiscoverPlaylist {
   tags: string[];
   description: string;
 }
+
+/** 播放模式 — 与 mobile/settingsStore.ts 对齐 */
+export type PlayMode = '单曲循环' | '随机播放' | '列表循环';
