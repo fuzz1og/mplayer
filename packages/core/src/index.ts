@@ -16,3 +16,5 @@ export type { LyricLine, ParsedLyrics } from './utils/lyricsParser.js';
 export { formatPlayCount } from './utils/format.js';
 export { createSearchController } from './shared/searchController.js';
 export type { SearchController, SearchControllerConfig } from './shared/searchController.js';
+export { resolvePlayableUrl } from './shared/resolvePlayableUrl.js';
+export type { UrlResolver } from './shared/resolvePlayableUrl.js';
