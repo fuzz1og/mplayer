@@ -1,6 +1,7 @@
 import { Song, SongGroup } from '@mplayer/core';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { IpcClient } from './IpcClient';
+import { ipcMusicApi } from './IpcMusicApi';
 import { createSearchController } from '@/shared';
 
 const DEBOUNCE_DELAY = 300;
@@ -13,9 +14,9 @@ class SearchService {
     this.controller = createSearchController({
       searchFn: async (query, page, source) => {
         if (source === 'all') {
-          return IpcClient.invoke<SongGroup[]>('musicApi:searchAllSources', query, page);
+          return ipcMusicApi.searchAllSources(query, page);
         }
-        const songs = await IpcClient.invoke<Song[]>('musicApi:searchSongs', query, page, source);
+        const songs = await ipcMusicApi.searchSongs(query, page, source as any);
         return [{ key: source, name: source, artist: '', songs }];
       },
       getState: () => {
