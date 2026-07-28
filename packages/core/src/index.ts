@@ -14,3 +14,5 @@ export type { Transport, TransportConfig, TransportResponse } from './api/transp
 export { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from './utils/lyricsParser.js';
 export type { LyricLine, ParsedLyrics } from './utils/lyricsParser.js';
 export { formatPlayCount } from './utils/format.js';
+export { createSearchController } from './shared/searchController.js';
+export type { SearchController, SearchControllerConfig } from './shared/searchController.js';
