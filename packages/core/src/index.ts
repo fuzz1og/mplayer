@@ -18,3 +18,7 @@ export { createSearchController } from './shared/searchController.js';
 export type { SearchController, SearchControllerConfig } from './shared/searchController.js';
 export { resolvePlayableUrl } from './shared/resolvePlayableUrl.js';
 export type { UrlResolver } from './shared/resolvePlayableUrl.js';
+export { CacheKernel } from './cache/cacheKernel.js';
+export { createMemoryBackend } from './cache/backends/memoryBackend.js';
+export { DEFAULT_TTL } from './cache/ttl.js';
+export type { CachePort, CacheBackend, CacheStats } from './cache/types.js';
