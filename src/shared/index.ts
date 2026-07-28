@@ -1,2 +1,2 @@
-export { createSearchController, resolvePlayableUrl } from '@mplayer/core';
-export type { SearchController, SearchControllerConfig, UrlResolver } from '@mplayer/core';
+export { createSearchController, resolvePlayableUrl, CacheKernel, createMemoryBackend, DEFAULT_TTL } from '@mplayer/core';
+export type { SearchController, SearchControllerConfig, UrlResolver, CachePort, CacheBackend, CacheStats } from '@mplayer/core';
