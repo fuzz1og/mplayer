@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, ListMusic } from 'lucide-react';
 import { message, Modal } from 'antd';
-import { filterDuplicates } from '@/renderer/utils/songDedupe';
+import { filterDuplicates } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song, Playlist } from '@/shared/types/song';
+import type { Song, Playlist } from '@mplayer/core';
 
 async function addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
   const playlist = await IpcClient.invoke<Playlist | undefined>('playlist:get', playlistId);

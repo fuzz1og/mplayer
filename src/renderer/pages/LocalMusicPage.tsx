@@ -3,7 +3,7 @@ import { FolderOpen, RefreshCw, FolderPlus } from 'lucide-react';
 import { useLocalStore } from '@/renderer/store/localStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import SongList from '@/renderer/components/SongList';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 const LocalMusicPage: React.FC = () => {
   const {

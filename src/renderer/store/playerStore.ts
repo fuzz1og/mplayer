@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
-import type { Song } from '@/shared/types/song';
-import type { PlayMode } from '@/shared/types/player';
+import type { Song } from '@mplayer/core';
+import type { PlayMode } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
@@ -352,7 +352,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     switch (playMode) {
-      case 'single-loop':
+      case '单曲循环':
         if (currentSong) {
           audioPlayer.seek(0);
           audioPlayer.play();
@@ -360,7 +360,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
         break;
 
-      case 'shuffle': {
+      case '随机播放': {
         let randomIndex = currentPlaylistIndex;
         if (currentPlaylist.length > 1) {
           do {
@@ -372,22 +372,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         break;
       }
 
-      case 'list-loop':
+      case '列表循环':
+      default: {
         const nextIndexLoop = (currentPlaylistIndex + 1) % currentPlaylist.length;
         set({ currentPlaylistIndex: nextIndexLoop });
         get().play(currentPlaylist[nextIndexLoop]);
         break;
-
-      case 'sequential':
-      default:
-        if (currentPlaylistIndex < currentPlaylist.length - 1) {
-          const nextIndex = currentPlaylistIndex + 1;
-          set({ currentPlaylistIndex: nextIndex });
-          get().play(currentPlaylist[nextIndex]);
-        } else {
-          get().stop();
-        }
-        break;
+      }
     }
   },
 
@@ -398,7 +389,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
 
-    if (playMode === 'shuffle') {
+    if (playMode === '随机播放') {
       let randomIndex = currentPlaylistIndex;
       if (currentPlaylist.length > 1) {
         do {

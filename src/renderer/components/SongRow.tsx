@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic } from 'lucide-react';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import SourceBadge from '@/renderer/components/SourceBadge';
 

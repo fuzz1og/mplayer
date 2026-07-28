@@ -1,5 +1,5 @@
 import { getFileStorage } from './fileStorage';
-import type { Song, Favorite, PlayHistory, Playlist, PlaylistSong } from '@/shared/types/song';
+import type { Song, Favorite, PlayHistory, Playlist, PlaylistSong } from '@mplayer/core';
 
 // 使用文件存储替代 IndexedDB
 export const db = getFileStorage();

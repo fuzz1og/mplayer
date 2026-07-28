@@ -1,7 +1,7 @@
 import React from 'react';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
 import PlayModeButton from './PlayModeButton';
-import type { PlayMode } from '@/shared/types/player';
+import type { PlayMode } from '@mplayer/core';
 
 interface PlayerControlsProps {
   isPlaying: boolean;

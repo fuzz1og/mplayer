@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { dedupeSongs } from '@/renderer/utils/songDedupe';
-import type { Song, SongGroup } from '@/shared/types/song';
+import { dedupeSongs } from '@mplayer/core';
+import type { Song, SongGroup } from '@mplayer/core';
 
 type SingleSourceType = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
 export type SourceKey = SingleSourceType | 'all';

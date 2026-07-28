@@ -2,7 +2,7 @@ import { create } from 'zustand';
 const { ipcRenderer } = window.require('electron');
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song, SongBase } from '@/shared/types/song';
+import type { Song, SongBase } from '@mplayer/core';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
 
 interface FavoriteState {

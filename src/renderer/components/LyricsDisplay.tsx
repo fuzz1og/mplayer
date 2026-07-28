@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect } from 'react';
-import { parseLRC, findCurrentLyricIndex, type ParsedLyrics } from '@/renderer/utils/lyricsParser';
+import { parseLRC, findCurrentLyricIndex, type ParsedLyrics } from '@mplayer/core';
 
 interface LyricsDisplayProps {
   lrcContent: string;
