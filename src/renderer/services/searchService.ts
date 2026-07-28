@@ -1,4 +1,4 @@
-import { Song, SongGroup } from '@/shared/types/song';
+import { Song, SongGroup } from '@mplayer/core';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { IpcClient } from './IpcClient';
 

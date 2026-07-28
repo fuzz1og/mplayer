@@ -11,7 +11,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song, Playlist } from '@/shared/types/song';
+import type { Song, Playlist } from '@mplayer/core';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 

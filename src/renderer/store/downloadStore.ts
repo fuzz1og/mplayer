@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 export interface DownloadTask {
   id: string;

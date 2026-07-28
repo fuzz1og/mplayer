@@ -1,5 +1,5 @@
-import type { Song } from '@/shared/types/song';
-import type { PlayMode } from '@/shared/types/player';
+import type { Song } from '@mplayer/core';
+import type { PlayMode } from '@mplayer/core';
 
 const QUEUE_STORAGE_KEY = 'mplayer_queue';
 const PLAY_MODE_KEY = 'playMode';
@@ -13,9 +13,9 @@ export function getNextSong(
   if (playlist.length === 0 || currentIndex === -1 || !currentSong) return null;
 
   switch (playMode) {
-    case 'single-loop':
+    case '单曲循环':
       return currentSong;
-    case 'shuffle': {
+    case '随机播放': {
       if (playlist.length <= 1) return currentSong;
       let next: Song;
       do {
@@ -23,11 +23,9 @@ export function getNextSong(
       } while (next.id === currentSong.id);
       return next;
     }
-    case 'list-loop':
-      return playlist[(currentIndex + 1) % playlist.length];
-    case 'sequential':
+    case '列表循环':
     default:
-      return currentIndex < playlist.length - 1 ? playlist[currentIndex + 1] : null;
+      return playlist[(currentIndex + 1) % playlist.length];
   }
 }
 
@@ -60,10 +58,10 @@ export function loadQueue(): { playlist: Song[]; index: number } {
 
 export function getInitialPlayMode(): PlayMode {
   const saved = localStorage.getItem(PLAY_MODE_KEY);
-  if (saved && ['sequential', 'list-loop', 'single-loop', 'shuffle'].includes(saved)) {
+  if (saved && ['单曲循环', '列表循环', '随机播放'].includes(saved)) {
     return saved as PlayMode;
   }
-  return 'list-loop';
+  return '列表循环';
 }
 
 export function persistPlayMode(mode: PlayMode): void {
