@@ -53,8 +53,10 @@ export class DiskCacheBackend implements CacheBackend {
   }
 
   async keys(): Promise<string[]> {
-    // Disk backend doesn't track keys externally (no index file needed)
-    // Keys are derived from filenames if needed
     return []
+  }
+
+  getFilePath(key: string): string {
+    return this.resolvePath(key)
   }
 }
