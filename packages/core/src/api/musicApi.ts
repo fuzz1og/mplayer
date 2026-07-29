@@ -66,7 +66,8 @@ function createNeteaseClient() {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Referer': 'https://music.163.com/',
     },
-    timeout: 30000
+    timeout: 30000,
+    proxy: false,
   });
 }
 const apiClient = axios.create({
@@ -80,7 +81,8 @@ const apiClient = axios.create({
     'x-requested-with': 'XMLHttpRequest'
   },
   proxy: false,
-  timeout: 30000
+  timeout: 30000,
+    proxy: false,
 });
 
 export function getApiClient(): AxiosInstance {
@@ -745,6 +747,7 @@ export const musicApi = {
           'Referer': 'https://y.qq.com/',
         },
         timeout: 30000,
+    proxy: false,
         responseType: 'text'
       });
 
@@ -846,7 +849,8 @@ export const musicApi = {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Referer': 'https://music.163.com/'
         },
-        timeout: 30000
+        timeout: 30000,
+    proxy: false,
       });
 
       const response = await neteaseClient.get(
@@ -894,7 +898,8 @@ export const musicApi = {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Referer': 'https://music.163.com/'
         },
-        timeout: 30000
+        timeout: 30000,
+    proxy: false,
       });
 
       const response = await neteaseClient.get(

@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { message } from 'antd';
+import { ArrowLeft } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useSearchStore } from '@/renderer/store/searchStore';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import { useDownload } from '@/renderer/hooks/useDownload';
 import ChartPanel from '@/renderer/components/ChartPanel';
+import GroupedSongList from '@/renderer/components/GroupedSongList';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
 import type { Song } from '@mplayer/core';
 
@@ -111,6 +116,15 @@ const DiscoverPageV2: React.FC = () => {
 
   const handlePlaySong = async (song: Song) => {
     try {
+      // Chart songs may have empty URL — search to get a playable one
+      if (!song.url && song.name) {
+        const keyword = `${song.name} ${song.artist}`;
+        const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType) as any;
+        if (result?.success && result.data?.length > 0) {
+          await play(result.data[0]);
+          return;
+        }
+      }
       await play(song);
     } catch (error) {
       console.error('播放失败:', error);
@@ -131,6 +145,61 @@ const DiscoverPageV2: React.FC = () => {
     cacheRef.current.newTimestamp = 0;
     fetchChart('new');
   };
+
+  // === Search results ===
+  const { groups, loading: searchLoading, currentKeyword, songs: searchSongs } = useSearchStore();
+  const { toggleFavorite } = useFavoriteStore();
+  const { download } = useDownload();
+
+  const handleBackFromSearch = () => {
+    useSearchStore.getState().reset();
+  };
+
+  // Show search results when there's an active search keyword
+  if (currentKeyword && (searchSongs.length > 0 || groups.length > 0 || searchLoading)) {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        {/* Search results header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
+          padding: 'var(--space-3) var(--space-6)',
+          borderBottom: '1px solid var(--divider-color)',
+          backgroundColor: 'var(--content-bg)', height: '60px', flexShrink: 0,
+        }}>
+          <button onClick={handleBackFromSearch} style={{
+            border: 'none', background: 'transparent', cursor: 'pointer',
+            padding: 'var(--space-3)', borderRadius: 'var(--radius-md)',
+            display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+            color: 'var(--text-secondary)', fontSize: 'var(--text-base)', fontWeight: 500,
+          }}>
+            <ArrowLeft size={16} />
+            <span>返回</span>
+          </button>
+          <h1 style={{
+            fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text-primary)',
+            flex: 1, margin: 0, textAlign: 'center',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            搜索结果: {currentKeyword}
+          </h1>
+          <div style={{ width: '140px' }} />
+        </div>
+
+        {/* Search results content */}
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <GroupedSongList
+            onPlay={handlePlaySong}
+            onAddToPlaylist={() => message.info('添加到歌单功能')}
+            onToggleFavorite={toggleFavorite}
+            onDownload={download}
+            selectedIds={[]}
+            onSelectionChange={() => {}}
+            loading={searchLoading}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
