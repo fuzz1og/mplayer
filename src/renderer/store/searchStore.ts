@@ -1,9 +1,6 @@
 import { create } from 'zustand';
 import { dedupeSongs } from '@/renderer/utils/songDedupe';
-import type { Song, SongGroup } from '@/shared/types/song';
-
-type SingleSourceType = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
-export type SourceKey = SingleSourceType | 'all';
+import type { Song, SongGroup, AudioTag, SourceKey } from '@/shared/types/song';
 
 export interface SearchState {
   songs: Song[];
@@ -23,6 +20,7 @@ export interface SearchState {
   setSourceType: (type: SourceKey) => void;
   setError: (error: string | null) => void;
   setGroups: (groups: SongGroup[], replace?: boolean) => void;
+  setAudioTag: (songId: string, tag: AudioTag) => void;
   toggleGroup: (key: string) => void;
   expandAll: () => void;
   collapseAll: () => void;
@@ -70,6 +68,25 @@ export const useSearchStore = create<SearchState>((set) => ({
       }
     }
     return { groups: Array.from(map.values()) };
+  }),
+  setAudioTag: (songId: string, tag: AudioTag) => set((state) => {
+    // Update in flat songs array
+    const songIndex = state.songs.findIndex(s => s.id === songId);
+    if (songIndex !== -1) {
+      const newSongs = [...state.songs];
+      newSongs[songIndex] = { ...newSongs[songIndex], audioTag: tag };
+      return { songs: newSongs };
+    }
+
+    // Update in groups
+    const newGroups = state.groups.map(group => ({
+      ...group,
+      songs: group.songs.map(song =>
+        song.id === songId ? { ...song, audioTag: tag } : song
+      )
+    }));
+
+    return { groups: newGroups };
   }),
   toggleGroup: (key) => set((state) => ({
     expandedKeys: state.expandedKeys.includes(key)

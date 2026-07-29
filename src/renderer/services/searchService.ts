@@ -1,11 +1,13 @@
 import { Song, SongGroup } from '@/shared/types/song';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { IpcClient } from './IpcClient';
+import { probeSongs } from '@mplayer/core';
 
 const DEBOUNCE_DELAY = 300;
 
 class SearchService {
   private debounceTimer: NodeJS.Timeout | null = null;
+  private searchSeq = 0;
 
   /**
    * 通用搜索骨架，处理 loading/error/page 逻辑
@@ -73,6 +75,8 @@ class SearchService {
       store.setGroups([], true);
     }
 
+    const seq = ++this.searchSeq;
+
     await this.doSearch<SongGroup[]>(
       keyword,
       page,
@@ -87,9 +91,34 @@ class SearchService {
           const newTotal = store.groups.reduce((sum, g) => sum + g.songs.length, 0);
           store.setHasMore(newTotal > prevTotal && groups.length > 0);
         }
+
+        // Fire-and-forget audio probe (non-blocking UI)
+        if (seq === this.searchSeq) {
+          this.probeResults(groups, seq);
+        }
       },
       '全部搜索失败',
     );
+  }
+
+  /**
+   * Async batch probe of search results with concurrency control.
+   * Uses searchSeq to ignore stale results when search changes.
+   */
+  private probeResults(groups: SongGroup[], seq: number): void {
+    const songs = groups.flatMap(g => g.songs);
+    probeSongs(songs, {
+      concurrency: 20,
+      resolver: async (song) => {
+        const result = await IpcClient.invoke('musicApi:getAudioUrl', song.url) as any;
+        return result.success ? result.data : song.url;
+      },
+      onResult: (songId, tag) => {
+        if (seq === this.searchSeq) {
+          useSearchStore.getState().setAudioTag(songId, tag);
+        }
+      },
+    });
   }
 
   debouncedSearch(keyword: string): void {

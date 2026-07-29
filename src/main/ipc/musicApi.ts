@@ -1,4 +1,5 @@
 import { registerIpcHandler } from './registerHandler';
+import { getAggregatedChart } from '../services/chartAggregator';
 
 type MusicApi = typeof import('../api/musicApi').musicApi & {
   getSodaPlayableUrl(trackId: string): Promise<string>;
@@ -23,4 +24,5 @@ export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('musicApi:getNeteaseArtists', (cat: number, offset: number, limit: number, initial: number) => musicApi.getNeteaseArtists(cat, offset, limit, initial));
   registerIpcHandler('musicApi:getArtistSongs', (artistId: string, offset: number, limit: number, order: string) => musicApi.getNeteaseArtistSongs(artistId, offset, limit, order));
   registerIpcHandler('musicApi:searchArtists', (keyword: string, limit: number) => musicApi.searchNeteaseArtists(keyword, limit));
+  registerIpcHandler('musicApi:getAggregatedChart', (type: 'hot' | 'new', sources: string[]) => getAggregatedChart(type, sources as any));
 }

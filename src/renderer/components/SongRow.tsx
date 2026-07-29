@@ -5,6 +5,29 @@ import type { Song } from '@/shared/types/song';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import SourceBadge from '@/renderer/components/SourceBadge';
 
+const AudioTagBadge: React.FC<{ tag: 'preview' | 'invalid' }> = ({ tag }) => {
+  const config = tag === 'preview'
+    ? { label: '片段', color: '#e67e22' }
+    : { label: '无效', color: '#e74c3c' };
+
+  return (
+    <span
+      style={{
+        fontSize: 'var(--text-2xs)',
+        fontWeight: 'var(--weight-medium)',
+        padding: '1px 6px',
+        borderRadius: 'var(--radius-xs)',
+        backgroundColor: `${config.color}14`,
+        color: config.color,
+        flexShrink: 0,
+        lineHeight: '1.4',
+      }}
+    >
+      {config.label}
+    </span>
+  );
+};
+
 interface DropdownMenuProps {
   song: Song;
   triggerRef: React.RefObject<HTMLElement | null>;
@@ -173,6 +196,8 @@ const SongRow: React.FC<SongRowProps> = ({
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.artist}</span>
             <SourceBadge sourceType={song.sourceType} />
+            {song.audioTag === 'preview' && <AudioTagBadge tag="preview" />}
+            {song.audioTag === 'invalid' && <AudioTagBadge tag="invalid" />}
           </div>
         </div>
       </div>

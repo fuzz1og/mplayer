@@ -4,7 +4,7 @@ import { Stack } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, setMusicServiceConfig, getApiBaseUrl } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import PlayerOverlay from '../components/PlayerOverlay';
@@ -48,13 +48,11 @@ export default function RootLayout() {
       setCoreApiBaseUrl(apiBaseUrl);
       console.log(`[RootLayout] synced apiBaseUrl: ${getApiBaseUrl()}`);
     }
-  }, [apiBaseUrl]);
-
-  useEffect(() => {
-    if (proxyUrl) {
-      setCoreProxyUrl(proxyUrl);
-    }
-  }, [proxyUrl]);
+    setMusicServiceConfig({
+      apiBaseUrl: apiBaseUrl || '',
+      proxyUrl: proxyUrl || '',
+    });
+  }, [apiBaseUrl, proxyUrl]);
 
   return (
     <>
