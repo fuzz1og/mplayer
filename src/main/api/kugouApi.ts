@@ -50,6 +50,7 @@ export async function getKugouRank(rankId: string, pageSize: number = 50): Promi
       },
       headers: KUGOU_HEADERS,
       timeout: 15000,
+      proxy: false,
     });
 
     const data = response.data;
@@ -78,6 +79,7 @@ export async function getKugouNewAlbums(page: number = 1, pageSize: number = 30)
       },
       headers: KUGOU_HEADERS,
       timeout: 15000,
+      proxy: false,
     });
 
     const data = response.data;
@@ -112,6 +114,7 @@ export async function getKugouPlaylists(page: number = 1, pageSize: number = 30)
       },
       headers: KUGOU_HEADERS,
       timeout: 15000,
+      proxy: false,
     });
 
     const data = response.data;
