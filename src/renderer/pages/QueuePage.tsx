@@ -9,7 +9,7 @@ import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistMod
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
 interface SortableItemProps {

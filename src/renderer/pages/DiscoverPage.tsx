@@ -14,7 +14,7 @@ import GroupedSongList from '@/renderer/components/GroupedSongList';
 import HotlistCard from '@/renderer/components/HotlistCard';
 import DiscoverPlaylistCard from '@/renderer/components/DiscoverPlaylistCard';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
-import type { Song, Artist, DiscoverPlaylist } from '@/shared/types/song';
+import type { Song, Artist, DiscoverPlaylist } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
 interface HotlistSong {

@@ -1,6 +1,6 @@
 import React, { useRef, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 import SongRow from './SongRow';
 
 interface SongListVirtualProps {

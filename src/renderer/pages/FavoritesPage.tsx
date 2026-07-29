@@ -5,7 +5,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 const FavoritesPage: React.FC = () => {
   const { favorites, loadFavorites, toggleFavorite } = useFavoriteStore();

@@ -4,7 +4,7 @@ import { Modal, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import MusicCard from '@/renderer/components/MusicCard';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Playlist } from '@/shared/types/song';
+import type { Playlist } from '@mplayer/core';
 
 const PlaylistsPage: React.FC = () => {
   const navigate = useNavigate();

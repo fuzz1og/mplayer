@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from '../utils/lyricsParser';
+import { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from '@mplayer/core';
 
 describe('lyricsParser', () => {
   describe('parseLRC', () => {

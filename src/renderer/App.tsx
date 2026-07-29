@@ -10,7 +10,7 @@ import { useDownloadStore, type DownloadTask } from '@/renderer/store/downloadSt
 import { useGlobalShortcuts } from '@/renderer/hooks/useGlobalShortcuts';
 import Sidebar from '@/renderer/components/Sidebar';
 import TopBar from '@/renderer/components/TopBar';
-import type { SourceKey } from '@/shared/types/song';
+import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
 import DownloadProgressModal from '@/renderer/components/DownloadProgressModal';
 import LyricsPage from '@/renderer/pages/LyricsPage';

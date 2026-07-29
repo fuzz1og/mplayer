@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 const createMockSong = (overrides?: Partial<Song>): Song => ({
   id: '1',

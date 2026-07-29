@@ -19,12 +19,13 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --ignore-scripts
+      # Build core first (desktop/mobile import @mplayer/core from its dist/)
+      - run: npm run core:build
       # Root (Electron)
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
       # Mobile typecheck
-      - run: npm run core:build
       - run: npx tsc --noEmit --project packages/mobile/tsconfig.json
 
   # Mobile Android APK

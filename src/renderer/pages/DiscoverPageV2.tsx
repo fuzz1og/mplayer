@@ -3,7 +3,7 @@ import { message } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import ChartPanel from '@/renderer/components/ChartPanel';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 const { ipcRenderer } = window.require('electron');
 

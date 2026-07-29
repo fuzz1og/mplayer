@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
-import type { Song, SongBase, Favorite, PlayHistory, Playlist, PlaylistSong } from '@/shared/types/song';
+import type { Song, SongBase, Favorite, PlayHistory, Playlist, PlaylistSong } from '@mplayer/core';
 
 interface StorageData {
   favorites: Favorite[];

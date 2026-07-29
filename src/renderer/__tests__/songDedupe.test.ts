@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { checkDuplicate, filterDuplicates } from '../utils/songDedupe';
-import type { Song } from '@/shared/types/song';
+import { checkDuplicate, filterDuplicates } from '@mplayer/core';
+import type { Song } from '@mplayer/core';
 
 const neteaseSong: Song = { id: '1', name: '晴天', artist: '周杰伦', album: '叶惠美', duration: 240, sourceType: 'netease', url: 'http://a.com/1', cover: 'http://a.com/c1', lrc: '' };
 const qqSong: Song = { id: '2', name: '晴天', artist: '周杰伦', album: '叶惠美', duration: 250, sourceType: 'qq', url: 'http://b.com/2', cover: 'http://b.com/c2', lrc: '' };

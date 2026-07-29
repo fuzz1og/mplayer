@@ -1,8 +1,8 @@
 import { searchService } from '@/renderer/services/searchService';
-import { findBestMatch } from '@/renderer/utils/songMatcher';
+import { findBestMatch } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song } from '@/shared/types/song';
-import type { Playlist } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
+import type { Playlist } from '@mplayer/core';
 
 async function addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
   const playlist = await IpcClient.invoke<Playlist | undefined>('playlist:get', playlistId);

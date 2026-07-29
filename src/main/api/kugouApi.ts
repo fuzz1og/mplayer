@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 // Kugou API endpoints
 const BASE_URL = 'http://mobilecdn.kugou.com/api/v3';

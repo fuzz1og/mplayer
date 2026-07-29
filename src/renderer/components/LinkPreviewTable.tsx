@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Checkbox, Button, Table, Tag } from 'antd';
-import type { SongBase } from '@/shared/types/song';
+import type { SongBase } from '@mplayer/core';
 
 interface LinkPreviewTableProps {
   songs: SongBase[];

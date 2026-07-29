@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Repeat, Repeat1, Shuffle, ArrowRight } from 'lucide-react';
-import type { PlayMode } from '@/shared/types/player';
+import { Repeat, Repeat1, Shuffle } from 'lucide-react';
+import type { PlayMode } from '@mplayer/core';
 
 interface PlayModeButtonProps {
   mode: PlayMode;
@@ -9,25 +9,20 @@ interface PlayModeButtonProps {
 }
 
 const modeConfig: Record<PlayMode, { icon: React.ReactNode; label: string; next: PlayMode }> = {
-  'sequential': {
-    icon: <ArrowRight size={18} />,
-    label: '顺序播放',
-    next: 'list-loop'
-  },
-  'list-loop': {
-    icon: <Repeat size={18} />,
-    label: '列表循环',
-    next: 'single-loop'
-  },
-  'single-loop': {
+  '单曲循环': {
     icon: <Repeat1 size={18} />,
     label: '单曲循环',
-    next: 'shuffle'
+    next: '列表循环'
   },
-  'shuffle': {
+  '列表循环': {
+    icon: <Repeat size={18} />,
+    label: '列表循环',
+    next: '随机播放'
+  },
+  '随机播放': {
     icon: <Shuffle size={18} />,
     label: '随机播放',
-    next: 'sequential'
+    next: '单曲循环'
   }
 };
 

@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Download, Trash2, ListMusic } from 'lucide-react';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import BatchAddToPlaylistModal from './BatchAddToPlaylistModal';
 
