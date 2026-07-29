@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, X, ChevronDown, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
-import type { SourceKey } from '@/renderer/store/searchStore';
+import type { SourceKey } from '@/shared/types/song';
 import { useButtonHover } from '@/renderer/hooks/useButtonHover';
 
 interface TopBarProps {

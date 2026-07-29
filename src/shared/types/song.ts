@@ -7,10 +7,16 @@ export interface SongBase {
   sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' | 'local';
 }
 
+export type AudioTag = 'valid' | 'preview' | 'invalid';
+
+export type SingleSourceType = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
+export type SourceKey = SingleSourceType | 'all';
+
 export interface Song extends SongBase {
   url: string;
   cover: string;
   lrc: string;
+  audioTag?: AudioTag;      // Probe result: none=untouched/normal, preview=preview clip, invalid=unplayable
 }
 
 export interface SearchResult {

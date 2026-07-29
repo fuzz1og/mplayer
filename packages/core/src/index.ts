@@ -4,9 +4,14 @@ export { RateLimiter, beforeRequest, getAntiScrapeHeaders } from './api/antiScra
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
 export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents } from './api/musicApi.js';
 export type { ProxyAgents } from './api/musicApi.js';
+export { probeAudio } from './api/audioProbe.js';
+export { probeSongs } from './api/probeSongs.js';
+export type { ProbeOptions } from './api/probeSongs.js';
 export { dedupeSongs } from './utils/songDedupe.js';
 export { calculateSimilarity, findBestMatch } from './utils/songMatcher.js';
 export { resolveSongUrls } from './utils/songResolver.js';
 export { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from './utils/lyricsParser.js';
 export type { LyricLine, ParsedLyrics } from './utils/lyricsParser.js';
 export { formatPlayCount } from './utils/format.js';
+export { setMusicServiceConfig, getMusicServiceConfig } from './config.js';
+export type { MusicServiceConfig } from './types/config.js';

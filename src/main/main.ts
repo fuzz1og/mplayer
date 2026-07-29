@@ -23,6 +23,7 @@ import { getCacheManager } from './cache/cacheManager';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { musicApi as coreMusicApi, injectProxyAgents } from './api/musicApi';
+import { setMusicServiceConfig } from '@mplayer/core';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
 import { applyElectronProxy, type ProxyConfig } from './proxy';
@@ -193,6 +194,15 @@ app.whenReady().then(async () => {
     } else {
       applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
     }
+
+    // 注入 MusicServiceConfig 到 core 包
+    const savedApiUrl = await db.getSetting<string>('apiUrl');
+    setMusicServiceConfig({
+      apiBaseUrl: savedApiUrl || '',
+      proxyUrl: savedProxy?.enabled && savedProxy.host
+        ? `${savedProxy.protocol}://${savedProxy.host}:${savedProxy.port}`
+        : '',
+    });
   } catch (error) {
     console.error('加载代理设置失败:', error);
     applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
