@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Song } from '@/shared/types/song';
-import type { PlayMode } from '@/shared/types/player';
+import type { Song } from '@mplayer/core';
+import type { PlayMode } from '@mplayer/core';
 
 const createMockSong = (overrides?: Partial<Song>): Song => ({
   id: '1',
@@ -39,17 +39,16 @@ describe('Song type', () => {
 
 describe('PlayMode type', () => {
   it('should have valid play modes', () => {
-    const validModes: PlayMode[] = ['sequential', 'list-loop', 'single-loop', 'shuffle'];
+    const validModes: PlayMode[] = ['单曲循环', '列表循环', '随机播放'];
 
-    expect(validModes).toContain('sequential');
-    expect(validModes).toContain('list-loop');
-    expect(validModes).toContain('single-loop');
-    expect(validModes).toContain('shuffle');
+    expect(validModes).toContain('单曲循环');
+    expect(validModes).toContain('列表循环');
+    expect(validModes).toContain('随机播放');
   });
 
-  it('should have exactly 4 play modes', () => {
-    const modes: PlayMode[] = ['sequential', 'list-loop', 'single-loop', 'shuffle'];
-    expect(modes.length).toBe(4);
+  it('should have exactly 3 play modes', () => {
+    const modes: PlayMode[] = ['单曲循环', '列表循环', '随机播放'];
+    expect(modes.length).toBe(3);
   });
 });
 
@@ -235,44 +234,39 @@ describe('PlayerBar formatTime utility', () => {
 
 describe('PlayModeButton logic', () => {
   const modeConfig: Record<PlayMode, { next: PlayMode }> = {
-    'sequential': { next: 'list-loop' },
-    'list-loop': { next: 'single-loop' },
-    'single-loop': { next: 'shuffle' },
-    'shuffle': { next: 'sequential' },
+    '单曲循环': { next: '列表循环' },
+    '列表循环': { next: '随机播放' },
+    '随机播放': { next: '单曲循环' },
   };
 
-  it('should cycle sequential -> list-loop', () => {
-    expect(modeConfig['sequential'].next).toBe('list-loop');
+  it('should cycle 单曲循环 -> 列表循环', () => {
+    expect(modeConfig['单曲循环'].next).toBe('列表循环');
   });
 
-  it('should cycle list-loop -> single-loop', () => {
-    expect(modeConfig['list-loop'].next).toBe('single-loop');
+  it('should cycle 列表循环 -> 随机播放', () => {
+    expect(modeConfig['列表循环'].next).toBe('随机播放');
   });
 
-  it('should cycle single-loop -> shuffle', () => {
-    expect(modeConfig['single-loop'].next).toBe('shuffle');
-  });
-
-  it('should cycle shuffle -> sequential', () => {
-    expect(modeConfig['shuffle'].next).toBe('sequential');
+  it('should cycle 随机播放 -> 单曲循环', () => {
+    expect(modeConfig['随机播放'].next).toBe('单曲循环');
   });
 
   it('should have all modes', () => {
-    const modes: PlayMode[] = ['sequential', 'list-loop', 'single-loop', 'shuffle'];
+    const modes: PlayMode[] = ['单曲循环', '列表循环', '随机播放'];
     modes.forEach(mode => {
       expect(modeConfig[mode]).toBeDefined();
     });
   });
 
   it('should cycle through all modes in order', () => {
-    let mode: PlayMode = 'sequential';
+    let mode: PlayMode = '单曲循环';
     const cycle: PlayMode[] = [];
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       cycle.push(mode);
       mode = modeConfig[mode].next;
     }
 
-    expect(cycle).toEqual(['sequential', 'list-loop', 'single-loop', 'shuffle']);
+    expect(cycle).toEqual(['单曲循环', '列表循环', '随机播放']);
   });
 });

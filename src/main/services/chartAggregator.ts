@@ -1,4 +1,4 @@
-import type { Song, SongGroup, SourceKey } from '@/shared/types/song';
+import type { Song, SongGroup, SourceKey } from '@mplayer/core';
 import { musicApi } from '../api/musicApi';
 import { getKugouRank, getKugouNewSongs } from '../api/kugouApi';
 

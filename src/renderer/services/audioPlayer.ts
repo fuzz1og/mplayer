@@ -1,5 +1,5 @@
 import { Howl, Howler } from 'howler';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 export type PlayerState = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
 

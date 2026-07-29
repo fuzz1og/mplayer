@@ -1,6 +1,9 @@
 import { create } from 'zustand';
-import { dedupeSongs } from '@/renderer/utils/songDedupe';
-import type { Song, SongGroup, AudioTag, SourceKey } from '@/shared/types/song';
+import { dedupeSongs } from '@mplayer/core';
+import type { Song, SongGroup, AudioTag, SourceKey as CoreSourceKey } from '@mplayer/core';
+
+type SingleSourceType = CoreSourceKey;
+export type SourceKey = SingleSourceType | 'all';
 
 export interface SearchState {
   songs: Song[];

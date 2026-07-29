@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 
 interface ChartPanelProps {
   title: string;
