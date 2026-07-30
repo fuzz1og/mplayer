@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import { musicApi } from '@mplayer/core';
 import type { SongGroup, SourceKey } from '@mplayer/core';
-import { useSourceStore } from './sourceStore';
 import type { SourceOption } from './sourceStore';
 import { probeAudio } from '../services/audioProbe';
+import { createSearchController } from '@mplayer/core';
 
 const SOURCE_LABELS: Record<SourceOption, string> = {
   all: '全部',
@@ -16,8 +16,6 @@ const SOURCE_LABELS: Record<SourceOption, string> = {
   soda: '汽水',
   local: '本地',
 };
-
-let searchSeq = 0;
 
 interface SearchState {
   query: string;
@@ -32,113 +30,54 @@ interface SearchState {
   clear: () => void;
 }
 
-export const useSearchStore = create<SearchState>((set, get) => ({
-  query: '',
-  results: [],
-  loading: false,
-  error: null,
-  page: 1,
-  hasMore: true,
-  loadingMore: false,
-
-  search: async (query: string) => {
-    if (!query.trim()) return;
-    const seq = ++searchSeq;
-    set({ query, loading: true, error: null, results: [], page: 1, hasMore: true });
-    try {
-      const source = useSourceStore.getState().selectedSource;
-      let results: SongGroup[];
-      if (source === 'all') {
-        results = await musicApi.searchAllSources(query, 1);
-      } else {
-        const songs = await musicApi.searchSongs(query, 1, source as SourceKey);
-        results = [{
-          key: source,
-          name: SOURCE_LABELS[source],
-          artist: '',
-          songs,
-        }];
-      }
-      if (searchSeq !== seq) return;
-      set({ results, loading: false, hasMore: results.some(g => g.songs.length > 0) });
-
-      // 非阻塞探测：异步 probe 每首歌的音频大小/可用性
-      probeResults(results, seq);
-    } catch (err) {
-      if (searchSeq !== seq) return;
-      console.error('搜索失败:', err);
-      set({ loading: false, error: '搜索失败，请重试' });
+export const useSearchStore = create<SearchState>((set, get) => {
+  const searchFn = async (query: string, page: number, source: string): Promise<SongGroup[]> => {
+    if (source === 'all') {
+      return musicApi.searchAllSources(query, page);
     }
-  },
+    const songs = await musicApi.searchSongs(query, page, source as SourceKey);
+    return [{ key: source, name: SOURCE_LABELS[source as SourceOption], artist: '', songs }];
+  };
 
-  loadMore: async () => {
-    const state = get();
-    if (state.loadingMore || !state.hasMore || !state.query.trim()) return;
-    set({ loadingMore: true });
-    const seq = searchSeq;
-    const currentQuery = state.query;
-    const currentPage = state.page;
-    try {
-      const nextPage = currentPage + 1;
-      const source = useSourceStore.getState().selectedSource;
-      let newResults: SongGroup[];
-      if (source === 'all') {
-        newResults = await musicApi.searchAllSources(currentQuery, nextPage);
-      } else {
-        const songs = await musicApi.searchSongs(currentQuery, nextPage, source as SourceKey);
-        newResults = [{
-          key: source,
-          name: SOURCE_LABELS[source],
-          artist: '',
-          songs,
-        }];
+  const controller = createSearchController({
+    searchFn,
+    getState: get,
+    setState: set,
+  });
+
+  return {
+    query: '',
+    results: [],
+    loading: false,
+    error: null,
+    page: 1,
+    hasMore: true,
+    loadingMore: false,
+
+    search: async (query: string) => {
+      await controller.search(query);
+      // 非阻塞探测
+      const state = get();
+      if (state.results.length > 0) {
+        probeResults(state.results);
       }
-      const s = get();
-      if (searchSeq !== seq || s.query !== currentQuery) return; // 查询已重置
+    },
+    loadMore: () => controller.loadMore(),
+    clear: () => controller.reset(),
+  };
+});
 
-      // 合并: 保留现有分组，追加同组，新增不在当前结果里的组
-      const existingKeys = new Set(s.results.map(g => g.key));
-      const merged = s.results.map(g => {
-        const same = newResults.find(n => n.key === g.key);
-        return same ? { ...g, songs: [...g.songs, ...same.songs] } : g;
-      });
-      for (const n of newResults) {
-        if (!existingKeys.has(n.key)) {
-          merged.push(n);
-        }
-      }
-      const hasMoreResults = newResults.some(g => g.songs.length > 0);
-      set({ results: merged, page: nextPage, loadingMore: false, hasMore: hasMoreResults });
-    } catch (err) {
-      if (searchSeq !== seq) return;
-      console.error('加载更多失败:', err);
-      set({ loadingMore: false });
-    }
-  },
-
-  clear: () => {
-    searchSeq++;
-    set({ query: '', results: [], loading: false, error: null, page: 1, hasMore: true, loadingMore: false });
-  },
-}));
-
-/** 并发探测搜索结果中每首歌的音频状态，更新 audioTag */
-async function probeResults(groups: SongGroup[], seq: number) {
+async function probeResults(groups: SongGroup[]) {
   const allSongs = groups.flatMap(g => g.songs);
   const BATCH_SIZE = 5;
-
   for (let i = 0; i < allSongs.length; i += BATCH_SIZE) {
     const batch = allSongs.slice(i, i + BATCH_SIZE);
     await Promise.allSettled(
       batch.map(async (song) => {
-        if (searchSeq !== seq) return;
         const tag = await probeAudio(song);
-        if (searchSeq !== seq) return;
         (song as any).audioTag = tag;
       })
     );
-    // 每批完成后刷新 store 触发重渲染
-    if (searchSeq !== seq) return;
     useSearchStore.setState({});
   }
 }

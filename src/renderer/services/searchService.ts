@@ -1,124 +1,77 @@
 import { Song, SongGroup } from '@mplayer/core';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { IpcClient } from './IpcClient';
+import { ipcMusicApi } from './IpcMusicApi';
+import { createSearchController } from '@/shared';
 
 const DEBOUNCE_DELAY = 300;
 
 class SearchService {
   private debounceTimer: NodeJS.Timeout | null = null;
+  private controller;
 
-  /**
-   * 通用搜索骨架，处理 loading/error/page 逻辑
-   */
-  private async doSearch<T>(
-    keyword: string,
-    page: number,
-    invoke: () => Promise<T>,
-    apply: (result: T, isFirstPage: boolean) => void,
-    errorMsg: string,
-  ): Promise<void> {
-    const store = useSearchStore.getState();
-
-    if (!keyword.trim()) {
-      store.reset();
-      return;
-    }
-
-    store.setLoading(true);
-    store.setError(null);
-
-    if (page === 1) {
-      store.setCurrentKeyword(keyword);
-    }
-
-    try {
-      const result = await invoke();
-      apply(result, page === 1);
-      store.setPage(page);
-    } catch (error) {
-      store.setError(error instanceof Error ? error.message : errorMsg);
-    } finally {
-      store.setLoading(false);
-    }
-  }
-
-  async search(keyword: string, page: number = 1): Promise<void> {
-    const store = useSearchStore.getState();
-    const sourceType = store.sourceType;
-
-    if (page === 1) {
-      store.setSongs([], true);
-    }
-
-    await this.doSearch<Song[]>(
-      keyword,
-      page,
-      () => IpcClient.invoke('musicApi:searchSongs', keyword, page, sourceType),
-      (songs, isFirstPage) => {
-        if (isFirstPage) {
-          store.setSongs(songs, true);
-        } else {
-          store.setSongs(songs, false);
+  constructor() {
+    this.controller = createSearchController({
+      searchFn: async (query, page, source) => {
+        if (source === 'all') {
+          return ipcMusicApi.searchAllSources(query, page);
         }
-        store.setHasMore(songs.length >= 10);
+        const songs = await ipcMusicApi.searchSongs(query, page, source as any);
+        return [{ key: source, name: source, artist: '', songs }];
       },
-      '搜索失败',
-    );
-  }
-
-  async searchAll(keyword: string, page: number = 1): Promise<void> {
-    const store = useSearchStore.getState();
-
-    if (page === 1) {
-      store.setGroups([], true);
-    }
-
-    await this.doSearch<SongGroup[]>(
-      keyword,
-      page,
-      () => IpcClient.invoke('musicApi:searchAllSources', keyword, page),
-      (groups, isFirstPage) => {
-        if (isFirstPage) {
-          store.setGroups(groups, true);
-          store.setHasMore(groups.length > 0);
-        } else {
-          const prevTotal = store.groups.reduce((sum, g) => sum + g.songs.length, 0);
-          store.setGroups(groups, false);
-          const newTotal = store.groups.reduce((sum, g) => sum + g.songs.length, 0);
-          store.setHasMore(newTotal > prevTotal && groups.length > 0);
+      getState: () => {
+        const s = useSearchStore.getState();
+        return {
+          query: s.currentKeyword,
+          source: s.sourceType,
+          page: s.page,
+          hasMore: s.hasMore,
+          loading: s.loading,
+          results: s.sourceType === 'all' ? s.groups : s.songs.map((song: Song) => ({ key: s.sourceType, name: s.sourceType, artist: '', songs: [song] })),
+        };
+      },
+      setState: (partial) => {
+        const store = useSearchStore.getState();
+        const updates: Record<string, any> = {};
+        if ('loading' in partial) updates.loading = partial.loading;
+        if ('error' in partial) updates.error = partial.error;
+        if ('hasMore' in partial) updates.hasMore = partial.hasMore;
+        if ('page' in partial) updates.page = partial.page;
+        if ('query' in partial) updates.currentKeyword = partial.query;
+        if ('results' in partial) {
+          if (store.sourceType === 'all') {
+            updates.groups = partial.results as SongGroup[];
+          } else {
+            updates.songs = (partial.results as SongGroup[]).flatMap(g => g.songs);
+          }
         }
+        useSearchStore.setState(updates as any);
       },
-      '全部搜索失败',
-    );
+    });
   }
 
   debouncedSearch(keyword: string): void {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => {
       this.search(keyword);
     }, DEBOUNCE_DELAY);
   }
 
-  async loadMore(): Promise<void> {
-    const store = useSearchStore.getState();
-    const { currentKeyword, page, hasMore, loading, sourceType } = store;
+  search(keyword: string): Promise<void> {
+    return this.controller.search(keyword);
+  }
 
-    if (!currentKeyword || !hasMore || loading) {
-      return;
-    }
+  searchAll(keyword: string): void {
+    useSearchStore.setState({ sourceType: 'all' } as any);
+    this.controller.search(keyword);
+  }
 
-    if (sourceType === 'all') {
-      await this.searchAll(currentKeyword, page + 1);
-    } else {
-      await this.search(currentKeyword, page + 1);
-    }
+  loadMore(): Promise<void> {
+    return this.controller.loadMore();
   }
 
   reset(): void {
-    useSearchStore.getState().reset();
+    this.controller.reset();
   }
 
   async batchSearch(
