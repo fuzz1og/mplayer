@@ -72,9 +72,8 @@ function aggregateRank(ranks: SourceRank): number {
  */
 function getSourceFetcher(type: ChartType, source: SourceName): () => Promise<NormalizedSong[]> {
   if (source === 'netease') {
-    const fetcher = type === 'hot' ? musicApi.getNeteaseHotlist : musicApi.getNeteaseNewSongList;
     return async () => {
-      const songs = await fetcher();
+      const songs = type === 'hot' ? await musicApi.getNeteaseHotlist() : await musicApi.getNeteaseNewSongList();
       return songs.map(s => ({
         name: s.name,
         artist: s.artists,
@@ -97,9 +96,8 @@ function getSourceFetcher(type: ChartType, source: SourceName): () => Promise<No
   }
 
   if (source === 'qq') {
-    const fetcher = type === 'hot' ? musicApi.getQQHotlist : musicApi.getQQNewSongList;
     return async () => {
-      const songs = await fetcher();
+      const songs = type === 'hot' ? await musicApi.getQQHotlist() : await musicApi.getQQNewSongList();
       return songs.map(s => ({
         name: s.name,
         artist: s.artists,
