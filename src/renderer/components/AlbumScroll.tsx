@@ -1,10 +1,11 @@
 import React from 'react';
 
 interface Album {
-  id: number | string;
+  id: string;
   name: string;
   picUrl: string;
   artist: string;
+  publishTime: string;
 }
 
 interface AlbumScrollProps {
@@ -14,6 +15,7 @@ interface AlbumScrollProps {
   area: string;
   onAreaChange: (area: string) => void;
   onRetry: () => void;
+  onAlbumClick?: (album: Album) => void;
 }
 
 const AREAS = [
@@ -24,7 +26,7 @@ const AREAS = [
   { label: '日本', value: 'JP' },
 ];
 
-const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area, onAreaChange, onRetry }) => {
+const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area, onAreaChange, onRetry, onAlbumClick }) => {
   if (error) {
     return (
       <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
@@ -80,7 +82,7 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
         ) : (
           <div style={{ display: 'flex', gap: 'var(--space-5)', flexFlow: 'row wrap' }}>
             {albums.map((album) => (
-              <div key={album.id} style={{ flexShrink: 0, width: '120px' }}>
+              <div key={album.id} style={{ flexShrink: 0, width: '120px', cursor: 'pointer' }} onClick={() => onAlbumClick?.(album)}>
                 <div style={{ width: '120px', height: '120px', borderRadius: '10px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', marginBottom: '8px' }}>
                   {album.picUrl ? (
                     <img src={album.picUrl} alt={album.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
