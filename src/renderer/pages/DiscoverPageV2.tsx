@@ -396,7 +396,7 @@ const DiscoverPageV2: React.FC = () => {
         {activeTab === 'charts' && (
           <div style={{ height: '100%', display: 'flex', gap: 'var(--space-6)' }}>
             <ChartPanel
-              title="热歌榜"
+              title="🔥 热歌榜"
               groups={hotGroups}
               loading={hotLoading}
               error={hotError}
@@ -405,7 +405,7 @@ const DiscoverPageV2: React.FC = () => {
               onRetry={handleRetryHot}
             />
             <ChartPanel
-              title="新歌榜"
+              title="🎵 新歌榜"
               groups={newGroups}
               loading={newLoading}
               error={newError}
