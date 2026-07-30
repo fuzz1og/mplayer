@@ -1,9 +1,23 @@
+import axios from 'axios';
 import type { DiscoverPlaylist } from '@mplayer/core';
-import { cacheManager, getApiClient } from '@mplayer/core';
+import { cacheManager } from '@mplayer/core';
+
+const NETWORK_TIMEOUT = 15000;
 
 const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
 const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
 const PLAYLIST_LIST_CACHE_TTL = 30 * 60 * 1000;
+
+// Matches core's createNeteaseClient() — direct NetEase API access
+const NET_EASE_CLIENT = axios.create({
+  headers: {
+    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://music.163.com/',
+  },
+  timeout: NETWORK_TIMEOUT,
+  proxy: false,
+});
 
 export interface Album {
   id: string;
@@ -33,15 +47,13 @@ export async function getNewAlbums(area: string = 'ALL', offset: number = 0, lim
   const cached = cacheManager.get<Album[]>(cacheKey);
   if (cached) return cached;
 
-  const client = getApiClient();
-  const response = await client.get(`/album/new?area=${area}&offset=${offset}&limit=${limit}`);
+  const response = await NET_EASE_CLIENT.get(
+    `https://music.163.com/api/album/new?area=${area}&offset=${offset}&limit=${limit}`
+  );
   const data = response.data;
+  if (!data?.albums) return [];
 
-  // Support both proxy format (direct array) and NetEase format ({ albums: [...] })
-  const rawAlbums = Array.isArray(data) ? data : data?.albums;
-  if (!rawAlbums || !Array.isArray(rawAlbums)) return [];
-
-  const albums = rawAlbums.map(normalizeNeteaseAlbum);
+  const albums = (data.albums as any[]).map(normalizeNeteaseAlbum);
   cacheManager.set(cacheKey, albums, ALBUMS_CACHE_TTL);
   return albums;
 }
@@ -51,15 +63,13 @@ export async function getRecommendedPlaylists(limit: number = 30): Promise<Disco
   const cached = cacheManager.get<DiscoverPlaylist[]>(cacheKey);
   if (cached) return cached;
 
-  const client = getApiClient();
-  const response = await client.get(`/personalized/playlist?limit=${limit}`);
+  const response = await NET_EASE_CLIENT.get(
+    `https://music.163.com/api/personalized/playlist?limit=${limit}`
+  );
   const data = response.data;
+  if (!data?.result) return [];
 
-  // Support both proxy format (direct array) and NetEase format ({ result: [...] })
-  const rawPlaylists = Array.isArray(data) ? data : data?.result;
-  if (!rawPlaylists || !Array.isArray(rawPlaylists)) return [];
-
-  const playlists = rawPlaylists.map((p: any) => ({
+  const playlists = (data.result as any[]).map((p: any) => ({
     id: p.id,
     name: p.name,
     coverImgUrl: p.picUrl || p.coverImgUrl || '',
@@ -79,15 +89,13 @@ export async function getRecommendedSongs(limit: number = 30): Promise<any[]> {
   const cached = cacheManager.get<any[]>(cacheKey);
   if (cached) return cached;
 
-  const client = getApiClient();
-  const response = await client.get(`/personalized/newsong?limit=${limit}`);
+  const response = await NET_EASE_CLIENT.get(
+    `https://music.163.com/api/personalized/newsong?limit=${limit}`
+  );
   const data = response.data;
+  if (!data?.result) return [];
 
-  // Support both proxy format (direct array) and NetEase format ({ result: [...] })
-  const rawSongs = Array.isArray(data) ? data : data?.result;
-  if (!rawSongs || !Array.isArray(rawSongs)) return [];
-
-  const songs = rawSongs.map((s: any) => ({
+  const songs = (data.result as any[]).map((s: any) => ({
     id: String(s.id),
     name: s.name || '',
     artist: (s.artists || []).map((a: any) => a.name).join(' / ') || s.song?.artists?.[0]?.name || '',
@@ -108,14 +116,13 @@ export async function getPlaylistLists(cat: string = '全部', order: string = '
   const cached = cacheManager.get<DiscoverPlaylist[]>(cacheKey);
   if (cached) return cached;
 
-  const client = getApiClient();
-  const response = await client.get(`/playlist/list?cat=${encodeURIComponent(cat)}&order=${order}&offset=${offset}&limit=${limit}`);
+  const response = await NET_EASE_CLIENT.get(
+    `https://music.163.com/api/top/playlist?cat=${encodeURIComponent(cat)}&order=${order}&offset=${offset}&limit=${limit}`
+  );
   const data = response.data;
+  if (!data?.playlists) return [];
 
-  const rawPlaylists = Array.isArray(data) ? data : data?.playlists;
-  if (!rawPlaylists || !Array.isArray(rawPlaylists)) return [];
-
-  const playlists = rawPlaylists.map((p: any) => ({
+  const playlists = (data.playlists as any[]).map((p: any) => ({
     id: p.id,
     name: p.name,
     coverImgUrl: p.coverImgUrl || '',
