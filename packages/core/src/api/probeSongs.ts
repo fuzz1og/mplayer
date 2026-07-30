@@ -33,7 +33,7 @@ export async function probeSongs(
 
   let currentIndex = 0;
   let activeCount = 0;
-  let stopped = false;
+  const stopped = false;
 
   function next(): void {
     if (stopped) return;
