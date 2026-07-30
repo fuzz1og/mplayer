@@ -1,24 +1,9 @@
-import axios from 'axios';
 import type { DiscoverPlaylist } from '@mplayer/core';
-import { cacheManager } from '@mplayer/core';
-
-const NETWORK_TIMEOUT = 15000;
+import { cacheManager, getApiClient } from '@mplayer/core';
 
 const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
 const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
 const PLAYLIST_LIST_CACHE_TTL = 30 * 60 * 1000;
-
-const NET_EASE_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Referer': 'https://music.163.com/',
-  'Accept-Language': 'zh-CN,zh;q=0.9',
-};
-
-const NET_EASE_CLIENT = axios.create({
-  headers: NET_EASE_HEADERS,
-  timeout: NETWORK_TIMEOUT,
-  proxy: false,
-});
 
 export interface Album {
   id: string;
@@ -43,34 +28,38 @@ function normalizeNeteaseAlbum(raw: any): Album {
   };
 }
 
-async function getNeteaseNewAlbums(area: string = 'ALL', offset: number = 0, limit: number = 30): Promise<Album[]> {
+export async function getNewAlbums(area: string = 'ALL', offset: number = 0, limit: number = 30): Promise<Album[]> {
   const cacheKey = `album_new_${area}`;
   const cached = cacheManager.get<Album[]>(cacheKey);
   if (cached) return cached;
 
-  const response = await NET_EASE_CLIENT.get(
-    `https://music.163.com/api/album/new?area=${area}&offset=${offset}&limit=${limit}`
-  );
+  const client = getApiClient();
+  const response = await client.get(`/album/new?area=${area}&offset=${offset}&limit=${limit}`);
   const data = response.data;
-  if (!data?.albums) return [];
 
-  const albums = (data.albums as any[]).map(normalizeNeteaseAlbum);
+  // Support both proxy format (direct array) and NetEase format ({ albums: [...] })
+  const rawAlbums = Array.isArray(data) ? data : data?.albums;
+  if (!rawAlbums || !Array.isArray(rawAlbums)) return [];
+
+  const albums = rawAlbums.map(normalizeNeteaseAlbum);
   cacheManager.set(cacheKey, albums, ALBUMS_CACHE_TTL);
   return albums;
 }
 
-async function getNeteaseRecommendedPlaylists(limit: number = 30): Promise<DiscoverPlaylist[]> {
+export async function getRecommendedPlaylists(limit: number = 30): Promise<DiscoverPlaylist[]> {
   const cacheKey = 'personalized_playlist';
   const cached = cacheManager.get<DiscoverPlaylist[]>(cacheKey);
   if (cached) return cached;
 
-  const response = await NET_EASE_CLIENT.get(
-    `https://music.163.com/api/personalized/playlist?limit=${limit}`
-  );
+  const client = getApiClient();
+  const response = await client.get(`/personalized/playlist?limit=${limit}`);
   const data = response.data;
-  if (!data?.result) return [];
 
-  const playlists = (data.result as any[]).map((p: any) => ({
+  // Support both proxy format (direct array) and NetEase format ({ result: [...] })
+  const rawPlaylists = Array.isArray(data) ? data : data?.result;
+  if (!rawPlaylists || !Array.isArray(rawPlaylists)) return [];
+
+  const playlists = rawPlaylists.map((p: any) => ({
     id: p.id,
     name: p.name,
     coverImgUrl: p.picUrl || p.coverImgUrl || '',
@@ -85,18 +74,20 @@ async function getNeteaseRecommendedPlaylists(limit: number = 30): Promise<Disco
   return playlists;
 }
 
-async function getNeteaseRecommendedSongs(limit: number = 30): Promise<any[]> {
+export async function getRecommendedSongs(limit: number = 30): Promise<any[]> {
   const cacheKey = 'personalized_newsong';
   const cached = cacheManager.get<any[]>(cacheKey);
   if (cached) return cached;
 
-  const response = await NET_EASE_CLIENT.get(
-    `https://music.163.com/api/personalized/newsong?limit=${limit}`
-  );
+  const client = getApiClient();
+  const response = await client.get(`/personalized/newsong?limit=${limit}`);
   const data = response.data;
-  if (!data?.result) return [];
 
-  const songs = (data.result as any[]).map((s: any) => ({
+  // Support both proxy format (direct array) and NetEase format ({ result: [...] })
+  const rawSongs = Array.isArray(data) ? data : data?.result;
+  if (!rawSongs || !Array.isArray(rawSongs)) return [];
+
+  const songs = rawSongs.map((s: any) => ({
     id: String(s.id),
     name: s.name || '',
     artist: (s.artists || []).map((a: any) => a.name).join(' / ') || s.song?.artists?.[0]?.name || '',
@@ -112,30 +103,19 @@ async function getNeteaseRecommendedSongs(limit: number = 30): Promise<any[]> {
   return songs;
 }
 
-export async function getNewAlbums(area: string = 'ALL', offset: number = 0, limit: number = 30): Promise<Album[]> {
-  return getNeteaseNewAlbums(area, offset, limit);
-}
-
-export async function getRecommendedPlaylists(limit: number = 30): Promise<DiscoverPlaylist[]> {
-  return getNeteaseRecommendedPlaylists(limit);
-}
-
-export async function getRecommendedSongs(limit: number = 30): Promise<any[]> {
-  return getNeteaseRecommendedSongs(limit);
-}
-
-async function getNeteasePlaylistLists(cat: string = '全部', order: string = 'hot', offset: number = 0, limit: number = 30): Promise<DiscoverPlaylist[]> {
+export async function getPlaylistLists(cat: string = '全部', order: string = 'hot', offset: number = 0, limit: number = 30): Promise<DiscoverPlaylist[]> {
   const cacheKey = `playlist_list_${cat}_${order}`;
   const cached = cacheManager.get<DiscoverPlaylist[]>(cacheKey);
   if (cached) return cached;
 
-  const response = await NET_EASE_CLIENT.get(
-    `https://music.163.com/api/top/playlist?cat=${encodeURIComponent(cat)}&order=${order}&offset=${offset}&limit=${limit}`
-  );
+  const client = getApiClient();
+  const response = await client.get(`/playlist/list?cat=${encodeURIComponent(cat)}&order=${order}&offset=${offset}&limit=${limit}`);
   const data = response.data;
-  if (!data?.playlists) return [];
 
-  const playlists = (data.playlists as any[]).map((p: any) => ({
+  const rawPlaylists = Array.isArray(data) ? data : data?.playlists;
+  if (!rawPlaylists || !Array.isArray(rawPlaylists)) return [];
+
+  const playlists = rawPlaylists.map((p: any) => ({
     id: p.id,
     name: p.name,
     coverImgUrl: p.coverImgUrl || '',
@@ -148,8 +128,4 @@ async function getNeteasePlaylistLists(cat: string = '全部', order: string = '
 
   cacheManager.set(cacheKey, playlists, PLAYLIST_LIST_CACHE_TTL);
   return playlists;
-}
-
-export async function getPlaylistLists(cat: string = '全部', order: string = 'hot', offset: number = 0, limit: number = 30): Promise<DiscoverPlaylist[]> {
-  return getNeteasePlaylistLists(cat, order, offset, limit);
 }
