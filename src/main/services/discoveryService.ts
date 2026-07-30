@@ -117,7 +117,7 @@ export async function getPlaylistLists(cat: string = '全部', order: string = '
   if (cached) return cached;
 
   const response = await NET_EASE_CLIENT.get(
-    `https://music.163.com/api/top/playlist?cat=${encodeURIComponent(cat)}&order=${order}&offset=${offset}&limit=${limit}`
+    `https://music.163.com/api/playlist/list?cat=${encodeURIComponent(cat)}&order=${order}&offset=${offset}&limit=${limit}`
   );
   const data = response.data;
   if (!data?.playlists) return [];

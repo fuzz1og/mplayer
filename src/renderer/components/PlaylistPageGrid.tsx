@@ -17,14 +17,14 @@ function formatCount(n: number): string {
 const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading, error, onRetry, onPlaylistSelect }) => {
   if (loading) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-5)', height: '100%', alignContent: 'start', overflow: 'auto' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-5)', overflow: 'auto', alignContent: 'start' }}>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} style={{ display: 'flex', gap: 'var(--space-4)', borderRadius: '12px', overflow: 'hidden', backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)', padding: 'var(--space-4)' }}>
-            <div className="skeleton-shimmer" style={{ width: '100px', height: '100px', borderRadius: '8px', flexShrink: 0 }} />
-            <div style={{ flex: 1 }}>
-              <div className="skeleton-shimmer" style={{ width: '60%', height: '16px', borderRadius: '2px', marginBottom: '8px' }} />
-              <div className="skeleton-shimmer" style={{ width: '40%', height: '12px', borderRadius: '2px', marginBottom: '6px' }} />
-              <div className="skeleton-shimmer" style={{ width: '80%', height: '12px', borderRadius: '2px' }} />
+          <div key={i} style={{ borderRadius: '12px', overflow: 'hidden', backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)' }}>
+            <div className="skeleton-shimmer" style={{ width: '100%', paddingTop: '50%' }} />
+            <div style={{ padding: '14px' }}>
+              <div className="skeleton-shimmer" style={{ width: '70%', height: '16px', borderRadius: '2px', marginBottom: '8px' }} />
+              <div className="skeleton-shimmer" style={{ width: '50%', height: '12px', borderRadius: '2px', marginBottom: '6px' }} />
+              <div className="skeleton-shimmer" style={{ width: '90%', height: '12px', borderRadius: '2px' }} />
             </div>
           </div>
         ))}
@@ -53,39 +53,36 @@ const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading,
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-5)', overflow: 'auto', height: '100%', alignContent: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-5)', overflow: 'auto', alignContent: 'start' }}>
       {playlists.map((pl) => (
         <div
           key={pl.id}
           onClick={() => onPlaylistSelect?.(pl)}
-          style={{ cursor: 'pointer', display: 'flex', gap: 'var(--space-4)', borderRadius: '12px', overflow: 'hidden', backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)', padding: 'var(--space-4)', transition: 'background-color 0.15s' }}
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--content-bg)'; }}
+          style={{ cursor: 'pointer', borderRadius: '12px', overflow: 'hidden', backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)', transition: 'transform 0.2s' }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
         >
-          <div style={{ width: '100px', height: '100px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
+          <div style={{ width: '100%', paddingTop: '50%', backgroundColor: 'var(--hover-bg)', position: 'relative' }}>
             {pl.coverImgUrl ? (
-              <img src={pl.coverImgUrl} alt={pl.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+              <img src={pl.coverImgUrl} alt={pl.name} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
             ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px' }}>🎵</div>
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px' }}>🎵</div>
             )}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ padding: '14px' }}>
             <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)', marginBottom: '4px' }}>
               {pl.name}
             </div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: '2px' }}>
-              {pl.creator.nickname} · {formatCount(pl.playCount)} 次播放
-            </div>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
-              {pl.trackCount} 首
+              {pl.creator.nickname} · {formatCount(pl.playCount)} 次播放 · {pl.trackCount} 首
             </div>
             {pl.description && (
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '6px' }}>
                 {pl.description}
               </div>
             )}
             {pl.tags.length > 0 && (
-              <div style={{ display: 'flex', gap: '4px', marginTop: '6px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                 {pl.tags.slice(0, 3).map((tag) => (
                   <span key={tag} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', backgroundColor: 'var(--border-color)', color: 'var(--text-tertiary)' }}>
                     {tag}
