@@ -4,29 +4,7 @@ import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic } from 'lucide
 import type { Song } from '@mplayer/core';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import SourceBadge from '@/renderer/components/SourceBadge';
-
-const AudioTagBadge: React.FC<{ tag: 'preview' | 'invalid' }> = ({ tag }) => {
-  const config = tag === 'preview'
-    ? { label: '片段', color: '#e67e22' }
-    : { label: '无效', color: '#e74c3c' };
-
-  return (
-    <span
-      style={{
-        fontSize: 'var(--text-2xs)',
-        fontWeight: 'var(--weight-medium)',
-        padding: '1px 6px',
-        borderRadius: 'var(--radius-xs)',
-        backgroundColor: `${config.color}14`,
-        color: config.color,
-        flexShrink: 0,
-        lineHeight: '1.4',
-      }}
-    >
-      {config.label}
-    </span>
-  );
-};
+import AudioTagBadge from '@/renderer/components/AudioTagBadge';
 
 interface DropdownMenuProps {
   song: Song;

@@ -6,6 +6,7 @@ const NETWORK_TIMEOUT = 15000;
 
 const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
 const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
+const PLAYLIST_LIST_CACHE_TTL = 30 * 60 * 1000;
 
 const NET_EASE_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -121,4 +122,34 @@ export async function getRecommendedPlaylists(limit: number = 30): Promise<Disco
 
 export async function getRecommendedSongs(limit: number = 30): Promise<any[]> {
   return getNeteaseRecommendedSongs(limit);
+}
+
+async function getNeteasePlaylistLists(cat: string = '全部', order: string = 'hot', offset: number = 0, limit: number = 30): Promise<DiscoverPlaylist[]> {
+  const cacheKey = `playlist_list_${cat}_${order}`;
+  const cached = cacheManager.get<DiscoverPlaylist[]>(cacheKey);
+  if (cached) return cached;
+
+  const response = await NET_EASE_CLIENT.get(
+    `https://music.163.com/api/top/playlist?cat=${encodeURIComponent(cat)}&order=${order}&offset=${offset}&limit=${limit}`
+  );
+  const data = response.data;
+  if (!data?.playlists) return [];
+
+  const playlists = (data.playlists as any[]).map((p: any) => ({
+    id: p.id,
+    name: p.name,
+    coverImgUrl: p.coverImgUrl || '',
+    playCount: p.playCount || 0,
+    trackCount: p.trackCount || 0,
+    creator: p.creator ? { nickname: p.creator.nickname || '' } : { nickname: '' },
+    tags: p.tags || [],
+    description: p.description || '',
+  }));
+
+  cacheManager.set(cacheKey, playlists, PLAYLIST_LIST_CACHE_TTL);
+  return playlists;
+}
+
+export async function getPlaylistLists(cat: string = '全部', order: string = 'hot', offset: number = 0, limit: number = 30): Promise<DiscoverPlaylist[]> {
+  return getNeteasePlaylistLists(cat, order, offset, limit);
 }

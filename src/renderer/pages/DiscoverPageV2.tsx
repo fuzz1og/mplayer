@@ -10,7 +10,7 @@ import ChartPanel from '@/renderer/components/ChartPanel';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistGrid from '@/renderer/components/PlaylistGrid';
-import SongList from '@/renderer/components/SongList';
+import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
 import type { Song, DiscoverPlaylist } from '@mplayer/core';
 import type { Album } from '@/main/services/discoveryService';
@@ -45,7 +45,7 @@ interface ChartCache {
 interface TabCache {
   albums: { data: Album[] | null; timestamp: number };
   recommendedPlaylists: { data: DiscoverPlaylist[] | null; timestamp: number };
-  recommendedSongs: { data: Song[] | null; timestamp: number };
+  playlists: { data: DiscoverPlaylist[] | null; timestamp: number };
 }
 
 const CACHE_TTL = 30 * 60 * 1000;
@@ -73,18 +73,20 @@ const DiscoverPageV2: React.FC = () => {
   const [recommendedLoading, setRecommendedLoading] = useState(false);
   const [recommendedError, setRecommendedError] = useState<string | null>(null);
 
-  const [recommendedSongs, setRecommendedSongs] = useState<Song[]>([]);
-  const [recommendedSongsLoading, setRecommendedSongsLoading] = useState(false);
+  const [playlistList, setPlaylistList] = useState<DiscoverPlaylist[]>([]);
+  const [playlistListLoading, setPlaylistListLoading] = useState(false);
+  const [playlistListError, setPlaylistListError] = useState<string | null>(null);
 
   const cacheRef = useRef<ChartCache>({ hot: null, new: null, hotTimestamp: 0, newTimestamp: 0 });
   const tabCacheRef = useRef<TabCache>({
     albums: { data: null, timestamp: 0 },
     recommendedPlaylists: { data: null, timestamp: 0 },
-    recommendedSongs: { data: null, timestamp: 0 },
+    playlists: { data: null, timestamp: 0 },
   });
   const mountedRef = useRef(true);
   const albumsFetchIdRef = useRef(0);
   const recommendFetchIdRef = useRef(0);
+  const playlistsFetchIdRef = useRef(0);
 
   const fetchChart = useCallback(async (type: 'hot' | 'new') => {
     const cache = cacheRef.current;
@@ -190,61 +192,69 @@ const DiscoverPageV2: React.FC = () => {
 
   const fetchRecommended = useCallback(async () => {
     const fetchId = ++recommendFetchIdRef.current;
-    const playlistCache = tabCacheRef.current.recommendedPlaylists;
-    const songCache = tabCacheRef.current.recommendedSongs;
+    const cache = tabCacheRef.current.recommendedPlaylists;
 
-    const hasPlaylistCache = !!playlistCache.data;
-    const hasSongCache = !!songCache.data;
-
-    if (hasPlaylistCache) {
-      setRecommendedPlaylists(playlistCache.data || []);
-      if (Date.now() - playlistCache.timestamp >= RECOMMENDED_CACHE_TTL) {
+    if (cache.data) {
+      setRecommendedPlaylists(cache.data);
+      if (Date.now() - cache.timestamp >= RECOMMENDED_CACHE_TTL) {
         setRecommendedLoading(true);
       }
     } else {
       setRecommendedLoading(true);
     }
 
-    if (hasSongCache) {
-      setRecommendedSongs(songCache.data || []);
-      if (Date.now() - songCache.timestamp >= RECOMMENDED_CACHE_TTL) {
-        setRecommendedSongsLoading(true);
-      }
-    } else {
-      setRecommendedSongsLoading(true);
-    }
-
     setRecommendedError(null);
 
     try {
-      const [plResult, sgResult] = await Promise.all([
-        ipcRenderer.invoke('musicApi:getRecommendedPlaylists', 30) as Promise<ApiResponse<DiscoverPlaylist[]>>,
-        ipcRenderer.invoke('musicApi:getRecommendedSongs', 30) as Promise<ApiResponse<Song[]>>,
-      ]);
-
+      const result = await ipcRenderer.invoke('musicApi:getRecommendedPlaylists', 30) as ApiResponse<DiscoverPlaylist[]>;
       if (!mountedRef.current || fetchId !== recommendFetchIdRef.current) return;
 
-      if (plResult.success) {
-        const plData = plResult.data || [];
+      if (result.success) {
+        const plData = result.data || [];
         setRecommendedPlaylists(plData);
         tabCacheRef.current.recommendedPlaylists = { data: plData, timestamp: Date.now() };
-      } else if (!hasPlaylistCache) {
-        setRecommendedError(plResult.error || '加载推荐失败');
-      }
-
-      if (sgResult.success) {
-        const sgData = sgResult.data || [];
-        setRecommendedSongs(sgData);
-        tabCacheRef.current.recommendedSongs = { data: sgData, timestamp: Date.now() };
+      } else if (!cache.data) {
+        setRecommendedError(result.error || '加载推荐失败');
       }
     } catch (err: any) {
       if (!mountedRef.current || fetchId !== recommendFetchIdRef.current) return;
-      if (!hasPlaylistCache) setRecommendedError(err?.message || '加载推荐失败');
+      if (!cache.data) setRecommendedError(err?.message || '加载推荐失败');
     } finally {
-      if (mountedRef.current && fetchId === recommendFetchIdRef.current) {
-        setRecommendedLoading(false);
-        setRecommendedSongsLoading(false);
+      if (mountedRef.current && fetchId === recommendFetchIdRef.current) setRecommendedLoading(false);
+    }
+  }, []);
+
+  const fetchPlaylistList = useCallback(async () => {
+    const fetchId = ++playlistsFetchIdRef.current;
+    const cache = tabCacheRef.current.playlists;
+
+    if (cache.data) {
+      setPlaylistList(cache.data);
+      if (Date.now() - cache.timestamp >= CACHE_TTL) {
+        setPlaylistListLoading(true);
       }
+    } else {
+      setPlaylistListLoading(true);
+    }
+    setPlaylistListError(null);
+
+    try {
+      const result = await ipcRenderer.invoke('musicApi:getPlaylists', '全部', 'hot', 0, 30) as ApiResponse<DiscoverPlaylist[]>;
+      if (!mountedRef.current || fetchId !== playlistsFetchIdRef.current) return;
+
+      if (!result.success) {
+        if (!cache.data) setPlaylistListError(result.error || '加载歌单失败');
+        return;
+      }
+
+      const plData = result.data || [];
+      setPlaylistList(plData);
+      tabCacheRef.current.playlists = { data: plData, timestamp: Date.now() };
+    } catch (err: any) {
+      if (!mountedRef.current || fetchId !== playlistsFetchIdRef.current) return;
+      if (!cache.data) setPlaylistListError(err?.message || '加载歌单失败');
+    } finally {
+      if (mountedRef.current && fetchId === playlistsFetchIdRef.current) setPlaylistListLoading(false);
     }
   }, []);
 
@@ -255,8 +265,11 @@ const DiscoverPageV2: React.FC = () => {
     } else if (activeTab === 'recommend') {
       setRecommendedError(null);
       fetchRecommended();
+    } else if (activeTab === 'playlists') {
+      setPlaylistListError(null);
+      fetchPlaylistList();
     }
-  }, [activeTab, albumsArea, fetchAlbums, fetchRecommended]);
+  }, [activeTab, albumsArea, fetchAlbums, fetchRecommended, fetchPlaylistList]);
 
   const handleAlbumsAreaChange = (area: string) => {
     setAlbumsArea(area as AreaKey);
@@ -269,8 +282,12 @@ const DiscoverPageV2: React.FC = () => {
 
   const handleRetryRecommended = () => {
     tabCacheRef.current.recommendedPlaylists = { data: null, timestamp: 0 };
-    tabCacheRef.current.recommendedSongs = { data: null, timestamp: 0 };
     fetchRecommended();
+  };
+
+  const handleRetryPlaylists = () => {
+    tabCacheRef.current.playlists = { data: null, timestamp: 0 };
+    fetchPlaylistList();
   };
 
   const handlePlaylistSelect = (pl: DiscoverPlaylist) => {
@@ -309,7 +326,7 @@ const DiscoverPageV2: React.FC = () => {
   };
 
   const { groups, loading: searchLoading, currentKeyword, songs: searchSongs } = useSearchStore();
-  const { toggleFavorite, favoriteIds } = useFavoriteStore();
+  const { toggleFavorite } = useFavoriteStore();
   const { download } = useDownload();
 
   const handleBackFromSearch = () => {
@@ -428,42 +445,23 @@ const DiscoverPageV2: React.FC = () => {
         )}
 
         {activeTab === 'recommend' && (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)', overflow: 'auto' }}>
-            <div>
-              <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-2)' }}>
-                推荐歌曲
-              </h3>
-              <SongList
-                songs={recommendedSongs}
-                currentSongId={currentSong?.id}
-                favoriteIds={favoriteIds}
-                onPlay={handlePlaySong}
-                onToggleFavorite={toggleFavorite}
-                onDownload={download}
-                loading={recommendedSongsLoading}
-                showHeader={false}
-                showIndex={false}
-              />
-            </div>
-            <div>
-              <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-2)' }}>
-                推荐歌单
-              </h3>
-              <PlaylistGrid
-                playlists={recommendedPlaylists}
-                loading={recommendedLoading}
-                error={recommendedError}
-                onRetry={handleRetryRecommended}
-                onPlaylistSelect={handlePlaylistSelect}
-              />
-            </div>
-          </div>
+          <PlaylistGrid
+            playlists={recommendedPlaylists}
+            loading={recommendedLoading}
+            error={recommendedError}
+            onRetry={handleRetryRecommended}
+            onPlaylistSelect={handlePlaylistSelect}
+          />
         )}
 
         {activeTab === 'playlists' && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)' }}>
-            <div style={{ fontSize: '14px' }}>歌单功能开发中，敬请期待</div>
-          </div>
+          <PlaylistPageGrid
+            playlists={playlistList}
+            loading={playlistListLoading}
+            error={playlistListError}
+            onRetry={handleRetryPlaylists}
+            onPlaylistSelect={handlePlaylistSelect}
+          />
         )}
       </div>
     </div>
