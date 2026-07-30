@@ -1,6 +1,6 @@
 import { registerIpcHandler } from './registerHandler';
 import { getAggregatedChart } from '../services/chartAggregator';
-import { getNewAlbums, getRecommendedPlaylists, getRecommendedSongs } from '../services/discoveryService';
+import { getNewAlbums, getRecommendedPlaylists, getRecommendedSongs, getPlaylistLists } from '../services/discoveryService';
 
 type MusicApi = typeof import('../api/musicApi').musicApi & {
   getSodaPlayableUrl(trackId: string): Promise<string>;
@@ -29,4 +29,5 @@ export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('musicApi:getNewAlbums', (area: string, offset: number, limit: number) => getNewAlbums(area, offset, limit));
   registerIpcHandler('musicApi:getRecommendedPlaylists', (limit: number) => getRecommendedPlaylists(limit));
   registerIpcHandler('musicApi:getRecommendedSongs', (limit: number) => getRecommendedSongs(limit));
+  registerIpcHandler('musicApi:getPlaylists', (cat: string, order: string, offset: number, limit: number) => getPlaylistLists(cat, order, offset, limit));
 }

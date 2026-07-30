@@ -1,6 +1,7 @@
 import type { Song, SongGroup, SourceKey } from '@mplayer/core';
 import { musicApi } from '../api/musicApi';
 import { getKugouRank, getKugouNewSongs } from '../api/kugouApi';
+import { cacheManager } from '@mplayer/core';
 
 export type ChartType = 'hot' | 'new';
 export type SourceName = 'netease' | 'qq' | 'kugou';
@@ -142,10 +143,16 @@ function getSourceFetcher(type: ChartType, source: SourceName): () => Promise<No
  * @param type 'hot' | 'new'
  * @param sources 要聚合的源列表
  */
+const CHART_CACHE_TTL = 30 * 60 * 1000;
+
 export async function getAggregatedChart(
   type: ChartType,
   sources: SourceName[],
 ): Promise<AggregatedChartResult> {
+  const cacheKey = `chart_${type}_aggregated`;
+  const cached = cacheManager.get<AggregatedChartResult>(cacheKey);
+  if (cached) return cached;
+
   // 并行获取所有源
   const fetchTasks = sources.map(source => getSourceFetcher(type, source));
   const results = await Promise.allSettled(fetchTasks.map(fn => fn()));
@@ -195,10 +202,13 @@ export async function getAggregatedChart(
   // 按分数降序排列
   groups.sort((a, b) => b.score - a.score);
 
-  return {
+  const result: AggregatedChartResult = {
     songs: groups,
     total: groups.length,
   };
+
+  cacheManager.set(cacheKey, result, CHART_CACHE_TTL);
+  return result;
 }
 
 /**

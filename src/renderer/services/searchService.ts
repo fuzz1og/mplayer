@@ -108,7 +108,7 @@ class SearchService {
   private probeResults(groups: SongGroup[], seq: number): void {
     const songs = groups.flatMap(g => g.songs);
     probeSongs(songs, {
-      concurrency: 20,
+      concurrency: 5,
       resolver: async (song) => {
         const result = await IpcClient.invoke('musicApi:getAudioUrl', song.url) as any;
         return result.success ? result.data : song.url;
