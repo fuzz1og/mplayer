@@ -14,10 +14,10 @@ const SKELETON_COUNT = 6;
 const PlaylistGrid: React.FC<PlaylistGridProps> = ({ playlists, loading, error, onRetry, onPlaylistSelect }) => {
   if (loading) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-5)', height: '100%', alignContent: 'start', overflow: 'auto' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-5)', overflow: 'auto', alignContent: 'start' }}>
         {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
           <div key={i} style={{ borderRadius: '12px', overflow: 'hidden', backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)' }}>
-            <div className="skeleton-shimmer" style={{ width: '100%', aspectRatio: '1' }} />
+            <div className="skeleton-shimmer" style={{ width: '100%', paddingTop: '100%' }} />
             <div style={{ padding: '10px' }}>
               <div className="skeleton-shimmer" style={{ width: '80%', height: '14px', borderRadius: '2px', marginBottom: '6px' }} />
               <div className="skeleton-shimmer" style={{ width: '40%', height: '12px', borderRadius: '2px' }} />
@@ -53,7 +53,7 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ playlists, loading, error, 
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-5)', overflow: 'auto', height: '100%', alignContent: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-5)', overflow: 'auto', alignContent: 'start' }}>
       {playlists.map((pl) => (
         <div
           key={pl.id}
@@ -62,11 +62,11 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ playlists, loading, error, 
           onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
         >
-          <div style={{ width: '100%', aspectRatio: '1', backgroundColor: 'var(--hover-bg)', position: 'relative' }}>
+          <div style={{ width: '100%', paddingTop: '100%', backgroundColor: 'var(--hover-bg)', position: 'relative' }}>
             {pl.coverImgUrl ? (
-              <img src={pl.coverImgUrl} alt={pl.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+              <img src={pl.coverImgUrl} alt={pl.name} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
             ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px' }}>🎵</div>
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px' }}>🎵</div>
             )}
           </div>
           <div style={{ padding: '10px' }}>
