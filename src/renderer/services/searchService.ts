@@ -1,7 +1,7 @@
 import { Song, SongGroup } from '@mplayer/core';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { IpcClient } from './IpcClient';
-import { probeSongs } from '@mplayer/core';
+
 
 const DEBOUNCE_DELAY = 300;
 
@@ -102,23 +102,49 @@ class SearchService {
   }
 
   /**
-   * Async batch probe of search results with concurrency control.
-   * Uses searchSeq to ignore stale results when search changes.
+   * Async batch probe of search results — matches mobile's pattern.
+   * Processes in batches of BATCH_SIZE, updates store after each batch for progressive rendering.
    */
   private probeResults(groups: SongGroup[], seq: number): void {
     const songs = groups.flatMap(g => g.songs);
-    probeSongs(songs, {
-      concurrency: 5,
-      resolver: async (song) => {
-        const result = await IpcClient.invoke('musicApi:getAudioUrl', song.url) as any;
-        return result.success ? result.data : song.url;
-      },
-      onResult: (songId, tag) => {
-        if (seq === this.searchSeq) {
-          useSearchStore.getState().setAudioTag(songId, tag);
-        }
-      },
-    });
+    const BATCH_SIZE = 5;
+
+    const runBatch = async (startIdx: number) => {
+      if (startIdx >= songs.length || seq !== this.searchSeq) return;
+
+      const batch = songs.slice(startIdx, startIdx + BATCH_SIZE);
+      await Promise.allSettled(
+        batch.map(async (song) => {
+          if (seq !== this.searchSeq) return;
+          try {
+            const resolvedUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
+            const url = (resolvedUrl || song.url) as string;
+            if (!url || !url.startsWith('http')) {
+              (song as any).audioTag = 'valid';
+              return;
+            }
+            // Quick HEAD probe for content-length
+            try {
+              const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000), redirect: 'follow' });
+              const cl = resp.headers.get('content-length');
+              const size = cl ? parseInt(cl, 10) : null;
+              (song as any).audioTag = size !== null && size < 1_048_576 ? 'preview' : 'valid';
+            } catch {
+              (song as any).audioTag = 'valid';
+            }
+          } catch {
+            (song as any).audioTag = 'valid';
+          }
+        })
+      );
+      if (seq === this.searchSeq) {
+        useSearchStore.setState({});
+      }
+      // Continue with next batch
+      runBatch(startIdx + BATCH_SIZE);
+    };
+
+    runBatch(0);
   }
 
   debouncedSearch(keyword: string): void {
