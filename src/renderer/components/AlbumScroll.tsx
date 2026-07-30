@@ -78,7 +78,7 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
             <div>暂无新碟数据</div>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 'var(--space-5)', flexDirection: 'row', overflow: 'visible' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-5)', flexFlow: 'row wrap' }}>
             {albums.map((album) => (
               <div key={album.id} style={{ flexShrink: 0, width: '120px' }}>
                 <div style={{ width: '120px', height: '120px', borderRadius: '10px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', marginBottom: '8px' }}>

@@ -56,7 +56,7 @@ export async function probeAudio(song: Song, options?: { baseUrl?: string }): Pr
   }
 }
 
-function normalizeProbeUrl(url: string, baseUrl?: string): string {
+export function normalizeProbeUrl(url: string, baseUrl?: string): string {
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
   if (url.startsWith('//')) return 'https:' + url;
   // Relative path - use provided base URL or fallback

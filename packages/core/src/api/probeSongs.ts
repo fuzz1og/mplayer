@@ -1,5 +1,5 @@
 import type { Song, AudioTag } from '../types/index.js';
-import { PREVIEW_THRESHOLD, PROBE_TIMEOUT, MAX_REDIRECTS } from './audioProbe.js';
+import { PREVIEW_THRESHOLD, PROBE_TIMEOUT, MAX_REDIRECTS, normalizeProbeUrl } from './audioProbe.js';
 
 export interface ProbeOptions {
   /** Max concurrent probe requests. Default: 20 */
@@ -67,7 +67,9 @@ async function probeOne(
     if (resolver) {
       url = await resolver(song);
     }
-    if (!url || !url.startsWith('http')) return 'invalid';
+    if (!url) return 'invalid';
+    url = normalizeProbeUrl(url);
+    if (!url.startsWith('http')) return 'invalid';
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT);
