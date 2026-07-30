@@ -22,7 +22,8 @@ if (!app.isPackaged) {
 import { getCacheManager } from './cache/cacheManager';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
-import { musicApi as coreMusicApi, injectProxyAgents } from './api/musicApi';
+import { getApiUrl } from './config';
+import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl } from './api/musicApi';
 import { setMusicServiceConfig } from '@mplayer/core';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
@@ -166,7 +167,14 @@ app.whenReady().then(async () => {
     }
   });
 
-  // 加载代理设置并应用（必须在 setupIPC 之前，因为 setupIPC 中的 getApiClient 需要 proxy 模块就绪）
+  // 设置 API base URL（必须在 IPC 注册之前）
+  const resolvedApiUrl = getApiUrl();
+  if (resolvedApiUrl) {
+    setApiBaseUrl(resolvedApiUrl);
+    setMusicServiceConfig({ apiBaseUrl: resolvedApiUrl });
+  }
+
+  // 加载代理设置并应用
   try {
     const savedProxy = await db.getSetting<ProxyConfig>('proxyConfig');
     if (savedProxy) {
@@ -176,6 +184,11 @@ app.whenReady().then(async () => {
         httpsAgent: proxy.getHttpsAgent(),
       }));
       applyElectronProxy(savedProxy);
+      setMusicServiceConfig({
+        proxyUrl: savedProxy?.enabled && savedProxy.host
+          ? `${savedProxy.protocol}://${savedProxy.host}:${savedProxy.port}`
+          : '',
+      });
       // 同时配置 electron-updater 的专用 session
       try {
         const { autoUpdater } = require('electron-updater');
@@ -194,15 +207,6 @@ app.whenReady().then(async () => {
     } else {
       applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
     }
-
-    // 注入 MusicServiceConfig 到 core 包
-    const savedApiUrl = await db.getSetting<string>('apiUrl');
-    setMusicServiceConfig({
-      apiBaseUrl: savedApiUrl || '',
-      proxyUrl: savedProxy?.enabled && savedProxy.host
-        ? `${savedProxy.protocol}://${savedProxy.host}:${savedProxy.port}`
-        : '',
-    });
   } catch (error) {
     console.error('加载代理设置失败:', error);
     applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
