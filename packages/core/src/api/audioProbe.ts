@@ -36,8 +36,10 @@ export async function probeAudio(song: Song, options?: { baseUrl?: string }): Pr
       }
 
       if (resp.status >= 400) {
+        // HEAD not supported or access denied — continue to next redirect attempt
+        if (i < MAX_REDIRECTS) continue;
         clearTimeout(timer);
-        return 'invalid';
+        return 'valid'; // fail open — don't block playback
       }
 
       // Successful response

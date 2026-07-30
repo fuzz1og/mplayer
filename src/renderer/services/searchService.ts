@@ -102,7 +102,7 @@ class SearchService {
   }
 
   /**
-   * Async batch probe of search results — matches mobile's pattern.
+   * Async batch probe of search results — uses core probeAudio, matches mobile's batch pattern.
    * Processes in batches of BATCH_SIZE, updates store after each batch for progressive rendering.
    */
   private probeResults(groups: SongGroup[], seq: number): void {
@@ -117,21 +117,15 @@ class SearchService {
         batch.map(async (song) => {
           if (seq !== this.searchSeq) return;
           try {
+            // Resolve playable URL first
             const resolvedUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
-            const url = (resolvedUrl || song.url) as string;
-            if (!url || !url.startsWith('http')) {
-              (song as any).audioTag = 'valid';
-              return;
-            }
-            // Quick HEAD probe for content-length
-            try {
-              const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000), redirect: 'follow' });
-              const cl = resp.headers.get('content-length');
-              const size = cl ? parseInt(cl, 10) : null;
-              (song as any).audioTag = size !== null && size < 1_048_576 ? 'preview' : 'valid';
-            } catch {
-              (song as any).audioTag = 'valid';
-            }
+            const url = resolvedUrl || song.url;
+            if (!url) { (song as any).audioTag = 'valid'; return; }
+
+            // Probe using core's probeAudio
+            const { probeAudio } = await import('@mplayer/core');
+            const tag = await probeAudio({ ...song, url });
+            (song as any).audioTag = tag;
           } catch {
             (song as any).audioTag = 'valid';
           }
@@ -140,7 +134,6 @@ class SearchService {
       if (seq === this.searchSeq) {
         useSearchStore.setState({});
       }
-      // Continue with next batch
       runBatch(startIdx + BATCH_SIZE);
     };
 
