@@ -6,6 +6,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
+import { searchService } from '@/renderer/services/searchService';
 import ChartPanel from '@/renderer/components/ChartPanel';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
@@ -84,6 +85,7 @@ const DiscoverPageV2: React.FC = () => {
     playlists: { data: null, timestamp: 0 },
   });
   const mountedRef = useRef(true);
+  const playedChartIdRef = useRef<string | null>(null);
   const albumsFetchIdRef = useRef(0);
   const recommendFetchIdRef = useRef(0);
   const playlistsFetchIdRef = useRef(0);
@@ -280,6 +282,10 @@ const DiscoverPageV2: React.FC = () => {
     fetchAlbums(albumsArea);
   };
 
+  const handleAlbumClick = (album: Album) => {
+    searchService.searchAll(`${album.name} ${album.artist}`);
+  };
+
   const handleRetryRecommended = () => {
     tabCacheRef.current.recommendedPlaylists = { data: null, timestamp: 0 };
     fetchRecommended();
@@ -294,7 +300,8 @@ const DiscoverPageV2: React.FC = () => {
     navigate(`/discover-playlist/${pl.id}`);
   };
 
-  const handlePlaySong = async (song: Song) => {
+  const handlePlaySong = async (song: Song, chartId?: string) => {
+    if (chartId) playedChartIdRef.current = chartId;
     try {
       if (!song.url && song.name) {
         const keyword = `${song.name} ${song.artist}`;
@@ -303,15 +310,20 @@ const DiscoverPageV2: React.FC = () => {
           await play(result.data[0]);
           return;
         }
+        // Search returned no results — try direct play
+        message.warning('未找到可播放版本，尝试直接播放');
       }
       await play(song);
     } catch (error) {
       console.error('播放失败:', error);
-      message.error('播放失败，请检查网络连接和 API 设置');
+      message.error('播放失败，请检查 API 服务是否运行');
     }
   };
 
-  const isCurrentSong = (songId: string) => currentSong?.id === songId;
+  const isCurrentSong = (songId: string, sourceType?: string, chartId?: string) =>
+    currentSong?.id === songId
+    && (!sourceType || currentSong?.sourceType === sourceType)
+    && playedChartIdRef.current === chartId;
 
   const handleRetryHot = () => {
     cacheRef.current.hot = null;
@@ -414,6 +426,7 @@ const DiscoverPageV2: React.FC = () => {
           <div style={{ height: '100%', display: 'flex', gap: 'var(--space-6)' }}>
             <ChartPanel
               title="🔥 热歌榜"
+              chartId="hot"
               groups={hotGroups}
               loading={hotLoading}
               error={hotError}
@@ -423,6 +436,7 @@ const DiscoverPageV2: React.FC = () => {
             />
             <ChartPanel
               title="🎵 新歌榜"
+              chartId="new"
               groups={newGroups}
               loading={newLoading}
               error={newError}
@@ -441,6 +455,7 @@ const DiscoverPageV2: React.FC = () => {
             area={albumsArea}
             onAreaChange={handleAlbumsAreaChange}
             onRetry={handleRetryAlbums}
+            onAlbumClick={handleAlbumClick}
           />
         )}
 

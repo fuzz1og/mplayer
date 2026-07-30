@@ -7,16 +7,18 @@ import type { Song } from '@mplayer/core';
 
 interface ChartPanelProps {
   title: string;
+  chartId: string;
   groups: AggregatedSongGroup[];
   loading: boolean;
   error: string | null;
-  onPlay: (song: Song) => void;
-  isCurrentSong: (songId: string) => boolean;
+  onPlay: (song: Song, chartId?: string) => void;
+  isCurrentSong: (songId: string, sourceType?: string, chartId?: string) => boolean;
   onRetry?: () => void;
 }
 
 const ChartPanel: React.FC<ChartPanelProps> = ({
   title,
+  chartId,
   groups,
   loading,
   error,
@@ -97,9 +99,9 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
 
     return (
       <div key={group.key} style={{ marginBottom: 'var(--space-1)' }}>
-        {/* Group row — collapsed shows best song, click to expand */}
+        {/* Group row — click plays the best song; chevron click expands */}
         <div
-          onClick={() => toggleGroup(group.key)}
+          onClick={() => onPlay(bestSong, chartId)}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -107,21 +109,24 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
             padding: '6px 8px',
             borderRadius: 'var(--radius-sm)',
             cursor: 'pointer',
-            backgroundColor: isCurrentSong(bestSong.id) ? 'rgba(116, 185, 255, 0.1)' : 'transparent',
+            backgroundColor: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'rgba(116, 185, 255, 0.1)' : 'transparent',
             transition: 'background-color 0.15s ease',
           }}
-          onMouseEnter={(e) => { if (!isCurrentSong(bestSong.id)) e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
-          onMouseLeave={(e) => { if (!isCurrentSong(bestSong.id)) e.currentTarget.style.backgroundColor = 'transparent'; }}
+          onMouseEnter={(e) => { if (!isCurrentSong(bestSong.id, bestSong.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
+          onMouseLeave={(e) => { if (!isCurrentSong(bestSong.id, bestSong.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
           {/* Expand/collapse icon */}
-          <div style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', flexShrink: 0 }}>
+          <div
+            onClick={(e) => { e.stopPropagation(); toggleGroup(group.key); }}
+            style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', flexShrink: 0, cursor: 'pointer' }}
+          >
             {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </div>
           {/* Rank */}
           <div style={{
             width: '28px', textAlign: 'center', fontSize: 'var(--text-sm)',
-            color: isCurrentSong(bestSong.id) ? 'var(--accent-color)' : 'var(--text-tertiary)',
-            fontWeight: isCurrentSong(bestSong.id) ? 600 : 400, flexShrink: 0,
+            color: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'var(--accent-color)' : 'var(--text-tertiary)',
+            fontWeight: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 600 : 400, flexShrink: 0,
           }}>
             {rank}
           </div>
@@ -135,7 +140,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
               )}
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 'var(--text-sm)', color: isCurrentSong(bestSong.id) ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 'var(--text-sm)', color: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {bestSong.name}
               </div>
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -146,13 +151,6 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
               </div>
             </div>
           </div>
-          {/* Play button */}
-          <button
-            onClick={(e) => { e.stopPropagation(); onPlay(bestSong); }}
-            style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <ChevronRight size={16} />
-          </button>
         </div>
 
         {/* Expanded: show all songs in group with source ranks */}
@@ -163,7 +161,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
               return (
                 <div
                   key={`${group.key}-${song.id}`}
-                  onDoubleClick={() => onPlay(song)}
+                  onDoubleClick={() => onPlay(song, chartId)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -171,11 +169,11 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
                     padding: '6px 8px',
                     borderRadius: 'var(--radius-xs)',
                     cursor: 'pointer',
-                    backgroundColor: isCurrentSong(song.id) ? 'rgba(116, 185, 255, 0.08)' : 'transparent',
+                    backgroundColor: isCurrentSong(song.id, song.sourceType, chartId) ? 'rgba(116, 185, 255, 0.08)' : 'transparent',
                     transition: 'background-color 0.15s ease',
                   }}
-                  onMouseEnter={(e) => { if (!isCurrentSong(song.id)) e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
-                  onMouseLeave={(e) => { if (!isCurrentSong(song.id)) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                  onMouseEnter={(e) => { if (!isCurrentSong(song.id, song.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
+                  onMouseLeave={(e) => { if (!isCurrentSong(song.id, song.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'transparent'; }}
                 >
                   <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
                     {song.cover ? (
@@ -185,7 +183,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
                     )}
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 'var(--text-sm)', color: isCurrentSong(song.id) ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 'var(--text-sm)', color: isCurrentSong(song.id, song.sourceType, chartId) ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {song.name}
                     </div>
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
