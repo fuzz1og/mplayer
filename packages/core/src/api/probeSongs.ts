@@ -27,7 +27,7 @@ export async function probeSongs(
   songs: Song[],
   options: ProbeOptions = {},
 ): Promise<void> {
-  const { concurrency = 5, onResult, resolver } = options;
+  const { concurrency = 10, onResult, resolver } = options;
 
   if (songs.length === 0) return;
 
@@ -90,8 +90,10 @@ async function probeOne(
       }
 
       if (resp.status >= 400) {
+        // HEAD not supported or access denied — try once more with GET
+        if (i < MAX_REDIRECTS) continue;
         clearTimeout(timer);
-        return 'invalid';
+        return 'valid'; // fail open — don't block playback
       }
 
       const cl = resp.headers.get('content-length');
