@@ -1,6 +1,14 @@
 import { vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 
+// Ant Design 6 tables require ResizeObserver in jsdom
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+(window as any).ResizeObserver = (window as any).ResizeObserver || ResizeObserverMock;
+
 // Mock window.matchMedia for Ant Design components in jsdom
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
