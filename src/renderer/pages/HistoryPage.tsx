@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { History, Trash2 } from 'lucide-react';
 import { message } from 'antd';
-import { historyService } from '@/renderer/services/historyService';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
-import type { Song } from '@/shared/types/song';
+import { IpcClient } from '@/renderer/services/IpcClient';
+import type { Song, SongBase } from '@mplayer/core';
 
 const HistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Song[]>([]);
@@ -14,8 +14,22 @@ const HistoryPage: React.FC = () => {
 
   const loadHistory = async () => {
     try {
-      const songs = await historyService.getHistory(100);
-      setHistory(songs);
+      const history = await IpcClient.invoke<any[]>('history:get', 100);
+      const songBases = history.map((h: any) => h.song as SongBase);
+      const uniqueMap = new Map<string, SongBase>();
+      songBases.forEach((s: SongBase) => uniqueMap.set(s.id, s));
+      const songsWithCover = await Promise.all(
+        Array.from(uniqueMap.values()).map(async (songBase) => {
+          try {
+            const songs = await IpcClient.invoke<Song[]>('musicApi:searchSongs', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
+            if (songs.length > 0) return songs[0];
+          } catch (e) {
+            console.error('获取历史封面失败:', e);
+          }
+          return { ...songBase, url: '', cover: '', lrc: '' } as Song;
+        })
+      );
+      setHistory(songsWithCover);
     } catch (error) {
       console.error('加载播放历史失败:', error);
     }
@@ -31,7 +45,7 @@ const HistoryPage: React.FC = () => {
 
   const handleClearHistory = async () => {
     try {
-      await historyService.clearHistory();
+      await IpcClient.invoke<void>('history:clear');
       setHistory([]);
       message.success('播放历史已清空');
     } catch (error) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAntiScrapeHeaders, RateLimiter } from '../../main/api/antiScrape';
+import { getAntiScrapeHeaders, RateLimiter } from '@mplayer/core';
 
 describe('antiScrape', () => {
   describe('getAntiScrapeHeaders', () => {
@@ -32,7 +32,7 @@ describe('antiScrape', () => {
 
     it('contains Sec-Ch-Ua header', () => {
       const headers = getAntiScrapeHeaders();
-      expect(headers['Sec-Ch-Ua']).toBeTruthy();
+      expect(headers).toHaveProperty('Sec-Ch-Ua');
       expect(headers['Sec-Ch-Ua-Mobile']).toBe('?0');
     });
   });

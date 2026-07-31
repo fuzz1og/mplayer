@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { cacheService } from './cacheService';
+import { IpcClient } from './IpcClient';
 
 const inFlight = new Set<string>();
 
 export async function getCoverSrc(coverUrl: string): Promise<string> {
   if (!coverUrl || coverUrl.startsWith('file://')) return coverUrl;
-  const cachedPath = await cacheService.getCoverCache(coverUrl);
+  const cachedPath = await IpcClient.invoke<string | null>('cache:getCover', coverUrl);
   if (cachedPath) return 'file://' + cachedPath;
   cacheCoverImage(coverUrl);
   return coverUrl;
@@ -26,7 +26,7 @@ export async function cacheCoverImage(coverUrl: string): Promise<void> {
     const response = await fetch(coverUrl);
     if (!response.ok) return;
     const buffer = Buffer.from(await response.arrayBuffer());
-    await cacheService.setCoverCache(coverUrl, buffer);
+    await IpcClient.invoke<void>('cache:setCover', coverUrl, buffer);
   } catch (error) {
     console.error('缓存封面失败:', error);
   } finally {

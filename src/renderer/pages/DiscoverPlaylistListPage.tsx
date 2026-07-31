@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useLazyLoad } from '@/renderer/hooks/useLazyLoad';
 import DiscoverPlaylistCard from '@/renderer/components/DiscoverPlaylistCard';
-import type { DiscoverPlaylist } from '@/shared/types/song';
+import type { DiscoverPlaylist } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
 const CATEGORIES = [

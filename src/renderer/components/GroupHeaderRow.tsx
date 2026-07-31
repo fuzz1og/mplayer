@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
-import type { SongGroup } from '@/shared/types/song';
+import type { SongGroup } from '@mplayer/core';
 
 interface GroupHeaderRowProps {
   group: SongGroup;

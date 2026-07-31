@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
-import type { LocalFolder, LocalSong } from '@/shared/types/song';
+import type { LocalFolder, LocalSong } from '@mplayer/core';
 
 const SUPPORTED_FORMATS = new Set(['.mp3', '.flac', '.wav', '.ogg']);
 

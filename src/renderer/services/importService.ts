@@ -1,7 +1,14 @@
 import { searchService } from '@/renderer/services/searchService';
-import { playlistService } from '@/renderer/services/playlistService';
-import { findBestMatch } from '@/renderer/utils/songMatcher';
-import type { Song } from '@/shared/types/song';
+import { findBestMatch } from '@mplayer/core';
+import { IpcClient } from '@/renderer/services/IpcClient';
+import type { Song } from '@mplayer/core';
+import type { Playlist } from '@mplayer/core';
+
+async function addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
+  const playlist = await IpcClient.invoke<Playlist | undefined>('playlist:get', playlistId);
+  if (!playlist) throw new Error('歌单不存在');
+  return IpcClient.invoke<number>('playlist:addSong', playlistId, song);
+}
 
 export type SourceType = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda';
 
@@ -187,7 +194,7 @@ export async function importSongs(
   const addedSuccesses: ImportResult['successes'] = [];
   for (const success of successes) {
     try {
-      await playlistService.addSongToPlaylist(playlistId, success.song);
+      await addSongToPlaylist(playlistId, success.song);
       addedSuccesses.push(success);
     } catch (error) {
       console.error(`添加到歌单失败: ${success.line}`, error);
@@ -255,7 +262,7 @@ export async function importFromLink(
     updateProgress({ currentLine: `${song.name} - ${song.artist}` });
 
     try {
-      await playlistService.addSongToPlaylist(playlistId, song);
+      await addSongToPlaylist(playlistId, song);
       successes.push({
         line: `${song.name} - ${song.artist}`,
         song,
