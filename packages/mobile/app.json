@@ -25,7 +25,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-av",
+      ["expo-audio", { "enableBackgroundPlayback": true }],
       "./plugins/withVectorIconsFonts",
       [
         "expo-build-properties",
