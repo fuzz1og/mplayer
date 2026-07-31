@@ -25,7 +25,7 @@ function createPlainAgents() {
   };
 }
 
-function validateProxyConfig(config: ProxyConfig): boolean {
+export function validateProxyConfig(config: ProxyConfig): boolean {
   if (!config.enabled) return true;
   // host 只允许合法主机名/IP，防止注入代理规则
   if (config.host && !/^[a-zA-Z0-9._-]+$/.test(config.host)) return false;

@@ -21,6 +21,16 @@ vi.mock('electron', () => ({
     invoke: vi.fn().mockResolvedValue({ success: true }),
     on: vi.fn(),
     removeListener: vi.fn(),
+    send: vi.fn(),
+    removeAllListeners: vi.fn(),
+  },
+  clipboard: {
+    writeText: vi.fn(),
+    readText: vi.fn().mockReturnValue(''),
+  },
+  shell: {
+    openExternal: vi.fn(),
+    openPath: vi.fn(),
   },
 }));
 
@@ -32,6 +42,16 @@ global.window = global.window || {};
         invoke: vi.fn().mockResolvedValue({ success: true }),
         on: vi.fn(),
         removeListener: vi.fn(),
+        send: vi.fn(),
+        removeAllListeners: vi.fn(),
+      },
+      clipboard: {
+        writeText: vi.fn(),
+        readText: vi.fn().mockReturnValue(''),
+      },
+      shell: {
+        openExternal: vi.fn(),
+        openPath: vi.fn(),
       },
     };
   }
