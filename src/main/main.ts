@@ -19,7 +19,7 @@ if (!app.isPackaged) {
 }
 
 
-import { getCacheManager } from './cache/cacheManager';
+import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { getApiUrl } from './config';
@@ -34,13 +34,15 @@ import { registerLocalMusicIpc } from './ipc/localMusic';
 import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDownloadIpc, registerAppIpc } from './ipc/appSettingsUpdate';
 
 // 扩展 musicApi：添加主进程特有的音频缓存方法
+const audioCacheBackend = new DiskCacheBackend(path.join(app.getPath('userData'), 'cache'))
 const musicApi = {
   ...coreMusicApi,
   async getSodaPlayableUrl(trackId: string): Promise<string> {
     const remoteUrl = await coreMusicApi.getSodaAudioUrl(trackId);
     if (!remoteUrl) return '';
-    const cached = getCacheManager().getAudioCache(`soda_${trackId}`);
-    if (cached) return 'file:///' + cached.replace(/\\/g, '/');
+    const cacheKey = `bin:soda:${trackId}`
+    const cachedPath = audioCacheBackend.getFilePath(cacheKey)
+    if (fs.existsSync(cachedPath)) return 'file:///' + cachedPath.replace(/\\/g, '/');
     try {
       const proxy = require('./proxy');
       const dl = await axios.get(remoteUrl, {
@@ -50,10 +52,9 @@ const musicApi = {
         responseType: 'arraybuffer',
         timeout: 30000,
       });
-      const audioData = Buffer.from(dl.data);
-      getCacheManager().setAudioCache(`soda_${trackId}`, audioData);
-      const cachedFile = getCacheManager().getAudioCache(`soda_${trackId}`);
-      if (cachedFile) return 'file:///' + cachedFile.replace(/\\/g, '/');
+      const audioData = Buffer.from(dl.data)
+      await audioCacheBackend.write(cacheKey, new Uint8Array(audioData))
+      return 'file:///' + audioCacheBackend.getFilePath(cacheKey).replace(/\\/g, '/')
     } catch (dlErr) {
       console.error('下载汽水音频到缓存失败，回退直链:', dlErr);
     }
