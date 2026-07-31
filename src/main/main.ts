@@ -22,7 +22,8 @@ if (!app.isPackaged) {
 import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
-import { musicApi as coreMusicApi, injectProxyAgents } from './api/musicApi';
+import { getApiUrl } from './config';
+import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
 import { applyElectronProxy, type ProxyConfig } from './proxy';
@@ -166,7 +167,13 @@ app.whenReady().then(async () => {
     }
   });
 
-  // 加载代理设置并应用（必须在 setupIPC 之前，因为 setupIPC 中的 getApiClient 需要 proxy 模块就绪）
+  // 设置 API base URL（必须在 IPC 注册之前）
+  const resolvedApiUrl = getApiUrl();
+  if (resolvedApiUrl) {
+    setApiBaseUrl(resolvedApiUrl);
+  }
+
+  // 加载代理设置并应用
   try {
     const savedProxy = await db.getSetting<ProxyConfig>('proxyConfig');
     if (savedProxy) {

@@ -16,7 +16,7 @@ export function getApiUrl(): string {
       return cachedApiUrl;
     }
   } catch {
-    // db 可能未初始化，继续检查环境变量
+    // db 可能未初始化
   }
 
   // 2. 其次使用环境变量（开发者用 .env.local）

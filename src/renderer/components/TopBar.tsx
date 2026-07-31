@@ -23,6 +23,7 @@ const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
   kuwo: { label: '酷我', accent: '#FF6F00' },
   qianqian: { label: '千千', accent: '#00A1D6' },
   soda: { label: '汽水', accent: '#1E90FF' },
+  local: { label: '本地', accent: '#10B981' },
 };
 
 const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange, onBack, onForward, onRefresh, canGoBack, canGoForward }) => {

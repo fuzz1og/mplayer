@@ -194,6 +194,8 @@ const App: React.FC = () => {
       <Sidebar
         currentPage={getActiveSidebarKey()}
         onPageChange={(page) => {
+          // 切换页面时清除搜索状态
+          useSearchStore.getState().reset();
           navigate(`/${page}`);
         }}
       />

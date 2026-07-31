@@ -3,7 +3,7 @@ import { createHashRouter } from 'react-router-dom';
 import App from '@/renderer/App';
 
 // 懒加载页面组件
-const DiscoverPage = lazy(() => import('@/renderer/pages/DiscoverPage'));
+const DiscoverPageV2 = lazy(() => import('@/renderer/pages/DiscoverPageV2'));
 const HotlistDetailPage = lazy(() => import('@/renderer/pages/HotlistDetailPage'));
 const FavoritesPage = lazy(() => import('@/renderer/pages/FavoritesPage'));
 const HistoryPage = lazy(() => import('@/renderer/pages/HistoryPage'));
@@ -74,7 +74,7 @@ export const router = createHashRouter([
         path: 'discover',
         element: (
           <Suspense fallback={<Loading />}>
-            <DiscoverPage />
+            <DiscoverPageV2 />
           </Suspense>
         ),
       },
@@ -182,7 +182,7 @@ export const router = createHashRouter([
         path: '',
         element: (
           <Suspense fallback={<Loading />}>
-            <DiscoverPage />
+            <DiscoverPageV2 />
           </Suspense>
         ),
       },
