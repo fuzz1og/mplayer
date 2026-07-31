@@ -58,6 +58,9 @@ export class RateLimiter {
         // 处理下一个等待者
         const waitMs = this.tokens >= 1 ? 0 : (1 / this.refillRate) * 1000;
         setTimeout(tick, waitMs);
+      } else if (this.queue.length > 0) {
+        // 仍有等待者但 tokens 不足，延迟重试
+        setTimeout(tick, (1 / this.refillRate) * 1000);
       } else {
         this.processing = false;
       }
