@@ -1,5 +1,5 @@
 import type { Song, AudioTag } from '../types/index.js';
-import { PREVIEW_THRESHOLD, PROBE_TIMEOUT, MAX_REDIRECTS, normalizeProbeUrl } from './audioProbe.js';
+import { probeAudioUrl } from './audioProbe.js';
 
 export interface ProbeOptions {
   /** Max concurrent probe requests. Default: 20 */
@@ -33,20 +33,17 @@ export async function probeSongs(
 
   let currentIndex = 0;
   let activeCount = 0;
-  const stopped = false;
 
   function next(): void {
-    if (stopped) return;
-
     while (activeCount < concurrency && currentIndex < songs.length) {
       const song = songs[currentIndex++];
       activeCount++;
       probeOne(song, resolver)
         .then((tag) => {
-          if (!stopped) onResult?.(song.id, tag);
+          onResult?.(song.id, tag);
         })
         .catch(() => {
-          if (!stopped) onResult?.(song.id, 'valid');
+          onResult?.(song.id, 'valid');
         })
         .finally(() => {
           activeCount--;
@@ -62,51 +59,10 @@ async function probeOne(
   song: Song,
   resolver?: (song: Song) => Promise<string>,
 ): Promise<AudioTag> {
-  try {
-    let url = song.url;
-    if (resolver) {
-      url = await resolver(song);
-    }
-    if (!url) return 'invalid';
-    url = normalizeProbeUrl(url);
-    if (!url.startsWith('http')) return 'invalid';
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT);
-
-    let finalUrl = url;
-    let contentLength: number | null = null;
-
-    for (let i = 0; i <= MAX_REDIRECTS; i++) {
-      const resp = await fetch(finalUrl, {
-        method: i === MAX_REDIRECTS ? 'HEAD' : 'GET',
-        signal: controller.signal,
-        redirect: 'manual',
-      });
-
-      if (resp.status >= 300 && resp.status < 400 && resp.headers.get('location')) {
-        finalUrl = new URL(resp.headers.get('location')!, finalUrl).href;
-        continue;
-      }
-
-      if (resp.status >= 400) {
-        // HEAD not supported or access denied — try once more with GET
-        if (i < MAX_REDIRECTS) continue;
-        clearTimeout(timer);
-        return 'valid'; // fail open — don't block playback
-      }
-
-      const cl = resp.headers.get('content-length');
-      contentLength = cl ? parseInt(cl, 10) : null;
-      break;
-    }
-
-    clearTimeout(timer);
-
-    if (contentLength === null) return 'valid';
-    if (contentLength < PREVIEW_THRESHOLD) return 'preview';
-    return 'valid';
-  } catch {
-    return 'valid'; // Fail open — better to allow playback than block it
+  let url = song.url;
+  if (resolver) {
+    url = await resolver(song);
   }
+  if (!url) return 'invalid';
+  return probeAudioUrl(url);
 }

@@ -120,21 +120,20 @@ class SearchService {
             // Resolve playable URL first
             const resolvedUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
             const url = resolvedUrl || song.url;
-            if (!url) { (song as any).audioTag = 'valid'; return; }
+            if (!url) { useSearchStore.getState().setAudioTag(song.id, 'valid'); return; }
 
             // Probe using core's probeAudio
             const { probeAudio } = await import('@mplayer/core');
             const tag = await probeAudio({ ...song, url });
-            (song as any).audioTag = tag;
+            if (seq === this.searchSeq) useSearchStore.getState().setAudioTag(song.id, tag);
           } catch {
-            (song as any).audioTag = 'valid';
+            if (seq === this.searchSeq) useSearchStore.getState().setAudioTag(song.id, 'valid');
           }
         })
       );
       if (seq === this.searchSeq) {
-        useSearchStore.setState({});
+        runBatch(startIdx + BATCH_SIZE);
       }
-      runBatch(startIdx + BATCH_SIZE);
     };
 
     runBatch(0);

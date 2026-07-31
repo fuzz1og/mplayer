@@ -9,12 +9,12 @@ import { useDownload } from '@/renderer/hooks/useDownload';
 import { searchService } from '@/renderer/services/searchService';
 import ChartPanel from '@/renderer/components/ChartPanel';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
+import SongList from '@/renderer/components/SongList';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistGrid from '@/renderer/components/PlaylistGrid';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
-import type { Song, DiscoverPlaylist } from '@mplayer/core';
-import type { Album } from '@/main/services/discoveryService';
+import type { Album, Song, DiscoverPlaylist } from '@mplayer/core';
 import type { ApiResponse } from '@/shared/types/ipc';
 
 const { ipcRenderer } = window.require('electron');
@@ -46,12 +46,10 @@ interface ChartCache {
 interface TabCache {
   albums: { data: Album[] | null; timestamp: number };
   recommendedPlaylists: { data: DiscoverPlaylist[] | null; timestamp: number };
+  recommendedSongs: { data: Song[] | null; timestamp: number };
   playlists: { data: DiscoverPlaylist[] | null; timestamp: number };
 }
 
-const CACHE_TTL = 30 * 60 * 1000;
-const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
-const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
 
 const DiscoverPageV2: React.FC = () => {
   const { currentSong, play } = usePlayerStore();
@@ -73,6 +71,7 @@ const DiscoverPageV2: React.FC = () => {
   const [recommendedPlaylists, setRecommendedPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [recommendedLoading, setRecommendedLoading] = useState(false);
   const [recommendedError, setRecommendedError] = useState<string | null>(null);
+  const [recommendedSongs, setRecommendedSongs] = useState<Song[]>([]);
 
   const [playlistList, setPlaylistList] = useState<DiscoverPlaylist[]>([]);
   const [playlistListLoading, setPlaylistListLoading] = useState(false);
@@ -82,6 +81,7 @@ const DiscoverPageV2: React.FC = () => {
   const tabCacheRef = useRef<TabCache>({
     albums: { data: null, timestamp: 0 },
     recommendedPlaylists: { data: null, timestamp: 0 },
+    recommendedSongs: { data: null, timestamp: 0 },
     playlists: { data: null, timestamp: 0 },
   });
   const mountedRef = useRef(true);
@@ -89,33 +89,27 @@ const DiscoverPageV2: React.FC = () => {
   const albumsFetchIdRef = useRef(0);
   const recommendFetchIdRef = useRef(0);
   const playlistsFetchIdRef = useRef(0);
+  const chartsFetchIdRef = useRef({ hot: 0, new: 0 });
 
   const fetchChart = useCallback(async (type: 'hot' | 'new') => {
+    const fetchId = type === 'hot' ? ++chartsFetchIdRef.current.hot : ++chartsFetchIdRef.current.new;
     const cache = cacheRef.current;
     const cached = type === 'hot' ? cache.hot : cache.new;
-    const timestamp = type === 'hot' ? cache.hotTimestamp : cache.newTimestamp;
 
-    // SWR: show cached data immediately, always background refresh
+    // SWR: cached data stays visible while the background refresh runs
     if (cached) {
-      if (type === 'hot') setHotGroups(cached);
-      else setNewGroups(cached);
-      if (Date.now() - timestamp < CACHE_TTL) {
-        // Fresh cache: show, don't show loading, but still refresh in background
-        if (type === 'hot') setHotLoading(false);
-        else setNewLoading(false);
-      } else {
-        // Stale cache: show but keep loading indicator
-        if (type === 'hot') setHotLoading(true);
-        else setNewLoading(true);
-      }
+      if (type === 'hot') { setHotGroups(cached); setHotLoading(false); }
+      else { setNewGroups(cached); setNewLoading(false); }
     } else {
       if (type === 'hot') { setHotLoading(true); setHotError(null); }
       else { setNewLoading(true); setNewError(null); }
     }
 
+    const isCurrentFetch = () => fetchId === (type === 'hot' ? chartsFetchIdRef.current.hot : chartsFetchIdRef.current.new);
+
     try {
       const result = await ipcRenderer.invoke('musicApi:getAggregatedChart', type, SOURCES) as ApiResponse<{ songs: AggregatedSongGroup[] }>;
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || !isCurrentFetch()) return;
 
       if (!result.success) {
         if (!cached) {
@@ -137,14 +131,14 @@ const DiscoverPageV2: React.FC = () => {
         cacheRef.current.newTimestamp = Date.now();
       }
     } catch (err: any) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || !isCurrentFetch()) return;
       if (!cached) {
         const errorMsg = err?.message || '加载失败';
         if (type === 'hot') setHotError(errorMsg);
         else setNewError(errorMsg);
       }
     } finally {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || !isCurrentFetch()) return;
       if (type === 'hot') setHotLoading(false);
       else setNewLoading(false);
     }
@@ -164,9 +158,7 @@ const DiscoverPageV2: React.FC = () => {
     // SWR: show cached data immediately if available
     if (cache.data) {
       setAlbums(cache.data);
-      if (Date.now() - cache.timestamp >= ALBUMS_CACHE_TTL) {
-        setAlbumsLoading(true); // stale — show skeleton too
-      }
+      setAlbumsLoading(false);
     } else {
       setAlbumsLoading(true);
     }
@@ -195,32 +187,43 @@ const DiscoverPageV2: React.FC = () => {
   const fetchRecommended = useCallback(async () => {
     const fetchId = ++recommendFetchIdRef.current;
     const cache = tabCacheRef.current.recommendedPlaylists;
+    const songsCache = tabCacheRef.current.recommendedSongs;
 
     if (cache.data) {
       setRecommendedPlaylists(cache.data);
-      if (Date.now() - cache.timestamp >= RECOMMENDED_CACHE_TTL) {
-        setRecommendedLoading(true);
-      }
+      setRecommendedLoading(false);
     } else {
       setRecommendedLoading(true);
     }
+    if (songsCache.data) setRecommendedSongs(songsCache.data);
 
     setRecommendedError(null);
 
     try {
-      const result = await ipcRenderer.invoke('musicApi:getRecommendedPlaylists', 30) as ApiResponse<DiscoverPlaylist[]>;
+      const [playlistResult, songsResult] = await Promise.all([
+        ipcRenderer.invoke('musicApi:getRecommendedPlaylists', 30) as Promise<ApiResponse<DiscoverPlaylist[]>>,
+        ipcRenderer.invoke('musicApi:getRecommendedSongs', 30) as Promise<ApiResponse<Song[]>>,
+      ]);
       if (!mountedRef.current || fetchId !== recommendFetchIdRef.current) return;
 
-      if (result.success) {
-        const plData = result.data || [];
+      if (playlistResult.success) {
+        const plData = playlistResult.data || [];
         setRecommendedPlaylists(plData);
         tabCacheRef.current.recommendedPlaylists = { data: plData, timestamp: Date.now() };
       } else if (!cache.data) {
-        setRecommendedError(result.error || '加载推荐失败');
+        setRecommendedError(playlistResult.error || '加载推荐失败');
+      }
+
+      if (songsResult.success) {
+        const songData = songsResult.data || [];
+        setRecommendedSongs(songData);
+        tabCacheRef.current.recommendedSongs = { data: songData, timestamp: Date.now() };
+      } else if (!songsCache.data) {
+        setRecommendedError(songsResult.error || '加载推荐歌曲失败');
       }
     } catch (err: any) {
       if (!mountedRef.current || fetchId !== recommendFetchIdRef.current) return;
-      if (!cache.data) setRecommendedError(err?.message || '加载推荐失败');
+      if (!cache.data && !songsCache.data) setRecommendedError(err?.message || '加载推荐失败');
     } finally {
       if (mountedRef.current && fetchId === recommendFetchIdRef.current) setRecommendedLoading(false);
     }
@@ -232,9 +235,7 @@ const DiscoverPageV2: React.FC = () => {
 
     if (cache.data) {
       setPlaylistList(cache.data);
-      if (Date.now() - cache.timestamp >= CACHE_TTL) {
-        setPlaylistListLoading(true);
-      }
+      setPlaylistListLoading(false);
     } else {
       setPlaylistListLoading(true);
     }
@@ -288,6 +289,7 @@ const DiscoverPageV2: React.FC = () => {
 
   const handleRetryRecommended = () => {
     tabCacheRef.current.recommendedPlaylists = { data: null, timestamp: 0 };
+    tabCacheRef.current.recommendedSongs = { data: null, timestamp: 0 };
     fetchRecommended();
   };
 
@@ -460,13 +462,30 @@ const DiscoverPageV2: React.FC = () => {
         )}
 
         {activeTab === 'recommend' && (
-          <PlaylistGrid
-            playlists={recommendedPlaylists}
-            loading={recommendedLoading}
-            error={recommendedError}
-            onRetry={handleRetryRecommended}
-            onPlaylistSelect={handlePlaylistSelect}
-          />
+          <div style={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+            <div>
+              <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-3)' }}>推荐歌曲</h3>
+              <SongList
+                songs={recommendedSongs}
+                loading={recommendedLoading && recommendedSongs.length === 0}
+                onPlay={handlePlaySong}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
+                showHeader={false}
+                emptyText="暂无推荐歌曲"
+              />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-3)' }}>推荐歌单</h3>
+              <PlaylistGrid
+                playlists={recommendedPlaylists}
+                loading={recommendedLoading && recommendedPlaylists.length === 0}
+                error={recommendedError}
+                onRetry={handleRetryRecommended}
+                onPlaylistSelect={handlePlaylistSelect}
+              />
+            </div>
+          </div>
         )}
 
         {activeTab === 'playlists' && (

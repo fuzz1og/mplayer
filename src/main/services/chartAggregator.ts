@@ -38,6 +38,7 @@ interface SourceRank {
 export interface AggregatedSongGroup extends SongGroup {
   sourceRanks: SourceRank;
   score: number;
+  bestSong: Song;
 }
 
 export interface AggregatedChartResult {
@@ -147,7 +148,7 @@ export async function getAggregatedChart(
   type: ChartType,
   sources: SourceName[],
 ): Promise<AggregatedChartResult> {
-  const cacheKey = `chart_${type}_aggregated`;
+  const cacheKey = `chart_${type}_${[...sources].sort().join('_')}`;
   const cached = cacheManager.get<AggregatedChartResult>(cacheKey);
   if (cached) return cached;
 
@@ -194,6 +195,7 @@ export async function getAggregatedChart(
       songs: groupSongs.map(s => s.song),
       sourceRanks,
       score,
+      bestSong: bestSong.song,
     });
   }
 

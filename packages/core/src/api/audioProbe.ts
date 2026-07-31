@@ -5,18 +5,14 @@ export const PROBE_TIMEOUT = 5000;
 export const MAX_REDIRECTS = 3;
 
 /**
- * HEAD request to probe audio file Content-Length, determine if playable and if it's a preview.
+ * Probe an absolute or relative audio URL and return its playability tag.
  * Returns 'valid' on failure - better to allow playback than block it.
  */
-export async function probeAudio(song: Song, options?: { baseUrl?: string }): Promise<AudioTag> {
-  if (!song.url) return 'invalid';
-
+export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string }): Promise<AudioTag> {
   try {
-    // Construct complete URL
-    const url = normalizeProbeUrl(song.url, options?.baseUrl);
+    const url = normalizeProbeUrl(rawUrl, options?.baseUrl);
     if (!url.startsWith('http')) return 'invalid';
 
-    // Follow redirects, HEAD probe
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT);
 
@@ -42,7 +38,6 @@ export async function probeAudio(song: Song, options?: { baseUrl?: string }): Pr
         return 'valid'; // fail open — don't block playback
       }
 
-      // Successful response
       const cl = resp.headers.get('content-length');
       contentLength = cl ? parseInt(cl, 10) : null;
       break;
@@ -56,6 +51,15 @@ export async function probeAudio(song: Song, options?: { baseUrl?: string }): Pr
   } catch {
     return 'valid'; // Network errors etc. → don't mark, ensure playable
   }
+}
+
+/**
+ * HEAD request to probe audio file Content-Length, determine if playable and if it's a preview.
+ * Returns 'valid' on failure - better to allow playback than block it.
+ */
+export async function probeAudio(song: Song, options?: { baseUrl?: string }): Promise<AudioTag> {
+  if (!song.url) return 'invalid';
+  return probeAudioUrl(song.url, options);
 }
 
 export function normalizeProbeUrl(url: string, baseUrl?: string): string {
