@@ -63,7 +63,7 @@ const PlayModeButton: React.FC<PlayModeButtonProps> = ({ mode, onModeChange, siz
           e.currentTarget.style.backgroundColor = 'transparent';
         }}
       >
-        {React.cloneElement(config.icon as React.ReactElement, { size })}
+        {React.cloneElement(config.icon as React.ReactElement<{ size?: number }>, { size })}
       </button>
 
       {/* 提示框 */}

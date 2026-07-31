@@ -1,32 +1,38 @@
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import type { AudioStatus } from 'expo-audio';
 import { musicApi, resolvePlayableUrl } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { updateNotification, clearNotification } from './notificationService';
 
-let sound: Audio.Sound | null = null;
+let player: ReturnType<typeof createAudioPlayer> | null = null;
+let playerStatusSubscription: { remove: () => void } | null = null;
 let playingPromise: Promise<void> | null = null;
 let currentPlayId = 0;
 
 export async function initAudio(): Promise<void> {
-  await Audio.setAudioModeAsync({
-    staysActiveInBackground: true,
-    shouldDuckAndroid: false,
-    playThroughEarpieceAndroid: false,
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    shouldPlayInBackground: true,
+    interruptionMode: 'doNotMix',
   });
+}
+
+function disposePlayer(): void {
+  playerStatusSubscription?.remove();
+  playerStatusSubscription = null;
+  player?.remove();
+  player = null;
 }
 
 export async function playSong(song: Song, retryCount = 0): Promise<void> {
   const playId = ++currentPlayId;
 
-  // 立即停掉当前声音 — 不等旧 run() 完成
-  if (sound) {
-    await sound.unloadAsync();
-    sound = null;
-  }
+  // Immediately stop the current player instead of waiting for the old run to finish.
+  disposePlayer();
 
-  // 等上一个 playSong 完成（旧 run() 检测到 playId 变化后会退出）
+  // Wait for a previous playSong call that is still unwinding.
   while (playingPromise) {
     try { await playingPromise; } catch { break; }
   }
@@ -37,35 +43,26 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
     const audioUrl = await resolvePlayableUrl(song, musicApi);
     if (playId !== currentPlayId) throw 'cancelled';
 
+    const nextPlayer = createAudioPlayer({ uri: audioUrl }, { updateInterval: 250 });
+    player = nextPlayer;
 
-    const { sound: newSound } = await Audio.Sound.createAsync(
-      { uri: audioUrl },
-      { shouldPlay: true, progressUpdateIntervalMillis: 250 }
-    );
+    const nextPlayerWithEvents = nextPlayer as typeof nextPlayer & {
+      addListener(event: 'playbackStatusUpdate', listener: (status: AudioStatus) => void): { remove(): void };
+    };
 
-    if (playId !== currentPlayId) {
-      await newSound.unloadAsync();
-      throw 'cancelled';
-    }
-
-    sound = newSound;
-    useHistoryStore.getState().addHistory(song);
-    await updateNotification(song, true);
-    sound.setOnPlaybackStatusUpdate((status) => {
+    playerStatusSubscription = nextPlayerWithEvents.addListener('playbackStatusUpdate', (status: AudioStatus) => {
       if (!status.isLoaded) return;
 
-      // 系统音频焦点打断同步（PauseOthers 自动暂停/恢复 sound）
       const s = usePlayerStore.getState();
-      if (status.isPlaying && !s.isPlaying) {
+      if (status.playing && !s.isPlaying) {
         s.resume();
-      } else if (!status.isPlaying && s.isPlaying && !status.didJustFinish) {
+      } else if (!status.playing && s.isPlaying && !status.didJustFinish) {
         s.pause();
       }
 
-      usePlayerStore.getState().setCurrentTime(status.positionMillis / 1000);
-      usePlayerStore.getState().setDuration(
-        (status.durationMillis ?? 0) / 1000
-      );
+      s.setCurrentTime(status.currentTime);
+      s.setDuration(status.duration || 0);
+
       if (status.didJustFinish) {
         if (playId !== currentPlayId) return;
         usePlayerStore.getState().next();
@@ -73,6 +70,17 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
         if (nextSong) playSong(nextSong);
       }
     });
+
+    nextPlayer.setActiveForLockScreen(true, {
+      title: song.name,
+      artist: song.artist,
+      albumTitle: song.album,
+      artworkUrl: song.cover || undefined,
+    });
+    nextPlayer.play();
+
+    useHistoryStore.getState().addHistory(song);
+    await updateNotification(song, true);
   };
 
   try {
@@ -93,32 +101,27 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
 }
 
 export async function togglePlay(): Promise<void> {
-  if (!sound) return;
-  const state = await sound.getStatusAsync();
-  if (!state.isLoaded) return;
-  if (state.isPlaying) {
-    await sound.pauseAsync();
+  if (!player) return;
+  const song = usePlayerStore.getState().currentSong;
+
+  if (player.playing) {
+    player.pause();
     usePlayerStore.getState().pause();
-    const song = usePlayerStore.getState().currentSong;
     if (song) await updateNotification(song, false);
   } else {
-    await sound.playAsync();
+    player.play();
     usePlayerStore.getState().resume();
-    const song = usePlayerStore.getState().currentSong;
     if (song) await updateNotification(song, true);
   }
 }
 
 export async function seekTo(timeSec: number): Promise<void> {
-  if (sound) {
-    await sound.setPositionAsync(timeSec * 1000);
+  if (player) {
+    await player.seekTo(timeSec);
   }
 }
 
 export async function cleanup(): Promise<void> {
-  if (sound) {
-    await sound.unloadAsync();
-    sound = null;
-  }
+  disposePlayer();
   await clearNotification();
 }

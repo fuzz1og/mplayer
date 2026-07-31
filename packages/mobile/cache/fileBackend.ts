@@ -1,4 +1,4 @@
-import { cacheDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync, deleteAsync } from 'expo-file-system'
+import { cacheDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync, deleteAsync } from 'expo-file-system/legacy'
 import type { CacheBackend } from '@mplayer/core'
 import crypto from 'crypto'
 
