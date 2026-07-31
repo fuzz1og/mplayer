@@ -11,7 +11,7 @@ import {
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, setMusicServiceConfig, musicApi } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 
 export default function SettingsPage() {
@@ -115,7 +115,6 @@ export default function SettingsPage() {
     const url = localProxyUrl.trim();
     setStoreProxyUrl(url);
     setCoreProxyUrl(url);
-    setMusicServiceConfig({ proxyUrl: url });
     setProxySaved(true);
     setTimeout(() => setProxySaved(false), 1500);
   };

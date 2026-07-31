@@ -24,7 +24,6 @@ import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { getApiUrl } from './config';
 import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl } from './api/musicApi';
-import { setMusicServiceConfig } from '@mplayer/core';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
 import { applyElectronProxy, type ProxyConfig } from './proxy';
@@ -171,7 +170,6 @@ app.whenReady().then(async () => {
   const resolvedApiUrl = getApiUrl();
   if (resolvedApiUrl) {
     setApiBaseUrl(resolvedApiUrl);
-    setMusicServiceConfig({ apiBaseUrl: resolvedApiUrl });
   }
 
   // 加载代理设置并应用
@@ -184,11 +182,6 @@ app.whenReady().then(async () => {
         httpsAgent: proxy.getHttpsAgent(),
       }));
       applyElectronProxy(savedProxy);
-      setMusicServiceConfig({
-        proxyUrl: savedProxy?.enabled && savedProxy.host
-          ? `${savedProxy.protocol}://${savedProxy.host}:${savedProxy.port}`
-          : '',
-      });
       // 同时配置 electron-updater 的专用 session
       try {
         const { autoUpdater } = require('electron-updater');

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import SourceBadge from '@/renderer/components/SourceBadge';
+import AudioTagBadge from '@/renderer/components/AudioTagBadge';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
 import type { Song } from '@mplayer/core';
 
@@ -95,7 +96,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
 
   const renderGroup = (group: AggregatedSongGroup, rank: number) => {
     const isExpanded = expandedKeys.has(group.key);
-    const bestSong = group.songs[0];
+    const bestSong = group.bestSong;
 
     return (
       <div key={group.key} style={{ marginBottom: 'var(--space-1)' }}>
@@ -146,8 +147,8 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{bestSong.artist}</span>
                 <SourceBadge sourceType={bestSong.sourceType} />
-                {bestSong.audioTag === 'preview' && <span style={{ fontSize: 'var(--text-2xs)', padding: '1px 5px', borderRadius: 'var(--radius-xs)', backgroundColor: '#e67e2214', color: '#e67e22' }}>片段</span>}
-                {bestSong.audioTag === 'invalid' && <span style={{ fontSize: 'var(--text-2xs)', padding: '1px 5px', borderRadius: 'var(--radius-xs)', backgroundColor: '#e74c3c14', color: '#e74c3c' }}>无效</span>}
+                {bestSong.audioTag === 'preview' && <AudioTagBadge tag="preview" />}
+                {bestSong.audioTag === 'invalid' && <AudioTagBadge tag="invalid" />}
               </div>
             </div>
           </div>
@@ -189,8 +190,8 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.artist}</span>
                       <SourceBadge sourceType={song.sourceType} />
-                      {song.audioTag === 'preview' && <span style={{ fontSize: 'var(--text-2xs)', padding: '1px 5px', borderRadius: 'var(--radius-xs)', backgroundColor: '#e67e2214', color: '#e67e22' }}>片段</span>}
-                      {song.audioTag === 'invalid' && <span style={{ fontSize: 'var(--text-2xs)', padding: '1px 5px', borderRadius: 'var(--radius-xs)', backgroundColor: '#e74c3c14', color: '#e74c3c' }}>无效</span>}
+                      {song.audioTag === 'preview' && <AudioTagBadge tag="preview" />}
+                      {song.audioTag === 'invalid' && <AudioTagBadge tag="invalid" />}
                     </div>
                   </div>
                   {/* Source rank badge */}

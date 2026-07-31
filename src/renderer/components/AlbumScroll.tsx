@@ -1,12 +1,5 @@
 import React from 'react';
-
-interface Album {
-  id: string;
-  name: string;
-  picUrl: string;
-  artist: string;
-  publishTime: string;
-}
+import type { Album } from '@mplayer/core';
 
 interface AlbumScrollProps {
   albums: Album[];

@@ -14,5 +14,3 @@ export { resolveSongUrls } from './utils/songResolver.js';
 export { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from './utils/lyricsParser.js';
 export type { LyricLine, ParsedLyrics } from './utils/lyricsParser.js';
 export { formatPlayCount } from './utils/format.js';
-export { setMusicServiceConfig, getMusicServiceConfig } from './config.js';
-export type { MusicServiceConfig } from './types/config.js';

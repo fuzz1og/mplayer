@@ -47,17 +47,12 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ playlists, loading, error, 
       </div>
     );
   }
-
-  const handleClick = (pl: DiscoverPlaylist) => {
-    onPlaylistSelect?.(pl);
-  };
-
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-5)', overflow: 'auto', alignContent: 'start' }}>
       {playlists.map((pl) => (
         <div
           key={pl.id}
-          onClick={() => handleClick(pl)}
+          onClick={() => onPlaylistSelect?.(pl)}
           style={{ cursor: 'pointer', borderRadius: '12px', overflow: 'hidden', backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)', transition: 'transform 0.2s' }}
           onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
