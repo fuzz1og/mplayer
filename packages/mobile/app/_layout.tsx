@@ -48,13 +48,10 @@ export default function RootLayout() {
       setCoreApiBaseUrl(apiBaseUrl);
       console.log(`[RootLayout] synced apiBaseUrl: ${getApiBaseUrl()}`);
     }
-  }, [apiBaseUrl]);
-
-  useEffect(() => {
     if (proxyUrl) {
       setCoreProxyUrl(proxyUrl);
     }
-  }, [proxyUrl]);
+  }, [apiBaseUrl, proxyUrl]);
 
   return (
     <>

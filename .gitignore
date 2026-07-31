@@ -22,6 +22,7 @@ docs/
 .opencode/
 .superpowers/
 e2e/screenshots/
+test-results/
 
 # Expo prebuild产物（每次CI自动生成）
 packages/mobile/android/

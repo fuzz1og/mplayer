@@ -4,6 +4,7 @@ import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic } from 'lucide
 import type { Song } from '@mplayer/core';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import SourceBadge from '@/renderer/components/SourceBadge';
+import AudioTagBadge from '@/renderer/components/AudioTagBadge';
 
 interface DropdownMenuProps {
   song: Song;
@@ -173,6 +174,8 @@ const SongRow: React.FC<SongRowProps> = ({
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.artist}</span>
             <SourceBadge sourceType={song.sourceType} />
+            {song.audioTag === 'preview' && <AudioTagBadge tag="preview" />}
+            {song.audioTag === 'invalid' && <AudioTagBadge tag="invalid" />}
           </div>
         </div>
       </div>

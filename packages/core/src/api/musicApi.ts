@@ -1,11 +1,13 @@
 import axios, { type AxiosInstance } from 'axios';
-import type { Song, SourceKey, SongGroup, DiscoverPlaylist } from '../types/index.js';
+import type { Song, SourceKey, SongGroup, DiscoverPlaylist, Album } from '../types/index.js';
 import { cacheManager } from './memoryCacheManager.js';
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
 let PROXY_URL = '';
+const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
+const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
 export function setApiBaseUrl(url: string): void {
   API_BASE_URL = url.endsWith('/') ? url : url + '/';
   apiClient.defaults.baseURL = API_BASE_URL;
@@ -66,8 +68,24 @@ function createNeteaseClient() {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Referer': 'https://music.163.com/',
     },
-    timeout: 30000
+    timeout: 30000,
+    proxy: false,
   });
+}
+
+function normalizeNeteaseAlbum(raw: any): Album {
+  const artist = (raw.artists || raw.artist)
+    ?.map((a: any) => a.name || '')
+    .filter(Boolean)
+    .join(' / ') || '';
+
+  return {
+    id: String(raw.id),
+    name: raw.name || raw.album?.name || '',
+    picUrl: raw.picUrl || raw.album?.picUrl || raw.coverImgUrl || '',
+    artist,
+    publishTime: raw.publishTime || raw.publish_time || '',
+  };
 }
 const apiClient = axios.create({
   get baseURL() {
@@ -80,7 +98,7 @@ const apiClient = axios.create({
     'x-requested-with': 'XMLHttpRequest'
   },
   proxy: false,
-  timeout: 30000
+  timeout: 30000,
 });
 
 export function getApiClient(): AxiosInstance {
@@ -745,6 +763,7 @@ export const musicApi = {
           'Referer': 'https://y.qq.com/',
         },
         timeout: 30000,
+    proxy: false,
         responseType: 'text'
       });
 
@@ -846,7 +865,8 @@ export const musicApi = {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Referer': 'https://music.163.com/'
         },
-        timeout: 30000
+        timeout: 30000,
+    proxy: false,
       });
 
       const response = await neteaseClient.get(
@@ -894,7 +914,8 @@ export const musicApi = {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Referer': 'https://music.163.com/'
         },
-        timeout: 30000
+        timeout: 30000,
+    proxy: false,
       });
 
       const response = await neteaseClient.get(
@@ -922,6 +943,79 @@ export const musicApi = {
       return null;
     }
   },
+
+  async getNewAlbums(area: string = 'ALL', offset: number = 0, limit: number = 30): Promise<Album[]> {
+    const cacheKey = `album_new_${area}`;
+    const cached = cacheManager.get<Album[]>(cacheKey);
+    if (cached) return cached;
+
+    const neteaseClient = createNeteaseClient();
+    const response = await neteaseClient.get(
+      `https://music.163.com/api/album/new?area=${area}&offset=${offset}&limit=${limit}`
+    );
+    const data = response.data;
+    if (!data?.albums) return [];
+
+    const albums: Album[] = (data.albums as any[]).map(normalizeNeteaseAlbum);
+    cacheManager.set(cacheKey, albums, ALBUMS_CACHE_TTL);
+    return albums;
+  },
+
+  async getRecommendedPlaylists(limit: number = 30): Promise<DiscoverPlaylist[]> {
+    const cacheKey = 'personalized_playlist';
+    const cached = cacheManager.get<DiscoverPlaylist[]>(cacheKey);
+    if (cached) return cached;
+
+    const neteaseClient = createNeteaseClient();
+    const response = await neteaseClient.get(
+      `https://music.163.com/api/personalized/playlist?limit=${limit}`
+    );
+    const data = response.data;
+    if (!data?.result) return [];
+
+    const playlists: DiscoverPlaylist[] = (data.result as any[]).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      coverImgUrl: p.picUrl || p.coverImgUrl || '',
+      playCount: p.playCount || 0,
+      trackCount: p.trackCount || 0,
+      creator: p.creator ? { nickname: p.creator.nickname || '' } : { nickname: '' },
+      tags: [],
+      description: p.copywriter || p.description || '',
+    }));
+
+    cacheManager.set(cacheKey, playlists, RECOMMENDED_CACHE_TTL);
+    return playlists;
+  },
+
+  async getRecommendedSongs(limit: number = 30): Promise<Song[]> {
+    const cacheKey = 'personalized_newsong';
+    const cached = cacheManager.get<Song[]>(cacheKey);
+    if (cached) return cached;
+
+    const neteaseClient = createNeteaseClient();
+    const response = await neteaseClient.get(
+      `https://music.163.com/api/personalized/newsong?limit=${limit}`
+    );
+    const data = response.data;
+    if (!data?.result) return [];
+
+    const songs: Song[] = (data.result as any[]).map((s: any) => ({
+      id: String(s.id),
+      name: s.name || '',
+      artist: (s.artists || []).map((a: any) => a.name).join(' / ') || s.song?.artists?.[0]?.name || '',
+      album: s.album?.name || s.song?.album?.name || '',
+      url: '',
+      cover: s.album?.picUrl || s.picUrl || s.song?.album?.picUrl || '',
+      lrc: '',
+      duration: s.duration ? Math.floor(s.duration / 1000) : s.song?.duration ? Math.floor(s.song.duration / 1000) : 0,
+      sourceType: 'netease' as const,
+    }));
+
+    cacheManager.set(cacheKey, songs, RECOMMENDED_CACHE_TTL);
+    return songs;
+  },
+
 
   groupIntoSongGroups(allSongs: Song[]): SongGroup[] {
     const map = new Map<string, SongGroup>();
