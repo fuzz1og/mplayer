@@ -1,0 +1,45 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git commit*)",
+        "exec": "npm run typecheck",
+        "timeout": 120000
+      },
+      {
+        "matcher": "Bash(git add*)",
+        "exec": "bash -c 'git diff --cached --name-only | grep -qE \"\\.env\\.local|\\.env$\" && echo \"ERROR: .env file staged — aborting.\" && exit 1 || true'",
+        "timeout": 10000
+      },
+      {
+        "matcher": "Bash(git add*packages/mobile/android*)",
+        "exec": "bash -c 'echo \"⚠️ packages/mobile/android/ 是 Expo 构建产物，不应提交到 git。如需提交，先确认 .gitignore 已配置。\" && exit 1 || true'",
+        "timeout": 10000
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "exec": "bash -c 'if git diff --name-only | grep -qE \"\\.(ts|tsx)$\"; then npx eslint --fix --quiet $(git diff --name-only | grep -E \"\\.(ts|tsx)$\") 2>/dev/null; fi'",
+        "timeout": 30000
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm run typecheck)",
+      "Bash(npm run test:run)",
+      "Bash(npm run lint)",
+      "Bash(npm run build)",
+      "Bash(npm run dev)",
+      "Bash(npx playwright test*)",
+      "Bash(npx eslint*)",
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git status*)",
+      "Bash(git add*)"
+    ]
+  }
+}

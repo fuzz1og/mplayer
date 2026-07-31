@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { ListMusic, Plus, FolderOpen } from 'lucide-react';
 import { Modal, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { playlistService } from '@/renderer/services/playlistService';
 import MusicCard from '@/renderer/components/MusicCard';
-import type { Playlist } from '@/shared/types/song';
+import { IpcClient } from '@/renderer/services/IpcClient';
+import type { Playlist } from '@mplayer/core';
 
 const PlaylistsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,7 +17,7 @@ const PlaylistsPage: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const playlistsData = await playlistService.getPlaylists();
+      const playlistsData = await IpcClient.invoke<Playlist[]>('playlist:getAll');
       setPlaylists(playlistsData);
     } catch (error) {
       console.error('加载数据失败:', error);
@@ -39,7 +39,7 @@ const PlaylistsPage: React.FC = () => {
       cancelText: '取消',
       onOk: async () => {
         try {
-          await playlistService.deletePlaylist(playlist.id);
+          await IpcClient.invoke<void>('playlist:delete', playlist.id);
           loadData();
         } catch (error) {
           console.error('删除歌单失败:', error);
@@ -53,7 +53,7 @@ const PlaylistsPage: React.FC = () => {
     if (!newPlaylistName.trim()) return;
 
     try {
-      await playlistService.createPlaylist(newPlaylistName.trim(), newPlaylistDesc.trim());
+      await IpcClient.invoke<number>('playlist:create', newPlaylistName.trim(), newPlaylistDesc.trim());
       setIsModalVisible(false);
       setNewPlaylistName('');
       setNewPlaylistDesc('');

@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { X, ListMusic } from 'lucide-react';
 import { message, Modal } from 'antd';
-import { playlistService } from '@/renderer/services/playlistService';
-import { checkDuplicate, type DupResult } from '@/renderer/utils/songDedupe';
-import type { Song, Playlist } from '@/shared/types/song';
+import { checkDuplicate, type DupResult } from '@mplayer/core';
+import { IpcClient } from '@/renderer/services/IpcClient';
+import type { Song, Playlist } from '@mplayer/core';
 
 interface AddToPlaylistModalProps {
   song: Song;
   isVisible: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+}
+
+async function addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
+  const playlist = await IpcClient.invoke<Playlist | undefined>('playlist:get', playlistId);
+  if (!playlist) throw new Error('歌单不存在');
+  return IpcClient.invoke<number>('playlist:addSong', playlistId, song);
 }
 
 const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
@@ -27,12 +33,12 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   const loadData = async () => {
     setLoading(true);
     try {
-      const playlistsData = await playlistService.getPlaylists();
+      const playlistsData = await IpcClient.invoke<Playlist[]>('playlist:getAll');
       setPlaylists(playlistsData);
 
       const results = new Map<number, DupResult>();
       for (const p of playlistsData) {
-        const songs = await playlistService.getPlaylistSongs(p.id);
+        const songs = await IpcClient.invoke<Song[]>('playlist:getSongs', p.id);
         results.set(p.id, checkDuplicate(songs, song));
       }
       setDupResults(results);
@@ -63,7 +69,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
         cancelText: '取消',
         onOk: async () => {
           try {
-            await playlistService.addSongToPlaylist(playlistId, song);
+            await addSongToPlaylist(playlistId, song);
             message.success(`已添加到歌单`);
             onClose();
             if (onSuccess) onSuccess();
@@ -76,7 +82,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
     }
 
     try {
-      await playlistService.addSongToPlaylist(playlistId, song);
+      await addSongToPlaylist(playlistId, song);
       onClose();
       if (onSuccess) onSuccess();
     } catch (_error) {
@@ -89,8 +95,8 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 
     setCreating(true);
     try {
-      const newId = await playlistService.createPlaylist(newPlaylistName.trim());
-      await playlistService.addSongToPlaylist(newId, song);
+      const newId = await IpcClient.invoke<number>('playlist:create', newPlaylistName.trim());
+      await addSongToPlaylist(newId, song);
       message.success(`已添加到歌单「${newPlaylistName.trim()}」`);
       onClose();
       if (onSuccess) {

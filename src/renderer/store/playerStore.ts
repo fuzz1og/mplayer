@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
-import { lyricsService } from '@/renderer/services/lyricsService';
-import type { Song } from '@/shared/types/song';
-import type { PlayMode } from '@/shared/types/player';
+import type { Song } from '@mplayer/core';
+import type { PlayMode } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { ipcMusicApi } from '@/renderer/services/IpcMusicApi';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
+import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
 const { ipcRenderer } = window.require('electron');
 
 interface PlayerStoreState {
@@ -47,44 +48,6 @@ interface PlayerStoreActions {
 
 export type PlayerStore = PlayerStoreState & PlayerStoreActions;
 
-const QUEUE_STORAGE_KEY = 'mplayer_queue';
-
-const persistQueue = (state: PlayerStoreState) => {
-  try {
-    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify({
-      playlist: state.currentPlaylist,
-      index: state.currentPlaylistIndex,
-    }));
-  } catch (e) {
-    console.error('持久化播放队列失败:', e);
-  }
-};
-
-const loadQueue = (): { playlist: Song[]; index: number } => {
-  try {
-    const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
-    if (raw) {
-      const data = JSON.parse(raw);
-      if (Array.isArray(data.playlist) && data.playlist.length > 0) {
-        const index = data.index ?? -1;
-        const clampedIndex = index >= 0 && index < data.playlist.length ? index : -1;
-        return { playlist: data.playlist, index: clampedIndex };
-      }
-    }
-  } catch (e) {
-    console.error('加载播放队列失败:', e);
-  }
-  return { playlist: [], index: -1 };
-};
-
-const getInitialPlayMode = (): PlayMode => {
-  const saved = localStorage.getItem('playMode');
-  if (saved && ['sequential', 'list-loop', 'single-loop', 'shuffle'].includes(saved)) {
-    return saved as PlayMode;
-  }
-  return 'list-loop';
-};
-
 let playGeneration = 0;
 
 const audioPlayer = getGlobalPlayer({
@@ -124,31 +87,7 @@ const prefetchedUrls = new Map<string, string>();
  * 导出供测试使用
  */
 export function getNextSongInQueue(state: PlayerStoreState): Song | null {
-  const { currentPlaylist, currentPlaylistIndex, playMode, currentSong } = state;
-  if (currentPlaylist.length === 0 || currentPlaylistIndex === -1 || !currentSong) {
-    return null;
-  }
-
-  switch (playMode) {
-    case 'single-loop':
-      return currentSong;
-    case 'shuffle': {
-      if (currentPlaylist.length <= 1) return currentSong;
-      let next: Song;
-      do {
-        next = currentPlaylist[Math.floor(Math.random() * currentPlaylist.length)];
-      } while (next.id === currentSong.id && currentPlaylist.length > 1);
-      return next;
-    }
-    case 'list-loop':
-      return currentPlaylist[(currentPlaylistIndex + 1) % currentPlaylist.length];
-    case 'sequential':
-    default:
-      if (currentPlaylistIndex < currentPlaylist.length - 1) {
-        return currentPlaylist[currentPlaylistIndex + 1];
-      }
-      return null;
-  }
+  return getNextSong(state.currentPlaylist, state.currentPlaylistIndex, state.playMode, state.currentSong);
 }
 
 /**
@@ -162,7 +101,7 @@ function prefetchNextUrl(state: PlayerStoreState): void {
   const cacheKey = `${nextSong.sourceType}:${nextSong.url}`;
   if (prefetchedUrls.has(cacheKey)) return;
 
-  IpcClient.invoke<string>('musicApi:getAudioUrl', nextSong.url)
+  ipcMusicApi.getAudioUrl(nextSong.url)
     .then((resolvedUrl) => {
       if (resolvedUrl) {
         prefetchedUrls.set(cacheKey, resolvedUrl);
@@ -210,15 +149,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       let realUrl = song.url;
 
-      if (song.sourceType === 'soda') {
-        if (song.url) {
-          realUrl = song.url;
-        } else {
-          try {
-            realUrl = await IpcClient.invoke<string>('musicApi:getSodaPlayableUrl', song.id);
-          } catch (urlError) {
-            console.error('获取汽水音乐可播放 URL 失败:', urlError);
-          }
+      if (song.sourceType === 'soda' && !song.url) {
+        try {
+          realUrl = await ipcMusicApi.getSodaPlayableUrl(song.id);
+        } catch (urlError) {
+          console.error('获取汽水音乐可播放 URL 失败:', urlError);
         }
       } else if (song.sourceType !== 'local') {
         const cacheKey = `${song.sourceType}:${song.url}`;
@@ -228,7 +163,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           prefetchedUrls.delete(cacheKey);
         } else {
           try {
-            realUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
+            realUrl = await ipcMusicApi.getAudioUrl(song.url);
           } catch (urlError) {
             console.error('获取真实音频 URL 失败:', urlError);
             message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');
@@ -277,7 +212,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             if (searchResults.length > 0) {
               const freshSong = searchResults[0];
               if (freshSong.lrc && freshSong.lrc.trim() !== '') {
-                return lyricsService.getLyrics(freshSong.lrc);
+                return IpcClient.invoke<string>('lyrics:get', freshSong.lrc);
               }
             }
             return '';
@@ -297,7 +232,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           });
       } else {
         set({ lyricsLoading: true });
-        lyricsService.getLyrics(song.lrc)
+        IpcClient.invoke<string>('lyrics:get', song.lrc)
           .then((lyricsContent) => {
             if (get().currentSong?.id === requestingSongId) {
               set({ lyrics: lyricsContent, lyricsLoading: false });
@@ -328,7 +263,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       } else {
         set({ currentPlaylistIndex: index });
       }
-      persistQueue(get());
+      persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
 
     } catch (error) {
       if (generation !== playGeneration) return;
@@ -359,7 +294,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       duration: 0,
       currentPlaylistIndex: -1
     });
-    persistQueue(get());
+    persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
   },
 
   seek: (position: number) => {
@@ -402,7 +337,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   setPlayMode: (mode: PlayMode) => {
     set({ playMode: mode });
-    localStorage.setItem('playMode', mode);
+    persistPlayMode(mode);
   },
 
   playNext: () => {
@@ -414,7 +349,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     switch (playMode) {
-      case 'single-loop':
+      case '单曲循环':
         if (currentSong) {
           audioPlayer.seek(0);
           audioPlayer.play();
@@ -422,7 +357,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
         break;
 
-      case 'shuffle': {
+      case '随机播放': {
         let randomIndex = currentPlaylistIndex;
         if (currentPlaylist.length > 1) {
           do {
@@ -434,22 +369,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         break;
       }
 
-      case 'list-loop':
+      case '列表循环':
+      default: {
         const nextIndexLoop = (currentPlaylistIndex + 1) % currentPlaylist.length;
         set({ currentPlaylistIndex: nextIndexLoop });
         get().play(currentPlaylist[nextIndexLoop]);
         break;
-
-      case 'sequential':
-      default:
-        if (currentPlaylistIndex < currentPlaylist.length - 1) {
-          const nextIndex = currentPlaylistIndex + 1;
-          set({ currentPlaylistIndex: nextIndex });
-          get().play(currentPlaylist[nextIndex]);
-        } else {
-          get().stop();
-        }
-        break;
+      }
     }
   },
 
@@ -460,7 +386,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
 
-    if (playMode === 'shuffle') {
+    if (playMode === '随机播放') {
       let randomIndex = currentPlaylistIndex;
       if (currentPlaylist.length > 1) {
         do {
@@ -483,7 +409,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylist: playlist,
       currentPlaylistIndex: currentIndex
     });
-    persistQueue(get());
+    persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
   },
 
   removeFromQueue: (index: number) => {
@@ -495,7 +421,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     if (newPlaylist.length === 0) {
       get().stop();
-      persistQueue({ ...get(), currentPlaylist: [], currentPlaylistIndex: -1 });
+      persistQueue([], -1);
       return;
     }
 
@@ -506,7 +432,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         currentPlaylist: newPlaylist,
         currentPlaylistIndex: index < newPlaylist.length ? index : 0,
       });
-      persistQueue(get());
+      persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
       get().play(nextSong);
       return;
     }
@@ -519,7 +445,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylist: newPlaylist,
       currentPlaylistIndex: newIndex,
     });
-    persistQueue(get());
+    persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
   },
 
   reorderQueue: (fromIndex: number, toIndex: number) => {
@@ -546,7 +472,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylist: newPlaylist,
       currentPlaylistIndex: newIndex,
     });
-    persistQueue(get());
+    persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
   },
 
   clearQueue: () => {
@@ -555,7 +481,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylist: [],
       currentPlaylistIndex: -1,
     });
-    persistQueue(get());
+    persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
   },
 }));
 

@@ -5,7 +5,7 @@ import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { searchService } from '@/renderer/services/searchService';
-import type { Song } from '@/shared/types/song';
+import type { Song } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
 const ArtistDetailPage: React.FC = () => {
