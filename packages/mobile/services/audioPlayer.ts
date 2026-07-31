@@ -1,5 +1,5 @@
 import { Audio } from 'expo-av';
-import { musicApi } from '@mplayer/core';
+import { musicApi, resolvePlayableUrl } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -34,41 +34,9 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
   if (playId !== currentPlayId) return;
 
   const run = async (): Promise<void> => {
-    let audioUrl = song.url;
+    const audioUrl = await resolvePlayableUrl(song, musicApi);
+    if (playId !== currentPlayId) throw 'cancelled';
 
-    if (!audioUrl || (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://'))) {
-      if (song.name) {
-        const searchResults = await musicApi.searchSongs(song.name, 1, song.sourceType);
-        if (playId !== currentPlayId) throw 'cancelled';
-        if (searchResults.length > 0) {
-          audioUrl = searchResults[0].url || audioUrl;
-          const store = usePlayerStore.getState();
-          if (store.currentIndex >= 0 && store.queue[store.currentIndex]?.id === song.id) {
-            const updatedQueue = [...store.queue];
-            const merged = { ...updatedQueue[store.currentIndex], ...searchResults[0], id: song.id };
-            updatedQueue[store.currentIndex] = merged;
-            usePlayerStore.setState({ queue: updatedQueue, currentSong: merged });
-          }
-        }
-      }
-    }
-
-    if (!audioUrl || (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://'))) {
-      if (song.sourceType === 'soda' && song.id) {
-        const sodaUrl = await musicApi.getSodaAudioUrl(song.id);
-        if (playId !== currentPlayId) throw 'cancelled';
-        if (sodaUrl?.startsWith('http://') || sodaUrl?.startsWith('https://')) {
-          audioUrl = sodaUrl;
-        }
-      }
-      if (!audioUrl?.startsWith('http://') && !audioUrl?.startsWith('https://')) {
-        const resolved = await musicApi.getAudioUrl(audioUrl);
-        if (playId !== currentPlayId) throw 'cancelled';
-        audioUrl = resolved || audioUrl;
-      }
-    }
-
-    if (!audioUrl?.startsWith('http')) throw new Error('no playable URL');
 
     const { sound: newSound } = await Audio.Sound.createAsync(
       { uri: audioUrl },

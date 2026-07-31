@@ -1,6 +1,6 @@
-import { create } from 'zustand';
-import type { Song } from '@mplayer/core';
-import { useSettingsStore } from './settingsStore';
+import { create } from 'zustand'
+import type { Song } from '@mplayer/core'
+import { useSettingsStore } from './settingsStore'
 
 interface PlayerState {
   currentSong: Song | null;
