@@ -2,6 +2,7 @@ import type { Song, SongGroup, SourceKey } from '@mplayer/core';
 import { musicApi } from '../api/musicApi';
 import { getKugouRank, getKugouNewSongs } from '../api/kugouApi';
 import { cacheManager } from '@mplayer/core';
+import { CHART_CACHE_TTL } from '../../shared/chart';
 
 export type ChartType = 'hot' | 'new';
 export type SourceName = 'netease' | 'qq' | 'kugou';
@@ -66,6 +67,10 @@ function aggregateRank(ranks: SourceRank): number {
     score += rank ? 1 / rank : 1 / DEFAULT_MISS;
   }
   return score;
+}
+
+function createSourceRanks(sources: SourceName[]): SourceRank {
+  return Object.fromEntries(sources.map(source => [source, DEFAULT_MISS])) as SourceRank;
 }
 
 /**
@@ -142,7 +147,6 @@ function getSourceFetcher(type: ChartType, source: SourceName): () => Promise<No
  * @param type 'hot' | 'new'
  * @param sources 要聚合的源列表
  */
-const CHART_CACHE_TTL = 30 * 60 * 1000;
 
 export async function getAggregatedChart(
   type: ChartType,
@@ -158,8 +162,11 @@ export async function getAggregatedChart(
 
   // 收集所有歌曲
   const allSongs: NormalizedSong[] = [];
-  for (const result of results) {
+  const fulfilledSources: SourceName[] = [];
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
     if (result.status === 'fulfilled') {
+      fulfilledSources.push(sources[i]);
       allSongs.push(...result.value);
     }
   }
@@ -174,9 +181,11 @@ export async function getAggregatedChart(
       existing.songs.push(song);
       existing.sourceRanks[song.sourceType as keyof SourceRank] = song.rank;
     } else {
+      const sourceRanks = createSourceRanks(fulfilledSources);
+      sourceRanks[song.sourceType as keyof SourceRank] = song.rank;
       groupMap.set(key, {
         songs: [song],
-        sourceRanks: { [song.sourceType]: song.rank } as SourceRank,
+        sourceRanks,
       });
     }
   }

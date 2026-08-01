@@ -10,6 +10,7 @@ const { mockStore } = vi.hoisted(() => {
     songs: [] as any[],
     groups: [] as any[],
     setState: vi.fn(),
+    setAudioTag: vi.fn(),
   };
   return { mockStore: store };
 });
@@ -69,6 +70,30 @@ describe('searchService', () => {
       await searchService.search('周杰伦');
 
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ error: '搜索失败，请重试' }));
+    });
+
+    it('probes every result in progressive batches', async () => {
+      vi.useRealTimers();
+      const { IpcClient } = await import('../services/IpcClient');
+      const songs = Array.from({ length: 12 }, (_, i) => ({
+        id: `s${i}`,
+        name: `song-${i}`,
+        artist: 'artist',
+        url: '',
+      }));
+      (IpcClient.invoke as any).mockImplementation(async (channel: string) => {
+        if (channel === 'musicApi:searchSongs') return songs;
+        if (channel === 'musicApi:getAudioUrl') return '';
+        return undefined;
+      });
+
+      await searchService.search('周杰伦');
+
+      await vi.waitFor(() => expect(mockStore.setAudioTag).toHaveBeenCalledTimes(songs.length));
+      const audioUrlCalls = (IpcClient.invoke as any).mock.calls.filter(
+        (call: unknown[]) => call[0] === 'musicApi:getAudioUrl'
+      );
+      expect(audioUrlCalls).toHaveLength(songs.length);
     });
   });
 

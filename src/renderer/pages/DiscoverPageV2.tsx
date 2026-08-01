@@ -16,6 +16,7 @@ import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
 import type { Album, Song, DiscoverPlaylist } from '@mplayer/core';
 import type { ApiResponse } from '@/shared/types/ipc';
+import { CHART_CACHE_TTL as CHART_TTL } from '../../shared/chart';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -146,8 +147,6 @@ const DiscoverPageV2: React.FC = () => {
 
   useEffect(() => {
     mountedRef.current = true;
-    fetchChart('hot');
-    fetchChart('new');
     return () => { mountedRef.current = false; };
   }, [fetchChart]);
 
@@ -262,7 +261,11 @@ const DiscoverPageV2: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'albums') {
+    if (activeTab === 'charts') {
+      const now = Date.now();
+      if (!cacheRef.current.hot || now - cacheRef.current.hotTimestamp > CHART_TTL) fetchChart('hot');
+      if (!cacheRef.current.new || now - cacheRef.current.newTimestamp > CHART_TTL) fetchChart('new');
+    } else if (activeTab === 'albums') {
       setAlbumsError(null);
       fetchAlbums(albumsArea);
     } else if (activeTab === 'recommend') {
@@ -272,7 +275,7 @@ const DiscoverPageV2: React.FC = () => {
       setPlaylistListError(null);
       fetchPlaylistList();
     }
-  }, [activeTab, albumsArea, fetchAlbums, fetchRecommended, fetchPlaylistList]);
+  }, [activeTab, albumsArea, fetchChart, fetchAlbums, fetchRecommended, fetchPlaylistList]);
 
   const handleAlbumsAreaChange = (area: string) => {
     setAlbumsArea(area as AreaKey);
