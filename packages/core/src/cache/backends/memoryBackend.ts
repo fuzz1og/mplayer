@@ -1,4 +1,4 @@
-import type { CacheBackend } from './types'
+import type { CacheBackend } from '../types'
 
 export function createMemoryBackend(): CacheBackend {
   const map = new Map<string, Uint8Array>()

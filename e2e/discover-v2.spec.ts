@@ -1,5 +1,5 @@
 import { test, expect, _electron as electron } from '@playwright/test';
-import type { ElectronApplication, Page } from 'playwright';
+import type { ElectronApplication, Page, Locator } from 'playwright';
 
 let electronApp: ElectronApplication;
 let page: Page;
@@ -40,6 +40,23 @@ async function navigateToDiscover() {
     await backBtn.click();
   }
   await page.waitForTimeout(1000);
+}
+
+type ExpectedState = { text: string } | { selector: string };
+
+async function expectAnyState(locator: Locator, states: ExpectedState[]): Promise<void> {
+  const timeout = 10000;
+  const deadline = Date.now() + timeout;
+  let body = '';
+  while (Date.now() < deadline) {
+    body = (await locator.textContent()) || '';
+    for (const state of states) {
+      if ('text' in state && body.includes(state.text)) return;
+      if ('selector' in state && (await locator.locator(state.selector).count()) > 0) return;
+    }
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`Expected state not found. Last content: ${body.slice(0, 200)}`);
 }
 
 test.describe('发现页 V2 - 排行榜', () => {
@@ -108,12 +125,13 @@ test.describe('发现页 V2 - 新碟上架', () => {
     await page.getByText('新碟上架').click();
     await page.waitForTimeout(3000);
 
-    // Album cards rendered (the scroll container has child divs)
     const main = page.locator('main');
-    const html = await main.innerHTML();
-    expect(html.length).toBeGreaterThan(0);
-    // At minimum, no crash state
-    expect(html).not.toContain('暂无新碟数据');
+    await expectAnyState(main, [
+      { selector: 'img' },
+      { text: '暂无新碟数据' },
+      { text: '重试' },
+      { selector: '.skeleton-shimmer' },
+    ]);
   });
 
   test('地区筛选按钮可点击切换', async () => {
@@ -121,34 +139,30 @@ test.describe('发现页 V2 - 新碟上架', () => {
     await page.getByText('新碟上架').click();
     await page.waitForTimeout(5000);
 
-    // Either filter buttons render, or error state shows retry
     const main = page.locator('main');
-    const html = await main.innerHTML();
+    await expectAnyState(main, [{ text: '华语' }, { text: '重试' }]);
 
-    if (html.includes('华语')) {
-      // Area filters rendered properly
-      const zhBtn = page.getByText('华语');
+    const zhBtn = page.getByRole('button', { name: '华语', exact: true });
+    if (await zhBtn.isVisible().catch(() => false)) {
       await zhBtn.click();
       await page.waitForTimeout(500);
       await expect(zhBtn).toBeVisible();
     } else {
-      // Error state — at least retry button exists
-      expect(html).toContain('重试');
+      await expect(page.getByText('重试')).toBeVisible();
     }
   });
 
-  test('失败时显示重试按钮', async () => {
+  test('加载或失败态不白屏', async () => {
     await navigateToDiscover();
-    // Albums tab with invalid area should show error state if API fails
-    // Just verify tab switching doesn't crash
     await page.getByText('新碟上架').click();
     await page.waitForTimeout(2000);
-    const retryBtn = page.getByText('重试');
-    // If error state, retry button exists — acceptable either way
-    if (await retryBtn.isVisible().catch(() => false)) {
-      await retryBtn.click();
-      await page.waitForTimeout(2000);
-    }
+    const main = page.locator('main');
+    await expectAnyState(main, [
+      { selector: 'img' },
+      { text: '暂无新碟数据' },
+      { text: '重试' },
+      { selector: '.skeleton-shimmer' },
+    ]);
   });
 });
 
@@ -159,10 +173,14 @@ test.describe('发现页 V2 - 猜你喜欢', () => {
     await page.getByText('猜你喜欢').click();
     await page.waitForTimeout(5000);
 
-    // Verify tab content rendered (no matter empty or loaded)
     const main = page.locator('main');
-    const html = await main.innerHTML();
-    expect(html.length).toBeGreaterThan(0);
+    await expectAnyState(main, [
+      { selector: 'img' },
+      { text: '暂无推荐歌单' },
+      { text: '暂无推荐歌曲' },
+      { text: '重试' },
+      { selector: '.skeleton-shimmer' },
+    ]);
   });
 });
 
@@ -173,16 +191,13 @@ test.describe('发现页 V2 - 歌单', () => {
     await page.getByRole('button', { name: '歌单', exact: true }).click();
     await page.waitForTimeout(5000);
 
-    // Should show large playlist cards or loading/error
     const main = page.locator('main');
-    const html = await main.innerHTML();
-    if (html.includes('重试') || html.includes('暂无')) {
-      // Error or empty state — acceptable, API may be unavailable
-      expect(true).toBeTruthy();
-    } else {
-      // Success state — should have content
-      expect(html.length).toBeGreaterThan(100);
-    }
+    await expectAnyState(main, [
+      { selector: 'img' },
+      { text: '暂无歌单' },
+      { text: '重试' },
+      { selector: '.skeleton-shimmer' },
+    ]);
   });
 });
 
@@ -196,8 +211,7 @@ test.describe('发现页 V2 - 搜索交互', () => {
     await searchInput.press('Enter');
     await page.waitForTimeout(5000);
 
-    const pageText = await page.textContent('body');
-    expect(pageText?.includes('搜索结果')).toBeTruthy();
+    await expect(page.getByText(/搜索结果:/)).toBeVisible({ timeout: 10000 });
   });
 
   test('搜索返回后排行榜数据仍在', async () => {
@@ -227,11 +241,11 @@ test.describe('播放器栏', () => {
     await expect(playerBar.first()).toBeVisible({ timeout: 10000 });
 
     // Verify across tab switches
-    await page.getByText('新碟上架').click();
+    await page.getByText('新碟上架').click({ noWaitAfter: true });
     await page.waitForTimeout(500);
     await expect(playerBar.first()).toBeVisible();
 
-    await page.getByText('猜你喜欢').click();
+    await page.getByText('猜你喜欢').click({ noWaitAfter: true });
     await page.waitForTimeout(500);
     await expect(playerBar.first()).toBeVisible();
   });
