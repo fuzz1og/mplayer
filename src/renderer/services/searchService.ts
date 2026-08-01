@@ -5,6 +5,7 @@ import { ipcMusicApi } from './IpcMusicApi';
 import { createSearchController } from '@/shared';
 
 const DEBOUNCE_DELAY = 300;
+const PROBE_BATCH_SIZE = 5;
 
 class SearchService {
   private debounceTimer: NodeJS.Timeout | null = null;
@@ -55,26 +56,38 @@ class SearchService {
   }
 
   /**
-   * Probe only each SongGroup representative via core probeSongs.
+   * Probe every song in progressive batches, matching the mobile search flow.
    */
   private async probeResults(groups: SongGroup[], seq: number): Promise<void> {
-    const representatives = groups
-      .map(group => group.songs[0])
-      .filter((song): song is Song => Boolean(song));
-    if (representatives.length === 0) return;
 
     try {
-      const { probeSongs } = await import('@mplayer/core');
-      probeSongs(representatives, {
-        concurrency: 5,
-        resolver: async (song) => {
-          const resolvedUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
-          return resolvedUrl || song.url;
-        },
-        onResult: (songId, tag) => {
-          if (seq === this.searchSeq) useSearchStore.getState().setAudioTag(songId, tag);
-        },
-      });
+      const allSongs = groups.flatMap(group => group.songs);
+      if (allSongs.length === 0) return;
+      const { probeAudio } = await import('@mplayer/core');
+
+      for (let i = 0; i < allSongs.length; i += PROBE_BATCH_SIZE) {
+        if (seq !== this.searchSeq) return;
+        const batch = allSongs.slice(i, i + PROBE_BATCH_SIZE);
+        const results = await Promise.allSettled(
+          batch.map(async (song) => {
+            try {
+              const resolvedUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
+              const url = resolvedUrl || song.url;
+              const tag = url ? await probeAudio({ ...song, url }) : 'valid';
+              return { songId: song.id, tag };
+            } catch {
+              return { songId: song.id, tag: 'valid' as const };
+            }
+          })
+        );
+        if (seq !== this.searchSeq) return;
+        const store = useSearchStore.getState();
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            store.setAudioTag(result.value.songId, result.value.tag);
+          }
+        }
+      }
     } catch {
       // Fail open: probing must never break search rendering.
     }
