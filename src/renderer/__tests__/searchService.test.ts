@@ -10,6 +10,7 @@ const { mockStore } = vi.hoisted(() => {
     songs: [] as any[],
     groups: [] as any[],
     setState: vi.fn(),
+    setAudioTag: vi.fn(),
   };
   return { mockStore: store };
 });

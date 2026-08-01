@@ -68,6 +68,10 @@ function aggregateRank(ranks: SourceRank): number {
   return score;
 }
 
+function createSourceRanks(sources: SourceName[]): SourceRank {
+  return Object.fromEntries(sources.map(source => [source, DEFAULT_MISS])) as SourceRank;
+}
+
 /**
  * 获取指定源+类型的 fetcher
  */
@@ -174,9 +178,11 @@ export async function getAggregatedChart(
       existing.songs.push(song);
       existing.sourceRanks[song.sourceType as keyof SourceRank] = song.rank;
     } else {
+      const sourceRanks = createSourceRanks(sources);
+      sourceRanks[song.sourceType as keyof SourceRank] = song.rank;
       groupMap.set(key, {
         songs: [song],
-        sourceRanks: { [song.sourceType]: song.rank } as SourceRank,
+        sourceRanks,
       });
     }
   }

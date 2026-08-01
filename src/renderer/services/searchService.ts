@@ -47,7 +47,7 @@ class SearchService {
           } else {
             updates.songs = groups.flatMap(g => g.songs);
           }
-          this.probeResults(groups, seq);
+          void this.probeResults(groups, seq);
         }
         useSearchStore.setState(updates as any);
       },
@@ -55,41 +55,29 @@ class SearchService {
   }
 
   /**
-   * Async batch probe of search results — uses core probeAudio, matches mobile's batch pattern.
-   * Processes in batches of BATCH_SIZE, updates store after each batch for progressive rendering.
+   * Probe only each SongGroup representative via core probeSongs.
    */
-  private probeResults(groups: SongGroup[], seq: number): void {
-    const songs = groups.flatMap(g => g.songs);
-    const BATCH_SIZE = 5;
+  private async probeResults(groups: SongGroup[], seq: number): Promise<void> {
+    const representatives = groups
+      .map(group => group.songs[0])
+      .filter((song): song is Song => Boolean(song));
+    if (representatives.length === 0) return;
 
-    const runBatch = async (startIdx: number) => {
-      if (startIdx >= songs.length || seq !== this.searchSeq) return;
-
-      const batch = songs.slice(startIdx, startIdx + BATCH_SIZE);
-      await Promise.allSettled(
-        batch.map(async (song) => {
-          if (seq !== this.searchSeq) return;
-          try {
-            // Resolve playable URL first
-            const resolvedUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
-            const url = resolvedUrl || song.url;
-            if (!url) { useSearchStore.getState().setAudioTag(song.id, 'valid'); return; }
-
-            // Probe using core's probeAudio
-            const { probeAudio } = await import('@mplayer/core');
-            const tag = await probeAudio({ ...song, url });
-            if (seq === this.searchSeq) useSearchStore.getState().setAudioTag(song.id, tag);
-          } catch {
-            if (seq === this.searchSeq) useSearchStore.getState().setAudioTag(song.id, 'valid');
-          }
-        })
-      );
-      if (seq === this.searchSeq) {
-        runBatch(startIdx + BATCH_SIZE);
-      }
-    };
-
-    runBatch(0);
+    try {
+      const { probeSongs } = await import('@mplayer/core');
+      probeSongs(representatives, {
+        concurrency: 5,
+        resolver: async (song) => {
+          const resolvedUrl = await IpcClient.invoke<string>('musicApi:getAudioUrl', song.url);
+          return resolvedUrl || song.url;
+        },
+        onResult: (songId, tag) => {
+          if (seq === this.searchSeq) useSearchStore.getState().setAudioTag(songId, tag);
+        },
+      });
+    } catch {
+      // Fail open: probing must never break search rendering.
+    }
   }
 
   debouncedSearch(keyword: string): void {

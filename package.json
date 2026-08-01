@@ -28,6 +28,7 @@
     "typecheck:mobile": "npx tsc --noEmit --project packages/mobile/tsconfig.json",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:chart": "node scripts/testAggregatedChart.js",
     "core:build": "npm run build -w packages/core"
   },
   "dependencies": {

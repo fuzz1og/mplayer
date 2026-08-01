@@ -57,7 +57,7 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
       </div>
 
       {/* Scrollable album cards */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
         {loading ? (
           <div style={{ display: 'flex', gap: 'var(--space-4)', paddingBottom: '12px' }}>
             {Array.from({ length: 6 }).map((_, i) => (
@@ -73,7 +73,7 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
             <div>暂无新碟数据</div>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 'var(--space-5)', flexFlow: 'row wrap' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-5)', flexFlow: 'row nowrap' }}>
             {albums.map((album) => (
               <div key={album.id} style={{ flexShrink: 0, width: '120px', cursor: 'pointer' }} onClick={() => onAlbumClick?.(album)}>
                 <div style={{ width: '120px', height: '120px', borderRadius: '10px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', marginBottom: '8px' }}>

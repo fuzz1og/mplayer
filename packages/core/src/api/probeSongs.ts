@@ -2,7 +2,7 @@ import type { Song, AudioTag } from '../types/index.js';
 import { probeAudioUrl } from './audioProbe.js';
 
 export interface ProbeOptions {
-  /** Max concurrent probe requests. Default: 20 */
+  /** Max concurrent probe requests. Default: 10 */
   concurrency?: number;
   /** Callback fired per song when probe completes */
   onResult?: (songId: string, tag: AudioTag) => void;
@@ -18,7 +18,7 @@ export interface ProbeOptions {
  *
  * Usage:
  *   probeSongs(songs, {
- *     concurrency: 20,
+ *     concurrency: 10,
  *     resolver: (song) => getAudioUrl(song.url),
  *     onResult: (id, tag) => store.setAudioTag(id, tag)
  *   });
@@ -63,6 +63,6 @@ async function probeOne(
   if (resolver) {
     url = await resolver(song);
   }
-  if (!url) return 'invalid';
+  if (!url) return 'valid'; // fail open — don't block playback
   return probeAudioUrl(url);
 }
