@@ -10,6 +10,8 @@ release
 docs/*
 !docs/agents/
 !docs/agents/*
+!docs/specs/
+!docs/specs/*
 
 # AI 配置目录（只忽略个人数据）
 .claude/plans/
