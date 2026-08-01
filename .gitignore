@@ -7,7 +7,9 @@ release
 .vscode
 .idea
 .trae
-docs/
+docs/*
+!docs/agents/
+!docs/agents/*
 
 # AI 配置目录（只忽略个人数据）
 .claude/plans/
