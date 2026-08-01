@@ -60,4 +60,18 @@ describe('chartAggregator', () => {
     expect(result.songs[0].sourceRanks).toEqual({ netease: 3, qq: 1, kugou: 51 });
     expect(result.songs[0].bestSong.sourceType).toBe('qq');
   });
+
+  it('omits failed sources from sourceRanks', async () => {
+    vi.mocked(musicApi.getNeteaseHotlist).mockResolvedValue([
+      { id: 'n1', name: 'Song C', artists: 'Artist C', cover: '', rank: 2, album: '' } as any,
+    ]);
+    vi.mocked(musicApi.getQQHotlist).mockResolvedValue([] as any);
+    vi.mocked(getKugouRank).mockRejectedValue(new Error('kugou down'));
+
+    const result = await getAggregatedChart('hot', ['netease', 'qq', 'kugou']);
+
+    expect(result.songs).toHaveLength(1);
+    expect(result.songs[0].sourceRanks).toEqual({ netease: 2, qq: 51 });
+    expect(result.songs[0].score).toBeCloseTo(1 / 2 + 1 / 51);
+  });
 });
