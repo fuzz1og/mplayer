@@ -1,13 +1,16 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
+import type { EventSubscription } from 'expo-modules-core';
 import { musicApi, resolvePlayableUrl } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { updateNotification, clearNotification } from './notificationService';
 
-let player: ReturnType<typeof createAudioPlayer> | null = null;
-let playerStatusSubscription: { remove: () => void } | null = null;
+type Player = ReturnType<typeof createAudioPlayer>;
+
+let player: Player | null = null;
+let playerStatusSubscription: EventSubscription | null = null;
 let playingPromise: Promise<void> | null = null;
 let currentPlayId = 0;
 
@@ -26,6 +29,12 @@ function disposePlayer(): void {
   player = null;
 }
 
+function nextSongAfterError(retryCount: number): Song | null {
+  const s = usePlayerStore.getState();
+  if (retryCount + 1 >= s.queue.length) return null;
+  return s.next();
+}
+
 export async function playSong(song: Song, retryCount = 0): Promise<void> {
   const playId = ++currentPlayId;
 
@@ -39,19 +48,23 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
 
   if (playId !== currentPlayId) return;
 
-  const run = async (): Promise<void> => {
+  const startPlayback = async (): Promise<void> => {
     const audioUrl = await resolvePlayableUrl(song, musicApi);
     if (playId !== currentPlayId) throw 'cancelled';
 
     const nextPlayer = createAudioPlayer({ uri: audioUrl }, { updateInterval: 250 });
     player = nextPlayer;
 
-    const nextPlayerWithEvents = nextPlayer as typeof nextPlayer & {
-      addListener(event: 'playbackStatusUpdate', listener: (status: AudioStatus) => void): { remove(): void };
-    };
+    playerStatusSubscription = nextPlayer.addListener('playbackStatusUpdate', (status: AudioStatus) => {
+      if (playId !== currentPlayId) return;
 
-    playerStatusSubscription = nextPlayerWithEvents.addListener('playbackStatusUpdate', (status: AudioStatus) => {
-      if (!status.isLoaded) return;
+      if (!status.isLoaded) {
+        if (status.error) {
+          const nextSong = nextSongAfterError(retryCount);
+          if (nextSong) void playSong(nextSong, retryCount + 1);
+        }
+        return;
+      }
 
       const s = usePlayerStore.getState();
       if (status.playing && !s.isPlaying) {
@@ -64,10 +77,8 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
       s.setDuration(status.duration || 0);
 
       if (status.didJustFinish) {
-        if (playId !== currentPlayId) return;
-        usePlayerStore.getState().next();
-        const nextSong = usePlayerStore.getState().currentSong;
-        if (nextSong) playSong(nextSong);
+        const nextSong = s.next();
+        if (nextSong) void playSong(nextSong);
       }
     });
 
@@ -84,17 +95,13 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
   };
 
   try {
-    playingPromise = run();
+    playingPromise = startPlayback();
     await playingPromise;
   } catch (err) {
     if (err === 'cancelled') return;
     console.error(`[playSong] error for song ${song.id} (${song.name}):`, err);
-    const nextRetryCount = retryCount + 1;
-    const queue = usePlayerStore.getState().queue;
-    if (nextRetryCount >= queue.length) return;
-    usePlayerStore.getState().next();
-    const nextSong = usePlayerStore.getState().currentSong;
-    if (nextSong) await playSong(nextSong, nextRetryCount);
+    const nextSong = nextSongAfterError(retryCount);
+    if (nextSong) await playSong(nextSong, retryCount + 1);
   } finally {
     playingPromise = null;
   }

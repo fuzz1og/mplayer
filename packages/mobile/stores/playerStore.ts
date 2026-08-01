@@ -14,7 +14,7 @@ interface PlayerState {
   play: (song: Song) => void;
   pause: () => void;
   resume: () => void;
-  next: () => void;
+  next: () => Song | null;
   prev: () => void;
   setQueue: (songs: Song[], startIndex?: number) => void;
   setCurrentTime: (time: number) => void;
@@ -37,30 +37,31 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   next: () => {
     const { queue, currentIndex } = get();
-    if (queue.length === 0 || currentIndex < 0) return;
+    if (queue.length === 0 || currentIndex < 0) return null;
     const playMode = useSettingsStore.getState().playMode;
 
     if (playMode === '单曲循环') {
       // 重复同一首
       set({ currentTime: 0, isPlaying: true });
-      return;
+      return get().currentSong;
     }
 
     if (playMode === '随机播放') {
       if (queue.length <= 1) {
         set({ currentTime: 0, isPlaying: true });
-        return;
+        return get().currentSong;
       }
       let idx: number;
       do { idx = Math.floor(Math.random() * queue.length); }
       while (idx === currentIndex);
       set({ currentSong: queue[idx], currentIndex: idx, isPlaying: true, currentTime: 0 });
-      return;
+      return get().currentSong;
     }
 
     // 列表循环
     const nextIdx = (currentIndex + 1) % queue.length;
     set({ currentSong: queue[nextIdx], currentIndex: nextIdx, isPlaying: true, currentTime: 0 });
+    return get().currentSong;
   },
 
   prev: () => {

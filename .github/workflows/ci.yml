@@ -5,6 +5,7 @@ on:
     branches: ['*']
   pull_request:
     branches: [master]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,6 +28,8 @@ jobs:
       - run: npm run build
       # Mobile typecheck
       - run: npx tsc --noEmit --project packages/mobile/tsconfig.json
+      # Mobile tests
+      - run: npx vitest run --config packages/mobile/vitest.config.ts
 
   # Mobile Android APK
   mobile-android:
