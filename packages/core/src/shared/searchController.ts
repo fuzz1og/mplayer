@@ -20,7 +20,7 @@ export function createSearchController(config: SearchControllerConfig): SearchCo
     search: async (query: string) => {
       if (!query.trim()) return;
       const currentSeq = ++seq;
-      setState({ loading: true, error: null, page: 1, results: [], hasMore: true });
+      setState({ loading: true, error: null, query, page: 1, results: [], hasMore: true });
 
       try {
         const { source } = getState() as { source: string };

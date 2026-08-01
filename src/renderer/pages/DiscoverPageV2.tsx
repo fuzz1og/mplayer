@@ -35,6 +35,7 @@ const TABS: TabDef[] = [
 ];
 
 const SOURCES = ['netease', 'qq', 'kugou'];
+const CHART_TTL = 30 * 60 * 1000;
 
 interface ChartCache {
   hot: AggregatedSongGroup[] | null;
@@ -146,8 +147,6 @@ const DiscoverPageV2: React.FC = () => {
 
   useEffect(() => {
     mountedRef.current = true;
-    fetchChart('hot');
-    fetchChart('new');
     return () => { mountedRef.current = false; };
   }, [fetchChart]);
 
@@ -262,7 +261,11 @@ const DiscoverPageV2: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'albums') {
+    if (activeTab === 'charts') {
+      const now = Date.now();
+      if (!cacheRef.current.hot || now - cacheRef.current.hotTimestamp > CHART_TTL) fetchChart('hot');
+      if (!cacheRef.current.new || now - cacheRef.current.newTimestamp > CHART_TTL) fetchChart('new');
+    } else if (activeTab === 'albums') {
       setAlbumsError(null);
       fetchAlbums(albumsArea);
     } else if (activeTab === 'recommend') {
@@ -272,7 +275,7 @@ const DiscoverPageV2: React.FC = () => {
       setPlaylistListError(null);
       fetchPlaylistList();
     }
-  }, [activeTab, albumsArea, fetchAlbums, fetchRecommended, fetchPlaylistList]);
+  }, [activeTab, albumsArea, fetchChart, fetchAlbums, fetchRecommended, fetchPlaylistList]);
 
   const handleAlbumsAreaChange = (area: string) => {
     setAlbumsArea(area as AreaKey);
