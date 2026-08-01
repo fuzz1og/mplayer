@@ -16,6 +16,7 @@ import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
 import type { Album, Song, DiscoverPlaylist } from '@mplayer/core';
 import type { ApiResponse } from '@/shared/types/ipc';
+import { CHART_CACHE_TTL as CHART_TTL } from '../../shared/chart';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -35,7 +36,6 @@ const TABS: TabDef[] = [
 ];
 
 const SOURCES = ['netease', 'qq', 'kugou'];
-const CHART_TTL = 30 * 60 * 1000;
 
 interface ChartCache {
   hot: AggregatedSongGroup[] | null;
