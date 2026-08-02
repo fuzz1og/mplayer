@@ -67,7 +67,7 @@ describe('searchService', () => {
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ loading: false }));
     });
 
-    it('单源搜索结果同时写入 songs 和 groups', async () => {
+    it('单源搜索写入 songs，不写 groups', async () => {
       const { IpcClient } = await import('../services/IpcClient');
       const mockSongs = [{ id: '1', name: '稻香', artist: '周杰伦' }];
       (IpcClient.invoke as any).mockResolvedValue(mockSongs);
@@ -75,10 +75,8 @@ describe('searchService', () => {
       await searchService.search('周杰伦');
 
       expect(mockStore.songs).toEqual(mockSongs);
-      expect(mockStore.groups).toHaveLength(1);
-      expect(mockStore.groups[0].key).toBe('netease');
-      expect(mockStore.groups[0].songs).toEqual(mockSongs);
-      expect(mockStore.expandedKeys).toEqual(['netease']);
+      expect(mockStore.groups).toEqual([]);
+      expect(mockStore.expandedKeys).toEqual([]);
     });
 
     it('IPC 失败应设置错误信息', async () => {

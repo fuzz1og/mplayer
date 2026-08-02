@@ -52,15 +52,13 @@ class SearchService {
           const seq = ++this.searchSeq;
           if (store.sourceType === 'all') {
             updates.groups = groups;
+            if (groups.length === 0) {
+              updates.expandedKeys = [];
+            } else if (store.expandedKeys.length === 0) {
+              updates.expandedKeys = groups.map(g => g.key);
+            }
           } else {
             updates.songs = groups.flatMap(g => g.songs);
-          }
-          // GroupedSongList renders from groups for both modes; keep them in sync.
-          updates.groups = groups;
-          if (groups.length === 0) {
-            updates.expandedKeys = [];
-          } else if (store.expandedKeys.length === 0) {
-            updates.expandedKeys = groups.map(g => g.key);
           }
           void this.probeResults(groups, seq);
         }

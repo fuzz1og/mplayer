@@ -9,6 +9,8 @@ import { useDownload } from '@/renderer/hooks/useDownload';
 import { searchService } from '@/renderer/services/searchService';
 import ChartPanel from '@/renderer/components/ChartPanel';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
+import SongList from '@/renderer/components/SongList';
+import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
@@ -58,7 +60,7 @@ interface TabCache {
 }
 
 const DiscoverPageV2: React.FC = () => {
-  const { currentSong, play } = usePlayerStore();
+  const { currentSong, isPlaying, play } = usePlayerStore();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>('charts');
@@ -325,9 +327,15 @@ const DiscoverPageV2: React.FC = () => {
     fetchChart('new');
   };
 
-  const { groups, loading: searchLoading, loadingMore: searchLoadingMore, currentKeyword, songs: searchSongs, hasMore } = useSearchStore();
-  const { toggleFavorite } = useFavoriteStore();
+  const { groups, loading: searchLoading, loadingMore: searchLoadingMore, currentKeyword, songs: searchSongs, hasMore, sourceType } = useSearchStore();
+  const { toggleFavorite, favoriteIds } = useFavoriteStore();
   const { download } = useDownload();
+  const singleSourceScrollRef = useRef<HTMLDivElement>(null);
+  useInfiniteScroll(singleSourceScrollRef, {
+    onLoadMore: () => searchService.loadMore(),
+    loading: searchLoading || searchLoadingMore,
+    hasMore,
+  });
 
   const handleBackFromSearch = () => {
     useSearchStore.getState().reset();
@@ -362,17 +370,40 @@ const DiscoverPageV2: React.FC = () => {
         </div>
 
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <GroupedSongList
-            onPlay={handlePlaySong}
-            onAddToPlaylist={() => message.info('添加到歌单功能')}
-            onToggleFavorite={toggleFavorite}
-            onDownload={download}
-            selectedIds={[]}
-            onSelectionChange={() => {}}
-            loading={searchLoading || searchLoadingMore}
-            hasMore={hasMore}
-            onLoadMore={() => searchService.loadMore()}
-          />
+          {sourceType === 'all' ? (
+            <GroupedSongList
+              onPlay={handlePlaySong}
+              onAddToPlaylist={() => message.info('添加到歌单功能')}
+              onToggleFavorite={toggleFavorite}
+              onDownload={download}
+              selectedIds={[]}
+              onSelectionChange={() => {}}
+              loading={searchLoading || searchLoadingMore}
+              hasMore={hasMore}
+              onLoadMore={() => searchService.loadMore()}
+            />
+          ) : (
+            <div ref={singleSourceScrollRef} style={{ height: '100%', overflowY: 'auto' }}>
+              <SongList
+                songs={searchSongs}
+                currentSongId={currentSong?.id}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handlePlaySong}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
+                onAddToPlaylist={() => message.info('添加到歌单功能')}
+                showCheckbox={false}
+                loading={searchLoading || searchLoadingMore}
+              />
+              {hasMore && (searchLoading || searchLoadingMore) && (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中...</div>
+              )}
+              {!hasMore && searchSongs.length > 0 && (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>没有更多歌曲了</div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
