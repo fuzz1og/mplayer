@@ -1,4 +1,5 @@
 import type { SongGroup } from '../types/index.js';
+import { dedupeSongs } from '../utils/songDedupe.js';
 
 export interface SearchControllerConfig {
   searchFn: (query: string, page: number, source: string) => Promise<SongGroup[]>;
@@ -52,7 +53,7 @@ export function createSearchController(config: SearchControllerConfig): SearchCo
         const existingKeys = new Set((s.results || []).map(g => g.key));
         const merged = (s.results || []).map(g => {
           const same = newResults.find(n => n.key === g.key);
-          return same ? { ...g, songs: [...g.songs, ...same.songs] } : g;
+          return same ? { ...g, songs: [...g.songs, ...dedupeSongs(g.songs, same.songs)] } : g;
         });
         for (const n of newResults) {
           if (!existingKeys.has(n.key)) merged.push(n);

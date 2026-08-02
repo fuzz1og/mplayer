@@ -35,7 +35,7 @@ class SearchService {
           hasMore: s.hasMore,
           loading: s.loading,
           loadingMore: s.loadingMore,
-          results: s.sourceType === 'all' ? s.groups : s.songs.map((song: Song) => ({ key: s.sourceType, name: s.sourceType, artist: '', songs: [song] })),
+          results: s.sourceType === 'all' ? s.groups : [{ key: s.sourceType, name: s.sourceType, artist: '', songs: s.songs }],
         };
       },
       setState: (partial) => {
