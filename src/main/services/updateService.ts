@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { autoUpdater } from 'electron-updater';
 import { app, BrowserWindow, session } from 'electron';
 import { db } from '../storage/db';
@@ -11,6 +12,60 @@ export interface UpdateStatus {
   error?: string;
 }
 
+const GITEE_OWNER = 'aris3104';
+const GITEE_REPO = 'mplayer';
+const GITEE_RELEASES_URL = `https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_REPO}/releases?per_page=100`;
+
+interface GiteeReleaseAsset {
+  name?: string;
+  browser_download_url?: string;
+}
+
+interface GiteeRelease {
+  tag_name?: string;
+  created_at?: string;
+  prerelease?: boolean;
+  assets?: GiteeReleaseAsset[];
+}
+
+function normalizeVersionTag(tag: string): string {
+  return tag.replace(/^[vV]/, '');
+}
+
+function compareVersions(a: string, b: string): number {
+  const pa = a.replace(/^[vV]/, '').split('.').map(Number);
+  const pb = b.replace(/^[vV]/, '').split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  return 0;
+}
+
+export function pickGiteeDesktopRelease(releases: GiteeRelease[]): GiteeRelease | null {
+  const desktop = (releases || []).filter(release =>
+    release && !release.prerelease &&
+    (release.assets || []).some(asset => /^latest(-(linux|mac))?\.yml$/.test(asset.name || ''))
+  );
+  if (desktop.length === 0) return null;
+  return [...desktop].sort((a, b) => {
+    const byVersion = compareVersions(
+      normalizeVersionTag(b.tag_name || ''),
+      normalizeVersionTag(a.tag_name || '')
+    );
+    if (byVersion !== 0) return byVersion;
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  })[0] ?? null;
+}
+
+export function getGiteeDesktopFeedUrl(release: GiteeRelease | null): string | null {
+  const asset = release?.assets?.find(a => /^latest(-(linux|mac))?\.yml$/.test(a.name || ''));
+  if (!asset?.browser_download_url) return null;
+  return asset.browser_download_url.replace(/\/[^/]+$/, '');
+}
+
 export class UpdateService {
   private mainWindow: BrowserWindow | null = null;
   private status: UpdateStatus = { status: 'idle' };
@@ -18,6 +73,7 @@ export class UpdateService {
   private downloadListeners: Array<() => void> = [];
   private isChecking = false;
   private isDownloading = false;
+  private giteeFeedUrl: string | null = null;
 
   constructor() {
     autoUpdater.autoDownload = false;
@@ -31,6 +87,21 @@ export class UpdateService {
 
   getStatus(): UpdateStatus {
     return this.status;
+  }
+
+  private async resolveGiteeFeedUrl(): Promise<string> {
+    const response = await axios.get<GiteeRelease[]>(GITEE_RELEASES_URL, { timeout: 10000 });
+    const release = pickGiteeDesktopRelease(response.data || []);
+    const feedUrl = getGiteeDesktopFeedUrl(release);
+    if (!feedUrl) throw new Error('Gitee 镜像仓库未找到桌面端更新文件');
+    return feedUrl;
+  }
+
+  private async prepareGiteeFeed(): Promise<string> {
+    const feedUrl = await this.resolveGiteeFeedUrl();
+    this.giteeFeedUrl = feedUrl;
+    autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl });
+    return feedUrl;
   }
 
   async syncProxyEnv() {
@@ -97,6 +168,8 @@ export class UpdateService {
     await this.syncProxyEnv();
 
     try {
+      await this.prepareGiteeFeed();
+
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
           reject(new Error('检查更新超时，请检查网络连接'));
@@ -150,6 +223,10 @@ export class UpdateService {
     this.cleanupDownloadListeners();
 
     try {
+      if (!this.giteeFeedUrl) {
+        await this.prepareGiteeFeed();
+      }
+
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('下载超时')), timeoutMs);
 
