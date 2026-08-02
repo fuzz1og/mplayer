@@ -7,6 +7,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
+import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song } from '@mplayer/core';
@@ -31,7 +32,7 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
     padding: '10px 16px',
     borderRadius: '6px',
     cursor: 'pointer',
-    backgroundColor: isDragging ? 'var(--hover-bg)' : (isCurrentSong ? 'rgba(116, 185, 255, 0.1)' : 'transparent'),
+    backgroundColor: isDragging ? 'var(--hover-bg)' : (isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent'),
     opacity: isDragging ? 0.7 : 1,
     transform: CSS.Transform.toString(transform),
     transition: transition || undefined,
@@ -57,8 +58,7 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
-          {song.cover ? <img src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
-            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #E8E8E8 0%, #F0F0F0 100%)' }} />}
+          <CoverImage src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 'var(--text-base)', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -149,7 +149,7 @@ const QueuePage: React.FC = () => {
   const handleClearQueue = () => {
     Modal.confirm({
       title: '清空队列',
-      content: '确定要清空试听列表吗？',
+      content: '确定要清空播放队列吗？',
       okText: '清空',
       cancelText: '取消',
       okButtonProps: { danger: true },
@@ -167,9 +167,9 @@ const QueuePage: React.FC = () => {
       <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Headphones size={24} color="var(--accent-color)" />
-            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>试听列表</h1>
-            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-tertiary)', marginLeft: '8px' }}>{currentPlaylist.length} 首歌曲</span>
+            <Headphones size={24} color="var(--text-secondary)" />
+            <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>播放队列</h1>
+            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>· {currentPlaylist.length} 首歌曲</span>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={handleClearQueue} disabled={currentPlaylist.length === 0}
@@ -177,7 +177,7 @@ const QueuePage: React.FC = () => {
               <Trash2 size={16} /> 清空队列
             </button>
             <button onClick={handleSaveToPlaylist} disabled={currentPlaylist.length === 0}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: currentPlaylist.length > 0 ? '#4ECDC4' : 'var(--hover-bg)', color: currentPlaylist.length > 0 ? 'white' : 'var(--text-tertiary)', border: 'none', borderRadius: '20px', cursor: currentPlaylist.length > 0 ? 'pointer' : 'not-allowed', fontSize: 'var(--text-base)', fontWeight: 500 }}>
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: currentPlaylist.length > 0 ? 'var(--accent-color)' : 'var(--hover-bg)', color: currentPlaylist.length > 0 ? 'white' : 'var(--text-tertiary)', border: 'none', borderRadius: '20px', cursor: currentPlaylist.length > 0 ? 'pointer' : 'not-allowed', fontSize: 'var(--text-base)', fontWeight: 500 }}>
               <ListMusic size={16} /> 保存为歌单
             </button>
           </div>
@@ -187,7 +187,7 @@ const QueuePage: React.FC = () => {
       <div style={{ flex: 1, overflow: 'auto' }}>
         {currentPlaylist.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', color: 'var(--text-tertiary)' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎧</div>
+            <Headphones size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
             <div style={{ fontSize: 'var(--text-base)' }}>暂无歌曲，去发现音乐吧</div>
           </div>
         ) : (

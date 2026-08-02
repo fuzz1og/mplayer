@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, X, ChevronDown, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
+import { Search, X, Check, ChevronDown, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import { useButtonHover } from '@/renderer/hooks/useButtonHover';
 
@@ -125,8 +125,8 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                 fontWeight: 'var(--weight-semibold)',
                 border: 'none',
                 cursor: 'pointer',
-                backgroundColor: `${currentSource.accent}12`,
-                color: currentSource.accent,
+                backgroundColor: 'var(--bg-hover)',
+                color: 'var(--text-primary)',
                 transition: 'all var(--duration-fast) var(--ease-out)',
               }}
             >
@@ -204,7 +204,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                         }}
                       />
                       {config.label}
-                      {isActive && <span style={{ marginLeft: 'auto', fontSize: '10px', color: config.accent }}>✓</span>}
+                      {isActive && <span style={{ marginLeft: 'auto', display: 'flex', color: config.accent }}><Check size={12} /></span>}
                     </button>
                   );
                 })}

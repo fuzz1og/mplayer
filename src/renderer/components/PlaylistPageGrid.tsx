@@ -1,4 +1,6 @@
 import React from 'react';
+import { ListMusic } from 'lucide-react';
+import CoverImage from '@/renderer/components/CoverImage';
 import type { DiscoverPlaylist } from '@mplayer/core';
 
 interface PlaylistPageGridProps {
@@ -9,6 +11,8 @@ interface PlaylistPageGridProps {
   onPlaylistSelect?: (playlist: DiscoverPlaylist) => void;
 }
 
+const SKELETON_COUNT = 6;
+
 function formatCount(n: number): string {
   if (n >= 10000) return (n / 10000).toFixed(1) + '万';
   return String(n);
@@ -17,14 +21,14 @@ function formatCount(n: number): string {
 const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading, error, onRetry, onPlaylistSelect }) => {
   if (loading) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-5)', overflow: 'auto', alignContent: 'start' }}>
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} style={{ borderRadius: '12px', overflow: 'hidden', backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)' }}>
-            <div className="skeleton-shimmer" style={{ width: '100%', paddingTop: '50%' }} />
-            <div style={{ padding: '14px' }}>
-              <div className="skeleton-shimmer" style={{ width: '70%', height: '16px', borderRadius: '2px', marginBottom: '8px' }} />
-              <div className="skeleton-shimmer" style={{ width: '50%', height: '12px', borderRadius: '2px', marginBottom: '6px' }} />
-              <div className="skeleton-shimmer" style={{ width: '90%', height: '12px', borderRadius: '2px' }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 'var(--space-4)', alignContent: 'start' }}>
+        {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
+          <div key={i} style={{ display: 'flex', gap: 'var(--space-4)', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)', padding: '14px' }}>
+            <div className="skeleton-shimmer" style={{ width: '144px', height: '144px', borderRadius: '8px', flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="skeleton-shimmer" style={{ width: '70%', height: '16px', borderRadius: '2px', marginBottom: '10px' }} />
+              <div className="skeleton-shimmer" style={{ width: '55%', height: '13px', borderRadius: '2px', marginBottom: '8px' }} />
+              <div className="skeleton-shimmer" style={{ width: '90%', height: '13px', borderRadius: '2px' }} />
             </div>
           </div>
         ))}
@@ -46,38 +50,40 @@ const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading,
   if (playlists.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>📚</div>
+        <ListMusic size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
         <div>暂无歌单</div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-5)', overflow: 'auto', alignContent: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 'var(--space-4)', alignContent: 'start' }}>
       {playlists.map((pl) => (
         <div
           key={pl.id}
           onClick={() => onPlaylistSelect?.(pl)}
-          style={{ cursor: 'pointer', borderRadius: '12px', overflow: 'hidden', backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)', transition: 'transform 0.2s' }}
-          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+          style={{ cursor: 'pointer', display: 'flex', gap: 'var(--space-4)', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)', padding: '14px', transition: 'background-color 0.15s ease, box-shadow 0.15s ease' }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--content-bg)'; e.currentTarget.style.boxShadow = 'none'; }}
         >
-          <div style={{ width: '100%', paddingTop: '50%', backgroundColor: 'var(--hover-bg)', position: 'relative' }}>
+          <div style={{ width: '144px', height: '144px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
             {pl.coverImgUrl ? (
-              <img src={pl.coverImgUrl} alt={pl.name} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+              <CoverImage src={pl.coverImgUrl} alt={pl.name} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
-              <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px' }}>🎵</div>
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ListMusic size={34} style={{ color: 'var(--text-tertiary)' }} />
+              </div>
             )}
           </div>
-          <div style={{ padding: '14px' }}>
-            <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)', marginBottom: '4px' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35, marginBottom: '6px' }}>
               {pl.name}
             </div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', lineHeight: 1.5, marginBottom: '6px' }}>
               {pl.creator.nickname} · {formatCount(pl.playCount)} 次播放 · {pl.trackCount} 首
             </div>
             {pl.description && (
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '6px' }}>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.5, marginBottom: '8px' }}>
                 {pl.description}
               </div>
             )}

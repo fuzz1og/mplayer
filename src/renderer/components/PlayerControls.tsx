@@ -36,7 +36,7 @@ const PlayerControls: React.FC<PlayerControlsProps> = React.memo(({
         border: 'none',
         background: hasCurrentSong ? 'var(--accent)' : 'var(--gray-300)',
         cursor: hasCurrentSong ? 'pointer' : 'not-allowed',
-        padding: 'var(--space-3)',
+        padding: '11px',
         borderRadius: 'var(--radius-full)',
         display: 'flex',
         alignItems: 'center',

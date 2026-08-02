@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Music2, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import LyricsDisplay from '@/renderer/components/LyricsDisplay';
+import { useCachedCover } from '@/renderer/services/coverCacheService';
+import CoverImage from '@/renderer/components/CoverImage';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 
 interface LyricsPageProps {
@@ -8,7 +10,7 @@ interface LyricsPageProps {
 }
 
 const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
-  const { lyrics, lyricsLoading, position, currentSong, seek } = usePlayerStore();
+  const { lyrics, lyricsLoading, position, currentSong, seek, isPlaying, pause, resume, playPrevious, playNext } = usePlayerStore();
 
   // Escape 键关闭歌词页面
   useEffect(() => {
@@ -22,6 +24,8 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const handleLyricClick = (time: number) => {
     seek(time);
   };
+
+  const coverSrc = useCachedCover(currentSong?.cover || '');
 
   if (!currentSong) {
     return (
@@ -57,99 +61,9 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
       display: 'flex',
       flexDirection: 'column',
       position: 'relative',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      backgroundColor: 'var(--bg-base)'
     }}>
-      {/* 梦幻背景层 */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 0,
-        }}
-      >
-        {/* 使用歌曲封面作为背景 */}
-        {currentSong?.cover ? (
-          <>
-            <img
-              src={currentSong.cover}
-              alt=""
-              style={{
-                position: 'absolute',
-                inset: '-20px',
-                width: 'calc(100% + 40px)',
-                height: 'calc(100% + 40px)',
-                objectFit: 'cover',
-                filter: 'blur(60px) saturate(1.5) brightness(0.8)',
-                transform: 'scale(1.1)',
-                opacity: 0.6,
-              }}
-            />
-            {/* 渐变遮罩 - 顶部 */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: '200px',
-                background: 'linear-gradient(to bottom, rgba(250, 250, 250, 0.95) 0%, rgba(250, 250, 250, 0.7) 50%, transparent 100%)',
-              }}
-            />
-            {/* 渐变遮罩 - 底部 */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: '150px',
-                background: 'linear-gradient(to top, rgba(250, 250, 250, 0.95) 0%, rgba(250, 250, 250, 0.7) 50%, transparent 100%)',
-              }}
-            />
-          </>
-        ) : (
-          /* 没有封面时的渐变背景 */
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: `
-                radial-gradient(ellipse at 20% 30%, rgba(116, 185, 255, 0.15) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 70%, rgba(162, 155, 254, 0.12) 0%, transparent 50%),
-                radial-gradient(ellipse at 50% 50%, rgba(253, 203, 110, 0.08) 0%, transparent 60%),
-                linear-gradient(135deg, #FAFAFA 0%, #F0F4F8 50%, #FAFAFA 100%)
-              `,
-            }}
-          />
-        )}
-
-        {/* 装饰性光晕 */}
-        <div
-          style={{
-            position: 'absolute',
-            top: '10%',
-            left: '10%',
-            width: '300px',
-            height: '300px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(116, 185, 255, 0.1) 0%, transparent 70%)',
-            filter: 'blur(40px)',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '20%',
-            right: '15%',
-            width: '250px',
-            height: '250px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(162, 155, 254, 0.08) 0%, transparent 70%)',
-            filter: 'blur(50px)',
-          }}
-        />
-      </div>
-
       {/* 内容层 */}
       <div style={{
         position: 'relative',
@@ -159,8 +73,8 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
         flexDirection: 'column',
         padding: '24px'
       }}>
-        {/* 返回按钮 */}
-        <div style={{ marginBottom: '24px' }}>
+        {/* 迷你播放器头部 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
           <button
             onClick={onBack}
             style={{
@@ -191,6 +105,26 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
             <ArrowLeft size={18} />
             <span style={{ fontSize: '14px', fontWeight: 500 }}>返回</span>
           </button>
+          <div style={{ width: '48px', height: '48px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
+            {coverSrc ? (
+              <CoverImage src={coverSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
+                <Music2 size={18} />
+              </div>
+            )}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentSong?.name}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>{currentSong?.artist}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+            <button onClick={playPrevious} className="player-btn" aria-label="上一首"><SkipBack size={16} fill="currentColor" /></button>
+            <button onClick={() => (isPlaying ? pause() : resume())} aria-label={isPlaying ? '暂停' : '播放'} style={{ width: '38px', height: '38px', borderRadius: '50%', border: 'none', backgroundColor: 'var(--accent-color)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}>
+              {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{ marginLeft: '1px' }} />}
+            </button>
+            <button onClick={playNext} className="player-btn" aria-label="下一首"><SkipForward size={16} fill="currentColor" /></button>
+          </div>
         </div>
 
         {/* 歌词显示区域 */}

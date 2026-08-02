@@ -19,5 +19,18 @@ export function createMemoryBackend(): CacheBackend {
     async keys(): Promise<string[]> {
       return [...map.keys()]
     },
+    stats() {
+      return {
+        hits: 0,
+        misses: 0,
+        entries: map.size,
+        totalSize: 0,
+        fileCount: map.size,
+        songsCount: 0,
+        coversCount: 0,
+        audioCount: 0,
+        urlsCount: 0,
+      }
+    },
   }
 }

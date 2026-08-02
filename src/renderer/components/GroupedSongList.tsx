@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
+import { Music2 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Song, SongGroup } from '@mplayer/core';
 import GroupHeaderRow from '@/renderer/components/GroupHeaderRow';
@@ -72,7 +73,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
     getScrollElement: () => scrollRef.current,
     estimateSize: (index) => {
       const item = flatItems[index];
-      return item.type === 'group' ? 44 : 52;
+      return item.type === 'group' ? 44 : 64;
     },
     overscan: 5,
   });
@@ -128,7 +129,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   if (!loading && groups.length === 0) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', color: 'var(--text-tertiary)' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎵</div>
+        <Music2 size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
         <div style={{ fontSize: '14px' }}>暂无搜索结果</div>
       </div>
     );
@@ -136,10 +137,13 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 16px 8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 10px' }}>
+        <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>{groups.length} 组结果</span>
         <button
           onClick={toggleAll}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '12px', color: 'var(--accent-color)', fontWeight: 500 }}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '999px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 500, cursor: 'pointer', transition: 'background 0.15s ease' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
           {allExpanded ? '全部折叠' : '全部展开'}
         </button>
@@ -169,7 +173,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
                 isPlaying={currentSong?.id === item.song.id && isPlaying}
                 isFavorite={favoriteSet.has(item.song.id)}
                 showIndex={false}
-                showCheckbox={true}
+                showCheckbox={false}
                 isSelected={selectedSet.has(item.song.id)}
                 showRemoveFromPlaylist={false}
                 activeDropdown={activeDropdown}
@@ -180,7 +184,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
                 onToggleSelect={handleToggleSelect}
                 onToggleDropdown={handleToggleDropdown}
                 onCloseDropdown={handleCloseDropdown}
-                compact={true}
+                compact={false}
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: `${virtualItem.size}px`, transform: `translateY(${virtualItem.start}px)` }}
               />
             );

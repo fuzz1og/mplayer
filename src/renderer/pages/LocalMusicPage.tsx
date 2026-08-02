@@ -49,11 +49,11 @@ const LocalMusicPage: React.FC = () => {
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <FolderOpen size={24} color="var(--accent-color)" />
-            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            <FolderOpen size={24} color="var(--text-secondary)" />
+            <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
               本地音乐
             </h1>
-            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
+            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>
               {folders.length} 个文件夹 · {songs.length} 首歌
             </span>
           </div>
@@ -152,8 +152,9 @@ const LocalMusicPage: React.FC = () => {
                 }
               }}
             >
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                📁 {folder.name}
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                <FolderOpen size={15} style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
               </span>
               <span style={{ fontSize: '12px', opacity: 0.7 }}>{folder.songCount}</span>
             </div>

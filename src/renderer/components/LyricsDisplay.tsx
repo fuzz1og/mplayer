@@ -114,7 +114,7 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
               }}
               onMouseEnter={(e) => {
                 if (!isActive) {
-                  e.currentTarget.style.backgroundColor = 'rgba(116, 185, 255, 0.15)';
+                  e.currentTarget.style.backgroundColor = 'rgba(47, 95, 208, 0.12)';
                 }
               }}
               onMouseLeave={(e) => {
@@ -129,7 +129,7 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
                   lineHeight: '1.8',
                   transition: 'all 0.3s ease',
                   textShadow: isActive 
-                    ? '0 2px 4px rgba(255, 255, 255, 0.9), 0 0 20px rgba(116, 185, 255, 0.3)' 
+                    ? '0 2px 4px rgba(255, 255, 255, 0.9), 0 0 20px rgba(47, 95, 208, 0.35)' 
                     : '0 1px 2px rgba(255, 255, 255, 0.8)',
                   letterSpacing: isActive ? '0.5px' : '0',
                   userSelect: 'none',

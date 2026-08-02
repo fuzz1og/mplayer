@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Modal, Input, Button, Progress, message, Tabs } from 'antd';
-import { Upload, Check, X, Clock } from 'lucide-react';
+import { Upload, Check, X, Clock, Loader2, AlertCircle } from 'lucide-react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -336,9 +336,9 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
           <Progress percent={percent} strokeColor="var(--accent-color)" />
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>
             {progress.found + progress.skipped + progress.failed} / {progress.total}
-            {' | '}✅ {progress.found} 已找到{' '}
-            {progress.skipped > 0 && <>⏭️ {progress.skipped} 已跳过 </>}
-            {progress.failed > 0 && <>❌ {progress.failed} 失败</>}
+            {' | '}<Check size={12} style={{ verticalAlign: '-2px' }} /> {progress.found} 已找到{' '}
+            {progress.skipped > 0 && <><Clock size={12} style={{ verticalAlign: '-2px' }} /> {progress.skipped} 已跳过 </>}
+            {progress.failed > 0 && <><X size={12} style={{ verticalAlign: '-2px' }} /> {progress.failed} 失败</>}
           </div>
           {progress.currentSource && (
             <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
@@ -350,9 +350,9 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
           {progress.statuses.map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
               {s.status === 'pending' && <Clock size={14} color="var(--text-tertiary)" />}
-              {s.status === 'searching' && <span style={{ color: 'var(--accent-color)' }}>⏳</span>}
+              {s.status === 'searching' && <Loader2 size={14} color="var(--accent-color)" style={{ animation: 'spin 1s linear infinite' }} />}
               {s.status === 'found' && <Check size={14} color="#00B894" />}
-              {s.status === 'skipped' && <span style={{ color: 'var(--text-tertiary)' }}>⏭️</span>}
+              {s.status === 'skipped' && <Clock size={14} color="var(--text-tertiary)" />}
               {s.status === 'failed' && <X size={14} color="#FF6B6B" />}
               <span style={{
                 color: s.status === 'failed' ? '#FF6B6B' : s.status === 'found' ? '#00B894' : 'var(--text-secondary)',
@@ -381,9 +381,9 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
       <div>
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
           {result.failures.length === 0 ? (
-            <div style={{ fontSize: '24px', color: '#00B894', marginBottom: '8px' }}>✅</div>
+            <Check size={24} color="#00B894" style={{ marginBottom: '8px' }} />
           ) : (
-            <div style={{ fontSize: '24px', color: '#FFB800', marginBottom: '8px' }}>⚠️</div>
+            <AlertCircle size={24} color="#FFB800" style={{ marginBottom: '8px' }} />
           )}
           <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
             导入完成

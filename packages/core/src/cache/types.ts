@@ -2,6 +2,12 @@ export interface CacheStats {
   hits: number
   misses: number
   entries: number
+  totalSize: number
+  fileCount: number
+  songsCount: number
+  coversCount: number
+  audioCount: number
+  urlsCount: number
 }
 
 export interface CachePort {
@@ -21,4 +27,5 @@ export interface CacheBackend {
   delete(key: string): Promise<void>
   clear(): Promise<void>
   keys(): Promise<string[]>
+  stats?(): CacheStats
 }

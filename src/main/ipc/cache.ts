@@ -1,21 +1,44 @@
+import fs from 'fs'
 import { app } from 'electron'
 import path from 'path'
 import { registerIpcHandlerSimple } from './registerHandler'
 import { CacheKernel, createMemoryBackend } from '@mplayer/core'
 import { DiskCacheBackend } from '../cache/diskBackend'
 
+const COVER_CACHE_TTL = 6 * 60 * 60 * 1000
+
 let cacheKernel: CacheKernel | null = null
+let diskBackend: DiskCacheBackend | null = null
 
 function getCacheKernel(): CacheKernel {
   if (!cacheKernel) {
     const userDataPath = app.getPath('userData')
     const diskDir = path.join(userDataPath, 'cache')
+    diskBackend = new DiskCacheBackend(diskDir)
     cacheKernel = new CacheKernel({
       l1: createMemoryBackend(),
-      l2: new DiskCacheBackend(diskDir),
+      l2: diskBackend,
     })
   }
   return cacheKernel
+}
+
+function getDiskBackend(): DiskCacheBackend {
+  getCacheKernel()
+  return diskBackend!
+}
+
+async function getBinaryCachePath(backendKey: string, ttlMs?: number): Promise<string | null> {
+  const filePath = getDiskBackend().getFilePath(backendKey)
+  if (!fs.existsSync(filePath)) return null
+  if (ttlMs) {
+    const stat = fs.statSync(filePath)
+    if (Date.now() - stat.mtimeMs > ttlMs) {
+      await getDiskBackend().delete(backendKey)
+      return null
+    }
+  }
+  return filePath
 }
 
 export function registerCacheIpc(): void {
@@ -49,13 +72,13 @@ export function registerCacheIpc(): void {
     await kernel.setJSON(`search:${keyword}`, songs, 6 * 60 * 60 * 1000)
   })
   registerIpcHandlerSimple('cache:getCover', async (coverUrl: string) => {
-    return kernel.getBinary(`cover:${coverUrl}`)
+    return getBinaryCachePath(`:bin:cover:${coverUrl}`, COVER_CACHE_TTL)
   })
   registerIpcHandlerSimple('cache:setCover', async (coverUrl: string, imageData: Buffer) => {
-    await kernel.setBinary(`cover:${coverUrl}`, new Uint8Array(imageData), 7 * 24 * 60 * 60 * 1000)
+    await kernel.setBinary(`cover:${coverUrl}`, new Uint8Array(imageData), COVER_CACHE_TTL)
   })
   registerIpcHandlerSimple('cache:getAudio', async (audioUrl: string) => {
-    return kernel.getBinary(`audio:${audioUrl}`)
+    return getBinaryCachePath(`:bin:audio:${audioUrl}`)
   })
   registerIpcHandlerSimple('cache:setAudio', async (audioUrl: string, audioData: Buffer) => {
     await kernel.setBinary(`audio:${audioUrl}`, new Uint8Array(audioData), 24 * 60 * 60 * 1000)

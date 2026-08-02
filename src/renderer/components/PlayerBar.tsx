@@ -1,10 +1,10 @@
 import React, { useCallback } from 'react';
-const { ipcRenderer } = window.require('electron');
-import { ListMusic, Heart, Download, Mic } from 'lucide-react';
-import { message } from 'antd';
+import { Heart, Download, Mic } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
+import CoverImage from '@/renderer/components/CoverImage';
+import { useDownload } from '@/renderer/hooks/useDownload';
 import PlayerControls from './PlayerControls';
 import PlayerProgress from './PlayerProgress';
 import PlayerVolume from './PlayerVolume';
@@ -32,6 +32,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
   const { isFavorite, toggleFavorite } = useFavoriteStore();
   const coverSrc = useCachedCover(currentSong?.cover ?? '');
   const fav = currentSong ? isFavorite(currentSong.id) : false;
+  const { download } = useDownload();
 
   const handlePlayPause = useCallback(() => {
     if (!currentSong) return;
@@ -45,9 +46,9 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
 
   const handleDownload = useCallback(() => {
     if (currentSong) {
-      ipcRenderer.invoke('download:start', currentSong).catch(() => message.error('下载失败'));
+      download(currentSong);
     }
-  }, [currentSong]);
+  }, [currentSong, download]);
 
   return (
     <div
@@ -81,9 +82,9 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           onClick={onCoverClick}
           aria-label="查看歌词"
           style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: 'var(--radius-sm)',
+            width: '52px',
+            height: '52px',
+            borderRadius: '8px',
             overflow: 'hidden',
             backgroundColor: 'var(--skeleton-base)',
             flexShrink: 0,
@@ -93,42 +94,31 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
             padding: 0,
           }}
         >
-          {currentSong?.cover ? (
-            <img
-              src={coverSrc}
-              alt={currentSong.name}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          ) : (
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'linear-gradient(135deg, var(--gray-100) 0%, var(--gray-200) 100%)',
-              }}
-            >
-              <ListMusic size={20} color="var(--text-tertiary)" />
-            </div>
-          )}
+          <CoverImage src={coverSrc} alt={currentSong?.name || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </button>
 
         {/* 歌曲信息 */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
               fontSize: 'var(--text-sm)',
               fontWeight: 'var(--weight-medium)',
               color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
               lineHeight: 'var(--leading-tight)',
+              minWidth: 0,
             }}
           >
-            {currentSong?.name || '未播放'}
+            {isPlaying && currentSong && (
+              <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '2px', height: '12px', flexShrink: 0 }}>
+                <span style={{ width: '2px', height: '6px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite' }} />
+                <span style={{ width: '2px', height: '10px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
+                <span style={{ width: '2px', height: '7px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+              </span>
+            )}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {currentSong?.name || '未播放'}
+            </span>
           </div>
           <div
             style={{

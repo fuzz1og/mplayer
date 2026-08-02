@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
+import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
 
@@ -103,6 +104,7 @@ const SongRow: React.FC<SongRowProps> = ({
 
   return (
     <div
+      className="song-row"
       onDoubleClick={() => onPlay(song)}
       style={{
         display: 'flex',
@@ -111,7 +113,7 @@ const SongRow: React.FC<SongRowProps> = ({
         borderRadius: 'var(--radius-sm)',
         cursor: 'pointer',
         transition: 'all 0.15s ease',
-        backgroundColor: isCurrentSong ? 'rgba(116, 185, 255, 0.1)' : 'transparent',
+        backgroundColor: isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent',
         ...style,
       }}
       onMouseEnter={(e) => {
@@ -152,9 +154,9 @@ const SongRow: React.FC<SongRowProps> = ({
       )}
       {/* Song info */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-        <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0, position: 'relative' }}>
+        <div style={{ width: '44px', height: '44px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0, position: 'relative' }}>
           {song.cover ? (
-            <img src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <CoverImage src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)' }} />
           )}
@@ -168,10 +170,10 @@ const SongRow: React.FC<SongRowProps> = ({
           </div>
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: '14px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: '15px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {song.name}
           </div>
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.artist}</span>
             <SourceBadge sourceType={song.sourceType} />
             {song.audioTag === 'preview' && <AudioTagBadge tag="preview" />}
@@ -186,7 +188,7 @@ const SongRow: React.FC<SongRowProps> = ({
         </div>
       )}
       {/* Actions */}
-      <div style={{ width: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+      <div className="song-row-actions" style={{ width: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
         {onToggleFavorite && (
           <button
             onClick={() => onToggleFavorite(song)}

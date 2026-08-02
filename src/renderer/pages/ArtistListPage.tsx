@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Mic2 } from 'lucide-react';
 import type { Artist } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
@@ -24,19 +24,17 @@ const ArtistCard: React.FC<{ artist: Artist; onClick: () => void }> = ({ artist,
     onClick={onClick}
     style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-      padding: '16px 12px', borderRadius: '12px', cursor: 'pointer',
-      transition: 'all 0.2s ease', backgroundColor: 'var(--content-bg)',
+      padding: '16px 12px', borderRadius: '8px', cursor: 'pointer',
+      transition: 'background-color 0.15s ease, box-shadow 0.15s ease', backgroundColor: 'var(--content-bg)',
       border: '1px solid var(--border-color)',
     }}
     onMouseEnter={(e) => {
-      e.currentTarget.style.transform = 'translateY(-4px)';
-      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)';
-      e.currentTarget.style.borderColor = 'var(--accent-color)';
+      e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+      e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
     }}
     onMouseLeave={(e) => {
-      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.backgroundColor = 'var(--content-bg)';
       e.currentTarget.style.boxShadow = 'none';
-      e.currentTarget.style.borderColor = 'var(--border-color)';
     }}
   >
     <div
@@ -161,37 +159,20 @@ const ArtistListPage: React.FC = () => {
   const displayed = artists;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', gap: '16px',
-          padding: '12px 24px', borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)', height: '60px',
-        }}
-      >
-        <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', margin: 0, whiteSpace: 'nowrap' }}>
-          歌手
-        </h1>
-      </div>
-
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
-          padding: '10px 24px', borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)', flexWrap: 'wrap',
-        }}
-      >
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 'var(--space-5) var(--space-6)' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-5)', flexShrink: 0 }}>
         {CATEGORIES.map((cat, idx) => (
           <button
             key={cat.id}
             onClick={() => setCategory(idx)}
             style={{
-              padding: '4px 14px', borderRadius: '14px', border: 'none',
-              cursor: 'pointer', fontSize: '12px',
+              padding: '6px 16px', borderRadius: '20px',
+              border: '1px solid var(--border-color)',
+              cursor: 'pointer', fontSize: 'var(--text-sm)',
               fontWeight: category === idx ? 600 : 400,
-              color: category === idx ? 'white' : 'var(--text-secondary)',
-              backgroundColor: category === idx ? 'var(--accent-color)' : 'var(--hover-bg)',
-              transition: 'all 0.15s ease',
+              color: category === idx ? '#fff' : 'var(--text-secondary)',
+              background: category === idx ? 'var(--accent-color)' : 'transparent',
+              transition: 'all 0.15s',
             }}
           >
             {cat.label}
@@ -199,13 +180,13 @@ const ArtistListPage: React.FC = () => {
         ))}
       </div>
 
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto' }}>
         {loading ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '16px' }}>
             {Array.from({ length: 20 }).map((_, i) => (
               <div key={i} style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-                padding: '16px 12px', borderRadius: '12px',
+                padding: '16px 12px', borderRadius: '8px',
                 backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)',
               }}>
                 <div style={{
@@ -229,7 +210,7 @@ const ArtistListPage: React.FC = () => {
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             padding: '60px 20px', color: 'var(--text-tertiary)',
           }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎤</div>
+            <Mic2 size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
             <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '6px' }}>
               没有匹配的歌手
             </div>
