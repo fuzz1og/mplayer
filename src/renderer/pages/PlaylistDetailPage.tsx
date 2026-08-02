@@ -342,11 +342,10 @@ const PlaylistDetailPage: React.FC = () => {
         </button>
       </div>
 
-      {/* 歌曲列表 */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        {playlist && (
-          <div style={{ padding: '24px 24px 8px' }}>
-            <div style={{ display: 'flex', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--content-bg)', border: '1px solid var(--border-color)' }}>
+      {/* 歌单卡片区:固定不滚动,播放/下载/导入按钮始终可见 */}
+      {playlist && (
+        <div style={{ padding: '24px 24px 0', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--content-bg)', border: '1px solid var(--border-color)' }}>
               <div style={{ width: '160px', height: '160px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, #2F5FD0 0%, #1F4399 100%)' }}>
             <CoverImage src={detailCover} alt="" variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
@@ -382,7 +381,10 @@ const PlaylistDetailPage: React.FC = () => {
               </div>
             </div>
           </div>
-        )}
+      )}
+
+      {/* 歌曲列表独立容器:内部滚动 */}
+      <div style={{ flex: 1, overflow: 'auto' }}>
         {loading && songs.length === 0 ? (
           <div style={{ padding: '24px' }}>
             {Array.from({ length: 8 }).map((_, i) => (
