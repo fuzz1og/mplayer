@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, AlertCircle } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -172,9 +172,7 @@ const HotlistDetailPage: React.FC = () => {
               width: '80px',
               height: '80px',
               borderRadius: '8px',
-              background: hotlistType === 'netease' || hotlistType === 'netease_new'
-                ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                : 'linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)',
+              background: 'linear-gradient(135deg, #2F5FD0 0%, #1F4399 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -285,7 +283,7 @@ const HotlistDetailPage: React.FC = () => {
               textAlign: 'center',
             }}
           >
-            <div style={{ fontSize: '32px', marginBottom: '16px' }}>❌</div>
+            <AlertCircle size={28} style={{ marginBottom: '12px', color: 'var(--danger-color)' }} />
             <div style={{ fontSize: '16px', marginBottom: '8px' }}>{error}</div>
             <button
               onClick={async () => {

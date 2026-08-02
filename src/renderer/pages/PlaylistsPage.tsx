@@ -1,10 +1,32 @@
 import React, { useEffect, useState } from 'react';
-import { ListMusic, Plus, FolderOpen } from 'lucide-react';
+import { Plus, FolderOpen } from 'lucide-react';
 import { Modal, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import MusicCard from '@/renderer/components/MusicCard';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { useCachedCover } from '@/renderer/services/coverCacheService';
+import CoverImage from '@/renderer/components/CoverImage';
 import type { Playlist } from '@mplayer/core';
+
+interface PlaylistCardProps {
+  playlist: Playlist;
+  onOpen: () => void;
+  onDelete: () => void;
+}
+
+const PlaylistCard: React.FC<PlaylistCardProps> = ({ playlist, onOpen, onDelete }) => {
+  const cover = useCachedCover(playlist.cover || '');
+
+  return (
+    <MusicCard
+      title={playlist.name}
+      subtitle={playlist.description || `${playlist.songCount ?? 0} 首歌曲`}
+      cover={cover}
+      onClick={onOpen}
+      onDelete={onDelete}
+    />
+  );
+};
 
 const PlaylistsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -13,6 +35,10 @@ const PlaylistsPage: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
+
+  const heroPlaylist = playlists[0];
+  const heroCover = useCachedCover(heroPlaylist?.cover || '');
+  const totalSongs = playlists.reduce((sum, playlist) => sum + (playlist.songCount || 0), 0);
 
   const loadData = async () => {
     setLoading(true);
@@ -65,89 +91,62 @@ const PlaylistsPage: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 页面标题 */}
-      <div
-        style={{
-          padding: '24px 24px 16px',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <ListMusic size={24} color="var(--accent-color)" />
-            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-              我的歌单
-            </h1>
-            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
-              {playlists.length} 个歌单
-            </span>
-          </div>
-          <button
-            onClick={() => setIsModalVisible(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              backgroundColor: 'var(--accent-color)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '20px',
-              cursor: 'pointer',
-              fontSize: 'var(--text-base)',
-              fontWeight: 500,
-            }}
-          >
-            <Plus size={16} />
-            新建歌单
-          </button>
-        </div>
-      </div>
-
-      {/* 歌单列表 */}
       <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-tertiary)' }}>
             加载中...
           </div>
-        ) : playlists.length === 0 ? (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '60px 20px',
-              color: 'var(--text-tertiary)',
-            }}
-          >
-            <FolderOpen size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-            <div style={{ fontSize: 'var(--text-lg)', marginBottom: '8px' }}>暂无歌单</div>
-            <div style={{ fontSize: 'var(--text-base)' }}>点击上方按钮创建第一个歌单</div>
-          </div>
         ) : (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-              gap: '20px',
-            }}
-          >
-            {playlists.map((playlist) => (
-              <MusicCard
-                key={playlist.id}
-                title={playlist.name}
-                subtitle={playlist.description || '暂无描述'}
-                onClick={() => navigate(`/playlist/${playlist.id}`)}
-                onDelete={() => handleDeletePlaylist(playlist)}
-              />
-            ))}
-          </div>
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--content-bg)', border: '1px solid var(--border-color)', marginBottom: '28px' }}>
+              <div style={{ width: '140px', height: '140px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
+                <CoverImage src={heroCover} alt="" variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-color)', marginBottom: '6px' }}>我的歌单</div>
+                <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                  {playlists.length} 个歌单
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                  {totalSongs} 首歌曲 · 把喜欢的歌都收进来
+                </div>
+              </div>
+              <button
+                onClick={() => setIsModalVisible(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', backgroundColor: 'var(--accent-color)', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', fontSize: '14px', fontWeight: 500, flexShrink: 0 }}
+              >
+                <Plus size={16} />
+                新建歌单
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>全部歌单</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{playlists.length} 个</span>
+            </div>
+
+            {playlists.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', color: 'var(--text-tertiary)' }}>
+                <FolderOpen size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                <div style={{ fontSize: '16px', marginBottom: '8px' }}>暂无歌单</div>
+                <div style={{ fontSize: '13px' }}>点击上方按钮创建第一个歌单</div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
+                {playlists.map((playlist) => (
+                  <PlaylistCard
+                    key={playlist.id}
+                    playlist={playlist}
+                    onOpen={() => navigate(`/playlist/${playlist.id}`)}
+                    onDelete={() => handleDeletePlaylist(playlist)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* 新建歌单弹窗 */}
       <Modal
         title="新建歌单"
         open={isModalVisible}
@@ -162,40 +161,23 @@ const PlaylistsPage: React.FC = () => {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px 0' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: 'var(--text-base)', color: 'var(--text-secondary)' }}>
-              歌单名称 *
-            </label>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>歌单名称 *</label>
             <input
               type="text"
               value={newPlaylistName}
               onChange={(e) => setNewPlaylistName(e.target.value)}
               placeholder="请输入歌单名称"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid var(--border-color)',
-                borderRadius: '6px',
-                fontSize: 'var(--text-base)',
-              }}
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '14px' }}
             />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: 'var(--text-base)', color: 'var(--text-secondary)' }}>
-              歌单描述
-            </label>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>歌单描述</label>
             <textarea
               value={newPlaylistDesc}
               onChange={(e) => setNewPlaylistDesc(e.target.value)}
               placeholder="请输入歌单描述（可选）"
               rows={3}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid var(--border-color)',
-                borderRadius: '6px',
-                fontSize: 'var(--text-base)',
-                resize: 'vertical',
-              }}
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '14px', resize: 'vertical' }}
             />
           </div>
         </div>

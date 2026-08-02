@@ -67,12 +67,12 @@ const ProxySection: React.FC = () => {
   };
 
   return (
-    <section style={{ marginBottom: '32px' }}>
+    <section id="proxy" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-        <Shield size={20} color="var(--accent-color)" />
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>网络代理设置</h2>
+        <Shield size={20} color="var(--text-secondary)" />
+        <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>网络代理设置</h2>
       </div>
-      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '12px', padding: '24px', border: '1px solid var(--border-color)' }}>
+      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-color)' }}>
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '16px' }}>
             <input type="checkbox" checked={proxyEnabled} onChange={(e) => setProxyEnabled(e.target.checked)} style={{ width: '18px', height: '18px', accentColor: 'var(--accent-color)', cursor: 'pointer' }} />

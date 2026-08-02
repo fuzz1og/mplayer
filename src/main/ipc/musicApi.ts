@@ -1,3 +1,5 @@
+import { probeAudioUrl } from '@mplayer/core';
+import type { Song, AudioTag } from '@mplayer/core';
 import { registerIpcHandler } from './registerHandler';
 import { getAggregatedChart } from '../services/chartAggregator';
 
@@ -5,9 +7,42 @@ type MusicApi = typeof import('../api/musicApi').musicApi & {
   getSodaPlayableUrl(trackId: string): Promise<string>;
 };
 
+interface ProbeResult {
+  songId: string;
+  tag: AudioTag;
+}
+
+async function probeSongBatch(songs: Song[], api: MusicApi): Promise<ProbeResult[]> {
+  const results: ProbeResult[] = [];
+  const concurrency = Math.min(20, Math.max(1, songs.length));
+  let index = 0;
+
+  async function worker(): Promise<void> {
+    while (index < songs.length) {
+      const song = songs[index++];
+      try {
+        let url = song.url;
+        try {
+          url = (await api.getAudioUrl(url)) || url;
+        } catch {
+          // keep the original URL; probeAudioUrl will classify it
+        }
+        const tag = url ? await probeAudioUrl(url) : 'invalid';
+        results.push({ songId: song.id, tag });
+      } catch {
+        results.push({ songId: song.id, tag: 'valid' });
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  return results;
+}
+
 export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('lyrics:get', (lrcUrl: string) => musicApi.getLyrics(lrcUrl));
   registerIpcHandler('musicApi:getAudioUrl', (audioUrl: string) => musicApi.getAudioUrl(audioUrl));
+  registerIpcHandler('musicApi:probeAudio', (songs: Song[]) => probeSongBatch(Array.isArray(songs) ? songs : [], musicApi));
   registerIpcHandler('musicApi:getSodaAudioUrl', (trackId: string) => musicApi.getSodaAudioUrl(trackId));
   registerIpcHandler('musicApi:getSodaPlayableUrl', (trackId: string) => musicApi.getSodaPlayableUrl(trackId));
   registerIpcHandler('musicApi:parseSodaShareLink', (link: string) => musicApi.parseSodaShareLink(link));

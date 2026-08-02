@@ -9,6 +9,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownloadStore, type DownloadTask } from '@/renderer/store/downloadStore';
 import { useGlobalShortcuts } from '@/renderer/hooks/useGlobalShortcuts';
 import Sidebar from '@/renderer/components/Sidebar';
+import TitleBar from '@/renderer/components/TitleBar';
 import TopBar from '@/renderer/components/TopBar';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
@@ -170,6 +171,7 @@ const App: React.FC = () => {
   // 根据路径获取当前活跃的侧边栏项
   const getActiveSidebarKey = () => {
     const path = location.pathname;
+    if (path.startsWith('/recommend')) return 'recommend';
     if (path.startsWith('/discover') || path.startsWith('/hotlist') || path.startsWith('/discover-playlist')) return 'discover';
     if (path.startsWith('/artists') || path.startsWith('/artist/')) return 'artists';
     if (path.startsWith('/local')) return 'local';
@@ -185,59 +187,66 @@ const App: React.FC = () => {
   return (
     <div
       style={{
-        display: 'flex',
         height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
         backgroundColor: 'var(--bg-base)',
+        overflow: 'hidden',
       }}
     >
-      {/* 左侧导航栏 */}
-      <Sidebar
-        currentPage={getActiveSidebarKey()}
-        onPageChange={(page) => {
-          // 切换页面时清除搜索状态
-          useSearchStore.getState().reset();
-          navigate(`/${page}`);
-        }}
-      />
+      <TitleBar />
 
-      {/* 主内容区域 */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        {/* 顶部导航栏 */}
-        <TopBar
-          onSearch={handleSearch}
-          sourceType={sourceType}
-          onSourceTypeChange={handleSourceTypeChange}
-          onBack={handleBack}
-          onForward={handleForward}
-          onRefresh={handleRefresh}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+        {/* 左侧导航栏 */}
+        <Sidebar
+          currentPage={getActiveSidebarKey()}
+          onPageChange={(page) => {
+            // 切换页面时清除搜索状态
+            useSearchStore.getState().reset();
+            navigate(`/${page}`);
+          }}
         />
 
-        {/* 页面内容 - 由React Router渲染 */}
-        <main
+        {/* 主内容区域 */}
+        <div
           style={{
             flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
             overflow: 'hidden',
-            backgroundColor: 'var(--bg-base)',
+            minWidth: 0,
           }}
         >
-          {showLyrics ? (
-            <LyricsPage onBack={() => setShowLyrics(false)} />
-          ) : (
-            <Outlet />
-          )}
-        </main>
+          {/* 顶部导航栏 */}
+          <TopBar
+            onSearch={handleSearch}
+            sourceType={sourceType}
+            onSourceTypeChange={handleSourceTypeChange}
+            onBack={handleBack}
+            onForward={handleForward}
+            onRefresh={handleRefresh}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+          />
 
-        {/* 底部播放控制栏 */}
-        <PlayerBar onCoverClick={() => setShowLyrics(true)} />
+          {/* 页面内容 - 由React Router渲染 */}
+          <main
+            style={{
+              flex: 1,
+              overflow: 'hidden',
+              backgroundColor: 'var(--bg-base)',
+            }}
+          >
+            {showLyrics ? (
+              <LyricsPage onBack={() => setShowLyrics(false)} />
+            ) : (
+              <Outlet />
+            )}
+          </main>
+
+          {/* 底部播放控制栏 */}
+          <PlayerBar onCoverClick={() => setShowLyrics(true)} />
+        </div>
       </div>
 
       {/* 下载进度弹窗 */}

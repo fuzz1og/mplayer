@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { Download, Trash2, ListMusic } from 'lucide-react';
+import { Download, Trash2, ListMusic, Music2 } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import AddToPlaylistModal from './AddToPlaylistModal';
+import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from './BatchAddToPlaylistModal';
 
 const batchBtnStyle: React.CSSProperties = {
@@ -81,10 +82,17 @@ const SongList: React.FC<SongListProps> = ({
   // 批量加入歌单弹窗状态
   const [showBatchAddToPlaylistModal, setShowBatchAddToPlaylistModal] = useState(false);
   const [selectedSongsForPlaylist, setSelectedSongsForPlaylist] = useState<Song[]>([]);
+  const { setCurrentPlaylist } = usePlayerStore();
 
   // 使用外部或内部状态
   const selectedIds = externalSelectedIds !== undefined ? externalSelectedIds : internalSelectedIds;
   const onSelectionChange = externalOnSelectionChange || setInternalSelectedIds;
+
+  const handlePlaySong = (song: Song) => {
+    const index = songs.findIndex(s => s.id === song.id && s.sourceType === song.sourceType);
+    setCurrentPlaylist(songs, index >= 0 ? index : 0);
+    onPlay(song);
+  };
 
   const handleToggleDropdown = useCallback((songId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -167,7 +175,7 @@ const SongList: React.FC<SongListProps> = ({
           color: 'var(--text-tertiary)',
         }}
       >
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎵</div>
+        <Music2 size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
         <div style={{ fontSize: 'var(--text-base)' }}>{emptyText}</div>
       </div>
     );
@@ -217,8 +225,8 @@ const SongList: React.FC<SongListProps> = ({
                 <button
                   onClick={handleBatchAddToPlaylist}
                   style={{ ...batchBtnStyle, backgroundColor: 'var(--accent-color)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#45B7AA'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#4ECDC4'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-hover)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-color)'; }}
                 >
                   <ListMusic size={16} />
                   批量加入歌单
@@ -244,6 +252,9 @@ const SongList: React.FC<SongListProps> = ({
       {showHeader && (
         <div
           style={{
+            position: 'sticky', top: 0, zIndex: 3,
+            backgroundColor: 'var(--bg-base)',
+            backdropFilter: 'blur(8px)',
             display: 'flex',
             alignItems: 'center',
             padding: '12px 16px',
@@ -296,7 +307,7 @@ const SongList: React.FC<SongListProps> = ({
               isSelected={selectedIds.includes(song.id)}
               showRemoveFromPlaylist={showRemoveFromPlaylist}
               activeDropdown={activeDropdown}
-              onPlay={onPlay}
+              onPlay={handlePlaySong}
               onToggleFavorite={onToggleFavorite}
               onDownload={onDownload}
               onAddToPlaylist={handleAddToPlaylistClick}

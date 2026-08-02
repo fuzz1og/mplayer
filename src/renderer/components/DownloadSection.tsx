@@ -68,12 +68,12 @@ const DownloadSection: React.FC = () => {
   };
 
   return (
-    <section style={{ marginBottom: '32px' }}>
+    <section id="download" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-        <Folder size={20} color="var(--accent-color)" />
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>下载设置</h2>
+        <Folder size={20} color="var(--text-secondary)" />
+        <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>下载设置</h2>
       </div>
-      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '12px', padding: '24px', border: '1px solid var(--border-color)' }}>
+      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-color)' }}>
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)', marginBottom: '8px' }}>默认下载目录</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

@@ -326,11 +326,26 @@ class FileStorage {
 
   async getPlaylists(): Promise<Playlist[]> {
     return this.data.playlists
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((playlist) => {
+        const songs = this.data.playlistSongs.filter(song => song.playlistId === playlist.id);
+        return {
+          ...playlist,
+          cover: songs[0]?.song.cover || undefined,
+          songCount: songs.length,
+        };
+      });
   }
 
   async getPlaylist(playlistId: number): Promise<Playlist | undefined> {
-    return this.data.playlists.find(p => p.id === playlistId);
+    const playlist = this.data.playlists.find(p => p.id === playlistId);
+    if (!playlist) return undefined;
+    const songs = this.data.playlistSongs.filter(song => song.playlistId === playlistId);
+    return {
+      ...playlist,
+      cover: songs[0]?.song.cover || undefined,
+      songCount: songs.length,
+    };
   }
 
   async updatePlaylist(playlistId: number, playlist: Partial<Playlist>): Promise<void> {
