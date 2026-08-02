@@ -7,8 +7,10 @@ const { mockStore } = vi.hoisted(() => {
     page: 1,
     hasMore: true,
     loading: false,
+    loadingMore: false,
     songs: [] as any[],
     groups: [] as any[],
+    expandedKeys: [] as string[],
     setState: vi.fn(),
     setAudioTag: vi.fn(),
   };
@@ -44,8 +46,10 @@ describe('searchService', () => {
     mockStore.page = 1;
     mockStore.hasMore = true;
     mockStore.loading = false;
+    mockStore.loadingMore = false;
     mockStore.songs = [];
     mockStore.groups = [];
+    mockStore.expandedKeys = [];
   });
 
   afterEach(() => { vi.useRealTimers(); });
@@ -61,6 +65,18 @@ describe('searchService', () => {
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ loading: true }));
       expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:searchSongs', '周杰伦', 1, 'netease');
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ loading: false }));
+    });
+
+    it('单源搜索写入 songs，不写 groups', async () => {
+      const { IpcClient } = await import('../services/IpcClient');
+      const mockSongs = [{ id: '1', name: '稻香', artist: '周杰伦' }];
+      (IpcClient.invoke as any).mockResolvedValue(mockSongs);
+
+      await searchService.search('周杰伦');
+
+      expect(mockStore.songs).toEqual(mockSongs);
+      expect(mockStore.groups).toEqual([]);
+      expect(mockStore.expandedKeys).toEqual([]);
     });
 
     it('IPC 失败应设置错误信息', async () => {
@@ -100,6 +116,29 @@ describe('searchService', () => {
     });
   });
 
+  describe('loadMore', () => {
+    it('请求下一页并同步 page/loadingMore', async () => {
+      const { IpcClient } = await import('../services/IpcClient');
+      const songs = [{ id: '2', name: '七里香', artist: '周杰伦' }];
+      (IpcClient.invoke as any).mockResolvedValue(songs);
+      mockStore.currentKeyword = '周杰伦';
+      mockStore.page = 1;
+      mockStore.hasMore = true;
+      mockStore.loading = false;
+      mockStore.loadingMore = false;
+      mockStore.songs = [{ id: '1', name: '稻香', artist: '周杰伦' }];
+      mockStore.groups = [{ key: 'netease', name: 'netease', artist: '', songs: [{ id: '1', name: '稻香', artist: '周杰伦' }] }];
+      mockStore.expandedKeys = ['netease'];
+
+      await searchService.loadMore();
+
+      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:searchSongs', '周杰伦', 2, 'netease');
+      expect(mockStore.page).toBe(2);
+      expect(mockStore.hasMore).toBe(true);
+      expect(mockStore.loadingMore).toBe(false);
+      expect(mockStore.songs.map((s: any) => s.id)).toEqual(['1', '2']);
+    });
+  });
   describe('debouncedSearch', () => {
     it('应延迟执行搜索', async () => {
       const { IpcClient } = await import('../services/IpcClient');

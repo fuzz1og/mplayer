@@ -13,6 +13,15 @@ import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
+import {
+  GITEE_RELEASES_PAGE_URL,
+  GITEE_RELEASES_URL,
+  compareVersions,
+  findApkAsset,
+  getReleasePageUrl,
+  normalizeVersionTag,
+  pickLatestRelease,
+} from '../services/updateCheck';
 
 export default function SettingsPage() {
   const storeApiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
@@ -34,40 +43,28 @@ export default function SettingsPage() {
   const [latestVersion, setLatestVersion] = useState('');
   const [releaseNotes, setReleaseNotes] = useState('');
   const [apkUrl, setApkUrl] = useState('');
-
-  function compareVersions(a: string, b: string): number {
-    const pa = a.split('.').map(Number);
-    const pb = b.split('.').map(Number);
-    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-      const na = pa[i] || 0;
-      const nb = pb[i] || 0;
-      if (na > nb) return 1;
-      if (na < nb) return -1;
-    }
-    return 0;
-  }
+  const [releaseUrl, setReleaseUrl] = useState('');
 
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
     try {
-      const res = await fetch('https://gitee.com/api/v5/repos/aris3104/mplayer/releases');
+      const res = await fetch(GITEE_RELEASES_URL);
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const list = await res.json();
-      if (!list || list.length === 0) {
+      const data = await res.json();
+      const list: any[] = Array.isArray(data) ? data : [];
+      const latest = pickLatestRelease(list);
+      if (!latest) {
         // 还没有任何发布版本
         setUpdateState('not-available');
         setTimeout(() => setUpdateState('idle'), 2000);
         return;
       }
-      const latest = list[0];
-      const remoteVer = latest.tag_name.replace(/^v/i, '');
+      const remoteVer = normalizeVersionTag(latest.tag_name || '');
       if (compareVersions(remoteVer, currentVersion) > 0) {
         setLatestVersion(remoteVer);
         setReleaseNotes(latest.body || '');
-        const apkAsset = latest.assets?.find((a: any) =>
-          a.name?.endsWith('.apk') || a.content_type?.includes('apk')
-        );
-        setApkUrl(apkAsset?.browser_download_url || '');
+        setApkUrl(findApkAsset(latest));
+        setReleaseUrl(getReleasePageUrl(latest));
         setUpdateState('available');
       } else {
         setUpdateState('not-available');
@@ -79,8 +76,15 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdate = () => {
-    if (apkUrl) Linking.openURL(apkUrl);
+  const handleUpdate = async () => {
+    const targetUrl = apkUrl || releaseUrl || GITEE_RELEASES_PAGE_URL;
+    try {
+      await Linking.openURL(targetUrl);
+    } catch (error) {
+      console.error('打开更新下载地址失败:', error);
+      setUpdateState('error');
+      setTimeout(() => setUpdateState('available'), 2000);
+    }
   };
 
   const handleSaveUrl = () => {

@@ -57,13 +57,35 @@ jobs:
           # Push commit only — don't push tag (avoids duplicate tag-push workflow)
           git push origin HEAD
 
+  # ── Validate pushed tag matches package version ──
+  validate-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate pushed tag
+        if: github.event_name == 'push'
+        run: |
+          node scripts/version-bump.js --check
+          TAG="${{ github.ref_name }}"
+          EXPECTED="v$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$EXPECTED" ]; then
+            echo "Tag $TAG does not match package version $EXPECTED" >&2
+            exit 1
+          fi
+          echo "Tag $TAG matches package version $EXPECTED"
+
+      - name: Dispatch version bump
+        if: github.event_name != 'push'
+        run: echo "Version bump is handled by create-tag"
+
   # ════════════════════════════════════════════════════════
   # Build jobs — run on tag push OR dispatch without version
   # ════════════════════════════════════════════════════════
 
   # ── Desktop (Electron) build ──
   build-desktop:
-    needs: [create-tag]
+    needs: [create-tag, validate-tag]
     if: |
       !failure() && !cancelled()
       && (github.event_name == 'push'
@@ -99,6 +121,7 @@ jobs:
         run: npx electron-builder ${{ matrix.args }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_GH_IGNORE_TIME: '1'
 
       # Dispatch without version (test build) → build only
       - name: Build only (test)
@@ -107,7 +130,7 @@ jobs:
 
   # ── Mobile Android APK ──
   build-mobile:
-    needs: [create-tag]
+    needs: [create-tag, validate-tag]
     if: |
       !failure() && !cancelled()
       && (github.event_name == 'push'
@@ -156,6 +179,7 @@ jobs:
     if: |
       always() && !cancelled()
       && needs.build-mobile.result == 'success'
+      && needs.build-desktop.result == 'success'
       && (github.event_name == 'push' || inputs.version != '')
     runs-on: ubuntu-latest
     env:
@@ -292,6 +316,16 @@ jobs:
               exit 0
             fi
           fi
+
+          # Clear old attachments so a retry never leaves duplicate/stale files
+          OLD_ASSETS=$(curl -s "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files?access_token=$GITEE_TOKEN" \
+            --connect-timeout 10 --max-time 30)
+          for OLD_ID in $(echo "$OLD_ASSETS" | jq -r '.[].id // empty'); do
+            curl -s -X DELETE \
+              "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files/$OLD_ID?access_token=$GITEE_TOKEN" \
+              --connect-timeout 10 --max-time 30 >/dev/null || true
+            echo "Removed old Gitee asset id=$OLD_ID"
+          done
 
           # Upload each asset to Gitee
           for file in ./assets/*; do

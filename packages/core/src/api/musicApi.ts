@@ -9,6 +9,8 @@ let API_BASE_URL = 'http://localhost:3000/';
 let PROXY_URL = '';
 const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
 const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
+const SODA_URL_CACHE_TTL = 10 * 60 * 1000;
+const sodaAudioUrlCache = new Map<string, { url: string; expires: number }>();
 export function setApiBaseUrl(url: string): void {
   API_BASE_URL = url.endsWith('/') ? url : url + '/';
   apiClient.defaults.baseURL = API_BASE_URL;
@@ -221,7 +223,7 @@ export const musicApi = {
 
   /**
    * 搜索汽水音乐 (直接调用 api.qishui.com)
-   * 注：搜索结果不含 audio_url，播放时需通过 getSodaAudioUrl 获取
+   * 注：搜索结果不含 audio_url，播放/探测时会通过 trackId 单独解析直链
    */
   async searchSongsSoda(keyword: string, page: number = 1): Promise<Song[]> {
     const cacheKey = `soda_search_${keyword}_${page}`;
@@ -275,6 +277,7 @@ export const musicApi = {
     return songs;
   },
 
+
   async fetchSodaSharePage(trackId: string): Promise<{ audioUrl: string; name: string; artist: string; cover: string } | null> {
     const shareUrl = `https://music.douyin.com/qishui/share/track?track_id=${trackId}`;
     try {
@@ -311,8 +314,14 @@ export const musicApi = {
    * 优先用分享页 _ROUTER_DATA（无需Cookie），fallback 到 track_v2
    */
   async getSodaAudioUrl(trackId: string): Promise<string> {
+    const cached = sodaAudioUrlCache.get(trackId);
+    if (cached && cached.expires > Date.now()) return cached.url;
+
     const page = await this.fetchSodaSharePage(trackId);
-    if (page?.audioUrl) return page.audioUrl;
+    if (page?.audioUrl) {
+      this.cacheSodaAudioUrl(trackId, page.audioUrl);
+      return page.audioUrl;
+    }
 
     const params = new URLSearchParams();
     params.set('track_id', trackId);
@@ -344,11 +353,17 @@ export const musicApi = {
       if (!audioUrl) return '';
 
       const auth = best.play_auth || '';
-      return auth ? `${audioUrl}?play_auth=${encodeURIComponent(auth)}` : audioUrl;
+      const result = auth ? `${audioUrl}?play_auth=${encodeURIComponent(auth)}` : audioUrl;
+      this.cacheSodaAudioUrl(trackId, result);
+      return result;
     } catch (error) {
       console.error('获取汽水音乐音频 URL 失败:', error);
       return '';
     }
+  },
+
+  cacheSodaAudioUrl(trackId: string, url: string): void {
+    sodaAudioUrlCache.set(trackId, { url, expires: Date.now() + SODA_URL_CACHE_TTL });
   },
 
   /**
