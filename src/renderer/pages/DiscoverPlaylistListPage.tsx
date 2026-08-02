@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ListMusic } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { ListMusic } from 'lucide-react';
+import { usePageTitleStore } from '@/renderer/store/pageTitleStore';
 import { useLazyLoad } from '@/renderer/hooks/useLazyLoad';
 import DiscoverPlaylistCard from '@/renderer/components/DiscoverPlaylistCard';
 import type { DiscoverPlaylist } from '@mplayer/core';
@@ -15,13 +16,18 @@ const CATEGORIES = [
 const PAGE_SIZE = 35;
 
 const DiscoverPlaylistListPage: React.FC = () => {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const currentCat = searchParams.get('cat') || '全部';
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // 标题上报到 TopBar 右侧,卸载时清空
+  useEffect(() => {
+    usePageTitleStore.getState().setTitle(`热门歌单 · ${currentCat}`);
+    return () => usePageTitleStore.getState().setTitle('');
+  }, [currentCat]);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
 
@@ -84,61 +90,6 @@ const DiscoverPlaylistListPage: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          padding: '12px 24px',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-          height: '60px',
-        }}
-      >
-        <button
-          onClick={() => navigate('/discover')}
-          style={{
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            padding: '10px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: 'var(--text-secondary)',
-            transition: 'all 0.2s ease',
-            fontSize: '14px',
-            fontWeight: 500,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-            e.currentTarget.style.color = 'var(--text-primary)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-            e.currentTarget.style.color = 'var(--text-secondary)';
-          }}
-        >
-          <ArrowLeft size={16} />
-          <span>返回</span>
-        </button>
-        <h1
-          style={{
-            fontSize: '20px',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            flex: 1,
-            margin: 0,
-            textAlign: 'center',
-          }}
-        >
-          热门歌单
-        </h1>
-        <div style={{ width: '140px' }} />
-      </div>
-
       <div
         style={{
           display: 'flex',

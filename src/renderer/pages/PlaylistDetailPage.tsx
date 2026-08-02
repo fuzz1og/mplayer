@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 const { ipcRenderer } = window.require('electron');
-import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload } from 'lucide-react';
+import { Play, Edit2, Music, Download, GripVertical, Trash2, Upload } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -9,6 +9,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
+import { usePageTitleStore } from '@/renderer/store/pageTitleStore';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
@@ -177,6 +178,12 @@ const PlaylistDetailPage: React.FC = () => {
     setSelectedIds([]);
   }, [playlistId]);
 
+  // 标题上报到 TopBar 右侧,卸载时清空
+  useEffect(() => {
+    if (playlist?.name) usePageTitleStore.getState().setTitle(playlist.name);
+    return () => usePageTitleStore.getState().setTitle('');
+  }, [playlist?.name]);
+
   const handlePlay = async (song: Song) => {
     await play(song);
   };
@@ -331,22 +338,10 @@ const PlaylistDetailPage: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 顶部工具栏 */}
-      <div style={{ padding: '10px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', flexShrink: 0 }}>
-        <button
-          onClick={() => navigate('/playlists')}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '14px' }}
-        >
-          <ArrowLeft size={16} />
-          返回歌单
-        </button>
-      </div>
-
-      {/* 歌曲列表 */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        {playlist && (
-          <div style={{ padding: '24px 24px 8px' }}>
-            <div style={{ display: 'flex', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--content-bg)', border: '1px solid var(--border-color)' }}>
+      {/* 歌单卡片区:固定不滚动,播放/下载/导入按钮始终可见 */}
+      {playlist && (
+        <div style={{ padding: '24px 24px 0', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--content-bg)', border: '1px solid var(--border-color)' }}>
               <div style={{ width: '160px', height: '160px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, #2F5FD0 0%, #1F4399 100%)' }}>
             <CoverImage src={detailCover} alt="" variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
@@ -382,9 +377,12 @@ const PlaylistDetailPage: React.FC = () => {
               </div>
             </div>
           </div>
-        )}
+      )}
+
+      {/* 歌曲列表独立容器:内部滚动,左右 24px 与上方卡片对齐 */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 24px 24px' }}>
         {loading && songs.length === 0 ? (
-          <div style={{ padding: '24px' }}>
+          <div style={{ padding: '24px 0' }}>
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={`sk-${i}`} style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px', marginBottom: '8px' }}>
                 <div style={{ width: '30px', textAlign: 'center' }}>
@@ -424,6 +422,8 @@ const PlaylistDetailPage: React.FC = () => {
           </div>
         ) : (
           <>
+        {/* 吸顶区:保存提示 + 批量操作栏 + 表头,滚动时悬浮,与上方固定卡片衔接 */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--content-bg)' }}>
         {isReordering && (
           <div style={{ padding: '8px 16px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
             正在保存排序...
@@ -457,6 +457,7 @@ const PlaylistDetailPage: React.FC = () => {
           <div style={{ width: '30px', textAlign: 'center' }}>#</div>
           <div style={{ flex: 1 }}>标题</div>
           <div style={{ width: '100px', textAlign: 'center' }}>操作</div>
+        </div>
         </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={songs.map(s => s.id)} strategy={verticalListSortingStrategy}>

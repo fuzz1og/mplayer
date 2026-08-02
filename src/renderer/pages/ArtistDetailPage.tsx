@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
+import { usePageTitleStore } from '@/renderer/store/pageTitleStore';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -18,6 +19,13 @@ const ArtistDetailPage: React.FC = () => {
 
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 标题上报到 TopBar 右侧,卸载时清空
+  useEffect(() => {
+    if (stateName) usePageTitleStore.getState().setTitle(stateName);
+    else if (artistId) usePageTitleStore.getState().setTitle(`歌手 (ID: ${artistId})`);
+    return () => usePageTitleStore.getState().setTitle('');
+  }, [stateName, artistId]);
   const [total, setTotal] = useState(0);
   const [order, setOrder] = useState<'hot' | 'time'>('hot');
 
@@ -69,66 +77,6 @@ const ArtistDetailPage: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          padding: '12px 24px',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-          height: '60px',
-        }}
-      >
-        <button
-          onClick={() => navigate(-1)}
-          style={{
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            padding: '10px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: 'var(--text-secondary)',
-            transition: 'all 0.2s ease',
-            fontSize: '14px',
-            fontWeight: 500,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-            e.currentTarget.style.color = 'var(--text-primary)';
-            e.currentTarget.style.transform = 'translateX(-2px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-            e.currentTarget.style.color = 'var(--text-secondary)';
-            e.currentTarget.style.transform = 'translateX(0)';
-          }}
-        >
-          <ArrowLeft size={16} />
-          <span>返回</span>
-        </button>
-        <h1
-          style={{
-            fontSize: '20px',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            flex: 1,
-            margin: 0,
-            textAlign: 'center',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          歌手歌曲
-        </h1>
-        <div style={{ width: '140px' }} />
-      </div>
-
       <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
         {loading ? (
           <div>

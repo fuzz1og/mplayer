@@ -56,7 +56,13 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
 /**
  * Probe a song URL and return its playability tag.
  */
+export const SODA_PREVIEW_SECONDS = 60;
+
 export async function probeAudio(song: Song, options?: { baseUrl?: string }): Promise<AudioTag> {
+  // Soda search results have no direct URL; playback resolves it later.
+  if (song.sourceType === 'soda' && !song.url) {
+    return song.duration > 0 && song.duration < SODA_PREVIEW_SECONDS ? 'preview' : 'valid';
+  }
   if (!song.url) return 'invalid';
   return probeAudioUrl(song.url, options);
 }
