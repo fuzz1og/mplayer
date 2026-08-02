@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Search, X, Check, ChevronDown, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import { useButtonHover } from '@/renderer/hooks/useButtonHover';
+import { usePageTitleStore } from '@/renderer/store/pageTitleStore';
 
 interface TopBarProps {
   onSearch: (keyword: string) => void;
@@ -34,6 +35,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const dropdownHoverProps = useButtonHover({ hoverBg: 'var(--bg-hover)', leaveBg: 'transparent' });
+  const pageTitle = usePageTitleStore(s => s.title);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -64,6 +66,9 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
     padding: '6px 4px 6px 6px',
     transition: 'all var(--duration-normal) var(--ease-out)',
     boxShadow: isFocused ? '0 0 0 3px var(--accent-subtle)' : 'var(--shadow-xs)',
+    // 限宽,给右侧页面标题留空间
+    maxWidth: '460px',
+    minWidth: '260px',
   };
 
   return (
@@ -81,7 +86,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
         zIndex: 100,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexShrink: 0 }}>
         {/* 导航按钮 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexShrink: 0 }}>
           <button
@@ -262,6 +267,24 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
             )}
           </div>
         </div>
+
+        {/* 当前页面标题:子页上报,显示在搜索框右侧 */}
+        {pageTitle && (
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+            <span
+              style={{
+                fontSize: 'var(--text-base)',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {pageTitle}
+            </span>
+          </div>
+        )}
       </div>
     </header>
   );

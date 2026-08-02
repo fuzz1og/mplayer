@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Play } from 'lucide-react';
+import { Download, Play } from 'lucide-react';
 import { Modal, message } from 'antd';
 import SongList from '@/renderer/components/SongList';
 import CoverImage from '@/renderer/components/CoverImage';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { usePageTitleStore } from '@/renderer/store/pageTitleStore';
 import type { Song, DiscoverPlaylist } from '@mplayer/core';
 import { formatPlayCount } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
@@ -46,6 +47,12 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
     };
     loadPlaylist();
   }, [id]);
+
+  // 标题上报到 TopBar 右侧,卸载时清空
+  useEffect(() => {
+    if (playlist?.name) usePageTitleStore.getState().setTitle(playlist.name);
+    return () => usePageTitleStore.getState().setTitle('');
+  }, [playlist?.name]);
 
   // 分页加载歌曲:首屏第一页,滚动到底加载更多
   const loadSongsPage = useCallback(async (reset: boolean) => {
@@ -168,44 +175,18 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', height: '60px' }}>
-          <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '14px' }}>
-            <ArrowLeft size={16} /><span>返回</span>
-          </button>
-          <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center' }}>加载中...</h1>
-          <div style={{ width: '140px' }} />
-        </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>加载中...</div>
-      </div>
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>加载中...</div>
     );
   }
 
   if (!playlist) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', height: '60px' }}>
-          <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '14px' }}>
-            <ArrowLeft size={16} /><span>返回</span>
-          </button>
-          <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center' }}>歌单不存在</h1>
-          <div style={{ width: '140px' }} />
-        </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>歌单不存在或加载失败</div>
-      </div>
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>歌单不存在或加载失败</div>
     );
   }
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', height: '60px' }}>
-        <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', transition: 'all 0.2s ease', fontSize: '14px', fontWeight: 500 }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; e.currentTarget.style.color = 'var(--text-primary)'; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}>
-          <ArrowLeft size={16} /><span>返回</span>
-        </button>
-        <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{playlist.name}</h1>
-        <div style={{ width: '140px' }} />
-      </div>
-
       {/* 歌单卡片区:固定不滚动,保证播放/保存按钮始终可见 */}
       <div style={{ padding: '24px 24px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 const { ipcRenderer } = window.require('electron');
-import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload } from 'lucide-react';
+import { Play, Edit2, Music, Download, GripVertical, Trash2, Upload } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -9,6 +9,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
+import { usePageTitleStore } from '@/renderer/store/pageTitleStore';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
@@ -177,6 +178,12 @@ const PlaylistDetailPage: React.FC = () => {
     setSelectedIds([]);
   }, [playlistId]);
 
+  // 标题上报到 TopBar 右侧,卸载时清空
+  useEffect(() => {
+    if (playlist?.name) usePageTitleStore.getState().setTitle(playlist.name);
+    return () => usePageTitleStore.getState().setTitle('');
+  }, [playlist?.name]);
+
   const handlePlay = async (song: Song) => {
     await play(song);
   };
@@ -331,17 +338,6 @@ const PlaylistDetailPage: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 顶部工具栏 */}
-      <div style={{ padding: '10px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', flexShrink: 0 }}>
-        <button
-          onClick={() => navigate('/playlists')}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '14px' }}
-        >
-          <ArrowLeft size={16} />
-          返回歌单
-        </button>
-      </div>
-
       {/* 歌单卡片区:固定不滚动,播放/下载/导入按钮始终可见 */}
       {playlist && (
         <div style={{ padding: '24px 24px 0', flexShrink: 0 }}>
