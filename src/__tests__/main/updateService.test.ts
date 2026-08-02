@@ -1,5 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { UpdateService } from '../../main/services/updateService';
+import axios from 'axios';
+import { UpdateService, getGiteeDesktopFeedUrl, pickGiteeDesktopRelease } from '../../main/services/updateService';
+
+vi.mock('axios', () => ({
+  default: { get: vi.fn() },
+  get: vi.fn(),
+}));
 
 vi.mock('electron-updater', () => ({
   autoUpdater: {
@@ -10,6 +16,7 @@ vi.mock('electron-updater', () => ({
     removeListener: vi.fn(),
     removeAllListeners: vi.fn(),
     checkForUpdates: vi.fn(),
+    setFeedURL: vi.fn(),
     downloadUpdate: vi.fn(),
     quitAndInstall: vi.fn(),
     netSession: {
@@ -36,6 +43,18 @@ vi.mock('../../main/storage/db', () => ({
   },
 }));
 
+const GITEE_RELEASE = {
+  tag_name: 'v2.0.0',
+  created_at: '2026-08-01T00:00:00+08:00',
+  prerelease: false,
+  assets: [
+    {
+      name: 'latest.yml',
+      browser_download_url: 'https://gitee.com/aris3104/mplayer/releases/download/v2.0.0/latest.yml',
+    },
+  ],
+};
+
 function createMockWindow() {
   return {
     webContents: { send: vi.fn() },
@@ -54,6 +73,7 @@ describe('UpdateService', () => {
   beforeEach(() => {
     updateService = new UpdateService();
     vi.clearAllMocks();
+    vi.mocked(axios.get).mockResolvedValue({ data: [GITEE_RELEASE] } as any);
   });
 
   afterEach(() => {
@@ -114,6 +134,28 @@ describe('UpdateService', () => {
     });
   });
 
+  describe('Gitee release selection', () => {
+    it('按版本号选择最新 release，不受 API 返回顺序影响', () => {
+      const older = { ...GITEE_RELEASE, tag_name: 'v1.4.0', created_at: '2026-07-01T00:00:00+08:00' };
+      const newer = { ...GITEE_RELEASE, tag_name: 'v1.5.0', created_at: '2026-07-16T00:00:00+08:00' };
+      const latest = pickGiteeDesktopRelease([older, newer]);
+      expect(latest?.tag_name).toBe('v1.5.0');
+    });
+
+    it('跳过 prerelease 和没有桌面更新文件的 release', () => {
+      const prerelease = { ...GITEE_RELEASE, tag_name: 'v3.0.0', prerelease: true };
+      const noDesktop = { ...GITEE_RELEASE, tag_name: 'v2.0.0', assets: [] };
+      const latest = pickGiteeDesktopRelease([prerelease, noDesktop]);
+      expect(latest).toBeNull();
+    });
+
+    it('从 latest.yml 资产推导 generic feed URL', () => {
+      expect(getGiteeDesktopFeedUrl(GITEE_RELEASE)).toBe(
+        'https://gitee.com/aris3104/mplayer/releases/download/v2.0.0'
+      );
+    });
+  });
+
   describe('checkForUpdates', () => {
     it('检查更新时立即设置 checking 状态（同步）', async () => {
       const mockWindow = createMockWindow();
@@ -133,6 +175,34 @@ describe('UpdateService', () => {
         .find(c => c[0] === 'update-not-available')?.[1] as () => void;
       handler?.();
       await promise;
+    });
+
+    it('检查前从 Gitee 设置 generic feed', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+
+      const promise = updateService.checkForUpdates(5000);
+
+      await tick();
+      const handler = vi.mocked(autoUpdater.once).mock.calls
+        .find(c => c[0] === 'update-available')?.[1] as (info: any) => void;
+      handler?.({ version: '2.0.0', releaseNotes: 'Bug fixes' });
+      await promise;
+
+      expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
+        provider: 'generic',
+        url: 'https://gitee.com/aris3104/mplayer/releases/download/v2.0.0',
+      });
+    });
+
+    it('Gitee 没有桌面更新文件时报错', async () => {
+      vi.mocked(axios.get).mockResolvedValue({ data: [] } as any);
+
+      await expect(updateService.checkForUpdates(5000)).rejects.toThrow('Gitee 镜像仓库未找到桌面端更新文件');
+      expect(updateService.getStatus().status).toBe('error');
     });
 
     it('有可用更新时推送 available 状态', async () => {

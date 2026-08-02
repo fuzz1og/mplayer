@@ -50,4 +50,24 @@ describe('createSearchController', () => {
     const lastCall = setState.mock.calls[setState.mock.calls.length - 1][0];
     expect(lastCall.results?.[0]?.key).toBe('b');
   });
+
+  it('loadMore 在 loadingMore 时跳过', async () => {
+    const searchFn = vi.fn();
+    const ctrl = createSearchController({
+      searchFn,
+      getState: vi.fn().mockReturnValue({
+        query: 'q',
+        page: 1,
+        hasMore: true,
+        loading: false,
+        loadingMore: true,
+        results: [],
+      }),
+      setState: vi.fn(),
+    });
+
+    await ctrl.loadMore();
+
+    expect(searchFn).not.toHaveBeenCalled();
+  });
 });

@@ -34,6 +34,7 @@ class SearchService {
           page: s.page,
           hasMore: s.hasMore,
           loading: s.loading,
+          loadingMore: s.loadingMore,
           results: s.sourceType === 'all' ? s.groups : s.songs.map((song: Song) => ({ key: s.sourceType, name: s.sourceType, artist: '', songs: [song] })),
         };
       },
@@ -41,6 +42,7 @@ class SearchService {
         const store = useSearchStore.getState();
         const updates: Record<string, any> = {};
         if ('loading' in partial) updates.loading = partial.loading;
+        if ('loadingMore' in partial) updates.loadingMore = partial.loadingMore;
         if ('error' in partial) updates.error = partial.error;
         if ('hasMore' in partial) updates.hasMore = partial.hasMore;
         if ('page' in partial) updates.page = partial.page;
@@ -52,6 +54,13 @@ class SearchService {
             updates.groups = groups;
           } else {
             updates.songs = groups.flatMap(g => g.songs);
+          }
+          // GroupedSongList renders from groups for both modes; keep them in sync.
+          updates.groups = groups;
+          if (groups.length === 0) {
+            updates.expandedKeys = [];
+          } else if (store.expandedKeys.length === 0) {
+            updates.expandedKeys = groups.map(g => g.key);
           }
           void this.probeResults(groups, seq);
         }

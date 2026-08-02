@@ -34,8 +34,8 @@ export function createSearchController(config: SearchControllerConfig): SearchCo
     },
 
     loadMore: async () => {
-      const state = getState() as { query?: string; page?: number; hasMore?: boolean; loading?: boolean; results?: SongGroup[] };
-      if (!state.query || !state.hasMore || state.loading) return;
+      const state = getState() as { query?: string; page?: number; hasMore?: boolean; loading?: boolean; loadingMore?: boolean; results?: SongGroup[] };
+      if (!state.query || !state.hasMore || state.loading || state.loadingMore) return;
 
       const currentSeq = seq;
       const currentPage = state.page || 1;
