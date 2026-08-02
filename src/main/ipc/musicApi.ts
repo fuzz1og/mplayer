@@ -55,6 +55,8 @@ export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('musicApi:getQQNewSongList', () => musicApi.getQQNewSongList());
   registerIpcHandler('musicApi:getNeteasePlaylists', (cat: string, order: string, offset: number, limit: number) => musicApi.getNeteasePlaylists(cat, order, offset, limit));
   registerIpcHandler('musicApi:getNeteasePlaylistDetail', (id: number) => musicApi.getNeteasePlaylistDetail(id));
+  registerIpcHandler('musicApi:getNeteasePlaylistSongs', (id: number, limit?: number) => musicApi.getNeteasePlaylistSongs(id, limit || 0));
+  registerIpcHandler('musicApi:getNeteasePlaylistSongsPage', (id: number, offset: number, limit: number) => musicApi.getNeteasePlaylistSongsPage(id, offset, limit));
   registerIpcHandler('musicApi:getPlaylistSongsFromThirdParty', (playlistUrl: string, sourceType: any = 'netease') => musicApi.getPlaylistSongsFromThirdParty(playlistUrl, sourceType));
   registerIpcHandler('musicApi:getNeteaseArtists', (cat: number, offset: number, limit: number, initial: number) => musicApi.getNeteaseArtists(cat, offset, limit, initial));
   registerIpcHandler('musicApi:getArtistSongs', (artistId: string, offset: number, limit: number, order: string) => musicApi.getNeteaseArtistSongs(artistId, offset, limit, order));
