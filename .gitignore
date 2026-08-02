@@ -2,7 +2,6 @@ node_modules
 dist
 dist-electron
 release
-coverage
 .DS_Store
 *.log
 .vscode
@@ -18,6 +17,7 @@ docs/*
 .claude/plans/
 .claude/session-extract/
 .claude/worktrees/
+.zcode/
 
 # 本地配置（包含敏感 API 地址）
 .env
@@ -28,6 +28,9 @@ docs/*
 .superpowers/
 e2e/screenshots/
 test-results/
+
+# 测试覆盖率产物
+coverage/
 
 # Expo prebuild产物（每次CI自动生成）
 packages/mobile/android/
