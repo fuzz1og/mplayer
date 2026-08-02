@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import {
-  View, Text, Image, FlatList, StyleSheet,
+  View, Text, Image, FlatList, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
@@ -15,7 +15,12 @@ export default function DiscoverPlaylistDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [playlist, setPlaylist] = useState<DiscoverPlaylist | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     if (!id) return;
@@ -25,14 +30,47 @@ export default function DiscoverPlaylistDetailPage() {
       if (cancelled) return;
       setPlaylist(p);
       if (p) {
-        const url = `https://music.163.com/playlist?id=${id}`;
-        const s = await musicApi.getPlaylistSongsFromThirdParty(url, 'netease');
-        if (!cancelled) setSongs(s);
+        // 分页加载第一页,下滑加载更多;第一页失败回退第三方解析
+        const page = await musicApi.getNeteasePlaylistSongsPage(Number(id), 0, PAGE_SIZE);
+        if (!page.songs || page.songs.length === 0) {
+          const url = `https://music.163.com/playlist?id=${id}`;
+          const s = await musicApi.getPlaylistSongsFromThirdParty(url, 'netease');
+          if (!cancelled) {
+            setSongs(s);
+            setTotal(s.length);
+          }
+        } else if (!cancelled) {
+          setSongs(page.songs);
+          setTotal(page.total);
+          setHasMore(page.songs.length < page.total);
+        }
       }
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [id]);
+
+  // 下滑加载更多
+  const loadMore = useCallback(async () => {
+    if (!id || loadingMoreRef.current || !hasMore || loading) return;
+    loadingMoreRef.current = true;
+    try {
+      setLoadingMore(true);
+      const page = await musicApi.getNeteasePlaylistSongsPage(Number(id), songs.length, PAGE_SIZE);
+      if (page.songs.length > 0) {
+        setSongs(prev => [...prev, ...page.songs]);
+        setTotal(page.total);
+        setHasMore(songs.length + page.songs.length < page.total);
+      } else {
+        setHasMore(false);
+      }
+    } catch (e) {
+      console.error('加载更多歌曲失败:', e);
+    } finally {
+      setLoadingMore(false);
+      loadingMoreRef.current = false;
+    }
+  }, [id, songs.length, hasMore, loading]);
 
   if (loading) return <LoadingState />;
   if (!playlist) {
@@ -52,6 +90,14 @@ export default function DiscoverPlaylistDetailPage() {
         <FlatList
           data={songs}
           keyExtractor={(item, i) => `${item.id}-${i}`}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={() => (
+            loadingMore ? <ActivityIndicator color="#888" style={{ padding: 16 }} />
+              : hasMore ? <Text style={styles.footer}>上滑加载更多</Text>
+              : songs.length > 0 ? <Text style={styles.footer}>已加载全部 {songs.length}{total > songs.length ? ` / ${total}` : ''} 首</Text>
+              : null
+          )}
           ListHeaderComponent={() => (
             <View style={styles.header}>
               <Image source={{ uri: playlist.coverImgUrl }} style={styles.cover} />
@@ -91,5 +137,6 @@ const styles = StyleSheet.create({
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
   tag: { backgroundColor: '#2a2a4a', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
   tagText: { color: '#e74c3c', fontSize: 12 },
+  footer: { textAlign: 'center', color: '#666', fontSize: 12, padding: 16 },
   list: { paddingBottom: 100 },
 });
