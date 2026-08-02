@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Music } from 'lucide-react';
+import { Music, Link2 } from 'lucide-react';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -9,25 +9,58 @@ const AboutSection: React.FC = () => {
   useEffect(() => {
     ipcRenderer.invoke('update:getVersion').then(setVersion).catch(() => {});
   }, []);
+
+  const infoItems = [
+    { label: '版本', value: `v${version || '...'}` },
+    { label: '作者', value: 'tomystack' },
+    { label: 'GitHub', value: 'github.com/fuzz1og', link: 'https://github.com/fuzz1og' },
+    { label: '技术栈', value: 'Electron + React + TypeScript' },
+    { label: '数据源', value: '网易云 / QQ / 酷狗 等' },
+    { label: '项目类型', value: '桌面音乐播放器' },
+  ];
+
   return (
-    <section>
+    <section id="about" style={{ scrollMarginTop: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-        <Music size={20} color="var(--accent-color)" />
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>关于</h2>
+        <Music size={20} color="var(--text-secondary)" />
+        <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>关于</h2>
       </div>
-      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '12px', padding: '24px', border: '1px solid var(--border-color)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
-          <div style={{ width: '60px', height: '60px', borderRadius: '12px', background: 'linear-gradient(135deg, #2D3436 0%, #636E72 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Music size={28} color="white" />
+
+      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-color)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '12px', background: 'linear-gradient(135deg, #2F5FD0 0%, #1F4399 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: 'var(--shadow-md)' }}>
+            <Music size={30} color="white" />
           </div>
-          <div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>MPlayer</div>
-            <div style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)' }}>简约优雅的音乐播放器</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>MPlayer</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>简约优雅的桌面音乐播放器，聚合多个音乐来源。</div>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', fontSize: 'var(--text-base)' }}>
-          <div style={{ color: 'var(--text-secondary)' }}>版本: <span style={{ color: 'var(--text-primary)' }}>v{version || '...'}</span></div>
-          <div style={{ color: 'var(--text-secondary)' }}>技术栈: <span style={{ color: 'var(--text-primary)' }}>Electron + React + TypeScript</span></div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
+          {infoItems.map((item) => (
+            <div key={item.label} style={{ padding: '14px 16px', backgroundColor: 'var(--bg-color)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>{item.label}</div>
+              {item.link ? (
+                <a
+                  href={item.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--accent-color)', fontWeight: 600, textDecoration: 'none', fontSize: '14px' }}
+                >
+                  <Link2 size={14} />
+                  {item.value}
+                </a>
+              ) : (
+                <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '14px' }}>{item.value}</div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--divider-color)', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+          <Link2 size={14} />
+          开源项目，欢迎反馈与建议
         </div>
       </div>
     </section>

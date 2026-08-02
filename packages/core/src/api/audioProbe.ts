@@ -1,12 +1,12 @@
 import type { Song, AudioTag } from '../types/index.js';
 
 export const PREVIEW_THRESHOLD = 1_048_576; // 1MB - 30s 128kbps ≈ 480KB, 1MB safe threshold
-export const PROBE_TIMEOUT = 5000;
+export const PROBE_TIMEOUT = 4000;
 export const MAX_REDIRECTS = 3;
 
 /**
  * Probe an absolute or relative audio URL and return its playability tag.
- * Returns 'valid' on failure - better to allow playback than block it.
+ * 4xx/5xx responses are marked invalid so the UI can show a badge.
  */
 export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string }): Promise<AudioTag> {
   try {
@@ -21,7 +21,7 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
 
     for (let i = 0; i <= MAX_REDIRECTS; i++) {
       const resp = await fetch(finalUrl, {
-        method: i === MAX_REDIRECTS ? 'HEAD' : 'GET',
+        method: i === 0 ? 'HEAD' : 'GET',
         signal: controller.signal,
         redirect: 'manual',
       });
@@ -32,10 +32,10 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
       }
 
       if (resp.status >= 400) {
-        // HEAD not supported or access denied — continue to next redirect attempt
-        if (i < MAX_REDIRECTS) continue;
+        // HEAD is not always supported; retry once with GET, otherwise mark invalid.
+        if (i === 0) continue;
         clearTimeout(timer);
-        return 'valid'; // fail open — don't block playback
+        return 'invalid';
       }
 
       const cl = resp.headers.get('content-length');
@@ -54,8 +54,7 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
 }
 
 /**
- * HEAD request to probe audio file Content-Length, determine if playable and if it's a preview.
- * Returns 'valid' on failure - better to allow playback than block it.
+ * Probe a song URL and return its playability tag.
  */
 export async function probeAudio(song: Song, options?: { baseUrl?: string }): Promise<AudioTag> {
   if (!song.url) return 'invalid';

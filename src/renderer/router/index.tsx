@@ -1,9 +1,10 @@
 import React, { Suspense, lazy } from 'react';
-import { createHashRouter } from 'react-router-dom';
+import { createHashRouter, Navigate } from 'react-router-dom';
 import App from '@/renderer/App';
 
 // 懒加载页面组件
 const DiscoverPageV2 = lazy(() => import('@/renderer/pages/DiscoverPageV2'));
+const RecommendPage = lazy(() => import('@/renderer/pages/RecommendPage'));
 const HotlistDetailPage = lazy(() => import('@/renderer/pages/HotlistDetailPage'));
 const FavoritesPage = lazy(() => import('@/renderer/pages/FavoritesPage'));
 const HistoryPage = lazy(() => import('@/renderer/pages/HistoryPage'));
@@ -75,6 +76,14 @@ export const router = createHashRouter([
         element: (
           <Suspense fallback={<Loading />}>
             <DiscoverPageV2 />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'recommend',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <RecommendPage />
           </Suspense>
         ),
       },
@@ -180,11 +189,7 @@ export const router = createHashRouter([
       },
       {
         path: '',
-        element: (
-          <Suspense fallback={<Loading />}>
-            <DiscoverPageV2 />
-          </Suspense>
-        ),
+        element: <Navigate to="/recommend" replace />,
       },
     ],
   },

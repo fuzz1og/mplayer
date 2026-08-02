@@ -19,12 +19,12 @@
   --gray-900: #1C1C1E;
 
   /* 品牌色 — 经典蓝 */
-  --blue-50: #E3F2FD;
-  --blue-100: #BBDEFB;
-  --blue-400: #42A5F5;
-  --blue-500: #74B9FF;
-  --blue-600: #5BA3F5;
-  --blue-700: #3D8BE0;
+  --blue-50: #E7EDFB;
+  --blue-100: #C9D7F4;
+  --blue-400: #3D7BD9;
+  --blue-500: #2F5FD0;
+  --blue-600: #264FB8;
+  --blue-700: #1F4399;
 
   /* 危险色 */
   --red-50: #FEF2F2;
@@ -309,6 +309,15 @@ html, body, #root {
 }
 
 /* ── 播放按钮覆盖层 ── */
+/* ── 歌曲列表行 ── */
+.song-row-actions {
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.song-row:hover .song-row-actions,
+.song-row:focus-within .song-row-actions {
+  opacity: 1;
+}
 .play-overlay {
   position: absolute;
   inset: 0;

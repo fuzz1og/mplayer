@@ -9,6 +9,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
+import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
@@ -27,7 +28,7 @@ const SortableSongRow: React.FC<{
     <div ref={setNodeRef}
       style={{
         display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer',
-        backgroundColor: isDragging ? 'var(--hover-bg)' : (isCurrentSong ? 'rgba(116, 185, 255, 0.1)' : 'transparent'),
+        backgroundColor: isDragging ? 'var(--hover-bg)' : (isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent'),
         opacity: isDragging ? 0.7 : 1,
         transform: CSS.Transform.toString(transform),
         transition: transition || undefined,
@@ -61,7 +62,7 @@ const SortableSongRow: React.FC<{
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
-          {song.cover ? <img src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+          <CoverImage src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: '14px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -104,6 +105,7 @@ const PlaylistDetailPage: React.FC = () => {
   const [isReordering, setIsReordering] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [importModalVisible, setImportModalVisible] = useState(false);
+  const detailCover = useCachedCover((playlist?.cover || songs[0]?.cover) || '');
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -329,131 +331,58 @@ const PlaylistDetailPage: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 页面标题 */}
-      {playlist && <div
-        style={{
-          padding: '24px 24px 16px',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-          <button
-            onClick={() => navigate('/playlists')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 12px',
-              backgroundColor: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-secondary)',
-              fontSize: '14px',
-            }}
-          >
-            <ArrowLeft size={16} />
-            返回
-          </button>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Music size={24} color="var(--accent-color)" />
-              <h1 style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                {playlist.name}
-              </h1>
-              <button
-                onClick={() => {
-                  setEditName(playlist.name);
-                  setEditDesc(playlist.description || '');
-                  setIsEditModalVisible(true);
-                }}
-                style={{
-                  padding: '4px 8px',
-                  backgroundColor: 'transparent',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                <Edit2 size={14} />
-              </button>
-            </div>
-            {playlist.description && (
-              <p style={{ fontSize: '14px', color: 'var(--text-tertiary)', margin: '8px 0 0 36px' }}>
-                {playlist.description}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={handlePlayAll}
-            disabled={songs.length === 0}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              backgroundColor: 'var(--accent-color)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '20px',
-              cursor: songs.length > 0 ? 'pointer' : 'not-allowed',
-              opacity: songs.length > 0 ? 1 : 0.5,
-              fontSize: '14px',
-              fontWeight: 500,
-            }}
-          >
-            <Play size={16} />
-            播放全部
-          </button>
-          <button
-            onClick={handleDownloadAll}
-            disabled={songs.length === 0}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              backgroundColor: 'transparent',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '20px',
-              cursor: songs.length > 0 ? 'pointer' : 'not-allowed',
-              opacity: songs.length > 0 ? 1 : 0.5,
-              fontSize: '14px',
-              fontWeight: 500,
-            }}
-          >
-            <Download size={16} />
-            下载全部
-          </button>
-          <button
-            onClick={() => setImportModalVisible(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              backgroundColor: 'transparent',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '20px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 500,
-            }}
-          >
-            <Upload size={16} />
-            导入
-          </button>
-        </div>
-        <div style={{ fontSize: '14px', color: 'var(--text-tertiary)' }}>
-          {songs.length} 首歌曲
-        </div>
-      </div>}
+      {/* 顶部工具栏 */}
+      <div style={{ padding: '10px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', flexShrink: 0 }}>
+        <button
+          onClick={() => navigate('/playlists')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '14px' }}
+        >
+          <ArrowLeft size={16} />
+          返回歌单
+        </button>
+      </div>
 
       {/* 歌曲列表 */}
       <div style={{ flex: 1, overflow: 'auto' }}>
+        {playlist && (
+          <div style={{ padding: '24px 24px 8px' }}>
+            <div style={{ display: 'flex', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--content-bg)', border: '1px solid var(--border-color)' }}>
+              <div style={{ width: '160px', height: '160px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, #2F5FD0 0%, #1F4399 100%)' }}>
+            <CoverImage src={detailCover} alt="" variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-color)' }}>我的歌单</div>
+                  <button
+                    onClick={() => {
+                      setEditName(playlist.name);
+                      setEditDesc(playlist.description || '');
+                      setIsEditModalVisible(true);
+                    }}
+                    style={{ padding: '4px 7px', backgroundColor: 'transparent', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0 }}
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                </div>
+                <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', margin: '8px 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{playlist.name}</h1>
+                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginBottom: '18px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {songs.length} 首歌曲{playlist.description ? ` · ${playlist.description}` : ''}
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button onClick={handlePlayAll} disabled={songs.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'var(--accent-color)', color: 'white', border: 'none', borderRadius: '20px', cursor: songs.length > 0 ? 'pointer' : 'not-allowed', opacity: songs.length > 0 ? 1 : 0.5, fontSize: '14px', fontWeight: 500 }}>
+                    <Play size={16} /> 播放全部
+                  </button>
+                  <button onClick={handleDownloadAll} disabled={songs.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '20px', cursor: songs.length > 0 ? 'pointer' : 'not-allowed', opacity: songs.length > 0 ? 1 : 0.5, fontSize: '14px', fontWeight: 500 }}>
+                    <Download size={16} /> 下载全部
+                  </button>
+                  <button onClick={() => setImportModalVisible(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '20px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+                    <Upload size={16} /> 导入歌曲
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {loading && songs.length === 0 ? (
           <div style={{ padding: '24px' }}>
             {Array.from({ length: 8 }).map((_, i) => (
@@ -502,7 +431,7 @@ const PlaylistDetailPage: React.FC = () => {
         )}
         {/* Batch action bar */}
         {selectedIds.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(116, 185, 255, 0.08)', borderBottom: '1px solid var(--divider-color)', fontSize: '13px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(47, 95, 208, 0.08)', borderBottom: '1px solid var(--divider-color)', fontSize: '13px' }}>
             <span style={{ color: 'var(--text-secondary)' }}>已选择 {selectedIds.length} 项</span>
             <button onClick={handleBatchDownload}
               style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12px' }}>

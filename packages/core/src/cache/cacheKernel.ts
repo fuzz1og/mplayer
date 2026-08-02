@@ -72,7 +72,18 @@ export class CacheKernel implements CachePort {
   }
 
   stats(): CacheStats {
-    return { hits: this.hits, misses: this.misses, entries: 0 }
+    const diskStats = this.l2?.stats?.()
+    return {
+      hits: this.hits,
+      misses: this.misses,
+      entries: diskStats?.entries ?? 0,
+      totalSize: diskStats?.totalSize ?? 0,
+      fileCount: diskStats?.fileCount ?? 0,
+      songsCount: diskStats?.songsCount ?? 0,
+      coversCount: diskStats?.coversCount ?? 0,
+      audioCount: diskStats?.audioCount ?? 0,
+      urlsCount: diskStats?.urlsCount ?? 0,
+    }
   }
 
   private async getBinaryInternal(key: string): Promise<Uint8Array | null> {

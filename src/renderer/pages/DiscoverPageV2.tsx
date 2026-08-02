@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { message } from 'antd';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Flame, Disc3, ListMusic, Mic2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useSearchStore } from '@/renderer/store/searchStore';
@@ -9,10 +9,9 @@ import { useDownload } from '@/renderer/hooks/useDownload';
 import { searchService } from '@/renderer/services/searchService';
 import ChartPanel from '@/renderer/components/ChartPanel';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
-import SongList from '@/renderer/components/SongList';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
-import PlaylistGrid from '@/renderer/components/PlaylistGrid';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
+import ArtistListPage from '@/renderer/pages/ArtistListPage';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
 import type { Album, Song, DiscoverPlaylist } from '@mplayer/core';
 import type { ApiResponse } from '@/shared/types/ipc';
@@ -20,22 +19,31 @@ import { CHART_CACHE_TTL as CHART_TTL } from '../../shared/chart';
 
 const { ipcRenderer } = window.require('electron');
 
-type TabKey = 'charts' | 'albums' | 'recommend' | 'playlists';
+type TabKey = 'charts' | 'albums' | 'playlists' | 'artists';
 type AreaKey = 'ALL' | 'ZH' | 'EA' | 'KR' | 'JP';
 
 interface TabDef {
   key: TabKey;
   label: string;
+  icon: React.ReactNode;
 }
 
 const TABS: TabDef[] = [
-  { key: 'charts', label: '排行榜' },
-  { key: 'albums', label: '新碟上架' },
-  { key: 'recommend', label: '猜你喜欢' },
-  { key: 'playlists', label: '歌单' },
+  { key: 'charts', label: '排行榜', icon: <Flame size={16} /> },
+  { key: 'albums', label: '新碟上架', icon: <Disc3 size={16} /> },
+  { key: 'playlists', label: '歌单', icon: <ListMusic size={16} /> },
+  { key: 'artists', label: '歌手', icon: <Mic2 size={16} /> },
 ];
 
 const SOURCES = ['netease', 'qq', 'kugou'];
+
+const PLAYLIST_CATEGORIES = [
+  '全部', '流行', '摇滚', '民谣', '电子', '说唱',
+  '轻音乐', '爵士', '古典', 'R&B', '乡村', '小清新',
+  '影视原声', '动漫', '怀旧', '治愈'
+];
+
+const PLAYLIST_PAGE_SIZE = 30;
 
 interface ChartCache {
   hot: AggregatedSongGroup[] | null;
@@ -46,11 +54,8 @@ interface ChartCache {
 
 interface TabCache {
   albums: { data: Album[] | null; timestamp: number };
-  recommendedPlaylists: { data: DiscoverPlaylist[] | null; timestamp: number };
-  recommendedSongs: { data: Song[] | null; timestamp: number };
   playlists: { data: DiscoverPlaylist[] | null; timestamp: number };
 }
-
 
 const DiscoverPageV2: React.FC = () => {
   const { currentSong, play } = usePlayerStore();
@@ -69,28 +74,28 @@ const DiscoverPageV2: React.FC = () => {
   const [albumsLoading, setAlbumsLoading] = useState(false);
   const [albumsError, setAlbumsError] = useState<string | null>(null);
 
-  const [recommendedPlaylists, setRecommendedPlaylists] = useState<DiscoverPlaylist[]>([]);
-  const [recommendedLoading, setRecommendedLoading] = useState(false);
-  const [recommendedError, setRecommendedError] = useState<string | null>(null);
-  const [recommendedSongs, setRecommendedSongs] = useState<Song[]>([]);
-
   const [playlistList, setPlaylistList] = useState<DiscoverPlaylist[]>([]);
   const [playlistListLoading, setPlaylistListLoading] = useState(false);
+  const [playlistListLoadingMore, setPlaylistListLoadingMore] = useState(false);
+  const [playlistListHasMore, setPlaylistListHasMore] = useState(true);
+  const [playlistListOffset, setPlaylistListOffset] = useState(0);
+  void playlistListOffset;
   const [playlistListError, setPlaylistListError] = useState<string | null>(null);
+  const [playlistCategory, setPlaylistCategory] = useState('全部');
 
   const cacheRef = useRef<ChartCache>({ hot: null, new: null, hotTimestamp: 0, newTimestamp: 0 });
   const tabCacheRef = useRef<TabCache>({
     albums: { data: null, timestamp: 0 },
-    recommendedPlaylists: { data: null, timestamp: 0 },
-    recommendedSongs: { data: null, timestamp: 0 },
     playlists: { data: null, timestamp: 0 },
   });
   const mountedRef = useRef(true);
   const playedChartIdRef = useRef<string | null>(null);
   const albumsFetchIdRef = useRef(0);
-  const recommendFetchIdRef = useRef(0);
   const playlistsFetchIdRef = useRef(0);
   const chartsFetchIdRef = useRef({ hot: 0, new: 0 });
+  const playlistListOffsetRef = useRef(0);
+  const playlistListHasMoreRef = useRef(true);
+  const playlistListLoadingMoreRef = useRef(false);
 
   const fetchChart = useCallback(async (type: 'hot' | 'new') => {
     const fetchId = type === 'hot' ? ++chartsFetchIdRef.current.hot : ++chartsFetchIdRef.current.new;
@@ -183,82 +188,57 @@ const DiscoverPageV2: React.FC = () => {
     }
   }, []);
 
-  const fetchRecommended = useCallback(async () => {
-    const fetchId = ++recommendFetchIdRef.current;
-    const cache = tabCacheRef.current.recommendedPlaylists;
-    const songsCache = tabCacheRef.current.recommendedSongs;
-
-    if (cache.data) {
-      setRecommendedPlaylists(cache.data);
-      setRecommendedLoading(false);
-    } else {
-      setRecommendedLoading(true);
-    }
-    if (songsCache.data) setRecommendedSongs(songsCache.data);
-
-    setRecommendedError(null);
-
-    try {
-      const [playlistResult, songsResult] = await Promise.all([
-        ipcRenderer.invoke('musicApi:getRecommendedPlaylists', 30) as Promise<ApiResponse<DiscoverPlaylist[]>>,
-        ipcRenderer.invoke('musicApi:getRecommendedSongs', 30) as Promise<ApiResponse<Song[]>>,
-      ]);
-      if (!mountedRef.current || fetchId !== recommendFetchIdRef.current) return;
-
-      if (playlistResult.success) {
-        const plData = playlistResult.data || [];
-        setRecommendedPlaylists(plData);
-        tabCacheRef.current.recommendedPlaylists = { data: plData, timestamp: Date.now() };
-      } else if (!cache.data) {
-        setRecommendedError(playlistResult.error || '加载推荐失败');
-      }
-
-      if (songsResult.success) {
-        const songData = songsResult.data || [];
-        setRecommendedSongs(songData);
-        tabCacheRef.current.recommendedSongs = { data: songData, timestamp: Date.now() };
-      } else if (!songsCache.data) {
-        setRecommendedError(songsResult.error || '加载推荐歌曲失败');
-      }
-    } catch (err: any) {
-      if (!mountedRef.current || fetchId !== recommendFetchIdRef.current) return;
-      if (!cache.data && !songsCache.data) setRecommendedError(err?.message || '加载推荐失败');
-    } finally {
-      if (mountedRef.current && fetchId === recommendFetchIdRef.current) setRecommendedLoading(false);
-    }
-  }, []);
-
-  const fetchPlaylistList = useCallback(async () => {
+  const fetchPlaylistList = useCallback(async (reset: boolean) => {
     const fetchId = ++playlistsFetchIdRef.current;
-    const cache = tabCacheRef.current.playlists;
 
-    if (cache.data) {
-      setPlaylistList(cache.data);
-      setPlaylistListLoading(false);
-    } else {
+    if (reset) {
+      playlistListOffsetRef.current = 0;
+      playlistListHasMoreRef.current = true;
+      playlistListLoadingMoreRef.current = false;
       setPlaylistListLoading(true);
+      setPlaylistList([]);
+      setPlaylistListHasMore(true);
+      setPlaylistListOffset(0);
+    } else {
+      if (playlistListLoadingMoreRef.current || !playlistListHasMoreRef.current) return;
+      playlistListLoadingMoreRef.current = true;
+      setPlaylistListLoadingMore(true);
     }
     setPlaylistListError(null);
 
+    const offset = reset ? 0 : playlistListOffsetRef.current;
     try {
-      const result = await ipcRenderer.invoke('musicApi:getPlaylists', '全部', 'hot', 0, 30) as ApiResponse<DiscoverPlaylist[]>;
+      const result = await ipcRenderer.invoke(
+        'musicApi:getNeteasePlaylists',
+        playlistCategory,
+        'hot',
+        offset,
+        PLAYLIST_PAGE_SIZE
+      ) as ApiResponse<{ playlists: DiscoverPlaylist[]; more: boolean }>;
       if (!mountedRef.current || fetchId !== playlistsFetchIdRef.current) return;
 
       if (!result.success) {
-        if (!cache.data) setPlaylistListError(result.error || '加载歌单失败');
+        if (reset) setPlaylistListError(result.error || '加载歌单失败');
         return;
       }
 
-      const plData = result.data || [];
-      setPlaylistList(plData);
-      tabCacheRef.current.playlists = { data: plData, timestamp: Date.now() };
+      const data = result.data || { playlists: [], more: false };
+      setPlaylistList(prev => reset ? data.playlists : [...prev, ...data.playlists]);
+      playlistListOffsetRef.current = offset + PLAYLIST_PAGE_SIZE;
+      playlistListHasMoreRef.current = data.more;
+      setPlaylistListOffset(playlistListOffsetRef.current);
+      setPlaylistListHasMore(data.more);
     } catch (err: any) {
       if (!mountedRef.current || fetchId !== playlistsFetchIdRef.current) return;
-      if (!cache.data) setPlaylistListError(err?.message || '加载歌单失败');
+      if (reset) setPlaylistListError(err?.message || '加载歌单失败');
     } finally {
-      if (mountedRef.current && fetchId === playlistsFetchIdRef.current) setPlaylistListLoading(false);
+      if (mountedRef.current && fetchId === playlistsFetchIdRef.current) {
+        playlistListLoadingMoreRef.current = false;
+        setPlaylistListLoading(false);
+        setPlaylistListLoadingMore(false);
+      }
     }
-  }, []);
+  }, [playlistCategory]);
 
   useEffect(() => {
     if (activeTab === 'charts') {
@@ -268,14 +248,11 @@ const DiscoverPageV2: React.FC = () => {
     } else if (activeTab === 'albums') {
       setAlbumsError(null);
       fetchAlbums(albumsArea);
-    } else if (activeTab === 'recommend') {
-      setRecommendedError(null);
-      fetchRecommended();
     } else if (activeTab === 'playlists') {
       setPlaylistListError(null);
-      fetchPlaylistList();
+      fetchPlaylistList(true);
     }
-  }, [activeTab, albumsArea, fetchChart, fetchAlbums, fetchRecommended, fetchPlaylistList]);
+  }, [activeTab, albumsArea, fetchChart, fetchAlbums, fetchPlaylistList]);
 
   const handleAlbumsAreaChange = (area: string) => {
     setAlbumsArea(area as AreaKey);
@@ -290,15 +267,21 @@ const DiscoverPageV2: React.FC = () => {
     searchService.searchAll(`${album.name} ${album.artist}`);
   };
 
-  const handleRetryRecommended = () => {
-    tabCacheRef.current.recommendedPlaylists = { data: null, timestamp: 0 };
-    tabCacheRef.current.recommendedSongs = { data: null, timestamp: 0 };
-    fetchRecommended();
-  };
-
   const handleRetryPlaylists = () => {
     tabCacheRef.current.playlists = { data: null, timestamp: 0 };
-    fetchPlaylistList();
+    fetchPlaylistList(true);
+  };
+
+  const handlePlaylistCategoryChange = (cat: string) => {
+    setPlaylistCategory(cat);
+  };
+
+  const handlePlaylistScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (activeTab !== 'playlists' || playlistListLoadingMoreRef.current || !playlistListHasMoreRef.current) return;
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) {
+      fetchPlaylistList(false);
+    }
   };
 
   const handlePlaylistSelect = (pl: DiscoverPlaylist) => {
@@ -394,43 +377,80 @@ const DiscoverPageV2: React.FC = () => {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div
-        style={{
-          display: 'flex',
-          gap: 'var(--space-1)',
-          padding: '0 var(--space-6)',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)',
-          flexShrink: 0,
-        }}
-      >
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              padding: 'var(--space-3) var(--space-5)',
-              border: 'none',
-              borderBottom: activeTab === tab.key ? '2px solid var(--accent-color)' : '2px solid transparent',
-              background: 'transparent',
-              cursor: 'pointer',
-              fontSize: 'var(--text-base)',
-              fontWeight: activeTab === tab.key ? 600 : 400,
-              color: activeTab === tab.key ? 'var(--accent-color)' : 'var(--text-secondary)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+    <div
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        '--accent-color': '#2F5FD0',
+        '--accent': '#2F5FD0',
+        '--accent-hover': '#264FB8',
+        '--accent-active': '#1F4399',
+        '--accent-subtle': '#E7EDFB',
+      } as React.CSSProperties}
+    >
+      <div style={{
+        display: 'flex', flexDirection: 'column',
+        padding: '16px 28px 0',
+        borderBottom: '1px solid var(--divider-color)',
+        backgroundColor: 'var(--content-bg)',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px' }}>
+          <span style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+            今天听什么
+          </span>
+          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+            网易云 · QQ · 酷狗
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '18px', marginTop: '12px', overflowX: 'auto' }}>
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                position: 'relative',
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '6px 2px 14px',
+                border: 'none',
+                background: 'transparent',
+                color: activeTab === tab.key ? 'var(--accent-color)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 'var(--text-sm)',
+                fontWeight: activeTab === tab.key ? 600 : 400,
+                whiteSpace: 'nowrap',
+                transition: 'color 0.15s ease',
+              }}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+              {activeTab === tab.key && (
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute', left: '50%', bottom: '4px', transform: 'translateX(-50%)',
+                    display: 'flex', alignItems: 'flex-end', gap: '2px', height: '10px',
+                    animation: 'fadeIn 0.2s ease-out',
+                  }}
+                >
+                  <span style={{ width: '2px', height: '6px', borderRadius: '1px', backgroundColor: 'var(--accent-color)' }} />
+                  <span style={{ width: '2px', height: '10px', borderRadius: '1px', backgroundColor: 'var(--accent-color)' }} />
+                  <span style={{ width: '2px', height: '7px', borderRadius: '1px', backgroundColor: 'var(--accent-color)' }} />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'hidden', padding: 'var(--space-5) var(--space-6)' }}>
+      <div
+        style={{ flex: 1, overflow: 'hidden', padding: activeTab === 'artists' ? 0 : 'var(--space-5) var(--space-6)' }}
+      >
         {activeTab === 'charts' && (
           <div style={{ height: '100%', display: 'flex', gap: 'var(--space-6)' }}>
             <ChartPanel
-              title="🔥 热歌榜"
+              title="热歌榜"
               chartId="hot"
               groups={hotGroups}
               loading={hotLoading}
@@ -440,7 +460,7 @@ const DiscoverPageV2: React.FC = () => {
               onRetry={handleRetryHot}
             />
             <ChartPanel
-              title="🎵 新歌榜"
+              title="新歌榜"
               chartId="new"
               groups={newGroups}
               loading={newLoading}
@@ -464,42 +484,48 @@ const DiscoverPageV2: React.FC = () => {
           />
         )}
 
-        {activeTab === 'recommend' && (
-          <div style={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-            <div>
-              <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-3)' }}>推荐歌曲</h3>
-              <SongList
-                songs={recommendedSongs}
-                loading={recommendedLoading && recommendedSongs.length === 0}
-                onPlay={handlePlaySong}
-                onToggleFavorite={toggleFavorite}
-                onDownload={download}
-                showHeader={false}
-                emptyText="暂无推荐歌曲"
-              />
+        {activeTab === 'playlists' && (
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-5)', flexShrink: 0 }}>
+              {PLAYLIST_CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => handlePlaylistCategoryChange(cat)}
+                  style={{
+                    padding: '6px 16px',
+                    borderRadius: '20px',
+                    border: '1px solid var(--border-color)',
+                    cursor: 'pointer',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: playlistCategory === cat ? 600 : 400,
+                    color: playlistCategory === cat ? 'white' : 'var(--text-secondary)',
+                    background: playlistCategory === cat ? 'var(--accent-color)' : 'transparent',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {cat}
+                </button>
+              ))}
             </div>
-            <div>
-              <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-3)' }}>推荐歌单</h3>
-              <PlaylistGrid
-                playlists={recommendedPlaylists}
-                loading={recommendedLoading && recommendedPlaylists.length === 0}
-                error={recommendedError}
-                onRetry={handleRetryRecommended}
+            <div onScroll={handlePlaylistScroll} style={{ flex: 1, overflow: 'auto' }}>
+              <PlaylistPageGrid
+                playlists={playlistList}
+                loading={playlistListLoading}
+                error={playlistListError}
+                onRetry={handleRetryPlaylists}
                 onPlaylistSelect={handlePlaylistSelect}
               />
+              {playlistListLoadingMore && (
+                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中...</div>
+              )}
+              {!playlistListHasMore && playlistList.length > 0 && (
+                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>没有更多歌单了</div>
+              )}
             </div>
           </div>
         )}
 
-        {activeTab === 'playlists' && (
-          <PlaylistPageGrid
-            playlists={playlistList}
-            loading={playlistListLoading}
-            error={playlistListError}
-            onRetry={handleRetryPlaylists}
-            onPlaylistSelect={handlePlaylistSelect}
-          />
-        )}
+        {activeTab === 'artists' && <ArtistListPage />}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Sparkles,
   Compass,
   Heart,
   History,
@@ -7,8 +8,7 @@ import {
   Settings,
   Download,
   FolderOpen,
-  Headphones,
-  Mic2
+  Headphones
 } from 'lucide-react';
 
 interface NavItem {
@@ -24,8 +24,8 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
   const mainNavItems: NavItem[] = [
+    { key: 'recommend', icon: <Sparkles size={18} />, label: '推荐' },
     { key: 'discover', icon: <Compass size={18} />, label: '发现音乐' },
-    { key: 'artists', icon: <Mic2 size={18} />, label: '歌手' },
   ];
 
   const myMusicItems: NavItem[] = [
@@ -37,7 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
 
   const playlistItems: NavItem[] = [
     { key: 'playlists', icon: <ListMusic size={18} />, label: '我的歌单' },
-    { key: 'queue', icon: <Headphones size={18} />, label: '试听列表' },
+    { key: 'queue', icon: <Headphones size={18} />, label: '播放队列' },
   ];
 
   const navItemStyle = (isActive: boolean): React.CSSProperties => ({
@@ -49,7 +49,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
     borderRadius: 'var(--radius-sm)',
     cursor: 'pointer',
     transition: 'background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)',
-    backgroundColor: isActive ? 'var(--bg-active)' : 'transparent',
+    backgroundColor: 'transparent',
     color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
     fontWeight: isActive ? 'var(--weight-medium)' : 'var(--weight-normal)',
     fontSize: 'var(--text-sm)',
@@ -64,8 +64,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
     fontSize: 'var(--text-xs)',
     color: 'var(--text-tertiary)',
     fontWeight: 'var(--weight-semibold)',
-    letterSpacing: '0.5px',
-    textTransform: 'uppercase' as const,
     userSelect: 'none',
   };
 
@@ -120,37 +118,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
         flexShrink: 0,
       }}
     >
-      {/* Logo */}
-      <div
-        style={{
-          padding: 'var(--space-5) var(--space-4)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-3)',
-        }}
-      >
-        <img
-          src="./icon.png"
-          alt="MPlayer"
-          style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: 'var(--radius-md)',
-            objectFit: 'contain',
-          }}
-        />
-        <span
-          style={{
-            fontSize: 'var(--text-lg)',
-            fontWeight: 'var(--weight-bold)',
-            color: 'var(--text-primary)',
-            letterSpacing: '-0.3px',
-          }}
-        >
-          MPlayer
-        </span>
-      </div>
-
       {/* 导航内容 */}
       <nav
         style={{
@@ -180,14 +147,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
       <div
         style={{
           padding: 'var(--space-2) 0',
-          marginTop: 'auto',
+          borderTop: '1px solid var(--border-subtle)',
         }}
       >
-        {renderNavItem({
-          key: 'settings',
-          icon: <Settings size={18} />,
-          label: '设置',
-        })}
+        {renderNavItem({ key: 'settings', icon: <Settings size={18} />, label: '设置' })}
       </div>
     </aside>
   );
