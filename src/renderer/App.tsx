@@ -45,6 +45,11 @@ const App: React.FC = () => {
   const canGoForward = historyIndex < historyStack.current.length - 1;
 
   const handleBack = useCallback(() => {
+    // 搜索模式下,后退 = 退出搜索视图(不触发路由后退,历史保留可再退)
+    if (useSearchStore.getState().currentKeyword) {
+      useSearchStore.getState().reset();
+      return;
+    }
     if (historyIndex > 0) {
       const newIndex = historyIndex - 1;
       isNavigating.current = true;
@@ -227,6 +232,7 @@ const App: React.FC = () => {
             onRefresh={handleRefresh}
             canGoBack={canGoBack}
             canGoForward={canGoForward}
+            searchActive={!!currentKeyword}
           />
 
           {/* 页面内容 - 由React Router渲染 */}
