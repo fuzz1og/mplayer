@@ -23,8 +23,14 @@ async function probeSongBatch(songs: Song[], api: MusicApi): Promise<ProbeResult
       try {
         let tag: AudioTag;
         if (song.sourceType === 'soda') {
-          // Soda search results have no direct URL; classify by duration here.
-          tag = await probeAudio(song);
+          // Probe resolves the trackId to a real link so preview detection is accurate.
+          let sodaUrl = '';
+          try {
+            sodaUrl = await api.getSodaAudioUrl(song.id);
+          } catch {
+            // fall through to duration-based classification
+          }
+          tag = sodaUrl ? await probeAudioUrl(sodaUrl) : await probeAudio(song);
         } else {
           let url = song.url;
           try {
