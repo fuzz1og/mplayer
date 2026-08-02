@@ -12,6 +12,8 @@ interface TopBarProps {
   onRefresh?: () => void;
   canGoBack?: boolean;
   canGoForward?: boolean;
+  /** 搜索视图激活时,后退按钮接管"退出搜索"语义 */
+  searchActive?: boolean;
 }
 
 const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
@@ -26,7 +28,7 @@ const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
   local: { label: '本地', accent: '#10B981' },
 };
 
-const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange, onBack, onForward, onRefresh, canGoBack, canGoForward }) => {
+const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange, onBack, onForward, onRefresh, canGoBack, canGoForward, searchActive = false }) => {
   const [searchValue, setSearchValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -84,19 +86,19 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexShrink: 0 }}>
           <button
             onClick={onBack}
-            disabled={!canGoBack}
+            disabled={!searchActive && !canGoBack}
             className="player-btn"
-            aria-label="后退"
-            style={{ opacity: canGoBack ? 1 : 0.3, cursor: canGoBack ? 'pointer' : 'not-allowed' }}
+            aria-label={searchActive ? '退出搜索' : '后退'}
+            style={{ opacity: searchActive || canGoBack ? 1 : 0.3, cursor: searchActive || canGoBack ? 'pointer' : 'not-allowed' }}
           >
             <ArrowLeft size={16} />
           </button>
           <button
             onClick={onForward}
-            disabled={!canGoForward}
+            disabled={searchActive || !canGoForward}
             className="player-btn"
             aria-label="前进"
-            style={{ opacity: canGoForward ? 1 : 0.3, cursor: canGoForward ? 'pointer' : 'not-allowed' }}
+            style={{ opacity: !searchActive && canGoForward ? 1 : 0.3, cursor: !searchActive && canGoForward ? 'pointer' : 'not-allowed' }}
           >
             <ArrowRight size={16} />
           </button>
