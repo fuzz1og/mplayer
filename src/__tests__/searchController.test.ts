@@ -70,4 +70,37 @@ describe('createSearchController', () => {
 
     expect(searchFn).not.toHaveBeenCalled();
   });
+
+  it('loadMore 合并同一 key 的歌曲并去重', async () => {
+    const state = {
+      query: 'q',
+      page: 1,
+      hasMore: true,
+      loading: false,
+      loadingMore: false,
+      source: 'netease',
+      results: [{
+        key: 'netease',
+        name: 'netease',
+        artist: '',
+        songs: [{ id: '1', name: '稻香', artist: '周杰伦', sourceType: 'netease' }],
+      }],
+    };
+    const searchFn = vi.fn().mockResolvedValue([{
+      key: 'netease',
+      name: 'netease',
+      artist: '',
+      songs: [
+        { id: '1', name: '稻香', artist: '周杰伦', sourceType: 'netease' },
+        { id: '2', name: '七里香', artist: '周杰伦', sourceType: 'netease' },
+      ],
+    }]);
+    const setState = vi.fn((partial: any) => Object.assign(state, partial));
+    const ctrl = createSearchController({ searchFn, getState: () => state, setState });
+
+    await ctrl.loadMore();
+
+    expect(state.results[0].songs).toHaveLength(2);
+    expect(state.page).toBe(2);
+  });
 });

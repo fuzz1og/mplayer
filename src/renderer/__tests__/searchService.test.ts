@@ -126,6 +126,7 @@ describe('searchService', () => {
       mockStore.hasMore = true;
       mockStore.loading = false;
       mockStore.loadingMore = false;
+      mockStore.songs = [{ id: '1', name: '稻香', artist: '周杰伦' }];
       mockStore.groups = [{ key: 'netease', name: 'netease', artist: '', songs: [{ id: '1', name: '稻香', artist: '周杰伦' }] }];
       mockStore.expandedKeys = ['netease'];
 
@@ -135,6 +136,7 @@ describe('searchService', () => {
       expect(mockStore.page).toBe(2);
       expect(mockStore.hasMore).toBe(true);
       expect(mockStore.loadingMore).toBe(false);
+      expect(mockStore.songs.map((s: any) => s.id)).toEqual(['1', '2']);
     });
   });
   describe('debouncedSearch', () => {
