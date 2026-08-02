@@ -325,7 +325,7 @@ const DiscoverPageV2: React.FC = () => {
     fetchChart('new');
   };
 
-  const { groups, loading: searchLoading, currentKeyword, songs: searchSongs } = useSearchStore();
+  const { groups, loading: searchLoading, loadingMore: searchLoadingMore, currentKeyword, songs: searchSongs, hasMore } = useSearchStore();
   const { toggleFavorite } = useFavoriteStore();
   const { download } = useDownload();
 
@@ -369,7 +369,9 @@ const DiscoverPageV2: React.FC = () => {
             onDownload={download}
             selectedIds={[]}
             onSelectionChange={() => {}}
-            loading={searchLoading}
+            loading={searchLoading || searchLoadingMore}
+            hasMore={hasMore}
+            onLoadMore={() => searchService.loadMore()}
           />
         </div>
       </div>

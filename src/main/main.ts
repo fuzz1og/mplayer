@@ -26,7 +26,7 @@ import { getApiUrl } from './config';
 import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
-import { applyElectronProxy, type ProxyConfig } from './proxy';
+import { applyElectronProxy, getHttpAgent, getHttpsAgent, type ProxyConfig } from './proxy';
 import { registerCacheIpc } from './ipc/cache';
 import { registerFavoriteIpc, registerHistoryIpc, registerPlaylistIpc } from './ipc/favoriteHistoryPlaylist';
 import { registerMusicApiIpc } from './ipc/musicApi';
@@ -44,10 +44,9 @@ const musicApi = {
     const cachedPath = audioCacheBackend.getFilePath(cacheKey)
     if (fs.existsSync(cachedPath)) return 'file:///' + cachedPath.replace(/\\/g, '/');
     try {
-      const proxy = require('./proxy');
-      const dl = await axios.get(remoteUrl, {
-        httpAgent: proxy.getHttpAgent(),
-        httpsAgent: proxy.getHttpsAgent(),
+            const dl = await axios.get(remoteUrl, {
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         responseType: 'arraybuffer',
         timeout: 30000,
@@ -192,10 +191,9 @@ app.whenReady().then(async () => {
   try {
     const savedProxy = await db.getSetting<ProxyConfig>('proxyConfig');
     if (savedProxy) {
-      const proxy = require('./proxy');
-      injectProxyAgents(() => ({
-        httpAgent: proxy.getHttpAgent(),
-        httpsAgent: proxy.getHttpsAgent(),
+            injectProxyAgents(() => ({
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
       }));
       applyElectronProxy(savedProxy);
       // 同时配置 electron-updater 的专用 session
