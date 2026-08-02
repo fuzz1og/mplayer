@@ -46,8 +46,8 @@ export function injectProxyAgents(provider: () => ProxyAgents): void {
 // 歌手头像缓存，供分类 tab 爬取时补图
 const artistPicCache = new Map<string, string>();
 
-// 搜索兜底状态:healthCheck 结果缓存(60s)+ 搜索无结果歌曲黑名单(会话级)
-const HEALTH_CHECK_TTL = 60 * 1000;
+// 搜索兜底状态:healthCheck 结果缓存(5 分钟)+ 搜索无结果歌曲黑名单(会话级)
+const HEALTH_CHECK_TTL = 5 * 60 * 1000;
 let healthCheckCache = { at: 0, ok: false };
 const searchFailedSongIds = new Set<string>();
 
@@ -512,32 +512,38 @@ export const musicApi = {
     return lyrics;
   },
 
-  async batchSearch(keywords: string[], sourceType: SourceKey = 'netease'): Promise<Record<string, Song[]>> {
+  /**
+   * 批量搜索
+   * @param concurrency 并发上限,0 表示不限制(默认);限制可避免弱 API 排队/被打爆
+   */
+  async batchSearch(keywords: string[], sourceType: SourceKey = 'netease', concurrency: number = 0): Promise<Record<string, Song[]>> {
     // 尝试从缓存获取
     const cachedData = cacheManager.getBatchSearchCache(keywords, sourceType);
     if (cachedData) {
       return cachedData;
     }
 
-    const promises = keywords.map(keyword =>
-      this.searchSongs(keyword, 1, sourceType).catch(error => {
-        console.error(`搜索关键词 "${keyword}" 失败:`, error);
-        return []; // 返回空数组表示该关键词搜索失败
-      })
-    );
+    const results: Song[][] = new Array(keywords.length);
+    const workerCount = concurrency > 0 ? Math.min(concurrency, keywords.length) : keywords.length;
+    let nextIndex = 0;
 
-    // 使用 Promise.allSettled() 替代 Promise.all()
-    const settledResults = await Promise.allSettled(promises);
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const i = nextIndex++;
+        if (i >= keywords.length) break;
+        try {
+          results[i] = await this.searchSongs(keywords[i], 1, sourceType);
+        } catch (error) {
+          console.error(`搜索关键词 "${keywords[i]}" 失败:`, error);
+          results[i] = [];
+        }
+      }
+    });
+    await Promise.all(workers);
 
     const batchResult: Record<string, Song[]> = {};
     keywords.forEach((keyword, index) => {
-      const result = settledResults[index];
-      if (result.status === 'fulfilled') {
-        batchResult[keyword] = result.value;
-      } else {
-        console.error(`搜索关键词 "${keyword}" 失败:`, result.reason);
-        batchResult[keyword] = [];
-      }
+      batchResult[keyword] = results[index] || [];
     });
 
     // 缓存结果
@@ -1109,7 +1115,8 @@ export const musicApi = {
 
     try {
       const keywords = missingUrlSongs.map(s => `${s.name} ${s.artist}`.trim());
-      const searchResults = await this.batchSearch(keywords, 'netease');
+      // 限 5 并发:避免弱 API 排队,稳定单页耗时
+      const searchResults = await this.batchSearch(keywords, 'netease', 5);
       for (let i = 0; i < missingUrlSongs.length; i++) {
         const song = missingUrlSongs[i];
         const hit = (searchResults[keywords[i]] || []).find(h => h.url);
@@ -1380,7 +1387,8 @@ export const musicApi = {
       params.append('filter', 'name');
       params.append('type', 'netease');
       params.append('page', '1');
-      const response = await apiClient.post('', params, { timeout: 8000 });
+      // 探测用短超时:API 慢时快速失败,不拖慢页面加载
+      const response = await apiClient.post('', params, { timeout: 3000 });
       const data = response.data?.data;
       return Array.isArray(data) && data.length > 0;
     } catch {
