@@ -206,7 +206,8 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
         <div style={{ width: '140px' }} />
       </div>
 
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+      {/* 歌单卡片区:固定不滚动,保证播放/保存按钮始终可见 */}
+      <div style={{ padding: '24px 24px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
           <div style={{ width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}>
             <CoverImage src={playlist.coverImgUrl} alt={playlist.name} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -238,7 +239,10 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
 
+      {/* 歌曲列表独立容器:内部滚动,SongList 标题栏吸顶不会漏出卡片区 */}
+      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '0 24px 24px' }}>
         {songsLoading ? (
           <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '40px' }}>正在加载歌曲列表...</div>
         ) : songsError ? (
