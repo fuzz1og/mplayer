@@ -9,7 +9,6 @@ let PROXY_URL = '';
 const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
 const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
 const SODA_URL_CACHE_TTL = 10 * 60 * 1000;
-const SODA_RESOLVE_TIMEOUT = 5000;
 const sodaAudioUrlCache = new Map<string, { url: string; expires: number }>();
 export function setApiBaseUrl(url: string): void {
   API_BASE_URL = url.endsWith('/') ? url : url + '/';
@@ -177,12 +176,12 @@ export const musicApi = {
 
   /**
    * 搜索汽水音乐 (直接调用 api.qishui.com)
-   * 注：搜索接口不直接返回 audio_url，这里会用 trackId 解析直链并短缓存；解析失败时播放仍走懒加载兜底
+   * 注：搜索结果不含 audio_url，播放/探测时会通过 trackId 单独解析直链
    */
   async searchSongsSoda(keyword: string, page: number = 1): Promise<Song[]> {
     const cacheKey = `soda_search_${keyword}_${page}`;
     const cached = cacheManager.getSearchCache(cacheKey, page, 'soda');
-    if (cached) return this.resolveSodaSearchUrls(cached);
+    if (cached) return cached;
 
     const params = new URLSearchParams();
     params.set('q', keyword);
@@ -228,37 +227,9 @@ export const musicApi = {
     }
 
     cacheManager.setSearchCache(cacheKey, page, 'soda', songs);
-    return this.resolveSodaSearchUrls(songs);
+    return songs;
   },
 
-  /**
-   * Resolve soda track IDs to playable direct URLs right after search.
-   * Keeps a short-lived cache so repeated searches do not hammer the API.
-   */
-  async resolveSodaSearchUrls(songs: Song[]): Promise<Song[]> {
-    const results = new Array<Song>(songs.length);
-    let index = 0;
-    const concurrency = Math.min(4, Math.max(1, songs.length));
-
-    const workers = Array.from({ length: concurrency }, async () => {
-      while (index < songs.length) {
-        const i = index++;
-        const song = songs[i];
-        try {
-          const url = await Promise.race([
-            this.getSodaAudioUrl(song.id),
-            new Promise<string>(resolve => setTimeout(() => resolve(''), SODA_RESOLVE_TIMEOUT)),
-          ]);
-          results[i] = url ? { ...song, url } : song;
-        } catch {
-          results[i] = song;
-        }
-      }
-    });
-
-    await Promise.all(workers);
-    return results;
-  },
 
   async fetchSodaSharePage(trackId: string): Promise<{ audioUrl: string; name: string; artist: string; cover: string } | null> {
     const shareUrl = `https://music.douyin.com/qishui/share/track?track_id=${trackId}`;
