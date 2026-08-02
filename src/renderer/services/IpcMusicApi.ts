@@ -1,5 +1,5 @@
 import { IpcClient } from './IpcClient';
-import type { Song, SongGroup, SourceKey, DiscoverPlaylist } from '@mplayer/core';
+import type { Song, SongGroup, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
 
 export interface MusicApiProxy {
   searchSongs(keyword: string, page: number, sourceType: SourceKey): Promise<Song[]>;
@@ -21,6 +21,8 @@ export interface MusicApiProxy {
   getNeteaseArtists(cat: number, offset: number, limit: number, initial: number): Promise<any>;
   getArtistSongs(artistId: string, offset: number, limit: number, order: string): Promise<any>;
   searchArtists(keyword: string, limit: number): Promise<any[]>;
+  getAlbumDetail(albumId: string): Promise<{ album: Album; songs: Song[] } | null>;
+  getArtistAlbums(artistId: string, offset: number, limit: number): Promise<{ albums: Album[]; total: number; more: boolean }>;
 }
 
 export function createIpcMusicApi(): MusicApiProxy {
@@ -44,6 +46,8 @@ export function createIpcMusicApi(): MusicApiProxy {
     getNeteaseArtists: (cat, offset, limit, initial) => IpcClient.invoke<any>('musicApi:getNeteaseArtists', cat, offset, limit, initial),
     getArtistSongs: (artistId, offset, limit, order) => IpcClient.invoke<any>('musicApi:getArtistSongs', artistId, offset, limit, order),
     searchArtists: (keyword, limit) => IpcClient.invoke<any[]>('musicApi:searchArtists', keyword, limit),
+    getAlbumDetail: (albumId) => IpcClient.invoke<{ album: Album; songs: Song[] } | null>('musicApi:getAlbumDetail', albumId),
+    getArtistAlbums: (artistId, offset, limit) => IpcClient.invoke<{ albums: Album[]; total: number; more: boolean }>('musicApi:getArtistAlbums', artistId, offset, limit),
   };
 }
 

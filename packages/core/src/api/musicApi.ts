@@ -123,10 +123,10 @@ function processNeteaseTrack(song: any): Song {
 }
 
 function normalizeNeteaseAlbum(raw: any): Album {
-  const artist = (raw.artists || raw.artist)
-    ?.map((a: any) => a.name || '')
-    .filter(Boolean)
-    .join(' / ') || '';
+  // weapi 返回 artist 单对象,旧接口返回 artists 数组;兼容两种形状
+  const rawArtist = raw.artists || raw.artist || [];
+  const artistList = Array.isArray(rawArtist) ? rawArtist : [rawArtist];
+  const artist = artistList.map((a: any) => a?.name || '').filter(Boolean).join(' / ') || '';
 
   return {
     id: String(raw.id),
@@ -1254,16 +1254,97 @@ export const musicApi = {
     const cached = cacheManager.get<Album[]>(cacheKey);
     if (cached) return cached;
 
-    const neteaseClient = createNeteaseClient();
-    const response = await neteaseClient.get(
-      `https://music.163.com/api/album/new?area=${area}&offset=${offset}&limit=${limit}`
-    );
-    const data = response.data;
-    if (!data?.albums) return [];
+    try {
+      // weapi 直连:area 分类真实生效(ZH 华语 / EA 欧美 / KR 韩国 / JP 日本),失败回退旧接口
+      const data = await weapiRequest<any>('/album/new', { area, offset, limit, total: true });
+      if (data.code !== 200 || !data.albums) {
+        throw new Error(`获取新碟失败 (area=${area})`);
+      }
+      const albums: Album[] = (data.albums as any[]).map(normalizeNeteaseAlbum);
+      cacheManager.set(cacheKey, albums, ALBUMS_CACHE_TTL);
+      return albums;
+    } catch (error) {
+      console.error(`[MusicApi] getNewAlbums weapi 失败,回退旧接口 (area=${area}):`, error);
+      try {
+        const neteaseClient = createNeteaseClient();
+        const response = await neteaseClient.get(
+          `https://music.163.com/api/album/new?area=${area}&offset=${offset}&limit=${limit}`
+        );
+        const data = response.data;
+        if (!data?.albums) return [];
 
-    const albums: Album[] = (data.albums as any[]).map(normalizeNeteaseAlbum);
-    cacheManager.set(cacheKey, albums, ALBUMS_CACHE_TTL);
-    return albums;
+        const albums: Album[] = (data.albums as any[]).map(normalizeNeteaseAlbum);
+        cacheManager.set(cacheKey, albums, ALBUMS_CACHE_TTL);
+        return albums;
+      } catch (error2) {
+        console.error('[MusicApi] getNewAlbums 失败(旧接口):', error2);
+        return [];
+      }
+    }
+  },
+
+  /**
+   * 获取网易云专辑详情+歌曲列表(weapi 直连,单请求)
+   * 专辑歌曲一般 ≤100 首;返回前补齐播放 URL(批量直链 + 搜索兜底),点开即播
+   */
+  async getAlbumDetail(albumId: string): Promise<{ album: Album; songs: Song[] } | null> {
+    const cacheKey = `album_detail_${albumId}`;
+    const cached = cacheManager.get<{ album: Album; songs: Song[] }>(cacheKey);
+    if (cached) return cached;
+
+    let album: Album | null = null;
+    let songs: Song[] = [];
+    try {
+      const data = await weapiRequest<any>(`/v1/album/${albumId}`, {});
+      if (data.code !== 200 || !data.album) {
+        throw new Error(`获取专辑详情失败 (albumId=${albumId})`);
+      }
+      album = normalizeNeteaseAlbum(data.album);
+      // 专辑歌曲字段与歌单同构(ar/al/dt),复用同一映射
+      songs = (data.songs || []).map((song: any) => processNeteaseTrack(song));
+    } catch (error) {
+      console.error(`[MusicApi] getAlbumDetail weapi 失败 (albumId=${albumId}):`, error);
+      return null;
+    }
+    if (!album) return null;
+
+    await this.resolveNeteaseSongUrls(songs);
+
+    const result = { album, songs };
+    // 空结果不缓存,避免瞬时故障 10 分钟内无法自愈
+    if (songs.length > 0) cacheManager.set(cacheKey, result, 10 * 60 * 1000);
+    return result;
+  },
+
+  /**
+   * 分页获取歌手专辑列表(weapi 直连)
+   * @param artistId 歌手 ID
+   * @param offset 起始偏移
+   * @param limit 每页数量
+   */
+  async getArtistAlbums(artistId: string, offset: number = 0, limit: number = 30): Promise<{ albums: Album[]; total: number; more: boolean }> {
+    const cacheKey = `artist_albums_${artistId}_${offset}_${limit}`;
+    const cached = cacheManager.get<{ albums: Album[]; total: number; more: boolean }>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const data = await weapiRequest<any>(`/artist/albums/${artistId}`, { offset, limit, total: true });
+      if (data.code !== 200) {
+        throw new Error(`获取歌手专辑失败 (artistId=${artistId})`);
+      }
+      const rawAlbums: any[] = data.hotAlbums || data.albums || [];
+      const albums = rawAlbums.map(normalizeNeteaseAlbum);
+      const result = {
+        albums,
+        total: typeof data.total === 'number' ? data.total : albums.length + offset,
+        more: data.more !== false,
+      };
+      cacheManager.set(cacheKey, result, 10 * 60 * 1000);
+      return result;
+    } catch (error) {
+      console.error(`[MusicApi] getArtistAlbums 失败 (artistId=${artistId}):`, error);
+      return { albums: [], total: 0, more: false };
+    }
   },
 
   async getRecommendedPlaylists(limit: number = 30): Promise<DiscoverPlaylist[]> {

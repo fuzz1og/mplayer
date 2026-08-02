@@ -48,6 +48,15 @@ const PLAYLIST_CATEGORIES = [
 
 const PLAYLIST_PAGE_SIZE = 30;
 
+// 发现页 tab 持久化:返回导航会让组件重新挂载,用 sessionStorage 恢复离开时的激活 tab
+const TAB_STORAGE_KEY = 'discover_active_tab';
+const VALID_TABS: TabKey[] = ['charts', 'albums', 'playlists', 'artists'];
+
+function loadSavedTab(): TabKey {
+  const saved = sessionStorage.getItem(TAB_STORAGE_KEY);
+  return (VALID_TABS as string[]).includes(saved as string) ? (saved as TabKey) : 'charts';
+}
+
 interface ChartCache {
   hot: AggregatedSongGroup[] | null;
   new: AggregatedSongGroup[] | null;
@@ -64,7 +73,7 @@ const DiscoverPageV2: React.FC = () => {
   const { currentSong, isPlaying, play } = usePlayerStore();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<TabKey>('charts');
+  const [activeTab, setActiveTab] = useState<TabKey>(loadSavedTab);
   const [hotGroups, setHotGroups] = useState<AggregatedSongGroup[]>([]);
   const [newGroups, setNewGroups] = useState<AggregatedSongGroup[]>([]);
   const [hotLoading, setHotLoading] = useState(true);
@@ -157,6 +166,11 @@ const DiscoverPageV2: React.FC = () => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, [fetchChart]);
+
+  // 记录激活 tab,返回导航重挂载后恢复
+  useEffect(() => {
+    sessionStorage.setItem(TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
 
   const fetchAlbums = useCallback(async (area: AreaKey) => {
     const fetchId = ++albumsFetchIdRef.current;
@@ -267,7 +281,7 @@ const DiscoverPageV2: React.FC = () => {
   };
 
   const handleAlbumClick = (album: Album) => {
-    searchService.searchAll(`${album.name} ${album.artist}`);
+    navigate(`/album/${album.id}`, { state: { name: album.name, picUrl: album.picUrl, artist: album.artist } });
   };
 
   const handleRetryPlaylists = () => {
