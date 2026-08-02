@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import { usePageTitleStore } from '@/renderer/store/pageTitleStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { searchService } from '@/renderer/services/searchService';
 import ChartPanel from '@/renderer/components/ChartPanel';
@@ -337,25 +338,15 @@ const DiscoverPageV2: React.FC = () => {
     hasMore,
   });
 
+  // 搜索结果标题上报到 TopBar 右侧,卸载时清空
+  useEffect(() => {
+    if (currentKeyword) usePageTitleStore.getState().setTitle(`搜索结果: ${currentKeyword}`);
+  }, [currentKeyword]);
+  useEffect(() => () => usePageTitleStore.getState().setTitle(''), []);
+
   if (currentKeyword && (searchSongs.length > 0 || groups.length > 0 || searchLoading)) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        {/* 搜索结果标题栏:退出搜索走 TopBar 后退(搜索模式接管)或搜索框清空 */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
-          padding: 'var(--space-3) var(--space-6)',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)', height: '60px', flexShrink: 0,
-        }}>
-          <h1 style={{
-            fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text-primary)',
-            flex: 1, margin: 0, textAlign: 'center',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            搜索结果: {currentKeyword}
-          </h1>
-        </div>
-
         <div style={{ flex: 1, overflow: 'hidden' }}>
           {sourceType === 'all' ? (
             <GroupedSongList

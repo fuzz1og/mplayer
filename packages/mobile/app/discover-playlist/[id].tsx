@@ -31,7 +31,7 @@ export default function DiscoverPlaylistDetailPage() {
       setPlaylist(p);
       if (p) {
         // 分页加载第一页,下滑加载更多;第一页失败回退第三方解析
-        let page = await musicApi.getNeteasePlaylistSongsPage(Number(id), 0, PAGE_SIZE);
+        const page = await musicApi.getNeteasePlaylistSongsPage(Number(id), 0, PAGE_SIZE);
         if (!page.songs || page.songs.length === 0) {
           const url = `https://music.163.com/playlist?id=${id}`;
           const s = await musicApi.getPlaylistSongsFromThirdParty(url, 'netease');
