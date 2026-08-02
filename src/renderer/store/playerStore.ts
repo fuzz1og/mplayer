@@ -149,11 +149,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       let realUrl = song.url;
 
-      if (song.sourceType === 'soda' && !song.url) {
+      if (song.sourceType === 'soda') {
         try {
+          // Soda CDN links are signed and need the main-process download/cache path.
           realUrl = await ipcMusicApi.getSodaPlayableUrl(song.id);
         } catch (urlError) {
           console.error('获取汽水音乐可播放 URL 失败:', urlError);
+          realUrl = song.url || '';
         }
       } else if (song.sourceType !== 'local') {
         const cacheKey = `${song.sourceType}:${song.url}`;
