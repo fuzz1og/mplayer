@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Play } from 'lucide-react';
 import { Modal, message } from 'antd';
 import SongList from '@/renderer/components/SongList';
+import CoverImage from '@/renderer/components/CoverImage';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, DiscoverPlaylist } from '@mplayer/core';
@@ -152,7 +153,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
       <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
         <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
           <div style={{ width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}>
-            <img src={playlist.coverImgUrl} alt={playlist.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <CoverImage src={playlist.coverImgUrl} alt={playlist.name} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px', marginTop: 0 }}>{playlist.name}</h2>

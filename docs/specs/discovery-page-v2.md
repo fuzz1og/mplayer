@@ -2,13 +2,13 @@
 
 ## Status
 
-Implemented and verified. PR #62 merged; review fixes landed in `codex/fix-review-findings` (PR #73); `e2e/discover-v2.spec.ts` 14/14; child tickets #57-#61 closed.
+Implemented and verified. PR #62 merged; review fixes landed in `codex/fix-review-findings` (PR #73); `e2e/discover-v2.spec.ts` 14/14; child tickets #57-#61 closed. 2026-08-02 回归修复：新碟恢复多行网格、猜你喜欢恢复歌单网格、封面缓存 IPC 恢复路径语义、搜索探测改为 15 并发逐首更新。
 
 ## Destination
 
 - 桌面端发现页重构为 V2：排行榜 / 新碟上架 / 猜你喜欢 / 歌单四个 Tab。
 - 三源排行榜聚合：网易、QQ、酷狗；热歌榜 + 新歌榜。
-- 搜索结果音频质量探测：SongRow 显示 `preview` / `invalid` badge，搜索后每首渐进探测。
+- 搜索结果音频质量探测：SongRow 显示 `preview` / `invalid` badge，搜索后每首并发探测。
 
 ## Decisions
 
@@ -16,11 +16,11 @@ Implemented and verified. PR #62 merged; review fixes landed in `codex/fix-revie
 - UI 布局：顶部 tab 切换，桌面端网格卡片。
 - audio probe：独立功能，但作为聚合前置依赖一起做；提取到 `packages/core`，desktop/mobile 共享。
 - 多源 API：酷狗全功能免费（UA only），QQ 排行榜+新歌免费，其他源需签名/反爬。
-- 搜索探测：搜索后每首渐进探测，`BATCH_SIZE=5`，批完成更新 UI；旧搜索结果不会覆盖新搜索。
+- 搜索探测：搜索后每首并发探测，`PROBE_CONCURRENCY=15`，单首完成后立即更新 UI；旧搜索结果不会覆盖新搜索。
 - 聚合去重：折叠显示最优一首（可展开）；完整度 > 排名 > 默认源序；未上榜源加权 `missing=51`；失败源不参与评分。
 - 缓存：排行榜 30min、推荐 15min、新碟 1h；排行榜默认立即加载，其他 Tab 首次切换加载并缓存；切回排行榜按 TTL 刷新。
-- 新碟上架：横向滚动卡片 + 地区筛选（全部/华语/欧美/韩国/日本）。
-- 猜你喜欢：歌单网格 + 推荐歌曲并行加载。
+- 新碟上架：多行自适应网格卡片 + 地区筛选（全部/华语/欧美/韩国/日本）。
+- 猜你喜欢：歌单网格。
 
 ## Child tickets
 

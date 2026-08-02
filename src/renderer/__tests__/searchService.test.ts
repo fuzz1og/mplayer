@@ -72,7 +72,7 @@ describe('searchService', () => {
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ error: '搜索失败，请重试' }));
     });
 
-    it('probes every result in progressive batches', async () => {
+    it('probes every result through the main-process batch IPC', async () => {
       vi.useRealTimers();
       const { IpcClient } = await import('../services/IpcClient');
       const songs = Array.from({ length: 12 }, (_, i) => ({
@@ -83,17 +83,20 @@ describe('searchService', () => {
       }));
       (IpcClient.invoke as any).mockImplementation(async (channel: string) => {
         if (channel === 'musicApi:searchSongs') return songs;
-        if (channel === 'musicApi:getAudioUrl') return '';
+        if (channel === 'musicApi:probeAudio') {
+          return songs.map((song) => ({ songId: song.id, tag: 'valid' as const }));
+        }
         return undefined;
       });
 
       await searchService.search('周杰伦');
 
       await vi.waitFor(() => expect(mockStore.setAudioTag).toHaveBeenCalledTimes(songs.length));
-      const audioUrlCalls = (IpcClient.invoke as any).mock.calls.filter(
-        (call: unknown[]) => call[0] === 'musicApi:getAudioUrl'
+      const probeCalls = (IpcClient.invoke as any).mock.calls.filter(
+        (call: unknown[]) => call[0] === 'musicApi:probeAudio'
       );
-      expect(audioUrlCalls).toHaveLength(songs.length);
+      expect(probeCalls).toHaveLength(1);
+      expect(probeCalls[0][1]).toHaveLength(songs.length);
     });
   });
 

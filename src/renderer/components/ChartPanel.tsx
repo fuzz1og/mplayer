@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Music2, AlertCircle, Play } from 'lucide-react';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
+import CoverImage from '@/renderer/components/CoverImage';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
 import type { Song } from '@mplayer/core';
 
@@ -44,7 +45,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   if (loading) {
     return (
       <div style={{ flex: 1, minWidth: 0 }}>
-        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
+        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
           {title}
         </h3>
         <SongListSkeleton rowCount={15} showIndex />
@@ -56,7 +57,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
     return (
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
         <div style={{ textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', padding: '24px', borderRadius: 'var(--radius-md)', maxWidth: '320px' }}>
-          <div style={{ fontSize: 'var(--text-lg)', marginBottom: '8px' }}>⚠️</div>
+          <AlertCircle size={22} style={{ marginBottom: '8px', color: 'var(--danger-color)' }} />
           <div style={{ fontSize: 'var(--text-base)', marginBottom: '16px' }}>{error}</div>
           {onRetry && (
             <button
@@ -83,11 +84,11 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   if (groups.length === 0) {
     return (
       <div style={{ flex: 1, minWidth: 0 }}>
-        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
+        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
           {title}
         </h3>
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
+          <Music2 size={24} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
           <div>暂无排行榜数据</div>
         </div>
       </div>
@@ -110,7 +111,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
             padding: '6px 8px',
             borderRadius: 'var(--radius-sm)',
             cursor: 'pointer',
-            backgroundColor: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'rgba(116, 185, 255, 0.1)' : 'transparent',
+            backgroundColor: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'rgba(47, 95, 208, 0.10)' : 'transparent',
             transition: 'background-color 0.15s ease',
           }}
           onMouseEnter={(e) => { if (!isCurrentSong(bestSong.id, bestSong.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
@@ -126,6 +127,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
           {/* Rank */}
           <div style={{
             width: '28px', textAlign: 'center', fontSize: 'var(--text-sm)',
+            fontVariantNumeric: 'tabular-nums',
             color: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'var(--accent-color)' : 'var(--text-tertiary)',
             fontWeight: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 600 : 400, flexShrink: 0,
           }}>
@@ -135,7 +137,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
             <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
               {bestSong.cover ? (
-                <img src={bestSong.cover} alt={bestSong.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <CoverImage src={bestSong.cover} alt={bestSong.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)' }} />
               )}
@@ -170,7 +172,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
                     padding: '6px 8px',
                     borderRadius: 'var(--radius-xs)',
                     cursor: 'pointer',
-                    backgroundColor: isCurrentSong(song.id, song.sourceType, chartId) ? 'rgba(116, 185, 255, 0.08)' : 'transparent',
+                    backgroundColor: isCurrentSong(song.id, song.sourceType, chartId) ? 'rgba(47, 95, 208, 0.08)' : 'transparent',
                     transition: 'background-color 0.15s ease',
                   }}
                   onMouseEnter={(e) => { if (!isCurrentSong(song.id, song.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
@@ -178,7 +180,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
                 >
                   <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
                     {song.cover ? (
-                      <img src={song.cover} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <CoverImage src={song.cover} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)' }} />
                     )}
@@ -215,13 +217,58 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
     );
   };
 
+  const renderFeatured = (group: AggregatedSongGroup, rank: number) => {
+    const bestSong = group.bestSong;
+    const isCurrent = isCurrentSong(bestSong.id, bestSong.sourceType, chartId);
+    return (
+      <div
+        key={group.key}
+        onClick={() => onPlay(bestSong, chartId)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
+          borderRadius: '8px', cursor: 'pointer', border: '1px solid var(--border-color)',
+          backgroundColor: isCurrent ? 'rgba(47, 95, 208, 0.10)' : 'var(--content-bg)',
+          transition: 'background-color 0.15s ease, border-color 0.15s ease',
+        }}
+        onMouseEnter={(e) => { if (!isCurrent) { e.currentTarget.style.borderColor = 'var(--accent-color)'; e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; } }}
+        onMouseLeave={(e) => { if (!isCurrent) { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.backgroundColor = 'var(--content-bg)'; } }}
+      >
+        <div style={{ width: '36px', textAlign: 'center', fontSize: '20px', fontWeight: 700, color: 'var(--accent-color)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+          {rank}
+        </div>
+        <div style={{ width: '56px', height: '56px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
+          <CoverImage src={bestSong.cover} alt={bestSong.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: isCurrent ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bestSong.name}</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{bestSong.artist}</span>
+            <SourceBadge sourceType={bestSong.sourceType} />
+            {bestSong.audioTag === 'preview' && <AudioTagBadge tag="preview" />}
+            {bestSong.audioTag === 'invalid' && <AudioTagBadge tag="invalid" />}
+          </div>
+        </div>
+        <button onClick={(e) => { e.stopPropagation(); onPlay(bestSong, chartId); }} aria-label="播放" style={{ border: 'none', background: 'var(--accent-color)', color: 'white', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          <Play size={14} fill="currentColor" />
+        </button>
+      </div>
+    );
+  };
+
+  const topGroups = groups.slice(0, 3);
+  const restGroups = groups.slice(3, 50);
+
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
-        {title}
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{title}</h3>
+        <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{groups.length} 首</span>
+      </div>
       <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
-        {groups.slice(0, 50).map((group, index) => renderGroup(group, index + 1))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+          {topGroups.map((group, index) => renderFeatured(group, index + 1))}
+        </div>
+        {restGroups.map((group, index) => renderGroup(group, index + 4))}
       </div>
     </div>
   );

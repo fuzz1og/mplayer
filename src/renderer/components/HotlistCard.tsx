@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Headphones } from 'lucide-react';
 import { useButtonHover } from '@/renderer/hooks/useButtonHover';
 
 interface HotlistSong {
@@ -44,7 +45,7 @@ const HotlistCard: React.FC<HotlistCardProps> = ({
       style={{
         display: 'flex',
         backgroundColor: 'var(--bg-surface)',
-        borderRadius: 'var(--radius-md)',
+        borderRadius: '8px',
         overflow: 'hidden',
         border: '1px solid var(--border-subtle)',
         cursor: 'pointer',
@@ -54,12 +55,10 @@ const HotlistCard: React.FC<HotlistCardProps> = ({
       onClick={() => navigate(route)}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = 'var(--accent)';
-        e.currentTarget.style.transform = 'translateY(-2px)';
         e.currentTarget.style.boxShadow = 'var(--shadow-md)';
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.borderColor = 'var(--border-subtle)';
-        e.currentTarget.style.transform = 'translateY(0)';
         e.currentTarget.style.boxShadow = 'none';
       }}
     >
@@ -118,7 +117,7 @@ const HotlistCard: React.FC<HotlistCardProps> = ({
             borderRadius: 'var(--radius-full)',
           }}
         >
-          <span>🎧</span>
+          <Headphones size={12} />
           <span>{songs.length > 0 ? badgeText : '加载中'}</span>
         </div>
       </div>

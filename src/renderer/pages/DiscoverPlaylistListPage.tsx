@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ListMusic } from 'lucide-react';
 import { useLazyLoad } from '@/renderer/hooks/useLazyLoad';
 import DiscoverPlaylistCard from '@/renderer/components/DiscoverPlaylistCard';
 import type { DiscoverPlaylist } from '@mplayer/core';
@@ -156,14 +156,14 @@ const DiscoverPlaylistListPage: React.FC = () => {
             onClick={() => handleCategoryChange(cat)}
             style={{
               padding: '6px 16px',
-              borderRadius: '16px',
-              border: 'none',
+              borderRadius: '20px',
+              border: '1px solid var(--border-color)',
               cursor: 'pointer',
               fontSize: '13px',
               fontWeight: 500,
               whiteSpace: 'nowrap',
               transition: 'all 0.2s ease',
-              backgroundColor: currentCat === cat ? 'var(--accent-color)' : 'var(--hover-bg)',
+              background: currentCat === cat ? 'var(--accent-color)' : 'transparent',
               color: currentCat === cat ? 'white' : 'var(--text-secondary)',
             }}
           >
@@ -246,7 +246,7 @@ const DiscoverPlaylistListPage: React.FC = () => {
                   color: 'var(--text-tertiary)',
                 }}
               >
-                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎵</div>
+                <ListMusic size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
                 <div>暂无歌单数据</div>
               </div>
             )}

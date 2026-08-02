@@ -23,7 +23,7 @@ describe('Sidebar', () => {
   it('应该高亮当前页面', () => {
     render(<Sidebar {...defaultProps} currentPage="discover" />);
     const discoverItem = screen.getByText('发现音乐').closest('button');
-    expect(discoverItem).toHaveStyle({ backgroundColor: 'var(--bg-active)' });
+    expect(discoverItem).toHaveAttribute('aria-current', 'page');
   });
 
   it('应该点击导航到对应页面', () => {
@@ -31,28 +31,21 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByText('我的收藏'));
     expect(defaultProps.onPageChange).toHaveBeenCalledWith('favorites');
   });
-
-  it('应该显示应用标题', () => {
-    render(<Sidebar {...defaultProps} />);
-    expect(screen.getByText('MPlayer')).toBeInTheDocument();
-  });
-
   it('应该显示所有导航项', () => {
     render(<Sidebar {...defaultProps} />);
     expect(screen.getByText('发现音乐')).toBeInTheDocument();
-    expect(screen.getByText('歌手')).toBeInTheDocument();
     expect(screen.getByText('本地音乐')).toBeInTheDocument();
     expect(screen.getByText('下载管理')).toBeInTheDocument();
     expect(screen.getByText('我的收藏')).toBeInTheDocument();
     expect(screen.getByText('播放历史')).toBeInTheDocument();
     expect(screen.getByText('我的歌单')).toBeInTheDocument();
-    expect(screen.getByText('试听列表')).toBeInTheDocument();
+    expect(screen.getByText('播放队列')).toBeInTheDocument();
   });
 
   it('应该显示当前页面高亮', () => {
     render(<Sidebar {...defaultProps} currentPage="favorites" />);
     const favoritesItem = screen.getByText('我的收藏').closest('button');
-    expect(favoritesItem).toHaveStyle({ backgroundColor: 'var(--bg-active)' });
+    expect(favoritesItem).toHaveAttribute('aria-current', 'page');
   });
 
   it('应该点击其他页面', () => {

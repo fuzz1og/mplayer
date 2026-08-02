@@ -76,7 +76,7 @@ function createWindow() {
       contextIsolation: false,
       webSecurity: false
     },
-    titleBarStyle: 'hiddenInset',
+    frame: false,
     autoHideMenuBar: true,
     show: false
   });
@@ -101,6 +101,21 @@ function createWindow() {
       mainWindow.hide();
     }
   });
+
+
+  ipcMain.handle('window:minimize', () => mainWindow.minimize());
+  ipcMain.handle('window:toggleMaximize', () => {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+    return mainWindow.isMaximized();
+  });
+  ipcMain.handle('window:isMaximized', () => mainWindow.isMaximized());
+  ipcMain.handle('window:close', () => mainWindow.close());
+  mainWindow.on('maximize', () => mainWindow.webContents.send('window:maximized', true));
+  mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:maximized', false));
 
   return mainWindow;
 }

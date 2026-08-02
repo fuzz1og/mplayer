@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Play, Trash2 } from 'lucide-react';
 import { useButtonHover } from '@/renderer/hooks/useButtonHover';
+import CoverImage from '@/renderer/components/CoverImage';
 
 interface MusicCardProps {
   title: string;
@@ -59,34 +60,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
           transition: 'box-shadow var(--duration-normal) var(--ease-out)',
         }}
       >
-        {cover ? (
-          <img
-            src={cover}
-            alt={title}
-            loading="lazy"
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        ) : (
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'linear-gradient(135deg, var(--gray-100) 0%, var(--gray-200) 100%)',
-            }}
-          >
-            <div
-              style={{
-                width: '40%',
-                height: '40%',
-                borderRadius: 'var(--radius-full)',
-                background: 'linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%)',
-              }}
-            />
-          </div>
-        )}
+        <CoverImage src={cover} alt={title} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
 
         {/* 播放按钮覆盖层 */}
         {onPlay && (

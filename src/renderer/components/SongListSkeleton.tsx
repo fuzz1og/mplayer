@@ -8,7 +8,7 @@ interface SongListSkeletonProps {
 
 const SkeletonRow: React.FC<{ showCheckbox: boolean; showIndex: boolean }> = ({ showCheckbox, showIndex }) => (
   <div style={{
-    display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px',
+    display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '8px',
   }}>
     {showCheckbox && (
       <div style={{ width: '40px', textAlign: 'center' }}>
@@ -21,7 +21,7 @@ const SkeletonRow: React.FC<{ showCheckbox: boolean; showIndex: boolean }> = ({ 
       </div>
     )}
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-      <div className="skeleton-shimmer" style={{ width: '40px', height: '40px', borderRadius: '4px', flexShrink: 0 }} />
+      <div className="skeleton-shimmer" style={{ width: '44px', height: '44px', borderRadius: '8px', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
         <div className="skeleton-shimmer" style={{ width: '45%', height: '14px', borderRadius: '3px' }} />
         <div className="skeleton-shimmer" style={{ width: '30%', height: '12px', borderRadius: '3px' }} />

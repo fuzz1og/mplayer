@@ -1,4 +1,6 @@
 import React from 'react';
+import { Disc3 } from 'lucide-react';
+import CoverImage from '@/renderer/components/CoverImage';
 import type { Album } from '@mplayer/core';
 
 interface AlbumScrollProps {
@@ -57,33 +59,35 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
       </div>
 
       {/* Scrollable album cards */}
-      <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
+      <div style={{ flex: 1, overflow: 'auto' }}>
         {loading ? (
           <div style={{ display: 'flex', gap: 'var(--space-4)', paddingBottom: '12px' }}>
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} style={{ flexShrink: 0, width: '120px' }}>
-                <div className="skeleton-shimmer" style={{ width: '120px', height: '120px', borderRadius: '10px', marginBottom: '8px' }} />
+                <div className="skeleton-shimmer" style={{ width: '120px', height: '120px', borderRadius: '8px', marginBottom: '8px' }} />
                 <div className="skeleton-shimmer" style={{ width: '100px', height: '14px', borderRadius: '2px' }} />
               </div>
             ))}
           </div>
         ) : albums.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>💿</div>
+            <Disc3 size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
             <div>暂无新碟数据</div>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 'var(--space-5)', flexFlow: 'row nowrap' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-5)', flexFlow: 'row wrap' }}>
             {albums.map((album) => (
               <div key={album.id} style={{ flexShrink: 0, width: '120px', cursor: 'pointer' }} onClick={() => onAlbumClick?.(album)}>
-                <div style={{ width: '120px', height: '120px', borderRadius: '10px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', marginBottom: '8px' }}>
+                <div style={{ width: '120px', height: '120px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', marginBottom: '8px' }}>
                   {album.picUrl ? (
-                    <img src={album.picUrl} alt={album.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                    <CoverImage src={album.picUrl} alt={album.name} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px', background: 'linear-gradient(135deg, #f093fb, #f5576c)' }}>🎵</div>
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--hover-bg)' }}>
+                      <Disc3 size={36} style={{ color: 'var(--text-tertiary)' }} />
+                    </div>
                   )}
                 </div>
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
                   {album.name}
                 </div>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

@@ -66,12 +66,12 @@ const UpdateSection: React.FC = () => {
   };
 
   return (
-    <section style={{ marginBottom: '32px' }}>
+    <section id="update" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-        <Download size={20} color="var(--accent-color)" />
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>检查更新</h2>
+        <Download size={20} color="var(--text-secondary)" />
+        <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>检查更新</h2>
       </div>
-      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '12px', padding: '24px', border: '1px solid var(--border-color)' }}>
+      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-color)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div>
             <div style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)', marginBottom: '4px' }}>当前版本</div>
