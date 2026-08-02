@@ -1,4 +1,4 @@
-import { probeAudioUrl } from '@mplayer/core';
+import { probeAudio, probeAudioUrl } from '@mplayer/core';
 import type { Song, AudioTag } from '@mplayer/core';
 import { registerIpcHandler } from './registerHandler';
 import { getAggregatedChart } from '../services/chartAggregator';
@@ -21,13 +21,25 @@ async function probeSongBatch(songs: Song[], api: MusicApi): Promise<ProbeResult
     while (index < songs.length) {
       const song = songs[index++];
       try {
-        let url = song.url;
-        try {
-          url = (await api.getAudioUrl(url)) || url;
-        } catch {
-          // keep the original URL; probeAudioUrl will classify it
+        let tag: AudioTag;
+        if (song.sourceType === 'soda') {
+          // Probe resolves the trackId to a real link so preview detection is accurate.
+          let sodaUrl = '';
+          try {
+            sodaUrl = await api.getSodaAudioUrl(song.id);
+          } catch {
+            // fall through to duration-based classification
+          }
+          tag = sodaUrl ? await probeAudioUrl(sodaUrl) : await probeAudio(song);
+        } else {
+          let url = song.url;
+          try {
+            url = (await api.getAudioUrl(url)) || url;
+          } catch {
+            // keep the original URL; probeAudioUrl will classify it
+          }
+          tag = url ? await probeAudioUrl(url) : 'invalid';
         }
-        const tag = url ? await probeAudioUrl(url) : 'invalid';
         results.push({ songId: song.id, tag });
       } catch {
         results.push({ songId: song.id, tag: 'valid' });
@@ -55,6 +67,8 @@ export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('musicApi:getQQNewSongList', () => musicApi.getQQNewSongList());
   registerIpcHandler('musicApi:getNeteasePlaylists', (cat: string, order: string, offset: number, limit: number) => musicApi.getNeteasePlaylists(cat, order, offset, limit));
   registerIpcHandler('musicApi:getNeteasePlaylistDetail', (id: number) => musicApi.getNeteasePlaylistDetail(id));
+  registerIpcHandler('musicApi:getNeteasePlaylistSongs', (id: number, limit?: number) => musicApi.getNeteasePlaylistSongs(id, limit || 0));
+  registerIpcHandler('musicApi:getNeteasePlaylistSongsPage', (id: number, offset: number, limit: number) => musicApi.getNeteasePlaylistSongsPage(id, offset, limit));
   registerIpcHandler('musicApi:getPlaylistSongsFromThirdParty', (playlistUrl: string, sourceType: any = 'netease') => musicApi.getPlaylistSongsFromThirdParty(playlistUrl, sourceType));
   registerIpcHandler('musicApi:getNeteaseArtists', (cat: number, offset: number, limit: number, initial: number) => musicApi.getNeteaseArtists(cat, offset, limit, initial));
   registerIpcHandler('musicApi:getArtistSongs', (artistId: string, offset: number, limit: number, order: string) => musicApi.getNeteaseArtistSongs(artistId, offset, limit, order));

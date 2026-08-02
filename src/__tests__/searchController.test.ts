@@ -50,4 +50,57 @@ describe('createSearchController', () => {
     const lastCall = setState.mock.calls[setState.mock.calls.length - 1][0];
     expect(lastCall.results?.[0]?.key).toBe('b');
   });
+
+  it('loadMore 在 loadingMore 时跳过', async () => {
+    const searchFn = vi.fn();
+    const ctrl = createSearchController({
+      searchFn,
+      getState: vi.fn().mockReturnValue({
+        query: 'q',
+        page: 1,
+        hasMore: true,
+        loading: false,
+        loadingMore: true,
+        results: [],
+      }),
+      setState: vi.fn(),
+    });
+
+    await ctrl.loadMore();
+
+    expect(searchFn).not.toHaveBeenCalled();
+  });
+
+  it('loadMore 合并同一 key 的歌曲并去重', async () => {
+    const state = {
+      query: 'q',
+      page: 1,
+      hasMore: true,
+      loading: false,
+      loadingMore: false,
+      source: 'netease',
+      results: [{
+        key: 'netease',
+        name: 'netease',
+        artist: '',
+        songs: [{ id: '1', name: '稻香', artist: '周杰伦', sourceType: 'netease' }],
+      }],
+    };
+    const searchFn = vi.fn().mockResolvedValue([{
+      key: 'netease',
+      name: 'netease',
+      artist: '',
+      songs: [
+        { id: '1', name: '稻香', artist: '周杰伦', sourceType: 'netease' },
+        { id: '2', name: '七里香', artist: '周杰伦', sourceType: 'netease' },
+      ],
+    }]);
+    const setState = vi.fn((partial: any) => Object.assign(state, partial));
+    const ctrl = createSearchController({ searchFn, getState: () => state, setState });
+
+    await ctrl.loadMore();
+
+    expect(state.results[0].songs).toHaveLength(2);
+    expect(state.page).toBe(2);
+  });
 });

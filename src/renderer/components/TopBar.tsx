@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Search, X, Check, ChevronDown, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import { useButtonHover } from '@/renderer/hooks/useButtonHover';
+import { usePageTitleStore } from '@/renderer/store/pageTitleStore';
 
 interface TopBarProps {
   onSearch: (keyword: string) => void;
@@ -12,6 +13,8 @@ interface TopBarProps {
   onRefresh?: () => void;
   canGoBack?: boolean;
   canGoForward?: boolean;
+  /** 搜索视图激活时,后退按钮接管"退出搜索"语义 */
+  searchActive?: boolean;
 }
 
 const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
@@ -26,12 +29,13 @@ const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
   local: { label: '本地', accent: '#10B981' },
 };
 
-const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange, onBack, onForward, onRefresh, canGoBack, canGoForward }) => {
+const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange, onBack, onForward, onRefresh, canGoBack, canGoForward, searchActive = false }) => {
   const [searchValue, setSearchValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const dropdownHoverProps = useButtonHover({ hoverBg: 'var(--bg-hover)', leaveBg: 'transparent' });
+  const pageTitle = usePageTitleStore(s => s.title);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -62,6 +66,9 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
     padding: '6px 4px 6px 6px',
     transition: 'all var(--duration-normal) var(--ease-out)',
     boxShadow: isFocused ? '0 0 0 3px var(--accent-subtle)' : 'var(--shadow-xs)',
+    // 限宽,给右侧页面标题留空间
+    maxWidth: '460px',
+    minWidth: '260px',
   };
 
   return (
@@ -79,24 +86,24 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
         zIndex: 100,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexShrink: 0 }}>
         {/* 导航按钮 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexShrink: 0 }}>
           <button
             onClick={onBack}
-            disabled={!canGoBack}
+            disabled={!searchActive && !canGoBack}
             className="player-btn"
-            aria-label="后退"
-            style={{ opacity: canGoBack ? 1 : 0.3, cursor: canGoBack ? 'pointer' : 'not-allowed' }}
+            aria-label={searchActive ? '退出搜索' : '后退'}
+            style={{ opacity: searchActive || canGoBack ? 1 : 0.3, cursor: searchActive || canGoBack ? 'pointer' : 'not-allowed' }}
           >
             <ArrowLeft size={16} />
           </button>
           <button
             onClick={onForward}
-            disabled={!canGoForward}
+            disabled={searchActive || !canGoForward}
             className="player-btn"
             aria-label="前进"
-            style={{ opacity: canGoForward ? 1 : 0.3, cursor: canGoForward ? 'pointer' : 'not-allowed' }}
+            style={{ opacity: !searchActive && canGoForward ? 1 : 0.3, cursor: !searchActive && canGoForward ? 'pointer' : 'not-allowed' }}
           >
             <ArrowRight size={16} />
           </button>
@@ -260,6 +267,24 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
             )}
           </div>
         </div>
+
+        {/* 当前页面标题:子页上报,显示在搜索框右侧 */}
+        {pageTitle && (
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+            <span
+              style={{
+                fontSize: 'var(--text-base)',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {pageTitle}
+            </span>
+          </div>
+        )}
       </div>
     </header>
   );
