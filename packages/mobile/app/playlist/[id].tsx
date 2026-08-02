@@ -15,7 +15,7 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import SongRow from '../../components/SongRow';
-import PlayerBar from '../../components/PlayerBar';
+import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import type { Song } from '@mplayer/core';
 
 export default function PlaylistDetailPage() {
@@ -66,7 +66,7 @@ export default function PlaylistDetailPage() {
             <Text style={styles.emptyText}>歌单不存在</Text>
           </View>
         </SafeAreaView>
-        <PlayerBar />
+        <BottomSafePlayerBar />
       </View>
     );
   }
@@ -161,7 +161,7 @@ export default function PlaylistDetailPage() {
           </TouchableOpacity>
         </Modal>
       </SafeAreaView>
-      <PlayerBar />
+      <BottomSafePlayerBar />
     </View>
   );
 }

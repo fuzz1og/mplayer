@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import { Stack } from 'expo-router';
-import * as Notifications from 'expo-notifications';
-import { setupNotificationChannel } from '../services/notificationService';
+import { addNotificationResponseListener, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -19,7 +18,7 @@ export default function RootLayout() {
     initAudio().catch(() => {});
     setupNotificationChannel().catch(() => {});
 
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const sub = addNotificationResponseListener((response) => {
       const data = response.notification.request.content.data;
       const actionId = response.actionIdentifier;
 

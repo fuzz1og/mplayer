@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, LayoutChangeEvent } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
@@ -9,6 +10,7 @@ import PlayerBar from '../../components/PlayerBar';
 const TAB_HEIGHT = 80;
 
 function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) {
+  const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const isSearch = pathname === '/search';
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -50,7 +52,7 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
       <PlayerBar />
       <Animated.View style={{ overflow: 'hidden', height: containerHeight }}>
         <Animated.View style={{ transform: [{ translateY }] }} onLayout={onLayout}>
-          <View style={tabBarStyles.container}>
+          <View style={[tabBarStyles.container, { paddingBottom: 24 + Math.max(0, insets.bottom - 8) }]}>
           {state.routes.map((route: any, i: number) => {
             // 搜索 tab 不显示 tab 按钮
             if (route.name === 'search') return null;

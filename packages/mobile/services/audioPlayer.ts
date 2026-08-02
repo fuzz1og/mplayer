@@ -11,7 +11,6 @@ type Player = ReturnType<typeof createAudioPlayer>;
 
 let player: Player | null = null;
 let playerStatusSubscription: EventSubscription | null = null;
-let playingPromise: Promise<void> | null = null;
 let currentPlayId = 0;
 
 export async function initAudio(): Promise<void> {
@@ -41,13 +40,6 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
   // Immediately stop the current player instead of waiting for the old run to finish.
   disposePlayer();
 
-  // Wait for a previous playSong call that is still unwinding.
-  while (playingPromise) {
-    try { await playingPromise; } catch { break; }
-  }
-
-  if (playId !== currentPlayId) return;
-
   const startPlayback = async (): Promise<void> => {
     const audioUrl = await resolvePlayableUrl(song, musicApi);
     if (playId !== currentPlayId) throw 'cancelled';
@@ -61,7 +53,9 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
       if (!status.isLoaded) {
         if (status.error) {
           const nextSong = nextSongAfterError(retryCount);
-          if (nextSong) void playSong(nextSong, retryCount + 1);
+          if (nextSong) setTimeout(() => {
+            if (playId === currentPlayId) void playSong(nextSong, retryCount + 1);
+          }, 0);
         }
         return;
       }
@@ -78,7 +72,9 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
 
       if (status.didJustFinish) {
         const nextSong = s.next();
-        if (nextSong) void playSong(nextSong);
+        if (nextSong) setTimeout(() => {
+          if (playId === currentPlayId) void playSong(nextSong);
+        }, 0);
       }
     });
 
@@ -91,19 +87,16 @@ export async function playSong(song: Song, retryCount = 0): Promise<void> {
     nextPlayer.play();
 
     useHistoryStore.getState().addHistory(song);
-    await updateNotification(song, true);
+    void updateNotification(song, true).catch(() => {});
   };
 
   try {
-    playingPromise = startPlayback();
-    await playingPromise;
+    await startPlayback();
   } catch (err) {
     if (err === 'cancelled') return;
     console.error(`[playSong] error for song ${song.id} (${song.name}):`, err);
     const nextSong = nextSongAfterError(retryCount);
     if (nextSong) await playSong(nextSong, retryCount + 1);
-  } finally {
-    playingPromise = null;
   }
 }
 
@@ -114,11 +107,11 @@ export async function togglePlay(): Promise<void> {
   if (player.playing) {
     player.pause();
     usePlayerStore.getState().pause();
-    if (song) await updateNotification(song, false);
+    if (song) void updateNotification(song, false).catch(() => {});
   } else {
     player.play();
     usePlayerStore.getState().resume();
-    if (song) await updateNotification(song, true);
+    if (song) void updateNotification(song, true).catch(() => {});
   }
 }
 
@@ -130,5 +123,5 @@ export async function seekTo(timeSec: number): Promise<void> {
 
 export async function cleanup(): Promise<void> {
   disposePlayer();
-  await clearNotification();
+  await clearNotification().catch(() => {});
 }

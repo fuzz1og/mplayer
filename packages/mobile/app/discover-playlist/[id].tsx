@@ -9,7 +9,7 @@ import { musicApi, type Song } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import SongRow from '../../components/SongRow';
-import PlayerBar from '../../components/PlayerBar';
+import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 
 export default function DiscoverPlaylistDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -74,7 +74,7 @@ export default function DiscoverPlaylistDetailPage() {
           contentContainerStyle={styles.list}
         />
       </SafeAreaView>
-      <PlayerBar />
+      <BottomSafePlayerBar />
     </View>
   );
 }

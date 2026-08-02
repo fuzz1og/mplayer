@@ -13,7 +13,7 @@ import { musicApi } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
 import LoadingState from '../components/LoadingState';
 import SongRow from '../components/SongRow';
-import PlayerBar from '../components/PlayerBar';
+import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { playSong } from '../services/audioPlayer';
 import { usePlayerStore } from '../stores/playerStore';
 
@@ -93,7 +93,7 @@ export default function HotlistPage() {
           />
           <Text style={styles.errorText}>未知榜单类型</Text>
         </SafeAreaView>
-        <PlayerBar />
+        <BottomSafePlayerBar />
       </View>
     );
   }
@@ -146,7 +146,7 @@ export default function HotlistPage() {
           />
         )}
       </SafeAreaView>
-      <PlayerBar />
+      <BottomSafePlayerBar />
     </View>
   );
 }

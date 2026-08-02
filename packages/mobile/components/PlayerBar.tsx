@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View, Text, Image, TouchableOpacity, StyleSheet,
   Modal, FlatList,
@@ -8,6 +9,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong } from '../services/audioPlayer';
 
 export default function PlayerBar() {
+  const insets = useSafeAreaInsets();
   const currentSong = usePlayerStore(s => s.currentSong);
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const queue = usePlayerStore(s => s.queue);
@@ -87,7 +89,7 @@ export default function PlayerBar() {
         onRequestClose={() => setShowQueue(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { paddingBottom: Math.max(32, insets.bottom + 16) }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>播放队列 ({queue.length})</Text>
               <TouchableOpacity onPress={() => setShowQueue(false)}>

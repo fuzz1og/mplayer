@@ -9,7 +9,7 @@ import { musicApi, type Song } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
-import PlayerBar from '../../components/PlayerBar';
+import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 
 export default function ArtistDetailPage() {
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
@@ -96,7 +96,7 @@ export default function ArtistDetailPage() {
           ListEmptyComponent={<View style={styles.empty}><Text style={{ color: '#666', fontSize: 16 }}>暂无歌曲</Text></View>}
         />
       </SafeAreaView>
-      <PlayerBar />
+      <BottomSafePlayerBar />
     </View>
   );
 }
