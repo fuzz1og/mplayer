@@ -1,4 +1,4 @@
-import { probeAudioUrl } from '@mplayer/core';
+import { probeAudio, probeAudioUrl } from '@mplayer/core';
 import type { Song, AudioTag } from '@mplayer/core';
 import { registerIpcHandler } from './registerHandler';
 import { getAggregatedChart } from '../services/chartAggregator';
@@ -21,13 +21,25 @@ async function probeSongBatch(songs: Song[], api: MusicApi): Promise<ProbeResult
     while (index < songs.length) {
       const song = songs[index++];
       try {
-        let url = song.url;
-        try {
-          url = (await api.getAudioUrl(url)) || url;
-        } catch {
-          // keep the original URL; probeAudioUrl will classify it
+        let tag: AudioTag;
+        if (song.sourceType === 'soda') {
+          // Probe resolves the trackId to a real link so preview detection is accurate.
+          let sodaUrl = '';
+          try {
+            sodaUrl = await api.getSodaAudioUrl(song.id);
+          } catch {
+            // fall through to duration-based classification
+          }
+          tag = sodaUrl ? await probeAudioUrl(sodaUrl) : await probeAudio(song);
+        } else {
+          let url = song.url;
+          try {
+            url = (await api.getAudioUrl(url)) || url;
+          } catch {
+            // keep the original URL; probeAudioUrl will classify it
+          }
+          tag = url ? await probeAudioUrl(url) : 'invalid';
         }
-        const tag = url ? await probeAudioUrl(url) : 'invalid';
         results.push({ songId: song.id, tag });
       } catch {
         results.push({ songId: song.id, tag: 'valid' });
