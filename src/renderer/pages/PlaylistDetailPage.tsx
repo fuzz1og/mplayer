@@ -383,10 +383,10 @@ const PlaylistDetailPage: React.FC = () => {
           </div>
       )}
 
-      {/* 歌曲列表独立容器:内部滚动 */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      {/* 歌曲列表独立容器:内部滚动,左右 24px 与上方卡片对齐 */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 24px 24px' }}>
         {loading && songs.length === 0 ? (
-          <div style={{ padding: '24px' }}>
+          <div style={{ padding: '24px 0' }}>
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={`sk-${i}`} style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px', marginBottom: '8px' }}>
                 <div style={{ width: '30px', textAlign: 'center' }}>
@@ -426,6 +426,8 @@ const PlaylistDetailPage: React.FC = () => {
           </div>
         ) : (
           <>
+        {/* 吸顶区:保存提示 + 批量操作栏 + 表头,滚动时悬浮,与上方固定卡片衔接 */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--content-bg)' }}>
         {isReordering && (
           <div style={{ padding: '8px 16px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
             正在保存排序...
@@ -459,6 +461,7 @@ const PlaylistDetailPage: React.FC = () => {
           <div style={{ width: '30px', textAlign: 'center' }}>#</div>
           <div style={{ flex: 1 }}>标题</div>
           <div style={{ width: '100px', textAlign: 'center' }}>操作</div>
+        </div>
         </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={songs.map(s => s.id)} strategy={verticalListSortingStrategy}>
