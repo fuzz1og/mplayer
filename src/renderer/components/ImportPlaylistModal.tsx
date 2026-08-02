@@ -166,7 +166,16 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     try {
       const { ipcRenderer } = window.require('electron');
       const sourceType = urlInfo.type === 'qq' ? 'qq' : 'netease';
-      const result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', linkUrl, sourceType);
+      // 网易云歌单:weapi 直连取全量歌曲,失败时回退第三方解析
+      let result;
+      if (sourceType === 'netease' && urlInfo.id) {
+        result = await ipcRenderer.invoke('musicApi:getNeteasePlaylistSongs', parseInt(urlInfo.id));
+        if (!result.success || !result.data || result.data.length === 0) {
+          result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', linkUrl, sourceType);
+        }
+      } else {
+        result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', linkUrl, sourceType);
+      }
 
       if (!result.success) {
         setLinkError(result.error || '解析链接失败');

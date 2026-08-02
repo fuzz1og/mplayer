@@ -15,6 +15,8 @@ export interface MusicApiProxy {
   getQQNewSongList(): Promise<any[]>;
   getNeteasePlaylists(cat: string, order: string, offset: number, limit: number): Promise<any>;
   getNeteasePlaylistDetail(id: number): Promise<DiscoverPlaylist | null>;
+  getNeteasePlaylistSongs(id: number, limit?: number): Promise<Song[]>;
+  getNeteasePlaylistSongsPage(id: number, offset: number, limit: number): Promise<{ songs: Song[]; total: number }>;
   getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: SourceKey): Promise<Song[]>;
   getNeteaseArtists(cat: number, offset: number, limit: number, initial: number): Promise<any>;
   getArtistSongs(artistId: string, offset: number, limit: number, order: string): Promise<any>;
@@ -36,6 +38,8 @@ export function createIpcMusicApi(): MusicApiProxy {
     getQQNewSongList: () => IpcClient.invoke<any[]>('musicApi:getQQNewSongList'),
     getNeteasePlaylists: (cat, order, offset, limit) => IpcClient.invoke<any>('musicApi:getNeteasePlaylists', cat, order, offset, limit),
     getNeteasePlaylistDetail: (id) => IpcClient.invoke<DiscoverPlaylist | null>('musicApi:getNeteasePlaylistDetail', id),
+    getNeteasePlaylistSongs: (id, limit) => IpcClient.invoke<Song[]>('musicApi:getNeteasePlaylistSongs', id, limit || 0),
+    getNeteasePlaylistSongsPage: (id, offset, limit) => IpcClient.invoke<{ songs: Song[]; total: number }>('musicApi:getNeteasePlaylistSongsPage', id, offset, limit),
     getPlaylistSongsFromThirdParty: (playlistUrl, sourceType) => IpcClient.invoke<Song[]>('musicApi:getPlaylistSongsFromThirdParty', playlistUrl, sourceType),
     getNeteaseArtists: (cat, offset, limit, initial) => IpcClient.invoke<any>('musicApi:getNeteaseArtists', cat, offset, limit, initial),
     getArtistSongs: (artistId, offset, limit, order) => IpcClient.invoke<any>('musicApi:getArtistSongs', artistId, offset, limit, order),

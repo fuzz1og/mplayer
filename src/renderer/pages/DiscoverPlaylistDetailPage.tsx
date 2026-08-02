@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Play } from 'lucide-react';
 import { Modal, message } from 'antd';
@@ -10,6 +10,8 @@ import type { Song, DiscoverPlaylist } from '@mplayer/core';
 import { formatPlayCount } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
+const PAGE_SIZE = 20;
+
 const DiscoverPlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -17,10 +19,15 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
 
   const [playlist, setPlaylist] = useState<DiscoverPlaylist | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [songsLoading, setSongsLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [songsError, setSongsError] = useState<string | null>(null);
+  const loadingMoreRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -40,28 +47,70 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
     loadPlaylist();
   }, [id]);
 
-  useEffect(() => {
-    if (!id) return;
-    const loadSongs = async () => {
-      try {
+  // 分页加载歌曲:首屏第一页,滚动到底加载更多
+  const loadSongsPage = useCallback(async (reset: boolean) => {
+    if (!id || loadingMoreRef.current) return;
+    if (!reset && !hasMore) return;
+    loadingMoreRef.current = true;
+    try {
+      if (reset) {
         setSongsLoading(true);
         setSongsError(null);
-        const playlistUrl = `https://music.163.com/#/playlist?id=${id}`;
-        const result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', playlistUrl);
-        if (result.success && result.data) {
-          setSongs(result.data);
-        } else {
-          setSongsError('加载歌曲失败，请稍后重试');
+      } else {
+        setLoadingMore(true);
+      }
+      const offset = reset ? 0 : songs.length;
+      let result = await ipcRenderer.invoke('musicApi:getNeteasePlaylistSongsPage', parseInt(id), offset, PAGE_SIZE);
+
+      // 分页失败时仅第一页回退第三方解析
+      if (!result.success || !result.data || result.data.songs.length === 0) {
+        if (reset) {
+          const playlistUrl = `https://music.163.com/#/playlist?id=${id}`;
+          result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', playlistUrl);
+          if (result.success && result.data) {
+            setSongs(result.data);
+            setTotal(result.data.length);
+            setHasMore(false);
+          } else {
+            setSongsError('加载歌曲失败，请稍后重试');
+          }
         }
-      } catch (error) {
-        console.error('加载歌单歌曲失败:', error);
-        setSongsError('加载歌曲失败，请稍后重试');
-      } finally {
-        setSongsLoading(false);
+        return;
+      }
+
+      setSongs(prev => reset ? result.data.songs : [...prev, ...result.data.songs]);
+      setTotal(result.data.total);
+      setHasMore(offset + result.data.songs.length < result.data.total);
+    } catch (error) {
+      console.error('加载歌单歌曲失败:', error);
+      if (reset) setSongsError('加载歌曲失败，请稍后重试');
+    } finally {
+      setSongsLoading(false);
+      setLoadingMore(false);
+      loadingMoreRef.current = false;
+    }
+  }, [id, songs.length, hasMore]);
+
+  useEffect(() => {
+    if (id) loadSongsPage(true);
+  }, [id]);
+
+  // 滚动到底加载更多
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      if (songsLoading || loadingMore || !hasMore) return;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      if (scrollTop + clientHeight >= scrollHeight - 200) {
+        loadSongsPage(false);
       }
     };
-    loadSongs();
-  }, [id]);
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [songsLoading, loadingMore, hasMore, loadSongsPage]);
 
   const handlePlay = async (song: Song) => {
     await play(song);
@@ -77,20 +126,27 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
   const handleSaveToLocal = () => {
     if (!playlist) return;
     Modal.confirm({
-      title: '保存到本地',
-      content: `确定要将歌单"${playlist.name}"（${songs.length}首歌曲）保存到本地吗？`,
+      content: `确定要将歌单"${playlist.name}"保存到本地吗？`,
       okText: '保存',
       cancelText: '取消',
       onOk: async () => {
         try {
           setSaving(true);
+          // 分页模式下已加载的歌曲可能不全,保存前拉取全量
+          let songsToSave = songs;
+          if (songsToSave.length < total) {
+            const result = await ipcRenderer.invoke('musicApi:getNeteasePlaylistSongs', parseInt(id!));
+            if (result.success && result.data && result.data.length > 0) {
+              songsToSave = result.data;
+            }
+          }
           const playlistId = await IpcClient.invoke<number>(
             'playlist:create',
             playlist.name,
             playlist.description || `来自网易云歌单: ${playlist.name}`
           );
           let addedCount = 0;
-          for (const song of songs) {
+          for (const song of songsToSave) {
             try {
               await IpcClient.invoke<number>('playlist:addSong', playlistId, song);
               addedCount++;
@@ -150,7 +206,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
         <div style={{ width: '140px' }} />
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
         <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
           <div style={{ width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}>
             <CoverImage src={playlist.coverImgUrl} alt={playlist.name} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -190,7 +246,17 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
             {songsError}
           </div>
         ) : (
-          <SongList songs={songs} currentSongId={currentSong?.id} isPlaying={isPlaying} onPlay={handlePlay} showHeader={true} showIndex={true} showCheckbox={true} enableBatchDownload={true} enableBatchAddToPlaylist={true} emptyText="暂无歌曲数据" />
+          <>
+            <SongList songs={songs} currentSongId={currentSong?.id} isPlaying={isPlaying} onPlay={handlePlay} showHeader={true} showIndex={true} showCheckbox={true} enableBatchDownload={true} enableBatchAddToPlaylist={true} emptyText="暂无歌曲数据" />
+            {loadingMore && (
+              <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '16px' }}>加载中...</div>
+            )}
+            {!hasMore && songs.length > 0 && (
+              <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '16px' }}>
+                已加载全部 {songs.length}{total > songs.length ? ` / ${total}` : ''} 首歌曲
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
