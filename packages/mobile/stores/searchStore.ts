@@ -59,12 +59,6 @@ export const useSearchStore = create<SearchState>((set, get) => {
     loadingMore: false,
 
     search: async (query: string) => {
-      const source = useSourceStore.getState().selectedSource;
-      if (source === 'all') {
-        // 渐进式多源：每源完成立即合并渲染 + 探测，不等最慢源（手机网络下 kugou 4.5s）
-        await progressiveSearch(query, 1);
-        return;
-      }
       const t0 = Date.now();
       await controller.search(query);
       const searchMs = Date.now() - t0;
@@ -79,32 +73,6 @@ export const useSearchStore = create<SearchState>((set, get) => {
     clear: () => controller.reset(),
   };
 });
-
-// 多源渐进搜索：各源并行，先完成先渲染（源结果按完成顺序排列）
-async function progressiveSearch(query: string, page: number): Promise<void> {
-  const sources: SourceKey[] = ['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda'];
-  const t0 = Date.now();
-  useSearchStore.setState({ loading: true, error: null, query, page, results: [], hasMore: true, loadingMore: false });
-  const groups: SongGroup[] = [];
-  await Promise.all(
-    sources.map(async (src) => {
-      try {
-        const songs = await musicApi.searchSongs(query, page, src);
-        if (songs.length === 0) return;
-        const group: SongGroup = { key: src, name: SOURCE_LABELS[src], artist: '', songs };
-        groups.push(group);
-        // 该源结果立即可见（不等其他源）
-        useSearchStore.setState({ results: [...groups] });
-        // 该源探测也渐进（probeCache 会话缓存避免重复）
-        void probeResults([group]);
-      } catch {
-        // 单源失败跳过，不影响其他源
-      }
-    })
-  );
-  useSearchStore.setState({ loading: false });
-  useLogsStore.getState().addLog('info', `搜索完成: 词「${query}」耗时 ${Date.now() - t0}ms`);
-}
 
 async function probeResults(groups: SongGroup[]) {
   const allSongs = groups.flatMap(g => g.songs);

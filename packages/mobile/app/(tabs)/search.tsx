@@ -4,7 +4,6 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
   Image,
   Dimensions,
@@ -15,6 +14,7 @@ import { musicApi } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
 import SongRow from '../../components/SongRow';
+import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -93,7 +93,8 @@ export default function SearchPage() {
 
       {activeTab === 'songs' ? (
         loading ? (
-          <ActivityIndicator color="#e74c3c" style={{ marginTop: 40 }} />
+          // 骨架屏：行高与 SongRow 一致,数据到达不跳动
+          <SongListSkeleton />
         ) : error ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="alert-circle-outline" size={48} color="#e74c3c" />
@@ -113,7 +114,10 @@ export default function SearchPage() {
           </View>
         )
       ) : artistsLoading ? (
-        <ActivityIndicator color="#e74c3c" style={{ marginTop: 40 }} />
+        // 歌手加载也用骨架屏
+        <View style={{ paddingTop: 8 }}>
+          <SongListSkeleton rows={6} />
+        </View>
       ) : artistsError ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#e74c3c" />
