@@ -10,6 +10,7 @@ import { musicApi, type Song, type Album } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
+import { probeSongsWithTags } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 
 export default function ArtistDetailPage() {
@@ -57,6 +58,10 @@ export default function ArtistDetailPage() {
         const info = artistResults[0] || null;
         // 优先用入口传入的 weapi 高清头像（searchNeteaseArtists 结果兜底）
         setArtist({ ...info, name: info?.name || artistName, picUrl: pic || info?.picUrl || '' });
+        // 补齐缺失 URL 后探测:30 秒片段自动标「片段」徽标
+        void musicApi.resolveNeteaseSongUrls(songResult.songs, false).then(() => {
+          if (!cancelled) probeSongsWithTags(songResult.songs);
+        });
       } catch (e: any) {
         console.error('[ArtistDetail] load error:', e.message);
       } finally {

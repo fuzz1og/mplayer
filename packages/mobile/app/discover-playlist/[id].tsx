@@ -10,6 +10,7 @@ import type { DiscoverPlaylist } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
+import { probeSongsWithTags } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 
 const PAGE_SIZE = 50;
@@ -44,6 +45,8 @@ export default function DiscoverPlaylistDetailPage() {
         void musicApi.resolveNeteaseSongUrls(page.songs, false).then(() => {
           if (!cancelled) setSongs([...page.songs]);
         });
+        // 音频质量探测:30 秒片段自动标「片段」徽标
+        void probeSongsWithTags(page.songs);
       } catch (e: any) {
         console.error('[DiscoverPlaylistDetail] load error:', e.message);
       } finally {
