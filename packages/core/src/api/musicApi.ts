@@ -140,8 +140,6 @@ const apiClient = axios.create({
   get baseURL() {
     return API_BASE_URL;
   },
-  // 兜底超时：某源挂起时多源搜索不能无限等待（Promise.all 等最慢）
-  timeout: 8000,
   headers: {
     'accept': 'application/json, text/javascript, */*; q=0.01',
     'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -444,7 +442,8 @@ export const musicApi = {
     params.append('type', sourceType);
     params.append('page', page.toString());
 
-    const response = await apiClient.post('', params);
+    // per-request 8s 超时：多源搜索 Promise.all 等最慢源，某源挂起不能拖 30s
+    const response = await apiClient.post('', params, { timeout: 8000 });
     const songs: Partial<Song>[] = response.data.data || [];
 
     const processedSongs = songs.map(song => processSong(song, sourceType));
