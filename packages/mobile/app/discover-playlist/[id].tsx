@@ -45,7 +45,7 @@ export default function DiscoverPlaylistDetailPage() {
         void musicApi.resolveNeteaseSongUrls(page.songs, false).then(() => {
           if (!cancelled) setSongs([...page.songs]);
         });
-        // 音频质量探测:30 秒片段自动标「片段」徽标
+        // 音频质量探测:30 秒片段自动标「短时长」徽标
         void probeSongsWithTags(page.songs);
       } catch (e: any) {
         console.error('[DiscoverPlaylistDetail] load error:', e.message);

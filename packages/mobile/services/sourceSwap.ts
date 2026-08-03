@@ -91,7 +91,7 @@ export async function probeSwapCandidates(candidates: SwapCandidate[]): Promise<
       const playable = tag !== 'invalid';
       useLogsStore.getState().addLog(
         playable ? 'info' : 'warn',
-        `换源候选探测: 《${c.song.name}》${c.song.artist} → ${tag === 'preview' ? '短时长片段' : playable ? '可播' : '失效'}`
+        `换源候选探测: 《${c.song.name}》${c.song.artist} → ${tag === 'preview' ? '短时长' : playable ? '可播' : '失效'}`
       );
       return { ...c, playable, tag };
     })

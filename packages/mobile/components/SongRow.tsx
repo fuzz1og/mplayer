@@ -274,7 +274,7 @@ export default function SongRow({
 
       {audioTag === 'preview' && (
         <View style={styles.tagBadgePreview}>
-          <Text style={styles.tagText}>片段</Text>
+          <Text style={styles.tagText}>短时长</Text>
         </View>
       )}
       {audioTag === 'invalid' && (

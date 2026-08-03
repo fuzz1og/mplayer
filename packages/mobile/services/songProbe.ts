@@ -42,5 +42,5 @@ export async function probeSongsWithTags(
       else valid++;
     },
   });
-  useLogsStore.getState().addLog('info', `探测完成: 共${songs.length}首, 完整${valid} 片段${preview} 无效${invalid}, 耗时 ${Date.now() - t0}ms`);
+  useLogsStore.getState().addLog('info', `探测完成: 共${songs.length}首, 完整${valid} 短时长${preview} 无效${invalid}, 耗时 ${Date.now() - t0}ms`);
 }
