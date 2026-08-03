@@ -9,7 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
-import { togglePlay, seekTo, playSong } from '../services/audioPlayer';
+import { togglePlay, seekTo, playSong, fetchLrcInBackground } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { parseLRC, musicApi, findCurrentLyricIndex } from '@mplayer/core';
@@ -125,7 +125,11 @@ export default function PlayerOverlay({ onClose }: Props) {
       lyricCache.set(cacheKey, parsed.lines);
       setLyricLines(parsed.lines);
     }).catch(() => {
-      if (!abort.signal.aborted) setLyricLines([]);
+      if (!abort.signal.aborted) {
+        setLyricLines([]);
+        // 歌曲自带 lrc URL 可能已失效（歌单缓存）→ 强制搜索兜底补歌词
+        void fetchLrcInBackground(song, true);
+      }
     }).finally(() => {
       if (!abort.signal.aborted) setLyricsLoading(false);
     });

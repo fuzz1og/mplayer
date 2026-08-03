@@ -75,10 +75,12 @@ async function refreshPlayableUrl(song: Song): Promise<string> {
  * 后台并行补歌词：有 url 的歌（专辑/歌单/歌手页）播放不等待歌词，
  * 搜索一次拿歌词地址 → 预取歌词文本（core 缓存预热）→ 写回 currentSong
  * 触发全屏播放器加载。失败静默（歌词缺失不阻塞播放）。
+ * @param force 强制搜索：歌曲自带 lrc URL 可能已失效（歌单缓存），
+ *   播放器歌词加载失败时传 true 重新搜索兜底
  */
-async function fetchLrcInBackground(song: Song): Promise<void> {
+export async function fetchLrcInBackground(song: Song, force = false): Promise<void> {
   const log = useLogsStore.getState();
-  if (song.lrc || song.sourceType === 'local' || !song.name) return;
+  if ((!force && song.lrc) || song.sourceType === 'local' || !song.name) return;
   try {
     const res = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
     const fresh = res[0];
@@ -107,8 +109,17 @@ function isRedirectEndpoint(url: string): boolean {
 
 /** 解析 302 端点 → CDN 直链（getAudioUrl 带缓存；直链直接返回原值） */
 async function resolveDirectUrl(url: string): Promise<string> {
-  const direct = await musicApi.getAudioUrl(url);
-  return direct?.startsWith('http') ? direct : url;
+  // 1.5s 超时：解析失败（网络/源临时故障）直接用原 URL（302 播放器能播，只是慢）
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1500);
+  try {
+    const direct = await musicApi.getAudioUrl(url, controller.signal);
+    return direct?.startsWith('http') ? direct : url;
+  } catch {
+    return url;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
