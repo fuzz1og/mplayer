@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import { musicApi } from '@mplayer/core';
 import type { SongGroup, SourceKey } from '@mplayer/core';
 import type { SourceOption } from './sourceStore';
+import { useSourceStore } from './sourceStore';
+import { useLogsStore } from './logsStore';
+import { useAudioTagStore } from './audioTagStore';
 import { probeAudio } from '../services/audioProbe';
 import { createSearchController } from '@mplayer/core';
 
@@ -41,7 +44,9 @@ export const useSearchStore = create<SearchState>((set, get) => {
 
   const controller = createSearchController({
     searchFn,
-    getState: get,
+    // controller 通过 getState().source 读取当前源;
+    // SearchStore state 没有 source 字段,这里实时合并 sourceStore 的值
+    getState: () => ({ ...get(), source: useSourceStore.getState().selectedSource }),
     setState: set,
   });
 
@@ -69,15 +74,24 @@ export const useSearchStore = create<SearchState>((set, get) => {
 
 async function probeResults(groups: SongGroup[]) {
   const allSongs = groups.flatMap(g => g.songs);
-  const BATCH_SIZE = 5;
+  const BATCH_SIZE = 10;
+  let valid = 0;
+  let preview = 0;
+  let invalid = 0;
+  const { setTag } = useAudioTagStore.getState();
   for (let i = 0; i < allSongs.length; i += BATCH_SIZE) {
     const batch = allSongs.slice(i, i + BATCH_SIZE);
+    // 每批完成立即 setTag → SongRow 按 id 订阅,只重渲染标签变化的行,
+    // 标签渐进式出现,不用等全部探测完
     await Promise.allSettled(
       batch.map(async (song) => {
         const tag = await probeAudio(song);
-        (song as any).audioTag = tag;
+        if (tag === 'preview') preview++;
+        else if (tag === 'invalid') invalid++;
+        else valid++;
+        setTag(song, tag);
       })
     );
-    useSearchStore.setState({});
   }
+  useLogsStore.getState().addLog('info', `探测完成: 共${allSongs.length}首, 完整${valid} 片段${preview} 无效${invalid}`);
 }

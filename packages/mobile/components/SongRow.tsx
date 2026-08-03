@@ -5,9 +5,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
+import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { playSong } from '../services/audioPlayer';
 
@@ -51,6 +53,9 @@ export default function SongRow({
   const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
   const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
+  const insets = useSafeAreaInsets();
+  // 按 (sourceType:id) 订阅探测标签:每批探测完成只重渲染对应的行,标签渐进式出现
+  const audioTag = useAudioTagStore((s) => s.tags[tagKey(song)]);
 
   const favorited = isFav;
   const [showActions, setShowActions] = useState(false);
@@ -142,12 +147,12 @@ export default function SongRow({
         </View>
       )}
 
-      {song.audioTag === 'preview' && (
+      {audioTag === 'preview' && (
         <View style={styles.tagBadgePreview}>
           <Text style={styles.tagText}>片段</Text>
         </View>
       )}
-      {song.audioTag === 'invalid' && (
+      {audioTag === 'invalid' && (
         <View style={styles.tagBadgeInvalid}>
           <Text style={styles.tagText}>无效</Text>
         </View>
@@ -169,9 +174,9 @@ export default function SongRow({
       </TouchableOpacity>
     </TouchableOpacity>
 
-    <Modal visible={showActions} animationType="slide" transparent onRequestClose={() => setShowActions(false)}>
+    <Modal visible={showActions} animationType="slide" transparent statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowActions(false)}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowActions(false)}>
-        <View style={styles.actionSheet}>
+        <View style={[styles.actionSheet, { paddingBottom: insets.bottom + 24 }]}>
           <Text style={styles.actionSheetTitle} numberOfLines={1}>{song.name}</Text>
           {MORE_ACTIONS.map(a => (
             <TouchableOpacity key={a.key} style={styles.actionItem} onPress={a.onPress}>
