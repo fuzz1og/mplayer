@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, Image, FlatList, StyleSheet,
 } from 'react-native';
@@ -8,31 +8,73 @@ import { StatusBar } from 'expo-status-bar';
 import { musicApi, type Song } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
+import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
+
+const PAGE_SIZE = 50;
 
 export default function DiscoverPlaylistDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [playlist, setPlaylist] = useState<DiscoverPlaylist | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const offsetRef = useRef(0);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
+    offsetRef.current = 0;
     (async () => {
-      const p = await musicApi.getNeteasePlaylistDetail(Number(id));
-      if (cancelled) return;
-      setPlaylist(p);
-      if (p) {
-        const url = `https://music.163.com/playlist?id=${id}`;
-        const s = await musicApi.getPlaylistSongsFromThirdParty(url, 'netease');
-        if (!cancelled) setSongs(s);
+      try {
+        // 元数据与第一页歌曲并行（weapi 直连，歌曲含已解析播放 URL）
+        // 跳过逐首搜索兜底(慢):先秒显列表,后台批量补齐 URL 后更新
+        const [p, page] = await Promise.all([
+          musicApi.getNeteasePlaylistDetail(Number(id)),
+          musicApi.getNeteasePlaylistSongsPage(Number(id), 0, PAGE_SIZE, true),
+        ]);
+        if (cancelled) return;
+        setPlaylist(p);
+        setSongs(page.songs);
+        setHasMore(page.songs.length < page.total);
+        offsetRef.current = PAGE_SIZE;
+        // 后台补齐缺失 URL(weapi 批量 + 10 并发搜索兜底),完成后触发重渲染
+        void musicApi.resolveNeteaseSongUrls(page.songs, false).then(() => {
+          if (!cancelled) setSongs([...page.songs]);
+        });
+      } catch (e: any) {
+        console.error('[DiscoverPlaylistDetail] load error:', e.message);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [id]);
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore || !id) return;
+    setLoadingMore(true);
+    try {
+      const page = await musicApi.getNeteasePlaylistSongsPage(Number(id), offsetRef.current, PAGE_SIZE, true);
+      if (page.songs.length > 0) {
+        setSongs(prev => [...prev, ...page.songs]);
+        offsetRef.current += PAGE_SIZE;
+        setHasMore(offsetRef.current < page.total);
+        // 后台补齐本页缺失 URL
+        void musicApi.resolveNeteaseSongUrls(page.songs, false).then(() => {
+          setSongs(prev => [...prev]);
+        });
+      } else {
+        setHasMore(false);
+      }
+    } catch (e: any) {
+      console.error('[DiscoverPlaylistDetail] loadMore error:', e.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   if (loading) return <LoadingState />;
   if (!playlist) {
@@ -72,6 +114,9 @@ export default function DiscoverPlaylistDetailPage() {
           )}
           renderItem={({ item }) => <SongRow song={item} showSource queueSongs={songs} />}
           contentContainerStyle={styles.list}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />}
         />
       </SafeAreaView>
       <BottomSafePlayerBar />
