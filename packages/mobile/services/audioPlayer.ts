@@ -3,7 +3,7 @@ import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { cacheManager, musicApi, resolvePlayableUrl } from '@mplayer/core';
+import { cacheManager, musicApi, resolvePlayableUrl, resolveFreshUrl } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -76,33 +76,14 @@ function nextSongAfterError(retryCount: number): Song | null {
 }
 
 /**
- * 播放失败后为同一首歌获取全新可播 URL。
- * 收藏/历史里的 url 可能已过期（音乐源直链一般数小时失效），
- * 先清掉 audioUrl 内存缓存，再重新解析，避免拿到过期的缓存直链。
+ * 播放失败后为同一首歌获取全新可播 URL（core 的 fresh 重试语义）。
+ * 收藏/历史里的 url 可能已过期（音乐源直链一般数小时失效）。
  */
 async function refreshPlayableUrl(song: Song): Promise<string> {
-  cacheManager.clearByPrefix('audioUrl');
-
-  // 汽水音乐 → 重新拿直链
-  if (song.sourceType === 'soda' && song.id) {
-    const u = await musicApi.getSodaAudioUrl(song.id);
-    if (u?.startsWith('http')) return u;
-  }
-
-  // 普通源 → 跟随重定向取最新直链（重定向结果未变说明源 URL 已失效）
-  if (song.url?.startsWith('http')) {
-    const u = await musicApi.getAudioUrl(song.url);
-    if (u?.startsWith('http') && u !== song.url) return u;
-  }
-
-  // 最后手段：重新搜索拿新 URL
-  if (song.name) {
-    const results = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
-    const fresh = results[0];
-    if (fresh?.url?.startsWith('http')) return fresh.url;
-  }
-
-  throw new Error('fresh URL resolve failed');
+  return resolveFreshUrl(song, {
+    ...musicApi,
+    clearAudioUrlCache: () => cacheManager.clearByPrefix('audioUrl'),
+  });
 }
 
 /**
