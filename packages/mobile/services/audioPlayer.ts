@@ -88,7 +88,12 @@ export async function fetchLrcInBackground(song: Song, force = false): Promise<v
     if (cur?.id !== song.id) return; // 已切歌，丢弃过期结果
     // 归一化比较：302 端点的 t 时间戳参数每次搜索都不同，不算资源变化
     const lrcChanged = !!fresh.lrc && resourceUrlKey(fresh.lrc) !== resourceUrlKey(cur.lrc);
-    const coverChanged = !!fresh.cover?.startsWith('http') && resourceUrlKey(fresh.cover) !== resourceUrlKey(cur.cover);
+    // 非 force（播放补全）只补空封面：已有封面不替换——302 端点的 sign
+    // 签名每次搜索都重新生成，替换会让迷你栏/播放器封面闪一下重载；
+    // force（onError 失效自愈）才允许换新签名的封面
+    const coverChanged = force
+      ? !!fresh.cover?.startsWith('http') && resourceUrlKey(fresh.cover) !== resourceUrlKey(cur.cover)
+      : !!fresh.cover?.startsWith('http') && !cur.cover;
     if (!lrcChanged && !coverChanged) return; // 资源仍有效，无需刷新
     // 预取歌词文本（core 歌词缓存预热，全屏播放器打开秒显）
     if (lrcChanged) void musicApi.getLyrics(fresh.lrc).catch(() => {});
