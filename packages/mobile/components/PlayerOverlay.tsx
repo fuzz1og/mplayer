@@ -101,6 +101,10 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (!song) onCloseRef.current();
   }, [song]);
 
+  // 封面加载失败 → 显示占位唱片（资源刷新写回新封面时重置）
+  const [coverFailed, setCoverFailed] = useState(false);
+  useEffect(() => { setCoverFailed(false); }, [song?.cover]);
+
   // 加载歌词：优先歌曲自带 lrc URL；今日推荐/歌单/歌手页的歌曲 lrc 为空，
   // 用网易云 songId 兜底拉歌词
   const [lyricsLoading, setLyricsLoading] = useState(false);
@@ -127,8 +131,8 @@ export default function PlayerOverlay({ onClose }: Props) {
     }).catch(() => {
       if (!abort.signal.aborted) {
         setLyricLines([]);
-        // 歌曲自带 lrc URL 可能已失效（歌单缓存）→ 强制搜索兜底补歌词
-        void fetchLrcInBackground(song, true);
+        // 歌曲自带 lrc URL 可能已失效（歌单/收藏缓存）→ 播放层统一资源刷新兜底
+        void fetchLrcInBackground(song);
       }
     }).finally(() => {
       if (!abort.signal.aborted) setLyricsLoading(false);
@@ -269,8 +273,9 @@ export default function PlayerOverlay({ onClose }: Props) {
               <View style={styles.plinth}>
                 <View style={styles.platter} />
                 <Animated.Image
-                  source={{ uri: song.cover || 'https://via.placeholder.com/300' }}
+                  source={coverFailed ? undefined : { uri: song.cover || 'https://via.placeholder.com/300' }}
                   style={[styles.cover, { transform: [{ rotate: spin }] }]}
+                  onError={() => setCoverFailed(true)}
                 />
                 {/* 唱臂 */}
                 <View style={styles.tonearmPivot} />

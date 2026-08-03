@@ -73,37 +73,33 @@ async function refreshPlayableUrl(song: Song): Promise<string> {
 }
 
 /**
- * 后台并行补歌词：有 url 的歌（专辑/歌单/歌手页）播放不等待歌词，
- * 搜索一次拿歌词地址 → 预取歌词文本（core 缓存预热）→ 写回 currentSong
- * 触发全屏播放器加载。失败静默（歌词缺失不阻塞播放）。
- * @param force 强制搜索：歌曲自带 lrc URL 可能已失效（歌单缓存），
- *   播放器歌词加载失败时传 true 重新搜索兜底
+ * 播放后校验歌曲资源（歌词/封面）：缓存歌（歌单/收藏）的 lrc/cover 可能已失效，
+ * 播放成功后走统一严格匹配搜索，有新值就写回 currentSong 触发播放器刷新。
+ * 无变化不写回不打日志；失败静默（不影响播放）。
  */
-export async function fetchLrcInBackground(song: Song, force = false): Promise<void> {
+export async function fetchLrcInBackground(song: Song): Promise<void> {
   const log = useLogsStore.getState();
-  if ((!force && song.lrc) || song.sourceType === 'local' || !song.name) return;
+  if (song.sourceType === 'local' || !song.name) return;
   try {
     const fresh = await searchStrictMatch(song);
-    if (!fresh?.lrc) {
-      log.addLog('warn', `歌词补全未找到: 《${song.name}》${song.artist}`);
-      return;
-    }
-    void musicApi.getLyrics(fresh.lrc).catch(() => {});
-    usePlayerStore.setState((s) =>
-      s.currentSong?.id === song.id
-        ? {
-            currentSong: {
-              ...s.currentSong,
-              lrc: fresh.lrc,
-              // 缓存封面可能失效：搜索一并补上（无新封面则保留原值）
-              cover: fresh.cover?.startsWith('http') ? fresh.cover : s.currentSong.cover,
-            },
-          }
-        : {}
-    );
-    log.addLog('info', `歌词补全: 《${song.name}》`);
+    if (!fresh) return;
+    const cur = usePlayerStore.getState().currentSong;
+    if (cur?.id !== song.id) return; // 已切歌，丢弃过期结果
+    const lrcChanged = !!fresh.lrc && fresh.lrc !== cur.lrc;
+    const coverChanged = !!fresh.cover?.startsWith('http') && fresh.cover !== cur.cover;
+    if (!lrcChanged && !coverChanged) return; // 资源仍有效，无需刷新
+    // 预取歌词文本（core 歌词缓存预热，全屏播放器打开秒显）
+    if (lrcChanged) void musicApi.getLyrics(fresh.lrc).catch(() => {});
+    usePlayerStore.setState({
+      currentSong: {
+        ...cur,
+        lrc: lrcChanged ? fresh.lrc : cur.lrc,
+        cover: coverChanged ? fresh.cover : cur.cover,
+      },
+    });
+    log.addLog('info', `歌曲资源刷新: 《${song.name}》${coverChanged ? '封面' : ''}${lrcChanged ? '歌词' : ''}`);
   } catch (e: any) {
-    log.addLog('warn', `歌词补全失败: 《${song.name}》${e?.message || e}`);
+    log.addLog('warn', `歌曲资源刷新失败: 《${song.name}》${e?.message || e}`);
   }
 }
 
