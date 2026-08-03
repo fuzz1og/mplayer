@@ -1,6 +1,6 @@
 import { cacheDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync, deleteAsync, readDirectoryAsync, getInfoAsync } from 'expo-file-system/legacy'
+import { md5 } from '@mplayer/core'
 import type { CacheBackend } from '@mplayer/core'
-import crypto from 'crypto'
 
 export class MobileFileBackend implements CacheBackend {
   private baseDir: string
@@ -10,7 +10,7 @@ export class MobileFileBackend implements CacheBackend {
   }
 
   private hashKey(key: string): string {
-    return crypto.createHash('md5').update(key).digest('hex')
+    return md5(key)
   }
 
   private resolvePath(key: string): string {
