@@ -85,8 +85,9 @@ export async function fetchLrcInBackground(song: Song): Promise<void> {
     if (!fresh) return;
     const cur = usePlayerStore.getState().currentSong;
     if (cur?.id !== song.id) return; // 已切歌，丢弃过期结果
-    const lrcChanged = !!fresh.lrc && fresh.lrc !== cur.lrc;
-    const coverChanged = !!fresh.cover?.startsWith('http') && fresh.cover !== cur.cover;
+    // 归一化比较：302 端点的 t 时间戳参数每次搜索都不同，不算资源变化
+    const lrcChanged = !!fresh.lrc && resourceUrlKey(fresh.lrc) !== resourceUrlKey(cur.lrc);
+    const coverChanged = !!fresh.cover?.startsWith('http') && resourceUrlKey(fresh.cover) !== resourceUrlKey(cur.cover);
     if (!lrcChanged && !coverChanged) return; // 资源仍有效，无需刷新
     // 预取歌词文本（core 歌词缓存预热，全屏播放器打开秒显）
     if (lrcChanged) void musicApi.getLyrics(fresh.lrc).catch(() => {});
@@ -124,6 +125,22 @@ async function resolveDirectUrl(url: string): Promise<string> {
     return url;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * 资源 URL 归一化 key：302 端点的 t 时间戳参数每次搜索都不同，
+ * 但内容相同——比较资源是否变化时忽略它，避免每次播放都触发
+ * 封面/歌词"伪刷新"（迷你播放栏图片反复重载）。
+ */
+function resourceUrlKey(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete('t');
+    u.searchParams.delete('timestamp');
+    return u.href;
+  } catch {
+    return url;
   }
 }
 
