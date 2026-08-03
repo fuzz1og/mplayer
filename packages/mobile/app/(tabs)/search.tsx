@@ -92,10 +92,10 @@ export default function SearchPage() {
       </View>
 
       {activeTab === 'songs' ? (
-        loading ? (
-          // 骨架屏：行高与 SongRow 一致,数据到达不跳动
+        // 渐进搜索:有结果就显示(即使还在加载),骨架屏只在无结果时出现
+        loading && results.length === 0 ? (
           <SongListSkeleton />
-        ) : error ? (
+        ) : error && results.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="alert-circle-outline" size={48} color="#e74c3c" />
             <Text style={[styles.emptyText, { color: '#e74c3c' }]}>{error}</Text>
