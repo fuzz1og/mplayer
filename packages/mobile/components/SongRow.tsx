@@ -83,7 +83,8 @@ export default function SongRow({
 
   const handleSearchArtist = () => {
     setShowActions(false);
-    router.push(`/search?q=${encodeURIComponent(song.artist)}`);
+    // type=artist：搜索结果页默认落在「歌手」次级 tab
+    router.push(`/search?q=${encodeURIComponent(song.artist)}&type=artist`);
   };
 
   // 单曲换源状态

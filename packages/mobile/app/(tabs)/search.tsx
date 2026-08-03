@@ -22,8 +22,9 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 type SearchTab = 'songs' | 'artists';
 
 export default function SearchPage() {
-  const params = useLocalSearchParams<{ q: string }>();
+  const params = useLocalSearchParams<{ q: string; type?: string }>();
   const q = Array.isArray(params.q) ? params.q[0] : params.q;
+  const type = Array.isArray(params.type) ? params.type[0] : params.type;
   const results = useSearchStore((s) => s.results);
   const loading = useSearchStore((s) => s.loading);
   const loadingMore = useSearchStore((s) => s.loadingMore);
@@ -34,7 +35,11 @@ export default function SearchPage() {
   const query = useSearchStore((s) => s.query);
   const source = useSourceStore((s) => s.selectedSource);
 
-  const [activeTab, setActiveTab] = useState<SearchTab>('songs');
+  // 从「搜索歌手」进入时默认落在歌手 tab（挂载时 + 后续 type 参数变化都处理）
+  const [activeTab, setActiveTab] = useState<SearchTab>(type === 'artist' ? 'artists' : 'songs');
+  useEffect(() => {
+    if (type === 'artist') setActiveTab('artists');
+  }, [type]);
   const [artists, setArtists] = useState<any[]>([]);
   const [artistsLoading, setArtistsLoading] = useState(false);
   const [artistsError, setArtistsError] = useState(false);

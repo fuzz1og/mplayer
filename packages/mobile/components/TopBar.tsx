@@ -3,10 +3,11 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, usePathname, useLocalSearchParams } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSourceStore, SOURCE_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
+import { useSearchStore } from '../stores/searchStore';
 
 const SOURCE_OPTIONS: { key: SourceOption; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'all', icon: 'apps-outline' },
@@ -28,12 +29,13 @@ export default function TopBar() {
   const selectedSource = useSourceStore((s) => s.selectedSource);
   const setSelectedSource = useSourceStore((s) => s.setSelectedSource);
 
-  // 从其他页面跳转(如「搜索歌手」)带来的 q 参数 → 同步到搜索框
-  const params = useLocalSearchParams<{ q: string }>();
-  const q = Array.isArray(params.q) ? params.q[0] : params.q;
+  // 从其他页面跳转（如「搜索歌手」）带来的搜索词 → 同步到搜索框。
+  // 用 searchStore.query（URL q 参数触发搜索后写入）而非 URL 参数，
+  // 避免 TopBar 挂在 Tabs 外读不到深层路由参数。
+  const storeQuery = useSearchStore((s) => s.query);
   useEffect(() => {
-    if (q) setSearchText(q);
-  }, [q]);
+    if (storeQuery && storeQuery !== searchText) setSearchText(storeQuery);
+  }, [storeQuery]);
 
   const handleSubmit = () => {
     const trimmed = searchText.trim();
