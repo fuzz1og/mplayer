@@ -4,7 +4,7 @@ import { cacheManager } from './memoryCacheManager.js';
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { weapiRequest } from './neteaseWeapi.js';
 import { MULTI_SOURCE_LIST } from '../constants.js';
-import { findBestMatch } from '../utils/songMatcher.js';
+import { findExactMatch } from '../utils/songMatcher.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
@@ -1166,10 +1166,12 @@ export const musicApi = {
       const searchResults = await this.batchSearch(keywords, 'netease', 10);
       for (let i = 0; i < missingUrlSongs.length; i++) {
         const song = missingUrlSongs[i];
-        // 严格匹配 name+artist：无版权歌的搜索结果第一条通常是翻唱，
+        // 精确匹配 name+artist：无版权歌的搜索结果第一条通常是翻唱/Live 版，
         // 直接取会填上错误的 URL（播放/探测都会被误导）
-        const match = findBestMatch({ name: song.name, artist: song.artist }, searchResults[keywords[i]] || []);
-        const hit = match?.song as Song | undefined;
+        const hit = findExactMatch(
+          { name: song.name, artist: song.artist },
+          searchResults[keywords[i]] || []
+        ) as Song | undefined;
         if (hit?.url) {
           song.url = hit.url;
         } else {

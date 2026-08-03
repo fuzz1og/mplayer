@@ -1,5 +1,5 @@
 import type { Song } from '../types/index.js';
-import { findBestMatch } from '../utils/songMatcher.js';
+import { findExactMatch } from '../utils/songMatcher.js';
 
 export interface UrlResolver {
   searchSongs: (keyword: string, page: number, sourceType: any) => Promise<Song[]>;
@@ -23,12 +23,13 @@ export async function resolvePlayableUrl(song: Song, resolver: UrlResolver): Pro
     return url;
   }
 
-  // 无 URL 或无效 → 搜索（严格匹配 name+artist，防翻唱被当作原唱）
+  // 无 URL 或无效 → 搜索（精确匹配 name+artist：Live/remix/翻唱一律拒绝，
+  // 避免音频与歌名歌手错位；匹配不到宁可解析失败也不播错歌）
   if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
     if (song.name) {
       const results = await resolver.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
-      const match = findBestMatch({ name: song.name, artist: song.artist }, results);
-      if (match?.song) url = (match.song as Song).url || url;
+      const match = findExactMatch({ name: song.name, artist: song.artist }, results);
+      if (match) url = (match as Song).url || url;
     }
   }
 
@@ -83,11 +84,10 @@ export async function resolvePlayableSong(song: Song, resolver: UrlResolver): Pr
     return { url: song.url, lrc: song.lrc };
   }
 
-  // 缺 url 或缺 lrc → 搜索补全（摄取端点一次返回两者；严格匹配防翻唱）
+  // 缺 url 或缺 lrc → 搜索补全（摄取端点一次返回两者；精确匹配防 Live/翻唱版）
   if (song.name) {
     const results = await resolver.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
-    const match = findBestMatch({ name: song.name, artist: song.artist }, results);
-    const fresh = match?.song as Song | undefined;
+    const fresh = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
     if (fresh) {
       const freshUrl = fresh.url?.startsWith('http') ? fresh.url : '';
       // lrc 允许相对路径（getLyrics 会 normalize 成完整 URL）

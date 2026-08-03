@@ -10,7 +10,7 @@ export { probeSongs } from './api/probeSongs.js';
 export type { ProbeOptions } from './api/probeSongs.js';
 export { dedupeSongs, checkDuplicate, filterDuplicates } from './utils/songDedupe.js';
 export type { DupStatus, DupResult, FilterResult } from './utils/songDedupe.js';
-export { calculateSimilarity, findBestMatch } from './utils/songMatcher.js';
+export { calculateSimilarity, findBestMatch, isExactMatch, findExactMatch } from './utils/songMatcher.js';
 export { createResolveSongUrls } from './utils/songResolver.js';
 export { getNextSongIndex } from './utils/queue.js';
 export type { SearchFn } from './utils/songResolver.js';
