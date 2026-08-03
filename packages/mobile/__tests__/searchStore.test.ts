@@ -4,8 +4,8 @@ import { useSearchStore } from '../stores/searchStore';
 
 // musicApi 打桩记录调用参数,createSearchController 用真实实现(纯逻辑)
 const mocks = vi.hoisted(() => ({
-  searchSongs: vi.fn(async () => []),
-  searchAllSources: vi.fn(async () => []),
+  searchSongs: vi.fn(async (_kw: string, _page: number, _src: string): Promise<any[]> => []),
+  searchAllSources: vi.fn(async (): Promise<any[]> => []),
 }));
 
 vi.mock('@mplayer/core', async (importOriginal) => {
