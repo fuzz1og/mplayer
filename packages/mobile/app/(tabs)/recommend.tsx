@@ -28,7 +28,7 @@ export default function RecommendPage() {
       // 下拉刷新时清掉推荐缓存,拿最新数据
       if (isRefresh) cacheManager.clearByPrefix('personalized');
       const [songList, playlistList] = await Promise.all([
-        musicApi.getRecommendedSongs(20),
+        musicApi.getRecommendedSongs(15),
         musicApi.getRecommendedPlaylists(12),
       ]);
       setSongs(songList);
@@ -59,10 +59,14 @@ export default function RecommendPage() {
     playSong(songs[0]);
   };
 
-  // 换一批:从下一首开始轮换 5 首(参考桌面端 DailyRecommend)
+  // 换一批:5 首/批轮换;3 批(15 首)展示完 → 重新拉取一批新推荐(load 同时刷新歌单)
   const handleShuffle = () => {
     if (songs.length <= 5) return;
-    setSongOffset(prev => (prev + 5) % songs.length);
+    if (songOffset + 5 >= songs.length) {
+      load(false);
+      return;
+    }
+    setSongOffset(prev => prev + 5);
   };
 
   // 当前展示的 5 首(循环取)
