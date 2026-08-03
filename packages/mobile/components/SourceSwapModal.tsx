@@ -4,6 +4,7 @@ import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '../services/sourceSwap';
 
 const SWAP_SOURCES: { key: SourceKey; label: string; color: string }[] = [
+  { key: 'netease', label: '网易云', color: '#e74c3c' },
   { key: 'qq', label: 'QQ音乐', color: '#3498db' },
   { key: 'kugou', label: '酷狗', color: '#9b59b6' },
   { key: 'kuwo', label: '酷我', color: '#1abc9c' },
@@ -13,6 +14,8 @@ const SWAP_SOURCES: { key: SourceKey; label: string; color: string }[] = [
 interface Props {
   visible: boolean;
   songName?: string;
+  /** 当前歌曲来源：列表中禁用该源（避免选回当前源白搜） */
+  currentSource?: SourceKey;
   /** 候选列表非空时展示候选选择（两阶段：选源 → 选候选） */
   candidates: SwapCandidate[];
   loading?: boolean;
@@ -28,7 +31,7 @@ interface Props {
  * → 用户自己选要切换到哪一首（精确匹配标「完整版」，其余显示相似度）。
  */
 export default function SourceSwapModal({
-  visible, songName, candidates, loading, success,
+  visible, songName, currentSource, candidates, loading, success,
   onSelectSource, onSelectCandidate, onBack, onClose,
 }: Props) {
   return (
@@ -79,18 +82,24 @@ export default function SourceSwapModal({
               </TouchableOpacity>
             </>
           ) : (
-            SWAP_SOURCES.map((s) => (
-              <TouchableOpacity
-                key={s.key}
-                style={styles.item}
-                activeOpacity={0.7}
-                onPress={() => onSelectSource(s.key)}
-              >
-                <View style={[styles.dot, { backgroundColor: s.color }]} />
-                <Text style={styles.itemText}>{s.label}</Text>
-                <Ionicons name="chevron-forward" size={18} color="#555" />
-              </TouchableOpacity>
-            ))
+            SWAP_SOURCES.map((s) => {
+              const disabled = s.key === currentSource;
+              return (
+                <TouchableOpacity
+                  key={s.key}
+                  style={[styles.item, disabled && styles.itemDisabled]}
+                  activeOpacity={0.7}
+                  disabled={disabled}
+                  onPress={() => onSelectSource(s.key)}
+                >
+                  <View style={[styles.dot, { backgroundColor: s.color }]} />
+                  <Text style={[styles.itemText, disabled && styles.itemDisabledText]}>
+                    {s.label}{disabled ? '（当前源）' : ''}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color="#555" />
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
       </TouchableOpacity>
@@ -125,6 +134,8 @@ const styles = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
   itemInfo: { flex: 1 },
   itemText: { color: '#fff', fontSize: 15 },
+  itemDisabled: { opacity: 0.4 },
+  itemDisabledText: { color: '#666' },
   itemArtist: { color: '#888', fontSize: 12, marginTop: 2 },
   matchTag: { color: '#888', fontSize: 12, marginRight: 8 },
   matchTagExact: { color: '#27ae60' },

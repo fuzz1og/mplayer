@@ -306,6 +306,7 @@ export default function SongRow({
     <SourceSwapModal
       visible={swapVisible}
       songName={song.name}
+      currentSource={song.sourceType}
       candidates={swapCandidates}
       loading={swapLoading}
       success={swapSuccess}
