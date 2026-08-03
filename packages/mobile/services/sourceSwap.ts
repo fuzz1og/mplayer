@@ -1,12 +1,14 @@
-import { musicApi, calculateSimilarity, isExactMatch, stripSourceIdPrefix } from '@mplayer/core';
+import { musicApi, calculateSimilarity, isExactMatch, stripSourceIdPrefix, probeAudioUrl } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
 import { useLogsStore } from '../stores/logsStore';
 
-/** 换源候选：exact=精确匹配（同名同歌手原版）；score=相似度（0~1） */
+/** 换源候选：exact=精确匹配（同名同歌手原版）；score=相似度（0~1）；
+ *  playable=可播性（null=未探测/检测中，true=可播，false=失效） */
 export interface SwapCandidate {
   song: Song;
   exact: boolean;
   score: number;
+  playable: boolean | null;
 }
 
 /**
@@ -25,6 +27,7 @@ export async function searchSwapCandidates(song: Song, source: SourceKey): Promi
         song: c,
         exact: isExactMatch(target, c),
         score: calculateSimilarity(target, c),
+        playable: null as boolean | null,
       }))
       .filter((c) => c.exact || c.score > 0)
       .sort((a, b) => (b.exact ? 1 : 0) - (a.exact ? 1 : 0) || b.score - a.score)
@@ -44,6 +47,26 @@ export async function searchSwapCandidates(song: Song, source: SourceKey): Promi
     log.addLog('warn', `换源搜索失败: 《${song.name}》 → ${source} ${e?.message || e}`);
     return [];
   }
+}
+
+/**
+ * 并行探测候选可播性（HEAD 跟随 302 → CDN 直链，不下载 body）：
+ * 坏的候选标失效（红色），用户选之前就知道；探测结果渐进更新 UI。
+ * 探测有会话级缓存（同 URL 不重复请求）。
+ */
+export async function probeSwapCandidates(candidates: SwapCandidate[]): Promise<SwapCandidate[]> {
+  return Promise.all(
+    candidates.map(async (c) => {
+      if (!c.song.url?.startsWith('http')) return { ...c, playable: false };
+      const tag = await probeAudioUrl(c.song.url);
+      const playable = tag !== 'invalid';
+      useLogsStore.getState().addLog(
+        playable ? 'info' : 'warn',
+        `换源候选探测: 《${c.song.name}》${c.song.artist} → ${playable ? '可播' : '失效'}`
+      );
+      return { ...c, playable };
+    })
+  );
 }
 
 /**

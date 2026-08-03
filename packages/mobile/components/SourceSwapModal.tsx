@@ -70,6 +70,13 @@ export default function SourceSwapModal({
                     <Text style={styles.itemText} numberOfLines={1}>{c.song.name}</Text>
                     <Text style={styles.itemArtist} numberOfLines={1}>{c.song.artist}</Text>
                   </View>
+                  {c.playable === false ? (
+                    <Text style={[styles.playTag, styles.playTagBad]}>失效</Text>
+                  ) : c.playable === true ? (
+                    <Text style={[styles.playTag, styles.playTagGood]}>可播</Text>
+                  ) : (
+                    <Text style={styles.playTag}>检测中…</Text>
+                  )}
                   <Text style={[styles.matchTag, c.exact && styles.matchTagExact]}>
                     {c.exact ? '完整版' : `${Math.round(c.score * 100)}%`}
                   </Text>
@@ -139,6 +146,9 @@ const styles = StyleSheet.create({
   itemArtist: { color: '#888', fontSize: 12, marginTop: 2 },
   matchTag: { color: '#888', fontSize: 12, marginRight: 8 },
   matchTagExact: { color: '#27ae60' },
+  playTag: { color: '#888', fontSize: 11, marginRight: 6 },
+  playTagGood: { color: '#27ae60' },
+  playTagBad: { color: '#e74c3c' },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',

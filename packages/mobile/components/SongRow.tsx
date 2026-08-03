@@ -16,7 +16,7 @@ import AddToPlaylistModal from './AddToPlaylistModal';
 import SourceSwapModal from './SourceSwapModal';
 import { playSong } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
-import { searchSwapCandidates, applySwap } from '../services/sourceSwap';
+import { searchSwapCandidates, applySwap, probeSwapCandidates } from '../services/sourceSwap';
 import type { SwapCandidate } from '../services/sourceSwap';
 import { searchStrictMatch } from '../services/songResources';
 
@@ -137,10 +137,27 @@ export default function SongRow({
     }
     setSwapSource(source);
     setSwapCandidates(candidates);
+    // 异步探测可播性：候选先显示（检测中），探测完成渐进更新标记
+    void probeSwapCandidates(candidates).then((probed) => {
+      setSwapCandidates(probed);
+    });
   };
 
   /** 阶段 2：用户选中候选版本 → 应用换源（替换队列/续播/持久化） */
   const handleSelectCandidate = async (candidate: SwapCandidate) => {
+    if (!swapSource) return;
+    if (candidate.playable === false) {
+      // 探测为失效：确认后再切换（用户可能想试）
+      Alert.alert('提示', `《${candidate.song.name}》探测为不可播（链接可能失效），仍要切换吗？`, [
+        { text: '取消', style: 'cancel' },
+        { text: '仍要切换', onPress: () => { void applyCandidate(candidate); } },
+      ]);
+      return;
+    }
+    void applyCandidate(candidate);
+  };
+
+  const applyCandidate = async (candidate: SwapCandidate) => {
     if (!swapSource) return;
     setSwapLoading(true);
     const swapped = applySwap(song, swapSource, candidate);
