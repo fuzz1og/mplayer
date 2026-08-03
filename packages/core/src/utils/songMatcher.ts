@@ -110,7 +110,7 @@ export function findBestMatch(
 }
 
 /**
- * 精确匹配：name 与 artist 归一化后完全相等（多歌手拆分任一匹配）。
+ * 精确匹配：name 与 artist 归一化后完全相等（双方多歌手都拆分，任一配对相等）。
  * 用于换源/播放兜底——findBestMatch 的 name substring 匹配会放行
  * "于是" 匹配 "于是(Live版)"，导致播放的音频与歌名歌手错位；
  * 精确匹配拒绝一切 Live/remix/翻唱变体，宁可匹配失败也不播错歌。
@@ -121,8 +121,9 @@ export function isExactMatch(target: MatchTarget, candidate: MatchCandidate): bo
   if (!nTarget || nTarget !== nCandidate) return false;
   if (!target.artist) return true; // 目标无歌手信息时只看歌名
   if (!candidate.artist) return false;
-  const nTargetArtist = normalize(target.artist);
-  return splitArtists(candidate.artist).some((ca) => normalize(ca) === nTargetArtist);
+  // target 也要拆分："肖琴 / 肖Music" 必须能匹配 candidate 的任一歌手
+  const targetArtists = splitArtists(target.artist).map(normalize);
+  return splitArtists(candidate.artist).some((ca) => targetArtists.includes(normalize(ca)));
 }
 
 /** 在候选中找第一个精确匹配且有 url 的歌（无则返回 null） */

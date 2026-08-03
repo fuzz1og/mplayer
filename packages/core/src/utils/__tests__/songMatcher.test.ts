@@ -74,6 +74,15 @@ describe('isExactMatch / findExactMatch（换源/播放兜底用）', () => {
     expect(isExactMatch({ name: '晴天', artist: '周杰伦' }, { name: '晴天', artist: '周杰伦、杨瑞代' })).toBe(true);
   });
 
+  it('target 多歌手也要拆分（"肖琴 / 肖Music" 匹配任一单歌手）', () => {
+    expect(isExactMatch({ name: 'CMon给我闹 (DJ版)', artist: '肖琴 / 肖Music' }, { name: 'CMon给我闹 (DJ版)', artist: '肖琴' })).toBe(true);
+    expect(isExactMatch({ name: 'CMon给我闹 (DJ版)', artist: '肖琴 / 肖Music' }, { name: 'CMon给我闹 (DJ版)', artist: '肖Music' })).toBe(true);
+  });
+
+  it('target 多歌手仍拒绝不相关歌手', () => {
+    expect(isExactMatch({ name: 'CMon给我闹 (DJ版)', artist: '肖琴 / 肖Music' }, { name: 'CMon给我闹 (DJ版)', artist: '张三' })).toBe(false);
+  });
+
   it('标点/空格差异不影响精确匹配（normalize）', () => {
     expect(isExactMatch({ name: '晴天', artist: '周杰伦' }, { name: '晴 天', artist: '周杰伦' })).toBe(true);
   });
