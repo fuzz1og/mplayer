@@ -140,6 +140,8 @@ const apiClient = axios.create({
   get baseURL() {
     return API_BASE_URL;
   },
+  // 兜底超时：某源挂起时多源搜索不能无限等待（Promise.all 等最慢）
+  timeout: 8000,
   headers: {
     'accept': 'application/json, text/javascript, */*; q=0.01',
     'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -1470,7 +1472,8 @@ export const musicApi = {
   },
 
   async searchAllSources(keyword: string, page: number = 1): Promise<SongGroup[]> {
-    const sources: SourceKey[] = ['netease', 'qq', 'kugou', 'migu', 'kuwo', 'qianqian', 'soda'];
+    // migu 不在列表：thirdparty.cn 无 migu 数据源，实测最慢(1.1s)且永远返回空，白等
+    const sources: SourceKey[] = ['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda'];
     const results = await Promise.allSettled(
       sources.map(src => this.searchSongs(keyword, page, src))
     );
