@@ -61,8 +61,13 @@ export const useSearchStore = create<SearchState>((set, get) => {
     search: async (query: string) => {
       const source = useSourceStore.getState().selectedSource;
       if (source === 'all') {
-        // 同名歌曲组内增量：每源完成即渲染(组内并入该源版本)，不等最慢源
+        // 同名歌曲组内增量：每源完成即渲染(组内并入该源版本)，不等最慢源；
+        // 探测在全部完成后统一跑(与搜索并发会抢手机网络带宽)
         await progressiveSearch(query, 1);
+        const state = get();
+        if (state.results.length > 0) {
+          probeResults(state.results);
+        }
         return;
       }
       const t0 = Date.now();
@@ -115,6 +120,8 @@ function mergeGroupedResults(prev: SongGroup[], incoming: SongGroup[]): SongGrou
  * 与一次性全量结果一致）——先到的源先组成同名组渲染，慢源(如 kugou 4.5s)
  * 完成后其版本并入已有同名组（组内+1 首）。
  * 关键：按源收集、渲染时按固定源序拼装，保证组内顺序不受完成顺序影响。
+ * 探测不在这里跑——与搜索并发会抢手机网络带宽（实测搜索 4.8s→8s），
+ * 由 search() 在全部完成后统一触发。
  */
 async function progressiveSearch(query: string, page: number): Promise<void> {
   const sources: SourceKey[] = ['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda'];
@@ -130,8 +137,6 @@ async function progressiveSearch(query: string, page: number): Promise<void> {
         // 按固定源序拼装 → 重跑分组（组内/组顺序与一次性全量完全一致）
         const allSongs = sources.flatMap((s) => collected.get(s) || []);
         useSearchStore.setState({ results: musicApi.groupIntoSongGroups(allSongs) });
-        // 该源探测也渐进（probeCache 会话缓存避免重复）
-        void probeResults([{ key: src, name: SOURCE_LABELS[src], artist: '', songs }]);
       } catch {
         // 单源失败跳过，不影响其他源
       }
