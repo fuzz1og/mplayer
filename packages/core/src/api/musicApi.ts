@@ -1471,7 +1471,7 @@ export const musicApi = {
   },
 
   async searchAllSources(keyword: string, page: number = 1): Promise<SongGroup[]> {
-    // migu 不在列表：thirdparty.cn 无 migu 数据源，实测最慢(1.1s)且永远返回空，白等
+    // migu 不在列表：摄取端点无 migu 数据源，实测最慢(1.1s)且永远返回空，白等
     const sources: SourceKey[] = ['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda'];
     const results = await Promise.allSettled(
       sources.map(async (src) => {

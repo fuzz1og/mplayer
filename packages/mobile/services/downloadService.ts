@@ -42,7 +42,7 @@ export async function downloadSong(song: Song): Promise<File> {
   });
 
   try {
-    // 解析真实音频直链（thirdparty.cn 的 302 端点不能直接下载）
+    // 解析真实音频直链（摄取端点的 302 跳转地址不能直接下载）
     const realUrl = song.url?.startsWith('http')
       ? await musicApi.getAudioUrl(song.url)
       : '';

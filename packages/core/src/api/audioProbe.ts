@@ -117,6 +117,6 @@ export function normalizeProbeUrl(url: string, baseUrl?: string): string {
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
   if (url.startsWith('//')) return 'https:' + url;
   // Relative path - use provided base URL or fallback
-  const base = baseUrl || 'http://www.thirdparty.cn/';
+  const base = baseUrl || '';
   return base + url.replace(/^\//, '');
 }

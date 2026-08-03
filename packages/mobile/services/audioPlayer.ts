@@ -87,11 +87,11 @@ async function fetchLrcInBackground(song: Song): Promise<void> {
 
 /**
  * 判断是否为摄取端点的 302 跳转地址（api.php?get=url...）。
- * 这类地址播放器请求时要先到 thirdparty 再 302 到 CDN，两跳慢加载；
+ * 这类地址播放器请求时要先到摄取端点再 302 到 CDN，两跳慢加载；
  * 提前在 JS 层解析成 CDN 直链（结果进缓存，重复播放秒开）。
  */
 function isRedirectEndpoint(url: string): boolean {
-  return url.includes('api.php?get=url') || url.includes('thirdparty.cn');
+  return url.includes('api.php?get=url');
 }
 
 /** 解析 302 端点 → CDN 直链（getAudioUrl 带缓存；直链直接返回原值） */
@@ -141,7 +141,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       audioUrl = song.url;
     } else if (song.url?.startsWith('http') || song.url?.startsWith('file://')) {
       // 有 url 无歌词：立即播放，歌词后台并行补充（不阻塞播放）
-      // thirdparty 302 端点先解析成 CDN 直链（播放器直连 CDN，避免两跳慢加载）
+      // 摄取端点 302 跳转先解析成 CDN 直链（播放器直连 CDN，避免两跳慢加载）
       audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
       void fetchLrcInBackground(song);
     } else {
@@ -153,7 +153,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       } else {
         // 无 url：合并解析，摄取端点一次拿音频 + 歌词（今日推荐/歌单/歌手页）
         const resolved = await resolvePlayableSong(song, musicApi);
-        // 搜索兜底拿到的可能是 thirdparty 302 端点 → JS 层解析成 CDN 直链
+        // 搜索兜底拿到的可能是 302 跳转端点 → JS 层解析成 CDN 直链
         audioUrl = isRedirectEndpoint(resolved.url) ? await resolveDirectUrl(resolved.url) : resolved.url;
         lrcUrl = resolved.lrc;
         // 并行预取歌词文本（core 歌词缓存预热，全屏播放器打开秒显）
