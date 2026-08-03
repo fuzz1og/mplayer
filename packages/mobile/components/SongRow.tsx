@@ -12,6 +12,7 @@ import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { playSong } from '../services/audioPlayer';
+import { downloadSong } from '../services/downloadService';
 
 interface SongRowProps {
   song: Song;
@@ -70,7 +71,9 @@ export default function SongRow({
 
   const handleDownload = () => {
     setShowActions(false);
-    Alert.alert('提示', '下载功能即将推出');
+    downloadSong(song)
+      .then(() => Alert.alert('提示', `《${song.name}》下载完成，可在下载页播放`))
+      .catch(() => Alert.alert('提示', `《${song.name}》下载失败，请重试`));
   };
 
   const handleSearchArtist = () => {

@@ -349,6 +349,38 @@ describe('playback lifecycle races (user-reported)', () => {
   });
 });
 
+describe('local file playback (downloads)', () => {
+  it('uses a file:// URL directly without resolution', async () => {
+    const local = song('1');
+    local.sourceType = 'local';
+    local.url = 'file:///data/user/0/host.exp.exponent/files/mplayer-downloads/晴天 - 周杰伦.mp3';
+    usePlayerStore.setState({ queue: [local], currentIndex: 0, currentSong: local, isPlaying: true });
+
+    await playSong(local);
+
+    expect(audioMocks.resolvePlayableUrl).not.toHaveBeenCalled();
+    expect(audioMocks.players[0].uri).toBe(local.url);
+  });
+
+  it('skips to the next song on failure without a fresh retry', async () => {
+    // local 文件不会过期：加载失败直接跳歌，不走 fresh 重试/重新搜索
+    const local = song('1');
+    local.sourceType = 'local';
+    local.url = 'file:///data/local.mp3';
+    const second = song('2');
+    usePlayerStore.setState({ queue: [local, second], currentIndex: 0, currentSong: local, isPlaying: true });
+
+    await playSong(local);
+    emitStatus(status({ isLoaded: false, error: 'file not found' }));
+    await vi.waitFor(() => expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(2));
+    await flush();
+
+    expect(audioMocks.getAudioUrl).not.toHaveBeenCalled();
+    expect(audioMocks.searchSongs).not.toHaveBeenCalled();
+    expect(audioMocks.players[1].uri).toBe('https://example.com/2.mp3');
+  });
+});
+
 describe('URL persistence cache (AsyncStorage songUrl:)', () => {
   it('uses the cached URL when the song has no direct url', async () => {
     const first = song('1');

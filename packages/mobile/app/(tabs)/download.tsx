@@ -1,18 +1,124 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import type { Song } from '@mplayer/core';
+import { useDownloadStore } from '../../stores/downloadStore';
+import { getLocalUri } from '../../services/downloadService';
+import { playSong } from '../../services/audioPlayer';
+import { usePlayerStore } from '../../stores/playerStore';
+
+const STATUS_LABELS: Record<string, string> = {
+  downloading: '下载中',
+  done: '已下载',
+  error: '失败',
+};
 
 export default function DownloadPage() {
+  const items = useDownloadStore((s) => s.items);
+  const removeItem = useDownloadStore((s) => s.removeItem);
+  const currentSong = usePlayerStore((s) => s.currentSong);
+
+  const handlePlay = (item: (typeof items)[number]) => {
+    if (item.status !== 'done') return;
+    const localSong: Song = {
+      id: `local-${item.songId}`,
+      name: item.name,
+      artist: item.artist,
+      album: '',
+      duration: 0,
+      sourceType: 'local',
+      url: getLocalUri(item.fileName),
+      cover: '',
+      lrc: '',
+    };
+    usePlayerStore.getState().setQueue([localSong], 0);
+    playSong(localSong);
+  };
+
+  const handleRemove = (item: (typeof items)[number]) => {
+    Alert.alert('删除下载', `确定删除《${item.name}》的本地文件吗？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => removeItem(item.songId),
+      },
+    ]);
+  };
+
   return (
     <View style={styles.container}>
-      <Ionicons name="download-outline" size={64} color="#444" />
-      <Text style={styles.title}>下载管理</Text>
-      <Text style={styles.subtitle}>暂无下载任务</Text>
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.songId}
+        contentContainerStyle={items.length === 0 ? styles.emptyContent : undefined}
+        ListEmptyComponent={
+          <View style={styles.emptyBox}>
+            <Ionicons name="download-outline" size={64} color="#444" />
+            <Text style={styles.title}>暂无下载任务</Text>
+            <Text style={styles.subtitle}>在歌曲更多菜单中点击「下载」</Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const isCurrent = currentSong?.id === `local-${item.songId}`;
+          return (
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={() => handlePlay(item)}
+              disabled={item.status !== 'done'}
+            >
+              <View style={styles.coverWrap}>
+                <Ionicons name="musical-note" size={22} color="#888" />
+              </View>
+              <View style={styles.info}>
+                <Text style={[styles.name, isCurrent && styles.nameActive]} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={styles.artist} numberOfLines={1}>{item.artist}</Text>
+              </View>
+              <Text style={[styles.status, item.status === 'error' && styles.statusError]}>
+                {item.status === 'downloading' ? '下载中…' : STATUS_LABELS[item.status]}
+              </Text>
+              {item.status === 'done' && (
+                <TouchableOpacity onPress={() => handleRemove(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="trash-outline" size={18} color="#666" />
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          );
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  emptyContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyBox: { alignItems: 'center' },
   title: { color: '#888', fontSize: 16, marginTop: 16 },
   subtitle: { color: '#555', fontSize: 13, marginTop: 8 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#2a2a4a',
+  },
+  coverWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 6,
+    backgroundColor: '#2a2a4a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  info: { flex: 1, marginRight: 12 },
+  name: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  nameActive: { color: '#e74c3c' },
+  artist: { color: '#888', fontSize: 12, marginTop: 2 },
+  status: { color: '#888', fontSize: 12, marginRight: 12 },
+  statusError: { color: '#e74c3c' },
 });

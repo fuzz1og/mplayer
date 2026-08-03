@@ -77,15 +77,17 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   const startPlayback = async (): Promise<void> => {
     let audioUrl: string;
     if (fresh) {
+      // 本地文件不会过期，不参与 fresh 重试（调用方已过滤 local 源）
       audioUrl = await refreshPlayableUrl(song);
-    } else if (song.url?.startsWith('http')) {
+    } else if (song.url?.startsWith('http') || song.url?.startsWith('file://')) {
+      // http 直链 / 本地下载文件直接使用
       audioUrl = song.url;
     } else {
       // 优先持久化缓存(24h TTL),未命中再解析(单首搜索兜底)
       audioUrl = (await getCachedUrl(song.id)) || (await resolvePlayableUrl(song, musicApi));
     }
     if (playId !== currentPlayId) throw 'cancelled';
-    if (!audioUrl?.startsWith('http')) throw new Error('no playable URL');
+    if (!audioUrl?.startsWith('http') && !audioUrl?.startsWith('file://')) throw new Error('no playable URL');
 
     const nextPlayer = createAudioPlayer({ uri: audioUrl }, { updateInterval: 250 });
     livePlayers.add(nextPlayer);
@@ -102,8 +104,9 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
         if (status.error && !failed) {
           failed = true;
           log.addLog('error', `《${song.name}》加载失败: ${status.error}`);
-          if (!fresh) {
-            // 同一首歌换全新 URL 重试一次（收藏/历史里的 url 可能已过期）
+          if (!fresh && song.sourceType !== 'local') {
+            // 同一首歌换全新 URL 重试一次（收藏/历史里的 url 可能已过期）；
+            // 本地文件不会过期，失败直接跳下一首
             log.addLog('warn', `《${song.name}》将使用新 URL 重试`);
             setTimeout(() => { if (playId === currentPlayId) void playSong(song, retryCount, true); }, 0);
           } else {
@@ -165,8 +168,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   } catch (err) {
     if (err === 'cancelled') return;
     log.addLog('error', `《${song.name}》播放失败: ${String(err)}`);
-    if (!fresh) {
-      // 解析失败 → 同一首歌换新 URL 重试一次
+    if (!fresh && song.sourceType !== 'local') {
+      // 解析失败 → 同一首歌换新 URL 重试一次；本地文件失败直接跳歌
       await playSong(song, retryCount, true);
     } else {
       const nextSong = nextSongAfterError(retryCount);
