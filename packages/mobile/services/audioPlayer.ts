@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants from 'expo-constants';
-import { cacheManager, musicApi, resolvePlayableUrl, resolveFreshUrl } from '@mplayer/core';
+import { cacheManager, musicApi, resolvePlayableSong, resolveFreshUrl } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -76,18 +76,39 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
 
   const startPlayback = async (): Promise<void> => {
     let audioUrl: string;
+    let lrcUrl = song.lrc || '';
     if (fresh) {
       // 本地文件不会过期，不参与 fresh 重试（调用方已过滤 local 源）
       audioUrl = await refreshPlayableUrl(song);
-    } else if (song.url?.startsWith('http') || song.url?.startsWith('file://')) {
-      // http 直链 / 本地下载文件直接使用
+    } else if ((song.url?.startsWith('http') || song.url?.startsWith('file://')) && song.lrc) {
+      // 已有完整信息（音频 + 歌词）：零网络直接播放
       audioUrl = song.url;
     } else {
-      // 优先持久化缓存(24h TTL),未命中再解析(单首搜索兜底)
-      audioUrl = (await getCachedUrl(song.id)) || (await resolvePlayableUrl(song, musicApi));
+      const cached = await getCachedUrl(song.id);
+      if (cached) {
+        // 缓存命中：秒起用缓存 url；歌词仍缺失时仅补歌词（搜索有缓存，不重复请求）
+        audioUrl = cached;
+        if (!song.lrc && song.name) {
+          const res = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
+          const fresh = res[0];
+          if (fresh?.lrc) lrcUrl = fresh.lrc;
+        }
+      } else {
+        // 合并解析：摄取端点一次拿音频 + 歌词（今日推荐/歌单/歌手页的歌 lrc 为空）
+        const resolved = await resolvePlayableSong(song, musicApi);
+        audioUrl = resolved.url;
+        lrcUrl = resolved.lrc;
+      }
     }
     if (playId !== currentPlayId) throw 'cancelled';
     if (!audioUrl?.startsWith('http') && !audioUrl?.startsWith('file://')) throw new Error('no playable URL');
+
+    // 兜底补歌词：把解析到的歌词 URL 写回 currentSong，触发全屏播放器加载歌词
+    if (lrcUrl && !song.lrc) {
+      usePlayerStore.setState((s) =>
+        s.currentSong?.id === song.id ? { currentSong: { ...s.currentSong, lrc: lrcUrl } } : {}
+      );
+    }
 
     const nextPlayer = createAudioPlayer({ uri: audioUrl }, { updateInterval: 250 });
     livePlayers.add(nextPlayer);

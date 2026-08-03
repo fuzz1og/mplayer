@@ -47,3 +47,56 @@ export async function resolvePlayableUrl(song: Song, resolver: UrlResolver): Pro
   if (!url?.startsWith('http')) throw new Error('no playable URL');
   return url;
 }
+
+/** 解析结果：音频 URL + 歌词 URL（可为空串） */
+export interface PlayableSong {
+  url: string;
+  lrc: string;
+}
+
+/**
+ * 合并解析歌曲的音频地址和歌词地址。
+ * 摄取端点（thirdparty.cn 搜索）一次返回 url + lrc，各源通用；
+ * 今日推荐/歌单/歌手页的歌 lrc 为空，播放时用搜索兜底一并补全。
+ * 策略：
+ * 1. 本地下载文件 → 直用，不搜索不补歌词
+ * 2. soda → 直链（无歌词能力）
+ * 3. 已有完整信息（有 url 且有 lrc）→ 零网络直接用
+ * 4. lrc 或 url 缺失 → 搜索一次拿两者（有缓存）
+ * 5. 搜索失败 → 退回 resolvePlayableUrl 原有路径
+ */
+export async function resolvePlayableSong(song: Song, resolver: UrlResolver): Promise<PlayableSong> {
+  // 本地下载文件：直用，不搜索不补歌词
+  if (song.url?.startsWith('file://')) {
+    return { url: song.url, lrc: song.lrc || '' };
+  }
+
+  if (song.sourceType === 'soda' && song.id) {
+    const u = await resolver.getSodaAudioUrl(song.id);
+    if (u?.startsWith('http')) return { url: u, lrc: '' };
+  }
+
+  const hasUrl = song.url?.startsWith('http') === true;
+  if (hasUrl && song.lrc) {
+    return { url: song.url, lrc: song.lrc };
+  }
+
+  // 缺 url 或缺 lrc → 搜索补全（摄取端点一次返回两者）
+  if (song.name) {
+    const results = await resolver.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
+    const fresh = results[0];
+    if (fresh) {
+      const freshUrl = fresh.url?.startsWith('http') ? fresh.url : '';
+      // lrc 允许相对路径（getLyrics 会 normalize 成完整 URL）
+      const freshLrc = fresh.lrc || '';
+      return {
+        url: hasUrl ? song.url : freshUrl,
+        lrc: freshLrc || song.lrc || '',
+      };
+    }
+  }
+
+  // 搜索失败：退回原有解析路径（有 url 直用等）
+  const url = await resolvePlayableUrl(song, resolver);
+  return { url, lrc: song.lrc || '' };
+}

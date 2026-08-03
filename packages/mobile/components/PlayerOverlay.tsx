@@ -100,17 +100,22 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (!song) onCloseRef.current();
   }, [song]);
 
-  // 加载歌词
+  // 加载歌词：优先歌曲自带 lrc URL；今日推荐/歌单/歌手页的歌曲 lrc 为空，
+  // 用网易云 songId 兜底拉歌词
   useEffect(() => {
-    if (!song?.lrc) { setLyricLines([]); return; }
+    if (!song) { setLyricLines([]); return; }
     const abort = new AbortController();
-    const cacheKey = song.lrc;
+    const cacheKey = song.lrc || (song.sourceType === 'netease' ? `songid:${song.id}` : '');
+    if (!cacheKey) { setLyricLines([]); return; }
     const cached = lyricCache.get(cacheKey);
     if (cached) {
       setLyricLines(cached);
       return;
     }
-    musicApi.getLyrics(song.lrc).then(lrc => {
+    const load = song.lrc
+      ? musicApi.getLyrics(song.lrc)
+      : musicApi.getLyricsBySongId(song.id);
+    load.then(lrc => {
       if (abort.signal.aborted) return;
       const parsed = parseLRC(lrc);
       lyricCache.set(cacheKey, parsed.lines);
@@ -119,7 +124,7 @@ export default function PlayerOverlay({ onClose }: Props) {
       if (!abort.signal.aborted) setLyricLines([]);
     });
     return () => abort.abort();
-  }, [song?.lrc]);
+  }, [song?.lrc, song?.id]);
 
   // 更新歌词高亮
   useEffect(() => {

@@ -528,6 +528,31 @@ export const musicApi = {
   },
 
   /**
+   * 按网易云 songId 获取歌词文本（LRC）。
+   * 兜底场景：今日推荐/歌单/歌手页的歌曲 lrc 字段为空
+   * （源接口不返回歌词链接），播放时用它补上。
+   * 无歌词（纯音乐等）返回空串。
+   */
+  async getLyricsBySongId(songId: string): Promise<string> {
+    if (!songId) return '';
+    const cacheKey = `lyric_id_${songId}`;
+    const cached = cacheManager.getLyricsCache(cacheKey);
+    if (cached !== null) return cached;
+
+    try {
+      const neteaseClient = createNeteaseClient();
+      const response = await neteaseClient.get(
+        `https://music.163.com/api/song/lyric?id=${encodeURIComponent(songId)}&lv=1&kv=1&tv=-1`
+      );
+      const lyrics = (response.data?.lrc?.lyric as string) || '';
+      cacheManager.setLyricsCache(cacheKey, lyrics);
+      return lyrics;
+    } catch {
+      return '';
+    }
+  },
+
+  /**
    * 批量搜索
    * @param concurrency 并发上限,0 表示不限制(默认);限制可避免弱 API 排队/被打爆
    */

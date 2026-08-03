@@ -56,6 +56,11 @@ const audioMocks = vi.hoisted(() => {
     createAudioPlayer,
     removeThrows: false,
     resolvePlayableUrl: vi.fn(async (song: Song) => `https://example.com/${song.id}.mp3`),
+    resolvePlayableSong: vi.fn(async (song: Song) =>
+      song.url?.startsWith('file://')
+        ? { url: song.url, lrc: '' }
+        : { url: `https://example.com/${song.id}.mp3`, lrc: '' }
+    ),
     getAudioUrl: vi.fn(async (url: string) =>
       url === 'https://stale.example.com/1.mp3' ? 'https://fresh.example.com/1.mp3' : url
     ),
@@ -94,6 +99,7 @@ vi.mock('@mplayer/core', async (importOriginal) => {
       searchSongs: audioMocks.searchSongs,
     },
     resolvePlayableUrl: audioMocks.resolvePlayableUrl,
+    resolvePlayableSong: audioMocks.resolvePlayableSong,
     cacheManager: { clearByPrefix: audioMocks.clearByPrefix },
   };
 });
@@ -409,7 +415,7 @@ describe('URL persistence cache (AsyncStorage songUrl:)', () => {
 
     await playSong(first);
 
-    expect(audioMocks.resolvePlayableUrl).toHaveBeenCalled();
+    expect(audioMocks.resolvePlayableSong).toHaveBeenCalled();
     expect(audioMocks.players[0].uri).toBe('https://example.com/1.mp3');
   });
 
@@ -498,9 +504,9 @@ describe('playId cancellation', () => {
 
   it('cancels a pending playback when switching songs mid-resolution', async () => {
     // 迟到的 URL 解析（如慢网络）：切歌后解析完成也不能创建播放器
-    let resolveUrl!: (v: string) => void;
-    audioMocks.resolvePlayableUrl.mockImplementationOnce(
-      () => new Promise<string>((r) => { resolveUrl = r; })
+    let resolveUrl!: (v: { url: string; lrc: string }) => void;
+    audioMocks.resolvePlayableSong.mockImplementationOnce(
+      () => new Promise<{ url: string; lrc: string }>((r) => { resolveUrl = r; })
     );
     const first = song('1');
     const second = song('2');
@@ -508,7 +514,7 @@ describe('playId cancellation', () => {
 
     const pendingFirst = playSong(first); // 停在 URL 解析
     await playSong(second);               // 切歌
-    resolveUrl('https://late.example.com/1.mp3');
+    resolveUrl({ url: 'https://late.example.com/1.mp3', lrc: '' });
     await pendingFirst;
     await flush();
 
