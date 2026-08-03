@@ -1,8 +1,17 @@
 import type { Song } from '../types/index.js';
 import { findExactMatch } from '../utils/songMatcher.js';
 
+// 换源后的歌 id 带源前缀（kuwo:1303464858）：按 ID 识别前剥离，
+// 得到源站真实 ID（链接会过期，ID 不会）
+const SOURCE_ID_PREFIX = /^(netease|qq|kugou|kuwo|qianqian|soda|local):/;
+export function stripSourceIdPrefix(id: string): string {
+  return id.replace(SOURCE_ID_PREFIX, '');
+}
+
 export interface UrlResolver {
   searchSongs: (keyword: string, page: number, sourceType: any) => Promise<Song[]>;
+  /** 按源站 ID 直接识别（可选）：链接过期但 ID 有效，优先于名字搜索 */
+  searchSongById?: (songId: string, sourceType: any) => Promise<Song | null>;
   getSodaAudioUrl: (trackId: string) => Promise<string>;
   getAudioUrl: (url: string) => Promise<string>;
 }
@@ -23,10 +32,14 @@ export async function resolvePlayableUrl(song: Song, resolver: UrlResolver): Pro
     return url;
   }
 
-  // 无 URL 或无效 → 搜索（精确匹配 name+artist：Live/remix/翻唱一律拒绝，
-  // 避免音频与歌名歌手错位；匹配不到宁可解析失败也不播错歌）
+  // 无 URL 或无效 → 先按源站 ID 识别（不过期，无匹配问题），失败再名字搜索
   if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
-    if (song.name) {
+    const baseId = song.id ? stripSourceIdPrefix(song.id) : '';
+    if (baseId && resolver.searchSongById) {
+      const byId = await resolver.searchSongById(baseId, song.sourceType);
+      if (byId?.url?.startsWith('http')) url = byId.url;
+    }
+    if (!url?.startsWith('http') && song.name) {
       const results = await resolver.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
       const match = findExactMatch({ name: song.name, artist: song.artist }, results);
       if (match) url = (match as Song).url || url;
@@ -84,18 +97,27 @@ export async function resolvePlayableSong(song: Song, resolver: UrlResolver): Pr
     return { url: song.url, lrc: song.lrc };
   }
 
-  // 缺 url 或缺 lrc → 搜索补全（摄取端点一次返回两者；精确匹配防 Live/翻唱版）
-  if (song.name) {
-    const results = await resolver.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
-    const fresh = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
-    if (fresh) {
-      const freshUrl = fresh.url?.startsWith('http') ? fresh.url : '';
-      // lrc 允许相对路径（getLyrics 会 normalize 成完整 URL）
-      const freshLrc = fresh.lrc || '';
-      return {
-        url: hasUrl ? song.url : freshUrl,
-        lrc: freshLrc || song.lrc || '',
-      };
+  // 缺 url 或缺 lrc → 先按源站 ID（不过期，一次拿 url+lrc+cover），失败再名字搜索
+  if (song.name || song.id) {
+    const baseId = song.id ? stripSourceIdPrefix(song.id) : '';
+    if (baseId && resolver.searchSongById) {
+      const byId = await resolver.searchSongById(baseId, song.sourceType);
+      if (byId?.url?.startsWith('http')) {
+        return { url: hasUrl ? song.url : byId.url, lrc: byId.lrc || song.lrc || '' };
+      }
+    }
+    if (song.name) {
+      const results = await resolver.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
+      const fresh = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
+      if (fresh) {
+        const freshUrl = fresh.url?.startsWith('http') ? fresh.url : '';
+        // lrc 允许相对路径（getLyrics 会 normalize 成完整 URL）
+        const freshLrc = fresh.lrc || '';
+        return {
+          url: hasUrl ? song.url : freshUrl,
+          lrc: freshLrc || song.lrc || '',
+        };
+      }
     }
   }
 

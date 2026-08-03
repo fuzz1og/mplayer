@@ -1,17 +1,21 @@
-import { musicApi, findBestMatch } from '@mplayer/core';
+import { musicApi, findBestMatch, stripSourceIdPrefix } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { useLogsStore } from '../stores/logsStore';
 
 /**
  * 严格匹配搜索（防翻唱）：歌词/封面失效兜底的统一入口。
- * 摄取端点搜索一次返回 url + lrc + cover，命中结果三件套齐全；
- * 各层（播放补歌词、播放器歌词兜底、列表封面重载）共用同一动作，
- * 避免每个页面各写一份"搜索 + 匹配"逻辑。
+ * 先按源站 ID 识别（链接过期但 ID 不过期，一次拿 url+lrc+cover，无匹配问题）；
+ * ID 失败再按名字搜索 + 严格匹配。未匹配时打诊断日志（候选摘要）。
  * 搜索有缓存，同一首歌重复兜底不重复请求。
- * 未匹配时打诊断日志（候选摘要），识别失败链路可见。
  */
 export async function searchStrictMatch(song: Song): Promise<Song | null> {
   if (!song.name) return null;
+  // ID 优先：收藏/歌单缓存的歌 ID 是源站真实 ID，不会过期
+  const baseId = song.id ? stripSourceIdPrefix(song.id) : '';
+  if (baseId) {
+    const byId = await musicApi.searchSongById(baseId, song.sourceType);
+    if (byId) return byId;
+  }
   const res = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
   const match = findBestMatch({ name: song.name, artist: song.artist }, res);
   const hit = (match?.song as Song) || null;

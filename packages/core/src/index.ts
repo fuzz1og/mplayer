@@ -22,7 +22,7 @@ export { formatPlayCount } from './utils/format.js';
 export { md5 } from './utils/hash.js';
 export { createSearchController } from './shared/searchController.js';
 export type { SearchController, SearchControllerConfig } from './shared/searchController.js';
-export { resolvePlayableUrl, resolvePlayableSong } from './shared/resolvePlayableUrl.js';
+export { resolvePlayableUrl, resolvePlayableSong, stripSourceIdPrefix } from './shared/resolvePlayableUrl.js';
 export type { UrlResolver, PlayableSong } from './shared/resolvePlayableUrl.js';
 export { resolveFreshUrl } from './shared/resolveFreshUrl.js';
 export type { FreshUrlResolver } from './shared/resolveFreshUrl.js';

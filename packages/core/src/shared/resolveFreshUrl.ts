@@ -1,5 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { UrlResolver } from './resolvePlayableUrl.js';
+import { stripSourceIdPrefix } from './resolvePlayableUrl.js';
 import { findExactMatch } from '../utils/songMatcher.js';
 
 export interface FreshUrlResolver extends UrlResolver {
@@ -21,6 +22,14 @@ export async function resolveFreshUrl(song: Song, resolver: FreshUrlResolver): P
   if (song.sourceType === 'soda' && song.id) {
     const u = await resolver.getSodaAudioUrl(song.id);
     if (u?.startsWith('http')) return u;
+  }
+
+  // 按源站 ID 直接识别（链接/302 sign 会过期，但 ID 不会）：
+  // 优先于跟随重定向与名字搜索——名字搜索有匹配失败风险（Live/翻唱/多歌手）
+  const baseId = song.id ? stripSourceIdPrefix(song.id) : '';
+  if (baseId && resolver.searchSongById) {
+    const byId = await resolver.searchSongById(baseId, song.sourceType);
+    if (byId?.url?.startsWith('http')) return byId.url;
   }
 
   if (song.url?.startsWith('http')) {

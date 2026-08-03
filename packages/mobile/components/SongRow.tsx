@@ -16,7 +16,8 @@ import AddToPlaylistModal from './AddToPlaylistModal';
 import SourceSwapModal from './SourceSwapModal';
 import { playSong } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
-import { swapSongToSource } from '../services/sourceSwap';
+import { searchSwapCandidates, applySwap } from '../services/sourceSwap';
+import type { SwapCandidate } from '../services/sourceSwap';
 import { searchStrictMatch } from '../services/songResources';
 
 // 封面失效兜底搜索：限并发（手机网络带宽有限，避免整列表失效时并发打满）
@@ -117,59 +118,77 @@ export default function SongRow({
     router.push(`/search?q=${encodeURIComponent(song.artist)}&type=artist`);
   };
 
-  // 单曲换源状态
+  // 单曲换源状态（两阶段：选源 → 候选选择）
   const [swapVisible, setSwapVisible] = useState(false);
   const [swapLoading, setSwapLoading] = useState(false);
   const [swapSuccess, setSwapSuccess] = useState(false);
+  const [swapCandidates, setSwapCandidates] = useState<SwapCandidate[]>([]);
+  const [swapSource, setSwapSource] = useState<SourceKey | null>(null);
 
-  const handleSwapSource = async (source: SourceKey) => {
+  /** 阶段 1：选目标源 → 搜索该源候选版本（前 3），交给用户选择 */
+  const handleSelectSource = async (source: SourceKey) => {
     setSwapLoading(true);
     setSwapSuccess(false);
-    try {
-      const swapped = await swapSongToSource(song, source);
-      if (swapped) {
-        setSwapSuccess(true);
-        const st = usePlayerStore.getState();
-        const idx = st.queue.findIndex((s) => s.id === song.id);
-        useLogsStore.getState().addLog(
-          'info',
-          `换源《${song.name}》: ${song.sourceType}→${source}, 队列idx=${idx}, 当前播放id=${st.currentSong?.id}, 换源歌id=${song.id}`
-        );
-        if (idx >= 0) {
-          const queue = [...st.queue];
-          queue[idx] = swapped;
-          if (st.currentSong?.id === song.id) {
-            // 正在播放的就是这首：替换队列并立即用完整版续播
-            st.setQueue(queue, idx);
-            playSong(swapped);
-          } else {
-            // 非当前歌曲：只替换队列，不调用 setQueue（会劫持播放）
-            usePlayerStore.setState({ queue });
-          }
-        } else if (st.currentSong?.id === song.id) {
-          // 不在队列但正在播放：直接续播
-          playSong(swapped);
-        }
-        // 父组件更新自己的列表（歌单页同时持久化）
-        onSwap?.(song, swapped);
-        setTimeout(() => { setSwapVisible(false); }, 1200);
-      } else {
-        Alert.alert('提示', '未在其他音乐源找到这首歌的完整版');
-        setSwapVisible(false);
-      }
-    } catch (e: any) {
-      console.error('[SongRow] swap error:', e.message);
-      Alert.alert('提示', '换源失败，请重试');
-      setSwapVisible(false);
-    } finally {
-      setSwapLoading(false);
+    const candidates = await searchSwapCandidates(song, source);
+    setSwapLoading(false);
+    if (candidates.length === 0) {
+      Alert.alert('提示', `未在${SOURCE_LABELS[source]}找到可切换的版本`);
+      return;
     }
+    setSwapSource(source);
+    setSwapCandidates(candidates);
+  };
+
+  /** 阶段 2：用户选中候选版本 → 应用换源（替换队列/续播/持久化） */
+  const handleSelectCandidate = async (candidate: SwapCandidate) => {
+    if (!swapSource) return;
+    setSwapLoading(true);
+    const swapped = applySwap(song, swapSource, candidate);
+    if (!swapped) {
+      setSwapLoading(false);
+      Alert.alert('提示', '换源失败，请重试');
+      return;
+    }
+    setSwapSuccess(true);
+    const st = usePlayerStore.getState();
+    const idx = st.queue.findIndex((s) => s.id === song.id);
+    useLogsStore.getState().addLog(
+      'info',
+      `换源《${song.name}》: ${song.sourceType}→${swapSource}${candidate.exact ? '(完整版)' : ''}, 队列idx=${idx}, 当前播放id=${st.currentSong?.id}, 换源歌id=${song.id}`
+    );
+    if (idx >= 0) {
+      const queue = [...st.queue];
+      queue[idx] = swapped;
+      if (st.currentSong?.id === song.id) {
+        // 正在播放的就是这首：替换队列并立即用完整版续播
+        st.setQueue(queue, idx);
+        playSong(swapped);
+      } else {
+        // 非当前歌曲：只替换队列，不调用 setQueue（会劫持播放）
+        usePlayerStore.setState({ queue });
+      }
+    } else if (st.currentSong?.id === song.id) {
+      // 不在队列但正在播放：直接续播
+      playSong(swapped);
+    }
+    // 父组件更新自己的列表（歌单页同时持久化）
+    onSwap?.(song, swapped);
+    setTimeout(() => {
+      setSwapVisible(false);
+      setSwapCandidates([]);
+      setSwapSource(null);
+    }, 1200);
+  };
+
+  const handleSwapBack = () => {
+    setSwapCandidates([]);
+    setSwapSource(null);
   };
 
   const MORE_ACTIONS = [
     { key: 'playlist', icon: 'list-outline', label: '加入歌单', onPress: () => { setShowActions(false); setShowPlaylistModal(true); } },
     { key: 'download', icon: 'download-outline', label: '下载', onPress: handleDownload },
-    { key: 'swap', icon: 'swap-horizontal', label: '换源完整版', onPress: () => { setShowActions(false); setSwapSuccess(false); setSwapLoading(false); setSwapVisible(true); } },
+    { key: 'swap', icon: 'swap-horizontal', label: '换源完整版', onPress: () => { setShowActions(false); setSwapSuccess(false); setSwapLoading(false); setSwapCandidates([]); setSwapSource(null); setSwapVisible(true); } },
     { key: 'artist', icon: 'person-outline', label: '搜索歌手', onPress: handleSearchArtist },
   ];
 
@@ -287,9 +306,12 @@ export default function SongRow({
     <SourceSwapModal
       visible={swapVisible}
       songName={song.name}
+      candidates={swapCandidates}
       loading={swapLoading}
       success={swapSuccess}
-      onSelect={handleSwapSource}
+      onSelectSource={handleSelectSource}
+      onSelectCandidate={handleSelectCandidate}
+      onBack={handleSwapBack}
       onClose={() => setSwapVisible(false)}
     />
     </>

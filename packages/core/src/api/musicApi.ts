@@ -464,6 +464,39 @@ export const musicApi = {
     return processedSongs;
   },
 
+  /**
+   * 按源站歌曲 ID 直接识别（filter=id）：链接会过期，但 ID 不会——
+   * 播放失败/歌词封面补全时优先按 ID 拿新鲜的 url/lrc/cover（三件套），
+   * 完全绕开"按名字搜索 + 匹配"（Live/翻唱/多歌手导致的匹配失败）。
+   * 失败返回 null（调用方回退名字搜索）。
+   */
+  async searchSongById(songId: string, sourceType: SourceKey = 'netease'): Promise<Song | null> {
+    if (!songId || sourceType === 'soda') return null;
+    const cacheKey = `song_by_id_${sourceType}_${songId}`;
+    const cached = cacheManager.getSearchCache(cacheKey, 1, sourceType);
+    if (cached?.length) return cached[0];
+
+    const params = new URLSearchParams();
+    params.append('input', songId);
+    params.append('filter', 'id');
+    params.append('type', sourceType);
+    params.append('page', '1');
+
+    try {
+      const response = await apiClient.post('', params, { timeout: 8000 });
+      const songs: Partial<Song>[] = response.data.data || [];
+      const processed = songs.map(song => processSong(song, sourceType));
+      if (processed.length === 0) {
+        console.warn(`[search] 按ID识别失败: ${sourceType} ${songId} 返回 0 首`);
+      }
+      cacheManager.setSearchCache(cacheKey, 1, sourceType, processed);
+      return processed[0] || null;
+    } catch (e: any) {
+      console.warn(`[search] 按ID识别失败: ${sourceType} ${songId} 请求异常 ${e?.message || e}`);
+      return null;
+    }
+  },
+
   async getAudioUrl(audioUrl: string, signal?: AbortSignal): Promise<string> {
     const fullUrl = normalizeUrl(audioUrl);
     if (!fullUrl) return '';
