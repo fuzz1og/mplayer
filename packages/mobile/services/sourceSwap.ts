@@ -18,7 +18,9 @@ export async function swapSongToSource(song: Song, source: SourceKey): Promise<S
     const candidates = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, source);
     const matched = findExactMatch({ name: song.name, artist: song.artist }, candidates) as Song | undefined;
     if (!matched?.url) {
-      log.addLog('warn', `换源未找到精确匹配: 《${song.name}》${song.artist} → ${source}`);
+      // 识别失败诊断：候选摘要（API 返回了什么 → 是空、错歌还是 Live 版）
+      const summary = candidates.slice(0, 5).map((c) => `《${c.name}》${c.artist}`).join(' | ');
+      log.addLog('warn', `换源未找到精确匹配: 《${song.name}》${song.artist} → ${source} (候选${candidates.length}首: ${summary || '空'})`);
       return null;
     }
     log.addLog('info', `换源命中: 《${matched.name}》${matched.artist} (${source}) url=${matched.url.slice(0, 60)}`);

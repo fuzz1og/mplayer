@@ -445,8 +445,18 @@ export const musicApi = {
     params.append('page', page.toString());
 
     // per-request 8s 超时：多源搜索 Promise.all 等最慢源，某源挂起不能拖 30s
-    const response = await apiClient.post('', params, { timeout: 8000 });
+    let response;
+    try {
+      response = await apiClient.post('', params, { timeout: 8000 });
+    } catch (e: any) {
+      // 识别失败诊断：请求异常（Metro 终端可见；正常命中不打日志避免刷屏）
+      console.warn(`[search] 识别失败: 「${keyword}」 ${sourceType} 请求异常 ${e?.message || e}`);
+      throw e;
+    }
     const songs: Partial<Song>[] = response.data.data || [];
+    if (songs.length === 0) {
+      console.warn(`[search] 识别失败: 「${keyword}」 ${sourceType} 返回 0 首`);
+    }
 
     const processedSongs = songs.map(song => processSong(song, sourceType));
 
