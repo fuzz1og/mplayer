@@ -1,9 +1,6 @@
-import { musicApi, calculateSimilarity, isExactMatch } from '@mplayer/core';
+import { musicApi, calculateSimilarity, isExactMatch, stripSourceIdPrefix } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
 import { useLogsStore } from '../stores/logsStore';
-
-// 已知源前缀：换源后的歌再换源时剥离，防止 id 无限嵌套（kugou:123 → kuwo:kugou:123）
-const SOURCE_ID_PREFIX = /^(netease|qq|kugou|kuwo|qianqian|soda|local):/;
 
 /** 换源候选：exact=精确匹配（同名同歌手原版）；score=相似度（0~1） */
 export interface SwapCandidate {
@@ -51,19 +48,17 @@ export async function searchSwapCandidates(song: Song, source: SourceKey): Promi
 
 /**
  * 应用用户选中的候选版本：构造换源后的歌曲。
- * name/artist 沿用原歌（列表显示一致）；id 用目标源的**真实曲目 ID**
- * （matched.id，源站 ID 不过期——播放失败/歌词封面补全时可按 ID 重新识别），
- * 剥离已有源前缀防嵌套；matched 无 id 时回退原 id。
+ * **完全采用用户选中版本的信息**——歌名/歌手/封面/专辑/ID 全部换成
+ * 匹配到的歌曲（用户选翻唱就用翻唱的名字和封面），只把 sourceType
+ * 换成目标源、id 加单层源前缀（源站真实 ID，防嵌套）。
  */
 export function applySwap(song: Song, source: SourceKey, candidate: SwapCandidate): Song | null {
   const matched = candidate.song;
   if (!matched?.url) return null;
-  const baseId = song.id.replace(SOURCE_ID_PREFIX, '');
+  const baseId = stripSourceIdPrefix(song.id);
   return {
     ...matched,
     sourceType: source,
     id: `${source}:${matched.id || baseId}`,
-    name: song.name,
-    artist: song.artist,
   } as Song;
 }

@@ -1,11 +1,13 @@
 import type { Song } from '../types/index.js';
 import { findExactMatch } from '../utils/songMatcher.js';
 
-// 换源后的歌 id 带源前缀（kuwo:1303464858）：按 ID 识别前剥离，
-// 得到源站真实 ID（链接会过期，ID 不会）
+// 换源后的歌 id 带源前缀（kuwo:1303464858；旧数据可能多层嵌套 kuwo:kugou:123）：
+// 按 ID 识别前循环剥离，得到源站真实 ID（链接会过期，ID 不会）
 const SOURCE_ID_PREFIX = /^(netease|qq|kugou|kuwo|qianqian|soda|local):/;
 export function stripSourceIdPrefix(id: string): string {
-  return id.replace(SOURCE_ID_PREFIX, '');
+  let out = id;
+  while (SOURCE_ID_PREFIX.test(out)) out = out.replace(SOURCE_ID_PREFIX, '');
+  return out;
 }
 
 export interface UrlResolver {

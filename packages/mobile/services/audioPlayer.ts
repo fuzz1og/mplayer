@@ -287,6 +287,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   } catch (err) {
     if (err === 'cancelled') return;
     log.addLog('error', `《${song.name}》播放失败: ${String(err)}`);
+    // 完整堆栈打到 Metro 终端（移动端诊断 TypeError 等异常用）
+    console.error(`[player] 《${song.name}》播放失败堆栈:`, (err as Error)?.stack || err);
     if (!fresh && song.sourceType !== 'local') {
       // 解析失败 → 同一首歌换新 URL 重试一次；本地文件失败直接跳歌
       await playSong(song, retryCount, true);
