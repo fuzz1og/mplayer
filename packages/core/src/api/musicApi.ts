@@ -1400,7 +1400,9 @@ export const musicApi = {
   },
 
   async getRecommendedSongs(limit: number = 30): Promise<Song[]> {
-    const cacheKey = 'personalized_newsong';
+    // cacheKey 必须包含 limit：接口按 limit 返回不同数量的歌，
+    // 固定 key 会导致拉 15 的缓存污染拉 100 的调用
+    const cacheKey = `personalized_newsong_${limit}`;
     const cached = cacheManager.get<Song[]>(cacheKey);
     if (cached) return cached;
 

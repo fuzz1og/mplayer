@@ -14,16 +14,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_GAP = 10;
 const CARD_COLS = 2;
 const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
-
-/** Fisher-Yates 洗牌（换一批重拉时使用，避免推荐接口数据稳定导致批次不变） */
-function shuffleArray<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+// 今日推荐一次拉取的大池子大小(5 首/批,共 20 批,轮完才重新拉取)
+const RECOMMEND_POOL_SIZE = 100;
 
 export default function RecommendPage() {
   const [songs, setSongs] = useState<Song[]>([]);
@@ -33,17 +25,16 @@ export default function RecommendPage() {
   const [error, setError] = useState(false);
   const [songOffset, setSongOffset] = useState(0);
 
-  const load = useCallback(async (isRefresh: boolean, shuffleSongs = false) => {
+  const load = useCallback(async (isRefresh: boolean) => {
     try {
       // 下拉刷新时清掉推荐缓存,拿最新数据
       if (isRefresh) cacheManager.clearByPrefix('personalized');
       const [songList, playlistList] = await Promise.all([
-        musicApi.getRecommendedSongs(15),
+        // 一次拉大池子(100 首):推荐接口数据稳定,拉多首后本地按 5 首/批慢慢换
+        musicApi.getRecommendedSongs(RECOMMEND_POOL_SIZE),
         musicApi.getRecommendedPlaylists(12),
       ]);
-      // 换一批重拉时打乱顺序:推荐接口数据稳定,不打乱会拿到相同的 3 批
-      const finalList = shuffleSongs ? shuffleArray(songList) : songList;
-      setSongs(finalList);
+      setSongs(songList);
       setPlaylists(playlistList);
       setSongOffset(0);
       setError(false);
@@ -71,11 +62,11 @@ export default function RecommendPage() {
     playSong(songs[0]);
   };
 
-  // 换一批:5 首/批轮换;3 批(15 首)展示完 → 重新拉取一批(打乱顺序保证批次内容变化)
+  // 换一批:5 首/批轮换,一次拉的大池子(100 首)够 20 批,轮完才重新拉取
   const handleShuffle = () => {
     if (songs.length <= 5) return;
     if (songOffset + 5 >= songs.length) {
-      load(false, true);
+      load(false);
       return;
     }
     setSongOffset(prev => prev + 5);
