@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { usePlayerStore } from '../stores/playerStore';
-import { togglePlay, playSong } from '../services/audioPlayer';
+import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
 
 export default function PlayerBar() {
   const insets = useSafeAreaInsets();
@@ -18,9 +18,13 @@ export default function PlayerBar() {
   const setQueue = usePlayerStore(s => s.setQueue);
   const setShowPlayer = usePlayerStore(s => s.setShowPlayer);
   const [showQueue, setShowQueue] = useState(false);
-  // 封面加载失败 → 占位图标（资源刷新写回新封面时重置）
+  // 封面加载失败 → 占位图标 + 懒刷新兜底（搜索补新封面，写回后自动恢复）
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [currentSong?.cover]);
+  const handleCoverError = () => {
+    setCoverFailed(true);
+    if (currentSong) void fetchLrcInBackground(currentSong, true);
+  };
 
   return (
     <TouchableOpacity
@@ -32,7 +36,7 @@ export default function PlayerBar() {
       {/* 专辑封面 */}
       <View style={styles.coverWrap}>
         {currentSong?.cover && !coverFailed ? (
-          <Image source={{ uri: currentSong.cover }} style={styles.cover} onError={() => setCoverFailed(true)} />
+          <Image source={{ uri: currentSong.cover }} style={styles.cover} onError={handleCoverError} />
         ) : (
           <Ionicons name="musical-note" size={24} color="#555" />
         )}

@@ -73,13 +73,14 @@ async function refreshPlayableUrl(song: Song): Promise<string> {
 }
 
 /**
- * 播放后校验歌曲资源（歌词/封面）：缓存歌（歌单/收藏）的 lrc/cover 可能已失效，
- * 播放成功后走统一严格匹配搜索，有新值就写回 currentSong 触发播放器刷新。
- * 无变化不写回不打日志；失败静默（不影响播放）。
+ * 后台补歌词/封面：**懒刷新**——播放时只用歌曲自带资源，不主动搜索；
+ * 仅当歌曲 lrc 为空（专辑/歌单歌）或加载失败（force，PlayerOverlay 歌词
+ * onError、PlayerBar/PlayerOverlay 封面 onError 触发）才搜索补全。
+ * 避免每次播放都搜索导致封面/歌词 URL 伪刷新（迷你播放栏图片反复重载）。
  */
-export async function fetchLrcInBackground(song: Song): Promise<void> {
+export async function fetchLrcInBackground(song: Song, force = false): Promise<void> {
   const log = useLogsStore.getState();
-  if (song.sourceType === 'local' || !song.name) return;
+  if ((!force && song.lrc) || song.sourceType === 'local' || !song.name) return;
   try {
     const fresh = await searchStrictMatch(song);
     if (!fresh) return;
