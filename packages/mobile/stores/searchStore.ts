@@ -59,7 +59,10 @@ export const useSearchStore = create<SearchState>((set, get) => {
     loadingMore: false,
 
     search: async (query: string) => {
+      const t0 = Date.now();
       await controller.search(query);
+      const searchMs = Date.now() - t0;
+      useLogsStore.getState().addLog('info', `搜索完成: 词「${query}」耗时 ${searchMs}ms`);
       // 非阻塞探测
       const state = get();
       if (state.results.length > 0) {
@@ -73,6 +76,7 @@ export const useSearchStore = create<SearchState>((set, get) => {
 
 async function probeResults(groups: SongGroup[]) {
   const allSongs = groups.flatMap(g => g.songs);
+  const t0 = Date.now();
   const BATCH_SIZE = 10;
   let valid = 0;
   let preview = 0;
@@ -92,5 +96,5 @@ async function probeResults(groups: SongGroup[]) {
       })
     );
   }
-  useLogsStore.getState().addLog('info', `探测完成: 共${allSongs.length}首, 完整${valid} 片段${preview} 无效${invalid}`);
+  useLogsStore.getState().addLog('info', `探测完成: 共${allSongs.length}首, 完整${valid} 片段${preview} 无效${invalid}, 耗时 ${Date.now() - t0}ms`);
 }
