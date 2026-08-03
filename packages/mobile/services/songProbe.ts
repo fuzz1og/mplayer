@@ -16,7 +16,7 @@ export async function probeSongsWithTags(songs: Song[]): Promise<void> {
   let invalid = 0;
   let valid = 0;
   await probeSongs(songs, {
-    concurrency: 10,
+    concurrency: 20,
     onResult: (id, tag) => {
       const song = byId.get(id);
       if (!song) return;

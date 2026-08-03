@@ -77,7 +77,8 @@ export const useSearchStore = create<SearchState>((set, get) => {
 async function probeResults(groups: SongGroup[]) {
   const allSongs = groups.flatMap(g => g.songs);
   const t0 = Date.now();
-  const BATCH_SIZE = 10;
+  // 手机网络慢,提高并发减少批数(每批 = 最慢一首的耗时)
+  const BATCH_SIZE = 20;
   let valid = 0;
   let preview = 0;
   let invalid = 0;

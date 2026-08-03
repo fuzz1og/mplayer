@@ -1474,7 +1474,17 @@ export const musicApi = {
     // migu 不在列表：thirdparty.cn 无 migu 数据源，实测最慢(1.1s)且永远返回空，白等
     const sources: SourceKey[] = ['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda'];
     const results = await Promise.allSettled(
-      sources.map(src => this.searchSongs(keyword, page, src))
+      sources.map(async (src) => {
+        const t0 = Date.now();
+        try {
+          const songs = await this.searchSongs(keyword, page, src);
+          console.log(`[search:${src}] ${Date.now() - t0}ms ${songs.length}首`);
+          return songs;
+        } catch (e: any) {
+          console.log(`[search:${src}] ${Date.now() - t0}ms FAILED`);
+          throw e;
+        }
+      })
     );
     const allSongs: Song[] = [];
     for (const r of results) {

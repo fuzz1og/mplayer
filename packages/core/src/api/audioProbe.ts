@@ -1,7 +1,9 @@
 import type { Song, AudioTag } from '../types/index.js';
 
 export const PREVIEW_THRESHOLD = 1_048_576; // 1MB - 30s 128kbps ≈ 480KB, 1MB safe threshold
-export const PROBE_TIMEOUT = 4000;
+// 手机网络下 4s 超时会让挂起请求拖慢整批探测(批 = 最慢一首);
+// 3s 折中:覆盖正常慢请求,拦截真正挂起的
+export const PROBE_TIMEOUT = 3000;
 export const MAX_REDIRECTS = 3;
 
 // 会话级探测缓存:同一首歌(同 id/稳定 url)重复搜索不重复探测
