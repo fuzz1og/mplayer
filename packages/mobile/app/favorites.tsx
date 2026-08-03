@@ -8,15 +8,22 @@ import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
+import type { Song } from '@mplayer/core';
 
 export default function FavoritesPage() {
   const { favorites } = useFavoriteStore();
+  const replaceSong = useFavoriteStore((s) => s.replaceSong);
 
   const handlePlay = (index: number) => {
     if (favorites.length === 0) return;
     usePlayerStore.getState().setQueue(favorites, index);
     const song = favorites[index];
     if (song) playSong(song);
+  };
+
+  // 单曲换源后持久化到收藏（换源版本下次进收藏仍是新源）
+  const handleSwap = (original: Song, swapped: Song) => {
+    replaceSong(original.id, swapped);
   };
 
   return (
@@ -41,6 +48,7 @@ export default function FavoritesPage() {
                 song={item}
                 showSource
                 onPress={() => handlePlay(index)}
+                onSwap={handleSwap}
               />
             )}
             contentContainerStyle={styles.list}

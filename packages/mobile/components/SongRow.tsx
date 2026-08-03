@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, Image, TouchableOpacity, StyleSheet,
   Modal, Alert,
@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { type Song, SourceKey } from '@mplayer/core';
+import { type Song, SourceKey, musicApi, findBestMatch } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
@@ -17,6 +17,23 @@ import SourceSwapModal from './SourceSwapModal';
 import { playSong } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
 import { swapSongToSource } from '../services/sourceSwap';
+
+// 封面失效兜底搜索：限并发（手机网络带宽有限，避免整列表失效时并发打满）
+let activeCoverSearches = 0;
+const MAX_COVER_SEARCHES = 4;
+const coverSearchWaiters: (() => void)[] = [];
+async function withCoverSearchSlot(fn: () => Promise<void>): Promise<void> {
+  if (activeCoverSearches >= MAX_COVER_SEARCHES) {
+    await new Promise<void>((r) => coverSearchWaiters.push(r));
+  }
+  activeCoverSearches++;
+  try {
+    await fn();
+  } finally {
+    activeCoverSearches--;
+    coverSearchWaiters.shift()?.();
+  }
+}
 
 interface SongRowProps {
   song: Song;
@@ -57,6 +74,30 @@ export default function SongRow({
   const [showActions, setShowActions] = useState(false);
   const [pressingAction, setPressingAction] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+
+  // 封面失效兜底：缓存 URL 挂了 → 搜索重载（每行最多一次，严格匹配防翻唱封面）
+  const [cover, setCover] = useState(song.cover);
+  const coverFallbackUsed = useRef(false);
+  useEffect(() => {
+    setCover(song.cover);
+    coverFallbackUsed.current = false;
+  }, [song.cover]);
+
+  const handleCoverError = () => {
+    if (coverFallbackUsed.current || !song.name) return;
+    coverFallbackUsed.current = true;
+    setCover('');
+    void withCoverSearchSlot(async () => {
+      try {
+        const res = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
+        const match = findBestMatch({ name: song.name, artist: song.artist }, res);
+        const fresh = match?.song as Song | undefined;
+        if (fresh?.cover?.startsWith('http')) setCover(fresh.cover);
+      } catch {
+        // 封面兜底失败保留占位
+      }
+    });
+  };
 
   const handleMore = () => {
     setShowActions(true);
@@ -129,7 +170,7 @@ export default function SongRow({
   const MORE_ACTIONS = [
     { key: 'playlist', icon: 'list-outline', label: '加入歌单', onPress: () => { setShowActions(false); setShowPlaylistModal(true); } },
     { key: 'download', icon: 'download-outline', label: '下载', onPress: handleDownload },
-    { key: 'swap', icon: 'swap-horizontal', label: '换源完整版', onPress: () => { setShowActions(false); setSwapVisible(true); } },
+    { key: 'swap', icon: 'swap-horizontal', label: '换源完整版', onPress: () => { setShowActions(false); setSwapSuccess(false); setSwapLoading(false); setSwapVisible(true); } },
     { key: 'artist', icon: 'person-outline', label: '搜索歌手', onPress: handleSearchArtist },
   ];
 
@@ -171,8 +212,8 @@ export default function SongRow({
         <Text style={styles.rank}>{rank}</Text>
       )}
 
-      {song.cover ? (
-        <Image source={{ uri: song.cover }} style={styles.cover} />
+      {cover ? (
+        <Image source={{ uri: cover }} style={styles.cover} onError={handleCoverError} />
       ) : (
         <View style={[styles.cover, styles.coverPlaceholder]}>
           <Ionicons name="musical-note" size={22} color="#555" />

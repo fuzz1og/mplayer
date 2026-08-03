@@ -90,7 +90,16 @@ export async function fetchLrcInBackground(song: Song, force = false): Promise<v
     }
     void musicApi.getLyrics(fresh.lrc).catch(() => {});
     usePlayerStore.setState((s) =>
-      s.currentSong?.id === song.id ? { currentSong: { ...s.currentSong, lrc: fresh.lrc } } : {}
+      s.currentSong?.id === song.id
+        ? {
+            currentSong: {
+              ...s.currentSong,
+              lrc: fresh.lrc,
+              // 缓存封面可能失效：搜索一并补上（无新封面则保留原值）
+              cover: fresh.cover?.startsWith('http') ? fresh.cover : s.currentSong.cover,
+            },
+          }
+        : {}
     );
     log.addLog('info', `歌词补全: 《${song.name}》`);
   } catch (e: any) {
