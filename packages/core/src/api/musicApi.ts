@@ -188,7 +188,8 @@ function normalizeUrl(url: string | undefined): string {
  */
 function processSong(song: any, sourceType: SourceKey = 'netease'): Song {
   return {
-    id: song.id || song.songid || '',
+    // id 统一字符串：API 部分源返回数字 id，按 ID 识别/URL-ID 比对都要求字符串
+    id: String(song.id || song.songid || ''),
     name: song.name || song.songname || '',
     artist: song.artist || song.authors || '',
     album: song.album || song.albumname || '',

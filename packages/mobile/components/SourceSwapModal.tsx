@@ -72,6 +72,8 @@ export default function SourceSwapModal({
                   </View>
                   {c.playable === false ? (
                     <Text style={[styles.playTag, styles.playTagBad]}>失效</Text>
+                  ) : c.tag === 'preview' ? (
+                    <Text style={[styles.playTag, styles.playTagPreview]}>短时长</Text>
                   ) : c.playable === true ? (
                     <Text style={[styles.playTag, styles.playTagGood]}>可播</Text>
                   ) : (
@@ -148,6 +150,7 @@ const styles = StyleSheet.create({
   matchTagExact: { color: '#27ae60' },
   playTag: { color: '#888', fontSize: 11, marginRight: 6 },
   playTagGood: { color: '#27ae60' },
+  playTagPreview: { color: '#e67e22' },
   playTagBad: { color: '#e74c3c' },
   backBtn: {
     flexDirection: 'row',

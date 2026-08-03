@@ -1,14 +1,16 @@
 import { musicApi, calculateSimilarity, isExactMatch, stripSourceIdPrefix, probeAudioUrl } from '@mplayer/core';
-import type { Song, SourceKey } from '@mplayer/core';
+import type { Song, SourceKey, AudioTag } from '@mplayer/core';
 import { useLogsStore } from '../stores/logsStore';
 
 /** 换源候选：exact=精确匹配（同名同歌手原版）；score=相似度（0~1）；
- *  playable=可播性（null=未探测/检测中，true=可播，false=失效） */
+ *  playable=可播性（null=未探测/检测中，true=可播，false=失效）；
+ *  tag=探测结果（'valid' 完整 / 'preview' 短时长片段 / 'invalid' 失效） */
 export interface SwapCandidate {
   song: Song;
   exact: boolean;
   score: number;
   playable: boolean | null;
+  tag: AudioTag | null;
 }
 
 /**
@@ -28,6 +30,7 @@ export async function searchSwapCandidates(song: Song, source: SourceKey): Promi
         exact: isExactMatch(target, c),
         score: calculateSimilarity(target, c),
         playable: null as boolean | null,
+        tag: null as AudioTag | null,
       }))
       .filter((c) => c.exact || c.score > 0)
       .sort((a, b) => (b.exact ? 1 : 0) - (a.exact ? 1 : 0) || b.score - a.score)
@@ -58,7 +61,8 @@ function urlIdMatchesSong(url: string, song: Song): boolean {
   try {
     const u = new URL(url);
     const urlId = u.searchParams.get('id');
-    if (urlId && song.id && urlId !== stripSourceIdPrefix(song.id)) return false;
+    // 都转字符串比较：API 部分源 id 是数字，严格比较会误判
+    if (urlId && song.id && String(urlId) !== String(stripSourceIdPrefix(song.id))) return false;
   } catch {
     // URL 无法解析（非 302 端点/直链）不做此校验
   }
@@ -75,21 +79,21 @@ function urlIdMatchesSong(url: string, song: Song): boolean {
 export async function probeSwapCandidates(candidates: SwapCandidate[]): Promise<SwapCandidate[]> {
   return Promise.all(
     candidates.map(async (c) => {
-      if (!c.song.url?.startsWith('http')) return { ...c, playable: false };
+      if (!c.song.url?.startsWith('http')) return { ...c, playable: false, tag: 'invalid' };
       if (!urlIdMatchesSong(c.song.url, c.song)) {
         useLogsStore.getState().addLog(
           'warn',
           `换源候选可疑: 《${c.song.name}》链接 ID 与歌曲不符（源数据错位）`
         );
-        return { ...c, playable: false };
+        return { ...c, playable: false, tag: 'invalid' };
       }
       const tag = await probeAudioUrl(c.song.url);
       const playable = tag !== 'invalid';
       useLogsStore.getState().addLog(
         playable ? 'info' : 'warn',
-        `换源候选探测: 《${c.song.name}》${c.song.artist} → ${playable ? '可播' : '失效'}`
+        `换源候选探测: 《${c.song.name}》${c.song.artist} → ${tag === 'preview' ? '短时长片段' : playable ? '可播' : '失效'}`
       );
-      return { ...c, playable };
+      return { ...c, playable, tag };
     })
   );
 }
