@@ -6,25 +6,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { musicApi, type Song, type Album, type SourceKey } from '@mplayer/core';
+import { musicApi, type Song, type Album } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import SongRow from '../../components/SongRow';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
-import SourceSwapModal from '../../components/SourceSwapModal';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
 import { probeSongsWithTags } from '../../services/songProbe';
-import { swapSongsToSource, countSwapped } from '../../services/sourceSwap';
 
 export default function AlbumDetailPage() {
   const { id, name, pic, artist } = useLocalSearchParams<{ id: string; name?: string; pic?: string; artist?: string }>();
   const [album, setAlbum] = useState<Album | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
-  // 换源状态
-  const [swapVisible, setSwapVisible] = useState(false);
-  const [swapLoading, setSwapLoading] = useState(false);
-  const [swapResult, setSwapResult] = useState<{ swapped: number; total: number } | null>(null);
 
   const displayName = album?.name || name || '专辑';
   const displayPic = album?.picUrl || pic || '';
@@ -62,22 +56,9 @@ export default function AlbumDetailPage() {
     playSong(songs[0]);
   };
 
-  // 换源:逐首搜索目标源完整版 → 替换队列从第一首播放
-  const handleSwapSource = async (source: SourceKey) => {
-    setSwapLoading(true);
-    setSwapResult(null);
-    try {
-      const swapped = await swapSongsToSource(songs, source);
-      const swappedCount = countSwapped(songs, swapped);
-      setSwapResult({ swapped: swappedCount, total: songs.length });
-      setSongs(swapped);
-      usePlayerStore.getState().setQueue(swapped, 0);
-      playSong(swapped[0]);
-    } catch (e: any) {
-      console.error('[AlbumDetail] swap error:', e.message);
-    } finally {
-      setSwapLoading(false);
-    }
+  // 单曲换源后更新列表（SongRow 更多菜单触发）
+  const handleSwap = (original: Song, swapped: Song) => {
+    setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)));
   };
 
   const year = (() => {
@@ -110,36 +91,20 @@ export default function AlbumDetailPage() {
                 {year ? <Text style={styles.meta}>{year}</Text> : null}
                 <Text style={styles.meta}>{songs.length} 首</Text>
               </View>
-              <View style={styles.btnRow}>
-                <TouchableOpacity style={styles.playAllBtn} activeOpacity={0.8} onPress={handlePlayAll}>
-                  <Ionicons name="play" size={16} color="#fff" />
-                  <Text style={styles.playAllText}>播放全部</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.swapBtn}
-                  activeOpacity={0.8}
-                  onPress={() => { setSwapVisible(true); setSwapResult(null); }}
-                >
-                  <Ionicons name="swap-horizontal" size={16} color="#e74c3c" />
-                  <Text style={styles.swapText}>换源完整版</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity style={styles.playAllBtn} activeOpacity={0.8} onPress={handlePlayAll}>
+                <Ionicons name="play" size={16} color="#fff" />
+                <Text style={styles.playAllText}>播放全部</Text>
+              </TouchableOpacity>
             </View>
           )}
-          renderItem={({ item }) => <SongRow song={item} showSource queueSongs={songs} />}
+          renderItem={({ item }) => (
+            <SongRow song={item} showSource queueSongs={songs} onSwap={handleSwap} />
+          )}
           contentContainerStyle={styles.list}
           ListEmptyComponent={<View style={styles.empty}><Text style={{ color: '#666', fontSize: 16 }}>暂无歌曲</Text></View>}
         />
       </SafeAreaView>
       <BottomSafePlayerBar />
-      <SourceSwapModal
-        visible={swapVisible}
-        loading={swapLoading}
-        swappedCount={swapResult?.swapped}
-        totalCount={swapResult?.total}
-        onSelect={handleSwapSource}
-        onClose={() => setSwapVisible(false)}
-      />
     </View>
   );
 }
@@ -157,13 +122,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#e74c3c', borderRadius: 20,
     paddingHorizontal: 20, paddingVertical: 8, marginTop: 16,
   },
-  swapBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#2a2a4a', borderRadius: 20,
-    paddingHorizontal: 20, paddingVertical: 8, marginTop: 16,
-  },
-  swapText: { color: '#e74c3c', fontSize: 14, fontWeight: '600' },
-  btnRow: { flexDirection: 'row', gap: 12 },
   playAllText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   list: { paddingBottom: 100 },
   empty: { paddingVertical: 60, alignItems: 'center' },

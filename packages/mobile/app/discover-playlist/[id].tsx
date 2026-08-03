@@ -115,7 +115,16 @@ export default function DiscoverPlaylistDetailPage() {
               )}
             </View>
           )}
-          renderItem={({ item }) => <SongRow song={item} showSource queueSongs={songs} />}
+          renderItem={({ item }) => (
+            <SongRow
+              song={item}
+              showSource
+              queueSongs={songs}
+              onSwap={(original, swapped) =>
+                setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)))
+              }
+            />
+          )}
           contentContainerStyle={styles.list}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}

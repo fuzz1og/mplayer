@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song, SourceKey } from '@mplayer/core';
-import { swapSongsToSource, countSwapped } from '../services/sourceSwap';
+import { swapSongToSource } from '../services/sourceSwap';
 
 const musicApiMock = vi.hoisted(() => ({
   searchSongs: vi.fn(async (_kw: string, _page: number, _source: SourceKey): Promise<Song[]> => []),
@@ -31,40 +31,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('swapSongsToSource', () => {
-  it('swaps each song to the target source via search + best match', async () => {
+describe('swapSongToSource', () => {
+  it('returns the matched full version from the target source', async () => {
     musicApiMock.searchSongs.mockImplementation(async (kw: string, _page: number, source: SourceKey) => {
       if (source !== 'qq') return [];
-      const name = kw.split(' ')[0];
-      return [qqSong(`qq-${name}`, name)];
+      return [qqSong(`qq-${kw}`, '晴天')];
     });
 
-    const swapped = await swapSongsToSource([neteaseSong('1', '晴天'), neteaseSong('2', '七里香')], 'qq');
+    const swapped = await swapSongToSource(neteaseSong('1', '晴天'), 'qq');
 
-    expect(swapped).toHaveLength(2);
-    expect(swapped[0].sourceType).toBe('qq');
-    expect(swapped[0].url).toContain('audio.qq.com');
-    expect(swapped[0].id).toBe('qq:1'); // 保留原 id 前缀避免冲突
-    expect(swapped[1].id).toBe('qq:2');
-    expect(musicApiMock.searchSongs).toHaveBeenCalledTimes(2);
-    expect(countSwapped([neteaseSong('1', '晴天'), neteaseSong('2', '七里香')], swapped)).toBe(2);
+    expect(swapped).not.toBeNull();
+    expect(swapped!.sourceType).toBe('qq');
+    expect(swapped!.url).toContain('audio.qq.com');
+    expect(swapped!.id).toBe('qq:1'); // 保留原 id 前缀避免冲突
+    expect(swapped!.name).toBe('晴天');
+    expect(musicApiMock.searchSongs).toHaveBeenCalledWith('晴天 周杰伦', 1, 'qq');
   });
 
-  it('keeps the original song when no match is found', async () => {
+  it('returns null when no match is found', async () => {
     musicApiMock.searchSongs.mockResolvedValue([]);
-
-    const original = [neteaseSong('1', '晴天')];
-    const swapped = await swapSongsToSource(original, 'qq');
-
-    expect(swapped[0]).toBe(original[0]);
-    expect(countSwapped(original, swapped)).toBe(0);
+    expect(await swapSongToSource(neteaseSong('1', '晴天'), 'qq')).toBeNull();
   });
 
-  it('keeps songs already on the target source untouched', async () => {
-    const original = [qqSong('q1', '晴天')];
-    const swapped = await swapSongsToSource(original, 'qq');
-
-    expect(swapped[0]).toBe(original[0]);
+  it('returns null for a song already on the target source', async () => {
+    expect(await swapSongToSource(qqSong('q1', '晴天'), 'qq')).toBeNull();
     expect(musicApiMock.searchSongs).not.toHaveBeenCalled();
   });
 });

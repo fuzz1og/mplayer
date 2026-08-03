@@ -1,11 +1,26 @@
 import { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Modal,
+  View, Text, TouchableOpacity, StyleSheet, Modal, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Song } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
+
+const SOURCE_LABELS: Record<string, string> = {
+  netease: '网易云',
+  qq: 'QQ音乐',
+  kugou: '酷狗',
+  migu: '咪咕',
+  kuwo: '酷我',
+  qianqian: '千千',
+  soda: '汽水',
+  local: '本地',
+};
+
+function sourceLabel(sourceType?: string): string {
+  return SOURCE_LABELS[sourceType || ''] || sourceType || '未知';
+}
 
 interface Props {
   visible: boolean;
@@ -17,12 +32,47 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const playlists = usePlaylistStore(s => s.playlists);
   const addSong = usePlaylistStore(s => s.addSong);
+  const removeSong = usePlaylistStore(s => s.removeSong);
   const [addedName, setAddedName] = useState<string | null>(null);
 
   const handleSelect = (playlistId: string, playlistName: string) => {
     if (!song) return;
+    const playlist = playlists.find((p) => p.id === playlistId);
+    // 同一首歌（同 id）已在歌单中 → 直接提示不加
+    if (playlist?.songs.some((s) => s.id === song.id)) {
+      Alert.alert('提示', '这首歌已在歌单中');
+      return;
+    }
+    // 跨源同名同歌手 → 弹窗让用户选保留哪首
+    const dup = playlist?.songs.find(
+      (s) => s.name === song.name && s.artist === song.artist && s.sourceType !== song.sourceType
+    );
+    if (dup) {
+      Alert.alert(
+        '发现同名歌曲',
+        `歌单中已有「${song.name}」的${sourceLabel(dup.sourceType)}版本，要替换成这首${sourceLabel(song.sourceType)}版本吗？`,
+        [
+          { text: '取消', style: 'cancel' },
+          { text: '保留原版', onPress: () => { setAddedName(playlistName); showSuccess(playlistName); } },
+          {
+            text: '替换为新版',
+            onPress: () => {
+              removeSong(playlistId, dup.id);
+              addSong(playlistId, song);
+              setAddedName(playlistName);
+              showSuccess(playlistName);
+            },
+          },
+        ]
+      );
+      return;
+    }
     addSong(playlistId, song);
     setAddedName(playlistName);
+    showSuccess(playlistName);
+  };
+
+  const showSuccess = (playlistName: string) => {
     setTimeout(() => {
       setAddedName(null);
       onClose();

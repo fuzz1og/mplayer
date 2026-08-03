@@ -23,8 +23,17 @@ export default function PlaylistDetailPage() {
   const playlists = usePlaylistStore((s) => s.playlists);
   const removeSong = usePlaylistStore((s) => s.removeSong);
   const renamePlaylist = usePlaylistStore((s) => s.renamePlaylist);
+  const replaceSong = usePlaylistStore((s) => s.replaceSong);
 
   const playlist = playlists.find((p) => p.id === id);
+
+  // 单曲换源：原位替换并持久化到歌单存储
+  const handleSwap = useCallback(
+    (original: Song, swapped: Song) => {
+      if (playlist) replaceSong(playlist.id, original.id, swapped);
+    },
+    [playlist, replaceSong],
+  );
 
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -104,7 +113,7 @@ export default function PlaylistDetailPage() {
                 activeOpacity={1}
                 onLongPress={() => handleRemoveSong(item)}
               >
-                <SongRow song={item} showSource queueSongs={playlist.songs} />
+                <SongRow song={item} showSource queueSongs={playlist.songs} onSwap={handleSwap} />
               </TouchableOpacity>
             )}
             contentContainerStyle={styles.list}

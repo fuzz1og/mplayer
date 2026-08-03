@@ -11,8 +11,10 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
 import AddToPlaylistModal from './AddToPlaylistModal';
+import SourceSwapModal from './SourceSwapModal';
 import { playSong } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
+import { swapSongToSource } from '../services/sourceSwap';
 
 interface SongRowProps {
   song: Song;
@@ -20,6 +22,8 @@ interface SongRowProps {
   onPress?: (song: Song) => void;
   showSource?: boolean;
   queueSongs?: Song[];
+  /** 换源成功回调：父组件用它更新自己的列表 state（歌单页同时持久化） */
+  onSwap?: (original: Song, swapped: Song) => void;
 }
 
 const SOURCE_COLORS: Record<SourceKey, string> = {
@@ -50,6 +54,7 @@ export default function SongRow({
   onPress,
   showSource = false,
   queueSongs,
+  onSwap,
 }: SongRowProps) {
   const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
@@ -81,9 +86,50 @@ export default function SongRow({
     router.push(`/search?q=${encodeURIComponent(song.artist)}`);
   };
 
+  // 单曲换源状态
+  const [swapVisible, setSwapVisible] = useState(false);
+  const [swapLoading, setSwapLoading] = useState(false);
+  const [swapSuccess, setSwapSuccess] = useState(false);
+
+  const handleSwapSource = async (source: SourceKey) => {
+    setSwapLoading(true);
+    setSwapSuccess(false);
+    try {
+      const swapped = await swapSongToSource(song, source);
+      if (swapped) {
+        setSwapSuccess(true);
+        // 替换播放队列中对应位置
+        const st = usePlayerStore.getState();
+        const idx = st.queue.findIndex((s) => s.id === song.id);
+        if (idx >= 0) {
+          const queue = [...st.queue];
+          queue[idx] = swapped;
+          st.setQueue(queue, idx);
+        }
+        // 正在播放的就是这首 → 立即用完整版续播
+        if (st.currentSong?.id === song.id) {
+          playSong(swapped);
+        }
+        // 父组件更新自己的列表（歌单页同时持久化）
+        onSwap?.(song, swapped);
+        setTimeout(() => { setSwapVisible(false); }, 1200);
+      } else {
+        Alert.alert('提示', '未在其他音乐源找到这首歌的完整版');
+        setSwapVisible(false);
+      }
+    } catch (e: any) {
+      console.error('[SongRow] swap error:', e.message);
+      Alert.alert('提示', '换源失败，请重试');
+      setSwapVisible(false);
+    } finally {
+      setSwapLoading(false);
+    }
+  };
+
   const MORE_ACTIONS = [
     { key: 'playlist', icon: 'list-outline', label: '加入歌单', onPress: () => { setShowActions(false); setShowPlaylistModal(true); } },
     { key: 'download', icon: 'download-outline', label: '下载', onPress: handleDownload },
+    { key: 'swap', icon: 'swap-horizontal', label: '换源完整版', onPress: () => { setShowActions(false); setSwapVisible(true); } },
     { key: 'artist', icon: 'person-outline', label: '搜索歌手', onPress: handleSearchArtist },
   ];
 
@@ -197,6 +243,14 @@ export default function SongRow({
       visible={showPlaylistModal}
       song={song}
       onClose={() => setShowPlaylistModal(false)}
+    />
+    <SourceSwapModal
+      visible={swapVisible}
+      songName={song.name}
+      loading={swapLoading}
+      success={swapSuccess}
+      onSelect={handleSwapSource}
+      onClose={() => setSwapVisible(false)}
     />
     </>
   );

@@ -66,6 +66,26 @@ async function refreshPlayableUrl(song: Song): Promise<string> {
 }
 
 /**
+ * 后台并行补歌词：有 url 的歌（专辑/歌单/歌手页）播放不等待歌词，
+ * 搜索一次拿歌词地址 → 预取歌词文本（core 缓存预热）→ 写回 currentSong
+ * 触发全屏播放器加载。失败静默（歌词缺失不阻塞播放）。
+ */
+async function fetchLrcInBackground(song: Song): Promise<void> {
+  if (song.lrc || song.sourceType === 'local' || !song.name) return;
+  try {
+    const res = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
+    const fresh = res[0];
+    if (!fresh?.lrc) return;
+    void musicApi.getLyrics(fresh.lrc).catch(() => {});
+    usePlayerStore.setState((s) =>
+      s.currentSong?.id === song.id ? { currentSong: { ...s.currentSong, lrc: fresh.lrc } } : {}
+    );
+  } catch {
+    // 歌词补全失败不影响播放
+  }
+}
+
+/**
  * 播放歌曲。
  * @param retryCount 级联跳歌计数（防止全部失效时无限循环）
  * @param fresh 为 true 时绕过原有 url，重新解析全新可播 URL
@@ -83,21 +103,23 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     } else if ((song.url?.startsWith('http') || song.url?.startsWith('file://')) && song.lrc) {
       // 已有完整信息（音频 + 歌词）：零网络直接播放
       audioUrl = song.url;
+    } else if (song.url?.startsWith('http') || song.url?.startsWith('file://')) {
+      // 有 url 无歌词：立即播放，歌词后台并行补充（不阻塞播放）
+      audioUrl = song.url;
+      void fetchLrcInBackground(song);
     } else {
       const cached = await getCachedUrl(song.id);
       if (cached) {
-        // 缓存命中：秒起用缓存 url；歌词仍缺失时仅补歌词（搜索有缓存，不重复请求）
+        // 缓存命中：秒起；歌词缺失时后台并行补
         audioUrl = cached;
-        if (!song.lrc && song.name) {
-          const res = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
-          const fresh = res[0];
-          if (fresh?.lrc) lrcUrl = fresh.lrc;
-        }
+        void fetchLrcInBackground(song);
       } else {
-        // 合并解析：摄取端点一次拿音频 + 歌词（今日推荐/歌单/歌手页的歌 lrc 为空）
+        // 无 url：合并解析，摄取端点一次拿音频 + 歌词（今日推荐/歌单/歌手页）
         const resolved = await resolvePlayableSong(song, musicApi);
         audioUrl = resolved.url;
         lrcUrl = resolved.lrc;
+        // 并行预取歌词文本（core 歌词缓存预热，全屏播放器打开秒显）
+        if (lrcUrl) void musicApi.getLyrics(lrcUrl).catch(() => {});
       }
     }
     if (playId !== currentPlayId) throw 'cancelled';

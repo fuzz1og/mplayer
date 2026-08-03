@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { SourceKey } from '@mplayer/core';
@@ -12,32 +11,37 @@ const SWAP_SOURCES: { key: SourceKey; label: string; color: string }[] = [
 
 interface Props {
   visible: boolean;
+  songName?: string;
   loading?: boolean;
-  swappedCount?: number;
-  totalCount?: number;
+  success?: boolean;
   onSelect: (source: SourceKey) => void;
   onClose: () => void;
 }
 
 /**
- * 换源选择弹层：网易云 VIP 歌只有 30 秒片段时，
- * 选其他源整专辑换源拿完整版。
+ * 单曲换源弹层：网易云 VIP 歌只有 30 秒片段时，
+ * 选其他源搜索这首歌的完整版并原位替换。
  */
-export default function SourceSwapModal({ visible, loading, swappedCount, totalCount, onSelect, onClose }: Props) {
+export default function SourceSwapModal({ visible, songName, loading, success, onSelect, onClose }: Props) {
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         <View style={styles.sheet}>
           <View style={styles.header}>
-            <Text style={styles.title}>换源播放完整版</Text>
+            <Text style={styles.title}>换源完整版</Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close" size={22} color="#888" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.hint}>当前为网易云 30 秒片段，选择其他音乐源搜索完整版</Text>
-          {loading ? (
+          {songName ? <Text style={styles.hint} numberOfLines={1}>{songName} 当前为 30 秒片段，选择其他音乐源搜索完整版</Text> : null}
+          {success ? (
+            <View style={styles.successBox}>
+              <Ionicons name="checkmark-circle" size={44} color="#27ae60" />
+              <Text style={styles.successText}>已替换为完整版</Text>
+            </View>
+          ) : loading ? (
             <View style={styles.loadingBox}>
-              <Text style={styles.loadingText}>正在搜索完整版…{swappedCount !== undefined && totalCount ? `（${swappedCount}/${totalCount}）` : ''}</Text>
+              <Text style={styles.loadingText}>正在搜索完整版…</Text>
             </View>
           ) : (
             SWAP_SOURCES.map((s) => (
@@ -52,9 +56,6 @@ export default function SourceSwapModal({ visible, loading, swappedCount, totalC
                 <Ionicons name="chevron-forward" size={18} color="#555" />
               </TouchableOpacity>
             ))
-          )}
-          {!loading && swappedCount !== undefined && totalCount !== undefined && (
-            <Text style={styles.resultText}>换源完成：{swappedCount}/{totalCount} 首找到完整版</Text>
           )}
         </View>
       </TouchableOpacity>
@@ -90,5 +91,6 @@ const styles = StyleSheet.create({
   itemText: { color: '#fff', fontSize: 15, flex: 1 },
   loadingBox: { paddingVertical: 24, alignItems: 'center' },
   loadingText: { color: '#e74c3c', fontSize: 14 },
-  resultText: { color: '#27ae60', fontSize: 13, marginTop: 4, textAlign: 'center' },
+  successBox: { paddingVertical: 24, alignItems: 'center' },
+  successText: { color: '#27ae60', fontSize: 14, marginTop: 8 },
 });

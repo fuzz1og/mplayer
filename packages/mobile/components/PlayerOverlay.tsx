@@ -102,16 +102,19 @@ export default function PlayerOverlay({ onClose }: Props) {
 
   // 加载歌词：优先歌曲自带 lrc URL；今日推荐/歌单/歌手页的歌曲 lrc 为空，
   // 用网易云 songId 兜底拉歌词
+  const [lyricsLoading, setLyricsLoading] = useState(false);
   useEffect(() => {
-    if (!song) { setLyricLines([]); return; }
+    if (!song) { setLyricLines([]); setLyricsLoading(false); return; }
     const abort = new AbortController();
     const cacheKey = song.lrc || (song.sourceType === 'netease' ? `songid:${song.id}` : '');
-    if (!cacheKey) { setLyricLines([]); return; }
+    if (!cacheKey) { setLyricLines([]); setLyricsLoading(false); return; }
     const cached = lyricCache.get(cacheKey);
     if (cached) {
       setLyricLines(cached);
+      setLyricsLoading(false);
       return;
     }
+    setLyricsLoading(true);
     const load = song.lrc
       ? musicApi.getLyrics(song.lrc)
       : musicApi.getLyricsBySongId(song.id);
@@ -122,6 +125,8 @@ export default function PlayerOverlay({ onClose }: Props) {
       setLyricLines(parsed.lines);
     }).catch(() => {
       if (!abort.signal.aborted) setLyricLines([]);
+    }).finally(() => {
+      if (!abort.signal.aborted) setLyricsLoading(false);
     });
     return () => abort.abort();
   }, [song?.lrc, song?.id]);
@@ -274,8 +279,8 @@ export default function PlayerOverlay({ onClose }: Props) {
               <Text style={styles.artist}>{song.artist}</Text>
             </View>
 
-            {/* 歌词预览 */}
-            {lyricLines.length > 0 && (
+            {/* 歌词预览：始终占位,加载中显示骨架屏,避免歌词到达时布局跳动 */}
+            {lyricLines.length > 0 ? (
               <FlatList
                 ref={flatListRef}
                 data={lyricLines}
@@ -295,7 +300,19 @@ export default function PlayerOverlay({ onClose }: Props) {
                 )}
                 showsVerticalScrollIndicator={false}
               />
-            )}
+            ) : lyricsLoading ? (
+              <View style={styles.lyricsList}>
+                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.skeletonLine,
+                      { width: `${82 - (i % 3) * 12}%` },
+                    ]}
+                  />
+                ))}
+              </View>
+            ) : null}
 
             {/* 进度条 */}
             <View style={styles.progressWrap}>
@@ -464,6 +481,14 @@ const styles = StyleSheet.create({
   lyricsList: { flex: 1, marginTop: 16, marginHorizontal: 24 },
   lyricLine: { color: '#666', fontSize: 15, textAlign: 'center', marginVertical: 6 },
   lyricLineActive: { color: '#e74c3c', fontSize: 16, fontWeight: '600' },
+  // 歌词骨架屏：行高/间距与 lyricLine 一致,占位稳定避免加载后跳动
+  skeletonLine: {
+    alignSelf: 'center',
+    height: 15,
+    borderRadius: 7,
+    backgroundColor: '#2a2a4a',
+    marginVertical: 6,
+  },
   lyricsFullLine: { color: '#888', fontSize: 18, textAlign: 'center', marginVertical: 8, lineHeight: 28 },
   lyricsFullLineActive: { color: '#e74c3c', fontSize: 20, fontWeight: '600', lineHeight: 30 },
   lyricsFullWrap: {

@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, usePathname } from 'expo-router';
+import { router, usePathname, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSourceStore, SOURCE_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
@@ -27,6 +27,13 @@ export default function TopBar() {
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const selectedSource = useSourceStore((s) => s.selectedSource);
   const setSelectedSource = useSourceStore((s) => s.setSelectedSource);
+
+  // 从其他页面跳转(如「搜索歌手」)带来的 q 参数 → 同步到搜索框
+  const params = useLocalSearchParams<{ q: string }>();
+  const q = Array.isArray(params.q) ? params.q[0] : params.q;
+  useEffect(() => {
+    if (q) setSearchText(q);
+  }, [q]);
 
   const handleSubmit = () => {
     const trimmed = searchText.trim();

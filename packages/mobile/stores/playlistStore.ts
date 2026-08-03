@@ -16,6 +16,7 @@ interface PlaylistStore {
   deletePlaylist: (id: string) => void;
   addSong: (playlistId: string, song: Song) => void;
   removeSong: (playlistId: string, songId: string) => void;
+  replaceSong: (playlistId: string, oldSongId: string, newSong: Song) => void;
   renamePlaylist: (id: string, name: string) => void;
 }
 
@@ -60,6 +61,16 @@ export const usePlaylistStore = create<PlaylistStore>()(
           playlists: state.playlists.map((p) =>
             p.id === playlistId
               ? { ...p, songs: p.songs.filter((s) => s.id !== songId) }
+              : p,
+          ),
+        })),
+
+      // 歌单内替换一首（单曲换源持久化：原位换掉旧歌，保持顺序）
+      replaceSong: (playlistId, oldSongId, newSong) =>
+        set((state) => ({
+          playlists: state.playlists.map((p) =>
+            p.id === playlistId
+              ? { ...p, songs: p.songs.map((s) => (s.id === oldSongId ? newSong : s)) }
               : p,
           ),
         })),
