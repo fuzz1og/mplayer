@@ -19,7 +19,6 @@ const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
   netease: { label: '网易云', accent: '#E74C3C' },
   qq: { label: 'QQ', accent: '#1DB954' },
   kugou: { label: '酷狗', accent: '#FF8C00' },
-  migu: { label: '咪咕', accent: '#C20C0C' },
   kuwo: { label: '酷我', accent: '#FF6F00' },
   qianqian: { label: '千千', accent: '#00A1D6' },
   soda: { label: '汽水', accent: '#1E90FF' },

@@ -64,7 +64,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
     if (dup?.status === 'nameConflict') {
       Modal.confirm({
         title: '同名歌曲',
-        content: `该歌单已有同名歌曲「${song.name}」（来自${dup.existingSong?.sourceType === 'netease' ? '网易云' : dup.existingSong?.sourceType === 'kugou' ? '酷狗' : dup.existingSong?.sourceType === 'migu' ? '咪咕' : dup.existingSong?.sourceType === 'kuwo' ? '酷我' : dup.existingSong?.sourceType === 'qianqian' ? '千千' : dup.existingSong?.sourceType === 'soda' ? '汽水' : 'QQ'}），是否继续添加？`,
+        content: `该歌单已有同名歌曲「${song.name}」（来自${dup.existingSong?.sourceType === 'netease' ? '网易云' : dup.existingSong?.sourceType === 'kugou' ? '酷狗' : dup.existingSong?.sourceType === 'kuwo' ? '酷我' : dup.existingSong?.sourceType === 'qianqian' ? '千千' : dup.existingSong?.sourceType === 'soda' ? '汽水' : 'QQ'}），是否继续添加？`,
         okText: '继续添加',
         cancelText: '取消',
         onOk: async () => {

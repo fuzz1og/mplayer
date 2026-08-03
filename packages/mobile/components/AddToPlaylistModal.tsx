@@ -11,7 +11,6 @@ const SOURCE_LABELS: Record<string, string> = {
   netease: '网易云',
   qq: 'QQ音乐',
   kugou: '酷狗',
-  migu: '咪咕',
   kuwo: '酷我',
   qianqian: '千千',
   soda: '汽水',

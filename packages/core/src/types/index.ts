@@ -1,4 +1,5 @@
-export type SourceKey = 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' | 'local';
+// migu 已移除：thirdparty.cn 无 migu 数据源（实测最慢且永远空），多源搜索/导入不再包含
+export type SourceKey = 'netease' | 'qq' | 'kugou' | 'kuwo' | 'qianqian' | 'soda' | 'local';
 
 export type AudioTag = 'valid' | 'preview' | 'invalid';
 

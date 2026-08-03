@@ -14,7 +14,6 @@ const SOURCE_OPTIONS: { key: SourceOption; icon: keyof typeof Ionicons.glyphMap 
   { key: 'netease', icon: 'musical-note-outline' },
   { key: 'qq', icon: 'musical-note-outline' },
   { key: 'kugou', icon: 'musical-note-outline' },
-  { key: 'migu', icon: 'musical-note-outline' },
   { key: 'kuwo', icon: 'musical-note-outline' },
   { key: 'qianqian', icon: 'musical-note-outline' },
   { key: 'soda', icon: 'musical-note-outline' },
