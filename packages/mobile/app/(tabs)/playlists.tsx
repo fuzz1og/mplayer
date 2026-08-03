@@ -118,6 +118,8 @@ export default function PlaylistsPage() {
         visible={modalVisible}
         transparent
         animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
         onRequestClose={() => setModalVisible(false)}
       >
         <TouchableOpacity
