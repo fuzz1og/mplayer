@@ -1,6 +1,7 @@
 import React from 'react';
 import { ListMusic } from 'lucide-react';
 import CoverImage from '@/renderer/components/CoverImage';
+import { formatPlayCount } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
 
 interface PlaylistPageGridProps {
@@ -12,11 +13,6 @@ interface PlaylistPageGridProps {
 }
 
 const SKELETON_COUNT = 6;
-
-function formatCount(n: number): string {
-  if (n >= 10000) return (n / 10000).toFixed(1) + '万';
-  return String(n);
-}
 
 const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading, error, onRetry, onPlaylistSelect }) => {
   if (loading) {
@@ -80,7 +76,7 @@ const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading,
               {pl.name}
             </div>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', lineHeight: 1.5, marginBottom: '6px' }}>
-              {pl.creator.nickname} · {formatCount(pl.playCount)} 次播放 · {pl.trackCount} 首
+              {pl.creator.nickname} · {formatPlayCount(pl.playCount)} 次播放 · {pl.trackCount} 首
             </div>
             {pl.description && (
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.5, marginBottom: '8px' }}>

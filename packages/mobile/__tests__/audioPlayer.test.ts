@@ -83,15 +83,19 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
-vi.mock('@mplayer/core', () => ({
-  musicApi: {
-    getAudioUrl: audioMocks.getAudioUrl,
-    getSodaAudioUrl: audioMocks.getSodaAudioUrl,
-    searchSongs: audioMocks.searchSongs,
-  },
-  resolvePlayableUrl: audioMocks.resolvePlayableUrl,
-  cacheManager: { clearByPrefix: audioMocks.clearByPrefix },
-}));
+vi.mock('@mplayer/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mplayer/core')>();
+  return {
+    ...actual,
+    musicApi: {
+      getAudioUrl: audioMocks.getAudioUrl,
+      getSodaAudioUrl: audioMocks.getSodaAudioUrl,
+      searchSongs: audioMocks.searchSongs,
+    },
+    resolvePlayableUrl: audioMocks.resolvePlayableUrl,
+    cacheManager: { clearByPrefix: audioMocks.clearByPrefix },
+  };
+});
 
 vi.mock('../services/notificationService', () => ({
   updateNotification: vi.fn(async () => {}),

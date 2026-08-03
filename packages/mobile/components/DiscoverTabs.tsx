@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { musicApi } from '@mplayer/core';
+import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
 import LoadingState from './LoadingState';
 import LoadMoreFooter from './LoadMoreFooter';
@@ -330,7 +330,7 @@ function PlaylistContent() {
         </View>
       )}
       <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
-      <Text style={styles.gridMeta}>{p.playCount ? `${(p.playCount / 10000).toFixed(0)}万` : ''}</Text>
+      <Text style={styles.gridMeta}>{p.playCount ? formatPlayCount(p.playCount) : ''}</Text>
     </TouchableOpacity>
   );
 

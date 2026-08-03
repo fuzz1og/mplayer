@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { cacheManager, musicApi, type Song, type DiscoverPlaylist } from '@mplayer/core';
+import { cacheManager, musicApi, formatPlayCount, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
 import LoadingState from '../../components/LoadingState';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -136,7 +136,7 @@ export default function RecommendPage() {
                     )}
                     <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
                     <Text style={styles.gridMeta}>
-                      {p.playCount ? `${(p.playCount / 10000).toFixed(0)}万` : ''}
+                      {p.playCount ? formatPlayCount(p.playCount) : ''}
                     </Text>
                   </TouchableOpacity>
                 ))}

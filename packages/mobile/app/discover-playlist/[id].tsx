@@ -5,7 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { musicApi, type Song } from '@mplayer/core';
+import { musicApi, formatPlayCount, type Song } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
@@ -100,7 +100,7 @@ export default function DiscoverPlaylistDetailPage() {
               <Text style={styles.name}>{playlist.name}</Text>
               <Text style={styles.creator}>{playlist.creator?.nickname ?? '未知'}</Text>
               <View style={styles.metaRow}>
-                <Text style={styles.meta}>播放: {(playlist.playCount / 10000).toFixed(0)}万</Text>
+                <Text style={styles.meta}>播放: {formatPlayCount(playlist.playCount)}</Text>
                 <Text style={styles.meta}>歌曲: {playlist.trackCount}首</Text>
               </View>
               {playlist.tags.length > 0 && (

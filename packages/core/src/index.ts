@@ -11,6 +11,7 @@ export { dedupeSongs, checkDuplicate, filterDuplicates } from './utils/songDedup
 export type { DupStatus, DupResult, FilterResult } from './utils/songDedupe.js';
 export { calculateSimilarity, findBestMatch } from './utils/songMatcher.js';
 export { createResolveSongUrls } from './utils/songResolver.js';
+export { getNextSongIndex } from './utils/queue.js';
 export type { SearchFn } from './utils/songResolver.js';
 export { createAxiosTransport } from './api/axiosTransport.js';
 export type { Transport, TransportConfig, TransportResponse } from './api/transport.js';
