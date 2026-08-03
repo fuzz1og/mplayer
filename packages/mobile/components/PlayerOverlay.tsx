@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions, FlatList,
-  PanResponder, Animated,
+  PanResponder, Animated, Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import Slider from '@react-native-community/slider';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { togglePlay, seekTo, playSong } from '../services/audioPlayer';
+import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { parseLRC, musicApi, findCurrentLyricIndex } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
@@ -140,6 +141,13 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (!song) return;
     if (isFav) removeFavorite(song.id);
     else addFavorite(song);
+  };
+
+  const handleDownload = () => {
+    if (!song) return;
+    downloadSong(song)
+      .then(() => Alert.alert('提示', `《${song.name}》下载完成，可在下载页播放`))
+      .catch(() => Alert.alert('提示', `《${song.name}》下载失败，请重试`));
   };
 
   const handlePrev = () => {
@@ -330,7 +338,7 @@ export default function PlayerOverlay({ onClose }: Props) {
               <TouchableOpacity onPress={() => setShowPlaylistModal(true)} style={styles.actionBtn}>
                 <Ionicons name="add-circle-outline" size={24} color="#fff" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn}>
+              <TouchableOpacity onPress={handleDownload} style={styles.actionBtn}>
                 <Ionicons name="download-outline" size={24} color="#fff" />
               </TouchableOpacity>
             </View>

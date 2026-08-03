@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Paths } from 'expo-file-system';
 import type { Song } from '@mplayer/core';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { getLocalUri } from '../../services/downloadService';
@@ -50,6 +51,13 @@ export default function DownloadPage() {
       <FlatList
         data={items}
         keyExtractor={(item) => item.songId}
+        ListHeaderComponent={
+          <View style={styles.pathBox}>
+            <Text style={styles.pathLabel}>保存位置</Text>
+            <Text style={styles.pathText} numberOfLines={2}>{Paths.document.uri}mplayer-downloads/</Text>
+            <Text style={styles.pathHint}>应用私有目录，Android 文件管理器不可直接访问</Text>
+          </View>
+        }
         contentContainerStyle={items.length === 0 ? styles.emptyContent : undefined}
         ListEmptyComponent={
           <View style={styles.emptyBox}>
@@ -98,6 +106,14 @@ const styles = StyleSheet.create({
   emptyBox: { alignItems: 'center' },
   title: { color: '#888', fontSize: 16, marginTop: 16 },
   subtitle: { color: '#555', fontSize: 13, marginTop: 8 },
+  pathBox: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 6,
+  },
+  pathLabel: { color: '#888', fontSize: 12, marginBottom: 4 },
+  pathText: { color: '#bbb', fontSize: 12, fontFamily: 'monospace' },
+  pathHint: { color: '#555', fontSize: 11, marginTop: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
