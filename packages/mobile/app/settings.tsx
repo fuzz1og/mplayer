@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,16 @@ import {
   ScrollView,
   StyleSheet,
   Linking,
+  Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useLogsStore } from '../stores/logsStore';
+import { cacheKernel, getCacheStats } from '../services/cacheService';
 
 function formatLogTime(ts: number): string {
   const d = new Date(ts);
@@ -37,6 +40,26 @@ export default function SettingsPage() {
   const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
 
   const currentVersion = Constants.expoConfig?.version || '0.0.0';
+
+  // 缓存统计（进入页面加载一次，清理后刷新）
+  const [cacheStats, setCacheStats] = useState({ fileCount: 0, totalSize: 0 });
+  useEffect(() => {
+    let cancelled = false;
+    getCacheStats().then((s) => { if (!cancelled) setCacheStats(s); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleClearCache = async () => {
+    await cacheKernel.clear();
+    // 清理旧版 AsyncStorage songUrl: 缓存残留（已迁移到 cacheKernel）
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const stale = keys.filter((k) => k.startsWith('songUrl:'));
+      if (stale.length > 0) await AsyncStorage.multiRemove(stale);
+    } catch { /* 忽略残留清理失败 */ }
+    setCacheStats(await getCacheStats());
+    Alert.alert('提示', '缓存已清理');
+  };
 
   // 更新检查状态
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'available' | 'not-available' | 'error'>('idle');
@@ -274,6 +297,23 @@ export default function SettingsPage() {
           </View>
         </View>
 
+        {/* 缓存管理：统计 + 一键清理（对齐桌面 CacheSection） */}
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>缓存管理</Text>
+            <View style={styles.cacheStatsRow}>
+              <Text style={styles.hintText}>
+                缓存文件 {cacheStats.fileCount} 个 · {(cacheStats.totalSize / 1024 / 1024).toFixed(1)} MB
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleClearCache} activeOpacity={0.7}>
+              <Ionicons name="trash-outline" size={18} color="#fff" style={styles.btnIcon} />
+              <Text style={styles.saveBtnText}>清理缓存</Text>
+            </TouchableOpacity>
+            <Text style={styles.hintText}>播放 URL 缓存 24 小时过期，清理不影响已收藏歌曲</Text>
+          </View>
+        </View>
+
         {/* 播放日志（真机上无法看终端 console，这里可直接查看最近播放/失败记录） */}
         <View style={styles.section}>
           <View style={styles.card}>
@@ -457,6 +497,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 10,
     textAlign: 'center',
+  },
+  cacheStatsRow: {
+    marginTop: 6,
   },
   updateAvailableText: {
     color: '#27ae60',

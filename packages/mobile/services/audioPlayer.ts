@@ -2,40 +2,19 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants from 'expo-constants';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cacheManager, musicApi, resolvePlayableUrl, resolveFreshUrl } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { useLogsStore } from '../stores/logsStore';
 import { updateNotification, clearNotification } from './notificationService';
+import { getCachedUrl, setCachedUrl } from './cacheService';
 
 type Player = ReturnType<typeof createAudioPlayer>;
 
 // Expo Go 未启用 expo-audio 的 background playback 配置插件，
 // 锁屏控制/后台播放不可用，跳过 setActiveForLockScreen 避免报错刷屏
 const isExpoGo = Constants.expoGoConfig !== null;
-
-// 播放 URL 持久化缓存(songId→url):二次播放(含重启后)直接命中,跳过重新解析;
-// URL 过期由加载失败后的 fresh 重试兜底,不会卡死
-const URL_CACHE_PREFIX = 'songUrl:';
-
-async function getCachedSongUrl(songId: string): Promise<string | null> {
-  try {
-    const v = await AsyncStorage.getItem(URL_CACHE_PREFIX + songId);
-    return v?.startsWith('http') ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-async function cacheSongUrl(songId: string, url: string): Promise<void> {
-  try {
-    await AsyncStorage.setItem(URL_CACHE_PREFIX + songId, url);
-  } catch {
-    // 忽略缓存写失败
-  }
-}
 
 // 追踪所有创建过的播放器：expo-audio 的原生释放是异步的，
 // remove() 后旧播放器可能仍在出声，切换前必须逐个显式暂停。
@@ -102,8 +81,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     } else if (song.url?.startsWith('http')) {
       audioUrl = song.url;
     } else {
-      // 优先持久化缓存,未命中再解析(单首搜索兜底)
-      audioUrl = (await getCachedSongUrl(song.id)) || (await resolvePlayableUrl(song, musicApi));
+      // 优先持久化缓存(24h TTL),未命中再解析(单首搜索兜底)
+      audioUrl = (await getCachedUrl(song.id)) || (await resolvePlayableUrl(song, musicApi));
     }
     if (playId !== currentPlayId) throw 'cancelled';
     if (!audioUrl?.startsWith('http')) throw new Error('no playable URL');
@@ -172,8 +151,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     }
     nextPlayer.play();
 
-    // 播放 URL 落缓存:下次(含重启后)直接命中,秒起;无 id 的歌不写(避免污染 'songUrl:' 空键)
-    if (audioUrl?.startsWith('http') && song.id) void cacheSongUrl(song.id, audioUrl);
+    // 播放 URL 落缓存(24h TTL):下次(含重启后)直接命中,秒起;无 id 的歌不写
+    if (audioUrl?.startsWith('http') && song.id) void setCachedUrl(song.id, audioUrl);
 
     log.addLog('info', `开始播放《${song.name}》- ${song.artist}${fresh ? '（新URL重试）' : ''}`);
     useHistoryStore.getState().addHistory(song);

@@ -1,4 +1,4 @@
-import { cacheDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync, deleteAsync } from 'expo-file-system/legacy'
+import { cacheDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync, deleteAsync, readDirectoryAsync, getInfoAsync } from 'expo-file-system/legacy'
 import type { CacheBackend } from '@mplayer/core'
 import crypto from 'crypto'
 
@@ -51,6 +51,42 @@ export class MobileFileBackend implements CacheBackend {
   }
 
   async keys(): Promise<string[]> {
-    return []
+    const keys: string[] = []
+    for (const type of ['json', 'bin']) {
+      const dir = `${this.baseDir}/${type}`
+      try {
+        const files = await readDirectoryAsync(dir)
+        keys.push(...files.map(f => `${type}:${f}`))
+      } catch {
+        // 目录不存在 = 无缓存
+      }
+    }
+    return keys
+  }
+
+  /** 磁盘占用统计（设置页展示用；CacheBackend.stats 是同步接口，此处独立提供） */
+  async getDiskStats(): Promise<{ fileCount: number; totalSize: number }> {
+    let fileCount = 0
+    let totalSize = 0
+    for (const type of ['json', 'bin']) {
+      const dir = `${this.baseDir}/${type}`
+      try {
+        const files = await readDirectoryAsync(dir)
+        for (const f of files) {
+          try {
+            const info = await getInfoAsync(`${dir}/${f}`)
+            if (info.exists && !info.isDirectory) {
+              fileCount++
+              totalSize += info.size || 0
+            }
+          } catch {
+            // 单个文件统计失败不影响整体
+          }
+        }
+      } catch {
+        // 目录不存在 = 无缓存
+      }
+    }
+    return { fileCount, totalSize }
   }
 }

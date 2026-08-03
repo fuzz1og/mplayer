@@ -64,6 +64,7 @@ const audioMocks = vi.hoisted(() => {
     clearByPrefix: vi.fn(),
     storageGet: null as string | null,
     storageSet: vi.fn(async () => {}),
+    storageSetLegacy: vi.fn(async () => {}),
   };
 });
 
@@ -79,7 +80,7 @@ vi.mock('expo-constants', () => ({
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: {
     getItem: vi.fn(async () => audioMocks.storageGet),
-    setItem: audioMocks.storageSet,
+    setItem: audioMocks.storageSetLegacy,
   },
 }));
 
@@ -100,6 +101,14 @@ vi.mock('@mplayer/core', async (importOriginal) => {
 vi.mock('../services/notificationService', () => ({
   updateNotification: vi.fn(async () => {}),
   clearNotification: vi.fn(async () => {}),
+}));
+
+vi.mock('../services/cacheService', () => ({
+  getCachedUrl: vi.fn(async (songId: string) => {
+    const v = audioMocks.storageGet;
+    return v?.startsWith('http') && songId === '1' ? v : null;
+  }),
+  setCachedUrl: audioMocks.storageSet,
 }));
 
 function status(overrides: Partial<AudioStatus> = {}): AudioStatus {
@@ -168,6 +177,7 @@ beforeEach(() => {
   audioMocks.clearByPrefix.mockClear();
   audioMocks.storageGet = null;
   audioMocks.storageSet.mockClear();
+  audioMocks.storageSetLegacy.mockClear();
 });
 
 afterEach(async () => {
@@ -357,7 +367,7 @@ describe('URL persistence cache (AsyncStorage songUrl:)', () => {
 
     await playSong(first);
 
-    expect(audioMocks.storageSet).toHaveBeenCalledWith('songUrl:1', 'https://example.com/1.mp3');
+    expect(audioMocks.storageSet).toHaveBeenCalledWith('1', 'https://example.com/1.mp3');
   });
 
   it('ignores cached values that are not http URLs', async () => {
@@ -377,8 +387,7 @@ describe('URL persistence cache (AsyncStorage songUrl:)', () => {
 
     await playSong(first);
 
-    // historyStore persist 会写 'history' 键，但绝不能写 'songUrl:' 空键
-    expect(audioMocks.storageSet).not.toHaveBeenCalledWith(expect.stringContaining('songUrl'));
+    expect(audioMocks.storageSet).not.toHaveBeenCalled();
   });
 });
 
