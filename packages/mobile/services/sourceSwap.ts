@@ -38,7 +38,7 @@ export async function searchSwapCandidates(song: Song, source: SourceKey): Promi
       log.addLog(
         'info',
         `换源候选: 《${song.name}》${song.artist} → ${source} ${ranked.length}个 (${ranked
-          .map((c) => `《${c.song.name}》${c.song.artist}${c.exact ? '[完整]' : ''}`)
+          .map((c) => `《${c.song.name}》${c.song.artist}${c.exact ? '[完整]' : ''} url=${c.song.url?.slice(0, 80)}`)
           .join(' | ')})`
       );
     }
@@ -50,14 +50,39 @@ export async function searchSwapCandidates(song: Song, source: SourceKey): Promi
 }
 
 /**
+ * 302 端点 id 参数与歌曲 ID 一致性校验：
+ * 源数据可能错位（url 指向另一首歌，如 DJ 版链接实际是纯音乐）——
+ * api.php?get=url&id=XXX 的 id 与候选 song.id 不符时标记为可疑（失效）。
+ */
+function urlIdMatchesSong(url: string, song: Song): boolean {
+  try {
+    const u = new URL(url);
+    const urlId = u.searchParams.get('id');
+    if (urlId && song.id && urlId !== stripSourceIdPrefix(song.id)) return false;
+  } catch {
+    // URL 无法解析（非 302 端点/直链）不做此校验
+  }
+  return true;
+}
+
+/**
  * 并行探测候选可播性（HEAD 跟随 302 → CDN 直链，不下载 body）：
  * 坏的候选标失效（红色），用户选之前就知道；探测结果渐进更新 UI。
  * 探测有会话级缓存（同 URL 不重复请求）。
+ * 附带 URL-ID 一致性校验：302 端点的 id 与歌曲 id 不符 → 标失效
+ * （源数据错位：链接内容可能是另一首歌）。
  */
 export async function probeSwapCandidates(candidates: SwapCandidate[]): Promise<SwapCandidate[]> {
   return Promise.all(
     candidates.map(async (c) => {
       if (!c.song.url?.startsWith('http')) return { ...c, playable: false };
+      if (!urlIdMatchesSong(c.song.url, c.song)) {
+        useLogsStore.getState().addLog(
+          'warn',
+          `换源候选可疑: 《${c.song.name}》链接 ID 与歌曲不符（源数据错位）`
+        );
+        return { ...c, playable: false };
+      }
       const tag = await probeAudioUrl(c.song.url);
       const playable = tag !== 'invalid';
       useLogsStore.getState().addLog(
