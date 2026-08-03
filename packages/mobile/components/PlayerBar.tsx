@@ -86,10 +86,12 @@ export default function PlayerBar() {
         visible={showQueue}
         animationType="slide"
         transparent
+        statusBarTranslucent
+        navigationBarTranslucent
         onRequestClose={() => setShowQueue(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: Math.max(32, insets.bottom + 16) }]}>
+          <View style={[styles.modalContent, { paddingBottom: Math.max(40, insets.bottom + 24) }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>播放队列 ({queue.length})</Text>
               <TouchableOpacity onPress={() => setShowQueue(false)}>

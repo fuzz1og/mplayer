@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSourceStore, SOURCE_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
 
@@ -19,6 +20,7 @@ const SOURCE_OPTIONS: { key: SourceOption; icon: keyof typeof Ionicons.glyphMap 
 ];
 
 export default function TopBar() {
+  const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const isSearchTab = pathname === '/search';
   const [searchText, setSearchText] = useState('');
@@ -69,9 +71,9 @@ export default function TopBar() {
         <Ionicons name="settings-outline" size={22} color="#ccc" />
       </TouchableOpacity>
 
-      <Modal visible={showSourcePicker} transparent animationType="slide" onRequestClose={() => setShowSourcePicker(false)}>
+      <Modal visible={showSourcePicker} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowSourcePicker(false)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowSourcePicker(false)}>
-          <TouchableOpacity style={styles.sheet} activeOpacity={1} onPress={() => {}}>
+          <TouchableOpacity style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]} activeOpacity={1} onPress={() => {}}>
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>选择音乐源</Text>
             {SOURCE_OPTIONS.map((opt) => (
@@ -123,10 +125,13 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     color: '#fff',
     fontSize: 14,
   },
   sourceBtn: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#3a3a5e',

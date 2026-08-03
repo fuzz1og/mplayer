@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions, FlatList,
   PanResponder, Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
@@ -46,6 +46,7 @@ export default function PlayerOverlay({ onClose }: Props) {
   const lyricCache = useRef(new Map<string, LyricLine[]>()).current;
   const onCloseRef = useRef(onClose);
   const slideAnim = useRef<Animated.CompositeAnimation | null>(null);
+  const insets = useSafeAreaInsets();
   onCloseRef.current = onClose;
 
   // 滑入动画
@@ -193,10 +194,10 @@ export default function PlayerOverlay({ onClose }: Props) {
   if (!song) return null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']} {...panResponder.panHandlers}>
+    <SafeAreaView style={styles.container} edges={['top']} {...panResponder.panHandlers}>
       <StatusBar style="light" />
 
-      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }] }]}>
+      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }], paddingBottom: insets.bottom + 24 }]}>
         {/* 自定义顶部栏 */}
         <View style={styles.customHeader}>
           <TouchableOpacity onPress={dismissWithAnimation}>

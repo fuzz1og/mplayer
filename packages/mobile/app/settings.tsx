@@ -13,12 +13,21 @@ import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useLogsStore } from '../stores/logsStore';
+
+function formatLogTime(ts: number): string {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 
 export default function SettingsPage() {
   const storeApiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
   const storeProxyUrl = useSettingsStore((s) => s.proxyUrl);
   const setApiBaseUrl = useSettingsStore((s) => s.setApiBaseUrl);
   const setStoreProxyUrl = useSettingsStore((s) => s.setProxyUrl);
+  const logEntries = useLogsStore((s) => s.entries);
+  const clearLogs = useLogsStore((s) => s.clearLogs);
 
   const [localUrl, setLocalUrl] = useState(storeApiBaseUrl);
   const [localProxyUrl, setLocalProxyUrl] = useState(storeProxyUrl);
@@ -265,6 +274,37 @@ export default function SettingsPage() {
           </View>
         </View>
 
+        {/* 播放日志（真机上无法看终端 console，这里可直接查看最近播放/失败记录） */}
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <View style={styles.logHeader}>
+              <Text style={styles.sectionTitle}>播放日志</Text>
+              <TouchableOpacity onPress={clearLogs} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="trash-outline" size={18} color="#888" />
+              </TouchableOpacity>
+            </View>
+            {logEntries.length === 0 ? (
+              <Text style={styles.hintText}>暂无日志</Text>
+            ) : (
+              [...logEntries].reverse().slice(0, 30).map((e, i) => (
+                <View key={`${e.ts}-${i}`} style={styles.logRow}>
+                  <Text
+                    style={[
+                      styles.logLevel,
+                      e.level === 'error' && styles.logLevelError,
+                      e.level === 'warn' && styles.logLevelWarn,
+                    ]}
+                  >
+                    {e.level === 'error' ? 'ERR' : e.level === 'warn' ? 'WRN' : 'INF'}
+                  </Text>
+                  <Text style={styles.logTime}>{formatLogTime(e.ts)}</Text>
+                  <Text style={styles.logMessage} numberOfLines={2}>{e.message}</Text>
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+
         {/* 关于 */}
         <View style={styles.section}>
           <View style={styles.card}>
@@ -366,6 +406,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  logHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#2a2a3e',
+  },
+  logLevel: {
+    color: '#888',
+    fontSize: 10,
+    fontWeight: '700',
+    width: 30,
+    marginTop: 2,
+  },
+  logLevelError: {
+    color: '#e74c3c',
+  },
+  logLevelWarn: {
+    color: '#e67e22',
+  },
+  logTime: {
+    color: '#666',
+    fontSize: 11,
+    width: 58,
+    marginTop: 2,
+  },
+  logMessage: {
+    color: '#ccc',
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
   },
   aboutLabel: {
     color: '#aaa',

@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Song } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
 
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
+  const insets = useSafeAreaInsets();
   const playlists = usePlaylistStore(s => s.playlists);
   const addSong = usePlaylistStore(s => s.addSong);
   const [addedName, setAddedName] = useState<string | null>(null);
@@ -28,7 +30,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         {addedName ? (
           <View style={styles.successBox}>
@@ -36,7 +38,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
             <Text style={styles.successText}>已加入歌单「{addedName}」</Text>
           </View>
         ) : (
-          <TouchableOpacity style={styles.sheet} activeOpacity={1} onPress={() => {}}>
+          <TouchableOpacity style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]} activeOpacity={1} onPress={() => {}}>
             <View style={styles.handle} />
             <Text style={styles.title}>加入歌单</Text>
             {song && (
