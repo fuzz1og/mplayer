@@ -24,6 +24,8 @@ export { resolvePlayableUrl } from './shared/resolvePlayableUrl.js';
 export type { UrlResolver } from './shared/resolvePlayableUrl.js';
 export { resolveFreshUrl } from './shared/resolveFreshUrl.js';
 export type { FreshUrlResolver } from './shared/resolveFreshUrl.js';
+export { parsePlaylistUrl, parseSongList, importSongs, importFromLink } from './api/playlistImport.js';
+export type { PlaylistUrlInfo, ParsedLine, ProgressState, ImportResult, PlaylistImportDeps, ImportSource } from './api/playlistImport.js';
 export { CacheKernel } from './cache/cacheKernel.js';
 export { createMemoryBackend } from './cache/backends/memoryBackend.js';
 export { DEFAULT_TTL } from './cache/ttl.js';
