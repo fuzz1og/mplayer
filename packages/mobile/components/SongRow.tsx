@@ -10,6 +10,7 @@ import { type Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
+import { useLogsStore } from '../stores/logsStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import SourceSwapModal from './SourceSwapModal';
@@ -90,6 +91,10 @@ export default function SongRow({
         setSwapSuccess(true);
         const st = usePlayerStore.getState();
         const idx = st.queue.findIndex((s) => s.id === song.id);
+        useLogsStore.getState().addLog(
+          'info',
+          `换源《${song.name}》: ${song.sourceType}→${source}, 队列idx=${idx}, 当前播放id=${st.currentSong?.id}, 换源歌id=${song.id}`
+        );
         if (idx >= 0) {
           const queue = [...st.queue];
           queue[idx] = swapped;

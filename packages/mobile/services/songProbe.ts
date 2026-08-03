@@ -7,16 +7,31 @@ import { useLogsStore } from '../stores/logsStore';
  * 对一组歌曲跑音频质量探测（30 秒片段/无效标记），结果写入 audioTagStore，
  * SongRow 按 id 订阅自动显示徽标。各页面（专辑/歌单/歌手/发现榜单）共用。
  * 非阻塞：探测完成逐首更新，仅重渲染标签变化的行。
+ * @param missingAsInvalid 无 url 的歌直接标「无效」不探测（专辑页用：
+ *   无版权歌 url 为空且搜索兜底已严格校验，标无效引导用户单曲换源）
  */
-export async function probeSongsWithTags(songs: Song[]): Promise<void> {
+export async function probeSongsWithTags(
+  songs: Song[],
+  options: { missingAsInvalid?: boolean } = {},
+): Promise<void> {
   if (songs.length === 0) return;
+  const { missingAsInvalid = false } = options;
   const t0 = Date.now();
   const { setTag } = useAudioTagStore.getState();
   const byId = new Map(songs.map((s) => [s.id, s]));
   let preview = 0;
   let invalid = 0;
   let valid = 0;
-  await probeSongs(songs, {
+  const toProbe: Song[] = [];
+  for (const s of songs) {
+    if (missingAsInvalid && !s.url?.startsWith('http')) {
+      setTag(s, 'invalid');
+      invalid++;
+      continue;
+    }
+    toProbe.push(s);
+  }
+  await probeSongs(toProbe, {
     concurrency: 20,
     onResult: (id, tag) => {
       const song = byId.get(id);

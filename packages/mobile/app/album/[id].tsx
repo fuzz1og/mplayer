@@ -36,10 +36,12 @@ export default function AlbumDetailPage() {
           setSongs(r.songs);
           // 后台补齐缺失 URL(weapi 批量 + 10 并发搜索兜底),完成后触发重渲染
           void musicApi.resolveNeteaseSongUrls(r.songs, false).then(() => {
-            if (!cancelled) setSongs([...r.songs]);
+            if (cancelled) return;
+            setSongs([...r.songs]);
+            // URL 补齐后再探测：无版权歌 url 仍为空（搜索兜底已严格校验不填翻唱）
+            // → 标「无效」徽标，用户看到就会去单曲换源
+            void probeSongsWithTags(r.songs, { missingAsInvalid: true });
           });
-          // 音频质量探测:30 秒片段(网易云 VIP 限制)自动标「片段」徽标
-          void probeSongsWithTags(r.songs);
         }
       } catch (e: any) {
         console.error('[AlbumDetail] load error:', e.message);

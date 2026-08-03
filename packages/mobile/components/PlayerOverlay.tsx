@@ -16,6 +16,7 @@ import { parseLRC, musicApi, findCurrentLyricIndex } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
+import { SOURCE_LABELS } from '../stores/sourceStore';
 
 const { width } = Dimensions.get('window');
 
@@ -276,7 +277,14 @@ export default function PlayerOverlay({ onClose }: Props) {
             {/* 歌曲信息 */}
             <View style={styles.infoWrap}>
               <Text style={styles.title}>{song.name}</Text>
-              <Text style={styles.artist}>{song.artist}</Text>
+              <View style={styles.infoRow}>
+                <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
+                {song.sourceType !== 'local' && (
+                  <View style={styles.sourceTag}>
+                    <Text style={styles.sourceTagText}>{SOURCE_LABELS[song.sourceType] || song.sourceType}</Text>
+                  </View>
+                )}
+              </View>
             </View>
 
             {/* 歌词预览：始终占位,加载中显示骨架屏,避免歌词到达时布局跳动 */}
@@ -459,7 +467,16 @@ const styles = StyleSheet.create({
   },
   infoWrap: { marginTop: 12, alignItems: 'center' },
   title: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  artist: { color: '#888', fontSize: 14, marginTop: 6 },
+  artist: { color: '#888', fontSize: 14, flexShrink: 1 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  sourceTag: {
+    marginLeft: 8,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: '#2a2a4a',
+  },
+  sourceTagText: { color: '#bbb', fontSize: 10 },
   progressWrap: { marginTop: 16, alignItems: 'center' },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', width: width - 48, marginTop: 4 },
   time: { color: '#666', fontSize: 12 },

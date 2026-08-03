@@ -1,5 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { UrlResolver } from './resolvePlayableUrl.js';
+import { findBestMatch } from '../utils/songMatcher.js';
 
 export interface FreshUrlResolver extends UrlResolver {
   /** fresh 解析前清掉内存中的 URL 缓存（可选） */
@@ -29,9 +30,11 @@ export async function resolveFreshUrl(song: Song, resolver: FreshUrlResolver): P
 
   if (song.name) {
     const results = await resolver.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
-    const fresh = results[0];
+    // 严格匹配 name+artist：搜索第一首可能是翻唱（无版权歌常见），不能直接采用
+    const match = findBestMatch({ name: song.name, artist: song.artist }, results);
+    const fresh = match?.song as Song | undefined;
     if (fresh?.url?.startsWith('http')) return fresh.url;
   }
 
-  throw new Error('fresh URL resolve failed');
+  throw new Error('fresh URL resolve failed (未找到匹配版本，可能无版权)');
 }

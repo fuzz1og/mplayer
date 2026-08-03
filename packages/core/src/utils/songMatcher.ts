@@ -49,7 +49,7 @@ function splitArtists(artist: string): string[] {
     .replace(/\bfeat\.?\s*/gi, '||')
     .replace(/\bft\.?\s*/gi, '||');
   return normalized
-    .split(/[、,，/＆&|]+/)
+    .split(/[、,，;；/＆&|]+/)
     .map(s => s.trim())
     .filter(Boolean);
 }
@@ -89,6 +89,9 @@ export function calculateSimilarity(target: MatchTarget, candidate: MatchCandida
   }
 
   const combined = NAME_WEIGHT * nameScore + ARTIST_WEIGHT * artistScore;
+  // artist 也必须达到阈值：防止同名不同歌手的翻唱/remix 被当作原唱
+  // （name 完全匹配 + artist 完全不匹配 = 0.6，按原逻辑会误判为匹配）
+  if (artistScore < SIMILARITY_THRESHOLD) return 0;
   return combined >= SIMILARITY_THRESHOLD ? combined : 0;
 }
 

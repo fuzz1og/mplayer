@@ -40,10 +40,12 @@ export async function initAudio(): Promise<void> {
  * 每个操作独立 try/catch，保证：
  * 1) 切歌时旧音频一定停止（先 pause() 同步停音），不会两首歌同时在播；
  * 2) remove() 在异常状态下抛错也不会中断后续播放、不会留下僵尸引用。
+ * pause 必须 await：expo-audio 原生暂停是异步的，不等待就创建新播放器，
+ * 旧播放器可能仍在出声（换源/切歌时表现为两首歌同时播放）。
  */
-function stopAllPlayers(): void {
+async function stopAllPlayers(): Promise<void> {
   for (const p of livePlayers) {
-    try { p.pause(); } catch {}
+    try { await p.pause(); } catch {}
     try { p.remove(); } catch {}
   }
   livePlayers.clear();
@@ -75,17 +77,22 @@ async function refreshPlayableUrl(song: Song): Promise<string> {
  * 触发全屏播放器加载。失败静默（歌词缺失不阻塞播放）。
  */
 async function fetchLrcInBackground(song: Song): Promise<void> {
+  const log = useLogsStore.getState();
   if (song.lrc || song.sourceType === 'local' || !song.name) return;
   try {
     const res = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
     const fresh = res[0];
-    if (!fresh?.lrc) return;
+    if (!fresh?.lrc) {
+      log.addLog('warn', `歌词补全未找到: 《${song.name}》${song.artist}`);
+      return;
+    }
     void musicApi.getLyrics(fresh.lrc).catch(() => {});
     usePlayerStore.setState((s) =>
       s.currentSong?.id === song.id ? { currentSong: { ...s.currentSong, lrc: fresh.lrc } } : {}
     );
-  } catch {
-    // 歌词补全失败不影响播放
+    log.addLog('info', `歌词补全: 《${song.name}》`);
+  } catch (e: any) {
+    log.addLog('warn', `歌词补全失败: 《${song.name}》${e?.message || e}`);
   }
 }
 
@@ -145,6 +152,9 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     if (fresh) {
       // 本地文件不会过期，不参与 fresh 重试（调用方已过滤 local 源）
       audioUrl = await refreshPlayableUrl(song);
+      // fresh 重试只解析 URL，不返回歌词；歌单/收藏缓存歌 lrc 为空，
+      // 后台并行补歌词（否则重试成功播放后歌词永远空白）
+      void fetchLrcInBackground(song);
     } else if ((song.url?.startsWith('http') || song.url?.startsWith('file://')) && song.lrc) {
       // 已有完整信息（音频 + 歌词）：零网络直接播放；
       // 302 跳转端点同样先解析成 CDN 直链（两跳慢加载不因有歌词而保留）
@@ -207,7 +217,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
               setTimeout(() => { if (playId === currentPlayId) void playSong(nextSong, retryCount + 1, false); }, 0);
             } else {
               // 队列已耗尽：停止假播放并提示
-              stopAllPlayers();
+              void stopAllPlayers();
               usePlayerStore.getState().pause();
               log.reportError(`《${song.name}》播放失败，且队列中没有其他歌曲`);
             }
@@ -256,7 +266,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   };
 
   try {
-    stopAllPlayers();
+    await stopAllPlayers();
     await startPlayback();
   } catch (err) {
     if (err === 'cancelled') return;
@@ -270,7 +280,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
         log.addLog('warn', `《${song.name}》播放失败，自动跳过`);
         await playSong(nextSong, retryCount + 1, false);
       } else {
-        stopAllPlayers();
+        await stopAllPlayers();
         usePlayerStore.getState().pause();
         log.reportError(`《${song.name}》播放失败，且队列中没有其他歌曲`);
       }
@@ -316,6 +326,6 @@ export async function seekTo(timeSec: number): Promise<void> {
 }
 
 export async function cleanup(): Promise<void> {
-  stopAllPlayers();
+  await stopAllPlayers();
   await clearNotification().catch(() => {});
 }
