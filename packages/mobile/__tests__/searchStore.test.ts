@@ -39,10 +39,18 @@ describe('searchStore source routing', () => {
     expect(mocks.searchAllSources).not.toHaveBeenCalled();
   });
 
-  it('uses searchAllSources when source is all', async () => {
+  it('searches each source progressively when source is all (no searchAllSources)', async () => {
     useSourceStore.getState().setSelectedSource('all');
     await useSearchStore.getState().search('晴天');
-    expect(mocks.searchAllSources).toHaveBeenCalledWith('晴天', 1);
-    expect(mocks.searchSongs).not.toHaveBeenCalled();
+    // 渐进式：逐源调用 searchSongs（每源完成立即渲染，不等最慢源）
+    expect(mocks.searchAllSources).not.toHaveBeenCalled();
+    const calls = mocks.searchSongs.mock.calls;
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    // 每个调用都是 ('晴天', 1, <源>)
+    for (const [kw, page, src] of calls) {
+      expect(kw).toBe('晴天');
+      expect(page).toBe(1);
+      expect(['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda']).toContain(src);
+    }
   });
 });
