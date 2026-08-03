@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Paths } from 'expo-file-system';
 import type { Song } from '@mplayer/core';
 import { useDownloadStore } from '../../stores/downloadStore';
-import { getLocalUri } from '../../services/downloadService';
+import { getLocalUri, removeDownloadedFile } from '../../services/downloadService';
 import { playSong } from '../../services/audioPlayer';
 import { usePlayerStore } from '../../stores/playerStore';
 
@@ -41,7 +41,10 @@ export default function DownloadPage() {
       {
         text: '删除',
         style: 'destructive',
-        onPress: () => removeItem(item.songId),
+        onPress: async () => {
+          await removeDownloadedFile(item.fileName).catch(() => {});
+          removeItem(item.songId);
+        },
       },
     ]);
   };

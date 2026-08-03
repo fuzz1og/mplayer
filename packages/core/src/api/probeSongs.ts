@@ -13,8 +13,8 @@ export interface ProbeOptions {
 /**
  * Batch probe audio quality for a list of songs.
  *
- * Non-blocking pattern: returns immediately, calls onResult per song as results arrive.
- * Uses concurrency limit to avoid overwhelming the network.
+ * Resolves when ALL probes settle (concurrency-limited), calling onResult
+ * per song as each finishes. Use with fire-and-forget for non-blocking UI.
  *
  * Usage:
  *   probeSongs(songs, {
@@ -33,11 +33,19 @@ export async function probeSongs(
 
   let currentIndex = 0;
   let activeCount = 0;
+  let pendingCount = 0;
+  let resolveAll: () => void = () => {};
+  const allDone = new Promise<void>((r) => { resolveAll = r; });
+
+  function maybeFinish(): void {
+    if (pendingCount === 0 && currentIndex >= songs.length) resolveAll();
+  }
 
   function next(): void {
     while (activeCount < concurrency && currentIndex < songs.length) {
       const song = songs[currentIndex++];
       activeCount++;
+      pendingCount++;
       probeOne(song, resolver)
         .then((tag) => {
           onResult?.(song.id, tag);
@@ -47,12 +55,16 @@ export async function probeSongs(
         })
         .finally(() => {
           activeCount--;
+          pendingCount--;
+          maybeFinish();
           next();
         });
     }
+    maybeFinish();
   }
 
   next();
+  await allDone;
 }
 
 async function probeOne(

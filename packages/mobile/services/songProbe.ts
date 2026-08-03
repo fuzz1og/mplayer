@@ -10,6 +10,7 @@ import { useLogsStore } from '../stores/logsStore';
  */
 export async function probeSongsWithTags(songs: Song[]): Promise<void> {
   if (songs.length === 0) return;
+  const t0 = Date.now();
   const { setTag } = useAudioTagStore.getState();
   const byId = new Map(songs.map((s) => [s.id, s]));
   let preview = 0;
@@ -26,5 +27,5 @@ export async function probeSongsWithTags(songs: Song[]): Promise<void> {
       else valid++;
     },
   });
-  useLogsStore.getState().addLog('info', `探测完成: 共${songs.length}首, 完整${valid} 片段${preview} 无效${invalid}`);
+  useLogsStore.getState().addLog('info', `探测完成: 共${songs.length}首, 完整${valid} 片段${preview} 无效${invalid}, 耗时 ${Date.now() - t0}ms`);
 }

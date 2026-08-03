@@ -4,21 +4,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Song } from '@mplayer/core';
+import type { Song, SourceKey } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
-
-const SOURCE_LABELS: Record<string, string> = {
-  netease: '网易云',
-  qq: 'QQ音乐',
-  kugou: '酷狗',
-  kuwo: '酷我',
-  qianqian: '千千',
-  soda: '汽水',
-  local: '本地',
-};
+import { SOURCE_LABELS } from '../stores/sourceStore';
 
 function sourceLabel(sourceType?: string): string {
-  return SOURCE_LABELS[sourceType || ''] || sourceType || '未知';
+  return SOURCE_LABELS[sourceType as SourceKey] || sourceType || '未知';
 }
 
 interface Props {
@@ -52,14 +43,14 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
         `歌单中已有「${song.name}」的${sourceLabel(dup.sourceType)}版本，要替换成这首${sourceLabel(song.sourceType)}版本吗？`,
         [
           { text: '取消', style: 'cancel' },
-          { text: '保留原版', onPress: () => { setAddedName(playlistName); showSuccess(playlistName); } },
+          { text: '保留原版', onPress: () => { setAddedName(playlistName); showSuccess(); } },
           {
             text: '替换为新版',
             onPress: () => {
               removeSong(playlistId, dup.id);
               addSong(playlistId, song);
               setAddedName(playlistName);
-              showSuccess(playlistName);
+              showSuccess();
             },
           },
         ]
@@ -68,10 +59,10 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
     }
     addSong(playlistId, song);
     setAddedName(playlistName);
-    showSuccess(playlistName);
+    showSuccess();
   };
 
-  const showSuccess = (playlistName: string) => {
+  const showSuccess = () => {
     setTimeout(() => {
       setAddedName(null);
       onClose();

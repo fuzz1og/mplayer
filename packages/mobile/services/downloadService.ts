@@ -23,6 +23,15 @@ async function removeFileIfExists(file: File): Promise<void> {
 }
 
 /**
+ * 下载文件全名：来源前缀避免跨源同名歌曲互相覆盖
+ * （不同来源同名歌曲文件名一样，去掉前缀会被后下载的覆盖）
+ */
+function buildFileName(song: Song): string {
+  const src = song.sourceType && song.sourceType !== 'local' ? song.sourceType : 'netease';
+  return `[${src}] ${sanitizeFileName(song.name)} - ${sanitizeFileName(song.artist)}.mp3`;
+}
+
+/**
  * 下载歌曲到本地：解析直链 → 下载 → 更新下载列表。
  * 并发下载由调用方控制（当前单曲入口，天然串行）。
  */
@@ -30,7 +39,7 @@ export async function downloadSong(song: Song): Promise<File> {
   const log = useLogsStore.getState();
   const { addItem, updateStatus } = useDownloadStore.getState();
 
-  const fileName = `${sanitizeFileName(song.name)} - ${sanitizeFileName(song.artist)}.mp3`;
+  const fileName = buildFileName(song);
   const file = new File(downloadDir, fileName);
   addItem({
     songId: song.id,
@@ -65,4 +74,9 @@ export async function downloadSong(song: Song): Promise<File> {
 /** 已下载歌曲的本地 file:// 播放 URI（未下载/文件丢失返回 null） */
 export function getLocalUri(fileName: string): string {
   return new File(downloadDir, fileName).uri;
+}
+
+/** 删除下载项对应的本地文件（文件不存在时静默）；状态记录删除由调用方处理 */
+export async function removeDownloadedFile(fileName: string): Promise<void> {
+  await removeFileIfExists(new File(downloadDir, fileName));
 }

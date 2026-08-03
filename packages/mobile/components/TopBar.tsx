@@ -5,7 +5,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSourceStore, SOURCE_LABELS } from '../stores/sourceStore';
+import { useSourceStore, SOURCE_OPTION_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
 
@@ -71,7 +71,7 @@ export default function TopBar() {
           }}
         />
         <TouchableOpacity onPress={() => setShowSourcePicker(true)} style={styles.sourceBtn}>
-          <Text style={styles.sourceLabel}>{SOURCE_LABELS[selectedSource]}</Text>
+          <Text style={styles.sourceLabel}>{SOURCE_OPTION_LABELS[selectedSource]}</Text>
           <Ionicons name="chevron-down" size={12} color="#888" />
         </TouchableOpacity>
       </View>
@@ -96,7 +96,7 @@ export default function TopBar() {
                   color={selectedSource === opt.key ? '#e74c3c' : '#fff'}
                 />
                 <Text style={[styles.optionLabel, selectedSource === opt.key && styles.optionLabelActive]}>
-                  {SOURCE_LABELS[opt.key]}
+                  {SOURCE_OPTION_LABELS[opt.key]}
                 </Text>
                 {selectedSource === opt.key && (
                   <Ionicons name="checkmark" size={20} color="#e74c3c" />

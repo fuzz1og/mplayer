@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getNextSongIndex } from '../queue.js';
-import type { PlayMode, Song } from '../../types/index.js';
+import type { Song } from '../../types/index.js';
 
 function song(id: string): Song {
   return { id, name: id, artist: 'a', album: '', duration: 100, sourceType: 'netease', url: '', cover: '', lrc: '' };

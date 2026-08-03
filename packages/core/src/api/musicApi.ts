@@ -3,6 +3,7 @@ import type { Song, SourceKey, SongGroup, DiscoverPlaylist, Album } from '../typ
 import { cacheManager } from './memoryCacheManager.js';
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { weapiRequest } from './neteaseWeapi.js';
+import { MULTI_SOURCE_LIST } from '../constants.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
@@ -1472,19 +1473,8 @@ export const musicApi = {
 
   async searchAllSources(keyword: string, page: number = 1): Promise<SongGroup[]> {
     // migu 不在列表：摄取端点无 migu 数据源，实测最慢(1.1s)且永远返回空，白等
-    const sources: SourceKey[] = ['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda'];
     const results = await Promise.allSettled(
-      sources.map(async (src) => {
-        const t0 = Date.now();
-        try {
-          const songs = await this.searchSongs(keyword, page, src);
-          console.log(`[search:${src}] ${Date.now() - t0}ms ${songs.length}首`);
-          return songs;
-        } catch (e: any) {
-          console.log(`[search:${src}] ${Date.now() - t0}ms FAILED`);
-          throw e;
-        }
-      })
+      MULTI_SOURCE_LIST.map(async (src) => this.searchSongs(keyword, page, src))
     );
     const allSongs: Song[] = [];
     for (const r of results) {

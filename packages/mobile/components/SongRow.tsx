@@ -10,6 +10,7 @@ import { type Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
+import { SOURCE_LABELS } from '../stores/sourceStore';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import SourceSwapModal from './SourceSwapModal';
 import { playSong } from '../services/audioPlayer';
@@ -34,16 +35,6 @@ const SOURCE_COLORS: Record<SourceKey, string> = {
   qianqian: '#95a5a6',
   soda: '#2ecc71',
   local: '#7f8c8d',
-};
-
-const SOURCE_LABELS: Record<SourceKey, string> = {
-  netease: '网易云',
-  qq: 'QQ',
-  kugou: '酷狗',
-  kuwo: '酷我',
-  qianqian: '千千',
-  soda: '汽水',
-  local: '本地',
 };
 
 export default function SongRow({
@@ -97,16 +88,21 @@ export default function SongRow({
       const swapped = await swapSongToSource(song, source);
       if (swapped) {
         setSwapSuccess(true);
-        // 替换播放队列中对应位置
         const st = usePlayerStore.getState();
         const idx = st.queue.findIndex((s) => s.id === song.id);
         if (idx >= 0) {
           const queue = [...st.queue];
           queue[idx] = swapped;
-          st.setQueue(queue, idx);
-        }
-        // 正在播放的就是这首 → 立即用完整版续播
-        if (st.currentSong?.id === song.id) {
+          if (st.currentSong?.id === song.id) {
+            // 正在播放的就是这首：替换队列并立即用完整版续播
+            st.setQueue(queue, idx);
+            playSong(swapped);
+          } else {
+            // 非当前歌曲：只替换队列，不调用 setQueue（会劫持播放）
+            usePlayerStore.setState({ queue });
+          }
+        } else if (st.currentSong?.id === song.id) {
+          // 不在队列但正在播放：直接续播
           playSong(swapped);
         }
         // 父组件更新自己的列表（歌单页同时持久化）

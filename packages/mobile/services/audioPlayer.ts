@@ -2,11 +2,12 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants from 'expo-constants';
-import { cacheManager, musicApi, resolvePlayableSong, resolveFreshUrl } from '@mplayer/core';
+import { cacheManager, getNextSongIndex, musicApi, resolvePlayableSong, resolveFreshUrl } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { useLogsStore } from '../stores/logsStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { updateNotification, clearNotification } from './notificationService';
 import { getCachedUrl, setCachedUrl } from './cacheService';
 
@@ -22,6 +23,9 @@ const livePlayers = new Set<Player>();
 let player: Player | null = null;
 let playerStatusSubscription: EventSubscription | null = null;
 let currentPlayId = 0;
+// playSong 进行中（解析 URL/创建播放器）：togglePlay 应忽略点击，
+// 避免 URL 解析期间反复触发 fresh 重试解析
+let preparingPlayback = false;
 
 export async function initAudio(): Promise<void> {
   await setAudioModeAsync({
@@ -108,12 +112,16 @@ function prefetchNextSong(): void {
   try {
     const st = usePlayerStore.getState();
     if (st.queue.length === 0 || st.currentIndex < 0) return;
-    const next = st.queue[(st.currentIndex + 1) % st.queue.length];
+    // 与真实切歌同一套索引逻辑（随机模式预取随机位置，避免总预取同一首）
+    const playMode = useSettingsStore.getState().playMode;
+    const nextIdx = getNextSongIndex(st.queue, st.currentIndex, playMode);
+    if (nextIdx < 0) return;
+    const next = st.queue[nextIdx];
     if (!next?.name || next.sourceType === 'local') return;
     void (async () => {
       const resolved = await resolvePlayableSong(next, musicApi);
       const url = isRedirectEndpoint(resolved.url) ? await resolveDirectUrl(resolved.url) : resolved.url;
-      if (url?.startsWith('http') && next.id) void setCachedUrl(next.id, url);
+      if (url?.startsWith('http') && next.id) void setCachedUrl(next.id, next.sourceType || 'netease', url);
       if (resolved.lrc) void musicApi.getLyrics(resolved.lrc).catch(() => {});
     })().catch(() => {});
   } catch {
@@ -129,6 +137,7 @@ function prefetchNextSong(): void {
 export async function playSong(song: Song, retryCount = 0, fresh = false): Promise<void> {
   const playId = ++currentPlayId;
   const log = useLogsStore.getState();
+  preparingPlayback = true;
 
   const startPlayback = async (): Promise<void> => {
     let audioUrl: string;
@@ -137,15 +146,16 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       // 本地文件不会过期，不参与 fresh 重试（调用方已过滤 local 源）
       audioUrl = await refreshPlayableUrl(song);
     } else if ((song.url?.startsWith('http') || song.url?.startsWith('file://')) && song.lrc) {
-      // 已有完整信息（音频 + 歌词）：零网络直接播放
-      audioUrl = song.url;
+      // 已有完整信息（音频 + 歌词）：零网络直接播放；
+      // 302 跳转端点同样先解析成 CDN 直链（两跳慢加载不因有歌词而保留）
+      audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
     } else if (song.url?.startsWith('http') || song.url?.startsWith('file://')) {
       // 有 url 无歌词：立即播放，歌词后台并行补充（不阻塞播放）
       // 摄取端点 302 跳转先解析成 CDN 直链（播放器直连 CDN，避免两跳慢加载）
       audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
       void fetchLrcInBackground(song);
     } else {
-      const cached = await getCachedUrl(song.id);
+      const cached = await getCachedUrl(song.id, song.sourceType || 'netease');
       if (cached) {
         // 缓存命中：秒起；歌词缺失时后台并行补
         audioUrl = isRedirectEndpoint(cached) ? await resolveDirectUrl(cached) : cached;
@@ -236,7 +246,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     nextPlayer.play();
 
     // 播放 URL 落缓存(24h TTL):下次(含重启后)直接命中,秒起;无 id 的歌不写
-    if (audioUrl?.startsWith('http') && song.id) void setCachedUrl(song.id, audioUrl);
+    if (audioUrl?.startsWith('http') && song.id) void setCachedUrl(song.id, song.sourceType || 'netease', audioUrl);
 
     log.addLog('info', `开始播放《${song.name}》- ${song.artist}${fresh ? '（新URL重试）' : ''}`);
     useHistoryStore.getState().addHistory(song);
@@ -265,6 +275,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
         log.reportError(`《${song.name}》播放失败，且队列中没有其他歌曲`);
       }
     }
+  } finally {
+    preparingPlayback = false;
   }
 }
 
@@ -273,6 +285,8 @@ export async function togglePlay(): Promise<void> {
   const song = usePlayerStore.getState().currentSong;
 
   if (!player) {
+    // 正在解析 URL/创建播放器：忽略点击（防止反复触发 fresh 重试解析）
+    if (preparingPlayback) return;
     // 播放器已被清理（如队列耗尽后）→ 用全新 URL 重试当前歌曲
     if (song) await playSong(song, 0, true);
     return;

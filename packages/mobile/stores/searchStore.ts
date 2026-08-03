@@ -1,23 +1,9 @@
 import { create } from 'zustand';
-import { musicApi } from '@mplayer/core';
+import { musicApi, createSearchController, MULTI_SOURCE_LIST } from '@mplayer/core';
 import type { SongGroup, SourceKey } from '@mplayer/core';
-import type { SourceOption } from './sourceStore';
-import { useSourceStore } from './sourceStore';
+import { useSourceStore, SOURCE_OPTION_LABELS } from './sourceStore';
 import { useLogsStore } from './logsStore';
-import { useAudioTagStore } from './audioTagStore';
-import { probeAudio } from '../services/audioProbe';
-import { createSearchController } from '@mplayer/core';
-
-const SOURCE_LABELS: Record<SourceOption, string> = {
-  all: '全部',
-  netease: '网易云',
-  qq: 'QQ音乐',
-  kugou: '酷狗',
-  kuwo: '酷我',
-  qianqian: '千千',
-  soda: '汽水',
-  local: '本地',
-};
+import { probeSongsWithTags } from '../services/songProbe';
 
 interface SearchState {
   query: string;
@@ -38,7 +24,7 @@ export const useSearchStore = create<SearchState>((set, get) => {
       return musicApi.searchAllSources(query, page);
     }
     const songs = await musicApi.searchSongs(query, page, source as SourceKey);
-    return [{ key: source, name: SOURCE_LABELS[source as SourceOption], artist: '', songs }];
+    return [{ key: source, name: SOURCE_OPTION_LABELS[source as SourceKey], artist: '', songs }];
   };
 
   const controller = createSearchController({
@@ -63,7 +49,7 @@ export const useSearchStore = create<SearchState>((set, get) => {
       if (source === 'all') {
         // 同名歌曲组内增量：每源完成即渲染(组内并入该源版本)，不等最慢源；
         // 探测在全部完成后统一跑(与搜索并发会抢手机网络带宽)
-        await progressiveSearch(query, 1);
+        await progressiveSearch(query, 1, searchSeq);
         const state = get();
         if (state.results.length > 0) {
           probeResults(state.results);
@@ -89,8 +75,10 @@ export const useSearchStore = create<SearchState>((set, get) => {
         // 但按组 key 合并：渐进首屏的组 + 第二页组不能出现同名组重复
         set({ loadingMore: true });
         const page = s.page + 1;
+        const seq = searchSeq;
         try {
           const groups = await musicApi.searchAllSources(s.query, page);
+          if (seq !== searchSeq) { set({ loadingMore: false }); return; } // 已发新查询，丢弃过期结果
           set({ results: mergeGroupedResults(s.results, groups), page, loadingMore: false });
         } catch {
           set({ loadingMore: false });
@@ -99,9 +87,15 @@ export const useSearchStore = create<SearchState>((set, get) => {
       }
       await controller.loadMore();
     },
-    clear: () => controller.reset(),
+    clear: () => {
+      searchSeq++;
+      controller.reset();
+    },
   };
 });
+
+/** 全局搜索序号：新查询/clear 递增，用于丢弃过期源的迟到结果 */
+let searchSeq = 0;
 
 /** 按组 key 合并两组结果（同名歌曲组内追加，不产生重复组） */
 function mergeGroupedResults(prev: SongGroup[], incoming: SongGroup[]): SongGroup[] {
@@ -123,8 +117,8 @@ function mergeGroupedResults(prev: SongGroup[], incoming: SongGroup[]): SongGrou
  * 探测不在这里跑——与搜索并发会抢手机网络带宽（实测搜索 4.8s→8s），
  * 由 search() 在全部完成后统一触发。
  */
-async function progressiveSearch(query: string, page: number): Promise<void> {
-  const sources: SourceKey[] = ['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda'];
+async function progressiveSearch(query: string, page: number, seq: number): Promise<void> {
+  const sources: SourceKey[] = MULTI_SOURCE_LIST;
   const t0 = Date.now();
   useSearchStore.setState({ loading: true, error: null, query, page, results: [], hasMore: true, loadingMore: false });
   const collected = new Map<SourceKey, SongGroup['songs']>();
@@ -132,6 +126,7 @@ async function progressiveSearch(query: string, page: number): Promise<void> {
     sources.map(async (src) => {
       try {
         const songs = await musicApi.searchSongs(query, page, src);
+        if (seq !== searchSeq) return; // 已被新查询/clear 取代，丢弃迟到结果
         if (songs.length === 0) return;
         collected.set(src, songs);
         // 按固定源序拼装 → 重跑分组（组内/组顺序与一次性全量完全一致）
@@ -142,32 +137,12 @@ async function progressiveSearch(query: string, page: number): Promise<void> {
       }
     })
   );
+  if (seq !== searchSeq) return;
   useSearchStore.setState({ loading: false });
   useLogsStore.getState().addLog('info', `搜索完成: 词「${query}」耗时 ${Date.now() - t0}ms`);
 }
 
 async function probeResults(groups: SongGroup[]) {
-  const allSongs = groups.flatMap(g => g.songs);
-  const t0 = Date.now();
-  // 手机网络慢,提高并发减少批数(每批 = 最慢一首的耗时)
-  const BATCH_SIZE = 20;
-  let valid = 0;
-  let preview = 0;
-  let invalid = 0;
-  const { setTag } = useAudioTagStore.getState();
-  for (let i = 0; i < allSongs.length; i += BATCH_SIZE) {
-    const batch = allSongs.slice(i, i + BATCH_SIZE);
-    // 每批完成立即 setTag → SongRow 按 id 订阅,只重渲染标签变化的行,
-    // 标签渐进式出现,不用等全部探测完
-    await Promise.allSettled(
-      batch.map(async (song) => {
-        const tag = await probeAudio(song);
-        if (tag === 'preview') preview++;
-        else if (tag === 'invalid') invalid++;
-        else valid++;
-        setTag(song, tag);
-      })
-    );
-  }
-  useLogsStore.getState().addLog('info', `探测完成: 共${allSongs.length}首, 完整${valid} 片段${preview} 无效${invalid}, 耗时 ${Date.now() - t0}ms`);
+  // 统一走 songProbe 管道（专辑/歌单/歌手/发现榜单共用同一实现）
+  await probeSongsWithTags(groups.flatMap((g) => g.songs));
 }
