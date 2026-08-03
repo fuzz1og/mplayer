@@ -191,8 +191,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     }
     nextPlayer.play();
 
-    // 播放 URL 落缓存:下次(含重启后)直接命中,秒起
-    if (audioUrl?.startsWith('http')) void cacheSongUrl(song.id, audioUrl);
+    // 播放 URL 落缓存:下次(含重启后)直接命中,秒起;无 id 的歌不写(避免污染 'songUrl:' 空键)
+    if (audioUrl?.startsWith('http') && song.id) void cacheSongUrl(song.id, audioUrl);
 
     log.addLog('info', `开始播放《${song.name}》- ${song.artist}${fresh ? '（新URL重试）' : ''}`);
     useHistoryStore.getState().addHistory(song);
