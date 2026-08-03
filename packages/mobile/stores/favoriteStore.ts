@@ -35,13 +35,17 @@ export const useFavoriteStore = create<FavoriteStore>()(
         }));
       },
 
-      // 单曲换源后原位替换：收藏里的歌保持新源版本（新 id 同步进 favoriteIds，
-      // 换源后 SongRow 的收藏红心状态仍正确）
+      // 单曲换源后原位替换：收藏里的歌保持新源版本。
+      // 旧 id 被替换（非新增）；若新 id 已存在于收藏（之前收藏过该源版本），
+      // 去重保留一条，避免 FlatList key 冲突
       replaceSong: (oldSongId, newSong) => {
-        set((state) => ({
-          favorites: state.favorites.map((s) => (s.id === oldSongId ? newSong : s)),
-          favoriteIds: state.favoriteIds.map((id) => (id === oldSongId ? newSong.id : id)),
-        }));
+        set((state) => {
+          const idx = state.favorites.findIndex((s) => s.id === oldSongId);
+          if (idx < 0) return state;
+          const others = state.favorites.filter((s) => s.id !== oldSongId && s.id !== newSong.id);
+          const favorites = [...others.slice(0, idx), newSong, ...others.slice(idx)];
+          return { favorites, favoriteIds: favorites.map((s) => s.id) };
+        });
       },
 
       isFavorite: (songId) => {

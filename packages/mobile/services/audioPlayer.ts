@@ -10,6 +10,7 @@ import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { updateNotification, clearNotification } from './notificationService';
 import { getCachedUrl, setCachedUrl } from './cacheService';
+import { searchStrictMatch } from './songResources';
 
 type Player = ReturnType<typeof createAudioPlayer>;
 
@@ -82,8 +83,7 @@ export async function fetchLrcInBackground(song: Song, force = false): Promise<v
   const log = useLogsStore.getState();
   if ((!force && song.lrc) || song.sourceType === 'local' || !song.name) return;
   try {
-    const res = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
-    const fresh = res[0];
+    const fresh = await searchStrictMatch(song);
     if (!fresh?.lrc) {
       log.addLog('warn', `歌词补全未找到: 《${song.name}》${song.artist}`);
       return;

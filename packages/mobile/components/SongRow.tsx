@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { type Song, SourceKey, musicApi, findBestMatch } from '@mplayer/core';
+import { type Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
@@ -17,6 +17,7 @@ import SourceSwapModal from './SourceSwapModal';
 import { playSong } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
 import { swapSongToSource } from '../services/sourceSwap';
+import { searchStrictMatch } from '../services/songResources';
 
 // 封面失效兜底搜索：限并发（手机网络带宽有限，避免整列表失效时并发打满）
 let activeCoverSearches = 0;
@@ -89,9 +90,7 @@ export default function SongRow({
     setCover('');
     void withCoverSearchSlot(async () => {
       try {
-        const res = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
-        const match = findBestMatch({ name: song.name, artist: song.artist }, res);
-        const fresh = match?.song as Song | undefined;
+        const fresh = await searchStrictMatch(song);
         if (fresh?.cover?.startsWith('http')) setCover(fresh.cover);
       } catch {
         // 封面兜底失败保留占位
