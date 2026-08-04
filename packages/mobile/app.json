@@ -2,7 +2,7 @@
   "expo": {
     "name": "MPlayer",
     "slug": "mplayer-mobile",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "orientation": "portrait",
     "scheme": "mplayer",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
     "icon": "../../resources/icon.png",
     "android": {
       "package": "com.mplayer.mobile",
-      "versionCode": 15,
+      "versionCode": 16,
       "adaptiveIcon": {
         "foregroundImage": "../../resources/icon.png",
         "backgroundColor": "#1a1a2e"
@@ -25,7 +25,12 @@
     },
     "plugins": [
       "expo-router",
-      ["expo-audio", { "enableBackgroundPlayback": true }],
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true
+        }
+      ],
       "./plugins/withVectorIconsFonts",
       [
         "expo-build-properties",
