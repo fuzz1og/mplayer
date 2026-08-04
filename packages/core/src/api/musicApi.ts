@@ -5,6 +5,7 @@ import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { weapiRequest } from './neteaseWeapi.js';
 import { MULTI_SOURCE_LIST } from '../constants.js';
 import { findExactMatch } from '../utils/songMatcher.js';
+import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
@@ -50,10 +51,12 @@ export function injectProxyAgents(provider: () => ProxyAgents): void {
 // 歌手头像缓存，供分类 tab 爬取时补图
 const artistPicCache = new Map<string, string>();
 
-// 搜索兜底状态:healthCheck 结果缓存(5 分钟)+ 搜索无结果歌曲黑名单(会话级)
+// 搜索兜底状态:healthCheck 结果缓存(5 分钟)+ 搜索无结果歌曲黑名单(带 TTL)
+// 黑名单用 Map<id, 时间戳> 而非 Set:瞬时故障(超时/502)不能永久拉黑,10 分钟后重试
 const HEALTH_CHECK_TTL = 5 * 60 * 1000;
+const SEARCH_FAILED_TTL = 10 * 60 * 1000;
 let healthCheckCache = { at: 0, ok: false };
-const searchFailedSongIds = new Set<string>();
+const searchFailedSongIds = new Map<string, number>();
 
 // 网易云歌手分类 cat id → weapi artist/list 的 type/area 参数
 // type: 1 男, 2 女, 3 乐队;area: 7 华语, 96 欧美, 8 日本(仅列出本项目用到的分类)
@@ -366,6 +369,13 @@ export const musicApi = {
   },
 
   cacheSodaAudioUrl(trackId: string, url: string): void {
+    // 顺带清理过期项，防 Map 无界增长（每首歌一个 entry，长期会话会积累）
+    if (sodaAudioUrlCache.size >= 500) {
+      const now = Date.now();
+      for (const [k, v] of sodaAudioUrlCache) {
+        if (v.expires < now) sodaAudioUrlCache.delete(k);
+      }
+    }
     sodaAudioUrlCache.set(trackId, { url, expires: Date.now() + SODA_URL_CACHE_TTL });
   },
 
@@ -470,12 +480,15 @@ export const musicApi = {
    * 播放失败/歌词封面补全时优先按 ID 拿新鲜的 url/lrc/cover（三件套），
    * 完全绕开"按名字搜索 + 匹配"（Live/翻唱/多歌手导致的匹配失败）。
    * 失败返回 null（调用方回退名字搜索）。
+   * @param force 为 true 时绕过 6h 搜索缓存（fresh 重试路径必须传：缓存里正是失败的那个过期 url）
    */
-  async searchSongById(songId: string, sourceType: SourceKey = 'netease'): Promise<Song | null> {
+  async searchSongById(songId: string, sourceType: SourceKey = 'netease', force = false): Promise<Song | null> {
     if (!songId || sourceType === 'soda') return null;
     const cacheKey = `song_by_id_${sourceType}_${songId}`;
-    const cached = cacheManager.getSearchCache(cacheKey, 1, sourceType);
-    if (cached?.length) return cached[0];
+    if (!force) {
+      const cached = cacheManager.getSearchCache(cacheKey, 1, sourceType);
+      if (cached?.length) return cached[0];
+    }
 
     const params = new URLSearchParams();
     params.append('input', songId);
@@ -487,11 +500,15 @@ export const musicApi = {
       const response = await apiClient.post('', params, { timeout: 8000 });
       const songs: Partial<Song>[] = response.data.data || [];
       const processed = songs.map(song => processSong(song, sourceType));
-      if (processed.length === 0) {
-        console.warn(`[search] 按ID识别失败: ${sourceType} ${songId} 返回 0 首`);
+      // 校验返回的歌确实是对应 ID：filter=id 不严格时可能回退相似歌曲，
+      // 不校验会把别的歌的 url 挂到目标歌上（错误音频）
+      const found = processed.find(s => s.id && (s.id === songId || stripSourceIdPrefix(s.id) === songId));
+      if (!found) {
+        console.warn(`[search] 按ID识别失败: ${sourceType} ${songId} 返回 ${processed.length} 首但无匹配 ID`);
+        return null;
       }
       cacheManager.setSearchCache(cacheKey, 1, sourceType, processed);
-      return processed[0] || null;
+      return found;
     } catch (e: any) {
       console.warn(`[search] 按ID识别失败: ${sourceType} ${songId} 请求异常 ${e?.message || e}`);
       return null;
@@ -1191,10 +1208,14 @@ export const musicApi = {
    * - 搜索无结果的歌曲记入黑名单(会话级),后续页不再重复搜索
    */
   async resolveNeteaseSongUrlsBySearch(songs: Song[]): Promise<void> {
+    // 先清掉过期的黑名单项（瞬时故障不能永久拉黑）
+    const now = Date.now();
+    for (const [id, at] of searchFailedSongIds) {
+      if (now - at >= SEARCH_FAILED_TTL) searchFailedSongIds.delete(id);
+    }
     const missingUrlSongs = songs.filter(s => !s.url && !searchFailedSongIds.has(s.id));
     if (missingUrlSongs.length === 0) return;
 
-    const now = Date.now();
     let apiOk: boolean;
     if (now - healthCheckCache.at < HEALTH_CHECK_TTL) {
       apiOk = healthCheckCache.ok;
@@ -1219,7 +1240,7 @@ export const musicApi = {
         if (hit?.url) {
           song.url = hit.url;
         } else {
-          searchFailedSongIds.add(song.id);
+          searchFailedSongIds.set(song.id, Date.now());
         }
       }
     } catch (error) {
@@ -1337,7 +1358,8 @@ export const musicApi = {
   },
 
   async getNewAlbums(area: string = 'ALL', offset: number = 0, limit: number = 30): Promise<Album[]> {
-    const cacheKey = `album_new_${area}`;
+    // key 必须含 offset/limit：分页参数不同返回不同数据，固定 key 会串页
+    const cacheKey = `album_new_${area}_${offset}_${limit}`;
     const cached = cacheManager.get<Album[]>(cacheKey);
     if (cached) return cached;
 
@@ -1435,7 +1457,8 @@ export const musicApi = {
   },
 
   async getRecommendedPlaylists(limit: number = 30): Promise<DiscoverPlaylist[]> {
-    const cacheKey = 'personalized_playlist';
+    // key 必须含 limit：接口按 limit 返回不同数量的歌单（同 getRecommendedSongs 的修复）
+    const cacheKey = `personalized_playlist_${limit}`;
     const cached = cacheManager.get<DiscoverPlaylist[]>(cacheKey);
     if (cached) return cached;
 

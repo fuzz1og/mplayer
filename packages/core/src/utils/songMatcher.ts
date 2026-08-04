@@ -70,17 +70,22 @@ export function calculateSimilarity(target: MatchTarget, candidate: MatchCandida
 
   let artistScore = 0;
   if (target.artist && candidate.artist) {
-    const nTargetArtist = normalize(target.artist);
+    // target 也要拆分（"肖琴 / 肖Music" 须能匹配 candidate 任一歌手），
+    // 与 isExactMatch 的拆分语义一致，避免多歌手目标被整体比较误拒
+    const targetArtists = splitArtists(target.artist).map(normalize);
     const candidateArtists = splitArtists(candidate.artist);
     let bestArtistScore = 0;
-    for (const ca of candidateArtists) {
-      const nCa = normalize(ca);
-      if (nCa === nTargetArtist) {
-        bestArtistScore = 1;
-        break;
+    for (const nTa of targetArtists) {
+      for (const ca of candidateArtists) {
+        const nCa = normalize(ca);
+        if (nCa === nTa) {
+          bestArtistScore = 1;
+          break;
+        }
+        const score = levenshteinRatio(nTa, nCa);
+        if (score > bestArtistScore) bestArtistScore = score;
       }
-      const score = levenshteinRatio(nTargetArtist, nCa);
-      if (score > bestArtistScore) bestArtistScore = score;
+      if (bestArtistScore === 1) break;
     }
     artistScore = bestArtistScore;
   } else {

@@ -48,7 +48,11 @@ export function createSearchController(config: SearchControllerConfig): SearchCo
         const { source } = getState() as { source: string };
         const newResults = await searchFn(currentQuery, nextPage, source);
         const s = getState() as { results?: SongGroup[]; query?: string; page?: number };
-        if (seq !== currentSeq || s.query !== currentQuery) return; // stale
+        // stale：清掉 loadingMore，否则新搜索后无限滚动永远被卡住
+        if (seq !== currentSeq || s.query !== currentQuery) {
+          setState({ loadingMore: false });
+          return;
+        }
 
         const existingKeys = new Set((s.results || []).map(g => g.key));
         const merged = (s.results || []).map(g => {

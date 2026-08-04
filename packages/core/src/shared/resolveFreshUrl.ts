@@ -26,9 +26,10 @@ export async function resolveFreshUrl(song: Song, resolver: FreshUrlResolver): P
 
   // 按源站 ID 直接识别（链接/302 sign 会过期，但 ID 不会）：
   // 优先于跟随重定向与名字搜索——名字搜索有匹配失败风险（Live/翻唱/多歌手）
+  // force=true 绕过 6h 搜索缓存：缓存里正是导致播放失败的那个过期 url
   const baseId = song.id ? stripSourceIdPrefix(song.id) : '';
   if (baseId && resolver.searchSongById) {
-    const byId = await resolver.searchSongById(baseId, song.sourceType);
+    const byId = await resolver.searchSongById(baseId, song.sourceType, true);
     if (byId?.url?.startsWith('http')) return byId.url;
   }
 

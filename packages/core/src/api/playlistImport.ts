@@ -23,7 +23,8 @@ export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
   const trimmedUrl = url.trim();
 
   // Full NetEase URL: https://music.163.com/#/playlist?id=xxx or https://music.163.com/playlist?id=xxx
-  const neteaseMatch = trimmedUrl.match(/music\.163\.com.*[?&]id=(\d+)/);
+  // 必须匹配 /playlist 路径：song/album/artist 链接同样带 id=，不校验路径会导入错歌单
+  const neteaseMatch = trimmedUrl.match(/music\.163\.com.*\/playlist[^?\s]*[?&]id=(\d+)/);
   if (neteaseMatch) {
     return { type: 'netease', id: neteaseMatch[1] };
   }

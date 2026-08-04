@@ -7,17 +7,21 @@ export const PROBE_TIMEOUT = 3000;
 export const MAX_REDIRECTS = 3;
 
 // 会话级探测缓存:同一首歌(同 id/稳定 url)重复搜索不重复探测
-const probeCache = new Map<string, AudioTag>();
+// 带 TTL:过期链接探测 valid 后不能永久有效;瞬时 4xx 也不能永久标 invalid
+const PROBE_CACHE_TTL = 30 * 60 * 1000;
+const probeCache = new Map<string, { tag: AudioTag; expires: number }>();
 const PROBE_CACHE_MAX = 500;
 
 /**
- * 稳定缓存键:去掉 url 的时间戳参数(t=),避免同一首歌每次搜索 url 不同导致缓存失效
+ * 稳定缓存键:去掉 url 的时间戳参数(t=)与 soda 的 play_auth token,
+ * 避免同一首歌每次搜索 url 不同导致缓存失效/堆积
  */
 function probeCacheKey(rawUrl: string): string {
   try {
     const u = new URL(rawUrl);
     u.searchParams.delete('t');
     u.searchParams.delete('timestamp');
+    u.searchParams.delete('play_auth');
     return u.href;
   } catch {
     return rawUrl;
@@ -33,7 +37,7 @@ function probeCacheKey(rawUrl: string): string {
 export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string }): Promise<AudioTag> {
   const cacheKey = probeCacheKey(rawUrl);
   const cached = probeCache.get(cacheKey);
-  if (cached) return cached;
+  if (cached && cached.expires > Date.now()) return cached.tag;
 
   try {
     const url = normalizeProbeUrl(rawUrl, options?.baseUrl);
@@ -78,7 +82,7 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
         if (total && Number.isFinite(total)) contentLength = total;
       } else if (resp.status >= 400) {
         clearTimeout(timer);
-        probeCache.set(cacheKey, 'invalid');
+        probeCache.set(cacheKey, { tag: 'invalid', expires: Date.now() + PROBE_CACHE_TTL });
         return 'invalid';
       }
       // 200(Range 被忽略,会下载完整 body):abort 中断,大小未知按 valid 处理
@@ -92,7 +96,7 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
     else tag = 'valid';
 
     if (probeCache.size >= PROBE_CACHE_MAX) probeCache.clear();
-    probeCache.set(cacheKey, tag);
+    probeCache.set(cacheKey, { tag, expires: Date.now() + PROBE_CACHE_TTL });
     return tag;
   } catch {
     return 'valid'; // Network errors etc. → don't mark, ensure playable

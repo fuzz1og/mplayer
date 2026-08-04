@@ -12,8 +12,8 @@ export function stripSourceIdPrefix(id: string): string {
 
 export interface UrlResolver {
   searchSongs: (keyword: string, page: number, sourceType: any) => Promise<Song[]>;
-  /** 按源站 ID 直接识别（可选）：链接过期但 ID 有效，优先于名字搜索 */
-  searchSongById?: (songId: string, sourceType: any) => Promise<Song | null>;
+  /** 按源站 ID 直接识别（可选）：链接过期但 ID 有效，优先于名字搜索；force 绕过搜索缓存 */
+  searchSongById?: (songId: string, sourceType: any, force?: boolean) => Promise<Song | null>;
   getSodaAudioUrl: (trackId: string) => Promise<string>;
   getAudioUrl: (url: string) => Promise<string>;
 }
@@ -105,7 +105,8 @@ export async function resolvePlayableSong(song: Song, resolver: UrlResolver): Pr
     if (baseId && resolver.searchSongById) {
       const byId = await resolver.searchSongById(baseId, song.sourceType);
       if (byId?.url?.startsWith('http')) {
-        return { url: hasUrl ? song.url : byId.url, lrc: byId.lrc || song.lrc || '' };
+        // byId 的 url 是最新签名（原 url 可能已过期），lrc 一并补全
+        return { url: byId.url, lrc: byId.lrc || song.lrc || '' };
       }
     }
     if (song.name) {
@@ -116,7 +117,8 @@ export async function resolvePlayableSong(song: Song, resolver: UrlResolver): Pr
         // lrc 允许相对路径（getLyrics 会 normalize 成完整 URL）
         const freshLrc = fresh.lrc || '';
         return {
-          url: hasUrl ? song.url : freshUrl,
+          // 搜索拿到新 url 优先于可能已过期的原 url
+          url: freshUrl || (hasUrl ? song.url : ''),
           lrc: freshLrc || song.lrc || '',
         };
       }
