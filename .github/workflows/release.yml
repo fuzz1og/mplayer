@@ -297,17 +297,30 @@ jobs:
             fi
           fi
 
-          # Upload each asset to Gitee
-          for file in ./assets/*; do
+          # Upload each asset to Gitee.
+          # Gitee 上传慢（实测 <150KB/s，1.2GB 总量需数小时）：小文件先传、
+          # 单文件 1h 超时 + 重试 1 次、失败不中断 job（重跑时跳过已传的）
+          EXISTING=$(curl -s "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID" \
+            --connect-timeout 10 --max-time 30 | jq -r '.assets[].name')
+          for file in $(ls -S ./assets/* | tac); do
             [ -f "$file" ] || continue
             BASE=$(basename "$file")
+            if echo "$EXISTING" | grep -qx "$BASE"; then
+              echo "SKIP $BASE (already uploaded)"
+              continue
+            fi
             echo "Uploading: $BASE"
-            UPLOAD_RESP=$(curl -s -X POST \
-              "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
-              --connect-timeout 10 --max-time 1800 \
-              -F "access_token=$GITEE_TOKEN" \
-              -F "file=@$file")
-            DL_URL=$(echo "$UPLOAD_RESP" | jq -r '.browser_download_url // empty')
+            DL_URL=""
+            for attempt in 1 2; do
+              UPLOAD_RESP=$(curl -s -X POST \
+                "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
+                --connect-timeout 10 --max-time 3600 \
+                -F "access_token=$GITEE_TOKEN" \
+                -F "file=@$file" || true)
+              DL_URL=$(echo "$UPLOAD_RESP" | jq -r '.browser_download_url // empty')
+              if [ -n "$DL_URL" ]; then break; fi
+              echo "Retry $attempt — $UPLOAD_RESP"
+            done
             if [ -n "$DL_URL" ]; then
               echo "OK $BASE → $DL_URL"
             else
