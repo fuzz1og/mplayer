@@ -305,6 +305,10 @@ jobs:
           for file in $(ls -S ./assets/* | tac); do
             [ -f "$file" ] || continue
             BASE=$(basename "$file")
+            # 不做 mac 端:跳过 dmg 及 blockmap（节省一半上传量）
+            case "$BASE" in
+              *.dmg|*.dmg.blockmap) echo "SKIP $BASE (mac 端不做)"; continue ;;
+            esac
             if echo "$EXISTING" | grep -qx "$BASE"; then
               echo "SKIP $BASE (already uploaded)"
               continue
