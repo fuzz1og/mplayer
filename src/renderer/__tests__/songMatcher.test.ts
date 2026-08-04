@@ -19,13 +19,14 @@ describe('songMatcher', () => {
       expect(score).toBe(0);
     });
 
-    it('should handle songs with same name but different artist', () => {
+    it('should reject same name but different artist (anti-cover)', () => {
       const score = calculateSimilarity(
         { name: '晴天', artist: '周杰伦' },
         { name: '晴天', artist: '其他歌手' }
       );
-      // Should still have some score due to name match
-      expect(score).toBeGreaterThan(0.5);
+      // artist 不匹配必须拒绝：name 完全匹配 + artist 完全不匹配按旧逻辑
+      // combined=0.6 会误判为匹配，放行翻唱/remix 导致播错歌
+      expect(score).toBe(0);
     });
 
     it('should handle substring matching', () => {

@@ -8,7 +8,7 @@ vi.mock('../services/coverCacheService', () => ({
 }));
 
 import { IpcClient } from '../services/IpcClient';
-import { refreshSongCover } from '../utils/songCoverRefresh';
+import { refreshSongCover, __resetSongCoverRefreshState } from '../utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
 
 const baseSong: Song = {
@@ -24,6 +24,8 @@ const baseSong: Song = {
 describe('refreshSongCover 封面失败刷新', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // 重置会话级刷新状态（attempts 计数/60s 冷却），否则同 id 用例被冷却挡住
+    __resetSongCoverRefreshState();
   });
 
   it('按源站 ID 识别成功返回新封面并更新 URL 缓存', async () => {
