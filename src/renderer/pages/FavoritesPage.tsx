@@ -5,6 +5,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
+import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
 
 const FavoritesPage: React.FC = () => {
@@ -29,6 +30,16 @@ const FavoritesPage: React.FC = () => {
 
   const handlePlay = async (song: Song) => {
     await play(song);
+  };
+
+  // 封面加载失败 → 按 ID 重识别换新封面并更新收藏列表（收藏封面常为空/过期）
+  const handleCoverError = (song: Song) => {
+    void refreshSongCover(song).then((cover) => {
+      if (!cover) return;
+      useFavoriteStore.setState((state) => ({
+        favorites: state.favorites.map((s) => (s.id === song.id ? { ...s, cover } : s)),
+      }));
+    });
   };
 
   const handlePlayAll = async () => {
@@ -105,6 +116,7 @@ const FavoritesPage: React.FC = () => {
           onBatchDownload={downloadBatch}
           onAddToPlaylist={handleAddToPlaylist}
           onBatchAddToPlaylist={handleBatchAddToPlaylist}
+          onCoverError={handleCoverError}
           showCheckbox={true}
           enableBatchDownload={true}
           enableBatchAddToPlaylist={true}

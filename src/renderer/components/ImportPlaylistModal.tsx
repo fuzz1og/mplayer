@@ -13,7 +13,6 @@ const SOURCE_LABELS: Record<SourceType, string> = {
   netease: '网易云',
   qq: 'QQ',
   kugou: '酷狗',
-  migu: '咪咕',
   kuwo: '酷我',
   qianqian: '千千',
   soda: '汽水',
@@ -23,7 +22,6 @@ const SOURCE_COLORS: Record<SourceType, string> = {
   netease: '#FF6B6B',
   qq: '#49B8FF',
   kugou: '#FF8C00',
-  migu: '#C20C0C',
   kuwo: '#FF6F00',
   qianqian: '#00A1D6',
   soda: '#1E90FF',
@@ -88,7 +86,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
 
   // 文本导入状态
   const [text, setText] = useState('');
-  const [sourceOrder, setSourceOrder] = useState<SourceType[]>(['netease', 'qq', 'kugou', 'migu', 'kuwo', 'qianqian', 'soda']);
+  const [sourceOrder, setSourceOrder] = useState<SourceType[]>(['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda']);
 
   // 链接导入状态
   const [linkUrl, setLinkUrl] = useState('');
@@ -231,7 +229,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     setLinkError(null);
     setProgress(null);
     setResult(null);
-    setSourceOrder(['netease', 'qq', 'kugou', 'migu', 'kuwo', 'qianqian', 'soda']);
+    setSourceOrder(['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda']);
     onClose();
   };
 

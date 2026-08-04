@@ -7,7 +7,7 @@ let page: Page;
 test.beforeAll(async () => {
   electronApp = await electron.launch({
     args: ['--no-sandbox', '.'],
-    env: { ...process.env, NODE_ENV: 'development', MUSIC_API_URL: 'http://www.thirdparty.cn/' },
+    env: { ...process.env, NODE_ENV: 'development', MUSIC_API_URL: 'http://localhost:3000/' },
     timeout: 30000,
   });
   page = await electronApp.firstWindow();

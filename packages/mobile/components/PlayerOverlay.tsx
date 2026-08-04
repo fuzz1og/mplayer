@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions, FlatList,
-  PanResponder, Animated,
+  PanResponder, Animated, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
-import { togglePlay, seekTo, playSong } from '../services/audioPlayer';
+import { togglePlay, seekTo, playSong, fetchLrcInBackground } from '../services/audioPlayer';
+import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { parseLRC, musicApi, findCurrentLyricIndex } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
+import { SOURCE_LABELS } from '../stores/sourceStore';
 
 const { width } = Dimensions.get('window');
 
@@ -46,6 +48,7 @@ export default function PlayerOverlay({ onClose }: Props) {
   const lyricCache = useRef(new Map<string, LyricLine[]>()).current;
   const onCloseRef = useRef(onClose);
   const slideAnim = useRef<Animated.CompositeAnimation | null>(null);
+  const insets = useSafeAreaInsets();
   onCloseRef.current = onClose;
 
   // 滑入动画
@@ -98,26 +101,48 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (!song) onCloseRef.current();
   }, [song]);
 
-  // 加载歌词
+  // 封面加载失败 → 占位唱片 + 懒刷新兜底（搜索补新封面，写回后自动恢复）
+  const [coverFailed, setCoverFailed] = useState(false);
+  useEffect(() => { setCoverFailed(false); }, [song?.cover]);
+  const handleCoverError = () => {
+    setCoverFailed(true);
+    if (song) void fetchLrcInBackground(song, true);
+  };
+
+  // 加载歌词：优先歌曲自带 lrc URL；今日推荐/歌单/歌手页的歌曲 lrc 为空，
+  // 用网易云 songId 兜底拉歌词
+  const [lyricsLoading, setLyricsLoading] = useState(false);
   useEffect(() => {
-    if (!song?.lrc) { setLyricLines([]); return; }
+    if (!song) { setLyricLines([]); setLyricsLoading(false); return; }
     const abort = new AbortController();
-    const cacheKey = song.lrc;
+    const cacheKey = song.lrc || (song.sourceType === 'netease' ? `songid:${song.id}` : '');
+    if (!cacheKey) { setLyricLines([]); setLyricsLoading(false); return; }
     const cached = lyricCache.get(cacheKey);
     if (cached) {
       setLyricLines(cached);
+      setLyricsLoading(false);
       return;
     }
-    musicApi.getLyrics(song.lrc).then(lrc => {
+    setLyricsLoading(true);
+    const load = song.lrc
+      ? musicApi.getLyrics(song.lrc)
+      : musicApi.getLyricsBySongId(song.id);
+    load.then(lrc => {
       if (abort.signal.aborted) return;
       const parsed = parseLRC(lrc);
       lyricCache.set(cacheKey, parsed.lines);
       setLyricLines(parsed.lines);
     }).catch(() => {
-      if (!abort.signal.aborted) setLyricLines([]);
+      if (!abort.signal.aborted) {
+        setLyricLines([]);
+        // 歌曲自带 lrc URL 可能已失效（歌单/收藏缓存）→ 强制搜索兜底补歌词
+        void fetchLrcInBackground(song, true);
+      }
+    }).finally(() => {
+      if (!abort.signal.aborted) setLyricsLoading(false);
     });
     return () => abort.abort();
-  }, [song?.lrc]);
+  }, [song?.lrc, song?.id]);
 
   // 更新歌词高亮
   useEffect(() => {
@@ -139,6 +164,13 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (!song) return;
     if (isFav) removeFavorite(song.id);
     else addFavorite(song);
+  };
+
+  const handleDownload = () => {
+    if (!song) return;
+    downloadSong(song)
+      .then(() => Alert.alert('提示', `《${song.name}》下载完成，可在下载页播放`))
+      .catch(() => Alert.alert('提示', `《${song.name}》下载失败，请重试`));
   };
 
   const handlePrev = () => {
@@ -193,10 +225,10 @@ export default function PlayerOverlay({ onClose }: Props) {
   if (!song) return null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']} {...panResponder.panHandlers}>
+    <SafeAreaView style={styles.container} edges={['top']} {...panResponder.panHandlers}>
       <StatusBar style="light" />
 
-      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }] }]}>
+      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }], paddingBottom: insets.bottom + 24 }]}>
         {/* 自定义顶部栏 */}
         <View style={styles.customHeader}>
           <TouchableOpacity onPress={dismissWithAnimation}>
@@ -245,8 +277,9 @@ export default function PlayerOverlay({ onClose }: Props) {
               <View style={styles.plinth}>
                 <View style={styles.platter} />
                 <Animated.Image
-                  source={{ uri: song.cover || 'https://via.placeholder.com/300' }}
+                  source={coverFailed ? undefined : { uri: song.cover || 'https://via.placeholder.com/300' }}
                   style={[styles.cover, { transform: [{ rotate: spin }] }]}
+                  onError={handleCoverError}
                 />
                 {/* 唱臂 */}
                 <View style={styles.tonearmPivot} />
@@ -257,11 +290,18 @@ export default function PlayerOverlay({ onClose }: Props) {
             {/* 歌曲信息 */}
             <View style={styles.infoWrap}>
               <Text style={styles.title}>{song.name}</Text>
-              <Text style={styles.artist}>{song.artist}</Text>
+              <View style={styles.infoRow}>
+                <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
+                {song.sourceType !== 'local' && (
+                  <View style={styles.sourceTag}>
+                    <Text style={styles.sourceTagText}>{SOURCE_LABELS[song.sourceType] || song.sourceType}</Text>
+                  </View>
+                )}
+              </View>
             </View>
 
-            {/* 歌词预览 */}
-            {lyricLines.length > 0 && (
+            {/* 歌词预览：始终占位,加载中显示骨架屏,避免歌词到达时布局跳动 */}
+            {lyricLines.length > 0 ? (
               <FlatList
                 ref={flatListRef}
                 data={lyricLines}
@@ -281,7 +321,19 @@ export default function PlayerOverlay({ onClose }: Props) {
                 )}
                 showsVerticalScrollIndicator={false}
               />
-            )}
+            ) : lyricsLoading ? (
+              <View style={styles.lyricsList}>
+                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.skeletonLine,
+                      { width: `${82 - (i % 3) * 12}%` },
+                    ]}
+                  />
+                ))}
+              </View>
+            ) : null}
 
             {/* 进度条 */}
             <View style={styles.progressWrap}>
@@ -329,7 +381,7 @@ export default function PlayerOverlay({ onClose }: Props) {
               <TouchableOpacity onPress={() => setShowPlaylistModal(true)} style={styles.actionBtn}>
                 <Ionicons name="add-circle-outline" size={24} color="#fff" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn}>
+              <TouchableOpacity onPress={handleDownload} style={styles.actionBtn}>
                 <Ionicons name="download-outline" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
@@ -428,7 +480,16 @@ const styles = StyleSheet.create({
   },
   infoWrap: { marginTop: 12, alignItems: 'center' },
   title: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  artist: { color: '#888', fontSize: 14, marginTop: 6 },
+  artist: { color: '#888', fontSize: 14, flexShrink: 1 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  sourceTag: {
+    marginLeft: 8,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: '#2a2a4a',
+  },
+  sourceTagText: { color: '#bbb', fontSize: 10 },
   progressWrap: { marginTop: 16, alignItems: 'center' },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', width: width - 48, marginTop: 4 },
   time: { color: '#666', fontSize: 12 },
@@ -450,6 +511,14 @@ const styles = StyleSheet.create({
   lyricsList: { flex: 1, marginTop: 16, marginHorizontal: 24 },
   lyricLine: { color: '#666', fontSize: 15, textAlign: 'center', marginVertical: 6 },
   lyricLineActive: { color: '#e74c3c', fontSize: 16, fontWeight: '600' },
+  // 歌词骨架屏：行高/间距与 lyricLine 一致,占位稳定避免加载后跳动
+  skeletonLine: {
+    alignSelf: 'center',
+    height: 15,
+    borderRadius: 7,
+    backgroundColor: '#2a2a4a',
+    marginVertical: 6,
+  },
   lyricsFullLine: { color: '#888', fontSize: 18, textAlign: 'center', marginVertical: 8, lineHeight: 28 },
   lyricsFullLineActive: { color: '#e74c3c', fontSize: 20, fontWeight: '600', lineHeight: 30 },
   lyricsFullWrap: {

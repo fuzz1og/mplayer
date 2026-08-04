@@ -49,7 +49,7 @@ function splitArtists(artist: string): string[] {
     .replace(/\bfeat\.?\s*/gi, '||')
     .replace(/\bft\.?\s*/gi, '||');
   return normalized
-    .split(/[、,，/＆&|]+/)
+    .split(/[、,，;；/＆&|]+/)
     .map(s => s.trim())
     .filter(Boolean);
 }
@@ -70,17 +70,22 @@ export function calculateSimilarity(target: MatchTarget, candidate: MatchCandida
 
   let artistScore = 0;
   if (target.artist && candidate.artist) {
-    const nTargetArtist = normalize(target.artist);
+    // target 也要拆分（"肖琴 / 肖Music" 须能匹配 candidate 任一歌手），
+    // 与 isExactMatch 的拆分语义一致，避免多歌手目标被整体比较误拒
+    const targetArtists = splitArtists(target.artist).map(normalize);
     const candidateArtists = splitArtists(candidate.artist);
     let bestArtistScore = 0;
-    for (const ca of candidateArtists) {
-      const nCa = normalize(ca);
-      if (nCa === nTargetArtist) {
-        bestArtistScore = 1;
-        break;
+    for (const nTa of targetArtists) {
+      for (const ca of candidateArtists) {
+        const nCa = normalize(ca);
+        if (nCa === nTa) {
+          bestArtistScore = 1;
+          break;
+        }
+        const score = levenshteinRatio(nTa, nCa);
+        if (score > bestArtistScore) bestArtistScore = score;
       }
-      const score = levenshteinRatio(nTargetArtist, nCa);
-      if (score > bestArtistScore) bestArtistScore = score;
+      if (bestArtistScore === 1) break;
     }
     artistScore = bestArtistScore;
   } else {
@@ -89,6 +94,9 @@ export function calculateSimilarity(target: MatchTarget, candidate: MatchCandida
   }
 
   const combined = NAME_WEIGHT * nameScore + ARTIST_WEIGHT * artistScore;
+  // artist 也必须达到阈值：防止同名不同歌手的翻唱/remix 被当作原唱
+  // （name 完全匹配 + artist 完全不匹配 = 0.6，按原逻辑会误判为匹配）
+  if (artistScore < SIMILARITY_THRESHOLD) return 0;
   return combined >= SIMILARITY_THRESHOLD ? combined : 0;
 }
 
@@ -104,4 +112,29 @@ export function findBestMatch(
     }
   }
   return best;
+}
+
+/**
+ * 精确匹配：name 与 artist 归一化后完全相等（双方多歌手都拆分，任一配对相等）。
+ * 用于换源/播放兜底——findBestMatch 的 name substring 匹配会放行
+ * "于是" 匹配 "于是(Live版)"，导致播放的音频与歌名歌手错位；
+ * 精确匹配拒绝一切 Live/remix/翻唱变体，宁可匹配失败也不播错歌。
+ */
+export function isExactMatch(target: MatchTarget, candidate: MatchCandidate): boolean {
+  const nTarget = normalize(target.name);
+  const nCandidate = normalize(candidate.name);
+  if (!nTarget || nTarget !== nCandidate) return false;
+  if (!target.artist) return true; // 目标无歌手信息时只看歌名
+  if (!candidate.artist) return false;
+  // target 也要拆分："肖琴 / 肖Music" 必须能匹配 candidate 的任一歌手
+  const targetArtists = splitArtists(target.artist).map(normalize);
+  return splitArtists(candidate.artist).some((ca) => targetArtists.includes(normalize(ca)));
+}
+
+/** 在候选中找第一个精确匹配且有 url 的歌（无则返回 null） */
+export function findExactMatch(target: MatchTarget, candidates: MatchCandidate[]): MatchCandidate | null {
+  for (const candidate of candidates) {
+    if (isExactMatch(target, candidate)) return candidate;
+  }
+  return null;
 }

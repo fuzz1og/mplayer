@@ -45,6 +45,8 @@ interface SongListProps {
   onBatchAddToPlaylist?: (songs: Song[]) => void;
   showRemoveFromPlaylist?: boolean;
   onRemoveFromPlaylist?: (song: Song) => void;
+  /** 封面加载失败时回调，由持有歌曲列表的层按 ID 重识别换新封面 */
+  onCoverError?: (song: Song) => void;
 }
 
 const SongList: React.FC<SongListProps> = ({
@@ -71,6 +73,7 @@ const SongList: React.FC<SongListProps> = ({
   onBatchAddToPlaylist,
   showRemoveFromPlaylist = false,
   onRemoveFromPlaylist,
+  onCoverError,
 }) => {
   // 内部状态管理（当外部没有提供时）
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
@@ -312,6 +315,7 @@ const SongList: React.FC<SongListProps> = ({
               onDownload={onDownload}
               onAddToPlaylist={handleAddToPlaylistClick}
               onRemoveFromPlaylist={onRemoveFromPlaylist}
+              onCoverError={onCoverError}
               onToggleSelect={handleToggleSelect}
               onToggleDropdown={handleToggleDropdown}
               onCloseDropdown={handleCloseDropdown}

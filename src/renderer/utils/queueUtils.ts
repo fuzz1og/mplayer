@@ -1,5 +1,6 @@
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
+import { getNextSongIndex } from '@mplayer/core';
 
 const QUEUE_STORAGE_KEY = 'mplayer_queue';
 const PLAY_MODE_KEY = 'playMode';
@@ -10,23 +11,9 @@ export function getNextSong(
   playMode: PlayMode,
   currentSong: Song | null,
 ): Song | null {
-  if (playlist.length === 0 || currentIndex === -1 || !currentSong) return null;
-
-  switch (playMode) {
-    case '单曲循环':
-      return currentSong;
-    case '随机播放': {
-      if (playlist.length <= 1) return currentSong;
-      let next: Song;
-      do {
-        next = playlist[Math.floor(Math.random() * playlist.length)];
-      } while (next.id === currentSong.id);
-      return next;
-    }
-    case '列表循环':
-    default:
-      return playlist[(currentIndex + 1) % playlist.length];
-  }
+  if (!currentSong) return null;
+  const nextIndex = getNextSongIndex(playlist, currentIndex, playMode);
+  return nextIndex === -1 ? null : playlist[nextIndex];
 }
 
 export function persistQueue(playlist: Song[], index: number): void {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 const { ipcRenderer } = window.require('electron');
 import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -14,15 +14,29 @@ import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
+import { mapSettledWithConcurrency } from '@/renderer/utils/async';
+import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
 const SortableSongRow: React.FC<{
   song: Song; index: number; isCurrentSong: boolean; isPlaying: boolean;
   onPlay: (song: Song) => void; onRemove: (song: Song) => void; onDownload: (song: Song) => void;
   isSelected: boolean; onToggleSelect: (songId: string) => void;
-}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, isSelected, onToggleSelect }) => {
+  onCoverError?: (song: Song) => void;
+}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, isSelected, onToggleSelect, onCoverError }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
   const coverSrc = useCachedCover(song.cover);
+  // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
+  const coverRefreshFired = useRef(false);
+
+  // cover 为空时挂载即触发一次刷新，显示层不依赖 onError（与 SongRow 一致）
+  useEffect(() => {
+    if (!song.cover && !coverRefreshFired.current) {
+      coverRefreshFired.current = true;
+      onCoverError?.(song);
+    }
+    // 仅挂载时触发：封面刷新后 song.cover 变化会自然进入正常渲染路径
+  }, []);
 
   return (
     <div ref={setNodeRef}
@@ -62,7 +76,7 @@ const SortableSongRow: React.FC<{
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
-          <CoverImage src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <CoverImage src={coverSrc} alt={song.name} onError={() => onCoverError?.(song)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: '14px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -107,13 +121,21 @@ const PlaylistDetailPage: React.FC = () => {
   const [importModalVisible, setImportModalVisible] = useState(false);
   const detailCover = useCachedCover((playlist?.cover || songs[0]?.cover) || '');
 
+  // 封面加载失败 → 按 ID 重识别换新封面并更新列表状态（旧封面签名过期后同一 URL 永远失败）
+  const handleCoverError = useCallback((song: Song) => {
+    void refreshSongCover(song).then((cover) => {
+      if (!cover) return;
+      setSongs((prev) => prev.map((s) => (s.id === song.id ? { ...s, cover } : s)));
+    });
+  }, []);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
   const refreshPlaylistSongs = async (songs: Song[]): Promise<Song[]> => {
-    const results = await Promise.allSettled(
-      songs.map(async (song) => {
+    // 并发 5 限流：整列表同时搜索会打爆 上游 API（高并发限流/502），必须逐批刷新
+    const results = await mapSettledWithConcurrency(songs, 5, async (song) => {
         const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
         if (cached) {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
@@ -141,8 +163,7 @@ const PlaylistDetailPage: React.FC = () => {
         }
 
         return { ...song, url: fresh.url, cover: fresh.cover, lrc: fresh.lrc };
-      })
-    );
+    });
 
     return results.map((r, i) => (r.status === 'fulfilled' ? r.value : songs[i]));
   };
@@ -472,6 +493,7 @@ const PlaylistDetailPage: React.FC = () => {
                 onPlay={handlePlay}
                 onRemove={handleRemoveFromPlaylist}
                 onDownload={handleDownload}
+                onCoverError={handleCoverError}
               />
             ))}
           </SortableContext>

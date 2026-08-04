@@ -15,7 +15,7 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import SongRow from '../../components/SongRow';
-import PlayerBar from '../../components/PlayerBar';
+import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import type { Song } from '@mplayer/core';
 
 export default function PlaylistDetailPage() {
@@ -23,8 +23,17 @@ export default function PlaylistDetailPage() {
   const playlists = usePlaylistStore((s) => s.playlists);
   const removeSong = usePlaylistStore((s) => s.removeSong);
   const renamePlaylist = usePlaylistStore((s) => s.renamePlaylist);
+  const replaceSong = usePlaylistStore((s) => s.replaceSong);
 
   const playlist = playlists.find((p) => p.id === id);
+
+  // 单曲换源：原位替换并持久化到歌单存储
+  const handleSwap = useCallback(
+    (original: Song, swapped: Song) => {
+      if (playlist) replaceSong(playlist.id, original.id, swapped);
+    },
+    [playlist, replaceSong],
+  );
 
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -66,7 +75,7 @@ export default function PlaylistDetailPage() {
             <Text style={styles.emptyText}>歌单不存在</Text>
           </View>
         </SafeAreaView>
-        <PlayerBar />
+        <BottomSafePlayerBar />
       </View>
     );
   }
@@ -104,7 +113,7 @@ export default function PlaylistDetailPage() {
                 activeOpacity={1}
                 onLongPress={() => handleRemoveSong(item)}
               >
-                <SongRow song={item} showSource queueSongs={playlist.songs} />
+                <SongRow song={item} showSource queueSongs={playlist.songs} onSwap={handleSwap} />
               </TouchableOpacity>
             )}
             contentContainerStyle={styles.list}
@@ -115,6 +124,8 @@ export default function PlaylistDetailPage() {
           visible={renameModalVisible}
           transparent
           animationType="fade"
+          statusBarTranslucent
+          navigationBarTranslucent
           onRequestClose={() => setRenameModalVisible(false)}
         >
           <TouchableOpacity
@@ -161,7 +172,7 @@ export default function PlaylistDetailPage() {
           </TouchableOpacity>
         </Modal>
       </SafeAreaView>
-      <PlayerBar />
+      <BottomSafePlayerBar />
     </View>
   );
 }

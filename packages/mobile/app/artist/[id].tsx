@@ -1,20 +1,23 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, Image, FlatList, StyleSheet,
+  View, Text, Image, FlatList, StyleSheet, ScrollView, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { musicApi, type Song } from '@mplayer/core';
+import { Ionicons } from '@expo/vector-icons';
+import { musicApi, type Song, type Album } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
-import PlayerBar from '../../components/PlayerBar';
+import { probeSongsWithTags } from '../../services/songProbe';
+import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 
 export default function ArtistDetailPage() {
-  const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
+  const { id, name, pic } = useLocalSearchParams<{ id: string; name?: string; pic?: string }>();
   const [artist, setArtist] = useState<any>(null);
   const [songs, setSongs] = useState<Song[]>([]);
+  const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -39,7 +42,11 @@ export default function ArtistDetailPage() {
   }, [loadingMore, hasMore, id, songs.length]);
 
   useEffect(() => {
-    if (!id) return;
+    // 缺 id（畸形链接）不能卡在 LoadingState：直接结束加载态渲染空列表
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -53,7 +60,12 @@ export default function ArtistDetailPage() {
         songTotalRef.current = songResult.total;
         setHasMore(songResult.songs.length < songResult.total);
         const info = artistResults[0] || null;
-        setArtist({ ...info, name: info?.name || artistName, picUrl: info?.picUrl || '' });
+        // 优先用入口传入的 weapi 高清头像（searchNeteaseArtists 结果兜底）
+        setArtist({ ...info, name: info?.name || artistName, picUrl: pic || info?.picUrl || '' });
+        // 补齐缺失 URL 后探测:30 秒片段自动标「短时长」徽标
+        void musicApi.resolveNeteaseSongUrls(songResult.songs, false).then(() => {
+          if (!cancelled) probeSongsWithTags(songResult.songs, { missingAsInvalid: true });
+        });
       } catch (e: any) {
         console.error('[ArtistDetail] load error:', e.message);
       } finally {
@@ -62,6 +74,21 @@ export default function ArtistDetailPage() {
     })();
     return () => { cancelled = true; };
   }, [id, name]);
+
+  // 专辑区块:前 20 张,横向滚动
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    musicApi.getArtistAlbums(id as string, 0, 20)
+      .then(r => { if (!cancelled) setAlbums(r.albums); })
+      .catch((e: any) => console.error('[ArtistDetail] albums error:', e.message));
+    return () => { cancelled = true; };
+  }, [id]);
+
+  // 单曲换源后更新列表（SongRow 更多菜单触发；不更新会显示旧的源条目）
+  const handleSwap = (original: Song, swapped: Song) => {
+    setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)));
+  };
 
   if (loading) return <LoadingState />;
 
@@ -86,9 +113,33 @@ export default function ArtistDetailPage() {
               )}
               <Text style={styles.name}>{artist?.name || '未知歌手'}</Text>
               {songTotalRef.current > 0 && <Text style={styles.subtitle}>共 {songTotalRef.current} 首歌曲</Text>}
+              {albums.length > 0 && (
+                <View style={styles.albumsSection}>
+                  <Text style={styles.albumsTitle}>专辑</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {albums.map(a => (
+                      <TouchableOpacity
+                        key={a.id}
+                        style={styles.albumCard}
+                        activeOpacity={0.7}
+                        onPress={() => router.push(`/album/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl)}&artist=${encodeURIComponent(a.artist)}` as any)}
+                      >
+                        {a.picUrl ? (
+                          <Image source={{ uri: a.picUrl }} style={styles.albumCover} />
+                        ) : (
+                          <View style={[styles.albumCover, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
+                            <Ionicons name="disc" size={24} color="#555" />
+                          </View>
+                        )}
+                        <Text style={styles.albumName} numberOfLines={1}>{a.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             </View>
           )}
-          renderItem={({ item }) => <SongRow song={item} showSource queueSongs={songs} />}
+          renderItem={({ item }) => <SongRow song={item} showSource queueSongs={songs} onSwap={handleSwap} />}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />}
@@ -96,7 +147,7 @@ export default function ArtistDetailPage() {
           ListEmptyComponent={<View style={styles.empty}><Text style={{ color: '#666', fontSize: 16 }}>暂无歌曲</Text></View>}
         />
       </SafeAreaView>
-      <PlayerBar />
+      <BottomSafePlayerBar />
     </View>
   );
 }
@@ -107,6 +158,11 @@ const styles = StyleSheet.create({
   avatar: { width: 120, height: 120, borderRadius: 60, marginBottom: 16 },
   name: { color: '#fff', fontSize: 20, fontWeight: '700' },
   subtitle: { color: '#888', fontSize: 13, marginTop: 6 },
+  albumsSection: { alignSelf: 'stretch', marginTop: 20 },
+  albumsTitle: { color: '#fff', fontSize: 15, fontWeight: '600', marginBottom: 12 },
+  albumCard: { width: 100, marginRight: 12 },
+  albumCover: { width: 100, height: 100, borderRadius: 10, backgroundColor: '#2a2a4a' },
+  albumName: { color: '#aaa', fontSize: 12, marginTop: 6 },
   list: { paddingBottom: 100 },
   empty: { paddingVertical: 60, alignItems: 'center' },
 });

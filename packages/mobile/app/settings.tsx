@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,30 @@ import {
   ScrollView,
   StyleSheet,
   Linking,
+  Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useLogsStore } from '../stores/logsStore';
+import { cacheKernel, getCacheStats } from '../services/cacheService';
+
+function formatLogTime(ts: number): string {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 
 export default function SettingsPage() {
   const storeApiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
   const storeProxyUrl = useSettingsStore((s) => s.proxyUrl);
   const setApiBaseUrl = useSettingsStore((s) => s.setApiBaseUrl);
   const setStoreProxyUrl = useSettingsStore((s) => s.setProxyUrl);
+  const logEntries = useLogsStore((s) => s.entries);
+  const clearLogs = useLogsStore((s) => s.clearLogs);
 
   const [localUrl, setLocalUrl] = useState(storeApiBaseUrl);
   const [localProxyUrl, setLocalProxyUrl] = useState(storeProxyUrl);
@@ -28,6 +40,26 @@ export default function SettingsPage() {
   const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
 
   const currentVersion = Constants.expoConfig?.version || '0.0.0';
+
+  // 缓存统计（进入页面加载一次，清理后刷新）
+  const [cacheStats, setCacheStats] = useState({ fileCount: 0, totalSize: 0 });
+  useEffect(() => {
+    let cancelled = false;
+    getCacheStats().then((s) => { if (!cancelled) setCacheStats(s); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleClearCache = async () => {
+    await cacheKernel.clear();
+    // 清理旧版 AsyncStorage songUrl: 缓存残留（已迁移到 cacheKernel）
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const stale = keys.filter((k) => k.startsWith('songUrl:'));
+      if (stale.length > 0) await AsyncStorage.multiRemove(stale);
+    } catch { /* 忽略残留清理失败 */ }
+    setCacheStats(await getCacheStats());
+    Alert.alert('提示', '缓存已清理');
+  };
 
   // 更新检查状态
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'available' | 'not-available' | 'error'>('idle');
@@ -265,6 +297,54 @@ export default function SettingsPage() {
           </View>
         </View>
 
+        {/* 缓存管理：统计 + 一键清理（对齐桌面 CacheSection） */}
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>缓存管理</Text>
+            <View style={styles.cacheStatsRow}>
+              <Text style={styles.hintText}>
+                缓存文件 {cacheStats.fileCount} 个 · {(cacheStats.totalSize / 1024 / 1024).toFixed(1)} MB
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleClearCache} activeOpacity={0.7}>
+              <Ionicons name="trash-outline" size={18} color="#fff" style={styles.btnIcon} />
+              <Text style={styles.saveBtnText}>清理缓存</Text>
+            </TouchableOpacity>
+            <Text style={styles.hintText}>播放 URL 缓存 24 小时过期，清理不影响已收藏歌曲</Text>
+          </View>
+        </View>
+
+        {/* 播放日志（真机上无法看终端 console，这里可直接查看最近播放/失败记录） */}
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <View style={styles.logHeader}>
+              <Text style={styles.sectionTitle}>播放日志</Text>
+              <TouchableOpacity onPress={clearLogs} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="trash-outline" size={18} color="#888" />
+              </TouchableOpacity>
+            </View>
+            {logEntries.length === 0 ? (
+              <Text style={styles.hintText}>暂无日志</Text>
+            ) : (
+              [...logEntries].reverse().slice(0, 30).map((e, i) => (
+                <View key={`${e.ts}-${i}`} style={styles.logRow}>
+                  <Text
+                    style={[
+                      styles.logLevel,
+                      e.level === 'error' && styles.logLevelError,
+                      e.level === 'warn' && styles.logLevelWarn,
+                    ]}
+                  >
+                    {e.level === 'error' ? 'ERR' : e.level === 'warn' ? 'WRN' : 'INF'}
+                  </Text>
+                  <Text style={styles.logTime}>{formatLogTime(e.ts)}</Text>
+                  <Text style={styles.logMessage} numberOfLines={2}>{e.message}</Text>
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+
         {/* 关于 */}
         <View style={styles.section}>
           <View style={styles.card}>
@@ -367,6 +447,43 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  logHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#2a2a3e',
+  },
+  logLevel: {
+    color: '#888',
+    fontSize: 10,
+    fontWeight: '700',
+    width: 30,
+    marginTop: 2,
+  },
+  logLevelError: {
+    color: '#e74c3c',
+  },
+  logLevelWarn: {
+    color: '#e67e22',
+  },
+  logTime: {
+    color: '#666',
+    fontSize: 11,
+    width: 58,
+    marginTop: 2,
+  },
+  logMessage: {
+    color: '#ccc',
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
+  },
   aboutLabel: {
     color: '#aaa',
     fontSize: 15,
@@ -380,6 +497,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 10,
     textAlign: 'center',
+  },
+  cacheStatsRow: {
+    marginTop: 6,
   },
   updateAvailableText: {
     color: '#27ae60',

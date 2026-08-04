@@ -5,8 +5,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { musicApi } from '@mplayer/core';
-import type { Song, SourceKey, DiscoverPlaylist } from '@mplayer/core';
+import { musicApi, formatPlayCount } from '@mplayer/core';
+import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
 import LoadingState from './LoadingState';
 import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
@@ -17,6 +17,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const TABS = [
   { key: 'hotlist', label: '排行榜' },
+  { key: 'albums', label: '新碟' },
   { key: 'playlists', label: '歌单' },
   { key: 'artists', label: '歌手' },
 ];
@@ -63,10 +64,13 @@ export default function DiscoverTabs() {
           <HotlistContent />
         </View>
         <View style={{ width: SCREEN_WIDTH }}>
-          {activeIndex >= 1 && <PlaylistContent />}
+          {activeIndex >= 1 && <AlbumsContent />}
         </View>
         <View style={{ width: SCREEN_WIDTH }}>
-          {activeIndex >= 2 && <ArtistContent />}
+          {activeIndex >= 2 && <PlaylistContent />}
+        </View>
+        <View style={{ width: SCREEN_WIDTH }}>
+          {activeIndex >= 3 && <ArtistContent />}
         </View>
       </ScrollView>
     </View>
@@ -94,7 +98,7 @@ function HotlistContent() {
   ];
 
   return (
-    <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentInner}>
+    <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentInnerHotlist}>
       {SECTIONS.map(section => (
         <SectionCard
           key={section.key}
@@ -156,7 +160,110 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
   );
 }
 
+/* ===== 新碟 Tab ===== */
+const ALBUM_AREAS = [
+  { label: '全部', value: 'ALL' },
+  { label: '华语', value: 'ZH' },
+  { label: '欧美', value: 'EA' },
+  { label: '韩国', value: 'KR' },
+  { label: '日本', value: 'JP' },
+];
+
+/** 二级分类胶囊行（新碟/歌单/歌手共用） */
+function CategoryPills({ items, activeLabel, onSelect }: {
+  items: { label: string; value: string }[];
+  activeLabel: string;
+  onSelect: (label: string, value: string) => void;
+}) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled style={styles.catBar} contentContainerStyle={styles.catBarContent}>
+      {items.map((c) => (
+        <TouchableOpacity
+          key={c.value}
+          onPress={() => onSelect(c.label, c.value)}
+          style={[styles.catPill, activeLabel === c.label && styles.catPillActive]}
+        >
+          <Text style={[styles.catLabel, activeLabel === c.label && styles.catLabelActive]}>{c.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+}
+
+function AlbumsContent() {
+  const CARD_GAP = 10;
+  const CARD_COLS = 2;
+  const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
+  const [albums, setAlbums] = useState<Album[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState(false);
+  const [areaLabel, setAreaLabel] = useState('全部');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadingError(false); // 新请求开始重置错误态
+    const area = ALBUM_AREAS.find(a => a.label === areaLabel)?.value || 'ALL';
+    musicApi.getNewAlbums(area, 0, 30)
+      .then(r => { if (!cancelled) { setAlbums(r); setLoadingError(false); } })
+      .catch(() => { if (!cancelled) setLoadingError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [areaLabel]);
+
+  // 首屏(无数据)整页 loading;分类切换保留旧数据,避免闪烁
+  if (loading && albums.length === 0) return <LoadingState />;
+
+  const renderItem = ({ item: album }: { item: Album }) => (
+    <TouchableOpacity
+      style={[styles.gridCard, { width: cardW }]}
+      activeOpacity={0.7}
+      onPress={() => router.push(`/album/${album.id}?name=${encodeURIComponent(album.name)}&pic=${encodeURIComponent(album.picUrl)}&artist=${encodeURIComponent(album.artist)}` as any)}
+    >
+      {album.picUrl ? (
+        <Image source={{ uri: album.picUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
+      ) : (
+        <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
+          <Ionicons name="disc" size={32} color="#555" />
+        </View>
+      )}
+      <Text style={styles.gridName} numberOfLines={1}>{album.name}</Text>
+      <Text style={styles.gridMeta} numberOfLines={1}>{album.artist}</Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={styles.tabContent}>
+      {/* 分类条固定顶部:不随列表滚动/不随数据变化重挂载,保持滑动位置 */}
+      <CategoryPills
+        items={ALBUM_AREAS}
+        activeLabel={areaLabel}
+        onSelect={(label) => setAreaLabel(label)}
+      />
+      <FlatList
+        style={styles.tabContent}
+        contentContainerStyle={styles.tabContentInner}
+        data={albums}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        numColumns={CARD_COLS}
+        columnWrapperStyle={{ gap: CARD_GAP }}
+        ListEmptyComponent={
+          loadingError ? (
+            <View style={styles.catErrorBox}>
+              <Text style={styles.catErrorText}>加载失败，下拉重试</Text>
+            </View>
+          ) : null
+        }
+      />
+    </View>
+  );
+}
+
 /* ===== 歌单 Tab ===== */
+const PLAYLIST_CATEGORIES = ['全部', '流行', '摇滚', '民谣', '电子', '说唱', '轻音乐', '爵士', '古典', 'R&B', '乡村', '小清新', '影视原声', '动漫', '怀旧', '治愈']
+  .map(c => ({ label: c, value: c }));
+
 function PlaylistContent() {
   const CARD_GAP = 10;
   const CARD_COLS = 2;
@@ -166,14 +273,21 @@ function PlaylistContent() {
   const [loadingError, setLoadingError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [category, setCategory] = useState('全部');
   const offsetRef = useRef(0);
+  // 最新分类的 ref：loadMore 请求返回后与发起时比较，防旧分类分页混入新分类列表
+  const categoryRef = useRef(category);
+  categoryRef.current = category;
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
+    const catAtStart = category;
     setLoadingMore(true);
     try {
       const nextOffset = offsetRef.current + 20;
-      const r = await musicApi.getNeteasePlaylists('全部', 'hot', nextOffset, 20);
+      const r = await musicApi.getNeteasePlaylists(catAtStart, 'hot', nextOffset, 20);
+      // 请求期间分类已切换 → 丢弃过期结果，不推进 offset（否则混合列表 + 跳过新分类首页）
+      if (catAtStart !== categoryRef.current) return;
       if (r.playlists.length > 0) {
         setPlaylists(prev => [...prev, ...r.playlists]);
         offsetRef.current = nextOffset;
@@ -186,38 +300,30 @@ function PlaylistContent() {
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore]);
+  }, [loadingMore, hasMore, category]);
 
   useEffect(() => {
     let cancelled = false;
-    musicApi.getNeteasePlaylists('全部', 'hot', 0, 20)
+    setLoading(true);
+    // 分类切换保留旧数据,避免闪烁
+    setHasMore(true);
+    setLoadingError(false); // 新请求开始重置错误态
+    offsetRef.current = 0;
+    musicApi.getNeteasePlaylists(category, 'hot', 0, 20)
       .then(r => {
         if (!cancelled) {
           setPlaylists(r.playlists);
           setHasMore(r.more);
+          setLoadingError(false);
         }
       })
       .catch(() => { if (!cancelled) setLoadingError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [category]);
 
-  if (loading) return <LoadingState />;
-  if (loadingError) {
-    return (
-      <FlatList
-        style={styles.tabContent}
-        contentContainerStyle={styles.tabContentInner}
-        data={[]}
-        renderItem={() => null}
-        ListEmptyComponent={
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 }}>
-            <Text style={{ color: '#e74c3c', fontSize: 14 }}>加载失败，下拉重试</Text>
-          </View>
-        }
-      />
-    );
-  }
+  // 首屏(无数据)整页 loading;分类切换保留旧列表
+  if (loading && playlists.length === 0) return <LoadingState />;
 
   const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
     <TouchableOpacity
@@ -233,27 +339,56 @@ function PlaylistContent() {
         </View>
       )}
       <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
-      <Text style={styles.gridMeta}>{p.playCount ? `${(p.playCount / 10000).toFixed(0)}万` : ''}</Text>
+      <Text style={styles.gridMeta}>{p.playCount ? formatPlayCount(p.playCount) : ''}</Text>
     </TouchableOpacity>
   );
 
   return (
-    <FlatList
-      style={styles.tabContent}
-      contentContainerStyle={styles.tabContentInner}
-      data={playlists}
-      keyExtractor={(item) => String(item.id)}
-      renderItem={renderItem}
-      numColumns={CARD_COLS}
-      columnWrapperStyle={{ gap: CARD_GAP }}
-      onEndReached={loadMore}
-      onEndReachedThreshold={0.5}
-      ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={playlists.length > 0} />}
-    />
+    <View style={styles.tabContent}>
+      {/* 分类条固定顶部:不随列表滚动/不随数据变化重挂载,保持滑动位置 */}
+      <CategoryPills
+        items={PLAYLIST_CATEGORIES}
+        activeLabel={category}
+        onSelect={(label) => setCategory(label)}
+      />
+      <FlatList
+        style={styles.tabContent}
+        contentContainerStyle={styles.tabContentInner}
+        data={playlists}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={renderItem}
+        numColumns={CARD_COLS}
+        columnWrapperStyle={{ gap: CARD_GAP }}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        ListEmptyComponent={
+          loadingError ? (
+            <View style={styles.catErrorBox}>
+              <Text style={styles.catErrorText}>加载失败，下拉重试</Text>
+            </View>
+          ) : null
+        }
+        ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={playlists.length > 0} />}
+      />
+    </View>
   );
 }
 
 /* ===== 歌手 Tab ===== */
+/* ===== 歌手 Tab ===== */
+const ARTIST_CATEGORIES = [
+  { label: '全部', value: '0' },
+  { label: '华语男', value: '1001' },
+  { label: '华语女', value: '1002' },
+  { label: '华语组合', value: '1003' },
+  { label: '欧美男', value: '2001' },
+  { label: '欧美女', value: '2002' },
+  { label: '欧美组合', value: '2003' },
+  { label: '日本', value: '6001' },
+  { label: '韩国', value: '7001' },
+  { label: '其他', value: '4001' },
+];
+
 function ArtistContent() {
   const CARD_COLS = 3;
   const [artists, setArtists] = useState<any[]>([]);
@@ -261,12 +396,20 @@ function ArtistContent() {
   const [loadingError, setLoadingError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [category, setCategory] = useState('全部');
+  // 最新分类的 ref：loadMore 请求返回后与发起时比较，防旧分类分页混入新分类列表
+  const categoryRef = useRef(category);
+  categoryRef.current = category;
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
+    const catAtStart = category;
     setLoadingMore(true);
     try {
-      const r = await musicApi.getNeteaseArtists(0, artists.length, 30);
+      const catId = Number(ARTIST_CATEGORIES.find(c => c.label === category)?.value || 0);
+      const r = await musicApi.getNeteaseArtists(catId, artists.length, 30);
+      // 请求期间分类已切换 → 丢弃过期结果（旧分类第 N 页混入新分类列表）
+      if (catAtStart !== categoryRef.current) return;
       if (r.artists.length > 0) {
         setArtists(prev => [...prev, ...r.artists]);
         setHasMore(r.more);
@@ -278,36 +421,36 @@ function ArtistContent() {
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, artists.length]);
+  }, [loadingMore, hasMore, artists.length, category]);
 
   useEffect(() => {
     let cancelled = false;
-    musicApi.getNeteaseArtists(0, 0, 30)
+    setLoading(true);
+    // 分类切换保留旧数据,避免闪烁
+    setHasMore(true);
+    setLoadingError(false); // 新请求开始重置错误态
+    const catId = Number(ARTIST_CATEGORIES.find(c => c.label === category)?.value || 0);
+    musicApi.getNeteaseArtists(catId, 0, 30)
       .then(r => {
         if (!cancelled) {
           setArtists(r.artists);
           setHasMore(r.more);
+          setLoadingError(false);
         }
       })
       .catch(() => { if (!cancelled) setLoadingError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [category]);
 
-  if (loading) return <LoadingState />;
-  if (loadingError) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 }}>
-        <Text style={{ color: '#e74c3c', fontSize: 14 }}>加载失败，下拉重试</Text>
-      </View>
-    );
-  }
+  // 首屏(无数据)整页 loading;分类切换保留旧列表
+  if (loading && artists.length === 0) return <LoadingState />;
 
   const renderItem = ({ item: a }: { item: any }) => (
     <TouchableOpacity
       style={styles.artistCard}
       activeOpacity={0.7}
-      onPress={() => router.push(`/artist/${a.id}?name=${encodeURIComponent(a.name)}` as any)}
+      onPress={() => router.push(`/artist/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl || '')}` as any)}
     >
       {a.picUrl ? (
         <Image source={{ uri: a.picUrl }} style={styles.artistAvatar} />
@@ -321,17 +464,32 @@ function ArtistContent() {
   );
 
   return (
-    <FlatList
-      style={styles.tabContent}
-      contentContainerStyle={styles.tabContentInner}
-      data={artists}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
-      numColumns={CARD_COLS}
-      onEndReached={loadMore}
-      onEndReachedThreshold={0.5}
-      ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={artists.length > 0} />}
-    />
+    <View style={styles.tabContent}>
+      {/* 分类条固定顶部:不随列表滚动/不随数据变化重挂载,保持滑动位置 */}
+      <CategoryPills
+        items={ARTIST_CATEGORIES}
+        activeLabel={category}
+        onSelect={(label) => setCategory(label)}
+      />
+      <FlatList
+        style={styles.tabContent}
+        contentContainerStyle={styles.tabContentInner}
+        data={artists}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        numColumns={CARD_COLS}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        ListEmptyComponent={
+          loadingError ? (
+            <View style={styles.catErrorBox}>
+              <Text style={styles.catErrorText}>加载失败，下拉重试</Text>
+            </View>
+          ) : null
+        }
+        ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={artists.length > 0} />}
+      />
+    </View>
   );
 }
 
@@ -366,7 +524,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tabContent: { flex: 1 },
-  tabContentInner: { paddingBottom: 24 },
+  // 网格 tab（新碟/歌单/歌手）：与 cardW 计算的左右 12px 边距对齐，保证卡片居中
+  tabContentInner: { paddingHorizontal: 12, paddingBottom: 24 },
+  // 热榜：section 自带 marginHorizontal: 12，不加容器 padding 避免边距翻倍
+  tabContentInnerHotlist: { paddingBottom: 24 },
+  // 二级分类胶囊
+  catBar: { flexGrow: 0 },
+  catBarContent: { gap: 8, paddingVertical: 10 },
+  catPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#2a2a4a',
+  },
+  catPillActive: {
+    backgroundColor: '#e74c3c',
+  },
+  catLabel: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  catLabelActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  catErrorBox: {
+    alignItems: 'center',
+    paddingTop: 60,
+  },
+  catErrorText: {
+    color: '#e74c3c',
+    fontSize: 14,
+  },
   // Hotlist section styles
   section: {
     backgroundColor: '#16213e',

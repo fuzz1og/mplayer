@@ -1,30 +1,40 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
-import { useSourceStore, SOURCE_LABELS } from '../stores/sourceStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSourceStore, SOURCE_OPTION_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
+import { useSearchStore } from '../stores/searchStore';
 
 const SOURCE_OPTIONS: { key: SourceOption; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'all', icon: 'apps-outline' },
   { key: 'netease', icon: 'musical-note-outline' },
   { key: 'qq', icon: 'musical-note-outline' },
   { key: 'kugou', icon: 'musical-note-outline' },
-  { key: 'migu', icon: 'musical-note-outline' },
   { key: 'kuwo', icon: 'musical-note-outline' },
   { key: 'qianqian', icon: 'musical-note-outline' },
   { key: 'soda', icon: 'musical-note-outline' },
 ];
 
 export default function TopBar() {
+  const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const isSearchTab = pathname === '/search';
   const [searchText, setSearchText] = useState('');
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const selectedSource = useSourceStore((s) => s.selectedSource);
   const setSelectedSource = useSourceStore((s) => s.setSelectedSource);
+
+  // 从其他页面跳转（如「搜索歌手」）带来的搜索词 → 同步到搜索框。
+  // 用 searchStore.query（URL q 参数触发搜索后写入）而非 URL 参数，
+  // 避免 TopBar 挂在 Tabs 外读不到深层路由参数。
+  const storeQuery = useSearchStore((s) => s.query);
+  useEffect(() => {
+    if (storeQuery && storeQuery !== searchText) setSearchText(storeQuery);
+  }, [storeQuery]);
 
   const handleSubmit = () => {
     const trimmed = searchText.trim();
@@ -61,7 +71,7 @@ export default function TopBar() {
           }}
         />
         <TouchableOpacity onPress={() => setShowSourcePicker(true)} style={styles.sourceBtn}>
-          <Text style={styles.sourceLabel}>{SOURCE_LABELS[selectedSource]}</Text>
+          <Text style={styles.sourceLabel}>{SOURCE_OPTION_LABELS[selectedSource]}</Text>
           <Ionicons name="chevron-down" size={12} color="#888" />
         </TouchableOpacity>
       </View>
@@ -69,9 +79,9 @@ export default function TopBar() {
         <Ionicons name="settings-outline" size={22} color="#ccc" />
       </TouchableOpacity>
 
-      <Modal visible={showSourcePicker} transparent animationType="slide" onRequestClose={() => setShowSourcePicker(false)}>
+      <Modal visible={showSourcePicker} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowSourcePicker(false)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowSourcePicker(false)}>
-          <TouchableOpacity style={styles.sheet} activeOpacity={1} onPress={() => {}}>
+          <TouchableOpacity style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]} activeOpacity={1} onPress={() => {}}>
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>选择音乐源</Text>
             {SOURCE_OPTIONS.map((opt) => (
@@ -86,7 +96,7 @@ export default function TopBar() {
                   color={selectedSource === opt.key ? '#e74c3c' : '#fff'}
                 />
                 <Text style={[styles.optionLabel, selectedSource === opt.key && styles.optionLabelActive]}>
-                  {SOURCE_LABELS[opt.key]}
+                  {SOURCE_OPTION_LABELS[opt.key]}
                 </Text>
                 {selectedSource === opt.key && (
                   <Ionicons name="checkmark" size={20} color="#e74c3c" />
@@ -123,10 +133,13 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     color: '#fff',
     fontSize: 14,
   },
   sourceBtn: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#3a3a5e',

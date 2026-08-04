@@ -1,4 +1,4 @@
-import type { Song, SongGroup, AudioTag } from '@mplayer/core';
+import type { Song, SongGroup, AudioTag, ImportSource } from '@mplayer/core';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { IpcClient } from './IpcClient';
 import { ipcMusicApi } from './IpcMusicApi';
@@ -111,7 +111,7 @@ class SearchService {
 
   async batchSearch(
     keywords: string[],
-    sourceType: 'netease' | 'qq' | 'kugou' | 'migu' | 'kuwo' | 'qianqian' | 'soda' = 'netease'
+    sourceType: ImportSource = 'netease'
   ): Promise<Record<string, Song[]>> {
     try {
       return await IpcClient.invoke<Record<string, Song[]>>('musicApi:batchSearch', keywords, sourceType);

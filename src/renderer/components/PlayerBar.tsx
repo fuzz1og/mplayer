@@ -4,6 +4,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
+import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import PlayerControls from './PlayerControls';
 import PlayerProgress from './PlayerProgress';
@@ -50,6 +51,17 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
     }
   }, [currentSong, download]);
 
+  // 播放栏封面加载失败 → 按 ID 重识别换新封面（上游 API 签名过期后同一 URL 永远失败）
+  const handleCoverError = useCallback(() => {
+    if (!currentSong) return;
+    void refreshSongCover(currentSong).then((cover) => {
+      if (!cover) return;
+      usePlayerStore.setState((state) =>
+        state.currentSong?.id === currentSong.id ? { currentSong: { ...state.currentSong, cover } } : state
+      );
+    });
+  }, [currentSong]);
+
   return (
     <div
       className={className}
@@ -94,7 +106,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
             padding: 0,
           }}
         >
-          <CoverImage src={coverSrc} alt={currentSong?.name || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <CoverImage src={coverSrc} alt={currentSong?.name || ''} onError={handleCoverError} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </button>
 
         {/* 歌曲信息 */}

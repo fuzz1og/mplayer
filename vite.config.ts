@@ -11,9 +11,10 @@ export default defineConfig({
     electron([
       {
         entry: 'src/main/main.ts',
-        onstart(options) {
-          options.startup();
-        },
+        // 空 onstart 阻止插件自动拉起 electron（无 onstart 时插件默认也会 startup）——
+        // 否则会和 `npm run electron:dev` 脚本里的 `electron .` 形成双实例
+        //（共享同一份 userData/storage，双倍请求 + 刷新流程互相干扰）
+        onstart() {},
         vite: {
           build: {
             target: 'esnext',
@@ -36,7 +37,11 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5173
+    port: 5173,
+    // 忽略测试产物目录，避免 vitest 写入 coverage 触发页面 reload/重建风暴
+    watch: {
+      ignored: ['**/coverage/**', '**/test-results/**', '**/dist-electron/**'],
+    },
   },
   build: {
     target: 'esnext',

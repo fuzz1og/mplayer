@@ -4,7 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import SongRow from '../components/SongRow';
 import EmptyState from '../components/EmptyState';
-import PlayerBar from '../components/PlayerBar';
+import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useHistoryStore } from '../stores/historyStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
@@ -55,7 +55,7 @@ export default function HistoryPage() {
           />
         )}
       </SafeAreaView>
-      <PlayerBar />
+      <BottomSafePlayerBar />
     </View>
   );
 }

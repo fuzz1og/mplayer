@@ -12,11 +12,16 @@ docs/*
 !docs/agents/*
 !docs/specs/
 !docs/specs/*
+!docs/wayfinder/
 
 # AI 配置目录（只忽略个人数据）
 .claude/plans/
 .claude/session-extract/
 .claude/worktrees/
+.zcode/
+
+# 测试覆盖率产物
+coverage/
 
 # 本地配置（包含敏感 API 地址）
 .env

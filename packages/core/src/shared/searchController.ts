@@ -1,4 +1,5 @@
 import type { SongGroup } from '../types/index.js';
+import { dedupeSongs } from '../utils/songDedupe.js';
 
 export interface SearchControllerConfig {
   searchFn: (query: string, page: number, source: string) => Promise<SongGroup[]>;
@@ -34,8 +35,8 @@ export function createSearchController(config: SearchControllerConfig): SearchCo
     },
 
     loadMore: async () => {
-      const state = getState() as { query?: string; page?: number; hasMore?: boolean; loading?: boolean; results?: SongGroup[] };
-      if (!state.query || !state.hasMore || state.loading) return;
+      const state = getState() as { query?: string; page?: number; hasMore?: boolean; loading?: boolean; loadingMore?: boolean; results?: SongGroup[] };
+      if (!state.query || !state.hasMore || state.loading || state.loadingMore) return;
 
       const currentSeq = seq;
       const currentPage = state.page || 1;
@@ -47,12 +48,16 @@ export function createSearchController(config: SearchControllerConfig): SearchCo
         const { source } = getState() as { source: string };
         const newResults = await searchFn(currentQuery, nextPage, source);
         const s = getState() as { results?: SongGroup[]; query?: string; page?: number };
-        if (seq !== currentSeq || s.query !== currentQuery) return; // stale
+        // stale：清掉 loadingMore，否则新搜索后无限滚动永远被卡住
+        if (seq !== currentSeq || s.query !== currentQuery) {
+          setState({ loadingMore: false });
+          return;
+        }
 
         const existingKeys = new Set((s.results || []).map(g => g.key));
         const merged = (s.results || []).map(g => {
           const same = newResults.find(n => n.key === g.key);
-          return same ? { ...g, songs: [...g.songs, ...same.songs] } : g;
+          return same ? { ...g, songs: [...g.songs, ...dedupeSongs(g.songs, same.songs)] } : g;
         });
         for (const n of newResults) {
           if (!existingKeys.has(n.key)) merged.push(n);

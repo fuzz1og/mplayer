@@ -47,6 +47,7 @@ export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('musicApi:getSodaPlayableUrl', (trackId: string) => musicApi.getSodaPlayableUrl(trackId));
   registerIpcHandler('musicApi:parseSodaShareLink', (link: string) => musicApi.parseSodaShareLink(link));
   registerIpcHandler('musicApi:searchSongs', (keyword: string, page: number, sourceType: any) => musicApi.searchSongs(keyword, page, sourceType));
+  registerIpcHandler('musicApi:searchSongById', (songId: string, sourceType: any) => musicApi.searchSongById(songId, sourceType));
   registerIpcHandler('musicApi:batchSearch', (keywords: string[], sourceType: any) => musicApi.batchSearch(keywords, sourceType));
   registerIpcHandler('musicApi:searchAllSources', (keyword: string, page: number) => musicApi.searchAllSources(keyword, page));
   registerIpcHandler('musicApi:getNeteaseHotlist', () => musicApi.getNeteaseHotlist());

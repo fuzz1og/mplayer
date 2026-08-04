@@ -1,10 +1,16 @@
 import { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Modal,
+  View, Text, TouchableOpacity, StyleSheet, Modal, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { Song } from '@mplayer/core';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { Song, SourceKey } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
+import { SOURCE_LABELS } from '../stores/sourceStore';
+
+function sourceLabel(sourceType?: string): string {
+  return SOURCE_LABELS[sourceType as SourceKey] || sourceType || '未知';
+}
 
 interface Props {
   visible: boolean;
@@ -13,14 +19,51 @@ interface Props {
 }
 
 export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
+  const insets = useSafeAreaInsets();
   const playlists = usePlaylistStore(s => s.playlists);
   const addSong = usePlaylistStore(s => s.addSong);
+  const removeSong = usePlaylistStore(s => s.removeSong);
   const [addedName, setAddedName] = useState<string | null>(null);
 
   const handleSelect = (playlistId: string, playlistName: string) => {
     if (!song) return;
+    const playlist = playlists.find((p) => p.id === playlistId);
+    // 同一首歌（同 id）已在歌单中 → 直接提示不加
+    if (playlist?.songs.some((s) => s.id === song.id)) {
+      Alert.alert('提示', '这首歌已在歌单中');
+      return;
+    }
+    // 跨源同名同歌手 → 弹窗让用户选保留哪首
+    const dup = playlist?.songs.find(
+      (s) => s.name === song.name && s.artist === song.artist && s.sourceType !== song.sourceType
+    );
+    if (dup) {
+      Alert.alert(
+        '发现同名歌曲',
+        `歌单中已有「${song.name}」的${sourceLabel(dup.sourceType)}版本，要替换成这首${sourceLabel(song.sourceType)}版本吗？`,
+        [
+          { text: '取消', style: 'cancel' },
+          // 保留原版 = 什么都没做，直接关闭（不能显示"已加入"成功提示）
+          { text: '保留原版', onPress: onClose },
+          {
+            text: '替换为新版',
+            onPress: () => {
+              removeSong(playlistId, dup.id);
+              addSong(playlistId, song);
+              setAddedName(playlistName);
+              showSuccess();
+            },
+          },
+        ]
+      );
+      return;
+    }
     addSong(playlistId, song);
     setAddedName(playlistName);
+    showSuccess();
+  };
+
+  const showSuccess = () => {
     setTimeout(() => {
       setAddedName(null);
       onClose();
@@ -28,7 +71,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         {addedName ? (
           <View style={styles.successBox}>
@@ -36,7 +79,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
             <Text style={styles.successText}>已加入歌单「{addedName}」</Text>
           </View>
         ) : (
-          <TouchableOpacity style={styles.sheet} activeOpacity={1} onPress={() => {}}>
+          <TouchableOpacity style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]} activeOpacity={1} onPress={() => {}}>
             <View style={styles.handle} />
             <Text style={styles.title}>加入歌单</Text>
             {song && (

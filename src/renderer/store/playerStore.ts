@@ -6,8 +6,28 @@ import type { PlayMode } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { ipcMusicApi } from '@/renderer/services/IpcMusicApi';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
+import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
 const { ipcRenderer } = window.require('electron');
+
+/**
+ * 播放封面回填：点击播放时歌曲对象可能还没有封面（DB 里 cover 为空、
+ * 或点歌发生在列表刷新完成前）。不覆盖已有封面，只补缺失的 cover。
+ * Fire-and-forget，不阻塞播放。
+ */
+async function backfillCurrentSongCover(song: Song): Promise<void> {
+  try {
+    const cover = await refreshSongCover(song);
+    if (!cover) return;
+    usePlayerStore.setState((state) => {
+      if (state.currentSong?.id !== song.id) return state; // 已切歌，丢弃
+      if (state.currentSong?.cover) return state; // 已有封面，不覆盖
+      return { currentSong: { ...state.currentSong, cover } };
+    });
+  } catch {
+    // 回填失败不影响播放
+  }
+}
 
 interface PlayerStoreState {
   currentSong: Song | null;
@@ -201,6 +221,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       });
 
       prefetchNextUrl(get());
+
+      // Fire-and-forget: 封面回填（点歌时 cover 可能为空，播放栏不显示兜底图）
+      if (!song.cover) {
+        backfillCurrentSongCover(song).catch(() => {});
+      }
 
       // Fire-and-forget: 歌词获取不阻塞播放
       const requestingSongId = song.id;

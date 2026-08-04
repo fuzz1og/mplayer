@@ -3,6 +3,7 @@ import { ArrowLeft, Music2, Pause, Play, SkipBack, SkipForward } from 'lucide-re
 import LyricsDisplay from '@/renderer/components/LyricsDisplay';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
+import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 
 interface LyricsPageProps {
@@ -107,7 +108,15 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
           </button>
           <div style={{ width: '48px', height: '48px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
             {coverSrc ? (
-              <CoverImage src={coverSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <CoverImage src={coverSrc} alt="" onError={() => {
+                if (!currentSong) return;
+                void refreshSongCover(currentSong).then((cover) => {
+                  if (!cover) return;
+                  usePlayerStore.setState((state) =>
+                    state.currentSong?.id === currentSong.id ? { currentSong: { ...state.currentSong, cover } } : state
+                  );
+                });
+              }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
                 <Music2 size={18} />

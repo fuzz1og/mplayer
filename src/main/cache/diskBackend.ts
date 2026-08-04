@@ -3,6 +3,30 @@ import path from 'path'
 import crypto from 'crypto'
 import type { CacheBackend, CacheStats } from '@mplayer/core'
 
+function isImageHeader(header: Buffer): boolean {
+  if (header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return true // JPEG
+  if (header.length >= 8 && header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47) return true // PNG
+  if (header.length >= 12 && header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46 && header[8] === 0x57 && header[9] === 0x45 && header[10] === 0x42 && header[11] === 0x50) return true // WebP
+  if (header.length >= 6 && header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x38) return true // GIF
+  if (header.length >= 12 && header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70 && header[8] === 0x61 && header[9] === 0x76 && header[10] === 0x69 && header[11] === 0x66) return true // AVIF (ftypavif)
+  if (header.length >= 4 && header[0] === 0x00 && header[1] === 0x00 && header[2] === 0x01 && header[3] === 0x00) return true // ICO/CUR
+  if (header.length >= 2 && header[0] === 0x42 && header[1] === 0x4d) return true // BMP
+  return false
+}
+
+/** 校验缓存文件是否为有效图片（JPEG/PNG/WebP/GIF/AVIF/ICO/BMP），损坏或非图片返回 false */
+export function isImageFile(filePath: string): boolean {
+  if (!fs.existsSync(filePath)) return false
+  const fd = fs.openSync(filePath, 'r')
+  try {
+    const buf = Buffer.alloc(16)
+    const bytesRead = fs.readSync(fd, buf, 0, 16, 0)
+    return isImageHeader(buf.subarray(0, bytesRead))
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
 export class DiskCacheBackend implements CacheBackend {
   private cacheDir: string
   private metaDir: string
@@ -112,11 +136,7 @@ export class DiskCacheBackend implements CacheBackend {
   }
 
   private isImage(header: Buffer): boolean {
-    if (header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return true
-    if (header.length >= 8 && header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47) return true
-    if (header.length >= 12 && header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46 && header[8] === 0x57 && header[9] === 0x45 && header[10] === 0x42 && header[11] === 0x50) return true
-    if (header.length >= 6 && header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x38) return true
-    return false
+    return isImageHeader(header)
   }
 
   private isAudio(header: Buffer): boolean {
