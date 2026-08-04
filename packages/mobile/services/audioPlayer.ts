@@ -281,6 +281,11 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
         if (nextSong) setTimeout(() => {
           if (playId === currentPlayId) void playSong(nextSong, 0, false);
         }, 0);
+        else {
+          // 队列播完：同步 store 状态（否则 UI 一直显示"播放中"且 togglePlay 失效）
+          void stopAllPlayers();
+          usePlayerStore.getState().pause();
+        }
       }
     });
 

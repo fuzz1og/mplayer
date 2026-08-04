@@ -62,7 +62,13 @@ function urlIdMatchesSong(url: string, song: Song): boolean {
     const u = new URL(url);
     const urlId = u.searchParams.get('id');
     // 都转字符串比较：API 部分源 id 是数字，严格比较会误判
-    if (urlId && song.id && String(urlId) !== String(stripSourceIdPrefix(song.id))) return false;
+    if (urlId && song.id) {
+      const a = String(urlId).trim();
+      const b = String(stripSourceIdPrefix(song.id)).trim();
+      // 仅双方都是纯数字 id 时才可靠比较：kugou 等源是 hash 格式，
+      // 格式不同不能判定为错位（否则合法候选被误标失效）
+      if (/^\d+$/.test(a) && /^\d+$/.test(b) && a !== b) return false;
+    }
   } catch {
     // URL 无法解析（非 302 端点/直链）不做此校验
   }
@@ -107,10 +113,12 @@ export async function probeSwapCandidates(candidates: SwapCandidate[]): Promise<
 export function applySwap(song: Song, source: SourceKey, candidate: SwapCandidate): Song | null {
   const matched = candidate.song;
   if (!matched?.url) return null;
-  const baseId = stripSourceIdPrefix(song.id);
+  // 候选必须有自己的 ID：否则 url 与 id 错配，持久化后按 ID 识别/
+  // URL-ID 一致性校验都会指向错误的歌（换源的核心保证是"真实 ID"）
+  if (!matched.id) return null;
   return {
     ...matched,
     sourceType: source,
-    id: `${source}:${matched.id || baseId}`,
+    id: `${source}:${stripSourceIdPrefix(matched.id)}`,
   } as Song;
 }

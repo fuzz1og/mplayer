@@ -22,6 +22,7 @@ export default function RecommendPage() {
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [shuffling, setShuffling] = useState(false);
   const [error, setError] = useState(false);
   const [songOffset, setSongOffset] = useState(0);
 
@@ -63,10 +64,12 @@ export default function RecommendPage() {
   };
 
   // 换一批:5 首/批轮换,一次拉的大池子(100 首)够 20 批,轮完才重新拉取
+  // 池耗尽重新拉取时给按钮反馈（否则静默失败/无感知等待）
   const handleShuffle = () => {
     if (songs.length <= 5) return;
     if (songOffset + 5 >= songs.length) {
-      load(false);
+      setShuffling(true);
+      load(false).finally(() => setShuffling(false));
       return;
     }
     setSongOffset(prev => prev + 5);
@@ -103,9 +106,9 @@ export default function RecommendPage() {
                       <Ionicons name="play" size={14} color="#fff" />
                       <Text style={styles.playAllText}>播放全部</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.shuffleBtn} onPress={handleShuffle} activeOpacity={0.8}>
+                    <TouchableOpacity style={styles.shuffleBtn} onPress={handleShuffle} activeOpacity={0.8} disabled={shuffling}>
                       <Ionicons name="refresh" size={14} color="#e74c3c" />
-                      <Text style={styles.shuffleText}>换一批</Text>
+                      <Text style={styles.shuffleText}>{shuffling ? '加载中…' : '换一批'}</Text>
                     </TouchableOpacity>
                   </>
                 )}

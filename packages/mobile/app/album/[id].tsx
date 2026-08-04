@@ -25,7 +25,11 @@ export default function AlbumDetailPage() {
   const displayArtist = album?.artist || artist || '';
 
   useEffect(() => {
-    if (!id) return;
+    // 缺 id（畸形链接）不能卡在 LoadingState：直接结束加载态渲染空列表
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {

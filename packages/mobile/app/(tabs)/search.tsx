@@ -21,6 +21,9 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type SearchTab = 'songs' | 'artists';
 
+// 歌手搜索序号（模块级）：慢响应不得覆盖新关键词的结果
+let artistSearchSeq = 0;
+
 export default function SearchPage() {
   const params = useLocalSearchParams<{ q: string; type?: string }>();
   const q = Array.isArray(params.q) ? params.q[0] : params.q;
@@ -35,27 +38,32 @@ export default function SearchPage() {
   const query = useSearchStore((s) => s.query);
   const source = useSourceStore((s) => s.selectedSource);
 
-  // 从「搜索歌手」进入时默认落在歌手 tab（挂载时 + 后续 type 参数变化都处理）
+  // 从「搜索歌手」进入时默认落在歌手 tab；普通搜索回到歌曲 tab
+  // （tab 页跨导航常驻，仅挂载时设置会导致歌手 tab 粘滞）
   const [activeTab, setActiveTab] = useState<SearchTab>(type === 'artist' ? 'artists' : 'songs');
   useEffect(() => {
-    if (type === 'artist') setActiveTab('artists');
-  }, [type]);
+    setActiveTab(type === 'artist' ? 'artists' : 'songs');
+  }, [q, type]);
   const [artists, setArtists] = useState<any[]>([]);
   const [artistsLoading, setArtistsLoading] = useState(false);
   const [artistsError, setArtistsError] = useState(false);
 
+  // 歌手搜索序号：慢响应不得覆盖新关键词的结果
   const searchArtists = async (kw: string) => {
     if (!kw) return;
+    const seq = ++artistSearchSeq;
     setArtistsLoading(true);
     setArtistsError(false);
     try {
       const r = await musicApi.searchNeteaseArtists(kw, 30);
+      if (seq !== artistSearchSeq) return; // 已被新搜索取代，丢弃迟到结果
       setArtists(r);
     } catch (e: any) {
+      if (seq !== artistSearchSeq) return;
       console.error('[Search] artists error:', e.message);
       setArtistsError(true);
     } finally {
-      setArtistsLoading(false);
+      if (seq === artistSearchSeq) setArtistsLoading(false);
     }
   };
 

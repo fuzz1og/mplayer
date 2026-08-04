@@ -42,11 +42,14 @@ export default function DiscoverPlaylistDetailPage() {
         setHasMore(page.songs.length < page.total);
         offsetRef.current = PAGE_SIZE;
         // 后台补齐缺失 URL(weapi 批量 + 10 并发搜索兜底),完成后触发重渲染
+        // URL 补齐后再探测：搜索兜底拿到的歌此时才有 url，提前探测会被
+        // core 的 fail-open 判成 valid（无版权歌永远不出现「无效」徽标）
         void musicApi.resolveNeteaseSongUrls(page.songs, false).then(() => {
-          if (!cancelled) setSongs([...page.songs]);
+          if (!cancelled) {
+            setSongs([...page.songs]);
+            void probeSongsWithTags(page.songs, { missingAsInvalid: true });
+          }
         });
-        // 音频质量探测:30 秒片段自动标「短时长」徽标
-        void probeSongsWithTags(page.songs);
       } catch (e: any) {
         console.error('[DiscoverPlaylistDetail] load error:', e.message);
       } finally {
@@ -65,9 +68,10 @@ export default function DiscoverPlaylistDetailPage() {
         setSongs(prev => [...prev, ...page.songs]);
         offsetRef.current += PAGE_SIZE;
         setHasMore(offsetRef.current < page.total);
-        // 后台补齐本页缺失 URL
+        // 后台补齐本页缺失 URL + 补齐后再探测（同首屏）
         void musicApi.resolveNeteaseSongUrls(page.songs, false).then(() => {
           setSongs(prev => [...prev]);
+          void probeSongsWithTags(page.songs, { missingAsInvalid: true });
         });
       } else {
         setHasMore(false);

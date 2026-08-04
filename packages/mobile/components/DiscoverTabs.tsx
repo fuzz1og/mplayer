@@ -202,9 +202,10 @@ function AlbumsContent() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadingError(false); // 新请求开始重置错误态
     const area = ALBUM_AREAS.find(a => a.label === areaLabel)?.value || 'ALL';
     musicApi.getNewAlbums(area, 0, 30)
-      .then(r => { if (!cancelled) setAlbums(r); })
+      .then(r => { if (!cancelled) { setAlbums(r); setLoadingError(false); } })
       .catch(() => { if (!cancelled) setLoadingError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -274,13 +275,19 @@ function PlaylistContent() {
   const [hasMore, setHasMore] = useState(true);
   const [category, setCategory] = useState('全部');
   const offsetRef = useRef(0);
+  // 最新分类的 ref：loadMore 请求返回后与发起时比较，防旧分类分页混入新分类列表
+  const categoryRef = useRef(category);
+  categoryRef.current = category;
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
+    const catAtStart = category;
     setLoadingMore(true);
     try {
       const nextOffset = offsetRef.current + 20;
-      const r = await musicApi.getNeteasePlaylists(category, 'hot', nextOffset, 20);
+      const r = await musicApi.getNeteasePlaylists(catAtStart, 'hot', nextOffset, 20);
+      // 请求期间分类已切换 → 丢弃过期结果，不推进 offset（否则混合列表 + 跳过新分类首页）
+      if (catAtStart !== categoryRef.current) return;
       if (r.playlists.length > 0) {
         setPlaylists(prev => [...prev, ...r.playlists]);
         offsetRef.current = nextOffset;
@@ -300,12 +307,14 @@ function PlaylistContent() {
     setLoading(true);
     // 分类切换保留旧数据,避免闪烁
     setHasMore(true);
+    setLoadingError(false); // 新请求开始重置错误态
     offsetRef.current = 0;
     musicApi.getNeteasePlaylists(category, 'hot', 0, 20)
       .then(r => {
         if (!cancelled) {
           setPlaylists(r.playlists);
           setHasMore(r.more);
+          setLoadingError(false);
         }
       })
       .catch(() => { if (!cancelled) setLoadingError(true); })
@@ -388,13 +397,19 @@ function ArtistContent() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [category, setCategory] = useState('全部');
+  // 最新分类的 ref：loadMore 请求返回后与发起时比较，防旧分类分页混入新分类列表
+  const categoryRef = useRef(category);
+  categoryRef.current = category;
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
+    const catAtStart = category;
     setLoadingMore(true);
     try {
       const catId = Number(ARTIST_CATEGORIES.find(c => c.label === category)?.value || 0);
       const r = await musicApi.getNeteaseArtists(catId, artists.length, 30);
+      // 请求期间分类已切换 → 丢弃过期结果（旧分类第 N 页混入新分类列表）
+      if (catAtStart !== categoryRef.current) return;
       if (r.artists.length > 0) {
         setArtists(prev => [...prev, ...r.artists]);
         setHasMore(r.more);
@@ -413,12 +428,14 @@ function ArtistContent() {
     setLoading(true);
     // 分类切换保留旧数据,避免闪烁
     setHasMore(true);
+    setLoadingError(false); // 新请求开始重置错误态
     const catId = Number(ARTIST_CATEGORIES.find(c => c.label === category)?.value || 0);
     musicApi.getNeteaseArtists(catId, 0, 30)
       .then(r => {
         if (!cancelled) {
           setArtists(r.artists);
           setHasMore(r.more);
+          setLoadingError(false);
         }
       })
       .catch(() => { if (!cancelled) setLoadingError(true); })

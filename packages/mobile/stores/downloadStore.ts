@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface DownloadItem {
+  /** 复合键 `${sourceType}:${songId}`：跨源可能返回相同数字 id，单用 songId 会互相顶掉记录 */
+  key: string;
   songId: string;
   name: string;
   artist: string;
@@ -15,8 +17,8 @@ export interface DownloadItem {
 interface DownloadState {
   items: DownloadItem[];
   addItem: (item: DownloadItem) => void;
-  updateStatus: (songId: string, patch: Partial<Pick<DownloadItem, 'status' | 'error'>>) => void;
-  removeItem: (songId: string) => void;
+  updateStatus: (key: string, patch: Partial<Pick<DownloadItem, 'status' | 'error'>>) => void;
+  removeItem: (key: string) => void;
 }
 
 export const useDownloadStore = create<DownloadState>()(
@@ -26,14 +28,14 @@ export const useDownloadStore = create<DownloadState>()(
       addItem: (item) =>
         set((s) => ({
           // 同名歌曲重新下载时替换旧记录（先删后加，保持顺序在前）
-          items: [item, ...s.items.filter((i) => i.songId !== item.songId)],
+          items: [item, ...s.items.filter((i) => i.key !== item.key)],
         })),
-      updateStatus: (songId, patch) =>
+      updateStatus: (key, patch) =>
         set((s) => ({
-          items: s.items.map((i) => (i.songId === songId ? { ...i, ...patch } : i)),
+          items: s.items.map((i) => (i.key === key ? { ...i, ...patch } : i)),
         })),
-      removeItem: (songId) =>
-        set((s) => ({ items: s.items.filter((i) => i.songId !== songId) })),
+      removeItem: (key) =>
+        set((s) => ({ items: s.items.filter((i) => i.key !== key) })),
     }),
     {
       name: 'mplayer-downloads',

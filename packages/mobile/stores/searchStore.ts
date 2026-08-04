@@ -46,10 +46,12 @@ export const useSearchStore = create<SearchState>((set, get) => {
 
     search: async (query: string) => {
       const source = useSourceStore.getState().selectedSource;
+      // 新查询递增序号：上一查询的迟到源结果（如 kugou 慢 8s）不得覆盖本次结果
+      const seq = ++searchSeq;
       if (source === 'all') {
         // 同名歌曲组内增量：每源完成即渲染(组内并入该源版本)，不等最慢源；
         // 探测在全部完成后统一跑(与搜索并发会抢手机网络带宽)
-        await progressiveSearch(query, 1, searchSeq);
+        await progressiveSearch(query, 1, seq);
         const state = get();
         if (state.results.length > 0) {
           probeResults(state.results);
@@ -97,13 +99,19 @@ export const useSearchStore = create<SearchState>((set, get) => {
 /** 全局搜索序号：新查询/clear 递增，用于丢弃过期源的迟到结果 */
 let searchSeq = 0;
 
-/** 按组 key 合并两组结果（同名歌曲组内追加，不产生重复组） */
+/** 按组 key 合并两组结果（同名歌曲组内追加且去重，不产生重复组） */
 function mergeGroupedResults(prev: SongGroup[], incoming: SongGroup[]): SongGroup[] {
   const map = new Map<string, SongGroup>(prev.map((g) => [g.key, { ...g, songs: [...g.songs] }]));
   for (const g of incoming) {
     const ex = map.get(g.key);
-    if (ex) ex.songs.push(...g.songs);
-    else map.set(g.key, { ...g, songs: [...g.songs] });
+    if (ex) {
+      // 组内是同一首歌的各源版本，跨源同名必须保留（不同音频）；
+      // 仅同源同名视为重复（分页接口可能跨页返回同源重复歌）
+      const seen = new Set(ex.songs.map((s) => `${s.sourceType}|${s.name}|${s.artist}`));
+      ex.songs.push(...g.songs.filter((s) => !seen.has(`${s.sourceType}|${s.name}|${s.artist}`)));
+    } else {
+      map.set(g.key, { ...g, songs: [...g.songs] });
+    }
   }
   return Array.from(map.values());
 }

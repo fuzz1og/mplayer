@@ -42,7 +42,11 @@ export default function ArtistDetailPage() {
   }, [loadingMore, hasMore, id, songs.length]);
 
   useEffect(() => {
-    if (!id) return;
+    // 缺 id（畸形链接）不能卡在 LoadingState：直接结束加载态渲染空列表
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -60,7 +64,7 @@ export default function ArtistDetailPage() {
         setArtist({ ...info, name: info?.name || artistName, picUrl: pic || info?.picUrl || '' });
         // 补齐缺失 URL 后探测:30 秒片段自动标「短时长」徽标
         void musicApi.resolveNeteaseSongUrls(songResult.songs, false).then(() => {
-          if (!cancelled) probeSongsWithTags(songResult.songs);
+          if (!cancelled) probeSongsWithTags(songResult.songs, { missingAsInvalid: true });
         });
       } catch (e: any) {
         console.error('[ArtistDetail] load error:', e.message);
@@ -80,6 +84,11 @@ export default function ArtistDetailPage() {
       .catch((e: any) => console.error('[ArtistDetail] albums error:', e.message));
     return () => { cancelled = true; };
   }, [id]);
+
+  // 单曲换源后更新列表（SongRow 更多菜单触发；不更新会显示旧的源条目）
+  const handleSwap = (original: Song, swapped: Song) => {
+    setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)));
+  };
 
   if (loading) return <LoadingState />;
 
@@ -130,7 +139,7 @@ export default function ArtistDetailPage() {
               )}
             </View>
           )}
-          renderItem={({ item }) => <SongRow song={item} showSource queueSongs={songs} />}
+          renderItem={({ item }) => <SongRow song={item} showSource queueSongs={songs} onSwap={handleSwap} />}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />}

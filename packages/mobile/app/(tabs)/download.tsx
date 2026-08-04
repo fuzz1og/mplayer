@@ -21,7 +21,7 @@ export default function DownloadPage() {
   const handlePlay = (item: (typeof items)[number]) => {
     if (item.status !== 'done') return;
     const localSong: Song = {
-      id: `local-${item.songId}`,
+      id: `local-${item.key}`,
       name: item.name,
       artist: item.artist,
       album: '',
@@ -43,7 +43,7 @@ export default function DownloadPage() {
         style: 'destructive',
         onPress: async () => {
           await removeDownloadedFile(item.fileName).catch(() => {});
-          removeItem(item.songId);
+          removeItem(item.key);
         },
       },
     ]);
@@ -53,7 +53,7 @@ export default function DownloadPage() {
     <View style={styles.container}>
       <FlatList
         data={items}
-        keyExtractor={(item) => item.songId}
+        keyExtractor={(item) => item.key}
         ListHeaderComponent={
           <View style={styles.pathBox}>
             <Text style={styles.pathLabel}>保存位置</Text>
@@ -70,7 +70,7 @@ export default function DownloadPage() {
           </View>
         }
         renderItem={({ item }) => {
-          const isCurrent = currentSong?.id === `local-${item.songId}`;
+          const isCurrent = currentSong?.id === `local-${item.key}`;
           return (
             <TouchableOpacity
               style={styles.row}

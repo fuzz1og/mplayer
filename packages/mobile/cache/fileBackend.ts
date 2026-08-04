@@ -33,7 +33,14 @@ export class MobileFileBackend implements CacheBackend {
     const filePath = this.resolvePath(key)
     const dir = filePath.substring(0, filePath.lastIndexOf('/'))
     await makeDirectoryAsync(dir, { intermediates: true })
-    const base64 = btoa(String.fromCharCode(...data))
+    // 分块转 base64：大数组直接 spread 到 String.fromCharCode 会爆调用栈（RangeError），
+    // 歌词/封面等大 payload 进入 L2 缓存时也不能崩
+    let binary = ''
+    const CHUNK = 0x8000
+    for (let i = 0; i < data.length; i += CHUNK) {
+      binary += String.fromCharCode(...data.subarray(i, i + CHUNK))
+    }
+    const base64 = btoa(binary)
     await writeAsStringAsync(filePath, base64, { encoding: 'base64' })
   }
 
@@ -50,6 +57,11 @@ export class MobileFileBackend implements CacheBackend {
     await deleteAsync(this.baseDir, { idempotent: true })
   }
 
+  /**
+   * 注意：本后端用单向 hash 做文件名，无法从文件名反推原始 key，
+   * 因此 keys() 返回的"伪 key"不能传给 remove()（会把 hash 再 hash，永远删不到）。
+   * 当前无调用方依赖它（设置页用 getDiskStats/clear），仅保持接口完整。
+   */
   async keys(): Promise<string[]> {
     const keys: string[] = []
     for (const type of ['json', 'bin']) {
