@@ -38,11 +38,24 @@ describe('registerCacheIpc legacy binary channels', () => {
     const setCover = getHandler('cache:setCover');
     const getCover = getHandler('cache:getCover');
 
-    await setCover({}, 'https://example.com/cover.jpg', Buffer.from([1, 2, 3]));
+    // 有效 PNG 头
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+    await setCover({}, 'https://example.com/cover.jpg', png);
 
     const cachedPath = await getCover({}, 'https://example.com/cover.jpg');
     expect(typeof cachedPath).toBe('string');
     expect(fs.existsSync(cachedPath as string)).toBe(true);
+  });
+
+  it('deletes a corrupt cached cover and returns null (triggers re-fetch)', async () => {
+    const setCover = getHandler('cache:setCover');
+    const getCover = getHandler('cache:getCover');
+
+    // 非图片内容（错误页/默认图）不视为有效封面
+    await setCover({}, 'https://example.com/broken.jpg', Buffer.from('<html>error</html>'));
+
+    const cachedPath = await getCover({}, 'https://example.com/broken.jpg');
+    expect(cachedPath).toBeNull();
   });
 
   it('returns null when the cover is not cached', async () => {

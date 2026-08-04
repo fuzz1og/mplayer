@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Headphones, Trash2, GripVertical, ListMusic } from 'lucide-react';
 import { Modal } from 'antd';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -10,6 +10,8 @@ import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { mapSettledWithConcurrency } from '@/renderer/utils/async';
+import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
@@ -20,9 +22,10 @@ interface SortableItemProps {
   isPlaying: boolean;
   onPlay: (song: Song) => void;
   onRemove: (index: number) => void;
+  onCoverError?: (song: Song) => void;
 }
 
-const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove }) => {
+const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onCoverError }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
   const coverSrc = useCachedCover(song.cover);
 
@@ -58,7 +61,7 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
-          <CoverImage src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <CoverImage src={coverSrc} alt={song.name} onError={() => onCoverError?.(song)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 'var(--text-base)', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -84,34 +87,48 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
 });
 
 const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
-  const results = await Promise.allSettled(
-    songs.map(async (song) => {
-      try {
-        const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
-        if (cached) {
-          return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
-        }
-        const keyword = `${song.name} ${song.artist}`;
-        const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
-        if (!result.success || !result.data.length) return song;
-        const fresh = result.data.find((s: Song) => s.id === song.id) || result.data[0];
-        await IpcClient.invoke<void>('cache:setUrl', song.id, {
-          url: fresh.url,
-          cover: fresh.cover,
-          lrc: fresh.lrc,
-        });
-        return { ...song, url: fresh.url, cover: fresh.cover, lrc: fresh.lrc };
-      } catch {
-        return song;
+  // 并发 5 限流：整列表同时搜索会打爆 上游 API（高并发限流/502）
+  const results = await mapSettledWithConcurrency(songs, 5, async (song) => {
+    try {
+      const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
+      if (cached) {
+        return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
       }
-    })
-  );
+      const keyword = `${song.name} ${song.artist}`;
+      const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
+      if (!result.success || !result.data.length) return song;
+      const fresh = result.data.find((s: Song) => s.id === song.id) || result.data[0];
+      await IpcClient.invoke<void>('cache:setUrl', song.id, {
+        url: fresh.url,
+        cover: fresh.cover,
+        lrc: fresh.lrc,
+      });
+      return { ...song, url: fresh.url, cover: fresh.cover, lrc: fresh.lrc };
+    } catch {
+      return song;
+    }
+  });
   return results.map((r, i) => (r.status === 'fulfilled' ? r.value : songs[i]));
 };
 
 const QueuePage: React.FC = () => {
   const { currentPlaylist, currentSong, isPlaying, play, removeFromQueue, reorderQueue, clearQueue, setCurrentPlaylist } = usePlayerStore();
   const [showBatchModal, setShowBatchModal] = useState(false);
+
+  // 封面加载失败 → 按 ID 重识别换新封面并更新队列/当前歌曲（旧签名封面永远失败）
+  const handleCoverError = useCallback((song: Song) => {
+    void refreshSongCover(song).then((cover) => {
+      if (!cover) return;
+      const { currentPlaylist: pl, currentPlaylistIndex, currentSong: cur } = usePlayerStore.getState();
+      setCurrentPlaylist(
+        pl.map((s) => (s.id === song.id ? { ...s, cover } : s)),
+        currentPlaylistIndex,
+      );
+      if (cur?.id === song.id) {
+        usePlayerStore.setState({ currentSong: { ...cur, cover } });
+      }
+    });
+  }, [setCurrentPlaylist]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -209,6 +226,7 @@ const QueuePage: React.FC = () => {
                     isPlaying={isPlaying}
                     onPlay={play}
                     onRemove={removeFromQueue}
+                    onCoverError={handleCoverError}
                   />
                 ))}
               </SortableContext>

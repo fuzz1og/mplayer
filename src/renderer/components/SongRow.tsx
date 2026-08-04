@@ -88,6 +88,8 @@ interface SongRowProps {
   onToggleSelect?: (songId: string) => void;
   onToggleDropdown?: (songId: string, e: React.MouseEvent) => void;
   onCloseDropdown?: (e: React.MouseEvent) => void;
+  /** 封面加载失败时回调，由持有歌曲列表的层按 ID 重识别换新封面 */
+  onCoverError?: (song: Song) => void;
   compact?: boolean;
   style?: React.CSSProperties;
 }
@@ -97,10 +99,21 @@ const SongRow: React.FC<SongRowProps> = ({
   showIndex, showCheckbox, isSelected, showRemoveFromPlaylist,
   activeDropdown, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onRemoveFromPlaylist, onToggleSelect,
-  onToggleDropdown, onCloseDropdown, compact = false, style,
+  onToggleDropdown, onCloseDropdown, onCoverError, compact = false, style,
 }) => {
   const coverSrc = useCachedCover(song.cover);
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
+  const coverRefreshFired = useRef(false);
+
+  // cover 为空（如收藏/历史里从未存过封面）时挂载即触发一次刷新，显示层不依赖 onError
+  useEffect(() => {
+    if (!song.cover && !coverRefreshFired.current) {
+      coverRefreshFired.current = true;
+      onCoverError?.(song);
+    }
+    // 仅挂载时触发：封面刷新后 song.cover 变化会自然进入正常渲染路径
+  }, []);
 
   return (
     <div
@@ -156,7 +169,7 @@ const SongRow: React.FC<SongRowProps> = ({
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '44px', height: '44px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0, position: 'relative' }}>
           {song.cover ? (
-            <CoverImage src={coverSrc} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <CoverImage src={coverSrc} alt={song.name} onError={() => onCoverError?.(song)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)' }} />
           )}

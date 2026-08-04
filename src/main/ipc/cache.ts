@@ -3,7 +3,7 @@ import { app } from 'electron'
 import path from 'path'
 import { registerIpcHandlerSimple } from './registerHandler'
 import { CacheKernel, createMemoryBackend } from '@mplayer/core'
-import { DiskCacheBackend } from '../cache/diskBackend'
+import { DiskCacheBackend, isImageFile } from '../cache/diskBackend'
 
 const COVER_CACHE_TTL = 6 * 60 * 60 * 1000
 
@@ -72,7 +72,15 @@ export function registerCacheIpc(): void {
     await kernel.setJSON(`search:${keyword}`, songs, 6 * 60 * 60 * 1000)
   })
   registerIpcHandlerSimple('cache:getCover', async (coverUrl: string) => {
-    return getBinaryCachePath(`:bin:cover:${coverUrl}`, COVER_CACHE_TTL)
+    const backendKey = `:bin:cover:${coverUrl}`
+    const filePath = await getBinaryCachePath(backendKey, COVER_CACHE_TTL)
+    if (!filePath) return null
+    // 缓存文件损坏或不是有效图片时删除并视为未命中，触发重新获取（默认图绝不落入缓存）
+    if (!isImageFile(filePath)) {
+      await getDiskBackend().delete(backendKey)
+      return null
+    }
+    return filePath
   })
   registerIpcHandlerSimple('cache:setCover', async (coverUrl: string, imageData: Buffer) => {
     await kernel.setBinary(`cover:${coverUrl}`, new Uint8Array(imageData), COVER_CACHE_TTL)

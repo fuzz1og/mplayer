@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Music2, ListMusic } from 'lucide-react';
 
 type CoverVariant = 'song' | 'playlist';
@@ -8,6 +8,8 @@ interface CoverImageProps {
   alt?: string;
   style?: React.CSSProperties;
   variant?: CoverVariant;
+  /** 图片加载失败时回调（fallback 仍显示）；持有 song 的层借此按 ID 重识别换新封面 */
+  onError?: () => void;
 }
 
 const SongFallback: React.FC<{ style?: React.CSSProperties }> = ({ style }) => (
@@ -72,8 +74,13 @@ const PlaylistFallback: React.FC<{ style?: React.CSSProperties }> = ({ style }) 
   </div>
 );
 
-const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant = 'song' }) => {
+const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant = 'song', onError }) => {
   const [failed, setFailed] = useState(false);
+
+  // src 变化（封面刷新换新 URL）时重置失败状态，否则新封面永远不会显示
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
 
   if (!src || failed) {
     return variant === 'playlist'
@@ -86,7 +93,10 @@ const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant =
       src={src}
       alt={alt}
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={() => {
+        setFailed(true);
+        onError?.();
+      }}
       style={style}
     />
   );

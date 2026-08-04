@@ -5,6 +5,8 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { mapSettledWithConcurrency } from '@/renderer/utils/async';
+import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song, SongBase } from '@mplayer/core';
 
 const HistoryPage: React.FC = () => {
@@ -18,16 +20,20 @@ const HistoryPage: React.FC = () => {
       const songBases = history.map((h: any) => h.song as SongBase);
       const uniqueMap = new Map<string, SongBase>();
       songBases.forEach((s: SongBase) => uniqueMap.set(s.id, s));
-      const songsWithCover = await Promise.all(
-        Array.from(uniqueMap.values()).map(async (songBase) => {
-          try {
-            const songs = await IpcClient.invoke<Song[]>('musicApi:searchSongs', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
-            if (songs.length > 0) return songs[0];
-          } catch (e) {
-            console.error('获取历史封面失败:', e);
-          }
+      const uniqueSongs = Array.from(uniqueMap.values());
+      // 并发 5 限流：历史歌曲同时搜索会打爆 上游 API（高并发限流/502）
+      const results = await mapSettledWithConcurrency(
+        uniqueSongs,
+        5,
+        async (songBase) => {
+          const songs = await IpcClient.invoke<Song[]>('musicApi:searchSongs', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
+          if (songs.length > 0) return songs[0];
           return { ...songBase, url: '', cover: '', lrc: '' } as Song;
-        })
+        },
+      );
+      // 失败/无结果时回退到原始歌曲对象（保留 id/name/artist），而不是错误对象
+      const songsWithCover = results.map((r, i) =>
+        r.status === 'fulfilled' ? r.value : { ...uniqueSongs[i], url: '', cover: '', lrc: '' } as Song
       );
       setHistory(songsWithCover);
     } catch (error) {
@@ -41,6 +47,14 @@ const HistoryPage: React.FC = () => {
 
   const handlePlay = async (song: Song) => {
     await play(song);
+  };
+
+  // 封面加载失败 → 按 ID 重识别换新封面（历史歌曲封面常为过期签名）
+  const handleCoverError = (song: Song) => {
+    void refreshSongCover(song).then((cover) => {
+      if (!cover) return;
+      setHistory((prev) => prev.map((s) => (s.id === song.id ? { ...s, cover } : s)));
+    });
   };
 
   const handleClearHistory = async () => {
@@ -110,6 +124,7 @@ const HistoryPage: React.FC = () => {
           onDownload={download}
           onBatchDownload={downloadBatch}
           onAddToPlaylist={handleAddToPlaylist}
+          onCoverError={handleCoverError}
           showCheckbox={true}
           enableBatchDownload={true}
           enableBatchAddToPlaylist={true}
