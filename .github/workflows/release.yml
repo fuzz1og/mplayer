@@ -91,6 +91,10 @@ jobs:
 
       - run: npm ci --ignore-scripts
 
+      # 先构建 core（桌面端从 @mplayer/core 的 dist 导入；dist 是 gitignored，
+      # 干净环境必须显式构建，否则 tsc 报 Cannot find module '@mplayer/core'）
+      - run: npm run core:build
+
       - run: npx tsc && npx vite build
 
       # Tag push or dispatch with version = official release → publish
@@ -300,7 +304,7 @@ jobs:
             echo "Uploading: $BASE"
             UPLOAD_RESP=$(curl -s -X POST \
               "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
-              --connect-timeout 10 --max-time 600 \
+              --connect-timeout 10 --max-time 1800 \
               -F "access_token=$GITEE_TOKEN" \
               -F "file=@$file")
             DL_URL=$(echo "$UPLOAD_RESP" | jq -r '.browser_download_url // empty')
