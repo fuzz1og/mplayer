@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
-import { Ionicons } from '@expo/vector-icons';
+import { CircleCheck, Save, RefreshCcw, Zap, RefreshCw, Download, CircleX, Trash2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -185,12 +185,11 @@ export default function SettingsPage() {
               onPress={handleSaveUrl}
               activeOpacity={0.7}
             >
-              <Ionicons
-                name={saved ? 'checkmark-circle' : 'save-outline'}
-                size={18}
-                color="#fff"
-                style={styles.btnIcon}
-              />
+              {saved ? (
+                <CircleCheck size={18} color="#fff" style={styles.btnIcon} />
+              ) : (
+                <Save size={18} color="#fff" style={styles.btnIcon} />
+              )}
               <Text style={styles.saveBtnText}>
                 {saved ? '已保存' : '保存'}
               </Text>
@@ -201,12 +200,15 @@ export default function SettingsPage() {
               disabled={testing || !localUrl.trim()}
               activeOpacity={0.7}
             >
-              <Ionicons
-                name={testing ? 'sync-outline' : testResult === 'success' ? 'checkmark-circle' : testResult === 'fail' ? 'close-circle' : 'flash-outline'}
-                size={18}
-                color="#fff"
-                style={styles.btnIcon}
-              />
+              {testing ? (
+                <RefreshCcw size={18} color="#fff" style={styles.btnIcon} />
+              ) : testResult === 'success' ? (
+                <CircleCheck size={18} color="#fff" style={styles.btnIcon} />
+              ) : testResult === 'fail' ? (
+                <CircleX size={18} color="#fff" style={styles.btnIcon} />
+              ) : (
+                <Zap size={18} color="#fff" style={styles.btnIcon} />
+              )}
               <Text style={styles.saveBtnText}>
                 {testing ? '测试中...' : testResult === 'success' ? '连接成功' : testResult === 'fail' ? '连接失败' : '测试连接'}
               </Text>
@@ -234,12 +236,11 @@ export default function SettingsPage() {
               onPress={handleSaveProxy}
               activeOpacity={0.7}
             >
-              <Ionicons
-                name={proxySaved ? 'checkmark-circle' : 'save-outline'}
-                size={18}
-                color="#fff"
-                style={styles.btnIcon}
-              />
+              {proxySaved ? (
+                <CircleCheck size={18} color="#fff" style={styles.btnIcon} />
+              ) : (
+                <Save size={18} color="#fff" style={styles.btnIcon} />
+              )}
               <Text style={styles.saveBtnText}>
                 {proxySaved ? '已保存' : '保存代理'}
               </Text>
@@ -254,7 +255,7 @@ export default function SettingsPage() {
             {updateState === 'idle' && (
               <>
                 <TouchableOpacity style={styles.saveBtn} onPress={handleCheckUpdate} activeOpacity={0.7}>
-                  <Ionicons name="refresh-outline" size={18} color="#fff" style={styles.btnIcon} />
+                  <RefreshCw size={18} color="#fff" style={styles.btnIcon} />
                   <Text style={styles.saveBtnText}>检查更新</Text>
                 </TouchableOpacity>
                 <Text style={styles.hintText}>点击检查是否有新版本可用</Text>
@@ -263,7 +264,7 @@ export default function SettingsPage() {
             {updateState === 'checking' && (
               <>
                 <View style={[styles.saveBtn, { backgroundColor: '#555' }]}>
-                  <Ionicons name="sync-outline" size={18} color="#fff" style={styles.btnIcon} />
+                  <RefreshCcw size={18} color="#fff" style={styles.btnIcon} />
                   <Text style={styles.saveBtnText}>检查中...</Text>
                 </View>
               </>
@@ -277,20 +278,20 @@ export default function SettingsPage() {
                   </Text>
                 ) : null}
                 <TouchableOpacity style={styles.saveBtn} onPress={handleUpdate} activeOpacity={0.7}>
-                  <Ionicons name="download-outline" size={18} color="#fff" style={styles.btnIcon} />
+                  <Download size={18} color="#fff" style={styles.btnIcon} />
                   <Text style={styles.saveBtnText}>立即更新</Text>
                 </TouchableOpacity>
               </>
             )}
             {updateState === 'not-available' && (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="checkmark-circle" size={20} color="#27ae60" style={{ marginRight: 8 }} />
+                <CircleCheck size={20} color="#27ae60" style={{ marginRight: 8 }} />
                 <Text style={{ color: '#27ae60', fontSize: 14 }}>已是最新版本</Text>
               </View>
             )}
             {updateState === 'error' && (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="close-circle" size={20} color="#c0392b" style={{ marginRight: 8 }} />
+                <CircleX size={20} color="#c0392b" style={{ marginRight: 8 }} />
                 <Text style={{ color: '#c0392b', fontSize: 14 }}>检查失败，请检查网络</Text>
               </View>
             )}
@@ -307,7 +308,7 @@ export default function SettingsPage() {
               </Text>
             </View>
             <TouchableOpacity style={styles.saveBtn} onPress={handleClearCache} activeOpacity={0.7}>
-              <Ionicons name="trash-outline" size={18} color="#fff" style={styles.btnIcon} />
+              <Trash2 size={18} color="#fff" style={styles.btnIcon} />
               <Text style={styles.saveBtnText}>清理缓存</Text>
             </TouchableOpacity>
             <Text style={styles.hintText}>播放 URL 缓存 24 小时过期，清理不影响已收藏歌曲</Text>
@@ -320,7 +321,7 @@ export default function SettingsPage() {
             <View style={styles.logHeader}>
               <Text style={styles.sectionTitle}>播放日志</Text>
               <TouchableOpacity onPress={clearLogs} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="trash-outline" size={18} color="#888" />
+                <Trash2 size={18} color="#888" />
               </TouchableOpacity>
             </View>
             {logEntries.length === 0 ? (

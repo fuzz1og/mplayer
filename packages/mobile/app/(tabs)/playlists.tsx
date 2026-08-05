@@ -9,14 +9,14 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ListMusic, ChevronRight, Plus, Heart, Clock } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import type { Playlist } from '../../stores/playlistStore';
 
 const BUILT_IN = [
-  { key: 'favorites', icon: 'heart' as const, label: '收藏', desc: '我喜欢的歌曲' },
-  { key: 'history', icon: 'time-outline' as const, label: '播放历史', desc: '最近播放的歌曲' },
+  { key: 'favorites', icon: Heart, label: '收藏', desc: '我喜欢的歌曲' },
+  { key: 'history', icon: Clock, label: '播放历史', desc: '最近播放的歌曲' },
 ];
 
 function formatDate(ts: number): string {
@@ -55,7 +55,7 @@ export default function PlaylistsPage() {
       onLongPress={() => handleDelete(item)}
     >
       <View style={styles.iconWrap}>
-        <Ionicons name="list-outline" size={24} color="#e74c3c" />
+        <ListMusic size={24} color="#e74c3c" />
       </View>
       <View style={styles.rowInfo}>
         <Text style={styles.rowName} numberOfLines={1}>
@@ -65,7 +65,7 @@ export default function PlaylistsPage() {
           {item.songs.length} 首 · {formatDate(item.createdAt)}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color="#555" />
+      <ChevronRight size={18} color="#555" />
     </TouchableOpacity>
   );
 
@@ -77,7 +77,7 @@ export default function PlaylistsPage() {
           style={styles.addBtn}
           onPress={() => setModalVisible(true)}
         >
-          <Ionicons name="add" size={24} color="#fff" />
+          <Plus size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -96,13 +96,13 @@ export default function PlaylistsPage() {
                 onPress={() => router.push(item.key === 'favorites' ? '/favorites' : '/history')}
               >
                 <View style={[styles.iconWrap, { backgroundColor: '#2a2a4a' }]}>
-                  <Ionicons name={item.icon} size={24} color="#e74c3c" />
+                  <item.icon size={24} color="#e74c3c" />
                 </View>
                 <View style={styles.rowInfo}>
                   <Text style={styles.rowName}>{item.label}</Text>
                   <Text style={styles.rowMeta}>{item.desc}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color="#555" />
+                <ChevronRight size={18} color="#555" />
               </TouchableOpacity>
             ))}
             {playlists.length > 0 && (

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Modal, Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { CircleCheck, ListMusic } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Song, SourceKey } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
@@ -75,7 +75,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         {addedName ? (
           <View style={styles.successBox}>
-            <Ionicons name="checkmark-circle" size={48} color="#e74c3c" />
+            <CircleCheck size={48} color="#e74c3c" />
             <Text style={styles.successText}>已加入歌单「{addedName}」</Text>
           </View>
         ) : (
@@ -87,7 +87,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
             )}
             {playlists.length === 0 ? (
               <View style={styles.emptyBox}>
-                <Ionicons name="list-outline" size={40} color="#444" />
+                <ListMusic size={40} color="#444" />
                 <Text style={styles.emptyText}>暂无歌单</Text>
                 <Text style={styles.emptyHint}>请先在歌单页面创建</Text>
               </View>
@@ -99,7 +99,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
                     style={styles.item}
                     onPress={() => handleSelect(p.id, p.name)}
                   >
-                    <Ionicons name="list-outline" size={22} color="#e74c3c" />
+                    <ListMusic size={22} color="#e74c3c" />
                     <Text style={styles.itemText}>{p.name}</Text>
                     <Text style={styles.itemCount}>{p.songs.length}首</Text>
                   </TouchableOpacity>

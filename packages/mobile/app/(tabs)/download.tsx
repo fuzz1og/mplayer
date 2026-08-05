@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Download, Music, Trash2 } from 'lucide-react-native';
 import { Paths } from 'expo-file-system';
 import type { Song } from '@mplayer/core';
 import { useDownloadStore } from '../../stores/downloadStore';
@@ -64,7 +64,7 @@ export default function DownloadPage() {
         contentContainerStyle={items.length === 0 ? styles.emptyContent : undefined}
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <Ionicons name="download-outline" size={64} color="#444" />
+            <Download size={64} color="#444" />
             <Text style={styles.title}>暂无下载任务</Text>
             <Text style={styles.subtitle}>在歌曲更多菜单中点击「下载」</Text>
           </View>
@@ -79,7 +79,7 @@ export default function DownloadPage() {
               disabled={item.status !== 'done'}
             >
               <View style={styles.coverWrap}>
-                <Ionicons name="musical-note" size={22} color="#888" />
+                <Music size={22} color="#888" />
               </View>
               <View style={styles.info}>
                 <Text style={[styles.name, isCurrent && styles.nameActive]} numberOfLines={1}>
@@ -92,7 +92,7 @@ export default function DownloadPage() {
               </Text>
               {item.status === 'done' && (
                 <TouchableOpacity onPress={() => handleRemove(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="trash-outline" size={18} color="#666" />
+                  <Trash2 size={18} color="#666" />
                 </TouchableOpacity>
               )}
             </TouchableOpacity>

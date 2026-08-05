@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import SongRow from '../components/SongRow';
 import EmptyState from '../components/EmptyState';
+import { Heart } from 'lucide-react-native';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { usePlayerStore } from '../stores/playerStore';
@@ -38,7 +39,7 @@ export default function FavoritesPage() {
           headerShadowVisible: false,
         }} />
         {favorites.length === 0 ? (
-          <EmptyState icon="heart-outline" title="还没有收藏歌曲" />
+          <EmptyState icon={Heart} title="还没有收藏歌曲" />
         ) : (
           <FlatList
             data={favorites}

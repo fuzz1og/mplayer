@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import SongRow from '../components/SongRow';
 import EmptyState from '../components/EmptyState';
+import { Clock } from 'lucide-react-native';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useHistoryStore } from '../stores/historyStore';
 import { usePlayerStore } from '../stores/playerStore';
@@ -31,7 +32,7 @@ export default function HistoryPage() {
           headerShadowVisible: false,
         }} />
         {history.length === 0 ? (
-          <EmptyState icon="time-outline" title="还没有播放记录" />
+          <EmptyState icon={Clock} title="还没有播放记录" />
         ) : (
           <FlatList
             data={history}

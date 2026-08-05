@@ -10,7 +10,7 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { CircleAlert, Pencil, Music2 } from 'lucide-react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { usePlaylistStore } from '../../stores/playlistStore';
@@ -71,7 +71,7 @@ export default function PlaylistDetailPage() {
         <SafeAreaView edges={['top']} style={{ flex: 1 }}>
           <Stack.Screen options={{ title: '歌单', headerShown: true }} />
           <View style={styles.empty}>
-            <Ionicons name="alert-circle-outline" size={48} color="#555" />
+            <CircleAlert size={48} color="#555" />
             <Text style={styles.emptyText}>歌单不存在</Text>
           </View>
         </SafeAreaView>
@@ -93,7 +93,7 @@ export default function PlaylistDetailPage() {
             headerShadowVisible: false,
             headerRight: () => (
               <TouchableOpacity onPress={handleRename} style={{ marginRight: 4 }}>
-                <Ionicons name="pencil-outline" size={20} color="#ccc" />
+                <Pencil size={20} color="#ccc" />
               </TouchableOpacity>
             ),
           }}
@@ -101,7 +101,7 @@ export default function PlaylistDetailPage() {
 
         {playlist.songs.length === 0 ? (
           <View style={styles.empty}>
-            <Ionicons name="musical-notes-outline" size={64} color="#444" />
+            <Music2 size={64} color="#444" />
             <Text style={styles.emptyText}>歌单是空的</Text>
           </View>
         ) : (

@@ -5,7 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import { Disc3, Play } from 'lucide-react-native';
 import { musicApi, type Song, type Album } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import SongRow from '../../components/SongRow';
@@ -88,7 +88,7 @@ export default function AlbumDetailPage() {
                 <Image source={{ uri: displayPic }} style={styles.cover} />
               ) : (
                 <View style={[styles.cover, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-                  <Ionicons name="disc" size={56} color="#555" />
+                  <Disc3 size={56} color="#555" />
                 </View>
               )}
               <Text style={styles.name}>{displayName}</Text>
@@ -98,7 +98,7 @@ export default function AlbumDetailPage() {
                 <Text style={styles.meta}>{songs.length} 首</Text>
               </View>
               <TouchableOpacity style={styles.playAllBtn} activeOpacity={0.8} onPress={handlePlayAll}>
-                <Ionicons name="play" size={16} color="#fff" />
+                <Play size={16} color="#fff" />
                 <Text style={styles.playAllText}>播放全部</Text>
               </TouchableOpacity>
             </View>

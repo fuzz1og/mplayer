@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, RefreshControl, StyleSheet, TouchableOpacity, Image, Dimensions,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
 import { cacheManager, musicApi, formatPlayCount, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
 import LoadingState from '../../components/LoadingState';
@@ -90,7 +90,7 @@ export default function RecommendPage() {
     >
       {error && songs.length === 0 ? (
         <View style={styles.errorBox}>
-          <Ionicons name="alert-circle-outline" size={40} color="#e74c3c" />
+          <CircleAlert size={40} color="#e74c3c" />
           <Text style={styles.errorText}>加载失败，下拉重试</Text>
         </View>
       ) : (
@@ -103,11 +103,11 @@ export default function RecommendPage() {
                 {songs.length > 0 && (
                   <>
                     <TouchableOpacity style={styles.playAllBtn} onPress={handlePlayAll} activeOpacity={0.8}>
-                      <Ionicons name="play" size={14} color="#fff" />
+                      <Play size={14} color="#fff" />
                       <Text style={styles.playAllText}>播放全部</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.shuffleBtn} onPress={handleShuffle} activeOpacity={0.8} disabled={shuffling}>
-                      <Ionicons name="refresh" size={14} color="#e74c3c" />
+                      <RefreshCw size={14} color="#e74c3c" />
                       <Text style={styles.shuffleText}>{shuffling ? '加载中…' : '换一批'}</Text>
                     </TouchableOpacity>
                   </>
@@ -141,7 +141,7 @@ export default function RecommendPage() {
                       <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
                     ) : (
                       <View style={[styles.gridCover, styles.gridCoverFallback]}>
-                        <Ionicons name="list-outline" size={32} color="#555" />
+                        <ListMusic size={32} color="#555" />
                       </View>
                     )}
                     <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>

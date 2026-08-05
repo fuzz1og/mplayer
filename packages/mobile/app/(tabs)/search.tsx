@@ -9,7 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { CircleAlert, Music2, User } from 'lucide-react-native';
 import { musicApi } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
@@ -105,7 +105,7 @@ export default function SearchPage() {
           <SongListSkeleton />
         ) : error && results.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="alert-circle-outline" size={48} color="#e74c3c" />
+            <CircleAlert size={48} color="#e74c3c" />
             <Text style={[styles.emptyText, { color: '#e74c3c' }]}>{error}</Text>
           </View>
         ) : results.length > 0 ? (
@@ -117,7 +117,7 @@ export default function SearchPage() {
           )
         ) : (
           <View style={styles.emptyContainer}>
-            <Ionicons name="musical-notes-outline" size={48} color="#444" />
+            <Music2 size={48} color="#444" />
             <Text style={styles.emptyText}>搜索歌曲和歌手</Text>
           </View>
         )
@@ -128,7 +128,7 @@ export default function SearchPage() {
         </View>
       ) : artistsError ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="alert-circle-outline" size={48} color="#e74c3c" />
+          <CircleAlert size={48} color="#e74c3c" />
           <Text style={[styles.emptyText, { color: '#e74c3c' }]}>歌手搜索失败</Text>
         </View>
       ) : artists.length > 0 ? (
@@ -148,7 +148,7 @@ export default function SearchPage() {
                 <Image source={{ uri: a.picUrl }} style={styles.artistAvatar} />
               ) : (
                 <View style={[styles.artistAvatar, styles.artistAvatarFallback]}>
-                  <Ionicons name="person" size={28} color="#555" />
+                  <User size={28} color="#555" />
                 </View>
               )}
               <Text style={styles.artistName} numberOfLines={1}>{a.name}</Text>
@@ -157,7 +157,7 @@ export default function SearchPage() {
         />
       ) : (
         <View style={styles.emptyContainer}>
-          <Ionicons name="person-outline" size={48} color="#444" />
+          <User size={48} color="#444" />
           <Text style={styles.emptyText}>未找到相关歌手</Text>
         </View>
       )}

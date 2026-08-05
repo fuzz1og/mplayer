@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions,
   Image, FlatList,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
@@ -147,7 +147,7 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
             <Image source={{ uri: song.cover }} style={styles.cover} />
           ) : (
             <View style={[styles.cover, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-              <Ionicons name="musical-note" size={20} color="#555" />
+              <Music size={20} color="#555" />
             </View>
           )}
           <View style={styles.songInfo}>
@@ -224,7 +224,7 @@ function AlbumsContent() {
         <Image source={{ uri: album.picUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
       ) : (
         <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-          <Ionicons name="disc" size={32} color="#555" />
+          <Disc3 size={32} color="#555" />
         </View>
       )}
       <Text style={styles.gridName} numberOfLines={1}>{album.name}</Text>
@@ -335,7 +335,7 @@ function PlaylistContent() {
         <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
       ) : (
         <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-          <Ionicons name="list-outline" size={32} color="#555" />
+          <ListMusic size={32} color="#555" />
         </View>
       )}
       <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
@@ -456,7 +456,7 @@ function ArtistContent() {
         <Image source={{ uri: a.picUrl }} style={styles.artistAvatar} />
       ) : (
         <View style={[styles.artistAvatar, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-          <Ionicons name="person" size={28} color="#555" />
+          <User size={28} color="#555" />
         </View>
       )}
       <Text style={styles.artistName} numberOfLines={1}>{a.name}</Text>

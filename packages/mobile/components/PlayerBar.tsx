@@ -4,7 +4,7 @@ import {
   View, Text, Image, TouchableOpacity, StyleSheet,
   Modal, FlatList,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, X, Play } from 'lucide-react-native';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
 
@@ -38,7 +38,7 @@ export default function PlayerBar() {
         {currentSong?.cover && !coverFailed ? (
           <Image source={{ uri: currentSong.cover }} style={styles.cover} onError={handleCoverError} />
         ) : (
-          <Ionicons name="musical-note" size={24} color="#555" />
+          <Music size={24} color="#555" />
         )}
       </View>
 
@@ -59,23 +59,23 @@ export default function PlayerBar() {
             onPress={(e) => { e.stopPropagation(); prev(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
           >
-            <Ionicons name="play-skip-back" size={24} color="#fff" />
+            <SkipBack size={24} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={(e) => { e.stopPropagation(); togglePlay(); }}
             style={styles.btn}
           >
-            <Ionicons
-              name={isPlaying ? 'pause-circle' : 'play-circle'}
-              size={36}
-              color="#e74c3c"
-            />
+            {isPlaying ? (
+              <CirclePause size={36} color="#e74c3c" />
+            ) : (
+              <CirclePlay size={36} color="#e74c3c" />
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             onPress={(e) => { e.stopPropagation(); next(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
           >
-            <Ionicons name="play-skip-forward" size={24} color="#fff" />
+            <SkipForward size={24} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={(e) => {
@@ -84,7 +84,7 @@ export default function PlayerBar() {
             }}
             style={styles.btn}
           >
-            <Ionicons name="list-outline" size={24} color="#fff" />
+            <ListMusic size={24} color="#fff" />
           </TouchableOpacity>
         </View>
       )}
@@ -102,7 +102,7 @@ export default function PlayerBar() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>播放队列 ({queue.length})</Text>
               <TouchableOpacity onPress={() => setShowQueue(false)}>
-                <Ionicons name="close" size={24} color="#fff" />
+                <X size={24} color="#fff" />
               </TouchableOpacity>
             </View>
             <FlatList
@@ -125,7 +125,7 @@ export default function PlayerBar() {
                       </Text>
                       <Text style={styles.queueItemArtist}>{item.artist}</Text>
                     </View>
-                    {isCurrent && <Ionicons name="play" size={16} color="#e74c3c" />}
+                    {isCurrent && <Play size={16} color="#e74c3c" />}
                   </TouchableOpacity>
                 );
               }}

@@ -3,7 +3,8 @@ import {
   View, Text, Image, TouchableOpacity, StyleSheet,
   Modal, Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Music, Heart, EllipsisVertical, ListMusic, Download, ArrowLeftRight, User } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type Song, SourceKey } from '@mplayer/core';
@@ -203,11 +204,11 @@ export default function SongRow({
   };
 
   const MORE_ACTIONS = [
-    { key: 'playlist', icon: 'list-outline', label: '加入歌单', onPress: () => { setShowActions(false); setShowPlaylistModal(true); } },
-    { key: 'download', icon: 'download-outline', label: '下载', onPress: handleDownload },
-    { key: 'swap', icon: 'swap-horizontal', label: '换源完整版', onPress: () => { setShowActions(false); setSwapSuccess(false); setSwapLoading(false); setSwapCandidates([]); setSwapSource(null); setSwapVisible(true); } },
-    { key: 'artist', icon: 'person-outline', label: '搜索歌手', onPress: handleSearchArtist },
-  ];
+    { key: 'playlist', icon: ListMusic, label: '加入歌单', onPress: () => { setShowActions(false); setShowPlaylistModal(true); } },
+    { key: 'download', icon: Download, label: '下载', onPress: handleDownload },
+    { key: 'swap', icon: ArrowLeftRight, label: '换源完整版', onPress: () => { setShowActions(false); setSwapSuccess(false); setSwapLoading(false); setSwapCandidates([]); setSwapSource(null); setSwapVisible(true); } },
+    { key: 'artist', icon: User, label: '搜索歌手', onPress: handleSearchArtist },
+  ] as { key: string; icon: LucideIcon; label: string; onPress: () => void }[];
 
   const handlePress = () => {
     if (pressingAction) return;
@@ -251,7 +252,7 @@ export default function SongRow({
         <Image source={{ uri: cover }} style={styles.cover} onError={handleCoverError} />
       ) : (
         <View style={[styles.cover, styles.coverPlaceholder]}>
-          <Ionicons name="musical-note" size={22} color="#555" />
+          <Music size={22} color="#555" />
         </View>
       )}
 
@@ -288,14 +289,14 @@ export default function SongRow({
         style={styles.favoriteBtn}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Ionicons
-          name={favorited ? 'heart' : 'heart-outline'}
+        <Heart
           size={20}
           color={favorited ? '#e74c3c' : '#666'}
+          fill={favorited ? '#e74c3c' : 'none'}
         />
       </TouchableOpacity>
       <TouchableOpacity onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <Ionicons name="ellipsis-vertical" size={18} color="#666" />
+        <EllipsisVertical size={18} color="#666" />
       </TouchableOpacity>
     </TouchableOpacity>
 
@@ -305,7 +306,7 @@ export default function SongRow({
           <Text style={styles.actionSheetTitle} numberOfLines={1}>{song.name}</Text>
           {MORE_ACTIONS.map(a => (
             <TouchableOpacity key={a.key} style={styles.actionItem} onPress={a.onPress}>
-              <Ionicons name={a.icon as any} size={22} color="#fff" />
+              <a.icon size={22} color="#fff" />
               <Text style={styles.actionLabel}>{a.label}</Text>
             </TouchableOpacity>
           ))}

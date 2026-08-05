@@ -5,7 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import { Disc3 } from 'lucide-react-native';
 import { musicApi, type Song, type Album } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
@@ -128,7 +128,7 @@ export default function ArtistDetailPage() {
                           <Image source={{ uri: a.picUrl }} style={styles.albumCover} />
                         ) : (
                           <View style={[styles.albumCover, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-                            <Ionicons name="disc" size={24} color="#555" />
+                            <Disc3 size={24} color="#555" />
                           </View>
                         )}
                         <Text style={styles.albumName} numberOfLines={1}>{a.name}</Text>

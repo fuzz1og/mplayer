@@ -2,21 +2,22 @@ import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Modal,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, Search, Settings, ChevronDown, Check, LayoutGrid, Music2 } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSourceStore, SOURCE_OPTION_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
 
-const SOURCE_OPTIONS: { key: SourceOption; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'all', icon: 'apps-outline' },
-  { key: 'netease', icon: 'musical-note-outline' },
-  { key: 'qq', icon: 'musical-note-outline' },
-  { key: 'kugou', icon: 'musical-note-outline' },
-  { key: 'kuwo', icon: 'musical-note-outline' },
-  { key: 'qianqian', icon: 'musical-note-outline' },
-  { key: 'soda', icon: 'musical-note-outline' },
+const SOURCE_OPTIONS: { key: SourceOption; icon: LucideIcon }[] = [
+  { key: 'all', icon: LayoutGrid },
+  { key: 'netease', icon: Music2 },
+  { key: 'qq', icon: Music2 },
+  { key: 'kugou', icon: Music2 },
+  { key: 'kuwo', icon: Music2 },
+  { key: 'qianqian', icon: Music2 },
+  { key: 'soda', icon: Music2 },
 ];
 
 export default function TopBar() {
@@ -51,11 +52,11 @@ export default function TopBar() {
     <View style={styles.container}>
       {isSearchTab && (
         <TouchableOpacity onPress={() => router.replace('/')} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#ccc" />
+          <ArrowLeft size={22} color="#ccc" />
         </TouchableOpacity>
       )}
       <View style={styles.searchBar}>
-        <Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} />
+        <Search size={18} color="#888" style={{ marginRight: 8 }} />
         <TextInput
           style={styles.input}
           placeholder="搜索歌曲..."
@@ -72,11 +73,11 @@ export default function TopBar() {
         />
         <TouchableOpacity onPress={() => setShowSourcePicker(true)} style={styles.sourceBtn}>
           <Text style={styles.sourceLabel}>{SOURCE_OPTION_LABELS[selectedSource]}</Text>
-          <Ionicons name="chevron-down" size={12} color="#888" />
+          <ChevronDown size={12} color="#888" />
         </TouchableOpacity>
       </View>
       <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
-        <Ionicons name="settings-outline" size={22} color="#ccc" />
+        <Settings size={22} color="#ccc" />
       </TouchableOpacity>
 
       <Modal visible={showSourcePicker} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowSourcePicker(false)}>
@@ -90,8 +91,7 @@ export default function TopBar() {
                 style={[styles.optionItem, selectedSource === opt.key && styles.optionItemActive]}
                 onPress={() => handleSelectSource(opt.key)}
               >
-                <Ionicons
-                  name={opt.icon}
+                <opt.icon
                   size={20}
                   color={selectedSource === opt.key ? '#e74c3c' : '#fff'}
                 />
@@ -99,7 +99,7 @@ export default function TopBar() {
                   {SOURCE_OPTION_LABELS[opt.key]}
                 </Text>
                 {selectedSource === opt.key && (
-                  <Ionicons name="checkmark" size={20} color="#e74c3c" />
+                  <Check size={20} color="#e74c3c" />
                 )}
               </TouchableOpacity>
             ))}

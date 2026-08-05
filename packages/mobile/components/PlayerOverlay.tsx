@@ -4,7 +4,8 @@ import {
   PanResponder, Animated, Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, Repeat, Shuffle, Heart, CirclePlus, Download } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
 import { usePlayerStore } from '../stores/playerStore';
@@ -85,11 +86,13 @@ export default function PlayerOverlay({ onClose }: Props) {
     outputRange: ['0deg', '360deg'],
   });
 
-  const MODE_ICONS: Record<PlayMode, string> = {
-    '单曲循环': 'repeat-once',
-    '列表循环': 'repeat',
-    '随机播放': 'shuffle',
+  const MODE_ICONS: Record<PlayMode, LucideIcon> = {
+    '单曲循环': Repeat1,
+    '列表循环': Repeat,
+    '随机播放': Shuffle,
   };
+
+  const ModeIcon = MODE_ICONS[playMode];
 
   const cyclePlayMode = () => {
     const idx = PLAY_MODES.indexOf(playMode);
@@ -232,7 +235,7 @@ export default function PlayerOverlay({ onClose }: Props) {
         {/* 自定义顶部栏 */}
         <View style={styles.customHeader}>
           <TouchableOpacity onPress={dismissWithAnimation}>
-            <Ionicons name="chevron-down" size={28} color="#fff" />
+            <ChevronDown size={28} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowLyrics(v => !v)}>
             <Text style={{ color: '#e74c3c', fontSize: 16, fontWeight: '600' }}>
@@ -356,33 +359,33 @@ export default function PlayerOverlay({ onClose }: Props) {
             {/* 控制按钮 */}
             <View style={styles.controls}>
               <TouchableOpacity onPress={handlePrev}>
-                <Ionicons name="play-skip-back" size={32} color="#fff" />
+                <SkipBack size={32} color="#fff" />
               </TouchableOpacity>
               <TouchableOpacity onPress={togglePlay} style={styles.playBtn}>
-                <Ionicons
-                  name={isPlaying ? 'pause-circle' : 'play-circle'}
-                  size={64}
-                  color="#e74c3c"
-                />
+                {isPlaying ? (
+                  <CirclePause size={64} color="#e74c3c" />
+                ) : (
+                  <CirclePlay size={64} color="#e74c3c" />
+                )}
               </TouchableOpacity>
               <TouchableOpacity onPress={handleNext}>
-                <Ionicons name="play-skip-forward" size={32} color="#fff" />
+                <SkipForward size={32} color="#fff" />
               </TouchableOpacity>
             </View>
 
             {/* 操作按钮 */}
             <View style={styles.actionRow}>
               <TouchableOpacity onPress={cyclePlayMode} style={styles.actionBtn}>
-                <MaterialCommunityIcons name={MODE_ICONS[playMode] as any} size={24} color="#e74c3c" />
+                <ModeIcon size={24} color="#e74c3c" />
               </TouchableOpacity>
               <TouchableOpacity onPress={toggleFavorite} style={styles.actionBtn}>
-                <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={24} color={isFav ? '#e74c3c' : '#fff'} />
+                <Heart size={24} color={isFav ? '#e74c3c' : '#fff'} fill={isFav ? '#e74c3c' : 'none'} />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setShowPlaylistModal(true)} style={styles.actionBtn}>
-                <Ionicons name="add-circle-outline" size={24} color="#fff" />
+                <CirclePlus size={24} color="#fff" />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleDownload} style={styles.actionBtn}>
-                <Ionicons name="download-outline" size={24} color="#fff" />
+                <Download size={24} color="#fff" />
               </TouchableOpacity>
             </View>
           </>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Tabs, usePathname } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Compass, Flame, ListMusic, Download } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -66,15 +67,12 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
             if (route.name === 'search') return null;
             const isFocused = state.index === i;
             const onPress = () => { navigation.navigate(route.name); };
-            const icons: Record<string, string> = { index: 'compass-outline', recommend: 'flame-outline', playlists: 'list-outline', download: 'download-outline' };
+            const icons: Record<string, LucideIcon> = { index: Compass, recommend: Flame, playlists: ListMusic, download: Download };
             const labels: Record<string, string> = { index: '发现', recommend: '推荐', playlists: '歌单', download: '下载' };
+            const Icon = icons[route.name];
             return (
               <TouchableOpacity key={route.key} onPress={onPress} style={tabBarStyles.tab}>
-                <Ionicons
-                  name={icons[route.name] as any}
-                  size={22}
-                  color={isFocused ? '#e74c3c' : '#888'}
-                />
+                <Icon size={22} color={isFocused ? '#e74c3c' : '#888'} />
                 <Text style={{ color: isFocused ? '#e74c3c' : '#888', fontSize: 11, marginTop: 2 }}>
                   {labels[route.name]}
                 </Text>

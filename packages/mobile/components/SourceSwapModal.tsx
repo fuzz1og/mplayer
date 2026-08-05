@@ -1,5 +1,5 @@
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { X, CircleCheck, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '../services/sourceSwap';
 
@@ -43,13 +43,13 @@ export default function SourceSwapModal({
               {success ? '换源完整版' : candidates.length > 0 ? '选择要切换的版本' : '换源完整版'}
             </Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close" size={22} color="#888" />
+              <X size={22} color="#888" />
             </TouchableOpacity>
           </View>
           {songName ? <Text style={styles.hint} numberOfLines={1}>{songName}</Text> : null}
           {success ? (
             <View style={styles.successBox}>
-              <Ionicons name="checkmark-circle" size={44} color="#27ae60" />
+              <CircleCheck size={44} color="#27ae60" />
               <Text style={styles.successText}>已替换为完整版</Text>
             </View>
           ) : loading ? (
@@ -82,11 +82,11 @@ export default function SourceSwapModal({
                   <Text style={[styles.matchTag, c.exact && styles.matchTagExact]}>
                     {c.exact ? '完整版' : `${Math.round(c.score * 100)}%`}
                   </Text>
-                  <Ionicons name="chevron-forward" size={18} color="#555" />
+                  <ChevronRight size={18} color="#555" />
                 </TouchableOpacity>
               ))}
               <TouchableOpacity style={styles.backBtn} activeOpacity={0.7} onPress={onBack}>
-                <Ionicons name="arrow-back" size={16} color="#888" />
+                <ArrowLeft size={16} color="#888" />
                 <Text style={styles.backText}>返回选择其他音乐源</Text>
               </TouchableOpacity>
             </>
@@ -105,7 +105,7 @@ export default function SourceSwapModal({
                   <Text style={[styles.itemText, disabled && styles.itemDisabledText]}>
                     {s.label}{disabled ? '（当前源）' : ''}
                   </Text>
-                  <Ionicons name="chevron-forward" size={18} color="#555" />
+                  <ChevronRight size={18} color="#555" />
                 </TouchableOpacity>
               );
             })
