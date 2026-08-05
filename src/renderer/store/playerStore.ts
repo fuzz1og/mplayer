@@ -61,6 +61,7 @@ interface PlayerStoreActions {
   playNext: () => void;
   playPrevious: () => void;
   setCurrentPlaylist: (playlist: Song[], currentIndex?: number) => void;
+  replaceQueueSong: (originalId: string, swapped: Song) => Promise<void>;
   removeFromQueue: (index: number) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   clearQueue: () => void;
@@ -435,6 +436,32 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylistIndex: currentIndex
     });
     persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
+  },
+
+  /**
+   * 单曲换源后的队列原位替换：命中当前播放歌曲则替换并续播新版本，
+   * 未命中只替换队列条目，不打断当前播放。
+   */
+  replaceQueueSong: async (originalId: string, swapped: Song) => {
+    const { currentPlaylist, currentPlaylistIndex, currentSong } = get();
+    const idx = currentPlaylist.findIndex(s => s.id === originalId);
+
+    if (idx === -1) {
+      if (currentSong?.id === originalId) await get().play(swapped);
+      return;
+    }
+
+    const queue = [...currentPlaylist];
+    queue[idx] = swapped;
+
+    if (currentSong?.id === originalId) {
+      set({ currentPlaylist: queue, currentPlaylistIndex: idx, currentSong: swapped });
+      persistQueue(queue, idx);
+      await get().play(swapped);
+    } else {
+      set({ currentPlaylist: queue });
+      persistQueue(queue, currentPlaylistIndex);
+    }
   },
 
   removeFromQueue: (index: number) => {

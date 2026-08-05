@@ -1,11 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic, RefreshCw, User } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
+import SourceSwapModal from '@/renderer/components/SourceSwapModal';
+import { useSongSwap } from '@/renderer/hooks/useSongSwap';
+import { useSearchStore } from '@/renderer/store/searchStore';
+import { searchService } from '@/renderer/services/searchService';
 
 interface DropdownMenuProps {
   song: Song;
@@ -15,10 +20,12 @@ interface DropdownMenuProps {
   onAddToPlaylist?: (song: Song) => void;
   onDownload?: (song: Song) => void;
   onRemoveFromPlaylist?: (song: Song) => void;
+  onSwap?: () => void;
+  onViewArtist?: () => void;
 }
 
 const DropdownMenu: React.FC<DropdownMenuProps> = ({
-  song, triggerRef, showRemoveFromPlaylist, onClose, onAddToPlaylist, onDownload, onRemoveFromPlaylist,
+  song, triggerRef, showRemoveFromPlaylist, onClose, onAddToPlaylist, onDownload, onRemoveFromPlaylist, onSwap, onViewArtist,
 }) => {
   const [pos, setPos] = useState({ top: 0, right: 0 });
 
@@ -63,6 +70,14 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
           style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
           <Download size={14} /> 下载
         </button>
+        <button aria-label="换源完整版" onClick={(e) => { e.stopPropagation(); onSwap?.(); onClose?.(e); }}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+          <RefreshCw size={14} /> 换源完整版
+        </button>
+        <button aria-label="查看歌手" onClick={(e) => { e.stopPropagation(); onViewArtist?.(); onClose?.(e); }}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+          <User size={14} /> 查看歌手
+        </button>
       </div>
     </>,
     document.body
@@ -85,6 +100,8 @@ interface SongRowProps {
   onDownload?: (song: Song) => void;
   onAddToPlaylist?: (song: Song) => void;
   onRemoveFromPlaylist?: (song: Song) => void;
+  /** 换源成功回调：父组件用它更新自己的列表 state（收藏/歌单页同时持久化） */
+  onSwap?: (original: Song, swapped: Song) => void;
   onToggleSelect?: (songId: string) => void;
   onToggleDropdown?: (songId: string, e: React.MouseEvent) => void;
   onCloseDropdown?: (e: React.MouseEvent) => void;
@@ -99,12 +116,23 @@ const SongRow: React.FC<SongRowProps> = ({
   showIndex, showCheckbox, isSelected, showRemoveFromPlaylist,
   activeDropdown, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onRemoveFromPlaylist, onToggleSelect,
-  onToggleDropdown, onCloseDropdown, onCoverError, compact = false, style,
+  onToggleDropdown, onCloseDropdown, onCoverError, onSwap, compact = false, style,
 }) => {
   const coverSrc = useCachedCover(song.cover);
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  const navigate = useNavigate();
   // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
   const coverRefreshFired = useRef(false);
+
+  const swap = useSongSwap(song, onSwap);
+
+  /** 查看歌手：以歌手名为关键词搜索并落在歌手 tab（与移动端一致） */
+  const handleViewArtist = () => {
+    if (!song.artist) return;
+    useSearchStore.getState().setPreferredTab('artists');
+    void searchService.search(song.artist);
+    navigate('/discover');
+  };
 
   // cover 为空（如收藏/历史里从未存过封面）时挂载即触发一次刷新，显示层不依赖 onError
   useEffect(() => {
@@ -216,6 +244,7 @@ const SongRow: React.FC<SongRowProps> = ({
           <button
             ref={dropdownTriggerRef}
             onClick={(e) => onToggleDropdown?.(song.id, e)}
+            aria-label={`更多操作: ${song.name}`}
             style={{ border: 'none', background: activeDropdown === song.id ? 'var(--hover-bg)' : 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: activeDropdown === song.id ? 'var(--text-secondary)' : 'var(--text-tertiary)', transition: 'all 0.15s ease' }}
           >
             <MoreHorizontal size={16} />
@@ -229,10 +258,24 @@ const SongRow: React.FC<SongRowProps> = ({
               onAddToPlaylist={onAddToPlaylist}
               onDownload={onDownload}
               onRemoveFromPlaylist={onRemoveFromPlaylist}
+              onSwap={swap.open}
+              onViewArtist={handleViewArtist}
             />
           )}
         </div>
       </div>
+      <SourceSwapModal
+        open={swap.visible}
+        songName={song.name}
+        currentSource={song.sourceType}
+        candidates={swap.candidates}
+        loading={swap.loading}
+        success={swap.success}
+        onSelectSource={swap.onSelectSource}
+        onSelectCandidate={swap.onSelectCandidate}
+        onBack={swap.onBack}
+        onClose={swap.close}
+      />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import type { Song, SongGroup, AudioTag, ImportSource } from '@mplayer/core';
+import type { Song, SongGroup, AudioTag, ImportSource, Artist } from '@mplayer/core';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { IpcClient } from './IpcClient';
 import { ipcMusicApi } from './IpcMusicApi';
@@ -99,6 +99,14 @@ class SearchService {
   searchAll(keyword: string): void {
     useSearchStore.setState({ sourceType: 'all' } as any);
     this.controller.search(keyword);
+  }
+
+  /**
+   * 搜索歌手（仅网易云源有歌手搜索接口）：结果由调用方持有，
+   * 搜索结果页的「歌手」tab 用它加载。
+   */
+  async searchArtists(keyword: string, limit = 30): Promise<Artist[]> {
+    return ipcMusicApi.searchArtists(keyword, limit);
   }
 
   loadMore(): Promise<void> {

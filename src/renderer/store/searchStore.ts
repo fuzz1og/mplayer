@@ -12,6 +12,8 @@ export interface SearchState {
   page: number;
   currentKeyword: string;
   sourceType: SourceKey;
+  /** 搜索结果初始 tab：普通搜索落在单曲；「查看歌手」入口落在歌手 */
+  preferredTab: 'songs' | 'artists';
   error: string | null;
   groups: SongGroup[];
   expandedKeys: string[];
@@ -21,6 +23,7 @@ export interface SearchState {
   setPage: (page: number) => void;
   setCurrentKeyword: (keyword: string) => void;
   setSourceType: (type: SourceKey) => void;
+  setPreferredTab: (tab: 'songs' | 'artists') => void;
   setError: (error: string | null) => void;
   setGroups: (groups: SongGroup[], replace?: boolean) => void;
   setAudioTag: (songId: string, tag: AudioTag) => void;
@@ -37,6 +40,7 @@ export const useSearchStore = create<SearchState>((set) => ({
   page: 1,
   currentKeyword: '',
   sourceType: 'all',
+  preferredTab: 'songs',
   error: null,
   groups: [],
   expandedKeys: [],
@@ -54,6 +58,7 @@ export const useSearchStore = create<SearchState>((set) => ({
   setPage: (page: number) => set({ page }),
   setCurrentKeyword: (keyword: string) => set({ currentKeyword: keyword }),
   setSourceType: (type: SourceKey) => set({ sourceType: type }),
+  setPreferredTab: (tab) => set({ preferredTab: tab }),
   setError: (error: string | null) => set({ error }),
   setGroups: (groups, replace = true) => set((state) => {
     if (replace) return { groups };
@@ -107,6 +112,7 @@ export const useSearchStore = create<SearchState>((set) => ({
     hasMore: true,
     page: 1,
     currentKeyword: '',
+    preferredTab: 'songs',
     error: null,
   }))
 }));

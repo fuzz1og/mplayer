@@ -6,13 +6,15 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
+import { searchService } from '@/renderer/services/searchService';
+import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
 import ChartPanel from '@/renderer/components/ChartPanel';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
-import type { Album, Song, DiscoverPlaylist } from '@mplayer/core';
+import type { Album, Song, DiscoverPlaylist, Artist } from '@mplayer/core';
 import type { ApiResponse } from '@/shared/types/ipc';
 import { CHART_CACHE_TTL as CHART_TTL } from '../../shared/chart';
 
@@ -342,11 +344,49 @@ const DiscoverPageV2: React.FC = () => {
   const { toggleFavorite } = useFavoriteStore();
   const { download } = useDownload();
 
+  // 搜索结果二级 tab：单曲 / 歌手。「查看歌手」入口通过 preferredTab 落在歌手 tab
+  const [activeSearchTab, setActiveSearchTab] = useState<'songs' | 'artists'>(() => useSearchStore.getState().preferredTab);
+  const [artistResults, setArtistResults] = useState<Artist[]>([]);
+  const [artistLoading, setArtistLoading] = useState(false);
+  const [artistError, setArtistError] = useState(false);
+  const artistSearchSeqRef = useRef(0);
+  // 「查看歌手」偏好：订阅变化以覆盖「同关键词再次进入」的边界（关键词未变时 effect 不触发）
+  const preferredTab = useSearchStore(s => s.preferredTab);
+
+  // 关键词变化：应用并消费「查看歌手」的偏好 tab；歌手搜索带序号守卫，慢响应不覆盖新关键词
+  useEffect(() => {
+    const preferred = useSearchStore.getState().preferredTab;
+    setActiveSearchTab(preferred);
+    useSearchStore.getState().setPreferredTab('songs');
+    setArtistResults([]);
+    setArtistError(false);
+    if (!currentKeyword) return;
+    const seq = ++artistSearchSeqRef.current;
+    setArtistLoading(true);
+    searchService.searchArtists(currentKeyword)
+      .then((artists) => {
+        if (seq === artistSearchSeqRef.current) setArtistResults(artists ?? []);
+      })
+      .catch(() => {
+        if (seq === artistSearchSeqRef.current) setArtistError(true);
+      })
+      .finally(() => {
+        if (seq === artistSearchSeqRef.current) setArtistLoading(false);
+      });
+  }, [currentKeyword]);
+
+  // 同关键词下再次点「查看歌手」：关键词未变时也能切到歌手 tab（消费后立即复位）
+  useEffect(() => {
+    if (preferredTab !== 'artists') return;
+    setActiveSearchTab('artists');
+    useSearchStore.getState().setPreferredTab('songs');
+  }, [preferredTab]);
+
   const handleBackFromSearch = () => {
     useSearchStore.getState().reset();
   };
 
-  if (currentKeyword && (searchSongs.length > 0 || groups.length > 0 || searchLoading)) {
+  if (currentKeyword && (searchSongs.length > 0 || groups.length > 0 || searchLoading || artistResults.length > 0 || artistLoading)) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         <div style={{
@@ -374,16 +414,97 @@ const DiscoverPageV2: React.FC = () => {
           <div style={{ width: '140px' }} />
         </div>
 
+        {/* 单曲 / 歌手二级 tab */}
+        <div style={{ display: 'flex', gap: '8px', padding: '10px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', flexShrink: 0 }}>
+          {([
+            { key: 'songs' as const, label: '单曲', count: searchSongs.length },
+            { key: 'artists' as const, label: '歌手', count: artistResults.length },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              aria-pressed={activeSearchTab === tab.key}
+              onClick={() => setActiveSearchTab(tab.key)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '6px 16px', borderRadius: 'var(--radius-full)', border: 'none', cursor: 'pointer',
+                fontSize: 'var(--text-sm)', fontWeight: activeSearchTab === tab.key ? 600 : 400,
+                color: activeSearchTab === tab.key ? '#fff' : 'var(--text-secondary)',
+                backgroundColor: activeSearchTab === tab.key ? 'var(--accent-color)' : 'var(--hover-bg)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span style={{
+                  fontSize: 'var(--text-2xs)', padding: '1px 6px', borderRadius: 'var(--radius-full)',
+                  backgroundColor: activeSearchTab === tab.key ? 'rgba(255,255,255,0.25)' : 'var(--bg-active)',
+                  color: activeSearchTab === tab.key ? '#fff' : 'var(--text-tertiary)',
+                }}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <GroupedSongList
-            onPlay={handlePlaySong}
-            onAddToPlaylist={() => message.info('添加到歌单功能')}
-            onToggleFavorite={toggleFavorite}
-            onDownload={download}
-            selectedIds={[]}
-            onSelectionChange={() => {}}
-            loading={searchLoading}
-          />
+          {activeSearchTab === 'songs' ? (
+            <GroupedSongList
+              onPlay={handlePlaySong}
+              onAddToPlaylist={() => message.info('添加到歌单功能')}
+              onToggleFavorite={toggleFavorite}
+              onDownload={download}
+              selectedIds={[]}
+              onSelectionChange={() => {}}
+              loading={searchLoading}
+            />
+          ) : artistLoading && artistResults.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>正在搜索歌手…</div>
+          ) : artistError ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>歌手搜索失败</div>
+          ) : artistResults.length > 0 ? (
+            <div style={{ height: '100%', overflowY: 'auto', padding: '24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 'var(--space-5)' }}>
+                {artistResults.map((a) => (
+                  <button
+                    key={a.id}
+                    aria-label={`查看歌手: ${a.name}`}
+                    onClick={() => {
+                      cacheArtistMeta(a.id, { name: a.name, pic: a.picUrl });
+                      navigate(`/artist/${a.id}`, { state: { name: a.name, pic: a.picUrl } });
+                    }}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                      padding: '16px 8px', border: 'none', background: 'transparent', cursor: 'pointer', minWidth: 0,
+                      borderRadius: 'var(--radius-md)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '72px', height: '72px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                        backgroundColor: 'var(--hover-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '28px', color: 'var(--text-tertiary)', border: '1px solid var(--border-color)',
+                      }}
+                    >
+                      {a.picUrl ? (
+                        <img src={a.picUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        a.name.charAt(0)
+                      )}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                      {a.name}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                      专辑 {a.albumSize} · 歌曲 {a.musicSize}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>未找到相关歌手</div>
+          )}
         </div>
       </div>
     );

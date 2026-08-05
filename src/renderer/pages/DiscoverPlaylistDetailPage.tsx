@@ -238,7 +238,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
           </div>
         ) : (
           <>
-          <SongList songs={songs} currentSongId={currentSong?.id} isPlaying={isPlaying} onPlay={handlePlay} showHeader={true} showIndex={true} showCheckbox={true} enableBatchDownload={true} enableBatchAddToPlaylist={true} emptyText="暂无歌曲数据" />
+          <SongList songs={songs} currentSongId={currentSong?.id} isPlaying={isPlaying} onPlay={handlePlay} onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))} showHeader={true} showIndex={true} showCheckbox={true} enableBatchDownload={true} enableBatchAddToPlaylist={true} emptyText="暂无歌曲数据" />
             {loadingMore && (
               <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '16px' }}>加载中...</div>
             )}

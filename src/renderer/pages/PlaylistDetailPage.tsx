@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 const { ipcRenderer } = window.require('electron');
-import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload } from 'lucide-react';
+import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload, RefreshCw } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -11,6 +11,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
+import SourceSwapModal from '@/renderer/components/SourceSwapModal';
+import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
@@ -21,11 +23,13 @@ import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 const SortableSongRow: React.FC<{
   song: Song; index: number; isCurrentSong: boolean; isPlaying: boolean;
   onPlay: (song: Song) => void; onRemove: (song: Song) => void; onDownload: (song: Song) => void;
+  onSwapped: (original: Song, swapped: Song) => void;
   isSelected: boolean; onToggleSelect: (songId: string) => void;
   onCoverError?: (song: Song) => void;
-}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, isSelected, onToggleSelect, onCoverError }) => {
+}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, onSwapped, isSelected, onToggleSelect, onCoverError }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
   const coverSrc = useCachedCover(song.cover);
+  const swap = useSongSwap(song, onSwapped);
   // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
   const coverRefreshFired = useRef(false);
 
@@ -89,6 +93,10 @@ const SortableSongRow: React.FC<{
         </div>
       </div>
       <div style={{ display: 'flex', gap: '4px' }}>
+        <button aria-label={`换源完整版: ${song.name}`} onClick={(e) => { e.stopPropagation(); swap.open(); }}
+          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
+          <RefreshCw size={14} />
+        </button>
         <button onClick={(e) => { e.stopPropagation(); onDownload(song); }}
           style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
           <Download size={14} />
@@ -98,6 +106,18 @@ const SortableSongRow: React.FC<{
           <Trash2 size={14} />
         </button>
       </div>
+      <SourceSwapModal
+        open={swap.visible}
+        songName={song.name}
+        currentSource={song.sourceType}
+        candidates={swap.candidates}
+        loading={swap.loading}
+        success={swap.success}
+        onSelectSource={swap.onSelectSource}
+        onSelectCandidate={swap.onSelectCandidate}
+        onBack={swap.onBack}
+        onClose={swap.close}
+      />
     </div>
   );
 });
@@ -212,6 +232,18 @@ const PlaylistDetailPage: React.FC = () => {
   const handleDownload = async (song: Song) => {
     await download(song);
   };
+
+  /** 单曲换源：原位替换本地歌单存储并更新列表 */
+  const handleSongSwapped = useCallback(async (original: Song, swapped: Song) => {
+    if (playlistId == null) return;
+    try {
+      await IpcClient.invoke<void>('playlist:replaceSong', playlistId, original.id, swapped);
+      setSongs(prev => prev.map(s => s.id === original.id ? swapped : s));
+    } catch (error) {
+      console.error('换源保存到歌单失败:', error);
+      message.error('换源成功，但保存到本地歌单失败');
+    }
+  }, [playlistId]);
 
   const handleDownloadAll = async () => {
     if (songs.length === 0) return;
@@ -493,6 +525,7 @@ const PlaylistDetailPage: React.FC = () => {
                 onPlay={handlePlay}
                 onRemove={handleRemoveFromPlaylist}
                 onDownload={handleDownload}
+                onSwapped={handleSongSwapped}
                 onCoverError={handleCoverError}
               />
             ))}

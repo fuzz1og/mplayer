@@ -304,6 +304,7 @@ const ArtistDetailPage: React.FC = () => {
                 isPlaying={isPlaying}
                 favoriteIds={favoriteIds}
                 onPlay={handlePlay}
+                onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
                 onToggleFavorite={handleToggleFavorite}
                 onDownload={handleDownload}
                 showHeader={true}

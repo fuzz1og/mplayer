@@ -153,6 +153,7 @@ const AlbumDetailPage: React.FC = () => {
             isPlaying={isPlaying}
             favoriteIds={favoriteIds}
             onPlay={handlePlay}
+            onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
             onToggleFavorite={toggleFavorite}
             onDownload={handleDownload}
             showHeader={true}
