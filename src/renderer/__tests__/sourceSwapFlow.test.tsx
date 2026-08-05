@@ -92,6 +92,8 @@ describe('SongList 单曲换源流程', () => {
     fireEvent.click(screen.getByRole('button', { name: '更多操作: 晴天' }));
     fireEvent.click(screen.getByRole('button', { name: '换源完整版' }));
     fireEvent.click(screen.getByRole('button', { name: 'QQ音乐' }));
+    // 等候选探测完成（出现「可播」徽标）再选择，确保换源结果带上探测标签
+    await screen.findByText('可播');
     fireEvent.click(await screen.findByRole('button', { name: '晴天' }));
 
     await waitFor(() => {
@@ -102,6 +104,7 @@ describe('SongList 单曲换源流程', () => {
     expect(original.id).toBe('netease:1');
     expect(swapped.id).toBe('qq:1');
     expect(swapped.sourceType).toBe('qq');
+    expect(swapped.audioTag).toBe('valid');
     expect(usePlayerStore.getState().currentPlaylist[0].id).toBe('qq:1');
     expect(screen.getAllByText('QQ').length).toBeGreaterThan(0);
   });

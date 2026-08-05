@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 const { ipcRenderer } = window.require('electron');
-import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload, RefreshCw } from 'lucide-react';
+import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload, RefreshCw, User } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -13,6 +13,8 @@ import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import SourceSwapModal from '@/renderer/components/SourceSwapModal';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
+import { useSearchStore } from '@/renderer/store/searchStore';
+import { searchService } from '@/renderer/services/searchService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
@@ -30,6 +32,15 @@ const SortableSongRow: React.FC<{
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
   const coverSrc = useCachedCover(song.cover);
   const swap = useSongSwap(song, onSwapped);
+  const navigate = useNavigate();
+
+  /** 查看歌手：以歌手名为关键词搜索并落在歌手 tab（与 SongRow 一致） */
+  const handleViewArtist = () => {
+    if (!song.artist) return;
+    useSearchStore.getState().setPreferredTab('artists');
+    void searchService.search(song.artist);
+    navigate('/discover');
+  };
   // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
   const coverRefreshFired = useRef(false);
 
@@ -96,6 +107,10 @@ const SortableSongRow: React.FC<{
         <button aria-label={`换源完整版: ${song.name}`} onClick={(e) => { e.stopPropagation(); swap.open(); }}
           style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
           <RefreshCw size={14} />
+        </button>
+        <button aria-label={`查看歌手: ${song.name}`} onClick={(e) => { e.stopPropagation(); handleViewArtist(); }}
+          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
+          <User size={14} />
         </button>
         <button onClick={(e) => { e.stopPropagation(); onDownload(song); }}
           style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>

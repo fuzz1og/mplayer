@@ -340,7 +340,7 @@ const DiscoverPageV2: React.FC = () => {
     fetchChart('new');
   };
 
-  const { groups, loading: searchLoading, currentKeyword, songs: searchSongs } = useSearchStore();
+  const { groups, loading: searchLoading, currentKeyword, songs: searchSongs, error: searchError } = useSearchStore();
   const { toggleFavorite } = useFavoriteStore();
   const { download } = useDownload();
 
@@ -449,15 +449,19 @@ const DiscoverPageV2: React.FC = () => {
 
         <div style={{ flex: 1, overflow: 'hidden' }}>
           {activeSearchTab === 'songs' ? (
-            <GroupedSongList
-              onPlay={handlePlaySong}
-              onAddToPlaylist={() => message.info('添加到歌单功能')}
-              onToggleFavorite={toggleFavorite}
-              onDownload={download}
-              selectedIds={[]}
-              onSelectionChange={() => {}}
-              loading={searchLoading}
-            />
+            searchError && searchSongs.length === 0 && !searchLoading ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>{searchError}</div>
+            ) : (
+              <GroupedSongList
+                onPlay={handlePlaySong}
+                onAddToPlaylist={() => message.info('添加到歌单功能')}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
+                selectedIds={[]}
+                onSelectionChange={() => {}}
+                loading={searchLoading}
+              />
+            )
           ) : artistLoading && artistResults.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>正在搜索歌手…</div>
           ) : artistError ? (

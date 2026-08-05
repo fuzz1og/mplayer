@@ -137,5 +137,7 @@ export function applySwap(_song: Song, source: SourceKey, candidate: SwapCandida
     ...matched,
     sourceType: source,
     id: `${source}:${stripSourceIdPrefix(matched.id)}`,
+    // 换源后的行立即反映候选探测结果（短时长/失效徽标）
+    audioTag: candidate.tag ?? matched.audioTag,
   } as Song;
 }

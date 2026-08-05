@@ -138,6 +138,7 @@ describe('applySwap', () => {
     expect(swapped!.url).toContain('audio.qq.com');
     expect(swapped!.name).toBe('晴天');
     expect(swapped!.artist).toBe('周杰伦');
+    expect(swapped!.audioTag).toBe('valid'); // 候选探测结果写回，换源后行徽标立即反映
   });
 
   it('strips repeated source prefixes and keeps the target source real id', () => {

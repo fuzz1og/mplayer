@@ -136,4 +136,21 @@ describe('搜索结果 单曲/歌手 tab', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: '查看歌手: 周杰伦' })).toBeNull());
     expect(screen.getByRole('button', { name: '查看歌手: 林俊杰' })).toBeInTheDocument();
   });
+
+  it('单曲 tab 搜索失败时显示错误态', async () => {
+    useSearchStore.setState({
+      currentKeyword: '晴天', preferredTab: 'songs', sourceType: 'all', songs: [], groups: [],
+      loading: false, hasMore: false, error: '搜索失败，请稍后重试',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/discover']}>
+        <Routes>
+          <Route path="/discover" element={<DiscoverPageV2 />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('搜索失败，请稍后重试')).toBeInTheDocument();
+  });
 });
