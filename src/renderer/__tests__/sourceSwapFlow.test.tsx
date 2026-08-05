@@ -163,4 +163,49 @@ describe('SongList 单曲换源流程', () => {
       expect(useSearchStore.getState().currentKeyword).toBe('周杰伦');
     });
   });
+
+  it('stale probe from a previous source does not overwrite the current candidates', async () => {
+    const s1 = song('netease:1');
+    let resolveOldProbe!: (value: { songId: string; tag: 'valid' }[]) => void;
+    const oldProbe = new Promise<{ songId: string; tag: 'valid' }[]>((resolve) => {
+      resolveOldProbe = resolve;
+    });
+    invokeMock.mockImplementation(async (channel: string, ...args: unknown[]) => {
+      if (channel === 'musicApi:probeAudio') {
+        const songs = args[0] as Song[];
+        const firstId = songs[0]?.id;
+        if (firstId === '1') return oldProbe; // QQ 候选探测挂起
+        return [{ songId: firstId, tag: 'valid' }];
+      }
+      return { success: true, data: undefined };
+    });
+    searchSongsMock.mockImplementation(async (kw: string, _page: number, source: string) => {
+      if (source === 'qq') return [{ ...song('1', '晴天', 'qq'), url: 'https://audio.qq.com/full.mp3' }];
+      if (source === 'kugou') return [{ ...song('k2', '晴天 (Live)', 'kugou'), url: 'https://audio.kugou.com/live.mp3' }];
+      return [];
+    });
+
+    render(
+      <MemoryRouter>
+        <SongList songs={[s1]} onPlay={vi.fn()} showHeader={false} />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '更多操作: 晴天' }));
+    fireEvent.click(screen.getByRole('button', { name: '换源完整版' }));
+    fireEvent.click(screen.getByRole('button', { name: 'QQ音乐' }));
+    expect(await screen.findByRole('button', { name: '晴天' })).toBeInTheDocument();
+
+    // 探测未返回时切到酷狗
+    fireEvent.click(screen.getByRole('button', { name: '返回选择其他音乐源' }));
+    fireEvent.click(screen.getByRole('button', { name: '酷狗' }));
+    expect(await screen.findByRole('button', { name: '晴天 (Live)' })).toBeInTheDocument();
+
+    // 旧源的慢探测姗姗来迟：不应覆盖酷狗候选
+    resolveOldProbe([{ songId: '1', tag: 'valid' }]);
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '晴天' })).toBeNull();
+    });
+    expect(screen.getByRole('button', { name: '晴天 (Live)' })).toBeInTheDocument();
+  });
 });
