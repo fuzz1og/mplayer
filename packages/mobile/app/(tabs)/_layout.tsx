@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { colors, statusBarStyle } from '../../theme/tokens';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
 
@@ -72,8 +73,8 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
             const Icon = icons[route.name];
             return (
               <TouchableOpacity key={route.key} onPress={onPress} style={tabBarStyles.tab}>
-                <Icon size={22} color={isFocused ? '#e74c3c' : '#888'} />
-                <Text style={{ color: isFocused ? '#e74c3c' : '#888', fontSize: 11, marginTop: 2 }}>
+                <Icon size={22} color={isFocused ? colors.accent : colors.textSecondary} />
+                <Text style={{ color: isFocused ? colors.accent : colors.textSecondary, fontSize: 11, marginTop: 2 }}>
                   {labels[route.name]}
                 </Text>
               </TouchableOpacity>
@@ -89,7 +90,7 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
 export default function TabLayout() {
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={statusBarStyle} />
       <TopBar />
       <Tabs
         initialRouteName="recommend"
@@ -135,17 +136,17 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  container: { flex: 1, backgroundColor: colors.bgBase },
   // 与 PlayerBar 背景一致,保证安全区 padding 区域颜色连续
-  playerWrap: { backgroundColor: '#16213e' },
+  playerWrap: { backgroundColor: colors.bgSurface },
 });
 
 const tabBarStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: '#16213e',
-    borderTopColor: '#2a2a4a',
-    borderTopWidth: 1,
+    backgroundColor: colors.bgSurface,
+    borderTopColor: colors.borderSubtle,
+    borderTopWidth: StyleSheet.hairlineWidth,
     paddingBottom: 24,
     paddingTop: 6,
   },

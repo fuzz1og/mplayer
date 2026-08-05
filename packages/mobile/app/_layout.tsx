@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
+import { colors } from '../theme/tokens';
 import { addNotificationResponseListener, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl } from '@mplayer/core';
@@ -114,16 +115,21 @@ const toastStyles = StyleSheet.create({
     zIndex: 2000,
   },
   box: {
-    backgroundColor: 'rgba(20, 20, 40, 0.95)',
-    borderColor: '#e74c3c',
+    backgroundColor: colors.bgSurface,
+    borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
     maxWidth: '85%',
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   text: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 13,
     textAlign: 'center',
   },
