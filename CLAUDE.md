@@ -223,7 +223,7 @@ npm run core:build        # Build @mplayer/core (regenerate dist/ with type decl
 - **No context isolation**: `contextIsolation: false`, `nodeIntegration: true`. Renderer imports main-process modules directly via `require('electron')`.
 
 ### Mobile
-- UI: Custom dark theme (`#1a1a2e` bg, `#16213e` cards, `#e74c3c` accent), Ionicons icons. All UI text in Chinese.
+- UI: 浅色蓝调主题（对齐 desktop 设计系统）。设计 token 见 `packages/mobile/theme/tokens.ts`（映射表见同目录 README.md）；浅色重构进行中（wayfinder #108），完成前部分组件仍为旧深色。Ionicons icons（重构后换 lucide-react-native）。All UI text in Chinese.
 - State management: Zustand stores, some with `persist` middleware (AsyncStorage).
 - Navigation: expo-router Stack + Tabs.
 - Audio: expo-av (Audio.Sound), no Howler.js.
