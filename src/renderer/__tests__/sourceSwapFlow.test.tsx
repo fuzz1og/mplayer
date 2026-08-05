@@ -211,4 +211,18 @@ describe('SongList 单曲换源流程', () => {
     });
     expect(screen.getByRole('button', { name: '晴天 (Live)' })).toBeInTheDocument();
   });
+
+  it('本地文件不显示换源入口（spec 范围外）', async () => {
+    const localSong = { ...song('local:1', '本地歌曲'), sourceType: 'local' as const, url: 'file:///C:/music/a.mp3' };
+
+    render(
+      <MemoryRouter>
+        <SongList songs={[localSong]} onPlay={vi.fn()} showHeader={false} />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '更多操作: 本地歌曲' }));
+    expect(screen.queryByRole('button', { name: '换源完整版' })).toBeNull();
+    expect(screen.getByRole('button', { name: '查看歌手' })).toBeInTheDocument();
+  });
 });

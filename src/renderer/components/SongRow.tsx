@@ -1,5 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic, RefreshCw, User } from 'lucide-react';
 import type { Song } from '@mplayer/core';
@@ -8,81 +7,10 @@ import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
 import SourceSwapModal from '@/renderer/components/SourceSwapModal';
+import RowActionMenu, { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
-
-interface DropdownMenuProps {
-  song: Song;
-  triggerRef: React.RefObject<HTMLElement | null>;
-  showRemoveFromPlaylist: boolean;
-  onClose?: (e: React.MouseEvent) => void;
-  onAddToPlaylist?: (song: Song) => void;
-  onDownload?: (song: Song) => void;
-  onRemoveFromPlaylist?: (song: Song) => void;
-  onSwap?: () => void;
-  onViewArtist?: () => void;
-}
-
-const DropdownMenu: React.FC<DropdownMenuProps> = ({
-  song, triggerRef, showRemoveFromPlaylist, onClose, onAddToPlaylist, onDownload, onRemoveFromPlaylist, onSwap, onViewArtist,
-}) => {
-  const [pos, setPos] = useState({ top: 0, right: 0 });
-
-  useEffect(() => {
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) {
-      setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-    }
-  }, [triggerRef]);
-
-  return createPortal(
-    <>
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }} onClick={onClose} />
-      <div
-        style={{
-          position: 'fixed',
-          top: `${pos.top}px`,
-          right: `${pos.right}px`,
-          backgroundColor: 'var(--bg-color)',
-          border: '1px solid var(--divider-color)',
-          borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-          zIndex: 10000,
-          minWidth: '120px',
-          padding: '4px',
-        }}
-      >
-        {showRemoveFromPlaylist && onRemoveFromPlaylist && (
-          <>
-            <button onClick={(e) => { e.stopPropagation(); onRemoveFromPlaylist(song); }}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--danger-color)' }}>
-              <Trash2 size={14} /> 从歌单移除
-            </button>
-            <div style={{ height: '1px', backgroundColor: 'var(--divider-color)', margin: '4px 0' }} />
-          </>
-        )}
-        <button onClick={(e) => { e.stopPropagation(); onAddToPlaylist?.(song); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-          <ListMusic size={14} /> 加入歌单
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onDownload?.(song); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-          <Download size={14} /> 下载
-        </button>
-        <button aria-label="换源完整版" onClick={(e) => { e.stopPropagation(); onSwap?.(); onClose?.(e); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-          <RefreshCw size={14} /> 换源完整版
-        </button>
-        <button aria-label="查看歌手" onClick={(e) => { e.stopPropagation(); onViewArtist?.(); onClose?.(e); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-          <User size={14} /> 查看歌手
-        </button>
-      </div>
-    </>,
-    document.body
-  );
-};
 
 interface SongRowProps {
   song: Song;
@@ -133,6 +61,20 @@ const SongRow: React.FC<SongRowProps> = ({
     void searchService.search(song.artist);
     navigate('/discover');
   };
+
+  // 操作统一收进「更多」菜单；本地文件不提供换源（spec 范围外）
+  const menuItems: RowActionItem[] = [];
+  if (showRemoveFromPlaylist && onRemoveFromPlaylist) {
+    menuItems.push({ key: 'remove', label: '从歌单移除', icon: <Trash2 size={14} />, danger: true, onClick: () => onRemoveFromPlaylist(song) });
+  }
+  menuItems.push({ key: 'playlist', label: '加入歌单', icon: <ListMusic size={14} />, onClick: () => onAddToPlaylist?.(song) });
+  menuItems.push({ key: 'download', label: '下载', icon: <Download size={14} />, onClick: () => onDownload?.(song) });
+  if (song.sourceType !== 'local') {
+    menuItems.push({ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open });
+  }
+  if (song.artist) {
+    menuItems.push({ key: 'artist', label: '查看歌手', ariaLabel: '查看歌手', icon: <User size={14} />, onClick: handleViewArtist });
+  }
 
   // cover 为空（如收藏/历史里从未存过封面）时挂载即触发一次刷新，显示层不依赖 onError
   useEffect(() => {
@@ -250,16 +192,10 @@ const SongRow: React.FC<SongRowProps> = ({
             <MoreHorizontal size={16} />
           </button>
           {activeDropdown === song.id && (
-            <DropdownMenu
-              song={song}
+            <RowActionMenu
               triggerRef={dropdownTriggerRef}
-              showRemoveFromPlaylist={showRemoveFromPlaylist}
-              onClose={onCloseDropdown}
-              onAddToPlaylist={onAddToPlaylist}
-              onDownload={onDownload}
-              onRemoveFromPlaylist={onRemoveFromPlaylist}
-              onSwap={swap.open}
-              onViewArtist={handleViewArtist}
+              items={menuItems}
+              onClose={onCloseDropdown ?? (() => {})}
             />
           )}
         </div>

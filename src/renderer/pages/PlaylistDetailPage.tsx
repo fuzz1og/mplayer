@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 const { ipcRenderer } = window.require('electron');
-import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload, RefreshCw, User } from 'lucide-react';
+import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload, RefreshCw, User, MoreHorizontal } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -12,6 +12,7 @@ import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import SourceSwapModal from '@/renderer/components/SourceSwapModal';
+import RowActionMenu, { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -33,6 +34,8 @@ const SortableSongRow: React.FC<{
   const coverSrc = useCachedCover(song.cover);
   const swap = useSongSwap(song, onSwapped);
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   /** 查看歌手：以歌手名为关键词搜索并落在歌手 tab（与 SongRow 一致） */
   const handleViewArtist = () => {
@@ -41,6 +44,18 @@ const SortableSongRow: React.FC<{
     void searchService.search(song.artist);
     navigate('/discover');
   };
+
+  // 操作统一收进「更多」菜单，与共享 SongList 行一致；本地文件不提供换源
+  const menuItems: RowActionItem[] = [
+    { key: 'download', label: '下载', icon: <Download size={14} />, onClick: () => onDownload(song) },
+    ...(song.sourceType !== 'local'
+      ? [{ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open }]
+      : []),
+    ...(song.artist
+      ? [{ key: 'artist', label: '查看歌手', ariaLabel: '查看歌手', icon: <User size={14} />, onClick: handleViewArtist }]
+      : []),
+    { key: 'remove', label: '从歌单移除', icon: <Trash2 size={14} />, danger: true, onClick: () => onRemove(song) },
+  ];
   // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
   const coverRefreshFired = useRef(false);
 
@@ -103,23 +118,22 @@ const SortableSongRow: React.FC<{
           </div>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: '4px' }}>
-        <button aria-label={`换源完整版: ${song.name}`} onClick={(e) => { e.stopPropagation(); swap.open(); }}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
-          <RefreshCw size={14} />
+      <div style={{ position: 'relative' }}>
+        <button
+          ref={menuTriggerRef}
+          aria-label={`更多操作: ${song.name}`}
+          onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v); }}
+          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}
+        >
+          <MoreHorizontal size={16} />
         </button>
-        <button aria-label={`查看歌手: ${song.name}`} onClick={(e) => { e.stopPropagation(); handleViewArtist(); }}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
-          <User size={14} />
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onDownload(song); }}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
-          <Download size={14} />
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onRemove(song); }}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
-          <Trash2 size={14} />
-        </button>
+        {menuOpen && (
+          <RowActionMenu
+            triggerRef={menuTriggerRef}
+            items={menuItems}
+            onClose={() => setMenuOpen(false)}
+          />
+        )}
       </div>
       <SourceSwapModal
         open={swap.visible}
