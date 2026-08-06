@@ -15,14 +15,12 @@
  * 验收后：获胜变体折入正式代码，本文件整体移到 throwaway 分支。
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Animated, Image,
+  View, Text, TouchableOpacity, StyleSheet, Image, FlatList,
 } from 'react-native';
 import { router } from 'expo-router';
 import { ChevronLeft, ChevronRight, Music2, Play, ArrowLeft } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import type { Playlist } from '../../stores/playlistStore';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
@@ -39,8 +37,6 @@ const VARIANT_NAMES: Record<HeroVariant, string> = {
   C: '卡片悬浮 Hero',
   D: '全出血折叠 Hero',
 };
-
-const AnimatedArrowLeft = Animated.createAnimatedComponent(ArrowLeft);
 
 /** 用户歌单没有封面：渐变占位 + 音符图标 */
 function CoverPlaceholder({ size, radiusValue }: { size: number; radiusValue: number }) {
@@ -144,9 +140,9 @@ export function VariantC({ playlist }: { playlist: Playlist }) {
   );
 }
 
-/* ═══════════ 变体 D：全出血折叠 Hero（Apple Music 式） ═══════════
- * 顶部整块都是封面（出血到状态栏/安全区后面），返回按钮悬浮；
- * 下滑盖过封面后导航栏渐变为正常标题栏（出现标题），上滑恢复。 */
+/* ═══════════ 变体 D：静态堆叠布局（用户确认方案） ═══════════
+ * 大封面在上面 → 信息区 → 歌曲列表区（带表头，行操作=点赞/下载/更多）。
+ * 无滚动切换、无一明一暗——标题栏始终正常。 */
 export function VariantD({
   playlist,
   onRemoveSong,
@@ -156,73 +152,19 @@ export function VariantD({
   onRemoveSong: (song: Song) => void;
   onSwap: (original: Song, swapped: Song) => void;
 }) {
-  const insets = useSafeAreaInsets();
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const [statusStyle, setStatusStyle] = useState<'light' | 'dark'>('light');
-
-  const NAV_H = 52;
-  const COVER_H = 300 + insets.top; // 全出血：含状态栏高度
-  const collapseAt = COVER_H - NAV_H - insets.top; // 导航栏完全实心化的滚动点
-
-  const navBg = scrollY.interpolate({
-    inputRange: [0, collapseAt],
-    outputRange: ['rgba(255,255,255,0)', colors.bgSurface],
-    extrapolate: 'clamp',
-  });
-  const titleOpacity = scrollY.interpolate({
-    inputRange: [collapseAt - 30, collapseAt],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-  const backColor = scrollY.interpolate({
-    inputRange: [collapseAt - 30, collapseAt],
-    outputRange: ['#FFFFFF', colors.textPrimary],
-    extrapolate: 'clamp',
-  });
-
-  useEffect(() => {
-    const id = scrollY.addListener(({ value }) => {
-      setStatusStyle(value > collapseAt - 30 ? 'dark' : 'light');
-    });
-    return () => scrollY.removeListener(id);
-  }, [collapseAt, scrollY]);
-
   // 自建歌单封面 = 第一首歌封面；过期则占位等待重新搜索后的最新封面
   const { cover, handleError } = useRefreshedCover(playlist.songs[0] || null);
 
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar style={statusStyle} />
-
-      {/* 悬浮导航栏：透明 → 实心，返回按钮白 → 深色，标题淡入 */}
-      <Animated.View
-        style={[
-          styles.dNav,
-          { paddingTop: insets.top, height: NAV_H + insets.top, backgroundColor: navBg },
-        ]}
-      >
-        <TouchableOpacity style={styles.dNavBack} onPress={() => router.back()} hitSlop={8}>
-          <AnimatedArrowLeft size={22} color={backColor} />
-        </TouchableOpacity>
-        <Animated.Text style={[styles.dNavTitle, { opacity: titleOpacity }]} numberOfLines={1}>
-          {playlist.name}
-        </Animated.Text>
-      </Animated.View>
-
-      {/* 列表：封面是列表的第一块内容（随滚动一起滚出屏幕），
-          只有导航栏是悬浮层——下滑时封面自然上移，导航栏随之实心化 */}
-      <Animated.FlatList
+      <FlatList
         data={playlist.songs}
         keyExtractor={(item) => item.id}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-          useNativeDriver: false,
-        })}
-        scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: 24 }}
         ListHeaderComponent={
           <View>
-            {/* 全出血封面（含状态栏区域，随列表滚动） */}
-            <View style={{ height: COVER_H }}>
+            {/* 大封面 */}
+            <View style={styles.dCover}>
               {cover ? (
                 <Image
                   source={{ uri: cover }}
@@ -231,22 +173,24 @@ export function VariantD({
                   onError={handleError}
                 />
               ) : (
-                <CoverPlaceholder size={COVER_H + 400} radiusValue={0} />
+                <View style={styles.dCoverFallback}>
+                  <Music2 size={72} color={colors.textInverse} />
+                </View>
               )}
-              {/* 底部白渐变（过渡到页面背景） */}
-              <View style={styles.dShade} />
-              {/* 封面上的歌单信息 */}
-              <View style={styles.dTitleWrap}>
-                <Text style={styles.dTitle} numberOfLines={2}>{playlist.name}</Text>
-                <Text style={styles.dMeta}>{formatCount(playlist.songs.length)} 首</Text>
-              </View>
             </View>
-            {/* 播放全部（随列表滚动） */}
-            <View style={styles.dPlayRow}>
+            {/* 信息区 */}
+            <View style={styles.dInfo}>
+              <Text style={styles.dTitle} numberOfLines={2}>{playlist.name}</Text>
+              <Text style={styles.dMeta}>{formatCount(playlist.songs.length)} 首</Text>
               <TouchableOpacity style={styles.dPlayBtn} onPress={() => playAll(playlist)}>
                 <Play size={18} color={colors.textInverse} fill={colors.textInverse} />
                 <Text style={styles.dPlayText}>播放全部</Text>
               </TouchableOpacity>
+            </View>
+            {/* 歌曲列表表头：与行对齐（封面 44+12 偏移） */}
+            <View style={styles.dListHeader}>
+              <Text style={styles.dListHeaderSong}>歌曲</Text>
+              <Text style={styles.dListHeaderOps}>操作</Text>
             </View>
           </View>
         }
@@ -372,63 +316,59 @@ const styles = StyleSheet.create({
   vCPlayText: { color: colors.textInverse, fontSize: typography.sizes.base, fontWeight: '600' },
 
   /* D */
+  dCover: {
+    width: '100%',
+    height: 280,
+    backgroundColor: colors.accent,
+  },
   dCoverImg: {
     width: '100%',
     height: '100%',
   },
-  dShade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 140,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+  dCoverFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  dTitleWrap: {
-    position: 'absolute',
-    left: spacing[5],
-    right: spacing[5],
-    bottom: spacing[4],
+  dInfo: {
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[3],
   },
   dTitle: { color: colors.textPrimary, fontSize: typography.sizes['3xl'], fontWeight: '800' },
   dMeta: { color: colors.textSecondary, fontSize: typography.sizes.sm, marginTop: spacing[1] },
-  dNav: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing[2],
-    zIndex: 5,
-  },
-  dNavBack: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dNavTitle: {
-    flex: 1,
-    marginRight: spacing[6],
-    textAlign: 'center',
-    color: colors.textPrimary,
-    fontSize: typography.sizes.lg,
-    fontWeight: '600',
-  },
-  dPlayRow: { paddingHorizontal: spacing[5], paddingBottom: spacing[3] },
   dPlayBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'flex-start',
     gap: spacing[2],
     backgroundColor: colors.accent,
-    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[2],
     borderRadius: radius.full,
-    marginTop: spacing[2],
+    marginTop: spacing[3],
   },
   dPlayText: { color: colors.textInverse, fontSize: typography.sizes.base, fontWeight: '600' },
+  dListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
+  },
+  dListHeaderSong: {
+    color: colors.textTertiary,
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 56, // 对齐行内封面（44）+ 间距（12）
+  },
+  dListHeaderOps: {
+    color: colors.textTertiary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
 
   /* switcher */
   switcher: {

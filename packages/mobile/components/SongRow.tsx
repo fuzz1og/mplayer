@@ -286,6 +286,14 @@ export default function SongRow({
           fill={favorited ? colors.accent : 'none'}
         />
       </TouchableOpacity>
+      {/* 下载（对齐桌面版行操作：点赞/下载/更多） */}
+      <TouchableOpacity
+        onPress={handleDownload}
+        style={styles.favoriteBtn}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Download size={18} color={colors.textTertiary} />
+      </TouchableOpacity>
       <TouchableOpacity onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <EllipsisVertical size={18} color={colors.textTertiary} />
       </TouchableOpacity>

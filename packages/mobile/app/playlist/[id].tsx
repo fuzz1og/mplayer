@@ -96,13 +96,12 @@ export default function PlaylistDetailPage() {
 
   return (
     <View style={styles.container}>
-      {/* D 变体（全出血封面）不需要顶部安全区边距，由封面自行延伸 */}
-      <SafeAreaView edges={__DEV__ && variant === 'D' ? [] : ['top']} style={{ flex: 1 }}>
-        <StatusBar style={__DEV__ && (variant === 'B' || variant === 'D') ? 'light' : statusBarStyle} />
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <StatusBar style={__DEV__ && variant === 'B' ? 'light' : statusBarStyle} />
         <Stack.Screen
           options={{
             title: playlist.name,
-            headerShown: !(__DEV__ && (variant === 'B' || variant === 'D')),
+            headerShown: !(__DEV__ && variant === 'B'),
             headerStyle: { backgroundColor: colors.bgSurface },
             headerTintColor: colors.textPrimary,
             headerShadowVisible: false,
