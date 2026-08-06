@@ -12,6 +12,7 @@ import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
 import { probeSongsWithTags } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
+import { colors, radius, spacing, statusBarStyle } from '../../theme/tokens';
 
 const PAGE_SIZE = 50;
 
@@ -87,8 +88,16 @@ export default function DiscoverPlaylistDetailPage() {
   if (!playlist) {
     return (
       <View style={styles.empty}>
-        <Stack.Screen options={{ title: '歌单详情', headerShown: true }} />
-        <Text style={{ color: '#666', fontSize: 16 }}>歌单不存在</Text>
+        <Stack.Screen
+          options={{
+            title: '歌单详情',
+            headerShown: true,
+            headerStyle: { backgroundColor: colors.bgSurface },
+            headerTintColor: colors.textPrimary,
+            headerShadowVisible: false,
+          }}
+        />
+        <Text style={{ color: colors.textSecondary, fontSize: 16 }}>歌单不存在</Text>
       </View>
     );
   }
@@ -96,8 +105,8 @@ export default function DiscoverPlaylistDetailPage() {
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style="light" />
-        <Stack.Screen options={{ title: playlist.name, headerShown: true, headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }} />
+        <StatusBar style={statusBarStyle} />
+        <Stack.Screen options={{ title: playlist.name, headerShown: true, headerStyle: { backgroundColor: colors.bgSurface }, headerTintColor: colors.textPrimary, headerShadowVisible: false }} />
         <FlatList
           data={songs}
           keyExtractor={(item, i) => `${item.id}-${i}`}
@@ -141,16 +150,16 @@ export default function DiscoverPlaylistDetailPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  empty: { flex: 1, backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' },
-  header: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 },
-  cover: { width: 200, height: 200, borderRadius: 16, marginBottom: 16 },
-  name: { color: '#fff', fontSize: 18, fontWeight: '700', textAlign: 'center' },
-  creator: { color: '#888', fontSize: 13, marginTop: 6 },
-  metaRow: { flexDirection: 'row', gap: 20, marginTop: 10 },
-  meta: { color: '#666', fontSize: 12 },
-  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
-  tag: { backgroundColor: '#2a2a4a', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
-  tagText: { color: '#e74c3c', fontSize: 12 },
+  container: { flex: 1, backgroundColor: colors.bgBase },
+  empty: { flex: 1, backgroundColor: colors.bgBase, justifyContent: 'center', alignItems: 'center' },
+  header: { alignItems: 'center', paddingVertical: spacing[6], paddingHorizontal: spacing[4] },
+  cover: { width: 200, height: 200, borderRadius: radius.lg, marginBottom: spacing[4] },
+  name: { color: colors.textPrimary, fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  creator: { color: colors.textSecondary, fontSize: 13, marginTop: 6 },
+  metaRow: { flexDirection: 'row', gap: spacing[5], marginTop: 10 },
+  meta: { color: colors.textTertiary, fontSize: 12 },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing[3] },
+  tag: { backgroundColor: colors.accentSubtle, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: spacing[1] },
+  tagText: { color: colors.accentText, fontSize: 12 },
   list: { paddingBottom: 100 },
 });

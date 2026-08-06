@@ -9,6 +9,7 @@ import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useHistoryStore } from '../stores/historyStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
+import { colors, spacing, statusBarStyle } from '../theme/tokens';
 
 export default function HistoryPage() {
   const { history, clearHistory } = useHistoryStore();
@@ -23,12 +24,12 @@ export default function HistoryPage() {
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style="light" />
+        <StatusBar style={statusBarStyle} />
         <Stack.Screen options={{
           title: '播放历史',
           headerShown: true,
-          headerStyle: { backgroundColor: '#1a1a2e' },
-          headerTintColor: '#fff',
+          headerStyle: { backgroundColor: colors.bgSurface },
+          headerTintColor: colors.textPrimary,
           headerShadowVisible: false,
         }} />
         {history.length === 0 ? (
@@ -62,18 +63,18 @@ export default function HistoryPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  container: { flex: 1, backgroundColor: colors.bgBase },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a4a',
+    borderBottomColor: colors.borderSubtle,
   },
   headerTitle: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -83,7 +84,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   clearText: {
-    color: '#e74c3c',
+    color: colors.dangerText,
     fontSize: 14,
   },
   list: {},

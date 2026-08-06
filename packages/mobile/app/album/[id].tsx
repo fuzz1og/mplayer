@@ -13,6 +13,7 @@ import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
 import { probeSongsWithTags } from '../../services/songProbe';
+import { colors, radius, spacing, statusBarStyle } from '../../theme/tokens';
 
 export default function AlbumDetailPage() {
   const { id, name, pic, artist } = useLocalSearchParams<{ id: string; name?: string; pic?: string; artist?: string }>();
@@ -77,8 +78,8 @@ export default function AlbumDetailPage() {
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style="light" />
-        <Stack.Screen options={{ title: displayName, headerShown: true, headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }} />
+        <StatusBar style={statusBarStyle} />
+        <Stack.Screen options={{ title: displayName, headerShown: true, headerStyle: { backgroundColor: colors.bgSurface }, headerTintColor: colors.textPrimary, headerShadowVisible: false }} />
         <FlatList
           data={songs}
           keyExtractor={(item, i) => `${item.id}-${i}`}
@@ -87,8 +88,8 @@ export default function AlbumDetailPage() {
               {displayPic ? (
                 <Image source={{ uri: displayPic }} style={styles.cover} />
               ) : (
-                <View style={[styles.cover, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-                  <Disc3 size={56} color="#555" />
+                <View style={[styles.cover, { backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+                  <Disc3 size={56} color={colors.textTertiary} />
                 </View>
               )}
               <Text style={styles.name}>{displayName}</Text>
@@ -98,7 +99,7 @@ export default function AlbumDetailPage() {
                 <Text style={styles.meta}>{songs.length} 首</Text>
               </View>
               <TouchableOpacity style={styles.playAllBtn} activeOpacity={0.8} onPress={handlePlayAll}>
-                <Play size={16} color="#fff" />
+                <Play size={16} color={colors.textInverse} />
                 <Text style={styles.playAllText}>播放全部</Text>
               </TouchableOpacity>
             </View>
@@ -107,7 +108,7 @@ export default function AlbumDetailPage() {
             <SongRow song={item} showSource queueSongs={songs} onSwap={handleSwap} />
           )}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={<View style={styles.empty}><Text style={{ color: '#666', fontSize: 16 }}>暂无歌曲</Text></View>}
+          ListEmptyComponent={<View style={styles.empty}><Text style={{ color: colors.textSecondary, fontSize: 16 }}>暂无歌曲</Text></View>}
         />
       </SafeAreaView>
       <BottomSafePlayerBar />
@@ -116,19 +117,19 @@ export default function AlbumDetailPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  header: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 },
-  cover: { width: 200, height: 200, borderRadius: 16, marginBottom: 16 },
-  name: { color: '#fff', fontSize: 18, fontWeight: '700', textAlign: 'center' },
-  artist: { color: '#888', fontSize: 13, marginTop: 6 },
-  metaRow: { flexDirection: 'row', gap: 20, marginTop: 10 },
-  meta: { color: '#666', fontSize: 12 },
+  container: { flex: 1, backgroundColor: colors.bgBase },
+  header: { alignItems: 'center', paddingVertical: spacing[6], paddingHorizontal: spacing[4] },
+  cover: { width: 200, height: 200, borderRadius: radius.lg, marginBottom: spacing[4] },
+  name: { color: colors.textPrimary, fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  artist: { color: colors.textSecondary, fontSize: 13, marginTop: 6 },
+  metaRow: { flexDirection: 'row', gap: spacing[5], marginTop: 10 },
+  meta: { color: colors.textTertiary, fontSize: 12 },
   playAllBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#e74c3c', borderRadius: 20,
-    paddingHorizontal: 20, paddingVertical: 8, marginTop: 16,
+    backgroundColor: colors.accent, borderRadius: radius.full,
+    paddingHorizontal: spacing[5], paddingVertical: spacing[2], marginTop: spacing[4],
   },
-  playAllText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  playAllText: { color: colors.textInverse, fontSize: 14, fontWeight: '600' },
   list: { paddingBottom: 100 },
   empty: { paddingVertical: 60, alignItems: 'center' },
 });

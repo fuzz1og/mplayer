@@ -12,6 +12,7 @@ import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
 import { probeSongsWithTags } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
+import { colors, radius, shadow, spacing, statusBarStyle } from '../../theme/tokens';
 
 export default function ArtistDetailPage() {
   const { id, name, pic } = useLocalSearchParams<{ id: string; name?: string; pic?: string }>();
@@ -95,8 +96,8 @@ export default function ArtistDetailPage() {
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style="light" />
-        <Stack.Screen options={{ title: artist?.name || '歌手', headerShown: true, headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }} />
+        <StatusBar style={statusBarStyle} />
+        <Stack.Screen options={{ title: artist?.name || '歌手', headerShown: true, headerStyle: { backgroundColor: colors.bgSurface }, headerTintColor: colors.textPrimary, headerShadowVisible: false }} />
         <FlatList
           data={songs}
           keyExtractor={(item, i) => `${item.id}-${i}`}
@@ -105,8 +106,8 @@ export default function ArtistDetailPage() {
               {artist?.picUrl ? (
                 <Image source={{ uri: artist.picUrl }} style={styles.avatar} />
               ) : (
-                <View style={[styles.avatar, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-                  <Text style={{ color: '#666', fontSize: 40, fontWeight: '700' }}>
+                <View style={[styles.avatar, { backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+                  <Text style={{ color: colors.textTertiary, fontSize: 40, fontWeight: '700' }}>
                     {(artist?.name || '?')[0]}
                   </Text>
                 </View>
@@ -127,8 +128,8 @@ export default function ArtistDetailPage() {
                         {a.picUrl ? (
                           <Image source={{ uri: a.picUrl }} style={styles.albumCover} />
                         ) : (
-                          <View style={[styles.albumCover, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-                            <Disc3 size={24} color="#555" />
+                          <View style={[styles.albumCover, { backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+                            <Disc3 size={24} color={colors.textTertiary} />
                           </View>
                         )}
                         <Text style={styles.albumName} numberOfLines={1}>{a.name}</Text>
@@ -144,7 +145,7 @@ export default function ArtistDetailPage() {
           onEndReachedThreshold={0.5}
           ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={<View style={styles.empty}><Text style={{ color: '#666', fontSize: 16 }}>暂无歌曲</Text></View>}
+          ListEmptyComponent={<View style={styles.empty}><Text style={{ color: colors.textSecondary, fontSize: 16 }}>暂无歌曲</Text></View>}
         />
       </SafeAreaView>
       <BottomSafePlayerBar />
@@ -153,16 +154,23 @@ export default function ArtistDetailPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  header: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 },
-  avatar: { width: 120, height: 120, borderRadius: 60, marginBottom: 16 },
-  name: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  subtitle: { color: '#888', fontSize: 13, marginTop: 6 },
-  albumsSection: { alignSelf: 'stretch', marginTop: 20 },
-  albumsTitle: { color: '#fff', fontSize: 15, fontWeight: '600', marginBottom: 12 },
-  albumCard: { width: 100, marginRight: 12 },
-  albumCover: { width: 100, height: 100, borderRadius: 10, backgroundColor: '#2a2a4a' },
-  albumName: { color: '#aaa', fontSize: 12, marginTop: 6 },
+  container: { flex: 1, backgroundColor: colors.bgBase },
+  header: { alignItems: 'center', paddingVertical: spacing[6], paddingHorizontal: spacing[4] },
+  avatar: { width: 120, height: 120, borderRadius: radius.full, marginBottom: spacing[4] },
+  name: { color: colors.textPrimary, fontSize: 20, fontWeight: '700' },
+  subtitle: { color: colors.textSecondary, fontSize: 13, marginTop: 6 },
+  albumsSection: { alignSelf: 'stretch', marginTop: spacing[5] },
+  albumsTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: spacing[3] },
+  albumCard: {
+    width: 116,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.md,
+    ...shadow.sm,
+    padding: spacing[2],
+    marginRight: spacing[3],
+  },
+  albumCover: { width: 100, height: 100, borderRadius: radius.sm, backgroundColor: colors.bgHover },
+  albumName: { color: colors.textTertiary, fontSize: 12, marginTop: 6 },
   list: { paddingBottom: 100 },
   empty: { paddingVertical: 60, alignItems: 'center' },
 });
