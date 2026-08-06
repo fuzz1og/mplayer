@@ -6,6 +6,12 @@
  *   A 信息行头部（横向：封面+信息+播放按钮）
  *   B 沉浸式 hero（全宽封面背景 + 渐变遮罩 + 覆盖文字 + 悬浮播放按钮）
  *   C 卡片悬浮 hero（渐变背景 + 大圆角封面卡片 + 信息 + 大播放按钮）
+ *   D 全出血折叠 hero（封面出血到状态栏，随列表滚动折叠导航栏）
+ *
+ * 封面来源规则（用户确认）：
+ *   自建歌单 → 第一首歌封面（过期则占位等待重新搜索后的最新封面）
+ *   网络歌单 → 自己的封面；歌手 → 歌手头像；专辑 → 专辑封面
+ *   空歌单/无图 → 默认渐变占位兜底
  * 验收后：获胜变体折入正式代码，本文件整体移到 throwaway 分支。
  */
 
@@ -20,6 +26,7 @@ import { StatusBar } from 'expo-status-bar';
 import type { Playlist } from '../../stores/playlistStore';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
+import { useRefreshedCover } from '../../hooks/useRefreshedCover';
 import { colors, radius, spacing, shadow, typography } from '../../theme/tokens';
 import SongRow from '../SongRow';
 import type { Song } from '@mplayer/core';
@@ -180,27 +187,12 @@ export function VariantD({
     return () => scrollY.removeListener(id);
   }, [collapseAt, scrollY]);
 
-  const cover = playlist.songs[0]?.cover;
+  // 自建歌单封面 = 第一首歌封面；过期则占位等待重新搜索后的最新封面
+  const { cover, handleError } = useRefreshedCover(playlist.songs[0] || null);
 
   return (
     <View style={{ flex: 1 }}>
       <StatusBar style={statusStyle} />
-
-      {/* 全出血封面（绝对定位盖在顶部，含状态栏区域） */}
-      <Animated.View style={[styles.dCover, { height: COVER_H }]}>
-        {cover ? (
-          <Image source={{ uri: cover }} style={styles.dCoverImg} resizeMode="cover" />
-        ) : (
-          <CoverPlaceholder size={COVER_H + 400} radiusValue={0} />
-        )}
-        {/* 底部白渐变（过渡到页面背景） */}
-        <View style={styles.dShade} />
-        {/* 封面上的歌单信息 */}
-        <View style={styles.dTitleWrap}>
-          <Text style={styles.dTitle} numberOfLines={2}>{playlist.name}</Text>
-          <Text style={styles.dMeta}>{formatCount(playlist.songs.length)} 首</Text>
-        </View>
-      </Animated.View>
 
       {/* 悬浮导航栏：透明 → 实心，返回按钮白 → 深色，标题淡入 */}
       <Animated.View
@@ -217,7 +209,8 @@ export function VariantD({
         </Animated.Text>
       </Animated.View>
 
-      {/* 列表：内容从封面底部开始，滚动驱动折叠 */}
+      {/* 列表：封面是列表的第一块内容（随滚动一起滚出屏幕），
+          只有导航栏是悬浮层——下滑时封面自然上移，导航栏随之实心化 */}
       <Animated.FlatList
         data={playlist.songs}
         keyExtractor={(item) => item.id}
@@ -225,13 +218,36 @@ export function VariantD({
           useNativeDriver: false,
         })}
         scrollEventThrottle={16}
-        contentContainerStyle={{ paddingTop: COVER_H, paddingBottom: 24 }}
+        contentContainerStyle={{ paddingBottom: 24 }}
         ListHeaderComponent={
-          <View style={styles.dPlayRow}>
-            <TouchableOpacity style={styles.dPlayBtn} onPress={() => playAll(playlist)}>
-              <Play size={18} color={colors.textInverse} fill={colors.textInverse} />
-              <Text style={styles.dPlayText}>播放全部</Text>
-            </TouchableOpacity>
+          <View>
+            {/* 全出血封面（含状态栏区域，随列表滚动） */}
+            <View style={{ height: COVER_H }}>
+              {cover ? (
+                <Image
+                  source={{ uri: cover }}
+                  style={styles.dCoverImg}
+                  resizeMode="cover"
+                  onError={handleError}
+                />
+              ) : (
+                <CoverPlaceholder size={COVER_H + 400} radiusValue={0} />
+              )}
+              {/* 底部白渐变（过渡到页面背景） */}
+              <View style={styles.dShade} />
+              {/* 封面上的歌单信息 */}
+              <View style={styles.dTitleWrap}>
+                <Text style={styles.dTitle} numberOfLines={2}>{playlist.name}</Text>
+                <Text style={styles.dMeta}>{formatCount(playlist.songs.length)} 首</Text>
+              </View>
+            </View>
+            {/* 播放全部（随列表滚动） */}
+            <View style={styles.dPlayRow}>
+              <TouchableOpacity style={styles.dPlayBtn} onPress={() => playAll(playlist)}>
+                <Play size={18} color={colors.textInverse} fill={colors.textInverse} />
+                <Text style={styles.dPlayText}>播放全部</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         }
         renderItem={({ item }) => (
@@ -356,19 +372,9 @@ const styles = StyleSheet.create({
   vCPlayText: { color: colors.textInverse, fontSize: typography.sizes.base, fontWeight: '600' },
 
   /* D */
-  dCover: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    overflow: 'hidden',
-  },
   dCoverImg: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    width: '100%',
+    height: '100%',
   },
   dShade: {
     position: 'absolute',
