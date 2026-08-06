@@ -45,6 +45,8 @@ interface SongListProps {
   onBatchAddToPlaylist?: (songs: Song[]) => void;
   showRemoveFromPlaylist?: boolean;
   onRemoveFromPlaylist?: (song: Song) => void;
+  /** 换源成功回调：父组件用它更新自己的列表 state（收藏/歌单页同时持久化） */
+  onSwap?: (original: Song, swapped: Song) => void;
   /** 封面加载失败时回调，由持有歌曲列表的层按 ID 重识别换新封面 */
   onCoverError?: (song: Song) => void;
 }
@@ -73,10 +75,14 @@ const SongList: React.FC<SongListProps> = ({
   onBatchAddToPlaylist,
   showRemoveFromPlaylist = false,
   onRemoveFromPlaylist,
+  onSwap,
   onCoverError,
 }) => {
   // 内部状态管理（当外部没有提供时）
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+  // 换源后的行替换覆盖：key 为旧 id，组件生命周期内生效，
+  // 页面重新从存储加载（路由重挂载）后自然失效，避免旧行复活
+  const [swapOverrides, setSwapOverrides] = useState<Map<string, Song>>(new Map());
   // 下拉菜单状态
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   // 加入歌单弹窗状态
@@ -87,15 +93,27 @@ const SongList: React.FC<SongListProps> = ({
   const [selectedSongsForPlaylist, setSelectedSongsForPlaylist] = useState<Song[]>([]);
   const { setCurrentPlaylist } = usePlayerStore();
 
+  const displaySongs = songs.map(song => swapOverrides.get(song.id) ?? song);
+  // 专辑列整列按需塌缩：列表内没有任何歌曲有专辑时不显示专辑列
+  const hasAlbum = displaySongs.some(song => song.album);
   // 使用外部或内部状态
   const selectedIds = externalSelectedIds !== undefined ? externalSelectedIds : internalSelectedIds;
   const onSelectionChange = externalOnSelectionChange || setInternalSelectedIds;
 
   const handlePlaySong = (song: Song) => {
-    const index = songs.findIndex(s => s.id === song.id && s.sourceType === song.sourceType);
-    setCurrentPlaylist(songs, index >= 0 ? index : 0);
+    const index = displaySongs.findIndex(s => s.id === song.id && s.sourceType === song.sourceType);
+    setCurrentPlaylist(displaySongs, index >= 0 ? index : 0);
     onPlay(song);
   };
+
+  const handleSwap = useCallback((original: Song, swapped: Song) => {
+    setSwapOverrides(prev => {
+      const next = new Map(prev);
+      next.set(original.id, swapped);
+      return next;
+    });
+    onSwap?.(original, swapped);
+  }, [onSwap]);
 
   const handleToggleDropdown = useCallback((songId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -130,16 +148,16 @@ const SongList: React.FC<SongListProps> = ({
   }, [onAddToPlaylist, selectedSongForPlaylist]);
 
   const handleToggleSelectAll = () => {
-    if (selectedIds.length === songs.length) {
+    if (selectedIds.length === displaySongs.length) {
       onSelectionChange([]);
     } else {
-      onSelectionChange(songs.map(song => song.id));
+      onSelectionChange(displaySongs.map(song => song.id));
     }
   };
 
   const handleBatchDownload = () => {
     if (!onBatchDownload || selectedIds.length === 0) return;
-    const selectedSongs = songs.filter(song => selectedIds.includes(song.id));
+    const selectedSongs = displaySongs.filter(song => selectedIds.includes(song.id));
     onBatchDownload(selectedSongs);
     // 清空选择
     onSelectionChange([]);
@@ -155,7 +173,7 @@ const SongList: React.FC<SongListProps> = ({
 
   const handleBatchAddToPlaylist = () => {
     if (!onBatchAddToPlaylist || selectedIds.length === 0) return;
-    const selectedSongs = songs.filter(song => selectedIds.includes(song.id));
+    const selectedSongs = displaySongs.filter(song => selectedIds.includes(song.id));
     setSelectedSongsForPlaylist(selectedSongs);
     setShowBatchAddToPlaylistModal(true);
   };
@@ -163,7 +181,7 @@ const SongList: React.FC<SongListProps> = ({
   // 是否显示批量操作按钮栏
   const showBatchActionBar = (enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && selectedIds.length > 0;
 
-  if (songs.length === 0) {
+  if (displaySongs.length === 0) {
     if (loading) {
       return <SongListSkeleton showCheckbox={showCheckbox} showIndex={showIndex} />;
     }
@@ -271,7 +289,7 @@ const SongList: React.FC<SongListProps> = ({
             <div style={{ width: '40px', textAlign: 'center' }}>
               <input
                 type="checkbox"
-                checked={songs.length > 0 && selectedIds.length === songs.length}
+                checked={displaySongs.length > 0 && selectedIds.length === displaySongs.length}
                 onChange={handleToggleSelectAll}
                 style={{
                   cursor: 'pointer',
@@ -286,14 +304,14 @@ const SongList: React.FC<SongListProps> = ({
             <div style={{ width: '50px', textAlign: 'center' }}>#</div>
           )}
           <div style={{ flex: 1 }}>标题</div>
-          <div style={{ width: '120px' }}>专辑</div>
-          <div style={{ width: '100px', textAlign: 'center' }}>操作</div>
+          {hasAlbum && <div style={{ width: '180px' }}>专辑</div>}
+          <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
         </div>
       )}
 
       {/* 歌曲列表 */}
       <div>
-        {songs.map((song, index) => {
+        {displaySongs.map((song, index) => {
           const isCurrentSong = currentSongId === song.id;
           const isFavorite = favoriteIds.includes(song.id);
 
@@ -309,12 +327,14 @@ const SongList: React.FC<SongListProps> = ({
               showCheckbox={showCheckbox}
               isSelected={selectedIds.includes(song.id)}
               showRemoveFromPlaylist={showRemoveFromPlaylist}
+              showAlbum={hasAlbum}
               activeDropdown={activeDropdown}
               onPlay={handlePlaySong}
               onToggleFavorite={onToggleFavorite}
               onDownload={onDownload}
               onAddToPlaylist={handleAddToPlaylistClick}
               onRemoveFromPlaylist={onRemoveFromPlaylist}
+              onSwap={handleSwap}
               onCoverError={onCoverError}
               onToggleSelect={handleToggleSelect}
               onToggleDropdown={handleToggleDropdown}

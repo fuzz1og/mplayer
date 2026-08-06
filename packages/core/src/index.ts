@@ -22,6 +22,8 @@ export { formatPlayCount } from './utils/format.js';
 export { md5 } from './utils/hash.js';
 export { createSearchController } from './shared/searchController.js';
 export type { SearchController, SearchControllerConfig } from './shared/searchController.js';
+export { searchSwapCandidates, probeSwapCandidates, applySwap } from './shared/sourceSwap.js';
+export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
 export { resolvePlayableUrl, resolvePlayableSong, stripSourceIdPrefix } from './shared/resolvePlayableUrl.js';
 export type { UrlResolver, PlayableSong } from './shared/resolvePlayableUrl.js';
 export { resolveFreshUrl } from './shared/resolveFreshUrl.js';

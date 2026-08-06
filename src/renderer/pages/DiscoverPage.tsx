@@ -4,6 +4,7 @@ import { Sparkles, TrendingUp, ArrowLeft, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
+import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -339,7 +340,10 @@ const DiscoverPage: React.FC = () => {
                   {artistResults.map((artist) => (
                     <div
                       key={artist.id}
-                      onClick={() => navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } })}
+                      onClick={() => {
+                        cacheArtistMeta(artist.id, { name: artist.name, pic: artist.picUrl });
+                        navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } });
+                      }}
                       style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)',
                         padding: '16px 12px', borderRadius: '12px', cursor: 'pointer',

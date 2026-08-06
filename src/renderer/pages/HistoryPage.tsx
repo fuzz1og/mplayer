@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { History, Trash2 } from 'lucide-react';
 import { message } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import { IpcClient } from '@/renderer/services/IpcClient';
@@ -12,6 +13,7 @@ import type { Song, SongBase } from '@mplayer/core';
 const HistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Song[]>([]);
   const { currentSong, isPlaying, play } = usePlayerStore();
+  const { favoriteIds, toggleFavorite } = useFavoriteStore();
   const { download, downloadBatch } = useDownload();
 
   const loadHistory = async () => {
@@ -120,7 +122,9 @@ const HistoryPage: React.FC = () => {
           songs={history}
           currentSongId={currentSong?.id}
           isPlaying={isPlaying}
+          favoriteIds={favoriteIds}
           onPlay={handlePlay}
+          onToggleFavorite={toggleFavorite}
           onDownload={download}
           onBatchDownload={downloadBatch}
           onAddToPlaylist={handleAddToPlaylist}

@@ -15,6 +15,7 @@ const QueuePage = lazy(() => import('@/renderer/pages/QueuePage'));
 const LocalMusicPage = lazy(() => import('@/renderer/pages/LocalMusicPage'));
 const ArtistListPage = lazy(() => import('@/renderer/pages/ArtistListPage'));
 const ArtistDetailPage = lazy(() => import('@/renderer/pages/ArtistDetailPage'));
+const AlbumDetailPage = lazy(() => import('@/renderer/pages/AlbumDetailPage'));
 const DiscoverPlaylistListPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistListPage'));
 const DiscoverPlaylistDetailPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistDetailPage'));
 
@@ -164,6 +165,14 @@ export const router = createHashRouter([
         element: (
           <Suspense fallback={<Loading />}>
             <ArtistDetailPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'album/:id',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <AlbumDetailPage />
           </Suspense>
         ),
       },

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { FolderOpen, RefreshCw, FolderPlus } from 'lucide-react';
 import { useLocalStore } from '@/renderer/store/localStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import SongList from '@/renderer/components/SongList';
 import type { Song } from '@mplayer/core';
 
@@ -17,6 +18,7 @@ const LocalMusicPage: React.FC = () => {
     refresh,
     setCurrentFolder,
   } = useLocalStore();
+  const { favoriteIds, toggleFavorite } = useFavoriteStore();
 
   const currentSongId = usePlayerStore(state => state.currentSong?.id);
   const isPlaying = usePlayerStore(state => state.isPlaying);
@@ -174,7 +176,9 @@ const LocalMusicPage: React.FC = () => {
                 songs={displayedSongs}
                 currentSongId={currentSongId}
                 isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
                 onPlay={handlePlay}
+                onToggleFavorite={toggleFavorite}
                 showHeader={false}
                 emptyText="该文件夹下暂无歌曲"
               />

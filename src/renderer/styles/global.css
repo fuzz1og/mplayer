@@ -309,15 +309,6 @@ html, body, #root {
 }
 
 /* ── 播放按钮覆盖层 ── */
-/* ── 歌曲列表行 ── */
-.song-row-actions {
-  opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-out);
-}
-.song-row:hover .song-row-actions,
-.song-row:focus-within .song-row-actions {
-  opacity: 1;
-}
 .play-overlay {
   position: absolute;
   inset: 0;

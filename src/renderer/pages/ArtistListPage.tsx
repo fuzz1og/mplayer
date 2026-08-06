@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Mic2 } from 'lucide-react';
 import type { Artist } from '@mplayer/core';
+import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
 const { ipcRenderer } = window.require('electron');
 
 const CATEGORIES = [
@@ -18,6 +19,14 @@ const CATEGORIES = [
 ];
 
 const PAGE_SIZE = 100;
+
+// 歌手分类持久化:返回导航重挂载后恢复离开时的分类
+const CATEGORY_STORAGE_KEY = 'artist_list_category';
+
+function loadSavedCategory(): number {
+  const saved = Number(sessionStorage.getItem(CATEGORY_STORAGE_KEY));
+  return Number.isInteger(saved) && saved >= 0 && saved < CATEGORIES.length ? saved : 0;
+}
 
 const ArtistCard: React.FC<{ artist: Artist; onClick: () => void }> = ({ artist, onClick }) => (
   <div
@@ -81,8 +90,13 @@ const ArtistListPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
-  const [category, setCategory] = useState(0);
+  const [category, setCategory] = useState(loadSavedCategory);
   const loadingMoreRef = useRef(false);
+
+  // 记录激活分类,返回导航重挂载后恢复
+  useEffect(() => {
+    sessionStorage.setItem(CATEGORY_STORAGE_KEY, String(category));
+  }, [category]);
 
   const currentCat = CATEGORIES[category];
   const isAllMode = currentCat.id === 0;
@@ -225,7 +239,10 @@ const ArtistListPage: React.FC = () => {
                 <ArtistCard
                   key={artist.id}
                   artist={artist}
-                  onClick={() => navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } })}
+                  onClick={() => {
+                    cacheArtistMeta(artist.id, { name: artist.name, pic: artist.picUrl });
+                    navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } });
+                  }}
                 />
               ))}
             </div>

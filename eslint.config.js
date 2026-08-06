@@ -4,7 +4,7 @@ const globals = require('globals');
 module.exports = tseslint.config(
   // Global ignores
   {
-    ignores: ['dist/', 'dist-electron/', 'node_modules/', 'packages/core/dist/', 'packages/core/coverage/', '.expo/', 'packages/mobile/.expo/', 'src/main/storage/fileStorage.ts'],
+    ignores: ['dist/', 'dist-electron/', 'coverage/', 'node_modules/', 'packages/core/dist/', 'packages/core/coverage/', '.expo/', 'packages/mobile/.expo/', 'src/main/storage/fileStorage.ts'],
   },
   // Base recommended rules
   ...tseslint.configs.recommended,
