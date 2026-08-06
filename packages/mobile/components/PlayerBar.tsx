@@ -7,6 +7,7 @@ import {
 import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, X, Play } from 'lucide-react-native';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
+import { colors, spacing, radius } from '../theme/tokens';
 
 export default function PlayerBar() {
   const insets = useSafeAreaInsets();
@@ -38,7 +39,7 @@ export default function PlayerBar() {
         {currentSong?.cover && !coverFailed ? (
           <Image source={{ uri: currentSong.cover }} style={styles.cover} onError={handleCoverError} />
         ) : (
-          <Music size={24} color="#555" />
+          <Music size={24} color={colors.textTertiary} />
         )}
       </View>
 
@@ -59,23 +60,23 @@ export default function PlayerBar() {
             onPress={(e) => { e.stopPropagation(); prev(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
           >
-            <SkipBack size={24} color="#fff" />
+            <SkipBack size={24} color={colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={(e) => { e.stopPropagation(); togglePlay(); }}
             style={styles.btn}
           >
             {isPlaying ? (
-              <CirclePause size={36} color="#e74c3c" />
+              <CirclePause size={36} color={colors.accent} />
             ) : (
-              <CirclePlay size={36} color="#e74c3c" />
+              <CirclePlay size={36} color={colors.accent} />
             )}
           </TouchableOpacity>
           <TouchableOpacity
             onPress={(e) => { e.stopPropagation(); next(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
           >
-            <SkipForward size={24} color="#fff" />
+            <SkipForward size={24} color={colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={(e) => {
@@ -84,7 +85,7 @@ export default function PlayerBar() {
             }}
             style={styles.btn}
           >
-            <ListMusic size={24} color="#fff" />
+            <ListMusic size={24} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       )}
@@ -102,7 +103,7 @@ export default function PlayerBar() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>播放队列 ({queue.length})</Text>
               <TouchableOpacity onPress={() => setShowQueue(false)}>
-                <X size={24} color="#fff" />
+                <X size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             <FlatList
@@ -125,7 +126,7 @@ export default function PlayerBar() {
                       </Text>
                       <Text style={styles.queueItemArtist}>{item.artist}</Text>
                     </View>
-                    {isCurrent && <Play size={16} color="#e74c3c" />}
+                    {isCurrent && <Play size={16} color={colors.accent} />}
                   </TouchableOpacity>
                 );
               }}
@@ -142,11 +143,11 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#16213e',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: colors.bgSurface,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a4a',
+    borderBottomColor: colors.borderSubtle,
   },
   containerEmpty: {
     opacity: 0.6,
@@ -154,59 +155,59 @@ const styles = StyleSheet.create({
   coverWrap: {
     width: 44,
     height: 44,
-    borderRadius: 6,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgHover,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: spacing[3],
   },
   cover: {
     width: 44,
     height: 44,
-    borderRadius: 6,
+    borderRadius: radius.sm,
   },
-  info: { flex: 1, marginRight: 12 },
-  title: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  artist: { color: '#888', fontSize: 12, marginTop: 2 },
-  textEmpty: { color: '#555' },
+  info: { flex: 1, marginRight: spacing[3] },
+  title: { color: colors.textPrimary, fontSize: 14, fontWeight: '600' },
+  artist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  textEmpty: { color: colors.textTertiary },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  btn: { padding: 4 },
+  btn: { padding: spacing[1] },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.bgOverlay,
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#1a1a2e',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: colors.bgSurface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     maxHeight: '60%',
-    paddingBottom: 32,
+    paddingBottom: spacing[8],
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#16213e',
+    padding: spacing[4],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderDefault,
   },
-  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  modalTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '700' },
   queueItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#16213e',
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[4],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderDefault,
   },
   queueItemInfo: { flex: 1, marginRight: 12 },
-  queueItemName: { color: '#fff', fontSize: 15 },
-  queueItemActive: { color: '#e74c3c' },
-  queueItemArtist: { color: '#888', fontSize: 12, marginTop: 2 },
-  emptyText: { color: '#666', textAlign: 'center', marginTop: 40 },
+  queueItemName: { color: colors.textPrimary, fontSize: 15 },
+  queueItemActive: { color: colors.accent },
+  queueItemArtist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  emptyText: { color: colors.textTertiary, textAlign: 'center', marginTop: spacing[10] },
 });
