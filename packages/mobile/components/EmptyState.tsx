@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import type { LucideIcon } from 'lucide-react-native';
+import { colors, spacing } from '../theme/tokens';
 
 interface Props {
   icon: LucideIcon;
@@ -11,7 +12,7 @@ export default function EmptyState({ icon, title, subtitle }: Props) {
   const Icon = icon;
   return (
     <View style={styles.container}>
-      <Icon size={64} color="#444" />
+      <Icon size={64} color={colors.textDisabled} />
       <Text style={styles.title}>{title}</Text>
       {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
     </View>
@@ -23,16 +24,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: colors.bgBase,
     paddingBottom: 80,
   },
   title: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 16,
-    marginTop: 12,
+    marginTop: spacing[3],
   },
   subtitle: {
-    color: '#555',
+    color: colors.textTertiary,
     fontSize: 13,
     marginTop: 6,
   },
