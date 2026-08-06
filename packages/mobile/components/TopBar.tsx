@@ -69,15 +69,17 @@ export default function TopBar() {
           onChangeText={setSearchText}
           onSubmitEditing={handleSubmit}
           returnKeyType="search"
-          onFocus={() => {
-            setFocused(true);
+          onPressIn={() => {
+            // onFocus 只在焦点变化时触发：从搜索页返回后输入框可能仍保持
+            // 聚焦，再次点击不会导航——用 onPressIn 保证每次点击都进搜索
             if (!isSearchTab) {
-              // 清掉上一次搜索的残留状态（tab 常驻会带着旧 q/type 参数），
-              // 让每次点搜索框都是干净的新会话
               useSearchStore.getState().clear();
               setSearchText('');
               router.push({ pathname: '/search', params: {} });
             }
+          }}
+          onFocus={() => {
+            setFocused(true);
           }}
           onBlur={() => setFocused(false)}
         />
@@ -141,14 +143,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.inputBg,
     borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
     paddingHorizontal: 12,
     height: 36,
   },
   searchBarFocused: {
     backgroundColor: colors.inputBgFocus,
-    borderColor: colors.inputBorderFocus,
   },
   focusRing: {
     position: 'absolute',
@@ -166,13 +165,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
     color: colors.textPrimary,
     fontSize: 14,
-    // Android EditText 默认 includeFontPadding + 无显式行高，在固定高度
-    // 的 pill 里会把字形上下裁掉（「字体不全」）；显式行高 + 关闭字体
-    // 内边距后文字完整垂直居中
-    lineHeight: 20,
-    paddingVertical: 0,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
   },
   sourceBtn: {
     flexShrink: 0,
