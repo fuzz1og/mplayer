@@ -16,11 +16,15 @@ import { StatusBar } from 'expo-status-bar';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import SongRow from '../../components/SongRow';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
+import { PlaylistHeroPrototype, PrototypeSwitcher } from '../../components/prototype/PlaylistHeroPrototype';
+import type { HeroVariant } from '../../components/prototype/PlaylistHeroPrototype';
 import type { Song } from '@mplayer/core';
 import { colors, radius, spacing, statusBarStyle } from '../../theme/tokens';
 
 export default function PlaylistDetailPage() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, variant: variantParam } = useLocalSearchParams<{ id: string; variant?: string }>();
+  const variantParamStr = Array.isArray(variantParam) ? variantParam[0] : variantParam;
+  const variant: HeroVariant = variantParamStr === 'B' ? 'B' : variantParamStr === 'C' ? 'C' : 'A';
   const playlists = usePlaylistStore((s) => s.playlists);
   const removeSong = usePlaylistStore((s) => s.removeSong);
   const renamePlaylist = usePlaylistStore((s) => s.renamePlaylist);
@@ -92,11 +96,11 @@ export default function PlaylistDetailPage() {
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style={statusBarStyle} />
+        <StatusBar style={__DEV__ && variant === 'B' ? 'light' : statusBarStyle} />
         <Stack.Screen
           options={{
             title: playlist.name,
-            headerShown: true,
+            headerShown: !(__DEV__ && variant === 'B'),
             headerStyle: { backgroundColor: colors.bgSurface },
             headerTintColor: colors.textPrimary,
             headerShadowVisible: false,
@@ -117,6 +121,11 @@ export default function PlaylistDetailPage() {
           <FlatList
             data={playlist.songs}
             keyExtractor={(item) => item.id}
+            ListHeaderComponent={
+              __DEV__ ? (
+                <PlaylistHeroPrototype playlist={playlist} variant={variant} />
+              ) : null
+            }
             renderItem={({ item }) => (
               <TouchableOpacity
                 activeOpacity={1}
@@ -128,6 +137,8 @@ export default function PlaylistDetailPage() {
             contentContainerStyle={styles.list}
           />
         )}
+
+        {__DEV__ && <PrototypeSwitcher current={variant} />}
 
         <Modal
           visible={renameModalVisible}

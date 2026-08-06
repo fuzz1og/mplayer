@@ -12,7 +12,8 @@ import PlayerOverlay from '../components/PlayerOverlay';
 
 // core 的搜索诊断 console.warn（单源识别失败等）在真机 dev 上会触发
 // LogBox 横幅盖住底部播放栏；诊断信息 Metro 终端可见，无需上屏
-LogBox.ignoreLogs(['[search]']);
+// [player] 的「加载失败」等 error 日志同样走内部重试逻辑，属预期内错误
+LogBox.ignoreLogs(['[search]', '[player]']);
 
 /** 全局播放错误提示（真机上无法看终端 console，用 Toast 直接展示最终错误） */
 function PlaybackErrorToast() {
