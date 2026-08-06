@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Song, SourceKey } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
+import { colors, radius, spacing } from '../theme/tokens';
 
 function sourceLabel(sourceType?: string): string {
   return SOURCE_LABELS[sourceType as SourceKey] || sourceType || '未知';
@@ -75,11 +76,11 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         {addedName ? (
           <View style={styles.successBox}>
-            <CircleCheck size={48} color="#e74c3c" />
+            <CircleCheck size={48} color={colors.accent} />
             <Text style={styles.successText}>已加入歌单「{addedName}」</Text>
           </View>
         ) : (
-          <TouchableOpacity style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]} activeOpacity={1} onPress={() => {}}>
+          <TouchableOpacity style={[styles.sheet, { paddingBottom: insets.bottom + spacing[6] }]} activeOpacity={1} onPress={() => {}}>
             <View style={styles.handle} />
             <Text style={styles.title}>加入歌单</Text>
             {song && (
@@ -87,7 +88,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
             )}
             {playlists.length === 0 ? (
               <View style={styles.emptyBox}>
-                <ListMusic size={40} color="#444" />
+                <ListMusic size={40} color={colors.textTertiary} />
                 <Text style={styles.emptyText}>暂无歌单</Text>
                 <Text style={styles.emptyHint}>请先在歌单页面创建</Text>
               </View>
@@ -99,7 +100,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
                     style={styles.item}
                     onPress={() => handleSelect(p.id, p.name)}
                   >
-                    <ListMusic size={22} color="#e74c3c" />
+                    <ListMusic size={22} color={colors.accent} />
                     <Text style={styles.itemText}>{p.name}</Text>
                     <Text style={styles.itemCount}>{p.songs.length}首</Text>
                   </TouchableOpacity>
@@ -119,16 +120,16 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.bgOverlay,
     justifyContent: 'flex-end',
     alignItems: 'center',
   },
   sheet: {
-    backgroundColor: '#16213e',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 24,
-    paddingTop: 12,
+    backgroundColor: colors.bgSurface,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[3],
     paddingBottom: 36,
     width: '100%',
     maxHeight: '70%',
@@ -137,81 +138,81 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#3a3a5e',
+    backgroundColor: colors.bgActive,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: spacing[4],
   },
   title: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: spacing[1],
   },
   songName: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 13,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: spacing[5],
   },
   list: {
-    marginBottom: 12,
+    marginBottom: spacing[3],
   },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing[2],
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a4a',
+    borderBottomColor: colors.borderSubtle,
   },
   itemText: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 16,
-    marginLeft: 12,
+    marginLeft: spacing[3],
     flex: 1,
   },
   itemCount: {
-    color: '#666',
+    color: colors.textTertiary,
     fontSize: 13,
   },
   emptyBox: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: spacing[8],
   },
   emptyText: {
-    color: '#666',
+    color: colors.textTertiary,
     fontSize: 16,
-    marginTop: 12,
+    marginTop: spacing[3],
   },
   emptyHint: {
-    color: '#555',
+    color: colors.textTertiary,
     fontSize: 13,
-    marginTop: 4,
+    marginTop: spacing[1],
   },
   cancelBtn: {
-    marginTop: 8,
+    marginTop: spacing[2],
     paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.md,
+    backgroundColor: colors.bgHover,
     alignItems: 'center',
   },
   cancelText: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 16,
     fontWeight: '600',
   },
   successBox: {
-    backgroundColor: '#16213e',
-    borderRadius: 16,
-    padding: 32,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
+    padding: spacing[8],
     alignItems: 'center',
     marginBottom: 100,
   },
   successText: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 16,
-    marginTop: 12,
+    marginTop: spacing[3],
     fontWeight: '600',
   },
 });
