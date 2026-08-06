@@ -1,13 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic, RefreshCw, User } from 'lucide-react';
+import { Play, Trash2, ListMusic, RefreshCw, User } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
 import SourceSwapModal from '@/renderer/components/SourceSwapModal';
-import RowActionMenu, { type RowActionItem } from '@/renderer/components/RowActionMenu';
+import { type RowActionItem } from '@/renderer/components/RowActionMenu';
+import RowActionButtons from '@/renderer/components/RowActionButtons';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -35,6 +36,8 @@ interface SongRowProps {
   onCloseDropdown?: (e: React.MouseEvent) => void;
   /** 封面加载失败时回调，由持有歌曲列表的层按 ID 重识别换新封面 */
   onCoverError?: (song: Song) => void;
+  /** 是否显示专辑列（列表层按整列是否有专辑判断，无专辑列表整列塌缩） */
+  showAlbum?: boolean;
   compact?: boolean;
   style?: React.CSSProperties;
 }
@@ -44,7 +47,7 @@ const SongRow: React.FC<SongRowProps> = ({
   showIndex, showCheckbox, isSelected, showRemoveFromPlaylist,
   activeDropdown, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onRemoveFromPlaylist, onToggleSelect,
-  onToggleDropdown, onCloseDropdown, onCoverError, onSwap, compact = false, style,
+  onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, compact = false, style,
 }) => {
   const coverSrc = useCachedCover(song.cover);
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
@@ -68,7 +71,6 @@ const SongRow: React.FC<SongRowProps> = ({
     menuItems.push({ key: 'remove', label: '从歌单移除', icon: <Trash2 size={14} />, danger: true, onClick: () => onRemoveFromPlaylist(song) });
   }
   menuItems.push({ key: 'playlist', label: '加入歌单', icon: <ListMusic size={14} />, onClick: () => onAddToPlaylist?.(song) });
-  menuItems.push({ key: 'download', label: '下载', icon: <Download size={14} />, onClick: () => onDownload?.(song) });
   if (song.sourceType !== 'local') {
     menuItems.push({ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open });
   }
@@ -136,7 +138,7 @@ const SongRow: React.FC<SongRowProps> = ({
         </div>
       )}
       {/* Song info */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+      <div style={{ width: '38%', maxWidth: '380px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '44px', height: '44px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0, position: 'relative' }}>
           {song.cover ? (
             <CoverImage src={coverSrc} alt={song.name} onError={() => onCoverError?.(song)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -164,42 +166,26 @@ const SongRow: React.FC<SongRowProps> = ({
           </div>
         </div>
       </div>
+      {/* 弹性占位：把专辑列和操作列推到右侧，标题区限宽后剩余空间留白 */}
+      <div style={{ flex: 1, minWidth: 0 }} />
       {/* Album */}
-      {!compact && (
-        <div style={{ width: '120px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {!compact && showAlbum && (
+        <div style={{ width: '180px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
           {song.album}
         </div>
       )}
       {/* Actions */}
-      <div className="song-row-actions" style={{ width: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-        {onToggleFavorite && (
-          <button
-            onClick={() => onToggleFavorite(song)}
-            style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isFavorite ? 'var(--accent-color)' : 'var(--text-tertiary)', transition: 'all 0.15s ease' }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-          >
-            <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
-          </button>
-        )}
-        <div style={{ position: 'relative' }}>
-          <button
-            ref={dropdownTriggerRef}
-            onClick={(e) => onToggleDropdown?.(song.id, e)}
-            aria-label={`更多操作: ${song.name}`}
-            style={{ border: 'none', background: activeDropdown === song.id ? 'var(--hover-bg)' : 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: activeDropdown === song.id ? 'var(--text-secondary)' : 'var(--text-tertiary)', transition: 'all 0.15s ease' }}
-          >
-            <MoreHorizontal size={16} />
-          </button>
-          {activeDropdown === song.id && (
-            <RowActionMenu
-              triggerRef={dropdownTriggerRef}
-              items={menuItems}
-              onClose={onCloseDropdown ?? (() => {})}
-            />
-          )}
-        </div>
-      </div>
+      <RowActionButtons
+        song={song}
+        isFavorite={isFavorite}
+        onToggleFavorite={onToggleFavorite}
+        onDownload={onDownload}
+        moreOpen={activeDropdown === song.id}
+        moreTriggerRef={dropdownTriggerRef}
+        onToggleMore={(e) => onToggleDropdown?.(song.id, e)}
+        onCloseMore={onCloseDropdown ?? (() => {})}
+        menuItems={menuItems}
+      />
       <SourceSwapModal
         open={swap.visible}
         songName={song.name}

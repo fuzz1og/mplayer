@@ -5,6 +5,8 @@ import { Modal, message } from 'antd';
 import SongList from '@/renderer/components/SongList';
 import CoverImage from '@/renderer/components/CoverImage';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import { useDownload } from '@/renderer/hooks/useDownload';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import type { Song, DiscoverPlaylist } from '@mplayer/core';
@@ -17,6 +19,8 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { play, currentSong, isPlaying, setCurrentPlaylist } = usePlayerStore();
+  const { favoriteIds, toggleFavorite } = useFavoriteStore();
+  const { download } = useDownload();
 
   const [playlist, setPlaylist] = useState<DiscoverPlaylist | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -238,7 +242,22 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
           </div>
         ) : (
           <>
-          <SongList songs={songs} currentSongId={currentSong?.id} isPlaying={isPlaying} onPlay={handlePlay} onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))} showHeader={true} showIndex={true} showCheckbox={true} enableBatchDownload={true} enableBatchAddToPlaylist={true} emptyText="暂无歌曲数据" />
+          <SongList
+            songs={songs}
+            currentSongId={currentSong?.id}
+            isPlaying={isPlaying}
+            favoriteIds={favoriteIds}
+            onPlay={handlePlay}
+            onToggleFavorite={toggleFavorite}
+            onDownload={download}
+            onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
+            showHeader={true}
+            showIndex={true}
+            showCheckbox={true}
+            enableBatchDownload={true}
+            enableBatchAddToPlaylist={true}
+            emptyText="暂无歌曲数据"
+          />
             {loadingMore && (
               <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '16px' }}>加载中...</div>
             )}

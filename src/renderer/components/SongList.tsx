@@ -94,6 +94,8 @@ const SongList: React.FC<SongListProps> = ({
   const { setCurrentPlaylist } = usePlayerStore();
 
   const displaySongs = songs.map(song => swapOverrides.get(song.id) ?? song);
+  // 专辑列整列按需塌缩：列表内没有任何歌曲有专辑时不显示专辑列
+  const hasAlbum = displaySongs.some(song => song.album);
   // 使用外部或内部状态
   const selectedIds = externalSelectedIds !== undefined ? externalSelectedIds : internalSelectedIds;
   const onSelectionChange = externalOnSelectionChange || setInternalSelectedIds;
@@ -302,8 +304,8 @@ const SongList: React.FC<SongListProps> = ({
             <div style={{ width: '50px', textAlign: 'center' }}>#</div>
           )}
           <div style={{ flex: 1 }}>标题</div>
-          <div style={{ width: '120px' }}>专辑</div>
-          <div style={{ width: '100px', textAlign: 'center' }}>操作</div>
+          {hasAlbum && <div style={{ width: '180px' }}>专辑</div>}
+          <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
         </div>
       )}
 
@@ -325,6 +327,7 @@ const SongList: React.FC<SongListProps> = ({
               showCheckbox={showCheckbox}
               isSelected={selectedIds.includes(song.id)}
               showRemoveFromPlaylist={showRemoveFromPlaylist}
+              showAlbum={hasAlbum}
               activeDropdown={activeDropdown}
               onPlay={handlePlaySong}
               onToggleFavorite={onToggleFavorite}

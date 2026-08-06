@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 const { ipcRenderer } = window.require('electron');
-import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload, RefreshCw, User, MoreHorizontal } from 'lucide-react';
+import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload, RefreshCw, User } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -12,7 +13,8 @@ import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import SourceSwapModal from '@/renderer/components/SourceSwapModal';
-import RowActionMenu, { type RowActionItem } from '@/renderer/components/RowActionMenu';
+import { type RowActionItem } from '@/renderer/components/RowActionMenu';
+import RowActionButtons from '@/renderer/components/RowActionButtons';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -27,9 +29,10 @@ const SortableSongRow: React.FC<{
   song: Song; index: number; isCurrentSong: boolean; isPlaying: boolean;
   onPlay: (song: Song) => void; onRemove: (song: Song) => void; onDownload: (song: Song) => void;
   onSwapped: (original: Song, swapped: Song) => void;
+  isFavorite: boolean; onToggleFavorite: (song: Song) => void;
   isSelected: boolean; onToggleSelect: (songId: string) => void;
   onCoverError?: (song: Song) => void;
-}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, onSwapped, isSelected, onToggleSelect, onCoverError }) => {
+}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, onSwapped, isFavorite, onToggleFavorite, isSelected, onToggleSelect, onCoverError }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
   const coverSrc = useCachedCover(song.cover);
   const swap = useSongSwap(song, onSwapped);
@@ -45,9 +48,8 @@ const SortableSongRow: React.FC<{
     navigate('/discover');
   };
 
-  // 操作统一收进「更多」菜单，与共享 SongList 行一致；本地文件不提供换源
+  // 下载内联常驻，其余收进「更多」菜单，与共享 SongList 行一致；本地文件不提供换源
   const menuItems: RowActionItem[] = [
-    { key: 'download', label: '下载', icon: <Download size={14} />, onClick: () => onDownload(song) },
     ...(song.sourceType !== 'local'
       ? [{ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open }]
       : []),
@@ -118,23 +120,17 @@ const SortableSongRow: React.FC<{
           </div>
         </div>
       </div>
-      <div style={{ position: 'relative' }}>
-        <button
-          ref={menuTriggerRef}
-          aria-label={`更多操作: ${song.name}`}
-          onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v); }}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}
-        >
-          <MoreHorizontal size={16} />
-        </button>
-        {menuOpen && (
-          <RowActionMenu
-            triggerRef={menuTriggerRef}
-            items={menuItems}
-            onClose={() => setMenuOpen(false)}
-          />
-        )}
-      </div>
+      <RowActionButtons
+        song={song}
+        isFavorite={isFavorite}
+        onToggleFavorite={onToggleFavorite}
+        onDownload={onDownload}
+        moreOpen={menuOpen}
+        moreTriggerRef={menuTriggerRef}
+        onToggleMore={() => setMenuOpen(v => !v)}
+        onCloseMore={() => setMenuOpen(false)}
+        menuItems={menuItems}
+      />
       <SourceSwapModal
         open={swap.visible}
         songName={song.name}
@@ -164,6 +160,7 @@ const PlaylistDetailPage: React.FC = () => {
   const [editDesc, setEditDesc] = useState('');
 
   const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
+  const { favoriteIds, toggleFavorite } = useFavoriteStore();
   const { download, downloadBatch } = useDownload();
   const [isReordering, setIsReordering] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -538,7 +535,7 @@ const PlaylistDetailPage: React.FC = () => {
           <div style={{ width: '30px', textAlign: 'center' }}></div>
           <div style={{ width: '30px', textAlign: 'center' }}>#</div>
           <div style={{ flex: 1 }}>标题</div>
-          <div style={{ width: '100px', textAlign: 'center' }}>操作</div>
+          <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
         </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={songs.map(s => s.id)} strategy={verticalListSortingStrategy}>
@@ -555,6 +552,8 @@ const PlaylistDetailPage: React.FC = () => {
                 onRemove={handleRemoveFromPlaylist}
                 onDownload={handleDownload}
                 onSwapped={handleSongSwapped}
+                isFavorite={favoriteIds.includes(song.id)}
+                onToggleFavorite={toggleFavorite}
                 onCoverError={handleCoverError}
               />
             ))}
