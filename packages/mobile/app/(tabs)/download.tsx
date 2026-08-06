@@ -6,6 +6,7 @@ import { useDownloadStore } from '../../stores/downloadStore';
 import { getLocalUri, removeDownloadedFile } from '../../services/downloadService';
 import { playSong } from '../../services/audioPlayer';
 import { usePlayerStore } from '../../stores/playerStore';
+import { colors, radius } from '../../theme/tokens';
 
 const STATUS_LABELS: Record<string, string> = {
   downloading: '下载中',
@@ -64,7 +65,7 @@ export default function DownloadPage() {
         contentContainerStyle={items.length === 0 ? styles.emptyContent : undefined}
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <Download size={64} color="#444" />
+            <Download size={64} color={colors.textDisabled} />
             <Text style={styles.title}>暂无下载任务</Text>
             <Text style={styles.subtitle}>在歌曲更多菜单中点击「下载」</Text>
           </View>
@@ -79,7 +80,7 @@ export default function DownloadPage() {
               disabled={item.status !== 'done'}
             >
               <View style={styles.coverWrap}>
-                <Music size={22} color="#888" />
+                <Music size={22} color={colors.textSecondary} />
               </View>
               <View style={styles.info}>
                 <Text style={[styles.name, isCurrent && styles.nameActive]} numberOfLines={1}>
@@ -92,7 +93,7 @@ export default function DownloadPage() {
               </Text>
               {item.status === 'done' && (
                 <TouchableOpacity onPress={() => handleRemove(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Trash2 size={18} color="#666" />
+                  <Trash2 size={18} color={colors.textTertiary} />
                 </TouchableOpacity>
               )}
             </TouchableOpacity>
@@ -104,40 +105,41 @@ export default function DownloadPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  container: { flex: 1, backgroundColor: colors.bgBase },
   emptyContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
   emptyBox: { alignItems: 'center' },
-  title: { color: '#888', fontSize: 16, marginTop: 16 },
-  subtitle: { color: '#555', fontSize: 13, marginTop: 8 },
+  title: { color: colors.textSecondary, fontSize: 16, marginTop: 16 },
+  subtitle: { color: colors.textTertiary, fontSize: 13, marginTop: 8 },
   pathBox: {
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 6,
   },
-  pathLabel: { color: '#888', fontSize: 12, marginBottom: 4 },
-  pathText: { color: '#bbb', fontSize: 12, fontFamily: 'monospace' },
-  pathHint: { color: '#555', fontSize: 11, marginTop: 4 },
+  pathLabel: { color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
+  pathText: { color: colors.textTertiary, fontSize: 12, fontFamily: 'monospace' },
+  pathHint: { color: colors.textTertiary, fontSize: 11, marginTop: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.bgSurface,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a4a',
+    borderBottomColor: colors.borderSubtle,
   },
   coverWrap: {
     width: 44,
     height: 44,
-    borderRadius: 6,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgHover,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   info: { flex: 1, marginRight: 12 },
-  name: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  nameActive: { color: '#e74c3c' },
-  artist: { color: '#888', fontSize: 12, marginTop: 2 },
-  status: { color: '#888', fontSize: 12, marginRight: 12 },
-  statusError: { color: '#e74c3c' },
+  name: { color: colors.textPrimary, fontSize: 15, fontWeight: '600' },
+  nameActive: { color: colors.accent },
+  artist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  status: { color: colors.textSecondary, fontSize: 12, marginRight: 12 },
+  statusError: { color: colors.danger },
 });
