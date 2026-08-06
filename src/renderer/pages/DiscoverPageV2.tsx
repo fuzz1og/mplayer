@@ -10,6 +10,8 @@ import { searchService } from '@/renderer/services/searchService';
 import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
 import ChartPanel from '@/renderer/components/ChartPanel';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
+import SongList from '@/renderer/components/SongList';
+import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
@@ -68,7 +70,7 @@ interface TabCache {
 }
 
 const DiscoverPageV2: React.FC = () => {
-  const { currentSong, play } = usePlayerStore();
+  const { currentSong, isPlaying, play } = usePlayerStore();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>(loadSavedTab);
@@ -340,9 +342,15 @@ const DiscoverPageV2: React.FC = () => {
     fetchChart('new');
   };
 
-  const { groups, loading: searchLoading, currentKeyword, songs: searchSongs, error: searchError } = useSearchStore();
-  const { toggleFavorite } = useFavoriteStore();
+  const { loading: searchLoading, loadingMore: searchLoadingMore, currentKeyword, songs: searchSongs, hasMore, sourceType, error: searchError } = useSearchStore();
+  const { toggleFavorite, favoriteIds } = useFavoriteStore();
   const { download } = useDownload();
+  const singleSourceScrollRef = useRef<HTMLDivElement>(null);
+  useInfiniteScroll(singleSourceScrollRef, {
+    onLoadMore: () => searchService.loadMore(),
+    loading: searchLoading || searchLoadingMore,
+    hasMore,
+  });
 
   // 搜索结果二级 tab：单曲 / 歌手。「查看歌手」入口通过 preferredTab 落在歌手 tab
   const [activeSearchTab, setActiveSearchTab] = useState<'songs' | 'artists'>(() => useSearchStore.getState().preferredTab);
@@ -386,7 +394,10 @@ const DiscoverPageV2: React.FC = () => {
     useSearchStore.getState().reset();
   };
 
-  if (currentKeyword && (searchSongs.length > 0 || groups.length > 0 || searchLoading || artistResults.length > 0 || artistLoading)) {
+  // currentKeyword 仅在用户提交搜索时被设置（TopBar 回车/搜索按钮），
+  // 因此只要有关键词就渲染搜索视图；loading/空/错误由各 tab 内部处理，
+  // 否则搜索失败或全空时整个视图不渲染、静默落回首页（story 20 空/错误态不可达）。
+  if (currentKeyword) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         <div style={{
@@ -451,7 +462,7 @@ const DiscoverPageV2: React.FC = () => {
           {activeSearchTab === 'songs' ? (
             searchError && searchSongs.length === 0 && !searchLoading ? (
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>{searchError}</div>
-            ) : (
+            ) : sourceType === 'all' ? (
               <GroupedSongList
                 onPlay={handlePlaySong}
                 onAddToPlaylist={() => message.info('添加到歌单功能')}
@@ -459,8 +470,32 @@ const DiscoverPageV2: React.FC = () => {
                 onDownload={download}
                 selectedIds={[]}
                 onSelectionChange={() => {}}
-                loading={searchLoading}
+                loading={searchLoading || searchLoadingMore}
+                hasMore={hasMore}
+                onLoadMore={() => searchService.loadMore()}
               />
+            ) : (
+              <div ref={singleSourceScrollRef} style={{ height: '100%', overflowY: 'auto' }}>
+                <SongList
+                  songs={searchSongs}
+                  currentSongId={currentSong?.id}
+                  isPlaying={isPlaying}
+                  favoriteIds={favoriteIds}
+                  onPlay={handlePlaySong}
+                  onToggleFavorite={toggleFavorite}
+                  onDownload={download}
+                  onAddToPlaylist={() => message.info('添加到歌单功能')}
+                  showCheckbox={false}
+                  loading={searchLoading || searchLoadingMore}
+                  emptyText="未找到相关歌曲"
+                />
+                {hasMore && (searchLoading || searchLoadingMore) && (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中...</div>
+                )}
+                {!hasMore && searchSongs.length > 0 && (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>没有更多歌曲了</div>
+                )}
+              </div>
             )
           ) : artistLoading && artistResults.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>正在搜索歌手…</div>

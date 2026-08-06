@@ -8,6 +8,7 @@ export type SourceKey = SingleSourceType | 'all';
 export interface SearchState {
   songs: Song[];
   loading: boolean;
+  loadingMore: boolean;
   hasMore: boolean;
   page: number;
   currentKeyword: string;
@@ -36,6 +37,7 @@ export interface SearchState {
 export const useSearchStore = create<SearchState>((set) => ({
   songs: [],
   loading: false,
+  loadingMore: false,
   hasMore: true,
   page: 1,
   currentKeyword: '',
@@ -109,6 +111,7 @@ export const useSearchStore = create<SearchState>((set) => ({
     expandedKeys: [],
     sourceType: state.sourceType,
     loading: false,
+    loadingMore: false,
     hasMore: true,
     page: 1,
     currentKeyword: '',

@@ -34,6 +34,7 @@ class SearchService {
           page: s.page,
           hasMore: s.hasMore,
           loading: s.loading,
+          loadingMore: s.loadingMore,
           results: s.sourceType === 'all' ? s.groups : s.songs.map((song: Song) => ({ key: s.sourceType, name: s.sourceType, artist: '', songs: [song] })),
         };
       },
@@ -41,6 +42,7 @@ class SearchService {
         const store = useSearchStore.getState();
         const updates: Record<string, any> = {};
         if ('loading' in partial) updates.loading = partial.loading;
+        if ('loadingMore' in partial) updates.loadingMore = partial.loadingMore;
         if ('error' in partial) updates.error = partial.error;
         if ('hasMore' in partial) updates.hasMore = partial.hasMore;
         if ('page' in partial) updates.page = partial.page;
