@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import { colors } from '../theme/tokens';
 import { addNotificationResponseListener, setupNotificationChannel } from '../services/notificationService';
@@ -9,6 +9,10 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
 import PlayerOverlay from '../components/PlayerOverlay';
+
+// core 的搜索诊断 console.warn（单源识别失败等）在真机 dev 上会触发
+// LogBox 横幅盖住底部播放栏；诊断信息 Metro 终端可见，无需上屏
+LogBox.ignoreLogs(['[search]']);
 
 /** 全局播放错误提示（真机上无法看终端 console，用 Toast 直接展示最终错误） */
 function PlaybackErrorToast() {

@@ -61,16 +61,16 @@ export default function DiscoverTabs() {
         onMomentumScrollEnd={onMomentumEnd}
         showsHorizontalScrollIndicator={false}
       >
-        <View style={{ width: SCREEN_WIDTH }}>
+        <View key="hotlist" style={{ width: SCREEN_WIDTH }}>
           <HotlistContent />
         </View>
-        <View style={{ width: SCREEN_WIDTH }}>
+        <View key="albums" style={{ width: SCREEN_WIDTH }}>
           {activeIndex >= 1 && <AlbumsContent />}
         </View>
-        <View style={{ width: SCREEN_WIDTH }}>
+        <View key="playlists" style={{ width: SCREEN_WIDTH }}>
           {activeIndex >= 2 && <PlaylistContent />}
         </View>
-        <View style={{ width: SCREEN_WIDTH }}>
+        <View key="artists" style={{ width: SCREEN_WIDTH }}>
           {activeIndex >= 3 && <ArtistContent />}
         </View>
       </ScrollView>

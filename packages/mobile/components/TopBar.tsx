@@ -58,6 +58,8 @@ export default function TopBar() {
         </TouchableOpacity>
       )}
       <View style={[styles.searchBar, focused && styles.searchBarFocused]}>
+        {/* 焦点光环用独立 overlay 实现：改父视图 elevation/shadow 会让 Android 聚焦中的 EditText 失焦 */}
+        {focused && <View pointerEvents="none" style={styles.focusRing} />}
         <Search size={18} color={focused ? colors.accent : colors.textTertiary} style={{ marginRight: 8 }} />
         <TextInput
           style={styles.input}
@@ -70,7 +72,11 @@ export default function TopBar() {
           onFocus={() => {
             setFocused(true);
             if (!isSearchTab) {
-              router.push('/search');
+              // 清掉上一次搜索的残留状态（tab 常驻会带着旧 q/type 参数），
+              // 让每次点搜索框都是干净的新会话
+              useSearchStore.getState().clear();
+              setSearchText('');
+              router.push({ pathname: '/search', params: {} });
             }
           }}
           onBlur={() => setFocused(false)}
@@ -143,11 +149,16 @@ const styles = StyleSheet.create({
   searchBarFocused: {
     backgroundColor: colors.inputBgFocus,
     borderColor: colors.inputBorderFocus,
-    shadowColor: colors.accent,
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 2,
+  },
+  focusRing: {
+    position: 'absolute',
+    top: -3,
+    left: -3,
+    right: -3,
+    bottom: -3,
+    borderRadius: radius.full + 3,
+    borderWidth: 2,
+    borderColor: colors.accentSubtle,
   },
   input: {
     flex: 1,
@@ -155,6 +166,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
     color: colors.textPrimary,
     fontSize: 14,
+    // Android EditText 默认 includeFontPadding + 无显式行高，在固定高度
+    // 的 pill 里会把字形上下裁掉（「字体不全」）；显式行高 + 关闭字体
+    // 内边距后文字完整垂直居中
+    lineHeight: 20,
+    paddingVertical: 0,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   sourceBtn: {
     flexShrink: 0,
