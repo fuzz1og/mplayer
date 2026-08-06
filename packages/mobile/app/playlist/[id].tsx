@@ -16,7 +16,7 @@ import { StatusBar } from 'expo-status-bar';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import SongRow from '../../components/SongRow';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
-import { PlaylistHeroPrototype, PrototypeSwitcher } from '../../components/prototype/PlaylistHeroPrototype';
+import { PlaylistHeroPrototype, PrototypeSwitcher, VariantD } from '../../components/prototype/PlaylistHeroPrototype';
 import type { HeroVariant } from '../../components/prototype/PlaylistHeroPrototype';
 import type { Song } from '@mplayer/core';
 import { colors, radius, spacing, statusBarStyle } from '../../theme/tokens';
@@ -24,7 +24,8 @@ import { colors, radius, spacing, statusBarStyle } from '../../theme/tokens';
 export default function PlaylistDetailPage() {
   const { id, variant: variantParam } = useLocalSearchParams<{ id: string; variant?: string }>();
   const variantParamStr = Array.isArray(variantParam) ? variantParam[0] : variantParam;
-  const variant: HeroVariant = variantParamStr === 'B' ? 'B' : variantParamStr === 'C' ? 'C' : 'A';
+  const variant: HeroVariant =
+    variantParamStr === 'B' ? 'B' : variantParamStr === 'C' ? 'C' : variantParamStr === 'D' ? 'D' : 'A';
   const playlists = usePlaylistStore((s) => s.playlists);
   const removeSong = usePlaylistStore((s) => s.removeSong);
   const renamePlaylist = usePlaylistStore((s) => s.renamePlaylist);
@@ -95,12 +96,13 @@ export default function PlaylistDetailPage() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style={__DEV__ && variant === 'B' ? 'light' : statusBarStyle} />
+      {/* D 变体（全出血封面）不需要顶部安全区边距，由封面自行延伸 */}
+      <SafeAreaView edges={__DEV__ && variant === 'D' ? [] : ['top']} style={{ flex: 1 }}>
+        <StatusBar style={__DEV__ && (variant === 'B' || variant === 'D') ? 'light' : statusBarStyle} />
         <Stack.Screen
           options={{
             title: playlist.name,
-            headerShown: !(__DEV__ && variant === 'B'),
+            headerShown: !(__DEV__ && (variant === 'B' || variant === 'D')),
             headerStyle: { backgroundColor: colors.bgSurface },
             headerTintColor: colors.textPrimary,
             headerShadowVisible: false,
@@ -117,6 +119,12 @@ export default function PlaylistDetailPage() {
             <Music2 size={64} color={colors.textTertiary} />
             <Text style={styles.emptyText}>歌单是空的</Text>
           </View>
+        ) : __DEV__ && variant === 'D' ? (
+          <VariantD
+            playlist={playlist}
+            onRemoveSong={handleRemoveSong}
+            onSwap={handleSwap}
+          />
         ) : (
           <FlatList
             data={playlist.songs}
