@@ -41,6 +41,19 @@ export function useRefreshedCover(song: Song | null | undefined): {
   useEffect(() => {
     setCover(song?.cover || undefined);
     searched.current = false;
+    // 歌单/收藏里保存的歌可能没有封面字段（或封面 URL 为空）：
+    // 没有 onError 可触发，主动搜索补一次最新封面
+    if (song && song.name && !song.cover) {
+      searched.current = true;
+      void withCoverSearchSlot(async () => {
+        try {
+          const fresh = await searchStrictMatch(song);
+          if (fresh?.cover?.startsWith('http')) setCover(fresh.cover);
+        } catch {
+          // 兜底失败保留占位
+        }
+      });
+    }
   }, [song?.cover, song?.id, song?.name]);
 
   const handleError = () => {

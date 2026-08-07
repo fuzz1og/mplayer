@@ -7,7 +7,7 @@ import {
 import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, X, Play } from 'lucide-react-native';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
-import { colors, spacing, radius } from '../theme/tokens';
+import { colors, spacing, radius, shadow } from '../theme/tokens';
 
 export default function PlayerBar() {
   const insets = useSafeAreaInsets();
@@ -144,10 +144,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.bgSurface,
-    paddingHorizontal: spacing[4],
+    // 悬浮卡片化：与列表/内容分离（圆角 + 阴影 + 边距）
+    borderRadius: radius.lg,
+    marginHorizontal: spacing[3],
+    marginVertical: spacing[2],
+    paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
+    ...shadow.lg,
   },
   containerEmpty: {
     opacity: 0.6,
