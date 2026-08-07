@@ -3,7 +3,7 @@ export { MULTI_SOURCE_LIST } from './constants.js';
 export { cacheManager } from './api/memoryCacheManager.js';
 export { RateLimiter, beforeRequest, getAntiScrapeHeaders } from './api/antiScrape.js';
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
-export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents } from './api/musicApi.js';
+export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, resolveCoverUrl, isSessionProtectedEndpoint, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents } from './api/musicApi.js';
 export type { ProxyAgents } from './api/musicApi.js';
 export { probeAudio, probeAudioUrl, normalizeProbeUrl } from './api/audioProbe.js';
 export { probeSongs } from './api/probeSongs.js';

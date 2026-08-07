@@ -42,6 +42,7 @@ async function probeSongBatch(songs: Song[], api: MusicApi): Promise<ProbeResult
 export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('lyrics:get', (lrcUrl: string) => musicApi.getLyrics(lrcUrl));
   registerIpcHandler('musicApi:getAudioUrl', (audioUrl: string) => musicApi.getAudioUrl(audioUrl));
+  registerIpcHandler('musicApi:resolveCoverUrl', (coverUrl: string) => musicApi.resolveCoverUrl(coverUrl));
   registerIpcHandler('musicApi:probeAudio', (songs: Song[]) => probeSongBatch(Array.isArray(songs) ? songs : [], musicApi));
   registerIpcHandler('musicApi:getSodaAudioUrl', (trackId: string) => musicApi.getSodaAudioUrl(trackId));
   registerIpcHandler('musicApi:getSodaPlayableUrl', (trackId: string) => musicApi.getSodaPlayableUrl(trackId));

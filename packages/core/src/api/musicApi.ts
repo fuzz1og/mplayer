@@ -13,10 +13,24 @@ let PROXY_URL = '';
 const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
 const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
 const SODA_URL_CACHE_TTL = 10 * 60 * 1000;
+const COVER_URL_CACHE_TTL = 6 * 60 * 60 * 1000;
 const sodaAudioUrlCache = new Map<string, { url: string; expires: number }>();
+const coverUrlCache = new Map<string, { url: string; expires: number }>();
+
+/** 会话保护端点返回的错误页特征串（无会话时 api.php 一律返回此页） */
+const INVALID_REQUEST_MARKER = '非法请求';
+/** 会话保护端点的 URL 特征（api.php?get=url / get=pic / get=lrc） */
+export function isSessionProtectedEndpoint(url: string): boolean {
+  return url.includes('api.php');
+}
 export function setApiBaseUrl(url: string): void {
   API_BASE_URL = url.endsWith('/') ? url : url + '/';
   apiClient.defaults.baseURL = API_BASE_URL;
+  // 服务端可能更换，旧会话失效；远程源提前预热会话，避免首个请求多一次往返
+  invalidateApiSession();
+  if (isRemoteApiHost()) {
+    void ensureApiSession();
+  }
 }
 export function getApiBaseUrl(): string { return API_BASE_URL; }
 export function setProxyUrl(url: string): void {
@@ -155,8 +169,212 @@ const apiClient = axios.create({
   timeout: 30000,
 });
 
+// ── 上游搜索服务会话管理 ────────────────────────────────────────
+// 搜索/取歌接口要求携带 PHPSESSID 会话 cookie，否则一律返回
+// {"code":404,"error":"没有找到相关信息"}（搜索）或「非法请求」（api.php）。
+// 首次请求前先 GET 首页拿会话，之后所有同源请求自动带 Cookie；
+// 会话失效时刷新并原样重试一次（搜索 404 / api.php 非法请求均视为失效信号）。
+let apiSessionCookie = '';
+let apiSessionFetching: Promise<string> | null = null;
+
+function invalidateApiSession(): void {
+  apiSessionCookie = '';
+}
+
+function isRemoteApiHost(): boolean {
+  try {
+    const host = new URL(API_BASE_URL).hostname;
+    return host !== '' && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
+  } catch {
+    return false;
+  }
+}
+
+/** 判断请求是否发往 API 同源（cookie 只允许带上同源请求，避免泄漏给第三方 CDN） */
+function isApiOriginRequest(config: { url?: string; baseURL?: string }): boolean {
+  try {
+    const base = new URL(API_BASE_URL);
+    const target = new URL(config.url || '', config.baseURL || API_BASE_URL);
+    return target.origin === base.origin;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureApiSession(): Promise<string> {
+  if (apiSessionCookie) return apiSessionCookie;
+  if (!apiSessionFetching) {
+    apiSessionFetching = (async () => {
+      try {
+        const origin = new URL(API_BASE_URL).origin;
+        // 走 apiClient 以继承代理/agent 配置；__sessionBootstrapSkip 标记绕过会话拦截
+        const res = await apiClient.get(origin + '/', {
+          timeout: 8000,
+          maxRedirects: 5,
+          headers: {
+            // 首页必须像普通浏览器访问，不能带 AJAX 特征头：
+            // 带 x-requested-with 会被服务端当 AJAX 请求处理，返回 403 且会话不初始化，
+            // 之后所有搜索都会因会话无效被拒（404 没有找到相关信息）
+            'X-Requested-With': null,
+            'Content-Type': null,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          },
+          __sessionBootstrapSkip: true,
+        } as any);
+        // 不同运行环境 headers['set-cookie'] 可能是数组或单条字符串，统一成数组
+        const rawCookies = res.headers['set-cookie'];
+        const setCookies: string[] = Array.isArray(rawCookies)
+          ? rawCookies
+          : rawCookies
+            ? [rawCookies]
+            : [];
+        apiSessionCookie = setCookies.map(c => c.split(';')[0]).find(c => c.startsWith('PHPSESSID=')) || '';
+        if (!apiSessionCookie) {
+          console.warn('[session] 首页未返回 PHPSESSID 会话 cookie，搜索可能被拒');
+        }
+      } catch (e: any) {
+        console.warn('[session] 获取会话失败:', e?.message || e);
+      } finally {
+        apiSessionFetching = null;
+      }
+      return apiSessionCookie;
+    })();
+  }
+  return apiSessionFetching;
+}
+
+// 请求拦截：API 同源请求自动带上会话 cookie（懒获取，去重并发）
+apiClient.interceptors.request.use(async (config) => {
+  const ext = config as any;
+  if (ext.__sessionBootstrapSkip || ext.__sessionRetried) return config;
+  if (!isApiOriginRequest(config)) return config;
+  try {
+    const cookie = await ensureApiSession();
+    if (cookie) config.headers.set('Cookie', cookie);
+  } catch {
+    // 会话获取失败不阻塞请求，保持原有失败兜底行为
+  }
+  return config;
+});
+
+// 响应拦截：会话缺失/失效时刷新会话并重试一次
+apiClient.interceptors.response.use(
+  async (response) => {
+    const config = response.config as any;
+    if (config.__sessionBootstrapSkip || config.__sessionRetried) return response;
+    if (!isApiOriginRequest(config)) return response;
+
+    const method = (config.method || 'get').toLowerCase();
+    const data: unknown = response.data;
+
+    // 搜索接口（POST 根路径）：code 404「没有找到相关信息」= 会话缺失/失效
+    const noSessionSearch =
+      method === 'post' &&
+      data !== null &&
+      typeof data === 'object' &&
+      (data as any).code === 404 &&
+      typeof (data as any).error === 'string' &&
+      ((data as any).error as string).includes('没有找到相关信息');
+
+    // api.php（GET）：返回「非法请求」= 会话缺失/失效（id 无效也会如此，重试一次无副作用）
+    const noSessionApi =
+      method === 'get' && typeof data === 'string' && data.includes(INVALID_REQUEST_MARKER);
+
+    if (noSessionSearch || noSessionApi) {
+      invalidateApiSession();
+      const cookie = await ensureApiSession();
+      if (cookie) {
+        config.__sessionRetried = true;
+        config.headers.set('Cookie', cookie);
+        return apiClient.request(config);
+      }
+      console.warn('[session] 会话刷新失败，返回原始响应');
+    }
+    return response;
+  },
+  (error) => Promise.reject(error)
+);
+
 export function getApiClient(): AxiosInstance {
   return apiClient;
+}
+
+/**
+ * 手动逐跳跟随重定向，返回最终 URL 和末跳响应数据。
+ * 当前 axios 版本的 response.request 取不到最终地址，依赖自动重定向会把
+ * 302 端点（如 api.php?get=url / get=pic）的 CDN 直链丢掉；
+ * 因此关闭自动跟随（maxRedirects: 0），逐跳处理 Location。
+ * 注意：部分环境（RN 的 XHR 适配器、axios fetch 适配器）会无视 maxRedirects
+ * 自动跟随，此时只会返回原 URL——调用方应自行兜底。
+ */
+async function followRedirectsToFinalUrl(
+  url: string,
+  signal?: AbortSignal,
+  timeout = 5000
+): Promise<{ finalUrl: string; data: unknown }> {
+  const MAX_REDIRECTS = 3;
+  let currentUrl = url;
+  let finalUrl = url;
+  let lastResponse: { data: unknown } | null = null;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    const response = await apiClient.get(currentUrl, {
+      maxRedirects: 0,
+      validateStatus: (status) => status >= 200 && status < 400, // 3xx 也接受，交给下面处理
+      timeout,
+      signal: signal as any,
+    });
+    finalUrl = currentUrl;
+    lastResponse = response;
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.location;
+      if (!location) break; // 无 Location 的重定向：按当前 URL 兜底
+      currentUrl = new URL(String(location), currentUrl).href;
+      continue;
+    }
+    break;
+  }
+  // 部分适配器（RN XHR、axios fetch 适配器）无视 maxRedirects 自动跟随重定向，
+  // 此时拿不到 3xx 响应；若平台暴露了最终地址（responseURL），用它兜底。
+  const autoFollowedUrl = (lastResponse as any)?.request?.responseURL;
+  if (
+    typeof autoFollowedUrl === 'string' &&
+    /^https?:\/\//.test(autoFollowedUrl) &&
+    autoFollowedUrl !== url
+  ) {
+    finalUrl = autoFollowedUrl;
+  }
+  return { finalUrl, data: lastResponse?.data };
+}
+
+/**
+ * 封面 URL 解析：api.php?get=pic 封面端点需要会话 cookie，
+ * 移动端原生 <Image> 无法携带，解析成 CDN 直链后即可直接加载。
+ * 非 api.php URL 原样返回；解析失败/会话不可用回退原 URL（渲染端占位图兜底）。
+ * 结果带 6 小时 TTL 缓存（同一首歌的签名链接变化会生成新 key）；
+ * 未发生重定向（适配器自动跟随拿不到 Location）时不缓存，避免长期保留故障态。
+ */
+export async function resolveCoverUrl(coverUrl: string): Promise<string> {
+  const fullUrl = normalizeUrl(coverUrl);
+  if (!fullUrl || !isSessionProtectedEndpoint(fullUrl)) return fullUrl;
+  const cached = coverUrlCache.get(fullUrl);
+  if (cached && cached.expires > Date.now()) return cached.url;
+  try {
+    const { finalUrl, data } = await followRedirectsToFinalUrl(fullUrl, undefined, 5000);
+    if (typeof data === 'string' && data.includes(INVALID_REQUEST_MARKER)) {
+      return fullUrl; // 会话不可用：不缓存，回退原 URL
+    }
+    if (finalUrl !== fullUrl) {
+      coverUrlCache.set(fullUrl, { url: finalUrl, expires: Date.now() + COVER_URL_CACHE_TTL });
+    }
+    return finalUrl;
+  } catch {
+    return fullUrl;
+  }
 }
 
 /**
@@ -528,7 +746,6 @@ export const musicApi = {
     // 带重试的 URL 解析（最多 3 次尝试，指数退避）
     const MAX_RETRIES = 2;
     const BASE_TIMEOUT = 5000;
-    const MAX_REDIRECTS = 3;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (signal?.aborted) {
@@ -536,17 +753,10 @@ export const musicApi = {
       }
 
       try {
-        const response = await apiClient.get(fullUrl, {
-          maxRedirects: MAX_REDIRECTS,
-          validateStatus: (status) => status < 400,
-          timeout: BASE_TIMEOUT,
-          signal: signal as any,
-        });
-
-        const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || fullUrl;
+        const { finalUrl, data } = await followRedirectsToFinalUrl(fullUrl, signal, BASE_TIMEOUT);
 
         if (finalUrl.startsWith('data:text/html')) {
-          const errorMsg = typeof response.data === 'string' ? response.data : '获取音频失败';
+          const errorMsg = typeof data === 'string' ? data : '获取音频失败';
           throw new Error(errorMsg);
         }
 
@@ -572,6 +782,8 @@ export const musicApi = {
 
     return fullUrl;
   },
+
+  resolveCoverUrl,
 
   async getLyrics(lrcUrl: string): Promise<string> {
     const fullUrl = normalizeUrl(lrcUrl);

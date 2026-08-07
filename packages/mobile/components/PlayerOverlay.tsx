@@ -12,6 +12,7 @@ import { useFavoriteStore } from '../stores/favoriteStore';
 import { togglePlay, seekTo, playSong, fetchLrcInBackground } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
+import { useResolvedCover } from '../hooks/useResolvedCover';
 import { parseLRC, musicApi, findCurrentLyricIndex } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
@@ -104,6 +105,8 @@ export default function PlayerOverlay({ onClose }: Props) {
   // 封面加载失败 → 占位唱片 + 懒刷新兜底（搜索补新封面，写回后自动恢复）
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [song?.cover]);
+  const coverUrl = useResolvedCover(song?.cover);
+  useEffect(() => { setCoverFailed(false); }, [coverUrl]);
   const handleCoverError = () => {
     setCoverFailed(true);
     if (song) void fetchLrcInBackground(song, true);
@@ -277,7 +280,7 @@ export default function PlayerOverlay({ onClose }: Props) {
               <View style={styles.plinth}>
                 <View style={styles.platter} />
                 <Animated.Image
-                  source={coverFailed ? undefined : { uri: song.cover || 'https://via.placeholder.com/300' }}
+                  source={coverFailed ? undefined : { uri: coverUrl || 'https://via.placeholder.com/300' }}
                   style={[styles.cover, { transform: [{ rotate: spin }] }]}
                   onError={handleCoverError}
                 />
