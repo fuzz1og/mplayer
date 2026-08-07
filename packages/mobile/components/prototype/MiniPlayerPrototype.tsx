@@ -25,7 +25,6 @@ import { router } from 'expo-router';
 import {
   ChevronLeft,
   ChevronRight,
-  X,
   Compass,
   Flame,
   Download,
@@ -308,29 +307,28 @@ const pillStyles = StyleSheet.create({
   btn: { padding: spacing[1] },
 });
 
-/* ═══════════ 悬浮切换条（仅 dev） ═══════════ */
-export function MiniPrototypeSwitcher({ current }: { current: MiniPlayerVariant }) {
+/* ═══════════ 悬浮切换条（仅 dev，常驻显示） ═══════════
+ * current 为 'NONE' 表示正式播放栏；箭头循环 正式→A→B→C→正式 */
+export type MiniSwitcherState = MiniPlayerVariant | 'NONE';
+
+const SWITCH_KEYS: MiniSwitcherState[] = ['NONE', 'A', 'B', 'C'];
+
+export function MiniPrototypeSwitcher({ current }: { current: MiniSwitcherState }) {
   const cycle = (dir: 1 | -1) => {
-    const keys: MiniPlayerVariant[] = ['A', 'B', 'C'];
-    const idx = keys.indexOf(current);
-    const nextKey = keys[(idx + dir + keys.length) % keys.length];
-    setPersistentVariant(nextKey);
-    router.setParams({ variant: nextKey });
-  };
-  const reset = () => {
-    setPersistentVariant(null);
-    router.setParams({ variant: '' });
+    const idx = SWITCH_KEYS.indexOf(current);
+    const nextKey = SWITCH_KEYS[(idx + dir + SWITCH_KEYS.length) % SWITCH_KEYS.length];
+    setPersistentVariant(nextKey === 'NONE' ? null : nextKey);
+    router.setParams({ variant: nextKey === 'NONE' ? '' : nextKey });
   };
   return (
     <View style={switchStyles.wrap} pointerEvents="box-none">
       <View style={switchStyles.bar}>
-        <TouchableOpacity onPress={reset} style={switchStyles.btn} hitSlop={8}>
-          <X size={16} color="rgba(255,255,255,0.7)" />
-        </TouchableOpacity>
         <TouchableOpacity onPress={() => cycle(-1)} style={switchStyles.btn} hitSlop={8}>
           <ChevronLeft size={20} color="#fff" />
         </TouchableOpacity>
-        <Text style={switchStyles.label}>{current} — {MINI_VARIANT_NAMES[current]}</Text>
+        <Text style={switchStyles.label}>
+          {current === 'NONE' ? '正式播放栏' : `${current} — ${MINI_VARIANT_NAMES[current]}`}
+        </Text>
         <TouchableOpacity onPress={() => cycle(1)} style={switchStyles.btn} hitSlop={8}>
           <ChevronRight size={20} color="#fff" />
         </TouchableOpacity>
@@ -426,7 +424,6 @@ export default function MiniPlayerPrototype({
           </View>
         </>
       )}
-      <MiniPrototypeSwitcher current={variant} />
     </View>
   );
 }

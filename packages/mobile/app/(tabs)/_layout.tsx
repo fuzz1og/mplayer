@@ -9,8 +9,8 @@ import { colors, statusBarStyle } from '../../theme/tokens';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
 import MiniPlayerPrototype from '../../components/prototype/MiniPlayerPrototype';
+import { MiniPrototypeSwitcher, getPersistentVariant } from '../../components/prototype/MiniPlayerPrototype';
 import type { MiniPlayerVariant } from '../../components/prototype/MiniPlayerPrototype';
-import { getPersistentVariant } from '../../components/prototype/MiniPlayerPrototype';
 import { usePlayerStore } from '../../stores/playerStore';
 
 // tab bar 内容高度（paddingTop + 图标 + 标签行 + paddingBottom）：
@@ -66,19 +66,7 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
     outputRange: [tabBarHeight, 0],
   });
 
-  // 原型模式：直接替换底部结构（迷你播放栏多方案评审用）
-  if (__DEV__ && protoVariant) {
-    return (
-      <MiniPlayerPrototype
-        variant={protoVariant}
-        onOpen={() => setShowPlayer(true)}
-        tabState={{ routes: state.routes, index: state.index }}
-        onTabPress={(name: string) => navigation.navigate(name)}
-      />
-    );
-  }
-
-  return (
+  const normalUI = (
     <View>
       {/* 搜索页时 tab bar 收起为 0 高度,PlayerBar 贴到屏幕底部,
           需要补底部安全区 padding;其他页 tab bar 自己处理安全区 */}
@@ -107,7 +95,25 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
           })}
         </View>
       </Animated.View>
-    </Animated.View>
+      </Animated.View>
+    </View>
+  );
+
+  // 原型模式：直接替换底部结构（迷你播放栏多方案评审用）；
+  // 切换条 dev 模式常驻（含"正式"态），保证用户一定能看到入口
+  return (
+    <View>
+      {__DEV__ && protoVariant ? (
+        <MiniPlayerPrototype
+          variant={protoVariant}
+          onOpen={() => setShowPlayer(true)}
+          tabState={{ routes: state.routes, index: state.index }}
+          onTabPress={(name: string) => navigation.navigate(name)}
+        />
+      ) : (
+        normalUI
+      )}
+      {__DEV__ && <MiniPrototypeSwitcher current={protoVariant ?? 'NONE'} />}
     </View>
   );
 }

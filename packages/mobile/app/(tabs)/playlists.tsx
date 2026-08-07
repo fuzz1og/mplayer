@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 52,
+    paddingTop: 12,
     paddingBottom: 12,
     backgroundColor: colors.bgSurface,
     borderBottomWidth: StyleSheet.hairlineWidth,

@@ -23,7 +23,8 @@ export default function HistoryPage() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+      {/* 原生 header 已含状态栏区域，SafeAreaView 再加 top 会叠出空白 */}
+      <SafeAreaView edges={[]} style={{ flex: 1 }}>
         <StatusBar style={statusBarStyle} />
         <Stack.Screen options={{
           title: '播放历史',
