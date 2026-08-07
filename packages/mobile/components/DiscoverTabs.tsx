@@ -25,11 +25,11 @@ const TABS = [
 
 export default function DiscoverTabs() {
   const [activeIndex, setActiveIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<FlatList<any>>(null);
 
   const onTabPress = (i: number) => {
     setActiveIndex(i);
-    scrollRef.current?.scrollTo({ x: i * SCREEN_WIDTH, animated: true });
+    scrollRef.current?.scrollToOffset({ offset: i * SCREEN_WIDTH, animated: true });
   };
 
   const onMomentumEnd = (e: any) => {
@@ -53,27 +53,28 @@ export default function DiscoverTabs() {
           </TouchableOpacity>
         ))}
       </View>
-      {/* Swipeable content */}
-      <ScrollView
+      {/* Swipeable content：横向分页容器用 FlatList（VirtualizedList-backed），
+          避免 ScrollView 内嵌 FlatList 触发「unique key」嵌套警告 */}
+      <FlatList
         horizontal
         pagingEnabled
         ref={scrollRef}
         onMomentumScrollEnd={onMomentumEnd}
         showsHorizontalScrollIndicator={false}
+        data={TABS}
+        keyExtractor={(t) => t.key}
+        initialNumToRender={1}
+        windowSize={3}
+        renderItem={({ index }) => (
+          <View style={{ width: SCREEN_WIDTH }}>
+            {index === 0 && <HotlistContent />}
+            {index === 1 && activeIndex >= 1 && <AlbumsContent />}
+            {index === 2 && activeIndex >= 2 && <PlaylistContent />}
+            {index === 3 && activeIndex >= 3 && <ArtistContent />}
+          </View>
+        )}
       >
-        <View key="hotlist" style={{ width: SCREEN_WIDTH }}>
-          <HotlistContent />
-        </View>
-        <View key="albums" style={{ width: SCREEN_WIDTH }}>
-          {activeIndex >= 1 && <AlbumsContent />}
-        </View>
-        <View key="playlists" style={{ width: SCREEN_WIDTH }}>
-          {activeIndex >= 2 && <PlaylistContent />}
-        </View>
-        <View key="artists" style={{ width: SCREEN_WIDTH }}>
-          {activeIndex >= 3 && <ArtistContent />}
-        </View>
-      </ScrollView>
+      </FlatList>
     </View>
   );
 }
