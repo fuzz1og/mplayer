@@ -6,7 +6,7 @@ import DailyRecommend from '@/renderer/components/DailyRecommend';
 import PlaylistGrid from '@/renderer/components/PlaylistGrid';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song, DiscoverPlaylist } from '@mplayer/core';
+import { pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 
 const RecommendPage: React.FC = () => {
   const navigate = useNavigate();
@@ -15,7 +15,9 @@ const RecommendPage: React.FC = () => {
   const [recommendedSongs, setRecommendedSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [offset, setOffset] = useState(0);
+  // 当前展示的随机批次 + 本轮已用过的池索引(抽完一轮自动重置)
+  const [batch, setBatch] = useState<Song[]>([]);
+  const [usedIndices, setUsedIndices] = useState<number[]>([]);
 
   const fetchRecommended = useCallback(async () => {
     setLoading(true);
@@ -23,10 +25,13 @@ const RecommendPage: React.FC = () => {
     try {
       const [playlists, songs] = await Promise.all([
         IpcClient.invoke<DiscoverPlaylist[]>('musicApi:getRecommendedPlaylists', 30),
-        IpcClient.invoke<Song[]>('musicApi:getRecommendedSongs', 30),
+        IpcClient.invoke<Song[]>('musicApi:getRecommendedSongs', 100),
       ]);
       setRecommendedPlaylists(playlists || []);
       setRecommendedSongs(songs || []);
+      const { batch: firstBatch, used } = pickRandomBatch(songs || [], [], 5);
+      setBatch(firstBatch);
+      setUsedIndices(used);
     } catch (err: any) {
       setError(err?.message || '加载推荐失败');
     } finally {
@@ -38,11 +43,12 @@ const RecommendPage: React.FC = () => {
     fetchRecommended();
   }, [fetchRecommended]);
 
+  // 换一批:从大池子随机抽 5 首(本轮不重复,抽完一轮自动重置)
   const handleRefresh = () => {
-    if (recommendedSongs.length > 0) {
-      setOffset(prev => (prev + 5) % recommendedSongs.length);
-    }
-    fetchRecommended();
+    if (recommendedSongs.length === 0) return;
+    const { batch: nextBatch, used } = pickRandomBatch(recommendedSongs, usedIndices, 5);
+    setBatch(nextBatch);
+    setUsedIndices(used);
   };
 
   const handlePlay = async (song: Song) => {
@@ -66,9 +72,7 @@ const RecommendPage: React.FC = () => {
     navigate(`/discover-playlist/${playlist.id}`);
   };
 
-  const dailySongs = recommendedSongs.length > 0
-    ? Array.from({ length: Math.min(5, recommendedSongs.length) }, (_, i) => recommendedSongs[(offset + i) % recommendedSongs.length])
-    : [];
+  const dailySongs = batch;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
