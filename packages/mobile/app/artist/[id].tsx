@@ -1,18 +1,20 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, Image, FlatList, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, Image, StyleSheet, ScrollView, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { Disc3 } from 'lucide-react-native';
 import { musicApi, type Song, type Album } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
+import CollapsingHero from '../../components/CollapsingHero';
 import { probeSongsWithTags } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
-import { colors, radius, shadow, spacing, statusBarStyle } from '../../theme/tokens';
+import { usePlayerStore } from '../../stores/playerStore';
+import { playSong } from '../../services/audioPlayer';
+import { colors, radius, shadow, spacing } from '../../theme/tokens';
 
 export default function ArtistDetailPage() {
   const { id, name, pic } = useLocalSearchParams<{ id: string; name?: string; pic?: string }>();
@@ -91,61 +93,67 @@ export default function ArtistDetailPage() {
     setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)));
   };
 
+  const handlePlayAll = () => {
+    if (songs.length === 0) return;
+    usePlayerStore.getState().setQueue(songs, 0);
+    playSong(songs[0]);
+  };
+
   if (loading) return <LoadingState />;
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style={statusBarStyle} />
-        <Stack.Screen options={{ title: artist?.name || '歌手', headerShown: true, headerStyle: { backgroundColor: colors.bgSurface }, headerTintColor: colors.textPrimary, headerShadowVisible: false }} />
-        <FlatList
+      <SafeAreaView edges={[]} style={{ flex: 1 }}>
+        <Stack.Screen options={{ title: artist?.name || '歌手', headerShown: false }} />
+        <CollapsingHero
+          cover={artist?.picUrl}
+          fallbackIcon={
+            <Text style={{ color: colors.textInverse, fontSize: 56, fontWeight: '700' }}>
+              {(artist?.name || '?')[0]}
+            </Text>
+          }
+          navTitle={artist?.name || '歌手'}
+          title={artist?.name || '未知歌手'}
+          subtitle={songTotalRef.current > 0 ? `共 ${songTotalRef.current} 首歌曲` : undefined}
+          actionLabel="播放全部"
+          onAction={handlePlayAll}
           data={songs}
           keyExtractor={(item, i) => `${item.id}-${i}`}
-          ListHeaderComponent={() => (
-            <View style={styles.header}>
-              {artist?.picUrl ? (
-                <Image source={{ uri: artist.picUrl }} style={styles.avatar} />
-              ) : (
-                <View style={[styles.avatar, { backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
-                  <Text style={{ color: colors.textTertiary, fontSize: 40, fontWeight: '700' }}>
-                    {(artist?.name || '?')[0]}
-                  </Text>
-                </View>
-              )}
-              <Text style={styles.name}>{artist?.name || '未知歌手'}</Text>
-              {songTotalRef.current > 0 && <Text style={styles.subtitle}>共 {songTotalRef.current} 首歌曲</Text>}
-              {albums.length > 0 && (
-                <View style={styles.albumsSection}>
-                  <Text style={styles.albumsTitle}>专辑</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {albums.map(a => (
-                      <TouchableOpacity
-                        key={a.id}
-                        style={styles.albumCard}
-                        activeOpacity={0.7}
-                        onPress={() => router.push(`/album/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl)}&artist=${encodeURIComponent(a.artist)}` as any)}
-                      >
-                        {a.picUrl ? (
-                          <Image source={{ uri: a.picUrl }} style={styles.albumCover} />
-                        ) : (
-                          <View style={[styles.albumCover, { backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
-                            <Disc3 size={24} color={colors.textTertiary} />
-                          </View>
-                        )}
-                        <Text style={styles.albumName} numberOfLines={1}>{a.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-          )}
           renderItem={({ item }) => <SongRow song={item} showSource queueSongs={songs} onSwap={handleSwap} />}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={<View style={styles.empty}><Text style={{ color: colors.textSecondary, fontSize: 16 }}>暂无歌曲</Text></View>}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={{ color: colors.textSecondary, fontSize: 16 }}>暂无歌曲</Text>
+            </View>
+          }
+          listHeader={
+            albums.length > 0 ? (
+              <View style={styles.albumsSection}>
+                <Text style={styles.albumsTitle}>专辑</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {albums.map(a => (
+                    <TouchableOpacity
+                      key={a.id}
+                      style={styles.albumCard}
+                      activeOpacity={0.7}
+                      onPress={() => router.push(`/album/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl)}&artist=${encodeURIComponent(a.artist)}` as any)}
+                    >
+                      {a.picUrl ? (
+                        <Image source={{ uri: a.picUrl }} style={styles.albumCover} />
+                      ) : (
+                        <View style={[styles.albumCover, { backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+                          <Disc3 size={24} color={colors.textTertiary} />
+                        </View>
+                      )}
+                      <Text style={styles.albumName} numberOfLines={1}>{a.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null
+          }
         />
       </SafeAreaView>
       <BottomSafePlayerBar />
@@ -155,11 +163,7 @@ export default function ArtistDetailPage() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  header: { alignItems: 'center', paddingVertical: spacing[6], paddingHorizontal: spacing[4] },
-  avatar: { width: 120, height: 120, borderRadius: radius.full, marginBottom: spacing[4] },
-  name: { color: colors.textPrimary, fontSize: 20, fontWeight: '700' },
-  subtitle: { color: colors.textSecondary, fontSize: 13, marginTop: 6 },
-  albumsSection: { alignSelf: 'stretch', marginTop: spacing[5] },
+  albumsSection: { paddingTop: spacing[3], paddingBottom: spacing[2], paddingLeft: spacing[4] },
   albumsTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: spacing[3] },
   albumCard: {
     width: 116,
@@ -171,6 +175,5 @@ const styles = StyleSheet.create({
   },
   albumCover: { width: 100, height: 100, borderRadius: radius.sm, backgroundColor: colors.bgHover },
   albumName: { color: colors.textTertiary, fontSize: 12, marginTop: 6 },
-  list: { paddingBottom: 100 },
   empty: { paddingVertical: 60, alignItems: 'center' },
 });

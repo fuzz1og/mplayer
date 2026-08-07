@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, Image, FlatList, StyleSheet,
+  View, Text, StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { musicApi, formatPlayCount, type Song } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
+import CollapsingHero from '../../components/CollapsingHero';
 import { probeSongsWithTags } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
-import { colors, radius, spacing, statusBarStyle } from '../../theme/tokens';
+import { usePlayerStore } from '../../stores/playerStore';
+import { playSong } from '../../services/audioPlayer';
+import { colors } from '../../theme/tokens';
 
 const PAGE_SIZE = 50;
 
@@ -102,32 +104,27 @@ export default function DiscoverPlaylistDetailPage() {
     );
   }
 
+  const handlePlayAll = () => {
+    if (songs.length === 0) return;
+    usePlayerStore.getState().setQueue(songs, 0);
+    playSong(songs[0]);
+  };
+
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style={statusBarStyle} />
-        <Stack.Screen options={{ title: playlist.name, headerShown: true, headerStyle: { backgroundColor: colors.bgSurface }, headerTintColor: colors.textPrimary, headerShadowVisible: false }} />
-        <FlatList
+      <SafeAreaView edges={[]} style={{ flex: 1 }}>
+        <Stack.Screen options={{ title: playlist.name, headerShown: false }} />
+        <CollapsingHero
+          cover={playlist.coverImgUrl}
+          navTitle={playlist.name}
+          title={playlist.name}
+          subtitle={playlist.creator?.nickname ?? '未知'}
+          meta={`播放: ${formatPlayCount(playlist.playCount)} · 歌曲: ${playlist.trackCount}首`}
+          tags={playlist.tags}
+          actionLabel="播放全部"
+          onAction={handlePlayAll}
           data={songs}
           keyExtractor={(item, i) => `${item.id}-${i}`}
-          ListHeaderComponent={() => (
-            <View style={styles.header}>
-              <Image source={{ uri: playlist.coverImgUrl }} style={styles.cover} />
-              <Text style={styles.name}>{playlist.name}</Text>
-              <Text style={styles.creator}>{playlist.creator?.nickname ?? '未知'}</Text>
-              <View style={styles.metaRow}>
-                <Text style={styles.meta}>播放: {formatPlayCount(playlist.playCount)}</Text>
-                <Text style={styles.meta}>歌曲: {playlist.trackCount}首</Text>
-              </View>
-              {playlist.tags.length > 0 && (
-                <View style={styles.tagsRow}>
-                  {playlist.tags.map(t => (
-                    <View key={t} style={styles.tag}><Text style={styles.tagText}>{t}</Text></View>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
           renderItem={({ item }) => (
             <SongRow
               song={item}
@@ -138,7 +135,6 @@ export default function DiscoverPlaylistDetailPage() {
               }
             />
           )}
-          contentContainerStyle={styles.list}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />}
@@ -152,14 +148,4 @@ export default function DiscoverPlaylistDetailPage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   empty: { flex: 1, backgroundColor: colors.bgBase, justifyContent: 'center', alignItems: 'center' },
-  header: { alignItems: 'center', paddingVertical: spacing[6], paddingHorizontal: spacing[4] },
-  cover: { width: 200, height: 200, borderRadius: radius.lg, marginBottom: spacing[4] },
-  name: { color: colors.textPrimary, fontSize: 18, fontWeight: '700', textAlign: 'center' },
-  creator: { color: colors.textSecondary, fontSize: 13, marginTop: 6 },
-  metaRow: { flexDirection: 'row', gap: spacing[5], marginTop: 10 },
-  meta: { color: colors.textTertiary, fontSize: 12 },
-  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing[3] },
-  tag: { backgroundColor: colors.accentSubtle, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: spacing[1] },
-  tagText: { color: colors.accentText, fontSize: 12 },
-  list: { paddingBottom: 100 },
 });
