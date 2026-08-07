@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react';
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -12,20 +11,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CircleAlert, Pencil, Music2 } from 'lucide-react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { usePlaylistStore } from '../../stores/playlistStore';
-import SongRow from '../../components/SongRow';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
-import { PlaylistHeroPrototype, PrototypeSwitcher, VariantD } from '../../components/prototype/PlaylistHeroPrototype';
-import type { HeroVariant } from '../../components/prototype/PlaylistHeroPrototype';
+import PlaylistHero from '../../components/PlaylistHero';
 import type { Song } from '@mplayer/core';
-import { colors, radius, spacing, statusBarStyle } from '../../theme/tokens';
+import { colors, radius, spacing } from '../../theme/tokens';
 
 export default function PlaylistDetailPage() {
-  const { id, variant: variantParam } = useLocalSearchParams<{ id: string; variant?: string }>();
-  const variantParamStr = Array.isArray(variantParam) ? variantParam[0] : variantParam;
-  const variant: HeroVariant =
-    variantParamStr === 'B' ? 'B' : variantParamStr === 'C' ? 'C' : variantParamStr === 'D' ? 'D' : 'A';
+  const { id } = useLocalSearchParams<{ id: string }>();
   const playlists = usePlaylistStore((s) => s.playlists);
   const removeSong = usePlaylistStore((s) => s.removeSong);
   const renamePlaylist = usePlaylistStore((s) => s.renamePlaylist);
@@ -96,13 +89,12 @@ export default function PlaylistDetailPage() {
 
   return (
     <View style={styles.container}>
-      {/* D 变体（全出血封面）不需要顶部安全区边距，由封面自行延伸 */}
-      <SafeAreaView edges={__DEV__ && variant === 'D' ? [] : ['top']} style={{ flex: 1 }}>
-        <StatusBar style={__DEV__ && (variant === 'B' || variant === 'D') ? 'light' : statusBarStyle} />
+      {/* 全出血封面方案不需要顶部安全区边距，由封面自行延伸 */}
+      <SafeAreaView edges={[]} style={{ flex: 1 }}>
         <Stack.Screen
           options={{
             title: playlist.name,
-            headerShown: !(__DEV__ && (variant === 'B' || variant === 'D')),
+            headerShown: false,
             headerStyle: { backgroundColor: colors.bgSurface },
             headerTintColor: colors.textPrimary,
             headerShadowVisible: false,
@@ -119,34 +111,13 @@ export default function PlaylistDetailPage() {
             <Music2 size={64} color={colors.textTertiary} />
             <Text style={styles.emptyText}>歌单是空的</Text>
           </View>
-        ) : __DEV__ && variant === 'D' ? (
-          <VariantD
+        ) : (
+          <PlaylistHero
             playlist={playlist}
             onRemoveSong={handleRemoveSong}
             onSwap={handleSwap}
           />
-        ) : (
-          <FlatList
-            data={playlist.songs}
-            keyExtractor={(item) => item.id}
-            ListHeaderComponent={
-              __DEV__ ? (
-                <PlaylistHeroPrototype playlist={playlist} variant={variant} />
-              ) : null
-            }
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                activeOpacity={1}
-                onLongPress={() => handleRemoveSong(item)}
-              >
-                <SongRow song={item} showSource queueSongs={playlist.songs} onSwap={handleSwap} />
-              </TouchableOpacity>
-            )}
-            contentContainerStyle={styles.list}
-          />
         )}
-
-        {__DEV__ && <PrototypeSwitcher current={variant} />}
 
         <Modal
           visible={renameModalVisible}
@@ -207,7 +178,6 @@ export default function PlaylistDetailPage() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  list: { paddingBottom: 100 },
   empty: {
     flex: 1,
     alignItems: 'center',
