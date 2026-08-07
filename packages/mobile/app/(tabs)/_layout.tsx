@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Tabs, usePathname } from 'expo-router';
+import { Tabs, usePathname, useLocalSearchParams } from 'expo-router';
 import { Compass, Flame, ListMusic, Download } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
@@ -8,6 +8,9 @@ import { StatusBar } from 'expo-status-bar';
 import { colors, statusBarStyle } from '../../theme/tokens';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
+import MiniPlayerPrototype from '../../components/prototype/MiniPlayerPrototype';
+import type { MiniPlayerVariant } from '../../components/prototype/MiniPlayerPrototype';
+import { usePlayerStore } from '../../stores/playerStore';
 
 // tab bar 内容高度（paddingTop + 图标 + 标签行 + paddingBottom）：
 // 用确定性计算替代 onLayout 测量——测量值一旦偏小（如动画/初始态），
@@ -21,6 +24,11 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const isSearch = pathname === '/search';
+  const { variant } = useLocalSearchParams<{ variant?: string }>();
+  const variantStr = Array.isArray(variant) ? variant[0] : variant;
+  const protoVariant: MiniPlayerVariant | null =
+    variantStr === 'A' || variantStr === 'B' || variantStr === 'C' ? variantStr : null;
+  const setShowPlayer = usePlayerStore((s) => s.setShowPlayer);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const heightAnim = useRef(new Animated.Value(0)).current;
   const tabBarHeight =
@@ -54,6 +62,18 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
     inputRange: [0, 1],
     outputRange: [tabBarHeight, 0],
   });
+
+  // 原型模式：直接替换底部结构（迷你播放栏多方案评审用）
+  if (__DEV__ && protoVariant) {
+    return (
+      <MiniPlayerPrototype
+        variant={protoVariant}
+        onOpen={() => setShowPlayer(true)}
+        tabState={{ routes: state.routes, index: state.index }}
+        onTabPress={(name: string) => navigation.navigate(name)}
+      />
+    );
+  }
 
   return (
     <View>
