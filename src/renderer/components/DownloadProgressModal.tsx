@@ -1,7 +1,8 @@
 import React from 'react';
-import { X, CheckCircle, AlertCircle, Loader2, Music, Trash2 } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import type { DownloadNotification } from '@/renderer/store/downloadStore';
 import { getNotificationStats, getStatusText, getStatusColor, useDownloadStore } from '@/renderer/store/downloadStore';
+import CoverImage from '@/renderer/components/CoverImage';
 
 interface DownloadProgressModalProps {
   notification: DownloadNotification;
@@ -118,26 +119,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 flexShrink: 0,
               }}
             >
-              {task.song.cover ? (
-                <img
-                  src={task.song.cover}
-                  alt={task.song.name}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)',
-                  }}
-                >
-                  <Music size={24} color="#999" />
-                </div>
-              )}
+              <CoverImage src={task.song.cover} alt={task.song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
 
             {/* 歌曲信息 */}

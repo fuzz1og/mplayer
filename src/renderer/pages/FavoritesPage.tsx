@@ -116,6 +116,11 @@ const FavoritesPage: React.FC = () => {
           onBatchDownload={downloadBatch}
           onAddToPlaylist={handleAddToPlaylist}
           onBatchAddToPlaylist={handleBatchAddToPlaylist}
+          onSwap={(original, swapped) => {
+            void useFavoriteStore.getState().replaceFavorite(original.id, swapped).catch((e) => {
+              console.error('换源保存到收藏失败:', e);
+            });
+          }}
           onCoverError={handleCoverError}
           showCheckbox={true}
           enableBatchDownload={true}

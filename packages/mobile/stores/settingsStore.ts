@@ -10,9 +10,12 @@ interface SettingsState {
   apiBaseUrl: string;
   proxyUrl: string;
   playMode: PlayMode;
+  /** Android SAF 授权的公共下载目录（content:// uri）；空 = 未授权，仅存应用私有目录 */
+  downloadDirUri: string;
   setApiBaseUrl: (url: string) => void;
   setProxyUrl: (url: string) => void;
   setPlayMode: (mode: PlayMode) => void;
+  setDownloadDirUri: (uri: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -21,9 +24,11 @@ export const useSettingsStore = create<SettingsState>()(
       apiBaseUrl: '',
       proxyUrl: '',
       playMode: '列表循环',
+      downloadDirUri: '',
       setApiBaseUrl: (url) => set({ apiBaseUrl: url }),
       setProxyUrl: (url) => set({ proxyUrl: url }),
       setPlayMode: (mode) => set({ playMode: mode }),
+      setDownloadDirUri: (uri) => set({ downloadDirUri: uri }),
     }),
     {
       name: 'settings-storage',

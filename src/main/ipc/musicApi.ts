@@ -42,6 +42,7 @@ async function probeSongBatch(songs: Song[], api: MusicApi): Promise<ProbeResult
 export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('lyrics:get', (lrcUrl: string) => musicApi.getLyrics(lrcUrl));
   registerIpcHandler('musicApi:getAudioUrl', (audioUrl: string) => musicApi.getAudioUrl(audioUrl));
+  registerIpcHandler('musicApi:resolveCoverUrl', (coverUrl: string) => musicApi.resolveCoverUrl(coverUrl));
   registerIpcHandler('musicApi:probeAudio', (songs: Song[]) => probeSongBatch(Array.isArray(songs) ? songs : [], musicApi));
   registerIpcHandler('musicApi:getSodaAudioUrl', (trackId: string) => musicApi.getSodaAudioUrl(trackId));
   registerIpcHandler('musicApi:getSodaPlayableUrl', (trackId: string) => musicApi.getSodaPlayableUrl(trackId));
@@ -56,12 +57,16 @@ export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('musicApi:getQQNewSongList', () => musicApi.getQQNewSongList());
   registerIpcHandler('musicApi:getNeteasePlaylists', (cat: string, order: string, offset: number, limit: number) => musicApi.getNeteasePlaylists(cat, order, offset, limit));
   registerIpcHandler('musicApi:getNeteasePlaylistDetail', (id: number) => musicApi.getNeteasePlaylistDetail(id));
+  registerIpcHandler('musicApi:getNeteasePlaylistSongs', (id: number, limit?: number) => musicApi.getNeteasePlaylistSongs(id, limit || 0));
+  registerIpcHandler('musicApi:getNeteasePlaylistSongsPage', (id: number, offset: number, limit: number, skipSearchFallback?: boolean) => musicApi.getNeteasePlaylistSongsPage(id, offset, limit, skipSearchFallback));
   registerIpcHandler('musicApi:getPlaylistSongsFromThirdParty', (playlistUrl: string, sourceType: any = 'netease') => musicApi.getPlaylistSongsFromThirdParty(playlistUrl, sourceType));
   registerIpcHandler('musicApi:getNeteaseArtists', (cat: number, offset: number, limit: number, initial: number) => musicApi.getNeteaseArtists(cat, offset, limit, initial));
   registerIpcHandler('musicApi:getArtistSongs', (artistId: string, offset: number, limit: number, order: string) => musicApi.getNeteaseArtistSongs(artistId, offset, limit, order));
   registerIpcHandler('musicApi:searchArtists', (keyword: string, limit: number) => musicApi.searchNeteaseArtists(keyword, limit));
   registerIpcHandler('musicApi:getAggregatedChart', (type: 'hot' | 'new', sources: string[]) => getAggregatedChart(type, sources as any));
   registerIpcHandler('musicApi:getNewAlbums', (area: string, offset: number, limit: number) => musicApi.getNewAlbums(area, offset, limit));
+  registerIpcHandler('musicApi:getAlbumDetail', (albumId: string) => musicApi.getAlbumDetail(albumId));
+  registerIpcHandler('musicApi:getArtistAlbums', (artistId: string, offset: number, limit: number) => musicApi.getArtistAlbums(artistId, offset, limit));
   registerIpcHandler('musicApi:getRecommendedPlaylists', (limit: number) => musicApi.getRecommendedPlaylists(limit));
   registerIpcHandler('musicApi:getRecommendedSongs', (limit: number) => musicApi.getRecommendedSongs(limit));
   registerIpcHandler('musicApi:getPlaylists', async (cat: string, order: string, offset: number, limit: number) => {

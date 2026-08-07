@@ -4,6 +4,7 @@ import { message, Modal } from 'antd';
 import { checkDuplicate, type DupResult } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
+import CoverImage from '@/renderer/components/CoverImage';
 
 interface AddToPlaylistModalProps {
   song: Song;
@@ -207,26 +208,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
               flexShrink: 0,
             }}
           >
-            {song.cover ? (
-              <img
-                src={song.cover}
-                alt={song.name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)',
-                }}
-              >
-                <ListMusic size={20} color="#999" />
-              </div>
-            )}
+            <CoverImage src={song.cover} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
 
           {/* 歌曲信息 */}

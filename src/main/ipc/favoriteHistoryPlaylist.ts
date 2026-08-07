@@ -9,6 +9,7 @@ export function registerFavoriteIpc(db: Db): void {
   registerIpcHandler('favorite:isFavorite', (songId: string) => db.isFavorite(songId));
   registerIpcHandler('favorite:getAll', () => db.getFavorites());
   registerIpcHandler('favorite:updateSongData', (songId: string, songData: any) => db.updateFavoriteSongData(songId, songData));
+  registerIpcHandler('favorite:replaceSong', (oldSongId: string, newSong: any) => db.replaceFavoriteSong(oldSongId, newSong));
 }
 
 export function registerHistoryIpc(db: Db): void {
@@ -29,6 +30,7 @@ export function registerPlaylistIpc(db: Db): void {
   registerIpcHandler('playlist:getSongs', (playlistId: number) => db.getPlaylistSongs(playlistId));
   registerIpcHandler('playlist:updateSongsOrder', (playlistId: number, songId: string, order: number) => db.updatePlaylistSongOrder(playlistId, songId, order));
   registerIpcHandler('playlist:updateSongData', (playlistId: number, songId: string, songData: any) => db.updatePlaylistSongData(playlistId, songId, songData));
+  registerIpcHandler('playlist:replaceSong', (playlistId: number, oldSongId: string, newSong: any) => db.replacePlaylistSong(playlistId, oldSongId, newSong));
   registerIpcHandler('playlist:reorderFull', async (playlistId: number, songIds: string[]) => {
     await db.reorderSongIds(playlistId, songIds);
   });

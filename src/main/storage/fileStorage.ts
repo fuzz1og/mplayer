@@ -11,7 +11,7 @@ interface StorageData {
   settings: Record<string, any>;
 }
 
-class FileStorage {
+export class FileStorage {
   private dataDir: string = '';
   private dataFile: string = '';
   private data: StorageData = {
@@ -255,6 +255,18 @@ class FileStorage {
     }
   }
 
+  /**
+   * 原位替换收藏歌曲（单曲换源）：按旧 ID 找到条目，整条换成新歌，
+   * 保持收藏时间与排序位置；历史与下载记录不追溯改写。
+   */
+  async replaceFavoriteSong(oldSongId: string, newSong: Song): Promise<void> {
+    const favorite = this.data.favorites.find(f => f.songId === oldSongId);
+    if (!favorite) return;
+    favorite.songId = newSong.id;
+    favorite.song = newSong as SongBase;
+    await this.saveData();
+  }
+
   async removeFavorite(songId: string): Promise<void> {
     this.data.favorites = this.data.favorites.filter(f => f.songId !== songId);
     await this.saveData();
@@ -459,6 +471,20 @@ class FileStorage {
       item.song = { ...item.song, ...songData } as Song;
       await this.saveData();
     }
+  }
+
+  /**
+   * 原位替换本地歌单歌曲（单曲换源）：按旧 ID 找到条目，整条换成新歌，
+   * 保持排序位置不变。
+   */
+  async replacePlaylistSong(playlistId: number, oldSongId: string, newSong: Song): Promise<void> {
+    const item = this.data.playlistSongs.find(
+      ps => ps.playlistId === playlistId && ps.songId === oldSongId
+    );
+    if (!item) return;
+    item.songId = newSong.id;
+    item.song = newSong as Song;
+    await this.saveData();
   }
 
   async reorderSongIds(playlistId: number, songIds: string[]): Promise<void> {

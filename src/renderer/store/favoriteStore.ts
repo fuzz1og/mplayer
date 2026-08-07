@@ -17,6 +17,8 @@ interface FavoriteState {
   isFavorite: (songId: string) => boolean;
   addFavorite: (song: Song) => Promise<void>;
   removeFavorite: (songId: string) => Promise<void>;
+  /** 单曲换源：原位替换收藏（保持收藏时间与排序） */
+  replaceFavorite: (originalId: string, swapped: Song) => Promise<void>;
   refreshSongUrls: (song: SongBase) => Promise<Song | null>;
 }
 
@@ -211,5 +213,18 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
       console.error('移除收藏失败:', error);
       throw error;
     }
-  }
+  },
+
+  replaceFavorite: async (originalId: string, swapped: Song) => {
+    try {
+      await IpcClient.invoke<void>('favorite:replaceSong', originalId, swapped);
+      set((state) => ({
+        favorites: state.favorites.map(f => f.id === originalId ? swapped : f),
+        favoriteIds: state.favoriteIds.map(id => id === originalId ? swapped.id : id),
+      }));
+    } catch (error) {
+      console.error('换源保存到收藏失败:', error);
+      throw error;
+    }
+  },
 }));

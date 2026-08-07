@@ -21,6 +21,7 @@ import { downloadSong } from '../services/downloadService';
 import { searchSwapCandidates, applySwap, probeSwapCandidates } from '../services/sourceSwap';
 import type { SwapCandidate } from '../services/sourceSwap';
 import { searchStrictMatch } from '../services/songResources';
+import { useResolvedCover } from '../hooks/useResolvedCover';
 
 // 封面失效兜底搜索：限并发（手机网络带宽有限，避免整列表失效时并发打满）
 let activeCoverSearches = 0;
@@ -72,6 +73,7 @@ export default function SongRow({
   // 封面失效兜底：缓存 URL 挂了 → 搜索重载（每行最多一次，严格匹配防翻唱封面）
   const [cover, setCover] = useState(song.cover);
   const coverFallbackUsed = useRef(false);
+  const resolvedCover = useResolvedCover(cover);
   useEffect(() => {
     setCover(song.cover);
     coverFallbackUsed.current = false;
@@ -239,8 +241,8 @@ export default function SongRow({
         <Text style={styles.rank}>{rank}</Text>
       )}
 
-      {cover ? (
-        <Image source={{ uri: cover }} style={styles.cover} onError={handleCoverError} />
+      {resolvedCover ? (
+        <Image source={{ uri: resolvedCover }} style={styles.cover} onError={handleCoverError} />
       ) : (
         <View style={[styles.cover, styles.coverPlaceholder]}>
           <Music size={22} color={colors.textDisabled} />

@@ -3,10 +3,11 @@ import { Download, Music, Trash2 } from 'lucide-react-native';
 import { Paths } from 'expo-file-system';
 import type { Song } from '@mplayer/core';
 import { useDownloadStore } from '../../stores/downloadStore';
-import { getLocalUri, removeDownloadedFile } from '../../services/downloadService';
+import { getLocalUri, removeDownloadedFile, pickDownloadDirectory } from '../../services/downloadService';
 import { playSong } from '../../services/audioPlayer';
 import { usePlayerStore } from '../../stores/playerStore';
 import { colors, radius } from '../../theme/tokens';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 const STATUS_LABELS: Record<string, string> = {
   downloading: '下载中',
@@ -18,6 +19,8 @@ export default function DownloadPage() {
   const items = useDownloadStore((s) => s.items);
   const removeItem = useDownloadStore((s) => s.removeItem);
   const currentSong = usePlayerStore((s) => s.currentSong);
+  const downloadDirUri = useSettingsStore((s) => s.downloadDirUri);
+  const authorized = Boolean(downloadDirUri);
 
   const handlePlay = (item: (typeof items)[number]) => {
     if (item.status !== 'done') return;
@@ -43,11 +46,19 @@ export default function DownloadPage() {
         text: '删除',
         style: 'destructive',
         onPress: async () => {
-          await removeDownloadedFile(item.fileName).catch(() => {});
+          await removeDownloadedFile(item.fileName, item.publicUri).catch(() => {});
           removeItem(item.key);
         },
       },
     ]);
+  };
+
+  const handlePickDir = async () => {
+    try {
+      await pickDownloadDirectory();
+    } catch (e) {
+      Alert.alert('选择目录失败', e instanceof Error ? e.message : String(e));
+    }
   };
 
   return (
@@ -56,11 +67,15 @@ export default function DownloadPage() {
         data={items}
         keyExtractor={(item) => item.key}
         ListHeaderComponent={
-          <View style={styles.pathBox}>
+          <TouchableOpacity style={styles.pathBox} onPress={handlePickDir} activeOpacity={0.7}>
             <Text style={styles.pathLabel}>保存位置</Text>
-            <Text style={styles.pathText} numberOfLines={2}>{Paths.document.uri}mplayer-downloads/</Text>
-            <Text style={styles.pathHint}>应用私有目录，Android 文件管理器不可直接访问</Text>
-          </View>
+            <Text style={styles.pathText} numberOfLines={2}>
+              {authorized ? '系统下载目录（已授权）' : `${Paths.document.uri}mplayer-downloads/`}
+            </Text>
+            <Text style={styles.pathHint}>
+              {authorized ? '点击可更换目录' : '点击选择系统下载目录；未授权时保存在应用私有目录'}
+            </Text>
+          </TouchableOpacity>
         }
         contentContainerStyle={items.length === 0 ? styles.emptyContent : undefined}
         ListEmptyComponent={
