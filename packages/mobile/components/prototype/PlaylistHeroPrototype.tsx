@@ -15,12 +15,14 @@
  * 验收后：获胜变体折入正式代码，本文件整体移到 throwaway 分支。
  */
 
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Image, FlatList,
+  View, Text, TouchableOpacity, StyleSheet, Image, Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import { ChevronLeft, ChevronRight, Music2, Play, ArrowLeft } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import type { Playlist } from '../../stores/playlistStore';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
@@ -37,6 +39,8 @@ const VARIANT_NAMES: Record<HeroVariant, string> = {
   C: '卡片悬浮 Hero',
   D: '全出血折叠 Hero',
 };
+
+const AnimatedArrowLeft = Animated.createAnimatedComponent(ArrowLeft);
 
 /** 用户歌单没有封面：渐变占位 + 音符图标 */
 function CoverPlaceholder({ size, radiusValue }: { size: number; radiusValue: number }) {
@@ -140,9 +144,11 @@ export function VariantC({ playlist }: { playlist: Playlist }) {
   );
 }
 
-/* ═══════════ 变体 D：静态堆叠布局（用户确认方案） ═══════════
- * 大封面在上面 → 信息区 → 歌曲列表区（带表头，行操作=点赞/下载/更多）。
- * 无滚动切换、无一明一暗——标题栏始终正常。 */
+/* ═══════════ 变体 D：全出血折叠 Hero（用户确认方案） ═══════════
+ * 大封面全出血到状态栏/灵动岛安全区后面（随列表滚动滚出屏幕）；
+ * 下滑盖过封面后导航栏由透明逐渐变为正常标题栏（标题淡入）；
+ * 信息区在封面下方独立实心区域（不叠封面、不透明）；
+ * 列表带表头，行操作 = 收藏 + 更多。 */
 export function VariantD({
   playlist,
   onRemoveSong,
@@ -152,19 +158,72 @@ export function VariantD({
   onRemoveSong: (song: Song) => void;
   onSwap: (original: Song, swapped: Song) => void;
 }) {
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [statusStyle, setStatusStyle] = useState<'light' | 'dark'>('light');
+
+  const NAV_H = 52;
+  const COVER_H = 300 + insets.top; // 全出血：含状态栏高度
+  const collapseAt = COVER_H - NAV_H - insets.top; // 导航栏完全实心化的滚动点
+
+  const navBg = scrollY.interpolate({
+    inputRange: [0, collapseAt],
+    outputRange: ['rgba(255,255,255,0)', colors.bgSurface],
+    extrapolate: 'clamp',
+  });
+  const titleOpacity = scrollY.interpolate({
+    inputRange: [collapseAt - 30, collapseAt],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const backColor = scrollY.interpolate({
+    inputRange: [collapseAt - 30, collapseAt],
+    outputRange: ['#FFFFFF', colors.textPrimary],
+    extrapolate: 'clamp',
+  });
+
+  useEffect(() => {
+    const id = scrollY.addListener(({ value }) => {
+      setStatusStyle(value > collapseAt - 30 ? 'dark' : 'light');
+    });
+    return () => scrollY.removeListener(id);
+  }, [collapseAt, scrollY]);
+
   // 自建歌单封面 = 第一首歌封面；过期则占位等待重新搜索后的最新封面
   const { cover, handleError } = useRefreshedCover(playlist.songs[0] || null);
 
   return (
     <View style={{ flex: 1 }}>
-      <FlatList
+      <StatusBar style={statusStyle} />
+
+      {/* 悬浮导航栏：顶部透明（盖在封面上）→ 下滑后实心正常标题栏 */}
+      <Animated.View
+        style={[
+          styles.dNav,
+          { paddingTop: insets.top, height: NAV_H + insets.top, backgroundColor: navBg },
+        ]}
+      >
+        <TouchableOpacity style={styles.dNavBack} onPress={() => router.back()} hitSlop={8}>
+          <AnimatedArrowLeft size={22} color={backColor} />
+        </TouchableOpacity>
+        <Animated.Text style={[styles.dNavTitle, { opacity: titleOpacity }]} numberOfLines={1}>
+          {playlist.name}
+        </Animated.Text>
+      </Animated.View>
+
+      {/* 列表：封面是列表第一块内容（含状态栏区域），随滚动滚出屏幕 */}
+      <Animated.FlatList
         data={playlist.songs}
         keyExtractor={(item) => item.id}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: false,
+        })}
+        scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: 24 }}
         ListHeaderComponent={
           <View>
-            {/* 大封面 */}
-            <View style={styles.dCover}>
+            {/* 全出血封面 */}
+            <View style={{ height: COVER_H }}>
               {cover ? (
                 <Image
                   source={{ uri: cover }}
@@ -178,7 +237,7 @@ export function VariantD({
                 </View>
               )}
             </View>
-            {/* 信息区 */}
+            {/* 信息区：封面下方独立实心区域（不叠封面、不透明） */}
             <View style={styles.dInfo}>
               <Text style={styles.dTitle} numberOfLines={2}>{playlist.name}</Text>
               <Text style={styles.dMeta}>{formatCount(playlist.songs.length)} 首</Text>
@@ -316,19 +375,40 @@ const styles = StyleSheet.create({
   vCPlayText: { color: colors.textInverse, fontSize: typography.sizes.base, fontWeight: '600' },
 
   /* D */
-  dCover: {
-    width: '100%',
-    height: 280,
-    backgroundColor: colors.accent,
-  },
   dCoverImg: {
     width: '100%',
     height: '100%',
   },
   dCoverFallback: {
     flex: 1,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  dNav: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing[2],
+    zIndex: 5,
+  },
+  dNavBack: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dNavTitle: {
+    flex: 1,
+    marginRight: spacing[6],
+    textAlign: 'center',
+    color: colors.textPrimary,
+    fontSize: typography.sizes.lg,
+    fontWeight: '600',
   },
   dInfo: {
     paddingHorizontal: spacing[4],
