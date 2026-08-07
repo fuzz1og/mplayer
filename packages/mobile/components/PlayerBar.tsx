@@ -7,6 +7,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
+import { useResolvedCover } from '../hooks/useResolvedCover';
 
 export default function PlayerBar() {
   const insets = useSafeAreaInsets();
@@ -21,6 +22,8 @@ export default function PlayerBar() {
   // 封面加载失败 → 占位图标 + 懒刷新兜底（搜索补新封面，写回后自动恢复）
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [currentSong?.cover]);
+  const coverUrl = useResolvedCover(currentSong?.cover);
+  useEffect(() => { setCoverFailed(false); }, [coverUrl]);
   const handleCoverError = () => {
     setCoverFailed(true);
     if (currentSong) void fetchLrcInBackground(currentSong, true);
@@ -35,8 +38,8 @@ export default function PlayerBar() {
     >
       {/* 专辑封面 */}
       <View style={styles.coverWrap}>
-        {currentSong?.cover && !coverFailed ? (
-          <Image source={{ uri: currentSong.cover }} style={styles.cover} onError={handleCoverError} />
+        {coverUrl && !coverFailed ? (
+          <Image source={{ uri: coverUrl }} style={styles.cover} onError={handleCoverError} />
         ) : (
           <Ionicons name="musical-note" size={24} color="#555" />
         )}

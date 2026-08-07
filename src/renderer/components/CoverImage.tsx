@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Music2, ListMusic } from 'lucide-react';
+import { isSessionProtectedEndpoint } from '@mplayer/core';
+import { resolveCoverUrl } from '@/renderer/services/coverUrlResolver';
 
 type CoverVariant = 'song' | 'playlist';
 
@@ -76,13 +78,52 @@ const PlaylistFallback: React.FC<{ style?: React.CSSProperties }> = ({ style }) 
 
 const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant = 'song', onError }) => {
   const [failed, setFailed] = useState(false);
+  // 会话保护的封面端点（api.php）→ JS 层解析成 CDN 直链，<img> 才能直接加载
+  // 首帧就跳过保护端点：解析完成前渲染必失败（无 cookie），onError 会抢占解析结果
+  const [resolvedSrc, setResolvedSrc] = useState(() =>
+    src && !isSessionProtectedEndpoint(src) ? src : ''
+  );
+  const [resolvingProtected, setResolvingProtected] = useState(
+    () => !!src && isSessionProtectedEndpoint(src)
+  );
 
   // src 变化（封面刷新换新 URL）时重置失败状态，否则新封面永远不会显示
   useEffect(() => {
     setFailed(false);
+    if (!src) {
+      setResolvingProtected(false);
+      setResolvedSrc('');
+      return;
+    }
+    // 会话保护端点先渲染必失败（无 cookie）：解析完成前不渲染 img，
+    // 避免 onError 抢占解析结果（否则 CDN 直链到达时封面已被标记失败）
+    if (isSessionProtectedEndpoint(src)) {
+      setResolvingProtected(true);
+      setResolvedSrc('');
+      let cancelled = false;
+      resolveCoverUrl(src)
+        .then((r) => {
+          if (!cancelled) {
+            setResolvedSrc(r);
+            setResolvingProtected(false);
+          }
+        })
+        .catch(() => {
+          // 解析失败回退原 URL，交给 onError 占位图兜底（保留既有兜底行为）
+          if (!cancelled) {
+            setResolvedSrc(src);
+            setResolvingProtected(false);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+    setResolvingProtected(false);
+    setResolvedSrc(src);
   }, [src]);
 
-  if (!src || failed) {
+  if (!resolvedSrc || resolvingProtected || failed) {
     return variant === 'playlist'
       ? <PlaylistFallback style={style} />
       : <SongFallback style={style} />;
@@ -90,7 +131,7 @@ const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant =
 
   return (
     <img
-      src={src}
+      src={resolvedSrc}
       alt={alt}
       loading="lazy"
       onError={() => {
