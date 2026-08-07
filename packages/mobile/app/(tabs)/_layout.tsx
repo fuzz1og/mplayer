@@ -139,8 +139,8 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  // PlayerBar 已卡片化（自带边距+阴影），包裹层透出页面背景即可
-  playerWrap: { backgroundColor: colors.bgBase },
+  // 与 PlayerBar 背景一致,保证安全区 padding 区域颜色连续
+  playerWrap: { backgroundColor: colors.bgSurface },
 });
 
 const tabBarStyles = StyleSheet.create({
