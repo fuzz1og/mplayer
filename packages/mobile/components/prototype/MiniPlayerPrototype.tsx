@@ -25,6 +25,7 @@ import { router } from 'expo-router';
 import {
   ChevronLeft,
   ChevronRight,
+  X,
   Compass,
   Flame,
   Download,
@@ -41,6 +42,17 @@ import { togglePlay, playSong, fetchLrcInBackground } from '../../services/audio
 import { colors, radius, spacing, turntable } from '../../theme/tokens';
 
 export type MiniPlayerVariant = 'A' | 'B' | 'C';
+
+/** 模块级持久：切 tab 不丢当前评审变体（URL 参数仅在当前 tab 路由上） */
+let persistentVariant: MiniPlayerVariant | null = null;
+
+export function setPersistentVariant(v: MiniPlayerVariant | null) {
+  persistentVariant = v;
+}
+
+export function getPersistentVariant(): MiniPlayerVariant | null {
+  return persistentVariant;
+}
 
 export const MINI_VARIANT_NAMES: Record<MiniPlayerVariant, string> = {
   A: '毛玻璃条',
@@ -302,11 +314,19 @@ export function MiniPrototypeSwitcher({ current }: { current: MiniPlayerVariant 
     const keys: MiniPlayerVariant[] = ['A', 'B', 'C'];
     const idx = keys.indexOf(current);
     const nextKey = keys[(idx + dir + keys.length) % keys.length];
+    setPersistentVariant(nextKey);
     router.setParams({ variant: nextKey });
+  };
+  const reset = () => {
+    setPersistentVariant(null);
+    router.setParams({ variant: '' });
   };
   return (
     <View style={switchStyles.wrap} pointerEvents="box-none">
       <View style={switchStyles.bar}>
+        <TouchableOpacity onPress={reset} style={switchStyles.btn} hitSlop={8}>
+          <X size={16} color="rgba(255,255,255,0.7)" />
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => cycle(-1)} style={switchStyles.btn} hitSlop={8}>
           <ChevronLeft size={20} color="#fff" />
         </TouchableOpacity>

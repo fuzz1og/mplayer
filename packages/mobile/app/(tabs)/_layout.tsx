@@ -10,6 +10,7 @@ import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
 import MiniPlayerPrototype from '../../components/prototype/MiniPlayerPrototype';
 import type { MiniPlayerVariant } from '../../components/prototype/MiniPlayerPrototype';
+import { getPersistentVariant } from '../../components/prototype/MiniPlayerPrototype';
 import { usePlayerStore } from '../../stores/playerStore';
 
 // tab bar 内容高度（paddingTop + 图标 + 标签行 + paddingBottom）：
@@ -27,7 +28,9 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
   const { variant } = useLocalSearchParams<{ variant?: string }>();
   const variantStr = Array.isArray(variant) ? variant[0] : variant;
   const protoVariant: MiniPlayerVariant | null =
-    variantStr === 'A' || variantStr === 'B' || variantStr === 'C' ? variantStr : null;
+    variantStr === 'A' || variantStr === 'B' || variantStr === 'C'
+      ? variantStr
+      : getPersistentVariant();
   const setShowPlayer = usePlayerStore((s) => s.setShowPlayer);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const heightAnim = useRef(new Animated.Value(0)).current;
