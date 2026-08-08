@@ -24,6 +24,51 @@ let apiTimingLog = false;
 export function setApiTimingLog(enabled: boolean): void {
   apiTimingLog = enabled;
 }
+
+// ── api.php 302 解析并发控制 ─────────────────────────────────────
+// RN 连接池默认仅 5 个连接/主机：搜索结果页 30+ 首歌同时解析封面
+// （api.php?get=pic）会把连接池排队打满，每个请求都 5s 超时，
+// 连播放 URL 的解析也被拖死。限 4 并发 + 相同 URL in-flight 去重
+// （同一首歌的封面/URL 并发请求合并为一个，避免重复打上游）。
+const resolveWaiters: { priority: boolean; resolve: () => void }[] = [];
+let resolveActive = 0;
+const RESOLVE_MAX_CONCURRENCY = 4;
+const resolveInflight = new Map<string, Promise<{ finalUrl: string; data: unknown }>>();
+
+function runResolve(
+  url: string,
+  timeout: number,
+  priority = false,
+): Promise<{ finalUrl: string; data: unknown }> {
+  const existing = resolveInflight.get(url);
+  if (existing) return existing;
+  const task = (async () => {
+    if (resolveActive >= RESOLVE_MAX_CONCURRENCY) {
+      await new Promise<void>((r) => {
+        // 播放 URL 解析优先：插到等待队列最前，槽位一释放立即执行；
+        // 封面解析排队（失败有占位图兜底，不阻塞播放）
+        const waiter = { priority, resolve: r };
+        if (priority) resolveWaiters.unshift(waiter);
+        else resolveWaiters.push(waiter);
+      });
+    }
+    resolveActive++;
+    try {
+      return await followRedirectsToFinalUrl(url, undefined, timeout);
+    } finally {
+      resolveActive--;
+      const next =
+        resolveWaiters.find((w) => w.priority) ?? resolveWaiters.shift();
+      if (next) {
+        resolveWaiters.splice(resolveWaiters.indexOf(next), 1);
+        next.resolve();
+      }
+      resolveInflight.delete(url);
+    }
+  })();
+  resolveInflight.set(url, task);
+  return task;
+}
 /** 会话保护端点的 URL 特征（api.php?get=url / get=pic / get=lrc） */
 export function isSessionProtectedEndpoint(url: string): boolean {
   return url.includes('api.php');
@@ -436,7 +481,8 @@ export async function resolveCoverUrl(coverUrl: string): Promise<string> {
   const cached = coverUrlCache.get(fullUrl);
   if (cached && cached.expires > Date.now()) return cached.url;
   try {
-    const { finalUrl, data } = await followRedirectsToFinalUrl(fullUrl, undefined, 5000);
+    // 封面解析：3s 快速超时（失败有占位图兜底），不让封面占住并发槽位
+    const { finalUrl, data } = await runResolve(fullUrl, 3000);
     if (typeof data === 'string' && data.includes(INVALID_REQUEST_MARKER)) {
       return fullUrl; // 会话不可用：不缓存，回退原 URL
     }
@@ -825,7 +871,8 @@ export const musicApi = {
       }
 
       try {
-        const { finalUrl, data } = await followRedirectsToFinalUrl(fullUrl, signal, BASE_TIMEOUT);
+          // 播放 URL 解析：优先于封面（插队）+ 更长超时
+          const { finalUrl, data } = await runResolve(fullUrl, BASE_TIMEOUT, true);
 
         if (finalUrl.startsWith('data:text/html')) {
           const errorMsg = typeof data === 'string' ? data : '获取音频失败';
