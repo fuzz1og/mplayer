@@ -331,28 +331,35 @@ async function followRedirectsToFinalUrl(
   timeout = 5000
 ): Promise<{ finalUrl: string; data: unknown }> {
   // RN：XHR 无视 maxRedirects 自动跟随 302 并下载完整响应体——
-  // 播放 URL 的 302 终点是 10MB 级 mp3，等 axios 返回要几十秒。
-  // 改用 fetch + redirect:'manual' 只取 302 响应头（Location），零 body 下载；
-  // fetch 与 XHR 共享 RN 原生 cookie jar，会话 cookie 自动携带。
+  // 播放 URL 的 302 终点是 10MB 级 mp3，等 axios 返回要几十秒；
+  // fetch 的 redirect:'manual' 在 RN 上不生效（实测仍跟随并下载到超时）。
+  // 用原生 XHR：收到响应头（readyState 2）时 responseURL 已是最终 mp3 直链，
+  // 立即 abort 停止 body 下载——一次请求、零 body、秒回。
   if (IS_REACT_NATIVE) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
-    try {
-      const resp = await fetch(url, {
-        method: 'GET',
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: { Accept: '*/*' },
-      });
-      if (resp.status >= 300 && resp.status < 400) {
-        const location = resp.headers.get('location');
-        if (location) return { finalUrl: new URL(location, url).href, data: '' };
-      }
-      // 200（如会话失效时的错误页）：原样返回，由调用方兜底（fresh 重试等）
-      return { finalUrl: url, data: '' };
-    } finally {
-      clearTimeout(timer);
-    }
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      const timer = setTimeout(() => {
+        try { xhr.abort(); } catch {}
+        resolve({ finalUrl: url, data: '' });
+      }, timeout);
+      xhr.open('GET', url, true);
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState >= 2) {
+          clearTimeout(timer);
+          const finalUrl =
+            typeof xhr.responseURL === 'string' && /^https?:\/\//.test(xhr.responseURL)
+              ? xhr.responseURL
+              : url;
+          try { xhr.abort(); } catch {}
+          resolve({ finalUrl, data: '' });
+        }
+      };
+      xhr.onerror = () => {
+        clearTimeout(timer);
+        resolve({ finalUrl: url, data: '' });
+      };
+      xhr.send();
+    });
   }
   const MAX_REDIRECTS = 3;
   let currentUrl = url;
