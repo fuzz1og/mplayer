@@ -185,6 +185,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   const playId = ++currentPlayId;
   const log = useLogsStore.getState();
   preparingPlayback = true;
+  const t0 = Date.now();
+  log.addLog('info', `[耗时] 播放准备开始: 《${song.name}》 url=${song.url ? '有' : '无'} fresh=${fresh}`);
 
   const startPlayback = async (): Promise<void> => {
     let audioUrl: string;
@@ -225,6 +227,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     }
     if (playId !== currentPlayId) throw 'cancelled';
     if (!audioUrl?.startsWith('http') && !audioUrl?.startsWith('file://')) throw new Error('no playable URL');
+    log.addLog('info', `[耗时] 直链就绪: 《${song.name}》 解析耗时 ${Date.now() - t0}ms`);
 
     // 兜底补歌词：把解析到的歌词 URL 写回 currentSong，触发全屏播放器加载歌词
     if (lrcUrl && !song.lrc) {
@@ -240,6 +243,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     // per-player 去重：didJustFinish / error 只处理一次，防止双触发跳歌
     let finished = false;
     let failed = false;
+    let readyLogged = false;
 
     playerStatusSubscription = nextPlayer.addListener('playbackStatusUpdate', (status: AudioStatus) => {
       if (playId !== currentPlayId) return;
@@ -267,6 +271,11 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
           }
         }
         return;
+      }
+
+      if (!readyLogged) {
+        readyLogged = true;
+        log.addLog('info', `[耗时] 播放器就绪(出声): 《${song.name}》 总耗时 ${Date.now() - t0}ms`);
       }
 
       const s = usePlayerStore.getState();
@@ -306,7 +315,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     // 播放 URL 落缓存(24h TTL):下次(含重启后)直接命中,秒起;无 id 的歌不写
     if (audioUrl?.startsWith('http') && song.id) void setCachedUrl(song.id, song.sourceType || 'netease', audioUrl);
 
-    log.addLog('info', `开始播放《${song.name}》- ${song.artist}${fresh ? '（新URL重试）' : ''}`);
+    log.addLog('info', `开始播放《${song.name}》- ${song.artist}${fresh ? '（新URL重试）' : ''}（准备耗时 ${Date.now() - t0}ms）`);
     useHistoryStore.getState().addHistory(song);
     void updateNotification(song, true).catch(() => {});
     // 预取下一首直链（切歌秒开）
