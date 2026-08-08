@@ -176,9 +176,17 @@ const apiClient = axios.create({
 // 会话失效时刷新并原样重试一次（搜索 404 / api.php 非法请求均视为失效信号）。
 let apiSessionCookie = '';
 let apiSessionFetching: Promise<string> | null = null;
+// RN（Android）原生 OkHttp cookie jar 自动托管会话 cookie，JS 读不到
+// Set-Cookie 响应头（被 RN networking 过滤）——此模式下 JS 只负责
+// 引导一次首页请求建立 jar，不读取也不手动携带 cookie 值。
+const IS_REACT_NATIVE =
+  typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
+// RN 下「已引导 jar」标志：避免每个请求都重复 GET 首页
+let apiSessionBootstrapped = false;
 
 function invalidateApiSession(): void {
   apiSessionCookie = '';
+  apiSessionBootstrapped = false;
 }
 
 function isRemoteApiHost(): boolean {
@@ -203,6 +211,8 @@ function isApiOriginRequest(config: { url?: string; baseURL?: string }): boolean
 
 async function ensureApiSession(): Promise<string> {
   if (apiSessionCookie) return apiSessionCookie;
+  // RN：jar 已引导过就直接返回空（cookie 由原生层携带）
+  if (IS_REACT_NATIVE && apiSessionBootstrapped) return '';
   if (!apiSessionFetching) {
     apiSessionFetching = (async () => {
       try {
@@ -232,12 +242,16 @@ async function ensureApiSession(): Promise<string> {
             : [];
         apiSessionCookie = setCookies.map(c => c.split(';')[0]).find(c => c.startsWith('PHPSESSID=')) || '';
         if (!apiSessionCookie) {
-          console.warn('[session] 首页未返回 PHPSESSID 会话 cookie，搜索可能被拒');
+          if (!IS_REACT_NATIVE) {
+            console.warn('[session] 首页未返回 PHPSESSID 会话 cookie，搜索可能被拒');
+          }
+          // RN：Set-Cookie 头被原生层过滤，cookie 由 OkHttp jar 自动携带
         }
       } catch (e: any) {
         console.warn('[session] 获取会话失败:', e?.message || e);
       } finally {
         apiSessionFetching = null;
+        apiSessionBootstrapped = true;
       }
       return apiSessionCookie;
     })();
@@ -285,9 +299,11 @@ apiClient.interceptors.response.use(
     if (noSessionSearch || noSessionApi) {
       invalidateApiSession();
       const cookie = await ensureApiSession();
-      if (cookie) {
+      // RN：cookie 由原生 jar 携带，JS 拿不到值但首页 GET 已重建 jar，
+      // 无条件重试一次；其他环境要求 JS 确实拿到新 cookie 才重试
+      if (cookie || IS_REACT_NATIVE) {
         config.__sessionRetried = true;
-        config.headers.set('Cookie', cookie);
+        if (cookie) config.headers.set('Cookie', cookie);
         return apiClient.request(config);
       }
       console.warn('[session] 会话刷新失败，返回原始响应');

@@ -119,18 +119,19 @@ function isRedirectEndpoint(url: string): boolean {
   return url.includes('api.php?get=url');
 }
 
-/** 解析 302 端点 → CDN 直链（getAudioUrl 带缓存；直链直接返回原值） */
+/**
+ * 解析 302 端点 → CDN 直链（getAudioUrl 带缓存；直链直接返回原值）。
+ * 不能设短硬超时：RN 播放器（expo-audio）请求 api.php 不带会话 cookie
+ * 必返回「非法请求」（原生层无 cookie jar），只能等 JS 层解析完成拿到
+ * CDN 直链再播放；桌面端 302 播放器能跟，多等无副作用。
+ * getAudioUrl 内部自带 3 次重试 + 5s 超时兜底。
+ */
 async function resolveDirectUrl(url: string): Promise<string> {
-  // 1.5s 超时：解析失败（网络/源临时故障）直接用原 URL（302 播放器能播，只是慢）
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1500);
   try {
-    const direct = await musicApi.getAudioUrl(url, controller.signal);
+    const direct = await musicApi.getAudioUrl(url);
     return direct?.startsWith('http') ? direct : url;
   } catch {
     return url;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
