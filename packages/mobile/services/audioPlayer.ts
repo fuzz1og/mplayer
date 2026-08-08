@@ -229,6 +229,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     if (playId !== currentPlayId) throw 'cancelled';
     if (!audioUrl?.startsWith('http') && !audioUrl?.startsWith('file://')) throw new Error('no playable URL');
     log.addLog('info', `[耗时] 直链就绪: 《${song.name}》 解析耗时 ${Date.now() - t0}ms`);
+    console.log(`[player] 直链URL: ${audioUrl.slice(0, 120)}`);
     usePlayerStore.getState().setPreparing(false);
 
     // 兜底补歌词：把解析到的歌词 URL 写回 currentSong，触发全屏播放器加载歌词
@@ -238,7 +239,17 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       );
     }
 
-    const nextPlayer = createAudioPlayer({ uri: audioUrl }, { updateInterval: 250 });
+    const nextPlayer = createAudioPlayer(
+      {
+        uri: audioUrl,
+        // 网易云 CDN 可能校验 UA/Referer：带上浏览器特征避免被拒（Source error）
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Referer': 'https://www.jbsou.cn/',
+        },
+      },
+      { updateInterval: 250 },
+    );
     livePlayers.add(nextPlayer);
     player = nextPlayer;
 
