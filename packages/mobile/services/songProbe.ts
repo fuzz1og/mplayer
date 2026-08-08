@@ -1,5 +1,6 @@
 import { probeSongs, musicApi } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
+import { setCachedUrl } from './cacheService';
 import { useAudioTagStore } from '../stores/audioTagStore';
 import { useLogsStore } from '../stores/logsStore';
 
@@ -32,16 +33,29 @@ export async function probeSongsWithTags(
     toProbe.push(s);
   }
   await probeSongs(toProbe, {
-    concurrency: 20,
+    // 并发控制在低位：高并发解析会把 jbsou 服务端打到限流（Network Error），
+    // 用户点击播放的解析请求也会被一起拖死（实测 70s 才就绪）
+    concurrency: 6,
     // 302 摄取端点（api.php?get=url）先解析成 CDN 直链再探测：
-    // 探测顺带预热 getAudioUrl 缓存——搜索结果返回后几秒内全部歌曲的
-    // 直链都已就绪，用户点击任意一首播放时缓存命中，点击到出声秒开。
+    // 探测顺带预热音频直链缓存——用户点击播放时缓存命中秒开。
+    // 用轻量解析：单次请求、2s 超时、失败不重试（重试留给点击播放的正式解析）。
     resolver: async (song) => {
       if (!song.url) return '';
       if (song.url.startsWith('http') || song.url.startsWith('file://')) return song.url;
       try {
-        const direct = await musicApi.getAudioUrl(song.url);
-        return direct?.startsWith('http') ? direct : song.url;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 2000);
+        try {
+          const direct = await musicApi.getAudioUrl(song.url, controller.signal);
+          if (direct?.startsWith('http')) {
+            // 顺带写持久缓存：点击播放先查 AsyncStorage，命中即秒开
+            if (song.id) void setCachedUrl(song.id, song.sourceType || 'netease', direct);
+            return direct;
+          }
+          return song.url;
+        } finally {
+          clearTimeout(timer);
+        }
       } catch {
         return song.url;
       }
