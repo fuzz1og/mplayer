@@ -216,7 +216,9 @@ const apiClient = axios.create({
     'x-requested-with': 'XMLHttpRequest'
   },
   proxy: false,
-  timeout: 30000,
+  // 手机网络并发超过 5 后严重劣化（连接限速/重传），单请求 0.6s 即可完成；
+  // 30s 超时会让慢源卡死整批，12s 足够覆盖慢网络又不至于无限等待
+  timeout: 12000,
 });
 
 // ── 上游搜索服务会话管理 ────────────────────────────────────────

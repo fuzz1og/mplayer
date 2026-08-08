@@ -130,12 +130,19 @@ async function progressiveSearch(query: string, page: number, seq: number): Prom
   const t0 = Date.now();
   useSearchStore.setState({ loading: true, error: null, query, page, results: [], hasMore: true, loadingMore: false });
   const collected = new Map<SourceKey, SongGroup['songs']>();
-  await Promise.all(
-    sources.map(async (src) => {
+  // 并发限制 3：手机网络并发 >5 后严重劣化（连接限速/重传，实测 6 并发
+  // 从 0.6s 恶化到 24s+）；渐进式渲染下慢源稍后并入，体验不受影响
+  const CONCURRENCY = 3;
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < sources.length) {
+      const src = sources[cursor++];
       try {
         const songs = await musicApi.searchSongs(query, page, src);
-        if (seq !== searchSeq) return; // 已被新查询/clear 取代，丢弃迟到结果
-        if (songs.length === 0) return;
+        // 注意用 continue 而非 return：cursor 是共享的，return 会退出当前
+        // worker 导致剩余源无人处理（只搜部分源）；空结果/过期结果跳过即可
+        if (seq !== searchSeq) continue; // 已被新查询/clear 取代，丢弃迟到结果
+        if (songs.length === 0) continue;
         collected.set(src, songs);
         // 按固定源序拼装 → 重跑分组（组内/组顺序与一次性全量完全一致）
         const allSongs = sources.flatMap((s) => collected.get(s) || []);
@@ -143,8 +150,9 @@ async function progressiveSearch(query: string, page: number, seq: number): Prom
       } catch {
         // 单源失败跳过，不影响其他源
       }
-    })
-  );
+    }
+  };
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   if (seq !== searchSeq) return;
   useSearchStore.setState({ loading: false });
   useLogsStore.getState().addLog('info', `搜索完成: 词「${query}」耗时 ${Date.now() - t0}ms`);
