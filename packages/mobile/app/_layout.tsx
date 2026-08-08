@@ -4,7 +4,7 @@ import { Stack } from 'expo-router';
 import { colors } from '../theme/tokens';
 import { addNotificationResponseListener, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl, setApiTimingLog } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -52,6 +52,8 @@ export default function RootLayout() {
   useEffect(() => {
     initAudio().catch(() => {});
     setupNotificationChannel().catch(() => {});
+    // dev 诊断：API 请求耗时日志（PC 链路快、手机慢的对比定位用）
+    if (__DEV__) setApiTimingLog(true);
 
     const sub = addNotificationResponseListener((response) => {
       const data = response.notification.request.content.data;

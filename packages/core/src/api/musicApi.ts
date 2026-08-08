@@ -19,6 +19,11 @@ const coverUrlCache = new Map<string, { url: string; expires: number }>();
 
 /** 会话保护端点返回的错误页特征串（无会话时 api.php 一律返回此页） */
 const INVALID_REQUEST_MARKER = '非法请求';
+/** dev 诊断：API 请求耗时日志（>300ms 才打，避免刷屏；mobile __DEV__ 启用） */
+let apiTimingLog = false;
+export function setApiTimingLog(enabled: boolean): void {
+  apiTimingLog = enabled;
+}
 /** 会话保护端点的 URL 特征（api.php?get=url / get=pic / get=lrc） */
 export function isSessionProtectedEndpoint(url: string): boolean {
   return url.includes('api.php');
@@ -264,6 +269,7 @@ apiClient.interceptors.request.use(async (config) => {
   const ext = config as any;
   if (ext.__sessionBootstrapSkip || ext.__sessionRetried) return config;
   if (!isApiOriginRequest(config)) return config;
+  if (apiTimingLog) (config as any).__t0 = Date.now();
   try {
     const cookie = await ensureApiSession();
     if (cookie) config.headers.set('Cookie', cookie);
@@ -277,6 +283,13 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   async (response) => {
     const config = response.config as any;
+    if (apiTimingLog && config?.__t0) {
+      const ms = Date.now() - config.__t0;
+      if (ms > 300) {
+        const method = (config.method || 'get').toUpperCase();
+        console.log(`[api耗时] ${method} ${String(config.url).slice(0, 70)}: ${ms}ms`);
+      }
+    }
     if (config.__sessionBootstrapSkip || config.__sessionRetried) return response;
     if (!isApiOriginRequest(config)) return response;
 
@@ -310,7 +323,15 @@ apiClient.interceptors.response.use(
     }
     return response;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    const config = error?.config as any;
+    if (apiTimingLog && config?.__t0) {
+      const ms = Date.now() - config.__t0;
+      const method = (config.method || 'get').toUpperCase();
+      console.log(`[api耗时] ${method} ${String(config.url).slice(0, 70)}: ${ms}ms (${error?.message})`);
+    }
+    return Promise.reject(error);
+  }
 );
 
 export function getApiClient(): AxiosInstance {
@@ -338,6 +359,7 @@ async function followRedirectsToFinalUrl(
   if (IS_REACT_NATIVE) {
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest();
+      const t0 = Date.now();
       const timer = setTimeout(() => {
         try { xhr.abort(); } catch {}
         resolve({ finalUrl: url, data: '' });
@@ -346,6 +368,9 @@ async function followRedirectsToFinalUrl(
       xhr.onreadystatechange = () => {
         if (xhr.readyState >= 2) {
           clearTimeout(timer);
+          if (apiTimingLog) {
+            console.log(`[api耗时] XHR-302 ${String(url).slice(0, 70)}: ${Date.now() - t0}ms`);
+          }
           const finalUrl =
             typeof xhr.responseURL === 'string' && /^https?:\/\//.test(xhr.responseURL)
               ? xhr.responseURL
