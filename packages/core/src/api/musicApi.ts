@@ -330,6 +330,30 @@ async function followRedirectsToFinalUrl(
   signal?: AbortSignal,
   timeout = 5000
 ): Promise<{ finalUrl: string; data: unknown }> {
+  // RN：XHR 无视 maxRedirects 自动跟随 302 并下载完整响应体——
+  // 播放 URL 的 302 终点是 10MB 级 mp3，等 axios 返回要几十秒。
+  // 改用 fetch + redirect:'manual' 只取 302 响应头（Location），零 body 下载；
+  // fetch 与 XHR 共享 RN 原生 cookie jar，会话 cookie 自动携带。
+  if (IS_REACT_NATIVE) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const resp = await fetch(url, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: { Accept: '*/*' },
+      });
+      if (resp.status >= 300 && resp.status < 400) {
+        const location = resp.headers.get('location');
+        if (location) return { finalUrl: new URL(location, url).href, data: '' };
+      }
+      // 200（如会话失效时的错误页）：原样返回，由调用方兜底（fresh 重试等）
+      return { finalUrl: url, data: '' };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   const MAX_REDIRECTS = 3;
   let currentUrl = url;
   let finalUrl = url;
