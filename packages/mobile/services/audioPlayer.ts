@@ -199,9 +199,12 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       // 已有完整信息（音频 + 歌词）：零网络直接播放；
       // 302 跳转端点同样先解析成 CDN 直链（两跳慢加载不因有歌词而保留）
       audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
-    } else if (song.url?.startsWith('http') || song.url?.startsWith('file://')) {
-      // 有 url 无歌词：立即播放，歌词后台并行补充（不阻塞播放）
-      // 摄取端点 302 跳转先解析成 CDN 直链（播放器直连 CDN，避免两跳慢加载）
+    } else if (song.url) {
+      // 有 url（http 直链 / file:// / api.php 302 端点）：
+      // 302 端点先解析成 CDN 直链（播放器直连 CDN，避免两跳慢加载）；
+      // 无歌词时后台并行补充（不阻塞播放）。
+      // 注意：302 端点不以 http 开头，但它是有效 url——直接解析即可，
+      // 不能走下方「无 url」分支去重复搜索（搜索结果页点击会白等一轮搜索）。
       audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
       void fetchLrcInBackground(song);
     } else {
