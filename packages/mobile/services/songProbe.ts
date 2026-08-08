@@ -1,4 +1,4 @@
-import { probeSongs } from '@mplayer/core';
+import { probeSongs, musicApi } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { useAudioTagStore } from '../stores/audioTagStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -33,6 +33,19 @@ export async function probeSongsWithTags(
   }
   await probeSongs(toProbe, {
     concurrency: 20,
+    // 302 摄取端点（api.php?get=url）先解析成 CDN 直链再探测：
+    // 探测顺带预热 getAudioUrl 缓存——搜索结果返回后几秒内全部歌曲的
+    // 直链都已就绪，用户点击任意一首播放时缓存命中，点击到出声秒开。
+    resolver: async (song) => {
+      if (!song.url) return '';
+      if (song.url.startsWith('http') || song.url.startsWith('file://')) return song.url;
+      try {
+        const direct = await musicApi.getAudioUrl(song.url);
+        return direct?.startsWith('http') ? direct : song.url;
+      } catch {
+        return song.url;
+      }
+    },
     onResult: (id, tag) => {
       const song = byId.get(id);
       if (!song) return;
