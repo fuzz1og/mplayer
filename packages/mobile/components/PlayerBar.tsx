@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View, Text, Image, TouchableOpacity, StyleSheet,
-  Modal, FlatList,
+  Modal, FlatList, Animated, Easing,
 } from 'react-native';
-import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, X, Play } from 'lucide-react-native';
+import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, X, Play, Loader2 } from 'lucide-react-native';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
 import { colors, spacing, radius } from '../theme/tokens';
@@ -19,7 +19,27 @@ export default function PlayerBar() {
   const prev = usePlayerStore(s => s.prev);
   const setQueue = usePlayerStore(s => s.setQueue);
   const setShowPlayer = usePlayerStore(s => s.setShowPlayer);
+  const preparing = usePlayerStore(s => s.preparing);
   const [showQueue, setShowQueue] = useState(false);
+  // 播放准备中：播放按钮旋转加载反馈（点击后解析直链的等待期）
+  const spin = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!preparing) return;
+    const loop = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      spin.setValue(0);
+    };
+  }, [preparing, spin]);
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   // 封面加载失败 → 占位图标 + 懒刷新兜底（搜索补新封面，写回后自动恢复）
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [currentSong?.cover]);
@@ -68,8 +88,13 @@ export default function PlayerBar() {
           <TouchableOpacity
             onPress={(e) => { e.stopPropagation(); togglePlay(); }}
             style={styles.btn}
+            disabled={preparing}
           >
-            {isPlaying ? (
+            {preparing ? (
+              <Animated.View style={{ transform: [{ rotate }] }}>
+                <Loader2 size={36} color={colors.accent} />
+              </Animated.View>
+            ) : isPlaying ? (
               <CirclePause size={36} color={colors.accent} />
             ) : (
               <CirclePlay size={36} color={colors.accent} />

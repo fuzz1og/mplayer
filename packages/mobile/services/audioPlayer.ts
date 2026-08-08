@@ -187,6 +187,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   preparingPlayback = true;
   const t0 = Date.now();
   log.addLog('info', `[耗时] 播放准备开始: 《${song.name}》 url=${song.url ? '有' : '无'} fresh=${fresh}`);
+  usePlayerStore.getState().setPreparing(true);
 
   const startPlayback = async (): Promise<void> => {
     let audioUrl: string;
@@ -228,6 +229,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     if (playId !== currentPlayId) throw 'cancelled';
     if (!audioUrl?.startsWith('http') && !audioUrl?.startsWith('file://')) throw new Error('no playable URL');
     log.addLog('info', `[耗时] 直链就绪: 《${song.name}》 解析耗时 ${Date.now() - t0}ms`);
+    usePlayerStore.getState().setPreparing(false);
 
     // 兜底补歌词：把解析到的歌词 URL 写回 currentSong，触发全屏播放器加载歌词
     if (lrcUrl && !song.lrc) {
@@ -341,6 +343,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       } else {
         await stopAllPlayers();
         usePlayerStore.getState().pause();
+        usePlayerStore.getState().setPreparing(false);
         log.reportError(`《${song.name}》播放失败，且队列中没有其他歌曲`);
       }
     }
