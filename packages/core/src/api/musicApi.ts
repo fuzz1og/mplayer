@@ -889,9 +889,8 @@ export const musicApi = {
       return cachedData;
     }
 
-    // 带重试的 URL 解析（最多 3 次尝试，指数退避）
-    const MAX_RETRIES = 2;
-    const BASE_TIMEOUT = 5000;
+      // 带重试的 URL 解析（最多 3 次尝试，指数退避）
+      const MAX_RETRIES = 2;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (signal?.aborted) {
@@ -899,8 +898,11 @@ export const musicApi = {
       }
 
       try {
-          // 播放 URL 解析：优先于封面（插队）+ 更长超时
-          const { finalUrl, data } = await runResolve(fullUrl, BASE_TIMEOUT, true);
+          // 播放 URL 解析：优先于封面（插队）+ 12s 超时。
+          // 手机网络波动大（LTE 下 api.php 响应 1-15s），5s 必超时回退
+          // 原 URL（播放器无 cookie 加载 api.php → Source error），
+          // 12s 覆盖慢网络，宁可多等也要拿到真直链
+          const { finalUrl, data } = await runResolve(fullUrl, 12000, true);
 
         if (finalUrl.startsWith('data:text/html')) {
           const errorMsg = typeof data === 'string' ? data : '获取音频失败';
