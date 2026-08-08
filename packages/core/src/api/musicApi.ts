@@ -297,11 +297,14 @@ async function ensureApiSession(): Promise<string> {
           }
           // RN：Set-Cookie 头被原生层过滤，cookie 由 OkHttp jar 自动携带
         }
+        // 请求成功（无论能否读到 cookie 值）：jar 已引导，后续无需重复 GET 首页
+        apiSessionBootstrapped = true;
       } catch (e: any) {
         console.warn('[session] 获取会话失败:', e?.message || e);
+        // 失败允许下次重试（RN 下 jar 为空时请求必被拒，不能一次失败就放弃）
+        apiSessionBootstrapped = false;
       } finally {
         apiSessionFetching = null;
-        apiSessionBootstrapped = true;
       }
       return apiSessionCookie;
     })();
@@ -402,34 +405,57 @@ async function followRedirectsToFinalUrl(
   // 用原生 XHR：收到响应头（readyState 2）时 responseURL 已是最终 mp3 直链，
   // 立即 abort 停止 body 下载——一次请求、零 body、秒回。
   if (IS_REACT_NATIVE) {
-    return new Promise((resolve) => {
-      const xhr = new XMLHttpRequest();
-      const t0 = Date.now();
-      const timer = setTimeout(() => {
-        try { xhr.abort(); } catch {}
-        resolve({ finalUrl: url, data: '' });
-      }, timeout);
-      xhr.open('GET', url, true);
-      xhr.onreadystatechange = () => {
-        if (xhr.readyState >= 2) {
-          clearTimeout(timer);
-          if (apiTimingLog) {
-            console.log(`[api耗时] XHR-302 ${String(url).slice(0, 70)}: ${Date.now() - t0}ms`);
-          }
-          const finalUrl =
-            typeof xhr.responseURL === 'string' && /^https?:\/\//.test(xhr.responseURL)
-              ? xhr.responseURL
-              : url;
-          try { xhr.abort(); } catch {}
-          resolve({ finalUrl, data: '' });
-        }
-      };
-      xhr.onerror = () => {
-        clearTimeout(timer);
-        resolve({ finalUrl: url, data: '' });
-      };
-      xhr.send();
-    });
+    return (async () => {
+      // 先确保会话：首页 GET 预热原生 cookie jar（jar 空时 api.php 无 cookie
+      // 必返回 200「非法请求」而非 302，拿不到 mp3 直链）
+      await ensureApiSession().catch(() => {});
+      return new Promise((resolve) => {
+        let retried = false;
+        const attempt = () => {
+          const xhr = new XMLHttpRequest();
+          const t0 = Date.now();
+          const timer = setTimeout(() => {
+            try { xhr.abort(); } catch {}
+            resolve({ finalUrl: url, data: '' });
+          }, timeout);
+          xhr.open('GET', url, true);
+          xhr.onreadystatechange = () => {
+            if (xhr.readyState >= 2) {
+              const ct = xhr.getResponseHeader('content-type') || '';
+              // 200 + text/html = 无 cookie 的「非法请求」页（小 body）：
+              // 刷新会话（首页 GET 重建 jar）后重试一次
+              if (xhr.status === 200 && ct.includes('text/html') && !retried) {
+                clearTimeout(timer);
+                try { xhr.abort(); } catch {}
+                retried = true;
+                void ensureApiSession()
+                  .catch(() => {})
+                  .then(attempt);
+                return;
+              }
+              clearTimeout(timer);
+              if (apiTimingLog) {
+                console.log(
+                  `[api耗时] XHR-302 ${String(url).slice(0, 70)}: ${Date.now() - t0}ms status=${xhr.status} ct=${ct.slice(0, 30)}`,
+                );
+              }
+              const finalUrl =
+                typeof xhr.responseURL === 'string' && /^https?:\/\//.test(xhr.responseURL)
+                  ? xhr.responseURL
+                  : url;
+              try { xhr.abort(); } catch {}
+              resolve({ finalUrl, data: '' });
+            }
+          };
+          xhr.onerror = () => {
+            clearTimeout(timer);
+            resolve({ finalUrl: url, data: '' });
+          };
+          xhr.send();
+        };
+        attempt();
+      });
+    })();
   }
   const MAX_REDIRECTS = 3;
   let currentUrl = url;
