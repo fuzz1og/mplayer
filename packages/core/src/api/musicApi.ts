@@ -10,6 +10,64 @@ import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
 let PROXY_URL = '';
+/** WebView 桥请求处理器（mobile 注入）：绕开 RN OkHttp 网络栈 */
+let apiRequestHandler:
+  | ((req: {
+      method: string;
+      url: string;
+      headers: Record<string, string>;
+      body?: string;
+    }) => Promise<{
+      status: number;
+      headers: Record<string, string>;
+      text: string;
+      finalUrl: string;
+    }>)
+  | null = null;
+
+export function setApiRequestHandler(
+  handler: typeof apiRequestHandler,
+): void {
+  apiRequestHandler = handler;
+}
+
+/** axios 自定义 adapter：有桥走桥（Chromium 栈），否则退回默认（Node/桌面） */
+async function bridgeOrDefaultAdapter(config: any): Promise<any> {
+  if (!apiRequestHandler) {
+    // 无桥（桌面/测试）：解析 axios 默认 adapter（defaults.adapter 是
+    // ['xhr','http','fetch'] 字符串数组，需 getAdapter 转成平台函数）
+    const defaultAdapter = (axios as any).getAdapter
+      ? (axios as any).getAdapter((axios as any).defaults.adapter)
+      : (axios as any).defaults.adapter;
+    return defaultAdapter(config);
+  }
+  const method = (config.method || 'get').toUpperCase();
+  const headers: Record<string, string> = {};
+  const rawHeaders = config.headers?.toJSON ? config.headers.toJSON() : config.headers || {};
+  for (const [k, v] of Object.entries(rawHeaders)) {
+    if (v != null && k.toLowerCase() !== 'cookie') headers[k] = String(v);
+  }
+  const body =
+    config.data != null
+      ? typeof config.data === 'string'
+        ? config.data
+        : JSON.stringify(config.data)
+      : undefined;
+  const res = await apiRequestHandler({
+    method,
+    url: config.url || '',
+    headers,
+    body,
+  });
+  return {
+    data: res.text,
+    status: res.status,
+    statusText: String(res.status),
+    headers: res.headers,
+    config,
+    request: { responseURL: res.finalUrl },
+  };
+}
 const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
 const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
 const SODA_URL_CACHE_TTL = 10 * 60 * 1000;
@@ -219,6 +277,7 @@ const apiClient = axios.create({
   // 手机网络并发超过 5 后严重劣化（连接限速/重传），单请求 0.6s 即可完成；
   // 30s 超时会让慢源卡死整批，12s 足够覆盖慢网络又不至于无限等待
   timeout: 12000,
+  adapter: bridgeOrDefaultAdapter as any,
 });
 
 // ── 上游搜索服务会话管理 ────────────────────────────────────────
