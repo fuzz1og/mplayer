@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, RefreshControl, StyleSheet, TouchableOpacity, Image, Dimensions,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { cacheManager, musicApi, formatPlayCount, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
 import LoadingState from '../../components/LoadingState';

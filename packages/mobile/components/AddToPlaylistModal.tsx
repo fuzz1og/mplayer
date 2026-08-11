@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Modal, Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Song, SourceKey } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';

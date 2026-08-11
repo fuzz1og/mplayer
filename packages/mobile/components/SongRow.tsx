@@ -3,7 +3,7 @@ import {
   View, Text, Image, TouchableOpacity, StyleSheet,
   Modal, Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type Song, SourceKey } from '@mplayer/core';

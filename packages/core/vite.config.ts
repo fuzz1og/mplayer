@@ -15,6 +15,7 @@ export default defineConfig({
     rollupOptions: {
       external: ['axios'],
     },
-    sourcemap: true,
+    // 产物被桌面/移动端打包器内联，sourcemap 只会白白增大 dist 体积
+    sourcemap: false,
   },
 });

@@ -39,6 +39,10 @@ const FONT_FAMILY_MAP = {
   'Zocial.ttf': 'zocial',
 };
 
+// 只拷贝实际用到的字体族，避免 APK 内嵌全部 19 个图标字体
+// （移动端代码仅深度导入 Ionicons / MaterialCommunityIcons，见各组件 import）
+const ALLOWED_FONTS = new Set(['Ionicons.ttf', 'MaterialCommunityIcons.ttf']);
+
 module.exports = function withVectorIconsFonts(config) {
   return withDangerousMod(config, [
     'android',
@@ -65,6 +69,11 @@ module.exports = function withVectorIconsFonts(config) {
 
       for (const file of files) {
         const src = path.join(VECTOR_ICONS_FONTS_DIR, file);
+        if (!ALLOWED_FONTS.has(file)) {
+          console.log(`[withVectorIconsFonts] skip ${file} (not in ALLOWED_FONTS)`);
+          skipped++;
+          continue;
+        }
         const family = FONT_FAMILY_MAP[file];
 
         if (!family) {

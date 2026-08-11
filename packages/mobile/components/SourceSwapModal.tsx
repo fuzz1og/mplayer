@@ -1,5 +1,5 @@
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '../services/sourceSwap';
 

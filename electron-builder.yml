@@ -23,6 +23,9 @@ files:
   - "!dist/linux*/**"
 win:
   icon: resources/icon.ico
+  electronLanguages:
+    - zh-CN
+    - en-US
   target:
     - target: nsis
       arch:

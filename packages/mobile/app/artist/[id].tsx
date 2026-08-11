@@ -5,7 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { musicApi, type Song, type Album } from '@mplayer/core';
 import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';

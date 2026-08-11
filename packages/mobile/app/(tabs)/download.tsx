@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Paths } from 'expo-file-system';
 import type { Song } from '@mplayer/core';
 import { useDownloadStore } from '../../stores/downloadStore';

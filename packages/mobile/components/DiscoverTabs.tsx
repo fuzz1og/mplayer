@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions,
   Image, FlatList,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
