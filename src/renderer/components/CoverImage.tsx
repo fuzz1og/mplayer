@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Music2, ListMusic } from 'lucide-react';
 import { isSessionProtectedEndpoint } from '@mplayer/core';
 import { resolveCoverUrl } from '@/renderer/services/coverUrlResolver';
@@ -78,6 +78,8 @@ const PlaylistFallback: React.FC<{ style?: React.CSSProperties }> = ({ style }) 
 
 const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant = 'song', onError }) => {
   const [failed, setFailed] = useState(false);
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 会话保护的封面端点（api.php）→ JS 层解析成 CDN 直链，<img> 才能直接加载
   // 首帧就跳过保护端点：解析完成前渲染必失败（无 cookie），onError 会抢占解析结果
   const [resolvedSrc, setResolvedSrc] = useState(() =>
@@ -100,23 +102,29 @@ const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant =
     if (isSessionProtectedEndpoint(src)) {
       setResolvingProtected(true);
       setResolvedSrc('');
+      retryCountRef.current = 0;
       let cancelled = false;
-      resolveCoverUrl(src)
-        .then((r) => {
+      // 解析失败（上游限流/会话未就绪）→ 指数退避重试（20s/40s/80s，最多 3 次）：
+      // 否则限流期间失败的封面会一直停留在默认占位图，直到重新进入页面
+      // 注意 resolveCoverUrl 失败时返回原 URL（不 reject），以 r === src 判定失败
+      const attempt = (): Promise<void> => {
+        return resolveCoverUrl(src).then((r) => {
           if (!cancelled) {
+            if (r === src && retryCountRef.current < 3) {
+              retryCountRef.current++;
+              const delay = 20000 * 2 ** (retryCountRef.current - 1);
+              retryTimerRef.current = setTimeout(attempt, delay);
+              return;
+            }
             setResolvedSrc(r);
             setResolvingProtected(false);
           }
-        })
-        .catch(() => {
-          // 解析失败回退原 URL，交给 onError 占位图兜底（保留既有兜底行为）
-          if (!cancelled) {
-            setResolvedSrc(src);
-            setResolvingProtected(false);
-          }
         });
+      };
+      attempt();
       return () => {
         cancelled = true;
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       };
     }
     setResolvingProtected(false);
