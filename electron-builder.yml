@@ -1,6 +1,7 @@
 appId: com.mplayer.app
 productName: MPlayer
 forceCodeSigning: false
+afterPack: scripts/afterPack.js
 publish:
   provider: github
   owner: fuzz1og
