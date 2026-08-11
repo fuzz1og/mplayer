@@ -190,7 +190,8 @@ const PlaylistDetailPage: React.FC = () => {
         const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
         if (searchResults.length === 0) return song;
 
-        const fresh = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
+        // DB 里 song.id 可能是 number，搜索结果 id 统一 string——String 比较兜底
+        const fresh = searchResults.find((s: Song) => String(s.id) === String(song.id)) || searchResults[0];
 
         // 写入缓存
         await IpcClient.invoke<void>('cache:setUrl', song.id, {
@@ -211,7 +212,14 @@ const PlaylistDetailPage: React.FC = () => {
         return { ...song, url: fresh.url, cover: fresh.cover, lrc: fresh.lrc };
     });
 
-    return results.map((r, i) => (r.status === 'fulfilled' ? r.value : songs[i]));
+    return results.map((r, i) => {
+      if (r.status === 'rejected') {
+        // 单曲刷新失败不再完全静默：保留旧数据，但打日志便于排查（会话失效/上游限流）
+        console.warn(`[playlist:refresh] 刷新失败，保留旧数据: ${songs[i]?.name}`, r.reason);
+        return songs[i];
+      }
+      return r.value;
+    });
   };
 
   const loadData = async () => {

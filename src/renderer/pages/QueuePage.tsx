@@ -97,7 +97,8 @@ const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
       const keyword = `${song.name} ${song.artist}`;
       const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
       if (!result.success || !result.data.length) return song;
-      const fresh = result.data.find((s: Song) => s.id === song.id) || result.data[0];
+      // DB 里 song.id 可能是 number，搜索结果 id 统一 string——String 比较兜底
+      const fresh = result.data.find((s: Song) => String(s.id) === String(song.id)) || result.data[0];
       await IpcClient.invoke<void>('cache:setUrl', song.id, {
         url: fresh.url,
         cover: fresh.cover,

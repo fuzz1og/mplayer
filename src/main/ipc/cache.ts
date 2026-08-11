@@ -63,7 +63,9 @@ export function registerCacheIpc(): void {
     return kernel.getJSON(`url:${songId}`)
   })
   registerIpcHandlerSimple('cache:setUrl', async (songId: string, urlData: any) => {
-    await kernel.setJSON(`url:${songId}`, urlData, 24 * 60 * 60 * 1000)
+    // 12h：与重构前 CacheManager.URL_EXPIRE_HOURS 契约一致——
+    // 签名 URL 服务端时效短，过期后下次进歌单必须重新搜索拿新签名
+    await kernel.setJSON(`url:${songId}`, urlData, 12 * 60 * 60 * 1000)
   })
   registerIpcHandlerSimple('cache:getSong', async (keyword: string) => {
     return kernel.getJSON(`search:${keyword}`)
