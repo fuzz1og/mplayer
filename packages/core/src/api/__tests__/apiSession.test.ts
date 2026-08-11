@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { setApiBaseUrl, musicApi, resolveCoverUrl } from '../musicApi.js';
+import { cacheManager } from '../memoryCacheManager.js';
 
 /**
  * 上游搜索服务会话管理测试：
@@ -158,6 +159,63 @@ describe('搜索服务会话管理', () => {
     expect(maxInFlight).toBeLessThanOrEqual(3);
   });
 
+  it('双池闸门：搜索洪峰挂满关键池时，封面仍用独立槽位推进（不被饿死）', async () => {
+    let releaseSearch!: () => void;
+    const searchHold = new Promise<void>((r) => { releaseSearch = r; });
+    let searchServerCount = 0;
+    let coverServerCount = 0;
+    const s = await withServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/') {
+        res.writeHead(200, { 'Set-Cookie': 'PHPSESSID=abc123; path=/' });
+        res.end('<html>home</html>');
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/') {
+        searchServerCount++;
+        // 模拟搜索洪峰：请求挂起直到手动放行，占满关键池全部槽位
+        searchHold.then(() => {
+          sendJson(res, {
+            code: 200,
+            data: [{ songid: 'H1', name: 'x', artist: 'y', url: 'api.php?get=url&type=qq&id=H1&sign=s&t=1' }],
+          });
+        });
+        return;
+      }
+      if (req.method === 'GET' && req.url?.startsWith('/api.php?get=pic')) {
+        setTimeout(() => {
+          coverServerCount++;
+          res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+          res.end('img');
+        }, 10);
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    setApiBaseUrl(`http://127.0.0.1:${s.port}/`);
+
+    const searches = Array.from({ length: 6 }, () => musicApi.searchSongs('洪峰测试', 1, 'qq'));
+    const covers = Array.from(
+      { length: 6 },
+      (_, i) => resolveCoverUrl(`api.php?get=pic&type=qq&id=C${i}&sign=s&t=1`),
+    );
+
+    // 等待封面全部到达（轮询，最多 2s）：搜索挂在关键池（2 个执行中 + 4 个
+    // 排队），封面应有独立槽位全部完成——旧单池设计下封面会排队饿死
+    const deadline = Date.now() + 2000;
+    while (coverServerCount < 6 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(searchServerCount).toBe(2);
+    expect(coverServerCount).toBe(6);
+
+    releaseSearch();
+    const searchResults = await Promise.all(searches);
+    const coverResults = await Promise.all(covers);
+    expect(searchResults.every((r) => r.length > 0)).toBe(true);
+    expect(coverResults.every((r) => r.startsWith('http'))).toBe(true);
+  });
+
   it('api.php 返回「非法请求」时刷新会话并重试一次', async () => {
     let homeCount = 0;
     let getCount = 0;
@@ -188,6 +246,32 @@ describe('搜索服务会话管理', () => {
     expect(getCount).toBe(2);
     expect(homeCount).toBe(2);
     expect(url).toContain('/api.php');
+  });
+
+  it('getAudioUrl 解析回原样的死链不写入 URL 缓存（重放会重新解析）', async () => {
+    const s = await withServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/') {
+        res.writeHead(200, { 'Set-Cookie': 'PHPSESSID=abc123; path=/' });
+        res.end('<html>home</html>');
+        return;
+      }
+      if (req.method === 'GET' && req.url?.startsWith('/api.php')) {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<script>x</script>非法请求');
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    setApiBaseUrl(`http://127.0.0.1:${s.port}/`);
+
+    const url = 'api.php?get=url&type=qq&id=D1&sign=s&t=1';
+    const full = `http://127.0.0.1:${s.port}/${url}`;
+    const result = await musicApi.getAudioUrl(url);
+
+    expect(result).toBe(full);
+    // 死链不缓存：1h 内重放会重新走解析，而不是直接拿到错误地址
+    expect(cacheManager.getAudioUrlCache(full)).toBeNull();
   });
 
   it('getAudioUrl 手动跟随 302 拿到 CDN 直链', async () => {

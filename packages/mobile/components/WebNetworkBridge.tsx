@@ -6,7 +6,7 @@
  * 白等 10s+ 超时；浏览器因 Chromium Happy Eyeballs 并行试 IPv4/IPv6
  * 直接走快路，秒开）。原生 App 不受影响（独立 OkHttp 配置）。
  *
- * 方案：常驻隐藏 WebView 加载 API 首页（https://www.jbsou.cn/，
+ * 方案：常驻隐藏 WebView 加载 API 首页（配置的 API 域名，
  * 拿到同源 origin + Chromium cookie jar 自动管理会话），注入桥脚本
  * 用 fetch 发请求——与浏览器完全同栈：IPv6 并行、302 自动跟随、
  * Set-Cookie 自动存储携带。API 请求全部走桥，绕开 RN 网络栈。
@@ -141,7 +141,8 @@ export default function WebNetworkBridge() {
   return (
     <WebView
       ref={ref}
-      source={{ uri: apiBaseUrl || 'https://www.jbsou.cn/' }}
+      // 未配置 API 地址时用 about:blank（桥不可用 → 自动回退 RN 原生栈）
+      source={{ uri: apiBaseUrl || 'about:blank' }}
       injectedJavaScriptBeforeContentLoaded={BRIDGE_JS}
       style={{ position: 'absolute', width: 1, height: 1, opacity: 0, zIndex: -1 }}
       originWhitelist={['*']}

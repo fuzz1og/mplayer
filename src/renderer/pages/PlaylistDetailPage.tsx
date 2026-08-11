@@ -20,7 +20,7 @@ import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
-import { resolveSongUrls } from '@/renderer/utils/songResolver';
+import { stripSourceIdPrefix } from '@mplayer/core';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
@@ -188,11 +188,15 @@ const PlaylistDetailPage: React.FC = () => {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
         }
 
-        const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
-        if (searchResults.length === 0) return song;
-
-        // DB 里 song.id 可能是 number，搜索结果 id 统一 string——String 比较兜底
-        const fresh = searchResults.find((s: Song) => String(s.id) === String(song.id)) || searchResults[0];
+        // 按源站 ID 直接识别（filter=id）：链接/签名会过期，ID 不会——
+        // 绕开"名字搜索 + 匹配"（Live/翻唱/多歌手导致匹配失败挂错 URL）
+        const fresh = await IpcClient.invoke<Song | null>(
+          'musicApi:searchSongById',
+          stripSourceIdPrefix(String(song.id)),
+          song.sourceType,
+          true,
+        );
+        if (!fresh?.url) return song;
 
         // 写入缓存
         await IpcClient.invoke<void>('cache:setUrl', song.id, {

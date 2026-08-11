@@ -3,7 +3,7 @@ const { ipcRenderer } = window.require('electron');
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, SongBase } from '@mplayer/core';
-import { resolveSongUrls } from '@/renderer/utils/songResolver';
+import { stripSourceIdPrefix } from '@mplayer/core';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 
 interface FavoriteState {
@@ -42,13 +42,15 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
         };
       }
 
-      // 如果缓存中没有，通过搜索获取最新URL
-      const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
-      if (searchResults.length > 0) {
-        // 找到匹配的歌曲
-        // DB 里 song.id 可能是 number，搜索结果 id 统一 string——String 比较兜底
-        const matchedSong = searchResults.find((s: Song) => String(s.id) === String(song.id)) || searchResults[0];
-
+      // 如果缓存中没有，按源站 ID 直接识别拿最新三件套（filter=id：
+      // 链接会过期，ID 不会；绕开名字搜索的翻唱/Live 匹配失败）
+      const matchedSong = await IpcClient.invoke<Song | null>(
+        'musicApi:searchSongById',
+        stripSourceIdPrefix(String(song.id)),
+        song.sourceType,
+        true,
+      );
+      if (matchedSong?.url) {
         // 写入缓存
         await IpcClient.invoke<void>('cache:setUrl', song.id, {
           url: matchedSong.url,

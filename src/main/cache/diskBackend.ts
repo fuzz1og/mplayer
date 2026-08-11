@@ -14,6 +14,12 @@ function isImageHeader(header: Buffer): boolean {
   return false
 }
 
+/** 校验字节内容是否为真实图片（与 isImageFile 同一白名单，供内存 Buffer 使用） */
+export function isImageBytes(buf: Buffer): boolean {
+  if (!buf || buf.length === 0) return false
+  return isImageHeader(buf.subarray(0, 16))
+}
+
 /** 校验缓存文件是否为有效图片（JPEG/PNG/WebP/GIF/AVIF/ICO/BMP），损坏或非图片返回 false */
 export function isImageFile(filePath: string): boolean {
   if (!fs.existsSync(filePath)) return false

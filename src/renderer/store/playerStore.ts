@@ -3,6 +3,7 @@ import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
+import { isSessionProtectedEndpoint, stripSourceIdPrefix } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { ipcMusicApi } from '@/renderer/services/IpcMusicApi';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
@@ -190,6 +191,37 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');
             realUrl = '';
           }
+        }
+      }
+
+      // 死链 fresh 兜底：受保护端点（签名 URL）解析回原样 = 签名过期/
+      // 会话失效（服务端返回错误页而非 302）。按源站 ID 重取全新三件套，
+      // 播放不再依赖列表刷新先行完成；成功顺手回写 URL 缓存。
+      if (
+        song.sourceType !== 'local' &&
+        song.sourceType !== 'soda' &&
+        song.id &&
+        realUrl &&
+        realUrl === song.url &&
+        isSessionProtectedEndpoint(song.url)
+      ) {
+        try {
+          const fresh = await IpcClient.invoke<Song | null>(
+            'musicApi:searchSongById',
+            stripSourceIdPrefix(String(song.id)),
+            song.sourceType,
+            true,
+          );
+          if (fresh?.url?.startsWith('http')) {
+            realUrl = fresh.url;
+            void IpcClient.invoke<void>('cache:setUrl', song.id, {
+              url: fresh.url,
+              cover: fresh.cover,
+              lrc: fresh.lrc,
+            }).catch(() => {});
+          }
+        } catch (freshError) {
+          console.warn('播放 URL fresh 重试失败，使用原解析结果:', freshError);
         }
       }
 

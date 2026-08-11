@@ -3,6 +3,7 @@ import type { Song, AudioTag } from '@mplayer/core';
 import { registerIpcHandler, registerIpcHandlerSimple } from './registerHandler';
 import { getAggregatedChart } from '../services/chartAggregator';
 import { getThrottleWaitMs } from '../api/musicApi';
+import { cacheResolvedCover } from './cache';
 
 type MusicApi = typeof import('../api/musicApi').musicApi & {
   getSodaPlayableUrl(trackId: string): Promise<string>;
@@ -44,7 +45,15 @@ export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandlerSimple('api:getThrottleWait', () => getThrottleWaitMs());
   registerIpcHandler('lyrics:get', (lrcUrl: string) => musicApi.getLyrics(lrcUrl));
   registerIpcHandler('musicApi:getAudioUrl', (audioUrl: string) => musicApi.getAudioUrl(audioUrl));
-  registerIpcHandler('musicApi:resolveCoverUrl', (coverUrl: string) => musicApi.resolveCoverUrl(coverUrl));
+  registerIpcHandler('musicApi:resolveCoverUrl', async (coverUrl: string) => {
+    const resolved = await musicApi.resolveCoverUrl(coverUrl);
+    // 解析成功且拿到 CDN 直链 → 主进程下载真实图片写入磁盘封面缓存
+    // （渲染层无会话 cookie 无法自行缓存受保护端点），失败不影响渲染
+    if (resolved && resolved !== coverUrl && /^https?:\/\//.test(resolved)) {
+      void cacheResolvedCover(coverUrl, resolved);
+    }
+    return resolved;
+  });
   registerIpcHandler('musicApi:probeAudio', (songs: Song[]) => probeSongBatch(Array.isArray(songs) ? songs : [], musicApi));
   registerIpcHandler('musicApi:getSodaAudioUrl', (trackId: string) => musicApi.getSodaAudioUrl(trackId));
   registerIpcHandler('musicApi:getSodaPlayableUrl', (trackId: string) => musicApi.getSodaPlayableUrl(trackId));

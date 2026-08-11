@@ -13,7 +13,7 @@ import { IpcClient } from '@/renderer/services/IpcClient';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
-const { ipcRenderer } = window.require('electron');
+import { stripSourceIdPrefix } from '@mplayer/core';
 
 interface SortableItemProps {
   song: Song;
@@ -94,11 +94,15 @@ const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
       if (cached) {
         return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
       }
-      const keyword = `${song.name} ${song.artist}`;
-      const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
-      if (!result.success || !result.data.length) return song;
-      // DB 里 song.id 可能是 number，搜索结果 id 统一 string——String 比较兜底
-      const fresh = result.data.find((s: Song) => String(s.id) === String(song.id)) || result.data[0];
+      // 按源站 ID 直接识别（filter=id）：链接会过期，ID 不会——
+      // 绕开名字搜索的匹配失败风险（翻唱/Live/多歌手）
+      const fresh = await IpcClient.invoke<Song | null>(
+        'musicApi:searchSongById',
+        stripSourceIdPrefix(String(song.id)),
+        song.sourceType,
+        true,
+      );
+      if (!fresh?.url) return song;
       await IpcClient.invoke<void>('cache:setUrl', song.id, {
         url: fresh.url,
         cover: fresh.cover,

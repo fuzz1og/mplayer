@@ -78,55 +78,72 @@ async function dispatchWithAdapter(config: any): Promise<any> {
   };
 }
 
-// ── 全局 API 并发闸门 ──────────────────────────────────────────
-// 上游服务端对同 IP 并发连接数有硬限制：实测 12 并发挂 9 个（8s 超时），
-// 5 个内基本稳定但延迟逐增。歌单刷新（搜索×5）+ 封面解析（×4）同时打
-// 上去必超限 → 大批 8s 超时。所有同源请求共享闸门，峰值 ≤3。
-// 优先级：0=播放直链（插队，不能等封面） / 1=搜索·会话引导 / 2=封面·歌词
-const API_GATE_CAP = 3;
-const gateQueue: { priority: number; resolve: () => void; since: number }[] = [];
-let gateActive = 0;
+// ── 全局 API 并发闸门（双池）────────────────────────────────────
+// 上游服务端对同 IP 并发连接数有硬限制（实测并发超过 ~3-4 个即挂起
+// 直到超时）。拆成两个独立池，避免互相拖死：
+// - 关键池 cap 2：搜索 POST / 播放直链(get=url) / 会话引导——播放与
+//   刷新必须保活，优先级 0=播放直链(插队) / 1=搜索·会话
+// - 封面池 cap 1：get=pic / get=lrc——整列表封面解析量大，但不能占用
+//   关键槽位，否则搜索洪峰期间封面永远排队（实测排队 87s 后 3s 超时
+//   全部失败，界面只剩默认占位图）；独立 1 槽保证封面稳定渐进。
+// 双池合计峰值 ≤3，仍在服务端承受范围内。
+interface GatePool {
+  cap: number;
+  active: number;
+  queue: { priority: number; resolve: () => void; since: number }[];
+}
+
+const gatePools: Record<'critical' | 'cover', GatePool> = {
+  critical: { cap: 2, active: 0, queue: [] },
+  cover: { cap: 1, active: 0, queue: [] },
+};
+
+function gatePoolOf(config: any): GatePool {
+  const url = String(config.url || '');
+  return url.includes('get=pic') || url.includes('get=lrc') ? gatePools.cover : gatePools.critical;
+}
 
 function gatePriorityOf(config: any): number {
   const url = String(config.url || '');
   if (url.includes('get=url')) return 0;
-  if (config.__sessionBootstrapSkip || (config.method || 'get').toLowerCase() === 'post') return 1;
-  return 2;
+  return 1;
 }
 
 async function acquireApiGate(config: any): Promise<() => void> {
   if (!isApiOriginRequest(config)) return () => {};
-  if (gateActive < API_GATE_CAP) {
-    gateActive++;
-    return () => releaseApiGate();
+  const pool = gatePoolOf(config);
+  if (pool.active < pool.cap) {
+    pool.active++;
+    return () => releaseApiGate(pool);
   }
   const priority = gatePriorityOf(config);
   const since = Date.now();
   await new Promise<void>((resolve) => {
     // 高优先级插到队首；同级保持 FIFO
-    if (priority === 0) gateQueue.unshift({ priority, resolve, since });
-    else gateQueue.push({ priority, resolve, since });
+    if (priority === 0) pool.queue.unshift({ priority, resolve, since });
+    else pool.queue.push({ priority, resolve, since });
   });
   if (apiTimingLog) {
     const waited = Date.now() - since;
     if (waited > 2000) {
-      console.log(`[apiGate] 排队 ${waited}ms (active=${gateActive} queue=${gateQueue.length}) ${String(config.url || '').slice(0, 60)}`);
+      const name = pool === gatePools.critical ? 'critical' : 'cover';
+      console.log(`[apiGate] ${name} 排队 ${waited}ms (active=${pool.active} queue=${pool.queue.length}) ${String(config.url || '').slice(0, 60)}`);
     }
   }
-  return () => releaseApiGate();
+  return () => releaseApiGate(pool);
 }
 
-function releaseApiGate(): void {
-  gateActive--;
+function releaseApiGate(pool: GatePool): void {
+  pool.active--;
   // 唤醒优先级最高的等待者（同优先级取最早入队的）
   let idx = -1;
-  for (let i = 0; i < gateQueue.length; i++) {
-    if (idx === -1 || gateQueue[i].priority < gateQueue[idx].priority) idx = i;
+  for (let i = 0; i < pool.queue.length; i++) {
+    if (idx === -1 || pool.queue[i].priority < pool.queue[idx].priority) idx = i;
   }
   if (idx !== -1) {
-    const w = gateQueue.splice(idx, 1)[0];
+    const w = pool.queue.splice(idx, 1)[0];
     // 槽位在同步块内直接转移给被唤醒者，避免新请求插队抢占
-    gateActive++;
+    pool.active++;
     w.resolve();
   }
 }
@@ -196,11 +213,15 @@ function runResolve(
       return await followRedirectsToFinalUrl(url, undefined, timeout);
     } finally {
       resolveActive--;
-      const next =
-        resolveWaiters.find((w) => w.priority) ?? resolveWaiters.shift();
-      if (next) {
-        resolveWaiters.splice(resolveWaiters.indexOf(next), 1);
-        next.resolve();
+      // 唤醒下一个等待者。注意：shift() 已移除队首，不能再 splice——
+      // indexOf 找不到时 splice(-1,1) 会误删队尾等待者（回归测试抓到：
+      // 队列 ≥2 时最后一个封面永久挂起，不 resolve 也不超时）。
+      const prio = resolveWaiters.find((w) => w.priority);
+      if (prio) {
+        resolveWaiters.splice(resolveWaiters.indexOf(prio), 1);
+        prio.resolve();
+      } else {
+        resolveWaiters.shift()?.resolve();
       }
       resolveInflight.delete(url);
     }
@@ -1053,7 +1074,12 @@ export const musicApi = {
           throw new Error(errorMsg);
         }
 
-        cacheManager.setAudioUrlCache(fullUrl, finalUrl);
+        // 死链不缓存：受保护端点（api.php?get=url）解析回原样 = 签名过期/
+        // 会话失效，服务端返回的是错误页而非 302。缓存死链会让 1h 内
+        // 重放直接拿到错误地址（连 fresh 重试的机会都没有）。
+        if (!(finalUrl === fullUrl && isSessionProtectedEndpoint(fullUrl))) {
+          cacheManager.setAudioUrlCache(fullUrl, finalUrl);
+        }
 
         return finalUrl;
       } catch (error: any) {

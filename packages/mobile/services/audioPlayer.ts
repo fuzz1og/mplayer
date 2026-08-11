@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants from 'expo-constants';
-import { cacheManager, getNextSongIndex, musicApi, resolvePlayableSong, resolveFreshUrl } from '@mplayer/core';
+import { cacheManager, getNextSongIndex, getApiBaseUrl, musicApi, resolvePlayableSong, resolveFreshUrl } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -242,10 +242,15 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     const nextPlayer = createAudioPlayer(
       {
         uri: audioUrl,
-        // 网易云 CDN 可能校验 UA/Referer：带上浏览器特征避免被拒（Source error）
+        // CDN 可能校验 UA/Referer：带上浏览器特征 + 当前 API 来源（运行时
+        // 取配置值，不硬编码域名）避免被拒（Source error）
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Referer': 'https://www.jbsou.cn/',
+          // 运行时取配置的 API 域名（origin 形式，去尾斜杠 + /），不硬编码
+          'Referer': (() => {
+            const base = getApiBaseUrl();
+            return base ? base.replace(/\/+$/, '') + '/' : '';
+          })(),
         },
       },
       { updateInterval: 250 },
