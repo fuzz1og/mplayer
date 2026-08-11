@@ -123,6 +123,41 @@ describe('搜索服务会话管理', () => {
     expect(songs[0].id).toBe('Q2');
   });
 
+  it('全局并发闸门：同源请求并发不超过 3，全部仍能完成', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const s = await withServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/') {
+        res.writeHead(200, { 'Set-Cookie': 'PHPSESSID=abc123; path=/' });
+        res.end('<html>home</html>');
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/') {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        setTimeout(() => {
+          inFlight--;
+          sendJson(res, {
+            code: 200,
+            data: [{ songid: 'G1', name: '闸门测试', artist: '测试', url: 'api.php?get=url&type=qq&id=G1&sign=s1&t=1' }],
+          });
+        }, 40);
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    setApiBaseUrl(`http://127.0.0.1:${s.port}/`);
+
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => musicApi.searchSongs('闸门测试', 1, 'qq')),
+    );
+
+    expect(results).toHaveLength(10);
+    expect(results.every((r) => r.length > 0)).toBe(true);
+    expect(maxInFlight).toBeLessThanOrEqual(3);
+  });
+
   it('api.php 返回「非法请求」时刷新会话并重试一次', async () => {
     let homeCount = 0;
     let getCount = 0;

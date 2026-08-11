@@ -33,6 +33,15 @@ export function setApiRequestHandler(
 
 /** axios 自定义 adapter：有桥走桥（Chromium 栈），否则退回默认（Node/桌面） */
 async function bridgeOrDefaultAdapter(config: any): Promise<any> {
+  const release = await acquireApiGate(config);
+  try {
+    return await dispatchWithAdapter(config);
+  } finally {
+    release();
+  }
+}
+
+async function dispatchWithAdapter(config: any): Promise<any> {
   if (!apiRequestHandler) {
     // 无桥（桌面/测试）：解析 axios 默认 adapter（defaults.adapter 是
     // ['xhr','http','fetch'] 字符串数组，需 getAdapter 转成平台函数）
@@ -68,6 +77,60 @@ async function bridgeOrDefaultAdapter(config: any): Promise<any> {
     request: { responseURL: res.finalUrl },
   };
 }
+
+// ── 全局 API 并发闸门 ──────────────────────────────────────────
+// 上游服务端对同 IP 并发连接数有硬限制：实测 12 并发挂 9 个（8s 超时），
+// 5 个内基本稳定但延迟逐增。歌单刷新（搜索×5）+ 封面解析（×4）同时打
+// 上去必超限 → 大批 8s 超时。所有同源请求共享闸门，峰值 ≤3。
+// 优先级：0=播放直链（插队，不能等封面） / 1=搜索·会话引导 / 2=封面·歌词
+const API_GATE_CAP = 3;
+const gateQueue: { priority: number; resolve: () => void; since: number }[] = [];
+let gateActive = 0;
+
+function gatePriorityOf(config: any): number {
+  const url = String(config.url || '');
+  if (url.includes('get=url')) return 0;
+  if (config.__sessionBootstrapSkip || (config.method || 'get').toLowerCase() === 'post') return 1;
+  return 2;
+}
+
+async function acquireApiGate(config: any): Promise<() => void> {
+  if (!isApiOriginRequest(config)) return () => {};
+  if (gateActive < API_GATE_CAP) {
+    gateActive++;
+    return () => releaseApiGate();
+  }
+  const priority = gatePriorityOf(config);
+  const since = Date.now();
+  await new Promise<void>((resolve) => {
+    // 高优先级插到队首；同级保持 FIFO
+    if (priority === 0) gateQueue.unshift({ priority, resolve, since });
+    else gateQueue.push({ priority, resolve, since });
+  });
+  if (apiTimingLog) {
+    const waited = Date.now() - since;
+    if (waited > 2000) {
+      console.log(`[apiGate] 排队 ${waited}ms (active=${gateActive} queue=${gateQueue.length}) ${String(config.url || '').slice(0, 60)}`);
+    }
+  }
+  return () => releaseApiGate();
+}
+
+function releaseApiGate(): void {
+  gateActive--;
+  // 唤醒优先级最高的等待者（同优先级取最早入队的）
+  let idx = -1;
+  for (let i = 0; i < gateQueue.length; i++) {
+    if (idx === -1 || gateQueue[i].priority < gateQueue[idx].priority) idx = i;
+  }
+  if (idx !== -1) {
+    const w = gateQueue.splice(idx, 1)[0];
+    // 槽位在同步块内直接转移给被唤醒者，避免新请求插队抢占
+    gateActive++;
+    w.resolve();
+  }
+}
+
 const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
 const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
 const SODA_URL_CACHE_TTL = 10 * 60 * 1000;
@@ -83,14 +146,32 @@ export function setApiTimingLog(enabled: boolean): void {
   apiTimingLog = enabled;
 }
 
+// ── 上游限流观察器 ─────────────────────────────────────────────
+// 上游服务端对同 IP 请求有窗口配额（超过后请求挂起直到超时，实测
+// 连续 2-3 个请求后即开始挂起）。客户端必须自适应退避：core 在检测到
+// 关键请求（搜索 POST / 播放直链解析）超时时通知宿主，宿主安排刷新暂停。
+export type ThrottleEvent = 'throttle' | 'success';
+let throttleObserver: ((event: ThrottleEvent) => void) | null = null;
+export function setThrottleObserver(fn: ((event: ThrottleEvent) => void) | null): void {
+  throttleObserver = fn;
+}
+function reportThrottleEvent(event: ThrottleEvent): void {
+  try {
+    throttleObserver?.(event);
+  } catch {
+    // 观察器异常不能影响请求链路
+  }
+}
+
 // ── api.php 302 解析并发控制 ─────────────────────────────────────
 // RN 连接池默认仅 5 个连接/主机：搜索结果页 30+ 首歌同时解析封面
 // （api.php?get=pic）会把连接池排队打满，每个请求都 5s 超时，
-// 连播放 URL 的解析也被拖死。限 4 并发 + 相同 URL in-flight 去重
+// 连播放 URL 的解析也被拖死。限 3 并发 + 相同 URL in-flight 去重
 // （同一首歌的封面/URL 并发请求合并为一个，避免重复打上游）。
+// 注意：全局 API 闸门（API_GATE_CAP=3）才是最终并发上限，此处只是外层池。
 const resolveWaiters: { priority: boolean; resolve: () => void }[] = [];
 let resolveActive = 0;
-const RESOLVE_MAX_CONCURRENCY = 4;
+const RESOLVE_MAX_CONCURRENCY = 3;
 const resolveInflight = new Map<string, Promise<{ finalUrl: string; data: unknown }>>();
 
 function runResolve(
@@ -402,7 +483,12 @@ apiClient.interceptors.response.use(
     if (config.__sessionBootstrapSkip || config.__sessionRetried) return response;
     if (!isApiOriginRequest(config)) return response;
 
+    // 关键请求成功 = 上游未限流，重置退避（封面 3s 快超时不算，避免误报）
     const method = (config.method || 'get').toLowerCase();
+    if (method === 'post' || String(config.url || '').includes('get=url')) {
+      reportThrottleEvent('success');
+    }
+
     const data: unknown = response.data;
 
     // 搜索接口（POST 根路径）：code 404「没有找到相关信息」= 会话缺失/失效
@@ -438,6 +524,16 @@ apiClient.interceptors.response.use(
       const ms = Date.now() - config.__t0;
       const method = (config.method || 'get').toUpperCase();
       console.log(`[api耗时] ${method} ${String(config.url).slice(0, 70)}: ${ms}ms (${error?.message})`);
+    }
+    // 超时 = 上游限流挂起的典型信号；只统计关键请求（搜索 POST / 播放直链），
+    // 封面/歌词 3s 快超时是常态，不计入退避
+    const timedOut =
+      error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''));
+    if (timedOut && config && isApiOriginRequest(config)) {
+      const method = String(config.method || 'get').toLowerCase();
+      if (method === 'post' || String(config.url || '').includes('get=url')) {
+        reportThrottleEvent('throttle');
+      }
     }
     return Promise.reject(error);
   }

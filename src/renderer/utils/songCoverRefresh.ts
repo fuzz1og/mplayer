@@ -15,7 +15,8 @@ const lastRefreshAt = new Map<string, number>();
 // 进行中的刷新去重：同一首歌可能同时在行/播放栏/歌词页触发刷新，合并为一次
 const inFlightRefreshes = new Map<string, Promise<string | null>>();
 // 全局并发限制：整列表封面同时失效/为空时同时刷新会打爆 上游 API
-const REFRESH_MAX_CONCURRENT = 5;
+// （服务端对同 IP 并发有硬限制，core 全局闸门再兜底）
+const REFRESH_MAX_CONCURRENT = 3;
 let refreshInFlight = 0;
 
 async function withRefreshLimit<T>(fn: () => Promise<T>): Promise<T> {

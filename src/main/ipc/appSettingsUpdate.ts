@@ -3,7 +3,7 @@ import { registerIpcHandler, registerIpcHandlerSimple } from './registerHandler'
 import { downloadService } from '../services/downloadService';
 import { updateService } from '../services/updateService';
 import { db } from '../storage/db';
-import { applyElectronProxy, type ProxyConfig } from '../proxy';
+import { applyElectronProxy, buildAgents, type ProxyConfig } from '../proxy';
 import type { BrowserWindow } from 'electron';
 
 export function registerDialogIpc(): void {
@@ -35,8 +35,7 @@ export function registerSettingsIpc(): void {
   });
   registerIpcHandler('settings:setProxy', async (proxyConfig: ProxyConfig) => {
     await db.setSetting('proxyConfig', proxyConfig);
-    const proxy = require('./proxy');
-    proxy.buildAgents(proxyConfig);
+    buildAgents(proxyConfig);
     applyElectronProxy(proxyConfig);
   });
 }

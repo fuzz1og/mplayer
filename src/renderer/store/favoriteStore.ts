@@ -4,6 +4,7 @@ import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, SongBase } from '@mplayer/core';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
+import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 
 interface FavoriteState {
   favoriteIds: string[];
@@ -106,16 +107,13 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
 
       // 异步刷新缺失 URL 的歌曲（不阻塞界面加载）
       if (needsRefresh.length > 0) {
-        // Bug #8: 限制并发请求数，避免请求风暴
-        const CONCURRENT_LIMIT = 5;
-        const refreshResults: PromiseSettledResult<Song | null>[] = [];
-        for (let i = 0; i < needsRefresh.length; i += CONCURRENT_LIMIT) {
-          const batch = needsRefresh.slice(i, i + CONCURRENT_LIMIT);
-          const batchResults = await Promise.allSettled(
-            batch.map(songBase => get().refreshSongUrls(songBase))
-          );
-          refreshResults.push(...batchResults);
-        }
+        // Bug #8: 分批刷新（每批 3 首 + 批间间隔 + 限流退避），
+        // 避免请求风暴（上游服务端对同 IP 并发/速率有硬限制）
+        const refreshResults = await mapPacedWithConcurrency(
+          needsRefresh,
+          3,
+          songBase => get().refreshSongUrls(songBase)
+        );
 
         // Bug #5: 用 Map<id, result> 查找，避免索引错位
         const resultMap = new Map<string, Song>();

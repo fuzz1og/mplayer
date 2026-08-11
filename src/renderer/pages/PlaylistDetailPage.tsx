@@ -21,7 +21,7 @@ import { searchService } from '@/renderer/services/searchService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
-import { mapSettledWithConcurrency } from '@/renderer/utils/async';
+import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
@@ -180,8 +180,9 @@ const PlaylistDetailPage: React.FC = () => {
   );
 
   const refreshPlaylistSongs = async (songs: Song[]): Promise<Song[]> => {
-    // 并发 5 限流：整列表同时搜索会打爆 上游 API（高并发限流/502），必须逐批刷新
-    const results = await mapSettledWithConcurrency(songs, 5, async (song) => {
+    // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP
+    // 有窗口配额，整列表同时搜索会打爆 API，必须逐批慢刷
+    const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
         const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
         if (cached) {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };

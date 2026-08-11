@@ -23,10 +23,10 @@ import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { getApiUrl } from './config';
-import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl } from './api/musicApi';
+import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl, setApiTimingLog } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
-import { applyElectronProxy, type ProxyConfig } from './proxy';
+import { applyElectronProxy, getHttpAgent, getHttpsAgent, type ProxyConfig } from './proxy';
 import { registerCacheIpc } from './ipc/cache';
 import { registerFavoriteIpc, registerHistoryIpc, registerPlaylistIpc } from './ipc/favoriteHistoryPlaylist';
 import { registerMusicApiIpc } from './ipc/musicApi';
@@ -44,10 +44,9 @@ const musicApi = {
     const cachedPath = audioCacheBackend.getFilePath(cacheKey)
     if (fs.existsSync(cachedPath)) return 'file:///' + cachedPath.replace(/\\/g, '/');
     try {
-      const proxy = require('./proxy');
       const dl = await axios.get(remoteUrl, {
-        httpAgent: proxy.getHttpAgent(),
-        httpsAgent: proxy.getHttpsAgent(),
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         responseType: 'arraybuffer',
         timeout: 30000,
@@ -187,15 +186,18 @@ app.whenReady().then(async () => {
   if (resolvedApiUrl) {
     setApiBaseUrl(resolvedApiUrl);
   }
+  // dev 诊断：API 请求耗时日志（>300ms 才打，定位慢请求/超时链路）
+  if (!app.isPackaged) {
+    setApiTimingLog(true);
+  }
 
   // 加载代理设置并应用
   try {
     const savedProxy = await db.getSetting<ProxyConfig>('proxyConfig');
     if (savedProxy) {
-      const proxy = require('./proxy');
       injectProxyAgents(() => ({
-        httpAgent: proxy.getHttpAgent(),
-        httpsAgent: proxy.getHttpsAgent(),
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
       }));
       applyElectronProxy(savedProxy);
       // 同时配置 electron-updater 的专用 session

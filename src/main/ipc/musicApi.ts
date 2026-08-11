@@ -1,7 +1,8 @@
 import { probeAudioUrl } from '@mplayer/core';
 import type { Song, AudioTag } from '@mplayer/core';
-import { registerIpcHandler } from './registerHandler';
+import { registerIpcHandler, registerIpcHandlerSimple } from './registerHandler';
 import { getAggregatedChart } from '../services/chartAggregator';
+import { getThrottleWaitMs } from '../api/musicApi';
 
 type MusicApi = typeof import('../api/musicApi').musicApi & {
   getSodaPlayableUrl(trackId: string): Promise<string>;
@@ -40,6 +41,7 @@ async function probeSongBatch(songs: Song[], api: MusicApi): Promise<ProbeResult
 }
 
 export function registerMusicApiIpc(musicApi: MusicApi): void {
+  registerIpcHandlerSimple('api:getThrottleWait', () => getThrottleWaitMs());
   registerIpcHandler('lyrics:get', (lrcUrl: string) => musicApi.getLyrics(lrcUrl));
   registerIpcHandler('musicApi:getAudioUrl', (audioUrl: string) => musicApi.getAudioUrl(audioUrl));
   registerIpcHandler('musicApi:resolveCoverUrl', (coverUrl: string) => musicApi.resolveCoverUrl(coverUrl));

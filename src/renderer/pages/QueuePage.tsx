@@ -10,7 +10,7 @@ import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { mapSettledWithConcurrency } from '@/renderer/utils/async';
+import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
@@ -87,8 +87,8 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
 });
 
 const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
-  // 并发 5 限流：整列表同时搜索会打爆 上游 API（高并发限流/502）
-  const results = await mapSettledWithConcurrency(songs, 5, async (song) => {
+  // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP 有窗口配额
+  const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
     try {
       const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
       if (cached) {
