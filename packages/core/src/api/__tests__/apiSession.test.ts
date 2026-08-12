@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { setApiBaseUrl, musicApi, resolveCoverUrl } from '../musicApi.js';
+import { setApiBaseUrl, setApiRequestHandler, musicApi, resolveCoverUrl } from '../musicApi.js';
 import { cacheManager } from '../memoryCacheManager.js';
 
 /**
@@ -379,4 +379,113 @@ describe('搜索服务会话管理', () => {
     const url = await resolveCoverUrl('api.php?get=pic&type=qq&id=BAD&sign=s&t=1');
     expect(url).toBe(`http://127.0.0.1:${s.port}/api.php?get=pic&type=qq&id=BAD&sign=s&t=1`);
   });
+
+  it('桥模式：api.php 解析走 rangeOnly 拿最终直链，不下载 body', async () => {
+    const bridgeCalls: any[] = [];
+    setApiRequestHandler(async (req) => {
+      bridgeCalls.push(req);
+      if (req.method === 'GET' && req.url.endsWith('/')) {
+        return { status: 200, headers: { 'content-type': 'text/html' }, text: '<html>home</html>', finalUrl: req.url };
+      }
+      return {
+        status: 200,
+        headers: { 'content-type': 'audio/mpeg' },
+        text: '',
+        finalUrl: 'https://cdn.example.com/real.mp3',
+      };
+    });
+    try {
+      setApiBaseUrl('http://api.example.com/');
+      const url = await musicApi.getAudioUrl('http://api.example.com/api.php?get=url&type=wy&id=1&sign=s&t=1');
+
+      expect(url).toBe('https://cdn.example.com/real.mp3');
+      const resolve = bridgeCalls.find((c) => c.rangeOnly);
+      expect(resolve).toBeTruthy();
+      expect(resolve.headers.Range).toBe('bytes=0-0');
+      expect(resolve.timeoutMs).toBeGreaterThan(0);
+    } finally {
+      setApiRequestHandler(null);
+    }
+  });
+
+  it('桥模式：同源 HTML（会话失效）自动重建会话并重试一次', async () => {
+    let homeCount = 0;
+    let rangeCalls = 0;
+    setApiRequestHandler(async (req) => {
+      if (req.method === 'GET' && req.url.endsWith('/')) {
+        homeCount++;
+        return { status: 200, headers: { 'content-type': 'text/html' }, text: '<html>home</html>', finalUrl: req.url };
+      }
+      rangeCalls++;
+      if (rangeCalls === 1) {
+        // 会话失效：最终地址没变 + text/html「非法请求」页
+        return { status: 200, headers: { 'content-type': 'text/html' }, text: '非法请求', finalUrl: req.url };
+      }
+      return {
+        status: 200,
+        headers: { 'content-type': 'audio/mpeg' },
+        text: '',
+        finalUrl: 'https://cdn.example.com/fresh.mp3',
+      };
+    });
+    try {
+      setApiBaseUrl('http://api.example.com/');
+      const url = await musicApi.getAudioUrl('http://api.example.com/api.php?get=url&type=wy&id=2&sign=s&t=1');
+
+      expect(url).toBe('https://cdn.example.com/fresh.mp3');
+      expect(rangeCalls).toBe(2);
+      expect(homeCount).toBe(2); // 启动预热 1 次 + 失效重建 1 次
+    } finally {
+      setApiRequestHandler(null);
+    }
+  });
+
+  it('桥基础设施故障时回退默认网络栈（搜索与 302 解析仍可用）', async () => {
+    setApiRequestHandler(async () => {
+      throw new Error('bridge startup failed');
+    });
+    let homeCount = 0;
+    let postCount = 0;
+    const cdn = await withServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
+      res.end('ID3 cdn bytes');
+    });
+    const s = await withServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/') {
+        homeCount++;
+        res.writeHead(200, { 'Set-Cookie': 'PHPSESSID=abc123; path=/' });
+        res.end('<html>home</html>');
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/') {
+        postCount++;
+        sendJson(res, {
+          code: 200,
+          data: [{ songid: 'FB1', name: '回退测试', artist: '测试', url: 'api.php?get=url&type=qq&id=FB1&sign=s&t=1' }],
+        });
+        return;
+      }
+      if (req.method === 'GET' && req.url?.startsWith('/api.php')) {
+        res.writeHead(302, { Location: `http://127.0.0.1:${cdn.port}/fallback.mp3` });
+        res.end();
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    try {
+      setApiBaseUrl(`http://127.0.0.1:${s.port}/`);
+
+      const songs = await musicApi.searchSongs('回退测试', 1, 'qq');
+      expect(songs).toHaveLength(1);
+      expect(postCount).toBe(1);
+
+      const url = await musicApi.getAudioUrl('api.php?get=url&type=qq&id=FB1&sign=s&t=1');
+      expect(url).toBe(`http://127.0.0.1:${cdn.port}/fallback.mp3`);
+      expect(homeCount).toBe(1);
+    } finally {
+      setApiRequestHandler(null);
+    }
+  });
+
 });

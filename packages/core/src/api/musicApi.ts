@@ -17,6 +17,10 @@ let apiRequestHandler:
       url: string;
       headers: Record<string, string>;
       body?: string;
+      /** 只取最终地址和响应头，不读 body（mp3 直链可能几十 MB） */
+      rangeOnly?: boolean;
+      /** 桥内 abort 超时（毫秒）；未传时由调用方兜底 */
+      timeoutMs?: number;
     }) => Promise<{
       status: number;
       headers: Record<string, string>;
@@ -35,20 +39,43 @@ export function setApiRequestHandler(
 async function bridgeOrDefaultAdapter(config: any): Promise<any> {
   const release = await acquireApiGate(config);
   try {
-    return await dispatchWithAdapter(config);
+    const requestPromise = dispatchWithAdapter(config);
+    // 自定义 adapter 必须自己执行 config.timeout（axios 只对内置 adapter
+    // 计时）。桥内会按 timeoutMs abort，这里再加一层 JS 侧竞速兜底，
+    // 保证 WebView 异常（不回调）时请求也能按时失败而不是挂死。
+    const timeoutMs = Number(config.timeout) || 0;
+    if (!timeoutMs || timeoutMs <= 0) return await requestPromise;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new axios.AxiosError(
+          `timeout of ${timeoutMs}ms exceeded`,
+          axios.AxiosError.ETIMEDOUT,
+          config,
+        ));
+      }, timeoutMs);
+    });
+    try {
+      return await Promise.race([requestPromise, timeoutPromise]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   } finally {
     release();
   }
+}
+
+function getDefaultAdapter(): any {
+  return (axios as any).getAdapter
+    ? (axios as any).getAdapter((axios as any).defaults.adapter)
+    : (axios as any).defaults.adapter;
 }
 
 async function dispatchWithAdapter(config: any): Promise<any> {
   if (!apiRequestHandler) {
     // 无桥（桌面/测试）：解析 axios 默认 adapter（defaults.adapter 是
     // ['xhr','http','fetch'] 字符串数组，需 getAdapter 转成平台函数）
-    const defaultAdapter = (axios as any).getAdapter
-      ? (axios as any).getAdapter((axios as any).defaults.adapter)
-      : (axios as any).defaults.adapter;
-    return defaultAdapter(config);
+    return getDefaultAdapter()(config);
   }
   const method = (config.method || 'get').toUpperCase();
   const headers: Record<string, string> = {};
@@ -62,12 +89,24 @@ async function dispatchWithAdapter(config: any): Promise<any> {
         ? config.data
         : JSON.stringify(config.data)
       : undefined;
-  const res = await apiRequestHandler({
-    method,
-    url: config.url || '',
-    headers,
-    body,
-  });
+  let res;
+  try {
+    res = await apiRequestHandler({
+      method,
+      url: config.url || '',
+      headers,
+      body,
+      timeoutMs: Number(config.timeout) || 0,
+    });
+  } catch (err: any) {
+    // 桥基础设施故障（启动失败 / 页面未加载 / 跨源被拒）时回退平台默认
+    // 栈，请求仍能发出；普通超时/HTTP 错误原样抛出（回退只会再白等一轮）
+    const msg = String(err?.message || err || '');
+    if (/bridge startup failed|bridge ready timeout|Failed to fetch|NetworkError/i.test(msg)) {
+      return getDefaultAdapter()(config);
+    }
+    throw err;
+  }
   return {
     data: res.text,
     status: res.status,
@@ -238,7 +277,10 @@ export function setApiBaseUrl(url: string): void {
   apiClient.defaults.baseURL = API_BASE_URL;
   // 服务端可能更换，旧会话失效；远程源提前预热会话，避免首个请求多一次往返
   invalidateApiSession();
-  if (isRemoteApiHost()) {
+  // RN 下会话由常驻 WebView 桥托管：桥加载 API 首页时即完成引导（onLoad
+  // 时 markApiSessionBootstrapped），这里再主动 GET 首页只会重复占用上游
+  // 的请求配额（上游对同 IP 有严格窗口限制）。桌面端保留预热。
+  if (isRemoteApiHost() && !IS_REACT_NATIVE) {
     void ensureApiSession();
   }
 }
@@ -393,13 +435,18 @@ let apiSessionFetching: Promise<string> | null = null;
 // Set-Cookie 响应头（被 RN networking 过滤）——此模式下 JS 只负责
 // 引导一次首页请求建立 jar，不读取也不手动携带 cookie 值。
 const IS_REACT_NATIVE =
-  typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
+  typeof navigator !== 'undefined' && (navigator as any).product === 'ReactNative';
 // RN 下「已引导 jar」标志：避免每个请求都重复 GET 首页
 let apiSessionBootstrapped = false;
 
 function invalidateApiSession(): void {
   apiSessionCookie = '';
   apiSessionBootstrapped = false;
+}
+
+/** 宿主（mobile WebView 桥）通知：首页已加载，会话引导完成 */
+export function markApiSessionBootstrapped(): void {
+  apiSessionBootstrapped = true;
 }
 
 function isRemoteApiHost(): boolean {
@@ -424,8 +471,8 @@ function isApiOriginRequest(config: { url?: string; baseURL?: string }): boolean
 
 async function ensureApiSession(): Promise<string> {
   if (apiSessionCookie) return apiSessionCookie;
-  // RN：jar 已引导过就直接返回空（cookie 由原生层携带）
-  if (IS_REACT_NATIVE && apiSessionBootstrapped) return '';
+  // 桥/原生 jar 已引导过就直接返回（cookie 由 jar 携带，JS 拿不到值）
+  if (apiSessionBootstrapped) return '';
   if (!apiSessionFetching) {
     apiSessionFetching = (async () => {
       try {
@@ -577,6 +624,45 @@ async function followRedirectsToFinalUrl(
   signal?: AbortSignal,
   timeout = 5000
 ): Promise<{ finalUrl: string; data: unknown }> {
+  // 桥模式（mobile WebView Chromium 栈）：302 解析与搜索/歌词走同一
+  // 网络栈和 cookie jar。rangeOnly 只取最终地址和 Content-Type，不下载
+  // body（mp3 直链可能几十 MB，读 body 会把桥消息撑爆）。桥故障时
+  // 继续走下方平台原生路径兜底。
+  if (apiRequestHandler) {
+    await ensureApiSession().catch(() => {});
+    let retried = false;
+    const bridgeAttempt = async (): Promise<{ finalUrl: string; data: unknown }> => {
+      const res = await apiRequestHandler!({
+        method: 'GET',
+        url,
+        headers: { Range: 'bytes=0-0' },
+        rangeOnly: true,
+        timeoutMs: timeout,
+      });
+      const hdrs = res.headers || {};
+      const ct = String(hdrs['content-type'] || hdrs['Content-Type'] || '').toLowerCase();
+      const finalUrl = res.finalUrl && /^https?:\/\//.test(res.finalUrl) ? res.finalUrl : url;
+      // 最终地址仍是 api.php 且返回 HTML = 会话失效（「非法请求」页）：
+      // 重建会话（桥内 cookie jar 会随新 Set-Cookie 更新）后重试一次
+      if (finalUrl === url && ct.includes('text/html') && !retried) {
+        retried = true;
+        invalidateApiSession();
+        await ensureApiSession().catch(() => {});
+        return bridgeAttempt();
+      }
+      if (apiTimingLog) {
+        console.log(
+          `[api耗时] bridge-302 ${String(url).slice(0, 70)}: status=${res.status} ct=${ct.slice(0, 30)} final=${finalUrl.slice(0, 60)}`,
+        );
+      }
+      return { finalUrl, data: ct.includes('text/html') ? INVALID_REQUEST_MARKER : '' };
+    };
+    try {
+      return await bridgeAttempt();
+    } catch {
+      // 桥不可用：继续走平台原生路径兜底
+    }
+  }
   // RN：XHR 无视 maxRedirects 自动跟随 302 并下载完整响应体——
   // 播放 URL 的 302 终点是 10MB 级 mp3，等 axios 返回要几十秒；
   // XHR 的 responseURL 在 readyState 2 abort 时不可靠（实测返回中间跳
@@ -603,6 +689,7 @@ async function followRedirectsToFinalUrl(
             // text/html = 无 cookie 的「非法请求」页：刷新会话后重试一次
             if (ct.includes('text/html') && !retried) {
               retried = true;
+              invalidateApiSession();
               await ensureApiSession().catch(() => {});
               return attempt();
             }

@@ -19,6 +19,7 @@ import { useEffect, useRef } from 'react';
 import { WebView } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
 import { useSettingsStore } from '../stores/settingsStore';
+import { markApiSessionBootstrapped } from '@mplayer/core';
 
 /** 注入到 API 首页的桥脚本（页面 origin = API 域名，fetch 同源无 CORS） */
 const BRIDGE_JS = `
@@ -28,15 +29,35 @@ const BRIDGE_JS = `
     var msg = e.data;
     if (!msg || typeof msg.id !== 'number') return;
     (async function () {
+      var ac = null;
+      var timer = null;
       try {
-        var resp = await fetch(msg.url, {
+        var fetchOpts = {
           method: msg.method || 'GET',
           headers: msg.headers || {},
           body: msg.body || undefined,
           redirect: 'follow',
           credentials: 'include',
-        });
+        };
+        if (msg.timeoutMs) {
+          ac = new AbortController();
+          timer = setTimeout(function () { ac.abort(); }, msg.timeoutMs);
+          fetchOpts.signal = ac.signal;
+        }
+        var resp = await fetch(msg.url, fetchOpts);
         var finalUrl = resp.url || msg.url;
+        if (msg.rangeOnly) {
+          // 302 解析：只取最终地址/状态/Content-Type，不读 body——
+          // 终点可能是几十 MB 的音频直链，读 body 会把桥消息撑爆
+          var ct = '';
+          try { ct = resp.headers.get('content-type') || ''; } catch (err) {}
+          try { if (resp.body && resp.body.cancel) resp.body.cancel(); } catch (err) {}
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            id: msg.id, ok: true, status: resp.status, finalUrl: finalUrl,
+            headers: { 'content-type': ct }, text: ''
+          }));
+          return;
+        }
         var text = '';
         try { text = await resp.text(); } catch (err) { text = ''; }
         var hdrs = {};
@@ -50,6 +71,8 @@ const BRIDGE_JS = `
         window.ReactNativeWebView.postMessage(JSON.stringify({
           id: msg.id, ok: false, error: String(err && err.message || err)
         }));
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     })();
   });
@@ -76,7 +99,7 @@ let bridgeReady = false;
 let bridgeStartupFail = false;
 let seq = 0;
 const pending = new Map<number, PendingReq>();
-const readyWaiters: (() => void)[] = [];
+const readyWaiters: { resolve: () => void; reject: (e: Error) => void }[] = [];
 
 /** 桥就绪等待（WebView 加载完 API 首页 + 脚本注入） */
 function waitReady(timeoutMs = 8000): Promise<void> {
@@ -84,9 +107,15 @@ function waitReady(timeoutMs = 8000): Promise<void> {
     if (bridgeReady) return resolve();
     if (bridgeStartupFail) return reject(new Error('bridge startup failed'));
     const timer = setTimeout(() => reject(new Error('bridge ready timeout')), timeoutMs);
-    readyWaiters.push(() => {
-      clearTimeout(timer);
-      resolve();
+    readyWaiters.push({
+      resolve: () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      reject: (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
     });
   });
 }
@@ -97,6 +126,8 @@ export async function webRequest(opts: {
   url: string;
   headers?: Record<string, string>;
   body?: string;
+  rangeOnly?: boolean;
+  timeoutMs?: number;
 }): Promise<BridgeResponse> {
   await waitReady();
   const id = ++seq;
@@ -105,24 +136,32 @@ export async function webRequest(opts: {
     webViewRef?.injectJavaScript(
       `window.postMessage(${JSON.stringify({ id, ...opts })}, '*'); true;`,
     );
-    // 兜底超时：桥异常时不能卡死请求
+    // 兜底超时：桥内已按 timeoutMs abort，这里留 3s 余量等桥回包；
+    // 未传 timeoutMs 时保持 15s 兜底；桥异常（不回调）时不能卡死请求
+    const deadline = opts.timeoutMs ? opts.timeoutMs + 3000 : 15000;
     setTimeout(() => {
       const p = pending.get(id);
       if (p) {
         pending.delete(id);
         p.reject(new Error('bridge request timeout'));
       }
-    }, 15000);
+    }, deadline);
   });
 }
 
 export default function WebNetworkBridge() {
   const ref = useRef<WebView>(null);
   const apiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
+  const apiBaseRef = useRef(apiBaseUrl);
+  const retryCount = useRef(0);
 
   useEffect(() => {
     webViewRef = ref.current;
   }, []);
+
+  useEffect(() => {
+    apiBaseRef.current = apiBaseUrl;
+  }, [apiBaseUrl]);
 
   const onMessage = (e: WebViewMessageEvent) => {
     let msg: BridgeResponse & { id: number };
@@ -150,13 +189,35 @@ export default function WebNetworkBridge() {
       domStorageEnabled
       thirdPartyCookiesEnabled
       sharedCookiesEnabled
+      onLoadStart={() => {
+        // 新一轮加载：旧页面已不可用，桥暂不可用，失败态一并复位
+        bridgeReady = false;
+        bridgeStartupFail = false;
+      }}
       onLoad={() => {
         bridgeReady = true;
-        readyWaiters.splice(0).forEach((f) => f());
+        bridgeStartupFail = false;
+        retryCount.current = 0;
+        // 首页加载完成 = 会话引导完成（服务端只在浏览器式访问首页时
+        // 初始化会话，cookie 已进 Chromium jar），通知 core 避免再次
+        // GET 首页浪费上游请求配额
+        if (apiBaseRef.current) markApiSessionBootstrapped();
+        readyWaiters.splice(0).forEach((f) => f.resolve());
       }}
       onError={() => {
+        bridgeReady = false;
         bridgeStartupFail = true;
-        readyWaiters.splice(0).forEach((f) => f());
+        // 等待中的请求直接失败（消息为桥基础设施故障 → core 自动回退
+        // 默认网络栈），不要塞进已死的 WebView 里干等超时
+        readyWaiters.splice(0).forEach((f) => f.reject(new Error('bridge startup failed')));
+        // 启动期加载失败（网络闪断/站点抖动）自动重载 2 次；
+        // 失败期间请求自动回退 RN 原生栈，重载成功后自动切回桥
+        const attempt = retryCount.current++;
+        if (attempt < 2) {
+          setTimeout(() => {
+            webViewRef?.reload();
+          }, attempt === 0 ? 2000 : 5000);
+        }
       }}
       onMessage={onMessage}
     />
