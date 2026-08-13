@@ -1,4 +1,5 @@
 import type { Song, AudioTag } from '../types/index.js';
+import { getApiClient } from './musicApi.js';
 
 export const PREVIEW_THRESHOLD = 1_048_576; // 1MB - 30s 128kbps ≈ 480KB, 1MB safe threshold
 // 手机网络下 4s 超时会让挂起请求拖慢整批探测(批 = 最慢一首);
@@ -65,57 +66,45 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
     const url = normalizeProbeUrl(rawUrl, options?.baseUrl);
     if (!url.startsWith('http')) return 'invalid';
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT);
+    // 统一走共享 axios 客户端（apiClient）：探测的 api.php 端点与会话保护
+    // 请求（搜索/播放直链）共用同一会话——RN 端由 OkHttp jar 携带 cookie、
+    // 其他环境由拦截器显式带 Cookie 头；响应拦截器检测到「非法请求」页时
+    // 自动刷新会话重试一次（无 cookie 的探测会拿到错误页，结果失真
+    // ——原生 fetch 的 credentials:'include' 在 RN 实测不带 jar cookie）。
+    // Range GET 只取 1KB（axios 自动跟随 302 → CDN 直链），完整大小从
+    // content-range 获取；4xx/5xx 与 text/html（反爬/非法请求页）标 invalid。
+    const client = getApiClient();
+    const resp = await client.get(url, {
+      headers: { Range: 'bytes=0-1023', ...probeRequestHeaders(url) },
+      responseType: 'arraybuffer',
+      timeout: PROBE_TIMEOUT,
+      maxRedirects: MAX_REDIRECTS,
+      validateStatus: () => true,
+      __probe: true, // 跳过耗时日志与限流退避统计
+    } as any);
 
-    // 全程 HEAD 跟随重定向(api 端点 302 → 音频直链),零 body 下载
-    // credentials:'include':探测的 api.php 端点(会话保护)需要 cookie 才会
-    // 302 到 CDN——无 cookie 时返回「非法请求」页,探测结果失真(全 invalid/短时长)
-    let finalUrl = url;
+    const status = resp.status;
+    const ct = String(resp.headers['content-type'] || '');
+
+    // 4xx/5xx 与 text/html（非法请求/反爬页，拦截器已带新会话重试过一次）：
+    // 不可播。之前 fetch 探测把 142 字节错误页按 content-length 标成 preview，
+    // 属于误判；统一会话后此路径只会在签名/URL 真失效时出现
+    if (status >= 400 || ct.includes('text/html')) {
+      probeCache.set(cacheKey, { tag: 'invalid', expires: Date.now() + PROBE_CACHE_TTL });
+      return 'invalid';
+    }
+
     let contentLength: number | null = null;
-    for (let i = 0; i <= MAX_REDIRECTS; i++) {
-      const resp = await fetch(finalUrl, {
-        method: 'HEAD',
-        redirect: 'manual',
-        signal: controller.signal,
-        credentials: 'include',
-        headers: probeRequestHeaders(finalUrl),
-      });
-
-      if (resp.status >= 300 && resp.status < 400 && resp.headers.get('location')) {
-        finalUrl = new URL(resp.headers.get('location')!, finalUrl).href;
-        continue;
-      }
-
-      if (resp.status < 400) {
-        const cl = resp.headers.get('content-length');
-        if (cl) contentLength = parseInt(cl, 10);
-      }
-      break;
+    if (status === 206) {
+      const cr = String(resp.headers['content-range'] || '');
+      const total = cr ? parseInt(cr.split('/')[1] || '', 10) : null;
+      if (total && Number.isFinite(total)) contentLength = total;
+    } else if (status < 300) {
+      // 200：Range 可能被 CDN 忽略（下载完整 body，超时由 axios timeout 兜底
+      // 中断 → catch → valid 不标记）；能拿到 content-length 就按大小分类
+      const cl = String(resp.headers['content-length'] || '');
+      if (cl) contentLength = parseInt(cl, 10);
     }
-
-    // HEAD 拿不到大小(CDN 不支持 HEAD / chunked) → Range GET 只取 1KB
-    if (contentLength === null) {
-      const resp = await fetch(finalUrl, {
-        method: 'GET',
-        headers: { Range: 'bytes=0-1023', ...probeRequestHeaders(finalUrl) },
-        redirect: 'manual',
-        signal: controller.signal,
-        credentials: 'include',
-      });
-      if (resp.status === 206) {
-        const cr = resp.headers.get('content-range');
-        const total = cr ? parseInt(cr.split('/')[1] || '', 10) : null;
-        if (total && Number.isFinite(total)) contentLength = total;
-      } else if (resp.status >= 400) {
-        clearTimeout(timer);
-        probeCache.set(cacheKey, { tag: 'invalid', expires: Date.now() + PROBE_CACHE_TTL });
-        return 'invalid';
-      }
-      // 200(Range 被忽略,会下载完整 body):abort 中断,大小未知按 valid 处理
-    }
-
-    clearTimeout(timer);
 
     let tag: AudioTag;
     if (contentLength === null) tag = 'valid'; // Cannot get size, don't mark

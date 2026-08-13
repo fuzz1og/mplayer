@@ -580,7 +580,7 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   async (response) => {
     const config = response.config as any;
-    if (apiTimingLog && config?.__t0) {
+    if (apiTimingLog && config?.__t0 && !config.__probe) {
       const ms = Date.now() - config.__t0;
       if (ms > 300) {
         const method = (config.method || 'get').toUpperCase();
@@ -591,8 +591,9 @@ apiClient.interceptors.response.use(
     if (!isApiOriginRequest(config)) return response;
 
     // 关键请求成功 = 上游未限流，重置退避（封面 3s 快超时不算，避免误报）
+    // 探测请求（__probe）高频且可能探测 get=url 端点，不计入退避统计
     const method = (config.method || 'get').toLowerCase();
-    if (method === 'post' || String(config.url || '').includes('get=url')) {
+    if (!config.__probe && (method === 'post' || String(config.url || '').includes('get=url'))) {
       reportThrottleEvent('success');
     }
 
@@ -607,9 +608,16 @@ apiClient.interceptors.response.use(
       typeof (data as any).error === 'string' &&
       ((data as any).error as string).includes('没有找到相关信息');
 
-    // api.php（GET）：返回「非法请求」= 会话缺失/失效（id 无效也会如此，重试一次无副作用）
+    // api.php（GET）：返回「非法请求」= 会话缺失/失效（id 无效也会如此，重试一次无副作用）。
+    // arraybuffer 响应（探测/302 解析）也检测：无 cookie 的探测会拿错误页，
+    // 不刷新会话重试的话探测结果失真（全 invalid/preview）
     const noSessionApi =
-      method === 'get' && typeof data === 'string' && data.includes(INVALID_REQUEST_MARKER);
+      method === 'get' &&
+      (typeof data === 'string'
+        ? data.includes(INVALID_REQUEST_MARKER)
+        : data instanceof ArrayBuffer
+          ? new TextDecoder('utf-8').decode(new Uint8Array(data.slice(0, 1024))).includes(INVALID_REQUEST_MARKER)
+          : false);
 
     if (noSessionSearch || noSessionApi) {
       invalidateApiSession();
@@ -636,7 +644,7 @@ apiClient.interceptors.response.use(
     // 封面/歌词 3s 快超时是常态，不计入退避
     const timedOut =
       error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''));
-    if (timedOut && config && isApiOriginRequest(config)) {
+    if (timedOut && config && isApiOriginRequest(config) && !config.__probe) {
       const method = String(config.method || 'get').toLowerCase();
       if (method === 'post' || String(config.url || '').includes('get=url')) {
         reportThrottleEvent('throttle');
