@@ -5,6 +5,7 @@ import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { weapiRequest } from './neteaseWeapi.js';
 import { MULTI_SOURCE_LIST } from '../constants.js';
 import { findExactMatch } from '../utils/songMatcher.js';
+import { resourceUrlKey } from '../utils/resourceKey.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import type { Agent } from 'http';
 
@@ -421,6 +422,12 @@ const apiClient = axios.create({
   // 手机网络并发超过 5 后严重劣化（连接限速/重传），单请求 0.6s 即可完成；
   // 30s 超时会让慢源卡死整批，12s 足够覆盖慢网络又不至于无限等待
   timeout: 12000,
+  // 显式开启 withCredentials：RN Android 的 NetworkingModule 只在
+  // withCredentials=true 时启用 cookie jar（否则 CookieJar.NO_COOKIES），
+  // axios 在 RN 的默认值有历史坑（PR #1441），显式指定保证原生栈
+  // fallback 能携带会话 cookie（Android 上 jar 与 WebView CookieManager
+  // 共享存储，桥引导的 PHPSESSID 原生栈可直接复用）。桌面/Node 无副作用。
+  withCredentials: true,
   adapter: bridgeOrDefaultAdapter as any,
 });
 
@@ -449,6 +456,29 @@ export function markApiSessionBootstrapped(): void {
   apiSessionBootstrapped = true;
 }
 
+/**
+ * 桥透传：WebView 同源 document.cookie 里读到的会话 cookie。
+ * RN 原生层过滤 Set-Cookie 响应头、JS 读不到值；但 WebView 里
+ * document.cookie 可读（PHPSESSID 非 HttpOnly 时）——透传后 JS 层
+ * 显式拿到 cookie 值，播放器/原生 fetch 可直接携带（iOS WKWebView
+ * 与 NSURLSession 存储不同步的场景尤其需要）。
+ */
+export function setApiSessionCookieValue(cookie: string): void {
+  const m = cookie
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('PHPSESSID='));
+  if (m) {
+    apiSessionCookie = m.slice('PHPSESSID='.length) || '';
+    apiSessionBootstrapped = true;
+  }
+}
+
+/** 当前会话 cookie 值（无则空串——cookie 由 jar/桥自动携带时 JS 拿不到值） */
+export function getApiSessionCookie(): string {
+  return apiSessionCookie;
+}
+
 function isRemoteApiHost(): boolean {
   try {
     const host = new URL(API_BASE_URL).hostname;
@@ -458,12 +488,21 @@ function isRemoteApiHost(): boolean {
   }
 }
 
-/** 判断请求是否发往 API 同源（cookie 只允许带上同源请求，避免泄漏给第三方 CDN） */
-function isApiOriginRequest(config: { url?: string; baseURL?: string }): boolean {
+/** 判断 URL 是否发往 API 同源（cookie 只允许带上同源请求，避免泄漏给第三方 CDN） */
+export function isApiOriginUrl(url: string): boolean {
   try {
     const base = new URL(API_BASE_URL);
-    const target = new URL(config.url || '', config.baseURL || API_BASE_URL);
+    const target = new URL(url, API_BASE_URL);
     return target.origin === base.origin;
+  } catch {
+    return false;
+  }
+}
+
+/** 判断请求配置是否发往 API 同源 */
+function isApiOriginRequest(config: { url?: string; baseURL?: string }): boolean {
+  try {
+    return isApiOriginUrl(new URL(config.url || '', config.baseURL || API_BASE_URL).href);
   } catch {
     return false;
   }
@@ -612,6 +651,36 @@ export function getApiClient(): AxiosInstance {
 }
 
 /**
+ * 从 api.php 端点 URL 的 type 参数推断源，返回该源官方站点 Referer。
+ * 302 解析 fetch 跟随重定向到源 CDN 时，CDN 防盗链会校验 Referer 域名：
+ * 网易云宽松（不带也行），酷狗/QQ 等严格（Referer 不对 → 403 → 拿不到
+ * 直链/播放失败）。fetch 默认 referrerPolicy 在跨源重定向时把 Referer
+ * 降级为 origin（API 域名），CDN 不认——必须手动带官方 Referer。
+ */
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+const SOURCE_REFERER_BY_TYPE: Record<string, string> = {
+  wy: 'https://music.163.com/',
+  netease: 'https://music.163.com/',
+  qq: 'https://y.qq.com/',
+  kg: 'https://www.kugou.com/',
+  kugou: 'https://www.kugou.com/',
+  kw: 'https://www.kuwo.cn/',
+  kuwo: 'https://www.kuwo.cn/',
+  qianqian: 'https://music.qianqian.com/',
+  migu: 'https://music.migu.cn/',
+};
+
+function refererForUrl(url: string): string | undefined {
+  try {
+    const m = url.match(/[?&]type=([^&]+)/);
+    return m ? SOURCE_REFERER_BY_TYPE[m[1]] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * 手动逐跳跟随重定向，返回最终 URL 和末跳响应数据。
  * 当前 axios 版本的 response.request 取不到最终地址，依赖自动重定向会把
  * 302 端点（如 api.php?get=url / get=pic）的 CDN 直链丢掉；
@@ -678,32 +747,40 @@ async function followRedirectsToFinalUrl(
       let retried = false;
       const attempt = async (): Promise<{ finalUrl: string; data: unknown }> => {
         try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), timeout);
-          try {
-            const resp = await fetch(url, {
-              headers: { Range: 'bytes=0-0' },
-              signal: controller.signal,
-            });
-            const ct = resp.headers.get('content-type') || '';
-            // text/html = 无 cookie 的「非法请求」页：刷新会话后重试一次
-            if (ct.includes('text/html') && !retried) {
-              retried = true;
-              invalidateApiSession();
-              await ensureApiSession().catch(() => {});
-              return attempt();
-            }
-            if (apiTimingLog) {
-              console.log(
-                `[api耗时] fetch-302 ${String(url).slice(0, 70)}: status=${resp.status} ct=${ct.slice(0, 30)}`,
-              );
-            }
-            const finalUrl = resp.url && /^https?:\/\//.test(resp.url) ? resp.url : url;
-            await resp.arrayBuffer().catch(() => {});
-            return { finalUrl, data: '' };
-          } finally {
-            clearTimeout(timer);
+          // 用 axios 替代 fetch 做 302 解析：
+          // RN fetch 的 credentials:'include' 实测不带原生 jar cookie，
+          // 而服务端对部分源（酷狗 get=url）严格校验 PHPSESSID —— 无 cookie
+          // 返回「非法请求」页（200 text/html），拿不到 CDN 直链。
+          // axios（withCredentials 已配置）走 XHR 自动带 jar cookie；
+          // XHR 自动跟随 302（无视 maxRedirects），Range 206 秒回 1 字节，
+          // responseURL 即最终 CDN 直链（完整响应下可靠，非 abort 场景）。
+          const resolveHeaders: Record<string, string> = { Range: 'bytes=0-0' };
+          const referer = refererForUrl(url);
+          if (referer) resolveHeaders['Referer'] = referer;
+          resolveHeaders['User-Agent'] = BROWSER_UA;
+          const resp = await apiClient.get(url, {
+            headers: resolveHeaders,
+            timeout,
+            responseType: 'arraybuffer',
+            // 显式声明该请求是 302 解析（响应拦截器不需要特殊处理）
+            __resolve302: true,
+          } as any);
+          const ct = String(resp.headers['content-type'] || '');
+          // text/html = 无 cookie 的「非法请求」页：刷新会话后重试一次
+          if (ct.includes('text/html') && !retried) {
+            retried = true;
+            invalidateApiSession();
+            await ensureApiSession().catch(() => {});
+            return attempt();
           }
+          if (apiTimingLog) {
+            console.log(
+              `[api耗时] xhr-302 ${String(url).slice(0, 70)}: status=${resp.status} ct=${ct.slice(0, 30)}`,
+            );
+          }
+          const responseUrl = (resp.request as any)?.responseURL;
+          const finalUrl = responseUrl && /^https?:\/\//.test(responseUrl) ? responseUrl : url;
+          return { finalUrl, data: '' };
         } catch {
           return { finalUrl: url, data: '' };
         }
@@ -752,13 +829,17 @@ async function followRedirectsToFinalUrl(
  * 封面 URL 解析：api.php?get=pic 封面端点需要会话 cookie，
  * 移动端原生 <Image> 无法携带，解析成 CDN 直链后即可直接加载。
  * 非 api.php URL 原样返回；解析失败/会话不可用回退原 URL（渲染端占位图兜底）。
- * 结果带 6 小时 TTL 缓存（同一首歌的签名链接变化会生成新 key）；
+ * 结果带 6 小时 TTL 缓存，缓存 key 用归一化 URL（忽略 t/sign 等签名参数）：
+ * 同一首歌每次搜索返回不同签名链接，但内容是同一张封面——归一化后
+ * 命中同一缓存，避免每次搜索都重新解析、拿到新时间戳直链导致
+ * <Image> 反复重载（"封面时不时刷新"）。
  * 未发生重定向（适配器自动跟随拿不到 Location）时不缓存，避免长期保留故障态。
  */
 export async function resolveCoverUrl(coverUrl: string): Promise<string> {
   const fullUrl = normalizeUrl(coverUrl);
   if (!fullUrl || !isSessionProtectedEndpoint(fullUrl)) return fullUrl;
-  const cached = coverUrlCache.get(fullUrl);
+  const cacheKey = resourceUrlKey(fullUrl);
+  const cached = coverUrlCache.get(cacheKey);
   if (cached && cached.expires > Date.now()) return cached.url;
   try {
     // 封面解析：3s 快速超时（失败有占位图兜底），不让封面占住并发槽位
@@ -767,12 +848,24 @@ export async function resolveCoverUrl(coverUrl: string): Promise<string> {
       return fullUrl; // 会话不可用：不缓存，回退原 URL
     }
     if (finalUrl !== fullUrl) {
-      coverUrlCache.set(fullUrl, { url: finalUrl, expires: Date.now() + COVER_URL_CACHE_TTL });
+      coverUrlCache.set(cacheKey, { url: finalUrl, expires: Date.now() + COVER_URL_CACHE_TTL });
     }
     return finalUrl;
   } catch {
     return fullUrl;
   }
+}
+
+/**
+ * 封面解析缓存失效：<Image> 加载失败（onError）说明缓存里的 CDN 直链
+ * 已过期/失效，清除对应归一化 key 的缓存，让下一次 resolveCoverUrl
+ * 重新解析拿到新直链（否则归一化 key 会一直命中失效缓存，封面永远
+ * 失败占位）。调用方在 onError 后、兜底刷新前调用。
+ */
+export function invalidateCoverUrl(coverUrl: string): void {
+  const fullUrl = normalizeUrl(coverUrl);
+  if (!fullUrl) return;
+  coverUrlCache.delete(resourceUrlKey(fullUrl));
 }
 
 /**
@@ -1841,7 +1934,12 @@ export const musicApi = {
       apiOk = await this.healthCheck();
       healthCheckCache = { at: now, ok: apiOk };
     }
-    if (!apiOk) return;
+    // healthCheck 失败（3s 超时，API 限流/慢时常见）不阻断搜索兜底：
+    // url 缺失会导致探测全标「无效」、播放无链接——比多打几个搜索请求
+    // 更糟。搜索兜底自身有 12s 超时 + 10 并发闸门兜底。
+    if (!apiOk) {
+      console.warn('[MusicApi] healthCheck 失败，仍尝试搜索兜底补齐 URL');
+    }
 
     try {
       const keywords = missingUrlSongs.map(s => `${s.name} ${s.artist}`.trim());

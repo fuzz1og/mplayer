@@ -14,7 +14,7 @@ import { togglePlay, seekTo, playSong, fetchLrcInBackground } from '../services/
 import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { useResolvedCover } from '../hooks/useResolvedCover';
-import { parseLRC, musicApi, findCurrentLyricIndex } from '@mplayer/core';
+import { parseLRC, musicApi, findCurrentLyricIndex, invalidateCoverUrl } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
@@ -113,7 +113,11 @@ export default function PlayerOverlay({ onClose }: Props) {
   useEffect(() => { setCoverFailed(false); }, [coverUrl]);
   const handleCoverError = () => {
     setCoverFailed(true);
-    if (song) void fetchLrcInBackground(song, true);
+    if (song) {
+      // 封面自身失效：清除解析缓存后强制换新签名封面（见 fetchLrcInBackground）
+      void invalidateCoverUrl(song.cover || '');
+      void fetchLrcInBackground(song, true, true);
+    }
   };
 
   // 加载歌词：优先歌曲自带 lrc URL；今日推荐/歌单/歌手页的歌曲 lrc 为空，

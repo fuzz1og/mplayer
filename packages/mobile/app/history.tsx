@@ -12,7 +12,7 @@ import { playSong } from '../services/audioPlayer';
 import { colors, spacing, statusBarStyle } from '../theme/tokens';
 
 export default function HistoryPage() {
-  const { history, clearHistory } = useHistoryStore();
+  const { history, removeHistory, clearHistory } = useHistoryStore();
 
   const handlePlay = (index: number) => {
     if (history.length === 0) return;
@@ -52,6 +52,7 @@ export default function HistoryPage() {
                 song={item}
                 showSource
                 onPress={() => handlePlay(index)}
+                onRemove={(s) => removeHistory(s.id)}
               />
             )}
             contentContainerStyle={styles.list}

@@ -4,12 +4,11 @@
  */
 
 import React from 'react';
-import { TouchableOpacity, StyleSheet, View, Text } from 'react-native';
+import { TouchableOpacity } from 'react-native';
 import type { Playlist } from '../stores/playlistStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
 import { useRefreshedCover } from '../hooks/useRefreshedCover';
-import { colors } from '../theme/tokens';
 import CollapsingHero from './CollapsingHero';
 import SongRow from './SongRow';
 import type { Song } from '@mplayer/core';
@@ -45,38 +44,9 @@ export default function PlaylistHero({
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
         <TouchableOpacity activeOpacity={1} onLongPress={() => onRemoveSong(item)}>
-          <SongRow song={item} showSource queueSongs={playlist.songs} onSwap={onSwap} />
+          <SongRow song={item} showSource queueSongs={playlist.songs} onSwap={onSwap} onRemove={onRemoveSong} />
         </TouchableOpacity>
       )}
-      listHeader={
-        <View style={listHeaderStyles.row}>
-          <Text style={listHeaderStyles.song}>歌曲</Text>
-          <Text style={listHeaderStyles.ops}>操作</Text>
-        </View>
-      }
     />
   );
 }
-
-const listHeaderStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
-  },
-  song: {
-    color: colors.textTertiary,
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 56, // 对齐行内封面（44）+ 间距（12）
-  },
-  ops: {
-    color: colors.textTertiary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-});

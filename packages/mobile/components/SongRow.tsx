@@ -3,12 +3,12 @@ import {
   View, Text, Image, TouchableOpacity, StyleSheet,
   Modal, Alert,
 } from 'react-native';
-import { Music, Heart, EllipsisVertical, ListMusic, Download, ArrowLeftRight, User } from 'lucide-react-native';
+import { Music, Heart, EllipsisVertical, ListMusic, Download, ArrowLeftRight, User, Trash2 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, sourceColors, spacing } from '../theme/tokens';
-import { type Song, SourceKey } from '@mplayer/core';
+import { type Song, SourceKey, invalidateCoverUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
@@ -48,6 +48,8 @@ interface SongRowProps {
   queueSongs?: Song[];
   /** 换源成功回调：父组件用它更新自己的列表 state（歌单页同时持久化） */
   onSwap?: (original: Song, swapped: Song) => void;
+  /** 提供后「更多」菜单显示「移除」项（歌单/播放历史列表用；由父组件决定移除语义与确认） */
+  onRemove?: (song: Song) => void;
 }
 
 export default function SongRow({
@@ -57,6 +59,7 @@ export default function SongRow({
   showSource = false,
   queueSongs,
   onSwap,
+  onRemove,
 }: SongRowProps) {
   const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
@@ -83,6 +86,9 @@ export default function SongRow({
     if (coverFallbackUsed.current || !song.name) return;
     coverFallbackUsed.current = true;
     setCover('');
+    // 封面自身失效：先清除解析缓存（归一化 key 命中失效直链会循环失败），
+    // 兜底搜索的新签名 URL 才能重新解析出新直链
+    void invalidateCoverUrl(cover);
     void withCoverSearchSlot(async () => {
       try {
         const fresh = await searchStrictMatch(song);
@@ -201,6 +207,10 @@ export default function SongRow({
     { key: 'download', icon: Download, label: '下载', onPress: handleDownload },
     { key: 'swap', icon: ArrowLeftRight, label: '换源完整版', onPress: () => { setShowActions(false); setSwapSuccess(false); setSwapLoading(false); setSwapCandidates([]); setSwapSource(null); setSwapVisible(true); } },
     { key: 'artist', icon: User, label: '搜索歌手', onPress: handleSearchArtist },
+    // 仅当父组件提供 onRemove（歌单/播放历史等"可移除"列表）时显示
+    ...(onRemove
+      ? [{ key: 'remove', icon: Trash2, label: '移除', onPress: () => { setShowActions(false); onRemove(song); } }]
+      : []),
   ] as { key: string; icon: LucideIcon; label: string; onPress: () => void }[];
 
   const handlePress = () => {

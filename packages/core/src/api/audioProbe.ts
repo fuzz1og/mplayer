@@ -6,6 +6,28 @@ export const PREVIEW_THRESHOLD = 1_048_576; // 1MB - 30s 128kbps ≈ 480KB, 1MB 
 export const PROBE_TIMEOUT = 3000;
 export const MAX_REDIRECTS = 3;
 
+// 探测请求头：源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格），
+// 不带/带错会 403 → 直链误判失效；部分 CDN 拒非浏览器 UA。
+// type 参数（wy/kg/qq/...）推断源，与 core musicApi 的 302 解析同规则。
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const REFERER_BY_TYPE: Record<string, string> = {
+  wy: 'https://music.163.com/',
+  netease: 'https://music.163.com/',
+  qq: 'https://y.qq.com/',
+  kg: 'https://www.kugou.com/',
+  kugou: 'https://www.kugou.com/',
+  kw: 'https://www.kuwo.cn/',
+  qianqian: 'https://music.qianqian.com/',
+  migu: 'https://music.migu.cn/',
+};
+
+function probeRequestHeaders(url: string): Record<string, string> {
+  const headers: Record<string, string> = { 'User-Agent': BROWSER_UA };
+  const m = url.match(/[?&]type=([^&]+)/);
+  if (m && REFERER_BY_TYPE[m[1]]) headers['Referer'] = REFERER_BY_TYPE[m[1]];
+  return headers;
+}
+
 // 会话级探测缓存:同一首歌(同 id/稳定 url)重复搜索不重复探测
 // 带 TTL:过期链接探测 valid 后不能永久有效;瞬时 4xx 也不能永久标 invalid
 const PROBE_CACHE_TTL = 30 * 60 * 1000;
@@ -47,6 +69,8 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
     const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT);
 
     // 全程 HEAD 跟随重定向(api 端点 302 → 音频直链),零 body 下载
+    // credentials:'include':探测的 api.php 端点(会话保护)需要 cookie 才会
+    // 302 到 CDN——无 cookie 时返回「非法请求」页,探测结果失真(全 invalid/短时长)
     let finalUrl = url;
     let contentLength: number | null = null;
     for (let i = 0; i <= MAX_REDIRECTS; i++) {
@@ -54,6 +78,8 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
         method: 'HEAD',
         redirect: 'manual',
         signal: controller.signal,
+        credentials: 'include',
+        headers: probeRequestHeaders(finalUrl),
       });
 
       if (resp.status >= 300 && resp.status < 400 && resp.headers.get('location')) {
@@ -72,9 +98,10 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
     if (contentLength === null) {
       const resp = await fetch(finalUrl, {
         method: 'GET',
-        headers: { Range: 'bytes=0-1023' },
+        headers: { Range: 'bytes=0-1023', ...probeRequestHeaders(finalUrl) },
         redirect: 'manual',
         signal: controller.signal,
+        credentials: 'include',
       });
       if (resp.status === 206) {
         const cr = resp.headers.get('content-range');

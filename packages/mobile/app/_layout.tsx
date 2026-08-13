@@ -4,8 +4,7 @@ import { Stack } from 'expo-router';
 import { colors } from '../theme/tokens';
 import { addNotificationResponseListener, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl, setApiTimingLog, setApiRequestHandler } from '@mplayer/core';
-import WebNetworkBridge, { webRequest } from '../components/WebNetworkBridge';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl, setApiTimingLog } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -53,9 +52,11 @@ export default function RootLayout() {
   useEffect(() => {
     initAudio().catch(() => {});
     setupNotificationChannel().catch(() => {});
-    // 所有 API 请求走 WebView 桥（Chromium 栈）：绕开 RN OkHttp 在
-    // VPN 残留等网络环境下的 IPv4 黑洞问题（浏览器同栈秒开）
-    setApiRequestHandler(webRequest);
+    // 注意：WebView 网络桥已移除——常驻隐藏 WebView 在 Android
+    // （Expo Go + Fabric + Android 16）下会破坏 react-native-screens 的
+    // 布局（Stack 内容被压缩到屏幕一半）。请求走 RN 原生栈：
+    // core 已配置 withCredentials（原生 cookie jar 自动携带会话），
+    // 302 直链解析走 fetch+Range+credentials:'include'（实测 206 成功）。
     // dev 诊断：API 请求耗时日志（PC 链路快、手机慢的对比定位用）
     if (__DEV__) setApiTimingLog(true);
 
@@ -95,8 +96,6 @@ export default function RootLayout() {
 
   return (
     <>
-      {/* 常驻隐藏 WebView：API 请求桥（Chromium 网络栈） */}
-      <WebNetworkBridge />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="hotlist" />

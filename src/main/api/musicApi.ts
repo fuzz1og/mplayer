@@ -26,8 +26,12 @@ registerThrottleObserver((event) => {
   if (event === 'throttle') {
     consecutiveThrottles++;
     const backoff = Math.min(THROTTLE_BASE_MS * 2 ** (consecutiveThrottles - 1), THROTTLE_MAX_MS);
-    throttleUntil = Date.now() + backoff;
-    console.warn(`[apiThrottle] 上游限流，退避 ${Math.ceil(backoff / 1000)}s（连续 ${consecutiveThrottles} 次）`);
+    // full jitter：sleep(random(0, backoff))。无 jitter 的指数退避会让
+    // 多端/多窗口在同一时刻同步重试（惊群），AWS 标准实践是在退避上
+    // 加全抖动（aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/）
+    const jittered = Math.floor(Math.random() * backoff);
+    throttleUntil = Date.now() + jittered;
+    console.warn(`[apiThrottle] 上游限流，退避 ${Math.ceil(jittered / 1000)}s（连续 ${consecutiveThrottles} 次）`);
   } else if (Date.now() >= throttleUntil) {
     consecutiveThrottles = 0;
   }

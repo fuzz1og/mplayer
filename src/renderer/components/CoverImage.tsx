@@ -112,7 +112,10 @@ const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant =
           if (!cancelled) {
             if (r === src && retryCountRef.current < 3) {
               retryCountRef.current++;
-              const delay = 20000 * 2 ** (retryCountRef.current - 1);
+              // 指数退避 + full jitter：多封面同步重试会放大限流，
+              // jitter 让重试在时间上散开（AWS 标准实践）
+              const base = 20000 * 2 ** (retryCountRef.current - 1);
+              const delay = Math.floor(Math.random() * base);
               retryTimerRef.current = setTimeout(attempt, delay);
               return;
             }

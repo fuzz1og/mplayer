@@ -24,7 +24,9 @@ export async function probeSongsWithTags(
   let valid = 0;
   const toProbe: Song[] = [];
   for (const s of songs) {
-    if (missingAsInvalid && !s.url?.startsWith('http')) {
+    // 只有 url 完全为空才标「无效」：302 端点（api.php?get=url…）不以
+    // http 开头但仍是有效播放地址（播放器能跟），不能按 http 前缀误杀
+    if (missingAsInvalid && !s.url) {
       setTag(s, 'invalid');
       invalid++;
       continue;
