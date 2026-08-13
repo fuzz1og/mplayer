@@ -1297,6 +1297,14 @@ export const musicApi = {
     const response = await apiClient.get(fullUrl);
     const lyrics = response.data;
 
+    // 会话失效/签名过期：服务端返回「非法请求」页（200 text/html；响应拦截器
+    // 已带新会话重试一次仍无效——签名与旧会话绑定，同 URL 重试无意义）。
+    // 按失败抛出让上层走搜索换新签名 URL 重试，否则 parseLRC 拿到空行会
+    // 静默显示"无歌词"，歌词永远刷新不出来（移动端实测现象）。
+    if (typeof lyrics === 'string' && lyrics.includes(INVALID_REQUEST_MARKER)) {
+      throw new Error('歌词会话失效（非法请求），需重新搜索歌词 URL');
+    }
+
     // 缓存结果
     cacheManager.setLyricsCache(fullUrl, lyrics);
     return lyrics;
