@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createSearchController } from '../shared';
+import { createSearchController } from '@mplayer/core';
 
 describe('createSearchController', () => {
   it('exposes search, loadMore, reset', () => {

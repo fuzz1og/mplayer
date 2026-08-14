@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolvePlayableUrl } from '../shared';
+import { resolvePlayableUrl } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 
 const baseSong: Song = {

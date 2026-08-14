@@ -2,7 +2,7 @@ import type { Song, SongGroup, AudioTag, ImportSource, Artist } from '@mplayer/c
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { IpcClient } from './IpcClient';
 import { ipcMusicApi } from './IpcMusicApi';
-import { createSearchController } from '@/shared';
+import { createSearchController } from '@mplayer/core';
 
 const DEBOUNCE_DELAY = 300;
 const PROBE_BATCH_SIZE = 20;

@@ -71,7 +71,7 @@ npm run web         # Start in web browser
 | `pages/` | Recommend, Discover, DiscoverPageV2, Favorites, History, Playlists, Queue, Settings, LocalMusic, PlaylistDetail, HotlistDetail, ArtistList, ArtistDetail, AlbumDetail, DiscoverPlaylistList, DiscoverPlaylistDetail, LyricsPage (unrouted) |
 | `components/` | Sidebar, TopBar, PlayerBar, SongList, SongListVirtual, SongRow, SongListSkeleton, GroupedSongList, GroupHeaderRow, PlayerControls, PlayerProgress, PlayerVolume, MusicCard, HotlistCard, DiscoverPlaylistCard, SourceBadge, AddToPlaylistModal, BatchAddToPlaylistModal, DownloadProgressModal, ImportPlaylistModal, LinkImportForm, LinkPreviewTable, PlayModeButton, CustomDropdown, LyricsDisplay |
 | `hooks/` | useLazyLoad, useGlobalShortcuts, useInfiniteScroll, useDownload, useButtonHover, useDiscoverData, useSongSwap |
-| `utils/` | async, queueUtils, songCoverRefresh, songResolver（去重/匹配/歌词/格式化已迁 core） |
+| `utils/` | async, queueUtils, songCoverRefresh |
 
 #### IPC Channels
 
@@ -222,11 +222,10 @@ packages/core/src/
 │   ├── memoryCacheManager.ts   # 内存缓存（搜索/URL/歌词/热榜，TTL）
 │   ├── audioProbe.ts           # 音频可播性探测（probeAudio / probeAudioUrl）
 │   ├── probeSongs.ts           # 批量歌曲探测
-│   ├── axiosTransport.ts / transport.ts   # 传输层抽象（axios 实现 / 接口）
 │   └── playlistImport.ts       # 歌单导入
 ├── cache/                      # 缓存内核（cacheKernel / ttl / backends/memoryBackend）
 ├── shared/                     # resolvePlayableUrl / resolveFreshUrl / searchController / sourceSwap（单曲换源）
-├── utils/                      # songDedupe / songMatcher / songResolver / lyricsParser / format /
+├── utils/                      # songDedupe / songMatcher / lyricsParser / format /
 │                                # hash(md5) / queue / recommendBatch / resourceKey / sourceReferer
 ├── types/index.ts              # Song, SourceKey, LyricLine, etc.
 └── index.ts                    # Re-exports everything

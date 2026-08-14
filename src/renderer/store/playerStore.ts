@@ -6,7 +6,6 @@ import type { PlayMode } from '@mplayer/core';
 import { isSessionProtectedEndpoint, stripSourceIdPrefix, findExactMatch } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { ipcMusicApi } from '@/renderer/services/IpcMusicApi';
-import { resolveSongUrls } from '@/renderer/utils/songResolver';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
 const { ipcRenderer } = window.require('electron');
@@ -25,7 +24,7 @@ const { ipcRenderer } = window.require('electron');
 async function loadLyricsWithRetry(song: Song): Promise<string> {
   const searchLrc = async (): Promise<string> => {
     try {
-      const results = await resolveSongUrls(song.name, song.artist, song.sourceType);
+      const results = await ipcMusicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
       return results[0]?.lrc?.trim() || '';
     } catch {
       return '';

@@ -24,6 +24,7 @@ const audioPlayerMock = vi.hoisted(() => {
 });
 
 const ipcInvokeMock = vi.hoisted(() => vi.fn());
+const searchSongsMock = vi.hoisted(() => vi.fn(async () => []));
 
 vi.mock('../services/audioPlayer', () => ({
   getGlobalPlayer: () => audioPlayerMock.player,
@@ -34,11 +35,11 @@ vi.mock('../services/IpcMusicApi', () => ({
   ipcMusicApi: {
     getAudioUrl: vi.fn(async () => 'https://resolved.example.com/a.mp3'),
     getSodaPlayableUrl: vi.fn(async () => ''),
-    searchSongs: vi.fn(async () => []),
+    searchSongs: searchSongsMock,
   },
 }));
 
-// 歌词链路走 IpcClient 直调（lyrics:get / musicApi:searchSongs）
+// 歌词链路走 IpcClient 直调（lyrics:get）
 vi.mock('../services/IpcClient', () => ({
   IpcClient: { invoke: ipcInvokeMock },
 }));
@@ -76,6 +77,8 @@ beforeEach(() => {
   audioPlayerMock.player.load.mockClear();
   audioPlayerMock.player.play.mockClear();
   ipcInvokeMock.mockReset();
+  searchSongsMock.mockReset();
+  searchSongsMock.mockResolvedValue([]);
 });
 
 describe('歌词获取失败自动重试（会话失效 → 重搜新签名）', () => {
@@ -83,9 +86,6 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
     const s1 = { ...song('1'), lrc: STALE_LRC };
     let lyricsGetCalls = 0;
     ipcInvokeMock.mockImplementation(async (channel: string) => {
-      if (channel === 'musicApi:searchSongs') {
-        return [{ ...s1, lrc: FRESH_LRC }];
-      }
       if (channel === 'lyrics:get') {
         lyricsGetCalls++;
         if (lyricsGetCalls === 1) throw new Error('歌词会话失效（非法请求）');
@@ -93,6 +93,8 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
       }
       return undefined;
     });
+    // 歌词搜索补全走 ipcMusicApi.searchSongs（renderer 直调，不再经 IpcClient.invoke）
+    searchSongsMock.mockResolvedValue([{ ...s1, lrc: FRESH_LRC }]);
 
     usePlayerStore.setState({ currentPlaylist: [s1], currentPlaylistIndex: 0, currentSong: s1 });
     await usePlayerStore.getState().play(s1);
@@ -108,8 +110,8 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
 
   it('重搜仍拿不到歌词 URL 时不再重试，歌词为空', async () => {
     const s1 = { ...song('1'), lrc: STALE_LRC };
+    // searchSongsMock 默认返回 []（beforeEach 已设）：搜不到 → 重搜仍拿不到 lrc
     ipcInvokeMock.mockImplementation(async (channel: string) => {
-      if (channel === 'musicApi:searchSongs') return []; // 搜不到
       if (channel === 'lyrics:get') throw new Error('歌词会话失效（非法请求）');
       return undefined;
     });
