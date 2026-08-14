@@ -1,5 +1,5 @@
-import axios from 'axios';
 import CryptoJS from 'crypto-js';
+import { request } from './transport.js';
 
 /**
  * 网易云 weapi 加密请求(参考 NeteaseCloudMusicApi 的 weapi 算法)
@@ -67,23 +67,24 @@ export function weapiEncrypt(
   };
 }
 
-const weapiClient = axios.create({
-  headers: {
-    'accept': 'application/json, text/javascript, */*; q=0.01',
-    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    'content-type': 'application/x-www-form-urlencoded',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Referer': 'https://music.163.com/',
-  },
-  // 30s → 8s：网易云对无 cookie 的 weapi 请求会风控挂起（不快速拒绝），
-  // 移动端歌手/歌单页批量补 URL 时 30s 超时会拖住整页加载；8s 覆盖正常
-  // 慢网络，风控挂起时快速失败走搜索兜底
-  timeout: 8000,
-  proxy: false,
-});
-
-/** POST weapi 请求,path 形如 '/v6/playlist/detail',返回响应 JSON */
+/** POST weapi 请求,path 形如 '/v6/playlist/detail',返回响应 JSON。
+ *  经 require('transport').request 统一出网（双端可用，测试注入 mock 传输驱动）。 */
 export async function weapiRequest<T>(path: string, data: Record<string, unknown>): Promise<T> {
-  const res = await weapiClient.post(NETEASE_WEAPI_BASE + path, new URLSearchParams(weapiEncrypt(data)));
-  return res.data as T;
+  const res = await request({
+    method: 'POST',
+    url: NETEASE_WEAPI_BASE + path,
+    headers: {
+      'accept': 'application/json, text/javascript, */*; q=0.01',
+      'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'content-type': 'application/x-www-form-urlencoded',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Referer': 'https://music.163.com/',
+    },
+    body: new URLSearchParams(weapiEncrypt(data)).toString(),
+    timeoutMs: 8000,
+  });
+  if (typeof res.body !== 'string') {
+    throw new Error('weapi 响应非文本');
+  }
+  return JSON.parse(res.body) as T;
 }

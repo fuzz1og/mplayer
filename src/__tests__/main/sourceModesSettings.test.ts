@@ -53,7 +53,7 @@ describe('来源开关 settings IPC（T01 持久化接线）', () => {
     expect(getSourceMode('qq')).toBe('auto');
   });
 
-  it('settings:getSourceModes 返回模式 + 每源直连状态（未注册客户端 → unavailable）', async () => {
+  it('settings:getSourceModes 返回模式 + 每源直连状态（已注册 netease → ready，未注册 → unavailable）', async () => {
     registerSettingsIpc();
     setSourceModes({ netease: 'direct' });
     const handler = getHandler('settings:getSourceModes');
@@ -62,7 +62,9 @@ describe('来源开关 settings IPC（T01 持久化接线）', () => {
       status: Record<string, 'ready' | 'unavailable'>;
     };
     expect(res.modes.netease).toBe('direct');
-    expect(res.status.netease).toBe('unavailable');
+    // T02：网易直连客户端已注册（src/main/api/musicApi.ts 模块加载时），
+    // 设置页「直连可用」状态自动变亮；未注册的 qq 仍为 unavailable。
+    expect(res.status.netease).toBe('ready');
     expect(res.status.qq).toBe('unavailable');
   });
 });
