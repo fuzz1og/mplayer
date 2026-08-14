@@ -10,6 +10,7 @@ import { MUSIC_API_METHODS } from '@/shared/musicApiContract';
  *  2. 渲染端无裸 `musicApi:*` 字符串（只允许 callMusicApi.ts 里的单通道 musicApi:call）
  *  3. src 全树无 `IpcMusicApi` / `ipcMusicApi` 引用（镜像代理已删除）
  *  4. 主进程 `musicApi:` 注册只有 `musicApi:call` 一处
+ *  5. 分发表键集合 == MUSIC_API_METHODS ∪ MainOnlyMethods 键（每个键都有 handler）
  */
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -18,6 +19,7 @@ const SRC_RENDERER = path.join(ROOT, 'src', 'renderer');
 const SRC_MAIN = path.join(ROOT, 'src', 'main');
 const SRC_ALL = path.join(ROOT, 'src');
 const CORE_MUSIC_API = path.join(ROOT, 'packages', 'core', 'src', 'api', 'musicApi.ts');
+const DISPATCH_FILE = path.join(ROOT, 'src', 'main', 'ipc', 'musicApiHandlers.ts');
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -52,11 +54,41 @@ function allSourceFiles(): string[] {
   return walk(SRC_ALL).filter((f) => !f.includes('__tests__'));
 }
 
+/** 主进程 MainOnly 方法的键名（与 contract 的 MainOnlyMethods 一致）。 */
+const MAIN_ONLY_METHODS = ['getAggregatedChart', 'getThrottleWait', 'getSodaPlayableUrl'];
+
+/** 从 musicApiHandlers.ts 的 `dispatch` 分发表提取方法名集合。 */
+function dispatchMethodNames(): Set<string> {
+  const src = fs.readFileSync(DISPATCH_FILE, 'utf8');
+  const start = src.indexOf('const dispatch = {');
+  if (start < 0) throw new Error('musicApiHandlers.ts 中找不到 const dispatch = {');
+  const block = src.slice(start, src.indexOf('} satisfies', start));
+  const names = new Set<string>();
+  // 每个分发表成员行：`key: (...)` / `key: async (...)` / 简写 `key,`
+  const re = /^\s*([A-Za-z_$][\w$]*)\s*(?::\s*(?:async\s*)?\(|,|$)/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block)) !== null) {
+    names.add(m[1]);
+  }
+  return names;
+}
+
 describe('music 域 IPC 契约完整性（ADR-0001）', () => {
   it('MUSIC_API_METHODS 全在 core musicApi 上（core 加方法需登记此清单）', () => {
     const coreMethods = coreMusicApiMethodNames();
     const missing = MUSIC_API_METHODS.filter((name) => !coreMethods.has(name));
     expect(missing).toEqual([]);
+  });
+
+  it('分发表键集合 == MUSIC_API_METHODS ∪ MainOnlyMethods 键（每个键都有 handler）', () => {
+    const dispatchKeys = dispatchMethodNames();
+    const expected = [...MUSIC_API_METHODS, ...MAIN_ONLY_METHODS].sort();
+    const missing = expected.filter((name) => !dispatchKeys.has(name));
+    const extra = [...dispatchKeys].filter((name) => !expected.includes(name)).sort();
+    // 每个键都有 handler（分发表里出现即接线）；缺失 / 多余都视为契约漂移。
+    expect(missing).toEqual([]);
+    expect(extra).toEqual([]);
+    expect(dispatchKeys.size).toBe(expected.length);
   });
 
   it('渲染端无裸 musicApi:* 字符串（只允许 callMusicApi.ts 的单通道）', () => {

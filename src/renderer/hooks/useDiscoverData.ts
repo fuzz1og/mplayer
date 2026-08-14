@@ -36,11 +36,11 @@ export function useDiscoverData<K extends keyof MusicApiMethodMap>(
     setLoading(true);
     setError(null);
 
-    callMusicApi(method as any, ...(args as any[]))
+    callMusicApi(method, ...args)
       .then((result) => {
         if (cancelled) return;
-        cacheRef.current = result as T;
-        setData(result as T);
+        cacheRef.current = result;
+        setData(result);
       })
       .catch((err: any) => {
         if (cancelled) return;

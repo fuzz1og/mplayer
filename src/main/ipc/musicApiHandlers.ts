@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import type { Song } from '@mplayer/core';
 import type { ApiResponse } from '@/shared/types/ipc';
-import type { MusicApiMethodMap } from '@/shared/musicApiContract';
+import type { MusicApiMethod, MusicApiMethodMap, MainOnlyMethods } from '@/shared/musicApiContract';
 import { getAggregatedChart } from '../services/chartAggregator';
 import { getThrottleWaitMs } from '../api/musicApi';
 import { cacheResolvedCover } from './cache';
@@ -12,14 +12,20 @@ import { cacheResolvedCover } from './cache';
  * 漏方法 → 编译期必报错。
  */
 
-/** main.ts 扩展后的完整 musicApi（core 方法 + getSodaPlayableUrl） */
-type MusicApi = typeof import('@/main/api/musicApi').musicApi & {
-  getSodaPlayableUrl(trackId: string): Promise<string>;
+/**
+ * main.ts 扩展后的完整 musicApi（core 方法 + getSodaPlayableUrl）。
+ * getSodaPlayableUrl 签名已由 contract 的 `MainOnlyMethods` 声明，此处只引用不重复。
+ */
+type CoreMusicApi = typeof import('@/main/api/musicApi').musicApi;
+type MusicApi = Pick<CoreMusicApi, MusicApiMethod> & {
+  getSodaPlayableUrl: MainOnlyMethods['getSodaPlayableUrl'];
 };
 
 /**
  * 注册单个 `musicApi:call` 分发通道。
- * 迁移期旧 `musicApi:*` / `lyrics:get` / `api:getThrottleWait` 通道保留并存（deprecated）。
+ * 旧 `musicApi:*` / `lyrics:get` / `api:getThrottleWait` 通道已删除，music 域收敛为
+ * `musicApi:call` 单通道；core 方法通过 MUSIC_API_METHODS 收编，MainOnly 方法
+ * （getAggregatedChart / getThrottleWait / getSodaPlayableUrl）在分发表内单独接线。
  */
 export function registerMusicApiCall(api: MusicApi): void {
   const dispatch = {
