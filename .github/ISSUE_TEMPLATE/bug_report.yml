@@ -1,0 +1,50 @@
+name: Bug 报告
+description: 提交一个 bug 帮助改进 MPlayer
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢提交 bug！请尽量填写以下信息，越详细越容易复现和修复。
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 桌面端 / 移动端，以及版本号（Settings 页可见，或 package.json 的 version）
+      placeholder: e.g. 桌面端 1.6.0 / 移动端 1.6.0
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      multiple: true
+      options:
+        - Windows (Electron 桌面端)
+        - macOS (Electron 桌面端)
+        - Linux (Electron 桌面端)
+        - Android (Expo)
+        - iOS (Expo)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么？
+      description: 期望行为 vs 实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开 ...
+        2. 点击 ...
+        3. 看到报错 ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: 报错信息、DevTools console 输出、截图等

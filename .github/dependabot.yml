@@ -6,11 +6,30 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
     ignore:
+      # electron 由 electron-builder 配套版本管理，避免依赖混乱
       - dependency-name: electron
       - dependency-name: "@types/electron*"
+      # vite 8 超出 @vitejs/plugin-react@4 peer 范围（^4||^5||^6||^7），只跟踪 6.x/7.x
+      - dependency-name: vite
+        versions: [">=8"]
+      # react/react-dom 精确 pin（19.2.3），react-dom 新版本 peer 要求 react@^19.2.8，
+      # 单独 bump 必然 ERESOLVE，须成对升级，这里整体忽略
+      - dependency-name: react
+      - dependency-name: react-dom
     labels:
       - dependencies
     commit-message:
       prefix: fix
       prefix-development: chore
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore
       include: scope
