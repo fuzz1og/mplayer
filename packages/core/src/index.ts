@@ -38,8 +38,28 @@ export { DEFAULT_TTL } from './cache/ttl.js';
 export { SongResourcesCache, SONGS_TTL_MS, COVERS_TTL_MS } from './cache/songResourcesCache.js';
 export type { SongResources, SongResourcesCacheOptions } from './cache/songResourcesCache.js';
 export type { CachePort, CacheBackend, CacheStats } from './cache/types.js';
-export { setTransport, getTransport, request } from './api/transport.js';
-export type { Transport, TransportRequest, TransportResponse } from './api/transport.js';
+export {
+  setTransport,
+  getTransport,
+  request,
+  setTransportRetryOptions,
+  getTransportRetryOptions,
+  setTlsDegradeProvider,
+  getTlsDegradeProvider,
+  isTlsHandshakeError,
+} from './api/transport.js';
+export type { Transport, TransportRequest, TransportResponse, TransportRetryOptions, TlsDegradeAgents } from './api/transport.js';
+export {
+  TLS_FINGERPRINT_SETTING_KEY,
+  getTlsFingerprintEnabled,
+  setTlsFingerprintEnabled,
+  loadTlsFingerprint,
+  setTlsFingerprintPersister,
+  setTlsFingerprintAgentProvider,
+  getTlsFingerprintAgent,
+  getTlsFingerprintHeaders,
+  getTlsFingerprintConfig,
+} from './api/tlsFingerprint.js';
 export {
   registerDirectClient,
   getDirectClient,

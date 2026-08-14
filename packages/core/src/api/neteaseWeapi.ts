@@ -1,5 +1,6 @@
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
+import { getTlsFingerprintConfig } from './tlsFingerprint.js';
 
 /**
  * 网易云 weapi 加密请求(参考 NeteaseCloudMusicApi 的 weapi 算法)
@@ -84,6 +85,12 @@ const weapiClient = axios.create({
 
 /** POST weapi 请求,path 形如 '/v6/playlist/detail',返回响应 JSON */
 export async function weapiRequest<T>(path: string, data: Record<string, unknown>): Promise<T> {
-  const res = await weapiClient.post(NETEASE_WEAPI_BASE + path, new URLSearchParams(weapiEncrypt(data)));
+  // T10 #156：险情开关开启（仅桌面）时附加指纹头 + 指纹 agent；关闭 → 空配置，行为不变。
+  // agent 类型为 unknown（双端共用、RN 无此类），经 as never 交给 axios 缺省实例。
+  const fingerprint = getTlsFingerprintConfig();
+  const res = await weapiClient.post(NETEASE_WEAPI_BASE + path, new URLSearchParams(weapiEncrypt(data)), {
+    headers: Object.keys(fingerprint.headers).length > 0 ? fingerprint.headers : undefined,
+    httpsAgent: fingerprint.httpsAgent as never | undefined,
+  });
   return res.data as T;
 }

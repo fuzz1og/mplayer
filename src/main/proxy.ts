@@ -71,6 +71,42 @@ export function getHttpsAgent(): https.Agent {
   return currentHttpsAgent;
 }
 
+// ── TLS 降级 agent（T09 spec #155，仅桌面）───────────────────────────
+// 内容直链（mp3/flac CDN）在 TLS 握手失败时，用放宽 minVersion 的降级 agent
+// 重试一次（Node 默认 minVersion=TLSv1.2，服务器仅支持旧协议时握手失败）。
+let degradedHttpsAgent: https.Agent | null = null;
+
+/** 返回静态复用的降级 https agent（minVersion 放宽到 TLSv1，允许旧协议）。 */
+export function getTlsDegradedHttpsAgent(): https.Agent {
+  if (!degradedHttpsAgent) {
+    degradedHttpsAgent = new https.Agent({
+      keepAlive: true,
+      maxSockets: 10,
+      minVersion: 'TLSv1',
+    });
+  }
+  return degradedHttpsAgent;
+}
+
+// ── TLS 指纹伪装 agent（T10 spec #156，仅桌面，weapi 试点）───────────────
+// best-effort：Node https.Agent 只能调整 minVersion/keepAlive/ciphers 等握手参数，
+// 无法逐字节伪造 ClientHello（JA3）或完整扩展集（JA4）。此 agent 作为「特征偏置」，
+// 配合 weapi 附加请求头，由 `setTlsFingerprintAgentProvider` 注入 core 供 weapi 使用。
+let fingerprintHttpsAgent: https.Agent | null = null;
+
+/** 返回静态复用的指纹 https agent（桌面 weapi 伪装用）。 */
+export function getTlsFingerprintHttpsAgent(): https.Agent {
+  if (!fingerprintHttpsAgent) {
+    fingerprintHttpsAgent = new https.Agent({
+      keepAlive: true,
+      maxSockets: 10,
+      // 略收紧 minVersion 以贴近现代客户端；ciphers 保持系统默认（Node 无法完整伪造）。
+      minVersion: 'TLSv1.2',
+    });
+  }
+  return fingerprintHttpsAgent;
+}
+
 export async function applyElectronProxy(config: ProxyConfig) {
   try {
     if (config.enabled && config.host) {

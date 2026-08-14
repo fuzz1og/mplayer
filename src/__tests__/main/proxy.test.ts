@@ -4,6 +4,8 @@ import {
   buildAgents,
   getHttpAgent,
   getHttpsAgent,
+  getTlsDegradedHttpsAgent,
+  getTlsFingerprintHttpsAgent,
 } from '../../main/proxy';
 
 describe('proxy', () => {
@@ -70,6 +72,24 @@ describe('proxy', () => {
       buildAgents({ enabled: false, protocol: 'http', host: '', port: 0 });
       expect(getHttpAgent()).toBeDefined();
       expect(getHttpsAgent()).toBeDefined();
+    });
+  });
+
+  describe('getTlsDegradedHttpsAgent（T09 spec #155 桌面 TLS 降级）', () => {
+    it('返回复用降级 agent，且 minVersion 放宽到 TLSv1（Node 默认 TLSv1.2）', () => {
+      const agent = getTlsDegradedHttpsAgent();
+      expect(agent).toBeDefined();
+      expect(agent).toBe(getTlsDegradedHttpsAgent()); // 静态复用，不重复建
+      expect((agent as any).options?.minVersion).toBe('TLSv1');
+    });
+  });
+
+  describe('getTlsFingerprintHttpsAgent（T10 spec #156 桌面 TLS 指纹伪装配线）', () => {
+    it('返回复用指纹 agent，minVersion=TLSv1.2（best-effort 特征偏置）', () => {
+      const agent = getTlsFingerprintHttpsAgent();
+      expect(agent).toBeDefined();
+      expect(agent).toBe(getTlsFingerprintHttpsAgent());
+      expect((agent as any).options?.minVersion).toBe('TLSv1.2');
     });
   });
 });
