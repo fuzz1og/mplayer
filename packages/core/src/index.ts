@@ -43,4 +43,7 @@ export type { AudioContainer } from './download/container.js';
 export { tagStrategyForContainer, buildID3Frames, ID3_FRAME_TLEN } from './download/tagging.js';
 export type { TagStrategy, ID3Frames, BuildID3FramesInput, CoverFrameData } from './download/tagging.js';
 export { lrcSidecarName, looksLikeLyrics } from './download/lyrics.js';
+export { estimateDownloadProgress } from './download/progress.js';
+export type { ProgressInput } from './download/progress.js';
+export { takeNextQueued, retryBackoffMs, DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_RETRIES } from './download/queue.js';
 

@@ -9,6 +9,8 @@ import {
   extensionForContainer,
   lrcSidecarName,
   looksLikeLyrics,
+  estimateDownloadProgress,
+  retryBackoffMs,
 } from '@mplayer/core';
 import { useDownloadStore } from '../stores/downloadStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -181,6 +183,7 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     artist: song.artist,
     fileName,
     status: 'downloading',
+    progress: 0,
     addedAt: Date.now(),
   });
 
@@ -193,7 +196,7 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     if (!realUrl?.startsWith('http')) throw new Error('无法解析下载地址');
 
     await downloadDir.create({ intermediates: true, idempotent: true });
-    await File.downloadFileAsync(realUrl, file, { idempotent: true });
+    await downloadWithRetry(song, realUrl, file, itemKey, updateStatus);
 
     // 按字节头嗅探真实容器，修正扩展名（FLAC/M4A 不再被错标成 .mp3）
     const corrected = await correctContainerName(file, fileName);
@@ -231,17 +234,47 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
       }
     }
 
-    updateStatus(itemKey, { status: 'done', publicUri });
+    updateStatus(itemKey, { status: 'done', progress: 100, publicUri });
     log.addLog('info', `下载完成《${song.name}》- ${song.artist}`);
     return new File(downloadDir, corrected.fileName);
   } catch (e) {
     // 只清理本次新建的文件：已有文件（上次下载成功）失败时保留，避免丢离线副本
     if (!existedBefore) await removeFileIfExists(file);
     const err = e as Error;
-    updateStatus(itemKey, { status: 'error', error: toErrorMessage(e) });
+    updateStatus(itemKey, { status: 'error', error: toErrorMessage(e), progress: 0 });
     log.addLog('error', `下载失败《${song.name}》: ${toErrorMessage(e)}`);
     throw err;
   }
+}
+
+/**
+ * 下载文件（含失败有限重试）。进度通过 onProgress 上报 core 估算（未知总量软进度，
+ * 不再卡 0%）；超过最大重试后抛错（单首失败不影响其他任务）。
+ */
+async function downloadWithRetry(song: Song, realUrl: string, file: File, itemKey: string, updateStatus: (k: string, p: any) => void): Promise<void> {
+  const maxRetries = 2;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await File.downloadFileAsync(realUrl, file, {
+        idempotent: true,
+        onProgress: ({ bytesWritten, totalBytes }) => {
+          const progress = estimateDownloadProgress({
+            loaded: bytesWritten,
+            total: totalBytes >= 0 ? totalBytes : null,
+          });
+          updateStatus(itemKey, { progress });
+        },
+      });
+      return;
+    } catch (e) {
+      lastError = e;
+      const delay = retryBackoffMs(attempt, maxRetries);
+      if (delay < 0) break;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`下载失败《${song.name}》`);
 }
 
 /** 写入 .lrc 歌词侧车（私有目录，与音频同名）。获取失败/非可用 LRC 时跳过。 */

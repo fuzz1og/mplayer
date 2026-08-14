@@ -104,7 +104,11 @@ export default function DownloadPage() {
                 <Text style={styles.artist} numberOfLines={1}>{item.artist}</Text>
               </View>
               <Text style={[styles.status, item.status === 'error' && styles.statusError]}>
-                {item.status === 'downloading' ? '下载中…' : STATUS_LABELS[item.status]}
+                {item.status === 'downloading'
+                  ? item.progress != null && item.progress > 0
+                    ? `下载中 ${item.progress}%`
+                    : '下载中…'
+                  : STATUS_LABELS[item.status]}
               </Text>
               {item.status === 'done' && (
                 <TouchableOpacity onPress={() => handleRemove(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>

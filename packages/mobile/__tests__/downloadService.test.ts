@@ -202,5 +202,20 @@ describe('downloadSong（T15 容器修正 + .lrc 侧车 + 进度，T16 未知总
     // 下载记录 status 完成
     const items = useDownloadStore.getState().items;
     expect(items[0].status).toBe('done');
+    expect(items[0].progress).toBe(100);
+  });
+
+  it('未知总大小进度通过 onProgress 上报软进度（不等 0%）', async () => {
+    const originalUpdate = useDownloadStore.getState().updateStatus;
+    const progressSeen: number[] = [];
+    const spy = vi.spyOn(useDownloadStore.getState(), 'updateStatus').mockImplementation((key, patch: any) => {
+      if (patch.progress != null) progressSeen.push(patch.progress);
+      return originalUpdate(key, patch);
+    });
+
+    await downloadSong(makeSong() as any);
+    // onProgress 上报未知总量软进度：至少存在一次 (0,100) 的中间进度，不再卡 0%
+    expect(progressSeen.some((p) => p > 0 && p < 100)).toBe(true);
+    spy.mockRestore();
   });
 });

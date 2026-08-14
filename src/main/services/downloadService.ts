@@ -10,10 +10,14 @@ import {
   buildID3Frames,
   containerFromContentType,
   detectAudioContainer,
+  estimateDownloadProgress,
   extensionForContainer,
   looksLikeLyrics,
   lrcSidecarName,
+  retryBackoffMs,
   tagStrategyForContainer,
+  takeNextQueued,
+  DEFAULT_MAX_CONCURRENT,
 } from '@mplayer/core';
 
 export interface DownloadTask {
@@ -37,7 +41,7 @@ export class DownloadService {
   private queue: string[] = [];
   private activeDownloads: Set<string> = new Set();
   private abortControllers: Map<string, AbortController> = new Map();
-  private maxConcurrentDownloads: number = 3;
+  private maxConcurrentDownloads: number = DEFAULT_MAX_CONCURRENT;
   private downloadPath: string = '';
 
   private async fetchCoverAsBuffer(coverUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
@@ -237,21 +241,21 @@ export class DownloadService {
   }
 
   private async processQueue(): Promise<void> {
-    while (this.queue.length > 0 && this.activeDownloads.size < this.maxConcurrentDownloads) {
-      const taskId = this.queue.shift();
-      if (!taskId) continue;
+    while (true) {
+      // 并发受控：active 未达上限时从队首取下一个任务（core 判定）
+      const { next, remaining } = takeNextQueued(this.queue, this.activeDownloads.size, this.maxConcurrentDownloads);
+      this.queue = remaining;
+      if (!next) break;
 
-      const task = this.tasks.get(taskId);
+      const task = this.tasks.get(next);
       if (!task || task.status === 'completed' || task.status === 'error') {
-        continue;
+        continue; // 跳过无效任务，继续推进队列
       }
 
-      this.activeDownloads.add(taskId);
-
-      // 添加错误处理和重试机制
+      this.activeDownloads.add(next);
       this.downloadFileWithRetry(task).finally(() => {
-        this.activeDownloads.delete(taskId);
-        this.processQueue();
+        this.activeDownloads.delete(next);
+        this.processQueue(); // 单首完成/失败后自动续下一首
       });
     }
   }
@@ -266,11 +270,10 @@ export class DownloadService {
       } catch (error) {
         lastError = error as Error;
 
-        if (attempt < maxRetries) {
-          // 指数退避重试
-          const delay = Math.pow(2, attempt) * 1000;
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
+        // 指数退避（core 判定，超过最大重试返回 -1 表示不再等待）
+        const delay = retryBackoffMs(attempt, maxRetries);
+        if (delay < 0) break;
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
@@ -332,12 +335,15 @@ export class DownloadService {
         timeout: 60000,
         signal: controller.signal,
         onDownloadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            task.progress = progress;
-            this.tasks.set(task.id, task);
-            this.notifyProgress(task);
-          }
+          // Content-Length 缺失/chunked 时 total 为 0/undefined：改走 core 软进度估算，不再卡 0%
+          const total = progressEvent.total;
+          const progress = estimateDownloadProgress({
+            loaded: progressEvent.loaded,
+            total: total != null && total > 0 ? total : null,
+          });
+          task.progress = progress;
+          this.tasks.set(task.id, task);
+          this.notifyProgress(task);
         }
       });
 
