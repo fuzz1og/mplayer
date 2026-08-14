@@ -19,9 +19,9 @@ export {
 } from '@mplayer/core';
 export type { ProxyAgents } from '@mplayer/core';
 
-import { setThrottleObserver as registerThrottleObserver, registerDirectClient as coreRegisterDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient } from '@mplayer/core';
+import { setThrottleObserver as registerThrottleObserver, registerDirectClient as coreRegisterDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient } from '@mplayer/core';
 
-// ── 直连客户端注册（T02 网易 / T04 千千 / T05 咪咕） ───────────────
+// ── 直连客户端注册（T02 网易 / T04 千千 / T05 咪咕 / T06 QQ） ────────
 // 在模块加载时注册直连客户端；注册后 sourceRouter.hasDirectClient(source)
 // 生效 → 设置页「直连可用」状态自动变亮，且 auto 模式搜索/播放优先走直连源站，
 // 直连失败自动回退自建 API。
@@ -29,6 +29,7 @@ import { setThrottleObserver as registerThrottleObserver, registerDirectClient a
 coreRegisterDirectClient(neteaseDirectClient);
 coreRegisterDirectClient(qianqianDirectClient);
 coreRegisterDirectClient(miguDirectClient);
+coreRegisterDirectClient(qqDirectClient);
 
 // ── 上游限流自适应退避 ──────────────────────────────────────────
 // core 观察器上报搜索/播放直链请求的成败：超时（上游挂起）→ 指数退避；

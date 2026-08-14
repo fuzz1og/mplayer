@@ -874,6 +874,44 @@ export function invalidateCoverUrl(coverUrl: string): void {
 }
 
 /**
+ * 歌词响应体归一化（T06 #152）：QQ fcg 歌词端点返回 JSON，`lyric` 字段为
+ * base64 编码的 LRC 文本 → 解码为 LRC；非 JSON / 无 lyric 字段原样返回。
+ * 纯函数，独立导出供测试。
+ */
+export function decodeLyricBody(body: unknown): string {
+  if (typeof body !== 'string') return '';
+  const trimmed = body.trim();
+  if (!trimmed.startsWith('{')) return body;
+  try {
+    const parsed = JSON.parse(trimmed) as { lyric?: unknown };
+    if (typeof parsed.lyric === 'string' && parsed.lyric.length > 0) {
+      const decoded = decodeBase64(parsed.lyric);
+      if (decoded) return decoded;
+    }
+  } catch {
+    // 非 JSON：按原样返回
+  }
+  return body;
+}
+
+function decodeBase64(input: string): string {
+  const clean = input.replace(/\s+/g, '');
+  try {
+    if (typeof atob === 'function') {
+      // atob 返回 Latin-1 二进制串 → 转字节 → UTF-8 解码（fcg lyric 为 UTF-8 的 base64）
+      const bin = atob(clean);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+    // Node 兜底
+    return Buffer.from(clean, 'base64').toString('utf-8');
+  } catch {
+    return '';
+  }
+}
+
+/**
  * 补全 URL，确保返回完整的绝对 URL
  * @param url 可能是相对路径或绝对 URL
  * @returns 完整的绝对 URL
@@ -1301,8 +1339,12 @@ export const musicApi = {
       return cachedData;
     }
 
-    const response = await apiClient.get(fullUrl);
-    const lyrics = response.data;
+    // 第三方歌词 URL（QQ fcg 等）需带官方 Referer，否则 CDN 防盗链 403/空响应
+    const referer = refererForUrl(fullUrl);
+    const response = await apiClient.get(fullUrl, {
+      headers: referer ? { Referer: referer } : undefined,
+    });
+    const lyrics = decodeLyricBody(response.data);
 
     // 会话失效/签名过期：服务端返回「非法请求」页（200 text/html；响应拦截器
     // 已带新会话重试一次仍无效——签名与旧会话绑定，同 URL 重试无意义）。
