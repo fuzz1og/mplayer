@@ -18,6 +18,7 @@ import {
   tagStrategyForContainer,
   takeNextQueued,
   DEFAULT_MAX_CONCURRENT,
+  DEFAULT_MAX_RETRIES,
 } from '@mplayer/core';
 
 export interface DownloadTask {
@@ -132,6 +133,29 @@ export class DownloadService {
       fs.writeFileSync(filePath, outBuf);
     } catch (err) {
       console.error('[DownloadService] 写入标签异常:', err);
+    }
+  }
+
+  /**
+   * 按文件字节头修正扩展名（Content-Type 不可靠时的二次校验，评审修复）。
+   * 真实容器与当前扩展名不一致时重命名并更新任务；检测失败/无需修正则原样返回。
+   */
+  private correctContainerFileName(filePath: string, task: DownloadTask): string {
+    try {
+      const container = detectAudioContainer(fs.readFileSync(filePath));
+      if (container === 'unknown') return filePath;
+      const correctExt = extensionForContainer(container);
+      const currentExt = path.extname(filePath);
+      if (!currentExt || currentExt === correctExt) return filePath;
+      const correctedPath = filePath.slice(0, filePath.length - currentExt.length) + correctExt;
+      fs.renameSync(filePath, correctedPath);
+      task.filePath = correctedPath;
+      this.tasks.set(task.id, task);
+      console.log(`[DownloadService] 按字节头修正扩展名: ${path.basename(filePath)} → ${path.basename(correctedPath)}`);
+      return correctedPath;
+    } catch (err) {
+      console.error('[DownloadService] 修正扩展名失败（保留原文件名）:', err);
+      return filePath;
     }
   }
 
@@ -260,7 +284,7 @@ export class DownloadService {
     }
   }
 
-  private async downloadFileWithRetry(task: DownloadTask, maxRetries: number = 3): Promise<void> {
+  private async downloadFileWithRetry(task: DownloadTask, maxRetries: number = DEFAULT_MAX_RETRIES): Promise<void> {
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -405,6 +429,9 @@ export class DownloadService {
       });
 
       // 写入标签元数据（title/artist/album/封面/真实时长）与 .lrc 歌词侧车
+      // 先按字节头修正扩展名：源站 Content-Type 不可靠（FLAC 报 audio/mpeg 等）时，
+      // 按真实容器重命名，避免 FLAC/M4A 错标成 .mp3（对齐移动端 correctContainerName）
+      actualFilePath = this.correctContainerFileName(actualFilePath, task);
       await this.writeMetadata(task.song, actualFilePath);
       await this.writeLyricsSidecar(task.song, actualFilePath);
 

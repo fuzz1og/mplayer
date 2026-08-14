@@ -11,6 +11,8 @@ import {
   looksLikeLyrics,
   estimateDownloadProgress,
   retryBackoffMs,
+  DEFAULT_MAX_RETRIES,
+  DEFAULT_MAX_CONCURRENT,
 } from '@mplayer/core';
 import { useDownloadStore } from '../stores/downloadStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -153,11 +155,39 @@ async function correctContainerName(
 const inFlight = new Map<string, Promise<File>>();
 
 /** 下载歌曲到本地：解析直链 → 下载 → 更新下载列表。重复点击同一首自动复用进行中的下载。 */
+// 下载并发门控（T16 移动端）：同时进行的下载受 DEFAULT_MAX_CONCURRENT 约束，
+// 单首失败只影响自身（调用方各自 catch/提示），不阻塞其他任务。槽位在释放时
+// 直接转移给最早的等待者，避免惊群。
+let activeDownloads = 0;
+const downloadWaiters: (() => void)[] = [];
+
+async function acquireDownloadSlot(): Promise<void> {
+  if (activeDownloads < DEFAULT_MAX_CONCURRENT) {
+    activeDownloads++;
+    return;
+  }
+  await new Promise<void>((resolve) => downloadWaiters.push(resolve));
+  activeDownloads++;
+}
+
+function releaseDownloadSlot(): void {
+  activeDownloads--;
+  const next = downloadWaiters.shift();
+  if (next) next();
+}
+
 export async function downloadSong(song: Song): Promise<File> {
   const fileName = buildFileName(song);
   const existing = inFlight.get(fileName);
   if (existing) return existing;
-  const promise = doDownload(song, fileName);
+  const promise = (async () => {
+    await acquireDownloadSlot();
+    try {
+      return await doDownload(song, fileName);
+    } finally {
+      releaseDownloadSlot();
+    }
+  })();
   inFlight.set(fileName, promise);
   try {
     return await promise;
@@ -252,7 +282,8 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
  * 不再卡 0%）；超过最大重试后抛错（单首失败不影响其他任务）。
  */
 async function downloadWithRetry(song: Song, realUrl: string, file: File, itemKey: string, updateStatus: (k: string, p: any) => void): Promise<void> {
-  const maxRetries = 2;
+  // 重试次数统一消费 core 常量（评审修复：两端不再各自硬编码）
+  const maxRetries = DEFAULT_MAX_RETRIES;
   let lastError: unknown = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {

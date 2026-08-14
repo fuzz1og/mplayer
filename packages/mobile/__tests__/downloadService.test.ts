@@ -176,6 +176,14 @@ describe('downloadService public copy (SAF)', () => {
     expect(useSettingsStore.getState().downloadDirUri).toBe('');
   });
 
+  it('pickDownloadDirectory: 非 Android 不请求授权直接返回 false', async () => {
+    (Platform as { OS: string }).OS = 'ios';
+    const ok = await pickDownloadDirectory();
+
+    expect(ok).toBe(false);
+    expect(safMocks.requestDirectoryPermissionsAsync).not.toHaveBeenCalled();
+  });
+
   it('removeDownloadedFile 同时删除 SAF 公共文件', async () => {
     await removeDownloadedFile('a.mp3', 'content://downloads/a.mp3');
 
@@ -217,5 +225,36 @@ describe('downloadSong（T15 容器修正 + .lrc 侧车 + 进度，T16 未知总
     // onProgress 上报未知总量软进度：至少存在一次 (0,100) 的中间进度，不再卡 0%
     expect(progressSeen.some((p) => p > 0 && p < 100)).toBe(true);
     spy.mockRestore();
+  });
+
+  it('并发下载受 DEFAULT_MAX_CONCURRENT 约束，槽位释放后续排（T16 队列门控）', async () => {
+    const originalImpl = fsMocks.downloadFileAsync.getMockImplementation();
+    const release: (() => void)[] = [];
+    fsMocks.downloadFileAsync.mockImplementation(async (_url: string, file: any, options?: any) => {
+      options?.onProgress?.({ bytesWritten: 512, totalBytes: -1 });
+      file.header = fsMocks.headerBytes;
+      await new Promise<void>((r) => release.push(r));
+      return file;
+    });
+    try {
+      const songs = [1, 2, 3, 4].map((i) =>
+        makeSong({ id: String(i), name: `歌${i}`, url: `http://example.com/${i}.mp3` })
+      );
+      const promises = songs.map((s) => downloadSong(s as any).catch(() => {}));
+
+      // 并发上限 3：第 4 首必须等待槽位
+      await vi.waitFor(() => expect(fsMocks.downloadFileAsync).toHaveBeenCalledTimes(3));
+      expect(fsMocks.downloadFileAsync).not.toHaveBeenCalledTimes(4);
+
+      // 放行一首 → 等待中的第 4 首进入
+      release.shift()!();
+      await vi.waitFor(() => expect(fsMocks.downloadFileAsync).toHaveBeenCalledTimes(4));
+
+      // 全部放行收尾
+      while (release.length > 0) release.shift()!();
+      await Promise.all(promises);
+    } finally {
+      fsMocks.downloadFileAsync.mockImplementation(originalImpl as never);
+    }
   });
 });

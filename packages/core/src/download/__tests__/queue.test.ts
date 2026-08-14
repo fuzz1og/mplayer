@@ -31,14 +31,14 @@ describe('takeNextQueued 队列并发受控', () => {
 });
 
 describe('retryBackoffMs 失败重试退避（指数退避，不进入死循环）', () => {
-  it('按尝试次数指数退避', () => {
+  it('按尝试次数指数退避（0..maxRetries-1 轮之间等待）', () => {
     expect(retryBackoffMs(0, 3)).toBe(1000);
     expect(retryBackoffMs(1, 3)).toBe(2000);
     expect(retryBackoffMs(2, 3)).toBe(4000);
-    expect(retryBackoffMs(3, 3)).toBe(8000);
   });
 
-  it('超过最大重试次数返回 -1（调用方停止重试，避免无限重试）', () => {
+  it('最后一轮尝试失败即停止（attempt >= maxRetries 返回 -1，不再等待）', () => {
+    expect(retryBackoffMs(3, 3)).toBe(-1);
     expect(retryBackoffMs(4, 3)).toBe(-1);
     expect(retryBackoffMs(3, 2)).toBe(-1);
   });

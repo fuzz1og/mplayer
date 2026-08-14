@@ -11,8 +11,8 @@
 /** 默认并发上限（沿用现有桌面端 3，作为文档化常量）。 */
 export const DEFAULT_MAX_CONCURRENT = 3;
 
-/** 失败后最多重试次数（0 = 首轮即算一尝试，共 1+max 次）。 */
-export const DEFAULT_MAX_RETRIES = 2;
+/** 失败后最多重试次数（0 = 首轮即算一尝试，共 1+max 次）。双端统一消费此常量（评审修复）。 */
+export const DEFAULT_MAX_RETRIES = 3;
 
 export interface TakeNextResult {
   /** 下一个应启动的任务 id；并发已满或队列空则为 null */
@@ -45,6 +45,8 @@ export function retryBackoffMs(
   attempt: number,
   maxRetries: number = DEFAULT_MAX_RETRIES
 ): number {
-  if (attempt > maxRetries) return -1;
+  // attempt >= maxRetries：本次已是最后一轮尝试，失败即停止，不再等待——
+  // 避免末次失败后徒增一段无用 sleep（评审修复）
+  if (attempt >= maxRetries) return -1;
   return Math.pow(2, attempt) * 1000;
 }
