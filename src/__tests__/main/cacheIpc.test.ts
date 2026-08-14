@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 
 const cacheDir = vi.hoisted(() => `${process.cwd()}/.cache-ipc-test-${Date.now()}`);
@@ -61,5 +62,31 @@ describe('registerCacheIpc legacy binary channels', () => {
   it('returns null when the cover is not cached', async () => {
     const getCover = getHandler('cache:getCover');
     expect(await getCover({}, 'https://example.com/missing.jpg')).toBeNull();
+  });
+
+  it('expires URL cache after ttlMs (kernel TTL actually enforced)', async () => {
+    const setJSON = getHandler('cache:setJSON');
+    const getJSON = getHandler('cache:getJSON');
+
+    await setJSON({}, 'url:expire-test', { url: 'https://example.com/x.mp3' }, 20);
+    expect(await getJSON({}, 'url:expire-test')).toEqual({ url: 'https://example.com/x.mp3' });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(await getJSON({}, 'url:expire-test')).toBeNull();
+  });
+
+  it('treats legacy json entries (no expiry metadata) as expired and deletes them', async () => {
+    const getJSON = getHandler('cache:getJSON');
+    // 模拟缓存统一重构前写入的旧格式条目：json 数据文件 + 无 expiresAt 的 meta
+    const key = ':json:url:legacy123';
+    const md5 = crypto.createHash('md5').update(key).digest('hex');
+    const dataDir = path.join(cacheDir, 'cache', 'bin');
+    const metaDir = path.join(cacheDir, 'cache', 'meta');
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.mkdirSync(metaDir, { recursive: true });
+    fs.writeFileSync(path.join(dataDir, md5), JSON.stringify({ url: 'https://expired.example.com/a.mp3' }));
+    fs.writeFileSync(path.join(metaDir, `${md5}.json`), JSON.stringify({ key, size: 50 }));
+
+    expect(await getJSON({}, 'url:legacy123')).toBeNull();
+    expect(fs.existsSync(path.join(dataDir, md5))).toBe(false);
   });
 });

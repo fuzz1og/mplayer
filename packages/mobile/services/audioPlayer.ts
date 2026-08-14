@@ -2,8 +2,8 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants from 'expo-constants';
-import { cacheManager, getNextSongIndex, musicApi, resolvePlayableSong, resolveFreshUrl } from '@mplayer/core';
-import type { Song } from '@mplayer/core';
+import { cacheManager, getNextSongIndex, getApiBaseUrl, getApiSessionCookie, isApiOriginUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey } from '@mplayer/core';
+import type { Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -27,6 +27,24 @@ let currentPlayId = 0;
 // playSong 进行中（解析 URL/创建播放器）：togglePlay 应忽略点击，
 // 避免 URL 解析期间反复触发 fresh 重试解析
 let preparingPlayback = false;
+
+// ── 单播放器复用的当前播放上下文 ──────────────────────────────
+// listener 只在播放器创建时挂一次（replace 换源复用同一 ExoPlayer），
+// 所有「当前歌曲」相关状态从 ctx 读取，不依赖闭包捕获。
+// 单例实例 = 切歌不存在「旧播放器停止 vs 新播放器启动」的叠加窗口
+// （双播放根治：ExoPlayer 实例永远只有一个）。
+interface PlaybackCtx {
+  song: Song;
+  playId: number;
+  t0: number;
+  fresh: boolean;
+  retryCount: number;
+}
+let playbackCtx: PlaybackCtx | null = null;
+// per-player 去重：didJustFinish / error 只处理一次，防止双触发跳歌
+let playbackFinished = false;
+let playbackFailed = false;
+let playbackReadyLogged = false;
 
 export async function initAudio(): Promise<void> {
   await setAudioModeAsync({
@@ -55,6 +73,72 @@ async function stopAllPlayers(): Promise<void> {
   playerStatusSubscription = null;
 }
 
+/**
+ * 播放状态监听（单例播放器只在创建时挂一次；replace 换源后事件仍来自
+ * 同一个实例，当前歌曲状态从 playbackCtx 读取）。
+ */
+function attachPlaybackListener(p: Player): void {
+  playerStatusSubscription = p.addListener('playbackStatusUpdate', (status: AudioStatus) => {
+    const ctx = playbackCtx;
+    if (!ctx || ctx.playId !== currentPlayId) return;
+    const { song, t0, fresh, retryCount } = ctx;
+    const log = useLogsStore.getState();
+
+    if (!status.isLoaded) {
+      if (status.error && !playbackFailed) {
+        playbackFailed = true;
+        log.addLog('error', `《${song.name}》加载失败: ${status.error}`);
+        if (!fresh && song.sourceType !== 'local') {
+          // 同一首歌换全新 URL 重试一次（收藏/历史里的 url 可能已过期）；
+          // 本地文件不会过期，失败直接跳下一首
+          log.addLog('warn', `《${song.name}》将使用新 URL 重试`);
+          setTimeout(() => { if (ctx.playId === currentPlayId) void playSong(song, retryCount, true); }, 0);
+        } else {
+          const nextSong = nextSongAfterError(retryCount);
+          if (nextSong) {
+            log.addLog('warn', `《${song.name}》播放失败，自动跳过`);
+            setTimeout(() => { if (ctx.playId === currentPlayId) void playSong(nextSong, retryCount + 1, false); }, 0);
+          } else {
+            // 队列已耗尽：停止假播放并提示
+            void stopAllPlayers();
+            usePlayerStore.getState().pause();
+            log.reportError(`《${song.name}》播放失败，且队列中没有其他歌曲`);
+          }
+        }
+      }
+      return;
+    }
+
+    if (!playbackReadyLogged) {
+      playbackReadyLogged = true;
+      log.addLog('info', `[耗时] 播放器就绪(出声): 《${song.name}》 总耗时 ${Date.now() - t0}ms`);
+    }
+
+    const s = usePlayerStore.getState();
+    if (status.playing && !s.isPlaying) {
+      s.resume();
+    } else if (!status.playing && s.isPlaying && !status.didJustFinish) {
+      s.pause();
+    }
+
+    s.setCurrentTime(status.currentTime);
+    s.setDuration(status.duration || 0);
+
+    if (status.didJustFinish && !playbackFinished) {
+      playbackFinished = true;
+      const nextSong = s.next();
+      if (nextSong) setTimeout(() => {
+        if (ctx.playId === currentPlayId) void playSong(nextSong, 0, false);
+      }, 0);
+      else {
+        // 队列播完：同步 store 状态（否则 UI 一直显示"播放中"且 togglePlay 失效）
+        void stopAllPlayers();
+        usePlayerStore.getState().pause();
+      }
+    }
+  });
+}
+
 function nextSongAfterError(retryCount: number): Song | null {
   const s = usePlayerStore.getState();
   if (retryCount + 1 >= s.queue.length) return null;
@@ -77,8 +161,13 @@ async function refreshPlayableUrl(song: Song): Promise<string> {
  * 仅当歌曲 lrc 为空（专辑/歌单歌）或加载失败（force，PlayerOverlay 歌词
  * onError、PlayerBar/PlayerOverlay 封面 onError 触发）才搜索补全。
  * 避免每次播放都搜索导致封面/歌词 URL 伪刷新（迷你播放栏图片反复重载）。
+ * @param force 资源失效（onError）时强制搜索补全
+ * @param refreshCover 封面**自身**失效（封面 onError）时允许换新签名 URL；
+ *   其他失效（歌词失败等）不碰封面——新签名 URL 会让迷你栏/播放器封面
+ *   闪一下重载（同一张图），封面只有真失效才值得换。调用方需先调
+ *   invalidateCoverUrl 清除解析缓存（否则归一化 key 命中失效直链）。
  */
-export async function fetchLrcInBackground(song: Song, force = false): Promise<void> {
+export async function fetchLrcInBackground(song: Song, force = false, refreshCover = false): Promise<void> {
   const log = useLogsStore.getState();
   if ((!force && song.lrc) || song.sourceType === 'local' || !song.name) return;
   try {
@@ -86,13 +175,17 @@ export async function fetchLrcInBackground(song: Song, force = false): Promise<v
     if (!fresh) return;
     const cur = usePlayerStore.getState().currentSong;
     if (cur?.id !== song.id) return; // 已切歌，丢弃过期结果
-    // 归一化比较：302 端点的 t 时间戳参数每次搜索都不同，不算资源变化
-    const lrcChanged = !!fresh.lrc && resourceUrlKey(fresh.lrc) !== resourceUrlKey(cur.lrc);
-    // 非 force（播放补全）只补空封面：已有封面不替换——302 端点的 sign
-    // 签名每次搜索都重新生成，替换会让迷你栏/播放器封面闪一下重载；
-    // force（onError 失效自愈）才允许换新签名的封面
-    const coverChanged = force
-      ? !!fresh.cover?.startsWith('http') && resourceUrlKey(fresh.cover) !== resourceUrlKey(cur.cover)
+    // 歌词比较：普通懒刷新用归一化 key（t/sign 签名参数每次搜索都不同，
+    // 不算资源变化，避免伪刷新）；force（歌词加载失败驱动）时旧 URL 已
+    // 证明失效——签名不同（新 sign）就直接换，否则归一化 key 相同会
+    // 永远命中失效 URL，歌词再也刷新不出来。
+    const lrcChanged = force
+      ? !!fresh.lrc && fresh.lrc !== cur.lrc
+      : !!fresh.lrc && resourceUrlKey(fresh.lrc) !== resourceUrlKey(cur.lrc);
+    // 封面：仅 refreshCover（封面自身失效，缓存已 invalidate）时换新签名；
+    // 其余场景只补空封面——已有封面不替换，避免迷你栏/播放器封面闪一下重载
+    const coverChanged = refreshCover
+      ? !!fresh.cover?.startsWith('http') && fresh.cover !== cur.cover
       : !!fresh.cover?.startsWith('http') && !cur.cover;
     if (!lrcChanged && !coverChanged) return; // 资源仍有效，无需刷新
     // 预取歌词文本（core 歌词缓存预热，全屏播放器打开秒显）
@@ -119,36 +212,27 @@ function isRedirectEndpoint(url: string): boolean {
   return url.includes('api.php?get=url');
 }
 
-/** 解析 302 端点 → CDN 直链（getAudioUrl 带缓存；直链直接返回原值） */
+/**
+ * 解析 302 端点 → CDN 直链（getAudioUrl 带缓存；直链直接返回原值）。
+ * 不能设短硬超时：RN 播放器（expo-audio）请求 api.php 不带会话 cookie
+ * 必返回「非法请求」（原生层无 cookie jar），只能等 JS 层解析完成拿到
+ * CDN 直链再播放；桌面端 302 播放器能跟，多等无副作用。
+ * getAudioUrl 内部自带 3 次重试 + 5s 超时兜底。
+ */
 async function resolveDirectUrl(url: string): Promise<string> {
-  // 1.5s 超时：解析失败（网络/源临时故障）直接用原 URL（302 播放器能播，只是慢）
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1500);
   try {
-    const direct = await musicApi.getAudioUrl(url, controller.signal);
+    const direct = await musicApi.getAudioUrl(url);
     return direct?.startsWith('http') ? direct : url;
   } catch {
     return url;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
 /**
- * 资源 URL 归一化 key：302 端点的 t 时间戳参数每次搜索都不同，
- * 但内容相同——比较资源是否变化时忽略它，避免每次播放都触发
- * 封面/歌词"伪刷新"（迷你播放栏图片反复重载）。
+ * 资源 URL 归一化 key（shared core）：302 端点的 t/sign 等签名参数每次
+ * 搜索都不同，但内容相同——比较资源是否变化时忽略它们，避免每次播放
+ * 都触发封面/歌词"伪刷新"（迷你播放栏图片反复重载）。
  */
-function resourceUrlKey(url: string): string {
-  try {
-    const u = new URL(url);
-    u.searchParams.delete('t');
-    u.searchParams.delete('timestamp');
-    return u.href;
-  } catch {
-    return url;
-  }
-}
 
 /**
  * 切歌预取：播放成功后，后台并行解析队列下一首的播放 URL（含 302 → 直链），
@@ -184,6 +268,15 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   const playId = ++currentPlayId;
   const log = useLogsStore.getState();
   preparingPlayback = true;
+  const t0 = Date.now();
+  log.addLog('info', `[耗时] 播放准备开始: 《${song.name}》 url=${song.url ? '有' : '无'} fresh=${fresh}`);
+  usePlayerStore.getState().setPreparing(true);
+
+  // 单例播放器：更新当前播放上下文（listener 从 ctx 读取）并复位去重标志
+  playbackCtx = { song, playId, t0, fresh, retryCount };
+  playbackFinished = false;
+  playbackFailed = false;
+  playbackReadyLogged = false;
 
   const startPlayback = async (): Promise<void> => {
     let audioUrl: string;
@@ -191,6 +284,11 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     if (fresh) {
       // 本地文件不会过期，不参与 fresh 重试（调用方已过滤 local 源）
       audioUrl = await refreshPlayableUrl(song);
+      // fresh 重试拿到的仍是 302 端点（api.php?get=url，服务端搜索返回）：
+      // 必须解析成 CDN 直链——播放器（ExoPlayer）请求 api.php 不带会话
+      // cookie 必返回「非法请求」→ Source error（酷狗等源解析成功与否的
+      // 关键路径，之前缺失导致 fresh 重试永远失败跳下一首）
+      audioUrl = isRedirectEndpoint(audioUrl) ? await resolveDirectUrl(audioUrl) : audioUrl;
       // fresh 重试只解析 URL，不返回歌词；歌单/收藏缓存歌 lrc 为空，
       // 后台并行补歌词（否则重试成功播放后歌词永远空白）
       void fetchLrcInBackground(song);
@@ -198,9 +296,12 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       // 已有完整信息（音频 + 歌词）：零网络直接播放；
       // 302 跳转端点同样先解析成 CDN 直链（两跳慢加载不因有歌词而保留）
       audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
-    } else if (song.url?.startsWith('http') || song.url?.startsWith('file://')) {
-      // 有 url 无歌词：立即播放，歌词后台并行补充（不阻塞播放）
-      // 摄取端点 302 跳转先解析成 CDN 直链（播放器直连 CDN，避免两跳慢加载）
+    } else if (song.url) {
+      // 有 url（http 直链 / file:// / api.php 302 端点）：
+      // 302 端点先解析成 CDN 直链（播放器直连 CDN，避免两跳慢加载）；
+      // 无歌词时后台并行补充（不阻塞播放）。
+      // 注意：302 端点不以 http 开头，但它是有效 url——直接解析即可，
+      // 不能走下方「无 url」分支去重复搜索（搜索结果页点击会白等一轮搜索）。
       audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
       void fetchLrcInBackground(song);
     } else {
@@ -221,6 +322,9 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     }
     if (playId !== currentPlayId) throw 'cancelled';
     if (!audioUrl?.startsWith('http') && !audioUrl?.startsWith('file://')) throw new Error('no playable URL');
+    log.addLog('info', `[耗时] 直链就绪: 《${song.name}》 解析耗时 ${Date.now() - t0}ms`);
+    console.log(`[player] 直链URL: ${audioUrl.slice(0, 120)}`);
+    usePlayerStore.getState().setPreparing(false);
 
     // 兜底补歌词：把解析到的歌词 URL 写回 currentSong，触发全屏播放器加载歌词
     if (lrcUrl && !song.lrc) {
@@ -229,80 +333,76 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       );
     }
 
-    const nextPlayer = createAudioPlayer({ uri: audioUrl }, { updateInterval: 250 });
-    livePlayers.add(nextPlayer);
-    player = nextPlayer;
-
-    // per-player 去重：didJustFinish / error 只处理一次，防止双触发跳歌
-    let finished = false;
-    let failed = false;
-
-    playerStatusSubscription = nextPlayer.addListener('playbackStatusUpdate', (status: AudioStatus) => {
-      if (playId !== currentPlayId) return;
-
-      if (!status.isLoaded) {
-        if (status.error && !failed) {
-          failed = true;
-          log.addLog('error', `《${song.name}》加载失败: ${status.error}`);
-          if (!fresh && song.sourceType !== 'local') {
-            // 同一首歌换全新 URL 重试一次（收藏/历史里的 url 可能已过期）；
-            // 本地文件不会过期，失败直接跳下一首
-            log.addLog('warn', `《${song.name}》将使用新 URL 重试`);
-            setTimeout(() => { if (playId === currentPlayId) void playSong(song, retryCount, true); }, 0);
-          } else {
-            const nextSong = nextSongAfterError(retryCount);
-            if (nextSong) {
-              log.addLog('warn', `《${song.name}》播放失败，自动跳过`);
-              setTimeout(() => { if (playId === currentPlayId) void playSong(nextSong, retryCount + 1, false); }, 0);
-            } else {
-              // 队列已耗尽：停止假播放并提示
-              void stopAllPlayers();
-              usePlayerStore.getState().pause();
-              log.reportError(`《${song.name}》播放失败，且队列中没有其他歌曲`);
-            }
-          }
-        }
-        return;
-      }
-
-      const s = usePlayerStore.getState();
-      if (status.playing && !s.isPlaying) {
-        s.resume();
-      } else if (!status.playing && s.isPlaying && !status.didJustFinish) {
-        s.pause();
-      }
-
-      s.setCurrentTime(status.currentTime);
-      s.setDuration(status.duration || 0);
-
-      if (status.didJustFinish && !finished) {
-        finished = true;
-        const nextSong = s.next();
-        if (nextSong) setTimeout(() => {
-          if (playId === currentPlayId) void playSong(nextSong, 0, false);
-        }, 0);
-        else {
-          // 队列播完：同步 store 状态（否则 UI 一直显示"播放中"且 togglePlay 失效）
-          void stopAllPlayers();
-          usePlayerStore.getState().pause();
-        }
-      }
-    });
-
-    if (!isExpoGo) {
-      nextPlayer.setActiveForLockScreen(true, {
-        title: song.name,
-        artist: song.artist,
-        albumTitle: song.album,
-        artworkUrl: song.cover || undefined,
-      });
+    // 播放器请求头：CDN 可能校验 UA/Referer。Referer 按源映射官方域名——
+    // 网易云 CDN（music.126.net）宽松不校验，酷狗/QQ 等 CDN 防盗链校验
+    // Referer 域名，带错 Referer（如 API 域名）会 403 → 播放失败跳下一首
+    // （图片 CDN 校验宽松所以封面正常、音频失败）。UA 保持浏览器特征。
+    const SOURCE_REFERERS: Partial<Record<SourceKey, string>> = {
+      netease: 'https://music.163.com/',
+      qq: 'https://y.qq.com/',
+      kugou: 'https://www.kugou.com/',
+      kuwo: 'https://www.kuwo.cn/',
+      qianqian: 'https://music.qianqian.com/',
+      soda: '',
+    };
+    const playerHeaders: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Referer': (() => {
+        const official = SOURCE_REFERERS[song.sourceType as SourceKey];
+        if (official) return official;
+        // 未映射的源（本地/soda）：回退 API 域名（origin 形式，去尾斜杠 + /）
+        const base = getApiBaseUrl();
+        return base ? base.replace(/\/+$/, '') + '/' : '';
+      })(),
+    };
+    // 播放器直连会话保护端点（api.php 302）的兜底：显式带会话 cookie。
+    // 仅限 API 同源（CDN 直链是第三方域，带 cookie 会泄漏）。
+    // 正常情况下 JS 层已把 302 解析成 CDN 直链（此处不生效）；
+    // 解析失败/直链过期走播放器直连时，ExoPlayer 请求带 Cookie
+    // 才能拿到 302 而非「非法请求」。cookie 值来自桥透传
+    // （document.cookie）或桌面式直接读取；RN jar 自动携带时为空串。
+    const sessionCookie = getApiSessionCookie();
+    if (sessionCookie && isApiOriginUrl(audioUrl)) {
+      playerHeaders['Cookie'] = sessionCookie;
     }
-    nextPlayer.play();
+
+    // 单播放器复用（replace 换源）：永远只有一个 ExoPlayer 实例，
+    // 切歌/重试不存在「旧播放器停止 vs 新播放器启动」的叠加窗口
+    // （多个实例切换时旧实例停止与新实例出声短暂重叠 = 两首歌同播）。
+    const source = { uri: audioUrl, headers: playerHeaders };
+    if (player) {
+      player.replace(source);
+    } else {
+      const nextPlayer = createAudioPlayer(source, { updateInterval: 250 });
+      livePlayers.add(nextPlayer);
+      player = nextPlayer;
+      attachPlaybackListener(nextPlayer);
+      if (!isExpoGo) {
+        nextPlayer.setActiveForLockScreen(true, {
+          title: song.name,
+          artist: song.artist,
+          albumTitle: song.album,
+          artworkUrl: song.cover || undefined,
+        });
+      }
+    }
+    // 换源后更新锁屏元数据（replace 复用同一 player，标题要跟着换）
+    if (!isExpoGo && player) {
+      try {
+        player.updateLockScreenMetadata({
+          title: song.name,
+          artist: song.artist,
+          albumTitle: song.album,
+          artworkUrl: song.cover || undefined,
+        });
+      } catch {}
+    }
+    player.play();
 
     // 播放 URL 落缓存(24h TTL):下次(含重启后)直接命中,秒起;无 id 的歌不写
     if (audioUrl?.startsWith('http') && song.id) void setCachedUrl(song.id, song.sourceType || 'netease', audioUrl);
 
-    log.addLog('info', `开始播放《${song.name}》- ${song.artist}${fresh ? '（新URL重试）' : ''}`);
+    log.addLog('info', `开始播放《${song.name}》- ${song.artist}${fresh ? '（新URL重试）' : ''}（准备耗时 ${Date.now() - t0}ms）`);
     useHistoryStore.getState().addHistory(song);
     void updateNotification(song, true).catch(() => {});
     // 预取下一首直链（切歌秒开）
@@ -310,7 +410,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   };
 
   try {
-    await stopAllPlayers();
+    // 单播放器复用：切歌/重试不销毁播放器（replace 换源，杜绝多实例叠加）。
+    // 只有「队列耗尽/播完/显式停止」才由 stopAllPlayers 销毁。
     await startPlayback();
   } catch (err) {
     if (err === 'cancelled') return;
@@ -328,6 +429,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       } else {
         await stopAllPlayers();
         usePlayerStore.getState().pause();
+        usePlayerStore.getState().setPreparing(false);
         log.reportError(`《${song.name}》播放失败，且队列中没有其他歌曲`);
       }
     }

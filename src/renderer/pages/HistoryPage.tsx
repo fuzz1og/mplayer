@@ -2,16 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { History, Trash2 } from 'lucide-react';
 import { message } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { mapSettledWithConcurrency } from '@/renderer/utils/async';
+import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song, SongBase } from '@mplayer/core';
 
 const HistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Song[]>([]);
-  const { currentSong, isPlaying, play } = usePlayerStore();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
 
   const loadHistory = async () => {
@@ -21,10 +26,10 @@ const HistoryPage: React.FC = () => {
       const uniqueMap = new Map<string, SongBase>();
       songBases.forEach((s: SongBase) => uniqueMap.set(s.id, s));
       const uniqueSongs = Array.from(uniqueMap.values());
-      // 并发 5 限流：历史歌曲同时搜索会打爆 上游 API（高并发限流/502）
-      const results = await mapSettledWithConcurrency(
+      // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP 有窗口配额
+      const results = await mapPacedWithConcurrency(
         uniqueSongs,
-        5,
+        3,
         async (songBase) => {
           const songs = await IpcClient.invoke<Song[]>('musicApi:searchSongs', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
           if (songs.length > 0) return songs[0];
@@ -120,7 +125,9 @@ const HistoryPage: React.FC = () => {
           songs={history}
           currentSongId={currentSong?.id}
           isPlaying={isPlaying}
+          favoriteIds={favoriteIds}
           onPlay={handlePlay}
+          onToggleFavorite={toggleFavorite}
           onDownload={download}
           onBatchDownload={downloadBatch}
           onAddToPlaylist={handleAddToPlaylist}

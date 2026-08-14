@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, AlertCircle } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import type { Song } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
@@ -26,7 +27,11 @@ const HotlistDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { play, currentSong, isPlaying } = usePlayerStore();
+  const play = usePlayerStore((s) => s.play);
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
 
   // 加载热榜数据
@@ -321,7 +326,9 @@ const HotlistDetailPage: React.FC = () => {
             songs={convertToSongs(hotlist)}
             currentSongId={currentSong?.id}
             isPlaying={isPlaying}
+            favoriteIds={favoriteIds}
             onPlay={handlePlay}
+            onToggleFavorite={toggleFavorite}
             showHeader={true}
             showIndex={true}
             showCheckbox={true}

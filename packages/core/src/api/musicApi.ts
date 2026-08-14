@@ -5,18 +5,290 @@ import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { weapiRequest } from './neteaseWeapi.js';
 import { MULTI_SOURCE_LIST } from '../constants.js';
 import { findExactMatch } from '../utils/songMatcher.js';
+import { resourceUrlKey } from '../utils/resourceKey.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
 let PROXY_URL = '';
+/** WebView 桥请求处理器（mobile 注入）：绕开 RN OkHttp 网络栈 */
+let apiRequestHandler:
+  | ((req: {
+      method: string;
+      url: string;
+      headers: Record<string, string>;
+      body?: string;
+      /** 只取最终地址和响应头，不读 body（mp3 直链可能几十 MB） */
+      rangeOnly?: boolean;
+      /** 桥内 abort 超时（毫秒）；未传时由调用方兜底 */
+      timeoutMs?: number;
+    }) => Promise<{
+      status: number;
+      headers: Record<string, string>;
+      text: string;
+      finalUrl: string;
+    }>)
+  | null = null;
+
+export function setApiRequestHandler(
+  handler: typeof apiRequestHandler,
+): void {
+  apiRequestHandler = handler;
+}
+
+/** axios 自定义 adapter：有桥走桥（Chromium 栈），否则退回默认（Node/桌面） */
+async function bridgeOrDefaultAdapter(config: any): Promise<any> {
+  const release = await acquireApiGate(config);
+  try {
+    const requestPromise = dispatchWithAdapter(config);
+    // 自定义 adapter 必须自己执行 config.timeout（axios 只对内置 adapter
+    // 计时）。桥内会按 timeoutMs abort，这里再加一层 JS 侧竞速兜底，
+    // 保证 WebView 异常（不回调）时请求也能按时失败而不是挂死。
+    const timeoutMs = Number(config.timeout) || 0;
+    if (!timeoutMs || timeoutMs <= 0) return await requestPromise;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new axios.AxiosError(
+          `timeout of ${timeoutMs}ms exceeded`,
+          axios.AxiosError.ETIMEDOUT,
+          config,
+        ));
+      }, timeoutMs);
+    });
+    try {
+      return await Promise.race([requestPromise, timeoutPromise]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } finally {
+    release();
+  }
+}
+
+function getDefaultAdapter(): any {
+  return (axios as any).getAdapter
+    ? (axios as any).getAdapter((axios as any).defaults.adapter)
+    : (axios as any).defaults.adapter;
+}
+
+async function dispatchWithAdapter(config: any): Promise<any> {
+  if (!apiRequestHandler) {
+    // 无桥（桌面/测试）：解析 axios 默认 adapter（defaults.adapter 是
+    // ['xhr','http','fetch'] 字符串数组，需 getAdapter 转成平台函数）
+    return getDefaultAdapter()(config);
+  }
+  const method = (config.method || 'get').toUpperCase();
+  const headers: Record<string, string> = {};
+  const rawHeaders = config.headers?.toJSON ? config.headers.toJSON() : config.headers || {};
+  for (const [k, v] of Object.entries(rawHeaders)) {
+    if (v != null && k.toLowerCase() !== 'cookie') headers[k] = String(v);
+  }
+  const body =
+    config.data != null
+      ? typeof config.data === 'string'
+        ? config.data
+        : JSON.stringify(config.data)
+      : undefined;
+  let res;
+  try {
+    res = await apiRequestHandler({
+      method,
+      url: config.url || '',
+      headers,
+      body,
+      timeoutMs: Number(config.timeout) || 0,
+    });
+  } catch (err: any) {
+    // 桥基础设施故障（启动失败 / 页面未加载 / 跨源被拒）时回退平台默认
+    // 栈，请求仍能发出；普通超时/HTTP 错误原样抛出（回退只会再白等一轮）
+    const msg = String(err?.message || err || '');
+    if (/bridge startup failed|bridge ready timeout|Failed to fetch|NetworkError/i.test(msg)) {
+      return getDefaultAdapter()(config);
+    }
+    throw err;
+  }
+  return {
+    data: res.text,
+    status: res.status,
+    statusText: String(res.status),
+    headers: res.headers,
+    config,
+    request: { responseURL: res.finalUrl },
+  };
+}
+
+// ── 全局 API 并发闸门（双池）────────────────────────────────────
+// 上游服务端对同 IP 并发连接数有硬限制（实测并发超过 ~3-4 个即挂起
+// 直到超时）。拆成两个独立池，避免互相拖死：
+// - 关键池 cap 2：搜索 POST / 播放直链(get=url) / 会话引导——播放与
+//   刷新必须保活，优先级 0=播放直链(插队) / 1=搜索·会话
+// - 封面池 cap 1：get=pic / get=lrc——整列表封面解析量大，但不能占用
+//   关键槽位，否则搜索洪峰期间封面永远排队（实测排队 87s 后 3s 超时
+//   全部失败，界面只剩默认占位图）；独立 1 槽保证封面稳定渐进。
+// 双池合计峰值 ≤3，仍在服务端承受范围内。
+interface GatePool {
+  cap: number;
+  active: number;
+  queue: { priority: number; resolve: () => void; since: number }[];
+}
+
+// 并发上限是实测确定的，不要随意调高：
+// 上游 API 服务端对并发有硬性限速——10 个并行搜索实测每个 5-15s（都能返回
+// 但被拖慢），2-3 个顺序/低并发则 ~550ms/个。cap=2 保证不触发并发限速；
+// 提高 cap 会让整批请求全部变慢。提速靠「减少请求数」（如专辑名预搜），
+// 不靠提高并发。
+const gatePools: Record<'critical' | 'cover', GatePool> = {
+  critical: { cap: 2, active: 0, queue: [] },
+  cover: { cap: 1, active: 0, queue: [] },
+};
+
+function gatePoolOf(config: any): GatePool {
+  const url = String(config.url || '');
+  return url.includes('get=pic') || url.includes('get=lrc') ? gatePools.cover : gatePools.critical;
+}
+
+function gatePriorityOf(config: any): number {
+  const url = String(config.url || '');
+  if (url.includes('get=url')) return 0;
+  return 1;
+}
+
+async function acquireApiGate(config: any): Promise<() => void> {
+  if (!isApiOriginRequest(config)) return () => {};
+  const pool = gatePoolOf(config);
+  if (pool.active < pool.cap) {
+    pool.active++;
+    return () => releaseApiGate(pool);
+  }
+  const priority = gatePriorityOf(config);
+  const since = Date.now();
+  await new Promise<void>((resolve) => {
+    // 高优先级插到队首；同级保持 FIFO
+    if (priority === 0) pool.queue.unshift({ priority, resolve, since });
+    else pool.queue.push({ priority, resolve, since });
+  });
+  if (apiTimingLog) {
+    const waited = Date.now() - since;
+    if (waited > 2000) {
+      const name = pool === gatePools.critical ? 'critical' : 'cover';
+      console.log(`[apiGate] ${name} 排队 ${waited}ms (active=${pool.active} queue=${pool.queue.length}) ${String(config.url || '').slice(0, 60)}`);
+    }
+  }
+  return () => releaseApiGate(pool);
+}
+
+function releaseApiGate(pool: GatePool): void {
+  pool.active--;
+  // 唤醒优先级最高的等待者（同优先级取最早入队的）
+  let idx = -1;
+  for (let i = 0; i < pool.queue.length; i++) {
+    if (idx === -1 || pool.queue[i].priority < pool.queue[idx].priority) idx = i;
+  }
+  if (idx !== -1) {
+    const w = pool.queue.splice(idx, 1)[0];
+    // 槽位在同步块内直接转移给被唤醒者，避免新请求插队抢占
+    pool.active++;
+    w.resolve();
+  }
+}
+
 const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
 const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
 const SODA_URL_CACHE_TTL = 10 * 60 * 1000;
+const COVER_URL_CACHE_TTL = 6 * 60 * 60 * 1000;
 const sodaAudioUrlCache = new Map<string, { url: string; expires: number }>();
+const coverUrlCache = new Map<string, { url: string; expires: number }>();
+
+/** 会话保护端点返回的错误页特征串（无会话时 api.php 一律返回此页） */
+const INVALID_REQUEST_MARKER = '非法请求';
+/** dev 诊断：API 请求耗时日志（>300ms 才打，避免刷屏；mobile __DEV__ 启用） */
+let apiTimingLog = false;
+export function setApiTimingLog(enabled: boolean): void {
+  apiTimingLog = enabled;
+}
+
+// ── 上游限流观察器 ─────────────────────────────────────────────
+// 上游服务端对同 IP 请求有窗口配额（超过后请求挂起直到超时，实测
+// 连续 2-3 个请求后即开始挂起）。客户端必须自适应退避：core 在检测到
+// 关键请求（搜索 POST / 播放直链解析）超时时通知宿主，宿主安排刷新暂停。
+export type ThrottleEvent = 'throttle' | 'success';
+let throttleObserver: ((event: ThrottleEvent) => void) | null = null;
+export function setThrottleObserver(fn: ((event: ThrottleEvent) => void) | null): void {
+  throttleObserver = fn;
+}
+function reportThrottleEvent(event: ThrottleEvent): void {
+  try {
+    throttleObserver?.(event);
+  } catch {
+    // 观察器异常不能影响请求链路
+  }
+}
+
+// ── api.php 302 解析并发控制 ─────────────────────────────────────
+// RN 连接池默认仅 5 个连接/主机：搜索结果页 30+ 首歌同时解析封面
+// （api.php?get=pic）会把连接池排队打满，每个请求都 5s 超时，
+// 连播放 URL 的解析也被拖死。限 3 并发 + 相同 URL in-flight 去重
+// （同一首歌的封面/URL 并发请求合并为一个，避免重复打上游）。
+// 注意：全局 API 闸门（API_GATE_CAP=3）才是最终并发上限，此处只是外层池。
+const resolveWaiters: { priority: boolean; resolve: () => void }[] = [];
+let resolveActive = 0;
+const RESOLVE_MAX_CONCURRENCY = 3;
+const resolveInflight = new Map<string, Promise<{ finalUrl: string; data: unknown }>>();
+
+function runResolve(
+  url: string,
+  timeout: number,
+  priority = false,
+): Promise<{ finalUrl: string; data: unknown }> {
+  const existing = resolveInflight.get(url);
+  if (existing) return existing;
+  const task = (async () => {
+    if (resolveActive >= RESOLVE_MAX_CONCURRENCY) {
+      await new Promise<void>((r) => {
+        // 播放 URL 解析优先：插到等待队列最前，槽位一释放立即执行；
+        // 封面解析排队（失败有占位图兜底，不阻塞播放）
+        const waiter = { priority, resolve: r };
+        if (priority) resolveWaiters.unshift(waiter);
+        else resolveWaiters.push(waiter);
+      });
+    }
+    resolveActive++;
+    try {
+      return await followRedirectsToFinalUrl(url, undefined, timeout);
+    } finally {
+      resolveActive--;
+      // 唤醒下一个等待者。注意：shift() 已移除队首，不能再 splice——
+      // indexOf 找不到时 splice(-1,1) 会误删队尾等待者（回归测试抓到：
+      // 队列 ≥2 时最后一个封面永久挂起，不 resolve 也不超时）。
+      const prio = resolveWaiters.find((w) => w.priority);
+      if (prio) {
+        resolveWaiters.splice(resolveWaiters.indexOf(prio), 1);
+        prio.resolve();
+      } else {
+        resolveWaiters.shift()?.resolve();
+      }
+      resolveInflight.delete(url);
+    }
+  })();
+  resolveInflight.set(url, task);
+  return task;
+}
+/** 会话保护端点的 URL 特征（api.php?get=url / get=pic / get=lrc） */
+export function isSessionProtectedEndpoint(url: string): boolean {
+  return url.includes('api.php');
+}
 export function setApiBaseUrl(url: string): void {
   API_BASE_URL = url.endsWith('/') ? url : url + '/';
   apiClient.defaults.baseURL = API_BASE_URL;
+  // 服务端可能更换，旧会话失效；远程源提前预热会话，避免首个请求多一次往返
+  invalidateApiSession();
+  // RN 下会话由常驻 WebView 桥托管：桥加载 API 首页时即完成引导（onLoad
+  // 时 markApiSessionBootstrapped），这里再主动 GET 首页只会重复占用上游
+  // 的请求配额（上游对同 IP 有严格窗口限制）。桌面端保留预热。
+  if (isRemoteApiHost() && !IS_REACT_NATIVE) {
+    void ensureApiSession();
+  }
 }
 export function getApiBaseUrl(): string { return API_BASE_URL; }
 export function setProxyUrl(url: string): void {
@@ -152,11 +424,461 @@ const apiClient = axios.create({
     'x-requested-with': 'XMLHttpRequest'
   },
   proxy: false,
-  timeout: 30000,
+  // 手机网络并发超过 5 后严重劣化（连接限速/重传），单请求 0.6s 即可完成；
+  // 30s 超时会让慢源卡死整批，12s 足够覆盖慢网络又不至于无限等待
+  timeout: 12000,
+  // 显式开启 withCredentials：RN Android 的 NetworkingModule 只在
+  // withCredentials=true 时启用 cookie jar（否则 CookieJar.NO_COOKIES），
+  // axios 在 RN 的默认值有历史坑（PR #1441），显式指定保证原生栈
+  // fallback 能携带会话 cookie（Android 上 jar 与 WebView CookieManager
+  // 共享存储，桥引导的 PHPSESSID 原生栈可直接复用）。桌面/Node 无副作用。
+  withCredentials: true,
+  adapter: bridgeOrDefaultAdapter as any,
 });
+
+// ── 上游搜索服务会话管理 ────────────────────────────────────────
+// 搜索/取歌接口要求携带 PHPSESSID 会话 cookie，否则一律返回
+// {"code":404,"error":"没有找到相关信息"}（搜索）或「非法请求」（api.php）。
+// 首次请求前先 GET 首页拿会话，之后所有同源请求自动带 Cookie；
+// 会话失效时刷新并原样重试一次（搜索 404 / api.php 非法请求均视为失效信号）。
+let apiSessionCookie = '';
+let apiSessionFetching: Promise<string> | null = null;
+// RN（Android）原生 OkHttp cookie jar 自动托管会话 cookie，JS 读不到
+// Set-Cookie 响应头（被 RN networking 过滤）——此模式下 JS 只负责
+// 引导一次首页请求建立 jar，不读取也不手动携带 cookie 值。
+const IS_REACT_NATIVE =
+  typeof navigator !== 'undefined' && (navigator as any).product === 'ReactNative';
+// RN 下「已引导 jar」标志：避免每个请求都重复 GET 首页
+let apiSessionBootstrapped = false;
+
+function invalidateApiSession(): void {
+  apiSessionCookie = '';
+  apiSessionBootstrapped = false;
+}
+
+/** 宿主（mobile WebView 桥）通知：首页已加载，会话引导完成 */
+export function markApiSessionBootstrapped(): void {
+  apiSessionBootstrapped = true;
+}
+
+/**
+ * 桥透传：WebView 同源 document.cookie 里读到的会话 cookie。
+ * RN 原生层过滤 Set-Cookie 响应头、JS 读不到值；但 WebView 里
+ * document.cookie 可读（PHPSESSID 非 HttpOnly 时）——透传后 JS 层
+ * 显式拿到 cookie 值，播放器/原生 fetch 可直接携带（iOS WKWebView
+ * 与 NSURLSession 存储不同步的场景尤其需要）。
+ */
+export function setApiSessionCookieValue(cookie: string): void {
+  const m = cookie
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('PHPSESSID='));
+  if (m) {
+    apiSessionCookie = m.slice('PHPSESSID='.length) || '';
+    apiSessionBootstrapped = true;
+  }
+}
+
+/** 当前会话 cookie 值（无则空串——cookie 由 jar/桥自动携带时 JS 拿不到值） */
+export function getApiSessionCookie(): string {
+  return apiSessionCookie;
+}
+
+function isRemoteApiHost(): boolean {
+  try {
+    const host = new URL(API_BASE_URL).hostname;
+    return host !== '' && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
+  } catch {
+    return false;
+  }
+}
+
+/** 判断 URL 是否发往 API 同源（cookie 只允许带上同源请求，避免泄漏给第三方 CDN） */
+export function isApiOriginUrl(url: string): boolean {
+  try {
+    const base = new URL(API_BASE_URL);
+    const target = new URL(url, API_BASE_URL);
+    return target.origin === base.origin;
+  } catch {
+    return false;
+  }
+}
+
+/** 判断请求配置是否发往 API 同源 */
+function isApiOriginRequest(config: { url?: string; baseURL?: string }): boolean {
+  try {
+    return isApiOriginUrl(new URL(config.url || '', config.baseURL || API_BASE_URL).href);
+  } catch {
+    return false;
+  }
+}
+
+async function ensureApiSession(): Promise<string> {
+  if (apiSessionCookie) return apiSessionCookie;
+  // 桥/原生 jar 已引导过就直接返回（cookie 由 jar 携带，JS 拿不到值）
+  if (apiSessionBootstrapped) return '';
+  if (!apiSessionFetching) {
+    apiSessionFetching = (async () => {
+      try {
+        const origin = new URL(API_BASE_URL).origin;
+        // 走 apiClient 以继承代理/agent 配置；__sessionBootstrapSkip 标记绕过会话拦截
+        const res = await apiClient.get(origin + '/', {
+          timeout: 8000,
+          maxRedirects: 5,
+          headers: {
+            // 首页必须像普通浏览器访问，不能带 AJAX 特征头：
+            // 带 x-requested-with 会被服务端当 AJAX 请求处理，返回 403 且会话不初始化，
+            // 之后所有搜索都会因会话无效被拒（404 没有找到相关信息）
+            'X-Requested-With': null,
+            'Content-Type': null,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          },
+          __sessionBootstrapSkip: true,
+        } as any);
+        // 不同运行环境 headers['set-cookie'] 可能是数组或单条字符串，统一成数组
+        const rawCookies = res.headers['set-cookie'];
+        const setCookies: string[] = Array.isArray(rawCookies)
+          ? rawCookies
+          : rawCookies
+            ? [rawCookies]
+            : [];
+        apiSessionCookie = setCookies.map(c => c.split(';')[0]).find(c => c.startsWith('PHPSESSID=')) || '';
+        if (!apiSessionCookie) {
+          if (!IS_REACT_NATIVE) {
+            console.warn('[session] 首页未返回 PHPSESSID 会话 cookie，搜索可能被拒');
+          }
+          // RN：Set-Cookie 头被原生层过滤，cookie 由 OkHttp jar 自动携带
+        }
+        // 请求成功（无论能否读到 cookie 值）：jar 已引导，后续无需重复 GET 首页
+        apiSessionBootstrapped = true;
+      } catch (e: any) {
+        console.warn('[session] 获取会话失败:', e?.message || e);
+        // 失败允许下次重试（RN 下 jar 为空时请求必被拒，不能一次失败就放弃）
+        apiSessionBootstrapped = false;
+      } finally {
+        apiSessionFetching = null;
+      }
+      return apiSessionCookie;
+    })();
+  }
+  return apiSessionFetching;
+}
+
+// 请求拦截：API 同源请求自动带上会话 cookie（懒获取，去重并发）
+apiClient.interceptors.request.use(async (config) => {
+  const ext = config as any;
+  if (ext.__sessionBootstrapSkip || ext.__sessionRetried) return config;
+  if (!isApiOriginRequest(config)) return config;
+  if (apiTimingLog) (config as any).__t0 = Date.now();
+  try {
+    const cookie = await ensureApiSession();
+    if (cookie) config.headers.set('Cookie', cookie);
+  } catch {
+    // 会话获取失败不阻塞请求，保持原有失败兜底行为
+  }
+  return config;
+});
+
+// 响应拦截：会话缺失/失效时刷新会话并重试一次
+apiClient.interceptors.response.use(
+  async (response) => {
+    const config = response.config as any;
+    if (apiTimingLog && config?.__t0 && !config.__probe) {
+      const ms = Date.now() - config.__t0;
+      if (ms > 300) {
+        const method = (config.method || 'get').toUpperCase();
+        console.log(`[api耗时] ${method} ${String(config.url).slice(0, 70)}: ${ms}ms`);
+      }
+    }
+    if (config.__sessionBootstrapSkip || config.__sessionRetried) return response;
+    if (!isApiOriginRequest(config)) return response;
+
+    // 关键请求成功 = 上游未限流，重置退避（封面 3s 快超时不算，避免误报）
+    // 探测请求（__probe）高频且可能探测 get=url 端点，不计入退避统计
+    const method = (config.method || 'get').toLowerCase();
+    if (!config.__probe && (method === 'post' || String(config.url || '').includes('get=url'))) {
+      reportThrottleEvent('success');
+    }
+
+    const data: unknown = response.data;
+
+    // 搜索接口（POST 根路径）：code 404「没有找到相关信息」= 会话缺失/失效
+    const noSessionSearch =
+      method === 'post' &&
+      data !== null &&
+      typeof data === 'object' &&
+      (data as any).code === 404 &&
+      typeof (data as any).error === 'string' &&
+      ((data as any).error as string).includes('没有找到相关信息');
+
+    // api.php（GET）：返回「非法请求」= 会话缺失/失效（id 无效也会如此，重试一次无副作用）。
+    // arraybuffer 响应（探测/302 解析）也检测：无 cookie 的探测会拿错误页，
+    // 不刷新会话重试的话探测结果失真（全 invalid/preview）
+    const noSessionApi =
+      method === 'get' &&
+      (typeof data === 'string'
+        ? data.includes(INVALID_REQUEST_MARKER)
+        : data instanceof ArrayBuffer
+          ? new TextDecoder('utf-8').decode(new Uint8Array(data.slice(0, 1024))).includes(INVALID_REQUEST_MARKER)
+          : false);
+
+    if (noSessionSearch || noSessionApi) {
+      invalidateApiSession();
+      const cookie = await ensureApiSession();
+      // RN：cookie 由原生 jar 携带，JS 拿不到值但首页 GET 已重建 jar，
+      // 无条件重试一次；其他环境要求 JS 确实拿到新 cookie 才重试
+      if (cookie || IS_REACT_NATIVE) {
+        config.__sessionRetried = true;
+        if (cookie) config.headers.set('Cookie', cookie);
+        return apiClient.request(config);
+      }
+      console.warn('[session] 会话刷新失败，返回原始响应');
+    }
+    return response;
+  },
+  (error) => {
+    const config = error?.config as any;
+    if (apiTimingLog && config?.__t0) {
+      const ms = Date.now() - config.__t0;
+      const method = (config.method || 'get').toUpperCase();
+      console.log(`[api耗时] ${method} ${String(config.url).slice(0, 70)}: ${ms}ms (${error?.message})`);
+    }
+    // 超时 = 上游限流挂起的典型信号；只统计关键请求（搜索 POST / 播放直链），
+    // 封面/歌词 3s 快超时是常态，不计入退避
+    const timedOut =
+      error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''));
+    if (timedOut && config && isApiOriginRequest(config) && !config.__probe) {
+      const method = String(config.method || 'get').toLowerCase();
+      if (method === 'post' || String(config.url || '').includes('get=url')) {
+        reportThrottleEvent('throttle');
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export function getApiClient(): AxiosInstance {
   return apiClient;
+}
+
+/**
+ * 从 api.php 端点 URL 的 type 参数推断源，返回该源官方站点 Referer。
+ * 302 解析 fetch 跟随重定向到源 CDN 时，CDN 防盗链会校验 Referer 域名：
+ * 网易云宽松（不带也行），酷狗/QQ 等严格（Referer 不对 → 403 → 拿不到
+ * 直链/播放失败）。fetch 默认 referrerPolicy 在跨源重定向时把 Referer
+ * 降级为 origin（API 域名），CDN 不认——必须手动带官方 Referer。
+ */
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+const SOURCE_REFERER_BY_TYPE: Record<string, string> = {
+  wy: 'https://music.163.com/',
+  netease: 'https://music.163.com/',
+  qq: 'https://y.qq.com/',
+  kg: 'https://www.kugou.com/',
+  kugou: 'https://www.kugou.com/',
+  kw: 'https://www.kuwo.cn/',
+  kuwo: 'https://www.kuwo.cn/',
+  qianqian: 'https://music.qianqian.com/',
+  migu: 'https://music.migu.cn/',
+};
+
+function refererForUrl(url: string): string | undefined {
+  try {
+    const m = url.match(/[?&]type=([^&]+)/);
+    return m ? SOURCE_REFERER_BY_TYPE[m[1]] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 手动逐跳跟随重定向，返回最终 URL 和末跳响应数据。
+ * 当前 axios 版本的 response.request 取不到最终地址，依赖自动重定向会把
+ * 302 端点（如 api.php?get=url / get=pic）的 CDN 直链丢掉；
+ * 因此关闭自动跟随（maxRedirects: 0），逐跳处理 Location。
+ * 注意：部分环境（RN 的 XHR 适配器、axios fetch 适配器）会无视 maxRedirects
+ * 自动跟随，此时只会返回原 URL——调用方应自行兜底。
+ */
+async function followRedirectsToFinalUrl(
+  url: string,
+  signal?: AbortSignal,
+  timeout = 5000
+): Promise<{ finalUrl: string; data: unknown }> {
+  // 桥模式（mobile WebView Chromium 栈）：302 解析与搜索/歌词走同一
+  // 网络栈和 cookie jar。rangeOnly 只取最终地址和 Content-Type，不下载
+  // body（mp3 直链可能几十 MB，读 body 会把桥消息撑爆）。桥故障时
+  // 继续走下方平台原生路径兜底。
+  if (apiRequestHandler) {
+    await ensureApiSession().catch(() => {});
+    let retried = false;
+    const bridgeAttempt = async (): Promise<{ finalUrl: string; data: unknown }> => {
+      const res = await apiRequestHandler!({
+        method: 'GET',
+        url,
+        headers: { Range: 'bytes=0-0' },
+        rangeOnly: true,
+        timeoutMs: timeout,
+      });
+      const hdrs = res.headers || {};
+      const ct = String(hdrs['content-type'] || hdrs['Content-Type'] || '').toLowerCase();
+      const finalUrl = res.finalUrl && /^https?:\/\//.test(res.finalUrl) ? res.finalUrl : url;
+      // 最终地址仍是 api.php 且返回 HTML = 会话失效（「非法请求」页）：
+      // 重建会话（桥内 cookie jar 会随新 Set-Cookie 更新）后重试一次
+      if (finalUrl === url && ct.includes('text/html') && !retried) {
+        retried = true;
+        invalidateApiSession();
+        await ensureApiSession().catch(() => {});
+        return bridgeAttempt();
+      }
+      if (apiTimingLog) {
+        console.log(
+          `[api耗时] bridge-302 ${String(url).slice(0, 70)}: status=${res.status} ct=${ct.slice(0, 30)} final=${finalUrl.slice(0, 60)}`,
+        );
+      }
+      return { finalUrl, data: ct.includes('text/html') ? INVALID_REQUEST_MARKER : '' };
+    };
+    try {
+      return await bridgeAttempt();
+    } catch {
+      // 桥不可用：继续走平台原生路径兜底
+    }
+  }
+  // RN：XHR 无视 maxRedirects 自动跟随 302 并下载完整响应体——
+  // 播放 URL 的 302 终点是 10MB 级 mp3，等 axios 返回要几十秒；
+  // XHR 的 responseURL 在 readyState 2 abort 时不可靠（实测返回中间跳
+  // 的 api.php 而非最终 mp3）。
+  // 改用 fetch（默认自动跟随 302 链）+ Range: bytes=0-0：
+  // mp3 CDN 支持 Range 时回 1 字节（206），拒绝时回 403 小 body——
+  // 两者都秒回，response.url 即最终 mp3 直链，不依赖 XHR responseURL。
+  if (IS_REACT_NATIVE) {
+    return (async () => {
+      // 先确保会话：首页 GET 预热原生 cookie jar（jar 空时 api.php 无 cookie
+      // 必返回 200「非法请求」而非 302，拿不到 mp3 直链）
+      await ensureApiSession().catch(() => {});
+      let retried = false;
+      const attempt = async (): Promise<{ finalUrl: string; data: unknown }> => {
+        try {
+          // 用 axios 替代 fetch 做 302 解析：
+          // RN fetch 的 credentials:'include' 实测不带原生 jar cookie，
+          // 而服务端对部分源（酷狗 get=url）严格校验 PHPSESSID —— 无 cookie
+          // 返回「非法请求」页（200 text/html），拿不到 CDN 直链。
+          // axios（withCredentials 已配置）走 XHR 自动带 jar cookie；
+          // XHR 自动跟随 302（无视 maxRedirects），Range 206 秒回 1 字节，
+          // responseURL 即最终 CDN 直链（完整响应下可靠，非 abort 场景）。
+          const resolveHeaders: Record<string, string> = { Range: 'bytes=0-0' };
+          const referer = refererForUrl(url);
+          if (referer) resolveHeaders['Referer'] = referer;
+          resolveHeaders['User-Agent'] = BROWSER_UA;
+          const resp = await apiClient.get(url, {
+            headers: resolveHeaders,
+            timeout,
+            responseType: 'arraybuffer',
+            // 显式声明该请求是 302 解析（响应拦截器不需要特殊处理）
+            __resolve302: true,
+          } as any);
+          const ct = String(resp.headers['content-type'] || '');
+          // text/html = 无 cookie 的「非法请求」页：刷新会话后重试一次
+          if (ct.includes('text/html') && !retried) {
+            retried = true;
+            invalidateApiSession();
+            await ensureApiSession().catch(() => {});
+            return attempt();
+          }
+          if (apiTimingLog) {
+            console.log(
+              `[api耗时] xhr-302 ${String(url).slice(0, 70)}: status=${resp.status} ct=${ct.slice(0, 30)}`,
+            );
+          }
+          const responseUrl = (resp.request as any)?.responseURL;
+          const finalUrl = responseUrl && /^https?:\/\//.test(responseUrl) ? responseUrl : url;
+          return { finalUrl, data: '' };
+        } catch {
+          return { finalUrl: url, data: '' };
+        }
+      };
+      return attempt();
+    })();
+  }
+  const MAX_REDIRECTS = 3;
+  let currentUrl = url;
+  let finalUrl = url;
+  let lastResponse: { data: unknown } | null = null;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    const response = await apiClient.get(currentUrl, {
+      maxRedirects: 0,
+      validateStatus: (status) => status >= 200 && status < 400, // 3xx 也接受，交给下面处理
+      timeout,
+      signal: signal as any,
+    });
+    finalUrl = currentUrl;
+    lastResponse = response;
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.location;
+      if (!location) break; // 无 Location 的重定向：按当前 URL 兜底
+      currentUrl = new URL(String(location), currentUrl).href;
+      continue;
+    }
+    break;
+  }
+  // 部分适配器（RN XHR、axios fetch 适配器）无视 maxRedirects 自动跟随重定向，
+  // 此时拿不到 3xx 响应；若平台暴露了最终地址（responseURL），用它兜底。
+  const autoFollowedUrl = (lastResponse as any)?.request?.responseURL;
+  if (
+    typeof autoFollowedUrl === 'string' &&
+    /^https?:\/\//.test(autoFollowedUrl) &&
+    autoFollowedUrl !== url
+  ) {
+    finalUrl = autoFollowedUrl;
+  }
+  return { finalUrl, data: lastResponse?.data };
+}
+
+/**
+ * 封面 URL 解析：api.php?get=pic 封面端点需要会话 cookie，
+ * 移动端原生 <Image> 无法携带，解析成 CDN 直链后即可直接加载。
+ * 非 api.php URL 原样返回；解析失败/会话不可用回退原 URL（渲染端占位图兜底）。
+ * 结果带 6 小时 TTL 缓存，缓存 key 用归一化 URL（忽略 t/sign 等签名参数）：
+ * 同一首歌每次搜索返回不同签名链接，但内容是同一张封面——归一化后
+ * 命中同一缓存，避免每次搜索都重新解析、拿到新时间戳直链导致
+ * <Image> 反复重载（"封面时不时刷新"）。
+ * 未发生重定向（适配器自动跟随拿不到 Location）时不缓存，避免长期保留故障态。
+ */
+export async function resolveCoverUrl(coverUrl: string): Promise<string> {
+  const fullUrl = normalizeUrl(coverUrl);
+  if (!fullUrl || !isSessionProtectedEndpoint(fullUrl)) return fullUrl;
+  const cacheKey = resourceUrlKey(fullUrl);
+  const cached = coverUrlCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) return cached.url;
+  try {
+    // 封面解析：3s 快速超时（失败有占位图兜底），不让封面占住并发槽位
+    const { finalUrl, data } = await runResolve(fullUrl, 3000);
+    if (typeof data === 'string' && data.includes(INVALID_REQUEST_MARKER)) {
+      return fullUrl; // 会话不可用：不缓存，回退原 URL
+    }
+    if (finalUrl !== fullUrl) {
+      coverUrlCache.set(cacheKey, { url: finalUrl, expires: Date.now() + COVER_URL_CACHE_TTL });
+    }
+    return finalUrl;
+  } catch {
+    return fullUrl;
+  }
+}
+
+/**
+ * 封面解析缓存失效：<Image> 加载失败（onError）说明缓存里的 CDN 直链
+ * 已过期/失效，清除对应归一化 key 的缓存，让下一次 resolveCoverUrl
+ * 重新解析拿到新直链（否则归一化 key 会一直命中失效缓存，封面永远
+ * 失败占位）。调用方在 onError 后、兜底刷新前调用。
+ */
+export function invalidateCoverUrl(coverUrl: string): void {
+  const fullUrl = normalizeUrl(coverUrl);
+  if (!fullUrl) return;
+  coverUrlCache.delete(resourceUrlKey(fullUrl));
 }
 
 /**
@@ -525,10 +1247,8 @@ export const musicApi = {
       return cachedData;
     }
 
-    // 带重试的 URL 解析（最多 3 次尝试，指数退避）
-    const MAX_RETRIES = 2;
-    const BASE_TIMEOUT = 5000;
-    const MAX_REDIRECTS = 3;
+      // 带重试的 URL 解析（最多 3 次尝试，指数退避）
+      const MAX_RETRIES = 2;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (signal?.aborted) {
@@ -536,21 +1256,23 @@ export const musicApi = {
       }
 
       try {
-        const response = await apiClient.get(fullUrl, {
-          maxRedirects: MAX_REDIRECTS,
-          validateStatus: (status) => status < 400,
-          timeout: BASE_TIMEOUT,
-          signal: signal as any,
-        });
-
-        const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || fullUrl;
+          // 播放 URL 解析：优先于封面（插队）+ 12s 超时。
+          // 手机网络波动大（LTE 下 api.php 响应 1-15s），5s 必超时回退
+          // 原 URL（播放器无 cookie 加载 api.php → Source error），
+          // 12s 覆盖慢网络，宁可多等也要拿到真直链
+          const { finalUrl, data } = await runResolve(fullUrl, 12000, true);
 
         if (finalUrl.startsWith('data:text/html')) {
-          const errorMsg = typeof response.data === 'string' ? response.data : '获取音频失败';
+          const errorMsg = typeof data === 'string' ? data : '获取音频失败';
           throw new Error(errorMsg);
         }
 
-        cacheManager.setAudioUrlCache(fullUrl, finalUrl);
+        // 死链不缓存：受保护端点（api.php?get=url）解析回原样 = 签名过期/
+        // 会话失效，服务端返回的是错误页而非 302。缓存死链会让 1h 内
+        // 重放直接拿到错误地址（连 fresh 重试的机会都没有）。
+        if (!(finalUrl === fullUrl && isSessionProtectedEndpoint(fullUrl))) {
+          cacheManager.setAudioUrlCache(fullUrl, finalUrl);
+        }
 
         return finalUrl;
       } catch (error: any) {
@@ -573,6 +1295,8 @@ export const musicApi = {
     return fullUrl;
   },
 
+  resolveCoverUrl,
+
   async getLyrics(lrcUrl: string): Promise<string> {
     const fullUrl = normalizeUrl(lrcUrl);
     if (!fullUrl) return '';
@@ -585,6 +1309,14 @@ export const musicApi = {
 
     const response = await apiClient.get(fullUrl);
     const lyrics = response.data;
+
+    // 会话失效/签名过期：服务端返回「非法请求」页（200 text/html；响应拦截器
+    // 已带新会话重试一次仍无效——签名与旧会话绑定，同 URL 重试无意义）。
+    // 按失败抛出让上层走搜索换新签名 URL 重试，否则 parseLRC 拿到空行会
+    // 静默显示"无歌词"，歌词永远刷新不出来（移动端实测现象）。
+    if (typeof lyrics === 'string' && lyrics.includes(INVALID_REQUEST_MARKER)) {
+      throw new Error('歌词会话失效（非法请求），需重新搜索歌词 URL');
+    }
 
     // 缓存结果
     cacheManager.setLyricsCache(fullUrl, lyrics);
@@ -1207,9 +1939,30 @@ export const musicApi = {
    * - healthCheck 结果缓存 60 秒,避免每页重复探测
    * - 搜索无结果的歌曲记入黑名单(会话级),后续页不再重复搜索
    */
-  async resolveNeteaseSongUrlsBySearch(songs: Song[]): Promise<void> {
+  /**
+   * 逐首搜索兜底（补无版权/无直链歌曲的 URL）。
+   * @param albumName 专辑名预搜：一次请求命中专辑内多首歌（服务端 name 搜索会
+   *   匹配专辑字段），按 name|artist 精确过滤填 URL——把 N 首逐首搜索降为
+   *   1 次专辑搜索 + 少量剩余。服务端对 AJAX 请求限速（连发尖峰 1-3s+），
+   *   减少请求数是最有效的提速手段。
+   */
+  async resolveNeteaseSongUrlsBySearch(songs: Song[], albumName?: string): Promise<void> {
     // 先清掉过期的黑名单项（瞬时故障不能永久拉黑）
     const now = Date.now();
+    // 专辑名预搜：一次请求批量命中（精确匹配 name|artist，防翻唱误挂）
+    if (albumName && songs.some((s) => !s.url)) {
+      try {
+        const albumHits = await this.searchSongs(albumName, 1, 'netease');
+        const byKey = new Map(albumHits.map((s) => [`${s.name}|${s.artist}`, s]));
+        for (const song of songs) {
+          if (song.url) continue;
+          const hit = byKey.get(`${song.name}|${song.artist}`);
+          if (hit?.url) song.url = hit.url;
+        }
+      } catch {
+        // 专辑名预搜失败不影响逐首兜底
+      }
+    }
     for (const [id, at] of searchFailedSongIds) {
       if (now - at >= SEARCH_FAILED_TTL) searchFailedSongIds.delete(id);
     }
@@ -1223,7 +1976,12 @@ export const musicApi = {
       apiOk = await this.healthCheck();
       healthCheckCache = { at: now, ok: apiOk };
     }
-    if (!apiOk) return;
+    // healthCheck 失败（3s 超时，API 限流/慢时常见）不阻断搜索兜底：
+    // url 缺失会导致探测全标「无效」、播放无链接——比多打几个搜索请求
+    // 更糟。搜索兜底自身有 12s 超时 + 10 并发闸门兜底。
+    if (!apiOk) {
+      console.warn('[MusicApi] healthCheck 失败，仍尝试搜索兜底补齐 URL');
+    }
 
     try {
       const keywords = missingUrlSongs.map(s => `${s.name} ${s.artist}`.trim());

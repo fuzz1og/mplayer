@@ -4,6 +4,7 @@ import { Sparkles, TrendingUp, ArrowLeft, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
+import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -44,10 +45,19 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: s
 
 const DiscoverPage: React.FC = () => {
   const navigate = useNavigate();
-  const { songs, groups, loading, currentKeyword, hasMore, error, sourceType } = useSearchStore();
+  const songs = useSearchStore((s) => s.songs);
+  const groups = useSearchStore((s) => s.groups);
+  const loading = useSearchStore((s) => s.loading);
+  const currentKeyword = useSearchStore((s) => s.currentKeyword);
+  const hasMore = useSearchStore((s) => s.hasMore);
+  const error = useSearchStore((s) => s.error);
+  const sourceType = useSearchStore((s) => s.sourceType);
   const isAllMode = sourceType === 'all';
-  const { currentSong, isPlaying, play } = usePlayerStore();
-  const { favoriteIds, toggleFavorite } = useFavoriteStore();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
 
   const hotlist = useDiscoverData<HotlistSong[]>('musicApi:getNeteaseHotlist');
@@ -339,7 +349,10 @@ const DiscoverPage: React.FC = () => {
                   {artistResults.map((artist) => (
                     <div
                       key={artist.id}
-                      onClick={() => navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } })}
+                      onClick={() => {
+                        cacheArtistMeta(artist.id, { name: artist.name, pic: artist.picUrl });
+                        navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } });
+                      }}
                       style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)',
                         padding: '16px 12px', borderRadius: '12px', cursor: 'pointer',

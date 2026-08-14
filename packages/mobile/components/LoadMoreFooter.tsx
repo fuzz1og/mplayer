@@ -1,4 +1,5 @@
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { colors, spacing } from '../theme/tokens';
 
 interface Props {
   loadingMore: boolean;
@@ -12,7 +13,7 @@ export default function LoadMoreFooter({ loadingMore, hasMore, hasData }: Props)
     <View style={styles.footer}>
       {loadingMore && (
         <View style={styles.row}>
-          <ActivityIndicator size="small" color="#e74c3c" />
+          <ActivityIndicator size="small" color={colors.accent} />
           <Text style={styles.loadingText}>加载中...</Text>
         </View>
       )}
@@ -23,21 +24,21 @@ export default function LoadMoreFooter({ loadingMore, hasMore, hasData }: Props)
 
 const styles = StyleSheet.create({
   footer: {
-    paddingVertical: 24,
+    paddingVertical: spacing[6],
     alignItems: 'center',
     justifyContent: 'center',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing[2],
   },
   loadingText: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 13,
   },
   doneText: {
-    color: '#555',
+    color: colors.textSecondary,
     fontSize: 13,
   },
 });

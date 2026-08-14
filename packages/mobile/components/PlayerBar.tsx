@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View, Text, Image, TouchableOpacity, StyleSheet,
-  Modal, FlatList,
+  Modal, FlatList, Animated, Easing,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, X, Play, Loader2 } from 'lucide-react-native';
+import { invalidateCoverUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
+import { colors, spacing, radius } from '../theme/tokens';
+import { useResolvedCover } from '../hooks/useResolvedCover';
 
 export default function PlayerBar() {
   const insets = useSafeAreaInsets();
@@ -17,13 +20,40 @@ export default function PlayerBar() {
   const prev = usePlayerStore(s => s.prev);
   const setQueue = usePlayerStore(s => s.setQueue);
   const setShowPlayer = usePlayerStore(s => s.setShowPlayer);
+  const preparing = usePlayerStore(s => s.preparing);
   const [showQueue, setShowQueue] = useState(false);
+  // 播放准备中：播放按钮旋转加载反馈（点击后解析直链的等待期）
+  const spin = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!preparing) return;
+    const loop = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      spin.setValue(0);
+    };
+  }, [preparing, spin]);
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   // 封面加载失败 → 占位图标 + 懒刷新兜底（搜索补新封面，写回后自动恢复）
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [currentSong?.cover]);
+  const coverUrl = useResolvedCover(currentSong?.cover);
+  useEffect(() => { setCoverFailed(false); }, [coverUrl]);
   const handleCoverError = () => {
     setCoverFailed(true);
-    if (currentSong) void fetchLrcInBackground(currentSong, true);
+    if (currentSong) {
+      // 封面自身失效：清除解析缓存（归一化 key 命中失效直链会永远失败占位）
+      // 再强制搜索补新签名封面
+      void invalidateCoverUrl(currentSong.cover || '');
+      void fetchLrcInBackground(currentSong, true, true);
+    }
   };
 
   return (
@@ -35,10 +65,10 @@ export default function PlayerBar() {
     >
       {/* 专辑封面 */}
       <View style={styles.coverWrap}>
-        {currentSong?.cover && !coverFailed ? (
-          <Image source={{ uri: currentSong.cover }} style={styles.cover} onError={handleCoverError} />
+        {coverUrl && !coverFailed ? (
+          <Image source={{ uri: coverUrl }} style={styles.cover} onError={handleCoverError} />
         ) : (
-          <Ionicons name="musical-note" size={24} color="#555" />
+          <Music size={24} color={colors.textTertiary} />
         )}
       </View>
 
@@ -59,23 +89,28 @@ export default function PlayerBar() {
             onPress={(e) => { e.stopPropagation(); prev(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
           >
-            <Ionicons name="play-skip-back" size={24} color="#fff" />
+            <SkipBack size={24} color={colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={(e) => { e.stopPropagation(); togglePlay(); }}
             style={styles.btn}
+            disabled={preparing}
           >
-            <Ionicons
-              name={isPlaying ? 'pause-circle' : 'play-circle'}
-              size={36}
-              color="#e74c3c"
-            />
+            {preparing ? (
+              <Animated.View style={{ transform: [{ rotate }] }}>
+                <Loader2 size={36} color={colors.accent} />
+              </Animated.View>
+            ) : isPlaying ? (
+              <CirclePause size={36} color={colors.accent} />
+            ) : (
+              <CirclePlay size={36} color={colors.accent} />
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             onPress={(e) => { e.stopPropagation(); next(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
           >
-            <Ionicons name="play-skip-forward" size={24} color="#fff" />
+            <SkipForward size={24} color={colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={(e) => {
@@ -84,7 +119,7 @@ export default function PlayerBar() {
             }}
             style={styles.btn}
           >
-            <Ionicons name="list-outline" size={24} color="#fff" />
+            <ListMusic size={24} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       )}
@@ -102,7 +137,7 @@ export default function PlayerBar() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>播放队列 ({queue.length})</Text>
               <TouchableOpacity onPress={() => setShowQueue(false)}>
-                <Ionicons name="close" size={24} color="#fff" />
+                <X size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             <FlatList
@@ -125,7 +160,7 @@ export default function PlayerBar() {
                       </Text>
                       <Text style={styles.queueItemArtist}>{item.artist}</Text>
                     </View>
-                    {isCurrent && <Ionicons name="play" size={16} color="#e74c3c" />}
+                    {isCurrent && <Play size={16} color={colors.accent} />}
                   </TouchableOpacity>
                 );
               }}
@@ -142,11 +177,12 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#16213e',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a4a',
+    backgroundColor: colors.bgSurface,
+    // 平铺贴底条：顶部 hairline 与列表分隔（无圆角/阴影，与整体设计语言一致）
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle,
   },
   containerEmpty: {
     opacity: 0.6,
@@ -154,59 +190,59 @@ const styles = StyleSheet.create({
   coverWrap: {
     width: 44,
     height: 44,
-    borderRadius: 6,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgHover,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: spacing[3],
   },
   cover: {
     width: 44,
     height: 44,
-    borderRadius: 6,
+    borderRadius: radius.sm,
   },
-  info: { flex: 1, marginRight: 12 },
-  title: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  artist: { color: '#888', fontSize: 12, marginTop: 2 },
-  textEmpty: { color: '#555' },
+  info: { flex: 1, marginRight: spacing[3] },
+  title: { color: colors.textPrimary, fontSize: 14, fontWeight: '600' },
+  artist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  textEmpty: { color: colors.textTertiary },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  btn: { padding: 4 },
+  btn: { padding: spacing[1] },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.bgOverlay,
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#1a1a2e',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: colors.bgSurface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     maxHeight: '60%',
-    paddingBottom: 32,
+    paddingBottom: spacing[8],
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#16213e',
+    padding: spacing[4],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderDefault,
   },
-  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  modalTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '700' },
   queueItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#16213e',
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[4],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderDefault,
   },
   queueItemInfo: { flex: 1, marginRight: 12 },
-  queueItemName: { color: '#fff', fontSize: 15 },
-  queueItemActive: { color: '#e74c3c' },
-  queueItemArtist: { color: '#888', fontSize: 12, marginTop: 2 },
-  emptyText: { color: '#666', textAlign: 'center', marginTop: 40 },
+  queueItemName: { color: colors.textPrimary, fontSize: 15 },
+  queueItemActive: { color: colors.accent },
+  queueItemArtist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  emptyText: { color: colors.textTertiary, textAlign: 'center', marginTop: spacing[10] },
 });

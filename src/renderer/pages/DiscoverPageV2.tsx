@@ -7,13 +7,16 @@ import { useSearchStore } from '@/renderer/store/searchStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { searchService } from '@/renderer/services/searchService';
+import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
 import ChartPanel from '@/renderer/components/ChartPanel';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
+import SongList from '@/renderer/components/SongList';
+import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
-import type { Album, Song, DiscoverPlaylist } from '@mplayer/core';
+import type { Album, Song, DiscoverPlaylist, Artist } from '@mplayer/core';
 import type { ApiResponse } from '@/shared/types/ipc';
 import { CHART_CACHE_TTL as CHART_TTL } from '../../shared/chart';
 
@@ -45,6 +48,15 @@ const PLAYLIST_CATEGORIES = [
 
 const PLAYLIST_PAGE_SIZE = 30;
 
+// 发现页 tab 持久化:返回导航会让组件重新挂载,用 sessionStorage 恢复离开时的激活 tab
+const TAB_STORAGE_KEY = 'discover_active_tab';
+const VALID_TABS: TabKey[] = ['charts', 'albums', 'playlists', 'artists'];
+
+function loadSavedTab(): TabKey {
+  const saved = sessionStorage.getItem(TAB_STORAGE_KEY);
+  return (VALID_TABS as string[]).includes(saved as string) ? (saved as TabKey) : 'charts';
+}
+
 interface ChartCache {
   hot: AggregatedSongGroup[] | null;
   new: AggregatedSongGroup[] | null;
@@ -58,10 +70,12 @@ interface TabCache {
 }
 
 const DiscoverPageV2: React.FC = () => {
-  const { currentSong, play } = usePlayerStore();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<TabKey>('charts');
+  const [activeTab, setActiveTab] = useState<TabKey>(loadSavedTab);
   const [hotGroups, setHotGroups] = useState<AggregatedSongGroup[]>([]);
   const [newGroups, setNewGroups] = useState<AggregatedSongGroup[]>([]);
   const [hotLoading, setHotLoading] = useState(true);
@@ -154,6 +168,11 @@ const DiscoverPageV2: React.FC = () => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, [fetchChart]);
+
+  // 记录激活 tab,返回导航重挂载后恢复
+  useEffect(() => {
+    sessionStorage.setItem(TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
 
   const fetchAlbums = useCallback(async (area: AreaKey) => {
     const fetchId = ++albumsFetchIdRef.current;
@@ -264,7 +283,7 @@ const DiscoverPageV2: React.FC = () => {
   };
 
   const handleAlbumClick = (album: Album) => {
-    searchService.searchAll(`${album.name} ${album.artist}`);
+    navigate(`/album/${album.id}`, { state: { name: album.name, picUrl: album.picUrl, artist: album.artist } });
   };
 
   const handleRetryPlaylists = () => {
@@ -325,15 +344,69 @@ const DiscoverPageV2: React.FC = () => {
     fetchChart('new');
   };
 
-  const { groups, loading: searchLoading, currentKeyword, songs: searchSongs } = useSearchStore();
-  const { toggleFavorite } = useFavoriteStore();
+  const searchLoading = useSearchStore((s) => s.loading);
+  const searchLoadingMore = useSearchStore((s) => s.loadingMore);
+  const currentKeyword = useSearchStore((s) => s.currentKeyword);
+  const searchSongs = useSearchStore((s) => s.songs);
+  const hasMore = useSearchStore((s) => s.hasMore);
+  const sourceType = useSearchStore((s) => s.sourceType);
+  const searchError = useSearchStore((s) => s.error);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const { download } = useDownload();
+  const singleSourceScrollRef = useRef<HTMLDivElement>(null);
+  useInfiniteScroll(singleSourceScrollRef, {
+    onLoadMore: () => searchService.loadMore(),
+    loading: searchLoading || searchLoadingMore,
+    hasMore,
+  });
+
+  // 搜索结果二级 tab：单曲 / 歌手。「查看歌手」入口通过 preferredTab 落在歌手 tab
+  const [activeSearchTab, setActiveSearchTab] = useState<'songs' | 'artists'>(() => useSearchStore.getState().preferredTab);
+  const [artistResults, setArtistResults] = useState<Artist[]>([]);
+  const [artistLoading, setArtistLoading] = useState(false);
+  const [artistError, setArtistError] = useState(false);
+  const artistSearchSeqRef = useRef(0);
+  // 「查看歌手」偏好：订阅变化以覆盖「同关键词再次进入」的边界（关键词未变时 effect 不触发）
+  const preferredTab = useSearchStore(s => s.preferredTab);
+
+  // 关键词变化：应用并消费「查看歌手」的偏好 tab；歌手搜索带序号守卫，慢响应不覆盖新关键词
+  useEffect(() => {
+    const preferred = useSearchStore.getState().preferredTab;
+    setActiveSearchTab(preferred);
+    useSearchStore.getState().setPreferredTab('songs');
+    setArtistResults([]);
+    setArtistError(false);
+    if (!currentKeyword) return;
+    const seq = ++artistSearchSeqRef.current;
+    setArtistLoading(true);
+    searchService.searchArtists(currentKeyword)
+      .then((artists) => {
+        if (seq === artistSearchSeqRef.current) setArtistResults(artists ?? []);
+      })
+      .catch(() => {
+        if (seq === artistSearchSeqRef.current) setArtistError(true);
+      })
+      .finally(() => {
+        if (seq === artistSearchSeqRef.current) setArtistLoading(false);
+      });
+  }, [currentKeyword]);
+
+  // 同关键词下再次点「查看歌手」：关键词未变时也能切到歌手 tab（消费后立即复位）
+  useEffect(() => {
+    if (preferredTab !== 'artists') return;
+    setActiveSearchTab('artists');
+    useSearchStore.getState().setPreferredTab('songs');
+  }, [preferredTab]);
 
   const handleBackFromSearch = () => {
     useSearchStore.getState().reset();
   };
 
-  if (currentKeyword && (searchSongs.length > 0 || groups.length > 0 || searchLoading)) {
+  // currentKeyword 仅在用户提交搜索时被设置（TopBar 回车/搜索按钮），
+  // 因此只要有关键词就渲染搜索视图；loading/空/错误由各 tab 内部处理，
+  // 否则搜索失败或全空时整个视图不渲染、静默落回首页（story 20 空/错误态不可达）。
+  if (currentKeyword) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         <div style={{
@@ -361,16 +434,125 @@ const DiscoverPageV2: React.FC = () => {
           <div style={{ width: '140px' }} />
         </div>
 
+        {/* 单曲 / 歌手二级 tab */}
+        <div style={{ display: 'flex', gap: '8px', padding: '10px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', flexShrink: 0 }}>
+          {([
+            { key: 'songs' as const, label: '单曲', count: searchSongs.length },
+            { key: 'artists' as const, label: '歌手', count: artistResults.length },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              aria-pressed={activeSearchTab === tab.key}
+              onClick={() => setActiveSearchTab(tab.key)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '6px 16px', borderRadius: 'var(--radius-full)', border: 'none', cursor: 'pointer',
+                fontSize: 'var(--text-sm)', fontWeight: activeSearchTab === tab.key ? 600 : 400,
+                color: activeSearchTab === tab.key ? '#fff' : 'var(--text-secondary)',
+                backgroundColor: activeSearchTab === tab.key ? 'var(--accent-color)' : 'var(--hover-bg)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span style={{
+                  fontSize: 'var(--text-2xs)', padding: '1px 6px', borderRadius: 'var(--radius-full)',
+                  backgroundColor: activeSearchTab === tab.key ? 'rgba(255,255,255,0.25)' : 'var(--bg-active)',
+                  color: activeSearchTab === tab.key ? '#fff' : 'var(--text-tertiary)',
+                }}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <GroupedSongList
-            onPlay={handlePlaySong}
-            onAddToPlaylist={() => message.info('添加到歌单功能')}
-            onToggleFavorite={toggleFavorite}
-            onDownload={download}
-            selectedIds={[]}
-            onSelectionChange={() => {}}
-            loading={searchLoading}
-          />
+          {activeSearchTab === 'songs' ? (
+            searchError && searchSongs.length === 0 && !searchLoading ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>{searchError}</div>
+            ) : sourceType === 'all' ? (
+              <GroupedSongList
+                onPlay={handlePlaySong}
+                onAddToPlaylist={() => message.info('添加到歌单功能')}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
+                selectedIds={[]}
+                onSelectionChange={() => {}}
+                loading={searchLoading || searchLoadingMore}
+                hasMore={hasMore}
+                onLoadMore={() => searchService.loadMore()}
+              />
+            ) : (
+              <div ref={singleSourceScrollRef} style={{ height: '100%', overflowY: 'auto' }}>
+                <SongList
+                  songs={searchSongs}
+                  currentSongId={currentSong?.id}
+                  isPlaying={isPlaying}
+                  favoriteIds={favoriteIds}
+                  onPlay={handlePlaySong}
+                  onToggleFavorite={toggleFavorite}
+                  onDownload={download}
+                  onAddToPlaylist={() => message.info('添加到歌单功能')}
+                  showCheckbox={false}
+                  loading={searchLoading || searchLoadingMore}
+                  emptyText="未找到相关歌曲"
+                />
+                {hasMore && (searchLoading || searchLoadingMore) && (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中...</div>
+                )}
+                {!hasMore && searchSongs.length > 0 && (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>没有更多歌曲了</div>
+                )}
+              </div>
+            )
+          ) : artistLoading && artistResults.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>正在搜索歌手…</div>
+          ) : artistError ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>歌手搜索失败</div>
+          ) : artistResults.length > 0 ? (
+            <div style={{ height: '100%', overflowY: 'auto', padding: '24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 'var(--space-5)' }}>
+                {artistResults.map((a) => (
+                  <button
+                    key={a.id}
+                    aria-label={`查看歌手: ${a.name}`}
+                    onClick={() => {
+                      cacheArtistMeta(a.id, { name: a.name, pic: a.picUrl });
+                      navigate(`/artist/${a.id}`, { state: { name: a.name, pic: a.picUrl } });
+                    }}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                      padding: '16px 8px', border: 'none', background: 'transparent', cursor: 'pointer', minWidth: 0,
+                      borderRadius: 'var(--radius-md)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '72px', height: '72px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                        backgroundColor: 'var(--hover-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '28px', color: 'var(--text-tertiary)', border: '1px solid var(--border-color)',
+                      }}
+                    >
+                      {a.picUrl ? (
+                        <img src={a.picUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        a.name.charAt(0)
+                      )}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                      {a.name}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                      专辑 {a.albumSize} · 歌曲 {a.musicSize}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>未找到相关歌手</div>
+          )}
         </div>
       </div>
     );

@@ -91,8 +91,14 @@ describe('searchStore source routing', () => {
       expect(results[0].songs[0].sourceType).toBe('netease');
     });
 
-    // 其余源陆续完成 → 同名歌并入已有组(组内增加版本)
-    for (const done of pending) done();
+    // 其余源陆续完成 → 同名歌并入已有组(组内增加版本)。
+    // 搜索并发受限(3)：worker 取源是动态的，resolve 一批后可能产生新
+    // pending（后取的源），循环 resolve 直到全部源完成
+    while (pending.length > 0) {
+      const batch = pending.splice(0);
+      for (const done of batch) done();
+      await new Promise((r) => setTimeout(r, 0));
+    }
     await searchPromise;
 
     const results = useSearchStore.getState().results;

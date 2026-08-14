@@ -4,8 +4,8 @@ import {
   PanResponder, Animated, Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, Repeat, Shuffle, Heart, CirclePlus, Download } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
 import { usePlayerStore } from '../stores/playerStore';
@@ -13,11 +13,13 @@ import { useFavoriteStore } from '../stores/favoriteStore';
 import { togglePlay, seekTo, playSong, fetchLrcInBackground } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
-import { parseLRC, musicApi, findCurrentLyricIndex } from '@mplayer/core';
+import { useResolvedCover } from '../hooks/useResolvedCover';
+import { parseLRC, musicApi, findCurrentLyricIndex, invalidateCoverUrl } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
+import { colors, spacing, radius, shadow, turntable } from '../theme/tokens';
 
 const { width } = Dimensions.get('window');
 
@@ -86,11 +88,13 @@ export default function PlayerOverlay({ onClose }: Props) {
     outputRange: ['0deg', '360deg'],
   });
 
-  const MODE_ICONS: Record<PlayMode, string> = {
-    '单曲循环': 'repeat-once',
-    '列表循环': 'repeat',
-    '随机播放': 'shuffle',
+  const MODE_ICONS: Record<PlayMode, LucideIcon> = {
+    '单曲循环': Repeat1,
+    '列表循环': Repeat,
+    '随机播放': Shuffle,
   };
+
+  const ModeIcon = MODE_ICONS[playMode];
 
   const cyclePlayMode = () => {
     const idx = PLAY_MODES.indexOf(playMode);
@@ -105,9 +109,15 @@ export default function PlayerOverlay({ onClose }: Props) {
   // 封面加载失败 → 占位唱片 + 懒刷新兜底（搜索补新封面，写回后自动恢复）
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [song?.cover]);
+  const coverUrl = useResolvedCover(song?.cover);
+  useEffect(() => { setCoverFailed(false); }, [coverUrl]);
   const handleCoverError = () => {
     setCoverFailed(true);
-    if (song) void fetchLrcInBackground(song, true);
+    if (song) {
+      // 封面自身失效：清除解析缓存后强制换新签名封面（见 fetchLrcInBackground）
+      void invalidateCoverUrl(song.cover || '');
+      void fetchLrcInBackground(song, true, true);
+    }
   };
 
   // 加载歌词：优先歌曲自带 lrc URL；今日推荐/歌单/歌手页的歌曲 lrc 为空，
@@ -227,16 +237,16 @@ export default function PlayerOverlay({ onClose }: Props) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']} {...panResponder.panHandlers}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
 
-      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }], paddingBottom: insets.bottom + 24 }]}>
+      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }], paddingBottom: insets.bottom + spacing[6] }]}>
         {/* 自定义顶部栏 */}
         <View style={styles.customHeader}>
           <TouchableOpacity onPress={dismissWithAnimation}>
-            <Ionicons name="chevron-down" size={28} color="#fff" />
+            <ChevronDown size={28} color={colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowLyrics(v => !v)}>
-            <Text style={{ color: '#e74c3c', fontSize: 16, fontWeight: '600' }}>
+            <Text style={{ color: colors.accent, fontSize: 16, fontWeight: '600' }}>
               {showLyrics ? '封' : '词'}
             </Text>
           </TouchableOpacity>
@@ -255,7 +265,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                   <TouchableOpacity
                     key={index}
                     onPress={() => seekTo(item.time)}
-                    style={{ paddingVertical: 4 }}
+                    style={{ paddingVertical: spacing[1] }}
                   >
                     <Text style={[
                       styles.lyricsFullLine,
@@ -268,7 +278,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                 showsVerticalScrollIndicator={false}
               />
             ) : (
-              <Text style={{ color: '#666', fontSize: 16 }}>暂无歌词</Text>
+              <Text style={{ color: colors.textTertiary, fontSize: 16 }}>暂无歌词</Text>
             )}
           </View>
         ) : (
@@ -278,7 +288,7 @@ export default function PlayerOverlay({ onClose }: Props) {
               <View style={styles.plinth}>
                 <View style={styles.platter} />
                 <Animated.Image
-                  source={coverFailed ? undefined : { uri: song.cover || 'https://via.placeholder.com/300' }}
+                  source={coverFailed ? undefined : { uri: coverUrl || 'https://via.placeholder.com/300' }}
                   style={[styles.cover, { transform: [{ rotate: spin }] }]}
                   onError={handleCoverError}
                 />
@@ -344,9 +354,9 @@ export default function PlayerOverlay({ onClose }: Props) {
                 maximumValue={Math.max(duration, 1)}
                 value={currentTime}
                 onSlidingComplete={seekTo}
-                minimumTrackTintColor="#e74c3c"
-                maximumTrackTintColor="#444"
-                thumbTintColor="#e74c3c"
+                minimumTrackTintColor={colors.accent}
+                maximumTrackTintColor={colors.borderDefault}
+                thumbTintColor={colors.accent}
               />
               <View style={styles.timeRow}>
                 <Text style={styles.time}>{formatTime(currentTime)}</Text>
@@ -357,33 +367,33 @@ export default function PlayerOverlay({ onClose }: Props) {
             {/* 控制按钮 */}
             <View style={styles.controls}>
               <TouchableOpacity onPress={handlePrev}>
-                <Ionicons name="play-skip-back" size={32} color="#fff" />
+                <SkipBack size={32} color={colors.textSecondary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={togglePlay} style={styles.playBtn}>
-                <Ionicons
-                  name={isPlaying ? 'pause-circle' : 'play-circle'}
-                  size={64}
-                  color="#e74c3c"
-                />
+                {isPlaying ? (
+                  <CirclePause size={64} color={colors.accent} />
+                ) : (
+                  <CirclePlay size={64} color={colors.accent} />
+                )}
               </TouchableOpacity>
               <TouchableOpacity onPress={handleNext}>
-                <Ionicons name="play-skip-forward" size={32} color="#fff" />
+                <SkipForward size={32} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             {/* 操作按钮 */}
             <View style={styles.actionRow}>
               <TouchableOpacity onPress={cyclePlayMode} style={styles.actionBtn}>
-                <MaterialCommunityIcons name={MODE_ICONS[playMode] as any} size={24} color="#e74c3c" />
+                <ModeIcon size={24} color={colors.accent} />
               </TouchableOpacity>
               <TouchableOpacity onPress={toggleFavorite} style={styles.actionBtn}>
-                <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={24} color={isFav ? '#e74c3c' : '#fff'} />
+                <Heart size={24} color={isFav ? colors.accent : colors.textSecondary} fill={isFav ? colors.accent : 'none'} />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setShowPlaylistModal(true)} style={styles.actionBtn}>
-                <Ionicons name="add-circle-outline" size={24} color="#fff" />
+                <CirclePlus size={24} color={colors.textSecondary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleDownload} style={styles.actionBtn}>
-                <Ionicons name="download-outline" size={24} color="#fff" />
+                <Download size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
           </>
@@ -408,51 +418,47 @@ function formatTime(sec: number): string {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent', alignItems: 'center' },
-  contentWrap: { flex: 1, alignItems: 'center', backgroundColor: '#1a1a2e', width: '100%' },
+  contentWrap: { flex: 1, alignItems: 'center', backgroundColor: colors.bgSurface, width: '100%' },
   customHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     width: '100%',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing[4],
     height: 44,
   },
   // 唱机底座
   turntableWrap: {
-    marginTop: 20,
+    marginTop: spacing[5],
     alignItems: 'center',
     justifyContent: 'center',
   },
   plinth: {
     width: 280,
     height: 280,
-    borderRadius: 20,
-    backgroundColor: '#222240',
+    borderRadius: radius.xl,
+    backgroundColor: turntable.plinth,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 12,
+    ...shadow.lg,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
+    borderColor: turntable.platterBorder,
   },
   platter: {
     position: 'absolute',
     width: 250,
     height: 250,
-    borderRadius: 125,
-    backgroundColor: '#111',
+    borderRadius: radius.full,
+    backgroundColor: turntable.platter,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: turntable.platterBorder,
   },
   cover: {
     width: 240,
     height: 240,
-    borderRadius: 120,
+    borderRadius: radius.full,
     borderWidth: 3,
-    borderColor: '#1a1a1a',
+    borderColor: turntable.coverBorder,
   },
   // 唱臂
   tonearmPivot: {
@@ -461,10 +467,10 @@ const styles = StyleSheet.create({
     right: 4,
     width: 16,
     height: 16,
-    borderRadius: 8,
-    backgroundColor: '#888',
+    borderRadius: radius.full,
+    backgroundColor: turntable.tonearmPivot,
     borderWidth: 2,
-    borderColor: '#bbb',
+    borderColor: turntable.tonearmPivotBorder,
     zIndex: 10,
   },
   tonearmRod: {
@@ -473,55 +479,55 @@ const styles = StyleSheet.create({
     right: 10,
     width: 4,
     height: 183,
-    backgroundColor: '#999',
-    borderRadius: 2,
+    backgroundColor: turntable.tonearm,
+    borderRadius: radius.xs,
     transform: [{ rotate: '45deg' }],
     transformOrigin: 'top',
     zIndex: 9,
   },
-  infoWrap: { marginTop: 12, alignItems: 'center' },
-  title: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  artist: { color: '#888', fontSize: 14, flexShrink: 1 },
+  infoWrap: { marginTop: spacing[3], alignItems: 'center' },
+  title: { color: colors.textPrimary, fontSize: 20, fontWeight: '700' },
+  artist: { color: colors.textSecondary, fontSize: 14, flexShrink: 1 },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   sourceTag: {
-    marginLeft: 8,
-    borderRadius: 4,
+    marginLeft: spacing[2],
+    borderRadius: radius.xs,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    backgroundColor: '#2a2a4a',
+    backgroundColor: colors.bgHover,
   },
-  sourceTagText: { color: '#bbb', fontSize: 10 },
-  progressWrap: { marginTop: 16, alignItems: 'center' },
+  sourceTagText: { color: colors.textSecondary, fontSize: 10 },
+  progressWrap: { marginTop: spacing[4], alignItems: 'center' },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', width: width - 48, marginTop: 4 },
-  time: { color: '#666', fontSize: 12 },
+  time: { color: colors.textTertiary, fontSize: 12 },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
-    gap: 40,
+    marginTop: spacing[4],
+    gap: spacing[10],
   },
-  playBtn: { marginHorizontal: 8 },
+  playBtn: { marginHorizontal: spacing[2] },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
-    gap: 24,
+    marginTop: spacing[4],
+    gap: spacing[6],
   },
-  actionBtn: { padding: 8 },
-  lyricsList: { flex: 1, marginTop: 16, marginHorizontal: 24 },
-  lyricLine: { color: '#666', fontSize: 15, textAlign: 'center', marginVertical: 6 },
-  lyricLineActive: { color: '#e74c3c', fontSize: 16, fontWeight: '600' },
+  actionBtn: { padding: spacing[2] },
+  lyricsList: { flex: 1, marginTop: spacing[4], marginHorizontal: spacing[6] },
+  lyricLine: { color: colors.textTertiary, fontSize: 15, textAlign: 'center', marginVertical: 6 },
+  lyricLineActive: { color: colors.accent, fontSize: 16, fontWeight: '600' },
   // 歌词骨架屏：行高/间距与 lyricLine 一致,占位稳定避免加载后跳动
   skeletonLine: {
     alignSelf: 'center',
     height: 15,
-    borderRadius: 7,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.full,
+    backgroundColor: colors.skeletonBase,
     marginVertical: 6,
   },
-  lyricsFullLine: { color: '#888', fontSize: 18, textAlign: 'center', marginVertical: 8, lineHeight: 28 },
-  lyricsFullLineActive: { color: '#e74c3c', fontSize: 20, fontWeight: '600', lineHeight: 30 },
+  lyricsFullLine: { color: colors.textTertiary, fontSize: 18, textAlign: 'center', marginVertical: spacing[2], lineHeight: 28 },
+  lyricsFullLineActive: { color: colors.accent, fontSize: 20, fontWeight: '600', lineHeight: 30 },
   lyricsFullWrap: {
     flex: 1,
     justifyContent: 'flex-start',
@@ -533,6 +539,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   lyricsFullContent: {
-    paddingVertical: 20,
+    paddingVertical: spacing[5],
   },
 });

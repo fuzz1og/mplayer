@@ -21,7 +21,9 @@ export function createSearchController(config: SearchControllerConfig): SearchCo
     search: async (query: string) => {
       if (!query.trim()) return;
       const currentSeq = ++seq;
-      setState({ loading: true, error: null, query, page: 1, results: [], hasMore: true });
+      // 新搜索起始必须重置 loadingMore：若上一次 loadMore 失败/过期仍置位，
+      // 新结果区的加载 footer 与无限滚动 guard 会永久卡死
+      setState({ loading: true, error: null, query, page: 1, results: [], hasMore: true, loadingMore: false });
 
       try {
         const { source } = getState() as { source: string };
@@ -65,7 +67,8 @@ export function createSearchController(config: SearchControllerConfig): SearchCo
         const hasMoreResults = newResults.some(g => g.songs.length > 0);
         setState({ results: merged, page: nextPage, loadingMore: false, hasMore: hasMoreResults });
       } catch {
-        if (seq !== currentSeq) return;
+        // 失败路径同样要清 loadingMore（含过期场景）：
+        // 成功路径在 stale 时已清，失败路径漏了会导致标志位泄漏
         setState({ loadingMore: false });
       }
     },

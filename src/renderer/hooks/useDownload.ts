@@ -5,7 +5,8 @@ import type { DownloadTask } from '@/renderer/store/downloadStore';
 import type { Song } from '@mplayer/core';
 
 export function useDownload() {
-  const { addSingleDownload, addBatchDownload } = useDownloadStore();
+  const addSingleDownload = useDownloadStore((s) => s.addSingleDownload);
+  const addBatchDownload = useDownloadStore((s) => s.addBatchDownload);
 
   const download = useCallback(async (song: Song) => {
     try {

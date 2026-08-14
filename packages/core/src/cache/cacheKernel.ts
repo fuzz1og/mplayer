@@ -97,8 +97,13 @@ export class CacheKernel implements CachePort {
       const data = await this.l2.read(key)
       if (data) {
         this.hits++
-        // Backfill L1
-        if (this.l1) await this.l1.write(key, data)
+        // Backfill L1（保留 L2 的剩余过期时间，避免 L1 把过期条目复活）
+        if (this.l1) {
+          const expiresAt = this.l2.getExpiryAt
+            ? await this.l2.getExpiryAt(key).catch(() => 0)
+            : 0
+          await this.l1.write(key, data, expiresAt)
+        }
         return data
       }
     }
@@ -106,9 +111,13 @@ export class CacheKernel implements CachePort {
     return null
   }
 
-  private async setBinaryInternal(key: string, data: Uint8Array, _ttlMs: number): Promise<void> {
+  private async setBinaryInternal(key: string, data: Uint8Array, ttlMs: number): Promise<void> {
+    // TTL 在此真正生效：转成绝对过期时间戳传给后端持久化。
+    // 之前的实现丢弃 ttlMs，导致 URL 缓存永不失效（回归：旧 CacheManager
+    // 的 url 缓存 12h 过期）。0 表示永不过期（音频等长驻缓存）。
+    const expiresAt = ttlMs > 0 ? Date.now() + ttlMs : 0
     // Write-through: L1 + L2
-    await this.l1?.write(key, data)
-    await this.l2?.write(key, data)
+    await this.l1?.write(key, data, expiresAt)
+    await this.l2?.write(key, data, expiresAt)
   }
 }

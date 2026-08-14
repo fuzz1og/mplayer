@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 const { ipcRenderer } = window.require('electron');
-import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload } from 'lucide-react';
+import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload, RefreshCw, User } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -11,21 +12,52 @@ import { CSS } from '@dnd-kit/utilities';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
+import SourceSwapModal from '@/renderer/components/SourceSwapModal';
+import { type RowActionItem } from '@/renderer/components/RowActionMenu';
+import RowActionButtons from '@/renderer/components/RowActionButtons';
+import { useSongSwap } from '@/renderer/hooks/useSongSwap';
+import { useSearchStore } from '@/renderer/store/searchStore';
+import { searchService } from '@/renderer/services/searchService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
-import { resolveSongUrls } from '@/renderer/utils/songResolver';
-import { mapSettledWithConcurrency } from '@/renderer/utils/async';
+import { stripSourceIdPrefix } from '@mplayer/core';
+import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
 const SortableSongRow: React.FC<{
   song: Song; index: number; isCurrentSong: boolean; isPlaying: boolean;
   onPlay: (song: Song) => void; onRemove: (song: Song) => void; onDownload: (song: Song) => void;
+  onSwapped: (original: Song, swapped: Song) => void;
+  isFavorite: boolean; onToggleFavorite: (song: Song) => void;
   isSelected: boolean; onToggleSelect: (songId: string) => void;
   onCoverError?: (song: Song) => void;
-}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, isSelected, onToggleSelect, onCoverError }) => {
+}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, onSwapped, isFavorite, onToggleFavorite, isSelected, onToggleSelect, onCoverError }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
   const coverSrc = useCachedCover(song.cover);
+  const swap = useSongSwap(song, onSwapped);
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+
+  /** 查看歌手：以歌手名为关键词搜索并落在歌手 tab（与 SongRow 一致） */
+  const handleViewArtist = () => {
+    if (!song.artist) return;
+    useSearchStore.getState().setPreferredTab('artists');
+    void searchService.search(song.artist);
+    navigate('/discover');
+  };
+
+  // 下载内联常驻，其余收进「更多」菜单，与共享 SongList 行一致；本地文件不提供换源
+  const menuItems: RowActionItem[] = [
+    ...(song.sourceType !== 'local'
+      ? [{ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open }]
+      : []),
+    ...(song.artist
+      ? [{ key: 'artist', label: '查看歌手', ariaLabel: '查看歌手', icon: <User size={14} />, onClick: handleViewArtist }]
+      : []),
+    { key: 'remove', label: '从歌单移除', icon: <Trash2 size={14} />, danger: true, onClick: () => onRemove(song) },
+  ];
   // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
   const coverRefreshFired = useRef(false);
 
@@ -88,16 +120,29 @@ const SortableSongRow: React.FC<{
           </div>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: '4px' }}>
-        <button onClick={(e) => { e.stopPropagation(); onDownload(song); }}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
-          <Download size={14} />
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onRemove(song); }}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
-          <Trash2 size={14} />
-        </button>
-      </div>
+      <RowActionButtons
+        song={song}
+        isFavorite={isFavorite}
+        onToggleFavorite={onToggleFavorite}
+        onDownload={onDownload}
+        moreOpen={menuOpen}
+        moreTriggerRef={menuTriggerRef}
+        onToggleMore={() => setMenuOpen(v => !v)}
+        onCloseMore={() => setMenuOpen(false)}
+        menuItems={menuItems}
+      />
+      <SourceSwapModal
+        open={swap.visible}
+        songName={song.name}
+        currentSource={song.sourceType}
+        candidates={swap.candidates}
+        loading={swap.loading}
+        success={swap.success}
+        onSelectSource={swap.onSelectSource}
+        onSelectCandidate={swap.onSelectCandidate}
+        onBack={swap.onBack}
+        onClose={swap.close}
+      />
     </div>
   );
 });
@@ -114,7 +159,12 @@ const PlaylistDetailPage: React.FC = () => {
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
 
-  const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
   const [isReordering, setIsReordering] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -134,17 +184,23 @@ const PlaylistDetailPage: React.FC = () => {
   );
 
   const refreshPlaylistSongs = async (songs: Song[]): Promise<Song[]> => {
-    // 并发 5 限流：整列表同时搜索会打爆 上游 API（高并发限流/502），必须逐批刷新
-    const results = await mapSettledWithConcurrency(songs, 5, async (song) => {
+    // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP
+    // 有窗口配额，整列表同时搜索会打爆 API，必须逐批慢刷
+    const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
         const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
         if (cached) {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
         }
 
-        const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
-        if (searchResults.length === 0) return song;
-
-        const fresh = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
+        // 按源站 ID 直接识别（filter=id）：链接/签名会过期，ID 不会——
+        // 绕开"名字搜索 + 匹配"（Live/翻唱/多歌手导致匹配失败挂错 URL）
+        const fresh = await IpcClient.invoke<Song | null>(
+          'musicApi:searchSongById',
+          stripSourceIdPrefix(String(song.id)),
+          song.sourceType,
+          true,
+        );
+        if (!fresh?.url) return song;
 
         // 写入缓存
         await IpcClient.invoke<void>('cache:setUrl', song.id, {
@@ -165,7 +221,14 @@ const PlaylistDetailPage: React.FC = () => {
         return { ...song, url: fresh.url, cover: fresh.cover, lrc: fresh.lrc };
     });
 
-    return results.map((r, i) => (r.status === 'fulfilled' ? r.value : songs[i]));
+    return results.map((r, i) => {
+      if (r.status === 'rejected') {
+        // 单曲刷新失败不再完全静默：保留旧数据，但打日志便于排查（会话失效/上游限流）
+        console.warn(`[playlist:refresh] 刷新失败，保留旧数据: ${songs[i]?.name}`, r.reason);
+        return songs[i];
+      }
+      return r.value;
+    });
   };
 
   const loadData = async () => {
@@ -212,6 +275,18 @@ const PlaylistDetailPage: React.FC = () => {
   const handleDownload = async (song: Song) => {
     await download(song);
   };
+
+  /** 单曲换源：原位替换本地歌单存储并更新列表 */
+  const handleSongSwapped = useCallback(async (original: Song, swapped: Song) => {
+    if (playlistId == null) return;
+    try {
+      await IpcClient.invoke<void>('playlist:replaceSong', playlistId, original.id, swapped);
+      setSongs(prev => prev.map(s => s.id === original.id ? swapped : s));
+    } catch (error) {
+      console.error('换源保存到歌单失败:', error);
+      message.error('换源成功，但保存到本地歌单失败');
+    }
+  }, [playlistId]);
 
   const handleDownloadAll = async () => {
     if (songs.length === 0) return;
@@ -477,7 +552,7 @@ const PlaylistDetailPage: React.FC = () => {
           <div style={{ width: '30px', textAlign: 'center' }}></div>
           <div style={{ width: '30px', textAlign: 'center' }}>#</div>
           <div style={{ flex: 1 }}>标题</div>
-          <div style={{ width: '100px', textAlign: 'center' }}>操作</div>
+          <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
         </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={songs.map(s => s.id)} strategy={verticalListSortingStrategy}>
@@ -493,6 +568,9 @@ const PlaylistDetailPage: React.FC = () => {
                 onPlay={handlePlay}
                 onRemove={handleRemoveFromPlaylist}
                 onDownload={handleDownload}
+                onSwapped={handleSongSwapped}
+                isFavorite={favoriteIds.includes(song.id)}
+                onToggleFavorite={toggleFavorite}
                 onCoverError={handleCoverError}
               />
             ))}

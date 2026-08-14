@@ -8,6 +8,7 @@ const MAX_HISTORY = 200;
 interface HistoryStore {
   history: Song[];
   addHistory: (song: Song) => void;
+  removeHistory: (songId: string) => void;
   clearHistory: () => void;
 }
 
@@ -25,6 +26,12 @@ export const useHistoryStore = create<HistoryStore>()(
 
       clearHistory: () => {
         set({ history: [] });
+      },
+
+      removeHistory: (songId) => {
+        set((state) => ({
+          history: state.history.filter((s) => s.id !== songId),
+        }));
       },
     }),
     {

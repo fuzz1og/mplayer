@@ -3,7 +3,8 @@ const { ipcRenderer } = window.require('electron');
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, SongBase } from '@mplayer/core';
-import { resolveSongUrls } from '@/renderer/utils/songResolver';
+import { stripSourceIdPrefix } from '@mplayer/core';
+import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 
 interface FavoriteState {
   favoriteIds: string[];
@@ -17,6 +18,8 @@ interface FavoriteState {
   isFavorite: (songId: string) => boolean;
   addFavorite: (song: Song) => Promise<void>;
   removeFavorite: (songId: string) => Promise<void>;
+  /** 单曲换源：原位替换收藏（保持收藏时间与排序） */
+  replaceFavorite: (originalId: string, swapped: Song) => Promise<void>;
   refreshSongUrls: (song: SongBase) => Promise<Song | null>;
 }
 
@@ -39,12 +42,15 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
         };
       }
 
-      // 如果缓存中没有，通过搜索获取最新URL
-      const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
-      if (searchResults.length > 0) {
-        // 找到匹配的歌曲
-        const matchedSong = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
-
+      // 如果缓存中没有，按源站 ID 直接识别拿最新三件套（filter=id：
+      // 链接会过期，ID 不会；绕开名字搜索的翻唱/Live 匹配失败）
+      const matchedSong = await IpcClient.invoke<Song | null>(
+        'musicApi:searchSongById',
+        stripSourceIdPrefix(String(song.id)),
+        song.sourceType,
+        true,
+      );
+      if (matchedSong?.url) {
         // 写入缓存
         await IpcClient.invoke<void>('cache:setUrl', song.id, {
           url: matchedSong.url,
@@ -103,16 +109,13 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
 
       // 异步刷新缺失 URL 的歌曲（不阻塞界面加载）
       if (needsRefresh.length > 0) {
-        // Bug #8: 限制并发请求数，避免请求风暴
-        const CONCURRENT_LIMIT = 5;
-        const refreshResults: PromiseSettledResult<Song | null>[] = [];
-        for (let i = 0; i < needsRefresh.length; i += CONCURRENT_LIMIT) {
-          const batch = needsRefresh.slice(i, i + CONCURRENT_LIMIT);
-          const batchResults = await Promise.allSettled(
-            batch.map(songBase => get().refreshSongUrls(songBase))
-          );
-          refreshResults.push(...batchResults);
-        }
+        // Bug #8: 分批刷新（每批 3 首 + 批间间隔 + 限流退避），
+        // 避免请求风暴（上游服务端对同 IP 并发/速率有硬限制）
+        const refreshResults = await mapPacedWithConcurrency(
+          needsRefresh,
+          3,
+          songBase => get().refreshSongUrls(songBase)
+        );
 
         // Bug #5: 用 Map<id, result> 查找，避免索引错位
         const resultMap = new Map<string, Song>();
@@ -211,5 +214,18 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
       console.error('移除收藏失败:', error);
       throw error;
     }
-  }
+  },
+
+  replaceFavorite: async (originalId: string, swapped: Song) => {
+    try {
+      await IpcClient.invoke<void>('favorite:replaceSong', originalId, swapped);
+      set((state) => ({
+        favorites: state.favorites.map(f => f.id === originalId ? swapped : f),
+        favoriteIds: state.favoriteIds.map(id => id === originalId ? swapped.id : id),
+      }));
+    } catch (error) {
+      console.error('换源保存到收藏失败:', error);
+      throw error;
+    }
+  },
 }));

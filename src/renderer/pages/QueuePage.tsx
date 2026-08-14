@@ -10,10 +10,10 @@ import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { mapSettledWithConcurrency } from '@/renderer/utils/async';
+import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
-const { ipcRenderer } = window.require('electron');
+import { stripSourceIdPrefix } from '@mplayer/core';
 
 interface SortableItemProps {
   song: Song;
@@ -87,17 +87,22 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
 });
 
 const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
-  // 并发 5 限流：整列表同时搜索会打爆 上游 API（高并发限流/502）
-  const results = await mapSettledWithConcurrency(songs, 5, async (song) => {
+  // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP 有窗口配额
+  const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
     try {
       const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
       if (cached) {
         return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
       }
-      const keyword = `${song.name} ${song.artist}`;
-      const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType);
-      if (!result.success || !result.data.length) return song;
-      const fresh = result.data.find((s: Song) => s.id === song.id) || result.data[0];
+      // 按源站 ID 直接识别（filter=id）：链接会过期，ID 不会——
+      // 绕开名字搜索的匹配失败风险（翻唱/Live/多歌手）
+      const fresh = await IpcClient.invoke<Song | null>(
+        'musicApi:searchSongById',
+        stripSourceIdPrefix(String(song.id)),
+        song.sourceType,
+        true,
+      );
+      if (!fresh?.url) return song;
       await IpcClient.invoke<void>('cache:setUrl', song.id, {
         url: fresh.url,
         cover: fresh.cover,
@@ -112,7 +117,14 @@ const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
 };
 
 const QueuePage: React.FC = () => {
-  const { currentPlaylist, currentSong, isPlaying, play, removeFromQueue, reorderQueue, clearQueue, setCurrentPlaylist } = usePlayerStore();
+  const currentPlaylist = usePlayerStore((s) => s.currentPlaylist);
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
+  const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
+  const reorderQueue = usePlayerStore((s) => s.reorderQueue);
+  const clearQueue = usePlayerStore((s) => s.clearQueue);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const [showBatchModal, setShowBatchModal] = useState(false);
 
   // 封面加载失败 → 按 ID 重识别换新封面并更新队列/当前歌曲（旧签名封面永远失败）

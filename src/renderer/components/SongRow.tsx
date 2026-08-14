@@ -1,73 +1,17 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Play, Heart, MoreHorizontal, Download, Trash2, ListMusic } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Play, Trash2, ListMusic, RefreshCw, User } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
-
-interface DropdownMenuProps {
-  song: Song;
-  triggerRef: React.RefObject<HTMLElement | null>;
-  showRemoveFromPlaylist: boolean;
-  onClose?: (e: React.MouseEvent) => void;
-  onAddToPlaylist?: (song: Song) => void;
-  onDownload?: (song: Song) => void;
-  onRemoveFromPlaylist?: (song: Song) => void;
-}
-
-const DropdownMenu: React.FC<DropdownMenuProps> = ({
-  song, triggerRef, showRemoveFromPlaylist, onClose, onAddToPlaylist, onDownload, onRemoveFromPlaylist,
-}) => {
-  const [pos, setPos] = useState({ top: 0, right: 0 });
-
-  useEffect(() => {
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) {
-      setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-    }
-  }, [triggerRef]);
-
-  return createPortal(
-    <>
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }} onClick={onClose} />
-      <div
-        style={{
-          position: 'fixed',
-          top: `${pos.top}px`,
-          right: `${pos.right}px`,
-          backgroundColor: 'var(--bg-color)',
-          border: '1px solid var(--divider-color)',
-          borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-          zIndex: 10000,
-          minWidth: '120px',
-          padding: '4px',
-        }}
-      >
-        {showRemoveFromPlaylist && onRemoveFromPlaylist && (
-          <>
-            <button onClick={(e) => { e.stopPropagation(); onRemoveFromPlaylist(song); }}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--danger-color)' }}>
-              <Trash2 size={14} /> 从歌单移除
-            </button>
-            <div style={{ height: '1px', backgroundColor: 'var(--divider-color)', margin: '4px 0' }} />
-          </>
-        )}
-        <button onClick={(e) => { e.stopPropagation(); onAddToPlaylist?.(song); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-          <ListMusic size={14} /> 加入歌单
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onDownload?.(song); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-          <Download size={14} /> 下载
-        </button>
-      </div>
-    </>,
-    document.body
-  );
-};
+import SourceSwapModal from '@/renderer/components/SourceSwapModal';
+import { type RowActionItem } from '@/renderer/components/RowActionMenu';
+import RowActionButtons from '@/renderer/components/RowActionButtons';
+import { useSongSwap } from '@/renderer/hooks/useSongSwap';
+import { useSearchStore } from '@/renderer/store/searchStore';
+import { searchService } from '@/renderer/services/searchService';
 
 interface SongRowProps {
   song: Song;
@@ -85,11 +29,15 @@ interface SongRowProps {
   onDownload?: (song: Song) => void;
   onAddToPlaylist?: (song: Song) => void;
   onRemoveFromPlaylist?: (song: Song) => void;
+  /** 换源成功回调：父组件用它更新自己的列表 state（收藏/歌单页同时持久化） */
+  onSwap?: (original: Song, swapped: Song) => void;
   onToggleSelect?: (songId: string) => void;
   onToggleDropdown?: (songId: string, e: React.MouseEvent) => void;
   onCloseDropdown?: (e: React.MouseEvent) => void;
   /** 封面加载失败时回调，由持有歌曲列表的层按 ID 重识别换新封面 */
   onCoverError?: (song: Song) => void;
+  /** 是否显示专辑列（列表层按整列是否有专辑判断，无专辑列表整列塌缩） */
+  showAlbum?: boolean;
   compact?: boolean;
   style?: React.CSSProperties;
 }
@@ -99,12 +47,36 @@ const SongRow: React.FC<SongRowProps> = ({
   showIndex, showCheckbox, isSelected, showRemoveFromPlaylist,
   activeDropdown, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onRemoveFromPlaylist, onToggleSelect,
-  onToggleDropdown, onCloseDropdown, onCoverError, compact = false, style,
+  onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, compact = false, style,
 }) => {
   const coverSrc = useCachedCover(song.cover);
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  const navigate = useNavigate();
   // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
   const coverRefreshFired = useRef(false);
+
+  const swap = useSongSwap(song, onSwap);
+
+  /** 查看歌手：以歌手名为关键词搜索并落在歌手 tab（与移动端一致） */
+  const handleViewArtist = () => {
+    if (!song.artist) return;
+    useSearchStore.getState().setPreferredTab('artists');
+    void searchService.search(song.artist);
+    navigate('/discover');
+  };
+
+  // 操作统一收进「更多」菜单；本地文件不提供换源（spec 范围外）
+  const menuItems: RowActionItem[] = [];
+  if (showRemoveFromPlaylist && onRemoveFromPlaylist) {
+    menuItems.push({ key: 'remove', label: '从歌单移除', icon: <Trash2 size={14} />, danger: true, onClick: () => onRemoveFromPlaylist(song) });
+  }
+  menuItems.push({ key: 'playlist', label: '加入歌单', icon: <ListMusic size={14} />, onClick: () => onAddToPlaylist?.(song) });
+  if (song.sourceType !== 'local') {
+    menuItems.push({ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open });
+  }
+  if (song.artist) {
+    menuItems.push({ key: 'artist', label: '查看歌手', ariaLabel: '查看歌手', icon: <User size={14} />, onClick: handleViewArtist });
+  }
 
   // cover 为空（如收藏/历史里从未存过封面）时挂载即触发一次刷新，显示层不依赖 onError
   useEffect(() => {
@@ -166,7 +138,7 @@ const SongRow: React.FC<SongRowProps> = ({
         </div>
       )}
       {/* Song info */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+      <div style={{ width: '38%', maxWidth: '380px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '44px', height: '44px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0, position: 'relative' }}>
           {song.cover ? (
             <CoverImage src={coverSrc} alt={song.name} onError={() => onCoverError?.(song)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -194,45 +166,38 @@ const SongRow: React.FC<SongRowProps> = ({
           </div>
         </div>
       </div>
+      {/* 弹性占位：把专辑列和操作列推到右侧，标题区限宽后剩余空间留白 */}
+      <div style={{ flex: 1, minWidth: 0 }} />
       {/* Album */}
-      {!compact && (
-        <div style={{ width: '120px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {!compact && showAlbum && (
+        <div style={{ width: '180px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
           {song.album}
         </div>
       )}
       {/* Actions */}
-      <div className="song-row-actions" style={{ width: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-        {onToggleFavorite && (
-          <button
-            onClick={() => onToggleFavorite(song)}
-            style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isFavorite ? 'var(--accent-color)' : 'var(--text-tertiary)', transition: 'all 0.15s ease' }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-          >
-            <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
-          </button>
-        )}
-        <div style={{ position: 'relative' }}>
-          <button
-            ref={dropdownTriggerRef}
-            onClick={(e) => onToggleDropdown?.(song.id, e)}
-            style={{ border: 'none', background: activeDropdown === song.id ? 'var(--hover-bg)' : 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: activeDropdown === song.id ? 'var(--text-secondary)' : 'var(--text-tertiary)', transition: 'all 0.15s ease' }}
-          >
-            <MoreHorizontal size={16} />
-          </button>
-          {activeDropdown === song.id && (
-            <DropdownMenu
-              song={song}
-              triggerRef={dropdownTriggerRef}
-              showRemoveFromPlaylist={showRemoveFromPlaylist}
-              onClose={onCloseDropdown}
-              onAddToPlaylist={onAddToPlaylist}
-              onDownload={onDownload}
-              onRemoveFromPlaylist={onRemoveFromPlaylist}
-            />
-          )}
-        </div>
-      </div>
+      <RowActionButtons
+        song={song}
+        isFavorite={isFavorite}
+        onToggleFavorite={onToggleFavorite}
+        onDownload={onDownload}
+        moreOpen={activeDropdown === song.id}
+        moreTriggerRef={dropdownTriggerRef}
+        onToggleMore={(e) => onToggleDropdown?.(song.id, e)}
+        onCloseMore={onCloseDropdown ?? (() => {})}
+        menuItems={menuItems}
+      />
+      <SourceSwapModal
+        open={swap.visible}
+        songName={song.name}
+        currentSource={song.sourceType}
+        candidates={swap.candidates}
+        loading={swap.loading}
+        success={swap.success}
+        onSelectSource={swap.onSelectSource}
+        onSelectCandidate={swap.onSelectCandidate}
+        onBack={swap.onBack}
+        onClose={swap.close}
+      />
     </div>
   );
 };
