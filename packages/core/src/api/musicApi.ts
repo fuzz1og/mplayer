@@ -3,11 +3,11 @@ import type { Song, SourceKey, SongGroup, DiscoverPlaylist, Album, AudioTag } fr
 import { cacheManager } from './memoryCacheManager.js';
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { weapiRequest } from './neteaseWeapi.js';
-import { MULTI_SOURCE_LIST } from '../constants.js';
 import { findExactMatch } from '../utils/songMatcher.js';
 import { resourceUrlKey } from '../utils/resourceKey.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
+import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
 import { probeSongs } from './probeSongs.js';
 import type { Agent } from 'http';
 
@@ -2278,31 +2278,7 @@ export const musicApi = {
 
 
   groupIntoSongGroups(allSongs: Song[]): SongGroup[] {
-    const map = new Map<string, SongGroup>();
-    for (const song of allSongs) {
-      const key = `${song.name.trim().toLowerCase()}|${song.artist.trim().toLowerCase()}`;
-      const existing = map.get(key);
-      if (existing) {
-        existing.songs.push(song);
-      } else {
-        map.set(key, { key, name: song.name, artist: song.artist, songs: [song] });
-      }
-    }
-    return Array.from(map.values());
-  },
-
-  async searchAllSources(keyword: string, page: number = 1): Promise<SongGroup[]> {
-    // migu 不在列表：摄取端点无 migu 数据源，实测最慢(1.1s)且永远返回空，白等
-    const results = await Promise.allSettled(
-      MULTI_SOURCE_LIST.map(async (src) => this.searchSongs(keyword, page, src))
-    );
-    const allSongs: Song[] = [];
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        allSongs.push(...r.value);
-      }
-    }
-    return this.groupIntoSongGroups(allSongs);
+    return groupIntoSongGroupsUtil(allSongs);
   },
 
   async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: SourceKey = 'netease'): Promise<Song[]> {
