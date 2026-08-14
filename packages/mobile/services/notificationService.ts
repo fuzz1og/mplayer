@@ -28,6 +28,22 @@ function loadNotifications(): typeof import('expo-notifications') | null {
   return notifications;
 }
 
+/**
+ * 请求通知权限（Android 13+ 的 POST_NOTIFICATIONS 运行时权限；iOS 为
+ * alert/badge/sound 授权）。Expo Go 下 expo-notifications 不可用，直接返回 false。
+ * 应在首次播放或启动时调用；拒绝后系统不会自动重弹，需用户去系统设置开启。
+ */
+export async function requestNotificationPermission(): Promise<boolean> {
+  const Notifications = loadNotifications();
+  if (!Notifications) return false;
+  try {
+    const { status } = await Notifications.requestPermissionsAsync();
+    return status === 'granted';
+  } catch {
+    return false;
+  }
+}
+
 export async function setupNotificationChannel(): Promise<void> {
   const Notifications = loadNotifications();
   if (!Notifications) return;

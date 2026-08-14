@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import { colors } from '../theme/tokens';
-import { addNotificationResponseListener, setupNotificationChannel } from '../services/notificationService';
+import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl, setApiTimingLog } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -51,6 +51,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     initAudio().catch(() => {});
+    // Android 13+ 需先请求 POST_NOTIFICATIONS 运行时权限，通知/锁屏控制才可用
+    // （#93；Expo Go 下内部直接返回 false，不弹系统授权框）
+    requestNotificationPermission().catch(() => {});
     setupNotificationChannel().catch(() => {});
     // 注意：WebView 网络桥已移除——常驻隐藏 WebView 在 Android
     // （Expo Go + Fabric + Android 16）下会破坏 react-native-screens 的
