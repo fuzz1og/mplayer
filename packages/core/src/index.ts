@@ -41,6 +41,7 @@ export type { CachePort, CacheBackend, CacheStats } from './cache/types.js';
 export { setTransport, getTransport, request } from './api/transport.js';
 export type { Transport, TransportRequest, TransportResponse } from './api/transport.js';
 export { neteaseDirectClient } from './api/neteaseDirect.js';
+export { qianqianDirectClient } from './api/qianqianDirect.js';
 export {
   registerDirectClient,
   getDirectClient,
