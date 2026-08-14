@@ -226,6 +226,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       }
 
+      // 无 url 歌曲（专辑页跳过搜索兜底后 / 列表未带 url）：播放时按名字
+      // 搜索解析一次（对齐移动端 resolvePlayableSong），失败走下方报错
+      if (!realUrl && song.sourceType !== 'local' && song.sourceType !== 'soda' && song.name) {
+        try {
+          const results = await ipcMusicApi.searchSongs(`${song.name} ${song.artist}`.trim(), 1, song.sourceType);
+          const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
+          if (hit?.url) realUrl = hit.url;
+        } catch (urlError) {
+          console.error('播放时搜索歌曲 URL 失败:', urlError);
+        }
+      }
+
       // 死链 fresh 兜底：受保护端点（签名 URL）解析回原样 = 签名过期/
       // 会话失效（服务端返回错误页而非 302）。按源站 ID 重取全新三件套，
       // 播放不再依赖列表刷新先行完成；成功顺手回写 URL 缓存。

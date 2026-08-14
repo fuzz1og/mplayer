@@ -47,7 +47,9 @@ const AlbumDetailPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const result = await ipcRenderer.invoke('musicApi:getAlbumDetail', albumId);
+        // skipSearchFallback=true：weapi 批量直链即可，跳过逐首搜索兜底（上游慢，
+        // 会阻塞页面数秒~数十秒）；无 URL 歌曲播放时由 playerStore 单首搜索解析
+        const result = await ipcRenderer.invoke('musicApi:getAlbumDetail', albumId, true);
         if (result.success && result.data) {
           setAlbum(result.data.album);
           setSongs(result.data.songs);

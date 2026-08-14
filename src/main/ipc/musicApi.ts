@@ -81,7 +81,7 @@ export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('musicApi:searchArtists', (keyword: string, limit: number) => musicApi.searchNeteaseArtists(keyword, limit));
   registerIpcHandler('musicApi:getAggregatedChart', (type: 'hot' | 'new', sources: string[]) => getAggregatedChart(type, sources as any));
   registerIpcHandler('musicApi:getNewAlbums', (area: string, offset: number, limit: number) => musicApi.getNewAlbums(area, offset, limit));
-  registerIpcHandler('musicApi:getAlbumDetail', (albumId: string) => musicApi.getAlbumDetail(albumId));
+  registerIpcHandler('musicApi:getAlbumDetail', (albumId: string, skipSearchFallback?: boolean) => musicApi.getAlbumDetail(albumId, skipSearchFallback));
   registerIpcHandler('musicApi:getArtistAlbums', (artistId: string, offset: number, limit: number) => musicApi.getArtistAlbums(artistId, offset, limit));
   registerIpcHandler('musicApi:getRecommendedPlaylists', (limit: number) => musicApi.getRecommendedPlaylists(limit));
   registerIpcHandler('musicApi:getRecommendedSongs', (limit: number) => musicApi.getRecommendedSongs(limit));
