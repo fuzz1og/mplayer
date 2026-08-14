@@ -71,6 +71,23 @@ export function getHttpsAgent(): https.Agent {
   return currentHttpsAgent;
 }
 
+// ── TLS 降级 agent（T09 spec #155，仅桌面）───────────────────────────
+// 内容直链（mp3/flac CDN）在 TLS 握手失败时，用放宽 minVersion 的降级 agent
+// 重试一次（Node 默认 minVersion=TLSv1.2，服务器仅支持旧协议时握手失败）。
+let degradedHttpsAgent: https.Agent | null = null;
+
+/** 返回静态复用的降级 https agent（minVersion 放宽到 TLSv1，允许旧协议）。 */
+export function getTlsDegradedHttpsAgent(): https.Agent {
+  if (!degradedHttpsAgent) {
+    degradedHttpsAgent = new https.Agent({
+      keepAlive: true,
+      maxSockets: 10,
+      minVersion: 'TLSv1',
+    });
+  }
+  return degradedHttpsAgent;
+}
+
 export async function applyElectronProxy(config: ProxyConfig) {
   try {
     if (config.enabled && config.host) {

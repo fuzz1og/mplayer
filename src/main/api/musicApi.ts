@@ -15,6 +15,7 @@ export {
   setSourceModePersister,
   getAllSourceModes,
   hasDirectClient,
+  setTlsDegradeProvider,
 } from '@mplayer/core';
 export type { ProxyAgents } from '@mplayer/core';
 

@@ -23,10 +23,10 @@ import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { getApiUrl } from './config';
-import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl, setApiTimingLog, loadSourceModes } from './api/musicApi';
+import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl, setApiTimingLog, loadSourceModes, setTlsDegradeProvider } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
-import { applyElectronProxy, getHttpAgent, getHttpsAgent, type ProxyConfig } from './proxy';
+import { applyElectronProxy, getHttpAgent, getHttpsAgent, getTlsDegradedHttpsAgent, type ProxyConfig } from './proxy';
 import { registerCacheIpc } from './ipc/cache';
 import { registerFavoriteIpc, registerHistoryIpc, registerPlaylistIpc } from './ipc/favoriteHistoryPlaylist';
 import { registerLocalMusicIpc } from './ipc/localMusic';
@@ -190,6 +190,10 @@ app.whenReady().then(async () => {
   if (!app.isPackaged) {
     setApiTimingLog(true);
   }
+
+  // 内容直链 TLS 降级 agent（T09 spec #155）：core 传输层检测到内容直链 TLS
+  // 握手失败时，用放宽 minVersion 的降级 agent 重试一次（仅桌面注入；RN 不注入）。
+  setTlsDegradeProvider(() => ({ httpsAgent: getTlsDegradedHttpsAgent() }));
 
   // 加载代理设置并应用
   try {
