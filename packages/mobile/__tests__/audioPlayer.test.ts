@@ -88,7 +88,8 @@ vi.mock('expo-audio', () => ({
 }));
 
 vi.mock('expo-constants', () => ({
-  default: { expoGoConfig: null },
+  AppOwnership: { Expo: 'expo' },
+  default: { appOwnership: null },
 }));
 
 vi.mock('@react-native-async-storage/async-storage', () => ({

@@ -45,17 +45,20 @@ npm run web         # Start in web browser
 | `main.ts` | Entry. BrowserWindow (1400×900, hiddenInset), IPC registration, global shortcuts, tray |
 | `config.ts` | API URL: DB settings → env vars → empty |
 | `proxy.ts` | Electron session proxy config |
-| `api/musicApi.ts` | HTTP client. **Base URL loaded dynamically from config** |
-| `api/antiScrape.ts` | Anti-scraping measures |
-| `api/memoryCacheManager.ts` | In-memory cache |
-| `cache/cacheManager.ts` | Disk cache (audio, covers, lyrics) |
+| `api/musicApi.ts` | 壳：re-export `musicApi` / client 配置（`setApiBaseUrl` 等）from `@mplayer/core`（HTTP 客户端逻辑在 core） |
+| `api/kugouApi.ts` | 酷狗排行榜直连（`mobilecdn.kugou.com`，`getKugouRank` / `getKugouNewSongs`） |
+| `env.ts` | 环境变量读取（`.env.local` MUSIC_API_URL 等） |
+| `cache/diskBackend.ts` | 磁盘缓存后端（音频、封面、歌词；`constructor(cacheDir)`） |
 | `storage/db.ts` | Primary persistence (favorites, history, playlists, settings) |
 | `storage/fileStorage.ts` | Legacy JSON storage |
 | `ipc/registerHandler.ts` | `registerIpcHandler` / `registerIpcHandlerSimple` helpers |
 | `services/downloadService.ts` | Download with progress callbacks |
 | `services/localMusicService.ts` | Local music library scanning |
 | `services/updateService.ts` | Auto-update via electron-updater |
+| `services/chartAggregator.ts` | 多源排行榜聚合（netease/qq/kugou，供发现页） |
 | `tray/trayManager.ts` | System tray + context menu |
+
+> 注：反爬工具（`antiScrape.ts`）与内存缓存（`memoryCacheManager.ts`）已迁至 `@mplayer/core`（见 Shared Package）。
 
 #### Renderer Process (`src/renderer/`)
 
@@ -64,18 +67,18 @@ npm run web         # Start in web browser
 | `App.tsx` | Root layout, `<Outlet />` |
 | `router/index.tsx` | HashRouter, all pages lazy loaded |
 | `store/` | Zustand: playerStore, searchStore, favoriteStore, downloadStore, localStore |
-| `services/` | Singletons: audioPlayer, searchService, lyricsService, favoriteService, historyService, playlistService, cacheService, coverCacheService, importService, IpcClient |
-| `pages/` | Discover, Favorites, History, Playlists, Queue, Settings, LocalMusic, PlaylistDetail, HotlistDetail, ArtistList, ArtistDetail, DiscoverPlaylistList, DiscoverPlaylistDetail, LyricsPage (unrouted) |
+| `services/` | audioPlayer, searchService, sourceSwap, coverCacheService, coverUrlResolver, artistMetaCache, importService, IpcClient, IpcMusicApi |
+| `pages/` | Recommend, Discover, DiscoverPageV2, Favorites, History, Playlists, Queue, Settings, LocalMusic, PlaylistDetail, HotlistDetail, ArtistList, ArtistDetail, AlbumDetail, DiscoverPlaylistList, DiscoverPlaylistDetail, LyricsPage (unrouted) |
 | `components/` | Sidebar, TopBar, PlayerBar, SongList, SongListVirtual, SongRow, SongListSkeleton, GroupedSongList, GroupHeaderRow, PlayerControls, PlayerProgress, PlayerVolume, MusicCard, HotlistCard, DiscoverPlaylistCard, SourceBadge, AddToPlaylistModal, BatchAddToPlaylistModal, DownloadProgressModal, ImportPlaylistModal, LinkImportForm, LinkPreviewTable, PlayModeButton, CustomDropdown, LyricsDisplay |
-| `hooks/` | useLazyLoad, useGlobalShortcuts, useInfiniteScroll, useDownload, useButtonHover |
-| `utils/` | songDedupe, songMatcher, songResolver, lyricsParser, format |
+| `hooks/` | useLazyLoad, useGlobalShortcuts, useInfiniteScroll, useDownload, useButtonHover, useDiscoverData, useSongSwap |
+| `utils/` | async, queueUtils, songCoverRefresh, songResolver（去重/匹配/歌词/格式化已迁 core） |
 
 #### IPC Channels
 
 Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/response, `ipcRenderer.on()` for push events.
 
 **MusicApi** — renderer→main (`invoke`):
-`searchSongs`, `getAudioUrl`, `batchSearch`, `searchAllSources`, `getNeteaseHotlist`, `getQQHotlist`, `getNeteaseNewSongList`, `getQQNewSongList`, `getNeteasePlaylists`, `getNeteasePlaylistDetail`, `getPlaylistSongsFromThirdParty`, `getNeteaseArtists`, `getArtistSongs`, `searchArtists`, `getSodaAudioUrl`, `getSodaPlayableUrl`, `parseSodaShareLink`
+`searchSongs`, `searchSongById`, `getAudioUrl`, `batchSearch`, `searchAllSources`, `probeAudio`, `getNeteaseHotlist`, `getQQHotlist`, `getNeteaseNewSongList`, `getQQNewSongList`, `getNeteasePlaylists`, `getNeteasePlaylistDetail`, `getNeteasePlaylistSongs`, `getNeteasePlaylistSongsPage`, `getPlaylistSongsFromThirdParty`, `getNeteaseArtists`, `getArtistSongs`, `getArtistAlbums`, `searchArtists`, `getAlbumDetail`, `getNewAlbums`, `getAggregatedChart`, `getRecommendedPlaylists`, `resolveCoverUrl`, `invalidateCoverUrl`, `fillSongUrls`, `getSodaAudioUrl`, `getSodaPlayableUrl`, `parseSodaShareLink`
 
 **Cache** — renderer→main:
 `getSong`, `setSong`, `getCover`, `setCover`, `getAudio`, `setAudio`, `getUrl`, `setUrl`, `clear`, `getStats`
@@ -122,8 +125,9 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 
 | Path | Component |
 |------|-----------|
-| `/` (default) | DiscoverPage |
-| `/discover` | DiscoverPage |
+| `/` (default) | Navigate → `/recommend` |
+| `/recommend` | RecommendPage |
+| `/discover` | DiscoverPage / DiscoverPageV2 |
 | `/hotlist/:type` | HotlistDetailPage |
 | `/favorites` | FavoritesPage |
 | `/history` | HistoryPage |
@@ -134,6 +138,7 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 | `/playlist/:id` | PlaylistDetailPage |
 | `/artists` | ArtistListPage |
 | `/artist/:id` | ArtistDetailPage |
+| `/album/:id` | AlbumDetailPage |
 | `/local` | LocalMusicPage |
 | `/settings` | SettingsPage |
 | `/download` | ComingSoon (planned) |
@@ -144,11 +149,12 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 
 | Path | Component |
 |------|-----------|
-| `(tabs)/` | Tab layout (发现, 搜索, 歌单, 下载) |
+| `(tabs)/` | Tab layout (推荐, 发现, 搜索, 歌单, 下载；initialRouteName=recommend) |
+| `(tabs)/recommend` | 推荐 tab（随机推荐 / 换一批） |
 | `(tabs)/index` | DiscoverPage — swipeable tabs (排行榜/歌单/歌手) |
 | `(tabs)/search` | Search results with `?q=` param |
 | `(tabs)/playlists` | Playlists page with built-in 收藏/播放历史 entries |
-| `(tabs)/download` | Download placeholder |
+| `(tabs)/download` | 下载列表（SAF 授权目录、本地播放、删除） |
 | `player` | Full-screen player (modal presentation) |
 | `favorites` | Favorites list (standalone Stack screen) |
 | `history` | History list (standalone Stack screen) |
@@ -157,6 +163,7 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 | `playlist/[id]` | User playlist detail |
 | `discover-playlist/[id]` | Discover playlist detail |
 | `artist/[id]` | Artist detail |
+| `album/[id]` | Album detail |
 
 #### Components (`packages/mobile/components/`)
 
@@ -184,6 +191,9 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 | `searchStore` | No | results, loading, error, query, page, hasMore, loadingMore |
 | `discoverStore` | No | hotlist data (netease/qq hot & new) |
 | `sourceStore` | AsyncStorage | selectedSource (搜索源切换) |
+| `downloadStore` | No | 下载任务（status: downloading/done/error） |
+| `audioTagStore` | No | 本地音频标签缓存 |
+| `logsStore` | AsyncStorage | 日志记录 |
 
 #### Services (`packages/mobile/services/`)
 
@@ -191,6 +201,12 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 |---------|------|
 | `audioPlayer.ts` | expo-av Sound management, play/toggle/seek |
 | `notificationService.ts` | expo-notifications channel + playback notification |
+| `downloadService.ts` | expo-file-system 下载（SAF 目录授权、本地 URI、删除） |
+| `audioProbe.ts` / `songProbe.ts` | 音频可播性探测（复用 core `audioProbe`） |
+| `songResources.ts` | 歌曲资源（封面/歌词）解析 |
+| `sourceSwap.ts` | 单曲换源候选（对接 core `sourceSwap`） |
+| `coverSearchSlot.ts` | 封面搜索槽位 |
+| `cacheService.ts` | 缓存服务 |
 
 ## Shared Package (`packages/core/`)
 
@@ -198,14 +214,22 @@ Common types and API client shared between desktop and mobile.
 
 ```
 packages/core/src/
-├── api/musicApi.ts       # Axios client for music API (search, lyrics, hotlist, etc.)
-│                          # warmUpArtistPicCache — 预缓存热门歌手头像
-│                          # fetchNeteaseArtistsByHtml — HTML 爬取 + 逐歌手 API 补图兜底
-├── types/index.ts        # Song, SourceKey, LyricLine, etc.
-├── utils/
-│   ├── lyricsParser.ts   # parseLRC, findCurrentLyricIndex
-│   └── songResolver.ts   # resolveSongUrl
-└── index.ts              # Re-exports everything
+├── api/                        # 请求层（桌面/移动端共享）
+│   ├── musicApi.ts             # 多源音乐 API 客户端（搜索/热榜/歌单/歌手/歌词/URL）
+│   │                            # 网易 weapi 直连、Soda 直连、QQ 热榜直连、反爬兜底、缓存
+│   ├── neteaseWeapi.ts         # 网易 weapi 加密（AES-CBC+RSA，纯 JS 双端可用）
+│   ├── antiScrape.ts           # UA 池 / 令牌桶限速 / 增强头 / beforeRequest
+│   ├── memoryCacheManager.ts   # 内存缓存（搜索/URL/歌词/热榜，TTL）
+│   ├── audioProbe.ts           # 音频可播性探测（probeAudio / probeAudioUrl）
+│   ├── probeSongs.ts           # 批量歌曲探测
+│   ├── axiosTransport.ts / transport.ts   # 传输层抽象（axios 实现 / 接口）
+│   └── playlistImport.ts       # 歌单导入
+├── cache/                      # 缓存内核（cacheKernel / ttl / backends/memoryBackend）
+├── shared/                     # resolvePlayableUrl / resolveFreshUrl / searchController / sourceSwap（单曲换源）
+├── utils/                      # songDedupe / songMatcher / songResolver / lyricsParser / format /
+│                                # hash(md5) / queue / recommendBatch / resourceKey / sourceReferer
+├── types/index.ts              # Song, SourceKey, LyricLine, etc.
+└── index.ts                    # Re-exports everything
 ```
 
 ```bash
@@ -218,12 +242,13 @@ npm run core:build        # Build @mplayer/core (regenerate dist/ with type decl
 - UI: Ant Design 5, Chinese locale (`zhCN`), lucide-react icons. All UI text in Chinese.
 - Virtual scrolling: `@tanstack/react-virtual` (threshold: 30 items).
 - Drag-and-drop: `@dnd-kit/core` + `@dnd-kit/sortable`.
-- Song dedup: `songDedupe.ts` (by id or name|artist composite key).
+- Song dedup: `songDedupe.ts` (by id or name|artist composite key)（在 core）。
+- Audio: Howler.js（`src/renderer/services/audioPlayer.ts`）。
 - Path alias: `@/*` maps to `./src/*`. Use `@/renderer/...`, `@/main/...`, etc.
 - **No context isolation**: `contextIsolation: false`, `nodeIntegration: true`. Renderer imports main-process modules directly via `require('electron')`.
 
 ### Mobile
-- UI: 浅色蓝调主题（对齐 desktop 设计系统）。设计 token 见 `packages/mobile/theme/tokens.ts`（映射表见同目录 README.md）；浅色重构进行中（wayfinder #108），完成前部分组件仍为旧深色。Ionicons icons（重构后换 lucide-react-native）。All UI text in Chinese.
+- UI: 浅色蓝调主题（对齐 desktop 设计系统），设计 token 见 `packages/mobile/theme/tokens.ts`（映射表见同目录 README.md）；主体浅色重构已完成（wayfinder #108，真机验收 #114 待办）。图标库：lucide-react-native（desktop 同款）。All UI text in Chinese.
 - State management: Zustand stores, some with `persist` middleware (AsyncStorage).
 - Navigation: expo-router Stack + Tabs.
 - Audio: expo-av (Audio.Sound), no Howler.js.
@@ -245,7 +270,7 @@ npx tsc --noEmit --project packages/mobile/tsconfig.json
 
 ## ESLint Ignores
 
-`src/main/api/musicApi.ts` and `src/main/storage/fileStorage.ts` are excluded from linting (legacy code).
+配置在 `eslint.config.js`（flat config）。全局 ignores：`dist/`, `dist-electron/`, `coverage/`, `node_modules/`, `packages/core/dist/`, `packages/core/coverage/`, `.expo/`, `packages/mobile/.expo/`, `src/main/storage/fileStorage.ts`（legacy）。`src/main/api/musicApi.ts` 已不是忽略项（现为 core 的 re-export 壳）。
 
 ## Testing
 
@@ -272,12 +297,11 @@ npx vitest                        # renderer tests (watch mode)
 npx vitest run --config vitest.main.config.ts   # main process tests
 ```
 
-**Constructor injection for testability**: 3 files accept optional `userDataPath` to avoid `app.getPath('userData')` dependency:
-- `src/main/cache/cacheManager.ts` — `constructor(userDataPath?: string)`
-- `src/main/storage/fileStorage.ts` — `constructor(userDataPath?: string)`
-- `src/main/services/localMusicService.ts` — `constructor(userDataPath?: string)`
+**Constructor injection for testability**:
+- `src/main/cache/diskBackend.ts` — `constructor(cacheDir: string)`（测试传临时目录）
+- `src/main/services/localMusicService.ts` — `constructor(userDataPath?: string)`（缺省回退 `app.getPath('userData')`）
 
-Pass a temp dir in tests, omit in production to fallback to `app.getPath`.
+（`fileStorage.ts` 已改为内部 `app.getPath('userData')`，不再注入。）
 
 ### Core (`packages/core/`)
 
