@@ -13,6 +13,8 @@ docs/*
 !docs/specs/
 !docs/specs/*
 !docs/wayfinder/
+!docs/adr/
+!docs/adr/*
 
 # AI 配置目录（只忽略个人数据）
 .claude/plans/
