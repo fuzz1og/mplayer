@@ -252,7 +252,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           const fresh = await callMusicApi('searchSongById', stripSourceIdPrefix(String(song.id)), song.sourceType, true);
           if (fresh?.url?.startsWith('http')) {
             realUrl = fresh.url;
-            void IpcClient.invoke<void>('cache:setUrl', song.id, {
+            void IpcClient.invoke<void>('cache:setSongResources', song.id, {
               url: fresh.url,
               cover: fresh.cover,
               lrc: fresh.lrc,

@@ -122,7 +122,7 @@ describe('SongList 单曲换源流程', () => {
     const s1 = song('netease:1');
     invokeMock.mockImplementation(async (channel: string) => {
       if (channel === 'favorite:getAll') return [s1];
-      if (channel === 'cache:getUrl') return null;
+      if (channel === 'cache:getSongResources') return null;
       return { success: true, data: undefined };
     });
     useFavoriteStore.setState({ favorites: [s1], favoriteIds: ['netease:1'], loading: false, error: null });

@@ -188,7 +188,7 @@ const PlaylistDetailPage: React.FC = () => {
     // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP
     // 有窗口配额，整列表同时搜索会打爆 API，必须逐批慢刷
     const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
-        const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
+        const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', song.id);
         if (cached) {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
         }
@@ -204,7 +204,7 @@ const PlaylistDetailPage: React.FC = () => {
         if (!fresh?.url) return song;
 
         // 写入缓存
-        await IpcClient.invoke<void>('cache:setUrl', song.id, {
+        await IpcClient.invoke<void>('cache:setSongResources', song.id, {
           url: fresh.url,
           cover: fresh.cover,
           lrc: fresh.lrc,

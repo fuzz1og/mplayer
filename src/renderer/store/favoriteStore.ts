@@ -33,7 +33,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
   refreshSongUrls: async (song: SongBase): Promise<Song | null> => {
     try {
       // 尝试从缓存获取URL
-      const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
+      const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', song.id);
       if (cachedUrl) {
         return {
           ...song,
@@ -53,7 +53,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
       );
       if (matchedSong?.url) {
         // 写入缓存
-        await IpcClient.invoke<void>('cache:setUrl', song.id, {
+        await IpcClient.invoke<void>('cache:setSongResources', song.id, {
           url: matchedSong.url,
           cover: matchedSong.cover,
           lrc: matchedSong.lrc
@@ -86,7 +86,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
       const needsRefresh: SongBase[] = [];
 
       for (const songBase of songBases) {
-        const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', songBase.id);
+        const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', songBase.id);
         if (cachedUrl) {
           cachedSongs.push({
             ...songBase,

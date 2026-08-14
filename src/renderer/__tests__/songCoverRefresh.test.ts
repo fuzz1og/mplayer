@@ -41,7 +41,7 @@ describe('refreshSongCover 封面失败刷新', () => {
     const cover = await refreshSongCover(baseSong);
     expect(cover).toBe(freshCover);
     expect(invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongById', '3336112836', 'netease');
-    expect(invoke).toHaveBeenCalledWith('cache:setUrl', '3336112836', {
+    expect(invoke).toHaveBeenCalledWith('cache:setSongResources', '3336112836', {
       url: 'https://example.com/api.php?get=url&type=wy&id=3336112836',
       cover: freshCover,
       lrc: 'lrc-url',
@@ -77,7 +77,7 @@ describe('refreshSongCover 封面失败刷新', () => {
 
     const cover = await refreshSongCover(baseSong);
     expect(cover).toBeNull();
-    expect(invoke).not.toHaveBeenCalledWith('cache:setUrl', expect.any(String), expect.any(Object));
+    expect(invoke).not.toHaveBeenCalledWith('cache:setSongResources', expect.any(String), expect.any(Object));
   });
 
   it('local/soda 源不刷新', async () => {

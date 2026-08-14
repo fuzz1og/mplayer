@@ -105,8 +105,8 @@ export function refreshSongCover(song: Song): Promise<string | null> {
 
     // 更新 URL 缓存：只替换封面，保留已有 url/lrc
     // （搜索结果的 url 常为空，整体覆盖会让本来可播的歌变"无法播放"，歌词也会丢）
-    const existing = await IpcClient.invoke<{ url?: string; lrc?: string } | null>('cache:getUrl', song.id).catch(() => null);
-    await IpcClient.invoke<void>('cache:setUrl', song.id, {
+    const existing = await IpcClient.invoke<{ url?: string; lrc?: string } | null>('cache:getSongResources', song.id).catch(() => null);
+    await IpcClient.invoke<void>('cache:setSongResources', song.id, {
       url: fresh?.url || existing?.url || '',
       cover,
       lrc: fresh?.lrc || existing?.lrc || '',
