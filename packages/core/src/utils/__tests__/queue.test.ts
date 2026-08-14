@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getNextSongIndex } from '../queue.js';
+import { getNextSongIndex, getPrevSongIndex } from '../queue.js';
 import type { Song } from '../../types/index.js';
 
 function song(id: string): Song {
@@ -35,5 +35,36 @@ describe('getNextSongIndex', () => {
       expect(next).toBeLessThan(3);
     }
     expect(getNextSongIndex([song('1')], 0, '随机播放')).toBe(0);
+  });
+});
+
+describe('getPrevSongIndex', () => {
+  it('returns -1 for an empty queue', () => {
+    expect(getPrevSongIndex([], 0, '列表循环')).toBe(-1);
+  });
+
+  it('returns -1 when currentIndex is out of range', () => {
+    expect(getPrevSongIndex(queue, 3, '列表循环')).toBe(-1);
+    expect(getPrevSongIndex(queue, -1, '列表循环')).toBe(-1);
+  });
+
+  it('list loop: wraps backwards to the last track', () => {
+    expect(getPrevSongIndex(queue, 0, '列表循环')).toBe(2);
+    expect(getPrevSongIndex(queue, 2, '列表循环')).toBe(1);
+  });
+
+  it('single loop: still goes to previous track (preserved behavior, no replay)', () => {
+    expect(getPrevSongIndex(queue, 1, '单曲循环')).toBe(0);
+    expect(getPrevSongIndex(queue, 0, '单曲循环')).toBe(2);
+  });
+
+  it('shuffle: never returns the current index (with a single song it does)', () => {
+    for (let i = 0; i < 50; i++) {
+      const prev = getPrevSongIndex(queue, 1, '随机播放');
+      expect(prev).not.toBe(1);
+      expect(prev).toBeGreaterThanOrEqual(0);
+      expect(prev).toBeLessThan(3);
+    }
+    expect(getPrevSongIndex([song('1')], 0, '随机播放')).toBe(0);
   });
 });
