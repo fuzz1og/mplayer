@@ -21,6 +21,7 @@ export const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   qq: 'QQ',
   kugou: '酷狗',
   kuwo: '酷我',
+  migu: '咪咕',
   qianqian: '千千',
   soda: '汽水',
 };

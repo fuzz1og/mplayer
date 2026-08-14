@@ -15,6 +15,7 @@ const SOURCE_LABELS: Record<SourceType, string> = {
   qq: 'QQ',
   kugou: '酷狗',
   kuwo: '酷我',
+  migu: '咪咕',
   qianqian: '千千',
   soda: '汽水',
 };
@@ -24,6 +25,7 @@ const SOURCE_COLORS: Record<SourceType, string> = {
   qq: '#49B8FF',
   kugou: '#FF8C00',
   kuwo: '#FF6F00',
+  migu: '#FF5A00',
   qianqian: '#00A1D6',
   soda: '#1E90FF',
 };

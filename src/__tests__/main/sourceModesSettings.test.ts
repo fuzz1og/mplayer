@@ -53,7 +53,7 @@ describe('来源开关 settings IPC（T01 持久化接线）', () => {
     expect(getSourceMode('qq')).toBe('auto');
   });
 
-  it('settings:getSourceModes 返回模式 + 每源直连状态（已注册 netease/qianqian → ready，未注册 → unavailable）', async () => {
+  it('settings:getSourceModes 返回模式 + 每源直连状态（已注册六源 → ready，未注册 → unavailable）', async () => {
     registerSettingsIpc();
     setSourceModes({ netease: 'direct' });
     const handler = getHandler('settings:getSourceModes');
@@ -62,10 +62,15 @@ describe('来源开关 settings IPC（T01 持久化接线）', () => {
       status: Record<string, 'ready' | 'unavailable'>;
     };
     expect(res.modes.netease).toBe('direct');
-    // T02/T04：网易/千千直连客户端已注册（src/main/api/musicApi.ts 模块加载时），
-    // 设置页「直连可用」状态自动变亮；未注册的 qq 仍为 unavailable。
+    // T02/T03/T04/T05/T06/T08：网易/汽水/千千/咪咕/QQ/酷我直连客户端已注册
+    // （src/main/api/musicApi.ts 模块加载时），设置页「直连可用」自动变亮；
+    // 未注册的 kugou 仍为 unavailable。
     expect(res.status.netease).toBe('ready');
+    expect(res.status.soda).toBe('ready');
     expect(res.status.qianqian).toBe('ready');
-    expect(res.status.qq).toBe('unavailable');
+    expect(res.status.migu).toBe('ready');
+    expect(res.status.qq).toBe('ready');
+    expect(res.status.kuwo).toBe('ready');
+    expect(res.status.kugou).toBe('unavailable');
   });
 });

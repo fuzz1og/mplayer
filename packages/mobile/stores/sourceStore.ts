@@ -9,6 +9,7 @@ export const SOURCE_LABELS: Record<SourceKey, string> = {
   qq: 'QQ音乐',
   kugou: '酷狗',
   kuwo: '酷我',
+  migu: '咪咕',
   qianqian: '千千',
   soda: '汽水',
   local: '本地',

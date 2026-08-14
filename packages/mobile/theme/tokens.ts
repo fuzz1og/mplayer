@@ -56,7 +56,7 @@ export const palette = {
 /**
  * 音乐源品牌色 — 对齐 desktop TopBar SOURCE_CONFIG 的 accent：
  * 全部 #8B5CF6 / 网易 #E74C3C / QQ #1DB954 / 酷狗 #FF8C00 /
- * 酷我 #FF6F00 / 千千 #00A1D6 / 汽水 #1E90FF / 本地 #10B981
+ * 酷我 #FF6F00 / 咪咕 #FF5A00 / 千千 #00A1D6 / 汽水 #1E90FF / 本地 #10B981
  */
 export const sourceColors: Record<SourceKey | 'all', string> = {
   all: '#8B5CF6',
@@ -64,6 +64,7 @@ export const sourceColors: Record<SourceKey | 'all', string> = {
   qq: '#1DB954',
   kugou: '#FF8C00',
   kuwo: '#FF6F00',
+  migu: '#FF5A00',
   qianqian: '#00A1D6',
   soda: '#1E90FF',
   local: '#10B981',

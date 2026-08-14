@@ -68,7 +68,7 @@ describe('searchStore 退化为编排器绑定', () => {
     useSourceStore.getState().setSelectedSource('all');
     await useSearchStore.getState().search('晴天');
     const calls = mocks.searchSongs.mock.calls;
-    expect(calls.length).toBe(6); // netease/qq/kugou/kuwo/qianqian/soda
+    expect(calls.length).toBe(7); // netease/qq/kugou/kuwo/migu/qianqian/soda（T05 重引入 migu）
     for (const [kw, page] of calls) {
       expect(kw).toBe('晴天');
       expect(page).toBe(1);
@@ -103,7 +103,7 @@ describe('searchStore 退化为编排器绑定', () => {
     await searchPromise;
 
     const order = useSearchStore.getState().results[0].songs.map((s: any) => s.sourceType);
-    expect(order).toEqual(['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda']);
+    expect(order).toEqual(['netease', 'qq', 'kugou', 'kuwo', 'migu', 'qianqian', 'soda']);
   });
 
   it('单源结果镜像后,name 映射为中文源名（渲染层标题）', async () => {
