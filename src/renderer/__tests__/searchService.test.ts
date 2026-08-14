@@ -129,6 +129,51 @@ describe('searchService', () => {
       expect(probeCalls).toHaveLength(1);
       expect(probeCalls[0][2]).toHaveLength(songs.length);
     });
+
+    it('快速连搜：旧搜索在途探测结果被丢弃，不写入新结果集', async () => {
+      vi.useRealTimers();
+      const { IpcClient } = await import('../services/IpcClient');
+
+      const firstSongs = [{ id: 'old1', name: '旧歌', artist: '歌手甲', url: '' }];
+      const secondSongs = [{ id: 'new1', name: '新歌', artist: '歌手乙', url: '' }];
+
+      // 第一次搜索的探测批次挂起（手动放行），第二次搜索立即返回
+      let releaseOldProbe: (() => void) | undefined;
+      let oldInFlight = false;
+      (IpcClient.invoke as any).mockImplementation(async (_ch: string, method?: string, arg?: unknown) => {
+        if (method === 'searchSongs') {
+          return arg === '周杰伦' ? firstSongs : secondSongs;
+        }
+        if (method === 'probeSongsBatch') {
+          if (!oldInFlight) {
+            oldInFlight = true;
+            await new Promise<void>((resolve) => { releaseOldProbe = resolve; });
+            return [{ songId: 'old1', tag: 'stale' as const }];
+          }
+          return [{ songId: 'new1', tag: 'valid' as const }];
+        }
+        return undefined;
+      });
+
+      const p1 = searchService.search('周杰伦');
+      await vi.waitFor(() => expect(oldInFlight).toBe(true));
+      // 旧搜索在途时立即发起新搜索（probeSeq++ → 旧探测变 stale）
+      await searchService.search('新词');
+      // 旧搜索的探测姗姗来迟，但其结果不得写入
+      releaseOldProbe!();
+
+      await vi.waitFor(() => {
+        const tags = (IpcClient.invoke as any).mock.calls.filter(
+          (call: unknown[]) => call[1] === 'probeSongsBatch' && (call[2] as any[])[0]?.id === 'new1'
+        );
+        expect(tags).toHaveLength(1);
+      });
+      await p1;
+
+      // 迟到的旧探测结果（old1/stale）不得写入；只有新结果被写入
+      expect(mockStore.setAudioTag).not.toHaveBeenCalledWith('old1', 'stale');
+      expect(mockStore.setAudioTag).toHaveBeenCalledWith('new1', 'valid');
+    });
   });
 
   describe('debouncedSearch', () => {

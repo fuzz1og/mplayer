@@ -23,6 +23,8 @@ class SearchService {
   });
   /** 已探测歌曲 id（每搜索会话重置），用于跨源渐进/翻页增量探测去重 */
   private probedIds = new Set<string>();
+  /** 探测序号：search/searchAll/reset 时递增，用于丢弃旧搜索在途探测的迟到结果 */
+  private probeSeq = 0;
 
   constructor() {
     this.orchestrator.subscribe((o) => this.applyOrchestratorState(o));
@@ -52,7 +54,8 @@ class SearchService {
   /**
    * 对「上一批未探测过的新歌」逐批跑主进程探测（probeSongsBatch，20/批）。
    * 增量去重：渐进/翻页里只探测新增歌曲，不重复探测已探测过的源批次。
-   * 失败打开：探测永不阻断搜索渲染。
+   * 失败打开：探测永不阻断搜索渲染。探测序号校验：新搜索/reset 后（probeSeq 递增）
+   * 旧搜索在途批次的探测结果直接丢弃，不写入新会话的 audioTag。
    */
   private probeNewResults(groups: SongGroup[]): void {
     const allSongs = groups.flatMap((group) => group.songs);
@@ -61,17 +64,19 @@ class SearchService {
     if (newSongs.length === 0) return;
     for (const s of newSongs) this.probedIds.add(s.id);
 
+    const seq = this.probeSeq;
     void (async () => {
       for (let i = 0; i < newSongs.length; i += PROBE_BATCH_SIZE) {
         const batch = newSongs.slice(i, i + PROBE_BATCH_SIZE);
         try {
           const results = await callMusicApi('probeSongsBatch', batch);
+          if (seq !== this.probeSeq) return; // 已被新搜索/重置取代，丢弃在途探测结果
           const store = useSearchStore.getState();
           for (const result of results) {
             store.setAudioTag(result.songId, result.tag);
           }
         } catch {
-          // Fail open: probing must never break search rendering.
+          // 失败打开：探测永不阻断搜索渲染。
         }
       }
     })();
@@ -88,12 +93,14 @@ class SearchService {
     const { sourceType } = useSearchStore.getState();
     const route: 'all' | CoreSourceKey = sourceType === 'all' ? 'all' : (sourceType as CoreSourceKey);
     this.probedIds.clear();
+    this.probeSeq++;
     return this.orchestrator.search(keyword, route);
   }
 
   searchAll(keyword: string): void {
     useSearchStore.setState({ sourceType: 'all' } as any);
     this.probedIds.clear();
+    this.probeSeq++;
     void this.orchestrator.search(keyword, 'all');
   }
 
@@ -111,6 +118,7 @@ class SearchService {
 
   reset(): void {
     this.probedIds.clear();
+    this.probeSeq++;
     this.orchestrator.reset();
   }
 
