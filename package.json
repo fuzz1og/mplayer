@@ -74,7 +74,7 @@
     "pinyin-pro": "^3.28.1",
     "prettier": "^3.9.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "react-dom": "19.2.8",
     "react-router-dom": "^7.14.2",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.64.0",
