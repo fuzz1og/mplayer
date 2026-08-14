@@ -71,7 +71,7 @@
     "https-proxy-agent": "^9.0.0",
     "jsdom": "^29.1.1",
     "lucide-react": "^1.7.0",
-    "pinyin-pro": "^3.28.1",
+    "pinyin-pro": "^3.28.2",
     "prettier": "^3.9.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
