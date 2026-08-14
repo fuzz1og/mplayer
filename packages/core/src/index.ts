@@ -42,6 +42,7 @@ export { setTransport, getTransport, request } from './api/transport.js';
 export type { Transport, TransportRequest, TransportResponse } from './api/transport.js';
 export { neteaseDirectClient } from './api/neteaseDirect.js';
 export { qianqianDirectClient } from './api/qianqianDirect.js';
+export { miguDirectClient, decryptXorStream, XOR_KEY } from './api/miguDirect.js';
 export {
   registerDirectClient,
   getDirectClient,

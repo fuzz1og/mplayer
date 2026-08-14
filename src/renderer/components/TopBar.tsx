@@ -20,6 +20,7 @@ const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
   qq: { label: 'QQ', accent: '#1DB954' },
   kugou: { label: '酷狗', accent: '#FF8C00' },
   kuwo: { label: '酷我', accent: '#FF6F00' },
+  migu: { label: '咪咕', accent: '#FF5A00' },
   qianqian: { label: '千千', accent: '#00A1D6' },
   soda: { label: '汽水', accent: '#1E90FF' },
   local: { label: '本地', accent: '#10B981' },

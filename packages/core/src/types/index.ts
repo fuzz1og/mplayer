@@ -1,5 +1,7 @@
-// migu 已移除：摄取端点无 migu 数据源（实测最慢且永远空），多源搜索/导入不再包含
-export type SourceKey = 'netease' | 'qq' | 'kugou' | 'kuwo' | 'qianqian' | 'soda' | 'local';
+// migu 说明：旧「摄取端点无 migu 数据源（实测最慢且永远空）」限制仅适用自建 API
+// 路径；T05 起咪咕走官方端点直连（c.musicapp.migu.cn），多源 'all' 搜索经
+// searchSongsRouted → 咪咕直连客户端可用。
+export type SourceKey = 'netease' | 'qq' | 'kugou' | 'kuwo' | 'migu' | 'qianqian' | 'soda' | 'local';
 
 export type AudioTag = 'valid' | 'preview' | 'invalid';
 
