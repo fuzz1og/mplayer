@@ -1,7 +1,7 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
-import Constants from 'expo-constants';
+import Constants, { AppOwnership } from 'expo-constants';
 import { cacheManager, getNextSongIndex, getApiBaseUrl, getApiSessionCookie, isApiOriginUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey, BROWSER_UA, refererForSourceKey } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
@@ -14,9 +14,11 @@ import { searchStrictMatch } from './songResources';
 
 type Player = ReturnType<typeof createAudioPlayer>;
 
-// Expo Go 未启用 expo-audio 的 background playback 配置插件，
-// 锁屏控制/后台播放不可用，跳过 setActiveForLockScreen 避免报错刷屏
-const isExpoGo = Constants.expoGoConfig !== null;
+// Expo Go 判定必须用 appOwnership（仅 Expo Go 返回 'expo'）：
+// `Constants.expoGoConfig !== null` 在 dev build（expo-dev-client）下也非 null
+// （返回整个 embedded manifest），会导致 dev build 误判为 Expo Go 而禁用
+// 锁屏控制/后台播放（#93 真机验证发现的 bug）。
+const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
 
 // 追踪所有创建过的播放器：expo-audio 的原生释放是异步的，
 // remove() 后旧播放器可能仍在出声，切换前必须逐个显式暂停。

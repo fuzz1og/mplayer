@@ -1,4 +1,4 @@
-import Constants from 'expo-constants';
+import Constants, { AppOwnership } from 'expo-constants';
 import { Platform } from 'react-native';
 import type { NotificationResponse } from 'expo-notifications';
 import type { Song } from '@mplayer/core';
@@ -7,7 +7,11 @@ const CHANNEL_ID = 'music-playback';
 const NOTIFICATION_ID = 'music-playback';
 const CATEGORY_ID = 'music-playback-controls';
 
-const isExpoGo = Constants.expoGoConfig !== null;
+// Expo Go 判定必须用 appOwnership（仅 Expo Go 返回 'expo'）：
+// `Constants.expoGoConfig !== null` 在 dev build（expo-dev-client）下也非 null
+// （返回整个 embedded manifest），会导致 dev build 误判为 Expo Go 而禁用通知/锁屏
+// （#93 真机验证发现的 bug）。executionEnvironment=StoreClient 也包含 dev build，不可用。
+export const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
 let notifications: typeof import('expo-notifications') | null = null;
 
 function loadNotifications(): typeof import('expo-notifications') | null {

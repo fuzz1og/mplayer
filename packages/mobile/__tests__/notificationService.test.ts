@@ -9,16 +9,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // dev build + 真机验收路径验证（expo run:android + OnePlus PKB110）。
 // 单测聚焦 guard：Expo Go 下 requestNotificationPermission 必须安全返回 false，
 // 不加载 expo-notifications、不抛错。
+//
+// 检测方式（#93 真机验证确定）：`Constants.appOwnership === AppOwnership.Expo`。
+// `Constants.expoGoConfig !== null` 在 dev build 下也非 null，会误判；单测 mock
+// 需与实现一致地提供 AppOwnership 枚举。
 
 const constantsMocks = vi.hoisted(() => ({
-  // 非 null = Expo Go
-  expoGoConfig: {} as Record<string, unknown> | null,
+  // 'expo' = Expo Go；null = dev build / standalone / bare
+  appOwnership: 'expo' as string | null,
 }));
 
 vi.mock('expo-constants', () => ({
+  AppOwnership: { Expo: 'expo' },
   default: {
-    get expoGoConfig() {
-      return constantsMocks.expoGoConfig;
+    get appOwnership() {
+      return constantsMocks.appOwnership;
     },
   },
 }));
@@ -35,14 +40,25 @@ async function loadService() {
 
 afterEach(() => {
   vi.clearAllMocks();
-  constantsMocks.expoGoConfig = {};
+  constantsMocks.appOwnership = 'expo';
 });
 
 describe('requestNotificationPermission (#93)', () => {
-  it('Expo Go 下返回 false，且不加载 expo-notifications', async () => {
-    constantsMocks.expoGoConfig = { expoGoSDKVersion: '57.0.0' };
+  it('Expo Go（appOwnership=expo）下返回 false，且不加载 expo-notifications', async () => {
+    constantsMocks.appOwnership = 'expo';
     const { requestNotificationPermission } = await loadService();
 
     await expect(requestNotificationPermission()).resolves.toBe(false);
+  });
+
+  it('dev build（appOwnership=null）下 guard 不生效，走真实 require 路径（node 环境抛错属预期）', async () => {
+    // 说明：node 测试环境无法加载真实 expo-notifications（依赖原生模块），
+    // 此用例仅验证 appOwnership=null 时 isExpoGo=false、不会提前 return false。
+    // 真实授权流由 dev build 真机验证（#93 验收路径）。
+    constantsMocks.appOwnership = null;
+    const service = await loadService();
+
+    // 通过导出常量确认 guard 判定
+    expect(service.isExpoGo).toBe(false);
   });
 });
