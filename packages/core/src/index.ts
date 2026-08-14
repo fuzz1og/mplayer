@@ -56,3 +56,4 @@ export {
   resolvePlayableUrlRouted,
 } from './shared/sourceRouter.js';
 export type { SourceMode, DirectSourceClient, SourceRouterLegs } from './shared/sourceRouter.js';
+export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS } from './shared/sourceRouter.js';

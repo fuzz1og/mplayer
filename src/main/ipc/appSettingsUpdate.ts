@@ -13,7 +13,7 @@ import {
 import { MULTI_SOURCE_LIST, type SourceKey, type SourceMode } from '@mplayer/core';
 import type { BrowserWindow } from 'electron';
 
-const SOURCE_MODE_VALUES: SourceMode[] = ['auto', 'direct', 'api'];
+const SOURCE_MODE_SET: ReadonlySet<SourceMode> = new Set(['auto', 'direct', 'api']);
 
 export function registerDialogIpc(): void {
   registerIpcHandlerSimple('dialog:openDirectory', () => dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }));
@@ -27,7 +27,7 @@ export function registerSettingsIpc(): void {
 
   registerIpcHandlerSimple('settings:getSourceModes', () => {
     const modes = getAllSourceModes();
-    const status: Record<string, 'ready' | 'unavailable'> = {};
+    const status: Partial<Record<SourceKey, 'ready' | 'unavailable'>> = {};
     for (const key of MULTI_SOURCE_LIST) {
       status[key] = hasDirectClient(key) ? 'ready' : 'unavailable';
     }
@@ -38,7 +38,7 @@ export function registerSettingsIpc(): void {
     const clean: Partial<Record<SourceKey, SourceMode>> = {};
     for (const key of MULTI_SOURCE_LIST) {
       const value = next[key];
-      if (typeof value === 'string' && (SOURCE_MODE_VALUES as string[]).includes(value)) {
+      if (typeof value === 'string' && SOURCE_MODE_SET.has(value as SourceMode)) {
         clean[key] = value as SourceMode;
       }
     }

@@ -1,29 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Zap } from 'lucide-react';
 import { Radio, Tag } from 'antd';
-import { MULTI_SOURCE_LIST } from '@mplayer/core';
+import { MULTI_SOURCE_LIST, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 
 /**
  * 直连设置（T01，spec #146）：每源来源开关 auto/direct/api + 直连状态。
  * 模式持久化在 db（settings:setSourceModes），路由在 core（searchSongsRouted /
  * resolvePlayableUrlRouted）；直连客户端由各源 ticket（T02+）注册后状态变「直连可用」。
+ * 来源中文名 / 三态选项与移动端共用 core 常量（SOURCE_DISPLAY_NAMES / SOURCE_MODE_OPTIONS）。
  */
-
-const SOURCE_LABELS: Record<string, string> = {
-  netease: '网易云',
-  qq: 'QQ',
-  kugou: '酷狗',
-  kuwo: '酷我',
-  qianqian: '千千',
-  soda: '汽水',
-};
-
-const MODE_OPTIONS = [
-  { value: 'auto', label: '自动（直连优先）' },
-  { value: 'direct', label: '仅直连' },
-  { value: 'api', label: '仅自建 API' },
-];
 
 interface SourceModesData {
   modes: Record<string, string>;
@@ -76,14 +62,14 @@ const SourceSection: React.FC = () => {
             {MULTI_SOURCE_LIST.map((source) => (
               <div key={source} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <span style={{ width: '56px', fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>
-                  {SOURCE_LABELS[source] || source}
+                  {SOURCE_DISPLAY_NAMES[source] || source}
                 </span>
                 <Tag color={data.status[source] === 'ready' ? 'green' : 'default'} style={{ marginInlineEnd: 0 }}>
                   {data.status[source] === 'ready' ? '直连可用' : '直连未实现'}
                 </Tag>
                 <Radio.Group
                   size="small"
-                  options={MODE_OPTIONS}
+                  options={SOURCE_MODE_OPTIONS}
                   optionType="button"
                   value={data.modes[source] || 'auto'}
                   onChange={(e) => void handleChange(source, e.target.value)}

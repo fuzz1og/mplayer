@@ -13,26 +13,11 @@ import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
 import { CircleCheck, Save, RefreshCcw, Zap, RefreshCw, Download, CircleX, Trash2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, hasDirectClient } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useLogsStore } from '../stores/logsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
 import { colors, radius, shadow, spacing } from '../theme/tokens';
-
-const SOURCE_LABELS: Record<string, string> = {
-  netease: '网易云',
-  qq: 'QQ',
-  kugou: '酷狗',
-  kuwo: '酷我',
-  qianqian: '千千',
-  soda: '汽水',
-};
-
-const MODE_OPTIONS: { value: 'auto' | 'direct' | 'api'; label: string }[] = [
-  { value: 'auto', label: '自动' },
-  { value: 'direct', label: '仅直连' },
-  { value: 'api', label: '仅API' },
-];
 
 function formatLogTime(ts: number): string {
   const d = new Date(ts);
@@ -251,9 +236,12 @@ export default function SettingsPage() {
             </Text>
             {MULTI_SOURCE_LIST.map((source) => (
               <View key={source} style={styles.modeRow}>
-                <Text style={styles.modeLabel}>{SOURCE_LABELS[source] || source}</Text>
+                <Text style={styles.modeLabel}>{SOURCE_DISPLAY_NAMES[source] || source}</Text>
+                <Text style={[styles.modeStatus, hasDirectClient(source) && styles.modeStatusReady]}>
+                  {hasDirectClient(source) ? '直连可用' : '直连未实现'}
+                </Text>
                 <View style={styles.modeGroup}>
-                  {MODE_OPTIONS.map((m) => {
+                  {SOURCE_MODE_OPTIONS.map((m) => {
                     const active = (sourceModes[source] || 'auto') === m.value;
                     return (
                       <TouchableOpacity
@@ -464,6 +452,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     width: 56,
+  },
+  modeStatus: {
+    flex: 1,
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginLeft: 8,
+  },
+  modeStatusReady: {
+    color: colors.success,
   },
   modeGroup: {
     flexDirection: 'row',

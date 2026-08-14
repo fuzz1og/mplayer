@@ -15,6 +15,23 @@ import type { Song, SourceKey } from '../types/index.js';
 
 export type SourceMode = 'auto' | 'direct' | 'api';
 
+/** 来源中文名（设置页/状态展示共用，桌面/移动端同一份，避免双端漂移）。 */
+export const SOURCE_DISPLAY_NAMES: Record<string, string> = {
+  netease: '网易云',
+  qq: 'QQ',
+  kugou: '酷狗',
+  kuwo: '酷我',
+  qianqian: '千千',
+  soda: '汽水',
+};
+
+/** 来源开关三态选项（桌面/移动端设置 UI 共用）。 */
+export const SOURCE_MODE_OPTIONS: { value: SourceMode; label: string }[] = [
+  { value: 'auto', label: '自动' },
+  { value: 'direct', label: '仅直连' },
+  { value: 'api', label: '仅自建 API' },
+];
+
 export interface DirectSourceClient {
   key: SourceKey;
   /** 源站搜索（直连）。未实现则不提供。 */
@@ -110,6 +127,21 @@ function requireLegs(): SourceRouterLegs {
   return legs;
 }
 
+/** 模式分派：api 一律走 api 腿；direct 无能力/失败明确上抛；auto 直连优先、失败回退 api。 */
+type RouteDecision =
+  | { kind: 'direct'; client: DirectSourceClient; mode: SourceMode }
+  | { kind: 'api' }
+  | { kind: 'direct-unavailable' };
+
+function decideRoute(source: SourceKey, hasCapability: (c: DirectSourceClient) => boolean): RouteDecision {
+  const mode = getSourceMode(source);
+  const client = getDirectClient(source);
+  if (mode === 'api' || !client || !hasCapability(client)) {
+    return mode === 'direct' ? { kind: 'direct-unavailable' } : { kind: 'api' };
+  }
+  return { kind: 'direct', client, mode };
+}
+
 /**
  * 模式感知搜索（供 SearchOrchestrator 的 searchOneSource 注入）。
  * - api：一律自建 API（现状）；
@@ -122,20 +154,13 @@ export async function searchSongsRouted(
   source: SourceKey,
 ): Promise<Song[]> {
   const api = requireLegs();
-  const mode = getSourceMode(source);
-  const client = getDirectClient(source);
-
-  if (mode === 'api' || !client?.search) {
-    if (mode === 'direct' && !client?.search) {
-      throw new Error('该源暂无直连实现');
-    }
-    return api.searchSongs(query, page, source);
-  }
-
+  const route = decideRoute(source, (c) => !!c.search);
+  if (route.kind === 'api') return api.searchSongs(query, page, source);
+  if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
   try {
-    return await client.search(query, page);
+    return await route.client.search!(query, page);
   } catch (err) {
-    if (mode === 'direct') throw err;
+    if (route.mode === 'direct') throw err;
     return api.searchSongs(query, page, source);
   }
 }
@@ -146,20 +171,13 @@ export async function searchSongsRouted(
  */
 export async function resolvePlayableUrlRouted(song: Song): Promise<string> {
   const api = requireLegs();
-  const mode = getSourceMode(song.sourceType);
-  const client = getDirectClient(song.sourceType);
-
-  if (mode === 'api' || !client?.resolvePlayableUrl) {
-    if (mode === 'direct' && !client?.resolvePlayableUrl) {
-      throw new Error('该源暂无直连实现');
-    }
-    return api.getAudioUrl(song.url);
-  }
-
+  const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl);
+  if (route.kind === 'api') return api.getAudioUrl(song.url);
+  if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
   try {
-    return await client.resolvePlayableUrl(song);
+    return await route.client.resolvePlayableUrl!(song);
   } catch (err) {
-    if (mode === 'direct') throw err;
+    if (route.mode === 'direct') throw err;
     return api.getAudioUrl(song.url);
   }
 }
