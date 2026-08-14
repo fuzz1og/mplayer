@@ -133,6 +133,11 @@ interface GatePool {
   queue: { priority: number; resolve: () => void; since: number }[];
 }
 
+// 并发上限是实测确定的，不要随意调高：
+// 上游 API 服务端对并发有硬性限速——10 个并行搜索实测每个 5-15s（都能返回
+// 但被拖慢），2-3 个顺序/低并发则 ~550ms/个。cap=2 保证不触发并发限速；
+// 提高 cap 会让整批请求全部变慢。提速靠「减少请求数」（如专辑名预搜），
+// 不靠提高并发。
 const gatePools: Record<'critical' | 'cover', GatePool> = {
   critical: { cap: 2, active: 0, queue: [] },
   cover: { cap: 1, active: 0, queue: [] },
