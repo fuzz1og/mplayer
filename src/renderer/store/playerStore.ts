@@ -3,7 +3,7 @@ import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
-import { isSessionProtectedEndpoint, stripSourceIdPrefix, findExactMatch } from '@mplayer/core';
+import { isSessionProtectedEndpoint, stripSourceIdPrefix, findExactMatch, getNextSongIndex, getPrevSongIndex } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
@@ -416,35 +416,25 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
 
-    switch (playMode) {
-      case '单曲循环':
-        if (currentSong) {
-          audioPlayer.seek(0);
-          audioPlayer.play();
-          set({ position: 0, isPlaying: true, error: null });
-        }
-        break;
-
-      case '随机播放': {
-        let randomIndex = currentPlaylistIndex;
-        if (currentPlaylist.length > 1) {
-          do {
-            randomIndex = Math.floor(Math.random() * currentPlaylist.length);
-          } while (randomIndex === currentPlaylistIndex);
-        }
-        set({ currentPlaylistIndex: randomIndex });
-        get().play(currentPlaylist[randomIndex]);
-        break;
+    // 单曲循环：刻意保留 seek(0)+play 特例（走 seek 复播而非 play()/URL，
+    // 避免切走 → reload 的音轨闪烁），不走 core 队列算法与 play() 主链路
+    if (playMode === '单曲循环') {
+      if (currentSong) {
+        audioPlayer.seek(0);
+        audioPlayer.play();
+        set({ position: 0, isPlaying: true, error: null });
       }
-
-      case '列表循环':
-      default: {
-        const nextIndexLoop = (currentPlaylistIndex + 1) % currentPlaylist.length;
-        set({ currentPlaylistIndex: nextIndexLoop });
-        get().play(currentPlaylist[nextIndexLoop]);
-        break;
-      }
+      return;
     }
+
+    // 随机 / 列表循环统一收敛到 core getNextSongIndex（防重复随机、列表回绕）
+    const nextIndex = getNextSongIndex(currentPlaylist, currentPlaylistIndex, playMode);
+    if (nextIndex === -1) {
+      get().stop();
+      return;
+    }
+    set({ currentPlaylistIndex: nextIndex });
+    get().play(currentPlaylist[nextIndex]);
   },
 
   playPrevious: () => {
@@ -454,22 +444,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
 
-    if (playMode === '随机播放') {
-      let randomIndex = currentPlaylistIndex;
-      if (currentPlaylist.length > 1) {
-        do {
-          randomIndex = Math.floor(Math.random() * currentPlaylist.length);
-        } while (randomIndex === currentPlaylistIndex);
-      }
-      set({ currentPlaylistIndex: randomIndex });
-      get().play(currentPlaylist[randomIndex]);
-    } else {
-      const prevIndex = currentPlaylistIndex > 0
-        ? currentPlaylistIndex - 1
-        : currentPlaylist.length - 1;
-      set({ currentPlaylistIndex: prevIndex });
-      get().play(currentPlaylist[prevIndex]);
-    }
+    // 随机 / 单曲循环 / 列表循环统一收敛到 core getPrevSongIndex
+    // （随机防重复、单曲不做重播、列表回绕——与现有行为一致）
+    const prevIndex = getPrevSongIndex(currentPlaylist, currentPlaylistIndex, playMode);
+    if (prevIndex === -1) return;
+    set({ currentPlaylistIndex: prevIndex });
+    get().play(currentPlaylist[prevIndex]);
   },
 
   setCurrentPlaylist: (playlist: Song[], currentIndex: number = -1) => {
