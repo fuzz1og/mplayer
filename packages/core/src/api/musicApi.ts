@@ -14,6 +14,7 @@ import {
   resolvePlayableUrlRouted as routedResolveUrl,
   configureSourceRouter,
 } from '../shared/sourceRouter.js';
+import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
@@ -1339,12 +1340,17 @@ export const musicApi = {
       return cachedData;
     }
 
-    // 第三方歌词 URL（QQ fcg 等）需带官方 Referer，否则 CDN 防盗链 403/空响应
+    // 第三方歌词 URL（QQ fcg / 酷我 newlyric 等）需带官方 Referer，否则 CDN 防盗链 403/空响应
     const referer = refererForUrl(fullUrl);
+    const isKuwoLyric = fullUrl.includes('newlyric.kuwo.cn');
     const response = await apiClient.get(fullUrl, {
       headers: referer ? { Referer: referer } : undefined,
+      responseType: isKuwoLyric ? 'arraybuffer' : 'text',
     });
-    const lyrics = decodeLyricBody(response.data);
+    // 酷我歌词响应为 tp=content + zlib + XOR + gb18030 管线；其余走 JSON/base64 或原样
+    const lyrics = isKuwoLyric
+      ? decodeKuwoLyricBody(new Uint8Array(response.data))
+      : decodeLyricBody(response.data);
 
     // 会话失效/签名过期：服务端返回「非法请求」页（200 text/html；响应拦截器
     // 已带新会话重试一次仍无效——签名与旧会话绑定，同 URL 重试无意义）。

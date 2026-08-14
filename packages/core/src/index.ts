@@ -44,6 +44,7 @@ export { neteaseDirectClient } from './api/neteaseDirect.js';
 export { qianqianDirectClient } from './api/qianqianDirect.js';
 export { miguDirectClient, decryptXorStream, XOR_KEY } from './api/miguDirect.js';
 export { qqDirectClient, rsaPkcs1v15Encrypt, aesCbcPkcs7Encrypt, obtainQimei, randomGuid } from './api/qqDirect.js';
+export { kuwoDirectClient, encryptQuery, kuwoDesEncrypt, decryptQuery, decodeKuwoLyricBody } from './api/kuwoDirect.js';
 export {
   registerDirectClient,
   getDirectClient,
