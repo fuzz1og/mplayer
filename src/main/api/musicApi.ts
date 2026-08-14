@@ -16,6 +16,12 @@ export {
   getAllSourceModes,
   hasDirectClient,
   setTlsDegradeProvider,
+  getTlsFingerprintEnabled,
+  setTlsFingerprintEnabled,
+  loadTlsFingerprint,
+  setTlsFingerprintPersister,
+  setTlsFingerprintAgentProvider,
+  TLS_FINGERPRINT_SETTING_KEY,
 } from '@mplayer/core';
 export type { ProxyAgents } from '@mplayer/core';
 

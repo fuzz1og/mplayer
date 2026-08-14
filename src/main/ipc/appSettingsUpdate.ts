@@ -9,6 +9,10 @@ import {
   setSourceModePersister,
   getAllSourceModes,
   hasDirectClient,
+  getTlsFingerprintEnabled,
+  setTlsFingerprintEnabled,
+  setTlsFingerprintPersister,
+  TLS_FINGERPRINT_SETTING_KEY,
 } from '../api/musicApi';
 import { MULTI_SOURCE_LIST, type SourceKey, type SourceMode } from '@mplayer/core';
 import type { BrowserWindow } from 'electron';
@@ -72,6 +76,17 @@ export function registerSettingsIpc(): void {
     await db.setSetting('proxyConfig', proxyConfig);
     buildAgents(proxyConfig);
     applyElectronProxy(proxyConfig);
+  });
+
+  // T10 spec #156：TLS 指纹伪装险情开关（仅桌面，weapi 试点）。默认关。
+  // 持久化仿 T01 sourceRouter：core 零 I/O，宿主注册 persister 落盘 db。
+  setTlsFingerprintPersister((value) => {
+    void db.setSetting(TLS_FINGERPRINT_SETTING_KEY, value);
+  });
+  registerIpcHandlerSimple('settings:getTlsFingerprint', () => getTlsFingerprintEnabled());
+  registerIpcHandler('settings:setTlsFingerprint', async (value: boolean) => {
+    setTlsFingerprintEnabled(value === true);
+    return true;
   });
 }
 

@@ -50,6 +50,17 @@ export {
 } from './api/transport.js';
 export type { Transport, TransportRequest, TransportResponse, TransportRetryOptions, TlsDegradeAgents } from './api/transport.js';
 export {
+  TLS_FINGERPRINT_SETTING_KEY,
+  getTlsFingerprintEnabled,
+  setTlsFingerprintEnabled,
+  loadTlsFingerprint,
+  setTlsFingerprintPersister,
+  setTlsFingerprintAgentProvider,
+  getTlsFingerprintAgent,
+  getTlsFingerprintHeaders,
+  getTlsFingerprintConfig,
+} from './api/tlsFingerprint.js';
+export {
   registerDirectClient,
   getDirectClient,
   hasDirectClient,

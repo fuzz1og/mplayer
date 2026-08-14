@@ -23,10 +23,10 @@ import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { getApiUrl } from './config';
-import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl, setApiTimingLog, loadSourceModes, setTlsDegradeProvider } from './api/musicApi';
+import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl, setApiTimingLog, loadSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
-import { applyElectronProxy, getHttpAgent, getHttpsAgent, getTlsDegradedHttpsAgent, type ProxyConfig } from './proxy';
+import { applyElectronProxy, getHttpAgent, getHttpsAgent, getTlsDegradedHttpsAgent, getTlsFingerprintHttpsAgent, type ProxyConfig } from './proxy';
 import { registerCacheIpc } from './ipc/cache';
 import { registerFavoriteIpc, registerHistoryIpc, registerPlaylistIpc } from './ipc/favoriteHistoryPlaylist';
 import { registerLocalMusicIpc } from './ipc/localMusic';
@@ -195,6 +195,10 @@ app.whenReady().then(async () => {
   // 握手失败时，用放宽 minVersion 的降级 agent 重试一次（仅桌面注入；RN 不注入）。
   setTlsDegradeProvider(() => ({ httpsAgent: getTlsDegradedHttpsAgent() }));
 
+  // TLS 指纹伪装险情开关（T10 spec #156）：注入桌面指纹 agent，供 weapi 请求装配。
+  // 默认关；仅桌面（RN 不注入、不开启）。
+  setTlsFingerprintAgentProvider(() => getTlsFingerprintHttpsAgent());
+
   // 加载代理设置并应用
   try {
     const savedProxy = await db.getSetting<ProxyConfig>('proxyConfig');
@@ -235,6 +239,16 @@ app.whenReady().then(async () => {
     }
   } catch (error) {
     console.error('加载来源开关设置失败:', error);
+  }
+
+  // 加载 TLS 指纹伪装险情开关（T10 spec #156，默认关，仅桌面）
+  try {
+    const saved = await db.getSetting<boolean>(TLS_FINGERPRINT_SETTING_KEY);
+    if (typeof saved === 'boolean') {
+      loadTlsFingerprint(saved);
+    }
+  } catch (error) {
+    console.error('加载 TLS 指纹伪装设置失败:', error);
   }
 
   // IPC registration (grouped by domain)
