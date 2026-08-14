@@ -6,6 +6,7 @@ import { weapiRequest } from './neteaseWeapi.js';
 import { MULTI_SOURCE_LIST } from '../constants.js';
 import { findExactMatch } from '../utils/songMatcher.js';
 import { resourceUrlKey } from '../utils/resourceKey.js';
+import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import type { Agent } from 'http';
 
@@ -670,28 +671,8 @@ export function getApiClient(): AxiosInstance {
  * 直链/播放失败）。fetch 默认 referrerPolicy 在跨源重定向时把 Referer
  * 降级为 origin（API 域名），CDN 不认——必须手动带官方 Referer。
  */
-const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-
-const SOURCE_REFERER_BY_TYPE: Record<string, string> = {
-  wy: 'https://music.163.com/',
-  netease: 'https://music.163.com/',
-  qq: 'https://y.qq.com/',
-  kg: 'https://www.kugou.com/',
-  kugou: 'https://www.kugou.com/',
-  kw: 'https://www.kuwo.cn/',
-  kuwo: 'https://www.kuwo.cn/',
-  qianqian: 'https://music.qianqian.com/',
-  migu: 'https://music.migu.cn/',
-};
-
-function refererForUrl(url: string): string | undefined {
-  try {
-    const m = url.match(/[?&]type=([^&]+)/);
-    return m ? SOURCE_REFERER_BY_TYPE[m[1]] : undefined;
-  } catch {
-    return undefined;
-  }
-}
+// BROWSER_UA / 按源 Referer 映射见 utils/sourceReferer.ts（core 共享，
+// musicApi / audioProbe / 播放器统一一份，避免 key 形状不一致漏配）
 
 /**
  * 手动逐跳跟随重定向，返回最终 URL 和末跳响应数据。

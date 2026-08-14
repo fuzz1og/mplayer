@@ -22,23 +22,7 @@ import { searchSwapCandidates, applySwap, probeSwapCandidates } from '../service
 import type { SwapCandidate } from '../services/sourceSwap';
 import { searchStrictMatch } from '../services/songResources';
 import { useResolvedCover } from '../hooks/useResolvedCover';
-
-// 封面失效兜底搜索：限并发（手机网络带宽有限，避免整列表失效时并发打满）
-let activeCoverSearches = 0;
-const MAX_COVER_SEARCHES = 4;
-const coverSearchWaiters: (() => void)[] = [];
-async function withCoverSearchSlot(fn: () => Promise<void>): Promise<void> {
-  if (activeCoverSearches >= MAX_COVER_SEARCHES) {
-    await new Promise<void>((r) => coverSearchWaiters.push(r));
-  }
-  activeCoverSearches++;
-  try {
-    await fn();
-  } finally {
-    activeCoverSearches--;
-    coverSearchWaiters.shift()?.();
-  }
-}
+import { withCoverSearchSlot } from '../services/coverSearchSlot';
 
 interface SongRowProps {
   song: Song;

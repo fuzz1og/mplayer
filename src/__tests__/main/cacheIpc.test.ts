@@ -68,9 +68,10 @@ describe('registerCacheIpc legacy binary channels', () => {
     const setJSON = getHandler('cache:setJSON');
     const getJSON = getHandler('cache:getJSON');
 
-    await setJSON({}, 'url:expire-test', { url: 'https://example.com/x.mp3' }, 20);
+    // TTL 余量放宽：并行测试负载下 20ms 会过期在读写之间（时序 flake）
+    await setJSON({}, 'url:expire-test', { url: 'https://example.com/x.mp3' }, 200);
     expect(await getJSON({}, 'url:expire-test')).toEqual({ url: 'https://example.com/x.mp3' });
-    await new Promise((r) => setTimeout(r, 40));
+    await new Promise((r) => setTimeout(r, 400));
     expect(await getJSON({}, 'url:expire-test')).toBeNull();
   });
 

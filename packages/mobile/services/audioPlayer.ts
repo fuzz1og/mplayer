@@ -2,8 +2,8 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants from 'expo-constants';
-import { cacheManager, getNextSongIndex, getApiBaseUrl, getApiSessionCookie, isApiOriginUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey } from '@mplayer/core';
-import type { Song, SourceKey } from '@mplayer/core';
+import { cacheManager, getNextSongIndex, getApiBaseUrl, getApiSessionCookie, isApiOriginUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey, BROWSER_UA, refererForSourceKey } from '@mplayer/core';
+import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -337,18 +337,11 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     // 网易云 CDN（music.126.net）宽松不校验，酷狗/QQ 等 CDN 防盗链校验
     // Referer 域名，带错 Referer（如 API 域名）会 403 → 播放失败跳下一首
     // （图片 CDN 校验宽松所以封面正常、音频失败）。UA 保持浏览器特征。
-    const SOURCE_REFERERS: Partial<Record<SourceKey, string>> = {
-      netease: 'https://music.163.com/',
-      qq: 'https://y.qq.com/',
-      kugou: 'https://www.kugou.com/',
-      kuwo: 'https://www.kuwo.cn/',
-      qianqian: 'https://music.qianqian.com/',
-      soda: '',
-    };
+    // UA 与按源 Referer 映射见 core utils/sourceReferer（musicApi/audioProbe 同一份）
     const playerHeaders: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'User-Agent': BROWSER_UA,
       'Referer': (() => {
-        const official = SOURCE_REFERERS[song.sourceType as SourceKey];
+        const official = refererForSourceKey(song.sourceType as string);
         if (official) return official;
         // 未映射的源（本地/soda）：回退 API 域名（origin 形式，去尾斜杠 + /）
         const base = getApiBaseUrl();

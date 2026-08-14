@@ -21,6 +21,7 @@ export type { Transport, TransportConfig, TransportResponse } from './api/transp
 export { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from './utils/lyricsParser.js';
 export type { LyricLine, ParsedLyrics } from './utils/lyricsParser.js';
 export { formatPlayCount } from './utils/format.js';
+export { BROWSER_UA, refererForApiType, refererForUrl, refererForSourceKey } from './utils/sourceReferer.js';
 export { resourceUrlKey } from './utils/resourceKey.js';
 export { md5 } from './utils/hash.js';
 export { createSearchController } from './shared/searchController.js';

@@ -318,7 +318,7 @@ export default function SettingsPage() {
               <Trash2 size={18} color={colors.textInverse} style={styles.btnIcon} />
               <Text style={styles.saveBtnText}>清理缓存</Text>
             </TouchableOpacity>
-            <Text style={styles.hintText}>播放 URL 缓存 24 小时过期，清理不影响已收藏歌曲</Text>
+            <Text style={styles.hintText}>播放 URL 缓存 12 小时过期，清理不影响已收藏歌曲</Text>
           </View>
         </View>
 

@@ -9,23 +9,13 @@ export const MAX_REDIRECTS = 3;
 
 // 探测请求头：源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格），
 // 不带/带错会 403 → 直链误判失效；部分 CDN 拒非浏览器 UA。
-// type 参数（wy/kg/qq/...）推断源，与 core musicApi 的 302 解析同规则。
-const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-const REFERER_BY_TYPE: Record<string, string> = {
-  wy: 'https://music.163.com/',
-  netease: 'https://music.163.com/',
-  qq: 'https://y.qq.com/',
-  kg: 'https://www.kugou.com/',
-  kugou: 'https://www.kugou.com/',
-  kw: 'https://www.kuwo.cn/',
-  qianqian: 'https://music.qianqian.com/',
-  migu: 'https://music.migu.cn/',
-};
+// UA 与按源 Referer 映射见 utils/sourceReferer.ts（core 共享，与 musicApi/播放器同一份）。
+import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 
 function probeRequestHeaders(url: string): Record<string, string> {
   const headers: Record<string, string> = { 'User-Agent': BROWSER_UA };
-  const m = url.match(/[?&]type=([^&]+)/);
-  if (m && REFERER_BY_TYPE[m[1]]) headers['Referer'] = REFERER_BY_TYPE[m[1]];
+  const referer = refererForUrl(url);
+  if (referer) headers['Referer'] = referer;
   return headers;
 }
 

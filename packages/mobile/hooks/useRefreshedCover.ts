@@ -13,23 +13,8 @@ import { searchStrictMatch } from '../services/songResources';
  * 用途：歌单详情 hero 用第一首歌封面、以及其他需要"最新封面"的场景。
  */
 
-// 封面失效兜底搜索：限并发（手机网络带宽有限，避免整列表失效时并发打满）
-let activeCoverSearches = 0;
-const MAX_COVER_SEARCHES = 4;
-const coverSearchWaiters: (() => void)[] = [];
-
-async function withCoverSearchSlot(fn: () => Promise<void>): Promise<void> {
-  if (activeCoverSearches >= MAX_COVER_SEARCHES) {
-    await new Promise<void>((r) => coverSearchWaiters.push(r));
-  }
-  activeCoverSearches++;
-  try {
-    await fn();
-  } finally {
-    activeCoverSearches--;
-    coverSearchWaiters.shift()?.();
-  }
-}
+// 封面失效兜底搜索的并发闸门（与 SongRow 共用 services/coverSearchSlot）
+import { withCoverSearchSlot } from '../services/coverSearchSlot';
 
 export function useRefreshedCover(song: Song | null | undefined): {
   cover: string | undefined;
