@@ -18,7 +18,6 @@ export const MUSIC_API_METHODS = [
   'searchSongById',
   'getAudioUrl',
   'batchSearch',
-  'searchAllSources',
   'probeSongsBatch',
   'getLyrics',
   'getNeteaseHotlist',
