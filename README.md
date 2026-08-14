@@ -23,7 +23,7 @@ Electron 桌面音乐播放器 + Expo/React Native 移动端。支持多音乐�
 
 ### 技术栈
 
-- Electron 28 + React 18 + TypeScript + Vite 5
+- Electron 41 + React + TypeScript + Vite 6
 - Zustand（状态管理）、Ant Design 5（UI）、Howler.js（音频）
 - @tanstack/react-virtual（虚拟滚动）、@dnd-kit（拖拽排序）
 - electron-builder（打包）、electron-updater（自动更新）
@@ -34,11 +34,12 @@ Electron 桌面音乐播放器 + Expo/React Native 移动端。支持多音乐�
 | 分类 | 功能 |
 |------|------|
 | 播放 | 多源搜索、热歌榜、播放控制、四种模式、音量/进度条（键盘可操作）、歌词、全局快捷键 |
+| 换源 | 单曲换源（完整版优先 + 可播性探测 + 原位替换） |
 | 搜索 | 歌曲/歌手标签页分类、歌手浏览（分类筛选）、歌手详情 |
 | 收藏 | 单首收藏、URL 自动刷新与 DB 回写 |
 | 历史 | 自动记录、查看/清空/删除 |
 | 歌单 | 创建/删除、拖拽排序、批量操作、URL 自动刷新与 DB 回写、文本/链接导入 |
-| 发现 | 推荐歌单浏览（分类标签、无限滚动）、一键保存 |
+| 发现 | 推荐 tab（换一批）、发现页（排行榜/歌单/歌手）、专辑页、推荐歌单一键保存 |
 | 缓存 | URL（12h）、封面（永久磁盘）、音频（最近 10 首）、空数据不缓存、统计/清除 |
 | 托盘 | 右键菜单、歌曲信息提示 |
 | 队列 | 拖拽排序、保存为歌单 |
@@ -68,11 +69,11 @@ npm run electron:build  # 打包应用（当前平台）
 src/
 ├── main/                    # Electron 主进程
 │   ├── main.ts              # 入口（窗口、IPC、快捷键、托盘）
-│   ├── api/                 # HTTP 客户端（搜索、热榜、反爬）
+│   ├── api/                 # 主进程侧 HTTP（kugouApi 直连；musicApi 为 @mplayer/core 的壳）
 │   ├── cache/               # 磁盘缓存
 │   ├── storage/             # 数据持久化（db.ts）
 │   ├── ipc/                 # IPC 注册工具
-│   ├── services/            # 下载、本地音乐扫描
+│   ├── services/            # 下载、本地音乐扫描、排行榜聚合
 │   └── tray/                # 系统托盘
 ├── renderer/                # React 渲染进程
 │   ├── components/          # 组件（PlayerBar, SongList, Modals 等）
@@ -80,7 +81,7 @@ src/
 │   ├── store/               # Zustand stores
 │   ├── services/            # 业务服务（audioPlayer, cacheService 等）
 │   ├── hooks/               # 自定义 Hooks
-│   └── utils/               # 工具函数（songDedupe, lyricsParser, format 等）
+│   └── utils/               # 渲染进程工具（async, queueUtils, songCoverRefresh 等；通用工具在 core）
 └── shared/                  # 共享类型定义
 ```
 
@@ -99,7 +100,7 @@ git push origin v1.x.x
 
 ### 技术栈
 
-- Expo 52 + React Native 0.76 + TypeScript
+- Expo 57 + React Native 0.86 + React 19 + TypeScript
 - expo-router（导航）、Zustand（状态管理）、expo-av（音频播放）
 - @react-native-async-storage/async-storage（持久化）
 
@@ -118,15 +119,21 @@ npm run ios        # iOS 模拟器（仅 macOS）
 
 | 路由 | 功能 |
 |------|------|
-| `/` | 发现页 — 排行榜/歌单/歌手滑动 Tab |
+| `/`（tabs） | 推荐 / 发现 / 搜索 / 歌单 / 下载 五个 Tab（initialRouteName=recommend） |
+| `/recommend` | 推荐 — 随机推荐 / 换一批 |
+| `/discover` | 发现 — 排行榜/歌单/歌手滑动 Tab |
 | `/search?q=` | 搜索结果（隐藏 Tab 栏动画下滑） |
+| `/download` | 下载列表（SAF 授权目录、本地播放、删除） |
 | `/playlists` | 歌单页（内置收藏/播放历史入口） |
 | `/player` | 全屏播放器（模态）— 左滑歌词、播放模式、收藏、队列 |
 | `/favorites` | 我的收藏 |
 | `/history` | 播放历史 |
 | `/settings` | API 地址 + 播放模式设置 |
+| `/hotlist` | 排行榜详情 |
 | `/playlist/[id]` | 歌单详情 |
+| `/album/[id]` | 专辑详情 |
 | `/artist/[id]` | 歌手详情 |
+| `/discover-playlist/[id]` | 发现歌单详情 |
 
 ### 调试
 
@@ -145,7 +152,6 @@ npx expo start --android --logs
 
 ```bash
 npm run core:build        # 构建共享包（修改核心代码后需重新构建）
-npm run core:typecheck    # 类型检查
 ```
 
 ## 构建检查

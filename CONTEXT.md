@@ -25,5 +25,5 @@ _Avoid_: 播放状态、质量
 _Avoid_: 删除后新增、覆盖更新
 
 **音乐源**:
-歌曲的提供方（netease / qq / kugou / kuwo / qianqian / soda / local），换源候选只在非当前源中搜索。
+歌曲的提供方（netease / qq / kugou / migu / kuwo / qianqian / soda / local），换源候选只在非当前源中搜索。
 _Avoid_: 来源、音源服务
