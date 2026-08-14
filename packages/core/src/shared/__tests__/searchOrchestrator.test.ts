@@ -150,6 +150,42 @@ describe('createSearchOrchestrator', () => {
   });
 
   describe('loadMore 与渐进并发', () => {
+    it("'all' 分页耗尽后 hasMore 变 false，loadMore 不再发请求", async () => {
+      // 第一页各源都有歌；第二页各源都空 → 视为耗尽
+      const searchOneSource = vi.fn(async (_q: string, page: number): Promise<Song[]> => {
+        if (page === 1) return [song(`s1-${_q}`, '晴天', '周杰伦', 'a')];
+        return [];
+      });
+      const o = createSearchOrchestrator({ searchOneSource, sources: SOURCES });
+
+      await o.search('所有页', 'all');
+      expect(o.getState().hasMore).toBe(true);
+
+      await o.loadMore(); // 第二页空 → hasMore=false
+      expect(o.getState().hasMore).toBe(false);
+      const callsAfterDrain = searchOneSource.mock.calls.length;
+
+      await o.loadMore(); // hasMore=false，守卫应拦下，不再发请求
+      expect(searchOneSource.mock.calls.length).toBe(callsAfterDrain);
+      expect(o.getState().page).toBe(2);
+    });
+
+    it("'all' 分页仍有任一源返回歌 → hasMore 保持 true（可继续翻页）", async () => {
+      const searchOneSource = vi.fn(async (_q: string, page: number, src: string): Promise<Song[]> => {
+        if (page === 1 || page === 2) return [song(`s-${src}-${page}`, '晴天', '周杰伦', src)];
+        return [];
+      });
+      const o = createSearchOrchestrator({ searchOneSource, sources: SOURCES });
+
+      await o.search('多页', 'all');
+      expect(o.getState().hasMore).toBe(true);
+
+      await o.loadMore(); // 第二页还有歌（bad dedup 后仍有新增）
+      expect(o.getState().hasMore).toBe(true);
+      await o.loadMore(); // 第三页耗尽
+      expect(o.getState().hasMore).toBe(false);
+    });
+
     it('分页进行中触发展的源（新搜索）后，旧分页迟到结果不污染新结果、组不重复', async () => {
       // 用可控的 deferred 队列控制源 a 的每次调用（search page1 / loadMore page2 /
       // 新搜索 page1）完成时机；b、c 立即完成。

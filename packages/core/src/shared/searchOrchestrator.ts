@@ -1,6 +1,7 @@
 import type { Song, SongGroup, SourceKey } from '../types/index.js';
 import { MULTI_SOURCE_LIST } from '../constants.js';
 import { groupIntoSongGroups } from '../utils/groupIntoSongGroups.js';
+import { dedupeSongs } from '../utils/songDedupe.js';
 
 /**
  * SearchOrchestrator —— 多源搜索编排深模块（ADR-0003）。
@@ -57,21 +58,6 @@ const INITIAL_STATE: SearchOrchestratorState = {
   error: null,
 };
 
-/** 同源去重：只与同源已有歌曲比 id 与「name|artist」，跨源同名一律保留。 */
-function collectSourceSongs(existing: Song[], adding: Song[]): Song[] {
-  const idSet = new Set(existing.map((s) => s.id));
-  const nameArtistSet = new Set(existing.map((s) => `${s.name}|${s.artist}`));
-  const out: Song[] = [];
-  for (const s of adding) {
-    const naKey = `${s.name}|${s.artist}`;
-    if (idSet.has(s.id) || nameArtistSet.has(naKey)) continue;
-    idSet.add(s.id);
-    nameArtistSet.add(naKey);
-    out.push(s);
-  }
-  return out;
-}
-
 /** ~内部 observable：零第三方依赖的最小 subject。订阅跨 search 持久，由调用方退订。 */
 function createEmitter() {
   const listeners = new Set<(state: SearchOrchestratorState) => void>();
@@ -122,7 +108,8 @@ export function createSearchOrchestrator<S extends string = SourceKey>(config: S
   function collectAndEmit(source: S, songs: Song[]): boolean {
     if (songs.length === 0) return false;
     const existing = collected.get(source) || [];
-    const added = collectSourceSongs(existing, songs);
+    // 同源去重（idSet + name|artist 复合键，定义在 songDedupe，跨源同名一律保留）
+    const added = dedupeSongs(existing, songs);
     if (added.length === 0) return false;
     collected.set(source, [...existing, ...added]);
     emitResults();
@@ -131,7 +118,8 @@ export function createSearchOrchestrator<S extends string = SourceKey>(config: S
 
   /**
    * 'all' 渐进执行：concurrency 个 worker 逐源调用，每源完成立即重组广播。
-   * 返回该页是否有任一源返回数据（用于 hasMore）。失败源跳过不影响其他源。
+   * 返回该页是否有任一源返回了歌（原始返回值非空，语义与单源 `songs.length > 0` 一致），
+   * 用于判定 hasMore——任一源还有歌即还有下一页。失败源跳过不影响其他源。
    */
   async function runAllProgressively(query: string, page: number, currentSeq: number): Promise<boolean> {
     let cursor = 0;
@@ -142,7 +130,8 @@ export function createSearchOrchestrator<S extends string = SourceKey>(config: S
         try {
           const songs = await searchOneSource(query, page, src);
           if (seq !== currentSeq) continue; // 已被新查询/clear 取代，丢弃迟到结果
-          if (collectAndEmit(src, songs)) pageHadData = true;
+          if (songs.length > 0) pageHadData = true;
+          collectAndEmit(src, songs);
         } catch {
           // 单源失败跳过，不影响其他源
         }
@@ -212,9 +201,11 @@ export function createSearchOrchestrator<S extends string = SourceKey>(config: S
 
       try {
         if (currentRoute === 'all') {
-          await runAllProgressively(currentQuery, currentPage + 1, currentSeq);
+          // 语义对齐单源：本次任一源还有歌 → 还有下一页（hasMore 保持 true），
+          // 全部耗尽（任一源都空）→ hasMore=false，loadMore 守卫随之生效。
+          const pageHadData = await runAllProgressively(currentQuery, currentPage + 1, currentSeq);
           if (seq === currentSeq && state.query === currentQuery) {
-            emit({ page: currentPage + 1, loadingMore: false });
+            emit({ page: currentPage + 1, loadingMore: false, hasMore: pageHadData });
           } else {
             emit({ loadingMore: false });
           }
