@@ -19,7 +19,7 @@ export interface DownloadItem {
 interface DownloadState {
   items: DownloadItem[];
   addItem: (item: DownloadItem) => void;
-  updateStatus: (key: string, patch: Partial<Pick<DownloadItem, 'status' | 'error' | 'publicUri'>>) => void;
+  updateStatus: (key: string, patch: Partial<Pick<DownloadItem, 'status' | 'error' | 'publicUri' | 'fileName'>>) => void;
   removeItem: (key: string) => void;
 }
 

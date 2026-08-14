@@ -1,14 +1,35 @@
 import { File, Directory, Paths } from 'expo-file-system';
 import { StorageAccessFramework } from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
-import type { Song } from '@mplayer/core';
-import { musicApi, md5 } from '@mplayer/core';
+import type { Song, AudioContainer } from '@mplayer/core';
+import {
+  musicApi,
+  md5,
+  detectAudioContainer,
+  extensionForContainer,
+  lrcSidecarName,
+  looksLikeLyrics,
+} from '@mplayer/core';
 import { useDownloadStore } from '../stores/downloadStore';
 import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 // 下载目录：应用文档目录（系统不会自动清理）。公共下载目录通过 SAF 授权后同步一份。
 const downloadDir = new Directory(Paths.document, 'mplayer-downloads');
+
+/** 容器 → SAF 公共文件 MIME（音频下载用真实容器 MIME，而非一律 audio/mpeg） */
+function mimeForContainer(container: AudioContainer): string {
+  switch (container) {
+    case 'm4a':
+      return 'audio/mp4';
+    case 'flac':
+      return 'audio/flac';
+    case 'ogg':
+      return 'audio/ogg';
+    default:
+      return 'audio/mpeg';
+  }
+}
 
 /**
  * 选择公共下载目录（Android SAF）：授权成功后持久化，后续下载直接写入。
@@ -26,11 +47,15 @@ export async function pickDownloadDirectory(): Promise<boolean> {
 
 /**
  * 将私有副本写入 SAF 公共目录，返回公共文件 content:// uri；失败抛错由调用方降级。
- * 注：expo-file-system 原生 copyAsync 不支持 file → SAF 写入，base64 读写是官方路径；
- * MP3 体积下（数 MB~十几 MB）一次读入 JS 内存可接受。
+ * mime 默认 audio/mpeg（兼容无容器识别的调用方）。
  */
-export async function writePublicCopy(privateUri: string, fileName: string, dirUri: string): Promise<string> {
-  const publicUri = await StorageAccessFramework.createFileAsync(dirUri, fileName, 'audio/mpeg');
+export async function writePublicCopy(
+  privateUri: string,
+  fileName: string,
+  dirUri: string,
+  mime: string = 'audio/mpeg'
+): Promise<string> {
+  const publicUri = await StorageAccessFramework.createFileAsync(dirUri, fileName, mime);
   const base64 = await StorageAccessFramework.readAsStringAsync(privateUri, { encoding: 'base64' });
   await StorageAccessFramework.writeAsStringAsync(publicUri, base64, { encoding: 'base64' });
   return publicUri;
@@ -79,7 +104,8 @@ async function removeFileIfExists(file: File): Promise<void> {
 
 /**
  * 下载文件全名：来源前缀 + 歌曲 ID 哈希，避免跨源同名/同歌手同名歌曲互相覆盖
- * （纯名字文件名会被后下载的覆盖，下载列表记录也会被顶掉）
+ * （纯名字文件名会被后下载的覆盖，下载列表记录也会被顶掉）。默认为 .mp3，
+ * 实际容器（FLAC/M4A 等）在下载后按字节头嗅探并重命名（见 correctContainerName）。
  */
 function buildFileName(song: Song): string {
   const src = song.sourceType && song.sourceType !== 'local' ? song.sourceType : 'netease';
@@ -89,6 +115,36 @@ function buildFileName(song: Song): string {
   const full = `[${src}] ${name} - ${artist}${digest ? ` [${digest}]` : ''}.mp3`;
   // 超长组合（长歌手名）整体截断，防文件名超限
   return full.length > 120 ? full.slice(0, 117) + '.mp3' : full;
+}
+
+/**
+ * 下载后按字节头嗅探真实容器。若扩展名与容器不符（如 FLAC 被存为 .mp3），
+ * 重命名为正确扩展名并返回 { fileName, container }；否则原样返回。
+ */
+async function correctContainerName(
+  file: File,
+  fileName: string
+): Promise<{ fileName: string; container: AudioContainer }> {
+  let head = new Uint8Array(0);
+  try {
+    const buf = await file.slice(0, 16).arrayBuffer();
+    head = new Uint8Array(buf);
+  } catch { /* 读头失败则沿用默认容器 */ }
+  const container = detectAudioContainer(head);
+  const correctExt = extensionForContainer(container);
+  const fileExt = file.extension;
+  if (correctExt === fileExt) return { fileName, container };
+  // 需要重命名：去掉原扩展名，换成正确扩展名
+  const base = fileName.replace(/\.[^.]*$/, '');
+  const newName = base + correctExt;
+  const newFile = new File(downloadDir, newName);
+  try {
+    await file.move(newFile);
+    return { fileName: newName, container };
+  } catch {
+    // 重命名失败不阻断：沿用原名（至少播放仍可用）
+    return { fileName, container };
+  }
 }
 
 // 进行中的下载去重：重复点击同一首歌复用同一 promise，避免并发写同一文件
@@ -139,6 +195,15 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     await downloadDir.create({ intermediates: true, idempotent: true });
     await File.downloadFileAsync(realUrl, file, { idempotent: true });
 
+    // 按字节头嗅探真实容器，修正扩展名（FLAC/M4A 不再被错标成 .mp3）
+    const corrected = await correctContainerName(file, fileName);
+    if (corrected.fileName !== fileName) {
+      updateStatus(itemKey, { fileName: corrected.fileName });
+    }
+
+    // 写入 .lrc 歌词侧车（与音频同名同目录）；歌词不可用/获取失败不影响下载结果
+    await writeLyricsSidecar(song, corrected.fileName, corrected.container);
+
     // 已授权公共目录时同步一份到系统下载目录；失败不阻断（私有副本仍可播放）
     const dirUri = useSettingsStore.getState().downloadDirUri || (await promptPublicDirOnce());
     let publicUri: string | undefined;
@@ -149,8 +214,10 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
           if (prevPublicUri) {
             await StorageAccessFramework.deleteAsync(prevPublicUri, { idempotent: true }).catch(() => {});
           }
-          publicUri = await writePublicCopy(file.uri, fileName, dirUri);
+          publicUri = await writePublicCopy(file.uri, corrected.fileName, dirUri, mimeForContainer(corrected.container));
           log.addLog('info', `已同步到公共下载目录《${song.name}》`);
+          // 歌词侧车同样同步到公共目录（失败不阻断音频）
+          await writePublicLyrics(song, corrected.fileName, dirUri).catch(() => {});
         } catch (e: unknown) {
           // 写入中途失败时清掉半成品公共文件，避免留下空文件
           if (publicUri) {
@@ -166,14 +233,44 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
 
     updateStatus(itemKey, { status: 'done', publicUri });
     log.addLog('info', `下载完成《${song.name}》- ${song.artist}`);
-    return file;
-  } catch (e: any) {
+    return new File(downloadDir, corrected.fileName);
+  } catch (e) {
     // 只清理本次新建的文件：已有文件（上次下载成功）失败时保留，避免丢离线副本
     if (!existedBefore) await removeFileIfExists(file);
+    const err = e as Error;
     updateStatus(itemKey, { status: 'error', error: toErrorMessage(e) });
     log.addLog('error', `下载失败《${song.name}》: ${toErrorMessage(e)}`);
-    throw e;
+    throw err;
   }
+}
+
+/** 写入 .lrc 歌词侧车（私有目录，与音频同名）。获取失败/非可用 LRC 时跳过。 */
+async function writeLyricsSidecar(song: Song, fileName: string, _container: AudioContainer): Promise<void> {
+  const lrcUrl = song.lrc?.trim();
+  if (!lrcUrl) return;
+  let content: string;
+  try {
+    content = await musicApi.getLyrics(lrcUrl);
+  } catch {
+    return;
+  }
+  if (!looksLikeLyrics(content)) return;
+  const lrcName = lrcSidecarName(fileName);
+  const lrcFile = new File(downloadDir, lrcName);
+  try {
+    await lrcFile.create({ overwrite: true, intermediates: true });
+    await lrcFile.write(content);
+  } catch { /* .lrc 写失败不影响音频结果 */ }
+}
+
+/** 将 .lrc 侧车同步到 SAF 公共目录（失败向下游静默）。 */
+async function writePublicLyrics(song: Song, fileName: string, dirUri: string): Promise<void> {
+  if (!song.lrc?.trim()) return;
+  const content = await musicApi.getLyrics(song.lrc.trim()).catch(() => '');
+  if (!looksLikeLyrics(content)) return;
+  const lrcName = lrcSidecarName(fileName);
+  const privateUri = new File(downloadDir, lrcName).uri;
+  await writePublicCopy(privateUri, lrcName, dirUri, 'text/plain');
 }
 
 /** 已下载歌曲的本地 file:// 播放 URI（未下载/文件丢失返回 null） */
