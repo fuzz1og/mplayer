@@ -2,7 +2,7 @@ import { probeAudioUrl } from '@mplayer/core';
 import type { Song, AudioTag } from '@mplayer/core';
 import { registerIpcHandler, registerIpcHandlerSimple } from './registerHandler';
 import { getAggregatedChart } from '../services/chartAggregator';
-import { getThrottleWaitMs } from '../api/musicApi';
+import { getThrottleWaitMs, invalidateCoverUrl } from '../api/musicApi';
 import { cacheResolvedCover } from './cache';
 
 type MusicApi = typeof import('../api/musicApi').musicApi & {
@@ -55,6 +55,11 @@ export function registerMusicApiIpc(musicApi: MusicApi): void {
     return resolved;
   });
   registerIpcHandler('musicApi:probeAudio', (songs: Song[]) => probeSongBatch(Array.isArray(songs) ? songs : [], musicApi));
+  // 封面失效：清除主进程 6h 归一化解析缓存（新签名 URL 归一化 key 相同会
+  // 命中失效直链循环失败），配合渲染层重搜换新签名封面
+  registerIpcHandler('musicApi:invalidateCoverUrl', async (coverUrl: string) => {
+    invalidateCoverUrl(coverUrl);
+  });
   registerIpcHandler('musicApi:getSodaAudioUrl', (trackId: string) => musicApi.getSodaAudioUrl(trackId));
   registerIpcHandler('musicApi:getSodaPlayableUrl', (trackId: string) => musicApi.getSodaPlayableUrl(trackId));
   registerIpcHandler('musicApi:parseSodaShareLink', (link: string) => musicApi.parseSodaShareLink(link));

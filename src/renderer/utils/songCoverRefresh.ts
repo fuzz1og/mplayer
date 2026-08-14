@@ -1,5 +1,6 @@
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
+import { invalidateCoverUrl } from '@/renderer/services/coverUrlResolver';
 import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 
@@ -50,6 +51,9 @@ export function __resetSongCoverRefreshState(): void {
  */
 export function refreshSongCover(song: Song): Promise<string | null> {
   if (!song || song.sourceType === 'local' || song.sourceType === 'soda') return Promise.resolve(null);
+  // 旧封面已失效：先清解析缓存（渲染层 + 主进程 6h 归一化 + 磁盘）。
+  // 否则搜索拿到的新签名 URL 归一化 key 相同，会命中失效直链循环失败
+  if (song.cover) invalidateCoverUrl(song.cover);
 
   const attemptKey = `${song.sourceType}:${song.id}`;
 

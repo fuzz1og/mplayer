@@ -9,6 +9,7 @@ export {
   setThrottleObserver,
   warmUpArtistPicCache,
   injectProxyAgents,
+  invalidateCoverUrl,
 } from '@mplayer/core';
 export type { ProxyAgents } from '@mplayer/core';
 

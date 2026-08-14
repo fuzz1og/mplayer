@@ -4,6 +4,7 @@ import CoverImage from '../components/CoverImage';
 
 vi.mock('@/renderer/services/coverUrlResolver', () => ({
   resolveCoverUrl: vi.fn(),
+  invalidateCoverUrl: vi.fn(),
 }));
 
 import { resolveCoverUrl } from '@/renderer/services/coverUrlResolver';

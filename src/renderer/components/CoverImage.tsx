@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Music2, ListMusic } from 'lucide-react';
 import { isSessionProtectedEndpoint } from '@mplayer/core';
-import { resolveCoverUrl } from '@/renderer/services/coverUrlResolver';
+import { resolveCoverUrl, invalidateCoverUrl } from '@/renderer/services/coverUrlResolver';
 
 type CoverVariant = 'song' | 'playlist';
 
@@ -146,6 +146,8 @@ const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant =
       alt={alt}
       loading="lazy"
       onError={() => {
+        // 直链失效：清解析/磁盘缓存，让页面层重搜后的新签名 URL 能重新解析
+        if (src) invalidateCoverUrl(src);
         setFailed(true);
         onError?.();
       }}
