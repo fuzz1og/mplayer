@@ -1,13 +1,14 @@
 import axios, { type AxiosInstance } from 'axios';
-import type { Song, SourceKey, SongGroup, DiscoverPlaylist, Album } from '../types/index.js';
+import type { Song, SourceKey, SongGroup, DiscoverPlaylist, Album, AudioTag } from '../types/index.js';
 import { cacheManager } from './memoryCacheManager.js';
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { weapiRequest } from './neteaseWeapi.js';
-import { MULTI_SOURCE_LIST } from '../constants.js';
 import { findExactMatch } from '../utils/songMatcher.js';
 import { resourceUrlKey } from '../utils/resourceKey.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
+import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
+import { probeSongs } from './probeSongs.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
@@ -1283,6 +1284,8 @@ export const musicApi = {
 
   resolveCoverUrl,
 
+  invalidateCoverUrl,
+
   async getLyrics(lrcUrl: string): Promise<string> {
     const fullUrl = normalizeUrl(lrcUrl);
     if (!fullUrl) return '';
@@ -2275,31 +2278,7 @@ export const musicApi = {
 
 
   groupIntoSongGroups(allSongs: Song[]): SongGroup[] {
-    const map = new Map<string, SongGroup>();
-    for (const song of allSongs) {
-      const key = `${song.name.trim().toLowerCase()}|${song.artist.trim().toLowerCase()}`;
-      const existing = map.get(key);
-      if (existing) {
-        existing.songs.push(song);
-      } else {
-        map.set(key, { key, name: song.name, artist: song.artist, songs: [song] });
-      }
-    }
-    return Array.from(map.values());
-  },
-
-  async searchAllSources(keyword: string, page: number = 1): Promise<SongGroup[]> {
-    // migu 不在列表：摄取端点无 migu 数据源，实测最慢(1.1s)且永远返回空，白等
-    const results = await Promise.allSettled(
-      MULTI_SOURCE_LIST.map(async (src) => this.searchSongs(keyword, page, src))
-    );
-    const allSongs: Song[] = [];
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        allSongs.push(...r.value);
-      }
-    }
-    return this.groupIntoSongGroups(allSongs);
+    return groupIntoSongGroupsUtil(allSongs);
   },
 
   async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: SourceKey = 'netease'): Promise<Song[]> {
@@ -2361,6 +2340,45 @@ export const musicApi = {
     } catch {
       return false;
     }
+  },
+
+  /**
+   * 批量探测歌曲可播性（桌面换源/搜索结果探测），空 url → `invalid`。
+   * 复用 core `probeSongs` + `getAudioUrl` resolver：每首先解析直链再探测。
+   */
+  async probeSongsBatch(songs: Song[]): Promise<{ songId: string; tag: AudioTag }[]> {
+    const list = Array.isArray(songs) ? songs : [];
+    if (list.length === 0) return [];
+    const results: { songId: string; tag: AudioTag }[] = [];
+    // 记录每首解析后的最终 URL（空 → invalid，保持桌面现状）
+    const resolvedUrls = new Map<string, string>();
+    await probeSongs(list, {
+      concurrency: Math.min(20, Math.max(1, list.length)),
+      resolver: async (song) => {
+        let url = song.url;
+        try {
+          url = (await this.getAudioUrl(url)) || url;
+        } catch {
+          // keep the original URL; probeAudioUrl will classify it
+        }
+        resolvedUrls.set(song.id, url || '');
+        return url;
+      },
+      onResult: (songId, tag) => {
+        results.push({ songId, tag: resolvedUrls.get(songId) ? tag : 'invalid' });
+      },
+    });
+    return results;
+  },
+
+  /**
+   * 补齐无 URL 歌曲（专辑名预搜 1 次批量命中 + 剩余逐首兜底）。
+   * 薄方法：包装 `resolveNeteaseSongUrlsBySearch`，返回补齐后的歌曲数组。
+   */
+  async fillSongUrls(songs: Song[], albumName?: string): Promise<Song[]> {
+    const list = Array.isArray(songs) ? songs : [];
+    await this.resolveNeteaseSongUrlsBySearch(list, albumName);
+    return list;
   },
 
   async warmUpArtistPicCache(): Promise<void> {

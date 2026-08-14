@@ -1,5 +1,6 @@
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { isSessionProtectedEndpoint, resourceUrlKey } from '@mplayer/core';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 
 /**
  * 封面直链解析：会话保护的封面端点（api.php?get=pic，需 PHPSESSID cookie）
@@ -24,7 +25,7 @@ export function resolveCoverUrl(url: string): Promise<string> {
   const running = inFlight.get(key);
   if (running) return running;
 
-  const pending = IpcClient.invoke<string>('musicApi:resolveCoverUrl', url)
+  const pending = callMusicApi('resolveCoverUrl', url)
     .then((resolved) => {
       const final = resolved && resolved !== url && resolved.startsWith('http') ? resolved : url;
       if (final !== url) {
@@ -53,7 +54,7 @@ export function invalidateCoverUrl(url: string): void {
   for (const k of cache.keys()) {
     if (resourceUrlKey(k) === key) cache.delete(k);
   }
-  void IpcClient.invoke('musicApi:invalidateCoverUrl', url).catch(() => {});
+  void callMusicApi('invalidateCoverUrl', url).catch(() => {});
   void IpcClient.invoke('cache:invalidateCover', url).catch(() => {});
 }
 

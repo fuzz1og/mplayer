@@ -122,7 +122,7 @@ vi.mock('../services/notificationService', () => ({
 }));
 
 vi.mock('../services/cacheService', () => ({
-  getCachedUrl: vi.fn(async (songId: string, _sourceType: string) => {
+  getCachedUrl: vi.fn(async (songId: string) => {
     const v = audioMocks.storageGet;
     return v?.startsWith('http') && songId === '1' ? v : null;
   }),
@@ -421,7 +421,7 @@ describe('URL persistence cache (AsyncStorage songUrl:)', () => {
 
     await playSong(first);
 
-    expect(audioMocks.storageSet).toHaveBeenCalledWith('1', 'netease', 'https://example.com/1.mp3');
+    expect(audioMocks.storageSet).toHaveBeenCalledWith('1', 'https://example.com/1.mp3');
   });
 
   it('ignores cached values that are not http URLs', async () => {

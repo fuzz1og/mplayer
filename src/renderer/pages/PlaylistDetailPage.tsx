@@ -19,6 +19,7 @@ import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, Playlist } from '@mplayer/core';
 import { stripSourceIdPrefix } from '@mplayer/core';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
@@ -187,15 +188,15 @@ const PlaylistDetailPage: React.FC = () => {
     // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP
     // 有窗口配额，整列表同时搜索会打爆 API，必须逐批慢刷
     const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
-        const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
+        const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', song.id);
         if (cached) {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
         }
 
         // 按源站 ID 直接识别（filter=id）：链接/签名会过期，ID 不会——
         // 绕开"名字搜索 + 匹配"（Live/翻唱/多歌手导致匹配失败挂错 URL）
-        const fresh = await IpcClient.invoke<Song | null>(
-          'musicApi:searchSongById',
+        const fresh = await callMusicApi(
+          'searchSongById',
           stripSourceIdPrefix(String(song.id)),
           song.sourceType,
           true,
@@ -203,7 +204,7 @@ const PlaylistDetailPage: React.FC = () => {
         if (!fresh?.url) return song;
 
         // 写入缓存
-        await IpcClient.invoke<void>('cache:setUrl', song.id, {
+        await IpcClient.invoke<void>('cache:setSongResources', song.id, {
           url: fresh.url,
           cover: fresh.cover,
           lrc: fresh.lrc,

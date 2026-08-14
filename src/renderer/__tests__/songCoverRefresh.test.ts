@@ -31,8 +31,8 @@ describe('refreshSongCover 封面失败刷新', () => {
   it('按源站 ID 识别成功返回新封面并更新 URL 缓存', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
     const freshCover = 'https://example.com/api.php?get=pic&type=wy&id=3336112836&sign=new&t=2';
-    invoke.mockImplementation(async (channel: string) => {
-      if (channel === 'musicApi:searchSongById') {
+    invoke.mockImplementation(async (channel: string, method?: string) => {
+      if (channel === 'musicApi:call' && method === 'searchSongById') {
         return { ...baseSong, cover: freshCover, url: 'https://example.com/api.php?get=url&type=wy&id=3336112836', lrc: 'lrc-url' };
       }
       return null;
@@ -40,8 +40,8 @@ describe('refreshSongCover 封面失败刷新', () => {
 
     const cover = await refreshSongCover(baseSong);
     expect(cover).toBe(freshCover);
-    expect(invoke).toHaveBeenCalledWith('musicApi:searchSongById', '3336112836', 'netease');
-    expect(invoke).toHaveBeenCalledWith('cache:setUrl', '3336112836', {
+    expect(invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongById', '3336112836', 'netease');
+    expect(invoke).toHaveBeenCalledWith('cache:setSongResources', '3336112836', {
       url: 'https://example.com/api.php?get=url&type=wy&id=3336112836',
       cover: freshCover,
       lrc: 'lrc-url',
@@ -51,9 +51,9 @@ describe('refreshSongCover 封面失败刷新', () => {
   it('ID 识别失败时回退名字搜索严格匹配（防翻唱/Live 误配）', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
     const freshCover = 'https://example.com/api.php?get=pic&type=wy&id=3336112836&sign=new&t=2';
-    invoke.mockImplementation(async (channel: string) => {
-      if (channel === 'musicApi:searchSongById') return null;
-      if (channel === 'musicApi:searchSongs') {
+    invoke.mockImplementation(async (channel: string, method?: string) => {
+      if (channel === 'musicApi:call' && method === 'searchSongById') return null;
+      if (channel === 'musicApi:call' && method === 'searchSongs') {
         return [
           { ...baseSong, name: '晴天 (Live)', artist: '周杰伦', cover: 'https://live-cover.jpg' },
           { ...baseSong, name: '晴天', artist: '周杰伦', cover: freshCover },
@@ -69,15 +69,15 @@ describe('refreshSongCover 封面失败刷新', () => {
 
   it('ID 与名字搜索都失败时返回 null', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
-    invoke.mockImplementation(async (channel: string) => {
-      if (channel === 'musicApi:searchSongById') return null;
-      if (channel === 'musicApi:searchSongs') return [];
+    invoke.mockImplementation(async (channel: string, method?: string) => {
+      if (channel === 'musicApi:call' && method === 'searchSongById') return null;
+      if (channel === 'musicApi:call' && method === 'searchSongs') return [];
       return null;
     });
 
     const cover = await refreshSongCover(baseSong);
     expect(cover).toBeNull();
-    expect(invoke).not.toHaveBeenCalledWith('cache:setUrl', expect.any(String), expect.any(Object));
+    expect(invoke).not.toHaveBeenCalledWith('cache:setSongResources', expect.any(String), expect.any(Object));
   });
 
   it('local/soda 源不刷新', async () => {
@@ -89,14 +89,14 @@ describe('refreshSongCover 封面失败刷新', () => {
 
   it('多层源前缀 ID 循环剥离后识别', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
-    invoke.mockImplementation(async (channel: string) => {
-      if (channel === 'musicApi:searchSongById') {
+    invoke.mockImplementation(async (channel: string, method?: string) => {
+      if (channel === 'musicApi:call' && method === 'searchSongById') {
         return { ...baseSong, cover: 'https://fresh-cover.jpg' };
       }
       return null;
     });
 
     await refreshSongCover({ ...baseSong, id: 'kuwo:kugou:3336112836' });
-    expect(invoke).toHaveBeenCalledWith('musicApi:searchSongById', '3336112836', 'netease');
+    expect(invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongById', '3336112836', 'netease');
   });
 });

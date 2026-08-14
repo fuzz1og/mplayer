@@ -5,6 +5,7 @@ import CoverImage from '@/renderer/components/CoverImage';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Album, Song } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
@@ -49,18 +50,16 @@ const AlbumDetailPage: React.FC = () => {
       try {
         // skipSearchFallback=true：weapi 批量直链即可，跳过逐首搜索兜底（上游慢，
         // 会阻塞页面数秒~数十秒）；无 URL 歌曲播放时由 playerStore 单首搜索解析
-        const result = await ipcRenderer.invoke('musicApi:getAlbumDetail', albumId, true);
-        if (result.success && result.data) {
-          setAlbum(result.data.album);
-          setSongs(result.data.songs);
+        const detail = await callMusicApi('getAlbumDetail', albumId, true);
+        if (detail) {
+          setAlbum(detail.album);
+          setSongs(detail.songs);
           // 无 URL 歌曲（无版权等，weapi 有信息但无直链）：后台逐首搜索兜底，
           // 不阻塞页面——补齐后更新列表（补不齐的播放时还有单首兜底）
-          const urlMissing = result.data.songs.filter((s: Song) => !s.url);
+          const urlMissing = detail.songs.filter((s: Song) => !s.url);
           if (urlMissing.length > 0) {
-            ipcRenderer
-              .invoke('musicApi:fillSongUrls', urlMissing, album?.name)
-              .then((res: any) => {
-                const filled = res?.success ? (res.data as Song[]) : null;
+            callMusicApi('fillSongUrls', urlMissing, album?.name)
+              .then((filled) => {
                 if (!Array.isArray(filled) || filled.length === 0) return;
                 const urlById = new Map<string, string>();
                 for (const s of filled) if (s.url) urlById.set(s.id, s.url);
@@ -70,7 +69,7 @@ const AlbumDetailPage: React.FC = () => {
               .catch(() => {});
           }
         } else {
-          setError(result.error || '专辑加载失败');
+          setError('专辑加载失败');
         }
       } catch (e: any) {
         console.error('加载专辑详情失败:', e);

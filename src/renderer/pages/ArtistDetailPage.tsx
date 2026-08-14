@@ -8,6 +8,7 @@ import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { searchService } from '@/renderer/services/searchService';
 import { getCachedArtistMeta } from '@/renderer/services/artistMetaCache';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, Album } from '@mplayer/core';
 const { ipcRenderer } = window.require('electron');
 
@@ -51,8 +52,7 @@ const ArtistDetailPage: React.FC = () => {
       if (!artistId) return;
       setLoading(true);
       try {
-        const result = await ipcRenderer.invoke('musicApi:getArtistSongs', artistId, 0, 50, order);
-        const data = result.success ? result.data : { songs: [], total: 0 };
+        const data = await callMusicApi('getNeteaseArtistSongs', artistId, 0, 50, order);
         setSongs(data.songs);
         setTotal(data.total);
       } catch (error) {
@@ -88,12 +88,7 @@ const ArtistDetailPage: React.FC = () => {
     }
     try {
       const offset = reset ? 0 : albumsOffsetRef.current;
-      const result = await ipcRenderer.invoke('musicApi:getArtistAlbums', artistId, offset, ALBUM_PAGE_SIZE);
-      if (!result.success || !result.data) {
-        if (reset) setAlbumsError(result.error || '加载专辑失败');
-        return;
-      }
-      const { albums: page, total: pageTotal, more } = result.data;
+      const { albums: page, total: pageTotal, more } = await callMusicApi('getArtistAlbums', artistId, offset, ALBUM_PAGE_SIZE);
       setAlbums(prev => reset ? page : [...prev, ...page]);
       setAlbumsTotal(pageTotal);
       albumsOffsetRef.current = offset + ALBUM_PAGE_SIZE;
@@ -122,8 +117,7 @@ const ArtistDetailPage: React.FC = () => {
 
   const handlePlay = async (song: Song) => {
     const keyword = `${song.name} ${song.artist}`;
-    const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, 'netease');
-    const searchResults = result.success ? result.data : [];
+    const searchResults = await callMusicApi('searchSongs', keyword, 1, 'netease');
     if (searchResults.length > 0) {
       await play(searchResults[0]);
     }

@@ -3,7 +3,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { Song } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { ipcMusicApi } from '@/renderer/services/IpcMusicApi';
 import SongList from '@/renderer/components/SongList';
 import FavoritesPage from '@/renderer/pages/FavoritesPage';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -32,6 +31,9 @@ const audioPlayerMock = vi.hoisted(() => {
   return { player };
 });
 
+const callMusicApiMock = vi.hoisted(() => vi.fn());
+const searchSongsMock = vi.hoisted(() => vi.fn(async () => []));
+
 vi.mock('@/renderer/services/audioPlayer', () => ({
   getGlobalPlayer: () => audioPlayerMock.player,
   destroyGlobalPlayer: vi.fn(),
@@ -41,13 +43,8 @@ vi.mock('@/renderer/services/IpcClient', () => ({
   IpcClient: { invoke: vi.fn(async () => ({ success: true, data: undefined })) },
 }));
 
-vi.mock('@/renderer/services/IpcMusicApi', () => ({
-  ipcMusicApi: {
-    searchSongs: vi.fn(async () => []),
-    searchAllSources: vi.fn(async () => []),
-    getAudioUrl: vi.fn(async () => 'https://resolved.example.com/a.mp3'),
-    getSodaPlayableUrl: vi.fn(async () => ''),
-  },
+vi.mock('@/renderer/services/callMusicApi', () => ({
+  callMusicApi: callMusicApiMock,
 }));
 
 function song(id: string, name = '晴天', sourceType: Song['sourceType'] = 'netease'): Song {
@@ -58,13 +55,25 @@ function song(id: string, name = '晴天', sourceType: Song['sourceType'] = 'net
 }
 
 const invokeMock = vi.mocked(IpcClient.invoke);
-const searchSongsMock = vi.mocked(ipcMusicApi.searchSongs);
 
 beforeEach(() => {
   invokeMock.mockClear();
-  invokeMock.mockImplementation(async (channel: string) => {
-    if (channel === 'musicApi:probeAudio') return [{ songId: '1', tag: 'valid' }];
-    return { success: true, data: undefined };
+  invokeMock.mockResolvedValue({ success: true, data: undefined });
+  // callMusicApi 分发：searchSongs → searchSongsMock；getAudioUrl → 可播 URL；
+  // probeSongsBatch 默认 → valid；其余 → undefined
+  callMusicApiMock.mockImplementation(async (method: string, ...args: any[]) => {
+    switch (method) {
+      case 'searchSongs':
+        return searchSongsMock(...args);
+      case 'getAudioUrl':
+        return 'https://resolved.example.com/a.mp3';
+      case 'probeSongsBatch': {
+        const songs = args[0] as Song[];
+        return songs.map((s) => ({ songId: s.id, tag: 'valid' as const }));
+      }
+      default:
+        return undefined;
+    }
   });
   searchSongsMock.mockReset();
   usePlayerStore.setState({ currentPlaylist: [], currentPlaylistIndex: -1, currentSong: null, isPlaying: false, isLoading: false });
@@ -113,9 +122,7 @@ describe('SongList 单曲换源流程', () => {
     const s1 = song('netease:1');
     invokeMock.mockImplementation(async (channel: string) => {
       if (channel === 'favorite:getAll') return [s1];
-      if (channel === 'cache:getUrl') return null;
-      if (channel === 'musicApi:searchSongs') return [];
-      if (channel === 'musicApi:probeAudio') return [{ songId: '1', tag: 'valid' }];
+      if (channel === 'cache:getSongResources') return null;
       return { success: true, data: undefined };
     });
     useFavoriteStore.setState({ favorites: [s1], favoriteIds: ['netease:1'], loading: false, error: null });
@@ -173,19 +180,21 @@ describe('SongList 单曲换源流程', () => {
     const oldProbe = new Promise<{ songId: string; tag: 'valid' }[]>((resolve) => {
       resolveOldProbe = resolve;
     });
-    invokeMock.mockImplementation(async (channel: string, ...args: unknown[]) => {
-      if (channel === 'musicApi:probeAudio') {
+    searchSongsMock.mockImplementation(async (kw: string, _page: number, source: string) => {
+      if (source === 'qq') return [{ ...song('1', '晴天', 'qq'), url: 'https://audio.qq.com/full.mp3' }];
+      if (source === 'kugou') return [{ ...song('k2', '晴天 (Live)', 'kugou'), url: 'https://audio.kugou.com/live.mp3' }];
+      return [];
+    });
+    callMusicApiMock.mockImplementation(async (method: string, ...args: any[]) => {
+      if (method === 'searchSongs') return searchSongsMock(...args);
+      if (method === 'probeSongsBatch') {
         const songs = args[0] as Song[];
         const firstId = songs[0]?.id;
         if (firstId === '1') return oldProbe; // QQ 候选探测挂起
         return [{ songId: firstId, tag: 'valid' }];
       }
-      return { success: true, data: undefined };
-    });
-    searchSongsMock.mockImplementation(async (kw: string, _page: number, source: string) => {
-      if (source === 'qq') return [{ ...song('1', '晴天', 'qq'), url: 'https://audio.qq.com/full.mp3' }];
-      if (source === 'kugou') return [{ ...song('k2', '晴天 (Live)', 'kugou'), url: 'https://audio.kugou.com/live.mp3' }];
-      return [];
+      if (method === 'getAudioUrl') return 'https://resolved.example.com/a.mp3';
+      return undefined;
     });
 
     render(

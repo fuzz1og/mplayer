@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, Mic2 } from 'lucide-react';
 import type { Artist } from '@mplayer/core';
 import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
-const { ipcRenderer } = window.require('electron');
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 
 const CATEGORIES = [
   { label: '全部', id: 0 },
@@ -114,8 +114,7 @@ const ArtistListPage: React.FC = () => {
     loadingMoreRef.current = true;
     try {
       const currentOffset = reset ? 0 : artists.length;
-      const r = await ipcRenderer.invoke('musicApi:getNeteaseArtists', 0, currentOffset, PAGE_SIZE, -1);
-      const data = r.success ? r.data : { artists: [], more: false };
+      const data = await callMusicApi('getNeteaseArtists', 0, currentOffset, PAGE_SIZE, -1);
       setArtists(prev => reset ? data.artists : [...prev, ...data.artists]);
       setHasMore(data.more);
     } catch (err) {
@@ -132,8 +131,7 @@ const ArtistListPage: React.FC = () => {
   const loadCategoryArtists = useCallback(async (catId: number) => {
     setLoading(true);
     try {
-      const r = await ipcRenderer.invoke('musicApi:getNeteaseArtists', catId, 0, 100, -1);
-      const data = r.success ? r.data : { artists: [], more: false };
+      const data = await callMusicApi('getNeteaseArtists', catId, 0, 100, -1);
       setArtists(data.artists);
       setHasMore(false);
     } catch (err) {

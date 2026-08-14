@@ -29,23 +29,25 @@ describe('coverCacheService 封面缓存', () => {
     vi.restoreAllMocks();
   });
 
-  it('下载成功且内容是真实图片时才写入缓存', async () => {
+  it('下载成功则交主进程写盘（字节校验移入主进程语义层 sniffers）', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
     invoke.mockResolvedValue(undefined);
     const fetchMock = vi.mocked(global.fetch);
     fetchMock.mockResolvedValue(okImageResponse());
 
     await cacheCoverImage(COVER_URL);
-    expect(invoke).toHaveBeenCalledWith('cache:setCover', COVER_URL, expect.any(Buffer));
+    expect(invoke).toHaveBeenCalledWith('cache:setCoverBytes', COVER_URL, expect.any(Buffer));
   });
 
-  it('非图片响应（默认图/错误页/反爬页）绝不写入缓存', async () => {
+  it('非图片响应也交主进程写盘，由语义层 setCoverBytes 拒绝（渲染层不再校验字节）', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
+    invoke.mockResolvedValue(undefined);
     const fetchMock = vi.mocked(global.fetch);
     fetchMock.mockResolvedValue(okHtmlResponse());
 
     await cacheCoverImage(COVER_URL);
-    expect(invoke).not.toHaveBeenCalledWith('cache:setCover', expect.any(String), expect.any(Buffer));
+    // 渲染层不再本地校验 isImageContent，一律提交；主进程 sniffers 拒绝非图片
+    expect(invoke).toHaveBeenCalledWith('cache:setCoverBytes', COVER_URL, expect.any(Buffer));
   });
 
   it('受保护封面端点（需会话 cookie）不发起渲染层 fetch——落盘缓存改由主进程完成', async () => {
@@ -55,7 +57,7 @@ describe('coverCacheService 封面缓存', () => {
 
     await cacheCoverImage('https://api.example.com/api.php?get=pic&type=wy&id=1&sign=s&t=1');
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(invoke).not.toHaveBeenCalledWith('cache:setCover', expect.any(String), expect.any(Buffer));
+    expect(invoke).not.toHaveBeenCalledWith('cache:setCoverBytes', expect.any(String), expect.any(Buffer));
   });
 
   it('HTTP 失败静默，不写入缓存', async () => {
@@ -64,7 +66,7 @@ describe('coverCacheService 封面缓存', () => {
     fetchMock.mockRejectedValue(new Error('网络错误'));
 
     await cacheCoverImage(COVER_URL);
-    expect(invoke).not.toHaveBeenCalledWith('cache:setCover', expect.any(String), expect.any(Buffer));
+    expect(invoke).not.toHaveBeenCalledWith('cache:setCoverBytes', expect.any(String), expect.any(Buffer));
   });
 
   it('useCachedCover 命中缓存返回 file://，未命中返回远程地址', async () => {

@@ -15,12 +15,10 @@ import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
 import type { Album, Song, DiscoverPlaylist, Artist } from '@mplayer/core';
-import type { ApiResponse } from '@/shared/types/ipc';
 import { CHART_CACHE_TTL as CHART_TTL } from '../../shared/chart';
-
-const { ipcRenderer } = window.require('electron');
 
 type TabKey = 'charts' | 'albums' | 'playlists' | 'artists';
 type AreaKey = 'ALL' | 'ZH' | 'EA' | 'KR' | 'JP';
@@ -128,19 +126,10 @@ const DiscoverPageV2: React.FC = () => {
     const isCurrentFetch = () => fetchId === (type === 'hot' ? chartsFetchIdRef.current.hot : chartsFetchIdRef.current.new);
 
     try {
-      const result = await ipcRenderer.invoke('musicApi:getAggregatedChart', type, SOURCES) as ApiResponse<{ songs: AggregatedSongGroup[] }>;
+      const result = await callMusicApi('getAggregatedChart', type, SOURCES);
       if (!mountedRef.current || !isCurrentFetch()) return;
 
-      if (!result.success) {
-        if (!cached) {
-          const errorMsg = result.error || '加载失败';
-          if (type === 'hot') setHotError(errorMsg);
-          else setNewError(errorMsg);
-        }
-        return;
-      }
-
-      const groups = result.data?.songs || [];
+      const groups = result?.songs || [];
       if (type === 'hot') {
         setHotGroups(groups);
         cacheRef.current.hot = groups;
@@ -188,15 +177,9 @@ const DiscoverPageV2: React.FC = () => {
     setAlbumsError(null);
 
     try {
-      const result = await ipcRenderer.invoke('musicApi:getNewAlbums', area, 0, 30) as ApiResponse<Album[]>;
+      const albumData = await callMusicApi('getNewAlbums', area, 0, 30);
       if (!mountedRef.current || fetchId !== albumsFetchIdRef.current) return;
 
-      if (!result.success) {
-        if (!cache.data) setAlbumsError(result.error || '加载新碟失败');
-        return;
-      }
-
-      const albumData = result.data || [];
       setAlbums(albumData);
       tabCacheRef.current.albums = { data: albumData, timestamp: Date.now() };
     } catch (err: any) {
@@ -227,21 +210,9 @@ const DiscoverPageV2: React.FC = () => {
 
     const offset = reset ? 0 : playlistListOffsetRef.current;
     try {
-      const result = await ipcRenderer.invoke(
-        'musicApi:getNeteasePlaylists',
-        playlistCategory,
-        'hot',
-        offset,
-        PLAYLIST_PAGE_SIZE
-      ) as ApiResponse<{ playlists: DiscoverPlaylist[]; more: boolean }>;
+      const data = await callMusicApi('getNeteasePlaylists', playlistCategory, 'hot', offset, PLAYLIST_PAGE_SIZE);
       if (!mountedRef.current || fetchId !== playlistsFetchIdRef.current) return;
 
-      if (!result.success) {
-        if (reset) setPlaylistListError(result.error || '加载歌单失败');
-        return;
-      }
-
-      const data = result.data || { playlists: [], more: false };
       setPlaylistList(prev => reset ? data.playlists : [...prev, ...data.playlists]);
       playlistListOffsetRef.current = offset + PLAYLIST_PAGE_SIZE;
       playlistListHasMoreRef.current = data.more;
@@ -312,9 +283,9 @@ const DiscoverPageV2: React.FC = () => {
     try {
       if (!song.url && song.name) {
         const keyword = `${song.name} ${song.artist}`;
-        const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, song.sourceType) as any;
-        if (result?.success && result.data?.length > 0) {
-          await play(result.data[0]);
+        const results = await callMusicApi('searchSongs', keyword, 1, song.sourceType);
+        if (results?.length > 0) {
+          await play(results[0]);
           return;
         }
         // Search returned no results — try direct play

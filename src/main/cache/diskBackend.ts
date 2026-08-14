@@ -1,33 +1,19 @@
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
-import type { CacheBackend, CacheStats } from '@mplayer/core'
+import { isImageBytes, isAudioBytes, type CacheBackend, type CacheStats } from '@mplayer/core'
 
-function isImageHeader(header: Buffer): boolean {
-  if (header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return true // JPEG
-  if (header.length >= 8 && header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47) return true // PNG
-  if (header.length >= 12 && header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46 && header[8] === 0x57 && header[9] === 0x45 && header[10] === 0x42 && header[11] === 0x50) return true // WebP
-  if (header.length >= 6 && header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x38) return true // GIF
-  if (header.length >= 12 && header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70 && header[8] === 0x61 && header[9] === 0x76 && header[10] === 0x69 && header[11] === 0x66) return true // AVIF (ftypavif)
-  if (header.length >= 4 && header[0] === 0x00 && header[1] === 0x00 && header[2] === 0x01 && header[3] === 0x00) return true // ICO/CUR
-  if (header.length >= 2 && header[0] === 0x42 && header[1] === 0x4d) return true // BMP
-  return false
-}
-
-/** 校验字节内容是否为真实图片（与 isImageFile 同一白名单，供内存 Buffer 使用） */
-export function isImageBytes(buf: Buffer): boolean {
-  if (!buf || buf.length === 0) return false
-  return isImageHeader(buf.subarray(0, 16))
-}
-
-/** 校验缓存文件是否为有效图片（JPEG/PNG/WebP/GIF/AVIF/ICO/BMP），损坏或非图片返回 false */
+/**
+ * 校验缓存文件是否为有效图片（JPEG/PNG/WebP/GIF/AVIF/ICO/BMP）。损坏或非图片
+ * 返回 false。字节判定走 core sniffers 单点（ADR-0002），此处仅负责读文件头。
+ */
 export function isImageFile(filePath: string): boolean {
   if (!fs.existsSync(filePath)) return false
   const fd = fs.openSync(filePath, 'r')
   try {
     const buf = Buffer.alloc(16)
     const bytesRead = fs.readSync(fd, buf, 0, 16, 0)
-    return isImageHeader(buf.subarray(0, bytesRead))
+    return isImageBytes(buf.subarray(0, bytesRead))
   } finally {
     fs.closeSync(fd)
   }
@@ -180,16 +166,11 @@ export class DiskCacheBackend implements CacheBackend {
   }
 
   private isImage(header: Buffer): boolean {
-    return isImageHeader(header)
+    return isImageBytes(header)
   }
 
   private isAudio(header: Buffer): boolean {
-    if (header.length >= 3 && header[0] === 0x49 && header[1] === 0x44 && header[2] === 0x33) return true
-    if (header.length >= 4 && header[0] === 0x66 && header[1] === 0x4c && header[2] === 0x61 && header[3] === 0x43) return true
-    if (header.length >= 4 && header[0] === 0x4f && header[1] === 0x67 && header[2] === 0x67 && header[3] === 0x53) return true
-    if (header.length >= 12 && header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70) return true
-    if (header.length >= 2 && header[0] === 0xff && (header[1] & 0xe0) === 0xe0) return true
-    return false
+    return isAudioBytes(header)
   }
 
   stats(): CacheStats {

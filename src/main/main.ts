@@ -29,8 +29,8 @@ import { getLocalMusicService } from './services/localMusicService';
 import { applyElectronProxy, getHttpAgent, getHttpsAgent, type ProxyConfig } from './proxy';
 import { registerCacheIpc } from './ipc/cache';
 import { registerFavoriteIpc, registerHistoryIpc, registerPlaylistIpc } from './ipc/favoriteHistoryPlaylist';
-import { registerMusicApiIpc } from './ipc/musicApi';
 import { registerLocalMusicIpc } from './ipc/localMusic';
+import { registerMusicApiCall } from './ipc/musicApiHandlers';
 import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDownloadIpc, registerAppIpc } from './ipc/appSettingsUpdate';
 
 // 扩展 musicApi：添加主进程特有的音频缓存方法
@@ -228,7 +228,8 @@ app.whenReady().then(async () => {
   registerFavoriteIpc(db);
   registerHistoryIpc(db);
   registerPlaylistIpc(db);
-  registerMusicApiIpc(musicApi);
+  // ADR-0001：music 域单通道分发（替换旧 musicApi:* / lyrics:get / api:getThrottleWait）
+  registerMusicApiCall(musicApi);
   registerLocalMusicIpc(mainWindow);
   registerDialogIpc();
   registerSettingsIpc();

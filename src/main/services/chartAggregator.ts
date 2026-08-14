@@ -1,8 +1,18 @@
-import type { Song, SongGroup, SourceKey } from '@mplayer/core';
+import type { Song, SourceKey } from '@mplayer/core';
 import { musicApi } from '../api/musicApi';
 import { getKugouRank, getKugouNewSongs } from '../api/kugouApi';
 import { cacheManager } from '@mplayer/core';
 import { CHART_CACHE_TTL } from '../../shared/chart';
+import type {
+  AggregatedSongGroup,
+  AggregatedChartResult,
+  SourceRank,
+} from '../../shared/chart';
+export type {
+  AggregatedSongGroup,
+  AggregatedChartResult,
+  SourceRank,
+} from '../../shared/chart';
 
 export type ChartType = 'hot' | 'new';
 export type SourceName = 'netease' | 'qq' | 'kugou';
@@ -27,24 +37,6 @@ export function normalizeSongKey(song: { name: string; artist: string }): string
     .replace(/[·•]/g, '');
 
   return `${name}|${artist}`;
-}
-
-interface SourceRank {
-  netease?: number;
-  qq?: number;
-  kugou?: number;
-}
-
-/** 聚合后的歌曲组（跨源匹配） */
-export interface AggregatedSongGroup extends SongGroup {
-  sourceRanks: SourceRank;
-  score: number;
-  bestSong: Song;
-}
-
-export interface AggregatedChartResult {
-  songs: AggregatedSongGroup[];
-  total: number;
 }
 
 /** 归一化后的歌曲（用于聚合） */

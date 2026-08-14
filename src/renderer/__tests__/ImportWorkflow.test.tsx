@@ -13,8 +13,14 @@ vi.mock('@/renderer/services/importService', async (importOriginal) => {
   };
 });
 
+// music 域 IPC 走 callMusicApi（getPlaylistSongsFromThirdParty）
+const callMusicApiMock = vi.hoisted(() => vi.fn(async () => []));
+vi.mock('@/renderer/services/callMusicApi', () => ({
+  callMusicApi: callMusicApiMock,
+}));
+
 // Mock electron ipcRenderer
-const mockInvoke = vi.fn();
+const mockInvoke = vi.hoisted(() => vi.fn());
 const originalRequire = window.require;
 window.require = vi.fn((module: string) => {
   if (module === 'electron') {
@@ -84,6 +90,7 @@ describe('ImportWorkflow Integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    callMusicApiMock.mockResolvedValue([]);
   });
 
   it('should complete full text import flow', async () => {
@@ -142,7 +149,7 @@ describe('ImportWorkflow Integration', () => {
       skips: [],
     };
 
-    mockInvoke.mockResolvedValue({ success: true, data: mockSongs });
+    callMusicApiMock.mockResolvedValue(mockSongs);
     (importFromLink as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
     render(<ImportPlaylistModal {...defaultProps} />);
@@ -183,7 +190,7 @@ describe('ImportWorkflow Integration', () => {
   });
 
   it('should handle link parse failure', async () => {
-    mockInvoke.mockRejectedValue(new Error('Network error'));
+    callMusicApiMock.mockRejectedValue(new Error('Network error'));
 
     render(<ImportPlaylistModal {...defaultProps} />);
 

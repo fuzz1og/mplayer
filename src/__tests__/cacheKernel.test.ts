@@ -93,6 +93,53 @@ describe('CacheKernel', () => {
     expect(await kernel.getJSON('perm')).toBe(1)
   })
 
+  it('negative ttlMs is treated as never-expiring (like 0)', async () => {
+    const kernel = new CacheKernel({ l1: createMemoryBackend() })
+    await kernel.setJSON('neg', 1, -500)
+    expect(await kernel.getJSON('neg')).toBe(1)
+    await new Promise((r) => setTimeout(r, 30))
+    expect(await kernel.getJSON('neg')).toBe(1)
+  })
+
+  it('ttlMs=0 binary entries never expire (permanent audio/cover cache)', async () => {
+    const kernel = new CacheKernel({ l1: createMemoryBackend() })
+    const data = new Uint8Array([9, 9, 9])
+    await kernel.setBinary('audioPerm', data, 0)
+    await new Promise((r) => setTimeout(r, 30))
+    expect(await kernel.getBinary('audioPerm')).toEqual(data)
+  })
+
+  it('L2 → L1 backfill preserves remaining TTL: does not resurrect after L2 expiry', async () => {
+    const l1 = createMemoryBackend()
+    const l2 = createMemoryBackend()
+    const kernel = new CacheKernel({ l1, l2 })
+
+    // 短 TTL：写入后 L1 无残留（避免写穿时 L1 已持有），强制走 L2 回填路径
+    await kernel.setBinary('binBackfill', new Uint8Array([1, 2]), 15)
+    await l1.delete(':bin:binBackfill') // 模拟 L1 被清/逐出
+
+    // 未过期：L2 命中并回填 L1（L1 携带剩余 expiresAt，而非无界）
+    expect(await kernel.getBinary('binBackfill')).toEqual(new Uint8Array([1, 2]))
+    const backfillExpiresAt = await l1.getExpiryAt?.(':bin:binBackfill')
+    expect(typeof backfillExpiresAt).toBe('number')
+    expect((backfillExpiresAt as number) > 0).toBe(true)
+
+    // 过期后 L2 失效，L1 不能把条目复活（回填时保留了剩余 TTL）
+    await new Promise((r) => setTimeout(r, 40))
+    expect(await kernel.getBinary('binBackfill')).toBeNull()
+  })
+
+  it('0 TTL backfill does not resurrect a 0-TTL (permanent) entry from L2 after L1 clear', async () => {
+    const l1 = createMemoryBackend()
+    const l2 = createMemoryBackend()
+    const kernel = new CacheKernel({ l1, l2 })
+    await kernel.setBinary('permBin', new Uint8Array([7]), 0)
+    await l1.delete(':bin:permBin')
+    // 永不过期条目：L2 命中回填 L1，两次都能读到
+    expect(await kernel.getBinary('permBin')).toEqual(new Uint8Array([7]))
+    expect(await kernel.getBinary('permBin')).toEqual(new Uint8Array([7]))
+  })
+
   it('namespace隔离', async () => {
     const backend = createMemoryBackend()
     const kernelA = new CacheKernel({ l1: backend, namespace: 'a' })

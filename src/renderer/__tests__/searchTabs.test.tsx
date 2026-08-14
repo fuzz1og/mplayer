@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type { Song, Artist } from '@mplayer/core';
-import { ipcMusicApi } from '@/renderer/services/IpcMusicApi';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import DiscoverPageV2 from '@/renderer/pages/DiscoverPageV2';
 import { useSearchStore } from '@/renderer/store/searchStore';
@@ -19,6 +18,9 @@ const audioPlayerMock = vi.hoisted(() => {
   return { player };
 });
 
+const callMusicApiMock = vi.hoisted(() => vi.fn());
+const searchArtistsMock = vi.hoisted(() => vi.fn(async () => []));
+
 vi.mock('@/renderer/services/audioPlayer', () => ({
   getGlobalPlayer: () => audioPlayerMock.player,
   destroyGlobalPlayer: vi.fn(),
@@ -28,14 +30,8 @@ vi.mock('@/renderer/services/IpcClient', () => ({
   IpcClient: { invoke: vi.fn(async () => ({ success: true, data: undefined })) },
 }));
 
-vi.mock('@/renderer/services/IpcMusicApi', () => ({
-  ipcMusicApi: {
-    searchSongs: vi.fn(async () => []),
-    searchAllSources: vi.fn(async () => []),
-    searchArtists: vi.fn(async () => []),
-    getAudioUrl: vi.fn(async () => 'https://resolved.example.com/a.mp3'),
-    getSodaPlayableUrl: vi.fn(async () => ''),
-  },
+vi.mock('@/renderer/services/callMusicApi', () => ({
+  callMusicApi: callMusicApiMock,
 }));
 
 function song(id: string, name = '晴天'): Song {
@@ -45,13 +41,16 @@ function song(id: string, name = '晴天'): Song {
   };
 }
 
-const searchArtistsMock = vi.mocked(ipcMusicApi.searchArtists);
-
 beforeEach(() => {
   searchArtistsMock.mockReset();
   searchArtistsMock.mockResolvedValue([
     { id: '123', name: '周杰伦', picUrl: '', alias: [], albumSize: 10, musicSize: 100, sourceType: 'netease' },
   ]);
+  // callMusicApi 分发：searchNeteaseArtists → searchArtistsMock
+  callMusicApiMock.mockImplementation(async (method: string, ...args: any[]) => {
+    if (method === 'searchNeteaseArtists') return searchArtistsMock(...args);
+    return undefined;
+  });
   useSearchStore.setState({ currentKeyword: '', preferredTab: 'songs', sourceType: 'all', songs: [], groups: [], loading: false, hasMore: false, error: null });
   usePlayerStore.setState({ currentPlaylist: [], currentPlaylistIndex: -1, currentSong: null, isPlaying: false, isLoading: false });
   vi.mocked(IpcClient.invoke).mockClear();

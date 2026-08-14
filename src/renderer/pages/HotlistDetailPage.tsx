@@ -5,8 +5,8 @@ import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song } from '@mplayer/core';
-const { ipcRenderer } = window.require('electron');
 
 // 热榜歌曲类型
 interface HotlistSong {
@@ -40,25 +40,17 @@ const HotlistDetailPage: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        let data;
-        if (hotlistType === 'netease') {
-          const result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
-          data = result.success ? result.data : [];
-        } else if (hotlistType === 'netease_new') {
-          const result = await ipcRenderer.invoke('musicApi:getNeteaseNewSongList');
-          data = result.success ? result.data : [];
-        } else if (hotlistType === 'qq') {
-          const result = await ipcRenderer.invoke('musicApi:getQQHotlist');
-          data = result.success ? result.data : [];
-        } else if (hotlistType === 'qq_new') {
-          const result = await ipcRenderer.invoke('musicApi:getQQNewSongList');
-          data = result.success ? result.data : [];
+        let data: HotlistSong[] = [];
+        if (hotlistType === 'netease' || hotlistType === 'netease_new') {
+          data = hotlistType === 'netease'
+            ? await callMusicApi('getNeteaseHotlist')
+            : await callMusicApi('getNeteaseNewSongList');
         } else {
-          const result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
-          data = result.success ? result.data : [];
+          data = hotlistType === 'qq'
+            ? await callMusicApi('getQQHotlist')
+            : await callMusicApi('getQQNewSongList');
         }
-
-        setHotlist(data);
+        setHotlist(data || []);
       } catch (error) {
         console.error(`加载热榜失败:`, error);
         setError('加载热榜失败，请稍后重试');
@@ -88,8 +80,7 @@ const HotlistDetailPage: React.FC = () => {
   const handlePlay = async (song: Song) => {
     const keyword = `${song.name} ${song.artist}`;
     const sourceType = hotlistType === 'netease_new' ? 'netease' : hotlistType === 'qq_new' ? 'qq' : hotlistType;
-    const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, sourceType);
-    const searchResults = result.success ? result.data : [];
+    const searchResults = await callMusicApi('searchSongs', keyword, 1, sourceType);
     if (searchResults.length > 0) {
       await play(searchResults[0]);
     }
@@ -294,14 +285,10 @@ const HotlistDetailPage: React.FC = () => {
               onClick={async () => {
                 setLoading(true);
                 try {
-                  let result;
-                  if (hotlistType === 'netease' || hotlistType === 'netease_new') {
-                    result = await ipcRenderer.invoke('musicApi:getNeteaseHotlist');
-                  } else {
-                    result = await ipcRenderer.invoke('musicApi:getQQHotlist');
-                  }
-                  const data = result.success ? result.data : [];
-                  setHotlist(data);
+                  const data = hotlistType === 'netease' || hotlistType === 'netease_new'
+                    ? await callMusicApi('getNeteaseHotlist')
+                    : await callMusicApi('getQQHotlist');
+                  setHotlist(data || []);
                 } catch (error) {
                   console.error(error);
                 } finally {

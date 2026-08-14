@@ -9,9 +9,9 @@ import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, DiscoverPlaylist } from '@mplayer/core';
 import { formatPlayCount } from '@mplayer/core';
-const { ipcRenderer } = window.require('electron');
 
 const PAGE_SIZE = 20;
 
@@ -43,9 +43,9 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
     const loadPlaylist = async () => {
       try {
         setLoading(true);
-        const result = await ipcRenderer.invoke('musicApi:getNeteasePlaylistDetail', parseInt(id));
-        if (result.success && result.data) {
-          setPlaylist(result.data);
+        const data = await callMusicApi('getNeteasePlaylistDetail', parseInt(id));
+        if (data) {
+          setPlaylist(data);
         }
       } catch (error) {
         console.error('加载歌单详情失败:', error);
@@ -69,16 +69,16 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
         setLoadingMore(true);
       }
       const offset = reset ? 0 : songs.length;
-      const result = await ipcRenderer.invoke('musicApi:getNeteasePlaylistSongsPage', parseInt(id), offset, PAGE_SIZE);
+      const page = await callMusicApi('getNeteasePlaylistSongsPage', parseInt(id), offset, PAGE_SIZE);
 
       // 分页失败时仅第一页回退第三方解析
-      if (!result.success || !result.data || result.data.songs.length === 0) {
+      if (!page || page.songs.length === 0) {
         if (reset) {
           const playlistUrl = `https://music.163.com/#/playlist?id=${id}`;
-          const fallback = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', playlistUrl);
-          if (fallback.success && fallback.data) {
-            setSongs(fallback.data);
-            setTotal(fallback.data.length);
+          const fallback = await callMusicApi('getPlaylistSongsFromThirdParty', playlistUrl);
+          if (fallback && fallback.length > 0) {
+            setSongs(fallback);
+            setTotal(fallback.length);
             setHasMore(false);
           } else {
             setSongsError('加载歌曲失败，请稍后重试');
@@ -87,9 +87,9 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
         return;
       }
 
-      setSongs(prev => reset ? result.data.songs : [...prev, ...result.data.songs]);
-      setTotal(result.data.total);
-      setHasMore(offset + result.data.songs.length < result.data.total);
+      setSongs(prev => reset ? page.songs : [...prev, ...page.songs]);
+      setTotal(page.total);
+      setHasMore(offset + page.songs.length < page.total);
     } catch (error) {
       console.error('加载歌单歌曲失败:', error);
       if (reset) setSongsError('加载歌曲失败，请稍后重试');
@@ -134,9 +134,9 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
           // 分页模式下已加载的歌曲可能不全,保存前拉取全量
           let songsToSave = songs;
           if (songsToSave.length < total) {
-            const result = await ipcRenderer.invoke('musicApi:getNeteasePlaylistSongs', parseInt(id!));
-            if (result.success && result.data && result.data.length > 0) {
-              songsToSave = result.data;
+            const full = await callMusicApi('getNeteasePlaylistSongs', parseInt(id!));
+            if (full && full.length > 0) {
+              songsToSave = full;
             }
           }
           const playlistId = await IpcClient.invoke<number>(

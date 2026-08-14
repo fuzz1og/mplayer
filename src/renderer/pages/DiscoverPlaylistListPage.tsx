@@ -3,8 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ListMusic } from 'lucide-react';
 import { useLazyLoad } from '@/renderer/hooks/useLazyLoad';
 import DiscoverPlaylistCard from '@/renderer/components/DiscoverPlaylistCard';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { DiscoverPlaylist } from '@mplayer/core';
-const { ipcRenderer } = window.require('electron');
 
 const CATEGORIES = [
   '全部', '流行', '摇滚', '民谣', '电子', '说唱',
@@ -33,15 +33,7 @@ const DiscoverPlaylistListPage: React.FC = () => {
         setLoading(true);
       }
 
-      const result = await ipcRenderer.invoke(
-        'musicApi:getNeteasePlaylists',
-        cat,
-        'hot',
-        newOffset,
-        PAGE_SIZE
-      );
-
-      const data = result.success ? result.data : { playlists: [], total: 0, more: false };
+      const data = await callMusicApi('getNeteasePlaylists', cat, 'hot', newOffset, PAGE_SIZE);
 
       if (append) {
         setPlaylists(prev => [...prev, ...data.playlists]);

@@ -3,15 +3,12 @@ import { app } from 'electron'
 import path from 'path'
 import axios from 'axios'
 import { registerIpcHandlerSimple } from './registerHandler'
-import { CacheKernel, createMemoryBackend, resourceUrlKey } from '@mplayer/core'
-import { DiskCacheBackend, isImageBytes, isImageFile } from '../cache/diskBackend'
-
-const COVER_CACHE_TTL = 6 * 60 * 60 * 1000
-// 签名 URL 服务端时效短：12h 过期后下次进歌单必须重新搜索拿新签名
-const URL_CACHE_TTL_MS = 12 * 60 * 60 * 1000
+import { CacheKernel, createMemoryBackend, SongResourcesCache, type SongResources } from '@mplayer/core'
+import { DiskCacheBackend } from '../cache/diskBackend'
 
 let cacheKernel: CacheKernel | null = null
 let diskBackend: DiskCacheBackend | null = null
+let songResources: SongResourcesCache | null = null
 
 function getCacheKernel(): CacheKernel {
   if (!cacheKernel) {
@@ -31,11 +28,28 @@ function getDiskBackend(): DiskCacheBackend {
   return diskBackend!
 }
 
+/** 歌曲资源语义层单例（ADR-0002）：key/TTL 推导内聚，调用方不手拼。 */
+function getSongResourcesCache(): SongResourcesCache {
+  if (!songResources) {
+    getCacheKernel()
+    songResources = new SongResourcesCache({
+      kernel: getCacheKernel(),
+      // 封面读返回磁盘绝对路径：确认文件存在才返回（不存在视为未命中）
+      resolveBackendFilePath: (backendKey) => {
+        const p = getDiskBackend().getFilePath(backendKey)
+        return fs.existsSync(p) ? p : null
+      },
+    })
+  }
+  return songResources
+}
+
 /**
  * 主进程侧封面落盘缓存：渲染层无会话 cookie，直接 fetch 受保护封面端点
  * 永远拿不到图（服务端返回错误页），改为在解析出 CDN 直链后由主进程
  * 下载真实图片字节写入磁盘缓存（以原始封面 URL 为键），下次渲染直接
  * 命中 file://，不再重复打上游。失败静默（不影响解析结果，渲染走 CDN）。
+ * 字节写入走语义层 setCoverBytes：非图片内容由 sniffers 白名单拒绝。
  */
 export async function cacheResolvedCover(originalUrl: string, cdnUrl: string): Promise<void> {
   try {
@@ -45,89 +59,43 @@ export async function cacheResolvedCover(originalUrl: string, cdnUrl: string): P
       proxy: false,
     });
     const buf = Buffer.from(res.data);
-    if (!isImageBytes(buf)) return;
     // 缓存 key 用归一化 URL（忽略 t/sign 等签名参数）：同一首歌每次搜索签名
     // 不同，但封面是同一资源——归一化后共享同一磁盘项，避免重复下载/堆积
-    await getCacheKernel().setBinary(`cover:${resourceUrlKey(originalUrl)}`, new Uint8Array(buf), COVER_CACHE_TTL);
+    await getSongResourcesCache().setCoverBytes(originalUrl, new Uint8Array(buf));
   } catch {
     // 封面缓存失败不影响解析结果
   }
 }
 
-async function getBinaryCachePath(backendKey: string, ttlMs?: number): Promise<string | null> {
-  const filePath = getDiskBackend().getFilePath(backendKey)
-  if (!fs.existsSync(filePath)) return null
-  if (ttlMs) {
-    const stat = fs.statSync(filePath)
-    if (Date.now() - stat.mtimeMs > ttlMs) {
-      await getDiskBackend().delete(backendKey)
-      return null
-    }
-  }
-  return filePath
-}
-
+/**
+ * 注册 7 个语义缓存通道（ADR-0002）。语义名即接口：
+ * getSongResources / setSongResources / getCoverPath / setCoverBytes /
+ * invalidateCover / clear / getStats。8 个僵尸通道（getSong/setSong/
+ * getAudio/setAudio + typed getJSON/setJSON/getBinary/setBinary）已删除。
+ */
 export function registerCacheIpc(): void {
-  const kernel = getCacheKernel()
+  const cache = getSongResourcesCache()
 
-  // New API (typed, for future renderer migration)
-  registerIpcHandlerSimple('cache:getJSON', async (key: string) => {
-    return kernel.getJSON(key)
+  registerIpcHandlerSimple('cache:getSongResources', async (songId: string) => {
+    return cache.getSongResources(songId)
   })
-  registerIpcHandlerSimple('cache:setJSON', async (key: string, value: any, ttlMs: number) => {
-    await kernel.setJSON(key, value, ttlMs)
+  registerIpcHandlerSimple('cache:setSongResources', async (songId: string, resources: SongResources) => {
+    await cache.setSongResources(songId, resources)
   })
-  registerIpcHandlerSimple('cache:getBinary', async (key: string) => {
-    return kernel.getBinary(key)
+  registerIpcHandlerSimple('cache:getCoverPath', async (coverUrl: string) => {
+    return cache.getCoverPath(coverUrl)
   })
-  registerIpcHandlerSimple('cache:setBinary', async (key: string, data: Uint8Array, ttlMs: number) => {
-    await kernel.setBinary(key, data, ttlMs)
-  })
-
-  // Legacy compatibility (renderer still uses these channels)
-  registerIpcHandlerSimple('cache:getUrl', async (songId: string) => {
-    return kernel.getJSON(`url:${songId}`)
-  })
-  registerIpcHandlerSimple('cache:setUrl', async (songId: string, urlData: any) => {
-    // 12h：与重构前 CacheManager.URL_EXPIRE_HOURS 契约一致——
-    // 签名 URL 服务端时效短，过期后下次进歌单必须重新搜索拿新签名
-    await kernel.setJSON(`url:${songId}`, urlData, URL_CACHE_TTL_MS)
-  })
-  registerIpcHandlerSimple('cache:getSong', async (keyword: string) => {
-    return kernel.getJSON(`search:${keyword}`)
-  })
-  registerIpcHandlerSimple('cache:setSong', async (keyword: string, songs: any[]) => {
-    await kernel.setJSON(`search:${keyword}`, songs, 6 * 60 * 60 * 1000)
-  })
-  registerIpcHandlerSimple('cache:getCover', async (coverUrl: string) => {
-    const backendKey = `:bin:cover:${resourceUrlKey(coverUrl)}`
-    const filePath = await getBinaryCachePath(backendKey, COVER_CACHE_TTL)
-    if (!filePath) return null
-    // 缓存文件损坏或不是有效图片时删除并视为未命中，触发重新获取（默认图绝不落入缓存）
-    if (!isImageFile(filePath)) {
-      await getDiskBackend().delete(backendKey)
-      return null
-    }
-    return filePath
-  })
-  registerIpcHandlerSimple('cache:setCover', async (coverUrl: string, imageData: Buffer) => {
-    await kernel.setBinary(`cover:${resourceUrlKey(coverUrl)}`, new Uint8Array(imageData), COVER_CACHE_TTL)
+  registerIpcHandlerSimple('cache:setCoverBytes', async (coverUrl: string, imageData: Buffer) => {
+    await cache.setCoverBytes(coverUrl, new Uint8Array(imageData))
   })
   // 封面失效：删除归一化 key 的磁盘+内存缓存（配合 musicApi:invalidateCoverUrl）
   registerIpcHandlerSimple('cache:invalidateCover', async (coverUrl: string) => {
-    await kernel.remove(`cover:${resourceUrlKey(coverUrl)}`)
+    await cache.invalidateCover(coverUrl)
   })
-  registerIpcHandlerSimple('cache:getAudio', async (audioUrl: string) => {
-    return getBinaryCachePath(`:bin:audio:${audioUrl}`)
-  })
-  registerIpcHandlerSimple('cache:setAudio', async (audioUrl: string, audioData: Buffer) => {
-    await kernel.setBinary(`audio:${audioUrl}`, new Uint8Array(audioData), 24 * 60 * 60 * 1000)
-  })
-
   registerIpcHandlerSimple('cache:clear', async () => {
-    await kernel.clear()
+    await cache.clear()
   })
   registerIpcHandlerSimple('cache:getStats', () => {
-    return kernel.stats()
+    return cache.getStats()
   })
 }

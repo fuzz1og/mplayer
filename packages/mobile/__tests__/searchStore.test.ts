@@ -2,10 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSourceStore } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
 
-// musicApi 打桩记录调用参数,createSearchController 用真实实现(纯逻辑)
+// musicApi 打桩记录调用参数;SearchOrchestrator 用真实实现(纯逻辑,自持状态)
 const mocks = vi.hoisted(() => ({
   searchSongs: vi.fn(async (_kw: string, _page: number, _src: string): Promise<any[]> => []),
-  searchAllSources: vi.fn(async (): Promise<any[]> => []),
   groupIntoSongGroups: vi.fn(),
 }));
 
@@ -16,7 +15,7 @@ vi.mock('@mplayer/core', async (importOriginal) => {
     musicApi: {
       ...actual.musicApi,
       searchSongs: mocks.searchSongs,
-      searchAllSources: mocks.searchAllSources,
+      searchAllSources: undefined, // 已退役：store 不再触碰该通道
       groupIntoSongGroups: mocks.groupIntoSongGroups,
     },
   };
@@ -26,11 +25,19 @@ vi.mock('../services/audioProbe', () => ({
   probeAudio: vi.fn(async () => 'ok'),
 }));
 
+vi.mock('../services/songProbe', () => ({
+  probeSongsWithTags: vi.fn(async () => {}),
+}));
+
+vi.mock('../stores/logsStore', () => ({
+  useLogsStore: { getState: () => ({ addLog: vi.fn() }) },
+}));
+
 function song(id: string, name: string, source: string) {
   return { id, name, artist: '周杰伦', album: '', duration: 100, sourceType: source, url: '', cover: '', lrc: '' };
 }
 
-// 真实分组逻辑(与 core 一致)用于断言:歌名|歌手 小写 key,组内按到达顺序
+// 与 core groupIntoSongGroups 同语义的独立分组,用于断言 store 镜像出的结果形状
 function realGroup(songs: any[]): any[] {
   const map = new Map<string, any>();
   for (const s of songs) {
@@ -44,37 +51,35 @@ function realGroup(songs: any[]): any[] {
 
 beforeEach(() => {
   mocks.searchSongs.mockClear();
-  mocks.searchAllSources.mockClear();
   mocks.groupIntoSongGroups.mockClear();
   useSourceStore.getState().setSelectedSource('all');
   useSearchStore.getState().clear();
 });
 
-describe('searchStore source routing', () => {
-  it('passes the selected single source to searchSongs (regression: c64f05a)', async () => {
+describe('searchStore 退化为编排器绑定', () => {
+  it('把所选单源传给 searchSongs（source 路由留在 store）', async () => {
     useSourceStore.getState().setSelectedSource('qq');
     await useSearchStore.getState().search('晴天');
     expect(mocks.searchSongs).toHaveBeenCalledWith('晴天', 1, 'qq');
-    expect(mocks.searchAllSources).not.toHaveBeenCalled();
   });
 
-  it('searches every source for "all" (progressive per-source)', async () => {
+  it('"all" 走渐进：逐源 searchSongs（不再用 searchAllSources）', async () => {
     useSourceStore.getState().setSelectedSource('all');
     await useSearchStore.getState().search('晴天');
-    // 渐进式: 逐源 searchSongs(每源完成即渲染), 不再用 searchAllSources 等全部
-    expect(mocks.searchAllSources).not.toHaveBeenCalled();
     const calls = mocks.searchSongs.mock.calls;
     expect(calls.length).toBe(6); // netease/qq/kugou/kuwo/qianqian/soda
     for (const [kw, page] of calls) {
       expect(kw).toBe('晴天');
       expect(page).toBe(1);
     }
+    // 通道已退役：store 不应尝试触碰 searchAllSources
+    expect(mocks.groupIntoSongGroups).not.toHaveBeenCalled();
   });
 
-  it('progressive: renders same-name groups incrementally as sources complete', async () => {
-    // 模拟: 只有 netease 先完成(1 首), 其余源 pending
-    const pending: (() => void)[] = [];
+  it('subscribe 镜像：all 渐进结果按固定源序合并、组内跨源同名保留', async () => {
     mocks.groupIntoSongGroups.mockImplementation((songs: any[]) => realGroup(songs));
+    // 只有 netease 先完成,其余源 pending → 验证渐进渲染(store 镜像编排器中途状态)
+    const pending: (() => void)[] = [];
     mocks.searchSongs.mockImplementation((_kw: string, _page: number, src: string) => {
       if (src === 'netease') return Promise.resolve([song('n1', '晴天', 'netease')]);
       return new Promise((r) => { pending.push(() => r([song(`${src}1`, '晴天', src)])); });
@@ -82,18 +87,13 @@ describe('searchStore source routing', () => {
 
     const searchPromise = useSearchStore.getState().search('晴天');
 
-    // netease 完成后: 结果已出现(不等其他源), 组内只有 netease 版本
     await vi.waitFor(() => {
       const results = useSearchStore.getState().results;
       expect(results.length).toBe(1);
-      expect(results[0].name).toBe('晴天');
-      expect(results[0].songs).toHaveLength(1);
-      expect(results[0].songs[0].sourceType).toBe('netease');
+      expect(results[0].songs.map((s: any) => s.sourceType)).toEqual(['netease']);
     });
 
-    // 其余源陆续完成 → 同名歌并入已有组(组内增加版本)。
-    // 搜索并发受限(3)：worker 取源是动态的，resolve 一批后可能产生新
-    // pending（后取的源），循环 resolve 直到全部源完成
+    // 其余源陆续完成,组内并入;顺序 = 固定源序
     while (pending.length > 0) {
       const batch = pending.splice(0);
       for (const done of batch) done();
@@ -101,29 +101,29 @@ describe('searchStore source routing', () => {
     }
     await searchPromise;
 
-    const results = useSearchStore.getState().results;
-    expect(results).toHaveLength(1); // 仍是同一个同名组
-    // 组内顺序 = 固定源序(不受完成顺序影响): netease 在前, kugou 在后
-    const order = results[0].songs.map((s: any) => s.sourceType);
+    const order = useSearchStore.getState().results[0].songs.map((s: any) => s.sourceType);
     expect(order).toEqual(['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda']);
   });
 
-  it('progressive: loadMore merges page-2 groups into same-name groups (no dup)', async () => {
-    mocks.groupIntoSongGroups.mockImplementation((songs: any[]) => realGroup(songs));
-    // 首屏: netease 1 首
-    mocks.searchSongs.mockImplementation((_kw: string, _page: number, src: string) =>
-      Promise.resolve(src === 'netease' ? [song('n1', '晴天', 'netease')] : [])
-    );
+  it('单源结果镜像后,name 映射为中文源名（渲染层标题）', async () => {
+    useSourceStore.getState().setSelectedSource('qq');
+    mocks.searchSongs.mockResolvedValue([song('q1', '晴天', 'qq')]);
     await useSearchStore.getState().search('晴天');
-    expect(useSearchStore.getState().results).toHaveLength(1);
-
-    // 第二页: 全量(含 qq 的同名歌)
-    mocks.searchAllSources.mockResolvedValue([{ key: '晴天|周杰伦', name: '晴天', artist: '周杰伦', songs: [song('q2', '晴天', 'qq')] }]);
-    await useSearchStore.getState().loadMore();
-
     const results = useSearchStore.getState().results;
-    expect(results).toHaveLength(1); // 同名组合并,不产生重复组
-    expect(results[0].songs.map((s: any) => s.sourceType)).toEqual(['netease', 'qq']);
-    expect(useSearchStore.getState().page).toBe(2);
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe('QQ音乐');
+  });
+
+  it('clear 重置为初始态', async () => {
+    useSourceStore.getState().setSelectedSource('qq');
+    mocks.searchSongs.mockResolvedValue([song('q1', '晴天', 'qq')]);
+    await useSearchStore.getState().search('晴天');
+    expect(useSearchStore.getState().results.length).toBeGreaterThan(0);
+
+    useSearchStore.getState().clear();
+    const s = useSearchStore.getState();
+    expect(s.results).toEqual([]);
+    expect(s.query).toBe('');
+    expect(s.loading).toBe(false);
   });
 });

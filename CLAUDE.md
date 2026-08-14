@@ -67,7 +67,7 @@ npm run web         # Start in web browser
 | `App.tsx` | Root layout, `<Outlet />` |
 | `router/index.tsx` | HashRouter, all pages lazy loaded |
 | `store/` | Zustand: playerStore, searchStore, favoriteStore, downloadStore, localStore |
-| `services/` | audioPlayer, searchService, sourceSwap, coverCacheService, coverUrlResolver, artistMetaCache, importService, IpcClient, IpcMusicApi |
+| `services/` | audioPlayer, searchService, sourceSwap, coverCacheService, coverUrlResolver, artistMetaCache, importService, IpcClient, callMusicApi |
 | `pages/` | Recommend, Discover, DiscoverPageV2, Favorites, History, Playlists, Queue, Settings, LocalMusic, PlaylistDetail, HotlistDetail, ArtistList, ArtistDetail, AlbumDetail, DiscoverPlaylistList, DiscoverPlaylistDetail, LyricsPage (unrouted) |
 | `components/` | Sidebar, TopBar, PlayerBar, SongList, SongListVirtual, SongRow, SongListSkeleton, GroupedSongList, GroupHeaderRow, PlayerControls, PlayerProgress, PlayerVolume, MusicCard, HotlistCard, DiscoverPlaylistCard, SourceBadge, AddToPlaylistModal, BatchAddToPlaylistModal, DownloadProgressModal, ImportPlaylistModal, LinkImportForm, LinkPreviewTable, PlayModeButton, CustomDropdown, LyricsDisplay |
 | `hooks/` | useLazyLoad, useGlobalShortcuts, useInfiniteScroll, useDownload, useButtonHover, useDiscoverData, useSongSwap |
@@ -77,11 +77,33 @@ npm run web         # Start in web browser
 
 Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/response, `ipcRenderer.on()` for push events.
 
-**MusicApi** — renderer→main (`invoke`):
-`searchSongs`, `searchSongById`, `getAudioUrl`, `batchSearch`, `searchAllSources`, `probeAudio`, `getNeteaseHotlist`, `getQQHotlist`, `getNeteaseNewSongList`, `getQQNewSongList`, `getNeteasePlaylists`, `getNeteasePlaylistDetail`, `getNeteasePlaylistSongs`, `getNeteasePlaylistSongsPage`, `getPlaylistSongsFromThirdParty`, `getNeteaseArtists`, `getArtistSongs`, `getArtistAlbums`, `searchArtists`, `getAlbumDetail`, `getNewAlbums`, `getAggregatedChart`, `getRecommendedPlaylists`, `resolveCoverUrl`, `invalidateCoverUrl`, `fillSongUrls`, `getSodaAudioUrl`, `getSodaPlayableUrl`, `parseSodaShareLink`
+**MusicApi** — renderer→main（`invoke`，ADR-0001 单通道分发）：
 
-**Cache** — renderer→main:
-`getSong`, `setSong`, `getCover`, `setCover`, `getAudio`, `setAudio`, `getUrl`, `setUrl`, `clear`, `getStats`
+`musicApi:call(method, ...args)` — 方法名 + 参数查表分发。契约单一事实来源见
+`src/shared/musicApiContract.ts`：`MUSIC_API_METHODS`（core `musicApi` 方法名字清单，唯一手写物）
++ `MainOnlyMethods`（`getAggregatedChart` / `getThrottleWait` / `getSodaPlayableUrl`）。渲染端泛型
+入口 `callMusicApi(method, ...args)`（类型自 `MusicApiMethodMap` 派生）；主进程
+`src/main/ipc/musicApiHandlers.ts` 分发表 `satisfies MusicApiMethodMap`，未知方法返回失败封套
+（`{success:false, error:'unknown musicApi method: …'}`）。加一个 music 域方法 = core 加方法 +
+`MUSIC_API_METHODS` 加一个字符串，其余自动（完整性测试 `src/__tests__/musicApiIntegrity.test.ts`
+静态扫描兜底：方法清单 ⊆ core / 渲染端无裸通道字符串 / 主进程仅此一处注册）。
+
+可用方法：`searchSongs` `searchSongById` `getAudioUrl` `batchSearch`
+`probeSongsBatch` `getLyrics` `getNeteaseHotlist` `getNeteaseNewSongList` `getQQHotlist`
+`getQQNewSongList` `getNeteasePlaylists` `getNeteasePlaylistDetail` `getNeteasePlaylistSongs`
+`getNeteasePlaylistSongsPage` `getPlaylistSongsFromThirdParty` `getNeteaseArtists`
+`getNeteaseArtistSongs` `searchNeteaseArtists` `getNewAlbums` `getAlbumDetail` `getArtistAlbums`
+`getRecommendedPlaylists` `getRecommendedSongs` `resolveCoverUrl` `invalidateCoverUrl`
+`fillSongUrls` `getSodaAudioUrl` `parseSodaShareLink` + MainOnly：`getAggregatedChart`
+`getThrottleWait` `getSodaPlayableUrl`。
+旧 `musicApi:*` / `lyrics:get` / `api:getThrottleWait` 通道已删除（收敛为单通道）。
+
+**Cache** — renderer→main（ADR-0002 语义通道，7 个）:
+`getSongResources`, `setSongResources`, `getCoverPath`, `setCoverBytes`,
+`invalidateCover`, `clear`, `getStats`。通道名即语义名，key/TTL 推导内聚在
+core 的 `SongResourcesCache`（song:<songId> 12h / cover:<归一化 URL> 6h），
+渲染层零 key 知识。旧 getSong/setSong/getAudio/setAudio 与 typed
+getJSON/setJSON/getBinary/setBinary 8 个僵尸通道已删除。
 
 **Favorite** — renderer→main:
 `add`, `remove`, `isFavorite`, `getAll`
@@ -224,9 +246,11 @@ packages/core/src/
 │   ├── probeSongs.ts           # 批量歌曲探测
 │   └── playlistImport.ts       # 歌单导入
 ├── cache/                      # 缓存内核（cacheKernel / ttl / backends/memoryBackend）
-├── shared/                     # resolvePlayableUrl / resolveFreshUrl / searchController / sourceSwap（单曲换源）
+│                                # + 歌曲资源语义层（songResourcesCache，key/TTL 内聚）
+├── shared/                     # resolvePlayableUrl / resolveFreshUrl / searchOrchestrator / sourceSwap（单曲换源）
 ├── utils/                      # songDedupe / songMatcher / lyricsParser / format /
-│                                # hash(md5) / queue / recommendBatch / resourceKey / sourceReferer
+│                                # hash(md5) / queue / recommendBatch / resourceKey / groupIntoSongGroups /
+│                                # sourceReferer / sniffers（图片/音频格式头嗅探单点）
 ├── types/index.ts              # Song, SourceKey, LyricLine, etc.
 └── index.ts                    # Re-exports everything
 ```

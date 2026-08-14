@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-
-const { ipcRenderer } = window.require('electron');
+import type { MusicApiMethodMap } from '@/shared/musicApiContract';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 
 interface UseDiscoverDataResult<T> {
   data: T | null;
@@ -9,10 +9,11 @@ interface UseDiscoverDataResult<T> {
   reload: () => void;
 }
 
-export function useDiscoverData<T>(
-  channel: string,
-  ...args: unknown[]
-): UseDiscoverDataResult<T> {
+export function useDiscoverData<K extends keyof MusicApiMethodMap>(
+  method: K,
+  ...args: Parameters<MusicApiMethodMap[K]>
+): UseDiscoverDataResult<Awaited<ReturnType<MusicApiMethodMap[K]>>> {
+  type T = Awaited<ReturnType<MusicApiMethodMap[K]>>;
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,20 +36,22 @@ export function useDiscoverData<T>(
     setLoading(true);
     setError(null);
 
-    ipcRenderer.invoke(channel, ...args).then((result: any) => {
-      if (cancelled) return;
-      const raw = result?.success ? result.data : (result?.data ?? result);
-      cacheRef.current = raw as T;
-      setData(raw as T);
-    }).catch((err: any) => {
-      if (cancelled) return;
-      setError(err?.message || '加载失败');
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+    callMusicApi(method, ...args)
+      .then((result) => {
+        if (cancelled) return;
+        cacheRef.current = result;
+        setData(result);
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setError(err?.message || '加载失败');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
     return () => { cancelled = true; };
-  }, [channel, trigger, ...args]);
+  }, [method, trigger, ...args]);
 
   return { data, loading, error, reload };
 }

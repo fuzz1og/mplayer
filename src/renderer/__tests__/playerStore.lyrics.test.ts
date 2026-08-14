@@ -24,6 +24,7 @@ const audioPlayerMock = vi.hoisted(() => {
 });
 
 const ipcInvokeMock = vi.hoisted(() => vi.fn());
+const callMusicApiMock = vi.hoisted(() => vi.fn());
 const searchSongsMock = vi.hoisted(() => vi.fn(async () => []));
 
 vi.mock('../services/audioPlayer', () => ({
@@ -31,15 +32,11 @@ vi.mock('../services/audioPlayer', () => ({
   destroyGlobalPlayer: vi.fn(),
 }));
 
-vi.mock('../services/IpcMusicApi', () => ({
-  ipcMusicApi: {
-    getAudioUrl: vi.fn(async () => 'https://resolved.example.com/a.mp3'),
-    getSodaPlayableUrl: vi.fn(async () => ''),
-    searchSongs: searchSongsMock,
-  },
+// 歌词搜索补全走 callMusicApi('searchSongs')，歌词获取走 callMusicApi('getLyrics')
+vi.mock('../services/callMusicApi', () => ({
+  callMusicApi: callMusicApiMock,
 }));
 
-// 歌词链路走 IpcClient 直调（lyrics:get）
 vi.mock('../services/IpcClient', () => ({
   IpcClient: { invoke: ipcInvokeMock },
 }));
@@ -77,6 +74,7 @@ beforeEach(() => {
   audioPlayerMock.player.load.mockClear();
   audioPlayerMock.player.play.mockClear();
   ipcInvokeMock.mockReset();
+  callMusicApiMock.mockReset();
   searchSongsMock.mockReset();
   searchSongsMock.mockResolvedValue([]);
 });
@@ -85,15 +83,17 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
   it('lrc URL 失效时重搜新签名并成功加载歌词', async () => {
     const s1 = { ...song('1'), lrc: STALE_LRC };
     let lyricsGetCalls = 0;
-    ipcInvokeMock.mockImplementation(async (channel: string) => {
-      if (channel === 'lyrics:get') {
+    // callMusicApi 分发：searchSongs → searchSongsMock（hoisted，测试注入）；getLyrics → 歌词实现
+    callMusicApiMock.mockImplementation(async (method: string) => {
+      if (method === 'searchSongs') return searchSongsMock();
+      if (method === 'getLyrics') {
         lyricsGetCalls++;
         if (lyricsGetCalls === 1) throw new Error('歌词会话失效（非法请求）');
         return LYRICS_TEXT;
       }
       return undefined;
     });
-    // 歌词搜索补全走 ipcMusicApi.searchSongs（renderer 直调，不再经 IpcClient.invoke）
+    // 歌词搜索补全走 searchSongsMock（renderer 直调 callMusicApi，不再经 IpcClient.invoke）
     searchSongsMock.mockResolvedValue([{ ...s1, lrc: FRESH_LRC }]);
 
     usePlayerStore.setState({ currentPlaylist: [s1], currentPlaylistIndex: 0, currentSong: s1 });
@@ -104,15 +104,16 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
     }, { timeout: 3000 });
 
     expect(lyricsGetCalls).toBe(2);
-    expect(ipcInvokeMock).toHaveBeenCalledWith('lyrics:get', STALE_LRC);
-    expect(ipcInvokeMock).toHaveBeenCalledWith('lyrics:get', FRESH_LRC);
+    expect(callMusicApiMock).toHaveBeenCalledWith('getLyrics', STALE_LRC);
+    expect(callMusicApiMock).toHaveBeenCalledWith('getLyrics', FRESH_LRC);
   });
 
   it('重搜仍拿不到歌词 URL 时不再重试，歌词为空', async () => {
     const s1 = { ...song('1'), lrc: STALE_LRC };
     // searchSongsMock 默认返回 []（beforeEach 已设）：搜不到 → 重搜仍拿不到 lrc
-    ipcInvokeMock.mockImplementation(async (channel: string) => {
-      if (channel === 'lyrics:get') throw new Error('歌词会话失效（非法请求）');
+    callMusicApiMock.mockImplementation(async (method: string) => {
+      if (method === 'searchSongs') return searchSongsMock();
+      if (method === 'getLyrics') throw new Error('歌词会话失效（非法请求）');
       return undefined;
     });
 

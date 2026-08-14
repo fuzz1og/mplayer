@@ -2,6 +2,7 @@ import { create } from 'zustand';
 const { ipcRenderer } = window.require('electron');
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, SongBase } from '@mplayer/core';
 import { stripSourceIdPrefix } from '@mplayer/core';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
@@ -32,7 +33,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
   refreshSongUrls: async (song: SongBase): Promise<Song | null> => {
     try {
       // 尝试从缓存获取URL
-      const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
+      const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', song.id);
       if (cachedUrl) {
         return {
           ...song,
@@ -44,15 +45,15 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
 
       // 如果缓存中没有，按源站 ID 直接识别拿最新三件套（filter=id：
       // 链接会过期，ID 不会；绕开名字搜索的翻唱/Live 匹配失败）
-      const matchedSong = await IpcClient.invoke<Song | null>(
-        'musicApi:searchSongById',
+      const matchedSong = await callMusicApi(
+        'searchSongById',
         stripSourceIdPrefix(String(song.id)),
         song.sourceType,
         true,
       );
       if (matchedSong?.url) {
         // 写入缓存
-        await IpcClient.invoke<void>('cache:setUrl', song.id, {
+        await IpcClient.invoke<void>('cache:setSongResources', song.id, {
           url: matchedSong.url,
           cover: matchedSong.cover,
           lrc: matchedSong.lrc
@@ -85,7 +86,7 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
       const needsRefresh: SongBase[] = [];
 
       for (const songBase of songBases) {
-        const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', songBase.id);
+        const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', songBase.id);
         if (cachedUrl) {
           cachedSongs.push({
             ...songBase,

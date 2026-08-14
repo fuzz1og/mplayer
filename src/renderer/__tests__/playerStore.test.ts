@@ -29,12 +29,19 @@ vi.mock('../services/audioPlayer', () => ({
 }));
 
 // IPC 是系统边界：给播放器返回一个可用的解析 URL，让续播流程真正走到音频加载
-vi.mock('../services/IpcMusicApi', () => ({
-  ipcMusicApi: {
-    getAudioUrl: vi.fn(async () => 'https://resolved.example.com/a.mp3'),
-    getSodaPlayableUrl: vi.fn(async () => ''),
-    searchSongs: vi.fn(async () => []),
-  },
+vi.mock('../services/callMusicApi', () => ({
+  callMusicApi: vi.fn(async (method: string) => {
+    switch (method) {
+      case 'getAudioUrl':
+        return 'https://resolved.example.com/a.mp3';
+      case 'getSodaPlayableUrl':
+        return '';
+      case 'searchSongs':
+        return [];
+      default:
+        return undefined;
+    }
+  }),
 }));
 
 import { usePlayerStore } from '../store/playerStore';

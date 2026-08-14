@@ -10,13 +10,13 @@ import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import { useDiscoverData } from '@/renderer/hooks/useDiscoverData';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import SongList from '@/renderer/components/SongList';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
 import HotlistCard from '@/renderer/components/HotlistCard';
 import DiscoverPlaylistCard from '@/renderer/components/DiscoverPlaylistCard';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
-import type { Song, Artist, DiscoverPlaylist } from '@mplayer/core';
-const { ipcRenderer } = window.require('electron');
+import type { Song, Artist } from '@mplayer/core';
 
 interface HotlistSong {
   id: string; name: string; artists: string; rank: number; cover: string; album: string;
@@ -60,11 +60,11 @@ const DiscoverPage: React.FC = () => {
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
 
-  const hotlist = useDiscoverData<HotlistSong[]>('musicApi:getNeteaseHotlist');
-  const newSongs = useDiscoverData<HotlistSong[]>('musicApi:getNeteaseNewSongList');
-  const qqHotlist = useDiscoverData<HotlistSong[]>('musicApi:getQQHotlist');
-  const qqNewSongs = useDiscoverData<HotlistSong[]>('musicApi:getQQNewSongList');
-  const playlists = useDiscoverData<{ playlists: DiscoverPlaylist[] }>('musicApi:getNeteasePlaylists', '全部', 'hot', 0, 10);
+  const hotlist = useDiscoverData('getNeteaseHotlist');
+  const newSongs = useDiscoverData('getNeteaseNewSongList');
+  const qqHotlist = useDiscoverData('getQQHotlist');
+  const qqNewSongs = useDiscoverData('getQQNewSongList');
+  const playlists = useDiscoverData('getNeteasePlaylists', '全部', 'hot', 0, 10);
 
   const [activeTab, setActiveTab] = useState<'songs' | 'artists'>('songs');
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
@@ -81,8 +81,8 @@ const DiscoverPage: React.FC = () => {
     if (!currentKeyword || activeTab !== 'artists') return;
     let cancelled = false;
     setArtistLoading(true);
-    ipcRenderer.invoke('musicApi:searchArtists', currentKeyword, 30)
-      .then((result: any) => { if (!cancelled) setArtistResults(result.success ? result.data : []); })
+    callMusicApi('searchNeteaseArtists', currentKeyword, 30)
+      .then((result) => { if (!cancelled) setArtistResults(result); })
       .catch(() => { if (!cancelled) setArtistResults([]); })
       .finally(() => { if (!cancelled) setArtistLoading(false); });
     return () => { cancelled = true; };
@@ -91,8 +91,7 @@ const DiscoverPage: React.FC = () => {
   const handleHotlistSongClick = async (song: HotlistSong, sourceType: 'netease' | 'qq' = 'netease') => {
     try {
       const keyword = `${song.name} ${song.artists}`;
-      const result = await ipcRenderer.invoke('musicApi:searchSongs', keyword, 1, sourceType);
-      const searchResults = result.success ? result.data : [];
+      const searchResults = await callMusicApi('searchSongs', keyword, 1, sourceType);
       if (searchResults.length > 0) {
         await play(searchResults[0]);
       } else {
