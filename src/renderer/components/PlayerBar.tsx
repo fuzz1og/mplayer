@@ -30,7 +30,8 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
   const playNext = usePlayerStore(s => s.playNext);
   const playPrevious = usePlayerStore(s => s.playPrevious);
 
-  const { isFavorite, toggleFavorite } = useFavoriteStore();
+  const isFavorite = useFavoriteStore((s) => s.isFavorite);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const coverSrc = useCachedCover(currentSong?.cover ?? '');
   const fav = currentSong ? isFavorite(currentSong.id) : false;
   const { download } = useDownload();

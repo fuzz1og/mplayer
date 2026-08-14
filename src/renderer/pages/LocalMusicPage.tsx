@@ -7,18 +7,17 @@ import SongList from '@/renderer/components/SongList';
 import type { Song } from '@mplayer/core';
 
 const LocalMusicPage: React.FC = () => {
-  const {
-    folders,
-    songs,
-    currentFolder,
-    isScanning,
-    initialize,
-    addFolder,
-    removeFolder,
-    refresh,
-    setCurrentFolder,
-  } = useLocalStore();
-  const { favoriteIds, toggleFavorite } = useFavoriteStore();
+  const folders = useLocalStore((s) => s.folders);
+  const songs = useLocalStore((s) => s.songs);
+  const currentFolder = useLocalStore((s) => s.currentFolder);
+  const isScanning = useLocalStore((s) => s.isScanning);
+  const initialize = useLocalStore((s) => s.initialize);
+  const addFolder = useLocalStore((s) => s.addFolder);
+  const removeFolder = useLocalStore((s) => s.removeFolder);
+  const refresh = useLocalStore((s) => s.refresh);
+  const setCurrentFolder = useLocalStore((s) => s.setCurrentFolder);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
 
   const currentSongId = usePlayerStore(state => state.currentSong?.id);
   const isPlaying = usePlayerStore(state => state.isPlaying);

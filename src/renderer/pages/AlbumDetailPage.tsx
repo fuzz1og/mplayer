@@ -34,7 +34,8 @@ const AlbumDetailPage: React.FC = () => {
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
-  const { favoriteIds, toggleFavorite } = useFavoriteStore();
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
 
   const displayName = album?.name || stateName || '';
   const displayPic = album?.picUrl || statePic || '';

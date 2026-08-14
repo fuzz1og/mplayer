@@ -30,7 +30,8 @@ const HotlistDetailPage: React.FC = () => {
   const play = usePlayerStore((s) => s.play);
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const { favoriteIds, toggleFavorite } = useFavoriteStore();
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
 
   // 加载热榜数据
