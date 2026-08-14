@@ -88,7 +88,7 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 `MUSIC_API_METHODS` 加一个字符串，其余自动（完整性测试 `src/__tests__/musicApiIntegrity.test.ts`
 静态扫描兜底：方法清单 ⊆ core / 渲染端无裸通道字符串 / 主进程仅此一处注册）。
 
-可用方法：`searchSongs` `searchSongById` `getAudioUrl` `batchSearch` `searchAllSources`
+可用方法：`searchSongs` `searchSongById` `getAudioUrl` `batchSearch`
 `probeSongsBatch` `getLyrics` `getNeteaseHotlist` `getNeteaseNewSongList` `getQQHotlist`
 `getQQNewSongList` `getNeteasePlaylists` `getNeteasePlaylistDetail` `getNeteasePlaylistSongs`
 `getNeteasePlaylistSongsPage` `getPlaylistSongsFromThirdParty` `getNeteaseArtists`
@@ -247,9 +247,9 @@ packages/core/src/
 │   └── playlistImport.ts       # 歌单导入
 ├── cache/                      # 缓存内核（cacheKernel / ttl / backends/memoryBackend）
 │                                # + 歌曲资源语义层（songResourcesCache，key/TTL 内聚）
-├── shared/                     # resolvePlayableUrl / resolveFreshUrl / searchController / sourceSwap（单曲换源）
+├── shared/                     # resolvePlayableUrl / resolveFreshUrl / searchOrchestrator / sourceSwap（单曲换源）
 ├── utils/                      # songDedupe / songMatcher / lyricsParser / format /
-│                                # hash(md5) / queue / recommendBatch / resourceKey /
+│                                # hash(md5) / queue / recommendBatch / resourceKey / groupIntoSongGroups /
 │                                # sourceReferer / sniffers（图片/音频格式头嗅探单点）
 ├── types/index.ts              # Song, SourceKey, LyricLine, etc.
 └── index.ts                    # Re-exports everything
