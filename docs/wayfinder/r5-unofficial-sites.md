@@ -142,11 +142,11 @@ l4 = [lpz]                               # 无效或不稳
 | 源 | 域 | 协议 | 定位 | 工作量 |
 |---|---|---|---|---|
 | **jbsou** | www.jbsou.cn | `POST /` form `{input,filter,type(page)}`(JSON)，`urljoin`+`HEAD` 还原直链 | **聚合镜像**——单站内搜 netease/qq/kugou/kuwo | S |
-| **xiaobai** | *(musicdl xiaobai)* | 同 form-POST 模板 | 与 jbsou 同模板变体 | S |
-| **myfreemp3** | myfreemp3 | form-POST+`session.head` | 同族 | M |
+| **xiaobai** | music.90svip.cn | 同 form-POST 模板（`{input,filter,type,page}`）| 与 jbsou 同模板变体 | S |
+| **myfreemp3** | www.myfreemp3.com.cn | form-POST+`session.head`；网易走 `music.163.com/song/media/outer/url?id=.mp3` 匿名重定向 | 同族，另含网易重定向 CDN 技巧 | M |
 | mp3juice | *(mp3juice)* | 4 跳 ThetaCloud JSON 链 + 预下载全音频 | 索引/快照源 | M |
 | tunehub | *(tunehub)* | 聚合 4 后端，硬编码 `X-API-Key` + 伪造 QQ `Cookie: uin=` | 聚合 | L |
-| **gdstudio** | music-api.gdstudio.xyz | `GET /api.php?types=url&id=&source=&br=`(JSON) | **同时被挂进网易兜底链**（`netease.py:_parsewithgdstudioapi` L541-547）| L（免其 MD5 签名）|
+| **gdstudio** | music.gdstudio.xyz | `POST /api.php`（`types=url/ search/ lyric`+`source`+`id`+`br`+`s=sign`）| **同时被挂进网易兜底链**（`netease.py:_parsewithgdstudioapi` L541-547）；自研 MD5(`gdstudiomd5`)+`encodeURIComponent` 克隆+时间/版本签名 | L（签名最重）|
 
 ### 3.2 关键同构发现：`jbsou`/`xiaobai` 就是「自建 API 的镜像版」
 
@@ -155,6 +155,8 @@ l4 = [lpz]                               # 无效或不稳
 > **`jbsou` 这类源在做的，正是 MPlayer 自建 API 想做的事**（一个统一网关按 `source` 分发到官方源）。对 MPlayer 而言这不是「要接入的第三方源」，而是「可被直连替代的同类」——直连化应该消灭依赖它的动机，而不是把它当目标。
 
 `ALLOWED_SITES = ['netease','qq','kugou','kuwo']`（L21，注释：qianqian/migu 无用），说明它自己就是个跨源聚合。**引入它 = 换一个更不稳定的自建 API**，无意义。
+
+> **顺带**：`myfreemp3` 的网易路径用 `music.163.com/song/media/outer/url?id=.mp3` 匿名 HEAD 重定向拿直链（`myfreemp3.py:_parseneteasesearchresult`）——这是网易官方一个**未鉴权的 CDN 重定向口**，与 R4 里网易「无 cookie 直连」的痛点直接相关；但网易历史上对该口风控/收紧（`verify=False`、HTTP 明文），且是版权灰色技巧。MPlayer 若要网易匿名兜底，应优先权衡 this 口 vs 现用 weapi+旧接口（R1/R4 已评估），不必引入 myfreemp3。
 
 ### 3.3 `gdstudio` 是 A/B/C 三类的粘合点
 
