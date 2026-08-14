@@ -1,47 +1,39 @@
-import { CacheKernel, createMemoryBackend } from '@mplayer/core';
+import { CacheKernel, createMemoryBackend, SongResourcesCache } from '@mplayer/core';
 import { MobileFileBackend } from '../cache/fileBackend';
 
-// 播放 URL 缓存 TTL：24h（音乐源直链一般数小时失效，过期自动失效不再复用）
-const URL_TTL = 24 * 60 * 60 * 1000;
-
-// L1 内存 + L2 文件（expo cacheDirectory）双层缓存；
-// 设置页可查看统计并一键清理（对齐桌面 CacheSection）
+// L1 内存 + L2 文件（expo cacheDirectory）双层缓存；设置页可查看统计并一键清理（对齐桌面 CacheSection）。
 const fileBackend = new MobileFileBackend();
-export const cacheKernel = new CacheKernel({
+const kernel = new CacheKernel({
   l1: createMemoryBackend(),
   l2: fileBackend,
 });
+
+/**
+ * 歌曲资源语义层（ADR-0002）：key/TTL 推导内聚，调用方不手拼。
+ * 播放 URL 缓存走 song:<songId>（songId 含源前缀，跨源唯一）；
+ * 移动端并入语义层后 key 去掉冗余 sourceType 前缀，变化一次无害冷缓存。
+ */
+export const songResources = new SongResourcesCache({ kernel });
+
+export const cacheKernel = kernel;
 
 /** 磁盘缓存占用统计（设置页展示） */
 export async function getCacheStats(): Promise<{ fileCount: number; totalSize: number }> {
   return fileBackend.getDiskStats();
 }
 
-interface CachedUrl { url: string; ts: number }
-
-/** 播放 URL 缓存 key：来源前缀隔离——不同来源同名歌曲（不同 id）不互相覆盖 */
-function urlCacheKey(songId: string, sourceType: string): string {
-  return `url:${sourceType}:${songId}`;
-}
-
 /**
- * 读取播放 URL 缓存（带 TTL 过期检查，过期删除）。
- * 无 id / 非 http / 过期都返回 null（走重新解析）。
+ * 读取播放 URL 缓存（走语义层，TTL 12h 过期自动失效）。无 http url 返回 null（重新解析）。
  */
-export async function getCachedUrl(songId: string, sourceType: string): Promise<string | null> {
+export async function getCachedUrl(songId: string): Promise<string | null> {
   if (!songId) return null;
-  const key = urlCacheKey(songId, sourceType);
-  const v = await cacheKernel.getJSON<CachedUrl>(key);
-  if (!v?.url?.startsWith('http')) return null;
-  if (Date.now() - v.ts > URL_TTL) {
-    await cacheKernel.remove(key);
-    return null;
-  }
-  return v.url;
+  const res = await songResources.getSongResources(songId);
+  if (!res?.url?.startsWith('http')) return null;
+  return res.url;
 }
 
-/** 写入播放 URL 缓存（带时间戳用于 TTL 判断）。 */
-export async function setCachedUrl(songId: string, sourceType: string, url: string): Promise<void> {
+/** 写入歌曲资源（三元组存 url，cover/lrc 留空；由语义层 kernel 管控 TTL）。 */
+export async function setCachedUrl(songId: string, url: string): Promise<void> {
   if (!songId || !url.startsWith('http')) return;
-  await cacheKernel.setJSON(urlCacheKey(songId, sourceType), { url, ts: Date.now() } satisfies CachedUrl, URL_TTL);
+  await songResources.setSongResources(songId, { url, cover: '', lrc: '' });
 }

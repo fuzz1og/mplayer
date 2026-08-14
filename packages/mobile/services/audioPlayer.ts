@@ -253,7 +253,7 @@ function prefetchNextSong(): void {
     void (async () => {
       const resolved = await resolvePlayableSong(next, musicApi);
       const url = isRedirectEndpoint(resolved.url) ? await resolveDirectUrl(resolved.url) : resolved.url;
-      if (url?.startsWith('http') && next.id) void setCachedUrl(next.id, next.sourceType || 'netease', url);
+      if (url?.startsWith('http') && next.id) void setCachedUrl(next.id, url);
       if (resolved.lrc) void musicApi.getLyrics(resolved.lrc).catch(() => {});
     })().catch(() => {});
   } catch {
@@ -307,7 +307,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
       void fetchLrcInBackground(song);
     } else {
-      const cached = await getCachedUrl(song.id, song.sourceType || 'netease');
+      const cached = await getCachedUrl(song.id);
       if (cached) {
         // 缓存命中：秒起；歌词缺失时后台并行补
         audioUrl = isRedirectEndpoint(cached) ? await resolveDirectUrl(cached) : cached;
@@ -394,8 +394,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     }
     player.play();
 
-    // 播放 URL 落缓存(24h TTL):下次(含重启后)直接命中,秒起;无 id 的歌不写
-    if (audioUrl?.startsWith('http') && song.id) void setCachedUrl(song.id, song.sourceType || 'netease', audioUrl);
+    // 播放 URL 落缓存（歌曲资源语义层，12h TTL）：下次(含重启后)直接命中,秒起;无 id 的歌不写
+    if (audioUrl?.startsWith('http') && song.id) void setCachedUrl(song.id, audioUrl);
 
     log.addLog('info', `开始播放《${song.name}》- ${song.artist}${fresh ? '（新URL重试）' : ''}（准备耗时 ${Date.now() - t0}ms）`);
     useHistoryStore.getState().addHistory(song);
