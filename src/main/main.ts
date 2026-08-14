@@ -32,6 +32,7 @@ import { registerFavoriteIpc, registerHistoryIpc, registerPlaylistIpc } from './
 import { registerLocalMusicIpc } from './ipc/localMusic';
 import { registerMusicApiCall } from './ipc/musicApiHandlers';
 import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDownloadIpc, registerAppIpc } from './ipc/appSettingsUpdate';
+import { registerCookiePersister, loadCookiesFromDisk } from './cookies/cookieAdapter';
 
 // 扩展 musicApi：添加主进程特有的音频缓存方法
 const audioCacheBackend = new DiskCacheBackend(path.join(app.getPath('userData'), 'cache'))
@@ -249,6 +250,14 @@ app.whenReady().then(async () => {
     }
   } catch (error) {
     console.error('加载 TLS 指纹伪装设置失败:', error);
+  }
+
+  // T13 spec #159：桌面 cookie 管理器 - 注册落盘 persister + 冷启动重水合（仅桌面落盘）
+  registerCookiePersister();
+  try {
+    await loadCookiesFromDisk();
+  } catch (error) {
+    console.error('加载源 cookie 失败:', error);
   }
 
   // IPC registration (grouped by domain)

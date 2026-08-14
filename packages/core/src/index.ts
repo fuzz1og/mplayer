@@ -1,7 +1,7 @@
 export * from './types/index.js';
 export { MULTI_SOURCE_LIST } from './constants.js';
 export { cacheManager } from './api/memoryCacheManager.js';
-export { RateLimiter, beforeRequest, getAntiScrapeHeaders } from './api/antiScrape.js';
+export { RateLimiter, beforeRequest, getAntiScrapeHeaders, getApiRequestHeaders, getUserAgent, resetUaContinuity, UA_POOL_SIZE, safeParseJSON } from './api/antiScrape.js';
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
 export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, resolveCoverUrl, invalidateCoverUrl, isSessionProtectedEndpoint, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents, setApiTimingLog, setApiRequestHandler, setThrottleObserver, markApiSessionBootstrapped, setApiSessionCookieValue, getApiSessionCookie, isApiOriginUrl } from './api/musicApi.js';
 export type { ProxyAgents } from './api/musicApi.js';
@@ -20,6 +20,25 @@ export type { LyricLine, ParsedLyrics } from './utils/lyricsParser.js';
 export { formatPlayCount } from './utils/format.js';
 export { BROWSER_UA, refererForApiType, refererForUrl, refererForSourceKey } from './utils/sourceReferer.js';
 export { resourceUrlKey } from './utils/resourceKey.js';
+export {
+  MANAGE_COOKIE_TTL_MS,
+  KUGOU_COOKIE_TTL_MS,
+  createNeteaseAnonymousCookie,
+  createNeteaseBorrowMusicUCookie,
+  createKugouDeviceCookie,
+  shouldRotateCookie,
+  getBorrowMusicUEnabled,
+  setBorrowMusicUEnabled,
+  getCookie,
+  setCookie,
+  clearCookie,
+  loadCookies,
+  generateCookie,
+  refreshCookie,
+  ensureFreshCookie,
+  setCookiePersister,
+} from './cookies/cookieManager.js';
+export type { SourceCookie, KugouDeviceReg, CookieClock, CookieSource, GenerateCookieOptions } from './cookies/cookieManager.js';
 export { isImageBytes, isAudioBytes } from './utils/sniffers.js';
 export { md5 } from './utils/hash.js';
 export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
