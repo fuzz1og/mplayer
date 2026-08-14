@@ -22,7 +22,7 @@ describe('SongResourcesCache 语义层', () => {
   })
 
   it('key 推导内聚：songKey = song:<id>，coverKey = cover:<归一化 URL>', () => {
-    const { cache } = makeCache()
+    const cache = new SongResourcesCache({ kernel: makeCache().kernel })
     expect(cache.songKey('netease:123')).toBe('song:netease:123')
     const cover = 'https://api.example.com/api.php?get=pic&id=1&sign=abc&t=9'
     expect(cache.coverKey(cover)).toBe(`cover:${resourceUrlKey(cover)}`)
@@ -50,13 +50,15 @@ describe('SongResourcesCache 语义层', () => {
   })
 
   it('getCoverPath 走内核统一语义 key：归一化后同一封面命中同一路径', async () => {
-    const { l2, cache } = makeCache()
-    const injected = vi.fn((backendKey: string) =>
-      l2.read(backendKey) === null ? null : `/cache/${backendKey}`,
-    )
-    const c = new SongResourcesCache({ kernel: makeCache().kernel, resolveBackendFilePath: injected })
+    const { l2 } = makeCache()
+    const kernel = new CacheKernel({ l1: createMemoryBackend(), l2 })
+    const injected = vi.fn(async (backendKey: string) => {
+      // 后端有内容才返回可渲染路径（模拟磁盘文件存在）
+      const hit = await l2.read(backendKey)
+      return hit ? `/cache/${backendKey}` : null
+    })
+    const c = new SongResourcesCache({ kernel, resolveBackendFilePath: injected })
 
-    // 用同一 kernel 的缓存器写入封面；路径解析注入后端路径
     const coverA = 'https://api.example.com/api.php?get=pic&id=7&sign=AAA&t=1'
     const coverB = 'https://api.example.com/api.php?get=pic&id=7&sign=BBB&t=2'
     await c.setCoverBytes(coverA, PNG_BYTES)
@@ -71,7 +73,7 @@ describe('SongResourcesCache 语义层', () => {
 
   it('getCoverPath 未命中/已过期返回 null', async () => {
     const pngCache = makeCache()
-    const injected = vi.fn(() => null)
+    const injected = vi.fn(async () => null)
     const c = new SongResourcesCache({ kernel: pngCache.kernel, resolveBackendFilePath: injected })
 
     expect(await c.getCoverPath('https://example.com/missing.jpg')).toBeNull()
@@ -90,9 +92,10 @@ describe('SongResourcesCache 语义层', () => {
 
   it('invalidateCover 清除归一化 key，复用命中新路径', async () => {
     const baseCache = makeCache()
-    const injected = vi.fn((backendKey: string) =>
-      baseCache.l2.read(backendKey) === null ? null : `/cache/${backendKey}`,
-    )
+    const injected = vi.fn(async (backendKey: string) => {
+      const hit = await baseCache.l2.read(backendKey)
+      return hit ? `/cache/${backendKey}` : null
+    })
     const cache = new SongResourcesCache({
       kernel: baseCache.kernel,
       resolveBackendFilePath: injected,

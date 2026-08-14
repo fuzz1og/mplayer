@@ -98,8 +98,12 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 `getThrottleWait` `getSodaPlayableUrl`。
 旧 `musicApi:*` / `lyrics:get` / `api:getThrottleWait` 通道已删除（收敛为单通道）。
 
-**Cache** — renderer→main:
-`getSong`, `setSong`, `getCover`, `setCover`, `getAudio`, `setAudio`, `getUrl`, `setUrl`, `clear`, `getStats`
+**Cache** — renderer→main（ADR-0002 语义通道，7 个）:
+`getSongResources`, `setSongResources`, `getCoverPath`, `setCoverBytes`,
+`invalidateCover`, `clear`, `getStats`。通道名即语义名，key/TTL 推导内聚在
+core 的 `SongResourcesCache`（song:<songId> 12h / cover:<归一化 URL> 6h），
+渲染层零 key 知识。旧 getSong/setSong/getAudio/setAudio 与 typed
+getJSON/setJSON/getBinary/setBinary 8 个僵尸通道已删除。
 
 **Favorite** — renderer→main:
 `add`, `remove`, `isFavorite`, `getAll`
@@ -242,9 +246,11 @@ packages/core/src/
 │   ├── probeSongs.ts           # 批量歌曲探测
 │   └── playlistImport.ts       # 歌单导入
 ├── cache/                      # 缓存内核（cacheKernel / ttl / backends/memoryBackend）
+│                                # + 歌曲资源语义层（songResourcesCache，key/TTL 内聚）
 ├── shared/                     # resolvePlayableUrl / resolveFreshUrl / searchController / sourceSwap（单曲换源）
 ├── utils/                      # songDedupe / songMatcher / lyricsParser / format /
-│                                # hash(md5) / queue / recommendBatch / resourceKey / sourceReferer
+│                                # hash(md5) / queue / recommendBatch / resourceKey /
+│                                # sourceReferer / sniffers（图片/音频格式头嗅探单点）
 ├── types/index.ts              # Song, SourceKey, LyricLine, etc.
 └── index.ts                    # Re-exports everything
 ```
