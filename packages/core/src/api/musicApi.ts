@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from 'axios';
-import type { Song, SourceKey, SongGroup, DiscoverPlaylist, Album } from '../types/index.js';
+import type { Song, SourceKey, SongGroup, DiscoverPlaylist, Album, AudioTag } from '../types/index.js';
 import { cacheManager } from './memoryCacheManager.js';
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { weapiRequest } from './neteaseWeapi.js';
@@ -8,6 +8,7 @@ import { findExactMatch } from '../utils/songMatcher.js';
 import { resourceUrlKey } from '../utils/resourceKey.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
+import { probeSongs } from './probeSongs.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
@@ -1283,6 +1284,8 @@ export const musicApi = {
 
   resolveCoverUrl,
 
+  invalidateCoverUrl,
+
   async getLyrics(lrcUrl: string): Promise<string> {
     const fullUrl = normalizeUrl(lrcUrl);
     if (!fullUrl) return '';
@@ -2361,6 +2364,45 @@ export const musicApi = {
     } catch {
       return false;
     }
+  },
+
+  /**
+   * 批量探测歌曲可播性（桌面换源/搜索结果探测），空 url → `invalid`。
+   * 复用 core `probeSongs` + `getAudioUrl` resolver：每首先解析直链再探测。
+   */
+  async probeSongsBatch(songs: Song[]): Promise<{ songId: string; tag: AudioTag }[]> {
+    const list = Array.isArray(songs) ? songs : [];
+    if (list.length === 0) return [];
+    const results: { songId: string; tag: AudioTag }[] = [];
+    // 记录每首解析后的最终 URL（空 → invalid，保持桌面现状）
+    const resolvedUrls = new Map<string, string>();
+    await probeSongs(list, {
+      concurrency: Math.min(20, Math.max(1, list.length)),
+      resolver: async (song) => {
+        let url = song.url;
+        try {
+          url = (await this.getAudioUrl(url)) || url;
+        } catch {
+          // keep the original URL; probeAudioUrl will classify it
+        }
+        resolvedUrls.set(song.id, url || '');
+        return url;
+      },
+      onResult: (songId, tag) => {
+        results.push({ songId, tag: resolvedUrls.get(songId) ? tag : 'invalid' });
+      },
+    });
+    return results;
+  },
+
+  /**
+   * 补齐无 URL 歌曲（专辑名预搜 1 次批量命中 + 剩余逐首兜底）。
+   * 薄方法：包装 `resolveNeteaseSongUrlsBySearch`，返回补齐后的歌曲数组。
+   */
+  async fillSongUrls(songs: Song[], albumName?: string): Promise<Song[]> {
+    const list = Array.isArray(songs) ? songs : [];
+    await this.resolveNeteaseSongUrlsBySearch(list, albumName);
+    return list;
   },
 
   async warmUpArtistPicCache(): Promise<void> {
