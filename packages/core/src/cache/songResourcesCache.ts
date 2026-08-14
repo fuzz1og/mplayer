@@ -68,6 +68,9 @@ export class SongResourcesCache {
   /**
    * 读取封面磁盘路径（可渲染 file:// 前缀由调用方加）。走内核统一语义 key，
    * 命中且未过期才返回平台路径；未命中 / 过期返回 null。
+   *
+   * 读时自愈：读入的字节若被 sniffers 判定非图片（历史残留 / 外部截断的损坏缓存），
+   * 删除该条目并返回 null，下次自动重新解析——绝不把死 file:// 路径交回调用方。
    */
   async getCoverPath(coverUrl: string): Promise<string | null> {
     if (!coverUrl) return null
@@ -75,6 +78,11 @@ export class SongResourcesCache {
     // 通过内核确认条目存在且未过期（含 L2→L1 回填语义），而非绕过内核直读磁盘。
     const bytes = await this.kernel.getBinary(key)
     if (!bytes) return null
+    // 读时自愈：字节存在但非图片 → 损坏缓存，删除并视为未命中（下次重新解析）。
+    if (!isImageBytes(bytes)) {
+      await this.kernel.remove(key)
+      return null
+    }
     if (!this.resolveBackendFilePath) return null
     return this.resolveBackendFilePath(`:bin:${key}`)
   }

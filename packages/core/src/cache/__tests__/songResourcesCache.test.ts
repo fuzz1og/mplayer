@@ -90,6 +90,29 @@ describe('SongResourcesCache 语义层', () => {
     expect(await cache.getCoverPath('https://example.com/broken.jpg')).toBeNull()
   })
 
+  it('getCoverPath 读时自愈：损坏封面字节被删除并返回 null，条目移除后再次读取亦为 null', async () => {
+    const { l2 } = makeCache()
+    const kernel = new CacheKernel({ l1: createMemoryBackend(), l2 })
+    const injected = vi.fn(async (backendKey: string) => {
+      const hit = await l2.read(backendKey)
+      return hit ? `/cache/${backendKey}` : null
+    })
+    const c = new SongResourcesCache({ kernel, resolveBackendFilePath: injected })
+    const cover = 'https://example.com/corrupted.jpg'
+    const key = `cover:${resourceUrlKey(cover)}`
+
+    // 先经 setCoverBytes 正常落盘（走写时 sniffers 校验），再绕过写时校验，
+    // 手工注入损坏字节（模拟历史残留/外部截断的损坏缓存）。
+    await c.setCoverBytes(cover, PNG_BYTES)
+    await kernel.setBinary(key, new TextEncoder().encode('<html>truncated</html>'), 60 * 60 * 1000)
+
+    // 读时自愈：字节非图片 → 删除损坏条目并返回 null，且不解析死路径
+    expect(await c.getCoverPath(cover)).toBeNull()
+    expect(injected).not.toHaveBeenCalledWith(`:bin:${key}`)
+    // 条目已被移除：再次读取同样为 null（不会复活，下次自动重新解析）
+    expect(await c.getCoverPath(cover)).toBeNull()
+  })
+
   it('invalidateCover 清除归一化 key，复用命中新路径', async () => {
     const baseCache = makeCache()
     const injected = vi.fn(async (backendKey: string) => {
