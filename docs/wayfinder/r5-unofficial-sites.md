@@ -85,7 +85,7 @@ l4 = [lpz]                               # 无效或不稳
 | 家族 | 站点（类名） | 下载通道 | 是否需网盘 cookie |
 |---|---|---|---|
 | **纯网页直链** | htqyy（`HTQYYMusicClient`）、itingwa（`ITingWaMusicClient`） | 网页 JS 变量里的 CDN 直链 | 否 |
-| **夸克网盘中转** | kkws、livepoo、liziyy、fivesong、xiageba、xmfwav、yinyuedao、mgmp3、mitu、sgogo、buguyy、fangpi、gequbao、gequhai | `pan.quark.cn` share → `QuarkParser` 解析 | **是**（`quark_parser_config.cookies`），个别 `assert` 强校验 |
+| **夸克网盘中转** | kkws、livepoo、liziyy、fivesong、xiageba、xmfwav、yinyuedao、mgmp3、mitu、sgogo、buguyy、fangpi、gequbao、gequhai | `pan.quark.cn` share → `QuarkParser` 解析 | **是**（`quark_parser_config.cookies`）；`fivesong` 无网盘 cookie 直接 `assert` 抛异常（`fivesong.py:26`），`yinyuedao` 用 `warn` 降级为仅 mp3（`yinyuedao.py:27`）|
 | **蓝奏网盘中转** | zhuolin | `lanzouy.com` → `LanZouYParser` | 否（蓝奏免登录） |
 
 - **纯网页直链**（最接近 MPlayer 想要的「点开即播」）：`htqyy` 抓 `fileHost+mp3` JS 变量（regex），`itingwa` 抓 `#tw_player init-data`。无签名、无 JSON，纯 HTML regex → 直链。**稳定性最低**（CSS/JS 结构调整即废），但架构最简单。
@@ -111,7 +111,7 @@ l4 = [lpz]                               # 无效或不稳
 | twot58 | www.2t58.com | HTML `.play_list` | `plug/down.php?ac=music`(HEAD/CDN) | 网页直链 | M |
 | xiageba | xiageba.liumingye.cn | `GET /api/music/search`(JSON) | `_payload.json` | 仅 quark（assert）| S |
 | xmfwav | www.xmfwav.com | HTML `allsrc` | `/song/{id}` JS-key regex | quark+web | M |
-| yinyuedao | *(musicdl yinyuedao)* | HTML | `/mdetail/` base64 + `geturl` JSON | quark+web | M |
+| yinyuedao | 1mp3.top | HTML | `/mdetail/` base64 + `geturl` JSON | quark+web | M |
 | zhuolin | music.zhuolin.wang | `POST /plugns/api.php`(JSON) | 同端点 `types=lyric` | 蓝奏+http | S |
 
 ### 2.3 同构性归类（可抽公共基类）
@@ -194,9 +194,9 @@ R1 报告（`r1-direct-connect-matrix.md`）已把 7 官方源直连排了优先
 | fangpi/gequbao | B HTML+curl_cffi | quark+web | 网盘中转 | 很低 | 中高（TLS 指纹）| L | 否（Electron 无 curl_cffi）|
 | gequhai | B 表格+JS 变量 | quark+web | 网盘中转 | 很低 | 中 | L | 否 |
 | sgogo/xmfwav/yinyuedao | B DOM/正则 | quark+web | 网盘中转 | 很低 | 中 | M | 否 |
-| fivesong/xiageba | B 仅 quark | 仅网盘 | 网盘中转 | 很低（assert cookie）| 中 | S/M | 否（依赖夸克 cookie）|
+| fivesong/xiageba | B 仅 quark | 仅网盘 | 网盘中转 | 很低（`__init__` 直接 `assert` quark cookie，无则抛异常）| 中 | S/M | 否（依赖夸克 cookie）|
 | mgmp3/mitu/buguyy | B JSON API | quark+http | 网盘+直链 | 低 | 中 | S/M | 可试（JSON API 族）|
-| kkws/livepoo/liziyy | B quark blob | 仅网盘 | 网盘中转 | 很低 | 中 | M-L | 否 |
+| kkws/liziyy（quark only）/ livepoo（quark + `/audio/play` web 兜底）| B quark blob | kkws/liziyy 仅网盘；livepoo 有 web 兜底 | 网盘中转 | 很低 | 中 | M-L | 否 |
 | zhuolin | B 蓝奏 | 蓝奏+http | 网盘+直链 | 低 | 中 | S | 可试（蓝奏免登录）|
 
 ---
