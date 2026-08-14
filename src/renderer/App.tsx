@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 const { ipcRenderer } = window.require('electron');
-import { message } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -94,26 +93,6 @@ const App: React.FC = () => {
     ipcRenderer.on('tray:action', handleTrayAction);
     return () => {
       ipcRenderer.removeListener('tray:action', handleTrayAction);
-    };
-  }, []);
-
-  // IPC通信机制
-  useEffect(() => {
-    const handleIPCResponse = (_event: any, _payload: any) => {
-      // IPC response handler
-    };
-
-    const handleIPCError = (_event: any, error: string) => {
-      console.error('IPC通信错误:', error);
-      message.error('通信失败，请重试');
-    };
-
-    ipcRenderer.on('ipc:response', handleIPCResponse);
-    ipcRenderer.on('ipc:error', handleIPCError);
-
-    return () => {
-      ipcRenderer.removeListener('ipc:response', handleIPCResponse);
-      ipcRenderer.removeListener('ipc:error', handleIPCError);
     };
   }, []);
 

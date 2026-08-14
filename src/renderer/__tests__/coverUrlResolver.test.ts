@@ -29,7 +29,7 @@ describe('coverUrlResolver 封面直链解析', () => {
     expect(a).toBe('https://cdn.example.com/cover.jpg');
     expect(b).toBe(a);
     expect(invoke).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith('musicApi:resolveCoverUrl', url);
+    expect(invoke).toHaveBeenCalledWith('musicApi:call', 'resolveCoverUrl', url);
   });
 
   it('解析失败回退原 URL 且不缓存，下次可重试', async () => {
@@ -68,7 +68,7 @@ describe('coverUrlResolver 封面直链解析', () => {
     invalidateCoverUrl(url);
     // 失效后重新解析必须重新 IPC（缓存已清）
     await resolveCoverUrl(url);
-    expect(invoke).toHaveBeenCalledWith('musicApi:invalidateCoverUrl', url);
+    expect(invoke).toHaveBeenCalledWith('musicApi:call', 'invalidateCoverUrl', url);
     expect(invoke).toHaveBeenCalledWith('cache:invalidateCover', url);
     // 1 次解析 + 2 次失效通知 + 1 次重解析
     expect(invoke).toHaveBeenCalledTimes(4);

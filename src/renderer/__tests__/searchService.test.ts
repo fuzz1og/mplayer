@@ -59,7 +59,7 @@ describe('searchService', () => {
       await searchService.search('周杰伦');
 
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ loading: true }));
-      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:searchSongs', '周杰伦', 1, 'netease');
+      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongs', '周杰伦', 1, 'netease');
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ loading: false }));
     });
 
@@ -81,9 +81,9 @@ describe('searchService', () => {
         artist: 'artist',
         url: '',
       }));
-      (IpcClient.invoke as any).mockImplementation(async (channel: string) => {
-        if (channel === 'musicApi:searchSongs') return songs;
-        if (channel === 'musicApi:probeAudio') {
+      (IpcClient.invoke as any).mockImplementation(async (channel: string, method?: string) => {
+        if (channel === 'musicApi:call' && method === 'searchSongs') return songs;
+        if (channel === 'musicApi:call' && method === 'probeSongsBatch') {
           return songs.map((song) => ({ songId: song.id, tag: 'valid' as const }));
         }
         return undefined;
@@ -93,10 +93,10 @@ describe('searchService', () => {
 
       await vi.waitFor(() => expect(mockStore.setAudioTag).toHaveBeenCalledTimes(songs.length));
       const probeCalls = (IpcClient.invoke as any).mock.calls.filter(
-        (call: unknown[]) => call[0] === 'musicApi:probeAudio'
+        (call: unknown[]) => call[0] === 'musicApi:call' && call[1] === 'probeSongsBatch'
       );
       expect(probeCalls).toHaveLength(1);
-      expect(probeCalls[0][1]).toHaveLength(songs.length);
+      expect(probeCalls[0][2]).toHaveLength(songs.length);
     });
   });
 
@@ -121,7 +121,7 @@ describe('searchService', () => {
 
       const result = await searchService.batchSearch(['周杰伦', '林俊杰']);
 
-      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:batchSearch', ['周杰伦', '林俊杰'], 'netease');
+      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'batchSearch', ['周杰伦', '林俊杰'], 'netease');
       expect(result).toEqual(mockResult);
     });
 
