@@ -3,6 +3,7 @@ import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
+import { isSessionProtectedEndpoint, stripSourceIdPrefix, findExactMatch } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { ipcMusicApi } from '@/renderer/services/IpcMusicApi';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';
@@ -15,6 +16,38 @@ const { ipcRenderer } = window.require('electron');
  * 或点歌发生在列表刷新完成前）。不覆盖已有封面，只补缺失的 cover。
  * Fire-and-forget，不阻塞播放。
  */
+/**
+ * 歌词获取（含失败重试）：优先歌曲自带 lrc URL；为空则搜索补全。
+ * 获取失败（getLyrics 对「非法请求」页抛错 = 签名与会话绑定、会话已轮换，
+ * 旧签名 URL 永远失败）→ 重搜拿新签名 lrc URL 重试一次，对齐手机端
+ * fetchLrcInBackground 的 force 路径。返回空串 = 无歌词（不重试）。
+ */
+async function loadLyricsWithRetry(song: Song): Promise<string> {
+  const searchLrc = async (): Promise<string> => {
+    try {
+      const results = await resolveSongUrls(song.name, song.artist, song.sourceType);
+      return results[0]?.lrc?.trim() || '';
+    } catch {
+      return '';
+    }
+  };
+  const fetchLyrics = (lrcUrl: string): Promise<string> =>
+    IpcClient.invoke<string>('lyrics:get', lrcUrl);
+
+  const lrcUrl = song.lrc && song.lrc.trim() !== '' ? song.lrc : await searchLrc();
+  if (!lrcUrl) return '';
+  try {
+    return await fetchLyrics(lrcUrl);
+  } catch (err) {
+    // 失败一次：重搜换新签名 URL 重试（旧签名已随会话轮换失效）
+    console.warn('[lyrics] 获取失败，重搜新签名重试:', err);
+    await new Promise((r) => setTimeout(r, 600));
+    const freshLrc = await searchLrc();
+    if (!freshLrc || freshLrc === lrcUrl) throw err;
+    return await fetchLyrics(freshLrc);
+  }
+}
+
 async function backfillCurrentSongCover(song: Song): Promise<void> {
   try {
     const cover = await refreshSongCover(song);
@@ -193,6 +226,49 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       }
 
+      // 无 url 歌曲（专辑页跳过搜索兜底后 / 列表未带 url）：播放时按名字
+      // 搜索解析一次（对齐移动端 resolvePlayableSong），失败走下方报错
+      if (!realUrl && song.sourceType !== 'local' && song.sourceType !== 'soda' && song.name) {
+        try {
+          const results = await ipcMusicApi.searchSongs(`${song.name} ${song.artist}`.trim(), 1, song.sourceType);
+          const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
+          if (hit?.url) realUrl = hit.url;
+        } catch (urlError) {
+          console.error('播放时搜索歌曲 URL 失败:', urlError);
+        }
+      }
+
+      // 死链 fresh 兜底：受保护端点（签名 URL）解析回原样 = 签名过期/
+      // 会话失效（服务端返回错误页而非 302）。按源站 ID 重取全新三件套，
+      // 播放不再依赖列表刷新先行完成；成功顺手回写 URL 缓存。
+      if (
+        song.sourceType !== 'local' &&
+        song.sourceType !== 'soda' &&
+        song.id &&
+        realUrl &&
+        realUrl === song.url &&
+        isSessionProtectedEndpoint(song.url)
+      ) {
+        try {
+          const fresh = await IpcClient.invoke<Song | null>(
+            'musicApi:searchSongById',
+            stripSourceIdPrefix(String(song.id)),
+            song.sourceType,
+            true,
+          );
+          if (fresh?.url?.startsWith('http')) {
+            realUrl = fresh.url;
+            void IpcClient.invoke<void>('cache:setUrl', song.id, {
+              url: fresh.url,
+              cover: fresh.cover,
+              lrc: fresh.lrc,
+            }).catch(() => {});
+          }
+        } catch (freshError) {
+          console.warn('播放 URL fresh 重试失败，使用原解析结果:', freshError);
+        }
+      }
+
       if (generation !== playGeneration) {
         set({ isLoading: false });
         return;
@@ -228,49 +304,21 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         backfillCurrentSongCover(song).catch(() => {});
       }
 
-      // Fire-and-forget: 歌词获取不阻塞播放
+      // Fire-and-forget: 歌词获取不阻塞播放（失败自动重搜新签名重试一次）
       const requestingSongId = song.id;
-      if (!song.lrc || song.lrc.trim() === '') {
-        set({ lyricsLoading: true });
-        resolveSongUrls(song.name, song.artist, song.sourceType)
-          .then((searchResults) => {
-            if (get().currentSong?.id !== requestingSongId) return null;
-            if (searchResults.length > 0) {
-              const freshSong = searchResults[0];
-              if (freshSong.lrc && freshSong.lrc.trim() !== '') {
-                return IpcClient.invoke<string>('lyrics:get', freshSong.lrc);
-              }
-            }
-            return '';
-          })
-          .then((lyricsContent) => {
-            if (lyricsContent !== null && get().currentSong?.id === requestingSongId) {
-              set({ lyrics: lyricsContent, lyricsLoading: false });
-            } else if (lyricsContent === null) {
-              set({ lyricsLoading: false });
-            }
-          })
-          .catch((lyricsError) => {
-            console.error('获取歌词失败:', lyricsError);
-            if (get().currentSong?.id === requestingSongId) {
-              set({ lyrics: '', lyricsLoading: false });
-            }
-          });
-      } else {
-        set({ lyricsLoading: true });
-        IpcClient.invoke<string>('lyrics:get', song.lrc)
-          .then((lyricsContent) => {
-            if (get().currentSong?.id === requestingSongId) {
-              set({ lyrics: lyricsContent, lyricsLoading: false });
-            }
-          })
-          .catch((lyricsError) => {
-            console.error('获取歌词失败:', lyricsError);
-            if (get().currentSong?.id === requestingSongId) {
-              set({ lyrics: '', lyricsLoading: false });
-            }
-          });
-      }
+      set({ lyricsLoading: true });
+      loadLyricsWithRetry(song)
+        .then((lyricsContent) => {
+          if (get().currentSong?.id === requestingSongId) {
+            set({ lyrics: lyricsContent, lyricsLoading: false });
+          }
+        })
+        .catch((lyricsError) => {
+          console.error('获取歌词失败:', lyricsError);
+          if (get().currentSong?.id === requestingSongId) {
+            set({ lyrics: '', lyricsLoading: false });
+          }
+        });
 
       // Fire-and-forget: 历史记录写入不阻塞播放
       IpcClient.invoke('history:add', song).catch((err) => {

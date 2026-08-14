@@ -9,14 +9,15 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ListMusic, ChevronRight, Plus, Heart, Clock } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import type { Playlist } from '../../stores/playlistStore';
+import { colors, radius } from '../../theme/tokens';
 
 const BUILT_IN = [
-  { key: 'favorites', icon: 'heart' as const, label: '收藏', desc: '我喜欢的歌曲' },
-  { key: 'history', icon: 'time-outline' as const, label: '播放历史', desc: '最近播放的歌曲' },
+  { key: 'favorites', icon: Heart, label: '收藏', desc: '我喜欢的歌曲' },
+  { key: 'history', icon: Clock, label: '播放历史', desc: '最近播放的歌曲' },
 ];
 
 function formatDate(ts: number): string {
@@ -31,6 +32,7 @@ export default function PlaylistsPage() {
 
   const [modalVisible, setModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
+  const [inputFocused, setInputFocused] = useState(false);
 
   const handleCreate = () => {
     const trimmed = newName.trim();
@@ -55,7 +57,7 @@ export default function PlaylistsPage() {
       onLongPress={() => handleDelete(item)}
     >
       <View style={styles.iconWrap}>
-        <Ionicons name="list-outline" size={24} color="#e74c3c" />
+        <ListMusic size={24} color={colors.accent} />
       </View>
       <View style={styles.rowInfo}>
         <Text style={styles.rowName} numberOfLines={1}>
@@ -65,7 +67,7 @@ export default function PlaylistsPage() {
           {item.songs.length} 首 · {formatDate(item.createdAt)}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color="#555" />
+      <ChevronRight size={18} color={colors.textTertiary} />
     </TouchableOpacity>
   );
 
@@ -77,7 +79,7 @@ export default function PlaylistsPage() {
           style={styles.addBtn}
           onPress={() => setModalVisible(true)}
         >
-          <Ionicons name="add" size={24} color="#fff" />
+          <Plus size={24} color={colors.textInverse} />
         </TouchableOpacity>
       </View>
 
@@ -95,19 +97,19 @@ export default function PlaylistsPage() {
                 activeOpacity={0.6}
                 onPress={() => router.push(item.key === 'favorites' ? '/favorites' : '/history')}
               >
-                <View style={[styles.iconWrap, { backgroundColor: '#2a2a4a' }]}>
-                  <Ionicons name={item.icon} size={24} color="#e74c3c" />
+                <View style={[styles.iconWrap, { backgroundColor: colors.bgHover }]}>
+                  <item.icon size={24} color={colors.accent} />
                 </View>
                 <View style={styles.rowInfo}>
                   <Text style={styles.rowName}>{item.label}</Text>
                   <Text style={styles.rowMeta}>{item.desc}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color="#555" />
+                <ChevronRight size={18} color={colors.textTertiary} />
               </TouchableOpacity>
             ))}
             {playlists.length > 0 && (
               <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
-                <Text style={{ color: '#888', fontSize: 13 }}>我的歌单</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>我的歌单</Text>
               </View>
             )}
           </>
@@ -134,11 +136,13 @@ export default function PlaylistsPage() {
           >
             <Text style={styles.modalTitle}>新建歌单</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, inputFocused && styles.modalInputFocused]}
               placeholder="输入歌单名称"
-              placeholderTextColor="#666"
+              placeholderTextColor={colors.inputPlaceholder}
               value={newName}
               onChangeText={setNewName}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               autoFocus
             />
             <View style={styles.modalActions}>
@@ -170,22 +174,24 @@ export default function PlaylistsPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  container: { flex: 1, backgroundColor: colors.bgBase },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 52,
+    paddingTop: 12,
     paddingBottom: 12,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: colors.bgSurface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
   },
-  title: { color: '#fff', fontSize: 22, fontWeight: '700' },
+  title: { color: colors.textPrimary, fontSize: 22, fontWeight: '700' },
   addBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: '#e74c3c',
+    borderRadius: radius.full,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -198,48 +204,53 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a4a',
+    borderBottomColor: colors.borderSubtle,
   },
   iconWrap: {
     width: 44,
     height: 44,
-    borderRadius: 10,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.md,
+    backgroundColor: colors.bgHover,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   rowInfo: { flex: 1 },
-  rowName: { color: '#fff', fontSize: 15, fontWeight: '500' },
-  rowMeta: { color: '#888', fontSize: 12, marginTop: 3 },
+  rowName: { color: colors.textPrimary, fontSize: 15, fontWeight: '500' },
+  rowMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
 
   // modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.bgOverlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#16213e',
-    borderRadius: 14,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
     padding: 24,
     width: '80%',
   },
   modalTitle: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 17,
     fontWeight: '600',
     marginBottom: 16,
     textAlign: 'center',
   },
   modalInput: {
-    backgroundColor: '#2a2a4a',
-    borderRadius: 8,
+    backgroundColor: colors.inputBg,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 15,
+  },
+  modalInputFocused: {
+    borderColor: colors.inputBorderFocus,
   },
   modalActions: {
     flexDirection: 'row',
@@ -249,17 +260,17 @@ const styles = StyleSheet.create({
   cancelBtn: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.md,
+    backgroundColor: colors.bgHover,
     alignItems: 'center',
   },
-  cancelText: { color: '#888', fontSize: 15 },
+  cancelText: { color: colors.textSecondary, fontSize: 15 },
   confirmBtn: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#e74c3c',
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
     alignItems: 'center',
   },
-  confirmText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  confirmText: { color: colors.textInverse, fontSize: 15, fontWeight: '600' },
 });

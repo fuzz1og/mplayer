@@ -4,6 +4,7 @@ import CoverImage from '../components/CoverImage';
 
 vi.mock('@/renderer/services/coverUrlResolver', () => ({
   resolveCoverUrl: vi.fn(),
+  invalidateCoverUrl: vi.fn(),
 }));
 
 import { resolveCoverUrl } from '@/renderer/services/coverUrlResolver';
@@ -72,5 +73,32 @@ describe('CoverImage 会话保护封面解析', () => {
     await act(async () => {});
     const img2 = screen.getByAltText('x') as HTMLImageElement;
     expect(img2.src).toContain('https://cdn.example.com/new.jpg');
+  });
+
+  it('解析失败（返回原 URL）时指数退避重试，成功后渲染 CDN 直链', async () => {
+    vi.useFakeTimers();
+    try {
+      const src = 'https://api.example.com/api.php?get=pic&id=9&sign=s&t=9';
+      vi.mocked(resolveCoverUrl)
+        .mockResolvedValueOnce(src) // 第一次：限流失败（返回原 URL）
+        .mockResolvedValueOnce('https://cdn.example.com/recovered.jpg');
+      vi.mocked(resolveCoverUrl).mockClear();
+      render(<CoverImage src={src} alt="x" />);
+
+      // 第一次失败 → 仍显示兜底，无 img
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.queryByAltText('x')).toBeNull();
+
+      // 20s 后退避重试成功 → 渲染 CDN 直链
+      await act(async () => {
+        vi.advanceTimersByTime(20000);
+        await Promise.resolve();
+      });
+      const img = screen.getByAltText('x') as HTMLImageElement;
+      expect(img.src).toContain('https://cdn.example.com/recovered.jpg');
+      expect(resolveCoverUrl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

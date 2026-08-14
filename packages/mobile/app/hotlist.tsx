@@ -16,6 +16,7 @@ import SongRow from '../components/SongRow';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { playSong } from '../services/audioPlayer';
 import { usePlayerStore } from '../stores/playerStore';
+import { colors, spacing, statusBarStyle } from '../theme/tokens';
 
 interface HotlistSong {
   id: string;
@@ -86,8 +87,8 @@ export default function HotlistPage() {
             options={{
               title: title || '未知榜单',
               headerShown: true,
-              headerStyle: { backgroundColor: '#1a1a2e' },
-              headerTintColor: '#fff',
+              headerStyle: { backgroundColor: colors.bgSurface },
+              headerTintColor: colors.textPrimary,
               headerShadowVisible: false,
             }}
           />
@@ -101,13 +102,13 @@ export default function HotlistPage() {
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style="light" />
+        <StatusBar style={statusBarStyle} />
         <Stack.Screen
           options={{
             title: title || '',
             headerShown: true,
-            headerStyle: { backgroundColor: '#1a1a2e' },
-            headerTintColor: '#fff',
+            headerStyle: { backgroundColor: colors.bgSurface },
+            headerTintColor: colors.textPrimary,
             headerShadowVisible: false,
           }}
         />
@@ -140,7 +141,7 @@ export default function HotlistPage() {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                tintColor="#e74c3c"
+                tintColor={colors.accent}
               />
             }
           />
@@ -152,6 +153,6 @@ export default function HotlistPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  errorText: { color: '#888', fontSize: 16, textAlign: 'center', marginTop: 40 },
+  container: { flex: 1, backgroundColor: colors.bgBase },
+  errorText: { color: colors.textSecondary, fontSize: 16, textAlign: 'center', marginTop: spacing[10] },
 });

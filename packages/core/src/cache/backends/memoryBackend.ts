@@ -1,14 +1,30 @@
 import type { CacheBackend } from '../types'
 
 export function createMemoryBackend(): CacheBackend {
-  const map = new Map<string, Uint8Array>()
+  interface Entry {
+    data: Uint8Array
+    expiresAt: number
+  }
+  const map = new Map<string, Entry>()
 
   return {
     async read(key: string): Promise<Uint8Array | null> {
-      return map.get(key) ?? null
+      const item = map.get(key)
+      if (!item) return null
+      if (item.expiresAt > 0 && Date.now() >= item.expiresAt) {
+        map.delete(key)
+        return null
+      }
+      return item.data
     },
-    async write(key: string, data: Uint8Array): Promise<void> {
-      map.set(key, data)
+    async write(key: string, data: Uint8Array, expiresAt?: number): Promise<void> {
+      map.set(key, {
+        data,
+        expiresAt: expiresAt && expiresAt > 0 ? expiresAt : 0,
+      })
+    },
+    async getExpiryAt(key: string): Promise<number> {
+      return map.get(key)?.expiresAt ?? 0
     },
     async delete(key: string): Promise<void> {
       map.delete(key)

@@ -61,6 +61,38 @@ describe('CacheKernel', () => {
     expect(await kernel.getJSON('b')).toBeNull()
   })
 
+  it('expires JSON entries after ttlMs (memory backend)', async () => {
+    const kernel = new CacheKernel({ l1: createMemoryBackend() })
+    // TTL 20ms：写入后立即能读，过期后必须 null
+    await kernel.setJSON('key', { v: 1 }, 20)
+    expect(await kernel.getJSON('key')).toEqual({ v: 1 })
+    await new Promise((r) => setTimeout(r, 40))
+    expect(await kernel.getJSON('key')).toBeNull()
+  })
+
+  it('expires JSON entries on L2 and does not resurrect via L1 backfill', async () => {
+    const l1 = createMemoryBackend()
+    const l2 = createMemoryBackend()
+    const kernel = new CacheKernel({ l1, l2 })
+
+    await kernel.setJSON('key', { v: 1 }, 20)
+    await l1.clear() // 模拟重启：L1 清空，L2 保留
+
+    // 未过期时：L2 命中并回填 L1（携带剩余 TTL）
+    expect(await kernel.getJSON('key')).toEqual({ v: 1 })
+    await new Promise((r) => setTimeout(r, 40))
+    // L2 过期删除后，L1 也不能把条目复活
+    expect(await kernel.getJSON('key')).toBeNull()
+    expect(await l1.read(':json:key')).toBeNull()
+  })
+
+  it('ttlMs=0 keeps entries forever', async () => {
+    const kernel = new CacheKernel({ l1: createMemoryBackend() })
+    await kernel.setJSON('perm', 1, 0)
+    await new Promise((r) => setTimeout(r, 30))
+    expect(await kernel.getJSON('perm')).toBe(1)
+  })
+
   it('namespace隔离', async () => {
     const backend = createMemoryBackend()
     const kernelA = new CacheKernel({ l1: backend, namespace: 'a' })

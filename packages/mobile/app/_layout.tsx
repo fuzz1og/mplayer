@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
+import { colors } from '../theme/tokens';
 import { addNotificationResponseListener, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl, setApiTimingLog } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
 import PlayerOverlay from '../components/PlayerOverlay';
+
+// core 的搜索诊断 console.warn（单源识别失败等）在真机 dev 上会触发
+// LogBox 横幅盖住底部播放栏；诊断信息 Metro 终端可见，无需上屏
+// [player] 的「加载失败」等 error 日志同样走内部重试逻辑，属预期内错误
+LogBox.ignoreLogs(['[search]', '[player]']);
 
 /** 全局播放错误提示（真机上无法看终端 console，用 Toast 直接展示最终错误） */
 function PlaybackErrorToast() {
@@ -46,6 +52,13 @@ export default function RootLayout() {
   useEffect(() => {
     initAudio().catch(() => {});
     setupNotificationChannel().catch(() => {});
+    // 注意：WebView 网络桥已移除——常驻隐藏 WebView 在 Android
+    // （Expo Go + Fabric + Android 16）下会破坏 react-native-screens 的
+    // 布局（Stack 内容被压缩到屏幕一半）。请求走 RN 原生栈：
+    // core 已配置 withCredentials（原生 cookie jar 自动携带会话），
+    // 302 直链解析走 fetch+Range+credentials:'include'（实测 206 成功）。
+    // dev 诊断：API 请求耗时日志（PC 链路快、手机慢的对比定位用）
+    if (__DEV__) setApiTimingLog(true);
 
     const sub = addNotificationResponseListener((response) => {
       const data = response.notification.request.content.data;
@@ -114,16 +127,21 @@ const toastStyles = StyleSheet.create({
     zIndex: 2000,
   },
   box: {
-    backgroundColor: 'rgba(20, 20, 40, 0.95)',
-    borderColor: '#e74c3c',
+    backgroundColor: colors.bgSurface,
+    borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
     maxWidth: '85%',
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   text: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 13,
     textAlign: 'center',
   },

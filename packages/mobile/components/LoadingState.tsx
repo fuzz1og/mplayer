@@ -1,4 +1,5 @@
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { colors } from '../theme/tokens';
 
 interface Props {
   message?: string;
@@ -7,7 +8,7 @@ interface Props {
 export default function LoadingState({ message = '加载中...' }: Props) {
   return (
     <View style={styles.container}>
-      <ActivityIndicator color="#e74c3c" />
+      <ActivityIndicator color={colors.accent} />
       {message && <Text style={styles.message}>{message}</Text>}
     </View>
   );
@@ -18,10 +19,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: colors.bgBase,
   },
   message: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 14,
     marginTop: 10,
   },

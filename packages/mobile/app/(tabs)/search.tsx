@@ -9,13 +9,14 @@ import {
   Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { CircleAlert, Music2, User } from 'lucide-react-native';
 import { musicApi } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
 import SongRow from '../../components/SongRow';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
+import { colors, radius } from '../../theme/tokens';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -105,8 +106,8 @@ export default function SearchPage() {
           <SongListSkeleton />
         ) : error && results.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="alert-circle-outline" size={48} color="#e74c3c" />
-            <Text style={[styles.emptyText, { color: '#e74c3c' }]}>{error}</Text>
+            <CircleAlert size={48} color={colors.danger} />
+            <Text style={[styles.emptyText, { color: colors.danger }]}>{error}</Text>
           </View>
         ) : results.length > 0 ? (
           // 多源/单源分开渲染:全部源按歌分组(同歌各源合并),单源按源分组
@@ -117,7 +118,7 @@ export default function SearchPage() {
           )
         ) : (
           <View style={styles.emptyContainer}>
-            <Ionicons name="musical-notes-outline" size={48} color="#444" />
+            <Music2 size={48} color={colors.textDisabled} />
             <Text style={styles.emptyText}>搜索歌曲和歌手</Text>
           </View>
         )
@@ -128,8 +129,8 @@ export default function SearchPage() {
         </View>
       ) : artistsError ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="alert-circle-outline" size={48} color="#e74c3c" />
-          <Text style={[styles.emptyText, { color: '#e74c3c' }]}>歌手搜索失败</Text>
+          <CircleAlert size={48} color={colors.danger} />
+          <Text style={[styles.emptyText, { color: colors.danger }]}>歌手搜索失败</Text>
         </View>
       ) : artists.length > 0 ? (
         <FlatList
@@ -148,7 +149,7 @@ export default function SearchPage() {
                 <Image source={{ uri: a.picUrl }} style={styles.artistAvatar} />
               ) : (
                 <View style={[styles.artistAvatar, styles.artistAvatarFallback]}>
-                  <Ionicons name="person" size={28} color="#555" />
+                  <User size={28} color={colors.textDisabled} />
                 </View>
               )}
               <Text style={styles.artistName} numberOfLines={1}>{a.name}</Text>
@@ -157,7 +158,7 @@ export default function SearchPage() {
         />
       ) : (
         <View style={styles.emptyContainer}>
-          <Ionicons name="person-outline" size={48} color="#444" />
+          <User size={48} color={colors.textDisabled} />
           <Text style={styles.emptyText}>未找到相关歌手</Text>
         </View>
       )}
@@ -226,10 +227,10 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  container: { flex: 1, backgroundColor: colors.bgBase },
   tabHeader: {
     flexDirection: 'row',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: colors.bgBase,
     paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 8,
@@ -237,43 +238,43 @@ const styles = StyleSheet.create({
   tabItem: {
     flex: 1,
     paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.full,
+    backgroundColor: colors.bgHover,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabItemActive: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: colors.accent,
   },
   tabLabel: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 14,
     fontWeight: '500',
   },
   tabLabelActive: {
-    color: '#fff',
+    color: colors.textInverse,
     fontWeight: '600',
   },
   groupSection: { marginBottom: 8 },
   groupHeader: {
-    color: '#aaa',
+    color: colors.textPrimary,
     fontSize: 13,
     fontWeight: '600',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#16213e',
+    backgroundColor: colors.bgSurface,
     marginTop: 8,
     marginHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: radius.md,
     overflow: 'hidden',
   },
-  groupArtist: { color: '#666', fontWeight: '400' },
+  groupArtist: { color: colors.textSecondary, fontWeight: '400' },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyText: { color: '#444', fontSize: 16, marginTop: 12 },
+  emptyText: { color: colors.textSecondary, fontSize: 16, marginTop: 12 },
   artistGrid: {
     paddingHorizontal: 12,
     paddingTop: 12,
@@ -288,15 +289,15 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#16213e',
+    backgroundColor: colors.bgSurface,
   },
   artistAvatarFallback: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#2a2a4a',
+    backgroundColor: colors.bgHover,
   },
   artistName: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 13,
     marginTop: 6,
     textAlign: 'center',

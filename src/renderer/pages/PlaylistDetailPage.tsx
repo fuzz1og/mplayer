@@ -20,8 +20,8 @@ import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
-import { resolveSongUrls } from '@/renderer/utils/songResolver';
-import { mapSettledWithConcurrency } from '@/renderer/utils/async';
+import { stripSourceIdPrefix } from '@mplayer/core';
+import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
@@ -159,8 +159,12 @@ const PlaylistDetailPage: React.FC = () => {
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
 
-  const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
-  const { favoriteIds, toggleFavorite } = useFavoriteStore();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
   const [isReordering, setIsReordering] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -180,17 +184,23 @@ const PlaylistDetailPage: React.FC = () => {
   );
 
   const refreshPlaylistSongs = async (songs: Song[]): Promise<Song[]> => {
-    // 并发 5 限流：整列表同时搜索会打爆 上游 API（高并发限流/502），必须逐批刷新
-    const results = await mapSettledWithConcurrency(songs, 5, async (song) => {
+    // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP
+    // 有窗口配额，整列表同时搜索会打爆 API，必须逐批慢刷
+    const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
         const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getUrl', song.id);
         if (cached) {
           return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
         }
 
-        const searchResults = await resolveSongUrls(song.name, song.artist, song.sourceType);
-        if (searchResults.length === 0) return song;
-
-        const fresh = searchResults.find((s: Song) => s.id === song.id) || searchResults[0];
+        // 按源站 ID 直接识别（filter=id）：链接/签名会过期，ID 不会——
+        // 绕开"名字搜索 + 匹配"（Live/翻唱/多歌手导致匹配失败挂错 URL）
+        const fresh = await IpcClient.invoke<Song | null>(
+          'musicApi:searchSongById',
+          stripSourceIdPrefix(String(song.id)),
+          song.sourceType,
+          true,
+        );
+        if (!fresh?.url) return song;
 
         // 写入缓存
         await IpcClient.invoke<void>('cache:setUrl', song.id, {
@@ -211,7 +221,14 @@ const PlaylistDetailPage: React.FC = () => {
         return { ...song, url: fresh.url, cover: fresh.cover, lrc: fresh.lrc };
     });
 
-    return results.map((r, i) => (r.status === 'fulfilled' ? r.value : songs[i]));
+    return results.map((r, i) => {
+      if (r.status === 'rejected') {
+        // 单曲刷新失败不再完全静默：保留旧数据，但打日志便于排查（会话失效/上游限流）
+        console.warn(`[playlist:refresh] 刷新失败，保留旧数据: ${songs[i]?.name}`, r.reason);
+        return songs[i];
+      }
+      return r.value;
+    });
   };
 
   const loadData = async () => {

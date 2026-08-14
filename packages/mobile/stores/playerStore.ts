@@ -11,6 +11,8 @@ interface PlayerState {
   currentTime: number;
   duration: number;
   showPlayer: boolean;
+  /** 播放准备中（解析直链/创建播放器）：UI 显示加载反馈，避免点击后无响应感 */
+  preparing: boolean;
   // actions
   play: (song: Song) => void;
   pause: () => void;
@@ -21,6 +23,7 @@ interface PlayerState {
   setCurrentTime: (time: number) => void;
   setDuration: (dur: number) => void;
   setShowPlayer: (show: boolean) => void;
+  setPreparing: (preparing: boolean) => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -31,6 +34,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentTime: 0,
   duration: 0,
   showPlayer: false,
+  preparing: false,
 
   play: (song) => set({ currentSong: song, isPlaying: true, currentTime: 0 }),
   pause: () => set({ isPlaying: false }),
@@ -74,4 +78,5 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setCurrentTime: (time) => set({ currentTime: time }),
   setDuration: (dur) => set({ duration: dur }),
   setShowPlayer: (show) => set({ showPlayer: show }),
+  setPreparing: (preparing) => set({ preparing }),
 }));

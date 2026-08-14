@@ -31,7 +31,6 @@
           "enableBackgroundPlayback": true
         }
       ],
-      "./plugins/withVectorIconsFonts",
       [
         "expo-build-properties",
         {

@@ -70,7 +70,9 @@ interface TabCache {
 }
 
 const DiscoverPageV2: React.FC = () => {
-  const { currentSong, isPlaying, play } = usePlayerStore();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>(loadSavedTab);
@@ -342,8 +344,15 @@ const DiscoverPageV2: React.FC = () => {
     fetchChart('new');
   };
 
-  const { loading: searchLoading, loadingMore: searchLoadingMore, currentKeyword, songs: searchSongs, hasMore, sourceType, error: searchError } = useSearchStore();
-  const { toggleFavorite, favoriteIds } = useFavoriteStore();
+  const searchLoading = useSearchStore((s) => s.loading);
+  const searchLoadingMore = useSearchStore((s) => s.loadingMore);
+  const currentKeyword = useSearchStore((s) => s.currentKeyword);
+  const searchSongs = useSearchStore((s) => s.songs);
+  const hasMore = useSearchStore((s) => s.hasMore);
+  const sourceType = useSearchStore((s) => s.sourceType);
+  const searchError = useSearchStore((s) => s.error);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const { download } = useDownload();
   const singleSourceScrollRef = useRef<HTMLDivElement>(null);
   useInfiniteScroll(singleSourceScrollRef, {

@@ -75,7 +75,10 @@ const weapiClient = axios.create({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://music.163.com/',
   },
-  timeout: 30000,
+  // 30s → 8s：网易云对无 cookie 的 weapi 请求会风控挂起（不快速拒绝），
+  // 移动端歌手/歌单页批量补 URL 时 30s 超时会拖住整页加载；8s 覆盖正常
+  // 慢网络，风控挂起时快速失败走搜索兜底
+  timeout: 8000,
   proxy: false,
 });
 

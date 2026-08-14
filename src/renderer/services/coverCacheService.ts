@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { IpcClient } from './IpcClient';
+import { isSessionProtectedEndpoint } from '@mplayer/core';
 
 const inFlight = new Set<string>();
 
@@ -41,6 +42,10 @@ export async function getCoverSrc(coverUrl: string): Promise<string> {
 
 export async function cacheCoverImage(coverUrl: string): Promise<void> {
   if (!isValidCoverUrl(coverUrl)) return;
+  // 受保护封面端点需要会话 cookie，渲染层 fetch 永远拿不到图（服务端
+  // 返回错误页）——自增会话强制后该路径已不可用，落盘缓存改由主进程
+  // 在 resolveCoverUrl 时完成（见 main/ipc/cache.ts cacheResolvedCover）
+  if (isSessionProtectedEndpoint(coverUrl)) return;
   if (inFlight.has(coverUrl)) return;
   inFlight.add(coverUrl);
   try {

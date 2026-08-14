@@ -4,13 +4,15 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import SongRow from '../components/SongRow';
 import EmptyState from '../components/EmptyState';
+import { Clock } from 'lucide-react-native';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useHistoryStore } from '../stores/historyStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
+import { colors, spacing, statusBarStyle } from '../theme/tokens';
 
 export default function HistoryPage() {
-  const { history, clearHistory } = useHistoryStore();
+  const { history, removeHistory, clearHistory } = useHistoryStore();
 
   const handlePlay = (index: number) => {
     if (history.length === 0) return;
@@ -21,17 +23,18 @@ export default function HistoryPage() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style="light" />
+      {/* 原生 header 已含状态栏区域，SafeAreaView 再加 top 会叠出空白 */}
+      <SafeAreaView edges={[]} style={{ flex: 1 }}>
+        <StatusBar style={statusBarStyle} />
         <Stack.Screen options={{
           title: '播放历史',
           headerShown: true,
-          headerStyle: { backgroundColor: '#1a1a2e' },
-          headerTintColor: '#fff',
+          headerStyle: { backgroundColor: colors.bgSurface },
+          headerTintColor: colors.textPrimary,
           headerShadowVisible: false,
         }} />
         {history.length === 0 ? (
-          <EmptyState icon="time-outline" title="还没有播放记录" />
+          <EmptyState icon={Clock} title="还没有播放记录" />
         ) : (
           <FlatList
             data={history}
@@ -49,6 +52,7 @@ export default function HistoryPage() {
                 song={item}
                 showSource
                 onPress={() => handlePlay(index)}
+                onRemove={(s) => removeHistory(s.id)}
               />
             )}
             contentContainerStyle={styles.list}
@@ -61,18 +65,18 @@ export default function HistoryPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  container: { flex: 1, backgroundColor: colors.bgBase },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a4a',
+    borderBottomColor: colors.borderSubtle,
   },
   headerTitle: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -82,7 +86,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   clearText: {
-    color: '#e74c3c',
+    color: colors.dangerText,
     fontSize: 14,
   },
   list: {},

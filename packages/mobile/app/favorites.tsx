@@ -4,11 +4,13 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import SongRow from '../components/SongRow';
 import EmptyState from '../components/EmptyState';
+import { Heart } from 'lucide-react-native';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
 import type { Song } from '@mplayer/core';
+import { colors, statusBarStyle } from '../theme/tokens';
 
 export default function FavoritesPage() {
   const { favorites } = useFavoriteStore();
@@ -28,17 +30,18 @@ export default function FavoritesPage() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style="light" />
+      {/* 原生 header 已含状态栏区域，SafeAreaView 再加 top 会叠出空白 */}
+      <SafeAreaView edges={[]} style={{ flex: 1 }}>
+        <StatusBar style={statusBarStyle} />
         <Stack.Screen options={{
           title: '我的收藏',
           headerShown: true,
-          headerStyle: { backgroundColor: '#1a1a2e' },
-          headerTintColor: '#fff',
+          headerStyle: { backgroundColor: colors.bgSurface },
+          headerTintColor: colors.textPrimary,
           headerShadowVisible: false,
         }} />
         {favorites.length === 0 ? (
-          <EmptyState icon="heart-outline" title="还没有收藏歌曲" />
+          <EmptyState icon={Heart} title="还没有收藏歌曲" />
         ) : (
           <FlatList
             data={favorites}
@@ -61,6 +64,6 @@ export default function FavoritesPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  container: { flex: 1, backgroundColor: colors.bgBase },
   list: {},
 });

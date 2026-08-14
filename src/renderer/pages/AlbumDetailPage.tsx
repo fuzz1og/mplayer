@@ -30,8 +30,12 @@ const AlbumDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { play, currentSong, isPlaying, setCurrentPlaylist } = usePlayerStore();
-  const { favoriteIds, toggleFavorite } = useFavoriteStore();
+  const play = usePlayerStore((s) => s.play);
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
 
   const displayName = album?.name || stateName || '';
   const displayPic = album?.picUrl || statePic || '';
@@ -43,10 +47,28 @@ const AlbumDetailPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const result = await ipcRenderer.invoke('musicApi:getAlbumDetail', albumId);
+        // skipSearchFallback=true：weapi 批量直链即可，跳过逐首搜索兜底（上游慢，
+        // 会阻塞页面数秒~数十秒）；无 URL 歌曲播放时由 playerStore 单首搜索解析
+        const result = await ipcRenderer.invoke('musicApi:getAlbumDetail', albumId, true);
         if (result.success && result.data) {
           setAlbum(result.data.album);
           setSongs(result.data.songs);
+          // 无 URL 歌曲（无版权等，weapi 有信息但无直链）：后台逐首搜索兜底，
+          // 不阻塞页面——补齐后更新列表（补不齐的播放时还有单首兜底）
+          const urlMissing = result.data.songs.filter((s: Song) => !s.url);
+          if (urlMissing.length > 0) {
+            ipcRenderer
+              .invoke('musicApi:fillSongUrls', urlMissing, album?.name)
+              .then((res: any) => {
+                const filled = res?.success ? (res.data as Song[]) : null;
+                if (!Array.isArray(filled) || filled.length === 0) return;
+                const urlById = new Map<string, string>();
+                for (const s of filled) if (s.url) urlById.set(s.id, s.url);
+                if (urlById.size === 0) return;
+                setSongs((prev) => prev.map((s) => (urlById.has(s.id) ? { ...s, url: urlById.get(s.id)! } : s)));
+              })
+              .catch(() => {});
+          }
         } else {
           setError(result.error || '专辑加载失败');
         }

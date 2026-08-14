@@ -3,10 +3,11 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions,
   Image, FlatList,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
+import { colors, radius, shadow, spacing } from '../theme/tokens';
 import LoadingState from './LoadingState';
 import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
@@ -24,11 +25,11 @@ const TABS = [
 
 export default function DiscoverTabs() {
   const [activeIndex, setActiveIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<FlatList<any>>(null);
 
   const onTabPress = (i: number) => {
     setActiveIndex(i);
-    scrollRef.current?.scrollTo({ x: i * SCREEN_WIDTH, animated: true });
+    scrollRef.current?.scrollToOffset({ offset: i * SCREEN_WIDTH, animated: true });
   };
 
   const onMomentumEnd = (e: any) => {
@@ -52,27 +53,28 @@ export default function DiscoverTabs() {
           </TouchableOpacity>
         ))}
       </View>
-      {/* Swipeable content */}
-      <ScrollView
+      {/* Swipeable content：横向分页容器用 FlatList（VirtualizedList-backed），
+          避免 ScrollView 内嵌 FlatList 触发「unique key」嵌套警告 */}
+      <FlatList
         horizontal
         pagingEnabled
         ref={scrollRef}
         onMomentumScrollEnd={onMomentumEnd}
         showsHorizontalScrollIndicator={false}
+        data={TABS}
+        keyExtractor={(t) => t.key}
+        initialNumToRender={1}
+        windowSize={3}
+        renderItem={({ index }) => (
+          <View style={{ width: SCREEN_WIDTH }}>
+            {index === 0 && <HotlistContent />}
+            {index === 1 && activeIndex >= 1 && <AlbumsContent />}
+            {index === 2 && activeIndex >= 2 && <PlaylistContent />}
+            {index === 3 && activeIndex >= 3 && <ArtistContent />}
+          </View>
+        )}
       >
-        <View style={{ width: SCREEN_WIDTH }}>
-          <HotlistContent />
-        </View>
-        <View style={{ width: SCREEN_WIDTH }}>
-          {activeIndex >= 1 && <AlbumsContent />}
-        </View>
-        <View style={{ width: SCREEN_WIDTH }}>
-          {activeIndex >= 2 && <PlaylistContent />}
-        </View>
-        <View style={{ width: SCREEN_WIDTH }}>
-          {activeIndex >= 3 && <ArtistContent />}
-        </View>
-      </ScrollView>
+      </FlatList>
     </View>
   );
 }
@@ -136,7 +138,7 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
   }, [sourceType, songs]);
 
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, shadow.sm]}>
       <TouchableOpacity onPress={() => router.push(`/hotlist?key=${routeKey}&title=${encodeURIComponent(title)}`)}>
         <Text style={styles.sectionTitle}>{title} ›</Text>
       </TouchableOpacity>
@@ -146,8 +148,8 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
           {song.cover ? (
             <Image source={{ uri: song.cover }} style={styles.cover} />
           ) : (
-            <View style={[styles.cover, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-              <Ionicons name="musical-note" size={20} color="#555" />
+            <View style={[styles.cover, { backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+              <Music size={20} color={colors.textDisabled} />
             </View>
           )}
           <View style={styles.songInfo}>
@@ -223,8 +225,8 @@ function AlbumsContent() {
       {album.picUrl ? (
         <Image source={{ uri: album.picUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
       ) : (
-        <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-          <Ionicons name="disc" size={32} color="#555" />
+        <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+          <Disc3 size={32} color={colors.textDisabled} />
         </View>
       )}
       <Text style={styles.gridName} numberOfLines={1}>{album.name}</Text>
@@ -334,8 +336,8 @@ function PlaylistContent() {
       {p.coverImgUrl ? (
         <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
       ) : (
-        <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-          <Ionicons name="list-outline" size={32} color="#555" />
+        <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+          <ListMusic size={32} color={colors.textDisabled} />
         </View>
       )}
       <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
@@ -455,8 +457,8 @@ function ArtistContent() {
       {a.picUrl ? (
         <Image source={{ uri: a.picUrl }} style={styles.artistAvatar} />
       ) : (
-        <View style={[styles.artistAvatar, { backgroundColor: '#2a2a4a', justifyContent: 'center', alignItems: 'center' }]}>
-          <Ionicons name="person" size={28} color="#555" />
+        <View style={[styles.artistAvatar, { backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+          <User size={28} color={colors.textDisabled} />
         </View>
       )}
       <Text style={styles.artistName} numberOfLines={1}>{a.name}</Text>
@@ -494,59 +496,59 @@ function ArtistContent() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  container: { flex: 1, backgroundColor: colors.bgBase },
   // Bubble tab header
   tabHeader: {
     flexDirection: 'row',
-    backgroundColor: '#1a1a2e',
-    paddingHorizontal: 16,
+    backgroundColor: colors.bgBase,
+    paddingHorizontal: spacing[4],
     paddingVertical: 10,
-    gap: 8,
+    gap: spacing[2],
   },
   tabItem: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#2a2a4a',
+    paddingVertical: spacing[2],
+    borderRadius: radius.xl,
+    backgroundColor: colors.bgHover,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabItemActive: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: colors.accent,
   },
   tabLabel: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 14,
     fontWeight: '500',
   },
   tabLabelActive: {
-    color: '#fff',
+    color: colors.textInverse,
     fontWeight: '600',
   },
   tabContent: { flex: 1 },
   // 网格 tab（新碟/歌单/歌手）：与 cardW 计算的左右 12px 边距对齐，保证卡片居中
-  tabContentInner: { paddingHorizontal: 12, paddingBottom: 24 },
+  tabContentInner: { paddingHorizontal: spacing[3], paddingBottom: spacing[6] },
   // 热榜：section 自带 marginHorizontal: 12，不加容器 padding 避免边距翻倍
-  tabContentInnerHotlist: { paddingBottom: 24 },
+  tabContentInnerHotlist: { paddingBottom: spacing[6] },
   // 二级分类胶囊
   catBar: { flexGrow: 0 },
-  catBarContent: { gap: 8, paddingVertical: 10 },
+  catBarContent: { gap: spacing[2], paddingVertical: 10 },
   catPill: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.lg,
+    backgroundColor: colors.bgHover,
   },
   catPillActive: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: colors.accent,
   },
   catLabel: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 12,
     fontWeight: '500',
   },
   catLabelActive: {
-    color: '#fff',
+    color: colors.textInverse,
     fontWeight: '600',
   },
   catErrorBox: {
@@ -554,22 +556,22 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
   catErrorText: {
-    color: '#e74c3c',
+    color: colors.danger,
     fontSize: 14,
   },
   // Hotlist section styles
   section: {
-    backgroundColor: '#16213e',
-    marginHorizontal: 12,
-    marginTop: 12,
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: colors.bgSurface,
+    marginHorizontal: spacing[3],
+    marginTop: spacing[3],
+    borderRadius: radius.md,
+    padding: spacing[3],
   },
   sectionTitle: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: 12,
+    marginBottom: spacing[3],
   },
   songRow: {
     flexDirection: 'row',
@@ -577,7 +579,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   rank: {
-    color: '#888',
+    color: colors.textTertiary,
     fontSize: 14,
     fontWeight: '600',
     width: 28,
@@ -586,12 +588,12 @@ const styles = StyleSheet.create({
   cover: {
     width: 44,
     height: 44,
-    borderRadius: 6,
+    borderRadius: radius.sm,
     marginRight: 10,
   },
   songInfo: { flex: 1 },
-  songName: { color: '#fff', fontSize: 14 },
-  songArtist: { color: '#888', fontSize: 12, marginTop: 2 },
+  songName: { color: colors.textPrimary, fontSize: 14 },
+  songArtist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   // Playlist grid styles
   grid: {
     flexDirection: 'row',
@@ -601,20 +603,20 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   gridCard: {
-    marginBottom: 4,
+    marginBottom: spacing[1],
   },
   gridCover: {
-    borderRadius: 10,
-    backgroundColor: '#16213e',
+    borderRadius: radius.md,
+    backgroundColor: colors.bgHover,
   },
   gridName: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 13,
     fontWeight: '500',
     marginTop: 6,
   },
   gridMeta: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 11,
     marginTop: 2,
   },
@@ -628,16 +630,16 @@ const styles = StyleSheet.create({
   artistCard: {
     width: (SCREEN_WIDTH - 24) / 3,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing[5],
   },
   artistAvatar: {
     width: 72,
     height: 72,
-    borderRadius: 36,
-    backgroundColor: '#16213e',
+    borderRadius: radius.full,
+    backgroundColor: colors.bgHover,
   },
   artistName: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 13,
     marginTop: 6,
     textAlign: 'center',

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AudioStatus } from 'expo-audio';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
-import { cleanup, playSong, seekTo, togglePlay } from '../services/audioPlayer';
+import { cleanup, playSong, seekTo, togglePlay, fetchLrcInBackground } from '../services/audioPlayer';
 
 type StatusListener = (status: AudioStatus) => void;
 
@@ -17,6 +17,8 @@ interface MockPlayer {
   seekTo: (seconds: number) => Promise<void>;
   setActiveForLockScreen: () => void;
   remove: () => void;
+  replace: (source: { uri: string }) => void;
+  updateLockScreenMetadata: () => void;
 }
 
 const audioMocks = vi.hoisted(() => {
@@ -43,6 +45,11 @@ const audioMocks = vi.hoisted(() => {
       },
       seekTo: async () => {},
       setActiveForLockScreen: () => {},
+      updateLockScreenMetadata: () => {},
+      replace: (source: { uri: string }) => {
+        // 单播放器复用：replace 换源不创建新实例
+        player.uri = source.uri;
+      },
       remove: () => {
         // 模拟 expo-audio：原生释放是异步的，remove() 本身不保证停止播放
         if (audioMocks.removeThrows) throw new Error('remove failed');
@@ -66,6 +73,8 @@ const audioMocks = vi.hoisted(() => {
     ),
     getSodaAudioUrl: vi.fn(async () => ''),
     searchSongs: vi.fn(async (): Promise<Song[]> => []),
+    searchSongById: vi.fn(async (): Promise<Song | null> => null),
+    getLyrics: vi.fn(async (): Promise<string> => ''),
     clearByPrefix: vi.fn(),
     storageGet: null as string | null,
     storageSet: vi.fn(async () => {}),
@@ -97,6 +106,8 @@ vi.mock('@mplayer/core', async (importOriginal) => {
       getAudioUrl: audioMocks.getAudioUrl,
       getSodaAudioUrl: audioMocks.getSodaAudioUrl,
       searchSongs: audioMocks.searchSongs,
+      searchSongById: audioMocks.searchSongById,
+      getLyrics: audioMocks.getLyrics,
     },
     resolvePlayableUrl: audioMocks.resolvePlayableUrl,
     resolvePlayableSong: audioMocks.resolvePlayableSong,
@@ -180,6 +191,8 @@ beforeEach(() => {
   audioMocks.getAudioUrl.mockClear();
   audioMocks.getSodaAudioUrl.mockClear();
   audioMocks.searchSongs.mockClear();
+  audioMocks.searchSongById.mockClear();
+  audioMocks.getLyrics.mockClear();
   audioMocks.clearByPrefix.mockClear();
   audioMocks.storageGet = null;
   audioMocks.storageSet.mockClear();
@@ -204,7 +217,8 @@ describe('audioPlayer', () => {
     await playSong(first);
     emitStatus(status({ isLoaded: false, error: 'load failed' }));
 
-    await vi.waitFor(() => expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(2));
+    // 单播放器复用：失败跳歌 = replace 换源到第二首（不创建新实例）
+    await vi.waitFor(() => expect(audioMocks.players[0].uri).toBe('https://example.com/2.mp3'));
     await flush();
 
     expect(usePlayerStore.getState().currentSong?.id).toBe('2');
@@ -223,7 +237,7 @@ describe('audioPlayer', () => {
     await playSong(first);
     emitStatus(status({ isLoaded: true, playing: false, didJustFinish: true, currentTime: 10, duration: 10 }));
 
-    await vi.waitFor(() => expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(audioMocks.players[0].uri).toBe('https://example.com/2.mp3'));
     await flush();
 
     expect(usePlayerStore.getState().currentSong?.id).toBe('2');
@@ -260,10 +274,11 @@ describe('playback lifecycle races (user-reported)', () => {
     await playSong(second);
     await flush();
 
-    // 旧播放器必须已被暂停，而不是继续在后台播放
-    expect(audioMocks.players.filter(p => p.playing).length).toBe(1);
-    expect(audioMocks.players[0].playing).toBe(false);
-    expect(audioMocks.players[1].playing).toBe(true);
+    // 单播放器复用：只有一个实例（replace 换源），不存在「两个播放器」。
+    // 切歌后唯一播放器播放第二首——双播放根治的回归断言。
+    expect(audioMocks.players.length).toBe(1);
+    expect(audioMocks.players[0].playing).toBe(true);
+    expect(audioMocks.players[0].uri).toBe('https://example.com/2.mp3');
   });
 
   it('keeps switching even when removing the old player throws', async () => {
@@ -277,9 +292,10 @@ describe('playback lifecycle races (user-reported)', () => {
     await playSong(second).catch(() => {});
     await flush();
 
-    // 清理失败不能卡死切歌：新歌必须能创建并播放
-    expect(audioMocks.players.length).toBe(2);
-    expect(audioMocks.players[1].playing).toBe(true);
+    // 单播放器复用：切歌走 replace（不 remove），remove 抛错不影响切歌
+    expect(audioMocks.players.length).toBe(1);
+    expect(audioMocks.players[0].playing).toBe(true);
+    expect(audioMocks.players[0].uri).toBe('https://example.com/2.mp3');
   });
 
   it('advances only one step when didJustFinish fires twice', async () => {
@@ -302,7 +318,7 @@ describe('playback lifecycle races (user-reported)', () => {
 
     // 只应前进一首（到 song-2），而不是跳过 song-2 直接到 song-3
     expect(usePlayerStore.getState().currentSong?.id).toBe('2');
-    expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(2);
+    expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(1);
   });
 
   it('retries the same song with a fresh URL before skipping on load failure', async () => {
@@ -314,22 +330,21 @@ describe('playback lifecycle races (user-reported)', () => {
     await playSong(first);
     emitStatus(status({ isLoaded: false, error: 'load failed: stale url' }));
 
-    await vi.waitFor(() => expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(audioMocks.players[0].uri).toBe('https://fresh.example.com/1.mp3'));
     await flush();
 
     expect(audioMocks.getAudioUrl).toHaveBeenCalledWith('https://stale.example.com/1.mp3');
-    expect(audioMocks.players[1].uri).toBe('https://fresh.example.com/1.mp3');
     expect(usePlayerStore.getState().currentSong?.id).toBe('1');
   });
 
   it('pauses (not stuck playing) when the queue is exhausted after retries', async () => {
-    // stale url：首试失败 → 新URL重试（创建播放器）→ 仍失败 → 队列耗尽必须暂停
+    // stale url：首试失败 → 新URL重试（replace 换源）→ 仍失败 → 队列耗尽必须暂停
     const first = song('1', 'https://stale.example.com/1.mp3');
     usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
 
     await playSong(first);
     emitStatus(status({ isLoaded: false, error: 'load failed' }));
-    await vi.waitFor(() => expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(audioMocks.players[0].uri).toBe('https://fresh.example.com/1.mp3'));
     emitStatus(status({ isLoaded: false, error: 'load failed' }));
     await flush();
 
@@ -378,12 +393,12 @@ describe('local file playback (downloads)', () => {
 
     await playSong(local);
     emitStatus(status({ isLoaded: false, error: 'file not found' }));
-    await vi.waitFor(() => expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(audioMocks.players[0].uri).toBe('https://example.com/2.mp3'));
     await flush();
 
     expect(audioMocks.getAudioUrl).not.toHaveBeenCalled();
     expect(audioMocks.searchSongs).not.toHaveBeenCalled();
-    expect(audioMocks.players[1].uri).toBe('https://example.com/2.mp3');
+    expect(usePlayerStore.getState().currentSong?.id).toBe('2');
   });
 });
 
@@ -451,19 +466,19 @@ describe('togglePlay / seekTo', () => {
     usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
 
     await playSong(first);
-    // 首试失败 → 新 URL 重试 → 再失败 → 队列耗尽 → stopAllPlayers（player 置 null）
+    // 首试失败 → 新 URL 重试（replace 换源）→ 再失败 → 队列耗尽 → stopAllPlayers（player 置 null）
     emitStatus(status({ isLoaded: false, error: 'load failed' }));
-    await vi.waitFor(() => expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(audioMocks.players[0].uri).toBe('https://fresh.example.com/1.mp3'));
     emitStatus(status({ isLoaded: false, error: 'load failed' }));
     await flush();
     expect(usePlayerStore.getState().isPlaying).toBe(false);
 
-    // player 为 null → 用 fresh URL 重试当前歌曲（stale → fresh 直链）
+    // player 为 null → 用 fresh URL 重试当前歌曲（重新创建播放器）
     await togglePlay();
     await flush();
 
-    expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(3);
-    expect(audioMocks.players[2].uri).toBe('https://fresh.example.com/1.mp3');
+    expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(2);
+    expect(audioMocks.players[1].uri).toBe('https://fresh.example.com/1.mp3');
   });
 
   it('forwards seekTo to the current player', async () => {
@@ -480,26 +495,20 @@ describe('togglePlay / seekTo', () => {
 });
 
 describe('playId cancellation', () => {
-  it('removes the previous song subscription on switch, ignoring stale status events', async () => {
+  it('reuses the singleton player via replace on switch (no second instance)', async () => {
     const first = song('1');
     const second = song('2');
     usePlayerStore.setState({ queue: [first, second], currentIndex: 0, currentSong: first, isPlaying: true });
 
     await playSong(first);
     const firstPlayer = audioMocks.players[0];
-    // 切歌前先捕获旧 listener：即使事件在订阅移除前已被派发（极端时序），
-    // playId guard 也必须忽略，不能额外创建播放器
-    const staleListener = firstPlayer.listeners.values().next().value!;
+    // 切歌：单播放器复用（replace 换源），不创建第二个 ExoPlayer 实例
     await playSong(second);
 
-    // 切歌时旧播放器订阅必须已被移除（stopAllPlayers）
-    expect(firstPlayer.listeners.size).toBe(0);
-
-    staleListener(status({ isLoaded: true, playing: false, didJustFinish: true, currentTime: 10, duration: 10 }));
-    await flush();
-
-    expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(2);
-    expect(audioMocks.players[1].playing).toBe(true);
+    expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(1);
+    expect(audioMocks.players.length).toBe(1);
+    expect(firstPlayer.uri).toBe('https://example.com/2.mp3');
+    expect(firstPlayer.playing).toBe(true);
   });
 
   it('cancels a pending playback when switching songs mid-resolution', async () => {
@@ -551,3 +560,48 @@ describe('fresh URL resolution fallbacks', () => {
     expect(audioMocks.players[0].uri).toBe('https://soda.example.com/1.mp3');
   });
 });
+
+describe('lyrics lazy refresh (fetchLrcInBackground)', () => {
+  const STALE_LRC = 'https://api.example.com/lrc?id=1&sign=OLDSIGN&t=100';
+  const FRESH_LRC = 'https://api.example.com/lrc?id=1&sign=NEWSIGN&t=200';
+
+  it('fills an empty lrc URL from a strict search', async () => {
+    const first = song('1');
+    audioMocks.searchSongById.mockResolvedValueOnce({ ...first, lrc: FRESH_LRC });
+    usePlayerStore.setState({ currentSong: first, currentIndex: 0, queue: [first], isPlaying: true });
+
+    await fetchLrcInBackground(first);
+
+    expect(audioMocks.searchSongById).toHaveBeenCalled();
+    expect(usePlayerStore.getState().currentSong?.lrc).toBe(FRESH_LRC);
+    expect(audioMocks.getLyrics).toHaveBeenCalledWith(FRESH_LRC); // 歌词文本预取
+  });
+
+  it('lazy refresh (non-force) does NOT swap a URL that only changed sign', async () => {
+    // 同一资源的新签名：归一化 key 相同 → 不替换（防止封面/歌词伪刷新）
+    const first = song('1', 'https://example.com/1.mp3');
+    const cur = { ...first, lrc: STALE_LRC };
+    audioMocks.searchSongById.mockResolvedValueOnce({ ...first, lrc: FRESH_LRC });
+    usePlayerStore.setState({ currentSong: cur, currentIndex: 0, queue: [first], isPlaying: true });
+
+    await fetchLrcInBackground(first);
+
+    expect(usePlayerStore.getState().currentSong?.lrc).toBe(STALE_LRC);
+    expect(audioMocks.getLyrics).not.toHaveBeenCalled();
+  });
+
+  it('force refresh DOES swap a stale lrc URL even when only the sign changed', async () => {
+    // 歌词加载失败驱动（force）：旧 URL 已证明失效，新签名 URL 必须能换上来，
+    // 否则归一化 key 相同会永远命中失效 URL，歌词再也刷新不出来
+    const first = song('1', 'https://example.com/1.mp3');
+    const cur = { ...first, lrc: STALE_LRC };
+    audioMocks.searchSongById.mockResolvedValueOnce({ ...first, lrc: FRESH_LRC });
+    usePlayerStore.setState({ currentSong: cur, currentIndex: 0, queue: [first], isPlaying: true });
+
+    await fetchLrcInBackground(first, true);
+
+    expect(usePlayerStore.getState().currentSong?.lrc).toBe(FRESH_LRC);
+    expect(audioMocks.getLyrics).toHaveBeenCalledWith(FRESH_LRC);
+  });
+});
+

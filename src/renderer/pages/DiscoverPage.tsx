@@ -45,10 +45,19 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: s
 
 const DiscoverPage: React.FC = () => {
   const navigate = useNavigate();
-  const { songs, groups, loading, currentKeyword, hasMore, error, sourceType } = useSearchStore();
+  const songs = useSearchStore((s) => s.songs);
+  const groups = useSearchStore((s) => s.groups);
+  const loading = useSearchStore((s) => s.loading);
+  const currentKeyword = useSearchStore((s) => s.currentKeyword);
+  const hasMore = useSearchStore((s) => s.hasMore);
+  const error = useSearchStore((s) => s.error);
+  const sourceType = useSearchStore((s) => s.sourceType);
   const isAllMode = sourceType === 'all';
-  const { currentSong, isPlaying, play } = usePlayerStore();
-  const { favoriteIds, toggleFavorite } = useFavoriteStore();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
 
   const hotlist = useDiscoverData<HotlistSong[]>('musicApi:getNeteaseHotlist');

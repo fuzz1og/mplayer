@@ -3,10 +3,12 @@ import {
   View, Text, Image, TouchableOpacity, StyleSheet,
   Modal, Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Music, Heart, EllipsisVertical, ListMusic, Download, ArrowLeftRight, User, Trash2 } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { type Song, SourceKey } from '@mplayer/core';
+import { colors, radius, sourceColors, spacing } from '../theme/tokens';
+import { type Song, SourceKey, invalidateCoverUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
@@ -46,17 +48,9 @@ interface SongRowProps {
   queueSongs?: Song[];
   /** 换源成功回调：父组件用它更新自己的列表 state（歌单页同时持久化） */
   onSwap?: (original: Song, swapped: Song) => void;
+  /** 提供后「更多」菜单显示「移除」项（歌单/播放历史列表用；由父组件决定移除语义与确认） */
+  onRemove?: (song: Song) => void;
 }
-
-const SOURCE_COLORS: Record<SourceKey, string> = {
-  netease: '#e74c3c',
-  qq: '#3498db',
-  kugou: '#9b59b6',
-  kuwo: '#1abc9c',
-  qianqian: '#95a5a6',
-  soda: '#2ecc71',
-  local: '#7f8c8d',
-};
 
 export default function SongRow({
   song,
@@ -65,6 +59,7 @@ export default function SongRow({
   showSource = false,
   queueSongs,
   onSwap,
+  onRemove,
 }: SongRowProps) {
   const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
@@ -91,6 +86,9 @@ export default function SongRow({
     if (coverFallbackUsed.current || !song.name) return;
     coverFallbackUsed.current = true;
     setCover('');
+    // 封面自身失效：先清除解析缓存（归一化 key 命中失效直链会循环失败），
+    // 兜底搜索的新签名 URL 才能重新解析出新直链
+    void invalidateCoverUrl(cover);
     void withCoverSearchSlot(async () => {
       try {
         const fresh = await searchStrictMatch(song);
@@ -205,11 +203,15 @@ export default function SongRow({
   };
 
   const MORE_ACTIONS = [
-    { key: 'playlist', icon: 'list-outline', label: '加入歌单', onPress: () => { setShowActions(false); setShowPlaylistModal(true); } },
-    { key: 'download', icon: 'download-outline', label: '下载', onPress: handleDownload },
-    { key: 'swap', icon: 'swap-horizontal', label: '换源完整版', onPress: () => { setShowActions(false); setSwapSuccess(false); setSwapLoading(false); setSwapCandidates([]); setSwapSource(null); setSwapVisible(true); } },
-    { key: 'artist', icon: 'person-outline', label: '搜索歌手', onPress: handleSearchArtist },
-  ];
+    { key: 'playlist', icon: ListMusic, label: '加入歌单', onPress: () => { setShowActions(false); setShowPlaylistModal(true); } },
+    { key: 'download', icon: Download, label: '下载', onPress: handleDownload },
+    { key: 'swap', icon: ArrowLeftRight, label: '换源完整版', onPress: () => { setShowActions(false); setSwapSuccess(false); setSwapLoading(false); setSwapCandidates([]); setSwapSource(null); setSwapVisible(true); } },
+    { key: 'artist', icon: User, label: '搜索歌手', onPress: handleSearchArtist },
+    // 仅当父组件提供 onRemove（歌单/播放历史等"可移除"列表）时显示
+    ...(onRemove
+      ? [{ key: 'remove', icon: Trash2, label: '移除', onPress: () => { setShowActions(false); onRemove(song); } }]
+      : []),
+  ] as { key: string; icon: LucideIcon; label: string; onPress: () => void }[];
 
   const handlePress = () => {
     if (pressingAction) return;
@@ -253,7 +255,7 @@ export default function SongRow({
         <Image source={{ uri: resolvedCover }} style={styles.cover} onError={handleCoverError} />
       ) : (
         <View style={[styles.cover, styles.coverPlaceholder]}>
-          <Ionicons name="musical-note" size={22} color="#555" />
+          <Music size={22} color={colors.textDisabled} />
         </View>
       )}
 
@@ -267,8 +269,8 @@ export default function SongRow({
       </View>
 
       {showSource && (
-        <View style={[styles.sourceBadge, { backgroundColor: SOURCE_COLORS[sourceKey] || '#666' }]}>
-          <Text style={styles.sourceText}>
+        <View style={[styles.sourceBadge, { backgroundColor: `${sourceColors[sourceKey]}14` }]}>
+          <Text style={[styles.sourceText, { color: sourceColors[sourceKey] }]}>
             {SOURCE_LABELS[sourceKey] || sourceKey}
           </Text>
         </View>
@@ -276,12 +278,12 @@ export default function SongRow({
 
       {audioTag === 'preview' && (
         <View style={styles.tagBadgePreview}>
-          <Text style={styles.tagText}>短时长</Text>
+          <Text style={[styles.tagText, { color: colors.warning }]}>短时长</Text>
         </View>
       )}
       {audioTag === 'invalid' && (
         <View style={styles.tagBadgeInvalid}>
-          <Text style={styles.tagText}>无效</Text>
+          <Text style={[styles.tagText, { color: colors.dangerText }]}>无效</Text>
         </View>
       )}
 
@@ -290,24 +292,24 @@ export default function SongRow({
         style={styles.favoriteBtn}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Ionicons
-          name={favorited ? 'heart' : 'heart-outline'}
+        <Heart
           size={20}
-          color={favorited ? '#e74c3c' : '#666'}
+          color={favorited ? colors.accent : colors.textTertiary}
+          fill={favorited ? colors.accent : 'none'}
         />
       </TouchableOpacity>
       <TouchableOpacity onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <Ionicons name="ellipsis-vertical" size={18} color="#666" />
+        <EllipsisVertical size={18} color={colors.textTertiary} />
       </TouchableOpacity>
     </TouchableOpacity>
 
     <Modal visible={showActions} animationType="slide" transparent statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowActions(false)}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowActions(false)}>
-        <View style={[styles.actionSheet, { paddingBottom: insets.bottom + 24 }]}>
+        <View style={[styles.actionSheet, { paddingBottom: insets.bottom + spacing[6] }]}>
           <Text style={styles.actionSheetTitle} numberOfLines={1}>{song.name}</Text>
           {MORE_ACTIONS.map(a => (
             <TouchableOpacity key={a.key} style={styles.actionItem} onPress={a.onPress}>
-              <Ionicons name={a.icon as any} size={22} color="#fff" />
+              <a.icon size={22} color={colors.textPrimary} />
               <Text style={styles.actionLabel}>{a.label}</Text>
             </TouchableOpacity>
           ))}
@@ -342,98 +344,98 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing[4],
     paddingVertical: 10,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: colors.bgSurface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
   },
   rank: {
-    color: '#888',
+    color: colors.textTertiary,
     fontSize: 14,
     fontWeight: '600',
     width: 28,
     textAlign: 'center',
-    marginRight: 4,
+    marginRight: spacing[1],
   },
   cover: {
     width: 44,
     height: 44,
-    borderRadius: 6,
-    marginRight: 12,
+    borderRadius: radius.sm,
+    marginRight: spacing[3],
   },
   coverPlaceholder: {
-    backgroundColor: '#16213e',
+    backgroundColor: colors.bgHover,
     justifyContent: 'center',
     alignItems: 'center',
   },
   info: {
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing[2],
   },
   name: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '500',
   },
   artist: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
   sourceBadge: {
-    borderRadius: 4,
+    borderRadius: radius.xs,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    marginRight: 8,
+    marginRight: spacing[2],
   },
   sourceText: {
-    color: '#fff',
     fontSize: 10,
     fontWeight: '600',
   },
   tagBadgePreview: {
-    borderRadius: 4,
+    borderRadius: radius.xs,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    marginRight: 8,
-    backgroundColor: '#e67e22',
+    marginRight: spacing[2],
+    backgroundColor: colors.warningSubtle,
   },
   tagBadgeInvalid: {
-    borderRadius: 4,
+    borderRadius: radius.xs,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    marginRight: 8,
-    backgroundColor: '#e74c3c',
+    marginRight: spacing[2],
+    backgroundColor: colors.dangerSubtle,
   },
   tagText: {
-    color: '#fff',
     fontSize: 10,
     fontWeight: '600',
   },
   favoriteBtn: {
-    padding: 4,
+    padding: spacing[1],
   },
   moreBtn: {
-    padding: 4,
-    marginLeft: 4,
+    padding: spacing[1],
+    marginLeft: spacing[1],
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.bgOverlay,
     justifyContent: 'flex-end',
   },
   actionSheet: {
-    backgroundColor: '#16213e',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 32,
+    backgroundColor: colors.bgSurface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[5],
+    paddingBottom: spacing[8],
   },
   actionSheetTitle: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: '600',
-    marginBottom: 16,
+    marginBottom: spacing[4],
     textAlign: 'center',
   },
   actionItem: {
@@ -441,22 +443,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a4a',
+    borderBottomColor: colors.borderSubtle,
   },
   actionLabel: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 16,
-    marginLeft: 12,
+    marginLeft: spacing[3],
   },
   actionCancel: {
-    marginTop: 12,
+    marginTop: spacing[3],
     paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.md,
+    backgroundColor: colors.bgHover,
     alignItems: 'center',
   },
   cancelText: {
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 16,
   },
 });

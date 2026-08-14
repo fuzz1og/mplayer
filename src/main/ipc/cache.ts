@@ -1,9 +1,10 @@
 import fs from 'fs'
 import { app } from 'electron'
 import path from 'path'
+import axios from 'axios'
 import { registerIpcHandlerSimple } from './registerHandler'
-import { CacheKernel, createMemoryBackend } from '@mplayer/core'
-import { DiskCacheBackend, isImageFile } from '../cache/diskBackend'
+import { CacheKernel, createMemoryBackend, resourceUrlKey } from '@mplayer/core'
+import { DiskCacheBackend, isImageBytes, isImageFile } from '../cache/diskBackend'
 
 const COVER_CACHE_TTL = 6 * 60 * 60 * 1000
 
@@ -26,6 +27,29 @@ function getCacheKernel(): CacheKernel {
 function getDiskBackend(): DiskCacheBackend {
   getCacheKernel()
   return diskBackend!
+}
+
+/**
+ * 主进程侧封面落盘缓存：渲染层无会话 cookie，直接 fetch 受保护封面端点
+ * 永远拿不到图（服务端返回错误页），改为在解析出 CDN 直链后由主进程
+ * 下载真实图片字节写入磁盘缓存（以原始封面 URL 为键），下次渲染直接
+ * 命中 file://，不再重复打上游。失败静默（不影响解析结果，渲染走 CDN）。
+ */
+export async function cacheResolvedCover(originalUrl: string, cdnUrl: string): Promise<void> {
+  try {
+    const res = await axios.get(cdnUrl, {
+      responseType: 'arraybuffer',
+      timeout: 10000,
+      proxy: false,
+    });
+    const buf = Buffer.from(res.data);
+    if (!isImageBytes(buf)) return;
+    // 缓存 key 用归一化 URL（忽略 t/sign 等签名参数）：同一首歌每次搜索签名
+    // 不同，但封面是同一资源——归一化后共享同一磁盘项，避免重复下载/堆积
+    await getCacheKernel().setBinary(`cover:${resourceUrlKey(originalUrl)}`, new Uint8Array(buf), COVER_CACHE_TTL);
+  } catch {
+    // 封面缓存失败不影响解析结果
+  }
 }
 
 async function getBinaryCachePath(backendKey: string, ttlMs?: number): Promise<string | null> {
@@ -63,7 +87,9 @@ export function registerCacheIpc(): void {
     return kernel.getJSON(`url:${songId}`)
   })
   registerIpcHandlerSimple('cache:setUrl', async (songId: string, urlData: any) => {
-    await kernel.setJSON(`url:${songId}`, urlData, 24 * 60 * 60 * 1000)
+    // 12h：与重构前 CacheManager.URL_EXPIRE_HOURS 契约一致——
+    // 签名 URL 服务端时效短，过期后下次进歌单必须重新搜索拿新签名
+    await kernel.setJSON(`url:${songId}`, urlData, 12 * 60 * 60 * 1000)
   })
   registerIpcHandlerSimple('cache:getSong', async (keyword: string) => {
     return kernel.getJSON(`search:${keyword}`)
@@ -72,7 +98,7 @@ export function registerCacheIpc(): void {
     await kernel.setJSON(`search:${keyword}`, songs, 6 * 60 * 60 * 1000)
   })
   registerIpcHandlerSimple('cache:getCover', async (coverUrl: string) => {
-    const backendKey = `:bin:cover:${coverUrl}`
+    const backendKey = `:bin:cover:${resourceUrlKey(coverUrl)}`
     const filePath = await getBinaryCachePath(backendKey, COVER_CACHE_TTL)
     if (!filePath) return null
     // 缓存文件损坏或不是有效图片时删除并视为未命中，触发重新获取（默认图绝不落入缓存）
@@ -83,7 +109,11 @@ export function registerCacheIpc(): void {
     return filePath
   })
   registerIpcHandlerSimple('cache:setCover', async (coverUrl: string, imageData: Buffer) => {
-    await kernel.setBinary(`cover:${coverUrl}`, new Uint8Array(imageData), COVER_CACHE_TTL)
+    await kernel.setBinary(`cover:${resourceUrlKey(coverUrl)}`, new Uint8Array(imageData), COVER_CACHE_TTL)
+  })
+  // 封面失效：删除归一化 key 的磁盘+内存缓存（配合 musicApi:invalidateCoverUrl）
+  registerIpcHandlerSimple('cache:invalidateCover', async (coverUrl: string) => {
+    await kernel.remove(`cover:${resourceUrlKey(coverUrl)}`)
   })
   registerIpcHandlerSimple('cache:getAudio', async (audioUrl: string) => {
     return getBinaryCachePath(`:bin:audio:${audioUrl}`)

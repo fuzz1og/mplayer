@@ -10,7 +10,7 @@ import { pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core
 
 const RecommendPage: React.FC = () => {
   const navigate = useNavigate();
-  const { play } = usePlayerStore();
+  const play = usePlayerStore((s) => s.play);
   const [recommendedPlaylists, setRecommendedPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [recommendedSongs, setRecommendedSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);

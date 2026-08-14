@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react';
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -10,13 +9,13 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { CircleAlert, Pencil, Music2 } from 'lucide-react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { usePlaylistStore } from '../../stores/playlistStore';
-import SongRow from '../../components/SongRow';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
+import PlaylistHero from '../../components/PlaylistHero';
 import type { Song } from '@mplayer/core';
+import { colors, radius, spacing } from '../../theme/tokens';
 
 export default function PlaylistDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -69,9 +68,17 @@ export default function PlaylistDetailPage() {
     return (
       <View style={styles.container}>
         <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-          <Stack.Screen options={{ title: '歌单', headerShown: true }} />
+          <Stack.Screen
+            options={{
+              title: '歌单',
+              headerShown: true,
+              headerStyle: { backgroundColor: colors.bgSurface },
+              headerTintColor: colors.textPrimary,
+              headerShadowVisible: false,
+            }}
+          />
           <View style={styles.empty}>
-            <Ionicons name="alert-circle-outline" size={48} color="#555" />
+            <CircleAlert size={48} color={colors.textTertiary} />
             <Text style={styles.emptyText}>歌单不存在</Text>
           </View>
         </SafeAreaView>
@@ -82,18 +89,18 @@ export default function PlaylistDetailPage() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style="light" />
+      {/* 全出血封面方案不需要顶部安全区边距，由封面自行延伸 */}
+      <SafeAreaView edges={[]} style={{ flex: 1 }}>
         <Stack.Screen
           options={{
             title: playlist.name,
-            headerShown: true,
-            headerStyle: { backgroundColor: '#1a1a2e' },
-            headerTintColor: '#fff',
+            headerShown: false,
+            headerStyle: { backgroundColor: colors.bgSurface },
+            headerTintColor: colors.textPrimary,
             headerShadowVisible: false,
             headerRight: () => (
-              <TouchableOpacity onPress={handleRename} style={{ marginRight: 4 }}>
-                <Ionicons name="pencil-outline" size={20} color="#ccc" />
+              <TouchableOpacity onPress={handleRename} style={{ marginRight: spacing[1] }}>
+                <Pencil size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             ),
           }}
@@ -101,22 +108,14 @@ export default function PlaylistDetailPage() {
 
         {playlist.songs.length === 0 ? (
           <View style={styles.empty}>
-            <Ionicons name="musical-notes-outline" size={64} color="#444" />
+            <Music2 size={64} color={colors.textTertiary} />
             <Text style={styles.emptyText}>歌单是空的</Text>
           </View>
         ) : (
-          <FlatList
-            data={playlist.songs}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                activeOpacity={1}
-                onLongPress={() => handleRemoveSong(item)}
-              >
-                <SongRow song={item} showSource queueSongs={playlist.songs} onSwap={handleSwap} />
-              </TouchableOpacity>
-            )}
-            contentContainerStyle={styles.list}
+          <PlaylistHero
+            playlist={playlist}
+            onRemoveSong={handleRemoveSong}
+            onSwap={handleSwap}
           />
         )}
 
@@ -142,7 +141,7 @@ export default function PlaylistDetailPage() {
               <TextInput
                 style={styles.modalInput}
                 placeholder="输入歌单名称"
-                placeholderTextColor="#666"
+                placeholderTextColor={colors.inputPlaceholder}
                 value={renameValue}
                 onChangeText={setRenameValue}
                 autoFocus
@@ -178,63 +177,62 @@ export default function PlaylistDetailPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  list: { paddingBottom: 100 },
+  container: { flex: 1, backgroundColor: colors.bgBase },
   empty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingBottom: 80,
   },
-  emptyText: { color: '#888', fontSize: 16, marginTop: 12 },
+  emptyText: { color: colors.textSecondary, fontSize: 16, marginTop: spacing[3] },
 
   // modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.bgOverlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#16213e',
-    borderRadius: 14,
-    padding: 24,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
+    padding: spacing[6],
     width: '80%',
   },
   modalTitle: {
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 17,
     fontWeight: '600',
-    marginBottom: 16,
+    marginBottom: spacing[4],
     textAlign: 'center',
   },
   modalInput: {
-    backgroundColor: '#2a2a4a',
-    borderRadius: 8,
+    backgroundColor: colors.inputBg,
+    borderRadius: radius.sm,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    color: '#fff',
+    color: colors.textPrimary,
     fontSize: 15,
   },
   modalActions: {
     flexDirection: 'row',
-    marginTop: 20,
-    gap: 12,
+    marginTop: spacing[5],
+    gap: spacing[3],
   },
   cancelBtn: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#2a2a4a',
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgHover,
     alignItems: 'center',
   },
-  cancelText: { color: '#888', fontSize: 15 },
+  cancelText: { color: colors.textSecondary, fontSize: 15 },
   confirmBtn: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#e74c3c',
+    borderRadius: radius.sm,
+    backgroundColor: colors.accent,
     alignItems: 'center',
   },
-  confirmText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  confirmText: { color: colors.textInverse, fontSize: 15, fontWeight: '600' },
 });

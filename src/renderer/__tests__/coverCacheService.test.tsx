@@ -48,6 +48,16 @@ describe('coverCacheService 封面缓存', () => {
     expect(invoke).not.toHaveBeenCalledWith('cache:setCover', expect.any(String), expect.any(Buffer));
   });
 
+  it('受保护封面端点（需会话 cookie）不发起渲染层 fetch——落盘缓存改由主进程完成', async () => {
+    const invoke = vi.mocked(IpcClient.invoke);
+    const fetchMock = vi.mocked(global.fetch);
+    fetchMock.mockResolvedValue(okImageResponse());
+
+    await cacheCoverImage('https://api.example.com/api.php?get=pic&type=wy&id=1&sign=s&t=1');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalledWith('cache:setCover', expect.any(String), expect.any(Buffer));
+  });
+
   it('HTTP 失败静默，不写入缓存', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
     const fetchMock = vi.mocked(global.fetch);

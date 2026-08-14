@@ -1,13 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Tabs, usePathname } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, LayoutChangeEvent } from 'react-native';
+import { Compass, Flame, ListMusic, Download } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { colors, statusBarStyle } from '../../theme/tokens';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
 
-const TAB_HEIGHT = 80;
+// tab bar 内容高度（paddingTop + 图标 + 标签行 + paddingBottom）：
+// 用确定性计算替代 onLayout 测量——测量值一旦偏小（如动画/初始态），
+// overflow:hidden 会把标签裁掉，看起来像迷你播放栏盖住了 tab bar
+const TAB_PAD_TOP = 6;
+const TAB_ICON_SIZE = 22;
+const TAB_LABEL_HEIGHT = 15; // fontSize 11 + marginTop 2
+const TAB_PAD_BOTTOM = 24;
 
 function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) {
   const insets = useSafeAreaInsets();
@@ -15,7 +23,8 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
   const isSearch = pathname === '/search';
   const slideAnim = useRef(new Animated.Value(0)).current;
   const heightAnim = useRef(new Animated.Value(0)).current;
-  const [contentHeight, setContentHeight] = useState(0);
+  const tabBarHeight =
+    TAB_PAD_TOP + TAB_ICON_SIZE + TAB_LABEL_HEIGHT + TAB_PAD_BOTTOM + Math.max(0, insets.bottom - 8);
 
   useEffect(() => {
     // 依赖 pathname 而非仅 isSearch：进入详情页再返回时强制重新同步动画，
@@ -38,18 +47,13 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
 
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, TAB_HEIGHT],
+    outputRange: [0, tabBarHeight],
   });
 
   const containerHeight = heightAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [contentHeight || 150, 0],
+    outputRange: [tabBarHeight, 0],
   });
-
-  const onLayout = (e: LayoutChangeEvent) => {
-    const h = e.nativeEvent.layout.height;
-    if (h > 0 && h !== contentHeight) setContentHeight(h);
-  };
 
   return (
     <View>
@@ -59,23 +63,20 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
         <PlayerBar />
       </View>
       <Animated.View style={{ overflow: 'hidden', height: containerHeight }}>
-        <Animated.View style={{ transform: [{ translateY }] }} onLayout={onLayout}>
-          <View style={[tabBarStyles.container, { paddingBottom: 24 + Math.max(0, insets.bottom - 8) }]}>
+        <Animated.View style={{ transform: [{ translateY }] }}>
+          <View style={[tabBarStyles.container, { paddingBottom: TAB_PAD_BOTTOM + Math.max(0, insets.bottom - 8) }]}>
           {state.routes.map((route: any, i: number) => {
             // 搜索 tab 不显示 tab 按钮
             if (route.name === 'search') return null;
             const isFocused = state.index === i;
             const onPress = () => { navigation.navigate(route.name); };
-            const icons: Record<string, string> = { index: 'compass-outline', recommend: 'flame-outline', playlists: 'list-outline', download: 'download-outline' };
+            const icons: Record<string, LucideIcon> = { index: Compass, recommend: Flame, playlists: ListMusic, download: Download };
             const labels: Record<string, string> = { index: '发现', recommend: '推荐', playlists: '歌单', download: '下载' };
+            const Icon = icons[route.name];
             return (
               <TouchableOpacity key={route.key} onPress={onPress} style={tabBarStyles.tab}>
-                <Ionicons
-                  name={icons[route.name] as any}
-                  size={22}
-                  color={isFocused ? '#e74c3c' : '#888'}
-                />
-                <Text style={{ color: isFocused ? '#e74c3c' : '#888', fontSize: 11, marginTop: 2 }}>
+                <Icon size={22} color={isFocused ? colors.accent : colors.textSecondary} />
+                <Text style={{ color: isFocused ? colors.accent : colors.textSecondary, fontSize: 11, marginTop: 2, lineHeight: TAB_LABEL_HEIGHT - 2 }}>
                   {labels[route.name]}
                 </Text>
               </TouchableOpacity>
@@ -83,7 +84,7 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
           })}
         </View>
       </Animated.View>
-    </Animated.View>
+      </Animated.View>
     </View>
   );
 }
@@ -91,7 +92,7 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
 export default function TabLayout() {
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={statusBarStyle} />
       <TopBar />
       <Tabs
         initialRouteName="recommend"
@@ -137,17 +138,17 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  container: { flex: 1, backgroundColor: colors.bgBase },
   // 与 PlayerBar 背景一致,保证安全区 padding 区域颜色连续
-  playerWrap: { backgroundColor: '#16213e' },
+  playerWrap: { backgroundColor: colors.bgSurface },
 });
 
 const tabBarStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: '#16213e',
-    borderTopColor: '#2a2a4a',
-    borderTopWidth: 1,
+    backgroundColor: colors.bgSurface,
+    borderTopColor: colors.borderSubtle,
+    borderTopWidth: StyleSheet.hairlineWidth,
     paddingBottom: 24,
     paddingTop: 6,
   },

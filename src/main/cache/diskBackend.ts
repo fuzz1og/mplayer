@@ -14,6 +14,12 @@ function isImageHeader(header: Buffer): boolean {
   return false
 }
 
+/** 校验字节内容是否为真实图片（与 isImageFile 同一白名单，供内存 Buffer 使用） */
+export function isImageBytes(buf: Buffer): boolean {
+  if (!buf || buf.length === 0) return false
+  return isImageHeader(buf.subarray(0, 16))
+}
+
 /** 校验缓存文件是否为有效图片（JPEG/PNG/WebP/GIF/AVIF/ICO/BMP），损坏或非图片返回 false */
 export function isImageFile(filePath: string): boolean {
   if (!fs.existsSync(filePath)) return false
@@ -53,22 +59,60 @@ export class DiskCacheBackend implements CacheBackend {
     return path.join(this.metaDir, `${hash}.json`)
   }
 
+  private readMeta(hash: string): { key?: string; size?: number; expiresAt?: number } | null {
+    const metaFile = this.metaPath(hash)
+    if (!fs.existsSync(metaFile)) return null
+    try {
+      return JSON.parse(fs.readFileSync(metaFile, 'utf-8'))
+    } catch {
+      return null
+    }
+  }
+
   async read(key: string): Promise<Uint8Array | null> {
     const filePath = this.resolvePath(key)
     if (!fs.existsSync(filePath)) return null
+    const hash = this.hashKey(key)
+    const meta = this.readMeta(hash)
+    const now = Date.now()
+    // TTL 过期：删除并视为未命中（重新获取）
+    if (meta?.expiresAt && meta.expiresAt > 0 && now >= meta.expiresAt) {
+      await this.delete(key)
+      return null
+    }
+    // 旧格式条目（缓存统一重构前写入，meta 无 expiresAt 字段）：
+    // JSON 类缓存（URL/搜索）按契约都有有限 TTL，无过期元数据说明是
+    // 重构回归期间写入的脏数据——签名 URL 早已过期，必须失效让上层重新解析；
+    // 二进制（音频/封面）保持永久兼容旧行为。
+    if (meta?.expiresAt === undefined && key.startsWith(':json:')) {
+      await this.delete(key)
+      return null
+    }
     return fs.readFileSync(filePath)
   }
 
-  async write(key: string, data: Uint8Array): Promise<void> {
+  async write(key: string, data: Uint8Array, expiresAt?: number): Promise<void> {
     const filePath = this.resolvePath(key)
     const hash = this.hashKey(key)
     fs.mkdirSync(path.dirname(filePath), { recursive: true })
     fs.writeFileSync(filePath, data)
     try {
-      fs.writeFileSync(this.metaPath(hash), JSON.stringify({ key, size: data.byteLength }))
+      fs.writeFileSync(
+        this.metaPath(hash),
+        JSON.stringify({
+          key,
+          size: data.byteLength,
+          expiresAt: expiresAt && expiresAt > 0 ? expiresAt : 0,
+        }),
+      )
     } catch (error) {
       console.error('写入缓存元数据失败:', error)
     }
+  }
+
+  async getExpiryAt(key: string): Promise<number> {
+    const meta = this.readMeta(this.hashKey(key))
+    return meta?.expiresAt && meta.expiresAt > 0 ? meta.expiresAt : 0
   }
 
   async delete(key: string): Promise<void> {

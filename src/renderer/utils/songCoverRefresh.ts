@@ -1,5 +1,6 @@
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
+import { invalidateCoverUrl } from '@/renderer/services/coverUrlResolver';
 import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 
@@ -15,7 +16,8 @@ const lastRefreshAt = new Map<string, number>();
 // 进行中的刷新去重：同一首歌可能同时在行/播放栏/歌词页触发刷新，合并为一次
 const inFlightRefreshes = new Map<string, Promise<string | null>>();
 // 全局并发限制：整列表封面同时失效/为空时同时刷新会打爆 上游 API
-const REFRESH_MAX_CONCURRENT = 5;
+// （服务端对同 IP 并发有硬限制，core 全局闸门再兜底）
+const REFRESH_MAX_CONCURRENT = 3;
 let refreshInFlight = 0;
 
 async function withRefreshLimit<T>(fn: () => Promise<T>): Promise<T> {
@@ -49,6 +51,9 @@ export function __resetSongCoverRefreshState(): void {
  */
 export function refreshSongCover(song: Song): Promise<string | null> {
   if (!song || song.sourceType === 'local' || song.sourceType === 'soda') return Promise.resolve(null);
+  // 旧封面已失效：先清解析缓存（渲染层 + 主进程 6h 归一化 + 磁盘）。
+  // 否则搜索拿到的新签名 URL 归一化 key 相同，会命中失效直链循环失败
+  if (song.cover) invalidateCoverUrl(song.cover);
 
   const attemptKey = `${song.sourceType}:${song.id}`;
 

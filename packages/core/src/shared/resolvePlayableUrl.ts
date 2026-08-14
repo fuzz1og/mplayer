@@ -94,7 +94,10 @@ export async function resolvePlayableSong(song: Song, resolver: UrlResolver): Pr
     if (u?.startsWith('http')) return { url: u, lrc: '' };
   }
 
-  const hasUrl = song.url?.startsWith('http') === true;
+  // 302 摄取端点（api.php?get=url...）也算「有 url」：它有效，只是需要
+  // 调用方再解析成 CDN 直链；若只认 http 开头，搜索结果页的歌会被误判
+  // 为无 url 而重复搜索（每次点击播放都白等一轮 4-5s 的搜索）。
+  const hasUrl = !!song.url;
   if (hasUrl && song.lrc) {
     return { url: song.url, lrc: song.lrc };
   }

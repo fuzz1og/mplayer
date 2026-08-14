@@ -3,7 +3,7 @@ export { MULTI_SOURCE_LIST } from './constants.js';
 export { cacheManager } from './api/memoryCacheManager.js';
 export { RateLimiter, beforeRequest, getAntiScrapeHeaders } from './api/antiScrape.js';
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
-export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, resolveCoverUrl, isSessionProtectedEndpoint, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents } from './api/musicApi.js';
+export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, resolveCoverUrl, invalidateCoverUrl, isSessionProtectedEndpoint, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents, setApiTimingLog, setApiRequestHandler, setThrottleObserver, markApiSessionBootstrapped, setApiSessionCookieValue, getApiSessionCookie, isApiOriginUrl } from './api/musicApi.js';
 export type { ProxyAgents } from './api/musicApi.js';
 export { probeAudio, probeAudioUrl, normalizeProbeUrl } from './api/audioProbe.js';
 export { probeSongs } from './api/probeSongs.js';
@@ -21,6 +21,7 @@ export type { Transport, TransportConfig, TransportResponse } from './api/transp
 export { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from './utils/lyricsParser.js';
 export type { LyricLine, ParsedLyrics } from './utils/lyricsParser.js';
 export { formatPlayCount } from './utils/format.js';
+export { resourceUrlKey } from './utils/resourceKey.js';
 export { md5 } from './utils/hash.js';
 export { createSearchController } from './shared/searchController.js';
 export type { SearchController, SearchControllerConfig } from './shared/searchController.js';

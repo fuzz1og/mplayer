@@ -91,7 +91,7 @@ const SongList: React.FC<SongListProps> = ({
   // 批量加入歌单弹窗状态
   const [showBatchAddToPlaylistModal, setShowBatchAddToPlaylistModal] = useState(false);
   const [selectedSongsForPlaylist, setSelectedSongsForPlaylist] = useState<Song[]>([]);
-  const { setCurrentPlaylist } = usePlayerStore();
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
 
   const displaySongs = songs.map(song => swapOverrides.get(song.id) ?? song);
   // 专辑列整列按需塌缩：列表内没有任何歌曲有专辑时不显示专辑列
