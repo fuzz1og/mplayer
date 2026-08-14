@@ -5,7 +5,21 @@ import MP3Tag from 'mp3tag.js';
 import { BrowserWindow } from 'electron';
 import { musicApi } from '../api/musicApi';
 import { getHttpAgent, getHttpsAgent } from '../proxy';
-import type { Song } from '@mplayer/core';
+import {
+  type Song,
+  buildID3Frames,
+  containerFromContentType,
+  detectAudioContainer,
+  estimateDownloadProgress,
+  extensionForContainer,
+  looksLikeLyrics,
+  lrcSidecarName,
+  retryBackoffMs,
+  tagStrategyForContainer,
+  takeNextQueued,
+  DEFAULT_MAX_CONCURRENT,
+  DEFAULT_MAX_RETRIES,
+} from '@mplayer/core';
 
 export interface DownloadTask {
   id: string;
@@ -23,12 +37,12 @@ export interface DownloadOptions {
   onError?: (task: DownloadTask, error: Error) => void;
 }
 
-class DownloadService {
+export class DownloadService {
   private tasks: Map<string, DownloadTask> = new Map();
   private queue: string[] = [];
   private activeDownloads: Set<string> = new Set();
   private abortControllers: Map<string, AbortController> = new Map();
-  private maxConcurrentDownloads: number = 3;
+  private maxConcurrentDownloads: number = DEFAULT_MAX_CONCURRENT;
   private downloadPath: string = '';
 
   private async fetchCoverAsBuffer(coverUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
@@ -50,45 +64,66 @@ class DownloadService {
     }
   }
 
+  /**
+   * 写入音频元数据（title/artist/album/封面/真实时长）。按容器类型选择标签写入
+   * 方式（见 core download/tagging）：MP3 走 mp3tag.js ID3；M4A 走 mp3tag.js 的
+   * MP4/ID32 容器写入；FLAC/Ogg 等 mp3tag.js 不支持容器 → 明确跳过，不错灌 ID3。
+   */
   private async writeMetadata(song: Song, filePath: string): Promise<void> {
     try {
       const buffer = fs.readFileSync(filePath);
+      const container = detectAudioContainer(buffer);
+      const strategy = tagStrategyForContainer(container);
+      if (strategy === 'skip') {
+        console.log(
+          `[DownloadService] 容器(${container})不支持写 ID3，跳过标签写入（避免错灌）: ${filePath}`
+        );
+        return;
+      }
+
+      const coverInfo = await this.fetchCoverAsBuffer(song.cover);
+      const frames = buildID3Frames({
+        title: song.name || '',
+        artist: song.artist || '',
+        album: song.album || '',
+        // 真实时长（秒 → 毫秒）；song.duration 缺失/为 0 时 core 自动跳过 TLEN
+        durationMs: (song.duration || 0) * 1000,
+        cover: coverInfo ? { format: coverInfo.mime, bytes: Array.from(coverInfo.buffer) } : undefined,
+      });
+
       const mp3tag = new MP3Tag(buffer);
       mp3tag.read();
       if (mp3tag.error) {
-        console.error('[DownloadService] 读取音频标签失败:', mp3tag.error);
+        console.error('[DownloadService] 读取音频标签失败:', mp3tag.error, '(跳过标签写入)');
         return;
       }
 
       mp3tag.tags.title = song.name || '';
       mp3tag.tags.artist = song.artist || '';
       mp3tag.tags.album = song.album || '';
-
       if (!mp3tag.tags.v2) {
         (mp3tag.tags as unknown as Record<string, unknown>).v2 = {};
       }
-
-      mp3tag.tags.v2!.TIT2 = song.name || '';
-      mp3tag.tags.v2!.TPE1 = song.artist || '';
-      mp3tag.tags.v2!.TALB = song.album || '';
-
-      const coverInfo = await this.fetchCoverAsBuffer(song.cover);
-      if (coverInfo) {
-        mp3tag.tags.v2!.APIC = [{
-          format: coverInfo.mime,
-          type: 3,
-          description: 'Cover',
-          data: Array.from(coverInfo.buffer),
-        }];
+      mp3tag.tags.v2!.TIT2 = frames.v2.TIT2;
+      mp3tag.tags.v2!.TPE1 = frames.v2.TPE1;
+      mp3tag.tags.v2!.TALB = frames.v2.TALB;
+      if (frames.v2.TLEN != null) mp3tag.tags.v2!.TLEN = frames.v2.TLEN;
+      if (frames.v2.APIC) {
+        mp3tag.tags.v2!.APIC = frames.v2.APIC.map((apic) => ({
+          format: apic.format,
+          type: apic.type,
+          description: apic.description,
+          data: apic.data,
+        }));
       }
 
-      const isM4a = filePath.endsWith('.m4a');
+      const isM4a = container === 'm4a';
       mp3tag.save({
         id3v2: { padding: isM4a ? 0 : 2048 },
       });
 
       if (mp3tag.error) {
-        console.error('[DownloadService] 写入ID3标签失败:', mp3tag.error);
+        console.error('[DownloadService] 写入标签失败:', mp3tag.error);
         return;
       }
 
@@ -97,7 +132,57 @@ class DownloadService {
         : mp3tag.buffer;
       fs.writeFileSync(filePath, outBuf);
     } catch (err) {
-      console.error('[DownloadService] 写入ID3标签异常:', err);
+      console.error('[DownloadService] 写入标签异常:', err);
+    }
+  }
+
+  /**
+   * 按文件字节头修正扩展名（Content-Type 不可靠时的二次校验，评审修复）。
+   * 真实容器与当前扩展名不一致时重命名并更新任务；检测失败/无需修正则原样返回。
+   */
+  private correctContainerFileName(filePath: string, task: DownloadTask): string {
+    try {
+      const container = detectAudioContainer(fs.readFileSync(filePath));
+      if (container === 'unknown') return filePath;
+      const correctExt = extensionForContainer(container);
+      const currentExt = path.extname(filePath);
+      if (!currentExt || currentExt === correctExt) return filePath;
+      const correctedPath = filePath.slice(0, filePath.length - currentExt.length) + correctExt;
+      fs.renameSync(filePath, correctedPath);
+      task.filePath = correctedPath;
+      this.tasks.set(task.id, task);
+      console.log(`[DownloadService] 按字节头修正扩展名: ${path.basename(filePath)} → ${path.basename(correctedPath)}`);
+      return correctedPath;
+    } catch (err) {
+      console.error('[DownloadService] 修正扩展名失败（保留原文件名）:', err);
+      return filePath;
+    }
+  }
+
+  /**
+   * 写入 .lrc 歌词侧车文件（与音频同目录同名）。源站有歌词（song.lrc 为歌词 URL）
+   * 时才尝试；抓取失败/内容非可用 LRC（非法请求页等）则跳过，不影响音频下载结果。
+   */
+  private async writeLyricsSidecar(song: Song, filePath: string): Promise<void> {
+    const lrcUrl = song.lrc?.trim();
+    if (!lrcUrl) return;
+    let content: string;
+    try {
+      content = await musicApi.getLyrics(lrcUrl);
+    } catch (err) {
+      console.error('[DownloadService] 获取歌词失败，跳过 .lrc 写入:', err);
+      return;
+    }
+    if (!looksLikeLyrics(content)) {
+      console.log('[DownloadService] 歌词内容不可用（可能为非法请求页），跳过 .lrc 写入');
+      return;
+    }
+    const sidecarPath = path.join(path.dirname(filePath), lrcSidecarName(path.basename(filePath)));
+    try {
+      fs.writeFileSync(sidecarPath, content, 'utf-8');
+      console.log(`[DownloadService] 已写入歌词侧车: ${sidecarPath}`);
+    } catch (err) {
+      console.error('[DownloadService] 写 .lrc 文件失败:', err);
     }
   }
 
@@ -180,26 +265,26 @@ class DownloadService {
   }
 
   private async processQueue(): Promise<void> {
-    while (this.queue.length > 0 && this.activeDownloads.size < this.maxConcurrentDownloads) {
-      const taskId = this.queue.shift();
-      if (!taskId) continue;
+    while (true) {
+      // 并发受控：active 未达上限时从队首取下一个任务（core 判定）
+      const { next, remaining } = takeNextQueued(this.queue, this.activeDownloads.size, this.maxConcurrentDownloads);
+      this.queue = remaining;
+      if (!next) break;
 
-      const task = this.tasks.get(taskId);
+      const task = this.tasks.get(next);
       if (!task || task.status === 'completed' || task.status === 'error') {
-        continue;
+        continue; // 跳过无效任务，继续推进队列
       }
 
-      this.activeDownloads.add(taskId);
-
-      // 添加错误处理和重试机制
+      this.activeDownloads.add(next);
       this.downloadFileWithRetry(task).finally(() => {
-        this.activeDownloads.delete(taskId);
-        this.processQueue();
+        this.activeDownloads.delete(next);
+        this.processQueue(); // 单首完成/失败后自动续下一首
       });
     }
   }
 
-  private async downloadFileWithRetry(task: DownloadTask, maxRetries: number = 3): Promise<void> {
+  private async downloadFileWithRetry(task: DownloadTask, maxRetries: number = DEFAULT_MAX_RETRIES): Promise<void> {
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -209,11 +294,10 @@ class DownloadService {
       } catch (error) {
         lastError = error as Error;
 
-        if (attempt < maxRetries) {
-          // 指数退避重试
-          const delay = Math.pow(2, attempt) * 1000;
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
+        // 指数退避（core 判定，超过最大重试返回 -1 表示不再等待）
+        const delay = retryBackoffMs(attempt, maxRetries);
+        if (delay < 0) break;
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
@@ -275,12 +359,15 @@ class DownloadService {
         timeout: 60000,
         signal: controller.signal,
         onDownloadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            task.progress = progress;
-            this.tasks.set(task.id, task);
-            this.notifyProgress(task);
-          }
+          // Content-Length 缺失/chunked 时 total 为 0/undefined：改走 core 软进度估算，不再卡 0%
+          const total = progressEvent.total;
+          const progress = estimateDownloadProgress({
+            loaded: progressEvent.loaded,
+            total: total != null && total > 0 ? total : null,
+          });
+          task.progress = progress;
+          this.tasks.set(task.id, task);
+          this.notifyProgress(task);
         }
       });
 
@@ -288,11 +375,9 @@ class DownloadService {
       if (ct.includes('text/html') || ct.includes('application/json')) {
         throw new Error('服务器返回了非音频内容，可能链接已失效');
       }
-      let ext = '.mp3';
-      if (ct.includes('audio/mpeg')) ext = '.mp3';
-      else if (ct.includes('audio/mp4') || ct.includes('video/mp4')) ext = '.m4a';
-      else if (ct.includes('audio/flac')) ext = '.flac';
-      else if (ct.includes('audio/ogg')) ext = '.ogg';
+      // 按真实 Content-Type 推断容器并取正确扩展名（替代硬编码 .mp3）
+      const container = containerFromContentType(ct);
+      const ext = extensionForContainer(container ?? 'unknown');
 
       let fileName = this.sanitizeFileName(`${task.song.name} - ${task.song.artist}${ext}`);
       let filePath = path.join(this.downloadPath, fileName);
@@ -343,8 +428,12 @@ class DownloadService {
         });
       });
 
-      // 写入ID3元数据（title/artist/album/封面等）
+      // 写入标签元数据（title/artist/album/封面/真实时长）与 .lrc 歌词侧车
+      // 先按字节头修正扩展名：源站 Content-Type 不可靠（FLAC 报 audio/mpeg 等）时，
+      // 按真实容器重命名，避免 FLAC/M4A 错标成 .mp3（对齐移动端 correctContainerName）
+      actualFilePath = this.correctContainerFileName(actualFilePath, task);
       await this.writeMetadata(task.song, actualFilePath);
+      await this.writeLyricsSidecar(task.song, actualFilePath);
 
     } catch (error) {
       console.error('[DownloadService] 下载失败:', error);

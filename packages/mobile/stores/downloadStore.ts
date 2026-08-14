@@ -10,6 +10,8 @@ export interface DownloadItem {
   artist: string;
   fileName: string;
   status: 'downloading' | 'done' | 'error';
+  /** 下载进度 0..100；未知总量时按已收字节估算（core），完成置 100 */
+  progress?: number;
   /** 同步到公共下载目录后的 SAF content:// uri（未同步则无） */
   publicUri?: string;
   error?: string;
@@ -19,7 +21,7 @@ export interface DownloadItem {
 interface DownloadState {
   items: DownloadItem[];
   addItem: (item: DownloadItem) => void;
-  updateStatus: (key: string, patch: Partial<Pick<DownloadItem, 'status' | 'error' | 'publicUri'>>) => void;
+  updateStatus: (key: string, patch: Partial<Pick<DownloadItem, 'status' | 'error' | 'publicUri' | 'fileName' | 'progress'>>) => void;
   removeItem: (key: string) => void;
 }
 
