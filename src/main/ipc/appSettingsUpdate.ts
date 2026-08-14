@@ -4,13 +4,48 @@ import { downloadService } from '../services/downloadService';
 import { updateService } from '../services/updateService';
 import { db } from '../storage/db';
 import { applyElectronProxy, buildAgents, type ProxyConfig } from '../proxy';
+import {
+  setSourceModes,
+  setSourceModePersister,
+  getAllSourceModes,
+  hasDirectClient,
+} from '../api/musicApi';
+import { MULTI_SOURCE_LIST, type SourceKey, type SourceMode } from '@mplayer/core';
 import type { BrowserWindow } from 'electron';
+
+const SOURCE_MODE_VALUES: SourceMode[] = ['auto', 'direct', 'api'];
 
 export function registerDialogIpc(): void {
   registerIpcHandlerSimple('dialog:openDirectory', () => dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }));
 }
 
 export function registerSettingsIpc(): void {
+  // 来源开关持久化：core 内零 I/O，宿主注册回调落盘（fire-and-forget）
+  setSourceModePersister((modes) => {
+    void db.setSetting('sourceModes', modes);
+  });
+
+  registerIpcHandlerSimple('settings:getSourceModes', () => {
+    const modes = getAllSourceModes();
+    const status: Record<string, 'ready' | 'unavailable'> = {};
+    for (const key of MULTI_SOURCE_LIST) {
+      status[key] = hasDirectClient(key) ? 'ready' : 'unavailable';
+    }
+    return { modes, status };
+  });
+
+  registerIpcHandler('settings:setSourceModes', async (next: Record<string, unknown>) => {
+    const clean: Partial<Record<SourceKey, SourceMode>> = {};
+    for (const key of MULTI_SOURCE_LIST) {
+      const value = next[key];
+      if (typeof value === 'string' && (SOURCE_MODE_VALUES as string[]).includes(value)) {
+        clean[key] = value as SourceMode;
+      }
+    }
+    setSourceModes(clean);
+    return true;
+  });
+
   registerIpcHandlerSimple('settings:getDownloadPath', () => downloadService.getDownloadPath());
   registerIpcHandler('settings:setDownloadPath', async (inputPath: string) => {
     downloadService.updateDownloadPath(inputPath);

@@ -67,6 +67,8 @@ beforeEach(() => {
         return searchSongsMock(...args);
       case 'getAudioUrl':
         return 'https://resolved.example.com/a.mp3';
+      case 'resolvePlayableUrlRouted':
+        return 'https://resolved.example.com/a.mp3';
       case 'probeSongsBatch': {
         const songs = args[0] as Song[];
         return songs.map((s) => ({ songId: s.id, tag: 'valid' as const }));
@@ -194,6 +196,7 @@ describe('SongList 单曲换源流程', () => {
         return [{ songId: firstId, tag: 'valid' }];
       }
       if (method === 'getAudioUrl') return 'https://resolved.example.com/a.mp3';
+      if (method === 'resolvePlayableUrlRouted') return 'https://resolved.example.com/a.mp3';
       return undefined;
     });
 

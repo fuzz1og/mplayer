@@ -24,7 +24,8 @@ interface SearchState {
  * subscribe 镜像 + source 路由 + 完成后统一探测 + 日志。
  */
 const orchestrator = createSearchOrchestrator<SourceKey>({
-  searchOneSource: (query, page, source) => musicApi.searchSongs(query, page, source),
+  // 模式感知搜索（T01）：auto 直连优先回退自建 API / direct 仅直连 / api 现状
+  searchOneSource: (query, page, source) => musicApi.searchSongsRouted(query, page, source),
   // 并发 3：手机网络并发 >5 后严重劣化，渐进渲染下慢源稍后并入，体验不受影响
   concurrency: 3,
 });

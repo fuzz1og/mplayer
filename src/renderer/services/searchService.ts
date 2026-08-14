@@ -17,7 +17,7 @@ const PROBE_BATCH_SIZE = 20;
 class SearchService {
   private debounceTimer: NodeJS.Timeout | null = null;
   private orchestrator = createSearchOrchestrator<CoreSourceKey>({
-    searchOneSource: (query, page, source) => callMusicApi('searchSongs', query, page, source),
+    searchOneSource: (query, page, source) => callMusicApi('searchSongsRouted', query, page, source),
     // 桌面并发 6-7：渐进渲染下慢源稍后并入，首屏不再等最慢源
     concurrency: 6,
   });

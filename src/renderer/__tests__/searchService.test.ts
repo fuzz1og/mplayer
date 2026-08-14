@@ -63,7 +63,7 @@ describe('searchService', () => {
       await searchService.search('周杰伦');
 
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ loading: true }));
-      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongs', '周杰伦', 1, 'netease');
+      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongsRouted', '周杰伦', 1, 'netease');
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ loading: false }));
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ songs: mockSongs }));
     });
@@ -85,7 +85,7 @@ describe('searchService', () => {
         qq: [{ id: 'q1', name: '晴天', artist: '周杰伦' }],
       };
       (IpcClient.invoke as any).mockImplementation(async (_c: string, method?: string, _kw?: string, _p?: number, src?: string) => {
-        if (method === 'searchSongs') return bySource[src as string] || [];
+        if (method === 'searchSongsRouted') return bySource[src as string] || [];
         if (method === 'probeSongsBatch') return [];
         return undefined;
       });
@@ -99,8 +99,8 @@ describe('searchService', () => {
       // groups 里同名歌曲含 netease + qq 两版本
       const groups = mockStore.groups as any[];
       expect(groups.length).toBeGreaterThan(0);
-      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongs', '晴天', 1, 'netease');
-      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongs', '晴天', 1, 'qq');
+      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongsRouted', '晴天', 1, 'netease');
+      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongsRouted', '晴天', 1, 'qq');
     });
 
     it('probes new results through the main-process batch IPC', async () => {
@@ -113,7 +113,7 @@ describe('searchService', () => {
         url: '',
       }));
       (IpcClient.invoke as any).mockImplementation(async (channel: string, method?: string) => {
-        if (channel === 'musicApi:call' && method === 'searchSongs') return songs;
+        if (channel === 'musicApi:call' && method === 'searchSongsRouted') return songs;
         if (channel === 'musicApi:call' && method === 'probeSongsBatch') {
           return songs.map((song) => ({ songId: song.id, tag: 'valid' as const }));
         }
@@ -141,7 +141,7 @@ describe('searchService', () => {
       let releaseOldProbe: (() => void) | undefined;
       let oldInFlight = false;
       (IpcClient.invoke as any).mockImplementation(async (_ch: string, method?: string, arg?: unknown) => {
-        if (method === 'searchSongs') {
+        if (method === 'searchSongsRouted') {
           return arg === '周杰伦' ? firstSongs : secondSongs;
         }
         if (method === 'probeSongsBatch') {

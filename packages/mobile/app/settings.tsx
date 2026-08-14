@@ -13,11 +13,26 @@ import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
 import { CircleCheck, Save, RefreshCcw, Zap, RefreshCw, Download, CircleX, Trash2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useLogsStore } from '../stores/logsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
 import { colors, radius, shadow, spacing } from '../theme/tokens';
+
+const SOURCE_LABELS: Record<string, string> = {
+  netease: '网易云',
+  qq: 'QQ',
+  kugou: '酷狗',
+  kuwo: '酷我',
+  qianqian: '千千',
+  soda: '汽水',
+};
+
+const MODE_OPTIONS: { value: 'auto' | 'direct' | 'api'; label: string }[] = [
+  { value: 'auto', label: '自动' },
+  { value: 'direct', label: '仅直连' },
+  { value: 'api', label: '仅API' },
+];
 
 function formatLogTime(ts: number): string {
   const d = new Date(ts);
@@ -28,10 +43,16 @@ function formatLogTime(ts: number): string {
 export default function SettingsPage() {
   const storeApiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
   const storeProxyUrl = useSettingsStore((s) => s.proxyUrl);
+  const sourceModes = useSettingsStore((s) => s.sourceModes);
   const setApiBaseUrl = useSettingsStore((s) => s.setApiBaseUrl);
   const setStoreProxyUrl = useSettingsStore((s) => s.setProxyUrl);
   const logEntries = useLogsStore((s) => s.entries);
   const clearLogs = useLogsStore((s) => s.clearLogs);
+
+  // 直连设置：改 core 来源开关 → persister 镜像进 store（AsyncStorage 持久化）
+  const handleSourceModeChange = (source: string, mode: 'auto' | 'direct' | 'api'): void => {
+    setCoreSourceModes({ ...sourceModes, [source]: mode });
+  };
 
   const [localUrl, setLocalUrl] = useState(storeApiBaseUrl);
   const [localProxyUrl, setLocalProxyUrl] = useState(storeProxyUrl);
@@ -221,6 +242,36 @@ export default function SettingsPage() {
           </View>
         </View>
 
+        {/* 直连设置（T01：每源来源开关） */}
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>直连设置</Text>
+            <Text style={styles.label}>
+              每源请求方式：自动 = 官方直连优先、失败回退自建 API；仅直连 / 仅自建 API。直连能力按源逐步落地。
+            </Text>
+            {MULTI_SOURCE_LIST.map((source) => (
+              <View key={source} style={styles.modeRow}>
+                <Text style={styles.modeLabel}>{SOURCE_LABELS[source] || source}</Text>
+                <View style={styles.modeGroup}>
+                  {MODE_OPTIONS.map((m) => {
+                    const active = (sourceModes[source] || 'auto') === m.value;
+                    return (
+                      <TouchableOpacity
+                        key={m.value}
+                        style={[styles.modeBtn, active && styles.modeBtnActive]}
+                        onPress={() => handleSourceModeChange(source, m.value)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.modeBtnText, active && styles.modeBtnTextActive]}>{m.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
         {/* 代理设置 */}
         <View style={styles.section}>
           <View style={styles.card}>
@@ -399,6 +450,44 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 13,
     marginBottom: spacing[2],
+  },
+  modeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
+  },
+  modeLabel: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '500',
+    width: 56,
+  },
+  modeGroup: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  modeBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    backgroundColor: colors.inputBg,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+  },
+  modeBtnActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  modeBtnText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  modeBtnTextActive: {
+    color: colors.textInverse,
   },
   input: {
     backgroundColor: colors.inputBg,

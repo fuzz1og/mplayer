@@ -38,3 +38,21 @@ export { DEFAULT_TTL } from './cache/ttl.js';
 export { SongResourcesCache, SONGS_TTL_MS, COVERS_TTL_MS } from './cache/songResourcesCache.js';
 export type { SongResources, SongResourcesCacheOptions } from './cache/songResourcesCache.js';
 export type { CachePort, CacheBackend, CacheStats } from './cache/types.js';
+export { setTransport, getTransport, request } from './api/transport.js';
+export type { Transport, TransportRequest, TransportResponse } from './api/transport.js';
+export {
+  registerDirectClient,
+  getDirectClient,
+  hasDirectClient,
+  clearDirectClients,
+  getSourceMode,
+  setSourceMode,
+  setSourceModes,
+  loadSourceModes,
+  getAllSourceModes,
+  setSourceModePersister,
+  configureSourceRouter,
+  searchSongsRouted,
+  resolvePlayableUrlRouted,
+} from './shared/sourceRouter.js';
+export type { SourceMode, DirectSourceClient, SourceRouterLegs } from './shared/sourceRouter.js';

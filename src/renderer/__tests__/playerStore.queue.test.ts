@@ -65,6 +65,8 @@ function defaultCallMusicApi(): void {
     switch (method) {
       case 'getAudioUrl':
         return 'https://resolved.example.com/audio.mp3';
+      case 'resolvePlayableUrlRouted':
+        return 'https://resolved.example.com/audio.mp3';
       case 'getSodaPlayableUrl':
         return '';
       case 'searchSongs':
@@ -212,6 +214,7 @@ describe('播放链路：URL 解析 / 死链 fresh / 加载失败', () => {
     const s1 = song('netease:1', '晴天', staleUrl);
     callMusicApiMock.mockImplementation(async (method: string) => {
       if (method === 'getAudioUrl') return staleUrl; // 死链：返回原样
+      if (method === 'resolvePlayableUrlRouted') return staleUrl; // 死链：返回原样
       if (method === 'searchSongById') return { ...s1, url: freshUrl };
       if (method === 'getSodaPlayableUrl') return '';
       if (method === 'searchSongs') return [];
@@ -233,6 +236,7 @@ describe('播放链路：URL 解析 / 死链 fresh / 加载失败', () => {
     const foundUrl = 'https://found.example.com/1.mp3';
     callMusicApiMock.mockImplementation(async (method: string) => {
       if (method === 'getAudioUrl') return ''; // 无真实解析
+      if (method === 'resolvePlayableUrlRouted') return ''; // 无真实解析
       if (method === 'searchSongs') return [{ ...s1, url: foundUrl, lrc: '' }];
       if (method === 'getSodaPlayableUrl') return '';
       return undefined;

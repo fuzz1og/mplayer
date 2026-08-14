@@ -94,7 +94,8 @@ Convention: `domain:action`. Renderer uses `ipcRenderer.invoke()` for request/re
 `getNeteasePlaylistSongsPage` `getPlaylistSongsFromThirdParty` `getNeteaseArtists`
 `getNeteaseArtistSongs` `searchNeteaseArtists` `getNewAlbums` `getAlbumDetail` `getArtistAlbums`
 `getRecommendedPlaylists` `getRecommendedSongs` `resolveCoverUrl` `invalidateCoverUrl`
-`fillSongUrls` `getSodaAudioUrl` `parseSodaShareLink` + MainOnly：`getAggregatedChart`
+`fillSongUrls` `getSodaAudioUrl` `parseSodaShareLink` `searchSongsRouted` `resolvePlayableUrlRouted`
+（模式感知路由，见 core `sourceRouter`）+ MainOnly：`getAggregatedChart`
 `getThrottleWait` `getSodaPlayableUrl`。
 旧 `musicApi:*` / `lyrics:get` / `api:getThrottleWait` 通道已删除（收敛为单通道）。
 
@@ -121,7 +122,8 @@ getJSON/setJSON/getBinary/setBinary 8 个僵尸通道已删除。
 `addFolder`, `removeFolder`, `getFolders`, `getSongs`, `refresh`
 
 **Settings** — renderer→main:
-`getDownloadPath`, `setDownloadPath`, `resetDownloadPath`, `getApiUrl`, `setApiUrl`, `getProxy`, `setProxy`
+`getDownloadPath`, `setDownloadPath`, `resetDownloadPath`, `getApiUrl`, `setApiUrl`, `getProxy`, `setProxy`,
+`getSourceModes`, `setSourceModes`（每源来源开关 auto/direct/api，直连设置，见 core `sourceRouter`）
 
 **Download** — renderer→main:
 `start`, `startBatch`, `cancel`, `getTasks`, `clearCompleted`
@@ -244,10 +246,13 @@ packages/core/src/
 │   ├── memoryCacheManager.ts   # 内存缓存（搜索/URL/歌词/热榜，TTL）
 │   ├── audioProbe.ts           # 音频可播性探测（probeAudio / probeAudioUrl）
 │   ├── probeSongs.ts           # 批量歌曲探测
+│   ├── transport.ts            # 可注入传输接缝（直连客户端/预检统一出网，测试 mock 点）
 │   └── playlistImport.ts       # 歌单导入
 ├── cache/                      # 缓存内核（cacheKernel / ttl / backends/memoryBackend）
 │                                # + 歌曲资源语义层（songResourcesCache，key/TTL 内聚）
-├── shared/                     # resolvePlayableUrl / resolveFreshUrl / searchOrchestrator / sourceSwap（单曲换源）
+├── shared/                     # resolvePlayableUrl / resolveFreshUrl / searchOrchestrator /
+│                                # sourceSwap（单曲换源）/ sourceRouter（来源开关 auto/direct/api
+│                                # + 直连客户端注册表 + 单一回退链路由）
 ├── utils/                      # songDedupe / songMatcher / lyricsParser / format /
 │                                # hash(md5) / queue / recommendBatch / resourceKey / groupIntoSongGroups /
 │                                # sourceReferer / sniffers（图片/音频格式头嗅探单点）

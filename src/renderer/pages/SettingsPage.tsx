@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { Settings, Database, Folder, Link, Shield, Download, Music } from 'lucide-react';
+import { Settings, Database, Folder, Link, Shield, Download, Music, Zap } from 'lucide-react';
 import CacheSection from '@/renderer/components/CacheSection';
 import DownloadSection from '@/renderer/components/DownloadSection';
 import ApiSection from '@/renderer/components/ApiSection';
 import ProxySection from '@/renderer/components/ProxySection';
 import UpdateSection from '@/renderer/components/UpdateSection';
 import AboutSection from '@/renderer/components/AboutSection';
+import SourceSection from '@/renderer/components/SourceSection';
 
 const NAV_ITEMS = [
   { id: 'cache', label: '缓存管理', icon: <Database size={15} /> },
   { id: 'download', label: '下载设置', icon: <Folder size={15} /> },
   { id: 'api', label: 'API 设置', icon: <Link size={15} /> },
+  { id: 'source', label: '直连设置', icon: <Zap size={15} /> },
   { id: 'proxy', label: '网络代理', icon: <Shield size={15} /> },
   { id: 'update', label: '检查更新', icon: <Download size={15} /> },
   { id: 'about', label: '关于', icon: <Music size={15} /> },
@@ -72,6 +74,7 @@ const SettingsPage: React.FC = () => {
         <CacheSection />
         <DownloadSection />
         <ApiSection />
+        <SourceSection />
         <ProxySection />
         <UpdateSection />
         <AboutSection />

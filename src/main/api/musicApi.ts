@@ -10,6 +10,11 @@ export {
   warmUpArtistPicCache,
   injectProxyAgents,
   invalidateCoverUrl,
+  setSourceModes,
+  loadSourceModes,
+  setSourceModePersister,
+  getAllSourceModes,
+  hasDirectClient,
 } from '@mplayer/core';
 export type { ProxyAgents } from '@mplayer/core';
 

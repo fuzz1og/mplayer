@@ -9,6 +9,11 @@ import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
 import { probeSongs } from './probeSongs.js';
+import {
+  searchSongsRouted as routedSearchSongs,
+  resolvePlayableUrlRouted as routedResolveUrl,
+  configureSourceRouter,
+} from '../shared/sourceRouter.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = 'http://localhost:3000/';
@@ -2383,5 +2388,22 @@ export const musicApi = {
 
   async warmUpArtistPicCache(): Promise<void> {
     return warmUpArtistPicCache();
-  }
+  },
+
+  /**
+   * 模式感知搜索（来源开关 auto/direct/api，单一回退链：直连 → 自建 API）。
+   * 供 SearchOrchestrator 的 searchOneSource 注入（桌面经 musicApi:call 契约，
+   * 移动端 core 直调）。直连客户端由 T02+ 各源 ticket 注册。
+   */
+  searchSongsRouted: (query: string, page: number, source: SourceKey) =>
+    routedSearchSongs(query, page, source),
+
+  /** 模式感知播放 URL 解析（请求层回退链 URL 腿；无版权/VIP 返回 '' 交换元层）。 */
+  resolvePlayableUrlRouted: (song: Song) => routedResolveUrl(song),
 };
+
+// 路由的 api 腿 = 自建 API 现状语义（搜索 POST / 播放直链解析）。
+configureSourceRouter({
+  searchSongs: (query, page, source) => musicApi.searchSongs(query, page, source),
+  getAudioUrl: (url) => musicApi.getAudioUrl(url),
+});

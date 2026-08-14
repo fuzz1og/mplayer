@@ -23,7 +23,7 @@ import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { getApiUrl } from './config';
-import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl, setApiTimingLog } from './api/musicApi';
+import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl, setApiTimingLog, loadSourceModes } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
 import { applyElectronProxy, getHttpAgent, getHttpsAgent, type ProxyConfig } from './proxy';
@@ -221,6 +221,16 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error('加载代理设置失败:', error);
     applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
+  }
+
+  // 加载来源开关（直连/自建 API 模式，spec #146 T01）
+  try {
+    const savedModes = await db.getSetting<Partial<Record<string, string>>>('sourceModes');
+    if (savedModes) {
+      loadSourceModes(savedModes as Partial<Record<string, 'auto' | 'direct' | 'api'>>);
+    }
+  } catch (error) {
+    console.error('加载来源开关设置失败:', error);
   }
 
   // IPC registration (grouped by domain)

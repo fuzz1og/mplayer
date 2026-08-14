@@ -154,7 +154,7 @@ function prefetchNextUrl(state: PlayerStoreState): void {
   const cacheKey = `${nextSong.sourceType}:${nextSong.url}`;
   if (prefetchedUrls.has(cacheKey)) return;
 
-  callMusicApi('getAudioUrl', nextSong.url)
+  callMusicApi('resolvePlayableUrlRouted', nextSong)
     .then((resolvedUrl) => {
       if (resolvedUrl) {
         prefetchedUrls.set(cacheKey, resolvedUrl);
@@ -216,7 +216,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           prefetchedUrls.delete(cacheKey);
         } else {
           try {
-            realUrl = await callMusicApi('getAudioUrl', song.url);
+            realUrl = await callMusicApi('resolvePlayableUrlRouted', song);
           } catch (urlError) {
             console.error('获取真实音频 URL 失败:', urlError);
             message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');

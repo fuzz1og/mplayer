@@ -3,6 +3,7 @@ import { useSourceStore } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
 
 // musicApi 打桩记录调用参数;SearchOrchestrator 用真实实现(纯逻辑,自持状态)
+// 注意:store 走模式感知搜索入口 searchSongsRouted(T01),桩打在路由入口上
 const mocks = vi.hoisted(() => ({
   searchSongs: vi.fn(async (_kw: string, _page: number, _src: string): Promise<any[]> => []),
   groupIntoSongGroups: vi.fn(),
@@ -14,7 +15,7 @@ vi.mock('@mplayer/core', async (importOriginal) => {
     ...actual,
     musicApi: {
       ...actual.musicApi,
-      searchSongs: mocks.searchSongs,
+      searchSongsRouted: mocks.searchSongs,
       searchAllSources: undefined, // 已退役：store 不再触碰该通道
       groupIntoSongGroups: mocks.groupIntoSongGroups,
     },
