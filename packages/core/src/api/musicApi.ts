@@ -237,6 +237,11 @@ let resolveActive = 0;
 const RESOLVE_MAX_CONCURRENCY = 3;
 const resolveInflight = new Map<string, Promise<{ finalUrl: string; data: unknown }>>();
 
+// 302 解析超时（毫秒）：封面 3s 快超时（失败有占位图兜底），播放直链 12s
+// （弱网下 api.php 响应 1-15s，宁等多等也要真直链）
+const COVER_RESOLVE_TIMEOUT_MS = 3000;
+const AUDIO_RESOLVE_TIMEOUT_MS = 12000;
+
 function runResolve(
   url: string,
   timeout: number,
@@ -837,7 +842,7 @@ export async function resolveCoverUrl(coverUrl: string): Promise<string> {
   if (cached && cached.expires > Date.now()) return cached.url;
   try {
     // 封面解析：3s 快速超时（失败有占位图兜底），不让封面占住并发槽位
-    const { finalUrl, data } = await runResolve(fullUrl, 3000);
+    const { finalUrl, data } = await runResolve(fullUrl, COVER_RESOLVE_TIMEOUT_MS);
     if (typeof data === 'string' && data.includes(INVALID_REQUEST_MARKER)) {
       return fullUrl; // 会话不可用：不缓存，回退原 URL
     }
@@ -1231,17 +1236,17 @@ export const musicApi = {
       // 带重试的 URL 解析（最多 3 次尝试，指数退避）
       const MAX_RETRIES = 2;
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      if (signal?.aborted) {
-        throw new DOMException('Aborted', 'AbortError');
-      }
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (signal?.aborted) {
+          throw new DOMException('Aborted', 'AbortError');
+        }
 
-      try {
+        try {
           // 播放 URL 解析：优先于封面（插队）+ 12s 超时。
           // 手机网络波动大（LTE 下 api.php 响应 1-15s），5s 必超时回退
           // 原 URL（播放器无 cookie 加载 api.php → Source error），
           // 12s 覆盖慢网络，宁可多等也要拿到真直链
-          const { finalUrl, data } = await runResolve(fullUrl, 12000, true);
+          const { finalUrl, data } = await runResolve(fullUrl, AUDIO_RESOLVE_TIMEOUT_MS, true);
 
         if (finalUrl.startsWith('data:text/html')) {
           const errorMsg = typeof data === 'string' ? data : '获取音频失败';

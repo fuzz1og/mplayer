@@ -76,6 +76,9 @@ const PlaylistFallback: React.FC<{ style?: React.CSSProperties }> = ({ style }) 
   </div>
 );
 
+// 封面解析失败重试：指数退避基数（20s/40s/80s，最多 3 次）
+const COVER_RESOLVE_RETRY_BASE_MS = 20000;
+
 const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant = 'song', onError }) => {
   const [failed, setFailed] = useState(false);
   const retryCountRef = useRef(0);
@@ -114,7 +117,7 @@ const CoverImage: React.FC<CoverImageProps> = ({ src, alt = '', style, variant =
               retryCountRef.current++;
               // 指数退避 + full jitter：多封面同步重试会放大限流，
               // jitter 让重试在时间上散开（AWS 标准实践）
-              const base = 20000 * 2 ** (retryCountRef.current - 1);
+              const base = COVER_RESOLVE_RETRY_BASE_MS * 2 ** (retryCountRef.current - 1);
               const delay = Math.floor(Math.random() * base);
               retryTimerRef.current = setTimeout(attempt, delay);
               return;

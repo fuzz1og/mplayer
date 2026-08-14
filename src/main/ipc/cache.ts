@@ -7,6 +7,8 @@ import { CacheKernel, createMemoryBackend, resourceUrlKey } from '@mplayer/core'
 import { DiskCacheBackend, isImageBytes, isImageFile } from '../cache/diskBackend'
 
 const COVER_CACHE_TTL = 6 * 60 * 60 * 1000
+// 签名 URL 服务端时效短：12h 过期后下次进歌单必须重新搜索拿新签名
+const URL_CACHE_TTL_MS = 12 * 60 * 60 * 1000
 
 let cacheKernel: CacheKernel | null = null
 let diskBackend: DiskCacheBackend | null = null
@@ -89,7 +91,7 @@ export function registerCacheIpc(): void {
   registerIpcHandlerSimple('cache:setUrl', async (songId: string, urlData: any) => {
     // 12h：与重构前 CacheManager.URL_EXPIRE_HOURS 契约一致——
     // 签名 URL 服务端时效短，过期后下次进歌单必须重新搜索拿新签名
-    await kernel.setJSON(`url:${songId}`, urlData, 12 * 60 * 60 * 1000)
+    await kernel.setJSON(`url:${songId}`, urlData, URL_CACHE_TTL_MS)
   })
   registerIpcHandlerSimple('cache:getSong', async (keyword: string) => {
     return kernel.getJSON(`search:${keyword}`)
