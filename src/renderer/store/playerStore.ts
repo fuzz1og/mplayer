@@ -3,7 +3,7 @@ import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
-import { isSessionProtectedEndpoint, stripSourceIdPrefix } from '@mplayer/core';
+import { isSessionProtectedEndpoint, stripSourceIdPrefix, findExactMatch } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { ipcMusicApi } from '@/renderer/services/IpcMusicApi';
 import { resolveSongUrls } from '@/renderer/utils/songResolver';

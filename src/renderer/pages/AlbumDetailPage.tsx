@@ -53,6 +53,22 @@ const AlbumDetailPage: React.FC = () => {
         if (result.success && result.data) {
           setAlbum(result.data.album);
           setSongs(result.data.songs);
+          // 无 URL 歌曲（无版权等，weapi 有信息但无直链）：后台逐首搜索兜底，
+          // 不阻塞页面——补齐后更新列表（补不齐的播放时还有单首兜底）
+          const urlMissing = result.data.songs.filter((s: Song) => !s.url);
+          if (urlMissing.length > 0) {
+            ipcRenderer
+              .invoke('musicApi:fillSongUrls', urlMissing)
+              .then((res: any) => {
+                const filled = res?.success ? (res.data as Song[]) : null;
+                if (!Array.isArray(filled) || filled.length === 0) return;
+                const urlById = new Map<string, string>();
+                for (const s of filled) if (s.url) urlById.set(s.id, s.url);
+                if (urlById.size === 0) return;
+                setSongs((prev) => prev.map((s) => (urlById.has(s.id) ? { ...s, url: urlById.get(s.id)! } : s)));
+              })
+              .catch(() => {});
+          }
         } else {
           setError(result.error || '专辑加载失败');
         }
