@@ -70,7 +70,9 @@ interface TabCache {
 }
 
 const DiscoverPageV2: React.FC = () => {
-  const { currentSong, isPlaying, play } = usePlayerStore();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>(loadSavedTab);

@@ -47,7 +47,9 @@ const DiscoverPage: React.FC = () => {
   const navigate = useNavigate();
   const { songs, groups, loading, currentKeyword, hasMore, error, sourceType } = useSearchStore();
   const isAllMode = sourceType === 'all';
-  const { currentSong, isPlaying, play } = usePlayerStore();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
   const { favoriteIds, toggleFavorite } = useFavoriteStore();
   const { download, downloadBatch } = useDownload();
 

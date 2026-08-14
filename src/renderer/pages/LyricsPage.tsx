@@ -11,7 +11,16 @@ interface LyricsPageProps {
 }
 
 const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
-  const { lyrics, lyricsLoading, position, currentSong, seek, isPlaying, pause, resume, playPrevious, playNext } = usePlayerStore();
+  const lyrics = usePlayerStore((s) => s.lyrics);
+  const lyricsLoading = usePlayerStore((s) => s.lyricsLoading);
+  const position = usePlayerStore((s) => s.position);
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const seek = usePlayerStore((s) => s.seek);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const pause = usePlayerStore((s) => s.pause);
+  const resume = usePlayerStore((s) => s.resume);
+  const playPrevious = usePlayerStore((s) => s.playPrevious);
+  const playNext = usePlayerStore((s) => s.playNext);
 
   // Escape 键关闭歌词页面
   useEffect(() => {

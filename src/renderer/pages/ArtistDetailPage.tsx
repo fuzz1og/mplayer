@@ -40,7 +40,9 @@ const ArtistDetailPage: React.FC = () => {
   const [order, setOrder] = useState<'hot' | 'time'>('hot');
   const [activeTab, setActiveTab] = useState<TabKey>('hot');
 
-  const { play, currentSong, isPlaying } = usePlayerStore();
+  const play = usePlayerStore((s) => s.play);
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const { favoriteIds, toggleFavorite } = useFavoriteStore();
 
   useEffect(() => {

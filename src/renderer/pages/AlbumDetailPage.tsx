@@ -30,7 +30,10 @@ const AlbumDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { play, currentSong, isPlaying, setCurrentPlaylist } = usePlayerStore();
+  const play = usePlayerStore((s) => s.play);
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const { favoriteIds, toggleFavorite } = useFavoriteStore();
 
   const displayName = album?.name || stateName || '';

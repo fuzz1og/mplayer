@@ -10,7 +10,10 @@ import type { Song } from '@mplayer/core';
 
 const FavoritesPage: React.FC = () => {
   const { favorites, loadFavorites, toggleFavorite } = useFavoriteStore();
-  const { currentSong, isPlaying, play, setCurrentPlaylist } = usePlayerStore();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const { download, downloadBatch } = useDownload();
 
   const [batchModalVisible, setBatchModalVisible] = useState(false);

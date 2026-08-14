@@ -117,7 +117,14 @@ const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
 };
 
 const QueuePage: React.FC = () => {
-  const { currentPlaylist, currentSong, isPlaying, play, removeFromQueue, reorderQueue, clearQueue, setCurrentPlaylist } = usePlayerStore();
+  const currentPlaylist = usePlayerStore((s) => s.currentPlaylist);
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
+  const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
+  const reorderQueue = usePlayerStore((s) => s.reorderQueue);
+  const clearQueue = usePlayerStore((s) => s.clearQueue);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const [showBatchModal, setShowBatchModal] = useState(false);
 
   // 封面加载失败 → 按 ID 重识别换新封面并更新队列/当前歌曲（旧签名封面永远失败）

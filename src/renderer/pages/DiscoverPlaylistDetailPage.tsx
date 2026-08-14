@@ -18,7 +18,10 @@ const PAGE_SIZE = 20;
 const DiscoverPlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { play, currentSong, isPlaying, setCurrentPlaylist } = usePlayerStore();
+  const play = usePlayerStore((s) => s.play);
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const { favoriteIds, toggleFavorite } = useFavoriteStore();
   const { download } = useDownload();
 
