@@ -82,10 +82,12 @@ export function registerMusicApiIpc(musicApi: MusicApi): void {
   registerIpcHandler('musicApi:getAggregatedChart', (type: 'hot' | 'new', sources: string[]) => getAggregatedChart(type, sources as any));
   registerIpcHandler('musicApi:getNewAlbums', (area: string, offset: number, limit: number) => musicApi.getNewAlbums(area, offset, limit));
   registerIpcHandler('musicApi:getAlbumDetail', (albumId: string, skipSearchFallback?: boolean) => musicApi.getAlbumDetail(albumId, skipSearchFallback));
-  // 后台补齐无 URL 歌曲（逐首搜索兜底，慢但不在页面主链路上阻塞）：
+  // 后台补齐无 URL 歌曲（专辑名预搜 1 次批量命中 + 剩余逐首兜底，不在页面主链路上阻塞）：
   // 返回补齐后的歌曲数组（resolveNeteaseSongUrlsBySearch 原地补 url）
-  registerIpcHandler('musicApi:fillSongUrls', (songs: Song[]) =>
-    musicApi.resolveNeteaseSongUrlsBySearch(Array.isArray(songs) ? songs : []).then(() => songs)
+  registerIpcHandler('musicApi:fillSongUrls', (songs: Song[], albumName?: string) =>
+    musicApi
+      .resolveNeteaseSongUrlsBySearch(Array.isArray(songs) ? songs : [], albumName)
+      .then(() => songs)
   );
   registerIpcHandler('musicApi:getArtistAlbums', (artistId: string, offset: number, limit: number) => musicApi.getArtistAlbums(artistId, offset, limit));
   registerIpcHandler('musicApi:getRecommendedPlaylists', (limit: number) => musicApi.getRecommendedPlaylists(limit));

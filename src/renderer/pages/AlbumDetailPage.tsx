@@ -58,7 +58,7 @@ const AlbumDetailPage: React.FC = () => {
           const urlMissing = result.data.songs.filter((s: Song) => !s.url);
           if (urlMissing.length > 0) {
             ipcRenderer
-              .invoke('musicApi:fillSongUrls', urlMissing)
+              .invoke('musicApi:fillSongUrls', urlMissing, album?.name)
               .then((res: any) => {
                 const filled = res?.success ? (res.data as Song[]) : null;
                 if (!Array.isArray(filled) || filled.length === 0) return;

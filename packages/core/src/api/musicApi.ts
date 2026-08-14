@@ -1934,9 +1934,30 @@ export const musicApi = {
    * - healthCheck 结果缓存 60 秒,避免每页重复探测
    * - 搜索无结果的歌曲记入黑名单(会话级),后续页不再重复搜索
    */
-  async resolveNeteaseSongUrlsBySearch(songs: Song[]): Promise<void> {
+  /**
+   * 逐首搜索兜底（补无版权/无直链歌曲的 URL）。
+   * @param albumName 专辑名预搜：一次请求命中专辑内多首歌（服务端 name 搜索会
+   *   匹配专辑字段），按 name|artist 精确过滤填 URL——把 N 首逐首搜索降为
+   *   1 次专辑搜索 + 少量剩余。服务端对 AJAX 请求限速（连发尖峰 1-3s+），
+   *   减少请求数是最有效的提速手段。
+   */
+  async resolveNeteaseSongUrlsBySearch(songs: Song[], albumName?: string): Promise<void> {
     // 先清掉过期的黑名单项（瞬时故障不能永久拉黑）
     const now = Date.now();
+    // 专辑名预搜：一次请求批量命中（精确匹配 name|artist，防翻唱误挂）
+    if (albumName && songs.some((s) => !s.url)) {
+      try {
+        const albumHits = await this.searchSongs(albumName, 1, 'netease');
+        const byKey = new Map(albumHits.map((s) => [`${s.name}|${s.artist}`, s]));
+        for (const song of songs) {
+          if (song.url) continue;
+          const hit = byKey.get(`${song.name}|${song.artist}`);
+          if (hit?.url) song.url = hit.url;
+        }
+      } catch {
+        // 专辑名预搜失败不影响逐首兜底
+      }
+    }
     for (const [id, at] of searchFailedSongIds) {
       if (now - at >= SEARCH_FAILED_TTL) searchFailedSongIds.delete(id);
     }
