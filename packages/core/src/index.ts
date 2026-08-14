@@ -20,6 +20,25 @@ export type { LyricLine, ParsedLyrics } from './utils/lyricsParser.js';
 export { formatPlayCount } from './utils/format.js';
 export { BROWSER_UA, refererForApiType, refererForUrl, refererForSourceKey } from './utils/sourceReferer.js';
 export { resourceUrlKey } from './utils/resourceKey.js';
+export {
+  MANAGE_COOKIE_TTL_MS,
+  KUGOU_COOKIE_TTL_MS,
+  createNeteaseAnonymousCookie,
+  createNeteaseBorrowMusicUCookie,
+  createKugouDeviceCookie,
+  shouldRotateCookie,
+  getBorrowMusicUEnabled,
+  setBorrowMusicUEnabled,
+  getCookie,
+  setCookie,
+  clearCookie,
+  loadCookies,
+  generateCookie,
+  refreshCookie,
+  ensureFreshCookie,
+  setCookiePersister,
+} from './cookies/cookieManager.js';
+export type { SourceCookie, KugouDeviceReg, CookieClock, CookieSource, GenerateCookieOptions } from './cookies/cookieManager.js';
 export { isImageBytes, isAudioBytes } from './utils/sniffers.js';
 export { md5 } from './utils/hash.js';
 export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
