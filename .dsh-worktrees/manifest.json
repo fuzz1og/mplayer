@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "worktrees": [
+    {
+      "name": "wayfinder-acceptance",
+      "path": "D:\\Playground\\mplayer\\.dsh-worktrees\\wayfinder-acceptance",
+      "baseCommit": "a500b621fc2edf20a4143086c666a1b1f132b58a",
+      "createdAt": "2026-08-14T17:30:52.734Z",
+      "createdBy": "session-c065929f-7db3-4306-bdc2-9bfed6efa1f7",
+      "permanent": true
+    },
+    {
+      "name": "impl-arch-review",
+      "path": "D:\\Playground\\mplayer\\.dsh-worktrees\\impl-arch-review",
+      "baseCommit": "3be656edc103d3f56a9ef2ad25cae6b12013739d",
+      "createdAt": "2026-08-14T21:04:24.019Z",
+      "createdBy": "session-399a6e48-20f1-4311-87bc-cbdf51553d2d",
+      "permanent": true
+    },
+    {
+      "name": "impl-t15-t16",
+      "path": "D:\\Playground\\mplayer\\.dsh-worktrees\\impl-t15-t16",
+      "baseCommit": "692a5e993a41c141211eeb6240c7c3b3d68fa984",
+      "createdAt": "2026-08-14T22:43:25.823Z",
+      "createdBy": "session-e01ad95e-d405-4306-aadc-b3fa81ecf8ae",
+      "permanent": true
+    },
+    {
+      "name": "impl-sources",
+      "path": "D:\\Playground\\mplayer\\.dsh-worktrees\\impl-sources",
+      "baseCommit": "9ce81c1a903735d7ec55c1558555c063934cab85",
+      "createdAt": "2026-08-14T23:08:16.955Z",
+      "createdBy": "session-e01ad95e-d405-4306-aadc-b3fa81ecf8ae",
+      "permanent": true
+    },
+    {
+      "name": "impl-infra",
+      "path": "D:\\Playground\\mplayer\\.dsh-worktrees\\impl-infra",
+      "baseCommit": "9ce81c1a903735d7ec55c1558555c063934cab85",
+      "createdAt": "2026-08-14T23:08:17.230Z",
+      "createdBy": "session-e01ad95e-d405-4306-aadc-b3fa81ecf8ae",
+      "permanent": true
+    }
+  ]
+}

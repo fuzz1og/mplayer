@@ -4,7 +4,7 @@ import { Stack } from 'expo-router';
 import { colors } from '../theme/tokens';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl, setApiTimingLog } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl, setApiTimingLog, registerDirectClient, neteaseDirectClient, qianqianDirectClient } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -88,6 +88,10 @@ export default function RootLayout() {
 
   // 启动时将已保存的设置同步到 core 模块
   useEffect(() => {
+    // 注册直连客户端（T02 网易 / T04 千千）——搜索/播放 URL 可直连源站
+    registerDirectClient(neteaseDirectClient);
+    registerDirectClient(qianqianDirectClient);
+
     if (apiBaseUrl) {
       setCoreApiBaseUrl(apiBaseUrl);
       console.log(`[RootLayout] synced apiBaseUrl: ${getApiBaseUrl()}`);

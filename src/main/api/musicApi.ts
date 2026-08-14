@@ -15,6 +15,7 @@ export {
   setSourceModePersister,
   getAllSourceModes,
   hasDirectClient,
+  registerDirectClient,
   setTlsDegradeProvider,
   getTlsFingerprintEnabled,
   setTlsFingerprintEnabled,
@@ -25,7 +26,15 @@ export {
 } from '@mplayer/core';
 export type { ProxyAgents } from '@mplayer/core';
 
-import { setThrottleObserver as registerThrottleObserver } from '@mplayer/core';
+import { setThrottleObserver as registerThrottleObserver, registerDirectClient as coreRegisterDirectClient, neteaseDirectClient, qianqianDirectClient } from '@mplayer/core';
+
+// ── 直连客户端注册（T02 网易 / T04 千千） ─────────────────────────
+// 在模块加载时注册直连客户端；注册后 sourceRouter.hasDirectClient(source)
+// 生效 → 设置页「直连可用」状态自动变亮，且 auto 模式搜索/播放优先走直连源站，
+// 直连失败自动回退自建 API。
+// （移动端在 app/_layout.tsx 各自注册；本壳是桌面主进程的注册点。）
+coreRegisterDirectClient(neteaseDirectClient);
+coreRegisterDirectClient(qianqianDirectClient);
 
 // ── 上游限流自适应退避 ──────────────────────────────────────────
 // core 观察器上报搜索/播放直链请求的成败：超时（上游挂起）→ 指数退避；

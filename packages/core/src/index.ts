@@ -79,6 +79,8 @@ export {
   getTlsFingerprintHeaders,
   getTlsFingerprintConfig,
 } from './api/tlsFingerprint.js';
+export { neteaseDirectClient } from './api/neteaseDirect.js';
+export { qianqianDirectClient } from './api/qianqianDirect.js';
 export {
   registerDirectClient,
   getDirectClient,
