@@ -7,6 +7,8 @@ const { mockStore } = vi.hoisted(() => {
     page: 1,
     hasMore: true,
     loading: false,
+    loadingMore: false,
+    error: null as string | null,
     songs: [] as any[],
     groups: [] as any[],
     setState: vi.fn(),
@@ -44,14 +46,16 @@ describe('searchService', () => {
     mockStore.page = 1;
     mockStore.hasMore = true;
     mockStore.loading = false;
+    mockStore.loadingMore = false;
     mockStore.songs = [];
     mockStore.groups = [];
+    mockStore.error = null;
   });
 
   afterEach(() => { vi.useRealTimers(); });
 
   describe('search', () => {
-    it('应设置 loading 并调用 IPC', async () => {
+    it('应设置 loading 并调用 IPC（route 由 sourceType 派生）', async () => {
       const { IpcClient } = await import('../services/IpcClient');
       const mockSongs = [{ id: '1', name: '稻香', artist: '周杰伦' }];
       (IpcClient.invoke as any).mockResolvedValue(mockSongs);
@@ -61,6 +65,7 @@ describe('searchService', () => {
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ loading: true }));
       expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongs', '周杰伦', 1, 'netease');
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ loading: false }));
+      expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ songs: mockSongs }));
     });
 
     it('IPC 失败应设置错误信息', async () => {
@@ -72,7 +77,33 @@ describe('searchService', () => {
       expect(mockStore.setState).toHaveBeenCalledWith(expect.objectContaining({ error: '搜索失败，请重试' }));
     });
 
-    it('probes every result through the main-process batch IPC', async () => {
+    it('sourceType=all 时渐进逐源调用并写 groups（不回退 searchAllSources）', async () => {
+      const { IpcClient } = await import('../services/IpcClient');
+      // 逐源返回同名歌不同版本
+      const bySource: Record<string, any[]> = {
+        netease: [{ id: 'n1', name: '晴天', artist: '周杰伦' }],
+        qq: [{ id: 'q1', name: '晴天', artist: '周杰伦' }],
+      };
+      (IpcClient.invoke as any).mockImplementation(async (_c: string, method?: string, _kw?: string, _p?: number, src?: string) => {
+        if (method === 'searchSongs') return bySource[src as string] || [];
+        if (method === 'probeSongsBatch') return [];
+        return undefined;
+      });
+
+      mockStore.sourceType = 'all';
+      await searchService.search('晴天');
+
+      expect(mockStore.setState).toHaveBeenCalledWith(
+        expect.objectContaining({ groups: expect.arrayContaining([expect.objectContaining({ songs: expect.any(Array) })]) })
+      );
+      // groups 里同名歌曲含 netease + qq 两版本
+      const groups = mockStore.groups as any[];
+      expect(groups.length).toBeGreaterThan(0);
+      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongs', '晴天', 1, 'netease');
+      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongs', '晴天', 1, 'qq');
+    });
+
+    it('probes new results through the main-process batch IPC', async () => {
       vi.useRealTimers();
       const { IpcClient } = await import('../services/IpcClient');
       const songs = Array.from({ length: 12 }, (_, i) => ({
