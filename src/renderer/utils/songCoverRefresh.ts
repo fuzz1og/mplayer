@@ -1,4 +1,5 @@
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { invalidateCoverUrl } from '@/renderer/services/coverUrlResolver';
 import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
@@ -80,7 +81,7 @@ export function refreshSongCover(song: Song): Promise<string | null> {
     // 第 1 次尝试：按源站 ID 识别
     if (baseId) {
       try {
-        fresh = await IpcClient.invoke<Song | null>('musicApi:searchSongById', baseId, song.sourceType);
+        fresh = await callMusicApi('searchSongById', baseId, song.sourceType);
       } catch {
         fresh = null;
       }
@@ -89,7 +90,7 @@ export function refreshSongCover(song: Song): Promise<string | null> {
     // 第 2 次尝试：名字搜索 + 精确匹配（只接受 name+artist 完全匹配，避免翻唱/Live）
     if (!fresh?.cover && song.name) {
       try {
-        const results = await IpcClient.invoke<Song[]>('musicApi:searchSongs', `${song.name} ${song.artist}`, 1, song.sourceType);
+        const results = await callMusicApi('searchSongs', `${song.name} ${song.artist}`, 1, song.sourceType);
         const matched = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
         if (matched?.cover) fresh = matched;
       } catch {

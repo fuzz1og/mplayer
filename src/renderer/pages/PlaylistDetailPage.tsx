@@ -19,6 +19,7 @@ import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, Playlist } from '@mplayer/core';
 import { stripSourceIdPrefix } from '@mplayer/core';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
@@ -194,8 +195,8 @@ const PlaylistDetailPage: React.FC = () => {
 
         // 按源站 ID 直接识别（filter=id）：链接/签名会过期，ID 不会——
         // 绕开"名字搜索 + 匹配"（Live/翻唱/多歌手导致匹配失败挂错 URL）
-        const fresh = await IpcClient.invoke<Song | null>(
-          'musicApi:searchSongById',
+        const fresh = await callMusicApi(
+          'searchSongById',
           stripSourceIdPrefix(String(song.id)),
           song.sourceType,
           true,

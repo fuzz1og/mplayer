@@ -2,6 +2,7 @@ import { create } from 'zustand';
 const { ipcRenderer } = window.require('electron');
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, SongBase } from '@mplayer/core';
 import { stripSourceIdPrefix } from '@mplayer/core';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
@@ -44,8 +45,8 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
 
       // 如果缓存中没有，按源站 ID 直接识别拿最新三件套（filter=id：
       // 链接会过期，ID 不会；绕开名字搜索的翻唱/Live 匹配失败）
-      const matchedSong = await IpcClient.invoke<Song | null>(
-        'musicApi:searchSongById',
+      const matchedSong = await callMusicApi(
+        'searchSongById',
         stripSourceIdPrefix(String(song.id)),
         song.sourceType,
         true,

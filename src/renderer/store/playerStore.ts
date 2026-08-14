@@ -5,7 +5,7 @@ import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
 import { isSessionProtectedEndpoint, stripSourceIdPrefix, findExactMatch } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { ipcMusicApi } from '@/renderer/services/IpcMusicApi';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
 const { ipcRenderer } = window.require('electron');
@@ -24,14 +24,14 @@ const { ipcRenderer } = window.require('electron');
 async function loadLyricsWithRetry(song: Song): Promise<string> {
   const searchLrc = async (): Promise<string> => {
     try {
-      const results = await ipcMusicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
+      const results = await callMusicApi('searchSongs', `${song.name} ${song.artist}`, 1, song.sourceType);
       return results[0]?.lrc?.trim() || '';
     } catch {
       return '';
     }
   };
   const fetchLyrics = (lrcUrl: string): Promise<string> =>
-    IpcClient.invoke<string>('lyrics:get', lrcUrl);
+    callMusicApi('getLyrics', lrcUrl);
 
   const lrcUrl = song.lrc && song.lrc.trim() !== '' ? song.lrc : await searchLrc();
   if (!lrcUrl) return '';
@@ -154,7 +154,7 @@ function prefetchNextUrl(state: PlayerStoreState): void {
   const cacheKey = `${nextSong.sourceType}:${nextSong.url}`;
   if (prefetchedUrls.has(cacheKey)) return;
 
-  ipcMusicApi.getAudioUrl(nextSong.url)
+  callMusicApi('getAudioUrl', nextSong.url)
     .then((resolvedUrl) => {
       if (resolvedUrl) {
         prefetchedUrls.set(cacheKey, resolvedUrl);
@@ -204,7 +204,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       if (song.sourceType === 'soda' && !song.url) {
         try {
-          realUrl = await ipcMusicApi.getSodaPlayableUrl(song.id);
+          realUrl = await callMusicApi('getSodaPlayableUrl', song.id);
         } catch (urlError) {
           console.error('获取汽水音乐可播放 URL 失败:', urlError);
         }
@@ -216,7 +216,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           prefetchedUrls.delete(cacheKey);
         } else {
           try {
-            realUrl = await ipcMusicApi.getAudioUrl(song.url);
+            realUrl = await callMusicApi('getAudioUrl', song.url);
           } catch (urlError) {
             console.error('获取真实音频 URL 失败:', urlError);
             message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');
@@ -229,7 +229,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       // 搜索解析一次（对齐移动端 resolvePlayableSong），失败走下方报错
       if (!realUrl && song.sourceType !== 'local' && song.sourceType !== 'soda' && song.name) {
         try {
-          const results = await ipcMusicApi.searchSongs(`${song.name} ${song.artist}`.trim(), 1, song.sourceType);
+          const results = await callMusicApi('searchSongs', `${song.name} ${song.artist}`.trim(), 1, song.sourceType);
           const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
           if (hit?.url) realUrl = hit.url;
         } catch (urlError) {
@@ -249,12 +249,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         isSessionProtectedEndpoint(song.url)
       ) {
         try {
-          const fresh = await IpcClient.invoke<Song | null>(
-            'musicApi:searchSongById',
-            stripSourceIdPrefix(String(song.id)),
-            song.sourceType,
-            true,
-          );
+          const fresh = await callMusicApi('searchSongById', stripSourceIdPrefix(String(song.id)), song.sourceType, true);
           if (fresh?.url?.startsWith('http')) {
             realUrl = fresh.url;
             void IpcClient.invoke<void>('cache:setUrl', song.id, {

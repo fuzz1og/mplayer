@@ -10,6 +10,7 @@ import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
@@ -96,8 +97,8 @@ const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
       }
       // 按源站 ID 直接识别（filter=id）：链接会过期，ID 不会——
       // 绕开名字搜索的匹配失败风险（翻唱/Live/多歌手）
-      const fresh = await IpcClient.invoke<Song | null>(
-        'musicApi:searchSongById',
+      const fresh = await callMusicApi(
+        'searchSongById',
         stripSourceIdPrefix(String(song.id)),
         song.sourceType,
         true,

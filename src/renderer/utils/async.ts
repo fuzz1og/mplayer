@@ -1,4 +1,4 @@
-import { IpcClient } from '@/renderer/services/IpcClient';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 
 /**
  * 带并发限制的批量异步执行，返回 settled 结果（不因单个失败中断整体）。
@@ -49,7 +49,7 @@ export async function mapPacedWithConcurrency<T, R>(
   for (let i = 0; i < items.length; i += limit) {
     // 每批开始前查询主进程维护的限流退避状态（core 观察器上报），
     // 被限流则暂停等待恢复，避免继续打超时请求
-    const wait = await IpcClient.invoke<number>('api:getThrottleWait').catch(() => 0);
+    const wait = await callMusicApi('getThrottleWait').catch(() => 0);
     if (wait > 0) {
       console.warn(`[apiThrottle] 上游限流，暂停 ${Math.ceil(wait / 1000)}s 后继续刷新`);
       await sleep(wait);

@@ -1,16 +1,10 @@
-import type { Song, SongGroup, AudioTag, ImportSource, Artist } from '@mplayer/core';
+import type { Song, SongGroup, ImportSource, Artist } from '@mplayer/core';
 import { useSearchStore } from '@/renderer/store/searchStore';
-import { IpcClient } from './IpcClient';
-import { ipcMusicApi } from './IpcMusicApi';
+import { callMusicApi } from './callMusicApi';
 import { createSearchController } from '@mplayer/core';
 
 const DEBOUNCE_DELAY = 300;
 const PROBE_BATCH_SIZE = 20;
-
-interface ProbeResult {
-  songId: string;
-  tag: AudioTag;
-}
 
 class SearchService {
   private debounceTimer: NodeJS.Timeout | null = null;
@@ -21,9 +15,9 @@ class SearchService {
     this.controller = createSearchController({
       searchFn: async (query, page, source) => {
         if (source === 'all') {
-          return ipcMusicApi.searchAllSources(query, page);
+          return callMusicApi('searchAllSources', query, page);
         }
-        const songs = await ipcMusicApi.searchSongs(query, page, source as any);
+        const songs = await callMusicApi('searchSongs', query, page, source as any);
         return [{ key: source, name: source, artist: '', songs }];
       },
       getState: () => {
@@ -75,7 +69,7 @@ class SearchService {
       const batch = allSongs.slice(i, i + PROBE_BATCH_SIZE);
 
       try {
-        const results = await IpcClient.invoke<ProbeResult[]>('musicApi:probeAudio', batch);
+        const results = await callMusicApi('probeSongsBatch', batch);
         if (seq !== this.searchSeq) return;
         const store = useSearchStore.getState();
         for (const result of results) {
@@ -108,7 +102,7 @@ class SearchService {
    * 搜索结果页的「歌手」tab 用它加载。
    */
   async searchArtists(keyword: string, limit = 30): Promise<Artist[]> {
-    return ipcMusicApi.searchArtists(keyword, limit);
+    return callMusicApi('searchNeteaseArtists', keyword, limit);
   }
 
   loadMore(): Promise<void> {
@@ -124,7 +118,7 @@ class SearchService {
     sourceType: ImportSource = 'netease'
   ): Promise<Record<string, Song[]>> {
     try {
-      return await IpcClient.invoke<Record<string, Song[]>>('musicApi:batchSearch', keywords, sourceType);
+      return await callMusicApi('batchSearch', keywords, sourceType);
     } catch (error) {
       console.error('批量搜索失败:', error);
       return {};

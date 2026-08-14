@@ -5,6 +5,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { importSongs, importFromLink, parseSongList, parsePlaylistUrl, type SourceType, type ProgressState, type ImportResult } from '@/renderer/services/importService';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import LinkImportForm from './LinkImportForm';
 import LinkPreviewTable from './LinkPreviewTable';
 import type { Song } from '@mplayer/core';
@@ -162,16 +163,8 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     setLinkError(null);
 
     try {
-      const { ipcRenderer } = window.require('electron');
       const sourceType = urlInfo.type === 'qq' ? 'qq' : 'netease';
-      const result = await ipcRenderer.invoke('musicApi:getPlaylistSongsFromThirdParty', linkUrl, sourceType);
-
-      if (!result.success) {
-        setLinkError(result.error || '解析链接失败');
-        return;
-      }
-
-      const songs = result.data || [];
+      const songs = await callMusicApi('getPlaylistSongsFromThirdParty', linkUrl, sourceType);
 
       if (songs.length === 0) {
         setLinkError('歌单不存在或没有歌曲');

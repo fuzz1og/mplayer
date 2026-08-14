@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import DailyRecommend from '@/renderer/components/DailyRecommend';
 import PlaylistGrid from '@/renderer/components/PlaylistGrid';
 import { usePlayerStore } from '@/renderer/store/playerStore';
-import { IpcClient } from '@/renderer/services/IpcClient';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 
 const RecommendPage: React.FC = () => {
@@ -24,8 +24,8 @@ const RecommendPage: React.FC = () => {
     setError(null);
     try {
       const [playlists, songs] = await Promise.all([
-        IpcClient.invoke<DiscoverPlaylist[]>('musicApi:getRecommendedPlaylists', 30),
-        IpcClient.invoke<Song[]>('musicApi:getRecommendedSongs', 100),
+        callMusicApi('getRecommendedPlaylists', 30),
+        callMusicApi('getRecommendedSongs', 100),
       ]);
       setRecommendedPlaylists(playlists || []);
       setRecommendedSongs(songs || []);
@@ -54,7 +54,7 @@ const RecommendPage: React.FC = () => {
   const handlePlay = async (song: Song) => {
     try {
       if (!song.url && song.name) {
-        const result = await IpcClient.invoke<Song[]>('musicApi:searchSongs', `${song.name} ${song.artist}`, 1, song.sourceType);
+        const result = await callMusicApi('searchSongs', `${song.name} ${song.artist}`, 1, song.sourceType);
         if (result?.length > 0) {
           await play(result[0]);
           return;

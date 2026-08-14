@@ -6,6 +6,7 @@ import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song, SongBase } from '@mplayer/core';
@@ -31,7 +32,7 @@ const HistoryPage: React.FC = () => {
         uniqueSongs,
         3,
         async (songBase) => {
-          const songs = await IpcClient.invoke<Song[]>('musicApi:searchSongs', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
+          const songs = await callMusicApi('searchSongs', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
           if (songs.length > 0) return songs[0];
           return { ...songBase, url: '', cover: '', lrc: '' } as Song;
         },
