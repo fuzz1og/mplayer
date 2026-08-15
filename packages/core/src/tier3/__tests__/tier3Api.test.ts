@@ -8,6 +8,7 @@ import {
   getTier3State,
   loadTier3State,
   parseTier3Manifest,
+  searchTier3Songs,
   setTier3Deps,
   setTier3Enabled,
   setTier3Persister,
@@ -305,5 +306,41 @@ describe('createTier3Resolver（search-then-resolve）', () => {
     addTier3SubscriptionFromText({ text: SEARCH_RESOLVER_MANIFEST });
     setTier3Enabled(true);
     expect(await createTier3Resolver()(song())).toBe('');
+  });
+});
+
+describe('searchTier3Songs（官方直连搜索失败后的第三方搜索兜底）', () => {
+  it('按关键词返回订阅源候选歌曲', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/search?keyword=%E6%99%B4%E5%A4%A9': () =>
+        jsonResponse(
+          {
+            data: {
+              list: [
+                { id: '999', name: '晴天', artist: '周杰伦', url: 'https://cdn.example.com/b.mp3' },
+                { id: '888', name: '晴天', artist: '五月天' },
+              ],
+            },
+          },
+          'https://api.example.com/search?keyword=x',
+        ),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: SEARCH_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+    const songs = await searchTier3Songs('晴天', 1, 'qq');
+    expect(songs).toHaveLength(2);
+    expect(songs[0]).toMatchObject({
+      name: '晴天',
+      artist: '周杰伦',
+      url: 'https://cdn.example.com/b.mp3',
+      sourceType: 'qq',
+    });
+    expect(songs[0].id).toContain('tier3:');
+  });
+
+  it('未启用/无订阅时返回空数组', async () => {
+    loadTier3State(undefined);
+    expect(await searchTier3Songs('晴天', 1, 'qq')).toEqual([]);
   });
 });

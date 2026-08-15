@@ -1,4 +1,4 @@
-import type { Song } from '../types/index.js';
+import type { Song, SourceKey } from '../types/index.js';
 import { request, bodyToText, type TransportRequest } from '../api/transport.js';
 import { BROWSER_UA } from '../utils/sourceReferer.js';
 import { isAudioBytes } from '../utils/sniffers.js';
@@ -7,6 +7,8 @@ import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import {
   setTier3Enabled as setRouterTier3Enabled,
   setTier3Resolver as setRouterTier3Resolver,
+  setTier3SearchEnabled as setRouterTier3SearchEnabled,
+  setTier3SearchResolver as setRouterTier3SearchResolver,
   type Tier3Resolver,
 } from '../shared/sourceRouter.js';
 
@@ -110,6 +112,8 @@ function persist(): void {
 function syncRouter(): void {
   setRouterTier3Enabled(state.enabled);
   setRouterTier3Resolver(createTier3Resolver());
+  setRouterTier3SearchEnabled(state.enabled);
+  setRouterTier3SearchResolver(state.enabled ? searchTier3Songs : null);
 }
 
 export function setTier3Enabled(enabled: boolean): void {
@@ -485,6 +489,80 @@ async function resolveSearchThenResolve(song: Song, source: Tier3Source): Promis
     }
   }
   return '';
+}
+
+// ── 第三方搜索兜底（官方直连搜索失败时返回候选歌曲）──────────────────
+
+interface Tier3SearchItem {
+  id: string;
+  name: string;
+  artist: string;
+  url: string;
+}
+
+async function searchTier3SourceItems(source: Tier3Source, keyword: string): Promise<Tier3SearchItem[]> {
+  if (source.kind !== 'search-then-resolve' || !source.search) return [];
+  const deps = currentDeps;
+  const vars: TemplateVars = {
+    id: '',
+    source: '',
+    name: keyword,
+    artist: '',
+    keyword,
+  };
+  const req = deps.request || request;
+  const res = await req(buildRequest(source.search, vars, source));
+  if (res.status >= 400) return [];
+  const items = getByPath(JSON.parse(bodyToText(res.body)), source.search.itemsPath);
+  if (!Array.isArray(items)) return [];
+  const out: Tier3SearchItem[] = [];
+  for (const item of items) {
+    if (!isRecord(item)) continue;
+    const name = asString(getByPath(item, source.search.namePath));
+    if (!name) continue;
+    out.push({
+      id: source.search.idPath ? asString(getByPath(item, source.search.idPath)) : '',
+      name,
+      artist: source.search.artistPath ? asString(getByPath(item, source.search.artistPath)) : '',
+      url: source.search.urlPath ? (toUrlCandidate(getByPath(item, source.search.urlPath)) || '') : '',
+    });
+  }
+  return out;
+}
+
+/**
+ * 第三方订阅搜索兜底：直连搜索失败时，用订阅清单里的 search-then-resolve 源
+ * 按关键词返回候选歌曲。歌曲 url 可能为空，播放时仍可走 tier3 解析链。
+ */
+export async function searchTier3Songs(keyword: string, _page: number, sourceKey: SourceKey): Promise<Song[]> {
+  if (!state.enabled || state.subscriptions.length === 0) return [];
+  console.info(`[tier3] 第三方搜索开始: ${keyword} (${sourceKey})`);
+  const out: Song[] = [];
+  for (const subscription of state.subscriptions) {
+    for (const source of subscription.manifest.sources) {
+      if (source.kind !== 'search-then-resolve' || !source.search) continue;
+      try {
+        const items = await searchTier3SourceItems(source, keyword);
+        for (const item of items) {
+          out.push({
+            id: item.id ? `tier3:${source.id}:${item.id}` : `tier3:${source.id}:${out.length}`,
+            name: item.name,
+            artist: item.artist,
+            album: '',
+            url: item.url,
+            cover: '',
+            lrc: '',
+            duration: 0,
+            sourceType: sourceKey,
+          });
+        }
+        console.info(`[tier3] 源 ${source.id} 返回 ${items.length} 条候选`);
+      } catch (e) {
+        console.warn(`[tier3] 源 ${source.id} 搜索失败: ${(e as Error)?.message || e}`);
+      }
+    }
+  }
+  return out;
 }
 
 // ── 订阅源拉取 ───────────────────────────────────────────────────────

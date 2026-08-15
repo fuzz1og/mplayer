@@ -148,6 +148,41 @@ export function setTier3Resolver(resolver: Tier3Resolver | null): void {
   tier3Resolver = resolver;
 }
 
+/** tier3 搜索兜底插槽：官方直连搜索失败时返回第三方候选歌曲；未注入/关闭 = 不生效。 */
+export type Tier3SearchResolver = (keyword: string, page: number, source: SourceKey) => Promise<Song[]>;
+
+let tier3SearchEnabled = false;
+let tier3SearchResolver: Tier3SearchResolver | null = null;
+
+export function setTier3SearchEnabled(enabled: boolean): void {
+  tier3SearchEnabled = enabled;
+}
+
+export function getTier3SearchEnabled(): boolean {
+  return tier3SearchEnabled;
+}
+
+export function setTier3SearchResolver(resolver: Tier3SearchResolver | null): void {
+  tier3SearchResolver = resolver;
+}
+
+/** 直连搜索失败后、api 腿前的 tier3 搜索兜底（默认关闭，未注入直接跳过）。 */
+async function tryTier3Search(keyword: string, page: number, source: SourceKey): Promise<Song[]> {
+  if (!tier3SearchEnabled || !tier3SearchResolver) {
+    console.info(`[tier3] 直连搜索失败，但 tier3 搜索未启用/未注入，跳过: ${keyword} (${source})`);
+    return [];
+  }
+  console.info(`[tier3] 直连搜索失败，进入第三方搜索兜底: ${keyword} (${source})`);
+  try {
+    const songs = await tier3SearchResolver(keyword, page, source);
+    console.info(`[tier3] 第三方搜索返回 ${songs.length} 首: ${keyword} (${source})`);
+    return songs;
+  } catch (e) {
+    console.warn(`[tier3] 第三方搜索抛错: ${(e as Error)?.message || e}`);
+    return [];
+  }
+}
+
 /** 直连失败后、api 腿前的 tier3 尝试（默认关闭，未注入直接跳过）。 */
 async function tryTier3(song: Song): Promise<string> {
   if (!tier3Enabled || !tier3Resolver) {
@@ -193,10 +228,17 @@ export async function searchSongsRouted(
   const api = requireLegs();
   const route = decideRoute(source, (c) => !!c.search);
   if (route.kind === 'api') return api.searchSongs(query, page, source);
-  if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
+  if (route.kind === 'direct-unavailable') {
+    const tier3Songs = await tryTier3Search(query, page, source);
+    if (tier3Songs.length > 0) return tier3Songs;
+    throw new Error('该源暂无直连实现');
+  }
   try {
     return await route.client.search!(query, page);
   } catch (err) {
+    // 直连搜索失败 → 第三方订阅搜索兜底（若启用）；再按模式决定是否回退自建 API。
+    const tier3Songs = await tryTier3Search(query, page, source);
+    if (tier3Songs.length > 0) return tier3Songs;
     if (route.mode === 'direct') throw err;
     return api.searchSongs(query, page, source);
   }

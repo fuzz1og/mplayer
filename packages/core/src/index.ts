@@ -135,6 +135,7 @@ export {
   setTier3Persister,
   setTier3Deps,
   createTier3Resolver,
+  searchTier3Songs,
 } from './tier3/tier3Api.js';
 export type {
   Tier3Manifest,
