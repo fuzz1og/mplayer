@@ -33,7 +33,8 @@ describe('antiScrape', () => {
     it('contains Sec-Ch-Ua header', () => {
       const headers = getAntiScrapeHeaders();
       expect(headers).toHaveProperty('Sec-Ch-Ua');
-      expect(headers['Sec-Ch-Ua-Mobile']).toBe('?0');
+      // UA 池同时含桌面/移动浏览器，Sec-Ch-Ua-Mobile 跟随随机选中的 UA。
+      expect(['?0', '?1']).toContain(headers['Sec-Ch-Ua-Mobile']);
     });
   });
 

@@ -8,12 +8,13 @@ import {
   StyleSheet,
   Linking,
   Alert,
+  Switch,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
-import { CircleCheck, Save, RefreshCcw, Zap, RefreshCw, Download, CircleX, Trash2 } from 'lucide-react-native';
+import { CircleCheck, Save, RefreshCcw, Zap, RefreshCw, Download, CircleX, Trash2, Plus } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, hasDirectClient } from '@mplayer/core';
+import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useLogsStore } from '../stores/logsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
@@ -29,6 +30,8 @@ export default function SettingsPage() {
   const storeApiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
   const storeProxyUrl = useSettingsStore((s) => s.proxyUrl);
   const sourceModes = useSettingsStore((s) => s.sourceModes);
+  const tier3Enabled = useSettingsStore((s) => s.tier3Enabled);
+  const tier3Subscriptions = useSettingsStore((s) => s.tier3Subscriptions);
   const setApiBaseUrl = useSettingsStore((s) => s.setApiBaseUrl);
   const setStoreProxyUrl = useSettingsStore((s) => s.setProxyUrl);
   const logEntries = useLogsStore((s) => s.entries);
@@ -39,6 +42,62 @@ export default function SettingsPage() {
     setCoreSourceModes({ ...sourceModes, [source]: mode });
   };
 
+  // tier3 第三方解析源（#144）：默认关，移动端支持 URL / 手动粘贴
+  const handleTier3Toggle = (value: boolean): void => {
+    setCoreTier3Enabled(value);
+  };
+
+  const handleAddTier3Url = async (): Promise<void> => {
+    const trimmed = tier3Url.trim();
+    if (!/^https?:\/\/.+/.test(trimmed)) {
+      Alert.alert('提示', '请输入 http(s) 开头的订阅 URL');
+      return;
+    }
+    setTier3Busy(true);
+    try {
+      await addTier3SubscriptionFromUrl({ url: trimmed });
+      setTier3Url('');
+      Alert.alert('提示', 'URL 订阅已添加');
+    } catch (e: any) {
+      Alert.alert('添加失败', e?.message || '未知错误');
+    } finally {
+      setTier3Busy(false);
+    }
+  };
+
+  const handleAddTier3Paste = async (): Promise<void> => {
+    if (!tier3Paste.trim()) {
+      Alert.alert('提示', '请粘贴 JSON 音源清单');
+      return;
+    }
+    setTier3Busy(true);
+    try {
+      await addTier3SubscriptionFromText({ text: tier3Paste });
+      setTier3Paste('');
+      Alert.alert('提示', '粘贴清单已添加');
+    } catch (e: any) {
+      Alert.alert('添加失败', e?.message || '未知错误');
+    } finally {
+      setTier3Busy(false);
+    }
+  };
+
+  const handleRemoveTier3 = (id: string): void => {
+    removeTier3Subscription(id);
+  };
+
+  const handleRefreshTier3 = async (id: string): Promise<void> => {
+    setTier3Busy(true);
+    try {
+      await refreshTier3Subscription(id);
+      Alert.alert('提示', '订阅已刷新');
+    } catch (e: any) {
+      Alert.alert('刷新失败', e?.message || '未知错误');
+    } finally {
+      setTier3Busy(false);
+    }
+  };
+
   const [localUrl, setLocalUrl] = useState(storeApiBaseUrl);
   const [localProxyUrl, setLocalProxyUrl] = useState(storeProxyUrl);
   const [saved, setSaved] = useState(false);
@@ -46,6 +105,9 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
   const [focusedInput, setFocusedInput] = useState<'api' | 'proxy' | null>(null);
+  const [tier3Url, setTier3Url] = useState('');
+  const [tier3Paste, setTier3Paste] = useState('');
+  const [tier3Busy, setTier3Busy] = useState(false);
 
   const currentVersion = Constants.expoConfig?.version || '0.0.0';
 
@@ -257,6 +319,82 @@ export default function SettingsPage() {
                 </View>
               </View>
             ))}
+          </View>
+        </View>
+
+        {/* tier3 第三方解析源（#144，实验性） */}
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={styles.sectionTitle}>第三方解析源（tier3）</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[styles.hintText, { marginTop: 0, marginRight: 8 }]}>
+                  {tier3Enabled ? '已开启' : '已关闭'}
+                </Text>
+                <Switch value={tier3Enabled} onValueChange={handleTier3Toggle} />
+              </View>
+            </View>
+            <Text style={styles.label}>
+              默认关闭。官方直连失败后按订阅清单尝试第三方源，全部失败回退自建 API / 换元。实验性功能，不内置任何解析端点。
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={tier3Url}
+              onChangeText={setTier3Url}
+              placeholder="https://example.com/manifest.json"
+              placeholderTextColor={colors.inputPlaceholder}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <TouchableOpacity
+              style={[styles.saveBtn, tier3Busy && styles.checkingBtn]}
+              onPress={handleAddTier3Url}
+              disabled={tier3Busy}
+              activeOpacity={0.7}
+            >
+              <Plus size={18} color={tier3Busy ? colors.textSecondary : colors.textInverse} style={styles.btnIcon} />
+              <Text style={[styles.saveBtnText, tier3Busy && styles.testBtnText]}>添加 URL 订阅</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={[styles.input, { height: 80, textAlignVertical: 'top', marginTop: spacing[3] }]}
+              value={tier3Paste}
+              onChangeText={setTier3Paste}
+              placeholder="或粘贴 JSON 音源清单…"
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.saveBtn, tier3Busy && styles.checkingBtn]}
+              onPress={handleAddTier3Paste}
+              disabled={tier3Busy}
+              activeOpacity={0.7}
+            >
+              <Plus size={18} color={tier3Busy ? colors.textSecondary : colors.textInverse} style={styles.btnIcon} />
+              <Text style={[styles.saveBtnText, tier3Busy && styles.testBtnText]}>添加粘贴清单</Text>
+            </TouchableOpacity>
+
+            {tier3Subscriptions.length === 0 ? (
+              <Text style={styles.hintText}>暂无订阅。添加一份 JSON 音源清单后才会生效。</Text>
+            ) : (
+              tier3Subscriptions.map((sub) => (
+                <View key={sub.id} style={styles.modeRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>{sub.name}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{sub.source}</Text>
+                    <Text style={{ color: colors.textTertiary, fontSize: 11 }}>{sub.manifest.sources.length} 个源</Text>
+                  </View>
+                  {sub.kind === 'url' && (
+                    <TouchableOpacity onPress={() => void handleRefreshTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
+                      <RefreshCw size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={() => handleRemoveTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
+                    <Trash2 size={16} color={colors.danger} />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
           </View>
         </View>
 

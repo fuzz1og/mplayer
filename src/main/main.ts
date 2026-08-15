@@ -23,15 +23,16 @@ import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { getApiUrl } from './config';
-import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl, setApiTimingLog, loadSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY } from './api/musicApi';
+import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl, setApiTimingLog, loadSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY, loadTier3State } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
 import { applyElectronProxy, getHttpAgent, getHttpsAgent, getTlsDegradedHttpsAgent, getTlsFingerprintHttpsAgent, type ProxyConfig } from './proxy';
+import type { Tier3Subscription } from '@mplayer/core';
 import { registerCacheIpc } from './ipc/cache';
 import { registerFavoriteIpc, registerHistoryIpc, registerPlaylistIpc } from './ipc/favoriteHistoryPlaylist';
 import { registerLocalMusicIpc } from './ipc/localMusic';
 import { registerMusicApiCall } from './ipc/musicApiHandlers';
-import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDownloadIpc, registerAppIpc } from './ipc/appSettingsUpdate';
+import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDownloadIpc, registerAppIpc, TIER3_SETTING_KEY } from './ipc/appSettingsUpdate';
 import { registerCookiePersister, loadCookiesFromDisk } from './cookies/cookieAdapter';
 
 // 扩展 musicApi：添加主进程特有的音频缓存方法
@@ -250,6 +251,16 @@ app.whenReady().then(async () => {
     }
   } catch (error) {
     console.error('加载 TLS 指纹伪装设置失败:', error);
+  }
+
+  // tier3 第三方解析源订阅执行器（#144）：默认关；空清单起步，用户订阅后才生效。
+  try {
+    const saved = await db.getSetting<{ enabled?: boolean; subscriptions?: Tier3Subscription[] }>(TIER3_SETTING_KEY);
+    if (saved) {
+      loadTier3State(saved);
+    }
+  } catch (error) {
+    console.error('加载 tier3 订阅设置失败:', error);
   }
 
   // T13 spec #159：桌面 cookie 管理器 - 注册落盘 persister + 冷启动重水合（仅桌面落盘）

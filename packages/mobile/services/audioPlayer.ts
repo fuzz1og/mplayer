@@ -261,7 +261,8 @@ async function resolveDirectUrl(url: string): Promise<string> {
 function prefetchNextSong(): void {
   try {
     const st = usePlayerStore.getState();
-    if (st.queue.length === 0 || st.currentIndex < 0) return;
+    // 队列只有一首时“下一首”就是当前歌，预取没有意义，跳过避免重复解析。
+    if (st.queue.length <= 1 || st.currentIndex < 0) return;
     // 与真实切歌同一套索引逻辑（随机模式预取随机位置，避免总预取同一首）
     const playMode = useSettingsStore.getState().playMode;
     const nextIdx = getNextSongIndex(st.queue, st.currentIndex, playMode);

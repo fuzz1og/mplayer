@@ -1,4 +1,6 @@
 import { app, dialog } from 'electron';
+import fs from 'fs';
+import path from 'path';
 import { registerIpcHandler, registerIpcHandlerSimple } from './registerHandler';
 import { downloadService } from '../services/downloadService';
 import { updateService } from '../services/updateService';
@@ -13,14 +15,34 @@ import {
   setTlsFingerprintEnabled,
   setTlsFingerprintPersister,
   TLS_FINGERPRINT_SETTING_KEY,
+  getTier3State,
+  setTier3Enabled,
+  setTier3Persister,
+  addTier3SubscriptionFromUrl,
+  addTier3SubscriptionFromText,
+  removeTier3Subscription,
+  refreshTier3Subscription,
 } from '../api/musicApi';
 import { MULTI_SOURCE_LIST, type SourceKey, type SourceMode } from '@mplayer/core';
 import type { BrowserWindow } from 'electron';
 
 const SOURCE_MODE_SET: ReadonlySet<SourceMode> = new Set(['auto', 'direct', 'api']);
 
+export const TIER3_SETTING_KEY = 'tier3State';
+
 export function registerDialogIpc(): void {
   registerIpcHandlerSimple('dialog:openDirectory', () => dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }));
+
+  registerIpcHandlerSimple('dialog:openTier3File', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'JSON 音源清单', extensions: ['json'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const filePath = result.filePaths[0];
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return { name: path.basename(filePath), content, source: filePath };
+  });
 }
 
 export function registerSettingsIpc(): void {
@@ -87,6 +109,29 @@ export function registerSettingsIpc(): void {
   registerIpcHandler('settings:setTlsFingerprint', async (value: boolean) => {
     setTlsFingerprintEnabled(value === true);
     return true;
+  });
+
+  // tier3 第三方解析源订阅执行器（#144）：默认关；公开仓库零端点，清单由用户订阅。
+  setTier3Persister((next) => {
+    void db.setSetting(TIER3_SETTING_KEY, next);
+  });
+  registerIpcHandlerSimple('settings:getTier3State', () => getTier3State());
+  registerIpcHandler('settings:setTier3Enabled', async (value: boolean) => {
+    setTier3Enabled(value === true);
+    return true;
+  });
+  registerIpcHandler('settings:addTier3Url', async (input: { name?: string; url: string }) => {
+    return addTier3SubscriptionFromUrl(input);
+  });
+  registerIpcHandler('settings:addTier3Text', async (input: { name?: string; text: string; kind?: 'url' | 'text' | 'file'; source?: string }) => {
+    return addTier3SubscriptionFromText(input);
+  });
+  registerIpcHandler('settings:removeTier3Subscription', async (id: string) => {
+    removeTier3Subscription(id);
+    return true;
+  });
+  registerIpcHandler('settings:refreshTier3Subscription', async (id: string) => {
+    return refreshTier3Subscription(id);
   });
 }
 

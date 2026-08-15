@@ -207,7 +207,12 @@ export async function resolvePlayableUrlRouted(song: Song): Promise<string> {
   if (route.kind === 'api') return api.getAudioUrl(song.url);
   if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
   try {
-    return await route.client.resolvePlayableUrl!(song);
+    const url = await route.client.resolvePlayableUrl!(song);
+    if (url) return url;
+    // 直连返回空串（无版权/VIP）也进 tier3 兜底（默认关）；失败保持空串交换元层。
+    const tier3Url = await tryTier3(song);
+    if (tier3Url) return tier3Url;
+    return url;
   } catch (err) {
     if (route.mode === 'direct') throw err;
     // tier3 插槽：直连失败后、api 腿前（默认关；#144 落地后启用）
@@ -241,10 +246,21 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
     if (client.resolveUrlInfo) {
       const info = await client.resolveUrlInfo(song);
       if (info) {
-        return { url: info.url, nonFull: isTrialUrlInfo(info, song.duration) };
+        if (info.url) {
+          return { url: info.url, nonFull: isTrialUrlInfo(info, song.duration) };
+        }
+        // UrlInfo 存在但 url 为空（无版权/VIP）→ tier3 兜底（默认关）。
+        const tier3Url = await tryTier3(song);
+        if (tier3Url) return { url: tier3Url, nonFull: false };
+        return { url: '', nonFull: false };
       }
     }
-    return { url: await client.resolvePlayableUrl!(song), nonFull: false };
+    const url = await client.resolvePlayableUrl!(song);
+    if (url) return { url, nonFull: false };
+    // 直连返回空串（无版权/VIP）→ tier3 兜底（默认关）；失败保持空串交换元层。
+    const tier3Url = await tryTier3(song);
+    if (tier3Url) return { url: tier3Url, nonFull: false };
+    return { url: '', nonFull: false };
   } catch (err) {
     if (route.mode === 'direct') throw err;
     // tier3 插槽：直连失败后、api 腿前（默认关；#144 落地后启用）

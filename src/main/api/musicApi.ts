@@ -23,6 +23,18 @@ export {
   setTlsFingerprintPersister,
   setTlsFingerprintAgentProvider,
   TLS_FINGERPRINT_SETTING_KEY,
+  setTier3Enabled,
+  getTier3Enabled,
+  setTier3Subscriptions,
+  getTier3Subscriptions,
+  getTier3State,
+  loadTier3State,
+  setTier3Persister,
+  addTier3SubscriptionFromUrl,
+  addTier3SubscriptionFromText,
+  removeTier3Subscription,
+  refreshTier3Subscription,
+  setTier3Deps,
 } from '@mplayer/core';
 export type { ProxyAgents } from '@mplayer/core';
 

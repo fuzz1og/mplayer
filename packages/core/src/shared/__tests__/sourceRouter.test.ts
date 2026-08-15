@@ -253,6 +253,30 @@ describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地�
     expect(url).toBe('https://api.example.com/1.mp3');
   });
 
+  it('开启 + resolver：直连返回空（无版权/VIP）也走 tier3，不再回退 api/空串', async () => {
+    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => '') });
+    registerDirectClient(client);
+    const url = await resolvePlayableUrlRouted(song('1', 'netease'));
+    expect(tier3).toHaveBeenCalled();
+    expect(apiGetAudioUrl).not.toHaveBeenCalled();
+    expect(url).toBe('https://tier3.example.com/1.mp3');
+  });
+
+  it('开启 + resolver 也返回空：直连空串原样返回（交换元层，不回退 api）', async () => {
+    const tier3 = vi.fn(async () => '');
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => '') });
+    registerDirectClient(client);
+    const url = await resolvePlayableUrlRouted(song('1', 'netease'));
+    expect(tier3).toHaveBeenCalled();
+    expect(apiGetAudioUrl).not.toHaveBeenCalled();
+    expect(url).toBe('');
+  });
+
   it('direct 模式不经过 tier3（直连失败直接上抛）', async () => {
     setTier3Enabled(true);
     const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');

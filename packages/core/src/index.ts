@@ -101,8 +101,6 @@ export {
   searchSongsRouted,
   resolvePlayableUrlRouted,
   resolvePlayableSongRouted,
-  setTier3Enabled,
-  getTier3Enabled,
   setTier3Resolver,
 } from './shared/sourceRouter.js';
 export type { SourceMode, DirectSourceClient, SourceRouterLegs, Tier3Resolver } from './shared/sourceRouter.js';
@@ -121,3 +119,31 @@ export { kugouDirectClient, ensureKugouCookie, resolveKugouLyricUrl } from './ap
 export { classifyLength, isTrialUrlInfo } from './api/audioProbe.js';
 export type { LengthClass, UrlInfo } from './api/audioProbe.js';
 export type { RoutedPlayable } from './shared/sourceRouter.js';
+export {
+  parseTier3Manifest,
+  fetchTier3ManifestFromUrl,
+  addTier3SubscriptionFromUrl,
+  addTier3SubscriptionFromText,
+  removeTier3Subscription,
+  refreshTier3Subscription,
+  setTier3Enabled,
+  getTier3Enabled,
+  setTier3Subscriptions,
+  getTier3Subscriptions,
+  getTier3State,
+  loadTier3State,
+  setTier3Persister,
+  setTier3Deps,
+  createTier3Resolver,
+} from './tier3/tier3Api.js';
+export type {
+  Tier3Manifest,
+  Tier3Source,
+  Tier3SourceKind,
+  Tier3RequestSpec,
+  Tier3SearchSpec,
+  Tier3Subscription,
+  Tier3SubscriptionKind,
+  Tier3State,
+  Tier3Deps,
+} from './tier3/tier3Api.js';
