@@ -71,7 +71,7 @@ function defaultCallMusicApi(): void {
         return { url: 'https://resolved.example.com/audio.mp3', nonFull: false };
       case 'getSodaPlayableUrl':
         return '';
-      case 'searchSongs':
+      case 'searchSongsRouted':
         return [];
       case 'searchSongById':
         return null;
@@ -220,7 +220,7 @@ describe('播放链路：URL 解析 / 死链 fresh / 加载失败', () => {
       if (method === 'resolvePlayableSongRouted') return { url: staleUrl, nonFull: false }; // 死链：返回原样
       if (method === 'searchSongById') return { ...s1, url: freshUrl };
       if (method === 'getSodaPlayableUrl') return '';
-      if (method === 'searchSongs') return [];
+      if (method === 'searchSongsRouted') return [];
       return undefined;
     });
     usePlayerStore.setState({ currentPlaylist: [s1], currentPlaylistIndex: 0, currentSong: s1 });
@@ -241,7 +241,7 @@ describe('播放链路：URL 解析 / 死链 fresh / 加载失败', () => {
       if (method === 'getAudioUrl') return ''; // 无真实解析
       if (method === 'resolvePlayableUrlRouted') return ''; // 无真实解析
       if (method === 'resolvePlayableSongRouted') return { url: '', nonFull: false }; // 无真实解析
-      if (method === 'searchSongs') return [{ ...s1, url: foundUrl, lrc: '' }];
+      if (method === 'searchSongsRouted') return [{ ...s1, url: foundUrl, lrc: '' }];
       if (method === 'getSodaPlayableUrl') return '';
       return undefined;
     });
@@ -249,7 +249,7 @@ describe('播放链路：URL 解析 / 死链 fresh / 加载失败', () => {
 
     await usePlayerStore.getState().play(s1);
 
-    expect(callMusicApiMock).toHaveBeenCalledWith('searchSongs', '晴天 周杰伦', 1, 'netease');
+    expect(callMusicApiMock).toHaveBeenCalledWith('searchSongsRouted', '晴天 周杰伦', 1, 'netease');
     expect(audioPlayerMock.player.load).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'netease:1', url: foundUrl }),
     );

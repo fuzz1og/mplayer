@@ -40,7 +40,7 @@ vi.mock('../services/callMusicApi', () => ({
         return { url: 'https://resolved.example.com/a.mp3', nonFull: false };
       case 'getSodaPlayableUrl':
         return '';
-      case 'searchSongs':
+      case 'searchSongsRouted':
         return [];
       default:
         return undefined;

@@ -32,7 +32,7 @@ vi.mock('../services/audioPlayer', () => ({
   destroyGlobalPlayer: vi.fn(),
 }));
 
-// 歌词搜索补全走 callMusicApi('searchSongs')，歌词获取走 callMusicApi('getLyrics')
+// 歌词搜索补全走 callMusicApi('searchSongsRouted')，歌词获取走 callMusicApi('getLyrics')
 vi.mock('../services/callMusicApi', () => ({
   callMusicApi: callMusicApiMock,
 }));
@@ -85,7 +85,7 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
     let lyricsGetCalls = 0;
     // callMusicApi 分发：searchSongs → searchSongsMock（hoisted，测试注入）；getLyrics → 歌词实现
     callMusicApiMock.mockImplementation(async (method: string) => {
-      if (method === 'searchSongs') return searchSongsMock();
+      if (method === 'searchSongsRouted') return searchSongsMock();
       if (method === 'getLyrics') {
         lyricsGetCalls++;
         if (lyricsGetCalls === 1) throw new Error('歌词会话失效（非法请求）');
@@ -112,7 +112,7 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
     const s1 = { ...song('1'), lrc: STALE_LRC };
     // searchSongsMock 默认返回 []（beforeEach 已设）：搜不到 → 重搜仍拿不到 lrc
     callMusicApiMock.mockImplementation(async (method: string) => {
-      if (method === 'searchSongs') return searchSongsMock();
+      if (method === 'searchSongsRouted') return searchSongsMock();
       if (method === 'getLyrics') throw new Error('歌词会话失效（非法请求）');
       return undefined;
     });

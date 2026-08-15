@@ -24,7 +24,7 @@ const { ipcRenderer } = window.require('electron');
 async function loadLyricsWithRetry(song: Song): Promise<string> {
   const searchLrc = async (): Promise<string> => {
     try {
-      const results = await callMusicApi('searchSongs', `${song.name} ${song.artist}`, 1, song.sourceType);
+      const results = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`, 1, song.sourceType);
       return results[0]?.lrc?.trim() || '';
     } catch {
       return '';
@@ -236,7 +236,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       // 搜索解析一次（对齐移动端 resolvePlayableSong），失败走下方报错
       if (!realUrl && song.sourceType !== 'local' && song.sourceType !== 'soda' && song.name) {
         try {
-          const results = await callMusicApi('searchSongs', `${song.name} ${song.artist}`.trim(), 1, song.sourceType);
+          const results = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`.trim(), 1, song.sourceType);
           const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
           if (hit?.url) realUrl = hit.url;
         } catch (urlError) {
