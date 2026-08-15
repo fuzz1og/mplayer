@@ -44,6 +44,7 @@ export const MUSIC_API_METHODS = [
   'parseSodaShareLink',
   'searchSongsRouted',
   'resolvePlayableUrlRouted',
+  'resolvePlayableSongRouted',
 ] as const;
 
 export type MusicApiMethod = (typeof MUSIC_API_METHODS)[number];

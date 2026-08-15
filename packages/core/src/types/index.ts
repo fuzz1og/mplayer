@@ -19,6 +19,8 @@ export interface Song extends SongBase {
   cover: string;
   lrc: string;
   audioTag?: AudioTag;      // 搜索探测结果：无标记=未探测/正常, preview=片段, invalid=无法播放
+  /** T12 试听版检测：完整时长校验判为 trial（非完整版）时置 true，驱动换元触发。 */
+  nonFull?: boolean;
 }
 
 export interface Favorite {

@@ -154,10 +154,11 @@ function prefetchNextUrl(state: PlayerStoreState): void {
   const cacheKey = `${nextSong.sourceType}:${nextSong.url}`;
   if (prefetchedUrls.has(cacheKey)) return;
 
-  callMusicApi('resolvePlayableUrlRouted', nextSong)
-    .then((resolvedUrl) => {
-      if (resolvedUrl) {
-        prefetchedUrls.set(cacheKey, resolvedUrl);
+  // T12：带试听版检测的播放解析（nonFull 标记）；预取只关心 URL
+  callMusicApi('resolvePlayableSongRouted', nextSong)
+    .then((resolved: { url: string; nonFull: boolean }) => {
+      if (resolved?.url) {
+        prefetchedUrls.set(cacheKey, resolved.url);
       }
     })
     .catch(() => {});
@@ -216,7 +217,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           prefetchedUrls.delete(cacheKey);
         } else {
           try {
-            realUrl = await callMusicApi('resolvePlayableUrlRouted', song);
+            // T12：带试听版检测的播放解析（nonFull 标记驱动换元提示）
+            const resolved = await callMusicApi('resolvePlayableSongRouted', song);
+            realUrl = resolved?.url || '';
+            if (resolved?.nonFull && realUrl) {
+              console.warn(`[player] 《${song.name}》解析结果为试听版（non-full），可换源获取完整版`);
+              song.nonFull = true;
+            }
           } catch (urlError) {
             console.error('获取真实音频 URL 失败:', urlError);
             message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');

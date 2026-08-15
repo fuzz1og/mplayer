@@ -12,6 +12,7 @@ import { probeSongs } from './probeSongs.js';
 import {
   searchSongsRouted as routedSearchSongs,
   resolvePlayableUrlRouted as routedResolveUrl,
+  resolvePlayableSongRouted as routedResolveSong,
   configureSourceRouter,
 } from '../shared/sourceRouter.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
@@ -2454,6 +2455,9 @@ export const musicApi = {
 
   /** 模式感知播放 URL 解析（请求层回退链 URL 腿；无版权/VIP 返回 '' 交换元层）。 */
   resolvePlayableUrlRouted: (song: Song) => routedResolveUrl(song),
+
+  /** 模式感知播放解析 + 试听版检测（T12：UrlInfo 完整时长校验 → nonFull 标记）。 */
+  resolvePlayableSongRouted: (song: Song) => routedResolveSong(song),
 };
 
 // 路由的 api 腿 = 自建 API 现状语义（搜索 POST / 播放直链解析）。

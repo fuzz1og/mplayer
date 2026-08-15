@@ -99,6 +99,7 @@ export {
   configureSourceRouter,
   searchSongsRouted,
   resolvePlayableUrlRouted,
+  resolvePlayableSongRouted,
 } from './shared/sourceRouter.js';
 export type { SourceMode, DirectSourceClient, SourceRouterLegs } from './shared/sourceRouter.js';
 export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS } from './shared/sourceRouter.js';
@@ -111,3 +112,6 @@ export { estimateDownloadProgress } from './download/progress.js';
 export type { ProgressInput } from './download/progress.js';
 export { takeNextQueued, retryBackoffMs, DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_RETRIES } from './download/queue.js';
 export { kugouDirectClient, ensureKugouCookie, resolveKugouLyricUrl } from './api/kugouDirect.js';
+export { classifyLength, isTrialUrlInfo } from './api/audioProbe.js';
+export type { LengthClass, UrlInfo } from './api/audioProbe.js';
+export type { RoutedPlayable } from './shared/sourceRouter.js';

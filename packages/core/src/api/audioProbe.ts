@@ -130,3 +130,9 @@ export function normalizeProbeUrl(url: string, baseUrl?: string): string {
   const base = baseUrl || '';
   return base + url.replace(/^\//, '');
 }
+
+// ── 完整时长校验（T12 #158）────────────────────────────────────────
+// 实现位于 shared/playability.ts（叶子模块，避免 sourceRouter → audioProbe →
+// musicApi 循环导入）；此处 re-export 保持 audioProbe 的「可播性」语义出口。
+export { classifyLength, isTrialUrlInfo } from '../shared/playability.js';
+export type { LengthClass, UrlInfo } from '../shared/playability.js';

@@ -1,4 +1,5 @@
 import type { Song, SourceKey } from '../types/index.js';
+import { isTrialUrlInfo } from './playability.js';
 
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
@@ -180,5 +181,39 @@ export async function resolvePlayableUrlRouted(song: Song): Promise<string> {
   } catch (err) {
     if (route.mode === 'direct') throw err;
     return api.getAudioUrl(song.url);
+  }
+}
+
+/** 路由解析结果：可播 URL + 试听版标记（T12，non-full 驱动换元触发）。 */
+export interface RoutedPlayable {
+  url: string;
+  nonFull: boolean;
+}
+
+/**
+ * 模式感知播放解析（带完整时长校验，T12 #158）：
+ * 直连客户端若有 resolveUrlInfo（权威 playTime/size/br/fee/payed），用它做
+ * 试听版判定（时长比 <0.5 → nonFull）；否则退回 resolvePlayableUrl。
+ * 空 URL（无版权/VIP）原样上抛（nonFull=false），由换元层处理；
+ * 直连失败按模式回退 api（auto）或上抛（direct）。
+ */
+export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlayable> {
+  const api = requireLegs();
+  // 能力门含 resolveUrlInfo（UrlInfo 自带 url，仅有 UrlInfo 也可直连解析）
+  const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl || !!c.resolveUrlInfo);
+  if (route.kind === 'api') return { url: await api.getAudioUrl(song.url), nonFull: false };
+  if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
+  try {
+    const client = route.client;
+    if (client.resolveUrlInfo) {
+      const info = await client.resolveUrlInfo(song);
+      if (info) {
+        return { url: info.url, nonFull: isTrialUrlInfo(info, song.duration) };
+      }
+    }
+    return { url: await client.resolvePlayableUrl!(song), nonFull: false };
+  } catch (err) {
+    if (route.mode === 'direct') throw err;
+    return { url: await api.getAudioUrl(song.url), nonFull: false };
   }
 }

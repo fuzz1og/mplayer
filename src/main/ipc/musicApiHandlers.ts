@@ -65,6 +65,7 @@ export function registerMusicApiCall(api: MusicApi): void {
     parseSodaShareLink: (link: string) => api.parseSodaShareLink(link),
     searchSongsRouted: (k: string, p: number, s?: any) => api.searchSongsRouted(k, p, s),
     resolvePlayableUrlRouted: (song: Song) => api.resolvePlayableUrlRouted(song),
+    resolvePlayableSongRouted: (song: Song) => api.resolvePlayableSongRouted(song),
     // resolveCoverUrl：保留主进程下载直链→磁盘封面缓存副作用
     resolveCoverUrl: async (coverUrl: string): Promise<string> => {
       const resolved = await api.resolveCoverUrl(coverUrl);
