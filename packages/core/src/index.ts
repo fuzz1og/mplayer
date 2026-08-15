@@ -110,3 +110,4 @@ export { lrcSidecarName, looksLikeLyrics } from './download/lyrics.js';
 export { estimateDownloadProgress } from './download/progress.js';
 export type { ProgressInput } from './download/progress.js';
 export { takeNextQueued, retryBackoffMs, DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_RETRIES } from './download/queue.js';
+export { kugouDirectClient, ensureKugouCookie, resolveKugouLyricUrl } from './api/kugouDirect.js';
