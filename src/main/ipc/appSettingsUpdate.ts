@@ -83,13 +83,6 @@ export function registerSettingsIpc(): void {
     await db.setSetting('downloadPath', defaultPath);
     return { path: defaultPath };
   });
-  registerIpcHandlerSimple('settings:getApiUrl', () => db.getSetting('apiUrl') || '');
-  registerIpcHandler('settings:setApiUrl', (url: string) => {
-    if (url && !/^https?:\/\/.+/.test(url)) {
-      throw new Error('API URL 必须以 http:// 或 https:// 开头');
-    }
-    return db.setSetting('apiUrl', url);
-  });
   registerIpcHandlerSimple('settings:getProxy', async () => {
     const saved = await db.getSetting<ProxyConfig>('proxyConfig');
     return saved || { enabled: false, host: '', port: 8080, protocol: 'http' };

@@ -21,7 +21,7 @@ import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
 import type { Agent } from 'http';
 
-let API_BASE_URL = 'http://localhost:3000/';
+let API_BASE_URL = '';
 let PROXY_URL = '';
 /** WebView 桥请求处理器（mobile 注入）：绕开 RN OkHttp 网络栈 */
 let apiRequestHandler:
@@ -296,7 +296,7 @@ export function isSessionProtectedEndpoint(url: string): boolean {
   return url.includes('api.php');
 }
 export function setApiBaseUrl(url: string): void {
-  API_BASE_URL = url.endsWith('/') ? url : url + '/';
+  API_BASE_URL = url ? (url.endsWith('/') ? url : url + '/') : '';
   apiClient.defaults.baseURL = API_BASE_URL;
   // 服务端可能更换，旧会话失效；远程源提前预热会话，避免首个请求多一次往返
   invalidateApiSession();
@@ -2412,7 +2412,9 @@ export const musicApi = {
       resolver: async (song) => {
         let url = song.url;
         try {
-          url = (await this.getAudioUrl(url)) || url;
+          // 探测走与播放同一套直连路由，不再依赖已退役的自建 API getAudioUrl。
+          const routed = await this.resolvePlayableSongRouted(song);
+          if (routed?.url?.startsWith('http')) url = routed.url;
         } catch {
           // keep the original URL; probeAudioUrl will classify it
         }

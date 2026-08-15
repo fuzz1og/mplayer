@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Settings, Database, Folder, Link, Shield, Download, Music, Zap, Fingerprint, FlaskConical } from 'lucide-react';
+import { Settings, Database, Folder, Shield, Download, Music, Zap, Fingerprint, FlaskConical } from 'lucide-react';
 import CacheSection from '@/renderer/components/CacheSection';
 import DownloadSection from '@/renderer/components/DownloadSection';
-import ApiSection from '@/renderer/components/ApiSection';
 import ProxySection from '@/renderer/components/ProxySection';
 import UpdateSection from '@/renderer/components/UpdateSection';
 import AboutSection from '@/renderer/components/AboutSection';
@@ -13,7 +12,6 @@ import Tier3Section from '@/renderer/components/Tier3Section';
 const NAV_ITEMS = [
   { id: 'cache', label: '缓存管理', icon: <Database size={15} /> },
   { id: 'download', label: '下载设置', icon: <Folder size={15} /> },
-  { id: 'api', label: 'API 设置', icon: <Link size={15} /> },
   { id: 'source', label: '直连设置', icon: <Zap size={15} /> },
   { id: 'tier3', label: '第三方解析源', icon: <FlaskConical size={15} /> },
   { id: 'tls-fingerprint', label: 'TLS 指纹伪装', icon: <Fingerprint size={15} /> },
@@ -77,7 +75,6 @@ const SettingsPage: React.FC = () => {
       <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
         <CacheSection />
         <DownloadSection />
-        <ApiSection />
         <SourceSection />
         <Tier3Section />
         <TlsFingerprintSection />

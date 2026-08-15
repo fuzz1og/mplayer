@@ -277,7 +277,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       if (!realUrl) {
         set({ isLoading: false });
-        throw new Error('无法获取音频 URL，可能网络不稳定或歌曲已下架');
+        throw new Error('无法获取音频 URL：可能为 VIP/无版权或直连暂不可用，可尝试换源');
       }
 
       const songWithRealUrl = { ...song, url: realUrl };
@@ -342,11 +342,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     } catch (error) {
       if (generation !== playGeneration) return;
+      const messageText = error instanceof Error ? error.message : '播放失败';
       set({
-        error: error instanceof Error ? error.message : '播放失败',
+        error: messageText,
         isLoading: false,
         isPlaying: false
       });
+      // 用户直接点歌时即使调用方没做 catch，也保证有可见反馈。
+      message.error(messageText);
     }
   },
 

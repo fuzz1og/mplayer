@@ -150,11 +150,16 @@ export function setTier3Resolver(resolver: Tier3Resolver | null): void {
 
 /** 直连失败后、api 腿前的 tier3 尝试（默认关闭，未注入直接跳过）。 */
 async function tryTier3(song: Song): Promise<string> {
-  if (!tier3Enabled || !tier3Resolver) return '';
+  if (!tier3Enabled || !tier3Resolver) {
+    console.info(`[tier3] 直连未取得可播 URL，但 tier3 未启用/未注入，直接回退: 《${song.name}》${song.artist}`);
+    return '';
+  }
+  console.info(`[tier3] 直连未取得可播 URL，进入第三方解析源: 《${song.name}》${song.artist}`);
   try {
     const url = await tier3Resolver(song);
     return url?.startsWith('http') ? url : '';
-  } catch {
+  } catch (e) {
+    console.warn(`[tier3] resolver 抛错: ${(e as Error)?.message || e}`);
     return '';
   }
 }

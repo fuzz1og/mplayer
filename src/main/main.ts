@@ -4,26 +4,10 @@ import path from 'path';
 import fs from 'fs';
 import axios from 'axios';
 
-// 开发模式下加载 .env.local
-if (!app.isPackaged) {
-  const envPath = path.join(process.cwd(), '.env.local');
-  if (fs.existsSync(envPath)) {
-    const envContent = fs.readFileSync(envPath, 'utf-8');
-    envContent.split('\n').forEach(line => {
-      const match = line.match(/^MUSIC_API_URL=(.*)$/);
-      if (match) {
-        process.env.MUSIC_API_URL = match[1].trim();
-      }
-    });
-  }
-}
-
-
 import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
-import { getApiUrl } from './config';
-import { musicApi as coreMusicApi, injectProxyAgents, setApiBaseUrl, setApiTimingLog, loadSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY, loadTier3State } from './api/musicApi';
+import { musicApi as coreMusicApi, injectProxyAgents, setApiTimingLog, loadSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY, loadTier3State } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
 import { applyElectronProxy, getHttpAgent, getHttpsAgent, getTlsDegradedHttpsAgent, getTlsFingerprintHttpsAgent, type ProxyConfig } from './proxy';
@@ -183,11 +167,7 @@ app.whenReady().then(async () => {
     }
   });
 
-  // 设置 API base URL（必须在 IPC 注册之前）
-  const resolvedApiUrl = getApiUrl();
-  if (resolvedApiUrl) {
-    setApiBaseUrl(resolvedApiUrl);
-  }
+  // 自建 API 已退役：不再设置 API_BASE_URL，直连/第三方订阅为唯一播放链路。
   // dev 诊断：API 请求耗时日志（>300ms 才打，定位慢请求/超时链路）
   if (!app.isPackaged) {
     setApiTimingLog(true);

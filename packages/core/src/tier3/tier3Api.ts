@@ -584,7 +584,15 @@ export function setTier3Deps(deps: Tier3Deps): void {
 }
 
 async function resolveTier3(song: Song): Promise<string> {
-  if (!state.enabled) return '';
+  if (!state.enabled) {
+    console.info(`[tier3] 未启用，跳过: 《${song.name}》${song.artist}`);
+    return '';
+  }
+  if (state.subscriptions.length === 0) {
+    console.info(`[tier3] 已启用但无订阅，跳过: 《${song.name}》${song.artist}`);
+    return '';
+  }
+  console.info(`[tier3] 开始解析: 《${song.name}》${song.artist} (${song.sourceType}, id=${song.id})`);
   for (const subscription of state.subscriptions) {
     for (const source of subscription.manifest.sources) {
       try {
@@ -594,12 +602,18 @@ async function resolveTier3(song: Song): Promise<string> {
         } else {
           url = await resolveSearchThenResolve(song, source);
         }
-        if (url) return url;
-      } catch {
+        if (url) {
+          console.info(`[tier3] 命中 source=${source.id}: ${url}`);
+          return url;
+        }
+        console.info(`[tier3] source=${source.id} 未命中`);
+      } catch (e) {
+        console.warn(`[tier3] source=${source.id} 失败: ${(e as Error)?.message || e}`);
         // 单源失败继续下一条；全失败返回空串由 sourceRouter 回退。
       }
     }
   }
+  console.warn(`[tier3] 全部订阅源未命中，回退下一链路: 《${song.name}》${song.artist}`);
   return '';
 }
 
