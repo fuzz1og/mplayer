@@ -18,7 +18,7 @@
     "version:bump": "node scripts/version-bump.js",
     "version:check": "node scripts/version-bump.js --check",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5174 && node scripts/start-electron-dev.mjs\"",
+    "electron:dev": "npm run core:build && node -e \"require('fs').rmSync('dist-electron/main.js',{force:true})\" && concurrently \"npm run dev\" \"wait-on http://localhost:5174 dist-electron/main.js && node scripts/start-electron-dev.mjs\"",
     "electron:build": "npm run build && electron-builder",
     "electron:build:win": "npm run build && electron-builder --win",
     "electron:build:mac": "npm run build && electron-builder --mac",

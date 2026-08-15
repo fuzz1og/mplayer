@@ -1199,6 +1199,10 @@ export const musicApi = {
       return cachedData;
     }
 
+    // 自建 API 已退役：桌面不再配置 API_BASE_URL，直接返回空结果，
+    // 避免 auto 回退链每次刷 Invalid URL。
+    if (!API_BASE_URL) return [];
+
     const params = new URLSearchParams();
     params.append('input', keyword);
     params.append('filter', 'name');
@@ -1239,6 +1243,10 @@ export const musicApi = {
       const cached = cacheManager.getSearchCache(cacheKey, 1, sourceType);
       if (cached?.length) return cached[0];
     }
+
+    // 自建 API 已退役：桌面不再配置 API_BASE_URL，ID 识别只能走旧 API；
+    // 直接返回 null 让调用方回退到按名字搜索，避免每次刷 Invalid URL。
+    if (!API_BASE_URL) return null;
 
     const params = new URLSearchParams();
     params.append('input', songId);
@@ -1396,7 +1404,7 @@ export const musicApi = {
    * 批量搜索
    * @param concurrency 并发上限,0 表示不限制(默认);限制可避免弱 API 排队/被打爆
    */
-  async batchSearch(keywords: string[], sourceType: SourceKey = 'netease', concurrency: number = 0): Promise<Record<string, Song[]>> {
+  async batchSearch(keywords: string[], sourceType: SourceKey = 'netease', concurrency: number = 3): Promise<Record<string, Song[]>> {
     // 尝试从缓存获取
     const cachedData = cacheManager.getBatchSearchCache(keywords, sourceType);
     if (cachedData) {
@@ -2408,7 +2416,7 @@ export const musicApi = {
     // 记录每首解析后的最终 URL（空 → invalid，保持桌面现状）
     const resolvedUrls = new Map<string, string>();
     await probeSongs(list, {
-      concurrency: Math.min(20, Math.max(1, list.length)),
+      concurrency: Math.min(5, Math.max(1, list.length)),
       resolver: async (song) => {
         let url = song.url;
         try {

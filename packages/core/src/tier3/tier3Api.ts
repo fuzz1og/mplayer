@@ -51,6 +51,10 @@ export interface Tier3SearchSpec extends Tier3RequestSpec {
   idPath?: string;
   /** 条目内直链字段路径（可选；命中则直接使用）。 */
   urlPath?: string;
+  /** 条目内封面字段路径（可选；缺省尝试常见字段 pic/cover/img/albumPic）。 */
+  coverPath?: string;
+  /** 条目内专辑字段路径（可选；缺省尝试常见字段 album/albumName/albumTitle）。 */
+  albumPath?: string;
 }
 
 export interface Tier3Source {
@@ -214,7 +218,9 @@ function parseSearchSpec(value: unknown, label: string): Tier3SearchSpec {
   const artistPath = value.artistPath === undefined ? undefined : assertString(value.artistPath, `${label}.artistPath`);
   const idPath = value.idPath === undefined ? undefined : assertString(value.idPath, `${label}.idPath`);
   const urlPath = value.urlPath === undefined ? undefined : assertString(value.urlPath, `${label}.urlPath`);
-  return { ...base, itemsPath, namePath, artistPath, idPath, urlPath };
+  const coverPath = value.coverPath === undefined ? undefined : assertString(value.coverPath, `${label}.coverPath`);
+  const albumPath = value.albumPath === undefined ? undefined : assertString(value.albumPath, `${label}.albumPath`);
+  return { ...base, itemsPath, namePath, artistPath, idPath, urlPath, coverPath, albumPath };
 }
 
 function parseSource(value: unknown): Tier3Source {
@@ -498,6 +504,8 @@ interface Tier3SearchItem {
   name: string;
   artist: string;
   url: string;
+  album: string;
+  cover: string;
 }
 
 async function searchTier3SourceItems(source: Tier3Source, keyword: string): Promise<Tier3SearchItem[]> {
@@ -520,11 +528,20 @@ async function searchTier3SourceItems(source: Tier3Source, keyword: string): Pro
     if (!isRecord(item)) continue;
     const name = asString(getByPath(item, source.search.namePath));
     if (!name) continue;
+    const album =
+      (source.search.albumPath ? asString(getByPath(item, source.search.albumPath)) : '') ||
+      asString(getByPath(item, 'album') || getByPath(item, 'albumName') || getByPath(item, 'albumTitle'));
+    const coverRaw =
+      (source.search.coverPath ? asString(getByPath(item, source.search.coverPath)) : '') ||
+      asString(getByPath(item, 'pic') || getByPath(item, 'cover') || getByPath(item, 'img') || getByPath(item, 'albumPic') || getByPath(item, 'image'));
+    const cover = /^https?:\/\//i.test(coverRaw) ? coverRaw.replace(/^http:/, 'https:') : '';
     out.push({
       id: source.search.idPath ? asString(getByPath(item, source.search.idPath)) : '',
       name,
       artist: source.search.artistPath ? asString(getByPath(item, source.search.artistPath)) : '',
       url: source.search.urlPath ? (toUrlCandidate(getByPath(item, source.search.urlPath)) || '') : '',
+      album,
+      cover,
     });
   }
   return out;
@@ -538,6 +555,7 @@ export async function searchTier3Songs(keyword: string, _page: number, sourceKey
   if (!state.enabled || state.subscriptions.length === 0) return [];
   console.info(`[tier3] 第三方搜索开始: ${keyword} (${sourceKey})`);
   const out: Song[] = [];
+  const seen = new Set<string>();
   for (const subscription of state.subscriptions) {
     for (const source of subscription.manifest.sources) {
       if (source.kind !== 'search-then-resolve' || !source.search) continue;
@@ -545,13 +563,17 @@ export async function searchTier3Songs(keyword: string, _page: number, sourceKey
       try {
         const items = await searchTier3SourceItems(source, keyword);
         for (const item of items) {
+          // 多个订阅/源可能指向同一上游，按“歌名+歌手”去重，避免结果重复。
+          const dedupeKey = `${item.name.trim().toLowerCase()}|${item.artist.trim().toLowerCase()}`;
+          if (seen.has(dedupeKey)) continue;
+          seen.add(dedupeKey);
           out.push({
             id: item.id ? `tier3:${source.id}:${item.id}` : `tier3:${source.id}:${out.length}`,
             name: item.name,
             artist: item.artist,
-            album: '',
+            album: item.album,
             url: item.url,
-            cover: '',
+            cover: item.cover,
             lrc: '',
             duration: 0,
             sourceType: sourceKey,

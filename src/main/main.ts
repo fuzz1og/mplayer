@@ -139,6 +139,11 @@ function setupGlobalShortcuts(mainWindow: BrowserWindow) {
 
 app.whenReady().then(async () => {
   setupImageCache();
+
+  // ADR-0001：music 域单通道分发（替换旧 musicApi:* / lyrics:get / api:getThrottleWait）
+  // 必须在 createWindow() 之前注册，否则渲染层加载后立即 invoke 会报
+  // “No handler registered for 'musicApi:call'”。
+  registerMusicApiCall(musicApi);
   const mainWindow = createWindow();
 
   // 获取保存的下载目录，如果没有则使用默认的 Downloads 目录
@@ -256,8 +261,6 @@ app.whenReady().then(async () => {
   registerFavoriteIpc(db);
   registerHistoryIpc(db);
   registerPlaylistIpc(db);
-  // ADR-0001：music 域单通道分发（替换旧 musicApi:* / lyrics:get / api:getThrottleWait）
-  registerMusicApiCall(musicApi);
   registerLocalMusicIpc(mainWindow);
   registerDialogIpc();
   registerSettingsIpc();

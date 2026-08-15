@@ -52,7 +52,7 @@ const SourceSection: React.FC = () => {
       </div>
       <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-color)' }}>
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 0, lineHeight: 1.6 }}>
-          每源可选择请求方式：自动 = 官方直连优先、失败回退自建 API；仅直连 = 只走官方直连；仅自建 API = 维持现状。
+          每源可选择请求方式：自动 = 官方直连优先、失败回退第三方解析；仅直连 = 只走官方直连。
           直连能力按源逐步落地（未实现时自动模式等价现状）。
         </p>
         {!data ? (

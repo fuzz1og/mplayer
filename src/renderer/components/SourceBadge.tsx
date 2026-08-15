@@ -6,6 +6,7 @@ const SOURCE_CONFIG: Record<string, { label: string; color: string }> = {
   kugou: { label: '酷狗', color: '#FF8C00' },
   kuwo: { label: '酷我', color: '#FF6F00' },
   qianqian: { label: '千千', color: '#00A1D6' },
+  migu: { label: '咪咕', color: '#FF5A00' },
   soda: { label: '汽水', color: '#1E90FF' },
   local: { label: '本地', color: '#10B981' },
 };

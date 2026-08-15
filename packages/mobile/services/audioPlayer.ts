@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { cacheManager, getNextSongIndex, getApiBaseUrl, getApiSessionCookie, isApiOriginUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey, BROWSER_UA, refererForSourceKey } from '@mplayer/core';
+import { cacheManager, getNextSongIndex, getApiSessionCookie, isApiOriginUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey, BROWSER_UA, refererForSourceKey } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -363,10 +363,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       'User-Agent': BROWSER_UA,
       'Referer': (() => {
         const official = refererForSourceKey(song.sourceType as string);
-        if (official) return official;
-        // 未映射的源（本地/soda）：回退 API 域名（origin 形式，去尾斜杠 + /）
-        const base = getApiBaseUrl();
-        return base ? base.replace(/\/+$/, '') + '/' : '';
+        return official || '';
       })(),
     };
     // 播放器直连会话保护端点（api.php 302）的兜底：显式带会话 cookie。

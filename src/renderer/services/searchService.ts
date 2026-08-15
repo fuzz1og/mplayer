@@ -18,8 +18,8 @@ class SearchService {
   private debounceTimer: NodeJS.Timeout | null = null;
   private orchestrator = createSearchOrchestrator<CoreSourceKey>({
     searchOneSource: (query, page, source) => callMusicApi('searchSongsRouted', query, page, source),
-    // 桌面并发 6-7：渐进渲染下慢源稍后并入，首屏不再等最慢源
-    concurrency: 6,
+    // 桌面并发 3：直连源对并发敏感，降低同时请求数避免风控/限流
+    concurrency: 3,
   });
   /** 已探测歌曲 id（每搜索会话重置），用于跨源渐进/翻页增量探测去重 */
   private probedIds = new Set<string>();

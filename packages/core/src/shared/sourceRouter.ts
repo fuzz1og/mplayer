@@ -28,11 +28,10 @@ export const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   soda: '汽水',
 };
 
-/** 来源开关三态选项（桌面/移动端设置 UI 共用）。 */
-export const SOURCE_MODE_OPTIONS: { value: SourceMode; label: string }[] = [
+/** 来源开关选项（桌面/移动端设置 UI 共用；自建 API 已退役，不再提供 api 模式）。 */
+export const SOURCE_MODE_OPTIONS: { value: Exclude<SourceMode, 'api'>; label: string }[] = [
   { value: 'auto', label: '自动' },
   { value: 'direct', label: '仅直连' },
-  { value: 'api', label: '仅自建 API' },
 ];
 
 export interface DirectSourceClient {

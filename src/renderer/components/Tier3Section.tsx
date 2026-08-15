@@ -151,7 +151,7 @@ const Tier3Section: React.FC = () => {
           </span>
         </div>
         <Text type="secondary" style={{ display: 'block', fontSize: '13px', lineHeight: 1.6, marginBottom: '16px' }}>
-          默认关闭。开启后，官方直连失败的歌曲会按订阅清单依次尝试第三方解析源；全部失败再回退自建 API / 换元。
+          默认关闭。开启后，官方直连失败的歌曲会按订阅清单依次尝试第三方解析源；全部失败换元/标记不可播。
           第三方源随时可能失效，且清单由你自行订阅，本应用不内置任何解析端点。
         </Text>
 

@@ -14,6 +14,7 @@ const sourceColorMap: Record<string, string> = {
   kugou: '#FF8C00',
   kuwo: '#FF6F00',
   qianqian: '#00A1D6',
+  migu: '#FF5A00',
   soda: '#1E90FF',
   local: '#999999',
 };
@@ -24,6 +25,7 @@ const sourceLabelMap: Record<string, string> = {
   kugou: '酷狗',
   kuwo: '酷我',
   qianqian: '千千',
+  migu: '咪咕',
   soda: '汽水',
   local: '本地',
 };

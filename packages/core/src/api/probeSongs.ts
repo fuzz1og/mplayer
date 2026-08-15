@@ -27,7 +27,7 @@ export async function probeSongs(
   songs: Song[],
   options: ProbeOptions = {},
 ): Promise<void> {
-  const { concurrency = 10, onResult, resolver } = options;
+  const { concurrency = 5, onResult, resolver } = options;
 
   if (songs.length === 0) return;
 
