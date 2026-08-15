@@ -8,7 +8,7 @@ const child = spawn(electron, ['.'], {
   stdio: 'inherit',
   env: {
     ...process.env,
-    VITE_DEV_SERVER_URL: process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173',
+    VITE_DEV_SERVER_URL: process.env.VITE_DEV_SERVER_URL || 'http://localhost:5174',
   },
 });
 

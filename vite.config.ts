@@ -37,7 +37,7 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5173,
+    port: 5174,
     // 忽略测试产物目录，避免 vitest 写入 coverage 触发页面 reload/重建风暴
     watch: {
       ignored: ['**/coverage/**', '**/test-results/**', '**/dist-electron/**'],
