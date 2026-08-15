@@ -541,6 +541,7 @@ export async function searchTier3Songs(keyword: string, _page: number, sourceKey
   for (const subscription of state.subscriptions) {
     for (const source of subscription.manifest.sources) {
       if (source.kind !== 'search-then-resolve' || !source.search) continue;
+      console.info(`[tier3] 源 ${source.id} 搜索请求: ${keyword}`);
       try {
         const items = await searchTier3SourceItems(source, keyword);
         for (const item of items) {
