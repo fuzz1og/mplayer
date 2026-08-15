@@ -90,7 +90,7 @@ export function refreshSongCover(song: Song): Promise<string | null> {
     // 第 2 次尝试：名字搜索 + 精确匹配（只接受 name+artist 完全匹配，避免翻唱/Live）
     if (!fresh?.cover && song.name) {
       try {
-        const results = await callMusicApi('searchSongs', `${song.name} ${song.artist}`, 1, song.sourceType);
+        const results = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`, 1, song.sourceType);
         const matched = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
         if (matched?.cover) fresh = matched;
       } catch {

@@ -80,7 +80,7 @@ const HotlistDetailPage: React.FC = () => {
   const handlePlay = async (song: Song) => {
     const keyword = `${song.name} ${song.artist}`;
     const sourceType = hotlistType === 'netease_new' ? 'netease' : hotlistType === 'qq_new' ? 'qq' : hotlistType;
-    const searchResults = await callMusicApi('searchSongs', keyword, 1, sourceType);
+    const searchResults = await callMusicApi('searchSongsRouted', keyword, 1, sourceType);
     if (searchResults.length > 0) {
       await play(searchResults[0]);
     }

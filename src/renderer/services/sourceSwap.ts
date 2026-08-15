@@ -7,7 +7,7 @@ export type { SourceSwapDeps };
 
 /** 桌面端换源依赖：搜索走现有歌曲搜索 IPC，探测走 core 批量探测 IPC */
 export const sourceSwapDeps: SourceSwapDeps = {
-  searchSongs: (keyword, page, source) => callMusicApi('searchSongs', keyword, page, source),
+  searchSongs: (keyword, page, source) => callMusicApi('searchSongsRouted', keyword, page, source),
   probeSongs: (songs) => callMusicApi('probeSongsBatch', songs),
   log: (level, message) => {
     if (level === 'warn') console.warn(message);

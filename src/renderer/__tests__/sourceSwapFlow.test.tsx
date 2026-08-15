@@ -63,7 +63,7 @@ beforeEach(() => {
   // probeSongsBatch 默认 → valid；其余 → undefined
   callMusicApiMock.mockImplementation(async (method: string, ...args: any[]) => {
     switch (method) {
-      case 'searchSongs':
+      case 'searchSongsRouted':
         return searchSongsMock(...args);
       case 'getAudioUrl':
         return 'https://resolved.example.com/a.mp3';
@@ -190,7 +190,7 @@ describe('SongList 单曲换源流程', () => {
       return [];
     });
     callMusicApiMock.mockImplementation(async (method: string, ...args: any[]) => {
-      if (method === 'searchSongs') return searchSongsMock(...args);
+      if (method === 'searchSongsRouted') return searchSongsMock(...args);
       if (method === 'probeSongsBatch') {
         const songs = args[0] as Song[];
         const firstId = songs[0]?.id;

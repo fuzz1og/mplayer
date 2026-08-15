@@ -117,7 +117,7 @@ const ArtistDetailPage: React.FC = () => {
 
   const handlePlay = async (song: Song) => {
     const keyword = `${song.name} ${song.artist}`;
-    const searchResults = await callMusicApi('searchSongs', keyword, 1, 'netease');
+    const searchResults = await callMusicApi('searchSongsRouted', keyword, 1, 'netease');
     if (searchResults.length > 0) {
       await play(searchResults[0]);
     }

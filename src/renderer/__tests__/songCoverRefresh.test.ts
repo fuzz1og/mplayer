@@ -53,7 +53,7 @@ describe('refreshSongCover 封面失败刷新', () => {
     const freshCover = 'https://example.com/api.php?get=pic&type=wy&id=3336112836&sign=new&t=2';
     invoke.mockImplementation(async (channel: string, method?: string) => {
       if (channel === 'musicApi:call' && method === 'searchSongById') return null;
-      if (channel === 'musicApi:call' && method === 'searchSongs') {
+      if (channel === 'musicApi:call' && method === 'searchSongsRouted') {
         return [
           { ...baseSong, name: '晴天 (Live)', artist: '周杰伦', cover: 'https://live-cover.jpg' },
           { ...baseSong, name: '晴天', artist: '周杰伦', cover: freshCover },
@@ -71,7 +71,7 @@ describe('refreshSongCover 封面失败刷新', () => {
     const invoke = vi.mocked(IpcClient.invoke);
     invoke.mockImplementation(async (channel: string, method?: string) => {
       if (channel === 'musicApi:call' && method === 'searchSongById') return null;
-      if (channel === 'musicApi:call' && method === 'searchSongs') return [];
+      if (channel === 'musicApi:call' && method === 'searchSongsRouted') return [];
       return null;
     });
 

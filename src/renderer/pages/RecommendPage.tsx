@@ -54,7 +54,7 @@ const RecommendPage: React.FC = () => {
   const handlePlay = async (song: Song) => {
     try {
       if (!song.url && song.name) {
-        const result = await callMusicApi('searchSongs', `${song.name} ${song.artist}`, 1, song.sourceType);
+        const result = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`, 1, song.sourceType);
         if (result?.length > 0) {
           await play(result[0]);
           return;
@@ -64,7 +64,7 @@ const RecommendPage: React.FC = () => {
       await play(song);
     } catch (error) {
       console.error('播放失败:', error);
-      message.error('播放失败，请检查 API 服务是否运行');
+      message.error('播放失败，请检查网络连接或稍后重试');
     }
   };
 

@@ -91,15 +91,15 @@ const DiscoverPage: React.FC = () => {
   const handleHotlistSongClick = async (song: HotlistSong, sourceType: 'netease' | 'qq' = 'netease') => {
     try {
       const keyword = `${song.name} ${song.artists}`;
-      const searchResults = await callMusicApi('searchSongs', keyword, 1, sourceType);
+      const searchResults = await callMusicApi('searchSongsRouted', keyword, 1, sourceType);
       if (searchResults.length > 0) {
         await play(searchResults[0]);
       } else {
-        message.warning('未找到可播放的音源，请检查 API 配置');
+        message.warning('未找到可播放的音源');
       }
     } catch (error) {
       console.error('搜索歌曲失败:', error);
-      message.error('播放失败，请检查网络连接和 API 设置');
+      message.error('播放失败，请检查网络连接或稍后重试');
     }
   };
 

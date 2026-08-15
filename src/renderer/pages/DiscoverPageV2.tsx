@@ -283,7 +283,7 @@ const DiscoverPageV2: React.FC = () => {
     try {
       if (!song.url && song.name) {
         const keyword = `${song.name} ${song.artist}`;
-        const results = await callMusicApi('searchSongs', keyword, 1, song.sourceType);
+        const results = await callMusicApi('searchSongsRouted', keyword, 1, song.sourceType);
         if (results?.length > 0) {
           await play(results[0]);
           return;
@@ -294,7 +294,7 @@ const DiscoverPageV2: React.FC = () => {
       await play(song);
     } catch (error) {
       console.error('播放失败:', error);
-      message.error('播放失败，请检查 API 服务是否运行');
+      message.error('播放失败，请检查网络连接或稍后重试');
     }
   };
 

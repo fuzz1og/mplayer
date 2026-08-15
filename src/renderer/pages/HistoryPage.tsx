@@ -32,7 +32,7 @@ const HistoryPage: React.FC = () => {
         uniqueSongs,
         3,
         async (songBase) => {
-          const songs = await callMusicApi('searchSongs', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
+          const songs = await callMusicApi('searchSongsRouted', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
           if (songs.length > 0) return songs[0];
           return { ...songBase, url: '', cover: '', lrc: '' } as Song;
         },
