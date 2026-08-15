@@ -2,8 +2,8 @@ import pako from 'pako';
 import iconv from 'iconv-lite';
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request } from './transport.js';
-import { BROWSER_UA } from '../utils/sourceReferer.js';
+import { request, bodyToText } from './transport.js';
+import { getUserAgent } from './antiScrape.js';
 
 /**
  * 酷我直连客户端（T08 #154）。
@@ -153,10 +153,6 @@ function xorencrypt(data: Uint8Array, key: Uint8Array): Uint8Array {
   return out;
 }
 
-function toText(body: string | ArrayBuffer): string {
-  return typeof body === 'string' ? body : new TextDecoder().decode(body);
-}
-
 function buildLyricUrl(rid: string): string {
   if (!rid) return '';
   const plain = `user=12345,web,web,web&requester=localhost&req=1&rid=MUSIC_${rid}&lrcx=1`;
@@ -224,11 +220,11 @@ export const kuwoDirectClient: DirectSourceClient = {
     const res = await request({
       method: 'GET',
       url: `${SEARCH_URL}?${params.toString()}`,
-      headers: { 'user-agent': BROWSER_UA, Referer: 'http://www.kuwo.cn/' },
+      headers: { 'user-agent': getUserAgent('kuwo'), Referer: 'http://www.kuwo.cn/' },
       timeoutMs: 8000,
     });
     if (res.status >= 400) throw new Error(`酷我搜索 HTTP ${res.status}`);
-    const data = JSON.parse(toText(res.body)) as { abslist?: any[] };
+    const data = JSON.parse(bodyToText(res.body)) as { abslist?: any[] };
     if (!Array.isArray(data.abslist)) throw new Error('酷我搜索响应无 abslist');
     return data.abslist.map(mapTrack).filter((s) => s.id);
   },
@@ -240,11 +236,11 @@ export const kuwoDirectClient: DirectSourceClient = {
     const res = await request({
       method: 'GET',
       url: `${MOBI_URL}?f=kuwo&q=${encodeURIComponent(encryptQuery(query))}`,
-      headers: { 'user-agent': BROWSER_UA },
+      headers: { 'user-agent': getUserAgent('kuwo') },
       timeoutMs: 10000,
     });
     if (res.status >= 400) throw new Error(`酷我 mobi HTTP ${res.status}`);
-    const text = toText(res.body);
+    const text = bodyToText(res.body);
     // 响应形如 kw:url=<直链>&br=<位率>&fmt=<格式>——URL 截断到 & 或空白
     const m = text.match(/https?:\/\/[^&\s"'<>]+/);
     if (!m) return ''; // 无可用直链 → 换元层

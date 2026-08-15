@@ -1,5 +1,6 @@
 import type { Song, SourceKey } from '../types/index.js';
 import { isTrialUrlInfo } from './playability.js';
+import type { UrlInfo } from './playability.js';
 
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
@@ -41,14 +42,7 @@ export interface DirectSourceClient {
   /** 播放 URL 直连解析；无版权/VIP 返回 ''（交给换元层）。 */
   resolvePlayableUrl?: (song: Song) => Promise<string>;
   /** 权威完整时长验证字段（T12 预检使用；按源覆盖，可不提供）。 */
-  resolveUrlInfo?: (song: Song) => Promise<{
-    url: string;
-    br: number;
-    size: number;
-    playTime: number;
-    fee: number;
-    payed: number;
-  } | null>;
+  resolveUrlInfo?: (song: Song) => Promise<UrlInfo | null>;
 }
 
 // ── 直连客户端注册表 ────────────────────────────────────────────────
@@ -129,6 +123,42 @@ function requireLegs(): SourceRouterLegs {
   return legs;
 }
 
+// ── tier3 插槽（spec #146 决策 2：预留，不实现；#144 独立立项实施）────────
+//
+// tier3 第三方解析源（订阅执行器）在「官方直连失败」与「换元」之间插槽，
+// 默认关闭。本 spec 只预留开关位与插槽 hook，不实现解析逻辑；#144 落地时
+// 注入 resolver 并开启开关即可，回退链无需再改。
+
+/** tier3 解析器插槽：输入 song，返回解析到的可播 URL；未注入/关闭 = 不生效。 */
+export type Tier3Resolver = (song: Song) => Promise<string>;
+
+let tier3Enabled = false;
+let tier3Resolver: Tier3Resolver | null = null;
+
+export function setTier3Enabled(enabled: boolean): void {
+  tier3Enabled = enabled;
+}
+
+export function getTier3Enabled(): boolean {
+  return tier3Enabled;
+}
+
+/** 注入 tier3 解析器（#144 实施时调用）；null 清除插槽。 */
+export function setTier3Resolver(resolver: Tier3Resolver | null): void {
+  tier3Resolver = resolver;
+}
+
+/** 直连失败后、api 腿前的 tier3 尝试（默认关闭，未注入直接跳过）。 */
+async function tryTier3(song: Song): Promise<string> {
+  if (!tier3Enabled || !tier3Resolver) return '';
+  try {
+    const url = await tier3Resolver(song);
+    return url?.startsWith('http') ? url : '';
+  } catch {
+    return '';
+  }
+}
+
 /** 模式分派：api 一律走 api 腿；direct 无能力/失败明确上抛；auto 直连优先、失败回退 api。 */
 type RouteDecision =
   | { kind: 'direct'; client: DirectSourceClient; mode: SourceMode }
@@ -180,6 +210,9 @@ export async function resolvePlayableUrlRouted(song: Song): Promise<string> {
     return await route.client.resolvePlayableUrl!(song);
   } catch (err) {
     if (route.mode === 'direct') throw err;
+    // tier3 插槽：直连失败后、api 腿前（默认关；#144 落地后启用）
+    const tier3Url = await tryTier3(song);
+    if (tier3Url) return tier3Url;
     return api.getAudioUrl(song.url);
   }
 }
@@ -214,6 +247,9 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
     return { url: await client.resolvePlayableUrl!(song), nonFull: false };
   } catch (err) {
     if (route.mode === 'direct') throw err;
+    // tier3 插槽：直连失败后、api 腿前（默认关；#144 落地后启用）
+    const tier3Url = await tryTier3(song);
+    if (tier3Url) return { url: tier3Url, nonFull: false };
     return { url: await api.getAudioUrl(song.url), nonFull: false };
   }
 }

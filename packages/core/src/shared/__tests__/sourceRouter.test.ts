@@ -13,6 +13,9 @@ import {
   configureSourceRouter,
   searchSongsRouted,
   resolvePlayableUrlRouted,
+  setTier3Enabled,
+  getTier3Enabled,
+  setTier3Resolver,
   type DirectSourceClient,
 } from '../sourceRouter.js';
 
@@ -51,6 +54,8 @@ beforeEach(() => {
   clearDirectClients();
   setSourceModePersister(null);
   setSourceModes({});
+  setTier3Enabled(false);
+  setTier3Resolver(null);
   apiSearch = vi.fn(async (_q: string, _p: number, _s: string) => [song('api-1', 'netease')]);
   apiGetAudioUrl = vi.fn(async (_url: string) => 'https://api.example.com/1.mp3');
   configureSourceRouter({ searchSongs: apiSearch, getAudioUrl: apiGetAudioUrl });
@@ -207,5 +212,56 @@ describe('resolvePlayableUrlRouted 路由矩阵', () => {
     const url = await resolvePlayableUrlRouted(song('1', 'netease', 'https://x/api.mp3'));
     expect(apiGetAudioUrl).toHaveBeenCalledWith('https://x/api.mp3');
     expect(url).toBe('https://api.example.com/1.mp3');
+  });
+});
+
+describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地后启用）', () => {
+  it('默认关闭且无 resolver', () => {
+    expect(getTier3Enabled()).toBe(false);
+  });
+
+  it('关闭时即使注入 resolver 也不调用（行为与现状一致）', async () => {
+    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    setTier3Resolver(tier3);
+    const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => { throw new Error('直连失败'); }) });
+    registerDirectClient(client);
+    const url = await resolvePlayableUrlRouted(song('1', 'netease', 'https://x/api.mp3'));
+    expect(tier3).not.toHaveBeenCalled();
+    expect(apiGetAudioUrl).toHaveBeenCalledWith('https://x/api.mp3');
+    expect(url).toBe('https://api.example.com/1.mp3');
+  });
+
+  it('开启 + resolver：直连失败后走 tier3，不再回退 api', async () => {
+    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => { throw new Error('直连失败'); }) });
+    registerDirectClient(client);
+    const url = await resolvePlayableUrlRouted(song('1', 'netease', 'https://x/api.mp3'));
+    expect(tier3).toHaveBeenCalled();
+    expect(apiGetAudioUrl).not.toHaveBeenCalled();
+    expect(url).toBe('https://tier3.example.com/1.mp3');
+  });
+
+  it('开启但 resolver 返回空/抛错 → 回退 api 腿', async () => {
+    setTier3Enabled(true);
+    setTier3Resolver(vi.fn(async () => ''));
+    const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => { throw new Error('直连失败'); }) });
+    registerDirectClient(client);
+    const url = await resolvePlayableUrlRouted(song('1', 'netease', 'https://x/api.mp3'));
+    expect(apiGetAudioUrl).toHaveBeenCalledWith('https://x/api.mp3');
+    expect(url).toBe('https://api.example.com/1.mp3');
+  });
+
+  it('direct 模式不经过 tier3（直连失败直接上抛）', async () => {
+    setTier3Enabled(true);
+    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    setTier3Resolver(tier3);
+    const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => { throw new Error('直连失败'); }) });
+    registerDirectClient(client);
+    setSourceMode('netease', 'direct');
+    await expect(resolvePlayableUrlRouted(song('1', 'netease'))).rejects.toThrow('直连失败');
+    expect(tier3).not.toHaveBeenCalled();
+    expect(apiGetAudioUrl).not.toHaveBeenCalled();
   });
 });

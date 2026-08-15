@@ -37,6 +37,7 @@ export {
   refreshCookie,
   ensureFreshCookie,
   setCookiePersister,
+  randomKugouReg,
 } from './cookies/cookieManager.js';
 export type { SourceCookie, KugouDeviceReg, CookieClock, CookieSource, GenerateCookieOptions } from './cookies/cookieManager.js';
 export { isImageBytes, isAudioBytes } from './utils/sniffers.js';
@@ -100,8 +101,11 @@ export {
   searchSongsRouted,
   resolvePlayableUrlRouted,
   resolvePlayableSongRouted,
+  setTier3Enabled,
+  getTier3Enabled,
+  setTier3Resolver,
 } from './shared/sourceRouter.js';
-export type { SourceMode, DirectSourceClient, SourceRouterLegs } from './shared/sourceRouter.js';
+export type { SourceMode, DirectSourceClient, SourceRouterLegs, Tier3Resolver } from './shared/sourceRouter.js';
 export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS } from './shared/sourceRouter.js';
 export { detectAudioContainer, containerFromContentType, extensionForContainer, replaceExtension } from './download/container.js';
 export type { AudioContainer } from './download/container.js';

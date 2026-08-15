@@ -1,6 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request } from './transport.js';
+import { request, bodyToText } from './transport.js';
 
 /**
  * 咪咕直连客户端（T05 #151）。
@@ -55,10 +55,6 @@ function toBytes(body: string | ArrayBuffer): Uint8Array {
   return typeof body === 'string' ? new TextEncoder().encode(body) : new Uint8Array(body);
 }
 
-function toText(body: string | ArrayBuffer): string {
-  return typeof body === 'string' ? body : new TextDecoder().decode(body);
-}
-
 /** cloudsearch 返回的咪咕原生 track → Song（字段名以实测/文档假设为准）。 */
 function mapTrack(t: any): Song {
   const rawArtists = t.singer ?? t.artists ?? [];
@@ -102,7 +98,7 @@ export const miguDirectClient: DirectSourceClient = {
       timeoutMs: 8000,
     });
     if (res.status >= 400) throw new Error(`migu 搜索 HTTP ${res.status}`);
-    const data = JSON.parse(toText(res.body)) as {
+    const data = JSON.parse(bodyToText(res.body)) as {
       code?: string | number;
       data?: { songList?: any[] };
     };

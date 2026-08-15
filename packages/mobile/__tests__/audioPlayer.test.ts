@@ -75,6 +75,7 @@ const audioMocks = vi.hoisted(() => {
     searchSongs: vi.fn(async (): Promise<Song[]> => []),
     searchSongById: vi.fn(async (): Promise<Song | null> => null),
     getLyrics: vi.fn(async (): Promise<string> => ''),
+    resolvePlayableSongRouted: vi.fn(async (): Promise<{ url: string; nonFull: boolean }> => ({ url: '', nonFull: false })),
     clearByPrefix: vi.fn(),
     storageGet: null as string | null,
     storageSet: vi.fn(async () => {}),
@@ -109,6 +110,7 @@ vi.mock('@mplayer/core', async (importOriginal) => {
       searchSongs: audioMocks.searchSongs,
       searchSongById: audioMocks.searchSongById,
       getLyrics: audioMocks.getLyrics,
+      resolvePlayableSongRouted: audioMocks.resolvePlayableSongRouted,
     },
     resolvePlayableUrl: audioMocks.resolvePlayableUrl,
     resolvePlayableSong: audioMocks.resolvePlayableSong,
@@ -194,6 +196,8 @@ beforeEach(() => {
   audioMocks.searchSongs.mockClear();
   audioMocks.searchSongById.mockClear();
   audioMocks.getLyrics.mockClear();
+  audioMocks.resolvePlayableSongRouted.mockClear();
+  audioMocks.resolvePlayableSong.mockClear();
   audioMocks.clearByPrefix.mockClear();
   audioMocks.storageGet = null;
   audioMocks.storageSet.mockClear();
@@ -442,6 +446,42 @@ describe('URL persistence cache (AsyncStorage songUrl:)', () => {
     await playSong(first);
 
     expect(audioMocks.storageSet).not.toHaveBeenCalled();
+  });
+});
+
+describe('direct-first playback (spec #146 §8 移动端直连)', () => {
+  it('no-url song resolves via routed chain (直连优先) instead of legacy search', async () => {
+    const first = song('1');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    audioMocks.resolvePlayableSongRouted.mockResolvedValueOnce({ url: 'https://direct.example.com/1.mp3', nonFull: false });
+
+    await playSong(first);
+
+    expect(audioMocks.resolvePlayableSongRouted).toHaveBeenCalledWith(first);
+    expect(audioMocks.resolvePlayableSong).not.toHaveBeenCalled();
+    expect(audioMocks.players[0].uri).toBe('https://direct.example.com/1.mp3');
+  });
+
+  it('routed chain empty result → falls back to legacy resolvePlayableSong', async () => {
+    const first = song('1');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    audioMocks.resolvePlayableSongRouted.mockResolvedValueOnce({ url: '', nonFull: false });
+
+    await playSong(first);
+
+    expect(audioMocks.resolvePlayableSong).toHaveBeenCalled();
+    expect(audioMocks.players[0].uri).toBe('https://example.com/1.mp3');
+  });
+
+  it('routed chain throw → falls back to legacy resolvePlayableSong', async () => {
+    const first = song('1');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    audioMocks.resolvePlayableSongRouted.mockRejectedValueOnce(new Error('路由链失败'));
+
+    await playSong(first);
+
+    expect(audioMocks.resolvePlayableSong).toHaveBeenCalled();
+    expect(audioMocks.players[0].uri).toBe('https://example.com/1.mp3');
   });
 });
 

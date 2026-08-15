@@ -1,13 +1,14 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request } from './transport.js';
+import { request, bodyToText } from './transport.js';
 import { md5 } from '../utils/hash.js';
-import { BROWSER_UA } from '../utils/sourceReferer.js';
+import { getUserAgent } from './antiScrape.js';
+import { decodeBase64Utf8 } from '../utils/base64.js';
 import {
   getCookie,
   generateCookie,
   shouldRotateCookie,
-  type KugouDeviceReg,
+  randomKugouReg,
 } from '../cookies/cookieManager.js';
 
 /**
@@ -32,28 +33,6 @@ const LYRIC_SEARCH_URL = 'http://lyrics.kugou.com/search';
 const LYRIC_DOWNLOAD_URL = 'http://lyrics.kugou.com/download';
 const KGCLOUD_KEY = 'kgcloudv2';
 
-function randomHex(len: number): string {
-  let out = '';
-  for (let i = 0; i < len; i++) out += Math.floor(Math.random() * 16).toString(16);
-  return out;
-}
-
-function randomMac(): string {
-  const parts: string[] = [];
-  for (let i = 0; i < 6; i++) parts.push(randomHex(2));
-  return parts.join(':');
-}
-
-function randomKugouReg(): KugouDeviceReg {
-  return {
-    guid: randomHex(32),
-    mid: randomHex(16),
-    mac: randomMac(),
-    dev: randomHex(16),
-    dfid: randomHex(16),
-  };
-}
-
 /** 取（必要时生成/轮换）酷狗设备 cookie 串；宿主持久化由 T13 cookieManager 处理。 */
 export function ensureKugouCookie(): string {
   let cookie = getCookie('kugou');
@@ -63,12 +42,7 @@ export function ensureKugouCookie(): string {
   return cookie.value;
 }
 
-function toText(body: string | ArrayBuffer): string {
-  return typeof body === 'string' ? body : new TextDecoder().decode(body);
-}
-
-function mapTrack(t: any): Song {
-  const hash = String(t.hash || t.FileHash || '');
+function mapTrack(t: any): Song {  const hash = String(t.hash || t.FileHash || '');
   const coverRaw = t.trans_param?.union_cover || t.cover_url || t.Image || '';
   const durationSec = Number(t.duration || t.Duration || 0) || Math.floor(Number(t.timelen || 0) / 1000) || 0;
   return {
@@ -87,7 +61,7 @@ function mapTrack(t: any): Song {
 }
 
 const KG_HEADERS = (): Record<string, string> => ({
-  'user-agent': BROWSER_UA,
+  'user-agent': getUserAgent('kugou'),
   'Cookie': ensureKugouCookie(),
 });
 
@@ -109,7 +83,7 @@ export const kugouDirectClient: DirectSourceClient = {
       timeoutMs: 8000,
     });
     if (res.status >= 400) throw new Error(`酷狗搜索 HTTP ${res.status}`);
-    const data = JSON.parse(toText(res.body)) as { data?: { lists?: any[] } };
+    const data = JSON.parse(bodyToText(res.body)) as { data?: { lists?: any[] } };
     const lists = data.data?.lists || [];
     return lists.map(mapTrack).filter((s) => s.id);
   },
@@ -133,7 +107,7 @@ export const kugouDirectClient: DirectSourceClient = {
       timeoutMs: 10000,
     });
     if (res.status >= 400) throw new Error(`酷狗 CDN HTTP ${res.status}`);
-    const data = JSON.parse(toText(res.body)) as {
+    const data = JSON.parse(bodyToText(res.body)) as {
       data?: { url?: unknown; backup_url?: unknown; backupUrl?: unknown; mp3Url?: unknown; backupMp3Url?: unknown };
     };
     const raw =
@@ -169,7 +143,7 @@ export async function resolveKugouLyricUrl(lrcUrl: string): Promise<string> {
     timeoutMs: 8000,
   });
   if (searchRes.status >= 400) throw new Error(`酷狗歌词搜索 HTTP ${searchRes.status}`);
-  const searchData = JSON.parse(toText(searchRes.body)) as {
+  const searchData = JSON.parse(bodyToText(searchRes.body)) as {
     candidates?: { id?: string; accesskey?: string }[];
   };
   const candidate = searchData.candidates?.[0];
@@ -181,10 +155,7 @@ export async function resolveKugouLyricUrl(lrcUrl: string): Promise<string> {
     timeoutMs: 8000,
   });
   if (dlRes.status >= 400) throw new Error(`酷狗歌词下载 HTTP ${dlRes.status}`);
-  const dlData = JSON.parse(toText(dlRes.body)) as { content?: string };
+  const dlData = JSON.parse(bodyToText(dlRes.body)) as { content?: string };
   if (typeof dlData.content !== 'string') return '';
-  const bin = atob(dlData.content.replace(/\s+/g, ''));
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder('utf-8').decode(bytes);
+  return decodeBase64Utf8(dlData.content);
 }

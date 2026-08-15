@@ -3,7 +3,7 @@ import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
 import { request } from './transport.js';
 import { md5 } from '../utils/hash.js';
-import { BROWSER_UA } from '../utils/sourceReferer.js';
+import { getUserAgent } from './antiScrape.js';
 
 /**
  * QQ 音乐直连客户端（T06 #152）。
@@ -263,7 +263,7 @@ function mapTrack(t: any): Song {
 
 const MUSICU_HEADERS = {
   'content-type': 'application/json',
-  'user-agent': BROWSER_UA,
+  'user-agent': getUserAgent('qq'),
   'Referer': 'https://y.qq.com/',
 };
 

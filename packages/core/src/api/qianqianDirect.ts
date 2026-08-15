@@ -2,6 +2,7 @@ import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
 import { request } from './transport.js';
 import { md5 } from '../utils/hash.js';
+import { getUserAgent } from './antiScrape.js';
 
 /**
  * 千千（太合）直连客户端（T04 #150）。
@@ -27,12 +28,12 @@ const SECRET = '0b50b02fd0d73a9c4c8c3a781c30845f';
 /** 播放档位按降序尝试；web 源常用 320（musicdl 顺序 3000→320→128→64）。这里取 320 起步。 */
 const RATES = ['320', '128', '64'];
 
-const BASE_HEADERS = {
+const BASE_HEADERS = (): Record<string, string> => ({
   'referer': 'https://music.91q.com/player',
   'from': 'web',
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+  'User-Agent': getUserAgent('qianqian'),
   'accept': 'application/json, text/javascript, */*; q=0.01',
-};
+});
 
 /** 补 timestamp + 计算 MD5 签名：sign = md5(sorted_kv + secret)。返回完整 query 参数表。 */
 function signedParams(params: Record<string, string>): Record<string, string> {
@@ -53,7 +54,7 @@ async function signedGet<T>(url: string, params: Record<string, string>): Promis
   const res = await request({
     method: 'GET',
     url: `${url}?${query.toString()}`,
-    headers: { ...BASE_HEADERS },
+    headers: { ...BASE_HEADERS() },
     timeoutMs: 8000,
   });
   if (typeof res.body !== 'string') {

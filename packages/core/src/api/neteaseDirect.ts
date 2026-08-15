@@ -1,7 +1,9 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
+import type { UrlInfo } from '../shared/playability.js';
 import { request } from './transport.js';
 import { weapiRequest } from './neteaseWeapi.js';
+import { getUserAgent } from './antiScrape.js';
 
 /**
  * 网易云直连客户端（T02 #148）。
@@ -57,7 +59,7 @@ export const neteaseDirectClient: DirectSourceClient = {
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
         'accept': 'application/json, text/javascript, */*; q=0.01',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': getUserAgent('netease'),
         'Referer': 'https://music.163.com/',
       },
       body: params.toString(),
@@ -80,9 +82,7 @@ export const neteaseDirectClient: DirectSourceClient = {
   },
 
   /** weapi 播放 URL 权威完整时长验证字段（T12 预检用）。无版权/VIP → null。 */
-  async resolveUrlInfo(song: Song): Promise<
-    { url: string; br: number; size: number; playTime: number; fee: number; payed: number } | null
-  > {
+  async resolveUrlInfo(song: Song): Promise<UrlInfo | null> {
     const data = await weapiRequest<{
       code: number;
       data?: {

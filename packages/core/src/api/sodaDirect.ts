@@ -1,7 +1,8 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request } from './transport.js';
-import { BROWSER_UA } from '../utils/sourceReferer.js';
+import type { UrlInfo } from '../shared/playability.js';
+import { request, bodyToText } from './transport.js';
+import { getUserAgent } from './antiScrape.js';
 import { musicApi } from './musicApi.js';
 
 /**
@@ -18,10 +19,6 @@ import { musicApi } from './musicApi.js';
  */
 
 const TRACK_V2_URL = 'https://api.qishui.com/luna/pc/track_v2';
-
-function toText(body: string | ArrayBuffer): string {
-  return typeof body === 'string' ? body : new TextDecoder().decode(body);
-}
 
 export const sodaDirectClient: DirectSourceClient = {
   key: 'soda',
@@ -44,11 +41,11 @@ export const sodaDirectClient: DirectSourceClient = {
     const res = await request({
       method: 'GET',
       url: `${TRACK_V2_URL}?${params.toString()}`,
-      headers: { 'user-agent': BROWSER_UA },
+      headers: { 'user-agent': getUserAgent('soda') },
       timeoutMs: 10000,
     });
     if (res.status >= 400) throw new Error(`汽水 track_v2 HTTP ${res.status}`);
-    const data = JSON.parse(toText(res.body)) as {
+    const data = JSON.parse(bodyToText(res.body)) as {
       track?: { duration?: number; audio_info?: { play_info_list?: { size?: number; bitrate?: number; main_play_url?: string; backup_play_url?: string; play_auth?: string }[] } };
     };
     const track = data.track;
@@ -57,7 +54,7 @@ export const sodaDirectClient: DirectSourceClient = {
     const best = list.reduce((a, b) => (a.size || 0) > (b.size || 0) ? a : b);
     const url = String(best.main_play_url || best.backup_play_url || '').replace(/^http:/, 'https:');
     const auth = best.play_auth || '';
-    return {
+    const info: UrlInfo = {
       url: auth ? `${url}?play_auth=${encodeURIComponent(auth)}` : url,
       br: best.bitrate || 0,
       size: best.size || 0,
@@ -65,5 +62,6 @@ export const sodaDirectClient: DirectSourceClient = {
       fee: 0,
       payed: 1,
     };
+    return info;
   },
 };

@@ -47,6 +47,11 @@ export interface TransportResponse {
 
 export type Transport = (req: TransportRequest) => Promise<TransportResponse>;
 
+/** 传输响应体 → 文本（直连客户端/预检共用，避免 4 处重复实现）。 */
+export function bodyToText(body: string | ArrayBuffer): string {
+  return typeof body === 'string' ? body : new TextDecoder().decode(body);
+}
+
 let active: Transport | null = null;
 
 /** 注入测试/桥接传输；传 null 恢复默认 axios 实现。 */

@@ -177,7 +177,7 @@ export function generateCookie(source: CookieSource, opts: GenerateCookieOptions
       ? createNeteaseBorrowMusicUCookie(opts.borrowMusicU, opts.clock)
       : createNeteaseAnonymousCookie(opts.clock);
   } else {
-    const reg = opts.kugouReg ?? defaultKugouReg();
+    const reg = opts.kugouReg ?? randomKugouReg();
     cookie = createKugouDeviceCookie(reg, opts.clock);
   }
   cookies.set(source, cookie);
@@ -185,12 +185,22 @@ export function generateCookie(source: CookieSource, opts: GenerateCookieOptions
   return cookie;
 }
 
-/** 酷狗缺省设备注册参数（程序化伪设备，逐字段随机/固定，供无显式 reg 时兜底）。 */
-function defaultKugouReg(): KugouDeviceReg {
-  const rand = Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
-  const mid = `KUGOU_MID_${rand}`;
-  const dfid = `DFID_${Date.now().toString(36)}`;
-  return { guid: rand, mid, mac: rand, dev: 'Mplayer-Direct', dfid };
+/** 酷狗缺省设备注册参数（程序化伪设备，逐字段随机——32hex guid/16hex mid/冒号 MAC，供无显式 reg 时兜底）。 */
+export function randomKugouReg(): KugouDeviceReg {
+  const hex = (len: number): string => {
+    let out = '';
+    for (let i = 0; i < len; i++) out += Math.floor(Math.random() * 16).toString(16);
+    return out;
+  };
+  const macParts: string[] = [];
+  for (let i = 0; i < 6; i++) macParts.push(hex(2));
+  return {
+    guid: hex(32),
+    mid: hex(16),
+    mac: macParts.join(':'),
+    dev: hex(16),
+    dfid: hex(16),
+  };
 }
 
 /**

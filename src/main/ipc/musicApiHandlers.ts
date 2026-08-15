@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import type { Song } from '@mplayer/core';
+import type { Song, SourceKey } from '@mplayer/core';
 import type { ApiResponse } from '@/shared/types/ipc';
 import type { MusicApiMethod, MusicApiMethodMap, MainOnlyMethods } from '@/shared/musicApiContract';
 import { getAggregatedChart } from '../services/chartAggregator';
@@ -63,7 +63,7 @@ export function registerMusicApiCall(api: MusicApi): void {
     fillSongUrls: (songs: Song[], albumName?: string) => api.fillSongUrls(songs, albumName),
     getSodaAudioUrl: (trackId: string) => api.getSodaAudioUrl(trackId),
     parseSodaShareLink: (link: string) => api.parseSodaShareLink(link),
-    searchSongsRouted: (k: string, p: number, s?: any) => api.searchSongsRouted(k, p, s),
+    searchSongsRouted: (k: string, p: number, s: SourceKey) => api.searchSongsRouted(k, p, s),
     resolvePlayableUrlRouted: (song: Song) => api.resolvePlayableUrlRouted(song),
     resolvePlayableSongRouted: (song: Song) => api.resolvePlayableSongRouted(song),
     // resolveCoverUrl：保留主进程下载直链→磁盘封面缓存副作用

@@ -215,6 +215,24 @@ function isRedirectEndpoint(url: string): boolean {
 }
 
 /**
+ * 移动端可播 URL 解析（spec #146 §8：直连优先，自建 API 兜底）。
+ * 直连 client（网易/汽水/千千/咪咕 + 酷我歌词）注册后，无 url 歌曲
+ * 先走路由链（官方直连 → 自建 API 腿兜底），失败才回退旧合并解析。
+ * 返回 {url, lrc}（lrc 取自直连歌曲自身，无则后台补）。
+ */
+async function resolvePlayableUrlMobile(song: Song): Promise<{ url: string; lrc: string }> {
+  try {
+    const routed = await musicApi.resolvePlayableSongRouted(song);
+    if (routed?.url?.startsWith('http')) {
+      return { url: routed.url, lrc: song.lrc || '' };
+    }
+  } catch {
+    // 路由链未配置/直连+api 均失败 → 走旧路径兜底
+  }
+  return resolvePlayableSong(song, musicApi);
+}
+
+/**
  * 解析 302 端点 → CDN 直链（getAudioUrl 带缓存；直链直接返回原值）。
  * 不能设短硬超时：RN 播放器（expo-audio）请求 api.php 不带会话 cookie
  * 必返回「非法请求」（原生层无 cookie jar），只能等 JS 层解析完成拿到
@@ -251,7 +269,7 @@ function prefetchNextSong(): void {
     const next = st.queue[nextIdx];
     if (!next?.name || next.sourceType === 'local') return;
     void (async () => {
-      const resolved = await resolvePlayableSong(next, musicApi);
+      const resolved = await resolvePlayableUrlMobile(next);
       const url = isRedirectEndpoint(resolved.url) ? await resolveDirectUrl(resolved.url) : resolved.url;
       if (url?.startsWith('http') && next.id) void setCachedUrl(next.id, url);
       if (resolved.lrc) void musicApi.getLyrics(resolved.lrc).catch(() => {});
@@ -313,8 +331,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
         audioUrl = isRedirectEndpoint(cached) ? await resolveDirectUrl(cached) : cached;
         void fetchLrcInBackground(song);
       } else {
-        // 无 url：合并解析，摄取端点一次拿音频 + 歌词（今日推荐/歌单/歌手页）
-        const resolved = await resolvePlayableSong(song, musicApi);
+        // 无 url：直连优先（spec #146 §8 移动端直连范围），失败回退旧合并解析
+        const resolved = await resolvePlayableUrlMobile(song);
         // 搜索兜底拿到的可能是 302 跳转端点 → JS 层解析成 CDN 直链
         audioUrl = isRedirectEndpoint(resolved.url) ? await resolveDirectUrl(resolved.url) : resolved.url;
         lrcUrl = resolved.lrc;

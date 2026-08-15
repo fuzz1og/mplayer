@@ -6,6 +6,8 @@ import { weapiRequest } from './neteaseWeapi.js';
 import { findExactMatch } from '../utils/songMatcher.js';
 import { resourceUrlKey } from '../utils/resourceKey.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
+import { decodeBase64Utf8 } from '../utils/base64.js';
+import { request, bodyToText } from './transport.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
 import { probeSongs } from './probeSongs.js';
@@ -898,20 +900,7 @@ export function decodeLyricBody(body: unknown): string {
 }
 
 function decodeBase64(input: string): string {
-  const clean = input.replace(/\s+/g, '');
-  try {
-    if (typeof atob === 'function') {
-      // atob 返回 Latin-1 二进制串 → 转字节 → UTF-8 解码（fcg lyric 为 UTF-8 的 base64）
-      const bin = atob(clean);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return new TextDecoder('utf-8').decode(bytes);
-    }
-    // Node 兜底
-    return Buffer.from(clean, 'base64').toString('utf-8');
-  } catch {
-    return '';
-  }
+  return decodeBase64Utf8(input);
 }
 
 /**
@@ -1000,14 +989,20 @@ export const musicApi = {
     params.set('channel', 'pc_web');
 
     const apiURL = 'https://api.qishui.com/luna/pc/search/track?' + params.toString();
-    const response = await axios.get(apiURL, {
+    const res = await request({
+      method: 'GET',
+      url: apiURL,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
       },
-      timeout: 15000,
+      timeoutMs: 15000,
     });
-
-    const data = response.data;
+    if (res.status < 200 || res.status >= 300) {
+      throw new Error(`汽水搜索 HTTP ${res.status}`);
+    }
+    const data = JSON.parse(bodyToText(res.body)) as {
+      result_groups?: { data?: { entity?: { track?: any } }[] }[];
+    };
     const songs: Song[] = [];
 
     if (data.result_groups && data.result_groups.length > 0) {
