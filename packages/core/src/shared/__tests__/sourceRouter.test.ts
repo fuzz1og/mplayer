@@ -163,6 +163,19 @@ describe('searchSongsRouted 路由矩阵', () => {
     expect(result[0].id).toBe('api-1');
   });
 
+  it('direct + 客户端返回空 → tier3 搜索兜底返回候选，不回退 api', async () => {
+    const tier3Search = vi.fn(async () => [song('tier3-1', 'netease')]);
+    setTier3SearchEnabled(true);
+    setTier3SearchResolver(tier3Search);
+    const client = makeClient('netease', { search: vi.fn(async () => []) });
+    registerDirectClient(client);
+    setSourceMode('netease', 'direct');
+    const result = await searchSongsRouted('陶喆', 1, 'netease');
+    expect(tier3Search).toHaveBeenCalledWith('陶喆', 1, 'netease');
+    expect(result[0].id).toBe('tier3-1');
+    expect(apiSearch).not.toHaveBeenCalled();
+  });
+
   it('direct + 客户端失败 → tier3 搜索兜底返回候选，不回退 api', async () => {
     const tier3Search = vi.fn(async () => [song('tier3-1', 'netease')]);
     setTier3SearchEnabled(true);

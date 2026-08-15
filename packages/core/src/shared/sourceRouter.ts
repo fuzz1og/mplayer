@@ -234,7 +234,13 @@ export async function searchSongsRouted(
     throw new Error('该源暂无直连实现');
   }
   try {
-    return await route.client.search!(query, page);
+    const directSongs = await route.client.search!(query, page);
+    if (directSongs.length > 0) return directSongs;
+    // 直连返回空也视为“未命中”，进入 tier3 搜索兜底（若启用）。
+    const tier3Songs = await tryTier3Search(query, page, source);
+    if (tier3Songs.length > 0) return tier3Songs;
+    if (route.mode === 'direct') return directSongs;
+    return api.searchSongs(query, page, source);
   } catch (err) {
     // 直连搜索失败 → 第三方订阅搜索兜底（若启用）；再按模式决定是否回退自建 API。
     const tier3Songs = await tryTier3Search(query, page, source);
