@@ -33,8 +33,19 @@ async function loadLyricsWithRetry(song: Song): Promise<string> {
   const fetchLyrics = (lrcUrl: string): Promise<string> =>
     callMusicApi('getLyrics', lrcUrl);
 
-  const lrcUrl = song.lrc && song.lrc.trim() !== '' ? song.lrc : await searchLrc();
-  if (!lrcUrl) return '';
+  let lrcUrl = song.lrc && song.lrc.trim() !== '' ? song.lrc : '';
+  // 网易直连搜索（neteaseDirect.mapTrack）不带 lrc 字段，再搜索也拿不到；
+  // 非网易源才回退「搜索补全 lrc URL」。
+  if (!lrcUrl && song.sourceType !== 'netease') {
+    lrcUrl = await searchLrc();
+  }
+  if (!lrcUrl) {
+    // 网易：按 songId 直取歌词（music.163.com/api/song/lyric 明文）
+    if (song.sourceType === 'netease' && song.id) {
+      return callMusicApi('getLyricsBySongId', String(song.id));
+    }
+    return '';
+  }
   try {
     return await fetchLyrics(lrcUrl);
   } catch (err) {

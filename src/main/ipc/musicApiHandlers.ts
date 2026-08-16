@@ -36,6 +36,7 @@ export function registerMusicApiCall(api: MusicApi): void {
     batchSearch: (kw: string[], s?: any, c?: number) => api.batchSearch(kw, s, c),
     probeSongsBatch: (s: Song[]) => api.probeSongsBatch(s),
     getLyrics: (url: string) => api.getLyrics(url),
+    getLyricsBySongId: (id: string) => api.getLyricsBySongId(id),
     getNeteaseHotlist: () => api.getNeteaseHotlist(),
     getNeteaseNewSongList: () => api.getNeteaseNewSongList(),
     getQQHotlist: () => api.getQQHotlist(),

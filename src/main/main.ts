@@ -7,10 +7,10 @@ import axios from 'axios';
 import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
-import { musicApi as coreMusicApi, injectProxyAgents, setApiTimingLog, loadSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY, loadTier3State } from './api/musicApi';
+import { musicApi as coreMusicApi, injectProxyAgents, setApiTimingLog, loadSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY, loadTier3State, setTransportProxyAgents } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
-import { applyElectronProxy, getHttpAgent, getHttpsAgent, getTlsDegradedHttpsAgent, getTlsFingerprintHttpsAgent, type ProxyConfig } from './proxy';
+import { applyElectronProxy, buildAgents, getHttpAgent, getHttpsAgent, getTlsDegradedHttpsAgent, getTlsFingerprintHttpsAgent, type ProxyConfig } from './proxy';
 import type { Tier3Subscription } from '@mplayer/core';
 import { registerCacheIpc } from './ipc/cache';
 import { registerFavoriteIpc, registerHistoryIpc, registerPlaylistIpc } from './ipc/favoriteHistoryPlaylist';
@@ -142,7 +142,7 @@ app.whenReady().then(async () => {
 
   // ADR-0001：music 域单通道分发（替换旧 musicApi:* / lyrics:get / api:getThrottleWait）
   // 必须在 createWindow() 之前注册，否则渲染层加载后立即 invoke 会报
-  // “No handler registered for 'musicApi:call'”。
+  // “No handler registered for the musicApi 单通道”。
   registerMusicApiCall(musicApi);
   const mainWindow = createWindow();
 
@@ -190,7 +190,18 @@ app.whenReady().then(async () => {
   try {
     const savedProxy = await db.getSetting<ProxyConfig>('proxyConfig');
     if (savedProxy) {
+      // buildAgents 按配置构建（enabled → proxied agents；disabled → plain），
+      // getHttpAgent()/getHttpsAgent() 返回构建结果；设置变更（settings:setProxy）
+      // 同样走 buildAgents，provider 每次请求时取值 → 动态切换无需重新注入。
+      buildAgents(savedProxy);
+      // 自建 API 客户端（已退役）与统一请求层（直连客户端/tier3/探测）共用同一
+      // 代理路径：主进程请求与渲染进程播放（applyElectronProxy）网络路径一致；
+      // 未配置/禁用时两者均为直连（裸连），不读系统代理。
       injectProxyAgents(() => ({
+        httpAgent: getHttpAgent(),
+        httpsAgent: getHttpsAgent(),
+      }));
+      setTransportProxyAgents(() => ({
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
       }));

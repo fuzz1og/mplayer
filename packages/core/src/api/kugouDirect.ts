@@ -29,8 +29,8 @@ import {
 
 const SEARCH_URL = 'https://songsearch.kugou.com/song_search_v2';
 const CDN_URL = 'https://trackercdn.kugou.com/i/v2';
-const LYRIC_SEARCH_URL = 'http://lyrics.kugou.com/search';
-const LYRIC_DOWNLOAD_URL = 'http://lyrics.kugou.com/download';
+const LYRIC_SEARCH_URL = 'https://lyrics.kugou.com/search';
+const LYRIC_DOWNLOAD_URL = 'https://lyrics.kugou.com/download';
 const KGCLOUD_KEY = 'kgcloudv2';
 
 /** 取（必要时生成/轮换）酷狗设备 cookie 串；宿主持久化由 T13 cookieManager 处理。 */
@@ -45,6 +45,9 @@ export function ensureKugouCookie(): string {
 function mapTrack(t: any): Song {  const hash = String(t.hash || t.FileHash || '');
   const coverRaw = t.trans_param?.union_cover || t.cover_url || t.Image || '';
   const durationSec = Number(t.duration || t.Duration || 0) || Math.floor(Number(t.timelen || 0) / 1000) || 0;
+  // 歌词 search 的 keyword 用歌名而不是 filename（filename 常是 “歌手 - 歌名”，
+  // 直接传给 lyrics.kugou.com/search 可能导致 candidates 为空）。
+  const lyricKeyword = t.songname || t.SongName || t.filename || '';
   return {
     id: hash,
     name: t.songname || t.SongName || t.filename || '',
@@ -52,8 +55,8 @@ function mapTrack(t: any): Song {  const hash = String(t.hash || t.FileHash || '
     album: t.album_name || t.AlbumName || '',
     url: '',
     cover: String(coverRaw).replace(/\{size\}/g, '300').replace(/^http:/, 'https:'),
-    lrc: hash && t.filename
-      ? `${LYRIC_SEARCH_URL}?hash=${encodeURIComponent(hash)}&keyword=${encodeURIComponent(t.filename)}`
+    lrc: hash && lyricKeyword
+      ? `${LYRIC_SEARCH_URL}?hash=${encodeURIComponent(hash)}&keyword=${encodeURIComponent(lyricKeyword)}`
       : '',
     duration: durationSec,
     sourceType: 'kugou',
@@ -62,6 +65,7 @@ function mapTrack(t: any): Song {  const hash = String(t.hash || t.FileHash || '
 
 const KG_HEADERS = (): Record<string, string> => ({
   'user-agent': getUserAgent('kugou'),
+  'Referer': 'https://www.kugou.com/',
   'Cookie': ensureKugouCookie(),
 });
 

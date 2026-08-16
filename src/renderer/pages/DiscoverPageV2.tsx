@@ -16,6 +16,7 @@ import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
+import { findExactMatch } from '@mplayer/core';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
 import type { Album, Song, DiscoverPlaylist, Artist } from '@mplayer/core';
 import { CHART_CACHE_TTL as CHART_TTL } from '../../shared/chart';
@@ -282,14 +283,17 @@ const DiscoverPageV2: React.FC = () => {
     if (chartId) playedChartIdRef.current = chartId;
     try {
       if (!song.url && song.name) {
+        // 无 url 歌曲（排行榜/推荐页）：按「歌名 歌手」搜索补 url，但只取**严格精确匹配**
+        // 的版本，且只回填 url（歌名/歌手/封面保持点击的歌）——绝不用搜索结果第一条顶替，
+        // 否则酷我这类搜索排序差的源会播放同名不同歌手的歌（如《单车恋人》→ cover 版）。
         const keyword = `${song.name} ${song.artist}`;
         const results = await callMusicApi('searchSongsRouted', keyword, 1, song.sourceType);
-        if (results?.length > 0) {
-          await play(results[0]);
+        const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
+        if (hit?.url) {
+          await play({ ...song, url: hit.url });
           return;
         }
-        // Search returned no results — try direct play
-        message.warning('未找到可播放版本，尝试直接播放');
+        // Search returned no exact match — fall through to direct play (play 内部再解析)
       }
       await play(song);
     } catch (error) {
@@ -444,7 +448,7 @@ const DiscoverPageV2: React.FC = () => {
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>{searchError}</div>
             ) : sourceType === 'all' ? (
               <GroupedSongList
-                onPlay={handlePlaySong}
+                onPlay={(song: Song) => { void play(song); }}
                 onAddToPlaylist={() => message.info('添加到歌单功能')}
                 onToggleFavorite={toggleFavorite}
                 onDownload={download}
@@ -461,7 +465,7 @@ const DiscoverPageV2: React.FC = () => {
                   currentSongId={currentSong?.id}
                   isPlaying={isPlaying}
                   favoriteIds={favoriteIds}
-                  onPlay={handlePlaySong}
+                  onPlay={(song: Song) => { void play(song); }}
                   onToggleFavorite={toggleFavorite}
                   onDownload={download}
                   onAddToPlaylist={() => message.info('添加到歌单功能')}

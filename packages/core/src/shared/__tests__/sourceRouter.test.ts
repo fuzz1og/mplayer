@@ -328,4 +328,24 @@ describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地�
     expect(tier3).not.toHaveBeenCalled();
     expect(apiGetAudioUrl).not.toHaveBeenCalled();
   });
+
+  it('开启 + resolver：直连返回非空但 audioTag=invalid 时也走 tier3', async () => {
+    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => 'https://direct.example.com/1.mp3') });
+    registerDirectClient(client);
+    const invalidSong = { ...song('1', 'netease'), audioTag: 'invalid' as const };
+    const url = await resolvePlayableUrlRouted(invalidSong);
+    expect(tier3).toHaveBeenCalled();
+    expect(url).toBe('https://tier3.example.com/1.mp3');
+  });
+
+  it('未配置 tier3：audioTag=invalid 时保留直连 URL（由上层继续弹窗/换元）', async () => {
+    const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => 'https://direct.example.com/1.mp3') });
+    registerDirectClient(client);
+    const invalidSong = { ...song('1', 'netease'), audioTag: 'invalid' as const };
+    const url = await resolvePlayableUrlRouted(invalidSong);
+    expect(url).toBe('https://direct.example.com/1.mp3');
+  });
 });

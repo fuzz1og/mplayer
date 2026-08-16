@@ -2,7 +2,7 @@ import type { Song, SourceKey } from '../types/index.js';
 import { request, bodyToText, type TransportRequest } from '../api/transport.js';
 import { BROWSER_UA } from '../utils/sourceReferer.js';
 import { isAudioBytes } from '../utils/sniffers.js';
-import { isExactMatch } from '../utils/songMatcher.js';
+import { isExactMatch, normalize } from '../utils/songMatcher.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import {
   setTier3Enabled as setRouterTier3Enabled,
@@ -61,6 +61,9 @@ export interface Tier3Source {
   /** 源代号（如 vkeys / gdstudio），仅用于日志与 UI 展示。 */
   id: string;
   name?: string;
+  /** 该源适用的原始音源（如 qq/netease/kuwo）。url-resolver 建议必填，
+   *  防止跨源时把 A 源的 id 当成 B 源的 id，解析出完全不同的歌。 */
+  source?: string;
   kind: Tier3SourceKind;
   /** 返回音频 URL 的域名白名单；支持 `*.example.com` 通配子域。 */
   allowedDomains: string[];
@@ -103,6 +106,10 @@ export interface Tier3Deps {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const SNIFF_TIMEOUT_MS = 8_000;
+
+/** 试听片段大小阈值：<1MB 视为片段（与 api/audioProbe.ts 的 PREVIEW_THRESHOLD 对齐，
+ *  30s 128kbps ≈ 480KB）。tier3 解析到片段时宁可跳过，也不把试听版当完整版播。 */
+const TRIAL_BYTES_THRESHOLD = 1_048_576;
 
 // ── 状态（core 零 I/O，宿主注册 persister 落盘）──────────────────────
 
@@ -226,6 +233,7 @@ function parseSearchSpec(value: unknown, label: string): Tier3SearchSpec {
 function parseSource(value: unknown): Tier3Source {
   if (!isRecord(value)) throw new Error('清单校验失败：source 必须是对象');
   const id = assertString(value.id, 'source.id');
+  const source = value.source === undefined ? undefined : assertString(value.source, `source(${id}).source`);
   const kind = assertString(value.kind, 'source.kind');
   if (!SOURCE_KINDS.has(kind)) {
     throw new Error(`清单校验失败：source.kind 不支持 ${kind}`);
@@ -243,6 +251,7 @@ function parseSource(value: unknown): Tier3Source {
   return {
     id,
     name: value.name === undefined ? undefined : assertString(value.name, `source(${id}).name`),
+    source,
     kind: kind as Tier3SourceKind,
     allowedDomains,
     timeoutMs,
@@ -399,7 +408,13 @@ function isAllowedUrl(url: string, allowedDomains: string[]): boolean {
 
 // ── 字节嗅探 ─────────────────────────────────────────────────────────
 
-async function sniffAudioUrl(url: string, source: Tier3Source, deps: Tier3Deps): Promise<boolean> {
+/** 嗅探结果：ok = 前 1KB 是音频字节；totalBytes = 完整大小（CDN 支持 Range/Content-Length 时可得）。 */
+interface SniffResult {
+  ok: boolean;
+  totalBytes: number | null;
+}
+
+async function sniffAudioUrl(url: string, source: Tier3Source, deps: Tier3Deps): Promise<SniffResult> {
   try {
     const req = deps.request || request;
     const res = await req({
@@ -413,16 +428,40 @@ async function sniffAudioUrl(url: string, source: Tier3Source, deps: Tier3Deps):
       timeoutMs: source.timeoutMs || SNIFF_TIMEOUT_MS,
       responseType: 'arraybuffer',
     });
-    if (res.status >= 400) return false;
+    if (res.status >= 400) return { ok: false, totalBytes: null };
     const ct = String(res.headers['content-type'] || '');
-    if (ct.includes('text/html')) return false;
+    if (ct.includes('text/html')) return { ok: false, totalBytes: null };
     const bytes = res.body instanceof ArrayBuffer
       ? new Uint8Array(res.body)
       : new TextEncoder().encode(String(res.body));
-    return isAudioBytes(bytes);
+    if (!isAudioBytes(bytes)) return { ok: false, totalBytes: null };
+    // 206：Range 被支持，content-range 的 /total 是完整大小；200：Content-Length。
+    let totalBytes: number | null = null;
+    if (res.status === 206) {
+      const cr = String(res.headers['content-range'] || '');
+      const total = cr ? parseInt(cr.split('/')[1] || '', 10) : null;
+      if (total && Number.isFinite(total)) totalBytes = total;
+    } else {
+      const cl = String(res.headers['content-length'] || '');
+      if (cl) {
+        const n = parseInt(cl, 10);
+        if (Number.isFinite(n)) totalBytes = n;
+      }
+    }
+    return { ok: true, totalBytes };
   } catch {
+    return { ok: false, totalBytes: null };
+  }
+}
+
+/** 候选是否可接受：字节嗅探通过，且（拿不到大小时不臆断 / 大小 ≥ 试听片段阈值）。 */
+function isAcceptableCandidate(sniff: SniffResult, source: Tier3Source, url: string): boolean {
+  if (!sniff.ok) return false;
+  if (sniff.totalBytes !== null && sniff.totalBytes < TRIAL_BYTES_THRESHOLD) {
+    console.info(`[tier3] source=${source.id} 候选疑似试听片段（${sniff.totalBytes}B < 1MB），跳过: ${url}`);
     return false;
   }
+  return true;
 }
 
 // ── 单源执行 ─────────────────────────────────────────────────────────
@@ -436,9 +475,23 @@ async function resolveFromRequestSpec(
   const req = deps.request || request;
   const res = await req(buildRequest(spec, vars, source));
   if (res.status >= 400) return '';
-  const candidate = toUrlCandidate(getByPath(JSON.parse(bodyToText(res.body)), spec.responseJsonPath));
+  let body: unknown;
+  try {
+    body = JSON.parse(bodyToText(res.body));
+  } catch {
+    return '';
+  }
+  // 上游返回 HTTP 200 但业务错误封套（如 vkeys 的 {code:110000,message:"…"}）：
+  // 记 warn 便于区分「上游挂了」与「无此歌」，避免日志里只有空洞的“未命中”。
+  const code = getByPath(body, 'code');
+  const message = getByPath(body, 'message');
+  if (typeof code === 'number' && code !== 0 && typeof message === 'string' && message) {
+    console.warn(`[tier3] source=${source.id} 上游返回错误: code=${code} message=${message}`);
+    return '';
+  }
+  const candidate = toUrlCandidate(getByPath(body, spec.responseJsonPath));
   if (!candidate || !isAllowedUrl(candidate, source.allowedDomains)) return '';
-  return (await sniffAudioUrl(candidate, source, deps)) ? candidate : '';
+  return isAcceptableCandidate(await sniffAudioUrl(candidate, source, deps), source, candidate) ? candidate : '';
 }
 
 async function resolveSourceUrl(
@@ -475,13 +528,25 @@ async function resolveSearchThenResolve(song: Song, source: Tier3Source): Promis
     if (!isRecord(item)) continue;
     const itemName = asString(getByPath(item, source.search.namePath));
     const itemArtist = source.search.artistPath ? asString(getByPath(item, source.search.artistPath)) : '';
-    if (!isExactMatch({ name: song.name || '', artist: song.artist || '' }, { name: itemName, artist: itemArtist })) {
-      continue;
-    }
+    // 严格匹配优先（拒绝翻唱/Live/remix/同名不同歌手）。降级仅当**目标歌手也为空**
+    // （如 tier3 搜索兜底候选本身无歌手信息）时允许歌名精确匹配；目标歌手非空时，
+    // 无歌手字段的候选一律拒绝——上游目录同名歌多（李荣浩/李寒/孟庭苇都有《恋人》），
+    // 同名不同歌手的错播比「不播」更糟。
+    const target = { name: song.name || '', artist: song.artist || '' };
+    const candidate = { name: itemName, artist: itemArtist };
+    const nameExact = !!target.name && normalize(target.name) === normalize(itemName);
+    const matched =
+      isExactMatch(target, candidate) ||
+      (!normalize(itemArtist) && !normalize(target.artist) && nameExact);
+    if (!matched) continue;
 
     if (source.search.urlPath) {
       const directUrl = toUrlCandidate(getByPath(item, source.search.urlPath));
-      if (directUrl && isAllowedUrl(directUrl, source.allowedDomains) && (await sniffAudioUrl(directUrl, source, deps))) {
+      if (
+        directUrl &&
+        isAllowedUrl(directUrl, source.allowedDomains) &&
+        isAcceptableCandidate(await sniffAudioUrl(directUrl, source, deps), source, directUrl)
+      ) {
         return directUrl;
       }
     }
@@ -550,6 +615,11 @@ async function searchTier3SourceItems(source: Tier3Source, keyword: string): Pro
 /**
  * 第三方订阅搜索兜底：直连搜索失败时，用订阅清单里的 search-then-resolve 源
  * 按关键词返回候选歌曲。歌曲 url 可能为空，播放时仍可走 tier3 解析链。
+ *
+ * 注意：搜索兜底是「关键词候选」，不存在把 A 源 id 塞给 B 源解析器的错配风险
+ * （source 防护只作用于播放解析 resolveTier3），因此**不按 source 过滤搜索源**；
+ * 候选的 sourceType 标记为其真实来源（tier3SourceSource 推断，如 mitu→kuwo），
+ * 让点击播放时解析链的 source 防护与候选一致，而不是伪装成查询源。
  */
 export async function searchTier3Songs(keyword: string, _page: number, sourceKey: SourceKey): Promise<Song[]> {
   if (!state.enabled || state.subscriptions.length === 0) return [];
@@ -562,7 +632,21 @@ export async function searchTier3Songs(keyword: string, _page: number, sourceKey
       console.info(`[tier3] 源 ${source.id} 搜索请求: ${keyword}`);
       try {
         const items = await searchTier3SourceItems(source, keyword);
+        // 只保留歌名与查询词强相关的候选：归一化后歌名必须等于查询词、或为查询词
+        // 的一部分（查询词更具体，如「恋人 李荣浩」可匹配「恋人」）；反向
+        // （「恋人」匹配「恋人未满」）会端上完全不同的歌，一律丢弃。
+        // 多词查询的每个词都要出现在歌名或歌手里（「恋人 李荣浩」要求歌手含李荣浩）。
+        const tokens = keyword
+          .trim()
+          .split(/[\s,，、;；&|/]+/)
+          .map((t) => normalize(t))
+          .filter(Boolean);
+        const qName = tokens.join('');
         for (const item of items) {
+          const itemName = normalize(item.name);
+          if (!itemName || (itemName !== qName && !qName.includes(itemName))) continue;
+          const itemArtist = normalize(item.artist);
+          if (tokens.some((t) => !itemName.includes(t) && !itemArtist.includes(t))) continue;
           // 多个订阅/源可能指向同一上游，按“歌名+歌手”去重，避免结果重复。
           const dedupeKey = `${item.name.trim().toLowerCase()}|${item.artist.trim().toLowerCase()}`;
           if (seen.has(dedupeKey)) continue;
@@ -576,7 +660,7 @@ export async function searchTier3Songs(keyword: string, _page: number, sourceKey
             cover: item.cover,
             lrc: '',
             duration: 0,
-            sourceType: sourceKey,
+            sourceType: tier3SourceSource(source) || sourceKey,
           });
         }
         console.info(`[tier3] 源 ${source.id} 返回 ${items.length} 条候选`);
@@ -684,6 +768,21 @@ export function setTier3Deps(deps: Tier3Deps): void {
   currentDeps = deps;
 }
 
+/** 源适用的原始音源：显式声明的 source 优先；未声明时从 URL 形态推断（两种 kind 都推断，
+ *  避免酷我/酷狗等歌曲把自身 id 塞给 QQ/网易专用解析接口，导致返回完全不同的歌）。 */
+export function tier3SourceSource(source: Tier3Source): string | undefined {
+  if (source.source) return source.source;
+  const url = `${source.resolve.method || 'GET'} ${source.resolve.url} ${source.search?.url || ''}`.toLowerCase();
+  if (url.includes('tencent') || url.includes('/qq') || url.includes('qqmusic')) return 'qq';
+  if (url.includes('netease') || url.includes('music.163') || url.includes('126.net')) return 'netease';
+  if (url.includes('kuwo') || url.includes('kw.php')) return 'kuwo';
+  if (url.includes('kugou')) return 'kugou';
+  if (url.includes('migu')) return 'migu';
+  if (url.includes('qianqian') || url.includes('91q.com')) return 'qianqian';
+  if (url.includes('soda') || url.includes('qishui')) return 'soda';
+  return undefined;
+}
+
 async function resolveTier3(song: Song): Promise<string> {
   if (!state.enabled) {
     console.info(`[tier3] 未启用，跳过: 《${song.name}》${song.artist}`);
@@ -696,6 +795,11 @@ async function resolveTier3(song: Song): Promise<string> {
   console.info(`[tier3] 开始解析: 《${song.name}》${song.artist} (${song.sourceType}, id=${song.id})`);
   for (const subscription of state.subscriptions) {
     for (const source of subscription.manifest.sources) {
+      const effectiveSource = tier3SourceSource(source);
+      if (effectiveSource && effectiveSource !== song.sourceType) {
+        console.info(`[tier3] 源 ${source.id} 跳过（source mismatch: ${effectiveSource} != ${song.sourceType}）`);
+        continue;
+      }
       try {
         let url = '';
         if (source.kind === 'url-resolver') {

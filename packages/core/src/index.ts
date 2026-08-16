@@ -66,9 +66,11 @@ export {
   getTransportRetryOptions,
   setTlsDegradeProvider,
   getTlsDegradeProvider,
+  setTransportProxyAgents,
+  getTransportProxyAgents,
   isTlsHandshakeError,
 } from './api/transport.js';
-export type { Transport, TransportRequest, TransportResponse, TransportRetryOptions, TlsDegradeAgents } from './api/transport.js';
+export type { Transport, TransportRequest, TransportResponse, TransportRetryOptions, TlsDegradeAgents, TransportProxyAgents } from './api/transport.js';
 export {
   TLS_FINGERPRINT_SETTING_KEY,
   getTlsFingerprintEnabled,
@@ -101,6 +103,7 @@ export {
   searchSongsRouted,
   resolvePlayableUrlRouted,
   resolvePlayableSongRouted,
+  resolvePlayableSongDirect,
   setTier3Resolver,
 } from './shared/sourceRouter.js';
 export type { SourceMode, DirectSourceClient, SourceRouterLegs, Tier3Resolver } from './shared/sourceRouter.js';

@@ -8,6 +8,8 @@ import {
   setSourceModes,
   configureSourceRouter,
   resolvePlayableSongRouted,
+  setTier3Enabled,
+  setTier3Resolver,
 } from '../sourceRouter.js';
 
 /**
@@ -33,6 +35,8 @@ const song = (duration = 240, overrides: Partial<Song> = {}): Song => ({
 beforeEach(() => {
   clearDirectClients();
   setSourceModes({});
+  setTier3Enabled(false);
+  setTier3Resolver(null);
   configureSourceRouter({
     searchSongs: vi.fn(async () => []),
     getAudioUrl: vi.fn(async (u: string) => `api:${u}`),
@@ -131,5 +135,82 @@ describe('resolvePlayableSongRouted（带试听检测的播放解析）', () => 
     setSourceMode('netease', 'api');
     const res = await resolvePlayableSongRouted(song());
     expect(res.url).toBe('api:https://api.example.com/x.mp3');
+  });
+
+  it('开启 tier3 + audioTag=invalid：直连返回非空也优先用 tier3', async () => {
+    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    registerDirectClient({
+      key: 'netease',
+      resolvePlayableUrl: vi.fn(async () => 'https://direct.mp3'),
+    });
+    const res = await resolvePlayableSongRouted(song(240, { audioTag: 'invalid' }));
+    expect(tier3).toHaveBeenCalled();
+    expect(res).toEqual({ url: 'https://tier3.example.com/1.mp3', nonFull: false });
+  });
+
+  it('未配置 tier3 + audioTag=invalid：保留直连 URL，由上层继续弹窗/换元', async () => {
+    registerDirectClient({
+      key: 'netease',
+      resolvePlayableUrl: vi.fn(async () => 'https://direct.mp3'),
+    });
+    const res = await resolvePlayableSongRouted(song(240, { audioTag: 'invalid' }));
+    expect(res).toEqual({ url: 'https://direct.mp3', nonFull: false });
+  });
+
+  it('audioTag=preview：直连返回非空也先试 tier3，tier3 命中则 nonFull=false（完整版）', async () => {
+    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    registerDirectClient({
+      key: 'netease',
+      resolvePlayableUrl: vi.fn(async () => 'https://direct.mp3'),
+    });
+    const res = await resolvePlayableSongRouted(song(240, { audioTag: 'preview' }));
+    expect(tier3).toHaveBeenCalled();
+    expect(res).toEqual({ url: 'https://tier3.example.com/1.mp3', nonFull: false });
+  });
+
+  it('audioTag=preview 且 tier3 未命中：保留直连并标记 nonFull（试听版提示换源）', async () => {
+    const tier3 = vi.fn(async () => '');
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    registerDirectClient({
+      key: 'netease',
+      resolvePlayableUrl: vi.fn(async () => 'https://direct.mp3'),
+    });
+    const res = await resolvePlayableSongRouted(song(240, { audioTag: 'preview' }));
+    expect(res).toEqual({ url: 'https://direct.mp3', nonFull: true });
+  });
+
+  it('tier3 resolver 超过 6s 预算 → 按未命中处理，不阻塞播放（慢源如 mgmp3 20s 超时）', async () => {
+    vi.useFakeTimers();
+    const tier3 = vi.fn(() => new Promise<string>(() => { /* 永不 resolve，模拟挂起的慢源 */ }));
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    registerDirectClient({
+      key: 'netease',
+      resolvePlayableUrl: vi.fn(async () => ''), // 直连无版权 → tier3
+    });
+    const promise = resolvePlayableSongRouted(song());
+    // advanceTimersByTimeAsync：推进 fake 时钟并 flush 微任务链
+    // （resolvePlayableSongRouted 需先走到 tryTier3 注册 race 的 setTimeout）
+    await vi.advanceTimersByTimeAsync(6_000);
+    const res = await promise;
+    expect(res).toEqual({ url: '', nonFull: false });
+    vi.useRealTimers();
+  });
+
+  it('预算内 tier3 命中仍生效（正常源不受预算影响）', async () => {
+    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    registerDirectClient({
+      key: 'netease',
+      resolvePlayableUrl: vi.fn(async () => ''),
+    });
+    const res = await resolvePlayableSongRouted(song());
+    expect(res).toEqual({ url: 'https://tier3.example.com/1.mp3', nonFull: false });
   });
 });

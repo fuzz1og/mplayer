@@ -12,7 +12,7 @@ import Tier3Section from '@/renderer/components/Tier3Section';
 const NAV_ITEMS = [
   { id: 'cache', label: '缓存管理', icon: <Database size={15} /> },
   { id: 'download', label: '下载设置', icon: <Folder size={15} /> },
-  { id: 'source', label: '直连设置', icon: <Zap size={15} /> },
+  { id: 'source', label: '直连状态', icon: <Zap size={15} /> },
   { id: 'tier3', label: '第三方解析源', icon: <FlaskConical size={15} /> },
   { id: 'tls-fingerprint', label: 'TLS 指纹伪装', icon: <Fingerprint size={15} /> },
   { id: 'proxy', label: '网络代理', icon: <Shield size={15} /> },
