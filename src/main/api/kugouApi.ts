@@ -60,7 +60,8 @@ export async function getKugouRank(rankId: string, pageSize: number = 50): Promi
     const songs = data.data?.info || [];
     return songs.map((song: any) => normalizeSong(song));
   } catch (error) {
-    console.error('[KugouApi] getKugouRank error:', error);
+    // 只打一行摘要，避免 TLS/网络错误把完整证书对象刷到控制台
+    console.error('[KugouApi] getKugouRank error:', error instanceof Error ? error.message : error);
     return [];
   }
 }

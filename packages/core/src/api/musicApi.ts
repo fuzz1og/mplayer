@@ -7,14 +7,17 @@ import { findExactMatch } from '../utils/songMatcher.js';
 import { resourceUrlKey } from '../utils/resourceKey.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
+import { looksLikeLyrics } from '../download/lyrics.js';
 import { request, bodyToText } from './transport.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
 import { probeSongs } from './probeSongs.js';
+import { rememberProbeResult } from './prefetchCache.js';
 import {
   searchSongsRouted as routedSearchSongs,
   resolvePlayableUrlRouted as routedResolveUrl,
   resolvePlayableSongRouted as routedResolveSong,
+  resolvePlayableSongDirect as routedResolveSongDirect,
   configureSourceRouter,
 } from '../shared/sourceRouter.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
@@ -1199,6 +1202,10 @@ export const musicApi = {
       return cachedData;
     }
 
+    // 自建 API 已退役：桌面不再配置 API_BASE_URL，直接返回空结果，
+    // 避免 auto 回退链每次刷 Invalid URL。
+    if (!API_BASE_URL) return [];
+
     const params = new URLSearchParams();
     params.append('input', keyword);
     params.append('filter', 'name');
@@ -1239,6 +1246,10 @@ export const musicApi = {
       const cached = cacheManager.getSearchCache(cacheKey, 1, sourceType);
       if (cached?.length) return cached[0];
     }
+
+    // 自建 API 已退役：桌面不再配置 API_BASE_URL，ID 识别只能走旧 API；
+    // 直接返回 null 让调用方回退到按名字搜索，避免每次刷 Invalid URL。
+    if (!API_BASE_URL) return null;
 
     const params = new URLSearchParams();
     params.append('input', songId);
@@ -1337,22 +1348,32 @@ export const musicApi = {
       return cachedData;
     }
 
-    // 第三方歌词 URL（QQ fcg / 酷我 newlyric / 酷狗两步）需带官方 Referer，
-    // 否则 CDN 防盗链 403/空响应
+    // 第三方歌词 URL（QQ fcg / 酷我 newlyric / 酷狗两步）需要浏览器 UA + 官方 Referer，
+    // 否则 CDN 防盗链会因 axios 默认 UA / 缺 Referer 返回 403 或空响应。
     const referer = refererForUrl(fullUrl);
     const isKuwoLyric = fullUrl.includes('newlyric.kuwo.cn');
     const isKugouLyric = fullUrl.includes('lyrics.kugou.com/search');
-    const response = await apiClient.get(fullUrl, {
-      headers: referer ? { Referer: referer } : undefined,
-      responseType: isKuwoLyric ? 'arraybuffer' : 'text',
-    });
-    // 酷我：tp=content + zlib + XOR + gb18030 管线；酷狗：两步 search/download 由
-    // resolveKugouLyricUrl 完成（T07）；其余走 JSON/base64 或原样
-    const lyrics = isKuwoLyric
-      ? decodeKuwoLyricBody(new Uint8Array(response.data))
-      : isKugouLyric
-        ? await resolveKugouLyricUrl(fullUrl)
+    const isQQFcgLyric = /c\.y\.qq\.com\/lyric\//i.test(fullUrl);
+    const lyricHeaders: Record<string, string> = {};
+    if (referer) lyricHeaders['Referer'] = referer;
+    if (isKuwoLyric || isKugouLyric || isQQFcgLyric) {
+      lyricHeaders['User-Agent'] = BROWSER_UA;
+    }
+    let lyrics: string;
+    if (isKugouLyric) {
+      // 酷狗歌词是两步接口：search → download。这里不要再先 GET 一次 search URL，
+      // 直接交给 resolveKugouLyricUrl 走完整链路，避免多余请求导致 403/失败。
+      lyrics = await resolveKugouLyricUrl(fullUrl);
+    } else {
+      const response = await apiClient.get(fullUrl, {
+        headers: lyricHeaders,
+        responseType: isKuwoLyric ? 'arraybuffer' : 'text',
+      });
+      // 酷我：tp=content + zlib + XOR + gb18030 管线；其余走 JSON/base64 或原样
+      lyrics = isKuwoLyric
+        ? decodeKuwoLyricBody(new Uint8Array(response.data))
         : decodeLyricBody(response.data);
+    }
 
     // 会话失效/签名过期：服务端返回「非法请求」页（200 text/html；响应拦截器
     // 已带新会话重试一次仍无效——签名与旧会话绑定，同 URL 重试无意义）。
@@ -1360,6 +1381,12 @@ export const musicApi = {
     // 静默显示"无歌词"，歌词永远刷新不出来（移动端实测现象）。
     if (typeof lyrics === 'string' && lyrics.includes(INVALID_REQUEST_MARKER)) {
       throw new Error('歌词会话失效（非法请求），需重新搜索歌词 URL');
+    }
+
+    // 只缓存真正的 LRC；错误页/JSON 错误体/无时间戳内容不缓存、按无歌词返回，
+    // 避免之前失败的坏结果把同一 lrc URL 卡在内存缓存里，导致修复后仍显示暂无歌词。
+    if (!looksLikeLyrics(lyrics)) {
+      return '';
     }
 
     // 缓存结果
@@ -1396,7 +1423,7 @@ export const musicApi = {
    * 批量搜索
    * @param concurrency 并发上限,0 表示不限制(默认);限制可避免弱 API 排队/被打爆
    */
-  async batchSearch(keywords: string[], sourceType: SourceKey = 'netease', concurrency: number = 0): Promise<Record<string, Song[]>> {
+  async batchSearch(keywords: string[], sourceType: SourceKey = 'netease', concurrency: number = 3): Promise<Record<string, Song[]>> {
     // 尝试从缓存获取
     const cachedData = cacheManager.getBatchSearchCache(keywords, sourceType);
     if (cachedData) {
@@ -2405,24 +2432,39 @@ export const musicApi = {
     const list = Array.isArray(songs) ? songs : [];
     if (list.length === 0) return [];
     const results: { songId: string; tag: AudioTag }[] = [];
-    // 记录每首解析后的最终 URL（空 → invalid，保持桌面现状）
-    const resolvedUrls = new Map<string, string>();
+    // 记录每首解析后的最终 URL + 直连 nonFull 判定（空 → invalid，保持桌面现状）
+    const resolvedUrls = new Map<string, { url: string; nonFull: boolean }>();
+    const songsById = new Map(list.map((s) => [s.id, s]));
     await probeSongs(list, {
-      concurrency: Math.min(20, Math.max(1, list.length)),
+      concurrency: Math.min(5, Math.max(1, list.length)),
       resolver: async (song) => {
         let url = song.url;
+        let nonFull = false;
         try {
-          // 探测走与播放同一套直连路由，不再依赖已退役的自建 API getAudioUrl。
-          const routed = await this.resolvePlayableSongRouted(song);
-          if (routed?.url?.startsWith('http')) url = routed.url;
+          // 探测只走**直连**路由（resolvePlayableSongDirect，无 tier3）：
+          // 探测语义 = 「直连可播性」，单请求/首、快，且不占用 tier3 上游配额、
+          // 不被 mgmp3 等慢源（20s 超时）拖死整批探测（标签秒出）。
+          // 播放仍走 resolvePlayableSongRouted（含 tier3 兜底）。
+          const routed = await routedResolveSongDirect(song);
+          if (routed?.url?.startsWith('http')) {
+            url = routed.url;
+            nonFull = routed.nonFull;
+          }
         } catch {
           // keep the original URL; probeAudioUrl will classify it
         }
-        resolvedUrls.set(song.id, url || '');
+        resolvedUrls.set(song.id, { url: url || '', nonFull });
         return url;
       },
       onResult: (songId, tag) => {
-        results.push({ songId, tag: resolvedUrls.get(songId) ? tag : 'invalid' });
+        const entry = resolvedUrls.get(songId);
+        results.push({ songId, tag: entry?.url ? tag : 'invalid' });
+        // 探测职责转型：打标签的同时把直连直链写入预取缓存（主进程内存，
+        // TTL 30min）——播放时 resolvePlayableSongRouted 先查缓存，命中 0 等待。
+        const target = songsById.get(songId);
+        if (target && entry?.url) {
+          rememberProbeResult(target, entry.url, tag, entry.nonFull);
+        }
       },
     });
     return results;

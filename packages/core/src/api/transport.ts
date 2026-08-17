@@ -47,12 +47,19 @@ export interface TransportResponse {
 
 export type Transport = (req: TransportRequest) => Promise<TransportResponse>;
 
+/** 传输层代理 agents（桌面主进程注入；未注入 = 默认裸连，不读系统/环境代理）。 */
+export interface TransportProxyAgents {
+  httpAgent: unknown;
+  httpsAgent: unknown;
+}
+
 /** 传输响应体 → 文本（直连客户端/预检共用，避免 4 处重复实现）。 */
 export function bodyToText(body: string | ArrayBuffer): string {
   return typeof body === 'string' ? body : new TextDecoder().decode(body);
 }
 
 let active: Transport | null = null;
+let proxyAgentsProvider: (() => TransportProxyAgents) | null = null;
 
 /** 注入测试/桥接传输；传 null 恢复默认 axios 实现。 */
 export function setTransport(transport: Transport | null): void {
@@ -61,6 +68,17 @@ export function setTransport(transport: Transport | null): void {
 
 export function getTransport(): Transport | null {
   return active;
+}
+
+/** 注入传输层代理 agents 提供者（用户配置 proxyConfig 后由宿主注入）。
+ *  提供者在**每次请求**时调用，宿主可在设置变更后无缝切换（无需重新注入）；
+ *  未注入 = 默认裸连（axios 显式 proxy:false，不读系统/环境代理）。 */
+export function setTransportProxyAgents(provider: (() => TransportProxyAgents) | null): void {
+  proxyAgentsProvider = provider;
+}
+
+export function getTransportProxyAgents(): (() => TransportProxyAgents) | null {
+  return proxyAgentsProvider;
 }
 
 /** 统一请求入口：有注入传输走注入，否则走默认 axios 实现。 */
@@ -167,6 +185,8 @@ async function requestWithRetry(req: TransportRequest, raw: Transport): Promise<
 }
 
 async function defaultTransport(req: TransportRequest): Promise<TransportResponse> {
+  // 代理 agents：宿主注入（用户配置 proxyConfig）时走代理；否则裸连。
+  const agents = proxyAgentsProvider?.();
   const resp = await axios.request({
     method: req.method,
     url: req.url,
@@ -175,6 +195,11 @@ async function defaultTransport(req: TransportRequest): Promise<TransportRespons
     timeout: req.timeoutMs || 12000,
     responseType: req.responseType === 'arraybuffer' ? 'arraybuffer' : 'text',
     validateStatus: () => true,
+    // 显式禁掉 axios 的代理探测：默认裸连，走代理仅当注入 agents。
+    proxy: false,
+    ...(agents
+      ? { httpAgent: agents.httpAgent as Parameters<typeof axios.request>[0]['httpAgent'], httpsAgent: agents.httpsAgent as Parameters<typeof axios.request>[0]['httpsAgent'] }
+      : {}),
   });
   const finalUrl = (resp.request as { responseURL?: string } | undefined)?.responseURL;
   return {

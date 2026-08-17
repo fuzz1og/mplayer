@@ -18,7 +18,6 @@ export type PlayMode = '单曲循环' | '随机播放' | '列表循环';
 export const PLAY_MODES: PlayMode[] = ['单曲循环', '列表循环', '随机播放'];
 
 interface SettingsState {
-  apiBaseUrl: string;
   proxyUrl: string;
   playMode: PlayMode;
   /** Android SAF 授权的公共下载目录（content:// uri）；空 = 未授权，仅存应用私有目录 */
@@ -28,7 +27,6 @@ interface SettingsState {
   /** tier3 第三方解析源（#144）：默认关，订阅清单存 AsyncStorage */
   tier3Enabled: boolean;
   tier3Subscriptions: Tier3Subscription[];
-  setApiBaseUrl: (url: string) => void;
   setProxyUrl: (url: string) => void;
   setPlayMode: (mode: PlayMode) => void;
   setDownloadDirUri: (uri: string) => void;
@@ -40,14 +38,12 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      apiBaseUrl: '',
       proxyUrl: '',
       playMode: '列表循环',
       downloadDirUri: '',
       sourceModes: {},
       tier3Enabled: false,
       tier3Subscriptions: [],
-      setApiBaseUrl: (url) => set({ apiBaseUrl: url }),
       setProxyUrl: (url) => set({ proxyUrl: url }),
       setPlayMode: (mode) => set({ playMode: mode }),
       setDownloadDirUri: (uri) => set({ downloadDirUri: uri }),

@@ -4,7 +4,7 @@ import { Stack } from 'expo-router';
 import { colors } from '../theme/tokens';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, getApiBaseUrl, setApiTimingLog, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
+import { setProxyUrl as setCoreProxyUrl, setApiTimingLog, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -44,7 +44,6 @@ function PlaybackErrorToast() {
 }
 
 export default function RootLayout() {
-  const apiBaseUrl = useSettingsStore(s => s.apiBaseUrl);
   const proxyUrl = useSettingsStore(s => s.proxyUrl);
   const showPlayer = usePlayerStore(s => s.showPlayer);
   const setShowPlayer = usePlayerStore(s => s.setShowPlayer);
@@ -97,14 +96,10 @@ export default function RootLayout() {
     registerDirectClient(kugouDirectClient);
     registerDirectClient(kuwoDirectClient);
 
-    if (apiBaseUrl) {
-      setCoreApiBaseUrl(apiBaseUrl);
-      console.log(`[RootLayout] synced apiBaseUrl: ${getApiBaseUrl()}`);
-    }
     if (proxyUrl) {
       setCoreProxyUrl(proxyUrl);
     }
-  }, [apiBaseUrl, proxyUrl]);
+  }, [proxyUrl]);
 
   return (
     <>

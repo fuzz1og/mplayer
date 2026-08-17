@@ -35,8 +35,10 @@ export {
   removeTier3Subscription,
   refreshTier3Subscription,
   setTier3Deps,
+  getTier3Stats,
+  setTransportProxyAgents,
 } from '@mplayer/core';
-export type { ProxyAgents } from '@mplayer/core';
+export type { ProxyAgents, TransportProxyAgents } from '@mplayer/core';
 
 import { setThrottleObserver as registerThrottleObserver, registerDirectClient as coreRegisterDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
 

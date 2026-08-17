@@ -303,7 +303,9 @@ export const qqDirectClient: DirectSourceClient = {
     const data = await musicuPost(body);
     const moduleRes = data['music.search.SearchCgiService.DoSearchForQQMusicMobile'];
     if (moduleRes?.code !== 0) throw new Error(`QQ 搜索 code=${String(moduleRes?.code)}`);
-    return (moduleRes?.data?.song?.list || []).map(mapTrack).filter((s: Song) => s.id);
+    // 新版 musicu 返回 `data.body.item_song`；旧版是 `data.song.list`，这里兼容两者。
+    const list = moduleRes?.data?.body?.item_song || moduleRes?.data?.song?.list || [];
+    return list.map(mapTrack).filter((s: Song) => s.id);
   },
 
   async resolvePlayableUrl(song: Song): Promise<string> {

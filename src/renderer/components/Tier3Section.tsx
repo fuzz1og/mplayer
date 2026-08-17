@@ -15,6 +15,7 @@ const { Text } = Typography;
 
 const Tier3Section: React.FC = () => {
   const [state, setState] = useState<Tier3State | null>(null);
+  const [stats, setStats] = useState<Record<string, { hits: number; misses: number }> | null>(null);
   const [url, setUrl] = useState('');
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState(false);
@@ -23,6 +24,13 @@ const Tier3Section: React.FC = () => {
     try {
       const data = await IpcClient.invoke<Tier3State>('settings:getTier3State');
       setState(data);
+      // 仅在开关开启且有订阅时展示每源累计命中/失败统计
+      if (data.enabled && data.subscriptions.length > 0) {
+        const statData = await IpcClient.invoke<Record<string, { hits: number; misses: number }>>('settings:getTier3Stats');
+        setStats(statData);
+      } else {
+        setStats(null);
+      }
     } catch (error) {
       console.error('加载 tier3 设置失败:', error);
     }
@@ -38,6 +46,7 @@ const Tier3Section: React.FC = () => {
     try {
       await IpcClient.invoke('settings:setTier3Enabled', value);
       message.success(value ? '已开启第三方解析源（实验性）' : '已关闭第三方解析源');
+      await refresh();
     } catch (error) {
       console.error('保存 tier3 开关失败:', error);
       void load();
@@ -136,6 +145,14 @@ const Tier3Section: React.FC = () => {
     return '粘贴';
   };
 
+  const sourceName = (sourceId: string): string => {
+    for (const sub of state?.subscriptions ?? []) {
+      const hit = sub.manifest.sources.find((s) => s.id === sourceId);
+      if (hit) return hit.name || hit.id;
+    }
+    return sourceId;
+  };
+
   return (
     <section id="tier3" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
@@ -151,7 +168,7 @@ const Tier3Section: React.FC = () => {
           </span>
         </div>
         <Text type="secondary" style={{ display: 'block', fontSize: '13px', lineHeight: 1.6, marginBottom: '16px' }}>
-          默认关闭。开启后，官方直连失败的歌曲会按订阅清单依次尝试第三方解析源；全部失败再回退自建 API / 换元。
+          默认关闭。开启后，官方直连失败的歌曲会按订阅清单依次尝试第三方解析源；全部失败换元/标记不可播。
           第三方源随时可能失效，且清单由你自行订阅，本应用不内置任何解析端点。
         </Text>
 
@@ -224,6 +241,39 @@ const Tier3Section: React.FC = () => {
           </div>
         ) : (
           <Text type="secondary" style={{ fontSize: '13px' }}>暂无订阅。添加一份 JSON 音源清单后才会生效。</Text>
+        )}
+
+        {stats && Object.keys(stats).length > 0 && (
+          <div
+            style={{
+              marginTop: '16px',
+              padding: '12px',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              background: 'var(--bg-surface)',
+            }}
+          >
+            <Text type="secondary" style={{ display: 'block', fontSize: '12px', marginBottom: '8px' }}>
+              每源累计解析统计（本次会话）
+            </Text>
+            {Object.entries(stats).map(([sourceId, s]) => (
+              <div
+                key={sourceId}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '13px',
+                  padding: '4px 0',
+                }}
+              >
+                <span style={{ color: 'var(--text-primary)' }}>{sourceName(sourceId)}</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                  命中 {s.hits} · 失败 {s.misses}
+                </span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </section>

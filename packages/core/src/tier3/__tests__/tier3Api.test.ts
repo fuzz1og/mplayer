@@ -3,8 +3,10 @@ import type { TransportRequest, TransportResponse } from '../../api/transport.js
 import type { Song } from '../../types/index.js';
 import {
   addTier3SubscriptionFromText,
+  clearTier3Stats,
   createTier3Resolver,
   fetchTier3ManifestFromUrl,
+  getTier3Stats,
   getTier3State,
   loadTier3State,
   parseTier3Manifest,
@@ -12,7 +14,9 @@ import {
   setTier3Deps,
   setTier3Enabled,
   setTier3Persister,
+  tier3SourceSource,
 } from '../tier3Api.js';
+import type { Tier3Source } from '../tier3Api.js';
 
 /**
  * tier3Api 测试（#144）：
@@ -50,9 +54,19 @@ function jsonResponse(body: unknown, url: string): TransportResponse {
 function audioResponse(): TransportResponse {
   return {
     status: 206,
-    headers: { 'content-type': 'audio/mpeg', 'content-range': 'bytes 0-9/99999' },
+    headers: { 'content-type': 'audio/mpeg', 'content-range': 'bytes 0-9/99999999' },
     body: AUDIO_BYTES.buffer.slice(AUDIO_BYTES.byteOffset, AUDIO_BYTES.byteOffset + AUDIO_BYTES.byteLength) as ArrayBuffer,
     finalUrl: 'https://cdn.example.com/a.mp3',
+  };
+}
+
+/** 完整大小 <1MB 的音频（试听片段形态，如酷我 M500 30 秒试听）。 */
+function trialAudioResponse(): TransportResponse {
+  return {
+    status: 206,
+    headers: { 'content-type': 'audio/mpeg', 'content-range': 'bytes 0-9/524288' },
+    body: AUDIO_BYTES.buffer.slice(AUDIO_BYTES.byteOffset, AUDIO_BYTES.byteOffset + AUDIO_BYTES.byteLength) as ArrayBuffer,
+    finalUrl: 'https://cdn.example.com/trial.mp3',
   };
 }
 
@@ -120,10 +134,37 @@ const SEARCH_RESOLVER_MANIFEST = JSON.stringify({
   ],
 });
 
+/** 无歌手字段的源（如 buguyy 返回 title 而无 artist）——降级边界用例。 */
+const NO_ARTIST_MANIFEST = JSON.stringify({
+  version: 1,
+  sources: [
+    {
+      id: 'no-artist',
+      kind: 'search-then-resolve',
+      allowedDomains: ['cdn.example.com'],
+      timeoutMs: 3000,
+      search: {
+        method: 'GET',
+        url: 'https://api.example.com/search?keyword={keyword}',
+        responseJsonPath: 'data',
+        itemsPath: 'data.list',
+        namePath: 'title',
+        idPath: 'id',
+      },
+      resolve: {
+        method: 'GET',
+        url: 'https://api.example.com/url?id={id}',
+        responseJsonPath: 'data.url',
+      },
+    },
+  ],
+});
+
 beforeEach(() => {
   loadTier3State(undefined);
   setTier3Deps({});
   setTier3Persister(null);
+  clearTier3Stats();
 });
 
 describe('parseTier3Manifest', () => {
@@ -206,6 +247,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song());
     expect(url).toBe('https://cdn.example.com/a.mp3');
+    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 1, misses: 0 } });
   });
 
   it('域名不在白名单 → 返回空串', async () => {
@@ -235,6 +277,108 @@ describe('createTier3Resolver（url-resolver）', () => {
       'https://api.example.com/url?id=123&source=netease': () =>
         jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, 'https://api.example.com/url?id=123&source=netease'),
       'https://cdn.example.com/a.mp3': htmlResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+    expect(await createTier3Resolver()(song())).toBe('');
+    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 0, misses: 1 } });
+  });
+
+  it('多次解析按源累计命中/失败', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/url?id=123&source=netease': () =>
+        jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, 'https://api.example.com/url?id=123&source=netease'),
+      'https://cdn.example.com/a.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+
+    await createTier3Resolver()(song());
+    await createTier3Resolver()(song());
+
+    expect(getTier3Stats()['demo-url']).toEqual({ hits: 2, misses: 0 });
+  });
+
+  it('url-resolver 声明 source 且与当前歌曲 source 不符时跳过，不拿错源 id 去解析', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [
+        {
+          id: 'qq-only',
+          name: 'QQ Only',
+          kind: 'url-resolver',
+          source: 'qq',
+          allowedDomains: ['cdn.example.com'],
+          resolve: {
+            method: 'GET',
+            url: 'https://api.example.com/qq?id={id}',
+            responseJsonPath: 'data.url',
+          },
+        },
+      ],
+    });
+    const request = vi.fn();
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    // 当前是 netease 歌曲，不应把 netease id 塞给 qq-only 的 url-resolver
+    expect(await createTier3Resolver()(song({ sourceType: 'netease' }))).toBe('');
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('字节嗅探通过但完整大小 <1MB（疑似试听片段）→ 返回空串，不把片段当完整版', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/url?id=123&source=netease': () =>
+        jsonResponse({ data: { url: 'https://cdn.example.com/trial.mp3' } }, 'https://api.example.com/url?id=123&source=netease'),
+      'https://cdn.example.com/trial.mp3': trialAudioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+    expect(await createTier3Resolver()(song())).toBe('');
+  });
+
+  it('search-then-resolve 未声明 source 但从 resolve URL 推断（kw.php → kuwo），异源歌曲跳过', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [
+        {
+          id: 'mitu-like',
+          name: '酷我系搜索源',
+          kind: 'search-then-resolve',
+          allowedDomains: ['*.kuwo.cn'],
+          search: {
+            method: 'GET',
+            url: 'https://api.qqmp3.vip/api/songs.php?keyword={keyword}',
+            responseJsonPath: 'data',
+            itemsPath: 'data',
+            namePath: 'name',
+            artistPath: 'artist',
+            idPath: 'rid',
+          },
+          resolve: {
+            method: 'GET',
+            url: 'https://api.qqmp3.vip/api/kw.php?rid={id}',
+            responseJsonPath: 'data.url',
+          },
+        },
+      ],
+    });
+    const request = vi.fn();
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    // netease 歌曲不应把 id 塞给酷我系 search-then-resolve 源
+    expect(await createTier3Resolver()(song({ sourceType: 'netease' }))).toBe('');
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('上游 HTTP 200 但返回业务错误封套（code/message，如 vkeys 挂掉）→ 未命中', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/url?id=123&source=netease': () =>
+        jsonResponse({ code: 110000, message: '音源获取失败' }, 'https://api.example.com/url?id=123&source=netease'),
     });
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
@@ -307,6 +451,33 @@ describe('createTier3Resolver（search-then-resolve）', () => {
     setTier3Enabled(true);
     expect(await createTier3Resolver()(song())).toBe('');
   });
+
+  it('候选无歌手字段 + 目标歌手非空 → 拒绝（同名不同歌手不播，如李寒版《恋人》）', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/search?keyword=%E6%81%8B%E4%BA%BA%20%E6%9D%8E%E8%8D%A3%E6%B5%A9': () =>
+        jsonResponse({ data: { list: [{ id: '999', title: '恋人' }] } }, 'https://api.example.com/search?keyword=x'),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: NO_ARTIST_MANIFEST });
+    setTier3Enabled(true);
+    // 目标歌手=李荣浩；候选无歌手字段 → 降级不允许（上游可能返回别的歌手的《恋人》）
+    expect(await createTier3Resolver()(song({ name: '恋人', artist: '李荣浩' }))).toBe('');
+  });
+
+  it('候选无歌手字段 + 目标歌手为空 → 歌名精确降级接受', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/search?keyword=%E6%81%8B%E4%BA%BA': () =>
+        jsonResponse({ data: { list: [{ id: '999', title: '恋人' }] } }, 'https://api.example.com/search?keyword=x'),
+      'https://api.example.com/url?id=999': () =>
+        jsonResponse({ data: { url: 'https://cdn.example.com/full.mp3' } }, 'https://api.example.com/url?id=999'),
+      'https://cdn.example.com/full.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: NO_ARTIST_MANIFEST });
+    setTier3Enabled(true);
+    const url = await createTier3Resolver()(song({ name: '恋人', artist: '' }));
+    expect(url).toBe('https://cdn.example.com/full.mp3');
+  });
 });
 
 describe('searchTier3Songs（官方直连搜索失败后的第三方搜索兜底）', () => {
@@ -342,5 +513,139 @@ describe('searchTier3Songs（官方直连搜索失败后的第三方搜索兜底
   it('未启用/无订阅时返回空数组', async () => {
     loadTier3State(undefined);
     expect(await searchTier3Songs('晴天', 1, 'qq')).toEqual([]);
+  });
+
+  it('第三方搜索兜底过滤掉歌名完全不同的模糊结果', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/search?keyword=%E6%99%B4%E5%A4%A9': () =>
+        jsonResponse(
+          {
+            data: {
+              list: [
+                { id: '999', name: '晴天', artist: '周杰伦' },
+                { id: '888', name: '冻结', artist: '林俊杰' },
+              ],
+            },
+          },
+          'https://api.example.com/search?keyword=x',
+        ),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: SEARCH_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+    const songs = await searchTier3Songs('晴天', 1, 'qq');
+    expect(songs).toHaveLength(1);
+    expect(songs[0].name).toBe('晴天');
+  });
+
+  it('拒绝歌名只是查询词子串的完全不同歌曲（搜“恋人”不返回“恋人未满”）', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/search?keyword=%E6%81%8B%E4%BA%BA': () =>
+        jsonResponse(
+          {
+            data: {
+              list: [
+                { id: '1', name: '恋人', artist: '李荣浩' },
+                { id: '2', name: '恋人未满', artist: 'S.H.E' },
+                { id: '3', name: '恋人', artist: '孟庭苇' },
+              ],
+            },
+          },
+          'https://api.example.com/search?keyword=x',
+        ),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: SEARCH_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+    const songs = await searchTier3Songs('恋人', 1, 'qq');
+    expect(songs.map((s) => `${s.name}|${s.artist}`)).toEqual(['恋人|李荣浩', '恋人|孟庭苇']);
+  });
+
+  it('多词查询的每个词都要命中歌名或歌手（搜“恋人 李荣浩”不返回孟庭苇版）', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/search?keyword=%E6%81%8B%E4%BA%BA%20%E6%9D%8E%E8%8D%A3%E6%B5%A9': () =>
+        jsonResponse(
+          {
+            data: {
+              list: [
+                { id: '1', name: '恋人', artist: '李荣浩' },
+                { id: '2', name: '恋人', artist: '孟庭苇' },
+                { id: '3', name: '恋人', artist: '蒋蕙林' },
+              ],
+            },
+          },
+          'https://api.example.com/search?keyword=x',
+        ),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: SEARCH_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+    const songs = await searchTier3Songs('恋人 李荣浩', 1, 'qq');
+    expect(songs).toHaveLength(1);
+    expect(songs[0]).toMatchObject({ name: '恋人', artist: '李荣浩' });
+  });
+
+  it('搜索兜底不按推断 source 过滤（关键词候选无 id 错配风险），候选标记真实来源', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [
+        {
+          id: 'mitu-like',
+          name: '酷我系搜索源',
+          kind: 'search-then-resolve',
+          allowedDomains: ['*.kuwo.cn'],
+          search: {
+            method: 'GET',
+            url: 'https://api.qqmp3.vip/api/songs.php?keyword={keyword}',
+            responseJsonPath: 'data',
+            itemsPath: 'data',
+            namePath: 'name',
+            artistPath: 'artist',
+            idPath: 'rid',
+          },
+          resolve: {
+            method: 'GET',
+            url: 'https://api.qqmp3.vip/api/kw.php?rid={id}',
+            responseJsonPath: 'data.url',
+          },
+        },
+      ],
+    });
+    const request = makeRequestMock({
+      'https://api.qqmp3.vip/api/songs.php?keyword=%E6%81%8B%E4%BA%BA': () =>
+        jsonResponse(
+          { data: [{ rid: '1', name: '恋人', artist: '李荣浩' }] },
+          'https://api.qqmp3.vip/api/songs.php?keyword=x',
+        ),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    // netease 查询也能用酷我系源搜候选（搜索无 id 错配），但 sourceType 标记真实来源 kuwo
+    const songs = await searchTier3Songs('恋人', 1, 'netease');
+    expect(songs).toHaveLength(1);
+    expect(songs[0]).toMatchObject({ name: '恋人', artist: '李荣浩', sourceType: 'kuwo' });
+  });
+});
+
+describe('tier3SourceSource（URL 形态推断，CodeQL 高危告警修复）', () => {
+  const mk = (resolve: string): Tier3Source => ({
+    id: 't',
+    kind: 'url-resolver',
+    allowedDomains: ['cdn.example.com'],
+    resolve: { method: 'GET', url: resolve, responseJsonPath: 'data.url' },
+  });
+
+  it('126.net / 91q.com 只按 hostname 后缀匹配，任意主机不得命中', () => {
+    expect(tier3SourceSource(mk('https://api.126.net/url?id={id}'))).toBe('netease');
+    expect(tier3SourceSource(mk('https://91q.com/url?id={id}'))).toBe('qianqian');
+    // 旧实现用整串 substring（includes），evil126.net.evil.example 这类会被误判
+    expect(tier3SourceSource(mk('https://not126.net.evil.example.com/url'))).toBeUndefined();
+    expect(tier3SourceSource(mk('https://x91q.com.evil.example/url'))).toBeUndefined();
+  });
+
+  it('路径标记 /qq 与 kw.php 仍参与推断', () => {
+    expect(tier3SourceSource(mk('https://api.example.com/qq?id={id}'))).toBe('qq');
+    expect(tier3SourceSource(mk('https://api.example.com/api/kw.php?rid={id}'))).toBe('kuwo');
   });
 });

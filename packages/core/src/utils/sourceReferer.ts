@@ -29,9 +29,17 @@ export function refererForApiType(apiType?: string): string | undefined {
   return apiType ? REFERER_BY_SOURCE[apiType] : undefined;
 }
 
-/** 从 URL 中提取 type 参数（wy/kg/qq/...）并返回对应 Referer */
+/** 从 URL 中提取 type 参数（wy/kg/qq/...）并返回对应 Referer；同时识别各源直连歌词端点。 */
 export function refererForUrl(url: string): string | undefined {
   try {
+    // QQ 歌词 fcg 需要播放器页 Referer，否则 CDN 防盗链会拦截（prototype/r1 实测口径）。
+    if (/c\.y\.qq\.com\/lyric\//i.test(url)) {
+      return 'https://y.qq.com/portal/player.html';
+    }
+    // 酷我/酷狗歌词直连同样按官方站点 Referer 处理，避免空响应/403。
+    if (/newlyric\.kuwo\.cn/i.test(url)) return 'https://www.kuwo.cn/';
+    if (/lyrics\.kugou\.com/i.test(url)) return 'https://www.kugou.com/';
+
     const m = url.match(/[?&]type=([^&]+)/);
     return m ? REFERER_BY_SOURCE[m[1]] : undefined;
   } catch {

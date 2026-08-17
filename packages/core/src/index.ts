@@ -66,9 +66,11 @@ export {
   getTransportRetryOptions,
   setTlsDegradeProvider,
   getTlsDegradeProvider,
+  setTransportProxyAgents,
+  getTransportProxyAgents,
   isTlsHandshakeError,
 } from './api/transport.js';
-export type { Transport, TransportRequest, TransportResponse, TransportRetryOptions, TlsDegradeAgents } from './api/transport.js';
+export type { Transport, TransportRequest, TransportResponse, TransportRetryOptions, TlsDegradeAgents, TransportProxyAgents } from './api/transport.js';
 export {
   TLS_FINGERPRINT_SETTING_KEY,
   getTlsFingerprintEnabled,
@@ -101,6 +103,7 @@ export {
   searchSongsRouted,
   resolvePlayableUrlRouted,
   resolvePlayableSongRouted,
+  resolvePlayableSongDirect,
   setTier3Resolver,
 } from './shared/sourceRouter.js';
 export type { SourceMode, DirectSourceClient, SourceRouterLegs, Tier3Resolver } from './shared/sourceRouter.js';
@@ -136,6 +139,8 @@ export {
   setTier3Deps,
   createTier3Resolver,
   searchTier3Songs,
+  getTier3Stats,
+  clearTier3Stats,
 } from './tier3/tier3Api.js';
 export type {
   Tier3Manifest,
@@ -147,4 +152,5 @@ export type {
   Tier3SubscriptionKind,
   Tier3State,
   Tier3Deps,
+  Tier3SourceStats,
 } from './tier3/tier3Api.js';

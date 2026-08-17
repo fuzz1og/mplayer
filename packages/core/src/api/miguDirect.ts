@@ -57,25 +57,33 @@ function toBytes(body: string | ArrayBuffer): Uint8Array {
 
 /** cloudsearch 返回的咪咕原生 track → Song（字段名以实测/文档假设为准）。 */
 function mapTrack(t: any): Song {
-  const rawArtists = t.singer ?? t.artists ?? [];
+  const rawArtists = t.singer ?? t.artists ?? t.singers ?? [];
   const artists = Array.isArray(rawArtists)
     ? rawArtists
         .map((a: any) => (typeof a === 'string' ? a : a?.name || a?.singerName || ''))
         .filter(Boolean)
     : [String(rawArtists || '')];
-  const album = typeof t.album === 'string' ? t.album : t.album?.name || t.albums?.[0]?.name || '';
+  const album =
+    (typeof t.album === 'string' ? t.album : t.album?.name) ||
+    t.albums?.[0]?.name ||
+    t.albumTitle ||
+    '';
   const cover =
-    (Array.isArray(t.albumImgs) ? t.albumImgs[0]?.img : t.albumImg) || t.albumPic || '';
+    t.imgItems?.[0]?.img ||
+    (Array.isArray(t.albumImgs) ? t.albumImgs[0]?.img : t.albumImg) ||
+    t.albumPic ||
+    '';
   return {
-    id: String(t.songId ?? t.contentId ?? ''),
+    id: String(t.contentId ?? t.songId ?? t.id ?? ''),
     name: t.songName || t.name || '',
     artist: artists.join(' / '),
     album,
     url: '',
     cover: String(cover || '').replace(/^http:/, 'https:'),
     lrc: String(t.lyricUrl || '').replace(/^http:/, 'https:'),
-    duration: Math.floor((t.interval || t.duration || 0) / 1000) || 0,
+    duration: Math.floor(Number(t.interval || t.duration || 0) / 1000) || 0,
     sourceType: 'migu',
+    tags: Array.isArray(t.tags) ? t.tags.map((x: any) => String(x)) : undefined,
   };
 }
 
@@ -101,9 +109,11 @@ export const miguDirectClient: DirectSourceClient = {
     const data = JSON.parse(bodyToText(res.body)) as {
       code?: string | number;
       data?: { songList?: any[] };
+      songResultData?: { result?: any[] };
     };
     if (String(data.code) !== '000000') throw new Error(`migu 搜索 code=${String(data.code)}`);
-    return (data.data?.songList || []).map(mapTrack).filter((s) => s.id);
+    // 新版接口返回 songResultData.result；旧版是 data.songList，这里兼容两者。
+    return (data.songResultData?.result || data.data?.songList || []).map(mapTrack).filter((s) => s.id);
   },
 
   async resolvePlayableUrl(song: Song): Promise<string> {

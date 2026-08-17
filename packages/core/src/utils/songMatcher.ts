@@ -13,7 +13,7 @@ const ARTIST_WEIGHT = 0.4;
 const SIMILARITY_THRESHOLD = 0.6;
 const SUBSTRING_SCORE = 0.8;
 
-function normalize(str: string): string {
+export function normalize(str: string): string {
   return str
     .toLowerCase()
     .replace(/[\s]/g, '')

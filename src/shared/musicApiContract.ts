@@ -20,6 +20,7 @@ export const MUSIC_API_METHODS = [
   'batchSearch',
   'probeSongsBatch',
   'getLyrics',
+  'getLyricsBySongId',
   'getNeteaseHotlist',
   'getNeteaseNewSongList',
   'getQQHotlist',

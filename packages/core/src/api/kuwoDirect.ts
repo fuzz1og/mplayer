@@ -154,8 +154,9 @@ function xorencrypt(data: Uint8Array, key: Uint8Array): Uint8Array {
 }
 
 function buildLyricUrl(rid: string): string {
-  if (!rid) return '';
-  const plain = `user=12345,web,web,web&requester=localhost&req=1&rid=MUSIC_${rid}&lrcx=1`;
+  const normalizedRid = String(rid || '').replace(/^MUSIC_/, '');
+  if (!normalizedRid) return '';
+  const plain = `user=12345,web,web,web&requester=localhost&req=1&rid=MUSIC_${normalizedRid}&lrcx=1`;
   const params = toBase64(xorencrypt(new TextEncoder().encode(plain), SECRET_KEY_LYRIC));
   return `${LYRIC_URL}?${encodeURIComponent(params)}`;
 }
@@ -184,16 +185,24 @@ export function decodeKuwoLyricBody(buf: Uint8Array, isLyricx = true): string {
 }
 
 function mapTrack(t: any): Song {
-  const rid = t.rid != null ? String(t.rid) : '';
+  const rid = String(t.MUSICRID || t.rid || (t.DC_TARGETID ? `MUSIC_${t.DC_TARGETID}` : '') || '');
+  const albumPic = t.web_albumpic_short || t.pic || t.albumpic || t.MVPIC || '';
+  const cover = /^https?:\/\//.test(albumPic)
+    ? albumPic.replace(/^http:/, 'https:')
+    : albumPic
+      ? `https://img1.kuwo.cn/star/albumcover/${albumPic}`
+      : '';
   return {
     id: rid,
-    name: t.name || '',
-    artist: t.artist || '',
-    album: t.album || '',
+    name: t.NAME || t.name || t.SONGNAME || '',
+    artist: t.ARTIST || t.artist || '',
+    album: t.ALBUM || t.album || '',
     url: '',
-    cover: String(t.pic || t.albumpic || '').replace(/^http:/, 'https:'),
+    cover,
     lrc: buildLyricUrl(rid),
-    duration: Math.floor((t.duration || 0) / 1000) || 0,
+    duration: t.DURATION != null
+      ? Number(t.DURATION) || 0
+      : Math.floor(Number(t.duration || 0) / 1000) || 0,
     sourceType: 'kuwo',
   };
 }

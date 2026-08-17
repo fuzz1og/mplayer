@@ -1,30 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { Zap } from 'lucide-react';
-import { Radio, Tag } from 'antd';
-import { MULTI_SOURCE_LIST, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS } from '@mplayer/core';
+import { Tag } from 'antd';
+import { MULTI_SOURCE_LIST, SOURCE_DISPLAY_NAMES } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 
 /**
- * 直连设置（T01，spec #146）：每源来源开关 auto/direct/api + 直连状态。
- * 模式持久化在 db（settings:setSourceModes），路由在 core（searchSongsRouted /
- * resolvePlayableUrlRouted）；直连客户端由各源 ticket（T02+）注册后状态变「直连可用」。
- * 来源中文名 / 三态选项与移动端共用 core 常量（SOURCE_DISPLAY_NAMES / SOURCE_MODE_OPTIONS）。
+ * 直连状态（T01，spec #146）：设置页只展示每源直连客户端是否已注册/可用，
+ * 不再提供 auto/仅直连 选项（自建 API 已退役，路由由 core 内部处理）。
+ * 直连客户端由各源 ticket（T02+）注册后状态变「直连可用」。
  */
 
-interface SourceModesData {
-  modes: Record<string, string>;
+interface SourceStatusData {
   status: Record<string, 'ready' | 'unavailable'>;
 }
 
 const SourceSection: React.FC = () => {
-  const [data, setData] = useState<SourceModesData | null>(null);
+  const [data, setData] = useState<SourceStatusData | null>(null);
 
   const load = async (): Promise<void> => {
     try {
-      const d = await IpcClient.invoke<SourceModesData>('settings:getSourceModes');
+      const d = await IpcClient.invoke<SourceStatusData>('settings:getSourceModes');
       setData(d);
     } catch (error) {
-      console.error('加载直连设置失败:', error);
+      console.error('加载直连状态失败:', error);
     }
   };
 
@@ -32,28 +30,15 @@ const SourceSection: React.FC = () => {
     void load();
   }, []);
 
-  const handleChange = async (source: string, mode: string): Promise<void> => {
-    if (!data) return;
-    const next = { ...data.modes, [source]: mode };
-    setData({ ...data, modes: next });
-    try {
-      await IpcClient.invoke('settings:setSourceModes', next);
-    } catch (error) {
-      console.error('保存直连设置失败:', error);
-      void load(); // 回滚到已保存状态
-    }
-  };
-
   return (
     <section id="source" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
         <Zap size={15} color="var(--text-secondary)" />
-        <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>直连设置</h2>
+        <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>直连状态</h2>
       </div>
       <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-color)' }}>
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 0, lineHeight: 1.6 }}>
-          每源可选择请求方式：自动 = 官方直连优先、失败回退自建 API；仅直连 = 只走官方直连；仅自建 API = 维持现状。
-          直连能力按源逐步落地（未实现时自动模式等价现状）。
+          各官方源的直连客户端能力状态。直连可用表示该源已接入官方直连，播放/搜索会优先走直连。
         </p>
         {!data ? (
           <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>加载中…</div>
@@ -67,13 +52,6 @@ const SourceSection: React.FC = () => {
                 <Tag color={data.status[source] === 'ready' ? 'green' : 'default'} style={{ marginInlineEnd: 0 }}>
                   {data.status[source] === 'ready' ? '直连可用' : '直连未实现'}
                 </Tag>
-                <Radio.Group
-                  size="small"
-                  options={SOURCE_MODE_OPTIONS}
-                  optionType="button"
-                  value={data.modes[source] || 'auto'}
-                  onChange={(e) => void handleChange(source, e.target.value)}
-                />
               </div>
             ))}
           </div>

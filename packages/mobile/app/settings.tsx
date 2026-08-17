@@ -12,9 +12,9 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
-import { CircleCheck, Save, RefreshCcw, Zap, RefreshCw, Download, CircleX, Trash2, Plus } from 'lucide-react-native';
+import { CircleCheck, Save, RefreshCcw, RefreshCw, Download, CircleX, Trash2, Plus } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setApiBaseUrl as setCoreApiBaseUrl, setProxyUrl as setCoreProxyUrl, musicApi, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription } from '@mplayer/core';
+import { setProxyUrl as setCoreProxyUrl, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useLogsStore } from '../stores/logsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
@@ -27,18 +27,16 @@ function formatLogTime(ts: number): string {
 }
 
 export default function SettingsPage() {
-  const storeApiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
   const storeProxyUrl = useSettingsStore((s) => s.proxyUrl);
   const sourceModes = useSettingsStore((s) => s.sourceModes);
   const tier3Enabled = useSettingsStore((s) => s.tier3Enabled);
   const tier3Subscriptions = useSettingsStore((s) => s.tier3Subscriptions);
-  const setApiBaseUrl = useSettingsStore((s) => s.setApiBaseUrl);
   const setStoreProxyUrl = useSettingsStore((s) => s.setProxyUrl);
   const logEntries = useLogsStore((s) => s.entries);
   const clearLogs = useLogsStore((s) => s.clearLogs);
 
   // 直连设置：改 core 来源开关 → persister 镜像进 store（AsyncStorage 持久化）
-  const handleSourceModeChange = (source: string, mode: 'auto' | 'direct' | 'api'): void => {
+  const handleSourceModeChange = (source: string, mode: 'auto' | 'direct'): void => {
     setCoreSourceModes({ ...sourceModes, [source]: mode });
   };
 
@@ -98,13 +96,9 @@ export default function SettingsPage() {
     }
   };
 
-  const [localUrl, setLocalUrl] = useState(storeApiBaseUrl);
   const [localProxyUrl, setLocalProxyUrl] = useState(storeProxyUrl);
-  const [saved, setSaved] = useState(false);
   const [proxySaved, setProxySaved] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
-  const [focusedInput, setFocusedInput] = useState<'api' | 'proxy' | null>(null);
+  const [focusedInput, setFocusedInput] = useState<'proxy' | null>(null);
   const [tier3Url, setTier3Url] = useState('');
   const [tier3Paste, setTier3Paste] = useState('');
   const [tier3Busy, setTier3Busy] = useState(false);
@@ -185,33 +179,6 @@ export default function SettingsPage() {
     if (apkUrl) Linking.openURL(apkUrl);
   };
 
-  const handleSaveUrl = () => {
-    setApiBaseUrl(localUrl.trim());
-    setCoreApiBaseUrl(localUrl.trim());
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  };
-
-  const handleTestConnection = async () => {
-    if (!localUrl.trim()) return;
-    setTesting(true);
-    setTestResult(null);
-    try {
-      // 先用临时 URL 测试, 成功才保存
-      const baseUrl = localUrl.trim().replace(/\/+$/, '');
-      setCoreApiBaseUrl(baseUrl);
-      const ok = await musicApi.healthCheck();
-      if (!ok) throw new Error('health check failed');
-      // 测试通过, 持久化
-      setApiBaseUrl(baseUrl);
-      setTestResult('success');
-    } catch {
-      setTestResult('fail');
-    } finally {
-      setTesting(false);
-      setTimeout(() => setTestResult(null), 3000);
-    }
-  };
 
   const handleSaveProxy = () => {
     const url = localProxyUrl.trim();
@@ -236,65 +203,13 @@ export default function SettingsPage() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* API 设置 */}
-        <View style={styles.section}>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>API 设置</Text>
-            <Text style={styles.label}>API 基础地址</Text>
-            <TextInput
-              style={[styles.input, focusedInput === 'api' && styles.inputFocused]}
-              value={localUrl}
-              onChangeText={setLocalUrl}
-              placeholder="https://your-api-server.com"
-              placeholderTextColor={colors.inputPlaceholder}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              onFocus={() => setFocusedInput('api')}
-              onBlur={() => setFocusedInput(null)}
-            />
-            <TouchableOpacity
-              style={[styles.saveBtn, saved && styles.saveBtnSaved]}
-              onPress={handleSaveUrl}
-              activeOpacity={0.7}
-            >
-              {saved ? (
-                <CircleCheck size={18} color={colors.textInverse} style={styles.btnIcon} />
-              ) : (
-                <Save size={18} color={colors.textInverse} style={styles.btnIcon} />
-              )}
-              <Text style={styles.saveBtnText}>
-                {saved ? '已保存' : '保存'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.testBtn, testResult === 'success' && styles.testBtnSuccess, testResult === 'fail' && styles.testBtnFail]}
-              onPress={handleTestConnection}
-              disabled={testing || !localUrl.trim()}
-              activeOpacity={0.7}
-            >
-              {testing ? (
-                <RefreshCcw size={18} color={testResult === null ? colors.textPrimary : colors.textInverse} style={styles.btnIcon} />
-              ) : testResult === 'success' ? (
-                <CircleCheck size={18} color={colors.textInverse} style={styles.btnIcon} />
-              ) : testResult === 'fail' ? (
-                <CircleX size={18} color={colors.textInverse} style={styles.btnIcon} />
-              ) : (
-                <Zap size={18} color={colors.textPrimary} style={styles.btnIcon} />
-              )}
-              <Text style={[styles.saveBtnText, testResult === null && styles.testBtnText]}>
-                {testing ? '测试中...' : testResult === 'success' ? '连接成功' : testResult === 'fail' ? '连接失败' : '测试连接'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {/* 直连设置（T01：每源来源开关） */}
         <View style={styles.section}>
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>直连设置</Text>
             <Text style={styles.label}>
-              每源请求方式：自动 = 官方直连优先、失败回退自建 API；仅直连 / 仅自建 API。直连能力按源逐步落地。
+              每源请求方式：自动 = 官方直连优先、失败回退第三方解析；仅直连 = 只走官方直连。直连能力按源逐步落地。
             </Text>
             {MULTI_SOURCE_LIST.map((source) => (
               <View key={source} style={styles.modeRow}>
@@ -335,7 +250,7 @@ export default function SettingsPage() {
               </View>
             </View>
             <Text style={styles.label}>
-              默认关闭。官方直连失败后按订阅清单尝试第三方源，全部失败回退自建 API / 换元。实验性功能，不内置任何解析端点。
+              默认关闭。官方直连失败后按订阅清单尝试第三方源，全部失败换元/标记不可播。实验性功能，不内置任何解析端点。
             </Text>
             <TextInput
               style={styles.input}

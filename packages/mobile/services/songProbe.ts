@@ -34,7 +34,7 @@ export async function probeSongsWithTags(
     toProbe.push(s);
   }
   await probeSongs(toProbe, {
-    concurrency: 20,
+    concurrency: 5,
     onResult: (id, tag) => {
       const song = byId.get(id);
       if (!song) return;
