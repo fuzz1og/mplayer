@@ -35,6 +35,7 @@ export {
   removeTier3Subscription,
   refreshTier3Subscription,
   setTier3Deps,
+  getTier3Stats,
   setTransportProxyAgents,
 } from '@mplayer/core';
 export type { ProxyAgents, TransportProxyAgents } from '@mplayer/core';

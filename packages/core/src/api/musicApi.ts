@@ -12,6 +12,7 @@ import { request, bodyToText } from './transport.js';
 import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
 import { probeSongs } from './probeSongs.js';
+import { rememberProbeResult } from './prefetchCache.js';
 import {
   searchSongsRouted as routedSearchSongs,
   resolvePlayableUrlRouted as routedResolveUrl,
@@ -2431,27 +2432,39 @@ export const musicApi = {
     const list = Array.isArray(songs) ? songs : [];
     if (list.length === 0) return [];
     const results: { songId: string; tag: AudioTag }[] = [];
-    // 记录每首解析后的最终 URL（空 → invalid，保持桌面现状）
-    const resolvedUrls = new Map<string, string>();
+    // 记录每首解析后的最终 URL + 直连 nonFull 判定（空 → invalid，保持桌面现状）
+    const resolvedUrls = new Map<string, { url: string; nonFull: boolean }>();
+    const songsById = new Map(list.map((s) => [s.id, s]));
     await probeSongs(list, {
       concurrency: Math.min(5, Math.max(1, list.length)),
       resolver: async (song) => {
         let url = song.url;
+        let nonFull = false;
         try {
           // 探测只走**直连**路由（resolvePlayableSongDirect，无 tier3）：
           // 探测语义 = 「直连可播性」，单请求/首、快，且不占用 tier3 上游配额、
           // 不被 mgmp3 等慢源（20s 超时）拖死整批探测（标签秒出）。
           // 播放仍走 resolvePlayableSongRouted（含 tier3 兜底）。
           const routed = await routedResolveSongDirect(song);
-          if (routed?.url?.startsWith('http')) url = routed.url;
+          if (routed?.url?.startsWith('http')) {
+            url = routed.url;
+            nonFull = routed.nonFull;
+          }
         } catch {
           // keep the original URL; probeAudioUrl will classify it
         }
-        resolvedUrls.set(song.id, url || '');
+        resolvedUrls.set(song.id, { url: url || '', nonFull });
         return url;
       },
       onResult: (songId, tag) => {
-        results.push({ songId, tag: resolvedUrls.get(songId) ? tag : 'invalid' });
+        const entry = resolvedUrls.get(songId);
+        results.push({ songId, tag: entry?.url ? tag : 'invalid' });
+        // 探测职责转型：打标签的同时把直连直链写入预取缓存（主进程内存，
+        // TTL 30min）——播放时 resolvePlayableSongRouted 先查缓存，命中 0 等待。
+        const target = songsById.get(songId);
+        if (target && entry?.url) {
+          rememberProbeResult(target, entry.url, tag, entry.nonFull);
+        }
       },
     });
     return results;

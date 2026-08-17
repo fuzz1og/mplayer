@@ -3,8 +3,10 @@ import type { TransportRequest, TransportResponse } from '../../api/transport.js
 import type { Song } from '../../types/index.js';
 import {
   addTier3SubscriptionFromText,
+  clearTier3Stats,
   createTier3Resolver,
   fetchTier3ManifestFromUrl,
+  getTier3Stats,
   getTier3State,
   loadTier3State,
   parseTier3Manifest,
@@ -12,7 +14,9 @@ import {
   setTier3Deps,
   setTier3Enabled,
   setTier3Persister,
+  tier3SourceSource,
 } from '../tier3Api.js';
+import type { Tier3Source } from '../tier3Api.js';
 
 /**
  * tier3Api 测试（#144）：
@@ -160,6 +164,7 @@ beforeEach(() => {
   loadTier3State(undefined);
   setTier3Deps({});
   setTier3Persister(null);
+  clearTier3Stats();
 });
 
 describe('parseTier3Manifest', () => {
@@ -242,6 +247,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song());
     expect(url).toBe('https://cdn.example.com/a.mp3');
+    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 1, misses: 0 } });
   });
 
   it('域名不在白名单 → 返回空串', async () => {
@@ -276,6 +282,23 @@ describe('createTier3Resolver（url-resolver）', () => {
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
     setTier3Enabled(true);
     expect(await createTier3Resolver()(song())).toBe('');
+    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 0, misses: 1 } });
+  });
+
+  it('多次解析按源累计命中/失败', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/url?id=123&source=netease': () =>
+        jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, 'https://api.example.com/url?id=123&source=netease'),
+      'https://cdn.example.com/a.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+
+    await createTier3Resolver()(song());
+    await createTier3Resolver()(song());
+
+    expect(getTier3Stats()['demo-url']).toEqual({ hits: 2, misses: 0 });
   });
 
   it('url-resolver 声明 source 且与当前歌曲 source 不符时跳过，不拿错源 id 去解析', async () => {
@@ -602,5 +625,27 @@ describe('searchTier3Songs（官方直连搜索失败后的第三方搜索兜底
     const songs = await searchTier3Songs('恋人', 1, 'netease');
     expect(songs).toHaveLength(1);
     expect(songs[0]).toMatchObject({ name: '恋人', artist: '李荣浩', sourceType: 'kuwo' });
+  });
+});
+
+describe('tier3SourceSource（URL 形态推断，CodeQL 高危告警修复）', () => {
+  const mk = (resolve: string): Tier3Source => ({
+    id: 't',
+    kind: 'url-resolver',
+    allowedDomains: ['cdn.example.com'],
+    resolve: { method: 'GET', url: resolve, responseJsonPath: 'data.url' },
+  });
+
+  it('126.net / 91q.com 只按 hostname 后缀匹配，任意主机不得命中', () => {
+    expect(tier3SourceSource(mk('https://api.126.net/url?id={id}'))).toBe('netease');
+    expect(tier3SourceSource(mk('https://91q.com/url?id={id}'))).toBe('qianqian');
+    // 旧实现用整串 substring（includes），evil126.net.evil.example 这类会被误判
+    expect(tier3SourceSource(mk('https://not126.net.evil.example.com/url'))).toBeUndefined();
+    expect(tier3SourceSource(mk('https://x91q.com.evil.example/url'))).toBeUndefined();
+  });
+
+  it('路径标记 /qq 与 kw.php 仍参与推断', () => {
+    expect(tier3SourceSource(mk('https://api.example.com/qq?id={id}'))).toBe('qq');
+    expect(tier3SourceSource(mk('https://api.example.com/api/kw.php?rid={id}'))).toBe('kuwo');
   });
 });

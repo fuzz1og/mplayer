@@ -53,9 +53,12 @@ class SearchService {
 
   /**
    * 对「上一批未探测过的新歌」逐批跑主进程探测（probeSongsBatch，20/批）。
+   * 探测职责 = **预取 URL**：主进程把直连解析出的直链写入预取缓存（30min TTL），
+   * 播放时 resolvePlayableSongRouted 命中即 0 等待。探测结果不再写渲染层
+   * audioTag——列表阶段不预显「片段/无效」预测徽标；徽标改为播放后按实际结果回写。
    * 增量去重：渐进/翻页里只探测新增歌曲，不重复探测已探测过的源批次。
    * 失败打开：探测永不阻断搜索渲染。探测序号校验：新搜索/reset 后（probeSeq 递增）
-   * 旧搜索在途批次的探测结果直接丢弃，不写入新会话的 audioTag。
+   * 旧搜索在途批次直接跳过剩余批次，不再做无用功。
    */
   private probeNewResults(groups: SongGroup[]): void {
     const allSongs = groups.flatMap((group) => group.songs);
@@ -69,12 +72,8 @@ class SearchService {
       for (let i = 0; i < newSongs.length; i += PROBE_BATCH_SIZE) {
         const batch = newSongs.slice(i, i + PROBE_BATCH_SIZE);
         try {
-          const results = await callMusicApi('probeSongsBatch', batch);
+          await callMusicApi('probeSongsBatch', batch);
           if (seq !== this.probeSeq) return; // 已被新搜索/重置取代，丢弃在途探测结果
-          const store = useSearchStore.getState();
-          for (const result of results) {
-            store.setAudioTag(result.songId, result.tag);
-          }
         } catch {
           // 失败打开：探测永不阻断搜索渲染。
         }

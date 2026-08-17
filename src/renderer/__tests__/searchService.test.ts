@@ -103,7 +103,7 @@ describe('searchService', () => {
       expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongsRouted', '晴天', 1, 'qq');
     });
 
-    it('probes new results through the main-process batch IPC', async () => {
+    it('探测批次仍走主进程 IPC 预取 URL，但不再写预测徽标', async () => {
       vi.useRealTimers();
       const { IpcClient } = await import('../services/IpcClient');
       const songs = Array.from({ length: 12 }, (_, i) => ({
@@ -122,15 +122,18 @@ describe('searchService', () => {
 
       await searchService.search('周杰伦');
 
-      await vi.waitFor(() => expect(mockStore.setAudioTag).toHaveBeenCalledTimes(songs.length));
-      const probeCalls = (IpcClient.invoke as any).mock.calls.filter(
-        (call: unknown[]) => call[0] === 'musicApi:call' && call[1] === 'probeSongsBatch'
-      );
-      expect(probeCalls).toHaveLength(1);
-      expect(probeCalls[0][2]).toHaveLength(songs.length);
+      await vi.waitFor(() => {
+        const probeCalls = (IpcClient.invoke as any).mock.calls.filter(
+          (call: unknown[]) => call[0] === 'musicApi:call' && call[1] === 'probeSongsBatch'
+        );
+        expect(probeCalls).toHaveLength(1);
+        expect(probeCalls[0][2]).toHaveLength(songs.length);
+      });
+      // 列表阶段不预显徽标：探测结果只用于主进程预取缓存，不写渲染层 audioTag
+      expect(mockStore.setAudioTag).not.toHaveBeenCalled();
     });
 
-    it('快速连搜：旧搜索在途探测结果被丢弃，不写入新结果集', async () => {
+    it('快速连搜：旧搜索在途探测被 seq 守卫跳过，新搜索仍发起预取探测', async () => {
       vi.useRealTimers();
       const { IpcClient } = await import('../services/IpcClient');
 
@@ -170,9 +173,13 @@ describe('searchService', () => {
       });
       await p1;
 
-      // 迟到的旧探测结果（old1/stale）不得写入；只有新结果被写入
+      // 探测结果一律不写渲染层徽标（预测徽标已废弃）；新搜索的预取探测必须发出
       expect(mockStore.setAudioTag).not.toHaveBeenCalledWith('old1', 'stale');
-      expect(mockStore.setAudioTag).toHaveBeenCalledWith('new1', 'valid');
+      expect(mockStore.setAudioTag).not.toHaveBeenCalledWith('new1', 'valid');
+      const newProbeCalls = (IpcClient.invoke as any).mock.calls.filter(
+        (call: unknown[]) => call[1] === 'probeSongsBatch' && (call[2] as any[])[0]?.id === 'new1'
+      );
+      expect(newProbeCalls).toHaveLength(1);
     });
   });
 

@@ -99,6 +99,12 @@ export interface Tier3State {
   subscriptions: Tier3Subscription[];
 }
 
+/** 每源累计解析统计（设置页展示；内存计数，本次会话有效）。 */
+export interface Tier3SourceStats {
+  hits: number;
+  misses: number;
+}
+
 export interface Tier3Deps {
   /** 测试/自定义请求入口；缺省走 core transport 默认实现。 */
   request?: (req: TransportRequest) => Promise<import('../api/transport.js').TransportResponse>;
@@ -115,6 +121,17 @@ const TRIAL_BYTES_THRESHOLD = 1_048_576;
 
 let state: Tier3State = { enabled: false, subscriptions: [] };
 let persister: ((next: Tier3State) => void) | null = null;
+const tier3Stats = new Map<string, Tier3SourceStats>();
+
+/** 每源累计命中/失败次数（key = source.id）。 */
+export function getTier3Stats(): Record<string, Tier3SourceStats> {
+  return Object.fromEntries(tier3Stats);
+}
+
+/** 测试/重置用：清空统计。 */
+export function clearTier3Stats(): void {
+  tier3Stats.clear();
+}
 
 function persist(): void {
   persister?.({ ...state });
@@ -768,45 +785,39 @@ export function setTier3Deps(deps: Tier3Deps): void {
   currentDeps = deps;
 }
 
-/** 源适用的原始音源：显式声明的 source 优先；未声明时从 URL 形态推断（两种 kind 都推断，
- *  避免酷我/酷狗等歌曲把自身 id 塞给 QQ/网易专用解析接口，导致返回完全不同的歌）。 */
-function extractUrlHosts(raw: string): string[] {
-  const hosts: string[] = [];
-  const pattern = /(?:https?:)?\/\/[^/\s?#]+/gi;
-  for (const match of raw.matchAll(pattern)) {
-    let candidate = match[0];
-    if (candidate.startsWith('//')) candidate = `https:${candidate}`;
-    try {
-      hosts.push(new URL(candidate).hostname.toLowerCase());
-    } catch {
-      // 模板 URL 解析失败时跳过该段，不影响其他 URL 的推断
-    }
+/** 从清单 URL 模板提取 hostname（用于音源推断）。 */
+function tier3HostOf(rawUrl: string): string {
+  try {
+    return new URL(rawUrl).hostname.toLowerCase();
+  } catch {
+    return '';
   }
-  return hosts;
 }
 
-export function tier3SourceSource(source: Tier3Source): string | undefined {
-  if (source.source) return source.source;
-  const raw = `${source.resolve.method || 'GET'} ${source.resolve.url} ${source.search?.url || ''}`.toLowerCase();
-  const hosts = extractUrlHosts(raw);
-  if (raw.includes('tencent') || raw.includes('/qq') || raw.includes('qqmusic')) return 'qq';
-  if (
-    raw.includes('netease') ||
-    raw.includes('music.163') ||
-    hosts.some((host) => host === 'music.126.net' || host.endsWith('.music.126.net'))
-  ) {
-    return 'netease';
-  }
-  if (raw.includes('kuwo') || raw.includes('kw.php')) return 'kuwo';
-  if (raw.includes('kugou')) return 'kugou';
-  if (raw.includes('migu')) return 'migu';
-  if (
-    raw.includes('qianqian') ||
-    hosts.some((host) => host === '91q.com' || host.endsWith('.91q.com'))
-  ) {
-    return 'qianqian';
-  }
-  if (raw.includes('soda') || raw.includes('qishui')) return 'soda';
+/** hostname 精确或子域匹配（`example.com` 匹配自身与 `*.example.com`）。 */
+function tier3HostIs(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
+/** 源适用的原始音源：显式声明的 source 优先；未声明时从 URL 形态推断（两种 kind 都推断，
+ *  避免酷我/酷狗等歌曲把自身 id 塞给 QQ/网易专用解析接口，导致返回完全不同的歌）。
+ *  域名类标记只比对 hostname（精确/子域），不做整串 substring——126.net / 91q.com
+ *  这类 substring 会被任意主机命中（CodeQL 高危告警「Incomplete URL substring
+ *  sanitization」）；路径类标记（/qq、kw.php）与域名无关，保留 substring。 */
+export function tier3SourceSource(source: Tier3Source): SourceKey | undefined {
+  if (source.source) return source.source as SourceKey;
+  const hosts = [source.resolve.url, source.search?.url || '']
+    .map(tier3HostOf)
+    .filter(Boolean);
+  const hostText = hosts.join(' ');
+  const path = `${source.resolve.url} ${source.search?.url || ''}`.toLowerCase();
+  if (hostText.includes('tencent') || path.includes('/qq') || hostText.includes('qqmusic')) return 'qq';
+  if (hostText.includes('netease') || hostText.includes('music.163') || hosts.some((h) => tier3HostIs(h, '126.net'))) return 'netease';
+  if (hostText.includes('kuwo') || path.includes('kw.php')) return 'kuwo';
+  if (hostText.includes('kugou')) return 'kugou';
+  if (hostText.includes('migu')) return 'migu';
+  if (hostText.includes('qianqian') || hosts.some((h) => tier3HostIs(h, '91q.com'))) return 'qianqian';
+  if (hostText.includes('soda') || hostText.includes('qishui')) return 'soda';
   return undefined;
 }
 
@@ -827,6 +838,7 @@ async function resolveTier3(song: Song): Promise<string> {
         console.info(`[tier3] 源 ${source.id} 跳过（source mismatch: ${effectiveSource} != ${song.sourceType}）`);
         continue;
       }
+      const stats = tier3Stats.get(source.id) ?? { hits: 0, misses: 0 };
       try {
         let url = '';
         if (source.kind === 'url-resolver') {
@@ -835,6 +847,8 @@ async function resolveTier3(song: Song): Promise<string> {
           url = await resolveSearchThenResolve(song, source);
         }
         if (url) {
+          stats.hits++;
+          tier3Stats.set(source.id, stats);
           console.info(`[tier3] 命中 source=${source.id}: ${url}`);
           return url;
         }
@@ -843,6 +857,8 @@ async function resolveTier3(song: Song): Promise<string> {
         console.warn(`[tier3] source=${source.id} 失败: ${(e as Error)?.message || e}`);
         // 单源失败继续下一条；全失败返回空串由 sourceRouter 回退。
       }
+      stats.misses++;
+      tier3Stats.set(source.id, stats);
     }
   }
   console.warn(`[tier3] 全部订阅源未命中，回退下一链路: 《${song.name}》${song.artist}`);
