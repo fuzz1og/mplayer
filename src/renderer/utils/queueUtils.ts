@@ -1,6 +1,7 @@
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
 import { getNextSongIndex } from '@mplayer/core';
+import { isLegacyDeadUrl } from '@/shared/legacyUrl';
 
 const QUEUE_STORAGE_KEY = 'mplayer_queue';
 const PLAY_MODE_KEY = 'playMode';
@@ -31,9 +32,14 @@ export function loadQueue(): { playlist: Song[]; index: number } {
       const data = JSON.parse(raw);
       if (Array.isArray(data.playlist) && data.playlist.length > 0) {
         const index = data.index ?? -1;
+        const playlist = data.playlist.map((song: Song) =>
+          isLegacyDeadUrl(song.url) || isLegacyDeadUrl(song.cover) || isLegacyDeadUrl(song.lrc)
+            ? { ...song, url: '', cover: '', lrc: '' }
+            : song,
+        );
         return {
-          playlist: data.playlist,
-          index: index >= 0 && index < data.playlist.length ? index : -1,
+          playlist,
+          index: index >= 0 && index < playlist.length ? index : -1,
         };
       }
     }

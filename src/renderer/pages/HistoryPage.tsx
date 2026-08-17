@@ -10,6 +10,7 @@ import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song, SongBase } from '@mplayer/core';
+import { findExactMatch } from '@mplayer/core';
 
 const HistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Song[]>([]);
@@ -33,7 +34,20 @@ const HistoryPage: React.FC = () => {
         3,
         async (songBase) => {
           const songs = await callMusicApi('searchSongsRouted', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
-          if (songs.length > 0) return songs[0];
+          const matched = findExactMatch({ name: songBase.name, artist: songBase.artist }, songs) as Song | undefined;
+          if (matched) {
+            return {
+              ...songBase,
+              name: matched.name || songBase.name,
+              artist: matched.artist || songBase.artist,
+              album: matched.album || songBase.album || '',
+              duration: matched.duration || songBase.duration || 0,
+              url: matched.url || '',
+              cover: matched.cover || '',
+              lrc: matched.lrc || '',
+              sourceType: matched.sourceType || songBase.sourceType,
+            };
+          }
           return { ...songBase, url: '', cover: '', lrc: '' } as Song;
         },
       );

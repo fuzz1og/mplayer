@@ -14,7 +14,8 @@ import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
-import { stripSourceIdPrefix } from '@mplayer/core';
+import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
+import { isLegacyDeadUrl } from '@/shared/legacyUrl';
 
 interface SortableItemProps {
   song: Song;
@@ -92,24 +93,57 @@ const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
   const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
     try {
       const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', song.id);
-      if (cached) {
+      if (
+        cached &&
+        !isLegacyDeadUrl(cached.url) &&
+        !isLegacyDeadUrl(cached.cover) &&
+        !isLegacyDeadUrl(cached.lrc)
+      ) {
         return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
       }
-      // 按源站 ID 直接识别（filter=id）：链接会过期，ID 不会——
-      // 绕开名字搜索的匹配失败风险（翻唱/Live/多歌手）
-      const fresh = await callMusicApi(
-        'searchSongById',
-        stripSourceIdPrefix(String(song.id)),
-        song.sourceType,
-        true,
-      );
-      if (!fresh?.url) return song;
+      // 按源站 ID 直接识别（filter=id）：链接会过期，ID 不会。
+      // 自建 API 退役后 searchSongById 返回 null，回退按歌名精确匹配。
+      let fresh: Song | null = null;
+      try {
+        fresh = await callMusicApi(
+          'searchSongById',
+          stripSourceIdPrefix(String(song.id)),
+          song.sourceType,
+          true,
+        );
+      } catch {
+        fresh = null;
+      }
+      if (!fresh && song.name) {
+        try {
+          const searchResults = await callMusicApi(
+            'searchSongsRouted',
+            `${song.name} ${song.artist}`.trim(),
+            1,
+            song.sourceType,
+          );
+          fresh = (findExactMatch({ name: song.name, artist: song.artist }, searchResults) as Song | undefined) || null;
+        } catch {
+          fresh = null;
+        }
+      }
+      if (!fresh) return song;
       await IpcClient.invoke<void>('cache:setSongResources', song.id, {
-        url: fresh.url,
-        cover: fresh.cover,
-        lrc: fresh.lrc,
+        url: fresh.url || '',
+        cover: fresh.cover || '',
+        lrc: fresh.lrc || '',
       });
-      return { ...song, url: fresh.url, cover: fresh.cover, lrc: fresh.lrc };
+      return {
+        ...song,
+        name: fresh.name || song.name,
+        artist: fresh.artist || song.artist,
+        album: fresh.album || song.album || '',
+        duration: fresh.duration || song.duration || 0,
+        url: fresh.url || '',
+        cover: fresh.cover || '',
+        lrc: fresh.lrc || '',
+        sourceType: fresh.sourceType || song.sourceType,
+      };
     } catch {
       return song;
     }
