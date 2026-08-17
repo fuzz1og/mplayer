@@ -785,18 +785,39 @@ export function setTier3Deps(deps: Tier3Deps): void {
   currentDeps = deps;
 }
 
+/** 从清单 URL 模板提取 hostname（用于音源推断）。 */
+function tier3HostOf(rawUrl: string): string {
+  try {
+    return new URL(rawUrl).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/** hostname 精确或子域匹配（`example.com` 匹配自身与 `*.example.com`）。 */
+function tier3HostIs(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
 /** 源适用的原始音源：显式声明的 source 优先；未声明时从 URL 形态推断（两种 kind 都推断，
- *  避免酷我/酷狗等歌曲把自身 id 塞给 QQ/网易专用解析接口，导致返回完全不同的歌）。 */
+ *  避免酷我/酷狗等歌曲把自身 id 塞给 QQ/网易专用解析接口，导致返回完全不同的歌）。
+ *  域名类标记只比对 hostname（精确/子域），不做整串 substring——126.net / 91q.com
+ *  这类 substring 会被任意主机命中（CodeQL 高危告警「Incomplete URL substring
+ *  sanitization」）；路径类标记（/qq、kw.php）与域名无关，保留 substring。 */
 export function tier3SourceSource(source: Tier3Source): SourceKey | undefined {
   if (source.source) return source.source as SourceKey;
-  const url = `${source.resolve.method || 'GET'} ${source.resolve.url} ${source.search?.url || ''}`.toLowerCase();
-  if (url.includes('tencent') || url.includes('/qq') || url.includes('qqmusic')) return 'qq';
-  if (url.includes('netease') || url.includes('music.163') || url.includes('126.net')) return 'netease';
-  if (url.includes('kuwo') || url.includes('kw.php')) return 'kuwo';
-  if (url.includes('kugou')) return 'kugou';
-  if (url.includes('migu')) return 'migu';
-  if (url.includes('qianqian') || url.includes('91q.com')) return 'qianqian';
-  if (url.includes('soda') || url.includes('qishui')) return 'soda';
+  const hosts = [source.resolve.url, source.search?.url || '']
+    .map(tier3HostOf)
+    .filter(Boolean);
+  const hostText = hosts.join(' ');
+  const path = `${source.resolve.url} ${source.search?.url || ''}`.toLowerCase();
+  if (hostText.includes('tencent') || path.includes('/qq') || hostText.includes('qqmusic')) return 'qq';
+  if (hostText.includes('netease') || hostText.includes('music.163') || hosts.some((h) => tier3HostIs(h, '126.net'))) return 'netease';
+  if (hostText.includes('kuwo') || path.includes('kw.php')) return 'kuwo';
+  if (hostText.includes('kugou')) return 'kugou';
+  if (hostText.includes('migu')) return 'migu';
+  if (hostText.includes('qianqian') || hosts.some((h) => tier3HostIs(h, '91q.com'))) return 'qianqian';
+  if (hostText.includes('soda') || hostText.includes('qishui')) return 'soda';
   return undefined;
 }
 

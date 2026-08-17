@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
-import { CircleCheck, Save, RefreshCcw, Zap, RefreshCw, Download, CircleX, Trash2, Plus } from 'lucide-react-native';
+import { CircleCheck, Save, RefreshCcw, RefreshCw, Download, CircleX, Trash2, Plus } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setProxyUrl as setCoreProxyUrl, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';

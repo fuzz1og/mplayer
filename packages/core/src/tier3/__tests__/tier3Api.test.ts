@@ -14,7 +14,9 @@ import {
   setTier3Deps,
   setTier3Enabled,
   setTier3Persister,
+  tier3SourceSource,
 } from '../tier3Api.js';
+import type { Tier3Source } from '../tier3Api.js';
 
 /**
  * tier3Api 测试（#144）：
@@ -623,5 +625,27 @@ describe('searchTier3Songs（官方直连搜索失败后的第三方搜索兜底
     const songs = await searchTier3Songs('恋人', 1, 'netease');
     expect(songs).toHaveLength(1);
     expect(songs[0]).toMatchObject({ name: '恋人', artist: '李荣浩', sourceType: 'kuwo' });
+  });
+});
+
+describe('tier3SourceSource（URL 形态推断，CodeQL 高危告警修复）', () => {
+  const mk = (resolve: string): Tier3Source => ({
+    id: 't',
+    kind: 'url-resolver',
+    allowedDomains: ['cdn.example.com'],
+    resolve: { method: 'GET', url: resolve, responseJsonPath: 'data.url' },
+  });
+
+  it('126.net / 91q.com 只按 hostname 后缀匹配，任意主机不得命中', () => {
+    expect(tier3SourceSource(mk('https://api.126.net/url?id={id}'))).toBe('netease');
+    expect(tier3SourceSource(mk('https://91q.com/url?id={id}'))).toBe('qianqian');
+    // 旧实现用整串 substring（includes），evil126.net.evil.example 这类会被误判
+    expect(tier3SourceSource(mk('https://not126.net.evil.example.com/url'))).toBeUndefined();
+    expect(tier3SourceSource(mk('https://x91q.com.evil.example/url'))).toBeUndefined();
+  });
+
+  it('路径标记 /qq 与 kw.php 仍参与推断', () => {
+    expect(tier3SourceSource(mk('https://api.example.com/qq?id={id}'))).toBe('qq');
+    expect(tier3SourceSource(mk('https://api.example.com/api/kw.php?rid={id}'))).toBe('kuwo');
   });
 });
