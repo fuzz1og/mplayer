@@ -770,16 +770,43 @@ export function setTier3Deps(deps: Tier3Deps): void {
 
 /** 源适用的原始音源：显式声明的 source 优先；未声明时从 URL 形态推断（两种 kind 都推断，
  *  避免酷我/酷狗等歌曲把自身 id 塞给 QQ/网易专用解析接口，导致返回完全不同的歌）。 */
+function extractUrlHosts(raw: string): string[] {
+  const hosts: string[] = [];
+  const pattern = /(?:https?:)?\/\/[^/\s?#]+/gi;
+  for (const match of raw.matchAll(pattern)) {
+    let candidate = match[0];
+    if (candidate.startsWith('//')) candidate = `https:${candidate}`;
+    try {
+      hosts.push(new URL(candidate).hostname.toLowerCase());
+    } catch {
+      // 模板 URL 解析失败时跳过该段，不影响其他 URL 的推断
+    }
+  }
+  return hosts;
+}
+
 export function tier3SourceSource(source: Tier3Source): string | undefined {
   if (source.source) return source.source;
-  const url = `${source.resolve.method || 'GET'} ${source.resolve.url} ${source.search?.url || ''}`.toLowerCase();
-  if (url.includes('tencent') || url.includes('/qq') || url.includes('qqmusic')) return 'qq';
-  if (url.includes('netease') || url.includes('music.163') || url.includes('126.net')) return 'netease';
-  if (url.includes('kuwo') || url.includes('kw.php')) return 'kuwo';
-  if (url.includes('kugou')) return 'kugou';
-  if (url.includes('migu')) return 'migu';
-  if (url.includes('qianqian') || url.includes('91q.com')) return 'qianqian';
-  if (url.includes('soda') || url.includes('qishui')) return 'soda';
+  const raw = `${source.resolve.method || 'GET'} ${source.resolve.url} ${source.search?.url || ''}`.toLowerCase();
+  const hosts = extractUrlHosts(raw);
+  if (raw.includes('tencent') || raw.includes('/qq') || raw.includes('qqmusic')) return 'qq';
+  if (
+    raw.includes('netease') ||
+    raw.includes('music.163') ||
+    hosts.some((host) => host === 'music.126.net' || host.endsWith('.music.126.net'))
+  ) {
+    return 'netease';
+  }
+  if (raw.includes('kuwo') || raw.includes('kw.php')) return 'kuwo';
+  if (raw.includes('kugou')) return 'kugou';
+  if (raw.includes('migu')) return 'migu';
+  if (
+    raw.includes('qianqian') ||
+    hosts.some((host) => host === '91q.com' || host.endsWith('.91q.com'))
+  ) {
+    return 'qianqian';
+  }
+  if (raw.includes('soda') || raw.includes('qishui')) return 'soda';
   return undefined;
 }
 
