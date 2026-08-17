@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
 import type { Song, SongBase, Favorite, PlayHistory, Playlist, PlaylistSong } from '@mplayer/core';
+import { clearLegacyDeadResources } from '../../shared/legacyUrl';
 
 interface StorageData {
   favorites: Favorite[];
@@ -40,6 +41,12 @@ export class FileStorage {
   private init(): void {
     fs.mkdirSync(this.dataDir, { recursive: true });
     this.loadData();
+    // 自建 API 退役后自动清理旧 302 端点残留：不删歌曲，只清死链字段。
+    if (this.migrateLegacyData()) {
+      void this.writeWithTransaction(this.data).catch((error) => {
+        console.error('迁移旧歌曲数据写入失败:', error);
+      });
+    }
   }
 
   private loadData(): void {
@@ -208,6 +215,62 @@ export class FileStorage {
     };
 
     return converted as StorageData;
+  }
+
+  /**
+   * 一次性/幂等迁移旧数据：
+   * - 歌曲 ID 统一为字符串（旧 API 部分源返回数字）；
+   * - 清掉指向已退役旧签名端点（api.php?get=...）的 url/cover/lrc；
+   * - 不删除任何收藏/歌单/历史条目。
+   */
+  private migrateLegacyData(): boolean {
+    let changed = false;
+
+    const normalizeSong = (song: any): void => {
+      if (!song || typeof song !== 'object') return;
+      if (song.id != null && typeof song.id !== 'string') {
+        song.id = String(song.id);
+        changed = true;
+      }
+      if (clearLegacyDeadResources(song)) {
+        changed = true;
+      }
+      // 旧 audioTag 是跟着旧签名 URL 一起探测出来的，URL 清掉后不再可信。
+      if ('audioTag' in song) {
+        delete song.audioTag;
+        changed = true;
+      }
+      if ('nonFull' in song) {
+        delete song.nonFull;
+        changed = true;
+      }
+    };
+
+    for (const favorite of this.data.favorites) {
+      if (favorite.songId != null && typeof favorite.songId !== 'string') {
+        favorite.songId = String(favorite.songId);
+        changed = true;
+      }
+      normalizeSong(favorite.song);
+    }
+
+    for (const historyItem of this.data.playHistory) {
+      if (historyItem.songId != null && typeof historyItem.songId !== 'string') {
+        historyItem.songId = String(historyItem.songId);
+        changed = true;
+      }
+      normalizeSong(historyItem.song);
+    }
+
+    for (const playlistSong of this.data.playlistSongs) {
+      if (playlistSong.songId != null && typeof playlistSong.songId !== 'string') {
+        playlistSong.songId = String(playlistSong.songId);
+        changed = true;
+      }
+      normalizeSong(playlistSong.song);
+    }
+
+    return changed;
   }
 
   private getInitialData(): StorageData {

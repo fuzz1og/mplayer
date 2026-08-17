@@ -4,6 +4,7 @@ import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { invalidateCoverUrl } from '@/renderer/services/coverUrlResolver';
 import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
+import { isLegacyDeadUrl } from '@/shared/legacyUrl';
 
 // 会话级重试：同一首歌最多刷新 3 次（"失败三次才放弃"），成功后清零；
 // 失败记录 5 分钟过期——瞬时故障不能永久放弃该歌（重新进入页面应重试）
@@ -106,10 +107,12 @@ export function refreshSongCover(song: Song): Promise<string | null> {
     // 更新 URL 缓存：只替换封面，保留已有 url/lrc
     // （搜索结果的 url 常为空，整体覆盖会让本来可播的歌变"无法播放"，歌词也会丢）
     const existing = await IpcClient.invoke<{ url?: string; lrc?: string } | null>('cache:getSongResources', song.id).catch(() => null);
+    const safeExisting =
+      existing && !isLegacyDeadUrl(existing.url) && !isLegacyDeadUrl(existing.lrc) ? existing : null;
     await IpcClient.invoke<void>('cache:setSongResources', song.id, {
-      url: fresh?.url || existing?.url || '',
+      url: fresh?.url || safeExisting?.url || '',
       cover,
-      lrc: fresh?.lrc || existing?.lrc || '',
+      lrc: fresh?.lrc || safeExisting?.lrc || '',
     }).catch(() => {});
     cacheCoverImage(cover).catch(() => {});
     return cover;

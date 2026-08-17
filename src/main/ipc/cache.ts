@@ -5,6 +5,7 @@ import axios from 'axios'
 import { registerIpcHandlerSimple } from './registerHandler'
 import { CacheKernel, createMemoryBackend, SongResourcesCache, type SongResources } from '@mplayer/core'
 import { DiskCacheBackend } from '../cache/diskBackend'
+import { isLegacyDeadUrl } from '../../shared/legacyUrl'
 
 let cacheKernel: CacheKernel | null = null
 let diskBackend: DiskCacheBackend | null = null
@@ -77,7 +78,15 @@ export function registerCacheIpc(): void {
   const cache = getSongResourcesCache()
 
   registerIpcHandlerSimple('cache:getSongResources', async (songId: string) => {
-    return cache.getSongResources(songId)
+    const resources = await cache.getSongResources(songId)
+    // 自建 API 退役后旧 302 端点缓存视为未命中：让上层重新解析并覆盖。
+    if (
+      resources &&
+      (isLegacyDeadUrl(resources.url) || isLegacyDeadUrl(resources.cover) || isLegacyDeadUrl(resources.lrc))
+    ) {
+      return null
+    }
+    return resources
   })
   registerIpcHandlerSimple('cache:setSongResources', async (songId: string, resources: SongResources) => {
     await cache.setSongResources(songId, resources)

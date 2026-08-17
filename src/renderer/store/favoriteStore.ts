@@ -4,8 +4,9 @@ import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, SongBase } from '@mplayer/core';
-import { stripSourceIdPrefix } from '@mplayer/core';
+import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
+import { isLegacyDeadUrl } from '@/shared/legacyUrl';
 
 interface FavoriteState {
   favoriteIds: string[];
@@ -34,7 +35,12 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
     try {
       // 尝试从缓存获取URL
       const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', song.id);
-      if (cachedUrl) {
+      if (
+        cachedUrl &&
+        !isLegacyDeadUrl(cachedUrl.url) &&
+        !isLegacyDeadUrl(cachedUrl.cover) &&
+        !isLegacyDeadUrl(cachedUrl.lrc)
+      ) {
         return {
           ...song,
           url: cachedUrl.url,
@@ -43,32 +49,70 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
         };
       }
 
-      // 如果缓存中没有，按源站 ID 直接识别拿最新三件套（filter=id：
-      // 链接会过期，ID 不会；绕开名字搜索的翻唱/Live 匹配失败）
-      const matchedSong = await callMusicApi(
-        'searchSongById',
-        stripSourceIdPrefix(String(song.id)),
-        song.sourceType,
-        true,
-      );
-      if (matchedSong?.url) {
+      // 如果缓存中没有（或缓存是旧死链），先按源站 ID 直接识别。
+      // 自建 API 退役后 searchSongById 会返回 null，再回退按歌名精确匹配。
+      let matchedSong: Song | null = null;
+      try {
+        matchedSong = await callMusicApi(
+          'searchSongById',
+          stripSourceIdPrefix(String(song.id)),
+          song.sourceType,
+          true,
+        );
+      } catch {
+        matchedSong = null;
+      }
+
+      if (!matchedSong && song.name) {
+        try {
+          const results = await callMusicApi(
+            'searchSongsRouted',
+            `${song.name} ${song.artist}`.trim(),
+            1,
+            song.sourceType,
+          );
+          matchedSong = (findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined) || null;
+        } catch {
+          matchedSong = null;
+        }
+      }
+
+      if (matchedSong) {
+        const fresh = matchedSong as Song;
+        const updated: Song = {
+          ...song,
+          name: fresh.name || song.name,
+          artist: fresh.artist || song.artist,
+          album: fresh.album || song.album || '',
+          duration: fresh.duration || song.duration || 0,
+          url: fresh.url || '',
+          cover: fresh.cover || '',
+          lrc: fresh.lrc || '',
+          sourceType: fresh.sourceType || song.sourceType,
+        };
+
         // 写入缓存
         await IpcClient.invoke<void>('cache:setSongResources', song.id, {
-          url: matchedSong.url,
-          cover: matchedSong.cover,
-          lrc: matchedSong.lrc
+          url: updated.url,
+          cover: updated.cover,
+          lrc: updated.lrc
         });
 
         // 写回 DB（下次启动不用重新搜索）
         ipcRenderer.invoke('favorite:updateSongData', song.id, {
-          url: matchedSong.url,
-          cover: matchedSong.cover,
-          lrc: matchedSong.lrc
+          name: updated.name,
+          artist: updated.artist,
+          album: updated.album,
+          duration: updated.duration,
+          url: updated.url,
+          cover: updated.cover,
+          lrc: updated.lrc,
+          sourceType: updated.sourceType,
         }).catch(() => {}); // fire-and-forget
 
-        cacheCoverImage(matchedSong.cover).catch(() => {});
+        if (updated.cover) cacheCoverImage(updated.cover).catch(() => {});
 
-        return matchedSong;
+        return updated;
       }
       return null;
     } catch (error) {
@@ -87,7 +131,12 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
 
       for (const songBase of songBases) {
         const cachedUrl = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', songBase.id);
-        if (cachedUrl) {
+        if (
+          cachedUrl &&
+          !isLegacyDeadUrl(cachedUrl.url) &&
+          !isLegacyDeadUrl(cachedUrl.cover) &&
+          !isLegacyDeadUrl(cachedUrl.lrc)
+        ) {
           cachedSongs.push({
             ...songBase,
             url: cachedUrl.url,
