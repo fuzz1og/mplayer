@@ -99,6 +99,12 @@ export interface Tier3State {
   subscriptions: Tier3Subscription[];
 }
 
+/** 每源累计解析统计（设置页展示；内存计数，本次会话有效）。 */
+export interface Tier3SourceStats {
+  hits: number;
+  misses: number;
+}
+
 export interface Tier3Deps {
   /** 测试/自定义请求入口；缺省走 core transport 默认实现。 */
   request?: (req: TransportRequest) => Promise<import('../api/transport.js').TransportResponse>;
@@ -115,6 +121,17 @@ const TRIAL_BYTES_THRESHOLD = 1_048_576;
 
 let state: Tier3State = { enabled: false, subscriptions: [] };
 let persister: ((next: Tier3State) => void) | null = null;
+const tier3Stats = new Map<string, Tier3SourceStats>();
+
+/** 每源累计命中/失败次数（key = source.id）。 */
+export function getTier3Stats(): Record<string, Tier3SourceStats> {
+  return Object.fromEntries(tier3Stats);
+}
+
+/** 测试/重置用：清空统计。 */
+export function clearTier3Stats(): void {
+  tier3Stats.clear();
+}
 
 function persist(): void {
   persister?.({ ...state });
@@ -770,8 +787,8 @@ export function setTier3Deps(deps: Tier3Deps): void {
 
 /** 源适用的原始音源：显式声明的 source 优先；未声明时从 URL 形态推断（两种 kind 都推断，
  *  避免酷我/酷狗等歌曲把自身 id 塞给 QQ/网易专用解析接口，导致返回完全不同的歌）。 */
-export function tier3SourceSource(source: Tier3Source): string | undefined {
-  if (source.source) return source.source;
+export function tier3SourceSource(source: Tier3Source): SourceKey | undefined {
+  if (source.source) return source.source as SourceKey;
   const url = `${source.resolve.method || 'GET'} ${source.resolve.url} ${source.search?.url || ''}`.toLowerCase();
   if (url.includes('tencent') || url.includes('/qq') || url.includes('qqmusic')) return 'qq';
   if (url.includes('netease') || url.includes('music.163') || url.includes('126.net')) return 'netease';
@@ -800,6 +817,7 @@ async function resolveTier3(song: Song): Promise<string> {
         console.info(`[tier3] 源 ${source.id} 跳过（source mismatch: ${effectiveSource} != ${song.sourceType}）`);
         continue;
       }
+      const stats = tier3Stats.get(source.id) ?? { hits: 0, misses: 0 };
       try {
         let url = '';
         if (source.kind === 'url-resolver') {
@@ -808,6 +826,8 @@ async function resolveTier3(song: Song): Promise<string> {
           url = await resolveSearchThenResolve(song, source);
         }
         if (url) {
+          stats.hits++;
+          tier3Stats.set(source.id, stats);
           console.info(`[tier3] 命中 source=${source.id}: ${url}`);
           return url;
         }
@@ -816,6 +836,8 @@ async function resolveTier3(song: Song): Promise<string> {
         console.warn(`[tier3] source=${source.id} 失败: ${(e as Error)?.message || e}`);
         // 单源失败继续下一条；全失败返回空串由 sourceRouter 回退。
       }
+      stats.misses++;
+      tier3Stats.set(source.id, stats);
     }
   }
   console.warn(`[tier3] 全部订阅源未命中，回退下一链路: 《${song.name}》${song.artist}`);

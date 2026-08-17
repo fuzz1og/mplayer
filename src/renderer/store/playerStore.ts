@@ -8,6 +8,7 @@ import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
+import { useSearchStore } from '@/renderer/store/searchStore';
 const { ipcRenderer } = window.require('electron');
 
 /**
@@ -213,6 +214,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       });
 
       let realUrl = song.url;
+      let playbackNonFull = false;
 
       if (song.sourceType === 'soda' && !song.url) {
         try {
@@ -234,6 +236,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             if (resolved?.nonFull && realUrl) {
               console.warn(`[player] 《${song.name}》解析结果为试听版（non-full），可换源获取完整版`);
               song.nonFull = true;
+              playbackNonFull = true;
+              // 播放后按实际结果回写徽标（预取缓存命中时同样走到这里）：
+              // preview 立即播直连试听（秒出声），不再等 tier3
+              useSearchStore.getState().setAudioTag(song.id, 'preview');
+              message.info('当前为试听版，可换源获取完整版');
             }
           } catch (urlError) {
             console.error('获取真实音频 URL 失败:', urlError);
@@ -288,6 +295,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       if (!realUrl) {
         set({ isLoading: false });
+        // 播放失败 → 列表回写「不可播」徽标 + 换源入口
+        useSearchStore.getState().setAudioTag(song.id, 'invalid');
         throw new Error('无法获取音频 URL：可能为 VIP/无版权或直连暂不可用，可尝试换源');
       }
 
@@ -300,6 +309,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
 
       audioPlayer.play();
+
+      // 完整版播放成功 → 回写 valid，清掉该行旧的失败徽标（试听版保留 preview）
+      if (!playbackNonFull) {
+        useSearchStore.getState().setAudioTag(song.id, 'valid');
+      }
 
       const duration = audioPlayer.getDuration();
 

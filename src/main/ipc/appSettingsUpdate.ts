@@ -22,6 +22,7 @@ import {
   addTier3SubscriptionFromText,
   removeTier3Subscription,
   refreshTier3Subscription,
+  getTier3Stats,
 } from '../api/musicApi';
 import { MULTI_SOURCE_LIST, type SourceKey, type SourceMode } from '@mplayer/core';
 import type { BrowserWindow } from 'electron';
@@ -126,6 +127,7 @@ export function registerSettingsIpc(): void {
   registerIpcHandler('settings:refreshTier3Subscription', async (id: string) => {
     return refreshTier3Subscription(id);
   });
+  registerIpcHandlerSimple('settings:getTier3Stats', () => getTier3Stats());
 }
 
 export function registerUpdateIpc(mainWindow: BrowserWindow): void {

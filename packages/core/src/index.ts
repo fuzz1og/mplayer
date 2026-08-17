@@ -139,6 +139,8 @@ export {
   setTier3Deps,
   createTier3Resolver,
   searchTier3Songs,
+  getTier3Stats,
+  clearTier3Stats,
 } from './tier3/tier3Api.js';
 export type {
   Tier3Manifest,
@@ -150,4 +152,5 @@ export type {
   Tier3SubscriptionKind,
   Tier3State,
   Tier3Deps,
+  Tier3SourceStats,
 } from './tier3/tier3Api.js';

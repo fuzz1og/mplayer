@@ -1,6 +1,7 @@
 import type { Song, SourceKey } from '../types/index.js';
 import { isTrialUrlInfo } from './playability.js';
 import type { UrlInfo } from './playability.js';
+import { getPrefetchedUrl } from '../api/prefetchCache.js';
 
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
@@ -206,15 +207,13 @@ async function tryTier3(song: Song, reason: string): Promise<string> {
   }
 }
 
-/** 搜索结果被探测标记为 invalid/preview 时，即使直连返回了 URL 也优先换 tier3；
+/** 搜索结果被探测标记为 invalid 时，即使直连返回了 URL 也优先换 tier3；
  *  tier3 未命中（未启用/未注入/全源失败）则保留直连结果，由上层按现状处理。
- *  invalid = 直连死链；preview = 直连试听版（如酷我 VIP 歌的 M500 试听）。 */
+ *  preview（直连试听版）**不再等待 tier3**：立即播直连试听（秒出声），由上层
+ *  标 nonFull 驱动「试听版 + 换源入口」；只有 invalid（直连死链）才实时等 tier3。 */
 async function preferTier3WhenBad(song: Song, directUrl: string): Promise<string> {
-  if (song.audioTag !== 'invalid' && song.audioTag !== 'preview') return directUrl;
-  const reason =
-    song.audioTag === 'invalid'
-      ? '直连 URL 已被探测标记为无效（audioTag=invalid）'
-      : '直连 URL 被探测为试听版（audioTag=preview）';
+  if (song.audioTag !== 'invalid') return directUrl;
+  const reason = '直连 URL 已被探测标记为无效（audioTag=invalid）';
   const tier3Url = await tryTier3(song, reason);
   return tier3Url || directUrl;
 }
@@ -313,6 +312,11 @@ export interface RoutedPlayable {
  * 直连失败按模式回退 api（auto）或上抛（direct）。
  */
 export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlayable> {
+  // 预取缓存命中（探测阶段已解析并验证过的直链，30min TTL）→ 0 等待直接播，
+  // 绝不等待预取队列；未命中才实时走完整解析链。
+  const prefetched = getPrefetchedUrl(song);
+  if (prefetched) return prefetched;
+
   const api = requireLegs();
   // 能力门含 resolveUrlInfo（UrlInfo 自带 url，仅有 UrlInfo 也可直连解析）
   const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl || !!c.resolveUrlInfo);

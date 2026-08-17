@@ -3,8 +3,10 @@ import type { TransportRequest, TransportResponse } from '../../api/transport.js
 import type { Song } from '../../types/index.js';
 import {
   addTier3SubscriptionFromText,
+  clearTier3Stats,
   createTier3Resolver,
   fetchTier3ManifestFromUrl,
+  getTier3Stats,
   getTier3State,
   loadTier3State,
   parseTier3Manifest,
@@ -160,6 +162,7 @@ beforeEach(() => {
   loadTier3State(undefined);
   setTier3Deps({});
   setTier3Persister(null);
+  clearTier3Stats();
 });
 
 describe('parseTier3Manifest', () => {
@@ -242,6 +245,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song());
     expect(url).toBe('https://cdn.example.com/a.mp3');
+    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 1, misses: 0 } });
   });
 
   it('域名不在白名单 → 返回空串', async () => {
@@ -276,6 +280,23 @@ describe('createTier3Resolver（url-resolver）', () => {
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
     setTier3Enabled(true);
     expect(await createTier3Resolver()(song())).toBe('');
+    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 0, misses: 1 } });
+  });
+
+  it('多次解析按源累计命中/失败', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/url?id=123&source=netease': () =>
+        jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, 'https://api.example.com/url?id=123&source=netease'),
+      'https://cdn.example.com/a.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+
+    await createTier3Resolver()(song());
+    await createTier3Resolver()(song());
+
+    expect(getTier3Stats()['demo-url']).toEqual({ hits: 2, misses: 0 });
   });
 
   it('url-resolver 声明 source 且与当前歌曲 source 不符时跳过，不拿错源 id 去解析', async () => {
