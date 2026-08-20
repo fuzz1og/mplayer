@@ -39,5 +39,8 @@ test-results/
 packages/mobile/android/
 packages/mobile/ios/
 
+# graphify skill 输出（知识图谱缓存）
+graphify-out/
+
 # dsh harness worktree 容器（勿提交）
 .dsh-worktrees/

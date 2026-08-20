@@ -43,6 +43,7 @@ npm run web         # Start in web browser
 | File | Role |
 |------|------|
 | `main.ts` | Entry. BrowserWindow (1400×900, hiddenInset), IPC registration, global shortcuts, tray |
+| `hidpi.ts` | WSLg HiDPI 修复：读 Windows AppliedDPI（reg.exe）→ 强制 `force-device-scale-factor`；非 WSL 跳过；`MPLAYER_UI_SCALE` 可覆盖 |
 | `config.ts` | API URL: DB settings → env vars → empty |
 | `proxy.ts` | Electron session proxy config |
 | `api/musicApi.ts` | 壳：re-export `musicApi` / client 配置（`setApiBaseUrl` 等）from `@mplayer/core`（HTTP 客户端逻辑在 core） |

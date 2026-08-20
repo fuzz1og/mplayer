@@ -3,6 +3,7 @@ import { app, BrowserWindow, ipcMain, session, globalShortcut } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import axios from 'axios';
+import { applyWslHidpiFix } from './hidpi';
 
 import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
@@ -18,6 +19,10 @@ import { registerLocalMusicIpc } from './ipc/localMusic';
 import { registerMusicApiCall } from './ipc/musicApiHandlers';
 import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDownloadIpc, registerAppIpc, TIER3_SETTING_KEY } from './ipc/appSettingsUpdate';
 import { registerCookiePersister, loadCookiesFromDisk } from './cookies/cookieAdapter';
+
+// WSLg HiDPI 修复：WSL 下 Windows 缩放（如 4K 屏 150%）不会透传给 Chromium，
+// 需在 app ready 前读取 Windows DPI 并强制缩放系数（详见 hidpi.ts）
+applyWslHidpiFix();
 
 // 扩展 musicApi：添加主进程特有的音频缓存方法
 const audioCacheBackend = new DiskCacheBackend(path.join(app.getPath('userData'), 'cache'))
