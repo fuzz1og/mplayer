@@ -36,11 +36,9 @@ export async function cacheCoverImage(coverUrl: string): Promise<void> {
   if (inFlight.has(coverUrl)) return;
   inFlight.add(coverUrl);
   try {
-    const response = await fetch(coverUrl);
-    if (!response.ok) return;
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    // 字节校验（非图片内容拒绝入缓存）移入主进程语义层 setCoverBytes（sniffers 单点）
-    await IpcClient.invoke<void>('cache:setCoverBytes', coverUrl, Buffer.from(bytes));
+    // 审查修复：webSecurity 恢复后渲染层跨域 fetch 受 CORS 限制，封面字节下载
+    // 改由主进程完成（axios + 语义层 setCoverBytes 字节嗅探校验）
+    await IpcClient.invoke<void>('cache:downloadCover', coverUrl);
   } catch (error) {
     console.error('缓存封面失败:', error);
   } finally {

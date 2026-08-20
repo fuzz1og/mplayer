@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Shield } from 'lucide-react';
 import { message } from 'antd';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 
 interface ProxyConfig {
   enabled: boolean;

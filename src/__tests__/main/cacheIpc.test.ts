@@ -115,10 +115,11 @@ describe('registerCacheIpc 语义缓存通道（ADR-0002）', () => {
 
   it('treats legacy json entries (no expiry metadata) as expired and deletes them', async () => {
     const getSong = getHandler('cache:getSongResources');
-    // 模拟缓存统一重构前写入的旧格式条目：song: 语义键 json 数据文件 + 无 expiresAt 的 meta
+    // 模拟缓存统一重构前写入的旧格式条目：song: 语义键 json 数据文件 + 无 expiresAt 的 meta。
+    // 审查修复后 JSON 缓存正确落 json/ 目录（修复前误落 bin/，此测试同步对齐正确目录）
     const key = ':json:song:legacy123';
     const md5 = crypto.createHash('md5').update(key).digest('hex');
-    const dataDir = path.join(cacheDir, 'cache', 'bin');
+    const dataDir = path.join(cacheDir, 'cache', 'json');
     const metaDir = path.join(cacheDir, 'cache', 'meta');
     fs.mkdirSync(dataDir, { recursive: true });
     fs.mkdirSync(metaDir, { recursive: true });

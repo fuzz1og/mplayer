@@ -83,7 +83,9 @@ describe('UpdateService', () => {
   });
 
   describe('代理配置', () => {
-    it('有代理配置时设置环境变量', async () => {
+    // 审查修复后：syncProxyEnv 只通过 session.setProxy 生效（netSession + defaultSession），
+    // 不再注入/清除 process.env.* 全局代理变量。
+    it('有代理配置时设置 session 代理规则', async () => {
       const { db } = await import('../../main/storage/db');
       vi.mocked(db.getSetting).mockResolvedValue({
         enabled: true,
@@ -92,16 +94,22 @@ describe('UpdateService', () => {
         port: 7890,
       });
 
+      process.env.HTTP_PROXY = 'http://old-proxy:8080'; // 应保持不变（不再被污染/清除）
+
       await updateService.syncProxyEnv();
 
-      expect(process.env.HTTP_PROXY).toBe('http://127.0.0.1:7890');
-      expect(process.env.HTTPS_PROXY).toBe('http://127.0.0.1:7890');
-      expect(process.env.http_proxy).toBe('http://127.0.0.1:7890');
-      expect(process.env.https_proxy).toBe('http://127.0.0.1:7890');
-      expect(process.env.ELECTRON_GET_USE_PROXY).toBe('1');
+      const { autoUpdater } = await import('electron-updater');
+      expect(autoUpdater.netSession.setProxy).toHaveBeenCalledWith({
+        proxyRules: 'http=127.0.0.1:7890;https=127.0.0.1:7890',
+      });
+      const { session } = await import('electron');
+      expect(session.defaultSession.setProxy).toHaveBeenCalledWith({
+        proxyRules: 'http=127.0.0.1:7890',
+      });
+      expect(process.env.HTTP_PROXY).toBe('http://old-proxy:8080');
     });
 
-    it('代理禁用时清除环境变量', async () => {
+    it('代理禁用时 session 走 direct', async () => {
       const { db } = await import('../../main/storage/db');
       vi.mocked(db.getSetting).mockResolvedValue({
         enabled: false,
@@ -111,16 +119,17 @@ describe('UpdateService', () => {
       });
 
       process.env.HTTP_PROXY = 'http://old-proxy:8080';
-      process.env.ELECTRON_GET_USE_PROXY = '1';
 
       await updateService.syncProxyEnv();
 
-      expect(process.env.HTTP_PROXY).toBeUndefined();
-      expect(process.env.HTTPS_PROXY).toBeUndefined();
-      expect(process.env.ELECTRON_GET_USE_PROXY).toBeUndefined();
+      const { autoUpdater } = await import('electron-updater');
+      expect(autoUpdater.netSession.setProxy).toHaveBeenCalledWith({ proxyRules: 'direct://' });
+      const { session } = await import('electron');
+      expect(session.defaultSession.setProxy).toHaveBeenCalledWith({ proxyRules: 'direct://' });
+      expect(process.env.HTTP_PROXY).toBe('http://old-proxy:8080'); // 全局 env 不被修改
     });
 
-    it('无代理配置时清除环境变量', async () => {
+    it('无代理配置时 session 走 direct', async () => {
       const { db } = await import('../../main/storage/db');
       vi.mocked(db.getSetting).mockResolvedValue(null);
 
@@ -128,7 +137,9 @@ describe('UpdateService', () => {
 
       await updateService.syncProxyEnv();
 
-      expect(process.env.HTTP_PROXY).toBeUndefined();
+      const { autoUpdater } = await import('electron-updater');
+      expect(autoUpdater.netSession.setProxy).toHaveBeenCalledWith({ proxyRules: 'direct://' });
+      expect(process.env.HTTP_PROXY).toBe('http://old-proxy:8080');
     });
   });
 

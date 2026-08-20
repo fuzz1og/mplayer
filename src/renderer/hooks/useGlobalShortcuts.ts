@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 import { usePlayerStore } from '@/renderer/store/playerStore';
 
 export function useGlobalShortcuts(): void {

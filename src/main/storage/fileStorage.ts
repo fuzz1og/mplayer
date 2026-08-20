@@ -12,6 +12,19 @@ interface StorageData {
   settings: Record<string, any>;
 }
 
+// 审查修复：ID 唯一化。旧实现用裸 Date.now() 作主键，同毫秒内连续操作
+//（批量收藏 / 快速加歌单）会生成相同 ID，导致去重误判、按 ID 删除错乱。
+// 改为「时间戳 + 进程内单调序号」：同进程内严格递增唯一，仍为 number 类型
+// 且与历史数据兼容（ID 为不透明标识，无格式依赖）。
+let idSeq = 0;
+function nextId(): number {
+  idSeq = (idSeq + 1) % 1000;
+  return Date.now() * 1000 + idSeq;
+}
+
+/** 播放历史上限（对齐移动端 historyStore max 200）。 */
+const MAX_HISTORY_ITEMS = 200;
+
 export class FileStorage {
   private dataDir: string = '';
   private dataFile: string = '';
@@ -290,7 +303,7 @@ export class FileStorage {
       return existing.id!;
     }
 
-    const id = Date.now();
+    const id = nextId();
     const favorite: Favorite = {
       id,
       songId: song.id,
@@ -347,7 +360,7 @@ export class FileStorage {
 
   // Play History
   async addToPlayHistory(song: Song): Promise<number> {
-    const id = Date.now();
+    const id = nextId();
     const songBase: SongBase = {
       id: song.id,
       name: song.name,
@@ -364,6 +377,10 @@ export class FileStorage {
     };
 
     this.data.playHistory.push(historyItem);
+    // 审查修复：历史上限截断（与移动端 max 200 对齐），防止 storage.json 无限增长
+    if (this.data.playHistory.length > MAX_HISTORY_ITEMS) {
+      this.data.playHistory = this.data.playHistory.slice(-MAX_HISTORY_ITEMS);
+    }
     await this.saveData();
     return id;
   }
@@ -386,7 +403,7 @@ export class FileStorage {
 
   // Playlists
   async createPlaylist(name: string, description?: string): Promise<number> {
-    const id = Date.now();
+    const id = nextId();
     const playlist: Playlist = {
       id,
       name,
@@ -484,7 +501,7 @@ export class FileStorage {
 
     const maxOrder = currentSongs.reduce((max, ps) => Math.max(max, ps.order), -1);
 
-    const id = Date.now();
+    const id = nextId();
     const playlistSong: PlaylistSong = {
       id,
       playlistId,

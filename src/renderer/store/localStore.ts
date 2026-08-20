@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { LocalFolder, LocalSong, Song } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 
 interface LocalStoreState {
   folders: LocalFolder[];
@@ -32,7 +32,8 @@ const localSongToSong = (localSong: LocalSong): Song => ({
   duration: localSong.duration,
   sourceType: 'local',
   url: `file:///${localSong.filePath.replace(/\\/g, '/')}`,
-  cover: localSong.coverBase64 || '',
+  // 审查修复：封面为独立落盘文件（coverPath），转 file:// 供 <img> 渲染
+  cover: localSong.coverPath ? `file:///${localSong.coverPath.replace(/\\/g, '/')}` : '',
   lrc: '',
 });
 

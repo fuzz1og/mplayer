@@ -10,7 +10,7 @@ import { getCachedArtistMeta } from '@/renderer/services/artistMetaCache';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, Album } from '@mplayer/core';
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 
 const ALBUM_PAGE_SIZE = 30;
 

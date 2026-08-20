@@ -87,10 +87,21 @@ export function registerMusicApiCall(api: MusicApi): void {
   ipcMain.handle(
     'musicApi:call',
     async <T>(
-      _event: Electron.IpcMainInvokeEvent,
+      event: Electron.IpcMainInvokeEvent,
       method: string,
       ...args: unknown[]
     ): Promise<ApiResponse<T>> => {
+      // 审查修复：sender 校验（仅应用页面可调用；测试直接调用无 senderFrame 时放行）
+      const senderUrl = event?.senderFrame?.url;
+      const isTrusted =
+        !senderUrl ||
+        senderUrl.startsWith('file://') ||
+        (process.env.VITE_DEV_SERVER_URL ? senderUrl.startsWith(process.env.VITE_DEV_SERVER_URL) : false);
+      if (!isTrusted) {
+        console.warn(`[IPC] 拦截非可信来源 musicApi:call: ${senderUrl ?? 'unknown'}`);
+        return { success: false, error: 'IPC 来源不受信任' };
+      }
+
       const handler = (dispatch as Record<string, (...xs: unknown[]) => unknown>)[method];
       if (typeof handler !== 'function') {
         return { success: false, error: `unknown musicApi method: ${method}` };
