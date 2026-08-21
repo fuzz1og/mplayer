@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
 import type { Song, SongBase, Favorite, PlayHistory, Playlist, PlaylistSong } from '@mplayer/core';
-import { clearLegacyDeadResources } from '../../shared/legacyUrl';
+import { clearLegacyDeadResources } from '@mplayer/core';
 
 interface StorageData {
   favorites: Favorite[];

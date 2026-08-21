@@ -1,7 +1,7 @@
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
 import { getNextSongIndex } from '@mplayer/core';
-import { isLegacyDeadUrl } from '@/shared/legacyUrl';
+import { isLegacyDeadUrl } from '@mplayer/core';
 
 const QUEUE_STORAGE_KEY = 'mplayer_queue';
 const PLAY_MODE_KEY = 'playMode';

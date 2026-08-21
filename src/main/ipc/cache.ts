@@ -5,7 +5,7 @@ import axios from 'axios'
 import { registerIpcHandlerSimple } from './registerHandler'
 import { CacheKernel, createMemoryBackend, SongResourcesCache, type SongResources } from '@mplayer/core'
 import { DiskCacheBackend } from '../cache/diskBackend'
-import { isLegacyDeadUrl } from '../../shared/legacyUrl'
+import { isLegacyDeadUrl } from '@mplayer/core'
 
 let cacheKernel: CacheKernel | null = null
 let diskBackend: DiskCacheBackend | null = null

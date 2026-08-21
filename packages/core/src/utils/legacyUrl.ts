@@ -1,8 +1,8 @@
 /**
- * 已退役的旧会话签名端点识别。
+ * 已退役的旧会话签名端点识别（桌面/移动端共享）。
  *
  * 旧版本通过 `api.php?get=url|pic|lrc` 这类带签名参数的端点拿 url/cover/lrc，
- * 服务退役后这些地址全部失效。这类地址不能再当作“有可播放 URL”，否则刷新
+ * 服务退役后这些地址全部失效。这类地址不能再当作"有可播放 URL"，否则刷新
  * 流程会被旧缓存/旧存储数据抢先命中，永远刷不出新信息。
  */
 export function isLegacyDeadUrl(url?: string | null): boolean {

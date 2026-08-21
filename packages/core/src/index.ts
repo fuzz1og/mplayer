@@ -13,6 +13,7 @@ export type { DupStatus, DupResult, FilterResult } from './utils/songDedupe.js';
 export { groupIntoSongGroups } from './utils/groupIntoSongGroups.js';
 export { calculateSimilarity, findBestMatch, isExactMatch, findExactMatch } from './utils/songMatcher.js';
 export { getNextSongIndex, getPrevSongIndex } from './utils/queue.js';
+export { isLegacyDeadUrl, clearLegacyDeadResources } from './utils/legacyUrl.js';
 export { pickRandomBatch } from './utils/recommendBatch.js';
 export type { RandomBatchResult } from './utils/recommendBatch.js';
 export { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from './utils/lyricsParser.js';
