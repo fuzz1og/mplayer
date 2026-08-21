@@ -9,9 +9,14 @@ import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useHistoryStore } from '../stores/historyStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
-import { colors, spacing, statusBarStyle } from '../theme/tokens';
+import { useMemo } from 'react';
+import { spacing } from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 
 export default function HistoryPage() {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { history, removeHistory, clearHistory } = useHistoryStore();
 
   const handlePlay = (index: number) => {
@@ -25,7 +30,7 @@ export default function HistoryPage() {
     <View style={styles.container}>
       {/* 原生 header 已含状态栏区域，SafeAreaView 再加 top 会叠出空白 */}
       <SafeAreaView edges={[]} style={{ flex: 1 }}>
-        <StatusBar style={statusBarStyle} />
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <Stack.Screen options={{
           title: '播放历史',
           headerShown: true,
@@ -64,7 +69,7 @@ export default function HistoryPage() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   header: {
     flexDirection: 'row',

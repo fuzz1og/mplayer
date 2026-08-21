@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
-import { colors } from '../theme/tokens';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setProxyUrl as setCoreProxyUrl, setApiTimingLog, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
@@ -9,6 +8,8 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
 import PlayerOverlay from '../components/PlayerOverlay';
+import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
+import type { ThemeColors } from '../theme/tokens';
 
 // core 的搜索诊断 console.warn（单源识别失败等）在真机 dev 上会触发
 // LogBox 横幅盖住底部播放栏；诊断信息 Metro 终端可见，无需上屏
@@ -19,8 +20,10 @@ LogBox.ignoreLogs(['[search]', '[player]']);
 function PlaybackErrorToast() {
   const lastError = useLogsStore((s) => s.lastError);
   const clearLastError = useLogsStore((s) => s.clearLastError);
+  const { colors } = useTheme();
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState('');
+  const styles = useMemo(() => makeToastStyles(colors), [colors]);
 
   useEffect(() => {
     if (!lastError) return;
@@ -35,9 +38,9 @@ function PlaybackErrorToast() {
 
   if (!visible) return null;
   return (
-    <View pointerEvents="none" style={toastStyles.wrap}>
-      <View style={toastStyles.box}>
-        <Text style={toastStyles.text}>{message}</Text>
+    <View pointerEvents="none" style={styles.wrap}>
+      <View style={styles.box}>
+        <Text style={styles.text}>{message}</Text>
       </View>
     </View>
   );
@@ -93,8 +96,8 @@ export default function RootLayout() {
     registerDirectClient(qianqianDirectClient);
     registerDirectClient(miguDirectClient);
     registerDirectClient(qqDirectClient);
-    registerDirectClient(kugouDirectClient);
     registerDirectClient(kuwoDirectClient);
+    registerDirectClient(kugouDirectClient);
 
     if (proxyUrl) {
       setCoreProxyUrl(proxyUrl);
@@ -102,7 +105,7 @@ export default function RootLayout() {
   }, [proxyUrl]);
 
   return (
-    <>
+    <ThemeProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="hotlist" />
@@ -120,11 +123,11 @@ export default function RootLayout() {
       )}
 
       <PlaybackErrorToast />
-    </>
+    </ThemeProvider>
   );
 }
 
-const toastStyles = StyleSheet.create({
+const makeToastStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: {
     position: 'absolute',
     left: 0,
@@ -134,7 +137,7 @@ const toastStyles = StyleSheet.create({
     zIndex: 2000,
   },
   box: {
-    backgroundColor: colors.bgSurface,
+    backgroundColor: colors.bgElevated,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: 10,

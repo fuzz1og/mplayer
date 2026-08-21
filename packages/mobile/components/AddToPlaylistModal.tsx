@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Modal, Alert,
 } from 'react-native';
@@ -7,7 +7,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Song, SourceKey } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
-import { colors, radius, spacing } from '../theme/tokens';
+import { radius, spacing } from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 
 function sourceLabel(sourceType?: string): string {
   return SOURCE_LABELS[sourceType as SourceKey] || sourceType || '未知';
@@ -20,6 +22,8 @@ interface Props {
 }
 
 export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const playlists = usePlaylistStore(s => s.playlists);
   const addSong = usePlaylistStore(s => s.addSong);
@@ -117,7 +121,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.bgOverlay,

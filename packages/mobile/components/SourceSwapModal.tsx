@@ -1,8 +1,11 @@
+import { useMemo } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { X, CircleCheck, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '../services/sourceSwap';
-import { colors, radius, spacing, sourceColors } from '../theme/tokens';
+import { radius, spacing, sourceColors } from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 
 const SWAP_SOURCES: { key: SourceKey; label: string }[] = [
   { key: 'netease', label: '网易云' },
@@ -35,6 +38,8 @@ export default function SourceSwapModal({
   visible, songName, currentSource, candidates, loading, success,
   onSelectSource, onSelectCandidate, onBack, onClose,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
@@ -118,7 +123,7 @@ export default function SourceSwapModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: { flex: 1, backgroundColor: colors.bgOverlay, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.bgSurface,

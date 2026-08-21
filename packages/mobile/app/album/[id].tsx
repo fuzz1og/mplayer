@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet,
 } from 'react-native';
@@ -13,9 +13,12 @@ import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
 import { probeSongsWithTags } from '../../services/songProbe';
-import { colors } from '../../theme/tokens';
+import type { ThemeColors } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 export default function AlbumDetailPage() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id, name, pic, artist } = useLocalSearchParams<{ id: string; name?: string; pic?: string; artist?: string }>();
   const [album, setAlbum] = useState<Album | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -105,7 +108,7 @@ export default function AlbumDetailPage() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   empty: { paddingVertical: 60, alignItems: 'center' },
 });

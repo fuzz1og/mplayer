@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,9 @@ import { ListMusic, ChevronRight, Plus, Heart, Clock } from 'lucide-react-native
 import { router } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import type { Playlist } from '../../stores/playlistStore';
-import { colors, radius } from '../../theme/tokens';
+import { radius } from '../../theme/tokens';
+import type { ThemeColors } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 const BUILT_IN = [
   { key: 'favorites', icon: Heart, label: '收藏', desc: '我喜欢的歌曲' },
@@ -26,6 +28,8 @@ function formatDate(ts: number): string {
 }
 
 export default function PlaylistsPage() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const playlists = usePlaylistStore((s) => s.playlists);
   const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
   const deletePlaylist = usePlaylistStore((s) => s.deletePlaylist);
@@ -173,7 +177,7 @@ export default function PlaylistsPage() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   header: {
     flexDirection: 'row',

@@ -1,5 +1,8 @@
+import { useMemo } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { colors, spacing } from '../theme/tokens';
+import { spacing } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
+import type { ThemeColors } from '../theme/tokens';
 
 interface Props {
   loadingMore: boolean;
@@ -8,6 +11,8 @@ interface Props {
 }
 
 export default function LoadMoreFooter({ loadingMore, hasMore, hasData }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   if (!hasData) return null;
   return (
     <View style={styles.footer}>
@@ -22,7 +27,7 @@ export default function LoadMoreFooter({ loadingMore, hasMore, hasData }: Props)
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   footer: {
     paddingVertical: spacing[6],
     alignItems: 'center',

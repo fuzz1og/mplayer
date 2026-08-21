@@ -1,11 +1,16 @@
+import { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { colors, radius, spacing } from '../theme/tokens';
+import { radius, spacing } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
+import type { ThemeColors } from '../theme/tokens';
 
 /**
  * 列表加载骨架屏：行高/间距与 SongRow 一致（44 封面 + 两行文字），
  * 灰色圆条占位，避免数据到达时布局跳动。
  */
 export default function SongListSkeleton({ rows = 8 }: { rows?: number }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.wrap}>
       {Array.from({ length: rows }, (_, i) => (
@@ -21,7 +26,7 @@ export default function SongListSkeleton({ rows = 8 }: { rows?: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: { paddingHorizontal: spacing[4], paddingTop: spacing[2] },
   row: {
     flexDirection: 'row',

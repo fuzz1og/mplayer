@@ -1,15 +1,16 @@
 /**
- * MPlayer mobile 设计系统 — desktop 同款浅色蓝调 token 体系
+ * MPlayer mobile 设计系统 — desktop 同款浅色蓝调 token 体系（#173 起支持深色）
  *
  * 与 desktop 的 src/renderer/styles/global.css 两层 token 架构一一对应：
  *   Primitive（palette / spacing / radius / shadow / typography）
- *   Semantic（colors）
+ *   Semantic（lightColors / darkColors 双套，运行时经 ThemeProvider 注入）
  *
  * 命名约定：mobile 用 camelCase，desktop 用 kebab-case（如 bgSurface ↔ --bg-surface）。
  * 完整映射表见同目录 README.md。
  *
- * 使用方式：
- *   import { colors, spacing, radius, typography, sourceColors } from '../theme/tokens';
+ * 使用方式（组件内取色一律走 useTheme，禁止再静态 import colors）：
+ *   const { colors } = useTheme();
+ *   const styles = useMemo(() => makeStyles(colors), [colors]);
  */
 
 import type { SourceKey } from '@mplayer/core';
@@ -18,7 +19,8 @@ import type { SourceKey } from '@mplayer/core';
    Primitive Tokens（基础值）
    ════════════════════════════════════════════════════════════ */
 
-/** 中性色阶 — Apple HIG + Spotify 混合（与 desktop --gray-* 一致） */
+/** 中性色阶 — Apple HIG + Spotify 混合（与 desktop --gray-* 一致）；
+ *  750/825/850/950 为深色主题专用表面阶（对应 iOS 暗色语义面与页面底） */
 export const palette = {
   gray50: '#FAFAFA',
   gray100: '#F5F5F7',
@@ -28,12 +30,17 @@ export const palette = {
   gray500: '#8E8E93',
   gray600: '#636366',
   gray700: '#48484A',
+  gray750: '#38383A',
   gray800: '#3A3A3C',
+  gray825: '#2A2A2C',
+  gray850: '#2C2C2E',
   gray900: '#1C1C1E',
+  gray950: '#121214',
 
-  /** 品牌色 — 经典蓝（与 desktop --blue-* 一致） */
+  /** 品牌色 — 经典蓝（与 desktop --blue-* 一致）；blue300 供暗底提亮用 */
   blue50: '#E7EDFB',
   blue100: '#C9D7F4',
+  blue300: '#6FA3EF',
   blue400: '#3D7BD9',
   blue500: '#2F5FD0',
   blue600: '#264FB8',
@@ -49,7 +56,8 @@ export const palette = {
   amber400: '#FBBF24',
   amber500: '#F59E0B',
 
-  /** 成功色 */
+  /** 成功色（emerald400 供暗底提亮用） */
+  emerald400: '#34D399',
   emerald500: '#10B981',
 } as const;
 
@@ -71,8 +79,8 @@ export const sourceColors: Record<SourceKey | 'all', string> = {
 };
 
 /**
- * 唱机深色点缀 — 全屏播放器「浅色主体 + 唱机局部深色」的深色基准。
- * 值取自现有 PlayerOverlay 唱机配色，播放器 ticket 可在此基础上微调。
+ * 唱机深色点缀 — 全屏播放器「唱机局部深色」的深色基准。
+ * 硬件本体双主题共用（唱片机本来就是黑的），不随主题翻转。
  */
 export const turntable = {
   plinth: '#222240',
@@ -111,7 +119,8 @@ export const radius = {
 /**
  * 阴影 — 克制的深度（2025 趋势）。
  * desktop 为多层 CSS box-shadow，RN 仅支持单层，按主层近似；
- * iOS 用 shadow*，Android 用 elevation。与 desktop --shadow-* 对应。
+ * iOS 用 shadow*，Android 用 elevation。与 desktop --shadow-* 对应；
+ * 深色主题下层级主要靠 surface 与底色的明度差表达，阴影保持克制。
  */
 export const shadow = {
   xs: {
@@ -178,10 +187,68 @@ export const typography = {
 } as const;
 
 /* ════════════════════════════════════════════════════════════
-   Semantic Tokens（语义映射）
+   Semantic Tokens（语义映射，双主题）
    ════════════════════════════════════════════════════════════ */
 
-export const colors = {
+/**
+ * 语义色结构契约：显式接口而非 typeof 推导——palette 是 as const，
+ * typeof 会把引用字段捕获成字面量类型，导致另一套配色赋值失败；
+ * 显式接口同时约束两套配色的键完整与拼写。
+ */
+export interface ThemeColors {
+  /* 背景层级 */
+  bgBase: string;
+  bgSurface: string;
+  bgElevated: string;
+  bgSidebar: string;
+  bgPlayer: string;
+  bgHover: string;
+  bgActive: string;
+  bgOverlay: string;
+
+  /* 文字层级 */
+  textPrimary: string;
+  textSecondary: string;
+  textTertiary: string;
+  textDisabled: string;
+  textInverse: string;
+  textLink: string;
+
+  /* 边框 */
+  borderDefault: string;
+  borderSubtle: string;
+  borderStrong: string;
+
+  /* 交互色 */
+  accent: string;
+  accentHover: string;
+  accentActive: string;
+  accentSubtle: string;
+  accentText: string;
+
+  danger: string;
+  dangerHover: string;
+  dangerSubtle: string;
+  dangerText: string;
+
+  warning: string;
+  warningSubtle: string;
+  success: string;
+
+  /* 输入框 */
+  inputBg: string;
+  inputBgFocus: string;
+  inputBorder: string;
+  inputBorderFocus: string;
+  inputPlaceholder: string;
+
+  /* 骨架屏 */
+  skeletonBase: string;
+  skeletonShine: string;
+}
+
+/** 浅色主题（默认，与 desktop 浅色一致） */
+export const lightColors: ThemeColors = {
   /* 背景层级 */
   bgBase: palette.gray50,
   bgSurface: '#FFFFFF',
@@ -231,7 +298,64 @@ export const colors = {
   /* 骨架屏 */
   skeletonBase: palette.gray100,
   skeletonShine: palette.gray200,
-} as const;
+};
 
-/** 浅色主题下的系统状态栏文字色（深色文字配浅色背景） */
-export const statusBarStyle: 'light' | 'dark' = 'dark';
+/**
+ * 深色主题 — 中性色沿用同一 gray 阶反转（iOS 暗色语义面）：
+ * 页面底 gray950 → 卡片 gray900 → 悬浮 gray850；文字整体提亮一档保对比。
+ * 品牌蓝在暗底用 blue400（accent）/ blue300（accentText），避免发闷。
+ */
+export const darkColors: ThemeColors = {
+  /* 背景层级 */
+  bgBase: palette.gray950,
+  bgSurface: palette.gray900,
+  bgElevated: palette.gray850,
+  bgSidebar: palette.gray900,
+  bgPlayer: 'rgba(28, 28, 30, 0.85)',
+  bgHover: palette.gray825,
+  bgActive: palette.gray750,
+  bgOverlay: 'rgba(0, 0, 0, 0.6)',
+
+  /* 文字层级 */
+  textPrimary: palette.gray50,
+  textSecondary: palette.gray400,
+  textTertiary: palette.gray500,
+  textDisabled: palette.gray700,
+  textInverse: palette.gray900,
+  textLink: palette.blue300,
+
+  /* 边框 */
+  borderDefault: palette.gray750,
+  borderSubtle: palette.gray850,
+  borderStrong: palette.gray700,
+
+  /* 交互色 */
+  accent: palette.blue400,
+  accentHover: palette.blue300,
+  accentActive: palette.blue500,
+  accentSubtle: 'rgba(61, 123, 217, 0.18)',
+  accentText: palette.blue300,
+
+  danger: palette.red400,
+  dangerHover: palette.red500,
+  dangerSubtle: 'rgba(248, 113, 113, 0.14)',
+  dangerText: palette.red400,
+
+  warning: palette.amber400,
+  warningSubtle: 'rgba(251, 191, 36, 0.12)',
+  success: palette.emerald400,
+
+  /* 输入框 */
+  inputBg: palette.gray825,
+  inputBgFocus: palette.gray850,
+  inputBorder: palette.gray750,
+  inputBorderFocus: palette.blue400,
+  inputPlaceholder: palette.gray600,
+
+  /* 骨架屏 */
+  skeletonBase: palette.gray825,
+  skeletonShine: palette.gray750,
+};
+
+/** 用户可选主题模式：system 跟随系统（默认），其余手动指定 */
+export type ThemeMode = 'system' | 'light' | 'dark';

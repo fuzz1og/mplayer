@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { useMemo } from 'react';
 import { Download, Music, Trash2 } from 'lucide-react-native';
 import { Paths } from 'expo-file-system';
 import type { Song } from '@mplayer/core';
@@ -6,7 +7,9 @@ import { useDownloadStore } from '../../stores/downloadStore';
 import { getLocalUri, removeDownloadedFile, pickDownloadDirectory } from '../../services/downloadService';
 import { playSong } from '../../services/audioPlayer';
 import { usePlayerStore } from '../../stores/playerStore';
-import { colors, radius } from '../../theme/tokens';
+import { radius } from '../../theme/tokens';
+import type { ThemeColors } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -16,6 +19,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function DownloadPage() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const items = useDownloadStore((s) => s.items);
   const removeItem = useDownloadStore((s) => s.removeItem);
   const currentSong = usePlayerStore((s) => s.currentSong);
@@ -123,7 +128,7 @@ export default function DownloadPage() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   emptyContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
   emptyBox: { alignItems: 'center' },

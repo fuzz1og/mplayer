@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,9 +15,13 @@ import { usePlaylistStore } from '../../stores/playlistStore';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import PlaylistHero from '../../components/PlaylistHero';
 import type { Song } from '@mplayer/core';
-import { colors, radius, spacing } from '../../theme/tokens';
+import { radius, spacing } from '../../theme/tokens';
+import type { ThemeColors } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 export default function PlaylistDetailPage() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlists = usePlaylistStore((s) => s.playlists);
   const removeSong = usePlaylistStore((s) => s.removeSong);
@@ -176,7 +180,7 @@ export default function PlaylistDetailPage() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   empty: {
     flex: 1,

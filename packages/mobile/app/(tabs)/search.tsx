@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,9 @@ import { useSourceStore } from '../../stores/sourceStore';
 import SongRow from '../../components/SongRow';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
-import { colors, radius } from '../../theme/tokens';
+import { radius } from '../../theme/tokens';
+import type { ThemeColors } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -26,6 +28,8 @@ type SearchTab = 'songs' | 'artists';
 let artistSearchSeq = 0;
 
 export default function SearchPage() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const params = useLocalSearchParams<{ q: string; type?: string }>();
   const q = Array.isArray(params.q) ? params.q[0] : params.q;
   const type = Array.isArray(params.type) ? params.type[0] : params.type;
@@ -177,6 +181,8 @@ interface ResultsListProps {
  * 多源搜索(全部源)结果:按歌分组,标题 = 歌名 — 歌手,组内为各源版本
  */
 function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: ResultsListProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <FlatList
       key="song-results"
@@ -206,6 +212,8 @@ function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: Results
  * 单源搜索结果:按源分组,标题 = 源名,组内为该源歌曲列表
  */
 function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: ResultsListProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <FlatList
       key="song-results"
@@ -226,7 +234,7 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   tabHeader: {
     flexDirection: 'row',
