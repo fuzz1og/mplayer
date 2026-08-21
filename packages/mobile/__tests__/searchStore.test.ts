@@ -27,7 +27,7 @@ vi.mock('../services/audioProbe', () => ({
 }));
 
 vi.mock('../services/songProbe', () => ({
-  probeSongsWithTags: vi.fn(async () => {}),
+  probeSongsPrefetch: vi.fn(async () => {}),
 }));
 
 vi.mock('../stores/logsStore', () => ({

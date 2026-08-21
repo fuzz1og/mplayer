@@ -10,7 +10,7 @@ import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
 import CollapsingHero from '../../components/CollapsingHero';
-import { probeSongsWithTags } from '../../services/songProbe';
+import { probeSongsPrefetch } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
@@ -45,12 +45,12 @@ export default function DiscoverPlaylistDetailPage() {
         setHasMore(page.songs.length < page.total);
         offsetRef.current = PAGE_SIZE;
         // 后台补齐缺失 URL(weapi 批量 + 10 并发搜索兜底),完成后触发重渲染
-        // URL 补齐后再探测：搜索兜底拿到的歌此时才有 url，提前探测会被
-        // core 的 fail-open 判成 valid（无版权歌永远不出现「无效」徽标）
+        // URL 补齐后直连探测：直链写入 core 预取缓存（播放 0 等待秒播）；
+        // 探测不再写列表徽标（预测常错，徽标改播放后回写）
         void musicApi.resolveNeteaseSongUrls(page.songs, false).then(() => {
           if (!cancelled) {
             setSongs([...page.songs]);
-            void probeSongsWithTags(page.songs, { missingAsInvalid: true });
+            void probeSongsPrefetch(page.songs);
           }
         });
       } catch (e: any) {
@@ -71,10 +71,10 @@ export default function DiscoverPlaylistDetailPage() {
         setSongs(prev => [...prev, ...page.songs]);
         offsetRef.current += PAGE_SIZE;
         setHasMore(offsetRef.current < page.total);
-        // 后台补齐本页缺失 URL + 补齐后再探测（同首屏）
+        // 后台补齐本页缺失 URL + 补齐后直连探测预取（同首屏）
         void musicApi.resolveNeteaseSongUrls(page.songs, false).then(() => {
           setSongs(prev => [...prev]);
-          void probeSongsWithTags(page.songs, { missingAsInvalid: true });
+          void probeSongsPrefetch(page.songs);
         });
       } else {
         setHasMore(false);

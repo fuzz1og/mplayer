@@ -10,13 +10,20 @@ export interface LogEntry {
 
 const MAX_ENTRIES = 100;
 
+/** 用户可见的瞬态通知（Toast）：error=播放最终失败等；info=试听版提示等非错误反馈 */
+export interface NoticeMessage {
+  level: 'info' | 'error';
+  text: string;
+}
+
 interface LogsState {
   entries: LogEntry[];
-  lastError: string | null;
+  notice: NoticeMessage | null;
   addLog: (level: LogLevel, message: string) => void;
   reportError: (message: string) => void;
+  setNotice: (level: 'info' | 'error', message: string) => void;
   clearLogs: () => void;
-  clearLastError: () => void;
+  clearNotice: () => void;
 }
 
 /**
@@ -25,7 +32,7 @@ interface LogsState {
  */
 export const useLogsStore = create<LogsState>((set, get) => ({
   entries: [],
-  lastError: null,
+  notice: null,
 
   addLog: (level, message) => {
     if (level === 'error') console.error('[player]', message);
@@ -36,12 +43,18 @@ export const useLogsStore = create<LogsState>((set, get) => ({
     }));
   },
 
-  // 需要用户可见的最终错误（如队列耗尽），触发全局 Toast
+  // 需要用户可见的最终错误（如队列耗尽），触发全局 Toast（error 样式）
   reportError: (message) => {
     get().addLog('error', message);
-    set({ lastError: message });
+    set({ notice: { level: 'error', text: message } });
+  },
+
+  // 非错误类用户提示（如「当前为试听版，可换源」），同一 Toast 通道 info 样式
+  setNotice: (level, message) => {
+    get().addLog(level, message);
+    set({ notice: { level, text: message } });
   },
 
   clearLogs: () => set({ entries: [] }),
-  clearLastError: () => set({ lastError: null }),
+  clearNotice: () => set({ notice: null }),
 }));

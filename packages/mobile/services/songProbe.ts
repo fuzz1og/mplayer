@@ -1,48 +1,22 @@
-import { probeSongs } from '@mplayer/core';
+import { musicApi } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
-import { useAudioTagStore } from '../stores/audioTagStore';
 import { useLogsStore } from '../stores/logsStore';
 
 /**
- * 对一组歌曲跑音频质量探测（30 秒片段/无效标记），结果写入 audioTagStore，
- * SongRow 按 id 订阅自动显示徽标。各页面（专辑/歌单/歌手/发现榜单）共用。
- * 非阻塞：探测完成逐首更新，仅重渲染标签变化的行。
- * @param missingAsInvalid 无 url 的歌直接标「无效」不探测（专辑页用：
- *   无版权歌 url 为空且搜索兜底已严格校验，标无效引导用户单曲换源）
+ * 对一组歌曲跑直连探测（musicApi.probeSongsBatch，仅直连、无 tier3/api 腿）：
+ * 解析出的直链写入 core 预取缓存（TTL 30min），播放时
+ * resolvePlayableSongRouted 命中缓存 0 等待秒播。
+ * 探测职责 = 预取，**不写列表徽标**（对齐桌面 68844b5：探测预测与实际
+ * 播放常不符；徽标改为播放后按实际结果回写，见 audioPlayer.playSong）。
+ * 非阻塞、失败打开：探测失败不影响列表渲染。
  */
-export async function probeSongsWithTags(
-  songs: Song[],
-  options: { missingAsInvalid?: boolean } = {},
-): Promise<void> {
+export async function probeSongsPrefetch(songs: Song[]): Promise<void> {
   if (songs.length === 0) return;
-  const { missingAsInvalid = false } = options;
   const t0 = Date.now();
-  const { setTag } = useAudioTagStore.getState();
-  const byId = new Map(songs.map((s) => [s.id, s]));
-  let preview = 0;
-  let invalid = 0;
-  let valid = 0;
-  const toProbe: Song[] = [];
-  for (const s of songs) {
-    // 只有 url 完全为空才标「无效」：302 端点（api.php?get=url…）不以
-    // http 开头但仍是有效播放地址（播放器能跟），不能按 http 前缀误杀
-    if (missingAsInvalid && !s.url) {
-      setTag(s, 'invalid');
-      invalid++;
-      continue;
-    }
-    toProbe.push(s);
+  try {
+    await musicApi.probeSongsBatch(songs);
+    useLogsStore.getState().addLog('info', `探测预取完成: ${songs.length}首, 耗时 ${Date.now() - t0}ms`);
+  } catch {
+    // 失败打开：探测永不阻断列表
   }
-  await probeSongs(toProbe, {
-    concurrency: 5,
-    onResult: (id, tag) => {
-      const song = byId.get(id);
-      if (!song) return;
-      setTag(song, tag);
-      if (tag === 'preview') preview++;
-      else if (tag === 'invalid') invalid++;
-      else valid++;
-    },
-  });
-  useLogsStore.getState().addLog('info', `探测完成: 共${songs.length}首, 完整${valid} 短时长${preview} 无效${invalid}, 耗时 ${Date.now() - t0}ms`);
 }

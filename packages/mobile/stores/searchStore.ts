@@ -3,7 +3,7 @@ import { musicApi, createSearchOrchestrator } from '@mplayer/core';
 import type { SongGroup, SourceKey, SearchOrchestratorState } from '@mplayer/core';
 import { useSourceStore, SOURCE_OPTION_LABELS, type SourceOption } from './sourceStore';
 import { useLogsStore } from './logsStore';
-import { probeSongsWithTags } from '../services/songProbe';
+import { probeSongsPrefetch } from '../services/songProbe';
 
 interface SearchState {
   query: string;
@@ -71,7 +71,7 @@ export const useSearchStore = create<SearchState>((set, get) => {
       // 探测在全部完成后统一跑（与搜索并发会抢手机网络带宽）
       const { results } = get();
       if (results.length > 0) {
-        await probeSongsWithTags(results.flatMap((g) => g.songs));
+        await probeSongsPrefetch(results.flatMap((g) => g.songs));
       }
     },
 
