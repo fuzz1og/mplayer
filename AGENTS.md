@@ -124,10 +124,18 @@ flat config（`eslint.config.js`），全局 ignores 与 `--no-warn-ignored` 语
 - 构造器注入可测性：diskBackend(cacheDir)、localMusicService(userDataPath)
 - E2E: Playwright 在 `e2e/`，测试服务器 `npx vite --config vite.test.config.ts --port 5174`；移动端 E2E 未搭建（手动 Expo 验收）
 
-## Worktree Rules
+## Git Workflow
 
-- worktree 内调试/测试必须在 worktree 内构建运行，不要 cd 回主分支目录（缓存不一致难排查）。
-- worktree 缺 node_modules 先在 worktree 内 `npm install`，不要从主分支复制。
+**功能开发一律从最新 `master` 新建本地 worktree 完成，完成后推分支经 PR 进入 `master`；直接 push `master` 是例外，需明确理由。**
+
+- **Issue 先行**：动手前开/认领 GitHub issue（见 `docs/agents/issue-tracker.md`），commit 与 PR 用 `Closes #N` 关联；跨端契约/IPC 协议/来源路由这类架构取舍先写 ADR 再动工。
+- 分支命名 `<type>/<slug>`（feat/fix/docs/chore/refactor）；commit 用 Conventional Commits（`type(scope): 中文描述`，scope 取 core/desktop/mobile/ci）。
+- 合并门槛：worktree 内验证顺序全绿 + CI 绿；PR 描述写清做了什么/为什么/怎么验证的；改 core/mobile 的 PR 附真机验收结论。
+- 敏感信息不入库：tier3 订阅地址、API key、本地缓存数据不进 commit。
+- 文档同责：行为/命令/架构变化在同一 PR 更新 AGENTS.md / CONTEXT.md / ADR。
+- worktree 内调试/测试就在 worktree 内构建运行，不要 cd 回主克隆目录；缺 node_modules 就地 `npm install`，不从主克隆复制。
+
+完整流程（issue → 建 worktree → 验证 → `gh pr create` → 清理）见 `docs/agents/git-workflow.md`。
 
 ## 多源链路速览
 
