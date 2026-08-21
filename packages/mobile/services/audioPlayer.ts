@@ -483,6 +483,22 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     const exhausted = reason === 'no playable URL';
     const reasonText = exhausted ? '直连与全部订阅源均未命中' : '音源解析失败';
     if (!fresh && song.sourceType !== 'local') {
+      // 解析链穷尽时先回查缓存（#172）：后台预取可能恰在本轮解析期间拿到直链
+      // 写入缓存（后台 3s 命中、前台 6s 预算耗尽失败的时序差）。命中且确系本轮
+      // 开始后新写入的，直接用它重播——省掉一轮 fresh 全链重跑（实测 ~6s）。
+      // 仅限无 url 的歌（有 url 的歌 fresh 重试语义是换掉过期 url，不能绕过）
+      // 且首轮（retryCount>0 说明已重试过，防循环）。
+      if (exhausted && !song.url && retryCount === 0 && song.id) {
+        const written = await getCachedUrl(song.id);
+        const age = urlAgeMs(song.id);
+        if (written && age != null && Date.now() - age >= t0 - 1_000) {
+          log.addLog('info', `《${song.name}》后台预取已拿到直链，跳过 fresh 重试直接播放`);
+          // retryCount+1：本轮解析已消耗一次尝试；若缓存在读取前又被清掉，
+          // 再次失败时不再进本捷径，正常走 fresh 重试（防循环）
+          await playSong(song, retryCount + 1, false);
+          return;
+        }
+      }
       // 解析失败 → 同一首歌换新 URL 重试一次；本地文件失败直接跳歌。
       // 重试保留：订阅源时灵时不灵（实测同歌第一轮全未命中、fresh 轮命中）。
       log.addLog('warn', `《${song.name}》将使用新 URL 重试（${reasonText}）`);

@@ -962,6 +962,29 @@ interface HotlistSong {
   album: string;
 }
 
+/**
+ * QQ v8 榜单单曲 → HotlistSong（#172）。
+ * id **优先取 songmid**：GetVkey 直连腿按 songmid 键控，数字 id 走直连恒为空
+ * （与无版权/VIP 无关），整榜 100% 依赖 tier3、探测预取全部无效。
+ * 数字 id 仅在响应缺失 mid 时兜底。封面用 album.mid 构建（同接口约定）。
+ */
+export function mapQQToplistItem(item: any, index: number): HotlistSong | null {
+  const songData = item?.data;
+  if (!songData) return null;
+  const artists = songData.singer?.map((singer: any) => singer.name).join('/') || '';
+  const albumMid = songData.album?.mid || '';
+  return {
+    id: songData.mid || songData.id?.toString() || '',
+    name: songData.name || '',
+    artists,
+    rank: index + 1,
+    cover: albumMid
+      ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}_1.jpg`
+      : '',
+    album: songData.album?.name || ''
+  };
+}
+
 export const musicApi = {
   /**
    * 构建汽水音乐封面 URL
@@ -1828,33 +1851,9 @@ export const musicApi = {
       const hotlistSongs: HotlistSong[] = [];
 
       for (let index = 0; index < songlist.length; index++) {
-        const item = songlist[index];
-
-        try {
-          const songData = item.data;
-
-          if (!songData) {
-            continue;
-          }
-
-          const artists = songData.singer?.map((singer: any) => singer.name).join('/') || '';
-          // 通过 album.mid 构建封面 URL，确保所有歌曲都有封面
-          const albumMid = songData.album?.mid || '';
-          const cover = albumMid
-            ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}_1.jpg`
-            : '';
-
-          hotlistSongs.push({
-            id: songData.mid || songData.id?.toString() || '',
-            name: songData.name || '',
-            artists: artists,
-            rank: index + 1,
-            cover: cover,
-            album: songData.album?.name || ''
-          });
-        } catch {
-          // 跳过处理失败的歌曲
-        }
+        // 映射失败的单曲跳过（与原内联 try/catch 语义一致）
+        const mapped = mapQQToplistItem(songlist[index], index);
+        if (mapped) hotlistSongs.push(mapped);
       }
 
       // 缓存结果

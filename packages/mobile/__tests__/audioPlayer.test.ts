@@ -132,7 +132,7 @@ vi.mock('../services/notificationService', () => ({
 vi.mock('../services/cacheService', () => ({
   getCachedUrl: vi.fn(async (songId: string) => {
     const v = audioMocks.storageGet;
-    return v?.startsWith('http') && songId === '1' ? v : null;
+    return v?.startsWith('http') && songId ? v : null;
   }),
   setCachedUrl: audioMocks.storageSet,
   deleteCachedUrl: vi.fn(async () => {}),
@@ -617,6 +617,54 @@ describe('playId cancellation', () => {
 });
 
 describe('fresh URL resolution fallbacks', () => {
+  it('resolution exhausted + cache written mid-flight → plays the prefetched URL instead of a fresh rerun', async () => {
+    // #172 场景：前台解析链穷尽失败时，后台预取恰好在解析期间拿到直链写入缓存
+    //（后台 3s 命中、前台 6s 预算耗尽的时序差）。此时应直接用缓存重播，
+    // 而不是再跑一轮 fresh 全链（实测 ~6s 白等）。
+    const first = song('9');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    audioMocks.resolvePlayableSongRouted.mockImplementationOnce(async () => {
+      // 解析期间「后台预取」写入缓存（刚写入：age≈0 → 本轮开始后新写入）
+      audioMocks.storageGet = 'https://prefetched.example.com/9.mp3';
+      audioMocks.urlAge = 0;
+      return { url: '', nonFull: false };
+    });
+    // legacy 兜底也空 → 解析链穷尽（no playable URL）
+    audioMocks.resolvePlayableSong.mockResolvedValueOnce({ url: '', lrc: '' });
+
+    await playSong(first);
+    await flush();
+
+    expect(audioMocks.players[0]?.uri).toBe('https://prefetched.example.com/9.mp3');
+    // fresh 全链未跑：resolveFreshUrl 入口无条件 clearAudioUrlCache（clearByPrefix），
+    // 这是 fresh 链独有的信号。searchSongById 不能当判据——歌词懒刷新
+    // （fetchLrcInBackground → searchStrictMatch）同样按 ID 搜歌（2 参调用），
+    // 本用例两次 playSong（首试 + 缓存重播）各触发一次，与 fresh 链无关。
+    expect(audioMocks.clearByPrefix).not.toHaveBeenCalled();
+  });
+
+  it('cache entry written before this attempt → shortcut skipped, fresh retry proceeds', async () => {
+    // 缓存是本轮开始前的旧条目（探活已判死删除过的那类）→ 不能走捷径
+    const first = song('9');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    audioMocks.resolvePlayableSongRouted.mockResolvedValueOnce({ url: '', nonFull: false });
+    audioMocks.resolvePlayableSong.mockResolvedValueOnce({ url: '', lrc: '' });
+    audioMocks.storageGet = 'https://stale-cache.example.com/9.mp3';
+    audioMocks.urlAge = 30 * 60 * 1000; // 30min 前写入，早于本次播放开始
+    // 旧条目已死：首轮探活必须判死（isUrlAlive 默认 mock 返回 true，会让
+    // 首轮直接拿旧缓存播放、根本走不到「解析穷尽 → 捷径判定 → fresh 重试」）
+    audioMocks.isUrlAlive.mockResolvedValueOnce(false);
+
+    await playSong(first);
+    await vi.waitFor(() => expect(audioMocks.searchSongById).toHaveBeenCalled());
+    await flush();
+
+    // fresh 重试链被走到（而非拿旧缓存重播）：strict 搜索全空后落到
+    // legacy 默认兜底解析出全新直链（正向断言，players 为空时不会空过）
+    expect(audioMocks.players.length).toBeGreaterThan(0);
+    expect(audioMocks.players[0]?.uri).toBe('https://example.com/9.mp3');
+  });
+
   it('falls back to re-search when redirect resolution returns the same URL', async () => {
     // getAudioUrl 返回与入参相同的 URL → 判定源 URL 失效 → 最后手段重新搜索
     const first = song('1', 'https://same.example.com/1.mp3');

@@ -13,6 +13,7 @@ import {
   configureSourceRouter,
   searchSongsRouted,
   resolvePlayableUrlRouted,
+  resolvePlayableSongRouted,
   setTier3Enabled,
   getTier3Enabled,
   setTier3Resolver,
@@ -347,5 +348,91 @@ describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地�
     const invalidSong = { ...song('1', 'netease'), audioTag: 'invalid' as const };
     const url = await resolvePlayableUrlRouted(invalidSong);
     expect(url).toBe('https://direct.example.com/1.mp3');
+  });
+});
+
+describe('tier3 同歌去重（#172 评论：同歌并行重复解析）', () => {
+  /** 直连返回空串 + tier3 兜底启用的环境：resolvePlayableSongRouted 必经 tier3 腿 */
+  function setupEmptyDirect(): void {
+    registerDirectClient(makeClient('qq', { resolvePlayableUrl: vi.fn(async () => '') }));
+    setTier3Enabled(true);
+  }
+
+  it('同歌并发解析只调用一次 resolver，两个调用方拿到同一结果', async () => {
+    setupEmptyDirect();
+    let resolveTier3!: (v: string) => void;
+    const tier3 = vi.fn(
+      () => new Promise<string>((r) => { resolveTier3 = r; })
+    );
+    setTier3Resolver(tier3);
+
+    const s = song('001abc', 'qq');
+    const p1 = resolvePlayableSongRouted(s);
+    const p2 = resolvePlayableSongRouted(s);
+    // 让两条调用都进入 tier3 腿
+    await vi.waitFor(() => expect(tier3).toHaveBeenCalledTimes(1));
+    resolveTier3('https://tier3.example.com/shared.m4a');
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(tier3).toHaveBeenCalledTimes(1); // 上游只被打一次
+    expect(r1.url).toBe('https://tier3.example.com/shared.m4a');
+    expect(r2.url).toBe('https://tier3.example.com/shared.m4a');
+  });
+
+  it('不同歌并发各自解析，互不共享', async () => {
+    setupEmptyDirect();
+    const tier3 = vi.fn(async (_s: Song) => `https://tier3.example.com/${_s.id}.m4a`);
+    setTier3Resolver(tier3);
+
+    const [r1, r2] = await Promise.all([
+      resolvePlayableSongRouted(song('a', 'qq')),
+      resolvePlayableSongRouted(song('b', 'qq')),
+    ]);
+    expect(tier3).toHaveBeenCalledTimes(2);
+    expect(r1.url).toBe('https://tier3.example.com/a.m4a');
+    expect(r2.url).toBe('https://tier3.example.com/b.m4a');
+  });
+
+  it('底层 Promise 结束后键移除：再次解析重新发起，不做结果缓存', async () => {
+    setupEmptyDirect();
+    const tier3 = vi.fn(async () => 'https://tier3.example.com/x.mp3');
+    setTier3Resolver(tier3);
+
+    await resolvePlayableSongRouted(song('x', 'qq'));
+    await resolvePlayableSongRouted(song('x', 'qq'));
+    expect(tier3).toHaveBeenCalledTimes(2);
+  });
+
+  it('预算超时不污染共享链：超时方拿空串，底层迟到命中后键被清理', async () => {
+    setupEmptyDirect();
+    vi.useFakeTimers();
+    try {
+      let resolveTier3!: (v: string) => void;
+      const tier3 = vi.fn(
+        () => new Promise<string>((r) => { resolveTier3 = r; })
+      );
+      setTier3Resolver(tier3);
+
+      const first = resolvePlayableSongRouted(song('slow', 'qq'));
+      await vi.advanceTimersByTimeAsync(1);
+      expect(tier3).toHaveBeenCalledTimes(1);
+      // 预算（6s）耗尽 → 第一位按未命中处理（底层继续跑）
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect((await first).url).toBe('');
+      expect(tier3).toHaveBeenCalledTimes(1); // 底层未被中断
+
+      // 底层迟到命中 → finally 清键
+      resolveTier3('https://tier3.example.com/late.m4a');
+      await vi.advanceTimersByTimeAsync(1);
+
+      // 键已清：后续调用重新发起，不会接住已结束的旧 Promise
+      const second = resolvePlayableSongRouted(song('slow', 'qq'));
+      // 第二次调用的预算同样走完（resolver 未命中 → 空串）
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect((await second).url).toBe('');
+      expect(tier3).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

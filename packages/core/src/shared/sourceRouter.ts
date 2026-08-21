@@ -143,8 +143,10 @@ export function getTier3Enabled(): boolean {
   return tier3Enabled;
 }
 
-/** 注入 tier3 解析器（#144 实施时调用）；null 清除插槽。 */
+/** 注入 tier3 解析器（#144 实施时调用）；null 清除插槽。
+ *  换 resolver 时同步清空同歌去重表——旧 resolver 的 in-flight 结果不再可信。 */
 export function setTier3Resolver(resolver: Tier3Resolver | null): void {
+  tier3Inflight.clear();
   tier3Resolver = resolver;
 }
 
@@ -187,17 +189,58 @@ async function tryTier3Search(keyword: string, page: number, source: SourceKey):
  *  预算截断避免播放被慢源拖死（超时按未命中处理，慢源请求自然结束，结果丢弃）。 */
 const TIER3_BUDGET_MS = 6_000;
 
+// ── tier3 同歌去重（#172 评论：同歌并行重复解析）──────────────────────
+//
+// 前台播放解析与后台预取（prefetchNextSong）会并行解析同一首歌，各自独立
+// 等满预算：后台 3s 已命中，前台还在等自己那条 6s 预算且中途不查缓存，
+// 实测《我好想你》白等 ~10s。以歌曲身份为键共享同一条底层 resolver
+// Promise：先到先得、后来者直接 join，第三方上游只被打一次。
+//
+// 键在**底层 Promise 结束**（含失败）后才移除——预算超时的调用方放弃等待
+// 后，迟到的命中仍能被同键后续调用方（如 fresh 重试的 tier3 腿）接住。
+const tier3Inflight = new Map<string, Promise<string>>();
+
+/** 歌曲身份键：id 优先；无 id 的歌（热榜旧数据等）退回 名字+歌手。 */
+export function tier3InflightKey(song: Song): string {
+  return song.id
+    ? `${song.sourceType}|${song.id}`
+    : `${song.sourceType}|name:${song.name}|${song.artist}`;
+}
+
+/** 共享的 tier3 解析：已有同键 in-flight 直接复用；否则调用 resolver 并登记。 */
+function tier3ResolveShared(song: Song, reason: string): Promise<string> {
+  const key = tier3InflightKey(song);
+  const existing = tier3Inflight.get(key);
+  if (existing) {
+    console.info(`[tier3] 同歌解析进行中，复用同一条解析（${reason}）: 《${song.name}》${song.artist}`);
+    return existing;
+  }
+  console.info(`[tier3] ${reason}，进入第三方解析源: 《${song.name}》${song.artist}`);
+  const inflight = (async () => {
+    try {
+      return await tier3Resolver!(song);
+    } catch (e) {
+      console.warn(`[tier3] resolver 抛错: ${(e as Error)?.message || e}`);
+      return '';
+    } finally {
+      tier3Inflight.delete(key);
+    }
+  })();
+  tier3Inflight.set(key, inflight);
+  return inflight;
+}
+
 /** 直连失败后、api 腿前的 tier3 尝试（默认关闭，未注入直接跳过）。reason 用于日志区分触发原因。
- *  带总预算：慢源（mgmp3 20s 超时）不阻塞播放——预算内未命中按未命中处理。 */
+ *  带总预算：慢源（mgmp3 20s 超时）不阻塞播放——预算内未命中按未命中处理。
+ *  同歌并发调用共享同一条底层解析（见 tier3ResolveShared），预算仍按各调用方独立计时。 */
 async function tryTier3(song: Song, reason: string): Promise<string> {
   if (!tier3Enabled || !tier3Resolver) {
     console.info(`[tier3] ${reason}，但 tier3 未启用/未注入，直接回退: 《${song.name}》${song.artist}`);
     return '';
   }
-  console.info(`[tier3] ${reason}，进入第三方解析源: 《${song.name}》${song.artist}`);
   try {
     const url = await Promise.race([
-      tier3Resolver(song),
+      tier3ResolveShared(song, reason),
       new Promise<string>((resolve) => setTimeout(() => resolve(''), TIER3_BUDGET_MS)),
     ]);
     return url?.startsWith('http') ? url : '';
