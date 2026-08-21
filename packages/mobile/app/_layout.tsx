@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/tokens';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
@@ -17,6 +18,7 @@ LogBox.ignoreLogs(['[search]', '[player]']);
 
 /** 全局播放错误提示（真机上无法看终端 console，用 Toast 直接展示最终错误） */
 function PlaybackErrorToast() {
+  const insets = useSafeAreaInsets();
   const lastError = useLogsStore((s) => s.lastError);
   const clearLastError = useLogsStore((s) => s.clearLastError);
   const [visible, setVisible] = useState(false);
@@ -35,7 +37,7 @@ function PlaybackErrorToast() {
 
   if (!visible) return null;
   return (
-    <View pointerEvents="none" style={toastStyles.wrap}>
+    <View pointerEvents="none" style={[toastStyles.wrap, { bottom: insets.bottom + 96 }]}>
       <View style={toastStyles.box}>
         <Text style={toastStyles.text}>{message}</Text>
       </View>
@@ -125,11 +127,11 @@ export default function RootLayout() {
 }
 
 const toastStyles = StyleSheet.create({
+  // bottom 由组件按 insets.bottom 动态注入（insets.bottom + 96），此处不写死
   wrap: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 120,
     alignItems: 'center',
     zIndex: 2000,
   },

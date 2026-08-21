@@ -4,7 +4,7 @@ import {
   PanResponder, Animated, Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, Repeat, Shuffle, Heart, CirclePlus, Download } from 'lucide-react-native';
+import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, Repeat, Shuffle, Heart, CirclePlus, Download, Music } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
@@ -287,11 +287,17 @@ export default function PlayerOverlay({ onClose }: Props) {
             <View style={styles.turntableWrap}>
               <View style={styles.plinth}>
                 <View style={styles.platter} />
-                <Animated.Image
-                  source={coverFailed ? undefined : { uri: coverUrl || 'https://via.placeholder.com/300' }}
-                  style={[styles.cover, { transform: [{ rotate: spin }] }]}
-                  onError={handleCoverError}
-                />
+                {coverUrl && !coverFailed ? (
+                  <Animated.Image
+                    source={{ uri: coverUrl }}
+                    style={[styles.cover, { transform: [{ rotate: spin }] }]}
+                    onError={handleCoverError}
+                  />
+                ) : (
+                  <View style={styles.coverPlaceholder}>
+                    <Music size={64} color={colors.textDisabled} />
+                  </View>
+                )}
                 {/* 唱臂 */}
                 <View style={styles.tonearmPivot} />
                 <View style={styles.tonearmRod} />
@@ -459,6 +465,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     borderWidth: 3,
     borderColor: turntable.coverBorder,
+  },
+  coverPlaceholder: {
+    width: 240,
+    height: 240,
+    borderRadius: radius.full,
+    backgroundColor: colors.bgHover,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // 唱臂
   tonearmPivot: {

@@ -274,7 +274,7 @@ export default function SongRow({
       <TouchableOpacity
         onPress={handleFavorite}
         style={styles.favoriteBtn}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 4 }}
       >
         <Heart
           size={20}
@@ -282,7 +282,7 @@ export default function SongRow({
           fill={favorited ? colors.accent : 'none'}
         />
       </TouchableOpacity>
-      <TouchableOpacity onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      <TouchableOpacity onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
         <EllipsisVertical size={18} color={colors.textTertiary} />
       </TouchableOpacity>
     </TouchableOpacity>

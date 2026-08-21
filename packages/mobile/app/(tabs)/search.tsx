@@ -288,8 +288,8 @@ const styles = StyleSheet.create({
   artistAvatar: {
     width: 72,
     height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.bgSurface,
+    borderRadius: radius.full,
+    backgroundColor: colors.bgHover,
   },
   artistAvatarFallback: {
     justifyContent: 'center',
