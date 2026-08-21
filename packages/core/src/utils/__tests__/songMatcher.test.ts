@@ -74,6 +74,15 @@ describe('isExactMatch / findExactMatch（换源/播放兜底用）', () => {
     expect(isExactMatch({ name: '晴天', artist: '周杰伦' }, { name: '晴天', artist: '周杰伦、杨瑞代' })).toBe(true);
   });
 
+  it('未匹配歌手片段是混音署名 → 非精确（DJ 版不得标完整版）', () => {
+    // 真机复现：《恋人》换源，网易上传者把混音署名塞进歌手字段，
+    // normalize 去掉 "-" 后"李荣浩"片段命中 → 混音版被标[完整]
+    expect(isExactMatch({ name: '恋人', artist: '李荣浩' }, { name: '恋人', artist: '李荣浩- / Montagem' })).toBe(false);
+    expect(isExactMatch({ name: '恋人', artist: '李荣浩' }, { name: '恋人', artist: '李荣浩 / AOML怪兽 Remix' })).toBe(false);
+    // 合法合作歌手（非混音署名）不受影响
+    expect(isExactMatch({ name: '晴天', artist: '周杰伦' }, { name: '晴天', artist: '周杰伦 / 杨瑞代' })).toBe(true);
+  });
+
   it('target 多歌手也要拆分（"肖琴 / 肖Music" 匹配任一单歌手）', () => {
     expect(isExactMatch({ name: 'CMon给我闹 (DJ版)', artist: '肖琴 / 肖Music' }, { name: 'CMon给我闹 (DJ版)', artist: '肖琴' })).toBe(true);
     expect(isExactMatch({ name: 'CMon给我闹 (DJ版)', artist: '肖琴 / 肖Music' }, { name: 'CMon给我闹 (DJ版)', artist: '肖Music' })).toBe(true);
