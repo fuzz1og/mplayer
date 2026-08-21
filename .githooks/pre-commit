@@ -11,7 +11,7 @@ npx tsc --noEmit --project packages/mobile/tsconfig.json
 echo "→ lint..."
 STAGED=$(git diff --cached --name-only --diff-filter=d | grep -E '\.(ts|tsx)$' || true)
 if [ -n "$STAGED" ]; then
-  echo "$STAGED" | xargs npx eslint --max-warnings 0
+  echo "$STAGED" | xargs npx eslint --no-warn-ignored --max-warnings 0
 fi
 
 echo "✓ pre-commit passed"
