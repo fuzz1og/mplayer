@@ -95,7 +95,20 @@ export async function probeSwapCandidates(
   candidates: SwapCandidate[],
   deps: SourceSwapDeps
 ): Promise<SwapCandidate[]> {
-  const toProbe = candidates.filter((c) => c.song.url?.startsWith('http') && urlIdMatchesSong(c.song.url, c.song));
+  // URL-ID 错位（源数据错位）仍直接标失效——仅针对**已有 url** 的候选。
+  // 无 url 候选不再预标失效：路由时代候选天生无 url（直连/tier3 搜索都不
+  // 回填 url），探测器（probeSongsBatch）自带直连解析并写预取缓存，
+  // 探测通过即播放时 0 等待命中；旧逻辑把无 url 一律标失效等于全灭。
+  const mismatched = new Set(
+    candidates.filter((c) => c.song.url && !urlIdMatchesSong(c.song.url, c.song)).map((c) => c.song.id)
+  );
+  for (const c of candidates) {
+    if (mismatched.has(c.song.id)) {
+      deps.log?.('warn', `换源候选可疑: 《${c.song.name}》链接 ID 与歌曲不符（源数据错位）`);
+    }
+  }
+
+  const toProbe = candidates.filter((c) => !mismatched.has(c.song.id));
   let tags = new Map<string, AudioTag>();
   if (toProbe.length > 0) {
     try {
@@ -107,8 +120,7 @@ export async function probeSwapCandidates(
   }
 
   return candidates.map((c) => {
-    if (!c.song.url?.startsWith('http') || !urlIdMatchesSong(c.song.url, c.song)) {
-      deps.log?.('warn', `换源候选可疑: 《${c.song.name}》链接 ID 与歌曲不符（源数据错位）`);
+    if (mismatched.has(c.song.id)) {
       return { ...c, playable: false, tag: 'invalid' as AudioTag };
     }
     const tag = tags.get(c.song.id) ?? null;
@@ -129,10 +141,11 @@ export async function probeSwapCandidates(
  */
 export function applySwap(_song: Song, source: SourceKey, candidate: SwapCandidate): Song | null {
   const matched = candidate.song;
-  if (!matched?.url) return null;
-  // 候选必须有自己的 ID：否则 url 与 id 错配，持久化后按 ID 识别/
-  // URL-ID 一致性校验都会指向错误的歌（换源的核心保证是"真实 ID"）
-  if (!matched.id) return null;
+  // 候选必须有真实 ID：否则 url 与 id 错配，持久化后按 ID 识别/
+  // URL-ID 一致性校验都会指向错误的歌（换源的核心保证是"真实 ID"）。
+  // url 允许为空：路由时代候选天生无 url，播放时经
+  // resolvePlayableSongRouted 现解析（探测已把直链写进预取缓存，命中秒播）。
+  if (!matched?.id) return null;
   return {
     ...matched,
     sourceType: source,

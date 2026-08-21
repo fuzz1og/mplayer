@@ -60,17 +60,20 @@ describe('searchSwapCandidates', () => {
 });
 
 describe('probeSwapCandidates', () => {
-  it('marks songs without url invalid without probing', async () => {
-    const deps = makeDeps();
+  it('probes url-less candidates instead of pre-marking invalid (routed-era semantics)', async () => {
+    const deps = makeDeps({
+      probeSongs: vi.fn(async () => [{ songId: 'q1', tag: 'valid' as AudioTag }]),
+    });
     const candidates: SwapCandidate[] = [
       { song: { ...qqSong('q1', '晴天'), url: '' }, exact: true, score: 1, playable: null, tag: null },
     ];
 
     const probed = await probeSwapCandidates(candidates, deps);
 
-    expect(probed[0].playable).toBe(false);
-    expect(probed[0].tag).toBe('invalid');
-    expect(deps.probeSongs).not.toHaveBeenCalled();
+    // 路由时代候选天生无 url：送探测器自解析（并写预取缓存），不再预标失效
+    expect(deps.probeSongs).toHaveBeenCalledWith([candidates[0].song]);
+    expect(probed[0].playable).toBe(true);
+    expect(probed[0].tag).toBe('valid');
   });
 
   it('marks url-id mismatched candidates invalid (source data offset)', async () => {
@@ -156,17 +159,21 @@ describe('applySwap', () => {
     expect(swapped!.id).toBe('kuwo:k1');
   });
 
-  it('rejects candidates without url or id', () => {
-    const noUrl: SwapCandidate = {
-      song: { ...qqSong('q1', '晴天'), url: '' },
-      exact: true, score: 1, playable: true, tag: 'valid',
-    };
-    expect(applySwap(neteaseSong('1', '晴天'), 'qq', noUrl)).toBeNull();
-
+  it('rejects candidates without id; allows url-less candidates (resolved at play)', () => {
     const noId: SwapCandidate = {
       song: { ...qqSong('q1', '晴天'), id: '' },
       exact: false, score: 0.5, playable: true, tag: 'valid',
     };
     expect(applySwap(neteaseSong('1', '晴天'), 'qq', noId)).toBeNull();
+
+    // 无 url 候选可换：播放时 resolvePlayableSongRouted 现解析（探测已写预取缓存）
+    const urlLess: SwapCandidate = {
+      song: { ...qqSong('q1', '晴天'), url: '' },
+      exact: true, score: 1, playable: true, tag: 'valid',
+    };
+    const swapped = applySwap(neteaseSong('1', '晴天'), 'qq', urlLess);
+    expect(swapped).not.toBeNull();
+    expect(swapped!.id).toBe('qq:q1');
+    expect(swapped!.url).toBe('');
   });
 });
