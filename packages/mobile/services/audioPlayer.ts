@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { cacheManager, getNextSongIndex, getApiSessionCookie, isApiOriginUrl, isLegacyDeadUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey, BROWSER_UA, refererForSourceKey } from '@mplayer/core';
+import { cacheManager, getNextSongIndex, getApiSessionCookie, isApiOriginUrl, isLegacyDeadUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -10,7 +10,7 @@ import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAudioTagStore } from '../stores/audioTagStore';
 import { updateNotification, clearNotification } from './notificationService';
-import { getCachedUrl, setCachedUrl, deleteCachedUrl } from './cacheService';
+import { getCachedUrl, setCachedUrl, deleteCachedUrl, urlAgeMs } from './cacheService';
 import { searchStrictMatch } from './songResources';
 
 type Player = ReturnType<typeof createAudioPlayer>;
@@ -30,6 +30,13 @@ let currentPlayId = 0;
 // playSong 进行中（解析 URL/创建播放器）：togglePlay 应忽略点击，
 // 避免 URL 解析期间反复触发 fresh 重试解析
 let preparingPlayback = false;
+
+// 缓存 URL「年轻」窗口（<10min 免探活直接播）：CDN 签名寿命 ~15-30min，
+// 窗口取下限避免年轻条目也白付探活延迟（丝滑路径 0 额外开销）。
+const URL_PROBE_FREE_MS = 10 * 60 * 1000;
+// 后台预取跳过窗口（<5min 已有直链不重解析）：预取的目的是切歌秒开，
+// 条目还新鲜时重解析只会重复 tier3 全链请求、与前台播放抢手机带宽。
+const PREFETCH_SKIP_FRESH_MS = 5 * 60 * 1000;
 
 // ── 单播放器复用的当前播放上下文 ──────────────────────────────
 // listener 只在播放器创建时挂一次（replace 换源复用同一 ExoPlayer），
@@ -276,6 +283,10 @@ function prefetchNextSong(): void {
     if (nextIdx < 0) return;
     const next = st.queue[nextIdx];
     if (!next?.name || next.sourceType === 'local') return;
+    // 新鲜缓存去重：上次写入还没超过 5min 时直链大概率仍然有效，
+    // 跳过重解析（VIP 歌重解析要整条 tier3 链，白烧带宽还拖慢前台）。
+    const age = urlAgeMs(next.id);
+    if (age != null && age < PREFETCH_SKIP_FRESH_MS) return;
     void (async () => {
       const resolved = await resolvePlayableUrlMobile(next);
       const url = isRedirectEndpoint(resolved.url) ? await resolveDirectUrl(resolved.url) : resolved.url;
@@ -339,7 +350,19 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
       void fetchLrcInBackground(song);
     } else {
-      const cached = await getCachedUrl(song.id);
+      let cached = await getCachedUrl(song.id);
+      // 高龄缓存先探活（≤1.5s）：CDN 签名直链寿命远短于 12h 缓存 TTL，
+      // 死链若直接交给播放器要 ~3s 才报 Source error；年轻条目（刚写入/
+      // 刚预取）免探活保秒开。探活失败按无缓存走正常解析链。
+      const age = urlAgeMs(song.id);
+      if (cached && (age == null || age >= URL_PROBE_FREE_MS)) {
+        const t1 = Date.now();
+        if (!(await isUrlAlive(cached))) {
+          log.addLog('info', `[耗时] 缓存直链已失效（探活 ${Date.now() - t1}ms），重新解析: 《${song.name}》`);
+          void deleteCachedUrl(song.id);
+          cached = null;
+        }
+      }
       if (cached) {
         // 缓存命中：秒起；歌词缺失时后台并行补
         audioUrl = isRedirectEndpoint(cached) ? await resolveDirectUrl(cached) : cached;
@@ -452,11 +475,17 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     await startPlayback();
   } catch (err) {
     if (err === 'cancelled') return;
-    log.addLog('error', `《${song.name}》播放失败: ${String(err)}`);
+    const reason = String((err as Error)?.message || err);
+    log.addLog('error', `《${song.name}》播放失败: ${reason}`);
     // 完整堆栈打到 Metro 终端（移动端诊断 TypeError 等异常用）
     console.error(`[player] 《${song.name}》播放失败堆栈:`, (err as Error)?.stack || err);
+    // 失败原因归类（Toast 文案用）：解析链穷尽 vs 其他（播放器/网络）
+    const exhausted = reason === 'no playable URL';
+    const reasonText = exhausted ? '直连与全部订阅源均未命中' : '音源解析失败';
     if (!fresh && song.sourceType !== 'local') {
-      // 解析失败 → 同一首歌换新 URL 重试一次；本地文件失败直接跳歌
+      // 解析失败 → 同一首歌换新 URL 重试一次；本地文件失败直接跳歌。
+      // 重试保留：订阅源时灵时不灵（实测同歌第一轮全未命中、fresh 轮命中）。
+      log.addLog('warn', `《${song.name}》将使用新 URL 重试（${reasonText}）`);
       await playSong(song, retryCount, true);
     } else {
       // 最终失败（fresh 重试也无效）：回写「不可播」徽标引导换源（local 源除外）
@@ -465,13 +494,15 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       }
       const nextSong = nextSongAfterError(retryCount);
       if (nextSong) {
+        // 静默跳歌用户无感知（曾表现为点歌后 ~12s 无声无息）：Toast 说明去向
+        useLogsStore.getState().setNotice('error', `《${song.name}》${reasonText}，已跳到下一首`);
         log.addLog('warn', `《${song.name}》播放失败，自动跳过`);
         await playSong(nextSong, retryCount + 1, false);
       } else {
         await stopAllPlayers();
         usePlayerStore.getState().pause();
         usePlayerStore.getState().setPreparing(false);
-        log.reportError(`《${song.name}》播放失败，且队列中没有其他歌曲，可长按歌曲换源`);
+        log.reportError(`《${song.name}》${reasonText}，且队列中没有其他歌曲。可长按歌曲换源，或稍后再试`);
       }
     }
   } finally {

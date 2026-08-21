@@ -5,7 +5,7 @@ export { RateLimiter, beforeRequest, getAntiScrapeHeaders, getApiRequestHeaders,
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
 export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, resolveCoverUrl, invalidateCoverUrl, isSessionProtectedEndpoint, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents, setApiTimingLog, setApiRequestHandler, setThrottleObserver, markApiSessionBootstrapped, setApiSessionCookieValue, getApiSessionCookie, isApiOriginUrl, decodeLyricBody } from './api/musicApi.js';
 export type { ProxyAgents } from './api/musicApi.js';
-export { probeAudio, probeAudioUrl, normalizeProbeUrl } from './api/audioProbe.js';
+export { probeAudio, probeAudioUrl, normalizeProbeUrl, isUrlAlive } from './api/audioProbe.js';
 export { probeSongs } from './api/probeSongs.js';
 export type { ProbeOptions } from './api/probeSongs.js';
 export { dedupeSongs, checkDuplicate, filterDuplicates } from './utils/songDedupe.js';

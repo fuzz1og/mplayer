@@ -78,10 +78,13 @@ const audioMocks = vi.hoisted(() => {
     searchSongById: vi.fn(async (): Promise<Song | null> => null),
     getLyrics: vi.fn(async (): Promise<string> => ''),
     resolvePlayableSongRouted: vi.fn(async (): Promise<{ url: string; nonFull: boolean }> => ({ url: '', nonFull: false })),
+    isUrlAlive: vi.fn(async () => true),
     clearByPrefix: vi.fn(),
     storageGet: null as string | null,
     storageSet: vi.fn(async () => {}),
     storageSetLegacy: vi.fn(async () => {}),
+    // 缓存 URL 年龄（cacheService.urlAgeMs mock 值）：null=未知（重启后）
+    urlAge: null as number | null,
   };
 });
 
@@ -116,6 +119,7 @@ vi.mock('@mplayer/core', async (importOriginal) => {
     },
     resolvePlayableUrl: audioMocks.resolvePlayableUrl,
     resolvePlayableSong: audioMocks.resolvePlayableSong,
+    isUrlAlive: audioMocks.isUrlAlive,
     cacheManager: { clearByPrefix: audioMocks.clearByPrefix },
   };
 });
@@ -132,6 +136,7 @@ vi.mock('../services/cacheService', () => ({
   }),
   setCachedUrl: audioMocks.storageSet,
   deleteCachedUrl: vi.fn(async () => {}),
+  urlAgeMs: vi.fn(() => audioMocks.urlAge),
 }));
 
 function status(overrides: Partial<AudioStatus> = {}): AudioStatus {
@@ -205,6 +210,8 @@ beforeEach(() => {
   audioMocks.storageGet = null;
   audioMocks.storageSet.mockClear();
   audioMocks.storageSetLegacy.mockClear();
+  audioMocks.isUrlAlive.mockClear();
+  audioMocks.urlAge = null;
 });
 
 afterEach(async () => {
@@ -425,6 +432,32 @@ describe('URL persistence cache (AsyncStorage songUrl:)', () => {
 
     expect(audioMocks.resolvePlayableUrl).not.toHaveBeenCalled();
     expect(audioMocks.players[0].uri).toBe('https://cached.example.com/1.mp3');
+  });
+
+  it('young cached URL (under 10min) skips the liveness probe', async () => {
+    const first = song('1');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    audioMocks.storageGet = 'https://cached.example.com/1.mp3';
+    audioMocks.urlAge = 60 * 1000; // Just written 1 minute ago
+
+    await playSong(first);
+
+    expect(audioMocks.isUrlAlive).not.toHaveBeenCalled();
+    expect(audioMocks.players[0].uri).toBe('https://cached.example.com/1.mp3');
+  });
+
+  it('stale cached URL fails the probe and re-resolves instead of dead-waiting on the player', async () => {
+    const first = song('1');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    audioMocks.storageGet = 'https://cached.example.com/1.mp3';
+    audioMocks.urlAge = 15 * 60 * 1000; // Older than the young window
+    audioMocks.isUrlAlive.mockResolvedValueOnce(false); // Probe finds a dead link
+
+    await playSong(first);
+
+    expect(audioMocks.isUrlAlive).toHaveBeenCalledWith('https://cached.example.com/1.mp3');
+    expect(audioMocks.resolvePlayableSong).toHaveBeenCalled();
+    expect(audioMocks.players[0].uri).toBe('https://example.com/1.mp3');
   });
 
   it('writes the resolved URL to the cache after playback starts', async () => {

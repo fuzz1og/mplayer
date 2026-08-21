@@ -15,6 +15,7 @@ import LoadingState from '../components/LoadingState';
 import SongRow from '../components/SongRow';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { playSong } from '../services/audioPlayer';
+import { probeSongsPrefetch } from '../services/songProbe';
 import { usePlayerStore } from '../stores/playerStore';
 import { colors, spacing, statusBarStyle } from '../theme/tokens';
 
@@ -63,7 +64,11 @@ export default function HotlistPage() {
     if (!config) return;
     try {
       const raw = await config.fetcher();
-      setSongs(raw.map((item) => toSong(item, config.sourceType)));
+      const list = raw.map((item) => toSong(item, config.sourceType));
+      setSongs(list);
+      // 直连探测预取（与搜索/歌单/专辑页对齐）：直链写入预取缓存，
+      // 点播 0 等待秒播。QQ 榜数字 id 直连必空（见 issue），探测无副作用。
+      void probeSongsPrefetch(list);
     } catch (err) {
       console.error('加载榜单失败:', err);
     }

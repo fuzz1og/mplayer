@@ -127,7 +127,13 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (!song) { setLyricLines([]); setLyricsLoading(false); return; }
     const abort = new AbortController();
     const cacheKey = song.lrc || (song.sourceType === 'netease' ? `songid:${song.id}` : '');
-    if (!cacheKey) { setLyricLines([]); setLyricsLoading(false); return; }
+    if (!cacheKey) {
+      setLyricLines([]);
+      setLyricsLoading(false);
+      // 热榜点播的搜索腿可能未命中（lrc 空）→ 后台搜索补 lrc，回填后本 effect 重跑
+      void fetchLrcInBackground(song, true);
+      return;
+    }
     const cached = lyricCache.get(cacheKey);
     if (cached) {
       setLyricLines(cached);
@@ -143,6 +149,12 @@ export default function PlayerOverlay({ onClose }: Props) {
       const parsed = parseLRC(lrc);
       lyricCache.set(cacheKey, parsed.lines);
       setLyricLines(parsed.lines);
+      // 拿到空词（lrc URL 被拒/无词）≠ 加载失败不抛错：非网易源再给搜索兜底
+      // 一次机会（网易 by-id 已是权威答案，纯音乐不再白搜）。结果同 URL 时
+      // fetchLrcInBackground 内部按无变化返回，不会循环。
+      if (parsed.lines.length === 0 && song.sourceType !== 'netease') {
+        void fetchLrcInBackground(song, true);
+      }
     }).catch(() => {
       if (!abort.signal.aborted) {
         setLyricLines([]);

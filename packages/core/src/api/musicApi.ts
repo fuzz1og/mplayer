@@ -22,6 +22,7 @@ import {
 } from '../shared/sourceRouter.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
+import { fetchLyricViaGateway } from './qqDirect.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = '';
@@ -1365,14 +1366,28 @@ export const musicApi = {
       // 直接交给 resolveKugouLyricUrl 走完整链路，避免多余请求导致 403/失败。
       lyrics = await resolveKugouLyricUrl(fullUrl);
     } else {
-      const response = await apiClient.get(fullUrl, {
-        headers: lyricHeaders,
-        responseType: isKuwoLyric ? 'arraybuffer' : 'text',
-      });
-      // 酷我：tp=content + zlib + XOR + gb18030 管线；其余走 JSON/base64 或原样
-      lyrics = isKuwoLyric
-        ? decodeKuwoLyricBody(new Uint8Array(response.data))
-        : decodeLyricBody(response.data);
+      try {
+        const response = await apiClient.get(fullUrl, {
+          headers: lyricHeaders,
+          responseType: isKuwoLyric ? 'arraybuffer' : 'text',
+        });
+        // 酷我：tp=content + zlib + XOR + gb18030 管线；其余走 JSON/base64 或原样
+        lyrics = isKuwoLyric
+          ? decodeKuwoLyricBody(new Uint8Array(response.data))
+          : decodeLyricBody(response.data);
+      } catch (e) {
+        if (!isQQFcgLyric) throw e;
+        lyrics = ''; // QQ：GET 失败（网络/超时）同样落网关兜底
+      }
+      // QQ fcg GET 强制 Referer 防盗链（缺 Referer 返回 retcode=-1310 拒绝体，
+      // 解不出 LRC）；桌面 Chromium/Node 栈带得上 Referer，RN 网络栈真机被拒。
+      // 被拒时改走 musicu 网关取词（与搜索/GetVkey 同通道，无 Referer 校验）。
+      if (isQQFcgLyric && !looksLikeLyrics(lyrics)) {
+        const songmid = /[?&]songmid=([^&]+)/.exec(fullUrl)?.[1] || '';
+        console.info(`[lyrics] QQ fcg GET 未拿到歌词，musicu 网关兜底 songmid=${songmid}`);
+        const viaGateway = songmid ? await fetchLyricViaGateway(songmid).catch(() => '') : '';
+        if (looksLikeLyrics(viaGateway)) lyrics = viaGateway;
+      }
     }
 
     // 会话失效/签名过期：服务端返回「非法请求」页（200 text/html；响应拦截器
@@ -1830,7 +1845,7 @@ export const musicApi = {
             : '';
 
           hotlistSongs.push({
-            id: songData.id?.toString() || '',
+            id: songData.mid || songData.id?.toString() || '',
             name: songData.name || '',
             artists: artists,
             rank: index + 1,
