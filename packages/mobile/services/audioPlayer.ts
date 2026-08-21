@@ -10,7 +10,7 @@ import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAudioTagStore } from '../stores/audioTagStore';
 import { updateNotification, clearNotification } from './notificationService';
-import { getCachedUrl, setCachedUrl } from './cacheService';
+import { getCachedUrl, setCachedUrl, deleteCachedUrl } from './cacheService';
 import { searchStrictMatch } from './songResources';
 
 type Player = ReturnType<typeof createAudioPlayer>;
@@ -93,7 +93,10 @@ function attachPlaybackListener(p: Player): void {
         log.addLog('error', `《${song.name}》加载失败: ${status.error}`);
         if (!fresh && song.sourceType !== 'local') {
           // 同一首歌换全新 URL 重试一次（收藏/历史里的 url 可能已过期）；
-          // 本地文件不会过期，失败直接跳下一首
+          // 本地文件不会过期，失败直接跳下一首。
+          // 先清该歌的 URL 缓存：CDN 直链带时效签名，TTL 内签名过期会
+          // 反复命中同一条死链（Source error 的典型根因）
+          void deleteCachedUrl(song.id);
           log.addLog('warn', `《${song.name}》将使用新 URL 重试`);
           setTimeout(() => { if (ctx.playId === currentPlayId) void playSong(song, retryCount, true); }, 0);
         } else {
@@ -309,8 +312,12 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     let audioUrl: string;
     let lrcUrl = song.lrc || '';
     if (fresh) {
-      // 本地文件不会过期，不参与 fresh 重试（调用方已过滤 local 源）
-      audioUrl = await refreshPlayableUrl(song);
+      // 本地文件不会过期，不参与 fresh 重试（调用方已过滤 local 源）。
+      // fresh 语义：core 按 ID 强搜/跟随重定向拿全新 URL；严格匹配搜不到
+      // 版本时（如候选全被混音署名拦截）退回完整路由链（直连按 ID → tier3）
+      audioUrl = await refreshPlayableUrl(song).catch(() =>
+        resolvePlayableUrlMobile(song).then((r) => r.url)
+      );
       // fresh 重试拿到的仍是 302 端点（api.php?get=url，服务端搜索返回）：
       // 必须解析成 CDN 直链——播放器（ExoPlayer）请求 api.php 不带会话
       // cookie 必返回「非法请求」→ Source error（酷狗等源解析成功与否的

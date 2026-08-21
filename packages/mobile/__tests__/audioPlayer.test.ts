@@ -18,6 +18,7 @@ interface MockPlayer {
   setActiveForLockScreen: () => void;
   remove: () => void;
   replace: (source: { uri: string }) => void;
+  replaceCalls?: number;
   updateLockScreenMetadata: () => void;
 }
 
@@ -49,6 +50,7 @@ const audioMocks = vi.hoisted(() => {
       replace: (source: { uri: string }) => {
         // 单播放器复用：replace 换源不创建新实例
         player.uri = source.uri;
+        player.replaceCalls = (player.replaceCalls ?? 0) + 1;
       },
       remove: () => {
         // 模拟 expo-audio：原生释放是异步的，remove() 本身不保证停止播放
@@ -129,6 +131,7 @@ vi.mock('../services/cacheService', () => ({
     return v?.startsWith('http') && songId === '1' ? v : null;
   }),
   setCachedUrl: audioMocks.storageSet,
+  deleteCachedUrl: vi.fn(async () => {}),
 }));
 
 function status(overrides: Partial<AudioStatus> = {}): AudioStatus {
@@ -222,8 +225,13 @@ describe('audioPlayer', () => {
     await playSong(first);
     emitStatus(status({ isLoaded: false, error: 'load failed' }));
 
-    // 单播放器复用：失败跳歌 = replace 换源到第二首（不创建新实例）
-    await vi.waitFor(() => expect(audioMocks.players[0].uri).toBe('https://example.com/2.mp3'));
+    // fresh 重试带路由链兜底：解析出替代 URL 会再起播一次（replace 第 2 次）；
+    // 仍失败（第二次错误事件）才跳歌——两次失败都注入，验证最终推进到下一首
+    // 首播走 createAudioPlayer（rc=0），fresh 重试走 replace（rc=1）：
+    // replace 发生 = 兜底解析完成并二次起播，此时才注入第二次失败
+    await vi.waitFor(() => expect(audioMocks.players[0].replaceCalls).toBe(1));
+    emitStatus(status({ isLoaded: false, error: 'load failed' }));
+    await vi.waitFor(() => expect(audioMocks.players[0].uri).toBe('https://example.com/2.mp3'), { timeout: 4000 });
     await flush();
 
     expect(usePlayerStore.getState().currentSong?.id).toBe('2');
