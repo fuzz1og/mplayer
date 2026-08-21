@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Song, SourceKey } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
-import { colors, radius, spacing } from '../theme/tokens';
+import { colors, radius, spacing, textVariants } from '../theme/tokens';
 
 function sourceLabel(sourceType?: string): string {
   return SOURCE_LABELS[sourceType as SourceKey] || sourceType || '未知';
@@ -143,15 +143,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing[4],
   },
   title: {
+    ...textVariants.title,
     color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
     textAlign: 'center',
     marginBottom: spacing[1],
   },
   songName: {
+    ...textVariants.footnote,
     color: colors.textSecondary,
-    fontSize: 13,
     textAlign: 'center',
     marginBottom: spacing[5],
   },
@@ -167,27 +166,27 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderSubtle,
   },
   itemText: {
+    ...textVariants.callout,
     color: colors.textPrimary,
-    fontSize: 16,
     marginLeft: spacing[3],
     flex: 1,
   },
   itemCount: {
+    ...textVariants.footnote,
     color: colors.textTertiary,
-    fontSize: 13,
   },
   emptyBox: {
     alignItems: 'center',
     paddingVertical: spacing[8],
   },
   emptyText: {
+    ...textVariants.callout,
     color: colors.textTertiary,
-    fontSize: 16,
     marginTop: spacing[3],
   },
   emptyHint: {
+    ...textVariants.footnote,
     color: colors.textTertiary,
-    fontSize: 13,
     marginTop: spacing[1],
   },
   cancelBtn: {
@@ -198,9 +197,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelText: {
-    color: colors.textSecondary,
-    fontSize: 16,
+    ...textVariants.sectionHeader,
     fontWeight: '600',
+    color: colors.textSecondary,
   },
   successBox: {
     backgroundColor: colors.bgSurface,
@@ -210,9 +209,9 @@ const styles = StyleSheet.create({
     marginBottom: 100,
   },
   successText: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    marginTop: spacing[3],
+    ...textVariants.sectionHeader,
     fontWeight: '600',
+    color: colors.textPrimary,
+    marginTop: spacing[3],
   },
 });

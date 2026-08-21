@@ -1,5 +1,5 @@
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { colors } from '../theme/tokens';
+import { colors, textVariants } from '../theme/tokens';
 
 interface Props {
   message?: string;
@@ -22,8 +22,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgBase,
   },
   message: {
+    ...textVariants.subhead,
+    fontWeight: '400',
     color: colors.textSecondary,
-    fontSize: 14,
     marginTop: 10,
   },
 });

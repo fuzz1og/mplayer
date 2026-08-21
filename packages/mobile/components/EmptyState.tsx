@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import type { LucideIcon } from 'lucide-react-native';
-import { colors, spacing } from '../theme/tokens';
+import { colors, spacing, textVariants } from '../theme/tokens';
 
 interface Props {
   icon: LucideIcon;
@@ -28,13 +28,13 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   title: {
+    ...textVariants.callout,
     color: colors.textSecondary,
-    fontSize: 16,
     marginTop: spacing[3],
   },
   subtitle: {
+    ...textVariants.footnote,
     color: colors.textTertiary,
-    fontSize: 13,
     marginTop: 6,
   },
 });

@@ -14,7 +14,7 @@ import PlayerBar from '../../components/PlayerBar';
 // overflow:hidden 会把标签裁掉，看起来像迷你播放栏盖住了 tab bar
 const TAB_PAD_TOP = 6;
 const TAB_ICON_SIZE = 22;
-const TAB_LABEL_HEIGHT = 15; // fontSize 11 + marginTop 2
+const TAB_LABEL_HEIGHT = 15; // 标签字号 11（micro 同级；带 lineHeight 成对样式不套变体）+ marginTop 2
 const TAB_PAD_BOTTOM = 24;
 
 function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) {

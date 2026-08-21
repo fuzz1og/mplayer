@@ -2,7 +2,7 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { X, CircleCheck, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '../services/sourceSwap';
-import { colors, radius, spacing, sourceColors } from '../theme/tokens';
+import { colors, radius, spacing, sourceColors, textVariants } from '../theme/tokens';
 
 const SWAP_SOURCES: { key: SourceKey; label: string }[] = [
   { key: 'netease', label: '网易云' },
@@ -133,8 +133,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing[4],
   },
-  title: { color: colors.textPrimary, fontSize: 17, fontWeight: '700' },
-  hint: { color: colors.textSecondary, fontSize: 12, marginBottom: spacing[2] },
+  title: { ...textVariants.title, color: colors.textPrimary },
+  hint: { ...textVariants.caption, color: colors.textSecondary, marginBottom: spacing[2] },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -144,11 +144,11 @@ const styles = StyleSheet.create({
   },
   dot: { width: 10, height: 10, borderRadius: 5, marginRight: spacing[3] },
   itemInfo: { flex: 1 },
-  itemText: { color: colors.textPrimary, fontSize: 15 },
-  itemArtist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  matchTag: { color: colors.textSecondary, fontSize: 12, marginRight: spacing[2] },
+  itemText: { ...textVariants.body, fontWeight: '400', color: colors.textPrimary },
+  itemArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
+  matchTag: { ...textVariants.caption, color: colors.textSecondary, marginRight: spacing[2] },
   matchTagExact: { color: colors.success },
-  playTag: { color: colors.textSecondary, fontSize: 11, marginRight: 6 },
+  playTag: { ...textVariants.micro, fontWeight: '400', color: colors.textSecondary, marginRight: 6 },
   playTagGood: { color: colors.success },
   playTagPreview: { color: colors.warning },
   playTagBad: { color: colors.danger },
@@ -159,9 +159,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginTop: spacing[2],
   },
-  backText: { color: colors.textSecondary, fontSize: 13, marginLeft: 6 },
+  backText: { ...textVariants.footnote, color: colors.textSecondary, marginLeft: 6 },
   loadingBox: { paddingVertical: spacing[6], alignItems: 'center' },
-  loadingText: { color: colors.accent, fontSize: 14 },
+  loadingText: { ...textVariants.subhead, fontWeight: '400', color: colors.accent },
   successBox: { paddingVertical: spacing[6], alignItems: 'center' },
-  successText: { color: colors.success, fontSize: 14, marginTop: spacing[2] },
+  successText: { ...textVariants.subhead, fontWeight: '400', color: colors.success, marginTop: spacing[2] },
 });

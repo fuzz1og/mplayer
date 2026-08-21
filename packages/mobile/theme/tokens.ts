@@ -177,6 +177,41 @@ export const typography = {
   },
 } as const;
 
+/**
+ * 文字语义变体（#175）：role → 预设 TextStyle，消灭散落各屏的字号魔法数。
+ *
+ * 用法（在 makeStyles 工厂里展开，weight 特例展开后覆盖）：
+ *   name: { ...textVariants.body, color: colors.textPrimary },
+ *   playAllText: { ...textVariants.caption, fontWeight: '600', color: ... },
+ *
+ * 归一约定：18→title、10→micro（±1px 级视觉差）。
+ * 不套变体的例外：歌词等带 lineHeight 的成对样式、一次性展示字形（如歌手占位字母）。
+ */
+export const textVariants = {
+  /** 页面大标题 */
+  largeTitle: { fontSize: 22, fontWeight: '700' },
+  /** 全屏播放器歌曲名 */
+  titleLg: { fontSize: 20, fontWeight: '700' },
+  /** 弹层/对话框标题 */
+  title: { fontSize: 17, fontWeight: '700' },
+  /** 区块标题 */
+  sectionHeader: { fontSize: 16, fontWeight: '700' },
+  /** 正文级说明/空态文案 */
+  callout: { fontSize: 16, fontWeight: '400' },
+  /** 列表主行文字 */
+  body: { fontSize: 15, fontWeight: '500' },
+  /** 次级行文字/输入框/tab 标签 */
+  subhead: { fontSize: 14, fontWeight: '500' },
+  /** 辅助说明/meta */
+  footnote: { fontSize: 13, fontWeight: '400' },
+  /** 副行文字（歌手名/时间） */
+  caption: { fontSize: 12, fontWeight: '400' },
+  /** 徽章/角标 */
+  micro: { fontSize: 11, fontWeight: '600' },
+} as const;
+
+export type TextVariant = keyof typeof textVariants;
+
 /* ════════════════════════════════════════════════════════════
    Semantic Tokens（语义映射）
    ════════════════════════════════════════════════════════════ */
