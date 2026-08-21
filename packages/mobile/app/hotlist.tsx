@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { musicApi } from '@mplayer/core';
+import { musicApi, findExactMatch } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
 import LoadingState from '../components/LoadingState';
 import SongRow from '../components/SongRow';
@@ -123,15 +123,16 @@ export default function HotlistPage() {
                 song={item}
                 rank={index + 1}
                 onPress={async (song) => {
-                  // 热榜数据不含 url, 搜索补齐
-                  let url = song.url;
-                  if (!url) {
+                  // 热榜数据不含 url/lrc：路由搜索（直连 + tier3 兜底）+ 严格匹配，
+                  // 命中后只回填 url/lrc 再播原歌——不播搜索结果本体（防同名 cover 错播）
+                  let s: Song = song;
+                  if (!song.url) {
                     try {
-                      const results = await musicApi.searchSongs(song.name, 1, song.sourceType);
-                      url = results[0]?.url || '';
+                      const results = await musicApi.searchSongsRouted(`${song.name} ${song.artist}`.trim(), 1, song.sourceType);
+                      const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
+                      if (hit) s = { ...song, url: hit.url || '', lrc: hit.lrc || '' };
                     } catch {}
                   }
-                  const s = { ...song, url };
                   usePlayerStore.getState().setQueue(songs, index);
                   playSong(s);
                 }}

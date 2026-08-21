@@ -1,6 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { UrlResolver } from './resolvePlayableUrl.js';
-import { stripSourceIdPrefix } from './resolvePlayableUrl.js';
+import { stripSourceIdPrefix, resolverSearchLeg } from './resolvePlayableUrl.js';
 import { findExactMatch } from '../utils/songMatcher.js';
 
 export interface FreshUrlResolver extends UrlResolver {
@@ -39,7 +39,7 @@ export async function resolveFreshUrl(song: Song, resolver: FreshUrlResolver): P
   }
 
   if (song.name) {
-    const results = await resolver.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
+    const results = await resolverSearchLeg(resolver, `${song.name} ${song.artist}`, song.sourceType);
     // 精确匹配 name+artist：搜索结果里的 Live/remix/翻唱版（歌名带后缀）
     // 不能采用——音频与歌名歌手错位；匹配不到宁可失败跳歌
     const fresh = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;

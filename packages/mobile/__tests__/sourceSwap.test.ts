@@ -3,14 +3,14 @@ import type { Song, SourceKey } from '@mplayer/core';
 import { searchSwapCandidates, applySwap } from '../services/sourceSwap';
 
 const musicApiMock = vi.hoisted(() => ({
-  searchSongs: vi.fn(async (_kw: string, _page: number, _source: SourceKey): Promise<Song[]> => []),
+  searchSongsRouted: vi.fn(async (_kw: string, _page: number, _source: SourceKey): Promise<Song[]> => []),
 }));
 
 vi.mock('@mplayer/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@mplayer/core')>();
   return {
     ...actual,
-    musicApi: { ...actual.musicApi, searchSongs: musicApiMock.searchSongs },
+    musicApi: { ...actual.musicApi, searchSongsRouted: musicApiMock.searchSongsRouted },
   };
 });
 
@@ -23,8 +23,8 @@ function qqSong(id: string, name: string, artist = '周杰伦'): Song {
 }
 
 beforeEach(() => {
-  musicApiMock.searchSongs.mockReset();
-  musicApiMock.searchSongs.mockResolvedValue([]);
+  musicApiMock.searchSongsRouted.mockReset();
+  musicApiMock.searchSongsRouted.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -33,7 +33,7 @@ afterEach(() => {
 
 describe('searchSwapCandidates', () => {
   it('ranks exact matches first, then by similarity, capped at 3', async () => {
-    musicApiMock.searchSongs.mockImplementation(async (kw: string, _page: number, source: SourceKey) => {
+    musicApiMock.searchSongsRouted.mockImplementation(async (kw: string, _page: number, source: SourceKey) => {
       if (source !== 'qq') return [];
       return [
         qqSong('live', '晴天 (Live)'),
@@ -48,24 +48,24 @@ describe('searchSwapCandidates', () => {
     expect(candidates.length).toBe(3); // 上限 3
     expect(candidates[0].exact).toBe(true); // 精确匹配排最前
     expect(candidates[0].song.id).toBe('orig');
-    expect(musicApiMock.searchSongs).toHaveBeenCalledWith('晴天 周杰伦', 1, 'qq');
+    expect(musicApiMock.searchSongsRouted).toHaveBeenCalledWith('晴天 周杰伦', 1, 'qq');
   });
 
   it('returns empty when the source returns nothing', async () => {
-    musicApiMock.searchSongs.mockResolvedValue([]);
+    musicApiMock.searchSongsRouted.mockResolvedValue([]);
     expect(await searchSwapCandidates(neteaseSong('1', '晴天'), 'qq')).toEqual([]);
   });
 
   it('returns empty for a song already on the target source', async () => {
     expect(await searchSwapCandidates(qqSong('q1', '晴天'), 'qq')).toEqual([]);
-    expect(musicApiMock.searchSongs).not.toHaveBeenCalled();
+    expect(musicApiMock.searchSongsRouted).not.toHaveBeenCalled();
   });
 });
 
 describe('applySwap', () => {
   it('builds the swapped song with single-layer source prefix', async () => {
     const candidates = await (async () => {
-      musicApiMock.searchSongs.mockResolvedValue([qqSong('orig', '晴天')]);
+      musicApiMock.searchSongsRouted.mockResolvedValue([qqSong('orig', '晴天')]);
       return searchSwapCandidates(neteaseSong('1', '晴天'), 'qq');
     })();
 
@@ -82,7 +82,7 @@ describe('applySwap', () => {
     // 换源后的歌（kugou:1）再换到 kuwo：id 用目标源真实曲目 ID + 单层前缀
     const kugouSong: Song = { ...qqSong('k1', '晴天'), id: 'kugou:1', sourceType: 'kugou' };
     const candidates = await (async () => {
-      musicApiMock.searchSongs.mockResolvedValue([{ ...qqSong('k1', '晴天'), sourceType: 'kuwo' }]);
+      musicApiMock.searchSongsRouted.mockResolvedValue([{ ...qqSong('k1', '晴天'), sourceType: 'kuwo' }]);
       return searchSwapCandidates(kugouSong, 'kuwo');
     })();
 

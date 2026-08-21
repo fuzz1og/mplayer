@@ -1,15 +1,15 @@
-import { searchSwapCandidates as coreSearchSwapCandidates, probeSwapCandidates as coreProbeSwapCandidates, applySwap as coreApplySwap, musicApi, probeAudioUrl } from '@mplayer/core';
+import { searchSwapCandidates as coreSearchSwapCandidates, probeSwapCandidates as coreProbeSwapCandidates, applySwap as coreApplySwap, musicApi } from '@mplayer/core';
 import type { Song, SourceKey, SwapCandidate, SourceSwapDeps } from '@mplayer/core';
 import { useLogsStore } from '../stores/logsStore';
 
 export type { SwapCandidate };
 export type { SourceSwapDeps };
 
-/** 移动端换源依赖：搜索/探测直调 core API（并发探测，带会话级缓存） */
+/** 移动端换源依赖：搜索走路由入口（直连 + tier3 兜底；旧 searchSongs 已随自建 API 退役恒空），
+ *  探测走批量直连探测（probeSongsBatch：直连解析 + 预取缓存，返回 {songId, tag}[] 匹配 deps 签名） */
 const sourceSwapDeps: SourceSwapDeps = {
-  searchSongs: (keyword, page, source) => musicApi.searchSongs(keyword, page, source),
-  probeSongs: async (songs) =>
-    Promise.all(songs.map(async (song) => ({ songId: song.id, tag: await probeAudioUrl(song.url) }))),
+  searchSongs: (keyword, page, source) => musicApi.searchSongsRouted(keyword, page, source),
+  probeSongs: (songs) => musicApi.probeSongsBatch(songs),
   log: (level, message) => {
     const addLog = useLogsStore.getState().addLog;
     addLog(level, message);
