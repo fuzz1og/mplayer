@@ -295,10 +295,15 @@ jobs:
           # Upload 全部产物到 release assets：桌面三平台（含 latest-*.yml 更新元数据）
           # + mobile APK/AAB（AAB 供上架 Google Play 使用，P3-8）。
           # 统一在此上传，避免与 electron-builder 的 --publish always 竞争。
-          for dir in desktop-linux desktop-mac desktop-win .; do
-            for f in "$dir"/*; do
-              [ -f "$f" ] && gh release upload "$TAG" "$f" --clobber || true
-            done
+          # 注意：只遍历产物目录，绝不要包含 "."（会把仓库根目录源文件误传）。
+          for dir in desktop-linux desktop-mac desktop-win ./*.apk ./*.aab; do
+            if [ -d "$dir" ]; then
+              for f in "$dir"/*; do
+                [ -f "$f" ] && gh release upload "$TAG" "$f" --clobber || true
+              done
+            elif [ -f "$dir" ]; then
+              gh release upload "$TAG" "$dir" --clobber
+            fi
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
