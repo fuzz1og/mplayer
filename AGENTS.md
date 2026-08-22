@@ -71,4 +71,4 @@ single-context：根 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。
 - `release-notes`（`.agents/skills/release-notes`）——publish 后按规格（亮点/分类变更/下载清单）用 `gh release edit` 更新 release 介绍
 - `release`（`.agents/skills/release`）——版本发布流程（`./scripts/release.sh` 一键发布 → 监控 CI → 更新介绍 → 验证产物）
 - `new-component`（`.agents/skills/new-component`）——按项目模式生成 renderer 组件/页面/hook 模板
-- `mobile-device-debugging`（`.agents/skills/mobile-device-debugging`）——真机调试（USB reverse / adb / Expo）
+- `mobile-device-debugging`（`.agents/skills/mobile-device-debugging`）——真机调试（usbipd 直挂 WSL / 原生 adb / 一条龙脚本 `scripts/mobile-debug.sh`）
