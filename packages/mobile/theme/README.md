@@ -1,17 +1,26 @@
-# Mobile 主题 token（wayfinder #108 资产）
+# Mobile 主题 token（wayfinder #108 资产，#173 起双主题）
 
-Mobile 浅色主题重构（[wayfinder map #108](https://github.com/fuzz1og/mplayer/issues/108)）的地基：`tokens.ts` 把 desktop 的设计系统（`src/renderer/styles/global.css`）移植为 React Native 可用的常量模块。
+Mobile 主题重构（[wayfinder map #108](https://github.com/fuzz1og/mplayer/issues/108)）的地基：`tokens.ts` 把 desktop 的设计系统（`src/renderer/styles/global.css`）移植为 React Native 可用的常量模块。[issue #173](https://github.com/fuzz1og/mplayer/issues/173) 起语义层拆为 `lightColors` / `darkColors` 双套，运行时经 `ThemeProvider` 注入。
 
-## 使用
+## 使用（组件内取色一律走 useTheme）
 
-```ts
-import { colors, spacing, radius, shadow, typography, sourceColors, turntable } from '../theme/tokens';
+```tsx
+import { spacing, radius, shadow, typography, sourceColors, turntable } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
+
+function Foo() {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]); // makeStyles 定义在文件底部
+}
 ```
 
+- **禁止**在组件里静态 `import { colors }`——`tokens.ts` 已不再导出单例 `colors`/`statusBarStyle`。
 - 所有新代码与后续重构 ticket 一律引用 token，禁止硬编码色值。
 - 语义色优先（`colors.bgSurface`），基础色次之（`palette.gray100`），仅在语义表达不清时直接用 palette。
 - 阴影用 `shadow.sm` 这类 RN 对象（iOS `shadow*` + Android `elevation`），直接展开到 style。
 - 行高用 `typography.lineHeights.normal` 等倍数，RN 需要像素时 `fontSize * lineHeight`。
+- 状态栏图标色：浅色主题 `'dark'`、深色主题 `'light'`，即 `style={isDark ? 'light' : 'dark'}`。
+- 多子组件共享一套大样式表的例外模式：模块级预构建两份（参考 `components/DiscoverTabs.tsx` 的 `STYLES`），组件内按 `isDark` 取用。
 
 ## 文字变体（#175）
 
@@ -103,8 +112,8 @@ playAllText: { ...textVariants.caption, fontWeight: '600', color: colors.textInv
 | `rgba(20,20,40,0.95)` | Toast 深色底 | 浅色 Toast：`colors.bgSurface` + 边框 `colors.borderDefault`/`colors.danger` |
 | `#222240`/`#111`/`#333`/`#1a1a1a`/`#999`/`#888`/`#bbb` | 唱机深色点缀 | `turntable.*`（播放器 ticket 可微调） |
 
-## 全局适配要点（供「导航骨架」ticket）
+## 全局适配要点
 
-- 状态栏文字：`statusBarStyle = 'dark'`（浅色底深色字），替换现有 `StatusBar style="light"`。
+- 状态栏：`app.json` `userInterfaceStyle: "automatic"`，各屏用 `isDark ? 'light' : 'dark'`（见上）。
 - 根布局背景、安全区底色统一 `colors.bgBase` / `colors.bgSurface`，保证 Android 15 edge-to-edge 下无白条/黑条。
-- 播放错误 Toast 由深色底改为浅色底（见上表）。
+- 唱机硬件色（`turntable.*`）双主题共用不翻转；深色下 surface 层级靠 gray950→900→850 明度差表达。

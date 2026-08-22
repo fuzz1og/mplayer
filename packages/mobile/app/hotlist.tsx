@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   FlatList,
@@ -18,7 +18,9 @@ import { playSong } from '../services/audioPlayer';
 import { probeSongsPrefetch } from '../services/songProbe';
 import { searchStrictMatch } from '../services/songResources';
 import { usePlayerStore } from '../stores/playerStore';
-import { colors, spacing, statusBarStyle, textVariants } from '../theme/tokens';
+import {spacing, textVariants} from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 
 interface HotlistSong {
   id: string;
@@ -54,6 +56,8 @@ function toSong(item: HotlistSong, sourceType: SourceKey): Song {
 }
 
 export default function HotlistPage() {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { key, title } = useLocalSearchParams<{ key: string; title: string }>();
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,7 +112,7 @@ export default function HotlistPage() {
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <StatusBar style={statusBarStyle} />
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <Stack.Screen
           options={{
             title: title || '',
@@ -158,7 +162,7 @@ export default function HotlistPage() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   errorText: { color: colors.textSecondary, ...textVariants.callout, textAlign: 'center', marginTop: spacing[10] },
 });

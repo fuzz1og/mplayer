@@ -13,7 +13,7 @@
  * 供调用方做刷新。
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -28,7 +28,9 @@ import { router } from 'expo-router';
 import { Music2, Play, ArrowLeft } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { colors, radius, spacing, typography } from '../theme/tokens';
+import { radius, spacing, typography } from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 
 const AnimatedArrowLeft = Animated.createAnimatedComponent(ArrowLeft);
 
@@ -86,6 +88,8 @@ export default function CollapsingHero<T>({
   ListFooterComponent,
   ListEmptyComponent,
 }: CollapsingHeroProps<T>) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
   const [statusStyle, setStatusStyle] = useState<'light' | 'dark'>('light');
@@ -206,7 +210,7 @@ export default function CollapsingHero<T>({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   coverImg: {
     width: '100%',
     height: '100%',

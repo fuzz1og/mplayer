@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions, FlatList,
   PanResponder, Animated, Alert,
@@ -19,7 +19,9 @@ import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
-import { colors, spacing, radius, shadow, turntable, textVariants } from '../theme/tokens';
+import {radius, shadow, spacing, textVariants, turntable} from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +30,8 @@ interface Props {
 }
 
 export default function PlayerOverlay({ onClose }: Props) {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const song = usePlayerStore(s => s.currentSong);
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const currentTime = usePlayerStore(s => s.currentTime);
@@ -249,7 +253,7 @@ export default function PlayerOverlay({ onClose }: Props) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']} {...panResponder.panHandlers}>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }], paddingBottom: insets.bottom + spacing[6] }]}>
         {/* 自定义顶部栏 */}
@@ -434,7 +438,7 @@ function formatTime(sec: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent', alignItems: 'center' },
   contentWrap: { flex: 1, alignItems: 'center', backgroundColor: colors.bgSurface, width: '100%' },
   customHeader: {

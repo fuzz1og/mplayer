@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, textVariants } from '../theme/tokens';
+import { textVariants } from '../theme/tokens';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setupLegacyMigration } from '../services/legacyMigration';
@@ -11,6 +11,8 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
 import PlayerOverlay from '../components/PlayerOverlay';
+import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
+import type { ThemeColors } from '../theme/tokens';
 
 // core 的搜索诊断 console.warn（单源识别失败等）在真机 dev 上会触发
 // LogBox 横幅盖住底部播放栏；诊断信息 Metro 终端可见，无需上屏
@@ -21,11 +23,13 @@ LogBox.ignoreLogs(['[search]', '[player]']);
  *  error=播放最终失败（红）；info=试听版提示等非错误反馈（蓝） */
 function PlaybackNoticeToast() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const notice = useLogsStore((s) => s.notice);
   const clearNotice = useLogsStore((s) => s.clearNotice);
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState('');
   const [level, setLevel] = useState<'info' | 'error'>('error');
+  const styles = useMemo(() => makeToastStyles(colors), [colors]);
 
   useEffect(() => {
     if (!notice) return;
@@ -41,9 +45,9 @@ function PlaybackNoticeToast() {
 
   if (!visible) return null;
   return (
-    <View pointerEvents="none" style={[toastStyles.wrap, { bottom: insets.bottom + 96 }]}>
-      <View style={[toastStyles.box, level === 'info' ? toastStyles.boxInfo : toastStyles.boxError]}>
-        <Text style={toastStyles.text}>{message}</Text>
+    <View pointerEvents="none" style={[styles.wrap, { bottom: insets.bottom + 96 }]}>
+      <View style={[styles.box, level === 'info' ? styles.boxInfo : styles.boxError]}>
+        <Text style={styles.text}>{message}</Text>
       </View>
     </View>
   );
@@ -101,8 +105,8 @@ export default function RootLayout() {
     registerDirectClient(qianqianDirectClient);
     registerDirectClient(miguDirectClient);
     registerDirectClient(qqDirectClient);
-    registerDirectClient(kugouDirectClient);
     registerDirectClient(kuwoDirectClient);
+    registerDirectClient(kugouDirectClient);
 
     if (proxyUrl) {
       setCoreProxyUrl(proxyUrl);
@@ -110,7 +114,7 @@ export default function RootLayout() {
   }, [proxyUrl]);
 
   return (
-    <>
+    <ThemeProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="hotlist" />
@@ -128,11 +132,11 @@ export default function RootLayout() {
       )}
 
       <PlaybackNoticeToast />
-    </>
+    </ThemeProvider>
   );
 }
 
-const toastStyles = StyleSheet.create({
+const makeToastStyles = (colors: ThemeColors) => StyleSheet.create({
   // bottom 由组件按 insets.bottom 动态注入（insets.bottom + 96），此处不写死
   wrap: {
     position: 'absolute',

@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import type { LucideIcon } from 'lucide-react-native';
-import { colors, spacing, textVariants } from '../theme/tokens';
+import {spacing, textVariants} from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
+import type { ThemeColors } from '../theme/tokens';
 
 interface Props {
   icon: LucideIcon;
@@ -10,6 +13,8 @@ interface Props {
 
 export default function EmptyState({ icon, title, subtitle }: Props) {
   const Icon = icon;
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.container}>
       <Icon size={64} color={colors.textDisabled} />
@@ -19,7 +24,7 @@ export default function EmptyState({ icon, title, subtitle }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',

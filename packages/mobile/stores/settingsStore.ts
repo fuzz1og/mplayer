@@ -12,6 +12,7 @@ import {
   type Tier3Subscription,
   type Tier3State,
 } from '@mplayer/core';
+import type { ThemeMode } from '../theme/tokens';
 
 export type PlayMode = '单曲循环' | '随机播放' | '列表循环';
 
@@ -27,12 +28,15 @@ interface SettingsState {
   /** tier3 第三方解析源（#144）：默认关，订阅清单存 AsyncStorage */
   tier3Enabled: boolean;
   tier3Subscriptions: Tier3Subscription[];
+  /** 主题模式（#173）：system 跟随系统深浅色，light/dark 手动指定 */
+  themeMode: ThemeMode;
   setProxyUrl: (url: string) => void;
   setPlayMode: (mode: PlayMode) => void;
   setDownloadDirUri: (uri: string) => void;
   setSourceModes: (modes: Partial<Record<string, SourceMode>>) => void;
   setTier3Enabled: (enabled: boolean) => void;
   setTier3Subscriptions: (subscriptions: Tier3Subscription[]) => void;
+  setThemeMode: (mode: ThemeMode) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -44,12 +48,14 @@ export const useSettingsStore = create<SettingsState>()(
       sourceModes: {},
       tier3Enabled: false,
       tier3Subscriptions: [],
+      themeMode: 'system',
       setProxyUrl: (url) => set({ proxyUrl: url }),
       setPlayMode: (mode) => set({ playMode: mode }),
       setDownloadDirUri: (uri) => set({ downloadDirUri: uri }),
       setSourceModes: (modes) => set({ sourceModes: modes }),
       setTier3Enabled: (enabled) => setCoreTier3Enabled(enabled),
       setTier3Subscriptions: (subscriptions) => setCoreTier3Subscriptions(subscriptions),
+      setThemeMode: (mode) => set({ themeMode: mode }),
     }),
     {
       name: 'settings-storage',

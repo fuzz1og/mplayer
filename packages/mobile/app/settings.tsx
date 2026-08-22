@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,16 @@ import type { Tier3SourceStats } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useLogsStore } from '../stores/logsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
-import { colors, radius, shadow, spacing, textVariants } from '../theme/tokens';
+import {radius, shadow, spacing, textVariants} from '../theme/tokens';
+import type { ThemeMode, ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
+
+/** 外观选项（#173）：system 跟随系统深浅色 */
+const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
+  { value: 'system', label: '跟随系统' },
+  { value: 'light', label: '浅色' },
+  { value: 'dark', label: '深色' },
+];
 
 function formatLogTime(ts: number): string {
   const d = new Date(ts);
@@ -28,10 +37,14 @@ function formatLogTime(ts: number): string {
 }
 
 export default function SettingsPage() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const storeProxyUrl = useSettingsStore((s) => s.proxyUrl);
   const sourceModes = useSettingsStore((s) => s.sourceModes);
   const tier3Enabled = useSettingsStore((s) => s.tier3Enabled);
   const tier3Subscriptions = useSettingsStore((s) => s.tier3Subscriptions);
+  const themeMode = useSettingsStore((s) => s.themeMode);
+  const setThemeMode = useSettingsStore((s) => s.setThemeMode);
   const setStoreProxyUrl = useSettingsStore((s) => s.setProxyUrl);
   const logEntries = useLogsStore((s) => s.entries);
   const clearLogs = useLogsStore((s) => s.clearLogs);
@@ -215,6 +228,29 @@ export default function SettingsPage() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
       >
+
+        {/* 外观（#173：深色模式） */}
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>外观</Text>
+            <Text style={styles.label}>跟随系统时，Android 深色模式开启后应用自动切换。</Text>
+            <View style={styles.appearanceGroup}>
+              {THEME_MODE_OPTIONS.map((opt) => {
+                const active = themeMode === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.appearanceBtn, active && styles.appearanceBtnActive]}
+                    onPress={() => setThemeMode(opt.value)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.appearanceBtnText, active && styles.appearanceBtnTextActive]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
 
         {/* 直连设置（T01：每源来源开关） */}
         <View style={styles.section}>
@@ -495,7 +531,7 @@ export default function SettingsPage() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bgBase,
@@ -505,6 +541,31 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
+  },
+  appearanceGroup: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  appearanceBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    backgroundColor: colors.inputBg,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    alignItems: 'center',
+  },
+  appearanceBtnActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  appearanceBtnText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  appearanceBtnTextActive: {
+    color: colors.textInverse,
   },
   section: {
     paddingHorizontal: spacing[4],

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, Image, StyleSheet, ScrollView, TouchableOpacity,
 } from 'react-native';
@@ -14,9 +14,13 @@ import { probeSongsPrefetch } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
-import { colors, radius, shadow, spacing, textVariants } from '../../theme/tokens';
+import {radius, shadow, spacing, textVariants} from '../../theme/tokens';
+import type { ThemeColors } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 export default function ArtistDetailPage() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id, name, pic } = useLocalSearchParams<{ id: string; name?: string; pic?: string }>();
   const [artist, setArtist] = useState<any>(null);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -162,7 +166,7 @@ export default function ArtistDetailPage() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   albumsSection: { paddingTop: spacing[3], paddingBottom: spacing[2], paddingLeft: spacing[4] },
   albumsTitle: { ...textVariants.body, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing[3] },
