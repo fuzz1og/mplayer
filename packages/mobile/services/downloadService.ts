@@ -84,13 +84,6 @@ async function isDirGrantValid(dirUri: string): Promise<boolean> {
   }
 }
 
-/** 未设置目录时自动弹一次授权（方便起见）；取消则本次仅存私有目录，下次下载再询问 */
-async function promptPublicDirOnce(): Promise<string> {
-  if (Platform.OS !== 'android') return '';
-  const ok = await pickDownloadDirectory().catch(() => false);
-  return ok ? useSettingsStore.getState().downloadDirUri : '';
-}
-
 /** 播放失败时清理失败的下载文件 */
 async function removeFileIfExists(file: File): Promise<void> {
   try {
@@ -225,8 +218,9 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     // 写入 .lrc 歌词侧车（与音频同名同目录）；歌词不可用/获取失败不影响下载结果
     await writeLyricsSidecar(song, corrected.fileName, corrected.container);
 
-    // 已授权公共目录时同步一份到系统下载目录；失败不阻断（私有副本仍可播放）
-    const dirUri = useSettingsStore.getState().downloadDirUri || (await promptPublicDirOnce());
+    // 已授权公共目录时同步一份到系统下载目录；失败不阻断（私有副本仍可播放）。
+    // 未授权时不弹系统目录选择器：默认保存在应用私有目录，用户可在下载页「保存位置」卡主动授权。
+    const dirUri = useSettingsStore.getState().downloadDirUri;
     let publicUri: string | undefined;
     if (dirUri) {
       if (await isDirGrantValid(dirUri)) {
@@ -259,7 +253,13 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     // 只清理本次新建的文件：已有文件（上次下载成功）失败时保留，避免丢离线副本
     if (!existedBefore) await removeFileIfExists(file);
     const err = e as Error;
-    updateStatus(itemKey, { status: 'error', error: toErrorMessage(e), progress: 0 });
+    if (existedBefore) {
+      // 旧文件仍可播放：回退 done，避免失败状态挡住播放/列表残留
+      updateStatus(itemKey, { status: 'done', progress: 100 });
+    } else {
+      // 全新下载失败：不残留失败条目（失败原因已在 Alert/日志展示，重试 = 再点下载）
+      useDownloadStore.getState().removeItem(itemKey);
+    }
     log.addLog('error', `下载失败《${song.name}》: ${toErrorMessage(e)}`);
     throw err;
   }
