@@ -28,7 +28,7 @@
 | 20 | 歌词（全屏+点击跳转） | LyricsPage.tsx + LyricsDisplay.tsx | 等价（PlayerOverlay 歌词预览+全屏） | **已对齐** |
 | 21 | 设置页 缓存/下载段 | CacheSection + DownloadSection | 缺失（有 API/代理/更新/日志/关于） | 并入 #1/#3 |
 | 22 | 睡眠定时 / 音质选择 | 桌面无 | mobile 无 | 双方均无，勿发明 |
-| 23 | 检查更新 | electron-updater | 已有（gitee releases + APK） | 已对齐（机制不同） |
+| 23 | 检查更新 | electron-updater | 已有（GitHub Releases + APK，镜像降级） | 已对齐（机制不同） |
 | 24 | 播放历史去重/恢复 URL | HistoryPage.tsx | 等价（historyStore + fresh 重试） | **已对齐** |
 
 ## 风险项（依赖桌面独有基础设施，mobile 需重实现）

@@ -171,16 +171,16 @@ export default function SettingsPage() {
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
     try {
-      const res = await fetch('https://gitee.com/api/v5/repos/aris3104/mplayer/releases');
+      // Gitee 方案已取消，改为 GitHub Releases API 检查最新版本
+      const res = await fetch('https://api.github.com/repos/fuzz1og/mplayer/releases/latest');
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const list = await res.json();
-      if (!list || list.length === 0) {
+      const latest = await res.json();
+      if (!latest || !latest.tag_name) {
         // 还没有任何发布版本
         setUpdateState('not-available');
         setTimeout(() => setUpdateState('idle'), 2000);
         return;
       }
-      const latest = list[0];
       const remoteVer = latest.tag_name.replace(/^v/i, '');
       if (compareVersions(remoteVer, currentVersion) > 0) {
         setLatestVersion(remoteVer);

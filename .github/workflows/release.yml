@@ -133,6 +133,18 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # Gradle 依赖缓存（对齐 ci.yml mobile-android）：首次构建下载依赖后缓存，
+      # 之后发布构建直接命中，显著缩短 build-mobile 耗时
+      - name: Cache Gradle
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('package-lock.json', 'packages/mobile/package.json', 'packages/mobile/app.json') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
       - run: npm ci --ignore-scripts
       - run: npm run core:build
 
@@ -230,155 +242,3 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Sync release assets to Gitee ──
-  sync-to-gitee:
-    needs: publish
-    if: |
-      always() && !cancelled() && needs.publish.result == 'success'
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Resolve tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          elif [ -n "${{ inputs.version }}" ]; then
-            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Download all release assets
-        run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          [ -z "$TAG" ] && exit 0
-          gh release download "$TAG" --dir ./assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Sync release to Gitee
-        if: steps.tag.outputs.tag != ''
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITEE_REPO: aris3104/mplayer
-        run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-
-          # Generate release notes
-          BODY=$(gh api repos/${{ github.repository }}/releases/generate-notes \
-            -f tag_name="$TAG" --jq '.body')
-
-          # Ensure tag exists on Gitee
-          curl -s -X POST "https://gitee.com/api/v5/repos/$GITEE_REPO/tags" \
-            -H "Content-Type: application/json" \
-            --connect-timeout 10 --max-time 30 \
-            -d "{
-              \"access_token\": \"$GITEE_TOKEN\",
-              \"tag_name\": \"$TAG\",
-              \"refs\": \"master\"
-            }" || echo "Tag creation skipped (may already exist)"
-
-          # Create release on Gitee
-          echo "--- Creating Gitee release for $TAG ---"
-          RELEASE_RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/$GITEE_REPO/releases" \
-            -H "Content-Type: application/json" \
-            --connect-timeout 10 --max-time 30 \
-            -d "{
-              \"access_token\": \"$GITEE_TOKEN\",
-              \"tag_name\": \"$TAG\",
-              \"name\": \"$TAG\",
-              \"body\": $(echo "$BODY" | jq -Rs '.'),
-              \"prerelease\": false,
-              \"target_commitish\": \"master\"
-            }")
-          echo "Gitee response: $RELEASE_RESP"
-          RELEASE_ID=$(echo "$RELEASE_RESP" | jq -r '.id // empty')
-
-          echo "Gitee release ID: $RELEASE_ID"
-          if [ -z "$RELEASE_ID" ]; then
-            echo "Release already exists — fetching existing release ID"
-            RELEASE_ID=$(curl -s "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/tags/$TAG?access_token=$GITEE_TOKEN"               --connect-timeout 10 --max-time 30 | jq -r '.id // empty')
-            echo "Existing release ID: $RELEASE_ID"
-            if [ -z "$RELEASE_ID" ]; then
-              echo "No Gitee release found — check GITEE_TOKEN and repo permissions"
-              exit 0
-            fi
-          fi
-
-          # Upload each asset to Gitee.
-          # Gitee 上传慢（实测 <150KB/s，1.2GB 总量需数小时）：小文件先传、
-          # 单文件 1h 超时 + 重试 1 次、失败不中断 job（重跑时跳过已传的）
-          # 注意：Gitee API 单文件上限 100MB。桌面端产物（exe/AppImage/dmg 等）
-          # 普遍超限必然 FAIL，这是平台硬限制；据此决定哪些 latest*.yml 元数据
-          # 才能上传——产物没传上去的元数据只会指向死链，宁可不传。
-          EXISTING=$(curl -s "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID" \
-            --connect-timeout 10 --max-time 30 | jq -r '.assets[].name')
-          RESULT_FILE=$(mktemp)
-          upload_file() {
-            local file="$1" base status resp dl_url
-            base=$(basename "$file")
-            case "$base" in
-              *.dmg|*.dmg.blockmap) echo "SKIP $base (mac 端不做)"; status=skip ;;
-              latest*.yml) echo "SKIP $base (元数据按需上传)"; status=skip ;;
-              *)
-                if echo "$EXISTING" | grep -qx "$base"; then
-                  echo "SKIP $base (already uploaded)"; status=ok
-                else
-                  echo "Uploading: $base"
-                  for attempt in 1 2; do
-                    resp=$(curl -s -X POST \
-                      "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
-                      --connect-timeout 10 --max-time 3600 \
-                      -F "access_token=$GITEE_TOKEN" \
-                      -F "file=@$file" || true)
-                    dl_url=$(echo "$resp" | jq -r '.browser_download_url // empty')
-                    [ -n "$dl_url" ] && break
-                    echo "Retry $attempt — $resp"
-                  done
-                  if [ -n "$dl_url" ]; then
-                    echo "OK $base → $dl_url"; status=ok
-                  else
-                    echo "FAIL $base — $resp"; status=fail
-                  fi
-                fi
-                ;;
-            esac
-            echo "$base=$status" >> "$RESULT_FILE"
-          }
-          for file in $(ls -S ./assets/* | tac); do
-            [ -f "$file" ] || continue
-            upload_file "$file"
-          done
-
-          # ── 条件上传 electron-updater 元数据（避免死链）──
-          # Windows 更新吃 latest.yml（对应 Setup exe）；Linux 吃 latest-linux.yml（AppImage/deb）；
-          # mac 从不同步产物，latest-mac.yml 一律不上传。
-          win_ok=false; linux_ok=false
-          while IFS='=' read -r base status; do
-            case "$base" in
-              MPlayer-Setup-*.exe|MPlayer-*.exe) [ "$status" = ok ] && win_ok=true ;;
-              MPlayer-*.AppImage|*_amd64.deb) [ "$status" = ok ] && linux_ok=true ;;
-            esac
-          done < "$RESULT_FILE"
-          for meta in latest.yml latest-linux.yml latest-mac.yml; do
-            [ -f "./assets/$meta" ] || continue
-            need=false
-            case "$meta" in
-              latest.yml) [ "$win_ok" = true ] && need=true ;;
-              latest-linux.yml) [ "$linux_ok" = true ] && need=true ;;
-              latest-mac.yml) need=false ;;
-            esac
-            if [ "$need" = true ]; then
-              curl -s -X POST \
-                "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
-                --connect-timeout 10 --max-time 300 \
-                -F "access_token=$GITEE_TOKEN" \
-                -F "file=@./assets/$meta" | jq -r 'if .browser_download_url then "OK \(.name) → \(.browser_download_url)" else "FAIL \(.name) — \(.)" end'
-            else
-              echo "SKIP $meta (对应产物未上传成功，跳过以避免更新死链)"
-            fi
-          done

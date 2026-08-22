@@ -103,7 +103,7 @@ git tag v1.7.0
 git push origin v1.7.0
 ```
 
-构建产物（Electron 三平台 Windows/macOS/Linux + Android APK）自动上传到 GitHub Releases 并同步 Gitee。应用内设置页可检查更新并一键安装。
+构建产物（Electron 三平台 Windows/macOS/Linux + Android APK）自动上传到 GitHub Releases。应用内设置页可检查更新并一键安装（桌面端更新走 GitHub 直连，失败自动降级到 gh-proxy.com / ghfast.top / ghproxy.net 镜像）。
 
 ## Mobile (Expo/React Native)
 
