@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Download, Music, Trash2, ChevronRight } from 'lucide-react-native';
 import { Paths } from 'expo-file-system';
 import type { Song } from '@mplayer/core';
@@ -24,9 +24,15 @@ export default function DownloadPage() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const items = useDownloadStore((s) => s.items);
   const removeItem = useDownloadStore((s) => s.removeItem);
+  const purgeFailed = useDownloadStore((s) => s.purgeFailed);
   const currentSong = usePlayerStore((s) => s.currentSong);
   const downloadDirUri = useSettingsStore((s) => s.downloadDirUri);
   const authorized = Boolean(downloadDirUri);
+
+  // 挂载时清除历史残留的失败条目（新失败已在下载服务里自动移除）
+  useEffect(() => {
+    purgeFailed();
+  }, [purgeFailed]);
 
   const handlePlay = (item: (typeof items)[number]) => {
     if (item.status !== 'done') return;
