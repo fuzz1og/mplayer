@@ -22,6 +22,11 @@ export async function getCacheStats(): Promise<{ fileCount: number; totalSize: n
   return fileBackend.getDiskStats();
 }
 
+// URL 写入时间（内存 Map，重启丢失→视为高龄）：签名直链服务端寿命
+// ~15-30min，条目「年轻」时播放前免探活（0 额外延迟）、后台预取跳过重解析；
+// 高龄条目播放前先探活，死链直接重解析而不是交给播放器死等 ~3s。
+const urlWrittenAt = new Map<string, number>();
+
 /**
  * 读取播放 URL 缓存（走语义层，TTL 12h 过期自动失效）。无 http url 返回 null（重新解析）。
  */
@@ -36,4 +41,23 @@ export async function getCachedUrl(songId: string): Promise<string | null> {
 export async function setCachedUrl(songId: string, url: string): Promise<void> {
   if (!songId || !url.startsWith('http')) return;
   await songResources.setSongResources(songId, { url, cover: '', lrc: '' });
+  urlWrittenAt.set(songId, Date.now());
+}
+
+/**
+ * 失效单首歌的 URL 缓存（播放失败时调用）。
+ * CDN 直链带时效签名（kuwo 等），12h TTL 内签名就会过期——死链若不清，
+ * 每次播放都抢先命中同一个坏地址（真机复现：《恋人》隔 3 小时重播必失败）。
+ * 走语义层单曲失效入口，key 推导不外泄（ADR-0002）。
+ */
+export async function deleteCachedUrl(songId: string): Promise<void> {
+  if (!songId) return;
+  await songResources.invalidateSongResources(songId);
+  urlWrittenAt.delete(songId);
+}
+
+/** 缓存 URL 的年龄（ms）；从未写入（重启/未预取过）返回 null。 */
+export function urlAgeMs(songId: string): number | null {
+  const t = urlWrittenAt.get(songId);
+  return t == null ? null : Date.now() - t;
 }

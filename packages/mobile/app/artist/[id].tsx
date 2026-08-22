@@ -10,7 +10,7 @@ import LoadingState from '../../components/LoadingState';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
 import CollapsingHero from '../../components/CollapsingHero';
-import { probeSongsWithTags } from '../../services/songProbe';
+import { probeSongsPrefetch } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
@@ -65,9 +65,10 @@ export default function ArtistDetailPage() {
         const info = artistResults[0] || null;
         // 优先用入口传入的 weapi 高清头像（searchNeteaseArtists 结果兜底）
         setArtist({ ...info, name: info?.name || artistName, picUrl: pic || info?.picUrl || '' });
-        // 补齐缺失 URL 后探测:30 秒片段自动标「短时长」徽标
+        // 补齐缺失 URL 后直连探测：直链写入 core 预取缓存（播放 0 等待秒播）；
+        // 探测不再写列表徽标（预测常错，徽标改播放后回写）
         void musicApi.resolveNeteaseSongUrls(songResult.songs, false).then(() => {
-          if (!cancelled) probeSongsWithTags(songResult.songs, { missingAsInvalid: true });
+          if (!cancelled) probeSongsPrefetch(songResult.songs);
         });
       } catch (e: any) {
         console.error('[ArtistDetail] load error:', e.message);

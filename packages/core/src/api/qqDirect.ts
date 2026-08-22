@@ -3,6 +3,7 @@ import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
 import { request } from './transport.js';
 import { md5 } from '../utils/hash.js';
+import { decodeBase64Utf8 } from '../utils/base64.js';
 import { getUserAgent } from './antiScrape.js';
 
 /**
@@ -332,3 +333,30 @@ export const qqDirectClient: DirectSourceClient = {
     return `https://isure.stream.qqmusic.qq.com/${purl}`;
   },
 };
+
+/**
+ * 网关取歌词（GetPlayLyricInfo）：与搜索/GetVkey 同一 musicu POST 通道，
+ * 服务端不做 Referer 防盗链校验——c.y.qq.com fcg GET 强制 Referer，而 RN
+ * 网络栈发出的该请求在真机上被拒（桌面 Chromium/Node 栈正常），移动端歌词
+ * 因此拿不到；此函数是 getLyrics 的 QQ 兜底腿（真机已验证该通道可用）。
+ * 注意：param 里 songID 键必须整个省略——服务端按 songMID 自查数字 id，
+ * 显式传 0/空串/字符串都会被拒（实测 10006/24001）。qrc/crypt 关掉才返回
+ * base64 明文 LRC（开启返回加密 QRC hex）。
+ */
+export async function fetchLyricViaGateway(mid: string): Promise<string> {
+  if (!mid) return '';
+  const q36 = await ensureQ36();
+  const data = await musicuPost({
+    comm: buildCommon(q36),
+    'music.musichallSong.PlayLyricInfo.GetPlayLyricInfo': {
+      module: 'music.musichallSong.PlayLyricInfo',
+      method: 'GetPlayLyricInfo',
+      param: { songMID: mid, qrc: 0, crypt: 0, trans: 0, dec: 0 },
+    },
+  });
+  const moduleRes = data['music.musichallSong.PlayLyricInfo.GetPlayLyricInfo'];
+  if (moduleRes?.code !== 0) throw new Error(`QQ 歌词网关 code=${String(moduleRes?.code)}`);
+  const b64 = moduleRes?.data?.lyric || '';
+  if (!b64) return ''; // 纯音乐/无歌词
+  return decodeBase64Utf8(b64);
+}

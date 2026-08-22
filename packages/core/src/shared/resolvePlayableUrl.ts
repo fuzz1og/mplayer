@@ -12,10 +12,20 @@ export function stripSourceIdPrefix(id: string): string {
 
 export interface UrlResolver {
   searchSongs: (keyword: string, page: number, sourceType: any) => Promise<Song[]>;
+  /** 路由搜索（直连 + tier3 搜索兜底）（可选）：自建 API 退役后 searchSongs 恒空，
+   *  兜底搜索腿优先走这里；未提供时退回 searchSongs */
+  searchSongsRouted?: (keyword: string, page: number, sourceType: any) => Promise<Song[]>;
   /** 按源站 ID 直接识别（可选）：链接过期但 ID 有效，优先于名字搜索；force 绕过搜索缓存 */
   searchSongById?: (songId: string, sourceType: any, force?: boolean) => Promise<Song | null>;
   getSodaAudioUrl: (trackId: string) => Promise<string>;
   getAudioUrl: (url: string) => Promise<string>;
+}
+
+/** 兜底解析的搜索腿（统一入口）：优先路由搜索，旧 resolver 未提供 routed 时退回 searchSongs */
+export function resolverSearchLeg(resolver: UrlResolver, keyword: string, sourceType: any): Promise<Song[]> {
+  const routed = resolver.searchSongsRouted;
+  if (routed) return routed(keyword, 1, sourceType);
+  return resolver.searchSongs(keyword, 1, sourceType);
 }
 
 /**
@@ -42,7 +52,7 @@ export async function resolvePlayableUrl(song: Song, resolver: UrlResolver): Pro
       if (byId?.url?.startsWith('http')) url = byId.url;
     }
     if (!url?.startsWith('http') && song.name) {
-      const results = await resolver.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
+      const results = await resolverSearchLeg(resolver, `${song.name} ${song.artist}`, song.sourceType);
       const match = findExactMatch({ name: song.name, artist: song.artist }, results);
       if (match) url = (match as Song).url || url;
     }
@@ -113,7 +123,7 @@ export async function resolvePlayableSong(song: Song, resolver: UrlResolver): Pr
       }
     }
     if (song.name) {
-      const results = await resolver.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
+      const results = await resolverSearchLeg(resolver, `${song.name} ${song.artist}`, song.sourceType);
       const fresh = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
       if (fresh) {
         const freshUrl = fresh.url?.startsWith('http') ? fresh.url : '';

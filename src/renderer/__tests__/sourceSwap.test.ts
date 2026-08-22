@@ -51,17 +51,19 @@ describe('searchSwapCandidates', () => {
 });
 
 describe('probeSwapCandidates', () => {
-  it('marks songs without url invalid without probing', async () => {
+  it('probes url-less candidates instead of pre-marking invalid (routed-era semantics)', async () => {
     const deps = makeDeps();
+    deps.probeSongs = vi.fn(async () => [{ songId: 'q1', tag: 'valid' as AudioTag }]);
     const candidates: SwapCandidate[] = [
       { song: { ...qqSong('q1', '晴天'), url: '' }, exact: true, score: 1, playable: null, tag: null },
     ];
 
     const probed = await probeSwapCandidates(candidates, deps);
 
-    expect(probed[0].playable).toBe(false);
-    expect(probed[0].tag).toBe('invalid');
-    expect(deps.probeSongs).not.toHaveBeenCalled();
+    // 路由时代候选天生无 url：送探测器自解析（并写预取缓存），不再预标失效
+    expect(deps.probeSongs).toHaveBeenCalledWith([candidates[0].song]);
+    expect(probed[0].playable).toBe(true);
+    expect(probed[0].tag).toBe('valid');
   });
 
   it('applies probe tags to matching candidates by song id', async () => {

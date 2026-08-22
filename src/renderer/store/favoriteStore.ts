@@ -6,7 +6,7 @@ import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, SongBase } from '@mplayer/core';
 import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
-import { isLegacyDeadUrl } from '@/shared/legacyUrl';
+import { isLegacyDeadUrl } from '@mplayer/core';
 
 interface FavoriteState {
   favoriteIds: string[];

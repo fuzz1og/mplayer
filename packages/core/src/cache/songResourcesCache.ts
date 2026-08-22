@@ -100,6 +100,12 @@ export class SongResourcesCache {
     await this.kernel.remove(this.coverKey(coverUrl))
   }
 
+  /** 失效某首歌的资源三件套（播放失败清死链：CDN 签名过期后不得反复命中同一条坏地址）。 */
+  async invalidateSongResources(songId: string): Promise<void> {
+    if (!songId) return
+    await this.kernel.remove(this.songKey(songId))
+  }
+
   async clear(): Promise<void> {
     await this.kernel.clear()
   }

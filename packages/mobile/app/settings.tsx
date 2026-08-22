@@ -14,7 +14,8 @@ import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
 import { CircleCheck, Save, RefreshCcw, RefreshCw, Download, CircleX, Trash2, Plus } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setProxyUrl as setCoreProxyUrl, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription } from '@mplayer/core';
+import { setProxyUrl as setCoreProxyUrl, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription, getTier3Stats, clearTier3Stats } from '@mplayer/core';
+import type { Tier3SourceStats } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useLogsStore } from '../stores/logsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
@@ -102,6 +103,17 @@ export default function SettingsPage() {
   const [tier3Url, setTier3Url] = useState('');
   const [tier3Paste, setTier3Paste] = useState('');
   const [tier3Busy, setTier3Busy] = useState(false);
+
+  // tier3 每源解析统计（会话级，对齐桌面 Tier3Section）：进页/开关/订阅变化时刷新
+  const [tier3Stats, setTier3Stats] = useState<Record<string, Tier3SourceStats>>({});
+  const refreshTier3Stats = (): void => setTier3Stats(getTier3Stats());
+  useEffect(() => {
+    refreshTier3Stats();
+  }, [tier3Enabled, tier3Subscriptions.length]);
+  const handleClearTier3Stats = (): void => {
+    clearTier3Stats();
+    setTier3Stats({});
+  };
 
   const currentVersion = Constants.expoConfig?.version || '0.0.0';
 
@@ -309,6 +321,29 @@ export default function SettingsPage() {
                   </TouchableOpacity>
                 </View>
               ))
+            )}
+
+            {/* 每源解析统计（本次会话）：命中/未命中，辅助判断订阅源质量 */}
+            {Object.keys(tier3Stats).length > 0 && (
+              <View style={{ marginTop: spacing[3] }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: 12 }}>每源解析统计（本次会话）</Text>
+                  <View style={{ flexDirection: 'row' }}>
+                    <TouchableOpacity onPress={refreshTier3Stats} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
+                      <RefreshCw size={14} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleClearTier3Stats} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
+                      <Trash2 size={14} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                {Object.entries(tier3Stats).map(([sourceId, st]) => (
+                  <View key={sourceId} style={[styles.modeRow, { paddingVertical: 4 }]}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 12, flex: 1 }} numberOfLines={1}>{sourceId}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>命中 {st.hits} / 未命中 {st.misses}</Text>
+                  </View>
+                ))}
+              </View>
             )}
           </View>
         </View>

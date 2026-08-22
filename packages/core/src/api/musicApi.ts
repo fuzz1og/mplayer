@@ -22,6 +22,7 @@ import {
 } from '../shared/sourceRouter.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
+import { fetchLyricViaGateway } from './qqDirect.js';
 import type { Agent } from 'http';
 
 let API_BASE_URL = '';
@@ -961,6 +962,29 @@ interface HotlistSong {
   album: string;
 }
 
+/**
+ * QQ v8 榜单单曲 → HotlistSong（#172）。
+ * id **优先取 songmid**：GetVkey 直连腿按 songmid 键控，数字 id 走直连恒为空
+ * （与无版权/VIP 无关），整榜 100% 依赖 tier3、探测预取全部无效。
+ * 数字 id 仅在响应缺失 mid 时兜底。封面用 album.mid 构建（同接口约定）。
+ */
+export function mapQQToplistItem(item: any, index: number): HotlistSong | null {
+  const songData = item?.data;
+  if (!songData) return null;
+  const artists = songData.singer?.map((singer: any) => singer.name).join('/') || '';
+  const albumMid = songData.album?.mid || '';
+  return {
+    id: songData.mid || songData.id?.toString() || '',
+    name: songData.name || '',
+    artists,
+    rank: index + 1,
+    cover: albumMid
+      ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}_1.jpg`
+      : '',
+    album: songData.album?.name || ''
+  };
+}
+
 export const musicApi = {
   /**
    * 构建汽水音乐封面 URL
@@ -1365,14 +1389,28 @@ export const musicApi = {
       // 直接交给 resolveKugouLyricUrl 走完整链路，避免多余请求导致 403/失败。
       lyrics = await resolveKugouLyricUrl(fullUrl);
     } else {
-      const response = await apiClient.get(fullUrl, {
-        headers: lyricHeaders,
-        responseType: isKuwoLyric ? 'arraybuffer' : 'text',
-      });
-      // 酷我：tp=content + zlib + XOR + gb18030 管线；其余走 JSON/base64 或原样
-      lyrics = isKuwoLyric
-        ? decodeKuwoLyricBody(new Uint8Array(response.data))
-        : decodeLyricBody(response.data);
+      try {
+        const response = await apiClient.get(fullUrl, {
+          headers: lyricHeaders,
+          responseType: isKuwoLyric ? 'arraybuffer' : 'text',
+        });
+        // 酷我：tp=content + zlib + XOR + gb18030 管线；其余走 JSON/base64 或原样
+        lyrics = isKuwoLyric
+          ? decodeKuwoLyricBody(new Uint8Array(response.data))
+          : decodeLyricBody(response.data);
+      } catch (e) {
+        if (!isQQFcgLyric) throw e;
+        lyrics = ''; // QQ：GET 失败（网络/超时）同样落网关兜底
+      }
+      // QQ fcg GET 强制 Referer 防盗链（缺 Referer 返回 retcode=-1310 拒绝体，
+      // 解不出 LRC）；桌面 Chromium/Node 栈带得上 Referer，RN 网络栈真机被拒。
+      // 被拒时改走 musicu 网关取词（与搜索/GetVkey 同通道，无 Referer 校验）。
+      if (isQQFcgLyric && !looksLikeLyrics(lyrics)) {
+        const songmid = /[?&]songmid=([^&]+)/.exec(fullUrl)?.[1] || '';
+        console.info(`[lyrics] QQ fcg GET 未拿到歌词，musicu 网关兜底 songmid=${songmid}`);
+        const viaGateway = songmid ? await fetchLyricViaGateway(songmid).catch(() => '') : '';
+        if (looksLikeLyrics(viaGateway)) lyrics = viaGateway;
+      }
     }
 
     // 会话失效/签名过期：服务端返回「非法请求」页（200 text/html；响应拦截器
@@ -1813,33 +1851,9 @@ export const musicApi = {
       const hotlistSongs: HotlistSong[] = [];
 
       for (let index = 0; index < songlist.length; index++) {
-        const item = songlist[index];
-
-        try {
-          const songData = item.data;
-
-          if (!songData) {
-            continue;
-          }
-
-          const artists = songData.singer?.map((singer: any) => singer.name).join('/') || '';
-          // 通过 album.mid 构建封面 URL，确保所有歌曲都有封面
-          const albumMid = songData.album?.mid || '';
-          const cover = albumMid
-            ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}_1.jpg`
-            : '';
-
-          hotlistSongs.push({
-            id: songData.id?.toString() || '',
-            name: songData.name || '',
-            artists: artists,
-            rank: index + 1,
-            cover: cover,
-            album: songData.album?.name || ''
-          });
-        } catch {
-          // 跳过处理失败的歌曲
-        }
+        // 映射失败的单曲跳过（与原内联 try/catch 语义一致）
+        const mapped = mapQQToplistItem(songlist[index], index);
+        if (mapped) hotlistSongs.push(mapped);
       }
 
       // 缓存结果

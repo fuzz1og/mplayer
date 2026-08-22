@@ -15,7 +15,7 @@ import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
 import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
-import { isLegacyDeadUrl } from '@/shared/legacyUrl';
+import { isLegacyDeadUrl } from '@mplayer/core';
 
 interface SortableItemProps {
   song: Song;

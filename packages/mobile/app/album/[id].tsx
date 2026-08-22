@@ -12,7 +12,7 @@ import CollapsingHero from '../../components/CollapsingHero';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
-import { probeSongsWithTags } from '../../services/songProbe';
+import { probeSongsPrefetch } from '../../services/songProbe';
 import { colors } from '../../theme/tokens';
 
 export default function AlbumDetailPage() {
@@ -43,9 +43,9 @@ export default function AlbumDetailPage() {
           void musicApi.resolveNeteaseSongUrls(r.songs, false).then(() => {
             if (cancelled) return;
             setSongs([...r.songs]);
-            // URL 补齐后再探测：无版权歌 url 仍为空（搜索兜底已严格校验不填翻唱）
-            // → 标「无效」徽标，用户看到就会去单曲换源
-            void probeSongsWithTags(r.songs, { missingAsInvalid: true });
+            // URL 补齐后直连探测：直链写入 core 预取缓存（播放 0 等待秒播）；
+            // 探测不再写列表徽标（预测常错，徽标改播放后回写）
+            void probeSongsPrefetch(r.songs);
           });
         }
       } catch (e: any) {

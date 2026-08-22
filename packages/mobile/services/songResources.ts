@@ -1,4 +1,4 @@
-import { musicApi, findBestMatch, stripSourceIdPrefix } from '@mplayer/core';
+import { musicApi, findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { useLogsStore } from '../stores/logsStore';
 
@@ -16,9 +16,10 @@ export async function searchStrictMatch(song: Song): Promise<Song | null> {
     const byId = await musicApi.searchSongById(baseId, song.sourceType);
     if (byId) return byId;
   }
-  const res = await musicApi.searchSongs(`${song.name} ${song.artist}`, 1, song.sourceType);
-  const match = findBestMatch({ name: song.name, artist: song.artist }, res);
-  const hit = (match?.song as Song) || null;
+  // 路由搜索（直连 + tier3 兜底）：自建 API 已退役，旧 searchSongs 恒空，
+  // 歌词/封面兜底必须走 routed 才能拿到候选
+  const res = await musicApi.searchSongsRouted(`${song.name} ${song.artist}`, 1, song.sourceType);
+  const hit = (findExactMatch({ name: song.name, artist: song.artist }, res) as Song) || null;
   if (!hit) {
     const summary = res.slice(0, 5).map((c) => `《${c.name}》${c.artist}`).join(' | ');
     useLogsStore.getState().addLog(

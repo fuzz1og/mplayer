@@ -4,7 +4,7 @@ import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { invalidateCoverUrl } from '@/renderer/services/coverUrlResolver';
 import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
-import { isLegacyDeadUrl } from '@/shared/legacyUrl';
+import { isLegacyDeadUrl } from '@mplayer/core';
 
 // 会话级重试：同一首歌最多刷新 3 次（"失败三次才放弃"），成功后清零；
 // 失败记录 5 分钟过期——瞬时故障不能永久放弃该歌（重新进入页面应重试）

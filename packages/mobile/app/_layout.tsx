@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { colors } from '../theme/tokens';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
+import { setupLegacyMigration } from '../services/legacyMigration';
 import { setProxyUrl as setCoreProxyUrl, setApiTimingLog, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
@@ -15,28 +16,31 @@ import PlayerOverlay from '../components/PlayerOverlay';
 // [player] 的「加载失败」等 error 日志同样走内部重试逻辑，属预期内错误
 LogBox.ignoreLogs(['[search]', '[player]']);
 
-/** 全局播放错误提示（真机上无法看终端 console，用 Toast 直接展示最终错误） */
-function PlaybackErrorToast() {
-  const lastError = useLogsStore((s) => s.lastError);
-  const clearLastError = useLogsStore((s) => s.clearLastError);
+/** 全局瞬态提示（真机上无法看终端 console，用 Toast 直接展示）：
+ *  error=播放最终失败（红）；info=试听版提示等非错误反馈（蓝） */
+function PlaybackNoticeToast() {
+  const notice = useLogsStore((s) => s.notice);
+  const clearNotice = useLogsStore((s) => s.clearNotice);
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState('');
+  const [level, setLevel] = useState<'info' | 'error'>('error');
 
   useEffect(() => {
-    if (!lastError) return;
-    setMessage(lastError);
+    if (!notice) return;
+    setMessage(notice.text);
+    setLevel(notice.level);
     setVisible(true);
     const t = setTimeout(() => {
       setVisible(false);
-      clearLastError();
+      clearNotice();
     }, 3500);
     return () => clearTimeout(t);
-  }, [lastError, clearLastError]);
+  }, [notice, clearNotice]);
 
   if (!visible) return null;
   return (
     <View pointerEvents="none" style={toastStyles.wrap}>
-      <View style={toastStyles.box}>
+      <View style={[toastStyles.box, level === 'info' ? toastStyles.boxInfo : toastStyles.boxError]}>
         <Text style={toastStyles.text}>{message}</Text>
       </View>
     </View>
@@ -50,6 +54,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     initAudio().catch(() => {});
+    // 存量数据迁移：persist rehydrate 完成后清理旧签名死链（幂等，见 legacyMigration）
+    setupLegacyMigration();
     // Android 13+ 需先请求 POST_NOTIFICATIONS 运行时权限，通知/锁屏控制才可用
     // （#93；Expo Go 下内部直接返回 false，不弹系统授权框）
     requestNotificationPermission().catch(() => {});
@@ -119,7 +125,7 @@ export default function RootLayout() {
         </View>
       )}
 
-      <PlaybackErrorToast />
+      <PlaybackNoticeToast />
     </>
   );
 }
@@ -135,7 +141,6 @@ const toastStyles = StyleSheet.create({
   },
   box: {
     backgroundColor: colors.bgSurface,
-    borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 16,
@@ -146,6 +151,12 @@ const toastStyles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
+  },
+  boxError: {
+    borderColor: colors.danger,
+  },
+  boxInfo: {
+    borderColor: colors.accent,
   },
   text: {
     color: colors.textPrimary,

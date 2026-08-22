@@ -120,6 +120,9 @@ export function findBestMatch(
  * "于是" 匹配 "于是(Live版)"，导致播放的音频与歌名歌手错位；
  * 精确匹配拒绝一切 Live/remix/翻唱变体，宁可匹配失败也不播错歌。
  */
+/** 混音署名标记：出现在候选歌手的「未匹配片段」里即判非精确（见 isExactMatch） */
+const REMIX_ARTIST_TAGS = ['montagem', 'remix', 'bootleg', 'flip', 'sped up', 'slowed', 'nightcore'];
+
 export function isExactMatch(target: MatchTarget, candidate: MatchCandidate): boolean {
   const nTarget = normalize(target.name);
   const nCandidate = normalize(candidate.name);
@@ -128,7 +131,15 @@ export function isExactMatch(target: MatchTarget, candidate: MatchCandidate): bo
   if (!candidate.artist) return false;
   // target 也要拆分："肖琴 / 肖Music" 必须能匹配 candidate 的任一歌手
   const targetArtists = splitArtists(target.artist).map(normalize);
-  return splitArtists(candidate.artist).some((ca) => targetArtists.includes(normalize(ca)));
+  const candidateArtists = splitArtists(candidate.artist);
+  const matched = candidateArtists.map(normalize);
+  if (!matched.some((ca) => targetArtists.includes(ca))) return false;
+  // 未匹配片段若是混音署名 → 非精确：网易上传者会把混音署名塞进歌手字段
+  // （"李荣浩- / Montagem"），normalize 去掉 "-" 后"李荣浩"片段命中即判
+  // 精确，DJ 混音版被标成「完整版」换源直接放混音（真机复现）
+  const unmatched = candidateArtists.filter((_, i) => !targetArtists.includes(matched[i]));
+  if (unmatched.some((ca) => REMIX_ARTIST_TAGS.some((tag) => ca.toLowerCase().includes(tag)))) return false;
+  return true;
 }
 
 /** 在候选中找第一个精确匹配且有 url 的歌（无则返回 null） */

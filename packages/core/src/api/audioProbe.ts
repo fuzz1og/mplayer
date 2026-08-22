@@ -110,6 +110,32 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
 }
 
 /**
+ * 播放期直链活性闸：缓存命中的 URL 在交给播放器前快速确认活着。
+ * 与 probeAudioUrl 的差别：网络异常/超时按**死链**处理（宁可多花一次
+ * fresh 重解析，不赌原生播放器对死链 ~3s 才报 Source error）；不写探测
+ * 缓存（活性结论时效极短，复用会误判）。
+ */
+export async function isUrlAlive(rawUrl: string, timeoutMs = 1500): Promise<boolean> {
+  try {
+    const url = normalizeProbeUrl(rawUrl);
+    if (!url.startsWith('http')) return false;
+    const client = getApiClient();
+    const resp = await client.get(url, {
+      headers: { Range: 'bytes=0-0', ...probeRequestHeaders(url) },
+      responseType: 'arraybuffer',
+      timeout: timeoutMs,
+      maxRedirects: MAX_REDIRECTS,
+      validateStatus: () => true,
+      __probe: true,
+    } as any);
+    const ct = String(resp.headers['content-type'] || '');
+    return resp.status < 400 && !ct.includes('text/html');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Probe a song URL and return its playability tag.
  */
 export const SODA_PREVIEW_SECONDS = 60;
