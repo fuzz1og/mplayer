@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions,
-  Image, FlatList,
+  Image, FlatList, RefreshControl,
 } from 'react-native';
 import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -201,19 +201,37 @@ function AlbumsContent() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [areaLabel, setAreaLabel] = useState('全部');
+  // 最新分类的 ref：请求返回后与发起时比较，防切换分类后旧响应覆盖新列表
+  const areaRef = useRef(areaLabel);
+  areaRef.current = areaLabel;
 
+  const load = useCallback(async () => {
+    const areaAtStart = areaLabel;
+    try {
+      const area = ALBUM_AREAS.find(a => a.label === areaAtStart)?.value || 'ALL';
+      const r = await musicApi.getNewAlbums(area, 0, 30);
+      if (areaAtStart !== areaRef.current) return; // 分类已切换 → 丢弃过期响应
+      setAlbums(r);
+      setLoadingError(false);
+    } catch {
+      if (areaAtStart === areaRef.current) setLoadingError(true);
+    }
+  }, [areaLabel]);
+
+  // 首屏(无数据)整页 loading;分类切换保留旧数据,避免闪烁
   useEffect(() => {
-    let cancelled = false;
     setLoading(true);
     setLoadingError(false); // 新请求开始重置错误态
-    const area = ALBUM_AREAS.find(a => a.label === areaLabel)?.value || 'ALL';
-    musicApi.getNewAlbums(area, 0, 30)
-      .then(r => { if (!cancelled) { setAlbums(r); setLoadingError(false); } })
-      .catch(() => { if (!cancelled) setLoadingError(true); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [areaLabel]);
+    load().finally(() => setLoading(false));
+  }, [load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   // 首屏(无数据)整页 loading;分类切换保留旧数据,避免闪烁
   if (loading && albums.length === 0) return <LoadingState />;
@@ -252,6 +270,9 @@ function AlbumsContent() {
         renderItem={renderItem}
         numColumns={CARD_COLS}
         columnWrapperStyle={{ gap: CARD_GAP }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+        }
         ListEmptyComponent={
           loadingError ? (
             <View style={styles.catErrorBox}>
@@ -279,9 +300,39 @@ function PlaylistContent() {
   const [hasMore, setHasMore] = useState(true);
   const [category, setCategory] = useState('全部');
   const offsetRef = useRef(0);
+  const [refreshing, setRefreshing] = useState(false);
   // 最新分类的 ref：loadMore 请求返回后与发起时比较，防旧分类分页混入新分类列表
   const categoryRef = useRef(category);
   categoryRef.current = category;
+
+  const load = useCallback(async () => {
+    const catAtStart = category;
+    try {
+      const r = await musicApi.getNeteasePlaylists(catAtStart, 'hot', 0, 20);
+      // 请求期间分类已切换 → 丢弃过期响应
+      if (catAtStart !== categoryRef.current) return;
+      setPlaylists(r.playlists);
+      setHasMore(r.more);
+      setLoadingError(false);
+    } catch {
+      if (catAtStart === categoryRef.current) setLoadingError(true);
+    }
+  }, [category]);
+
+  useEffect(() => {
+    setLoading(true);
+    // 分类切换保留旧数据,避免闪烁
+    setHasMore(true);
+    setLoadingError(false); // 新请求开始重置错误态
+    offsetRef.current = 0;
+    load().finally(() => setLoading(false));
+  }, [load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -305,26 +356,6 @@ function PlaylistContent() {
       setLoadingMore(false);
     }
   }, [loadingMore, hasMore, category]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    // 分类切换保留旧数据,避免闪烁
-    setHasMore(true);
-    setLoadingError(false); // 新请求开始重置错误态
-    offsetRef.current = 0;
-    musicApi.getNeteasePlaylists(category, 'hot', 0, 20)
-      .then(r => {
-        if (!cancelled) {
-          setPlaylists(r.playlists);
-          setHasMore(r.more);
-          setLoadingError(false);
-        }
-      })
-      .catch(() => { if (!cancelled) setLoadingError(true); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [category]);
 
   // 首屏(无数据)整页 loading;分类切换保留旧列表
   if (loading && playlists.length === 0) return <LoadingState />;
@@ -365,6 +396,9 @@ function PlaylistContent() {
         columnWrapperStyle={{ gap: CARD_GAP }}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+        }
         ListEmptyComponent={
           loadingError ? (
             <View style={styles.catErrorBox}>
@@ -401,9 +435,38 @@ function ArtistContent() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [category, setCategory] = useState('全部');
+  const [refreshing, setRefreshing] = useState(false);
   // 最新分类的 ref：loadMore 请求返回后与发起时比较，防旧分类分页混入新分类列表
   const categoryRef = useRef(category);
   categoryRef.current = category;
+
+  const load = useCallback(async () => {
+    const catAtStart = category;
+    try {
+      const catId = Number(ARTIST_CATEGORIES.find(c => c.label === catAtStart)?.value || 0);
+      const r = await musicApi.getNeteaseArtists(catId, 0, 30);
+      if (catAtStart !== categoryRef.current) return; // 分类已切换 → 丢弃过期响应
+      setArtists(r.artists);
+      setHasMore(r.more);
+      setLoadingError(false);
+    } catch {
+      if (catAtStart === categoryRef.current) setLoadingError(true);
+    }
+  }, [category]);
+
+  useEffect(() => {
+    setLoading(true);
+    // 分类切换保留旧数据,避免闪烁
+    setHasMore(true);
+    setLoadingError(false); // 新请求开始重置错误态
+    load().finally(() => setLoading(false));
+  }, [load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -426,26 +489,6 @@ function ArtistContent() {
       setLoadingMore(false);
     }
   }, [loadingMore, hasMore, artists.length, category]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    // 分类切换保留旧数据,避免闪烁
-    setHasMore(true);
-    setLoadingError(false); // 新请求开始重置错误态
-    const catId = Number(ARTIST_CATEGORIES.find(c => c.label === category)?.value || 0);
-    musicApi.getNeteaseArtists(catId, 0, 30)
-      .then(r => {
-        if (!cancelled) {
-          setArtists(r.artists);
-          setHasMore(r.more);
-          setLoadingError(false);
-        }
-      })
-      .catch(() => { if (!cancelled) setLoadingError(true); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [category]);
 
   // 首屏(无数据)整页 loading;分类切换保留旧列表
   if (loading && artists.length === 0) return <LoadingState />;
@@ -484,6 +527,9 @@ function ArtistContent() {
         numColumns={CARD_COLS}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+        }
         ListEmptyComponent={
           loadingError ? (
             <View style={styles.catErrorBox}>
@@ -510,7 +556,7 @@ const styles = StyleSheet.create({
   tabItem: {
     flex: 1,
     paddingVertical: spacing[2],
-    borderRadius: radius.xl,
+    borderRadius: radius.full, // 气泡 tab 统一全圆角（与搜索页 tab 一致）
     backgroundColor: colors.bgHover,
     alignItems: 'center',
     justifyContent: 'center',
@@ -538,7 +584,7 @@ const styles = StyleSheet.create({
   catPill: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: radius.lg,
+    borderRadius: radius.full, // 分类胶囊统一全圆角
     backgroundColor: colors.bgHover,
   },
   catPillActive: {

@@ -51,9 +51,13 @@ export default function TopBar() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       {isSearchTab && (
-        <TouchableOpacity onPress={() => router.replace('/')} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.replace('/')}
+          style={styles.backBtn}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
           <ArrowLeft size={22} color={colors.textSecondary} />
         </TouchableOpacity>
       )}
@@ -89,7 +93,11 @@ export default function TopBar() {
           <ChevronDown size={12} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
-      <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
+      <TouchableOpacity
+        onPress={() => router.push('/settings')}
+        style={styles.settingsBtn}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
         <Settings size={22} color={colors.textSecondary} />
       </TouchableOpacity>
 
@@ -101,7 +109,7 @@ export default function TopBar() {
             {SOURCE_OPTIONS.map((opt) => (
               <TouchableOpacity
                 key={opt.key}
-                style={[styles.optionItem, selectedSource === opt.key && { backgroundColor: `${sourceColors[opt.key]}10`, borderRadius: 8 }]}
+                style={[styles.optionItem, selectedSource === opt.key && { backgroundColor: `${sourceColors[opt.key]}10`, borderRadius: radius.md }]}
                 onPress={() => handleSelectSource(opt.key)}
               >
                 <opt.icon
@@ -132,7 +140,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    paddingTop: 52,
+    // paddingTop 由组件按 insets.top 动态注入（写死 52 在无刘海机型空一大截）
     backgroundColor: colors.bgSurface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
