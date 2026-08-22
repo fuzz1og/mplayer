@@ -148,6 +148,18 @@ jobs:
         env:
           GRADLE_OPTS: "-Xmx4096m"
 
+      # gradle 默认产物名是 app-release.apk；这里按「应用名 + 版本号」重命名，
+      # 例如 MPlayer-v1.7.0.apk（与 electron-builder 桌面产物命名风格一致）
+      - name: Rename APK with app name + version
+        working-directory: packages/mobile/android/app/build/outputs/apk/release
+        run: |
+          VERSION=$(node -p "require('/home/runner/work/mplayer/mplayer/package.json').version")
+          for apk in *.apk; do
+            [ -f "$apk" ] || continue
+            mv "$apk" "MPlayer-v${VERSION}.apk"
+          done
+          ls -la
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
@@ -300,34 +312,73 @@ jobs:
           # Upload each asset to Gitee.
           # Gitee 上传慢（实测 <150KB/s，1.2GB 总量需数小时）：小文件先传、
           # 单文件 1h 超时 + 重试 1 次、失败不中断 job（重跑时跳过已传的）
+          # 注意：Gitee API 单文件上限 100MB。桌面端产物（exe/AppImage/dmg 等）
+          # 普遍超限必然 FAIL，这是平台硬限制；据此决定哪些 latest*.yml 元数据
+          # 才能上传——产物没传上去的元数据只会指向死链，宁可不传。
           EXISTING=$(curl -s "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID" \
             --connect-timeout 10 --max-time 30 | jq -r '.assets[].name')
+          RESULT_FILE=$(mktemp)
+          upload_file() {
+            local file="$1" base status resp dl_url
+            base=$(basename "$file")
+            case "$base" in
+              *.dmg|*.dmg.blockmap) echo "SKIP $base (mac 端不做)"; status=skip ;;
+              latest*.yml) echo "SKIP $base (元数据按需上传)"; status=skip ;;
+              *)
+                if echo "$EXISTING" | grep -qx "$base"; then
+                  echo "SKIP $base (already uploaded)"; status=ok
+                else
+                  echo "Uploading: $base"
+                  for attempt in 1 2; do
+                    resp=$(curl -s -X POST \
+                      "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
+                      --connect-timeout 10 --max-time 3600 \
+                      -F "access_token=$GITEE_TOKEN" \
+                      -F "file=@$file" || true)
+                    dl_url=$(echo "$resp" | jq -r '.browser_download_url // empty')
+                    [ -n "$dl_url" ] && break
+                    echo "Retry $attempt — $resp"
+                  done
+                  if [ -n "$dl_url" ]; then
+                    echo "OK $base → $dl_url"; status=ok
+                  else
+                    echo "FAIL $base — $resp"; status=fail
+                  fi
+                fi
+                ;;
+            esac
+            echo "$base=$status" >> "$RESULT_FILE"
+          }
           for file in $(ls -S ./assets/* | tac); do
             [ -f "$file" ] || continue
-            BASE=$(basename "$file")
-            # 不做 mac 端:跳过 dmg 及 blockmap（节省一半上传量）
-            case "$BASE" in
-              *.dmg|*.dmg.blockmap) echo "SKIP $BASE (mac 端不做)"; continue ;;
+            upload_file "$file"
+          done
+
+          # ── 条件上传 electron-updater 元数据（避免死链）──
+          # Windows 更新吃 latest.yml（对应 Setup exe）；Linux 吃 latest-linux.yml（AppImage/deb）；
+          # mac 从不同步产物，latest-mac.yml 一律不上传。
+          win_ok=false; linux_ok=false
+          while IFS='=' read -r base status; do
+            case "$base" in
+              MPlayer-Setup-*.exe|MPlayer-*.exe) [ "$status" = ok ] && win_ok=true ;;
+              MPlayer-*.AppImage|*_amd64.deb) [ "$status" = ok ] && linux_ok=true ;;
             esac
-            if echo "$EXISTING" | grep -qx "$BASE"; then
-              echo "SKIP $BASE (already uploaded)"
-              continue
-            fi
-            echo "Uploading: $BASE"
-            DL_URL=""
-            for attempt in 1 2; do
-              UPLOAD_RESP=$(curl -s -X POST \
+          done < "$RESULT_FILE"
+          for meta in latest.yml latest-linux.yml latest-mac.yml; do
+            [ -f "./assets/$meta" ] || continue
+            need=false
+            case "$meta" in
+              latest.yml) [ "$win_ok" = true ] && need=true ;;
+              latest-linux.yml) [ "$linux_ok" = true ] && need=true ;;
+              latest-mac.yml) need=false ;;
+            esac
+            if [ "$need" = true ]; then
+              curl -s -X POST \
                 "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
-                --connect-timeout 10 --max-time 3600 \
+                --connect-timeout 10 --max-time 300 \
                 -F "access_token=$GITEE_TOKEN" \
-                -F "file=@$file" || true)
-              DL_URL=$(echo "$UPLOAD_RESP" | jq -r '.browser_download_url // empty')
-              if [ -n "$DL_URL" ]; then break; fi
-              echo "Retry $attempt — $UPLOAD_RESP"
-            done
-            if [ -n "$DL_URL" ]; then
-              echo "OK $BASE → $DL_URL"
+                -F "file=@./assets/$meta" | jq -r 'if .browser_download_url then "OK \(.name) → \(.browser_download_url)" else "FAIL \(.name) — \(.)" end'
             else
-              echo "FAIL $BASE — $UPLOAD_RESP"
+              echo "SKIP $meta (对应产物未上传成功，跳过以避免更新死链)"
             fi
           done
