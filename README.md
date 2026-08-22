@@ -2,7 +2,7 @@
 
 > 本项目仅供个人学习 Electron、React、TypeScript 等技术使用，不包含任何商业目的。所有音乐资源版权归原作者所有。
 
-Electron 桌面音乐播放器 + Expo/React Native 移动端。支持多音乐源搜索与播放（网易云、QQ、酷狗、咪咕、酷我、千千、Soda）。
+Electron 桌面音乐播放器 + Expo/React Native 移动端。支持 7 个音乐源官方直连搜索与播放（网易云、QQ、酷狗、咪咕、酷我、千千、汽水），官方直连失败时可由第三方解析源（tier3 订阅）兜底。
 
 ## 项目结构
 
@@ -13,18 +13,18 @@ Electron 桌面音乐播放器 + Expo/React Native 移动端。支持多音乐�
 │   ├── renderer/            # React 渲染进程
 │   └── shared/              # 共享类型定义
 ├── packages/
-│   ├── core/                # @mplayer/core — 共享 API 客户端和类型
+│   ├── core/                # @mplayer/core — 双端共享：多源直连、歌曲识别、播放地址解析
 │   └── mobile/              # Expo/React Native 移动端
 ├── e2e/                     # Playwright E2E 测试（桌面端）
-└── docs/                    # 设计文档和计划
+└── docs/                    # 设计文档（ADR / 规格 / Agent 约定）
 ```
 
 ## Desktop (Electron)
 
 ### 技术栈
 
-- Electron 41 + React + TypeScript + Vite 6
-- Zustand（状态管理）、Ant Design 5（UI）、Howler.js（音频）
+- Electron 41 + React 19 + TypeScript + Vite 6
+- Zustand（状态管理）、Ant Design 6（UI）、Howler.js（音频）
 - @tanstack/react-virtual（虚拟滚动）、@dnd-kit（拖拽排序）
 - electron-builder（打包）、electron-updater（自动更新）
 - Playwright（E2E 测试）
@@ -33,19 +33,22 @@ Electron 桌面音乐播放器 + Expo/React Native 移动端。支持多音乐�
 
 | 分类 | 功能 |
 |------|------|
-| 播放 | 多源搜索、热歌榜、播放控制、四种模式、音量/进度条（键盘可操作）、歌词、全局快捷键 |
+| 播放 | 多源搜索、热歌榜、播放控制、四种模式、音量/进度条（键盘可操作）、歌词、全局快捷键、试听版识别与提示 |
 | 换源 | 单曲换源（完整版优先 + 可播性探测 + 原位替换） |
-| 搜索 | 歌曲/歌手标签页分类、歌手浏览（分类筛选）、歌手详情 |
+| 搜索 | 歌曲/歌手标签页分类、歌手浏览（分类筛选）、歌手详情、无 URL 歌曲严格匹配回填 |
 | 收藏 | 单首收藏、URL 自动刷新与 DB 回写 |
 | 历史 | 自动记录、查看/清空/删除 |
 | 歌单 | 创建/删除、拖拽排序、批量操作、URL 自动刷新与 DB 回写、文本/链接导入 |
-| 发现 | 推荐 tab（换一批）、发现页（排行榜/歌单/歌手）、专辑页、推荐歌单一键保存 |
-| 缓存 | URL（12h）、封面（永久磁盘）、音频（最近 10 首）、空数据不缓存、统计/清除 |
+| 发现 | 推荐 tab（换一批）、发现页（排行榜/新碟/歌单/歌手四 Tab）、专辑页、推荐歌单一键保存 |
+| 缓存 | 预取缓存（探测直链写入、播放零等待）、封面（永久磁盘）、音频（最近 10 首）、统计/清除 |
+| 多源直连 | 7 源官方直连客户端（网易云/QQ/酷狗/咪咕/酷我/千千/汽水）、直连状态面板 |
+| tier3 | 第三方解析源订阅（URL / 本地文件 / 粘贴清单）、每源命中/失败统计、默认关闭 |
+| 网络 | 网络代理（HTTP/HTTPS）、TLS 指纹伪装（网易云 weapi 试点） |
 | 托盘 | 右键菜单、歌曲信息提示 |
 | 队列 | 拖拽排序、保存为歌单 |
 | 下载 | 单曲/批量、进度弹窗、PlayerBar 快捷下载 |
 | 本地音乐 | 文件夹扫描、ID3 解析、文件变更监视 |
-| 设置 | 缓存管理、下载目录、API 地址、网络代理、检查更新 |
+| 设置 | 缓存管理、下载目录、直连状态、tier3、TLS 指纹、代理、检查更新 |
 
 ### 快速开始
 
@@ -56,12 +59,16 @@ npm run build           # 生产构建
 npm run electron:build  # 打包应用（当前平台）
 ```
 
-### API 配置
+### 多源与解析链路
 
-1. **用户配置**（优先级最高）：设置页 → API 设置 → 填入地址 → 保存重启
-2. **开发配置**：项目根目录创建 `.env.local`，填入 `MUSIC_API_URL=https://your-api-server.com/`
+自建 API 已退役，无需任何 API 地址配置。解析链路为：
 
-需要兼容的接口：`/search`、`/toplist`、`/url`、`/lyric`、`/playlist/catlist`、`/playlist/hot`、`/playlist/detail`
+**官方直连优先 → tier3 订阅源兜底**
+
+- 7 个音乐源（网易云 / QQ / 酷狗 / 咪咕 / 酷我 / 千千 / 汽水）均内置官方直连客户端
+- 探测语义 = 直连可播性：探测时直接解析并写入预取缓存，播放命中缓存零等待出声
+- 官方直连失败 → 按订阅清单尝试第三方解析源（tier3，实验性，默认关闭）→ 全部失败换元/标记不可播
+- 设置页 → 第三方解析源：可添加 URL / 本地文件 / 粘贴 JSON 清单，并查看每源命中/失败统计
 
 ### 项目结构（桌面端）
 
@@ -69,6 +76,8 @@ npm run electron:build  # 打包应用（当前平台）
 src/
 ├── main/                    # Electron 主进程
 │   ├── main.ts              # 入口（窗口、IPC、快捷键、托盘）
+│   ├── hidpi.ts             # WSLg HiDPI 修复（读 Windows AppliedDPI）
+│   ├── proxy.ts             # Electron session 代理配置
 │   ├── api/                 # 主进程侧 HTTP（kugouApi 直连；musicApi 为 @mplayer/core 的壳）
 │   ├── cache/               # 磁盘缓存
 │   ├── storage/             # 数据持久化（db.ts）
@@ -77,38 +86,40 @@ src/
 │   └── tray/                # 系统托盘
 ├── renderer/                # React 渲染进程
 │   ├── components/          # 组件（PlayerBar, SongList, Modals 等）
-│   ├── pages/               # 页面（Discover, Favorites, History, Playlists 等）
+│   ├── pages/               # 页面（Recommend, Discover, Favorites, Settings 等，路由全懒加载）
 │   ├── store/               # Zustand stores
 │   ├── services/            # 业务服务（audioPlayer, cacheService 等）
 │   ├── hooks/               # 自定义 Hooks
-│   └── utils/               # 渲染进程工具（async, queueUtils, songCoverRefresh 等；通用工具在 core）
+│   └── utils/               # 渲染进程工具（async, queueUtils 等；通用工具在 core）
 └── shared/                  # 共享类型定义
 ```
 
 ### 发布
 
-推送 tag 自动触发 GitHub Actions 构建：
+推送 `v*` tag 自动触发 GitHub Actions 构建，也可在 Actions 页面手动 `workflow_dispatch`：
 
 ```bash
-git tag v1.x.x
-git push origin v1.x.x
+git tag v1.7.0
+git push origin v1.7.0
 ```
 
-三平台（Windows/macOS/Linux）产物自动上传到 GitHub Releases。应用内设置页可检查更新并一键安装。
+构建产物（Electron 三平台 Windows/macOS/Linux + Android APK）自动上传到 GitHub Releases 并同步 Gitee。应用内设置页可检查更新并一键安装。
 
 ## Mobile (Expo/React Native)
 
 ### 技术栈
 
 - Expo 57 + React Native 0.86 + React 19 + TypeScript
-- expo-router（导航）、Zustand（状态管理）、expo-av（音频播放）
-- @react-native-async-storage/async-storage（持久化）
+- expo-router（导航）、Zustand（状态管理）、expo-audio（音频播放，支持后台播放）
+- @react-native-async-storage/async-storage（持久化）、lucide-react-native（图标）
+- 双主题 token 体系（浅色/深色，跟随系统或手动切换）+ textVariants 文字语义变体
 
 ### 快速开始
 
 ```bash
 cd packages/mobile
 npm install        # 安装依赖
+npm run start      # 启动 Expo 开发服务器
 npm run android    # Android 模拟器
 npm run ios        # iOS 模拟器（仅 macOS）
 ```
@@ -120,15 +131,15 @@ npm run ios        # iOS 模拟器（仅 macOS）
 | 路由 | 功能 |
 |------|------|
 | `/`（tabs） | 推荐 / 发现 / 搜索 / 歌单 / 下载 五个 Tab（initialRouteName=recommend） |
-| `/recommend` | 推荐 — 随机推荐 / 换一批 |
+| `/recommend` | 推荐 — 今日推荐 / 换一批 |
 | `/discover` | 发现 — 排行榜/歌单/歌手滑动 Tab |
-| `/search?q=` | 搜索结果（隐藏 Tab 栏动画下滑） |
-| `/download` | 下载列表（SAF 授权目录、本地播放、删除） |
+| `/search` | 搜索 — 歌曲/歌手双 Tab，多源聚合 |
+| `/download` | 下载列表（SAF 授权公共下载目录、本地播放、删除） |
 | `/playlists` | 歌单页（内置收藏/播放历史入口） |
 | `/player` | 全屏播放器（模态）— 左滑歌词、播放模式、收藏、队列 |
 | `/favorites` | 我的收藏 |
 | `/history` | 播放历史 |
-| `/settings` | API 地址 + 播放模式设置 |
+| `/settings` | 外观（深色模式）/ 直连设置 / tier3 / 代理 / 检查更新 / 缓存 / 播放日志 |
 | `/hotlist` | 排行榜详情 |
 | `/playlist/[id]` | 歌单详情 |
 | `/album/[id]` | 专辑详情 |
@@ -146,12 +157,14 @@ npm start
 npx expo start --android --logs
 ```
 
+真机调试流程见 `docs/agents/mobile-device-debugging.md`。
+
 ## Shared Package (`@mplayer/core`)
 
-`packages/core/` 包含桌面端和移动端共用的 API 客户端和类型定义。
+`packages/core/` 包含桌面端和移动端共用的能力：多源直连客户端、歌曲识别/匹配、播放地址解析、缓存内核、tier3 订阅源执行器。
 
 ```bash
-npm run core:build        # 构建共享包（修改核心代码后需重新构建）
+npm run core:build        # 构建共享包（修改核心代码后需重新构建，移动端 Metro 直接吃 dist 产物）
 ```
 
 ## 构建检查

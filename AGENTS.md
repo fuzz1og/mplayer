@@ -91,14 +91,16 @@ npm run core:build   # 移动端 Metro 吃 dist 产物：改 core 后必须重�
 ## Key Conventions
 
 ### Desktop
-- UI: Ant Design 5 (`zhCN`) + lucide-react。全部界面文案中文。
+- UI: Ant Design 6 (`zhCN`) + lucide-react。全部界面文案中文。
 - Virtual scrolling: `@tanstack/react-virtual`（阈值 30）；DnD: `@dnd-kit`。
 - Song dedupe/matching 在 core（songDedupe/songMatcher）。
 - Path alias `@/*` → `./src/*`。
 - **No context isolation**: renderer 经 `require('electron')` 直用 node；主进程 import 共享件用相对路径（别名在 tsc 主进程构建不解析）。
 
 ### Mobile
-- UI: 浅色蓝调主题，token 见 `packages/mobile/theme/tokens.ts`；lucide-react-native。文案中文。
+- UI: 双主题 token 体系（浅色/深色，`themeMode`: system/light/dark 三态，settingsStore 持久化，默认跟随系统），
+  token 见 `packages/mobile/theme/tokens.ts`（Primitive → Semantic 双层，`lightColors`/`darkColors`）；文字走
+  `textVariants` 语义变体（tokens.ts 定义，清零字号魔法数）；lucide-react-native。文案中文。
 - Audio: expo-audio（非 Howler）；手势 PanResponder + Animated。
 - Metro 入口是 `packages/core/dist`——core 改动必须 `core:build`。
 
@@ -139,10 +141,12 @@ flat config（`eslint.config.js`），全局 ignores 与 `--no-warn-ignored` 语
 
 ## 多源链路速览
 
-自建 API 已退役。现状：**官方直连优先 → tier3 订阅源兜底**（来源开关 auto/direct + 订阅清单在设置页，
-实现在 core `sourceRouter`/`tier3Api`）。探测语义 = 直连可播性（probeSongsBatch 直连解析并写预取缓存）；
+自建 API 已退役。现状：**官方直连优先 → tier3 订阅源兜底**（来源开关 auto/direct 在移动端设置页，
+桌面端为只读直连状态面板；tier3 订阅清单 + 每源命中/失败统计在两端设置页，实现在 core `sourceRouter`/`tier3Api`）。
+探测语义 = 直连可播性（probeSongsBatch 直连解析并写预取缓存）；
 播放走 `resolvePlayableSongRouted`（预取命中 0 等待 → 直连 → tier3 → 失败）。旧 `api.php?get=*` 签名地址
-是死链，识别与清理见 core `utils/legacyUrl` 与各端迁移逻辑。
+是死链，识别与清理见 core `utils/legacyUrl` 与各端迁移逻辑。请求硬化（UA 池/反同源连续/TLS 指纹伪装险情开关，
+桌面设置页 `tls-fingerprint`，weapi 试点）见 core `api/tlsFingerprint` 与 `api/transport`。
 
 ## Agent skills
 
