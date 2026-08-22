@@ -371,10 +371,13 @@ export default function SettingsPage() {
           </View>
         </View>
 
-        {/* 检查更新 */}
+        {/* 检查更新（标题右侧显示当前版本号） */}
         <View style={styles.section}>
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>检查更新</Text>
+            <View style={styles.updateHeader}>
+              <Text style={[styles.sectionTitle, styles.updateHeaderTitle]}>检查更新</Text>
+              <Text style={styles.updateVersion}>v{currentVersion}</Text>
+            </View>
             {updateState === 'idle' && (
               <>
                 <TouchableOpacity style={styles.saveBtn} onPress={handleCheckUpdate} activeOpacity={0.7}>
@@ -570,6 +573,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...textVariants.caption,
     marginTop: 10,
     textAlign: 'center',
+  },
+  updateHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing[4],
+  },
+  updateHeaderTitle: { marginBottom: 0 },
+  updateVersion: {
+    color: colors.textTertiary,
+    ...textVariants.caption,
   },
   updateAvailableText: {
     color: colors.success,
