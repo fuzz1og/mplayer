@@ -4,7 +4,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/fuzz1og/mplayer/ci.yml?label=CI&branch=master)](https://github.com/fuzz1og/mplayer/actions/workflows/ci.yml)
 [![Build & Release](https://img.shields.io/github/actions/workflow/status/fuzz1og/mplayer/release.yml?label=Build%20%26%20Release)](https://github.com/fuzz1og/mplayer/actions/workflows/release.yml)
-[![License: MIT](https://img.shields.io/github/license/fuzz1og/mplayer)](LICENSE)
+[![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-orange)](LICENSE)
 ![Version](https://img.shields.io/github/package-json/v/fuzz1og/mplayer)
 
 跨平台音乐播放器：**Electron 桌面端 + Expo/React Native 移动端**，7 大音乐源官方直连搜索与播放（网易云 / QQ / 酷狗 / 咪咕 / 酷我 / 千千 / 汽水），直连失败自动降级到第三方解析源（tier3 订阅）。桌面端与移动端共享同一套 `@mplayer/core` 能力。
@@ -112,4 +112,4 @@ npm run core:build          # 构建共享包（改 core 后移动端必须重�
 
 ## 许可证
 
-[MIT](LICENSE)
+[PolyForm Noncommercial License 1.0.0](LICENSE)——**仅限非商业用途**（与参考项目 musicdl 同款许可证）。允许学习、研究、个人使用，禁止商业使用。

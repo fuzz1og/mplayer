@@ -40,5 +40,6 @@
     "expo-build-properties": "~57.0.13",
     "expo-dev-client": "~57.0.14",
     "typescript": "~6.0.3"
-  }
+  },
+  "license": "PolyForm-Noncommercial-1.0.0"
 }
