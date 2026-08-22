@@ -16,7 +16,7 @@ import { useSourceStore } from '../../stores/sourceStore';
 import SongRow from '../../components/SongRow';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
-import { colors, radius } from '../../theme/tokens';
+import { colors, radius, textVariants } from '../../theme/tokens';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -247,9 +247,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   tabLabel: {
+    ...textVariants.subhead,
     color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
   },
   tabLabelActive: {
     color: colors.textInverse,
@@ -257,9 +256,9 @@ const styles = StyleSheet.create({
   },
   groupSection: { marginBottom: 8 },
   groupHeader: {
-    color: colors.textPrimary,
-    fontSize: 13,
+    ...textVariants.footnote,
     fontWeight: '600',
+    color: colors.textPrimary,
     paddingHorizontal: 16,
     paddingVertical: 8,
     backgroundColor: colors.bgSurface,
@@ -274,7 +273,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyText: { color: colors.textSecondary, fontSize: 16, marginTop: 12 },
+  emptyText: { ...textVariants.callout, color: colors.textSecondary, marginTop: 12 },
   artistGrid: {
     paddingHorizontal: 12,
     paddingTop: 12,
@@ -297,8 +296,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgHover,
   },
   artistName: {
+    ...textVariants.footnote,
     color: colors.textPrimary,
-    fontSize: 13,
     marginTop: 6,
     textAlign: 'center',
   },

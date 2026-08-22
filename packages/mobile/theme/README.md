@@ -13,6 +13,34 @@ import { colors, spacing, radius, shadow, typography, sourceColors, turntable } 
 - 阴影用 `shadow.sm` 这类 RN 对象（iOS `shadow*` + Android `elevation`），直接展开到 style。
 - 行高用 `typography.lineHeights.normal` 等倍数，RN 需要像素时 `fontSize * lineHeight`。
 
+## 文字变体（#175）
+
+Text 样式一律用语义变体，禁止裸写 `fontSize`/`fontWeight` 魔法数：
+
+| 变体 | 值 | 用途 |
+|---|---|---|
+| `largeTitle` | 22/700 | 页面大标题 |
+| `titleLg` | 20/700 | 全屏播放器歌曲名 |
+| `title` | 17/700 | 弹层/对话框标题 |
+| `sectionHeader` | 16/700 | 区块标题 |
+| `callout` | 16/400 | 正文级说明/空态文案 |
+| `body` | 15/500 | 列表主行文字 |
+| `subhead` | 14/500 | 次级行文字/输入框/tab 标签 |
+| `footnote` | 13/400 | 辅助说明/meta |
+| `caption` | 12/400 | 副行文字（歌手名/时间） |
+| `micro` | 11/600 | 徽章/角标 |
+
+用法（makeStyles 工厂内展开，weight 特例在展开后覆盖）：
+
+```ts
+import { textVariants } from '../theme/tokens';
+
+name: { ...textVariants.body, color: colors.textPrimary },
+playAllText: { ...textVariants.caption, fontWeight: '600', color: colors.textInverse },
+```
+
+归一约定：18→`title`、10→`micro`（±1px 级视觉差）。例外不套变体：歌词等带 lineHeight 的成对样式、一次性展示字形（如歌手占位字母）。
+
 ## desktop CSS 变量 ↔ mobile token 映射
 
 | desktop（global.css） | mobile（tokens.ts） | 值 |

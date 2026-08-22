@@ -7,7 +7,7 @@ import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
-import { colors, radius, shadow, spacing } from '../theme/tokens';
+import { colors, radius, shadow, spacing, textVariants } from '../theme/tokens';
 import LoadingState from './LoadingState';
 import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
@@ -565,9 +565,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   tabLabel: {
+    ...textVariants.subhead,
     color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
   },
   tabLabelActive: {
     color: colors.textInverse,
@@ -591,9 +590,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   catLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
+    ...textVariants.caption,
     fontWeight: '500',
+    color: colors.textSecondary,
   },
   catLabelActive: {
     color: colors.textInverse,
@@ -604,8 +603,9 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
   catErrorText: {
+    ...textVariants.subhead,
+    fontWeight: '400',
     color: colors.danger,
-    fontSize: 14,
   },
   // Hotlist section styles
   section: {
@@ -616,9 +616,8 @@ const styles = StyleSheet.create({
     padding: spacing[3],
   },
   sectionTitle: {
+    ...textVariants.sectionHeader,
     color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
     marginBottom: spacing[3],
   },
   songRow: {
@@ -627,9 +626,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   rank: {
-    color: colors.textTertiary,
-    fontSize: 14,
+    ...textVariants.subhead,
     fontWeight: '600',
+    color: colors.textTertiary,
     width: 28,
     textAlign: 'center',
   },
@@ -640,8 +639,8 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   songInfo: { flex: 1 },
-  songName: { color: colors.textPrimary, fontSize: 14 },
-  songArtist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  songName: { ...textVariants.subhead, fontWeight: '400', color: colors.textPrimary },
+  songArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
   // Playlist grid styles
   grid: {
     flexDirection: 'row',
@@ -658,14 +657,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgHover,
   },
   gridName: {
-    color: colors.textPrimary,
-    fontSize: 13,
+    ...textVariants.footnote,
     fontWeight: '500',
+    color: colors.textPrimary,
     marginTop: 6,
   },
   gridMeta: {
+    ...textVariants.micro,
+    fontWeight: '400',
     color: colors.textSecondary,
-    fontSize: 11,
     marginTop: 2,
   },
   // Artist grid styles
@@ -687,8 +687,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgHover,
   },
   artistName: {
+    ...textVariants.footnote,
     color: colors.textPrimary,
-    fontSize: 13,
     marginTop: 6,
     textAlign: 'center',
   },

@@ -14,7 +14,7 @@ import { probeSongsPrefetch } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
-import { colors } from '../../theme/tokens';
+import { colors, textVariants } from '../../theme/tokens';
 
 const PAGE_SIZE = 50;
 
@@ -99,7 +99,7 @@ export default function DiscoverPlaylistDetailPage() {
             headerShadowVisible: false,
           }}
         />
-        <Text style={{ color: colors.textSecondary, fontSize: 16 }}>歌单不存在</Text>
+        <Text style={{ ...textVariants.callout, color: colors.textSecondary }}>歌单不存在</Text>
       </View>
     );
   }

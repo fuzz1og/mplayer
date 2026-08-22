@@ -7,7 +7,7 @@ import { Music, Heart, EllipsisVertical, ListMusic, Download, ArrowLeftRight, Us
 import type { LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, sourceColors, spacing } from '../theme/tokens';
+import { colors, radius, sourceColors, spacing, textVariants } from '../theme/tokens';
 import { type Song, SourceKey, invalidateCoverUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
@@ -335,9 +335,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderSubtle,
   },
   rank: {
-    color: colors.textTertiary,
-    fontSize: 14,
+    ...textVariants.subhead,
     fontWeight: '600',
+    color: colors.textTertiary,
     width: 28,
     textAlign: 'center',
     marginRight: spacing[1],
@@ -358,13 +358,12 @@ const styles = StyleSheet.create({
     marginRight: spacing[2],
   },
   name: {
+    ...textVariants.subhead,
     color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '500',
   },
   artist: {
+    ...textVariants.caption,
     color: colors.textSecondary,
-    fontSize: 12,
     marginTop: 2,
   },
   sourceBadge: {
@@ -374,8 +373,7 @@ const styles = StyleSheet.create({
     marginRight: spacing[2],
   },
   sourceText: {
-    fontSize: 10,
-    fontWeight: '600',
+    ...textVariants.micro, // 归一：10 → micro(11)
   },
   tagBadgePreview: {
     borderRadius: radius.xs,
@@ -392,8 +390,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerSubtle,
   },
   tagText: {
-    fontSize: 10,
-    fontWeight: '600',
+    ...textVariants.micro, // 归一：10 → micro(11)
   },
   favoriteBtn: {
     padding: spacing[1],
@@ -416,9 +413,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[8],
   },
   actionSheetTitle: {
-    color: colors.textPrimary,
-    fontSize: 15,
+    ...textVariants.body,
     fontWeight: '600',
+    color: colors.textPrimary,
     marginBottom: spacing[4],
     textAlign: 'center',
   },
@@ -430,8 +427,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderSubtle,
   },
   actionLabel: {
+    ...textVariants.callout,
     color: colors.textPrimary,
-    fontSize: 16,
     marginLeft: spacing[3],
   },
   actionCancel: {
@@ -442,7 +439,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelText: {
+    ...textVariants.callout,
     color: colors.textSecondary,
-    fontSize: 16,
   },
 });

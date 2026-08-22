@@ -19,7 +19,7 @@ import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
-import { colors, spacing, radius, shadow, turntable } from '../theme/tokens';
+import { colors, spacing, radius, shadow, turntable, textVariants } from '../theme/tokens';
 
 const { width } = Dimensions.get('window');
 
@@ -258,7 +258,7 @@ export default function PlayerOverlay({ onClose }: Props) {
             <ChevronDown size={28} color={colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowLyrics(v => !v)}>
-            <Text style={{ color: colors.accent, fontSize: 16, fontWeight: '600' }}>
+            <Text style={{ ...textVariants.sectionHeader, fontWeight: '600', color: colors.accent }}>
               {showLyrics ? '封' : '词'}
             </Text>
           </TouchableOpacity>
@@ -290,7 +290,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                 showsVerticalScrollIndicator={false}
               />
             ) : (
-              <Text style={{ color: colors.textTertiary, fontSize: 16 }}>暂无歌词</Text>
+              <Text style={{ ...textVariants.callout, color: colors.textTertiary }}>暂无歌词</Text>
             )}
           </View>
         ) : (
@@ -512,8 +512,8 @@ const styles = StyleSheet.create({
     zIndex: 9,
   },
   infoWrap: { marginTop: spacing[3], alignItems: 'center' },
-  title: { color: colors.textPrimary, fontSize: 20, fontWeight: '700' },
-  artist: { color: colors.textSecondary, fontSize: 14, flexShrink: 1 },
+  title: { ...textVariants.titleLg, color: colors.textPrimary },
+  artist: { ...textVariants.subhead, color: colors.textSecondary, flexShrink: 1 },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   sourceTag: {
     marginLeft: spacing[2],
@@ -522,10 +522,10 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     backgroundColor: colors.bgHover,
   },
-  sourceTagText: { color: colors.textSecondary, fontSize: 10 },
+  sourceTagText: { ...textVariants.micro, color: colors.textSecondary },
   progressWrap: { marginTop: spacing[4], alignItems: 'center' },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', width: width - 48, marginTop: 4 },
-  time: { color: colors.textTertiary, fontSize: 12 },
+  time: { ...textVariants.caption, color: colors.textTertiary },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',

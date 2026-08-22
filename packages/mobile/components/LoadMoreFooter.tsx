@@ -1,5 +1,5 @@
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { colors, spacing } from '../theme/tokens';
+import { colors, spacing, textVariants } from '../theme/tokens';
 
 interface Props {
   loadingMore: boolean;
@@ -34,11 +34,11 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   loadingText: {
+    ...textVariants.footnote,
     color: colors.textSecondary,
-    fontSize: 13,
   },
   doneText: {
+    ...textVariants.footnote,
     color: colors.textSecondary,
-    fontSize: 13,
   },
 });
