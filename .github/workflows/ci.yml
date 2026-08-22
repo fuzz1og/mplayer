@@ -55,7 +55,8 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('package-lock.json', 'packages/mobile/package.json', 'packages/mobile/app.json') }}
+          # key 只用 package-lock.json：gradle 依赖与版本号无关，避免 bump 版本导致缓存失效
+          key: ${{ runner.os }}-gradle-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
       - run: npm ci --ignore-scripts

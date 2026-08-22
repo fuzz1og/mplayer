@@ -153,3 +153,4 @@ flat config（`eslint.config.js`），全局 ignores 与 `--no-warn-ignored` 语
 - Issue tracker: GitHub Issues via `gh` CLI，见 `docs/agents/issue-tracker.md`
 - Triage labels: `docs/agents/triage-labels.md`
 - Domain docs: `CONTEXT.md` + `docs/adr/`，见 `docs/agents/domain.md`
+- Release notes: `.agents/skills/release-notes`——publish job 创建 release 后，按规格（亮点/分类变更/下载清单）用 `gh release edit` 覆盖自动生成的平铺介绍
