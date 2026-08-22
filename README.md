@@ -99,6 +99,11 @@ npm run core:build          # 构建共享包（改 core 后移动端必须重�
 ./scripts/release.sh patch   # 一键发布（验证 → bump → commit → tag → 触发 CI）
 ```
 
+## 参考与致谢
+
+- **[musicdl](https://github.com/CharlesPikachu/musicdl)**（PolyForm Noncommercial License 1.0.0）——各音乐源官方直连手法（端点、签名算法、cookie 思路）的参考。本项目实现为独立重写的 TypeScript 代码，仅用于学习研究、禁止商用。
+- **[NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)**（MIT）——网易云 weapi 加密算法参考。
+
 ## 免责声明
 
 1. 个人学习项目，禁止商用
