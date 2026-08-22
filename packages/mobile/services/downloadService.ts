@@ -18,6 +18,7 @@ import {
 import { useDownloadStore } from '../stores/downloadStore';
 import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { resolvePlayableUrlMobile } from './audioPlayer';
 
 // 共享下载文件名生成器（T19，core）：来源前缀 + 组合哈希防跨源覆盖，URI/Windows 安全
 const buildSongFileName = makeSongFileName({ hash: md5 });
@@ -88,11 +89,6 @@ async function promptPublicDirOnce(): Promise<string> {
   if (Platform.OS !== 'android') return '';
   const ok = await pickDownloadDirectory().catch(() => false);
   return ok ? useSettingsStore.getState().downloadDirUri : '';
-}
-
-/** 摄取端点 302 跳转地址特征（与 audioPlayer 一致）：这类地址要先解析成 CDN 直链才能下载 */
-function isRedirectEndpoint(url: string): boolean {
-  return url.includes('api.php?get=url');
 }
 
 /** 播放失败时清理失败的下载文件 */
@@ -211,11 +207,10 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
   });
 
   try {
-    // 仅 302 跳转端点需要先解析成 CDN 直链；已是直链的直接下载
-    // （对直链再调 getAudioUrl 会整包下载一遍，双倍流量）
-    const realUrl = song.url?.startsWith('http') && isRedirectEndpoint(song.url)
-      ? await musicApi.getAudioUrl(song.url)
-      : (song.url || '');
+    // 与播放同一套解析（路由链：直连→tier3→api 兜底，含预取缓存），拿 CDN 直链下载。
+    // 不能用 song.url 原值：移动端歌的 url 字段常为空/过期（播放也是现解析的），
+    // 直接下载会抛「无法解析下载地址」。
+    const { url: realUrl } = await resolvePlayableUrlMobile(song);
     if (!realUrl?.startsWith('http')) throw new Error('无法解析下载地址');
 
     await downloadDir.create({ intermediates: true, idempotent: true });
