@@ -62,7 +62,7 @@
     "concurrently": "^8.2.2",
     "dotenv": "^17.4.2",
     "electron": "^41.7.1",
-    "electron-builder": "^24.9.1",
+    "electron-builder": "^26.15.3",
     "esbuild": "0.25.2",
     "eslint": "^8.55.0",
     "expo": "~57.0.9",
