@@ -102,17 +102,20 @@ jobs:
       # 发布前跑测试：直接 push master 发版时 ci.yml 可能并行未完成，release 构建自带验证兜底
       - run: npx tsc && npx vitest run && npx vite build
 
-      # Tag push or dispatch with version = official release → publish
-      - name: Build + publish to GitHub Releases
-        if: github.event_name == 'push' || inputs.version != ''
-        run: npx electron-builder ${{ matrix.args }} --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # 只构建不上传（--publish never）：产物统一上传 actions artifact，
+      # 由 publish job 汇总上传到 GitHub Release。
+      # 注意：不要用 --publish always —— 会与 publish job 的 gh release create 竞争，
+      # electron-builder 因 release 已存在而 skipped publishing（实测 v1.7.2 桌面产物全丢）。
+      - name: Build (Electron)
+        run: npx electron-builder ${{ matrix.args }} --publish never
 
-      # Dispatch without version (test build) → build only
-      - name: Build only (test)
-        if: github.event_name != 'push' && inputs.version == ''
-        run: npx electron-builder ${{ matrix.args }}
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mplayer-desktop-${{ matrix.os }}
+          path: |
+            dist/**/*
+          if-no-files-found: error
 
   # ── Mobile Android APK + AAB ──
   build-mobile:
@@ -236,11 +239,26 @@ jobs:
             echo "tag=" >> "$GITHUB_OUTPUT"
           fi
 
+      # 下载全部构建产物：三个桌面平台 + mobile（APK + AAB）
+      - name: Download desktop (linux) artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: mplayer-desktop-ubuntu-latest
+          path: desktop-linux
+      - name: Download desktop (mac) artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: mplayer-desktop-macos-latest
+          path: desktop-mac
+      - name: Download desktop (win) artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: mplayer-desktop-windows-latest
+          path: desktop-win
       - name: Download APK artifact
         uses: actions/download-artifact@v8
         with:
           name: mplayer-mobile-apk
-
       - name: Download AAB artifact
         uses: actions/download-artifact@v8
         with:
@@ -274,9 +292,13 @@ jobs:
             gh release create "$TAG" --notes-file release-notes.md --draft=false
           fi
 
-          # Upload APK + AAB to release assets（AAB 供上架 Google Play 使用，P3-8）
-          for f in *.apk *.aab; do
-            [ -f "$f" ] && gh release upload "$TAG" "$f" --clobber
+          # Upload 全部产物到 release assets：桌面三平台（含 latest-*.yml 更新元数据）
+          # + mobile APK/AAB（AAB 供上架 Google Play 使用，P3-8）。
+          # 统一在此上传，避免与 electron-builder 的 --publish always 竞争。
+          for dir in desktop-linux desktop-mac desktop-win .; do
+            for f in "$dir"/*; do
+              [ -f "$f" ] && gh release upload "$TAG" "$f" --clobber || true
+            done
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
