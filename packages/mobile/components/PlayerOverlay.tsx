@@ -22,8 +22,16 @@ import { SOURCE_LABELS } from '../stores/sourceStore';
 import {radius, shadow, spacing, textVariants, turntable} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import { springs, projectMomentum, rubberband } from '../theme/motion';
+import * as Haptics from 'expo-haptics';
 
 const { width } = Dimensions.get('window');
+
+/** 投影落点超过屏高此比例即判关：快甩从任意位置都能关，慢拖半途自然回弹 */
+const DISMISS_PROJECT_RATIO = 0.35;
+
+/** 轻触觉（expo-haptics web 端为 no-op，异常静默） */
+const tapLight = () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); };
 
 interface Props {
   onClose: () => void;
@@ -58,16 +66,15 @@ export default function PlayerOverlay({ onClose }: Props) {
   const insets = useSafeAreaInsets();
   onCloseRef.current = onClose;
 
-  // 滑入动画
+  // 滑入动画（sheet 预设，ADR-0004）；落定给一次轻触觉
   useEffect(() => {
     const anim = Animated.spring(panY, {
       toValue: 0,
       useNativeDriver: true,
-      tension: 50,
-      friction: 10,
+      ...springs.sheet,
     });
     slideAnim.current = anim;
-    anim.start();
+    anim.start(({ finished }) => { if (finished) tapLight(); });
     return () => anim.stop();
   }, []);
 
@@ -215,12 +222,29 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (newSong) playSong(newSong);
   };
 
-  const dismissWithAnimation = () => {
-    Animated.timing(panY, {
-      toValue: Dimensions.get('window').height,
-      duration: 200,
+  // ── 手势物理（ADR-0004）：可中断、速度继承、动量投影、橡皮筋 ──
+  const dragStartValue = useRef(0);                 // 抓取瞬间面板呈现值（支持中途抓住动画）
+  const gestureBaseDy = useRef<number | null>(null); // 首个 move 事件校准基准（消除激活前位移跳变）
+  const lastY = useRef(0);                          // 最近一帧面板位置（release 同步可读）
+
+  const dismiss = (velocityY = 0) => {
+    Animated.spring(panY, {
+      toValue: Dimensions.get('window').height, // 现取现用，旋转/折叠屏不取过期值
+      velocity: velocityY,                      // 继承松手速度，无匀速刹车感
       useNativeDriver: true,
-    }).start(() => onCloseRef.current());
+      ...springs.sheet,
+    }).start(({ finished }) => {
+      if (finished) { tapLight(); onCloseRef.current(); }
+    });
+  };
+
+  const snapBack = (velocityY = 0) => {
+    Animated.spring(panY, {
+      toValue: 0,
+      velocity: velocityY,
+      useNativeDriver: true,
+      ...springs.sheet,
+    }).start();
   };
 
   const panResponder = useRef(
@@ -228,27 +252,35 @@ export default function PlayerOverlay({ onClose }: Props) {
       onMoveShouldSetPanResponder: (_, gs) => {
         return (Math.abs(gs.dx) > 30 && Math.abs(gs.dy) < 20) || Math.abs(gs.dy) > 30;
       },
+      onPanResponderGrant: () => {
+        // 可中断：抓住当前呈现值接管进行中的动画（关闭/入场途中均可抓）
+        panY.stopAnimation((v) => { dragStartValue.current = v; });
+        gestureBaseDy.current = null;
+      },
       onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) panY.setValue(gs.dy);
+        if (gestureBaseDy.current === null) gestureBaseDy.current = gs.dy;
+        const raw = dragStartValue.current + (gs.dy - gestureBaseDy.current);
+        // 下滑 1:1 跟手；上滑越界给橡皮筋渐进阻力（非硬钳制）
+        const next = raw > 0 ? raw : rubberband(raw, Dimensions.get('window').height);
+        lastY.current = next;
+        panY.setValue(next);
       },
       onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80) {
-          Animated.timing(panY, {
-            toValue: Dimensions.get('window').height,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => onCloseRef.current());
+        const vy = gs.vy * 1000; // PanResponder 单位 px/ms → px/s
+        // 动量投影判定落点：投影越过屏高 35% 即关
+        const projected = lastY.current + projectMomentum(vy);
+        if (projected >= Dimensions.get('window').height * DISMISS_PROJECT_RATIO) {
+          dismiss(vy);
         } else {
-          Animated.spring(panY, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-          if (Math.abs(gs.dy) < 20) {
+          snapBack(vy);
+          // 水平轻扫切歌词/封面（仅近乎无垂直速度时，避免与回弹打架）
+          if (Math.abs(vy) < 150 && lastY.current < 20) {
             if (gs.dx < -50) setShowLyrics(true);
             else if (gs.dx > 50) setShowLyrics(false);
           }
         }
       },
+      onPanResponderTerminate: () => snapBack(), // 手势被系统抢走（来电等）→ 回弹兜底不丢面板
     })
   ).current;
 
@@ -261,7 +293,7 @@ export default function PlayerOverlay({ onClose }: Props) {
       <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }], paddingBottom: insets.bottom + spacing[6] }]}>
         {/* 自定义顶部栏 */}
         <View style={styles.customHeader}>
-          <TouchableOpacity onPress={dismissWithAnimation}>
+          <TouchableOpacity onPress={() => dismiss()}>
             <ChevronDown size={28} color={colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowLyrics(v => !v)}>
@@ -394,7 +426,7 @@ export default function PlayerOverlay({ onClose }: Props) {
               <TouchableOpacity onPress={handlePrev}>
                 <SkipBack size={32} color={colors.textSecondary} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={togglePlay} style={styles.playBtn}>
+              <TouchableOpacity onPress={() => { tapLight(); togglePlay(); }} style={styles.playBtn}>
                 {isPlaying ? (
                   <CirclePause size={64} color={colors.accent} />
                 ) : (
