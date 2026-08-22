@@ -32,6 +32,15 @@ const TARGETS = [
     read: (data) => ({ version: data.version }),
     write: (data, v) => { data.version = v; },
   },
+  // Root package-lock.json（顶层 + packages[""] 双处 version，与 package.json 保持同步）
+  {
+    file: 'package-lock.json',
+    read: (data) => ({ version: data.version }),
+    write: (data, v) => {
+      data.version = v;
+      if (data.packages && data.packages['']) data.packages[''].version = v;
+    },
+  },
   // Mobile app.json (expo.version + android.versionCode for Expo)
   {
     file: 'packages/mobile/app.json',
