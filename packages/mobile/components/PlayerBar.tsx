@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View, Text, Image, TouchableOpacity, StyleSheet,
@@ -8,11 +8,15 @@ import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, X, Pl
 import { invalidateCoverUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
-import { colors, spacing, radius, textVariants } from '../theme/tokens';
+import {radius, spacing, textVariants} from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 import { useResolvedCover } from '../hooks/useResolvedCover';
 
 export default function PlayerBar() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const currentSong = usePlayerStore(s => s.currentSong);
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const queue = usePlayerStore(s => s.queue);
@@ -78,7 +82,7 @@ export default function PlayerBar() {
           {currentSong ? currentSong.name : '未在播放'}
         </Text>
         <Text style={[styles.artist, !currentSong && styles.textEmpty]} numberOfLines={1}>
-          {currentSong ? currentSong.artist : '选择一个歌曲开始播放'}
+          {currentSong ? currentSong.artist : '选择一首歌曲开始播放'}
         </Text>
       </View>
 
@@ -177,7 +181,7 @@ export default function PlayerBar() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',

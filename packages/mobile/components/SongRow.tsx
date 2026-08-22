@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import {
   View, Text, Image, TouchableOpacity, StyleSheet,
   Modal, Alert,
@@ -7,7 +7,9 @@ import { Music, Heart, EllipsisVertical, ListMusic, Download, ArrowLeftRight, Us
 import type { LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, sourceColors, spacing, textVariants } from '../theme/tokens';
+import {radius, sourceColors, spacing, textVariants} from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 import { type Song, SourceKey, invalidateCoverUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
@@ -49,6 +51,8 @@ export default function SongRow({
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
   const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   // 按 (sourceType:id) 订阅探测标签:每批探测完成只重渲染对应的行,标签渐进式出现
   const audioTag = useAudioTagStore((s) => s.tags[tagKey(song)]);
 
@@ -324,7 +328,7 @@ export default function SongRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',

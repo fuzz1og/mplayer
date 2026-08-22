@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Modal,
 } from 'react-native';
@@ -6,7 +6,9 @@ import { ArrowLeft, Search, Settings, ChevronDown, Check, LayoutGrid, Music2 } f
 import type { LucideIcon } from 'lucide-react-native';
 import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, sourceColors, textVariants } from '../theme/tokens';
+import {radius, sourceColors, textVariants} from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 import { useSourceStore, SOURCE_OPTION_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
@@ -24,6 +26,8 @@ const SOURCE_OPTIONS: { key: SourceOption; icon: LucideIcon }[] = [
 export default function TopBar() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const isSearchTab = pathname === '/search';
   const [searchText, setSearchText] = useState('');
   const [showSourcePicker, setShowSourcePicker] = useState(false);
@@ -134,7 +138,7 @@ export default function TopBar() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',

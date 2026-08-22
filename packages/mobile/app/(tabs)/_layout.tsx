@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Tabs, usePathname } from 'expo-router';
 import { Compass, Flame, ListMusic, Download } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { colors, statusBarStyle } from '../../theme/tokens';
+import type { ThemeColors } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
 
@@ -18,6 +19,9 @@ const TAB_LABEL_HEIGHT = 15; // 标签字号 11（micro 同级；带 lineHeight 
 const TAB_PAD_BOTTOM = 24;
 
 function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const tabBarStyles = useMemo(() => makeTabBarStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const isSearch = pathname === '/search';
@@ -90,9 +94,11 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
 }
 
 export default function TabLayout() {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.container}>
-      <StatusBar style={statusBarStyle} />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <TopBar />
       <Tabs
         initialRouteName="recommend"
@@ -137,13 +143,13 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   // 与 PlayerBar 背景一致,保证安全区 padding 区域颜色连续
   playerWrap: { backgroundColor: colors.bgSurface },
 });
 
-const tabBarStyles = StyleSheet.create({
+const makeTabBarStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     backgroundColor: colors.bgSurface,

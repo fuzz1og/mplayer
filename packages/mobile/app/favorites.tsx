@@ -10,9 +10,13 @@ import { useFavoriteStore } from '../stores/favoriteStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
 import type { Song } from '@mplayer/core';
-import { colors, statusBarStyle } from '../theme/tokens';
+import { useMemo } from 'react';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 
 export default function FavoritesPage() {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { favorites } = useFavoriteStore();
   const replaceSong = useFavoriteStore((s) => s.replaceSong);
 
@@ -32,7 +36,7 @@ export default function FavoritesPage() {
     <View style={styles.container}>
       {/* 原生 header 已含状态栏区域，SafeAreaView 再加 top 会叠出空白 */}
       <SafeAreaView edges={[]} style={{ flex: 1 }}>
-        <StatusBar style={statusBarStyle} />
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <Stack.Screen options={{
           title: '我的收藏',
           headerShown: true,
@@ -63,7 +67,7 @@ export default function FavoritesPage() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   list: {},
 });

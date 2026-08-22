@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, RefreshControl, StyleSheet, TouchableOpacity, Image, Dimensions,
 } from 'react-native';
@@ -9,7 +9,9 @@ import SongRow from '../../components/SongRow';
 import LoadingState from '../../components/LoadingState';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
-import { colors, radius, textVariants } from '../../theme/tokens';
+import {radius, textVariants} from '../../theme/tokens';
+import type { ThemeColors } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_GAP = 10;
@@ -19,6 +21,8 @@ const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
 const RECOMMEND_POOL_SIZE = 100;
 
 export default function RecommendPage() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,7 +171,7 @@ export default function RecommendPage() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   content: { paddingBottom: 32 },
   section: { paddingHorizontal: 12, marginTop: 16 },

@@ -7,7 +7,10 @@ import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
-import { colors, radius, shadow, spacing, textVariants } from '../theme/tokens';
+import {radius, shadow, spacing, textVariants} from '../theme/tokens';
+import { lightColors, darkColors } from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 import LoadingState from './LoadingState';
 import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
@@ -25,6 +28,9 @@ const TABS = [
 ];
 
 export default function DiscoverTabs() {
+  const { isDark } = useTheme();
+  // 多子组件共用一套样式：模块级预构建两套（见文件底部 STYLES），按主题取用
+  const styles = isDark ? STYLES.dark : STYLES.light;
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<FlatList<any>>(null);
 
@@ -82,6 +88,8 @@ export default function DiscoverTabs() {
 
 /* ===== 排行榜 Tab ===== */
 function HotlistContent() {
+  const { isDark } = useTheme();
+  const styles = isDark ? STYLES.dark : STYLES.light;
   const loading = useDiscoverStore(s => s.loading);
   const load = useDiscoverStore(s => s.load);
   const getSongs = useCallback((key: string) => {
@@ -116,6 +124,8 @@ function HotlistContent() {
 }
 
 function SectionCard({ title, songs, routeKey, sourceType }: { title: string; songs: HotlistItem[]; routeKey: string; sourceType: SourceKey }) {
+  const { colors, isDark } = useTheme();
+  const styles = isDark ? STYLES.dark : STYLES.light;
   const toSong = (item: HotlistItem): Song => ({
     id: item.id, name: item.name, artist: item.artists,
     album: item.album, cover: item.cover, url: '',
@@ -179,6 +189,8 @@ function CategoryPills({ items, activeLabel, onSelect }: {
   activeLabel: string;
   onSelect: (label: string, value: string) => void;
 }) {
+  const { isDark } = useTheme();
+  const styles = isDark ? STYLES.dark : STYLES.light;
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled style={styles.catBar} contentContainerStyle={styles.catBarContent}>
       {items.map((c) => (
@@ -195,6 +207,8 @@ function CategoryPills({ items, activeLabel, onSelect }: {
 }
 
 function AlbumsContent() {
+  const { colors, isDark } = useTheme();
+  const styles = isDark ? STYLES.dark : STYLES.light;
   const CARD_GAP = 10;
   const CARD_COLS = 2;
   const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
@@ -290,6 +304,8 @@ const PLAYLIST_CATEGORIES = ['全部', '流行', '摇滚', '民谣', '电子', '
   .map(c => ({ label: c, value: c }));
 
 function PlaylistContent() {
+  const { colors, isDark } = useTheme();
+  const styles = isDark ? STYLES.dark : STYLES.light;
   const CARD_GAP = 10;
   const CARD_COLS = 2;
   const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
@@ -428,6 +444,8 @@ const ARTIST_CATEGORIES = [
 ];
 
 function ArtistContent() {
+  const { colors, isDark } = useTheme();
+  const styles = isDark ? STYLES.dark : STYLES.light;
   const CARD_COLS = 3;
   const [artists, setArtists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -543,7 +561,8 @@ function ArtistContent() {
   );
 }
 
-const styles = StyleSheet.create({
+/** 样式工厂：7 个子组件共用一套样式，模块级预构建双主题两份（见各组件内按 isDark 取用） */
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   // Bubble tab header
   tabHeader: {
@@ -693,3 +712,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+const STYLES = {
+  light: makeStyles(lightColors),
+  dark: makeStyles(darkColors),
+};
