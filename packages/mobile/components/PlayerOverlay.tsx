@@ -197,7 +197,10 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (!song) return;
     downloadSong(song)
       .then(() => Alert.alert('提示', `《${song.name}》下载完成，可在本地歌曲页播放`))
-      .catch(() => Alert.alert('提示', `《${song.name}》下载失败，请重试`));
+      .catch((e) => {
+        console.error('[player]', `下载失败《${song.name}》:`, e);
+        Alert.alert('下载失败', `《${song.name}》: ${e instanceof Error ? e.message : String(e)}`);
+      });
   };
 
   const handlePrev = () => {
