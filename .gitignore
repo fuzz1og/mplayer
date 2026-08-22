@@ -2,6 +2,8 @@ node_modules
 dist
 dist-electron
 release
+!.agents/skills/release/
+!.agents/skills/release/*
 .DS_Store
 *.log
 .vscode

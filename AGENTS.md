@@ -18,6 +18,8 @@ npm run typecheck        # tsc --noEmit
 npm run core:build       # Build @mplayer/core shared package
 npm run test             # vitest (watch)
 npm run test:run         # vitest (single run)
+./scripts/verify.sh      # 提交/发布前全量验证（lint + 双端 typecheck + renderer 测试；fast 跳过测试）
+./scripts/release.sh     # 一键发布（验证 → version-bump → commit → push → tag → 触发 CI 构建）
 ```
 
 ### Mobile (Expo/React Native)
@@ -154,3 +156,5 @@ flat config（`eslint.config.js`），全局 ignores 与 `--no-warn-ignored` 语
 - Triage labels: `docs/agents/triage-labels.md`
 - Domain docs: `CONTEXT.md` + `docs/adr/`，见 `docs/agents/domain.md`
 - Release notes: `.agents/skills/release-notes`——publish job 创建 release 后，按规格（亮点/分类变更/下载清单）用 `gh release edit` 覆盖自动生成的平铺介绍
+- Release: `.agents/skills/release`——版本发布流程（`./scripts/release.sh` 一键发布 → 监控 CI → 更新介绍 → 验证产物）
+- New component: `.agents/skills/new-component`——按项目模式生成 renderer 组件/页面/hook 模板
