@@ -88,12 +88,14 @@ export default function PlayerBar() {
           <TouchableOpacity
             onPress={(e) => { e.stopPropagation(); prev(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 2 }}
           >
             <SkipBack size={24} color={colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={(e) => { e.stopPropagation(); togglePlay(); }}
             style={styles.btn}
+            hitSlop={{ top: 4, bottom: 4 }}
             disabled={preparing}
           >
             {preparing ? (
@@ -109,6 +111,7 @@ export default function PlayerBar() {
           <TouchableOpacity
             onPress={(e) => { e.stopPropagation(); next(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
+            hitSlop={{ top: 6, bottom: 6, left: 2, right: 6 }}
           >
             <SkipForward size={24} color={colors.textSecondary} />
           </TouchableOpacity>
@@ -118,6 +121,7 @@ export default function PlayerBar() {
               setShowQueue(true);
             }}
             style={styles.btn}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 12 }}
           >
             <ListMusic size={24} color={colors.textSecondary} />
           </TouchableOpacity>

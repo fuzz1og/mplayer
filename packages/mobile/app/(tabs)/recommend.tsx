@@ -100,11 +100,21 @@ export default function RecommendPage() {
               <View style={styles.headerActions}>
                 {songs.length > 0 && (
                   <>
-                    <TouchableOpacity style={styles.playAllBtn} onPress={handlePlayAll} activeOpacity={0.8}>
+                    <TouchableOpacity
+                      style={styles.playAllBtn}
+                      onPress={handlePlayAll}
+                      activeOpacity={0.8}
+                      hitSlop={{ top: 6, bottom: 6 }}
+                    >
                       <Play size={14} color={colors.textInverse} />
                       <Text style={styles.playAllText}>播放全部</Text>
                     </TouchableOpacity>
-                      <TouchableOpacity style={styles.shuffleBtn} onPress={handleShuffle} activeOpacity={0.8}>
+                      <TouchableOpacity
+                        style={styles.shuffleBtn}
+                        onPress={handleShuffle}
+                        activeOpacity={0.8}
+                        hitSlop={{ top: 6, bottom: 6 }}
+                      >
                         <RefreshCw size={14} color={colors.accent} />
                         <Text style={styles.shuffleText}>换一批</Text>
                       </TouchableOpacity>
@@ -183,9 +193,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: colors.accent,
-    borderRadius: radius.lg,
+    borderRadius: radius.full, // 药丸按钮统一全圆角（原 16 在小尺寸上近似随机圆角）
     paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingVertical: 8, // 加高至 ~32px + hitSlop 达到 44pt 触控标准
     marginBottom: 8,
   },
   playAllText: { color: colors.textInverse, fontSize: 12, fontWeight: '600' },
@@ -194,9 +204,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: colors.bgHover,
-    borderRadius: radius.lg,
+    borderRadius: radius.full,
     paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingVertical: 8,
     marginBottom: 8,
   },
   shuffleText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
