@@ -19,6 +19,28 @@ function probeRequestHeaders(url: string): Record<string, string> {
   return headers;
 }
 
+/**
+ * 探测/活性共用的带会话 Range GET：统一走共享 axios 客户端（apiClient）——
+ * 探测的 api.php 端点与会话保护请求（搜索/播放直链）共用同一会话，RN 端由
+ * OkHttp jar 携带 cookie、其他环境由拦截器显式带 Cookie 头；响应拦截器检测到
+ * 「非法请求」页时自动刷新会话重试一次（无 cookie 的探测会拿到错误页，结果失真
+ * ——原生 fetch 的 credentials:'include' 在 RN 实测不带 jar cookie）。
+ * 另带 CDN 防盗链头（Referer/UA，见 probeRequestHeaders），axios 自动跟随
+ * 302 → CDN 直链；__probe 跳过耗时日志与限流退避统计。
+ * 网络异常直接上抛——极性由调用方定义（探测：异常=valid 不标记；活性：异常=false 死链）。
+ */
+async function rangedGet(url: string, rangeEnd: number, timeoutMs: number) {
+  const client = getApiClient();
+  return client.get(url, {
+    headers: { Range: `bytes=0-${rangeEnd}`, ...probeRequestHeaders(url) },
+    responseType: 'arraybuffer',
+    timeout: timeoutMs,
+    maxRedirects: MAX_REDIRECTS,
+    validateStatus: () => true,
+    __probe: true, // 跳过耗时日志与限流退避统计
+  } as any);
+}
+
 // 会话级探测缓存:同一首歌(同 id/稳定 url)重复搜索不重复探测
 // 带 TTL:过期链接探测 valid 后不能永久有效;瞬时 4xx 也不能永久标 invalid
 const PROBE_CACHE_TTL = 30 * 60 * 1000;
@@ -56,22 +78,9 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
     const url = normalizeProbeUrl(rawUrl, options?.baseUrl);
     if (!url.startsWith('http')) return 'invalid';
 
-    // 统一走共享 axios 客户端（apiClient）：探测的 api.php 端点与会话保护
-    // 请求（搜索/播放直链）共用同一会话——RN 端由 OkHttp jar 携带 cookie、
-    // 其他环境由拦截器显式带 Cookie 头；响应拦截器检测到「非法请求」页时
-    // 自动刷新会话重试一次（无 cookie 的探测会拿到错误页，结果失真
-    // ——原生 fetch 的 credentials:'include' 在 RN 实测不带 jar cookie）。
-    // Range GET 只取 1KB（axios 自动跟随 302 → CDN 直链），完整大小从
-    // content-range 获取；4xx/5xx 与 text/html（反爬/非法请求页）标 invalid。
-    const client = getApiClient();
-    const resp = await client.get(url, {
-      headers: { Range: 'bytes=0-1023', ...probeRequestHeaders(url) },
-      responseType: 'arraybuffer',
-      timeout: PROBE_TIMEOUT,
-      maxRedirects: MAX_REDIRECTS,
-      validateStatus: () => true,
-      __probe: true, // 跳过耗时日志与限流退避统计
-    } as any);
+    // Range GET 只取 1KB，完整大小从 content-range 获取；4xx/5xx 与
+    // text/html（反爬/非法请求页）标 invalid。
+    const resp = await rangedGet(url, 1023, PROBE_TIMEOUT);
 
     const status = resp.status;
     const ct = String(resp.headers['content-type'] || '');
@@ -119,15 +128,7 @@ export async function isUrlAlive(rawUrl: string, timeoutMs = 1500): Promise<bool
   try {
     const url = normalizeProbeUrl(rawUrl);
     if (!url.startsWith('http')) return false;
-    const client = getApiClient();
-    const resp = await client.get(url, {
-      headers: { Range: 'bytes=0-0', ...probeRequestHeaders(url) },
-      responseType: 'arraybuffer',
-      timeout: timeoutMs,
-      maxRedirects: MAX_REDIRECTS,
-      validateStatus: () => true,
-      __probe: true,
-    } as any);
+    const resp = await rangedGet(url, 0, timeoutMs);
     const ct = String(resp.headers['content-type'] || '');
     return resp.status < 400 && !ct.includes('text/html');
   } catch {

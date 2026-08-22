@@ -9,13 +9,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { musicApi, findExactMatch } from '@mplayer/core';
+import { musicApi } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
 import LoadingState from '../components/LoadingState';
 import SongRow from '../components/SongRow';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { playSong } from '../services/audioPlayer';
 import { probeSongsPrefetch } from '../services/songProbe';
+import { searchStrictMatch } from '../services/songResources';
 import { usePlayerStore } from '../stores/playerStore';
 import { colors, spacing, statusBarStyle } from '../theme/tokens';
 
@@ -133,8 +134,7 @@ export default function HotlistPage() {
                   let s: Song = song;
                   if (!song.url) {
                     try {
-                      const results = await musicApi.searchSongsRouted(`${song.name} ${song.artist}`.trim(), 1, song.sourceType);
-                      const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
+                      const hit = await searchStrictMatch(song);
                       if (hit) s = { ...song, url: hit.url || '', lrc: hit.lrc || '' };
                     } catch {}
                   }
