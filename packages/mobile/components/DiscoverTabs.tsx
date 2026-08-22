@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { musicApi, findExactMatch, formatPlayCount } from '@mplayer/core';
+import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
 import { colors, radius, shadow, spacing } from '../theme/tokens';
 import LoadingState from './LoadingState';
@@ -13,6 +13,7 @@ import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong as playAudio } from '../services/audioPlayer';
+import { searchStrictMatch } from '../services/songResources';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -126,8 +127,7 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
     try {
       // 热榜数据不含 url/lrc：路由搜索（直连 + tier3 兜底）+ 严格匹配，
       // 命中后只回填 url/lrc 再播原 item——不播搜索结果本体（防同名 cover 错播）
-      const results = await musicApi.searchSongsRouted(`${item.name} ${item.artists}`.trim(), 1, sourceType);
-      const hit = findExactMatch({ name: item.name, artist: item.artists }, results) as Song | undefined;
+      const hit = await searchStrictMatch(toSong(item));
       s = hit ? { ...toSong(item), url: hit.url || '', lrc: hit.lrc || '' } : toSong(item);
     } catch {
       s = toSong(item);
