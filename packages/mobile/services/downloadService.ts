@@ -93,7 +93,8 @@ function isRedirectEndpoint(url: string): boolean {
 
 function sanitizeFileName(name: string): string {
   return (name || 'unknown')
-    .replace(/[\\/:*?"<>|]/g, '_')
+    // Windows 保留字符 + URI 非法字符（file:// 路径中 [] {} ^ ` % # 等会抛 URISyntaxException）
+    .replace(/[\\/:*?"<>|[\]{}^`%#]/g, '_')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 80);
@@ -110,13 +111,16 @@ async function removeFileIfExists(file: File): Promise<void> {
  * 下载文件全名：来源前缀 + 歌曲 ID 哈希，避免跨源同名/同歌手同名歌曲互相覆盖
  * （纯名字文件名会被后下载的覆盖，下载列表记录也会被顶掉）。默认为 .mp3，
  * 实际容器（FLAC/M4A 等）在下载后按字节头嗅探并重命名（见 correctContainerName）。
+ *
+ * 分隔符用 `()` 而非 `[]`：expo-file-system 新 File API 构建 file:// URI 时只编码空格，
+ * 方括号是 URI 非法字符会直接抛 URISyntaxException（下载/播放必失败）。
  */
 function buildFileName(song: Song): string {
   const src = song.sourceType && song.sourceType !== 'local' ? song.sourceType : 'netease';
   const name = sanitizeFileName(song.name);
   const artist = sanitizeFileName(song.artist);
   const digest = song.id ? md5(song.id).slice(0, 6) : '';
-  const full = `[${src}] ${name} - ${artist}${digest ? ` [${digest}]` : ''}.mp3`;
+  const full = `(${src}) ${name} - ${artist}${digest ? ` (${digest})` : ''}.mp3`;
   // 超长组合（长歌手名）整体截断，防文件名超限
   return full.length > 120 ? full.slice(0, 117) + '.mp3' : full;
 }
