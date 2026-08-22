@@ -139,6 +139,15 @@
   --warning: var(--amber-500);
   --warning-subtle: #FFFBEB;
   --success: var(--emerald-500);
+  --success-subtle: rgba(16, 185, 129, 0.12);
+  --info: #6C5CE7;
+  --info-subtle: rgba(108, 92, 231, 0.14);
+
+  /* 数据可视化色（缓存构成等分类色）— 深浅色各有对应 */
+  --chart-1: #2F5FD0;
+  --chart-2: #00B894;
+  --chart-3: #FDCB6E;
+  --chart-4: #E17055;
 
   /* 输入框 */
   --input-bg: var(--gray-50);
@@ -151,12 +160,140 @@
   --skeleton-base: var(--gray-100);
   --skeleton-shine: var(--gray-200);
 
+  /* 封面占位（唱机/黑胶装饰色）— 双主题固定，类似移动端 turntable「硬件黑」 */
+  --cover-placeholder: #0D1117;
+  --cover-placeholder-glow: #2A3342;
+
   /* ── 布局尺寸 ── */
   --sidebar-width: 220px;
   --sidebar-collapsed-width: 64px;
   --topbar-height: 56px;
   --player-height: 72px;
   --content-max-width: 1400px;
+}
+
+/* ════════════════════════════════════════════════════════════
+   深色语义 token — 值镜像移动端 darkColors（双端对齐，见
+   packages/mobile/theme/README.md 映射表）
+   三态：跟随系统 = prefers-color-scheme；
+        手动覆盖 = html[data-theme='light'|'dark']
+   ════════════════════════════════════════════════════════════ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    /* 背景层级 */
+    --bg-base: #121214;
+    --bg-surface: #1C1C1E;
+    --bg-elevated: #2C2C2E;
+    --bg-sidebar: #1C1C1E;
+    --bg-player: rgba(28, 28, 30, 0.85);
+    --bg-hover: #2A2A2C;
+    --bg-active: #38383A;
+    --bg-overlay: rgba(0, 0, 0, 0.6);
+
+    /* 文字层级 */
+    --text-primary: #FAFAFA;
+    --text-secondary: #AEAEB2;
+    --text-tertiary: #8E8E93;
+    --text-disabled: #48484A;
+    --text-inverse: #1C1C1E;
+    --text-link: #6FA3EF;
+
+    /* 边框 */
+    --border-default: #38383A;
+    --border-subtle: #2A2A2C;
+    --border-strong: #48484A;
+
+    /* 交互色 */
+    --accent: #3D7BD9;
+    --accent-hover: #6FA3EF;
+    --accent-active: #2F5FD0;
+    --accent-subtle: rgba(61, 123, 217, 0.18);
+    --accent-text: #6FA3EF;
+
+    --danger: #F87171;
+    --danger-hover: #EF4444;
+    --danger-subtle: rgba(248, 113, 113, 0.14);
+    --danger-text: #F87171;
+
+    --warning: #FBBF24;
+    --warning-subtle: rgba(251, 191, 36, 0.12);
+    --success: #34D399;
+    --success-subtle: rgba(52, 211, 153, 0.14);
+    --info: #8F7EF0;
+    --info-subtle: rgba(143, 126, 240, 0.14);
+
+    /* 数据可视化色（暗底提亮） */
+    --chart-1: #6FA3EF;
+    --chart-2: #2FD3AF;
+    --chart-3: #FFD97E;
+    --chart-4: #F0906B;
+
+    /* 输入框 */
+    --input-bg: #2A2A2C;
+    --input-bg-focus: #2C2C2E;
+    --input-border: #38383A;
+    --input-border-focus: #3D7BD9;
+    --input-placeholder: #636366;
+
+    /* 骨架屏 */
+    --skeleton-base: #2A2A2C;
+    --skeleton-shine: #38383A;
+  }
+}
+
+/* 手动指定深色（data-theme="dark"）覆盖系统偏好 */
+:root[data-theme='dark'] {
+  --bg-base: #121214;
+  --bg-surface: #1C1C1E;
+  --bg-elevated: #2C2C2E;
+  --bg-sidebar: #1C1C1E;
+  --bg-player: rgba(28, 28, 30, 0.85);
+  --bg-hover: #2A2A2C;
+  --bg-active: #38383A;
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+
+  --text-primary: #FAFAFA;
+  --text-secondary: #AEAEB2;
+  --text-tertiary: #8E8E93;
+  --text-disabled: #48484A;
+  --text-inverse: #1C1C1E;
+  --text-link: #6FA3EF;
+
+  --border-default: #38383A;
+  --border-subtle: #2A2A2C;
+  --border-strong: #48484A;
+
+  --accent: #3D7BD9;
+  --accent-hover: #6FA3EF;
+  --accent-active: #2F5FD0;
+  --accent-subtle: rgba(61, 123, 217, 0.18);
+  --accent-text: #6FA3EF;
+
+  --danger: #F87171;
+  --danger-hover: #EF4444;
+  --danger-subtle: rgba(248, 113, 113, 0.14);
+  --danger-text: #F87171;
+
+  --warning: #FBBF24;
+  --warning-subtle: rgba(251, 191, 36, 0.12);
+  --success: #34D399;
+  --success-subtle: rgba(52, 211, 153, 0.14);
+  --info: #8F7EF0;
+  --info-subtle: rgba(143, 126, 240, 0.14);
+
+  --chart-1: #6FA3EF;
+  --chart-2: #2FD3AF;
+  --chart-3: #FFD97E;
+  --chart-4: #F0906B;
+
+  --input-bg: #2A2A2C;
+  --input-bg-focus: #2C2C2E;
+  --input-border: #38383A;
+  --input-border-focus: #3D7BD9;
+  --input-placeholder: #636366;
+
+  --skeleton-base: #2A2A2C;
+  --skeleton-shine: #38383A;
 }
 
 /* ── 重置 ── */
@@ -524,19 +661,4 @@ button:focus-visible,
   }
 }
 
-/* ── 向后兼容别名 ── */
-:root {
-  --accent-color: var(--accent);
-  --border-color: var(--border-default);
-  --hover-bg: var(--bg-hover);
-  --content-bg: var(--bg-surface);
-  --divider-color: var(--border-subtle);
-  --bg-color: var(--bg-base);
-  --danger-color: var(--danger);
-  --primary-color: #2D3436;
-  --danger-bg: var(--danger-subtle);
-  --active-bg: var(--bg-active);
-  --primary-hover: #1A1E1F;
-  --player-bar-bg: var(--bg-player);
-  --text-light: var(--gray-300);
-}
+

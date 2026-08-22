@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Database, Folder, Shield, Download, Music, Zap, Fingerprint, FlaskConical } from 'lucide-react';
+import { Settings, Database, Folder, Shield, Download, Music, Zap, Fingerprint, FlaskConical, Palette } from 'lucide-react';
 import CacheSection from '@/renderer/components/CacheSection';
 import DownloadSection from '@/renderer/components/DownloadSection';
 import ProxySection from '@/renderer/components/ProxySection';
@@ -8,8 +8,10 @@ import AboutSection from '@/renderer/components/AboutSection';
 import SourceSection from '@/renderer/components/SourceSection';
 import TlsFingerprintSection from '@/renderer/components/TlsFingerprintSection';
 import Tier3Section from '@/renderer/components/Tier3Section';
+import AppearanceSection from '@/renderer/components/AppearanceSection';
 
 const NAV_ITEMS = [
+  { id: 'appearance', label: '外观', icon: <Palette size={15} /> },
   { id: 'cache', label: '缓存管理', icon: <Database size={15} /> },
   { id: 'download', label: '下载设置', icon: <Folder size={15} /> },
   { id: 'source', label: '直连状态', icon: <Zap size={15} /> },
@@ -33,7 +35,7 @@ const SettingsPage: React.FC = () => {
       <aside
         style={{
           width: '220px',
-          borderRight: '1px solid var(--divider-color)',
+          borderRight: '1px solid var(--border-subtle)',
           backgroundColor: 'var(--bg-surface)',
           flexShrink: 0,
           display: 'flex',
@@ -55,7 +57,7 @@ const SettingsPage: React.FC = () => {
                 gap: '10px',
                 padding: '9px 12px',
                 border: 'none',
-                background: active === item.id ? 'var(--hover-bg)' : 'transparent',
+                background: active === item.id ? 'var(--bg-hover)' : 'transparent',
                 color: active === item.id ? 'var(--text-primary)' : 'var(--text-secondary)',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -73,6 +75,7 @@ const SettingsPage: React.FC = () => {
       </aside>
 
       <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
+        <AppearanceSection />
         <CacheSection />
         <DownloadSection />
         <SourceSection />

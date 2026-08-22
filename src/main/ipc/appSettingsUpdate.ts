@@ -94,6 +94,18 @@ export function registerSettingsIpc(): void {
     applyElectronProxy(proxyConfig);
   });
 
+  // 外观：主题模式（跟随系统/浅色/深色），默认跟随系统
+  const THEME_MODE_SET: ReadonlySet<string> = new Set(['system', 'light', 'dark']);
+  registerIpcHandlerSimple('settings:getThemeMode', async () => {
+    const saved = await db.getSetting<string>('themeMode');
+    return THEME_MODE_SET.has(saved || '') ? saved : 'system';
+  });
+  registerIpcHandler('settings:setThemeMode', async (mode: string) => {
+    const clean = THEME_MODE_SET.has(mode) ? mode : 'system';
+    await db.setSetting('themeMode', clean);
+    return clean;
+  });
+
   // T10 spec #156：TLS 指纹伪装险情开关（仅桌面，weapi 试点）。默认关。
   // 持久化仿 T01 sourceRouter：core 零 I/O，宿主注册 persister 落盘 db。
   setTlsFingerprintPersister((value) => {
