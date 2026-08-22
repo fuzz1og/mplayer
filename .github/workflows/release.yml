@@ -81,6 +81,7 @@ jobs:
           - os: ubuntu-latest
             args: --linux
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
@@ -113,7 +114,7 @@ jobs:
         if: github.event_name != 'push' && inputs.version == ''
         run: npx electron-builder ${{ matrix.args }}
 
-  # ── Mobile Android APK ──
+  # ── Mobile Android APK + AAB ──
   build-mobile:
     needs: [create-tag]
     if: |
@@ -121,6 +122,7 @@ jobs:
       && (github.event_name == 'push'
           || (github.event_name == 'workflow_dispatch' && inputs.platform != 'desktop-only'))
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -137,52 +139,78 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # Gradle 依赖缓存（对齐 ci.yml mobile-android）：首次构建下载依赖后缓存，
-      # 之后发布构建直接命中，显著缩短 build-mobile 耗时。
-      # key 只用 package-lock.json——gradle 依赖与版本号（app.json/package.json 的 version）
-      # 无关，避免每次 bump 版本导致缓存失效（v1.7.0→v1.7.1 实测白跑 15 分钟 gradle）
-      - name: Cache Gradle
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
       - run: npm ci --ignore-scripts
       - run: npm run core:build
 
-      - name: Prebuild Android native project
-        working-directory: packages/mobile
-        run: npx expo prebuild --platform android --clean
-        env:
-          EXPO_DEBUG: 1
+      # Metro bundle 缓存（JS bundle 打包中间产物，跨 run 复用）
+      - name: Cache Metro
+        uses: actions/cache@v6
+        with:
+          path: |
+            node_modules/.cache/metro
+            ~/.expo
+          key: ${{ runner.os }}-metro-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-metro-
 
-      - name: Build APK (release)
+      # Gradle 官方 setup（P1）：自动缓存依赖(modules-2)/Build Cache(build-cache-1)/
+      # transforms-3(AAR 解包)/wrapper，配 gradle.properties 的 org.gradle.caching=true
+      # 二次构建命中绝大多数编译产物。注意：不要与 actions/cache / setup-java cache:gradle 混用。
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: wrapper
+          cache: gradle
+          cache-read-only: false
+
+      # 解码 release keystore（P0，由 GitHub Secrets 提供 base64；密码不进库）
+      - name: Decode release keystore
+        working-directory: packages/mobile
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+          ls -la android/app/release.keystore
+
+      # android 原生目录已提交进 git（P1-3 CNG 反向），不再 prebuild —— 直接增量构建。
+      # versionCode/versionName 由 build.gradle 从 app.json 显式读取（P3-9）。
+      - name: Build APK + AAB (release)
         working-directory: packages/mobile/android
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
         env:
           GRADLE_OPTS: "-Xmx4096m"
+          ANDROID_KEYSTORE_FILE: release.keystore
+          ANDROID_KEYSTORE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_STORE_PASSWORD }}
+          ANDROID_KEYSTORE_KEY_ALIAS: ${{ secrets.ANDROID_KEYSTORE_KEY_ALIAS }}
+          ANDROID_KEYSTORE_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_KEY_PASSWORD }}
 
-      # gradle 默认产物名是 app-release.apk；这里按「应用名 + 版本号」重命名，
-      # 例如 MPlayer-v1.7.0.apk（与 electron-builder 桌面产物命名风格一致）
-      - name: Rename APK with app name + version
-        working-directory: packages/mobile/android/app/build/outputs/apk/release
+      # gradle 默认产物名是 app-release.apk / app-release.aab；按「应用名 + 版本号」重命名，
+      # 例如 MPlayer-v1.7.0.apk / MPlayer-v1.7.0.aab（与 electron-builder 桌面产物命名风格一致）
+      - name: Rename artifacts with app name + version
+        working-directory: packages/mobile/android/app/build/outputs
         run: |
           VERSION=$(node -p "require('/home/runner/work/mplayer/mplayer/package.json').version")
-          for apk in *.apk; do
+          for apk in apk/release/*.apk; do
             [ -f "$apk" ] || continue
-            mv "$apk" "MPlayer-v${VERSION}.apk"
+            mv "$apk" "apk/release/MPlayer-v${VERSION}.apk"
           done
-          ls -la
+          for aab in bundle/release/*.aab; do
+            [ -f "$aab" ] || continue
+            mv "$aab" "bundle/release/MPlayer-v${VERSION}.aab"
+          done
+          ls -la apk/release bundle/release
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
           name: mplayer-mobile-apk
           path: packages/mobile/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mplayer-mobile-aab
+          path: packages/mobile/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
 
   # ── Publish release ──
   publish:
@@ -213,6 +241,11 @@ jobs:
         with:
           name: mplayer-mobile-apk
 
+      - name: Download AAB artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: mplayer-mobile-aab
+
       - name: Create or edit release
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
@@ -241,9 +274,9 @@ jobs:
             gh release create "$TAG" --notes-file release-notes.md --draft=false
           fi
 
-          # Upload APK to release assets
-          for apk in *.apk; do
-            [ -f "$apk" ] && gh release upload "$TAG" "$apk" --clobber
+          # Upload APK + AAB to release assets（AAB 供上架 Google Play 使用，P3-8）
+          for f in *.apk *.aab; do
+            [ -f "$f" ] && gh release upload "$TAG" "$f" --clobber
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

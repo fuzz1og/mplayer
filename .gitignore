@@ -37,9 +37,20 @@ coverage/
 e2e/screenshots/
 test-results/
 
-# Expo prebuild产物（每次CI自动生成）
-packages/mobile/android/
+# iOS 原生目录（CNG 模式，不提交）
 packages/mobile/ios/
+
+# Android 原生目录已提交进 git（加速 CI 增量构建，P1-3 路线）——
+# 仅忽略构建中间产物与本地配置
+packages/mobile/android/app/build/
+packages/mobile/android/app/.cxx/
+packages/mobile/android/app/release.keystore
+packages/mobile/android/build/
+packages/mobile/android/.gradle/
+packages/mobile/android/.cxx/
+packages/mobile/android/local.properties
+packages/mobile/android/.idea/
+*.keystore.backup
 
 # graphify skill 输出（知识图谱缓存）
 graphify-out/
