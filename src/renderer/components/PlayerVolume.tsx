@@ -28,7 +28,7 @@ const PlayerVolume: React.FC<PlayerVolumeProps> = React.memo(({
         onChange={(e) => onVolumeChange(Number(e.target.value))}
         style={{
           width: '80px', height: '4px', WebkitAppearance: 'none', appearance: 'none',
-          background: `linear-gradient(to right, var(--text-secondary) ${volume}%, var(--border-color) ${volume}%)`,
+          background: `linear-gradient(to right, var(--text-secondary) ${volume}%, var(--border-default) ${volume}%)`,
           borderRadius: '2px', outline: 'none', cursor: 'pointer',
         }}
       />

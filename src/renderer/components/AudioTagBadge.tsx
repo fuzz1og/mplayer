@@ -6,8 +6,8 @@ interface AudioTagBadgeProps {
 
 const AudioTagBadge: React.FC<AudioTagBadgeProps> = ({ tag }) => {
   const config = tag === 'preview'
-    ? { label: '试听', color: '#e67e22' }
-    : { label: '不可播', color: '#e74c3c' };
+    ? { label: '试听', color: 'var(--warning)' }
+    : { label: '不可播', color: 'var(--danger)' };
 
   return (
     <span
@@ -16,7 +16,7 @@ const AudioTagBadge: React.FC<AudioTagBadgeProps> = ({ tag }) => {
         fontWeight: 'var(--weight-medium)',
         padding: '1px 6px',
         borderRadius: 'var(--radius-xs)',
-        backgroundColor: `${config.color}14`,
+        backgroundColor: `color-mix(in srgb, ${config.color} 12%, transparent)`,
         color: config.color,
         flexShrink: 0,
         lineHeight: '1.4',

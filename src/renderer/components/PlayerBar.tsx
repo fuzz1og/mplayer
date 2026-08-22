@@ -124,9 +124,9 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           >
             {isPlaying && currentSong && (
               <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '2px', height: '12px', flexShrink: 0 }}>
-                <span style={{ width: '2px', height: '6px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite' }} />
-                <span style={{ width: '2px', height: '10px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
-                <span style={{ width: '2px', height: '7px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+                <span style={{ width: '2px', height: '6px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite' }} />
+                <span style={{ width: '2px', height: '10px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
+                <span style={{ width: '2px', height: '7px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
               </span>
             )}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

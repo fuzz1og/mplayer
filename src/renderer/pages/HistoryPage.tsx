@@ -98,13 +98,13 @@ const HistoryPage: React.FC = () => {
       <div
         style={{
           padding: '24px 24px 16px',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)',
+          borderBottom: '1px solid var(--border-subtle)',
+          backgroundColor: 'var(--bg-surface)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <History size={24} color="var(--accent-color)" />
+            <History size={24} color="var(--accent)" />
             <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
               播放历史
             </h1>
@@ -122,7 +122,7 @@ const HistoryPage: React.FC = () => {
               padding: '8px 16px',
               backgroundColor: 'transparent',
               color: history.length > 0 ? 'var(--text-secondary)' : 'var(--text-tertiary)',
-              border: '1px solid var(--border-color)',
+              border: '1px solid var(--border-default)',
               borderRadius: '20px',
               cursor: history.length > 0 ? 'pointer' : 'not-allowed',
               fontSize: 'var(--text-base)',

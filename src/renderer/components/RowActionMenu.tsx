@@ -39,8 +39,8 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ triggerRef, items, onClos
           position: 'fixed',
           top: `${pos.top}px`,
           right: `${pos.right}px`,
-          backgroundColor: 'var(--bg-color)',
-          border: '1px solid var(--divider-color)',
+          backgroundColor: 'var(--bg-base)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '8px',
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
           zIndex: 10000,
@@ -61,7 +61,7 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ triggerRef, items, onClos
               display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
               padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer',
               borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)',
-              color: item.danger ? 'var(--danger-color)' : 'var(--text-primary)',
+              color: item.danger ? 'var(--danger)' : 'var(--text-primary)',
             }}
           >
             {item.icon} {item.label}

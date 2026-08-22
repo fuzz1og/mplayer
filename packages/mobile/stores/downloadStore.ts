@@ -23,6 +23,8 @@ interface DownloadState {
   addItem: (item: DownloadItem) => void;
   updateStatus: (key: string, patch: Partial<Pick<DownloadItem, 'status' | 'error' | 'publicUri' | 'fileName' | 'progress'>>) => void;
   removeItem: (key: string) => void;
+  /** 清除失败条目：下载失败已自动移除，此处清理历史残留的 error 条目（本地歌曲页挂载时调用） */
+  purgeFailed: () => void;
 }
 
 export const useDownloadStore = create<DownloadState>()(
@@ -40,6 +42,8 @@ export const useDownloadStore = create<DownloadState>()(
         })),
       removeItem: (key) =>
         set((s) => ({ items: s.items.filter((i) => i.key !== key) })),
+      purgeFailed: () =>
+        set((s) => ({ items: s.items.filter((i) => i.status !== 'error') })),
     }),
     {
       name: 'mplayer-downloads',

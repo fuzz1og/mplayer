@@ -70,8 +70,8 @@ const FavoritesPage: React.FC = () => {
       <div
         style={{
           padding: '24px 24px 16px',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)',
+          borderBottom: '1px solid var(--border-subtle)',
+          backgroundColor: 'var(--bg-surface)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -92,7 +92,7 @@ const FavoritesPage: React.FC = () => {
               alignItems: 'center',
               gap: '8px',
               padding: '8px 16px',
-              backgroundColor: 'var(--accent-color)',
+              backgroundColor: 'var(--accent)',
               color: 'white',
               border: 'none',
               borderRadius: '20px',

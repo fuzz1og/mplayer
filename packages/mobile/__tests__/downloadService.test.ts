@@ -100,6 +100,8 @@ vi.mock('@mplayer/core', async () => {
   const actual = await vi.importActual<typeof import('@mplayer/core')>('@mplayer/core');
   return {
     ...actual,
+    makeSongFileName: actual.makeSongFileName,
+    md5: actual.md5,
     musicApi: {
       ...actual.musicApi,
       getAudioUrl: vi.fn(async (u: string) => u),
@@ -107,6 +109,16 @@ vi.mock('@mplayer/core', async () => {
     },
   };
 });
+
+// downloadService 复用播放的 URL 解析链（resolvePlayableUrlMobile）；audioPlayer 依赖
+// expo-audio（RN 原生链，vitest node 环境 __DEV__ 未定义），mock 掉避免拉入
+vi.mock('../services/audioPlayer', () => ({
+  resolvePlayableUrlMobile: vi.fn(async (song: any) => ({
+    url: song?.url || '',
+    lrc: song?.lrc || '',
+    nonFull: false,
+  })),
+}));
 
 function makeSong(overrides: Record<string, unknown> = {}) {
   return {

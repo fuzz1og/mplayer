@@ -149,8 +149,8 @@ describe('getStatusText', () => {
 describe('getStatusColor', () => {
   it('应该返回正确的状态颜色', () => {
     expect(getStatusColor('pending')).toBe('var(--text-tertiary)');
-    expect(getStatusColor('downloading')).toBe('var(--primary-color)');
-    expect(getStatusColor('completed')).toBe('#52c41a');
-    expect(getStatusColor('error')).toBe('#ff4d4f');
+    expect(getStatusColor('downloading')).toBe('var(--accent)');
+    expect(getStatusColor('completed')).toBe('var(--success)');
+    expect(getStatusColor('error')).toBe('var(--danger)');
   });
 });

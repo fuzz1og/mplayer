@@ -26,7 +26,7 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
     return (
       <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
         <div>{error}</div>
-        <button onClick={onRetry} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+        <button onClick={onRetry} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>
           重试
         </button>
       </div>
@@ -43,9 +43,9 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
             onClick={() => onAreaChange(a.value)}
             style={{
               padding: '6px 16px',
-              border: '1px solid var(--border-color)',
+              border: '1px solid var(--border-default)',
               borderRadius: '20px',
-              background: area === a.value ? 'var(--accent-color)' : 'transparent',
+              background: area === a.value ? 'var(--accent)' : 'transparent',
               color: area === a.value ? '#fff' : 'var(--text-secondary)',
               cursor: 'pointer',
               fontSize: 'var(--text-sm)',
@@ -78,11 +78,11 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
           <div style={{ display: 'flex', gap: 'var(--space-5)', flexFlow: 'row wrap' }}>
             {albums.map((album) => (
               <div key={album.id} style={{ flexShrink: 0, width: '120px', cursor: 'pointer' }} onClick={() => onAlbumClick?.(album)}>
-                <div style={{ width: '120px', height: '120px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', marginBottom: '8px' }}>
+                <div style={{ width: '120px', height: '120px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', marginBottom: '8px' }}>
                   {album.picUrl ? (
                     <CoverImage src={album.picUrl} alt={album.name} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--hover-bg)' }}>
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-hover)' }}>
                       <Disc3 size={36} style={{ color: 'var(--text-tertiary)' }} />
                     </div>
                   )}

@@ -15,6 +15,7 @@ import {
   looksLikeLyrics,
   lrcSidecarName,
   retryBackoffMs,
+  sanitizeFileNameFragment,
   tagStrategyForContainer,
   takeNextQueued,
   DEFAULT_MAX_CONCURRENT,
@@ -496,11 +497,7 @@ export class DownloadService {
   }
 
   private sanitizeFileName(fileName: string): string {
-    return fileName
-      .replace(/[\x00-\x1f\x7f]/g, '')
-      .replace(/[<>:"/\\|?*]/g, '_')
-      .replace(/\.\./g, '_')
-      .trim();
+    return sanitizeFileNameFragment(fileName);
   }
 
   private notifyProgress(task: DownloadTask): void {

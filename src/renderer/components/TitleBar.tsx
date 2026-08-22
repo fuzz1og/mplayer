@@ -24,7 +24,7 @@ const TitleBar: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'space-between',
         backgroundColor: 'var(--bg-surface)',
-        borderBottom: '1px solid var(--divider-color)',
+        borderBottom: '1px solid var(--border-subtle)',
         userSelect: 'none',
         WebkitAppRegion: 'drag',
       } as React.CSSProperties}
@@ -39,7 +39,7 @@ const TitleBar: React.FC = () => {
           onClick={() => ipcRenderer.invoke('window:minimize')}
           aria-label="最小化"
           style={buttonStyle}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
           <Minus size={14} />
@@ -48,7 +48,7 @@ const TitleBar: React.FC = () => {
           onClick={() => ipcRenderer.invoke('window:toggleMaximize')}
           aria-label={maximized ? '还原' : '最大化'}
           style={buttonStyle}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
           {maximized ? <Copy size={12} /> : <Square size={11} />}
@@ -58,7 +58,7 @@ const TitleBar: React.FC = () => {
           aria-label="关闭"
           style={buttonStyle}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#E81123';
+            e.currentTarget.style.background = 'var(--danger)';
             e.currentTarget.style.color = '#fff';
           }}
           onMouseLeave={(e) => {

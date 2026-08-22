@@ -26,9 +26,9 @@ const AboutSection: React.FC = () => {
         <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>关于</h2>
       </div>
 
-      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-color)' }}>
+      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-default)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
-          <div style={{ width: '64px', height: '64px', borderRadius: '12px', background: 'linear-gradient(135deg, #2F5FD0 0%, #1F4399 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: 'var(--shadow-md)' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '12px', background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: 'var(--shadow-md)' }}>
             <Music size={30} color="white" />
           </div>
           <div style={{ minWidth: 0 }}>
@@ -39,14 +39,14 @@ const AboutSection: React.FC = () => {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
           {infoItems.map((item) => (
-            <div key={item.label} style={{ padding: '14px 16px', backgroundColor: 'var(--bg-color)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <div key={item.label} style={{ padding: '14px 16px', backgroundColor: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
               <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>{item.label}</div>
               {item.link ? (
                 <a
                   href={item.link}
                   target="_blank"
                   rel="noreferrer"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--accent-color)', fontWeight: 600, textDecoration: 'none', fontSize: '14px' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--accent)', fontWeight: 600, textDecoration: 'none', fontSize: '14px' }}
                 >
                   <Link2 size={14} />
                   {item.value}
@@ -58,7 +58,7 @@ const AboutSection: React.FC = () => {
           ))}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--divider-color)', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)' }}>
           <Link2 size={14} />
           开源项目，欢迎反馈与建议
         </div>

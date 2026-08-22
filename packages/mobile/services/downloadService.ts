@@ -13,10 +13,15 @@ import {
   retryBackoffMs,
   DEFAULT_MAX_RETRIES,
   DEFAULT_MAX_CONCURRENT,
+  makeSongFileName,
 } from '@mplayer/core';
 import { useDownloadStore } from '../stores/downloadStore';
 import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { resolvePlayableUrlMobile } from './audioPlayer';
+
+// 共享下载文件名生成器（T19，core）：来源前缀 + 组合哈希防跨源覆盖，URI/Windows 安全
+const buildSongFileName = makeSongFileName({ hash: md5 });
 
 // 下载目录：应用文档目录（系统不会自动清理）。公共下载目录通过 SAF 授权后同步一份。
 const downloadDir = new Directory(Paths.document, 'mplayer-downloads');
@@ -79,26 +84,6 @@ async function isDirGrantValid(dirUri: string): Promise<boolean> {
   }
 }
 
-/** 未设置目录时自动弹一次授权（方便起见）；取消则本次仅存私有目录，下次下载再询问 */
-async function promptPublicDirOnce(): Promise<string> {
-  if (Platform.OS !== 'android') return '';
-  const ok = await pickDownloadDirectory().catch(() => false);
-  return ok ? useSettingsStore.getState().downloadDirUri : '';
-}
-
-/** 摄取端点 302 跳转地址特征（与 audioPlayer 一致）：这类地址要先解析成 CDN 直链才能下载 */
-function isRedirectEndpoint(url: string): boolean {
-  return url.includes('api.php?get=url');
-}
-
-function sanitizeFileName(name: string): string {
-  return (name || 'unknown')
-    .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 80);
-}
-
 /** 播放失败时清理失败的下载文件 */
 async function removeFileIfExists(file: File): Promise<void> {
   try {
@@ -107,18 +92,15 @@ async function removeFileIfExists(file: File): Promise<void> {
 }
 
 /**
- * 下载文件全名：来源前缀 + 歌曲 ID 哈希，避免跨源同名/同歌手同名歌曲互相覆盖
- * （纯名字文件名会被后下载的覆盖，下载列表记录也会被顶掉）。默认为 .mp3，
- * 实际容器（FLAC/M4A 等）在下载后按字节头嗅探并重命名（见 correctContainerName）。
+ * 下载文件全名：来自 core 共享生成器（T19），来源前缀 + 组合哈希防跨源同名覆盖；
+ * 分隔符用 `()` 且清理 URI/Windows 非法字符（expo File API 的 file:// 遇到 `[]` 会抛 URISyntaxException）。
  */
 function buildFileName(song: Song): string {
-  const src = song.sourceType && song.sourceType !== 'local' ? song.sourceType : 'netease';
-  const name = sanitizeFileName(song.name);
-  const artist = sanitizeFileName(song.artist);
-  const digest = song.id ? md5(song.id).slice(0, 6) : '';
-  const full = `[${src}] ${name} - ${artist}${digest ? ` [${digest}]` : ''}.mp3`;
-  // 超长组合（长歌手名）整体截断，防文件名超限
-  return full.length > 120 ? full.slice(0, 117) + '.mp3' : full;
+  return buildSongFileName({
+    source: song.sourceType || 'netease',
+    name: song.name,
+    artist: song.artist,
+  });
 }
 
 /**
@@ -218,11 +200,10 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
   });
 
   try {
-    // 仅 302 跳转端点需要先解析成 CDN 直链；已是直链的直接下载
-    // （对直链再调 getAudioUrl 会整包下载一遍，双倍流量）
-    const realUrl = song.url?.startsWith('http') && isRedirectEndpoint(song.url)
-      ? await musicApi.getAudioUrl(song.url)
-      : (song.url || '');
+    // 与播放同一套解析（路由链：直连→tier3→api 兜底，含预取缓存），拿 CDN 直链下载。
+    // 不能用 song.url 原值：移动端歌的 url 字段常为空/过期（播放也是现解析的），
+    // 直接下载会抛「无法解析下载地址」。
+    const { url: realUrl } = await resolvePlayableUrlMobile(song);
     if (!realUrl?.startsWith('http')) throw new Error('无法解析下载地址');
 
     await downloadDir.create({ intermediates: true, idempotent: true });
@@ -237,8 +218,9 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     // 写入 .lrc 歌词侧车（与音频同名同目录）；歌词不可用/获取失败不影响下载结果
     await writeLyricsSidecar(song, corrected.fileName, corrected.container);
 
-    // 已授权公共目录时同步一份到系统下载目录；失败不阻断（私有副本仍可播放）
-    const dirUri = useSettingsStore.getState().downloadDirUri || (await promptPublicDirOnce());
+    // 已授权公共目录时同步一份到系统下载目录；失败不阻断（私有副本仍可播放）。
+    // 未授权时不弹系统目录选择器：默认保存在应用私有目录，用户可在下载页「保存位置」卡主动授权。
+    const dirUri = useSettingsStore.getState().downloadDirUri;
     let publicUri: string | undefined;
     if (dirUri) {
       if (await isDirGrantValid(dirUri)) {
@@ -271,7 +253,13 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     // 只清理本次新建的文件：已有文件（上次下载成功）失败时保留，避免丢离线副本
     if (!existedBefore) await removeFileIfExists(file);
     const err = e as Error;
-    updateStatus(itemKey, { status: 'error', error: toErrorMessage(e), progress: 0 });
+    if (existedBefore) {
+      // 旧文件仍可播放：回退 done，避免失败状态挡住播放/列表残留
+      updateStatus(itemKey, { status: 'done', progress: 100 });
+    } else {
+      // 全新下载失败：不残留失败条目（失败原因已在 Alert/日志展示，重试 = 再点下载）
+      useDownloadStore.getState().removeItem(itemKey);
+    }
     log.addLog('error', `下载失败《${song.name}》: ${toErrorMessage(e)}`);
     throw err;
   }

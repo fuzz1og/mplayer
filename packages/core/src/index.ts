@@ -43,6 +43,8 @@ export {
 export type { SourceCookie, KugouDeviceReg, CookieClock, CookieSource, GenerateCookieOptions } from './cookies/cookieManager.js';
 export { isImageBytes, isAudioBytes } from './utils/sniffers.js';
 export { md5 } from './utils/hash.js';
+export { sanitizeFileNameFragment, makeSongFileName } from './utils/downloadFileName.js';
+export type { SongFileNameParts, SongFileNameDeps } from './utils/downloadFileName.js';
 export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, probeSwapCandidates, applySwap } from './shared/sourceSwap.js';

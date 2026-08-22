@@ -109,8 +109,8 @@ const AlbumDetailPage: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', height: '60px' }}>
-        <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', transition: 'all 0.2s ease', fontSize: '14px', fontWeight: 500 }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; e.currentTarget.style.color = 'var(--text-primary)'; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', height: '60px' }}>
+        <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', transition: 'all 0.2s ease', fontSize: '14px', fontWeight: 500 }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}>
           <ArrowLeft size={16} /><span>返回</span>
         </button>
         <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName || '专辑'}</h1>
@@ -119,7 +119,7 @@ const AlbumDetailPage: React.FC = () => {
       {/* 专辑卡片区:固定不滚动,布局与歌单详情页一致 */}
       <div style={{ padding: '24px 24px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
-          <div style={{ width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', backgroundColor: 'var(--hover-bg)' }}>
+          <div style={{ width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', backgroundColor: 'var(--bg-hover)' }}>
             {displayPic ? (
               <CoverImage src={displayPic} alt={displayName} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
@@ -147,7 +147,7 @@ const AlbumDetailPage: React.FC = () => {
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px',
                   padding: '10px 24px', borderRadius: '24px', border: 'none',
-                  backgroundColor: 'var(--accent-color)', color: 'white',
+                  backgroundColor: 'var(--accent)', color: 'white',
                   fontSize: '14px', fontWeight: 500,
                   cursor: songs.length === 0 || loading ? 'not-allowed' : 'pointer',
                   opacity: songs.length === 0 || loading ? 0.6 : 1,
@@ -164,7 +164,7 @@ const AlbumDetailPage: React.FC = () => {
       {/* 歌曲列表独立容器:内部滚动,与歌单详情页一致 */}
       <div style={{ flex: 1, overflow: 'auto', padding: '0 24px 24px' }}>
         {error && songs.length === 0 ? (
-          <div style={{ padding: '12px 16px', backgroundColor: 'var(--danger-bg)', borderRadius: '8px', color: 'var(--danger-color)', textAlign: 'center' }}>
+          <div style={{ padding: '12px 16px', backgroundColor: 'var(--danger-subtle)', borderRadius: '8px', color: 'var(--danger)', textAlign: 'center' }}>
             {error}
           </div>
         ) : (

@@ -9,6 +9,7 @@ import { callMusicApi } from '@/renderer/services/callMusicApi';
 import LinkImportForm from './LinkImportForm';
 import LinkPreviewTable from './LinkPreviewTable';
 import type { Song } from '@mplayer/core';
+import { SOURCE_COLORS } from '@/renderer/constants/sourceConfig';
 
 const SOURCE_LABELS: Record<SourceType, string> = {
   netease: '网易云',
@@ -18,16 +19,6 @@ const SOURCE_LABELS: Record<SourceType, string> = {
   migu: '咪咕',
   qianqian: '千千',
   soda: '汽水',
-};
-
-const SOURCE_COLORS: Record<SourceType, string> = {
-  netease: '#FF6B6B',
-  qq: '#49B8FF',
-  kugou: '#FF8C00',
-  kuwo: '#FF6F00',
-  migu: '#FF5A00',
-  qianqian: '#00A1D6',
-  soda: '#1E90FF',
 };
 
 interface DraggableSourceProps {
@@ -309,7 +300,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
       {importMode === 'text' && (
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
           <Button onClick={onClose}>取消</Button>
-          <Button type="primary" onClick={handleStartImport} style={{ backgroundColor: 'var(--accent-color)' }}>
+          <Button type="primary" onClick={handleStartImport} style={{ backgroundColor: 'var(--accent)' }}>
             开始导入
           </Button>
         </div>
@@ -326,7 +317,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     return (
       <div>
         <div style={{ marginBottom: '16px' }}>
-          <Progress percent={percent} strokeColor="var(--accent-color)" />
+          <Progress percent={percent} strokeColor="var(--accent)" />
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>
             {progress.found + progress.skipped + progress.failed} / {progress.total}
             {' | '}<Check size={12} style={{ verticalAlign: '-2px' }} /> {progress.found} 已找到{' '}
@@ -343,12 +334,12 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
           {progress.statuses.map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
               {s.status === 'pending' && <Clock size={14} color="var(--text-tertiary)" />}
-              {s.status === 'searching' && <Loader2 size={14} color="var(--accent-color)" style={{ animation: 'spin 1s linear infinite' }} />}
-              {s.status === 'found' && <Check size={14} color="#00B894" />}
+              {s.status === 'searching' && <Loader2 size={14} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />}
+              {s.status === 'found' && <Check size={14} color="var(--success)" />}
               {s.status === 'skipped' && <Clock size={14} color="var(--text-tertiary)" />}
-              {s.status === 'failed' && <X size={14} color="#FF6B6B" />}
+              {s.status === 'failed' && <X size={14} color="var(--danger)" />}
               <span style={{
-                color: s.status === 'failed' ? '#FF6B6B' : s.status === 'found' ? '#00B894' : 'var(--text-secondary)',
+                color: s.status === 'failed' ? 'var(--danger)' : s.status === 'found' ? 'var(--success)' : 'var(--text-secondary)',
                 flex: 1,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -374,9 +365,9 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
       <div>
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
           {result.failures.length === 0 ? (
-            <Check size={24} color="#00B894" style={{ marginBottom: '8px' }} />
+            <Check size={24} color="var(--success)" style={{ marginBottom: '8px' }} />
           ) : (
-            <AlertCircle size={24} color="#FFB800" style={{ marginBottom: '8px' }} />
+            <AlertCircle size={24} color="var(--warning)" style={{ marginBottom: '8px' }} />
           )}
           <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
             导入完成
@@ -389,13 +380,13 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
         </div>
         {result.failures.length > 0 && (
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 500, color: '#FF6B6B', marginBottom: '8px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--danger)', marginBottom: '8px' }}>
               以下歌曲未找到匹配：
             </div>
             <div style={{ maxHeight: '200px', overflow: 'auto' }}>
               {result.failures.map((f, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '4px', backgroundColor: 'rgba(255,107,107,0.05)', marginBottom: '4px', fontSize: '13px' }}>
-                  <X size={14} color="#FF6B6B" />
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--danger-subtle)', marginBottom: '4px', fontSize: '13px' }}>
+                  <X size={14} color="var(--danger)" />
                   <span style={{ flex: 1, color: 'var(--text-primary)' }}>{f.line}</span>
                   <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>{f.reason}</span>
                 </div>
@@ -427,7 +418,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
         <>
           {renderResult()}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-            <Button type="primary" onClick={handleDone} style={{ backgroundColor: 'var(--accent-color)' }}>
+            <Button type="primary" onClick={handleDone} style={{ backgroundColor: 'var(--accent)' }}>
               完成
             </Button>
           </div>

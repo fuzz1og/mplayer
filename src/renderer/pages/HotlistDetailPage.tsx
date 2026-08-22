@@ -95,8 +95,8 @@ const HotlistDetailPage: React.FC = () => {
           alignItems: 'center',
           gap: '16px',
           padding: '12px 24px',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)',
+          borderBottom: '1px solid var(--border-subtle)',
+          backgroundColor: 'var(--bg-surface)',
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
           height: '60px',
         }}
@@ -118,7 +118,7 @@ const HotlistDetailPage: React.FC = () => {
             fontWeight: 500,
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+            e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
             e.currentTarget.style.color = 'var(--text-primary)';
             e.currentTarget.style.transform = 'translateX(-2px)';
           }}
@@ -168,7 +168,7 @@ const HotlistDetailPage: React.FC = () => {
               width: '80px',
               height: '80px',
               borderRadius: '8px',
-              background: 'linear-gradient(135deg, #2F5FD0 0%, #1F4399 100%)',
+              background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -213,7 +213,7 @@ const HotlistDetailPage: React.FC = () => {
                       width: '20px',
                       height: '14px',
                       borderRadius: '2px',
-                      background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                      background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
                       backgroundSize: '200% 200%',
                       animation: 'skeletonLoading 1.5s ease-in-out infinite',
                       margin: '0 auto',
@@ -226,7 +226,7 @@ const HotlistDetailPage: React.FC = () => {
                       width: '40px',
                       height: '40px',
                       borderRadius: '4px',
-                      background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                      background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
                       backgroundSize: '200% 200%',
                       animation: 'skeletonLoading 1.5s ease-in-out infinite',
                     }}
@@ -237,7 +237,7 @@ const HotlistDetailPage: React.FC = () => {
                         width: '70%',
                         height: '14px',
                         borderRadius: '2px',
-                        background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                        background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
                         backgroundSize: '200% 200%',
                         animation: 'skeletonLoading 1.5s ease-in-out infinite',
                         marginBottom: '4px',
@@ -248,7 +248,7 @@ const HotlistDetailPage: React.FC = () => {
                         width: '50%',
                         height: '12px',
                         borderRadius: '2px',
-                        background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                        background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
                         backgroundSize: '200% 200%',
                         animation: 'skeletonLoading 1.5s ease-in-out infinite',
                         animationDelay: '0.1s',
@@ -273,13 +273,13 @@ const HotlistDetailPage: React.FC = () => {
           <div
             style={{
               padding: '24px',
-              backgroundColor: 'var(--danger-bg)',
+              backgroundColor: 'var(--danger-subtle)',
               borderRadius: '8px',
-              color: 'var(--danger-color)',
+              color: 'var(--danger)',
               textAlign: 'center',
             }}
           >
-            <AlertCircle size={28} style={{ marginBottom: '12px', color: 'var(--danger-color)' }} />
+            <AlertCircle size={28} style={{ marginBottom: '12px', color: 'var(--danger)' }} />
             <div style={{ fontSize: '16px', marginBottom: '8px' }}>{error}</div>
             <button
               onClick={async () => {
@@ -298,7 +298,7 @@ const HotlistDetailPage: React.FC = () => {
               style={{
                 marginTop: '16px',
                 padding: '8px 16px',
-                backgroundColor: 'var(--danger-color)',
+                backgroundColor: 'var(--danger)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',

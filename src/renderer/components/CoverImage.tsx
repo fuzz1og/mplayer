@@ -22,7 +22,7 @@ const SongFallback: React.FC<{ style?: React.CSSProperties }> = ({ style }) => (
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(145deg, #3D7BD9 0%, #1F4399 100%)',
+      background: 'linear-gradient(145deg, var(--accent) 0%, var(--accent-active) 100%)',
       overflow: 'hidden',
     }}
   >
@@ -40,7 +40,7 @@ const PlaylistFallback: React.FC<{ style?: React.CSSProperties }> = ({ style }) 
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: '#0D1117',
+      background: 'var(--cover-placeholder)',
       overflow: 'hidden',
     }}
   >
@@ -49,7 +49,7 @@ const PlaylistFallback: React.FC<{ style?: React.CSSProperties }> = ({ style }) 
         width: '74%',
         height: '74%',
         borderRadius: '50%',
-        background: 'radial-gradient(circle at 34% 28%, #2A3342 0%, #0D1117 72%)',
+        background: 'radial-gradient(circle at 34% 28%, var(--cover-placeholder-glow) 0%, var(--cover-placeholder) 72%)',
         boxShadow: '0 8px 20px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08)',
         position: 'relative',
         display: 'flex',
@@ -64,7 +64,7 @@ const PlaylistFallback: React.FC<{ style?: React.CSSProperties }> = ({ style }) 
           width: '34%',
           height: '34%',
           borderRadius: '50%',
-          background: 'linear-gradient(145deg, #2F5FD0 0%, #1F4399 100%)',
+          background: 'linear-gradient(145deg, var(--accent) 0%, var(--accent-active) 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

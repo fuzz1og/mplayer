@@ -82,8 +82,8 @@ const DiscoverPlaylistListPage: React.FC = () => {
           alignItems: 'center',
           gap: '16px',
           padding: '12px 24px',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)',
+          borderBottom: '1px solid var(--border-subtle)',
+          backgroundColor: 'var(--bg-surface)',
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
           height: '60px',
         }}
@@ -105,7 +105,7 @@ const DiscoverPlaylistListPage: React.FC = () => {
             fontWeight: 500,
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+            e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
             e.currentTarget.style.color = 'var(--text-primary)';
           }}
           onMouseLeave={(e) => {
@@ -136,9 +136,9 @@ const DiscoverPlaylistListPage: React.FC = () => {
           display: 'flex',
           gap: '8px',
           padding: '12px 24px',
-          borderBottom: '1px solid var(--divider-color)',
+          borderBottom: '1px solid var(--border-subtle)',
           overflowX: 'auto',
-          backgroundColor: 'var(--content-bg)',
+          backgroundColor: 'var(--bg-surface)',
           flexShrink: 0,
         }}
       >
@@ -149,13 +149,13 @@ const DiscoverPlaylistListPage: React.FC = () => {
             style={{
               padding: '6px 16px',
               borderRadius: '20px',
-              border: '1px solid var(--border-color)',
+              border: '1px solid var(--border-default)',
               cursor: 'pointer',
               fontSize: '13px',
               fontWeight: 500,
               whiteSpace: 'nowrap',
               transition: 'all 0.2s ease',
-              background: currentCat === cat ? 'var(--accent-color)' : 'transparent',
+              background: currentCat === cat ? 'var(--accent)' : 'transparent',
               color: currentCat === cat ? 'white' : 'var(--text-secondary)',
             }}
           >
@@ -179,7 +179,7 @@ const DiscoverPlaylistListPage: React.FC = () => {
                   style={{
                     paddingTop: '100%',
                     borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                    background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
                     backgroundSize: '200% 200%',
                     animation: 'skeletonLoading 1.5s ease-in-out infinite',
                   }}
@@ -189,7 +189,7 @@ const DiscoverPlaylistListPage: React.FC = () => {
                     height: '14px',
                     marginTop: '8px',
                     borderRadius: '2px',
-                    background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                    background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
                     backgroundSize: '200% 200%',
                     animation: 'skeletonLoading 1.5s ease-in-out infinite',
                   }}

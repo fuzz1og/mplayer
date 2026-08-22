@@ -12,12 +12,11 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
-import { CircleCheck, Save, RefreshCcw, RefreshCw, Download, CircleX, Trash2, Plus } from 'lucide-react-native';
+import { CircleCheck, RefreshCcw, RefreshCw, Download, CircleX, Trash2, Plus } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setProxyUrl as setCoreProxyUrl, MULTI_SOURCE_LIST, setSourceModes as setCoreSourceModes, SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription, getTier3Stats, clearTier3Stats } from '@mplayer/core';
+import { MULTI_SOURCE_LIST, SOURCE_DISPLAY_NAMES, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription, getTier3Stats, clearTier3Stats } from '@mplayer/core';
 import type { Tier3SourceStats } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useLogsStore } from '../stores/logsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
 import {radius, shadow, spacing, textVariants} from '../theme/tokens';
 import type { ThemeMode, ThemeColors } from '../theme/tokens';
@@ -30,29 +29,16 @@ const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: '深色' },
 ];
 
-function formatLogTime(ts: number): string {
-  const d = new Date(ts);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
+/** 缓存占用条上限（对齐桌面 CacheSection 的 100MB 口径） */
+const MAX_CACHE_MB = 100;
 
 export default function SettingsPage() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const storeProxyUrl = useSettingsStore((s) => s.proxyUrl);
-  const sourceModes = useSettingsStore((s) => s.sourceModes);
   const tier3Enabled = useSettingsStore((s) => s.tier3Enabled);
   const tier3Subscriptions = useSettingsStore((s) => s.tier3Subscriptions);
   const themeMode = useSettingsStore((s) => s.themeMode);
   const setThemeMode = useSettingsStore((s) => s.setThemeMode);
-  const setStoreProxyUrl = useSettingsStore((s) => s.setProxyUrl);
-  const logEntries = useLogsStore((s) => s.entries);
-  const clearLogs = useLogsStore((s) => s.clearLogs);
-
-  // 直连设置：改 core 来源开关 → persister 镜像进 store（AsyncStorage 持久化）
-  const handleSourceModeChange = (source: string, mode: 'auto' | 'direct'): void => {
-    setCoreSourceModes({ ...sourceModes, [source]: mode });
-  };
 
   // tier3 第三方解析源（#144）：默认关，移动端支持 URL / 手动粘贴
   const handleTier3Toggle = (value: boolean): void => {
@@ -110,14 +96,11 @@ export default function SettingsPage() {
     }
   };
 
-  const [localProxyUrl, setLocalProxyUrl] = useState(storeProxyUrl);
-  const [proxySaved, setProxySaved] = useState(false);
-  const [focusedInput, setFocusedInput] = useState<'proxy' | null>(null);
   const [tier3Url, setTier3Url] = useState('');
   const [tier3Paste, setTier3Paste] = useState('');
   const [tier3Busy, setTier3Busy] = useState(false);
 
-  // tier3 每源解析统计（会话级，对齐桌面 Tier3Section）：进页/开关/订阅变化时刷新
+  // tier3 每源解析统计（本次会话）：命中/未命中，辅助判断订阅源质量
   const [tier3Stats, setTier3Stats] = useState<Record<string, Tier3SourceStats>>({});
   const refreshTier3Stats = (): void => setTier3Stats(getTier3Stats());
   useEffect(() => {
@@ -204,14 +187,7 @@ export default function SettingsPage() {
     if (apkUrl) Linking.openURL(apkUrl);
   };
 
-
-  const handleSaveProxy = () => {
-    const url = localProxyUrl.trim();
-    setStoreProxyUrl(url);
-    setCoreProxyUrl(url);
-    setProxySaved(true);
-    setTimeout(() => setProxySaved(false), 1500);
-  };
+  const cachePercent = Math.min((cacheStats.totalSize / (MAX_CACHE_MB * 1024 * 1024)) * 100, 100);
 
   return (
     <View style={styles.container}>
@@ -233,18 +209,17 @@ export default function SettingsPage() {
         <View style={styles.section}>
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>外观</Text>
-            <Text style={styles.label}>跟随系统时，Android 深色模式开启后应用自动切换。</Text>
-            <View style={styles.appearanceGroup}>
+            <View style={styles.segmentGroup}>
               {THEME_MODE_OPTIONS.map((opt) => {
                 const active = themeMode === opt.value;
                 return (
                   <TouchableOpacity
                     key={opt.value}
-                    style={[styles.appearanceBtn, active && styles.appearanceBtnActive]}
+                    style={[styles.segmentBtn, active && styles.segmentBtnActive]}
                     onPress={() => setThemeMode(opt.value)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.appearanceBtnText, active && styles.appearanceBtnTextActive]}>{opt.label}</Text>
+                    <Text style={[styles.segmentBtnText, active && styles.segmentBtnTextActive]}>{opt.label}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -252,36 +227,23 @@ export default function SettingsPage() {
           </View>
         </View>
 
-        {/* 直连设置（T01：每源来源开关） */}
+        {/* 直连状态（T01：每源直连可用性；不再配置 auto/仅直连） */}
         <View style={styles.section}>
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>直连设置</Text>
-            <Text style={styles.label}>
-              每源请求方式：自动 = 官方直连优先、失败回退第三方解析；仅直连 = 只走官方直连。直连能力按源逐步落地。
-            </Text>
-            {MULTI_SOURCE_LIST.map((source) => (
-              <View key={source} style={styles.modeRow}>
-                <Text style={styles.modeLabel}>{SOURCE_DISPLAY_NAMES[source] || source}</Text>
-                <Text style={[styles.modeStatus, hasDirectClient(source) && styles.modeStatusReady]}>
-                  {hasDirectClient(source) ? '直连可用' : '直连未实现'}
-                </Text>
-                <View style={styles.modeGroup}>
-                  {SOURCE_MODE_OPTIONS.map((m) => {
-                    const active = (sourceModes[source] || 'auto') === m.value;
-                    return (
-                      <TouchableOpacity
-                        key={m.value}
-                        style={[styles.modeBtn, active && styles.modeBtnActive]}
-                        onPress={() => handleSourceModeChange(source, m.value)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.modeBtnText, active && styles.modeBtnTextActive]}>{m.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+            <Text style={styles.sectionTitle}>直连状态</Text>
+            <Text style={styles.label}>每源官方直连可用性，直连能力按源逐步落地。</Text>
+            {MULTI_SOURCE_LIST.map((source) => {
+              const ready = hasDirectClient(source);
+              return (
+                <View key={source} style={styles.modeRow}>
+                  <View style={[styles.statusDot, ready && styles.statusDotReady]} />
+                  <Text style={styles.modeLabel}>{SOURCE_DISPLAY_NAMES[source] || source}</Text>
+                  <Text style={[styles.modeStatus, ready && styles.modeStatusReady]}>
+                    {ready ? '直连可用' : '直连未实现'}
+                  </Text>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </View>
 
@@ -384,44 +346,38 @@ export default function SettingsPage() {
           </View>
         </View>
 
-        {/* 代理设置 */}
+        {/* 缓存管理：统计 + 用量条 + 一键清理（对齐桌面 CacheSection） */}
         <View style={styles.section}>
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>代理设置</Text>
-            <Text style={styles.label}>代理地址（可选，留空=直连）</Text>
-            <TextInput
-              style={[styles.input, focusedInput === 'proxy' && styles.inputFocused]}
-              value={localProxyUrl}
-              onChangeText={setLocalProxyUrl}
-              placeholder="http://127.0.0.1:8080"
-              placeholderTextColor={colors.inputPlaceholder}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              onFocus={() => setFocusedInput('proxy')}
-              onBlur={() => setFocusedInput(null)}
-            />
-            <TouchableOpacity
-              style={[styles.saveBtn, proxySaved && styles.saveBtnSaved]}
-              onPress={handleSaveProxy}
-              activeOpacity={0.7}
-            >
-              {proxySaved ? (
-                <CircleCheck size={18} color={colors.textInverse} style={styles.btnIcon} />
-              ) : (
-                <Save size={18} color={colors.textInverse} style={styles.btnIcon} />
-              )}
-              <Text style={styles.saveBtnText}>
-                {proxySaved ? '已保存' : '保存代理'}
+            <Text style={styles.sectionTitle}>缓存管理</Text>
+            <View style={styles.cacheStatsRow}>
+              <Text style={styles.cacheStatsText}>
+                缓存文件 {cacheStats.fileCount} 个 · {(cacheStats.totalSize / 1024 / 1024).toFixed(1)} MB / {MAX_CACHE_MB} MB
               </Text>
+            </View>
+            <View style={styles.cacheBarWrap}>
+              <View
+                style={[
+                  styles.cacheBarFill,
+                  { width: `${cachePercent}%`, backgroundColor: cachePercent > 90 ? colors.danger : colors.accent },
+                ]}
+              />
+            </View>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleClearCache} activeOpacity={0.7}>
+              <Trash2 size={18} color={colors.textInverse} style={styles.btnIcon} />
+              <Text style={styles.saveBtnText}>清理缓存</Text>
             </TouchableOpacity>
+            <Text style={styles.hintText}>播放 URL 缓存 12 小时过期，清理不影响已收藏歌曲</Text>
           </View>
         </View>
 
-        {/* 检查更新 */}
+        {/* 检查更新（标题右侧显示当前版本号） */}
         <View style={styles.section}>
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>检查更新</Text>
+            <View style={styles.updateHeader}>
+              <Text style={[styles.sectionTitle, styles.updateHeaderTitle]}>检查更新</Text>
+              <Text style={styles.updateVersion}>v{currentVersion}</Text>
+            </View>
             {updateState === 'idle' && (
               <>
                 <TouchableOpacity style={styles.saveBtn} onPress={handleCheckUpdate} activeOpacity={0.7}>
@@ -467,65 +423,6 @@ export default function SettingsPage() {
             )}
           </View>
         </View>
-
-        {/* 缓存管理：统计 + 一键清理（对齐桌面 CacheSection） */}
-        <View style={styles.section}>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>缓存管理</Text>
-            <View style={styles.cacheStatsRow}>
-              <Text style={styles.hintText}>
-                缓存文件 {cacheStats.fileCount} 个 · {(cacheStats.totalSize / 1024 / 1024).toFixed(1)} MB
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleClearCache} activeOpacity={0.7}>
-              <Trash2 size={18} color={colors.textInverse} style={styles.btnIcon} />
-              <Text style={styles.saveBtnText}>清理缓存</Text>
-            </TouchableOpacity>
-            <Text style={styles.hintText}>播放 URL 缓存 12 小时过期，清理不影响已收藏歌曲</Text>
-          </View>
-        </View>
-
-        {/* 播放日志（真机上无法看终端 console，这里可直接查看最近播放/失败记录） */}
-        <View style={styles.section}>
-          <View style={styles.card}>
-            <View style={styles.logHeader}>
-              <Text style={styles.sectionTitle}>播放日志</Text>
-              <TouchableOpacity onPress={clearLogs} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Trash2 size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            {logEntries.length === 0 ? (
-              <Text style={styles.hintText}>暂无日志</Text>
-            ) : (
-              [...logEntries].reverse().slice(0, 30).map((e, i) => (
-                <View key={`${e.ts}-${i}`} style={styles.logRow}>
-                  <Text
-                    style={[
-                      styles.logLevel,
-                      e.level === 'error' && styles.logLevelError,
-                      e.level === 'warn' && styles.logLevelWarn,
-                    ]}
-                  >
-                    {e.level === 'error' ? 'ERR' : e.level === 'warn' ? 'WRN' : 'INF'}
-                  </Text>
-                  <Text style={styles.logTime}>{formatLogTime(e.ts)}</Text>
-                  <Text style={styles.logMessage} numberOfLines={2}>{e.message}</Text>
-                </View>
-              ))
-            )}
-          </View>
-        </View>
-
-        {/* 关于 */}
-        <View style={styles.section}>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>关于</Text>
-            <View style={styles.aboutRow}>
-              <Text style={styles.aboutLabel}>应用版本</Text>
-              <Text style={styles.aboutValue}>{currentVersion}</Text>
-            </View>
-          </View>
-        </View>
       </ScrollView>
     </View>
   );
@@ -542,30 +439,31 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   scrollContent: {
     paddingBottom: 40,
   },
-  appearanceGroup: {
+  /* 外观：一体分段控件 */
+  segmentGroup: {
     flexDirection: 'row',
-    gap: 6,
-  },
-  appearanceBtn: {
-    flex: 1,
-    paddingVertical: 10,
+    backgroundColor: colors.bgActive,
     borderRadius: radius.sm,
-    backgroundColor: colors.inputBg,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
+    padding: 2,
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: radius.xs,
     alignItems: 'center',
   },
-  appearanceBtnActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+  segmentBtnActive: {
+    backgroundColor: colors.bgElevated,
+    ...shadow.xs,
   },
-  appearanceBtnText: {
+  segmentBtnText: {
     color: colors.textSecondary,
-    fontSize: 13,
+    ...textVariants.subhead,
     fontWeight: '500',
   },
-  appearanceBtnTextActive: {
-    color: colors.textInverse,
+  segmentBtnTextActive: {
+    color: colors.accent,
+    fontWeight: '600',
   },
   section: {
     paddingHorizontal: spacing[4],
@@ -587,52 +485,35 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...textVariants.footnote,
     marginBottom: spacing[2],
   },
+  /* 直连状态行：圆点 + 源名 + 状态（tier3 订阅行/统计行共用行样式） */
   modeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.textTertiary,
+    marginRight: 10,
+  },
+  statusDotReady: {
+    backgroundColor: colors.success,
   },
   modeLabel: {
     color: colors.textPrimary,
     ...textVariants.subhead,
-    width: 56,
+    flex: 1,
   },
   modeStatus: {
-    flex: 1,
-    ...textVariants.micro,
-    fontWeight: '400',
-    color: colors.textSecondary,
-    marginLeft: 8,
+    ...textVariants.caption,
+    color: colors.textTertiary,
   },
   modeStatusReady: {
     color: colors.success,
-  },
-  modeGroup: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  modeBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radius.sm,
-    backgroundColor: colors.inputBg,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-  },
-  modeBtnActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  modeBtnText: {
-    color: colors.textSecondary,
-    ...textVariants.caption,
-    fontWeight: '500',
-  },
-  modeBtnTextActive: {
-    color: colors.textInverse,
   },
   input: {
     backgroundColor: colors.inputBg,
@@ -646,10 +527,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: 10,
     marginBottom: spacing[3],
   },
-  inputFocused: {
-    backgroundColor: colors.inputBgFocus,
-    borderColor: colors.inputBorderFocus,
-  },
   saveBtn: {
     backgroundColor: colors.accent,
     borderRadius: radius.sm,
@@ -657,9 +534,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-  },
-  saveBtnSaved: {
-    backgroundColor: colors.success,
   },
   checkingBtn: {
     backgroundColor: colors.bgHover,
@@ -672,81 +546,27 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...textVariants.subhead,
     fontWeight: '600',
   },
-  testBtn: { backgroundColor: colors.bgHover, borderRadius: radius.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, marginTop: spacing[2] },
   testBtnText: { color: colors.textPrimary },
-  testBtnSuccess: { backgroundColor: colors.success },
-  testBtnFail: { backgroundColor: colors.danger },
-  radioItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing[3],
+  /* 缓存管理 */
+  cacheStatsRow: {
+    marginTop: 6,
+    marginBottom: 10,
   },
-  radioItemBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
-  },
-  radioLabel: {
+  cacheStatsText: {
     color: colors.textSecondary,
-    ...textVariants.body,
-    fontWeight: '400',
-    marginLeft: spacing[3],
+    ...textVariants.footnote,
+    textAlign: 'center',
   },
-  radioLabelActive: {
-    color: colors.textPrimary,
-    fontWeight: '600',
+  cacheBarWrap: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.bgHover,
+    overflow: 'hidden',
+    marginBottom: spacing[4],
   },
-  aboutRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  logHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  logRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
-  },
-  logLevel: {
-    color: colors.textSecondary,
-    ...textVariants.micro, // 归一：10 → micro(11)
-    fontWeight: '700',
-    width: 30,
-    marginTop: 2,
-  },
-  logLevelError: {
-    color: colors.dangerText,
-  },
-  logLevelWarn: {
-    color: colors.warning,
-  },
-  logTime: {
-    color: colors.textTertiary,
-    ...textVariants.micro,
-    fontWeight: '400',
-    width: 58,
-    marginTop: 2,
-  },
-  logMessage: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    flex: 1,
-    lineHeight: 16,
-  },
-  aboutLabel: {
-    color: colors.textSecondary,
-    ...textVariants.body,
-    fontWeight: '400',
-  },
-  aboutValue: {
-    color: colors.textPrimary,
-    ...textVariants.body,
-    fontWeight: '400',
+  cacheBarFill: {
+    height: '100%',
+    borderRadius: 3,
   },
   hintText: {
     color: colors.textTertiary,
@@ -754,8 +574,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
-  cacheStatsRow: {
-    marginTop: 6,
+  updateHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing[4],
+  },
+  updateHeaderTitle: { marginBottom: 0 },
+  updateVersion: {
+    color: colors.textTertiary,
+    ...textVariants.caption,
   },
   updateAvailableText: {
     color: colors.success,

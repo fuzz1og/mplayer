@@ -8,7 +8,7 @@ type ButtonHoverConfig = {
 };
 
 export const useButtonHover = (config: ButtonHoverConfig = {}) => {
-  const { hoverBg = 'var(--hover-bg)', hoverColor, leaveBg = 'transparent', leaveColor } = config;
+  const { hoverBg = 'var(--bg-hover)', hoverColor, leaveBg = 'transparent', leaveColor } = config;
 
   const handleMouseEnter: MouseEventHandler<HTMLElement> = useCallback((e) => {
     if (hoverColor) {

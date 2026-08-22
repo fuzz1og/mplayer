@@ -56,15 +56,15 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   if (error) {
     return (
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
-        <div style={{ textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', padding: '24px', borderRadius: 'var(--radius-md)', maxWidth: '320px' }}>
-          <AlertCircle size={22} style={{ marginBottom: '8px', color: 'var(--danger-color)' }} />
+        <div style={{ textAlign: 'center', color: 'var(--danger)', backgroundColor: 'var(--danger-subtle)', padding: '24px', borderRadius: 'var(--radius-md)', maxWidth: '320px' }}>
+          <AlertCircle size={22} style={{ marginBottom: '8px', color: 'var(--danger)' }} />
           <div style={{ fontSize: 'var(--text-base)', marginBottom: '16px' }}>{error}</div>
           {onRetry && (
             <button
               onClick={onRetry}
               style={{
                 padding: '8px 16px',
-                backgroundColor: 'var(--accent-color)',
+                backgroundColor: 'var(--accent)',
                 color: 'white',
                 border: 'none',
                 borderRadius: 'var(--radius-sm)',
@@ -114,7 +114,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
             backgroundColor: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'rgba(47, 95, 208, 0.10)' : 'transparent',
             transition: 'background-color 0.15s ease',
           }}
-          onMouseEnter={(e) => { if (!isCurrentSong(bestSong.id, bestSong.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
+          onMouseEnter={(e) => { if (!isCurrentSong(bestSong.id, bestSong.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
           onMouseLeave={(e) => { if (!isCurrentSong(bestSong.id, bestSong.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
           {/* Expand/collapse icon */}
@@ -128,22 +128,22 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
           <div style={{
             width: '28px', textAlign: 'center', fontSize: 'var(--text-sm)',
             fontVariantNumeric: 'tabular-nums',
-            color: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'var(--accent-color)' : 'var(--text-tertiary)',
+            color: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'var(--accent)' : 'var(--text-tertiary)',
             fontWeight: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 600 : 400, flexShrink: 0,
           }}>
             {rank}
           </div>
           {/* Song info via SongRow-like layout */}
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
               {bestSong.cover ? (
                 <CoverImage src={bestSong.cover} alt={bestSong.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)' }} />
+                <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)' }} />
               )}
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 'var(--text-sm)', color: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 'var(--text-sm)', color: isCurrentSong(bestSong.id, bestSong.sourceType, chartId) ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {bestSong.name}
               </div>
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -175,18 +175,18 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
                     backgroundColor: isCurrentSong(song.id, song.sourceType, chartId) ? 'rgba(47, 95, 208, 0.08)' : 'transparent',
                     transition: 'background-color 0.15s ease',
                   }}
-                  onMouseEnter={(e) => { if (!isCurrentSong(song.id, song.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
+                  onMouseEnter={(e) => { if (!isCurrentSong(song.id, song.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
                   onMouseLeave={(e) => { if (!isCurrentSong(song.id, song.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'transparent'; }}
                 >
-                  <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
                     {song.cover ? (
                       <CoverImage src={song.cover} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
-                      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, var(--border-color) 0%, var(--divider-color) 100%)' }} />
+                      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)' }} />
                     )}
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 'var(--text-sm)', color: isCurrentSong(song.id, song.sourceType, chartId) ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 'var(--text-sm)', color: isCurrentSong(song.id, song.sourceType, chartId) ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {song.name}
                     </div>
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -198,7 +198,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
                   </div>
                   {/* Source rank badge */}
                   {sourceRank && (
-                    <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', flexShrink: 0, padding: '2px 6px', borderRadius: 'var(--radius-xs)', backgroundColor: 'var(--hover-bg)' }}>
+                    <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', flexShrink: 0, padding: '2px 6px', borderRadius: 'var(--radius-xs)', backgroundColor: 'var(--bg-hover)' }}>
                       #{sourceRank}
                     </div>
                   )}
@@ -226,21 +226,21 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
         onClick={() => onPlay(bestSong, chartId)}
         style={{
           display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
-          borderRadius: '8px', cursor: 'pointer', border: '1px solid var(--border-color)',
-          backgroundColor: isCurrent ? 'rgba(47, 95, 208, 0.10)' : 'var(--content-bg)',
+          borderRadius: '8px', cursor: 'pointer', border: '1px solid var(--border-default)',
+          backgroundColor: isCurrent ? 'rgba(47, 95, 208, 0.10)' : 'var(--bg-surface)',
           transition: 'background-color 0.15s ease, border-color 0.15s ease',
         }}
-        onMouseEnter={(e) => { if (!isCurrent) { e.currentTarget.style.borderColor = 'var(--accent-color)'; e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; } }}
-        onMouseLeave={(e) => { if (!isCurrent) { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.backgroundColor = 'var(--content-bg)'; } }}
+        onMouseEnter={(e) => { if (!isCurrent) { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; } }}
+        onMouseLeave={(e) => { if (!isCurrent) { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; } }}
       >
-        <div style={{ width: '36px', textAlign: 'center', fontSize: '20px', fontWeight: 700, color: 'var(--accent-color)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+        <div style={{ width: '36px', textAlign: 'center', fontSize: '20px', fontWeight: 700, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
           {rank}
         </div>
         <div style={{ width: '56px', height: '56px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
           <CoverImage src={bestSong.cover} alt={bestSong.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '15px', fontWeight: 600, color: isCurrent ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bestSong.name}</div>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: isCurrent ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bestSong.name}</div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{bestSong.artist}</span>
             <SourceBadge sourceType={bestSong.sourceType} />
@@ -248,7 +248,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
             {bestSong.audioTag === 'invalid' && <AudioTagBadge tag="invalid" />}
           </div>
         </div>
-        <button onClick={(e) => { e.stopPropagation(); onPlay(bestSong, chartId); }} aria-label="播放" style={{ border: 'none', background: 'var(--accent-color)', color: 'white', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+        <button onClick={(e) => { e.stopPropagation(); onPlay(bestSong, chartId); }} aria-label="播放" style={{ border: 'none', background: 'var(--accent)', color: 'white', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           <Play size={14} fill="currentColor" />
         </button>
       </div>

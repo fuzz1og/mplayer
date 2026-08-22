@@ -42,7 +42,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
       >
         <div
           style={{
-            backgroundColor: 'var(--bg-color)',
+            backgroundColor: 'var(--bg-base)',
             borderRadius: '12px',
             padding: '24px',
             width: '360px',
@@ -87,7 +87,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 transition: 'all 0.15s ease',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+                e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
                 e.currentTarget.style.color = 'var(--text-secondary)';
               }}
               onMouseLeave={(e) => {
@@ -115,7 +115,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 height: '56px',
                 borderRadius: '8px',
                 overflow: 'hidden',
-                backgroundColor: 'var(--hover-bg)',
+                backgroundColor: 'var(--bg-hover)',
                 flexShrink: 0,
               }}
             >
@@ -153,11 +153,11 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
             {/* 状态图标 */}
             <div>
               {task.status === 'completed' ? (
-                <CheckCircle size={24} color="#52c41a" />
+                <CheckCircle size={24} color="var(--success)" />
               ) : task.status === 'error' ? (
-                <AlertCircle size={24} color="#ff4d4f" />
+                <AlertCircle size={24} color="var(--danger)" />
               ) : (
-                <Loader2 size={24} color="var(--primary-color)" style={{ animation: 'spin 1s linear infinite' }} />
+                <Loader2 size={24} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
               )}
             </div>
           </div>
@@ -167,7 +167,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
             <div
               style={{
                 height: '6px',
-                backgroundColor: 'var(--hover-bg)',
+                backgroundColor: 'var(--bg-hover)',
                 borderRadius: '3px',
                 overflow: 'hidden',
               }}
@@ -176,7 +176,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 style={{
                   height: '100%',
                   width: `${task.progress}%`,
-                  backgroundColor: task.status === 'error' ? '#ff4d4f' : 'var(--primary-color)',
+                  backgroundColor: task.status === 'error' ? 'var(--danger)' : 'var(--accent)',
                   borderRadius: '3px',
                   transition: 'width 0.3s ease',
                 }}
@@ -205,11 +205,11 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
               style={{
                 marginTop: '12px',
                 padding: '10px 12px',
-                backgroundColor: 'var(--danger-bg)',
-                border: '1px solid var(--danger-color)',
+                backgroundColor: 'var(--danger-subtle)',
+                border: '1px solid var(--danger)',
                 borderRadius: '6px',
                 fontSize: 'var(--text-xs)',
-                color: '#ff4d4f',
+                color: 'var(--danger)',
               }}
             >
               {task.error}
@@ -225,7 +225,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 width: '100%',
                 padding: '10px',
                 backgroundColor: 'transparent',
-                border: '1px solid var(--border-color)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '6px',
                 color: 'var(--text-secondary)',
                 fontSize: '13px',
@@ -241,7 +241,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 e.currentTarget.style.color = 'var(--text-primary)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-color)';
+                e.currentTarget.style.borderColor = 'var(--border-default)';
                 e.currentTarget.style.color = 'var(--text-secondary)';
               }}
             >
@@ -288,7 +288,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
     >
       <div
         style={{
-          backgroundColor: 'var(--bg-color)',
+          backgroundColor: 'var(--bg-base)',
           borderRadius: '12px',
           padding: '24px',
           width: '420px',
@@ -334,7 +334,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
               transition: 'all 0.15s ease',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+              e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
               e.currentTarget.style.color = 'var(--text-secondary)';
             }}
             onMouseLeave={(e) => {
@@ -365,7 +365,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
           <div
             style={{
               height: '8px',
-              backgroundColor: 'var(--hover-bg)',
+              backgroundColor: 'var(--bg-hover)',
               borderRadius: '4px',
               overflow: 'hidden',
             }}
@@ -376,9 +376,9 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 width: `${stats.averageProgress}%`,
                 backgroundColor: isAllCompleted
                   ? hasError
-                    ? '#ff4d4f'
-                    : '#52c41a'
-                  : 'var(--primary-color)',
+                    ? 'var(--danger)'
+                    : 'var(--success)'
+                  : 'var(--accent)',
                 borderRadius: '4px',
                 transition: 'width 0.3s ease',
               }}
@@ -392,8 +392,8 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
             flex: 1,
             overflowY: 'auto',
             maxHeight: '300px',
-            borderTop: '1px solid var(--divider-color)',
-            borderBottom: '1px solid var(--divider-color)',
+            borderTop: '1px solid var(--border-subtle)',
+            borderBottom: '1px solid var(--border-subtle)',
           }}
         >
           {tasks.map((task) => (
@@ -404,17 +404,17 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 alignItems: 'center',
                 gap: '12px',
                 padding: '12px 0',
-                borderBottom: '1px solid var(--divider-color)',
+                borderBottom: '1px solid var(--border-subtle)',
               }}
             >
               {/* 状态图标 */}
               <div style={{ width: '20px', flexShrink: 0 }}>
                 {task.status === 'completed' ? (
-                  <CheckCircle size={18} color="#52c41a" />
+                  <CheckCircle size={18} color="var(--success)" />
                 ) : task.status === 'error' ? (
-                  <AlertCircle size={18} color="#ff4d4f" />
+                  <AlertCircle size={18} color="var(--danger)" />
                 ) : task.status === 'downloading' ? (
-                  <Loader2 size={18} color="var(--primary-color)" style={{ animation: 'spin 1s linear infinite' }} />
+                  <Loader2 size={18} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
                 ) : (
                   <div
                     style={{
@@ -458,7 +458,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
               {/* 进度 */}
               <div style={{ width: '50px', textAlign: 'right' }}>
                 {task.status === 'downloading' ? (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--primary-color)' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>
                     {task.progress}%
                   </span>
                 ) : (
@@ -491,11 +491,11 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
             <span style={{ color: 'var(--text-secondary)' }}>
               总计: <strong style={{ color: 'var(--text-primary)' }}>{stats.total}</strong>
             </span>
-            <span style={{ color: '#52c41a' }}>
+            <span style={{ color: 'var(--success)' }}>
               成功: <strong>{stats.completed}</strong>
             </span>
             {stats.error > 0 && (
-              <span style={{ color: '#ff4d4f' }}>
+              <span style={{ color: 'var(--danger)' }}>
                 失败: <strong>{stats.error}</strong>
               </span>
             )}
@@ -511,7 +511,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
               width: '100%',
               padding: '10px',
               backgroundColor: 'transparent',
-              border: '1px solid var(--border-color)',
+              border: '1px solid var(--border-default)',
               borderRadius: '6px',
               color: 'var(--text-secondary)',
               fontSize: '13px',
@@ -527,7 +527,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
               e.currentTarget.style.color = 'var(--text-primary)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border-color)';
+              e.currentTarget.style.borderColor = 'var(--border-default)';
               e.currentTarget.style.color = 'var(--text-secondary)';
             }}
           >

@@ -56,7 +56,7 @@ const PlayModeButton: React.FC<PlayModeButtonProps> = ({ mode, onModeChange, siz
         }}
         onMouseOver={(e) => {
           e.currentTarget.style.color = 'var(--text-secondary)';
-          e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+          e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
         }}
         onMouseOut={(e) => {
           e.currentTarget.style.color = 'var(--text-tertiary)';

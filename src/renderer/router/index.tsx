@@ -31,8 +31,8 @@ const Loading = () => (
     <div style={{
       width: '24px',
       height: '24px',
-      border: '2px solid var(--divider-color)',
-      borderTopColor: 'var(--primary-color)',
+      border: '2px solid var(--border-subtle)',
+      borderTopColor: 'var(--accent)',
       borderRadius: '50%',
       animation: 'spin 0.8s linear infinite',
       marginRight: '12px',

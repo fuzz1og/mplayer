@@ -1,14 +1,16 @@
 import React from 'react';
+import type { SourceKey } from '@mplayer/core';
+import { SOURCE_COLORS } from '@/renderer/constants/sourceConfig';
 
-const SOURCE_CONFIG: Record<string, { label: string; color: string }> = {
-  netease: { label: '网易云', color: '#E74C3C' },
-  qq: { label: 'QQ', color: '#1DB954' },
-  kugou: { label: '酷狗', color: '#FF8C00' },
-  kuwo: { label: '酷我', color: '#FF6F00' },
-  qianqian: { label: '千千', color: '#00A1D6' },
-  migu: { label: '咪咕', color: '#FF5A00' },
-  soda: { label: '汽水', color: '#1E90FF' },
-  local: { label: '本地', color: '#10B981' },
+const SOURCE_LABELS: Record<string, string> = {
+  netease: '网易云',
+  qq: 'QQ',
+  kugou: '酷狗',
+  kuwo: '酷我',
+  qianqian: '千千',
+  migu: '咪咕',
+  soda: '汽水',
+  local: '本地',
 };
 
 interface SourceBadgeProps {
@@ -17,8 +19,9 @@ interface SourceBadgeProps {
 }
 
 const SourceBadge: React.FC<SourceBadgeProps> = ({ sourceType, style }) => {
-  const config = SOURCE_CONFIG[sourceType];
-  if (!config) return null;
+  const color = SOURCE_COLORS[sourceType as SourceKey];
+  const label = SOURCE_LABELS[sourceType];
+  if (!color || !label) return null;
 
   return (
     <span
@@ -27,14 +30,14 @@ const SourceBadge: React.FC<SourceBadgeProps> = ({ sourceType, style }) => {
         fontWeight: 'var(--weight-medium)',
         padding: '1px 6px',
         borderRadius: 'var(--radius-xs)',
-        backgroundColor: `${config.color}14`,
-        color: config.color,
+        backgroundColor: `${color}14`,
+        color,
         flexShrink: 0,
         lineHeight: '1.4',
         ...style,
       }}
     >
-      {config.label}
+      {label}
     </span>
   );
 };

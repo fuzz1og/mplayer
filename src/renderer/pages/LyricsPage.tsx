@@ -52,7 +52,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
           onClick={onBack}
           style={{
             padding: '8px 16px',
-            background: 'var(--primary-color)',
+            background: 'var(--accent)',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
@@ -115,7 +115,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
             <ArrowLeft size={18} />
             <span style={{ fontSize: '14px', fontWeight: 500 }}>返回</span>
           </button>
-          <div style={{ width: '48px', height: '48px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
             {coverSrc ? (
               <CoverImage src={coverSrc} alt="" onError={() => {
                 if (!currentSong) return;
@@ -138,7 +138,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
             <button onClick={playPrevious} className="player-btn" aria-label="上一首"><SkipBack size={16} fill="currentColor" /></button>
-            <button onClick={() => (isPlaying ? pause() : resume())} aria-label={isPlaying ? '暂停' : '播放'} style={{ width: '38px', height: '38px', borderRadius: '50%', border: 'none', backgroundColor: 'var(--accent-color)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}>
+            <button onClick={() => (isPlaying ? pause() : resume())} aria-label={isPlaying ? '暂停' : '播放'} style={{ width: '38px', height: '38px', borderRadius: '50%', border: 'none', backgroundColor: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}>
               {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{ marginLeft: '1px' }} />}
             </button>
             <button onClick={playNext} className="player-btn" aria-label="下一首"><SkipForward size={16} fill="currentColor" /></button>

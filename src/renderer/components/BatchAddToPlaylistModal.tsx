@@ -118,7 +118,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
     >
       <div
         style={{
-          backgroundColor: 'var(--content-bg)',
+          backgroundColor: 'var(--bg-surface)',
           borderRadius: '12px',
           padding: '24px',
           width: '420px',
@@ -164,7 +164,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
             }}
             onMouseEnter={(e) => {
               if (!adding) {
-                e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+                e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
                 e.currentTarget.style.color = 'var(--text-secondary)';
               }
             }}
@@ -186,7 +186,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
             alignItems: 'center',
             gap: '12px',
             padding: '12px',
-            backgroundColor: 'var(--hover-bg)',
+            backgroundColor: 'var(--bg-hover)',
             borderRadius: '8px',
             marginBottom: '20px',
           }}
@@ -197,7 +197,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
               height: '48px',
               borderRadius: '6px',
               overflow: 'hidden',
-              backgroundColor: 'var(--bg-color)',
+              backgroundColor: 'var(--bg-base)',
               flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
@@ -289,7 +289,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
                     }}
                     onMouseEnter={(e) => {
                       if (!adding) {
-                        e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+                        e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
                         e.currentTarget.style.transform = 'translateX(4px)';
                       }
                     }}
@@ -305,7 +305,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
                         width: '40px',
                         height: '40px',
                         borderRadius: '6px',
-                        backgroundColor: 'var(--hover-bg)',
+                        backgroundColor: 'var(--bg-hover)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -345,14 +345,14 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
             style={{
               marginTop: '16px',
               padding: '12px',
-              backgroundColor: 'var(--hover-bg)',
+              backgroundColor: 'var(--bg-hover)',
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
             }}
           >
-            <div style={{ width: '20px', height: '20px', border: '2px solid var(--primary-color)', borderRadius: '50%', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
+            <div style={{ width: '20px', height: '20px', border: '2px solid var(--accent)', borderRadius: '50%', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
             <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>正在添加歌曲...</span>
           </div>
         )}

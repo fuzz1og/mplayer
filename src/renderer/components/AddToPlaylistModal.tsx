@@ -129,7 +129,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
     >
       <div
         style={{
-          backgroundColor: 'var(--content-bg)',
+          backgroundColor: 'var(--bg-surface)',
           borderRadius: '12px',
           padding: '24px',
           width: '420px',
@@ -173,7 +173,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
               transition: 'all 0.15s ease',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+              e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
               e.currentTarget.style.color = 'var(--text-secondary)';
             }}
             onMouseLeave={(e) => {
@@ -192,7 +192,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
             alignItems: 'center',
             gap: '12px',
             padding: '12px',
-            backgroundColor: 'var(--hover-bg)',
+            backgroundColor: 'var(--bg-hover)',
             borderRadius: 'var(--radius-md)',
             marginBottom: '20px',
           }}
@@ -204,7 +204,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
               height: '48px',
               borderRadius: '6px',
               overflow: 'hidden',
-              backgroundColor: 'var(--bg-color)',
+              backgroundColor: 'var(--bg-base)',
               flexShrink: 0,
             }}
           >
@@ -291,7 +291,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                       }}
                       onMouseEnter={(e) => {
                         if (!isDisabled) {
-                          e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+                          e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
                           e.currentTarget.style.transform = 'translateX(4px)';
                         }
                       }}
@@ -302,7 +302,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                         }
                       }}
                     >
-                      <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: 'var(--hover-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <ListMusic size={20} color={isDisabled ? 'var(--text-tertiary)' : 'var(--text-primary)'} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -310,8 +310,8 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                           {playlist.name}
                         </div>
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {dup?.status === 'duplicate' && <span style={{ color: 'var(--danger-color)' }}>已存在</span>}
-                          {dup?.status === 'nameConflict' && <span style={{ color: '#F0A500' }}>同名（不同平台）</span>}
+                          {dup?.status === 'duplicate' && <span style={{ color: 'var(--danger)' }}>已存在</span>}
+                          {dup?.status === 'nameConflict' && <span style={{ color: 'var(--warning)' }}>同名（不同平台）</span>}
                           {(!dup || dup?.status === 'ok') && (playlist.description || '歌单')}
                         </div>
                       </div>
@@ -327,7 +327,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
         <div style={{
           marginTop: '16px',
           paddingTop: '16px',
-          borderTop: '1px solid var(--divider-color)',
+          borderTop: '1px solid var(--border-subtle)',
         }}>
           <div style={{ display: 'flex', gap: '8px' }}>
             <input
@@ -338,10 +338,10 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
               style={{
                 flex: 1,
                 padding: '8px 12px',
-                border: '1px solid var(--border-color)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '6px',
                 fontSize: 'var(--text-base)',
-                backgroundColor: 'var(--bg-color)',
+                backgroundColor: 'var(--bg-base)',
                 color: 'var(--text-primary)',
               }}
               onKeyDown={(e) => {
@@ -353,7 +353,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
               disabled={creating || !newPlaylistName.trim()}
               style={{
                 padding: '8px 16px',
-                backgroundColor: 'var(--accent-color)',
+                backgroundColor: 'var(--accent)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',

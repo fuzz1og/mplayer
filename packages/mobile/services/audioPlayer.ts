@@ -233,7 +233,7 @@ function isRedirectEndpoint(url: string): boolean {
  * 走路由链（直连 client → tier3 订阅源兜底），失败才回退旧合并解析。
  * 返回 {url, lrc, nonFull}（nonFull=试听版/片段，驱动「可换源」提示与 preview 徽标）。
  */
-async function resolvePlayableUrlMobile(song: Song): Promise<{ url: string; lrc: string; nonFull: boolean }> {
+export async function resolvePlayableUrlMobile(song: Song): Promise<{ url: string; lrc: string; nonFull: boolean }> {
   try {
     const routed = await musicApi.resolvePlayableSongRouted(song);
     if (routed?.url?.startsWith('http')) {
