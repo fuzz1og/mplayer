@@ -96,7 +96,7 @@ export default function SongRow({
   const handleDownload = () => {
     setShowActions(false);
     downloadSong(song)
-      .then(() => Alert.alert('提示', `《${song.name}》下载完成，可在下载页播放`))
+      .then(() => Alert.alert('提示', `《${song.name}》下载完成，可在本地歌曲页播放`))
       .catch(() => Alert.alert('提示', `《${song.name}》下载失败，请重试`));
   };
 
