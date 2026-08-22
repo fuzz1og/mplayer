@@ -201,7 +201,7 @@ const TIER3_BUDGET_MS = 6_000;
 const tier3Inflight = new Map<string, Promise<string>>();
 
 /** 歌曲身份键：id 优先；无 id 的歌（热榜旧数据等）退回 名字+歌手。 */
-export function tier3InflightKey(song: Song): string {
+function tier3InflightKey(song: Song): string {
   return song.id
     ? `${song.sourceType}|${song.id}`
     : `${song.sourceType}|name:${song.name}|${song.artist}`;

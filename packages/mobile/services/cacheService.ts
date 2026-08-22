@@ -48,10 +48,11 @@ export async function setCachedUrl(songId: string, url: string): Promise<void> {
  * 失效单首歌的 URL 缓存（播放失败时调用）。
  * CDN 直链带时效签名（kuwo 等），12h TTL 内签名就会过期——死链若不清，
  * 每次播放都抢先命中同一个坏地址（真机复现：《恋人》隔 3 小时重播必失败）。
+ * 走语义层单曲失效入口，key 推导不外泄（ADR-0002）。
  */
 export async function deleteCachedUrl(songId: string): Promise<void> {
   if (!songId) return;
-  await cacheKernel.remove(songResources.songKey(songId));
+  await songResources.invalidateSongResources(songId);
   urlWrittenAt.delete(songId);
 }
 

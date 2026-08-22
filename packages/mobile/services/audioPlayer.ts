@@ -491,7 +491,10 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       if (exhausted && !song.url && retryCount === 0 && song.id) {
         const written = await getCachedUrl(song.id);
         const age = urlAgeMs(song.id);
-        if (written && age != null && Date.now() - age >= t0 - 1_000) {
+        // 写入时刻 = 现在 - 年龄：要求「本轮播放开始之后写入」（1s 容差吸收同
+        // 进程时钟毛刺）——本轮之前的旧条目可能是探活判死删除过的那类死链。
+        const writtenAt = age != null ? Date.now() - age : null;
+        if (written && writtenAt != null && writtenAt >= t0 - 1_000) {
           log.addLog('info', `《${song.name}》后台预取已拿到直链，跳过 fresh 重试直接播放`);
           // retryCount+1：本轮解析已消耗一次尝试；若缓存在读取前又被清掉，
           // 再次失败时不再进本捷径，正常走 fresh 重试（防循环）
