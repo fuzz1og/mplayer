@@ -8,7 +8,7 @@ import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, X, Pl
 import { invalidateCoverUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
-import { colors, spacing, radius } from '../theme/tokens';
+import { colors, spacing, radius, textVariants } from '../theme/tokens';
 import { useResolvedCover } from '../hooks/useResolvedCover';
 
 export default function PlayerBar() {
@@ -207,8 +207,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   info: { flex: 1, marginRight: spacing[3] },
-  title: { color: colors.textPrimary, fontSize: 14, fontWeight: '600' },
-  artist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  title: { ...textVariants.subhead, fontWeight: '600', color: colors.textPrimary },
+  artist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
   textEmpty: { color: colors.textTertiary },
   controls: {
     flexDirection: 'row',
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderDefault,
   },
-  modalTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '700' },
+  modalTitle: { ...textVariants.title, color: colors.textPrimary },
   queueItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -245,8 +245,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderDefault,
   },
   queueItemInfo: { flex: 1, marginRight: 12 },
-  queueItemName: { color: colors.textPrimary, fontSize: 15 },
+  queueItemName: { ...textVariants.body, fontWeight: '400', color: colors.textPrimary },
   queueItemActive: { color: colors.accent },
-  queueItemArtist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  emptyText: { color: colors.textTertiary, textAlign: 'center', marginTop: spacing[10] },
+  queueItemArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
+  emptyText: { ...textVariants.footnote, color: colors.textTertiary, textAlign: 'center', marginTop: spacing[10] },
 });

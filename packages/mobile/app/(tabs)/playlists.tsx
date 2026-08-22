@@ -13,7 +13,7 @@ import { ListMusic, ChevronRight, Plus, Heart, Clock } from 'lucide-react-native
 import { router } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import type { Playlist } from '../../stores/playlistStore';
-import { colors, radius } from '../../theme/tokens';
+import { colors, radius, textVariants } from '../../theme/tokens';
 
 const BUILT_IN = [
   { key: 'favorites', icon: Heart, label: '收藏', desc: '我喜欢的歌曲' },
@@ -109,7 +109,7 @@ export default function PlaylistsPage() {
             ))}
             {playlists.length > 0 && (
               <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
-                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>我的歌单</Text>
+                <Text style={{ ...textVariants.footnote, color: colors.textSecondary }}>我的歌单</Text>
               </View>
             )}
           </>
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
   },
-  title: { color: colors.textPrimary, fontSize: 22, fontWeight: '700' },
+  title: { ...textVariants.largeTitle, color: colors.textPrimary },
   addBtn: {
     width: 36,
     height: 36,
@@ -216,8 +216,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   rowInfo: { flex: 1 },
-  rowName: { color: colors.textPrimary, fontSize: 15, fontWeight: '500' },
-  rowMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
+  rowName: { ...textVariants.body, color: colors.textPrimary },
+  rowMeta: { ...textVariants.caption, color: colors.textSecondary, marginTop: 3 },
 
   // modal
   modalOverlay: {
@@ -233,13 +233,15 @@ const styles = StyleSheet.create({
     width: '80%',
   },
   modalTitle: {
-    color: colors.textPrimary,
-    fontSize: 17,
+    ...textVariants.title,
     fontWeight: '600',
+    color: colors.textPrimary,
     marginBottom: 16,
     textAlign: 'center',
   },
   modalInput: {
+    ...textVariants.body,
+    fontWeight: '400',
     backgroundColor: colors.inputBg,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -247,7 +249,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     color: colors.textPrimary,
-    fontSize: 15,
   },
   modalInputFocused: {
     borderColor: colors.inputBorderFocus,
@@ -264,7 +265,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgHover,
     alignItems: 'center',
   },
-  cancelText: { color: colors.textSecondary, fontSize: 15 },
+  cancelText: { ...textVariants.body, fontWeight: '400', color: colors.textSecondary },
   confirmBtn: {
     flex: 1,
     paddingVertical: 10,
@@ -272,5 +273,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
   },
-  confirmText: { color: colors.textInverse, fontSize: 15, fontWeight: '600' },
+  confirmText: { ...textVariants.body, fontWeight: '600', color: colors.textInverse },
 });

@@ -13,7 +13,7 @@ import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
 import { probeSongsPrefetch } from '../../services/songProbe';
-import { colors } from '../../theme/tokens';
+import { colors, textVariants } from '../../theme/tokens';
 
 export default function AlbumDetailPage() {
   const { id, name, pic, artist } = useLocalSearchParams<{ id: string; name?: string; pic?: string; artist?: string }>();
@@ -95,7 +95,7 @@ export default function AlbumDetailPage() {
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={{ color: colors.textSecondary, fontSize: 16 }}>暂无歌曲</Text>
+              <Text style={{ ...textVariants.callout, color: colors.textSecondary }}>暂无歌曲</Text>
             </View>
           }
         />

@@ -9,7 +9,7 @@ import SongRow from '../../components/SongRow';
 import LoadingState from '../../components/LoadingState';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
-import { colors, radius } from '../../theme/tokens';
+import { colors, radius, textVariants } from '../../theme/tokens';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_GAP = 10;
@@ -183,9 +183,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
+    ...textVariants.sectionHeader,
     color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
     marginBottom: 8,
   },
   playAllBtn: {
@@ -198,7 +197,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8, // 加高至 ~32px + hitSlop 达到 44pt 触控标准
     marginBottom: 8,
   },
-  playAllText: { color: colors.textInverse, fontSize: 12, fontWeight: '600' },
+  playAllText: { ...textVariants.caption, fontWeight: '600', color: colors.textInverse },
   shuffleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -209,13 +208,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginBottom: 8,
   },
-  shuffleText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
-  emptyText: { color: colors.textSecondary, fontSize: 13, marginVertical: 20, textAlign: 'center' },
+  shuffleText: { ...textVariants.caption, fontWeight: '600', color: colors.accent },
+  emptyText: { ...textVariants.footnote, color: colors.textSecondary, marginVertical: 20, textAlign: 'center' },
   errorBox: {
     alignItems: 'center',
     paddingTop: 80,
   },
-  errorText: { color: colors.danger, fontSize: 14, marginTop: 10 },
+  errorText: { ...textVariants.subhead, fontWeight: '400', color: colors.danger, marginTop: 10 },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -229,13 +228,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgHover,
   },
   gridName: {
+    ...textVariants.footnote,
     color: colors.textPrimary,
-    fontSize: 13,
     marginTop: 6,
   },
   gridMeta: {
+    ...textVariants.micro,
+    fontWeight: '400',
     color: colors.textSecondary,
-    fontSize: 11,
     marginTop: 2,
   },
 });

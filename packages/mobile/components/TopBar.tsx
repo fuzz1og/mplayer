@@ -6,7 +6,7 @@ import { ArrowLeft, Search, Settings, ChevronDown, Check, LayoutGrid, Music2 } f
 import type { LucideIcon } from 'lucide-react-native';
 import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, sourceColors } from '../theme/tokens';
+import { colors, radius, sourceColors, textVariants } from '../theme/tokens';
 import { useSourceStore, SOURCE_OPTION_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
@@ -172,7 +172,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
     color: colors.textPrimary,
-    fontSize: 14,
+    ...textVariants.subhead,
+    fontWeight: '400',
   },
   sourceBtn: {
     flexShrink: 0,
@@ -191,9 +192,9 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   sourceLabel: {
-    color: colors.textPrimary,
-    fontSize: 12,
+    ...textVariants.caption,
     fontWeight: '600',
+    color: colors.textPrimary,
   },
   settingsBtn: {
     marginLeft: 12,
@@ -225,9 +226,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sheetTitle: {
+    ...textVariants.title,
     color: colors.textPrimary,
-    fontSize: 17,
-    fontWeight: '700',
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -240,8 +240,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderSubtle,
   },
   optionLabel: {
+    ...textVariants.callout,
     color: colors.textPrimary,
-    fontSize: 16,
     marginLeft: 12,
     flex: 1,
   },
@@ -253,8 +253,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelText: {
-    color: colors.textSecondary,
-    fontSize: 16,
+    ...textVariants.sectionHeader,
     fontWeight: '600',
+    color: colors.textSecondary,
   },
 });

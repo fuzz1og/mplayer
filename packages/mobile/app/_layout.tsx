@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../theme/tokens';
+import { colors, textVariants } from '../theme/tokens';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setupLegacyMigration } from '../services/legacyMigration';
@@ -161,8 +161,8 @@ const toastStyles = StyleSheet.create({
     borderColor: colors.accent,
   },
   text: {
+    ...textVariants.footnote,
     color: colors.textPrimary,
-    fontSize: 13,
     textAlign: 'center',
   },
 });

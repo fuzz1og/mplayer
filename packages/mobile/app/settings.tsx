@@ -19,7 +19,7 @@ import type { Tier3SourceStats } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useLogsStore } from '../stores/logsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
-import { colors, radius, shadow, spacing } from '../theme/tokens';
+import { colors, radius, shadow, spacing, textVariants } from '../theme/tokens';
 
 function formatLogTime(ts: number): string {
   const d = new Date(ts);
@@ -307,9 +307,9 @@ export default function SettingsPage() {
               tier3Subscriptions.map((sub) => (
                 <View key={sub.id} style={styles.modeRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>{sub.name}</Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{sub.source}</Text>
-                    <Text style={{ color: colors.textTertiary, fontSize: 11 }}>{sub.manifest.sources.length} 个源</Text>
+                    <Text style={{ ...textVariants.subhead, fontWeight: '600', color: colors.textPrimary }}>{sub.name}</Text>
+                    <Text style={{ ...textVariants.caption, color: colors.textSecondary }} numberOfLines={1}>{sub.source}</Text>
+                    <Text style={{ ...textVariants.micro, fontWeight: '400', color: colors.textTertiary }}>{sub.manifest.sources.length} 个源</Text>
                   </View>
                   {sub.kind === 'url' && (
                     <TouchableOpacity onPress={() => void handleRefreshTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
@@ -420,13 +420,13 @@ export default function SettingsPage() {
             {updateState === 'not-available' && (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <CircleCheck size={20} color={colors.success} style={{ marginRight: 8 }} />
-                <Text style={{ color: colors.success, fontSize: 14 }}>已是最新版本</Text>
+                <Text style={{ ...textVariants.subhead, fontWeight: '400', color: colors.success }}>已是最新版本</Text>
               </View>
             )}
             {updateState === 'error' && (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <CircleX size={20} color={colors.danger} style={{ marginRight: 8 }} />
-                <Text style={{ color: colors.danger, fontSize: 14 }}>检查失败，请检查网络</Text>
+                <Text style={{ ...textVariants.subhead, fontWeight: '400', color: colors.danger }}>检查失败，请检查网络</Text>
               </View>
             )}
           </View>
@@ -518,13 +518,12 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
+    ...textVariants.sectionHeader,
     marginBottom: spacing[4],
   },
   label: {
     color: colors.textSecondary,
-    fontSize: 13,
+    ...textVariants.footnote,
     marginBottom: spacing[2],
   },
   modeRow: {
@@ -537,13 +536,13 @@ const styles = StyleSheet.create({
   },
   modeLabel: {
     color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '500',
+    ...textVariants.subhead,
     width: 56,
   },
   modeStatus: {
     flex: 1,
-    fontSize: 11,
+    ...textVariants.micro,
+    fontWeight: '400',
     color: colors.textSecondary,
     marginLeft: 8,
   },
@@ -568,7 +567,7 @@ const styles = StyleSheet.create({
   },
   modeBtnText: {
     color: colors.textSecondary,
-    fontSize: 12,
+    ...textVariants.caption,
     fontWeight: '500',
   },
   modeBtnTextActive: {
@@ -580,7 +579,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.inputBorder,
     color: colors.textPrimary,
-    fontSize: 14,
+    ...textVariants.subhead,
+    fontWeight: '400',
     paddingHorizontal: spacing[3],
     paddingVertical: 10,
     marginBottom: spacing[3],
@@ -608,7 +608,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     color: colors.textInverse,
-    fontSize: 14,
+    ...textVariants.subhead,
     fontWeight: '600',
   },
   testBtn: { backgroundColor: colors.bgHover, borderRadius: radius.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, marginTop: spacing[2] },
@@ -626,7 +626,8 @@ const styles = StyleSheet.create({
   },
   radioLabel: {
     color: colors.textSecondary,
-    fontSize: 15,
+    ...textVariants.body,
+    fontWeight: '400',
     marginLeft: spacing[3],
   },
   radioLabelActive: {
@@ -652,7 +653,7 @@ const styles = StyleSheet.create({
   },
   logLevel: {
     color: colors.textSecondary,
-    fontSize: 10,
+    ...textVariants.micro, // 归一：10 → micro(11)
     fontWeight: '700',
     width: 30,
     marginTop: 2,
@@ -665,7 +666,8 @@ const styles = StyleSheet.create({
   },
   logTime: {
     color: colors.textTertiary,
-    fontSize: 11,
+    ...textVariants.micro,
+    fontWeight: '400',
     width: 58,
     marginTop: 2,
   },
@@ -677,15 +679,17 @@ const styles = StyleSheet.create({
   },
   aboutLabel: {
     color: colors.textSecondary,
-    fontSize: 15,
+    ...textVariants.body,
+    fontWeight: '400',
   },
   aboutValue: {
     color: colors.textPrimary,
-    fontSize: 15,
+    ...textVariants.body,
+    fontWeight: '400',
   },
   hintText: {
     color: colors.textTertiary,
-    fontSize: 12,
+    ...textVariants.caption,
     marginTop: 10,
     textAlign: 'center',
   },
@@ -694,7 +698,7 @@ const styles = StyleSheet.create({
   },
   updateAvailableText: {
     color: colors.success,
-    fontSize: 15,
+    ...textVariants.body,
     fontWeight: '600',
     marginBottom: spacing[2],
   },

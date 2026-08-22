@@ -6,7 +6,7 @@ import { useDownloadStore } from '../../stores/downloadStore';
 import { getLocalUri, removeDownloadedFile, pickDownloadDirectory } from '../../services/downloadService';
 import { playSong } from '../../services/audioPlayer';
 import { usePlayerStore } from '../../stores/playerStore';
-import { colors, radius } from '../../theme/tokens';
+import { colors, radius, textVariants } from '../../theme/tokens';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -127,16 +127,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   emptyContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
   emptyBox: { alignItems: 'center' },
-  title: { color: colors.textSecondary, fontSize: 16, marginTop: 16 },
-  subtitle: { color: colors.textTertiary, fontSize: 13, marginTop: 8 },
+  title: { ...textVariants.callout, color: colors.textSecondary, marginTop: 16 },
+  subtitle: { ...textVariants.footnote, color: colors.textTertiary, marginTop: 8 },
   pathBox: {
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 6,
   },
-  pathLabel: { color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
-  pathText: { color: colors.textTertiary, fontSize: 12, fontFamily: 'monospace' },
-  pathHint: { color: colors.textTertiary, fontSize: 11, marginTop: 4 },
+  pathLabel: { ...textVariants.caption, color: colors.textSecondary, marginBottom: 4 },
+  pathText: { ...textVariants.caption, color: colors.textTertiary, fontFamily: 'monospace' },
+  pathHint: { ...textVariants.micro, fontWeight: '400', color: colors.textTertiary, marginTop: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -156,9 +156,9 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   info: { flex: 1, marginRight: 12 },
-  name: { color: colors.textPrimary, fontSize: 15, fontWeight: '600' },
+  name: { ...textVariants.body, fontWeight: '600', color: colors.textPrimary },
   nameActive: { color: colors.accent },
-  artist: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  status: { color: colors.textSecondary, fontSize: 12, marginRight: 12 },
+  artist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
+  status: { ...textVariants.caption, color: colors.textSecondary, marginRight: 12 },
   statusError: { color: colors.danger },
 });

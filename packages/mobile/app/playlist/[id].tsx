@@ -15,7 +15,7 @@ import { usePlaylistStore } from '../../stores/playlistStore';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import PlaylistHero from '../../components/PlaylistHero';
 import type { Song } from '@mplayer/core';
-import { colors, radius, spacing } from '../../theme/tokens';
+import { colors, radius, spacing, textVariants } from '../../theme/tokens';
 
 export default function PlaylistDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingBottom: 80,
   },
-  emptyText: { color: colors.textSecondary, fontSize: 16, marginTop: spacing[3] },
+  emptyText: { ...textVariants.callout, color: colors.textSecondary, marginTop: spacing[3] },
 
   // modal
   modalOverlay: {
@@ -200,9 +200,9 @@ const styles = StyleSheet.create({
     width: '80%',
   },
   modalTitle: {
-    color: colors.textPrimary,
-    fontSize: 17,
+    ...textVariants.title,
     fontWeight: '600',
+    color: colors.textPrimary,
     marginBottom: spacing[4],
     textAlign: 'center',
   },
@@ -211,8 +211,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    ...textVariants.body,
+    fontWeight: '400',
     color: colors.textPrimary,
-    fontSize: 15,
   },
   modalActions: {
     flexDirection: 'row',
@@ -226,7 +227,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgHover,
     alignItems: 'center',
   },
-  cancelText: { color: colors.textSecondary, fontSize: 15 },
+  cancelText: { ...textVariants.body, fontWeight: '400', color: colors.textSecondary },
   confirmBtn: {
     flex: 1,
     paddingVertical: 10,
@@ -234,5 +235,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
   },
-  confirmText: { color: colors.textInverse, fontSize: 15, fontWeight: '600' },
+  confirmText: { ...textVariants.body, fontWeight: '600', color: colors.textInverse },
 });

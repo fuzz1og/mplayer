@@ -14,7 +14,7 @@ import { probeSongsPrefetch } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
-import { colors, radius, shadow, spacing } from '../../theme/tokens';
+import { colors, radius, shadow, spacing, textVariants } from '../../theme/tokens';
 
 export default function ArtistDetailPage() {
   const { id, name, pic } = useLocalSearchParams<{ id: string; name?: string; pic?: string }>();
@@ -126,7 +126,7 @@ export default function ArtistDetailPage() {
           ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={{ color: colors.textSecondary, fontSize: 16 }}>暂无歌曲</Text>
+              <Text style={{ ...textVariants.callout, color: colors.textSecondary }}>暂无歌曲</Text>
             </View>
           }
           listHeader={
@@ -165,7 +165,7 @@ export default function ArtistDetailPage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   albumsSection: { paddingTop: spacing[3], paddingBottom: spacing[2], paddingLeft: spacing[4] },
-  albumsTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: spacing[3] },
+  albumsTitle: { ...textVariants.body, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing[3] },
   albumCard: {
     width: 116,
     backgroundColor: colors.bgSurface,
@@ -175,6 +175,6 @@ const styles = StyleSheet.create({
     marginRight: spacing[3],
   },
   albumCover: { width: 100, height: 100, borderRadius: radius.sm, backgroundColor: colors.bgHover },
-  albumName: { color: colors.textTertiary, fontSize: 12, marginTop: 6 },
+  albumName: { ...textVariants.caption, color: colors.textTertiary, marginTop: 6 },
   empty: { paddingVertical: 60, alignItems: 'center' },
 });

@@ -9,7 +9,7 @@ import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useHistoryStore } from '../stores/historyStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
-import { colors, spacing, statusBarStyle } from '../theme/tokens';
+import { colors, spacing, statusBarStyle, textVariants } from '../theme/tokens';
 
 export default function HistoryPage() {
   const { history, removeHistory, clearHistory } = useHistoryStore();
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: colors.textPrimary,
-    fontSize: 16,
+    ...textVariants.sectionHeader,
     fontWeight: '600',
   },
   clearBtn: {
@@ -87,7 +87,8 @@ const styles = StyleSheet.create({
   },
   clearText: {
     color: colors.dangerText,
-    fontSize: 14,
+    ...textVariants.subhead,
+    fontWeight: '400',
   },
   list: {},
 });

@@ -18,7 +18,7 @@ import { playSong } from '../services/audioPlayer';
 import { probeSongsPrefetch } from '../services/songProbe';
 import { searchStrictMatch } from '../services/songResources';
 import { usePlayerStore } from '../stores/playerStore';
-import { colors, spacing, statusBarStyle } from '../theme/tokens';
+import { colors, spacing, statusBarStyle, textVariants } from '../theme/tokens';
 
 interface HotlistSong {
   id: string;
@@ -160,5 +160,5 @@ export default function HotlistPage() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  errorText: { color: colors.textSecondary, fontSize: 16, textAlign: 'center', marginTop: spacing[10] },
+  errorText: { color: colors.textSecondary, ...textVariants.callout, textAlign: 'center', marginTop: spacing[10] },
 });
