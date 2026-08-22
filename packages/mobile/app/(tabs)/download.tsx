@@ -10,6 +10,9 @@ import { usePlayerStore } from '../../stores/playerStore';
 import {radius, shadow, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+
 import { useSettingsStore } from '../../stores/settingsStore';
 import EmptyState from '../../components/EmptyState';
 
@@ -21,6 +24,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function DownloadPage() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const items = useDownloadStore((s) => s.items);
   const removeItem = useDownloadStore((s) => s.removeItem);
@@ -92,7 +96,10 @@ export default function DownloadPage() {
       <FlatList
         data={items}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={items.length === 0 ? styles.emptyContent : styles.listContent}
+        contentContainerStyle={[
+          items.length === 0 ? styles.emptyContent : styles.listContent,
+          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 },
+        ]}
         ListEmptyComponent={
           <EmptyState
             icon={Download}

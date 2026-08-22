@@ -11,6 +11,8 @@ import {radius, shadow, spacing, textVariants} from '../theme/tokens';
 import { lightColors, darkColors } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topChromeHeight, bottomChromeHeight } from './chromeMetrics';
 import LoadingState from './LoadingState';
 import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
@@ -44,8 +46,10 @@ export default function DiscoverTabs() {
     setActiveIndex(idx);
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
       {/* Bubble tab header */}
       <View style={styles.tabHeader}>
         {TABS.map((t, i) => (
@@ -89,6 +93,7 @@ export default function DiscoverTabs() {
 /* ===== 排行榜 Tab ===== */
 function HotlistContent() {
   const { isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
   const loading = useDiscoverStore(s => s.loading);
   const load = useDiscoverStore(s => s.load);
@@ -109,7 +114,7 @@ function HotlistContent() {
   ];
 
   return (
-    <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentInnerHotlist}>
+    <ScrollView style={styles.tabContent} contentContainerStyle={[styles.tabContentInnerHotlist, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}>
       {SECTIONS.map(section => (
         <SectionCard
           key={section.key}
@@ -208,6 +213,7 @@ function CategoryPills({ items, activeLabel, onSelect }: {
 
 function AlbumsContent() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
   const CARD_GAP = 10;
   const CARD_COLS = 2;
@@ -278,7 +284,7 @@ function AlbumsContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={styles.tabContentInner}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}
         data={albums}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
@@ -305,6 +311,7 @@ const PLAYLIST_CATEGORIES = ['全部', '流行', '摇滚', '民谣', '电子', '
 
 function PlaylistContent() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
   const CARD_GAP = 10;
   const CARD_COLS = 2;
@@ -404,7 +411,7 @@ function PlaylistContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={styles.tabContentInner}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}
         data={playlists}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
@@ -445,6 +452,7 @@ const ARTIST_CATEGORIES = [
 
 function ArtistContent() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
   const CARD_COLS = 3;
   const [artists, setArtists] = useState<any[]>([]);
@@ -538,7 +546,7 @@ function ArtistContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={styles.tabContentInner}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}
         data={artists}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}

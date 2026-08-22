@@ -197,12 +197,12 @@ export const typography = {
  * 不套变体的例外：歌词等带 lineHeight 的成对样式、一次性展示字形（如歌手占位字母）。
  */
 export const textVariants = {
-  /** 页面大标题 */
-  largeTitle: { fontSize: 22, fontWeight: '700' },
+  /** 页面大标题（字距跟字号走：大字收紧，apple-design §15） */
+  largeTitle: { fontSize: 22, fontWeight: '700', letterSpacing: -0.5 },
   /** 全屏播放器歌曲名 */
-  titleLg: { fontSize: 20, fontWeight: '700' },
+  titleLg: { fontSize: 20, fontWeight: '700', letterSpacing: -0.4 },
   /** 弹层/对话框标题 */
-  title: { fontSize: 17, fontWeight: '700' },
+  title: { fontSize: 17, fontWeight: '700', letterSpacing: -0.2 },
   /** 区块标题 */
   sectionHeader: { fontSize: 16, fontWeight: '700' },
   /** 正文级说明/空态文案 */

@@ -19,6 +19,8 @@ import LoadMoreFooter from '../../components/LoadMoreFooter';
 import {radius, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -30,6 +32,7 @@ let artistSearchSeq = 0;
 export default function SearchPage() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ q: string; type?: string }>();
   const q = Array.isArray(params.q) ? params.q[0] : params.q;
   const type = Array.isArray(params.type) ? params.type[0] : params.type;
@@ -85,7 +88,7 @@ export default function SearchPage() {
   }, [source]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
       {/* 气泡 tab：歌曲 / 歌手 */}
       <View style={styles.tabHeader}>
         {([
@@ -142,7 +145,10 @@ export default function SearchPage() {
           data={artists}
           keyExtractor={(item) => String(item.id)}
           numColumns={3}
-          contentContainerStyle={styles.artistGrid}
+          contentContainerStyle={[
+            styles.artistGrid,
+            { paddingBottom: bottomChromeHeight(insets.bottom, false) + 16 },
+          ]}
           renderItem={({ item: a }) => (
             <TouchableOpacity
               style={styles.artistCard}
@@ -182,12 +188,14 @@ interface ResultsListProps {
  */
 function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: ResultsListProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <FlatList
       key="song-results"
       data={results}
       keyExtractor={(item) => item.key}
+      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + 16 }}
       renderItem={({ item: group }) => (
         <View style={styles.groupSection}>
           {(group.name || group.artist) ? (
@@ -213,12 +221,14 @@ function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: Results
  */
 function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: ResultsListProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <FlatList
       key="song-results"
       data={results}
       keyExtractor={(item) => item.key}
+      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + 16 }}
       renderItem={({ item: group }) => (
         <View style={styles.groupSection}>
           {group.name ? <Text style={styles.groupHeader}>{group.name}</Text> : null}

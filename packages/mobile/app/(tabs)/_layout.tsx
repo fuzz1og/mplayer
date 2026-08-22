@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Tabs, usePathname } from 'expo-router';
 import { Compass, Flame, ListMusic, Download } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
+import ScalePress from '../../components/ScalePress';
 
 // tab bar 内容高度（paddingTop + 图标 + 标签行 + paddingBottom）：
 // 用确定性计算替代 onLayout 测量——测量值一旦偏小（如动画/初始态），
@@ -60,7 +61,9 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
   });
 
   return (
-    <View>
+    // 悬浮底部 chrome（UI 重构 M2）：绝对定位脱离文档流，内容从其半透明材质下穿过；
+    // box-none 让 chrome 之间的空隙不拦截列表滚动手势
+    <View pointerEvents="box-none" style={styles.chromeHost}>
       {/* 搜索页时 tab bar 收起为 0 高度,PlayerBar 贴到屏幕底部,
           需要补底部安全区 padding;其他页 tab bar 自己处理安全区 */}
       <View style={[styles.playerWrap, isSearch && { paddingBottom: insets.bottom }]}>
@@ -78,12 +81,12 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
             const labels: Record<string, string> = { index: '发现', recommend: '推荐', playlists: '歌单', download: '本地歌曲' };
             const Icon = icons[route.name];
             return (
-              <TouchableOpacity key={route.key} onPress={onPress} style={tabBarStyles.tab}>
+              <ScalePress key={route.key} onPress={onPress} pressScaleTo={0.95} style={tabBarStyles.tab}>
                 <Icon size={22} color={isFocused ? colors.accent : colors.textSecondary} />
                 <Text style={{ color: isFocused ? colors.accent : colors.textSecondary, fontSize: 11, marginTop: 2, lineHeight: TAB_LABEL_HEIGHT - 2 }}>
                   {labels[route.name]}
                 </Text>
-              </TouchableOpacity>
+              </ScalePress>
             );
           })}
         </View>
@@ -99,7 +102,10 @@ export default function TabLayout() {
   return (
     <View style={styles.container}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <TopBar />
+      {/* 顶部 chrome 悬浮：内容从半透明 TopBar 下穿过（M2） */}
+      <View pointerEvents="box-none" style={styles.topChrome}>
+        <TopBar />
+      </View>
       <Tabs
         initialRouteName="recommend"
         screenOptions={{
@@ -145,16 +151,30 @@ export default function TabLayout() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
+  // 悬浮顶部 chrome：半透明材质，内容从下穿过（M2）
+  topChrome: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+  },
   // 与 PlayerBar 背景一致,保证安全区 padding 区域颜色连续
-  playerWrap: { backgroundColor: colors.bgSurface },
+  playerWrap: { backgroundColor: colors.bgPlayer },
+  // 悬浮底部 chrome 宿主：box-none 空隙不拦截滚动
+  chromeHost: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+  },
 });
 
 const makeTabBarStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: colors.bgSurface,
-    borderTopColor: colors.borderSubtle,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.bgPlayer,
     paddingBottom: 24,
     paddingTop: 6,
   },

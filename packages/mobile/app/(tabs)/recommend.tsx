@@ -3,6 +3,9 @@ import {
   View, Text, ScrollView, RefreshControl, StyleSheet, TouchableOpacity, Image, Dimensions,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+
   import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
   import { cacheManager, musicApi, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
@@ -84,11 +87,23 @@ export default function RecommendPage() {
 
   if (loading) return <LoadingState />;
 
+  const insets = useSafeAreaInsets();
+
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + 32 },
+      ]}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.accent}
+          progressViewOffset={topChromeHeight(insets.top)}
+        />
+      }
     >
       {error && songs.length === 0 ? (
         <View style={styles.errorBox}>

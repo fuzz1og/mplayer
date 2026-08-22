@@ -12,6 +12,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
 import PlayerOverlay from '../components/PlayerOverlay';
 import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
+import * as SystemUI from 'expo-system-ui';
 import type { ThemeColors } from '../theme/tokens';
 
 // core 的搜索诊断 console.warn（单源识别失败等）在真机 dev 上会触发
@@ -51,6 +52,15 @@ function PlaybackNoticeToast() {
       </View>
     </View>
   );
+}
+
+/** 主题切换时同步系统窗口底色：消除 OS 层启动/切主题的白黑闪（M3，应用内切换瞬时无动画） */
+function SystemBackgroundSync() {
+  const { colors } = useTheme();
+  useEffect(() => {
+    SystemUI.setBackgroundColorAsync(colors.bgBase).catch(() => {});
+  }, [colors.bgBase]);
+  return null;
 }
 
 export default function RootLayout() {
@@ -115,6 +125,7 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider>
+      <SystemBackgroundSync />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="hotlist" />

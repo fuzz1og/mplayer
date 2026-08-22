@@ -25,6 +25,7 @@ import type { SwapCandidate } from '../services/sourceSwap';
 import { searchStrictMatch } from '../services/songResources';
 import { useResolvedCover } from '../hooks/useResolvedCover';
 import { withCoverSearchSlot } from '../services/coverSearchSlot';
+import ScalePress from './ScalePress';
 
 interface SongRowProps {
   song: Song;
@@ -233,10 +234,10 @@ export default function SongRow({
 
   return (
     <>
-      <TouchableOpacity
+      <ScalePress
       style={styles.container}
+      pressScaleTo={0.98}
       onPress={handlePress}
-      activeOpacity={0.6}
     >
       {rank !== undefined && (
         <Text style={styles.rank}>{rank}</Text>
@@ -292,7 +293,7 @@ export default function SongRow({
       <TouchableOpacity onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
         <EllipsisVertical size={18} color={colors.textTertiary} />
       </TouchableOpacity>
-    </TouchableOpacity>
+    </ScalePress>
 
     <Modal visible={showActions} animationType="slide" transparent statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowActions(false)}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowActions(false)}>

@@ -103,13 +103,13 @@ export default function SourceSwapModal({
               return (
                 <TouchableOpacity
                   key={s.key}
-                  style={[styles.item, disabled && { backgroundColor: `${srcColor}10` }]}
+                  style={[styles.item, disabled && { backgroundColor: colors.bgHover }]}
                   activeOpacity={0.7}
                   disabled={disabled}
                   onPress={() => onSelectSource(s.key)}
                 >
                   <View style={[styles.dot, { backgroundColor: srcColor }]} />
-                  <Text style={[styles.itemText, disabled && { color: srcColor, fontWeight: '600' }]}>
+                  <Text style={[styles.itemText, disabled && { color: colors.textPrimary, fontWeight: '600' }]}>
                     {s.label}{disabled ? '（当前源）' : ''}
                   </Text>
                   <ChevronRight size={18} color={colors.textTertiary} />

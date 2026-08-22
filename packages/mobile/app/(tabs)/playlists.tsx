@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+
 import {
   View,
   Text,
@@ -29,6 +32,7 @@ function formatDate(ts: number): string {
 
 export default function PlaylistsPage() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const playlists = usePlaylistStore((s) => s.playlists);
   const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
@@ -91,7 +95,10 @@ export default function PlaylistsPage() {
         data={playlists}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[
+          styles.list,
+          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + 32 },
+        ]}
         ListHeaderComponent={() => (
           <>
             {BUILT_IN.map((item) => (
