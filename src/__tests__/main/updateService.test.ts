@@ -9,6 +9,7 @@ vi.mock('electron-updater', () => ({
     on: vi.fn(),
     removeListener: vi.fn(),
     removeAllListeners: vi.fn(),
+    setFeedURL: vi.fn(),
     checkForUpdates: vi.fn(),
     downloadUpdate: vi.fn(),
     quitAndInstall: vi.fn(),
@@ -46,6 +47,23 @@ function createMockWindow() {
 /** Let pending microtasks flush so async setup in checkForUpdates/downloadUpdate completes */
 function tick() {
   return new Promise<void>(resolve => setTimeout(resolve, 10));
+}
+
+/** 触发 autoUpdater.once 最近一次注册的指定事件 */
+function fireOnce(autoUpdater: any, event: string, ...args: any[]) {
+  const calls = vi.mocked(autoUpdater.once).mock.calls.filter((c: any[]) => c[0] === event);
+  const handler = calls[calls.length - 1]?.[1] as (...a: any[]) => void;
+  handler?.(...args);
+}
+
+/** 让 checkForUpdates 挂起（等待外部触发事件） */
+function mockCheckPending(autoUpdater: any) {
+  vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+}
+
+/** 让 checkForUpdates 立即失败 */
+function mockCheckReject(autoUpdater: any, msg: string) {
+  vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error(msg));
 }
 
 describe('UpdateService', () => {
@@ -120,7 +138,7 @@ describe('UpdateService', () => {
       updateService.setMainWindow(mockWindow);
 
       const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+      mockCheckPending(autoUpdater);
 
       const promise = updateService.checkForUpdates(5000);
 
@@ -129,9 +147,24 @@ describe('UpdateService', () => {
 
       // Cleanup: fire event to resolve the promise
       await tick();
-      const handler = vi.mocked(autoUpdater.once).mock.calls
-        .find(c => c[0] === 'update-not-available')?.[1] as () => void;
-      handler?.();
+      fireOnce(autoUpdater, 'update-not-available');
+      await promise;
+    });
+
+    it('检查更新时先切换 GitHub 直连 feed（索引 0）', async () => {
+      const { autoUpdater } = await import('electron-updater');
+      mockCheckPending(autoUpdater);
+
+      const promise = updateService.checkForUpdates(5000);
+      await tick();
+
+      expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
+        provider: 'github',
+        owner: 'fuzz1og',
+        repo: 'mplayer',
+      });
+
+      fireOnce(autoUpdater, 'update-not-available');
       await promise;
     });
 
@@ -140,14 +173,12 @@ describe('UpdateService', () => {
       updateService.setMainWindow(mockWindow);
 
       const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+      mockCheckPending(autoUpdater);
 
       const promise = updateService.checkForUpdates(5000);
 
       await tick();
-      const handler = vi.mocked(autoUpdater.once).mock.calls
-        .find(c => c[0] === 'update-available')?.[1] as (info: any) => void;
-      handler?.({ version: '2.0.0', releaseNotes: 'Bug fixes' });
+      fireOnce(autoUpdater, 'update-available', { version: '2.0.0', releaseNotes: 'Bug fixes' });
 
       await promise;
 
@@ -168,14 +199,12 @@ describe('UpdateService', () => {
       updateService.setMainWindow(mockWindow);
 
       const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+      mockCheckPending(autoUpdater);
 
       const promise = updateService.checkForUpdates(5000);
 
       await tick();
-      const handler = vi.mocked(autoUpdater.once).mock.calls
-        .find(c => c[0] === 'update-not-available')?.[1] as () => void;
-      handler?.();
+      fireOnce(autoUpdater, 'update-not-available');
 
       await promise;
 
@@ -188,7 +217,7 @@ describe('UpdateService', () => {
       updateService.setMainWindow(mockWindow);
 
       const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('Network timeout'));
+      mockCheckReject(autoUpdater, 'Network timeout');
 
       await expect(updateService.checkForUpdates(100)).rejects.toThrow('Network timeout');
 
@@ -199,12 +228,43 @@ describe('UpdateService', () => {
       });
     });
 
+    it('直连失败时降级到镜像源并成功', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      // 直连（第一次调用）失败 → 降级镜像（第二次调用挂起，等待事件触发成功）
+      vi.mocked(autoUpdater.checkForUpdates)
+        .mockRejectedValueOnce(new Error('github down'))
+        .mockReturnValueOnce(new Promise(() => {}));
+
+      const promise = updateService.checkForUpdates(5000);
+
+      await tick();
+
+      // 应已切换到镜像源（generic provider）
+      expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
+        provider: 'generic',
+        url: expect.stringContaining('gh-proxy.com'),
+      });
+
+      fireOnce(autoUpdater, 'update-available', { version: '2.0.0' });
+      await promise;
+
+      expect(updateService.getStatus().status).toBe('available');
+      expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', {
+        status: 'available',
+        version: '2.0.0',
+        releaseNotes: undefined,
+      });
+    });
+
     it('超时时推送 error 状态并抛出', async () => {
       const mockWindow = createMockWindow();
       updateService.setMainWindow(mockWindow);
 
       const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+      mockCheckPending(autoUpdater);
 
       const promise = updateService.checkForUpdates(50);
       await expect(promise).rejects.toThrow('检查更新超时');
@@ -216,7 +276,10 @@ describe('UpdateService', () => {
       updateService.setMainWindow(createMockWindow());
 
       const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+      // 直连挂起（等 cleanup 触发 error），镜像快速失败
+      vi.mocked(autoUpdater.checkForUpdates)
+        .mockReturnValueOnce(new Promise(() => {}))
+        .mockRejectedValue(new Error('cleanup'));
 
       const first = updateService.checkForUpdates(5000);
       const second = updateService.checkForUpdates(5000);
@@ -226,9 +289,7 @@ describe('UpdateService', () => {
 
       // Cleanup
       await tick();
-      const handler = vi.mocked(autoUpdater.once).mock.calls
-        .find(c => c[0] === 'error')?.[1] as (err: Error) => void;
-      handler?.(new Error('cleanup'));
+      fireOnce(autoUpdater, 'error', new Error('cleanup'));
       await expect(first).rejects.toThrow('cleanup');
     });
 
@@ -236,37 +297,39 @@ describe('UpdateService', () => {
       updateService.setMainWindow(createMockWindow());
 
       const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+      mockCheckPending(autoUpdater);
 
       const promise = updateService.checkForUpdates(5000);
 
       await tick();
-      const handler = vi.mocked(autoUpdater.once).mock.calls
-        .find(c => c[0] === 'update-not-available')?.[1] as () => void;
-      handler?.();
+      fireOnce(autoUpdater, 'update-not-available');
       await promise;
 
       // Second call should proceed normally
-      vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('second'));
+      mockCheckReject(autoUpdater, 'second');
       await expect(updateService.checkForUpdates(100)).rejects.toThrow('second');
     });
   });
 
   describe('downloadUpdate', () => {
+    // 下载依赖检查阶段成功（更新源检查到 available），下载阶段挂起等待事件
+    function mockDownloadPending(autoUpdater: any) {
+      vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
+      vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('mirror check fail'));
+      vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
+    }
+
     it('下载完成时推送 downloaded 状态', async () => {
       const mockWindow = createMockWindow();
       updateService.setMainWindow(mockWindow);
 
       const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
-      vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
+      mockDownloadPending(autoUpdater);
 
       const promise = updateService.downloadUpdate(5000);
 
       await tick();
-      const handler = vi.mocked(autoUpdater.once).mock.calls
-        .find(c => c[0] === 'update-downloaded')?.[1] as () => void;
-      handler?.();
+      fireOnce(autoUpdater, 'update-downloaded');
 
       await promise;
 
@@ -279,8 +342,7 @@ describe('UpdateService', () => {
       updateService.setMainWindow(mockWindow);
 
       const { autoUpdater } = await import('electron-updater');
-      vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
-      vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
+      mockDownloadPending(autoUpdater);
 
       const promise = updateService.downloadUpdate(5000);
 
@@ -297,9 +359,7 @@ describe('UpdateService', () => {
       });
 
       // Complete
-      const downloadedHandler = vi.mocked(autoUpdater.once).mock.calls
-        .find(c => c[0] === 'update-downloaded')?.[1] as () => void;
-      downloadedHandler?.();
+      fireOnce(autoUpdater, 'update-downloaded');
       await promise;
     });
 
@@ -309,6 +369,7 @@ describe('UpdateService', () => {
 
       const { autoUpdater } = await import('electron-updater');
       vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
+      vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('mirror check fail'));
       vi.mocked(autoUpdater.downloadUpdate).mockRejectedValue(new Error('Download failed'));
 
       await expect(updateService.downloadUpdate(100)).rejects.toThrow('Download failed');
@@ -326,6 +387,7 @@ describe('UpdateService', () => {
 
       const { autoUpdater } = await import('electron-updater');
       vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
+      vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('mirror check fail'));
       vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
 
       const promise = updateService.downloadUpdate(50);
@@ -339,7 +401,8 @@ describe('UpdateService', () => {
 
       const { autoUpdater } = await import('electron-updater');
       vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
-      vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
+      vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('mirror check fail'));
+      vi.mocked(autoUpdater.downloadUpdate).mockReturnValueOnce(new Promise(() => {}));
 
       const first = updateService.downloadUpdate(5000);
       const second = updateService.downloadUpdate(5000);
@@ -348,9 +411,7 @@ describe('UpdateService', () => {
 
       // Cleanup
       await tick();
-      const handler = vi.mocked(autoUpdater.once).mock.calls
-        .find(c => c[0] === 'error')?.[1] as (err: Error) => void;
-      handler?.(new Error('cleanup'));
+      fireOnce(autoUpdater, 'error', new Error('cleanup'));
       await expect(first).rejects.toThrow('cleanup');
     });
   });

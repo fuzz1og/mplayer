@@ -225,16 +225,26 @@ export class UpdateService {
 
     let lastErr: Error | null = null;
     try {
-      // 从检查时的生效源开始下载；失败依次降级，每个源先 check 拿到元数据再下载
-      for (let i = this.sourceIndex; i < UPDATE_SOURCES.length; i++) {
-        this.sourceIndex = i;
-        this.applyFeed(i);
-        try {
-          await this.checkWithCurrentFeed(15000);
+      // 从检查时的生效源开始下载；失败依次降级。
+      // 同源（检查时已拿到元数据）不重复 check；切源后才重新 check 拿元数据。
+      const firstSource = this.sourceIndex;
+      for (let i = firstSource; i < UPDATE_SOURCES.length; i++) {
+        if (i !== firstSource) {
+          this.sourceIndex = i;
+          this.applyFeed(i);
+          try {
+            await this.checkWithCurrentFeed(15000);
+          } catch (err: any) {
+            if (!lastErr) lastErr = err;
+            console.warn(`[update] 更新源 #${i} 检查失败（${UPDATE_SOURCES[i]}），降级：${err.message}`);
+            continue;
+          }
           if (this.status.status !== 'available') {
             this.updateStatus({ status: 'idle' });
             return;
           }
+        }
+        try {
           await this.downloadWithCurrentFeed(timeoutMs);
           return;
         } catch (err: any) {
