@@ -50,17 +50,17 @@ const CacheSection: React.FC = () => {
   const avgFileSize = stats.fileCount > 0 ? Math.round(stats.totalSize / stats.fileCount) : 0;
 
   const cacheItems = [
-    { label: '歌曲索引', count: stats.songsCount, icon: <Music size={16} />, color: '#2F5FD0' },
-    { label: '封面图片', count: stats.coversCount, icon: <Image size={16} />, color: '#00B894' },
-    { label: '音频文件', count: stats.audioCount, icon: <FileAudio size={16} />, color: '#FDCB6E' },
-    { label: 'URL 缓存', count: stats.urlsCount, icon: <Link size={16} />, color: '#E17055' },
+    { label: '歌曲索引', count: stats.songsCount, icon: <Music size={16} />, color: 'var(--chart-1)' },
+    { label: '封面图片', count: stats.coversCount, icon: <Image size={16} />, color: 'var(--chart-2)' },
+    { label: '音频文件', count: stats.audioCount, icon: <FileAudio size={16} />, color: 'var(--chart-3)' },
+    { label: 'URL 缓存', count: stats.urlsCount, icon: <Link size={16} />, color: 'var(--chart-4)' },
   ];
 
   const miniStats = [
     { label: '缓存文件数', value: String(stats.fileCount), icon: <FolderOpen size={18} />, color: 'var(--text-secondary)' },
     { label: '平均文件大小', value: formatSize(avgFileSize), icon: <HardDrive size={18} />, color: 'var(--text-secondary)' },
-    { label: '歌曲索引', value: String(stats.songsCount), icon: <Music size={18} />, color: 'var(--accent-color)' },
-    { label: '封面图片', value: String(stats.coversCount), icon: <Image size={18} />, color: '#00B894' },
+    { label: '歌曲索引', value: String(stats.songsCount), icon: <Music size={18} />, color: 'var(--accent)' },
+    { label: '封面图片', value: String(stats.coversCount), icon: <Image size={18} />, color: 'var(--chart-2)' },
   ];
 
   return (
@@ -70,18 +70,18 @@ const CacheSection: React.FC = () => {
           <Database size={20} color="var(--text-secondary)" />
           <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>缓存管理</h2>
         </div>
-        <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-color)' }}>
+        <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-default)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, 1.1fr) 1fr', gap: '16px' }}>
-            <div style={{ padding: '18px', backgroundColor: 'var(--bg-color)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <div style={{ padding: '18px', backgroundColor: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <HardDrive size={16} color="var(--accent-color)" />
+                <HardDrive size={16} color="var(--accent)" />
                 <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>已用缓存</span>
               </div>
               <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px', fontVariantNumeric: 'tabular-nums' }}>
                 {formatSize(stats.totalSize)}
               </div>
-              <div style={{ height: '8px', backgroundColor: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
-                <div style={{ height: '100%', width: `${usagePercent}%`, backgroundColor: usagePercent > 90 ? '#FF6B6B' : 'var(--accent-color)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+              <div style={{ height: '8px', backgroundColor: 'var(--border-default)', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
+                <div style={{ height: '100%', width: `${usagePercent}%`, backgroundColor: usagePercent > 90 ? 'var(--danger)' : 'var(--accent)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>
                 <span>上限 100 MB</span>
@@ -94,7 +94,7 @@ const CacheSection: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
               {miniStats.map((item) => (
-                <div key={item.label} style={{ padding: '14px', backgroundColor: 'var(--bg-color)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div key={item.label} style={{ padding: '14px', backgroundColor: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: item.color }}>{item.icon}</div>
                   <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px', fontVariantNumeric: 'tabular-nums' }}>{item.value}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{item.label}</div>
@@ -111,14 +111,14 @@ const CacheSection: React.FC = () => {
             {cacheItems.map((item, index) => {
               const share = stats.fileCount > 0 ? (item.count / stats.fileCount) * 100 : 0;
               return (
-                <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 0', borderBottom: index < cacheItems.length - 1 ? '1px solid var(--divider-color)' : 'none' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: `${item.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.color, flexShrink: 0 }}>{item.icon}</div>
+                <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 0', borderBottom: index < cacheItems.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: `color-mix(in srgb, ${item.color} 12%, transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.color, flexShrink: 0 }}>{item.icon}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                       <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{item.label}</span>
                       <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{item.count} 个 · {share.toFixed(1)}%</span>
                     </div>
-                    <div style={{ height: '4px', backgroundColor: 'var(--border-color)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ height: '4px', backgroundColor: 'var(--border-default)', borderRadius: '2px', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${share}%`, backgroundColor: item.color, borderRadius: '2px' }} />
                     </div>
                   </div>
@@ -133,9 +133,9 @@ const CacheSection: React.FC = () => {
               disabled={stats.fileCount === 0}
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px',
-                backgroundColor: stats.fileCount > 0 ? 'transparent' : 'var(--hover-bg)',
-                color: stats.fileCount > 0 ? '#FF6B6B' : 'var(--text-tertiary)',
-                border: `1px solid ${stats.fileCount > 0 ? '#FF6B6B' : 'var(--border-color)'}`,
+                backgroundColor: stats.fileCount > 0 ? 'transparent' : 'var(--bg-hover)',
+                color: stats.fileCount > 0 ? 'var(--danger)' : 'var(--text-tertiary)',
+                border: `1px solid ${stats.fileCount > 0 ? 'var(--danger)' : 'var(--border-default)'}`,
                 borderRadius: '8px', fontSize: '13px', fontWeight: 500,
                 cursor: stats.fileCount > 0 ? 'pointer' : 'not-allowed', transition: 'all 0.15s ease',
               }}
@@ -149,15 +149,15 @@ const CacheSection: React.FC = () => {
 
       {showClearConfirm && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowClearConfirm(false)}>
-          <div style={{ width: '360px', backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#FF6B6B20', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
-              <Trash2 size={24} color="#FF6B6B" />
+          <div style={{ width: '360px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'var(--danger-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+              <Trash2 size={24} color="var(--danger)" />
             </div>
             <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>清除缓存</h3>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>确定要清除所有缓存吗？此操作不可恢复。</p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowClearConfirm(false)} style={{ padding: '8px 16px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '14px', cursor: 'pointer' }}>取消</button>
-              <button onClick={handleClearCache} style={{ padding: '8px 16px', backgroundColor: '#FF6B6B', color: 'white', border: 'none', borderRadius: '6px', fontSize: '14px', cursor: 'pointer' }}>确定清除</button>
+              <button onClick={() => setShowClearConfirm(false)} style={{ padding: '8px 16px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)', borderRadius: '6px', fontSize: '14px', cursor: 'pointer' }}>取消</button>
+              <button onClick={handleClearCache} style={{ padding: '8px 16px', backgroundColor: 'var(--danger)', color: 'white', border: 'none', borderRadius: '6px', fontSize: '14px', cursor: 'pointer' }}>确定清除</button>
             </div>
           </div>
         </div>

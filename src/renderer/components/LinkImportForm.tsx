@@ -50,7 +50,7 @@ const LinkImportForm: React.FC<LinkImportFormProps> = ({
         onClick={onParse}
         disabled={loading || !linkUrl.trim()}
         loading={loading}
-        style={{ backgroundColor: 'var(--accent-color)' }}
+        style={{ backgroundColor: 'var(--accent)' }}
       >
         {loading ? '解析中...' : '解析链接'}
       </Button>

@@ -62,8 +62,8 @@ const ProxySection: React.FC = () => {
   };
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '8px 12px', backgroundColor: 'var(--bg-color)',
-    border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: 'var(--text-sm)', color: 'var(--text-primary)', outline: 'none',
+    width: '100%', padding: '8px 12px', backgroundColor: 'var(--bg-base)',
+    border: '1px solid var(--border-default)', borderRadius: '8px', fontSize: 'var(--text-sm)', color: 'var(--text-primary)', outline: 'none',
   };
 
   return (
@@ -72,10 +72,10 @@ const ProxySection: React.FC = () => {
         <Shield size={20} color="var(--text-secondary)" />
         <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>网络代理设置</h2>
       </div>
-      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-color)' }}>
+      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-default)' }}>
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '16px' }}>
-            <input type="checkbox" checked={proxyEnabled} onChange={(e) => setProxyEnabled(e.target.checked)} style={{ width: '18px', height: '18px', accentColor: 'var(--accent-color)', cursor: 'pointer' }} />
+            <input type="checkbox" checked={proxyEnabled} onChange={(e) => setProxyEnabled(e.target.checked)} style={{ width: '18px', height: '18px', accentColor: 'var(--accent)', cursor: 'pointer' }} />
             <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)', fontWeight: 500 }}>启用代理</span>
           </label>
 
@@ -115,7 +115,7 @@ const ProxySection: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button
             onClick={handleSave} disabled={isSaving}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: 'var(--accent-color)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: 'var(--text-base)', fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1 }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: 'var(--text-base)', fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1 }}
           >
             保存代理设置
           </button>

@@ -73,22 +73,22 @@ const DownloadSection: React.FC = () => {
         <Folder size={20} color="var(--text-secondary)" />
         <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>下载设置</h2>
       </div>
-      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-color)' }}>
+      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-default)' }}>
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)', marginBottom: '8px' }}>默认下载目录</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ flex: 1, padding: '10px 14px', backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: 'var(--text-sm)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ flex: 1, padding: '10px 14px', backgroundColor: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '8px', fontSize: 'var(--text-sm)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {downloadPath || '加载中...'}
             </div>
             <button
               onClick={handleSelectDirectory} disabled={isSaving}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: 'var(--accent-color)', color: 'white', border: 'none', borderRadius: '8px', fontSize: 'var(--text-base)', fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1, transition: 'all 0.15s ease' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: 'var(--accent)', color: 'white', border: 'none', borderRadius: '8px', fontSize: 'var(--text-base)', fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1, transition: 'all 0.15s ease' }}
             >
               <Folder size={16} />选择目录
             </button>
             <button
               onClick={handleReset} disabled={isSaving}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: 'var(--text-base)', fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1, transition: 'all 0.15s ease' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)', borderRadius: '8px', fontSize: 'var(--text-base)', fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1, transition: 'all 0.15s ease' }}
             >
               <RefreshCw size={16} />重置
             </button>

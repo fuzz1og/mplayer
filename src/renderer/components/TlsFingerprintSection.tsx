@@ -45,7 +45,7 @@ const TlsFingerprintSection: React.FC = () => {
         <Fingerprint size={15} color="var(--text-secondary)" />
         <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>TLS 指纹伪装（险情开关）</h2>
       </div>
-      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-color)' }}>
+      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-default)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Switch checked={enabled} loading={loading} onChange={(v) => void handleChange(v)} />
           <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>

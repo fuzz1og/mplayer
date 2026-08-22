@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Search, X, Check, ChevronDown, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import { useButtonHover } from '@/renderer/hooks/useButtonHover';
+import { SOURCE_COLORS, ALL_SOURCE_COLOR } from '@/renderer/constants/sourceConfig';
 
 interface TopBarProps {
   onSearch: (keyword: string) => void;
@@ -15,15 +16,15 @@ interface TopBarProps {
 }
 
 const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
-  all: { label: '全部', accent: '#8B5CF6' },
-  netease: { label: '网易云', accent: '#E74C3C' },
-  qq: { label: 'QQ', accent: '#1DB954' },
-  kugou: { label: '酷狗', accent: '#FF8C00' },
-  kuwo: { label: '酷我', accent: '#FF6F00' },
-  migu: { label: '咪咕', accent: '#FF5A00' },
-  qianqian: { label: '千千', accent: '#00A1D6' },
-  soda: { label: '汽水', accent: '#1E90FF' },
-  local: { label: '本地', accent: '#10B981' },
+  all: { label: '全部', accent: ALL_SOURCE_COLOR },
+  netease: { label: '网易云', accent: SOURCE_COLORS.netease },
+  qq: { label: 'QQ', accent: SOURCE_COLORS.qq },
+  kugou: { label: '酷狗', accent: SOURCE_COLORS.kugou },
+  kuwo: { label: '酷我', accent: SOURCE_COLORS.kuwo },
+  migu: { label: '咪咕', accent: SOURCE_COLORS.migu },
+  qianqian: { label: '千千', accent: SOURCE_COLORS.qianqian },
+  soda: { label: '汽水', accent: SOURCE_COLORS.soda },
+  local: { label: '本地', accent: SOURCE_COLORS.local },
 };
 
 const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChange, onBack, onForward, onRefresh, canGoBack, canGoForward }) => {

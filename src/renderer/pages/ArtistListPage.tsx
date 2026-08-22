@@ -34,22 +34,22 @@ const ArtistCard: React.FC<{ artist: Artist; onClick: () => void }> = ({ artist,
     style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
       padding: '16px 12px', borderRadius: '8px', cursor: 'pointer',
-      transition: 'background-color 0.15s ease, box-shadow 0.15s ease', backgroundColor: 'var(--content-bg)',
-      border: '1px solid var(--border-color)',
+      transition: 'background-color 0.15s ease, box-shadow 0.15s ease', backgroundColor: 'var(--bg-surface)',
+      border: '1px solid var(--border-default)',
     }}
     onMouseEnter={(e) => {
-      e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+      e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
       e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
     }}
     onMouseLeave={(e) => {
-      e.currentTarget.style.backgroundColor = 'var(--content-bg)';
+      e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
       e.currentTarget.style.boxShadow = 'none';
     }}
   >
     <div
       style={{
         width: '80px', height: '80px', borderRadius: '50%',
-        overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0,
+        overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0,
       }}
     >
       {artist.picUrl ? (
@@ -179,11 +179,11 @@ const ArtistListPage: React.FC = () => {
             onClick={() => setCategory(idx)}
             style={{
               padding: '6px 16px', borderRadius: '20px',
-              border: '1px solid var(--border-color)',
+              border: '1px solid var(--border-default)',
               cursor: 'pointer', fontSize: 'var(--text-sm)',
               fontWeight: category === idx ? 600 : 400,
               color: category === idx ? '#fff' : 'var(--text-secondary)',
-              background: category === idx ? 'var(--accent-color)' : 'transparent',
+              background: category === idx ? 'var(--accent)' : 'transparent',
               transition: 'all 0.15s',
             }}
           >
@@ -199,15 +199,15 @@ const ArtistListPage: React.FC = () => {
               <div key={i} style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
                 padding: '16px 12px', borderRadius: '8px',
-                backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)',
               }}>
                 <div style={{
                   width: '80px', height: '80px', borderRadius: '50%',
-                  backgroundColor: 'var(--hover-bg)', animation: 'pulse 1.5s ease-in-out infinite',
+                  backgroundColor: 'var(--bg-hover)', animation: 'pulse 1.5s ease-in-out infinite',
                 }} />
                 <div style={{
                   width: '60%', height: '14px', borderRadius: '4px',
-                  backgroundColor: 'var(--hover-bg)', animation: 'pulse 1.5s ease-in-out infinite',
+                  backgroundColor: 'var(--bg-hover)', animation: 'pulse 1.5s ease-in-out infinite',
                   animationDelay: '0.1s',
                 }} />
               </div>

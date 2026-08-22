@@ -48,7 +48,7 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
       <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
         <div>{error}</div>
         {onRetry && (
-          <button onClick={onRetry} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+          <button onClick={onRetry} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>
             重试
           </button>
         )}
@@ -111,7 +111,7 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
                       aspectRatio: '1',
                       borderRadius: '8px',
                       overflow: 'hidden',
-                      backgroundColor: 'var(--hover-bg)',
+                      backgroundColor: 'var(--bg-hover)',
                       marginBottom: '8px',
                       transition: 'box-shadow 0.15s ease, transform 0.15s ease',
                     }}
@@ -119,7 +119,7 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
                     {album.picUrl ? (
                       <CoverImage src={album.picUrl} alt={album.name} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--hover-bg)' }}>
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-hover)' }}>
                         <Disc3 size={36} style={{ color: 'var(--text-tertiary)' }} />
                       </div>
                     )}

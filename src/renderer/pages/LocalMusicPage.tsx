@@ -44,8 +44,8 @@ const LocalMusicPage: React.FC = () => {
       <div
         style={{
           padding: '24px 24px 16px',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)',
+          borderBottom: '1px solid var(--border-subtle)',
+          backgroundColor: 'var(--bg-surface)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -67,7 +67,7 @@ const LocalMusicPage: React.FC = () => {
                 alignItems: 'center',
                 gap: '8px',
                 padding: '8px 16px',
-                backgroundColor: 'var(--accent-color)',
+                backgroundColor: 'var(--accent)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '20px',
@@ -90,7 +90,7 @@ const LocalMusicPage: React.FC = () => {
                 padding: '8px 16px',
                 backgroundColor: 'transparent',
                 color: 'var(--text-secondary)',
-                border: '1px solid var(--border-color)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '20px',
                 cursor: isScanning ? 'not-allowed' : 'pointer',
                 fontSize: 'var(--text-base)',
@@ -111,7 +111,7 @@ const LocalMusicPage: React.FC = () => {
         <div
           style={{
             width: '240px',
-            borderRight: '1px solid var(--border-color)',
+            borderRight: '1px solid var(--border-default)',
             overflowY: 'auto',
             padding: '16px',
           }}
@@ -122,7 +122,7 @@ const LocalMusicPage: React.FC = () => {
               padding: '10px 12px',
               borderRadius: '6px',
               cursor: 'pointer',
-              backgroundColor: currentFolder === null ? 'var(--active-bg)' : 'transparent',
+              backgroundColor: currentFolder === null ? 'var(--bg-active)' : 'transparent',
               color: currentFolder === null ? 'var(--text-primary)' : 'var(--text-secondary)',
               fontWeight: currentFolder === null ? 500 : 400,
               marginBottom: '4px',
@@ -140,7 +140,7 @@ const LocalMusicPage: React.FC = () => {
                 padding: '10px 12px',
                 borderRadius: '6px',
                 cursor: 'pointer',
-                backgroundColor: currentFolder === folder.path ? 'var(--active-bg)' : 'transparent',
+                backgroundColor: currentFolder === folder.path ? 'var(--bg-active)' : 'transparent',
                 color: currentFolder === folder.path ? 'var(--text-primary)' : 'var(--text-secondary)',
                 fontWeight: currentFolder === folder.path ? 500 : 400,
                 marginBottom: '4px',

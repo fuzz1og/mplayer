@@ -27,14 +27,14 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: s
 }) => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-      <span style={{ color: 'var(--accent-color)' }}>{icon}</span>
+      <span style={{ color: 'var(--accent)' }}>{icon}</span>
       <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h2>
     </div>
     {action && (
       <button
         style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: 'var(--radius-xs)', transition: 'all 0.15s ease' }}
         onClick={onClickAction}
-        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-color)'; }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
       >
         {action} →
@@ -142,8 +142,8 @@ const DiscoverPage: React.FC = () => {
             alignItems: 'center',
             gap: 'var(--space-4)',
             padding: 'var(--space-3) var(--space-6)',
-            borderBottom: '1px solid var(--divider-color)',
-            backgroundColor: 'var(--content-bg)',
+            borderBottom: '1px solid var(--border-subtle)',
+            backgroundColor: 'var(--bg-surface)',
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
             height: '60px',
           }}
@@ -165,7 +165,7 @@ const DiscoverPage: React.FC = () => {
               fontWeight: 500,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+              e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
               e.currentTarget.style.color = 'var(--text-primary)';
               e.currentTarget.style.transform = 'translateX(-2px)';
             }}
@@ -202,8 +202,8 @@ const DiscoverPage: React.FC = () => {
             display: 'flex',
             gap: 'var(--space-1)',
             padding: '0 var(--space-6)',
-            borderBottom: '1px solid var(--divider-color)',
-            backgroundColor: 'var(--content-bg)',
+            borderBottom: '1px solid var(--border-subtle)',
+            backgroundColor: 'var(--bg-surface)',
           }}
         >
           {[
@@ -216,12 +216,12 @@ const DiscoverPage: React.FC = () => {
               style={{
                 padding: 'var(--space-3) var(--space-5)',
                 border: 'none',
-                borderBottom: activeTab === tab.key ? '2px solid var(--accent-color)' : '2px solid transparent',
+                borderBottom: activeTab === tab.key ? '2px solid var(--accent)' : '2px solid transparent',
                 background: 'transparent',
                 cursor: 'pointer',
                 fontSize: 'var(--text-base)',
                 fontWeight: activeTab === tab.key ? 600 : 400,
-                color: activeTab === tab.key ? 'var(--accent-color)' : 'var(--text-secondary)',
+                color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-secondary)',
                 transition: 'all 0.15s ease',
               }}
             >
@@ -232,7 +232,7 @@ const DiscoverPage: React.FC = () => {
                   fontSize: '11px',
                   padding: '1px 6px',
                   borderRadius: '10px',
-                  backgroundColor: activeTab === tab.key ? 'var(--accent-color)' : 'var(--hover-bg)',
+                  backgroundColor: activeTab === tab.key ? 'var(--accent)' : 'var(--bg-hover)',
                   color: activeTab === tab.key ? 'white' : 'var(--text-tertiary)',
                 }}>
                   {tab.count}
@@ -248,9 +248,9 @@ const DiscoverPage: React.FC = () => {
             <div
               style={{
                 padding: '12px 16px',
-                backgroundColor: 'var(--danger-bg)',
+                backgroundColor: 'var(--danger-subtle)',
                 borderRadius: 'var(--radius-md)',
-                color: 'var(--danger-color)',
+                color: 'var(--danger)',
                 marginBottom: '16px',
                 fontSize: 'var(--text-base)',
               }}
@@ -332,7 +332,7 @@ const DiscoverPage: React.FC = () => {
                     <div key={i} style={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)',
                       padding: '16px 12px', borderRadius: '12px',
-                      backgroundColor: 'var(--content-bg)', border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)',
                     }}>
                       <div className="skeleton-shimmer" style={{
                         width: '80px', height: '80px', borderRadius: '50%',
@@ -355,23 +355,23 @@ const DiscoverPage: React.FC = () => {
                       style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)',
                         padding: '16px 12px', borderRadius: '12px', cursor: 'pointer',
-                        transition: 'all 0.2s ease', backgroundColor: 'var(--content-bg)',
-                        border: '1px solid var(--border-color)',
+                        transition: 'all 0.2s ease', backgroundColor: 'var(--bg-surface)',
+                        border: '1px solid var(--border-default)',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'translateY(-4px)';
                         e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)';
-                        e.currentTarget.style.borderColor = 'var(--accent-color)';
+                        e.currentTarget.style.borderColor = 'var(--accent)';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'translateY(0)';
                         e.currentTarget.style.boxShadow = 'none';
-                        e.currentTarget.style.borderColor = 'var(--border-color)';
+                        e.currentTarget.style.borderColor = 'var(--border-default)';
                       }}
                     >
                       <div style={{
                         width: '80px', height: '80px', borderRadius: '50%',
-                        overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0,
+                        overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0,
                       }}>
                         {artist.picUrl ? (
                           <img
@@ -447,7 +447,7 @@ const DiscoverPage: React.FC = () => {
                   style={{
                     paddingTop: '100%',
                     borderRadius: 'var(--radius-md)',
-                    background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                    background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
                     backgroundSize: '200% 200%',
                     animation: 'skeletonLoading 1.5s ease-in-out infinite',
                   }}
@@ -457,7 +457,7 @@ const DiscoverPage: React.FC = () => {
                     height: '14px',
                     marginTop: '8px',
                     borderRadius: '2px',
-                    background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)',
+                    background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
                     backgroundSize: '200% 200%',
                     animation: 'skeletonLoading 1.5s ease-in-out infinite',
                   }}
@@ -465,7 +465,7 @@ const DiscoverPage: React.FC = () => {
               </div>
             ))
           ) : playlists.error ? (
-            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--danger)', backgroundColor: 'var(--danger-subtle)', borderRadius: 'var(--radius-md)' }}>
               {playlists.error}
             </div>
           ) : (
@@ -543,7 +543,7 @@ const DiscoverPage: React.FC = () => {
             onSongClick={handleHotlistSongClick}
           />
           {(anyError) && (
-            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'var(--danger-color)', backgroundColor: 'var(--danger-bg)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-base)' }}>
+            <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'var(--danger)', backgroundColor: 'var(--danger-subtle)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-base)' }}>
               {anyError}
             </div>
           )}

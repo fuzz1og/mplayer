@@ -387,8 +387,8 @@ const DiscoverPageV2: React.FC = () => {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
           padding: 'var(--space-3) var(--space-6)',
-          borderBottom: '1px solid var(--divider-color)',
-          backgroundColor: 'var(--content-bg)', height: '60px', flexShrink: 0,
+          borderBottom: '1px solid var(--border-subtle)',
+          backgroundColor: 'var(--bg-surface)', height: '60px', flexShrink: 0,
         }}>
           <button onClick={handleBackFromSearch} style={{
             border: 'none', background: 'transparent', cursor: 'pointer',
@@ -410,7 +410,7 @@ const DiscoverPageV2: React.FC = () => {
         </div>
 
         {/* 单曲 / 歌手二级 tab */}
-        <div style={{ display: 'flex', gap: '8px', padding: '10px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: '8px', padding: '10px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', flexShrink: 0 }}>
           {([
             { key: 'songs' as const, label: '单曲', count: searchSongs.length },
             { key: 'artists' as const, label: '歌手', count: artistResults.length },
@@ -424,7 +424,7 @@ const DiscoverPageV2: React.FC = () => {
                 padding: '6px 16px', borderRadius: 'var(--radius-full)', border: 'none', cursor: 'pointer',
                 fontSize: 'var(--text-sm)', fontWeight: activeSearchTab === tab.key ? 600 : 400,
                 color: activeSearchTab === tab.key ? '#fff' : 'var(--text-secondary)',
-                backgroundColor: activeSearchTab === tab.key ? 'var(--accent-color)' : 'var(--hover-bg)',
+                backgroundColor: activeSearchTab === tab.key ? 'var(--accent)' : 'var(--bg-hover)',
                 transition: 'all 0.15s ease',
               }}
             >
@@ -505,8 +505,8 @@ const DiscoverPageV2: React.FC = () => {
                     <span
                       style={{
                         width: '72px', height: '72px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-                        backgroundColor: 'var(--hover-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '28px', color: 'var(--text-tertiary)', border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '28px', color: 'var(--text-tertiary)', border: '1px solid var(--border-default)',
                       }}
                     >
                       {a.picUrl ? (
@@ -539,18 +539,13 @@ const DiscoverPageV2: React.FC = () => {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        '--accent-color': '#2F5FD0',
-        '--accent': '#2F5FD0',
-        '--accent-hover': '#264FB8',
-        '--accent-active': '#1F4399',
-        '--accent-subtle': '#E7EDFB',
       } as React.CSSProperties}
     >
       <div style={{
         display: 'flex', flexDirection: 'column',
         padding: '16px 28px 0',
-        borderBottom: '1px solid var(--divider-color)',
-        backgroundColor: 'var(--content-bg)',
+        borderBottom: '1px solid var(--border-subtle)',
+        backgroundColor: 'var(--bg-surface)',
         flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px' }}>
@@ -572,7 +567,7 @@ const DiscoverPageV2: React.FC = () => {
                 padding: '6px 2px 14px',
                 border: 'none',
                 background: 'transparent',
-                color: activeTab === tab.key ? 'var(--accent-color)' : 'var(--text-secondary)',
+                color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-secondary)',
                 cursor: 'pointer',
                 fontSize: 'var(--text-sm)',
                 fontWeight: activeTab === tab.key ? 600 : 400,
@@ -591,9 +586,9 @@ const DiscoverPageV2: React.FC = () => {
                     animation: 'fadeIn 0.2s ease-out',
                   }}
                 >
-                  <span style={{ width: '2px', height: '6px', borderRadius: '1px', backgroundColor: 'var(--accent-color)' }} />
-                  <span style={{ width: '2px', height: '10px', borderRadius: '1px', backgroundColor: 'var(--accent-color)' }} />
-                  <span style={{ width: '2px', height: '7px', borderRadius: '1px', backgroundColor: 'var(--accent-color)' }} />
+                  <span style={{ width: '2px', height: '6px', borderRadius: '1px', backgroundColor: 'var(--accent)' }} />
+                  <span style={{ width: '2px', height: '10px', borderRadius: '1px', backgroundColor: 'var(--accent)' }} />
+                  <span style={{ width: '2px', height: '7px', borderRadius: '1px', backgroundColor: 'var(--accent)' }} />
                 </span>
               )}
             </button>
@@ -651,12 +646,12 @@ const DiscoverPageV2: React.FC = () => {
                   style={{
                     padding: '6px 16px',
                     borderRadius: '20px',
-                    border: '1px solid var(--border-color)',
+                    border: '1px solid var(--border-default)',
                     cursor: 'pointer',
                     fontSize: 'var(--text-sm)',
                     fontWeight: playlistCategory === cat ? 600 : 400,
                     color: playlistCategory === cat ? 'white' : 'var(--text-secondary)',
-                    background: playlistCategory === cat ? 'var(--accent-color)' : 'transparent',
+                    background: playlistCategory === cat ? 'var(--accent)' : 'transparent',
                     transition: 'all 0.15s ease',
                   }}
                 >

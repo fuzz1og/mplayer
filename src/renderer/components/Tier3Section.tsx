@@ -160,7 +160,7 @@ const Tier3Section: React.FC = () => {
         <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>第三方解析源（tier3）</h2>
         <Tag color="orange" style={{ marginInlineEnd: 0 }}>实验性</Tag>
       </div>
-      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-color)' }}>
+      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-default)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
           <Switch checked={!!state?.enabled} loading={!state} onChange={(v) => void handleToggle(v)} />
           <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>
@@ -206,7 +206,7 @@ const Tier3Section: React.FC = () => {
                   alignItems: 'center',
                   gap: '10px',
                   padding: '10px 12px',
-                  border: '1px solid var(--border-color)',
+                  border: '1px solid var(--border-default)',
                   borderRadius: '6px',
                   background: 'var(--bg-surface)',
                 }}
@@ -248,7 +248,7 @@ const Tier3Section: React.FC = () => {
             style={{
               marginTop: '16px',
               padding: '12px',
-              border: '1px solid var(--border-color)',
+              border: '1px solid var(--border-default)',
               borderRadius: '6px',
               background: 'var(--bg-surface)',
             }}

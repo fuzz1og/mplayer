@@ -1,23 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Checkbox, Button, Table, Tag } from 'antd';
 import type { SongBase } from '@mplayer/core';
+import { SOURCE_COLORS, ALL_SOURCE_COLOR } from '@/renderer/constants/sourceConfig';
 
 interface LinkPreviewTableProps {
   songs: SongBase[];
   onConfirm: (selectedIds: Set<string>) => void;
   onCancel: () => void;
 }
-
-const sourceColorMap: Record<string, string> = {
-  netease: '#FF6B6B',
-  qq: '#49B8FF',
-  kugou: '#FF8C00',
-  kuwo: '#FF6F00',
-  qianqian: '#00A1D6',
-  migu: '#FF5A00',
-  soda: '#1E90FF',
-  local: '#999999',
-};
 
 const sourceLabelMap: Record<string, string> = {
   netease: '网易云',
@@ -80,7 +70,7 @@ const LinkPreviewTable: React.FC<LinkPreviewTableProps> = ({
       dataIndex: 'sourceType',
       key: 'sourceType',
       render: (source: string) => (
-        <Tag color={sourceColorMap[source] || '#999999'}>
+        <Tag color={SOURCE_COLORS[source as keyof typeof SOURCE_COLORS] || ALL_SOURCE_COLOR}>
           {sourceLabelMap[source] || source}
         </Tag>
       )
@@ -107,7 +97,7 @@ const LinkPreviewTable: React.FC<LinkPreviewTableProps> = ({
           type="primary"
           onClick={handleConfirm}
           disabled={selectedRowKeys.length === 0}
-          style={{ backgroundColor: 'var(--accent-color)' }}
+          style={{ backgroundColor: 'var(--accent)' }}
         >
           导入选中歌曲 ({selectedRowKeys.length})
         </Button>

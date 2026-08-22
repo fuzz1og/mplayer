@@ -36,7 +36,7 @@ const SourceSection: React.FC = () => {
         <Zap size={15} color="var(--text-secondary)" />
         <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>直连状态</h2>
       </div>
-      <div style={{ backgroundColor: 'var(--content-bg)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-color)' }}>
+      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-default)' }}>
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 0, lineHeight: 1.6 }}>
           各官方源的直连客户端能力状态。直连可用表示该源已接入官方直连，播放/搜索会优先走直连。
         </p>

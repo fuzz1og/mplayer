@@ -23,8 +23,8 @@ const GroupHeaderRow: React.FC<GroupHeaderRowProps> = ({
         gap: '10px',
         padding: '8px 16px',
         cursor: 'pointer',
-        borderBottom: '1px solid var(--divider-color)',
-        backgroundColor: 'var(--content-bg)',
+        borderBottom: '1px solid var(--border-subtle)',
+        backgroundColor: 'var(--bg-surface)',
         ...style,
       }}
       onClick={onPlayFirst}
@@ -69,7 +69,7 @@ const GroupHeaderRow: React.FC<GroupHeaderRowProps> = ({
         gap: '4px',
         padding: '3px 9px',
         borderRadius: '999px',
-        backgroundColor: 'var(--hover-bg)',
+        backgroundColor: 'var(--bg-hover)',
         color: 'var(--text-secondary)',
         fontSize: '12px',
         fontWeight: 500,

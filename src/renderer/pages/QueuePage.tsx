@@ -37,7 +37,7 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
     padding: '10px 16px',
     borderRadius: '6px',
     cursor: 'pointer',
-    backgroundColor: isDragging ? 'var(--hover-bg)' : (isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent'),
+    backgroundColor: isDragging ? 'var(--bg-hover)' : (isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent'),
     opacity: isDragging ? 0.7 : 1,
     transform: CSS.Transform.toString(transform),
     transition: transition || undefined,
@@ -51,22 +51,22 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
         </span>
         {isCurrentSong && isPlaying ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-            <span style={{ width: '3px', height: '12px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0s' }} />
-            <span style={{ width: '3px', height: '16px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
-            <span style={{ width: '3px', height: '10px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+            <span style={{ width: '3px', height: '12px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0s' }} />
+            <span style={{ width: '3px', height: '16px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
+            <span style={{ width: '3px', height: '10px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
           </div>
         ) : (
-          <span style={{ fontSize: 'var(--text-base)', color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-tertiary)', fontWeight: isCurrentSong ? 600 : 400 }}>
+          <span style={{ fontSize: 'var(--text-base)', color: isCurrentSong ? 'var(--accent)' : 'var(--text-tertiary)', fontWeight: isCurrentSong ? 600 : 400 }}>
             {index + 1}
           </span>
         )}
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-        <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
+        <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
           <CoverImage src={coverSrc} alt={song.name} onError={() => onCoverError?.(song)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 'var(--text-base)', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 'var(--text-base)', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {song.name}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -228,7 +228,7 @@ const QueuePage: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)' }}>
+      <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Headphones size={24} color="var(--text-secondary)" />
@@ -237,11 +237,11 @@ const QueuePage: React.FC = () => {
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={handleClearQueue} disabled={currentPlaylist.length === 0}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: 'transparent', color: currentPlaylist.length > 0 ? 'var(--text-secondary)' : 'var(--text-tertiary)', border: '1px solid var(--divider-color)', borderRadius: '20px', cursor: currentPlaylist.length > 0 ? 'pointer' : 'not-allowed', fontSize: 'var(--text-base)', fontWeight: 500 }}>
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: 'transparent', color: currentPlaylist.length > 0 ? 'var(--text-secondary)' : 'var(--text-tertiary)', border: '1px solid var(--border-subtle)', borderRadius: '20px', cursor: currentPlaylist.length > 0 ? 'pointer' : 'not-allowed', fontSize: 'var(--text-base)', fontWeight: 500 }}>
               <Trash2 size={16} /> 清空队列
             </button>
             <button onClick={handleSaveToPlaylist} disabled={currentPlaylist.length === 0}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: currentPlaylist.length > 0 ? 'var(--accent-color)' : 'var(--hover-bg)', color: currentPlaylist.length > 0 ? 'white' : 'var(--text-tertiary)', border: 'none', borderRadius: '20px', cursor: currentPlaylist.length > 0 ? 'pointer' : 'not-allowed', fontSize: 'var(--text-base)', fontWeight: 500 }}>
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: currentPlaylist.length > 0 ? 'var(--accent)' : 'var(--bg-hover)', color: currentPlaylist.length > 0 ? 'white' : 'var(--text-tertiary)', border: 'none', borderRadius: '20px', cursor: currentPlaylist.length > 0 ? 'pointer' : 'not-allowed', fontSize: 'var(--text-base)', fontWeight: 500 }}>
               <ListMusic size={16} /> 保存为歌单
             </button>
           </div>
@@ -256,7 +256,7 @@ const QueuePage: React.FC = () => {
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--divider-color)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
               <div style={{ width: '50px', textAlign: 'center' }}>#</div>
               <div style={{ flex: 1 }}>标题</div>
               <div style={{ width: '120px' }}>专辑</div>

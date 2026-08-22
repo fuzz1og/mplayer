@@ -190,8 +190,8 @@ const ArtistDetailPage: React.FC = () => {
                 style={{
                   width: '100px', height: '100px', borderRadius: '50%',
                   overflow: 'hidden', flexShrink: 0,
-                  backgroundColor: 'var(--hover-bg)',
-                  border: '2px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-hover)',
+                  border: '2px solid var(--border-default)',
                 }}
               >
                 {displayPic ? (
@@ -235,7 +235,7 @@ const ArtistDetailPage: React.FC = () => {
                         background: 'transparent',
                         cursor: 'pointer',
                         fontSize: '12px',
-                        color: 'var(--accent-color)',
+                        color: 'var(--accent)',
                         padding: 0,
                         display: 'flex',
                         alignItems: 'center',
@@ -264,7 +264,7 @@ const ArtistDetailPage: React.FC = () => {
                       fontSize: '12px',
                       fontWeight: activeTab === tab.key ? 600 : 400,
                       color: activeTab === tab.key ? 'white' : 'var(--text-secondary)',
-                      backgroundColor: activeTab === tab.key ? 'var(--accent-color)' : 'var(--hover-bg)',
+                      backgroundColor: activeTab === tab.key ? 'var(--accent)' : 'var(--bg-hover)',
                       transition: 'all 0.15s ease',
                     }}
                   >

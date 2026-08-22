@@ -3,13 +3,14 @@ import { Modal } from 'antd';
 import { CheckCircle2, ChevronRight, ArrowLeft } from 'lucide-react';
 import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '@/renderer/services/sourceSwap';
+import { SOURCE_COLORS } from '@/renderer/constants/sourceConfig';
 
 export const SWAP_SOURCES: { key: SourceKey; label: string; color: string }[] = [
-  { key: 'netease', label: '网易云', color: '#E74C3C' },
-  { key: 'qq', label: 'QQ音乐', color: '#1DB954' },
-  { key: 'kugou', label: '酷狗', color: '#FF8C00' },
-  { key: 'kuwo', label: '酷我', color: '#FF6F00' },
-  { key: 'qianqian', label: '千千', color: '#00A1D6' },
+  { key: 'netease', label: '网易云', color: SOURCE_COLORS.netease },
+  { key: 'qq', label: 'QQ音乐', color: SOURCE_COLORS.qq },
+  { key: 'kugou', label: '酷狗', color: SOURCE_COLORS.kugou },
+  { key: 'kuwo', label: '酷我', color: SOURCE_COLORS.kuwo },
+  { key: 'qianqian', label: '千千', color: SOURCE_COLORS.qianqian },
 ];
 
 interface SourceSwapModalProps {
@@ -68,7 +69,7 @@ const SourceSwapModal: React.FC<SourceSwapModalProps> = ({
               onClick={() => onSelectCandidate(c)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 'var(--space-3)', width: '100%',
-                padding: 'var(--space-3) 0', border: 'none', borderBottom: '1px solid var(--divider-color)',
+                padding: 'var(--space-3) 0', border: 'none', borderBottom: '1px solid var(--border-subtle)',
                 background: 'transparent', cursor: 'pointer', textAlign: 'left',
               }}
             >
@@ -116,7 +117,7 @@ const SourceSwapModal: React.FC<SourceSwapModalProps> = ({
                 onClick={() => onSelectSource(s.key)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 'var(--space-3)', width: '100%',
-                  padding: 'var(--space-3) 0', border: 'none', borderBottom: '1px solid var(--divider-color)',
+                  padding: 'var(--space-3) 0', border: 'none', borderBottom: '1px solid var(--border-subtle)',
                   background: 'transparent', cursor: disabled ? 'not-allowed' : 'pointer',
                   opacity: disabled ? 0.4 : 1, color: 'var(--text-primary)', fontSize: 'var(--text-base)',
                 }}

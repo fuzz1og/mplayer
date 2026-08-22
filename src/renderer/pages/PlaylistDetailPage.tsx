@@ -76,7 +76,7 @@ const SortableSongRow: React.FC<{
     <div ref={setNodeRef}
       style={{
         display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer',
-        backgroundColor: isDragging ? 'var(--hover-bg)' : (isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent'),
+        backgroundColor: isDragging ? 'var(--bg-hover)' : (isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent'),
         opacity: isDragging ? 0.7 : 1,
         transform: CSS.Transform.toString(transform),
         transition: transition || undefined,
@@ -89,7 +89,7 @@ const SortableSongRow: React.FC<{
           checked={isSelected}
           onChange={() => onToggleSelect(song.id)}
           onClick={(e) => e.stopPropagation()}
-          style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--accent-color)' }}
+          style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--accent)' }}
         />
       </div>
       <div style={{ width: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -100,20 +100,20 @@ const SortableSongRow: React.FC<{
       <div style={{ width: '30px', textAlign: 'center' }}>
         {isCurrentSong && isPlaying ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-            <span style={{ width: '3px', height: '12px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite' }} />
-            <span style={{ width: '3px', height: '16px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
-            <span style={{ width: '3px', height: '10px', backgroundColor: 'var(--accent-color)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+            <span style={{ width: '3px', height: '12px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite' }} />
+            <span style={{ width: '3px', height: '16px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
+            <span style={{ width: '3px', height: '10px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
           </div>
         ) : (
-          <span style={{ fontSize: '13px', color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-tertiary)' }}>{index + 1}</span>
+          <span style={{ fontSize: '13px', color: isCurrentSong ? 'var(--accent)' : 'var(--text-tertiary)' }}>{index + 1}</span>
         )}
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-        <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--hover-bg)', flexShrink: 0 }}>
+        <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
           <CoverImage src={coverSrc} alt={song.name} onError={() => onCoverError?.(song)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: '14px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent-color)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: '14px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {song.name}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -452,7 +452,7 @@ const PlaylistDetailPage: React.FC = () => {
           onClick={() => navigate('/playlists')}
           style={{
             padding: '8px 16px',
-            backgroundColor: 'var(--accent-color)',
+            backgroundColor: 'var(--accent)',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
@@ -468,7 +468,7 @@ const PlaylistDetailPage: React.FC = () => {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* 顶部工具栏 */}
-      <div style={{ padding: '10px 24px', borderBottom: '1px solid var(--divider-color)', backgroundColor: 'var(--content-bg)', flexShrink: 0 }}>
+      <div style={{ padding: '10px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', flexShrink: 0 }}>
         <button
           onClick={() => navigate('/playlists')}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '14px' }}
@@ -482,20 +482,20 @@ const PlaylistDetailPage: React.FC = () => {
       <div style={{ flex: 1, overflow: 'auto' }}>
         {playlist && (
           <div style={{ padding: '24px 24px 8px' }}>
-            <div style={{ display: 'flex', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--content-bg)', border: '1px solid var(--border-color)' }}>
-              <div style={{ width: '160px', height: '160px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, #2F5FD0 0%, #1F4399 100%)' }}>
+            <div style={{ display: 'flex', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}>
+              <div style={{ width: '160px', height: '160px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%)' }}>
             <CoverImage src={detailCover} alt="" variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-color)' }}>我的歌单</div>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>我的歌单</div>
                   <button
                     onClick={() => {
                       setEditName(playlist.name);
                       setEditDesc(playlist.description || '');
                       setIsEditModalVisible(true);
                     }}
-                    style={{ padding: '4px 7px', backgroundColor: 'transparent', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0 }}
+                    style={{ padding: '4px 7px', backgroundColor: 'transparent', border: '1px solid var(--border-default)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0 }}
                   >
                     <Edit2 size={13} />
                   </button>
@@ -505,13 +505,13 @@ const PlaylistDetailPage: React.FC = () => {
                   {songs.length} 首歌曲{playlist.description ? ` · ${playlist.description}` : ''}
                 </div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button onClick={handlePlayAll} disabled={songs.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'var(--accent-color)', color: 'white', border: 'none', borderRadius: '20px', cursor: songs.length > 0 ? 'pointer' : 'not-allowed', opacity: songs.length > 0 ? 1 : 0.5, fontSize: '14px', fontWeight: 500 }}>
+                  <button onClick={handlePlayAll} disabled={songs.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'var(--accent)', color: 'white', border: 'none', borderRadius: '20px', cursor: songs.length > 0 ? 'pointer' : 'not-allowed', opacity: songs.length > 0 ? 1 : 0.5, fontSize: '14px', fontWeight: 500 }}>
                     <Play size={16} /> 播放全部
                   </button>
-                  <button onClick={handleDownloadAll} disabled={songs.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '20px', cursor: songs.length > 0 ? 'pointer' : 'not-allowed', opacity: songs.length > 0 ? 1 : 0.5, fontSize: '14px', fontWeight: 500 }}>
+                  <button onClick={handleDownloadAll} disabled={songs.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)', borderRadius: '20px', cursor: songs.length > 0 ? 'pointer' : 'not-allowed', opacity: songs.length > 0 ? 1 : 0.5, fontSize: '14px', fontWeight: 500 }}>
                     <Download size={16} /> 下载全部
                   </button>
-                  <button onClick={() => setImportModalVisible(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '20px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+                  <button onClick={() => setImportModalVisible(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)', borderRadius: '20px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
                     <Upload size={16} /> 导入歌曲
                   </button>
                 </div>
@@ -524,24 +524,24 @@ const PlaylistDetailPage: React.FC = () => {
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={`sk-${i}`} style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px', marginBottom: '8px' }}>
                 <div style={{ width: '30px', textAlign: 'center' }}>
-                  <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+                  <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
                 </div>
                 <div style={{ width: '30px', textAlign: 'center' }}>
-                  <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+                  <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
                 </div>
                 <div style={{ width: '30px', textAlign: 'center' }}>
-                  <div style={{ width: '20px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+                  <div style={{ width: '20px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
                 </div>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '4px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
+                  <div style={{ width: '40px', height: '40px', borderRadius: '4px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ width: '70%', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', marginBottom: '4px' }} />
-                    <div style={{ width: '50%', height: '12px', borderRadius: '2px', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', animationDelay: '0.1s' }} />
+                    <div style={{ width: '70%', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', marginBottom: '4px' }} />
+                    <div style={{ width: '50%', height: '12px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', animationDelay: '0.1s' }} />
                   </div>
                 </div>
                 <div style={{ width: '100px', display: 'flex', justifyContent: 'center', gap: '4px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
                 </div>
               </div>
             ))}
@@ -567,26 +567,26 @@ const PlaylistDetailPage: React.FC = () => {
         )}
         {/* Batch action bar */}
         {selectedIds.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(47, 95, 208, 0.08)', borderBottom: '1px solid var(--divider-color)', fontSize: '13px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(47, 95, 208, 0.08)', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px' }}>
             <span style={{ color: 'var(--text-secondary)' }}>已选择 {selectedIds.length} 项</span>
             <button onClick={handleBatchDownload}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12px' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12px' }}>
               <Download size={12} /> 批量下载
             </button>
             <button onClick={handleBatchDelete}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', color: '#FF6B6B', fontSize: '12px' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--danger)', fontSize: '12px' }}>
               <Trash2 size={12} /> 批量移除
             </button>
           </div>
         )}
         {/* Table header */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--divider-color)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
           <div style={{ width: '30px', textAlign: 'center' }}>
             <input
               type="checkbox"
               checked={songs.length > 0 && selectedIds.length === songs.length}
               onChange={handleSelectAll}
-              style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--accent-color)' }}
+              style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--accent)' }}
             />
           </div>
           <div style={{ width: '30px', textAlign: 'center' }}></div>
@@ -637,7 +637,7 @@ const PlaylistDetailPage: React.FC = () => {
           <div
             style={{
               width: '400px',
-              backgroundColor: 'var(--content-bg)',
+              backgroundColor: 'var(--bg-surface)',
               borderRadius: '12px',
               padding: '24px',
               boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
@@ -659,7 +659,7 @@ const PlaylistDetailPage: React.FC = () => {
                   style={{
                     width: '100%',
                     padding: '8px 12px',
-                    border: '1px solid var(--border-color)',
+                    border: '1px solid var(--border-default)',
                     borderRadius: '6px',
                     fontSize: '14px',
                   }}
@@ -676,7 +676,7 @@ const PlaylistDetailPage: React.FC = () => {
                   style={{
                     width: '100%',
                     padding: '8px 12px',
-                    border: '1px solid var(--border-color)',
+                    border: '1px solid var(--border-default)',
                     borderRadius: '6px',
                     fontSize: '14px',
                     resize: 'vertical',
@@ -691,7 +691,7 @@ const PlaylistDetailPage: React.FC = () => {
                   padding: '8px 16px',
                   backgroundColor: 'transparent',
                   color: 'var(--text-secondary)',
-                  border: '1px solid var(--border-color)',
+                  border: '1px solid var(--border-default)',
                   borderRadius: '6px',
                   fontSize: '14px',
                   cursor: 'pointer',
@@ -703,7 +703,7 @@ const PlaylistDetailPage: React.FC = () => {
                 onClick={handleEditPlaylist}
                 style={{
                   padding: '8px 16px',
-                  backgroundColor: 'var(--accent-color)',
+                  backgroundColor: 'var(--accent)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',

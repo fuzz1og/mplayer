@@ -49,7 +49,7 @@ const RowActionButtons: React.FC<RowActionButtonsProps> = ({
         onClick={(e) => { e.stopPropagation(); onDownload(song); }}
         aria-label={`下载: ${song.name}`}
         style={iconBtn}
-        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
+        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
       >
         <Download size={16} />
@@ -59,8 +59,8 @@ const RowActionButtons: React.FC<RowActionButtonsProps> = ({
       <button
         onClick={(e) => { e.stopPropagation(); onToggleFavorite(song); }}
         aria-label={isFavorite ? `取消收藏: ${song.name}` : `收藏: ${song.name}`}
-        style={{ ...iconBtn, color: isFavorite ? 'var(--accent-color)' : 'var(--text-tertiary)' }}
-        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--hover-bg)'; }}
+        style={{ ...iconBtn, color: isFavorite ? 'var(--accent)' : 'var(--text-tertiary)' }}
+        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
       >
         <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
@@ -71,7 +71,7 @@ const RowActionButtons: React.FC<RowActionButtonsProps> = ({
         ref={moreTriggerRef}
         onClick={(e) => { e.stopPropagation(); onToggleMore(e); }}
         aria-label={`更多操作: ${song.name}`}
-        style={{ ...iconBtn, color: moreOpen ? 'var(--text-secondary)' : 'var(--text-tertiary)', backgroundColor: moreOpen ? 'var(--hover-bg)' : 'transparent' }}
+        style={{ ...iconBtn, color: moreOpen ? 'var(--text-secondary)' : 'var(--text-tertiary)', backgroundColor: moreOpen ? 'var(--bg-hover)' : 'transparent' }}
       >
         <MoreHorizontal size={16} />
       </button>

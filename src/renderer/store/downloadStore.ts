@@ -156,11 +156,11 @@ export const getStatusColor = (status: DownloadTask['status']): string => {
     case 'pending':
       return 'var(--text-tertiary)';
     case 'downloading':
-      return 'var(--primary-color)';
+      return 'var(--accent)';
     case 'completed':
-      return '#52c41a';
+      return 'var(--success)';
     case 'error':
-      return '#ff4d4f';
+      return 'var(--danger)';
     default:
       return 'var(--text-secondary)';
   }
