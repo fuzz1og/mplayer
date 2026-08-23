@@ -16,12 +16,12 @@ import { useSourceStore } from '../../stores/sourceStore';
 import SongRow from '../../components/SongRow';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
-import {radius, textVariants} from '../../theme/tokens';
+import {radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
-import TextTabs from '../../components/TextTabs';
+import ScalePress from '../../components/ScalePress';
 
 const SEARCH_TABS: { key: SearchTab; label: string }[] = [
   { key: 'songs', label: '歌曲' },
@@ -95,13 +95,20 @@ export default function SearchPage() {
 
   return (
     <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
-      {/* 歌曲 / 歌手：文字 tabs + 下划线（与发现页二级分类同语言，左对齐） */}
-      <TextTabs
-        tabs={SEARCH_TABS}
-        activeKey={activeTab}
-        onSelect={(key) => setActiveTab(key as SearchTab)}
-        scrollable={false}
-      />
+      {/* 歌曲/歌手（后续可扩展歌单/专辑）：气泡 tab 平分整行 */}
+      <View style={styles.tabHeader}>
+        {SEARCH_TABS.map((t) => (
+          <ScalePress
+            key={t.key}
+            onPress={() => setActiveTab(t.key)}
+            style={[styles.tabItem, activeTab === t.key && styles.tabItemActive]}
+          >
+            <Text style={[styles.tabLabel, activeTab === t.key && styles.tabLabelActive]}>
+              {t.label}
+            </Text>
+          </ScalePress>
+        ))}
+      </View>
 
       {activeTab === 'songs' ? (
         // 渐进搜索:有结果就显示(即使还在加载),骨架屏只在无结果时出现
@@ -242,6 +249,32 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
+  tabHeader: {
+    flexDirection: 'row',
+    backgroundColor: colors.bgBase,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    gap: spacing[2],
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: spacing[2],
+    borderRadius: radius.full,
+    backgroundColor: colors.bgHover,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabItemActive: {
+    backgroundColor: colors.accent,
+  },
+  tabLabel: {
+    ...textVariants.subhead,
+    color: colors.textSecondary,
+  },
+  tabLabelActive: {
+    color: colors.textInverse,
+    fontWeight: '600',
+  },
   groupSection: { marginBottom: 8 },
   groupHeader: {
     ...textVariants.footnote,
