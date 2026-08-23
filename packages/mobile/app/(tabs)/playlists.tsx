@@ -81,16 +81,6 @@ export default function PlaylistsPage() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>我的歌单</Text>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => setModalVisible(true)}
-        >
-          <Plus size={24} color={colors.textInverse} />
-        </TouchableOpacity>
-      </View>
-
       <FlatList
         data={playlists}
         keyExtractor={(item) => item.id}
@@ -101,6 +91,16 @@ export default function PlaylistsPage() {
         ]}
         ListHeaderComponent={() => (
           <>
+            {/* 页头随内容滚动、从悬浮 TopBar 下穿过（M2）；静态放列表外会被 TopBar 盖住 */}
+            <View style={styles.header}>
+              <Text style={styles.title}>我的歌单</Text>
+              <TouchableOpacity
+                style={styles.addBtn}
+                onPress={() => setModalVisible(true)}
+              >
+                <Plus size={24} color={colors.textInverse} />
+              </TouchableOpacity>
+            </View>
             {BUILT_IN.map((item) => (
               <TouchableOpacity
                 key={item.key}
@@ -193,9 +193,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
-    backgroundColor: colors.bgSurface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
   },
   title: { ...textVariants.largeTitle, color: colors.textPrimary },
   addBtn: {
