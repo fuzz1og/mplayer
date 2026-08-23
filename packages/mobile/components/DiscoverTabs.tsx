@@ -1,16 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions,
-  Image, FlatList, RefreshControl,
+  Image, FlatList, RefreshControl, Animated,
 } from 'react-native';
 import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
-import {radius, spacing, textVariants} from '../theme/tokens';
+import {radius, shadow, spacing, textVariants} from '../theme/tokens';
 import { lightColors, darkColors } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import { springs } from '../theme/motion';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import ScalePress from './ScalePress';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from './chromeMetrics';
@@ -30,16 +32,67 @@ const TABS = [
   { key: 'artists', label: '歌手' },
 ];
 
+/**
+ * 一级选择器：iOS 分段控件——灰轨道 + 白滑块，滑块随选中项弹簧滑动
+ * （uiDefault 临界阻尼，无过冲；减弱动效直接跳位，ADR-0004）。
+ * 与设置页「外观」分段控件同一语言。
+ */
+function SegmentedTabs({ tabs, activeIndex, onSelect, reducedMotion }: {
+  tabs: { key: string; label: string }[];
+  activeIndex: number;
+  onSelect: (i: number) => void;
+  reducedMotion: boolean;
+}) {
+  const { isDark } = useTheme();
+  const styles = isDark ? STYLES.dark : STYLES.light;
+  const [trackW, setTrackW] = useState(0);
+  const thumbX = useRef(new Animated.Value(0)).current;
+  // 轨道左右各 2 padding，滑块宽度按剩余空间均分
+  const segW = trackW > 4 ? (trackW - 4) / tabs.length : 0;
+
+  useEffect(() => {
+    if (segW <= 0) return;
+    if (reducedMotion) {
+      thumbX.setValue(activeIndex * segW);
+      return;
+    }
+    Animated.spring(thumbX, {
+      toValue: activeIndex * segW,
+      useNativeDriver: true,
+      ...springs.uiDefault,
+    }).start();
+  }, [activeIndex, segW]);
+
+  return (
+    <View style={styles.tabHeader}>
+      <View style={styles.segTrack} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
+        {segW > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.segThumb, { width: segW, transform: [{ translateX: thumbX }] }]}
+          />
+        )}
+        {tabs.map((t, i) => (
+          <ScalePress key={t.key} style={styles.segItem} onPress={() => onSelect(i)}>
+            <Text style={[styles.segLabel, activeIndex === i && styles.segLabelActive]}>{t.label}</Text>
+          </ScalePress>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function DiscoverTabs() {
   const { isDark } = useTheme();
   // 多子组件共用一套样式：模块级预构建两套（见文件底部 STYLES），按主题取用
   const styles = isDark ? STYLES.dark : STYLES.light;
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<FlatList<any>>(null);
+  const reducedMotion = useReducedMotion();
 
   const onTabPress = (i: number) => {
     setActiveIndex(i);
-    scrollRef.current?.scrollToOffset({ offset: i * SCREEN_WIDTH, animated: true });
+    scrollRef.current?.scrollToOffset({ offset: i * SCREEN_WIDTH, animated: !reducedMotion });
   };
 
   const onMomentumEnd = (e: any) => {
@@ -51,20 +104,7 @@ export default function DiscoverTabs() {
 
   return (
     <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
-      {/* Bubble tab header */}
-      <View style={styles.tabHeader}>
-        {TABS.map((t, i) => (
-          <TouchableOpacity
-            key={t.key}
-            onPress={() => onTabPress(i)}
-            style={[styles.tabItem, activeIndex === i && styles.tabItemActive]}
-          >
-            <Text style={[styles.tabLabel, activeIndex === i && styles.tabLabelActive]}>
-              {t.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <SegmentedTabs tabs={TABS} activeIndex={activeIndex} onSelect={onTabPress} reducedMotion={reducedMotion} />
       {/* Swipeable content：横向分页容器用 FlatList（VirtualizedList-backed），
           避免 ScrollView 内嵌 FlatList 触发「unique key」嵌套警告 */}
       <FlatList
@@ -197,7 +237,11 @@ const ALBUM_AREAS = [
   { label: '日本', value: 'JP' },
 ];
 
-/** 二级分类胶囊行（新碟/歌单/歌手共用） */
+/**
+ * 二级分类选择器：Apple Music「资料库」式文字 tabs——纯文字横滑，
+ * 选中项加粗变深 + accent 下划线；零底色零圆角，层级让给一级分段控件。
+ * 左缘 16pt 与一级分段控件轨道对齐（同一页面沟槽 spacing[4]）。
+ */
 function CategoryPills({ items, activeLabel, onSelect }: {
   items: { label: string; value: string }[];
   activeLabel: string;
@@ -207,15 +251,19 @@ function CategoryPills({ items, activeLabel, onSelect }: {
   const styles = isDark ? STYLES.dark : STYLES.light;
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled style={styles.catBar} contentContainerStyle={styles.catBarContent}>
-      {items.map((c) => (
-        <TouchableOpacity
-          key={c.value}
-          onPress={() => onSelect(c.label, c.value)}
-          style={[styles.catPill, activeLabel === c.label && styles.catPillActive]}
-        >
-          <Text style={[styles.catLabel, activeLabel === c.label && styles.catLabelActive]}>{c.label}</Text>
-        </TouchableOpacity>
-      ))}
+      {items.map((c) => {
+        const active = c.label === activeLabel;
+        return (
+          <ScalePress
+            key={c.value}
+            onPress={() => onSelect(c.label, c.value)}
+            style={styles.catItem}
+          >
+            <Text style={[styles.catLabel, active && styles.catLabelActive]}>{c.label}</Text>
+            <View style={[styles.catUnderline, active && styles.catUnderlineActive]} />
+          </ScalePress>
+        );
+      })}
     </ScrollView>
   );
 }
@@ -581,31 +629,38 @@ function ArtistContent() {
 /** 样式工厂：7 个子组件共用一套样式，模块级预构建双主题两份（见各组件内按 isDark 取用） */
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  // Bubble tab header
+  // 一级分段控件：灰轨道 + 白滑块（与设置页「外观」同款），滑块动画在组件内
   tabHeader: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgBase,
     paddingHorizontal: spacing[4],
     paddingVertical: 10,
-    gap: spacing[2],
   },
-  tabItem: {
+  segTrack: {
+    flexDirection: 'row',
+    backgroundColor: colors.bgActive,
+    borderRadius: radius.sm,
+    padding: 2,
+  },
+  segThumb: {
+    position: 'absolute',
+    top: 2,
+    bottom: 2,
+    left: 2,
+    backgroundColor: colors.bgElevated,
+    borderRadius: radius.xs,
+    ...shadow.xs,
+  },
+  segItem: {
     flex: 1,
-    paddingVertical: spacing[2],
-    borderRadius: radius.full, // 气泡 tab 统一全圆角（与搜索页 tab 一致）
-    backgroundColor: colors.bgHover,
+    paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabItemActive: {
-    backgroundColor: colors.accent,
-  },
-  tabLabel: {
+  segLabel: {
     ...textVariants.subhead,
     color: colors.textSecondary,
   },
-  tabLabelActive: {
-    color: colors.textInverse,
+  segLabelActive: {
+    color: colors.accent,
     fontWeight: '600',
   },
   tabContent: { flex: 1 },
@@ -613,26 +668,33 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   tabContentInner: { paddingHorizontal: spacing[3], paddingBottom: spacing[6] },
   // 热榜：section 自带 marginHorizontal: 12，不加容器 padding 避免边距翻倍
   tabContentInnerHotlist: { paddingBottom: spacing[6] },
-  // 二级分类胶囊
+  // 二级分类：文字 tabs + 选中下划线；左缘 16pt 对齐一级分段控件轨道
   catBar: { flexGrow: 0 },
-  catBarContent: { gap: spacing[2], paddingVertical: 10 },
-  catPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: radius.full, // 分类胶囊统一全圆角
-    backgroundColor: colors.bgHover,
-  },
-  catPillActive: {
-    backgroundColor: colors.accent,
+  catBarContent: { gap: spacing[1], paddingHorizontal: spacing[4], paddingVertical: spacing[1] },
+  catItem: {
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    alignItems: 'center',
   },
   catLabel: {
-    ...textVariants.caption,
+    ...textVariants.footnote,
     fontWeight: '500',
     color: colors.textSecondary,
   },
   catLabelActive: {
-    color: colors.textInverse,
+    color: colors.textPrimary,
     fontWeight: '600',
+  },
+  catUnderline: {
+    height: 2,
+    borderRadius: 1,
+    alignSelf: 'stretch',
+    marginTop: 3,
+    opacity: 0,
+  },
+  catUnderlineActive: {
+    backgroundColor: colors.accent,
+    opacity: 1,
   },
   catErrorBox: {
     alignItems: 'center',
