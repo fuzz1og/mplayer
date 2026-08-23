@@ -22,8 +22,8 @@ interface ScalePressProps {
  * - 松手用 pressScale 临界阻尼弹簧回弹（ADR-0004），无过冲
  * - 系统"减弱动效"时退化为轻微变暗，不做位移动画
  *
- * 样式挂在内部 Animated.View 上，使 padding/边框与内容一体缩放；
- * hitSlop 透传给 Pressable 保证触控目标不因视觉缩放而缩小。
+ * style 挂在 Pressable 本体上（flex/宽度等布局样式必须落在容器才生效，
+ * 内层 Animated.View 只包缩放变换）；hitSlop 透传保证触控目标完整。
  */
 export default function ScalePress({
   onPress,
@@ -61,8 +61,9 @@ export default function ScalePress({
       onPressOut={pressOut}
       disabled={disabled}
       hitSlop={hitSlop}
+      style={style}
     >
-      <Animated.View style={[style, reducedMotion && styles.reducedDim, { transform: [{ scale }] }]}>
+      <Animated.View style={[reducedMotion && styles.reducedDim, { transform: [{ scale }] }]}>
         {children}
       </Animated.View>
     </Pressable>

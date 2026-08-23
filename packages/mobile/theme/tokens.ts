@@ -289,7 +289,10 @@ export const lightColors: ThemeColors = {
   bgSurface: '#FFFFFF',
   bgElevated: '#FFFFFF',
   bgSidebar: '#FFFFFF',
-  bgPlayer: 'rgba(255, 255, 255, 0.85)',
+  // 无 blur 的纯半透明在浅色下与白底明度差为零、chrome 隐形（真机验证），
+  // 按指南 §2.2 无 backdrop-filter 兜底思路提不透明度：保留一丝材质感，
+  // 分层靠「白 chrome vs 灰底」明度差（§1 柱子一）
+  bgPlayer: 'rgba(255, 255, 255, 0.96)',
   bgHover: palette.gray100,
   bgActive: palette.gray200,
   bgOverlay: 'rgba(0, 0, 0, 0.4)',

@@ -34,6 +34,8 @@ export default function RecommendPage() {
   // 当前展示的随机批次 + 本轮已用过的池索引(抽完一轮自动重置)
   const [batch, setBatch] = useState<Song[]>([]);
   const [usedIndices, setUsedIndices] = useState<number[]>([]);
+  // 早退/条件分支之后不得再调 hook，insets 必须在 LoadingState 早退前取
+  const insets = useSafeAreaInsets();
 
   const load = useCallback(async (isRefresh: boolean) => {
     try {
@@ -86,8 +88,6 @@ export default function RecommendPage() {
   const shownSongs = batch;
 
   if (loading) return <LoadingState />;
-
-  const insets = useSafeAreaInsets();
 
   return (
     <ScrollView
