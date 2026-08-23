@@ -557,6 +557,8 @@ function ArtistContent() {
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         numColumns={CARD_COLS}
+        // 卡片宽按含 2×12 gap 计算，行必须补 gap 才满宽居中（否则 3 卡左对齐、右侧空 24dp）
+        columnWrapperStyle={styles.artistRow}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         refreshControl={
@@ -669,6 +671,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flexWrap: 'wrap',
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
+    gap: GRID_GAP,
+  },
+  // numColumns 行容器：补列间距，让 3 卡满宽居中（卡片宽已含 gap 份额）
+  artistRow: {
     gap: GRID_GAP,
   },
   artistCard: {
