@@ -2,6 +2,8 @@ appId: com.mplayer.app
 productName: MPlayer
 forceCodeSigning: false
 afterPack: scripts/afterPack.js
+# 安装包最大压缩（normal → maximum，体积再降 ~20-30%，代价是打包/安装稍慢）
+compression: maximum
 publish:
   provider: github
   owner: fuzz1og

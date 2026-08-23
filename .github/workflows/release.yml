@@ -76,10 +76,16 @@ jobs:
         include:
           - os: windows-latest
             args: --win
+            electron_cache: '~\AppData\Local\electron\Cache'
+            builder_cache: '~\AppData\Local\electron-builder\Cache'
           - os: macos-latest
             args: --mac
+            electron_cache: '~/.cache/electron'
+            builder_cache: '~/.cache/electron-builder'
           - os: ubuntu-latest
             args: --linux
+            electron_cache: '~/.cache/electron'
+            builder_cache: '~/.cache/electron-builder'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -92,6 +98,19 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      # 缓存 Electron 二进制与 electron-builder 工具：npm ci --ignore-scripts 跳过
+      # electron postinstall，不缓存的话每次打包都要重新下载 ~100MB/平台的
+      # electron zip + winCodeSign/nsis 工具（Windows 缓存路径在 LOCALAPPDATA）
+      - name: Cache Electron + electron-builder
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ matrix.electron_cache }}
+            ${{ matrix.builder_cache }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
 
       - run: npm ci --ignore-scripts
 
@@ -108,6 +127,18 @@ jobs:
       # electron-builder 因 release 已存在而 skipped publishing（实测 v1.7.2 桌面产物全丢）。
       - name: Build (Electron)
         run: npx electron-builder ${{ matrix.args }} --publish never
+        env:
+          # 代码签名/公证（electron-builder 检测到凭据才签名，secrets 未配置时自动跳过）：
+          #   macOS —— Developer ID 证书 p12 的 base64（MAC_CSC_LINK）+ 密码；
+          #            notarize 由 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三个变量驱动
+          #   Windows —— 代码签名证书 pfx 的 base64（WIN_CSC_LINK）+ 密码
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       # 只上传顶层发布产物（AppImage/deb/dmg/exe/latest-*.yml），
       # 排除 dist 下被打包进 app 的源文件（index.html/icon.png/builder-debug.yml 等）
