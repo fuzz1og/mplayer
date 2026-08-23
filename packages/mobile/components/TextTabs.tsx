@@ -34,6 +34,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: spacing[2],
     alignItems: 'center',
   },
+  /* 固定行形态：各项 flex 等分满宽（iOS 分段式等分，非横滑形态专用） */
+  itemFixed: {
+    flex: 1,
+  },
   label: {
     ...textVariants.footnote,
     fontWeight: '500',
@@ -73,7 +77,7 @@ export default function TextTabs({ tabs, activeKey, onSelect, scrollable = true 
   const items = tabs.map((t) => {
     const active = t.key === activeKey;
     return (
-      <ScalePress key={t.key} style={styles.item} onPress={() => onSelect(t.key)}>
+      <ScalePress key={t.key} style={[styles.item, !scrollable && styles.itemFixed]} onPress={() => onSelect(t.key)}>
         <Text style={[styles.label, active && styles.labelActive]}>{t.label}</Text>
         <View style={[styles.underline, active && styles.underlineActive]} />
       </ScalePress>
