@@ -643,14 +643,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '400',
     color: colors.danger,
   },
-  // Hotlist section styles：平铺（指南 §2.3）——无卡片容器，内容直接坐在底色上，
-  // 标题行 + 歌曲行用发丝线分隔；水平缩进与网格 tab 的 12px 页边距一致
+  // Hotlist section styles：iOS inset grouped（指南 §2.3/§2.5）——白组坐灰底靠明度差分层，
+  // 无阴影无边框；标题行/歌曲行之间发丝线分隔；水平缩进对齐网格 tab 的 12px 页边距
   section: {
+    backgroundColor: colors.bgSurface,
+    marginHorizontal: spacing[3],
     marginTop: spacing[5],
+    borderRadius: radius.lg,
+    overflow: 'hidden',
   },
   sectionHeader: {
     paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
   },
