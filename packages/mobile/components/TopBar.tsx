@@ -181,6 +181,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textPrimary,
     ...textVariants.subhead,
     fontWeight: '400',
+    // Android TextInput 在定高容器里默认自带内边距 + 顶部对齐，文字会偏离中心
+    paddingVertical: 0,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   sourceBtn: {
     flexShrink: 0,
