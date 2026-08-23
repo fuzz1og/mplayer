@@ -17,7 +17,7 @@ import { useSourceStore } from '../../stores/sourceStore';
 import SongRow from '../../components/SongRow';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
-import {radius, textVariants} from '../../theme/tokens';
+import {radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
@@ -201,6 +201,7 @@ function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: Results
             <Text style={styles.groupHeader}>
               {group.name}
               {group.artist ? <Text style={styles.groupArtist}> — {group.artist}</Text> : null}
+              {group.songs.length > 1 && <Text style={styles.groupCount}>· {group.songs.length} 个版本</Text>}
             </Text>
           ) : null}
           {group.songs.map((song, i) => (
@@ -230,7 +231,12 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
       contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + 16 }}
       renderItem={({ item: group }) => (
         <View style={styles.groupSection}>
-          {group.name ? <Text style={styles.groupHeader}>{group.name}</Text> : null}
+          {group.name ? (
+            <Text style={styles.groupHeaderLabel}>
+              {group.name}
+              {group.songs.length > 1 && <Text style={styles.groupCount}>· {group.songs.length} 首</Text>}
+            </Text>
+          ) : null}
           {group.songs.map((song, i) => (
             <SongRow key={`${song.id}-${i}`} song={song} showSource queueSongs={group.songs} />
           ))}
@@ -246,20 +252,27 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
   container: { flex: 1 },
-  groupSection: { marginBottom: 8 },
+  groupSection: { marginBottom: 12 },
+  // 组头 = 沟槽对齐的静默标签（无卡片底）：多源视图标题是歌名，单源视图标题是源名，
+  // 行保持全出血——沿用推荐页「标签 + 全出血行」的列表语言，避免内嵌卡与行断裂
   groupHeader: {
+    ...textVariants.subhead,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[3],
+    paddingBottom: 4,
+  },
+  groupHeaderLabel: {
     ...textVariants.footnote,
     fontWeight: '600',
     color: colors.textPrimary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: colors.bgSurface,
-    marginTop: 8,
-    marginHorizontal: 12,
-    borderRadius: radius.md,
-    overflow: 'hidden',
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[3],
+    paddingBottom: 4,
   },
   groupArtist: { color: colors.textSecondary, fontWeight: '400' },
+  groupCount: { ...textVariants.caption, color: colors.textTertiary, fontWeight: '400', marginLeft: spacing[2] },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
