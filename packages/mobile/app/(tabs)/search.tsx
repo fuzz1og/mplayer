@@ -21,6 +21,12 @@ import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+import SegmentedTabs from '../../components/SegmentedTabs';
+
+const SEARCH_TABS: { key: SearchTab; label: string }[] = [
+  { key: 'songs', label: '歌曲' },
+  { key: 'artists', label: '歌手' },
+];
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -89,22 +95,13 @@ export default function SearchPage() {
 
   return (
     <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
-      {/* 气泡 tab：歌曲 / 歌手 */}
+      {/* 歌曲 / 歌手：共享分段控件（与发现页一级选择器同语言） */}
       <View style={styles.tabHeader}>
-        {([
-          { key: 'songs', label: '歌曲' },
-          { key: 'artists', label: '歌手' },
-        ] as { key: SearchTab; label: string }[]).map((t) => (
-          <TouchableOpacity
-            key={t.key}
-            onPress={() => setActiveTab(t.key)}
-            style={[styles.tabItem, activeTab === t.key && styles.tabItemActive]}
-          >
-            <Text style={[styles.tabLabel, activeTab === t.key && styles.tabLabelActive]}>
-              {t.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        <SegmentedTabs
+          tabs={SEARCH_TABS}
+          activeIndex={SEARCH_TABS.findIndex((t) => t.key === activeTab)}
+          onSelect={(i) => setActiveTab(SEARCH_TABS[i].key)}
+        />
       </View>
 
       {activeTab === 'songs' ? (
@@ -252,25 +249,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 8,
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: radius.full,
-    backgroundColor: colors.bgHover,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabItemActive: {
-    backgroundColor: colors.accent,
-  },
-  tabLabel: {
-    ...textVariants.subhead,
-    color: colors.textSecondary,
-  },
-  tabLabelActive: {
-    color: colors.textInverse,
-    fontWeight: '600',
   },
   groupSection: { marginBottom: 8 },
   groupHeader: {

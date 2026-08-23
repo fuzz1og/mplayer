@@ -1,19 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions,
-  Image, FlatList, RefreshControl, Animated,
+  Image, FlatList, RefreshControl,
 } from 'react-native';
 import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
-import {radius, shadow, spacing, textVariants} from '../theme/tokens';
+import {radius, spacing, textVariants} from '../theme/tokens';
 import { lightColors, darkColors } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import { springs } from '../theme/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import ScalePress from './ScalePress';
+import SegmentedTabs from './SegmentedTabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from './chromeMetrics';
 import LoadingState from './LoadingState';
@@ -25,62 +25,17 @@ import { searchStrictMatch } from '../services/songResources';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+/** 网格统一度量：16pt 页面沟槽（与分段控件/分类行同轴），列间 12 */
+const GRID_GAP = spacing[3];
+const gridCardW = (SCREEN_WIDTH - spacing[4] * 2 - GRID_GAP) / 2;
+const artistCardW = (SCREEN_WIDTH - spacing[4] * 2 - GRID_GAP * 2) / 3;
+
 const TABS = [
   { key: 'hotlist', label: '排行榜' },
   { key: 'albums', label: '新碟' },
   { key: 'playlists', label: '歌单' },
   { key: 'artists', label: '歌手' },
 ];
-
-/**
- * 一级选择器：iOS 分段控件——灰轨道 + 白滑块，滑块随选中项弹簧滑动
- * （uiDefault 临界阻尼，无过冲；减弱动效直接跳位，ADR-0004）。
- * 与设置页「外观」分段控件同一语言。
- */
-function SegmentedTabs({ tabs, activeIndex, onSelect, reducedMotion }: {
-  tabs: { key: string; label: string }[];
-  activeIndex: number;
-  onSelect: (i: number) => void;
-  reducedMotion: boolean;
-}) {
-  const { isDark } = useTheme();
-  const styles = isDark ? STYLES.dark : STYLES.light;
-  const [trackW, setTrackW] = useState(0);
-  const thumbX = useRef(new Animated.Value(0)).current;
-  // 轨道左右各 2 padding，滑块宽度按剩余空间均分
-  const segW = trackW > 4 ? (trackW - 4) / tabs.length : 0;
-
-  useEffect(() => {
-    if (segW <= 0) return;
-    if (reducedMotion) {
-      thumbX.setValue(activeIndex * segW);
-      return;
-    }
-    Animated.spring(thumbX, {
-      toValue: activeIndex * segW,
-      useNativeDriver: true,
-      ...springs.uiDefault,
-    }).start();
-  }, [activeIndex, segW]);
-
-  return (
-    <View style={styles.tabHeader}>
-      <View style={styles.segTrack} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
-        {segW > 0 && (
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.segThumb, { width: segW, transform: [{ translateX: thumbX }] }]}
-          />
-        )}
-        {tabs.map((t, i) => (
-          <ScalePress key={t.key} style={styles.segItem} onPress={() => onSelect(i)}>
-            <Text style={[styles.segLabel, activeIndex === i && styles.segLabelActive]}>{t.label}</Text>
-          </ScalePress>
-        ))}
-      </View>
-    </View>
-  );
-}
 
 export default function DiscoverTabs() {
   const { isDark } = useTheme();
@@ -104,7 +59,9 @@ export default function DiscoverTabs() {
 
   return (
     <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
-      <SegmentedTabs tabs={TABS} activeIndex={activeIndex} onSelect={onTabPress} reducedMotion={reducedMotion} />
+      <View style={styles.tabHeader}>
+        <SegmentedTabs tabs={TABS} activeIndex={activeIndex} onSelect={onTabPress} reducedMotion={reducedMotion} />
+      </View>
       {/* Swipeable content：横向分页容器用 FlatList（VirtualizedList-backed），
           避免 ScrollView 内嵌 FlatList 触发「unique key」嵌套警告 */}
       <FlatList
@@ -272,9 +229,7 @@ function AlbumsContent() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
-  const CARD_GAP = 10;
   const CARD_COLS = 2;
-  const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(false);
@@ -315,18 +270,18 @@ function AlbumsContent() {
 
   const renderItem = ({ item: album }: { item: Album }) => (
     <TouchableOpacity
-      style={[styles.gridCard, { width: cardW }]}
+      style={[styles.gridCard, { width: gridCardW }]}
       activeOpacity={0.7}
       onPress={() => router.push(`/album/${album.id}?name=${encodeURIComponent(album.name)}&pic=${encodeURIComponent(album.picUrl)}&artist=${encodeURIComponent(album.artist)}` as any)}
     >
       {album.picUrl ? (
-        <Image source={{ uri: album.picUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
+        <Image source={{ uri: album.picUrl }} style={[styles.gridCover, { width: gridCardW, height: gridCardW }]} />
       ) : (
-        <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={[styles.gridCover, { width: gridCardW, height: gridCardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
           <Disc3 size={32} color={colors.textDisabled} />
         </View>
       )}
-      <Text style={styles.gridName} numberOfLines={1}>{album.name}</Text>
+      <Text style={styles.gridName} numberOfLines={2}>{album.name}</Text>
       <Text style={styles.gridMeta} numberOfLines={1}>{album.artist}</Text>
     </TouchableOpacity>
   );
@@ -346,7 +301,7 @@ function AlbumsContent() {
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         numColumns={CARD_COLS}
-        columnWrapperStyle={{ gap: CARD_GAP }}
+        columnWrapperStyle={{ gap: GRID_GAP }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
         }
@@ -370,9 +325,7 @@ function PlaylistContent() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
-  const CARD_GAP = 10;
   const CARD_COLS = 2;
-  const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(false);
@@ -442,18 +395,18 @@ function PlaylistContent() {
 
   const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
     <TouchableOpacity
-      style={[styles.gridCard, { width: cardW }]}
+      style={[styles.gridCard, { width: gridCardW }]}
       activeOpacity={0.7}
       onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
     >
       {p.coverImgUrl ? (
-        <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
+        <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: gridCardW, height: gridCardW }]} />
       ) : (
-        <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={[styles.gridCover, { width: gridCardW, height: gridCardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
           <ListMusic size={32} color={colors.textDisabled} />
         </View>
       )}
-      <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
+      <Text style={styles.gridName} numberOfLines={2}>{p.name}</Text>
       <Text style={styles.gridMeta}>{p.playCount ? formatPlayCount(p.playCount) : ''}</Text>
     </TouchableOpacity>
   );
@@ -473,7 +426,7 @@ function PlaylistContent() {
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
         numColumns={CARD_COLS}
-        columnWrapperStyle={{ gap: CARD_GAP }}
+        columnWrapperStyle={{ gap: GRID_GAP }}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         refreshControl={
@@ -511,7 +464,7 @@ function ArtistContent() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
-  const CARD_COLS = 3;
+  const CARD_COLS = 3;  // 宽度用模块级 artistCardW（16 沟槽 + 2×12 列距）
   const [artists, setArtists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(false);
@@ -629,44 +582,15 @@ function ArtistContent() {
 /** 样式工厂：7 个子组件共用一套样式，模块级预构建双主题两份（见各组件内按 isDark 取用） */
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  // 一级分段控件：灰轨道 + 白滑块（与设置页「外观」同款），滑块动画在组件内
+  // 一级分段控件外框：16pt 页面沟槽（全页统一轴线），控件本体在共享 SegmentedTabs
   tabHeader: {
     paddingHorizontal: spacing[4],
     paddingVertical: 10,
   },
-  segTrack: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgActive,
-    borderRadius: radius.sm,
-    padding: 2,
-  },
-  segThumb: {
-    position: 'absolute',
-    top: 2,
-    bottom: 2,
-    left: 2,
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.xs,
-    ...shadow.xs,
-  },
-  segItem: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segLabel: {
-    ...textVariants.subhead,
-    color: colors.textSecondary,
-  },
-  segLabelActive: {
-    color: colors.accent,
-    fontWeight: '600',
-  },
   tabContent: { flex: 1 },
-  // 网格 tab（新碟/歌单/歌手）：与 cardW 计算的左右 12px 边距对齐，保证卡片居中
-  tabContentInner: { paddingHorizontal: spacing[3], paddingBottom: spacing[6] },
-  // 热榜：section 自带 marginHorizontal: 12，不加容器 padding 避免边距翻倍
+  // 网格 tab（新碟/歌单/歌手）：16pt 沟槽与 gridCardW 计算一致
+  tabContentInner: { paddingHorizontal: spacing[4], paddingBottom: spacing[6] },
+  // 热榜：section 自带 marginHorizontal: 16，不加容器 padding 避免边距翻倍
   tabContentInnerHotlist: { paddingBottom: spacing[6] },
   // 二级分类：文字 tabs + 选中下划线；左缘 16pt 对齐一级分段控件轨道
   catBar: { flexGrow: 0 },
@@ -706,16 +630,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.danger,
   },
   // Hotlist section styles：iOS inset grouped（指南 §2.3/§2.5）——白组坐灰底靠明度差分层，
-  // 无阴影无边框；标题行/歌曲行之间发丝线分隔；水平缩进对齐网格 tab 的 12px 页边距
+  // 无阴影无边框；标题行/歌曲行之间发丝线分隔；水平缩进对齐 16pt 页面沟槽
   section: {
     backgroundColor: colors.bgSurface,
-    marginHorizontal: spacing[3],
+    marginHorizontal: spacing[4],
     marginTop: spacing[5],
     borderRadius: radius.lg,
     overflow: 'hidden',
   },
   sectionHeader: {
-    paddingHorizontal: spacing[3],
+    paddingHorizontal: spacing[4],
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
@@ -727,7 +651,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   songRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing[3],
+    paddingHorizontal: spacing[4],
     paddingVertical: 10,
   },
   songRowSep: {
@@ -750,17 +674,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   songInfo: { flex: 1 },
   songName: { ...textVariants.subhead, fontWeight: '400', color: colors.textPrimary },
   songArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
-  // Playlist grid styles
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    gap: 10,
-  },
-  gridCard: {
-    marginBottom: spacing[1],
-  },
+  // 专辑/歌单网格卡片：封面方圆角 md，标题两行截断，副行 meta——
+  // 垂直节奏走 token（name 8 / meta 2），列距 gap 统一 12，无逐卡 margin
+  gridCard: {},
   gridCover: {
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
@@ -769,7 +685,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...textVariants.footnote,
     fontWeight: '500',
     color: colors.textPrimary,
-    marginTop: 6,
+    marginTop: spacing[2],
   },
   gridMeta: {
     ...textVariants.micro,
@@ -781,13 +697,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   artistGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 12,
-    paddingTop: 12,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[3],
+    gap: GRID_GAP,
   },
   artistCard: {
-    width: (SCREEN_WIDTH - 24) / 3,
+    width: artistCardW,
     alignItems: 'center',
-    marginBottom: spacing[5],
+    marginBottom: spacing[4],
   },
   artistAvatar: {
     width: 72,
@@ -798,7 +715,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   artistName: {
     ...textVariants.footnote,
     color: colors.textPrimary,
-    marginTop: 6,
+    marginTop: spacing[2],
     textAlign: 'center',
   },
 });
