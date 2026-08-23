@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Text, Animated, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { radius, shadow, textVariants } from '../theme/tokens';
 import { lightColors, darkColors } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
@@ -49,11 +49,13 @@ const STYLES = {
   dark: makeStyles(darkColors),
 };
 
-export default function SegmentedTabs({ tabs, activeIndex, onSelect, reducedMotion }: {
+export default function SegmentedTabs({ tabs, activeIndex, onSelect, reducedMotion, style }: {
   tabs: { key: string; label: string }[];
   activeIndex: number;
   onSelect: (i: number) => void;
   reducedMotion?: boolean;
+  /** 轨道尺寸覆写：两选项的搜索页用紧凑宽度（iOS 搜索结果式居中），默认通栏 */
+  style?: StyleProp<ViewStyle>;
 }) {
   const { isDark } = useTheme();
   const styles = isDark ? STYLES.dark : STYLES.light;
@@ -76,7 +78,7 @@ export default function SegmentedTabs({ tabs, activeIndex, onSelect, reducedMoti
   }, [activeIndex, segW]);
 
   return (
-    <View style={styles.track} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
+    <View style={[styles.track, style]} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
       {segW > 0 && (
         <Animated.View
           pointerEvents="none"

@@ -95,12 +95,13 @@ export default function SearchPage() {
 
   return (
     <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
-      {/* 歌曲 / 歌手：共享分段控件（与发现页一级选择器同语言） */}
+      {/* 歌曲 / 歌手：紧凑居中分段控件（iOS 搜索结果式，两选项不通栏） */}
       <View style={styles.tabHeader}>
         <SegmentedTabs
           tabs={SEARCH_TABS}
           activeIndex={SEARCH_TABS.findIndex((t) => t.key === activeTab)}
           onSelect={(i) => setActiveTab(SEARCH_TABS[i].key)}
+          style={styles.segCompact}
         />
       </View>
 
@@ -244,12 +245,11 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   tabHeader: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgBase,
-    paddingHorizontal: 16,
+    alignItems: 'center',
     paddingVertical: 10,
-    gap: 8,
   },
+  /* iOS 搜索结果的紧凑分段控件：约四成屏宽居中，两选项不通栏 */
+  segCompact: { width: '42%' },
   groupSection: { marginBottom: 8 },
   groupHeader: {
     ...textVariants.footnote,
