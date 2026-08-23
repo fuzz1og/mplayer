@@ -163,7 +163,7 @@ const makeToastStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     maxWidth: '85%',
-    shadowColor: '#000000',
+    shadowColor: '#000000', // design-lint: ok 阴影投影必须纯黑（RN 阴影靠色值控制深浅）
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },

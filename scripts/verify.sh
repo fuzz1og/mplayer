@@ -9,6 +9,9 @@ cd "$(dirname "$0")/.."
 echo "→ lint..."
 npm run lint
 
+echo "→ design-lint..."
+./scripts/design-lint.sh
+
 echo "→ root typecheck..."
 npm run typecheck
 
