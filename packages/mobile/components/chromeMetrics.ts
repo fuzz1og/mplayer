@@ -8,8 +8,8 @@ import type { Insets } from 'react-native';
  * 改 chrome 布局时必须同步这里；数值与样式文件中的公式一一对应。
  */
 
-/** TopBar 固定部分：paddingTop(8) + paddingVertical(16) + 搜索栏(36)；状态栏高度由 insets 动态加 */
-export const TOP_BAR_FIXED_HEIGHT = 60;
+/** TopBar 固定部分：paddingTop(8) + 搜索栏(36) + paddingBottom(8) = 52；状态栏高度由 insets 动态加 */
+export const TOP_BAR_FIXED_HEIGHT = 52;
 
 /** 迷你播放栏：paddingVertical(spacing[2]×2=16) + 封面(44) */
 export const PLAYER_BAR_HEIGHT = 60;
