@@ -18,11 +18,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
   },
   scrollContent: {
+    flexDirection: 'row',
     gap: spacing[1],
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[1],
   },
   rowContent: {
+    flexDirection: 'row',
     gap: spacing[1],
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[1],
