@@ -270,7 +270,7 @@ export default function SongRow({
 
       {audioTag === 'preview' && (
         <View style={styles.tagBadgePreview}>
-          <Text style={[styles.tagText, { color: colors.warning }]}>短时长</Text>
+          <Text style={[styles.tagText, { color: colors.textSecondary }]}>短时长</Text>
         </View>
       )}
       {audioTag === 'invalid' && (
