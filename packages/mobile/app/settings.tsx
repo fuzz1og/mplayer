@@ -535,11 +535,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...textVariants.subhead,
     fontWeight: '600',
   },
-  label: {
-    color: colors.textSecondary,
-    ...textVariants.footnote,
-    marginBottom: spacing[2],
-  },
   statusDot: {
     width: 8,
     height: 8,
