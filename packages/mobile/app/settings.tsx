@@ -206,12 +206,11 @@ export default function SettingsPage() {
         contentContainerStyle={styles.scrollContent}
       >
 
-        {/* 外观（#173：深色模式）—— inset grouped：节标签在组外，组靠明度差分层（指南 §2.3） */}
+        {/* 外观（#173：深色模式）—— 平铺：无卡片容器，节标签 + 发丝线承担结构（指南 §2.3） */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>外观</Text>
-          <View style={styles.group}>
-            <View style={styles.groupPad}>
-              <View style={styles.segmentGroup}>
+          <View style={styles.sectionBody}>
+            <View style={styles.segmentGroup}>
                 {THEME_MODE_OPTIONS.map((opt) => {
                   const active = themeMode === opt.value;
                   return (
@@ -224,7 +223,6 @@ export default function SettingsPage() {
                     </ScalePress>
                   );
                 })}
-              </View>
             </View>
           </View>
         </View>
@@ -232,7 +230,7 @@ export default function SettingsPage() {
         {/* 直连状态（T01：每源官方直连可用性；不再配置 auto/仅直连） */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>直连状态</Text>
-          <View style={styles.group}>
+          <View>
             {MULTI_SOURCE_LIST.map((source, i) => {
               const ready = hasDirectClient(source);
               return (
@@ -252,12 +250,12 @@ export default function SettingsPage() {
         {/* tier3 第三方解析源（#144，实验性） */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>第三方解析源（tier3）</Text>
-          <View style={styles.group}>
+          <View>
             <View style={[styles.row, { paddingVertical: 8 }]}>
               <Text style={[styles.modeLabel, { flex: 1 }]}>启用第三方解析</Text>
               <Switch value={tier3Enabled} onValueChange={handleTier3Toggle} />
             </View>
-            <View style={[styles.groupPad, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderSubtle }]}>
+            <View style={[styles.sectionBody, styles.rowSep]}>
               <Text style={styles.label}>
                 官方直连失败后按订阅清单尝试第三方源，全部失败换元/标记不可播。实验性功能，不内置任何解析端点。
               </Text>
@@ -321,7 +319,7 @@ export default function SettingsPage() {
 
             {/* 每源解析统计（本次会话）：命中/未命中，辅助判断订阅源质量 */}
             {Object.keys(tier3Stats).length > 0 && (
-              <View style={[styles.groupPad, styles.rowSep]}>
+              <View style={[styles.sectionBody, styles.rowSep]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Text style={{ color: colors.textSecondary, fontSize: 12 }}>每源解析统计（本次会话）</Text>
                   <View style={{ flexDirection: 'row' }}>
@@ -347,8 +345,8 @@ export default function SettingsPage() {
         {/* 缓存管理：统计 + 用量条 + 一键清理（对齐桌面 CacheSection） */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>缓存管理</Text>
-          <View style={styles.group}>
-            <View style={styles.groupPad}>
+          <View>
+            <View style={styles.sectionBody}>
               <Text style={styles.cacheStatsText}>
                 缓存文件 {cacheStats.fileCount} 个 · {(cacheStats.totalSize / 1024 / 1024).toFixed(1)} MB / {MAX_CACHE_MB} MB
               </Text>
@@ -369,10 +367,10 @@ export default function SettingsPage() {
           <Text style={styles.sectionFootnote}>播放 URL 缓存 12 小时过期，清理不影响已收藏歌曲</Text>
         </View>
 
-        {/* 检查更新（版本号作组内首行） */}
+        {/* 检查更新（版本号作节内首行） */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>关于</Text>
-          <View style={styles.group}>
+          <View>
             <View style={styles.row}>
               <Text style={styles.modeLabel}>当前版本</Text>
               <Text style={styles.modeStatus}>v{currentVersion}</Text>
@@ -390,7 +388,7 @@ export default function SettingsPage() {
               </View>
             )}
             {updateState === 'available' && (
-              <View style={[styles.groupPad, styles.rowSep]}>
+              <View style={[styles.sectionBody, styles.rowSep]}>
                 <Text style={styles.updateAvailableText}>发现新版本 v{latestVersion}</Text>
                 {releaseNotes ? (
                   <Text style={styles.releaseNotes} numberOfLines={4}>
@@ -460,24 +458,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
   },
   section: {
-    paddingHorizontal: spacing[4],
     paddingTop: spacing[5],
   },
-  /* inset grouped（指南 §2.3/§2.5）：组靠灰底↔白组明度差分层，无阴影无边框；
-     分组分容器圆角用 lg；节标签是组外小字 */
+  /* 平铺（指南 §2.3）：无卡片容器，内容直接坐在底色上，
+     节标签 + 行间发丝线承担全部结构；各元素自带 16 水平缩进 */
   sectionLabel: {
     ...textVariants.footnote,
     color: colors.textSecondary,
     marginBottom: spacing[2],
-    marginLeft: spacing[2],
+    paddingHorizontal: spacing[4],
   },
-  group: {
-    backgroundColor: colors.bgSurface,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-  },
-  groupPad: {
-    padding: spacing[4],
+  sectionBody: {
+    paddingTop: spacing[2],
   },
   row: {
     flexDirection: 'row',
@@ -492,13 +484,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   groupFootnote: {
     ...textVariants.caption,
     color: colors.textTertiary,
-    padding: spacing[4],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
   },
   sectionFootnote: {
     ...textVariants.caption,
     color: colors.textTertiary,
     marginTop: spacing[2],
-    marginLeft: spacing[2],
+    paddingHorizontal: spacing[4],
   },
   /* 操作行：iOS 式安静主操作（accent 文字行），替代满页填充大按钮 */
   actionRow: {
