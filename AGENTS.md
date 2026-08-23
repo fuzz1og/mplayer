@@ -12,11 +12,11 @@ npm run build / electron:build   # 生产构建 / 打包当前平台
 npm run lint / typecheck / typecheck:mobile  # ESLint(零警告) / 双端 tsc
 npm run core:build               # 构建 @mplayer/core（改 core 后移动端必须重建）
 npm run test:run                 # vitest 单次（renderer）
-./scripts/verify.sh              # 提交/发布前全量验证（lint+双端 typecheck+test；fast 跳过 test）
+./scripts/verify.sh              # 提交/发布前全量验证（lint+design-lint+双端 typecheck+test；fast 跳过 test）
 ./scripts/release.sh             # 一键发布（bump → 验证 → commit → tag → 触发 CI 构建）
 ```
 
-**验证顺序**：`lint → typecheck → test:run`，提交前全绿（pre-commit 钩子强制 root+mobile typecheck + staged lint，见 `.githooks/pre-commit`）。
+**验证顺序**：`lint → design-lint → typecheck → test:run`，提交前全绿（pre-commit 钩子强制 root+mobile typecheck + staged lint，见 `.githooks/pre-commit`）。
 
 ## Architecture
 

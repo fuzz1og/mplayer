@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CircleAlert, Music2, User } from 'lucide-react-native';
@@ -16,9 +17,18 @@ import { useSourceStore } from '../../stores/sourceStore';
 import SongRow from '../../components/SongRow';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
-import {radius, textVariants} from '../../theme/tokens';
+import {radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useAnimatedBg } from '../../theme/AnimatedBg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+import TextTabs from '../../components/TextTabs';
+
+const SEARCH_TABS: { key: SearchTab; label: string }[] = [
+  { key: 'songs', label: '歌曲' },
+  { key: 'artists', label: '歌手' },
+];
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -29,7 +39,9 @@ let artistSearchSeq = 0;
 
 export default function SearchPage() {
   const { colors } = useTheme();
+  const animatedBg = useAnimatedBg();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ q: string; type?: string }>();
   const q = Array.isArray(params.q) ? params.q[0] : params.q;
   const type = Array.isArray(params.type) ? params.type[0] : params.type;
@@ -85,24 +97,14 @@ export default function SearchPage() {
   }, [source]);
 
   return (
-    <View style={styles.container}>
-      {/* 气泡 tab：歌曲 / 歌手 */}
-      <View style={styles.tabHeader}>
-        {([
-          { key: 'songs', label: '歌曲' },
-          { key: 'artists', label: '歌手' },
-        ] as { key: SearchTab; label: string }[]).map((t) => (
-          <TouchableOpacity
-            key={t.key}
-            onPress={() => setActiveTab(t.key)}
-            style={[styles.tabItem, activeTab === t.key && styles.tabItemActive]}
-          >
-            <Text style={[styles.tabLabel, activeTab === t.key && styles.tabLabelActive]}>
-              {t.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+    <Animated.View style={[styles.container, { paddingTop: topChromeHeight(insets.top), backgroundColor: animatedBg }]}>
+      {/* 歌曲/歌手（后续可扩展歌单/专辑）：文字 tabs + 下划线，与发现页二级分类同语言 */}
+      <TextTabs
+        tabs={SEARCH_TABS}
+        activeKey={activeTab}
+        onSelect={(key) => setActiveTab(key as SearchTab)}
+        scrollable={false}
+      />
 
       {activeTab === 'songs' ? (
         // 渐进搜索:有结果就显示(即使还在加载),骨架屏只在无结果时出现
@@ -142,7 +144,10 @@ export default function SearchPage() {
           data={artists}
           keyExtractor={(item) => String(item.id)}
           numColumns={3}
-          contentContainerStyle={styles.artistGrid}
+          contentContainerStyle={[
+            styles.artistGrid,
+            { paddingBottom: bottomChromeHeight(insets.bottom, false) + 16 },
+          ]}
           renderItem={({ item: a }) => (
             <TouchableOpacity
               style={styles.artistCard}
@@ -166,7 +171,7 @@ export default function SearchPage() {
           <Text style={styles.emptyText}>未找到相关歌手</Text>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -182,18 +187,21 @@ interface ResultsListProps {
  */
 function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: ResultsListProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <FlatList
       key="song-results"
       data={results}
       keyExtractor={(item) => item.key}
+      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + 16 }}
       renderItem={({ item: group }) => (
         <View style={styles.groupSection}>
           {(group.name || group.artist) ? (
             <Text style={styles.groupHeader}>
               {group.name}
               {group.artist ? <Text style={styles.groupArtist}> — {group.artist}</Text> : null}
+              {group.songs.length > 1 && <Text style={styles.groupCount}>· {group.songs.length} 个版本</Text>}
             </Text>
           ) : null}
           {group.songs.map((song, i) => (
@@ -213,15 +221,22 @@ function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: Results
  */
 function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: ResultsListProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <FlatList
       key="song-results"
       data={results}
       keyExtractor={(item) => item.key}
+      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + 16 }}
       renderItem={({ item: group }) => (
         <View style={styles.groupSection}>
-          {group.name ? <Text style={styles.groupHeader}>{group.name}</Text> : null}
+          {group.name ? (
+            <Text style={styles.groupHeaderLabel}>
+              {group.name}
+              {group.songs.length > 1 && <Text style={styles.groupCount}>· {group.songs.length} 首</Text>}
+            </Text>
+          ) : null}
           {group.songs.map((song, i) => (
             <SongRow key={`${song.id}-${i}`} song={song} showSource queueSongs={group.songs} />
           ))}
@@ -235,47 +250,29 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase },
-  tabHeader: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgBase,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: radius.full,
-    backgroundColor: colors.bgHover,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabItemActive: {
-    backgroundColor: colors.accent,
-  },
-  tabLabel: {
-    ...textVariants.subhead,
-    color: colors.textSecondary,
-  },
-  tabLabelActive: {
-    color: colors.textInverse,
-    fontWeight: '600',
-  },
-  groupSection: { marginBottom: 8 },
+  // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
+  container: { flex: 1 },
+  groupSection: { marginBottom: 12 },
+  // 组头 = 沟槽对齐的静默标签（无卡片底）：多源视图标题是歌名，单源视图标题是源名，
+  // 行保持全出血——沿用推荐页「标签 + 全出血行」的列表语言，避免内嵌卡与行断裂
   groupHeader: {
+    ...textVariants.subhead,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[3],
+    paddingBottom: 4,
+  },
+  groupHeaderLabel: {
     ...textVariants.footnote,
     fontWeight: '600',
     color: colors.textPrimary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: colors.bgSurface,
-    marginTop: 8,
-    marginHorizontal: 12,
-    borderRadius: radius.md,
-    overflow: 'hidden',
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[3],
+    paddingBottom: 4,
   },
   groupArtist: { color: colors.textSecondary, fontWeight: '400' },
+  groupCount: { ...textVariants.caption, color: colors.textTertiary, fontWeight: '400', marginLeft: spacing[2] },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',

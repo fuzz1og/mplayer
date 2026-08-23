@@ -103,13 +103,13 @@ export default function SourceSwapModal({
               return (
                 <TouchableOpacity
                   key={s.key}
-                  style={[styles.item, disabled && { backgroundColor: `${srcColor}10` }]}
+                  style={[styles.item, disabled && { backgroundColor: colors.bgHover }]}
                   activeOpacity={0.7}
                   disabled={disabled}
                   onPress={() => onSelectSource(s.key)}
                 >
                   <View style={[styles.dot, { backgroundColor: srcColor }]} />
-                  <Text style={[styles.itemText, disabled && { color: srcColor, fontWeight: '600' }]}>
+                  <Text style={[styles.itemText, disabled && { color: colors.textPrimary, fontWeight: '600' }]}>
                     {s.label}{disabled ? '（当前源）' : ''}
                   </Text>
                   <ChevronRight size={18} color={colors.textTertiary} />
@@ -155,7 +155,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   matchTagExact: { color: colors.success },
   playTag: { ...textVariants.micro, fontWeight: '400', color: colors.textSecondary, marginRight: 6 },
   playTagGood: { color: colors.success },
-  playTagPreview: { color: colors.warning },
+  // 试听版标记：warning 不当正文色（M2-4），中性文字 + warningSubtle 底保留琥珀信号
+  playTagPreview: {
+    color: colors.textSecondary,
+    backgroundColor: colors.warningSubtle,
+    borderRadius: radius.xs,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
   playTagBad: { color: colors.danger },
   backBtn: {
     flexDirection: 'row',

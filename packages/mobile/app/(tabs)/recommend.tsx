@@ -1,27 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, RefreshControl, StyleSheet, TouchableOpacity, Image, Dimensions,
+  View, Text, RefreshControl, StyleSheet, TouchableOpacity, Image, Dimensions, Animated,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+import { useAnimatedBg } from '../../theme/AnimatedBg';
+
   import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
   import { cacheManager, musicApi, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
 import LoadingState from '../../components/LoadingState';
+import ScalePress from '../../components/ScalePress';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
-import {radius, textVariants} from '../../theme/tokens';
+import {radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_GAP = 10;
+/** 猜你喜欢网格：16pt 页面沟槽（与节标题/发现页同轴线），列间 12 */
 const CARD_COLS = 2;
-const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
+const GRID_GAP = spacing[3];
+const cardW = (SCREEN_WIDTH - spacing[4] * 2 - GRID_GAP) / CARD_COLS;
 // 今日推荐一次拉取的大池子大小(每次随机抽 5 首,约 20 批不重复)
 const RECOMMEND_POOL_SIZE = 100;
 
 export default function RecommendPage() {
   const { colors } = useTheme();
+  const animatedBg = useAnimatedBg();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
@@ -31,6 +38,8 @@ export default function RecommendPage() {
   // 当前展示的随机批次 + 本轮已用过的池索引(抽完一轮自动重置)
   const [batch, setBatch] = useState<Song[]>([]);
   const [usedIndices, setUsedIndices] = useState<number[]>([]);
+  // 早退/条件分支之后不得再调 hook，insets 必须在 LoadingState 早退前取
+  const insets = useSafeAreaInsets();
 
   const load = useCallback(async (isRefresh: boolean) => {
     try {
@@ -85,10 +94,20 @@ export default function RecommendPage() {
   if (loading) return <LoadingState />;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
+    <Animated.ScrollView
+      style={[styles.container, { backgroundColor: animatedBg }]}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + 32 },
+      ]}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.accent}
+          progressViewOffset={topChromeHeight(insets.top)}
+        />
+      }
     >
       {error && songs.length === 0 ? (
         <View style={styles.errorBox}>
@@ -101,30 +120,18 @@ export default function RecommendPage() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>今日推荐</Text>
-              <View style={styles.headerActions}>
-                {songs.length > 0 && (
-                  <>
-                    <TouchableOpacity
-                      style={styles.playAllBtn}
-                      onPress={handlePlayAll}
-                      activeOpacity={0.8}
-                      hitSlop={{ top: 6, bottom: 6 }}
-                    >
-                      <Play size={14} color={colors.textInverse} />
-                      <Text style={styles.playAllText}>播放全部</Text>
-                    </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.shuffleBtn}
-                        onPress={handleShuffle}
-                        activeOpacity={0.8}
-                        hitSlop={{ top: 6, bottom: 6 }}
-                      >
-                        <RefreshCw size={14} color={colors.accent} />
-                        <Text style={styles.shuffleText}>换一批</Text>
-                      </TouchableOpacity>
-                  </>
-                )}
-              </View>
+              {songs.length > 0 && (
+                <View style={styles.headerActions}>
+                  <ScalePress onPress={handlePlayAll} style={styles.headerAction} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
+                    <Play size={15} color={colors.accent} />
+                    <Text style={[styles.headerActionText, { color: colors.accent }]}>播放全部</Text>
+                  </ScalePress>
+                  <ScalePress onPress={handleShuffle} style={styles.headerAction} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
+                    <RefreshCw size={15} color={colors.textSecondary} />
+                    <Text style={[styles.headerActionText, { color: colors.textSecondary }]}>换一批</Text>
+                  </ScalePress>
+                </View>
+              )}
             </View>
             {shownSongs.length === 0 ? (
               <Text style={styles.emptyText}>暂无推荐歌曲</Text>
@@ -156,7 +163,7 @@ export default function RecommendPage() {
                         <ListMusic size={32} color={colors.textDisabled} />
                       </View>
                     )}
-                    <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
+                    <Text style={styles.gridName} numberOfLines={2}>{p.name}</Text>
                     <Text style={styles.gridMeta}>
                       {p.playCount ? formatPlayCount(p.playCount) : ''}
                     </Text>
@@ -167,14 +174,15 @@ export default function RecommendPage() {
           </View>
         </>
       )}
-    </ScrollView>
+    </Animated.ScrollView>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase },
+  // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
+  container: { flex: 1 },
   content: { paddingBottom: 32 },
-  section: { paddingHorizontal: 12, marginTop: 16 },
+  section: { paddingHorizontal: spacing[4], marginTop: spacing[4] },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -189,30 +197,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   sectionTitle: {
     ...textVariants.sectionHeader,
     color: colors.textPrimary,
-    marginBottom: 8,
   },
-  playAllBtn: {
+  /* 头部动作：安静文字按钮（AM 式）——去底色去圆角，触控目标靠 padding + hitSlop */
+  headerAction: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.accent,
-    borderRadius: radius.full, // 药丸按钮统一全圆角（原 16 在小尺寸上近似随机圆角）
-    paddingHorizontal: 12,
-    paddingVertical: 8, // 加高至 ~32px + hitSlop 达到 44pt 触控标准
-    marginBottom: 8,
+    paddingVertical: spacing[1],
   },
-  playAllText: { ...textVariants.caption, fontWeight: '600', color: colors.textInverse },
-  shuffleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.bgHover,
-    borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 8,
-  },
-  shuffleText: { ...textVariants.caption, fontWeight: '600', color: colors.accent },
+  headerActionText: { ...textVariants.footnote, fontWeight: '600' },
   emptyText: { ...textVariants.footnote, color: colors.textSecondary, marginVertical: 20, textAlign: 'center' },
   errorBox: {
     alignItems: 'center',
@@ -222,9 +215,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: CARD_GAP,
+    gap: GRID_GAP,
   },
-  gridCard: { marginBottom: 4 },
+  gridCard: {},
   gridCover: { borderRadius: radius.md, backgroundColor: colors.bgSurface },
   gridCoverFallback: {
     justifyContent: 'center',
@@ -233,8 +226,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   gridName: {
     ...textVariants.footnote,
+    fontWeight: '500',
     color: colors.textPrimary,
-    marginTop: 6,
+    marginTop: spacing[2],
   },
   gridMeta: {
     ...textVariants.micro,

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { textVariants } from '../theme/tokens';
+import { AnimatedBgProvider } from '../theme/AnimatedBg';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setupLegacyMigration } from '../services/legacyMigration';
@@ -12,6 +13,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
 import PlayerOverlay from '../components/PlayerOverlay';
 import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
+import * as SystemUI from 'expo-system-ui';
 import type { ThemeColors } from '../theme/tokens';
 
 // core 的搜索诊断 console.warn（单源识别失败等）在真机 dev 上会触发
@@ -51,6 +53,15 @@ function PlaybackNoticeToast() {
       </View>
     </View>
   );
+}
+
+/** 主题切换时同步系统窗口底色：消除 OS 层启动/切主题的白黑闪（M3，应用内切换瞬时无动画） */
+function SystemBackgroundSync() {
+  const { colors } = useTheme();
+  useEffect(() => {
+    SystemUI.setBackgroundColorAsync(colors.bgBase).catch(() => {});
+  }, [colors.bgBase]);
+  return null;
 }
 
 export default function RootLayout() {
@@ -115,23 +126,26 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="hotlist" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="favorites" />
-        <Stack.Screen name="history" />
-        <Stack.Screen name="discover-playlist/[id]" />
-        <Stack.Screen name="artist/[id]" />
-      </Stack>
+      <SystemBackgroundSync />
+      <AnimatedBgProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="hotlist" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="favorites" />
+          <Stack.Screen name="history" />
+          <Stack.Screen name="discover-playlist/[id]" />
+          <Stack.Screen name="artist/[id]" />
+        </Stack>
 
-      {showPlayer && (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}>
-          <PlayerOverlay onClose={() => setShowPlayer(false)} />
-        </View>
-      )}
+        {showPlayer && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}>
+            <PlayerOverlay onClose={() => setShowPlayer(false)} />
+          </View>
+        )}
 
-      <PlaybackNoticeToast />
+        <PlaybackNoticeToast />
+      </AnimatedBgProvider>
     </ThemeProvider>
   );
 }
@@ -152,7 +166,7 @@ const makeToastStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     maxWidth: '85%',
-    shadowColor: '#000000',
+    shadowColor: '#000000', // design-lint: ok 阴影投影必须纯黑（RN 阴影靠色值控制深浅）
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },

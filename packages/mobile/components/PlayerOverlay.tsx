@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Dimensions, FlatList,
+  View, Text, StyleSheet, Dimensions, FlatList,
   PanResponder, Animated, Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,15 +23,14 @@ import {radius, shadow, spacing, textVariants, turntable} from '../theme/tokens'
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { springs, projectMomentum, rubberband } from '../theme/motion';
-import * as Haptics from 'expo-haptics';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import { tapLight } from '../utils/haptics';
+import ScalePress from './ScalePress';
 
 const { width } = Dimensions.get('window');
 
 /** 投影落点超过屏高此比例即判关：快甩从任意位置都能关，慢拖半途自然回弹 */
 const DISMISS_PROJECT_RATIO = 0.35;
-
-/** 轻触觉（expo-haptics web 端为 no-op，异常静默） */
-const tapLight = () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); };
 
 interface Props {
   onClose: () => void;
@@ -66,8 +65,23 @@ export default function PlayerOverlay({ onClose }: Props) {
   const insets = useSafeAreaInsets();
   onCloseRef.current = onClose;
 
-  // 滑入动画（sheet 预设，ADR-0004）；落定给一次轻触觉
+  // ── 开合动画：常规 = sheet 弹簧滑入；减弱动效 = 原地淡入（无大位移，§14）──
+  const reducedMotion = useReducedMotion();
+  const opacity = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
+    if (reducedMotion) {
+      panY.stopAnimation();
+      panY.setValue(0);
+      opacity.setValue(0);
+      const fade = Animated.timing(opacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      });
+      fade.start(({ finished }) => { if (finished) tapLight(); });
+      return () => fade.stop();
+    }
     const anim = Animated.spring(panY, {
       toValue: 0,
       useNativeDriver: true,
@@ -76,11 +90,11 @@ export default function PlayerOverlay({ onClose }: Props) {
     slideAnim.current = anim;
     anim.start(({ finished }) => { if (finished) tapLight(); });
     return () => anim.stop();
-  }, []);
+  }, [reducedMotion]);
 
-  // 唱片旋转动画
+  // 唱片旋转动画（减弱动效时停止循环装饰动画）
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying && !reducedMotion) {
       Animated.loop(
         Animated.timing(rotation, {
           toValue: 1,
@@ -92,7 +106,7 @@ export default function PlayerOverlay({ onClose }: Props) {
       rotation.stopAnimation();
     }
     return () => rotation.stopAnimation();
-  }, [isPlaying, rotation]);
+  }, [isPlaying, rotation, reducedMotion]);
 
   const spin = rotation.interpolate({
     inputRange: [0, 1],
@@ -228,6 +242,12 @@ export default function PlayerOverlay({ onClose }: Props) {
   const lastY = useRef(0);                          // 最近一帧面板位置（release 同步可读）
 
   const dismiss = (velocityY = 0) => {
+    if (reducedMotion) {
+      // 减弱动效：原地淡出，不做大位移
+      Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true })
+        .start(({ finished }) => { if (finished) { tapLight(); onCloseRef.current(); } });
+      return;
+    }
     Animated.spring(panY, {
       toValue: Dimensions.get('window').height, // 现取现用，旋转/折叠屏不取过期值
       velocity: velocityY,                      // 继承松手速度，无匀速刹车感
@@ -290,17 +310,17 @@ export default function PlayerOverlay({ onClose }: Props) {
     <SafeAreaView style={styles.container} edges={['top']} {...panResponder.panHandlers}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }], paddingBottom: insets.bottom + spacing[6] }]}>
+      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }], opacity, paddingBottom: insets.bottom + spacing[6] }]}>
         {/* 自定义顶部栏 */}
         <View style={styles.customHeader}>
-          <TouchableOpacity onPress={() => dismiss()}>
+          <ScalePress onPress={() => dismiss()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <ChevronDown size={28} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowLyrics(v => !v)}>
+          </ScalePress>
+          <ScalePress onPress={() => setShowLyrics(v => !v)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Text style={{ ...textVariants.sectionHeader, fontWeight: '600', color: colors.accent }}>
               {showLyrics ? '封' : '词'}
             </Text>
-          </TouchableOpacity>
+          </ScalePress>
         </View>
 
         {showLyrics ? (
@@ -313,7 +333,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                 style={styles.lyricsFullList}
                 contentContainerStyle={styles.lyricsFullContent}
                 renderItem={({ item, index }) => (
-                  <TouchableOpacity
+                  <ScalePress
                     key={index}
                     onPress={() => seekTo(item.time)}
                     style={{ paddingVertical: spacing[1] }}
@@ -324,7 +344,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                     ]}>
                       {item.text}
                     </Text>
-                  </TouchableOpacity>
+                  </ScalePress>
                 )}
                 showsVerticalScrollIndicator={false}
               />
@@ -375,7 +395,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                 data={lyricLines}
                 style={styles.lyricsList}
                 renderItem={({ item, index }) => (
-                  <TouchableOpacity
+                  <ScalePress
                     key={index}
                     onPress={() => seekTo(item.time)}
                   >
@@ -385,7 +405,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                     ]}>
                       {item.text}
                     </Text>
-                  </TouchableOpacity>
+                  </ScalePress>
                 )}
                 showsVerticalScrollIndicator={false}
               />
@@ -423,35 +443,35 @@ export default function PlayerOverlay({ onClose }: Props) {
 
             {/* 控制按钮 */}
             <View style={styles.controls}>
-              <TouchableOpacity onPress={handlePrev}>
+              <ScalePress onPress={handlePrev} hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}>
                 <SkipBack size={32} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => { tapLight(); togglePlay(); }} style={styles.playBtn}>
+              </ScalePress>
+              <ScalePress onPress={() => { tapLight(); togglePlay(); }} style={styles.playBtn} pressScaleTo={0.95}>
                 {isPlaying ? (
                   <CirclePause size={64} color={colors.accent} />
                 ) : (
                   <CirclePlay size={64} color={colors.accent} />
                 )}
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleNext}>
+              </ScalePress>
+              <ScalePress onPress={handleNext} hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}>
                 <SkipForward size={32} color={colors.textSecondary} />
-              </TouchableOpacity>
+              </ScalePress>
             </View>
 
             {/* 操作按钮 */}
             <View style={styles.actionRow}>
-              <TouchableOpacity onPress={cyclePlayMode} style={styles.actionBtn}>
+              <ScalePress onPress={cyclePlayMode} style={styles.actionBtn}>
                 <ModeIcon size={24} color={colors.accent} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={toggleFavorite} style={styles.actionBtn}>
+              </ScalePress>
+              <ScalePress onPress={toggleFavorite} style={styles.actionBtn}>
                 <Heart size={24} color={isFav ? colors.accent : colors.textSecondary} fill={isFav ? colors.accent : 'none'} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setShowPlaylistModal(true)} style={styles.actionBtn}>
+              </ScalePress>
+              <ScalePress onPress={() => setShowPlaylistModal(true)} style={styles.actionBtn}>
                 <CirclePlus size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDownload} style={styles.actionBtn}>
+              </ScalePress>
+              <ScalePress onPress={handleDownload} style={styles.actionBtn}>
                 <Download size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
+              </ScalePress>
             </View>
           </>
         )}
@@ -564,7 +584,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   sourceTagText: { ...textVariants.micro, color: colors.textSecondary },
   progressWrap: { marginTop: spacing[4], alignItems: 'center' },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', width: width - 48, marginTop: 4 },
-  time: { ...textVariants.caption, color: colors.textTertiary },
+  time: { ...textVariants.caption, color: colors.textTertiary, fontVariant: ['tabular-nums'] },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',

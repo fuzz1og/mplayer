@@ -8,10 +8,12 @@ import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, X, Pl
 import { invalidateCoverUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
-import {radius, spacing, textVariants} from '../theme/tokens';
+import { radius, spacing, textVariants } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { useResolvedCover } from '../hooks/useResolvedCover';
+import ScalePress from './ScalePress';
+import { tapLight } from '../utils/haptics';
 
 export default function PlayerBar() {
   const insets = useSafeAreaInsets();
@@ -89,15 +91,15 @@ export default function PlayerBar() {
       {/* 控制按钮 */}
       {currentSong && (
         <View style={styles.controls}>
-          <TouchableOpacity
-            onPress={(e) => { e.stopPropagation(); prev(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
+          <ScalePress
+            onPress={(e) => { e?.stopPropagation(); prev(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 2 }}
           >
             <SkipBack size={24} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={(e) => { e.stopPropagation(); togglePlay(); }}
+          </ScalePress>
+          <ScalePress
+            onPress={(e) => { e?.stopPropagation(); togglePlay(); tapLight(); }}
             style={styles.btn}
             hitSlop={{ top: 4, bottom: 4 }}
             disabled={preparing}
@@ -111,24 +113,24 @@ export default function PlayerBar() {
             ) : (
               <CirclePlay size={36} color={colors.accent} />
             )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={(e) => { e.stopPropagation(); next(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
+          </ScalePress>
+          <ScalePress
+            onPress={(e) => { e?.stopPropagation(); next(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
             style={styles.btn}
             hitSlop={{ top: 6, bottom: 6, left: 2, right: 6 }}
           >
             <SkipForward size={24} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity
+          </ScalePress>
+          <ScalePress
             onPress={(e) => {
-              e.stopPropagation();
+              e?.stopPropagation();
               setShowQueue(true);
             }}
             style={styles.btn}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 12 }}
           >
             <ListMusic size={24} color={colors.textSecondary} />
-          </TouchableOpacity>
+          </ScalePress>
         </View>
       )}
       {/* 队列弹窗 */}
@@ -185,12 +187,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgSurface,
-    // 平铺贴底条：顶部 hairline 与列表分隔（无圆角/阴影，与整体设计语言一致）
+    // 悬浮底部 chrome：半透明材质，列表内容从下穿过（M2）
+    backgroundColor: colors.bgPlayer,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.borderSubtle,
   },
   containerEmpty: {
     opacity: 0.6,

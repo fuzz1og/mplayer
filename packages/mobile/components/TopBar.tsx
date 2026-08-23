@@ -12,6 +12,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { useSourceStore, SOURCE_OPTION_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
+import ScalePress from './ScalePress';
 
 const SOURCE_OPTIONS: { key: SourceOption; icon: LucideIcon }[] = [
   { key: 'all', icon: LayoutGrid },
@@ -57,13 +58,13 @@ export default function TopBar() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       {isSearchTab && (
-        <TouchableOpacity
+        <ScalePress
           onPress={() => router.replace('/')}
           style={styles.backBtn}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <ArrowLeft size={22} color={colors.textSecondary} />
-        </TouchableOpacity>
+        </ScalePress>
       )}
       <View style={[styles.searchBar, focused && styles.searchBarFocused]}>
         {/* 焦点光环用独立 overlay 实现：改父视图 elevation/shadow 会让 Android 聚焦中的 EditText 失焦 */}
@@ -97,13 +98,13 @@ export default function TopBar() {
           <ChevronDown size={12} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
-      <TouchableOpacity
+      <ScalePress
         onPress={() => router.push('/settings')}
         style={styles.settingsBtn}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       >
         <Settings size={22} color={colors.textSecondary} />
-      </TouchableOpacity>
+      </ScalePress>
 
       <Modal visible={showSourcePicker} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowSourcePicker(false)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowSourcePicker(false)}>
@@ -111,22 +112,25 @@ export default function TopBar() {
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>选择音乐源</Text>
             {SOURCE_OPTIONS.map((opt) => (
-              <TouchableOpacity
+              <ScalePress
                 key={opt.key}
-                style={[styles.optionItem, selectedSource === opt.key && { backgroundColor: `${sourceColors[opt.key]}10`, borderRadius: radius.md }]}
+                pressScaleTo={0.98}
+                style={[styles.optionItem, selectedSource === opt.key && { backgroundColor: colors.bgHover, borderRadius: radius.md }]}
                 onPress={() => handleSelectSource(opt.key)}
               >
+                {/* 源身份只经 6px 徽章点表达（源色纪律）；文字/图标保持中性色保对比度 */}
+                <View style={[styles.optionDot, { backgroundColor: sourceColors[opt.key] }]} />
                 <opt.icon
                   size={20}
-                  color={selectedSource === opt.key ? sourceColors[opt.key] : colors.textSecondary}
+                  color={selectedSource === opt.key ? colors.textPrimary : colors.textSecondary}
                 />
-                <Text style={[styles.optionLabel, selectedSource === opt.key && { color: sourceColors[opt.key], fontWeight: '600' }]}>
+                <Text style={[styles.optionLabel, selectedSource === opt.key && { color: colors.textPrimary, fontWeight: '600' }]}>
                   {SOURCE_OPTION_LABELS[opt.key]}
                 </Text>
                 {selectedSource === opt.key && (
-                  <Check size={20} color={sourceColors[opt.key]} />
+                  <Check size={20} color={colors.textPrimary} />
                 )}
-              </TouchableOpacity>
+              </ScalePress>
             ))}
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowSourcePicker(false)}>
               <Text style={styles.cancelText}>取消</Text>
@@ -145,9 +149,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     // paddingTop 由组件按 insets.top 动态注入（写死 52 在无刘海机型空一大截）
-    backgroundColor: colors.bgSurface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
+    // 悬浮 chrome：半透明材质让内容从下穿过（M2），无发丝硬分隔
+    backgroundColor: colors.bgPlayer,
   },
   searchBar: {
     flex: 1,
@@ -178,6 +181,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textPrimary,
     ...textVariants.subhead,
     fontWeight: '400',
+    // Android TextInput 在定高容器里默认自带内边距 + 顶部对齐，文字会偏离中心
+    paddingVertical: 0,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   sourceBtn: {
     flexShrink: 0,
@@ -194,6 +201,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  optionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 12,
   },
   sourceLabel: {
     ...textVariants.caption,

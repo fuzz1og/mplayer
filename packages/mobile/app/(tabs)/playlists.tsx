@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+
 import {
   View,
   Text,
@@ -8,6 +11,7 @@ import {
   Modal,
   TextInput,
   Alert,
+  Animated,
 } from 'react-native';
 import { ListMusic, ChevronRight, Plus, Heart, Clock } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -16,6 +20,7 @@ import type { Playlist } from '../../stores/playlistStore';
 import {radius, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useAnimatedBg } from '../../theme/AnimatedBg';
 
 const BUILT_IN = [
   { key: 'favorites', icon: Heart, label: '收藏', desc: '我喜欢的歌曲' },
@@ -29,6 +34,8 @@ function formatDate(ts: number): string {
 
 export default function PlaylistsPage() {
   const { colors } = useTheme();
+  const animatedBg = useAnimatedBg();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const playlists = usePlaylistStore((s) => s.playlists);
   const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
@@ -76,24 +83,27 @@ export default function PlaylistsPage() {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>我的歌单</Text>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => setModalVisible(true)}
-        >
-          <Plus size={24} color={colors.textInverse} />
-        </TouchableOpacity>
-      </View>
-
+    <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
       <FlatList
         data={playlists}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[
+          styles.list,
+          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + 32 },
+        ]}
         ListHeaderComponent={() => (
           <>
+            {/* 页头随内容滚动、从悬浮 TopBar 下穿过（M2）；静态放列表外会被 TopBar 盖住 */}
+            <View style={styles.header}>
+              <Text style={styles.title}>我的歌单</Text>
+              <TouchableOpacity
+                style={styles.addBtn}
+                onPress={() => setModalVisible(true)}
+              >
+                <Plus size={24} color={colors.textInverse} />
+              </TouchableOpacity>
+            </View>
             {BUILT_IN.map((item) => (
               <TouchableOpacity
                 key={item.key}
@@ -173,12 +183,13 @@ export default function PlaylistsPage() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </Animated.View>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase },
+  // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -186,9 +197,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
-    backgroundColor: colors.bgSurface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
   },
   title: { ...textVariants.largeTitle, color: colors.textPrimary },
   addBtn: {

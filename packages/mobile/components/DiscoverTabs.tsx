@@ -7,10 +7,16 @@ import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
-import {radius, shadow, spacing, textVariants} from '../theme/tokens';
+import {radius, spacing, textVariants} from '../theme/tokens';
 import { lightColors, darkColors } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import ScalePress from './ScalePress';
+import SegmentedTabs from './SegmentedTabs';
+import TextTabs from './TextTabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topChromeHeight, bottomChromeHeight } from './chromeMetrics';
 import LoadingState from './LoadingState';
 import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
@@ -19,6 +25,11 @@ import { playSong as playAudio } from '../services/audioPlayer';
 import { searchStrictMatch } from '../services/songResources';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+/** 网格统一度量：16pt 页面沟槽（与分段控件/分类行同轴），列间 12 */
+const GRID_GAP = spacing[3];
+const gridCardW = (SCREEN_WIDTH - spacing[4] * 2 - GRID_GAP) / 2;
+const artistCardW = (SCREEN_WIDTH - spacing[4] * 2 - GRID_GAP * 2) / 3;
 
 const TABS = [
   { key: 'hotlist', label: '排行榜' },
@@ -33,10 +44,11 @@ export default function DiscoverTabs() {
   const styles = isDark ? STYLES.dark : STYLES.light;
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<FlatList<any>>(null);
+  const reducedMotion = useReducedMotion();
 
   const onTabPress = (i: number) => {
     setActiveIndex(i);
-    scrollRef.current?.scrollToOffset({ offset: i * SCREEN_WIDTH, animated: true });
+    scrollRef.current?.scrollToOffset({ offset: i * SCREEN_WIDTH, animated: !reducedMotion });
   };
 
   const onMomentumEnd = (e: any) => {
@@ -44,21 +56,12 @@ export default function DiscoverTabs() {
     setActiveIndex(idx);
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
-      {/* Bubble tab header */}
+    <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
       <View style={styles.tabHeader}>
-        {TABS.map((t, i) => (
-          <TouchableOpacity
-            key={t.key}
-            onPress={() => onTabPress(i)}
-            style={[styles.tabItem, activeIndex === i && styles.tabItemActive]}
-          >
-            <Text style={[styles.tabLabel, activeIndex === i && styles.tabLabelActive]}>
-              {t.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        <SegmentedTabs tabs={TABS} activeIndex={activeIndex} onSelect={onTabPress} reducedMotion={reducedMotion} />
       </View>
       {/* Swipeable content：横向分页容器用 FlatList（VirtualizedList-backed），
           避免 ScrollView 内嵌 FlatList 触发「unique key」嵌套警告 */}
@@ -89,6 +92,7 @@ export default function DiscoverTabs() {
 /* ===== 排行榜 Tab ===== */
 function HotlistContent() {
   const { isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
   const loading = useDiscoverStore(s => s.loading);
   const load = useDiscoverStore(s => s.load);
@@ -109,7 +113,7 @@ function HotlistContent() {
   ];
 
   return (
-    <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentInnerHotlist}>
+    <ScrollView style={styles.tabContent} contentContainerStyle={[styles.tabContentInnerHotlist, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}>
       {SECTIONS.map(section => (
         <SectionCard
           key={section.key}
@@ -150,12 +154,20 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
   }, [sourceType, songs]);
 
   return (
-    <View style={[styles.section, shadow.sm]}>
-      <TouchableOpacity onPress={() => router.push(`/hotlist?key=${routeKey}&title=${encodeURIComponent(title)}`)}>
+    <View style={styles.section}>
+      <ScalePress
+        style={styles.sectionHeader}
+        onPress={() => router.push(`/hotlist?key=${routeKey}&title=${encodeURIComponent(title)}`)}
+      >
         <Text style={styles.sectionTitle}>{title} ›</Text>
-      </TouchableOpacity>
+      </ScalePress>
       {songs.slice(0, 5).map((song, i) => (
-        <TouchableOpacity key={song.id + String(i)} style={styles.songRow} onPress={() => playSong(song, i)}>
+        <ScalePress
+          key={song.id + String(i)}
+          style={[styles.songRow, i > 0 && styles.songRowSep]}
+          pressScaleTo={0.98}
+          onPress={() => playSong(song, i)}
+        >
           <Text style={styles.rank}>{i + 1}</Text>
           {song.cover ? (
             <Image source={{ uri: song.cover }} style={styles.cover} />
@@ -168,7 +180,7 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
             <Text style={styles.songName} numberOfLines={1}>{song.name}</Text>
             <Text style={styles.songArtist} numberOfLines={1}>{song.artists}</Text>
           </View>
-        </TouchableOpacity>
+        </ScalePress>
       ))}
     </View>
   );
@@ -183,7 +195,11 @@ const ALBUM_AREAS = [
   { label: '日本', value: 'JP' },
 ];
 
-/** 二级分类胶囊行（新碟/歌单/歌手共用） */
+/**
+ * 二级分类选择器：Apple Music「资料库」式文字 tabs——纯文字横滑，
+ * 选中项加粗变深 + accent 下划线；零底色零圆角，层级让给一级分段控件。
+ * 左缘 16pt 与一级分段控件轨道对齐（同一页面沟槽 spacing[4]）。
+ */
 function CategoryPills({ items, activeLabel, onSelect }: {
   items: { label: string; value: string }[];
   activeLabel: string;
@@ -192,26 +208,24 @@ function CategoryPills({ items, activeLabel, onSelect }: {
   const { isDark } = useTheme();
   const styles = isDark ? STYLES.dark : STYLES.light;
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled style={styles.catBar} contentContainerStyle={styles.catBarContent}>
-      {items.map((c) => (
-        <TouchableOpacity
-          key={c.value}
-          onPress={() => onSelect(c.label, c.value)}
-          style={[styles.catPill, activeLabel === c.label && styles.catPillActive]}
-        >
-          <Text style={[styles.catLabel, activeLabel === c.label && styles.catLabelActive]}>{c.label}</Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+    <View style={styles.catBar}>
+      <TextTabs
+        tabs={items.map((c) => ({ key: c.value, label: c.label }))}
+        activeKey={items.find((c) => c.label === activeLabel)?.value ?? items[0]?.value ?? ''}
+        onSelect={(key) => {
+          const hit = items.find((c) => c.value === key);
+          if (hit) onSelect(hit.label, hit.value);
+        }}
+      />
+    </View>
   );
 }
 
 function AlbumsContent() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
-  const CARD_GAP = 10;
   const CARD_COLS = 2;
-  const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(false);
@@ -252,18 +266,18 @@ function AlbumsContent() {
 
   const renderItem = ({ item: album }: { item: Album }) => (
     <TouchableOpacity
-      style={[styles.gridCard, { width: cardW }]}
+      style={[styles.gridCard, { width: gridCardW }]}
       activeOpacity={0.7}
       onPress={() => router.push(`/album/${album.id}?name=${encodeURIComponent(album.name)}&pic=${encodeURIComponent(album.picUrl)}&artist=${encodeURIComponent(album.artist)}` as any)}
     >
       {album.picUrl ? (
-        <Image source={{ uri: album.picUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
+        <Image source={{ uri: album.picUrl }} style={[styles.gridCover, { width: gridCardW, height: gridCardW }]} />
       ) : (
-        <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={[styles.gridCover, { width: gridCardW, height: gridCardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
           <Disc3 size={32} color={colors.textDisabled} />
         </View>
       )}
-      <Text style={styles.gridName} numberOfLines={1}>{album.name}</Text>
+      <Text style={styles.gridName} numberOfLines={2}>{album.name}</Text>
       <Text style={styles.gridMeta} numberOfLines={1}>{album.artist}</Text>
     </TouchableOpacity>
   );
@@ -278,12 +292,12 @@ function AlbumsContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={styles.tabContentInner}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}
         data={albums}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         numColumns={CARD_COLS}
-        columnWrapperStyle={{ gap: CARD_GAP }}
+        columnWrapperStyle={{ gap: GRID_GAP }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
         }
@@ -305,10 +319,9 @@ const PLAYLIST_CATEGORIES = ['全部', '流行', '摇滚', '民谣', '电子', '
 
 function PlaylistContent() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
-  const CARD_GAP = 10;
   const CARD_COLS = 2;
-  const cardW = (SCREEN_WIDTH - 12 * 2 - CARD_GAP) / CARD_COLS;
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(false);
@@ -378,18 +391,18 @@ function PlaylistContent() {
 
   const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
     <TouchableOpacity
-      style={[styles.gridCard, { width: cardW }]}
+      style={[styles.gridCard, { width: gridCardW }]}
       activeOpacity={0.7}
       onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
     >
       {p.coverImgUrl ? (
-        <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
+        <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: gridCardW, height: gridCardW }]} />
       ) : (
-        <View style={[styles.gridCover, { width: cardW, height: cardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={[styles.gridCover, { width: gridCardW, height: gridCardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
           <ListMusic size={32} color={colors.textDisabled} />
         </View>
       )}
-      <Text style={styles.gridName} numberOfLines={1}>{p.name}</Text>
+      <Text style={styles.gridName} numberOfLines={2}>{p.name}</Text>
       <Text style={styles.gridMeta}>{p.playCount ? formatPlayCount(p.playCount) : ''}</Text>
     </TouchableOpacity>
   );
@@ -404,12 +417,12 @@ function PlaylistContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={styles.tabContentInner}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}
         data={playlists}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
         numColumns={CARD_COLS}
-        columnWrapperStyle={{ gap: CARD_GAP }}
+        columnWrapperStyle={{ gap: GRID_GAP }}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         refreshControl={
@@ -445,8 +458,9 @@ const ARTIST_CATEGORIES = [
 
 function ArtistContent() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
-  const CARD_COLS = 3;
+  const CARD_COLS = 3;  // 宽度用模块级 artistCardW（16 沟槽 + 2×12 列距）
   const [artists, setArtists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(false);
@@ -538,11 +552,13 @@ function ArtistContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={styles.tabContentInner}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}
         data={artists}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         numColumns={CARD_COLS}
+        // 卡片宽按含 2×12 gap 计算，行必须补 gap 才满宽居中（否则 3 卡左对齐、右侧空 24dp）
+        columnWrapperStyle={styles.artistRow}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         refreshControl={
@@ -564,59 +580,18 @@ function ArtistContent() {
 /** 样式工厂：7 个子组件共用一套样式，模块级预构建双主题两份（见各组件内按 isDark 取用） */
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  // Bubble tab header
+  // 一级分段控件外框：16pt 页面沟槽（全页统一轴线），控件本体在共享 SegmentedTabs
   tabHeader: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgBase,
     paddingHorizontal: spacing[4],
     paddingVertical: 10,
-    gap: spacing[2],
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: spacing[2],
-    borderRadius: radius.full, // 气泡 tab 统一全圆角（与搜索页 tab 一致）
-    backgroundColor: colors.bgHover,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabItemActive: {
-    backgroundColor: colors.accent,
-  },
-  tabLabel: {
-    ...textVariants.subhead,
-    color: colors.textSecondary,
-  },
-  tabLabelActive: {
-    color: colors.textInverse,
-    fontWeight: '600',
   },
   tabContent: { flex: 1 },
-  // 网格 tab（新碟/歌单/歌手）：与 cardW 计算的左右 12px 边距对齐，保证卡片居中
-  tabContentInner: { paddingHorizontal: spacing[3], paddingBottom: spacing[6] },
-  // 热榜：section 自带 marginHorizontal: 12，不加容器 padding 避免边距翻倍
+  // 网格 tab（新碟/歌单/歌手）：16pt 沟槽与 gridCardW 计算一致
+  tabContentInner: { paddingHorizontal: spacing[4], paddingBottom: spacing[6] },
+  // 热榜：section 自带 marginHorizontal: 16，不加容器 padding 避免边距翻倍
   tabContentInnerHotlist: { paddingBottom: spacing[6] },
-  // 二级分类胶囊
+  // 二级分类：共享 TextTabs（文字+下划线），catBar 只管布局位
   catBar: { flexGrow: 0 },
-  catBarContent: { gap: spacing[2], paddingVertical: 10 },
-  catPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: radius.full, // 分类胶囊统一全圆角
-    backgroundColor: colors.bgHover,
-  },
-  catPillActive: {
-    backgroundColor: colors.accent,
-  },
-  catLabel: {
-    ...textVariants.caption,
-    fontWeight: '500',
-    color: colors.textSecondary,
-  },
-  catLabelActive: {
-    color: colors.textInverse,
-    fontWeight: '600',
-  },
   catErrorBox: {
     alignItems: 'center',
     paddingTop: 60,
@@ -626,23 +601,34 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '400',
     color: colors.danger,
   },
-  // Hotlist section styles
+  // Hotlist section styles：iOS inset grouped（指南 §2.3/§2.5）——白组坐灰底靠明度差分层，
+  // 无阴影无边框；标题行/歌曲行之间发丝线分隔；水平缩进对齐 16pt 页面沟槽
   section: {
     backgroundColor: colors.bgSurface,
-    marginHorizontal: spacing[3],
-    marginTop: spacing[3],
-    borderRadius: radius.md,
-    padding: spacing[3],
+    marginHorizontal: spacing[4],
+    marginTop: spacing[5],
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
   },
   sectionTitle: {
     ...textVariants.sectionHeader,
     color: colors.textPrimary,
-    marginBottom: spacing[3],
   },
   songRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    paddingHorizontal: spacing[4],
+    paddingVertical: 10,
+  },
+  songRowSep: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle,
   },
   rank: {
     ...textVariants.subhead,
@@ -660,17 +646,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   songInfo: { flex: 1 },
   songName: { ...textVariants.subhead, fontWeight: '400', color: colors.textPrimary },
   songArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
-  // Playlist grid styles
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    gap: 10,
-  },
-  gridCard: {
-    marginBottom: spacing[1],
-  },
+  // 专辑/歌单网格卡片：封面方圆角 md，标题两行截断，副行 meta——
+  // 垂直节奏走 token（name 8 / meta 2），列距 gap 统一 12，无逐卡 margin
+  gridCard: {},
   gridCover: {
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
@@ -679,7 +657,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...textVariants.footnote,
     fontWeight: '500',
     color: colors.textPrimary,
-    marginTop: 6,
+    marginTop: spacing[2],
   },
   gridMeta: {
     ...textVariants.micro,
@@ -691,13 +669,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   artistGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 12,
-    paddingTop: 12,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[3],
+    gap: GRID_GAP,
+  },
+  // numColumns 行容器：补列间距，让 3 卡满宽居中（卡片宽已含 gap 份额）
+  artistRow: {
+    gap: GRID_GAP,
   },
   artistCard: {
-    width: (SCREEN_WIDTH - 24) / 3,
+    width: artistCardW,
     alignItems: 'center',
-    marginBottom: spacing[5],
+    marginBottom: spacing[4],
   },
   artistAvatar: {
     width: 72,
@@ -708,7 +691,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   artistName: {
     ...textVariants.footnote,
     color: colors.textPrimary,
-    marginTop: 6,
+    marginTop: spacing[2],
     textAlign: 'center',
   },
 });

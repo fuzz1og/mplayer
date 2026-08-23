@@ -197,26 +197,26 @@ export const typography = {
  * 不套变体的例外：歌词等带 lineHeight 的成对样式、一次性展示字形（如歌手占位字母）。
  */
 export const textVariants = {
-  /** 页面大标题 */
-  largeTitle: { fontSize: 22, fontWeight: '700' },
+  /** 页面大标题（字距跟字号走：大字收紧，apple-design §15） */
+  largeTitle: { fontSize: 22, fontWeight: '700', letterSpacing: -0.5, lineHeight: 26 },
   /** 全屏播放器歌曲名 */
-  titleLg: { fontSize: 20, fontWeight: '700' },
+  titleLg: { fontSize: 20, fontWeight: '700', letterSpacing: -0.4, lineHeight: 24 },
   /** 弹层/对话框标题 */
-  title: { fontSize: 17, fontWeight: '700' },
+  title: { fontSize: 17, fontWeight: '700', letterSpacing: -0.2, lineHeight: 21 },
   /** 区块标题 */
-  sectionHeader: { fontSize: 16, fontWeight: '700' },
+  sectionHeader: { fontSize: 16, fontWeight: '700', lineHeight: 20 },
   /** 正文级说明/空态文案 */
-  callout: { fontSize: 16, fontWeight: '400' },
+  callout: { fontSize: 16, fontWeight: '400', lineHeight: 21 },
   /** 列表主行文字 */
-  body: { fontSize: 15, fontWeight: '500' },
+  body: { fontSize: 15, fontWeight: '500', lineHeight: 20 },
   /** 次级行文字/输入框/tab 标签 */
-  subhead: { fontSize: 14, fontWeight: '500' },
+  subhead: { fontSize: 14, fontWeight: '500', lineHeight: 18 },
   /** 辅助说明/meta */
-  footnote: { fontSize: 13, fontWeight: '400' },
+  footnote: { fontSize: 13, fontWeight: '400', lineHeight: 17 },
   /** 副行文字（歌手名/时间） */
-  caption: { fontSize: 12, fontWeight: '400' },
+  caption: { fontSize: 12, fontWeight: '400', lineHeight: 16 },
   /** 徽章/角标 */
-  micro: { fontSize: 11, fontWeight: '600' },
+  micro: { fontSize: 11, fontWeight: '600', lineHeight: 14 },
 } as const;
 
 export type TextVariant = keyof typeof textVariants;
@@ -289,7 +289,10 @@ export const lightColors: ThemeColors = {
   bgSurface: '#FFFFFF',
   bgElevated: '#FFFFFF',
   bgSidebar: '#FFFFFF',
-  bgPlayer: 'rgba(255, 255, 255, 0.85)',
+  // 无 blur 的纯半透明在浅色下与白底明度差为零、chrome 隐形（真机验证），
+  // 按指南 §2.2 无 backdrop-filter 兜底思路提不透明度：保留一丝材质感，
+  // 分层靠「白 chrome vs 灰底」明度差（§1 柱子一）
+  bgPlayer: 'rgba(255, 255, 255, 0.96)',
   bgHover: palette.gray100,
   bgActive: palette.gray200,
   bgOverlay: 'rgba(0, 0, 0, 0.4)',

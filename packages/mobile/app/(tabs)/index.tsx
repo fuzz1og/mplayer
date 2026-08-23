@@ -1,19 +1,22 @@
 import { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet, Animated } from 'react-native';
 import DiscoverTabs from '../../components/DiscoverTabs';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useAnimatedBg } from '../../theme/AnimatedBg';
 
 export default function DiscoverPage() {
   const { colors } = useTheme();
+  const animatedBg = useAnimatedBg();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
       <DiscoverTabs />
-    </View>
+    </Animated.View>
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase },
+const makeStyles = (_colors: ThemeColors) => StyleSheet.create({
+  // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
+  container: { flex: 1 },
 });

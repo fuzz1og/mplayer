@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Animated } from 'react-native';
 import { useEffect, useMemo } from 'react';
 import { Download, Music, Trash2, ChevronRight } from 'lucide-react-native';
 import { Paths } from 'expo-file-system';
@@ -10,6 +10,10 @@ import { usePlayerStore } from '../../stores/playerStore';
 import {radius, shadow, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useAnimatedBg } from '../../theme/AnimatedBg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+
 import { useSettingsStore } from '../../stores/settingsStore';
 import EmptyState from '../../components/EmptyState';
 
@@ -21,6 +25,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function DownloadPage() {
   const { colors } = useTheme();
+  const animatedBg = useAnimatedBg();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const items = useDownloadStore((s) => s.items);
   const removeItem = useDownloadStore((s) => s.removeItem);
@@ -74,25 +80,30 @@ export default function DownloadPage() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* 保存位置：独立于列表，空列表时也不被居中 */}
-      <TouchableOpacity style={styles.pathBox} onPress={handlePickDir} activeOpacity={0.7}>
-        <View style={styles.pathInfo}>
-          <Text style={styles.pathLabel}>保存位置</Text>
-          <Text style={styles.pathText} numberOfLines={2}>
-            {authorized ? '系统下载目录（已授权）' : `${Paths.document.uri}mplayer-downloads/`}
-          </Text>
-          <Text style={styles.pathHint}>
-            {authorized ? '点击可更换目录' : '点击选择系统下载目录；未授权时保存在应用私有目录'}
-          </Text>
-        </View>
-        <ChevronRight size={18} color={colors.textTertiary} />
-      </TouchableOpacity>
-
+    <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
+      {/* 保存位置随内容滚动、从悬浮 TopBar 下穿过（M2）；静态放列表外会被 TopBar 盖住。
+          空列表时也不被居中：ListHeader 恒在 EmptyState 之上 */}
       <FlatList
         data={items}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={items.length === 0 ? styles.emptyContent : styles.listContent}
+        contentContainerStyle={[
+          items.length === 0 ? styles.emptyContent : styles.listContent,
+          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 },
+        ]}
+        ListHeaderComponent={
+          <TouchableOpacity style={styles.pathBox} onPress={handlePickDir} activeOpacity={0.7}>
+            <View style={styles.pathInfo}>
+              <Text style={styles.pathLabel}>保存位置</Text>
+              <Text style={styles.pathText} numberOfLines={2}>
+                {authorized ? '系统下载目录（已授权）' : `${Paths.document.uri}mplayer-downloads/`}
+              </Text>
+              <Text style={styles.pathHint}>
+                {authorized ? '点击可更换目录' : '点击选择系统下载目录；未授权时保存在应用私有目录'}
+              </Text>
+            </View>
+            <ChevronRight size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
+        }
         ListEmptyComponent={
           <EmptyState
             icon={Download}
@@ -142,12 +153,13 @@ export default function DownloadPage() {
           );
         }}
       />
-    </View>
+    </Animated.View>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase },
+  // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
+  container: { flex: 1 },
   emptyContent: { flexGrow: 1, justifyContent: 'center' },
   listContent: { paddingBottom: 24 },
   /* 保存位置卡片 */
@@ -192,7 +204,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   name: { ...textVariants.body, fontWeight: '600', color: colors.textPrimary },
   nameActive: { color: colors.accent },
   artist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
-  status: { ...textVariants.caption, color: colors.textSecondary, marginRight: spacing[3] },
+  status: { ...textVariants.caption, color: colors.textSecondary, marginRight: spacing[3], fontVariant: ['tabular-nums'] },
   statusError: { color: colors.danger },
   progressTrack: {
     height: 2,
