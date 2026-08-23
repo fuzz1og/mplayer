@@ -14,6 +14,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import ScalePress from './ScalePress';
 import SegmentedTabs from './SegmentedTabs';
+import TextTabs from './TextTabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from './chromeMetrics';
 import LoadingState from './LoadingState';
@@ -207,21 +208,16 @@ function CategoryPills({ items, activeLabel, onSelect }: {
   const { isDark } = useTheme();
   const styles = isDark ? STYLES.dark : STYLES.light;
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled style={styles.catBar} contentContainerStyle={styles.catBarContent}>
-      {items.map((c) => {
-        const active = c.label === activeLabel;
-        return (
-          <ScalePress
-            key={c.value}
-            onPress={() => onSelect(c.label, c.value)}
-            style={styles.catItem}
-          >
-            <Text style={[styles.catLabel, active && styles.catLabelActive]}>{c.label}</Text>
-            <View style={[styles.catUnderline, active && styles.catUnderlineActive]} />
-          </ScalePress>
-        );
-      })}
-    </ScrollView>
+    <View style={styles.catBar}>
+      <TextTabs
+        tabs={items.map((c) => ({ key: c.value, label: c.label }))}
+        activeKey={items.find((c) => c.label === activeLabel)?.value ?? items[0]?.value ?? ''}
+        onSelect={(key) => {
+          const hit = items.find((c) => c.value === key);
+          if (hit) onSelect(hit.label, hit.value);
+        }}
+      />
+    </View>
   );
 }
 
@@ -592,34 +588,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   tabContentInner: { paddingHorizontal: spacing[4], paddingBottom: spacing[6] },
   // 热榜：section 自带 marginHorizontal: 16，不加容器 padding 避免边距翻倍
   tabContentInnerHotlist: { paddingBottom: spacing[6] },
-  // 二级分类：文字 tabs + 选中下划线；左缘 16pt 对齐一级分段控件轨道
+  // 二级分类：共享 TextTabs（文字+下划线），catBar 只管布局位
   catBar: { flexGrow: 0 },
-  catBarContent: { gap: spacing[1], paddingHorizontal: spacing[4], paddingVertical: spacing[1] },
-  catItem: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    alignItems: 'center',
-  },
-  catLabel: {
-    ...textVariants.footnote,
-    fontWeight: '500',
-    color: colors.textSecondary,
-  },
-  catLabelActive: {
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  catUnderline: {
-    height: 2,
-    borderRadius: 1,
-    alignSelf: 'stretch',
-    marginTop: 3,
-    opacity: 0,
-  },
-  catUnderlineActive: {
-    backgroundColor: colors.accent,
-    opacity: 1,
-  },
   catErrorBox: {
     alignItems: 'center',
     paddingTop: 60,

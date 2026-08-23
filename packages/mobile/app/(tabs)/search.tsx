@@ -21,7 +21,7 @@ import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
-import SegmentedTabs from '../../components/SegmentedTabs';
+import TextTabs from '../../components/TextTabs';
 
 const SEARCH_TABS: { key: SearchTab; label: string }[] = [
   { key: 'songs', label: '歌曲' },
@@ -95,15 +95,13 @@ export default function SearchPage() {
 
   return (
     <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
-      {/* 歌曲 / 歌手：紧凑居中分段控件（iOS 搜索结果式，两选项不通栏） */}
-      <View style={styles.tabHeader}>
-        <SegmentedTabs
-          tabs={SEARCH_TABS}
-          activeIndex={SEARCH_TABS.findIndex((t) => t.key === activeTab)}
-          onSelect={(i) => setActiveTab(SEARCH_TABS[i].key)}
-          style={styles.segCompact}
-        />
-      </View>
+      {/* 歌曲 / 歌手：文字 tabs + 下划线（与发现页二级分类同语言，左对齐） */}
+      <TextTabs
+        tabs={SEARCH_TABS}
+        activeKey={activeTab}
+        onSelect={(key) => setActiveTab(key as SearchTab)}
+        scrollable={false}
+      />
 
       {activeTab === 'songs' ? (
         // 渐进搜索:有结果就显示(即使还在加载),骨架屏只在无结果时出现
@@ -244,12 +242,6 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  tabHeader: {
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  /* iOS 搜索结果的紧凑分段控件：约四成屏宽居中，两选项不通栏 */
-  segCompact: { width: '42%' },
   groupSection: { marginBottom: 8 },
   groupHeader: {
     ...textVariants.footnote,
