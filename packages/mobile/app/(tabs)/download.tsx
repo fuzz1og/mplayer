@@ -201,7 +201,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   name: { ...textVariants.body, fontWeight: '600', color: colors.textPrimary },
   nameActive: { color: colors.accent },
   artist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
-  status: { ...textVariants.caption, color: colors.textSecondary, marginRight: spacing[3] },
+  status: { ...textVariants.caption, color: colors.textSecondary, marginRight: spacing[3], fontVariant: ['tabular-nums'] },
   statusError: { color: colors.danger },
   progressTrack: {
     height: 2,
