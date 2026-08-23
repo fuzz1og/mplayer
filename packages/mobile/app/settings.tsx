@@ -21,6 +21,7 @@ import { cacheKernel, getCacheStats } from '../services/cacheService';
 import {radius, shadow, spacing, textVariants} from '../theme/tokens';
 import type { ThemeMode, ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import ScalePress from '../components/ScalePress';
 
 /** 外观选项（#173）：system 跟随系统深浅色 */
 const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
@@ -205,37 +206,37 @@ export default function SettingsPage() {
         contentContainerStyle={styles.scrollContent}
       >
 
-        {/* 外观（#173：深色模式） */}
+        {/* 外观（#173：深色模式）—— inset grouped：节标签在组外，组靠明度差分层（指南 §2.3） */}
         <View style={styles.section}>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>外观</Text>
-            <View style={styles.segmentGroup}>
-              {THEME_MODE_OPTIONS.map((opt) => {
-                const active = themeMode === opt.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[styles.segmentBtn, active && styles.segmentBtnActive]}
-                    onPress={() => setThemeMode(opt.value)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.segmentBtnText, active && styles.segmentBtnTextActive]}>{opt.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+          <Text style={styles.sectionLabel}>外观</Text>
+          <View style={styles.group}>
+            <View style={styles.groupPad}>
+              <View style={styles.segmentGroup}>
+                {THEME_MODE_OPTIONS.map((opt) => {
+                  const active = themeMode === opt.value;
+                  return (
+                    <ScalePress
+                      key={opt.value}
+                      style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                      onPress={() => setThemeMode(opt.value)}
+                    >
+                      <Text style={[styles.segmentBtnText, active && styles.segmentBtnTextActive]}>{opt.label}</Text>
+                    </ScalePress>
+                  );
+                })}
+              </View>
             </View>
           </View>
         </View>
 
-        {/* 直连状态（T01：每源直连可用性；不再配置 auto/仅直连） */}
+        {/* 直连状态（T01：每源官方直连可用性；不再配置 auto/仅直连） */}
         <View style={styles.section}>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>直连状态</Text>
-            <Text style={styles.label}>每源官方直连可用性，直连能力按源逐步落地。</Text>
-            {MULTI_SOURCE_LIST.map((source) => {
+          <Text style={styles.sectionLabel}>直连状态</Text>
+          <View style={styles.group}>
+            {MULTI_SOURCE_LIST.map((source, i) => {
               const ready = hasDirectClient(source);
               return (
-                <View key={source} style={styles.modeRow}>
+                <View key={source} style={[styles.row, i > 0 && styles.rowSep]}>
                   <View style={[styles.statusDot, ready && styles.statusDotReady]} />
                   <Text style={styles.modeLabel}>{SOURCE_DISPLAY_NAMES[source] || source}</Text>
                   <Text style={[styles.modeStatus, ready && styles.modeStatusReady]}>
@@ -245,65 +246,62 @@ export default function SettingsPage() {
               );
             })}
           </View>
+          <Text style={styles.sectionFootnote}>每源官方直连可用性，直连能力按源逐步落地。</Text>
         </View>
 
         {/* tier3 第三方解析源（#144，实验性） */}
         <View style={styles.section}>
-          <View style={styles.card}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={styles.sectionTitle}>第三方解析源（tier3）</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={[styles.hintText, { marginTop: 0, marginRight: 8 }]}>
-                  {tier3Enabled ? '已开启' : '已关闭'}
-                </Text>
-                <Switch value={tier3Enabled} onValueChange={handleTier3Toggle} />
-              </View>
+          <Text style={styles.sectionLabel}>第三方解析源（tier3）</Text>
+          <View style={styles.group}>
+            <View style={[styles.row, { paddingVertical: 8 }]}>
+              <Text style={[styles.modeLabel, { flex: 1 }]}>启用第三方解析</Text>
+              <Switch value={tier3Enabled} onValueChange={handleTier3Toggle} />
             </View>
-            <Text style={styles.label}>
-              默认关闭。官方直连失败后按订阅清单尝试第三方源，全部失败换元/标记不可播。实验性功能，不内置任何解析端点。
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={tier3Url}
-              onChangeText={setTier3Url}
-              placeholder="https://example.com/manifest.json"
-              placeholderTextColor={colors.inputPlaceholder}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-            />
-            <TouchableOpacity
-              style={[styles.saveBtn, tier3Busy && styles.checkingBtn]}
-              onPress={handleAddTier3Url}
-              disabled={tier3Busy}
-              activeOpacity={0.7}
-            >
-              <Plus size={18} color={tier3Busy ? colors.textSecondary : colors.textInverse} style={styles.btnIcon} />
-              <Text style={[styles.saveBtnText, tier3Busy && styles.testBtnText]}>添加 URL 订阅</Text>
-            </TouchableOpacity>
-            <TextInput
-              style={[styles.input, { height: 80, textAlignVertical: 'top', marginTop: spacing[3] }]}
-              value={tier3Paste}
-              onChangeText={setTier3Paste}
-              placeholder="或粘贴 JSON 音源清单…"
-              placeholderTextColor={colors.inputPlaceholder}
-              multiline
-            />
-            <TouchableOpacity
-              style={[styles.saveBtn, tier3Busy && styles.checkingBtn]}
-              onPress={handleAddTier3Paste}
-              disabled={tier3Busy}
-              activeOpacity={0.7}
-            >
-              <Plus size={18} color={tier3Busy ? colors.textSecondary : colors.textInverse} style={styles.btnIcon} />
-              <Text style={[styles.saveBtnText, tier3Busy && styles.testBtnText]}>添加粘贴清单</Text>
-            </TouchableOpacity>
+            <View style={[styles.groupPad, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderSubtle }]}>
+              <Text style={styles.label}>
+                官方直连失败后按订阅清单尝试第三方源，全部失败换元/标记不可播。实验性功能，不内置任何解析端点。
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={tier3Url}
+                onChangeText={setTier3Url}
+                placeholder="https://example.com/manifest.json"
+                placeholderTextColor={colors.inputPlaceholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
+              <ScalePress
+                style={[styles.actionRow, tier3Busy && styles.actionRowDisabled]}
+                onPress={handleAddTier3Url}
+                disabled={tier3Busy}
+              >
+                <Plus size={18} color={tier3Busy ? colors.textSecondary : colors.accent} style={styles.btnIcon} />
+                <Text style={[styles.actionRowText, tier3Busy && { color: colors.textSecondary }]}>添加 URL 订阅</Text>
+              </ScalePress>
+              <TextInput
+                style={[styles.input, { height: 80, textAlignVertical: 'top', marginTop: spacing[3] }]}
+                value={tier3Paste}
+                onChangeText={setTier3Paste}
+                placeholder="或粘贴 JSON 音源清单…"
+                placeholderTextColor={colors.inputPlaceholder}
+                multiline
+              />
+              <ScalePress
+                style={[styles.actionRow, tier3Busy && styles.actionRowDisabled]}
+                onPress={handleAddTier3Paste}
+                disabled={tier3Busy}
+              >
+                <Plus size={18} color={tier3Busy ? colors.textSecondary : colors.accent} style={styles.btnIcon} />
+                <Text style={[styles.actionRowText, tier3Busy && { color: colors.textSecondary }]}>添加粘贴清单</Text>
+              </ScalePress>
+            </View>
 
             {tier3Subscriptions.length === 0 ? (
-              <Text style={styles.hintText}>暂无订阅。添加一份 JSON 音源清单后才会生效。</Text>
+              <Text style={styles.groupFootnote}>暂无订阅。添加一份 JSON 音源清单后才会生效。</Text>
             ) : (
               tier3Subscriptions.map((sub) => (
-                <View key={sub.id} style={styles.modeRow}>
+                <View key={sub.id} style={[styles.row, { alignItems: 'flex-start' }, styles.rowSep]}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ ...textVariants.subhead, fontWeight: '600', color: colors.textPrimary }}>{sub.name}</Text>
                     <Text style={{ ...textVariants.caption, color: colors.textSecondary }} numberOfLines={1}>{sub.source}</Text>
@@ -323,7 +321,7 @@ export default function SettingsPage() {
 
             {/* 每源解析统计（本次会话）：命中/未命中，辅助判断订阅源质量 */}
             {Object.keys(tier3Stats).length > 0 && (
-              <View style={{ marginTop: spacing[3] }}>
+              <View style={[styles.groupPad, styles.rowSep]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Text style={{ color: colors.textSecondary, fontSize: 12 }}>每源解析统计（本次会话）</Text>
                   <View style={{ flexDirection: 'row' }}>
@@ -336,7 +334,7 @@ export default function SettingsPage() {
                   </View>
                 </View>
                 {Object.entries(tier3Stats).map(([sourceId, st]) => (
-                  <View key={sourceId} style={[styles.modeRow, { paddingVertical: 4 }]}>
+                  <View key={sourceId} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
                     <Text style={{ color: colors.textPrimary, fontSize: 12, flex: 1 }} numberOfLines={1}>{sourceId}</Text>
                     <Text style={{ color: colors.textSecondary, fontSize: 12 }}>命中 {st.hits} / 未命中 {st.misses}</Text>
                   </View>
@@ -348,75 +346,71 @@ export default function SettingsPage() {
 
         {/* 缓存管理：统计 + 用量条 + 一键清理（对齐桌面 CacheSection） */}
         <View style={styles.section}>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>缓存管理</Text>
-            <View style={styles.cacheStatsRow}>
+          <Text style={styles.sectionLabel}>缓存管理</Text>
+          <View style={styles.group}>
+            <View style={styles.groupPad}>
               <Text style={styles.cacheStatsText}>
                 缓存文件 {cacheStats.fileCount} 个 · {(cacheStats.totalSize / 1024 / 1024).toFixed(1)} MB / {MAX_CACHE_MB} MB
               </Text>
+              <View style={styles.cacheBarWrap}>
+                <View
+                  style={[
+                    styles.cacheBarFill,
+                    { width: `${cachePercent}%`, backgroundColor: cachePercent > 90 ? colors.danger : colors.accent },
+                  ]}
+                />
+              </View>
             </View>
-            <View style={styles.cacheBarWrap}>
-              <View
-                style={[
-                  styles.cacheBarFill,
-                  { width: `${cachePercent}%`, backgroundColor: cachePercent > 90 ? colors.danger : colors.accent },
-                ]}
-              />
-            </View>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleClearCache} activeOpacity={0.7}>
-              <Trash2 size={18} color={colors.textInverse} style={styles.btnIcon} />
-              <Text style={styles.saveBtnText}>清理缓存</Text>
-            </TouchableOpacity>
-            <Text style={styles.hintText}>播放 URL 缓存 12 小时过期，清理不影响已收藏歌曲</Text>
+            <ScalePress style={styles.actionRow} onPress={handleClearCache}>
+              <Trash2 size={18} color={colors.accent} style={styles.btnIcon} />
+              <Text style={styles.actionRowText}>清理缓存</Text>
+            </ScalePress>
           </View>
+          <Text style={styles.sectionFootnote}>播放 URL 缓存 12 小时过期，清理不影响已收藏歌曲</Text>
         </View>
 
-        {/* 检查更新（标题右侧显示当前版本号） */}
+        {/* 检查更新（版本号作组内首行） */}
         <View style={styles.section}>
-          <View style={styles.card}>
-            <View style={styles.updateHeader}>
-              <Text style={[styles.sectionTitle, styles.updateHeaderTitle]}>检查更新</Text>
-              <Text style={styles.updateVersion}>v{currentVersion}</Text>
+          <Text style={styles.sectionLabel}>关于</Text>
+          <View style={styles.group}>
+            <View style={styles.row}>
+              <Text style={styles.modeLabel}>当前版本</Text>
+              <Text style={styles.modeStatus}>v{currentVersion}</Text>
             </View>
             {updateState === 'idle' && (
-              <>
-                <TouchableOpacity style={styles.saveBtn} onPress={handleCheckUpdate} activeOpacity={0.7}>
-                  <RefreshCw size={18} color={colors.textInverse} style={styles.btnIcon} />
-                  <Text style={styles.saveBtnText}>检查更新</Text>
-                </TouchableOpacity>
-                <Text style={styles.hintText}>点击检查是否有新版本可用</Text>
-              </>
+              <ScalePress style={[styles.actionRow, styles.rowSep]} onPress={handleCheckUpdate}>
+                <RefreshCw size={18} color={colors.accent} style={styles.btnIcon} />
+                <Text style={styles.actionRowText}>检查更新</Text>
+              </ScalePress>
             )}
             {updateState === 'checking' && (
-              <>
-                <View style={[styles.saveBtn, styles.checkingBtn]}>
-                  <RefreshCcw size={18} color={colors.textSecondary} style={styles.btnIcon} />
-                  <Text style={[styles.saveBtnText, styles.testBtnText]}>检查中...</Text>
-                </View>
-              </>
+              <View style={[styles.row, styles.rowSep]}>
+                <RefreshCcw size={18} color={colors.textSecondary} style={styles.btnIcon} />
+                <Text style={{ ...textVariants.subhead, color: colors.textSecondary }}>检查中…</Text>
+              </View>
             )}
             {updateState === 'available' && (
-              <>
+              <View style={[styles.groupPad, styles.rowSep]}>
                 <Text style={styles.updateAvailableText}>发现新版本 v{latestVersion}</Text>
                 {releaseNotes ? (
                   <Text style={styles.releaseNotes} numberOfLines={4}>
                     {releaseNotes}
                   </Text>
                 ) : null}
-                <TouchableOpacity style={styles.saveBtn} onPress={handleUpdate} activeOpacity={0.7}>
+                <ScalePress style={styles.updateBtn} onPress={handleUpdate}>
                   <Download size={18} color={colors.textInverse} style={styles.btnIcon} />
-                  <Text style={styles.saveBtnText}>立即更新</Text>
-                </TouchableOpacity>
-              </>
+                  <Text style={styles.updateBtnText}>立即更新</Text>
+                </ScalePress>
+              </View>
             )}
             {updateState === 'not-available' && (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={[styles.row, styles.rowSep]}>
                 <CircleCheck size={20} color={colors.success} style={{ marginRight: 8 }} />
                 <Text style={{ ...textVariants.subhead, fontWeight: '400', color: colors.success }}>已是最新版本</Text>
               </View>
             )}
             {updateState === 'error' && (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={[styles.row, styles.rowSep]}>
                 <CircleX size={20} color={colors.danger} style={{ marginRight: 8 }} />
                 <Text style={{ ...textVariants.subhead, fontWeight: '400', color: colors.danger }}>检查失败，请检查网络</Text>
               </View>
@@ -469,29 +463,77 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingTop: spacing[5],
   },
-  card: {
+  /* inset grouped（指南 §2.3/§2.5）：组靠灰底↔白组明度差分层，无阴影无边框；
+     分组分容器圆角用 lg；节标签是组外小字 */
+  sectionLabel: {
+    ...textVariants.footnote,
+    color: colors.textSecondary,
+    marginBottom: spacing[2],
+    marginLeft: spacing[2],
+  },
+  group: {
     backgroundColor: colors.bgSurface,
-    borderRadius: radius.md,
-    ...shadow.sm,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  groupPad: {
     padding: spacing[4],
   },
-  sectionTitle: {
-    color: colors.textPrimary,
-    ...textVariants.sectionHeader,
-    marginBottom: spacing[4],
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    paddingVertical: 12,
+  },
+  rowSep: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle,
+  },
+  groupFootnote: {
+    ...textVariants.caption,
+    color: colors.textTertiary,
+    padding: spacing[4],
+  },
+  sectionFootnote: {
+    ...textVariants.caption,
+    color: colors.textTertiary,
+    marginTop: spacing[2],
+    marginLeft: spacing[2],
+  },
+  /* 操作行：iOS 式安静主操作（accent 文字行），替代满页填充大按钮 */
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    paddingVertical: 12,
+  },
+  actionRowText: {
+    ...textVariants.subhead,
+    fontWeight: '500',
+    color: colors.accent,
+  },
+  actionRowDisabled: {
+    opacity: 0.55,
+  },
+  /* 立即更新保留填充按钮：版本可用是低频且重要的主操作，值得视觉强调 */
+  updateBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    marginTop: spacing[3],
+  },
+  updateBtnText: {
+    color: colors.textInverse,
+    ...textVariants.subhead,
+    fontWeight: '600',
   },
   label: {
     color: colors.textSecondary,
     ...textVariants.footnote,
     marginBottom: spacing[2],
-  },
-  /* 直连状态行：圆点 + 源名 + 状态（tier3 订阅行/统计行共用行样式） */
-  modeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
   },
   statusDot: {
     width: 8,
@@ -527,30 +569,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: 10,
     marginBottom: spacing[3],
   },
-  saveBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-  },
-  checkingBtn: {
-    backgroundColor: colors.bgHover,
-  },
+  /* 缓存管理 */
   btnIcon: {
     marginRight: 6,
-  },
-  saveBtnText: {
-    color: colors.textInverse,
-    ...textVariants.subhead,
-    fontWeight: '600',
-  },
-  testBtnText: { color: colors.textPrimary },
-  /* 缓存管理 */
-  cacheStatsRow: {
-    marginTop: 6,
-    marginBottom: 10,
   },
   cacheStatsText: {
     color: colors.textSecondary,
@@ -562,28 +583,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 3,
     backgroundColor: colors.bgHover,
     overflow: 'hidden',
-    marginBottom: spacing[4],
+    marginTop: spacing[3],
   },
   cacheBarFill: {
     height: '100%',
     borderRadius: 3,
-  },
-  hintText: {
-    color: colors.textTertiary,
-    ...textVariants.caption,
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  updateHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing[4],
-  },
-  updateHeaderTitle: { marginBottom: 0 },
-  updateVersion: {
-    color: colors.textTertiary,
-    ...textVariants.caption,
   },
   updateAvailableText: {
     color: colors.success,

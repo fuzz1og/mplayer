@@ -7,10 +7,11 @@ import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { musicApi, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
-import {radius, shadow, spacing, textVariants} from '../theme/tokens';
+import {radius, spacing, textVariants} from '../theme/tokens';
 import { lightColors, darkColors } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import ScalePress from './ScalePress';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from './chromeMetrics';
 import LoadingState from './LoadingState';
@@ -155,12 +156,20 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
   }, [sourceType, songs]);
 
   return (
-    <View style={[styles.section, shadow.sm]}>
-      <TouchableOpacity onPress={() => router.push(`/hotlist?key=${routeKey}&title=${encodeURIComponent(title)}`)}>
+    <View style={styles.section}>
+      <ScalePress
+        style={styles.sectionHeader}
+        onPress={() => router.push(`/hotlist?key=${routeKey}&title=${encodeURIComponent(title)}`)}
+      >
         <Text style={styles.sectionTitle}>{title} ›</Text>
-      </TouchableOpacity>
+      </ScalePress>
       {songs.slice(0, 5).map((song, i) => (
-        <TouchableOpacity key={song.id + String(i)} style={styles.songRow} onPress={() => playSong(song, i)}>
+        <ScalePress
+          key={song.id + String(i)}
+          style={[styles.songRow, i > 0 && styles.songRowSep]}
+          pressScaleTo={0.98}
+          onPress={() => playSong(song, i)}
+        >
           <Text style={styles.rank}>{i + 1}</Text>
           {song.cover ? (
             <Image source={{ uri: song.cover }} style={styles.cover} />
@@ -173,7 +182,7 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
             <Text style={styles.songName} numberOfLines={1}>{song.name}</Text>
             <Text style={styles.songArtist} numberOfLines={1}>{song.artists}</Text>
           </View>
-        </TouchableOpacity>
+        </ScalePress>
       ))}
     </View>
   );
@@ -634,23 +643,34 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '400',
     color: colors.danger,
   },
-  // Hotlist section styles
+  // Hotlist section styles：inset group（指南 §2.3/§2.5）——白组浮在灰底上靠明度差分层，
+  // 无阴影无边框；标题行/歌曲行之间用发丝线分隔
   section: {
     backgroundColor: colors.bgSurface,
     marginHorizontal: spacing[3],
-    marginTop: spacing[3],
-    borderRadius: radius.md,
-    padding: spacing[3],
+    marginTop: spacing[4],
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
   },
   sectionTitle: {
     ...textVariants.sectionHeader,
     color: colors.textPrimary,
-    marginBottom: spacing[3],
   },
   songRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    paddingHorizontal: spacing[4],
+    paddingVertical: 10,
+  },
+  songRowSep: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle,
   },
   rank: {
     ...textVariants.subhead,
