@@ -22,9 +22,12 @@ interface ScalePressProps {
  * - 松手用 pressScale 临界阻尼弹簧回弹（ADR-0004），无过冲
  * - 系统"减弱动效"时退化为轻微变暗，不做位移动画
  *
- * style 挂在 Pressable 本体上（flex/宽度等布局样式必须落在容器才生效，
- * 内层 Animated.View 只包缩放变换）；hitSlop 透传保证触控目标完整。
+ * 用 Animated.createAnimatedComponent(Pressable) 把布局样式与缩放变换挂在
+ * 同一个节点上：双节点（Pressable>Animated.View）要么 flex 丢在外层（tab 塌缩）、
+ * 要么 flexDirection 丢在内层（SongRow 竖排），单节点才两者都对。
  */
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 export default function ScalePress({
   onPress,
   onLongPress,
@@ -54,19 +57,17 @@ export default function ScalePress({
   };
 
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress ? (e) => onPress(e) : undefined}
       onLongPress={onLongPress}
       onPressIn={pressIn}
       onPressOut={pressOut}
       disabled={disabled}
       hitSlop={hitSlop}
-      style={style}
+      style={[style, reducedMotion && styles.reducedDim, { transform: [{ scale }] }]}
     >
-      <Animated.View style={[reducedMotion && styles.reducedDim, { transform: [{ scale }] }]}>
-        {children}
-      </Animated.View>
-    </Pressable>
+      {children}
+    </AnimatedPressable>
   );
 }
 
