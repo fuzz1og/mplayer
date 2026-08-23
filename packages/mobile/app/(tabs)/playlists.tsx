@@ -11,6 +11,7 @@ import {
   Modal,
   TextInput,
   Alert,
+  Animated,
 } from 'react-native';
 import { ListMusic, ChevronRight, Plus, Heart, Clock } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -19,6 +20,7 @@ import type { Playlist } from '../../stores/playlistStore';
 import {radius, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useAnimatedBg } from '../../theme/AnimatedBg';
 
 const BUILT_IN = [
   { key: 'favorites', icon: Heart, label: '收藏', desc: '我喜欢的歌曲' },
@@ -32,6 +34,7 @@ function formatDate(ts: number): string {
 
 export default function PlaylistsPage() {
   const { colors } = useTheme();
+  const animatedBg = useAnimatedBg();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const playlists = usePlaylistStore((s) => s.playlists);
@@ -80,7 +83,7 @@ export default function PlaylistsPage() {
   );
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
       <FlatList
         data={playlists}
         keyExtractor={(item) => item.id}
@@ -180,12 +183,13 @@ export default function PlaylistsPage() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </Animated.View>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase },
+  // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

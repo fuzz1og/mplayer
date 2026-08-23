@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useAnimatedBg } from '../../theme/AnimatedBg';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
 import ScalePress from '../../components/ScalePress';
@@ -98,9 +99,10 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
 
 export default function TabLayout() {
   const { colors, isDark } = useTheme();
+  const animatedBg = useAnimatedBg();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {/* 顶部 chrome 悬浮：内容从半透明 TopBar 下穿过（M2） */}
       <View pointerEvents="box-none" style={styles.topChrome}>
@@ -145,12 +147,13 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
-    </View>
+    </Animated.View>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase },
+  // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色（屏内容器再盖一层 SceneView 默认浅底）
+  container: { flex: 1 },
   // 悬浮顶部 chrome：半透明材质，内容从下穿过（M2）
   topChrome: {
     position: 'absolute',

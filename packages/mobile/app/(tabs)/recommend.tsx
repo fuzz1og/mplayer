@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, RefreshControl, StyleSheet, TouchableOpacity, Image, Dimensions,
+  View, Text, RefreshControl, StyleSheet, TouchableOpacity, Image, Dimensions, Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+import { useAnimatedBg } from '../../theme/AnimatedBg';
 
   import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
   import { cacheManager, musicApi, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
@@ -27,6 +28,7 @@ const RECOMMEND_POOL_SIZE = 100;
 
 export default function RecommendPage() {
   const { colors } = useTheme();
+  const animatedBg = useAnimatedBg();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
@@ -92,8 +94,8 @@ export default function RecommendPage() {
   if (loading) return <LoadingState />;
 
   return (
-    <ScrollView
-      style={styles.container}
+    <Animated.ScrollView
+      style={[styles.container, { backgroundColor: animatedBg }]}
       contentContainerStyle={[
         styles.content,
         { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + 32 },
@@ -172,12 +174,13 @@ export default function RecommendPage() {
           </View>
         </>
       )}
-    </ScrollView>
+    </Animated.ScrollView>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase },
+  // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
+  container: { flex: 1 },
   content: { paddingBottom: 32 },
   section: { paddingHorizontal: spacing[4], marginTop: spacing[4] },
   sectionHeader: {

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CircleAlert, Music2, User } from 'lucide-react-native';
@@ -19,6 +20,7 @@ import LoadMoreFooter from '../../components/LoadMoreFooter';
 import {radius, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
 import TextTabs from '../../components/TextTabs';
@@ -37,6 +39,7 @@ let artistSearchSeq = 0;
 
 export default function SearchPage() {
   const { colors } = useTheme();
+  const animatedBg = useAnimatedBg();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ q: string; type?: string }>();
@@ -94,7 +97,7 @@ export default function SearchPage() {
   }, [source]);
 
   return (
-    <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
+    <Animated.View style={[styles.container, { paddingTop: topChromeHeight(insets.top), backgroundColor: animatedBg }]}>
       {/* 歌曲/歌手（后续可扩展歌单/专辑）：文字 tabs + 下划线，与发现页二级分类同语言 */}
       <TextTabs
         tabs={SEARCH_TABS}
@@ -168,7 +171,7 @@ export default function SearchPage() {
           <Text style={styles.emptyText}>未找到相关歌手</Text>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -241,7 +244,8 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase },
+  // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
+  container: { flex: 1 },
   groupSection: { marginBottom: 8 },
   groupHeader: {
     ...textVariants.footnote,

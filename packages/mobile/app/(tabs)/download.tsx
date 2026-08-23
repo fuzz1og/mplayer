@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Animated } from 'react-native';
 import { useEffect, useMemo } from 'react';
 import { Download, Music, Trash2, ChevronRight } from 'lucide-react-native';
 import { Paths } from 'expo-file-system';
@@ -10,6 +10,7 @@ import { usePlayerStore } from '../../stores/playerStore';
 import {radius, shadow, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
 
@@ -24,6 +25,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function DownloadPage() {
   const { colors } = useTheme();
+  const animatedBg = useAnimatedBg();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const items = useDownloadStore((s) => s.items);
@@ -78,7 +80,7 @@ export default function DownloadPage() {
   };
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
       {/* 保存位置随内容滚动、从悬浮 TopBar 下穿过（M2）；静态放列表外会被 TopBar 盖住。
           空列表时也不被居中：ListHeader 恒在 EmptyState 之上 */}
       <FlatList
@@ -151,12 +153,13 @@ export default function DownloadPage() {
           );
         }}
       />
-    </View>
+    </Animated.View>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase },
+  // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
+  container: { flex: 1 },
   emptyContent: { flexGrow: 1, justifyContent: 'center' },
   listContent: { paddingBottom: 24 },
   /* 保存位置卡片 */

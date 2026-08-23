@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { textVariants } from '../theme/tokens';
+import { AnimatedBgProvider } from '../theme/AnimatedBg';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setupLegacyMigration } from '../services/legacyMigration';
@@ -126,23 +127,25 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <SystemBackgroundSync />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="hotlist" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="favorites" />
-        <Stack.Screen name="history" />
-        <Stack.Screen name="discover-playlist/[id]" />
-        <Stack.Screen name="artist/[id]" />
-      </Stack>
+      <AnimatedBgProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="hotlist" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="favorites" />
+          <Stack.Screen name="history" />
+          <Stack.Screen name="discover-playlist/[id]" />
+          <Stack.Screen name="artist/[id]" />
+        </Stack>
 
-      {showPlayer && (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}>
-          <PlayerOverlay onClose={() => setShowPlayer(false)} />
-        </View>
-      )}
+        {showPlayer && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}>
+            <PlayerOverlay onClose={() => setShowPlayer(false)} />
+          </View>
+        )}
 
-      <PlaybackNoticeToast />
+        <PlaybackNoticeToast />
+      </AnimatedBgProvider>
     </ThemeProvider>
   );
 }
