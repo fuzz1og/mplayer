@@ -109,12 +109,19 @@ jobs:
       - name: Build (Electron)
         run: npx electron-builder ${{ matrix.args }} --publish never
 
+      # 只上传顶层发布产物（AppImage/deb/dmg/exe/latest-*.yml），
+      # 排除 dist 下被打包进 app 的源文件（index.html/icon.png/builder-debug.yml 等）
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v7
         with:
           name: mplayer-desktop-${{ matrix.os }}
           path: |
-            dist/**/*
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.dmg
+            dist/*.exe
+            dist/*.blockmap
+            dist/latest*.yml
           if-no-files-found: error
 
   # ── Mobile Android APK + AAB ──
@@ -281,14 +288,13 @@ jobs:
             git push origin "$TAG" --force
           fi
 
-          # Generate release notes
-          gh api repos/${{ github.repository }}/releases/generate-notes \
-            -f tag_name="$TAG" --jq '.body' > release-notes.md
-
-          # Create if not exists, otherwise edit
+          # Create if not exists（用 generate-notes 兜底）；已存在的 release 不覆盖 body，
+          # 保留人工按 release-notes skill 规格写好的介绍（CI 每次 rebuild 会重复 publish）。
           if gh release view "$TAG" &>/dev/null; then
-            gh release edit "$TAG" --notes-file release-notes.md --draft=false
+            gh release edit "$TAG" --draft=false
           else
+            gh api repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="$TAG" --jq '.body' > release-notes.md
             gh release create "$TAG" --notes-file release-notes.md --draft=false
           fi
 
