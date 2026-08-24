@@ -12,7 +12,7 @@ import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+import { topChromeHeight, bottomChromeHeight, LIST_TAIL_PADDING } from '../../components/chromeMetrics';
 
 import { useSettingsStore } from '../../stores/settingsStore';
 import EmptyState from '../../components/EmptyState';
@@ -88,7 +88,7 @@ export default function DownloadPage() {
         keyExtractor={(item) => item.key}
         contentContainerStyle={[
           items.length === 0 ? styles.emptyContent : styles.listContent,
-          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 },
+          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + LIST_TAIL_PADDING },
         ]}
         ListHeaderComponent={
           <TouchableOpacity style={styles.pathBox} onPress={handlePickDir} activeOpacity={0.7}>

@@ -16,20 +16,23 @@ import ScalePress from './ScalePress';
 import SegmentedTabs from './SegmentedTabs';
 import TextTabs from './TextTabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { topChromeHeight, bottomChromeHeight } from './chromeMetrics';
+import { topChromeHeight, bottomChromeHeight, LIST_TAIL_PADDING } from './chromeMetrics';
 import LoadingState from './LoadingState';
 import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong as playAudio } from '../services/audioPlayer';
 import { searchStrictMatch } from '../services/songResources';
+import { gridCardWidth } from './gridMetrics';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-/** 网格统一度量：16pt 页面沟槽（与分段控件/分类行同轴），列间 12 */
+/** 网格统一度量：16pt 页面沟槽（与分段控件/分类行同轴），列间 12；公式见 gridMetrics */
+const gridCardW = gridCardWidth({ cols: 2 });
+const artistCardW = gridCardWidth({ cols: 3 });
+/** 网格列间距（gridCardWidth 默认同值；columnWrapperStyle/grid 样式 gap 引用） */
 const GRID_GAP = spacing[3];
-const gridCardW = (SCREEN_WIDTH - spacing[4] * 2 - GRID_GAP) / 2;
-const artistCardW = (SCREEN_WIDTH - spacing[4] * 2 - GRID_GAP * 2) / 3;
+
+/** 整页宽度：分页滚动（按页 scrollToOffset/翻页判定）用，非卡片宽度（卡片宽度见 gridMetrics） */
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const TABS = [
   { key: 'hotlist', label: '排行榜' },
@@ -113,7 +116,7 @@ function HotlistContent() {
   ];
 
   return (
-    <ScrollView style={styles.tabContent} contentContainerStyle={[styles.tabContentInnerHotlist, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}>
+    <ScrollView style={styles.tabContent} contentContainerStyle={[styles.tabContentInnerHotlist, { paddingBottom: bottomChromeHeight(insets.bottom, true) + LIST_TAIL_PADDING }]}>
       {SECTIONS.map(section => (
         <SectionCard
           key={section.key}
@@ -263,7 +266,7 @@ function AlbumsContent() {
 
   const renderItem = ({ item: album }: { item: Album }) => (
     <TouchableOpacity
-      style={[styles.gridCard, { width: gridCardW }]}
+      style={{ width: gridCardW }}
       activeOpacity={0.7}
       onPress={() => router.push(`/album/${album.id}?name=${encodeURIComponent(album.name)}&pic=${encodeURIComponent(album.picUrl)}&artist=${encodeURIComponent(album.artist)}` as any)}
     >
@@ -289,7 +292,7 @@ function AlbumsContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + LIST_TAIL_PADDING }]}
         data={albums}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
@@ -388,7 +391,7 @@ function PlaylistContent() {
 
   const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
     <TouchableOpacity
-      style={[styles.gridCard, { width: gridCardW }]}
+      style={{ width: gridCardW }}
       activeOpacity={0.7}
       onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
     >
@@ -414,7 +417,7 @@ function PlaylistContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + LIST_TAIL_PADDING }]}
         data={playlists}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
@@ -547,7 +550,7 @@ function ArtistContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + 24 }]}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + LIST_TAIL_PADDING }]}
         data={artists}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
@@ -643,7 +646,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   songArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
   // 专辑/歌单网格卡片：封面方圆角 md，标题两行截断，副行 meta——
   // 垂直节奏走 token（name 8 / meta 2），列距 gap 统一 12，无逐卡 margin
-  gridCard: {},
   gridCover: {
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
