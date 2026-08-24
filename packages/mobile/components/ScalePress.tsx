@@ -58,7 +58,7 @@ export default function ScalePress({
 
   return (
     <AnimatedPressable
-      onPress={onPress ? (e) => onPress(e) : undefined}
+      onPress={onPress}
       onLongPress={onLongPress}
       onPressIn={pressIn}
       onPressOut={pressOut}

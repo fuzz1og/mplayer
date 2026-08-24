@@ -1,5 +1,3 @@
-import type { Insets } from 'react-native';
-
 /**
  * 悬浮 chrome 的尺寸度量 —— 唯一事实源。
  * 各 tab 屏的滚动内容用这里的函数计算让位 padding
@@ -33,5 +31,3 @@ export function bottomChromeHeight(insetsBottom: number, tabBarVisible: boolean)
 export function topChromeHeight(insetsTop: number): number {
   return insetsTop + TOP_BAR_FIXED_HEIGHT;
 }
-
-export type { Insets };
