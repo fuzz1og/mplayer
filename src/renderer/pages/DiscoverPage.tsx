@@ -109,7 +109,8 @@ const DiscoverPage: React.FC = () => {
     try { await toggleFavorite(song); } catch (error) { console.error('收藏操作失败:', error); }
   };
 
-  const handleAddToPlaylist = (song: Song) => { setSelectedSongsForPlaylist([song]); setBatchModalVisible(true); };
+  // SongList 行内「加入歌单」由组件内部单曲弹窗闭环，此 prop 仅作成功通知（勿在此开弹窗）
+  const handleAddToPlaylist = (_song: Song) => {};
   const handleBatchAddToPlaylist = (selectedSongs: Song[]) => { setSelectedSongsForPlaylist(selectedSongs); setBatchModalVisible(true); };
 
   const handleBackFromSearch = () => {

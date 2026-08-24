@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Download, Trash2, ListMusic, Music2 } from 'lucide-react';
+import { Download, Trash2, ListMusic, Music2, CheckSquare } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -91,6 +91,8 @@ const SongList: React.FC<SongListProps> = ({
   // 批量加入歌单弹窗状态
   const [showBatchAddToPlaylistModal, setShowBatchAddToPlaylistModal] = useState(false);
   const [selectedSongsForPlaylist, setSelectedSongsForPlaylist] = useState<Song[]>([]);
+  // 批量管理模式：常驻「批量管理」按钮进入，勾选框与批量操作栏随之显示，「完成」退出
+  const [batchMode, setBatchMode] = useState(false);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
 
   const displaySongs = songs.map(song => swapOverrides.get(song.id) ?? song);
@@ -178,8 +180,15 @@ const SongList: React.FC<SongListProps> = ({
     setShowBatchAddToPlaylistModal(true);
   };
 
-  // 是否显示批量操作按钮栏
-  const showBatchActionBar = (enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && selectedIds.length > 0;
+  // 是否显示批量操作按钮栏：批量模式下常显（未勾选时按钮禁用），否则保持勾选后浮现的旧交互
+  const showBatchActionBar = (enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (batchMode || selectedIds.length > 0);
+  const batchDisabled = selectedIds.length === 0;
+
+  const handleExitBatchMode = () => {
+    setBatchMode(false);
+    onSelectionChange([]);
+    setActiveDropdown(null);
+  };
 
   if (displaySongs.length === 0) {
     if (loading) {
@@ -204,6 +213,28 @@ const SongList: React.FC<SongListProps> = ({
 
   return (
     <div style={{ width: '100%' }}>
+      {/* 批量管理入口：常驻（有批量能力且列表非空时），进入后显示勾选框与批量操作栏 */}
+      {(enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 16px 8px' }}>
+          <button
+            onClick={() => (batchMode ? handleExitBatchMode() : setBatchMode(true))}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '5px 14px',
+              backgroundColor: batchMode ? 'var(--accent)' : 'transparent',
+              color: batchMode ? 'white' : 'var(--text-secondary)',
+              border: `1px solid ${batchMode ? 'var(--accent)' : 'var(--border-default)'}`,
+              borderRadius: '16px',
+              cursor: 'pointer',
+              fontSize: 'var(--text-sm)',
+            }}
+          >
+            <CheckSquare size={14} />
+            {batchMode ? '完成' : '批量管理'}
+          </button>
+        </div>
+      )}
+
       {/* 批量操作按钮栏 */}
       {(enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (
         <div
@@ -234,8 +265,9 @@ const SongList: React.FC<SongListProps> = ({
               {enableBatchDownload && (
                 <button
                   onClick={handleBatchDownload}
-                  style={{ ...batchBtnStyle, backgroundColor: 'var(--accent)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-hover)'; }}
+                  disabled={batchDisabled}
+                  style={{ ...batchBtnStyle, backgroundColor: 'var(--accent)', opacity: batchDisabled ? 0.5 : 1, cursor: batchDisabled ? 'not-allowed' : 'pointer' }}
+                  onMouseEnter={(e) => { if (!batchDisabled) e.currentTarget.style.backgroundColor = 'var(--accent-hover)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent)'; }}
                 >
                   <Download size={16} />
@@ -245,8 +277,9 @@ const SongList: React.FC<SongListProps> = ({
               {enableBatchAddToPlaylist && (
                 <button
                   onClick={handleBatchAddToPlaylist}
-                  style={{ ...batchBtnStyle, backgroundColor: 'var(--accent)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-hover)'; }}
+                  disabled={batchDisabled}
+                  style={{ ...batchBtnStyle, backgroundColor: 'var(--accent)', opacity: batchDisabled ? 0.5 : 1, cursor: batchDisabled ? 'not-allowed' : 'pointer' }}
+                  onMouseEnter={(e) => { if (!batchDisabled) e.currentTarget.style.backgroundColor = 'var(--accent-hover)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent)'; }}
                 >
                   <ListMusic size={16} />
@@ -256,8 +289,9 @@ const SongList: React.FC<SongListProps> = ({
               {enableBatchDelete && (
                 <button
                   onClick={handleBatchDelete}
-                  style={{ ...batchBtnStyle, backgroundColor: 'var(--danger)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--danger-hover)'; }}
+                  disabled={batchDisabled}
+                  style={{ ...batchBtnStyle, backgroundColor: 'var(--danger)', opacity: batchDisabled ? 0.5 : 1, cursor: batchDisabled ? 'not-allowed' : 'pointer' }}
+                  onMouseEnter={(e) => { if (!batchDisabled) e.currentTarget.style.backgroundColor = 'var(--danger-hover)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--danger)'; }}
                 >
                   <Trash2 size={16} />
@@ -285,7 +319,7 @@ const SongList: React.FC<SongListProps> = ({
             fontWeight: 500,
           }}
         >
-          {showCheckbox && (
+          {(showCheckbox || batchMode) && (
             <div style={{ width: '40px', textAlign: 'center' }}>
               <input
                 type="checkbox"
@@ -324,7 +358,7 @@ const SongList: React.FC<SongListProps> = ({
               isPlaying={isPlaying ?? false}
               isFavorite={isFavorite}
               showIndex={showIndex}
-              showCheckbox={showCheckbox}
+              showCheckbox={showCheckbox || batchMode}
               isSelected={selectedIds.includes(song.id)}
               showRemoveFromPlaylist={showRemoveFromPlaylist}
               showAlbum={hasAlbum}

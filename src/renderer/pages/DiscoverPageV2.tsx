@@ -449,7 +449,7 @@ const DiscoverPageV2: React.FC = () => {
             ) : sourceType === 'all' ? (
               <GroupedSongList
                 onPlay={(song: Song) => { void play(song); }}
-                onAddToPlaylist={() => message.info('添加到歌单功能')}
+                onAddToPlaylist={() => {}} // 组件内部单曲弹窗闭环，此 prop 未被消费（必填占位）
                 onToggleFavorite={toggleFavorite}
                 onDownload={download}
                 selectedIds={[]}
@@ -468,7 +468,6 @@ const DiscoverPageV2: React.FC = () => {
                   onPlay={(song: Song) => { void play(song); }}
                   onToggleFavorite={toggleFavorite}
                   onDownload={download}
-                  onAddToPlaylist={() => message.info('添加到歌单功能')}
                   showCheckbox={false}
                   loading={searchLoading || searchLoadingMore}
                   emptyText="未找到相关歌曲"
