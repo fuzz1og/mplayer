@@ -45,13 +45,11 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 
 ## Git Workflow
 
-**功能开发从最新 `master` 建 worktree，完成后 PR 进 master；直接 push `master` 是例外，需明确理由。**
+**只有文档类修改可以直接 push `master`；其余修改（含 bugfix）一律从最新 `master` 建 worktree，完成后 PR，CI 绿后等人工审核，不自行合并。**
 
-- **Issue 先行**：开/认领 GitHub issue，commit/PR 用 `Closes #N`；跨端契约/IPC/来源路由先写 ADR。
-- 分支 `<type>/<slug>`；commit 用 Conventional Commits（`type(scope): 中文`，scope 取 core/desktop/mobile/ci）。
-- 合并门槛：worktree 内验证顺序全绿 + CI 绿；改 core/mobile 附真机验收。
-- 敏感信息不入库（tier3 订阅地址、API key、本地缓存）。
-- 完整流程（issue → worktree → 验证 → `gh pr create` → 清理）见 `docs/agents/git-workflow.md`。
+- **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。
+- **敏感信息不入库**：tier3 订阅地址、API key、本地缓存。
+- 分流边界（什么算文档类）、分支命名、Conventional Commits、验证顺序、PR 模板与清理的完整流程见 `docs/agents/git-workflow.md`。
 
 ## Agent skills
 

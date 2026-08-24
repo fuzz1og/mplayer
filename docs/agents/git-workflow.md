@@ -1,6 +1,9 @@
 # Git workflow: issue → worktree → PR
 
-功能开发的标准路径：**开/认领 issue → 从最新 `master` 新建本地 worktree → 在 worktree 内实现并验证 → 推分支开 PR → 合并后清理**。所有变更经 PR 进入 `master`。
+进 `master` 只有两条路，先按改动性质分流：
+
+- **默认走 worktree 路径** —— 一切非文档类修改（feat / **fix** / chore / refactor / test / perf，修 bug 与做功能同待遇）。流程：开/认领 issue → 从最新 `master` 建 worktree → 实现 + 验证 → 推分支开 PR → CI 绿后交人工审核。**agent 到此为止，不自行合并。**
+- **例外是文档直推** —— 只改 Markdown（`*.md`、`docs/**`，含 AGENTS.md / CONTEXT.md / ADR）且不碰代码、配置、依赖时，可在主克隆直接 commit + push `master`，commit 前缀 `docs:`，无需 issue。代码+文档混合改动不算文档类，整单走 worktree 路径。
 
 ## 1. 认领工作
 
@@ -18,20 +21,20 @@ cd .claude/worktrees/<slug>
 完成标准：worktree 已建好，新分支基于最新 `origin/master`。
 
 - 分支命名 `<type>/<slug>`：`feat/` `fix/` `docs/` `chore/` `refactor/`，slug 用短英文（如 `fix/mobile-parity-tier3`）。
-- 一个功能一个新 worktree + 新分支；不在旧分支上叠新工作。
+- 一个任务一个新 worktree + 新分支；不在旧分支上叠新工作。
 - `.claude/worktrees/` 已 gitignore，是默认的 worktree 位置。
 - worktree 缺 node_modules 就地 `npm install`，不要从主克隆复制（依赖漂移）。
 - 调试/测试必须在 worktree 内构建运行，不要 cd 回主克隆目录（缓存不一致难排查）。
 
 ## 3. 实现并验证
 
-在 worktree 内跑完仓库验证顺序，全绿才算任务完成：
+在 worktree 内跑全量验证，全绿才算任务完成：
 
 ```bash
-npm run lint && npm run typecheck && npm run test:run
+./scripts/verify.sh   # lint → design-lint → 双端 typecheck → test:run；加 fast 跳过测试
 ```
 
-改了 `packages/core` 追加：`npm run core:build` → mobile typecheck → mobile vitest（Metro 吃 dist 产物，不重建等于白改）。
+改了 `packages/core` 追加：`npm run core:build` 后重跑验证（Metro 吃 dist 产物，不重建等于白改）。
 
 ## 4. 提交
 
@@ -57,15 +60,15 @@ EOF
 )"
 ```
 
-- 描述三段齐全：做了什么 / 为什么 / 怎么验证的。**CI 红不合**：验证顺序绿且 CI 绿才算可合并。
+- 描述三段齐全：做了什么 / 为什么 / 怎么验证的。**CI 红不合**：验证顺序绿且 CI 绿才进入下一步。
+- **CI 绿后停在人审**：PR 交给人工 review 与合并，agent 不自行合并、不设 auto-merge。收到 review 意见回本 worktree 继续修，push 自动更新同一 PR。
 - 改了 `packages/mobile` 或 `packages/core` 的 PR 必须附真机验收结论（流程见 `.agents/skills/mobile-device-debugging`）。
 - 行为/命令/架构有变化的，同一个 PR 里更新 AGENTS.md / CONTEXT.md / 相关 ADR。
 - 开 PR 前先合入最新 `origin/master`，冲突就地解决。
-- review 意见继续在本 worktree 修，push 自动更新同一 PR。
 
-## 6. 合并后清理
+## 6. 人工合并后清理
 
-回主克隆执行：
+人工 merge 进 `master` 之后，回主克隆执行：
 
 ```bash
 git pull origin master
