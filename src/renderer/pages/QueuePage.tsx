@@ -6,6 +6,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
+import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
 import SourceBadge from '@/renderer/components/SourceBadge';
@@ -24,10 +25,11 @@ interface SortableItemProps {
   isPlaying: boolean;
   onPlay: (song: Song) => void;
   onRemove: (index: number) => void;
+  onAddToPlaylist: (song: Song) => void;
   onCoverError?: (song: Song) => void;
 }
 
-const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onCoverError }) => {
+const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onAddToPlaylist, onCoverError }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
   const coverSrc = useCachedCover(song.cover);
 
@@ -78,7 +80,14 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
       <div style={{ width: '120px', fontSize: '13px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {song.album}
       </div>
-      <div style={{ width: '60px', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ width: '90px', display: 'flex', justifyContent: 'center', gap: '4px' }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); onAddToPlaylist(song); }}
+          aria-label="加入歌单"
+          title="加入歌单"
+          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
+          <ListMusic size={14} />
+        </button>
         <button onClick={(e) => { e.stopPropagation(); onRemove(index); }}
           style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
           <Trash2 size={14} />
@@ -161,6 +170,8 @@ const QueuePage: React.FC = () => {
   const clearQueue = usePlayerStore((s) => s.clearQueue);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  // 行内「加入歌单」单曲弹窗
+  const [addToPlaylistSong, setAddToPlaylistSong] = useState<Song | null>(null);
 
   // 封面加载失败 → 按 ID 重识别换新封面并更新队列/当前歌曲（旧签名封面永远失败）
   const handleCoverError = useCallback((song: Song) => {
@@ -273,6 +284,7 @@ const QueuePage: React.FC = () => {
                     isPlaying={isPlaying}
                     onPlay={play}
                     onRemove={removeFromQueue}
+                    onAddToPlaylist={setAddToPlaylistSong}
                     onCoverError={handleCoverError}
                   />
                 ))}
@@ -281,6 +293,14 @@ const QueuePage: React.FC = () => {
           </>
         )}
       </div>
+
+      {addToPlaylistSong && (
+        <AddToPlaylistModal
+          song={addToPlaylistSong}
+          isVisible
+          onClose={() => setAddToPlaylistSong(null)}
+        />
+      )}
 
       <BatchAddToPlaylistModal
         isVisible={showBatchModal}
