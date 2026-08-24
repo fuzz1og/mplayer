@@ -250,10 +250,19 @@ async function tryTier3(song: Song, reason: string): Promise<string> {
   }
 }
 
+/** 试听版也先试 tier3 拿完整版（用户决策：试听无意义，兜底可能拿完整）：
+ *  命中返回完整版可播对象（nonFull=false）；未命中/未配置返回 null，
+ *  调用方退回直连试听并标 nonFull。tier3 未配置时 tryTier3 零成本返回。 */
+async function tryTier3Full(song: Song, reason: string): Promise<RoutedPlayable | null> {
+  const tier3Url = await tryTier3(song, reason);
+  return tier3Url ? { url: tier3Url, nonFull: false } : null;
+}
+
 /** 搜索结果被探测标记为 invalid 时，即使直连返回了 URL 也优先换 tier3；
  *  tier3 未命中（未启用/未注入/全源失败）则保留直连结果，由上层按现状处理。
- *  preview（直连试听版）**不再等待 tier3**：立即播直连试听（秒出声），由上层
- *  标 nonFull 驱动「试听版 + 换源入口」；只有 invalid（直连死链）才实时等 tier3。 */
+ *  试听版（preview/试听段）的完整版 tier3 兜底不在此函数——调用方
+ *  resolvePlayableSongRouted 判定试听后统一走 tryTier3Full（命中换完整版、
+ *  未命中退回直连试听并标 nonFull）。 */
 async function preferTier3WhenBad(song: Song, directUrl: string): Promise<string> {
   if (song.audioTag !== 'invalid') return directUrl;
   const reason = '直连 URL 已被探测标记为无效（audioTag=invalid）';
@@ -357,8 +366,16 @@ export interface RoutedPlayable {
 export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlayable> {
   // 预取缓存命中（探测阶段已解析并验证过的直链，30min TTL）→ 0 等待直接播，
   // 绝不等待预取队列；未命中才实时走完整解析链。
+  // 命中且 nonFull（试听版）→ 也走 tier3 兜底尝试拿完整版（用户决策：试听无意义，
+  // 兜底可能拿完整；tier3 未配置/未命中则退回缓存直连试听）。
   const prefetched = getPrefetchedUrl(song);
-  if (prefetched) return prefetched;
+  if (prefetched) {
+    if (prefetched.nonFull) {
+      const full = await tryTier3Full(song, `预取缓存命中但为试听版（nonFull），尝试 tier3 拿完整版`);
+      if (full) return full;
+    }
+    return prefetched;
+  }
 
   const api = requireLegs();
   // 能力门含 resolveUrlInfo（UrlInfo 自带 url，仅有 UrlInfo 也可直连解析）
@@ -374,9 +391,16 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
           // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL；
           // tier3 未命中则保留直连结果并按其权威字段判定试听版。
           const url = await preferTier3WhenBad(song, info.url);
+          const trial = isTrialUrlInfo(info, song.duration) || song.audioTag === 'preview';
+          // 试听版也走 tier3 兜底尝试拿完整版（用户决策：试听无意义，兜底可能
+          // 拿到完整版；tier3 未命中才退回直连试听）——tier3 拿到则 nonFull=false。
+          if (trial && url === info.url) {
+            const full = await tryTier3Full(song, `直连为试听版（nonFull），尝试 tier3 拿完整版`);
+            if (full) return full;
+          }
           return {
             url,
-            nonFull: url === info.url ? isTrialUrlInfo(info, song.duration) || song.audioTag === 'preview' : false,
+            nonFull: trial && url === info.url,
           };
         }
         // UrlInfo 存在但 url 为空（无版权/VIP）→ tier3 兜底（默认关）。
@@ -390,7 +414,11 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
       // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL。
       const u = await preferTier3WhenBad(song, url);
       // 搜索结果已被探测标为试听版（audioTag=preview，如酷我 VIP 歌的 M500 试听）：
-      // 即使直连解析成功也标记 nonFull，驱动 UI 提示“试听版，可换源”。
+      // 试听也走 tier3 兜底尝试拿完整版（tier3 未命中才退回直连试听）。
+      if (song.audioTag === 'preview' && u === url) {
+        const full = await tryTier3Full(song, `直连为试听版（audioTag=preview），尝试 tier3 拿完整版`);
+        if (full) return full;
+      }
       return { url: u, nonFull: u === url && song.audioTag === 'preview' };
     }
     // 直连返回空串（无版权/VIP）→ tier3 兜底（默认关）；失败保持空串交换元层。

@@ -48,6 +48,7 @@ export type { SongFileNameParts, SongFileNameDeps } from './utils/downloadFileNa
 export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, probeSwapCandidates, applySwap } from './shared/sourceSwap.js';
+export { songUsesSongidLyrics, isSodaSource } from './shared/songLyrics.js';
 export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
 export { resolvePlayableUrl, resolvePlayableSong, stripSourceIdPrefix } from './shared/resolvePlayableUrl.js';
 export type { UrlResolver, PlayableSong } from './shared/resolvePlayableUrl.js';
@@ -119,8 +120,6 @@ export { lrcSidecarName, looksLikeLyrics } from './download/lyrics.js';
 export { estimateDownloadProgress } from './download/progress.js';
 export type { ProgressInput } from './download/progress.js';
 export { takeNextQueued, retryBackoffMs, DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_RETRIES } from './download/queue.js';
-export { gateDownloadBitrate, estimateBitrateKbps, BITRATE_GATE_OPTIONS } from './download/quality.js';
-export type { BitrateGate, QualityGateResult } from './download/quality.js';
 export { kugouDirectClient, ensureKugouCookie, resolveKugouLyricUrl } from './api/kugouDirect.js';
 export { classifyLength, isTrialUrlInfo } from './api/audioProbe.js';
 export type { LengthClass, UrlInfo } from './api/audioProbe.js';

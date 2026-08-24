@@ -229,11 +229,32 @@ export class DownloadService {
     return task;
   }
 
-  addBatchDownloads(songs: Song[]): DownloadTask[] {
+  /**
+   * 批量下载（下载前可播性预检 #181）：先批量探测直连可播性，
+   * 死链（invalid）直接跳过不进队列，避免对失效链接发起下载。
+   * 探测走 probeSongsBatch（直连-only，短超时，不触发 tier3）。
+   */
+  async addBatchDownloads(songs: Song[]): Promise<DownloadTask[]> {
     const tasks: DownloadTask[] = [];
     const now = Date.now();
 
-    songs.forEach((song, index) => {
+    let playable = songs;
+    if (Array.isArray(songs) && songs.length > 0) {
+      try {
+        const tags = await musicApi.probeSongsBatch(songs);
+        const deadIds = new Set(tags.filter((t) => t.tag === 'invalid').map((t) => t.songId));
+        if (deadIds.size > 0) {
+          console.warn(`[DownloadService] 批量下载预检跳过 ${deadIds.size} 首死链`);
+          playable = songs.filter((s) => !deadIds.has(s.id));
+        }
+      } catch (probeError) {
+        // 预检失败不阻断下载：仍按原列表入队（下载时逐首解析仍会拦截死链）
+        console.error('[DownloadService] 批量下载预检失败，按原列表入队:', probeError);
+        playable = songs;
+      }
+    }
+
+    playable.forEach((song, index) => {
       try {
         // 验证歌曲数据：url 由下载时按身份懒解析（#171 后列表歌 url 恒空），不作前置要求
         if (!song.id || !song.name) {

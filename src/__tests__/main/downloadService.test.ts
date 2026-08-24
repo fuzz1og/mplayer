@@ -30,6 +30,9 @@ const musicApiMock = vi.hoisted(() => ({
   getAudioUrl: vi.fn(async (u: string) => u),
   getLyrics: vi.fn(async () => ''),
   fillSongUrls: vi.fn(),
+  probeSongsBatch: vi.fn(async (songs: { id: string }[]) =>
+    songs.map((s) => ({ songId: s.id, tag: 'valid' as const }))
+  ),
 }));
 
 // 只覆写 routed 解析器与重试退避，其余 core 导出保持真实现
@@ -148,7 +151,7 @@ describe('DownloadService (T15 多格式标签 + .lrc 侧车)', () => {
     serveDownload('audio/mpeg');
     axiosMock.get.mockResolvedValueOnce({ data: Buffer.from([0xff, 0xfb]), headers: { 'content-type': 'image/jpeg' } });
 
-    const tasks = service.addBatchDownloads([song]);
+    const tasks = await service.addBatchDownloads([song]);
     await ticks(); // 等待队列异步完成
 
     expect(tasks[0].status).toBe('completed');
@@ -163,7 +166,7 @@ describe('DownloadService (T15 多格式标签 + .lrc 侧车)', () => {
   it('FLAC Content-Type 产物存为 .flac 且不触发 ID3 标签写入（不错灌）', async () => {
     const song = makeSong();
     serveDownload('audio/flac', 'fLaC-HEADER-BYTES');
-    const tasks = service.addBatchDownloads([song]);
+    const tasks = await service.addBatchDownloads([song]);
     await ticks();
 
     expect(tasks[0].status).toBe('completed');
@@ -176,7 +179,7 @@ describe('DownloadService (T15 多格式标签 + .lrc 侧车)', () => {
   it('无歌词（lrc 为空）时不写 .lrc 侧车', async () => {
     const song = makeSong();
     serveDownload('audio/mpeg');
-    const tasks = service.addBatchDownloads([song]);
+    const tasks = await service.addBatchDownloads([song]);
     await ticks();
 
     expect(tasks[0].status).toBe('completed');
@@ -187,7 +190,7 @@ describe('DownloadService (T15 多格式标签 + .lrc 侧车)', () => {
   it('未知总量进度不卡 0%（进度回调给出软进度 > 0）', async () => {
     const song = makeSong();
     serveDownload('audio/mpeg');
-    const tasks = service.addBatchDownloads([song]);
+    const tasks = await service.addBatchDownloads([song]);
     await ticks();
 
     // 流下载结束时置 100；进度回调期间 >0（软进度），不再停留在 0
@@ -227,7 +230,7 @@ describe('DownloadService 按身份解析（resolve-by-identity）', () => {
     routedResolveMock.resolve.mockResolvedValue({ url: 'https://cdn.example.com/resolved.flac', nonFull: false });
     serveDownload('audio/flac');
 
-    const tasks = service.addBatchDownloads([song]);
+    const tasks = await service.addBatchDownloads([song]);
     await ticks();
 
     // 未被「歌曲数据不完整」静默跳过
@@ -255,7 +258,7 @@ describe('DownloadService 按身份解析（resolve-by-identity）', () => {
     routedResolveMock.resolve.mockResolvedValue({ url: 'https://cdn.example.com/fresh.mp3', nonFull: false });
     serveDownload('audio/mpeg');
 
-    const tasks = service.addBatchDownloads([song]);
+    const tasks = await service.addBatchDownloads([song]);
     await ticks();
 
     expect(tasks[0].status).toBe('completed');
@@ -270,7 +273,7 @@ describe('DownloadService 按身份解析（resolve-by-identity）', () => {
     const song = makeSong({ url: '' });
     routedResolveMock.resolve.mockResolvedValue({ url: '', nonFull: false });
 
-    const tasks = service.addBatchDownloads([song]);
+    const tasks = await service.addBatchDownloads([song]);
     await ticks();
 
     expect(tasks[0].status).toBe('error');

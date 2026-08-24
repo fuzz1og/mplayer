@@ -985,6 +985,47 @@ export function mapQQToplistItem(item: any, index: number): HotlistSong | null {
   };
 }
 
+/** 汽水分享页结构化歌词单字（sentences[].words[] 项，行内逐字时间轴）。 */
+export interface SodaLyricWord {
+  text: string;
+  startMs: number;
+  endMs: number;
+}
+
+/** 汽水分享页结构化歌词行（sentences[] 项，type=krc/lrc）。 */
+export interface SodaLyricSentence {
+  startMs: number;
+  endMs: number;
+  text: string;
+  /** 逐字时间轴；缺省/为空时行文本取整句 text。 */
+  words?: SodaLyricWord[];
+  type?: string;
+}
+
+/**
+ * 汽水分享页结构化歌词（sentences[]）→ LRC 文本（纯函数，可单测）。
+ * 输入为分享页 _ROUTER_DATA.audioWithLyricsOption.lyrics.sentences。
+ * 行文本取 words[].text 拼接（回退整句 text）；时间轴 [mm:ss.xxx]。
+ */
+export function sodaSentencesToLrc(sentences: SodaLyricSentence[] | null | undefined): string {
+  if (!Array.isArray(sentences) || sentences.length === 0) return '';
+  const lines: string[] = [];
+  for (const s of sentences) {
+    if (typeof s?.startMs !== 'number') continue;
+    const text =
+      Array.isArray(s.words) && s.words.length > 0
+        ? s.words.map((w) => w?.text ?? '').join('')
+        : s.text ?? '';
+    if (!text.trim()) continue;
+    const ms = s.startMs;
+    const mm = Math.floor(ms / 60000);
+    const ss = Math.floor((ms % 60000) / 1000);
+    const xxx = ms % 1000;
+    lines.push(`[${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}.${String(xxx).padStart(3, '0')}]${text}`);
+  }
+  return lines.join('\n');
+}
+
 export const musicApi = {
   /**
    * 构建汽水音乐封面 URL
@@ -1015,7 +1056,9 @@ export const musicApi = {
     params.set('device_platform', 'web');
     params.set('channel', 'pc_web');
 
-    const apiURL = 'https://api.qishui.com/luna/pc/search/track?' + params.toString();
+    // 路径要点：luna/search/track（无 pc 段）。旧 luna/pc/search/track 返回 200 空 body（接口已改版），
+    // 无 pc 段的路径免登录可用（2026-08 实测：大陆 IP 直连返回完整 result_groups）。
+    const apiURL = 'https://api.qishui.com/luna/search/track?' + params.toString();
     const res = await request({
       method: 'GET',
       url: apiURL,
@@ -1061,7 +1104,25 @@ export const musicApi = {
   },
 
 
-  async fetchSodaSharePage(trackId: string): Promise<{ audioUrl: string; name: string; artist: string; cover: string } | null> {
+  /**
+   * 解析汽水分享页（music.douyin.com/qishui/share/track，免登录）。
+   *
+   * _ROUTER_DATA.audioWithLyricsOption 同时含：
+   * - url：音频直链（encrypt=false，未加密；付费歌为试听段）
+   * - lyrics.sentences[]：结构化歌词（startMs/endMs/text/words，lyricType=krc），
+   *   免登录即可拿，无需 track_v2 的登录态 Cookie
+   * - trackInfo.duration：权威完整时长（ms），供探测 resolveUrlInfo 时长校验
+   *
+   * 返回 lyrics 为 LRC 文本（[mm:ss.xxx]行），无歌词返回空串。
+   */
+  async fetchSodaSharePage(trackId: string): Promise<{
+    audioUrl: string;
+    name: string;
+    artist: string;
+    cover: string;
+    lyrics: string;
+    durationMs: number;
+  } | null> {
     const shareUrl = `https://music.douyin.com/qishui/share/track?track_id=${trackId}`;
     try {
       const response = await axios.get(shareUrl, {
@@ -1081,11 +1142,20 @@ export const musicApi = {
       });
       const audio = data?.loaderData?.track_page?.audioWithLyricsOption;
       if (!audio?.url) return null;
+
+      // 结构化歌词 → LRC 文本（sodaSentencesToLrc 纯函数，可单测）
+      const sentences = audio?.lyrics?.sentences;
+      const lyrics = sodaSentencesToLrc(sentences);
+
       return {
         audioUrl: decodeURIComponent(audio.url),
         name: audio.trackName || '',
         artist: audio.artistName || '',
         cover: audio.coverURL || '',
+        lyrics,
+        // trackInfo.duration 为权威完整时长（ms），供探测 resolveUrlInfo 时长校验
+        // （playTime）；audio.duration 为浮点秒，两者一致
+        durationMs: typeof audio?.trackInfo?.duration === 'number' ? audio.trackInfo.duration : 0,
       };
     } catch {
       return null;
@@ -1106,6 +1176,9 @@ export const musicApi = {
       return page.audioUrl;
     }
 
+    // 注意：track_v2 匿名请求 2026-08 实测返回 200 空 body（需 PC 客户端登录态
+    // Cookie，见 CONTEXT.md「汽水歌词」），下述 fallback 基本必空，保留仅为历史
+    // 兼容（若未来接入登录态凭证可复用此段）；分享页失败时返回 '' 由调用方兜底。
     const params = new URLSearchParams();
     params.set('track_id', trackId);
     params.set('media_type', 'track');
@@ -1141,6 +1214,26 @@ export const musicApi = {
       return result;
     } catch (error) {
       console.error('获取汽水音乐音频 URL 失败:', error);
+      return '';
+    }
+  },
+
+  /**
+   * 获取汽水音乐歌词（分享页免登录结构化歌词 → LRC 文本）。
+   * 分享页 audioWithLyricsOption.lyrics.sentences 已是结构化时间轴，
+   * 无需 track_v2 的登录态 Cookie；无歌词返回空串。
+   */
+  async getSodaLyrics(trackId: string): Promise<string> {
+    if (!trackId) return '';
+    const cacheKey = `soda_lyric_${trackId}`;
+    const cached = cacheManager.getLyricsCache(cacheKey);
+    if (cached !== null) return cached;
+    try {
+      const page = await this.fetchSodaSharePage(trackId);
+      const lyrics = page?.lyrics || '';
+      if (lyrics) cacheManager.setLyricsCache(cacheKey, lyrics);
+      return lyrics;
+    } catch {
       return '';
     }
   },

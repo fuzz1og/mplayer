@@ -43,3 +43,7 @@ _Avoid_: 死链、过期 URL、旧 API 地址
 **预取缓存**:
 探测阶段解析所得直链的短期缓存；播放命中时零等待出声，失效或不完整结果不入缓存。
 _Avoid_: 探测缓存、URL 缓存、秒播缓存
+
+**汽水歌词**:
+汽水歌词可通过**分享页免登录**获取：`music.douyin.com/qishui/share/track?track_id={id}` 的 `_ROUTER_DATA.audioWithLyricsOption.lyrics.sentences[]`（结构化时间轴 startMs/endMs/text/words，lyricType=krc），无需登录态；分享页同时返回音频直链（encrypt=false 未加密）与 `trackInfo.playable_range`（试听窗口，Cover 歌也有该字段却给完整版，**不能**作试听/完整判别依据；可靠判别 = `trackInfo.preview.duration` 或实际音频时长）。track_v2 接口（`api.qishui.com/luna/pc/track_v2`）也含 `lyric.content`（KRC 文本），但需 PC 客户端登录态 Cookie（sessionid），匿名请求 200 空 body——完整版/高音质音频亦需凭证 + CENC 解密（社区方案 qishui-decrypt / musicdl，软件不实现，仅记录）。搜索接口当前路径为 `api.qishui.com/luna/search/track`（无 pc 段，免登录）；旧 `luna/pc/search/track` 已失效返回空 body。桌面歌词接线：`loadLyricsWithRetry` 的 soda 分支调 `getSodaLyrics`（分享页转 LRC，lrc=URL 契约不变）。移动端接线：PlayerOverlay 的 soda 歌 cacheKey 用 songid、load 走 `getSodaLyrics` 直取文本；`fetchLrcInBackground` 对 soda 只补封面不搜索歌词。双端歌词决策（songid 直取/搜索补全/soda 特判）共用 core `songLyrics` helper 防漂移。下载侧 .lrc 仍按 song.lrc（URL）驱动，soda 恒空故不生成——留待下载侧专项。
+_Avoid_: 匿名 track_v2、汽水歌词源、soda 歌词（匿名直连取不回）
