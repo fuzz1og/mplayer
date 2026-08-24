@@ -147,6 +147,11 @@ const initialQueue = loadQueue();
 // --- URL 预解析缓存 ---
 const prefetchedUrls = new Map<string, string>();
 
+/** 测试专用：清空模块级预取缓存，保证用例间隔离 */
+export function __clearPrefetchedUrlsForTests(): void {
+  prefetchedUrls.clear();
+}
+
 /**
  * 获取队列中下一首歌（不改变播放状态）
  * 导出供测试使用
@@ -161,9 +166,10 @@ export function getNextSongInQueue(state: PlayerStoreState): Song | null {
 function prefetchNextUrl(state: PlayerStoreState): void {
   const nextSong = getNextSongInQueue(state);
   if (!nextSong || nextSong.sourceType === 'local') return;
-  if (!nextSong.url) return;
 
-  const cacheKey = `${nextSong.sourceType}:${nextSong.url}`;
+  // #171 后列表歌 url 恒为空串，预取不得以 url 为前提；
+  // 缓存键必须含歌曲 id，否则同源空 url 歌曲共享一个 key 会串歌
+  const cacheKey = `${nextSong.sourceType}:${nextSong.id}`;
   if (prefetchedUrls.has(cacheKey)) return;
 
   // T12：带试听版检测的播放解析（nonFull 标记）；预取只关心 URL
@@ -223,7 +229,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           console.error('获取汽水音乐可播放 URL 失败:', urlError);
         }
       } else if (song.sourceType !== 'local') {
-        const cacheKey = `${song.sourceType}:${song.url}`;
+        // 与 prefetchNextUrl 的缓存键保持一致（含歌曲 id，防止空 url 同源串歌）
+        const cacheKey = `${song.sourceType}:${song.id}`;
         const prefetched = prefetchedUrls.get(cacheKey);
         if (prefetched) {
           realUrl = prefetched;
