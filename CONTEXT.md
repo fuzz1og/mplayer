@@ -45,5 +45,5 @@ _Avoid_: 死链、过期 URL、旧 API 地址
 _Avoid_: 探测缓存、URL 缓存、秒播缓存
 
 **汽水歌词**:
-汽水源站（qishui / music.douyin.com）无公开歌词接口——搜索、分享页、track_v2 均不返回歌词；汽水歌曲因此从不携带 lrc URL。歌词兜底链（移动端 fetchLrcInBackground/searchStrictMatch、桌面 loadLyricsWithRetry 的搜索补全）对汽水源实际取不回歌词（searchSongById 对 soda 返回 null，searchSongsSoda 恒空 lrc），故汽水歌曲无歌词展示，下载侧车也不生成 .lrc。
-_Avoid_: 汽水歌词源、soda 歌词
+汽水歌词可通过**分享页免登录**获取：`music.douyin.com/qishui/share/track?track_id={id}` 的 `_ROUTER_DATA.audioWithLyricsOption.lyrics.sentences[]`（结构化时间轴 startMs/endMs/text/words，lyricType=krc），无需登录态；分享页同时返回音频直链（encrypt=false 未加密）与 `trackInfo.playable_range`（试听窗口，付费歌非空 = 试听版）。track_v2 接口（`api.qishui.com/luna/pc/track_v2`）也含 `lyric.content`（KRC 文本），但需 PC 客户端登录态 Cookie（sessionid），匿名请求 200 空 body——完整版/高音质音频亦需凭证 + CENC 解密（社区方案 qishui-decrypt / musicdl，软件不实现，仅记录）。搜索接口当前路径为 `api.qishui.com/luna/search/track`（无 pc 段，免登录）；旧 `luna/pc/search/track` 已失效返回空 body。桌面歌词接线：`loadLyricsWithRetry` 的 soda 分支调 `getSodaLyrics`（分享页转 LRC，lrc=URL 契约不变）。移动端（audioPlayer fetchLrcInBackground / PlayerOverlay）未接线——soda 歌词直取文本需单独的 getSodaLyrics 分支，留待移动端专项。
+_Avoid_: 匿名 track_v2、汽水歌词源、soda 歌词（匿名直连取不回）

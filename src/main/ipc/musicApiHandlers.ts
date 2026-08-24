@@ -63,6 +63,7 @@ export function registerMusicApiCall(api: MusicApi): void {
     invalidateCoverUrl: (coverUrl: string) => api.invalidateCoverUrl(coverUrl),
     fillSongUrls: (songs: Song[], albumName?: string) => api.fillSongUrls(songs, albumName),
     getSodaAudioUrl: (trackId: string) => api.getSodaAudioUrl(trackId),
+    getSodaLyrics: (trackId: string) => api.getSodaLyrics(trackId),
     parseSodaShareLink: (link: string) => api.parseSodaShareLink(link),
     searchSongsRouted: (k: string, p: number, s: SourceKey) => api.searchSongsRouted(k, p, s),
     resolvePlayableUrlRouted: (song: Song) => api.resolvePlayableUrlRouted(song),

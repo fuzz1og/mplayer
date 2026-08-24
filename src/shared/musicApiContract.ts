@@ -42,6 +42,7 @@ export const MUSIC_API_METHODS = [
   'invalidateCoverUrl',
   'fillSongUrls',
   'getSodaAudioUrl',
+  'getSodaLyrics',
   'parseSodaShareLink',
   'searchSongsRouted',
   'resolvePlayableUrlRouted',

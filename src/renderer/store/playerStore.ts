@@ -35,15 +35,21 @@ async function loadLyricsWithRetry(song: Song): Promise<string> {
     callMusicApi('getLyrics', lrcUrl);
 
   let lrcUrl = song.lrc && song.lrc.trim() !== '' ? song.lrc : '';
-  // 网易直连搜索（neteaseDirect.mapTrack）不带 lrc 字段，再搜索也拿不到；
-  // 非网易源才回退「搜索补全 lrc URL」。
-  if (!lrcUrl && song.sourceType !== 'netease') {
+  // 网易/汽水直连搜索都不带 lrc 字段，再搜索也拿不到：
+  // - 网易（neteaseDirect.mapTrack）→ 按 songId 直取歌词
+  // - 汽水（searchSongsSoda）→ 分享页免登录结构化歌词（getSodaLyrics）
+  if (!lrcUrl && song.sourceType !== 'netease' && song.sourceType !== 'soda') {
     lrcUrl = await searchLrc();
   }
   if (!lrcUrl) {
     // 网易：按 songId 直取歌词（music.163.com/api/song/lyric 明文）
     if (song.sourceType === 'netease' && song.id) {
       return callMusicApi('getLyricsBySongId', String(song.id));
+    }
+    // 汽水：分享页免登录结构化歌词（searchSongsSoda 不带 lrc，track_v2 需登录态，
+    // 分享页 _ROUTER_DATA.lyrics.sentences 免登录可拿，getSodaLyrics 转 LRC 文本）
+    if (song.sourceType === 'soda' && song.id) {
+      return callMusicApi('getSodaLyrics', String(song.id));
     }
     return '';
   }
