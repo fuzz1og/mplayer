@@ -1,1 +1,5 @@
 blank_issues_enabled: false
+contact_links:
+  - name: Discussions
+    url: https://github.com/fuzz1og/mplayer/discussions
+    about: 使用疑问、非 bug 非 feature 的讨论（如"某源失效了"、"求导入歌单"）请发到 Discussions

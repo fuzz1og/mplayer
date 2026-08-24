@@ -10,6 +10,18 @@ body:
       description: 使用场景、痛点，以及为什么现有功能不够
     validations:
       required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 影响端
+      description: 该改动会落在哪一端（可多选）
+      multiple: true
+      options:
+        - desktop（Electron 桌面端）
+        - mobile（Expo 移动端）
+        - core（双端共享逻辑）
+    validations:
+      required: true
   - type: textarea
     id: solution
     attributes:
@@ -17,6 +29,18 @@ body:
       description: 你希望怎么做（界面、交互、行为均可）
     validations:
       required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 怎么算完成？至少 1 条可测、可演示的标准（实现方据此判断 Done）
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: 本次不做（out-of-scope）
+      description: 明确排除的范围，防止开发中加戏
   - type: textarea
     id: alternatives
     attributes:

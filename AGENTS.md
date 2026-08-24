@@ -47,7 +47,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 
 **只有文档类修改可以直接 push `master`；其余修改（含 bugfix）一律从最新 `master` 建 worktree，完成后 PR，CI 绿后等人工审核，不自行合并。**
 
-- **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。
+- **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。issue/PR 模板见 `.github/`（issue 标题 `[Bug]:` / `[Feature]:` 前缀；PR 正文用模板，验证清单含双端核对）。
 - **敏感信息不入库**：tier3 订阅地址、API key、本地缓存。
 - 分流边界（什么算文档类）、分支命名、Conventional Commits、验证顺序、PR 模板与清理的完整流程见 `docs/agents/git-workflow.md`。
 

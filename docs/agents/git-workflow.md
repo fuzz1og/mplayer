@@ -8,6 +8,7 @@
 ## 1. 认领工作
 
 - 动手前确认有对应 GitHub issue；没有就先建（操作命令见 `issue-tracker.md`）。认领已有 issue 就 assign 自己。
+- **issue 标题用模板预置前缀**（`[Bug]:` / `[Feature]:`，见 `.github/ISSUE_TEMPLATE/`），不要套 `type(scope)` —— 那套只用于 commit 与 PR 标题。
 - 涉及跨端契约、IPC 协议、来源路由策略这类架构取舍：先写 ADR（`docs/adr/`）再动工。
 
 ## 2. 开 worktree
@@ -48,19 +49,11 @@ Commit 信息用 Conventional Commits：`type(scope): 中文描述`。type 取 f
 
 ```bash
 git push -u origin <branch>
-gh pr create --base master --title "<type(scope): 中文摘要>" --body "$(cat <<'EOF'
-## 做了什么
-
-## 为什么
-（关联 issue，写 Closes #N）
-
-## 怎么验证的
-（贴 lint/typecheck/test 结果或手动步骤）
-EOF
-)"
+gh pr create --base master --title "<type(scope): 中文摘要>" --body-file .github/PULL_REQUEST_TEMPLATE.md
 ```
 
-- 描述三段齐全：做了什么 / 为什么 / 怎么验证的。**CI 红不合**：验证顺序绿且 CI 绿才进入下一步。
+- **PR 模板是唯一事实源**：正文一律用 `.github/PULL_REQUEST_TEMPLATE.md`（四段：变更内容 / 关联 issue / 验证 / 备注），流程文档只引用、不重写模板内容，不要在 `--body` 里手写别的格式。
+- 验证清单逐项勾选（双端核对）：`core:build`、双端 typecheck、真机验收、UI 截图、文档同步。**CI 红不合**：验证顺序绿且 CI 绿才进入下一步。
 - **CI 绿后停在人审**：PR 交给人工 review 与合并，agent 不自行合并、不设 auto-merge。收到 review 意见回本 worktree 继续修，push 自动更新同一 PR。
 - 改了 `packages/mobile` 或 `packages/core` 的 PR 必须附真机验收结论（流程见 `.agents/skills/mobile-device-debugging`）。
 - 行为/命令/架构有变化的，同一个 PR 里更新 AGENTS.md / CONTEXT.md / 相关 ADR。

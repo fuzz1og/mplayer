@@ -28,11 +28,39 @@ body:
         - iOS (Expo)
     validations:
       required: true
-  - type: textarea
-    id: what-happened
+  - type: dropdown
+    id: source
     attributes:
-      label: 发生了什么？
-      description: 期望行为 vs 实际行为
+      label: 涉及来源
+      description: 若与某个具体音乐源相关，请勾选（可多选）
+      multiple: true
+      options:
+        - netease
+        - qq
+        - kugou
+        - migu
+        - kuwo
+        - qianqian
+        - soda
+        - 不限 / 不确定
+  - type: input
+    id: regression
+    attributes:
+      label: 最近正常版本
+      description: 如果某版本之前正常、之后开始出问题，填那个正常版本号（帮助定位回归）
+      placeholder: e.g. 1.5.2 正常，1.6.0 开始出错
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 你希望发生什么
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 实际发生了什么（与期望行为的差异）
     validations:
       required: true
   - type: textarea
@@ -43,6 +71,16 @@ body:
         1. 打开 ...
         2. 点击 ...
         3. 看到报错 ...
+    validations:
+      required: true
+  - type: dropdown
+    id: reproducible
+    attributes:
+      label: 是否可稳定复现
+      options:
+        - 每次必现
+        - 偶尔出现（附触发频率）
+        - 只出现一次
   - type: textarea
     id: logs
     attributes:
