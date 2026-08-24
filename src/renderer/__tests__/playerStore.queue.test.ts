@@ -50,7 +50,7 @@ vi.mock('../utils/songCoverRefresh', () => ({
   refreshSongCover: vi.fn(async () => null),
 }));
 
-import { usePlayerStore } from '../store/playerStore';
+import { usePlayerStore, __clearPrefetchedUrlsForTests } from '../store/playerStore';
 
 function song(id: string, name = '晴天', url = ''): Song {
   return {
@@ -82,6 +82,7 @@ function defaultCallMusicApi(): void {
 }
 
 beforeEach(() => {
+  __clearPrefetchedUrlsForTests();
   usePlayerStore.setState({
     currentSong: null,
     isPlaying: false,
@@ -275,5 +276,88 @@ describe('播放链路：URL 解析 / 死链 fresh / 加载失败', () => {
     expect(audioPlayerMock.player.load).not.toHaveBeenCalled();
     expect(audioPlayerMock.player.play).not.toHaveBeenCalled();
     expect(usePlayerStore.getState().currentPlaylistIndex).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 队列下一首预取（#171 后列表歌 url 恒空：预取不得依赖 url；缓存键必须含歌曲 id）
+// ---------------------------------------------------------------------------
+describe('队列下一首预取（预取缓存键）', () => {
+  function routedResolverPerSong(): void {
+    callMusicApiMock.mockImplementation(async (method: string, target?: { id?: string }) => {
+      if (method === 'resolvePlayableSongRouted') {
+        const url = `https://resolved.example.com/${target?.id}.mp3`;
+        return { url, nonFull: false };
+      }
+      return undefined;
+    });
+  }
+
+  it('下一首即使 url 为空也触发预解析（#171 后搜索结果一律无 url）', async () => {
+    routedResolverPerSong();
+    const current = song('pf-a', '晴天');
+    const next = song('pf-b', '稻香'); // url 为空
+    usePlayerStore.setState({
+      currentPlaylist: [current, next], currentPlaylistIndex: 0,
+      currentSong: current, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(current);
+    await vi.waitFor(() =>
+      expect(callMusicApiMock).toHaveBeenCalledWith(
+        'resolvePlayableSongRouted',
+        expect.objectContaining({ id: 'pf-b' }),
+      ),
+    );
+  });
+
+  it('不同歌曲互不串缓存：预取了下一首，手动播放第三首仍走自己的解析', async () => {
+    routedResolverPerSong();
+    const a = song('qc-a', '晴天');
+    const b = song('qc-b', '稻香');
+    const c = song('qc-c', '七里香');
+    usePlayerStore.setState({
+      currentPlaylist: [a, b, c], currentPlaylistIndex: 0,
+      currentSong: a, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(a);
+    // 等预取把下一首（b）的解析结果写入缓存
+    await vi.waitFor(() =>
+      expect(callMusicApiMock).toHaveBeenCalledWith(
+        'resolvePlayableSongRouted',
+        expect.objectContaining({ id: 'qc-b' }),
+      ),
+    );
+
+    // 用户手动点播第三首：不得命中 b 的预取结果
+    await usePlayerStore.getState().play(c);
+
+    expect(callMusicApiMock).toHaveBeenCalledWith(
+      'resolvePlayableSongRouted',
+      expect.objectContaining({ id: 'qc-c' }),
+    );
+    expect(audioPlayerMock.player.load).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'qc-c', url: 'https://resolved.example.com/qc-c.mp3' }),
+    );
+  });
+
+  it('local 源下一首不预取', async () => {
+    routedResolverPerSong();
+    const current = song('pl-a', '晴天', 'https://audio.example.com/a.mp3');
+    const localNext: Song = { ...song('pl-local', '本地demo'), sourceType: 'local', url: '/music/demo.mp3' };
+    usePlayerStore.setState({
+      currentPlaylist: [current, localNext], currentPlaylistIndex: 0,
+      currentSong: current, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(current);
+    // 给 fire-and-forget 预取留出误触发的机会
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(callMusicApiMock).not.toHaveBeenCalledWith(
+      'resolvePlayableSongRouted',
+      expect.objectContaining({ id: 'pl-local' }),
+    );
   });
 });
