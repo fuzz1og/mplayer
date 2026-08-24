@@ -22,7 +22,7 @@ import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+import { topChromeHeight, bottomChromeHeight, SEARCH_TAIL_PADDING } from '../../components/chromeMetrics';
 import TextTabs from '../../components/TextTabs';
 
 const SEARCH_TABS: { key: SearchTab; label: string }[] = [
@@ -146,7 +146,7 @@ export default function SearchPage() {
           numColumns={3}
           contentContainerStyle={[
             styles.artistGrid,
-            { paddingBottom: bottomChromeHeight(insets.bottom, false) + 16 },
+            { paddingBottom: bottomChromeHeight(insets.bottom, false) + SEARCH_TAIL_PADDING },
           ]}
           renderItem={({ item: a }) => (
             <TouchableOpacity
@@ -194,7 +194,7 @@ function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: Results
       key="song-results"
       data={results}
       keyExtractor={(item) => item.key}
-      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + 16 }}
+      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + SEARCH_TAIL_PADDING }}
       renderItem={({ item: group }) => (
         <View style={styles.groupSection}>
           {(group.name || group.artist) ? (
@@ -228,7 +228,7 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
       key="song-results"
       data={results}
       keyExtractor={(item) => item.key}
-      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + 16 }}
+      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + SEARCH_TAIL_PADDING }}
       renderItem={({ item: group }) => (
         <View style={styles.groupSection}>
           {group.name ? (

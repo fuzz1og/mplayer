@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+import { topChromeHeight, bottomChromeHeight, SECTION_TAIL_PADDING } from '../../components/chromeMetrics';
 
 import {
   View,
@@ -90,7 +90,7 @@ export default function PlaylistsPage() {
         renderItem={renderItem}
         contentContainerStyle={[
           styles.list,
-          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + 32 },
+          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + SECTION_TAIL_PADDING },
         ]}
         ListHeaderComponent={() => (
           <>

@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
+import { TAB_PAD_TOP, TAB_ICON_SIZE, TAB_LABEL_HEIGHT, TAB_PAD_BOTTOM, TAB_SAFE_INSET_MIN } from '../../components/chromeMetrics';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
 import ScalePress from '../../components/ScalePress';
@@ -15,10 +16,7 @@ import ScalePress from '../../components/ScalePress';
 // tab bar 内容高度（paddingTop + 图标 + 标签行 + paddingBottom）：
 // 用确定性计算替代 onLayout 测量——测量值一旦偏小（如动画/初始态），
 // overflow:hidden 会把标签裁掉，看起来像迷你播放栏盖住了 tab bar
-const TAB_PAD_TOP = 6;
-const TAB_ICON_SIZE = 22;
-const TAB_LABEL_HEIGHT = 15; // 标签字号 11（micro 同级；带 lineHeight 成对样式不套变体）+ marginTop 2
-const TAB_PAD_BOTTOM = 24;
+// 各 TAB_* 常量来自 chromeMetrics（唯一事实源），此处不重复定义
 
 function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) {
   const { colors } = useTheme();
@@ -30,7 +28,7 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
   const slideAnim = useRef(new Animated.Value(0)).current;
   const heightAnim = useRef(new Animated.Value(0)).current;
   const tabBarHeight =
-    TAB_PAD_TOP + TAB_ICON_SIZE + TAB_LABEL_HEIGHT + TAB_PAD_BOTTOM + Math.max(0, insets.bottom - 8);
+    TAB_PAD_TOP + TAB_ICON_SIZE + TAB_LABEL_HEIGHT + TAB_PAD_BOTTOM + Math.max(0, insets.bottom - TAB_SAFE_INSET_MIN);
 
   useEffect(() => {
     // 依赖 pathname 而非仅 isSearch：进入详情页再返回时强制重新同步动画，
@@ -72,7 +70,7 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
       </View>
       <Animated.View style={{ overflow: 'hidden', height: containerHeight }}>
         <Animated.View style={{ transform: [{ translateY }] }}>
-          <View style={[tabBarStyles.container, { paddingBottom: TAB_PAD_BOTTOM + Math.max(0, insets.bottom - 8) }]}>
+          <View style={[tabBarStyles.container, { paddingBottom: TAB_PAD_BOTTOM + Math.max(0, insets.bottom - TAB_SAFE_INSET_MIN) }]}>
           {state.routes.map((route: any, i: number) => {
             // 搜索 tab 不显示 tab 按钮
             if (route.name === 'search') return null;

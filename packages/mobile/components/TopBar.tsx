@@ -12,6 +12,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { useSourceStore, SOURCE_OPTION_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
+import { TOP_BAR_PAD_VERTICAL, SEARCH_BAR_HEIGHT } from './chromeMetrics';
 import ScalePress from './ScalePress';
 
 const SOURCE_OPTIONS: { key: SourceOption; icon: LucideIcon }[] = [
@@ -56,7 +57,7 @@ export default function TopBar() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + TOP_BAR_PAD_VERTICAL }]}>
       {isSearchTab && (
         <ScalePress
           onPress={() => router.replace('/')}
@@ -147,7 +148,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: TOP_BAR_PAD_VERTICAL,
     // paddingTop 由组件按 insets.top 动态注入（写死 52 在无刘海机型空一大截）
     // 悬浮 chrome：半透明材质让内容从下穿过（M2），无发丝硬分隔
     backgroundColor: colors.bgPlayer,
@@ -159,7 +160,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.inputBg,
     borderRadius: radius.full,
     paddingHorizontal: 12,
-    height: 36,
+    height: SEARCH_BAR_HEIGHT,
   },
   searchBarFocused: {
     backgroundColor: colors.inputBgFocus,
