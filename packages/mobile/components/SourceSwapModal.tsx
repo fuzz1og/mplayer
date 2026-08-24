@@ -3,9 +3,10 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { X, CircleCheck, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '../services/sourceSwap';
-import {radius, sourceColors, spacing, textVariants} from '../theme/tokens';
+import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import SourceBadge from './SourceBadge';
 
 const SWAP_SOURCES: { key: SourceKey; label: string }[] = [
   { key: 'netease', label: '网易云' },
@@ -99,7 +100,6 @@ export default function SourceSwapModal({
           ) : (
             SWAP_SOURCES.map((s) => {
               const disabled = s.key === currentSource;
-              const srcColor = sourceColors[s.key];
               return (
                 <TouchableOpacity
                   key={s.key}
@@ -108,7 +108,7 @@ export default function SourceSwapModal({
                   disabled={disabled}
                   onPress={() => onSelectSource(s.key)}
                 >
-                  <View style={[styles.dot, { backgroundColor: srcColor }]} />
+                  <SourceBadge source={s.key} size="lg" style={styles.dot} />
                   <Text style={[styles.itemText, disabled && { color: colors.textPrimary, fontWeight: '600' }]}>
                     {s.label}{disabled ? '（当前源）' : ''}
                   </Text>
@@ -147,7 +147,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
   },
-  dot: { width: 10, height: 10, borderRadius: 5, marginRight: spacing[3] },
+  dot: { marginRight: spacing[3] },
   itemInfo: { flex: 1 },
   itemText: { ...textVariants.body, fontWeight: '400', color: colors.textPrimary },
   itemArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },

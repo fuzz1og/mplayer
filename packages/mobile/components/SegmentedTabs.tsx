@@ -4,6 +4,7 @@ import { radius, shadow, textVariants } from '../theme/tokens';
 import { lightColors, darkColors } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { springs } from '../theme/motion';
 import ScalePress from './ScalePress';
 
@@ -49,15 +50,16 @@ const STYLES = {
   dark: makeStyles(darkColors),
 };
 
-export default function SegmentedTabs({ tabs, activeIndex, onSelect, reducedMotion, style }: {
+export default function SegmentedTabs({ tabs, activeIndex, onSelect, style }: {
   tabs: { key: string; label: string }[];
   activeIndex: number;
   onSelect: (i: number) => void;
-  reducedMotion?: boolean;
   /** 轨道尺寸覆写：两选项的搜索页用紧凑宽度（iOS 搜索结果式居中），默认通栏 */
   style?: StyleProp<ViewStyle>;
 }) {
   const { isDark } = useTheme();
+  // 减弱动效一律 hook 内自取（纪律：动画组件不接受外部覆盖，见 AGENTS.md）
+  const reducedMotion = useReducedMotion();
   const styles = isDark ? STYLES.dark : STYLES.light;
   const [trackW, setTrackW] = useState(0);
   const thumbX = useRef(new Animated.Value(0)).current;

@@ -6,12 +6,13 @@ import { ArrowLeft, Search, Settings, ChevronDown, Check, LayoutGrid, Music2 } f
 import type { LucideIcon } from 'lucide-react-native';
 import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {radius, sourceColors, textVariants} from '../theme/tokens';
+import {radius, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { useSourceStore, SOURCE_OPTION_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
+import SourceBadge from './SourceBadge';
 import ScalePress from './ScalePress';
 
 const SOURCE_OPTIONS: { key: SourceOption; icon: LucideIcon }[] = [
@@ -93,7 +94,7 @@ export default function TopBar() {
           onBlur={() => setFocused(false)}
         />
         <TouchableOpacity onPress={() => setShowSourcePicker(true)} style={styles.sourceBtn}>
-          <View style={[styles.sourceDot, { backgroundColor: sourceColors[selectedSource] }]} />
+          <SourceBadge source={selectedSource} size="sm" />
           <Text style={styles.sourceLabel}>{SOURCE_OPTION_LABELS[selectedSource]}</Text>
           <ChevronDown size={12} color={colors.textSecondary} />
         </TouchableOpacity>
@@ -119,7 +120,7 @@ export default function TopBar() {
                 onPress={() => handleSelectSource(opt.key)}
               >
                 {/* 源身份只经 6px 徽章点表达（源色纪律）；文字/图标保持中性色保对比度 */}
-                <View style={[styles.optionDot, { backgroundColor: sourceColors[opt.key] }]} />
+                <SourceBadge source={opt.key} size="md" style={styles.optionDot} />
                 <opt.icon
                   size={20}
                   color={selectedSource === opt.key ? colors.textPrimary : colors.textSecondary}
@@ -197,15 +198,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginLeft: 6,
     gap: 4,
   },
-  sourceDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
   optionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
     marginRight: 12,
   },
   sourceLabel: {
