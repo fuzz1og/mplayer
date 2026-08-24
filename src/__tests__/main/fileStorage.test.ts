@@ -70,3 +70,33 @@ describe('原位替换（单曲换源持久化）', () => {
     expect(songs[1].sourceType).toBe('qq');
   });
 });
+
+describe('歌单加入未解析歌曲（直连架构：搜索结果 url 为空，播放时懒解析）', () => {
+  it('accepts a search-result song with empty url (VIP/未探测曲目)', async () => {
+    const storage = new FileStorage();
+    const playlistId = await storage.createPlaylist('测试歌单');
+    const unresolved: Song = { ...song('1481587458', 'Take on Me'), artist: 'Various Artists', url: '' };
+
+    await storage.addSongToPlaylist(playlistId, unresolved);
+
+    const songs = await storage.getPlaylistSongs(playlistId);
+    expect(songs.map(s => s.id)).toEqual(['1481587458']);
+    expect(songs[0].artist).toBe('Various Artists');
+  });
+
+  it('still rejects songs missing identity fields', async () => {
+    const storage = new FileStorage();
+    const playlistId = await storage.createPlaylist('测试歌单');
+
+    await expect(storage.addSongToPlaylist(playlistId, { ...song('x'), name: '' })).rejects.toThrow('歌曲数据不完整');
+    await expect(storage.addSongToPlaylist(playlistId, { ...song('x'), artist: '' })).rejects.toThrow('歌曲数据不完整');
+  });
+
+  it('local songs still require a file path', async () => {
+    const storage = new FileStorage();
+    const playlistId = await storage.createPlaylist('测试歌单');
+    const noPath: Song = { ...song('local:1', '本地歌', 'local'), url: '' };
+
+    await expect(storage.addSongToPlaylist(playlistId, noPath)).rejects.toThrow('歌曲数据不完整');
+  });
+});
