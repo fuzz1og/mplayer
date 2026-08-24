@@ -14,6 +14,7 @@ import {
   extensionForContainer,
   looksLikeLyrics,
   lrcSidecarName,
+  resolvePlayableSongRouted,
   retryBackoffMs,
   sanitizeFileNameFragment,
   tagStrategyForContainer,
@@ -234,8 +235,8 @@ export class DownloadService {
 
     songs.forEach((song, index) => {
       try {
-        // 验证歌曲数据
-        if (!song.id || !song.name || !song.url) {
+        // 验证歌曲数据：url 由下载时按身份懒解析（#171 后列表歌 url 恒空），不作前置要求
+        if (!song.id || !song.name) {
           console.error(`歌曲数据不完整，跳过下载: ${song.name || '未知'}`);
           return;
         }
@@ -331,16 +332,18 @@ export class DownloadService {
             realUrl = '';
           }
         }
-      } else {
-        if (!task.song.url) {
-          console.error('[DownloadService] 歌曲URL为空, song:', task.song);
-          throw new Error('歌曲URL为空');
-        }
+      } else if (task.song.sourceType === 'local') {
+        // 本地歌曲的 url 即文件路径，直接使用
         realUrl = task.song.url;
+      } else {
+        // 按身份解析（预取缓存 → 直连 → tier3）：#171 后列表歌 url 恒空，
+        // 旧签名死链（api.php?get=*）由解析链按歌曲 id 重取，绝不再交给下载流
         try {
-          realUrl = await musicApi.getAudioUrl(task.song.url);
+          const resolved = await resolvePlayableSongRouted(task.song);
+          realUrl = resolved?.url || '';
         } catch (urlError) {
-          console.error('[DownloadService] 获取真实音频 URL 失败:', urlError);
+          console.error('[DownloadService] 按身份解析音频 URL 失败:', urlError);
+          realUrl = '';
         }
       }
 
