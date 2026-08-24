@@ -7,7 +7,7 @@ import { Music, Heart, EllipsisVertical, ListMusic, Download, ArrowLeftRight, Us
 import type { LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {radius, sourceColors, spacing, textVariants} from '../theme/tokens';
+import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { type Song, SourceKey, invalidateCoverUrl } from '@mplayer/core';
@@ -17,6 +17,7 @@ import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
 import { useLogsStore } from '../stores/logsStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
 import AddToPlaylistModal from './AddToPlaylistModal';
+import SourceBadge from './SourceBadge';
 import SourceSwapModal from './SourceSwapModal';
 import { playSong } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
@@ -261,11 +262,9 @@ export default function SongRow({
       </View>
 
       {showSource && (
-        <View style={[styles.sourceBadge, { backgroundColor: `${sourceColors[sourceKey]}14` }]}>
-          <Text style={[styles.sourceText, { color: sourceColors[sourceKey] }]}>
-            {SOURCE_LABELS[sourceKey] || sourceKey}
-          </Text>
-        </View>
+        <SourceBadge source={sourceKey} variant="badge">
+          {SOURCE_LABELS[sourceKey] || sourceKey}
+        </SourceBadge>
       )}
 
       {audioTag === 'preview' && (
@@ -373,15 +372,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...textVariants.caption,
     color: colors.textSecondary,
     marginTop: 2,
-  },
-  sourceBadge: {
-    borderRadius: radius.xs,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginRight: spacing[2],
-  },
-  sourceText: {
-    ...textVariants.micro, // 归一：10 → micro(11)
   },
   tagBadgePreview: {
     borderRadius: radius.xs,

@@ -64,7 +64,7 @@ export default function DiscoverTabs() {
   return (
     <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
       <View style={styles.tabHeader}>
-        <SegmentedTabs tabs={TABS} activeIndex={activeIndex} onSelect={onTabPress} reducedMotion={reducedMotion} />
+        <SegmentedTabs tabs={TABS} activeIndex={activeIndex} onSelect={onTabPress} />
       </View>
       {/* Swipeable content：横向分页容器用 FlatList（VirtualizedList-backed），
           避免 ScrollView 内嵌 FlatList 触发「unique key」嵌套警告 */}
@@ -202,11 +202,12 @@ const ALBUM_AREAS = [
  * 二级分类选择器：Apple Music「资料库」式文字 tabs——纯文字横滑，
  * 选中项加粗变深 + accent 下划线；零底色零圆角，层级让给一级分段控件。
  * 左缘 16pt 与一级分段控件轨道对齐（同一页面沟槽 spacing[4]）。
+ * 选中身份按 value 寻址（label 仅渲染层展示，不参与状态主键）。
  */
-function CategoryPills({ items, activeLabel, onSelect }: {
+function CategoryPills({ items, activeValue, onSelect }: {
   items: { label: string; value: string }[];
-  activeLabel: string;
-  onSelect: (label: string, value: string) => void;
+  activeValue: string;
+  onSelect: (value: string) => void;
 }) {
   const { isDark } = useTheme();
   const styles = isDark ? STYLES.dark : STYLES.light;
@@ -214,11 +215,8 @@ function CategoryPills({ items, activeLabel, onSelect }: {
     <View style={styles.catBar}>
       <TextTabs
         tabs={items.map((c) => ({ key: c.value, label: c.label }))}
-        activeKey={items.find((c) => c.label === activeLabel)?.value ?? items[0]?.value ?? ''}
-        onSelect={(key) => {
-          const hit = items.find((c) => c.value === key);
-          if (hit) onSelect(hit.label, hit.value);
-        }}
+        activeKey={activeValue}
+        onSelect={(key) => onSelect(key)}
       />
     </View>
   );
@@ -233,15 +231,14 @@ function AlbumsContent() {
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [areaLabel, setAreaLabel] = useState('全部');
+  const [area, setArea] = useState('ALL');
   // 最新分类的 ref：请求返回后与发起时比较，防切换分类后旧响应覆盖新列表
-  const areaRef = useRef(areaLabel);
-  areaRef.current = areaLabel;
+  const areaRef = useRef(area);
+  areaRef.current = area;
 
   const load = useCallback(async () => {
-    const areaAtStart = areaLabel;
+    const areaAtStart = area;
     try {
-      const area = ALBUM_AREAS.find(a => a.label === areaAtStart)?.value || 'ALL';
       const r = await musicApi.getNewAlbums(area, 0, 30);
       if (areaAtStart !== areaRef.current) return; // 分类已切换 → 丢弃过期响应
       setAlbums(r);
@@ -249,7 +246,7 @@ function AlbumsContent() {
     } catch {
       if (areaAtStart === areaRef.current) setLoadingError(true);
     }
-  }, [areaLabel]);
+  }, [area]);
 
   // 首屏(无数据)整页 loading;分类切换保留旧数据,避免闪烁
   useEffect(() => {
@@ -290,8 +287,8 @@ function AlbumsContent() {
       {/* 分类条固定顶部:不随列表滚动/不随数据变化重挂载,保持滑动位置 */}
       <CategoryPills
         items={ALBUM_AREAS}
-        activeLabel={areaLabel}
-        onSelect={(label) => setAreaLabel(label)}
+        activeValue={area}
+        onSelect={(value) => setArea(value)}
       />
       <FlatList
         style={styles.tabContent}
@@ -415,8 +412,8 @@ function PlaylistContent() {
       {/* 分类条固定顶部:不随列表滚动/不随数据变化重挂载,保持滑动位置 */}
       <CategoryPills
         items={PLAYLIST_CATEGORIES}
-        activeLabel={category}
-        onSelect={(label) => setCategory(label)}
+        activeValue={category}
+        onSelect={(value) => setCategory(value)}
       />
       <FlatList
         style={styles.tabContent}
@@ -469,7 +466,7 @@ function ArtistContent() {
   const [loadingError, setLoadingError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [category, setCategory] = useState('全部');
+  const [category, setCategory] = useState('0');
   const [refreshing, setRefreshing] = useState(false);
   // 最新分类的 ref：loadMore 请求返回后与发起时比较，防旧分类分页混入新分类列表
   const categoryRef = useRef(category);
@@ -478,8 +475,7 @@ function ArtistContent() {
   const load = useCallback(async () => {
     const catAtStart = category;
     try {
-      const catId = Number(ARTIST_CATEGORIES.find(c => c.label === catAtStart)?.value || 0);
-      const r = await musicApi.getNeteaseArtists(catId, 0, 30);
+      const r = await musicApi.getNeteaseArtists(Number(category), 0, 30);
       if (catAtStart !== categoryRef.current) return; // 分类已切换 → 丢弃过期响应
       setArtists(r.artists);
       setHasMore(r.more);
@@ -508,8 +504,7 @@ function ArtistContent() {
     const catAtStart = category;
     setLoadingMore(true);
     try {
-      const catId = Number(ARTIST_CATEGORIES.find(c => c.label === category)?.value || 0);
-      const r = await musicApi.getNeteaseArtists(catId, artists.length, 30);
+      const r = await musicApi.getNeteaseArtists(Number(category), artists.length, 30);
       // 请求期间分类已切换 → 丢弃过期结果（旧分类第 N 页混入新分类列表）
       if (catAtStart !== categoryRef.current) return;
       if (r.artists.length > 0) {
@@ -550,8 +545,8 @@ function ArtistContent() {
       {/* 分类条固定顶部:不随列表滚动/不随数据变化重挂载,保持滑动位置 */}
       <CategoryPills
         items={ARTIST_CATEGORIES}
-        activeLabel={category}
-        onSelect={(label) => setCategory(label)}
+        activeValue={category}
+        onSelect={(value) => setCategory(value)}
       />
       <FlatList
         style={styles.tabContent}
