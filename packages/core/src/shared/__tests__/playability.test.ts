@@ -186,7 +186,7 @@ describe('resolvePlayableSongRouted（带试听检测的播放解析）', () => 
     expect(res).toEqual({ url: 'https://direct.mp3', nonFull: false });
   });
 
-  it('audioTag=preview：不再等待 tier3，立即返回直连试听并标 nonFull（秒出声 + 换源入口）', async () => {
+  it('audioTag=preview：走 tier3 尝试拿完整版，命中则 nonFull=false（试听无意义，兜底优先）', async () => {
     const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
     setTier3Enabled(true);
     setTier3Resolver(tier3);
@@ -195,7 +195,28 @@ describe('resolvePlayableSongRouted（带试听检测的播放解析）', () => 
       resolvePlayableUrl: vi.fn(async () => 'https://direct.mp3'),
     });
     const res = await resolvePlayableSongRouted(song(240, { audioTag: 'preview' }));
-    expect(tier3).not.toHaveBeenCalled();
+    expect(tier3).toHaveBeenCalled();
+    expect(res).toEqual({ url: 'https://tier3.example.com/1.mp3', nonFull: false });
+  });
+
+  it('audioTag=preview：tier3 未命中 → 退回直连试听并标 nonFull', async () => {
+    const tier3 = vi.fn(async () => '');
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    registerDirectClient({
+      key: 'netease',
+      resolvePlayableUrl: vi.fn(async () => 'https://direct.mp3'),
+    });
+    const res = await resolvePlayableSongRouted(song(240, { audioTag: 'preview' }));
+    expect(res).toEqual({ url: 'https://direct.mp3', nonFull: true });
+  });
+
+  it('audioTag=preview：tier3 未配置 → 直接播直连试听（零成本回退）', async () => {
+    registerDirectClient({
+      key: 'netease',
+      resolvePlayableUrl: vi.fn(async () => 'https://direct.mp3'),
+    });
+    const res = await resolvePlayableSongRouted(song(240, { audioTag: 'preview' }));
     expect(res).toEqual({ url: 'https://direct.mp3', nonFull: true });
   });
 
