@@ -1109,6 +1109,7 @@ export const musicApi = {
     artist: string;
     cover: string;
     lyrics: string;
+    durationMs: number;
     playableRange: { start: number; duration: number } | null;
   } | null> {
     const shareUrl = `https://music.douyin.com/qishui/share/track?track_id=${trackId}`;
@@ -1147,6 +1148,8 @@ export const musicApi = {
         artist: audio.artistName || '',
         cover: audio.coverURL || '',
         lyrics,
+        // trackInfo.duration 为权威完整时长（ms）；audio.duration 为浮点秒，两者一致
+        durationMs: typeof audio?.trackInfo?.duration === 'number' ? audio.trackInfo.duration : 0,
         playableRange,
       };
     } catch {

@@ -100,6 +100,7 @@ describe('musicApi 汽水搜索/歌词接线', () => {
       artist: '周杰伦',
       cover: '',
       lyrics: '[00:00.000]作曲：周杰伦\n[00:11.485]半夜睡不着觉',
+      durationMs: 312999,
       playableRange: { start: 162816, duration: 17088 },
     });
     const lrc1 = await musicApi.getSodaLyrics('7145679509738489867');
@@ -117,6 +118,7 @@ describe('musicApi 汽水搜索/歌词接线', () => {
       artist: 'x',
       cover: '',
       lyrics: '',
+      durationMs: 0,
       playableRange: null,
     });
     await expect(musicApi.getSodaLyrics('1')).resolves.toBe('');
@@ -130,6 +132,7 @@ describe('musicApi 汽水搜索/歌词接线', () => {
       artist: '周杰伦',
       cover: 'https://p3-luna.douyinpic.com/img/x~c5_375x375.jpg',
       lyrics: '[00:00.000]作曲：周杰伦',
+      durationMs: 312999,
       playableRange: { start: 162816, duration: 17088 },
     };
     const spy = vi.spyOn(musicApi, 'fetchSodaSharePage').mockResolvedValue(page as any);

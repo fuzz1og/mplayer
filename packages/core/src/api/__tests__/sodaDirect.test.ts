@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Song } from '../../types/index.js';
 import { setTransport } from '../transport.js';
 import { sodaDirectClient } from '../sodaDirect.js';
+import { musicApi } from '../musicApi.js';
 
 /**
  * 汽水直连客户端测试（T03 #149）。
@@ -62,8 +63,37 @@ describe('sodaDirectClient.resolveUrlInfo（权威完整时长字段，供 T12�
     expect(info).toBeNull();
   });
 
-  it('失败上抛（供上层兜底）', async () => {
+  it('track_v2 空 body（匿名常态）→ 分享页降级拿完整时长', async () => {
+    // 匿名 track_v2 返回 200 空 body（2026-08 实测），应降级分享页（免登录）
+    // 而非抛 JSON.parse 错误卡死探测链路
+    setTransport(async () => textResponse('') as any);
+    const spy = vi.spyOn(musicApi, 'fetchSodaSharePage').mockResolvedValue({
+      audioUrl: 'https://v5-luna.douyinvod.com/a.mp4',
+      name: '屋顶',
+      artist: '周杰伦',
+      cover: '',
+      lyrics: '',
+      durationMs: 312999,
+      playableRange: null,
+    });
+    const info = await sodaDirectClient.resolveUrlInfo!(sodaSong());
+    expect(spy).toHaveBeenCalledWith('7260000000000000000');
+    expect(info).toEqual({
+      url: 'https://v5-luna.douyinvod.com/a.mp4',
+      br: 0,
+      size: 0,
+      playTime: 312,
+      fee: 0,
+      payed: 1,
+    });
+    spy.mockRestore();
+  });
+
+  it('track_v2 与分享页都失败 → 返回 null（探测标不可用，不卡链路）', async () => {
     setTransport(async () => { throw new Error('soda track_v2 失败'); });
-    await expect(sodaDirectClient.resolveUrlInfo!(sodaSong())).rejects.toThrow('soda track_v2 失败');
+    const spy = vi.spyOn(musicApi, 'fetchSodaSharePage').mockResolvedValue(null);
+    const info = await sodaDirectClient.resolveUrlInfo!(sodaSong());
+    expect(info).toBeNull();
+    spy.mockRestore();
   });
 });
