@@ -152,7 +152,7 @@ export function registerUpdateIpc(mainWindow: BrowserWindow): void {
 
 export function registerDownloadIpc(): void {
   registerIpcHandlerSimple('download:start', (song: any) => downloadService.addDownload(song));
-  registerIpcHandlerSimple('download:startBatch', (songs: any[]) => downloadService.addBatchDownloads(songs));
+  registerIpcHandler('download:startBatch', (songs: any[]) => downloadService.addBatchDownloads(songs));
   registerIpcHandlerSimple('download:cancel', (taskId: string) => downloadService.cancelDownload(taskId));
   registerIpcHandlerSimple('download:getTasks', () => downloadService.getAllTasks());
   registerIpcHandlerSimple('download:clearCompleted', () => downloadService.clearCompleted());

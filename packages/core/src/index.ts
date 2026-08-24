@@ -119,8 +119,6 @@ export { lrcSidecarName, looksLikeLyrics } from './download/lyrics.js';
 export { estimateDownloadProgress } from './download/progress.js';
 export type { ProgressInput } from './download/progress.js';
 export { takeNextQueued, retryBackoffMs, DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_RETRIES } from './download/queue.js';
-export { gateDownloadBitrate, estimateBitrateKbps, BITRATE_GATE_OPTIONS } from './download/quality.js';
-export type { BitrateGate, QualityGateResult } from './download/quality.js';
 export { kugouDirectClient, ensureKugouCookie, resolveKugouLyricUrl } from './api/kugouDirect.js';
 export { classifyLength, isTrialUrlInfo } from './api/audioProbe.js';
 export type { LengthClass, UrlInfo } from './api/audioProbe.js';
