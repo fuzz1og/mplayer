@@ -32,6 +32,18 @@ const musicApiMock = vi.hoisted(() => ({
   fillSongUrls: vi.fn(),
 }));
 
+// 只覆写 routed 解析器与重试退避，其余 core 导出保持真实现
+const routedResolveMock = vi.hoisted(() => ({ resolve: vi.fn() }));
+
+vi.mock('@mplayer/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mplayer/core')>();
+  return {
+    ...actual,
+    resolvePlayableSongRouted: routedResolveMock.resolve,
+    retryBackoffMs: () => 0,
+  };
+});
+
 // mp3tag.js 记录是否被调用（FLAC 不应触发写入）
 const mp3tagMock = vi.hoisted(() => ({
   instantiated: 0,
@@ -118,6 +130,9 @@ describe('DownloadService (T15 多格式标签 + .lrc 侧车)', () => {
     service.initialize({ downloadPath: dir });
     mp3tagMock.instantiated = 0;
     axiosMock.get.mockReset();
+    // 默认解析器按身份原样返回 song.url（存量行为），个别用例再覆写
+    routedResolveMock.resolve.mockReset();
+    routedResolveMock.resolve.mockImplementation(async (song: Song) => ({ url: song.url, nonFull: false }));
   });
 
   afterEach(() => {
@@ -187,3 +202,78 @@ async function ticks(n = 30): Promise<void> {
     await new Promise((r) => setTimeout(r, 8));
   }
 }
+
+// ---------------------------------------------------------------------------
+// 按身份解析后下载（#211）：#171 后列表歌 url 恒空，下载不得要求/信任 song.url
+// ---------------------------------------------------------------------------
+describe('DownloadService 按身份解析（resolve-by-identity）', () => {
+  let service: DownloadService;
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mplayer-dl-'));
+    service = new DownloadService();
+    service.initialize({ downloadPath: dir });
+    routedResolveMock.resolve.mockReset();
+    routedResolveMock.resolve.mockImplementation(async () => ({ url: '', nonFull: false }));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('无 url 的搜索结果歌可批量下载：按 id 解析出直链再抓流', async () => {
+    const song = makeSong({ url: '' });
+    routedResolveMock.resolve.mockResolvedValue({ url: 'https://cdn.example.com/resolved.flac', nonFull: false });
+    serveDownload('audio/flac');
+
+    const tasks = service.addBatchDownloads([song]);
+    await ticks();
+
+    // 未被「歌曲数据不完整」静默跳过
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].status).toBe('completed');
+    expect(routedResolveMock.resolve).toHaveBeenCalledWith(expect.objectContaining({ id: '1', sourceType: 'netease' }));
+    expect(axiosMock.download).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://cdn.example.com/resolved.flac' }));
+  });
+
+  it('无 url 歌单曲下载同样走身份解析', async () => {
+    const song = makeSong({ id: '2', url: '' });
+    routedResolveMock.resolve.mockResolvedValue({ url: 'https://cdn.example.com/single.mp3', nonFull: false });
+    serveDownload('audio/mpeg');
+
+    const task = service.addDownload(song);
+    await ticks();
+
+    expect(task.status).toBe('completed');
+    expect(axiosMock.download).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://cdn.example.com/single.mp3' }));
+  });
+
+  it('旧签名死链不入下载流：以解析结果为准', async () => {
+    const deadUrl = 'https://legacy.example.com/api.php?get=url&id=1&sign=OLDSIGN';
+    const song = makeSong({ url: deadUrl });
+    routedResolveMock.resolve.mockResolvedValue({ url: 'https://cdn.example.com/fresh.mp3', nonFull: false });
+    serveDownload('audio/mpeg');
+
+    const tasks = service.addBatchDownloads([song]);
+    await ticks();
+
+    expect(tasks[0].status).toBe('completed');
+    expect(axiosMock.download).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://cdn.example.com/fresh.mp3' }));
+    const calledWith = (axiosMock.download as ReturnType<typeof vi.fn>).mock.calls[0][0] as { url: string };
+    expect(calledWith.url).not.toBe(deadUrl);
+    // 退役的 api.php getAudioUrl 解析不再被调用
+    expect(musicApiMock.getAudioUrl).not.toHaveBeenCalled();
+  });
+
+  it('解析失败（无直链）任务进 error 态并给出可读错误', async () => {
+    const song = makeSong({ url: '' });
+    routedResolveMock.resolve.mockResolvedValue({ url: '', nonFull: false });
+
+    const tasks = service.addBatchDownloads([song]);
+    await ticks();
+
+    expect(tasks[0].status).toBe('error');
+    expect(tasks[0].error).toContain('无法获取音频 URL');
+  });
+});
