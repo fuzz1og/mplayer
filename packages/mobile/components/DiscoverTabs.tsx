@@ -269,7 +269,7 @@ function AlbumsContent() {
 
   const renderItem = ({ item: album }: { item: Album }) => (
     <TouchableOpacity
-      style={[styles.gridCard, { width: gridCardW }]}
+      style={{ width: gridCardW }}
       activeOpacity={0.7}
       onPress={() => router.push(`/album/${album.id}?name=${encodeURIComponent(album.name)}&pic=${encodeURIComponent(album.picUrl)}&artist=${encodeURIComponent(album.artist)}` as any)}
     >
@@ -394,7 +394,7 @@ function PlaylistContent() {
 
   const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
     <TouchableOpacity
-      style={[styles.gridCard, { width: gridCardW }]}
+      style={{ width: gridCardW }}
       activeOpacity={0.7}
       onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
     >
@@ -651,7 +651,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   songArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
   // 专辑/歌单网格卡片：封面方圆角 md，标题两行截断，副行 meta——
   // 垂直节奏走 token（name 8 / meta 2），列距 gap 统一 12，无逐卡 margin
-  gridCard: {},
   gridCover: {
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
