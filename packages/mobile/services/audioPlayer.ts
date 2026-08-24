@@ -186,6 +186,19 @@ export async function fetchLrcInBackground(song: Song, force = false, refreshCov
   try {
     const fresh = await searchStrictMatch(song);
     if (!fresh) return;
+    // 汽水：搜索不带 lrc（searchSongsSoda 恒空），歌词由 PlayerOverlay 直取
+    // 分享页（getSodaLyrics，songid cacheKey）；此处只处理封面补全
+    if (song.sourceType === 'soda') {
+      const cur = usePlayerStore.getState().currentSong;
+      if (cur?.id !== song.id) return;
+      const coverChanged = refreshCover
+        ? !!fresh.cover?.startsWith('http') && fresh.cover !== cur.cover
+        : !!fresh.cover?.startsWith('http') && !cur.cover;
+      if (!coverChanged) return;
+      usePlayerStore.setState({ currentSong: { ...cur, cover: fresh.cover } });
+      log.addLog('info', `歌曲资源刷新: 《${song.name}》封面`);
+      return;
+    }
     const cur = usePlayerStore.getState().currentSong;
     if (cur?.id !== song.id) return; // 已切歌，丢弃过期结果
     // 歌词比较：普通懒刷新用归一化 key（t/sign 签名参数每次搜索都不同，

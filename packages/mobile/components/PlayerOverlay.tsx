@@ -146,12 +146,14 @@ export default function PlayerOverlay({ onClose }: Props) {
   };
 
   // 加载歌词：优先歌曲自带 lrc URL；今日推荐/歌单/歌手页的歌曲 lrc 为空，
-  // 用网易云 songId 兜底拉歌词
+  // 用网易云 songId 兜底拉歌词；汽水用分享页免登录结构化歌词（getSodaLyrics）
   const [lyricsLoading, setLyricsLoading] = useState(false);
   useEffect(() => {
     if (!song) { setLyricLines([]); setLyricsLoading(false); return; }
     const abort = new AbortController();
-    const cacheKey = song.lrc || (song.sourceType === 'netease' ? `songid:${song.id}` : '');
+    const cacheKey = song.lrc
+      ? song.lrc
+      : (song.sourceType === 'netease' || song.sourceType === 'soda') ? `songid:${song.id}` : '';
     if (!cacheKey) {
       setLyricLines([]);
       setLyricsLoading(false);
@@ -168,7 +170,9 @@ export default function PlayerOverlay({ onClose }: Props) {
     setLyricsLoading(true);
     const load = song.lrc
       ? musicApi.getLyrics(song.lrc)
-      : musicApi.getLyricsBySongId(song.id);
+      : song.sourceType === 'soda'
+        ? musicApi.getSodaLyrics(String(song.id))
+        : musicApi.getLyricsBySongId(song.id);
     load.then(lrc => {
       if (abort.signal.aborted) return;
       const parsed = parseLRC(lrc);

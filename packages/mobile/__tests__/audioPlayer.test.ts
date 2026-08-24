@@ -733,5 +733,27 @@ describe('lyrics lazy refresh (fetchLrcInBackground)', () => {
     expect(usePlayerStore.getState().currentSong?.lrc).toBe(FRESH_LRC);
     expect(audioMocks.getLyrics).toHaveBeenCalledWith(FRESH_LRC);
   });
+
+  it('soda: only fills cover, never swaps lrc (search has no lrc; lyrics come from share page)', async () => {
+    // 汽水搜索不带 lrc（searchSongsSoda 恒空），fetchLrcInBackground 只处理封面；
+    // 歌词由 PlayerOverlay 直取分享页（getSodaLyrics），不经过 song.lrc URL 契约
+    const soda = { ...song('9'), sourceType: 'soda' as const, cover: '' };
+    const cur = { ...soda, cover: '' };
+    audioMocks.searchSongById.mockResolvedValueOnce({
+      ...soda,
+      cover: 'https://p3-luna.douyinpic.com/img/x~c5_375x375.jpg',
+      lrc: '', // soda 搜索恒空 lrc
+    });
+    usePlayerStore.setState({ currentSong: cur, currentIndex: 0, queue: [soda], isPlaying: true });
+
+    await fetchLrcInBackground(soda);
+
+    // 封面补上了
+    expect(usePlayerStore.getState().currentSong?.cover).toBe('https://p3-luna.douyinpic.com/img/x~c5_375x375.jpg');
+    // 歌词 URL 未被设置（保持空，由 PlayerOverlay 直取分享页歌词）
+    expect(usePlayerStore.getState().currentSong?.lrc).toBe('');
+    // 未预取歌词文本（无 lrc URL 可拉）
+    expect(audioMocks.getLyrics).not.toHaveBeenCalled();
+  });
 });
 
