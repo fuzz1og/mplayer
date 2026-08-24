@@ -7,8 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
 
-  import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
-  import { cacheManager, musicApi, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
+import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
+import { cacheManager, musicApi, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
 import LoadingState from '../../components/LoadingState';
 import ScalePress from '../../components/ScalePress';
@@ -152,7 +152,7 @@ export default function RecommendPage() {
                 {playlists.map((p) => (
                   <TouchableOpacity
                     key={String(p.id)}
-                    style={[styles.gridCard, { width: cardW }]}
+                    style={{ width: cardW }}
                     activeOpacity={0.7}
                     onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
                   >
@@ -217,7 +217,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flexWrap: 'wrap',
     gap: GRID_GAP,
   },
-  gridCard: {},
   gridCover: { borderRadius: radius.md, backgroundColor: colors.bgSurface },
   gridCoverFallback: {
     justifyContent: 'center',

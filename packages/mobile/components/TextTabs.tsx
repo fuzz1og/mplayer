@@ -17,13 +17,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   row: {
     flexDirection: 'row',
   },
-  scrollContent: {
-    flexDirection: 'row',
-    gap: spacing[1],
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[1],
-  },
-  rowContent: {
+  content: {
     flexDirection: 'row',
     gap: spacing[1],
     paddingHorizontal: spacing[4],
@@ -87,9 +81,9 @@ export default function TextTabs({ tabs, activeKey, onSelect, scrollable = true 
   if (scrollable) {
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled>
-        <View style={styles.scrollContent}>{items}</View>
+        <View style={styles.content}>{items}</View>
       </ScrollView>
     );
   }
-  return <View style={styles.rowContent}>{items}</View>;
+  return <View style={styles.content}>{items}</View>;
 }
