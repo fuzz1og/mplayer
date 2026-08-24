@@ -1,9 +1,10 @@
-import React, { useCallback } from 'react';
-import { Heart, Download, Mic } from 'lucide-react';
+import React, { useCallback, useState } from 'react';
+import { Heart, Download, Mic, ListMusic } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useCachedCover } from '@/renderer/services/coverCacheService';
 import CoverImage from '@/renderer/components/CoverImage';
+import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import PlayerControls from './PlayerControls';
@@ -34,6 +35,8 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const coverSrc = useCachedCover(currentSong?.cover ?? '');
   const fav = currentSong ? isFavorite(currentSong.id) : false;
+  // 当前歌加入歌单弹窗（播放栏直达入口）
+  const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const { download } = useDownload();
 
   const handlePlayPause = useCallback(() => {
@@ -199,6 +202,17 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           <Heart size={16} fill={fav ? 'currentColor' : 'none'} />
         </button>
 
+        {/* 加入歌单 */}
+        <button
+          onClick={() => setShowAddToPlaylist(true)}
+          disabled={!currentSong}
+          aria-label="加入歌单"
+          className="player-btn"
+          style={{ opacity: currentSong ? 1 : 0.3 }}
+        >
+          <ListMusic size={16} />
+        </button>
+
         {/* 歌词按钮 */}
         <button
           onClick={onCoverClick}
@@ -228,6 +242,15 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           onToggleMute={() => setVolume(volume === 0 ? 80 : 0)}
         />
       </div>
+
+      {/* 加入歌单弹窗（对当前播放歌曲） */}
+      {currentSong && (
+        <AddToPlaylistModal
+          song={currentSong}
+          isVisible={showAddToPlaylist}
+          onClose={() => setShowAddToPlaylist(false)}
+        />
+      )}
     </div>
   );
 };
