@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, RefreshControl, StyleSheet, TouchableOpacity, Image, Dimensions, Animated,
+  View, Text, RefreshControl, StyleSheet, TouchableOpacity, Image, Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { topChromeHeight, bottomChromeHeight } from '../../components/chromeMetrics';
+import { topChromeHeight, bottomChromeHeight, SECTION_TAIL_PADDING } from '../../components/chromeMetrics';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
+import { gridCardWidth } from '../../components/gridMetrics';
 
 import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
 import { cacheManager, musicApi, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
@@ -18,11 +19,8 @@ import {radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-/** 猜你喜欢网格：16pt 页面沟槽（与节标题/发现页同轴线），列间 12 */
-const CARD_COLS = 2;
-const GRID_GAP = spacing[3];
-const cardW = (SCREEN_WIDTH - spacing[4] * 2 - GRID_GAP) / CARD_COLS;
+/** 猜你喜欢网格：16pt 页面沟槽（与节标题/发现页同轴线），列间 12；公式见 gridMetrics */
+const cardW = gridCardWidth({ cols: 2 });
 // 今日推荐一次拉取的大池子大小(每次随机抽 5 首,约 20 批不重复)
 const RECOMMEND_POOL_SIZE = 100;
 
@@ -98,7 +96,7 @@ export default function RecommendPage() {
       style={[styles.container, { backgroundColor: animatedBg }]}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + 32 },
+        { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + SECTION_TAIL_PADDING },
       ]}
       refreshControl={
         <RefreshControl
@@ -215,7 +213,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: GRID_GAP,
+    gap: spacing[3],
   },
   gridCover: { borderRadius: radius.md, backgroundColor: colors.bgSurface },
   gridCoverFallback: {
