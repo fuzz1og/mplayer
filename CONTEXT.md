@@ -43,3 +43,7 @@ _Avoid_: 死链、过期 URL、旧 API 地址
 **预取缓存**:
 探测阶段解析所得直链的短期缓存；播放命中时零等待出声，失效或不完整结果不入缓存。
 _Avoid_: 探测缓存、URL 缓存、秒播缓存
+
+**汽水歌词**:
+汽水源站（qishui / music.douyin.com）无公开歌词接口——搜索、分享页、track_v2 均不返回歌词；汽水歌曲因此从不携带 lrc URL。歌词兜底链（移动端 fetchLrcInBackground/searchStrictMatch、桌面 loadLyricsWithRetry 的搜索补全）对汽水源实际取不回歌词（searchSongById 对 soda 返回 null，searchSongsSoda 恒空 lrc），故汽水歌曲无歌词展示，下载侧车也不生成 .lrc。
+_Avoid_: 汽水歌词源、soda 歌词
