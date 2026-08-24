@@ -499,7 +499,11 @@ export class FileStorage {
   }
 
   private validateSongData(song: Song): boolean {
-    return !!(song.id && song.name && song.artist && song.url);
+    if (!song.id || !song.name || !song.artist) return false;
+    // 在线歌曲的 url 由播放链路懒解析（预取缓存 → 直连 → tier3），
+    // 搜索结果入库时 url 为空是常态；本地歌曲的 url 即文件路径，必须存在。
+    if (song.sourceType === 'local' && !song.url) return false;
+    return true;
   }
 
   async removeSongFromPlaylist(playlistId: number, songId: string): Promise<void> {
