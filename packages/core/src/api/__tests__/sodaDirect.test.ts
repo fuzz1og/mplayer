@@ -74,7 +74,6 @@ describe('sodaDirectClient.resolveUrlInfo（权威完整时长字段，供 T12�
       cover: '',
       lyrics: '',
       durationMs: 312999,
-      playableRange: null,
     });
     const info = await sodaDirectClient.resolveUrlInfo!(sodaSong());
     expect(spy).toHaveBeenCalledWith('7260000000000000000');

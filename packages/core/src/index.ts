@@ -48,6 +48,7 @@ export type { SongFileNameParts, SongFileNameDeps } from './utils/downloadFileNa
 export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, probeSwapCandidates, applySwap } from './shared/sourceSwap.js';
+export { songUsesSongidLyrics, isSodaSource } from './shared/songLyrics.js';
 export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
 export { resolvePlayableUrl, resolvePlayableSong, stripSourceIdPrefix } from './shared/resolvePlayableUrl.js';
 export type { UrlResolver, PlayableSong } from './shared/resolvePlayableUrl.js';

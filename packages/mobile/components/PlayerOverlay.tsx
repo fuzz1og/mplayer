@@ -14,7 +14,7 @@ import { togglePlay, seekTo, playSong, fetchLrcInBackground } from '../services/
 import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { useResolvedCover } from '../hooks/useResolvedCover';
-import { parseLRC, musicApi, findCurrentLyricIndex, invalidateCoverUrl } from '@mplayer/core';
+import { parseLRC, musicApi, findCurrentLyricIndex, invalidateCoverUrl, songUsesSongidLyrics, isSodaSource } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
@@ -153,7 +153,7 @@ export default function PlayerOverlay({ onClose }: Props) {
     const abort = new AbortController();
     const cacheKey = song.lrc
       ? song.lrc
-      : (song.sourceType === 'netease' || song.sourceType === 'soda') ? `songid:${song.id}` : '';
+      : songUsesSongidLyrics(song.sourceType) ? `songid:${song.id}` : '';
     if (!cacheKey) {
       setLyricLines([]);
       setLyricsLoading(false);
@@ -170,7 +170,7 @@ export default function PlayerOverlay({ onClose }: Props) {
     setLyricsLoading(true);
     const load = song.lrc
       ? musicApi.getLyrics(song.lrc)
-      : song.sourceType === 'soda'
+      : isSodaSource(song.sourceType)
         ? musicApi.getSodaLyrics(String(song.id))
         : musicApi.getLyricsBySongId(song.id);
     load.then(lrc => {

@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { cacheManager, getNextSongIndex, getApiSessionCookie, isApiOriginUrl, isLegacyDeadUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive } from '@mplayer/core';
+import { cacheManager, getNextSongIndex, getApiSessionCookie, isApiOriginUrl, isLegacyDeadUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -188,7 +188,7 @@ export async function fetchLrcInBackground(song: Song, force = false, refreshCov
     if (!fresh) return;
     // 汽水：搜索不带 lrc（searchSongsSoda 恒空），歌词由 PlayerOverlay 直取
     // 分享页（getSodaLyrics，songid cacheKey）；此处只处理封面补全
-    if (song.sourceType === 'soda') {
+    if (isSodaSource(song.sourceType)) {
       const cur = usePlayerStore.getState().currentSong;
       if (cur?.id !== song.id) return;
       const coverChanged = refreshCover

@@ -28,7 +28,6 @@ describe('sodaSentencesToLrc（分享页结构化歌词 → LRC 纯函数）', (
     expect(sodaSentencesToLrc([])).toBe('');
     expect(sodaSentencesToLrc(null)).toBe('');
     expect(sodaSentencesToLrc(undefined)).toBe('');
-    expect(sodaSentencesToLrc('x')).toBe('');
   });
 
   it('跳过无 startMs 或空文本行', () => {
@@ -101,7 +100,6 @@ describe('musicApi 汽水搜索/歌词接线', () => {
       cover: '',
       lyrics: '[00:00.000]作曲：周杰伦\n[00:11.485]半夜睡不着觉',
       durationMs: 312999,
-      playableRange: { start: 162816, duration: 17088 },
     });
     const lrc1 = await musicApi.getSodaLyrics('7145679509738489867');
     expect(lrc1).toContain('[00:00.000]作曲：周杰伦');
@@ -119,26 +117,8 @@ describe('musicApi 汽水搜索/歌词接线', () => {
       cover: '',
       lyrics: '',
       durationMs: 0,
-      playableRange: null,
     });
     await expect(musicApi.getSodaLyrics('1')).resolves.toBe('');
     vi.restoreAllMocks();
-  });
-
-  it('fetchSodaSharePage 解析 playable_range 试听窗口（spy 返回结构）', async () => {
-    const page = {
-      audioUrl: 'https://v5-luna.douyinvod.com/a.mp4',
-      name: '屋顶',
-      artist: '周杰伦',
-      cover: 'https://p3-luna.douyinpic.com/img/x~c5_375x375.jpg',
-      lyrics: '[00:00.000]作曲：周杰伦',
-      durationMs: 312999,
-      playableRange: { start: 162816, duration: 17088 },
-    };
-    const spy = vi.spyOn(musicApi, 'fetchSodaSharePage').mockResolvedValue(page as any);
-    const result = await musicApi.fetchSodaSharePage('7145679509738489867');
-    expect(result).toEqual(page);
-    expect(result?.playableRange).toEqual({ start: 162816, duration: 17088 });
-    spy.mockRestore();
   });
 });

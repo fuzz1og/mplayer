@@ -985,25 +985,39 @@ export function mapQQToplistItem(item: any, index: number): HotlistSong | null {
   };
 }
 
+/** 汽水分享页结构化歌词单字（sentences[].words[] 项，行内逐字时间轴）。 */
+export interface SodaLyricWord {
+  text: string;
+  startMs: number;
+  endMs: number;
+}
+
+/** 汽水分享页结构化歌词行（sentences[] 项，type=krc/lrc）。 */
+export interface SodaLyricSentence {
+  startMs: number;
+  endMs: number;
+  text: string;
+  /** 逐字时间轴；缺省/为空时行文本取整句 text。 */
+  words?: SodaLyricWord[];
+  type?: string;
+}
+
 /**
  * 汽水分享页结构化歌词（sentences[]）→ LRC 文本（纯函数，可单测）。
- * 输入为分享页 _ROUTER_DATA.audioWithLyricsOption.lyrics.sentences：
- * [{ startMs, endMs, text, words: [{text, startMs, endMs}], type }]，type=krc/lrc。
+ * 输入为分享页 _ROUTER_DATA.audioWithLyricsOption.lyrics.sentences。
  * 行文本取 words[].text 拼接（回退整句 text）；时间轴 [mm:ss.xxx]。
  */
-export function sodaSentencesToLrc(sentences: unknown): string {
+export function sodaSentencesToLrc(sentences: SodaLyricSentence[] | null | undefined): string {
   if (!Array.isArray(sentences) || sentences.length === 0) return '';
   const lines: string[] = [];
   for (const s of sentences) {
-    if (!s || typeof s !== 'object') continue;
-    const startMs = (s as { startMs?: unknown }).startMs;
-    if (typeof startMs !== 'number') continue;
-    const words = (s as { words?: unknown }).words;
-    const text = Array.isArray(words)
-      ? words.map((w) => (w && typeof w === 'object' && typeof (w as { text?: unknown }).text === 'string' ? (w as { text: string }).text : '')).join('')
-      : typeof (s as { text?: unknown }).text === 'string' ? (s as { text: string }).text : '';
+    if (typeof s?.startMs !== 'number') continue;
+    const text =
+      Array.isArray(s.words) && s.words.length > 0
+        ? s.words.map((w) => w?.text ?? '').join('')
+        : s.text ?? '';
     if (!text.trim()) continue;
-    const ms = startMs;
+    const ms = s.startMs;
     const mm = Math.floor(ms / 60000);
     const ss = Math.floor((ms % 60000) / 1000);
     const xxx = ms % 1000;
@@ -1094,12 +1108,10 @@ export const musicApi = {
    * 解析汽水分享页（music.douyin.com/qishui/share/track，免登录）。
    *
    * _ROUTER_DATA.audioWithLyricsOption 同时含：
-   * - url：音频直链（encrypt=false，未加密；付费歌为试听段，试听窗口见 playableRange）
+   * - url：音频直链（encrypt=false，未加密；付费歌为试听段）
    * - lyrics.sentences[]：结构化歌词（startMs/endMs/text/words，lyricType=krc），
    *   免登录即可拿，无需 track_v2 的登录态 Cookie
-   * - trackInfo.playable_range：试听窗口 {start, duration}（付费歌非空 = 试听版）。
-   *   与搜索响应的 playable_range 一致；供 T12 预检/UI preview 徽标做试听判别
-   *   （当前调用方未消费，保留为探测结果字段，避免二次请求）。
+   * - trackInfo.duration：权威完整时长（ms），供探测 resolveUrlInfo 时长校验
    *
    * 返回 lyrics 为 LRC 文本（[mm:ss.xxx]行），无歌词返回空串。
    */
@@ -1110,7 +1122,6 @@ export const musicApi = {
     cover: string;
     lyrics: string;
     durationMs: number;
-    playableRange: { start: number; duration: number } | null;
   } | null> {
     const shareUrl = `https://music.douyin.com/qishui/share/track?track_id=${trackId}`;
     try {
@@ -1136,21 +1147,15 @@ export const musicApi = {
       const sentences = audio?.lyrics?.sentences;
       const lyrics = sodaSentencesToLrc(sentences);
 
-      const pr = audio?.trackInfo?.playable_range;
-      const playableRange =
-        pr && typeof pr.start === 'number' && typeof pr.duration === 'number'
-          ? { start: pr.start, duration: pr.duration }
-          : null;
-
       return {
         audioUrl: decodeURIComponent(audio.url),
         name: audio.trackName || '',
         artist: audio.artistName || '',
         cover: audio.coverURL || '',
         lyrics,
-        // trackInfo.duration 为权威完整时长（ms）；audio.duration 为浮点秒，两者一致
+        // trackInfo.duration 为权威完整时长（ms），供探测 resolveUrlInfo 时长校验
+        // （playTime）；audio.duration 为浮点秒，两者一致
         durationMs: typeof audio?.trackInfo?.duration === 'number' ? audio.trackInfo.duration : 0,
-        playableRange,
       };
     } catch {
       return null;
