@@ -82,7 +82,7 @@
     "vite": "^6.4.3",
     "vite-plugin-electron": "^1.1.0",
     "vite-plugin-electron-renderer": "^0.14.5",
-    "vitest": "^4.1.5",
+    "vitest": "^4.1.11",
     "wait-on": "^9.1.0",
     "zustand": "^4.4.7"
   },
