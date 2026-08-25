@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList,
   PanResponder, Animated, Alert, Dimensions, useWindowDimensions, Easing,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, Repeat, Shuffle, Heart, CirclePlus, Download, Music, MicVocal, ListMusic, MessageSquareText, Disc3, X, MoreVertical } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
@@ -28,7 +29,6 @@ import { springs, projectMomentum, rubberband } from '../theme/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { tapLight } from '../utils/haptics';
 import ScalePress from './ScalePress';
-import ChromeBlur from './ChromeBlur';
 
 /** 投影落点超过屏高此比例即判关：快甩从任意位置都能关，慢拖半途自然回弹 */
 const DISMISS_PROJECT_RATIO = 0.35;
@@ -51,7 +51,9 @@ export default function PlayerOverlay({ onClose }: Props) {
   const { colors, isDark } = useTheme();
   // #186 #4：旋转/折叠屏实时取宽高，避免模块顶层 Dimensions 取值过期
   const { width: winW, height: winH } = useWindowDimensions();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  // 播放器前景色：随背景明暗切换（暗背景→亮字 / 浅背景→深字，iOS 全屏双端适配）
+  const fg = useMemo(() => makeFg(isDark), [isDark]);
+  const styles = useMemo(() => makeStyles(colors, fg), [colors, fg]);
   const song = usePlayerStore(s => s.currentSong);
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const currentTime = usePlayerStore(s => s.currentTime);
@@ -437,26 +439,45 @@ export default function PlayerOverlay({ onClose }: Props) {
     <SafeAreaView style={styles.container} edges={['top']} {...panResponder.panHandlers}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }, { scale }], opacity, paddingBottom: insets.bottom + spacing[6] }]}>
-        {/* 自定义顶部栏（P0-1：单独套 ChromeBlur 毛玻璃，与 TopBar/PlayerBar 语言一致） */}
-        <ChromeBlur style={styles.customHeader}>
+      {/* 全屏播放器固定渐变背景（方案 C：固定配色、不随封面 → 白封面歌不跳变）。
+          深浅主题各一套：暗=冷调蓝灰→近黑（亮字阅读区在底部），浅=冷灰→白（深字阅读区在底部）。
+          背景层与 contentWrap 共享下滑/缩放/淡出动画：下拉关闭时随面板一起滑走，露出底层
+          tab 页面（iOS 全屏媒体 dismiss 行为）；若固定不动会盖住底层页面。 */}
+      <Animated.View style={[styles.bgLayer, { transform: [{ translateY: panY }, { scale }], opacity }]} pointerEvents="none">
+        <LinearGradient
+          colors={isDark
+            ? ['#20242D', '#151821', '#0A0C10']
+            : ['#D5DAE3', '#E1E5EB', '#ECEEF3']}
+          locations={[0, 0.5, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+
+      <Animated.View style={[
+        styles.contentWrap,
+        // 背景恒由 bgLayer（固定暗色渐变）提供，contentWrap 恒透明
+        { backgroundColor: 'transparent' },
+        { transform: [{ translateY: panY }, { scale }], opacity, paddingBottom: insets.bottom + spacing[6] },
+      ]}>
+        {/* 自定义顶部栏（与背景一体：透明无毛玻璃，图标亮色；iOS 全屏沉浸，真机反馈） */}
+        <View style={styles.customHeader}>
           <ScalePress onPress={() => dismiss()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <ChevronDown size={28} color={colors.textSecondary} />
+            <ChevronDown size={28} color={fg.icon} />
           </ScalePress>
           {/* #186 #9：词/封切换改图标对，当前态 accent 高亮；弱化原单字切换的隐晦 */}
           <View style={styles.toggleGroup}>
             <ScalePress onPress={() => setShowLyrics(true)} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
-              <MessageSquareText size={22} color={showLyrics ? colors.accent : colors.textSecondary} />
+              <MessageSquareText size={22} color={showLyrics ? colors.accent : 'rgba(255,255,255,0.85)'} />
             </ScalePress>
             <ScalePress onPress={() => setShowLyrics(false)} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
-              <Disc3 size={22} color={showLyrics ? colors.textSecondary : colors.accent} />
+              <Disc3 size={22} color={showLyrics ? 'rgba(255,255,255,0.85)' : colors.accent} />
             </ScalePress>
             {/* 更多操作（真机反馈：竖排三点图标，加歌单/下载收进弹层） */}
             <ScalePress onPress={() => setShowMoreModal(true)} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
-              <MoreVertical size={22} color={colors.textSecondary} />
+              <MoreVertical size={22} color={fg.icon} />
             </ScalePress>
           </View>
-        </ChromeBlur>
+        </View>
 
         {/* 词/封 横向分页（真机反馈 #2）：封面页 + 歌词页并排，pageX 平移切换（苹果式 Tab） */}
         <View style={styles.pagerViewport}>
@@ -497,7 +518,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                 <ScalePress onPress={toggleFavorite} style={styles.infoFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   {/* P1-4：收藏切换即时 pop 反馈 */}
                   <Animated.View style={{ transform: [{ scale: favPop }] }}>
-                    <Heart size={22} color={isFav ? colors.accent : colors.textSecondary} fill={isFav ? colors.accent : 'none'} />
+                    <Heart size={22} color={isFav ? colors.accent : fg.iconSoft} fill={isFav ? colors.accent : 'none'} />
                   </Animated.View>
                 </ScalePress>
               </View>
@@ -519,7 +540,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                             styles.lyricLine,
                             styles.lyricLineActive,
                             {
-                              color: lyricPop.interpolate({ inputRange: [0, 1], outputRange: [colors.textTertiary, colors.accent] }),
+                              color: lyricPop.interpolate({ inputRange: [0, 1], outputRange: [fg.tertiary, colors.accent] }),
                               transform: [{ scale: lyricPop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) }],
                             },
                           ]}
@@ -583,7 +604,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                 </Animated.View>
               </ScalePress>
               <ScalePress onPress={handlePrev} hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}>
-                <SkipBack size={26} color={colors.textSecondary} />
+                <SkipBack size={26} color={fg.icon} />
               </ScalePress>
               <ScalePress onPress={() => { tapLight(); togglePlay(); }} style={styles.playBtn} pressScaleTo={0.95}>
                 {isPlaying ? (
@@ -593,10 +614,10 @@ export default function PlayerOverlay({ onClose }: Props) {
                 )}
               </ScalePress>
               <ScalePress onPress={handleNext} hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}>
-                <SkipForward size={26} color={colors.textSecondary} />
+                <SkipForward size={26} color={fg.icon} />
               </ScalePress>
               <ScalePress onPress={() => setShowQueueModal(true)} style={styles.actionBtn} hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}>
-                <ListMusic size={24} color={colors.textSecondary} />
+                <ListMusic size={24} color={fg.icon} />
               </ScalePress>
             </View>
             </View>
@@ -623,11 +644,11 @@ export default function PlayerOverlay({ onClose }: Props) {
                       >
                         {index === currentLineIdx ? (
                           <Animated.Text
-                            style={[
+                                                   style={[
                               styles.lyricsFullLine,
                               styles.lyricsFullLineActive,
                               {
-                                color: lyricPop.interpolate({ inputRange: [0, 1], outputRange: [colors.textTertiary, colors.accent] }),
+                                color: lyricPop.interpolate({ inputRange: [0, 1], outputRange: [fg.lyricFull, colors.accent] }),
                                 transform: [{ scale: lyricPop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] }) }],
                               },
                             ]}
@@ -691,11 +712,36 @@ function formatTime(sec: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+/** 播放器前景色集合：随背景明暗切换（暗背景→亮字 / 浅背景→深字，iOS 全屏双端适配） */
+const makeFg = (isDark: boolean) => isDark ? {
+  primary: '#FFFFFF',
+  secondary: 'rgba(255,255,255,0.7)',
+  tertiary: 'rgba(255,255,255,0.5)',
+  icon: 'rgba(255,255,255,0.85)',
+  iconSoft: 'rgba(255,255,255,0.8)',
+  badgeBg: 'rgba(255,255,255,0.14)',
+  badgeText: 'rgba(255,255,255,0.8)',
+  skeleton: 'rgba(255,255,255,0.18)',
+  lyricFull: 'rgba(255,255,255,0.6)',
+} : {
+  primary: '#16181E',
+  secondary: 'rgba(22,24,30,0.75)',
+  tertiary: 'rgba(22,24,30,0.55)',
+  icon: 'rgba(22,24,30,0.85)',
+  iconSoft: 'rgba(22,24,30,0.8)',
+  badgeBg: 'rgba(22,24,30,0.08)',
+  badgeText: 'rgba(22,24,30,0.8)',
+  skeleton: 'rgba(22,24,30,0.12)',
+  lyricFull: 'rgba(22,24,30,0.6)',
+};
+type PlayerFg = ReturnType<typeof makeFg>;
+
+const makeStyles = (colors: ThemeColors, fg: PlayerFg) => StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent', alignItems: 'center' },
-  // P0-1：contentWrap 是 Animated.View（translateY/scale/opacity native driver），不能内嵌 BlurView，
-  // 用 bgPlayer 半透明底让下滑关闭时底下内容透出材质；顶部栏单独套 ChromeBlur 毛玻璃
-  contentWrap: { flex: 1, alignItems: 'center', backgroundColor: colors.bgPlayer, width: '100%' },
+  // 全屏背景层（绝对铺满，位于 Animated contentWrap 之下）：固定暗色渐变，恒渲染
+  bgLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  // contentWrap 恒透明（背景交给 bgLayer）；是 Animated.View（native driver），背景层独立在其下
+  contentWrap: { flex: 1, alignItems: 'center', backgroundColor: 'transparent', width: '100%' },
   customHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -811,8 +857,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing[6],
   },
   infoText: { flex: 1, alignItems: 'flex-start' },
-  title: { ...textVariants.titleLg, color: colors.textPrimary },
-  artist: { ...textVariants.footnote, color: colors.textSecondary, marginTop: 4 },
+  // 前景色随背景明暗切换（fg）：暗背景→亮字 / 浅背景→深字
+  title: { ...textVariants.titleLg, color: fg.primary },
+  artist: { ...textVariants.footnote, color: fg.secondary, marginTop: 4 },
   // 来源徽标移到收藏按钮左侧（真机反馈：右侧不空）
   infoFav: { marginLeft: spacing[2], padding: spacing[1] },
   sourceTag: {
@@ -820,13 +867,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radius.xs,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    backgroundColor: colors.bgHover,
+    backgroundColor: fg.badgeBg,
   },
-  sourceTagText: { ...textVariants.micro, color: colors.textSecondary },
+  sourceTagText: { ...textVariants.micro, color: fg.badgeText },
   progressWrap: { marginTop: spacing[3], alignItems: 'center' },
   // 宽度由 JSX 注入 sliderWidth(winW)（#186 #4 旋转/折叠屏实时）
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  time: { ...textVariants.caption, color: colors.textTertiary, fontVariant: ['tabular-nums'] },
+  time: { ...textVariants.caption, color: fg.tertiary, fontVariant: ['tabular-nums'] },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -845,18 +892,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   // 真机反馈：普通视图歌词——灰行小、蓝行明显大一号、行距收紧。
   // P1-3：行高固定（避免 scrollToIndex 抖动），active 行用 scale+颜色过渡（见 renderItem），不再跳字号
-  lyricLine: { color: colors.textTertiary, fontSize: 13, textAlign: 'center', marginVertical: 4, lineHeight: 18 },
+  lyricLine: { color: fg.tertiary, fontSize: 13, textAlign: 'center', marginVertical: 4, lineHeight: 18 },
   lyricLineActive: { fontWeight: '600' },
   // 歌词骨架屏：行高/间距与 lyricLine 一致,占位稳定避免加载后跳动
   skeletonLine: {
     alignSelf: 'center',
     height: 15,
     borderRadius: radius.full,
-    backgroundColor: colors.skeletonBase,
+    backgroundColor: fg.skeleton,
     marginVertical: 6,
   },
   // 真机反馈：歌词页歌词——灰行小、蓝行明显大、行距收紧。P1-3：行高固定，active 用 scale 过渡
-  lyricsFullLine: { color: colors.textTertiary, fontSize: 16, textAlign: 'center', marginVertical: 6, lineHeight: 24 },
+  lyricsFullLine: { color: fg.lyricFull, fontSize: 16, textAlign: 'center', marginVertical: 6, lineHeight: 24 },
   lyricsFullLineActive: { fontWeight: '600' },
   // P1-5：空歌词占位（图标 + 方向文案）
   lyricsEmpty: {
@@ -865,7 +912,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: spacing[4],
     gap: spacing[2],
   },
-  lyricsEmptyText: { ...textVariants.footnote, color: colors.textTertiary },
+  lyricsEmptyText: { ...textVariants.footnote, color: fg.tertiary },
   lyricsFullEmpty: {
     flex: 1,
     alignItems: 'center',
@@ -884,8 +931,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing[4],
     marginBottom: spacing[2],
   },
-  lyricsFullTitle: { ...textVariants.titleLg, color: colors.textPrimary },
-  lyricsFullArtist: { ...textVariants.subhead, color: colors.textSecondary, marginTop: 2 },
+  lyricsFullTitle: { ...textVariants.titleLg, color: fg.primary },
+  lyricsFullArtist: { ...textVariants.subhead, color: fg.secondary, marginTop: 2 },
   lyricsFullList: {
     flex: 1,
     width: '100%',
