@@ -465,10 +465,10 @@ export default function PlayerOverlay({ onClose }: Props) {
           {/* #186 #9：词/封切换改图标对，当前态 accent 高亮；弱化原单字切换的隐晦 */}
           <View style={styles.toggleGroup}>
             <ScalePress onPress={() => setShowLyrics(true)} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
-              <MessageSquareText size={22} color={showLyrics ? colors.accent : 'rgba(255,255,255,0.85)'} />
+              <MessageSquareText size={22} color={showLyrics ? colors.accent : fg.icon} />
             </ScalePress>
             <ScalePress onPress={() => setShowLyrics(false)} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
-              <Disc3 size={22} color={showLyrics ? 'rgba(255,255,255,0.85)' : colors.accent} />
+              <Disc3 size={22} color={showLyrics ? fg.icon : colors.accent} />
             </ScalePress>
             {/* 更多操作（真机反馈：竖排三点图标，加歌单/下载收进弹层） */}
             <ScalePress onPress={() => setShowMoreModal(true)} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
