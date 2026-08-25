@@ -325,7 +325,9 @@ export interface ThemeColors {
 /** 浅色主题（默认，与 desktop 浅色一致） */
 export const lightColors: ThemeColors = {
   /* 背景层级 */
-  bgBase: palette.gray50,
+  // 页面底用 iOS systemGroupedBackground 标准浅灰（#F2F2F7）：原 gray50 #FAFAFA 近白，
+  // 灰一档让「白卡片 vs 灰底」的层级更明显（卡片层保持纯白）
+  bgBase: '#F2F2F7',
   bgSurface: '#FFFFFF',
   bgElevated: '#FFFFFF',
   bgSidebar: '#FFFFFF',
