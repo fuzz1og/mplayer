@@ -11,7 +11,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { musicApi } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
-import LoadingState from '../components/LoadingState';
+import SongListSkeleton from '../components/SongListSkeleton';
 import SongRow from '../components/SongRow';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { playSong } from '../services/audioPlayer';
@@ -123,7 +123,7 @@ export default function HotlistPage() {
           }}
         />
         {loading ? (
-          <LoadingState />
+          <SongListSkeleton />
         ) : (
           <FlatList
             data={songs}

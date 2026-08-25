@@ -11,6 +11,7 @@ import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { TAB_PAD_TOP, TAB_ICON_SIZE, TAB_LABEL_HEIGHT, TAB_PAD_BOTTOM, TAB_SAFE_INSET_MIN } from '../../components/chromeMetrics';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
+import { usePlayerStore } from '../../stores/playerStore';
 import ScalePress from '../../components/ScalePress';
 
 // tab bar 内容高度（paddingTop + 图标 + 标签行 + paddingBottom）：
@@ -25,6 +26,8 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const isSearch = pathname === '/search';
+  // ADR-0008：首次播放前迷你播放栏隐藏（内容让位已随之缩小），第一首播放时滑入
+  const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
   const slideAnim = useRef(new Animated.Value(0)).current;
   const heightAnim = useRef(new Animated.Value(0)).current;
   const tabBarHeight =
@@ -64,10 +67,13 @@ function AnimatedTabBar({ state, navigation }: { state: any; navigation: any }) 
     // box-none 让 chrome 之间的空隙不拦截列表滚动手势
     <View pointerEvents="box-none" style={styles.chromeHost}>
       {/* 搜索页时 tab bar 收起为 0 高度,PlayerBar 贴到屏幕底部,
-          需要补底部安全区 padding;其他页 tab bar 自己处理安全区 */}
-      <View style={[styles.playerWrap, isSearch && { paddingBottom: insets.bottom }]}>
-        <PlayerBar />
-      </View>
+          需要补底部安全区 padding;其他页 tab bar 自己处理安全区。
+          首次播放前隐藏 PlayerBar（ADR-0008） */}
+      {playerVisible && (
+        <View style={[styles.playerWrap, isSearch && { paddingBottom: insets.bottom }]}>
+          <PlayerBar />
+        </View>
+      )}
       <Animated.View style={{ overflow: 'hidden', height: containerHeight }}>
         <Animated.View style={{ transform: [{ translateY }] }}>
           <View style={[tabBarStyles.container, { paddingBottom: TAB_PAD_BOTTOM + Math.max(0, insets.bottom - TAB_SAFE_INSET_MIN) }]}>

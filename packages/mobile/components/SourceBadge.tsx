@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import type { SourceKey } from '@mplayer/core';
 import { radius, sourceColors, spacing, textVariants } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 
 /**
  * 音乐源身份的唯一视觉出口（源色纪律 #196 M2-3）：
@@ -20,10 +21,13 @@ export default function SourceBadge({ source, size = 'md', variant = 'dot', styl
   /** badge 形态的文案（如来源名）；dot 形态忽略 */
   children?: React.ReactNode;
 }) {
+  const { colors } = useTheme();
   if (variant === 'badge') {
+    // ADR-0006：彩色文字走 sourceText 变体达标 4.5:1（浅色加深/深色提亮）；
+    // 圆点徽章仍用 sourceColors（色块无对比度要求）
     return (
       <View style={[styles.badge, { backgroundColor: `${sourceColors[source]}14` }, style]}>
-        <Text style={[styles.badgeText, { color: sourceColors[source] }]}>{children}</Text>
+        <Text style={[styles.badgeText, { color: colors.sourceText[source] }]}>{children}</Text>
       </View>
     );
   }

@@ -13,6 +13,8 @@ interface PlayerState {
   showPlayer: boolean;
   /** 播放准备中（解析直链/创建播放器）：UI 显示加载反馈，避免点击后无响应感 */
   preparing: boolean;
+  /** 是否曾播放过（ADR-0008）：首次播放前隐藏迷你播放栏，此后队列清空仍显示空态 */
+  hasPlayed: boolean;
   // actions
   play: (song: Song) => void;
   pause: () => void;
@@ -35,8 +37,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   duration: 0,
   showPlayer: false,
   preparing: false,
+  hasPlayed: false,
 
-  play: (song) => set({ currentSong: song, isPlaying: true, currentTime: 0 }),
+  play: (song) => set({ currentSong: song, isPlaying: true, currentTime: 0, hasPlayed: true }),
   pause: () => set({ isPlaying: false }),
   resume: () => set({ isPlaying: true }),
 
@@ -45,7 +48,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const playMode = useSettingsStore.getState().playMode;
     const nextIndex = getNextSongIndex(queue, currentIndex, playMode);
     if (nextIndex === -1) return null;
-    set({ currentSong: queue[nextIndex], currentIndex: nextIndex, isPlaying: true, currentTime: 0 });
+    set({ currentSong: queue[nextIndex], currentIndex: nextIndex, isPlaying: true, currentTime: 0, hasPlayed: true });
     return get().currentSong;
   },
 
@@ -72,7 +75,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setQueue: (songs, startIndex = 0) => {
     if (songs.length === 0) return;
     const idx = Math.max(0, Math.min(startIndex, songs.length - 1));
-    set({ queue: songs, currentSong: songs[idx], currentIndex: idx, isPlaying: true, currentTime: 0 });
+    set({ queue: songs, currentSong: songs[idx], currentIndex: idx, isPlaying: true, currentTime: 0, hasPlayed: true });
   },
 
   setCurrentTime: (time) => set({ currentTime: time }),

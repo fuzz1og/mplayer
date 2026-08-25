@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Modal,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
 } from 'react-native';
 import { ArrowLeft, Search, Settings, ChevronDown, Check, LayoutGrid, Music2 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
@@ -13,6 +13,8 @@ import { useSourceStore, SOURCE_OPTION_LABELS } from '../stores/sourceStore';
 import type { SourceOption } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
 import SourceBadge from './SourceBadge';
+import BottomSheet from './BottomSheet';
+import ChromeBlur from './ChromeBlur';
 import { TOP_BAR_PAD_VERTICAL, SEARCH_BAR_HEIGHT } from './chromeMetrics';
 import ScalePress from './ScalePress';
 
@@ -58,7 +60,7 @@ export default function TopBar() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + TOP_BAR_PAD_VERTICAL }]}>
+    <ChromeBlur style={[styles.container, { paddingTop: insets.top + TOP_BAR_PAD_VERTICAL }]}>
       {isSearchTab && (
         <ScalePress
           onPress={() => router.replace('/')}
@@ -108,39 +110,34 @@ export default function TopBar() {
         <Settings size={22} color={colors.textSecondary} />
       </ScalePress>
 
-      <Modal visible={showSourcePicker} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowSourcePicker(false)}>
-        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowSourcePicker(false)}>
-          <TouchableOpacity style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]} activeOpacity={1} onPress={() => {}}>
-            <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>选择音乐源</Text>
-            {SOURCE_OPTIONS.map((opt) => (
-              <ScalePress
-                key={opt.key}
-                pressScaleTo={0.98}
-                style={[styles.optionItem, selectedSource === opt.key && { backgroundColor: colors.bgHover, borderRadius: radius.md }]}
-                onPress={() => handleSelectSource(opt.key)}
-              >
-                {/* 源身份只经 6px 徽章点表达（源色纪律）；文字/图标保持中性色保对比度 */}
-                <SourceBadge source={opt.key} size="md" style={styles.optionDot} />
-                <opt.icon
-                  size={20}
-                  color={selectedSource === opt.key ? colors.textPrimary : colors.textSecondary}
-                />
-                <Text style={[styles.optionLabel, selectedSource === opt.key && { color: colors.textPrimary, fontWeight: '600' }]}>
-                  {SOURCE_OPTION_LABELS[opt.key]}
-                </Text>
-                {selectedSource === opt.key && (
-                  <Check size={20} color={colors.textPrimary} />
-                )}
-              </ScalePress>
-            ))}
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowSourcePicker(false)}>
-              <Text style={styles.cancelText}>取消</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
+      <BottomSheet visible={showSourcePicker} onClose={() => setShowSourcePicker(false)}>
+        <Text style={styles.sheetTitle}>选择音乐源</Text>
+        {SOURCE_OPTIONS.map((opt) => (
+          <ScalePress
+            key={opt.key}
+            pressScaleTo={0.98}
+            style={[styles.optionItem, selectedSource === opt.key && { backgroundColor: colors.bgHover, borderRadius: radius.md }]}
+            onPress={() => handleSelectSource(opt.key)}
+          >
+            {/* 源身份只经 6px 徽章点表达（源色纪律）；文字/图标保持中性色保对比度 */}
+            <SourceBadge source={opt.key} size="md" style={styles.optionDot} />
+            <opt.icon
+              size={20}
+              color={selectedSource === opt.key ? colors.textPrimary : colors.textSecondary}
+            />
+            <Text style={[styles.optionLabel, selectedSource === opt.key && { color: colors.textPrimary, fontWeight: '600' }]}>
+              {SOURCE_OPTION_LABELS[opt.key]}
+            </Text>
+            {selectedSource === opt.key && (
+              <Check size={20} color={colors.textPrimary} />
+            )}
+          </ScalePress>
+        ))}
+        <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowSourcePicker(false)}>
+          <Text style={styles.cancelText}>取消</Text>
         </TouchableOpacity>
-      </Modal>
-    </View>
+      </BottomSheet>
+    </ChromeBlur>
   );
 }
 
@@ -151,8 +148,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: TOP_BAR_PAD_VERTICAL,
     // paddingTop 由组件按 insets.top 动态注入（写死 52 在无刘海机型空一大截）
-    // 悬浮 chrome：半透明材质让内容从下穿过（M2），无发丝硬分隔
-    backgroundColor: colors.bgPlayer,
+    // 悬浮 chrome：毛玻璃材质由 ChromeBlur 提供（ADR-0005），此处透明
+    backgroundColor: 'transparent',
   },
   searchBar: {
     flex: 1,
@@ -214,27 +211,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   backBtn: {
     padding: 4,
     marginRight: 8,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: colors.bgOverlay,
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 36,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.bgActive,
-    alignSelf: 'center',
-    marginBottom: 16,
   },
   sheetTitle: {
     ...textVariants.title,

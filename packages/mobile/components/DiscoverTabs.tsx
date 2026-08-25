@@ -17,7 +17,8 @@ import SegmentedTabs from './SegmentedTabs';
 import TextTabs from './TextTabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight, LIST_TAIL_PADDING } from './chromeMetrics';
-import LoadingState from './LoadingState';
+import SongListSkeleton from './SongListSkeleton';
+import CoverGridSkeleton from './CoverGridSkeleton';
 import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
 import { usePlayerStore } from '../stores/playerStore';
@@ -99,6 +100,7 @@ function HotlistContent() {
   const styles = isDark ? STYLES.dark : STYLES.light;
   const loading = useDiscoverStore(s => s.loading);
   const load = useDiscoverStore(s => s.load);
+  const playerVisible = usePlayerStore(s => !!(s.currentSong || s.hasPlayed));
   const getSongs = useCallback((key: string) => {
     const state = useDiscoverStore.getState();
     return (state as any)[key] as HotlistItem[];
@@ -106,7 +108,7 @@ function HotlistContent() {
 
   useEffect(() => { load(); }, []);
 
-  if (loading) return <LoadingState />;
+  if (loading) return <SongListSkeleton />;
 
   const SECTIONS = [
     { key: 'neteaseHotlist' as const, title: '网易云音乐 · 热歌榜', sourceType: 'netease' as SourceKey },
@@ -116,7 +118,7 @@ function HotlistContent() {
   ];
 
   return (
-    <ScrollView style={styles.tabContent} contentContainerStyle={[styles.tabContentInnerHotlist, { paddingBottom: bottomChromeHeight(insets.bottom, true) + LIST_TAIL_PADDING }]}>
+    <ScrollView style={styles.tabContent} contentContainerStyle={[styles.tabContentInnerHotlist, { paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + LIST_TAIL_PADDING }]}>
       {SECTIONS.map(section => (
         <SectionCard
           key={section.key}
@@ -171,7 +173,7 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
           pressScaleTo={0.98}
           onPress={() => playSong(song, i)}
         >
-          <Text style={styles.rank}>{i + 1}</Text>
+          <Text style={[styles.rank, i < 3 && { color: colors.rankText[i] }]}>{i + 1}</Text>
           {song.cover ? (
             <Image source={{ uri: song.cover }} style={styles.cover} />
           ) : (
@@ -226,6 +228,7 @@ function AlbumsContent() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
+  const playerVisible = usePlayerStore(s => !!(s.currentSong || s.hasPlayed));
   const CARD_COLS = 2;
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
@@ -262,7 +265,7 @@ function AlbumsContent() {
   }, [load]);
 
   // 首屏(无数据)整页 loading;分类切换保留旧数据,避免闪烁
-  if (loading && albums.length === 0) return <LoadingState />;
+  if (loading && albums.length === 0) return <CoverGridSkeleton />;
 
   const renderItem = ({ item: album }: { item: Album }) => (
     <TouchableOpacity
@@ -292,7 +295,7 @@ function AlbumsContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + LIST_TAIL_PADDING }]}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + LIST_TAIL_PADDING }]}
         data={albums}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
@@ -321,6 +324,7 @@ function PlaylistContent() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
+  const playerVisible = usePlayerStore(s => !!(s.currentSong || s.hasPlayed));
   const CARD_COLS = 2;
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
@@ -387,7 +391,7 @@ function PlaylistContent() {
   }, [loadingMore, hasMore, category]);
 
   // 首屏(无数据)整页 loading;分类切换保留旧列表
-  if (loading && playlists.length === 0) return <LoadingState />;
+  if (loading && playlists.length === 0) return <CoverGridSkeleton />;
 
   const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
     <TouchableOpacity
@@ -417,7 +421,7 @@ function PlaylistContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + LIST_TAIL_PADDING }]}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + LIST_TAIL_PADDING }]}
         data={playlists}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
@@ -460,6 +464,7 @@ function ArtistContent() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = isDark ? STYLES.dark : STYLES.light;
+  const playerVisible = usePlayerStore(s => !!(s.currentSong || s.hasPlayed));
   const CARD_COLS = 3;  // 宽度用模块级 artistCardW（16 沟槽 + 2×12 列距）
   const [artists, setArtists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -521,7 +526,7 @@ function ArtistContent() {
   }, [loadingMore, hasMore, artists.length, category]);
 
   // 首屏(无数据)整页 loading;分类切换保留旧列表
-  if (loading && artists.length === 0) return <LoadingState />;
+  if (loading && artists.length === 0) return <CoverGridSkeleton columns={3} />;
 
   const renderItem = ({ item: a }: { item: any }) => (
     <TouchableOpacity
@@ -550,7 +555,7 @@ function ArtistContent() {
       />
       <FlatList
         style={styles.tabContent}
-        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true) + LIST_TAIL_PADDING }]}
+        contentContainerStyle={[styles.tabContentInner, { paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + LIST_TAIL_PADDING }]}
         data={artists}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}

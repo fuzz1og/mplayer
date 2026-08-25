@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  View, Text, Image, TouchableOpacity, StyleSheet,
-  Modal, FlatList, Animated, Easing,
+  View, Text, Image, TouchableOpacity, StyleSheet, Animated, Easing,
 } from 'react-native';
-import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, X, Play, Loader2 } from 'lucide-react-native';
+import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, Loader2 } from 'lucide-react-native';
 import { invalidateCoverUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
@@ -13,18 +11,17 @@ import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { useResolvedCover } from '../hooks/useResolvedCover';
 import ScalePress from './ScalePress';
+import QueueListModal from './QueueListModal';
+import ChromeBlur from './ChromeBlur';
 import { tapLight } from '../utils/haptics';
 
 export default function PlayerBar() {
-  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const currentSong = usePlayerStore(s => s.currentSong);
   const isPlaying = usePlayerStore(s => s.isPlaying);
-  const queue = usePlayerStore(s => s.queue);
   const next = usePlayerStore(s => s.next);
   const prev = usePlayerStore(s => s.prev);
-  const setQueue = usePlayerStore(s => s.setQueue);
   const setShowPlayer = usePlayerStore(s => s.setShowPlayer);
   const preparing = usePlayerStore(s => s.preparing);
   const [showQueue, setShowQueue] = useState(false);
@@ -63,6 +60,7 @@ export default function PlayerBar() {
   };
 
   return (
+    <ChromeBlur style={styles.blurWrap}>
     <TouchableOpacity
       style={[styles.container, !currentSong && styles.containerEmpty]}
       onPress={() => currentSong && setShowPlayer(true)}
@@ -133,62 +131,22 @@ export default function PlayerBar() {
           </ScalePress>
         </View>
       )}
-      {/* 队列弹窗 */}
-      <Modal
-        visible={showQueue}
-        animationType="slide"
-        transparent
-        statusBarTranslucent
-        navigationBarTranslucent
-        onRequestClose={() => setShowQueue(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: Math.max(40, insets.bottom + 24) }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>播放队列 ({queue.length})</Text>
-              <TouchableOpacity onPress={() => setShowQueue(false)}>
-                <X size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={queue}
-              keyExtractor={(item, i) => `${item.id}-${i}`}
-              renderItem={({ item, index }) => {
-                const isCurrent = currentSong?.id === item.id;
-                return (
-                  <TouchableOpacity
-                    style={styles.queueItem}
-                    onPress={() => {
-                      setQueue(queue, index);
-                      playSong(item);
-                      setShowQueue(false);
-                    }}
-                  >
-                    <View style={styles.queueItemInfo}>
-                      <Text style={[styles.queueItemName, isCurrent && styles.queueItemActive]} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      <Text style={styles.queueItemArtist}>{item.artist}</Text>
-                    </View>
-                    {isCurrent && <Play size={16} color={colors.accent} />}
-                  </TouchableOpacity>
-                );
-              }}
-              ListEmptyComponent={<Text style={styles.emptyText}>队列为空</Text>}
-            />
-          </View>
-        </View>
-      </Modal>
+      {/* 队列弹层（#186 #5：抽共享 QueueListModal，基于 BottomSheet 壳） */}
+      <QueueListModal visible={showQueue} onClose={() => setShowQueue(false)} />
     </TouchableOpacity>
+    </ChromeBlur>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  // 毛玻璃由 ChromeBlur 提供（ADR-0005），容器仅排版
+  blurWrap: {
+    overflow: 'hidden',
+  },
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    // 悬浮底部 chrome：半透明材质，列表内容从下穿过（M2）
-    backgroundColor: colors.bgPlayer,
+    backgroundColor: 'transparent',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
   },

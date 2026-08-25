@@ -11,7 +11,7 @@ import { gridCardWidth } from '../../components/gridMetrics';
 import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
 import { cacheManager, musicApi, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
-import LoadingState from '../../components/LoadingState';
+import SongListSkeleton from '../../components/SongListSkeleton';
 import ScalePress from '../../components/ScalePress';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
@@ -38,6 +38,8 @@ export default function RecommendPage() {
   const [usedIndices, setUsedIndices] = useState<number[]>([]);
   // 早退/条件分支之后不得再调 hook，insets 必须在 LoadingState 早退前取
   const insets = useSafeAreaInsets();
+  // ADR-0008：首次播放前迷你播放栏隐藏，让位随之缩小
+  const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
 
   const load = useCallback(async (isRefresh: boolean) => {
     try {
@@ -89,14 +91,15 @@ export default function RecommendPage() {
   // 当前展示的 5 首(随机批次;池不足 5 首时直接展示整个池)
   const shownSongs = batch;
 
-  if (loading) return <LoadingState />;
+  // #186 #6：整页加载改为就地骨架，避免居中转圈→列表的布局跳动
+  if (loading) return <SongListSkeleton />;
 
   return (
     <Animated.ScrollView
       style={[styles.container, { backgroundColor: animatedBg }]}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + SECTION_TAIL_PADDING },
+        { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + SECTION_TAIL_PADDING },
       ]}
       refreshControl={
         <RefreshControl

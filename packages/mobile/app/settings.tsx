@@ -414,7 +414,7 @@ export default function SettingsPage() {
             {updateState === 'not-available' && (
               <View style={[styles.row, styles.rowSep]}>
                 <CircleCheck size={20} color={colors.success} style={{ marginRight: 8 }} />
-                <Text style={{ ...textVariants.subhead, fontWeight: '400', color: colors.success }}>已是最新版本</Text>
+                <Text style={{ ...textVariants.subhead, fontWeight: '400', color: colors.successText }}>已是最新版本</Text>
               </View>
             )}
             {updateState === 'error' && (
@@ -554,8 +554,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...textVariants.caption,
     color: colors.textTertiary,
   },
+  // ADR-0006：success 当文字仅 ≈2.3:1，走 successText 达标
   modeStatusReady: {
-    color: colors.success,
+    color: colors.successText,
   },
   input: {
     backgroundColor: colors.inputBg,
@@ -589,8 +590,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     height: '100%',
     borderRadius: 3,
   },
+  // ADR-0006：success 当文字走 successText 达标
   updateAvailableText: {
-    color: colors.success,
+    color: colors.successText,
     ...textVariants.body,
     fontWeight: '600',
     marginBottom: spacing[2],

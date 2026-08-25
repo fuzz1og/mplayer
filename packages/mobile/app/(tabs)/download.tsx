@@ -32,6 +32,8 @@ export default function DownloadPage() {
   const removeItem = useDownloadStore((s) => s.removeItem);
   const purgeFailed = useDownloadStore((s) => s.purgeFailed);
   const currentSong = usePlayerStore((s) => s.currentSong);
+  // ADR-0008：首次播放前迷你播放栏隐藏，让位随之缩小
+  const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
   const downloadDirUri = useSettingsStore((s) => s.downloadDirUri);
   const authorized = Boolean(downloadDirUri);
 
@@ -88,7 +90,7 @@ export default function DownloadPage() {
         keyExtractor={(item) => item.key}
         contentContainerStyle={[
           items.length === 0 ? styles.emptyContent : styles.listContent,
-          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + LIST_TAIL_PADDING },
+          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + LIST_TAIL_PADDING },
         ]}
         ListHeaderComponent={
           <TouchableOpacity style={styles.pathBox} onPress={handlePickDir} activeOpacity={0.7}>

@@ -1,15 +1,15 @@
 import { useState, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Modal, Alert,
+  View, Text, TouchableOpacity, StyleSheet, Alert,
 } from 'react-native';
 import { CircleCheck, ListMusic } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Song, SourceKey } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
 import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import BottomSheet from './BottomSheet';
 
 function sourceLabel(sourceType?: string): string {
   return SOURCE_LABELS[sourceType as SourceKey] || sourceType || '未知';
@@ -24,7 +24,6 @@ interface Props {
 export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const playlists = usePlaylistStore(s => s.playlists);
   const addSong = usePlaylistStore(s => s.addSong);
   const removeSong = usePlaylistStore(s => s.removeSong);
@@ -76,76 +75,49 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        {addedName ? (
-          <View style={styles.successBox}>
-            <CircleCheck size={48} color={colors.accent} />
-            <Text style={styles.successText}>已加入歌单「{addedName}」</Text>
-          </View>
-        ) : (
-          <TouchableOpacity style={[styles.sheet, { paddingBottom: insets.bottom + spacing[6] }]} activeOpacity={1} onPress={() => {}}>
-            <View style={styles.handle} />
-            <Text style={styles.title}>加入歌单</Text>
-            {song && (
-              <Text style={styles.songName} numberOfLines={1}>{song.name}</Text>
-            )}
-            {playlists.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <ListMusic size={40} color={colors.textTertiary} />
-                <Text style={styles.emptyText}>暂无歌单</Text>
-                <Text style={styles.emptyHint}>请先在歌单页面创建</Text>
-              </View>
-            ) : (
-              <View style={styles.list}>
-                {playlists.map(p => (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={styles.item}
-                    onPress={() => handleSelect(p.id, p.name)}
-                  >
-                    <ListMusic size={22} color={colors.accent} />
-                    <Text style={styles.itemText}>{p.name}</Text>
-                    <Text style={styles.itemCount}>{p.songs.length}首</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-            <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-              <Text style={styles.cancelText}>取消</Text>
-            </TouchableOpacity>
+    <BottomSheet visible={visible} onClose={onClose}>
+      {addedName ? (
+        <View style={styles.successBox}>
+          <CircleCheck size={48} color={colors.accent} />
+          <Text style={styles.successText}>已加入歌单「{addedName}」</Text>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.title}>加入歌单</Text>
+          {song && (
+            <Text style={styles.songName} numberOfLines={1}>{song.name}</Text>
+          )}
+          {playlists.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <ListMusic size={40} color={colors.textTertiary} />
+              <Text style={styles.emptyText}>暂无歌单</Text>
+              <Text style={styles.emptyHint}>请先在歌单页面创建</Text>
+            </View>
+          ) : (
+            <View style={styles.list}>
+              {playlists.map(p => (
+                <TouchableOpacity
+                  key={p.id}
+                  style={styles.item}
+                  onPress={() => handleSelect(p.id, p.name)}
+                >
+                  <ListMusic size={22} color={colors.accent} />
+                  <Text style={styles.itemText}>{p.name}</Text>
+                  <Text style={styles.itemCount}>{p.songs.length}首</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
+            <Text style={styles.cancelText}>取消</Text>
           </TouchableOpacity>
-        )}
-      </TouchableOpacity>
-    </Modal>
+        </>
+      )}
+    </BottomSheet>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: colors.bgOverlay,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  sheet: {
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    paddingHorizontal: spacing[6],
-    paddingTop: spacing[3],
-    paddingBottom: 36,
-    width: '100%',
-    maxHeight: '70%',
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.bgActive,
-    alignSelf: 'center',
-    marginBottom: spacing[4],
-  },
   title: {
     ...textVariants.title,
     color: colors.textPrimary,

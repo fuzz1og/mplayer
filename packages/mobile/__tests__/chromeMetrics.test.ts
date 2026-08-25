@@ -61,6 +61,11 @@ describe('bottomChromeHeight / topChromeHeight', () => {
     expect(bottomChromeHeight(34, false)).toBe(PLAYER_BAR_HEIGHT + 34);
   });
 
+  it('首次播放前（playerVisible=false）播放栏高度贡献为 0（ADR-0008）', () => {
+    expect(bottomChromeHeight(34, true, false)).toBe(tabBarHeight(34));
+    expect(bottomChromeHeight(34, false, false)).toBe(34);
+  });
+
   it('topChromeHeight = insetsTop + 固定高度', () => {
     expect(topChromeHeight(47)).toBe(47 + TOP_BAR_FIXED_HEIGHT);
   });
