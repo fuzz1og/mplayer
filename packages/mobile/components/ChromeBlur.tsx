@@ -1,5 +1,5 @@
 import { createRef } from 'react';
-import { View, Platform, type View as RNView, type StyleProp, type ViewStyle } from 'react-native';
+import { View, Platform, StyleSheet, type View as RNView, type StyleProp, type ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../theme/ThemeProvider';
 import { useReducedTransparency } from '../hooks/useReducedTransparency';
@@ -43,11 +43,27 @@ export default function ChromeBlur({ style, children }: Props) {
   return (
     <BlurView
       intensity={90}
-      tint={isDark ? 'systemThinMaterialDark' : 'systemThinMaterialLight'}
+      tint={isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterialLight'}
       blurTarget={Platform.OS === 'android' ? chromeBlurTargetRef : undefined}
       blurMethod={Platform.OS === 'android' ? 'dimezisBlurViewSdk31Plus' : undefined}
+      // Android 实际模糊强度 = intensity / blurReductionFactor：默认 4 → 90/4≈22，
+      // 近乎 iOS 的 1/4，观感"发干、像半透明"。设为 1 后 ≈90 追平 iOS（社区调研方案 A）。
+      blurReductionFactor={Platform.OS === 'android' ? 1 : undefined}
       style={style}
     >
+      {/* Android 材质着色补偿（社区调研方案 B，见 docs/agents/mobile-blur-community-research.md）：
+          iOS material = 模糊+饱和+着色三件套；Android expo-blur 只有模糊+弱着色、无饱和，
+          高斯模糊采样天然压暗/稀释色彩 → 发灰。叠极低 alpha 中性色补「着色」、压发灰。
+          iOS 不叠（BlurView 自带 material 着色，叠了双重着色）。 */}
+      {Platform.OS === 'android' && (
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.18)' : 'rgba(255, 255, 255, 0.12)' },
+          ]}
+        />
+      )}
       {children}
     </BlurView>
   );
