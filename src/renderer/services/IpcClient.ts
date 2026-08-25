@@ -1,4 +1,4 @@
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 
 export class IpcClient {
   static async invoke<T>(channel: string, ...args: unknown[]): Promise<T> {

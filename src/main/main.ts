@@ -1,5 +1,5 @@
 import './env'; // 必须第一个 import，设置 ELECTRON_GET_USE_PROXY
-import { app, BrowserWindow, ipcMain, session, globalShortcut } from 'electron';
+import { app, BrowserWindow, ipcMain, session, globalShortcut, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import axios from 'axios';
@@ -55,6 +55,27 @@ const musicApi = {
 // 标记是否正在退出（托盘退出时设置，防止 close 事件拦截退出）
 let isQuitting = false;
 
+/**
+ * IPC 来源可信校验（审查修复）：只信任应用自身页面（生产 file:// / 开发 dev server）。
+ * 渲染层若被注入（XSS），senderFrame.url 会是恶意来源，此处拦截其调用主进程能力。
+ * 注意：senderFrame 为 null 仅出现在测试直接调用 handler 的场景（非真实 IPC），放行并告警。
+ */
+function isTrustedIpcSender(frame: Electron.WebFrameMain | null | undefined): boolean {
+  if (!frame) {
+    console.warn('[IPC] 未提供 senderFrame（非真实 IPC 调用），放行');
+    return true;
+  }
+  const url = frame.url || '';
+  if (url.startsWith('file://')) return true;
+  if (process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL)) return true;
+  return false;
+}
+
+/** 单个 IPC 调用的 sender 校验；不通过返回错误信息（null 表示通过）。 */
+export function checkIpcSender(frame: Electron.WebFrameMain | null | undefined): string | null {
+  return isTrustedIpcSender(frame) ? null : `IPC 来源不受信任: ${frame?.url ?? 'unknown'}`;
+}
+
 function createWindow() {
   const iconPath = path.join(app.getAppPath(), 'resources', 'icon.png');
   const mainWindow = new BrowserWindow({
@@ -62,13 +83,38 @@ function createWindow() {
     height: 900,
     icon: iconPath,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      webSecurity: false
+      // 审查修复：收紧为 Electron 安全基线。
+      // - contextIsolation: true + nodeIntegration: false：渲染层不再拥有 Node/require
+      //   能力（经 preload 暴露的 window.electronAPI 通信），XSS 无法再直接升级为 RCE；
+      // - webSecurity: true：恢复同源策略/CORS 保护（渲染层跨域 fetch 已改走主进程）；
+      // - preload：唯一 IPC 桥（src/main/preload.ts）。
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: true,
+      sandbox: false
     },
     frame: false,
     autoHideMenuBar: true,
     show: false
+  });
+
+  // 审查修复：拦截渲染层一切外部导航与 window.open（防被注入后跳转到任意站点）
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowed = process.env.VITE_DEV_SERVER_URL
+      ? url.startsWith(process.env.VITE_DEV_SERVER_URL)
+      : url.startsWith('file://');
+    if (!allowed) {
+      console.warn(`[Security] 已拦截渲染层导航: ${url}`);
+      event.preventDefault();
+    }
+  });
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // 外部链接一律交给系统浏览器打开（如设置页的仓库链接），不在应用内新建窗口
+    if (/^https?:\/\//.test(url)) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -93,8 +139,13 @@ function createWindow() {
   });
 
 
-  ipcMain.handle('window:minimize', () => mainWindow.minimize());
-  ipcMain.handle('window:toggleMaximize', () => {
+  // 审查修复：window 域 IPC 增加 sender 校验（拒绝非应用页面来源）
+  ipcMain.handle('window:minimize', (event) => {
+    if (checkIpcSender(event.senderFrame)) throw new Error('IPC 来源不受信任');
+    mainWindow.minimize();
+  });
+  ipcMain.handle('window:toggleMaximize', (event) => {
+    if (checkIpcSender(event.senderFrame)) throw new Error('IPC 来源不受信任');
     if (mainWindow.isMaximized()) {
       mainWindow.unmaximize();
     } else {
@@ -102,8 +153,14 @@ function createWindow() {
     }
     return mainWindow.isMaximized();
   });
-  ipcMain.handle('window:isMaximized', () => mainWindow.isMaximized());
-  ipcMain.handle('window:close', () => mainWindow.close());
+  ipcMain.handle('window:isMaximized', (event) => {
+    if (checkIpcSender(event.senderFrame)) throw new Error('IPC 来源不受信任');
+    return mainWindow.isMaximized();
+  });
+  ipcMain.handle('window:close', (event) => {
+    if (checkIpcSender(event.senderFrame)) throw new Error('IPC 来源不受信任');
+    mainWindow.close();
+  });
   mainWindow.on('maximize', () => mainWindow.webContents.send('window:maximized', true));
   mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:maximized', false));
 
@@ -134,12 +191,20 @@ function setupGlobalShortcuts(mainWindow: BrowserWindow) {
     mainWindow.webContents.send('shortcut:action', { type });
   };
 
-  globalShortcut.register('MediaPlayPause', () => sendAction('playPause'));
-  globalShortcut.register('MediaNextTrack', () => sendAction('next'));
-  globalShortcut.register('MediaPreviousTrack', () => sendAction('prev'));
-  globalShortcut.register('CommandOrControl+Alt+Space', () => sendAction('playPause'));
-  globalShortcut.register('CommandOrControl+Alt+Right', () => sendAction('next'));
-  globalShortcut.register('CommandOrControl+Alt+Left', () => sendAction('prev'));
+  // 审查修复：检查 register 返回值——快捷键被其他应用占用时静默失败会误导用户
+  const register = (accelerator: string, type: string) => {
+    const ok = globalShortcut.register(accelerator, () => sendAction(type));
+    if (!ok) {
+      console.warn(`[Shortcut] 全局快捷键注册失败（可能被其他应用占用）: ${accelerator}`);
+    }
+  };
+
+  register('MediaPlayPause', 'playPause');
+  register('MediaNextTrack', 'next');
+  register('MediaPreviousTrack', 'prev');
+  register('CommandOrControl+Alt+Space', 'playPause');
+  register('CommandOrControl+Alt+Right', 'next');
+  register('CommandOrControl+Alt+Left', 'prev');
 }
 
 app.whenReady().then(async () => {
@@ -301,7 +366,8 @@ app.whenReady().then(async () => {
   setupGlobalShortcuts(mainWindow);
 
   // Tray state sync from renderer
-  ipcMain.on('tray:state', (_event, state: { songName: string; artist: string; isPlaying: boolean }) => {
+  ipcMain.on('tray:state', (event, state: { songName: string; artist: string; isPlaying: boolean }) => {
+    if (checkIpcSender(event.senderFrame)) return; // 审查修复：拒绝非应用页面来源
     // 截断并过滤控制字符，防止恶意内容注入托盘
     const sanitize = (s: string) => (s || '').replace(/[\x00-\x1f\x7f]/g, '').slice(0, 100);
     trayManager.updateSongInfo(sanitize(state.songName), sanitize(state.artist));
@@ -311,7 +377,8 @@ app.whenReady().then(async () => {
 
   // Tray action handler (minimize, etc.) - 仅允许已知类型
   const TRAY_ACTION_TYPES = new Set(['minimize']);
-  ipcMain.on('tray:action', (_event, payload: { type: string }) => {
+  ipcMain.on('tray:action', (event, payload: { type: string }) => {
+    if (checkIpcSender(event.senderFrame)) return; // 审查修复：拒绝非应用页面来源
     if (payload.type === 'minimize') {
       mainWindow.hide();
       return;

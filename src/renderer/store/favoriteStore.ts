@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';

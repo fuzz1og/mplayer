@@ -1,4 +1,4 @@
-import { Howl, Howler } from 'howler';
+import { Howl } from 'howler';
 import type { Song } from '@mplayer/core';
 
 export type PlayerState = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
@@ -19,6 +19,8 @@ export class AudioPlayer {
   private positionInterval: NodeJS.Timeout | null = null;
   private volume: number = 80;
   private loadIdCounter: number = 0;
+  /** 挂起中的 load() Promise 的 reject（cancelLoad/被新 load 取代时主动 settle，避免永不落定）。 */
+  private pendingReject: ((reason: Error) => void) | null = null;
 
   constructor(callbacks: AudioPlayerCallbacks = {}) {
     this.callbacks = callbacks;
@@ -60,9 +62,15 @@ async load(song: Song): Promise<void> {
     const loadId = ++this.loadIdCounter;
 
     return new Promise((resolve, reject) => {
+      // settle 保护：一次 load 只落定一次（onloaderror 后 onplayerror 等重复回调不再生效）
+      let settled = false;
+      const settleResolve = () => { if (!settled) { settled = true; this.pendingReject = null; resolve(); } };
+      const settleReject = (err: Error) => { if (!settled) { settled = true; this.pendingReject = null; reject(err); } };
+      this.pendingReject = settleReject;
+
       if (!song.url) {
         this.setState('error');
-        reject(new Error('歌曲URL为空'));
+        settleReject(new Error('歌曲URL为空'));
         return;
       }
 
@@ -74,11 +82,13 @@ async load(song: Song): Promise<void> {
         format: ['mp3', 'flac', 'm4a', 'ogg', 'wav', 'aac'],
         volume: this.volume / 100,
         onload: () => {
+          // 已被新 load/cancelLoad 取代：旧 Howl 已 unload，事件属迟到的幽灵回调，
+          // 直接落定（Promise 由 cancelLoad 的 reject 或新 load 接管，这里不重复处理）
           if (loadId !== this.loadIdCounter) return;
           const duration = this.howl?.duration() || 0;
           this.callbacks.onDurationChange?.(duration);
           this.setState('paused');
-          resolve();
+          settleResolve();
         },
         onplay: () => {
           if (loadId !== this.loadIdCounter) return;
@@ -102,14 +112,14 @@ async load(song: Song): Promise<void> {
           this.setState('error');
           const err = new Error(`加载音频失败: ${error}`);
           this.callbacks.onLoadError?.(err);
-          reject(err);
+          settleReject(err);
         },
         onplayerror: (_id, error) => {
           if (loadId !== this.loadIdCounter) return;
           this.setState('error');
           const err = new Error(`播放音频失败: ${error}`);
           this.callbacks.onLoadError?.(err);
-          reject(err);
+          settleReject(err);
         }
       });
     });
@@ -117,6 +127,11 @@ async load(song: Song): Promise<void> {
 
   cancelLoad(): void {
     this.loadIdCounter++;
+    // 审查修复：主动 settle 挂起的 load() Promise，避免被取消的加载永远 pending
+    // （旧 Howl 已 unload 后其回调不会再派发，不主动 reject 则 await 方永远卡死）。
+    // 调用方（playerStore.play）有 generation 守卫，被取代的 reject 不会污染新状态。
+    this.pendingReject?.(new Error('加载已取消'));
+    this.pendingReject = null;
     if (this.howl) {
       this.howl.unload();
       this.howl = null;
@@ -154,7 +169,8 @@ async load(song: Song): Promise<void> {
     if (this.howl) {
       this.howl.volume(this.volume / 100);
     }
-    Howler.volume(this.volume / 100);
+    // 审查修复：不再调用 Howler.volume（全局）——单播放器场景下 howl.volume 已生效，
+    // 全局设置冗余且会影响未来可能新增的音频实例
   }
 
   getVolume(): number {
@@ -197,6 +213,8 @@ async load(song: Song): Promise<void> {
 
   destroy(): void {
     this.stopPositionTracking();
+    this.pendingReject?.(new Error('播放器已销毁'));
+    this.pendingReject = null;
     if (this.howl) {
       this.howl.unload();
       this.howl = null;

@@ -36,7 +36,10 @@ export class DiskCacheBackend implements CacheBackend {
   }
 
   private resolvePath(key: string): string {
-    const type = key.startsWith('json:') ? 'json' : 'bin'
+    // 注意：CacheKernel 生成的 key 带前导冒号（`:json:…` / `:bin:…`）。
+    // 修复前用 `startsWith('json:')` 判定永远匹配不上，JSON 缓存全部误落 bin/ 目录，
+    // 导致 stats() 统计失真（songsCount/urlsCount 恒 0，JSON 被当音频/封面计数）。
+    const type = key.startsWith(':json:') ? 'json' : 'bin'
     const hash = this.hashKey(key)
     return path.join(this.cacheDir, type, hash)
   }

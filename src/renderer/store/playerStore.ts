@@ -9,7 +9,7 @@ import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
 import { useSearchStore } from '@/renderer/store/searchStore';
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 
 /**
  * 播放封面回填：点击播放时歌曲对象可能还没有封面（DB 里 cover 为空、

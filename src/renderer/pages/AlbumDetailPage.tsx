@@ -7,7 +7,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Album, Song } from '@mplayer/core';
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 
 function formatDuration(sec?: number): string {
   if (!sec || sec <= 0) return '--:--';

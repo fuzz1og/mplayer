@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Music, Link2 } from 'lucide-react';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 
 const AboutSection: React.FC = () => {
   const [version, setVersion] = useState('');

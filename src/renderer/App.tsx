@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';

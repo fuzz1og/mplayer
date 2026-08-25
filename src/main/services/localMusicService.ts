@@ -1,9 +1,26 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { app } from 'electron';
 import type { LocalFolder, LocalSong } from '@mplayer/core';
 
 const SUPPORTED_FORMATS = new Set(['.mp3', '.flac', '.wav', '.ogg']);
+
+// 审查修复：封面独立落盘目录（data/covers/<hash>.<ext>），JSON 只存路径引用。
+// 旧实现把封面 base64 内嵌进 local-music.json：单张数百 KB，千首歌即膨胀到
+// 数十 MB，且每次变更全量重写整个 JSON 文件。
+const COVERS_DIR_NAME = 'covers';
+const COVER_EXT_BY_MIME: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+};
+const DEFAULT_COVER_EXT = '.jpg';
+
+function extensionForCover(mime: string): string {
+  return COVER_EXT_BY_MIME[mime] || DEFAULT_COVER_EXT;
+}
 
 interface FolderData {
   path: string;
@@ -26,6 +43,7 @@ async function getMusicMetadata(): Promise<typeof import('music-metadata')> {
 
 class LocalMusicService {
   private dataDir: string = '';
+  private coversDir: string = '';
   private storeFile: string = '';
   private store: LocalMusicStore = { folders: [] };
   private watchers: Map<string, fs.FSWatcher> = new Map();
@@ -41,6 +59,10 @@ class LocalMusicService {
     const resolved = this.userDataPath ?? app.getPath('userData');
     this.dataDir = path.join(resolved, 'data');
     this.storeFile = path.join(this.dataDir, 'local-music.json');
+    fs.mkdirSync(this.dataDir, { recursive: true });
+    // 封面目录（审查修复：封面独立文件，不入 JSON）
+    this.coversDir = path.join(this.dataDir, COVERS_DIR_NAME);
+    fs.mkdirSync(this.coversDir, { recursive: true });
     this.loadStore();
     this.initialized = true;
   }
@@ -65,6 +87,25 @@ class LocalMusicService {
     return SUPPORTED_FORMATS.has(ext);
   }
 
+  /**
+   * 提取音频内嵌封面并落盘到 data/covers/（按图片内容 hash 命名，天然去重；
+   * 同一张封面多首歌共享一个文件）。写入失败静默返回 undefined，不影响扫描。
+   */
+  private persistCover(pic: { format: string; data: Uint8Array } | undefined): string | undefined {
+    if (!pic || !pic.data || pic.data.length === 0) return undefined;
+    try {
+      const ext = extensionForCover(pic.format || '');
+      const hash = crypto.createHash('md5').update(pic.data).digest('hex');
+      const coverPath = path.join(this.coversDir, `${hash}${ext}`);
+      if (!fs.existsSync(coverPath)) {
+        fs.writeFileSync(coverPath, Buffer.from(pic.data));
+      }
+      return coverPath;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async parseFile(filePath: string): Promise<LocalSong | null> {
     try {
       const mm = await getMusicMetadata();
@@ -82,14 +123,8 @@ class LocalMusicService {
         duration: metadata.format.duration || 0,
         sourceType: 'local',
         filePath,
-        coverBase64: (() => {
-          if (tag.picture && tag.picture.length > 0) {
-            const pic = tag.picture[0];
-            const base64 = Buffer.from(pic.data).toString('base64');
-            return `data:${pic.format};base64,${base64}`;
-          }
-          return undefined;
-        })(),
+        // 审查修复：封面落盘为独立文件，JSON 只存绝对路径（不再 base64 内嵌膨胀）
+        coverPath: this.persistCover(tag.picture?.[0]),
         format: ext,
         fileSize: stats.size,
       };
@@ -207,6 +242,13 @@ class LocalMusicService {
           onChange('remove', [], [fullPath]);
         }
       }
+    });
+
+    // 审查修复：目录被移除/权限变化时 fs.watch 会派发 error，不监听将抛出未捕获异常
+    watcher.on('error', (err) => {
+      console.error(`[LocalMusic] 监听目录失败（已停止监听）: ${folderPath}`, err);
+      watcher.close();
+      this.watchers.delete(folderPath);
     });
 
     this.watchers.set(folderPath, watcher);

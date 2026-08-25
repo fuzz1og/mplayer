@@ -8,65 +8,37 @@ vi.mock('../services/IpcClient', () => ({
 import { IpcClient } from '../services/IpcClient';
 import { cacheCoverImage, useCachedCover } from '../services/coverCacheService';
 
-const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
 const COVER_URL = 'https://example.com/cover.jpg';
-
-function okImageResponse(): Response {
-  return { ok: true, arrayBuffer: async () => PNG_BYTES.buffer } as unknown as Response;
-}
-
-function okHtmlResponse(): Response {
-  return { ok: true, arrayBuffer: async () => new TextEncoder().encode('<html>default</html>').buffer } as unknown as Response;
-}
 
 describe('coverCacheService 封面缓存', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    global.fetch = vi.fn();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('下载成功则交主进程写盘（字节校验移入主进程语义层 sniffers）', async () => {
+  it('下载委托主进程（webSecurity 恢复后渲染层跨域 fetch 受 CORS 限制）', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
     invoke.mockResolvedValue(undefined);
-    const fetchMock = vi.mocked(global.fetch);
-    fetchMock.mockResolvedValue(okImageResponse());
 
     await cacheCoverImage(COVER_URL);
-    expect(invoke).toHaveBeenCalledWith('cache:setCoverBytes', COVER_URL, expect.any(Buffer));
+    expect(invoke).toHaveBeenCalledWith('cache:downloadCover', COVER_URL);
   });
 
-  it('非图片响应也交主进程写盘，由语义层 setCoverBytes 拒绝（渲染层不再校验字节）', async () => {
+  it('主进程下载失败静默（字节校验与拒绝在语义层 setCoverBytes，渲染层不抛）', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
-    invoke.mockResolvedValue(undefined);
-    const fetchMock = vi.mocked(global.fetch);
-    fetchMock.mockResolvedValue(okHtmlResponse());
+    invoke.mockRejectedValue(new Error('下载失败'));
 
-    await cacheCoverImage(COVER_URL);
-    // 渲染层不再本地校验 isImageContent，一律提交；主进程 sniffers 拒绝非图片
-    expect(invoke).toHaveBeenCalledWith('cache:setCoverBytes', COVER_URL, expect.any(Buffer));
+    await expect(cacheCoverImage(COVER_URL)).resolves.toBeUndefined();
   });
 
-  it('受保护封面端点（需会话 cookie）不发起渲染层 fetch——落盘缓存改由主进程完成', async () => {
+  it('受保护封面端点（需会话 cookie）不发起下载——落盘缓存改由主进程解析时完成', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
-    const fetchMock = vi.mocked(global.fetch);
-    fetchMock.mockResolvedValue(okImageResponse());
 
     await cacheCoverImage('https://api.example.com/api.php?get=pic&type=wy&id=1&sign=s&t=1');
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(invoke).not.toHaveBeenCalledWith('cache:setCoverBytes', expect.any(String), expect.any(Buffer));
-  });
-
-  it('HTTP 失败静默，不写入缓存', async () => {
-    const invoke = vi.mocked(IpcClient.invoke);
-    const fetchMock = vi.mocked(global.fetch);
-    fetchMock.mockRejectedValue(new Error('网络错误'));
-
-    await cacheCoverImage(COVER_URL);
-    expect(invoke).not.toHaveBeenCalledWith('cache:setCoverBytes', expect.any(String), expect.any(Buffer));
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it('useCachedCover 命中缓存返回 file://，未命中返回远程地址', async () => {
@@ -90,10 +62,10 @@ describe('coverCacheService 封面缓存', () => {
   });
 
   it('非 http(s) 或 file:// 地址不触发下载', async () => {
-    const fetchMock = vi.mocked(global.fetch);
+    const invoke = vi.mocked(IpcClient.invoke);
     await cacheCoverImage('file://C:/x.jpg');
     await cacheCoverImage('data:image/png;base64,xxx');
     await cacheCoverImage('not-a-url');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

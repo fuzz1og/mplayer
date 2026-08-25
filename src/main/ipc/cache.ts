@@ -97,6 +97,11 @@ export function registerCacheIpc(): void {
   registerIpcHandlerSimple('cache:setCoverBytes', async (coverUrl: string, imageData: Buffer) => {
     await cache.setCoverBytes(coverUrl, new Uint8Array(imageData))
   })
+  // 审查修复：渲染层封面字节下载（webSecurity 恢复后渲染层跨域 fetch 受 CORS 限制，
+  // 改由主进程 axios 下载 + 语义层字节校验落盘；CDN 直链 = 原 URL，直接复用 cacheResolvedCover）
+  registerIpcHandlerSimple('cache:downloadCover', async (coverUrl: string) => {
+    await cacheResolvedCover(coverUrl, coverUrl)
+  })
   // 封面失效：删除归一化 key 的磁盘+内存缓存（配合 musicApi:invalidateCoverUrl）
   registerIpcHandlerSimple('cache:invalidateCover', async (coverUrl: string) => {
     await cache.invalidateCover(coverUrl)

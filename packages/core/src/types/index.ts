@@ -82,7 +82,8 @@ export interface LocalSong {
   duration: number;
   sourceType: 'local';
   filePath: string;
-  coverBase64?: string;
+  /** 封面落盘绝对路径（审查修复：封面独立存 data/covers/，不再 base64 内嵌 JSON）。 */
+  coverPath?: string;
   format: string;
   fileSize: number;
 }

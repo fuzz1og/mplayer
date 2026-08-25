@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Minus, Square, Copy, X } from 'lucide-react';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 
 const TitleBar: React.FC = () => {
   const [maximized, setMaximized] = useState(false);

@@ -62,6 +62,10 @@ export class UpdateService {
     try {
       const config = await db.getSetting<ProxyConfig>('proxyConfig');
 
+      // 审查修复：移除 process.env.HTTP(S)_PROXY 全局注入——污染主进程所有网络请求，
+      // 与 axios agents 双轨代理易不一致。代理仅通过 session 级 setProxy 生效：
+      // electron-updater 专用 netSession + 应用 defaultSession（defaultSession 由
+      // main.ts applyElectronProxy 统一维护，此处为更新检查触发时的二次同步）。
       const netSession = autoUpdater.netSession;
       if (netSession) {
         if (config?.enabled && config.host) {
@@ -77,21 +81,6 @@ export class UpdateService {
         await session.defaultSession.setProxy({ proxyRules });
       } else {
         await session.defaultSession.setProxy({ proxyRules: 'direct://' });
-      }
-
-      if (config?.enabled && config.host) {
-        const proxyUrl = `${config.protocol}://${config.host}:${config.port}`;
-        process.env.HTTP_PROXY = proxyUrl;
-        process.env.HTTPS_PROXY = proxyUrl;
-        process.env.http_proxy = proxyUrl;
-        process.env.https_proxy = proxyUrl;
-        process.env.ELECTRON_GET_USE_PROXY = '1';
-      } else {
-        delete process.env.HTTP_PROXY;
-        delete process.env.HTTPS_PROXY;
-        delete process.env.http_proxy;
-        delete process.env.https_proxy;
-        delete process.env.ELECTRON_GET_USE_PROXY;
       }
     } catch (err) {
       console.error('同步代理设置失败:', err);

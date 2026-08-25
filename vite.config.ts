@@ -27,6 +27,20 @@ export default defineConfig({
             'process.env.MUSIC_API_URL': JSON.stringify(process.env.MUSIC_API_URL || '')
           }
         }
+      },
+      // Preload 脚本（审查修复：contextIsolation 启用，渲染层经 window.electronAPI 通信）
+      {
+        entry: 'src/main/preload.ts',
+        onstart() {},
+        vite: {
+          build: {
+            target: 'esnext',
+            outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['electron']
+            }
+          }
+        }
       }
     ]),
     renderer()

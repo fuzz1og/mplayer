@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.electronAPI;
 
 const UpdateSection: React.FC = () => {
   const [currentVersion, setCurrentVersion] = useState('');
