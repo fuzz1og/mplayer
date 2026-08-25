@@ -18,9 +18,10 @@ import { usePlayerStore } from '../../stores/playerStore';
 import ScalePress from '../../components/ScalePress';
 
 // 底部 chrome 的 tab 清单（与 <Tabs.Screen> 路由一一对应；search 页由 href:null 隐藏）
+// 顺序对齐 master：推荐第一（initialRouteName="recommend"，首屏）
 const TABS: { name: string; href: Href; icon: LucideIcon; label: string }[] = [
-  { name: 'index', href: '/', icon: Compass, label: '发现' },
   { name: 'recommend', href: '/recommend', icon: Flame, label: '推荐' },
+  { name: 'index', href: '/', icon: Compass, label: '发现' },
   { name: 'playlists', href: '/playlists', icon: ListMusic, label: '歌单' },
   { name: 'download', href: '/download', icon: Download, label: '本地歌曲' },
 ];
