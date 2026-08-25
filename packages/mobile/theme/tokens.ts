@@ -331,8 +331,9 @@ export const lightColors: ThemeColors = {
   bgSidebar: '#FFFFFF',
   // 无 blur 的纯半透明在浅色下与白底明度差为零、chrome 隐形（真机验证），
   // 按指南 §2.2 无 backdrop-filter 兜底思路提不透明度：保留一丝材质感，
-  // 分层靠「白 chrome vs 灰底」明度差（§1 柱子一）
-  bgPlayer: 'rgba(255, 255, 255, 0.96)',
+  // 分层靠「白 chrome vs 灰底」明度差（§1 柱子一）。
+  // 真机反馈：0.96 偏透（与毛玻璃 chrome 观感不统一），提至 0.98
+  bgPlayer: 'rgba(255, 255, 255, 0.98)',
   bgHover: palette.gray100,
   bgActive: palette.gray200,
   bgOverlay: 'rgba(0, 0, 0, 0.4)',
@@ -399,7 +400,8 @@ export const darkColors: ThemeColors = {
   bgSurface: palette.gray900,
   bgElevated: palette.gray850,
   bgSidebar: palette.gray900,
-  bgPlayer: 'rgba(28, 28, 30, 0.85)',
+  // 真机反馈：0.85 偏透（tab 栏/全屏页与毛玻璃 chrome 观感不统一），提至 0.92
+  bgPlayer: 'rgba(28, 28, 30, 0.92)',
   bgHover: palette.gray825,
   bgActive: palette.gray750,
   bgOverlay: 'rgba(0, 0, 0, 0.6)',

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
-  PanResponder, Animated, Alert, Dimensions, useWindowDimensions,
+  PanResponder, Animated, Alert, Dimensions, useWindowDimensions, Easing,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, Repeat, Shuffle, Heart, CirclePlus, Download, Music, ListMusic, MessageSquareText, Disc3 } from 'lucide-react-native';
+import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, Repeat, Shuffle, Heart, CirclePlus, Download, Music, MicVocal, ListMusic, MessageSquareText, Disc3, X, MoreVertical } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
@@ -15,6 +15,7 @@ import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import QueueListModal from './QueueListModal';
 import { useResolvedCover } from '../hooks/useResolvedCover';
+import BottomSheet from './BottomSheet';
 import { parseLRC, musicApi, findCurrentLyricIndex, invalidateCoverUrl, songUsesSongidLyrics, isSodaSource } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
@@ -27,13 +28,15 @@ import { springs, projectMomentum, rubberband } from '../theme/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { tapLight } from '../utils/haptics';
 import ScalePress from './ScalePress';
+import ChromeBlur from './ChromeBlur';
 
 /** 投影落点超过屏高此比例即判关：快甩从任意位置都能关，慢拖半途自然回弹 */
 const DISMISS_PROJECT_RATIO = 0.35;
 
-/** 唱盘尺寸：按屏宽缩放（#186 #4 响应式），上限 280 下限 224 */
-function plinthSize(width: number): number {
-  return Math.max(224, Math.min(width - 96, 280));
+/** 唱盘尺寸（#186 #4 + 真机反馈）：底部操作行合并进控制行后省出空间，唱盘加大，
+ *  按屏高 36% 缩放（SE 667dp → ~240，常见 731dp → ~263） */
+function plinthSize(width: number, winH: number): number {
+  return Math.max(200, Math.min(width - 96, winH * 0.4, 280));
 }
 /** 进度条/时间行宽度：唱盘同轴的 `屏宽 - 48`，统一此处防散落魔数（#186 #4） */
 function sliderWidth(width: number): number {
@@ -67,6 +70,8 @@ export default function PlayerOverlay({ onClose }: Props) {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   // #186 #5：全屏播放器队列入口（与迷你播放栏共用 QueueListModal）
   const [showQueueModal, setShowQueueModal] = useState(false);
+  // 右上角「更多」弹层（真机反馈：模式/加歌单/下载收进弹层，减轻底部五键负担）
+  const [showMoreModal, setShowMoreModal] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const lyricsFlatListRef = useRef<FlatList>(null);
   const rotation = useRef(new Animated.Value(0)).current;
@@ -79,14 +84,21 @@ export default function PlayerOverlay({ onClose }: Props) {
   const insets = useSafeAreaInsets();
   onCloseRef.current = onClose;
 
-  // ── 开合动画：常规 = sheet 弹簧滑入；减弱动效 = 原地淡入（无大位移，§14）──
+  // ── 开合动画：常规 = sheet 弹簧滑入 + 减淡缩放联动（P0-2）；减弱动效 = 原地淡入（无大位移，§14）──
   const reducedMotion = useReducedMotion();
-  const opacity = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  // P0-2：入场 scale 0.98→1 与 translateY 同 sheet 弹簧联动，dismiss 同步淡出
+  const scale = useRef(new Animated.Value(0.98)).current;
+
+  // P1-4：收藏/循环切换的 icon pop（1→1.15→1）即时反馈
+  const favPop = useRef(new Animated.Value(1)).current;
+  const modePop = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (reducedMotion) {
       panY.stopAnimation();
       panY.setValue(0);
+      scale.setValue(1);
       opacity.setValue(0);
       const fade = Animated.timing(opacity, {
         toValue: 1,
@@ -96,30 +108,60 @@ export default function PlayerOverlay({ onClose }: Props) {
       fade.start(({ finished }) => { if (finished) tapLight(); });
       return () => fade.stop();
     }
-    const anim = Animated.spring(panY, {
-      toValue: 0,
-      useNativeDriver: true,
-      ...springs.sheet,
-    });
+    const anim = Animated.parallel([
+      Animated.spring(panY, { toValue: 0, useNativeDriver: true, ...springs.sheet }),
+      Animated.spring(opacity, { toValue: 1, useNativeDriver: true, ...springs.sheet }),
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, ...springs.sheet }),
+    ]);
     slideAnim.current = anim;
     anim.start(({ finished }) => { if (finished) tapLight(); });
     return () => anim.stop();
   }, [reducedMotion]);
 
+  /** P1-4：一次 pop（1→1.15→1）即时反馈；减弱动效时只保留触觉 */
+  const popValue = (av: Animated.Value) => {
+    tapLight();
+    if (reducedMotion) return;
+    Animated.sequence([
+      Animated.spring(av, { toValue: 1.15, useNativeDriver: true, ...springs.pressScale }),
+      Animated.spring(av, { toValue: 1, useNativeDriver: true, ...springs.pressScale }),
+    ]).start();
+  };
+
   // 唱片旋转动画（减弱动效时停止循环装饰动画）
+  // 词/封横向分页动画（真机反馈 #2）：两页（封面/歌词）并排平移切换（苹果式），
+  // 非瞬间切换。0 = 封面页，-winW = 歌词页。点击图标/横向滑动均触发该动画。
+  const pageX = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (isPlaying && !reducedMotion) {
-      Animated.loop(
-        Animated.timing(rotation, {
-          toValue: 1,
-          duration: 8000,
-          useNativeDriver: true,
-        })
-      ).start();
-    } else {
+    Animated.timing(pageX, {
+      toValue: showLyrics ? -winW : 0,
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [showLyrics, pageX, winW]);
+
+  // 封面匀速旋转（真机反馈 #2）：Animated.loop 每圈结束跳回 0° 视觉断裂。
+  // 改为 JS 驱动自增角度——播放时 rAF 匀速推进、暂停时冻结当前角度、恢复时续转。
+  const angleRef = useRef(0);
+  const lastTickRef = useRef(0);
+  const ROTATE_MS = 12000; // 一圈 12s，速度与唱盘旋转观感一致
+  useEffect(() => {
+    if (!isPlaying || reducedMotion) {
       rotation.stopAnimation();
+      return;
     }
-    return () => rotation.stopAnimation();
+    let raf = 0;
+    const tick = () => {
+      const now = Date.now();
+      angleRef.current = (angleRef.current + (now - lastTickRef.current) / ROTATE_MS) % 1;
+      lastTickRef.current = now;
+      rotation.setValue(angleRef.current);
+      raf = requestAnimationFrame(tick);
+    };
+    lastTickRef.current = Date.now();
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [isPlaying, rotation, reducedMotion]);
 
   // #186 #10：唱臂起落——播放落臂（45°→12°），暂停抬臂（回 45°），spring 物理；
@@ -137,6 +179,7 @@ export default function PlayerOverlay({ onClose }: Props) {
   const spin = rotation.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
+    // 值在 0~1 内 mod 循环（角度 0~360°），无需外推
   });
   const armAngle = tonearm.interpolate({
     inputRange: [0, 1],
@@ -152,6 +195,7 @@ export default function PlayerOverlay({ onClose }: Props) {
   const ModeIcon = MODE_ICONS[playMode];
 
   const cyclePlayMode = () => {
+    popValue(modePop);
     const idx = PLAY_MODES.indexOf(playMode);
     const nextMode = PLAY_MODES[(idx + 1) % PLAY_MODES.length];
     setPlayMode(nextMode);
@@ -242,8 +286,19 @@ export default function PlayerOverlay({ onClose }: Props) {
     }
   }, [currentTime, lyricLines, currentLineIdx]);
 
+  // P1-3：歌词当前行平滑过渡——active 行用轻量 Animated（仅当前行渲染 Animated.Text），
+  // 行高固定（避免 scrollToIndex 抖动），入场 scale+颜色渐入；离开行直接回灰。
+  const lyricPop = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (currentLineIdx < 0) return;
+    lyricPop.setValue(0);
+    Animated.spring(lyricPop, { toValue: 1, useNativeDriver: true, ...springs.pressScale }).start();
+    return () => lyricPop.stopAnimation();
+  }, [currentLineIdx, lyricPop]);
+
   const toggleFavorite = () => {
     if (!song) return;
+    popValue(favPop);
     if (isFav) removeFavorite(song.id);
     else addFavorite(song);
   };
@@ -274,6 +329,9 @@ export default function PlayerOverlay({ onClose }: Props) {
   const dragStartValue = useRef(0);                 // 抓取瞬间面板呈现值（支持中途抓住动画）
   const gestureBaseDy = useRef<number | null>(null); // 首个 move 事件校准基准（消除激活前位移跳变）
   const lastY = useRef(0);                          // 最近一帧面板位置（release 同步可读）
+  // 词/封分页手势（真机反馈 #2）：水平方向接管 pageX 跟手 + 松手动画落位
+  const dragAxis = useRef<'x' | 'y' | null>(null);
+  const pageBase = useRef(0);                       // 抓取瞬间 pageX 呈现值（支持中途抓住分页动画）
 
   const dismiss = (velocityY = 0) => {
     if (reducedMotion) {
@@ -282,12 +340,17 @@ export default function PlayerOverlay({ onClose }: Props) {
         .start(({ finished }) => { if (finished) { tapLight(); onCloseRef.current(); } });
       return;
     }
-    Animated.spring(panY, {
-      toValue: Dimensions.get('window').height, // 现取现用，旋转/折叠屏不取过期值
-      velocity: velocityY,                      // 继承松手速度，无匀速刹车感
-      useNativeDriver: true,
-      ...springs.sheet,
-    }).start(({ finished }) => {
+    // P0-2：下滑关闭时 translateY 弹簧下滑，同时淡出 + 轻微放大（同步减淡缩放）
+    Animated.parallel([
+      Animated.spring(panY, {
+        toValue: Dimensions.get('window').height, // 现取现用，旋转/折叠屏不取过期值
+        velocity: velocityY,                      // 继承松手速度，无匀速刹车感
+        useNativeDriver: true,
+        ...springs.sheet,
+      }),
+      Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1.04, useNativeDriver: true, ...springs.sheet }),
+    ]).start(({ finished }) => {
       if (finished) { tapLight(); onCloseRef.current(); }
     });
   };
@@ -307,19 +370,49 @@ export default function PlayerOverlay({ onClose }: Props) {
         return (Math.abs(gs.dx) > 30 && Math.abs(gs.dy) < 20) || Math.abs(gs.dy) > 30;
       },
       onPanResponderGrant: () => {
-        // 可中断：抓住当前呈现值接管进行中的动画（关闭/入场途中均可抓）
+        // 可中断：抓住当前呈现值接管进行中的动画（关闭/入场/分页途中均可抓）
         panY.stopAnimation((v) => { dragStartValue.current = v; });
+        pageX.stopAnimation((v) => { pageBase.current = v; });
         gestureBaseDy.current = null;
+        dragAxis.current = null;
       },
       onPanResponderMove: (_, gs) => {
-        if (gestureBaseDy.current === null) gestureBaseDy.current = gs.dy;
-        const raw = dragStartValue.current + (gs.dy - gestureBaseDy.current);
-        // 下滑 1:1 跟手；上滑越界给橡皮筋渐进阻力（非硬钳制）
-        const next = raw > 0 ? raw : rubberband(raw, Dimensions.get('window').height);
-        lastY.current = next;
-        panY.setValue(next);
+        // 首帧判定手势主方向：水平 → 分页；垂直 → 关闭
+        if (dragAxis.current === null) {
+          dragAxis.current = Math.abs(gs.dx) > Math.abs(gs.dy) ? 'x' : 'y';
+        }
+        if (dragAxis.current === 'x') {
+          // 水平分页：1:1 跟手；两端（0 / -winW）之外给橡皮筋渐进阻力
+          const raw = pageBase.current + gs.dx;
+          const next = raw > 0
+            ? rubberband(raw, winW)
+            : (raw < -winW ? -winW - rubberband(-winW - raw, winW) : raw);
+          pageX.setValue(next);
+        } else {
+          // 纵向关闭：1:1 跟手；上滑越界橡皮筋
+          if (gestureBaseDy.current === null) gestureBaseDy.current = gs.dy;
+          const raw = dragStartValue.current + (gs.dy - gestureBaseDy.current);
+          const next = raw > 0 ? raw : rubberband(raw, Dimensions.get('window').height);
+          lastY.current = next;
+          panY.setValue(next);
+        }
       },
       onPanResponderRelease: (_, gs) => {
+        if (dragAxis.current === 'x') {
+          // 水平松手：动量投影判定切页，spring 物理落位（P1-1，继承松手速度）
+          pageX.stopAnimation((v) => {
+            const projected = v + projectMomentum(gs.vx * 1000);
+            const toLyrics = projected < -winW * 0.3;
+            Animated.spring(pageX, {
+              toValue: toLyrics ? -winW : 0,
+              velocity: gs.vx,
+              useNativeDriver: true,
+              ...springs.uiDefault,
+            }).start();
+            if (showLyrics !== toLyrics) setShowLyrics(toLyrics);
+          });
+          return;
+        }
         const vy = gs.vy * 1000; // PanResponder 单位 px/ms → px/s
         // 动量投影判定落点：投影越过屏高 35% 即关
         const projected = lastY.current + projectMomentum(vy);
@@ -327,7 +420,7 @@ export default function PlayerOverlay({ onClose }: Props) {
           dismiss(vy);
         } else {
           snapBack(vy);
-          // 水平轻扫切歌词/封面（仅近乎无垂直速度时，避免与回弹打架）
+          // 纵向手势下轻微横向位移：补一次分页切换（避免与回弹打架）
           if (Math.abs(vy) < 150 && lastY.current < 20) {
             if (gs.dx < -50) setShowLyrics(true);
             else if (gs.dx > 50) setShowLyrics(false);
@@ -344,9 +437,9 @@ export default function PlayerOverlay({ onClose }: Props) {
     <SafeAreaView style={styles.container} edges={['top']} {...panResponder.panHandlers}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }], opacity, paddingBottom: insets.bottom + spacing[6] }]}>
-        {/* 自定义顶部栏 */}
-        <View style={styles.customHeader}>
+      <Animated.View style={[styles.contentWrap, { transform: [{ translateY: panY }, { scale }], opacity, paddingBottom: insets.bottom + spacing[6] }]}>
+        {/* 自定义顶部栏（P0-1：单独套 ChromeBlur 毛玻璃，与 TopBar/PlayerBar 语言一致） */}
+        <ChromeBlur style={styles.customHeader}>
           <ScalePress onPress={() => dismiss()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <ChevronDown size={28} color={colors.textSecondary} />
           </ScalePress>
@@ -358,143 +451,109 @@ export default function PlayerOverlay({ onClose }: Props) {
             <ScalePress onPress={() => setShowLyrics(false)} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
               <Disc3 size={22} color={showLyrics ? colors.textSecondary : colors.accent} />
             </ScalePress>
+            {/* 更多操作（真机反馈：竖排三点图标，加歌单/下载收进弹层） */}
+            <ScalePress onPress={() => setShowMoreModal(true)} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
+              <MoreVertical size={22} color={colors.textSecondary} />
+            </ScalePress>
           </View>
-        </View>
+        </ChromeBlur>
 
-        {showLyrics ? (
-          /* 全屏歌词（#186 #9）：保留进度条 + 播放三键，暂停无需滑回封面 */
-          <View style={styles.lyricsFullWrap}>
-            {lyricLines.length > 0 ? (
-              <FlatList
-                ref={lyricsFlatListRef}
-                data={lyricLines}
-                style={styles.lyricsFullList}
-                contentContainerStyle={styles.lyricsFullContent}
-                renderItem={({ item, index }) => (
-                  <ScalePress
-                    key={index}
-                    onPress={() => seekTo(item.time)}
-                    style={{ paddingVertical: spacing[1] }}
-                  >
-                    <Text style={[
-                      styles.lyricsFullLine,
-                      index === currentLineIdx && styles.lyricsFullLineActive
-                    ]}>
-                      {item.text}
-                    </Text>
-                  </ScalePress>
-                )}
-                showsVerticalScrollIndicator={false}
-              />
-            ) : (
-              <Text style={{ ...textVariants.callout, color: colors.textTertiary }}>暂无歌词</Text>
-            )}
-
-            {/* 歌词模式底部控制：进度条 + 播放三键（操作行保持隐藏保沉浸） */}
-            <View style={styles.lyricsControls}>
-              <View style={styles.progressWrap}>
-                <Slider
-                  style={{ width: sliderWidth(winW) }}
-                  minimumValue={0}
-                  maximumValue={Math.max(duration, 1)}
-                  value={currentTime}
-                  onSlidingComplete={seekTo}
-                  minimumTrackTintColor={colors.accent}
-                  maximumTrackTintColor={colors.borderDefault}
-                  thumbTintColor={colors.accent}
-                />
-                <View style={styles.timeRow}>
-                  <Text style={styles.time}>{formatTime(currentTime)}</Text>
-                  <Text style={styles.time}>{formatTime(duration)}</Text>
+        {/* 词/封 横向分页（真机反馈 #2）：封面页 + 歌词页并排，pageX 平移切换（苹果式 Tab） */}
+        <View style={styles.pagerViewport}>
+          <Animated.View style={[styles.pagerTrack, { transform: [{ translateX: pageX }] }]}>
+            {/* ── 封面页（回退竖排布局）── */}
+            <View style={[styles.pagerPage, { width: winW }]}>
+              <View style={styles.turntableWrap}>
+                <View style={[styles.plinth, { width: plinthSize(winW, winH), height: plinthSize(winW, winH) }]}>
+                  <View style={[styles.platter, { width: plinthSize(winW, winH) - 30, height: plinthSize(winW, winH) - 30 }]} />
+                  {coverUrl && !coverFailed ? (
+                    <Animated.Image
+                      source={{ uri: coverUrl }}
+                      style={[styles.cover, { width: plinthSize(winW, winH) - 40, height: plinthSize(winW, winH) - 40, transform: [{ rotate: spin }] }]}
+                      onError={handleCoverError}
+                    />
+                  ) : (
+                    <View style={[styles.coverPlaceholder, { width: plinthSize(winW, winH) - 40, height: plinthSize(winW, winH) - 40 }]}>
+                      <Music size={64} color={colors.textDisabled} />
+                    </View>
+                  )}
+                  {/* 唱臂（#186 #10：播放落臂/暂停抬臂；高度随唱机缩放） */}
+                  <View style={styles.tonearmPivot} />
+                  <Animated.View style={[styles.tonearmRod, { height: plinthSize(winW, winH) * 0.66, transform: [{ rotate: armAngle }] }]} />
                 </View>
               </View>
-              <View style={styles.controls}>
-                <ScalePress onPress={handlePrev} hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}>
-                  <SkipBack size={32} color={colors.textSecondary} />
-                </ScalePress>
-                <ScalePress onPress={() => { tapLight(); togglePlay(); }} style={styles.playBtn} pressScaleTo={0.95}>
-                  {isPlaying ? (
-                    <CirclePause size={64} color={colors.accent} />
-                  ) : (
-                    <CirclePlay size={64} color={colors.accent} />
-                  )}
-                </ScalePress>
-                <ScalePress onPress={handleNext} hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}>
-                  <SkipForward size={32} color={colors.textSecondary} />
-                </ScalePress>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <>
-            {/* 唱机区域（#186 #4：plinth 按屏宽缩放，SE 上不再压扁歌词预览） */}
-            <View style={styles.turntableWrap}>
-              <View style={[styles.plinth, { width: plinthSize(winW), height: plinthSize(winW) }]}>
-                <View style={[styles.platter, { width: plinthSize(winW) - 30, height: plinthSize(winW) - 30 }]} />
-                {coverUrl && !coverFailed ? (
-                  <Animated.Image
-                    source={{ uri: coverUrl }}
-                    style={[styles.cover, { width: plinthSize(winW) - 40, height: plinthSize(winW) - 40, transform: [{ rotate: spin }] }]}
-                    onError={handleCoverError}
-                  />
-                ) : (
-                  <View style={[styles.coverPlaceholder, { width: plinthSize(winW) - 40, height: plinthSize(winW) - 40 }]}>
-                    <Music size={64} color={colors.textDisabled} />
-                  </View>
-                )}
-                {/* 唱臂（#186 #10：播放落臂/暂停抬臂） */}
-                <View style={styles.tonearmPivot} />
-                <Animated.View style={[styles.tonearmRod, { transform: [{ rotate: armAngle }] }]} />
-              </View>
-            </View>
 
-            {/* 歌曲信息 */}
-            <View style={styles.infoWrap}>
-              <Text style={styles.title}>{song.name}</Text>
-              <View style={styles.infoRow}>
-                <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
+              {/* 歌曲信息（真机反馈：歌名/歌手居左；来源徽标 + 收藏按钮在右，右侧不空） */}
+              <View style={styles.infoWrap}>
+                <View style={styles.infoText}>
+                  <Text style={styles.title} numberOfLines={1}>{song.name}</Text>
+                  <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
+                </View>
                 {song.sourceType !== 'local' && (
                   <View style={styles.sourceTag}>
                     <Text style={styles.sourceTagText}>{SOURCE_LABELS[song.sourceType] || song.sourceType}</Text>
                   </View>
                 )}
+                <ScalePress onPress={toggleFavorite} style={styles.infoFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  {/* P1-4：收藏切换即时 pop 反馈 */}
+                  <Animated.View style={{ transform: [{ scale: favPop }] }}>
+                    <Heart size={22} color={isFav ? colors.accent : colors.textSecondary} fill={isFav ? colors.accent : 'none'} />
+                  </Animated.View>
+                </ScalePress>
               </View>
-            </View>
 
-            {/* 歌词预览：始终占位,加载中显示骨架屏,避免歌词到达时布局跳动 */}
-            {lyricLines.length > 0 ? (
-              <FlatList
-                ref={flatListRef}
-                data={lyricLines}
-                style={styles.lyricsList}
-                renderItem={({ item, index }) => (
-                  <ScalePress
-                    key={index}
-                    onPress={() => seekTo(item.time)}
-                  >
-                    <Text style={[
-                      styles.lyricLine,
-                      index === currentLineIdx && styles.lyricLineActive
-                    ]}>
-                      {item.text}
-                    </Text>
-                  </ScalePress>
-                )}
-                showsVerticalScrollIndicator={false}
-              />
-            ) : lyricsLoading ? (
-              <View style={styles.lyricsList}>
-                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.skeletonLine,
-                      { width: `${82 - (i % 3) * 12}%` },
-                    ]}
-                  />
-                ))}
-              </View>
-            ) : null}
+              {/* 歌词预览：始终占位,加载中显示骨架屏,避免歌词到达时布局跳动 */}
+              {lyricLines.length > 0 ? (
+                <FlatList
+                  ref={flatListRef}
+                  data={lyricLines}
+                  style={styles.lyricsList}
+                  renderItem={({ item, index }) => (
+                    <ScalePress
+                      key={index}
+                      onPress={() => seekTo(item.time)}
+                    >
+                      {index === currentLineIdx ? (
+                        <Animated.Text
+                          style={[
+                            styles.lyricLine,
+                            styles.lyricLineActive,
+                            {
+                              color: lyricPop.interpolate({ inputRange: [0, 1], outputRange: [colors.textTertiary, colors.accent] }),
+                              transform: [{ scale: lyricPop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) }],
+                            },
+                          ]}
+                        >
+                          {item.text}
+                        </Animated.Text>
+                      ) : (
+                        <Text style={styles.lyricLine}>{item.text}</Text>
+                      )}
+                    </ScalePress>
+                  )}
+                  showsVerticalScrollIndicator={false}
+                />
+              ) : lyricsLoading ? (
+                <View style={styles.lyricsList}>
+                  {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.skeletonLine,
+                        { width: `${82 - (i % 3) * 12}%` },
+                      ]}
+                    />
+                  ))}
+                </View>
+              ) : (
+                /* issue #246：空歌词渲染占位行保持歌词区高度，避免普通视图塌缩（P1-5 加图标+方向文案） */
+                <View style={styles.lyricsList}>
+                  <View style={styles.lyricsEmpty}>
+                    <Music size={22} color={colors.textDisabled} />
+                    <Text style={styles.lyricsEmptyText}>这首歌暂无歌词</Text>
+                  </View>
+                </View>
+              )}
 
             {/* 进度条（#186 #4：宽度走共享 sliderWidth） */}
             <View style={styles.progressWrap}>
@@ -514,43 +573,85 @@ export default function PlayerOverlay({ onClose }: Props) {
               </View>
             </View>
 
-            {/* 控制按钮 */}
+            {/* 控制按钮（真机反馈：循环模式最左、队列最右，与播放三键构成五件布局；
+                原底部操作行合并至此，腾出空间给唱盘） */}
             <View style={styles.controls}>
+              <ScalePress onPress={cyclePlayMode} style={styles.actionBtn} hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}>
+                {/* P1-4：循环模式切换即时 pop 反馈 */}
+                <Animated.View style={{ transform: [{ scale: modePop }] }}>
+                  <ModeIcon size={24} color={colors.accent} />
+                </Animated.View>
+              </ScalePress>
               <ScalePress onPress={handlePrev} hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}>
-                <SkipBack size={32} color={colors.textSecondary} />
+                <SkipBack size={26} color={colors.textSecondary} />
               </ScalePress>
               <ScalePress onPress={() => { tapLight(); togglePlay(); }} style={styles.playBtn} pressScaleTo={0.95}>
                 {isPlaying ? (
-                  <CirclePause size={64} color={colors.accent} />
+                  <CirclePause size={56} color={colors.accent} />
                 ) : (
-                  <CirclePlay size={64} color={colors.accent} />
+                  <CirclePlay size={56} color={colors.accent} />
                 )}
               </ScalePress>
               <ScalePress onPress={handleNext} hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}>
-                <SkipForward size={32} color={colors.textSecondary} />
+                <SkipForward size={26} color={colors.textSecondary} />
               </ScalePress>
-            </View>
-
-            {/* 操作按钮（#186 #5 队列入口；#3 触控目标 ≥44pt） */}
-            <View style={styles.actionRow}>
-              <ScalePress onPress={cyclePlayMode} style={styles.actionBtn} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
-                <ModeIcon size={24} color={colors.accent} />
-              </ScalePress>
-              <ScalePress onPress={toggleFavorite} style={styles.actionBtn} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
-                <Heart size={24} color={isFav ? colors.accent : colors.textSecondary} fill={isFav ? colors.accent : 'none'} />
-              </ScalePress>
-              <ScalePress onPress={() => setShowQueueModal(true)} style={styles.actionBtn} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+              <ScalePress onPress={() => setShowQueueModal(true)} style={styles.actionBtn} hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}>
                 <ListMusic size={24} color={colors.textSecondary} />
               </ScalePress>
-              <ScalePress onPress={() => setShowPlaylistModal(true)} style={styles.actionBtn} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
-                <CirclePlus size={24} color={colors.textSecondary} />
-              </ScalePress>
-              <ScalePress onPress={handleDownload} style={styles.actionBtn} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
-                <Download size={24} color={colors.textSecondary} />
-              </ScalePress>
             </View>
-          </>
-        )}
+            </View>
+
+            {/* ── 歌词页（纯沉浸）── */}
+            <View style={[styles.pagerPage, { width: winW }]}>
+              <View style={styles.lyricsFullWrap}>
+                {/* 歌词页顶部信息行（利用顶部空间） */}
+                <View style={styles.lyricsFullInfo}>
+                  <Text style={styles.lyricsFullTitle} numberOfLines={1}>{song.name}</Text>
+                  <Text style={styles.lyricsFullArtist} numberOfLines={1}>{song.artist}</Text>
+                </View>
+                {lyricLines.length > 0 ? (
+                  <FlatList
+                    ref={lyricsFlatListRef}
+                    data={lyricLines}
+                    style={styles.lyricsFullList}
+                    contentContainerStyle={styles.lyricsFullContent}
+                    renderItem={({ item, index }) => (
+                      <ScalePress
+                        key={index}
+                        onPress={() => seekTo(item.time)}
+                        style={{ paddingVertical: spacing[1] }}
+                      >
+                        {index === currentLineIdx ? (
+                          <Animated.Text
+                            style={[
+                              styles.lyricsFullLine,
+                              styles.lyricsFullLineActive,
+                              {
+                                color: lyricPop.interpolate({ inputRange: [0, 1], outputRange: [colors.textTertiary, colors.accent] }),
+                                transform: [{ scale: lyricPop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] }) }],
+                              },
+                            ]}
+                          >
+                            {item.text}
+                          </Animated.Text>
+                        ) : (
+                          <Text style={styles.lyricsFullLine}>{item.text}</Text>
+                        )}
+                      </ScalePress>
+                    )}
+                    showsVerticalScrollIndicator={false}
+                  />
+                ) : (
+                  /* P1-5：歌词页空态（图标 + 方向文案） */
+                  <View style={styles.lyricsFullEmpty}>
+                    <MicVocal size={24} color={colors.textDisabled} />
+                    <Text style={styles.lyricsEmptyText}>这首歌暂无歌词</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Animated.View>
+        </View>
       </Animated.View>
 
       <AddToPlaylistModal
@@ -562,6 +663,23 @@ export default function PlayerOverlay({ onClose }: Props) {
         visible={showQueueModal}
         onClose={() => setShowQueueModal(false)}
       />
+      {/* 「更多」弹层（真机反馈：模式/加歌单/下载收纳于此，底部仅留常用键） */}
+      <BottomSheet visible={showMoreModal} onClose={() => setShowMoreModal(false)}>
+        <View style={styles.moreHeader}>
+          <Text style={styles.moreTitle}>更多</Text>
+          <ScalePress onPress={() => setShowMoreModal(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <X size={22} color={colors.textSecondary} />
+          </ScalePress>
+        </View>
+        <ScalePress style={styles.moreItem} onPress={() => { setShowPlaylistModal(true); setShowMoreModal(false); }}>
+          <CirclePlus size={20} color={colors.textSecondary} />
+          <Text style={styles.moreItemText}>添加到歌单</Text>
+        </ScalePress>
+        <ScalePress style={styles.moreItem} onPress={() => { handleDownload(); setShowMoreModal(false); }}>
+          <Download size={20} color={colors.textSecondary} />
+          <Text style={styles.moreItemText}>下载</Text>
+        </ScalePress>
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -575,7 +693,9 @@ function formatTime(sec: number): string {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent', alignItems: 'center' },
-  contentWrap: { flex: 1, alignItems: 'center', backgroundColor: colors.bgSurface, width: '100%' },
+  // P0-1：contentWrap 是 Animated.View（translateY/scale/opacity native driver），不能内嵌 BlurView，
+  // 用 bgPlayer 半透明底让下滑关闭时底下内容透出材质；顶部栏单独套 ChromeBlur 毛玻璃
+  contentWrap: { flex: 1, alignItems: 'center', backgroundColor: colors.bgPlayer, width: '100%' },
   customHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -584,7 +704,25 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing[4],
     height: 44,
   },
-  // 唱机底座
+  // 词/封横向分页（真机反馈 #2）：viewport 裁剪 + track 双页平移
+  pagerViewport: {
+    flex: 1,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  // 注意：track 不能 flex:1（row 方向会约束宽度为屏宽、把两页压扁到半屏），
+  // 宽度由两个 winW 的 pagerPage 撑开为 2 倍屏宽，高度继承 viewport
+  pagerTrack: {
+    height: '100%',
+    flexDirection: 'row',
+  },
+  // 注意：pagerPage 绝不能 flex:1（row 里会 grow 把固定宽度压缩回半屏，又变成分栏！）
+  // 宽度由 JSX 注入 winW 固定，高度 100% 填满 track
+  pagerPage: {
+    height: '100%',
+    alignItems: 'center',
+  },
+  // 唱机底座（回退竖排布局）
   turntableWrap: {
     marginTop: spacing[5],
     alignItems: 'center',
@@ -642,6 +780,20 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     transformOrigin: 'top',
     zIndex: 9,
   },
+  // 「更多」弹层（真机反馈：模式/加歌单/下载收纳）
+  moreHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing[2],
+  },
+  moreTitle: { ...textVariants.title, color: colors.textPrimary },
+  moreItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing[3],
+  },
+  moreItemText: { ...textVariants.body, color: colors.textPrimary, marginLeft: spacing[3] },
   // 词/封切换图标对（#186 #9）
   toggleGroup: {
     flexDirection: 'row',
@@ -651,10 +803,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   toggleBtn: {
     padding: spacing[1],
   },
-  infoWrap: { marginTop: spacing[3], alignItems: 'center' },
+  // 歌曲信息（真机反馈：歌名/歌手居左，收藏按钮独立在右）
+  infoWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing[3],
+    paddingHorizontal: spacing[6],
+  },
+  infoText: { flex: 1, alignItems: 'flex-start' },
   title: { ...textVariants.titleLg, color: colors.textPrimary },
-  artist: { ...textVariants.subhead, color: colors.textSecondary, flexShrink: 1 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  artist: { ...textVariants.footnote, color: colors.textSecondary, marginTop: 4 },
+  // 来源徽标移到收藏按钮左侧（真机反馈：右侧不空）
+  infoFav: { marginLeft: spacing[2], padding: spacing[1] },
   sourceTag: {
     marginLeft: spacing[2],
     borderRadius: radius.xs,
@@ -663,30 +823,30 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgHover,
   },
   sourceTagText: { ...textVariants.micro, color: colors.textSecondary },
-  progressWrap: { marginTop: spacing[4], alignItems: 'center' },
+  progressWrap: { marginTop: spacing[3], alignItems: 'center' },
   // 宽度由 JSX 注入 sliderWidth(winW)（#186 #4 旋转/折叠屏实时）
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   time: { ...textVariants.caption, color: colors.textTertiary, fontVariant: ['tabular-nums'] },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing[4],
-    gap: spacing[10],
+    marginTop: spacing[3],
+    gap: spacing[6], // 真机反馈：原 gap 40pt 过宽，收窄让播放键紧凑
   },
   playBtn: { marginHorizontal: spacing[2] },
-  // 操作行五键（#186 #5）：gap 收窄让 375pt 屏放得下，间距让给触控目标
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing[4],
-    gap: spacing[4],
-  },
   // #186 #3：icon 24 + padding 14 ≈ 52pt 触控区，达 44pt 下限
   actionBtn: { padding: spacing[2], margin: 6 },
-  lyricsList: { flex: 1, marginTop: spacing[4], marginHorizontal: spacing[6] },
-  lyricLine: { color: colors.textTertiary, fontSize: 15, textAlign: 'center', marginVertical: 6 },
-  lyricLineActive: { color: colors.accent, fontSize: 16, fontWeight: '600' },
+  // 歌词预览（真机反馈：字号调小后 minHeight 降到三行高度 ~76，issue #246 防塌缩）
+  lyricsList: {
+    flex: 1,
+    minHeight: 76,
+    marginTop: spacing[3],
+    marginHorizontal: spacing[6],
+  },
+  // 真机反馈：普通视图歌词——灰行小、蓝行明显大一号、行距收紧。
+  // P1-3：行高固定（避免 scrollToIndex 抖动），active 行用 scale+颜色过渡（见 renderItem），不再跳字号
+  lyricLine: { color: colors.textTertiary, fontSize: 13, textAlign: 'center', marginVertical: 4, lineHeight: 18 },
+  lyricLineActive: { fontWeight: '600' },
   // 歌词骨架屏：行高/间距与 lyricLine 一致,占位稳定避免加载后跳动
   skeletonLine: {
     alignSelf: 'center',
@@ -695,26 +855,42 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.skeletonBase,
     marginVertical: 6,
   },
-  lyricsFullLine: { color: colors.textTertiary, fontSize: 18, textAlign: 'center', marginVertical: spacing[2], lineHeight: 28 },
-  lyricsFullLineActive: { color: colors.accent, fontSize: 20, fontWeight: '600', lineHeight: 30 },
+  // 真机反馈：歌词页歌词——灰行小、蓝行明显大、行距收紧。P1-3：行高固定，active 用 scale 过渡
+  lyricsFullLine: { color: colors.textTertiary, fontSize: 16, textAlign: 'center', marginVertical: 6, lineHeight: 24 },
+  lyricsFullLineActive: { fontWeight: '600' },
+  // P1-5：空歌词占位（图标 + 方向文案）
+  lyricsEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: spacing[4],
+    gap: spacing[2],
+  },
+  lyricsEmptyText: { ...textVariants.footnote, color: colors.textTertiary },
+  lyricsFullEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+  },
   lyricsFullWrap: {
     flex: 1,
     justifyContent: 'flex-start',
     alignItems: 'center',
     width: '100%',
   },
+  // 全屏歌词页顶部信息行（真机反馈重排：利用顶部空间）
+  lyricsFullInfo: {
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    marginBottom: spacing[2],
+  },
+  lyricsFullTitle: { ...textVariants.titleLg, color: colors.textPrimary },
+  lyricsFullArtist: { ...textVariants.subhead, color: colors.textSecondary, marginTop: 2 },
   lyricsFullList: {
     flex: 1,
     width: '100%',
   },
   lyricsFullContent: {
     paddingVertical: spacing[5],
-  },
-  // 歌词模式底部控制区（#186 #9）：进度条 + 播放三键，保留暂停入口
-  lyricsControls: {
-    width: '100%',
-    alignItems: 'center',
-    paddingTop: spacing[2],
-    paddingBottom: spacing[2],
   },
 });

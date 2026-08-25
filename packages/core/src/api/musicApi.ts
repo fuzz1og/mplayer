@@ -1543,7 +1543,8 @@ export const musicApi = {
         `https://music.163.com/api/song/lyric?id=${encodeURIComponent(songId)}&lv=1&kv=1&tv=-1`
       );
       const lyrics = (response.data?.lrc?.lyric as string) || '';
-      cacheManager.setLyricsCache(cacheKey, lyrics);
+      // issue #246：空歌词（404/纯音乐）不入缓存——否则永久命中空串、无兜底重试机会
+      if (lyrics) cacheManager.setLyricsCache(cacheKey, lyrics);
       return lyrics;
     } catch {
       return '';

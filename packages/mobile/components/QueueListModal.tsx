@@ -41,9 +41,9 @@ export default function QueueListModal({ visible, onClose }: Props) {
             <TouchableOpacity
               style={styles.item}
               onPress={() => {
+                // 真机反馈（#186）：点歌换歌不关闭弹层，由用户决定何时关闭
                 setQueue(queue, index);
                 playSong(item);
-                onClose();
               }}
             >
               <View style={styles.itemInfo}>
