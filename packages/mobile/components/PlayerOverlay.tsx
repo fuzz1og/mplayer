@@ -22,7 +22,7 @@ import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
-import {radius, shadow, spacing, textVariants, turntable} from '../theme/tokens';
+import {radius, shadow, spacing, textVariants, turntable, playerForeground, playerBackground} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { springs, projectMomentum, rubberband } from '../theme/motion';
@@ -445,9 +445,7 @@ export default function PlayerOverlay({ onClose }: Props) {
           tab 页面（iOS 全屏媒体 dismiss 行为）；若固定不动会盖住底层页面。 */}
       <Animated.View style={[styles.bgLayer, { transform: [{ translateY: panY }, { scale }], opacity }]} pointerEvents="none">
         <LinearGradient
-          colors={isDark
-            ? ['#20242D', '#151821', '#0A0C10']
-            : ['#D5DAE3', '#E1E5EB', '#ECEEF3']}
+          colors={isDark ? playerBackground.dark : playerBackground.light}
           locations={[0, 0.5, 1]}
           style={StyleSheet.absoluteFill}
         />
@@ -712,29 +710,9 @@ function formatTime(sec: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-/** 播放器前景色集合：随背景明暗切换（暗背景→亮字 / 浅背景→深字，iOS 全屏双端适配） */
-const makeFg = (isDark: boolean) => isDark ? {
-  primary: '#FFFFFF',
-  secondary: 'rgba(255,255,255,0.7)',
-  tertiary: 'rgba(255,255,255,0.5)',
-  icon: 'rgba(255,255,255,0.85)',
-  iconSoft: 'rgba(255,255,255,0.8)',
-  badgeBg: 'rgba(255,255,255,0.14)',
-  badgeText: 'rgba(255,255,255,0.8)',
-  skeleton: 'rgba(255,255,255,0.18)',
-  lyricFull: 'rgba(255,255,255,0.6)',
-} : {
-  primary: '#16181E',
-  secondary: 'rgba(22,24,30,0.75)',
-  tertiary: 'rgba(22,24,30,0.55)',
-  icon: 'rgba(22,24,30,0.85)',
-  iconSoft: 'rgba(22,24,30,0.8)',
-  badgeBg: 'rgba(22,24,30,0.08)',
-  badgeText: 'rgba(22,24,30,0.8)',
-  skeleton: 'rgba(22,24,30,0.12)',
-  lyricFull: 'rgba(22,24,30,0.6)',
-};
-type PlayerFg = ReturnType<typeof makeFg>;
+/** 播放器前景色：从 tokens 单一来源（playerForeground）取，随背景明暗切换 */
+type PlayerFg = (typeof playerForeground)['dark'] | (typeof playerForeground)['light'];
+const makeFg = (isDark: boolean): PlayerFg => (isDark ? playerForeground.dark : playerForeground.light);
 
 const makeStyles = (colors: ThemeColors, fg: PlayerFg) => StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent', alignItems: 'center' },

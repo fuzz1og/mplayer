@@ -36,7 +36,8 @@ const TABS: { name: string; href: Href; icon: LucideIcon; label: string }[] = [
 function BottomChrome() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const tabBarStyles = useMemo(() => makeTabBarStyles(), []);
+  // makeTabBarStyles 是无参纯工厂（StyleSheet.create 自带注册缓存），空依赖 useMemo 无意义
+  const tabBarStyles = makeTabBarStyles();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const isSearch = pathname === '/search';

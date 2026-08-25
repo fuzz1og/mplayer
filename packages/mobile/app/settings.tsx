@@ -34,8 +34,8 @@ const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
 const MAX_CACHE_MB = 100;
 
 export default function SettingsPage() {
-  const { colors, isDark } = useTheme();
-  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const tier3Enabled = useSettingsStore((s) => s.tier3Enabled);
   const tier3Subscriptions = useSettingsStore((s) => s.tier3Subscriptions);
   const themeMode = useSettingsStore((s) => s.themeMode);
@@ -310,10 +310,10 @@ export default function SettingsPage() {
               {tier3Subscriptions.map((sub, i) => (
                 <View key={sub.id} style={[styles.row, { alignItems: 'flex-start' }, i > 0 && styles.rowSep]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 17, fontWeight: '500', lineHeight: 22, color: colors.textPrimary }}>{sub.name}</Text>
-                    {/* iOS cell 副标题 15pt 灰 / 三级信息 13pt */}
-                    <Text style={{ fontSize: 15, fontWeight: '400', lineHeight: 20, color: colors.textSecondary }} numberOfLines={1}>{sub.source}</Text>
-                    <Text style={{ fontSize: 13, fontWeight: '400', lineHeight: 17, color: colors.textTertiary }}>{sub.manifest.sources.length} 个源</Text>
+                    <Text style={{ ...textVariants.settingsPrimary, fontWeight: '500', color: colors.textPrimary }}>{sub.name}</Text>
+                    {/* iOS cell 副标题 15pt（settingsSecondary）/ 三级信息 13pt（settingsTertiary） */}
+                    <Text style={{ ...textVariants.settingsSecondary, color: colors.textSecondary }} numberOfLines={1}>{sub.source}</Text>
+                    <Text style={{ ...textVariants.settingsTertiary, color: colors.textTertiary }}>{sub.manifest.sources.length} 个源</Text>
                   </View>
                   {sub.kind === 'url' && (
                     <TouchableOpacity onPress={() => void handleRefreshTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
@@ -333,7 +333,7 @@ export default function SettingsPage() {
             <View style={[styles.group, styles.groupGap]}>
               <View style={styles.groupPad}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={{ color: colors.textSecondary, fontSize: 13 }}>每源解析统计（本次会话）</Text>
+                  <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>每源解析统计（本次会话）</Text>
                   <View style={{ flexDirection: 'row' }}>
                     <TouchableOpacity onPress={refreshTier3Stats} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
                       <RefreshCw size={14} color={colors.textSecondary} />
@@ -345,8 +345,8 @@ export default function SettingsPage() {
                 </View>
                 {Object.entries(tier3Stats).map(([sourceId, st]) => (
                   <View key={sourceId} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 13, flex: 1 }} numberOfLines={1}>{sourceId}</Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 13 }}>命中 {st.hits} / 未命中 {st.misses}</Text>
+                    <Text style={{ ...textVariants.settingsTertiary, color: colors.textPrimary, flex: 1 }} numberOfLines={1}>{sourceId}</Text>
+                    <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>命中 {st.hits} / 未命中 {st.misses}</Text>
                   </View>
                 ))}
               </View>
@@ -399,7 +399,7 @@ export default function SettingsPage() {
             {updateState === 'checking' && (
               <View style={[styles.row, styles.rowSep]}>
                 <RefreshCcw size={18} color={colors.textSecondary} style={styles.btnIcon} />
-                <Text style={{ fontSize: 17, fontWeight: '400', lineHeight: 22, color: colors.textSecondary }}>检查中…</Text>
+                <Text style={{ ...textVariants.settingsPrimary, color: colors.textSecondary }}>检查中…</Text>
               </View>
             )}
             {updateState === 'available' && (
@@ -419,13 +419,13 @@ export default function SettingsPage() {
             {updateState === 'not-available' && (
               <View style={[styles.row, styles.rowSep]}>
                 <CircleCheck size={20} color={colors.success} style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 17, fontWeight: '400', lineHeight: 22, color: colors.successText }}>已是最新版本</Text>
+                <Text style={{ ...textVariants.settingsPrimary, color: colors.successText }}>已是最新版本</Text>
               </View>
             )}
             {updateState === 'error' && (
               <View style={[styles.row, styles.rowSep]}>
                 <CircleX size={20} color={colors.danger} style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 17, fontWeight: '400', lineHeight: 22, color: colors.danger }}>检查失败，请检查网络</Text>
+                <Text style={{ ...textVariants.settingsPrimary, color: colors.danger }}>检查失败，请检查网络</Text>
               </View>
             )}
           </View>
@@ -435,7 +435,7 @@ export default function SettingsPage() {
   );
 }
 
-const makeStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bgBase,
@@ -451,10 +451,10 @@ const makeStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: 10,
   },
-  /* iOS 13+ 分段控件默认：极浅灰底 rgba(118,118,128) 0.12(浅)/0.24(深) + 选中段白胶囊浮起 */
+  /* iOS 13+ 分段控件默认：极浅灰底（segmentTrack）+ 选中段白胶囊浮起 */
   segmentGroup: {
     flexDirection: 'row',
-    backgroundColor: isDark ? 'rgba(120,120,128,0.24)' : 'rgba(120,120,128,0.12)',
+    backgroundColor: colors.segmentTrack,
     borderRadius: radius.sm,
     padding: 2,
   },
@@ -484,9 +484,8 @@ const makeStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
   /* iOS inset grouped：节标题 13pt 灰色大写（uppercase secondary label）；
      白组坐灰底、组圆角 10pt（radius.md）、无阴影无边框；水平缩进 16（spacing[4]） */
   sectionLabel: {
-    ...textVariants.footnote,
+    ...textVariants.settingsHeader,
     color: colors.textSecondary,
-    fontWeight: '600',
     textTransform: 'uppercase',
     marginBottom: spacing[2],
   },
@@ -526,11 +525,9 @@ const makeStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: 12,
   },
-  /* iOS 操作行：17pt accent（与 cell 主标题同字号） */
+  /* iOS 操作行：17pt accent（settingsPrimary） */
   actionRowText: {
-    fontSize: 17,
-    fontWeight: '400',
-    lineHeight: 22,
+    ...textVariants.settingsPrimary,
     color: colors.accent,
   },
   actionRowDisabled: {
@@ -561,12 +558,10 @@ const makeStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
   statusDotReady: {
     backgroundColor: colors.success,
   },
-  /* iOS cell：主标题 17pt regular（primary label），值 13pt 灰（secondary label） */
+  /* iOS cell：主标题 17pt（settingsPrimary），值 13pt（settingsTertiary） */
   modeLabel: {
+    ...textVariants.settingsPrimary,
     color: colors.textPrimary,
-    fontSize: 17,
-    fontWeight: '400',
-    lineHeight: 22,
     flex: 1,
   },
   /* Switch 行：iOS cell 44pt（31 Switch + 13 padding ≈ 44），独立于通用 row 避免全局改动 */
@@ -586,7 +581,7 @@ const makeStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     transform: [{ scale: 0.65 }],
   },
   modeStatus: {
-    ...textVariants.footnote,
+    ...textVariants.settingsTertiary,
     color: colors.textSecondary,
   },
   // ADR-0006：success 当文字仅 ≈2.3:1，走 successText 达标
@@ -633,8 +628,8 @@ const makeStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     marginBottom: spacing[2],
   },
   releaseNotes: {
+    ...textVariants.settingsTertiary,
     color: colors.textSecondary,
-    fontSize: 13,
     marginBottom: spacing[3],
     lineHeight: 20,
   },

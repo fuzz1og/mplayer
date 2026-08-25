@@ -60,7 +60,7 @@ export default function ChromeBlur({ style, children }: Props) {
           pointerEvents="none"
           style={[
             StyleSheet.absoluteFill,
-            { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.18)' : 'rgba(255, 255, 255, 0.12)' },
+            { backgroundColor: colors.blurScrim },
           ]}
         />
       )}

@@ -121,6 +121,40 @@ export const turntable = {
   tonearmPivotBorder: '#BBBBBB',
 } as const;
 
+/**
+ * 全屏播放器前景色（iOS 全屏惯例：暗背景→亮前景 / 浅背景→深前景）。
+ * PlayerOverlay 的 makeFg 以此为单一来源，不散落魔数。
+ */
+export const playerForeground = {
+  dark: {
+    primary: '#FFFFFF',
+    secondary: 'rgba(255,255,255,0.7)',
+    tertiary: 'rgba(255,255,255,0.5)',
+    icon: 'rgba(255,255,255,0.85)',
+    iconSoft: 'rgba(255,255,255,0.8)',
+    badgeBg: 'rgba(255,255,255,0.14)',
+    badgeText: 'rgba(255,255,255,0.8)',
+    skeleton: 'rgba(255,255,255,0.18)',
+    lyricFull: 'rgba(255,255,255,0.6)',
+  },
+  light: {
+    primary: '#16181E',
+    secondary: 'rgba(22,24,30,0.75)',
+    tertiary: 'rgba(22,24,30,0.55)',
+    icon: 'rgba(22,24,30,0.85)',
+    iconSoft: 'rgba(22,24,30,0.8)',
+    badgeBg: 'rgba(22,24,30,0.08)',
+    badgeText: 'rgba(22,24,30,0.8)',
+    skeleton: 'rgba(22,24,30,0.12)',
+    lyricFull: 'rgba(22,24,30,0.6)',
+  },
+} as const;
+/** 全屏播放器固定渐变背景（双端，方案 C：不随封面防白封面跳变） */
+export const playerBackground: Record<'dark' | 'light', [string, string, string]> = {
+  dark: ['#20242D', '#151821', '#0A0C10'],
+  light: ['#D5DAE3', '#E1E5EB', '#ECEEF3'],
+};
+
 /** 间距 — 8px 网格（与 desktop --space-* 一致） */
 export const spacing = {
   0: 0,
@@ -248,6 +282,12 @@ export const textVariants = {
   caption: { fontSize: 12, fontWeight: '400', lineHeight: 16 },
   /** 徽章/角标 */
   micro: { fontSize: 11, fontWeight: '600', lineHeight: 14 },
+  /** iOS 设置页 Inset Grouped 三档层级（17/15/13，见 docs/agents/mobile-ios-design-guide.md） */
+  settingsPrimary: { fontSize: 17, fontWeight: '400', lineHeight: 22 },
+  settingsSecondary: { fontSize: 15, fontWeight: '400', lineHeight: 20 },
+  settingsTertiary: { fontSize: 13, fontWeight: '400', lineHeight: 17 },
+  /** iOS 设置节标题（配 textTransform: uppercase 使用） */
+  settingsHeader: { fontSize: 13, fontWeight: '600', lineHeight: 16 },
 } as const;
 
 export type TextVariant = keyof typeof textVariants;
@@ -271,6 +311,10 @@ export interface ThemeColors {
   bgHover: string;
   bgActive: string;
   bgOverlay: string;
+  /** iOS 分段控件轨道底（rgba(120,120,128) 0.12 浅 / 0.24 深，iOS 13+ 默认） */
+  segmentTrack: string;
+  /** Android 毛玻璃材质着色补偿层（浅白 0.12 / 深黑 0.18） */
+  blurScrim: string;
 
   /* 文字层级 */
   textPrimary: string;
@@ -339,6 +383,8 @@ export const lightColors: ThemeColors = {
   bgHover: palette.gray100,
   bgActive: palette.gray200,
   bgOverlay: 'rgba(0, 0, 0, 0.4)',
+  segmentTrack: 'rgba(120, 120, 128, 0.12)',
+  blurScrim: 'rgba(255, 255, 255, 0.12)',
 
   /* 文字层级 */
   textPrimary: palette.gray900,
@@ -398,7 +444,8 @@ export const lightColors: ThemeColors = {
  */
 export const darkColors: ThemeColors = {
   /* 背景层级 */
-  bgBase: palette.gray950,
+  // 对齐 iOS 深色标准：页面底纯黑 #000000（systemGroupedBackground），卡片/浮层已是标准色
+  bgBase: '#000000',
   bgSurface: palette.gray900,
   bgElevated: palette.gray850,
   bgSidebar: palette.gray900,
@@ -407,6 +454,8 @@ export const darkColors: ThemeColors = {
   bgHover: palette.gray825,
   bgActive: palette.gray750,
   bgOverlay: 'rgba(0, 0, 0, 0.6)',
+  segmentTrack: 'rgba(120, 120, 128, 0.24)',
+  blurScrim: 'rgba(0, 0, 0, 0.18)',
 
   /* 文字层级 */
   textPrimary: palette.gray50,
