@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
+import { Pressable } from 'react-native';
 import type { Playlist } from '../stores/playlistStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
@@ -24,10 +24,13 @@ export default function PlaylistHero({
   playlist,
   onRemoveSong,
   onSwap,
+  navRight,
 }: {
   playlist: Playlist;
   onRemoveSong: (song: Song) => void;
   onSwap: (original: Song, swapped: Song) => void;
+  /** 悬浮导航栏右侧动作插槽（透传 CollapsingHero） */
+  navRight?: React.ReactNode;
 }) {
   // 自建歌单封面 = 第一首歌封面；过期则占位等待重新搜索后的最新封面
   const { cover, handleError } = useRefreshedCover(playlist.songs[0] || null);
@@ -41,6 +44,7 @@ export default function PlaylistHero({
       cover={resolvedCover}
       onCoverError={handleError}
       navTitle={playlist.name}
+      navRight={navRight}
       title={playlist.name}
       meta={`${playlist.songs.length} 首`}
       actionLabel="播放全部"
@@ -48,9 +52,11 @@ export default function PlaylistHero({
       data={playlist.songs}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
-        <TouchableOpacity activeOpacity={1} onLongPress={() => onRemoveSong(item)}>
+        // 长按删除的行包装：SongRow 自带 ScalePress 按压反馈，这里只承接
+        // 手势不做视觉（原 activeOpacity={1} 语义），故用无动画 Pressable
+        <Pressable onLongPress={() => onRemoveSong(item)}>
           <SongRow song={item} showSource queueSongs={playlist.songs} onSwap={onSwap} onRemove={onRemoveSong} />
-        </TouchableOpacity>
+        </Pressable>
       )}
     />
   );
