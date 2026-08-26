@@ -145,7 +145,13 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         shell: bash
         run: |
-          emit() { [ -n "${!1}" ] && printf '%s=%s\n' "$1" "${!1}" >> "$GITHUB_ENV"; }
+          emit() {
+            # Actions 的 bash 自带 set -e：写成 [ -n ] && cmd 时空值会让函数返回非零直接崩步骤
+            # （v1.7.3 第二跑 mac/win 实测 exit 1），用 if 守卫保证空值时静默返回 0
+            if [ -n "${!1}" ]; then
+              printf '%s=%s\n' "$1" "${!1}" >> "$GITHUB_ENV"
+            fi
+          }
           case "$RUNNER_OS" in
             macOS)
               emit CSC_LINK "$MAC_CSC_LINK"
