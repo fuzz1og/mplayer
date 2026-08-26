@@ -24,7 +24,7 @@ export const chromeBlurTargetRef = createRef<RNView>();
  * - 系统「减弱透明度」开启 / web / Android 且内容区 target 未挂载：回退纯半透明底
  */
 export default function ChromeBlur({ style, children }: Props) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   // 真机反馈根因：isReduceTransparencyEnabled 是异步 API，render 期同步调用拿到
   // Promise（恒 truthy）→ 恒走降级分支、BlurView 从未挂载。必须用 hook 异步消费。
   const reduceTransparency = useReducedTransparency();
@@ -42,12 +42,14 @@ export default function ChromeBlur({ style, children }: Props) {
   // 读取 blurTarget.current 时 ref 已就绪；target 缺失时原生侧自动回退 none。
   return (
     <BlurView
-      intensity={90}
-      tint={isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterialLight'}
+      // OpenAI expo skill 推荐组合（真机反馈 chrome 档过实）：intensity 60 + systemMaterial
+      // （自动适配明暗）+ factor 1。注意：Android 上无明暗后缀 tint 映射 DEFAULT=26% 白，
+      // 深色下可能偏白/透明（TintStyle.kt），真机观感为准再定。
+      intensity={60}
+      tint="systemMaterial"
       blurTarget={Platform.OS === 'android' ? chromeBlurTargetRef : undefined}
       blurMethod={Platform.OS === 'android' ? 'dimezisBlurViewSdk31Plus' : undefined}
-      // Android 实际模糊强度 = intensity / blurReductionFactor：默认 4 → 90/4≈22，
-      // 近乎 iOS 的 1/4，观感"发干、像半透明"。设为 1 后 ≈90 追平 iOS（社区调研方案 A）。
+      // Android 实际模糊强度 = intensity / blurReductionFactor：默认 4 会缩水到 1/4，1 才对齐 iOS
       blurReductionFactor={Platform.OS === 'android' ? 1 : undefined}
       style={style}
     >

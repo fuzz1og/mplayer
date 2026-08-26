@@ -384,7 +384,7 @@ export const lightColors: ThemeColors = {
   bgActive: palette.gray200,
   bgOverlay: 'rgba(0, 0, 0, 0.4)',
   segmentTrack: 'rgba(120, 120, 128, 0.12)',
-  blurScrim: 'rgba(255, 255, 255, 0.12)',
+  blurScrim: 'rgba(255, 255, 255, 0.15)',
 
   /* 文字层级 */
   textPrimary: palette.gray900,
@@ -455,7 +455,7 @@ export const darkColors: ThemeColors = {
   bgActive: palette.gray750,
   bgOverlay: 'rgba(0, 0, 0, 0.6)',
   segmentTrack: 'rgba(120, 120, 128, 0.24)',
-  blurScrim: 'rgba(0, 0, 0, 0.18)',
+  blurScrim: 'rgba(0, 0, 0, 0.10)',
 
   /* 文字层级 */
   textPrimary: palette.gray50,
