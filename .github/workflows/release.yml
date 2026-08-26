@@ -72,6 +72,8 @@ jobs:
       && (github.event_name == 'push'
           || (github.event_name == 'workflow_dispatch' && inputs.platform != 'mobile-only'))
     strategy:
+      # 单平台失败不连坐取消其他平台；publish 端仍要求三平台 + mobile 全部成功
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -125,20 +127,44 @@ jobs:
       # 由 publish job 汇总上传到 GitHub Release。
       # 注意：不要用 --publish always —— 会与 publish job 的 gh release create 竞争，
       # electron-builder 因 release 已存在而 skipped publishing（实测 v1.7.2 桌面产物全丢）。
-      - name: Build (Electron)
-        run: npx electron-builder ${{ matrix.args }} --publish never
+      # 代码签名/公证凭据按需注入（electron-builder 检测到凭据才签名，无凭据自动跳过）：
+      #   macOS —— Developer ID 证书 p12 的 base64（MAC_CSC_LINK）+ 密码；
+      #            notarize 由 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三件套驱动
+      #   Windows —— 代码签名证书 pfx 的 base64（WIN_CSC_LINK）+ 密码
+      # 不能直接写进步骤 env：secret 未配置时渲染成空字符串，「已定义的空值」会把
+      # electron-builder 带进签名分支然后崩溃（v1.7.3 实测 mac 报 ⨯ "not a file" exit 1，
+      # 而 v1.7.2 无此 env 时正常走 skipped code signing）。只注入非空凭据。
+      - name: Resolve code signing credentials
         env:
-          # 代码签名/公证（electron-builder 检测到凭据才签名，secrets 未配置时自动跳过）：
-          #   macOS —— Developer ID 证书 p12 的 base64（MAC_CSC_LINK）+ 密码；
-          #            notarize 由 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三个变量驱动
-          #   Windows —— 代码签名证书 pfx 的 base64（WIN_CSC_LINK）+ 密码
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          emit() { [ -n "${!1}" ] && printf '%s=%s\n' "$1" "${!1}" >> "$GITHUB_ENV"; }
+          case "$RUNNER_OS" in
+            macOS)
+              emit CSC_LINK "$MAC_CSC_LINK"
+              emit CSC_KEY_PASSWORD "$MAC_CSC_KEY_PASSWORD"
+              # 公证三件套齐备才注入，缺一个就整体不走 notarize（部分配置会崩）
+              if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+                echo "APPLE_ID=$APPLE_ID" >> "$GITHUB_ENV"
+                echo "APPLE_APP_SPECIFIC_PASSWORD=$APPLE_APP_SPECIFIC_PASSWORD" >> "$GITHUB_ENV"
+                echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
+              fi
+              ;;
+            Windows)
+              emit CSC_LINK "$WIN_CSC_LINK"
+              emit CSC_KEY_PASSWORD "$WIN_CSC_KEY_PASSWORD"
+              ;;
+          esac
+
+      - name: Build (Electron)
+        run: npx electron-builder ${{ matrix.args }} --publish never
 
       # 只上传顶层发布产物（AppImage/deb/dmg/exe/latest-*.yml），
       # 排除 dist 下被打包进 app 的源文件（index.html/icon.png/builder-debug.yml 等）
