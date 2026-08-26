@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { X, CircleCheck, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '../services/sourceSwap';
@@ -7,6 +7,7 @@ import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import SourceBadge from './SourceBadge';
+import BottomSheet from './BottomSheet';
 
 const SWAP_SOURCES: { key: SourceKey; label: string }[] = [
   { key: 'netease', label: '网易云' },
@@ -42,9 +43,7 @@ export default function SourceSwapModal({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        <View style={styles.sheet}>
+    <BottomSheet visible={visible} onClose={onClose}>
           <View style={styles.header}>
             <Text style={styles.title}>
               {success ? '换源完整版' : candidates.length > 0 ? '选择要切换的版本' : '换源完整版'}
@@ -117,21 +116,11 @@ export default function SourceSwapModal({
               );
             })
           )}
-        </View>
-      </TouchableOpacity>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: colors.bgOverlay, justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    paddingBottom: spacing[8],
-    paddingHorizontal: spacing[5],
-  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -152,9 +141,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   itemText: { ...textVariants.body, fontWeight: '400', color: colors.textPrimary },
   itemArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
   matchTag: { ...textVariants.caption, color: colors.textSecondary, marginRight: spacing[2] },
-  matchTagExact: { color: colors.success },
+  // ADR-0006：success 当文字走 successText 达标
+  matchTagExact: { color: colors.successText },
   playTag: { ...textVariants.micro, fontWeight: '400', color: colors.textSecondary, marginRight: 6 },
-  playTagGood: { color: colors.success },
+  playTagGood: { color: colors.successText },
   // 试听版标记：warning 不当正文色（M2-4），中性文字 + warningSubtle 底保留琥珀信号
   playTagPreview: {
     color: colors.textSecondary,
@@ -163,7 +153,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
   },
-  playTagBad: { color: colors.danger },
+  // ADR-0006：danger 当文字走 dangerText 达标
+  playTagBad: { color: colors.dangerText },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -175,5 +166,5 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   loadingBox: { paddingVertical: spacing[6], alignItems: 'center' },
   loadingText: { ...textVariants.subhead, fontWeight: '400', color: colors.accent },
   successBox: { paddingVertical: spacing[6], alignItems: 'center' },
-  successText: { ...textVariants.subhead, fontWeight: '400', color: colors.success, marginTop: spacing[2] },
+  successText: { ...textVariants.subhead, fontWeight: '400', color: colors.successText, marginTop: spacing[2] },
 });

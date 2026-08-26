@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Disc3 } from 'lucide-react-native';
 import { musicApi, type Song, type Album } from '@mplayer/core';
-import LoadingState from '../../components/LoadingState';
+import SongListSkeleton from '../../components/SongListSkeleton';
 import SongRow from '../../components/SongRow';
 import CollapsingHero from '../../components/CollapsingHero';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
@@ -77,7 +77,7 @@ export default function AlbumDetailPage() {
     return t > 0 ? String(new Date(t).getFullYear()) : '';
   })();
 
-  if (loading) return <LoadingState />;
+  if (loading) return <SongListSkeleton />;
 
   return (
     <View style={styles.container}>

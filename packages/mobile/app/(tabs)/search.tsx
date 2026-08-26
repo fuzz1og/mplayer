@@ -14,6 +14,7 @@ import { CircleAlert, Music2, User } from 'lucide-react-native';
 import { musicApi } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
+import { usePlayerStore } from '../../stores/playerStore';
 import SongRow from '../../components/SongRow';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
@@ -42,6 +43,8 @@ export default function SearchPage() {
   const animatedBg = useAnimatedBg();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  // ADR-0008：首次播放前迷你播放栏隐藏，让位随之缩小
+  const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
   const params = useLocalSearchParams<{ q: string; type?: string }>();
   const q = Array.isArray(params.q) ? params.q[0] : params.q;
   const type = Array.isArray(params.type) ? params.type[0] : params.type;
@@ -146,7 +149,7 @@ export default function SearchPage() {
           numColumns={3}
           contentContainerStyle={[
             styles.artistGrid,
-            { paddingBottom: bottomChromeHeight(insets.bottom, false) + SEARCH_TAIL_PADDING },
+            { paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING },
           ]}
           renderItem={({ item: a }) => (
             <TouchableOpacity
@@ -189,12 +192,13 @@ function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: Results
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
   return (
     <FlatList
       key="song-results"
       data={results}
       keyExtractor={(item) => item.key}
-      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + SEARCH_TAIL_PADDING }}
+      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING }}
       renderItem={({ item: group }) => (
         <View style={styles.groupSection}>
           {(group.name || group.artist) ? (
@@ -223,12 +227,13 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
   return (
     <FlatList
       key="song-results"
       data={results}
       keyExtractor={(item) => item.key}
-      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false) + SEARCH_TAIL_PADDING }}
+      contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING }}
       renderItem={({ item: group }) => (
         <View style={styles.groupSection}>
           {group.name ? (

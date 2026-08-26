@@ -17,6 +17,7 @@ import { ListMusic, ChevronRight, Plus, Heart, Clock } from 'lucide-react-native
 import { router } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import type { Playlist } from '../../stores/playlistStore';
+import { usePlayerStore } from '../../stores/playerStore';
 import {radius, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -39,6 +40,8 @@ export default function PlaylistsPage() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const playlists = usePlaylistStore((s) => s.playlists);
   const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
+  // ADR-0008：首次播放前迷你播放栏隐藏，让位随之缩小
+  const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
   const deletePlaylist = usePlaylistStore((s) => s.deletePlaylist);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -90,7 +93,7 @@ export default function PlaylistsPage() {
         renderItem={renderItem}
         contentContainerStyle={[
           styles.list,
-          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true) + SECTION_TAIL_PADDING },
+          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + SECTION_TAIL_PADDING },
         ]}
         ListHeaderComponent={() => (
           <>

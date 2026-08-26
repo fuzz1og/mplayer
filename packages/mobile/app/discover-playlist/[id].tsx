@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { musicApi, formatPlayCount, type Song } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
-import LoadingState from '../../components/LoadingState';
+import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
 import CollapsingHero from '../../components/CollapsingHero';
@@ -90,7 +90,7 @@ export default function DiscoverPlaylistDetailPage() {
     }
   };
 
-  if (loading) return <LoadingState />;
+  if (loading) return <SongListSkeleton />;
   if (!playlist) {
     return (
       <View style={styles.empty}>

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { textVariants } from '../theme/tokens';
+import { radius, textVariants } from '../theme/tokens';
 import { AnimatedBgProvider } from '../theme/AnimatedBg';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
@@ -162,7 +162,8 @@ const makeToastStyles = (colors: ThemeColors) => StyleSheet.create({
   box: {
     backgroundColor: colors.bgSurface,
     borderWidth: 1,
-    borderRadius: 10,
+    // #186：#2 Toast 圆角走 token，不直写魔法数
+    borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 10,
     maxWidth: '85%',

@@ -210,7 +210,7 @@ export default function SettingsPage() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>外观</Text>
           <View style={styles.group}>
-            <View style={styles.groupPad}>
+            <View style={styles.segmentCell}>
               <View style={styles.segmentGroup}>
                 {THEME_MODE_OPTIONS.map((opt) => {
                   const active = themeMode === opt.value;
@@ -246,21 +246,23 @@ export default function SettingsPage() {
               );
             })}
           </View>
-          <Text style={styles.sectionFootnote}>每源官方直连可用性，直连能力按源逐步落地。</Text>
         </View>
 
         {/* tier3 第三方解析源（#144，实验性）：按 iOS 惯例拆成小分组，避免一个巨型组 */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>第三方解析源（tier3）</Text>
-          <Text style={styles.sectionFootnote}>官方直连失败后按订阅清单尝试第三方源，全部失败换元/标记不可播。实验性功能，不内置任何解析端点。</Text>
+          {/* iOS 惯例：同一节连续 cells 合成一个卡片，cell 间 hairline 分隔（rowSep） */}
           <View style={styles.group}>
-            <View style={styles.row}>
+            <View style={styles.rowSwitch}>
               <Text style={[styles.modeLabel, { flex: 1 }]}>启用第三方解析</Text>
-              <Switch value={tier3Enabled} onValueChange={handleTier3Toggle} />
+              {/* iOS Switch 高度 31pt：Android Material Switch 默认 48dp 会撑高 cell 行高。
+                  transform scale 只改视觉不改布局占位，必须用 switchWrap 固定 31 高度收敛占位 */}
+              <View style={styles.switchWrap}>
+                <Switch value={tier3Enabled} onValueChange={handleTier3Toggle} style={styles.switch} />
+              </View>
             </View>
-          </View>
-          <View style={[styles.group, styles.groupGap]}>
-            <View style={styles.groupPad}>
+            {/* iOS 表单惯例：输入 cell + 下方居中「添加」整行按钮（紧贴成块） */}
+            <View style={[styles.groupPad, styles.rowSep, { paddingBottom: 0 }]}>
               <TextInput
                 style={styles.input}
                 value={tier3Url}
@@ -273,16 +275,15 @@ export default function SettingsPage() {
               />
             </View>
             <ScalePress
-              style={[styles.actionRow, styles.rowSep, tier3Busy && styles.actionRowDisabled]}
+              style={[styles.actionRow, tier3Busy && styles.actionRowDisabled]}
               onPress={handleAddTier3Url}
               disabled={tier3Busy}
             >
               <Plus size={18} color={tier3Busy ? colors.textSecondary : colors.accent} style={styles.btnIcon} />
               <Text style={[styles.actionRowText, tier3Busy && { color: colors.textSecondary }]}>添加 URL 订阅</Text>
             </ScalePress>
-          </View>
-          <View style={[styles.group, styles.groupGap]}>
-            <View style={styles.groupPad}>
+            {/* 多行 JSON 输入 + 下方居中「添加粘贴清单」（与 URL 块同构） */}
+            <View style={[styles.groupPad, styles.rowSep, { paddingBottom: 0 }]}>
               <TextInput
                 style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
                 value={tier3Paste}
@@ -293,7 +294,7 @@ export default function SettingsPage() {
               />
             </View>
             <ScalePress
-              style={[styles.actionRow, styles.rowSep, tier3Busy && styles.actionRowDisabled]}
+              style={[styles.actionRow, tier3Busy && styles.actionRowDisabled]}
               onPress={handleAddTier3Paste}
               disabled={tier3Busy}
             >
@@ -309,9 +310,10 @@ export default function SettingsPage() {
               {tier3Subscriptions.map((sub, i) => (
                 <View key={sub.id} style={[styles.row, { alignItems: 'flex-start' }, i > 0 && styles.rowSep]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ ...textVariants.subhead, fontWeight: '600', color: colors.textPrimary }}>{sub.name}</Text>
-                    <Text style={{ ...textVariants.caption, color: colors.textSecondary }} numberOfLines={1}>{sub.source}</Text>
-                    <Text style={{ ...textVariants.micro, fontWeight: '400', color: colors.textTertiary }}>{sub.manifest.sources.length} 个源</Text>
+                    <Text style={{ ...textVariants.settingsPrimary, fontWeight: '500', color: colors.textPrimary }}>{sub.name}</Text>
+                    {/* iOS cell 副标题 15pt（settingsSecondary）/ 三级信息 13pt（settingsTertiary） */}
+                    <Text style={{ ...textVariants.settingsSecondary, color: colors.textSecondary }} numberOfLines={1}>{sub.source}</Text>
+                    <Text style={{ ...textVariants.settingsTertiary, color: colors.textTertiary }}>{sub.manifest.sources.length} 个源</Text>
                   </View>
                   {sub.kind === 'url' && (
                     <TouchableOpacity onPress={() => void handleRefreshTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
@@ -331,7 +333,7 @@ export default function SettingsPage() {
             <View style={[styles.group, styles.groupGap]}>
               <View style={styles.groupPad}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={{ color: colors.textSecondary, fontSize: 12 }}>每源解析统计（本次会话）</Text>
+                  <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>每源解析统计（本次会话）</Text>
                   <View style={{ flexDirection: 'row' }}>
                     <TouchableOpacity onPress={refreshTier3Stats} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
                       <RefreshCw size={14} color={colors.textSecondary} />
@@ -343,13 +345,16 @@ export default function SettingsPage() {
                 </View>
                 {Object.entries(tier3Stats).map(([sourceId, st]) => (
                   <View key={sourceId} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 12, flex: 1 }} numberOfLines={1}>{sourceId}</Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>命中 {st.hits} / 未命中 {st.misses}</Text>
+                    <Text style={{ ...textVariants.settingsTertiary, color: colors.textPrimary, flex: 1 }} numberOfLines={1}>{sourceId}</Text>
+                    <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>命中 {st.hits} / 未命中 {st.misses}</Text>
                   </View>
                 ))}
               </View>
             </View>
           )}
+
+          {/* iOS footer：说明文字在组下方（8pt 距组）；原放在节标题下会与卡片粘连 */}
+          <Text style={styles.sectionFootnote}>官方直连失败后按订阅清单尝试第三方源，全部失败换元/标记不可播。实验性功能，不内置任何解析端点。</Text>
         </View>
 
         {/* 缓存管理：统计 + 用量条 + 一键清理（对齐桌面 CacheSection） */}
@@ -394,7 +399,7 @@ export default function SettingsPage() {
             {updateState === 'checking' && (
               <View style={[styles.row, styles.rowSep]}>
                 <RefreshCcw size={18} color={colors.textSecondary} style={styles.btnIcon} />
-                <Text style={{ ...textVariants.subhead, color: colors.textSecondary }}>检查中…</Text>
+                <Text style={{ ...textVariants.settingsPrimary, color: colors.textSecondary }}>检查中…</Text>
               </View>
             )}
             {updateState === 'available' && (
@@ -414,13 +419,13 @@ export default function SettingsPage() {
             {updateState === 'not-available' && (
               <View style={[styles.row, styles.rowSep]}>
                 <CircleCheck size={20} color={colors.success} style={{ marginRight: 8 }} />
-                <Text style={{ ...textVariants.subhead, fontWeight: '400', color: colors.success }}>已是最新版本</Text>
+                <Text style={{ ...textVariants.settingsPrimary, color: colors.successText }}>已是最新版本</Text>
               </View>
             )}
             {updateState === 'error' && (
               <View style={[styles.row, styles.rowSep]}>
                 <CircleX size={20} color={colors.danger} style={{ marginRight: 8 }} />
-                <Text style={{ ...textVariants.subhead, fontWeight: '400', color: colors.danger }}>检查失败，请检查网络</Text>
+                <Text style={{ ...textVariants.settingsPrimary, color: colors.danger }}>检查失败，请检查网络</Text>
               </View>
             )}
           </View>
@@ -441,10 +446,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   scrollContent: {
     paddingBottom: 40,
   },
-  /* 外观：一体分段控件 */
+  /* 外观：iOS 13+ 默认分段控件 cell——控件铺满、垂直居中紧凑（~60pt cell） */
+  segmentCell: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: 10,
+  },
+  /* iOS 13+ 分段控件默认：极浅灰底（segmentTrack）+ 选中段白胶囊浮起 */
   segmentGroup: {
     flexDirection: 'row',
-    backgroundColor: colors.bgActive,
+    backgroundColor: colors.segmentTrack,
     borderRadius: radius.sm,
     padding: 2,
   },
@@ -469,23 +479,25 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   section: {
     paddingHorizontal: spacing[4],
-    paddingTop: spacing[6],
+    paddingTop: spacing[8], // iOS inset grouped 节间距 ~32pt（原 24 偏紧）
   },
-  /* iOS inset grouped（指南 §2.3/§2.5）：白组坐灰底靠明度差分层，
-     无阴影无边框；节标签在组外、脚注在组下；水平缩进统一 16（spacing[4]） */
+  /* iOS inset grouped：节标题 13pt 灰色大写（uppercase secondary label）；
+     白组坐灰底、组圆角 10pt（radius.md）、无阴影无边框；水平缩进 16（spacing[4]） */
   sectionLabel: {
-    ...textVariants.footnote,
+    ...textVariants.settingsHeader,
     color: colors.textSecondary,
+    textTransform: 'uppercase',
     marginBottom: spacing[2],
   },
+  /* iOS 组下脚注：13pt 灰（secondary label） */
   sectionFootnote: {
-    ...textVariants.caption,
-    color: colors.textTertiary,
+    ...textVariants.footnote,
+    color: colors.textSecondary,
     marginTop: spacing[2],
   },
   group: {
     backgroundColor: colors.bgSurface,
-    borderRadius: radius.lg,
+    borderRadius: radius.md, // iOS 组圆角 10pt（原 lg=16 偏大）
     overflow: 'hidden',
   },
   /* 同节多个小组之间的间距（iOS 同域小组惯例 8pt） */
@@ -505,16 +517,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderSubtle,
   },
-  /* 操作行：iOS 式安静主操作（accent 文字行），替代满页填充大按钮 */
+  /* 操作行：iOS 设置操作 cell 文字居中（accent 主操作 / 破坏性红），图标+文字整体居中 */
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: spacing[4],
     paddingVertical: 12,
   },
+  /* iOS 操作行：17pt accent（settingsPrimary） */
   actionRowText: {
-    ...textVariants.subhead,
-    fontWeight: '500',
+    ...textVariants.settingsPrimary,
     color: colors.accent,
   },
   actionRowDisabled: {
@@ -545,17 +558,35 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   statusDotReady: {
     backgroundColor: colors.success,
   },
+  /* iOS cell：主标题 17pt（settingsPrimary），值 13pt（settingsTertiary） */
   modeLabel: {
+    ...textVariants.settingsPrimary,
     color: colors.textPrimary,
-    ...textVariants.subhead,
     flex: 1,
   },
-  modeStatus: {
-    ...textVariants.caption,
-    color: colors.textTertiary,
+  /* Switch 行：iOS cell 44pt（31 Switch + 13 padding ≈ 44），独立于通用 row 避免全局改动 */
+  rowSwitch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    paddingVertical: 6,
   },
+  /* Android Material Switch 默认 48dp 偏高：wrap 固定 31（iOS UISwitch 高度）收敛布局占位 */
+  switchWrap: {
+    height: 31,
+    justifyContent: 'center',
+  },
+  /* 视觉再缩 0.65 → 48dp × 0.65 ≈ 31pt，与 iOS UISwitch 观感一致 */
+  switch: {
+    transform: [{ scale: 0.65 }],
+  },
+  modeStatus: {
+    ...textVariants.settingsTertiary,
+    color: colors.textSecondary,
+  },
+  // ADR-0006：success 当文字仅 ≈2.3:1，走 successText 达标
   modeStatusReady: {
-    color: colors.success,
+    color: colors.successText,
   },
   input: {
     backgroundColor: colors.inputBg,
@@ -567,8 +598,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '400',
     paddingHorizontal: spacing[3],
     paddingVertical: 10,
-    marginBottom: spacing[3],
   },
+
   /* 缓存管理 */
   btnIcon: {
     marginRight: 6,
@@ -589,16 +620,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     height: '100%',
     borderRadius: 3,
   },
+  // ADR-0006：success 当文字走 successText 达标
   updateAvailableText: {
-    color: colors.success,
+    color: colors.successText,
     ...textVariants.body,
     fontWeight: '600',
     marginBottom: spacing[2],
   },
   releaseNotes: {
+    ...textVariants.settingsTertiary,
     color: colors.textSecondary,
-    fontSize: 12,
     marginBottom: spacing[3],
-    lineHeight: 18,
+    lineHeight: 20,
   },
 });

@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  View, Text, Image, TouchableOpacity, StyleSheet,
-  Modal, Alert,
+  View, Text, Image, TouchableOpacity, StyleSheet, Alert,
 } from 'react-native';
 import { Music, Heart, EllipsisVertical, ListMusic, Download, ArrowLeftRight, User, Trash2 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -19,6 +17,7 @@ import { SOURCE_LABELS } from '../stores/sourceStore';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import SourceBadge from './SourceBadge';
 import SourceSwapModal from './SourceSwapModal';
+import BottomSheet from './BottomSheet';
 import { playSong } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
 import { searchSwapCandidates, applySwap, probeSwapCandidates } from '../services/sourceSwap';
@@ -52,7 +51,6 @@ export default function SongRow({
   const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
   const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
-  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   // 按 (sourceType:id) 订阅探测标签:每批探测完成只重渲染对应的行,标签渐进式出现
@@ -208,7 +206,6 @@ export default function SongRow({
 
   const handlePress = () => {
     if (pressingAction) return;
-    console.log(`[SongRow] handlePress: id=${song.id}, name=${song.name}`);
     if (onPress) {
       onPress(song);
     } else if (queueSongs) {
@@ -241,7 +238,7 @@ export default function SongRow({
       onPress={handlePress}
     >
       {rank !== undefined && (
-        <Text style={styles.rank}>{rank}</Text>
+        <Text style={[styles.rank, rank <= 3 && { color: colors.rankText[rank - 1] }]}>{rank}</Text>
       )}
 
       {resolvedCover ? (
@@ -294,22 +291,18 @@ export default function SongRow({
       </TouchableOpacity>
     </ScalePress>
 
-    <Modal visible={showActions} animationType="slide" transparent statusBarTranslucent navigationBarTranslucent onRequestClose={() => setShowActions(false)}>
-      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowActions(false)}>
-        <View style={[styles.actionSheet, { paddingBottom: insets.bottom + spacing[6] }]}>
-          <Text style={styles.actionSheetTitle} numberOfLines={1}>{song.name}</Text>
-          {MORE_ACTIONS.map(a => (
-            <TouchableOpacity key={a.key} style={styles.actionItem} onPress={a.onPress}>
-              <a.icon size={22} color={colors.textPrimary} />
-              <Text style={styles.actionLabel}>{a.label}</Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity style={styles.actionCancel} onPress={() => setShowActions(false)}>
-            <Text style={styles.cancelText}>取消</Text>
-          </TouchableOpacity>
-        </View>
+    <BottomSheet visible={showActions} onClose={() => setShowActions(false)}>
+      <Text style={styles.actionSheetTitle} numberOfLines={1}>{song.name}</Text>
+      {MORE_ACTIONS.map(a => (
+        <TouchableOpacity key={a.key} style={styles.actionItem} onPress={a.onPress}>
+          <a.icon size={22} color={colors.textPrimary} />
+          <Text style={styles.actionLabel}>{a.label}</Text>
+        </TouchableOpacity>
+      ))}
+      <TouchableOpacity style={styles.actionCancel} onPress={() => setShowActions(false)}>
+        <Text style={styles.cancelText}>取消</Text>
       </TouchableOpacity>
-    </Modal>
+    </BottomSheet>
     <AddToPlaylistModal
       visible={showPlaylistModal}
       song={song}
@@ -396,19 +389,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   moreBtn: {
     padding: spacing[1],
     marginLeft: spacing[1],
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: colors.bgOverlay,
-    justifyContent: 'flex-end',
-  },
-  actionSheet: {
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingHorizontal: spacing[6],
-    paddingTop: spacing[5],
-    paddingBottom: spacing[8],
   },
   actionSheetTitle: {
     ...textVariants.body,

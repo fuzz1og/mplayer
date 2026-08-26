@@ -79,6 +79,35 @@ export const sourceColors: Record<SourceKey | 'all', string> = {
 };
 
 /**
+ * 音乐源文字变体（ADR-0006 源色纪律）：文字徽章用色必须达 WCAG AA 4.5:1。
+ * 源品牌色（sourceColors）多属中/高明度（QQ 绿/酷狗橙/酷我橙浅底仅 ≈2.1–2.9:1），
+ * 故每源配文字专用色：浅色主题加深、深色主题提亮，分别随主题注入。
+ * 圆点徽章仍用 sourceColors（色块无对比度要求）。键与 sourceColors 完全对齐。
+ */
+export const sourceTextLight: Record<SourceKey | 'all', string> = {
+  all: '#7C3AED',
+  netease: '#C0392B',
+  qq: '#128A4A',
+  kugou: '#C75B00',
+  kuwo: '#C75300',
+  migu: '#C44B00',
+  qianqian: '#0B7AA0',
+  soda: '#1565C0',
+  local: '#0E8A5F',
+};
+export const sourceTextDark: Record<SourceKey | 'all', string> = {
+  all: '#B79DF5',
+  netease: '#F08080',
+  qq: '#54D689',
+  kugou: '#FFB054',
+  kuwo: '#FFA052',
+  migu: '#FF8A52',
+  qianqian: '#6BC8E8',
+  soda: '#7FB3F5',
+  local: '#63D9A8',
+};
+
+/**
  * 唱机深色点缀 — 全屏播放器「唱机局部深色」的深色基准。
  * 硬件本体双主题共用（唱片机本来就是黑的），不随主题翻转。
  */
@@ -91,6 +120,40 @@ export const turntable = {
   tonearmPivot: '#888888',
   tonearmPivotBorder: '#BBBBBB',
 } as const;
+
+/**
+ * 全屏播放器前景色（iOS 全屏惯例：暗背景→亮前景 / 浅背景→深前景）。
+ * PlayerOverlay 的 makeFg 以此为单一来源，不散落魔数。
+ */
+export const playerForeground = {
+  dark: {
+    primary: '#FFFFFF',
+    secondary: 'rgba(255,255,255,0.7)',
+    tertiary: 'rgba(255,255,255,0.5)',
+    icon: 'rgba(255,255,255,0.85)',
+    iconSoft: 'rgba(255,255,255,0.8)',
+    badgeBg: 'rgba(255,255,255,0.14)',
+    badgeText: 'rgba(255,255,255,0.8)',
+    skeleton: 'rgba(255,255,255,0.18)',
+    lyricFull: 'rgba(255,255,255,0.6)',
+  },
+  light: {
+    primary: '#16181E',
+    secondary: 'rgba(22,24,30,0.75)',
+    tertiary: 'rgba(22,24,30,0.55)',
+    icon: 'rgba(22,24,30,0.85)',
+    iconSoft: 'rgba(22,24,30,0.8)',
+    badgeBg: 'rgba(22,24,30,0.08)',
+    badgeText: 'rgba(22,24,30,0.8)',
+    skeleton: 'rgba(22,24,30,0.12)',
+    lyricFull: 'rgba(22,24,30,0.6)',
+  },
+} as const;
+/** 全屏播放器固定渐变背景（双端，方案 C：不随封面防白封面跳变） */
+export const playerBackground: Record<'dark' | 'light', [string, string, string]> = {
+  dark: ['#20242D', '#151821', '#0A0C10'],
+  light: ['#D5DAE3', '#E1E5EB', '#ECEEF3'],
+};
 
 /** 间距 — 8px 网格（与 desktop --space-* 一致） */
 export const spacing = {
@@ -111,6 +174,8 @@ export const radius = {
   xs: 4,
   sm: 6,
   md: 10,
+  /** 底部弹层统一圆角（对齐 iOS sheet 解剖，ADR-0007）；原 xl=20 偏 Android */
+  sheet: 12,
   lg: 16,
   xl: 20,
   full: 9999,
@@ -217,6 +282,12 @@ export const textVariants = {
   caption: { fontSize: 12, fontWeight: '400', lineHeight: 16 },
   /** 徽章/角标 */
   micro: { fontSize: 11, fontWeight: '600', lineHeight: 14 },
+  /** iOS 设置页 Inset Grouped 三档层级（17/15/13，见 docs/agents/mobile-ios-design-guide.md） */
+  settingsPrimary: { fontSize: 17, fontWeight: '400', lineHeight: 22 },
+  settingsSecondary: { fontSize: 15, fontWeight: '400', lineHeight: 20 },
+  settingsTertiary: { fontSize: 13, fontWeight: '400', lineHeight: 17 },
+  /** iOS 设置节标题（配 textTransform: uppercase 使用） */
+  settingsHeader: { fontSize: 13, fontWeight: '600', lineHeight: 16 },
 } as const;
 
 export type TextVariant = keyof typeof textVariants;
@@ -240,6 +311,10 @@ export interface ThemeColors {
   bgHover: string;
   bgActive: string;
   bgOverlay: string;
+  /** iOS 分段控件轨道底（rgba(120,120,128) 0.12 浅 / 0.24 深，iOS 13+ 默认） */
+  segmentTrack: string;
+  /** Android 毛玻璃材质着色补偿层（浅白 0.12 / 深黑 0.18） */
+  blurScrim: string;
 
   /* 文字层级 */
   textPrimary: string;
@@ -268,7 +343,16 @@ export interface ThemeColors {
 
   warning: string;
   warningSubtle: string;
+  /** 语义色当文字时的达标变体（ADR-0006 纪律：彩色文字一律走 *Text） */
+  warningText: string;
   success: string;
+  successText: string;
+
+  /* 音乐源文字徽章用色（ADR-0006；键对齐 sourceColors） */
+  sourceText: Record<SourceKey | 'all', string>;
+
+  /* 榜单前三名排名强调色（#186 #8：红/橙/琥珀三档，独立于 danger/warning 语义色避免撞车） */
+  rankText: readonly [string, string, string];
 
   /* 输入框 */
   inputBg: string;
@@ -285,17 +369,22 @@ export interface ThemeColors {
 /** 浅色主题（默认，与 desktop 浅色一致） */
 export const lightColors: ThemeColors = {
   /* 背景层级 */
-  bgBase: palette.gray50,
+  // 页面底用 iOS systemGroupedBackground 标准浅灰（#F2F2F7）：原 gray50 #FAFAFA 近白，
+  // 灰一档让「白卡片 vs 灰底」的层级更明显（卡片层保持纯白）
+  bgBase: '#F2F2F7',
   bgSurface: '#FFFFFF',
   bgElevated: '#FFFFFF',
   bgSidebar: '#FFFFFF',
   // 无 blur 的纯半透明在浅色下与白底明度差为零、chrome 隐形（真机验证），
   // 按指南 §2.2 无 backdrop-filter 兜底思路提不透明度：保留一丝材质感，
-  // 分层靠「白 chrome vs 灰底」明度差（§1 柱子一）
-  bgPlayer: 'rgba(255, 255, 255, 0.96)',
+  // 分层靠「白 chrome vs 灰底」明度差（§1 柱子一）。
+  // 真机反馈：0.96 偏透（与毛玻璃 chrome 观感不统一），提至 0.98
+  bgPlayer: 'rgba(255, 255, 255, 0.98)',
   bgHover: palette.gray100,
   bgActive: palette.gray200,
   bgOverlay: 'rgba(0, 0, 0, 0.4)',
+  segmentTrack: 'rgba(120, 120, 128, 0.12)',
+  blurScrim: 'rgba(255, 255, 255, 0.15)',
 
   /* 文字层级 */
   textPrimary: palette.gray900,
@@ -324,7 +413,17 @@ export const lightColors: ThemeColors = {
 
   warning: palette.amber500,
   warningSubtle: '#FFFBEB',
+  /** 琥珀当文字过淡（#F59E0B 白底 ≈2.1:1），用深琥珀达标 */
+  warningText: '#B45309',
   success: palette.emerald500,
+  /** emerald500 当文字仅 ≈2.3:1，用深 emerald 达标 */
+  successText: '#047857',
+
+  /* 音乐源文字徽章（ADR-0006：浅色加深） */
+  sourceText: sourceTextLight,
+
+  /* 榜单前三名（#186 #8：浅色加深，红/橙/琥珀） */
+  rankText: ['#C0392B', '#B45309', '#A16207'] as const,
 
   /* 输入框 */
   inputBg: palette.gray50,
@@ -345,14 +444,18 @@ export const lightColors: ThemeColors = {
  */
 export const darkColors: ThemeColors = {
   /* 背景层级 */
-  bgBase: palette.gray950,
+  // 对齐 iOS 深色标准：页面底纯黑 #000000（systemGroupedBackground），卡片/浮层已是标准色
+  bgBase: '#000000',
   bgSurface: palette.gray900,
   bgElevated: palette.gray850,
   bgSidebar: palette.gray900,
-  bgPlayer: 'rgba(28, 28, 30, 0.85)',
+  // 真机反馈：0.85 偏透（tab 栏/全屏页与毛玻璃 chrome 观感不统一），提至 0.92
+  bgPlayer: 'rgba(28, 28, 30, 0.92)',
   bgHover: palette.gray825,
   bgActive: palette.gray750,
   bgOverlay: 'rgba(0, 0, 0, 0.6)',
+  segmentTrack: 'rgba(120, 120, 128, 0.24)',
+  blurScrim: 'rgba(0, 0, 0, 0.10)',
 
   /* 文字层级 */
   textPrimary: palette.gray50,
@@ -381,7 +484,17 @@ export const darkColors: ThemeColors = {
 
   warning: palette.amber400,
   warningSubtle: 'rgba(251, 191, 36, 0.12)',
+  /** 暗底 amber400 足够（≈11:1），text 用同色；语义一致即可 */
+  warningText: palette.amber400,
   success: palette.emerald400,
+  /** 暗底 emerald400 足够（≈9:1），text 用同色 */
+  successText: palette.emerald400,
+
+  /* 音乐源文字徽章（ADR-0006：深色提亮） */
+  sourceText: sourceTextDark,
+
+  /* 榜单前三名（#186 #8：深色提亮，红/橙/琥珀） */
+  rankText: ['#F08080', '#F59E0B', '#FBBF24'] as const,
 
   /* 输入框 */
   inputBg: palette.gray825,

@@ -1,24 +1,20 @@
-import { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { radius, spacing } from '../theme/tokens';
-import { useTheme } from '../theme/ThemeProvider';
-import type { ThemeColors } from '../theme/tokens';
+import SkeletonBlock from './SkeletonBlock';
 
 /**
- * 列表加载骨架屏：行高/间距与 SongRow 一致（44 封面 + 两行文字），
- * 灰色圆条占位，避免数据到达时布局跳动。
+ * 列表加载骨架屏（#186 #6）：行高/间距与 SongRow 一致（44 封面 + 两行文字），
+ * shimmer 由 SkeletonBlock 提供，避免数据到达时布局跳动。
  */
 export default function SongListSkeleton({ rows = 8 }: { rows?: number }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.wrap}>
       {Array.from({ length: rows }, (_, i) => (
         <View key={i} style={styles.row}>
-          <View style={styles.cover} />
+          <SkeletonBlock style={styles.cover} />
           <View style={styles.info}>
-            <View style={[styles.line, { width: '60%' }]} />
-            <View style={[styles.line, { width: '35%', marginTop: 8 }]} />
+            <SkeletonBlock style={styles.line} />
+            <SkeletonBlock style={[styles.line, styles.lineShort]} />
           </View>
         </View>
       ))}
@@ -26,7 +22,7 @@ export default function SongListSkeleton({ rows = 8 }: { rows?: number }) {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const styles = StyleSheet.create({
   wrap: { paddingHorizontal: spacing[4], paddingTop: spacing[2] },
   row: {
     flexDirection: 'row',
@@ -37,13 +33,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radius.sm,
-    backgroundColor: colors.skeletonBase,
     marginRight: spacing[3],
   },
   info: { flex: 1 },
   line: {
     height: 13,
     borderRadius: radius.sm,
-    backgroundColor: colors.skeletonBase,
+    width: '60%',
+  },
+  lineShort: {
+    width: '35%',
+    marginTop: 8,
   },
 });

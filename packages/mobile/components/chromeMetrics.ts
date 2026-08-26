@@ -37,9 +37,13 @@ export function tabBarHeight(insetsBottom: number): number {
   return TAB_PAD_TOP + TAB_ICON_SIZE + TAB_LABEL_HEIGHT + TAB_PAD_BOTTOM + Math.max(0, insetsBottom - TAB_SAFE_INSET_MIN);
 }
 
-/** 滚动内容底部让位：tab 栏可见时含 tab 栏；搜索页 tab 收起时播放栏直接贴底补安全区 */
-export function bottomChromeHeight(insetsBottom: number, tabBarVisible: boolean): number {
-  return PLAYER_BAR_HEIGHT + (tabBarVisible ? tabBarHeight(insetsBottom) : insetsBottom);
+/**
+ * 滚动内容底部让位：tab 栏可见时含 tab 栏；搜索页 tab 收起时播放栏直接贴底补安全区。
+ * playerVisible（ADR-0008）：首次播放前迷你播放栏隐藏，其高度贡献为 0，
+ * 让位随之缩小，避免内容底部留白；默认 true 向后兼容。
+ */
+export function bottomChromeHeight(insetsBottom: number, tabBarVisible: boolean, playerVisible = true): number {
+  return (playerVisible ? PLAYER_BAR_HEIGHT : 0) + (tabBarVisible ? tabBarHeight(insetsBottom) : insetsBottom);
 }
 
 /** 滚动内容顶部让位 */
