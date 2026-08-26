@@ -567,7 +567,8 @@ export default function PlayerOverlay({ onClose }: Props) {
                 style={styles.lyricsPreviewWrap}
                 maskElement={
                   <LinearGradient
-                    colors={['transparent', '#000', '#000', 'transparent']}
+                    /* alpha 遮罩：MaskedView 只取 alpha 通道，颜色用命名色（design-lint 纪律） */
+                    colors={['transparent', 'black', 'black', 'transparent']}
                     locations={[0, 0.06, 0.94, 1]}
                     style={StyleSheet.absoluteFill}
                   />
