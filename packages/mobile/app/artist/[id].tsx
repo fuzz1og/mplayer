@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, Image, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, Image, StyleSheet, ScrollView,
 } from 'react-native';
+import ScalePress from '../../components/ScalePress';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Disc3 } from 'lucide-react-native';
@@ -139,10 +140,9 @@ export default function ArtistDetailPage() {
                 <Text style={styles.albumsTitle}>专辑</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {albums.map(a => (
-                    <TouchableOpacity
+                    <ScalePress
                       key={a.id}
                       style={styles.albumCard}
-                      activeOpacity={0.7}
                       onPress={() => router.push(`/album/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl)}&artist=${encodeURIComponent(a.artist)}` as any)}
                     >
                       {a.picUrl ? (
@@ -153,7 +153,7 @@ export default function ArtistDetailPage() {
                         </View>
                       )}
                       <Text style={styles.albumName} numberOfLines={1}>{a.name}</Text>
-                    </TouchableOpacity>
+                    </ScalePress>
                   ))}
                 </ScrollView>
               </View>
