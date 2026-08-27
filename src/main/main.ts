@@ -24,6 +24,14 @@ import { registerCookiePersister, loadCookiesFromDisk } from './cookies/cookieAd
 // 需在 app ready 前读取 Windows DPI 并强制缩放系数（详见 hidpi.ts）
 applyWslHidpiFix();
 
+// 禁用 QUIC/HTTP3（#262 联调，仅 dev 生效）：Cloudflare 系更新镜像会经 Alt-Svc 把
+// Chromium 升级到 QUIC(UDP 443)，WSL2 镜像网络的 UDP 转发不可靠 → 大文件下载 0% 停滞
+// （curl/TCP 对照实测 11MB/s；disable-quic 后应用内下载成功完成，见 PR 联调记录）。
+// 打包产物跑在真实桌面网络栈上，QUIC 行为未实测，保持默认以零回归；后续按平台实测再放开。
+if (!app.isPackaged) {
+  app.commandLine.appendSwitch('disable-quic');
+}
+
 // 扩展 musicApi：添加主进程特有的音频缓存方法
 const audioCacheBackend = new DiskCacheBackend(path.join(app.getPath('userData'), 'cache'))
 const musicApi = {

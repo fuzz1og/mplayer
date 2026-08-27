@@ -88,6 +88,10 @@ export class UpdateService {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.forceDevUpdateConfig = true;
+    // dev 联调：electron-updater 全量调试日志（URL/重定向/进度），打包产物静默
+    if (!app.isPackaged) {
+      autoUpdater.logger = console;
+    }
   }
 
   /**
