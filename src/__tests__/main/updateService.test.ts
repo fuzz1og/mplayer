@@ -459,7 +459,7 @@ describe('UpdateService', () => {
       const { autoUpdater } = await import('electron-updater');
       mockDownloadPending(autoUpdater);
 
-      const promise = updateService.downloadUpdate(5000);
+      const promise = updateService.downloadUpdate();
 
       await tick();
       fireOnce(autoUpdater, 'update-downloaded');
@@ -477,7 +477,7 @@ describe('UpdateService', () => {
       const { autoUpdater } = await import('electron-updater');
       mockDownloadPending(autoUpdater);
 
-      const promise = updateService.downloadUpdate(5000);
+      const promise = updateService.downloadUpdate();
 
       await tick();
       expect(autoUpdater.on).toHaveBeenCalledWith('download-progress', expect.any(Function));
@@ -506,7 +506,7 @@ describe('UpdateService', () => {
       vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('mirror check fail'));
       vi.mocked(autoUpdater.downloadUpdate).mockRejectedValue(new Error('Download failed'));
 
-      await expect(updateService.downloadUpdate(100)).rejects.toThrow('Download failed');
+      await expect(updateService.downloadUpdate()).rejects.toThrow('Download failed');
 
       expect(updateService.getStatus().status).toBe('error');
       expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', {
@@ -515,19 +515,21 @@ describe('UpdateService', () => {
       });
     });
 
-    it('下载超时推送 error 状态并抛出', async () => {
+    it('首字节窗口内无任何进度则判停滞并降级报错（看门狗）', async () => {
       const mockWindow = createMockWindow();
-      updateService.setMainWindow(mockWindow);
+      // 专用实例：首字节窗口缩到 60ms 便于测试
+      const svc = new UpdateService({ autoProbeOnCheck: false, firstByteTimeoutMs: 60 });
+      svc.setMainWindow(mockWindow);
 
       const { autoUpdater } = await import('electron-updater');
       vi.mocked(autoUpdater.on).mockReturnValue(autoUpdater as any);
       vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('mirror check fail'));
       vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
 
-      const promise = updateService.downloadUpdate(50);
-      await expect(promise).rejects.toThrow('下载超时');
+      const promise = svc.downloadUpdate();
+      await expect(promise).rejects.toThrow(/下载停滞/);
 
-      expect(updateService.getStatus().status).toBe('error');
+      expect(svc.getStatus().status).toBe('error');
     });
 
     it('并发下载时跳过', async () => {
@@ -538,8 +540,8 @@ describe('UpdateService', () => {
       vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error('mirror check fail'));
       vi.mocked(autoUpdater.downloadUpdate).mockReturnValueOnce(new Promise(() => {}));
 
-      const first = updateService.downloadUpdate(5000);
-      const second = updateService.downloadUpdate(5000);
+      const first = updateService.downloadUpdate();
+      const second = updateService.downloadUpdate();
 
       await expect(second).resolves.toBeUndefined();
 

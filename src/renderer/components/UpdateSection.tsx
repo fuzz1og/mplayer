@@ -26,6 +26,7 @@ const UpdateSection: React.FC = () => {
   const [speedResults, setSpeedResults] = useState<SpeedResult[] | null>(null);
   const [isTestingSpeed, setIsTestingSpeed] = useState(false);
   const [activeChannelLabel, setActiveChannelLabel] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const loadChannels = async () => {
     try {
@@ -90,6 +91,7 @@ const UpdateSection: React.FC = () => {
       if (status.version) setLatestVersion(status.version);
       if (status.progress) setUpdateProgress(status.progress.percent);
       if (status.sourceLabel) setActiveChannelLabel(status.sourceLabel);
+      setErrorMsg(status.error || '');
       if (status.status === 'idle' || status.status === 'not-available' || status.status === 'downloaded' || status.status === 'error') {
         setIsCheckingUpdate(false);
       }
@@ -236,7 +238,9 @@ const UpdateSection: React.FC = () => {
         {updateStatus === 'error' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 0' }}>
             <AlertCircle size={16} color="var(--danger)" />
-            <span style={{ fontSize: 'var(--text-base)', color: 'var(--danger)' }}>检查更新失败，请检查网络连接</span>
+            <span style={{ fontSize: 'var(--text-base)', color: 'var(--danger)' }}>
+              {errorMsg ? `更新失败：${errorMsg}` : '更新失败，请检查网络连接'}
+            </span>
           </div>
         )}
 
