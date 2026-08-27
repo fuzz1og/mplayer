@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { UpdateService } from '../../main/services/updateService';
+import { UPDATE_SOURCE_DEFS } from '@mplayer/core';
 
 vi.mock('electron-updater', () => ({
   autoUpdater: {
@@ -420,6 +421,15 @@ describe('UpdateService', () => {
 
       fireOnce(autoUpdater, 'update-not-available');
       await promise;
+    });
+
+    it('下载停滞过的源自动降权到队尾（延迟假象自愈）', () => {
+      const svc = new UpdateService({ autoProbeOnCheck: false });
+      (svc as any).stalledSources.add('ghfast'); // ghfast 探针快但大文件吞吐差 → 下载停滞
+
+      const order = svc.orderWithStalledDemoted([...UPDATE_SOURCE_DEFS]);
+
+      expect(order.map((d) => d.id)).toEqual(['gh-proxy', 'ghproxynet', 'github', 'ghfast']);
     });
 
     it('全部源测速失败时回落静态兜底顺序', async () => {

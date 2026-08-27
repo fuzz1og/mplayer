@@ -60,6 +60,12 @@ export class UpdateService {
   private probeResults: UpdateLatencyMap = new Map();
   private probedAt = 0;
 
+  /**
+   * 下载停滞过的源（会话内记忆，联调教训：ghfast 探针延迟低但大文件吞吐差）。
+   * 延迟测速无法反映大文件吞吐，停滞即降权到队尾，避免低延迟假象反复挡路。
+   */
+  private stalledSources = new Set<string>();
+
   /** 通道设置缓存（读穿透 db） */
   private channelCache: ChannelValue | null = null;
 
@@ -217,22 +223,32 @@ export class UpdateService {
     }
   }
 
+  /** 把下载停滞过的源稳定降权到队尾（其余保持原相对顺序） */
+  orderWithStalledDemoted(order: readonly UpdateSourceDef[]): readonly UpdateSourceDef[] {
+    if (this.stalledSources.size === 0) return order;
+    return [
+      ...order.filter(def => !this.stalledSources.has(def.id)),
+      ...order.filter(def => this.stalledSources.has(def.id)),
+    ];
+  }
+
   /**
    * 计算本轮检查/下载的尝试顺序：
    * - 手动通道：选中源置顶，其余保持静态兜底顺序（仍可逐源降级）
    * - auto：优先测速快照排序；无可用探针结果时回落静态兜底顺序
+   * - 末尾统一套用停滞降权（延迟快≠吞吐好，见 stalledSources）
    */
   private async resolveAttemptOrder(): Promise<readonly UpdateSourceDef[]> {
     const channel = await this.getChannel();
     if (channel !== 'auto') {
       const chosen = UPDATE_SOURCE_DEFS.find(s => s.id === channel)!;
-      return [chosen, ...UPDATE_SOURCE_DEFS.filter(s => s.id !== channel)];
+      return this.orderWithStalledDemoted([chosen, ...UPDATE_SOURCE_DEFS.filter(s => s.id !== channel)]);
     }
     if (this.autoProbeOnCheck) {
       const probes = await this.ensureFreshProbes();
-      if (probes) return rankSourcesByLatency(UPDATE_SOURCE_DEFS, probes);
+      if (probes) return this.orderWithStalledDemoted(rankSourcesByLatency(UPDATE_SOURCE_DEFS, probes));
     }
-    return UPDATE_SOURCE_DEFS;
+    return this.orderWithStalledDemoted(UPDATE_SOURCE_DEFS);
   }
 
   // ── 检查与下载 ─────────────────────────────────────────────────────
@@ -400,6 +416,11 @@ export class UpdateService {
         } catch (err: any) {
           lastErr = err;
           console.warn(`[update] 更新源「${def.label}」下载失败，降级：${err.message}`);
+          // 停滞型失败（非硬错误）记入降权，本轮后续与下次检查都排到队尾
+          if (/下载停滞/.test(err.message)) {
+            this.stalledSources.add(def.id);
+            this.attemptOrder = this.orderWithStalledDemoted(order);
+          }
         }
       }
       throw lastErr ?? new Error('所有更新源下载均失败');
