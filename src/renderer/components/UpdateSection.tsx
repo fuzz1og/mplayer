@@ -42,7 +42,11 @@ const UpdateSection: React.FC = () => {
   const handleSetChannel = async (value: string) => {
     setChannelState(value); // 乐观更新，失败回读
     try {
-      await ipcRenderer.invoke('update:setChannel', value);
+      const res = await ipcRenderer.invoke('update:setChannel', value);
+      if (!res?.success) {
+        console.error('设置更新通道失败:', res?.error);
+        loadChannels();
+      }
     } catch (e) {
       console.error('设置更新通道失败:', e);
       loadChannels();
@@ -52,8 +56,13 @@ const UpdateSection: React.FC = () => {
   const handleSpeedTest = async () => {
     setIsTestingSpeed(true);
     try {
-      const results = await ipcRenderer.invoke('update:speedTest');
-      setSpeedResults(results || []);
+      // registerIpcHandler 统一封套：{ success, data | error }
+      const res = await ipcRenderer.invoke('update:speedTest');
+      if (res?.success) {
+        setSpeedResults(res.data || []);
+      } else {
+        console.error('测速失败:', res?.error);
+      }
     } catch (e) {
       console.error('测速失败:', e);
     } finally {
