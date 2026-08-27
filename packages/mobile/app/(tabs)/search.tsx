@@ -4,11 +4,11 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  TouchableOpacity,
   Image,
   Dimensions,
   Animated,
 } from 'react-native';
+import ScalePress from '../../components/ScalePress';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CircleAlert, Music2, User } from 'lucide-react-native';
 import { musicApi } from '@mplayer/core';
@@ -152,9 +152,8 @@ export default function SearchPage() {
             { paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING },
           ]}
           renderItem={({ item: a }) => (
-            <TouchableOpacity
+            <ScalePress
               style={styles.artistCard}
-              activeOpacity={0.7}
               onPress={() => router.push(`/artist/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl || '')}` as any)}
             >
               {a.picUrl ? (
@@ -165,7 +164,7 @@ export default function SearchPage() {
                 </View>
               )}
               <Text style={styles.artistName} numberOfLines={1}>{a.name}</Text>
-            </TouchableOpacity>
+            </ScalePress>
           )}
         />
       ) : (

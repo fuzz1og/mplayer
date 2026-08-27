@@ -1,4 +1,5 @@
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
+import ScalePress from '../components/ScalePress';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -47,9 +48,9 @@ export default function HistoryPage() {
             ListHeaderComponent={
               <View style={styles.header}>
                 <Text style={styles.headerTitle}>播放历史</Text>
-                <TouchableOpacity onPress={clearHistory} style={styles.clearBtn}>
+                <ScalePress onPress={clearHistory} style={styles.clearBtn}>
                   <Text style={styles.clearText}>清空</Text>
-                </TouchableOpacity>
+                </ScalePress>
               </View>
             }
             renderItem={({ item, index }) => (

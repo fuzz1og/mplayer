@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  View, Text, Image, TouchableOpacity, StyleSheet, Alert,
+  View, Text, Image, StyleSheet, Alert,
 } from 'react-native';
 import { Music, Heart, EllipsisVertical, ListMusic, Download, ArrowLeftRight, User, Trash2 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
@@ -275,7 +275,7 @@ export default function SongRow({
         </View>
       )}
 
-      <TouchableOpacity
+      <ScalePress
         onPress={handleFavorite}
         style={styles.favoriteBtn}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 4 }}
@@ -285,23 +285,23 @@ export default function SongRow({
           color={favorited ? colors.accent : colors.textTertiary}
           fill={favorited ? colors.accent : 'none'}
         />
-      </TouchableOpacity>
-      <TouchableOpacity onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
+      </ScalePress>
+      <ScalePress onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
         <EllipsisVertical size={18} color={colors.textTertiary} />
-      </TouchableOpacity>
+      </ScalePress>
     </ScalePress>
 
     <BottomSheet visible={showActions} onClose={() => setShowActions(false)}>
       <Text style={styles.actionSheetTitle} numberOfLines={1}>{song.name}</Text>
       {MORE_ACTIONS.map(a => (
-        <TouchableOpacity key={a.key} style={styles.actionItem} onPress={a.onPress}>
+        <ScalePress key={a.key} style={styles.actionItem} onPress={a.onPress}>
           <a.icon size={22} color={colors.textPrimary} />
           <Text style={styles.actionLabel}>{a.label}</Text>
-        </TouchableOpacity>
+        </ScalePress>
       ))}
-      <TouchableOpacity style={styles.actionCancel} onPress={() => setShowActions(false)}>
+      <ScalePress style={styles.actionCancel} onPress={() => setShowActions(false)}>
         <Text style={styles.cancelText}>取消</Text>
-      </TouchableOpacity>
+      </ScalePress>
     </BottomSheet>
     <AddToPlaylistModal
       visible={showPlaylistModal}

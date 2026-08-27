@@ -43,6 +43,8 @@ interface CollapsingHeroProps<T> {
   fallbackIcon?: React.ReactNode;
   /** 折叠后的导航标题 */
   navTitle: string;
+  /** 悬浮导航栏右侧动作插槽（铅笔等页面动作；headerShown:false 后 Stack headerRight 不渲染） */
+  navRight?: React.ReactNode;
   /** 信息区大标题 */
   title: string;
   /** 副标题（歌手/创建者） */
@@ -73,6 +75,7 @@ export default function CollapsingHero<T>({
   onCoverError,
   fallbackIcon,
   navTitle,
+  navRight,
   title,
   subtitle,
   meta,
@@ -148,6 +151,8 @@ export default function CollapsingHero<T>({
         <Animated.Text style={[styles.navTitle, { opacity: titleOpacity }]} numberOfLines={1}>
           {navTitle}
         </Animated.Text>
+        {/* 页面动作插槽（如歌单重命名铅笔）：原 headerShown:false 后 Stack headerRight 不渲染 */}
+        {navRight}
       </Animated.View>
 
       {/* 列表：封面是列表第一块内容（含状态栏区域），随滚动滚出屏幕 */}

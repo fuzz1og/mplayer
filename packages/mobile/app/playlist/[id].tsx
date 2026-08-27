@@ -2,13 +2,14 @@ import { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   Alert,
   Modal,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ScalePress from '../../components/ScalePress';
 import { CircleAlert, Pencil, Music2 } from 'lucide-react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
@@ -99,14 +100,6 @@ export default function PlaylistDetailPage() {
           options={{
             title: playlist.name,
             headerShown: false,
-            headerStyle: { backgroundColor: colors.bgSurface },
-            headerTintColor: colors.textPrimary,
-            headerShadowVisible: false,
-            headerRight: () => (
-              <TouchableOpacity onPress={handleRename} style={{ marginRight: spacing[1] }}>
-                <Pencil size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            ),
           }}
         />
 
@@ -120,6 +113,11 @@ export default function PlaylistDetailPage() {
             playlist={playlist}
             onRemoveSong={handleRemoveSong}
             onSwap={handleSwap}
+            navRight={
+              <ScalePress onPress={handleRename} style={{ marginRight: spacing[2] }} hitSlop={{ left: 8, right: 8 }}>
+                <Pencil size={20} color={colors.textSecondary} />
+              </ScalePress>
+            }
           />
         )}
 
@@ -131,14 +129,12 @@ export default function PlaylistDetailPage() {
           navigationBarTranslucent
           onRequestClose={() => setRenameModalVisible(false)}
         >
-          <TouchableOpacity
+          <Pressable
             style={styles.modalOverlay}
-            activeOpacity={1}
             onPress={() => setRenameModalVisible(false)}
           >
-            <TouchableOpacity
+            <Pressable
               style={styles.modalContent}
-              activeOpacity={1}
               onPress={() => {}}
             >
               <Text style={styles.modalTitle}>重命名歌单</Text>
@@ -151,7 +147,7 @@ export default function PlaylistDetailPage() {
                 autoFocus
               />
               <View style={styles.modalActions}>
-                <TouchableOpacity
+                <ScalePress
                   style={styles.cancelBtn}
                   onPress={() => {
                     setRenameValue('');
@@ -159,8 +155,8 @@ export default function PlaylistDetailPage() {
                   }}
                 >
                   <Text style={styles.cancelText}>取消</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                </ScalePress>
+                <ScalePress
                   style={[
                     styles.confirmBtn,
                     !renameValue.trim() && { opacity: 0.4 },
@@ -169,10 +165,10 @@ export default function PlaylistDetailPage() {
                   disabled={!renameValue.trim()}
                 >
                   <Text style={styles.confirmText}>确认</Text>
-                </TouchableOpacity>
+                </ScalePress>
               </View>
-            </TouchableOpacity>
-          </TouchableOpacity>
+            </Pressable>
+          </Pressable>
         </Modal>
       </SafeAreaView>
       <BottomSafePlayerBar />
