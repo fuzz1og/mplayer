@@ -28,6 +28,8 @@ interface SettingsState {
   /** tier3 第三方解析源（#144）：默认关，订阅清单存 AsyncStorage */
   tier3Enabled: boolean;
   tier3Subscriptions: Tier3Subscription[];
+  /** 更新下载通道（#262/#263）：'auto' 测速择优，或指定源 id；镜像优先、直连垫底 */
+  updateChannel: string;
   /** 主题模式（#173）：system 跟随系统深浅色，light/dark 手动指定 */
   themeMode: ThemeMode;
   setProxyUrl: (url: string) => void;
@@ -36,6 +38,7 @@ interface SettingsState {
   setSourceModes: (modes: Partial<Record<string, SourceMode>>) => void;
   setTier3Enabled: (enabled: boolean) => void;
   setTier3Subscriptions: (subscriptions: Tier3Subscription[]) => void;
+  setUpdateChannel: (channel: string) => void;
   setThemeMode: (mode: ThemeMode) => void;
 }
 
@@ -48,6 +51,7 @@ export const useSettingsStore = create<SettingsState>()(
       sourceModes: {},
       tier3Enabled: false,
       tier3Subscriptions: [],
+      updateChannel: 'auto',
       themeMode: 'system',
       setProxyUrl: (url) => set({ proxyUrl: url }),
       setPlayMode: (mode) => set({ playMode: mode }),
@@ -55,6 +59,7 @@ export const useSettingsStore = create<SettingsState>()(
       setSourceModes: (modes) => set({ sourceModes: modes }),
       setTier3Enabled: (enabled) => setCoreTier3Enabled(enabled),
       setTier3Subscriptions: (subscriptions) => setCoreTier3Subscriptions(subscriptions),
+      setUpdateChannel: (channel) => set({ updateChannel: channel }),
       setThemeMode: (mode) => set({ themeMode: mode }),
     }),
     {
