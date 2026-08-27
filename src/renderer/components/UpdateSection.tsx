@@ -103,6 +103,7 @@ const UpdateSection: React.FC = () => {
   const handleCheckUpdate = async () => {
     setIsCheckingUpdate(true);
     setUpdateStatus('checking');
+    setBrowserUrl('');
     const safetyTimer = setTimeout(() => {
       setIsCheckingUpdate(false);
       setUpdateStatus('error');
@@ -116,12 +117,22 @@ const UpdateSection: React.FC = () => {
     }
   };
 
+  // 浏览器下载模式（#262 联调定案）：大文件交给系统浏览器，app 不再进程内硬扛
+  const [browserUrl, setBrowserUrl] = useState('');
+
   const handleDownloadUpdate = async () => {
-    setUpdateStatus('downloading');
     try {
-      await ipcRenderer.invoke('update:download');
-    } catch (_e) {
-      // handled by update:status push
+      const res = await ipcRenderer.invoke('update:downloadInBrowser');
+      if (res?.success && res.data?.ok) {
+        setBrowserUrl(res.data.url || '');
+      } else {
+        setErrorMsg(res?.data?.error || res?.error || '打开浏览器失败');
+        setUpdateStatus('error');
+      }
+    } catch (e) {
+      console.error('跳转浏览器下载失败:', e);
+      setErrorMsg('打开浏览器失败');
+      setUpdateStatus('error');
     }
   };
 
@@ -215,6 +226,17 @@ const UpdateSection: React.FC = () => {
               <div style={{ height: '100%', width: `${updateProgress}%`, backgroundColor: 'var(--accent)', borderRadius: '4px', transition: 'width 0.3s' }} />
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>{updateProgress.toFixed(1)}%</div>
+          </div>
+        )}
+
+        {browserUrl && (
+          <div style={{ padding: '16px', backgroundColor: 'var(--info-subtle)', borderRadius: '8px', border: '1px solid color-mix(in srgb, var(--info) 30%, transparent)' }}>
+            <div style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: 'var(--info)', marginBottom: '4px' }}>
+              已跳转浏览器下载{activeChannelLabel ? `（通道：${activeChannelLabel}）` : ''}
+            </div>
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+              浏览器完成后，用新安装包覆盖安装即可完成更新
+            </div>
           </div>
         )}
 

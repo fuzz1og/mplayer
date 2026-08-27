@@ -1,7 +1,8 @@
 import { autoUpdater } from 'electron-updater';
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, session, shell } from 'electron';
 import {
   UPDATE_SOURCE_DEFS,
+  buildAssetUrl,
   probeUpdateSources,
   rankSourcesByLatency,
   toGenericFeedUrl,
@@ -55,6 +56,8 @@ export class UpdateService {
   private attemptOrder: readonly UpdateSourceDef[] = UPDATE_SOURCE_DEFS;
   /** 当前正在使用的源（透出到状态事件） */
   private activeSource: UpdateSourceDef | null = null;
+  /** 最近一次检查拿到的官方资产文件名（latest-*.yml files[].url） */
+  private lastAssetFiles: string[] = [];
 
   /** probe 结果缓存：id → 延迟 ms / null（失败） */
   private probeResults: UpdateLatencyMap = new Map();
@@ -262,6 +265,10 @@ export class UpdateService {
 
       const onAvailable = (info: any) => {
         clearTimeout(timer);
+        // 记录官方资产名清单（latest-*.yml files[].url），浏览器直链按通道前缀拼装
+        this.lastAssetFiles = Array.isArray(info.files)
+          ? info.files.map((f: any) => String(f.url)).filter(Boolean)
+          : [];
         this.updateStatus({
           status: 'available',
           version: info.version,
@@ -430,6 +437,30 @@ export class UpdateService {
     } finally {
       this.cleanupDownloadListeners();
       this.isDownloading = false;
+    }
+  }
+
+  /**
+   * 浏览器下载模式（#262 联调定案）：大文件交给系统浏览器/下载管理器，
+   * 不再进程内单流硬扛公共镜像的波动。URL = 获胜通道前缀 + 官方资产名。
+   */
+  async openDownloadInBrowser(): Promise<{ ok: boolean; url?: string; error?: string }> {
+    const def = this.activeSource ?? this.attemptOrder[0];
+    const version = this.status.version;
+    if (!def || !version) return { ok: false, error: '请先检查更新' };
+    const platformFallback =
+      process.platform === 'darwin'
+        ? `MPlayer-${version}.dmg`
+        : process.platform === 'win32'
+          ? `MPlayer.Setup.${version}.exe`
+          : `MPlayer-${version}.AppImage`;
+    const filename = this.lastAssetFiles[0] ?? platformFallback;
+    const url = buildAssetUrl(def, filename);
+    try {
+      await shell.openExternal(url);
+      return { ok: true, url };
+    } catch (err: any) {
+      return { ok: false, url, error: err?.message ?? '打开浏览器失败' };
     }
   }
 

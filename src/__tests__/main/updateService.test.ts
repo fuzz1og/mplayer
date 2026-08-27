@@ -26,6 +26,9 @@ vi.mock('electron', () => ({
     getVersion: vi.fn().mockReturnValue('1.0.0'),
   },
   BrowserWindow: vi.fn(),
+  shell: {
+    openExternal: vi.fn().mockResolvedValue(undefined),
+  },
   session: {
     defaultSession: {
       setProxy: vi.fn().mockResolvedValue(undefined),
@@ -430,6 +433,31 @@ describe('UpdateService', () => {
       const order = svc.orderWithStalledDemoted([...UPDATE_SOURCE_DEFS]);
 
       expect(order.map((d) => d.id)).toEqual(['gh-proxy', 'ghproxynet', 'github', 'ghfast']);
+    });
+
+    it('openDownloadInBrowser 用获胜通道前缀拼官方资产名并交给系统浏览器', async () => {
+      const svc = new UpdateService({ autoProbeOnCheck: false });
+      mockDbSettings({});
+
+      const { autoUpdater } = await import('electron-updater');
+      const { shell } = await import('electron');
+      mockCheckPending(autoUpdater);
+
+      const promise = svc.checkForUpdates(5000);
+      await tick();
+      fireOnce(autoUpdater, 'update-available', {
+        version: '1.7.3',
+        files: [{ url: 'MPlayer-1.7.3.AppImage' }],
+      });
+      await promise;
+
+      const res = await svc.openDownloadInBrowser();
+
+      expect(res.ok).toBe(true);
+      expect(res.url).toBe(
+        'https://gh-proxy.com/https://github.com/fuzz1og/mplayer/releases/latest/download/MPlayer-1.7.3.AppImage',
+      );
+      expect(shell.openExternal).toHaveBeenCalledWith(res.url);
     });
 
     it('全部源测速失败时回落静态兜底顺序', async () => {
