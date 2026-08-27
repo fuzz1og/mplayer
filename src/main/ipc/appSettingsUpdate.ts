@@ -148,6 +148,16 @@ export function registerUpdateIpc(mainWindow: BrowserWindow): void {
   registerIpcHandler('update:download', () => updateService.downloadUpdate());
   registerIpcHandlerSimple('update:install', () => updateService.quitAndInstall());
   registerIpcHandlerSimple('update:getVersion', () => updateService.getVersion());
+  // 更新通道（#262）：源清单/当前选择 + 测速；setChannel 内部校验非法值
+  registerIpcHandlerSimple('update:getChannels', async () => ({
+    channel: await updateService.getChannel(),
+    sources: updateService.listSources(),
+  }));
+  registerIpcHandler('update:setChannel', async (value: string) => {
+    await updateService.setChannel(value);
+    return true;
+  });
+  registerIpcHandler('update:speedTest', async () => updateService.speedTest());
 }
 
 export function registerDownloadIpc(): void {

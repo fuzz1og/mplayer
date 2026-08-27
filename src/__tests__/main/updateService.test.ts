@@ -15,6 +15,7 @@ vi.mock('electron-updater', () => ({
     quitAndInstall: vi.fn(),
     netSession: {
       setProxy: vi.fn().mockResolvedValue(undefined),
+      fetch: vi.fn(),
     },
   },
 }));
@@ -31,9 +32,15 @@ vi.mock('electron', () => ({
   },
 }));
 
+/** 各测试直接往这里写 key/value，db.getSetting/setSetting 即时读写（同步、零竞态） */
+const dbSettingsStore: Record<string, unknown> = {};
+
 vi.mock('../../main/storage/db', () => ({
   db: {
-    getSetting: vi.fn(),
+    getSetting: vi.fn(async (key: string) => dbSettingsStore[key]),
+    setSetting: vi.fn(async (key: string, value: unknown) => {
+      dbSettingsStore[key] = value;
+    }),
   },
 }));
 
@@ -44,9 +51,14 @@ function createMockWindow() {
   } as any;
 }
 
+/** 按 key 预置 db 设置 */
+function mockDbSettings(map: Record<string, unknown>) {
+  Object.assign(dbSettingsStore, map);
+}
+
 /** Let pending microtasks flush so async setup in checkForUpdates/downloadUpdate completes */
-function tick() {
-  return new Promise<void>(resolve => setTimeout(resolve, 10));
+function tick(ms = 10) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
 /** 触发 autoUpdater.once 最近一次注册的指定事件 */
@@ -66,11 +78,15 @@ function mockCheckReject(autoUpdater: any, msg: string) {
   vi.mocked(autoUpdater.checkForUpdates).mockRejectedValue(new Error(msg));
 }
 
+const GH_PROXY_LABEL = 'gh-proxy.com 镜像';
+
 describe('UpdateService', () => {
   let updateService: UpdateService;
 
   beforeEach(() => {
-    updateService = new UpdateService();
+    // 常规用例关闭检查时自动测速，隔离探针对顺序的影响；测速用例单独开
+    updateService = new UpdateService({ autoProbeOnCheck: false });
+    for (const key of Object.keys(dbSettingsStore)) delete dbSettingsStore[key];
     vi.clearAllMocks();
   });
 
@@ -86,15 +102,9 @@ describe('UpdateService', () => {
     // 审查修复后：syncProxyEnv 只通过 session.setProxy 生效（netSession + defaultSession），
     // 不再注入/清除 process.env.* 全局代理变量。
     it('有代理配置时设置 session 代理规则', async () => {
-      const { db } = await import('../../main/storage/db');
-      vi.mocked(db.getSetting).mockResolvedValue({
-        enabled: true,
-        protocol: 'http',
-        host: '127.0.0.1',
-        port: 7890,
+      mockDbSettings({
+        proxyConfig: { enabled: true, protocol: 'http', host: '127.0.0.1', port: 7890 },
       });
-
-      process.env.HTTP_PROXY = 'http://old-proxy:8080'; // 应保持不变（不再被污染/清除）
 
       await updateService.syncProxyEnv();
 
@@ -103,22 +113,26 @@ describe('UpdateService', () => {
         proxyRules: 'http=127.0.0.1:7890;https=127.0.0.1:7890',
       });
       const { session } = await import('electron');
-      expect(session.defaultSession.setProxy).toHaveBeenCalledWith({
-        proxyRules: 'http=127.0.0.1:7890',
-      });
-      expect(process.env.HTTP_PROXY).toBe('http://old-proxy:8080');
+      expect(session.defaultSession.setProxy).toHaveBeenCalledWith({ proxyRules: 'http=127.0.0.1:7890' });
     });
 
-    it('代理禁用时 session 走 direct', async () => {
-      const { db } = await import('../../main/storage/db');
-      vi.mocked(db.getSetting).mockResolvedValue({
-        enabled: false,
-        protocol: 'http',
-        host: '127.0.0.1',
-        port: 7890,
+    it('代理配置读写不污染全局 env（session 级生效）', async () => {
+      process.env.HTTP_PROXY = 'http://old-proxy:8080';
+      mockDbSettings({
+        proxyConfig: { enabled: true, protocol: 'http', host: '127.0.0.1', port: 7890 },
       });
 
-      process.env.HTTP_PROXY = 'http://old-proxy:8080';
+      await updateService.syncProxyEnv();
+
+      const { autoUpdater } = await import('electron-updater');
+      expect(autoUpdater.netSession.setProxy).toHaveBeenCalledWith({
+        proxyRules: 'http=127.0.0.1:7890;https=127.0.0.1:7890',
+      });
+      expect(process.env.HTTP_PROXY).toBe('http://old-proxy:8080'); // 全局 env 不被修改
+    });
+
+    it('无代理配置时 session 走 direct', async () => {
+      mockDbSettings({});
 
       await updateService.syncProxyEnv();
 
@@ -126,20 +140,6 @@ describe('UpdateService', () => {
       expect(autoUpdater.netSession.setProxy).toHaveBeenCalledWith({ proxyRules: 'direct://' });
       const { session } = await import('electron');
       expect(session.defaultSession.setProxy).toHaveBeenCalledWith({ proxyRules: 'direct://' });
-      expect(process.env.HTTP_PROXY).toBe('http://old-proxy:8080'); // 全局 env 不被修改
-    });
-
-    it('无代理配置时 session 走 direct', async () => {
-      const { db } = await import('../../main/storage/db');
-      vi.mocked(db.getSetting).mockResolvedValue(null);
-
-      process.env.HTTP_PROXY = 'http://old-proxy:8080';
-
-      await updateService.syncProxyEnv();
-
-      const { autoUpdater } = await import('electron-updater');
-      expect(autoUpdater.netSession.setProxy).toHaveBeenCalledWith({ proxyRules: 'direct://' });
-      expect(process.env.HTTP_PROXY).toBe('http://old-proxy:8080');
     });
   });
 
@@ -162,24 +162,54 @@ describe('UpdateService', () => {
       await promise;
     });
 
-    it('检查更新时先切换 GitHub 直连 feed（索引 0）', async () => {
+    it('默认镜像优先：首个 feed 是 gh-proxy.com 镜像而非 GitHub 直连（#262）', async () => {
       const { autoUpdater } = await import('electron-updater');
       mockCheckPending(autoUpdater);
 
       const promise = updateService.checkForUpdates(5000);
       await tick();
 
-      expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
-        provider: 'github',
-        owner: 'fuzz1og',
-        repo: 'mplayer',
+      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(1, {
+        provider: 'generic',
+        url: expect.stringContaining('gh-proxy.com'),
       });
 
       fireOnce(autoUpdater, 'update-not-available');
       await promise;
     });
 
-    it('有可用更新时推送 available 状态', async () => {
+    it('首镜像失败时降级到下一镜像 ghfast.top（直连只作最后兜底）', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+
+      const { autoUpdater } = await import('electron-updater');
+      // gh-proxy.com（第一次调用）失败 → 降级 ghfast.top（第二次调用挂起，等待事件成功）
+      vi.mocked(autoUpdater.checkForUpdates)
+        .mockRejectedValueOnce(new Error('mirror down'))
+        .mockReturnValueOnce(new Promise(() => {}));
+
+      const promise = updateService.checkForUpdates(5000);
+
+      await tick();
+
+      expect(autoUpdater.setFeedURL).toHaveBeenLastCalledWith({
+        provider: 'generic',
+        url: expect.stringContaining('ghfast.top'),
+      });
+
+      fireOnce(autoUpdater, 'update-available', { version: '2.0.0' });
+      await promise;
+
+      expect(updateService.getStatus()).toMatchObject({ status: 'available' });
+      expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', {
+        status: 'available',
+        version: '2.0.0',
+        releaseNotes: undefined,
+        sourceLabel: 'ghfast.top 镜像',
+      });
+    });
+
+    it('有可用更新时推送 available 状态并携带当前通道标签', async () => {
       const mockWindow = createMockWindow();
       updateService.setMainWindow(mockWindow);
 
@@ -197,11 +227,7 @@ describe('UpdateService', () => {
         status: 'available',
         version: '2.0.0',
         releaseNotes: 'Bug fixes',
-      });
-      expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', {
-        status: 'available',
-        version: '2.0.0',
-        releaseNotes: 'Bug fixes',
+        sourceLabel: GH_PROXY_LABEL,
       });
     });
 
@@ -239,37 +265,6 @@ describe('UpdateService', () => {
       });
     });
 
-    it('直连失败时降级到镜像源并成功', async () => {
-      const mockWindow = createMockWindow();
-      updateService.setMainWindow(mockWindow);
-
-      const { autoUpdater } = await import('electron-updater');
-      // 直连（第一次调用）失败 → 降级镜像（第二次调用挂起，等待事件触发成功）
-      vi.mocked(autoUpdater.checkForUpdates)
-        .mockRejectedValueOnce(new Error('github down'))
-        .mockReturnValueOnce(new Promise(() => {}));
-
-      const promise = updateService.checkForUpdates(5000);
-
-      await tick();
-
-      // 应已切换到镜像源（generic provider）
-      expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
-        provider: 'generic',
-        url: expect.stringContaining('gh-proxy.com'),
-      });
-
-      fireOnce(autoUpdater, 'update-available', { version: '2.0.0' });
-      await promise;
-
-      expect(updateService.getStatus().status).toBe('available');
-      expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', {
-        status: 'available',
-        version: '2.0.0',
-        releaseNotes: undefined,
-      });
-    });
-
     it('超时时推送 error 状态并抛出', async () => {
       const mockWindow = createMockWindow();
       updateService.setMainWindow(mockWindow);
@@ -287,7 +282,7 @@ describe('UpdateService', () => {
       updateService.setMainWindow(createMockWindow());
 
       const { autoUpdater } = await import('electron-updater');
-      // 直连挂起（等 cleanup 触发 error），镜像快速失败
+      // gh-proxy 挂起（等 cleanup 触发 error），其余源快速失败
       vi.mocked(autoUpdater.checkForUpdates)
         .mockReturnValueOnce(new Promise(() => {}))
         .mockRejectedValue(new Error('cleanup'));
@@ -322,6 +317,133 @@ describe('UpdateService', () => {
     });
   });
 
+  describe('更新通道（#262）', () => {
+    it('listSources 返回镜像在前、GitHub 直连垫底的清单', () => {
+      const sources = updateService.listSources();
+      expect(sources.map(s => s.id)).toEqual(['gh-proxy', 'ghfast', 'ghproxynet', 'github']);
+    });
+
+    it('setChannel 合法值持久化到 db 并立即生效', async () => {
+      const { db } = await import('../../main/storage/db');
+
+      await updateService.setChannel('ghfast');
+
+      expect(db.setSetting).toHaveBeenCalledWith('updateChannel', 'ghfast');
+      expect(await updateService.getChannel()).toBe('ghfast');
+    });
+
+    it('setChannel 非法值拒绝且不落盘', async () => {
+      const { db } = await import('../../main/storage/db');
+
+      await expect(updateService.setChannel('evil-channel')).rejects.toThrow('非法更新通道');
+      expect(db.setSetting).not.toHaveBeenCalled();
+    });
+
+    it('db 存了非法通道值时读回 auto', async () => {
+      mockDbSettings({ updateChannel: 'deleted-mirror' });
+
+      expect(await updateService.getChannel()).toBe('auto');
+    });
+
+    it('手动通道把所选源排最前，其余保持兜底顺序', async () => {
+      const mockWindow = createMockWindow();
+      updateService.setMainWindow(mockWindow);
+      mockDbSettings({ updateChannel: 'github' });
+
+      const { autoUpdater } = await import('electron-updater');
+      // 全部源依次失败：github（手动置顶）→ 三个镜像
+      mockCheckReject(autoUpdater, 'all channels down');
+
+      await expect(updateService.checkForUpdates(5000)).rejects.toThrow('all channels down');
+
+      // 首选 feed 是 github provider（手动置顶）
+      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(1, {
+        provider: 'github',
+        owner: 'fuzz1og',
+        repo: 'mplayer',
+      });
+      // 失败后仍按静态兜底顺序降级到镜像
+      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(2, {
+        provider: 'generic',
+        url: expect.stringContaining('gh-proxy.com'),
+      });
+    });
+
+    it('speedTest 并发探测全部源并按延迟升序、失败垫底', async () => {
+      const service = new UpdateService(); // 探针用例直接走 netSession.fetch
+      const { autoUpdater } = await import('electron-updater');
+
+      const fakeOk = { arrayBuffer: async () => new ArrayBuffer(64) };
+      vi.mocked((autoUpdater.netSession as any).fetch).mockImplementation(async (url: string) => {
+        if (url.includes('gh-proxy.com')) {
+          await new Promise(r => setTimeout(r, 30)); // 最慢的成功源
+          return fakeOk;
+        }
+        if (url.includes('ghfast.top')) {
+          return fakeOk; // 最快
+        }
+        if (url.includes('ghproxy.net')) {
+          await new Promise(r => setTimeout(r, 10));
+          return fakeOk;
+        }
+        throw new Error('unreachable'); // github 直连失败 → 垫底
+      });
+
+      const results = await service.speedTest();
+
+      expect((autoUpdater.netSession as any).fetch).toHaveBeenCalledTimes(4);
+      expect(results.map(r => r.id)).toEqual(['ghfast', 'ghproxynet', 'gh-proxy', 'github']);
+      expect(results.find(r => r.id === 'github')?.latencyMs).toBeNull();
+      expect(results.find(r => r.id === 'ghfast')?.latencyMs).not.toBeNull();
+    });
+
+    it('auto 模式下按测速结果排序检查（最快镜像最先尝试）', async () => {
+      const service = new UpdateService(); // 开启检查前自动测速
+      mockDbSettings({}); // channel 默认 auto
+
+      const { autoUpdater } = await import('electron-updater');
+      const fakeOk = { arrayBuffer: async () => new ArrayBuffer(64) };
+      vi.mocked((autoUpdater.netSession as any).fetch).mockImplementation(async (url: string) => {
+        // ghfast 测速最快，但检查阶段挂起等待事件
+        if (url.includes('ghfast.top')) return fakeOk;
+        throw new Error('probe fail');
+      });
+      mockCheckPending(autoUpdater);
+
+      const promise = service.checkForUpdates(5000);
+      await tick(20);
+
+      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(1, {
+        provider: 'generic',
+        url: expect.stringContaining('ghfast.top'),
+      });
+
+      fireOnce(autoUpdater, 'update-not-available');
+      await promise;
+    });
+
+    it('全部源测速失败时回落静态兜底顺序', async () => {
+      const service = new UpdateService();
+      mockDbSettings({});
+
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked((autoUpdater.netSession as any).fetch).mockRejectedValue(new Error('all down'));
+      mockCheckPending(autoUpdater);
+
+      const promise = service.checkForUpdates(5000);
+      await tick(20);
+
+      // 探针全失败 → 仍是静态首源 gh-proxy.com
+      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(1, {
+        provider: 'generic',
+        url: expect.stringContaining('gh-proxy.com'),
+      });
+
+      fireOnce(autoUpdater, 'update-not-available');
+      await promise;
+    });
+  });
+
   describe('downloadUpdate', () => {
     // 下载依赖检查阶段成功（更新源检查到 available），下载阶段挂起等待事件
     function mockDownloadPending(autoUpdater: any) {
@@ -348,7 +470,7 @@ describe('UpdateService', () => {
       expect(mockWindow.webContents.send).toHaveBeenLastCalledWith('update:status', { status: 'downloaded' });
     });
 
-    it('监听下载进度事件', async () => {
+    it('监听下载进度事件且进度携带当前通道', async () => {
       const mockWindow = createMockWindow();
       updateService.setMainWindow(mockWindow);
 
@@ -367,6 +489,7 @@ describe('UpdateService', () => {
       expect(updateService.getStatus()).toEqual({
         status: 'downloading',
         progress: { percent: 50, bytesPerSecond: 102400, transferred: 51200, total: 102400 },
+        sourceLabel: GH_PROXY_LABEL,
       });
 
       // Complete

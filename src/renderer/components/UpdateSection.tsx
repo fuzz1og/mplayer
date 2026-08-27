@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2, Gauge } from 'lucide-react';
 
 const ipcRenderer = window.electronAPI;
+
+interface ChannelSource {
+  id: string;
+  label: string;
+}
+
+interface SpeedResult {
+  id: string;
+  label: string;
+  latencyMs: number | null;
+}
 
 const UpdateSection: React.FC = () => {
   const [currentVersion, setCurrentVersion] = useState('');
@@ -9,6 +20,46 @@ const UpdateSection: React.FC = () => {
   const [latestVersion, setLatestVersion] = useState('');
   const [updateProgress, setUpdateProgress] = useState(0);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  // 更新通道（#262）：auto=自动测速排序；手动选择把该源排最前
+  const [channelSources, setChannelSources] = useState<ChannelSource[]>([]);
+  const [channel, setChannelState] = useState<string>('auto');
+  const [speedResults, setSpeedResults] = useState<SpeedResult[] | null>(null);
+  const [isTestingSpeed, setIsTestingSpeed] = useState(false);
+  const [activeChannelLabel, setActiveChannelLabel] = useState('');
+
+  const loadChannels = async () => {
+    try {
+      const res = await ipcRenderer.invoke('update:getChannels');
+      if (res) {
+        setChannelSources(res.sources || []);
+        setChannelState(res.channel || 'auto');
+      }
+    } catch (e) {
+      console.error('获取更新通道失败:', e);
+    }
+  };
+
+  const handleSetChannel = async (value: string) => {
+    setChannelState(value); // 乐观更新，失败回读
+    try {
+      await ipcRenderer.invoke('update:setChannel', value);
+    } catch (e) {
+      console.error('设置更新通道失败:', e);
+      loadChannels();
+    }
+  };
+
+  const handleSpeedTest = async () => {
+    setIsTestingSpeed(true);
+    try {
+      const results = await ipcRenderer.invoke('update:speedTest');
+      setSpeedResults(results || []);
+    } catch (e) {
+      console.error('测速失败:', e);
+    } finally {
+      setIsTestingSpeed(false);
+    }
+  };
 
   const loadVersion = async () => {
     try {
@@ -21,6 +72,7 @@ const UpdateSection: React.FC = () => {
 
   useEffect(() => {
     loadVersion();
+    loadChannels();
   }, []);
 
   useEffect(() => {
@@ -28,6 +80,7 @@ const UpdateSection: React.FC = () => {
       setUpdateStatus(status.status);
       if (status.version) setLatestVersion(status.version);
       if (status.progress) setUpdateProgress(status.progress.percent);
+      if (status.sourceLabel) setActiveChannelLabel(status.sourceLabel);
       if (status.status === 'idle' || status.status === 'not-available' || status.status === 'downloaded' || status.status === 'error') {
         setIsCheckingUpdate(false);
       }
@@ -71,6 +124,43 @@ const UpdateSection: React.FC = () => {
         <Download size={20} color="var(--text-secondary)" />
         <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>检查更新</h2>
       </div>
+
+      {/* 更新通道（#262）：镜像优先、GitHub 直连兜底；auto 按测速延迟排序，也可手动指定置顶 */}
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>更新通道</span>
+        <select
+          value={channel}
+          onChange={(e) => handleSetChannel(e.target.value)}
+          style={{
+            padding: '6px 10px', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)',
+            border: '1px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', cursor: 'pointer',
+          }}
+        >
+          <option value="auto">自动（测速择优）</option>
+          {channelSources.map((s) => (
+            <option key={s.id} value={s.id}>{s.label}</option>
+          ))}
+        </select>
+        <button
+          onClick={handleSpeedTest}
+          disabled={isTestingSpeed}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px',
+            backgroundColor: 'transparent', color: 'var(--text-secondary)',
+            border: '1px solid var(--border-default)', borderRadius: '8px', fontSize: '13px',
+            cursor: isTestingSpeed ? 'not-allowed' : 'pointer', transition: 'all 0.15s ease',
+          }}
+        >
+          {isTestingSpeed ? <Loader2 size={14} className="animate-spin" /> : <Gauge size={14} />}
+          测速
+        </button>
+        {speedResults && (
+          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+            {speedResults.map((r) => `${r.label.replace(' 镜像', '')} ${r.latencyMs == null ? '超时' : `${r.latencyMs}ms`}`).join(' · ')}
+          </span>
+        )}
+      </div>
+
       <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-default)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div>
@@ -107,7 +197,9 @@ const UpdateSection: React.FC = () => {
 
         {updateStatus === 'downloading' && (
           <div style={{ padding: '16px', backgroundColor: 'var(--accent-subtle)', borderRadius: '8px', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' }}>
-            <div style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: 'var(--accent-text)', marginBottom: '8px' }}>正在下载更新...</div>
+            <div style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: 'var(--accent-text)', marginBottom: '8px' }}>
+              正在下载更新{activeChannelLabel ? `（通道：${activeChannelLabel}）` : ''}
+            </div>
             <div style={{ height: '8px', backgroundColor: 'var(--border-default)', borderRadius: '4px', overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${updateProgress}%`, backgroundColor: 'var(--accent)', borderRadius: '4px', transition: 'width 0.3s' }} />
             </div>
