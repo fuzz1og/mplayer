@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { FlatList, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
+import { FlatList, Text, View, StyleSheet } from 'react-native';
 import { X, Play } from 'lucide-react-native';
 import { spacing, textVariants } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
@@ -7,6 +7,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
 import BottomSheet from './BottomSheet';
+import ScalePress, { pressScale } from './ScalePress';
 
 interface Props {
   visible: boolean;
@@ -28,9 +29,9 @@ export default function QueueListModal({ visible, onClose }: Props) {
     <BottomSheet visible={visible} onClose={onClose}>
       <View style={styles.header}>
         <Text style={styles.title}>播放队列 ({queue.length})</Text>
-        <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <ScalePress onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <X size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
+        </ScalePress>
       </View>
       <FlatList
         data={queue}
@@ -38,8 +39,9 @@ export default function QueueListModal({ visible, onClose }: Props) {
         renderItem={({ item, index }) => {
           const isCurrent = currentSong?.id === item.id;
           return (
-            <TouchableOpacity
+            <ScalePress
               style={styles.item}
+              pressScaleTo={pressScale.row}
               onPress={() => {
                 // 真机反馈（#186）：点歌换歌不关闭弹层，由用户决定何时关闭
                 setQueue(queue, index);
@@ -53,7 +55,7 @@ export default function QueueListModal({ visible, onClose }: Props) {
                 <Text style={styles.itemArtist}>{item.artist}</Text>
               </View>
               {isCurrent && <Play size={16} color={colors.accent} />}
-            </TouchableOpacity>
+            </ScalePress>
           );
         }}
         ListEmptyComponent={<Text style={styles.empty}>队列为空</Text>}

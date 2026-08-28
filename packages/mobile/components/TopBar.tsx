@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TextInput, StyleSheet,
 } from 'react-native';
 import { ArrowLeft, Search, Settings, ChevronDown, Check, LayoutGrid, Music2 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
@@ -96,11 +96,11 @@ export default function TopBar() {
           }}
           onBlur={() => setFocused(false)}
         />
-        <TouchableOpacity onPress={() => setShowSourcePicker(true)} style={styles.sourceBtn}>
+        <ScalePress onPress={() => setShowSourcePicker(true)} style={styles.sourceBtn}>
           <SourceBadge source={selectedSource} size="sm" />
           <Text style={styles.sourceLabel}>{SOURCE_OPTION_LABELS[selectedSource]}</Text>
           <ChevronDown size={12} color={colors.textSecondary} />
-        </TouchableOpacity>
+        </ScalePress>
       </View>
       <ScalePress
         onPress={() => router.push('/settings')}
@@ -133,9 +133,9 @@ export default function TopBar() {
             )}
           </ScalePress>
         ))}
-        <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowSourcePicker(false)}>
+        <ScalePress style={styles.cancelBtn} onPress={() => setShowSourcePicker(false)}>
           <Text style={styles.cancelText}>取消</Text>
-        </TouchableOpacity>
+        </ScalePress>
       </BottomSheet>
     </ChromeBlur>
   );

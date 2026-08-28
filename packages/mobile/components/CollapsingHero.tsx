@@ -2,7 +2,8 @@
  * 通用折叠 Hero — 详情页全出血封面方案（歌单 D 变体推广到专辑/歌手/网络歌单）
  *
  * 结构（自上而下）：
- *   1. 大封面全出血到状态栏/灵动岛安全区后面，随列表滚动滚出屏幕
+ *   1. 大封面全出血到状态栏/灵动岛安全区后面，随列表滚动滚出屏幕；
+ *      底缘叠 bgBase 雾化条向上淡出（#259 决议转正，硬切 → 雾化渐隐）
  *   2. 悬浮导航栏：顶部透明（盖在封面上）→ 下滑盖过封面后逐渐变为
  *      实心正常标题栏（标题淡入、返回按钮变深色），上滑恢复
  *   3. 信息区在封面下方独立实心区域（不叠封面、不透明）
@@ -17,7 +18,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Image,
   Animated,
@@ -25,14 +25,19 @@ import {
 } from 'react-native';
 import type { ListRenderItem } from 'react-native';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Music2, Play, ArrowLeft } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { radius, spacing, typography } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import ScalePress from './ScalePress';
 
 const AnimatedArrowLeft = Animated.createAnimatedComponent(ArrowLeft);
+
+/** 封面底缘雾化条高度：bgBase 向上淡出的过渡带（#259 真机原型定稿值） */
+const COVER_FOG_H = 64;
 
 interface CollapsingHeroProps<T> {
   /** 封面 URL（调用方决定来源） */
@@ -145,9 +150,9 @@ export default function CollapsingHero<T>({
           { paddingTop: insets.top, height: NAV_H + insets.top, backgroundColor: navBg },
         ]}
       >
-        <TouchableOpacity style={styles.navBack} onPress={() => router.back()} hitSlop={8}>
+        <ScalePress style={styles.navBack} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <AnimatedArrowLeft size={22} color={backColor} />
-        </TouchableOpacity>
+        </ScalePress>
         <Animated.Text style={[styles.navTitle, { opacity: titleOpacity }]} numberOfLines={1}>
           {navTitle}
         </Animated.Text>
@@ -171,7 +176,7 @@ export default function CollapsingHero<T>({
         contentContainerStyle={{ paddingBottom: 24 }}
         ListHeaderComponent={
           <View>
-            {/* 全出血封面 */}
+            {/* 全出血封面（底缘雾化条与信息区/页面底色衔接） */}
             <View style={{ height: COVER_H }}>
               {showCover ? (
                 <Image
@@ -185,6 +190,11 @@ export default function CollapsingHero<T>({
                   {fallbackIcon ?? <Music2 size={72} color={colors.textInverse} />}
                 </View>
               )}
+              <LinearGradient
+                pointerEvents="none"
+                colors={['transparent', colors.bgBase]}
+                style={styles.coverFog}
+              />
             </View>
             {/* 信息区：封面下方独立实心区域（不叠封面、不透明） */}
             <View style={styles.info}>
@@ -201,10 +211,10 @@ export default function CollapsingHero<T>({
                 </View>
               ) : null}
               {actionLabel && onAction ? (
-                <TouchableOpacity style={styles.playBtn} onPress={onAction}>
+                <ScalePress style={styles.playBtn} onPress={onAction}>
                   <Play size={18} color={colors.textInverse} fill={colors.textInverse} />
                   <Text style={styles.playText}>{actionLabel}</Text>
-                </TouchableOpacity>
+                </ScalePress>
               ) : null}
             </View>
             {listHeader}
@@ -219,6 +229,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   coverImg: {
     width: '100%',
     height: '100%',
+  },
+  coverFog: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: COVER_FOG_H,
   },
   coverFallback: {
     flex: 1,

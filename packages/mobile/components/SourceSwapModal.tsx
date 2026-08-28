@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { X, CircleCheck, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '../services/sourceSwap';
@@ -8,6 +8,7 @@ import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import SourceBadge from './SourceBadge';
 import BottomSheet from './BottomSheet';
+import ScalePress, { pressScale } from './ScalePress';
 
 const SWAP_SOURCES: { key: SourceKey; label: string }[] = [
   { key: 'netease', label: '网易云' },
@@ -48,9 +49,9 @@ export default function SourceSwapModal({
             <Text style={styles.title}>
               {success ? '换源完整版' : candidates.length > 0 ? '选择要切换的版本' : '换源完整版'}
             </Text>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <ScalePress onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <X size={22} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </ScalePress>
           </View>
           {songName ? <Text style={styles.hint} numberOfLines={1}>{songName}</Text> : null}
           {success ? (
@@ -65,10 +66,10 @@ export default function SourceSwapModal({
           ) : candidates.length > 0 ? (
             <>
               {candidates.map((c, i) => (
-                <TouchableOpacity
+                <ScalePress
                   key={`${c.song.id}-${i}`}
                   style={styles.item}
-                  activeOpacity={0.7}
+                  pressScaleTo={pressScale.row}
                   onPress={() => onSelectCandidate(c)}
                 >
                   <View style={[styles.dot, { backgroundColor: c.exact ? colors.success : colors.textSecondary }]} />
@@ -89,21 +90,21 @@ export default function SourceSwapModal({
                     {c.exact ? '完整版' : `${Math.round(c.score * 100)}%`}
                   </Text>
                   <ChevronRight size={18} color={colors.textTertiary} />
-                </TouchableOpacity>
+                </ScalePress>
               ))}
-              <TouchableOpacity style={styles.backBtn} activeOpacity={0.7} onPress={onBack}>
+              <ScalePress style={styles.backBtn} pressScaleTo={pressScale.row} onPress={onBack}>
                 <ArrowLeft size={16} color={colors.textSecondary} />
                 <Text style={styles.backText}>返回选择其他音乐源</Text>
-              </TouchableOpacity>
+              </ScalePress>
             </>
           ) : (
-            SWAP_SOURCES.map((s) => {
+              SWAP_SOURCES.map((s) => {
               const disabled = s.key === currentSource;
               return (
-                <TouchableOpacity
+                <ScalePress
                   key={s.key}
                   style={[styles.item, disabled && { backgroundColor: colors.bgHover }]}
-                  activeOpacity={0.7}
+                  pressScaleTo={pressScale.row}
                   disabled={disabled}
                   onPress={() => onSelectSource(s.key)}
                 >
@@ -112,7 +113,7 @@ export default function SourceSwapModal({
                     {s.label}{disabled ? '（当前源）' : ''}
                   </Text>
                   <ChevronRight size={18} color={colors.textTertiary} />
-                </TouchableOpacity>
+                </ScalePress>
               );
             })
           )}

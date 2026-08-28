@@ -3,6 +3,15 @@ import { Pressable, Animated, StyleSheet, type StyleProp, type ViewStyle, type G
 import { springs } from '../theme/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
+/**
+ * 按压幅度分档语义值（#233/#261 绞杀判例，防魔数散落）：
+ * - 行/网格卡/大面板 → pressScale.row（0.98）
+ * - 小型图标钮 → 不传 pressScaleTo，用组件默认 0.97
+ */
+export const pressScale = {
+  row: 0.98,
+} as const;
+
 interface ScalePressProps {
   /** 接收事件对象以便嵌套场景 stopPropagation（与 TouchableOpacity 行为对齐） */
   onPress?: (e?: GestureResponderEvent) => void;
@@ -10,7 +19,7 @@ interface ScalePressProps {
   disabled?: boolean;
   /** 布局/外观样式：随内容一起缩放（iOS 按压手感是整个控件微微变小） */
   style?: StyleProp<ViewStyle>;
-  /** 按压幅度，默认 0.97；整行/大面板建议 0.98 */
+  /** 按压幅度，默认 0.97；整行/大面板用 pressScale.row */
   pressScaleTo?: number;
   hitSlop?: { top?: number; bottom?: number; left?: number; right?: number };
   children: React.ReactNode;

@@ -6,7 +6,7 @@ import {
   View,
   Text,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   Modal,
   TextInput,
@@ -22,6 +22,7 @@ import {radius, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
+import ScalePress, { pressScale } from '../../components/ScalePress';
 
 const BUILT_IN = [
   { key: 'favorites', icon: Heart, label: '收藏', desc: '我喜欢的歌曲' },
@@ -64,9 +65,9 @@ export default function PlaylistsPage() {
   };
 
   const renderItem = ({ item }: { item: Playlist }) => (
-    <TouchableOpacity
+    <ScalePress
       style={styles.row}
-      activeOpacity={0.6}
+      pressScaleTo={pressScale.row}
       onPress={() => router.push(`/playlist/${item.id}`)}
       onLongPress={() => handleDelete(item)}
     >
@@ -82,7 +83,7 @@ export default function PlaylistsPage() {
         </Text>
       </View>
       <ChevronRight size={18} color={colors.textTertiary} />
-    </TouchableOpacity>
+    </ScalePress>
   );
 
   return (
@@ -100,18 +101,18 @@ export default function PlaylistsPage() {
             {/* 页头随内容滚动、从悬浮 TopBar 下穿过（M2）；静态放列表外会被 TopBar 盖住 */}
             <View style={styles.header}>
               <Text style={styles.title}>我的歌单</Text>
-              <TouchableOpacity
+              <ScalePress
                 style={styles.addBtn}
                 onPress={() => setModalVisible(true)}
               >
                 <Plus size={24} color={colors.textInverse} />
-              </TouchableOpacity>
+              </ScalePress>
             </View>
             {BUILT_IN.map((item) => (
-              <TouchableOpacity
+              <ScalePress
                 key={item.key}
                 style={styles.row}
-                activeOpacity={0.6}
+                pressScaleTo={pressScale.row}
                 onPress={() => router.push(item.key === 'favorites' ? '/favorites' : '/history')}
               >
                 <View style={[styles.iconWrap, { backgroundColor: colors.bgHover }]}>
@@ -122,7 +123,7 @@ export default function PlaylistsPage() {
                   <Text style={styles.rowMeta}>{item.desc}</Text>
                 </View>
                 <ChevronRight size={18} color={colors.textTertiary} />
-              </TouchableOpacity>
+              </ScalePress>
             ))}
             {playlists.length > 0 && (
               <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
@@ -141,14 +142,13 @@ export default function PlaylistsPage() {
         navigationBarTranslucent
         onRequestClose={() => setModalVisible(false)}
       >
-        <TouchableOpacity
+        {/* 遮罩/内容拦截器保持无动画语义（PR #260 判例）：不应有视觉反馈 */}
+        <Pressable
           style={styles.modalOverlay}
-          activeOpacity={1}
           onPress={() => setModalVisible(false)}
         >
-          <TouchableOpacity
+          <Pressable
             style={styles.modalContent}
-            activeOpacity={1}
             onPress={() => {}}
           >
             <Text style={styles.modalTitle}>新建歌单</Text>
@@ -163,7 +163,7 @@ export default function PlaylistsPage() {
               autoFocus
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity
+              <ScalePress
                 style={styles.cancelBtn}
                 onPress={() => {
                   setNewName('');
@@ -171,8 +171,8 @@ export default function PlaylistsPage() {
                 }}
               >
                 <Text style={styles.cancelText}>取消</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </ScalePress>
+              <ScalePress
                 style={[
                   styles.confirmBtn,
                   !newName.trim() && { opacity: 0.4 },
@@ -181,10 +181,10 @@ export default function PlaylistsPage() {
                 disabled={!newName.trim()}
               >
                 <Text style={styles.confirmText}>创建</Text>
-              </TouchableOpacity>
+              </ScalePress>
             </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </Pressable>
+        </Pressable>
       </Modal>
     </Animated.View>
   );

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert,
+  View, Text, StyleSheet, Alert,
 } from 'react-native';
 import { CircleCheck, ListMusic } from 'lucide-react-native';
 import type { Song, SourceKey } from '@mplayer/core';
@@ -10,6 +10,7 @@ import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import BottomSheet from './BottomSheet';
+import ScalePress, { pressScale } from './ScalePress';
 
 function sourceLabel(sourceType?: string): string {
   return SOURCE_LABELS[sourceType as SourceKey] || sourceType || '未知';
@@ -96,21 +97,22 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
           ) : (
             <View style={styles.list}>
               {playlists.map(p => (
-                <TouchableOpacity
+                <ScalePress
                   key={p.id}
                   style={styles.item}
+                  pressScaleTo={pressScale.row}
                   onPress={() => handleSelect(p.id, p.name)}
                 >
                   <ListMusic size={22} color={colors.accent} />
                   <Text style={styles.itemText}>{p.name}</Text>
                   <Text style={styles.itemCount}>{p.songs.length}首</Text>
-                </TouchableOpacity>
+                </ScalePress>
               ))}
             </View>
           )}
-          <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
+          <ScalePress style={styles.cancelBtn} onPress={onClose}>
             <Text style={styles.cancelText}>取消</Text>
-          </TouchableOpacity>
+          </ScalePress>
         </>
       )}
     </BottomSheet>

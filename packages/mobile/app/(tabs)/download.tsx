@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Alert, Animated } from 'react-native';
 import { useEffect, useMemo } from 'react';
 import { Download, Music, Trash2, ChevronRight } from 'lucide-react-native';
 import { Paths } from 'expo-file-system';
@@ -10,6 +10,7 @@ import { usePlayerStore } from '../../stores/playerStore';
 import {radius, shadow, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import ScalePress, { pressScale } from '../../components/ScalePress';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight, LIST_TAIL_PADDING } from '../../components/chromeMetrics';
@@ -93,7 +94,7 @@ export default function DownloadPage() {
           { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + LIST_TAIL_PADDING },
         ]}
         ListHeaderComponent={
-          <TouchableOpacity style={styles.pathBox} onPress={handlePickDir} activeOpacity={0.7}>
+          <ScalePress style={styles.pathBox} pressScaleTo={pressScale.row} onPress={handlePickDir}>
             <View style={styles.pathInfo}>
               <Text style={styles.pathLabel}>保存位置</Text>
               <Text style={styles.pathText} numberOfLines={2}>
@@ -104,7 +105,7 @@ export default function DownloadPage() {
               </Text>
             </View>
             <ChevronRight size={18} color={colors.textTertiary} />
-          </TouchableOpacity>
+          </ScalePress>
         }
         ListEmptyComponent={
           <EmptyState
@@ -117,9 +118,9 @@ export default function DownloadPage() {
           const isCurrent = currentSong?.id === `local-${item.key}`;
           const progress = Math.max(0, Math.min(item.progress ?? 0, 100));
           return (
-            <TouchableOpacity
+            <ScalePress
               style={styles.row}
-              activeOpacity={0.7}
+              pressScaleTo={pressScale.row}
               onPress={() => handlePlay(item)}
               disabled={item.status !== 'done'}
             >
@@ -141,9 +142,9 @@ export default function DownloadPage() {
                     : STATUS_LABELS[item.status]}
                 </Text>
                 {item.status === 'done' && (
-                  <TouchableOpacity onPress={() => handleRemove(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <ScalePress onPress={() => handleRemove(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <Trash2 size={18} color={colors.textTertiary} />
-                  </TouchableOpacity>
+                  </ScalePress>
                 )}
               </View>
               {item.status === 'downloading' && (
@@ -151,7 +152,7 @@ export default function DownloadPage() {
                   <View style={[styles.progressFill, { width: `${progress}%` }]} />
                 </View>
               )}
-            </TouchableOpacity>
+            </ScalePress>
           );
         }}
       />

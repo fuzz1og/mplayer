@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   ScrollView,
   StyleSheet,
   Linking,
@@ -22,7 +21,7 @@ import { checkLatestRelease, speedTestChannels, type ChannelSpeedResult } from '
 import {radius, shadow, spacing, textVariants} from '../theme/tokens';
 import type { ThemeMode, ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import ScalePress from '../components/ScalePress';
+import ScalePress, { pressScale } from '../components/ScalePress';
 
 /** 外观选项（#173）：system 跟随系统深浅色 */
 const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
@@ -317,13 +316,13 @@ export default function SettingsPage() {
                     <Text style={{ ...textVariants.settingsTertiary, color: colors.textTertiary }}>{sub.manifest.sources.length} 个源</Text>
                   </View>
                   {sub.kind === 'url' && (
-                    <TouchableOpacity onPress={() => void handleRefreshTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
+                    <ScalePress onPress={() => void handleRefreshTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
                       <RefreshCw size={16} color={colors.textSecondary} />
-                    </TouchableOpacity>
+                    </ScalePress>
                   )}
-                  <TouchableOpacity onPress={() => handleRemoveTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
+                  <ScalePress onPress={() => handleRemoveTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
                     <Trash2 size={16} color={colors.danger} />
-                  </TouchableOpacity>
+                  </ScalePress>
                 </View>
               ))}
             </View>
@@ -336,12 +335,12 @@ export default function SettingsPage() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>每源解析统计（本次会话）</Text>
                   <View style={{ flexDirection: 'row' }}>
-                    <TouchableOpacity onPress={refreshTier3Stats} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
+                    <ScalePress onPress={refreshTier3Stats} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
                       <RefreshCw size={14} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={handleClearTier3Stats} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
+                    </ScalePress>
+                    <ScalePress onPress={handleClearTier3Stats} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
                       <Trash2 size={14} color={colors.textSecondary} />
-                    </TouchableOpacity>
+                    </ScalePress>
                   </View>
                 </View>
                 {Object.entries(tier3Stats).map(([sourceId, st]) => (
@@ -406,10 +405,10 @@ export default function SettingsPage() {
                 ].map((opt) => {
                   const active = updateChannel === opt.id;
                   return (
-                    <TouchableOpacity
+                    <ScalePress
                       key={opt.id}
                       style={[styles.row, styles.rowSep]}
-                      activeOpacity={0.6}
+                      pressScaleTo={pressScale.row}
                       onPress={() => setUpdateChannelStore(opt.id)}
                     >
                       <Text style={{ ...textVariants.settingsPrimary, color: colors.textPrimary, flex: 1 }}>
@@ -420,7 +419,7 @@ export default function SettingsPage() {
                       ) : (
                         <View style={{ width: 18 }} />
                       )}
-                    </TouchableOpacity>
+                    </ScalePress>
                   );
                 })}
                 <ScalePress
