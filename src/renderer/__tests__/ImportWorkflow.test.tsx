@@ -3,65 +3,19 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import ImportPlaylistModal from '../components/ImportPlaylistModal';
 
-// Mock importService - keep real parseSongList and parsePlaylistUrl, mock async functions
+// Mock importService - keep real parsePlaylistUrl, mock async import
 vi.mock('@/renderer/services/importService', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
-    importSongs: vi.fn(),
     importFromLink: vi.fn(),
   };
 });
 
-// music 域 IPC 走 callMusicApi（getPlaylistSongsFromThirdParty）
+// music 域 IPC 走 callMusicApi（getNeteasePlaylistSongs 原生歌单接口）
 const callMusicApiMock = vi.hoisted(() => vi.fn(async () => []));
 vi.mock('@/renderer/services/callMusicApi', () => ({
   callMusicApi: callMusicApiMock,
-}));
-
-// Mock electron ipcRenderer
-const mockInvoke = vi.hoisted(() => vi.fn());
-const originalRequire = window.require;
-window.require = vi.fn((module: string) => {
-  if (module === 'electron') {
-    return {
-      ipcRenderer: {
-        invoke: mockInvoke,
-      },
-    };
-  }
-  return originalRequire(module);
-});
-
-// Mock dnd-kit
-vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children }: any) => <div>{children}</div>,
-  closestCenter: vi.fn(),
-  PointerSensor: vi.fn(),
-  useSensor: vi.fn(() => ({})),
-  useSensors: vi.fn(() => ({})),
-}));
-
-vi.mock('@dnd-kit/sortable', () => ({
-  SortableContext: ({ children }: any) => <div>{children}</div>,
-  useSortable: vi.fn(() => ({
-    attributes: {},
-    listeners: {},
-    setNodeRef: vi.fn(),
-    transform: null,
-    transition: null,
-    isDragging: false,
-  })),
-  verticalListSortingStrategy: vi.fn(),
-  arrayMove: vi.fn(),
-}));
-
-vi.mock('@dnd-kit/utilities', () => ({
-  CSS: {
-    Transform: {
-      toString: () => '',
-    },
-  },
 }));
 
 vi.mock('antd', async () => {
@@ -76,13 +30,12 @@ vi.mock('antd', async () => {
   };
 });
 
-import { importSongs, importFromLink } from '@/renderer/services/importService';
+import { importFromLink } from '@/renderer/services/importService';
 
 describe('ImportWorkflow Integration', () => {
   const defaultProps = {
     open: true,
     playlistId: 1,
-    playlistName: 'Test Playlist',
     existingSongs: [],
     onClose: vi.fn(),
     onImported: vi.fn(),
@@ -93,46 +46,7 @@ describe('ImportWorkflow Integration', () => {
     callMusicApiMock.mockResolvedValue([]);
   });
 
-  it('should complete full text import flow', async () => {
-    const mockResult = {
-      successes: [
-        {
-          line: 'Test Song - Artist',
-          song: { id: '1', name: 'Test Song', artist: 'Artist', album: '', url: '', cover: '', lrc: '', duration: 0, sourceType: 'netease' },
-          source: 'netease',
-        },
-      ],
-      failures: [],
-      skips: [],
-    };
-
-    (importSongs as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
-
-    render(<ImportPlaylistModal {...defaultProps} />);
-
-    // Input text
-    const textarea = screen.getByPlaceholderText(/七里香/);
-    fireEvent.change(textarea, { target: { value: 'Test Song - Artist' } });
-
-    // Click import
-    fireEvent.click(screen.getByText('开始导入'));
-
-    // Wait for import to complete
-    await waitFor(() => {
-      expect(screen.getByText('导入完成')).toBeInTheDocument();
-    }, { timeout: 5000 });
-
-    // Verify import was called correctly
-    expect(importSongs).toHaveBeenCalledWith(
-      1,
-      'Test Song - Artist',
-      ['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda'],
-      [],
-      expect.any(Function)
-    );
-  });
-
-  it('should complete full link import flow', async () => {
+  it('should complete full link import flow via native netease api', async () => {
     const mockSongs = [
       { id: '100', name: 'Song 1', artist: 'Artist 1', sourceType: 'netease' },
     ];
@@ -154,9 +68,6 @@ describe('ImportWorkflow Integration', () => {
 
     render(<ImportPlaylistModal {...defaultProps} />);
 
-    // Switch to link import tab
-    fireEvent.click(screen.getByText('链接导入'));
-
     // Input URL
     const input = screen.getByPlaceholderText('请输入歌单链接（支持网易云和QQ音乐）');
     fireEvent.change(input, {
@@ -170,6 +81,9 @@ describe('ImportWorkflow Integration', () => {
     await waitFor(() => {
       expect(screen.getByText(/共 1 首歌曲/)).toBeInTheDocument();
     });
+
+    // 原生接口拉全量曲目
+    expect(callMusicApiMock).toHaveBeenCalledWith('getNeteasePlaylistSongs', 123);
 
     // Click import selected songs
     fireEvent.click(screen.getByText(/导入选中歌曲/));
@@ -193,9 +107,6 @@ describe('ImportWorkflow Integration', () => {
     callMusicApiMock.mockRejectedValue(new Error('Network error'));
 
     render(<ImportPlaylistModal {...defaultProps} />);
-
-    // Switch to link import tab
-    fireEvent.click(screen.getByText('链接导入'));
 
     // Input URL
     const input = screen.getByPlaceholderText('请输入歌单链接（支持网易云和QQ音乐）');

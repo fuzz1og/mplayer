@@ -1,5 +1,4 @@
 import type { Song, SourceKey } from '../types/index.js';
-import { findBestMatch } from '../utils/songMatcher.js';
 
 /** 可搜索导入的音乐源（local 本地文件无搜索能力，排除） */
 export type ImportSource = Exclude<SourceKey, 'local'>;
@@ -44,31 +43,6 @@ export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
   return null;
 }
 
-/** 文本粘贴的一行：歌名 + 歌手（`歌名 - 歌手` 分隔，无分隔符时整行为歌名） */
-export interface ParsedLine {
-  raw: string;
-  name: string;
-  artist: string;
-}
-
-export function parseSongList(text: string): ParsedLine[] {
-  return text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-    .map(line => {
-      const separatorIndex = line.lastIndexOf(' - ');
-      if (separatorIndex === -1) {
-        return { raw: line, name: line, artist: '' };
-      }
-      return {
-        raw: line,
-        name: line.substring(0, separatorIndex).trim(),
-        artist: line.substring(separatorIndex + 3).trim(),
-      };
-    });
-}
-
 export interface ProgressState {
   total: number;
   found: number;
@@ -85,140 +59,15 @@ export interface ImportResult {
   skips: { line: string; reason: string }[];
 }
 
-/** 导入编排的外部依赖（两端各自注入：桌面走 IPC，mobile 走本地 store/API） */
+/** 链接导入编排的外部依赖（两端各自注入：桌面走 IPC，mobile 走本地 store/API） */
 export interface PlaylistImportDeps {
-  /** 批量搜索：keywords 与返回对象的 key 一一对应 */
-  batchSearch: (keywords: string[], source: ImportSource) => Promise<Record<string, Song[]>>;
   /** 把歌曲加入目标歌单 */
   addSong: (playlistId: string | number, song: Song) => Promise<void>;
 }
 
 /**
- * 文本导入歌单：解析行 → 按源顺序批量搜索 → findBestMatch 匹配 →
- * 未匹配行流向下一个源 → 全部匹配后逐首加入歌单。
- * 进度通过 onProgress 回调（状态行数组引用会更新，需整体替换触发渲染）。
- */
-export async function importSongs(
-  playlistId: string | number,
-  text: string,
-  sourceOrder: ImportSource[],
-  existingSongs: Song[],
-  deps: PlaylistImportDeps,
-  onProgress: (state: ProgressState) => void
-): Promise<ImportResult> {
-  const lines = parseSongList(text);
-  const total = lines.length;
-
-  const successes: ImportResult['successes'] = [];
-  const failures: ImportResult['failures'] = [];
-  const skips: ImportResult['skips'] = [];
-
-  const statuses: ProgressState['statuses'] = lines.map(l => ({ line: l.raw, status: 'pending' as const }));
-
-  const updateProgress = (partial: Partial<ProgressState> = {}) => {
-    onProgress({
-      total,
-      found: successes.length,
-      skipped: skips.length,
-      failed: failures.length,
-      currentLine: '',
-      currentSource: '',
-      statuses: [...statuses],
-      ...partial,
-    });
-  };
-
-  const existingKeys = new Set(existingSongs.map(s => `${s.name}|${s.artist || ''}`));
-
-  const toSearch: { index: number; parsed: ParsedLine }[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const key = `${lines[i].name}|${lines[i].artist || ''}`;
-    if (existingKeys.has(key)) {
-      skips.push({ line: lines[i].raw, reason: '已在歌单中' });
-      statuses[i] = { line: lines[i].raw, status: 'skipped' };
-      updateProgress({ skipped: skips.length });
-    } else {
-      toSearch.push({ index: i, parsed: lines[i] });
-    }
-  }
-
-  const remainingLines = [...toSearch];
-
-  for (const source of sourceOrder) {
-    if (remainingLines.length === 0) break;
-
-    const currentBatch = [...remainingLines];
-    remainingLines.length = 0;
-
-    const keywords = currentBatch.map(item => `${item.parsed.name} ${item.parsed.artist}`.trim());
-
-    for (const item of currentBatch) {
-      statuses[item.index] = { line: item.parsed.raw, status: 'searching' };
-    }
-    updateProgress({ currentSource: source });
-
-    let batchResults: Record<string, Song[]>;
-    try {
-      batchResults = await deps.batchSearch(keywords, source);
-    } catch (error) {
-      console.error(`批量搜索失败 (${source}):`, error);
-      for (const item of currentBatch) {
-        failures.push({ line: item.parsed.raw, reason: `${source} 搜索出错` });
-        statuses[item.index] = { line: item.parsed.raw, status: 'failed' };
-      }
-      continue;
-    }
-
-    for (let i = 0; i < currentBatch.length; i++) {
-      const item = currentBatch[i];
-      const keyword = keywords[i];
-      const candidates = batchResults[keyword] || [];
-
-      const match = findBestMatch(
-        { name: item.parsed.name, artist: item.parsed.artist },
-        candidates
-      );
-
-      if (match) {
-        successes.push({
-          line: item.parsed.raw,
-          song: { ...match.song as Song, sourceType: source },
-          source,
-        });
-        statuses[item.index] = { line: item.parsed.raw, status: 'found', source };
-      } else {
-        remainingLines.push(item);
-      }
-    }
-
-    updateProgress({ found: successes.length, currentSource: '' });
-  }
-
-  for (const item of remainingLines) {
-    failures.push({ line: item.parsed.raw, reason: '在所有音乐源中未找到匹配的歌曲' });
-    statuses[item.index] = { line: item.parsed.raw, status: 'failed' };
-  }
-
-  updateProgress({ failed: failures.length });
-
-  // 把找到的歌曲加入歌单（逐个，失败单独计数）
-  const addedSuccesses: ImportResult['successes'] = [];
-  for (const success of successes) {
-    try {
-      await deps.addSong(playlistId, success.song);
-      addedSuccesses.push(success);
-    } catch (error) {
-      console.error(`添加到歌单失败: ${success.line}`, error);
-      failures.push({ line: success.line, reason: '添加到歌单时出错' });
-    }
-  }
-
-  return { successes: addedSuccesses, failures, skips };
-}
-
-/**
  * 链接导入（解析后已拿到的歌曲列表）：按用户勾选 + 去重后逐个加入歌单。
+ * 歌曲自带来源 ID，地址播放时由播放链路路由解析，导入阶段不需要搜索。
  */
 export async function importFromLink(
   playlistId: string | number,

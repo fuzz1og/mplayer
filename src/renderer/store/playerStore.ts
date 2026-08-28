@@ -3,7 +3,7 @@ import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
-import { isSessionProtectedEndpoint, stripSourceIdPrefix, findExactMatch, getNextSongIndex, getPrevSongIndex, songUsesSongidLyrics, isSodaSource } from '@mplayer/core';
+import { findExactMatch, getNextSongIndex, getPrevSongIndex, songUsesSongidLyrics, isSodaSource } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
@@ -262,39 +262,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       }
 
-      // 死链 fresh 兜底：受保护端点（签名 URL）解析回原样 = 签名过期/
-      // 会话失效（服务端返回错误页而非 302）。按源站 ID 重取全新三件套，
-      // 播放不再依赖列表刷新先行完成；成功顺手回写 URL 缓存。
-      if (
-        song.sourceType !== 'local' &&
-        song.sourceType !== 'soda' &&
-        song.id &&
-        realUrl &&
-        realUrl === song.url &&
-        isSessionProtectedEndpoint(song.url)
-      ) {
-        try {
-          const fresh = await callMusicApi('searchSongById', stripSourceIdPrefix(String(song.id)), song.sourceType, true);
-          if (fresh?.url?.startsWith('http')) {
-            realUrl = fresh.url;
-            void IpcClient.invoke<void>('cache:setSongResources', song.id, {
-              url: fresh.url,
-              cover: fresh.cover,
-              lrc: fresh.lrc,
-            }).catch(() => {});
-          } else {
-            // 自建 API 已退役时 searchSongById 可能拿不到结果；把死链置空，
-            // 走下方按歌名搜索兜底，避免把失效签名 URL 直接交给播放器。
-            realUrl = '';
-          }
-        } catch (freshError) {
-          console.warn('播放 URL fresh 重试失败，使用原解析结果:', freshError);
-          realUrl = '';
-        }
-      }
-
-      // 无 url 歌曲（直连解析失败 / 死链 fresh 失败 / 列表未带 url）：
-      // 按歌名搜索解析一次，失败走下方报错。
+      // 无 url 歌曲（直连解析失败 / 列表未带 url）：按歌名搜索解析一次，
+      // 失败走下方报错。「受保护端点死链 fresh 兜底」分支已随 searchSongById
+      // 死腿删除（自建 API 退役后恒 null，#273）。
       if (!realUrl && song.sourceType !== 'local' && song.sourceType !== 'soda' && song.name) {
         try {
           const results = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`.trim(), 1, song.sourceType);

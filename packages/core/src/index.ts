@@ -8,6 +8,7 @@ export type { ProxyAgents } from './api/musicApi.js';
 export { probeAudio, probeAudioUrl, normalizeProbeUrl, isUrlAlive } from './api/audioProbe.js';
 export { probeSongs } from './api/probeSongs.js';
 export type { ProbeOptions } from './api/probeSongs.js';
+export { forgetPrefetchedUrl } from './api/prefetchCache.js';
 export { dedupeSongs, checkDuplicate, filterDuplicates } from './utils/songDedupe.js';
 export type { DupStatus, DupResult, FilterResult } from './utils/songDedupe.js';
 export { groupIntoSongGroups } from './utils/groupIntoSongGroups.js';
@@ -63,12 +64,12 @@ export { resolvePlayableUrl, resolvePlayableSong, stripSourceIdPrefix } from './
 export type { UrlResolver, PlayableSong } from './shared/resolvePlayableUrl.js';
 export { resolveFreshUrl } from './shared/resolveFreshUrl.js';
 export type { FreshUrlResolver } from './shared/resolveFreshUrl.js';
-export { parsePlaylistUrl, parseSongList, importSongs, importFromLink } from './api/playlistImport.js';
-export type { PlaylistUrlInfo, ParsedLine, ProgressState, ImportResult, PlaylistImportDeps, ImportSource } from './api/playlistImport.js';
+export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
+export type { PlaylistUrlInfo, ProgressState, ImportResult, PlaylistImportDeps, ImportSource } from './api/playlistImport.js';
 export { CacheKernel } from './cache/cacheKernel.js';
 export { createMemoryBackend } from './cache/backends/memoryBackend.js';
 export { DEFAULT_TTL } from './cache/ttl.js';
-export { SongResourcesCache, SONGS_TTL_MS, COVERS_TTL_MS } from './cache/songResourcesCache.js';
+export { SongResourcesCache, SONGS_TTL_MS } from './cache/songResourcesCache.js';
 export type { SongResources, SongResourcesCacheOptions } from './cache/songResourcesCache.js';
 export type { CachePort, CacheBackend, CacheStats } from './cache/types.js';
 export {

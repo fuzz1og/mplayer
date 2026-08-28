@@ -3,13 +3,11 @@ import {
   View, Text, Image, Pressable, StyleSheet, Animated, Easing,
 } from 'react-native';
 import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, Loader2 } from 'lucide-react-native';
-import { invalidateCoverUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
 import { radius, spacing, textVariants } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import { useResolvedCover } from '../hooks/useResolvedCover';
 import ScalePress from './ScalePress';
 import QueueListModal from './QueueListModal';
 import ChromeBlur from './ChromeBlur';
@@ -44,17 +42,13 @@ export default function PlayerBar() {
     };
   }, [preparing, spin]);
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  // 封面加载失败 → 占位图标 + 懒刷新兜底（搜索补新封面，写回后自动恢复）
+  // 封面加载失败 → 占位图标 + 懒刷新兜底（搜索补新封面，写回后自动恢复）。
+  // 原生 <Image> 直连 CDN 直链渲染
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [currentSong?.cover]);
-  const coverUrl = useResolvedCover(currentSong?.cover);
-  useEffect(() => { setCoverFailed(false); }, [coverUrl]);
   const handleCoverError = () => {
     setCoverFailed(true);
     if (currentSong) {
-      // 封面自身失效：清除解析缓存（归一化 key 命中失效直链会永远失败占位）
-      // 再强制搜索补新签名封面
-      void invalidateCoverUrl(currentSong.cover || '');
       void fetchLrcInBackground(currentSong, true, true);
     }
   };
@@ -70,8 +64,8 @@ export default function PlayerBar() {
     >
       {/* 专辑封面 */}
       <View style={styles.coverWrap}>
-        {coverUrl && !coverFailed ? (
-          <Image source={{ uri: coverUrl }} style={styles.cover} onError={handleCoverError} />
+        {currentSong?.cover && !coverFailed ? (
+          <Image source={{ uri: currentSong.cover }} style={styles.cover} onError={handleCoverError} />
         ) : (
           <Music size={24} color={colors.textTertiary} />
         )}

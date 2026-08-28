@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Play } from 'lucide-react';
+import { ArrowLeft, Download, Play, Music2 } from 'lucide-react';
 import { Modal, message } from 'antd';
 import SongList from '@/renderer/components/SongList';
-import CoverImage from '@/renderer/components/CoverImage';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -71,18 +70,9 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
       const offset = reset ? 0 : songs.length;
       const page = await callMusicApi('getNeteasePlaylistSongsPage', parseInt(id), offset, PAGE_SIZE);
 
-      // 分页失败时仅第一页回退第三方解析
       if (!page || page.songs.length === 0) {
         if (reset) {
-          const playlistUrl = `https://music.163.com/#/playlist?id=${id}`;
-          const fallback = await callMusicApi('getPlaylistSongsFromThirdParty', playlistUrl);
-          if (fallback && fallback.length > 0) {
-            setSongs(fallback);
-            setTotal(fallback.length);
-            setHasMore(false);
-          } else {
-            setSongsError('加载歌曲失败，请稍后重试');
-          }
+          setSongsError('加载歌曲失败，请稍后重试');
         }
         return;
       }
@@ -207,8 +197,21 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
 
       <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
         <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
-          <div style={{ width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}>
-            <CoverImage src={playlist.coverImgUrl} alt={playlist.name} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <div style={{ position: 'relative', width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', backgroundColor: 'var(--bg-hover)' }}>
+            {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Music2 size={40} style={{ color: 'var(--text-tertiary)' }} />
+            </div>
+            {playlist.coverImgUrl && (
+              <img
+                key={playlist.coverImgUrl}
+                src={playlist.coverImgUrl}
+                alt={playlist.name}
+                loading="lazy"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            )}
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px', marginTop: 0 }}>{playlist.name}</h2>

@@ -1,10 +1,9 @@
 import { create } from 'zustand';
 const ipcRenderer = window.electronAPI;
-import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, SongBase } from '@mplayer/core';
-import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
+import { findExactMatch } from '@mplayer/core';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { isLegacyDeadUrl } from '@mplayer/core';
 
@@ -49,21 +48,10 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
         };
       }
 
-      // 如果缓存中没有（或缓存是旧死链），先按源站 ID 直接识别。
-      // 自建 API 退役后 searchSongById 会返回 null，再回退按歌名精确匹配。
+      // 缓存没有（或缓存是旧死链）时，「按 ID 识别」死腿已删
+      // （自建 API 退役后 searchSongById 恒 null，#273）：直接按歌名精确匹配。
       let matchedSong: Song | null = null;
-      try {
-        matchedSong = await callMusicApi(
-          'searchSongById',
-          stripSourceIdPrefix(String(song.id)),
-          song.sourceType,
-          true,
-        );
-      } catch {
-        matchedSong = null;
-      }
-
-      if (!matchedSong && song.name) {
+      if (song.name) {
         try {
           const results = await callMusicApi(
             'searchSongsRouted',
@@ -109,8 +97,6 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
           lrc: updated.lrc,
           sourceType: updated.sourceType,
         }).catch(() => {}); // fire-and-forget
-
-        if (updated.cover) cacheCoverImage(updated.cover).catch(() => {});
 
         return updated;
       }

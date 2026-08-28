@@ -104,7 +104,6 @@ vi.mock('@mplayer/core', async () => {
     md5: actual.md5,
     musicApi: {
       ...actual.musicApi,
-      getAudioUrl: vi.fn(async (u: string) => u),
       getLyrics: vi.fn(async () => '[00:12.00]你好'),
     },
   };
