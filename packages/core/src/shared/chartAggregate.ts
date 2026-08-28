@@ -8,8 +8,7 @@ import type { ToplistGroup } from './sourceRouter.js';
  * 输入 = 各源榜单歌组（ToplistGroup，rank 由索引推导），输出 = 跨源归一合并后的
  * 聚合歌曲组（分数降序）。纯函数零 I/O、零缓存——宿主自管缓存与并发拉取。
  *
- * 桌面 chartAggregator 保持现状（消费侧改造留给 #279）；本模块先定型聚合语义，
- * 后续消费方接 `getDirectClient(source).getToplists()` + 本函数即可复现现有行为。
+ * 桌面 chartAggregator 已接本内核（#279），三源榜单腿走 `getDirectClient(source).getToplists()`。
  */
 
 /** 未上榜源的默认排名（1/51 权重，与桌面 chartAggregator 语义一致）。 */
