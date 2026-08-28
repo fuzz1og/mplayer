@@ -118,6 +118,9 @@ describe('resolveQqPlaylistDisstid', () => {
   it('短链走 302 Location 头解析（不跟随重定向的传输）', async () => {
     const transport = vi.fn(async (req: any) => {
       expect(req.url).toBe('https://c6.y.qq.com/base/fcgi-bin/u?__=w3lqEpOHACLO');
+      // 必须显式要求不跟随：真实桌面 axios 默认跟随 302，跟完既无 location 也无
+      // responseURL（Node 适配器），落地地址拿不到（#280 验收实测回归）。
+      expect(req.maxRedirects).toBe(0);
       return jsonResponse({}, { status: 302, headers: { location: 'https://i.y.qq.com/n2/m/share/details/taoge.html?id=5204875759&from=app' } });
     });
     setTransport(transport as any);

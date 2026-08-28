@@ -95,7 +95,10 @@ export async function resolveQqPlaylistDisstid(url: string): Promise<number> {
     // 短链才继续跟跳；其余形态（含歌曲链接）按无法识别/歌曲链接报错。
     if (!isQqShortLink(current)) throw unknownLinkError(current);
 
-    const res = await request({ method: 'GET', url: current, timeoutMs: 10000 });
+    // maxRedirects:0：桌面 axios 默认跟随 302，跟完后既无 location 头也（Node 上）
+    // 无 responseURL，落地地址就拿不到了；显式不跟随，302 + Location 才可见。
+    // RN XHR 忽略此字段原生跟随，走 responseURL 兜底。
+    const res = await request({ method: 'GET', url: current, timeoutMs: 10000, maxRedirects: 0 });
     if (res.status >= 400) throw new Error(`QQ 短链已失效（HTTP ${res.status}）`);
     const location = res.headers?.location;
     const locationStr = Array.isArray(location) ? location[0] : location;

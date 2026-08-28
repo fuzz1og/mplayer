@@ -8,6 +8,18 @@ import { addNotificationResponseListener, requestNotificationPermission, setupNo
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setupLegacyMigration } from '../services/legacyMigration';
 import { setProxyUrl as setCoreProxyUrl, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
+
+// 启动即注册直连客户端（T02 网易 / T03 汽水 / T04 千千 / T05 咪咕 / T06 QQ / T07 酷狗 / T08 酷我）。
+// 必须在模块顶层注册：发现页首屏数据请求（getToplists 等）早于任何 useEffect 执行，
+// 注册若放在 effect 里会撞上未注册窗口期（getDirectClient 返回 undefined 直接崩溃）。
+registerDirectClient(neteaseDirectClient);
+registerDirectClient(sodaDirectClient);
+registerDirectClient(qianqianDirectClient);
+registerDirectClient(miguDirectClient);
+registerDirectClient(qqDirectClient);
+registerDirectClient(kuwoDirectClient);
+registerDirectClient(kugouDirectClient);
+
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -107,15 +119,6 @@ export default function RootLayout() {
 
   // 启动时将已保存的设置同步到 core 模块
   useEffect(() => {
-    // 注册直连客户端（T02 网易 / T03 汽水 / T04 千千 / T05 咪咕 / T06 QQ / T07 酷狗 / T08 酷我）
-    registerDirectClient(neteaseDirectClient);
-    registerDirectClient(sodaDirectClient);
-    registerDirectClient(qianqianDirectClient);
-    registerDirectClient(miguDirectClient);
-    registerDirectClient(qqDirectClient);
-    registerDirectClient(kuwoDirectClient);
-    registerDirectClient(kugouDirectClient);
-
     if (proxyUrl) {
       setCoreProxyUrl(proxyUrl);
     }
