@@ -18,7 +18,6 @@ import {
   resolvePlayableUrlRouted as routedResolveUrl,
   resolvePlayableSongRouted as routedResolveSong,
   resolvePlayableSongDirect as routedResolveSongDirect,
-  configureSourceRouter,
 } from '../shared/sourceRouter.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
@@ -2606,9 +2605,3 @@ export const musicApi = {
   /** 模式感知播放解析 + 试听版检测（T12：UrlInfo 完整时长校验 → nonFull 标记）。 */
   resolvePlayableSongRouted: (song: Song) => routedResolveSong(song),
 };
-
-// 路由的 api 腿 = 自建 API 现状语义（搜索 POST / 播放直链解析）。
-configureSourceRouter({
-  searchSongs: (query, page, source) => musicApi.searchSongs(query, page, source),
-  getAudioUrl: (url) => musicApi.getAudioUrl(url),
-});

@@ -6,7 +6,6 @@ import {
   clearDirectClients,
   setSourceMode,
   setSourceModes,
-  configureSourceRouter,
   resolvePlayableSongRouted,
   setTier3Enabled,
   setTier3Resolver,
@@ -17,7 +16,7 @@ import { clearPrefetchCache, setPrefetchedUrl } from '../../api/prefetchCache.js
  * T12 试听版检测 + 可播性预检测试（#158）。
  * - classifyLength / isTrialUrlInfo：纯函数，独立边界向量（0.95 完整 / 0.5 试听分界）。
  * - resolvePlayableSongRouted：接缝矩阵（UrlInfo trial → nonFull；无 UrlInfo →
- *   resolvePlayableUrl；空 URL → 换元层；auto 回退）。
+ *   resolvePlayableUrl；空 URL → 换元层；直连失败且 tier3 未命中 → 上抛）。
  */
 
 const song = (duration = 240, overrides: Partial<Song> = {}): Song => ({
@@ -39,10 +38,6 @@ beforeEach(() => {
   setSourceModes({});
   setTier3Enabled(false);
   setTier3Resolver(null);
-  configureSourceRouter({
-    searchSongs: vi.fn(async () => []),
-    getAudioUrl: vi.fn(async (u: string) => `api:${u}`),
-  });
 });
 
 describe('classifyLength 完整时长校验', () => {
@@ -138,14 +133,12 @@ describe('resolvePlayableSongRouted（带试听检测的播放解析）', () => 
     expect(res).toEqual({ url: '', nonFull: false });
   });
 
-  it('auto 直连失败 → 回退 api 腿', async () => {
+  it('auto 直连失败且 tier3 未命中 → 上抛（D2，api 腿已拆除）', async () => {
     registerDirectClient({
       key: 'netease',
       resolvePlayableUrl: vi.fn(async () => { throw new Error('直连失败'); }),
     });
-    const res = await resolvePlayableSongRouted(song());
-    expect(res.url).toBe('api:https://api.example.com/x.mp3');
-    expect(res.nonFull).toBe(false);
+    await expect(resolvePlayableSongRouted(song())).rejects.toThrow('直连失败');
   });
 
   it('direct 模式失败 → 上抛', async () => {
@@ -157,11 +150,10 @@ describe('resolvePlayableSongRouted（带试听检测的播放解析）', () => 
     await expect(resolvePlayableSongRouted(song())).rejects.toThrow('直连失败');
   });
 
-  it('api 模式 → 直接走 api 腿', async () => {
+  it('legacy api 模式（#277 收窄前）→ 无直连可用，报错「暂无直连实现」', async () => {
     registerDirectClient({ key: 'netease', resolvePlayableUrl: vi.fn(async () => 'https://direct.mp3') });
     setSourceMode('netease', 'api');
-    const res = await resolvePlayableSongRouted(song());
-    expect(res.url).toBe('api:https://api.example.com/x.mp3');
+    await expect(resolvePlayableSongRouted(song())).rejects.toThrow('暂无直连实现');
   });
 
   it('开启 tier3 + audioTag=invalid：直连返回非空也优先用 tier3', async () => {

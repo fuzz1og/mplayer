@@ -113,14 +113,13 @@ export {
   loadSourceModes,
   getAllSourceModes,
   setSourceModePersister,
-  configureSourceRouter,
   searchSongsRouted,
   resolvePlayableUrlRouted,
   resolvePlayableSongRouted,
   resolvePlayableSongDirect,
   setTier3Resolver,
 } from './shared/sourceRouter.js';
-export type { SourceMode, DirectSourceClient, SourceRouterLegs, Tier3Resolver } from './shared/sourceRouter.js';
+export type { SourceMode, DirectSourceClient, Tier3Resolver } from './shared/sourceRouter.js';
 export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS } from './shared/sourceRouter.js';
 export { detectAudioContainer, containerFromContentType, extensionForContainer, replaceExtension } from './download/container.js';
 export type { AudioContainer } from './download/container.js';
