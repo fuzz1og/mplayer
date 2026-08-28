@@ -34,6 +34,7 @@
     "core:build": "npm run build -w packages/core"
   },
   "dependencies": {
+    "buffer": "^6.0.3",
     "electron-updater": "^6.8.9",
     "mp3tag.js": "^3.17.0",
     "music-metadata": "^11.12.3"
