@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import { type Song, SourceKey, invalidateCoverUrl } from '@mplayer/core';
+import { type Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
@@ -23,7 +23,6 @@ import { downloadSong } from '../services/downloadService';
 import { searchSwapCandidates, applySwap, probeSwapCandidates } from '../services/sourceSwap';
 import type { SwapCandidate } from '../services/sourceSwap';
 import { searchStrictMatch } from '../services/songResources';
-import { useResolvedCover } from '../hooks/useResolvedCover';
 import { withCoverSearchSlot } from '../services/coverSearchSlot';
 import ScalePress from './ScalePress';
 
@@ -62,9 +61,9 @@ export default function SongRow({
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
 
   // 封面失效兜底：缓存 URL 挂了 → 搜索重载（每行最多一次，严格匹配防翻唱封面）
+  // 原生 <Image> 直连 CDN 直链渲染
   const [cover, setCover] = useState(song.cover);
   const coverFallbackUsed = useRef(false);
-  const resolvedCover = useResolvedCover(cover);
   useEffect(() => {
     setCover(song.cover);
     coverFallbackUsed.current = false;
@@ -74,9 +73,6 @@ export default function SongRow({
     if (coverFallbackUsed.current || !song.name) return;
     coverFallbackUsed.current = true;
     setCover('');
-    // 封面自身失效：先清除解析缓存（归一化 key 命中失效直链会循环失败），
-    // 兜底搜索的新签名 URL 才能重新解析出新直链
-    void invalidateCoverUrl(cover);
     void withCoverSearchSlot(async () => {
       try {
         const fresh = await searchStrictMatch(song);
@@ -241,8 +237,8 @@ export default function SongRow({
         <Text style={[styles.rank, rank <= 3 && { color: colors.rankText[rank - 1] }]}>{rank}</Text>
       )}
 
-      {resolvedCover ? (
-        <Image source={{ uri: resolvedCover }} style={styles.cover} onError={handleCoverError} />
+      {cover ? (
+        <Image source={{ uri: cover }} style={styles.cover} onError={handleCoverError} />
       ) : (
         <View style={[styles.cover, styles.coverPlaceholder]}>
           <Music size={22} color={colors.textDisabled} />

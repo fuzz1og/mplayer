@@ -9,7 +9,6 @@ import type { Playlist } from '../stores/playlistStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
 import { useRefreshedCover } from '../hooks/useRefreshedCover';
-import { useResolvedCover } from '../hooks/useResolvedCover';
 import CollapsingHero from './CollapsingHero';
 import SongRow from './SongRow';
 import type { Song } from '@mplayer/core';
@@ -32,16 +31,13 @@ export default function PlaylistHero({
   /** 悬浮导航栏右侧动作插槽（透传 CollapsingHero） */
   navRight?: React.ReactNode;
 }) {
-  // 自建歌单封面 = 第一首歌封面；过期则占位等待重新搜索后的最新封面
+  // 自建歌单封面 = 第一首歌封面；过期则占位等待重新搜索后的最新封面。
+  // 原生 <Image> 直连 CDN 直链渲染
   const { cover, handleError } = useRefreshedCover(playlist.songs[0] || null);
-  // 封面 URL 可能是 api.php?get=pic 会话保护端点（原生 <Image> 无法带 cookie，
-  // 直接加载必失败 → 占位图）。解析成 CDN 直链后再渲染——否则歌单详情页
-  // 永远只显示占位/搜索兜底的错误封面（"封面不是第一首歌的图片"）。
-  const resolvedCover = useResolvedCover(cover);
 
   return (
     <CollapsingHero
-      cover={resolvedCover}
+      cover={cover}
       onCoverError={handleError}
       navTitle={playlist.name}
       navRight={navRight}

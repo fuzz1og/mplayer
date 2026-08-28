@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Song } from '@mplayer/core';
-import { invalidateCoverUrl } from '@mplayer/core';
 import { searchStrictMatch } from '../services/songResources';
 
 /**
@@ -47,9 +46,6 @@ export function useRefreshedCover(song: Song | null | undefined): {
     searched.current = true;
     // 旧封面已失效：立即切占位，等待搜索补新封面后再渲染（避免闪失效图）
     setCover(undefined);
-    // 封面自身失效：先清除解析缓存（归一化 key 命中失效直链会循环失败），
-    // 兜底搜索的新签名 URL 才能重新解析出新直链（与 SongRow 同一套机制）
-    void invalidateCoverUrl(song.cover || '');
     void withCoverSearchSlot(async () => {
       try {
         const fresh = await searchStrictMatch(song);

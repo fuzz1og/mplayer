@@ -17,9 +17,8 @@ import { togglePlay, seekTo, playSong, fetchLrcInBackground } from '../services/
 import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import QueueListModal from './QueueListModal';
-import { useResolvedCover } from '../hooks/useResolvedCover';
 import BottomSheet from './BottomSheet';
-import { parseLRC, musicApi, findCurrentLyricIndex, invalidateCoverUrl, songUsesSongidLyrics, isSodaSource } from '@mplayer/core';
+import { parseLRC, musicApi, findCurrentLyricIndex, songUsesSongidLyrics, isSodaSource } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
@@ -236,16 +235,14 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (!song) onCloseRef.current();
   }, [song]);
 
-  // 封面加载失败 → 占位唱片 + 懒刷新兜底（搜索补新封面，写回后自动恢复）
+  // 封面加载失败 → 占位唱片 + 懒刷新兜底（搜索补新封面，写回后自动恢复）。
+  // 原生 <Image> 直连 CDN 直链渲染
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [song?.cover]);
-  const coverUrl = useResolvedCover(song?.cover);
-  useEffect(() => { setCoverFailed(false); }, [coverUrl]);
   const handleCoverError = () => {
     setCoverFailed(true);
     if (song) {
-      // 封面自身失效：清除解析缓存后强制换新签名封面（见 fetchLrcInBackground）
-      void invalidateCoverUrl(song.cover || '');
+      // 封面自身失效：强制搜索换新签名封面（见 fetchLrcInBackground）
       void fetchLrcInBackground(song, true, true);
     }
   };
@@ -520,9 +517,9 @@ export default function PlayerOverlay({ onClose }: Props) {
               <View style={styles.turntableWrap}>
                 <View style={[styles.plinth, { width: plinthSize(winW, winH), height: plinthSize(winW, winH) }]}>
                   <View style={[styles.platter, { width: plinthSize(winW, winH) - 30, height: plinthSize(winW, winH) - 30 }]} />
-                  {coverUrl && !coverFailed ? (
+                  {song?.cover && !coverFailed ? (
                     <Animated.Image
-                      source={{ uri: coverUrl }}
+                      source={{ uri: song.cover }}
                       style={[styles.cover, { width: plinthSize(winW, winH) - 40, height: plinthSize(winW, winH) - 40, transform: [{ rotate: spin }] }]}
                       onError={handleCoverError}
                     />
