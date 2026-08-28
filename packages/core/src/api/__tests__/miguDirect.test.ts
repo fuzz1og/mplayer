@@ -46,7 +46,7 @@ describe('decryptXorStream 换位流解密（纯函数，已知向量）', () =>
   });
 });
 
-describe('miguDirectClient.search', () => {
+describe('miguDirectClient.searchSongs', () => {
   it('搜索经 transport 出网并映射 Song（lyricUrl → lrc，封面 https）', async () => {
     const transport = vi.fn(async () =>
       textResponse(JSON.stringify({
@@ -65,7 +65,7 @@ describe('miguDirectClient.search', () => {
     );
     setTransport(transport as any);
 
-    const songs = await miguDirectClient.search('晴天', 1);
+    const songs = await miguDirectClient.searchSongs('晴天', 1);
 
     expect(transport).toHaveBeenCalledTimes(1);
     const req = transport.mock.calls[0][0];
@@ -85,12 +85,12 @@ describe('miguDirectClient.search', () => {
 
   it('源站异常上抛（供 sourceRouter auto 回退自建 API）', async () => {
     setTransport(async () => { throw new Error('migu 直连失败'); });
-    await expect(miguDirectClient.search('晴天', 1)).rejects.toThrow('migu 直连失败');
+    await expect(miguDirectClient.searchSongs('晴天', 1)).rejects.toThrow('migu 直连失败');
   });
 
   it('业务错误码（非 000000）上抛', async () => {
     setTransport(async () => textResponse(JSON.stringify({ code: '300001', message: '限流' })) as any);
-    await expect(miguDirectClient.search('晴天', 1)).rejects.toThrow('300001');
+    await expect(miguDirectClient.searchSongs('晴天', 1)).rejects.toThrow('300001');
   });
 });
 

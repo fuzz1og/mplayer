@@ -12,7 +12,7 @@ vi.mock('@/renderer/services/importService', async (importOriginal) => {
   };
 });
 
-// music 域 IPC 走 callMusicApi（getNeteasePlaylistSongs 原生歌单接口）
+// music 域 IPC 走 callMusicApi（getPlaylistSongs 原生歌单接口）
 const callMusicApiMock = vi.hoisted(() => vi.fn(async () => []));
 vi.mock('@/renderer/services/callMusicApi', () => ({
   callMusicApi: callMusicApiMock,
@@ -43,7 +43,7 @@ describe('ImportWorkflow Integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    callMusicApiMock.mockResolvedValue([]);
+    callMusicApiMock.mockResolvedValue({ songs: [], total: 0 });
   });
 
   it('should complete full link import flow via native netease api', async () => {
@@ -63,7 +63,7 @@ describe('ImportWorkflow Integration', () => {
       skips: [],
     };
 
-    callMusicApiMock.mockResolvedValue(mockSongs);
+    callMusicApiMock.mockResolvedValue({ songs: mockSongs, total: mockSongs.length });
     (importFromLink as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
     render(<ImportPlaylistModal {...defaultProps} />);
@@ -83,7 +83,7 @@ describe('ImportWorkflow Integration', () => {
     });
 
     // 原生接口拉全量曲目
-    expect(callMusicApiMock).toHaveBeenCalledWith('getNeteasePlaylistSongs', 123);
+    expect(callMusicApiMock).toHaveBeenCalledWith('getPlaylistSongs', 'netease', 123, 0, 0);
 
     // Click import selected songs
     fireEvent.click(screen.getByText(/导入选中歌曲/));

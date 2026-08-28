@@ -22,7 +22,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('kugouDirectClient.search', () => {
+describe('kugouDirectClient.searchSongs', () => {
   it('搜索映射 Song（hash → id，lrc = 两步歌词 search URL）', async () => {
     const transport = vi.fn(async () =>
       jsonResponse(JSON.stringify({
@@ -41,7 +41,7 @@ describe('kugouDirectClient.search', () => {
     );
     setTransport(transport as any);
 
-    const songs = await kugouDirectClient.search('晴天', 1);
+    const songs = await kugouDirectClient.searchSongs('晴天', 1);
 
     const req = transport.mock.calls[0][0];
     expect(req.url).toContain('songsearch.kugou.com/song_search_v2');
@@ -55,7 +55,7 @@ describe('kugouDirectClient.search', () => {
 
   it('失败上抛（供 auto 回退）', async () => {
     setTransport(async () => { throw new Error('kugou 搜索失败'); });
-    await expect(kugouDirectClient.search('晴天', 1)).rejects.toThrow('kugou 搜索失败');
+    await expect(kugouDirectClient.searchSongs('晴天', 1)).rejects.toThrow('kugou 搜索失败');
   });
 });
 

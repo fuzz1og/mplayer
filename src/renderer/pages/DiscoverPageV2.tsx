@@ -178,7 +178,7 @@ const DiscoverPageV2: React.FC = () => {
     setAlbumsError(null);
 
     try {
-      const albumData = await callMusicApi('getNewAlbums', area, 0, 30);
+      const albumData = await callMusicApi('getNewAlbums', 'netease', area, 0, 30);
       if (!mountedRef.current || fetchId !== albumsFetchIdRef.current) return;
 
       setAlbums(albumData);
@@ -211,7 +211,7 @@ const DiscoverPageV2: React.FC = () => {
 
     const offset = reset ? 0 : playlistListOffsetRef.current;
     try {
-      const data = await callMusicApi('getNeteasePlaylists', playlistCategory, 'hot', offset, PLAYLIST_PAGE_SIZE);
+      const data = await callMusicApi('getPlaylists', 'netease', playlistCategory, 'hot', offset, PLAYLIST_PAGE_SIZE);
       if (!mountedRef.current || fetchId !== playlistsFetchIdRef.current) return;
 
       setPlaylistList(prev => reset ? data.playlists : [...prev, ...data.playlists]);

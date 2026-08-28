@@ -24,8 +24,8 @@ const RecommendPage: React.FC = () => {
     setError(null);
     try {
       const [playlists, songs] = await Promise.all([
-        callMusicApi('getRecommendedPlaylists', 30),
-        callMusicApi('getRecommendedSongs', 100),
+        callMusicApi('getRecommendedPlaylists', 'netease', 30),
+        callMusicApi('getRecommendedSongs', 'netease', 100),
       ]);
       setRecommendedPlaylists(playlists || []);
       setRecommendedSongs(songs || []);

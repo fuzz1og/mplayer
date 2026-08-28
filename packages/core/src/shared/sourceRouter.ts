@@ -1,4 +1,4 @@
-import type { Song, SourceKey } from '../types/index.js';
+import type { Album, Artist, DiscoverPlaylist, Song, SourceKey } from '../types/index.js';
 import { isTrialUrlInfo } from './playability.js';
 import type { UrlInfo } from './playability.js';
 import { getPrefetchedUrl } from '../api/prefetchCache.js';
@@ -37,15 +37,102 @@ export const SOURCE_MODE_OPTIONS: { value: SourceMode; label: string }[] = [
   { value: 'direct', label: '仅直连' },
 ];
 
+/**
+ * 榜单分组（#239 内容能力统一榜单结构）。
+ * id 全局唯一：`${source}:${sourceId}`（如 `netease:3778678`）；
+ * rank 不落结构——消费方按 songs 数组索引推导。
+ */
+export interface ToplistGroup {
+  id: string;
+  name: string;
+  songs: Song[];
+}
+
+/**
+ * 内容缓存抽象（D6 #239）：直连客户端经构造注入访问宿主缓存，
+ * core 默认实现包一层 cacheManager（同语义：get 命中返回数据 / 未命中 null，
+ * set 由后端决定空值是否入缓存）。仅网易内容实现先行，接口先定型。
+ */
+export interface ContentCache {
+  get<T>(key: string): T | null;
+  set<T>(key: string, data: T, ttlMs: number): void;
+}
+
+/**
+ * 单源直连客户端能力面（#239/#240）：
+ * - 基础三能力（searchSongs / resolvePlayableUrl / resolveUrlInfo）；
+ * - 内容能力平铺进客户端，**不设 content 子对象**（search 本身也是内容能力）；
+ *   能力探测 = 方法存在性（`client.getToplists?`），与 hasCapability 同构；
+ * - 命名规则：搜索 `search<实体>s` / 列表 `get<实体>s` / 详情 `get<实体>Detail` /
+ *   播放 `resolve*`（批量加复数）；
+ * - 内容方法统一返回 `Song`（rank 由消费方按索引推导，HotlistSong 已废）。
+ * 全部可选：各源按自身能力实现子集。
+ */
 export interface DirectSourceClient {
   key: SourceKey;
+  // ── 基础能力 ─────────────────────────────────────────────────────
   /** 源站搜索（直连）。未实现则不提供。 */
-  search?: (keyword: string, page: number) => Promise<Song[]>;
+  searchSongs?: (keyword: string, page: number) => Promise<Song[]>;
   /** 播放 URL 直连解析；无版权/VIP 返回 ''（交给换元层）。 */
   resolvePlayableUrl?: (song: Song) => Promise<string>;
   /** 权威完整时长验证字段（T12 预检使用；按源覆盖，可不提供）。 */
   resolveUrlInfo?: (song: Song) => Promise<UrlInfo | null>;
+  // ── 内容能力（#239 接口形态）────────────────────────────────────
+  /** 歌手搜索（searchNeteaseArtists 迁入）。 */
+  searchArtists?: (keyword: string, limit: number) => Promise<Artist[]>;
+  /** 榜单全集（热榜/新歌榜…，id=`${source}:${sourceId}`）。 */
+  getToplists?: () => Promise<ToplistGroup[]>;
+  /** 每日推荐歌曲。 */
+  getRecommendedSongs?: (limit: number) => Promise<Song[]>;
+  /** 推荐歌单。 */
+  getRecommendedPlaylists?: (limit: number) => Promise<DiscoverPlaylist[]>;
+  /** 新碟上架（area 分类 + 分页）。 */
+  getNewAlbums?: (area: string, offset: number, limit: number) => Promise<Album[]>;
+  /** 专辑详情 + 专辑歌曲。 */
+  getAlbumDetail?: (albumId: string) => Promise<{ album: Album; songs: Song[] } | null>;
+  /** 歌手分类列表（cat 透传，offset/limit 分页）。 */
+  getArtists?: (cat: number, offset: number, limit: number) => Promise<{ artists: Artist[]; total: number; more: boolean }>;
+  /** 歌手详情合并（hotSongs + albums，一次调用渲染歌手页首屏）。 */
+  getArtistDetail?: (artistId: string) => Promise<{ artist: Artist | null; hotSongs: Song[]; albums: Album[] }>;
+  /** 歌手歌曲（分页；order: hot|time）。 */
+  getArtistSongs?: (artistId: string, offset: number, limit: number, order?: string) => Promise<{ songs: Song[]; total: number }>;
+  /** 歌手专辑（分页；#278 保留独立方法：桌面歌手页专辑年表需无限滚动）。 */
+  getArtistAlbums?: (artistId: string, offset: number, limit: number) => Promise<{ albums: Album[]; total: number; more: boolean }>;
+  /** 歌单列表（cat + order + 分页）。 */
+  getPlaylists?: (cat: string, order: string, offset: number, limit: number) => Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }>;
+  /** 歌单详情。 */
+  getPlaylistDetail?: (id: number) => Promise<DiscoverPlaylist | null>;
+  /** 歌单歌曲（分页；limit <= 0 = 全量，供导入/播放全部场景）。 */
+  getPlaylistSongs?: (id: number, offset: number, limit: number) => Promise<{ songs: Song[]; total: number }>;
+  /** 批量补齐歌曲可播放 URL（原 fillSongUrls/resolveNeteaseSongUrls 并入）。 */
+  resolvePlayableUrls?: (songs: Song[]) => Promise<void>;
 }
+
+/**
+ * IPC 暴露的内容方法清单（#240：契约从客户端接口派生的唯一手写物）。
+ * 每方法在 IPC 层带 `source: SourceKey` 首参（`musicApi:call('getToplists', 'netease')`），
+ * 主进程分发表按清单循环泛型分派到 `getDirectClient(source)`（未实现源抛错）。
+ * `satisfies` 钉死清单 ⊆ 客户端接口方法名（加方法漏登记 → 编译期必报错）。
+ */
+export const CONTENT_METHODS = [
+  'searchSongs',
+  'searchArtists',
+  'getToplists',
+  'getRecommendedSongs',
+  'getRecommendedPlaylists',
+  'getNewAlbums',
+  'getAlbumDetail',
+  'getArtists',
+  'getArtistDetail',
+  'getArtistSongs',
+  'getArtistAlbums',
+  'getPlaylists',
+  'getPlaylistDetail',
+  'getPlaylistSongs',
+  'resolvePlayableUrls',
+] as const satisfies readonly (keyof DirectSourceClient)[];
+
+export type ContentMethod = (typeof CONTENT_METHODS)[number];
 
 // ── 直连客户端注册表 ────────────────────────────────────────────────
 
@@ -299,14 +386,14 @@ export async function searchSongsRouted(
   page: number,
   source: SourceKey,
 ): Promise<Song[]> {
-  const route = decideRoute(source, (c) => !!c.search);
+  const route = decideRoute(source, (c) => !!c.searchSongs);
   if (route.kind === 'direct-unavailable') {
     const tier3Songs = await tryTier3Search(query, page, source);
     if (tier3Songs.length > 0) return tier3Songs;
     throw new Error('该源暂无直连实现');
   }
   try {
-    const directSongs = await route.client.search!(query, page);
+    const directSongs = await route.client.searchSongs!(query, page);
     if (directSongs.length > 0) return directSongs;
     // 直连返回空也视为“未命中”，进入 tier3 搜索兜底（若启用）。
     const tier3Songs = await tryTier3Search(query, page, source);

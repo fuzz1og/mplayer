@@ -41,10 +41,10 @@ function captureCloudsearch(respondJson: unknown) {
   return getSeen;
 }
 
-describe('neteaseDirectClient.search（cloudsearch 直连搜索）', () => {
+describe('neteaseDirectClient.searchSongs（cloudsearch 直连搜索）', () => {
   it('POST 明文 cloudsearch 表单 s/type/limit/offset，页码从 1 推算 offset', async () => {
     const getSeen = captureCloudsearch({ code: 200, result: { songs: [] } });
-    await neteaseDirectClient.search!('晴天', 2);
+    await neteaseDirectClient.searchSongs!('晴天', 2);
     const seen = getSeen()!;
     expect(seen.method).toBe('POST');
     expect(seen.url).toBe('https://music.163.com/api/cloudsearch/pc');
@@ -71,7 +71,7 @@ describe('neteaseDirectClient.search（cloudsearch 直连搜索）', () => {
         ],
       },
     });
-    const songs = await neteaseDirectClient.search!('晴天', 1);
+    const songs = await neteaseDirectClient.searchSongs!('晴天', 1);
     expect(songs).toHaveLength(1);
     const s = songs[0];
     expect(s).toMatchObject({
@@ -87,14 +87,14 @@ describe('neteaseDirectClient.search（cloudsearch 直连搜索）', () => {
 
   it('code !== 200 时抛错（风险/风控），供 auto 回退自建 API', async () => {
     captureCloudsearch({ code: 20001, message: 'blocked' });
-    await expect(neteaseDirectClient.search!('晴天', 1)).rejects.toThrow();
+    await expect(neteaseDirectClient.searchSongs!('晴天', 1)).rejects.toThrow();
   });
 
   it('搜索失败（网络/HTTP 错误）时错误上抛', async () => {
     setTransport(async () => {
       throw new Error('network down');
     });
-    await expect(neteaseDirectClient.search!('晴天', 1)).rejects.toThrow('network down');
+    await expect(neteaseDirectClient.searchSongs!('晴天', 1)).rejects.toThrow('network down');
   });
 });
 

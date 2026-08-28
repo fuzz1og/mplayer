@@ -93,7 +93,7 @@ export const qianqianDirectClient: DirectSourceClient = {
   key: 'qianqian',
 
   /** 千千搜索直连。returns: 页歌曲（含 lrc 直连 URL）。 */
-  async search(keyword: string, page = 1): Promise<Song[]> {
+  async searchSongs(keyword: string, page = 1): Promise<Song[]> {
     const data = await signedGet<{ data?: { typeTrack?: QianqianTrack[] } }>(SEARCH_URL, {
       word: keyword,
       type: '1',

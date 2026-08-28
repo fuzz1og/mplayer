@@ -49,7 +49,7 @@ const AlbumDetailPage: React.FC = () => {
       try {
         // weapi 批量直链即可：无 URL 歌曲（无版权等）播放时由 playerStore 走
         // 路由解析（旧逐首搜索兜底已随自建 API 退役删除，#244/#275）
-        const detail = await callMusicApi('getAlbumDetail', albumId);
+        const detail = await callMusicApi('getAlbumDetail', 'netease', albumId);
         if (detail) {
           setAlbum(detail.album);
           setSongs(detail.songs);

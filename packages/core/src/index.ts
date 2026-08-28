@@ -50,7 +50,9 @@ export type { SongFileNameParts, SongFileNameDeps } from './utils/downloadFileNa
 export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, probeSwapCandidates, applySwap } from './shared/sourceSwap.js';
-export { songUsesSongidLyrics, isSodaSource } from './shared/songLyrics.js';
+export { songUsesSongidLyrics, isSodaSource, isInlineLyrics } from './shared/songLyrics.js';
+export { aggregateChartSongs, aggregateToplistGroups, normalizeSongKey, CHART_DEFAULT_MISS } from './shared/chartAggregate.js';
+export type { AggregatedChartEntry } from './shared/chartAggregate.js';
 export {
   UPDATE_SOURCE_DEFS,
   GITHUB_LATEST_BASE,
@@ -94,7 +96,7 @@ export {
   getTlsFingerprintHeaders,
   getTlsFingerprintConfig,
 } from './api/tlsFingerprint.js';
-export { neteaseDirectClient } from './api/neteaseDirect.js';
+export { neteaseDirectClient, createNeteaseDirectClient, defaultContentCache, warmUpArtistPicCache } from './api/neteaseDirect.js';
 export { qianqianDirectClient } from './api/qianqianDirect.js';
 export { miguDirectClient, decryptXorStream, XOR_KEY } from './api/miguDirect.js';
 export { qqDirectClient, rsaPkcs1v15Encrypt, aesCbcPkcs7Encrypt, obtainQimei, randomGuid } from './api/qqDirect.js';
@@ -118,8 +120,15 @@ export {
   resolvePlayableSongDirect,
   setTier3Resolver,
 } from './shared/sourceRouter.js';
-export type { SourceMode, DirectSourceClient, Tier3Resolver } from './shared/sourceRouter.js';
-export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS } from './shared/sourceRouter.js';
+export type {
+  SourceMode,
+  DirectSourceClient,
+  ToplistGroup,
+  ContentCache,
+  ContentMethod,
+  Tier3Resolver,
+} from './shared/sourceRouter.js';
+export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, CONTENT_METHODS } from './shared/sourceRouter.js';
 export { detectAudioContainer, containerFromContentType, extensionForContainer, replaceExtension } from './download/container.js';
 export type { AudioContainer } from './download/container.js';
 export { tagStrategyForContainer, buildID3Frames, ID3_FRAME_TLEN } from './download/tagging.js';

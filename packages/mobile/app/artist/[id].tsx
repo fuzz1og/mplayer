@@ -6,7 +6,7 @@ import ScalePress from '../../components/ScalePress';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Disc3 } from 'lucide-react-native';
-import { musicApi, type Song, type Album } from '@mplayer/core';
+import { getDirectClient, type Song, type Album } from '@mplayer/core';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
@@ -35,7 +35,7 @@ export default function ArtistDetailPage() {
     if (loadingMore || !hasMore || !id) return;
     setLoadingMore(true);
     try {
-      const r = await musicApi.getNeteaseArtistSongs(id as string, songs.length, 50);
+      const r = await getDirectClient('netease')!.getArtistSongs!(id as string, songs.length, 50);
       if (r.songs.length > 0) {
         setSongs(prev => [...prev, ...r.songs]);
         setHasMore(songs.length + r.songs.length < r.total);
@@ -60,8 +60,8 @@ export default function ArtistDetailPage() {
       try {
         const artistName = name || id;
         const [artistResults, songResult] = await Promise.all([
-          musicApi.searchNeteaseArtists(artistName, 1),
-          musicApi.getNeteaseArtistSongs(id as string, 0, 50),
+          getDirectClient('netease')!.searchArtists!(artistName, 1),
+          getDirectClient('netease')!.getArtistSongs!(id as string, 0, 50),
         ]);
         if (cancelled) return;
         setSongs(songResult.songs);
@@ -72,7 +72,7 @@ export default function ArtistDetailPage() {
         setArtist({ ...info, name: info?.name || artistName, picUrl: pic || info?.picUrl || '' });
         // 补齐缺失 URL 后直连探测：直链写入 core 预取缓存（播放 0 等待秒播）；
         // 探测不再写列表徽标（预测常错，徽标改播放后回写）
-        void musicApi.resolveNeteaseSongUrls(songResult.songs).then(() => {
+        void getDirectClient('netease')!.resolvePlayableUrls!(songResult.songs).then(() => {
           if (!cancelled) probeSongsPrefetch(songResult.songs);
         });
       } catch (e: any) {
@@ -88,7 +88,7 @@ export default function ArtistDetailPage() {
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    musicApi.getArtistAlbums(id as string, 0, 20)
+    getDirectClient('netease')!.getArtistAlbums!(id as string, 0, 20)
       .then(r => { if (!cancelled) setAlbums(r.albums); })
       .catch((e: any) => console.error('[ArtistDetail] albums error:', e.message));
     return () => { cancelled = true; };

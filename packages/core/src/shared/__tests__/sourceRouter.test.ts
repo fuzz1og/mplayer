@@ -46,7 +46,7 @@ const song = (id: string, source: string, url = ''): Song => ({
 function makeClient(source: string, overrides: Partial<DirectSourceClient> = {}): DirectSourceClient {
   return {
     key: source as DirectSourceClient['key'],
-    search: vi.fn(async () => [song('direct-1', source)]),
+    searchSongs: vi.fn(async () => [song('direct-1', source)]),
     resolvePlayableUrl: vi.fn(async () => 'https://direct.example.com/1.mp3'),
     ...overrides,
   };
@@ -141,12 +141,12 @@ describe('searchSongsRouted 路由矩阵', () => {
     const client = makeClient('netease');
     registerDirectClient(client);
     const result = await searchSongsRouted('晴天', 1, 'netease');
-    expect(client.search).toHaveBeenCalledWith('晴天', 1);
+    expect(client.searchSongs).toHaveBeenCalledWith('晴天', 1);
     expect(result[0].id).toBe('direct-1');
   });
 
   it('auto + 客户端失败 → tier3 未命中后原样上抛（D2）', async () => {
-    const client = makeClient('netease', { search: vi.fn(async () => { throw new Error('直连失败'); }) });
+    const client = makeClient('netease', { searchSongs: vi.fn(async () => { throw new Error('直连失败'); }) });
     registerDirectClient(client);
     await expect(searchSongsRouted('晴天', 1, 'netease')).rejects.toThrow('直连失败');
   });
@@ -156,12 +156,12 @@ describe('searchSongsRouted 路由矩阵', () => {
     registerDirectClient(client);
     setSourceMode('netease', 'direct');
     const result = await searchSongsRouted('晴天', 1, 'netease');
-    expect(client.search).toHaveBeenCalled();
+    expect(client.searchSongs).toHaveBeenCalled();
     expect(result[0].id).toBe('direct-1');
   });
 
   it('direct + 客户端失败 → 错误上抛，不回退', async () => {
-    const client = makeClient('netease', { search: vi.fn(async () => { throw new Error('直连失败'); }) });
+    const client = makeClient('netease', { searchSongs: vi.fn(async () => { throw new Error('直连失败'); }) });
     registerDirectClient(client);
     setSourceMode('netease', 'direct');
     await expect(searchSongsRouted('晴天', 1, 'netease')).rejects.toThrow('直连失败');
@@ -176,7 +176,7 @@ describe('searchSongsRouted 路由矩阵', () => {
     const tier3Search = vi.fn(async () => [song('tier3-1', 'netease')]);
     setTier3SearchEnabled(true);
     setTier3SearchResolver(tier3Search);
-    const client = makeClient('netease', { search: vi.fn(async () => []) });
+    const client = makeClient('netease', { searchSongs: vi.fn(async () => []) });
     registerDirectClient(client);
     setSourceMode('netease', 'direct');
     const result = await searchSongsRouted('陶喆', 1, 'netease');
@@ -185,7 +185,7 @@ describe('searchSongsRouted 路由矩阵', () => {
   });
 
   it('auto + 客户端返回空且 tier3 未命中 → 返回空结果（搜索成功无命中，非失败）', async () => {
-    const client = makeClient('netease', { search: vi.fn(async () => []) });
+    const client = makeClient('netease', { searchSongs: vi.fn(async () => []) });
     registerDirectClient(client);
     const result = await searchSongsRouted('晴天', 1, 'netease');
     expect(result).toEqual([]);
@@ -195,7 +195,7 @@ describe('searchSongsRouted 路由矩阵', () => {
     const tier3Search = vi.fn(async () => [song('tier3-1', 'netease')]);
     setTier3SearchEnabled(true);
     setTier3SearchResolver(tier3Search);
-    const client = makeClient('netease', { search: vi.fn(async () => { throw new Error('直连失败'); }) });
+    const client = makeClient('netease', { searchSongs: vi.fn(async () => { throw new Error('直连失败'); }) });
     registerDirectClient(client);
     setSourceMode('netease', 'direct');
     const result = await searchSongsRouted('晴天', 1, 'netease');

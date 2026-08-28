@@ -11,7 +11,7 @@ import {
 import ScalePress from '../../components/ScalePress';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CircleAlert, Music2, User } from 'lucide-react-native';
-import { musicApi } from '@mplayer/core';
+import { getDirectClient } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -75,7 +75,7 @@ export default function SearchPage() {
     setArtistsLoading(true);
     setArtistsError(false);
     try {
-      const r = await musicApi.searchNeteaseArtists(kw, 30);
+      const r = await getDirectClient('netease')!.searchArtists!(kw, 30);
       if (seq !== artistSearchSeq) return; // 已被新搜索取代，丢弃迟到结果
       setArtists(r);
     } catch (e: any) {

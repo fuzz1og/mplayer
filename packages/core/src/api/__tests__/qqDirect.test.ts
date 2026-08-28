@@ -141,12 +141,12 @@ describe('decodeLyricBody（T06 歌词响应归一化）', () => {
   });
 });
 
-describe('qqDirectClient.search', () => {
+describe('qqDirectClient.searchSongs', () => {
   it('musicu 网关搜索（comm 带 QIMEI36）并映射 Song', async () => {
     const transport = gatewayTransport(SEARCH_OK, VKEY_OK);
     setTransport(transport as any);
 
-    const songs = await qqDirectClient.search('晴天', 1);
+    const songs = await qqDirectClient.searchSongs('晴天', 1);
 
     // 两次请求：QIMEI + 搜索
     expect(transport.mock.calls).toHaveLength(2);
@@ -175,7 +175,7 @@ describe('qqDirectClient.search', () => {
       { 'music.search.SearchCgiService.DoSearchForQQMusicMobile': { code: 10001, data: null } },
       VKEY_OK,
     ) as any);
-    await expect(qqDirectClient.search('晴天', 1)).rejects.toThrow('10001');
+    await expect(qqDirectClient.searchSongs('晴天', 1)).rejects.toThrow('10001');
   });
 });
 

@@ -9,7 +9,7 @@ import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { gridCardWidth } from '../../components/gridMetrics';
 
 import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
-import { cacheManager, musicApi, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
+import { cacheManager, getDirectClient, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import ScalePress, { pressScale } from '../../components/ScalePress';
@@ -47,8 +47,8 @@ export default function RecommendPage() {
       if (isRefresh) cacheManager.clearByPrefix('personalized');
       const [songList, playlistList] = await Promise.all([
         // 一次拉大池子(100 首):推荐接口数据稳定,拉多首后本地随机抽 5 首/批展示
-        musicApi.getRecommendedSongs(RECOMMEND_POOL_SIZE),
-        musicApi.getRecommendedPlaylists(12),
+        getDirectClient('netease')!.getRecommendedSongs!(RECOMMEND_POOL_SIZE),
+        getDirectClient('netease')!.getRecommendedPlaylists!(12),
       ]);
       setSongs(songList);
       setPlaylists(playlistList);

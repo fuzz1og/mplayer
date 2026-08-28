@@ -24,7 +24,7 @@ export const sodaDirectClient: DirectSourceClient = {
   key: 'soda',
 
   /** 复用 musicApi 既有汽水直连搜索。 */
-  search: (keyword, page = 1) => musicApi.searchSongsSoda(keyword, page),
+  searchSongs: (keyword, page = 1) => musicApi.searchSongsSoda(keyword, page),
 
   /** 分享页直链优先（musicApi.getSodaAudioUrl 已实现），失败降级 track_v2。 */
   resolvePlayableUrl: (song) => musicApi.getSodaAudioUrl(song.id),

@@ -33,7 +33,7 @@ const DiscoverPlaylistListPage: React.FC = () => {
         setLoading(true);
       }
 
-      const data = await callMusicApi('getNeteasePlaylists', cat, 'hot', newOffset, PAGE_SIZE);
+      const data = await callMusicApi('getPlaylists', 'netease', cat, 'hot', newOffset, PAGE_SIZE);
 
       if (append) {
         setPlaylists(prev => [...prev, ...data.playlists]);
