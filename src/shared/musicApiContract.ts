@@ -46,13 +46,11 @@ export type MusicApiMethod = (typeof MUSIC_API_METHODS)[number];
 /**
  * 主进程独有组合方法（不在 core `musicApi` 对象上）。
  * - `getAggregatedChart`：多源排行榜聚合（chartAggregator）
- * - `getThrottleWait`：上游限流退避剩余等待 ms（api/musicApi 壳）
  * - `getSodaPlayableUrl`：下载汽水音频到磁盘缓存并回放 file:// 直链（main.ts 扩展）
  * - `resolvePlaylistLink`：歌单分享短链跟随 302 返回落地 URL（playlistLinkResolver）
  */
 export interface MainOnlyMethods {
   getAggregatedChart(type: 'hot' | 'new', sources: string[]): Promise<AggregatedChartResult>;
-  getThrottleWait(): Promise<number>;
   getSodaPlayableUrl(trackId: string): Promise<string>;
   resolvePlaylistLink(url: string): Promise<string>;
 }

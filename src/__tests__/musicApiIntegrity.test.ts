@@ -55,7 +55,7 @@ function allSourceFiles(): string[] {
 }
 
 /** 主进程 MainOnly 方法的键名（与 contract 的 MainOnlyMethods 一致）。 */
-const MAIN_ONLY_METHODS = ['getAggregatedChart', 'getThrottleWait', 'getSodaPlayableUrl', 'resolvePlaylistLink'];
+const MAIN_ONLY_METHODS = ['getAggregatedChart', 'getSodaPlayableUrl', 'resolvePlaylistLink'];
 
 /** 从 musicApiHandlers.ts 的 `dispatch` 分发表提取方法名集合。 */
 function dispatchMethodNames(): Set<string> {

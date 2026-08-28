@@ -15,10 +15,6 @@ vi.mock('../../main/services/chartAggregator', () => ({
   getAggregatedChart: vi.fn(async (type: string) => ({ songs: [], total: 0, type })),
 }));
 
-vi.mock('../../main/api/musicApi', () => ({
-  getThrottleWaitMs: vi.fn(() => 1234),
-}));
-
 import { registerMusicApiCall } from '../../main/ipc/musicApiHandlers';
 
 /** 拿到 ipcMain.handle('musicApi:call', ...) 注册的处理器 */
@@ -98,15 +94,6 @@ describe('musicApi:call 单通道分发表', () => {
 
     expect(api.getLyrics).toHaveBeenCalledWith('http://x/lrc');
     expect(result).toEqual({ success: false, error: '网络错误' });
-  });
-
-  it('main 独有方法 getThrottleWait 转发', async () => {
-    const api = makeApi({});
-    registerMusicApiCall(api as any);
-    const handler = getCallHandler();
-
-    const result = await handler({}, 'getThrottleWait');
-    expect(result).toEqual({ success: true, data: 1234 });
   });
 
   it('getSodaPlayableUrl 转发 main 扩展对象', async () => {

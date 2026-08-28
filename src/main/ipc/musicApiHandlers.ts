@@ -3,7 +3,6 @@ import type { Song, SourceKey } from '@mplayer/core';
 import type { ApiResponse } from '@/shared/types/ipc';
 import type { MusicApiMethod, MusicApiMethodMap, MainOnlyMethods } from '@/shared/musicApiContract';
 import { getAggregatedChart } from '../services/chartAggregator';
-import { getThrottleWaitMs } from '../api/musicApi';
 
 /**
  * music 域 IPC 单通道分发（ADR-0001）：`musicApi:call` 查表分发。
@@ -25,8 +24,7 @@ type MusicApi = Pick<CoreMusicApi, MusicApiMethod> & {
  * 注册单个 `musicApi:call` 分发通道。
  * 旧 `musicApi:*` / `lyrics:get` / `api:getThrottleWait` 通道已删除，music 域收敛为
  * `musicApi:call` 单通道；core 方法通过 MUSIC_API_METHODS 收编，MainOnly 方法
- * （getAggregatedChart / getThrottleWait / getSodaPlayableUrl / resolvePlaylistLink）
- * 在分发表内单独接线。
+ * （getAggregatedChart / getSodaPlayableUrl / resolvePlaylistLink）在分发表内单独接线。
  */
 export function registerMusicApiCall(api: MusicApi): void {
   const dispatch = {
@@ -63,7 +61,6 @@ export function registerMusicApiCall(api: MusicApi): void {
     resolvePlayableSongRouted: (song: Song) => api.resolvePlayableSongRouted(song),
     // ── main 独有组合方法 ─────────────────────────────────────────
     getAggregatedChart,
-    getThrottleWait: async () => getThrottleWaitMs(),
     getSodaPlayableUrl: (trackId: string) => api.getSodaPlayableUrl(trackId),
     resolvePlaylistLink: (url: string) => api.resolvePlaylistLink(url),
   } satisfies MusicApiMethodMap;

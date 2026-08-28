@@ -8,7 +8,7 @@ import { applyWslHidpiFix } from './hidpi';
 import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
-import { musicApi as coreMusicApi, injectProxyAgents, setApiTimingLog, loadSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY, loadTier3State, setTransportProxyAgents } from './api/musicApi';
+import { musicApi as coreMusicApi, loadSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY, loadTier3State, setTransportProxyAgents } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
 import { applyElectronProxy, buildAgents, getHttpAgent, getHttpsAgent, getTlsDegradedHttpsAgent, getTlsFingerprintHttpsAgent, type ProxyConfig } from './proxy';
@@ -255,11 +255,7 @@ app.whenReady().then(async () => {
     }
   });
 
-  // 自建 API 已退役：不再设置 API_BASE_URL，直连/第三方订阅为唯一播放链路。
-  // dev 诊断：API 请求耗时日志（>300ms 才打，定位慢请求/超时链路）
-  if (!app.isPackaged) {
-    setApiTimingLog(true);
-  }
+  // 自建 API 已退役：直连/第三方订阅为唯一播放链路（#276 机件归零，耗时日志设施同删）。
 
   // 内容直链 TLS 降级 agent（T09 spec #155）：core 传输层检测到内容直链 TLS
   // 握手失败时，用放宽 minVersion 的降级 agent 重试一次（仅桌面注入；RN 不注入）。
@@ -277,13 +273,9 @@ app.whenReady().then(async () => {
       // getHttpAgent()/getHttpsAgent() 返回构建结果；设置变更（settings:setProxy）
       // 同样走 buildAgents，provider 每次请求时取值 → 动态切换无需重新注入。
       buildAgents(savedProxy);
-      // 自建 API 客户端（已退役）与统一请求层（直连客户端/tier3/探测）共用同一
-      // 代理路径：主进程请求与渲染进程播放（applyElectronProxy）网络路径一致；
-      // 未配置/禁用时两者均为直连（裸连），不读系统代理。
-      injectProxyAgents(() => ({
-        httpAgent: getHttpAgent(),
-        httpsAgent: getHttpsAgent(),
-      }));
+      // 统一请求层（直连客户端/tier3/探测）共用同一代理路径：主进程请求与渲染
+      // 进程播放（applyElectronProxy）网络路径一致；未配置/禁用时为直连（裸连），
+      // 不读系统代理。（旧 apiClient agents 注入已随 #276 机件归零删除）
       setTransportProxyAgents(() => ({
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
