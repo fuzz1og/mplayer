@@ -3,9 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../services/IpcClient', () => ({
   IpcClient: { invoke: vi.fn() },
 }));
-vi.mock('../services/coverCacheService', () => ({
-  cacheCoverImage: vi.fn().mockResolvedValue(undefined),
-}));
 
 import { IpcClient } from '../services/IpcClient';
 import { refreshSongCover, __resetSongCoverRefreshState } from '../utils/songCoverRefresh';

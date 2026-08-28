@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Disc3 } from 'lucide-react';
-import CoverImage from '@/renderer/components/CoverImage';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -119,13 +118,20 @@ const AlbumDetailPage: React.FC = () => {
       {/* 专辑卡片区:固定不滚动,布局与歌单详情页一致 */}
       <div style={{ padding: '24px 24px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
-          <div style={{ width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', backgroundColor: 'var(--bg-hover)' }}>
-            {displayPic ? (
-              <CoverImage src={displayPic} alt={displayName} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Disc3 size={56} style={{ color: 'var(--text-tertiary)' }} />
-              </div>
+          <div style={{ position: 'relative', width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', backgroundColor: 'var(--bg-hover)' }}>
+            {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Disc3 size={56} style={{ color: 'var(--text-tertiary)' }} />
+            </div>
+            {displayPic && (
+              <img
+                key={displayPic}
+                src={displayPic}
+                alt={displayName}
+                loading="lazy"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             )}
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>

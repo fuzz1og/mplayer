@@ -13,11 +13,6 @@ vi.mock('../store/favoriteStore', () => ({
   useFavoriteStore: vi.fn()
 }));
 
-// Mock coverCacheService
-vi.mock('../services/coverCacheService', () => ({
-  useCachedCover: vi.fn((url: string) => url)
-}));
-
 // Mock 子组件
 vi.mock('../components/PlayerControls', () => ({
   default: () => <div data-testid="player-controls">PlayerControls</div>

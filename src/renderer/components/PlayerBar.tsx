@@ -1,9 +1,7 @@
-import React, { useCallback, useState } from 'react';
-import { Heart, Download, Mic, ListMusic } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Heart, Download, Mic, ListMusic, Music2 } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
-import { useCachedCover } from '@/renderer/services/coverCacheService';
-import CoverImage from '@/renderer/components/CoverImage';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -33,7 +31,8 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
 
   const isFavorite = useFavoriteStore((s) => s.isFavorite);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
-  const coverSrc = useCachedCover(currentSong?.cover ?? '');
+  // 封面直链直渲：加载失败显示占位并走既有搜索式刷新（封面链已删，#273）
+  const [coverFailed, setCoverFailed] = useState(false);
   const fav = currentSong ? isFavorite(currentSong.id) : false;
   // 当前歌加入歌单弹窗（播放栏直达入口）
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
@@ -65,6 +64,11 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
       );
     });
   }, [currentSong]);
+
+  // 封面刷新换新 URL 后重置失败态，否则新封面永远不会显示
+  useEffect(() => {
+    setCoverFailed(false);
+  }, [currentSong?.cover]);
 
   return (
     <div
@@ -110,7 +114,19 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
             padding: 0,
           }}
         >
-          <CoverImage src={coverSrc} alt={currentSong?.name || ''} onError={handleCoverError} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          {currentSong?.cover && !coverFailed ? (
+            <img
+              src={currentSong.cover}
+              alt={currentSong?.name || ''}
+              loading="lazy"
+              onError={() => { setCoverFailed(true); handleCoverError(); }}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
+              <Music2 size={20} />
+            </div>
+          )}
         </button>
 
         {/* 歌曲信息 */}

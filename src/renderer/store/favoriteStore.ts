@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 const ipcRenderer = window.electronAPI;
-import { cacheCoverImage } from '@/renderer/services/coverCacheService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, SongBase } from '@mplayer/core';
@@ -109,8 +108,6 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
           lrc: updated.lrc,
           sourceType: updated.sourceType,
         }).catch(() => {}); // fire-and-forget
-
-        if (updated.cover) cacheCoverImage(updated.cover).catch(() => {});
 
         return updated;
       }

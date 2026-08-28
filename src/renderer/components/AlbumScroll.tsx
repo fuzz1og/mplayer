@@ -1,6 +1,5 @@
 import React from 'react';
 import { Disc3 } from 'lucide-react';
-import CoverImage from '@/renderer/components/CoverImage';
 import type { Album } from '@mplayer/core';
 
 interface AlbumScrollProps {
@@ -78,13 +77,20 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
           <div style={{ display: 'flex', gap: 'var(--space-5)', flexFlow: 'row wrap' }}>
             {albums.map((album) => (
               <div key={album.id} style={{ flexShrink: 0, width: '120px', cursor: 'pointer' }} onClick={() => onAlbumClick?.(album)}>
-                <div style={{ width: '120px', height: '120px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', marginBottom: '8px' }}>
-                  {album.picUrl ? (
-                    <CoverImage src={album.picUrl} alt={album.name} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-hover)' }}>
-                      <Disc3 size={36} style={{ color: 'var(--text-tertiary)' }} />
-                    </div>
+                <div style={{ position: 'relative', width: '120px', height: '120px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', marginBottom: '8px' }}>
+                  {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Disc3 size={36} style={{ color: 'var(--text-tertiary)' }} />
+                  </div>
+                  {album.picUrl && (
+                    <img
+                      key={album.picUrl}
+                      src={album.picUrl}
+                      alt={album.name}
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
                   )}
                 </div>
                 <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>

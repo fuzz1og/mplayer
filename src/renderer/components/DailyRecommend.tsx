@@ -1,8 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Play, RefreshCw, Music2 } from 'lucide-react';
 import type { Song } from '@mplayer/core';
-import { useCachedCover } from '@/renderer/services/coverCacheService';
-import CoverImage from '@/renderer/components/CoverImage';
 
 interface DailyRecommendProps {
   songs: Song[];
@@ -17,7 +15,13 @@ interface SongRowMiniProps {
 }
 
 const SongRowMini: React.FC<SongRowMiniProps> = ({ song, onPlay }) => {
-  const cover = useCachedCover(song.cover || '');
+  // 封面直链直渲：加载失败显示占位（封面链已删，#273）
+  const [coverFailed, setCoverFailed] = useState(false);
+
+  // 封面变化后重置失败态
+  useEffect(() => {
+    setCoverFailed(false);
+  }, [song.cover]);
 
   return (
     <div
@@ -27,8 +31,14 @@ const SongRowMini: React.FC<SongRowMiniProps> = ({ song, onPlay }) => {
       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
     >
       <div style={{ width: '44px', height: '44px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-        {cover ? (
-          <CoverImage src={cover} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        {song.cover && !coverFailed ? (
+          <img
+            src={song.cover}
+            alt={song.name}
+            loading="lazy"
+            onError={() => setCoverFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
             <Music2 size={16} />
@@ -58,8 +68,14 @@ const SongRowMini: React.FC<SongRowMiniProps> = ({ song, onPlay }) => {
 
 const DailyRecommend: React.FC<DailyRecommendProps> = ({ songs, loading, onPlay, onRefresh }) => {
   const featured = songs[0];
-  const featuredCover = useCachedCover(featured?.cover || '');
+  // 主打位封面直链直渲：加载失败显示渐变占位（封面链已删，#273）
+  const [featuredFailed, setFeaturedFailed] = useState(false);
   const listSongs = songs.slice(0, 5);
+
+  // 封面变化（换一批）后重置失败态
+  useEffect(() => {
+    setFeaturedFailed(false);
+  }, [featured?.cover]);
 
   if (loading && songs.length === 0) {
     return (
@@ -95,8 +111,14 @@ const DailyRecommend: React.FC<DailyRecommendProps> = ({ songs, loading, onPlay,
         onClick={() => featured && onPlay(featured)}
         style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', minHeight: '360px', cursor: 'pointer', backgroundColor: 'var(--bg-hover)', border: '1px solid var(--border-default)' }}
       >
-        {featuredCover ? (
-          <CoverImage src={featuredCover} alt={featured.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        {featured?.cover && !featuredFailed ? (
+          <img
+            src={featured.cover}
+            alt={featured.name}
+            loading="lazy"
+            onError={() => setFeaturedFailed(true)}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         ) : (
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, var(--gray-300) 0%, var(--gray-100) 100%)' }} />
         )}

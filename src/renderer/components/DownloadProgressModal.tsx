@@ -1,8 +1,7 @@
 import React from 'react';
-import { X, CheckCircle, AlertCircle, Loader2, Trash2 } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Loader2, Trash2, Music2 } from 'lucide-react';
 import type { DownloadNotification } from '@/renderer/store/downloadStore';
 import { getNotificationStats, getStatusText, getStatusColor, useDownloadStore } from '@/renderer/store/downloadStore';
-import CoverImage from '@/renderer/components/CoverImage';
 
 interface DownloadProgressModalProps {
   notification: DownloadNotification;
@@ -111,6 +110,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
             {/* 封面 */}
             <div
               style={{
+                position: 'relative',
                 width: '56px',
                 height: '56px',
                 borderRadius: '8px',
@@ -119,7 +119,20 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 flexShrink: 0,
               }}
             >
-              <CoverImage src={task.song.cover} alt={task.song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Music2 size={20} style={{ color: 'var(--text-tertiary)' }} />
+              </div>
+              {task.song.cover && (
+                <img
+                  key={task.song.cover}
+                  src={task.song.cover}
+                  alt={task.song.name}
+                  loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              )}
             </div>
 
             {/* 歌曲信息 */}

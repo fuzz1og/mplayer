@@ -3,7 +3,6 @@ import { ChevronDown, ChevronRight, Music2, AlertCircle, Play } from 'lucide-rea
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
-import CoverImage from '@/renderer/components/CoverImage';
 import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
 import type { Song } from '@mplayer/core';
 
@@ -135,11 +134,18 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
           </div>
           {/* Song info via SongRow-like layout */}
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-              {bestSong.cover ? (
-                <CoverImage src={bestSong.cover} alt={bestSong.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)' }} />
+            <div style={{ position: 'relative', width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
+              {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)' }} />
+              {bestSong.cover && (
+                <img
+                  key={bestSong.cover}
+                  src={bestSong.cover}
+                  alt={bestSong.name}
+                  loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                />
               )}
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
@@ -178,11 +184,18 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
                   onMouseEnter={(e) => { if (!isCurrentSong(song.id, song.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
                   onMouseLeave={(e) => { if (!isCurrentSong(song.id, song.sourceType, chartId)) e.currentTarget.style.backgroundColor = 'transparent'; }}
                 >
-                  <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-                    {song.cover ? (
-                      <CoverImage src={song.cover} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)' }} />
+                  <div style={{ position: 'relative', width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
+                    {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)' }} />
+                    {song.cover && (
+                      <img
+                        key={song.cover}
+                        src={song.cover}
+                        alt={song.name}
+                        loading="lazy"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
                     )}
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -236,8 +249,21 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
         <div style={{ width: '36px', textAlign: 'center', fontSize: '20px', fontWeight: 700, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
           {rank}
         </div>
-        <div style={{ width: '56px', height: '56px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
-          <CoverImage src={bestSong.cover} alt={bestSong.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <div style={{ position: 'relative', width: '56px', height: '56px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
+          {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Music2 size={20} style={{ color: 'var(--text-tertiary)' }} />
+          </div>
+          {bestSong.cover && (
+            <img
+              key={bestSong.cover}
+              src={bestSong.cover}
+              alt={bestSong.name}
+              loading="lazy"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '15px', fontWeight: 600, color: isCurrent ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bestSong.name}</div>
