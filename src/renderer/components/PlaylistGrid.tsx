@@ -1,6 +1,5 @@
 import React from 'react';
 import { ListMusic } from 'lucide-react';
-import CoverImage from '@/renderer/components/CoverImage';
 import { formatPlayCount } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
 
@@ -62,13 +61,20 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ playlists, loading, error, 
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; e.currentTarget.style.boxShadow = 'none'; }}
         >
-          <div style={{ width: '144px', height: '144px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-            {pl.coverImgUrl ? (
-              <CoverImage src={pl.coverImgUrl} alt={pl.name} variant="playlist" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ListMusic size={34} style={{ color: 'var(--text-tertiary)' }} />
-              </div>
+          <div style={{ position: 'relative', width: '144px', height: '144px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
+            {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <ListMusic size={34} style={{ color: 'var(--text-tertiary)' }} />
+            </div>
+            {pl.coverImgUrl && (
+              <img
+                key={pl.coverImgUrl}
+                src={pl.coverImgUrl}
+                alt={pl.name}
+                loading="lazy"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             )}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>

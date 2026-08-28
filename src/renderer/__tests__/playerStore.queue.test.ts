@@ -210,31 +210,7 @@ describe('playPrevious（core getPrevSongIndex 收敛）', () => {
 // ---------------------------------------------------------------------------
 // 播放链路固化
 // ---------------------------------------------------------------------------
-describe('播放链路：URL 解析 / 死链 fresh / 加载失败', () => {
-  it('死链 fresh：受保护端点解析回原 url → searchSongById 重取新 url 并加载', async () => {
-    const staleUrl = 'https://api.example.com/api.php?get=url&id=1&sign=OLDSIGN';
-    const freshUrl = 'https://fresh.example.com/1.mp3';
-    const s1 = song('netease:1', '晴天', staleUrl);
-    callMusicApiMock.mockImplementation(async (method: string) => {
-      if (method === 'getAudioUrl') return staleUrl; // 死链：返回原样
-      if (method === 'resolvePlayableUrlRouted') return staleUrl; // 死链：返回原样
-      if (method === 'resolvePlayableSongRouted') return { url: staleUrl, nonFull: false }; // 死链：返回原样
-      if (method === 'searchSongById') return { ...s1, url: freshUrl };
-      if (method === 'getSodaPlayableUrl') return '';
-      if (method === 'searchSongsRouted') return [];
-      return undefined;
-    });
-    usePlayerStore.setState({ currentPlaylist: [s1], currentPlaylistIndex: 0, currentSong: s1 });
-
-    await usePlayerStore.getState().play(s1);
-
-    // isSessionProtectedEndpoint(staleUrl) = true（含 api.php）→ 触发 fresh 重取
-    expect(callMusicApiMock).toHaveBeenCalledWith('searchSongById', '1', 'netease', true);
-    expect(audioPlayerMock.player.load).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'netease:1', url: freshUrl }),
-    );
-  });
-
+describe('播放链路：URL 解析 / 加载失败', () => {
   it('无 url 歌曲：按歌手名搜索解析 url 后加载（兜底）', async () => {
     const s1 = song('netease:1', '晴天', ''); // url 为空
     const foundUrl = 'https://found.example.com/1.mp3';

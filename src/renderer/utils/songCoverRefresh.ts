@@ -1,8 +1,6 @@
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
-import { cacheCoverImage } from '@/renderer/services/coverCacheService';
-import { invalidateCoverUrl } from '@/renderer/services/coverUrlResolver';
-import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
+import { findExactMatch } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { isLegacyDeadUrl } from '@mplayer/core';
 
@@ -45,17 +43,14 @@ export function __resetSongCoverRefreshState(): void {
 /**
  * 封面加载失败时刷新歌曲封面（上游 API 签名过期后同一 URL 永远失败，必须换新 URL）。
  * 策略（"失败三次才放弃"）：
- * 1. 按源站 ID 识别（链接会过期，ID 不会）
- * 2. 名字搜索 + 精确匹配（严格匹配防翻唱/Live 误配）
- * 3. 放弃，返回 null（UI 保持默认图，5 分钟后重试）
- * 找到新封面后同步更新 URL 缓存（只替换封面，不动已有 url/lrc）并预热封面图片；
- * 失败静默。同歌并发触发合并为一次；60 秒冷却防刷新风暴。
+ * 1. 名字搜索 + 精确匹配（严格匹配防翻唱/Live 误配）
+ * 2. 放弃，返回 null（UI 保持默认图，5 分钟后重试）
+ * 「按源站 ID 识别」首腿已删（自建 API 退役后 searchSongById 恒 null，#273）。
+ * 找到新封面后同步更新 URL 缓存（只替换封面，不动已有 url/lrc）；失败静默。
+ * 同歌并发触发合并为一次；60 秒冷却防刷新风暴。
  */
 export function refreshSongCover(song: Song): Promise<string | null> {
   if (!song || song.sourceType === 'local' || song.sourceType === 'soda') return Promise.resolve(null);
-  // 旧封面已失效：先清解析缓存（渲染层 + 主进程 6h 归一化 + 磁盘）。
-  // 否则搜索拿到的新签名 URL 归一化 key 相同，会命中失效直链循环失败
-  if (song.cover) invalidateCoverUrl(song.cover);
 
   const attemptKey = `${song.sourceType}:${song.id}`;
 
@@ -76,20 +71,10 @@ export function refreshSongCover(song: Song): Promise<string | null> {
   lastRefreshAt.set(attemptKey, Date.now());
 
   const promise = withRefreshLimit(async () => {
-    const baseId = stripSourceIdPrefix(song.id || '');
     let fresh: Song | null = null;
 
-    // 第 1 次尝试：按源站 ID 识别
-    if (baseId) {
-      try {
-        fresh = await callMusicApi('searchSongById', baseId, song.sourceType);
-      } catch {
-        fresh = null;
-      }
-    }
-
-    // 第 2 次尝试：名字搜索 + 精确匹配（只接受 name+artist 完全匹配，避免翻唱/Live）
-    if (!fresh?.cover && song.name) {
+    // 名字搜索 + 精确匹配（只接受 name+artist 完全匹配，避免翻唱/Live）
+    if (song.name) {
       try {
         const results = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`, 1, song.sourceType);
         const matched = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
@@ -114,7 +99,6 @@ export function refreshSongCover(song: Song): Promise<string | null> {
       cover,
       lrc: fresh?.lrc || safeExisting?.lrc || '',
     }).catch(() => {});
-    cacheCoverImage(cover).catch(() => {});
     return cover;
   });
   inFlightRefreshes.set(attemptKey, promise);

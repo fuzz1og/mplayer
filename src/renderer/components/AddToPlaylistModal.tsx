@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, ListMusic } from 'lucide-react';
+import { X, ListMusic, Music2 } from 'lucide-react';
 import { message, Modal } from 'antd';
 import { checkDuplicate, type DupResult } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
-import CoverImage from '@/renderer/components/CoverImage';
 
 interface AddToPlaylistModalProps {
   song: Song;
@@ -30,6 +29,13 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [creating, setCreating] = useState(false);
   const [dupResults, setDupResults] = useState<Map<number, DupResult>>(new Map());
+  // 封面直链直渲：加载失败显示占位（封面链已删，#273）
+  const [coverFailed, setCoverFailed] = useState(false);
+
+  // 封面变化（弹窗换歌）后重置失败态
+  useEffect(() => {
+    setCoverFailed(false);
+  }, [song.cover]);
 
   const loadData = async () => {
     setLoading(true);
@@ -206,9 +212,22 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
               overflow: 'hidden',
               backgroundColor: 'var(--bg-base)',
               flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            <CoverImage src={song.cover} alt={song.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {song.cover && !coverFailed ? (
+              <img
+                src={song.cover}
+                alt={song.name}
+                loading="lazy"
+                onError={() => setCoverFailed(true)}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            ) : (
+              <Music2 size={18} color="var(--text-tertiary)" />
+            )}
           </div>
 
           {/* 歌曲信息 */}

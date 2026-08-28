@@ -69,7 +69,7 @@ export type { PlaylistUrlInfo, ParsedLine, ProgressState, ImportResult, Playlist
 export { CacheKernel } from './cache/cacheKernel.js';
 export { createMemoryBackend } from './cache/backends/memoryBackend.js';
 export { DEFAULT_TTL } from './cache/ttl.js';
-export { SongResourcesCache, SONGS_TTL_MS, COVERS_TTL_MS } from './cache/songResourcesCache.js';
+export { SongResourcesCache, SONGS_TTL_MS } from './cache/songResourcesCache.js';
 export type { SongResources, SongResourcesCacheOptions } from './cache/songResourcesCache.js';
 export type { CachePort, CacheBackend, CacheStats } from './cache/types.js';
 export {

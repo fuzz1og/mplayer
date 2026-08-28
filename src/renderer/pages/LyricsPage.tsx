@@ -1,8 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Music2, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import LyricsDisplay from '@/renderer/components/LyricsDisplay';
-import { useCachedCover } from '@/renderer/services/coverCacheService';
-import CoverImage from '@/renderer/components/CoverImage';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 
@@ -35,7 +33,13 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
     seek(time);
   };
 
-  const coverSrc = useCachedCover(currentSong?.cover || '');
+  // 封面直链直渲：加载失败显示占位并走既有搜索式刷新（封面链已删，#273）
+  const [coverFailed, setCoverFailed] = useState(false);
+
+  // 封面刷新换新 URL 后重置失败态，否则新封面永远不会显示
+  useEffect(() => {
+    setCoverFailed(false);
+  }, [currentSong?.cover]);
 
   if (!currentSong) {
     return (
@@ -116,16 +120,22 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
             <span style={{ fontSize: '14px', fontWeight: 500 }}>返回</span>
           </button>
           <div style={{ width: '48px', height: '48px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-            {coverSrc ? (
-              <CoverImage src={coverSrc} alt="" onError={() => {
-                if (!currentSong) return;
-                void refreshSongCover(currentSong).then((cover) => {
-                  if (!cover) return;
-                  usePlayerStore.setState((state) =>
-                    state.currentSong?.id === currentSong.id ? { currentSong: { ...state.currentSong, cover } } : state
-                  );
-                });
-              }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {currentSong.cover && !coverFailed ? (
+              <img
+                src={currentSong.cover}
+                alt=""
+                loading="lazy"
+                onError={() => {
+                  setCoverFailed(true);
+                  void refreshSongCover(currentSong).then((cover) => {
+                    if (!cover) return;
+                    usePlayerStore.setState((state) =>
+                      state.currentSong?.id === currentSong.id ? { currentSong: { ...state.currentSong, cover } } : state
+                    );
+                  });
+                }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
                 <Music2 size={18} />
