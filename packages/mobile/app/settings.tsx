@@ -21,7 +21,7 @@ import { checkLatestRelease, speedTestChannels, type ChannelSpeedResult } from '
 import {radius, shadow, spacing, textVariants} from '../theme/tokens';
 import type { ThemeMode, ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import ScalePress from '../components/ScalePress';
+import ScalePress, { pressScale } from '../components/ScalePress';
 
 /** 外观选项（#173）：system 跟随系统深浅色 */
 const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
@@ -408,7 +408,7 @@ export default function SettingsPage() {
                     <ScalePress
                       key={opt.id}
                       style={[styles.row, styles.rowSep]}
-                      pressScaleTo={0.98}
+                      pressScaleTo={pressScale.row}
                       onPress={() => setUpdateChannelStore(opt.id)}
                     >
                       <Text style={{ ...textVariants.settingsPrimary, color: colors.textPrimary, flex: 1 }}>

@@ -33,17 +33,20 @@ module.exports = tseslint.config(
   },
   // ScalePress 绞杀防回潮（#261）：mobile UI 禁用 TouchableOpacity——
   // 按压反馈统一 ScalePress（弹簧缩放），遮罩/拦截器等无动画语义用 Pressable；
-  // 选型依据见 packages/mobile/components/ScalePress.tsx 头注释
+  // 选型依据见 packages/mobile/components/ScalePress.tsx 头注释。
+  // selector 同时拦普通标识符与 RN.TouchableOpacity 成员表达式写法
   {
     files: ['packages/mobile/components/**/*.tsx', 'packages/mobile/app/**/*.tsx'],
     rules: {
       'no-restricted-syntax': ['error', {
-        selector: "JSXOpeningElement[name.name='TouchableOpacity']",
+        selector: "JSXOpeningElement[name.name='TouchableOpacity'], JSXOpeningElement[name.property.name='TouchableOpacity']",
         message: 'mobile UI 禁用 TouchableOpacity：按压反馈用 ScalePress（components/ScalePress.tsx），无动画语义（遮罩/拦截器）用 Pressable；确需豁免登记 eslint.config.js 的 mobileTouchableWhitelist',
       }],
     },
   },
-  // 白名单豁免块：空表时不生成配置块
+  // 白名单豁免块：空表时不生成配置块。
+  // 注意是规则级豁免——本仓库 no-restricted-syntax 仅此一条 selector，故无连带；
+  // 将来若增加其他受限语法，须改为 selector 级豁免（拆独立规则）。
   ...(mobileTouchableWhitelist.length > 0
     ? [{
         files: mobileTouchableWhitelist,
