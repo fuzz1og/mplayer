@@ -71,18 +71,9 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
       const offset = reset ? 0 : songs.length;
       const page = await callMusicApi('getNeteasePlaylistSongsPage', parseInt(id), offset, PAGE_SIZE);
 
-      // 分页失败时仅第一页回退第三方解析
       if (!page || page.songs.length === 0) {
         if (reset) {
-          const playlistUrl = `https://music.163.com/#/playlist?id=${id}`;
-          const fallback = await callMusicApi('getPlaylistSongsFromThirdParty', playlistUrl);
-          if (fallback && fallback.length > 0) {
-            setSongs(fallback);
-            setTotal(fallback.length);
-            setHasMore(false);
-          } else {
-            setSongsError('加载歌曲失败，请稍后重试');
-          }
+          setSongsError('加载歌曲失败，请稍后重试');
         }
         return;
       }
