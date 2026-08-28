@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Music2, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { ArrowLeft, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import LyricsDisplay from '@/renderer/components/LyricsDisplay';
+import SongCover from '@/renderer/components/SongCover';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 
@@ -33,13 +34,16 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
     seek(time);
   };
 
-  // 封面直链直渲：加载失败显示占位并走既有搜索式刷新（封面链已删，#273）
-  const [coverFailed, setCoverFailed] = useState(false);
-
-  // 封面刷新换新 URL 后重置失败态，否则新封面永远不会显示
-  useEffect(() => {
-    setCoverFailed(false);
-  }, [currentSong?.cover]);
+  // 封面加载失败 → 按 ID 重识别换新封面（上游 API 签名过期后同一 URL 永远失败）
+  const handleCoverError = () => {
+    if (!currentSong) return;
+    void refreshSongCover(currentSong).then((cover) => {
+      if (!cover) return;
+      usePlayerStore.setState((state) =>
+        state.currentSong?.id === currentSong.id ? { currentSong: { ...state.currentSong, cover } } : state
+      );
+    });
+  };
 
   if (!currentSong) {
     return (
@@ -120,27 +124,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
             <span style={{ fontSize: '14px', fontWeight: 500 }}>返回</span>
           </button>
           <div style={{ width: '48px', height: '48px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-            {currentSong.cover && !coverFailed ? (
-              <img
-                src={currentSong.cover}
-                alt=""
-                loading="lazy"
-                onError={() => {
-                  setCoverFailed(true);
-                  void refreshSongCover(currentSong).then((cover) => {
-                    if (!cover) return;
-                    usePlayerStore.setState((state) =>
-                      state.currentSong?.id === currentSong.id ? { currentSong: { ...state.currentSong, cover } } : state
-                    );
-                  });
-                }}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              />
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
-                <Music2 size={18} />
-              </div>
-            )}
+            <SongCover src={currentSong.cover} variant="icon" iconSize={18} onError={handleCoverError} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentSong?.name}</div>

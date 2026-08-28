@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, Trash2, ListMusic, RefreshCw, User } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
 import SourceSwapModal from '@/renderer/components/SourceSwapModal';
+import SongCover from '@/renderer/components/SongCover';
 import { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import RowActionButtons from '@/renderer/components/RowActionButtons';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
@@ -47,8 +48,6 @@ const SongRow: React.FC<SongRowProps> = ({
   onAddToPlaylist, onRemoveFromPlaylist, onToggleSelect,
   onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, compact = false, style,
 }) => {
-  // 封面直链直渲：加载失败显示占位并走既有搜索式刷新（封面链已删，#273）
-  const [coverFailed, setCoverFailed] = useState(false);
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
@@ -85,11 +84,6 @@ const SongRow: React.FC<SongRowProps> = ({
     }
     // 仅挂载时触发：封面刷新后 song.cover 变化会自然进入正常渲染路径
   }, []);
-
-  // 封面刷新换新 URL 后重置失败态，否则新封面永远不会显示
-  useEffect(() => {
-    setCoverFailed(false);
-  }, [song.cover]);
 
   return (
     <div
@@ -144,17 +138,7 @@ const SongRow: React.FC<SongRowProps> = ({
       {/* Song info */}
       <div style={{ width: '38%', maxWidth: '380px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '44px', height: '44px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0, position: 'relative' }}>
-          {song.cover && !coverFailed ? (
-            <img
-              src={song.cover}
-              alt={song.name}
-              loading="lazy"
-              onError={() => { setCoverFailed(true); onCoverError?.(song); }}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            />
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)' }} />
-          )}
+          <SongCover src={song.cover} alt={song.name} variant="gradient" onError={() => onCoverError?.(song)} />
           <div
             style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s ease' }}
             onClick={() => onPlay(song)}
