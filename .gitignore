@@ -41,6 +41,7 @@ coverage/
 .opencode/
 .superpowers/
 e2e/screenshots/
+e2e/artifacts/
 test-results/
 
 # iOS 原生目录（CNG 模式，不提交）
