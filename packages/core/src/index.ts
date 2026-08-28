@@ -109,6 +109,7 @@ export {
   setSourceModes,
   loadSourceModes,
   getAllSourceModes,
+  sanitizeSourceModes,
   setSourceModePersister,
   searchSongsRouted,
   resolvePlayableUrlRouted,
