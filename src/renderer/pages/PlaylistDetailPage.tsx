@@ -739,7 +739,6 @@ const PlaylistDetailPage: React.FC = () => {
       <ImportPlaylistModal
         open={importModalVisible}
         playlistId={playlistId!}
-        playlistName={playlist?.name || ''}
         existingSongs={songs}
         onClose={() => setImportModalVisible(false)}
         onImported={loadData}

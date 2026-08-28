@@ -195,25 +195,4 @@ describe('searchService', () => {
       expect(IpcClient.invoke).toHaveBeenCalled();
     });
   });
-
-  describe('batchSearch', () => {
-    it('应调用 IPC 批量搜索', async () => {
-      const { IpcClient } = await import('../services/IpcClient');
-      const mockResult = { '周杰伦': [{ id: '1', name: '稻香' }] };
-      (IpcClient.invoke as any).mockResolvedValue(mockResult);
-
-      const result = await searchService.batchSearch(['周杰伦', '林俊杰']);
-
-      expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'batchSearch', ['周杰伦', '林俊杰'], 'netease');
-      expect(result).toEqual(mockResult);
-    });
-
-    it('失败应返回空对象', async () => {
-      const { IpcClient } = await import('../services/IpcClient');
-      (IpcClient.invoke as any).mockRejectedValue(new Error('失败'));
-
-      const result = await searchService.batchSearch(['周杰伦']);
-      expect(result).toEqual({});
-    });
-  });
 });

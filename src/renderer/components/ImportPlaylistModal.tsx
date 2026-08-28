@@ -1,10 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { Modal, Input, Button, Progress, message, Tabs } from 'antd';
+import { Modal, Button, Progress, message } from 'antd';
 import { Upload, Check, X, Clock, Loader2, AlertCircle } from 'lucide-react';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { importSongs, importFromLink, parseSongList, parsePlaylistUrl, type SourceType, type ProgressState, type ImportResult } from '@/renderer/services/importService';
+import { importFromLink, parsePlaylistUrl, type SourceType, type ProgressState, type ImportResult } from '@/renderer/services/importService';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import LinkImportForm from './LinkImportForm';
 import LinkPreviewTable from './LinkPreviewTable';
@@ -21,47 +18,9 @@ const SOURCE_LABELS: Record<SourceType, string> = {
   soda: '汽水',
 };
 
-interface DraggableSourceProps {
-  source: SourceType;
-  index: number;
-}
-
-const DraggableSource: React.FC<DraggableSourceProps> = ({ source, index }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: source });
-
-  return (
-    <div
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        padding: '4px 12px',
-        borderRadius: '14px',
-        fontSize: '13px',
-        fontWeight: 500,
-        backgroundColor: SOURCE_COLORS[source] + '22',
-        color: SOURCE_COLORS[source],
-        border: `1px solid ${SOURCE_COLORS[source]}44`,
-        cursor: isDragging ? 'grabbing' : 'grab',
-        opacity: isDragging ? 0.6 : 1,
-        transform: CSS.Transform.toString(transform),
-        transition: transition || undefined,
-        userSelect: 'none',
-      }}
-    >
-      <span style={{ opacity: 0.6, fontSize: '12px' }}>{index + 1}.</span>
-      <span>{SOURCE_LABELS[source]}</span>
-    </div>
-  );
-};
-
 interface ImportPlaylistModalProps {
   open: boolean;
   playlistId: number;
-  playlistName: string;
   existingSongs: Song[];
   onClose: () => void;
   onImported: () => void;
@@ -70,17 +29,11 @@ interface ImportPlaylistModalProps {
 const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
   open,
   playlistId,
-  playlistName,
   existingSongs,
   onClose,
   onImported,
 }) => {
   const [step, setStep] = useState<'input' | 'progress' | 'result'>('input');
-  const [importMode, setImportMode] = useState<'text' | 'link'>('text');
-
-  // 文本导入状态
-  const [text, setText] = useState('');
-  const [sourceOrder, setSourceOrder] = useState<SourceType[]>(['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda']);
 
   // 链接导入状态
   const [linkUrl, setLinkUrl] = useState('');
@@ -94,51 +47,6 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
   const [result, setResult] = useState<ImportResult | null>(null);
   const [importing, setImporting] = useState(false);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
-
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = sourceOrder.indexOf(active.id as SourceType);
-    const newIndex = sourceOrder.indexOf(over.id as SourceType);
-    if (oldIndex === -1 || newIndex === -1) return;
-    setSourceOrder(arrayMove(sourceOrder, oldIndex, newIndex));
-  }, [sourceOrder]);
-
-  const handleStartImport = useCallback(async () => {
-    if (!text.trim()) {
-      message.warning('请输入歌曲列表');
-      return;
-    }
-    const lines = parseSongList(text);
-    if (lines.length === 0) {
-      message.warning('未解析到有效的歌曲信息');
-      return;
-    }
-
-    setStep('progress');
-    setImporting(true);
-
-    try {
-      const finalResult = await importSongs(
-        playlistId,
-        text,
-        sourceOrder,
-        existingSongs,
-        (state) => setProgress(state)
-      );
-      setResult(finalResult);
-      setStep('result');
-    } catch (error) {
-      message.error('导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
-      setStep('input');
-    } finally {
-      setImporting(false);
-    }
-  }, [text, sourceOrder, playlistId, existingSongs]);
-
   // 链接解析处理
   const handleParseLink = useCallback(async () => {
     if (!linkUrl.trim()) {
@@ -146,7 +54,7 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
       return;
     }
 
-    const urlInfo = parsePlaylistUrl(linkUrl);
+    let urlInfo = parsePlaylistUrl(linkUrl);
     if (!urlInfo) {
       setLinkError('请输入有效的歌单链接（支持网易云和QQ音乐）');
       return;
@@ -156,8 +64,21 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     setLinkError(null);
 
     try {
-      const sourceType = urlInfo.type === 'qq' ? 'qq' : 'netease';
-      const songs = await callMusicApi('getPlaylistSongsFromThirdParty', linkUrl, sourceType);
+      let songs: Song[] = [];
+      if (urlInfo.type === 'qq') {
+        songs = await callMusicApi('getPlaylistSongsFromThirdParty', linkUrl, 'qq');
+      } else {
+        if (urlInfo.type === 'netease-short') {
+          // 短链渲染层无法跟随跨域 302：主进程解析出落地 URL 后再取歌单 id
+          const finalUrl = await callMusicApi('resolvePlaylistLink', urlInfo.url!);
+          urlInfo = parsePlaylistUrl(finalUrl);
+          if (!urlInfo || urlInfo.type !== 'netease') {
+            setLinkError('短链解析失败，未能定位到网易云歌单');
+            return;
+          }
+        }
+        songs = await callMusicApi('getNeteasePlaylistSongs', Number(urlInfo.id));
+      }
 
       if (songs.length === 0) {
         setLinkError('歌单不存在或没有歌曲');
@@ -207,51 +128,17 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
       onImported();
     }
     setStep('input');
-    setImportMode('text');
-    setText('');
     setLinkUrl('');
     setParsedLinkSongs([]);
     setSelectedSongIds(new Set());
     setLinkError(null);
     setProgress(null);
     setResult(null);
-    setSourceOrder(['netease', 'qq', 'kugou', 'kuwo', 'qianqian', 'soda']);
     onClose();
   };
 
-  // 渲染文本导入表单
-  const renderTextImportForm = () => (
-    <div>
-      <div style={{ marginBottom: '12px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-        粘贴歌曲列表到歌单「{playlistName}」，每行一首
-      </div>
-      <div style={{ marginBottom: '8px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-        格式：歌曲名 - 歌手
-      </div>
-      <Input.TextArea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={`七里香 - 周杰伦\n童话 - 光良\n泡沫 - G.E.M. 邓紫棋`}
-        rows={8}
-        style={{ fontSize: '14px', resize: 'vertical', marginBottom: '16px' }}
-      />
-      <div style={{ marginBottom: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-        搜索源顺序（拖拽调整）：
-      </div>
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={sourceOrder} strategy={verticalListSortingStrategy}>
-            {sourceOrder.map((source, index) => (
-              <DraggableSource key={source} source={source} index={index} />
-            ))}
-          </SortableContext>
-        </DndContext>
-      </div>
-    </div>
-  );
-
-  // 渲染链接导入表单
-  const renderLinkImportForm = () => (
+  // 渲染输入步骤（链接导入）
+  const renderInput = () => (
     <div>
       <LinkImportForm
         linkUrl={linkUrl}
@@ -273,36 +160,6 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
               setSelectedSongIds(new Set());
             }}
           />
-        </div>
-      )}
-    </div>
-  );
-
-  // 渲染输入步骤
-  const renderInput = () => (
-    <div>
-      <Tabs
-        activeKey={importMode}
-        onChange={(key) => setImportMode(key as 'text' | 'link')}
-        items={[
-          {
-            key: 'text',
-            label: '文本导入',
-            children: renderTextImportForm()
-          },
-          {
-            key: 'link',
-            label: '链接导入',
-            children: renderLinkImportForm()
-          }
-        ]}
-      />
-      {importMode === 'text' && (
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" onClick={handleStartImport} style={{ backgroundColor: 'var(--accent)' }}>
-            开始导入
-          </Button>
         </div>
       )}
     </div>

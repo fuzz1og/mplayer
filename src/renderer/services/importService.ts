@@ -1,7 +1,5 @@
 import {
   parsePlaylistUrl,
-  parseSongList,
-  importSongs as coreImportSongs,
   importFromLink as coreImportFromLink,
 } from '@mplayer/core';
 import type { ImportSource } from '@mplayer/core';
@@ -9,17 +7,15 @@ import type { Song } from '@mplayer/core';
 import type { Playlist } from '@mplayer/core';
 import type {
   PlaylistUrlInfo,
-  ParsedLine,
   ProgressState,
   ImportResult,
 } from '@mplayer/core';
-import { searchService } from '@/renderer/services/searchService';
 import { IpcClient } from '@/renderer/services/IpcClient';
 
 // 兼容旧导出名（ImportPlaylistModal / 测试仍引用）
 export type SourceType = ImportSource;
-export type { PlaylistUrlInfo, ParsedLine, ProgressState, ImportResult };
-export { parsePlaylistUrl, parseSongList };
+export type { PlaylistUrlInfo, ProgressState, ImportResult };
+export { parsePlaylistUrl };
 
 async function addSongToPlaylist(playlistId: string | number, song: Song): Promise<void> {
   const pid = Number(playlistId);
@@ -29,19 +25,8 @@ async function addSongToPlaylist(playlistId: string | number, song: Song): Promi
 }
 
 const importDeps = {
-  batchSearch: (keywords: string[], source: ImportSource) => searchService.batchSearch(keywords, source),
   addSong: addSongToPlaylist,
 };
-
-export function importSongs(
-  playlistId: number,
-  text: string,
-  sourceOrder: SourceType[],
-  existingSongs: Song[],
-  onProgress: (state: ProgressState) => void
-): Promise<ImportResult> {
-  return coreImportSongs(playlistId, text, sourceOrder, existingSongs, importDeps, onProgress);
-}
 
 export function importFromLink(
   playlistId: number,
