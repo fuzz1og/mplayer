@@ -436,21 +436,6 @@ async function fetchArtistInfo(artistId: string): Promise<Artist | null> {
   }
 }
 
-/** 预热热门歌手头像缓存（top 100），供 HTML 爬取分类歌手时补图（原门面导出迁入）。 */
-export async function warmUpArtistPicCache(): Promise<void> {
-  if (artistPicCache.size > 50) return;
-  try {
-    const data = await plaintextGetJson<any>('https://music.163.com/api/v1/artist/list?offset=0&limit=100&initial=-1');
-    const rawArtists: any[] = data?.artists || [];
-    for (const a of rawArtists) {
-      const picUrl = a.picUrl || a.img1v1Url || '';
-      if (picUrl && !artistPicCache.has(a.name)) artistPicCache.set(a.name, picUrl);
-    }
-  } catch (e) {
-    console.error('[warmUpArtistPicCache] 预热失败:', e);
-  }
-}
-
 /** 默认 ContentCache（D6）：包一层 cacheManager，TTL 由调用方显式传。 */
 export const defaultContentCache: ContentCache = {
   get: <T,>(key: string) => cacheManager.get<T>(key),

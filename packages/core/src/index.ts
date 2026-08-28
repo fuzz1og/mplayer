@@ -96,7 +96,7 @@ export {
   getTlsFingerprintHeaders,
   getTlsFingerprintConfig,
 } from './api/tlsFingerprint.js';
-export { neteaseDirectClient, createNeteaseDirectClient, defaultContentCache, warmUpArtistPicCache } from './api/neteaseDirect.js';
+export { neteaseDirectClient, createNeteaseDirectClient, defaultContentCache } from './api/neteaseDirect.js';
 export { qianqianDirectClient } from './api/qianqianDirect.js';
 export { miguDirectClient, decryptXorStream, XOR_KEY } from './api/miguDirect.js';
 export { qqDirectClient, rsaPkcs1v15Encrypt, aesCbcPkcs7Encrypt, obtainQimei, randomGuid } from './api/qqDirect.js';
