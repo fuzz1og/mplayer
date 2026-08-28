@@ -44,6 +44,7 @@ function makeApi(methods: Partial<Record<keyof MusicApiMethodMap, unknown>>) {
     invalidateCoverUrl: vi.fn(),
     fillSongUrls: vi.fn(async (songs: Song[]) => songs),
     getSodaPlayableUrl: vi.fn(async (id: string) => `file:///${id}`),
+    resolvePlaylistLink: vi.fn(async (url: string) => url),
     // 其余 core 方法空实现（占位，保证类型完整）
     searchSongById: vi.fn(async () => null),
     batchSearch: vi.fn(async () => ({})),
@@ -125,6 +126,18 @@ describe('musicApi:call 单通道分发表', () => {
     const result = await handler({}, 'getSodaPlayableUrl', 't1');
     expect(api.getSodaPlayableUrl).toHaveBeenCalledWith('t1');
     expect(result).toEqual({ success: true, data: 'file:///t1' });
+  });
+
+  it('resolvePlaylistLink 转发 main 扩展对象', async () => {
+    const api = makeApi({
+      resolvePlaylistLink: vi.fn(async () => 'https://music.163.com/playlist?id=42'),
+    });
+    registerMusicApiCall(api as any);
+    const handler = getCallHandler();
+
+    const result = await handler({}, 'resolvePlaylistLink', 'https://163cn.tv/abc');
+    expect(api.resolvePlaylistLink).toHaveBeenCalledWith('https://163cn.tv/abc');
+    expect(result).toEqual({ success: true, data: 'https://music.163.com/playlist?id=42' });
   });
 
   it('probeSongsBatch 转发空 url 保留 invalid 语义（交由 core 内实现）', async () => {

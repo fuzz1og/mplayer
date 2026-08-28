@@ -17,6 +17,7 @@ import { registerCacheIpc } from './ipc/cache';
 import { registerFavoriteIpc, registerHistoryIpc, registerPlaylistIpc } from './ipc/favoriteHistoryPlaylist';
 import { registerLocalMusicIpc } from './ipc/localMusic';
 import { registerMusicApiCall } from './ipc/musicApiHandlers';
+import { resolvePlaylistLink } from './services/playlistLinkResolver';
 import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDownloadIpc, registerAppIpc, TIER3_SETTING_KEY } from './ipc/appSettingsUpdate';
 import { registerCookiePersister, loadCookiesFromDisk } from './cookies/cookieAdapter';
 
@@ -57,6 +58,10 @@ const musicApi = {
       console.error('下载汽水音频到缓存失败，回退直链:', dlErr);
     }
     return remoteUrl;
+  },
+  // 歌单分享短链解析：渲染层无法跟随跨域 302，主进程代跟并返回落地 URL
+  async resolvePlaylistLink(url: string): Promise<string> {
+    return resolvePlaylistLink(url);
   },
 };
 

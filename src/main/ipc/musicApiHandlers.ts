@@ -13,19 +13,21 @@ import { cacheResolvedCover } from './cache';
  */
 
 /**
- * main.ts 扩展后的完整 musicApi（core 方法 + getSodaPlayableUrl）。
- * getSodaPlayableUrl 签名已由 contract 的 `MainOnlyMethods` 声明，此处只引用不重复。
+ * main.ts 扩展后的完整 musicApi（core 方法 + getSodaPlayableUrl + resolvePlaylistLink）。
+ * MainOnly 方法签名已由 contract 的 `MainOnlyMethods` 声明，此处只引用不重复。
  */
 type CoreMusicApi = typeof import('@/main/api/musicApi').musicApi;
 type MusicApi = Pick<CoreMusicApi, MusicApiMethod> & {
   getSodaPlayableUrl: MainOnlyMethods['getSodaPlayableUrl'];
+  resolvePlaylistLink: MainOnlyMethods['resolvePlaylistLink'];
 };
 
 /**
  * 注册单个 `musicApi:call` 分发通道。
  * 旧 `musicApi:*` / `lyrics:get` / `api:getThrottleWait` 通道已删除，music 域收敛为
  * `musicApi:call` 单通道；core 方法通过 MUSIC_API_METHODS 收编，MainOnly 方法
- * （getAggregatedChart / getThrottleWait / getSodaPlayableUrl）在分发表内单独接线。
+ * （getAggregatedChart / getThrottleWait / getSodaPlayableUrl / resolvePlaylistLink）
+ * 在分发表内单独接线。
  */
 export function registerMusicApiCall(api: MusicApi): void {
   const dispatch = {
@@ -82,6 +84,7 @@ export function registerMusicApiCall(api: MusicApi): void {
     getAggregatedChart,
     getThrottleWait: async () => getThrottleWaitMs(),
     getSodaPlayableUrl: (trackId: string) => api.getSodaPlayableUrl(trackId),
+    resolvePlaylistLink: (url: string) => api.resolvePlaylistLink(url),
   } satisfies MusicApiMethodMap;
 
   ipcMain.handle(
