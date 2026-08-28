@@ -10,7 +10,7 @@ import { usePlayerStore } from '../../stores/playerStore';
 import {radius, shadow, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
-import ScalePress from '../../components/ScalePress';
+import ScalePress, { pressScale } from '../../components/ScalePress';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight, LIST_TAIL_PADDING } from '../../components/chromeMetrics';
@@ -94,7 +94,7 @@ export default function DownloadPage() {
           { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + LIST_TAIL_PADDING },
         ]}
         ListHeaderComponent={
-          <ScalePress style={styles.pathBox} pressScaleTo={0.98} onPress={handlePickDir}>
+          <ScalePress style={styles.pathBox} pressScaleTo={pressScale.row} onPress={handlePickDir}>
             <View style={styles.pathInfo}>
               <Text style={styles.pathLabel}>保存位置</Text>
               <Text style={styles.pathText} numberOfLines={2}>
@@ -120,7 +120,7 @@ export default function DownloadPage() {
           return (
             <ScalePress
               style={styles.row}
-              pressScaleTo={0.98}
+              pressScaleTo={pressScale.row}
               onPress={() => handlePlay(item)}
               disabled={item.status !== 'done'}
             >

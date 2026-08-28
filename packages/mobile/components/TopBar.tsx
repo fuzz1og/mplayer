@@ -96,7 +96,7 @@ export default function TopBar() {
           }}
           onBlur={() => setFocused(false)}
         />
-        <ScalePress onPress={() => setShowSourcePicker(true)} pressScaleTo={0.98} style={styles.sourceBtn}>
+        <ScalePress onPress={() => setShowSourcePicker(true)} style={styles.sourceBtn}>
           <SourceBadge source={selectedSource} size="sm" />
           <Text style={styles.sourceLabel}>{SOURCE_OPTION_LABELS[selectedSource]}</Text>
           <ChevronDown size={12} color={colors.textSecondary} />

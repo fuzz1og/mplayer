@@ -12,7 +12,7 @@ import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
 import { cacheManager, musicApi, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
 import SongListSkeleton from '../../components/SongListSkeleton';
-import ScalePress from '../../components/ScalePress';
+import ScalePress, { pressScale } from '../../components/ScalePress';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
 import {radius, spacing, textVariants} from '../../theme/tokens';
@@ -154,7 +154,7 @@ export default function RecommendPage() {
                   <ScalePress
                     key={String(p.id)}
                     style={{ width: cardW }}
-                    pressScaleTo={0.98}
+                    pressScaleTo={pressScale.row}
                     onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
                   >
                     {p.coverImgUrl ? (

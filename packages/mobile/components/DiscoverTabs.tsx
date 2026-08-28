@@ -12,7 +12,7 @@ import { lightColors, darkColors } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import ScalePress from './ScalePress';
+import ScalePress, { pressScale } from './ScalePress';
 import SegmentedTabs from './SegmentedTabs';
 import TextTabs from './TextTabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -170,7 +170,7 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
         <ScalePress
           key={song.id + String(i)}
           style={[styles.songRow, i > 0 && styles.songRowSep]}
-          pressScaleTo={0.98}
+          pressScaleTo={pressScale.row}
           onPress={() => playSong(song, i)}
         >
           <Text style={[styles.rank, i < 3 && { color: colors.rankText[i] }]}>{i + 1}</Text>
@@ -270,7 +270,7 @@ function AlbumsContent() {
   const renderItem = ({ item: album }: { item: Album }) => (
     <ScalePress
       style={{ width: gridCardW }}
-      pressScaleTo={0.98}
+      pressScaleTo={pressScale.row}
       onPress={() => router.push(`/album/${album.id}?name=${encodeURIComponent(album.name)}&pic=${encodeURIComponent(album.picUrl)}&artist=${encodeURIComponent(album.artist)}` as any)}
     >
       {album.picUrl ? (
@@ -396,7 +396,7 @@ function PlaylistContent() {
   const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
     <ScalePress
       style={{ width: gridCardW }}
-      pressScaleTo={0.98}
+      pressScaleTo={pressScale.row}
       onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
     >
       {p.coverImgUrl ? (
@@ -531,7 +531,7 @@ function ArtistContent() {
   const renderItem = ({ item: a }: { item: any }) => (
     <ScalePress
       style={styles.artistCard}
-      pressScaleTo={0.98}
+      pressScaleTo={pressScale.row}
       onPress={() => router.push(`/artist/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl || '')}` as any)}
     >
       {a.picUrl ? (

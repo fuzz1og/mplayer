@@ -22,7 +22,7 @@ import {radius, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
-import ScalePress from '../../components/ScalePress';
+import ScalePress, { pressScale } from '../../components/ScalePress';
 
 const BUILT_IN = [
   { key: 'favorites', icon: Heart, label: '收藏', desc: '我喜欢的歌曲' },
@@ -67,7 +67,7 @@ export default function PlaylistsPage() {
   const renderItem = ({ item }: { item: Playlist }) => (
     <ScalePress
       style={styles.row}
-      pressScaleTo={0.98}
+      pressScaleTo={pressScale.row}
       onPress={() => router.push(`/playlist/${item.id}`)}
       onLongPress={() => handleDelete(item)}
     >
@@ -112,7 +112,7 @@ export default function PlaylistsPage() {
               <ScalePress
                 key={item.key}
                 style={styles.row}
-                pressScaleTo={0.98}
+                pressScaleTo={pressScale.row}
                 onPress={() => router.push(item.key === 'favorites' ? '/favorites' : '/history')}
               >
                 <View style={[styles.iconWrap, { backgroundColor: colors.bgHover }]}>
