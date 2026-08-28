@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "description": "A minimalist desktop music player built with Electron, React and TypeScript",
+  "homepage": "https://github.com/fuzz1og/mplayer",
   "author": {
     "name": "t0nyst4",
     "email": "t0nyst4@users.noreply.github.com"
@@ -33,7 +34,7 @@
     "core:build": "npm run build -w packages/core"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3",
+    "electron-updater": "^6.8.9",
     "mp3tag.js": "^3.17.0",
     "music-metadata": "^11.12.3"
   },
@@ -62,7 +63,7 @@
     "concurrently": "^8.2.2",
     "dotenv": "^17.4.2",
     "electron": "^41.7.1",
-    "electron-builder": "^24.9.1",
+    "electron-builder": "^26.15.7",
     "esbuild": "0.25.2",
     "eslint": "^8.55.0",
     "expo": "~57.0.9",
