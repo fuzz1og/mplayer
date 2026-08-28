@@ -3,8 +3,9 @@ export { MULTI_SOURCE_LIST } from './constants.js';
 export { cacheManager } from './api/memoryCacheManager.js';
 export { RateLimiter, beforeRequest, getAntiScrapeHeaders, getApiRequestHeaders, getUserAgent, resetUaContinuity, UA_POOL_SIZE, safeParseJSON } from './api/antiScrape.js';
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
-export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents, setApiTimingLog, setApiRequestHandler, setThrottleObserver, markApiSessionBootstrapped, setApiSessionCookieValue, getApiSessionCookie, isApiOriginUrl, decodeLyricBody } from './api/musicApi.js';
-export type { ProxyAgents } from './api/musicApi.js';
+// #276 自建 API 机件归零：api 客户端/会话/拦截器/闸门/计时设施出口已删。
+// setProxyUrl/getProxyUrl 保留（代理注入替代确认悬而未决，mobile 设置页仍注入）。
+export { musicApi, setProxyUrl, getProxyUrl, decodeLyricBody } from './api/musicApi.js';
 export { probeAudio, probeAudioUrl, normalizeProbeUrl, isUrlAlive } from './api/audioProbe.js';
 export { probeSongs } from './api/probeSongs.js';
 export type { ProbeOptions } from './api/probeSongs.js';
@@ -58,7 +59,7 @@ export {
   rankSourcesByLatency,
   probeUpdateSources,
 } from './shared/updateChannels.js';
-export type { UpdateSourceDef, UpdateLatencyMap, FetchLike, ProbeOptions } from './shared/updateChannels.js';
+export type { UpdateSourceDef, UpdateLatencyMap, FetchLike } from './shared/updateChannels.js';
 export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
 export { stripSourceIdPrefix } from './utils/sourceIdPrefix.js';
 export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
