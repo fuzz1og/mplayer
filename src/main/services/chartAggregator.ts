@@ -1,7 +1,6 @@
 import type { Song, SourceKey, ToplistGroup } from '@mplayer/core';
 import { getDirectClient } from '@mplayer/core';
 import { musicApi } from '../api/musicApi';
-import { getKugouRank, getKugouNewSongs } from '../api/kugouApi';
 import { cacheManager } from '@mplayer/core';
 import { CHART_CACHE_TTL } from '../../shared/chart';
 import type {
@@ -66,11 +65,12 @@ function createSourceRanks(sources: SourceName[]): SourceRank {
   return Object.fromEntries(sources.map(source => [source, DEFAULT_MISS])) as SourceRank;
 }
 
-/** 网易榜单 playlistId（与门面时代一致，#278 迁能力面 getToplists）。 */
+/** 榜单 sourceId（与门面/桌面私有路径时代一致，#278 迁能力面 getToplists）。 */
 const NETEASE_TOPLIST_ID: Record<ChartType, number> = { hot: 3778678, new: 3779629 };
+const KUGOU_TOPLIST_ID: Record<ChartType, string> = { hot: '8888', new: '74534' };
 
 /** 从榜单组中按 id 取歌（ToplistGroup.id = `${source}:${sourceId}`）。 */
-function pickToplistSongs(groups: ToplistGroup[], source: SourceName, sourceId: number): Song[] {
+function pickToplistSongs(groups: ToplistGroup[], source: SourceName, sourceId: number | string): Song[] {
   return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
 }
 
@@ -117,19 +117,16 @@ function getSourceFetcher(type: ChartType, source: SourceName): () => Promise<No
     };
   }
 
-  // kugou
-  const kugouFetcher = type === 'hot'
-    ? () => getKugouRank('8888', 50)
-    : () => getKugouNewSongs();
+  // kugou：榜单走能力面 getToplists（#278 自桌面 kugouApi 私有路径并入）
   return async () => {
-    const songs = await kugouFetcher();
-    return songs.map((s, i) => ({
-      name: s.name,
-      artist: s.artist,
-      cover: s.cover,
+    const groups = await getDirectClient('kugou')!.getToplists!();
+    return pickToplistSongs(groups, 'kugou', KUGOU_TOPLIST_ID[type]).map((song, i) => ({
+      name: song.name,
+      artist: song.artist,
+      cover: song.cover,
       rank: i + 1, // Kugou 返回无 rank 字段，用索引
       sourceType: 'kugou' as SourceKey,
-      song: s,
+      song,
     }));
   };
 }

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getAggregatedChart } from '../../main/services/chartAggregator';
 import { musicApi } from '../../main/api/musicApi';
-import { getKugouRank } from '../../main/api/kugouApi';
 import { cacheManager } from '@mplayer/core';
 
-// 网易榜单已迁能力面（#278）：mock 直连客户端 getToplists
+// 网易/酷狗榜单已迁能力面（#278）：mock 直连客户端 getToplists
 const neteaseGetToplists = vi.fn();
+const kugouGetToplists = vi.fn();
 
 vi.mock('../../main/api/musicApi', () => ({
   musicApi: {
@@ -14,18 +14,16 @@ vi.mock('../../main/api/musicApi', () => ({
   },
 }));
 
-vi.mock('../../main/api/kugouApi', () => ({
-  getKugouRank: vi.fn(),
-  getKugouNewSongs: vi.fn(),
-}));
-
 vi.mock('@mplayer/core', () => ({
   cacheManager: {
     get: vi.fn(),
     set: vi.fn(),
   },
-  getDirectClient: (key: string) =>
-    key === 'netease' ? { key: 'netease', getToplists: neteaseGetToplists } : undefined,
+  getDirectClient: (key: string) => {
+    if (key === 'netease') return { key: 'netease', getToplists: neteaseGetToplists };
+    if (key === 'kugou') return { key: 'kugou', getToplists: kugouGetToplists };
+    return undefined;
+  },
   musicApi: {},
 }));
 
@@ -34,6 +32,10 @@ const neteaseSongs = (songs: Record<string, unknown>[]) =>
 const neteaseGroups = (songs: Record<string, unknown>[]) => [
   { id: 'netease:3778678', name: '热歌榜', songs: neteaseSongs(songs) },
   { id: 'netease:3779629', name: '新歌榜', songs: [] },
+];
+const kugouGroups = (songs: Record<string, unknown>[]) => [
+  { id: 'kugou:8888', name: '热歌榜', songs: songs.map((s) => ({ id: s.id, name: s.name, artist: s.artists, cover: s.cover, album: s.album, url: '', lrc: '', duration: 0, sourceType: 'kugou' })) },
+  { id: 'kugou:74534', name: '新歌榜', songs: [] },
 ];
 
 describe('chartAggregator', () => {
@@ -47,7 +49,7 @@ describe('chartAggregator', () => {
       { id: 'n1', name: 'Song A', artists: 'Artist A', cover: '', rank: 1, album: '' },
     ]));
     vi.mocked(musicApi.getQQHotlist).mockResolvedValue([] as any);
-    vi.mocked(getKugouRank).mockResolvedValue([] as any);
+    kugouGetToplists.mockResolvedValue(kugouGroups([]));
 
     const result = await getAggregatedChart('hot', ['netease', 'qq', 'kugou']);
 
@@ -66,7 +68,7 @@ describe('chartAggregator', () => {
     vi.mocked(musicApi.getQQHotlist).mockResolvedValue([
       { id: 'q1', name: 'Song B', artists: 'Artist B', cover: '', rank: 1, album: '' } as any,
     ]);
-    vi.mocked(getKugouRank).mockResolvedValue([] as any);
+    kugouGetToplists.mockResolvedValue(kugouGroups([]));
 
     const result = await getAggregatedChart('hot', ['netease', 'qq', 'kugou']);
 
@@ -83,7 +85,7 @@ describe('chartAggregator', () => {
       { id: 'n1', name: 'Song C', artists: 'Artist C', cover: '', rank: 2, album: '' },
     ]));
     vi.mocked(musicApi.getQQHotlist).mockResolvedValue([] as any);
-    vi.mocked(getKugouRank).mockRejectedValue(new Error('kugou down'));
+    kugouGetToplists.mockRejectedValue(new Error('kugou down'));
 
     const result = await getAggregatedChart('hot', ['netease', 'qq', 'kugou']);
 
