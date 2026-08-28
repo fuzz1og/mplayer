@@ -12,6 +12,7 @@ npm run build / electron:build   # 生产构建 / 打包当前平台
 npm run lint / typecheck / typecheck:mobile  # ESLint(零警告) / 双端 tsc
 npm run core:build               # 构建 @mplayer/core（改 core 后移动端必须重建）
 npm run test:run                 # vitest 单次（renderer）
+npm run mobile:e2e               # 移动端真机 e2e 一条龙（usbipd 直挂真机验收，见 e2e/README.md）
 ./scripts/verify.sh              # 提交/发布前全量验证（lint+design-lint+双端 typecheck+test；fast 跳过 test）
 ./scripts/release.sh             # 一键发布（bump → 验证 → commit → tag → 触发 CI 构建）
 ```
