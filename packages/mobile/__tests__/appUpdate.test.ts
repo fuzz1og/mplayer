@@ -69,17 +69,15 @@ describe('checkLatestRelease', () => {
   it('auto 通道：最快的成功镜像胜出，APK 直链走该镜像前缀', async () => {
     // 探针与元数据共用同一 stub：ghfast 即回、gh-proxy 慢一拍、直连失败
     stubFetch(async (url) => {
-      // 注意：必须按完整前缀判断，镜像 URL 里也含这段路径
-      if (url.startsWith('https://github.com/fuzz1og/mplayer/releases/')) {
-        throw new Error('direct blocked');
-      }
-      if (url.includes('ghfast.top')) return fakeOk(LATEST_YML('1.8.0'));
-      if (url.includes('gh-proxy.com')) {
+      const { hostname } = new URL(url);
+      if (hostname === 'github.com') throw new Error('direct blocked'); // 直连整域失败
+      if (hostname === 'ghfast.top') return fakeOk(LATEST_YML('1.8.0'));
+      if (hostname === 'gh-proxy.com') {
         await new Promise((r) => setTimeout(r, 20));
         return fakeOk(LATEST_YML('1.8.0'));
       }
-      if (url.includes('ghproxy.net')) throw new Error('down');
-      if (url.includes('api.github.com')) {
+      if (hostname === 'ghproxy.net') throw new Error('down');
+      if (hostname === 'api.github.com') {
         return fakeOk(JSON.stringify({ tag_name: 'v1.8.0', body: 'notes' }));
       }
       throw new Error('unexpected url: ' + url);
@@ -90,7 +88,9 @@ describe('checkLatestRelease', () => {
     expect(result.state).toBe('available');
     expect(result.version).toBe('1.8.0');
     expect(result.apkUrl).toContain('https://ghfast.top/https://github.com/');
-    expect(result.apkUrl?.endsWith('MPlayer-v1.8.0.apk')).toBe(true);
+    const apk = new URL(result.apkUrl!);
+    expect(apk.hostname).toBe('ghfast.top');
+    expect(apk.pathname.endsWith('/releases/latest/download/MPlayer-v1.8.0.apk')).toBe(true);
     expect(result.sourceLabel).toContain('ghfast.top');
     expect(result.needsUninstallMigration).toBe(true);
   });
@@ -98,8 +98,8 @@ describe('checkLatestRelease', () => {
   it('手动通道置顶所选源；最新版时不触发 available', async () => {
     const seenOrder: string[] = [];
     stubFetch(async (url) => {
-      if (url.includes('latest.yml')) {
-        seenOrder.push(url.split('/')[2]);
+      if (new URL(url).pathname.endsWith('/latest.yml')) {
+        seenOrder.push(new URL(url).host);
         return fakeOk(LATEST_YML('1.7.3'));
       }
       throw new Error('no api expected');
@@ -114,7 +114,7 @@ describe('checkLatestRelease', () => {
 
   it('全部镜像失败时回落 GitHub Releases API 兜底', async () => {
     stubFetch(async (url) => {
-      if (url.includes('api.github.com')) {
+      if (new URL(url).hostname === 'api.github.com') {
         return fakeOk(JSON.stringify({
           tag_name: 'v1.9.0',
           body: '- mirror fallback notes',

@@ -379,14 +379,14 @@ describe('UpdateService', () => {
 
       const fakeOk = { arrayBuffer: async () => new ArrayBuffer(64) };
       vi.mocked((autoUpdater.netSession as any).fetch).mockImplementation(async (url: string) => {
-        if (url.includes('gh-proxy.com')) {
+        if (new URL(url).hostname === 'gh-proxy.com') {
           await new Promise(r => setTimeout(r, 30)); // 最慢的成功源
           return fakeOk;
         }
-        if (url.includes('ghfast.top')) {
+        if (new URL(url).hostname === 'ghfast.top') {
           return fakeOk; // 最快
         }
-        if (url.includes('ghproxy.net')) {
+        if (new URL(url).hostname === 'ghproxy.net') {
           await new Promise(r => setTimeout(r, 10));
           return fakeOk;
         }
@@ -409,7 +409,7 @@ describe('UpdateService', () => {
       const fakeOk = { arrayBuffer: async () => new ArrayBuffer(64) };
       vi.mocked((autoUpdater.netSession as any).fetch).mockImplementation(async (url: string) => {
         // ghfast 测速最快，但检查阶段挂起等待事件
-        if (url.includes('ghfast.top')) return fakeOk;
+        if (new URL(url).hostname === 'ghfast.top') return fakeOk;
         throw new Error('probe fail');
       });
       mockCheckPending(autoUpdater);

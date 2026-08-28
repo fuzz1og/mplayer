@@ -101,13 +101,21 @@ async function probeOne(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const startedAt = Date.now();
   try {
-    // Range 截断是双保险：latest.yml 本身极小，镜像忽略 Range 也只拉几百字节
-    const res = await fetchLike(buildAssetUrl(def, 'latest.yml'), {
-      signal: controller.signal,
-      headers: { Range: 'bytes=0-4095' },
-    });
-    await res.arrayBuffer();
-    return Date.now() - startedAt;
+    // Range 截断是双保险：latest.yml 本身极小，镜像忽略 Range 也只拉几百字节。
+    // 与超时 Promise 竞速而非仅依赖 signal：fetchLike 若不响应 abort 也不会挂死探针。
+    const timedOut = Symbol('probe-timeout');
+    const outcome = await Promise.race([
+      (async () => {
+        const res = await fetchLike(buildAssetUrl(def, 'latest.yml'), {
+          signal: controller.signal,
+          headers: { Range: 'bytes=0-4095' },
+        });
+        await res.arrayBuffer();
+        return Date.now() - startedAt;
+      })(),
+      new Promise<typeof timedOut>((resolve) => setTimeout(() => resolve(timedOut), timeoutMs)),
+    ]);
+    return outcome === timedOut ? null : (outcome as number);
   } catch {
     return null;
   } finally {

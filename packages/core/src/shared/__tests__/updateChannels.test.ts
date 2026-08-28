@@ -19,7 +19,8 @@ describe('updateChannels', () => {
   });
 
   it('toGenericFeedUrl：直连源返回空串，镜像返回前缀拼接地址', () => {
-    const [mirror, direct] = UPDATE_SOURCE_DEFS;
+    const mirror = UPDATE_SOURCE_DEFS[0];
+    const direct = UPDATE_SOURCE_DEFS.find((d) => d.id === 'github')!;
     expect(toGenericFeedUrl(direct)).toBe('');
     expect(toGenericFeedUrl(mirror)).toBe(`https://gh-proxy.com/${GITHUB_LATEST_BASE}`);
   });
@@ -62,8 +63,8 @@ describe('updateChannels', () => {
     const fetchLike = vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
       seenUrls.push(url);
       expect(init?.headers?.Range).toBe('bytes=0-4095');
-      if (url.includes('github.com')) throw new Error('unreachable'); // 直连失败
-      await new Promise((r) => setTimeout(r, url.includes('ghfast') ? 1 : 15));
+      if (new URL(url).hostname === 'github.com') throw new Error('unreachable'); // 直连失败
+      await new Promise((r) => setTimeout(r, new URL(url).hostname === 'ghfast.top' ? 1 : 15));
       return fakeOk();
     });
 
@@ -74,8 +75,8 @@ describe('updateChannels', () => {
     expect(results.get('ghfast')).not.toBeNull();
     expect(results.get('gh-proxy')).not.toBeNull();
     // 每个 URL 都是 latest.yml 探针
-    expect(seenUrls.every((u) => u.endsWith('latest.yml'))).toBe(true);
-    expect(seenUrls.filter((u) => u.includes('gh-proxy.com/https://github.com'))).toHaveLength(1);
+    expect(seenUrls.every((u) => new URL(u).pathname.endsWith('/latest.yml'))).toBe(true);
+    expect(seenUrls.filter((u) => new URL(u).hostname === 'gh-proxy.com')).toHaveLength(1);
   });
 
   it('probeUpdateSources 超时的源以 null 表达，整体不 reject', async () => {
