@@ -19,17 +19,29 @@ beforeEach(() => {
 
 describe('settingsStore ↔ core 来源开关双向同步', () => {
   it('core setSourceModes → persister 镜像进 store（持久化方向）', () => {
-    setSourceModes({ netease: 'direct', qq: 'api' });
-    expect(useSettingsStore.getState().sourceModes).toEqual({ netease: 'direct', qq: 'api' });
+    setSourceModes({ netease: 'direct', qq: 'auto' });
+    expect(useSettingsStore.getState().sourceModes).toEqual({ netease: 'direct', qq: 'auto' });
   });
 
   it('rehydrate 时回灌 core 路由（启动方向）', async () => {
     (AsyncStorage.getItem as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      JSON.stringify({ state: { sourceModes: { qq: 'api' } }, version: 0 }),
+      JSON.stringify({ state: { sourceModes: { qq: 'direct' } }, version: 0 }),
     );
     await useSettingsStore.persist.rehydrate();
-    expect(getSourceMode('qq')).toBe('api');
-    expect(useSettingsStore.getState().sourceModes).toEqual({ qq: 'api' });
+    expect(getSourceMode('qq')).toBe('direct');
+    expect(useSettingsStore.getState().sourceModes).toEqual({ qq: 'direct' });
+  });
+
+  it('rehydrate 存量 legacy "api" 洗白为 "auto" 并回写 store（#277）', async () => {
+    (AsyncStorage.getItem as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      JSON.stringify({ state: { sourceModes: { qq: 'api', netease: 'bogus' } }, version: 0 }),
+    );
+    await useSettingsStore.persist.rehydrate();
+    // core 路由拿到洗白后的模式：api → auto，非法值过滤
+    expect(getSourceMode('qq')).toBe('auto');
+    expect(getSourceMode('netease')).toBe('auto');
+    // store 状态同步洗白（回写触发 persist 落盘干净数据）
+    expect(useSettingsStore.getState().sourceModes).toEqual({ qq: 'auto' });
   });
 });
 
