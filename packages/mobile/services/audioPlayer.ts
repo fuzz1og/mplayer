@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { cacheManager, getNextSongIndex, getApiSessionCookie, isApiOriginUrl, isLegacyDeadUrl, musicApi, resolvePlayableSong, resolveFreshUrl, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource } from '@mplayer/core';
+import { forgetPrefetchedUrl, getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -159,14 +159,17 @@ function nextSongAfterError(retryCount: number): Song | null {
 }
 
 /**
- * 播放失败后为同一首歌获取全新可播 URL（core 的 fresh 重试语义）。
+ * 播放失败后为同一首歌获取全新可播 URL（fresh 重试语义）。
  * 收藏/历史里的 url 可能已过期（音乐源直链一般数小时失效）。
+ * 先遗忘该歌的预取缓存条目——预取命中的是刚被证明失败的直链，0 等待
+ * 命中只会连败两次；再重走完整路由解析链（直连 → tier3 兜底）。
+ * 失败上抛，由调用方（playSong fresh 分支）兜底。
  */
 async function refreshPlayableUrl(song: Song): Promise<string> {
-  return resolveFreshUrl(song, {
-    ...musicApi,
-    clearAudioUrlCache: () => cacheManager.clearByPrefix('audioUrl'),
-  });
+  forgetPrefetchedUrl(song);
+  const routed = await musicApi.resolvePlayableSongRouted(song);
+  if (routed?.url?.startsWith('http')) return routed.url;
+  throw new Error('no playable URL');
 }
 
 /**
@@ -177,8 +180,7 @@ async function refreshPlayableUrl(song: Song): Promise<string> {
  * @param force 资源失效（onError）时强制搜索补全
  * @param refreshCover 封面**自身**失效（封面 onError）时允许换新签名 URL；
  *   其他失效（歌词失败等）不碰封面——新签名 URL 会让迷你栏/播放器封面
- *   闪一下重载（同一张图），封面只有真失效才值得换。调用方需先调
- *   invalidateCoverUrl 清除解析缓存（否则归一化 key 命中失效直链）。
+ *   闪一下重载（同一张图），封面只有真失效才值得换。
  */
 export async function fetchLrcInBackground(song: Song, force = false, refreshCover = false): Promise<void> {
   const log = useLogsStore.getState();
@@ -230,49 +232,18 @@ export async function fetchLrcInBackground(song: Song, force = false, refreshCov
 }
 
 /**
- * 判断是否为摄取端点的 302 跳转地址（api.php?get=url...）。
- * 这类地址播放器请求时要先到摄取端点再 302 到 CDN，两跳慢加载；
- * 提前在 JS 层解析成 CDN 直链（结果进缓存，重复播放秒开）。
- */
-function isRedirectEndpoint(url: string): boolean {
-  // 旧签名端点（api.php?get=*）已随自建 API 退役：不再当有效 302 端点送
-  // getAudioUrl 解析（必败死链），让其落入「无 url」分支走现解析链补全
-  if (isLegacyDeadUrl(url)) return false;
-  return url.includes('api.php?get=url');
-}
-
-/**
- * 移动端可播 URL 解析（直连优先，tier3 兜底）。
- * 走路由链（直连 client → tier3 订阅源兜底），失败才回退旧合并解析。
+ * 移动端可播 URL 解析（routed-only：直连 client → tier3 订阅源兜底）。
+ * 路由链失败/未命中（空 URL，无版权/VIP）不再回退旧合并解析——空结果
+ * 交给调用方按「解析链穷尽」处理（no playable URL → 换源提示/跳歌）。
  * 返回 {url, lrc, nonFull}（nonFull=试听版/片段，驱动「可换源」提示与 preview 徽标）。
  */
 export async function resolvePlayableUrlMobile(song: Song): Promise<{ url: string; lrc: string; nonFull: boolean }> {
-  try {
-    const routed = await musicApi.resolvePlayableSongRouted(song);
-    if (routed?.url?.startsWith('http')) {
-      return { url: routed.url, lrc: song.lrc || '', nonFull: !!routed.nonFull };
-    }
-  } catch {
-    // 路由链未配置/直连+tier3 均失败 → 走旧路径兜底
-  }
-  const legacy = await resolvePlayableSong(song, musicApi);
-  return { url: legacy.url, lrc: legacy.lrc, nonFull: false };
-}
-
-/**
- * 解析 302 端点 → CDN 直链（getAudioUrl 带缓存；直链直接返回原值）。
- * 不能设短硬超时：RN 播放器（expo-audio）请求 api.php 不带会话 cookie
- * 必返回「非法请求」（原生层无 cookie jar），只能等 JS 层解析完成拿到
- * CDN 直链再播放；桌面端 302 播放器能跟，多等无副作用。
- * getAudioUrl 内部自带 3 次重试 + 5s 超时兜底。
- */
-async function resolveDirectUrl(url: string): Promise<string> {
-  try {
-    const direct = await musicApi.getAudioUrl(url);
-    return direct?.startsWith('http') ? direct : url;
-  } catch {
-    return url;
-  }
+  const routed = await musicApi.resolvePlayableSongRouted(song);
+  return {
+    url: routed?.url?.startsWith('http') ? routed.url : '',
+    lrc: song.lrc || '',
+    nonFull: !!routed?.nonFull,
+  };
 }
 
 /**
@@ -282,7 +253,7 @@ async function resolveDirectUrl(url: string): Promise<string> {
  */
 
 /**
- * 切歌预取：播放成功后，后台并行解析队列下一首的播放 URL（含 302 → 直链），
+ * 切歌预取：播放成功后，后台并行解析队列下一首的播放 URL，
  * 结果写入 URL 持久化缓存——用户切歌时缓存命中，播放器直连 CDN 秒开。
  */
 function prefetchNextSong(): void {
@@ -302,8 +273,7 @@ function prefetchNextSong(): void {
     if (age != null && age < PREFETCH_SKIP_FRESH_MS) return;
     void (async () => {
       const resolved = await resolvePlayableUrlMobile(next);
-      const url = isRedirectEndpoint(resolved.url) ? await resolveDirectUrl(resolved.url) : resolved.url;
-      if (url?.startsWith('http') && next.id) void setCachedUrl(next.id, url);
+      if (resolved.url?.startsWith('http') && next.id) void setCachedUrl(next.id, resolved.url);
       if (resolved.lrc) void musicApi.getLyrics(resolved.lrc).catch(() => {});
     })().catch(() => {});
   } catch {
@@ -337,30 +307,21 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     let lrcUrl = song.lrc || '';
     if (fresh) {
       // 本地文件不会过期，不参与 fresh 重试（调用方已过滤 local 源）。
-      // fresh 语义：core 按 ID 强搜/跟随重定向拿全新 URL；严格匹配搜不到
-      // 版本时（如候选全被混音署名拦截）退回完整路由链（直连按 ID → tier3）
+      // fresh 语义：先遗忘预取缓存里刚失败的直链，再重走完整路由解析链
+      //（直连 → tier3）拿全新 URL；重试仍失败再退回同一条路由链兜底一次
       audioUrl = await refreshPlayableUrl(song).catch(() =>
         resolvePlayableUrlMobile(song).then((r) => r.url)
       );
-      // fresh 重试拿到的仍是 302 端点（api.php?get=url，服务端搜索返回）：
-      // 必须解析成 CDN 直链——播放器（ExoPlayer）请求 api.php 不带会话
-      // cookie 必返回「非法请求」→ Source error（酷狗等源解析成功与否的
-      // 关键路径，之前缺失导致 fresh 重试永远失败跳下一首）
-      audioUrl = isRedirectEndpoint(audioUrl) ? await resolveDirectUrl(audioUrl) : audioUrl;
       // fresh 重试只解析 URL，不返回歌词；歌单/收藏缓存歌 lrc 为空，
       // 后台并行补歌词（否则重试成功播放后歌词永远空白）
       void fetchLrcInBackground(song);
     } else if ((song.url?.startsWith('http') || song.url?.startsWith('file://')) && song.lrc) {
-      // 已有完整信息（音频 + 歌词）：零网络直接播放；
-      // 302 跳转端点同样先解析成 CDN 直链（两跳慢加载不因有歌词而保留）
-      audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
+      // 已有完整信息（音频 + 歌词）：零网络直接播放
+      audioUrl = song.url;
     } else if (song.url) {
-      // 有 url（http 直链 / file:// / api.php 302 端点）：
-      // 302 端点先解析成 CDN 直链（播放器直连 CDN，避免两跳慢加载）；
+      // 有 url（http 直链 / file://）：直接用；
       // 无歌词时后台并行补充（不阻塞播放）。
-      // 注意：302 端点不以 http 开头，但它是有效 url——直接解析即可，
-      // 不能走下方「无 url」分支去重复搜索（搜索结果页点击会白等一轮搜索）。
-      audioUrl = isRedirectEndpoint(song.url) ? await resolveDirectUrl(song.url) : song.url;
+      audioUrl = song.url;
       void fetchLrcInBackground(song);
     } else {
       let cached = await getCachedUrl(song.id);
@@ -378,13 +339,12 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       }
       if (cached) {
         // 缓存命中：秒起；歌词缺失时后台并行补
-        audioUrl = isRedirectEndpoint(cached) ? await resolveDirectUrl(cached) : cached;
+        audioUrl = cached;
         void fetchLrcInBackground(song);
       } else {
-        // 无 url：路由解析（直连 → tier3 兜底），失败回退旧合并解析
+        // 无 url：路由解析（直连 → tier3 兜底），空结果交给下方直链校验上抛
         const resolved = await resolvePlayableUrlMobile(song);
-        // 搜索兜底拿到的可能是 302 跳转端点 → JS 层解析成 CDN 直链
-        audioUrl = isRedirectEndpoint(resolved.url) ? await resolveDirectUrl(resolved.url) : resolved.url;
+        audioUrl = resolved.url;
         lrcUrl = resolved.lrc;
         playbackNonFull = resolved.nonFull;
         // 试听版：立即回写 preview 徽标 + 提示可换源（秒播直连试听，不等 tier3）
@@ -424,16 +384,6 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
         return official || '';
       })(),
     };
-    // 播放器直连会话保护端点（api.php 302）的兜底：显式带会话 cookie。
-    // 仅限 API 同源（CDN 直链是第三方域，带 cookie 会泄漏）。
-    // 正常情况下 JS 层已把 302 解析成 CDN 直链（此处不生效）；
-    // 解析失败/直链过期走播放器直连时，ExoPlayer 请求带 Cookie
-    // 才能拿到 302 而非「非法请求」。cookie 值来自桥透传
-    // （document.cookie）或桌面式直接读取；RN jar 自动携带时为空串。
-    const sessionCookie = getApiSessionCookie();
-    if (sessionCookie && isApiOriginUrl(audioUrl)) {
-      playerHeaders['Cookie'] = sessionCookie;
-    }
 
     // 单播放器复用（replace 换源）：永远只有一个 ExoPlayer 实例，
     // 切歌/重试不存在「旧播放器停止 vs 新播放器启动」的叠加窗口
