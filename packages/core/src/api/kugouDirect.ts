@@ -72,7 +72,7 @@ const KG_HEADERS = (): Record<string, string> => ({
 export const kugouDirectClient: DirectSourceClient = {
   key: 'kugou',
 
-  async search(keyword: string, page = 1): Promise<Song[]> {
+  async searchSongs(keyword: string, page = 1): Promise<Song[]> {
     const params = new URLSearchParams({
       format: 'json',
       keyword,

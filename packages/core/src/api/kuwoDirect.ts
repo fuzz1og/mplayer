@@ -210,7 +210,7 @@ function mapTrack(t: any): Song {
 export const kuwoDirectClient: DirectSourceClient = {
   key: 'kuwo',
 
-  async search(keyword: string, page = 1): Promise<Song[]> {
+  async searchSongs(keyword: string, page = 1): Promise<Song[]> {
     const params = new URLSearchParams({
       vipver: '1',
       client: 'kt',

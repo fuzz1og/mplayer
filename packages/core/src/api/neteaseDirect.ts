@@ -46,7 +46,7 @@ export const neteaseDirectClient: DirectSourceClient = {
   key: 'netease',
 
   /** 明文 cloudsearch 搜索。returns: 页歌曲 */
-  async search(keyword: string, page = 1): Promise<Song[]> {
+  async searchSongs(keyword: string, page = 1): Promise<Song[]> {
     const params = new URLSearchParams({
       s: keyword,
       type: '1',

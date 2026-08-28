@@ -41,10 +41,10 @@ const mockSong = (over: Partial<Song> = {}): Song => ({
   ...over,
 });
 
-describe('qianqianDirectClient.search（标注签名的搜索直连）', () => {
+describe('qianqianDirectClient.searchSongs（标注签名的搜索直连）', () => {
   it('GET music.91q.com/v1/search 携带 word/type/appid + timestamp，头含 referer/from', async () => {
     const calls = mockRequest({ respond: () => ({ data: { typeTrack: [] } }) });
-    await qianqianDirectClient.search!('晴天', 1);
+    await qianqianDirectClient.searchSongs!('晴天', 1);
     const c = calls[0];
     expect(c.url).toContain('https://music.91q.com/v1/search');
     expect(c.query.get('word')).toBe('晴天');
@@ -60,7 +60,7 @@ describe('qianqianDirectClient.search（标注签名的搜索直连）', () => {
     const now = Date.now();
     viDate(now);
     try {
-      await qianqianDirectClient.search!('晴天', 3);
+      await qianqianDirectClient.searchSongs!('晴天', 3);
     } finally {
       restoreDate();
     }
@@ -93,7 +93,7 @@ describe('qianqianDirectClient.search（标注签名的搜索直连）', () => {
         },
       }),
     });
-    const songs = await qianqianDirectClient.search!('晴天', 1);
+    const songs = await qianqianDirectClient.searchSongs!('晴天', 1);
     expect(songs).toHaveLength(1);
     expect(songs[0]).toMatchObject({
       id: '65818',
@@ -110,7 +110,7 @@ describe('qianqianDirectClient.search（标注签名的搜索直连）', () => {
     setTransport(async () => {
       throw new Error('qianqian down');
     });
-    await expect(qianqianDirectClient.search!('晴天', 1)).rejects.toThrow('qianqian down');
+    await expect(qianqianDirectClient.searchSongs!('晴天', 1)).rejects.toThrow('qianqian down');
   });
 });
 

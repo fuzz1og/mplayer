@@ -283,7 +283,7 @@ async function musicuPost(body: Record<string, unknown>): Promise<any> {
 export const qqDirectClient: DirectSourceClient = {
   key: 'qq',
 
-  async search(keyword: string, page = 1): Promise<Song[]> {
+  async searchSongs(keyword: string, page = 1): Promise<Song[]> {
     const q36 = await ensureQ36();
     const body = {
       comm: buildCommon(q36),
