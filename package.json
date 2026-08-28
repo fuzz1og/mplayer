@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "description": "A minimalist desktop music player built with Electron, React and TypeScript",
+  "homepage": "https://github.com/fuzz1og/mplayer",
   "author": {
     "name": "t0nyst4",
     "email": "t0nyst4@users.noreply.github.com"
@@ -33,7 +34,8 @@
     "core:build": "npm run build -w packages/core"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3",
+    "buffer": "^6.0.3",
+    "electron-updater": "^6.8.9",
     "mp3tag.js": "^3.17.0",
     "music-metadata": "^11.12.3"
   },
@@ -57,12 +59,12 @@
     "@typescript-eslint/eslint-plugin": "^8.61.1",
     "@typescript-eslint/parser": "^8.67.0",
     "@vitejs/plugin-react": "^4.2.1",
-    "antd": "^6.6.0",
+    "antd": "^6.6.2",
     "axios": "^1.6.2",
     "concurrently": "^8.2.2",
     "dotenv": "^17.4.2",
     "electron": "^41.7.1",
-    "electron-builder": "^24.9.1",
+    "electron-builder": "^26.15.7",
     "esbuild": "0.25.2",
     "eslint": "^8.55.0",
     "expo": "~57.0.9",
@@ -71,20 +73,20 @@
     "http-proxy-agent": "^9.0.0",
     "https-proxy-agent": "^9.0.0",
     "jsdom": "^29.1.1",
-    "lucide-react": "^1.7.0",
-    "pinyin-pro": "^3.28.2",
+    "lucide-react": "^1.35.0",
+    "pinyin-pro": "^3.29.3",
     "prettier": "^3.9.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-router-dom": "^7.14.2",
+    "react-router-dom": "^7.18.2",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.64.0",
-    "vite": "^6.4.3",
+    "vite": "^7.3.6",
     "vite-plugin-electron": "^1.1.0",
     "vite-plugin-electron-renderer": "^0.14.5",
-    "vitest": "^4.1.5",
+    "vitest": "^4.1.11",
     "wait-on": "^9.1.0",
-    "zustand": "^4.4.7"
+    "zustand": "^5.0.15"
   },
   "license": "PolyForm-Noncommercial-1.0.0"
 }

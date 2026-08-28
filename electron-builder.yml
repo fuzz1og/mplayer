@@ -18,6 +18,10 @@ files:
   - "!**/*.test.*"
   - "!**/*.spec.*"
   - "!dist/*.exe"
+  # 二次打包会把上一轮产出的安装包卷进 asar（历史上体积 +64% 事故同款），产物扩展名全覆盖
+  - "!dist/*.AppImage"
+  - "!dist/*.deb"
+  - "!dist/*.dmg"
   - "!dist/*.7z"
   - "!dist/*.zip"
   - "!dist/builder-*"
@@ -44,6 +48,10 @@ nsis:
   createStartMenuShortcut: true
 mac:
   icon: resources/icon.png
+  # electron-builder 26 起公证不再靠 env 自动检测隐式触发，需显式开启（凭据仍走 CI 注入的
+  # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三件套）。实测 26.15.7：
+  # 无签名证书时公证随代码签名一并跳过（与 24 行为一致）；未来配置证书+公证凭据后自动生效
+  notarize: true
   target:
     - target: dmg
       arch:
