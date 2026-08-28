@@ -48,9 +48,9 @@ nsis:
   createStartMenuShortcut: true
 mac:
   icon: resources/icon.png
-  # electron-builder 26 起不再凭环境变量自动触发公证，必须显式开启（凭据由 CI 注入
-  # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三件套；缺凭据时构建报错，
-  # 宁可失败也不产出未经公证的 dmg —— Gatekeeper 会直接拦截未公证产物）
+  # electron-builder 26 起公证不再靠 env 自动检测隐式触发，需显式开启（凭据仍走 CI 注入的
+  # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三件套）。实测 26.15.7：
+  # 无签名证书时公证随代码签名一并跳过（与 24 行为一致）；未来配置证书+公证凭据后自动生效
   notarize: true
   target:
     - target: dmg
