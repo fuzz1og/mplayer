@@ -1,6 +1,6 @@
 import type { Song, SourceKey, AudioTag } from '../types/index.js';
 import { calculateSimilarity, isExactMatch } from '../utils/songMatcher.js';
-import { stripSourceIdPrefix } from './resolvePlayableUrl.js';
+import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
 
 /** 换源候选：exact=精确匹配（同名同歌手原版）；score=相似度（0~1）；
  *  playable=可播性（null=未探测/检测中，true=可播，false=失效）；

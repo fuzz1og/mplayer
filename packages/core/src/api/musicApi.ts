@@ -9,7 +9,7 @@ import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { looksLikeLyrics } from '../download/lyrics.js';
 import { request, bodyToText } from './transport.js';
-import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
+import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
 import { probeSongs } from './probeSongs.js';
 import { rememberProbeResult } from './prefetchCache.js';

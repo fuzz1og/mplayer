@@ -60,10 +60,7 @@ export {
 } from './shared/updateChannels.js';
 export type { UpdateSourceDef, UpdateLatencyMap, FetchLike, ProbeOptions } from './shared/updateChannels.js';
 export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
-export { resolvePlayableUrl, resolvePlayableSong, stripSourceIdPrefix } from './shared/resolvePlayableUrl.js';
-export type { UrlResolver, PlayableSong } from './shared/resolvePlayableUrl.js';
-export { resolveFreshUrl } from './shared/resolveFreshUrl.js';
-export type { FreshUrlResolver } from './shared/resolveFreshUrl.js';
+export { stripSourceIdPrefix } from './utils/sourceIdPrefix.js';
 export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
 export type { PlaylistUrlInfo, ProgressState, ImportResult, PlaylistImportDeps, ImportSource } from './api/playlistImport.js';
 export { CacheKernel } from './cache/cacheKernel.js';
