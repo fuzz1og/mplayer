@@ -14,8 +14,10 @@ interface SongCoverProps {
   iconSize?: number;
   /** 加载失败回调（搜索式刷新等后续动作由调用方决定，本组件无解析/无缓存语义）。 */
   onError?: () => void;
-  /** 透传到 img（如 MusicCard 需 relative 覆盖在占位层之上）。 */
+  /** 透传到 img（如绝对定位于容器）。 */
   style?: React.CSSProperties;
+  /** 透传到占位元素（默认已带 variant 基础样式，调用方覆盖特殊布局/底色）。 */
+  placeholderStyle?: React.CSSProperties;
 }
 
 /**
@@ -29,6 +31,7 @@ const SongCover: React.FC<SongCoverProps> = ({
   iconSize = 20,
   onError,
   style,
+  placeholderStyle,
 }) => {
   const [failed, setFailed] = useState(false);
 
@@ -48,7 +51,7 @@ const SongCover: React.FC<SongCoverProps> = ({
             alignItems: 'center',
             justifyContent: 'center',
             color: 'var(--text-tertiary)',
-            ...style,
+            ...placeholderStyle,
           }}
         >
           <Music2 size={iconSize} />
@@ -62,7 +65,7 @@ const SongCover: React.FC<SongCoverProps> = ({
             width: '100%',
             height: '100%',
             background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)',
-            ...style,
+            ...placeholderStyle,
           }}
         />
       );
@@ -77,7 +80,7 @@ const SongCover: React.FC<SongCoverProps> = ({
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: 'var(--cover-placeholder)',
-            ...style,
+            ...placeholderStyle,
           }}
         >
           <ListMusic size={iconSize} color="var(--text-tertiary)" />
