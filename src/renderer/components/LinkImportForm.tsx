@@ -29,6 +29,8 @@ const LinkImportForm: React.FC<LinkImportFormProps> = ({
         <div>• 网易云: https://music.163.com/playlist?id=xxx</div>
         <div>• 网易云短链接: http://163cn.tv/xxx</div>
         <div>• QQ音乐: https://c6.y.qq.com/base/fcgi-bin/u?__=xxx</div>
+        <div>• QQ音乐: https://y.qq.com/n/ryqq/playlist/xxx</div>
+        <div>• QQ音乐: …/taoge.html?id=xxx（手机分享页）</div>
       </div>
       <Input
         value={linkUrl}

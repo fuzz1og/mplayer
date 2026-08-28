@@ -66,10 +66,10 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     try {
       let songs: Song[] = [];
       if (urlInfo.type === 'qq') {
-        // QQ 歌单导入暂不可用：旧 unmeta 镜像 + batchSearch 链路已随自建 API
-        // 退役（恒返回空），方法与契约条目已删（#275）；原生直连接线是 #280。
-        setLinkError('QQ 歌单链接导入暂不支持，待原生化（#280）');
-        return;
+        // QQ 原生歌单接口（#280）：直链 parsePlaylistUrl 已带出歌单 id；短链传原 url，
+        // core 侧经 transport 跟随 302 解析 disstid（无需走主进程白名单解析腿）。
+        // 曲目 url 留空，播放时由 resolvePlayableSongRouted 路由解析。
+        songs = await callMusicApi('getQqPlaylistSongs', urlInfo.id ?? urlInfo.url!);
       } else {
         if (urlInfo.type === 'netease-short') {
           // 短链渲染层无法跟随跨域 302：主进程解析出落地 URL 后再取歌单 id
@@ -93,7 +93,8 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
       setSelectedSongIds(new Set(songs.map((song: { id: string }) => song.id)));
     } catch (error) {
       console.error('[LinkImport] 解析链接失败:', error);
-      setLinkError('解析链接失败，请检查网络连接');
+      // core 侧语义错误（歌单不存在/隐私/短链失效/歌曲链接）直接透出给用户
+      setLinkError(error instanceof Error && error.message ? error.message : '解析链接失败，请检查网络连接');
     } finally {
       setLinkLoading(false);
     }

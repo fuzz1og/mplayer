@@ -119,7 +119,7 @@ describe('ImportPlaylistModal', () => {
     expect(callMusicApiMock).toHaveBeenCalledWith('getPlaylistSongs', 'netease', 42, 0, 0);
   });
 
-  it('解析失败应显示错误', async () => {
+  it('解析失败应显示错误（IPC 错误信息原样透出）', async () => {
     callMusicApiMock.mockRejectedValue(new Error('Network error'));
 
     render(<ImportPlaylistModal {...defaultProps} />);
@@ -130,7 +130,7 @@ describe('ImportPlaylistModal', () => {
     fireEvent.click(screen.getByText('解析链接'));
 
     await waitFor(() => {
-      expect(screen.getByText('解析链接失败，请检查网络连接')).toBeInTheDocument();
+      expect(screen.getByText('Network error')).toBeInTheDocument();
     });
   });
 
@@ -146,6 +146,62 @@ describe('ImportPlaylistModal', () => {
       expect(screen.getByText('请输入有效的歌单链接（支持网易云和QQ音乐）')).toBeInTheDocument();
     });
     expect(callMusicApiMock).not.toHaveBeenCalled();
+  });
+
+  it('QQ 歌单直链应走原生 getQqPlaylistSongs（带歌单 id，#280）', async () => {
+    const qqSongs = [
+      { id: '004Z8Ihr0JIu5s', name: '晴天', artist: '周杰伦', sourceType: 'qq' },
+      { id: '002bKPPa1MfCjh', name: '七里香', artist: '周杰伦', sourceType: 'qq' },
+    ];
+    callMusicApiMock.mockResolvedValue(qqSongs);
+
+    render(<ImportPlaylistModal {...defaultProps} />);
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'https://y.qq.com/n/ryqq/playlist/7729596131' },
+    });
+    fireEvent.click(screen.getByText('解析链接'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/共 2 首歌曲/)).toBeInTheDocument();
+    });
+    expect(callMusicApiMock).toHaveBeenCalledTimes(1);
+    expect(callMusicApiMock).toHaveBeenCalledWith('getQqPlaylistSongs', '7729596131');
+  });
+
+  it('QQ 短链应把原链接交给 core 解析 302（#280）', async () => {
+    const qqSongs = [{ id: '004Z8Ihr0JIu5s', name: '晴天', artist: '周杰伦', sourceType: 'qq' }];
+    callMusicApiMock.mockResolvedValue(qqSongs);
+
+    render(<ImportPlaylistModal {...defaultProps} />);
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'https://c6.y.qq.com/base/fcgi-bin/u?__=w3lqEpOHACLO' },
+    });
+    fireEvent.click(screen.getByText('解析链接'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/共 1 首歌曲/)).toBeInTheDocument();
+    });
+    expect(callMusicApiMock).toHaveBeenCalledWith(
+      'getQqPlaylistSongs',
+      'https://c6.y.qq.com/base/fcgi-bin/u?__=w3lqEpOHACLO',
+    );
+  });
+
+  it('QQ 语义错误（隐私歌单）应原样透出（#280）', async () => {
+    callMusicApiMock.mockRejectedValue(new Error('该 QQ 歌单被主人设为隐私，无法导入'));
+
+    render(<ImportPlaylistModal {...defaultProps} />);
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'https://y.qq.com/n/ryqq/playlist/7729596131' },
+    });
+    fireEvent.click(screen.getByText('解析链接'));
+
+    await waitFor(() => {
+      expect(screen.getByText('该 QQ 歌单被主人设为隐私，无法导入')).toBeInTheDocument();
+    });
   });
 
   it('确认后应调用 importFromLink 入库', async () => {

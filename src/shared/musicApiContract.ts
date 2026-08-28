@@ -19,6 +19,7 @@ import type { AggregatedChartResult } from '@/shared/chart';
 /**
  * 基础方法清单（core `musicApi` 门面上的活方法，#275 收缩后全集）。
  * - QQ 榜单两方法暂留门面（QQ 内容迁移在后续票，#278 仅迁网易/酷狗）；
+ * - `getQqPlaylistSongs`（#280 歌单导入原生化，musicApi 层方法不进能力面）；
  * - `getLyricsBySongId` 已随歌词内聚删除（#242）。
  */
 export const BASE_METHODS = [
@@ -26,6 +27,7 @@ export const BASE_METHODS = [
   'getLyrics',
   'getQQHotlist',
   'getQQNewSongList',
+  'getQqPlaylistSongs',
   'getSodaAudioUrl',
   'getSodaLyrics',
   'parseSodaShareLink',
