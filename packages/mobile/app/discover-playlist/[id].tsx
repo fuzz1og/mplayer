@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { musicApi, formatPlayCount, type Song } from '@mplayer/core';
+import { getDirectClient, formatPlayCount, type Song } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
@@ -39,8 +39,8 @@ export default function DiscoverPlaylistDetailPage() {
       try {
         // 元数据与第一页歌曲并行（weapi 直连，歌曲含已解析播放 URL）
         const [p, page] = await Promise.all([
-          musicApi.getNeteasePlaylistDetail(Number(id)),
-          musicApi.getNeteasePlaylistSongsPage(Number(id), 0, PAGE_SIZE),
+          getDirectClient('netease')!.getPlaylistDetail!(Number(id)),
+          getDirectClient('netease')!.getPlaylistSongs!(Number(id), 0, PAGE_SIZE),
         ]);
         if (cancelled) return;
         setPlaylist(p);
@@ -50,7 +50,7 @@ export default function DiscoverPlaylistDetailPage() {
         // 后台补齐缺失 URL（weapi by-ID 批量直链），完成后触发重渲染
         // URL 补齐后直连探测：直链写入 core 预取缓存（播放 0 等待秒播）；
         // 探测不再写列表徽标（预测常错，徽标改播放后回写）
-        void musicApi.resolveNeteaseSongUrls(page.songs).then(() => {
+        void getDirectClient('netease')!.resolvePlayableUrls!(page.songs).then(() => {
           if (!cancelled) {
             setSongs([...page.songs]);
             void probeSongsPrefetch(page.songs);
@@ -69,13 +69,13 @@ export default function DiscoverPlaylistDetailPage() {
     if (loadingMore || !hasMore || !id) return;
     setLoadingMore(true);
     try {
-      const page = await musicApi.getNeteasePlaylistSongsPage(Number(id), offsetRef.current, PAGE_SIZE);
+      const page = await getDirectClient('netease')!.getPlaylistSongs!(Number(id), offsetRef.current, PAGE_SIZE);
       if (page.songs.length > 0) {
         setSongs(prev => [...prev, ...page.songs]);
         offsetRef.current += PAGE_SIZE;
         setHasMore(offsetRef.current < page.total);
         // 后台补齐本页缺失 URL + 补齐后直连探测预取（同首屏）
-        void musicApi.resolveNeteaseSongUrls(page.songs).then(() => {
+        void getDirectClient('netease')!.resolvePlayableUrls!(page.songs).then(() => {
           setSongs(prev => [...prev]);
           void probeSongsPrefetch(page.songs);
         });

@@ -49,7 +49,7 @@ export type { SongFileNameParts, SongFileNameDeps } from './utils/downloadFileNa
 export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, probeSwapCandidates, applySwap } from './shared/sourceSwap.js';
-export { songUsesSongidLyrics, isSodaSource } from './shared/songLyrics.js';
+export { songUsesSongidLyrics, isSodaSource, isInlineLyrics } from './shared/songLyrics.js';
 export {
   UPDATE_SOURCE_DEFS,
   GITHUB_LATEST_BASE,

@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { forgetPrefetchedUrl, getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource } from '@mplayer/core';
+import { forgetPrefetchedUrl, getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -216,8 +216,9 @@ export async function fetchLrcInBackground(song: Song, force = false, refreshCov
       ? !!fresh.cover?.startsWith('http') && fresh.cover !== cur.cover
       : !!fresh.cover?.startsWith('http') && !cur.cover;
     if (!lrcChanged && !coverChanged) return; // 资源仍有效，无需刷新
-    // 预取歌词文本（core 歌词缓存预热，全屏播放器打开秒显）
-    if (lrcChanged) void musicApi.getLyrics(fresh.lrc).catch(() => {});
+    // 预取歌词文本（core 歌词缓存预热，全屏播放器打开秒显）；
+    // 网易搜索兜底返回的是内联歌词文本（#242 fillLyrics），无需再走 URL 门面
+    if (lrcChanged && !isInlineLyrics(song.sourceType, fresh.lrc)) void musicApi.getLyrics(fresh.lrc).catch(() => {});
     usePlayerStore.setState({
       currentSong: {
         ...cur,
