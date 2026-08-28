@@ -7,7 +7,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
 import BottomSheet from './BottomSheet';
-import ScalePress from './ScalePress';
+import ScalePress, { pressScale } from './ScalePress';
 
 interface Props {
   visible: boolean;
@@ -41,7 +41,7 @@ export default function QueueListModal({ visible, onClose }: Props) {
           return (
             <ScalePress
               style={styles.item}
-              pressScaleTo={0.98}
+              pressScaleTo={pressScale.row}
               onPress={() => {
                 // 真机反馈（#186）：点歌换歌不关闭弹层，由用户决定何时关闭
                 setQueue(queue, index);

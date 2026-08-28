@@ -10,7 +10,7 @@ import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import BottomSheet from './BottomSheet';
-import ScalePress from './ScalePress';
+import ScalePress, { pressScale } from './ScalePress';
 
 function sourceLabel(sourceType?: string): string {
   return SOURCE_LABELS[sourceType as SourceKey] || sourceType || '未知';
@@ -100,7 +100,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
                 <ScalePress
                   key={p.id}
                   style={styles.item}
-                  pressScaleTo={0.98}
+                  pressScaleTo={pressScale.row}
                   onPress={() => handleSelect(p.id, p.name)}
                 >
                   <ListMusic size={22} color={colors.accent} />

@@ -8,7 +8,7 @@ import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import SourceBadge from './SourceBadge';
 import BottomSheet from './BottomSheet';
-import ScalePress from './ScalePress';
+import ScalePress, { pressScale } from './ScalePress';
 
 const SWAP_SOURCES: { key: SourceKey; label: string }[] = [
   { key: 'netease', label: '网易云' },
@@ -69,7 +69,7 @@ export default function SourceSwapModal({
                 <ScalePress
                   key={`${c.song.id}-${i}`}
                   style={styles.item}
-                  pressScaleTo={0.98}
+                  pressScaleTo={pressScale.row}
                   onPress={() => onSelectCandidate(c)}
                 >
                   <View style={[styles.dot, { backgroundColor: c.exact ? colors.success : colors.textSecondary }]} />
@@ -92,7 +92,7 @@ export default function SourceSwapModal({
                   <ChevronRight size={18} color={colors.textTertiary} />
                 </ScalePress>
               ))}
-              <ScalePress style={styles.backBtn} pressScaleTo={0.98} onPress={onBack}>
+              <ScalePress style={styles.backBtn} pressScaleTo={pressScale.row} onPress={onBack}>
                 <ArrowLeft size={16} color={colors.textSecondary} />
                 <Text style={styles.backText}>返回选择其他音乐源</Text>
               </ScalePress>
@@ -104,7 +104,7 @@ export default function SourceSwapModal({
                 <ScalePress
                   key={s.key}
                   style={[styles.item, disabled && { backgroundColor: colors.bgHover }]}
-                  pressScaleTo={0.98}
+                  pressScaleTo={pressScale.row}
                   disabled={disabled}
                   onPress={() => onSelectSource(s.key)}
                 >
