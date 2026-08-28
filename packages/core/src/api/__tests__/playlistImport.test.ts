@@ -32,6 +32,26 @@ describe('parsePlaylistUrl', () => {
     expect(qq?.url).toContain('c6.y.qq.com');
   });
 
+  it('recognizes qq web playlist direct links with id（#280）', () => {
+    expect(parsePlaylistUrl('https://y.qq.com/n/ryqq/playlist/7729596131')).toEqual({ type: 'qq', id: '7729596131' });
+    expect(parsePlaylistUrl('https://y.qq.com/n/ryqq_v2/playlist/7729596131')).toEqual({ type: 'qq', id: '7729596131' });
+  });
+
+  it('recognizes qq h5 share pages with id（#280）', () => {
+    expect(parsePlaylistUrl('https://i.y.qq.com/n2/m/share/details/taoge.html?id=5204875759')).toEqual({
+      type: 'qq',
+      id: '5204875759',
+    });
+    expect(
+      parsePlaylistUrl('https://i2.y.qq.com/n3/other/pages/details/playlist.html?id=930054744&redirect_from=node_v2'),
+    ).toEqual({ type: 'qq', id: '930054744' });
+  });
+
+  it('rejects qq song links（playsong.html 非歌单，#280）', () => {
+    expect(parsePlaylistUrl('https://i.y.qq.com/v8/playsong.html?songmid=000XjcLg0fbRjv&type=0')).toBeNull();
+    expect(parsePlaylistUrl('https://y.qq.com/n/ryqq/singer/004Z8Ihr0JIu5s')).toBeNull();
+  });
+
   it('returns null for unknown input', () => {
     expect(parsePlaylistUrl('')).toBeNull();
     expect(parsePlaylistUrl('https://example.com/foo')).toBeNull();

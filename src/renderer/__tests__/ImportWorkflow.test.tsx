@@ -117,9 +117,9 @@ describe('ImportWorkflow Integration', () => {
     // Click parse
     fireEvent.click(screen.getByText('解析链接'));
 
-    // Wait for error message
+    // Wait for error message（IPC 错误信息原样透出）
     await waitFor(() => {
-      expect(screen.getByText('解析链接失败，请检查网络连接')).toBeInTheDocument();
+      expect(screen.getByText('Network error')).toBeInTheDocument();
     });
   });
 });

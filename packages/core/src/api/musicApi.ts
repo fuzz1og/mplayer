@@ -17,6 +17,7 @@ import {
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
 import { fetchLyricViaGateway } from './qqDirect.js';
+import { getQqPlaylistSongs as fetchQqPlaylistSongs } from './qqPlaylist.js';
 let PROXY_URL = '';
 
 const SODA_URL_CACHE_TTL = 10 * 60 * 1000;
@@ -490,6 +491,14 @@ export const musicApi = {
     cacheManager.setLyricsCache(fullUrl, lyrics);
     return lyrics;
   },
+
+  /**
+   * QQ 歌单全量曲目（#280 链接导入原生化；与旧 getNeteasePlaylistSongs 对位）。
+   * 入参兼容：disstid（number）/ 数字串 / 歌单链接（ryqq/taoge 直链或 `__=` 短链，
+   * 短链经 transport 302 解析）。实现与缓存在 qqPlaylist 模块（10min，空不缓存）；
+   * 不进 DirectSourceClient 能力面——歌单导入是 musicApi 层关注点，与网易对位实现对称。
+   */
+  getQqPlaylistSongs: (source: string | number): Promise<Song[]> => fetchQqPlaylistSongs(source),
 
   groupIntoSongGroups(allSongs: Song[]): SongGroup[] {
     return groupIntoSongGroupsUtil(allSongs);

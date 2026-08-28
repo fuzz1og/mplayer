@@ -88,3 +88,9 @@ describe('core musicApi 收编方法（ADR-0001）', () => {
     expect(getPrefetchedUrl(song('1'))).toBeUndefined();
   });
 });
+
+describe('musicApi 门面 QQ 歌单方法（#280，BASE_METHODS 契约同步）', () => {
+  it('getQqPlaylistSongs 在门面上（BASE_METHODS 登记依赖此方法存在）', () => {
+    expect(typeof musicApi.getQqPlaylistSongs).toBe('function');
+  });
+});
