@@ -47,26 +47,12 @@ const AlbumDetailPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        // skipSearchFallback=true：weapi 批量直链即可，跳过逐首搜索兜底（上游慢，
-        // 会阻塞页面数秒~数十秒）；无 URL 歌曲播放时由 playerStore 单首搜索解析
-        const detail = await callMusicApi('getAlbumDetail', albumId, true);
+        // weapi 批量直链即可：无 URL 歌曲（无版权等）播放时由 playerStore 走
+        // 路由解析（旧逐首搜索兜底已随自建 API 退役删除，#244/#275）
+        const detail = await callMusicApi('getAlbumDetail', albumId);
         if (detail) {
           setAlbum(detail.album);
           setSongs(detail.songs);
-          // 无 URL 歌曲（无版权等，weapi 有信息但无直链）：后台逐首搜索兜底，
-          // 不阻塞页面——补齐后更新列表（补不齐的播放时还有单首兜底）
-          const urlMissing = detail.songs.filter((s: Song) => !s.url);
-          if (urlMissing.length > 0) {
-            callMusicApi('fillSongUrls', urlMissing, album?.name)
-              .then((filled) => {
-                if (!Array.isArray(filled) || filled.length === 0) return;
-                const urlById = new Map<string, string>();
-                for (const s of filled) if (s.url) urlById.set(s.id, s.url);
-                if (urlById.size === 0) return;
-                setSongs((prev) => prev.map((s) => (urlById.has(s.id) ? { ...s, url: urlById.get(s.id)! } : s)));
-              })
-              .catch(() => {});
-          }
         } else {
           setError('专辑加载失败');
         }

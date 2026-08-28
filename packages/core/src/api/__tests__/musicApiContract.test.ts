@@ -91,12 +91,4 @@ describe('core musicApi 收编方法（ADR-0001）', () => {
 
     expect(getPrefetchedUrl(song('1'))).toBeUndefined();
   });
-
-  it('fillSongUrls 包装 resolveNeteaseSongUrlsBySearch 并返回数组', async () => {
-    const s = song('1');
-    const out = await musicApi.fillSongUrls([s], '专辑名');
-    expect(Array.isArray(out)).toBe(true);
-    expect(out).toHaveLength(1);
-    expect(typeof musicApi.resolveNeteaseSongUrlsBySearch).toBe('function');
-  });
 });

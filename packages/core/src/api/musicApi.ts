@@ -3,7 +3,6 @@ import type { Song, SourceKey, SongGroup, DiscoverPlaylist, Album, AudioTag } fr
 import { cacheManager } from './memoryCacheManager.js';
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { weapiRequest } from './neteaseWeapi.js';
-import { findExactMatch } from '../utils/songMatcher.js';
 import { resourceUrlKey } from '../utils/resourceKey.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
@@ -342,13 +341,6 @@ export function injectProxyAgents(provider: () => ProxyAgents): void {
 
 // 歌手头像缓存，供分类 tab 爬取时补图
 const artistPicCache = new Map<string, string>();
-
-// 搜索兜底状态:healthCheck 结果缓存(5 分钟)+ 搜索无结果歌曲黑名单(带 TTL)
-// 黑名单用 Map<id, 时间戳> 而非 Set:瞬时故障(超时/502)不能永久拉黑,10 分钟后重试
-const HEALTH_CHECK_TTL = 5 * 60 * 1000;
-const SEARCH_FAILED_TTL = 10 * 60 * 1000;
-let healthCheckCache = { at: 0, ok: false };
-const searchFailedSongIds = new Map<string, number>();
 
 // 网易云歌手分类 cat id → weapi artist/list 的 type/area 参数
 // type: 1 男, 2 女, 3 乐队;area: 7 华语, 96 欧美, 8 日本(仅列出本项目用到的分类)
@@ -2113,91 +2105,16 @@ export const musicApi = {
   },
 
   /**
-   * 搜索兜底:剩余无 url 的歌曲(通常为 VIP)用「歌名+歌手」通过自有搜索 API 拿直链。
-   * - healthCheck 结果缓存 60 秒,避免每页重复探测
-   * - 搜索无结果的歌曲记入黑名单(会话级),后续页不再重复搜索
+   * 批量补齐歌曲可播放 URL：weapi by-ID 批量直连（免费歌曲全覆盖，VIP 返回空）。
+   * 旧「逐首搜索兜底」（resolveNeteaseSongUrlsBySearch/fillSongUrls）已随自建 API
+   * 退役删除（#244 决策 7）；无 URL 歌曲播放时由路由层单首解析。
    */
-  /**
-   * 逐首搜索兜底（补无版权/无直链歌曲的 URL）。
-   * @param albumName 专辑名预搜：一次请求命中专辑内多首歌（服务端 name 搜索会
-   *   匹配专辑字段），按 name|artist 精确过滤填 URL——把 N 首逐首搜索降为
-   *   1 次专辑搜索 + 少量剩余。服务端对 AJAX 请求限速（连发尖峰 1-3s+），
-   *   减少请求数是最有效的提速手段。
-   */
-  async resolveNeteaseSongUrlsBySearch(songs: Song[], albumName?: string): Promise<void> {
-    // 先清掉过期的黑名单项（瞬时故障不能永久拉黑）
-    const now = Date.now();
-    // 专辑名预搜：一次请求批量命中（精确匹配 name|artist，防翻唱误挂）
-    if (albumName && songs.some((s) => !s.url)) {
-      try {
-        const albumHits = await this.searchSongs(albumName, 1, 'netease');
-        const byKey = new Map(albumHits.map((s) => [`${s.name}|${s.artist}`, s]));
-        for (const song of songs) {
-          if (song.url) continue;
-          const hit = byKey.get(`${song.name}|${song.artist}`);
-          if (hit?.url) song.url = hit.url;
-        }
-      } catch {
-        // 专辑名预搜失败不影响逐首兜底
-      }
-    }
-    for (const [id, at] of searchFailedSongIds) {
-      if (now - at >= SEARCH_FAILED_TTL) searchFailedSongIds.delete(id);
-    }
-    const missingUrlSongs = songs.filter(s => !s.url && !searchFailedSongIds.has(s.id));
-    if (missingUrlSongs.length === 0) return;
-
-    let apiOk: boolean;
-    if (now - healthCheckCache.at < HEALTH_CHECK_TTL) {
-      apiOk = healthCheckCache.ok;
-    } else {
-      apiOk = await this.healthCheck();
-      healthCheckCache = { at: now, ok: apiOk };
-    }
-    // healthCheck 失败（3s 超时，API 限流/慢时常见）不阻断搜索兜底：
-    // url 缺失会导致探测全标「无效」、播放无链接——比多打几个搜索请求
-    // 更糟。搜索兜底自身有 12s 超时 + 10 并发闸门兜底。
-    if (!apiOk) {
-      console.warn('[MusicApi] healthCheck 失败，仍尝试搜索兜底补齐 URL');
-    }
-
-    try {
-      const keywords = missingUrlSongs.map(s => `${s.name} ${s.artist}`.trim());
-      // 限 10 并发:单页搜索兜底更快,弱 API 排队仍可控
-      const searchResults = await this.batchSearch(keywords, 'netease', 10);
-      for (let i = 0; i < missingUrlSongs.length; i++) {
-        const song = missingUrlSongs[i];
-        // 精确匹配 name+artist：无版权歌的搜索结果第一条通常是翻唱/Live 版，
-        // 直接取会填上错误的 URL（播放/探测都会被误导）
-        const hit = findExactMatch(
-          { name: song.name, artist: song.artist },
-          searchResults[keywords[i]] || []
-        ) as Song | undefined;
-        if (hit?.url) {
-          song.url = hit.url;
-        } else {
-          searchFailedSongIds.set(song.id, Date.now());
-        }
-      }
-    } catch (error) {
-      console.error('[MusicApi] resolveNeteaseSongUrlsBySearch 搜索兜底失败:', error);
-    }
-  },
-
-  /**
-   * 批量补齐歌曲可播放 URL(全量场景用):weapi 批量直连 + 搜索兜底
-   * @param skipSearchFallback 为 true 时跳过逐首搜索兜底(慢),适合移动端详情页:
-   *   无 URL 歌曲播放时再由 resolvePlayableUrl 单首解析,避免进入详情页长时间等待
-   */
-  async resolveNeteaseSongUrls(songs: Song[], skipSearchFallback: boolean = false): Promise<void> {
+  async resolveNeteaseSongUrls(songs: Song[]): Promise<void> {
     const ids = songs.map(s => Number(s.id)).filter(id => Number.isFinite(id) && id > 0);
     const urlMap = await this.fetchNeteaseSongUrlMap(ids);
     for (const song of songs) {
       const u = urlMap.get(Number(song.id));
       if (u) song.url = u;
-    }
-    if (!skipSearchFallback) {
-      await this.resolveNeteaseSongUrlsBySearch(songs);
     }
   },
 
@@ -2208,7 +2125,7 @@ export const musicApi = {
    * @param limit 每页数量
    * @returns 本页歌曲与歌单总曲数
    */
-  async getNeteasePlaylistSongsPage(playlistId: number, offset: number = 0, limit: number = 50, skipSearchFallback: boolean = false): Promise<{ songs: Song[]; total: number }> {
+  async getNeteasePlaylistSongsPage(playlistId: number, offset: number = 0, limit: number = 50): Promise<{ songs: Song[]; total: number }> {
     const cacheKey = `netease_playlist_page_${playlistId}_${offset}_${limit}`;
     const cached = cacheManager.get<{ songs: Song[]; total: number }>(cacheKey);
     if (cached) return cached;
@@ -2237,9 +2154,6 @@ export const musicApi = {
         } catch (error2) {
           console.error(`[MusicApi] getNeteasePlaylistSongsPage 失败(旧接口) (id=${playlistId}):`, error2);
         }
-      }
-      if (!skipSearchFallback) {
-        await this.resolveNeteaseSongUrlsBySearch(songs);
       }
     }
 
@@ -2330,9 +2244,9 @@ export const musicApi = {
 
   /**
    * 获取网易云专辑详情+歌曲列表(weapi 直连,单请求)
-   * 专辑歌曲一般 ≤100 首;返回前补齐播放 URL(批量直链 + 搜索兜底),点开即播
+   * 专辑歌曲一般 ≤100 首;返回前补齐播放 URL(weapi by-ID 批量直链),点开即播
    */
-  async getAlbumDetail(albumId: string, skipSearchFallback: boolean = false): Promise<{ album: Album; songs: Song[] } | null> {
+  async getAlbumDetail(albumId: string): Promise<{ album: Album; songs: Song[] } | null> {
     const cacheKey = `album_detail_${albumId}`;
     const cached = cacheManager.get<{ album: Album; songs: Song[] }>(cacheKey);
     if (cached) return cached;
@@ -2353,7 +2267,7 @@ export const musicApi = {
     }
     if (!album) return null;
 
-    await this.resolveNeteaseSongUrls(songs, skipSearchFallback);
+    await this.resolveNeteaseSongUrls(songs);
 
     const result = { album, songs };
     // 空结果不缓存,避免瞬时故障 10 分钟内无法自愈
@@ -2575,16 +2489,6 @@ export const musicApi = {
       },
     });
     return results;
-  },
-
-  /**
-   * 补齐无 URL 歌曲（专辑名预搜 1 次批量命中 + 剩余逐首兜底）。
-   * 薄方法：包装 `resolveNeteaseSongUrlsBySearch`，返回补齐后的歌曲数组。
-   */
-  async fillSongUrls(songs: Song[], albumName?: string): Promise<Song[]> {
-    const list = Array.isArray(songs) ? songs : [];
-    await this.resolveNeteaseSongUrlsBySearch(list, albumName);
-    return list;
   },
 
   async warmUpArtistPicCache(): Promise<void> {

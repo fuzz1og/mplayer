@@ -46,8 +46,8 @@ export function registerMusicApiCall(api: MusicApi): void {
       api.getNeteasePlaylists(cat, order, offset, limit),
     getNeteasePlaylistDetail: (id: number) => api.getNeteasePlaylistDetail(id),
     getNeteasePlaylistSongs: (id: number, limit?: number) => api.getNeteasePlaylistSongs(id, limit || 0),
-    getNeteasePlaylistSongsPage: (id: number, offset: number, limit: number, skipSearchFallback?: boolean) =>
-      api.getNeteasePlaylistSongsPage(id, offset, limit, skipSearchFallback),
+    getNeteasePlaylistSongsPage: (id: number, offset: number, limit: number) =>
+      api.getNeteasePlaylistSongsPage(id, offset, limit),
     getPlaylistSongsFromThirdParty: (url: string, s?: any) => api.getPlaylistSongsFromThirdParty(url, s),
     getNeteaseArtists: (cat: number, offset: number, limit: number, initial: number) =>
       api.getNeteaseArtists(cat, offset, limit, initial),
@@ -55,14 +55,12 @@ export function registerMusicApiCall(api: MusicApi): void {
       api.getNeteaseArtistSongs(artistId, offset, limit, order),
     searchNeteaseArtists: (keyword: string, limit: number) => api.searchNeteaseArtists(keyword, limit),
     getNewAlbums: (area: string, offset: number, limit: number) => api.getNewAlbums(area, offset, limit),
-    getAlbumDetail: (albumId: string, skipSearchFallback?: boolean) =>
-      api.getAlbumDetail(albumId, skipSearchFallback),
+    getAlbumDetail: (albumId: string) => api.getAlbumDetail(albumId),
     getArtistAlbums: (artistId: string, offset: number, limit: number) =>
       api.getArtistAlbums(artistId, offset, limit),
     getRecommendedPlaylists: (limit: number) => api.getRecommendedPlaylists(limit),
     getRecommendedSongs: (limit: number) => api.getRecommendedSongs(limit),
     invalidateCoverUrl: (coverUrl: string) => api.invalidateCoverUrl(coverUrl),
-    fillSongUrls: (songs: Song[], albumName?: string) => api.fillSongUrls(songs, albumName),
     getSodaAudioUrl: (trackId: string) => api.getSodaAudioUrl(trackId),
     getSodaLyrics: (trackId: string) => api.getSodaLyrics(trackId),
     parseSodaShareLink: (link: string) => api.parseSodaShareLink(link),
