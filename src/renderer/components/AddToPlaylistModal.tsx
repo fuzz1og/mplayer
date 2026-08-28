@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ListMusic, Music2 } from 'lucide-react';
 import { message, Modal } from 'antd';
 import { checkDuplicate, type DupResult } from '@mplayer/core';
@@ -119,7 +120,8 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 
   if (!isVisible) return null;
 
-  return (
+  // portal 到 body：fixed 遮罩若渲染在 PlayerBar 内会被其 backdropFilter 建立的包含块捕获，缩进播放栏而非视口（#245）
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -387,7 +389,8 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
         </div>
       </div>
 
-    </div>
+    </div>,
+    document.body
   );
 };
 
