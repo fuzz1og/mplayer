@@ -53,6 +53,19 @@ describe('来源开关 settings IPC（T01 持久化接线）', () => {
     expect(getSourceMode('qq')).toBe('auto');
   });
 
+  it('settings:setSourceModes 白名单不再接受 legacy "api"（#277 收窄）', async () => {
+    registerSettingsIpc();
+    const handler = getHandler('settings:setSourceModes');
+    const res = (await (handler as (e: unknown, v: unknown) => Promise<unknown>)({}, {
+      netease: 'api', // legacy 值：白名单已收窄，应被过滤
+      qq: 'direct',
+    })) as { success: boolean };
+    expect(res.success).toBe(true);
+    expect(db.setSetting).toHaveBeenCalledWith('sourceModes', { qq: 'direct' });
+    expect(getSourceMode('netease')).toBe('auto');
+    expect(getSourceMode('qq')).toBe('direct');
+  });
+
   it('settings:getSourceModes 返回模式 + 每源直连状态（七源全 ready）', async () => {
     registerSettingsIpc();
     setSourceModes({ netease: 'direct' });

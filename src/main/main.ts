@@ -8,7 +8,7 @@ import { applyWslHidpiFix } from './hidpi';
 import { DiskCacheBackend } from './cache/diskBackend';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
-import { musicApi as coreMusicApi, injectProxyAgents, setApiTimingLog, loadSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY, loadTier3State, setTransportProxyAgents } from './api/musicApi';
+import { musicApi as coreMusicApi, injectProxyAgents, setApiTimingLog, loadSourceModes, sanitizeSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY, loadTier3State, setTransportProxyAgents } from './api/musicApi';
 import { TrayManager } from './tray/trayManager';
 import { getLocalMusicService } from './services/localMusicService';
 import { applyElectronProxy, buildAgents, getHttpAgent, getHttpsAgent, getTlsDegradedHttpsAgent, getTlsFingerprintHttpsAgent, type ProxyConfig } from './proxy';
@@ -312,11 +312,11 @@ app.whenReady().then(async () => {
     applyElectronProxy({ enabled: false, host: '', port: 8080, protocol: 'http' });
   }
 
-  // 加载来源开关（直连/自建 API 模式，spec #146 T01）
+  // 加载来源开关（直连模式，spec #146 T01）；存量 legacy 'api' 洗白为 auto（#277）
   try {
     const savedModes = await db.getSetting<Partial<Record<string, string>>>('sourceModes');
     if (savedModes) {
-      loadSourceModes(savedModes as Partial<Record<string, 'auto' | 'direct' | 'api'>>);
+      loadSourceModes(sanitizeSourceModes(savedModes));
     }
   } catch (error) {
     console.error('加载来源开关设置失败:', error);

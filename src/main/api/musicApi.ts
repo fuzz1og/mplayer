@@ -11,6 +11,7 @@ export {
   injectProxyAgents,
   setSourceModes,
   loadSourceModes,
+  sanitizeSourceModes,
   setSourceModePersister,
   getAllSourceModes,
   hasDirectClient,
