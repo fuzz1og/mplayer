@@ -15,8 +15,8 @@ describe('callMusicApi 泛型入口', () => {
   it('按 (musicApi:call, method, ...args) 分发调用', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
     invoke.mockResolvedValue([{ id: '1', name: '晴天' }]);
-    const data = await callMusicApi('searchSongs', '晴天', 1, 'netease');
-    expect(invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongs', '晴天', 1, 'netease');
+    const data = await callMusicApi('searchSongsRouted', '晴天', 1, 'netease');
+    expect(invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongsRouted', '晴天', 1, 'netease');
     expect(data).toEqual([{ id: '1', name: '晴天' }]);
   });
 

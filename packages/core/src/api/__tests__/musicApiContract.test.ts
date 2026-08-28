@@ -24,10 +24,6 @@ beforeEach(() => {
 });
 
 describe('core musicApi 收编方法（ADR-0001）', () => {
-  it('invalidateCoverUrl 已补进对象（一行）', () => {
-    expect(typeof musicApi.invalidateCoverUrl).toBe('function');
-  });
-
   it('probeSongsBatch 空 url → invalid（保持桌面现状）', async () => {
     const results = await musicApi.probeSongsBatch([song('1')]);
     // 空 url 那首必为 invalid 语义（不触发网络探测）

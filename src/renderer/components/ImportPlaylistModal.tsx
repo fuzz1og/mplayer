@@ -66,7 +66,10 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
     try {
       let songs: Song[] = [];
       if (urlInfo.type === 'qq') {
-        songs = await callMusicApi('getPlaylistSongsFromThirdParty', linkUrl, 'qq');
+        // QQ 歌单导入暂不可用：旧 unmeta 镜像 + batchSearch 链路已随自建 API
+        // 退役（恒返回空），方法与契约条目已删（#275）；原生直连接线是 #280。
+        setLinkError('QQ 歌单链接导入暂不支持，待原生化（#280）');
+        return;
       } else {
         if (urlInfo.type === 'netease-short') {
           // 短链渲染层无法跟随跨域 302：主进程解析出落地 URL 后再取歌单 id

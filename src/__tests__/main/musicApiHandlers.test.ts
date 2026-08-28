@@ -32,18 +32,11 @@ function getCallHandler() {
 
 function makeApi(methods: Partial<Record<keyof MusicApiMethodMap, unknown>>) {
   return {
-    searchSongs: vi.fn(async () => [{ id: '1', name: '晴天' } as Song]),
-    getAudioUrl: vi.fn(async (url: string) => `resolved:${url}`),
     probeSongsBatch: vi.fn(async (songs: Song[]) => songs.map((s) => ({ songId: s.id, tag: 'valid' as const }))),
     getLyrics: vi.fn(async () => 'lrc text'),
-    resolveCoverUrl: vi.fn(async (url: string) => url),
-    invalidateCoverUrl: vi.fn(),
-    fillSongUrls: vi.fn(async (songs: Song[]) => songs),
     getSodaPlayableUrl: vi.fn(async (id: string) => `file:///${id}`),
     resolvePlaylistLink: vi.fn(async (url: string) => url),
     // 其余 core 方法空实现（占位，保证类型完整）
-    searchSongById: vi.fn(async () => null),
-    batchSearch: vi.fn(async () => ({})),
     getNeteaseHotlist: vi.fn(async () => []),
     getNeteaseNewSongList: vi.fn(async () => []),
     getQQHotlist: vi.fn(async () => []),
@@ -52,7 +45,6 @@ function makeApi(methods: Partial<Record<keyof MusicApiMethodMap, unknown>>) {
     getNeteasePlaylistDetail: vi.fn(async () => null),
     getNeteasePlaylistSongs: vi.fn(async () => []),
     getNeteasePlaylistSongsPage: vi.fn(async () => ({ songs: [], total: 0 })),
-    getPlaylistSongsFromThirdParty: vi.fn(async () => []),
     getNeteaseArtists: vi.fn(async () => ({ artists: [], total: 0, more: false })),
     getNeteaseArtistSongs: vi.fn(async () => ({ songs: [], total: 0 })),
     searchNeteaseArtists: vi.fn(async () => []),
@@ -63,6 +55,9 @@ function makeApi(methods: Partial<Record<keyof MusicApiMethodMap, unknown>>) {
     getRecommendedSongs: vi.fn(async () => []),
     getSodaAudioUrl: vi.fn(async () => ''),
     parseSodaShareLink: vi.fn(async () => null),
+    searchSongsRouted: vi.fn(async () => []),
+    resolvePlayableUrlRouted: vi.fn(async () => ''),
+    resolvePlayableSongRouted: vi.fn(async () => ({ url: '', nonFull: false })),
     ...methods,
   };
 }
@@ -77,10 +72,10 @@ describe('musicApi:call 单通道分发表', () => {
     registerMusicApiCall(api as any);
     const handler = getCallHandler();
 
-    const result = await handler({}, 'searchSongs', '晴天', 1, 'netease');
+    const result = await handler({}, 'getLyrics', 'http://x/lrc');
 
-    expect(api.searchSongs).toHaveBeenCalledWith('晴天', 1, 'netease');
-    expect(result).toEqual({ success: true, data: [{ id: '1', name: '晴天' }] });
+    expect(api.getLyrics).toHaveBeenCalledWith('http://x/lrc');
+    expect(result).toEqual({ success: true, data: 'lrc text' });
   });
 
   it('未知方法返回失败封套，不抛异常', async () => {
@@ -95,13 +90,13 @@ describe('musicApi:call 单通道分发表', () => {
 
   it('core 方法抛错时返回失败封套', async () => {
     const api = makeApi({});
-    (api.getAudioUrl as any).mockRejectedValueOnce(new Error('网络错误'));
+    (api.getLyrics as any).mockRejectedValueOnce(new Error('网络错误'));
     registerMusicApiCall(api as any);
     const handler = getCallHandler();
 
-    const result = await handler({}, 'getAudioUrl', 'http://x.mp3');
+    const result = await handler({}, 'getLyrics', 'http://x/lrc');
 
-    expect(api.getAudioUrl).toHaveBeenCalledWith('http://x.mp3', undefined);
+    expect(api.getLyrics).toHaveBeenCalledWith('http://x/lrc');
     expect(result).toEqual({ success: false, error: '网络错误' });
   });
 

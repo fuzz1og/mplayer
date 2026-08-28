@@ -3,7 +3,7 @@ export { MULTI_SOURCE_LIST } from './constants.js';
 export { cacheManager } from './api/memoryCacheManager.js';
 export { RateLimiter, beforeRequest, getAntiScrapeHeaders, getApiRequestHeaders, getUserAgent, resetUaContinuity, UA_POOL_SIZE, safeParseJSON } from './api/antiScrape.js';
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
-export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, resolveCoverUrl, invalidateCoverUrl, isSessionProtectedEndpoint, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents, setApiTimingLog, setApiRequestHandler, setThrottleObserver, markApiSessionBootstrapped, setApiSessionCookieValue, getApiSessionCookie, isApiOriginUrl, decodeLyricBody } from './api/musicApi.js';
+export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents, setApiTimingLog, setApiRequestHandler, setThrottleObserver, markApiSessionBootstrapped, setApiSessionCookieValue, getApiSessionCookie, isApiOriginUrl, decodeLyricBody } from './api/musicApi.js';
 export type { ProxyAgents } from './api/musicApi.js';
 export { probeAudio, probeAudioUrl, normalizeProbeUrl, isUrlAlive } from './api/audioProbe.js';
 export { probeSongs } from './api/probeSongs.js';
