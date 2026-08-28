@@ -59,14 +59,12 @@ const invokeMock = vi.mocked(IpcClient.invoke);
 beforeEach(() => {
   invokeMock.mockClear();
   invokeMock.mockResolvedValue({ success: true, data: undefined });
-  // callMusicApi 分发：searchSongs → searchSongsMock；getAudioUrl → 可播 URL；
+  // callMusicApi 分发：searchSongsRouted → searchSongsMock；routed 解析 → 可播 URL；
   // probeSongsBatch 默认 → valid；其余 → undefined
   callMusicApiMock.mockImplementation(async (method: string, ...args: any[]) => {
     switch (method) {
       case 'searchSongsRouted':
         return searchSongsMock(...args);
-      case 'getAudioUrl':
-        return 'https://resolved.example.com/a.mp3';
       case 'resolvePlayableUrlRouted':
         return 'https://resolved.example.com/a.mp3';
       case 'resolvePlayableSongRouted':
@@ -197,7 +195,6 @@ describe('SongList 单曲换源流程', () => {
         if (firstId === '1') return oldProbe; // QQ 候选探测挂起
         return [{ songId: firstId, tag: 'valid' }];
       }
-      if (method === 'getAudioUrl') return 'https://resolved.example.com/a.mp3';
       if (method === 'resolvePlayableUrlRouted') return 'https://resolved.example.com/a.mp3';
       if (method === 'resolvePlayableSongRouted') return { url: 'https://resolved.example.com/a.mp3', nonFull: false };
       return undefined;

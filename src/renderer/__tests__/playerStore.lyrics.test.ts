@@ -83,7 +83,7 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
   it('lrc URL 失效时重搜新签名并成功加载歌词', async () => {
     const s1 = { ...song('1'), lrc: STALE_LRC };
     let lyricsGetCalls = 0;
-    // callMusicApi 分发：searchSongs → searchSongsMock（hoisted，测试注入）；getLyrics → 歌词实现
+    // callMusicApi 分发：searchSongsRouted → searchSongsMock（hoisted，测试注入）；getLyrics → 歌词实现
     callMusicApiMock.mockImplementation(async (method: string) => {
       if (method === 'searchSongsRouted') return searchSongsMock();
       if (method === 'getLyrics') {
