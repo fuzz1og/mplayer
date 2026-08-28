@@ -45,3 +45,13 @@
 ## 回退选项
 
 不采用：构建时代码生成（引入工具链，收益只是保留独立通道——而独立通道正是四份拷贝的根源）；每域一条通用通道（music 域外各域薄而稳，收编是「把直的弯成弯的」）。
+
+## 更新（2026-08-28，#238 内容能力落地）
+
+`musicApi` 门面收缩后，本 ADR 的「方法清单唯一手写物」演化为三段派生契约：
+
+- `BASE_METHODS`（门面活方法手写清单）∪ `CONTENT_METHODS`（内容方法，自 `DirectSourceClient` 接口派生、每方法带 `source: SourceKey` 首参）∪ `MainOnlyMethods`（主进程独有组合方法）；
+- 主进程分发表：基础/独有方法仍手写表（`satisfies Omit<MusicApiMethodMap, ContentMethod>` 钉签名），内容方法按 `CONTENT_METHODS` 清单循环泛型分派到 `getDirectClient(source)`；
+- 内容方法加删 = 直连客户端加删方法 + `CONTENT_METHODS` 加删名字，契约与双端类型自动跟随；完整性测试兜底不变。
+
+决策出处：wayfinder #238（#239/#240 决议），实现 #278/#279。

@@ -10,12 +10,13 @@ import {
   resetQqDirectForTests,
 } from '../qqDirect.js';
 import { decodeLyricBody } from '../musicApi.js';
+import { cacheManager } from '../memoryCacheManager.js';
 
 /**
  * QQ 直连客户端测试（T06 #152）。
- * 接缝：transport.request（T01）——mock 传输按 URL 路由（QIMEI 获取 / musicu 网关），
- * 断言外部行为：QIMEI 请求结构、搜索映射、GetVkey URL 解析、失败/空串回退。
- * 加密纯函数用独立已知向量验证（AES-CBC 向量来自 .NET 独立实现，非本库自证）。
+ * 接缝：transport.request（T01）——mock 传输按 URL 路由（QIMEI 获取 / musicu 网关 /
+ * v8 榜单），断言外部行为：QIMEI 请求结构、搜索映射、GetVkey URL 解析、榜单映射、
+ * 失败/空串回退。加密纯函数用独立已知向量验证（AES-CBC 向量来自 .NET 独立实现）。
  */
 
 const QIMEI_OK = JSON.stringify({ data: JSON.stringify({ data: { q16: 'q16x', q36: 'q36-abc123' } }) });
@@ -68,6 +69,7 @@ const VKEY_OK = {
 beforeEach(() => {
   setTransport(null);
   resetQqDirectForTests();
+  cacheManager.clearAll();
   vi.clearAllMocks();
 });
 
@@ -208,5 +210,101 @@ describe('qqDirectClient.resolvePlayableUrl', () => {
       { 'music.vkey.GetVkey.UrlGetVkey': { code: 10001, data: null } },
     ) as any);
     await expect(qqDirectClient.resolvePlayableUrl!(qqSong())).rejects.toThrow('10001');
+  });
+});
+
+describe('qqDirectClient.getToplists（#279 自门面迁入）', () => {
+  /** v8 toplist 响应（songlist[].data 包裹形态，mid 缺失时回退数字 id）。 */
+  const toplistOk = () => ({
+    code: 0,
+    songlist: [
+      {
+        data: {
+          mid: '001auUcH4WQs2V',
+          id: 496054946,
+          name: '恋人',
+          singer: [{ name: '李荣浩' }, { name: '另一人' }],
+          album: { mid: '004HaG7p4ZkhXA', name: '黑马' },
+          interval: 245,
+        },
+      },
+      { data: { id: 900002, name: '缺mid的歌', singer: [{ name: '歌手C' }], album: { mid: '', name: '专辑B' } } },
+      { data: null }, // 无 data 的条目跳过
+    ],
+  });
+
+  /** mock 传输：按 v8 榜单 URL 的 topid/date 路由。 */
+  function toplistTransport(respond: (topid: number, date: string) => unknown) {
+    return vi.fn(async (req: any) => {
+      const url = new URL(req.url);
+      const topid = Number(url.searchParams.get('topid'));
+      const date = url.searchParams.get('date') || '';
+      return { status: 200, headers: {}, body: JSON.stringify(respond(topid, date)), finalUrl: req.url };
+    });
+  }
+
+  it('v8 toplist 请求形态 + ToplistGroup id=qq:${topid} + songmid 优先映射（#172 回归）', async () => {
+    const transport = toplistTransport(() => toplistOk());
+    setTransport(transport as any);
+
+    const groups = await qqDirectClient.getToplists!();
+
+    expect(groups.map((g) => g.id)).toEqual(['qq:26', 'qq:27']);
+    expect(groups.map((g) => g.name)).toEqual(['热歌榜', '新歌榜']);
+    // 两榜各一请求（GET c.y.qq.com v8 toplist，100 首）
+    expect(transport.mock.calls).toHaveLength(2);
+    const firstUrl = new URL(transport.mock.calls[0][0].url);
+    expect(firstUrl.origin + firstUrl.pathname).toBe('https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg');
+    expect(firstUrl.searchParams.get('song_num')).toBe('100');
+    expect(transport.mock.calls[0][0].headers['Referer']).toBe('https://y.qq.com/');
+
+    const songs = groups[0].songs;
+    expect(songs).toHaveLength(2); // 无 data 条目被跳过
+    // #172 回归：id 优先 songmid（GetVkey 键），数字 id 496054946 仅在缺 mid 时兜底
+    expect(songs[0]).toMatchObject({
+      id: '001auUcH4WQs2V',
+      name: '恋人',
+      artist: '李荣浩/另一人',
+      album: '黑马',
+      duration: 245,
+      sourceType: 'qq',
+    });
+    expect(songs[0].cover).toBe('https://y.gtimg.cn/music/photo_new/T002R300x300M000004HaG7p4ZkhXA_1.jpg');
+    expect(songs[1].id).toBe('900002');
+    expect(songs[1].duration).toBe(0);
+  });
+
+  it('今天数据未更新（code≠0）→ 回退昨天的日期重试', async () => {
+    const today = new Date().toISOString().split('T')[0];
+    const transport = toplistTransport((_topid, date) => (date === today ? { code: 1 } : toplistOk()));
+    setTransport(transport as any);
+
+    const groups = await qqDirectClient.getToplists!();
+
+    // 两榜并发：各先请求今天（code=1）再各重试一次昨日（共 4 次请求）
+    const dates = transport.mock.calls.map((c) => new URL(c[0].url).searchParams.get('date'));
+    expect(transport.mock.calls).toHaveLength(4);
+    expect(dates.filter((d) => d === today)).toHaveLength(2);
+    expect(dates.filter((d) => d !== today)).toHaveLength(2);
+    expect(groups[0].songs[0].id).toBe('001auUcH4WQs2V');
+  });
+
+  it('请求失败返回空组不抛（与 kugou 榜单失败语义一致）+ 结果写缓存', async () => {
+    setTransport((async () => { throw new Error('network down'); }) as any);
+
+    const groups = await qqDirectClient.getToplists!();
+
+    expect(groups.map((g) => g.id)).toEqual(['qq:26', 'qq:27']);
+    expect(groups.every((g) => g.songs.length === 0)).toBe(true);
+    // 全空不写缓存：下次调用重新请求
+    const transport2 = toplistTransport(() => toplistOk());
+    setTransport(transport2 as any);
+    const again = await qqDirectClient.getToplists!();
+    expect(again[0].songs[0].id).toBe('001auUcH4WQs2V');
+
+    // 有歌后写缓存：transport 抛错也命中缓存
+    setTransport((async () => { throw new Error('should hit cache'); }) as any);
+    const cached = await qqDirectClient.getToplists!();
+    expect(cached[0].songs[0].id).toBe('001auUcH4WQs2V');
   });
 });

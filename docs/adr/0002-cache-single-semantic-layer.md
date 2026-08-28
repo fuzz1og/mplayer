@@ -44,3 +44,7 @@
 ## 回退选项
 
 不采用：方案 A（保留通用接口只去重，key 仍散在调用方）；内嵌语义注册表进 CacheKernel（内核变得懂业务，跨平台复用面变窄）；cache:call 单通道分发（与 ADR-0001 形态一致但 cache 域无接口复制问题）；musicApi 内联缓存并入（负缓存哨兵使接口复杂化）。
+
+## 更新（2026-08-28，#238 封面直链落地）
+
+歌曲三件套语义（getSongResources/setSongResources/invalidateSongResources）保留；封面磁盘字节通道（getCoverPath/setCoverBytes/invalidateCover 及 `cache:downloadCover`）随封面解析链退役删除——封面改源站 CDN 直链直渲（D8），磁盘条目由 TTL 自净。决策出处：#243 resolution。

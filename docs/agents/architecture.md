@@ -24,19 +24,19 @@
 
 - `router/index.tsx` HashRouter 全懒加载；页面在 `pages/`（推荐/发现/热榜/收藏/历史/歌单/队列/本地/歌手/专辑/设置等）
 - `store/` Zustand：playerStore, searchStore, favoriteStore, downloadStore, localStore
-- `services/` audioPlayer(Howler), searchService, sourceSwap, coverCacheService, IpcClient, callMusicApi 等
+- `services/` audioPlayer(Howler), searchService, sourceSwap, IpcClient, callMusicApi 等
 - `components/` PlayerBar/SongList/SongRow/LyricsDisplay 等通用件
 
 ## IPC Channels
 
 约定 `domain:action`。渲染端 request/response 用 `invoke`，推送用 `on`。
 
-**MusicApi** — 单通道分发（ADR-0001）：`musicApi:call(method, ...args)`。方法清单唯一手写物是
-`src/shared/musicApiContract.ts` 的 `MUSIC_API_METHODS`；渲染端泛型入口 `callMusicApi(method, ...args)`，
-主进程分发表 `satisfies MusicApiMethodMap`，未知方法返回失败封套。加方法 = core 加方法 + 清单加字符串，
-其余自动（完整性测试 `src/__tests__/musicApiIntegrity.test.ts` 兜底）。**不要在架构文档枚举方法清单**——那是契约文件的缓存。
+**MusicApi** — 单通道分发（ADR-0001，#278 派生化更新）：`musicApi:call(method, ...args)`。契约 = `BASE_METHODS ∪ CONTENT_METHODS ∪ MainOnlyMethods`
+（`src/shared/musicApiContract.ts`；内容方法自 `DirectSourceClient` 接口派生、带 `source` 首参）；渲染端泛型入口 `callMusicApi(method, ...args)`，
+主进程基础/独有方法手写表 + 内容方法按 `CONTENT_METHODS` 清单循环分派到 `getDirectClient(source)`，未知方法返回失败封套。
+加内容方法 = 直连客户端加方法 + `CONTENT_METHODS` 加字符串，其余自动（完整性测试兜底）。**不要在架构文档枚举方法清单**——那是契约文件的缓存。
 
-**语义通道**（ADR-0002）：`cache:*`（getSongResources/setSongResources/getCoverPath/setCoverBytes/invalidateCover/clear/getStats）、
+**语义通道**（ADR-0002）：`cache:*`（getSongResources/setSongResources/clear/getStats；封面磁盘字节通道已随封面直链直渲移除）、
 favorite/history/playlist/localMusic/settings/download/dialog/app/update 各自的 `domain:action` 组。
 Push（main→renderer）：`download:progress|complete|error`, `localMusic:folderChanged`, `tray:action`, `shortcut:action`, `update:status`。
 

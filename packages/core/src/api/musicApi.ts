@@ -1,7 +1,6 @@
 import axios from 'axios';
 import type { Song, SourceKey, SongGroup, AudioTag } from '../types/index.js';
 import { cacheManager } from './memoryCacheManager.js';
-import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { looksLikeLyrics } from '../download/lyrics.js';
@@ -18,6 +17,7 @@ import {
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
 import { fetchLyricViaGateway } from './qqDirect.js';
+import { getQqPlaylistSongs as fetchQqPlaylistSongs } from './qqPlaylist.js';
 let PROXY_URL = '';
 
 const SODA_URL_CACHE_TTL = 10 * 60 * 1000;
@@ -84,39 +84,6 @@ function normalizeUrl(url: string | undefined): string {
   }
 
   return url;
-}
-
-// 热榜歌曲类型
-interface HotlistSong {
-  id: string;
-  name: string;
-  artists: string;
-  rank: number;
-  cover: string;
-  album: string;
-}
-
-/**
- * QQ v8 榜单单曲 → HotlistSong（#172）。
- * id **优先取 songmid**：GetVkey 直连腿按 songmid 键控，数字 id 走直连恒为空
- * （与无版权/VIP 无关），整榜 100% 依赖 tier3、探测预取全部无效。
- * 数字 id 仅在响应缺失 mid 时兜底。封面用 album.mid 构建（同接口约定）。
- */
-export function mapQQToplistItem(item: any, index: number): HotlistSong | null {
-  const songData = item?.data;
-  if (!songData) return null;
-  const artists = songData.singer?.map((singer: any) => singer.name).join('/') || '';
-  const albumMid = songData.album?.mid || '';
-  return {
-    id: songData.mid || songData.id?.toString() || '',
-    name: songData.name || '',
-    artists,
-    rank: index + 1,
-    cover: albumMid
-      ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}_1.jpg`
-      : '',
-    album: songData.album?.name || ''
-  };
 }
 
 /** 汽水分享页结构化歌词单字（sentences[].words[] 项，行内逐字时间轴）。 */
@@ -525,91 +492,13 @@ export const musicApi = {
     return lyrics;
   },
 
-    /**
-   * QQ 音乐排行榜通用方法
-   * @param topid 榜单 ID（热歌榜 26，新歌榜 27）
-   * @param cacheKey 缓存键
+  /**
+   * QQ 歌单全量曲目（#280 链接导入原生化；与旧 getNeteasePlaylistSongs 对位）。
+   * 入参兼容：disstid（number）/ 数字串 / 歌单链接（ryqq/taoge 直链或 `__=` 短链，
+   * 短链经 transport 302 解析）。实现与缓存在 qqPlaylist 模块（10min，空不缓存）；
+   * 不进 DirectSourceClient 能力面——歌单导入是 musicApi 层关注点，与网易对位实现对称。
    */
-  async getQQToplist(topid: number, cacheKey: string): Promise<HotlistSong[]> {
-    const cachedData = cacheManager.getHotlistCache(cacheKey);
-    if (cachedData && cachedData.length > 0) {
-      return cachedData;
-    }
-
-    try {
-      // 获取当前日期，格式为 YYYY-MM-DD
-      const today = new Date();
-      const dateStr = today.toISOString().split('T')[0];
-
-      // 使用旧 API 端点获取 albummid，用于构建封面 URL
-      const url = `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?newsong=1&tpl=3&page=detail&date=${dateStr}&topid=${topid}&type=top&song_begin=0&song_num=100&g_tk=5381&format=json&inCharset=utf-8&outCharset=utf-8&notice=0`;
-
-      await beforeRequest();
-      const qqClient = axios.create({
-        headers: {
-          ...getAntiScrapeHeaders('https://y.qq.com/'),
-          'Accept': '*/*',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          'Referer': 'https://y.qq.com/',
-        },
-        timeout: 30000,
-    proxy: false,
-        responseType: 'text'
-      });
-
-      let response = await qqClient.get(url);
-      let data = response.data;
-
-      // 确保数据是字符串类型
-      let dataStr = typeof data === 'string' ? data : JSON.stringify(data);
-
-      // 解析JSON格式的数据
-      let jsonData = JSON.parse(dataStr);
-
-      // 如果今天的数据还没有更新（code不为0），尝试使用昨天的日期
-      if (jsonData.code !== 0) {
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
-        const yesterdayUrl = url.replace(dateStr, yesterdayStr);
-        response = await qqClient.get(yesterdayUrl);
-        data = response.data;
-        dataStr = typeof data === 'string' ? data : JSON.stringify(data);
-        jsonData = JSON.parse(dataStr);
-      }
-
-      // 检查songlist字段
-      const songlist = jsonData.songlist || [];
-
-      if (!Array.isArray(songlist)) {
-        throw new Error(`无法解析QQ音乐排行榜数据 (topid=${topid})，songlist不是数组`);
-      }
-
-      // 转换为热榜歌曲格式
-      const hotlistSongs: HotlistSong[] = [];
-
-      for (let index = 0; index < songlist.length; index++) {
-        // 映射失败的单曲跳过（与原内联 try/catch 语义一致）
-        const mapped = mapQQToplistItem(songlist[index], index);
-        if (mapped) hotlistSongs.push(mapped);
-      }
-
-      // 缓存结果
-      cacheManager.setHotlistCache(cacheKey, hotlistSongs);
-      return hotlistSongs;
-    } catch (error) {
-      console.error(`获取QQ音乐排行榜失败 (cacheKey=${cacheKey}):`, error);
-      return [];
-    }
-  },
-
-  async getQQHotlist(): Promise<HotlistSong[]> {
-    return this.getQQToplist(26, 'qq');
-  },
-
-  async getQQNewSongList(): Promise<HotlistSong[]> {
-    return this.getQQToplist(27, 'qq_new');
-  },
+  getQqPlaylistSongs: (source: string | number): Promise<Song[]> => fetchQqPlaylistSongs(source),
 
   groupIntoSongGroups(allSongs: Song[]): SongGroup[] {
     return groupIntoSongGroupsUtil(allSongs);

@@ -1,4 +1,5 @@
 import type { Song, SourceKey } from '../types/index.js';
+import { extractQqPlaylistIdFromUrl, isQqShortLink } from './qqPlaylist.js';
 
 /** 可搜索导入的音乐源（local 本地文件无搜索能力，排除） */
 export type ImportSource = Exclude<SourceKey, 'local'>;
@@ -12,6 +13,8 @@ export interface PlaylistUrlInfo {
 
 /**
  * 识别歌单分享链接来源（网易云/短链/QQ 音乐）。
+ * QQ 链接尽量带出歌单 id（直链形态）；短链只有 `__=` token，
+ * disstid 需经 getQqPlaylistSongs 内的 302 解析提取。
  * 无法识别的链接返回 null。
  */
 export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
@@ -34,9 +37,16 @@ export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
     return { type: 'netease-short', url: trimmedUrl };
   }
 
-  // QQ Music URL: https://c6.y.qq.com/base/fcgi-bin/u?__=xxx or similar
-  const qqMatch = trimmedUrl.match(/(?:https?:\/\/)?(?:c\d+\.y\.qq\.com|y\.qq\.com).*[?&]__=[^&]+/);
-  if (qqMatch) {
+  // QQ Music（#280 原生化，正则与 qqPlaylist 共用防漂移）：
+  // - web 歌单页直链 y.qq.com/n/ryqq{,_v2}/playlist/{id} 与 H5 分享页
+  //   taoge.html?id= / playlist.html?id= → 带出歌单 id；
+  // - App 分享短链 c6.y.qq.com/base/fcgi-bin/u?__=xxx → 返回 url，播放侧解析 302；
+  // - 歌曲链接（playsong.html?songmid=）不匹配任何形态 → null（歌单导入不收）。
+  const qqId = extractQqPlaylistIdFromUrl(trimmedUrl);
+  if (qqId !== null) {
+    return { type: 'qq', id: String(qqId) };
+  }
+  if (isQqShortLink(trimmedUrl)) {
     return { type: 'qq', url: trimmedUrl };
   }
 

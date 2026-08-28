@@ -1,10 +1,11 @@
 import CryptoJS from 'crypto-js';
 import type { Song } from '../types/index.js';
-import type { DirectSourceClient } from '../shared/sourceRouter.js';
+import type { DirectSourceClient, ToplistGroup } from '../shared/sourceRouter.js';
 import { request } from './transport.js';
 import { md5 } from '../utils/hash.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { getUserAgent } from './antiScrape.js';
+import { cacheManager } from './memoryCacheManager.js';
 
 /**
  * QQ 音乐直连客户端（T06 #152）。
@@ -16,6 +17,7 @@ import { getUserAgent } from './antiScrape.js';
  *   密钥 + MD5 签名（musicdl qqutils 算法，纯 JS 双端可用）；失败兜底静态 q36。
  * - 歌词：fcg_query_lyric_new.fcg（songmid 键控，`lyric` 为 base64 LRC）→ 构造为
  *   `Song.lrc` URL，由 `musicApi.getLyrics` 增强（补 Referer + 解码 base64 JSON）消费。
+ * - 榜单：v8 fcg toplist（热歌榜 26 / 新歌榜 27，#279 自门面迁入）。
  *
  * 出网统一经 transport.request（T01 接缝），测试注入 mock 传输；双端（Node/RN）可用。
  */
@@ -231,7 +233,7 @@ function buildCommon(q36: string): Record<string, unknown> {
   return { cv: 1601, v: 1601, QIMEI36: q36 };
 }
 
-function buildLyricUrl(songmid: string): string {
+export function buildLyricUrl(songmid: string): string {
   if (!songmid) return '';
   const p = new URLSearchParams({
     songmid,
@@ -246,7 +248,7 @@ function buildLyricUrl(songmid: string): string {
   return `https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?${p.toString()}`;
 }
 
-function mapTrack(t: any): Song {
+export function mapTrack(t: any): Song {
   const mid = t.mid || t.songmid || '';
   const albumMid = t.album?.mid || '';
   return {
@@ -268,7 +270,7 @@ const MUSICU_HEADERS = {
   'Referer': 'https://y.qq.com/',
 };
 
-async function musicuPost(body: Record<string, unknown>): Promise<any> {
+export async function musicuPost(body: Record<string, unknown>): Promise<any> {
   const res = await request({
     method: 'POST',
     url: MUSICU_URL,
@@ -278,6 +280,111 @@ async function musicuPost(body: Record<string, unknown>): Promise<any> {
   });
   if (res.status >= 400) throw new Error(`QQ musicu HTTP ${res.status}`);
   return JSON.parse(typeof res.body === 'string' ? res.body : new TextDecoder().decode(res.body));
+}
+
+// ── 榜单（#279 自门面 getQQToplist/getQQHotlist/getQQNewSongList 迁入）──────
+//
+// 端点 = v8 fcg toplist（GET c.y.qq.com，匿名可用，2026-08 实测）。musicu 网关的
+// musicToplist.ToplistInfoServer.GetToplist 匿名恒拒（code 500005，实测），故榜单
+// id 沿用 v8 端点的 topid（热歌榜 26 / 新歌榜 27），即 `qq:26` / `qq:27`。
+// 请求走 qqDirect 现有 transport 接缝（桌面 axios 代理/RN 网络栈统一，可 mock）。
+
+const TOPLIST_URL = 'https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg';
+const TOPLIST_TTL_MS = 24 * 60 * 60 * 1000; // 榜单日更，与原门面 hotlist 缓存 TTL 一致
+const QQ_TOPLIST_CACHE_KEY = 'qq_toplists';
+
+const QQ_TOPLISTS: { topid: number; name: string }[] = [
+  { topid: 26, name: '热歌榜' },
+  { topid: 27, name: '新歌榜' },
+];
+
+const TOPLIST_HEADERS = {
+  'user-agent': getUserAgent('qq'),
+  'Referer': 'https://y.qq.com/',
+  'Accept': '*/*',
+};
+
+function toplistUrl(topid: number, date: string): string {
+  const p = new URLSearchParams({
+    newsong: '1',
+    tpl: '3',
+    page: 'detail',
+    date,
+    topid: String(topid),
+    type: 'top',
+    song_begin: '0',
+    song_num: '100',
+    g_tk: '5381',
+    format: 'json',
+    inCharset: 'utf-8',
+    outCharset: 'utf-8',
+    notice: '0',
+  });
+  return `${TOPLIST_URL}?${p.toString()}`;
+}
+
+/**
+ * v8 榜单单曲 → Song（原门面 mapQQToplistItem 语义，HotlistSong 视图废）。
+ * id **优先取 songmid**：GetVkey 直连腿按 songmid 键控，数字 id 走直连恒为空
+ * （与无版权/VIP 无关），整榜 100% 依赖 tier3、探测预取全部无效（#172）。
+ * 数字 id 仅在响应缺失 mid 时兜底。rank 不落结构——消费方按索引推导。
+ */
+function mapToplistTrack(item: any): Song | null {
+  const songData = item?.data;
+  if (!songData) return null;
+  const albumMid = songData.album?.mid || '';
+  return {
+    id: songData.mid || songData.id?.toString() || '',
+    name: songData.name || '',
+    artist: (songData.singer || []).map((singer: any) => singer?.name || '').filter(Boolean).join('/'),
+    album: songData.album?.name || '',
+    url: '',
+    cover: albumMid
+      ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}_1.jpg`
+      : '',
+    lrc: '',
+    duration: Math.floor(songData.interval || 0) || 0,
+    sourceType: 'qq',
+  };
+}
+
+/** 解析 v8 响应体（字符串/字节均可能）。 */
+function parseToplistResponse(res: { body: string | Uint8Array | ArrayBuffer }): { code?: number; songlist?: unknown[] } {
+  return JSON.parse(typeof res.body === 'string' ? res.body : new TextDecoder().decode(res.body));
+}
+
+/** 拉单榜歌曲；失败只打一行摘要返回空数组（榜单元数据在消费页有兜底，不拖死整页）。 */
+async function fetchToplistSongs(topid: number): Promise<Song[]> {
+  const today = new Date();
+  const dateStr = today.toISOString().split('T')[0];
+  try {
+    let res = await request({ method: 'GET', url: toplistUrl(topid, dateStr), headers: TOPLIST_HEADERS, timeoutMs: 30000 });
+    if (res.status >= 400) throw new Error(`QQ 榜单 HTTP ${res.status}`);
+    let data = parseToplistResponse(res);
+
+    // 今天的数据还没更新（code≠0）→ 回退昨天的日期
+    if (data.code !== 0) {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      res = await request({
+        method: 'GET',
+        url: toplistUrl(topid, yesterday.toISOString().split('T')[0]),
+        headers: TOPLIST_HEADERS,
+        timeoutMs: 30000,
+      });
+      if (res.status >= 400) throw new Error(`QQ 榜单 HTTP ${res.status}`);
+      data = parseToplistResponse(res);
+    }
+
+    const songlist = data.songlist;
+    if (!Array.isArray(songlist)) {
+      throw new Error(`无法解析QQ音乐排行榜数据 (topid=${topid})，songlist不是数组`);
+    }
+    return songlist.map(mapToplistTrack).filter((s: Song | null): s is Song => !!s && !!s.id);
+  } catch (error) {
+    console.error(`[qqDirect] getToplists 失败 (topid=${topid}):`, error instanceof Error ? error.message : error);
+    return [];
+  }
 }
 
 export const qqDirectClient: DirectSourceClient = {
@@ -331,6 +438,26 @@ export const qqDirectClient: DirectSourceClient = {
     const purl = moduleRes?.data?.midurlinfo?.[0]?.purl || '';
     if (!purl) return ''; // 无版权/VIP → 换元层
     return `https://isure.stream.qqmusic.qq.com/${purl}`;
+  },
+
+  /**
+   * 榜单全集（热歌榜 26 / 新歌榜 27；#279 自门面迁入）。
+   * 单榜失败返回空组（保持原门面失败不抛语义）；至少一榜有歌才写缓存。
+   */
+  async getToplists(): Promise<ToplistGroup[]> {
+    const cached = cacheManager.get<ToplistGroup[]>(QQ_TOPLIST_CACHE_KEY);
+    if (cached && cached.length > 0) return cached;
+    const groups = await Promise.all(
+      QQ_TOPLISTS.map(async (t) => ({
+        id: `qq:${t.topid}`,
+        name: t.name,
+        songs: await fetchToplistSongs(t.topid),
+      })),
+    );
+    if (groups.some((g) => g.songs.length > 0)) {
+      cacheManager.set(QQ_TOPLIST_CACHE_KEY, groups, TOPLIST_TTL_MS);
+    }
+    return groups;
   },
 };
 

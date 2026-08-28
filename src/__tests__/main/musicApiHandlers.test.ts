@@ -35,8 +35,8 @@ function makeApi(methods: Partial<Record<keyof MusicApiMethodMap, unknown>>) {
     // 其余 core 方法空实现（占位，保证类型完整）
     getNeteaseHotlist: vi.fn(async () => []),
     getNeteaseNewSongList: vi.fn(async () => []),
-    getQQHotlist: vi.fn(async () => []),
     getQQNewSongList: vi.fn(async () => []),
+    getQqPlaylistSongs: vi.fn(async () => []),
     getNeteasePlaylists: vi.fn(async () => ({ playlists: [], total: 0, more: false })),
     getNeteasePlaylistDetail: vi.fn(async () => null),
     getNeteasePlaylistSongs: vi.fn(async () => []),
@@ -116,6 +116,23 @@ describe('musicApi:call 单通道分发表', () => {
     const result = await handler({}, 'resolvePlaylistLink', 'https://163cn.tv/abc');
     expect(api.resolvePlaylistLink).toHaveBeenCalledWith('https://163cn.tv/abc');
     expect(result).toEqual({ success: true, data: 'https://music.163.com/playlist?id=42' });
+  });
+
+  it('getQqPlaylistSongs 转发 core 门面（QQ 歌单导入 #280）', async () => {
+    const api = makeApi({
+      getQqPlaylistSongs: vi.fn(async (source: string | number) => [
+        { id: String(source), name: '晴天', artist: '周杰伦', sourceType: 'qq' },
+      ]),
+    });
+    registerMusicApiCall(api as any);
+    const handler = getCallHandler();
+
+    const result = (await handler({}, 'getQqPlaylistSongs', '7729596131')) as { success: boolean; data: unknown };
+    expect(api.getQqPlaylistSongs).toHaveBeenCalledWith('7729596131');
+    expect(result).toEqual({
+      success: true,
+      data: [{ id: '7729596131', name: '晴天', artist: '周杰伦', sourceType: 'qq' }],
+    });
   });
 
   it('probeSongsBatch 转发空 url 保留 invalid 语义（交由 core 内实现）', async () => {

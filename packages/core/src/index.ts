@@ -66,6 +66,14 @@ export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
 export { stripSourceIdPrefix } from './utils/sourceIdPrefix.js';
 export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
 export type { PlaylistUrlInfo, ProgressState, ImportResult, PlaylistImportDeps, ImportSource } from './api/playlistImport.js';
+export {
+  getQqPlaylistSongs,
+  resolveQqPlaylistDisstid,
+  extractQqPlaylistIdFromUrl,
+  isQqSongLink,
+  isQqShortLink,
+  QQ_PLAYLIST_MAX_SONGS,
+} from './api/qqPlaylist.js';
 export { CacheKernel } from './cache/cacheKernel.js';
 export { createMemoryBackend } from './cache/backends/memoryBackend.js';
 export { DEFAULT_TTL } from './cache/ttl.js';
