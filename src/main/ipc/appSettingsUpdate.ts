@@ -146,8 +146,20 @@ export function registerUpdateIpc(mainWindow: BrowserWindow): void {
   updateService.setMainWindow(mainWindow);
   registerIpcHandler('update:check', () => updateService.checkForUpdates());
   registerIpcHandler('update:download', () => updateService.downloadUpdate());
+  // 浏览器下载模式（#262 联调定案）：把获胜通道的资产直链交给系统浏览器
+  registerIpcHandler('update:downloadInBrowser', async () => updateService.openDownloadInBrowser());
   registerIpcHandlerSimple('update:install', () => updateService.quitAndInstall());
   registerIpcHandlerSimple('update:getVersion', () => updateService.getVersion());
+  // 更新通道（#262）：源清单/当前选择 + 测速；setChannel 内部校验非法值
+  registerIpcHandlerSimple('update:getChannels', async () => ({
+    channel: await updateService.getChannel(),
+    sources: updateService.listSources(),
+  }));
+  registerIpcHandler('update:setChannel', async (value: string) => {
+    await updateService.setChannel(value);
+    return true;
+  });
+  registerIpcHandler('update:speedTest', async () => updateService.speedTest());
 }
 
 export function registerDownloadIpc(): void {

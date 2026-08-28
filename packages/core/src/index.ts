@@ -49,6 +49,15 @@ export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, probeSwapCandidates, applySwap } from './shared/sourceSwap.js';
 export { songUsesSongidLyrics, isSodaSource } from './shared/songLyrics.js';
+export {
+  UPDATE_SOURCE_DEFS,
+  GITHUB_LATEST_BASE,
+  toGenericFeedUrl,
+  buildAssetUrl,
+  rankSourcesByLatency,
+  probeUpdateSources,
+} from './shared/updateChannels.js';
+export type { UpdateSourceDef, UpdateLatencyMap, FetchLike, ProbeOptions } from './shared/updateChannels.js';
 export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
 export { resolvePlayableUrl, resolvePlayableSong, stripSourceIdPrefix } from './shared/resolvePlayableUrl.js';
 export type { UrlResolver, PlayableSong } from './shared/resolvePlayableUrl.js';

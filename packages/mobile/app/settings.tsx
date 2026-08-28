@@ -12,12 +12,13 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
-import { CircleCheck, RefreshCcw, RefreshCw, Download, CircleX, Trash2, Plus } from 'lucide-react-native';
+import { CircleCheck, RefreshCcw, RefreshCw, Download, CircleX, Trash2, Plus, Gauge } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MULTI_SOURCE_LIST, SOURCE_DISPLAY_NAMES, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription, getTier3Stats, clearTier3Stats } from '@mplayer/core';
+import { MULTI_SOURCE_LIST, SOURCE_DISPLAY_NAMES, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription, getTier3Stats, clearTier3Stats, UPDATE_SOURCE_DEFS } from '@mplayer/core';
 import type { Tier3SourceStats } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
+import { checkLatestRelease, speedTestChannels, type ChannelSpeedResult } from '../services/appUpdate';
 import {radius, shadow, spacing, textVariants} from '../theme/tokens';
 import type { ThemeMode, ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -139,40 +140,40 @@ export default function SettingsPage() {
   const [latestVersion, setLatestVersion] = useState('');
   const [releaseNotes, setReleaseNotes] = useState('');
   const [apkUrl, setApkUrl] = useState('');
+  /** #263：debug→release 跨签名迁移（v1.7.0/1.7.1 → ≥1.7.2）需要卸载重装 */
+  const [needsMigration, setNeedsMigration] = useState(false);
 
-  function compareVersions(a: string, b: string): number {
-    const pa = a.split('.').map(Number);
-    const pb = b.split('.').map(Number);
-    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-      const na = pa[i] || 0;
-      const nb = pb[i] || 0;
-      if (na > nb) return 1;
-      if (na < nb) return -1;
+  // 更新通道（#262/#263）：镜像优先、GitHub 直连垫底；auto 测速择优
+  const updateChannel = useSettingsStore((s) => s.updateChannel);
+  const setUpdateChannelStore = useSettingsStore((s) => s.setUpdateChannel);
+  const [channelExpanded, setChannelExpanded] = useState(false);
+  const [speedResults, setSpeedResults] = useState<ChannelSpeedResult[] | null>(null);
+  const [testingSpeed, setTestingSpeed] = useState(false);
+
+  const channelLabel = (id: string): string =>
+    id === 'auto' ? '自动测速' : UPDATE_SOURCE_DEFS.find((d) => d.id === id)?.label || id;
+
+  const handleSpeedTest = async (): Promise<void> => {
+    setTestingSpeed(true);
+    try {
+      setSpeedResults(await speedTestChannels());
+    } catch {
+      Alert.alert('提示', '测速失败，请检查网络');
+    } finally {
+      setTestingSpeed(false);
     }
-    return 0;
-  }
+  };
 
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
     try {
-      // Gitee 方案已取消，改为 GitHub Releases API 检查最新版本
-      const res = await fetch('https://api.github.com/repos/fuzz1og/mplayer/releases/latest');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const latest = await res.json();
-      if (!latest || !latest.tag_name) {
-        // 还没有任何发布版本
-        setUpdateState('not-available');
-        setTimeout(() => setUpdateState('idle'), 2000);
-        return;
-      }
-      const remoteVer = latest.tag_name.replace(/^v/i, '');
-      if (compareVersions(remoteVer, currentVersion) > 0) {
-        setLatestVersion(remoteVer);
-        setReleaseNotes(latest.body || '');
-        const apkAsset = latest.assets?.find((a: any) =>
-          a.name?.endsWith('.apk') || a.content_type?.includes('apk')
-        );
-        setApkUrl(apkAsset?.browser_download_url || '');
+      // #262/#263：镜像优先取 latest.yml，直连 API 仅兜底；按通道解析 APK 直链
+      const result = await checkLatestRelease(currentVersion, updateChannel);
+      if (result.state === 'available') {
+        setLatestVersion(result.version || '');
+        setReleaseNotes(result.releaseNotes || '');
+        setApkUrl(result.apkUrl || '');
+        setNeedsMigration(!!result.needsUninstallMigration);
         setUpdateState('available');
       } else {
         setUpdateState('not-available');
@@ -390,6 +391,62 @@ export default function SettingsPage() {
               <Text style={styles.modeLabel}>当前版本</Text>
               <Text style={styles.modeStatus}>v{currentVersion}</Text>
             </View>
+
+            {/* 下载通道（#262/#263）：镜像优先、GitHub 直连垫底；auto 测速择优 */}
+            <ScalePress style={[styles.row, styles.rowSep]} onPress={() => setChannelExpanded(!channelExpanded)}>
+              <Gauge size={18} color={colors.accent} style={styles.btnIcon} />
+              <Text style={styles.actionRowText}>下载通道</Text>
+              <Text style={styles.modeStatus}>{channelLabel(updateChannel)}</Text>
+            </ScalePress>
+            {channelExpanded && (
+              <>
+                {[
+                  { id: 'auto', label: '自动（测速择优）' },
+                  ...UPDATE_SOURCE_DEFS.map((d) => ({ id: d.id, label: d.label })),
+                ].map((opt) => {
+                  const active = updateChannel === opt.id;
+                  return (
+                    <TouchableOpacity
+                      key={opt.id}
+                      style={[styles.row, styles.rowSep]}
+                      activeOpacity={0.6}
+                      onPress={() => setUpdateChannelStore(opt.id)}
+                    >
+                      <Text style={{ ...textVariants.settingsPrimary, color: colors.textPrimary, flex: 1 }}>
+                        {opt.label}
+                      </Text>
+                      {active ? (
+                        <CircleCheck size={18} color={colors.accent} />
+                      ) : (
+                        <View style={{ width: 18 }} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+                <ScalePress
+                  style={[styles.actionRow, styles.rowSep, testingSpeed && styles.actionRowDisabled]}
+                  onPress={handleSpeedTest}
+                  disabled={testingSpeed}
+                >
+                  {testingSpeed ? (
+                    <RefreshCcw size={18} color={colors.textSecondary} style={styles.btnIcon} />
+                  ) : (
+                    <Gauge size={18} color={colors.accent} style={styles.btnIcon} />
+                  )}
+                  <Text style={styles.actionRowText}>{testingSpeed ? '测速中…' : '通道测速'}</Text>
+                </ScalePress>
+                {speedResults && (
+                  <View style={[styles.groupPad, styles.rowSep]}>
+                    <Text style={styles.releaseNotes} numberOfLines={3}>
+                      {speedResults
+                        .map((r) => `${r.label.replace(' 镜像', '')} ${r.latencyMs == null ? '超时' : `${r.latencyMs}ms`}`)
+                        .join(' · ')}
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
+
             {updateState === 'idle' && (
               <ScalePress style={[styles.actionRow, styles.rowSep]} onPress={handleCheckUpdate}>
                 <RefreshCw size={18} color={colors.accent} style={styles.btnIcon} />
@@ -410,6 +467,11 @@ export default function SettingsPage() {
                     {releaseNotes}
                   </Text>
                 ) : null}
+                {needsMigration && (
+                  <Text style={[styles.releaseNotes, { color: colors.danger }]}>
+                    注意：旧版本签名机制不同，若安装报「签名不一致/重复签名」，请先卸载旧版再安装本更新包
+                  </Text>
+                )}
                 <ScalePress style={styles.updateBtn} onPress={handleUpdate}>
                   <Download size={18} color={colors.textInverse} style={styles.btnIcon} />
                   <Text style={styles.updateBtnText}>立即更新</Text>

@@ -1,5 +1,14 @@
 import { autoUpdater } from 'electron-updater';
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, session, shell } from 'electron';
+import {
+  UPDATE_SOURCE_DEFS,
+  buildAssetUrl,
+  probeUpdateSources,
+  rankSourcesByLatency,
+  toGenericFeedUrl,
+  type UpdateSourceDef,
+  type UpdateLatencyMap,
+} from '@mplayer/core';
 import { db } from '../storage/db';
 import type { ProxyConfig } from '../proxy';
 
@@ -9,21 +18,31 @@ export interface UpdateStatus {
   releaseNotes?: string;
   progress?: { percent: number; bytesPerSecond: number; transferred: number; total: number };
   error?: string;
+  /** 本状态对应的更新源展示名（仅 available / downloading 透出，UI 显示当前通道） */
+  sourceLabel?: string;
 }
 
 // GitHub 仓库信息（与 electron-builder.yml publish 配置一致）
 const GITHUB_OWNER = 'fuzz1og';
 const GITHUB_REPO = 'mplayer';
 
-// 更新源列表（索引 0 = GitHub 直连，其后为镜像，按实测速度降级）。
-// 镜像统一走 GitHub releases/latest/download 固定 URL（302 到最新 release），跨版本有效，
-// 让 generic provider 能以固定地址拿到元数据与安装包。
-const UPDATE_SOURCES: string[] = [
-  '', // GitHub 直连（线路好时最快）
-  'https://gh-proxy.com/https://github.com/fuzz1og/mplayer/releases/latest/download/',
-  'https://ghfast.top/https://github.com/fuzz1og/mplayer/releases/latest/download/',
-  'https://ghproxy.net/https://github.com/fuzz1og/mplayer/releases/latest/download/',
-];
+// 更新源清单与测速/排序逻辑在 @mplayer/core（#262，桌面/移动端共享单一事实源）：
+// 静态兜底顺序 = 镜像在前、GitHub 直连垫底。
+
+const CHANNEL_SETTING_KEY = 'updateChannel';
+/** 通道设置项的合法取值：'auto' 或某个源 id */
+type ChannelValue = string;
+const PROBE_CACHE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * 下载看门狗窗口（真机联调教训：原实现是一刀切 120s 硬超时，
+ * 大文件慢速健康下载会被误杀——镜像对 latest.yml 快不代表大文件吞吐好）。
+ * - 首字节窗口：起播后这么久没有任何进度 → 判定源不可用，快速降级换源
+ * - 停滞窗口：进度开始后，两次进度事件间隔超过它 → 判定停滞
+ * 只要进度持续推进就永不限时。
+ */
+const DOWNLOAD_FIRST_BYTE_MS = 25000;
+const DOWNLOAD_STALL_MS = 30000;
 
 export class UpdateService {
   private mainWindow: BrowserWindow | null = null;
@@ -32,21 +51,68 @@ export class UpdateService {
   private downloadListeners: Array<() => void> = [];
   private isChecking = false;
   private isDownloading = false;
-  /** 当前生效的更新源索引（检查/下载失败时递增降级） */
-  private sourceIndex = 0;
 
-  constructor() {
+  /** 本次检查/下载生效的尝试顺序（downloadUpdate 复用，默认静态兜底顺序） */
+  private attemptOrder: readonly UpdateSourceDef[] = UPDATE_SOURCE_DEFS;
+  /** 当前正在使用的源（透出到状态事件） */
+  private activeSource: UpdateSourceDef | null = null;
+  /** 最近一次检查拿到的官方资产文件名（latest-*.yml files[].url） */
+  private lastAssetFiles: string[] = [];
+
+  /** probe 结果缓存：id → 延迟 ms / null（失败） */
+  private probeResults: UpdateLatencyMap = new Map();
+  private probedAt = 0;
+
+  /**
+   * 下载停滞过的源（会话内记忆，联调教训：ghfast 探针延迟低但大文件吞吐差）。
+   * 延迟测速无法反映大文件吞吐，停滞即降权到队尾，避免低延迟假象反复挡路。
+   */
+  private stalledSources = new Set<string>();
+
+  /** 通道设置缓存（读穿透 db） */
+  private channelCache: ChannelValue | null = null;
+
+  private readonly autoProbeOnCheck: boolean;
+  private readonly firstByteTimeoutMs: number;
+  private readonly stallTimeoutMs: number;
+
+  constructor(options?: {
+    autoProbeOnCheck?: boolean;
+    /** 测试可注入缩短看门狗窗口 */
+    firstByteTimeoutMs?: number;
+    stallTimeoutMs?: number;
+  }) {
+    this.autoProbeOnCheck = options?.autoProbeOnCheck ?? true;
+    this.firstByteTimeoutMs = options?.firstByteTimeoutMs ?? DOWNLOAD_FIRST_BYTE_MS;
+    this.stallTimeoutMs = options?.stallTimeoutMs ?? DOWNLOAD_STALL_MS;
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.forceDevUpdateConfig = true;
+    // dev 联调：electron-updater 全量调试日志（URL/重定向/进度），打包产物静默
+    if (!app.isPackaged) {
+      autoUpdater.logger = console;
+    }
+  }
+
+  /**
+   * netSession 版 fetch 适配：走 electron-updater 专用会话，
+   * 自动享受该会话的代理配置，与实际下载链路同环境。
+   * 会话不可用 / 无 fetch 时返回 null（探针整体回落静态顺序）。
+   */
+  private sessionFetch(): ((url: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<{ arrayBuffer(): Promise<ArrayBuffer> }>) | null {
+    const netSession = autoUpdater.netSession;
+    if (!netSession || typeof (netSession as unknown as { fetch?: unknown }).fetch !== 'function') return null;
+    return (url, init) => (netSession as unknown as { fetch: (u: string, i?: object) => Promise<{ arrayBuffer(): Promise<ArrayBuffer> }> }).fetch(url, init);
   }
 
   /** 切换 electron-updater 的 feed 到指定更新源 */
-  private applyFeed(index: number) {
-    if (index === 0) {
+  private applyFeed(def: UpdateSourceDef) {
+    this.activeSource = def;
+    const genericUrl = toGenericFeedUrl(def);
+    if (genericUrl === '') {
       autoUpdater.setFeedURL({ provider: 'github', owner: GITHUB_OWNER, repo: GITHUB_REPO });
     } else {
-      autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_SOURCES[index] });
+      autoUpdater.setFeedURL({ provider: 'generic', url: genericUrl });
     }
   }
 
@@ -102,6 +168,98 @@ export class UpdateService {
     this.downloadListeners = [];
   }
 
+  // ── 通道选择与测速（#262）───────────────────────────────────────────
+
+  /** 对外展示用源清单（静态兜底顺序） */
+  listSources(): Array<{ id: string; label: string }> {
+    return UPDATE_SOURCE_DEFS.map(({ id, label }) => ({ id, label }));
+  }
+
+  /** 当前通道（缓存读穿透 db）；未配置或非法值视为 auto */
+  async getChannel(): Promise<ChannelValue> {
+    if (this.channelCache !== null) return this.channelCache;
+    const saved = await db.getSetting<string>(CHANNEL_SETTING_KEY);
+    if (saved !== undefined && (saved === 'auto' || UPDATE_SOURCE_DEFS.some(s => s.id === saved))) {
+      this.channelCache = saved;
+    }
+    return this.channelCache ?? 'auto';
+  }
+
+  /** 设置并持久化通道；非法值抛错拒绝 */
+  async setChannel(value: string): Promise<void> {
+    if (value !== 'auto' && !UPDATE_SOURCE_DEFS.some(s => s.id === value)) {
+      throw new Error(`非法更新通道: ${value}`);
+    }
+    await db.setSetting(CHANNEL_SETTING_KEY, value);
+    this.channelCache = value;
+  }
+
+  /**
+   * 并发探测全部源并按延迟升序返回（失败 null 垫底）。
+   * 结果同时写入进程内缓存供检查流程复用。
+   */
+  async speedTest(timeoutMs?: number): Promise<Array<{ id: string; label: string; latencyMs: number | null }>> {
+    const results = await this.probeAll(timeoutMs);
+    const ranked = rankSourcesByLatency(UPDATE_SOURCE_DEFS, results);
+    return ranked.map(def => ({ id: def.id, label: def.label, latencyMs: results.get(def.id) ?? null }));
+  }
+
+  private async probeAll(timeoutMs?: number): Promise<UpdateLatencyMap> {
+    const fetchLike = this.sessionFetch();
+    if (!fetchLike) return new Map();
+    const results = await probeUpdateSources(fetchLike, timeoutMs !== undefined ? { timeoutMs } : {});
+    this.probeResults = results;
+    this.probedAt = Date.now();
+    return results;
+  }
+
+  /** 缓存有效期内的探测快照；过期则重测（整体不可用则回落静态顺序） */
+  private async ensureFreshProbes(): Promise<UpdateLatencyMap | null> {
+    if (this.probedAt > 0 && Date.now() - this.probedAt < PROBE_CACHE_TTL_MS) {
+      return this.probeResults;
+    }
+    try {
+      const results = await this.probeAll();
+      // 至少一个源探活成功才信任排序
+      if ([...results.values()].some(v => v != null)) return results;
+      console.warn('[update] 全部源测速失败，使用默认通道顺序');
+      return null;
+    } catch (err) {
+      console.warn(`[update] 测速失败，使用默认通道顺序：${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** 把下载停滞过的源稳定降权到队尾（其余保持原相对顺序） */
+  orderWithStalledDemoted(order: readonly UpdateSourceDef[]): readonly UpdateSourceDef[] {
+    if (this.stalledSources.size === 0) return order;
+    return [
+      ...order.filter(def => !this.stalledSources.has(def.id)),
+      ...order.filter(def => this.stalledSources.has(def.id)),
+    ];
+  }
+
+  /**
+   * 计算本轮检查/下载的尝试顺序：
+   * - 手动通道：选中源置顶，其余保持静态兜底顺序（仍可逐源降级）
+   * - auto：优先测速快照排序；无可用探针结果时回落静态兜底顺序
+   * - 末尾统一套用停滞降权（延迟快≠吞吐好，见 stalledSources）
+   */
+  private async resolveAttemptOrder(): Promise<readonly UpdateSourceDef[]> {
+    const channel = await this.getChannel();
+    if (channel !== 'auto') {
+      const chosen = UPDATE_SOURCE_DEFS.find(s => s.id === channel)!;
+      return this.orderWithStalledDemoted([chosen, ...UPDATE_SOURCE_DEFS.filter(s => s.id !== channel)]);
+    }
+    if (this.autoProbeOnCheck) {
+      const probes = await this.ensureFreshProbes();
+      if (probes) return this.orderWithStalledDemoted(rankSourcesByLatency(UPDATE_SOURCE_DEFS, probes));
+    }
+    return this.orderWithStalledDemoted(UPDATE_SOURCE_DEFS);
+  }
+
+  // ── 检查与下载 ─────────────────────────────────────────────────────
+
   /** 用当前 feed 执行一次检查（事件监听 + checkForUpdates） */
   private checkWithCurrentFeed(timeoutMs: number): Promise<void> {
     return new Promise<void>((resolve, reject) => {
@@ -111,7 +269,16 @@ export class UpdateService {
 
       const onAvailable = (info: any) => {
         clearTimeout(timer);
-        this.updateStatus({ status: 'available', version: info.version, releaseNotes: info.releaseNotes });
+        // 记录官方资产名清单（latest-*.yml files[].url），浏览器直链按通道前缀拼装
+        this.lastAssetFiles = Array.isArray(info.files)
+          ? info.files.map((f: any) => String(f.url)).filter(Boolean)
+          : [];
+        this.updateStatus({
+          status: 'available',
+          version: info.version,
+          releaseNotes: info.releaseNotes,
+          ...(this.activeSource ? { sourceLabel: this.activeSource.label } : {}),
+        });
         resolve();
       };
       const onNotAvailable = () => {
@@ -140,35 +307,51 @@ export class UpdateService {
     });
   }
 
-  /** 用当前 feed 执行一次下载 */
-  private downloadWithCurrentFeed(timeoutMs: number): Promise<void> {
+  /** 用当前 feed 执行一次下载（进度看门狗代替固定超时，见 DOWNLOAD_* 常量注释） */
+  private downloadWithCurrentFeed(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('下载超时')), timeoutMs);
+      let watchdog = setTimeout(
+        () => reject(new Error(`下载停滞（${this.firstByteTimeoutMs}ms 无响应）`)),
+        this.firstByteTimeoutMs,
+      );
+      const bumpWatchdog = () => {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(
+          () => reject(new Error(`下载停滞（${this.stallTimeoutMs}ms 无进度）`)),
+          this.stallTimeoutMs,
+        );
+      };
 
       const onDownloaded = () => {
-        clearTimeout(timer);
+        clearTimeout(watchdog);
         this.updateStatus({ status: 'downloaded' });
         resolve();
       };
       const onError = (err: Error) => {
-        clearTimeout(timer);
+        clearTimeout(watchdog);
         reject(err);
       };
       const onProgress = (progress: any) => {
-        this.updateStatus({ status: 'downloading', progress });
+        bumpWatchdog();
+        this.updateStatus({
+          status: 'downloading',
+          progress,
+          ...(this.activeSource ? { sourceLabel: this.activeSource.label } : {}),
+        });
       };
 
       autoUpdater.once('update-downloaded', onDownloaded);
       autoUpdater.once('error', onError);
       autoUpdater.on('download-progress', onProgress);
       this.downloadListeners.push(() => {
+        clearTimeout(watchdog);
         autoUpdater.removeListener('update-downloaded', onDownloaded);
         autoUpdater.removeListener('error', onError);
         autoUpdater.removeListener('download-progress', onProgress);
       });
 
       autoUpdater.downloadUpdate().catch((err: any) => {
-        clearTimeout(timer);
+        clearTimeout(watchdog);
         reject(err);
       });
     });
@@ -184,16 +367,18 @@ export class UpdateService {
 
     let lastErr: Error | null = null;
     try {
-      // 从上次生效源开始依次尝试；失败降级到下一源（直连 → gh-proxy.com → ghfast.top → ghproxy.net）
-      for (let i = this.sourceIndex; i < UPDATE_SOURCES.length; i++) {
-        this.sourceIndex = i;
-        this.applyFeed(i);
+      // 镜像优先、GitHub 直连兜底（#262）：auto 模式先测速再排序；
+      // 手动模式把所选通道排最前。失败时沿顺序逐源降级。
+      this.attemptOrder = await this.resolveAttemptOrder();
+      for (let i = 0; i < this.attemptOrder.length; i++) {
+        const def = this.attemptOrder[i];
+        this.applyFeed(def);
         try {
           await this.checkWithCurrentFeed(timeoutMs);
           return this.status;
         } catch (err: any) {
           lastErr = err;
-          console.warn(`[update] 更新源 #${i} 检查失败（${UPDATE_SOURCES[i] || 'GitHub 直连'}），降级：${err.message}`);
+          console.warn(`[update] 更新源「${def.label}」检查失败，降级：${err.message}`);
         }
       }
       throw lastErr ?? new Error('所有更新源均不可用');
@@ -206,7 +391,7 @@ export class UpdateService {
     }
   }
 
-  async downloadUpdate(timeoutMs = 120000): Promise<void> {
+  async downloadUpdate(): Promise<void> {
     if (this.isDownloading) return;
     this.isDownloading = true;
 
@@ -214,18 +399,21 @@ export class UpdateService {
 
     let lastErr: Error | null = null;
     try {
-      // 从检查时的生效源开始下载；失败依次降级。
+      // 从检查时的生效顺序继续下载；失败依次降级。
       // 同源（检查时已拿到元数据）不重复 check；切源后才重新 check 拿元数据。
-      const firstSource = this.sourceIndex;
-      for (let i = firstSource; i < UPDATE_SOURCES.length; i++) {
-        if (i !== firstSource) {
-          this.sourceIndex = i;
-          this.applyFeed(i);
+      // 超时语义由进度看门狗接管（首字节/停滞窗口），不再有一刀切总时长。
+      const order = this.attemptOrder;
+      const firstSource = this.activeSource ?? order[0];
+      const startIndex = Math.max(order.indexOf(firstSource), 0);
+      for (let i = startIndex; i < order.length; i++) {
+        const def = order[i];
+        this.applyFeed(def);
+        if (i !== startIndex) {
           try {
             await this.checkWithCurrentFeed(15000);
           } catch (err: any) {
             if (!lastErr) lastErr = err;
-            console.warn(`[update] 更新源 #${i} 检查失败（${UPDATE_SOURCES[i]}），降级：${err.message}`);
+            console.warn(`[update] 更新源「${def.label}」检查失败，降级：${err.message}`);
             continue;
           }
           if (this.status.status !== 'available') {
@@ -234,11 +422,16 @@ export class UpdateService {
           }
         }
         try {
-          await this.downloadWithCurrentFeed(timeoutMs);
+          await this.downloadWithCurrentFeed();
           return;
         } catch (err: any) {
           lastErr = err;
-          console.warn(`[update] 更新源 #${i} 下载失败（${UPDATE_SOURCES[i] || 'GitHub 直连'}），降级：${err.message}`);
+          console.warn(`[update] 更新源「${def.label}」下载失败，降级：${err.message}`);
+          // 停滞型失败（非硬错误）记入降权，本轮后续与下次检查都排到队尾
+          if (/下载停滞/.test(err.message)) {
+            this.stalledSources.add(def.id);
+            this.attemptOrder = this.orderWithStalledDemoted(order);
+          }
         }
       }
       throw lastErr ?? new Error('所有更新源下载均失败');
@@ -248,6 +441,30 @@ export class UpdateService {
     } finally {
       this.cleanupDownloadListeners();
       this.isDownloading = false;
+    }
+  }
+
+  /**
+   * 浏览器下载模式（#262 联调定案）：大文件交给系统浏览器/下载管理器，
+   * 不再进程内单流硬扛公共镜像的波动。URL = 获胜通道前缀 + 官方资产名。
+   */
+  async openDownloadInBrowser(): Promise<{ ok: boolean; url?: string; error?: string }> {
+    const def = this.activeSource ?? this.attemptOrder[0];
+    const version = this.status.version;
+    if (!def || !version) return { ok: false, error: '请先检查更新' };
+    const platformFallback =
+      process.platform === 'darwin'
+        ? `MPlayer-${version}.dmg`
+        : process.platform === 'win32'
+          ? `MPlayer.Setup.${version}.exe`
+          : `MPlayer-${version}.AppImage`;
+    const filename = this.lastAssetFiles[0] ?? platformFallback;
+    const url = buildAssetUrl(def, filename);
+    try {
+      await shell.openExternal(url);
+      return { ok: true, url };
+    } catch (err: any) {
+      return { ok: false, url, error: err?.message ?? '打开浏览器失败' };
     }
   }
 
