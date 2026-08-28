@@ -1,6 +1,6 @@
 import type { Song } from '../types/index.js';
 import { request } from './transport.js';
-import { getUserAgent } from './antiScrape.js';
+import { mapTrack, musicuPost } from './qqDirect.js';
 import { cacheManager } from './memoryCacheManager.js';
 
 /**
@@ -24,11 +24,9 @@ import { cacheManager } from './memoryCacheManager.js';
  * - 缓存照网易歌单模式（10 分钟，空结果不缓存）。
  *
  * 与 qqDirect 的关系：musicu POST 基建与新版字段映射（mid/title/singer/album.mid/
- * interval）同构复用——但 qqDirect.ts 正被 #279 并行改动，为避免冲突本模块持有本地
- * 同构副本（不 import 其私有函数）；#279 落地后再收敛为单一实现。
+ * interval）复用——musicuPost/mapTrack/buildLyricUrl 直接 import 自 qqDirect（#279 落地后已收敛为单一实现）。
  */
 
-const MUSICU_URL = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
 const DISS_MODULE = 'music.srfDissInfo.DissInfo';
 const DISS_METHOD = 'CgiGetDiss';
 
@@ -39,13 +37,6 @@ export const QQ_PLAYLIST_MAX_SONGS = 1000;
 
 /** 短链重定向解析最多跟随的跳数（实测链长 ≤3：短链 → H5/落地页）。 */
 const MAX_SHORT_LINK_HOPS = 3;
-
-/** musicu 网关统一请求头（与 qqDirect.MUSICU_HEADERS 同构）。 */
-const MUSICU_HEADERS = {
-  'content-type': 'application/json',
-  'user-agent': getUserAgent('qq'),
-  'Referer': 'https://y.qq.com/',
-};
 
 /** QQ App 分享短链（`c6.y.qq.com/base/fcgi-bin/u?__=xxx`）。 */
 export const QQ_SHORT_LINK_RE = /(?:https?:\/\/)?(?:c\d+\.y\.qq\.com|y\.qq\.com)[^\s]*[?&]__=[^&\s]+/i;
@@ -120,54 +111,6 @@ export async function resolveQqPlaylistDisstid(url: string): Promise<number> {
   throw new Error('QQ 短链重定向次数过多');
 }
 
-async function musicuPost(body: Record<string, unknown>): Promise<any> {
-  const res = await request({
-    method: 'POST',
-    url: MUSICU_URL,
-    headers: MUSICU_HEADERS,
-    body: JSON.stringify(body),
-    timeoutMs: 8000,
-  });
-  if (res.status >= 400) throw new Error(`QQ musicu HTTP ${res.status}`);
-  return JSON.parse(typeof res.body === 'string' ? res.body : new TextDecoder().decode(res.body));
-}
-
-/** 歌词 fcg URL（与 qqDirect.buildLyricUrl 同构；getLyrics 消费）。 */
-function buildLyricUrl(songmid: string): string {
-  if (!songmid) return '';
-  const p = new URLSearchParams({
-    songmid,
-    g_tk: '5381',
-    loginUin: '0',
-    hostUin: '0',
-    format: 'json',
-    inCharset: 'utf8',
-    outCharset: 'utf-8',
-    platform: 'yqq',
-  });
-  return `https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?${p.toString()}`;
-}
-
-/**
- * CgiGetDiss songlist 新版歌曲对象 → Song（与 qqDirect.mapTrack 同构，
- * 逐字段吻合：mid/title/singer/album.mid/interval）；`url` 恒留空，播放时路由解析。
- */
-function mapDissTrack(t: any): Song {
-  const mid = t.mid || t.songmid || '';
-  const albumMid = t.album?.mid || '';
-  return {
-    id: String(mid),
-    name: t.title || t.name || '',
-    artist: (t.singer || []).map((s: any) => s?.name || '').filter(Boolean).join(' / '),
-    album: t.album?.name || '',
-    url: '',
-    cover: albumMid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg` : '',
-    lrc: buildLyricUrl(mid),
-    duration: Math.floor(t.interval || 0) || 0,
-    sourceType: 'qq',
-  };
-}
-
 /** 单次 CgiGetDiss 请求 → 该页 songlist（已映射）+ hasmore + dirinfo。 */
 async function fetchDissPage(disstid: number, songBegin: number, songNum: number) {
   const data = await musicuPost({
@@ -204,7 +147,7 @@ async function fetchDissPage(disstid: number, songBegin: number, songNum: number
   }
   const list = Array.isArray(d.songlist) ? d.songlist : [];
   return {
-    songs: list.map(mapDissTrack).filter((s: Song) => s.id),
+    songs: list.map(mapTrack).filter((s: Song) => s.id),
     hasmore: d.hasmore === 1,
     totalSongs: Number(dirinfo.songnum) || Number(d.total_song_num) || 0,
   };

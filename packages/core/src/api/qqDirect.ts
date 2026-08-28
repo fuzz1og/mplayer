@@ -233,7 +233,7 @@ function buildCommon(q36: string): Record<string, unknown> {
   return { cv: 1601, v: 1601, QIMEI36: q36 };
 }
 
-function buildLyricUrl(songmid: string): string {
+export function buildLyricUrl(songmid: string): string {
   if (!songmid) return '';
   const p = new URLSearchParams({
     songmid,
@@ -248,7 +248,7 @@ function buildLyricUrl(songmid: string): string {
   return `https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?${p.toString()}`;
 }
 
-function mapTrack(t: any): Song {
+export function mapTrack(t: any): Song {
   const mid = t.mid || t.songmid || '';
   const albumMid = t.album?.mid || '';
   return {
@@ -270,7 +270,7 @@ const MUSICU_HEADERS = {
   'Referer': 'https://y.qq.com/',
 };
 
-async function musicuPost(body: Record<string, unknown>): Promise<any> {
+export async function musicuPost(body: Record<string, unknown>): Promise<any> {
   const res = await request({
     method: 'POST',
     url: MUSICU_URL,
@@ -349,7 +349,7 @@ function mapToplistTrack(item: any): Song | null {
 }
 
 /** 解析 v8 响应体（字符串/字节均可能）。 */
-function parseToplistResponse(res: { body: string | Uint8Array }): { code?: number; songlist?: unknown[] } {
+function parseToplistResponse(res: { body: string | Uint8Array | ArrayBuffer }): { code?: number; songlist?: unknown[] } {
   return JSON.parse(typeof res.body === 'string' ? res.body : new TextDecoder().decode(res.body));
 }
 
