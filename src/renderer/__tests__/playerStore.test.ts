@@ -32,8 +32,6 @@ vi.mock('../services/audioPlayer', () => ({
 vi.mock('../services/callMusicApi', () => ({
   callMusicApi: vi.fn(async (method: string) => {
     switch (method) {
-      case 'getAudioUrl':
-        return 'https://resolved.example.com/a.mp3';
       case 'resolvePlayableUrlRouted':
         return 'https://resolved.example.com/a.mp3';
       case 'resolvePlayableSongRouted':

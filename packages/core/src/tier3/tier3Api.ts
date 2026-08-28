@@ -3,7 +3,7 @@ import { request, bodyToText, type TransportRequest } from '../api/transport.js'
 import { BROWSER_UA } from '../utils/sourceReferer.js';
 import { isAudioBytes } from '../utils/sniffers.js';
 import { isExactMatch, normalize } from '../utils/songMatcher.js';
-import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
+import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
 import {
   setTier3Enabled as setRouterTier3Enabled,
   setTier3Resolver as setRouterTier3Resolver,

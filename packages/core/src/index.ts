@@ -3,7 +3,7 @@ export { MULTI_SOURCE_LIST } from './constants.js';
 export { cacheManager } from './api/memoryCacheManager.js';
 export { RateLimiter, beforeRequest, getAntiScrapeHeaders, getApiRequestHeaders, getUserAgent, resetUaContinuity, UA_POOL_SIZE, safeParseJSON } from './api/antiScrape.js';
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
-export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, resolveCoverUrl, invalidateCoverUrl, isSessionProtectedEndpoint, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents, setApiTimingLog, setApiRequestHandler, setThrottleObserver, markApiSessionBootstrapped, setApiSessionCookieValue, getApiSessionCookie, isApiOriginUrl, decodeLyricBody } from './api/musicApi.js';
+export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents, setApiTimingLog, setApiRequestHandler, setThrottleObserver, markApiSessionBootstrapped, setApiSessionCookieValue, getApiSessionCookie, isApiOriginUrl, decodeLyricBody } from './api/musicApi.js';
 export type { ProxyAgents } from './api/musicApi.js';
 export { probeAudio, probeAudioUrl, normalizeProbeUrl, isUrlAlive } from './api/audioProbe.js';
 export { probeSongs } from './api/probeSongs.js';
@@ -60,10 +60,7 @@ export {
 } from './shared/updateChannels.js';
 export type { UpdateSourceDef, UpdateLatencyMap, FetchLike, ProbeOptions } from './shared/updateChannels.js';
 export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
-export { resolvePlayableUrl, resolvePlayableSong, stripSourceIdPrefix } from './shared/resolvePlayableUrl.js';
-export type { UrlResolver, PlayableSong } from './shared/resolvePlayableUrl.js';
-export { resolveFreshUrl } from './shared/resolveFreshUrl.js';
-export type { FreshUrlResolver } from './shared/resolveFreshUrl.js';
+export { stripSourceIdPrefix } from './utils/sourceIdPrefix.js';
 export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
 export type { PlaylistUrlInfo, ProgressState, ImportResult, PlaylistImportDeps, ImportSource } from './api/playlistImport.js';
 export { CacheKernel } from './cache/cacheKernel.js';
@@ -113,14 +110,13 @@ export {
   loadSourceModes,
   getAllSourceModes,
   setSourceModePersister,
-  configureSourceRouter,
   searchSongsRouted,
   resolvePlayableUrlRouted,
   resolvePlayableSongRouted,
   resolvePlayableSongDirect,
   setTier3Resolver,
 } from './shared/sourceRouter.js';
-export type { SourceMode, DirectSourceClient, SourceRouterLegs, Tier3Resolver } from './shared/sourceRouter.js';
+export type { SourceMode, DirectSourceClient, Tier3Resolver } from './shared/sourceRouter.js';
 export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS } from './shared/sourceRouter.js';
 export { detectAudioContainer, containerFromContentType, extensionForContainer, replaceExtension } from './download/container.js';
 export type { AudioContainer } from './download/container.js';

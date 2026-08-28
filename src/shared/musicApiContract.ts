@@ -14,10 +14,6 @@ import type { AggregatedChartResult } from '@/shared/chart';
  * 加一个 music 域方法 = core 加方法 + 这里加一个字符串，其余自动。
  */
 export const MUSIC_API_METHODS = [
-  'searchSongs',
-  'searchSongById',
-  'getAudioUrl',
-  'batchSearch',
   'probeSongsBatch',
   'getLyrics',
   'getLyricsBySongId',
@@ -29,7 +25,6 @@ export const MUSIC_API_METHODS = [
   'getNeteasePlaylistDetail',
   'getNeteasePlaylistSongs',
   'getNeteasePlaylistSongsPage',
-  'getPlaylistSongsFromThirdParty',
   'getNeteaseArtists',
   'getNeteaseArtistSongs',
   'searchNeteaseArtists',
@@ -38,9 +33,6 @@ export const MUSIC_API_METHODS = [
   'getArtistAlbums',
   'getRecommendedPlaylists',
   'getRecommendedSongs',
-  'resolveCoverUrl',
-  'invalidateCoverUrl',
-  'fillSongUrls',
   'getSodaAudioUrl',
   'getSodaLyrics',
   'parseSodaShareLink',

@@ -35,7 +35,7 @@ function coreMusicApiMethodNames(): Set<string> {
   const src = fs.readFileSync(CORE_MUSIC_API, 'utf8');
   const names = new Set<string>();
   // 匹配对象字面量成员名：`  async xxx(` / `  xxx:` / `  xxx(`
-  // 或简写成员 `  xxx,`（如 invalidateCoverUrl）
+  // 或简写成员 `  xxx,`（如 groupIntoSongGroups）
   const re = /^\s{2}(?:async\s+)?([A-Za-z_$][\w$]*)\s*(?:\(|:|,)/gm;
   let m: RegExpExecArray | null;
   while ((m = re.exec(src)) !== null) {

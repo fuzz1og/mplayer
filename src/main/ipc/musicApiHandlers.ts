@@ -31,10 +31,6 @@ type MusicApi = Pick<CoreMusicApi, MusicApiMethod> & {
 export function registerMusicApiCall(api: MusicApi): void {
   const dispatch = {
     // ── core musicApi 方法（泛型 forward）────────────────────────
-    searchSongs: (k: string, p?: number, s?: any) => api.searchSongs(k, p, s),
-    searchSongById: (id: string, s?: any, f?: boolean) => api.searchSongById(id, s, f),
-    getAudioUrl: (u: string, sig?: AbortSignal) => api.getAudioUrl(u, sig),
-    batchSearch: (kw: string[], s?: any, c?: number) => api.batchSearch(kw, s, c),
     probeSongsBatch: (s: Song[]) => api.probeSongsBatch(s),
     getLyrics: (url: string) => api.getLyrics(url),
     getLyricsBySongId: (id: string) => api.getLyricsBySongId(id),
@@ -46,33 +42,25 @@ export function registerMusicApiCall(api: MusicApi): void {
       api.getNeteasePlaylists(cat, order, offset, limit),
     getNeteasePlaylistDetail: (id: number) => api.getNeteasePlaylistDetail(id),
     getNeteasePlaylistSongs: (id: number, limit?: number) => api.getNeteasePlaylistSongs(id, limit || 0),
-    getNeteasePlaylistSongsPage: (id: number, offset: number, limit: number, skipSearchFallback?: boolean) =>
-      api.getNeteasePlaylistSongsPage(id, offset, limit, skipSearchFallback),
-    getPlaylistSongsFromThirdParty: (url: string, s?: any) => api.getPlaylistSongsFromThirdParty(url, s),
+    getNeteasePlaylistSongsPage: (id: number, offset: number, limit: number) =>
+      api.getNeteasePlaylistSongsPage(id, offset, limit),
     getNeteaseArtists: (cat: number, offset: number, limit: number, initial: number) =>
       api.getNeteaseArtists(cat, offset, limit, initial),
     getNeteaseArtistSongs: (artistId: string, offset: number, limit: number, order: string) =>
       api.getNeteaseArtistSongs(artistId, offset, limit, order),
     searchNeteaseArtists: (keyword: string, limit: number) => api.searchNeteaseArtists(keyword, limit),
     getNewAlbums: (area: string, offset: number, limit: number) => api.getNewAlbums(area, offset, limit),
-    getAlbumDetail: (albumId: string, skipSearchFallback?: boolean) =>
-      api.getAlbumDetail(albumId, skipSearchFallback),
+    getAlbumDetail: (albumId: string) => api.getAlbumDetail(albumId),
     getArtistAlbums: (artistId: string, offset: number, limit: number) =>
       api.getArtistAlbums(artistId, offset, limit),
     getRecommendedPlaylists: (limit: number) => api.getRecommendedPlaylists(limit),
     getRecommendedSongs: (limit: number) => api.getRecommendedSongs(limit),
-    invalidateCoverUrl: (coverUrl: string) => api.invalidateCoverUrl(coverUrl),
-    fillSongUrls: (songs: Song[], albumName?: string) => api.fillSongUrls(songs, albumName),
     getSodaAudioUrl: (trackId: string) => api.getSodaAudioUrl(trackId),
     getSodaLyrics: (trackId: string) => api.getSodaLyrics(trackId),
     parseSodaShareLink: (link: string) => api.parseSodaShareLink(link),
     searchSongsRouted: (k: string, p: number, s: SourceKey) => api.searchSongsRouted(k, p, s),
     resolvePlayableUrlRouted: (song: Song) => api.resolvePlayableUrlRouted(song),
     resolvePlayableSongRouted: (song: Song) => api.resolvePlayableSongRouted(song),
-    // resolveCoverUrl/invalidateCoverUrl：封面链已随「直链直渲」下线（#273），
-    // 渲染层不再调用；条目暂留保契约完整（分发表键集合 == MUSIC_API_METHODS），
-    // #275 随 core 方法一起删。直通转发，无封面落盘副作用。
-    resolveCoverUrl: (coverUrl: string) => api.resolveCoverUrl(coverUrl),
     // ── main 独有组合方法 ─────────────────────────────────────────
     getAggregatedChart,
     getThrottleWait: async () => getThrottleWaitMs(),

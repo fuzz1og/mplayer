@@ -139,7 +139,7 @@ describe('qianqianDirectClient URL 解析（tracklink 签名直连）', () => {
     expect(url).toBe('');
   });
 
-  it('URL 解析失败（网络错误）→ 错误上抛（供 auto 回退 api getAudioUrl）', async () => {
+  it('URL 解析失败（网络错误）→ 错误上抛（auto 由路由层接手：tier3 兜底后上抛）', async () => {
     setTransport(async () => {
       throw new Error('tracklink timeout');
     });

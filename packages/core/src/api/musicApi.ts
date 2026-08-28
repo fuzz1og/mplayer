@@ -3,13 +3,10 @@ import type { Song, SourceKey, SongGroup, DiscoverPlaylist, Album, AudioTag } fr
 import { cacheManager } from './memoryCacheManager.js';
 import { beforeRequest, getAntiScrapeHeaders } from './antiScrape.js';
 import { weapiRequest } from './neteaseWeapi.js';
-import { findExactMatch } from '../utils/songMatcher.js';
-import { resourceUrlKey } from '../utils/resourceKey.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { looksLikeLyrics } from '../download/lyrics.js';
 import { request, bodyToText } from './transport.js';
-import { stripSourceIdPrefix } from '../shared/resolvePlayableUrl.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
 import { probeSongs } from './probeSongs.js';
 import { rememberProbeResult } from './prefetchCache.js';
@@ -18,7 +15,6 @@ import {
   resolvePlayableUrlRouted as routedResolveUrl,
   resolvePlayableSongRouted as routedResolveSong,
   resolvePlayableSongDirect as routedResolveSongDirect,
-  configureSourceRouter,
 } from '../shared/sourceRouter.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
@@ -212,9 +208,7 @@ function releaseApiGate(pool: GatePool): void {
 const ALBUMS_CACHE_TTL = 60 * 60 * 1000;
 const RECOMMENDED_CACHE_TTL = 15 * 60 * 1000;
 const SODA_URL_CACHE_TTL = 10 * 60 * 1000;
-const COVER_URL_CACHE_TTL = 6 * 60 * 60 * 1000;
 const sodaAudioUrlCache = new Map<string, { url: string; expires: number }>();
-const coverUrlCache = new Map<string, { url: string; expires: number }>();
 
 /** 会话保护端点返回的错误页特征串（无会话时 api.php 一律返回此页） */
 const INVALID_REQUEST_MARKER = '非法请求';
@@ -242,63 +236,9 @@ function reportThrottleEvent(event: ThrottleEvent): void {
 }
 
 // ── api.php 302 解析并发控制 ─────────────────────────────────────
-// RN 连接池默认仅 5 个连接/主机：搜索结果页 30+ 首歌同时解析封面
-// （api.php?get=pic）会把连接池排队打满，每个请求都 5s 超时，
-// 连播放 URL 的解析也被拖死。限 3 并发 + 相同 URL in-flight 去重
-// （同一首歌的封面/URL 并发请求合并为一个，避免重复打上游）。
-// 注意：全局 API 闸门（API_GATE_CAP=3）才是最终并发上限，此处只是外层池。
-const resolveWaiters: { priority: boolean; resolve: () => void }[] = [];
-let resolveActive = 0;
-const RESOLVE_MAX_CONCURRENCY = 3;
-const resolveInflight = new Map<string, Promise<{ finalUrl: string; data: unknown }>>();
+// （已随 getAudioUrl/resolveCoverUrl 死方法删除，#275；apiClient/会话机件
+// 的删除是下一票 #276）
 
-// 302 解析超时（毫秒）：封面 3s 快超时（失败有占位图兜底），播放直链 12s
-// （弱网下 api.php 响应 1-15s，宁等多等也要真直链）
-const COVER_RESOLVE_TIMEOUT_MS = 3000;
-const AUDIO_RESOLVE_TIMEOUT_MS = 12000;
-
-function runResolve(
-  url: string,
-  timeout: number,
-  priority = false,
-): Promise<{ finalUrl: string; data: unknown }> {
-  const existing = resolveInflight.get(url);
-  if (existing) return existing;
-  const task = (async () => {
-    if (resolveActive >= RESOLVE_MAX_CONCURRENCY) {
-      await new Promise<void>((r) => {
-        // 播放 URL 解析优先：插到等待队列最前，槽位一释放立即执行；
-        // 封面解析排队（失败有占位图兜底，不阻塞播放）
-        const waiter = { priority, resolve: r };
-        if (priority) resolveWaiters.unshift(waiter);
-        else resolveWaiters.push(waiter);
-      });
-    }
-    resolveActive++;
-    try {
-      return await followRedirectsToFinalUrl(url, undefined, timeout);
-    } finally {
-      resolveActive--;
-      // 唤醒下一个等待者。注意：shift() 已移除队首，不能再 splice——
-      // indexOf 找不到时 splice(-1,1) 会误删队尾等待者（回归测试抓到：
-      // 队列 ≥2 时最后一个封面永久挂起，不 resolve 也不超时）。
-      const prio = resolveWaiters.find((w) => w.priority);
-      if (prio) {
-        resolveWaiters.splice(resolveWaiters.indexOf(prio), 1);
-        prio.resolve();
-      } else {
-        resolveWaiters.shift()?.resolve();
-      }
-      resolveInflight.delete(url);
-    }
-  })();
-  resolveInflight.set(url, task);
-  return task;
-}
-/** 会话保护端点的 URL 特征（api.php?get=url / get=pic / get=lrc） */
-export function isSessionProtectedEndpoint(url: string): boolean {
-  return url.includes('api.php');
-}
 export function setApiBaseUrl(url: string): void {
   API_BASE_URL = url ? (url.endsWith('/') ? url : url + '/') : '';
   apiClient.defaults.baseURL = API_BASE_URL;
@@ -343,13 +283,6 @@ export function injectProxyAgents(provider: () => ProxyAgents): void {
 
 // 歌手头像缓存，供分类 tab 爬取时补图
 const artistPicCache = new Map<string, string>();
-
-// 搜索兜底状态:healthCheck 结果缓存(5 分钟)+ 搜索无结果歌曲黑名单(带 TTL)
-// 黑名单用 Map<id, 时间戳> 而非 Set:瞬时故障(超时/502)不能永久拉黑,10 分钟后重试
-const HEALTH_CHECK_TTL = 5 * 60 * 1000;
-const SEARCH_FAILED_TTL = 10 * 60 * 1000;
-let healthCheckCache = { at: 0, ok: false };
-const searchFailedSongIds = new Map<string, number>();
 
 // 网易云歌手分类 cat id → weapi artist/list 的 type/area 参数
 // type: 1 男, 2 女, 3 乐队;area: 7 华语, 96 欧美, 8 日本(仅列出本项目用到的分类)
@@ -695,194 +628,6 @@ export function getApiClient(): AxiosInstance {
 // musicApi / audioProbe / 播放器统一一份，避免 key 形状不一致漏配）
 
 /**
- * 手动逐跳跟随重定向，返回最终 URL 和末跳响应数据。
- * 当前 axios 版本的 response.request 取不到最终地址，依赖自动重定向会把
- * 302 端点（如 api.php?get=url / get=pic）的 CDN 直链丢掉；
- * 因此关闭自动跟随（maxRedirects: 0），逐跳处理 Location。
- * 注意：部分环境（RN 的 XHR 适配器、axios fetch 适配器）会无视 maxRedirects
- * 自动跟随，此时只会返回原 URL——调用方应自行兜底。
- */
-async function followRedirectsToFinalUrl(
-  url: string,
-  signal?: AbortSignal,
-  timeout = 5000
-): Promise<{ finalUrl: string; data: unknown }> {
-  // 桥模式（mobile WebView Chromium 栈）：302 解析与搜索/歌词走同一
-  // 网络栈和 cookie jar。rangeOnly 只取最终地址和 Content-Type，不下载
-  // body（mp3 直链可能几十 MB，读 body 会把桥消息撑爆）。桥故障时
-  // 继续走下方平台原生路径兜底。
-  if (apiRequestHandler) {
-    await ensureApiSession().catch(() => {});
-    let retried = false;
-    const bridgeAttempt = async (): Promise<{ finalUrl: string; data: unknown }> => {
-      const res = await apiRequestHandler!({
-        method: 'GET',
-        url,
-        headers: { Range: 'bytes=0-0' },
-        rangeOnly: true,
-        timeoutMs: timeout,
-      });
-      const hdrs = res.headers || {};
-      const ct = String(hdrs['content-type'] || hdrs['Content-Type'] || '').toLowerCase();
-      const finalUrl = res.finalUrl && /^https?:\/\//.test(res.finalUrl) ? res.finalUrl : url;
-      // 最终地址仍是 api.php 且返回 HTML = 会话失效（「非法请求」页）：
-      // 重建会话（桥内 cookie jar 会随新 Set-Cookie 更新）后重试一次
-      if (finalUrl === url && ct.includes('text/html') && !retried) {
-        retried = true;
-        invalidateApiSession();
-        await ensureApiSession().catch(() => {});
-        return bridgeAttempt();
-      }
-      if (apiTimingLog) {
-        console.log(
-          `[api耗时] bridge-302 ${String(url).slice(0, 70)}: status=${res.status} ct=${ct.slice(0, 30)} final=${finalUrl.slice(0, 60)}`,
-        );
-      }
-      return { finalUrl, data: ct.includes('text/html') ? INVALID_REQUEST_MARKER : '' };
-    };
-    try {
-      return await bridgeAttempt();
-    } catch {
-      // 桥不可用：继续走平台原生路径兜底
-    }
-  }
-  // RN：XHR 无视 maxRedirects 自动跟随 302 并下载完整响应体——
-  // 播放 URL 的 302 终点是 10MB 级 mp3，等 axios 返回要几十秒；
-  // XHR 的 responseURL 在 readyState 2 abort 时不可靠（实测返回中间跳
-  // 的 api.php 而非最终 mp3）。
-  // 改用 fetch（默认自动跟随 302 链）+ Range: bytes=0-0：
-  // mp3 CDN 支持 Range 时回 1 字节（206），拒绝时回 403 小 body——
-  // 两者都秒回，response.url 即最终 mp3 直链，不依赖 XHR responseURL。
-  if (IS_REACT_NATIVE) {
-    return (async () => {
-      // 先确保会话：首页 GET 预热原生 cookie jar（jar 空时 api.php 无 cookie
-      // 必返回 200「非法请求」而非 302，拿不到 mp3 直链）
-      await ensureApiSession().catch(() => {});
-      let retried = false;
-      const attempt = async (): Promise<{ finalUrl: string; data: unknown }> => {
-        try {
-          // 用 axios 替代 fetch 做 302 解析：
-          // RN fetch 的 credentials:'include' 实测不带原生 jar cookie，
-          // 而服务端对部分源（酷狗 get=url）严格校验 PHPSESSID —— 无 cookie
-          // 返回「非法请求」页（200 text/html），拿不到 CDN 直链。
-          // axios（withCredentials 已配置）走 XHR 自动带 jar cookie；
-          // XHR 自动跟随 302（无视 maxRedirects），Range 206 秒回 1 字节，
-          // responseURL 即最终 CDN 直链（完整响应下可靠，非 abort 场景）。
-          const resolveHeaders: Record<string, string> = { Range: 'bytes=0-0' };
-          const referer = refererForUrl(url);
-          if (referer) resolveHeaders['Referer'] = referer;
-          resolveHeaders['User-Agent'] = BROWSER_UA;
-          const resp = await apiClient.get(url, {
-            headers: resolveHeaders,
-            timeout,
-            responseType: 'arraybuffer',
-            // 显式声明该请求是 302 解析（响应拦截器不需要特殊处理）
-            __resolve302: true,
-          } as any);
-          const ct = String(resp.headers['content-type'] || '');
-          // text/html = 无 cookie 的「非法请求」页：刷新会话后重试一次
-          if (ct.includes('text/html') && !retried) {
-            retried = true;
-            invalidateApiSession();
-            await ensureApiSession().catch(() => {});
-            return attempt();
-          }
-          if (apiTimingLog) {
-            console.log(
-              `[api耗时] xhr-302 ${String(url).slice(0, 70)}: status=${resp.status} ct=${ct.slice(0, 30)}`,
-            );
-          }
-          const responseUrl = (resp.request as any)?.responseURL;
-          const finalUrl = responseUrl && /^https?:\/\//.test(responseUrl) ? responseUrl : url;
-          return { finalUrl, data: '' };
-        } catch {
-          return { finalUrl: url, data: '' };
-        }
-      };
-      return attempt();
-    })();
-  }
-  const MAX_REDIRECTS = 3;
-  let currentUrl = url;
-  let finalUrl = url;
-  let lastResponse: { data: unknown } | null = null;
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    if (signal?.aborted) {
-      throw new DOMException('Aborted', 'AbortError');
-    }
-    const response = await apiClient.get(currentUrl, {
-      maxRedirects: 0,
-      validateStatus: (status) => status >= 200 && status < 400, // 3xx 也接受，交给下面处理
-      timeout,
-      signal: signal as any,
-    });
-    finalUrl = currentUrl;
-    lastResponse = response;
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.location;
-      if (!location) break; // 无 Location 的重定向：按当前 URL 兜底
-      currentUrl = new URL(String(location), currentUrl).href;
-      continue;
-    }
-    break;
-  }
-  // 部分适配器（RN XHR、axios fetch 适配器）无视 maxRedirects 自动跟随重定向，
-  // 此时拿不到 3xx 响应；若平台暴露了最终地址（responseURL），用它兜底。
-  const autoFollowedUrl = (lastResponse as any)?.request?.responseURL;
-  if (
-    typeof autoFollowedUrl === 'string' &&
-    /^https?:\/\//.test(autoFollowedUrl) &&
-    autoFollowedUrl !== url
-  ) {
-    finalUrl = autoFollowedUrl;
-  }
-  return { finalUrl, data: lastResponse?.data };
-}
-
-/**
- * 封面 URL 解析：api.php?get=pic 封面端点需要会话 cookie，
- * 移动端原生 <Image> 无法携带，解析成 CDN 直链后即可直接加载。
- * 非 api.php URL 原样返回；解析失败/会话不可用回退原 URL（渲染端占位图兜底）。
- * 结果带 6 小时 TTL 缓存，缓存 key 用归一化 URL（忽略 t/sign 等签名参数）：
- * 同一首歌每次搜索返回不同签名链接，但内容是同一张封面——归一化后
- * 命中同一缓存，避免每次搜索都重新解析、拿到新时间戳直链导致
- * <Image> 反复重载（"封面时不时刷新"）。
- * 未发生重定向（适配器自动跟随拿不到 Location）时不缓存，避免长期保留故障态。
- */
-export async function resolveCoverUrl(coverUrl: string): Promise<string> {
-  const fullUrl = normalizeUrl(coverUrl);
-  if (!fullUrl || !isSessionProtectedEndpoint(fullUrl)) return fullUrl;
-  const cacheKey = resourceUrlKey(fullUrl);
-  const cached = coverUrlCache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) return cached.url;
-  try {
-    // 封面解析：3s 快速超时（失败有占位图兜底），不让封面占住并发槽位
-    const { finalUrl, data } = await runResolve(fullUrl, COVER_RESOLVE_TIMEOUT_MS);
-    if (typeof data === 'string' && data.includes(INVALID_REQUEST_MARKER)) {
-      return fullUrl; // 会话不可用：不缓存，回退原 URL
-    }
-    if (finalUrl !== fullUrl) {
-      coverUrlCache.set(cacheKey, { url: finalUrl, expires: Date.now() + COVER_URL_CACHE_TTL });
-    }
-    return finalUrl;
-  } catch {
-    return fullUrl;
-  }
-}
-
-/**
- * 封面解析缓存失效：<Image> 加载失败（onError）说明缓存里的 CDN 直链
- * 已过期/失效，清除对应归一化 key 的缓存，让下一次 resolveCoverUrl
- * 重新解析拿到新直链（否则归一化 key 会一直命中失效缓存，封面永远
- * 失败占位）。调用方在 onError 后、兜底刷新前调用。
- */
-export function invalidateCoverUrl(coverUrl: string): void {
-  const fullUrl = normalizeUrl(coverUrl);
-  if (!fullUrl) return;
-  coverUrlCache.delete(resourceUrlKey(fullUrl));
-}
-
-/**
  * 歌词响应体归一化（T06 #152）：QQ fcg 歌词端点返回 JSON，`lyric` 字段为
  * base64 编码的 LRC 文本 → 解码为 LRC；非 JSON / 无 lyric 字段原样返回。
  * 纯函数，独立导出供测试。
@@ -932,24 +677,6 @@ function normalizeUrl(url: string | undefined): string {
 
   // 其他情况直接拼接
   return API_BASE_URL + url;
-}
-
-/**
- * 处理歌曲数据，补全所有 URL 字段
- */
-function processSong(song: any, sourceType: SourceKey = 'netease'): Song {
-  return {
-    // id 统一字符串：API 部分源返回数字 id，按 ID 识别/URL-ID 比对都要求字符串
-    id: String(song.id || song.songid || ''),
-    name: song.name || song.songname || '',
-    artist: song.artist || song.authors || '',
-    album: song.album || song.albumname || '',
-    url: normalizeUrl(song.url),
-    cover: normalizeUrl(song.cover || song.pic),
-    lrc: normalizeUrl(song.lrc || song.lyric || song.lrcurl),
-    duration: song.duration || song.interval || 0,
-    sourceType: song.sourceType || sourceType
-  };
 }
 
 // 热榜歌曲类型
@@ -1309,152 +1036,6 @@ export const musicApi = {
     }
   },
 
-  async searchSongs(keyword: string, page: number = 1, sourceType: SourceKey = 'netease'): Promise<Song[]> {
-    if (sourceType === 'soda') {
-      return this.searchSongsSoda(keyword, page);
-    }
-
-    const cachedData = cacheManager.getSearchCache(keyword, page, sourceType);
-    if (cachedData) {
-      return cachedData;
-    }
-
-    // 自建 API 已退役：桌面不再配置 API_BASE_URL，直接返回空结果，
-    // 避免 auto 回退链每次刷 Invalid URL。
-    if (!API_BASE_URL) return [];
-
-    const params = new URLSearchParams();
-    params.append('input', keyword);
-    params.append('filter', 'name');
-    params.append('type', sourceType);
-    params.append('page', page.toString());
-
-    // per-request 8s 超时：多源搜索 Promise.all 等最慢源，某源挂起不能拖 30s
-    let response;
-    try {
-      response = await apiClient.post('', params, { timeout: 8000 });
-    } catch (e: any) {
-      // 识别失败诊断：请求异常（Metro 终端可见；正常命中不打日志避免刷屏）
-      console.warn(`[search] 识别失败: 「${keyword}」 ${sourceType} 请求异常 ${e?.message || e}`);
-      throw e;
-    }
-    const songs: Partial<Song>[] = response.data.data || [];
-    if (songs.length === 0) {
-      console.warn(`[search] 识别失败: 「${keyword}」 ${sourceType} 返回 0 首`);
-    }
-
-    const processedSongs = songs.map(song => processSong(song, sourceType));
-
-    cacheManager.setSearchCache(keyword, page, sourceType, processedSongs);
-    return processedSongs;
-  },
-
-  /**
-   * 按源站歌曲 ID 直接识别（filter=id）：链接会过期，但 ID 不会——
-   * 播放失败/歌词封面补全时优先按 ID 拿新鲜的 url/lrc/cover（三件套），
-   * 完全绕开"按名字搜索 + 匹配"（Live/翻唱/多歌手导致的匹配失败）。
-   * 失败返回 null（调用方回退名字搜索）。
-   * @param force 为 true 时绕过 6h 搜索缓存（fresh 重试路径必须传：缓存里正是失败的那个过期 url）
-   */
-  async searchSongById(songId: string, sourceType: SourceKey = 'netease', force = false): Promise<Song | null> {
-    if (!songId || sourceType === 'soda') return null;
-    const cacheKey = `song_by_id_${sourceType}_${songId}`;
-    if (!force) {
-      const cached = cacheManager.getSearchCache(cacheKey, 1, sourceType);
-      if (cached?.length) return cached[0];
-    }
-
-    // 自建 API 已退役：桌面不再配置 API_BASE_URL，ID 识别只能走旧 API；
-    // 直接返回 null 让调用方回退到按名字搜索，避免每次刷 Invalid URL。
-    if (!API_BASE_URL) return null;
-
-    const params = new URLSearchParams();
-    params.append('input', songId);
-    params.append('filter', 'id');
-    params.append('type', sourceType);
-    params.append('page', '1');
-
-    try {
-      const response = await apiClient.post('', params, { timeout: 8000 });
-      const songs: Partial<Song>[] = response.data.data || [];
-      const processed = songs.map(song => processSong(song, sourceType));
-      // 校验返回的歌确实是对应 ID：filter=id 不严格时可能回退相似歌曲，
-      // 不校验会把别的歌的 url 挂到目标歌上（错误音频）
-      const found = processed.find(s => s.id && (s.id === songId || stripSourceIdPrefix(s.id) === songId));
-      if (!found) {
-        console.warn(`[search] 按ID识别失败: ${sourceType} ${songId} 返回 ${processed.length} 首但无匹配 ID`);
-        return null;
-      }
-      cacheManager.setSearchCache(cacheKey, 1, sourceType, processed);
-      return found;
-    } catch (e: any) {
-      console.warn(`[search] 按ID识别失败: ${sourceType} ${songId} 请求异常 ${e?.message || e}`);
-      return null;
-    }
-  },
-
-  async getAudioUrl(audioUrl: string, signal?: AbortSignal): Promise<string> {
-    const fullUrl = normalizeUrl(audioUrl);
-    if (!fullUrl) return '';
-
-    // 尝试从URL缓存获取
-    const cachedData = cacheManager.getAudioUrlCache(fullUrl);
-    if (cachedData) {
-      return cachedData;
-    }
-
-      // 带重试的 URL 解析（最多 3 次尝试，指数退避）
-      const MAX_RETRIES = 2;
-
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        if (signal?.aborted) {
-          throw new DOMException('Aborted', 'AbortError');
-        }
-
-        try {
-          // 播放 URL 解析：优先于封面（插队）+ 12s 超时。
-          // 手机网络波动大（LTE 下 api.php 响应 1-15s），5s 必超时回退
-          // 原 URL（播放器无 cookie 加载 api.php → Source error），
-          // 12s 覆盖慢网络，宁可多等也要拿到真直链
-          const { finalUrl, data } = await runResolve(fullUrl, AUDIO_RESOLVE_TIMEOUT_MS, true);
-
-        if (finalUrl.startsWith('data:text/html')) {
-          const errorMsg = typeof data === 'string' ? data : '获取音频失败';
-          throw new Error(errorMsg);
-        }
-
-        // 死链不缓存：受保护端点（api.php?get=url）解析回原样 = 签名过期/
-        // 会话失效，服务端返回的是错误页而非 302。缓存死链会让 1h 内
-        // 重放直接拿到错误地址（连 fresh 重试的机会都没有）。
-        if (!(finalUrl === fullUrl && isSessionProtectedEndpoint(fullUrl))) {
-          cacheManager.setAudioUrlCache(fullUrl, finalUrl);
-        }
-
-        return finalUrl;
-      } catch (error: any) {
-        if (error.name === 'AbortError' || signal?.aborted) {
-          throw error;
-        }
-
-        const isLastAttempt = attempt === MAX_RETRIES;
-        if (isLastAttempt) {
-          console.error('getAudioUrl 失败（已重试', MAX_RETRIES, '次）:', error);
-          return fullUrl;
-        }
-
-        const delay = 500 * Math.pow(2, attempt);
-        console.warn(`getAudioUrl 第 ${attempt + 1} 次失败，${delay}ms 后重试:`, error.message);
-        await new Promise(r => setTimeout(r, delay));
-      }
-    }
-
-    return fullUrl;
-  },
-
-  resolveCoverUrl,
-
-  invalidateCoverUrl,
-
   async getLyrics(lrcUrl: string): Promise<string> {
     const fullUrl = normalizeUrl(lrcUrl);
     if (!fullUrl) return '';
@@ -1549,45 +1130,6 @@ export const musicApi = {
     } catch {
       return '';
     }
-  },
-
-  /**
-   * 批量搜索
-   * @param concurrency 并发上限,0 表示不限制(默认);限制可避免弱 API 排队/被打爆
-   */
-  async batchSearch(keywords: string[], sourceType: SourceKey = 'netease', concurrency: number = 3): Promise<Record<string, Song[]>> {
-    // 尝试从缓存获取
-    const cachedData = cacheManager.getBatchSearchCache(keywords, sourceType);
-    if (cachedData) {
-      return cachedData;
-    }
-
-    const results: Song[][] = new Array(keywords.length);
-    const workerCount = concurrency > 0 ? Math.min(concurrency, keywords.length) : keywords.length;
-    let nextIndex = 0;
-
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (true) {
-        const i = nextIndex++;
-        if (i >= keywords.length) break;
-        try {
-          results[i] = await this.searchSongs(keywords[i], 1, sourceType);
-        } catch (error) {
-          console.error(`搜索关键词 "${keywords[i]}" 失败:`, error);
-          results[i] = [];
-        }
-      }
-    });
-    await Promise.all(workers);
-
-    const batchResult: Record<string, Song[]> = {};
-    keywords.forEach((keyword, index) => {
-      batchResult[keyword] = results[index] || [];
-    });
-
-    // 缓存结果
-    cacheManager.setBatchSearchCache(keywords, sourceType, batchResult);
-    return batchResult;
   },
 
   async searchNeteaseArtists(keyword: string, limit: number = 30): Promise<any[]> {
@@ -2114,91 +1656,16 @@ export const musicApi = {
   },
 
   /**
-   * 搜索兜底:剩余无 url 的歌曲(通常为 VIP)用「歌名+歌手」通过自有搜索 API 拿直链。
-   * - healthCheck 结果缓存 60 秒,避免每页重复探测
-   * - 搜索无结果的歌曲记入黑名单(会话级),后续页不再重复搜索
+   * 批量补齐歌曲可播放 URL：weapi by-ID 批量直连（免费歌曲全覆盖，VIP 返回空）。
+   * 旧「逐首搜索兜底」（resolveNeteaseSongUrlsBySearch/fillSongUrls）已随自建 API
+   * 退役删除（#244 决策 7）；无 URL 歌曲播放时由路由层单首解析。
    */
-  /**
-   * 逐首搜索兜底（补无版权/无直链歌曲的 URL）。
-   * @param albumName 专辑名预搜：一次请求命中专辑内多首歌（服务端 name 搜索会
-   *   匹配专辑字段），按 name|artist 精确过滤填 URL——把 N 首逐首搜索降为
-   *   1 次专辑搜索 + 少量剩余。服务端对 AJAX 请求限速（连发尖峰 1-3s+），
-   *   减少请求数是最有效的提速手段。
-   */
-  async resolveNeteaseSongUrlsBySearch(songs: Song[], albumName?: string): Promise<void> {
-    // 先清掉过期的黑名单项（瞬时故障不能永久拉黑）
-    const now = Date.now();
-    // 专辑名预搜：一次请求批量命中（精确匹配 name|artist，防翻唱误挂）
-    if (albumName && songs.some((s) => !s.url)) {
-      try {
-        const albumHits = await this.searchSongs(albumName, 1, 'netease');
-        const byKey = new Map(albumHits.map((s) => [`${s.name}|${s.artist}`, s]));
-        for (const song of songs) {
-          if (song.url) continue;
-          const hit = byKey.get(`${song.name}|${song.artist}`);
-          if (hit?.url) song.url = hit.url;
-        }
-      } catch {
-        // 专辑名预搜失败不影响逐首兜底
-      }
-    }
-    for (const [id, at] of searchFailedSongIds) {
-      if (now - at >= SEARCH_FAILED_TTL) searchFailedSongIds.delete(id);
-    }
-    const missingUrlSongs = songs.filter(s => !s.url && !searchFailedSongIds.has(s.id));
-    if (missingUrlSongs.length === 0) return;
-
-    let apiOk: boolean;
-    if (now - healthCheckCache.at < HEALTH_CHECK_TTL) {
-      apiOk = healthCheckCache.ok;
-    } else {
-      apiOk = await this.healthCheck();
-      healthCheckCache = { at: now, ok: apiOk };
-    }
-    // healthCheck 失败（3s 超时，API 限流/慢时常见）不阻断搜索兜底：
-    // url 缺失会导致探测全标「无效」、播放无链接——比多打几个搜索请求
-    // 更糟。搜索兜底自身有 12s 超时 + 10 并发闸门兜底。
-    if (!apiOk) {
-      console.warn('[MusicApi] healthCheck 失败，仍尝试搜索兜底补齐 URL');
-    }
-
-    try {
-      const keywords = missingUrlSongs.map(s => `${s.name} ${s.artist}`.trim());
-      // 限 10 并发:单页搜索兜底更快,弱 API 排队仍可控
-      const searchResults = await this.batchSearch(keywords, 'netease', 10);
-      for (let i = 0; i < missingUrlSongs.length; i++) {
-        const song = missingUrlSongs[i];
-        // 精确匹配 name+artist：无版权歌的搜索结果第一条通常是翻唱/Live 版，
-        // 直接取会填上错误的 URL（播放/探测都会被误导）
-        const hit = findExactMatch(
-          { name: song.name, artist: song.artist },
-          searchResults[keywords[i]] || []
-        ) as Song | undefined;
-        if (hit?.url) {
-          song.url = hit.url;
-        } else {
-          searchFailedSongIds.set(song.id, Date.now());
-        }
-      }
-    } catch (error) {
-      console.error('[MusicApi] resolveNeteaseSongUrlsBySearch 搜索兜底失败:', error);
-    }
-  },
-
-  /**
-   * 批量补齐歌曲可播放 URL(全量场景用):weapi 批量直连 + 搜索兜底
-   * @param skipSearchFallback 为 true 时跳过逐首搜索兜底(慢),适合移动端详情页:
-   *   无 URL 歌曲播放时再由 resolvePlayableUrl 单首解析,避免进入详情页长时间等待
-   */
-  async resolveNeteaseSongUrls(songs: Song[], skipSearchFallback: boolean = false): Promise<void> {
+  async resolveNeteaseSongUrls(songs: Song[]): Promise<void> {
     const ids = songs.map(s => Number(s.id)).filter(id => Number.isFinite(id) && id > 0);
     const urlMap = await this.fetchNeteaseSongUrlMap(ids);
     for (const song of songs) {
       const u = urlMap.get(Number(song.id));
       if (u) song.url = u;
-    }
-    if (!skipSearchFallback) {
-      await this.resolveNeteaseSongUrlsBySearch(songs);
     }
   },
 
@@ -2209,7 +1676,7 @@ export const musicApi = {
    * @param limit 每页数量
    * @returns 本页歌曲与歌单总曲数
    */
-  async getNeteasePlaylistSongsPage(playlistId: number, offset: number = 0, limit: number = 50, skipSearchFallback: boolean = false): Promise<{ songs: Song[]; total: number }> {
+  async getNeteasePlaylistSongsPage(playlistId: number, offset: number = 0, limit: number = 50): Promise<{ songs: Song[]; total: number }> {
     const cacheKey = `netease_playlist_page_${playlistId}_${offset}_${limit}`;
     const cached = cacheManager.get<{ songs: Song[]; total: number }>(cacheKey);
     if (cached) return cached;
@@ -2238,9 +1705,6 @@ export const musicApi = {
         } catch (error2) {
           console.error(`[MusicApi] getNeteasePlaylistSongsPage 失败(旧接口) (id=${playlistId}):`, error2);
         }
-      }
-      if (!skipSearchFallback) {
-        await this.resolveNeteaseSongUrlsBySearch(songs);
       }
     }
 
@@ -2331,9 +1795,9 @@ export const musicApi = {
 
   /**
    * 获取网易云专辑详情+歌曲列表(weapi 直连,单请求)
-   * 专辑歌曲一般 ≤100 首;返回前补齐播放 URL(批量直链 + 搜索兜底),点开即播
+   * 专辑歌曲一般 ≤100 首;返回前补齐播放 URL(weapi by-ID 批量直链),点开即播
    */
-  async getAlbumDetail(albumId: string, skipSearchFallback: boolean = false): Promise<{ album: Album; songs: Song[] } | null> {
+  async getAlbumDetail(albumId: string): Promise<{ album: Album; songs: Song[] } | null> {
     const cacheKey = `album_detail_${albumId}`;
     const cached = cacheManager.get<{ album: Album; songs: Song[] }>(cacheKey);
     if (cached) return cached;
@@ -2354,7 +1818,7 @@ export const musicApi = {
     }
     if (!album) return null;
 
-    await this.resolveNeteaseSongUrls(songs, skipSearchFallback);
+    await this.resolveNeteaseSongUrls(songs);
 
     const result = { album, songs };
     // 空结果不缓存,避免瞬时故障 10 分钟内无法自愈
@@ -2471,51 +1935,6 @@ export const musicApi = {
     return groupIntoSongGroupsUtil(allSongs);
   },
 
-  async getPlaylistSongsFromThirdParty(playlistUrl: string, sourceType: SourceKey = 'netease'): Promise<Song[]> {
-    try {
-      // Note: unmeta.cn auto-detects the music source from the URL
-      // sourceType is used for local search (batchSearch) after getting song names
-      const response = await axios.post(
-        'https://sss.unmeta.cn/songlist?detailed=false&format=song-singer&order=normal',
-        `url=${encodeURIComponent(playlistUrl)}`,
-        {
-          headers: {
-            'accept': 'application/json, text/javascript, */*; q=0.01',
-            'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'content-type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://music.unmeta.cn/',
-            'Origin': 'https://music.unmeta.cn'
-          },
-          timeout: 30000
-        }
-      );
-
-      const data = response.data;
-      if (data.code !== 1 || !data.data?.songs) {
-        console.error('[MusicApi] getPlaylistSongsFromThirdParty 失败:', data.msg);
-        return [];
-      }
-
-      const keywords = data.data.songs.map((s: string) => s.trim()).filter(Boolean);
-
-      const searchResults = await this.batchSearch(keywords, sourceType);
-
-      const songs: Song[] = [];
-      for (const keyword of keywords) {
-        const results = searchResults[keyword];
-        if (results && results.length > 0) {
-          songs.push(results[0]);
-        }
-      }
-
-      return songs;
-    } catch (error) {
-      console.error('[MusicApi] getPlaylistSongsFromThirdParty 失败:', error);
-      return [];
-    }
-  },
-
   async healthCheck(): Promise<boolean> {
     try {
       const params = new URLSearchParams();
@@ -2578,16 +1997,6 @@ export const musicApi = {
     return results;
   },
 
-  /**
-   * 补齐无 URL 歌曲（专辑名预搜 1 次批量命中 + 剩余逐首兜底）。
-   * 薄方法：包装 `resolveNeteaseSongUrlsBySearch`，返回补齐后的歌曲数组。
-   */
-  async fillSongUrls(songs: Song[], albumName?: string): Promise<Song[]> {
-    const list = Array.isArray(songs) ? songs : [];
-    await this.resolveNeteaseSongUrlsBySearch(list, albumName);
-    return list;
-  },
-
   async warmUpArtistPicCache(): Promise<void> {
     return warmUpArtistPicCache();
   },
@@ -2606,9 +2015,3 @@ export const musicApi = {
   /** 模式感知播放解析 + 试听版检测（T12：UrlInfo 完整时长校验 → nonFull 标记）。 */
   resolvePlayableSongRouted: (song: Song) => routedResolveSong(song),
 };
-
-// 路由的 api 腿 = 自建 API 现状语义（搜索 POST / 播放直链解析）。
-configureSourceRouter({
-  searchSongs: (query, page, source) => musicApi.searchSongs(query, page, source),
-  getAudioUrl: (url) => musicApi.getAudioUrl(url),
-});

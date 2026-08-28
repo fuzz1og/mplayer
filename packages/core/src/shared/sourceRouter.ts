@@ -6,10 +6,11 @@ import { getPrefetchedUrl } from '../api/prefetchCache.js';
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
  *
- * 单一回退链（请求层）：官方直连 → 自建 API（auto 链末位兜底）→ 换元/明确不可播
+ * 单一回退链（请求层）：官方直连 → tier3 订阅源兜底 → 上抛
  * （换元在调用方/store 层，本模块不实现；直连返回空串 = 无版权/VIP，原样上抛）。
+ * 自建 API 已退役：路由不再有 api 腿，直连失败且 tier3 未命中 = 上抛（D2 语义）。
  *
- * - 每源来源开关 `auto | direct | api`，默认 auto；
+ * - 每源来源开关 `auto | direct`（类型里 legacy `'api'` 的收窄见 #277），默认 auto；
  * - 直连客户端由 T02+ 各源 ticket 注册（纯 JS，双端共用）；
  * - 路由函数（searchSongsRouted / resolvePlayableUrlRouted）供 SearchOrchestrator
  *   的 searchOneSource 注入（ADR-0003）与播放 URL 解析使用；
@@ -105,24 +106,6 @@ export function getAllSourceModes(): Partial<Record<SourceKey, SourceMode>> {
 
 // ── 路由（单一回退链） ───────────────────────────────────────────────
 
-/** api 腿 = 自建 API 现状语义（搜索 POST / 播放直链解析）。 */
-export interface SourceRouterLegs {
-  searchSongs: (query: string, page: number, source: SourceKey) => Promise<Song[]>;
-  getAudioUrl: (url: string) => Promise<string>;
-}
-
-let legs: SourceRouterLegs | null = null;
-
-/** 宿主在 core 初始化时注入 api 腿（musicApi.searchSongs / getAudioUrl）。 */
-export function configureSourceRouter(routerLegs: SourceRouterLegs): void {
-  legs = routerLegs;
-}
-
-function requireLegs(): SourceRouterLegs {
-  if (!legs) throw new Error('sourceRouter 未配置 api 腿（configureSourceRouter 未调用）');
-  return legs;
-}
-
 // ── tier3 插槽（spec #146 决策 2：预留，不实现；#144 独立立项实施）────────
 //
 // tier3 第三方解析源（订阅执行器）在「官方直连失败」与「换元」之间插槽，
@@ -168,7 +151,7 @@ export function setTier3SearchResolver(resolver: Tier3SearchResolver | null): vo
   tier3SearchResolver = resolver;
 }
 
-/** 直连搜索失败后、api 腿前的 tier3 搜索兜底（默认关闭，未注入直接跳过）。 */
+/** 直连搜索失败后的 tier3 搜索兜底（默认关闭，未注入直接跳过）。 */
 async function tryTier3Search(keyword: string, page: number, source: SourceKey): Promise<Song[]> {
   if (!tier3SearchEnabled || !tier3SearchResolver) {
     console.info(`[tier3] 直连搜索失败，但 tier3 搜索未启用/未注入，跳过: ${keyword} (${source})`);
@@ -230,7 +213,7 @@ function tier3ResolveShared(song: Song, reason: string): Promise<string> {
   return inflight;
 }
 
-/** 直连失败后、api 腿前的 tier3 尝试（默认关闭，未注入直接跳过）。reason 用于日志区分触发原因。
+/** 直连失败后的 tier3 尝试（默认关闭，未注入直接跳过）。reason 用于日志区分触发原因。
  *  带总预算：慢源（mgmp3 20s 超时）不阻塞播放——预算内未命中按未命中处理。
  *  同歌并发调用共享同一条底层解析（见 tier3ResolveShared），预算仍按各调用方独立计时。 */
 async function tryTier3(song: Song, reason: string): Promise<string> {
@@ -270,35 +253,32 @@ async function preferTier3WhenBad(song: Song, directUrl: string): Promise<string
   return tier3Url || directUrl;
 }
 
-/** 模式分派：api 一律走 api 腿；direct 无能力/失败明确上抛；auto 直连优先、失败回退 api。 */
+/** 模式分派：无客户端/无能力（含 legacy 'api' 模式）统一按「直连不可用」处理——
+ *  自建 API 已退役，api 腿已拆除（#275）；'api' 收窄出 SourceMode 类型见 #277。 */
 type RouteDecision =
   | { kind: 'direct'; client: DirectSourceClient; mode: SourceMode }
-  | { kind: 'api' }
   | { kind: 'direct-unavailable' };
 
 function decideRoute(source: SourceKey, hasCapability: (c: DirectSourceClient) => boolean): RouteDecision {
   const mode = getSourceMode(source);
   const client = getDirectClient(source);
   if (mode === 'api' || !client || !hasCapability(client)) {
-    return mode === 'direct' ? { kind: 'direct-unavailable' } : { kind: 'api' };
+    return { kind: 'direct-unavailable' };
   }
   return { kind: 'direct', client, mode };
 }
 
 /**
  * 模式感知搜索（供 SearchOrchestrator 的 searchOneSource 注入）。
- * - api：一律自建 API（现状）；
  * - direct：仅直连（无客户端/失败 → 明确报错，不回退）；
- * - auto：直连优先，失败回退自建 API；无客户端则直接自建 API（现状等价）。
+ * - auto：直连优先，失败/空结果进 tier3 搜索兜底；tier3 未命中 = 上抛（D2 语义）。
  */
 export async function searchSongsRouted(
   query: string,
   page: number,
   source: SourceKey,
 ): Promise<Song[]> {
-  const api = requireLegs();
   const route = decideRoute(source, (c) => !!c.search);
-  if (route.kind === 'api') return api.searchSongs(query, page, source);
   if (route.kind === 'direct-unavailable') {
     const tier3Songs = await tryTier3Search(query, page, source);
     if (tier3Songs.length > 0) return tier3Songs;
@@ -310,25 +290,21 @@ export async function searchSongsRouted(
     // 直连返回空也视为“未命中”，进入 tier3 搜索兜底（若启用）。
     const tier3Songs = await tryTier3Search(query, page, source);
     if (tier3Songs.length > 0) return tier3Songs;
-    if (route.mode === 'direct') return directSongs;
-    return api.searchSongs(query, page, source);
+    return directSongs;
   } catch (err) {
-    // 直连搜索失败 → 第三方订阅搜索兜底（若启用）；再按模式决定是否回退自建 API。
+    // 直连搜索失败 → 第三方订阅搜索兜底（若启用）；tier3 未命中 = 原样上抛（D2）。
     const tier3Songs = await tryTier3Search(query, page, source);
     if (tier3Songs.length > 0) return tier3Songs;
-    if (route.mode === 'direct') throw err;
-    return api.searchSongs(query, page, source);
+    throw err;
   }
 }
 
 /**
  * 模式感知播放 URL 解析（请求层回退链的 URL 腿）。
- * 直连返回空串（无版权/VIP）= 原样上抛，由换元层处理，不静默回退 api。
+ * 直连返回空串（无版权/VIP）= 原样上抛，由换元层处理；直连失败且 tier3 未命中 = 上抛。
  */
 export async function resolvePlayableUrlRouted(song: Song): Promise<string> {
-  const api = requireLegs();
   const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl);
-  if (route.kind === 'api') return api.getAudioUrl(song.url);
   if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
   try {
     const url = await route.client.resolvePlayableUrl!(song);
@@ -343,10 +319,10 @@ export async function resolvePlayableUrlRouted(song: Song): Promise<string> {
     return url;
   } catch (err) {
     if (route.mode === 'direct') throw err;
-    // tier3 插槽：直连失败后、api 腿前（默认关；#144 落地后启用）
+    // tier3 插槽：直连失败后的兜底（默认关；#144 落地后启用）；未命中 = 上抛（D2）。
     const tier3Url = await tryTier3(song, '直连解析失败');
     if (tier3Url) return tier3Url;
-    return api.getAudioUrl(song.url);
+    throw err;
   }
 }
 
@@ -361,7 +337,7 @@ export interface RoutedPlayable {
  * 直连客户端若有 resolveUrlInfo（权威 playTime/size/br/fee/payed），用它做
  * 试听版判定（时长比 <0.5 → nonFull）；否则退回 resolvePlayableUrl。
  * 空 URL（无版权/VIP）原样上抛（nonFull=false），由换元层处理；
- * 直连失败按模式回退 api（auto）或上抛（direct）。
+ * 直连失败且 tier3 未命中 = 上抛（D2 语义）。
  */
 export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlayable> {
   // 预取缓存命中（探测阶段已解析并验证过的直链，30min TTL）→ 0 等待直接播，
@@ -377,10 +353,8 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
     return prefetched;
   }
 
-  const api = requireLegs();
   // 能力门含 resolveUrlInfo（UrlInfo 自带 url，仅有 UrlInfo 也可直连解析）
   const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl || !!c.resolveUrlInfo);
-  if (route.kind === 'api') return { url: await api.getAudioUrl(song.url), nonFull: false };
   if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
   try {
     const client = route.client;
@@ -427,16 +401,16 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
     return { url: '', nonFull: false };
   } catch (err) {
     if (route.mode === 'direct') throw err;
-    // tier3 插槽：直连失败后、api 腿前（默认关；#144 落地后启用）
+    // tier3 插槽：直连失败后的兜底（默认关；#144 落地后启用）；未命中 = 上抛（D2）。
     const tier3Url = await tryTier3(song, '直连解析失败');
     if (tier3Url) return { url: tier3Url, nonFull: false };
-    return { url: await api.getAudioUrl(song.url), nonFull: false };
+    throw err;
   }
 }
 
 /**
  * 直连-only 播放解析（搜索结果探测用，T12 预检）：
- * 只走直连客户端（resolveUrlInfo/resolvePlayableUrl），**无 tier3、无 api 腿**——
+ * 只走直连客户端（resolveUrlInfo/resolvePlayableUrl），**无 tier3、无兜底**——
  * 探测语义 = 「直连可播性」：快（单请求）、不占用 tier3 上游配额、不被 mgmp3 等
  * 慢源（20s 超时）拖死整批探测。播放仍走 resolvePlayableSongRouted（含 tier3 兜底）。
  */

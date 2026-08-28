@@ -59,12 +59,10 @@ function song(id: string, name = '晴天', url = ''): Song {
   };
 }
 
-/** 默认 callMusicApi 分发：getAudioUrl 返回可用 URL，搜索/换源返回空 */
+/** 默认 callMusicApi 分发：routed 解析返回可用 URL，搜索/换源返回空 */
 function defaultCallMusicApi(): void {
   callMusicApiMock.mockImplementation(async (method: string) => {
     switch (method) {
-      case 'getAudioUrl':
-        return 'https://resolved.example.com/audio.mp3';
       case 'resolvePlayableUrlRouted':
         return 'https://resolved.example.com/audio.mp3';
       case 'resolvePlayableSongRouted':
@@ -73,8 +71,6 @@ function defaultCallMusicApi(): void {
         return '';
       case 'searchSongsRouted':
         return [];
-      case 'searchSongById':
-        return null;
       default:
         return undefined;
     }
@@ -215,7 +211,6 @@ describe('播放链路：URL 解析 / 加载失败', () => {
     const s1 = song('netease:1', '晴天', ''); // url 为空
     const foundUrl = 'https://found.example.com/1.mp3';
     callMusicApiMock.mockImplementation(async (method: string) => {
-      if (method === 'getAudioUrl') return ''; // 无真实解析
       if (method === 'resolvePlayableUrlRouted') return ''; // 无真实解析
       if (method === 'resolvePlayableSongRouted') return { url: '', nonFull: false }; // 无真实解析
       if (method === 'searchSongsRouted') return [{ ...s1, url: foundUrl, lrc: '' }];

@@ -27,9 +27,7 @@ const axiosMock = vi.hoisted(() => {
 });
 
 const musicApiMock = vi.hoisted(() => ({
-  getAudioUrl: vi.fn(async (u: string) => u),
   getLyrics: vi.fn(async () => ''),
-  fillSongUrls: vi.fn(),
   probeSongsBatch: vi.fn(async (songs: { id: string }[]) =>
     songs.map((s) => ({ songId: s.id, tag: 'valid' as const }))
   ),
@@ -265,8 +263,6 @@ describe('DownloadService 按身份解析（resolve-by-identity）', () => {
     expect(axiosMock.download).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://cdn.example.com/fresh.mp3' }));
     const calledWith = (axiosMock.download as ReturnType<typeof vi.fn>).mock.calls[0][0] as { url: string };
     expect(calledWith.url).not.toBe(deadUrl);
-    // 退役的 api.php getAudioUrl 解析不再被调用
-    expect(musicApiMock.getAudioUrl).not.toHaveBeenCalled();
   });
 
   it('解析失败（无直链）任务进 error 态并给出可读错误', async () => {

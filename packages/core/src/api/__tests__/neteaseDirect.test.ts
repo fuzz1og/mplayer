@@ -143,7 +143,7 @@ describe('neteaseDirectClient URL 解析（weapi 经 request 接缝出网）', (
     expect(url).toBe('');
   });
 
-  it('URL 解析失败（网络错误）→ 错误上抛（供 auto 回退 api getAudioUrl）', async () => {
+  it('URL 解析失败（网络错误）→ 错误上抛（auto 由路由层接手：tier3 兜底后上抛）', async () => {
     setTransport(async () => {
       throw new Error('weapi timeout');
     });
