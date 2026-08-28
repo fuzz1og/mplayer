@@ -15,9 +15,7 @@ class CacheManager {
   private defaultExpirations = {
     search: 6 * 60 * 60 * 1000, // 6小时
     hotlist: 24 * 60 * 60 * 1000, // 1天
-    audioUrl: 1 * 60 * 60 * 1000, // 1小时
-    lyrics: 24 * 60 * 60 * 1000, // 1天
-    batchSearch: 6 * 60 * 60 * 1000 // 6小时
+    lyrics: 24 * 60 * 60 * 1000 // 1天
   };
 
   /**
@@ -125,22 +123,6 @@ class CacheManager {
   }
 
   /**
-   * 获取音频URL缓存
-   */
-  getAudioUrlCache(audioUrl: string): string | null {
-    const key = this.generateKey('audioUrl', audioUrl);
-    return this.get<string>(key);
-  }
-
-  /**
-   * 设置音频URL缓存
-   */
-  setAudioUrlCache(audioUrl: string, data: string): void {
-    const key = this.generateKey('audioUrl', audioUrl);
-    this.set(key, data, this.defaultExpirations.audioUrl);
-  }
-
-  /**
    * 获取歌词缓存
    */
   getLyricsCache(lrcUrl: string): string | null {
@@ -154,22 +136,6 @@ class CacheManager {
   setLyricsCache(lrcUrl: string, data: string): void {
     const key = this.generateKey('lyrics', lrcUrl);
     this.set(key, data, this.defaultExpirations.lyrics);
-  }
-
-  /**
-   * 获取批量搜索缓存
-   */
-  getBatchSearchCache(keywords: string[], sourceType: string): Record<string, Song[]> | null {
-    const key = this.generateKey('batchSearch', [...keywords].sort().join(','), sourceType);
-    return this.get<Record<string, Song[]>>(key);
-  }
-
-  /**
-   * 设置批量搜索缓存
-   */
-  setBatchSearchCache(keywords: string[], sourceType: string, data: Record<string, Song[]>): void {
-    const key = this.generateKey('batchSearch', [...keywords].sort().join(','), sourceType);
-    this.set(key, data, this.defaultExpirations.batchSearch);
   }
 
   /**

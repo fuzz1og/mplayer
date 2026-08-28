@@ -1,11 +1,10 @@
 import type { Song, AudioTag } from '../types/index.js';
-import { getApiClient } from './musicApi.js';
+import { request } from './transport.js';
 
 export const PREVIEW_THRESHOLD = 1_048_576; // 1MB - 30s 128kbps ≈ 480KB, 1MB safe threshold
 // 手机网络下 4s 超时会让挂起请求拖慢整批探测(批 = 最慢一首);
 // 3s 折中:覆盖正常慢请求,拦截真正挂起的
 export const PROBE_TIMEOUT = 3000;
-export const MAX_REDIRECTS = 3;
 
 // 探测请求头：源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格），
 // 不带/带错会 403 → 直链误判失效；部分 CDN 拒非浏览器 UA。
@@ -20,25 +19,19 @@ function probeRequestHeaders(url: string): Record<string, string> {
 }
 
 /**
- * 探测/活性共用的带会话 Range GET：统一走共享 axios 客户端（apiClient）——
- * 探测的 api.php 端点与会话保护请求（搜索/播放直链）共用同一会话，RN 端由
- * OkHttp jar 携带 cookie、其他环境由拦截器显式带 Cookie 头；响应拦截器检测到
- * 「非法请求」页时自动刷新会话重试一次（无 cookie 的探测会拿到错误页，结果失真
- * ——原生 fetch 的 credentials:'include' 在 RN 实测不带 jar cookie）。
- * 另带 CDN 防盗链头（Referer/UA，见 probeRequestHeaders），axios 自动跟随
- * 302 → CDN 直链；__probe 跳过耗时日志与限流退避统计。
+ * 探测/活性共用的 Range GET：统一走传输层（直连客户端/歌词门面同一传输接缝，
+ * 默认 axios 实现，重试/超时行为一致；302 由 axios 自动跟随到 CDN 直链）。
+ * 另带 CDN 防盗链头（Referer/UA，见 probeRequestHeaders）。
  * 网络异常直接上抛——极性由调用方定义（探测：异常=valid 不标记；活性：异常=false 死链）。
  */
 async function rangedGet(url: string, rangeEnd: number, timeoutMs: number) {
-  const client = getApiClient();
-  return client.get(url, {
+  return request({
+    method: 'GET',
+    url,
     headers: { Range: `bytes=0-${rangeEnd}`, ...probeRequestHeaders(url) },
     responseType: 'arraybuffer',
-    timeout: timeoutMs,
-    maxRedirects: MAX_REDIRECTS,
-    validateStatus: () => true,
-    __probe: true, // 跳过耗时日志与限流退避统计
-  } as any);
+    timeoutMs,
+  });
 }
 
 // 会话级探测缓存:同一首歌(同 id/稳定 url)重复搜索不重复探测
@@ -85,9 +78,9 @@ export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string
     const status = resp.status;
     const ct = String(resp.headers['content-type'] || '');
 
-    // 4xx/5xx 与 text/html（非法请求/反爬页，拦截器已带新会话重试过一次）：
+    // 4xx/5xx 与 text/html（签名过期/非法请求/反爬页）：
     // 不可播。之前 fetch 探测把 142 字节错误页按 content-length 标成 preview，
-    // 属于误判；统一会话后此路径只会在签名/URL 真失效时出现
+    // 属于误判；此路径只会在签名/URL 真失效或 CDN 防盗链拒绝时出现
     if (status >= 400 || ct.includes('text/html')) {
       probeCache.set(cacheKey, { tag: 'invalid', expires: Date.now() + PROBE_CACHE_TTL });
       return 'invalid';
