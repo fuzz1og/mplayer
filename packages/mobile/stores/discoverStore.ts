@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { musicApi, getDirectClient } from '@mplayer/core';
-import type { Song } from '@mplayer/core';
+import { getDirectClient } from '@mplayer/core';
+import type { Song, SourceKey } from '@mplayer/core';
 
 /** 发现页榜单条目视图（rank 由索引推导，#239）。 */
 export interface HotlistItem {
@@ -12,7 +12,7 @@ export interface HotlistItem {
   album: string;
 }
 
-/** Song → 榜单视图条目（网易能力面/QQ 旧门面统一走这里）。 */
+/** Song → 榜单视图条目（榜单各源统一经能力面 getToplists 返回 Song）。 */
 function toHotlistItems(songs: Song[]): HotlistItem[] {
   return songs.map((s, i) => ({
     id: s.id,
@@ -24,35 +24,16 @@ function toHotlistItems(songs: Song[]): HotlistItem[] {
   }));
 }
 
-/** 网易榜单：经能力面直调 getToplists，按 id（`${source}:${sourceId}`）取组。 */
-async function neteaseToplistSongs(sourceId: number): Promise<Song[]> {
-  const groups = await getDirectClient('netease')!.getToplists!();
-  return groups.find((g) => g.id === `netease:${sourceId}`)?.songs ?? [];
+/** 榜单：经能力面直调 getToplists，按 id（`${source}:${sourceId}`）取组。 */
+async function toplistSongs(source: SourceKey, sourceId: number): Promise<Song[]> {
+  const groups = await getDirectClient(source)!.getToplists!();
+  return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
 }
 
-/** QQ 榜单旧门面条目（QQ 内容迁移在后续票，#278 仅迁网易）。 */
-interface QqHotlistItem {
-  id: string;
-  name: string;
-  artists: string;
-  cover: string;
-  album: string;
-}
-
-/** QQ 榜单旧门面 → Song（字段对齐，rank 由上层索引推导）。 */
-function qqSongsToSongs(items: QqHotlistItem[]): Song[] {
-  return items.map((it) => ({
-    id: it.id,
-    name: it.name,
-    artist: it.artists,
-    album: it.album,
-    cover: it.cover,
-    url: '',
-    lrc: '',
-    duration: 0,
-    sourceType: 'qq' as const,
-  }));
-}
+const NETEASE_HOTLIST_ID = 3778678;
+const NETEASE_NEW_ID = 3779629;
+const QQ_HOTLIST_ID = 26; // v8 topid（qq:26 热歌榜，#279）
+const QQ_NEW_ID = 27; // v8 topid（qq:27 新歌榜，#279）
 
 interface DiscoverState {
   neteaseHotlist: HotlistItem[];
@@ -74,16 +55,16 @@ export const useDiscoverStore = create<DiscoverState>((set) => ({
     set({ loading: true });
     try {
       const [nh, qh, nn, qn] = await Promise.all([
-        neteaseToplistSongs(3778678),
-        musicApi.getQQHotlist(),
-        neteaseToplistSongs(3779629),
-        musicApi.getQQNewSongList(),
+        toplistSongs('netease', NETEASE_HOTLIST_ID),
+        toplistSongs('qq', QQ_HOTLIST_ID),
+        toplistSongs('netease', NETEASE_NEW_ID),
+        toplistSongs('qq', QQ_NEW_ID),
       ]);
       set({
         neteaseHotlist: toHotlistItems(nh).slice(0, 10),
-        qqHotlist: toHotlistItems(qqSongsToSongs(qh)).slice(0, 10),
+        qqHotlist: toHotlistItems(qh).slice(0, 10),
         neteaseNew: toHotlistItems(nn).slice(0, 10),
-        qqNew: toHotlistItems(qqSongsToSongs(qn)).slice(0, 10),
+        qqNew: toHotlistItems(qn).slice(0, 10),
       });
     } catch (err) {
       console.error('加载发现页失败:', err);

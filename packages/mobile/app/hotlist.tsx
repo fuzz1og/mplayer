@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { musicApi, getDirectClient } from '@mplayer/core';
+import { getDirectClient } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
 import SongListSkeleton from '../components/SongListSkeleton';
 import SongRow from '../components/SongRow';
@@ -22,51 +22,22 @@ import {spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
-/** QQ 榜单旧结构（QQ 内容迁移在后续票，#278 仅迁网易；rank 由索引推导）。 */
-interface HotlistSong {
-  id: string;
-  name: string;
-  artists: string;
-  rank: number;
-  cover: string;
-  album: string;
-}
-
-/** 网易榜单：经能力面直调 getToplists，按 id（`${source}:${sourceId}`）取组。 */
-async function neteaseToplistSongs(sourceId: number): Promise<Song[]> {
-  const groups = await getDirectClient('netease')!.getToplists!();
-  return groups.find((g) => g.id === `netease:${sourceId}`)?.songs ?? [];
-}
-
-/** QQ 榜单旧门面 → Song（QQ 内容迁移在后续票，#278 仅迁网易；rank 由索引推导）。 */
-async function qqToplistSongs(kind: 'hot' | 'new'): Promise<Song[]> {
-  const raw: HotlistSong[] = kind === 'hot' ? await musicApi.getQQHotlist() : await musicApi.getQQNewSongList();
-  return raw.map((item) => toSong(item, 'qq'));
+/** 榜单：经能力面直调 getToplists，按 id（`${source}:${sourceId}`）取组。 */
+async function toplistSongs(source: SourceKey, sourceId: number): Promise<Song[]> {
+  const groups = await getDirectClient(source)!.getToplists!();
+  return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
 }
 
 const API_MAP: Record<
   string,
   { fetcher: () => Promise<Song[]>; sourceType: SourceKey }
 > = {
-  neteaseHotlist: { fetcher: () => neteaseToplistSongs(3778678), sourceType: 'netease' },
-  neteaseNew: { fetcher: () => neteaseToplistSongs(3779629), sourceType: 'netease' },
-  qqHotlist: { fetcher: () => qqToplistSongs('hot'), sourceType: 'qq' },
-  qqNew: { fetcher: () => qqToplistSongs('new'), sourceType: 'qq' },
+  neteaseHotlist: { fetcher: () => toplistSongs('netease', 3778678), sourceType: 'netease' },
+  neteaseNew: { fetcher: () => toplistSongs('netease', 3779629), sourceType: 'netease' },
+  // QQ 榜单 id = v8 topid（qq:26 热歌榜 / qq:27 新歌榜，#279 迁能力面 getToplists）
+  qqHotlist: { fetcher: () => toplistSongs('qq', 26), sourceType: 'qq' },
+  qqNew: { fetcher: () => toplistSongs('qq', 27), sourceType: 'qq' },
 };
-
-function toSong(item: HotlistSong, sourceType: SourceKey): Song {
-  return {
-    id: item.id,
-    name: item.name,
-    artist: item.artists,
-    album: item.album,
-    cover: item.cover,
-    url: '',
-    lrc: '',
-    duration: 0,
-    sourceType,
-  };
-}
 
 export default function HotlistPage() {
   const { colors, isDark } = useTheme();
@@ -81,7 +52,7 @@ export default function HotlistPage() {
   const fetchSongs = useCallback(async () => {
     if (!config) return;
     try {
-      // fetcher 统一返回 Song[]（网易经能力面带内联歌词；QQ 由旧结构转换）
+      // fetcher 统一返回 Song[]（各源榜单均经能力面 getToplists，#279）
       const list = await config.fetcher();
       setSongs(list);
       // 直连探测预取（与搜索/歌单/专辑页对齐）：直链写入预取缓存，
