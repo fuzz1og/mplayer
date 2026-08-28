@@ -1,4 +1,4 @@
-import type { Song, SongGroup, ImportSource, Artist, SearchOrchestratorState } from '@mplayer/core';
+import type { SongGroup, Artist, SearchOrchestratorState } from '@mplayer/core';
 import { createSearchOrchestrator } from '@mplayer/core';
 import type { SourceKey as CoreSourceKey } from '@mplayer/core';
 import { useSearchStore } from '@/renderer/store/searchStore';
@@ -119,18 +119,6 @@ class SearchService {
     this.probedIds.clear();
     this.probeSeq++;
     this.orchestrator.reset();
-  }
-
-  async batchSearch(
-    keywords: string[],
-    sourceType: ImportSource = 'netease'
-  ): Promise<Record<string, Song[]>> {
-    try {
-      return await callMusicApi('batchSearch', keywords, sourceType);
-    } catch (error) {
-      console.error('批量搜索失败:', error);
-      return {};
-    }
   }
 }
 
