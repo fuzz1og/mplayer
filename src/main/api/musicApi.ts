@@ -9,7 +9,6 @@ export {
   setThrottleObserver,
   warmUpArtistPicCache,
   injectProxyAgents,
-  invalidateCoverUrl,
   setSourceModes,
   loadSourceModes,
   setSourceModePersister,

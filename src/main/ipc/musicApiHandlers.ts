@@ -4,7 +4,6 @@ import type { ApiResponse } from '@/shared/types/ipc';
 import type { MusicApiMethod, MusicApiMethodMap, MainOnlyMethods } from '@/shared/musicApiContract';
 import { getAggregatedChart } from '../services/chartAggregator';
 import { getThrottleWaitMs } from '../api/musicApi';
-import { cacheResolvedCover } from './cache';
 
 /**
  * music 域 IPC 单通道分发（ADR-0001）：`musicApi:call` 查表分发。
@@ -68,16 +67,10 @@ export function registerMusicApiCall(api: MusicApi): void {
     searchSongsRouted: (k: string, p: number, s: SourceKey) => api.searchSongsRouted(k, p, s),
     resolvePlayableUrlRouted: (song: Song) => api.resolvePlayableUrlRouted(song),
     resolvePlayableSongRouted: (song: Song) => api.resolvePlayableSongRouted(song),
-    // resolveCoverUrl：保留主进程下载直链→磁盘封面缓存副作用
-    resolveCoverUrl: async (coverUrl: string): Promise<string> => {
-      const resolved = await api.resolveCoverUrl(coverUrl);
-      // 解析成功且拿到 CDN 直链 → 主进程下载真实图片写入磁盘封面缓存
-      // （渲染层无会话 cookie 无法自行缓存受保护端点），失败不影响渲染
-      if (resolved && resolved !== coverUrl && /^https?:\/\//.test(resolved)) {
-        void cacheResolvedCover(coverUrl, resolved);
-      }
-      return resolved;
-    },
+    // resolveCoverUrl/invalidateCoverUrl：封面链已随「直链直渲」下线（#273），
+    // 渲染层不再调用；条目暂留保契约完整（分发表键集合 == MUSIC_API_METHODS），
+    // #275 随 core 方法一起删。直通转发，无封面落盘副作用。
+    resolveCoverUrl: (coverUrl: string) => api.resolveCoverUrl(coverUrl),
     // ── main 独有组合方法 ─────────────────────────────────────────
     getAggregatedChart,
     getThrottleWait: async () => getThrottleWaitMs(),

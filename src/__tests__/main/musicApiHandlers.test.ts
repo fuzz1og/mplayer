@@ -19,10 +19,6 @@ vi.mock('../../main/api/musicApi', () => ({
   getThrottleWaitMs: vi.fn(() => 1234),
 }));
 
-vi.mock('../../main/ipc/cache', () => ({
-  cacheResolvedCover: vi.fn(async () => {}),
-}));
-
 import { registerMusicApiCall } from '../../main/ipc/musicApiHandlers';
 
 /** 拿到 ipcMain.handle('musicApi:call', ...) 注册的处理器 */
