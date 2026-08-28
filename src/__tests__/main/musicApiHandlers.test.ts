@@ -35,8 +35,6 @@ function makeApi(methods: Partial<Record<keyof MusicApiMethodMap, unknown>>) {
     // 其余 core 方法空实现（占位，保证类型完整）
     getNeteaseHotlist: vi.fn(async () => []),
     getNeteaseNewSongList: vi.fn(async () => []),
-    getQQHotlist: vi.fn(async () => []),
-    getQQNewSongList: vi.fn(async () => []),
     getNeteasePlaylists: vi.fn(async () => ({ playlists: [], total: 0, more: false })),
     getNeteasePlaylistDetail: vi.fn(async () => null),
     getNeteasePlaylistSongs: vi.fn(async () => []),

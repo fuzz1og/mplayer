@@ -1,73 +1,83 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getAggregatedChart } from '../../main/services/chartAggregator';
-import { musicApi } from '../../main/api/musicApi';
 import { cacheManager } from '@mplayer/core';
+import type { Song, ToplistGroup } from '@mplayer/core';
 
-// 网易/酷狗榜单已迁能力面（#278）：mock 直连客户端 getToplists
+// 三源榜单均走能力面 getToplists（#278 网易/酷狗 + #279 QQ）：mock 直连客户端
 const neteaseGetToplists = vi.fn();
+const qqGetToplists = vi.fn();
 const kugouGetToplists = vi.fn();
 
-vi.mock('../../main/api/musicApi', () => ({
-  musicApi: {
-    getQQHotlist: vi.fn(),
-    getQQNewSongList: vi.fn(),
-  },
-}));
+vi.mock('@mplayer/core', async () => {
+  const actual = await vi.importActual<typeof import('@mplayer/core')>('@mplayer/core');
+  return {
+    ...actual,
+    cacheManager: {
+      get: vi.fn(),
+      set: vi.fn(),
+    },
+    getDirectClient: (key: string) => {
+      if (key === 'netease') return { key: 'netease', getToplists: neteaseGetToplists };
+      if (key === 'qq') return { key: 'qq', getToplists: qqGetToplists };
+      if (key === 'kugou') return { key: 'kugou', getToplists: kugouGetToplists };
+      return undefined;
+    },
+  };
+});
 
-vi.mock('@mplayer/core', () => ({
-  cacheManager: {
-    get: vi.fn(),
-    set: vi.fn(),
-  },
-  getDirectClient: (key: string) => {
-    if (key === 'netease') return { key: 'netease', getToplists: neteaseGetToplists };
-    if (key === 'kugou') return { key: 'kugou', getToplists: kugouGetToplists };
-    return undefined;
-  },
-  musicApi: {},
-}));
+const songOf = (source: Song['sourceType'], over: Partial<Song> & { id: string; name: string }): Song => ({
+  artist: '',
+  album: '',
+  url: '',
+  cover: '',
+  lrc: '',
+  duration: 0,
+  sourceType: source,
+  ...over,
+});
 
-const neteaseSongs = (songs: Record<string, unknown>[]) =>
-  songs.map((s) => ({ id: s.id, name: s.name, artist: s.artists, cover: s.cover, album: s.album, url: '', lrc: '', duration: 0, sourceType: 'netease' }));
-const neteaseGroups = (songs: Record<string, unknown>[]) => [
-  { id: 'netease:3778678', name: '热歌榜', songs: neteaseSongs(songs) },
+const neteaseGroups = (hot: Song[]): ToplistGroup[] => [
+  { id: 'netease:3778678', name: '热歌榜', songs: hot },
   { id: 'netease:3779629', name: '新歌榜', songs: [] },
 ];
-const kugouGroups = (songs: Record<string, unknown>[]) => [
-  { id: 'kugou:8888', name: '热歌榜', songs: songs.map((s) => ({ id: s.id, name: s.name, artist: s.artists, cover: s.cover, album: s.album, url: '', lrc: '', duration: 0, sourceType: 'kugou' })) },
+const qqGroups = (hot: Song[]): ToplistGroup[] => [
+  { id: 'qq:26', name: '热歌榜', songs: hot },
+  { id: 'qq:27', name: '新歌榜', songs: [] },
+];
+const kugouGroups = (hot: Song[]): ToplistGroup[] => [
+  { id: 'kugou:8888', name: '热歌榜', songs: hot },
   { id: 'kugou:74534', name: '新歌榜', songs: [] },
 ];
 
-describe('chartAggregator', () => {
+describe('chartAggregator（#279 接 core aggregateChartSongs 内核）', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(cacheManager.get).mockReturnValue(null);
   });
 
-  it('adds DEFAULT_MISS for sources that did not rank a song', async () => {
+  it('单源上榜歌：sourceRanks 只含上榜源（内核语义，不再 1/51 预填），score = Σ1/rank', async () => {
     neteaseGetToplists.mockResolvedValue(neteaseGroups([
-      { id: 'n1', name: 'Song A', artists: 'Artist A', cover: '', rank: 1, album: '' },
+      songOf('netease', { id: 'n1', name: 'Song A', artist: 'Artist A' }),
     ]));
-    vi.mocked(musicApi.getQQHotlist).mockResolvedValue([] as any);
+    qqGetToplists.mockResolvedValue(qqGroups([]));
     kugouGetToplists.mockResolvedValue(kugouGroups([]));
 
     const result = await getAggregatedChart('hot', ['netease', 'qq', 'kugou']);
 
     expect(result.songs).toHaveLength(1);
-    expect(result.songs[0].sourceRanks).toEqual({ netease: 1, qq: 51, kugou: 51 });
-    expect(result.songs[0].score).toBeCloseTo(1 + 1 / 51 + 1 / 51);
+    expect(result.songs[0].sourceRanks).toEqual({ netease: 1 });
+    expect(result.songs[0].score).toBeCloseTo(1);
+    expect(result.total).toBe(1);
   });
 
-  it('merges the same song across sources and prefers the better rank', async () => {
-    // rank 由索引推导（#239）：网易榜 Song B 落在第 2 位（第 1 位是别首歌），
-    // QQ 榜 Song B 在第 1 位 → 同组选优 QQ 胜出
+  it('跨源同名同歌手合并，同组选优按排名（QQ rank 1 胜网易 rank 2）', async () => {
     neteaseGetToplists.mockResolvedValue(neteaseGroups([
-      { id: 'n0', name: 'Song X', artists: 'Artist X', cover: '', rank: 1, album: '' },
-      { id: 'n1', name: 'Song B', artists: 'Artist B', cover: '', rank: 2, album: '' },
+      songOf('netease', { id: 'n0', name: 'Song X', artist: 'Artist X' }),
+      songOf('netease', { id: 'n1', name: 'Song B', artist: 'Artist B' }),
     ]));
-    vi.mocked(musicApi.getQQHotlist).mockResolvedValue([
-      { id: 'q1', name: 'Song B', artists: 'Artist B', cover: '', rank: 1, album: '' } as any,
-    ]);
+    qqGetToplists.mockResolvedValue(qqGroups([
+      songOf('qq', { id: 'q1', name: 'Song B', artist: 'Artist B' }),
+    ]));
     kugouGetToplists.mockResolvedValue(kugouGroups([]));
 
     const result = await getAggregatedChart('hot', ['netease', 'qq', 'kugou']);
@@ -75,24 +85,44 @@ describe('chartAggregator', () => {
     expect(result.songs).toHaveLength(2);
     const merged = result.songs.find((g) => g.name === 'Song B');
     expect(merged).toBeDefined();
-    expect(merged!.sourceRanks).toEqual({ netease: 2, qq: 1, kugou: 51 });
+    expect(merged!.sourceRanks).toEqual({ netease: 2, qq: 1 });
+    expect(merged!.score).toBeCloseTo(1 / 2 + 1);
     expect(merged!.bestSong.sourceType).toBe('qq');
   });
 
-  it('omits failed sources from sourceRanks', async () => {
+  it('失败/未实现的源整体跳过：其歌不进聚合，也不占缺省权重', async () => {
     neteaseGetToplists.mockResolvedValue(neteaseGroups([
-      { id: 'n0', name: 'Song X', artists: 'Artist X', cover: '', rank: 1, album: '' },
-      { id: 'n1', name: 'Song C', artists: 'Artist C', cover: '', rank: 2, album: '' },
+      songOf('netease', { id: 'n1', name: 'Song C', artist: 'Artist C' }),
     ]));
-    vi.mocked(musicApi.getQQHotlist).mockResolvedValue([] as any);
+    qqGetToplists.mockResolvedValue(qqGroups([]));
     kugouGetToplists.mockRejectedValue(new Error('kugou down'));
 
     const result = await getAggregatedChart('hot', ['netease', 'qq', 'kugou']);
 
-    expect(result.songs).toHaveLength(2);
-    const merged = result.songs.find((g) => g.name === 'Song C');
-    expect(merged).toBeDefined();
-    expect(merged!.sourceRanks).toEqual({ netease: 2, qq: 51 });
-    expect(merged!.score).toBeCloseTo(1 / 2 + 1 / 51);
+    expect(result.songs).toHaveLength(1);
+    expect(result.songs[0].name).toBe('Song C');
+    expect(result.songs[0].sourceRanks).toEqual({ netease: 1 });
+    expect(result.songs[0].sourceRanks).not.toHaveProperty('kugou');
+  });
+
+  it('按榜型 id 取歌：hot 取 26/8888/3778678，new 取 27/74534/3779629', async () => {
+    neteaseGetToplists.mockResolvedValue([
+      { id: 'netease:3778678', name: '热歌榜', songs: [songOf('netease', { id: 'nh', name: 'NeteaseHot' })] },
+      { id: 'netease:3779629', name: '新歌榜', songs: [songOf('netease', { id: 'nn', name: 'NeteaseNew' })] },
+    ] as ToplistGroup[]);
+    qqGetToplists.mockResolvedValue([
+      { id: 'qq:26', name: '热歌榜', songs: [songOf('qq', { id: 'qh', name: 'QQHot' })] },
+      { id: 'qq:27', name: '新歌榜', songs: [songOf('qq', { id: 'qn', name: 'QQNew' })] },
+    ] as ToplistGroup[]);
+    kugouGetToplists.mockResolvedValue(kugouGroups([]));
+
+    const hot = await getAggregatedChart('hot', ['netease', 'qq', 'kugou']);
+    expect(hot.songs.map((g) => g.name)).toContain('NeteaseHot');
+    expect(hot.songs.map((g) => g.name)).toContain('QQHot');
+    expect(hot.songs.map((g) => g.name)).not.toContain('NeteaseNew');
+
+    const fresh = await getAggregatedChart('new', ['netease', 'qq', 'kugou']);
+    expect(fresh.songs.map((g) => g.name)).toContain('QQNew');
+    expect(fresh.songs.map((g) => g.name)).not.toContain('QQHot');
   });
 });

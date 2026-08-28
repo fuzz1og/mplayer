@@ -1,12 +1,9 @@
 import type { Song, SourceKey, ToplistGroup } from '@mplayer/core';
-import { getDirectClient } from '@mplayer/core';
-import { musicApi } from '../api/musicApi';
-import { cacheManager } from '@mplayer/core';
+import { aggregateChartSongs, cacheManager, getDirectClient } from '@mplayer/core';
 import { CHART_CACHE_TTL } from '../../shared/chart';
 import type {
   AggregatedSongGroup,
   AggregatedChartResult,
-  SourceRank,
 } from '../../shared/chart';
 export type {
   AggregatedSongGroup,
@@ -17,126 +14,45 @@ export type {
 export type ChartType = 'hot' | 'new';
 export type SourceName = 'netease' | 'qq' | 'kugou';
 
-const DEFAULT_MISS = 51; // 未上榜源的默认排名
-
 /**
- * 归一化歌曲匹配键（模糊匹配用）
- * - 歌名：小写、去空格、去括号内容、只保留中文/英文/数字
- * - 歌手：小写、去空格、去点号
+ * 多源排行榜聚合（#279 接 core 聚合内核）。
+ *
+ * 本模块瘦身为宿主壳：并行拉各源榜单（能力面 getToplists，一次取全组按榜型 id
+ * 取歌）→ 交 core `aggregateChartSongs` 做归一合并 / Σ1/rank 计分 / 完整版优先
+ * 选优 → 写进程内缓存。本地的归一化键/计分/选优实现已随内核统一删除；
+ * 计分语义以内核为准（未上榜源不计入 sourceRanks，不再做 1/51 预填）。
  */
-export function normalizeSongKey(song: { name: string; artist: string }): string {
-  const name = song.name
-    .toLowerCase()
-    .replace(/[（(].*?[)）]/g, '') // 去掉括号内容
-    .replace(/\s+/g, '') // 去掉空格
-    .replace(/[^一-龥a-z0-9]/gi, ''); // 只保留中文/英文/数字
 
-  const artist = song.artist
-    .toLowerCase()
-    .replace(/\s+/g, '')
-    .replace(/[·•]/g, '');
-
-  return `${name}|${artist}`;
-}
-
-/** 归一化后的歌曲（用于聚合） */
-interface NormalizedSong {
-  name: string;
-  artist: string;
-  cover: string;
-  rank: number;
-  sourceType: SourceKey;
-  song: Song;
-}
-
-/**
- * 计算聚合排名分数
- * score = Σ(1/rank)，未上榜源 = 1/51
- */
-function aggregateRank(ranks: SourceRank): number {
-  let score = 0;
-  for (const rank of Object.values(ranks)) {
-    score += rank ? 1 / rank : 1 / DEFAULT_MISS;
-  }
-  return score;
-}
-
-function createSourceRanks(sources: SourceName[]): SourceRank {
-  return Object.fromEntries(sources.map(source => [source, DEFAULT_MISS])) as SourceRank;
-}
-
-/** 榜单 sourceId（与门面/桌面私有路径时代一致，#278 迁能力面 getToplists）。 */
-const NETEASE_TOPLIST_ID: Record<ChartType, number> = { hot: 3778678, new: 3779629 };
-const KUGOU_TOPLIST_ID: Record<ChartType, string> = { hot: '8888', new: '74534' };
+/** 各源各榜型的榜单 sourceId（与桌面私有路径时代一致；QQ 26/27 自 v8 topid，#279）。 */
+const TOPLIST_IDS: Record<SourceName, Record<ChartType, number | string>> = {
+  netease: { hot: 3778678, new: 3779629 },
+  qq: { hot: 26, new: 27 },
+  kugou: { hot: '8888', new: '74534' },
+};
 
 /** 从榜单组中按 id 取歌（ToplistGroup.id = `${source}:${sourceId}`）。 */
 function pickToplistSongs(groups: ToplistGroup[], source: SourceName, sourceId: number | string): Song[] {
   return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
 }
 
-/**
- * 获取指定源+类型的 fetcher
- */
-function getSourceFetcher(type: ChartType, source: SourceName): () => Promise<NormalizedSong[]> {
-  if (source === 'netease') {
-    return async () => {
-      // 网易榜单走能力面 getToplists（一次取全组），rank 由索引推导（#239）
-      const groups = await getDirectClient('netease')!.getToplists!();
-      return pickToplistSongs(groups, 'netease', NETEASE_TOPLIST_ID[type]).map((song, i) => ({
-        name: song.name,
-        artist: song.artist,
-        cover: song.cover,
-        rank: i + 1,
-        sourceType: 'netease' as SourceKey,
-        song,
-      }));
-    };
+/** 单源腿：能力面 getToplists 一次取全组，按榜型 id 取歌（rank 由内核按索引推导）。 */
+async function fetchSourceToplist(
+  type: ChartType,
+  source: SourceName,
+): Promise<{ source: SourceKey; songs: Song[] }> {
+  const client = getDirectClient(source);
+  if (!client?.getToplists) {
+    throw new Error(`源 ${source} 未实现内容能力 getToplists`);
   }
-
-  if (source === 'qq') {
-    return async () => {
-      const songs = type === 'hot' ? await musicApi.getQQHotlist() : await musicApi.getQQNewSongList();
-      return songs.map(s => ({
-        name: s.name,
-        artist: s.artists,
-        cover: s.cover,
-        rank: s.rank,
-        sourceType: 'qq' as SourceKey,
-        song: {
-          id: s.id,
-          name: s.name,
-          artist: s.artists,
-          album: s.album,
-          url: '',
-          cover: s.cover,
-          lrc: '',
-          duration: 0,
-          sourceType: 'qq',
-        },
-      }));
-    };
-  }
-
-  // kugou：榜单走能力面 getToplists（#278 自桌面 kugouApi 私有路径并入）
-  return async () => {
-    const groups = await getDirectClient('kugou')!.getToplists!();
-    return pickToplistSongs(groups, 'kugou', KUGOU_TOPLIST_ID[type]).map((song, i) => ({
-      name: song.name,
-      artist: song.artist,
-      cover: song.cover,
-      rank: i + 1, // Kugou 返回无 rank 字段，用索引
-      sourceType: 'kugou' as SourceKey,
-      song,
-    }));
-  };
+  const groups = await client.getToplists();
+  return { source, songs: pickToplistSongs(groups, source, TOPLIST_IDS[source][type]) };
 }
 
 /**
  * 聚合多源排行榜
  * @param type 'hot' | 'new'
- * @param sources 要聚合的源列表
+ * @param sources 要聚合的源列表（失败的源整体跳过，不进聚合）
  */
-
 export async function getAggregatedChart(
   type: ChartType,
   sources: SourceName[],
@@ -146,59 +62,23 @@ export async function getAggregatedChart(
   if (cached) return cached;
 
   // 并行获取所有源
-  const fetchTasks = sources.map(source => getSourceFetcher(type, source));
-  const results = await Promise.allSettled(fetchTasks.map(fn => fn()));
+  const settled = await Promise.allSettled(sources.map(source => fetchSourceToplist(type, source)));
+  const entries = settled
+    .filter((r): r is PromiseFulfilledResult<{ source: SourceKey; songs: Song[] }> => r.status === 'fulfilled')
+    .map(r => r.value);
 
-  // 收集所有歌曲
-  const allSongs: NormalizedSong[] = [];
-  const fulfilledSources: SourceName[] = [];
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i];
-    if (result.status === 'fulfilled') {
-      fulfilledSources.push(sources[i]);
-      allSongs.push(...result.value);
-    }
-  }
+  // 聚合统一入口（core 内核）：归一化合并 + Σ1/rank 计分 + 同组选优 + 分数降序
+  const aggregated = aggregateChartSongs(entries);
 
-  // 按归一化键分组
-  const groupMap = new Map<string, { songs: NormalizedSong[]; sourceRanks: SourceRank }>();
-
-  for (const song of allSongs) {
-    const key = normalizeSongKey(song);
-    const existing = groupMap.get(key);
-    if (existing) {
-      existing.songs.push(song);
-      existing.sourceRanks[song.sourceType as keyof SourceRank] = song.rank;
-    } else {
-      const sourceRanks = createSourceRanks(fulfilledSources);
-      sourceRanks[song.sourceType as keyof SourceRank] = song.rank;
-      groupMap.set(key, {
-        songs: [song],
-        sourceRanks,
-      });
-    }
-  }
-
-  // 构建聚合结果
-  const groups: AggregatedSongGroup[] = [];
-  for (const [key, { songs: groupSongs, sourceRanks }] of groupMap) {
-    // 同组选优：完整版优先 > 最好排名 > 默认源序
-    const bestSong = pickBestSong(groupSongs);
-    const score = aggregateRank(sourceRanks);
-
-    groups.push({
-      key,
-      name: bestSong.name,
-      artist: bestSong.artist,
-      songs: groupSongs.map(s => s.song),
-      sourceRanks,
-      score,
-      bestSong: bestSong.song,
-    });
-  }
-
-  // 按分数降序排列
-  groups.sort((a, b) => b.score - a.score);
+  const groups: AggregatedSongGroup[] = aggregated.map(e => ({
+    key: e.key,
+    name: e.name,
+    artist: e.artist,
+    songs: e.songs,
+    sourceRanks: e.sourceRanks,
+    score: e.score,
+    bestSong: e.bestSong,
+  }));
 
   const result: AggregatedChartResult = {
     songs: groups,
@@ -207,30 +87,4 @@ export async function getAggregatedChart(
 
   cacheManager.set(cacheKey, result, CHART_CACHE_TTL);
   return result;
-}
-
-/**
- * 同组选优策略：
- * 1. 完整版优先 (audioTag !== 'preview')
- * 2. 排名优先 (min rank)
- * 3. 默认源序 (netease > qq > kugou)
- */
-function pickBestSong(songs: NormalizedSong[]): NormalizedSong {
-  const sourceOrder: SourceKey[] = ['netease', 'qq', 'kugou'];
-  return songs.reduce((best, current) => {
-    // 完整版优先
-    const bestIsPreview = best.song.audioTag === 'preview';
-    const currentIsPreview = current.song.audioTag === 'preview';
-    if (bestIsPreview && !currentIsPreview) return current;
-    if (!bestIsPreview && currentIsPreview) return best;
-
-    // 排名优先
-    if (current.rank < best.rank) return current;
-    if (current.rank > best.rank) return best;
-
-    // 默认源序
-    const bestIdx = sourceOrder.indexOf(best.sourceType);
-    const currentIdx = sourceOrder.indexOf(current.sourceType);
-    return currentIdx < bestIdx ? current : best;
-  });
 }

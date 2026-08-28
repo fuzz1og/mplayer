@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, AlertCircle } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
@@ -6,27 +6,28 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
-import type { Song } from '@mplayer/core';
+import type { Song, SourceKey } from '@mplayer/core';
 
-// QQ 榜单旧结构（QQ 内容迁移在后续票，#278 仅迁网易；rank 由索引推导）
-interface QqHotlistItem {
-  id: string;
-  name: string;
-  artists: string;
-  rank: number;
-  cover: string;
-  album: string;
-}
+/** 榜单详情页配置：路由 type → 能力面来源 + 榜单组 id（ToplistGroup.id = `${source}:${sourceId}`）。 */
+type HotlistType = 'netease' | 'netease_new' | 'qq' | 'qq_new';
 
-/** 榜单组按 id 取 songs（ToplistGroup.id = `${source}:${sourceId}`，#278）。 */
-function pickToplist(groups: { id: string; songs: Song[] }[], sourceId: number): Song[] {
-  return groups.find((g) => g.id === `netease:${sourceId}`)?.songs ?? [];
+const HOTLIST_CONFIG: Record<HotlistType, { source: SourceKey; sourceId: number; title: string }> = {
+  netease: { source: 'netease', sourceId: 3778678, title: '网易云音乐热歌榜' },
+  netease_new: { source: 'netease', sourceId: 3779629, title: '网易云音乐新歌榜' },
+  qq: { source: 'qq', sourceId: 26, title: 'QQ音乐热歌榜' },
+  qq_new: { source: 'qq', sourceId: 27, title: 'QQ音乐新歌榜' },
+};
+
+/** 榜单组按 id 取 songs（rank 由索引推导，SongList 按行序展示）。 */
+function pickToplist(groups: { id: string; songs: Song[] }[], source: SourceKey, sourceId: number): Song[] {
+  return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
 }
 
 const HotlistDetailPage: React.FC = () => {
-  const { type } = useParams<{ type: 'netease' | 'netease_new' | 'qq' | 'qq_new' }>();
+  const { type } = useParams<{ type: HotlistType }>();
   const navigate = useNavigate();
-  const hotlistType = type || 'netease';
+  const hotlistType: HotlistType = type && HOTLIST_CONFIG[type] ? type : 'netease';
+  const config = HOTLIST_CONFIG[hotlistType];
 
   const [hotlist, setHotlist] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,52 +40,28 @@ const HotlistDetailPage: React.FC = () => {
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
 
-  // 加载热榜数据
+  // 加载热榜数据：统一走 IPC 内容方法 getToplists（一次取全组，按 id 拆榜）
+  const loadHotlist = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const groups = await callMusicApi('getToplists', config.source);
+      setHotlist(pickToplist(groups, config.source, config.sourceId));
+    } catch (error) {
+      console.error(`加载热榜失败:`, error);
+      setError('加载热榜失败，请稍后重试');
+    } finally {
+      setLoading(false);
+    }
+  }, [config.source, config.sourceId]);
+
   useEffect(() => {
-    const loadHotlist = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        if (hotlistType === 'netease' || hotlistType === 'netease_new') {
-          // 网易榜单走能力面 getToplists（歌词内联，#242），按 id 取组
-          const groups = await callMusicApi('getToplists', 'netease');
-          setHotlist(pickToplist(groups, hotlistType === 'netease' ? 3778678 : 3779629));
-        } else {
-          const raw: QqHotlistItem[] = hotlistType === 'qq'
-            ? await callMusicApi('getQQHotlist')
-            : await callMusicApi('getQQNewSongList');
-          setHotlist(convertToSongs(raw || []));
-        }
-      } catch (error) {
-        console.error(`加载热榜失败:`, error);
-        setError('加载热榜失败，请稍后重试');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadHotlist();
-  }, [hotlistType]);
-
-  // QQ 榜单旧结构 → Song（rank 由索引推导；网易路径直接用能力面返回的 Song）
-  const convertToSongs = (hotlistSongs: QqHotlistItem[]): Song[] => {
-    return hotlistSongs.map(song => ({
-      id: song.id,
-      name: song.name,
-      artist: song.artists,
-      album: song.album,
-      cover: song.cover,
-      url: '',
-      duration: 0,
-      lrc: '',
-      sourceType: (hotlistType === 'qq_new' ? 'qq' : hotlistType) as 'netease' | 'qq'
-    }));
-  };
+  }, [loadHotlist]);
 
   const handlePlay = async (song: Song) => {
     const keyword = `${song.name} ${song.artist}`;
-    const sourceType = hotlistType === 'netease_new' ? 'netease' : hotlistType === 'qq_new' ? 'qq' : hotlistType;
-    const searchResults = await callMusicApi('searchSongsRouted', keyword, 1, sourceType);
+    const searchResults = await callMusicApi('searchSongsRouted', keyword, 1, config.source);
     if (searchResults.length > 0) {
       await play(searchResults[0]);
     }
@@ -148,10 +125,7 @@ const HotlistDetailPage: React.FC = () => {
             textOverflow: 'ellipsis',
           }}
         >
-          {hotlistType === 'netease' ? '网易云音乐热歌榜' :
-           hotlistType === 'netease_new' ? '网易云音乐新歌榜' :
-           hotlistType === 'qq_new' ? 'QQ音乐新歌榜' :
-           'QQ音乐热歌榜'}
+          {config.title}
         </h1>
         <div style={{ width: '140px' }} />
       </div>
@@ -185,10 +159,7 @@ const HotlistDetailPage: React.FC = () => {
           </div>
           <div>
             <h2 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-              {hotlistType === 'netease' ? '网易云音乐热歌榜' :
-               hotlistType === 'netease_new' ? '网易云音乐新歌榜' :
-               hotlistType === 'qq_new' ? 'QQ音乐新歌榜' :
-               'QQ音乐热歌榜'}
+              {config.title}
             </h2>
             <p style={{ fontSize: '14px', color: 'var(--text-tertiary)' }}>
               实时更新，最热门的100首歌曲
@@ -286,22 +257,7 @@ const HotlistDetailPage: React.FC = () => {
             <AlertCircle size={28} style={{ marginBottom: '12px', color: 'var(--danger)' }} />
             <div style={{ fontSize: '16px', marginBottom: '8px' }}>{error}</div>
             <button
-              onClick={async () => {
-                setLoading(true);
-                try {
-                  if (hotlistType === 'netease' || hotlistType === 'netease_new') {
-                    const groups = await callMusicApi('getToplists', 'netease');
-                    setHotlist(pickToplist(groups, hotlistType === 'netease' ? 3778678 : 3779629));
-                  } else {
-                    const raw: QqHotlistItem[] = await callMusicApi('getQQHotlist');
-                    setHotlist(convertToSongs(raw || []));
-                  }
-                } catch (error) {
-                  console.error(error);
-                } finally {
-                  setLoading(false);
-                }
-              }}
+              onClick={() => { loadHotlist(); }}
               style={{
                 marginTop: '16px',
                 padding: '8px 16px',

@@ -37,8 +37,6 @@ export function registerMusicApiCall(api: MusicApi): void {
     // ── core musicApi 基础方法（泛型 forward）────────────────────
     probeSongsBatch: (s: Song[]) => api.probeSongsBatch(s),
     getLyrics: (url: string) => api.getLyrics(url),
-    getQQHotlist: () => api.getQQHotlist(),
-    getQQNewSongList: () => api.getQQNewSongList(),
     getSodaAudioUrl: (trackId: string) => api.getSodaAudioUrl(trackId),
     getSodaLyrics: (trackId: string) => api.getSodaLyrics(trackId),
     parseSodaShareLink: (link: string) => api.parseSodaShareLink(link),
