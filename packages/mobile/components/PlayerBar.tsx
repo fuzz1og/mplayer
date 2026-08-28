@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  View, Text, Image, TouchableOpacity, StyleSheet, Animated, Easing,
+  View, Text, Image, Pressable, StyleSheet, Animated, Easing,
 } from 'react-native';
 import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, Loader2 } from 'lucide-react-native';
 import { invalidateCoverUrl } from '@mplayer/core';
@@ -61,10 +61,11 @@ export default function PlayerBar() {
 
   return (
     <ChromeBlur style={styles.blurWrap}>
-    <TouchableOpacity
+    {/* 整栏点击主体用无动画 Pressable（#261 判例）：条内已有 4 个 ScalePress
+        控制钮，整栏再缩放/变淡会双层反馈叠加，观感混乱 */}
+    <Pressable
       style={[styles.container, !currentSong && styles.containerEmpty]}
       onPress={() => currentSong && setShowPlayer(true)}
-      activeOpacity={0.8}
       disabled={!currentSong}
     >
       {/* 专辑封面 */}
@@ -133,7 +134,7 @@ export default function PlayerBar() {
       )}
       {/* 队列弹层（#186 #5：抽共享 QueueListModal，基于 BottomSheet 壳） */}
       <QueueListModal visible={showQueue} onClose={() => setShowQueue(false)} />
-    </TouchableOpacity>
+    </Pressable>
     </ChromeBlur>
   );
 }

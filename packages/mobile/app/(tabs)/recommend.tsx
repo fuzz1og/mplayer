@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, RefreshControl, StyleSheet, TouchableOpacity, Image, Animated,
+  View, Text, RefreshControl, StyleSheet, Image, Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -151,10 +151,10 @@ export default function RecommendPage() {
             ) : (
               <View style={styles.grid}>
                 {playlists.map((p) => (
-                  <TouchableOpacity
+                  <ScalePress
                     key={String(p.id)}
                     style={{ width: cardW }}
-                    activeOpacity={0.7}
+                    pressScaleTo={0.98}
                     onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
                   >
                     {p.coverImgUrl ? (
@@ -168,7 +168,7 @@ export default function RecommendPage() {
                     <Text style={styles.gridMeta}>
                       {p.playCount ? formatPlayCount(p.playCount) : ''}
                     </Text>
-                  </TouchableOpacity>
+                  </ScalePress>
                 ))}
               </View>
             )}

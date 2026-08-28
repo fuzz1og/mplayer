@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Modal, View, StyleSheet, TouchableOpacity, PanResponder, Animated,
+  Modal, View, StyleSheet, Pressable, PanResponder, Animated,
   useWindowDimensions,
   type StyleProp, type ViewStyle,
 } from 'react-native';
@@ -199,7 +199,8 @@ export default function BottomSheet({
       <View style={styles.overlay} pointerEvents="box-none">
         {/* 独立遮罩层：绝对铺满、opacity 动画——立即出现，不再跟面板一起滑 */}
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: maskOpacity }]} pointerEvents="box-none">
-          <TouchableOpacity style={styles.maskFill} activeOpacity={1} onPress={() => requestClose()} />
+          {/* 点按拦截器：无动画语义（Pressable），遮罩不应有按压反馈 */}
+          <Pressable style={styles.maskFill} onPress={() => requestClose()} />
         </Animated.View>
         {/* 弹性空白区把面板压到底部；pointerEvents=none 让触摸穿透到下方遮罩
             （RN 命中测试不跨兄弟节点，无此属性遮罩点按会失效） */}

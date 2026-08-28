@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions,
+  View, Text, ScrollView, StyleSheet, Dimensions,
   Image, FlatList, RefreshControl,
 } from 'react-native';
 import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
@@ -268,9 +268,9 @@ function AlbumsContent() {
   if (loading && albums.length === 0) return <CoverGridSkeleton />;
 
   const renderItem = ({ item: album }: { item: Album }) => (
-    <TouchableOpacity
+    <ScalePress
       style={{ width: gridCardW }}
-      activeOpacity={0.7}
+      pressScaleTo={0.98}
       onPress={() => router.push(`/album/${album.id}?name=${encodeURIComponent(album.name)}&pic=${encodeURIComponent(album.picUrl)}&artist=${encodeURIComponent(album.artist)}` as any)}
     >
       {album.picUrl ? (
@@ -282,7 +282,7 @@ function AlbumsContent() {
       )}
       <Text style={styles.gridName} numberOfLines={2}>{album.name}</Text>
       <Text style={styles.gridMeta} numberOfLines={1}>{album.artist}</Text>
-    </TouchableOpacity>
+    </ScalePress>
   );
 
   return (
@@ -394,9 +394,9 @@ function PlaylistContent() {
   if (loading && playlists.length === 0) return <CoverGridSkeleton />;
 
   const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
-    <TouchableOpacity
+    <ScalePress
       style={{ width: gridCardW }}
-      activeOpacity={0.7}
+      pressScaleTo={0.98}
       onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
     >
       {p.coverImgUrl ? (
@@ -408,7 +408,7 @@ function PlaylistContent() {
       )}
       <Text style={styles.gridName} numberOfLines={2}>{p.name}</Text>
       <Text style={styles.gridMeta}>{p.playCount ? formatPlayCount(p.playCount) : ''}</Text>
-    </TouchableOpacity>
+    </ScalePress>
   );
 
   return (
@@ -529,9 +529,9 @@ function ArtistContent() {
   if (loading && artists.length === 0) return <CoverGridSkeleton columns={3} />;
 
   const renderItem = ({ item: a }: { item: any }) => (
-    <TouchableOpacity
+    <ScalePress
       style={styles.artistCard}
-      activeOpacity={0.7}
+      pressScaleTo={0.98}
       onPress={() => router.push(`/artist/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl || '')}` as any)}
     >
       {a.picUrl ? (
@@ -542,7 +542,7 @@ function ArtistContent() {
         </View>
       )}
       <Text style={styles.artistName} numberOfLines={1}>{a.name}</Text>
-    </TouchableOpacity>
+    </ScalePress>
   );
 
   return (

@@ -17,7 +17,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Image,
   Animated,
@@ -31,6 +30,7 @@ import { StatusBar } from 'expo-status-bar';
 import { radius, spacing, typography } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import ScalePress from './ScalePress';
 
 const AnimatedArrowLeft = Animated.createAnimatedComponent(ArrowLeft);
 
@@ -145,9 +145,9 @@ export default function CollapsingHero<T>({
           { paddingTop: insets.top, height: NAV_H + insets.top, backgroundColor: navBg },
         ]}
       >
-        <TouchableOpacity style={styles.navBack} onPress={() => router.back()} hitSlop={8}>
+        <ScalePress style={styles.navBack} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <AnimatedArrowLeft size={22} color={backColor} />
-        </TouchableOpacity>
+        </ScalePress>
         <Animated.Text style={[styles.navTitle, { opacity: titleOpacity }]} numberOfLines={1}>
           {navTitle}
         </Animated.Text>
@@ -201,10 +201,10 @@ export default function CollapsingHero<T>({
                 </View>
               ) : null}
               {actionLabel && onAction ? (
-                <TouchableOpacity style={styles.playBtn} onPress={onAction}>
+                <ScalePress style={styles.playBtn} onPress={onAction}>
                   <Play size={18} color={colors.textInverse} fill={colors.textInverse} />
                   <Text style={styles.playText}>{actionLabel}</Text>
-                </TouchableOpacity>
+                </ScalePress>
               ) : null}
             </View>
             {listHeader}
