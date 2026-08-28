@@ -19,8 +19,12 @@ import {
   setTier3Resolver,
   setTier3SearchEnabled,
   setTier3SearchResolver,
+  pickToplistSongs,
+  getToplistSongs,
+  TOPLIST_SOURCE_IDS,
   type DirectSourceClient,
   type SourceMode,
+  type ToplistGroup,
 } from '../sourceRouter.js';
 
 /**
@@ -422,5 +426,45 @@ describe('tier3 同歌去重（#172 评论：同歌并行重复解析）', () =>
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('榜单取组 helper（#286：id 单一来源，双端消费）', () => {
+  const group = (source: string, sourceId: number | string, ids: string[]): ToplistGroup => ({
+    id: `${source}:${sourceId}`,
+    name: `榜${sourceId}`,
+    songs: ids.map((id) => song(id, source)),
+  });
+
+  it('TOPLIST_SOURCE_IDS 契约定值（netease/qq 数值 id、kugou rankid 字符串）', () => {
+    expect(TOPLIST_SOURCE_IDS).toEqual({
+      netease: { hot: 3778678, new: 3779629 },
+      qq: { hot: 26, new: 27 },
+      kugou: { hot: '8888', new: '74534' },
+    });
+  });
+
+  it('pickToplistSongs：按 `${source}:${sourceId}` 命中取歌组，未命中 = 空数组', () => {
+    const groups = [group('netease', 3778678, ['1', '2']), group('qq', 26, ['3'])];
+    expect(pickToplistSongs(groups, 'netease', 3778678).map((s) => s.id)).toEqual(['1', '2']);
+    expect(pickToplistSongs(groups, 'kugou', '8888')).toEqual([]);
+  });
+
+  it('getToplistSongs：无客户端 / 未实现能力 → 统一抛错「未实现内容能力 getToplists」', async () => {
+    await expect(getToplistSongs('netease', 3778678)).rejects.toThrow('源 netease 未实现内容能力 getToplists');
+
+    registerDirectClient(makeClient('netease')); // 有客户端但无 getToplists 能力
+    await expect(getToplistSongs('netease', 3778678)).rejects.toThrow('源 netease 未实现内容能力 getToplists');
+  });
+
+  it('getToplistSongs：成功路径经能力面取全组后按 id 取歌', async () => {
+    const getToplists = vi.fn(async () => [group('netease', 3779629, ['9']), group('netease', 3778678, ['7', '8'])]);
+    registerDirectClient(makeClient('netease', { getToplists }));
+
+    await expect(getToplistSongs('netease', TOPLIST_SOURCE_IDS.netease.hot)).resolves.toMatchObject([
+      { id: '7' },
+      { id: '8' },
+    ]);
+    expect(getToplists).toHaveBeenCalledTimes(1);
   });
 });

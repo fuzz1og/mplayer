@@ -127,6 +127,8 @@ export {
   resolvePlayableSongRouted,
   resolvePlayableSongDirect,
   setTier3Resolver,
+  pickToplistSongs,
+  getToplistSongs,
 } from './shared/sourceRouter.js';
 export type {
   SourceMode,
@@ -135,8 +137,10 @@ export type {
   ContentCache,
   ContentMethod,
   Tier3Resolver,
+  ChartKind,
+  ToplistSourceKey,
 } from './shared/sourceRouter.js';
-export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, CONTENT_METHODS } from './shared/sourceRouter.js';
+export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, CONTENT_METHODS, TOPLIST_SOURCE_IDS } from './shared/sourceRouter.js';
 export { detectAudioContainer, containerFromContentType, extensionForContainer, replaceExtension } from './download/container.js';
 export type { AudioContainer } from './download/container.js';
 export { tagStrategyForContainer, buildID3Frames, ID3_FRAME_TLEN } from './download/tagging.js';

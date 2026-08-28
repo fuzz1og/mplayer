@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { getDirectClient } from '@mplayer/core';
-import type { Song, SourceKey } from '@mplayer/core';
+import { getToplistSongs, TOPLIST_SOURCE_IDS } from '@mplayer/core';
+import type { Song } from '@mplayer/core';
 
 /** 发现页榜单条目视图（rank 由索引推导，#239）。 */
 export interface HotlistItem {
@@ -24,17 +24,7 @@ function toHotlistItems(songs: Song[]): HotlistItem[] {
   }));
 }
 
-/** 榜单：经能力面直调 getToplists，按 id（`${source}:${sourceId}`）取组。 */
-async function toplistSongs(source: SourceKey, sourceId: number): Promise<Song[]> {
-  const groups = await getDirectClient(source)!.getToplists!();
-  return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
-}
-
-const NETEASE_HOTLIST_ID = 3778678;
-const NETEASE_NEW_ID = 3779629;
-const QQ_HOTLIST_ID = 26; // v8 topid（qq:26 热歌榜，#279）
-const QQ_NEW_ID = 27; // v8 topid（qq:27 新歌榜，#279）
-
+// 榜单 id 契约取自 core TOPLIST_SOURCE_IDS（#286），取组经 getToplistSongs（无客户端统一抛错）
 interface DiscoverState {
   neteaseHotlist: HotlistItem[];
   qqHotlist: HotlistItem[];
@@ -55,10 +45,10 @@ export const useDiscoverStore = create<DiscoverState>((set) => ({
     set({ loading: true });
     try {
       const [nh, qh, nn, qn] = await Promise.all([
-        toplistSongs('netease', NETEASE_HOTLIST_ID),
-        toplistSongs('qq', QQ_HOTLIST_ID),
-        toplistSongs('netease', NETEASE_NEW_ID),
-        toplistSongs('qq', QQ_NEW_ID),
+        getToplistSongs('netease', TOPLIST_SOURCE_IDS.netease.hot),
+        getToplistSongs('qq', TOPLIST_SOURCE_IDS.qq.hot),
+        getToplistSongs('netease', TOPLIST_SOURCE_IDS.netease.new),
+        getToplistSongs('qq', TOPLIST_SOURCE_IDS.qq.new),
       ]);
       set({
         neteaseHotlist: toHotlistItems(nh).slice(0, 10),

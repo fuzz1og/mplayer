@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getAggregatedChart } from '../../main/services/chartAggregator';
-import { cacheManager } from '@mplayer/core';
+import { cacheManager, registerDirectClient, clearDirectClients } from '@mplayer/core';
 import type { Song, ToplistGroup } from '@mplayer/core';
 
-// 三源榜单均走能力面 getToplists（#278 网易/酷狗 + #279 QQ）：mock 直连客户端
+// 三源榜单均走能力面 getToplists（#278 网易/酷狗 + #279 QQ）：经 core 注册表注入
+// 假直连客户端（#286 起壳层改调 core getToplistSongs，取组/无客户端抛错在 core 内真实执行）
 const neteaseGetToplists = vi.fn();
 const qqGetToplists = vi.fn();
 const kugouGetToplists = vi.fn();
@@ -15,12 +16,6 @@ vi.mock('@mplayer/core', async () => {
     cacheManager: {
       get: vi.fn(),
       set: vi.fn(),
-    },
-    getDirectClient: (key: string) => {
-      if (key === 'netease') return { key: 'netease', getToplists: neteaseGetToplists };
-      if (key === 'qq') return { key: 'qq', getToplists: qqGetToplists };
-      if (key === 'kugou') return { key: 'kugou', getToplists: kugouGetToplists };
-      return undefined;
     },
   };
 });
@@ -53,6 +48,10 @@ describe('chartAggregator（#279 接 core aggregateChartSongs 内核）', () => 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(cacheManager.get).mockReturnValue(null);
+    clearDirectClients();
+    registerDirectClient({ key: 'netease', getToplists: neteaseGetToplists });
+    registerDirectClient({ key: 'qq', getToplists: qqGetToplists });
+    registerDirectClient({ key: 'kugou', getToplists: kugouGetToplists });
   });
 
   it('单源上榜歌：sourceRanks 只含上榜源（内核语义，不再 1/51 预填），score = Σ1/rank', async () => {

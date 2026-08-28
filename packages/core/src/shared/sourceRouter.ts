@@ -48,6 +48,38 @@ export interface ToplistGroup {
   songs: Song[];
 }
 
+// ── 榜单取组 helper（#286：榜单 id 单一来源，双端消费）────────────────
+
+/** 榜单型：热歌榜 / 新歌榜。 */
+export type ChartKind = 'hot' | 'new';
+
+/** 已实现 getToplists 能力的源（榜单 id 契约的键域；其余四源无该能力）。 */
+export type ToplistSourceKey = 'netease' | 'qq' | 'kugou';
+
+/**
+ * 各源榜单 sourceId 契约（#279 定值；ToplistGroup.id = `${source}:${sourceId}`）。
+ * QQ 26/27 自 v8 topid；酷狗为 rankid 字符串。
+ */
+export const TOPLIST_SOURCE_IDS: Record<ToplistSourceKey, Record<ChartKind, number | string>> = {
+  netease: { hot: 3778678, new: 3779629 },
+  qq: { hot: 26, new: 27 },
+  kugou: { hot: '8888', new: '74534' },
+};
+
+/** 从 getToplists 全组结果中按 `${source}:${sourceId}` 取歌组（无匹配 = 空数组）。 */
+export function pickToplistSongs(groups: ToplistGroup[], source: SourceKey, sourceId: number | string): Song[] {
+  return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
+}
+
+/** 单源榜单腿：经能力面 getToplists 取全组后按 id 取歌；无客户端/未实现能力抛错（双端统一错误风格）。 */
+export async function getToplistSongs(source: SourceKey, sourceId: number | string): Promise<Song[]> {
+  const client = getDirectClient(source);
+  if (!client?.getToplists) {
+    throw new Error(`源 ${source} 未实现内容能力 getToplists`);
+  }
+  return pickToplistSongs(await client.getToplists(), source, sourceId);
+}
+
 /**
  * 内容缓存抽象（D6 #239）：直连客户端经构造注入访问宿主缓存，
  * core 默认实现包一层 cacheManager（同语义：get 命中返回数据 / 未命中 null，
