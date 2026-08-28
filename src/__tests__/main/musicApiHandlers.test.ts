@@ -8,6 +8,7 @@ vi.mock('electron', () => ({
 
 import { ipcMain } from 'electron';
 import type { MusicApiMethodMap } from '@/shared/musicApiContract';
+import { clearDirectClients, registerDirectClient } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 
 // mock core api 依赖
@@ -72,6 +73,33 @@ describe('musicApi:call 单通道分发表', () => {
 
     expect(api.getLyrics).toHaveBeenCalledWith('http://x/lrc');
     expect(result).toEqual({ success: true, data: 'lrc text' });
+  });
+
+  it('内容方法以直连客户端为接收者调用（this 绑定回归）', async () => {
+    const api = makeApi({});
+    registerMusicApiCall(api as any);
+    const handler = getCallHandler();
+
+    // 真实内容方法实现依赖 this（neteaseDirect.getAlbumDetail 内部 this.resolvePlayableUrls）
+    const client = {
+      key: 'netease',
+      resolvePlayableUrls(this: { key: string }) {
+        return this.key;
+      },
+    } as any;
+    clearDirectClients();
+    registerDirectClient(client);
+
+    try {
+      const result = (await handler({}, 'resolvePlayableUrls', 'netease', [])) as {
+        success: boolean;
+        data: unknown;
+      };
+      expect(result.success).toBe(true);
+      expect(result.data).toBe('netease');
+    } finally {
+      clearDirectClients();
+    }
   });
 
   it('未知方法返回失败封套，不抛异常', async () => {

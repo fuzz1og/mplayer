@@ -55,11 +55,14 @@ export function registerMusicApiCall(api: MusicApi): void {
   for (const method of CONTENT_METHODS) {
     (dispatch as unknown as Record<string, (...xs: unknown[]) => unknown>)[method] = (...xs: unknown[]) => {
       const source = xs[0] as SourceKey;
-      const fn = getDirectClient(source)?.[method] as ((...a: unknown[]) => unknown) | undefined;
+      const client = getDirectClient(source);
+      const fn = client?.[method] as ((...a: unknown[]) => unknown) | undefined;
       if (typeof fn !== 'function') {
         throw new Error(`源 ${source} 未实现内容能力 ${method}`);
       }
-      return fn(...xs.slice(1));
+      // 必须以客户端为接收者调用：内容方法实现依赖 this（如 getAlbumDetail 内部
+      // this.resolvePlayableUrls），脱体调用会丢 this 直接 TypeError
+      return fn.apply(client, xs.slice(1));
     };
   }
 
