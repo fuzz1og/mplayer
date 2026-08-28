@@ -8,8 +8,8 @@ import { useDownload } from '@/renderer/hooks/useDownload';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song } from '@mplayer/core';
 
-// 热榜歌曲类型
-interface HotlistSong {
+// QQ 榜单旧结构（QQ 内容迁移在后续票，#278 仅迁网易；rank 由索引推导）
+interface QqHotlistItem {
   id: string;
   name: string;
   artists: string;
@@ -18,12 +18,17 @@ interface HotlistSong {
   album: string;
 }
 
+/** 榜单组按 id 取 songs（ToplistGroup.id = `${source}:${sourceId}`，#278）。 */
+function pickToplist(groups: { id: string; songs: Song[] }[], sourceId: number): Song[] {
+  return groups.find((g) => g.id === `netease:${sourceId}`)?.songs ?? [];
+}
+
 const HotlistDetailPage: React.FC = () => {
   const { type } = useParams<{ type: 'netease' | 'netease_new' | 'qq' | 'qq_new' }>();
   const navigate = useNavigate();
   const hotlistType = type || 'netease';
 
-  const [hotlist, setHotlist] = useState<HotlistSong[]>([]);
+  const [hotlist, setHotlist] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,17 +45,16 @@ const HotlistDetailPage: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        let data: HotlistSong[] = [];
         if (hotlistType === 'netease' || hotlistType === 'netease_new') {
-          data = hotlistType === 'netease'
-            ? await callMusicApi('getNeteaseHotlist')
-            : await callMusicApi('getNeteaseNewSongList');
+          // 网易榜单走能力面 getToplists（歌词内联，#242），按 id 取组
+          const groups = await callMusicApi('getToplists', 'netease');
+          setHotlist(pickToplist(groups, hotlistType === 'netease' ? 3778678 : 3779629));
         } else {
-          data = hotlistType === 'qq'
+          const raw: QqHotlistItem[] = hotlistType === 'qq'
             ? await callMusicApi('getQQHotlist')
             : await callMusicApi('getQQNewSongList');
+          setHotlist(convertToSongs(raw || []));
         }
-        setHotlist(data || []);
       } catch (error) {
         console.error(`加载热榜失败:`, error);
         setError('加载热榜失败，请稍后重试');
@@ -62,8 +66,8 @@ const HotlistDetailPage: React.FC = () => {
     loadHotlist();
   }, [hotlistType]);
 
-  // 转换热榜歌曲为Song类型
-  const convertToSongs = (hotlistSongs: HotlistSong[]): Song[] => {
+  // QQ 榜单旧结构 → Song（rank 由索引推导；网易路径直接用能力面返回的 Song）
+  const convertToSongs = (hotlistSongs: QqHotlistItem[]): Song[] => {
     return hotlistSongs.map(song => ({
       id: song.id,
       name: song.name,
@@ -73,7 +77,7 @@ const HotlistDetailPage: React.FC = () => {
       url: '',
       duration: 0,
       lrc: '',
-      sourceType: (hotlistType === 'netease_new' ? 'netease' : hotlistType === 'qq_new' ? 'qq' : hotlistType) as 'netease' | 'qq'
+      sourceType: (hotlistType === 'qq_new' ? 'qq' : hotlistType) as 'netease' | 'qq'
     }));
   };
 
@@ -285,10 +289,13 @@ const HotlistDetailPage: React.FC = () => {
               onClick={async () => {
                 setLoading(true);
                 try {
-                  const data = hotlistType === 'netease' || hotlistType === 'netease_new'
-                    ? await callMusicApi('getNeteaseHotlist')
-                    : await callMusicApi('getQQHotlist');
-                  setHotlist(data || []);
+                  if (hotlistType === 'netease' || hotlistType === 'netease_new') {
+                    const groups = await callMusicApi('getToplists', 'netease');
+                    setHotlist(pickToplist(groups, hotlistType === 'netease' ? 3778678 : 3779629));
+                  } else {
+                    const raw: QqHotlistItem[] = await callMusicApi('getQQHotlist');
+                    setHotlist(convertToSongs(raw || []));
+                  }
                 } catch (error) {
                   console.error(error);
                 } finally {
@@ -310,7 +317,7 @@ const HotlistDetailPage: React.FC = () => {
           </div>
         ) : (
           <SongList
-            songs={convertToSongs(hotlist)}
+            songs={hotlist}
             currentSongId={currentSong?.id}
             isPlaying={isPlaying}
             favoriteIds={favoriteIds}

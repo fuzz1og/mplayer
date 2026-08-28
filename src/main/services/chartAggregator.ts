@@ -1,4 +1,5 @@
-import type { Song, SourceKey } from '@mplayer/core';
+import type { Song, SourceKey, ToplistGroup } from '@mplayer/core';
+import { getDirectClient } from '@mplayer/core';
 import { musicApi } from '../api/musicApi';
 import { getKugouRank, getKugouNewSongs } from '../api/kugouApi';
 import { cacheManager } from '@mplayer/core';
@@ -65,30 +66,29 @@ function createSourceRanks(sources: SourceName[]): SourceRank {
   return Object.fromEntries(sources.map(source => [source, DEFAULT_MISS])) as SourceRank;
 }
 
+/** 网易榜单 playlistId（与门面时代一致，#278 迁能力面 getToplists）。 */
+const NETEASE_TOPLIST_ID: Record<ChartType, number> = { hot: 3778678, new: 3779629 };
+
+/** 从榜单组中按 id 取歌（ToplistGroup.id = `${source}:${sourceId}`）。 */
+function pickToplistSongs(groups: ToplistGroup[], source: SourceName, sourceId: number): Song[] {
+  return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
+}
+
 /**
  * 获取指定源+类型的 fetcher
  */
 function getSourceFetcher(type: ChartType, source: SourceName): () => Promise<NormalizedSong[]> {
   if (source === 'netease') {
     return async () => {
-      const songs = type === 'hot' ? await musicApi.getNeteaseHotlist() : await musicApi.getNeteaseNewSongList();
-      return songs.map(s => ({
-        name: s.name,
-        artist: s.artists,
-        cover: s.cover,
-        rank: s.rank,
+      // 网易榜单走能力面 getToplists（一次取全组），rank 由索引推导（#239）
+      const groups = await getDirectClient('netease')!.getToplists!();
+      return pickToplistSongs(groups, 'netease', NETEASE_TOPLIST_ID[type]).map((song, i) => ({
+        name: song.name,
+        artist: song.artist,
+        cover: song.cover,
+        rank: i + 1,
         sourceType: 'netease' as SourceKey,
-        song: {
-          id: s.id,
-          name: s.name,
-          artist: s.artists,
-          album: s.album,
-          url: '',
-          cover: s.cover,
-          lrc: '',
-          duration: 0,
-          sourceType: 'netease',
-        },
+        song,
       }));
     };
   }

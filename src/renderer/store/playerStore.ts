@@ -3,7 +3,7 @@ import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
-import { findExactMatch, getNextSongIndex, getPrevSongIndex, songUsesSongidLyrics, isSodaSource } from '@mplayer/core';
+import { findExactMatch, getNextSongIndex, getPrevSongIndex, songUsesSongidLyrics, isSodaSource, isInlineLyrics } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
@@ -23,10 +23,14 @@ const ipcRenderer = window.electronAPI;
  * fetchLrcInBackground 的 force 路径。返回空串 = 无歌词（不重试）。
  */
 async function loadLyricsWithRetry(song: Song): Promise<string> {
+  // 网易歌词已内聚进内容能力（#242 fillLyrics）：Song.lrc 即 LRC 文本，直接用
+  if (isInlineLyrics(song.sourceType, song.lrc)) return song.lrc;
+
   const searchLrc = async (): Promise<string> => {
     try {
       const results = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`, 1, song.sourceType);
-      return results[0]?.lrc?.trim() || '';
+      const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
+      return (hit || results[0])?.lrc?.trim() || '';
     } catch {
       return '';
     }
@@ -34,17 +38,17 @@ async function loadLyricsWithRetry(song: Song): Promise<string> {
   const fetchLyrics = (lrcUrl: string): Promise<string> =>
     callMusicApi('getLyrics', lrcUrl);
 
-  let lrcUrl = song.lrc && song.lrc.trim() !== '' ? song.lrc : '';
-  // 网易/汽水直连搜索都不带 lrc 字段，再搜索也拿不到，按 songid 直取
-  // （见 core songLyrics：netease → getLyricsBySongId、soda → getSodaLyrics）
-  if (!lrcUrl && !songUsesSongidLyrics(song.sourceType)) {
-    lrcUrl = await searchLrc();
+  let lrc = song.lrc && song.lrc.trim() !== '' ? song.lrc : '';
+  // 歌词为空时搜索补全：网易搜索兜底返回的也是内联文本（#242）；汽水搜索恒空，
+  // 跳过（分享页按 trackId 直取 getSodaLyrics）；其余源返回取词 URL
+  if (!lrc && !songUsesSongidLyrics(song.sourceType)) {
+    lrc = await searchLrc();
   }
+  // 搜索兜底命中的内联文本（网易）直接返回
+  if (lrc && isInlineLyrics(song.sourceType, lrc)) return lrc;
+
+  const lrcUrl = lrc;
   if (!lrcUrl) {
-    // 网易：按 songId 直取歌词（music.163.com/api/song/lyric 明文）
-    if (song.sourceType === 'netease' && song.id) {
-      return callMusicApi('getLyricsBySongId', String(song.id));
-    }
     // 汽水：分享页免登录结构化歌词（searchSongsSoda 不带 lrc，track_v2 需登录态，
     // 分享页 _ROUTER_DATA.lyrics.sentences 免登录可拿，getSodaLyrics 转 LRC 文本）
     if (isSodaSource(song.sourceType) && song.id) {
@@ -60,6 +64,7 @@ async function loadLyricsWithRetry(song: Song): Promise<string> {
     await new Promise((r) => setTimeout(r, 600));
     const freshLrc = await searchLrc();
     if (!freshLrc || freshLrc === lrcUrl) throw err;
+    if (isInlineLyrics(song.sourceType, freshLrc)) return freshLrc;
     return await fetchLyrics(freshLrc);
   }
 }

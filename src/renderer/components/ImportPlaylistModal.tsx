@@ -80,7 +80,8 @@ const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
             return;
           }
         }
-        songs = await callMusicApi('getNeteasePlaylistSongs', Number(urlInfo.id));
+        const full = await callMusicApi('getPlaylistSongs', 'netease', Number(urlInfo.id), 0, 0);
+        songs = full.songs;
       }
 
       if (songs.length === 0) {

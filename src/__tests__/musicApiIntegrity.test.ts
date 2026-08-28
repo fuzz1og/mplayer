@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { MUSIC_API_METHODS } from '@/shared/musicApiContract';
+import { BASE_METHODS, MUSIC_API_METHODS } from '@/shared/musicApiContract';
+import { CONTENT_METHODS, neteaseDirectClient } from '@mplayer/core';
 
 /**
  * 完整性测试（ADR-0001）：静态扫描把「music 域三份拷贝会漂移」收敛为测试期必现。
  * 校验：
- *  1. MUSIC_API_METHODS ⊆ core musicApi 方法（加方法漏登记 / 名字拼错 → 必报错）
+ *  1. 基础方法 ⊆ core musicApi 方法（加方法漏登记 / 名字拼错 → 必报错）；
+ *     内容方法 ⊆ 网易客户端（参考实现，全能力）——契约自客户端接口派生（#240）
  *  2. 渲染端无裸 `musicApi:*` 字符串（只允许 callMusicApi.ts 里的单通道 musicApi:call）
  *  3. src 全树无 `IpcMusicApi` / `ipcMusicApi` 引用（镜像代理已删除）
  *  4. 主进程 `musicApi:` 注册只有 `musicApi:call` 一处
- *  5. 分发表键集合 == MUSIC_API_METHODS ∪ MainOnlyMethods 键（每个键都有 handler）
+ *  5. 分发表键集合 == 基础方法 ∪ MainOnlyMethods 键，内容方法经 CONTENT_METHODS
+ *     清单循环接线（每个键都有 handler）
  */
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -57,11 +60,11 @@ function allSourceFiles(): string[] {
 /** 主进程 MainOnly 方法的键名（与 contract 的 MainOnlyMethods 一致）。 */
 const MAIN_ONLY_METHODS = ['getAggregatedChart', 'getThrottleWait', 'getSodaPlayableUrl', 'resolvePlaylistLink'];
 
-/** 从 musicApiHandlers.ts 的 `dispatch` 分发表提取方法名集合。 */
+/** 从 musicApiHandlers.ts 的 `base` 手写分发表提取方法名集合（内容方法走循环接线）。 */
 function dispatchMethodNames(): Set<string> {
   const src = fs.readFileSync(DISPATCH_FILE, 'utf8');
-  const start = src.indexOf('const dispatch = {');
-  if (start < 0) throw new Error('musicApiHandlers.ts 中找不到 const dispatch = {');
+  const start = src.indexOf('const base = {');
+  if (start < 0) throw new Error('musicApiHandlers.ts 中找不到 const base = {');
   const block = src.slice(start, src.indexOf('} satisfies', start));
   const names = new Set<string>();
   // 每个分发表成员行：`key: (...)` / `key: async (...)` / 简写 `key,`
@@ -74,15 +77,32 @@ function dispatchMethodNames(): Set<string> {
 }
 
 describe('music 域 IPC 契约完整性（ADR-0001）', () => {
-  it('MUSIC_API_METHODS 全在 core musicApi 上（core 加方法需登记此清单）', () => {
+  it('基础方法全在 core musicApi 上（core 加方法需登记 BASE_METHODS）', () => {
     const coreMethods = coreMusicApiMethodNames();
-    const missing = MUSIC_API_METHODS.filter((name) => !coreMethods.has(name));
+    const missing = BASE_METHODS.filter((name) => !coreMethods.has(name));
     expect(missing).toEqual([]);
   });
 
-  it('分发表键集合 == MUSIC_API_METHODS ∪ MainOnlyMethods 键（每个键都有 handler）', () => {
+  it('MUSIC_API_METHODS == BASE ∪ CONTENT（契约方法集自客户端接口派生）', () => {
+    expect([...MUSIC_API_METHODS].sort()).toEqual([...BASE_METHODS, ...CONTENT_METHODS].sort());
+  });
+
+  it('CONTENT_METHODS 全部在网易客户端上（参考实现，全能力面）', () => {
+    const missing = CONTENT_METHODS.filter(
+      (name) => typeof (neteaseDirectClient as unknown as Record<string, unknown>)[name] !== 'function'
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('内容方法经 CONTENT_METHODS 清单循环接线（分派到 getDirectClient）', () => {
+    const src = fs.readFileSync(DISPATCH_FILE, 'utf8');
+    expect(src).toContain('for (const method of CONTENT_METHODS)');
+    expect(src).toContain('getDirectClient(source)');
+  });
+
+  it('分发表键集合 == 基础方法 ∪ MainOnlyMethods 键（每个键都有 handler）', () => {
     const dispatchKeys = dispatchMethodNames();
-    const expected = [...MUSIC_API_METHODS, ...MAIN_ONLY_METHODS].sort();
+    const expected = [...BASE_METHODS, ...MAIN_ONLY_METHODS].sort();
     const missing = expected.filter((name) => !dispatchKeys.has(name));
     const extra = [...dispatchKeys].filter((name) => !expected.includes(name)).sort();
     // 每个键都有 handler（分发表里出现即接线）；缺失 / 多余都视为契约漂移。

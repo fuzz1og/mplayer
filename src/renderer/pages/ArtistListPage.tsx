@@ -114,7 +114,7 @@ const ArtistListPage: React.FC = () => {
     loadingMoreRef.current = true;
     try {
       const currentOffset = reset ? 0 : artists.length;
-      const data = await callMusicApi('getNeteaseArtists', 0, currentOffset, PAGE_SIZE, -1);
+      const data = await callMusicApi('getArtists', 'netease', 0, currentOffset, PAGE_SIZE);
       setArtists(prev => reset ? data.artists : [...prev, ...data.artists]);
       setHasMore(data.more);
     } catch (err) {
@@ -131,7 +131,7 @@ const ArtistListPage: React.FC = () => {
   const loadCategoryArtists = useCallback(async (catId: number) => {
     setLoading(true);
     try {
-      const data = await callMusicApi('getNeteaseArtists', catId, 0, 100, -1);
+      const data = await callMusicApi('getArtists', 'netease', catId, 0, 100);
       setArtists(data.artists);
       setHasMore(false);
     } catch (err) {

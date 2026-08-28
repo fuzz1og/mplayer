@@ -42,7 +42,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
     const loadPlaylist = async () => {
       try {
         setLoading(true);
-        const data = await callMusicApi('getNeteasePlaylistDetail', parseInt(id));
+        const data = await callMusicApi('getPlaylistDetail', 'netease', parseInt(id));
         if (data) {
           setPlaylist(data);
         }
@@ -68,7 +68,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
         setLoadingMore(true);
       }
       const offset = reset ? 0 : songs.length;
-      const page = await callMusicApi('getNeteasePlaylistSongsPage', parseInt(id), offset, PAGE_SIZE);
+      const page = await callMusicApi('getPlaylistSongs', 'netease', parseInt(id), offset, PAGE_SIZE);
 
       if (!page || page.songs.length === 0) {
         if (reset) {
@@ -124,9 +124,10 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
           // 分页模式下已加载的歌曲可能不全,保存前拉取全量
           let songsToSave = songs;
           if (songsToSave.length < total) {
-            const full = await callMusicApi('getNeteasePlaylistSongs', parseInt(id!));
-            if (full && full.length > 0) {
-              songsToSave = full;
+            // limit <= 0 = 全量（getPlaylistSongs 合一语义，#278）
+            const full = await callMusicApi('getPlaylistSongs', 'netease', parseInt(id!), 0, 0);
+            if (full.songs && full.songs.length > 0) {
+              songsToSave = full.songs;
             }
           }
           const playlistId = await IpcClient.invoke<number>(

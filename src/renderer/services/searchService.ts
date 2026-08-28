@@ -108,7 +108,7 @@ class SearchService {
    * 搜索结果页的「歌手」tab 用它加载。
    */
   async searchArtists(keyword: string, limit = 30): Promise<Artist[]> {
-    return callMusicApi('searchNeteaseArtists', keyword, limit);
+    return callMusicApi('searchArtists', 'netease', keyword, limit);
   }
 
   loadMore(): Promise<void> {

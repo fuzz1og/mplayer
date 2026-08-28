@@ -52,7 +52,7 @@ const ArtistDetailPage: React.FC = () => {
       if (!artistId) return;
       setLoading(true);
       try {
-        const data = await callMusicApi('getNeteaseArtistSongs', artistId, 0, 50, order);
+        const data = await callMusicApi('getArtistSongs', 'netease', artistId, 0, 50, order);
         setSongs(data.songs);
         setTotal(data.total);
       } catch (error) {
@@ -88,7 +88,7 @@ const ArtistDetailPage: React.FC = () => {
     }
     try {
       const offset = reset ? 0 : albumsOffsetRef.current;
-      const { albums: page, total: pageTotal, more } = await callMusicApi('getArtistAlbums', artistId, offset, ALBUM_PAGE_SIZE);
+      const { albums: page, total: pageTotal, more } = await callMusicApi('getArtistAlbums', 'netease', artistId, offset, ALBUM_PAGE_SIZE);
       setAlbums(prev => reset ? page : [...prev, ...page]);
       setAlbumsTotal(pageTotal);
       albumsOffsetRef.current = offset + ALBUM_PAGE_SIZE;

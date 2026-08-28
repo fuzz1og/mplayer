@@ -22,6 +22,18 @@ interface HotlistSong {
   id: string; name: string; artists: string; rank: number; cover: string; album: string;
 }
 
+/** 榜单组按 id 取 songs（ToplistGroup.id = `${source}:${sourceId}`，#278）。 */
+function pickToplist(groups: { id: string; songs: Song[] }[] | null, source: string, sourceId: number): Song[] {
+  return groups?.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
+}
+
+/** Song → 榜单视图条目（rank 按索引推导，#239）。 */
+function toHotlistView(songs: Song[]): HotlistSong[] {
+  return songs.map((s, i) => ({
+    id: s.id, name: s.name, artists: s.artist, rank: i + 1, cover: s.cover, album: s.album,
+  }));
+}
+
 const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; action?: string; onClickAction?: () => void }> = ({
   icon, title, action, onClickAction
 }) => (
@@ -60,11 +72,13 @@ const DiscoverPage: React.FC = () => {
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
 
-  const hotlist = useDiscoverData('getNeteaseHotlist');
-  const newSongs = useDiscoverData('getNeteaseNewSongList');
+  // 网易榜单走能力面 getToplists（一次取全组，按 id 拆热歌/新歌）；QQ 榜暂留旧门面
+  const neteaseToplists = useDiscoverData('getToplists', 'netease');
+  const hotlist = { data: pickToplist(neteaseToplists.data, 'netease', 3778678), loading: neteaseToplists.loading, error: neteaseToplists.error };
+  const newSongs = { data: pickToplist(neteaseToplists.data, 'netease', 3779629), loading: neteaseToplists.loading, error: neteaseToplists.error };
   const qqHotlist = useDiscoverData('getQQHotlist');
   const qqNewSongs = useDiscoverData('getQQNewSongList');
-  const playlists = useDiscoverData('getNeteasePlaylists', '全部', 'hot', 0, 10);
+  const playlists = useDiscoverData('getPlaylists', 'netease', '全部', 'hot', 0, 10);
 
   const [activeTab, setActiveTab] = useState<'songs' | 'artists'>('songs');
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
@@ -81,7 +95,7 @@ const DiscoverPage: React.FC = () => {
     if (!currentKeyword || activeTab !== 'artists') return;
     let cancelled = false;
     setArtistLoading(true);
-    callMusicApi('searchNeteaseArtists', currentKeyword, 30)
+    callMusicApi('searchArtists', 'netease', currentKeyword, 30)
       .then((result) => { if (!cancelled) setArtistResults(result); })
       .catch(() => { if (!cancelled) setArtistResults([]); })
       .finally(() => { if (!cancelled) setArtistLoading(false); });
@@ -125,8 +139,9 @@ const DiscoverPage: React.FC = () => {
     }
   }, [currentKeyword, groups.length]);
 
-  const hotlistData = (hotlist.data || []).slice(0, 20);
-  const newSongsData = (newSongs.data || []).slice(0, 20);
+  // 网易榜单已是 Song[]（歌词内联）；QQ 仍为 HotlistSong[]——统一映射视图结构
+  const hotlistData = toHotlistView(hotlist.data || []).slice(0, 20);
+  const newSongsData = toHotlistView(newSongs.data || []).slice(0, 20);
   const qqHotlistData = (qqHotlist.data || []).slice(0, 20);
   const qqNewSongsData = (qqNewSongs.data || []).slice(0, 20);
   const playlistsData = playlists.data?.playlists?.slice(0, 10) || [];
