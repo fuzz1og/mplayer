@@ -18,7 +18,7 @@ import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import QueueListModal from './QueueListModal';
 import BottomSheet from './BottomSheet';
-import { parseLRC, musicApi, findCurrentLyricIndex, songUsesSongidLyrics, isSodaSource } from '@mplayer/core';
+import { parseLRC, musicApi, findCurrentLyricIndex, songUsesSongidLyrics, isSodaSource, isInlineLyrics } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
@@ -247,15 +247,20 @@ export default function PlayerOverlay({ onClose }: Props) {
     }
   };
 
-  // 加载歌词：优先歌曲自带 lrc URL；今日推荐/歌单/歌手页的歌曲 lrc 为空，
-  // 用网易云 songId 兜底拉歌词；汽水用分享页免登录结构化歌词（getSodaLyrics）
+  // 加载歌词：网易内容能力已把 LRC 文本内联进 song.lrc（fillLyrics，#242）；
+  // 其余源优先歌曲自带 lrc URL（取词 URL）；汽水用分享页免登录结构化歌词（getSodaLyrics）
   const [lyricsLoading, setLyricsLoading] = useState(false);
   useEffect(() => {
     if (!song) { setLyricLines([]); setLyricsLoading(false); return; }
     const abort = new AbortController();
-    const cacheKey = song.lrc
-      ? song.lrc
-      : songUsesSongidLyrics(song.sourceType) ? `songid:${song.id}` : '';
+    // 网易歌词内聚（#242）：内容能力返回的 Song.lrc 即 LRC 文本（内联），直接用；
+    // 其余源 lrc 为取词 URL（getLyrics 门面）；汽水按 trackId 直取分享页歌词。
+    const inline = isInlineLyrics(song.sourceType, song.lrc);
+    const cacheKey = inline
+      ? `inline:${song.id}`
+      : song.lrc
+        ? song.lrc
+        : songUsesSongidLyrics(song.sourceType) ? `songid:${song.id}` : '';
     if (!cacheKey) {
       setLyricLines([]);
       setLyricsLoading(false);
@@ -270,11 +275,13 @@ export default function PlayerOverlay({ onClose }: Props) {
       return;
     }
     setLyricsLoading(true);
-    const load = song.lrc
-      ? musicApi.getLyrics(song.lrc)
-      : isSodaSource(song.sourceType)
-        ? musicApi.getSodaLyrics(String(song.id))
-        : musicApi.getLyricsBySongId(song.id);
+    const load = inline
+      ? Promise.resolve(song.lrc)
+      : song.lrc
+        ? musicApi.getLyrics(song.lrc)
+        : isSodaSource(song.sourceType)
+          ? musicApi.getSodaLyrics(String(song.id))
+          : Promise.resolve('');
     load.then(lrc => {
       if (abort.signal.aborted) return;
       const parsed = parseLRC(lrc);

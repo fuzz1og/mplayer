@@ -12,7 +12,7 @@ vi.mock('@/renderer/services/importService', async (importOriginal) => {
   };
 });
 
-// music 域 IPC 走 callMusicApi（getNeteasePlaylistSongs / resolvePlaylistLink）
+// music 域 IPC 走 callMusicApi（getPlaylistSongs 原生歌单接口 / resolvePlaylistLink）
 const callMusicApiMock = vi.hoisted(() => vi.fn(async () => []));
 vi.mock('@/renderer/services/callMusicApi', () => ({
   callMusicApi: callMusicApiMock,
@@ -69,7 +69,7 @@ describe('ImportPlaylistModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    callMusicApiMock.mockResolvedValue([]);
+    callMusicApiMock.mockResolvedValue({ songs: [], total: 0 });
   });
 
   it('应该只显示链接导入（无文本导入 tab）', () => {
@@ -79,8 +79,8 @@ describe('ImportPlaylistModal', () => {
     expect(screen.queryByText('文本导入')).not.toBeInTheDocument();
   });
 
-  it('网易歌单直链应走原生 getNeteasePlaylistSongs', async () => {
-    callMusicApiMock.mockResolvedValue(mockSongs);
+  it('网易歌单直链应走原生 getPlaylistSongs', async () => {
+    callMusicApiMock.mockResolvedValue({ songs: mockSongs, total: mockSongs.length });
 
     render(<ImportPlaylistModal {...defaultProps} />);
 
@@ -93,7 +93,7 @@ describe('ImportPlaylistModal', () => {
       expect(screen.getByText(/共 2 首歌曲/)).toBeInTheDocument();
     });
 
-    expect(callMusicApiMock).toHaveBeenCalledWith('getNeteasePlaylistSongs', 123456);
+    expect(callMusicApiMock).toHaveBeenCalledWith('getPlaylistSongs', 'netease', 123456, 0, 0);
   });
 
   it('网易短链应先经主进程解析重定向，再走原生接口', async () => {
@@ -101,7 +101,7 @@ describe('ImportPlaylistModal', () => {
       if (method === 'resolvePlaylistLink') {
         return 'https://music.163.com/playlist?id=42';
       }
-      return mockSongs;
+      return { songs: mockSongs, total: mockSongs.length };
     });
 
     render(<ImportPlaylistModal {...defaultProps} />);
@@ -116,7 +116,7 @@ describe('ImportPlaylistModal', () => {
     });
 
     expect(callMusicApiMock).toHaveBeenCalledWith('resolvePlaylistLink', 'https://163cn.tv/abc123');
-    expect(callMusicApiMock).toHaveBeenCalledWith('getNeteasePlaylistSongs', 42);
+    expect(callMusicApiMock).toHaveBeenCalledWith('getPlaylistSongs', 'netease', 42, 0, 0);
   });
 
   it('解析失败应显示错误', async () => {
@@ -149,7 +149,7 @@ describe('ImportPlaylistModal', () => {
   });
 
   it('确认后应调用 importFromLink 入库', async () => {
-    callMusicApiMock.mockResolvedValue(mockSongs);
+    callMusicApiMock.mockResolvedValue({ songs: mockSongs, total: mockSongs.length });
     (importFromLink as ReturnType<typeof vi.fn>).mockResolvedValue({
       successes: [{ line: 'Song 1 - Artist 1', song: mockSongs[0], source: 'netease' }],
       failures: [],

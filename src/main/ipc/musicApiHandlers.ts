@@ -1,22 +1,25 @@
 import { ipcMain } from 'electron';
-import type { Song, SourceKey } from '@mplayer/core';
+import { CONTENT_METHODS, getDirectClient } from '@mplayer/core';
+import type { ContentMethod, SourceKey, Song } from '@mplayer/core';
 import type { ApiResponse } from '@/shared/types/ipc';
-import type { MusicApiMethod, MusicApiMethodMap, MainOnlyMethods } from '@/shared/musicApiContract';
+import type { BaseMethod, MusicApiMethodMap, MainOnlyMethods } from '@/shared/musicApiContract';
 import { getAggregatedChart } from '../services/chartAggregator';
-import { getThrottleWaitMs } from '../api/musicApi';
 
 /**
  * music 域 IPC 单通道分发（ADR-0001）：`musicApi:call` 查表分发。
- * 分发表 `dispatch` `satisfies MusicApiMethodMap`——方法名拼错 / 签名不符 /
- * 漏方法 → 编译期必报错。
+ *
+ * - 基础方法 + MainOnly：手写分发表 `satisfies Omit<MusicApiMethodMap, ContentMethod>`
+ *   （方法名拼错 / 签名不符 / 漏方法 → 编译期必报错）；
+ * - 内容方法（#240）：CONTENT_METHODS 清单循环泛型分派到 `getDirectClient(source)`，
+ *   能力探测 = 客户端方法存在性，未实现源明确抛错。
  */
 
 /**
- * main.ts 扩展后的完整 musicApi（core 方法 + getSodaPlayableUrl + resolvePlaylistLink）。
- * MainOnly 方法签名已由 contract 的 `MainOnlyMethods` 声明，此处只引用不重复。
+ * main.ts 扩展后的 musicApi（core 门面基础方法 + getSodaPlayableUrl + resolvePlaylistLink）。
+ * 内容方法不经门面——按清单循环分派到直连客户端。
  */
 type CoreMusicApi = typeof import('@/main/api/musicApi').musicApi;
-type MusicApi = Pick<CoreMusicApi, MusicApiMethod> & {
+type MusicApi = Pick<CoreMusicApi, BaseMethod> & {
   getSodaPlayableUrl: MainOnlyMethods['getSodaPlayableUrl'];
   resolvePlaylistLink: MainOnlyMethods['resolvePlaylistLink'];
 };
@@ -24,37 +27,18 @@ type MusicApi = Pick<CoreMusicApi, MusicApiMethod> & {
 /**
  * 注册单个 `musicApi:call` 分发通道。
  * 旧 `musicApi:*` / `lyrics:get` / `api:getThrottleWait` 通道已删除，music 域收敛为
- * `musicApi:call` 单通道；core 方法通过 MUSIC_API_METHODS 收编，MainOnly 方法
- * （getAggregatedChart / getThrottleWait / getSodaPlayableUrl / resolvePlaylistLink）
- * 在分发表内单独接线。
+ * `musicApi:call` 单通道；core 方法通过 MUSIC_API_METHODS 收编，内容方法经
+ * CONTENT_METHODS 循环接线（#278 契约派生），MainOnly 方法
+ * （getAggregatedChart / getSodaPlayableUrl / resolvePlaylistLink）在分发表内单独接线。
  */
 export function registerMusicApiCall(api: MusicApi): void {
-  const dispatch = {
-    // ── core musicApi 方法（泛型 forward）────────────────────────
+  // ── 基础方法 + main 独有组合方法（手写表，satisfies 钉死签名）──────
+  const base = {
+    // ── core musicApi 基础方法（泛型 forward）────────────────────
     probeSongsBatch: (s: Song[]) => api.probeSongsBatch(s),
     getLyrics: (url: string) => api.getLyrics(url),
-    getLyricsBySongId: (id: string) => api.getLyricsBySongId(id),
-    getNeteaseHotlist: () => api.getNeteaseHotlist(),
-    getNeteaseNewSongList: () => api.getNeteaseNewSongList(),
     getQQHotlist: () => api.getQQHotlist(),
     getQQNewSongList: () => api.getQQNewSongList(),
-    getNeteasePlaylists: (cat: string, order: string, offset: number, limit: number) =>
-      api.getNeteasePlaylists(cat, order, offset, limit),
-    getNeteasePlaylistDetail: (id: number) => api.getNeteasePlaylistDetail(id),
-    getNeteasePlaylistSongs: (id: number, limit?: number) => api.getNeteasePlaylistSongs(id, limit || 0),
-    getNeteasePlaylistSongsPage: (id: number, offset: number, limit: number) =>
-      api.getNeteasePlaylistSongsPage(id, offset, limit),
-    getNeteaseArtists: (cat: number, offset: number, limit: number, initial: number) =>
-      api.getNeteaseArtists(cat, offset, limit, initial),
-    getNeteaseArtistSongs: (artistId: string, offset: number, limit: number, order: string) =>
-      api.getNeteaseArtistSongs(artistId, offset, limit, order),
-    searchNeteaseArtists: (keyword: string, limit: number) => api.searchNeteaseArtists(keyword, limit),
-    getNewAlbums: (area: string, offset: number, limit: number) => api.getNewAlbums(area, offset, limit),
-    getAlbumDetail: (albumId: string) => api.getAlbumDetail(albumId),
-    getArtistAlbums: (artistId: string, offset: number, limit: number) =>
-      api.getArtistAlbums(artistId, offset, limit),
-    getRecommendedPlaylists: (limit: number) => api.getRecommendedPlaylists(limit),
-    getRecommendedSongs: (limit: number) => api.getRecommendedSongs(limit),
     getSodaAudioUrl: (trackId: string) => api.getSodaAudioUrl(trackId),
     getSodaLyrics: (trackId: string) => api.getSodaLyrics(trackId),
     parseSodaShareLink: (link: string) => api.parseSodaShareLink(link),
@@ -63,10 +47,22 @@ export function registerMusicApiCall(api: MusicApi): void {
     resolvePlayableSongRouted: (song: Song) => api.resolvePlayableSongRouted(song),
     // ── main 独有组合方法 ─────────────────────────────────────────
     getAggregatedChart,
-    getThrottleWait: async () => getThrottleWaitMs(),
     getSodaPlayableUrl: (trackId: string) => api.getSodaPlayableUrl(trackId),
     resolvePlaylistLink: (url: string) => api.resolvePlaylistLink(url),
-  } satisfies MusicApiMethodMap;
+  } satisfies Omit<MusicApiMethodMap, ContentMethod>;
+
+  // ── 内容方法：清单循环泛型分派到直连客户端（能力探测式）──────────
+  const dispatch = base as MusicApiMethodMap;
+  for (const method of CONTENT_METHODS) {
+    (dispatch as unknown as Record<string, (...xs: unknown[]) => unknown>)[method] = (...xs: unknown[]) => {
+      const source = xs[0] as SourceKey;
+      const fn = getDirectClient(source)?.[method] as ((...a: unknown[]) => unknown) | undefined;
+      if (typeof fn !== 'function') {
+        throw new Error(`源 ${source} 未实现内容能力 ${method}`);
+      }
+      return fn(...xs.slice(1));
+    };
+  }
 
   ipcMain.handle(
     'musicApi:call',
@@ -86,7 +82,7 @@ export function registerMusicApiCall(api: MusicApi): void {
         return { success: false, error: 'IPC 来源不受信任' };
       }
 
-      const handler = (dispatch as Record<string, (...xs: unknown[]) => unknown>)[method];
+      const handler = (dispatch as unknown as Record<string, (...xs: unknown[]) => unknown>)[method];
       if (typeof handler !== 'function') {
         return { success: false, error: `unknown musicApi method: ${method}` };
       }

@@ -90,7 +90,7 @@ function mapTrack(t: any): Song {
 export const miguDirectClient: DirectSourceClient = {
   key: 'migu',
 
-  async search(keyword: string, page = 1): Promise<Song[]> {
+  async searchSongs(keyword: string, page = 1): Promise<Song[]> {
     const params = new URLSearchParams({
       text: keyword,
       pageNo: String(page),

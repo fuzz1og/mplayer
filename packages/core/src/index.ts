@@ -3,8 +3,9 @@ export { MULTI_SOURCE_LIST } from './constants.js';
 export { cacheManager } from './api/memoryCacheManager.js';
 export { RateLimiter, beforeRequest, getAntiScrapeHeaders, getApiRequestHeaders, getUserAgent, resetUaContinuity, UA_POOL_SIZE, safeParseJSON } from './api/antiScrape.js';
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
-export { musicApi, setApiBaseUrl, getApiBaseUrl, getApiClient, setProxyUrl, getProxyUrl, warmUpArtistPicCache, injectProxyAgents, setApiTimingLog, setApiRequestHandler, setThrottleObserver, markApiSessionBootstrapped, setApiSessionCookieValue, getApiSessionCookie, isApiOriginUrl, decodeLyricBody } from './api/musicApi.js';
-export type { ProxyAgents } from './api/musicApi.js';
+// #276 自建 API 机件归零：api 客户端/会话/拦截器/闸门/计时设施出口已删。
+// setProxyUrl/getProxyUrl 保留（代理注入替代确认悬而未决，mobile 设置页仍注入）。
+export { musicApi, setProxyUrl, getProxyUrl, decodeLyricBody } from './api/musicApi.js';
 export { probeAudio, probeAudioUrl, normalizeProbeUrl, isUrlAlive } from './api/audioProbe.js';
 export { probeSongs } from './api/probeSongs.js';
 export type { ProbeOptions } from './api/probeSongs.js';
@@ -49,7 +50,9 @@ export type { SongFileNameParts, SongFileNameDeps } from './utils/downloadFileNa
 export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, probeSwapCandidates, applySwap } from './shared/sourceSwap.js';
-export { songUsesSongidLyrics, isSodaSource } from './shared/songLyrics.js';
+export { songUsesSongidLyrics, isSodaSource, isInlineLyrics } from './shared/songLyrics.js';
+export { aggregateChartSongs, aggregateToplistGroups, normalizeSongKey, CHART_DEFAULT_MISS } from './shared/chartAggregate.js';
+export type { AggregatedChartEntry } from './shared/chartAggregate.js';
 export {
   UPDATE_SOURCE_DEFS,
   GITHUB_LATEST_BASE,
@@ -58,7 +61,7 @@ export {
   rankSourcesByLatency,
   probeUpdateSources,
 } from './shared/updateChannels.js';
-export type { UpdateSourceDef, UpdateLatencyMap, FetchLike, ProbeOptions } from './shared/updateChannels.js';
+export type { UpdateSourceDef, UpdateLatencyMap, FetchLike } from './shared/updateChannels.js';
 export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
 export { stripSourceIdPrefix } from './utils/sourceIdPrefix.js';
 export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
@@ -93,7 +96,7 @@ export {
   getTlsFingerprintHeaders,
   getTlsFingerprintConfig,
 } from './api/tlsFingerprint.js';
-export { neteaseDirectClient } from './api/neteaseDirect.js';
+export { neteaseDirectClient, createNeteaseDirectClient, defaultContentCache } from './api/neteaseDirect.js';
 export { qianqianDirectClient } from './api/qianqianDirect.js';
 export { miguDirectClient, decryptXorStream, XOR_KEY } from './api/miguDirect.js';
 export { qqDirectClient, rsaPkcs1v15Encrypt, aesCbcPkcs7Encrypt, obtainQimei, randomGuid } from './api/qqDirect.js';
@@ -109,6 +112,7 @@ export {
   setSourceModes,
   loadSourceModes,
   getAllSourceModes,
+  sanitizeSourceModes,
   setSourceModePersister,
   searchSongsRouted,
   resolvePlayableUrlRouted,
@@ -116,8 +120,15 @@ export {
   resolvePlayableSongDirect,
   setTier3Resolver,
 } from './shared/sourceRouter.js';
-export type { SourceMode, DirectSourceClient, Tier3Resolver } from './shared/sourceRouter.js';
-export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS } from './shared/sourceRouter.js';
+export type {
+  SourceMode,
+  DirectSourceClient,
+  ToplistGroup,
+  ContentCache,
+  ContentMethod,
+  Tier3Resolver,
+} from './shared/sourceRouter.js';
+export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, CONTENT_METHODS } from './shared/sourceRouter.js';
 export { detectAudioContainer, containerFromContentType, extensionForContainer, replaceExtension } from './download/container.js';
 export type { AudioContainer } from './download/container.js';
 export { tagStrategyForContainer, buildID3Frames, ID3_FRAME_TLEN } from './download/tagging.js';

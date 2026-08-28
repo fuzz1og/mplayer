@@ -77,7 +77,7 @@ describe('decodeKuwoLyricBody（歌词管线）', () => {
   });
 });
 
-describe('kuwoDirectClient.search', () => {
+describe('kuwoDirectClient.searchSongs', () => {
   it('搜索经 transport 出网并映射 Song（lrc = newlyric URL）', async () => {
     const transport = vi.fn(async () =>
       textResponse(JSON.stringify({
@@ -93,7 +93,7 @@ describe('kuwoDirectClient.search', () => {
     );
     setTransport(transport as any);
 
-    const songs = await kuwoDirectClient.search('晴天', 1);
+    const songs = await kuwoDirectClient.searchSongs('晴天', 1);
 
     expect(transport).toHaveBeenCalledTimes(1);
     const req = transport.mock.calls[0][0];
@@ -108,7 +108,7 @@ describe('kuwoDirectClient.search', () => {
 
   it('无 abslist 上抛（供 auto 回退）', async () => {
     setTransport(async () => textResponse(JSON.stringify({ status: true, abslist: undefined })) as any);
-    await expect(kuwoDirectClient.search('晴天', 1)).rejects.toThrow('无 abslist');
+    await expect(kuwoDirectClient.searchSongs('晴天', 1)).rejects.toThrow('无 abslist');
   });
 });
 

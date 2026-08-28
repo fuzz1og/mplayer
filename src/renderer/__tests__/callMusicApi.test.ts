@@ -20,14 +20,6 @@ describe('callMusicApi 泛型入口', () => {
     expect(data).toEqual([{ id: '1', name: '晴天' }]);
   });
 
-  it('getThrottleWait 返回数值', async () => {
-    const invoke = vi.mocked(IpcClient.invoke);
-    invoke.mockResolvedValue(1500);
-    const wait = await callMusicApi('getThrottleWait');
-    expect(invoke).toHaveBeenCalledWith('musicApi:call', 'getThrottleWait');
-    expect(wait).toBe(1500);
-  });
-
   it('失败时 IpcClient 抛错则向上传播', async () => {
     const invoke = vi.mocked(IpcClient.invoke);
     invoke.mockRejectedValue(new Error('unknown musicApi method: xxx'));

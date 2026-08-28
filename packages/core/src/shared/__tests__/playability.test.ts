@@ -150,12 +150,6 @@ describe('resolvePlayableSongRouted（带试听检测的播放解析）', () => 
     await expect(resolvePlayableSongRouted(song())).rejects.toThrow('直连失败');
   });
 
-  it('legacy api 模式（#277 收窄前）→ 无直连可用，报错「暂无直连实现」', async () => {
-    registerDirectClient({ key: 'netease', resolvePlayableUrl: vi.fn(async () => 'https://direct.mp3') });
-    setSourceMode('netease', 'api');
-    await expect(resolvePlayableSongRouted(song())).rejects.toThrow('暂无直连实现');
-  });
-
   it('开启 tier3 + audioTag=invalid：直连返回非空也优先用 tier3', async () => {
     const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
     setTier3Enabled(true);

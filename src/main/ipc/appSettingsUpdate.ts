@@ -27,7 +27,8 @@ import {
 import { MULTI_SOURCE_LIST, type SourceKey, type SourceMode } from '@mplayer/core';
 import type { BrowserWindow } from 'electron';
 
-const SOURCE_MODE_SET: ReadonlySet<SourceMode> = new Set(['auto', 'direct', 'api']);
+// 设置更新白名单（#277 收窄）：'api' 已退役（api 腿拆除，#275），不再接受，非法值过滤
+const SOURCE_MODE_SET: ReadonlySet<SourceMode> = new Set<SourceMode>(['auto', 'direct']);
 
 export const TIER3_SETTING_KEY = 'tier3State';
 

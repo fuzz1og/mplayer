@@ -48,7 +48,7 @@ beforeEach(() => {
   ]);
   // callMusicApi 分发：searchNeteaseArtists → searchArtistsMock
   callMusicApiMock.mockImplementation(async (method: string, ...args: any[]) => {
-    if (method === 'searchNeteaseArtists') return searchArtistsMock(...args);
+    if (method === 'searchArtists') return searchArtistsMock(...args);
     return undefined;
   });
   useSearchStore.setState({ currentKeyword: '', preferredTab: 'songs', sourceType: 'all', songs: [], groups: [], loading: false, hasMore: false, error: null });

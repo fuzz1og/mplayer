@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { musicApi, formatPlayCount } from '@mplayer/core';
+import { getDirectClient, formatPlayCount } from '@mplayer/core';
 import type { Song, SourceKey, DiscoverPlaylist, Album } from '@mplayer/core';
 import {radius, spacing, textVariants} from '../theme/tokens';
 import { lightColors, darkColors } from '../theme/tokens';
@@ -242,7 +242,7 @@ function AlbumsContent() {
   const load = useCallback(async () => {
     const areaAtStart = area;
     try {
-      const r = await musicApi.getNewAlbums(area, 0, 30);
+      const r = await getDirectClient('netease')!.getNewAlbums!(area, 0, 30);
       if (areaAtStart !== areaRef.current) return; // 分类已切换 → 丢弃过期响应
       setAlbums(r);
       setLoadingError(false);
@@ -341,7 +341,7 @@ function PlaylistContent() {
   const load = useCallback(async () => {
     const catAtStart = category;
     try {
-      const r = await musicApi.getNeteasePlaylists(catAtStart, 'hot', 0, 20);
+      const r = await getDirectClient('netease')!.getPlaylists!(catAtStart, 'hot', 0, 20);
       // 请求期间分类已切换 → 丢弃过期响应
       if (catAtStart !== categoryRef.current) return;
       setPlaylists(r.playlists);
@@ -373,7 +373,7 @@ function PlaylistContent() {
     setLoadingMore(true);
     try {
       const nextOffset = offsetRef.current + 20;
-      const r = await musicApi.getNeteasePlaylists(catAtStart, 'hot', nextOffset, 20);
+      const r = await getDirectClient('netease')!.getPlaylists!(catAtStart, 'hot', nextOffset, 20);
       // 请求期间分类已切换 → 丢弃过期结果，不推进 offset（否则混合列表 + 跳过新分类首页）
       if (catAtStart !== categoryRef.current) return;
       if (r.playlists.length > 0) {
@@ -480,7 +480,7 @@ function ArtistContent() {
   const load = useCallback(async () => {
     const catAtStart = category;
     try {
-      const r = await musicApi.getNeteaseArtists(Number(category), 0, 30);
+      const r = await getDirectClient('netease')!.getArtists!(Number(category), 0, 30);
       if (catAtStart !== categoryRef.current) return; // 分类已切换 → 丢弃过期响应
       setArtists(r.artists);
       setHasMore(r.more);
@@ -509,7 +509,7 @@ function ArtistContent() {
     const catAtStart = category;
     setLoadingMore(true);
     try {
-      const r = await musicApi.getNeteaseArtists(Number(category), artists.length, 30);
+      const r = await getDirectClient('netease')!.getArtists!(Number(category), artists.length, 30);
       // 请求期间分类已切换 → 丢弃过期结果（旧分类第 N 页混入新分类列表）
       if (catAtStart !== categoryRef.current) return;
       if (r.artists.length > 0) {

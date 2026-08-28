@@ -7,7 +7,7 @@ import { AnimatedBgProvider } from '../theme/AnimatedBg';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setupLegacyMigration } from '../services/legacyMigration';
-import { setProxyUrl as setCoreProxyUrl, setApiTimingLog, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
+import { setProxyUrl as setCoreProxyUrl, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -79,11 +79,8 @@ export default function RootLayout() {
     setupNotificationChannel().catch(() => {});
     // 注意：WebView 网络桥已移除——常驻隐藏 WebView 在 Android
     // （Expo Go + Fabric + Android 16）下会破坏 react-native-screens 的
-    // 布局（Stack 内容被压缩到屏幕一半）。请求走 RN 原生栈：
-    // core 已配置 withCredentials（原生 cookie jar 自动携带会话），
-    // 302 直链解析走 fetch+Range+credentials:'include'（实测 206 成功）。
-    // dev 诊断：API 请求耗时日志（PC 链路快、手机慢的对比定位用）
-    if (__DEV__) setApiTimingLog(true);
+    // 布局（Stack 内容被压缩到屏幕一半）。请求走 RN 原生栈；
+    // 旧 apiClient 会话机件与耗时日志设施已随 #276 归零删除。
 
     const sub = addNotificationResponseListener((response) => {
       const data = response.notification.request.content.data;

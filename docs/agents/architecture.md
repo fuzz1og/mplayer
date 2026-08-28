@@ -14,7 +14,6 @@
 | `hidpi.ts` | WSLg HiDPI 修复：读 Windows AppliedDPI → 强制 `force-device-scale-factor`；非 WSL 跳过；`MPLAYER_UI_SCALE` 可覆盖 |
 | `proxy.ts` | Electron session proxy config |
 | `api/musicApi.ts` | 壳：re-export core `musicApi` / client 配置（HTTP 客户端逻辑在 core） |
-| `api/kugouApi.ts` | 酷狗排行榜直连（`getKugouRank` / `getKugouNewSongs`） |
 | `cache/diskBackend.ts` | 磁盘缓存后端（音频、封面、歌词；constructor 注入 cacheDir） |
 | `storage/db.ts` | Primary persistence (favorites, history, playlists, settings)；启动时跑旧签名端点迁移 |
 | `ipc/registerHandler.ts` | `registerIpcHandler` helpers |

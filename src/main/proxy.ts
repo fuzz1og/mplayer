@@ -130,8 +130,3 @@ export async function applyElectronProxy(config: ProxyConfig) {
   currentHttpAgent = agents.httpAgent;
   currentHttpsAgent = agents.httpsAgent;
 }
-export function updateApiClientAgents(apiClient: any, config: ProxyConfig) {
-  const { httpAgent, httpsAgent } = buildAgents(config);
-  apiClient.defaults.httpAgent = httpAgent;
-  apiClient.defaults.httpsAgent = httpsAgent;
-}
