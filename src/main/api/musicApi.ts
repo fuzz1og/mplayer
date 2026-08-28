@@ -2,6 +2,7 @@ export {
   musicApi,
   setSourceModes,
   loadSourceModes,
+  sanitizeSourceModes,
   setSourceModePersister,
   getAllSourceModes,
   hasDirectClient,

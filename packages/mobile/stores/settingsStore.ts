@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   setSourceModePersister as setCoreSourceModePersister,
   loadSourceModes as loadCoreSourceModes,
+  sanitizeSourceModes,
   setTier3Persister as setCoreTier3Persister,
   loadTier3State as loadCoreTier3State,
   setTier3Enabled as setCoreTier3Enabled,
@@ -23,7 +24,7 @@ interface SettingsState {
   playMode: PlayMode;
   /** Android SAF 授权的公共下载目录（content:// uri）；空 = 未授权，仅存应用私有目录 */
   downloadDirUri: string;
-  /** 每源来源开关（T01，spec #146）：auto/direct/api */
+  /** 每源来源开关（T01，spec #146）：auto/direct（#277 收窄，legacy 'api' 洗白为 auto） */
   sourceModes: Partial<Record<string, SourceMode>>;
   /** tier3 第三方解析源（#144）：默认关，订阅清单存 AsyncStorage */
   tier3Enabled: boolean;
@@ -70,7 +71,13 @@ export const useSettingsStore = create<SettingsState>()(
       // 启动重水合 → 回灌 core 路由（loadCoreSourceModes）。
       onRehydrateStorage: () => (state) => {
         if (state?.sourceModes) {
-          loadCoreSourceModes(state.sourceModes);
+          // 存量 legacy 'api' 洗白为 'auto'（#277）：回灌 core 路由 + 回写 store
+          // （setState 触发 persist 中间件把洗白后的数据落回 AsyncStorage）。
+          const clean = sanitizeSourceModes(state.sourceModes);
+          loadCoreSourceModes(clean);
+          if (JSON.stringify(clean) !== JSON.stringify(state.sourceModes)) {
+            useSettingsStore.setState({ sourceModes: clean });
+          }
         }
         if (Array.isArray(state?.tier3Subscriptions)) {
           loadCoreTier3State({

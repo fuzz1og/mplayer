@@ -10,14 +10,15 @@ import { getPrefetchedUrl } from '../api/prefetchCache.js';
  * （换元在调用方/store 层，本模块不实现；直连返回空串 = 无版权/VIP，原样上抛）。
  * 自建 API 已退役：路由不再有 api 腿，直连失败且 tier3 未命中 = 上抛（D2 语义）。
  *
- * - 每源来源开关 `auto | direct`（类型里 legacy `'api'` 的收窄见 #277），默认 auto；
+ * - 每源来源开关 `auto | direct`（#277 收窄，legacy `'api'` 已出类型），默认 auto；
+ *   存量持久化 'api' 值由 sanitizeSourceModes 洗白为 auto（双端加载处调用）；
  * - 直连客户端由 T02+ 各源 ticket 注册（纯 JS，双端共用）；
  * - 路由函数（searchSongsRouted / resolvePlayableUrlRouted）供 SearchOrchestrator
  *   的 searchOneSource 注入（ADR-0003）与播放 URL 解析使用；
  * - 持久化钩子：宿主（桌面主进程/移动端设置存储）注册 persister，core 内零 I/O。
  */
 
-export type SourceMode = 'auto' | 'direct' | 'api';
+export type SourceMode = 'auto' | 'direct';
 
 /** 来源中文名（设置页/状态展示共用，桌面/移动端同一份，避免双端漂移）。 */
 export const SOURCE_DISPLAY_NAMES: Record<string, string> = {
@@ -30,8 +31,8 @@ export const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   soda: '汽水',
 };
 
-/** 来源开关选项（桌面/移动端设置 UI 共用；自建 API 已退役，不再提供 api 模式）。 */
-export const SOURCE_MODE_OPTIONS: { value: Exclude<SourceMode, 'api'>; label: string }[] = [
+/** 来源开关选项（桌面/移动端设置 UI 共用；自建 API 已退役，仅剩两态）。 */
+export const SOURCE_MODE_OPTIONS: { value: SourceMode; label: string }[] = [
   { value: 'auto', label: '自动' },
   { value: 'direct', label: '仅直连' },
 ];
@@ -102,6 +103,26 @@ export function loadSourceModes(saved: Partial<Record<SourceKey, SourceMode>>): 
 
 export function getAllSourceModes(): Partial<Record<SourceKey, SourceMode>> {
   return { ...modes };
+}
+
+/**
+ * 存量来源开关洗白（#277）：SourceMode 已收窄为 auto|direct，双端加载持久化
+ * 设置时统一调用——legacy 'api'（api 腿已拆，#275）映射为语义最接近的 'auto'
+ * （直连优先），其余非法值过滤。桌面 main.ts 加载 / 移动端 settingsStore 重水合共用。
+ */
+export function sanitizeSourceModes(
+  saved: Partial<Record<string, unknown>> | null | undefined,
+): Partial<Record<SourceKey, SourceMode>> {
+  const clean: Partial<Record<SourceKey, SourceMode>> = {};
+  if (!saved) return clean;
+  for (const [key, value] of Object.entries(saved)) {
+    if (value === 'auto' || value === 'direct') {
+      clean[key as SourceKey] = value;
+    } else if (value === 'api') {
+      clean[key as SourceKey] = 'auto';
+    }
+  }
+  return clean;
 }
 
 // ── 路由（单一回退链） ───────────────────────────────────────────────
@@ -253,8 +274,8 @@ async function preferTier3WhenBad(song: Song, directUrl: string): Promise<string
   return tier3Url || directUrl;
 }
 
-/** 模式分派：无客户端/无能力（含 legacy 'api' 模式）统一按「直连不可用」处理——
- *  自建 API 已退役，api 腿已拆除（#275）；'api' 收窄出 SourceMode 类型见 #277。 */
+/** 模式分派：无客户端/无能力统一按「直连不可用」处理——
+ *  自建 API 已退役，api 腿已拆除（#275），SourceMode 已收窄为 auto|direct（#277）。 */
 type RouteDecision =
   | { kind: 'direct'; client: DirectSourceClient; mode: SourceMode }
   | { kind: 'direct-unavailable' };
@@ -262,7 +283,7 @@ type RouteDecision =
 function decideRoute(source: SourceKey, hasCapability: (c: DirectSourceClient) => boolean): RouteDecision {
   const mode = getSourceMode(source);
   const client = getDirectClient(source);
-  if (mode === 'api' || !client || !hasCapability(client)) {
+  if (!client || !hasCapability(client)) {
     return { kind: 'direct-unavailable' };
   }
   return { kind: 'direct', client, mode };
