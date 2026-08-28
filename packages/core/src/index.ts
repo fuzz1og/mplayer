@@ -8,6 +8,7 @@ export type { ProxyAgents } from './api/musicApi.js';
 export { probeAudio, probeAudioUrl, normalizeProbeUrl, isUrlAlive } from './api/audioProbe.js';
 export { probeSongs } from './api/probeSongs.js';
 export type { ProbeOptions } from './api/probeSongs.js';
+export { forgetPrefetchedUrl } from './api/prefetchCache.js';
 export { dedupeSongs, checkDuplicate, filterDuplicates } from './utils/songDedupe.js';
 export type { DupStatus, DupResult, FilterResult } from './utils/songDedupe.js';
 export { groupIntoSongGroups } from './utils/groupIntoSongGroups.js';

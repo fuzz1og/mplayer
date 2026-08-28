@@ -47,6 +47,12 @@ export function getPrefetchedUrl(song: Song): { url: string; nonFull: boolean } 
   return { url: entry.url, nonFull: entry.nonFull };
 }
 
+/** 遗忘单歌预取条目：播放失败 fresh 重试前调用，避免重走路由解析时
+ *  0 等待命中刚被证明失败的预取直链（同一条死链接连败两次）。 */
+export function forgetPrefetchedUrl(song: Song): void {
+  prefetchCache.delete(prefetchCacheKey(song));
+}
+
 /**
  * 探测结果写缓存：invalid / 空 URL 不缓存；preview 或直连权威判定 nonFull
  * 时缓存 nonFull=true（播放命中后立即提示试听版）。

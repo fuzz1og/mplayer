@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song } from '../../types/index.js';
 import {
   clearPrefetchCache,
+  forgetPrefetchedUrl,
   getPrefetchedUrl,
   PREFETCH_TTL_MS,
   rememberProbeResult,
@@ -85,5 +86,27 @@ describe('prefetchCache（预取 URL 缓存）', () => {
     rememberProbeResult(song(), 'https://cdn.example.com/trial.mp3', 'valid', true);
 
     expect(getPrefetchedUrl(song())?.nonFull).toBe(true);
+  });
+
+  it('forgetPrefetchedUrl：移除该歌的预取条目（fresh 重试前遗忘失败直链）', () => {
+    setPrefetchedUrl(song(), 'https://cdn.example.com/dead.mp3', false);
+
+    forgetPrefetchedUrl(song());
+
+    expect(getPrefetchedUrl(song())).toBeUndefined();
+  });
+
+  it('forgetPrefetchedUrl：只遗忘目标歌，同 id 不同源互不影响', () => {
+    setPrefetchedUrl(song({ sourceType: 'netease' }), 'https://netease.example.com/1.mp3', false);
+    setPrefetchedUrl(song({ sourceType: 'qq' }), 'https://qq.example.com/1.mp3', false);
+
+    forgetPrefetchedUrl(song({ sourceType: 'netease' }));
+
+    expect(getPrefetchedUrl(song({ sourceType: 'netease' }))).toBeUndefined();
+    expect(getPrefetchedUrl(song({ sourceType: 'qq' }))?.url).toBe('https://qq.example.com/1.mp3');
+  });
+
+  it('forgetPrefetchedUrl：条目不存在时静默无操作', () => {
+    expect(() => forgetPrefetchedUrl(song())).not.toThrow();
   });
 });
