@@ -32,6 +32,16 @@ jobs:
       - run: npm run build
       # Mobile typecheck
       - run: npx tsc --noEmit --project packages/mobile/tsconfig.json
+      # DEBUG (temporary): dump raw @mplayer/core import + vitest serial run for full stack
+      - name: DEBUG core import
+        run: |
+          node --version
+          node -e "console.log('resolve:', require.resolve('@mplayer/core'))"
+          node --input-type=module -e "import('@mplayer/core').then(m=>console.log('RAW_IMPORT_OK',Object.keys(m).length)).catch(e=>console.error('RAW_IMPORT_FAIL:',e?.stack||e))"
+          cd packages/mobile && node --input-type=module -e "import('@mplayer/core').then(m=>{const s={...m};console.log('MOBILE_SPREAD_OK',Object.keys(m).length)}).catch(e=>console.error('MOBILE_SPREAD_FAIL:',e?.stack||e))"
+          cd ../..
+      - name: DEBUG vitest serial
+        run: NODE_OPTIONS="--stack-trace-limit=500" npx vitest run --config packages/mobile/vitest.config.ts --no-file-parallelism
       # Mobile tests
       - run: npx vitest run --config packages/mobile/vitest.config.ts
 
