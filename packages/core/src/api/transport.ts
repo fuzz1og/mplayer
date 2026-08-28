@@ -23,6 +23,12 @@ export interface TransportRequest {
   timeoutMs?: number;
   responseType?: 'text' | 'arraybuffer';
   /**
+   * 最大重定向跟随次数（仅默认 axios 实现（Node/桌面）支持；0 = 不跟随，
+   * 响应即 302 本体（headers.location 可读，短链解析用）。
+   * RN XHR 实现忽略此字段（原生层恒跟随），依赖 responseURL 暴露落地地址。
+   */
+  maxRedirects?: number;
+  /**
    * 内容直链标记（mp3/flac 等音频 CDN 直链）。T09 spec #155：内容直链在 TLS
    * 握手失败时允许一次降级重试（仅桌面，需注入降级 agent 提供者）。
    */
@@ -194,6 +200,7 @@ async function defaultTransport(req: TransportRequest): Promise<TransportRespons
     data: req.body,
     timeout: req.timeoutMs || 12000,
     responseType: req.responseType === 'arraybuffer' ? 'arraybuffer' : 'text',
+    maxRedirects: req.maxRedirects,
     validateStatus: () => true,
     // 显式禁掉 axios 的代理探测：默认裸连，走代理仅当注入 agents。
     proxy: false,
