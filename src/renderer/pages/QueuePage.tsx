@@ -13,7 +13,7 @@ import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
-import { findExactMatch, stripSourceIdPrefix } from '@mplayer/core';
+import { findExactMatch } from '@mplayer/core';
 import { isLegacyDeadUrl } from '@mplayer/core';
 
 interface SortableItemProps {
@@ -124,20 +124,10 @@ const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
       ) {
         return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
       }
-      // 按源站 ID 直接识别（filter=id）：链接会过期，ID 不会。
-      // 自建 API 退役后 searchSongById 返回 null，回退按歌名精确匹配。
+      // 「按 ID 识别」死腿已删（自建 API 退役后 searchSongById 恒 null，#273）：
+      // 直接按歌名精确匹配（严格匹配防翻唱/Live 误配）
       let fresh: Song | null = null;
-      try {
-        fresh = await callMusicApi(
-          'searchSongById',
-          stripSourceIdPrefix(String(song.id)),
-          song.sourceType,
-          true,
-        );
-      } catch {
-        fresh = null;
-      }
-      if (!fresh && song.name) {
+      if (song.name) {
         try {
           const searchResults = await callMusicApi(
             'searchSongsRouted',
