@@ -53,18 +53,19 @@ export interface ToplistGroup {
 /** 榜单型：热歌榜 / 新歌榜。 */
 export type ChartKind = 'hot' | 'new';
 
-/** 已实现 getToplists 能力的源（榜单 id 契约的键域；其余四源无该能力）。 */
-export type ToplistSourceKey = 'netease' | 'qq' | 'kugou';
-
 /**
  * 各源榜单 sourceId 契约（#279 定值；ToplistGroup.id = `${source}:${sourceId}`）。
- * QQ 26/27 自 v8 topid；酷狗为 rankid 字符串。
+ * QQ 26/27 自 v8 topid；酷狗为 rankid 字符串。按源保持字面精度：
+ * `TOPLIST_SOURCE_IDS.netease.hot` 类型即 number，kugou 两条为字符串模板的真实 rankid。
  */
-export const TOPLIST_SOURCE_IDS: Record<ToplistSourceKey, Record<ChartKind, number | string>> = {
+export const TOPLIST_SOURCE_IDS = {
   netease: { hot: 3778678, new: 3779629 },
   qq: { hot: 26, new: 27 },
   kugou: { hot: '8888', new: '74534' },
-};
+} as const;
+
+/** 已实现 getToplists 能力的源（榜单 id 契约的键域；其余四源无该能力）。 */
+export type ToplistSourceKey = keyof typeof TOPLIST_SOURCE_IDS;
 
 /** 从 getToplists 全组结果中按 `${source}:${sourceId}` 取歌组（无匹配 = 空数组）。 */
 export function pickToplistSongs(groups: ToplistGroup[], source: SourceKey, sourceId: number | string): Song[] {

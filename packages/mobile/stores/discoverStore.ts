@@ -24,7 +24,7 @@ function toHotlistItems(songs: Song[]): HotlistItem[] {
   }));
 }
 
-// 榜单 id 契约取自 core TOPLIST_SOURCE_IDS（#286），取组经 getToplistSongs（无客户端统一抛错）
+// 发现页四条榜单腿的 id/取组均出自 core（TOPLIST_SOURCE_IDS + getToplistSongs，#286），本地不维护字面量
 interface DiscoverState {
   neteaseHotlist: HotlistItem[];
   qqHotlist: HotlistItem[];

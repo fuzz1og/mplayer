@@ -12,7 +12,7 @@ import { pickToplistSongs, TOPLIST_SOURCE_IDS } from '@mplayer/core';
 /** 榜单详情页配置：路由 type → 能力面来源 + 榜单组 id（id 契约取自 core，#286）。 */
 type HotlistType = 'netease' | 'netease_new' | 'qq' | 'qq_new';
 
-const HOTLIST_CONFIG: Record<HotlistType, { source: SourceKey; sourceId: number | string; title: string }> = {
+const HOTLIST_CONFIG: Record<HotlistType, { source: SourceKey; sourceId: number; title: string }> = {
   netease: { source: 'netease', sourceId: TOPLIST_SOURCE_IDS.netease.hot, title: '网易云音乐热歌榜' },
   netease_new: { source: 'netease', sourceId: TOPLIST_SOURCE_IDS.netease.new, title: '网易云音乐新歌榜' },
   qq: { source: 'qq', sourceId: TOPLIST_SOURCE_IDS.qq.hot, title: 'QQ音乐热歌榜' },

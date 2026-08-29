@@ -61,7 +61,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
         }}
       >
         {/* 封面：无封面/加载失败显示占位（#286 形状回收）；占位与 img 互斥渲染，img 无需叠层定位 */}
-        <SongCover src={cover} alt={title} variant="music" iconSize={34} />
+        <SongCover src={cover} alt={title} variant="tinted" iconSize={34} />
 
         {/* 播放按钮覆盖层 */}
         {onPlay && (

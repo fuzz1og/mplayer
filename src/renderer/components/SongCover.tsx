@@ -1,38 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { ListMusic, Music2 } from 'lucide-react';
 
-/** 占位风格（保留各调用点既有视觉，#286）：icon = Music2 居中；gradient = 灰阶渐变色块；
- *  music = --cover-placeholder + ListMusic；none = 不渲染占位（容器自有底色透出）。 */
-export type CoverPlaceholderVariant = 'icon' | 'gradient' | 'music' | 'none';
-
-interface SongCoverProps {
+interface SongCoverBaseProps {
   /** 封面直链；空值直接显示占位。 */
   src?: string;
   alt?: string;
-  variant?: CoverPlaceholderVariant;
-  /** icon / music 占位的图标尺寸。 */
-  iconSize?: number;
   /** 加载失败回调（搜索式刷新等后续动作由调用方决定，本组件无解析/无缓存语义）。 */
   onError?: () => void;
   /** 透传到 img（如绝对定位于容器）。 */
   style?: React.CSSProperties;
-  /** 透传到占位元素（默认已带 variant 基础样式，调用方覆盖特殊布局/底色）。 */
+  /** 透传到占位元素（variant 基础样式之上，用于特殊布局定位）。 */
   placeholderStyle?: React.CSSProperties;
 }
 
+type SongCoverProps = SongCoverBaseProps &
+  (
+    | { variant: 'icon' | 'tinted'; iconSize: number }
+    | { variant: 'gradient' | 'none'; iconSize?: never }
+  );
+
 /**
  * 封面直链直渲的纯展示形状（#286）：失败态 + 封面变化重置 + 占位。
+ * 占位 variant 按形状命名（保留各调用点既有视觉）：icon = Music2 居中；
+ * tinted = --cover-placeholder 底 + ListMusic；gradient = 灰阶渐变色块；
+ * none = 不渲染占位（容器自有底色透出）。
  * 从旧 CoverImage 删除后内联在各调用点的形状回收而来，不含任何解析/重试机件。
  */
-const SongCover: React.FC<SongCoverProps> = ({
+const SongCover = ({
   src,
   alt = '',
-  variant = 'icon',
-  iconSize = 20,
+  variant,
+  iconSize,
   onError,
   style,
   placeholderStyle,
-}) => {
+}: SongCoverProps) => {
   const [failed, setFailed] = useState(false);
 
   // 封面刷新换新 URL 后重置失败态，否则新封面永远不会显示
@@ -58,19 +60,7 @@ const SongCover: React.FC<SongCoverProps> = ({
         </div>
       );
     }
-    if (variant === 'gradient') {
-      return (
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)',
-            ...placeholderStyle,
-          }}
-        />
-      );
-    }
-    if (variant === 'music') {
+    if (variant === 'tinted') {
       return (
         <div
           style={{
@@ -85,6 +75,18 @@ const SongCover: React.FC<SongCoverProps> = ({
         >
           <ListMusic size={iconSize} color="var(--text-tertiary)" />
         </div>
+      );
+    }
+    if (variant === 'gradient') {
+      return (
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)',
+            ...placeholderStyle,
+          }}
+        />
       );
     }
     return null;

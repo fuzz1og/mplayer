@@ -90,7 +90,7 @@ const DailyRecommend: React.FC<DailyRecommendProps> = ({ songs, loading, onPlay,
           alt={featured?.name ?? ''}
           variant="gradient"
           style={{ position: 'absolute', inset: 0 }}
-          placeholderStyle={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, var(--gray-300) 0%, var(--gray-100) 100%)' }}
+          placeholderStyle={{ position: 'absolute', inset: 0 }}
         />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.68) 82%)' }} />
         <div style={{ position: 'absolute', left: '20px', right: '20px', bottom: '18px', color: '#fff' }}>

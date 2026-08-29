@@ -22,7 +22,7 @@ import {spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
-// 榜单 id 契约取自 core TOPLIST_SOURCE_IDS（#286），取组经 getToplistSongs（无客户端统一抛错）
+// 榜单 id 契约取自 core TOPLIST_SOURCE_IDS（#286）：取组走 getToplistSongs（无客户端统一抛错），键面仅含已实现榜单能力的三源
 const API_MAP: Record<
   string,
   { fetcher: () => Promise<Song[]>; sourceType: SourceKey }
