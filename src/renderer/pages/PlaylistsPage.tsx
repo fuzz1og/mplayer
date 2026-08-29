@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, FolderOpen, Music2 } from 'lucide-react';
+import { Plus, FolderOpen } from 'lucide-react';
 import { Modal, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import MusicCard from '@/renderer/components/MusicCard';
+import SongCover from '@/renderer/components/SongCover';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Playlist } from '@mplayer/core';
 
@@ -33,14 +34,7 @@ const PlaylistsPage: React.FC = () => {
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
 
   const heroPlaylist = playlists[0];
-  // 头图直链直渲：加载失败由容器底色兜底（封面链已删，#273）
-  const [heroCoverFailed, setHeroCoverFailed] = useState(false);
   const totalSongs = playlists.reduce((sum, playlist) => sum + (playlist.songCount || 0), 0);
-
-  // 封面变化（列表重载/删除首个歌单）后重置失败态
-  useEffect(() => {
-    setHeroCoverFailed(false);
-  }, [heroPlaylist?.cover]);
 
   const loadData = async () => {
     setLoading(true);
@@ -102,17 +96,7 @@ const PlaylistsPage: React.FC = () => {
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', marginBottom: '28px' }}>
               <div style={{ width: '140px', height: '140px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {heroPlaylist?.cover && !heroCoverFailed ? (
-                  <img
-                    src={heroPlaylist.cover}
-                    alt=""
-                    loading="lazy"
-                    onError={() => setHeroCoverFailed(true)}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  />
-                ) : (
-                  <Music2 size={30} color="var(--text-tertiary)" />
-                )}
+                <SongCover src={heroPlaylist?.cover} variant="icon" iconSize={30} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)', marginBottom: '6px' }}>我的歌单</div>

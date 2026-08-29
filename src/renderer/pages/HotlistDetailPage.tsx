@@ -7,21 +7,17 @@ import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, SourceKey } from '@mplayer/core';
+import { pickToplistSongs, TOPLIST_SOURCE_IDS } from '@mplayer/core';
 
-/** 榜单详情页配置：路由 type → 能力面来源 + 榜单组 id（ToplistGroup.id = `${source}:${sourceId}`）。 */
+/** 榜单详情页配置：路由 type → 能力面来源 + 榜单组 id（id 契约取自 core，#286）。 */
 type HotlistType = 'netease' | 'netease_new' | 'qq' | 'qq_new';
 
 const HOTLIST_CONFIG: Record<HotlistType, { source: SourceKey; sourceId: number; title: string }> = {
-  netease: { source: 'netease', sourceId: 3778678, title: '网易云音乐热歌榜' },
-  netease_new: { source: 'netease', sourceId: 3779629, title: '网易云音乐新歌榜' },
-  qq: { source: 'qq', sourceId: 26, title: 'QQ音乐热歌榜' },
-  qq_new: { source: 'qq', sourceId: 27, title: 'QQ音乐新歌榜' },
+  netease: { source: 'netease', sourceId: TOPLIST_SOURCE_IDS.netease.hot, title: '网易云音乐热歌榜' },
+  netease_new: { source: 'netease', sourceId: TOPLIST_SOURCE_IDS.netease.new, title: '网易云音乐新歌榜' },
+  qq: { source: 'qq', sourceId: TOPLIST_SOURCE_IDS.qq.hot, title: 'QQ音乐热歌榜' },
+  qq_new: { source: 'qq', sourceId: TOPLIST_SOURCE_IDS.qq.new, title: 'QQ音乐新歌榜' },
 };
-
-/** 榜单组按 id 取 songs（rank 由索引推导，SongList 按行序展示）。 */
-function pickToplist(groups: { id: string; songs: Song[] }[], source: SourceKey, sourceId: number): Song[] {
-  return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
-}
 
 const HotlistDetailPage: React.FC = () => {
   const { type } = useParams<{ type: HotlistType }>();
@@ -46,7 +42,7 @@ const HotlistDetailPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const groups = await callMusicApi('getToplists', config.source);
-      setHotlist(pickToplist(groups, config.source, config.sourceId));
+      setHotlist(pickToplistSongs(groups, config.source, config.sourceId));
     } catch (error) {
       console.error(`加载热榜失败:`, error);
       setError('加载热榜失败，请稍后重试');

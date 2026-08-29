@@ -8,6 +8,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import SourceBadge from '@/renderer/components/SourceBadge';
+import SongCover from '@/renderer/components/SongCover';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { mapPacedWithConcurrency } from '@/renderer/utils/async';
@@ -29,13 +30,6 @@ interface SortableItemProps {
 
 const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onAddToPlaylist, onCoverError }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
-  // 封面直链直渲：加载失败显示占位并走既有搜索式刷新（封面链已删，#273）
-  const [coverFailed, setCoverFailed] = useState(false);
-
-  // 封面刷新换新 URL 后重置失败态，否则新封面永远不会显示
-  useEffect(() => {
-    setCoverFailed(false);
-  }, [song.cover]);
 
   const style: React.CSSProperties = {
     display: 'flex',
@@ -69,17 +63,7 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-          {song.cover && !coverFailed ? (
-            <img
-              src={song.cover}
-              alt={song.name}
-              loading="lazy"
-              onError={() => { setCoverFailed(true); onCoverError?.(song); }}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            />
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)' }} />
-          )}
+          <SongCover src={song.cover} alt={song.name} variant="gradient" onError={() => onCoverError?.(song)} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 'var(--text-base)', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

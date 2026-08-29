@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, ListMusic, Music2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, ListMusic } from 'lucide-react';
 import { message, Modal } from 'antd';
 import { checkDuplicate, type DupResult } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import SongCover from '@/renderer/components/SongCover';
 import type { Song, Playlist } from '@mplayer/core';
 
 interface AddToPlaylistModalProps {
@@ -29,13 +31,6 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [creating, setCreating] = useState(false);
   const [dupResults, setDupResults] = useState<Map<number, DupResult>>(new Map());
-  // 封面直链直渲：加载失败显示占位（封面链已删，#273）
-  const [coverFailed, setCoverFailed] = useState(false);
-
-  // 封面变化（弹窗换歌）后重置失败态
-  useEffect(() => {
-    setCoverFailed(false);
-  }, [song.cover]);
 
   const loadData = async () => {
     setLoading(true);
@@ -119,7 +114,8 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 
   if (!isVisible) return null;
 
-  return (
+  // portal 到 body：fixed 遮罩若渲染在 PlayerBar 内会被其 backdropFilter 建立的包含块捕获，缩进播放栏而非视口（#245）
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -217,17 +213,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
               justifyContent: 'center',
             }}
           >
-            {song.cover && !coverFailed ? (
-              <img
-                src={song.cover}
-                alt={song.name}
-                loading="lazy"
-                onError={() => setCoverFailed(true)}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              />
-            ) : (
-              <Music2 size={18} color="var(--text-tertiary)" />
-            )}
+            <SongCover src={song.cover} alt={song.name} variant="icon" iconSize={18} />
           </div>
 
           {/* 歌曲信息 */}
@@ -387,7 +373,8 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
         </div>
       </div>
 
-    </div>
+    </div>,
+    document.body
   );
 };
 

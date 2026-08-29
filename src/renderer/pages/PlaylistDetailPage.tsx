@@ -11,6 +11,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import SourceSwapModal from '@/renderer/components/SourceSwapModal';
+import SongCover from '@/renderer/components/SongCover';
 import { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import RowActionButtons from '@/renderer/components/RowActionButtons';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
@@ -34,8 +35,6 @@ const SortableSongRow: React.FC<{
   onCoverError?: (song: Song) => void;
 }> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, onSwapped, isFavorite, onToggleFavorite, isSelected, onToggleSelect, onCoverError }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
-  // 封面直链直渲：加载失败显示占位并走既有搜索式刷新（封面链已删，#273）
-  const [coverFailed, setCoverFailed] = useState(false);
   const swap = useSongSwap(song, onSwapped);
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -70,11 +69,6 @@ const SortableSongRow: React.FC<{
     }
     // 仅挂载时触发：封面刷新后 song.cover 变化会自然进入正常渲染路径
   }, []);
-
-  // 封面刷新换新 URL 后重置失败态，否则新封面永远不会显示
-  useEffect(() => {
-    setCoverFailed(false);
-  }, [song.cover]);
 
   return (
     <div ref={setNodeRef}
@@ -114,17 +108,7 @@ const SortableSongRow: React.FC<{
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-          {song.cover && !coverFailed ? (
-            <img
-              src={song.cover}
-              alt={song.name}
-              loading="lazy"
-              onError={() => { setCoverFailed(true); onCoverError?.(song); }}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            />
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)' }} />
-          )}
+          <SongCover src={song.cover} alt={song.name} variant="gradient" onError={() => onCoverError?.(song)} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: '14px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -187,12 +171,6 @@ const PlaylistDetailPage: React.FC = () => {
   const [importModalVisible, setImportModalVisible] = useState(false);
   // 歌单头图直链直渲（恒取 playlist.cover / songs[0].cover）：加载失败由容器渐变兜底
   const detailCoverSrc = (playlist?.cover || songs[0]?.cover) || '';
-  const [detailCoverFailed, setDetailCoverFailed] = useState(false);
-
-  // 封面刷新换新 URL 后重置失败态，否则新封面永远不会显示
-  useEffect(() => {
-    setDetailCoverFailed(false);
-  }, [detailCoverSrc]);
 
   // 封面加载失败 → 按 ID 重识别换新封面并更新列表状态（旧封面签名过期后同一 URL 永远失败）
   const handleCoverError = useCallback((song: Song) => {
@@ -495,15 +473,7 @@ const PlaylistDetailPage: React.FC = () => {
           <div style={{ padding: '24px 24px 8px' }}>
             <div style={{ display: 'flex', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}>
               <div style={{ width: '160px', height: '160px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%)' }}>
-                {detailCoverSrc && !detailCoverFailed && (
-                  <img
-                    src={detailCoverSrc}
-                    alt=""
-                    loading="lazy"
-                    onError={() => setDetailCoverFailed(true)}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  />
-                )}
+                <SongCover src={detailCoverSrc} variant="none" />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>

@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { getDirectClient } from '@mplayer/core';
+import { getToplistSongs, TOPLIST_SOURCE_IDS } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
 import SongListSkeleton from '../components/SongListSkeleton';
 import SongRow from '../components/SongRow';
@@ -22,21 +22,15 @@ import {spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
-/** 榜单：经能力面直调 getToplists，按 id（`${source}:${sourceId}`）取组。 */
-async function toplistSongs(source: SourceKey, sourceId: number): Promise<Song[]> {
-  const groups = await getDirectClient(source)!.getToplists!();
-  return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
-}
-
+// 榜单 id 契约取自 core TOPLIST_SOURCE_IDS（#286）：取组走 getToplistSongs（无客户端统一抛错），键面仅含已实现榜单能力的三源
 const API_MAP: Record<
   string,
   { fetcher: () => Promise<Song[]>; sourceType: SourceKey }
 > = {
-  neteaseHotlist: { fetcher: () => toplistSongs('netease', 3778678), sourceType: 'netease' },
-  neteaseNew: { fetcher: () => toplistSongs('netease', 3779629), sourceType: 'netease' },
-  // QQ 榜单 id = v8 topid（qq:26 热歌榜 / qq:27 新歌榜，#279 迁能力面 getToplists）
-  qqHotlist: { fetcher: () => toplistSongs('qq', 26), sourceType: 'qq' },
-  qqNew: { fetcher: () => toplistSongs('qq', 27), sourceType: 'qq' },
+  neteaseHotlist: { fetcher: () => getToplistSongs('netease', TOPLIST_SOURCE_IDS.netease.hot), sourceType: 'netease' },
+  neteaseNew: { fetcher: () => getToplistSongs('netease', TOPLIST_SOURCE_IDS.netease.new), sourceType: 'netease' },
+  qqHotlist: { fetcher: () => getToplistSongs('qq', TOPLIST_SOURCE_IDS.qq.hot), sourceType: 'qq' },
+  qqNew: { fetcher: () => getToplistSongs('qq', TOPLIST_SOURCE_IDS.qq.new), sourceType: 'qq' },
 };
 
 export default function HotlistPage() {

@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { ListMusic, Play, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play, Trash2 } from 'lucide-react';
 import { useButtonHover } from '@/renderer/hooks/useButtonHover';
+import SongCover from '@/renderer/components/SongCover';
 
 interface MusicCardProps {
   title: string;
@@ -29,14 +30,7 @@ const MusicCard: React.FC<MusicCardProps> = ({
 
   const { width, imgHeight } = sizeMap[size];
   const [isHovered, setIsHovered] = useState(false);
-  // 封面直链直渲：加载失败由占位层兜底（封面链已删，#273）
-  const [coverFailed, setCoverFailed] = useState(false);
   const deleteHoverProps = useButtonHover({ hoverBg: 'rgba(220,38,38,0.8)', leaveBg: 'rgba(0,0,0,0.5)' });
-
-  // 封面变化后重置失败态，否则新封面永远不会显示
-  useEffect(() => {
-    setCoverFailed(false);
-  }, [cover]);
 
   return (
     <div
@@ -66,20 +60,8 @@ const MusicCard: React.FC<MusicCardProps> = ({
           transition: 'box-shadow var(--duration-normal) var(--ease-out)',
         }}
       >
-        {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--cover-placeholder)' }}>
-          <ListMusic size={34} color="var(--text-tertiary)" />
-        </div>
-        {cover && !coverFailed && (
-          <img
-            key={cover}
-            src={cover}
-            alt={title}
-            loading="lazy"
-            onError={() => setCoverFailed(true)}
-            style={{ position: 'relative', width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
-        )}
+        {/* 封面：无封面/加载失败显示占位（#286 形状回收）；占位与 img 互斥渲染，img 无需叠层定位 */}
+        <SongCover src={cover} alt={title} variant="tinted" iconSize={34} />
 
         {/* 播放按钮覆盖层 */}
         {onPlay && (

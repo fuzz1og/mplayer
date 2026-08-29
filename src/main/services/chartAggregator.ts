@@ -1,5 +1,5 @@
-import type { Song, SourceKey, ToplistGroup } from '@mplayer/core';
-import { aggregateChartSongs, cacheManager, getDirectClient } from '@mplayer/core';
+import type { Song, SourceKey, ToplistSourceKey, ChartKind } from '@mplayer/core';
+import { aggregateChartSongs, cacheManager, getToplistSongs, TOPLIST_SOURCE_IDS } from '@mplayer/core';
 import { CHART_CACHE_TTL } from '../../shared/chart';
 import type {
   AggregatedSongGroup,
@@ -11,8 +11,8 @@ export type {
   SourceRank,
 } from '../../shared/chart';
 
-export type ChartType = 'hot' | 'new';
-export type SourceName = 'netease' | 'qq' | 'kugou';
+export type ChartType = ChartKind;
+export type SourceName = ToplistSourceKey;
 
 /**
  * 多源排行榜聚合（#279 接 core 聚合内核）。
@@ -21,31 +21,15 @@ export type SourceName = 'netease' | 'qq' | 'kugou';
  * 取歌）→ 交 core `aggregateChartSongs` 做归一合并 / Σ1/rank 计分 / 完整版优先
  * 选优 → 写进程内缓存。本地的归一化键/计分/选优实现已随内核统一删除；
  * 计分语义以内核为准（未上榜源不计入 sourceRanks，不再做 1/51 预填）。
+ * 榜单 id 契约与取组已下沉 core `getToplistSongs`（#286）。
  */
 
-/** 各源各榜型的榜单 sourceId（与桌面私有路径时代一致；QQ 26/27 自 v8 topid，#279）。 */
-const TOPLIST_IDS: Record<SourceName, Record<ChartType, number | string>> = {
-  netease: { hot: 3778678, new: 3779629 },
-  qq: { hot: 26, new: 27 },
-  kugou: { hot: '8888', new: '74534' },
-};
-
-/** 从榜单组中按 id 取歌（ToplistGroup.id = `${source}:${sourceId}`）。 */
-function pickToplistSongs(groups: ToplistGroup[], source: SourceName, sourceId: number | string): Song[] {
-  return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
-}
-
-/** 单源腿：能力面 getToplists 一次取全组，按榜型 id 取歌（rank 由内核按索引推导）。 */
+/** 单源腿：经 core getToplistSongs（能力面 getToplists + 按 id 取组，无客户端抛错）。 */
 async function fetchSourceToplist(
   type: ChartType,
   source: SourceName,
 ): Promise<{ source: SourceKey; songs: Song[] }> {
-  const client = getDirectClient(source);
-  if (!client?.getToplists) {
-    throw new Error(`源 ${source} 未实现内容能力 getToplists`);
-  }
-  const groups = await client.getToplists();
-  return { source, songs: pickToplistSongs(groups, source, TOPLIST_IDS[source][type]) };
+  return { source, songs: await getToplistSongs(source, TOPLIST_SOURCE_IDS[source][type]) };
 }
 
 /**
