@@ -2,15 +2,20 @@
 
 ## 概述
 
-本项目使用 **MCP Playwright** 进行 E2E UI 测试。MCP Playwright 是 Claude Code 的一个 MCP 插件，无需安装额外依赖，直接在会话中使用浏览器自动化工具。
+本项目有两套 e2e：
+
+- **桌面端（Electron / Web）**：`e2e/*.spec.ts` 用标准 `@playwright/test` 编写（`electron-e2e.spec.ts` 等以 `_electron.launch` 驱动 Electron），`npx playwright test` 运行；另有部分场景按 **MCP Playwright** 交互式风格人工执行（Claude Code 会话内用浏览器自动化工具）。
+- **移动端真机**：`scripts/mobile-e2e.sh`，adb + logcat + uiautomator 驱动真机，与 Playwright 无关。见下文[「移动端真机 e2e」](#移动端真机-e2e)。
+
+> 注意：`e2e/` 下的 `*.spec.ts` **不在 CI/verify 流程里**，属本地手工回归工具；`playwright.config.ts` 的 `testDir` 指向本目录。
 
 ## 快速开始
 
 ### 1. 启动测试服务器
 
 ```bash
-# 使用测试专用配置（不包含 Electron 插件）
-npx vite --config vite.test.config.ts --port 5174
+# 桌面端 dev server（Vite，5174 端口）
+npm run dev
 ```
 
 ### 2. 在 Claude Code 中执行测试
@@ -215,7 +220,7 @@ const elementCount = await browser_evaluate({
 
 ### 1. 测试前准备
 
-- 确保测试服务器运行：`npx vite --config vite.test.config.ts --port 5174`
+- 确保测试服务器运行：`npm run dev`（Vite dev server，5174 端口）
 - 清除浏览器缓存（如果需要）
 - 准备测试数据
 
@@ -255,13 +260,57 @@ source ~/.bashrc
 
 ## 示例测试文件
 
-查看 `e2e/example.spec.ts` 文件，了解完整的测试场景定义。
+查看 `e2e/electron-e2e.spec.ts` 文件，了解完整的测试场景定义（`_electron.launch` 驱动 Electron 的标准写法）。
+
+## 移动端真机 e2e
+
+`scripts/mobile-e2e.sh` 把「usbipd 直挂真机 → Metro → 冷启 → UI 走查 → 点歌出声」的手工验收流程固化为一条命令（adb 驱动，非 Playwright，跑在 WSL 开发机侧，不改 App 代码）。
+
+### 前置条件
+
+1. Android 真机经 usbipd 直挂进 WSL：`scripts/mobile-device/usb-attach.sh`（透传掉线重挂：`adb kill-server` 后 `usbipd attach --wsl --busid <busid>`，见 mobile-device-debugging skill 的陷阱清单）；
+2. `@mplayer/core` 已构建（`packages/core/dist` 过期的症状是启动即 `undefined is not a function`，脚本会识别为明确 FAIL）；
+3. Metro：8081 已有健康 Metro 则直接复用（校验归属、不杀不起第二个）；没有则脚本代为拉起。
+4. 依赖：`adb`（`~/.local/bin/adb`）、`python3`（uiautomator dump 解析）。
+
+### 运行方式
+
+```bash
+scripts/mobile-e2e.sh                       # 唯一设备 + 8081 Metro
+MOBILE_E2E_SERIAL=<serial> scripts/mobile-e2e.sh          # 多设备时指定
+MOBILE_E2E_DIR=/path/to/other/packages/mobile scripts/mobile-e2e.sh   # 复用别的 checkout/worktree 的 Metro
+npm run mobile:e2e                          # 同上（包一层 npm script）
+```
+
+其余参数（等待秒数、端口、是否代拉 Metro 等）见脚本头部注释。
+
+### 各断言含义
+
+脚本按步骤输出 PASS/FAIL 摘要，任一步失败退出码为 1；每步截图与全程 logcat 存档到 `e2e/artifacts/`（已 gitignore，仅本地留档）：
+
+| 步骤 | 断言 | 说明 |
+|------|------|------|
+| `device` | `adb devices` 有在位设备 | 双 transport 串线自动断无线；多设备要求 `MOBILE_E2E_SERIAL` |
+| `reverse` | `adb reverse tcp:8081` 成功 | 手机侧 `localhost:8081` 通到本机 Metro |
+| `metro` | dev server 健康 + manifest `extra.expoClient._internal.projectRoot` 匹配预期目录 | 识破陈年 Metro / 别的 worktree 起的 Metro 串线 |
+| `coldstart` | logcat 有 `Running "main"` + `存量数据迁移完成`，且无 `undefined is not a function` | 前两者 = JS 跑起来 + 启动迁移接线跑到；后者 = core dist 断裂症状（FAIL） |
+| `discover` | 点「发现」tab 后，排行榜四分区（网易云/QQ · 热歌/新歌）标题齐 + rank 数字行渲染 | 分区标题文本走 uiautomator dump 断言；截图存档供人工复核 |
+| `hotlist-detail` | 点「QQ 音乐 · 新歌榜」分区头进详情页，全量列表 rank 节点 ≥8 | 可视行数随迷你播放栏/Toast 浮动，阈值取宽松值；语义是「列表真的渲染了行」 |
+| `play` | 点列表第 2 首歌后，logcat 有 `[player] 开始播放《…》` + `播放器就绪(出声)`，屏幕上出现歌名文本 | 出声断言 + 底部迷你播放栏 UI 断言；截图存档 |
+
+### 局限
+
+- UI 坐标按参考机（OPPO PKB110, 1256x2760）手工校准，其他分辨率按 `wm size` 等比缩放，但没在别的机型上验证过；
+- 文本断言依赖 uiautomator dump（RN 组件 → 原生 TextView）：uiautomator 在动画/滚动中会间歇性吐空壳树，脚本重试 + 失败即弃旧快照（绝不拿上一轮的过期内容做断言）；logcat 里 RN 多参数 console.log 渲染为 `'[player]', 'msg'`，断言一律匹配消息本体；
+- usbipd 直挂的 attach 掉线是常态，脚本带自愈（重挂 + 重建 reverse + 复活 logcat 捕获），设备彻底消失（拔线/关调试）才 FAIL；
+- 点歌断言依赖真实网络音源解析，接口故障会命中 FAIL——这是真实验收语义，不是脚本 bug。
 
 ## 相关文件
 
-- `vite.test.config.ts` - 测试专用 Vite 配置
-- `e2e/example.spec.ts` - 测试场景示例
+- `e2e/electron-e2e.spec.ts` 等 `*.spec.ts` - 桌面端 Playwright 测试场景
+- `scripts/mobile-e2e.sh` - 移动端真机 e2e 一条龙脚本
 - `e2e/README.md` - 本文档
+- `e2e/artifacts/` - 移动端 e2e 截图与 logcat 存档（gitignore）
 
 ## 下一步
 
