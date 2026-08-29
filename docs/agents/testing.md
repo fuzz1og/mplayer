@@ -22,4 +22,5 @@ flat config（`eslint.config.js`），全局 ignores 与 `--no-warn-ignored` 语
 - **Core**: `npm run core:build` 后 `npx vitest run --config packages/core/vitest.config.ts`
 - **Mobile**: `packages/mobile/vitest.config.ts`（node env），setup mock AsyncStorage/Alert/musicApi；store 测试用纯 getState/setState。`npx vitest run --config packages/mobile/vitest.config.ts`
 - 构造器注入可测性：diskBackend(cacheDir)、localMusicService(userDataPath)
-- E2E: Playwright 在 `e2e/`，测试服务器 `npx vite --config vite.test.config.ts --port 5174`；移动端 E2E 未搭建（手动 Expo 验收）
+- E2E 桌面: Playwright 在 `e2e/`，测试服务器 `npx vite --config vite.test.config.ts --port 5174`；spec 不在 CI/verify 流程，属本地手工回归
+- E2E 移动端: 真机一条龙 `npm run mobile:e2e`（`scripts/mobile-e2e.sh`，adb + logcat + uiautomator 驱动，前置/断言/局限见 `e2e/README.md`）

@@ -75,7 +75,7 @@ npm run start               # 启动 Expo dev server
 
 | 端 | 技术 |
 |----|------|
-| 桌面 | Electron 41 · React 19 · TypeScript · Vite 6 · Zustand · Ant Design 6 · Howler · electron-builder · electron-updater |
+| 桌面 | Electron 41 · React 19 · TypeScript · Vite 7 · Zustand · Ant Design 6 · Howler · electron-builder · electron-updater |
 | 移动 | Expo 57 · React Native 0.86 · expo-router · expo-audio · Zustand · AsyncStorage · lucide-react-native |
 | 共享 | `@mplayer/core`：多源直连客户端、歌曲识别/匹配、播放地址解析、缓存内核、tier3 执行器 |
 
@@ -90,6 +90,8 @@ npm run core:build          # 构建共享包（改 core 后移动端必须重�
 ```
 
 桌面端 E2E（Playwright）：`npx vite --config vite.test.config.ts --port 5174` + `npx playwright test`
+
+移动端真机 E2E：`npm run mobile:e2e`（usbipd 直挂真机 → Metro → 冷启 → UI 走查 → 点歌出声，一条龙验收，见 [e2e/README.md](e2e/README.md)）
 
 ## 📦 发布
 

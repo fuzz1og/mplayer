@@ -50,9 +50,13 @@ expo-router Stack + Tabs：`(tabs)/`（推荐/发现/搜索/歌单/下载）+ pl
 
 ## Shared Package (`packages/core/`)
 
-桌面/移动端共享。请求层 `api/`（musicApi 多源客户端、neteaseWeapi、antiScrape、probeSongs、transport 可注入接缝）、
-cache 内核、`shared/`（resolvePlayableUrl/resolveFreshUrl/searchOrchestrator/sourceSwap/sourceRouter 来源开关+tier3 订阅兜底）、
-`utils/`（songMatcher/songDedupe/lyricsParser/legacyUrl 等）、`tier3/tier3Api` 订阅源执行器。
+桌面/移动端共享。
+
+- `api/` 请求层：7 源直连客户端（`neteaseDirect`/`qqDirect`/`kugouDirect`/`miguDirect`/`kuwoDirect`/`qianqianDirect`/`sodaDirect`，能力面 = searchSongs/getToplists/内容方法，IPC 契约见上节）；`musicApi` 薄门面（probeSongsBatch、soda 分享解析等基础方法）；`qqPlaylist`/`playlistImport`（QQ 歌单解析与链接导入）；`neteaseWeapi`；`antiScrape`（UA 池/反同源连续）；`tlsFingerprint` + `transport`（可注入接缝，maxRedirects 透传）；`probeSongs` + `prefetchCache`（探测写预取）
+- `cache/` 缓存内核（CacheKernel/SongResourcesCache）
+- `shared/`：`sourceRouter`（来源开关 `auto|direct` 两态 + `sanitizeSourceModes` 洗白存量 'api'、直连客户端注册表、`searchSongsRouted`/`resolvePlayableSongRouted` 路由、`getToplistSongs` + `TOPLIST_SOURCE_IDS`）、`chartAggregate`（多源榜单聚合内核）、`searchOrchestrator`、`sourceSwap`、`songLyrics`、`updateChannels`（更新镜像探速）
+- `utils/`（songMatcher/songDedupe/lyricsParser/legacyUrl 等）
+- `tier3/tier3Api` 订阅源执行器
 
 ```bash
 npm run core:build   # 移动端 Metro 吃 dist 产物：改 core 后必须重建移动端才生效
