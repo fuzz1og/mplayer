@@ -1,9 +1,10 @@
 import { View, Text, StyleSheet, FlatList, Alert, Animated } from 'react-native';
-import { useEffect, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 import { Download, Music, Trash2, ChevronRight } from 'lucide-react-native';
 import { Paths } from 'expo-file-system';
 import type { Song } from '@mplayer/core';
-import { useDownloadStore } from '../../stores/downloadStore';
+import { useDownloadStore, type DownloadItem } from '../../stores/downloadStore';
+import { useDownloadProgressStore } from '../../stores/downloadProgressStore';
 import { getLocalUri, removeDownloadedFile, pickDownloadDirectory } from '../../services/downloadService';
 import { playSong } from '../../services/audioPlayer';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -43,7 +44,7 @@ export default function DownloadPage() {
     purgeFailed();
   }, [purgeFailed]);
 
-  const handlePlay = (item: (typeof items)[number]) => {
+  const handlePlay = useCallback((item: DownloadItem) => {
     if (item.status !== 'done') return;
     const localSong: Song = {
       id: `local-${item.key}`,
@@ -58,9 +59,9 @@ export default function DownloadPage() {
     };
     usePlayerStore.getState().setQueue([localSong], 0);
     playSong(localSong);
-  };
+  }, []);
 
-  const handleRemove = (item: (typeof items)[number]) => {
+  const handleRemove = useCallback((item: DownloadItem) => {
     Alert.alert('删除下载', `确定删除《${item.name}》的本地文件吗？`, [
       { text: '取消', style: 'cancel' },
       {
@@ -72,7 +73,7 @@ export default function DownloadPage() {
         },
       },
     ]);
-  };
+  }, [removeItem]);
 
   const handlePickDir = async () => {
     try {
@@ -114,51 +115,79 @@ export default function DownloadPage() {
             subtitle="在歌曲更多菜单中点击「下载」"
           />
         }
-        renderItem={({ item }) => {
-          const isCurrent = currentSong?.id === `local-${item.key}`;
-          const progress = Math.max(0, Math.min(item.progress ?? 0, 100));
-          return (
-            <ScalePress
-              style={styles.row}
-              pressScaleTo={pressScale.row}
-              onPress={() => handlePlay(item)}
-              disabled={item.status !== 'done'}
-            >
-              <View style={styles.rowMain}>
-                <View style={styles.coverWrap}>
-                  <Music size={22} color={colors.textSecondary} />
-                </View>
-                <View style={styles.info}>
-                  <Text style={[styles.name, isCurrent && styles.nameActive]} numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                  <Text style={styles.artist} numberOfLines={1}>{item.artist}</Text>
-                </View>
-                <Text style={[styles.status, item.status === 'error' && styles.statusError]}>
-                  {item.status === 'downloading'
-                    ? item.progress != null && item.progress > 0
-                      ? `下载中 ${item.progress}%`
-                      : '下载中…'
-                    : STATUS_LABELS[item.status]}
-                </Text>
-                {item.status === 'done' && (
-                  <ScalePress onPress={() => handleRemove(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Trash2 size={18} color={colors.textTertiary} />
-                  </ScalePress>
-                )}
-              </View>
-              {item.status === 'downloading' && (
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${progress}%` }]} />
-                </View>
-              )}
-            </ScalePress>
-          );
-        }}
+        renderItem={({ item }) => (
+          <DownloadRow
+            item={item}
+            isCurrent={currentSong?.id === `local-${item.key}`}
+            styles={styles}
+            colors={colors}
+            onPlay={handlePlay}
+            onRemove={handleRemove}
+          />
+        )}
       />
     </Animated.View>
   );
 }
+
+interface DownloadRowProps {
+  item: DownloadItem;
+  isCurrent: boolean;
+  styles: ReturnType<typeof makeStyles>;
+  colors: ThemeColors;
+  onPlay: (item: DownloadItem) => void;
+  onRemove: (item: DownloadItem) => void;
+}
+
+/**
+ * 下载行：进度只在行内订阅瞬时读模型（downloadProgressStore）。
+ * 进度事件不再让整页/整列表重渲染；行组件 memo 后，未变化的行也不重渲染。
+ */
+const DownloadRow = memo(function DownloadRow({
+  item, isCurrent, styles, colors, onPlay, onRemove,
+}: DownloadRowProps) {
+  const progress = useDownloadProgressStore((s) =>
+    Math.max(0, Math.min(s.progressByKey[item.key] ?? 0, 100))
+  );
+
+  return (
+    <ScalePress
+      style={styles.row}
+      pressScaleTo={pressScale.row}
+      onPress={() => onPlay(item)}
+      disabled={item.status !== 'done'}
+    >
+      <View style={styles.rowMain}>
+        <View style={styles.coverWrap}>
+          <Music size={22} color={colors.textSecondary} />
+        </View>
+        <View style={styles.info}>
+          <Text style={[styles.name, isCurrent && styles.nameActive]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={styles.artist} numberOfLines={1}>{item.artist}</Text>
+        </View>
+        <Text style={[styles.status, item.status === 'error' && styles.statusError]}>
+          {item.status === 'downloading'
+            ? progress > 0
+              ? `下载中 ${progress}%`
+              : '下载中…'
+            : STATUS_LABELS[item.status]}
+        </Text>
+        {item.status === 'done' && (
+          <ScalePress onPress={() => onRemove(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Trash2 size={18} color={colors.textTertiary} />
+          </ScalePress>
+        )}
+      </View>
+      {item.status === 'downloading' && (
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${progress}%` }]} />
+        </View>
+      )}
+    </ScalePress>
+  );
+});
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
