@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
+import { useLatest } from '@/renderer/hooks/useLatest';
 
 /** SongRow 行高：44px 封面 + 上下各 10px 内边距（见 SongRow 的 padding） */
 export const SONG_ROW_HEIGHT = 64;
@@ -32,11 +33,17 @@ interface VirtualRows {
 const SCROLLABLE_OVERFLOW_Y = new Set(['auto', 'scroll', 'overlay']);
 const EMPTY_ITEMS: VirtualItem[] = [];
 
+/** 纵轴是否可滚动：overflow-y 长写优先，退回 overflow 简写（jsdom 等环境不展开简写） */
+function isScrollableY(node: HTMLElement): boolean {
+  const style = getComputedStyle(node);
+  return SCROLLABLE_OVERFLOW_Y.has(style.overflowY) || SCROLLABLE_OVERFLOW_Y.has(style.overflow);
+}
+
 /** 向上找最近的纵向滚动祖先：列表挂靠页面已有的滚动容器，页面无需知道测量细节 */
 function findScrollParent(from: HTMLElement | null): HTMLElement | null {
   let node = from?.parentElement ?? null;
   while (node) {
-    if (SCROLLABLE_OVERFLOW_Y.has(getComputedStyle(node).overflowY)) return node;
+    if (isScrollableY(node)) return node;
     node = node.parentElement;
   }
   return null;
@@ -53,7 +60,9 @@ export function useVirtualRows({ count, enabled, estimateSize, overscan = 8 }: U
   const [scrollMargin, setScrollMargin] = useState(0);
 
   const canVirtualize = enabled && scrollElement !== null;
-  const estimate = useCallback((index: number) => estimateSize(index), [estimateSize]);
+  // 行高按 index 取值（分组列表：组头 44 / 歌曲 64），经 ref 读取以保持函数身份稳定
+  const estimateRef = useLatest(estimateSize);
+  const estimate = useCallback((index: number) => estimateRef.current(index), [estimateRef]);
 
   // 首帧尺寸：ResizeObserver 回调到来之前先用当前尺寸算窗口，避免虚拟化首帧空白（只读一次）
   const initialRect = useMemo(

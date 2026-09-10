@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import type { Song } from '@mplayer/core';
+import type { Song, SongGroup } from '@mplayer/core';
 import SongList from '@/renderer/components/SongList';
+import GroupedSongList from '@/renderer/components/GroupedSongList';
 
 // 用 SongCover 的渲染次数当「这一行是否重渲染」的探针：
 // SongRow 是 React.memo，行内封面若没重渲染，说明该行的 props 身份稳定。
@@ -142,5 +143,74 @@ describe('歌曲列表模块：虚拟滚动', () => {
       </MemoryRouter>
     );
     expect(coverRenders.size).toBe(3);
+  });
+});
+
+describe('分组歌曲列表：数据经 props（页面做适配器）', () => {
+  const groups: SongGroup[] = [
+    { key: 'sunny', name: '晴天', artist: '周杰伦', songs: [song(1), song(2), song(3)] },
+    { key: 'rainy', name: '雨天', artist: '孙燕姿', songs: [song(4), song(5)] },
+  ];
+
+  const renderGrouped = (overrides: Partial<React.ComponentProps<typeof GroupedSongList>> = {}) => {
+    const props = {
+      groups,
+      expandedKeys: ['sunny'],
+      onToggleGroup: vi.fn(),
+      onExpandAll: vi.fn(),
+      onCollapseAll: vi.fn(),
+      onPlay: vi.fn(),
+      onToggleFavorite: vi.fn(),
+      selectedIds: [],
+      onSelectionChange: vi.fn(),
+      ...overrides,
+    };
+    render(
+      <MemoryRouter>
+        <GroupedSongList {...props} />
+      </MemoryRouter>
+    );
+    return props;
+  };
+
+  it('已展开的组渲染组内歌曲，折叠的组只留组头', () => {
+    renderGrouped();
+
+    expect(screen.getByText('晴天')).toBeInTheDocument();
+    expect(screen.getByText('雨天')).toBeInTheDocument();
+    expect(coverRenders.size).toBe(3);
+    expect(coverRenders.has('歌曲 4')).toBe(false);
+  });
+
+  it('「全部展开 / 全部折叠」把决定权交回适配器', () => {
+    const props = renderGrouped({ expandedKeys: [] });
+
+    fireEvent.click(screen.getByRole('button', { name: '全部展开' }));
+    expect(props.onExpandAll).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    const allExpanded = renderGrouped({ expandedKeys: groups.map(g => g.key) });
+    fireEvent.click(screen.getByRole('button', { name: '全部折叠' }));
+    expect(allExpanded.onCollapseAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('播放分组第一首：用组内第一首回调页面', () => {
+    const props = renderGrouped();
+
+    fireEvent.click(screen.getAllByRole('button', { name: '播放分组第一首' })[1]);
+
+    expect(props.onPlay).toHaveBeenCalledTimes(1);
+    expect((props.onPlay as ReturnType<typeof vi.fn>).mock.calls[0][0].name).toBe('歌曲 4');
+  });
+
+  it('点组头的展开/折叠按钮调用 onToggleGroup 并带上组 key', () => {
+    const props = renderGrouped();
+
+    // sunny 已展开 → 按钮语义是「折叠分组」；rainy 折叠 → 「展开分组」
+    fireEvent.click(screen.getByRole('button', { name: '折叠分组' }));
+    fireEvent.click(screen.getByRole('button', { name: '展开分组' }));
+
+    expect(props.onToggleGroup).toHaveBeenNthCalledWith(1, 'sunny');
+    expect(props.onToggleGroup).toHaveBeenNthCalledWith(2, 'rainy');
   });
 });

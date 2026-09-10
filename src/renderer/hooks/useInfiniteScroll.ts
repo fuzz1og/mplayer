@@ -7,12 +7,20 @@ interface UseInfiniteScrollOptions {
   threshold?: number;
 }
 
+/** 既接受 ref（页面自己的滚动容器），也接受已解析的元素（歌曲列表模块探测到的滚动祖先） */
+export type ScrollTarget = RefObject<HTMLElement | null> | HTMLElement | null;
+
+function resolveTarget(target: ScrollTarget): HTMLElement | null {
+  if (!target) return null;
+  return 'current' in target ? target.current : target;
+}
+
 export function useInfiniteScroll(
-  containerRef: RefObject<HTMLDivElement | null>,
+  target: ScrollTarget,
   { onLoadMore, loading, hasMore, threshold = 200 }: UseInfiniteScrollOptions
 ) {
   useEffect(() => {
-    const container = containerRef.current;
+    const container = resolveTarget(target);
     if (!container || !onLoadMore) return;
 
     const handleScroll = () => {
@@ -25,5 +33,5 @@ export function useInfiniteScroll(
 
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [containerRef, loading, hasMore, onLoadMore, threshold]);
+  }, [target, loading, hasMore, onLoadMore, threshold]);
 }
