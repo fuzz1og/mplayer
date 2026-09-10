@@ -383,13 +383,18 @@ export default function PlayerOverlay({ onClose }: Props) {
 
   // ── 竖直下拉关闭（ADR-0004）：可中断、速度继承、动量投影、橡皮筋全部收在
   //    gestures/dragSession（与 BottomSheet 共用同一实现），这里只提供实时面板尺寸、
-  //    认领阈值与退场编排。横向分页已交给原生 ScrollView，外层永不认领横向手势。──
+  //    认领阈值、纵向优先开关（封面页）与退场编排。横向分页已交给原生 ScrollView，
+  //    外层永不认领横向手势（dy 严格占优）。──
   const panHandlers = useDragToDismiss({
     value: panY,
     size: winH, // #186 #4：实时高度，旋转/折叠屏不吃模块顶层的过期值
     // 24 = 全屏面板的认领阈值（BottomSheet 把手热区只有 ~28px 高，那里用 10 更跟手）。
     // 抬高 + dy 严格占优是为了横向分页 / 歌词列表滚动优先认领，防斜滑误判
     claimThreshold: 24,
+    // 封面页开启「纵向优先」（真机 review）：从唱盘起手的拇指弧线是「先横后竖」，
+    // 起始几帧 |dy| 还不占优，横向分页 ScrollView 会先认领且再也不放手 → 拉不下来。
+    // capture 阶段用同一条竖直判定抢回纵向意图；歌词页不开（竖滑仍是歌词滚动）。
+    shouldCapture: () => !showLyricsRef.current,
     onDismiss: dismiss,
     onSnapBack: snapBack,
     // 拖拽期间暂停歌词自动滚动（跟手渲染与 scrollToIndex 抢 JS 线程）；400ms 覆盖退场/回弹弹簧段

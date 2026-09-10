@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { PanResponder } from 'react-native';
 import type { Animated, GestureResponderHandlers, PanResponderInstance } from 'react-native';
-import { createDragSession } from '../gestures/dragSession';
+import { createDragSession, isVerticalDragClaim, shouldCaptureDrag } from '../gestures/dragSession';
 
 /** 适配器参数：把纯拖拽会话内核（gestures/dragSession）绑到一个 Animated.Value + PanResponder */
 export interface DragToDismissOptions {
@@ -14,6 +14,13 @@ export interface DragToDismissOptions {
    * 把手热区小（~28px）用小阈值更跟手；全屏面板用大阈值 + dy 严格占优防斜滑误判。
    */
   claimThreshold: number;
+  /**
+   * 是否在 capture 阶段抢先认领竖直拖拽（默认关）：开启后「先横后竖」的拇指弧线也能被
+   * 纵向意图带走，不被横向分页 ScrollView 先抢。判定与 bubble 同一条 isVerticalDragClaim，
+   * 故横向拖动（Slider）与点按（ScalePress）天然不受影响。谓词在事件时刻求值（可读 ref），
+   * 不是渲染快照——页面切换（封面/歌词）要即时生效。
+   */
+  shouldCapture?: () => boolean;
   /** 判关：调用点编排退场动画（reducedMotion 分支两端不同，留在调用点） */
   onDismiss: (velocityY: number) => void;
   /** 未判关：回弹到 0（继承松手速度；terminate 为零速兜底） */
@@ -42,7 +49,12 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
     panResponderRef.current = PanResponder.create({
       // 只认领竖直拖拽（dy 严格占优防斜滑）：横向分页 / 子列表滚动优先让给原生
       onMoveShouldSetPanResponder: (_, gs) =>
-        Math.abs(gs.dy) > optionsRef.current.claimThreshold && Math.abs(gs.dy) > Math.abs(gs.dx),
+        isVerticalDragClaim(gs.dx, gs.dy, optionsRef.current.claimThreshold),
+      // 纵向优先（可选）：capture 阶段用同一条判定抢在子级 ScrollView 之前拿下手势
+      onMoveShouldSetPanResponderCapture: (_, gs) => {
+        const { claimThreshold, shouldCapture } = optionsRef.current;
+        return shouldCaptureDrag(gs.dx, gs.dy, claimThreshold, shouldCapture?.() ?? false);
+      },
       onPanResponderGrant: () => {
         const { value, onGestureStart } = optionsRef.current;
         session.grab();

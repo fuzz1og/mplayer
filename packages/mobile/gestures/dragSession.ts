@@ -12,6 +12,8 @@
  *     （vitest environment: 'node'，见 __tests__/dragSession.test.ts）。
  *   - 绑定见 hooks/useDragToDismiss.ts；退场/回弹动画与 reducedMotion 分支留在调用点
  *     （两端编排不同，不硬塞进内核）。
+ *   - 认领判定（isVerticalDragClaim / shouldCaptureDrag）也收在这里：bubble 与 capture
+ *     共用同一条「竖直意图」判定，调用点只决定要不要在 capture 阶段抢先（shouldCapture）。
  *
  * Fabric 三坑（原先只活在两个调用点的注释里，收敛到此）：
  *   1. release 回调拿到的框架 gestureState 可能已被下一段触摸序列清零（vy=0）——
@@ -139,4 +141,24 @@ export function createDragSession(): DragSession {
       return { dismiss: false, velocity: 0 };
     },
   };
+}
+
+/**
+ * 竖直下拉的认领判定（bubble 与 capture 共用）：|dy| 过阈值且纵向占优。
+ * 横向留给原生分页 / 子列表滚动——Slider 横向拖动与点按天然不满足此判定。
+ * 真机教训：拇指弧线「先横后竖」的起始几帧 |dy| 还不占优，只有 bubble 认领时
+ * 会被横向分页 ScrollView 抢走且再也拿不回来（全屏播放器从封面起手拉不动）。
+ */
+export function isVerticalDragClaim(dx: number, dy: number, threshold: number): boolean {
+  return Math.abs(dy) > threshold && Math.abs(dy) > Math.abs(dx);
+}
+
+/**
+ * capture 阶段是否抢先认领：只有调用点开启「纵向意图优先」时才抢（captureEnabled）。
+ * 关着时横向分页照常先认领（歌词页的竖滑仍是歌词滚动，不能被抢）。
+ */
+export function shouldCaptureDrag(
+  dx: number, dy: number, threshold: number, captureEnabled: boolean,
+): boolean {
+  return captureEnabled && isVerticalDragClaim(dx, dy, threshold);
 }

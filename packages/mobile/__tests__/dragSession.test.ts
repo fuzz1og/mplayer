@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDragSession } from '../gestures/dragSession';
+import { createDragSession, isVerticalDragClaim, shouldCaptureDrag } from '../gestures/dragSession';
 import { DISMISS_PROJECT_RATIO } from '../theme/motion';
 
 const SIZE = 800;
@@ -178,3 +178,32 @@ describe('拖拽会话：terminate 与跨会话无残留', () => {
     expect(s.release(SIZE)).toEqual({ dismiss: false, velocity: 0 });
   });
 });
+describe('认领判定：bubble 与 capture 开 / 关（真机 drop-claim 竞争）', () => {
+  const T = 24;
+
+  it('纵向意图：bubble 与 capture 都认领（拇指弧线纵向占优那一帧起认领）', () => {
+    // 真机轨迹「先横后竖」：前几帧 |dy| 还不占优 → 都不认领；到 |dy|>|dx| 才认领
+    expect(isVerticalDragClaim(132, 70, T)).toBe(false);
+    expect(isVerticalDragClaim(102, 190, T)).toBe(true);
+    expect(shouldCaptureDrag(102, 190, T, true)).toBe(true);
+  });
+
+  it('capture 关闭（歌词页）：绝不抢先认领，横向分页照常先接管', () => {
+    expect(shouldCaptureDrag(0, 400, T, false)).toBe(false);
+    expect(shouldCaptureDrag(102, 190, T, false)).toBe(false);
+  });
+
+  it('横向占优 / 未过阈值：两种阶段都不认领（Slider 横向拖动、ScalePress 点按不受影响）', () => {
+    const cases: [number, number][] = [[120, 8], [200, 30], [40, 39], [0, 24], [0, 10]];
+    for (const [dx, dy] of cases) {
+      expect(isVerticalDragClaim(dx, dy, T)).toBe(false);
+      expect(shouldCaptureDrag(dx, dy, T, true)).toBe(false);
+    }
+  });
+
+  it('阈值严格大于：恰好等于阈值不认领（与旧实现逐字一致）', () => {
+    expect(isVerticalDragClaim(0, 24, T)).toBe(false);
+    expect(isVerticalDragClaim(0, 25, T)).toBe(true);
+  });
+});
+
