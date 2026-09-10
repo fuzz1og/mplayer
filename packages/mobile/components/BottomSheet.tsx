@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { radius, spacing } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import { springs } from '../theme/motion';
+import { DISMISS_POSITION_RATIO, springs } from '../theme/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useDragToDismiss } from '../hooks/useDragToDismiss';
 import { handlePanelLayout } from './panelHeight';
@@ -140,6 +140,9 @@ export default function BottomSheet({
     value: translateY,
     rubberbandSize: winH, // 上推越界的阻尼维度：仍按整屏算，手感与 master 一致
     dismissSize: sheetHeight, // 判关基准：面板自身高度（0.35 的语义 = 投影超过面板 1/3）
+    // 位置兜底（真机第二轮）：中低速长拖不该因为速度自采样偏低而回弹——
+    // 拖过面板高度 0.4 即判关，投影判据仍是「快甩更容易关」的加分项
+    positionRatio: DISMISS_POSITION_RATIO,
     // 10 = 把手热区的认领阈值（PlayerOverlay 全屏面板用 24）：热区总高仅 ~28px，
     // 阈值放宽到 10 手感更跟手
     claimThreshold: 10,

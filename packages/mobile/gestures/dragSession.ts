@@ -28,7 +28,11 @@ import { DISMISS_PROJECT_RATIO, projectMomentum, rubberband } from '../theme/mot
 export interface DragSample {
   /** 手势累计位移（gestureState.dy，px） */
   dy: number;
-  /** 事件时间戳（nativeEvent.timestamp，ms） */
+  /**
+   * 该样本的采样时刻（ms，单调）。由适配器在「事件处理时刻」取 JS 单调时钟——
+   * 位置（dy）同样取自处理时刻，两者同源才自洽；真机上 nativeEvent.timestamp 的
+   * 单位/可用性不可靠（第二轮实测速度自采样恒为 0），故不采用。
+   */
   timestamp: number;
   /** 上推越界的橡皮筋阻尼维度（px，一般 = 屏高）：只影响越界跟随的阻力，不影响判关 */
   rubberbandSize: number;
@@ -53,12 +57,15 @@ export interface DragSession {
   /** PanResponderMove：1:1 跟手 + 上推橡皮筋；基准未就绪返回 null（该帧丢弃） */
   move(sample: DragSample): number | null;
   /**
-   * PanResponderRelease：动量投影判决。
-   * `dismissSize` = 判关基准高度（现取，旋转/折叠屏不吃过期值）：投影落点越过
-   * `dismissSize × DISMISS_PROJECT_RATIO` 即判关。全屏面板传屏高；底部弹层传面板
-   * 自身高度——短面板若拿整屏当基准，正常速度的整段下拉永远够不到判关线。
+   * PanResponderRelease：动量投影判决 +（可选）位置兜底判决，两者取或。
+   * `dismissSize` = 判关基准高度（现取，旋转/折叠屏不吃过期值）：
+   *   - 投影判据：`lastPos + projectMomentum(vy) ≥ dismissSize × DISMISS_PROJECT_RATIO`
+   *     （快甩从任意位置都能关）；
+   *   - 位置判据（仅当 `positionRatio > 0`）：`lastPos ≥ dismissSize × positionRatio`，
+   *     不依赖速度——真机事件密度下速度自采样可能偏低，长拖不该因此回弹。
+   * 全屏面板传屏高且不传 positionRatio；底部弹层传面板自身高度 + DISMISS_POSITION_RATIO。
    */
-  release(dismissSize: number): DragVerdict;
+  release(dismissSize: number, positionRatio?: number): DragVerdict;
   /** PanResponderTerminate：手势被系统抢走 → 零速回弹兜底 */
   terminate(): DragVerdict;
 }
@@ -134,11 +141,14 @@ export function createDragSession(): DragSession {
       return next;
     },
 
-    release(dismissSize) {
+    release(dismissSize, positionRatio = 0) {
       const velocity = clamp(vy, RELEASE_VELOCITY_CLAMP);
-      // 动量投影落点：快甩从任意位置都能关，慢拖半途自然回弹
+      // 动量投影落点：快甩从任意位置都能关
       const projected = lastPos + projectMomentum(velocity);
-      return { dismiss: projected >= dismissSize * DISMISS_PROJECT_RATIO, velocity };
+      const projectedDismiss = projected >= dismissSize * DISMISS_PROJECT_RATIO;
+      // 位置兜底：中低速长拖不依赖速度也能判关（positionRatio = 0 时关闭）
+      const positionDismiss = positionRatio > 0 && lastPos >= dismissSize * positionRatio;
+      return { dismiss: projectedDismiss || positionDismiss, velocity };
     },
 
     terminate() {
@@ -149,13 +159,15 @@ export function createDragSession(): DragSession {
 }
 
 /**
- * 竖直下拉的认领判定（bubble 与 capture 共用）：|dy| 过阈值且纵向占优。
+ * 竖直下拉的认领判定（bubble 与 capture 共用）：enabled + |dy| 过阈值且纵向占优。
  * 横向留给原生分页 / 子列表滚动——Slider 横向拖动与点按天然不满足此判定。
- * 真机教训：拇指弧线「先横后竖」的起始几帧 |dy| 还不占优，只有 bubble 认领时
- * 会被横向分页 ScrollView 抢走且再也拿不回来（全屏播放器从封面起手拉不动）。
+ * 真机教训 1：拇指弧线「先横后竖」的起始几帧 |dy| 还不占优，只有 bubble 认领时会被
+ * 横向分页 ScrollView 抢走且再也拿不回来（全屏播放器从封面起手拉不动）。
+ * 真机教训 2：enabled = false 表示这次触摸序列不归本层管（弹层打开期间；或事件从未在
+ * 本层落下过 DOWN——Modal 卸载后残余事件会漏到下层），那种序列一律不认领，防连带关闭。
  */
-export function isVerticalDragClaim(dx: number, dy: number, threshold: number): boolean {
-  return Math.abs(dy) > threshold && Math.abs(dy) > Math.abs(dx);
+export function isVerticalDragClaim(dx: number, dy: number, threshold: number, enabled = true): boolean {
+  return enabled && Math.abs(dy) > threshold && Math.abs(dy) > Math.abs(dx);
 }
 
 /**

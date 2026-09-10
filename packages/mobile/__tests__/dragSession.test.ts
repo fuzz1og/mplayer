@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDragSession, isVerticalDragClaim, shouldCaptureDrag } from '../gestures/dragSession';
-import { DISMISS_PROJECT_RATIO } from '../theme/motion';
+import { DISMISS_POSITION_RATIO, DISMISS_PROJECT_RATIO } from '../theme/motion';
 
 const SIZE = 800;
 const SLOW = 500; // dt ≥ 100ms：速度样本被丢弃，落点即为位置本身，便于测阈值边界
@@ -251,5 +251,91 @@ describe('拖拽会话：判关基准 = 面板高度（底部弹层短面板）'
   it('全屏面板行为不变：不传 dismissSize → 基准回退屏高，阈值仍是 0.35 屏高', () => {
     expect(slowDragTo(SIZE * DISMISS_PROJECT_RATIO).release(SIZE).dismiss).toBe(true);
     expect(slowDragTo(SIZE * DISMISS_PROJECT_RATIO - 1).release(SIZE)).toEqual({ dismiss: false, velocity: 0 });
+  });
+});
+describe('拖拽会话：位置兜底判关（底部弹层，不依赖速度）', () => {
+  const SHEET = 700; // 底部弹层面板高度
+  const POS = DISMISS_POSITION_RATIO;
+
+  /** 短面板上的慢拖：位置即落点（速度样本按 dt 越界丢弃 → vy = 0） */
+  function slowSheetDragTo(target: number) {
+    const s = createDragSession();
+    s.grab();
+    s.calibrate(0);
+    s.move({ dy: 0, timestamp: 0, rubberbandSize: SIZE });
+    s.move({ dy: target, timestamp: SLOW, rubberbandSize: SIZE });
+    return s;
+  }
+
+  it('低速长拖越过判关线 → 判关（位置 0.4 与投影 0.35 取先到者，速度全程为 0）', () => {
+    const verdict = slowSheetDragTo(SHEET * POS).release(SHEET, POS);
+    expect(verdict).toEqual({ dismiss: true, velocity: 0 });
+    expect(verdict.velocity).toBe(0); // 不依赖速度：速度样本全被丢弃也判关
+  });
+
+  it('低速长拖未过任一判关线（< 0.35 面板高度）→ 回弹', () => {
+    expect(slowSheetDragTo(SHEET * DISMISS_PROJECT_RATIO - 1).release(SHEET, POS))
+      .toEqual({ dismiss: false, velocity: 0 });
+  });
+
+  it('位置兜底独立于投影：拖过 0.4 面板高度后向上回甩，投影不足仍判关', () => {
+    // 慢拖到 400（> 0.4 × 700 = 280），再在 16ms 内回甩到 300：
+    // vy 被钳到 -3000 → 投影落点 300 - 1497 = -1197，远在 0.35 × 700 = 245 之下，
+    // 只有位置判据（300 ≥ 280）能判关
+    const pullBack = () => {
+      const s = createDragSession();
+      s.grab();
+      s.calibrate(0);
+      s.move({ dy: 0, timestamp: 0, rubberbandSize: SIZE });
+      s.move({ dy: 400, timestamp: SLOW, rubberbandSize: SIZE });      // 慢拖到位（速度样本丢弃）
+      s.move({ dy: 300, timestamp: SLOW + 16, rubberbandSize: SIZE }); // 回甩 → vy 钳到 -3000
+      return s;
+    };
+    expect(pullBack().release(SHEET).dismiss).toBe(false);       // 不启用位置判据：投影不足 → 回弹
+    expect(pullBack().release(SHEET, POS).dismiss).toBe(true);   // 位置判据兜住 → 判关
+    expect(pullBack().release(SHEET, POS).velocity).toBe(-3000);
+  });
+
+  it('位置远未到线但快甩：投影判据照样判关（加分项保留）', () => {
+    const s = createDragSession();
+    s.grab();
+    s.calibrate(0);
+    s.move({ dy: 0, timestamp: 1000, rubberbandSize: SIZE });
+    s.move({ dy: 100, timestamp: 1016, rubberbandSize: SIZE }); // 高速下拉
+    expect(100).toBeLessThan(SHEET * POS); // 位置离 0.4 倍面板高度还远
+    expect(s.release(SHEET, POS).dismiss).toBe(true);
+  });
+
+  it('全屏面板不传位置比例：拖过 0.4 后向上回甩仍回弹（原手感不变）', () => {
+    // 拖到 400（0.5 × SIZE）再在 16ms 内回甩到 380：投影落点被拉回阈值之下
+    const dragThenFlickUp = () => {
+      const s = createDragSession();
+      s.grab();
+      s.calibrate(0);
+      s.move({ dy: 0, timestamp: 0, rubberbandSize: SIZE });           // 校准基准帧
+      s.move({ dy: 400, timestamp: SLOW, rubberbandSize: SIZE });      // 慢拖到位（速度样本丢弃）
+      s.move({ dy: 380, timestamp: SLOW + 16, rubberbandSize: SIZE }); // 回甩 → vy = -1250px/s
+      return s;
+    };
+    const noPositionRule = dragThenFlickUp().release(SIZE); // 全屏面板：不传 positionRatio
+    expect(noPositionRule.dismiss).toBe(false);
+    expect(noPositionRule.velocity).toBe(-1250);
+
+    // 同一手势若开启位置兜底（面板 0.4 线 = 320 ≤ 380）→ 判关
+    expect(dragThenFlickUp().release(SIZE, POS).dismiss).toBe(true);
+  });
+});
+
+describe('认领总开关：弹层打开期间下层不被认领（连带关闭护栏）', () => {
+  const T = 24;
+
+  it('enabled=false 时 bubble 与 capture 都不认领', () => {
+    expect(isVerticalDragClaim(0, 400, T, false)).toBe(false);
+    expect(shouldCaptureDrag(0, 400, T, false)).toBe(false);
+  });
+
+  it('缺省 enabled=true：正常路径不受影响', () => {
+    expect(isVerticalDragClaim(0, 400, T)).toBe(true);
+    expect(isVerticalDragClaim(0, 400, T, true)).toBe(true);
   });
 });

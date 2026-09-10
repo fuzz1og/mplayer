@@ -16,6 +16,16 @@ export interface DragToDismissOptions {
    */
   dismissSize?: number;
   /**
+   * 位置兜底判关比例（缺省 0 = 不启用）：拖动距离越过 `dismissSize × 此比例` 即判关，
+   * 不依赖速度。底部弹层传 DISMISS_POSITION_RATIO；全屏面板不传（沿用原手感）。
+   */
+  positionRatio?: number;
+  /**
+   * 本层当前是否接受手势（缺省 true）：弹层打开期间传 false —— 遮罩下层的播放器不该响应
+   * 任何触摸（真机第二轮：快甩关闭「更多」面板时，播放器被连带关闭）。
+   */
+  enabled?: boolean;
+  /**
    * 认领手势的 |dy| 阈值（px）：各调用点手感不同，故留在调用点声明——
    * 把手热区小（~28px）用小阈值更跟手；全屏面板用大阈值 + dy 严格占优防斜滑误判。
    */
@@ -49,17 +59,30 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const session = useRef(createDragSession()).current;
+  // 本次触摸序列是否在本层落下过 DOWN（capture 阶段的 start 一定会被问到）：
+  // Modal 卸载后残余事件会漏到下层，那种序列没有本层的 DOWN，一律不认领
+  const sequenceOwnedRef = useRef(false);
+  // 关着的时候不清白：等下一次真正落在本层的手势（否则会留着上一轮的 true）
+  if (options.enabled === false) sequenceOwnedRef.current = false;
   const panResponderRef = useRef<PanResponderInstance | null>(null);
 
   if (panResponderRef.current === null) {
     panResponderRef.current = PanResponder.create({
+      // 只记「本层见过 DOWN」，不抢起点（返回 false，对子级零影响）
+      onStartShouldSetPanResponderCapture: () => {
+        sequenceOwnedRef.current = true;
+        return false;
+      },
       // 只认领竖直拖拽（dy 严格占优防斜滑）：横向分页 / 子列表滚动优先让给原生
-      onMoveShouldSetPanResponder: (_, gs) =>
-        isVerticalDragClaim(gs.dx, gs.dy, optionsRef.current.claimThreshold),
+      onMoveShouldSetPanResponder: (_, gs) => {
+        const { claimThreshold, enabled } = optionsRef.current;
+        return isVerticalDragClaim(gs.dx, gs.dy, claimThreshold, (enabled ?? true) && sequenceOwnedRef.current);
+      },
       // 纵向优先（可选）：capture 阶段用同一条判定抢在子级 ScrollView 之前拿下手势
       onMoveShouldSetPanResponderCapture: (_, gs) => {
-        const { claimThreshold, shouldCapture } = optionsRef.current;
-        return shouldCaptureDrag(gs.dx, gs.dy, claimThreshold, shouldCapture?.() ?? false);
+        const { claimThreshold, shouldCapture, enabled } = optionsRef.current;
+        const gate = (enabled ?? true) && sequenceOwnedRef.current && (shouldCapture?.() ?? false);
+        return shouldCaptureDrag(gs.dx, gs.dy, claimThreshold, gate);
       },
       onPanResponderGrant: () => {
         const { value, onGestureStart } = optionsRef.current;
@@ -68,19 +91,29 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
         // 可中断：抓住当前呈现值接管进行中的动画（getValue 异步 → 就绪前的 move 被内核丢弃）
         value.stopAnimation((v) => session.calibrate(v));
       },
-      onPanResponderMove: (e, gs) => {
+      onPanResponderMove: (_, gs) => {
         const { value, rubberbandSize } = optionsRef.current;
-        const next = session.move({ dy: gs.dy, timestamp: e.nativeEvent.timestamp, rubberbandSize });
+        // 时间基准取 JS 单调时钟的「处理时刻」：位置（gs.dy）也取自处理时刻，两者同源才自洽。
+        // 真机上 nativeEvent.timestamp 的单位/可用性不可靠，会让速度自采样恒为 0。
+        const next = session.move({ dy: gs.dy, timestamp: Date.now(), rubberbandSize });
         if (next !== null) value.setValue(next);
       },
       onPanResponderRelease: () => {
-        const { onDismiss, onSnapBack, onGestureEnd, rubberbandSize, dismissSize } = optionsRef.current;
-        const { dismiss, velocity } = session.release(dismissSize ?? rubberbandSize);
+        sequenceOwnedRef.current = false; // 本次触摸序列结束
+        const { onDismiss, onSnapBack, onGestureEnd, rubberbandSize, dismissSize, positionRatio } = optionsRef.current;
+        const basis = dismissSize ?? rubberbandSize;
+        const ratio = positionRatio ?? 0;
+        const { dismiss, velocity } = session.release(basis, ratio);
+        if (__DEV__) {
+          // 临时诊断（真机第二轮）：确认判关基准与速度采样在真机上的实际取值
+          console.log('[drag] release basis=' + basis.toFixed(0) + 'px ratio=' + ratio + ' vy=' + velocity.toFixed(0) + 'px/s → ' + (dismiss ? 'dismiss' : 'snapBack'));
+        }
         if (dismiss) onDismiss(velocity);
         else onSnapBack(velocity);
         onGestureEnd?.();
       },
       onPanResponderTerminate: () => {
+        sequenceOwnedRef.current = false;
         const { onSnapBack, onGestureEnd } = optionsRef.current;
         onSnapBack(session.terminate().velocity);
         onGestureEnd?.();

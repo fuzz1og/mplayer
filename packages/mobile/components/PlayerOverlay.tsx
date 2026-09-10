@@ -395,6 +395,10 @@ export default function PlayerOverlay({ onClose }: Props) {
     // 起始几帧 |dy| 还不占优，横向分页 ScrollView 会先认领且再也不放手 → 拉不下来。
     // capture 阶段用同一条竖直判定抢回纵向意图；歌词页不开（竖滑仍是歌词滚动）。
     shouldCapture: () => !showLyricsRef.current,
+    // 弹层打开期间不接受手势（真机第二轮：快甩关闭「更多」面板时播放器被连带关闭）。
+    // 弹层期间触摸本就被 Modal 挡住，关掉手势零副作用；Modal 卸载瞬间漏下来的残余
+    // 事件序列也被这道闸挡住（配合适配器内的「本层见过 DOWN」闸）
+    enabled: !(showPlaylistModal || showQueueModal || showMoreModal),
     onDismiss: dismiss,
     onSnapBack: snapBack,
     // 拖拽期间暂停歌词自动滚动（跟手渲染与 scrollToIndex 抢 JS 线程）；400ms 覆盖退场/回弹弹簧段
