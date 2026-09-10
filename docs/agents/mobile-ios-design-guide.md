@@ -45,7 +45,10 @@
 
 - **tint 必须带明暗后缀**：`systemMaterialDark/Light`——无后缀映射为 DEFAULT（26% 白），深色下几乎透明（源码 TintStyle.kt 实锤）
 - 实际强度 = `intensity / blurReductionFactor`；Android 端 `blurReductionFactor=1` 才对齐 iOS 感知（默认 4 缩水到 1/4）
-- BlurView 必须在 blurTarget（BlurTargetView）之后渲染；BlurView 不能嵌 Animated/native-driver 容器（模糊快照不同步）
+- BlurView 必须在 blurTarget（BlurTargetView）之后渲染，且**不得位于自身 blurTarget 的子树内**（自包含失效，ADR-0010 根因二）
+- 不要让 JS 驱动的**尺寸/布局动画**（height/width/padding 逐帧变化）跨过 BlurView：Android 模糊按尺寸重新采样，动画期间快照可能不同步；要收起/展开请用「固定尺寸 + overflow 裁剪 + transform 位移」
+- 固定尺寸容器内的 transform（translate/scale，native driver）动画实践上可用，但改动渲染结构后需真机确认模糊仍在
+- **已知例外**：底部 tab 栏（ADR-0010 第三阶段）仍处于外层 JS 驱动的 height 收起动画内且已套 ChromeBlur；2026-09-10 架构评审决定保留现状（Q7b=B2，见 ADR-0005 更新节），该组合的动画期快照同步性未单独验证——属接受的残留风险，改动此处必须重做真机验证
 - 同一 ref 可被多个 BlurView 共享（效率更高）
 
 ## 纪律
