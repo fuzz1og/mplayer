@@ -176,7 +176,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
                 showCheckbox={false}
                 isSelected={selectedSet.has(item.song.id)}
                 showRemoveFromPlaylist={false}
-                activeDropdown={activeDropdown}
+                moreOpen={activeDropdown === item.song.id}
                 onPlay={onPlay}
                 onToggleFavorite={onToggleFavorite}
                 onDownload={onDownload}

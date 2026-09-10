@@ -22,7 +22,8 @@ interface SongRowProps {
   showCheckbox: boolean;
   isSelected: boolean;
   showRemoveFromPlaylist: boolean;
-  activeDropdown: string | null;
+  /** 「更多」菜单是否开在本行：由列表模块把 activeDropdown 折算成布尔量，避免开一个菜单重渲染整表 */
+  moreOpen: boolean;
   onPlay: (song: Song) => void;
   onToggleFavorite?: (song: Song) => void;
   onDownload?: (song: Song) => void;
@@ -44,7 +45,7 @@ interface SongRowProps {
 const SongRow: React.FC<SongRowProps> = ({
   song, index, isCurrentSong, isPlaying, isFavorite,
   showIndex, showCheckbox, isSelected, showRemoveFromPlaylist,
-  activeDropdown, onPlay, onToggleFavorite, onDownload,
+  moreOpen, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onRemoveFromPlaylist, onToggleSelect,
   onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, compact = false, style,
 }) => {
@@ -174,7 +175,7 @@ const SongRow: React.FC<SongRowProps> = ({
         isFavorite={isFavorite}
         onToggleFavorite={onToggleFavorite}
         onDownload={onDownload}
-        moreOpen={activeDropdown === song.id}
+        moreOpen={moreOpen}
         moreTriggerRef={dropdownTriggerRef}
         onToggleMore={(e) => onToggleDropdown?.(song.id, e)}
         onCloseMore={onCloseDropdown ?? (() => {})}
