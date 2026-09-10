@@ -45,6 +45,7 @@ Push（main→renderer）：`download:progress|complete|error`, `localMusic:fold
 expo-router Stack + Tabs：`(tabs)/`（推荐/发现/搜索/歌单/下载）+ player/favorites/history/settings/hotlist/playlist/[id]/discover-playlist/[id]/artist/[id]/album/[id]。
 
 - `components/` TopBar, PlayerBar, PlayerOverlay, SongRow, DiscoverTabs, SourceSwapModal, AddToPlaylistModal 等
+- `gestures/` 手势物理纯内核（拖拽关闭会话：位移/速度/判关，零 react-native 依赖，node 可测）+ `hooks/useDragToDismiss` 适配器——PlayerOverlay 与 BottomSheet 共用同一份物理
 - `stores/` Zustand（部分 AsyncStorage persist）：player/settings/favorite/history/playlist/search/discover/source/download/audioTag/logs
 - `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songProbe/songResources/sourceSwap, legacyMigration, cacheService
 
