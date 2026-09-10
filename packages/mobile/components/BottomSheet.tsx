@@ -192,8 +192,12 @@ export default function BottomSheet({
             style,
           ]}
         >
-          {/* 把手 + 可拖拽热区（真机反馈 #c：按住把手可下拉关闭，iOS 式） */}
-          <View style={styles.grabberZone} {...panHandlers}>
+          {/* 把手 + 可拖拽热区（真机反馈 #c：按住把手可下拉关闭，iOS 式）。
+              命中区对齐 Apple HIG：热区 48dp（HIG 建议 ≥44pt）+ hitSlop 上下各 8dp 外扩
+              （HIG Accessibility：无边框元素周围约 24pt 内边距）；RN 的 hitSlop 会真实扩大
+              原生命中矩形且不影响兄弟节点（遮罩）。依据见
+              docs/agents/mobile-bottom-sheet-drag-research.md */}
+          <View style={styles.grabberZone} hitSlop={{ top: 8, bottom: 8 }} {...panHandlers}>
             <View style={styles.handle} />
           </View>
           {children}
@@ -219,12 +223,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgSurface,
     paddingHorizontal: spacing[5],
   },
-  // 把手拖拽热区：≥40dp 命中区（真机第三轮：原总高仅 22dp，手指命中率低，「拉不到把手」
-  // 是体感问题的一部分）。视觉不变——handle 仍 4dp、在热区内居中，多出来的是透明命中范围
+  // 把手拖拽热区：48dp 命中区（Apple HIG 建议 ≥44pt；真机第三轮原总高仅 22dp，
+  // 命中率低是「拉不到把手」体感的一部分；研究结论见
+  // docs/agents/mobile-bottom-sheet-drag-research.md）。JSX 侧再叠 hitSlop 上下各 8dp。
+  // 视觉不变——handle 仍 4dp、在热区内居中，多出来的是透明命中范围
   grabberZone: {
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: spacing[10], // 40dp
+    minHeight: spacing[12], // 48dp（token 体系已有 48 档，与 desktop --space-* 同网格）
     paddingTop: spacing[2] + 2,
     paddingBottom: spacing[2],
   },
