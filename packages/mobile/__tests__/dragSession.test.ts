@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDragSession, isVerticalDragClaim, shouldCaptureDrag } from '../gestures/dragSession';
+import { createDragSession, createTouchSequenceGate, isVerticalDragClaim, shouldCaptureDrag } from '../gestures/dragSession';
 import { DISMISS_POSITION_RATIO, DISMISS_PROJECT_RATIO } from '../theme/motion';
 
 const SIZE = 800;
@@ -337,5 +337,50 @@ describe('认领总开关：弹层打开期间下层不被认领（连带关闭�
   it('缺省 enabled=true：正常路径不受影响', () => {
     expect(isVerticalDragClaim(0, 400, T)).toBe(true);
     expect(isVerticalDragClaim(0, 400, T, true)).toBe(true);
+  });
+});
+describe('触摸序列归属闸：Modal 卸载后的残余事件不认领（真机第三轮）', () => {
+  it('本层收到 start（bubble 或 capture 任一阶段）→ 该序列可认领', () => {
+    const g = createTouchSequenceGate();
+    expect(g.allows(true)).toBe(false); // 尚未见到本层 DOWN
+    g.begin();                          // onStartShouldSetPanResponder / …Capture
+    expect(g.allows(true)).toBe(true);
+  });
+
+  it('未 begin（只挂 capture、而目标自身的 capture 不被调用）→ 不可认领', () => {
+    // 真机第三轮根因：PanResponder 挂在触摸目标自身时 capture 阶段不触发；
+    // 若只有 capture 一条路径置位，序列归属恒为 false → 认领被全拒、把手拖不动
+    const g = createTouchSequenceGate();
+    expect(g.allows(true)).toBe(false);
+  });
+
+  it('Modal 卸载后漏到本层的残余 move（DOWN 落在别层）→ 不认领', () => {
+    const g = createTouchSequenceGate();
+    expect(g.allows(true)).toBe(false);  // 本层只收到 move/release，没有本层 DOWN
+    expect(g.allows(false)).toBe(false);
+  });
+
+  it('调用点总开关关闭（弹层打开期间）→ 即使本层见过 DOWN 也不认领', () => {
+    const g = createTouchSequenceGate();
+    g.begin();
+    expect(g.allows(false)).toBe(false);
+  });
+
+  it('序列结束（release/terminate）后回到未认领，等下一次本层 DOWN', () => {
+    const g = createTouchSequenceGate();
+    g.begin();
+    g.end();
+    expect(g.allows(true)).toBe(false);
+    g.begin();
+    expect(g.allows(true)).toBe(true);
+  });
+
+  it('bubble 与 capture 都置位时幂等', () => {
+    const g = createTouchSequenceGate();
+    g.begin();
+    g.begin();
+    expect(g.allows(true)).toBe(true);
+    g.end();
+    expect(g.allows(true)).toBe(false);
   });
 });

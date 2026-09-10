@@ -216,9 +216,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgSurface,
     paddingHorizontal: spacing[5],
   },
-  // 把手拖拽热区：把手上下各留 ~12px 命中范围（总高 ~28，iOS grabber 手感）
+  // 把手拖拽热区：≥40dp 命中区（真机第三轮：原总高仅 22dp，手指命中率低，「拉不到把手」
+  // 是体感问题的一部分）。视觉不变——handle 仍 4dp、在热区内居中，多出来的是透明命中范围
   grabberZone: {
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: spacing[10], // 40dp
     paddingTop: spacing[2] + 2,
     paddingBottom: spacing[2],
   },

@@ -171,6 +171,36 @@ export function isVerticalDragClaim(dx: number, dy: number, threshold: number, e
 }
 
 /**
+ * 触摸序列归属闸：只有「在本层落下过 DOWN」的序列才归本层管。
+ *
+ * 真机教训 3（Modal 事件泄漏）：面板判关 → 退场 → Modal 卸载，若触摸序列尚未结束，
+ * Android 会把后续事件转交下层窗口；下层根节点若认领就会「连带关闭」。那种残余序列
+ * 没有在本层落下过 DOWN，被这道闸拒掉。
+ *
+ * 真机教训 4（为什么 begin 要接 bubble 与 capture 两处）：responder 协商的 capture
+ * 阶段只覆盖「root → 目标的父级」，PanResponder 挂在目标自身时（BottomSheet 的把手
+ * 热区）capture 不触发——只挂 capture 会把把手拖拽彻底拦死。两处都返回 false：
+ * 只记「见过 DOWN」，不抢起点。
+ */
+export interface TouchSequenceGate {
+  /** 本层收到 touch start（bubble 或 capture 任一阶段）→ 该序列归本层 */
+  begin(): void;
+  /** 序列结束（手势 release/terminate）或作废（弹层打开期间）→ 等下一次本层 DOWN */
+  end(): void;
+  /** 这次 move 是否归本层管（enabled = 调用点的总开关） */
+  allows(enabled: boolean): boolean;
+}
+
+export function createTouchSequenceGate(): TouchSequenceGate {
+  let owned = false;
+  return {
+    begin: () => { owned = true; },
+    end: () => { owned = false; },
+    allows: (enabled) => enabled && owned,
+  };
+}
+
+/**
  * capture 阶段是否抢先认领：只有调用点开启「纵向意图优先」时才抢（captureEnabled）。
  * 关着时横向分页照常先认领（歌词页的竖滑仍是歌词滚动，不能被抢）。
  */

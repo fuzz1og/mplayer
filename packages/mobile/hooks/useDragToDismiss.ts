@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { PanResponder } from 'react-native';
 import type { Animated, GestureResponderHandlers, PanResponderInstance } from 'react-native';
-import { createDragSession, isVerticalDragClaim, shouldCaptureDrag } from '../gestures/dragSession';
+import { createDragSession, createTouchSequenceGate, isVerticalDragClaim, shouldCaptureDrag } from '../gestures/dragSession';
 
 /** 适配器参数：把纯拖拽会话内核（gestures/dragSession）绑到一个 Animated.Value + PanResponder */
 export interface DragToDismissOptions {
@@ -59,30 +59,37 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const session = useRef(createDragSession()).current;
-  // 本次触摸序列是否在本层落下过 DOWN（capture 阶段的 start 一定会被问到）：
-  // Modal 卸载后残余事件会漏到下层，那种序列没有本层的 DOWN，一律不认领
-  const sequenceOwnedRef = useRef(false);
+  // 触摸序列归属闸（见 gestures/dragSession）：Modal 卸载后漏到本层的残余事件序列
+  // 没有在本层落下过 DOWN，一律不认领
+  const sequence = useRef(createTouchSequenceGate()).current;
   // 关着的时候不清白：等下一次真正落在本层的手势（否则会留着上一轮的 true）
-  if (options.enabled === false) sequenceOwnedRef.current = false;
+  if (options.enabled === false) sequence.end();
   const panResponderRef = useRef<PanResponderInstance | null>(null);
 
   if (panResponderRef.current === null) {
     panResponderRef.current = PanResponder.create({
-      // 只记「本层见过 DOWN」，不抢起点（返回 false，对子级零影响）
+      // 记「本层见过 DOWN」，不抢起点（两条都返回 false，对子级零影响）。
+      // bubble 这条必须挂：PanResponder 挂在触摸目标自身时（BottomSheet 把手热区），
+      // responder 协商的 capture 阶段不会问到它——真机第三轮教训，只挂 capture 会把
+      // 把手拖拽彻底拦死；capture 这条留给 handler 挂在祖先上的场景（全屏播放器根节点）
+      onStartShouldSetPanResponder: () => {
+        sequence.begin();
+        return false;
+      },
       onStartShouldSetPanResponderCapture: () => {
-        sequenceOwnedRef.current = true;
+        sequence.begin();
         return false;
       },
       // 只认领竖直拖拽（dy 严格占优防斜滑）：横向分页 / 子列表滚动优先让给原生
       onMoveShouldSetPanResponder: (_, gs) => {
         const { claimThreshold, enabled } = optionsRef.current;
-        return isVerticalDragClaim(gs.dx, gs.dy, claimThreshold, (enabled ?? true) && sequenceOwnedRef.current);
+        return isVerticalDragClaim(gs.dx, gs.dy, claimThreshold, sequence.allows(enabled ?? true));
       },
       // 纵向优先（可选）：capture 阶段用同一条判定抢在子级 ScrollView 之前拿下手势
       onMoveShouldSetPanResponderCapture: (_, gs) => {
         const { claimThreshold, shouldCapture, enabled } = optionsRef.current;
-        const gate = (enabled ?? true) && sequenceOwnedRef.current && (shouldCapture?.() ?? false);
-        return shouldCaptureDrag(gs.dx, gs.dy, claimThreshold, gate);
+        return shouldCaptureDrag(gs.dx, gs.dy, claimThreshold,
+          sequence.allows(enabled ?? true) && (shouldCapture?.() ?? false));
       },
       onPanResponderGrant: () => {
         const { value, onGestureStart } = optionsRef.current;
@@ -99,7 +106,7 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
         if (next !== null) value.setValue(next);
       },
       onPanResponderRelease: () => {
-        sequenceOwnedRef.current = false; // 本次触摸序列结束
+        sequence.end(); // 本次触摸序列结束
         const { onDismiss, onSnapBack, onGestureEnd, rubberbandSize, dismissSize, positionRatio } = optionsRef.current;
         const basis = dismissSize ?? rubberbandSize;
         const ratio = positionRatio ?? 0;
@@ -113,7 +120,7 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
         onGestureEnd?.();
       },
       onPanResponderTerminate: () => {
-        sequenceOwnedRef.current = false;
+        sequence.end();
         const { onSnapBack, onGestureEnd } = optionsRef.current;
         onSnapBack(session.terminate().velocity);
         onGestureEnd?.();
