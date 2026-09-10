@@ -5,7 +5,6 @@ export type PlayerState = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
 
 interface AudioPlayerCallbacks {
   onStateChange?: (state: PlayerState) => void;
-  onPositionChange?: (position: number) => void;
   onDurationChange?: (duration: number) => void;
   onLoadError?: (error: Error) => void;
   onEnd?: () => void;
@@ -16,7 +15,6 @@ export class AudioPlayer {
   private currentSong: Song | null = null;
   private state: PlayerState = 'idle';
   private callbacks: AudioPlayerCallbacks = {};
-  private positionInterval: NodeJS.Timeout | null = null;
   private volume: number = 80;
   private loadIdCounter: number = 0;
   /** 挂起中的 load() Promise 的 reject（cancelLoad/被新 load 取代时主动 settle，避免永不落定）。 */
@@ -24,23 +22,6 @@ export class AudioPlayer {
 
   constructor(callbacks: AudioPlayerCallbacks = {}) {
     this.callbacks = callbacks;
-    this.startPositionTracking();
-  }
-
-  private startPositionTracking(): void {
-    this.positionInterval = setInterval(() => {
-      if (this.howl && this.state === 'playing') {
-        const position = this.howl.seek() as number;
-        this.callbacks.onPositionChange?.(position);
-      }
-    }, 250);
-  }
-
-  private stopPositionTracking(): void {
-    if (this.positionInterval) {
-      clearInterval(this.positionInterval);
-      this.positionInterval = null;
-    }
   }
 
   private setState(newState: PlayerState): void {
@@ -157,10 +138,10 @@ async load(song: Song): Promise<void> {
     this.setState('idle');
   }
 
+  /** 跳转播放位置：只动传输层，位置读模型由调用方（playbackClock）改写 */
   seek(position: number): void {
     if (this.howl) {
       this.howl.seek(position);
-      this.callbacks.onPositionChange?.(position);
     }
   }
 
@@ -212,7 +193,6 @@ async load(song: Song): Promise<void> {
   }
 
   destroy(): void {
-    this.stopPositionTracking();
     this.pendingReject?.(new Error('播放器已销毁'));
     this.pendingReject = null;
     if (this.howl) {

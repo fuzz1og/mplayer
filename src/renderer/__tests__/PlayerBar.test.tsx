@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import PlayerBar from '../components/PlayerBar';
 import { usePlayerStore } from '../store/playerStore';
 import { useFavoriteStore } from '../store/favoriteStore';
+import { playbackClock } from '../services/playbackClock';
 
 // Mock stores
 vi.mock('../store/playerStore', () => ({
@@ -18,10 +19,6 @@ vi.mock('../components/PlayerControls', () => ({
   default: () => <div data-testid="player-controls">PlayerControls</div>
 }));
 
-vi.mock('../components/PlayerProgress', () => ({
-  default: () => <div data-testid="player-progress">PlayerProgress</div>
-}));
-
 vi.mock('../components/PlayerVolume', () => ({
   default: () => <div data-testid="player-volume">PlayerVolume</div>
 }));
@@ -35,8 +32,6 @@ describe('PlayerBar', () => {
     currentSong: null,
     isPlaying: false,
     volume: 80,
-    position: 0,
-    duration: 0,
     playMode: 'sequence',
     pause: vi.fn(),
     resume: vi.fn(),
@@ -54,6 +49,8 @@ describe('PlayerBar', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // 进度块自订阅 playbackClock：每个用例从空快照开始，避免互相污染
+    playbackClock.destroy();
     // 支持选择器调用：usePlayerStore(selector) 返回 selector(store)
     (usePlayerStore as any).mockImplementation((selector?: any) => {
       if (typeof selector === 'function') return selector(mockPlayerStore);
@@ -85,11 +82,36 @@ describe('PlayerBar', () => {
     expect(screen.getByText('周杰伦')).toBeInTheDocument();
   });
 
-  it('应该显示子组件', () => {
+  it('应该显示子组件（进度条走真实实现，不再被 mock 掉）', () => {
     render(<PlayerBar />);
     expect(screen.getByTestId('player-controls')).toBeInTheDocument();
-    expect(screen.getByTestId('player-progress')).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: '播放进度' })).toBeInTheDocument();
     expect(screen.getByTestId('player-volume')).toBeInTheDocument();
+  });
+
+  it('播放位置推进只重渲染进度块，PlayerBar 自身不重渲染（位置不再经全局 store）', () => {
+    const storeWithSong = {
+      ...mockPlayerStore,
+      currentSong: { id: '1', name: '稻香', artist: '周杰伦', album: '魔杰座' }
+    };
+    (usePlayerStore as any).mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') return selector(storeWithSong);
+      return storeWithSong;
+    });
+    playbackClock.connect(() => 0);
+    playbackClock.setDuration(200);
+    playbackClock.setPosition(30);
+
+    render(<PlayerBar />);
+    expect(screen.getByText('00:30')).toBeInTheDocument();
+    const selectorCallsBefore = (usePlayerStore as any).mock.calls.length;
+
+    act(() => { playbackClock.setPosition(45); });
+
+    // 进度块（叶子）自己订阅时钟，立即更新
+    expect(screen.getByText('00:45')).toBeInTheDocument();
+    // PlayerBar 的 store 选择器一次都没再跑 = PlayerBar 没有重渲染
+    expect((usePlayerStore as any).mock.calls.length).toBe(selectorCallsBefore);
   });
 
   it('应该显示播放器容器', () => {

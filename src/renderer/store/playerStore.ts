@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
+import { playbackClock } from '@/renderer/services/playbackClock';
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
 import { findExactMatch, getNextSongIndex, getPrevSongIndex, songUsesSongidLyrics, isSodaSource, isInlineLyrics } from '@mplayer/core';
@@ -88,8 +89,6 @@ interface PlayerStoreState {
   isPlaying: boolean;
   isLoading: boolean;
   volume: number;
-  position: number;
-  duration: number;
   playerState: PlayerState;
   error: string | null;
   lyrics: string;
@@ -106,8 +105,6 @@ interface PlayerStoreActions {
   stop: () => void;
   seek: (position: number) => void;
   setVolume: (volume: number) => void;
-  setPosition: (position: number) => void;
-  setDuration: (duration: number) => void;
   setPlayerState: (state: PlayerState) => void;
   clearError: () => void;
   togglePlay: () => void;
@@ -132,12 +129,11 @@ const audioPlayer = getGlobalPlayer({
       isPlaying: state === 'playing',
       isLoading: state === 'loading'
     });
-  },
-  onPositionChange: (position) => {
-    usePlayerStore.getState().setPosition(position);
+    // 采样节奏归 playbackClock：只有真正在播放时才走表
+    playbackClock.setPlaying(state === 'playing');
   },
   onDurationChange: (duration) => {
-    usePlayerStore.getState().setDuration(duration);
+    playbackClock.setDuration(duration);
   },
   onLoadError: (error) => {
     usePlayerStore.setState({
@@ -151,6 +147,9 @@ const audioPlayer = getGlobalPlayer({
     state.playNext();
   }
 });
+
+// 时钟的采样源：只读传输层当前位置（轮询已从 audioPlayer 移出）
+playbackClock.connect(() => audioPlayer.getPosition());
 
 const initialQueue = loadQueue();
 
@@ -199,8 +198,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   isPlaying: false,
   isLoading: false,
   volume: audioPlayer.getVolume(),
-  position: 0,
-  duration: 0,
   playerState: 'idle',
   error: null,
   lyrics: '',
@@ -224,10 +221,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         error: null,
         isLoading: true,
         currentSong: song,
-        position: 0,
         lyrics: '',
         lyricsLoading: false
       });
+      // 位置读模型归零（时长保留旧值到新曲加载完成，与旧 store 行为一致）
+      playbackClock.setPosition(0);
 
       let realUrl = song.url;
       let playbackNonFull = false;
@@ -307,10 +305,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         useSearchStore.getState().setAudioTag(song.id, 'valid');
       }
 
-      const duration = audioPlayer.getDuration();
+      playbackClock.setDuration(audioPlayer.getDuration());
 
       set({
-        duration: duration,
         isLoading: false,
         isPlaying: true
       });
@@ -382,11 +379,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   stop: () => {
     audioPlayer.stop();
+    playbackClock.reset();
     set({
       currentSong: null,
       isPlaying: false,
-      position: 0,
-      duration: 0,
       currentPlaylistIndex: -1
     });
     persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
@@ -394,21 +390,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   seek: (position: number) => {
     audioPlayer.seek(position);
-    set({ position });
+    // 立即改写读模型：暂停中 seek 也要马上反映（不依赖下一次采样）
+    playbackClock.setPosition(position);
   },
 
   setVolume: (volume: number) => {
     const clampedVolume = Math.max(0, Math.min(100, volume));
     audioPlayer.setVolume(clampedVolume);
     set({ volume: clampedVolume });
-  },
-
-  setPosition: (position: number) => {
-    set({ position });
-  },
-
-  setDuration: (duration: number) => {
-    set({ duration });
   },
 
   setPlayerState: (state: PlayerState) => {
@@ -449,7 +438,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       if (currentSong) {
         audioPlayer.seek(0);
         audioPlayer.play();
-        set({ position: 0, isPlaying: true, error: null });
+        playbackClock.setPosition(0);
+        set({ isPlaying: true, error: null });
       }
       return;
     }
@@ -607,5 +597,6 @@ usePlayerStore.subscribe((state) => {
 });
 
 export function destroyPlayer(): void {
+  playbackClock.destroy();
   destroyGlobalPlayer();
 }
