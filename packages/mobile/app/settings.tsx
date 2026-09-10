@@ -18,7 +18,7 @@ import type { Tier3SourceStats } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
 import { checkLatestRelease, speedTestChannels, type ChannelSpeedResult } from '../services/appUpdate';
-import {radius, shadow, spacing, textVariants} from '../theme/tokens';
+import {opacity, radius, shadow, spacing, textVariants} from '../theme/tokens';
 import type { ThemeMode, ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import ScalePress, { pressScale } from '../components/ScalePress';
@@ -592,7 +592,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.accent,
   },
   actionRowDisabled: {
-    opacity: 0.55,
+    opacity: opacity.disabledStrong,
   },
   /* 立即更新保留填充按钮：版本可用是低频且重要的主操作，值得视觉强调 */
   updateBtn: {

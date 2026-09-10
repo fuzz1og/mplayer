@@ -16,7 +16,7 @@ import { usePlaylistStore } from '../../stores/playlistStore';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import PlaylistHero from '../../components/PlaylistHero';
 import type { Song } from '@mplayer/core';
-import {radius, spacing, textVariants} from '../../theme/tokens';
+import {opacity, radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -159,7 +159,7 @@ export default function PlaylistDetailPage() {
                 <ScalePress
                   style={[
                     styles.confirmBtn,
-                    !renameValue.trim() && { opacity: 0.4 },
+                    !renameValue.trim() && { opacity: opacity.disabled },
                   ]}
                   onPress={handleRenameConfirm}
                   disabled={!renameValue.trim()}

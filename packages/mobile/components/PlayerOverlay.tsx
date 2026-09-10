@@ -532,7 +532,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                 maskElement={
                   <LinearGradient
                     /* alpha 遮罩：MaskedView 只取 alpha 通道，颜色用命名色（design-lint 纪律） */
-                    colors={['transparent', 'black', 'black', 'transparent']}
+                    colors={['transparent', 'black', 'black', 'transparent']} // design-lint: ok（MaskedView 只取 alpha 通道，命名色即语义，双主题一致）
                     locations={[0, 0.06, 0.94, 1]}
                     style={StyleSheet.absoluteFill}
                   />

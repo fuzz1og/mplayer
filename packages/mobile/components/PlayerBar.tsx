@@ -5,7 +5,7 @@ import {
 import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, Loader2 } from 'lucide-react-native';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
-import { radius, spacing, textVariants } from '../theme/tokens';
+import { opacity, radius, spacing, textVariants } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import ScalePress from './ScalePress';
@@ -146,7 +146,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: spacing[2],
   },
   containerEmpty: {
-    opacity: 0.6,
+    opacity: opacity.idle,
   },
   coverWrap: {
     width: 44,
@@ -166,7 +166,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   info: { flex: 1, marginRight: spacing[3] },
   title: { ...textVariants.subhead, fontWeight: '600', color: colors.textPrimary },
   artist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
-  textEmpty: { color: colors.textTertiary },
+  textEmpty: { color: colors.textSecondary }, // #318 审计：空态文字是正文级，tertiary 在亮色只有 2.2:1
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
