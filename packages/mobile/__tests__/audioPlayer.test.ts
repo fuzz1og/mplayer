@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AudioStatus } from 'expo-audio';
 import type { Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
+import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
+import { useLogsStore } from '../stores/logsStore';
 import { cleanup, playSong, seekTo, togglePlay, fetchLrcInBackground } from '../services/audioPlayer';
 
 type StatusListener = (status: AudioStatus) => void;
@@ -78,6 +80,8 @@ const audioMocks = vi.hoisted(() => {
     storageSetLegacy: vi.fn(async () => {}),
     // 缓存 URL 年龄（cacheService.urlAgeMs mock 值）：null=未知（重启后）
     urlAge: null as number | null,
+    // 缓存资源值的 nonFull（试听版命中）
+    cachedNonFull: false,
   };
 });
 
@@ -117,12 +121,14 @@ vi.mock('../services/notificationService', () => ({
 }));
 
 vi.mock('../services/cacheService', () => ({
-  getCachedUrl: vi.fn(async (songId: string) => {
+  getCachedResource: vi.fn(async (song: Song) => {
     const v = audioMocks.storageGet;
-    return v?.startsWith('http') && songId ? v : null;
+    return v?.startsWith('http') && song?.id
+      ? { url: v, nonFull: audioMocks.cachedNonFull, ts: 0 }
+      : null;
   }),
-  setCachedUrl: audioMocks.storageSet,
-  deleteCachedUrl: vi.fn(async () => {}),
+  setCachedResource: audioMocks.storageSet,
+  deleteCachedResource: vi.fn(async () => {}),
   urlAgeMs: vi.fn(() => audioMocks.urlAge),
 }));
 
@@ -194,6 +200,9 @@ beforeEach(() => {
   audioMocks.storageSetLegacy.mockClear();
   audioMocks.isUrlAlive.mockClear();
   audioMocks.urlAge = null;
+  audioMocks.cachedNonFull = false;
+  useAudioTagStore.setState({ tags: {} });
+  useLogsStore.setState({ notice: null });
 });
 
 afterEach(async () => {
@@ -448,7 +457,46 @@ describe('URL persistence cache (AsyncStorage songUrl:)', () => {
 
     await playSong(first);
 
-    expect(audioMocks.storageSet).toHaveBeenCalledWith('1', 'https://example.com/1.mp3');
+    expect(audioMocks.storageSet).toHaveBeenCalledWith(first, {
+      url: 'https://example.com/1.mp3',
+      nonFull: false,
+      ts: expect.any(Number),
+    });
+  });
+
+  it('缓存命中且 nonFull=true → 走试听版分支（提示 + preview 徽标），不回写 valid', async () => {
+    const first = song('1');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    audioMocks.storageGet = 'https://cached.example.com/trial.mp3';
+    audioMocks.cachedNonFull = true;
+
+    await playSong(first);
+
+    expect(audioMocks.players[0].uri).toBe('https://cached.example.com/trial.mp3');
+    expect(useAudioTagStore.getState().tags[tagKey(first)]).toBe('preview');
+    expect(useLogsStore.getState().notice?.text).toContain('试听版');
+    // 缓存回写必须保留 nonFull（不得被收窄成"完整版"）
+    expect(audioMocks.storageSet).toHaveBeenCalledWith(first, {
+      url: 'https://cached.example.com/trial.mp3',
+      nonFull: true,
+      ts: expect.any(Number),
+    });
+    expect(audioMocks.resolvePlayableSongRouted).not.toHaveBeenCalled();
+  });
+
+  it('缓存命中完整版 → 回写 valid 徽标（试听分支未误伤正常路径）', async () => {
+    const first = song('1');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    audioMocks.storageGet = 'https://cached.example.com/full.mp3';
+
+    await playSong(first);
+
+    expect(useAudioTagStore.getState().tags[tagKey(first)]).toBe('valid');
+    expect(audioMocks.storageSet).toHaveBeenCalledWith(first, {
+      url: 'https://cached.example.com/full.mp3',
+      nonFull: false,
+      ts: expect.any(Number),
+    });
   });
 
   it('ignores cached values that are not http URLs', async () => {
@@ -640,6 +688,31 @@ describe('fresh retry (forgetPrefetchedUrl + routed re-resolve)', () => {
 
     expect(audioMocks.players.length).toBeGreaterThan(0);
     expect(audioMocks.players[0]?.uri).toBe('https://example.com/9.mp3');
+  });
+});
+
+describe('试听版资源标记（nonFull 不得在外层缓存被擦掉）', () => {
+  it('fresh 重试解析到试听版 → 保留 nonFull（preview 徽标，不回写 valid）', async () => {
+    // 队列只有一首：后台预取提前返回，once 桩不会被预取消费（只留给 fresh 重试）
+    const first = song('1', 'https://stale.example.com/1.mp3');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+
+    await playSong(first);
+    audioMocks.resolvePlayableSongRouted.mockResolvedValueOnce({
+      url: 'https://trial.example.com/1.mp3',
+      nonFull: true,
+    });
+    emitStatus(status({ isLoaded: false, error: 'load failed' }));
+
+    await vi.waitFor(() => expect(audioMocks.players[0].uri).toBe('https://trial.example.com/1.mp3'));
+    await flush();
+
+    expect(useAudioTagStore.getState().tags[tagKey(first)]).toBe('preview');
+    expect(audioMocks.storageSet).toHaveBeenCalledWith(first, {
+      url: 'https://trial.example.com/1.mp3',
+      nonFull: true,
+      ts: expect.any(Number),
+    });
   });
 });
 

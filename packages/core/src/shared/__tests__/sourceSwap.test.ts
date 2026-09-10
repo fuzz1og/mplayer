@@ -159,6 +159,21 @@ describe('applySwap', () => {
     expect(swapped!.id).toBe('kuwo:k1');
   });
 
+  it('migu 候选带前缀 id 不再写成 migu:migu:1（#307 前缀表补齐）', () => {
+    const candidate: SwapCandidate = {
+      song: { ...qqSong('m1', '晴天'), id: 'migu:1', sourceType: 'migu' },
+      exact: true,
+      score: 1,
+      playable: true,
+      tag: 'valid',
+    };
+
+    const swapped = applySwap(neteaseSong('1', '晴天'), 'migu', candidate);
+
+    expect(swapped!.sourceType).toBe('migu');
+    expect(swapped!.id).toBe('migu:1');
+  });
+
   it('rejects candidates without id; allows url-less candidates (resolved at play)', () => {
     const noId: SwapCandidate = {
       song: { ...qqSong('q1', '晴天'), id: '' },
