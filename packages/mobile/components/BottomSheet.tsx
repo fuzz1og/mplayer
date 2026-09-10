@@ -12,6 +12,7 @@ import { DISMISS_POSITION_RATIO, springs } from '../theme/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useDragToDismiss } from '../hooks/useDragToDismiss';
 import { handlePanelLayout } from './panelHeight';
+import { createSheetExitLatch } from '../services/sheetExit';
 
 /** 面板内容最大高度占屏比 */
 const DEFAULT_MAX_HEIGHT = 0.7;
@@ -41,6 +42,11 @@ interface Props {
  * - 关闭统一走「先播退场动画、finished 后再调 onClose」——父组件 visible=false
  *   会立即卸载 Modal，必须让动画先走完（PlayerOverlay dismiss 同款约束）；
  *   外部直接把 visible 置 false 的路径也会补播退场再卸载，观感一致。
+ * - 退场闩（services/sheetExit.ts，#308 真机回归）：退场动画播放期间遮罩仍在接
+ *   点击（Android 上 Modal 窗口是模态的，触摸不穿透下层），旧实现每点一次就重播
+ *   一次退场 → Modal 寿命被点击无限拉长，表现为「关掉面板后点下一行『更多』要点
+ *   两下」。现在只认第一次关闭请求，且面板一离屏就落定（不等弹簧在屏外收尾），
+ *   把"点击被吞"的窗口压到最短。
  * - 减弱动效（useReducedMotion）：无大位移，遮罩+面板 200ms 交叉淡化。
  */
 export default function BottomSheet({
@@ -64,6 +70,8 @@ export default function BottomSheet({
   // 高度当基准，正常速度的整段下拉投影也够不到 0.35×屏高，必然回弹。onLayout 量真实
   // 高度，首帧未量到前回退 winH（≈ master 行为，不会更差）
   const [sheetHeight, setSheetHeight] = useState(winH);
+  /** 退场闩：退场中的重复关闭请求一律忽略（见 services/sheetExit.ts） */
+  const exitLatch = useRef(createSheetExitLatch()).current;
   const translateY = useRef(new Animated.Value(winH)).current;
   const maskOpacity = useRef(new Animated.Value(0)).current;
   const panelOpacity = useRef(new Animated.Value(1)).current;
@@ -94,28 +102,49 @@ export default function BottomSheet({
     // 注：winH 变化（旋转）不重播进场——只以 mounted/reducedMotion 为准
   }, [mounted, reducedMotion]);
 
-  /** 播退场动画；finished 后回调（onClose 或卸载）。减弱动效为整体 200ms 交叉淡化 */
+  /** 播退场动画；退场结束（面板离屏 + 遮罩淡出）后回调（onClose 或卸载）。
+   *  减弱动效为整体 200ms 交叉淡化。*/
   const playExit = (velocityY = 0, after?: () => void) => {
+    // 退场闩：退场中的重复关闭请求（遮罩在动画期间仍会被点到）一律忽略，
+    // 否则每次点击都重播退场动画，Modal 寿命被无限拉长（#308 真机回归）
+    if (!exitLatch.beginClose()) return;
     translateY.stopAnimation();
     maskOpacity.stopAnimation();
     panelOpacity.stopAnimation();
-    const done = () => { exitingRef.current = true; after?.(); };
+    // 离屏判据 = 面板自身高度（sheetHeight 首帧即 winH，量到后是真实高度）
+    const offscreenAt = sheetHeight;
+    let listenerId: string | null = null;
+    const finish = () => {
+      if (!exitLatch.settle()) return;
+      if (listenerId !== null) {
+        translateY.removeListener(listenerId);
+        listenerId = null;
+      }
+      translateY.stopAnimation();
+      maskOpacity.stopAnimation();
+      panelOpacity.stopAnimation();
+      exitingRef.current = true;
+      after?.();
+    };
     if (reducedMotion) {
       Animated.parallel([
         Animated.timing(maskOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
         Animated.timing(panelOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-      ]).start(({ finished }) => { if (finished) done(); });
+      ]).start(({ finished }) => { if (finished) finish(); });
       return;
     }
-    Animated.parallel([
-      Animated.timing(maskOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.spring(translateY, {
-        toValue: winH,
-        velocity: velocityY, // 继承松手速度，无匀速刹车感
-        useNativeDriver: true,
-        ...springs.sheet,
-      }),
-    ]).start(({ finished }) => { if (finished) done(); });
+    // 面板一离屏即记账：弹簧在屏外收尾的那段时间里，Modal 仍然会吃掉点击
+    listenerId = translateY.addListener(({ value }) => {
+      if (value >= offscreenAt && exitLatch.markPanelOffscreen()) finish();
+    });
+    Animated.timing(maskOpacity, { toValue: 0, duration: 200, useNativeDriver: true })
+      .start(() => { if (exitLatch.markMaskFaded()) finish(); });
+    Animated.spring(translateY, {
+      toValue: winH,
+      velocity: velocityY, // 继承松手速度，无匀速刹车感
+      useNativeDriver: true,
+      ...springs.sheet,
+    }).start(({ finished }) => { if (finished) finish(); });
   };
 
   // ── visible 编排：开 → 挂载进场；关 → 补播退场再卸载 ──
@@ -124,6 +153,7 @@ export default function BottomSheet({
   useEffect(() => {
     if (visible) {
       exitingRef.current = false;
+      exitLatch.reopen(); // 新一轮开合：复位退场闩
       setMounted(true);
     } else if (mountedRef.current && !exitingRef.current) {
       // 外部直接置 false（如各弹层自己的 X 按钮）：补播退场保持观感一致

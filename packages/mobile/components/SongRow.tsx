@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  View, Text, Image, StyleSheet, Alert,
+  View, Text, Image, StyleSheet, type GestureResponderEvent,
 } from 'react-native';
-import { Music, Heart, EllipsisVertical, ListMusic, Download, ArrowLeftRight, User, Trash2 } from 'lucide-react-native';
-import type { LucideIcon } from 'lucide-react-native';
-import { router } from 'expo-router';
+import { Music, Heart, EllipsisVertical } from 'lucide-react-native';
 import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -12,16 +10,11 @@ import { type Song, SourceKey } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
-import { useLogsStore } from '../stores/logsStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
-import AddToPlaylistModal from './AddToPlaylistModal';
+import { useSongActionsStore } from '../stores/songActionsStore';
+import { usePressMutex } from '../hooks/usePressMutex';
 import SourceBadge from './SourceBadge';
-import SourceSwapModal from './SourceSwapModal';
-import BottomSheet from './BottomSheet';
 import { playSong } from '../services/audioPlayer';
-import { downloadSong } from '../services/downloadService';
-import { searchSwapCandidates, applySwap, probeSwapCandidates } from '../services/sourceSwap';
-import type { SwapCandidate } from '../services/sourceSwap';
 import { searchStrictMatch } from '../services/songResources';
 import { withCoverSearchSlot } from '../services/coverSearchSlot';
 import ScalePress from './ScalePress';
@@ -38,6 +31,16 @@ interface SongRowProps {
   onRemove?: (song: Song) => void;
 }
 
+/**
+ * 歌曲行：只负责展示与行级按压反馈，「更多」面板 / 加入歌单 / 换源三套弹层
+ * 交给全应用单实例的 components/SongActionsHost.tsx（状态在 stores/songActionsStore.ts）——
+ * 旧形态每行挂 3 个 BottomSheet + 3 个 ScalePress，隐藏实例也在跑无障碍与
+ * 尺寸订阅（#304）。
+ *
+ * 行内按钮（收藏 / 更多）与行自身的按压互斥：e.stopPropagation()（对齐
+ * PlayerBar 纪律）+ hooks/usePressMutex 同步认领，替代旧的
+ * `pressingAction` state + setTimeout(100)（读上一次渲染闭包值，JS 忙时漏判）。
+ */
 export default function SongRow({
   song,
   rank,
@@ -50,15 +53,14 @@ export default function SongRow({
   const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
   const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
+  const openActions = useSongActionsStore((s) => s.openActions);
+  const pressMutex = usePressMutex();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   // 按 (sourceType:id) 订阅探测标签:每批探测完成只重渲染对应的行,标签渐进式出现
   const audioTag = useAudioTagStore((s) => s.tags[tagKey(song)]);
 
   const favorited = isFav;
-  const [showActions, setShowActions] = useState(false);
-  const [pressingAction, setPressingAction] = useState(false);
-  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
 
   // 封面失效兜底：缓存 URL 挂了 → 搜索重载（每行最多一次，严格匹配防翻唱封面）
   // 原生 <Image> 直连 CDN 直链渲染
@@ -83,125 +85,15 @@ export default function SongRow({
     });
   };
 
-  const handleMore = () => {
-    setShowActions(true);
-    setPressingAction(true);
-    setTimeout(() => setPressingAction(false), 100);
+  /** 「更多」：认领本次手势 → 打开操作面板（弹层内容与状态在 SongActionsHost） */
+  const handleMore = (e?: GestureResponderEvent) => {
+    e?.stopPropagation();
+    pressMutex.claimInner();
+    openActions(song, { onSwap, onRemove });
   };
-
-  const handleDownload = () => {
-    setShowActions(false);
-    downloadSong(song)
-      .then(() => Alert.alert('提示', `《${song.name}》下载完成，可在本地歌曲页播放`))
-      .catch((e) => {
-        console.error('[player]', `下载失败《${song.name}》:`, e);
-        Alert.alert('下载失败', `《${song.name}》: ${e instanceof Error ? e.message : String(e)}`);
-      });
-  };
-
-  const handleSearchArtist = () => {
-    setShowActions(false);
-    // type=artist：搜索结果页默认落在「歌手」次级 tab
-    router.push(`/search?q=${encodeURIComponent(song.artist)}&type=artist`);
-  };
-
-  // 单曲换源状态（两阶段：选源 → 候选选择）
-  const [swapVisible, setSwapVisible] = useState(false);
-  const [swapLoading, setSwapLoading] = useState(false);
-  const [swapSuccess, setSwapSuccess] = useState(false);
-  const [swapCandidates, setSwapCandidates] = useState<SwapCandidate[]>([]);
-  const [swapSource, setSwapSource] = useState<SourceKey | null>(null);
-
-  /** 阶段 1：选目标源 → 搜索该源候选版本（前 3），交给用户选择 */
-  const handleSelectSource = async (source: SourceKey) => {
-    setSwapLoading(true);
-    setSwapSuccess(false);
-    const candidates = await searchSwapCandidates(song, source);
-    setSwapLoading(false);
-    if (candidates.length === 0) {
-      Alert.alert('提示', `未在${SOURCE_LABELS[source]}找到可切换的版本`);
-      return;
-    }
-    setSwapSource(source);
-    setSwapCandidates(candidates);
-    // 异步探测可播性：候选先显示（检测中），探测完成渐进更新标记
-    void probeSwapCandidates(candidates).then((probed) => {
-      setSwapCandidates(probed);
-    });
-  };
-
-  /** 阶段 2：用户选中候选版本 → 应用换源（替换队列/续播/持久化） */
-  const handleSelectCandidate = async (candidate: SwapCandidate) => {
-    if (!swapSource) return;
-    if (candidate.playable === false) {
-      // 探测为失效：确认后再切换（用户可能想试）
-      Alert.alert('提示', `《${candidate.song.name}》探测为不可播（链接可能失效），仍要切换吗？`, [
-        { text: '取消', style: 'cancel' },
-        { text: '仍要切换', onPress: () => { void applyCandidate(candidate); } },
-      ]);
-      return;
-    }
-    void applyCandidate(candidate);
-  };
-
-  const applyCandidate = async (candidate: SwapCandidate) => {
-    if (!swapSource) return;
-    setSwapLoading(true);
-    const swapped = applySwap(song, swapSource, candidate);
-    if (!swapped) {
-      setSwapLoading(false);
-      Alert.alert('提示', '换源失败，请重试');
-      return;
-    }
-    setSwapSuccess(true);
-    const st = usePlayerStore.getState();
-    const idx = st.queue.findIndex((s) => s.id === song.id);
-    useLogsStore.getState().addLog(
-      'info',
-      `换源《${song.name}》: ${song.sourceType}→${swapSource}${candidate.exact ? '(完整版)' : ''}, 队列idx=${idx}, 当前播放id=${st.currentSong?.id}, 换源歌id=${song.id}`
-    );
-    if (idx >= 0) {
-      const queue = [...st.queue];
-      queue[idx] = swapped;
-      if (st.currentSong?.id === song.id) {
-        // 正在播放的就是这首：替换队列并立即用完整版续播
-        st.setQueue(queue, idx);
-        playSong(swapped);
-      } else {
-        // 非当前歌曲：只替换队列，不调用 setQueue（会劫持播放）
-        usePlayerStore.setState({ queue });
-      }
-    } else if (st.currentSong?.id === song.id) {
-      // 不在队列但正在播放：直接续播
-      playSong(swapped);
-    }
-    // 父组件更新自己的列表（歌单页同时持久化）
-    onSwap?.(song, swapped);
-    setTimeout(() => {
-      setSwapVisible(false);
-      setSwapCandidates([]);
-      setSwapSource(null);
-    }, 1200);
-  };
-
-  const handleSwapBack = () => {
-    setSwapCandidates([]);
-    setSwapSource(null);
-  };
-
-  const MORE_ACTIONS = [
-    { key: 'playlist', icon: ListMusic, label: '加入歌单', onPress: () => { setShowActions(false); setShowPlaylistModal(true); } },
-    { key: 'download', icon: Download, label: '下载', onPress: handleDownload },
-    { key: 'swap', icon: ArrowLeftRight, label: '换源完整版', onPress: () => { setShowActions(false); setSwapSuccess(false); setSwapLoading(false); setSwapCandidates([]); setSwapSource(null); setSwapVisible(true); } },
-    { key: 'artist', icon: User, label: '搜索歌手', onPress: handleSearchArtist },
-    // 仅当父组件提供 onRemove（歌单/播放历史等"可移除"列表）时显示
-    ...(onRemove
-      ? [{ key: 'remove', icon: Trash2, label: '移除', onPress: () => { setShowActions(false); onRemove(song); } }]
-      : []),
-  ] as { key: string; icon: LucideIcon; label: string; onPress: () => void }[];
 
   const handlePress = () => {
-    if (pressingAction) return;
+    if (pressMutex.consumeRowPress()) return;
     if (onPress) {
       onPress(song);
     } else if (queueSongs) {
@@ -214,9 +106,9 @@ export default function SongRow({
     }
   };
 
-  const handleFavorite = () => {
-    setPressingAction(true);
-    setTimeout(() => setPressingAction(false), 100);
+  const handleFavorite = (e?: GestureResponderEvent) => {
+    e?.stopPropagation();
+    pressMutex.claimInner();
     if (favorited) {
       removeFavorite(song.id);
     } else {
@@ -227,8 +119,7 @@ export default function SongRow({
   const sourceKey = song.sourceType as SourceKey;
 
   return (
-    <>
-      <ScalePress
+    <ScalePress
       style={styles.container}
       pressScaleTo={0.98}
       onPress={handlePress}
@@ -286,37 +177,6 @@ export default function SongRow({
         <EllipsisVertical size={18} color={colors.textTertiary} />
       </ScalePress>
     </ScalePress>
-
-    <BottomSheet visible={showActions} onClose={() => setShowActions(false)}>
-      <Text style={styles.actionSheetTitle} numberOfLines={1}>{song.name}</Text>
-      {MORE_ACTIONS.map(a => (
-        <ScalePress key={a.key} style={styles.actionItem} onPress={a.onPress}>
-          <a.icon size={22} color={colors.textPrimary} />
-          <Text style={styles.actionLabel}>{a.label}</Text>
-        </ScalePress>
-      ))}
-      <ScalePress style={styles.actionCancel} onPress={() => setShowActions(false)}>
-        <Text style={styles.cancelText}>取消</Text>
-      </ScalePress>
-    </BottomSheet>
-    <AddToPlaylistModal
-      visible={showPlaylistModal}
-      song={song}
-      onClose={() => setShowPlaylistModal(false)}
-    />
-    <SourceSwapModal
-      visible={swapVisible}
-      songName={song.name}
-      currentSource={song.sourceType}
-      candidates={swapCandidates}
-      loading={swapLoading}
-      success={swapSuccess}
-      onSelectSource={handleSelectSource}
-      onSelectCandidate={handleSelectCandidate}
-      onBack={handleSwapBack}
-      onClose={() => setSwapVisible(false)}
-    />
-    </>
   );
 }
 
@@ -385,35 +245,5 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   moreBtn: {
     padding: spacing[1],
     marginLeft: spacing[1],
-  },
-  actionSheetTitle: {
-    ...textVariants.body,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: spacing[4],
-    textAlign: 'center',
-  },
-  actionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
-  },
-  actionLabel: {
-    ...textVariants.callout,
-    color: colors.textPrimary,
-    marginLeft: spacing[3],
-  },
-  actionCancel: {
-    marginTop: spacing[3],
-    paddingVertical: 14,
-    borderRadius: radius.md,
-    backgroundColor: colors.bgHover,
-    alignItems: 'center',
-  },
-  cancelText: {
-    ...textVariants.callout,
-    color: colors.textSecondary,
   },
 });
