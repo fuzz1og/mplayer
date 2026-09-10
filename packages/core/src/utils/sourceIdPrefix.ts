@@ -11,3 +11,13 @@ export function stripSourceIdPrefix(id: string): string {
   while (SOURCE_ID_PREFIX.test(out)) out = out.replace(SOURCE_ID_PREFIX, '');
   return out;
 }
+
+/**
+ * 最外层源前缀（无前缀返回 null）：kuwo:kugou:123 → 'kuwo'。
+ * 与 stripSourceIdPrefix 共用同一份前缀表：身份推导（utils/songIdentity）按
+ * 「最外层源」折叠多层嵌套，不需要第二份前缀正则。
+ */
+export function outermostSourceIdPrefix(id: string): string | null {
+  const matched = SOURCE_ID_PREFIX.exec(id);
+  return matched ? matched[1] : null;
+}
