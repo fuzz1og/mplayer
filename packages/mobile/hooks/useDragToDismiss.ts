@@ -1,7 +1,11 @@
 import { useRef } from 'react';
 import { PanResponder } from 'react-native';
 import type { Animated, GestureResponderHandlers, PanResponderInstance } from 'react-native';
-import { createDragSession, createTouchSequenceGate, isVerticalDragClaim, shouldCaptureDrag } from '../gestures/dragSession';
+import {
+  allowsTerminationRequest, claimsOnTouchStart, createDragSession, createTouchSequenceGate,
+  isVerticalDragClaim, shouldCaptureDrag,
+} from '../gestures/dragSession';
+import type { DragClaimMode } from '../gestures/dragSession';
 
 /** 适配器参数：把纯拖拽会话内核（gestures/dragSession）绑到一个 Animated.Value + PanResponder */
 export interface DragToDismissOptions {
@@ -25,6 +29,14 @@ export interface DragToDismissOptions {
    * 任何触摸（真机第二轮：快甩关闭「更多」面板时，播放器被连带关闭）。
    */
   enabled?: boolean;
+  /**
+   * 认领模式（缺省 `'move'`）：
+   * - `'start'`：触摸 DOWN 即成为响应者 + 拒绝让出响应者。**Modal 内的必经路径**
+   *   （RN#14295：Modal 内 onMoveShouldSetPanResponder 不触发；BottomSheet 把手用这条）。
+   * - `'move'`：move 阶段按阈值认领——挂在根节点、需要把点按/横向滑动先让给子级时用
+   *   （全屏播放器）。'start' 模式下 move 认领仍保留为兜底，两者不冲突。
+   */
+  claimMode?: DragClaimMode;
   /**
    * 认领手势的 |dy| 阈值（px）：各调用点手感不同，故留在调用点声明——
    * 把手热区小（~28px）用小阈值更跟手；全屏面板用大阈值 + dy 严格占优防斜滑误判。
@@ -72,9 +84,11 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
       // bubble 这条必须挂：PanResponder 挂在触摸目标自身时（BottomSheet 把手热区），
       // responder 协商的 capture 阶段不会问到它——真机第三轮教训，只挂 capture 会把
       // 把手拖拽彻底拦死；capture 这条留给 handler 挂在祖先上的场景（全屏播放器根节点）
+      // 'start' 模式（Modal 内）：DOWN 即成为响应者，之后所有 move 必然送达；
+      // 'move' 模式（根节点）：只记「见过 DOWN」，返回 false 不抢点按
       onStartShouldSetPanResponder: () => {
         sequence.begin();
-        return false;
+        return claimsOnTouchStart(optionsRef.current.claimMode ?? 'move');
       },
       onStartShouldSetPanResponderCapture: () => {
         sequence.begin();
@@ -91,8 +105,11 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
         return shouldCaptureDrag(gs.dx, gs.dy, claimThreshold,
           sequence.allows(enabled ?? true) && (shouldCapture?.() ?? false));
       },
+      // 'start' 模式下必须拒绝让出响应者，否则 Modal/Dialog 会在拖动途中抢走（RN#14295）
+      onPanResponderTerminationRequest: () => allowsTerminationRequest(optionsRef.current.claimMode ?? 'move'),
       onPanResponderGrant: () => {
         const { value, onGestureStart } = optionsRef.current;
+        sequence.begin(); // grant 即 owned（start 模式在 DOWN 时就已成响应者）
         session.grab();
         onGestureStart?.();
         // 可中断：抓住当前呈现值接管进行中的动画（getValue 异步 → 就绪前的 move 被内核丢弃）

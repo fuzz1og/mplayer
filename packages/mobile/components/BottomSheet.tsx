@@ -143,8 +143,11 @@ export default function BottomSheet({
     // 位置兜底（真机第二轮）：中低速长拖不该因为速度自采样偏低而回弹——
     // 拖过面板高度 0.4 即判关，投影判据仍是「快甩更容易关」的加分项
     positionRatio: DISMISS_POSITION_RATIO,
-    // 10 = 把手热区的认领阈值（PlayerOverlay 全屏面板用 24）：热区总高仅 ~28px，
-    // 阈值放宽到 10 手感更跟手
+    // 认领模式 = 触摸 DOWN 即成为响应者（RN#14295：Modal 内 onMoveShouldSetPanResponder
+    // 根本不触发，只靠 move 认领在 Modal 里不可靠）。同时拒绝让出响应者，防 Modal/Dialog
+    // 在拖动途中抢走——这是 Modal 内把手拖拽的标准修法
+    claimMode: 'start',
+    // 10 = 把手热区的认领阈值（PlayerOverlay 全屏面板用 24）：只作 'start' 模式下的 move 兜底
     claimThreshold: 10,
     onDismiss: requestClose, // 快甩/过半 → 先播退场、finished 后再通知父级
     // 未判关 / 系统抢走手势 → 弹簧回弹到 0，release 继承松手速度，terminate 走零速兜底

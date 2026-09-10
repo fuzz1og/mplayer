@@ -201,6 +201,32 @@ export function createTouchSequenceGate(): TouchSequenceGate {
 }
 
 /**
+ * 认领模式：
+ * - `'start'`：触摸 DOWN 即成为响应者（onStartShouldSetPanResponder 返回 true）。
+ *   Modal 内的唯一可靠路径——RN#14295：Modal 内 onMoveShouldSetPanResponder 不触发、
+ *   Modal 外正常，补上 start 认领即修复（BottomSheet 把手挂在 Modal 里，走这条）。
+ * - `'move'`：move 阶段按阈值认领。挂在根节点、必须先把点按与横向滑动让给子级的
+ *   场景用（全屏播放器）。
+ * 参见官方 Gesture Responder System：onStartShouldSetResponder = 触摸开始即成为响应者；
+ * onMoveShouldSetResponder = 仅在「尚不是响应者」时对每个 move 兜底询问。
+ */
+export type DragClaimMode = 'start' | 'move';
+
+/** 触摸开始是否直接成为响应者（'start' 模式） */
+export function claimsOnTouchStart(mode: DragClaimMode): boolean {
+  return mode === 'start';
+}
+
+/**
+ * 是否允许系统/子级抢走响应者：'start' 模式必须拒绝（RN#14295 的修法之二：
+ * onResponderTerminationRequest: () => false），否则 Modal/Dialog 会在拖动途中把
+ * 响应者收走，表现为「拉到一半断掉」。
+ */
+export function allowsTerminationRequest(mode: DragClaimMode): boolean {
+  return mode !== 'start';
+}
+
+/**
  * capture 阶段是否抢先认领：只有调用点开启「纵向意图优先」时才抢（captureEnabled）。
  * 关着时横向分页照常先认领（歌词页的竖滑仍是歌词滚动，不能被抢）。
  */

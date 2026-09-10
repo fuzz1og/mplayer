@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createDragSession, createTouchSequenceGate, isVerticalDragClaim, shouldCaptureDrag } from '../gestures/dragSession';
+import {
+  allowsTerminationRequest, claimsOnTouchStart, createDragSession, createTouchSequenceGate,
+  isVerticalDragClaim, shouldCaptureDrag,
+} from '../gestures/dragSession';
 import { DISMISS_POSITION_RATIO, DISMISS_PROJECT_RATIO } from '../theme/motion';
 
 const SIZE = 800;
@@ -382,5 +385,32 @@ describe('触摸序列归属闸：Modal 卸载后的残余事件不认领（真�
     expect(g.allows(true)).toBe(true);
     g.end();
     expect(g.allows(true)).toBe(false);
+  });
+});
+describe('认领模式：Modal 内必须「触摸开始即认领」（RN#14295 + 官方 responder 语义）', () => {
+  it("'start' 模式（BottomSheet 把手，挂在 Modal 内）：DOWN 即成响应者", () => {
+    expect(claimsOnTouchStart('start')).toBe(true);
+  });
+
+  it("'start' 模式拒绝让出响应者（否则 Modal/Dialog 拖动途中抢走）", () => {
+    expect(allowsTerminationRequest('start')).toBe(false);
+  });
+
+  it("'move' 模式（全屏播放器根节点）：start 不认领、允许让出——点按与横向滑动不被抢", () => {
+    expect(claimsOnTouchStart('move')).toBe(false);
+    expect(allowsTerminationRequest('move')).toBe(true);
+  });
+
+  it("'start' 模式 grant 即 owned：序列归属置位后 move 兜底判定可用", () => {
+    const g = createTouchSequenceGate();
+    g.begin(); // onStartShouldSetPanResponder / onPanResponderGrant
+    expect(g.allows(true)).toBe(true);
+    expect(isVerticalDragClaim(0, 100, 10, g.allows(true))).toBe(true); // 竖直 move 进入会话
+    expect(isVerticalDragClaim(0, 5, 10, g.allows(true))).toBe(false);  // 未过阈值的抖动不认领
+  });
+
+  it('兜底语义不变：Modal 外（全屏播放器）仍按 move 阈值认领', () => {
+    expect(isVerticalDragClaim(0, 100, 24)).toBe(true);
+    expect(isVerticalDragClaim(0, 12, 24)).toBe(false);
   });
 });
