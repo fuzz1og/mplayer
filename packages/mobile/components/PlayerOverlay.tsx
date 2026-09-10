@@ -387,7 +387,7 @@ export default function PlayerOverlay({ onClose }: Props) {
   //    外层永不认领横向手势（dy 严格占优）。──
   const panHandlers = useDragToDismiss({
     value: panY,
-    size: winH, // #186 #4：实时高度，旋转/折叠屏不吃模块顶层的过期值
+    rubberbandSize: winH, // #186 #4：实时高度，旋转/折叠屏不吃模块顶层的过期值
     // 24 = 全屏面板的认领阈值（BottomSheet 把手热区只有 ~28px 高，那里用 10 更跟手）。
     // 抬高 + dy 严格占优是为了横向分页 / 歌词列表滚动优先认领，防斜滑误判
     claimThreshold: 24,

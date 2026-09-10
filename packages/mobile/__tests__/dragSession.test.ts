@@ -10,8 +10,8 @@ function slowDragTo(target: number) {
   const s = createDragSession();
   s.grab();
   s.calibrate(0);
-  s.move({ dy: 0, timestamp: 0, panelSize: SIZE }); // 校准基准帧（首帧无速度样本）
-  s.move({ dy: target, timestamp: SLOW, panelSize: SIZE });
+  s.move({ dy: 0, timestamp: 0, rubberbandSize: SIZE }); // 校准基准帧（首帧无速度样本）
+  s.move({ dy: target, timestamp: SLOW, rubberbandSize: SIZE });
   return s;
 }
 
@@ -20,24 +20,24 @@ describe('拖拽会话：抓取 / 校准（Fabric 异步回路）', () => {
     const s = createDragSession();
     s.grab();
     s.calibrate(120); // 入场/退场动画当前呈现到 120px
-    expect(s.move({ dy: 400, timestamp: 1000, panelSize: SIZE })).toBe(120);
-    expect(s.move({ dy: 500, timestamp: 1016, panelSize: SIZE })).toBe(220);
+    expect(s.move({ dy: 400, timestamp: 1000, rubberbandSize: SIZE })).toBe(120);
+    expect(s.move({ dy: 500, timestamp: 1016, rubberbandSize: SIZE })).toBe(220);
   });
 
   it('基准未就绪（stopAnimation 回调未回）的 move 被丢弃，就绪后从首个 move 校准原点', () => {
     const s = createDragSession();
     s.grab();
-    expect(s.move({ dy: 50, timestamp: 1000, panelSize: SIZE })).toBeNull();
+    expect(s.move({ dy: 50, timestamp: 1000, rubberbandSize: SIZE })).toBeNull();
     s.calibrate(0);
-    expect(s.move({ dy: 50, timestamp: 1016, panelSize: SIZE })).toBe(0);
+    expect(s.move({ dy: 50, timestamp: 1016, rubberbandSize: SIZE })).toBe(0);
   });
 
   it('首帧校准：认领前累计的位移不参与跟手（防瞬移）', () => {
     const s = createDragSession();
     s.grab();
     s.calibrate(0);
-    expect(s.move({ dy: 30, timestamp: 1000, panelSize: SIZE })).toBe(0);
-    expect(s.move({ dy: 60, timestamp: 1016, panelSize: SIZE })).toBe(30);
+    expect(s.move({ dy: 30, timestamp: 1000, rubberbandSize: SIZE })).toBe(0);
+    expect(s.move({ dy: 60, timestamp: 1016, rubberbandSize: SIZE })).toBe(30);
   });
 });
 
@@ -46,17 +46,17 @@ describe('拖拽会话：跟手位移与橡皮筋', () => {
     const s = createDragSession();
     s.grab();
     s.calibrate(0);
-    s.move({ dy: 0, timestamp: 0, panelSize: SIZE });
-    expect(s.move({ dy: 900, timestamp: SLOW, panelSize: SIZE })).toBe(900);
+    s.move({ dy: 0, timestamp: 0, rubberbandSize: SIZE });
+    expect(s.move({ dy: 900, timestamp: SLOW, rubberbandSize: SIZE })).toBe(900);
   });
 
   it('上推越界走橡皮筋：跟随量小于线性外推，且维度越小阻力越强', () => {
-    const at = (panelSize: number) => {
+    const at = (size: number) => {
       const s = createDragSession();
       s.grab();
       s.calibrate(0);
-      s.move({ dy: 0, timestamp: 0, panelSize });
-      return s.move({ dy: -100, timestamp: SLOW, panelSize })!;
+      s.move({ dy: 0, timestamp: 0, rubberbandSize: size });
+      return s.move({ dy: -100, timestamp: SLOW, rubberbandSize: size })!;
     };
     expect(at(SIZE)).toBeLessThan(0);
     expect(Math.abs(at(SIZE))).toBeLessThan(100);
@@ -69,8 +69,8 @@ describe('拖拽会话：自采样速度（EMA + 钳幅）', () => {
     const s = createDragSession();
     s.grab();
     s.calibrate(0);
-    s.move({ dy: 0, timestamp: 1000, panelSize: SIZE });
-    s.move({ dy: 40, timestamp: 1016, panelSize: SIZE }); // 40px/16ms = 2500px/s
+    s.move({ dy: 0, timestamp: 1000, rubberbandSize: SIZE });
+    s.move({ dy: 40, timestamp: 1016, rubberbandSize: SIZE }); // 40px/16ms = 2500px/s
     expect(s.release(SIZE).velocity).toBe(2500);
   });
 
@@ -78,10 +78,10 @@ describe('拖拽会话：自采样速度（EMA + 钳幅）', () => {
     const s = createDragSession();
     s.grab();
     s.calibrate(0);
-    s.move({ dy: 0, timestamp: 1000, panelSize: SIZE });
-    s.move({ dy: 40, timestamp: 1016, panelSize: SIZE }); // 播种 2500
-    s.move({ dy: 40, timestamp: 1032, panelSize: SIZE }); // 瞬时 0 → 2500×0.6 = 1500
-    s.move({ dy: 40, timestamp: 1048, panelSize: SIZE }); // → 1500×0.6 = 900
+    s.move({ dy: 0, timestamp: 1000, rubberbandSize: SIZE });
+    s.move({ dy: 40, timestamp: 1016, rubberbandSize: SIZE }); // 播种 2500
+    s.move({ dy: 40, timestamp: 1032, rubberbandSize: SIZE }); // 瞬时 0 → 2500×0.6 = 1500
+    s.move({ dy: 40, timestamp: 1048, rubberbandSize: SIZE }); // → 1500×0.6 = 900
     expect(s.release(SIZE).velocity).toBe(900);
   });
 
@@ -89,9 +89,9 @@ describe('拖拽会话：自采样速度（EMA + 钳幅）', () => {
     const s = createDragSession();
     s.grab();
     s.calibrate(0);
-    s.move({ dy: 0, timestamp: 1000, panelSize: SIZE });
-    s.move({ dy: 200, timestamp: 1010, panelSize: SIZE }); // 200px/10ms = 20000 → 钳 4000
-    s.move({ dy: 200, timestamp: 1026, panelSize: SIZE }); // 瞬时 0 → 4000×0.6 = 2400（未钳则 14400）
+    s.move({ dy: 0, timestamp: 1000, rubberbandSize: SIZE });
+    s.move({ dy: 200, timestamp: 1010, rubberbandSize: SIZE }); // 200px/10ms = 20000 → 钳 4000
+    s.move({ dy: 200, timestamp: 1026, rubberbandSize: SIZE }); // 瞬时 0 → 4000×0.6 = 2400（未钳则 14400）
     expect(s.release(SIZE).velocity).toBe(2400);
   });
 
@@ -99,8 +99,8 @@ describe('拖拽会话：自采样速度（EMA + 钳幅）', () => {
     const s = createDragSession();
     s.grab();
     s.calibrate(0);
-    s.move({ dy: 0, timestamp: 1000, panelSize: SIZE });
-    s.move({ dy: 40, timestamp: 1002, panelSize: SIZE }); // dt=2ms → 丢弃速度，位置照常跟手
+    s.move({ dy: 0, timestamp: 1000, rubberbandSize: SIZE });
+    s.move({ dy: 40, timestamp: 1002, rubberbandSize: SIZE }); // dt=2ms → 丢弃速度，位置照常跟手
     expect(s.release(SIZE)).toEqual({ dismiss: false, velocity: 0 });
   });
 
@@ -108,8 +108,8 @@ describe('拖拽会话：自采样速度（EMA + 钳幅）', () => {
     const s = createDragSession();
     s.grab();
     s.calibrate(0);
-    s.move({ dy: 0, timestamp: 1000, panelSize: SIZE });
-    s.move({ dy: 40, timestamp: 1200, panelSize: SIZE }); // dt=200ms → 丢弃
+    s.move({ dy: 0, timestamp: 1000, rubberbandSize: SIZE });
+    s.move({ dy: 40, timestamp: 1200, rubberbandSize: SIZE }); // dt=200ms → 丢弃
     expect(s.release(SIZE).velocity).toBe(0);
   });
 });
@@ -126,8 +126,8 @@ describe('拖拽会话：松手判决（动量投影 vs 面板比例）', () => 
     const s = createDragSession();
     s.grab();
     s.calibrate(0);
-    s.move({ dy: 0, timestamp: 1000, panelSize: SIZE });
-    s.move({ dy: 100, timestamp: 1016, panelSize: SIZE }); // 高速（钳 4000 → 松手钳 3000）
+    s.move({ dy: 0, timestamp: 1000, rubberbandSize: SIZE });
+    s.move({ dy: 100, timestamp: 1016, rubberbandSize: SIZE }); // 高速（钳 4000 → 松手钳 3000）
     const verdict = s.release(SIZE);
     expect(verdict.dismiss).toBe(true);
     expect(verdict.velocity).toBe(3000);
@@ -151,8 +151,8 @@ describe('拖拽会话：terminate 与跨会话无残留', () => {
     const s = createDragSession();
     s.grab();
     s.calibrate(0);
-    s.move({ dy: 0, timestamp: 1000, panelSize: SIZE });
-    s.move({ dy: 600, timestamp: 1016, panelSize: SIZE }); // 高速下拉中
+    s.move({ dy: 0, timestamp: 1000, rubberbandSize: SIZE });
+    s.move({ dy: 600, timestamp: 1016, rubberbandSize: SIZE }); // 高速下拉中
     expect(s.terminate()).toEqual({ dismiss: false, velocity: 0 });
   });
 
@@ -167,14 +167,14 @@ describe('拖拽会话：terminate 与跨会话无残留', () => {
     const s = createDragSession();
     s.grab();
     s.calibrate(0);
-    s.move({ dy: 0, timestamp: 1000, panelSize: SIZE });
-    s.move({ dy: 600, timestamp: 1016, panelSize: SIZE });
+    s.move({ dy: 0, timestamp: 1000, rubberbandSize: SIZE });
+    s.move({ dy: 600, timestamp: 1016, rubberbandSize: SIZE });
     expect(s.release(SIZE).dismiss).toBe(true);
 
     // 第二次手势只在顶部轻轻下压一帧就松手：旧实现读上一次的 lastY=600 → 误判关闭
     s.grab();
     s.calibrate(0);
-    s.move({ dy: 0, timestamp: 2000, panelSize: SIZE });
+    s.move({ dy: 0, timestamp: 2000, rubberbandSize: SIZE });
     expect(s.release(SIZE)).toEqual({ dismiss: false, velocity: 0 });
   });
 });
@@ -207,3 +207,49 @@ describe('认领判定：bubble 与 capture 开 / 关（真机 drop-claim 竞争
   });
 });
 
+describe('拖拽会话：判关基准 = 面板高度（底部弹层短面板）', () => {
+  const SCREEN = 3840; // 真机整屏高度（橡皮筋维度）
+  const SHEET = 700;   // 底部弹层实测面板高度
+
+  /** 短面板上的慢拖：位置即落点（速度样本按 dt 越界丢弃） */
+  function slowSheetDragTo(target: number) {
+    const s = createDragSession();
+    s.grab();
+    s.calibrate(0);
+    s.move({ dy: 0, timestamp: 0, rubberbandSize: SCREEN });
+    s.move({ dy: target, timestamp: SLOW, rubberbandSize: SCREEN });
+    return s;
+  }
+
+  it('低速整段下拉越过面板高度 1/3 → 判关（旧实现拿整屏当基准必然回弹）', () => {
+    expect(slowSheetDragTo(SHEET * DISMISS_PROJECT_RATIO).release(SHEET))
+      .toEqual({ dismiss: true, velocity: 0 });
+  });
+
+  it('未越过面板高度 1/3 → 回弹', () => {
+    expect(slowSheetDragTo(SHEET * DISMISS_PROJECT_RATIO - 1).release(SHEET))
+      .toEqual({ dismiss: false, velocity: 0 });
+  });
+
+  it('同一手势若仍拿整屏当判关基准 → 回弹（护栏：基准必须来自面板高度）', () => {
+    const s = slowSheetDragTo(SHEET * DISMISS_PROJECT_RATIO);
+    expect(s.release(SCREEN).dismiss).toBe(false);
+  });
+
+  it('橡皮筋维度与判关基准解耦：越界阻力只跟传入的橡皮筋维度走', () => {
+    const at = (size: number) => {
+      const s = createDragSession();
+      s.grab();
+      s.calibrate(0);
+      s.move({ dy: 0, timestamp: 0, rubberbandSize: size });
+      return s.move({ dy: -100, timestamp: SLOW, rubberbandSize: size })!;
+    };
+    // 维度越小阻力越强、跟随越少（同 rubberband 公式，与上面 SIZE/400 那条一致）
+    expect(Math.abs(at(SHEET))).toBeLessThan(Math.abs(at(SCREEN)));
+  });
+
+  it('全屏面板行为不变：不传 dismissSize → 基准回退屏高，阈值仍是 0.35 屏高', () => {
+    expect(slowDragTo(SIZE * DISMISS_PROJECT_RATIO).release(SIZE).dismiss).toBe(true);
+    expect(slowDragTo(SIZE * DISMISS_PROJECT_RATIO - 1).release(SIZE)).toEqual({ dismiss: false, velocity: 0 });
+  });
+});

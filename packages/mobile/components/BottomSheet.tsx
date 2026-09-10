@@ -35,7 +35,8 @@ interface Props {
  * - 拖拽只挂在把手区（grabberZone），面板内容区零接管——#186 教训：整面板挂手势
  *   会点内容误关、与 FlatList 抢滚动；把手区物理与 PlayerOverlay 共用同一份实现
  *   （gestures/dragSession + hooks/useDragToDismiss：可中断抓取 / 首帧原点校准 /
- *   自采样速度 EMA+钳幅 / 动量投影阈值 / terminate 回弹），此处只声明认领阈值。
+ *   自采样速度 EMA+钳幅 / 动量投影阈值 / terminate 回弹），此处只声明认领阈值与
+ *   判关基准（面板自身高度，onLayout 量取）。
  * - 关闭统一走「先播退场动画、finished 后再调 onClose」——父组件 visible=false
  *   会立即卸载 Modal，必须让动画先走完（PlayerOverlay dismiss 同款约束）；
  *   外部直接把 visible 置 false 的路径也会补播退场再卸载，观感一致。
@@ -58,6 +59,10 @@ export default function BottomSheet({
   mountedRef.current = mounted;
   const exitingRef = useRef(false);
 
+  // 判关基准 = 面板自身高度（真机 review）：短面板（如「更多」面板 ~700px）若拿整屏
+  // 高度当基准，正常速度的整段下拉投影也够不到 0.35×屏高，必然回弹。onLayout 量真实
+  // 高度，首帧未量到前回退 winH（≈ master 行为，不会更差）
+  const [sheetHeight, setSheetHeight] = useState(winH);
   const translateY = useRef(new Animated.Value(winH)).current;
   const maskOpacity = useRef(new Animated.Value(0)).current;
   const panelOpacity = useRef(new Animated.Value(1)).current;
@@ -132,7 +137,8 @@ export default function BottomSheet({
   // ── 把手区拖拽关闭：仅 grabberZone 接管，物理在 gestures/dragSession（与 PlayerOverlay 共用）──
   const panHandlers = useDragToDismiss({
     value: translateY,
-    size: winH,
+    rubberbandSize: winH, // 上推越界的阻尼维度：仍按整屏算，手感与 master 一致
+    dismissSize: sheetHeight, // 判关基准：面板自身高度（0.35 的语义 = 投影超过面板 1/3）
     // 10 = 把手热区的认领阈值（PlayerOverlay 全屏面板用 24）：热区总高仅 ~28px，
     // 阈值放宽到 10 手感更跟手
     claimThreshold: 10,
@@ -163,6 +169,11 @@ export default function BottomSheet({
             （RN 命中测试不跨兄弟节点，无此属性遮罩点按会失效） */}
         <View style={styles.spacer} pointerEvents="none" />
         <Animated.View
+          // 量面板真实高度喂判关基准；亚像素抖动不回写，避免无谓重渲染
+          onLayout={(e) => setSheetHeight((prev) => {
+            const h = e.nativeEvent.layout.height;
+            return Math.abs(prev - h) < 1 ? prev : h;
+          })}
           style={[
             styles.sheetWrap,
             {

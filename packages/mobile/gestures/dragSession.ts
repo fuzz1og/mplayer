@@ -24,14 +24,14 @@
  */
 import { DISMISS_PROJECT_RATIO, projectMomentum, rubberband } from '../theme/motion';
 
-/** 一次手势样本：PanResponder 的累计位移 + 事件时间戳 + 面板尺寸 */
+/** 一次手势样本：PanResponder 的累计位移 + 事件时间戳 + 橡皮筋维度 */
 export interface DragSample {
   /** 手势累计位移（gestureState.dy，px） */
   dy: number;
   /** 事件时间戳（nativeEvent.timestamp，ms） */
   timestamp: number;
-  /** 面板可见高度（px）：橡皮筋的阻尼维度 + 投影判关的比例基准 */
-  panelSize: number;
+  /** 上推越界的橡皮筋阻尼维度（px，一般 = 屏高）：只影响越界跟随的阻力，不影响判关 */
+  rubberbandSize: number;
 }
 
 /** 松手判决：调用点据此编排退场或回弹 */
@@ -52,8 +52,13 @@ export interface DragSession {
   calibrate(presentationValue: number): void;
   /** PanResponderMove：1:1 跟手 + 上推橡皮筋；基准未就绪返回 null（该帧丢弃） */
   move(sample: DragSample): number | null;
-  /** PanResponderRelease：动量投影判决（面板尺寸现取，旋转/折叠屏不吃过期值） */
-  release(panelSize: number): DragVerdict;
+  /**
+   * PanResponderRelease：动量投影判决。
+   * `dismissSize` = 判关基准高度（现取，旋转/折叠屏不吃过期值）：投影落点越过
+   * `dismissSize × DISMISS_PROJECT_RATIO` 即判关。全屏面板传屏高；底部弹层传面板
+   * 自身高度——短面板若拿整屏当基准，正常速度的整段下拉永远够不到判关线。
+   */
+  release(dismissSize: number): DragVerdict;
   /** PanResponderTerminate：手势被系统抢走 → 零速回弹兜底 */
   terminate(): DragVerdict;
 }
@@ -107,7 +112,7 @@ export function createDragSession(): DragSession {
 
     move(sample) {
       if (!baseReady) return null; // 坑 2：基准未就绪，丢弃该帧
-      const { dy, timestamp, panelSize } = sample;
+      const { dy, timestamp, rubberbandSize } = sample;
       // 首个 move 校准原点：认领前累计的位移不参与跟手（防瞬移）
       if (baseDy === null) {
         baseDy = dy;
@@ -115,7 +120,7 @@ export function createDragSession(): DragSession {
       }
       // 竖直下拉 1:1 跟手；上推越界给橡皮筋阻力（下拉越界不拦，交给松手投影判决）
       const raw = baseValue + (dy - baseDy);
-      const next = raw > 0 ? raw : rubberband(raw, panelSize);
+      const next = raw > 0 ? raw : rubberband(raw, rubberbandSize);
       // 自采样速度：对呈现位置差分；dt 越界的样本丢弃
       const dt = timestamp - vyT;
       if (vyT >= 0 && dt >= MIN_SAMPLE_DT && dt < MAX_SAMPLE_DT) {
@@ -129,11 +134,11 @@ export function createDragSession(): DragSession {
       return next;
     },
 
-    release(panelSize) {
+    release(dismissSize) {
       const velocity = clamp(vy, RELEASE_VELOCITY_CLAMP);
       // 动量投影落点：快甩从任意位置都能关，慢拖半途自然回弹
       const projected = lastPos + projectMomentum(velocity);
-      return { dismiss: projected >= panelSize * DISMISS_PROJECT_RATIO, velocity };
+      return { dismiss: projected >= dismissSize * DISMISS_PROJECT_RATIO, velocity };
     },
 
     terminate() {

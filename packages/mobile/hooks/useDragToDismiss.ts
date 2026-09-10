@@ -7,8 +7,14 @@ import { createDragSession, isVerticalDragClaim, shouldCaptureDrag } from '../ge
 export interface DragToDismissOptions {
   /** 被拖拽的位移值（面板 translateY）：跟手期间写值，松手交回调用点做弹簧 */
   value: Animated.Value;
-  /** 面板尺寸（一般 useWindowDimensions().height）：事件时刻取最新值，旋转/折叠屏不吃过期值 */
-  size: number;
+  /** 橡皮筋阻尼维度（一般 useWindowDimensions().height）：事件时刻取最新值，旋转/折叠屏不吃过期值 */
+  rubberbandSize: number;
+  /**
+   * 判关基准高度（px）：投影落点越过 `此值 × DISMISS_PROJECT_RATIO` 即判关；
+   * 缺省 = rubberbandSize（全屏面板行程 ≈ 屏高）。底部弹层传量出来的面板高度——
+   * 短面板拿整屏当基准，正常速度的整段下拉永远够不到判关线。
+   */
+  dismissSize?: number;
   /**
    * 认领手势的 |dy| 阈值（px）：各调用点手感不同，故留在调用点声明——
    * 把手热区小（~28px）用小阈值更跟手；全屏面板用大阈值 + dy 严格占优防斜滑误判。
@@ -39,7 +45,7 @@ export interface DragToDismissOptions {
  */
 export function useDragToDismiss(options: DragToDismissOptions): GestureResponderHandlers {
   // PanResponder 只能建一次（手势回调必须稳定），故实时参数经 ref 取最近一次渲染的值：
-  // 旋转/折叠屏时 size 与回调闭包（含其中的 winH）随之刷新，不吃挂载时的过期值
+  // 旋转/折叠屏时尺寸与回调闭包（含其中的 winH）随之刷新，不吃挂载时的过期值
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const session = useRef(createDragSession()).current;
@@ -63,13 +69,13 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
         value.stopAnimation((v) => session.calibrate(v));
       },
       onPanResponderMove: (e, gs) => {
-        const { value, size } = optionsRef.current;
-        const next = session.move({ dy: gs.dy, timestamp: e.nativeEvent.timestamp, panelSize: size });
+        const { value, rubberbandSize } = optionsRef.current;
+        const next = session.move({ dy: gs.dy, timestamp: e.nativeEvent.timestamp, rubberbandSize });
         if (next !== null) value.setValue(next);
       },
       onPanResponderRelease: () => {
-        const { onDismiss, onSnapBack, onGestureEnd, size } = optionsRef.current;
-        const { dismiss, velocity } = session.release(size);
+        const { onDismiss, onSnapBack, onGestureEnd, rubberbandSize, dismissSize } = optionsRef.current;
+        const { dismiss, velocity } = session.release(dismissSize ?? rubberbandSize);
         if (dismiss) onDismiss(velocity);
         else onSnapBack(velocity);
         onGestureEnd?.();
