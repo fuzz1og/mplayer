@@ -11,6 +11,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { springs } from '../theme/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useDragToDismiss } from '../hooks/useDragToDismiss';
+import { handlePanelLayout } from './panelHeight';
 
 /** 面板内容最大高度占屏比 */
 const DEFAULT_MAX_HEIGHT = 0.7;
@@ -169,11 +170,9 @@ export default function BottomSheet({
             （RN 命中测试不跨兄弟节点，无此属性遮罩点按会失效） */}
         <View style={styles.spacer} pointerEvents="none" />
         <Animated.View
-          // 量面板真实高度喂判关基准；亚像素抖动不回写，避免无谓重渲染
-          onLayout={(e) => setSheetHeight((prev) => {
-            const h = e.nativeEvent.layout.height;
-            return Math.abs(prev - h) < 1 ? prev : h;
-          })}
+          // 量面板真实高度喂判关基准：取值必须在 handler 内同步完成（事件对象会被回收，
+          // 写进 updater 里就是真机 Render Error），纪律钉在 handlePanelLayout 内
+          onLayout={(e) => handlePanelLayout(setSheetHeight, e)}
           style={[
             styles.sheetWrap,
             {
