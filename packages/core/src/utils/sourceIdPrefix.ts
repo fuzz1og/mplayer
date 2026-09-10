@@ -3,8 +3,12 @@
  * 按 ID 识别前循环剥离，得到源站真实 ID（链接会过期，ID 不会）。
  * 原 shared/resolvePlayableUrl.ts 内联实现（#244 共享解析层四件套删除后独立成文件），
  * tier3 / sourceSwap 等仍在使用。
+ *
+ * #307 补齐 migu：前缀表原先漏了 SourceKey 八源里的 migu，导致换源到咪咕的歌
+ * 被写成 migu:migu:123，身份键（utils/songIdentity）对同一首歌分裂出两个键。
+ * 咪咕直连搜索产出裸数字 id（api/miguDirect.ts），补上后与其它源同一套语义。
  */
-const SOURCE_ID_PREFIX = /^(netease|qq|kugou|kuwo|qianqian|soda|local):/;
+const SOURCE_ID_PREFIX = /^(netease|qq|kugou|kuwo|migu|qianqian|soda|local):/;
 
 export function stripSourceIdPrefix(id: string): string {
   let out = id;

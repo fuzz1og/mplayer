@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { identityKey, identityKeyFrom, rawSongId } from '../songIdentity.js';
+import { stripSourceIdPrefix } from '../sourceIdPrefix.js';
 
 describe('rawSongId（去源前缀的真实 ID）', () => {
   it('裸 id 原样返回', () => {
@@ -18,6 +19,25 @@ describe('rawSongId（去源前缀的真实 ID）', () => {
   it('空值归一为空串', () => {
     expect(rawSongId(undefined)).toBe('');
     expect(rawSongId(null)).toBe('');
+  });
+});
+
+describe('migu 前缀补齐（#307 契约缺口）', () => {
+  it('stripSourceIdPrefix 剥离 migu 前缀（此前漏配 → migu:migu:123）', () => {
+    expect(stripSourceIdPrefix('migu:123')).toBe('123');
+    expect(stripSourceIdPrefix('migu:kugou:123')).toBe('123');
+  });
+
+  it('裸 id 与带 migu 前缀 id 收敛为同一身份键（直连搜索 vs 换源后）', () => {
+    expect(identityKeyFrom('migu', '123')).toBe('migu:123');
+    expect(identityKeyFrom('migu', 'migu:123')).toBe('migu:123');
+    expect(identityKeyFrom('migu', '123')).toBe(identityKeyFrom('migu', 'migu:123'));
+  });
+
+  it('多层嵌套 migu:kugou:1 收敛为最外层源 migu', () => {
+    expect(rawSongId('migu:kugou:1')).toBe('1');
+    expect(identityKeyFrom('kugou', 'migu:kugou:1')).toBe('migu:1');
+    expect(identityKeyFrom('migu', 'migu:kugou:1')).toBe('migu:1');
   });
 });
 
