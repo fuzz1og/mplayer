@@ -332,3 +332,49 @@ describe('队列下一首预取（预取缓存键）', () => {
     );
   });
 });
+
+// 拖拽排序的唯一索引数学在 utils/reorder.moveItem，队列页/本地歌单页/store 共用；
+// 这里锁住 store 侧的语义：顺序变了、currentPlaylistIndex 跟着走
+describe('reorderQueue（拖拽排序）', () => {
+  const queue = () => [song('r-a'), song('r-b'), song('r-c'), song('r-d')];
+
+  it('把某一首挪到新位置，其余相对顺序不变', () => {
+    usePlayerStore.setState({ currentPlaylist: queue(), currentPlaylistIndex: -1 });
+
+    usePlayerStore.getState().reorderQueue(0, 2);
+
+    expect(usePlayerStore.getState().currentPlaylist.map(s => s.id)).toEqual(['r-b', 'r-c', 'r-a', 'r-d']);
+  });
+
+  it('挪动正在播放的那首时，currentPlaylistIndex 跟随该曲', () => {
+    usePlayerStore.setState({ currentPlaylist: queue(), currentPlaylistIndex: 1 });
+
+    usePlayerStore.getState().reorderQueue(1, 3);
+
+    const state = usePlayerStore.getState();
+    expect(state.currentPlaylist.map(s => s.id)).toEqual(['r-a', 'r-c', 'r-d', 'r-b']);
+    expect(state.currentPlaylistIndex).toBe(3);
+  });
+
+  it('把当前曲前面的歌挪到它后面（或反之）时，下标相应平移一位', () => {
+    usePlayerStore.setState({ currentPlaylist: queue(), currentPlaylistIndex: 2 });
+
+    // 前面的 r-a 挪到 r-d 之后：当前曲整体前移一位
+    usePlayerStore.getState().reorderQueue(0, 3);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(1);
+
+    // 再把队尾挪回队首：当前曲整体后移一位
+    usePlayerStore.getState().reorderQueue(3, 0);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(2);
+  });
+
+  it('越界下标是空操作', () => {
+    usePlayerStore.setState({ currentPlaylist: queue(), currentPlaylistIndex: 0 });
+
+    usePlayerStore.getState().reorderQueue(-1, 2);
+    usePlayerStore.getState().reorderQueue(0, 9);
+    usePlayerStore.getState().reorderQueue(1, 1);
+
+    expect(usePlayerStore.getState().currentPlaylist.map(s => s.id)).toEqual(['r-a', 'r-b', 'r-c', 'r-d']);
+  });
+});

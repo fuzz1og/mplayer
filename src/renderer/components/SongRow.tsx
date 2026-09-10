@@ -15,15 +15,15 @@ import { searchService } from '@/renderer/services/searchService';
 interface SongRowProps {
   song: Song;
   index: number;
-  isCurrentSong: boolean;
-  isPlaying: boolean;
-  isFavorite: boolean;
-  showIndex: boolean;
-  showCheckbox: boolean;
-  isSelected: boolean;
-  showRemoveFromPlaylist: boolean;
+  isCurrentSong?: boolean;
+  isPlaying?: boolean;
+  isFavorite?: boolean;
+  showIndex?: boolean;
+  showCheckbox?: boolean;
+  isSelected?: boolean;
+  showRemoveFromPlaylist?: boolean;
   /** 「更多」菜单是否开在本行：由列表模块把 activeDropdown 折算成布尔量，避免开一个菜单重渲染整表 */
-  moreOpen: boolean;
+  moreOpen?: boolean;
   onPlay: (song: Song) => void;
   onToggleFavorite?: (song: Song) => void;
   onDownload?: (song: Song) => void;
@@ -38,16 +38,30 @@ interface SongRowProps {
   onCoverError?: (song: Song) => void;
   /** 是否显示专辑列（列表层按整列是否有专辑判断，无专辑列表整列塌缩） */
   showAlbum?: boolean;
+  /** 专辑列宽（默认 180px；队列页沿用 120px） */
+  albumWidth?: number;
+  /**
+   * 标题区是否吸收剩余宽度：默认按「固定标题列 + 弹性留白 + 专辑列 + 操作列」的表格布局，
+   * 置 true 时标题撑满（无专辑列、行尾按钮自带宽度的场景，如队列页/本地歌单页）
+   */
+  fillTitle?: boolean;
+  /** 拖拽句柄插槽：渲染在序号列内（有句柄时序号列与句柄同格，队列页/歌单页拖拽排序用） */
+  dragHandle?: React.ReactNode;
+  /** 行尾操作区插槽：缺省用共享的 RowActionButtons（下载/收藏/更多） */
+  actions?: React.ReactNode;
+  /** 行根节点 ref：供 dnd-kit 等外部能力挂载 */
+  rowRef?: React.Ref<HTMLDivElement>;
   compact?: boolean;
   style?: React.CSSProperties;
 }
 
 const SongRow: React.FC<SongRowProps> = ({
-  song, index, isCurrentSong, isPlaying, isFavorite,
-  showIndex, showCheckbox, isSelected, showRemoveFromPlaylist,
-  moreOpen, onPlay, onToggleFavorite, onDownload,
+  song, index, isCurrentSong = false, isPlaying = false, isFavorite = false,
+  showIndex = true, showCheckbox = false, isSelected = false, showRemoveFromPlaylist = false,
+  moreOpen = false, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onRemoveFromPlaylist, onToggleSelect,
-  onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, compact = false, style,
+  onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, albumWidth = 180,
+  fillTitle = false, dragHandle, actions, rowRef, compact = false, style,
 }) => {
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
@@ -64,17 +78,20 @@ const SongRow: React.FC<SongRowProps> = ({
     navigate('/discover');
   };
 
-  // 操作统一收进「更多」菜单；本地文件不提供换源（spec 范围外）
+  // 操作统一收进「更多」菜单：加入歌单（提供处理器才有入口）、换源、查看歌手、从歌单移除（危险项居末）；
+  // 本地文件不提供换源（spec 范围外）
   const menuItems: RowActionItem[] = [];
-  if (showRemoveFromPlaylist && onRemoveFromPlaylist) {
-    menuItems.push({ key: 'remove', label: '从歌单移除', icon: <Trash2 size={14} />, danger: true, onClick: () => onRemoveFromPlaylist(song) });
+  if (onAddToPlaylist) {
+    menuItems.push({ key: 'playlist', label: '加入歌单', icon: <ListMusic size={14} />, onClick: () => onAddToPlaylist(song) });
   }
-  menuItems.push({ key: 'playlist', label: '加入歌单', icon: <ListMusic size={14} />, onClick: () => onAddToPlaylist?.(song) });
   if (song.sourceType !== 'local') {
     menuItems.push({ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open });
   }
   if (song.artist) {
     menuItems.push({ key: 'artist', label: '查看歌手', ariaLabel: '查看歌手', icon: <User size={14} />, onClick: handleViewArtist });
+  }
+  if (showRemoveFromPlaylist && onRemoveFromPlaylist) {
+    menuItems.push({ key: 'remove', label: '从歌单移除', icon: <Trash2 size={14} />, danger: true, onClick: () => onRemoveFromPlaylist(song) });
   }
 
   // cover 为空（如收藏/历史里从未存过封面）时挂载即触发一次刷新，显示层不依赖 onError
@@ -88,6 +105,7 @@ const SongRow: React.FC<SongRowProps> = ({
 
   return (
     <div
+      ref={rowRef}
       className="song-row"
       onDoubleClick={() => onPlay(song)}
       style={{
@@ -121,9 +139,10 @@ const SongRow: React.FC<SongRowProps> = ({
           />
         </div>
       )}
-      {showIndex && (
-        <div style={{ width: '50px', textAlign: 'center' }}>
-          {isCurrentSong && isPlaying ? (
+      {(showIndex || dragHandle) && (
+        <div style={{ width: showIndex ? '50px' : '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+          {dragHandle}
+          {showIndex && (isCurrentSong && isPlaying ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
               <span style={{ width: '3px', height: '12px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0s' }} />
               <span style={{ width: '3px', height: '16px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
@@ -133,11 +152,13 @@ const SongRow: React.FC<SongRowProps> = ({
             <span style={{ fontSize: '14px', color: isCurrentSong ? 'var(--accent)' : 'var(--text-tertiary)', fontWeight: isCurrentSong ? 600 : 400 }}>
               {index + 1}
             </span>
-          )}
+          ))}
         </div>
       )}
       {/* Song info */}
-      <div style={{ width: '38%', maxWidth: '380px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+      <div style={fillTitle
+        ? { flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }
+        : { width: '38%', maxWidth: '380px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <div style={{ width: '44px', height: '44px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0, position: 'relative' }}>
           <SongCover src={song.cover} alt={song.name} variant="gradient" onError={() => onCoverError?.(song)} />
           <div
@@ -161,26 +182,28 @@ const SongRow: React.FC<SongRowProps> = ({
           </div>
         </div>
       </div>
-      {/* 弹性占位：把专辑列和操作列推到右侧，标题区限宽后剩余空间留白 */}
-      <div style={{ flex: 1, minWidth: 0 }} />
+      {/* 弹性占位：把专辑列和操作列推到右侧，标题区限宽后剩余空间留白（标题撑满时不需要） */}
+      {!fillTitle && <div style={{ flex: 1, minWidth: 0 }} />}
       {/* Album */}
       {!compact && showAlbum && (
-        <div style={{ width: '180px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        <div style={{ width: `${albumWidth}px`, fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
           {song.album}
         </div>
       )}
-      {/* Actions */}
-      <RowActionButtons
-        song={song}
-        isFavorite={isFavorite}
-        onToggleFavorite={onToggleFavorite}
-        onDownload={onDownload}
-        moreOpen={moreOpen}
-        moreTriggerRef={dropdownTriggerRef}
-        onToggleMore={(e) => onToggleDropdown?.(song.id, e)}
-        onCloseMore={onCloseDropdown ?? (() => {})}
-        menuItems={menuItems}
-      />
+      {/* Actions：缺省用共享操作区，调用方可整块替换（如队列页的加入歌单/移除） */}
+      {actions ?? (
+        <RowActionButtons
+          song={song}
+          isFavorite={isFavorite}
+          onToggleFavorite={onToggleFavorite}
+          onDownload={onDownload}
+          moreOpen={moreOpen}
+          moreTriggerRef={dropdownTriggerRef}
+          onToggleMore={(e) => onToggleDropdown?.(song.id, e)}
+          onCloseMore={onCloseDropdown ?? (() => {})}
+          menuItems={menuItems}
+        />
+      )}
       <SourceSwapModal
         open={swap.visible}
         songName={song.name}
