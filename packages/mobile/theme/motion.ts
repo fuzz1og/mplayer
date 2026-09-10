@@ -28,6 +28,21 @@ export const springs = {
 } as const satisfies Record<string, SpringPreset>;
 
 /**
+ * 拖拽关闭判决阈值：松手后的动量投影落点越过「面板高度 × 此比例」即判关。
+ * 0.35 让快甩从任意位置都能关、慢拖半途自然回弹；PlayerOverlay 与 BottomSheet
+ * 共用这一份（曾各自声明一遍），唯一定义在此，改阈值即两端生效。
+ */
+export const DISMISS_PROJECT_RATIO = 0.35;
+
+/**
+ * 位置兜底判关比例：拖动距离越过「面板高度 × 此比例」即判关，不依赖速度。
+ * 与 DISMISS_PROJECT_RATIO（动量投影判关）相互独立、取或：位置判据给中低速长拖一个
+ * 确定性下限，速度自采样在真机事件密度下不可靠时也不至于「整段拉不动」。
+ * 缺省不启用（调用点按需传）：全屏播放器沿用原手感，只有底部弹层传它。
+ */
+export const DISMISS_POSITION_RATIO = 0.4;
+
+/**
  * 动量投影（Apple 指数衰减模型，非 v²/2a 教科书式）：
  * 松手速度 → 预计继续滑行的距离（px）。decelerationRate 同 UIScrollView：
  * 0.998 = 常规滚动手感，0.99 更利落。

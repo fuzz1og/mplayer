@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Modal, View, StyleSheet, Pressable, PanResponder, Animated,
+  Modal, View, StyleSheet, Pressable, Animated,
   useWindowDimensions,
   type StyleProp, type ViewStyle,
 } from 'react-native';
@@ -8,14 +8,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { radius, spacing } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import { springs, projectMomentum, rubberband } from '../theme/motion';
+import { DISMISS_POSITION_RATIO, springs } from '../theme/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useDragToDismiss } from '../hooks/useDragToDismiss';
+import { handlePanelLayout } from './panelHeight';
 
 /** 面板内容最大高度占屏比 */
 const DEFAULT_MAX_HEIGHT = 0.7;
-
-/** 动量投影落点超过屏高此比例即判关：快甩从任意位置都能关，慢拖半途自然回弹 */
-const DISMISS_PROJECT_RATIO = 0.35;
 
 interface Props {
   visible: boolean;
@@ -35,9 +34,10 @@ interface Props {
  *   （含遮罩底色）一起从底部滑上来；现在原生 slide 关掉，遮罩用短 timing 淡入、
  *   面板用 springs.sheet 弹簧上滑，两者 parallel 但节奏天然分层。
  * - 拖拽只挂在把手区（grabberZone），面板内容区零接管——#186 教训：整面板挂手势
- *   会点内容误关、与 FlatList 抢滚动；把手区物理照抄 PlayerOverlay 已验证模式
- *   （可中断抓取 / 首帧原点校准 / 自采样速度 EMA+钳幅 / 动量投影 0.35 阈值 /
- *   terminate 回弹）。
+ *   会点内容误关、与 FlatList 抢滚动；把手区物理与 PlayerOverlay 共用同一份实现
+ *   （gestures/dragSession + hooks/useDragToDismiss：可中断抓取 / 首帧原点校准 /
+ *   自采样速度 EMA+钳幅 / 动量投影阈值 / terminate 回弹），此处只声明认领阈值与
+ *   判关基准（面板自身高度，onLayout 量取）。
  * - 关闭统一走「先播退场动画、finished 后再调 onClose」——父组件 visible=false
  *   会立即卸载 Modal，必须让动画先走完（PlayerOverlay dismiss 同款约束）；
  *   外部直接把 visible 置 false 的路径也会补播退场再卸载，观感一致。
@@ -60,6 +60,10 @@ export default function BottomSheet({
   mountedRef.current = mounted;
   const exitingRef = useRef(false);
 
+  // 判关基准 = 面板自身高度（真机 review）：短面板（如「更多」面板 ~700px）若拿整屏
+  // 高度当基准，正常速度的整段下拉投影也够不到 0.35×屏高，必然回弹。onLayout 量真实
+  // 高度，首帧未量到前回退 winH（≈ master 行为，不会更差）
+  const [sheetHeight, setSheetHeight] = useState(winH);
   const translateY = useRef(new Animated.Value(winH)).current;
   const maskOpacity = useRef(new Animated.Value(0)).current;
   const panelOpacity = useRef(new Animated.Value(1)).current;
@@ -131,60 +135,26 @@ export default function BottomSheet({
 
   const requestClose = (velocityY = 0) => playExit(velocityY, () => onCloseRef.current());
 
-  // ── 把手区拖拽关闭：仅 grabberZone 接管，物理照抄 PlayerOverlay ──
-  const dragStart = useRef(0);
-  const baseDy = useRef<number | null>(null);
-  const lastPos = useRef(0);
-  const vySample = useRef({ vy: 0, lastY: 0, t: -1 });
-  const baseReady = useRef(false);
-  const grabberPan = useRef(
-    PanResponder.create({
-      // 只认领竖直下拉（dy 占优防斜滑）；zone 很小，阈值放宽到 10 手感更跟手
-      onMoveShouldSetPanResponder: (_, gs) =>
-        Math.abs(gs.dy) > 10 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onPanResponderGrant: () => {
-        // 可中断：抓住当前值（入场途中抓住也能接续下拉）
-        translateY.stopAnimation((v) => { dragStart.current = v; baseReady.current = true; });
-        baseDy.current = null;
-        vySample.current = { vy: 0, lastY: 0, t: -1 };
-      },
-      onPanResponderMove: (e, gs) => {
-        if (!baseReady.current) return;
-        const ts = e.nativeEvent.timestamp;
-        const s = vySample.current;
-        // 首个 move 校准原点：grant 前累计位移不参与跟手（防瞬移）
-        if (baseDy.current === null) {
-          baseDy.current = gs.dy;
-          s.lastY = dragStart.current;
-        }
-        const raw = dragStart.current + (gs.dy - baseDy.current);
-        const next = raw > 0 ? raw : rubberband(raw, winH); // 上推越界给橡皮筋阻力
-        // 自采样速度（dt<4ms 视为时间戳抖动丢弃；瞬时钳 ±4000）
-        const dt = ts - s.t;
-        if (s.t >= 0 && dt >= 4 && dt < 100) {
-          const ivy = Math.max(-4000, Math.min(4000, ((next - s.lastY) / dt) * 1000));
-          s.vy = s.vy === 0 ? ivy : s.vy * 0.6 + ivy * 0.4;
-        }
-        s.lastY = next;
-        s.t = ts;
-        lastPos.current = next;
-        translateY.setValue(next);
-      },
-      onPanResponderRelease: () => {
-        const vy = Math.max(-3000, Math.min(3000, vySample.current.vy));
-        const projected = lastPos.current + projectMomentum(vy);
-        if (projected >= winH * DISMISS_PROJECT_RATIO) {
-          playExit(vy, () => onCloseRef.current()); // 快甩/过半 → 下滑退场后再通知父级
-        } else {
-          Animated.spring(translateY, { toValue: 0, velocity: vy, useNativeDriver: true, ...springs.sheet }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        // 手势被系统抢走 → 回弹兜底
-        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, ...springs.sheet }).start();
-      },
-    })
-  ).current;
+  // ── 把手区拖拽关闭：仅 grabberZone 接管，物理在 gestures/dragSession（与 PlayerOverlay 共用）──
+  const panHandlers = useDragToDismiss({
+    value: translateY,
+    rubberbandSize: winH, // 上推越界的阻尼维度：仍按整屏算，手感与 master 一致
+    dismissSize: sheetHeight, // 判关基准：面板自身高度（0.35 的语义 = 投影超过面板 1/3）
+    // 位置兜底（真机第二轮）：中低速长拖不该因为速度自采样偏低而回弹——
+    // 拖过面板高度 0.4 即判关，投影判据仍是「快甩更容易关」的加分项
+    positionRatio: DISMISS_POSITION_RATIO,
+    // 认领模式 = 触摸 DOWN 即成为响应者（RN#14295：Modal 内 onMoveShouldSetPanResponder
+    // 根本不触发，只靠 move 认领在 Modal 里不可靠）。同时拒绝让出响应者，防 Modal/Dialog
+    // 在拖动途中抢走——这是 Modal 内把手拖拽的标准修法
+    claimMode: 'start',
+    // 10 = 把手热区的认领阈值（PlayerOverlay 全屏面板用 24）：只作 'start' 模式下的 move 兜底
+    claimThreshold: 10,
+    onDismiss: requestClose, // 快甩/过半 → 先播退场、finished 后再通知父级
+    // 未判关 / 系统抢走手势 → 弹簧回弹到 0，release 继承松手速度，terminate 走零速兜底
+    onSnapBack: (vy) => {
+      Animated.spring(translateY, { toValue: 0, velocity: vy, useNativeDriver: true, ...springs.sheet }).start();
+    },
+  });
 
   if (!mounted) return null;
 
@@ -206,6 +176,9 @@ export default function BottomSheet({
             （RN 命中测试不跨兄弟节点，无此属性遮罩点按会失效） */}
         <View style={styles.spacer} pointerEvents="none" />
         <Animated.View
+          // 量面板真实高度喂判关基准：取值必须在 handler 内同步完成（事件对象会被回收，
+          // 写进 updater 里就是真机 Render Error），纪律钉在 handlePanelLayout 内
+          onLayout={(e) => handlePanelLayout(setSheetHeight, e)}
           style={[
             styles.sheetWrap,
             {
@@ -219,8 +192,12 @@ export default function BottomSheet({
             style,
           ]}
         >
-          {/* 把手 + 可拖拽热区（真机反馈 #c：按住把手可下拉关闭，iOS 式） */}
-          <View style={styles.grabberZone} {...grabberPan.panHandlers}>
+          {/* 把手 + 可拖拽热区（真机反馈 #c：按住把手可下拉关闭，iOS 式）。
+              命中区对齐 Apple HIG：热区 48dp（HIG 建议 ≥44pt）+ hitSlop 上下各 8dp 外扩
+              （HIG Accessibility：无边框元素周围约 24pt 内边距）；RN 的 hitSlop 会真实扩大
+              原生命中矩形且不影响兄弟节点（遮罩）。依据见
+              docs/agents/mobile-bottom-sheet-drag-research.md */}
+          <View style={styles.grabberZone} hitSlop={{ top: 8, bottom: 8 }} {...panHandlers}>
             <View style={styles.handle} />
           </View>
           {children}
@@ -246,9 +223,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgSurface,
     paddingHorizontal: spacing[5],
   },
-  // 把手拖拽热区：把手上下各留 ~12px 命中范围（总高 ~28，iOS grabber 手感）
+  // 把手拖拽热区：48dp 命中区（Apple HIG 建议 ≥44pt；真机第三轮原总高仅 22dp，
+  // 命中率低是「拉不到把手」体感的一部分；研究结论见
+  // docs/agents/mobile-bottom-sheet-drag-research.md）。JSX 侧再叠 hitSlop 上下各 8dp。
+  // 视觉不变——handle 仍 4dp、在热区内居中，多出来的是透明命中范围
   grabberZone: {
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: spacing[12], // 48dp（token 体系已有 48 档，与 desktop --space-* 同网格）
     paddingTop: spacing[2] + 2,
     paddingBottom: spacing[2],
   },
