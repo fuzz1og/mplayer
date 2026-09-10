@@ -81,9 +81,8 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
   if (panResponderRef.current === null) {
     panResponderRef.current = PanResponder.create({
       // 记「本层见过 DOWN」，不抢起点（两条都返回 false，对子级零影响）。
-      // bubble 这条必须挂：PanResponder 挂在触摸目标自身时（BottomSheet 把手热区），
-      // responder 协商的 capture 阶段不会问到它——真机第三轮教训，只挂 capture 会把
-      // 把手拖拽彻底拦死；capture 这条留给 handler 挂在祖先上的场景（全屏播放器根节点）
+      // 两处都接：无活跃 responder 时 renderer 的两阶段派发（accumulateTwoPhaseDispatchesSingle）
+      // 都包含目标自身，handler 挂祖先（播放器根节点）或叶子（把手热区）都能收到 start。
       // 'start' 模式（Modal 内）：DOWN 即成为响应者，之后所有 move 必然送达；
       // 'move' 模式（根节点）：只记「见过 DOWN」，返回 false 不抢点按
       onStartShouldSetPanResponder: () => {
@@ -128,10 +127,6 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
         const basis = dismissSize ?? rubberbandSize;
         const ratio = positionRatio ?? 0;
         const { dismiss, velocity } = session.release(basis, ratio);
-        if (__DEV__) {
-          // 临时诊断（真机第二轮）：确认判关基准与速度采样在真机上的实际取值
-          console.log('[drag] release basis=' + basis.toFixed(0) + 'px ratio=' + ratio + ' vy=' + velocity.toFixed(0) + 'px/s → ' + (dismiss ? 'dismiss' : 'snapBack'));
-        }
         if (dismiss) onDismiss(velocity);
         else onSnapBack(velocity);
         onGestureEnd?.();

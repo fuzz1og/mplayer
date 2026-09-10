@@ -177,10 +177,14 @@ export function isVerticalDragClaim(dx: number, dy: number, threshold: number, e
  * Android 会把后续事件转交下层窗口；下层根节点若认领就会「连带关闭」。那种残余序列
  * 没有在本层落下过 DOWN，被这道闸拒掉。
  *
- * 真机教训 4（为什么 begin 要接 bubble 与 capture 两处）：responder 协商的 capture
- * 阶段只覆盖「root → 目标的父级」，PanResponder 挂在目标自身时（BottomSheet 的把手
- * 热区）capture 不触发——只挂 capture 会把把手拖拽彻底拦死。两处都返回 false：
- * 只记「见过 DOWN」，不抢起点。
+ * 真机教训 4（叶子节点上只挂 move 认领为何整条失效）：RN Android 在 ACTION_DOWN 时锁定
+ * touch target，后续 MOVE 只派发给同一个 target——认领挂在叶子（BottomSheet 把手热区）时，
+ * 只有 DOWN 恰好落在那片叶子内才可能命中；再叠加本闸，认领就会全灭。
+ * （曾归因于「capture 阶段不覆盖目标自身」，按 RN 0.86.2 源码不成立：无活跃 responder 时
+ * 用 accumulateTwoPhaseDispatchesSingle，目标在两阶段都被包含；只有 responder 与 target 的
+ * 共同祖先就是 responder 时才走 SkipTarget 变体。）
+ * 因此把手路径改用「触摸开始即认领」（claimMode 'start'，见 RN#14295）；本闸只服务于挂在
+ * 祖先上的 move 认领路径（全屏播放器）。begin 两处都接，覆盖两种挂载位置，只记不抢。
  */
 export interface TouchSequenceGate {
   /** 本层收到 touch start（bubble 或 capture 任一阶段）→ 该序列归本层 */
