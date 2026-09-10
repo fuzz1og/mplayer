@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, memo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, ScrollView,
-  PanResponder, Animated, Alert, Dimensions, useWindowDimensions, Easing,
+  Animated, Alert, useWindowDimensions, Easing,
 } from 'react-native';
 import type { NativeSyntheticEvent, NativeScrollEvent, StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,13 +26,11 @@ import { SOURCE_LABELS } from '../stores/sourceStore';
 import {radius, shadow, spacing, textVariants, turntable, playerForeground, playerBackground} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import { springs, projectMomentum, rubberband } from '../theme/motion';
+import { springs } from '../theme/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useDragToDismiss } from '../hooks/useDragToDismiss';
 import { tapLight } from '../utils/haptics';
 import ScalePress from './ScalePress';
-
-/** 投影落点超过屏高此比例即判关：快甩从任意位置都能关，慢拖半途自然回弹 */
-const DISMISS_PROJECT_RATIO = 0.35;
 
 /** 唱盘尺寸（#186 #4 + 真机反馈 + 布局优化）：底部操作行合并进控制行后省出空间，
  *  按屏宽 72% / 屏高 36% 缩放（收一档四周留白对称，配合唱盘弹性居中悬浮感；
@@ -352,18 +350,6 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (newSong) playSong(newSong);
   };
 
-  // ── 手势物理（ADR-0004）：可中断、速度继承、动量投影、橡皮筋。
-  //    只管竖直下拉关闭；横向分页已交给原生 ScrollView，外层永不认领横向手势。──
-  const dragStartValue = useRef(0);                 // 抓取瞬间面板呈现值（支持中途抓住动画）
-  const gestureBaseDy = useRef<number | null>(null); // 首个 move 事件校准基准（消除激活前位移跳变）
-  const lastY = useRef(0);                          // 最近一帧面板位置（release 同步可读）
-  // 真机实测（PKB110/Fabric）：release 回调拿到的框架 gestureState 可能已被下一个
-  // 触摸序列清零（vy=0），松手判定用 move 阶段自采样：对呈现位置差分 + EMA 平滑。
-  const vySampleRef = useRef({ vy: 0, lastY: 0, t: -1 });
-  // stopAnimation 的 getValue 走原生异步回路，回调可能晚于首个 move 到达；
-  // 基准未就绪前丢弃 move 帧，防止跟手从错误基准起跳。
-  const dragBaseReadyRef = useRef(false);
-
   const dismiss = (velocityY = 0) => {
     if (reducedMotion) {
       // 减弱动效：原地淡出，不做大位移
@@ -374,7 +360,7 @@ export default function PlayerOverlay({ onClose }: Props) {
     // P0-2：下滑关闭时 translateY 弹簧下滑，同时淡出 + 轻微放大（同步减淡缩放）
     Animated.parallel([
       Animated.spring(panY, {
-        toValue: Dimensions.get('window').height, // 现取现用，旋转/折叠屏不取过期值
+        toValue: winH,        // 实时高度（useWindowDimensions 经适配器取最新值）：旋转/折叠屏不吃过期值
         velocity: velocityY,                      // 继承松手速度，无匀速刹车感
         useNativeDriver: true,
         ...springs.sheet,
@@ -395,61 +381,26 @@ export default function PlayerOverlay({ onClose }: Props) {
     }).start();
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      // 只认领竖直下拉（dy 严格占优防斜滑误判）：横向让给原生分页 ScrollView，
-      // 竖向在歌词列表上让给列表自身滚动（bubble 协商子组件优先）
-      onMoveShouldSetPanResponder: (_, gs) =>
-        Math.abs(gs.dy) > 24 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onPanResponderGrant: () => {
-        // 可中断：抓住当前呈现值接管进行中的动画（关闭/入场途中均可抓）
-        panY.stopAnimation((v) => { dragStartValue.current = v; dragBaseReadyRef.current = true; });
-        gestureBaseDy.current = null;
-        vySampleRef.current = { vy: 0, lastY: 0, t: -1 };
-        isPagingRef.current = true;
-      },
-      onPanResponderMove: (e, gs) => {
-        if (!dragBaseReadyRef.current) return; // 基准未就绪：丢弃头部帧防错跳
-        const ts = e.nativeEvent.timestamp;
-        const s = vySampleRef.current;
-        // 首个 move 校准原点：grant 前的累计位移不参与跟手（防瞬移）
-        if (gestureBaseDy.current === null) {
-          gestureBaseDy.current = gs.dy;
-          s.lastY = dragStartValue.current;
-        }
-        // 竖直下拉 1:1 跟手；上滑越界橡皮筋
-        const raw = dragStartValue.current + (gs.dy - gestureBaseDy.current);
-        const next = raw > 0 ? raw : rubberband(raw, Dimensions.get('window').height);
-        // 自采样速度（dt<4ms 视为时间戳抖动丢弃；瞬时钳 ±4000 防弹簧带天文速度瞬扫整屏）
-        const dt = ts - s.t;
-        if (s.t >= 0 && dt >= 4 && dt < 100) {
-          const ivy = Math.max(-4000, Math.min(4000, ((next - s.lastY) / dt) * 1000));
-          s.vy = s.vy === 0 ? ivy : s.vy * 0.6 + ivy * 0.4;
-        }
-        s.lastY = next;
-        s.t = ts;
-        lastY.current = next;
-        panY.setValue(next);
-      },
-      onPanResponderRelease: () => {
-        const vy = Math.max(-3000, Math.min(3000, vySampleRef.current.vy)); // px/s 自采样 + 钳幅
-        // 动量投影判定落点：投影越过屏高 35% 即关（快甩任意位置能关，慢拖半途自然回弹）
-        const projected = lastY.current + projectMomentum(vy);
-        if (projected >= Dimensions.get('window').height * DISMISS_PROJECT_RATIO) {
-          dismiss(vy);
-        } else {
-          snapBack(vy);
-        }
-        setTimeout(() => { isPagingRef.current = false; }, 400);
-      },
-      onPanResponderTerminate: () => snapBack(), // 手势被系统抢走（来电等）→ 回弹兜底不丢面板
-    })
-  ).current;
+  // ── 竖直下拉关闭（ADR-0004）：可中断、速度继承、动量投影、橡皮筋全部收在
+  //    gestures/dragSession（与 BottomSheet 共用同一实现），这里只提供实时面板尺寸、
+  //    认领阈值与退场编排。横向分页已交给原生 ScrollView，外层永不认领横向手势。──
+  const panHandlers = useDragToDismiss({
+    value: panY,
+    size: winH, // #186 #4：实时高度，旋转/折叠屏不吃模块顶层的过期值
+    // 24 = 全屏面板的认领阈值（BottomSheet 把手热区只有 ~28px 高，那里用 10 更跟手）。
+    // 抬高 + dy 严格占优是为了横向分页 / 歌词列表滚动优先认领，防斜滑误判
+    claimThreshold: 24,
+    onDismiss: dismiss,
+    onSnapBack: snapBack,
+    // 拖拽期间暂停歌词自动滚动（跟手渲染与 scrollToIndex 抢 JS 线程）；400ms 覆盖退场/回弹弹簧段
+    onGestureStart: () => { isPagingRef.current = true; },
+    onGestureEnd: () => { setTimeout(() => { isPagingRef.current = false; }, 400); },
+  });
 
   if (!song) return null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']} {...panResponder.panHandlers}>
+    <SafeAreaView style={styles.container} edges={['top']} {...panHandlers}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {/* 歌词高亮同步器（渲染 null）：currentTime 订阅下沉点，心跳不打全树 */}
       <LyricSyncer

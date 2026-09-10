@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Modal, View, StyleSheet, Pressable, PanResponder, Animated,
+  Modal, View, StyleSheet, Pressable, Animated,
   useWindowDimensions,
   type StyleProp, type ViewStyle,
 } from 'react-native';
@@ -8,14 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { radius, spacing } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import { springs, projectMomentum, rubberband } from '../theme/motion';
+import { springs } from '../theme/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useDragToDismiss } from '../hooks/useDragToDismiss';
 
 /** 面板内容最大高度占屏比 */
 const DEFAULT_MAX_HEIGHT = 0.7;
-
-/** 动量投影落点超过屏高此比例即判关：快甩从任意位置都能关，慢拖半途自然回弹 */
-const DISMISS_PROJECT_RATIO = 0.35;
 
 interface Props {
   visible: boolean;
@@ -35,9 +33,9 @@ interface Props {
  *   （含遮罩底色）一起从底部滑上来；现在原生 slide 关掉，遮罩用短 timing 淡入、
  *   面板用 springs.sheet 弹簧上滑，两者 parallel 但节奏天然分层。
  * - 拖拽只挂在把手区（grabberZone），面板内容区零接管——#186 教训：整面板挂手势
- *   会点内容误关、与 FlatList 抢滚动；把手区物理照抄 PlayerOverlay 已验证模式
- *   （可中断抓取 / 首帧原点校准 / 自采样速度 EMA+钳幅 / 动量投影 0.35 阈值 /
- *   terminate 回弹）。
+ *   会点内容误关、与 FlatList 抢滚动；把手区物理与 PlayerOverlay 共用同一份实现
+ *   （gestures/dragSession + hooks/useDragToDismiss：可中断抓取 / 首帧原点校准 /
+ *   自采样速度 EMA+钳幅 / 动量投影阈值 / terminate 回弹），此处只声明认领阈值。
  * - 关闭统一走「先播退场动画、finished 后再调 onClose」——父组件 visible=false
  *   会立即卸载 Modal，必须让动画先走完（PlayerOverlay dismiss 同款约束）；
  *   外部直接把 visible 置 false 的路径也会补播退场再卸载，观感一致。
@@ -131,60 +129,19 @@ export default function BottomSheet({
 
   const requestClose = (velocityY = 0) => playExit(velocityY, () => onCloseRef.current());
 
-  // ── 把手区拖拽关闭：仅 grabberZone 接管，物理照抄 PlayerOverlay ──
-  const dragStart = useRef(0);
-  const baseDy = useRef<number | null>(null);
-  const lastPos = useRef(0);
-  const vySample = useRef({ vy: 0, lastY: 0, t: -1 });
-  const baseReady = useRef(false);
-  const grabberPan = useRef(
-    PanResponder.create({
-      // 只认领竖直下拉（dy 占优防斜滑）；zone 很小，阈值放宽到 10 手感更跟手
-      onMoveShouldSetPanResponder: (_, gs) =>
-        Math.abs(gs.dy) > 10 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onPanResponderGrant: () => {
-        // 可中断：抓住当前值（入场途中抓住也能接续下拉）
-        translateY.stopAnimation((v) => { dragStart.current = v; baseReady.current = true; });
-        baseDy.current = null;
-        vySample.current = { vy: 0, lastY: 0, t: -1 };
-      },
-      onPanResponderMove: (e, gs) => {
-        if (!baseReady.current) return;
-        const ts = e.nativeEvent.timestamp;
-        const s = vySample.current;
-        // 首个 move 校准原点：grant 前累计位移不参与跟手（防瞬移）
-        if (baseDy.current === null) {
-          baseDy.current = gs.dy;
-          s.lastY = dragStart.current;
-        }
-        const raw = dragStart.current + (gs.dy - baseDy.current);
-        const next = raw > 0 ? raw : rubberband(raw, winH); // 上推越界给橡皮筋阻力
-        // 自采样速度（dt<4ms 视为时间戳抖动丢弃；瞬时钳 ±4000）
-        const dt = ts - s.t;
-        if (s.t >= 0 && dt >= 4 && dt < 100) {
-          const ivy = Math.max(-4000, Math.min(4000, ((next - s.lastY) / dt) * 1000));
-          s.vy = s.vy === 0 ? ivy : s.vy * 0.6 + ivy * 0.4;
-        }
-        s.lastY = next;
-        s.t = ts;
-        lastPos.current = next;
-        translateY.setValue(next);
-      },
-      onPanResponderRelease: () => {
-        const vy = Math.max(-3000, Math.min(3000, vySample.current.vy));
-        const projected = lastPos.current + projectMomentum(vy);
-        if (projected >= winH * DISMISS_PROJECT_RATIO) {
-          playExit(vy, () => onCloseRef.current()); // 快甩/过半 → 下滑退场后再通知父级
-        } else {
-          Animated.spring(translateY, { toValue: 0, velocity: vy, useNativeDriver: true, ...springs.sheet }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        // 手势被系统抢走 → 回弹兜底
-        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, ...springs.sheet }).start();
-      },
-    })
-  ).current;
+  // ── 把手区拖拽关闭：仅 grabberZone 接管，物理在 gestures/dragSession（与 PlayerOverlay 共用）──
+  const panHandlers = useDragToDismiss({
+    value: translateY,
+    size: winH,
+    // 10 = 把手热区的认领阈值（PlayerOverlay 全屏面板用 24）：热区总高仅 ~28px，
+    // 阈值放宽到 10 手感更跟手
+    claimThreshold: 10,
+    onDismiss: requestClose, // 快甩/过半 → 先播退场、finished 后再通知父级
+    // 未判关 / 系统抢走手势 → 弹簧回弹到 0，release 继承松手速度，terminate 走零速兜底
+    onSnapBack: (vy) => {
+      Animated.spring(translateY, { toValue: 0, velocity: vy, useNativeDriver: true, ...springs.sheet }).start();
+    },
+  });
 
   if (!mounted) return null;
 
@@ -220,7 +177,7 @@ export default function BottomSheet({
           ]}
         >
           {/* 把手 + 可拖拽热区（真机反馈 #c：按住把手可下拉关闭，iOS 式） */}
-          <View style={styles.grabberZone} {...grabberPan.panHandlers}>
+          <View style={styles.grabberZone} {...panHandlers}>
             <View style={styles.handle} />
           </View>
           {children}
