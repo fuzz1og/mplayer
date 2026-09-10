@@ -46,16 +46,16 @@ expo-router Stack + Tabs：`(tabs)/`（推荐/发现/搜索/歌单/下载）+ pl
 
 - `components/` TopBar, PlayerBar, PlayerOverlay, SongRow, DiscoverTabs, SourceSwapModal, AddToPlaylistModal 等
 - `stores/` Zustand（部分 AsyncStorage persist）：player/settings/favorite/history/playlist/search/discover/source/download/audioTag/logs
-- `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songProbe/songResources/sourceSwap, legacyMigration, cacheService
+- `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songProbe/songResources(严格搜索 + core 刷新编排适配器)/sourceSwap, legacyMigration, cacheService(身份键 + 可播资源值缓存)
 
 ## Shared Package (`packages/core/`)
 
 桌面/移动端共享。
 
-- `api/` 请求层：7 源直连客户端（`neteaseDirect`/`qqDirect`/`kugouDirect`/`miguDirect`/`kuwoDirect`/`qianqianDirect`/`sodaDirect`，能力面 = searchSongs/getToplists/内容方法，IPC 契约见上节）；`musicApi` 薄门面（probeSongsBatch、soda 分享解析等基础方法）；`qqPlaylist`/`playlistImport`（QQ 歌单解析与链接导入）；`neteaseWeapi`；`antiScrape`（UA 池/反同源连续）；`tlsFingerprint` + `transport`（可注入接缝，maxRedirects 透传）；`probeSongs` + `prefetchCache`（探测写预取）
+- `api/` 请求层：7 源直连客户端（`neteaseDirect`/`qqDirect`/`kugouDirect`/`miguDirect`/`kuwoDirect`/`qianqianDirect`/`sodaDirect`，能力面 = searchSongs/getToplists/内容方法，IPC 契约见上节）；`musicApi` 薄门面（probeSongsBatch、soda 分享解析等基础方法）；`qqPlaylist`/`playlistImport`（QQ 歌单解析与链接导入）；`neteaseWeapi`；`antiScrape`（UA 池/反同源连续）；`tlsFingerprint` + `transport`（可注入接缝，maxRedirects 透传）；`probeSongs` + `prefetchCache`（探测写预取；键 = 歌曲身份键，值 = `PlayableResource`）
 - `cache/` 缓存内核（CacheKernel/SongResourcesCache）
-- `shared/`：`sourceRouter`（来源开关 `auto|direct` 两态 + `sanitizeSourceModes` 洗白存量 'api'、直连客户端注册表、`searchSongsRouted`/`resolvePlayableSongRouted` 路由、`getToplistSongs` + `TOPLIST_SOURCE_IDS`）、`chartAggregate`（多源榜单聚合内核）、`searchOrchestrator`、`sourceSwap`、`songLyrics`、`updateChannels`（更新镜像探速）
-- `utils/`（songMatcher/songDedupe/lyricsParser/legacyUrl 等）
+- `shared/`：`sourceRouter`（来源开关 `auto|direct` 两态 + `sanitizeSourceModes` 洗白存量 'api'、直连客户端注册表、`searchSongsRouted`/`resolvePlayableSongRouted` 路由、`getToplistSongs` + `TOPLIST_SOURCE_IDS`）、`chartAggregate`（多源榜单聚合内核）、`searchOrchestrator`、`sourceSwap`、`songResourceRefresh`（可播资源刷新编排：取缓存 → 旧签名死链判定 → 精确匹配搜索 → 写缓存/写回，依赖注入）、`songLyrics`、`updateChannels`（更新镜像探速）
+- `utils/`（`songIdentity` 歌曲身份键：源 + 去源前缀真实 ID，多层嵌套按最外层源折叠；songMatcher/songDedupe/lyricsParser/legacyUrl 等）
 - `tier3/tier3Api` 订阅源执行器
 
 ```bash
