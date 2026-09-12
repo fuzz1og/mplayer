@@ -33,6 +33,13 @@ interface DownloadStoreActions {
 
 export type DownloadStore = DownloadStoreState & DownloadStoreActions;
 
+/** 更新值是否真的改变：全等则保持原 task 引用，避免无谓的对象重建与重渲染 */
+function hasTaskChanges(task: DownloadTask, updates: Partial<DownloadTask>): boolean {
+  return (Object.keys(updates) as Array<keyof DownloadTask>).some(
+    (key) => !Object.is(task[key], updates[key])
+  );
+}
+
 export const useDownloadStore = create<DownloadStore>((set) => ({
   notifications: [],
 
@@ -64,15 +71,31 @@ export const useDownloadStore = create<DownloadStore>((set) => ({
     }));
   },
 
+  /**
+   * 单 task 更新：未命中的 notification/task 保持对象同一性，只有真正变化的
+   * notification 被重建；值没变时连 state 都不换（zustand 不通知任何订阅者）。
+   * 进度事件因此只让「那条通知」重渲染，而不是全部弹窗。
+   */
   updateTask: (taskId: string, updates: Partial<DownloadTask>) => {
-    set((state) => ({
-      notifications: state.notifications.map((notification) => ({
-        ...notification,
-        tasks: notification.tasks.map((task) =>
-          task.id === taskId ? { ...task, ...updates } : task
-        ),
-      })),
-    }));
+    set((state) => {
+      let changed = false;
+      const notifications = state.notifications.map((notification) => {
+        if (!notification.tasks.some((task) => task.id === taskId)) return notification;
+
+        let notificationChanged = false;
+        const tasks = notification.tasks.map((task) => {
+          if (task.id !== taskId || !hasTaskChanges(task, updates)) return task;
+          notificationChanged = true;
+          return { ...task, ...updates };
+        });
+
+        if (!notificationChanged) return notification;
+        changed = true;
+        return { ...notification, tasks };
+      });
+
+      return changed ? { notifications } : state;
+    });
   },
 
   closeNotification: (notificationId: string) => {

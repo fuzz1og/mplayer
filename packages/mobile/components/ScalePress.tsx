@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { Pressable, Animated, StyleSheet, type StyleProp, type ViewStyle, type GestureResponderEvent } from 'react-native';
 import { springs } from '../theme/motion';
+import { opacity } from '../theme/tokens';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
 /**
@@ -82,5 +83,5 @@ export default function ScalePress({
 
 const styles = StyleSheet.create({
   // 减弱动效下的非前庭替代反馈：轻微降不透明度（保留"按到了"的确认感）
-  reducedDim: { opacity: 0.75 },
+  reducedDim: { opacity: opacity.pressDim },
 });

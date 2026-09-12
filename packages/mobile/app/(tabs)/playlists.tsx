@@ -18,7 +18,7 @@ import { router } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import type { Playlist } from '../../stores/playlistStore';
 import { usePlayerStore } from '../../stores/playerStore';
-import {radius, textVariants} from '../../theme/tokens';
+import {opacity, radius, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
@@ -175,7 +175,7 @@ export default function PlaylistsPage() {
               <ScalePress
                 style={[
                   styles.confirmBtn,
-                  !newName.trim() && { opacity: 0.4 },
+                  !newName.trim() && { opacity: opacity.disabled },
                 ]}
                 onPress={handleCreate}
                 disabled={!newName.trim()}

@@ -3,6 +3,7 @@ import { Readable } from 'stream';
 import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { BrowserWindow } from 'electron';
 import { DownloadService } from '../../main/services/downloadService';
 import type { Song } from '@mplayer/core';
 
@@ -274,5 +275,89 @@ describe('DownloadService 按身份解析（resolve-by-identity）', () => {
 
     expect(tasks[0].status).toBe('error');
     expect(tasks[0].error).toContain('无法获取音频 URL');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 进度节流（#305）：进度是粗粒度读模型，不再逐 chunk 打满 IPC 通道
+// ---------------------------------------------------------------------------
+describe('DownloadService 进度节流（#305）', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mplayer-dl-throttle-'));
+    routedResolveMock.resolve.mockReset();
+    routedResolveMock.resolve.mockImplementation(async (song: Song) => ({ url: song.url, nonFull: false }));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([]);
+  });
+
+  /** 注册一个假窗口，收集 download:* 事件通道 */
+  function captureDownloadEvents(): string[] {
+    const channels: string[] = [];
+    const fakeWindow = {
+      webContents: { send: (channel: string) => { channels.push(channel); } },
+    };
+    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([fakeWindow as unknown as BrowserWindow]);
+    return channels;
+  }
+
+  /** 同一个 chunk 循环里连发 50 次进度（模拟高速下载） */
+  function serveDownloadWithChunks(count: number) {
+    axiosMock.download.mockImplementationOnce(async ({ onDownloadProgress }: any) => {
+      for (let i = 1; i <= count; i++) {
+        onDownloadProgress?.({ loaded: i * 1024, total: count * 1024 });
+      }
+      return {
+        headers: { 'content-type': 'audio/mpeg' },
+        data: Readable.from([Buffer.from('AUDIODATA')]),
+      };
+    });
+  }
+
+  it('一个 chunk 循环内的多次进度只推一次 IPC，完成态仍即时补齐', async () => {
+    const service = new DownloadService();
+    service.initialize({ downloadPath: dir });
+    const channels = captureDownloadEvents();
+    serveDownloadWithChunks(50);
+
+    const tasks = await service.addBatchDownloads([makeSong()]);
+    await ticks();
+
+    expect(tasks[0].status).toBe('completed');
+    expect(channels.filter((c) => c === 'download:progress')).toHaveLength(1);
+    expect(channels).toContain('download:complete');
+  });
+
+  it('progressThrottleMs=0 时逐次推送（确认聚合来自节流窗口）', async () => {
+    const service = new DownloadService({ progressThrottleMs: 0 });
+    service.initialize({ downloadPath: dir });
+    const channels = captureDownloadEvents();
+    serveDownloadWithChunks(50);
+
+    const tasks = await service.addBatchDownloads([makeSong()]);
+    await ticks();
+
+    expect(tasks[0].status).toBe('completed');
+    expect(channels.filter((c) => c === 'download:progress')).toHaveLength(50);
+  });
+
+  it('每首任务的节流窗口互不影响', async () => {
+    const service = new DownloadService();
+    service.initialize({ downloadPath: dir });
+    const channels = captureDownloadEvents();
+    serveDownloadWithChunks(20);
+    serveDownloadWithChunks(20);
+
+    const tasks = await service.addBatchDownloads([makeSong({ id: '1' }), makeSong({ id: '2' })]);
+    await ticks();
+
+    expect(tasks.map((t) => t.status)).toEqual(['completed', 'completed']);
+    // 两首任务各自的首次进度都要推出去（不能因共享窗口被吞掉）
+    expect(channels.filter((c) => c === 'download:progress').length).toBeGreaterThanOrEqual(2);
+    expect(channels.filter((c) => c === 'download:complete')).toHaveLength(2);
   });
 });

@@ -11,7 +11,8 @@ import { gridCardWidth } from '../../components/gridMetrics';
 import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
 import { cacheManager, getDirectClient, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
-import SongListSkeleton from '../../components/SongListSkeleton';
+import RecommendSkeleton from '../../components/RecommendSkeleton';
+import { RECOMMEND_BATCH_SIZE, RECOMMEND_GRID_COLS } from '../../components/recommendMetrics';
 import ScalePress, { pressScale } from '../../components/ScalePress';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
@@ -20,7 +21,7 @@ import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
 /** 猜你喜欢网格：16pt 页面沟槽（与节标题/发现页同轴线），列间 12；公式见 gridMetrics */
-const cardW = gridCardWidth({ cols: 2 });
+const cardW = gridCardWidth({ cols: RECOMMEND_GRID_COLS });
 // 今日推荐一次拉取的大池子大小(每次随机抽 5 首,约 20 批不重复)
 const RECOMMEND_POOL_SIZE = 100;
 
@@ -52,7 +53,7 @@ export default function RecommendPage() {
       ]);
       setSongs(songList);
       setPlaylists(playlistList);
-      const { batch: firstBatch, used } = pickRandomBatch(songList, [], 5);
+      const { batch: firstBatch, used } = pickRandomBatch(songList, [], RECOMMEND_BATCH_SIZE);
       setBatch(firstBatch);
       setUsedIndices(used);
       setError(false);
@@ -83,7 +84,7 @@ export default function RecommendPage() {
   // 换一批:从大池子随机抽 5 首(本轮不重复,抽完一轮自动重置)
   const handleShuffle = () => {
     if (songs.length <= 5) return;
-    const { batch: nextBatch, used } = pickRandomBatch(songs, usedIndices, 5);
+    const { batch: nextBatch, used } = pickRandomBatch(songs, usedIndices, RECOMMEND_BATCH_SIZE);
     setBatch(nextBatch);
     setUsedIndices(used);
   };
@@ -92,7 +93,7 @@ export default function RecommendPage() {
   const shownSongs = batch;
 
   // #186 #6：整页加载改为就地骨架，避免居中转圈→列表的布局跳动
-  if (loading) return <SongListSkeleton />;
+  if (loading) return <RecommendSkeleton />;
 
   return (
     <Animated.ScrollView

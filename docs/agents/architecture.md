@@ -17,15 +17,16 @@
 | `cache/diskBackend.ts` | 磁盘缓存后端（音频、封面、歌词；constructor 注入 cacheDir） |
 | `storage/db.ts` | Primary persistence (favorites, history, playlists, settings)；启动时跑旧签名端点迁移 |
 | `ipc/registerHandler.ts` | `registerIpcHandler` helpers |
-| `services/` | downloadService / localMusicService / updateService / chartAggregator |
+| `services/` | downloadService(进度按 150ms 聚合后推 IPC) / localMusicService / updateService / chartAggregator |
 | `tray/trayManager.ts` | System tray + context menu |
 
 ### Renderer Process (`src/renderer/`)
 
 - `router/index.tsx` HashRouter 全懒加载；页面在 `pages/`（推荐/发现/热榜/收藏/历史/歌单/队列/本地/歌手/专辑/设置等）
 - `store/` Zustand：playerStore, searchStore, favoriteStore, downloadStore, localStore
-- `services/` audioPlayer(Howler), searchService, sourceSwap, IpcClient, callMusicApi 等
+- `services/` audioPlayer(Howler), playbackClock(播放位置/时长读模型：点击/键盘 seek 语义 + 叶子窄订阅，位置/时长不进 store), searchService, sourceSwap, IpcClient, callMusicApi 等
 - `components/` PlayerBar/SongList/SongRow/LyricsDisplay 等通用件
+- **歌曲列表模块**（#302 整合）：`SongList.tsx` 独占虚拟滚动与滚动测量（`hooks/useVirtualRows` 自动挂靠页面已有滚动容器）、选中/收藏的 Set 索引、行级交互（下拉菜单/换源/勾选/批量栏/加入歌单弹窗）；`SongRow.tsx` 是唯一行实现（能力位 + `dragHandle`/`actions`/`fillTitle` 插槽），`SortableSongRow.tsx` 是它的 dnd 薄包装（队列页/本地歌单页共用，排序索引数学在 `utils/reorder.moveItem` + `hooks/useSortableReorder`），`GroupedSongList.tsx` 数据经 props（页面做 `searchStore` 适配器）并复用同一套滚动/虚拟化与行实现。页面只做数据与语义回调的适配器，不感知测量细节。
 
 ## IPC Channels
 

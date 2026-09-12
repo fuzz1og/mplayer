@@ -1,146 +1,20 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Play, ArrowLeft, Edit2, Music, Download, GripVertical, Trash2, Upload, RefreshCw, User } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { Play, ArrowLeft, Edit2, Music, Download, Trash2, Upload } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import SourceBadge from '@/renderer/components/SourceBadge';
-import SourceSwapModal from '@/renderer/components/SourceSwapModal';
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import SongCover from '@/renderer/components/SongCover';
-import { type RowActionItem } from '@/renderer/components/RowActionMenu';
-import RowActionButtons from '@/renderer/components/RowActionButtons';
-import { useSongSwap } from '@/renderer/hooks/useSongSwap';
-import { useSearchStore } from '@/renderer/store/searchStore';
-import { searchService } from '@/renderer/services/searchService';
+import SortableSongRow from '@/renderer/components/SortableSongRow';
+import { useSortableReorder } from '@/renderer/hooks/useSortableReorder';
+import { moveItem } from '@/renderer/utils/reorder';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
-
-const SortableSongRow: React.FC<{
-  song: Song; index: number; isCurrentSong: boolean; isPlaying: boolean;
-  onPlay: (song: Song) => void; onRemove: (song: Song) => void; onDownload: (song: Song) => void;
-  onSwapped: (original: Song, swapped: Song) => void;
-  isFavorite: boolean; onToggleFavorite: (song: Song) => void;
-  isSelected: boolean; onToggleSelect: (songId: string) => void;
-  onCoverError?: (song: Song) => void;
-}> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onDownload, onSwapped, isFavorite, onToggleFavorite, isSelected, onToggleSelect, onCoverError }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
-  const swap = useSongSwap(song, onSwapped);
-  const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuTriggerRef = useRef<HTMLButtonElement>(null);
-
-  /** 查看歌手：以歌手名为关键词搜索并落在歌手 tab（与 SongRow 一致） */
-  const handleViewArtist = () => {
-    if (!song.artist) return;
-    useSearchStore.getState().setPreferredTab('artists');
-    void searchService.search(song.artist);
-    navigate('/discover');
-  };
-
-  // 下载内联常驻，其余收进「更多」菜单，与共享 SongList 行一致；本地文件不提供换源
-  const menuItems: RowActionItem[] = [
-    ...(song.sourceType !== 'local'
-      ? [{ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open }]
-      : []),
-    ...(song.artist
-      ? [{ key: 'artist', label: '查看歌手', ariaLabel: '查看歌手', icon: <User size={14} />, onClick: handleViewArtist }]
-      : []),
-    { key: 'remove', label: '从歌单移除', icon: <Trash2 size={14} />, danger: true, onClick: () => onRemove(song) },
-  ];
-  // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
-  const coverRefreshFired = useRef(false);
-
-  // cover 为空时挂载即触发一次刷新，显示层不依赖 onError（与 SongRow 一致）
-  useEffect(() => {
-    if (!song.cover && !coverRefreshFired.current) {
-      coverRefreshFired.current = true;
-      onCoverError?.(song);
-    }
-    // 仅挂载时触发：封面刷新后 song.cover 变化会自然进入正常渲染路径
-  }, []);
-
-  return (
-    <div ref={setNodeRef}
-      style={{
-        display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer',
-        backgroundColor: isDragging ? 'var(--bg-hover)' : (isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent'),
-        opacity: isDragging ? 0.7 : 1,
-        transform: CSS.Transform.toString(transform),
-        transition: transition || undefined,
-      }}
-      onDoubleClick={() => onPlay(song)}
-    >
-      <div style={{ width: '30px', textAlign: 'center' }}>
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={() => onToggleSelect(song.id)}
-          onClick={(e) => e.stopPropagation()}
-          style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--accent)' }}
-        />
-      </div>
-      <div style={{ width: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span {...attributes} {...listeners} style={{ cursor: 'grab', display: 'flex', color: 'var(--text-tertiary)' }}>
-          <GripVertical size={14} />
-        </span>
-      </div>
-      <div style={{ width: '30px', textAlign: 'center' }}>
-        {isCurrentSong && isPlaying ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-            <span style={{ width: '3px', height: '12px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite' }} />
-            <span style={{ width: '3px', height: '16px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
-            <span style={{ width: '3px', height: '10px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
-          </div>
-        ) : (
-          <span style={{ fontSize: '13px', color: isCurrentSong ? 'var(--accent)' : 'var(--text-tertiary)' }}>{index + 1}</span>
-        )}
-      </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-        <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-          <SongCover src={song.cover} alt={song.name} variant="gradient" onError={() => onCoverError?.(song)} />
-        </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: '14px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {song.name}
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.artist}</span>
-            <SourceBadge sourceType={song.sourceType} style={{ padding: '1px 4px', lineHeight: '1.4' }} />
-          </div>
-        </div>
-      </div>
-      <RowActionButtons
-        song={song}
-        isFavorite={isFavorite}
-        onToggleFavorite={onToggleFavorite}
-        onDownload={onDownload}
-        moreOpen={menuOpen}
-        moreTriggerRef={menuTriggerRef}
-        onToggleMore={() => setMenuOpen(v => !v)}
-        onCloseMore={() => setMenuOpen(false)}
-        menuItems={menuItems}
-      />
-      <SourceSwapModal
-        open={swap.visible}
-        songName={song.name}
-        currentSource={song.sourceType}
-        candidates={swap.candidates}
-        loading={swap.loading}
-        success={swap.success}
-        onSelectSource={swap.onSelectSource}
-        onSelectCandidate={swap.onSelectCandidate}
-        onBack={swap.onBack}
-        onClose={swap.close}
-      />
-    </div>
-  );
-});
 
 const PlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -163,6 +37,9 @@ const PlaylistDetailPage: React.FC = () => {
   const { download, downloadBatch } = useDownload();
   const [isReordering, setIsReordering] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // 行级归属判断 O(1)：避免每行 selectedIds/favoriteIds includes 扫描
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const favoriteIdSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
   const [importModalVisible, setImportModalVisible] = useState(false);
   // 歌单头图直链直渲（恒取 playlist.cover / songs[0].cover）：加载失败由容器渐变兜底
   const detailCoverSrc = (playlist?.cover || songs[0]?.cover) || '';
@@ -175,9 +52,27 @@ const PlaylistDetailPage: React.FC = () => {
     });
   }, []);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
+  // 拖拽排序：dnd 事件 → (from, to) 由共享 hook 折算，本页只负责乐观更新 + 落库；
+  // 索引数学走共享 moveItem，本地歌单页不再手写 splice
+  const handleReorder = useCallback(async (oldIndex: number, newIndex: number) => {
+    if (!playlistId) return;
+    const newSongIds = moveItem(songs.map(s => s.id), oldIndex, newIndex);
+
+    // Optimistically update UI
+    setSongs(prev => moveItem(prev, oldIndex, newIndex));
+
+    setIsReordering(true);
+    try {
+      await IpcClient.invoke<void>('playlist:reorderFull', playlistId, newSongIds);
+    } catch (error) {
+      console.error('Reorder failed:', error);
+      loadData();
+    } finally {
+      setIsReordering(false);
+    }
+  }, [playlistId, songs]);
+
+  const { sensors, handleDragEnd } = useSortableReorder({ items: songs, onReorder: handleReorder });
 
   const loadData = async () => {
     if (!playlistId) return;
@@ -206,9 +101,9 @@ const PlaylistDetailPage: React.FC = () => {
     setSelectedIds([]);
   }, [playlistId]);
 
-  const handlePlay = async (song: Song) => {
+  const handlePlay = useCallback(async (song: Song) => {
     await play(song);
-  };
+  }, [play]);
 
   const handlePlayAll = async () => {
     if (songs.length > 0) {
@@ -217,9 +112,9 @@ const PlaylistDetailPage: React.FC = () => {
     }
   };
 
-  const handleDownload = async (song: Song) => {
+  const handleDownload = useCallback(async (song: Song) => {
     await download(song);
-  };
+  }, [download]);
 
   /** 单曲换源：原位替换本地歌单存储并更新列表 */
   const handleSongSwapped = useCallback(async (original: Song, swapped: Song) => {
@@ -291,7 +186,7 @@ const PlaylistDetailPage: React.FC = () => {
     }
   }, [songs, selectedIds.length]);
 
-  const handleRemoveFromPlaylist = async (song: Song) => {
+  const handleRemoveFromPlaylist = useCallback(async (song: Song) => {
     if (!playlistId) return;
     try {
       await IpcClient.invoke<void>('playlist:removeSong', playlistId, song.id);
@@ -301,37 +196,8 @@ const PlaylistDetailPage: React.FC = () => {
       console.error('从歌单移除失败:', error);
       message.error('移除失败，请重试');
     }
-  };
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id || !playlistId) return;
-
-    const songIds = songs.map(s => s.id);
-    const oldIndex = songIds.indexOf(String(active.id));
-    const newIndex = songIds.indexOf(String(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    const newSongIds = [...songIds];
-    const [moved] = newSongIds.splice(oldIndex, 1);
-    newSongIds.splice(newIndex, 0, moved);
-
-    // Optimistically update UI
-    const newSongs = [...songs];
-    const [movedSong] = newSongs.splice(oldIndex, 1);
-    newSongs.splice(newIndex, 0, movedSong);
-    setSongs(newSongs);
-
-    setIsReordering(true);
-    try {
-      await IpcClient.invoke<void>('playlist:reorderFull', playlistId, newSongIds);
-    } catch (error) {
-      console.error('Reorder failed:', error);
-      loadData();
-    } finally {
-      setIsReordering(false);
-    }
-  };
+    // 只依赖 playlistId：loadData 每次渲染虽是新身份，但内部只用 playlistId 与稳定的 setState
+  }, [playlistId]);
 
   const handleEditPlaylist = async () => {
     if (!playlistId || !editName.trim()) return;
@@ -486,16 +352,15 @@ const PlaylistDetailPage: React.FC = () => {
         )}
         {/* Table header */}
         <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
-          <div style={{ width: '30px', textAlign: 'center' }}>
+          <div style={{ width: '40px', textAlign: 'center' }}>
             <input
               type="checkbox"
               checked={songs.length > 0 && selectedIds.length === songs.length}
               onChange={handleSelectAll}
-              style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--accent)' }}
+              style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
             />
           </div>
-          <div style={{ width: '30px', textAlign: 'center' }}></div>
-          <div style={{ width: '30px', textAlign: 'center' }}>#</div>
+          <div style={{ width: '50px', textAlign: 'center' }}>#</div>
           <div style={{ flex: 1 }}>标题</div>
           <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
         </div>
@@ -508,13 +373,17 @@ const PlaylistDetailPage: React.FC = () => {
                 index={index}
                 isCurrentSong={currentSong?.id === song.id}
                 isPlaying={isPlaying}
-                isSelected={selectedIds.includes(song.id)}
+                showCheckbox
+                isSelected={selectedIdSet.has(song.id)}
                 onToggleSelect={handleToggleSelect}
+                showRemoveFromPlaylist
+                onRemoveFromPlaylist={handleRemoveFromPlaylist}
+                showAlbum={false}
+                fillTitle
                 onPlay={handlePlay}
-                onRemove={handleRemoveFromPlaylist}
                 onDownload={handleDownload}
-                onSwapped={handleSongSwapped}
-                isFavorite={favoriteIds.includes(song.id)}
+                onSwap={handleSongSwapped}
+                isFavorite={favoriteIdSet.has(song.id)}
                 onToggleFavorite={toggleFavorite}
                 onCoverError={handleCoverError}
               />
