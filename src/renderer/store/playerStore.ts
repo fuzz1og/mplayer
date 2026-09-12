@@ -177,6 +177,9 @@ function prefetchNextUrl(state: PlayerStoreState): void {
   const nextSong = getNextSongInQueue(state);
   if (!nextSong || nextSong.sourceType === 'local') return;
 
+  // 自我预取守卫：单元素队列列表循环回绕会算出当前歌自己，预取自己无意义
+  if (nextSong.id === state.currentSong?.id) return;
+
   // #171 后列表歌 url 恒为空串，预取不得以 url 为前提；
   // 缓存键必须含歌曲 id，否则同源空 url 歌曲共享一个 key 会串歌
   const cacheKey = `${nextSong.sourceType}:${nextSong.id}`;
@@ -315,8 +318,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         isPlaying: true
       });
 
-      prefetchNextUrl(get());
-
       // Fire-and-forget: 封面回填（点歌时 cover 可能为空，播放栏不显示兜底图）
       if (!song.cover) {
         backfillCurrentSongCover(song).catch(() => {});
@@ -356,6 +357,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         set({ currentPlaylistIndex: index });
       }
       persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
+
+      // 预取必须放在队列 index 同步之后（#318）：手动点播路径（QueuePage 双击行、
+      // 历史/本地/发现页单曲点播）不先同步 index，若在 set({ currentSong }) 后立即
+      // 预取，会基于「新 currentSong + 旧 index」算出刚开播的这首歌自己——当前歌被
+      // 重复解析、真正的下一首漏预取。此时各路径（playNext/playPrevious/onEnd/
+      // playAll/append）index 均已就位；失败/被取代（generation 早退）路径不会走到这里。
+      prefetchNextUrl(get());
 
     } catch (error) {
       if (generation !== playGeneration) return;

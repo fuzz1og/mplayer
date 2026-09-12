@@ -264,6 +264,13 @@ describe('队列下一首预取（预取缓存键）', () => {
     });
   }
 
+  /** 统计某首歌被 resolvePlayableSongRouted 解析的次数（mockReset 后重新计数） */
+  function resolveCallsFor(id: string): number {
+    return callMusicApiMock.mock.calls.filter(
+      ([method, target]) => method === 'resolvePlayableSongRouted' && (target as { id?: string } | undefined)?.id === id,
+    ).length;
+  }
+
   it('下一首即使 url 为空也触发预解析（#171 后搜索结果一律无 url）', async () => {
     routedResolverPerSong();
     const current = song('pf-a', '晴天');
@@ -330,5 +337,65 @@ describe('队列下一首预取（预取缓存键）', () => {
       'resolvePlayableSongRouted',
       expect.objectContaining({ id: 'pl-local' }),
     );
+  });
+
+  it('手动点播已被预取的第 2 首：b 不得被重复解析，且改预取 c、index 同步为 1（#318）', async () => {
+    routedResolverPerSong();
+    const a = song('rp-a', '晴天');
+    const b = song('rp-b', '稻香');
+    const c = song('rp-c', '七里香');
+    usePlayerStore.setState({
+      currentPlaylist: [a, b, c], currentPlaylistIndex: 0,
+      currentSong: a, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(a);
+    // 等预取调用发生，再让一个宏任务跑完 mock 的 .then（结果落进预取缓存）
+    await vi.waitFor(() => expect(resolveCallsFor('rp-b')).toBe(1));
+    await new Promise((r) => setTimeout(r, 0));
+
+    // 手动点播 b：应命中预取缓存（b 自身 url 为空，load 拿到的是预取 url）
+    await usePlayerStore.getState().play(b);
+
+    expect(audioPlayerMock.player.load).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'rp-b', url: 'https://resolved.example.com/rp-b.mp3' }),
+    );
+    expect(resolveCallsFor('rp-b')).toBe(1);
+    // 预取必须基于同步后的 index：真正被预取的是下一首 c，而不是刚开播的 b
+    await vi.waitFor(() => expect(resolveCallsFor('rp-c')).toBe(1));
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(1);
+  });
+
+  it('手动点播未预取过的第 2 首（不先 play 第 1 首）：b 总共只解析 1 次且预取 c（#318）', async () => {
+    routedResolverPerSong();
+    const a = song('rq-a', '晴天');
+    const b = song('rq-b', '稻香');
+    const c = song('rq-c', '七里香');
+    // 直接建队列不 play(a)：复刻 QueuePage 双击行 / 历史·本地·发现页单曲点播路径
+    usePlayerStore.setState({
+      currentPlaylist: [a, b, c], currentPlaylistIndex: 0,
+      currentSong: a, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(b);
+
+    expect(resolveCallsFor('rq-b')).toBe(1);
+    await vi.waitFor(() => expect(resolveCallsFor('rq-c')).toBe(1));
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(1);
+  });
+
+  it('单元素队列列表循环回绕：不得自我预取当前歌（#318 守卫）', async () => {
+    routedResolverPerSong();
+    const only = song('rs-a', '晴天');
+    usePlayerStore.setState({
+      currentPlaylist: [only], currentPlaylistIndex: 0,
+      currentSong: only, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(only);
+    // 给 fire-and-forget 预取留出误触发的机会
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(resolveCallsFor('rs-a')).toBe(1);
   });
 });
