@@ -323,14 +323,6 @@ export class FileStorage {
     return id;
   }
 
-  async updateFavoriteSongData(songId: string, songData: Partial<Song>): Promise<void> {
-    const favorite = this.data.favorites.find(f => f.songId === songId);
-    if (favorite) {
-      favorite.song = { ...favorite.song, ...songData } as SongBase;
-      await this.saveData();
-    }
-  }
-
   /**
    * 原位替换收藏歌曲（单曲换源）：按旧 ID 找到条目，整条换成新歌，
    * 保持收藏时间与排序位置；历史与下载记录不追溯改写。
@@ -543,16 +535,6 @@ export class FileStorage {
     );
     if (item) {
       item.order = order;
-      await this.saveData();
-    }
-  }
-
-  async updatePlaylistSongData(playlistId: number, songId: string, songData: Partial<Song>): Promise<void> {
-    const item = this.data.playlistSongs.find(
-      ps => ps.playlistId === playlistId && ps.songId === songId
-    );
-    if (item) {
-      item.song = { ...item.song, ...songData } as Song;
       await this.saveData();
     }
   }

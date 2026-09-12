@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearPrefetchCache, type Song } from '@mplayer/core';
+import { clearPrefetchCache, getPrefetchedUrl, type Song } from '@mplayer/core';
 
 // --- Mock 准备：audioPlayer / callMusicApi / IpcClient / songCoverRefresh ---
 const audioPlayerMock = vi.hoisted(() => {
@@ -53,21 +53,24 @@ vi.mock('../utils/songCoverRefresh', () => ({
 import { usePlayerStore } from '../store/playerStore';
 import { playbackClock } from '../services/playbackClock';
 
-function song(id: string, name = '晴天', url = ''): Song {
+function song(id: string, name = '晴天', url = '', sourceType: Song['sourceType'] = 'netease'): Song {
   return {
     id, name, artist: '周杰伦', album: '', duration: 240,
-    sourceType: 'netease', url, cover: '', lrc: '',
+    sourceType, url, cover: '', lrc: '',
   };
 }
 
 /** 默认 callMusicApi 分发：routed 解析返回可用 URL，搜索/换源返回空 */
 function defaultCallMusicApi(): void {
-  callMusicApiMock.mockImplementation(async (method: string) => {
+  callMusicApiMock.mockImplementation(async (method: string, target?: Song) => {
     switch (method) {
       case 'resolvePlayableUrlRouted':
         return 'https://resolved.example.com/audio.mp3';
-      case 'resolvePlayableSongRouted':
-        return { url: 'https://resolved.example.com/audio.mp3', nonFull: false };
+      case 'resolvePlayableSongRouted': {
+        // 与 core resolvePlayableSongRouted 契约同口径：先查预取缓存，命中 0 等待返回
+        const prefetched = target ? getPrefetchedUrl(target) : undefined;
+        return prefetched ?? { url: 'https://resolved.example.com/audio.mp3', nonFull: false };
+      }
       case 'getSodaPlayableUrl':
         return '';
       case 'searchSongsRouted':
@@ -254,14 +257,28 @@ describe('播放链路：URL 解析 / 加载失败', () => {
 // 队列下一首预取（#171 后列表歌 url 恒空：预取不得依赖 url；缓存键必须含歌曲 id）
 // ---------------------------------------------------------------------------
 describe('队列下一首预取（预取缓存键）', () => {
+  /** 本 describe 内的上游解析计数（routedResolverPerSong 清零）：预取缓存命中不算上游解析 */
+  const upstreamResolves = new Map<string, number>();
+
   function routedResolverPerSong(): void {
-    callMusicApiMock.mockImplementation(async (method: string, target?: { id?: string }) => {
+    upstreamResolves.clear();
+    callMusicApiMock.mockImplementation(async (method: string, target?: Song) => {
       if (method === 'resolvePlayableSongRouted') {
-        const url = `https://resolved.example.com/${target?.id}.mp3`;
-        return { url, nonFull: false };
+        // 与 core resolvePlayableSongRouted 契约同口径：先查预取缓存，命中 0 等待返回、
+        // 不产生上游解析（#318 的「不得被重复解析」约束的是上游解析次数）
+        const prefetched = target ? getPrefetchedUrl(target) : undefined;
+        if (prefetched) return prefetched;
+        const id = target?.id ?? '';
+        upstreamResolves.set(id, (upstreamResolves.get(id) ?? 0) + 1);
+        return { url: `https://resolved.example.com/${id}.mp3`, nonFull: false };
       }
       return undefined;
     });
+  }
+
+  /** 统计本用例内某首歌真正走到上游解析的次数（routedResolverPerSong 已清零） */
+  function resolveCallsFor(id: string): number {
+    return upstreamResolves.get(id) ?? 0;
   }
 
   it('下一首即使 url 为空也触发预解析（#171 后搜索结果一律无 url）', async () => {
@@ -330,6 +347,134 @@ describe('队列下一首预取（预取缓存键）', () => {
       'resolvePlayableSongRouted',
       expect.objectContaining({ id: 'pl-local' }),
     );
+  });
+
+  it('手动点播已被预取的第 2 首：b 不得被重复解析，且改预取 c、index 同步为 1（#318）', async () => {
+    routedResolverPerSong();
+    const a = song('rp-a', '晴天');
+    const b = song('rp-b', '稻香');
+    const c = song('rp-c', '七里香');
+    usePlayerStore.setState({
+      currentPlaylist: [a, b, c], currentPlaylistIndex: 0,
+      currentSong: a, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(a);
+    // 等预取调用发生，再让一个宏任务跑完 mock 的 .then（结果落进预取缓存）
+    await vi.waitFor(() => expect(resolveCallsFor('rp-b')).toBe(1));
+    await new Promise((r) => setTimeout(r, 0));
+
+    // 手动点播 b：应命中预取缓存（b 自身 url 为空，load 拿到的是预取 url）
+    await usePlayerStore.getState().play(b);
+
+    expect(audioPlayerMock.player.load).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'rp-b', url: 'https://resolved.example.com/rp-b.mp3' }),
+    );
+    expect(resolveCallsFor('rp-b')).toBe(1);
+    // 预取必须基于同步后的 index：真正被预取的是下一首 c，而不是刚开播的 b
+    await vi.waitFor(() => expect(resolveCallsFor('rp-c')).toBe(1));
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(1);
+  });
+
+  it('手动点播未预取过的第 2 首（不先 play 第 1 首）：b 总共只解析 1 次且预取 c（#318）', async () => {
+    routedResolverPerSong();
+    const a = song('rq-a', '晴天');
+    const b = song('rq-b', '稻香');
+    const c = song('rq-c', '七里香');
+    // 直接建队列不 play(a)：复刻 QueuePage 双击行 / 历史·本地·发现页单曲点播路径
+    usePlayerStore.setState({
+      currentPlaylist: [a, b, c], currentPlaylistIndex: 0,
+      currentSong: a, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(b);
+
+    expect(resolveCallsFor('rq-b')).toBe(1);
+    await vi.waitFor(() => expect(resolveCallsFor('rq-c')).toBe(1));
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(1);
+  });
+
+  it('单元素队列列表循环回绕：不得自我预取当前歌（#318 守卫）', async () => {
+    routedResolverPerSong();
+    const only = song('rs-a', '晴天');
+    usePlayerStore.setState({
+      currentPlaylist: [only], currentPlaylistIndex: 0,
+      currentSong: only, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(only);
+    // 给 fire-and-forget 预取留出误触发的机会
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(resolveCallsFor('rs-a')).toBe(1);
+  });
+
+  it('跨源同数字 id：守卫按组合键比较，下一首不被误拦为自我预取', async () => {
+    routedResolverPerSong();
+    // 两首歌数字 id 相同、sourceType 不同：自我预取守卫若只比 id，
+    // 会把合法的下一首预取当成「预取自己」静默跳过（kuwo:123 ≠ netease:123）
+    const a = song('123', '晴天', '', 'netease');
+    const b = song('123', '稻香', '', 'kuwo');
+    usePlayerStore.setState({
+      currentPlaylist: [a, b], currentPlaylistIndex: 0,
+      currentSong: a, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(a);
+
+    // 守卫口径须与 cacheKey 一致：b（kuwo:123）必须被预取
+    await vi.waitFor(() =>
+      expect(callMusicApiMock).toHaveBeenCalledWith(
+        'resolvePlayableSongRouted',
+        expect.objectContaining({ id: '123', sourceType: 'kuwo' }),
+      ),
+    );
+  });
+});
+
+// 拖拽排序的唯一索引数学在 utils/reorder.moveItem，队列页/本地歌单页/store 共用；
+// 这里锁住 store 侧的语义：顺序变了、currentPlaylistIndex 跟着走
+describe('reorderQueue（拖拽排序）', () => {
+  const queue = () => [song('r-a'), song('r-b'), song('r-c'), song('r-d')];
+
+  it('把某一首挪到新位置，其余相对顺序不变', () => {
+    usePlayerStore.setState({ currentPlaylist: queue(), currentPlaylistIndex: -1 });
+
+    usePlayerStore.getState().reorderQueue(0, 2);
+
+    expect(usePlayerStore.getState().currentPlaylist.map(s => s.id)).toEqual(['r-b', 'r-c', 'r-a', 'r-d']);
+  });
+
+  it('挪动正在播放的那首时，currentPlaylistIndex 跟随该曲', () => {
+    usePlayerStore.setState({ currentPlaylist: queue(), currentPlaylistIndex: 1 });
+
+    usePlayerStore.getState().reorderQueue(1, 3);
+
+    const state = usePlayerStore.getState();
+    expect(state.currentPlaylist.map(s => s.id)).toEqual(['r-a', 'r-c', 'r-d', 'r-b']);
+    expect(state.currentPlaylistIndex).toBe(3);
+  });
+
+  it('把当前曲前面的歌挪到它后面（或反之）时，下标相应平移一位', () => {
+    usePlayerStore.setState({ currentPlaylist: queue(), currentPlaylistIndex: 2 });
+
+    // 前面的 r-a 挪到 r-d 之后：当前曲整体前移一位
+    usePlayerStore.getState().reorderQueue(0, 3);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(1);
+
+    // 再把队尾挪回队首：当前曲整体后移一位
+    usePlayerStore.getState().reorderQueue(3, 0);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(2);
+  });
+
+  it('越界下标是空操作', () => {
+    usePlayerStore.setState({ currentPlaylist: queue(), currentPlaylistIndex: 0 });
+
+    usePlayerStore.getState().reorderQueue(-1, 2);
+    usePlayerStore.getState().reorderQueue(0, 9);
+    usePlayerStore.getState().reorderQueue(1, 1);
+
+    expect(usePlayerStore.getState().currentPlaylist.map(s => s.id)).toEqual(['r-a', 'r-b', 'r-c', 'r-d']);
   });
 });
 

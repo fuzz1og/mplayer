@@ -18,6 +18,7 @@ import {
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
+import { moveItem } from '@/renderer/utils/reorder';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
 import { useSearchStore } from '@/renderer/store/searchStore';
 const ipcRenderer = window.electronAPI;
@@ -191,6 +192,13 @@ export function getNextSongInQueue(state: PlayerStoreState): Song | null {
 function prefetchNextUrl(state: PlayerStoreState): void {
   const nextSong = getNextSongInQueue(state);
   if (!nextSong || nextSong.sourceType === 'local') return;
+
+  // 自我预取守卫：单元素队列列表循环回绕会算出当前歌自己，预取自己无意义。
+  // 比较口径与 core 预取缓存键同口径（`${sourceType}:${id}` 组合键）：跨源数字 id
+  // 相同不算同一首（kuwo:123 ≠ netease:123），只比 id 会误拦合法的下一首预取
+  const nextKey = `${nextSong.sourceType}:${nextSong.id}`;
+  const currentKey = state.currentSong ? `${state.currentSong.sourceType}:${state.currentSong.id}` : '';
+  if (nextKey === currentKey) return;
 
   // 已有未过期条目（core 30min TTL）→ 播放时 core 内部 0 等待命中，无需重解析
   if (getPrefetchedUrl(nextSong)) return;
@@ -402,8 +410,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         isPlaying: true
       });
 
-      prefetchNextUrl(get());
-
       // Fire-and-forget: 封面回填（点歌时 cover 可能为空，播放栏不显示兜底图）
       if (!song.cover) {
         backfillCurrentSongCover(song).catch(() => {});
@@ -443,6 +449,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         set({ currentPlaylistIndex: index });
       }
       persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
+
+      // 预取必须放在队列 index 同步之后（#318）：手动点播路径（QueuePage 双击行、
+      // 历史/本地/发现页单曲点播）不先同步 index，若在 set({ currentSong }) 后立即
+      // 预取，会基于「新 currentSong + 旧 index」算出刚开播的这首歌自己——当前歌被
+      // 重复解析、真正的下一首漏预取。走到这里时各路径 index 均已就位：playNext/
+      // playPrevious/onEnd 在进 play 前已同步；页面级点播为 setCurrentPlaylist + play；
+      // 队列外点歌由上方 append 进队并置尾 index。失败/被取代（generation 早退）路径
+      // 不会走到这里。
+      prefetchNextUrl(get());
 
     } catch (error) {
       if (generation !== playGeneration) return;
@@ -637,9 +652,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (toIndex < 0 || toIndex >= currentPlaylist.length) return;
     if (fromIndex === toIndex) return;
 
-    const newPlaylist = [...currentPlaylist];
-    const [moved] = newPlaylist.splice(fromIndex, 1);
-    newPlaylist.splice(toIndex, 0, moved);
+    // 索引数学走共享 moveItem：队列拖拽、本地歌单拖拽、store 内部同一份实现
+    const newPlaylist = moveItem(currentPlaylist, fromIndex, toIndex);
 
     // 同步更新 currentPlaylistIndex
     let newIndex = currentPlaylistIndex;

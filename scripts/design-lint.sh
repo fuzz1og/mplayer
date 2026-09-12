@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# design-lint.sh — 组件内 hex 色值门禁（UI 重构指南 §9）
-# 两级扫描：
-#   1) mobile 严格模式：packages/mobile/{components,app} 内一切引号包裹的 hex 色值，
-#      仅豁免 token 定义文件（下方 MOBILE_ALLOW_FILES）与行级豁免标记。
-#      行级豁免：合法遗留在该行行尾注释 `design-lint: ok`（附原因）。
+# design-lint.sh — 组件内颜色/不透明度门禁（UI 重构指南 §9 + #318 审计）
+# 扫描：
+#   1) mobile 严格模式：packages/mobile/{components,app} 内四类写法一律 fail ——
+#      a. 引号包裹的 hex 色值
+#      b. rgb()/rgba() 字面量（含数字，`rgb(0,0,0)` 这类）
+#      c. 命名色（white/black/red/...；`'transparent'` 不在此列，它是无语义替代）
+#      d. 裸 opacity 魔数（`opacity: 0.x`）——改用 theme/tokens.ts 的 `opacity.*`
+#      仅豁免 token 定义文件（下方 MOBILE_ALLOW_FILES）与行级豁免标记：
+#      合法遗留在该行行尾注释 `design-lint: ok`（附原因），例如 MaskedView 的 alpha 蒙版。
 #   2) desktop 黑名单模式：src/renderer 内命中遗留 hex 黑名单（LEGACY_HEX）即 fail。
 #      桌面 P2（清账 187 hex，延后）逐项清理后把对应色值填进黑名单防回归，
 #      因此当前为空清单、恒通过——门禁随 P2 进度生效。
@@ -20,18 +24,29 @@ MOBILE_ALLOW_FILES=(
   "packages/mobile/theme/tokens.ts"
 )
 
-echo "→ design-lint: mobile 严格模式（components/app）"
-while IFS=: read -r file line rest; do
-  allow=0
-  for f in "${MOBILE_ALLOW_FILES[@]}"; do
-    [ "$file" = "$f" ] && allow=1
-  done
-  [ "$allow" = 1 ] && continue
-  if echo "$rest" | grep -q "design-lint: ok"; then continue; fi
-  hit=$(echo "$rest" | grep -oE "['\"]#[0-9a-fA-F]{3,8}['\"]" | head -1)
-  echo "  ✗ $file:$line 非 token hex 色值: $hit（token 文件见 MOBILE_ALLOW_FILES；合法遗留加行尾注释 design-lint: ok）"
-  FAIL=1
-done < <(grep -rnE "['\"]#[0-9a-fA-F]{3,8}['\"]" packages/mobile/components packages/mobile/app || true)
+echo "→ design-lint: mobile 严格模式（components/app，四类写法）"
+
+# 逐组模式扫描：命中即 fail；token 文件与 `design-lint: ok` 行豁免
+scan_mobile() {
+  local label="$1" pattern="$2"
+  while IFS=: read -r file line rest; do
+    local allow=0
+    for f in "${MOBILE_ALLOW_FILES[@]}"; do
+      [ "$file" = "$f" ] && allow=1
+    done
+    [ "$allow" = 1 ] && continue
+    echo "$rest" | grep -q "design-lint: ok" && continue
+    local hit
+    hit=$(echo "$rest" | grep -oE "$pattern" | head -1)
+    echo "  ✗ $file:$line 非 token $label: $hit（token 定义见 MOBILE_ALLOW_FILES；合法遗留加行尾注释 design-lint: ok 并写明原因）"
+    FAIL=1
+  done < <(grep -rnE "$pattern" packages/mobile/components packages/mobile/app || true)
+}
+
+scan_mobile "hex 色值"     "['\"]#[0-9a-fA-F]{3,8}['\"]"
+scan_mobile "rgb/rgba 字面量" "['\"]rgba?\([0-9]"
+scan_mobile "命名色"       "['\"](white|black|red|green|blue|yellow|gray|grey|orange|purple|pink|brown|cyan|magenta)['\"]"
+scan_mobile "opacity 魔数"  "opacity: 0\.[0-9]+"
 
 # ── 2) desktop 黑名单模式 ─────────────────────────────────────
 # 格式: "色值|清理原因"，清一处填一处
@@ -54,7 +69,7 @@ if [ "${#LEGACY_HEX[@]}" -gt 0 ]; then
 fi
 
 if [ "$FAIL" = 1 ]; then
-  echo "✗ design-lint 未通过：存在非 token hex 色值"
+  echo "✗ design-lint 未通过：存在非 token 颜色/不透明度写法"
   exit 1
 fi
 echo "✓ design-lint passed"

@@ -193,7 +193,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   rank: {
     ...textVariants.subhead,
     fontWeight: '600',
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     width: 28,
     textAlign: 'center',
     marginRight: spacing[1],

@@ -9,21 +9,23 @@
  *   3. 信息区在封面下方独立实心区域（不叠封面、不透明）
  *   4. 可选表头（如「歌曲 / 操作」）+ 列表
  *
+ * 分层：阈值数学/边沿检测在 components/collapsingChrome.ts（纯逻辑，node 可测），
+ * 滚动 → chrome 的原生驱动接线在 hooks/useCollapsingChrome.ts，本文件只剩结构与样式。
+ *
  * 封面来源由调用方决定（自建歌单=第一首歌、专辑=专辑图、歌手=头像、
  * 网络歌单=自己的封面）；加载失败自动切占位图标，并回调 onCoverError
  * 供调用方做刷新。
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Image,
   Animated,
-  FlatList,
 } from 'react-native';
-import type { ListRenderItem } from 'react-native';
+import type { FlatListProps, ListRenderItem } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Music2, Play, ArrowLeft } from 'lucide-react-native';
@@ -32,12 +34,19 @@ import { StatusBar } from 'expo-status-bar';
 import { radius, spacing, typography } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import { COVER_FOG_H } from './collapsingChrome';
+import { useCollapsingChrome } from '../hooks/useCollapsingChrome';
 import ScalePress from './ScalePress';
 
-const AnimatedArrowLeft = Animated.createAnimatedComponent(ArrowLeft);
+/** 返回图标压在封面上的颜色（旧 color 插值起点色；深色主题下 textInverse 是深色，不能替代） */
+const BACK_ICON_ON_COVER = '#FFFFFF'; // design-lint: ok 折叠头部返回图标起点色：白
 
-/** 封面底缘雾化条高度：bgBase 向上淡出的过渡带（#259 真机原型定稿值） */
-const COVER_FOG_H = 64;
+/**
+ * Animated.FlatList 的 AnimatedProps 条件类型在泛型组件里推不出 data（T[] 被判成
+ * ArrayLike<T> 的映射类型），按 FlatListProps<T> 收口；运行时仍是 Animated.FlatList ——
+ * VirtualizedList 要求 native onScroll 的宿主组件包这一层（详见组件内注释）。
+ */
+const HeroFlatList = Animated.FlatList as unknown as <T>(props: FlatListProps<T>) => React.ReactElement;
 
 interface CollapsingHeroProps<T> {
   /** 封面 URL（调用方决定来源） */
@@ -99,38 +108,10 @@ export default function CollapsingHero<T>({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const [statusStyle, setStatusStyle] = useState<'light' | 'dark'>('light');
+  const { chrome, onScroll, navBg, fade, statusStyle } = useCollapsingChrome();
   const [coverFailed, setCoverFailed] = useState(false);
 
   useEffect(() => setCoverFailed(false), [cover]);
-
-  const NAV_H = 52;
-  const COVER_H = 300 + insets.top; // 全出血：含状态栏高度
-  const collapseAt = COVER_H - NAV_H - insets.top; // 导航栏完全实心化的滚动点
-
-  const navBg = scrollY.interpolate({
-    inputRange: [0, collapseAt],
-    outputRange: ['rgba(255,255,255,0)', colors.bgSurface],
-    extrapolate: 'clamp',
-  });
-  const titleOpacity = scrollY.interpolate({
-    inputRange: [collapseAt - 30, collapseAt],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-  const backColor = scrollY.interpolate({
-    inputRange: [collapseAt - 30, collapseAt],
-    outputRange: ['#FFFFFF', colors.textPrimary], // design-lint: ok 动画插值端点白：唱机收缩消失时的兜底色
-    extrapolate: 'clamp',
-  });
-
-  useEffect(() => {
-    const id = scrollY.addListener(({ value }) => {
-      setStatusStyle(value > collapseAt - 30 ? 'dark' : 'light');
-    });
-    return () => scrollY.removeListener(id);
-  }, [collapseAt, scrollY]);
 
   const handleCoverError = () => {
     setCoverFailed(true);
@@ -147,27 +128,35 @@ export default function CollapsingHero<T>({
       <Animated.View
         style={[
           styles.nav,
-          { paddingTop: insets.top, height: NAV_H + insets.top, backgroundColor: navBg },
+          { paddingTop: insets.top, height: chrome.navH + insets.top, backgroundColor: navBg },
         ]}
       >
         <ScalePress style={styles.navBack} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <AnimatedArrowLeft size={22} color={backColor} />
+          {/* 返回图标换色 = 两层同形图标叠加：底层恒为不透明白，上层 textPrimary 用
+              原生驱动的 opacity 0→1 覆盖。合成色 = 白·(1-p) + textPrimary·p，
+              与旧的 color 插值逐值相同，但颜色插值只在原生侧结算，不再每帧重建组件。 */}
+          <View>
+            <ArrowLeft size={22} color={BACK_ICON_ON_COVER} />
+            <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: fade }]}>
+              <ArrowLeft size={22} color={colors.textPrimary} />
+            </Animated.View>
+          </View>
         </ScalePress>
-        <Animated.Text style={[styles.navTitle, { opacity: titleOpacity }]} numberOfLines={1}>
+        <Animated.Text style={[styles.navTitle, { opacity: fade }]} numberOfLines={1}>
           {navTitle}
         </Animated.Text>
         {/* 页面动作插槽（如歌单重命名铅笔）：原 headerShown:false 后 Stack headerRight 不渲染 */}
         {navRight}
       </Animated.View>
 
-      {/* 列表：封面是列表第一块内容（含状态栏区域），随滚动滚出屏幕 */}
-      <FlatList
+      {/* 列表：封面是列表第一块内容（含状态栏区域），随滚动滚出屏幕。
+          Animated.FlatList + 原生驱动 scrollY：VirtualizedList 要求 native onScroll
+          的宿主组件由 Animated.createAnimatedComponent 包一层。 */}
+      <HeroFlatList
         data={data}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-          useNativeDriver: false,
-        })}
+        onScroll={onScroll}
         scrollEventThrottle={16}
         onEndReached={onEndReached}
         onEndReachedThreshold={onEndReachedThreshold}
@@ -177,7 +166,7 @@ export default function CollapsingHero<T>({
         ListHeaderComponent={
           <View>
             {/* 全出血封面（底缘雾化条与信息区/页面底色衔接） */}
-            <View style={{ height: COVER_H }}>
+            <View style={{ height: chrome.coverH }}>
               {showCover ? (
                 <Image
                   source={{ uri: cover }}

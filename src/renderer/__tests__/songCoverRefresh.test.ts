@@ -63,7 +63,8 @@ describe('refreshSongCover 封面失败刷新', () => {
       return null;
     });
 
-    await refreshSongCover({ ...baseSong, url: 'https://old-audio.example.com/a.mp3' });
+    // song.cover 与缓存一致（刚 onError 失败的同一 URL）→ 缓存优先不命中，落回搜索路径
+    await refreshSongCover({ ...baseSong, cover: 'https://old-cover.jpg', url: 'https://old-audio.example.com/a.mp3' });
     expect(invoke).toHaveBeenCalledWith('cache:setSongResources', '3336112836', {
       url: 'https://old-audio.example.com/a.mp3',
       cover: 'https://fresh-cover.jpg',
@@ -102,5 +103,71 @@ describe('refreshSongCover 封面失败刷新', () => {
     // 刚刷新过（60s 冷却）：第二次触发直接跳过，不再发起搜索
     await refreshSongCover(baseSong);
     expect(invoke.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  it('缓存已有可用封面直接复用零搜索（收藏/历史 cover 不落库，挂载触发不打上游）', async () => {
+    const invoke = vi.mocked(IpcClient.invoke);
+    invoke.mockImplementation(async (channel: string) => {
+      if (channel === 'cache:getSongResources') {
+        return { url: 'https://cache-audio.example.com/a.mp3', cover: 'https://cache-cover.jpg', lrc: 'cache-lrc' };
+      }
+      return null;
+    });
+
+    const cover = await refreshSongCover(baseSong);
+    expect(cover).toBe('https://cache-cover.jpg');
+    // 缓存命中：完全不发起搜索，回写沿用缓存里的安全 url/lrc
+    expect(invoke).not.toHaveBeenCalledWith('musicApi:call', expect.anything());
+    expect(invoke).toHaveBeenCalledWith('cache:setSongResources', '3336112836', {
+      url: 'https://cache-audio.example.com/a.mp3',
+      cover: 'https://cache-cover.jpg',
+      lrc: 'cache-lrc',
+    });
+  });
+
+  it('缓存封面与传入 song.cover 相同（刚失败）时不复用缓存，仍走搜索', async () => {
+    const invoke = vi.mocked(IpcClient.invoke);
+    invoke.mockImplementation(async (channel: string, method?: string) => {
+      if (channel === 'musicApi:call' && method === 'searchSongsRouted') {
+        return [{ ...baseSong, cover: 'https://fresh-cover.jpg' }];
+      }
+      if (channel === 'cache:getSongResources') {
+        return { url: '', cover: 'https://stale-cover.jpg', lrc: '' };
+      }
+      return null;
+    });
+
+    const cover = await refreshSongCover({ ...baseSong, cover: 'https://stale-cover.jpg' });
+    expect(cover).toBe('https://fresh-cover.jpg');
+    expect(invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongsRouted', '晴天 周杰伦', 1, 'netease');
+    expect(invoke).toHaveBeenCalledWith('cache:setSongResources', '3336112836', {
+      url: '',
+      cover: 'https://fresh-cover.jpg',
+      lrc: '',
+    });
+  });
+
+  it('缓存封面是 legacy 死链时视同未命中，仍走搜索', async () => {
+    const invoke = vi.mocked(IpcClient.invoke);
+    const deadUrl = 'http://legacy.example.com/api.php?get=pic&sign=abc';
+    invoke.mockImplementation(async (channel: string, method?: string) => {
+      if (channel === 'musicApi:call' && method === 'searchSongsRouted') {
+        return [{ ...baseSong, cover: 'https://fresh-cover.jpg' }];
+      }
+      if (channel === 'cache:getSongResources') {
+        return { url: deadUrl, cover: deadUrl, lrc: '' };
+      }
+      return null;
+    });
+
+    const cover = await refreshSongCover(baseSong);
+    expect(cover).toBe('https://fresh-cover.jpg');
+    expect(invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongsRouted', '晴天 周杰伦', 1, 'netease');
+    // 死链 url/cover 不回写残留，全部被搜索结果/空串替换
+    expect(invoke).toHaveBeenCalledWith('cache:setSongResources', '3336112836', {
+      url: '',
+      cover: 'https://fresh-cover.jpg',
+      lrc: '',
+    });
   });
 });

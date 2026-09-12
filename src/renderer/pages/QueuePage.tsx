@@ -1,152 +1,37 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Headphones, Trash2, GripVertical, ListMusic } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Headphones, Trash2, ListMusic } from 'lucide-react';
 import { Modal } from 'antd';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
-import SourceBadge from '@/renderer/components/SourceBadge';
-import SongCover from '@/renderer/components/SongCover';
-import { IpcClient } from '@/renderer/services/IpcClient';
-import { callMusicApi } from '@/renderer/services/callMusicApi';
-import { mapPacedWithConcurrency } from '@/renderer/utils/async';
+import SortableSongRow from '@/renderer/components/SortableSongRow';
+import { useSortableReorder } from '@/renderer/hooks/useSortableReorder';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
-import { findExactMatch } from '@mplayer/core';
-import { isLegacyDeadUrl } from '@mplayer/core';
 
-interface SortableItemProps {
+/** 队列行的行尾操作：加入歌单 + 从队列移除（沿用队列页原有的常驻图标按钮） */
+const QueueRowActions: React.FC<{
   song: Song;
   index: number;
-  isCurrentSong: boolean;
-  isPlaying: boolean;
-  onPlay: (song: Song) => void;
-  onRemove: (index: number) => void;
   onAddToPlaylist: (song: Song) => void;
-  onCoverError?: (song: Song) => void;
-}
-
-const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onAddToPlaylist, onCoverError }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
-
-  const style: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '10px 16px',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    backgroundColor: isDragging ? 'var(--bg-hover)' : (isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent'),
-    opacity: isDragging ? 0.7 : 1,
-    transform: CSS.Transform.toString(transform),
-    transition: transition || undefined,
-  };
-
-  return (
-    <div ref={setNodeRef} style={style} onDoubleClick={() => onPlay(song)}>
-      <div style={{ width: '50px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-        <span {...attributes} {...listeners} style={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>
-          <GripVertical size={14} />
-        </span>
-        {isCurrentSong && isPlaying ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-            <span style={{ width: '3px', height: '12px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0s' }} />
-            <span style={{ width: '3px', height: '16px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
-            <span style={{ width: '3px', height: '10px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
-          </div>
-        ) : (
-          <span style={{ fontSize: 'var(--text-base)', color: isCurrentSong ? 'var(--accent)' : 'var(--text-tertiary)', fontWeight: isCurrentSong ? 600 : 400 }}>
-            {index + 1}
-          </span>
-        )}
-      </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-        <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-          <SongCover src={song.cover} alt={song.name} variant="gradient" onError={() => onCoverError?.(song)} />
-        </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 'var(--text-base)', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {song.name}
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.artist}</span>
-            <SourceBadge sourceType={song.sourceType} style={{ padding: '1px 4px', lineHeight: '1.4' }} />
-          </div>
-        </div>
-      </div>
-      <div style={{ width: '120px', fontSize: '13px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {song.album}
-      </div>
-      <div style={{ width: '90px', display: 'flex', justifyContent: 'center', gap: '4px' }}>
-        <button
-          onClick={(e) => { e.stopPropagation(); onAddToPlaylist(song); }}
-          aria-label="加入歌单"
-          title="加入歌单"
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
-          <ListMusic size={14} />
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onRemove(index); }}
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
-          <Trash2 size={14} />
-        </button>
-      </div>
-    </div>
-  );
-});
-
-const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
-  // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP 有窗口配额
-  const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
-    try {
-      const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', song.id);
-      if (
-        cached &&
-        !isLegacyDeadUrl(cached.url) &&
-        !isLegacyDeadUrl(cached.cover) &&
-        !isLegacyDeadUrl(cached.lrc)
-      ) {
-        return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
-      }
-      // 「按 ID 识别」死腿已删（自建 API 退役后 searchSongById 恒 null，#273）：
-      // 直接按歌名精确匹配（严格匹配防翻唱/Live 误配）
-      let fresh: Song | null = null;
-      if (song.name) {
-        try {
-          const searchResults = await callMusicApi(
-            'searchSongsRouted',
-            `${song.name} ${song.artist}`.trim(),
-            1,
-            song.sourceType,
-          );
-          fresh = (findExactMatch({ name: song.name, artist: song.artist }, searchResults) as Song | undefined) || null;
-        } catch {
-          fresh = null;
-        }
-      }
-      if (!fresh) return song;
-      await IpcClient.invoke<void>('cache:setSongResources', song.id, {
-        url: fresh.url || '',
-        cover: fresh.cover || '',
-        lrc: fresh.lrc || '',
-      });
-      return {
-        ...song,
-        name: fresh.name || song.name,
-        artist: fresh.artist || song.artist,
-        album: fresh.album || song.album || '',
-        duration: fresh.duration || song.duration || 0,
-        url: fresh.url || '',
-        cover: fresh.cover || '',
-        lrc: fresh.lrc || '',
-        sourceType: fresh.sourceType || song.sourceType,
-      };
-    } catch {
-      return song;
-    }
-  });
-  return results.map((r, i) => (r.status === 'fulfilled' ? r.value : songs[i]));
-};
+  onRemove: (index: number) => void;
+}> = ({ song, index, onAddToPlaylist, onRemove }) => (
+  <div style={{ width: '90px', display: 'flex', justifyContent: 'center', gap: '4px', flexShrink: 0 }}>
+    <button
+      onClick={(e) => { e.stopPropagation(); onAddToPlaylist(song); }}
+      aria-label="加入歌单"
+      title="加入歌单"
+      style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
+      <ListMusic size={14} />
+    </button>
+    <button onClick={(e) => { e.stopPropagation(); onRemove(index); }}
+      style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
+      <Trash2 size={14} />
+    </button>
+  </div>
+);
 
 const QueuePage: React.FC = () => {
   const currentPlaylist = usePlayerStore((s) => s.currentPlaylist);
@@ -176,38 +61,11 @@ const QueuePage: React.FC = () => {
     });
   }, [setCurrentPlaylist]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    const doRefresh = async () => {
-      if (currentPlaylist.length === 0) return;
-      const refreshed = await refreshQueueSongs(currentPlaylist);
-      if (cancelled) return;
-      const hasChanges = refreshed.some((s, i) =>
-        s.url !== currentPlaylist[i]?.url || s.cover !== currentPlaylist[i]?.cover
-      );
-      if (hasChanges) {
-        const { currentPlaylistIndex } = usePlayerStore.getState();
-        setCurrentPlaylist(refreshed, currentPlaylistIndex);
-      }
-    };
-    doRefresh();
-    return () => { cancelled = true; };
-  }, []);
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = currentPlaylist.findIndex(s => s.id === active.id);
-    const newIndex = currentPlaylist.findIndex(s => s.id === over.id);
-    if (oldIndex !== -1 && newIndex !== -1) {
-      reorderQueue(oldIndex, newIndex);
-    }
-  };
+  // 拖拽排序：索引数学收在共享 hook 里，本页只声明「谁挪到了哪」
+  const { sensors, handleDragEnd } = useSortableReorder({
+    items: currentPlaylist,
+    onReorder: reorderQueue,
+  });
 
   const handleClearQueue = () => {
     Modal.confirm({
@@ -264,16 +122,24 @@ const QueuePage: React.FC = () => {
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={currentPlaylist.map(s => s.id)} strategy={verticalListSortingStrategy}>
                 {currentPlaylist.map((song, index) => (
-                  <SortableItem
+                  <SortableSongRow
                     key={song.id}
                     song={song}
                     index={index}
                     isCurrentSong={currentSong?.id === song.id}
                     isPlaying={isPlaying}
+                    fillTitle
+                    albumWidth={120}
                     onPlay={play}
-                    onRemove={removeFromQueue}
-                    onAddToPlaylist={setAddToPlaylistSong}
                     onCoverError={handleCoverError}
+                    actions={
+                      <QueueRowActions
+                        song={song}
+                        index={index}
+                        onAddToPlaylist={setAddToPlaylistSong}
+                        onRemove={removeFromQueue}
+                      />
+                    }
                   />
                 ))}
               </SortableContext>

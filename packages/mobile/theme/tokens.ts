@@ -41,6 +41,9 @@ export const palette = {
   blue50: '#E7EDFB',
   blue100: '#C9D7F4',
   blue300: '#6FA3EF',
+  // #318 审计：暗色 accent 用。原 blue400 对最差面 bgElevated(#2C2C2E) 只有 3.34:1；
+  // 取「刚好 ≥4.5:1」的最暗档（bgElevated 4.65 / bgSurface 5.68），不整片提亮
+  blue350: '#5C96EA',
   blue400: '#3D7BD9',
   blue500: '#2F5FD0',
   blue600: '#264FB8',
@@ -51,6 +54,8 @@ export const palette = {
   red400: '#F87171',
   red500: '#EF4444',
   red600: '#DC2626',
+  // #318 审计：亮色 dangerText 用。原 red600 对亮色页底(#F2F2F7) 4.33:1 → red650 4.72:1
+  red650: '#D31F1F',
 
   /** 警告色 */
   amber400: '#FBBF24',
@@ -366,6 +371,23 @@ export interface ThemeColors {
   skeletonShine: string;
 }
 
+/**
+ * 不透明度语义值（#318 审计）：组件里不再写裸 `0.x`，与主题无关，双端共用。
+ * 门禁由 scripts/design-lint.sh 守着（components/app 内出现 `opacity: 0.x` 即 fail）。
+ */
+export const opacity = {
+  /** 禁用/不可操作内容（歌单重命名按钮等） */
+  disabled: 0.4,
+  /** 次要的未就绪主操作（「立即更新」按钮禁用态） */
+  disabledStrong: 0.55,
+  /** 空闲态容器（播放栏无播放内容时整体压暗） */
+  idle: 0.6,
+  /** 骨架屏 shimmer 扫光条 */
+  shimmer: 0.6,
+  /** 减弱动效下的按压反馈（替代缩放） */
+  pressDim: 0.75,
+} as const;
+
 /** 浅色主题（默认，与 desktop 浅色一致） */
 export const lightColors: ThemeColors = {
   /* 背景层级 */
@@ -409,7 +431,7 @@ export const lightColors: ThemeColors = {
   danger: palette.red500,
   dangerHover: palette.red600,
   dangerSubtle: palette.red50,
-  dangerText: palette.red600,
+  dangerText: palette.red650, // #318 审计：亮色 danger 文字对页底 ≥4.5:1
 
   warning: palette.amber500,
   warningSubtle: '#FFFBEB',
@@ -433,8 +455,12 @@ export const lightColors: ThemeColors = {
   inputPlaceholder: palette.gray400,
 
   /* 骨架屏 */
-  skeletonBase: palette.gray100,
-  skeletonShine: palette.gray200,
+  // 骨架屏（#318 真机实测）：原 gray100 #F5F5F7 比亮色页底 #F2F2F7 还浅，
+  // 对比度只有 1.02:1 —— 亮色下骨架块基本不可见（shimmer 更看不见）。
+  // 基色改 gray300：对页底 1.36:1 / 对白卡 1.52:1；高光用 gray100 反向提亮，
+  // shimmer 相对基色 1.4:1。可见度下限由 __tests__/skeletonContrast.test.ts 守住。
+  skeletonBase: palette.gray300,
+  skeletonShine: palette.gray100,
 };
 
 /**
@@ -471,7 +497,7 @@ export const darkColors: ThemeColors = {
   borderStrong: palette.gray700,
 
   /* 交互色 */
-  accent: palette.blue400,
+  accent: palette.blue350, // #318 审计：暗色 accent 文字需对 bgSurface/bgElevated ≥4.5:1
   accentHover: palette.blue300,
   accentActive: palette.blue500,
   accentSubtle: 'rgba(61, 123, 217, 0.18)',
