@@ -52,10 +52,10 @@ vi.mock('../utils/songCoverRefresh', () => ({
 
 import { usePlayerStore, __clearPrefetchedUrlsForTests } from '../store/playerStore';
 
-function song(id: string, name = '晴天', url = ''): Song {
+function song(id: string, name = '晴天', url = '', sourceType: Song['sourceType'] = 'netease'): Song {
   return {
     id, name, artist: '周杰伦', album: '', duration: 240,
-    sourceType: 'netease', url, cover: '', lrc: '',
+    sourceType, url, cover: '', lrc: '',
   };
 }
 
@@ -264,7 +264,7 @@ describe('队列下一首预取（预取缓存键）', () => {
     });
   }
 
-  /** 统计某首歌被 resolvePlayableSongRouted 解析的次数（mockReset 后重新计数） */
+  /** 统计本用例内某首歌被 resolvePlayableSongRouted 解析的次数（beforeEach 已重置 mock，不含先前用例的调用） */
   function resolveCallsFor(id: string): number {
     return callMusicApiMock.mock.calls.filter(
       ([method, target]) => method === 'resolvePlayableSongRouted' && (target as { id?: string } | undefined)?.id === id,
@@ -397,5 +397,27 @@ describe('队列下一首预取（预取缓存键）', () => {
     await new Promise((r) => setTimeout(r, 20));
 
     expect(resolveCallsFor('rs-a')).toBe(1);
+  });
+
+  it('跨源同数字 id：守卫按组合键比较，下一首不被误拦为自我预取', async () => {
+    routedResolverPerSong();
+    // 两首歌数字 id 相同、sourceType 不同：自我预取守卫若只比 id，
+    // 会把合法的下一首预取当成「预取自己」静默跳过（kuwo:123 ≠ netease:123）
+    const a = song('123', '晴天', '', 'netease');
+    const b = song('123', '稻香', '', 'kuwo');
+    usePlayerStore.setState({
+      currentPlaylist: [a, b], currentPlaylistIndex: 0,
+      currentSong: a, playMode: '列表循环',
+    });
+
+    await usePlayerStore.getState().play(a);
+
+    // 守卫口径须与 cacheKey 一致：b（kuwo:123）必须被预取
+    await vi.waitFor(() =>
+      expect(callMusicApiMock).toHaveBeenCalledWith(
+        'resolvePlayableSongRouted',
+        expect.objectContaining({ id: '123', sourceType: 'kuwo' }),
+      ),
+    );
   });
 });
