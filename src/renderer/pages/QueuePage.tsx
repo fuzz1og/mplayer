@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Headphones, Trash2, GripVertical, ListMusic } from 'lucide-react';
 import { Modal } from 'antd';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -9,13 +9,8 @@ import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistMod
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import SongCover from '@/renderer/components/SongCover';
-import { IpcClient } from '@/renderer/services/IpcClient';
-import { callMusicApi } from '@/renderer/services/callMusicApi';
-import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
-import { findExactMatch } from '@mplayer/core';
-import { isLegacyDeadUrl } from '@mplayer/core';
 
 interface SortableItemProps {
   song: Song;
@@ -95,59 +90,6 @@ const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isC
   );
 });
 
-const refreshQueueSongs = async (songs: Song[]): Promise<Song[]> => {
-  // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP 有窗口配额
-  const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
-    try {
-      const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', song.id);
-      if (
-        cached &&
-        !isLegacyDeadUrl(cached.url) &&
-        !isLegacyDeadUrl(cached.cover) &&
-        !isLegacyDeadUrl(cached.lrc)
-      ) {
-        return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
-      }
-      // 「按 ID 识别」死腿已删（自建 API 退役后 searchSongById 恒 null，#273）：
-      // 直接按歌名精确匹配（严格匹配防翻唱/Live 误配）
-      let fresh: Song | null = null;
-      if (song.name) {
-        try {
-          const searchResults = await callMusicApi(
-            'searchSongsRouted',
-            `${song.name} ${song.artist}`.trim(),
-            1,
-            song.sourceType,
-          );
-          fresh = (findExactMatch({ name: song.name, artist: song.artist }, searchResults) as Song | undefined) || null;
-        } catch {
-          fresh = null;
-        }
-      }
-      if (!fresh) return song;
-      await IpcClient.invoke<void>('cache:setSongResources', song.id, {
-        url: fresh.url || '',
-        cover: fresh.cover || '',
-        lrc: fresh.lrc || '',
-      });
-      return {
-        ...song,
-        name: fresh.name || song.name,
-        artist: fresh.artist || song.artist,
-        album: fresh.album || song.album || '',
-        duration: fresh.duration || song.duration || 0,
-        url: fresh.url || '',
-        cover: fresh.cover || '',
-        lrc: fresh.lrc || '',
-        sourceType: fresh.sourceType || song.sourceType,
-      };
-    } catch {
-      return song;
-    }
-  });
-  return results.map((r, i) => (r.status === 'fulfilled' ? r.value : songs[i]));
-};
-
 const QueuePage: React.FC = () => {
   const currentPlaylist = usePlayerStore((s) => s.currentPlaylist);
   const currentSong = usePlayerStore((s) => s.currentSong);
@@ -179,24 +121,6 @@ const QueuePage: React.FC = () => {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
-
-  useEffect(() => {
-    let cancelled = false;
-    const doRefresh = async () => {
-      if (currentPlaylist.length === 0) return;
-      const refreshed = await refreshQueueSongs(currentPlaylist);
-      if (cancelled) return;
-      const hasChanges = refreshed.some((s, i) =>
-        s.url !== currentPlaylist[i]?.url || s.cover !== currentPlaylist[i]?.cover
-      );
-      if (hasChanges) {
-        const { currentPlaylistIndex } = usePlayerStore.getState();
-        setCurrentPlaylist(refreshed, currentPlaylistIndex);
-      }
-    };
-    doRefresh();
-    return () => { cancelled = true; };
-  }, []);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;

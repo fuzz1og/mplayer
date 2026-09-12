@@ -6,11 +6,8 @@ import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { callMusicApi } from '@/renderer/services/callMusicApi';
-import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song, SongBase } from '@mplayer/core';
-import { findExactMatch } from '@mplayer/core';
 
 const HistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Song[]>([]);
@@ -27,35 +24,9 @@ const HistoryPage: React.FC = () => {
       const songBases = history.map((h: any) => h.song as SongBase);
       const uniqueMap = new Map<string, SongBase>();
       songBases.forEach((s: SongBase) => uniqueMap.set(s.id, s));
-      const uniqueSongs = Array.from(uniqueMap.values());
-      // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP 有窗口配额
-      const results = await mapPacedWithConcurrency(
-        uniqueSongs,
-        3,
-        async (songBase) => {
-          const songs = await callMusicApi('searchSongsRouted', `${songBase.name} ${songBase.artist}`, 1, songBase.sourceType);
-          const matched = findExactMatch({ name: songBase.name, artist: songBase.artist }, songs) as Song | undefined;
-          if (matched) {
-            return {
-              ...songBase,
-              name: matched.name || songBase.name,
-              artist: matched.artist || songBase.artist,
-              album: matched.album || songBase.album || '',
-              duration: matched.duration || songBase.duration || 0,
-              url: matched.url || '',
-              cover: matched.cover || '',
-              lrc: matched.lrc || '',
-              sourceType: matched.sourceType || songBase.sourceType,
-            };
-          }
-          return { ...songBase, url: '', cover: '', lrc: '' } as Song;
-        },
-      );
-      // 失败/无结果时回退到原始歌曲对象（保留 id/name/artist），而不是错误对象
-      const songsWithCover = results.map((r, i) =>
-        r.status === 'fulfilled' ? r.value : { ...uniqueSongs[i], url: '', cover: '', lrc: '' } as Song
-      );
-      setHistory(songsWithCover);
+      // 挂载整表扫荡已退役（#317）：去重后直接上屏——播放/歌词懒解析补 url/lrc，
+      // 空封面行由行级 songCoverRefresh 懒兜底
+      setHistory(Array.from(uniqueMap.values()) as Song[]);
     } catch (error) {
       console.error('加载播放历史失败:', error);
     }
