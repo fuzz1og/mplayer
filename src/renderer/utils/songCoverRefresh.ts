@@ -43,6 +43,8 @@ export function __resetSongCoverRefreshState(): void {
 /**
  * 封面加载失败时刷新歌曲封面（上游 API 签名过期后同一 URL 永远失败，必须换新 URL）。
  * 策略（"失败三次才放弃"）：
+ * 0. 缓存优先：缓存里已有可用封面（非死链且非刚失败的同一 URL）直接复用，零搜索上屏
+ *    （收藏/历史的 cover 本不落库，空封面挂载即触发；整表扫荡退役后缓存不能只写不读）
  * 1. 名字搜索 + 精确匹配（严格匹配防翻唱/Live 误配）
  * 2. 放弃，返回 null（UI 保持默认图，5 分钟后重试）
  * 「按源站 ID 识别」首腿已删（自建 API 退役后 searchSongById 恒 null，#273）。
@@ -71,6 +73,26 @@ export function refreshSongCover(song: Song): Promise<string | null> {
   lastRefreshAt.set(attemptKey, Date.now());
 
   const promise = withRefreshLimit(async () => {
+    // 缓存优先：先读 URL 缓存，已有可用封面直接复用（收藏/历史行每 session 挂载触发，
+    // 不先查缓存会对缓存里已有的封面反复打上游搜索）。排除两类必须落回搜索的情况：
+    // cover === song.cover（刚 onError 失败的同一 URL，重读会死链循环）与 legacy 死链。
+    const cached = await IpcClient
+      .invoke<{ url?: string; cover?: string; lrc?: string } | null>('cache:getSongResources', song.id)
+      .catch(() => null);
+    const cachedCover = cached?.cover && !isLegacyDeadUrl(cached.cover) ? cached.cover : '';
+    if (cachedCover && cachedCover !== song.cover) {
+      attempts.delete(attemptKey);
+      // 与搜索成功路径一致的缓存回写：只替换封面，保留安全 url/lrc
+      const safeExisting =
+        cached && !isLegacyDeadUrl(cached.url) && !isLegacyDeadUrl(cached.lrc) ? cached : null;
+      await IpcClient.invoke<void>('cache:setSongResources', song.id, {
+        url: safeExisting?.url || '',
+        cover: cachedCover,
+        lrc: safeExisting?.lrc || '',
+      }).catch(() => {});
+      return cachedCover;
+    }
+
     let fresh: Song | null = null;
 
     // 名字搜索 + 精确匹配（只接受 name+artist 完全匹配，避免翻唱/Live）

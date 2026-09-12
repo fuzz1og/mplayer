@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Headphones, Trash2, GripVertical, ListMusic } from 'lucide-react';
 import { Modal } from 'antd';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -25,6 +25,18 @@ interface SortableItemProps {
 
 const SortableItem: React.FC<SortableItemProps> = React.memo(({ song, index, isCurrentSong, isPlaying, onPlay, onRemove, onAddToPlaylist, onCoverError }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
+  // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
+  const coverRefreshFired = useRef(false);
+
+  // cover 为空时挂载即触发一次刷新，显示层不依赖 onError（与 SongRow 一致；
+  // SongCover 对空 src 渲染占位、从不触发 onError，只接 onError 空封面会永久占位）
+  useEffect(() => {
+    if (!song.cover && !coverRefreshFired.current) {
+      coverRefreshFired.current = true;
+      onCoverError?.(song);
+    }
+    // 仅挂载时触发：封面刷新后 song.cover 变化会自然进入正常渲染路径
+  }, []);
 
   const style: React.CSSProperties = {
     display: 'flex',
