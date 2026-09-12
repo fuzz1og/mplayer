@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song } from '@mplayer/core';
 
 // --- Mock 准备：audioPlayer / callMusicApi / IpcClient / songCoverRefresh ---
@@ -51,6 +51,7 @@ vi.mock('../utils/songCoverRefresh', () => ({
 }));
 
 import { usePlayerStore, __clearPrefetchedUrlsForTests } from '../store/playerStore';
+import { playbackClock } from '../services/playbackClock';
 
 function song(id: string, name = '晴天', url = ''): Song {
   return {
@@ -83,8 +84,6 @@ beforeEach(() => {
     currentSong: null,
     isPlaying: false,
     isLoading: false,
-    position: 0,
-    duration: 0,
     error: null,
     lyrics: '',
     lyricsLoading: false,
@@ -376,5 +375,45 @@ describe('reorderQueue（拖拽排序）', () => {
     usePlayerStore.getState().reorderQueue(1, 1);
 
     expect(usePlayerStore.getState().currentPlaylist.map(s => s.id)).toEqual(['r-a', 'r-b', 'r-c', 'r-d']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 播放位置采样脱离全局 store（#305）：tick 只唤醒时钟订阅者
+// ---------------------------------------------------------------------------
+describe('播放位置采样不经全局 store', () => {
+  afterEach(() => {
+    playbackClock.destroy();
+    vi.useRealTimers();
+  });
+
+  it('传输层开播后由 playbackClock 走表，tick 不通知 playerStore 订阅者', async () => {
+    vi.useFakeTimers();
+    defaultCallMusicApi();
+    const current = song('clk-a', '晴天', 'https://audio.example.com/clk-a.mp3');
+    usePlayerStore.setState({ currentPlaylist: [current], currentPlaylistIndex: 0, currentSong: current });
+
+    let position = 0;
+    audioPlayerMock.player.getPosition.mockImplementation(() => position);
+    audioPlayerMock.player.getDuration.mockReturnValue(240);
+
+    await usePlayerStore.getState().play(current);
+    // 传输层进入 playing（mock 不回调，直接触发捕获到的回调）
+    (capturedCallbacks.current.onStateChange as (state: string) => void)('playing');
+
+    const subscriber = vi.fn();
+    const unsubscribe = usePlayerStore.subscribe(subscriber);
+
+    position = 7.5;
+    vi.advanceTimersByTime(1000); // 4 个采样窗口
+
+    expect(playbackClock.getSnapshot().position).toBe(7.5);
+    expect(playbackClock.getSnapshot().duration).toBe(240);
+    expect(subscriber).not.toHaveBeenCalled();
+    unsubscribe();
+
+    // 位置/时长确实已不是 store 字段
+    expect('position' in usePlayerStore.getState()).toBe(false);
+    expect('duration' in usePlayerStore.getState()).toBe(false);
   });
 });

@@ -48,8 +48,6 @@ beforeEach(() => {
     currentSong: null,
     isPlaying: false,
     isLoading: false,
-    position: 0,
-    duration: 0,
     currentPlaylist: [],
     currentPlaylistIndex: -1,
     error: null,

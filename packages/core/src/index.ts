@@ -64,6 +64,9 @@ export {
 export type { UpdateSourceDef, UpdateLatencyMap, FetchLike } from './shared/updateChannels.js';
 export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
 export { stripSourceIdPrefix } from './utils/sourceIdPrefix.js';
+export { rawSongId, identityKey, identityKeyFrom } from './utils/songIdentity.js';
+export { refreshSongResource } from './shared/songResourceRefresh.js';
+export type { SongResourceRefreshDeps } from './shared/songResourceRefresh.js';
 export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
 export type { PlaylistUrlInfo, ProgressState, ImportResult, PlaylistImportDeps, ImportSource } from './api/playlistImport.js';
 export {

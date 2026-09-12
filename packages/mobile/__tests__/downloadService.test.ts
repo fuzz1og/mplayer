@@ -8,6 +8,7 @@ import {
 } from '../services/downloadService';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useDownloadStore } from '../stores/downloadStore';
+import { useDownloadProgressStore } from '../stores/downloadProgressStore';
 import { musicApi } from '@mplayer/core';
 
 const safMocks = vi.hoisted(() => {
@@ -218,18 +219,19 @@ describe('downloadSong（T15 容器修正 + .lrc 侧车 + 进度，T16 未知总
     expect(file.name.endsWith('.flac')).toBe(true);
     // .lrc 侧车已尝试写入（无实际目录，mock 层不抛）
     expect(musicApi.getLyrics).toHaveBeenCalledWith('http://example.com/lyric.lrc');
-    // 下载记录 status 完成
+    // 下载记录 status 完成；进度是瞬时读模型，完成后清掉（不落盘）
     const items = useDownloadStore.getState().items;
     expect(items[0].status).toBe('done');
-    expect(items[0].progress).toBe(100);
+    expect('progress' in items[0]).toBe(false);
+    expect(useDownloadProgressStore.getState().progressByKey['netease:1']).toBeUndefined();
   });
 
-  it('未知总大小进度通过 onProgress 上报软进度（不等 0%）', async () => {
-    const originalUpdate = useDownloadStore.getState().updateStatus;
+  it('未知总大小进度通过 onProgress 上报软进度（不等 0%）且只进瞬时进度 store', async () => {
+    const originalReport = useDownloadProgressStore.getState().reportProgress;
     const progressSeen: number[] = [];
-    const spy = vi.spyOn(useDownloadStore.getState(), 'updateStatus').mockImplementation((key, patch: any) => {
-      if (patch.progress != null) progressSeen.push(patch.progress);
-      return originalUpdate(key, patch);
+    const spy = vi.spyOn(useDownloadProgressStore.getState(), 'reportProgress').mockImplementation((key: string, progress: number) => {
+      progressSeen.push(progress);
+      return originalReport(key, progress);
     });
 
     await downloadSong(makeSong() as any);

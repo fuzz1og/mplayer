@@ -16,6 +16,7 @@ import {
   makeSongFileName,
 } from '@mplayer/core';
 import { useDownloadStore } from '../stores/downloadStore';
+import { useDownloadProgressStore } from '../stores/downloadProgressStore';
 import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { resolvePlayableUrlMobile } from './audioPlayer';
@@ -195,9 +196,10 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     artist: song.artist,
     fileName,
     status: 'downloading',
-    progress: 0,
     addedAt: Date.now(),
   });
+  // 重新下载：清掉上一次残留的瞬时进度（进度不落盘，状态才落盘）
+  useDownloadProgressStore.getState().clearProgress(itemKey);
 
   try {
     // 与播放同一套解析（路由链：直连→tier3→api 兜底，含预取缓存），拿 CDN 直链下载。
@@ -207,7 +209,7 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     if (!realUrl?.startsWith('http')) throw new Error('无法解析下载地址');
 
     await downloadDir.create({ intermediates: true, idempotent: true });
-    await downloadWithRetry(song, realUrl, file, itemKey, updateStatus);
+    await downloadWithRetry(song, realUrl, file, itemKey);
 
     // 按字节头嗅探真实容器，修正扩展名（FLAC/M4A 不再被错标成 .mp3）
     const corrected = await correctContainerName(file, fileName);
@@ -246,7 +248,8 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
       }
     }
 
-    updateStatus(itemKey, { status: 'done', progress: 100, publicUri });
+    updateStatus(itemKey, { status: 'done', publicUri });
+    useDownloadProgressStore.getState().clearProgress(itemKey);
     log.addLog('info', `下载完成《${song.name}》- ${song.artist}`);
     return new File(downloadDir, corrected.fileName);
   } catch (e) {
@@ -255,10 +258,12 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     const err = e as Error;
     if (existedBefore) {
       // 旧文件仍可播放：回退 done，避免失败状态挡住播放/列表残留
-      updateStatus(itemKey, { status: 'done', progress: 100 });
+      updateStatus(itemKey, { status: 'done' });
+      useDownloadProgressStore.getState().clearProgress(itemKey);
     } else {
       // 全新下载失败：不残留失败条目（失败原因已在 Alert/日志展示，重试 = 再点下载）
       useDownloadStore.getState().removeItem(itemKey);
+      useDownloadProgressStore.getState().clearProgress(itemKey);
     }
     log.addLog('error', `下载失败《${song.name}》: ${toErrorMessage(e)}`);
     throw err;
@@ -267,9 +272,10 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
 
 /**
  * 下载文件（含失败有限重试）。进度通过 onProgress 上报 core 估算（未知总量软进度，
- * 不再卡 0%）；超过最大重试后抛错（单首失败不影响其他任务）。
+ * 不再卡 0%）——只进瞬时进度 store，不落 AsyncStorage；超过最大重试后抛错
+ * （单首失败不影响其他任务）。
  */
-async function downloadWithRetry(song: Song, realUrl: string, file: File, itemKey: string, updateStatus: (k: string, p: any) => void): Promise<void> {
+async function downloadWithRetry(song: Song, realUrl: string, file: File, itemKey: string): Promise<void> {
   // 重试次数统一消费 core 常量（评审修复：两端不再各自硬编码）
   const maxRetries = DEFAULT_MAX_RETRIES;
   let lastError: unknown = null;
@@ -282,7 +288,7 @@ async function downloadWithRetry(song: Song, realUrl: string, file: File, itemKe
             loaded: bytesWritten,
             total: totalBytes >= 0 ? totalBytes : null,
           });
-          updateStatus(itemKey, { progress });
+          useDownloadProgressStore.getState().reportProgress(itemKey, progress);
         },
       });
       return;

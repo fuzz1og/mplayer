@@ -17,14 +17,14 @@
 | `cache/diskBackend.ts` | 磁盘缓存后端（音频、封面、歌词；constructor 注入 cacheDir） |
 | `storage/db.ts` | Primary persistence (favorites, history, playlists, settings)；启动时跑旧签名端点迁移 |
 | `ipc/registerHandler.ts` | `registerIpcHandler` helpers |
-| `services/` | downloadService / localMusicService / updateService / chartAggregator |
+| `services/` | downloadService(进度按 150ms 聚合后推 IPC) / localMusicService / updateService / chartAggregator |
 | `tray/trayManager.ts` | System tray + context menu |
 
 ### Renderer Process (`src/renderer/`)
 
 - `router/index.tsx` HashRouter 全懒加载；页面在 `pages/`（推荐/发现/热榜/收藏/历史/歌单/队列/本地/歌手/专辑/设置等）
 - `store/` Zustand：playerStore, searchStore, favoriteStore, downloadStore, localStore
-- `services/` audioPlayer(Howler), searchService, sourceSwap, IpcClient, callMusicApi 等
+- `services/` audioPlayer(Howler), playbackClock(播放位置/时长读模型：点击/键盘 seek 语义 + 叶子窄订阅，位置/时长不进 store), searchService, sourceSwap, IpcClient, callMusicApi 等
 - `components/` PlayerBar/SongList/SongRow/LyricsDisplay 等通用件
 - **歌曲列表模块**（#302 整合）：`SongList.tsx` 独占虚拟滚动与滚动测量（`hooks/useVirtualRows` 自动挂靠页面已有滚动容器）、选中/收藏的 Set 索引、行级交互（下拉菜单/换源/勾选/批量栏/加入歌单弹窗）；`SongRow.tsx` 是唯一行实现（能力位 + `dragHandle`/`actions`/`fillTitle` 插槽），`SortableSongRow.tsx` 是它的 dnd 薄包装（队列页/本地歌单页共用，排序索引数学在 `utils/reorder.moveItem` + `hooks/useSortableReorder`），`GroupedSongList.tsx` 数据经 props（页面做 `searchStore` 适配器）并复用同一套滚动/虚拟化与行实现。页面只做数据与语义回调的适配器，不感知测量细节。
 
@@ -46,17 +46,18 @@ Push（main→renderer）：`download:progress|complete|error`, `localMusic:fold
 expo-router Stack + Tabs：`(tabs)/`（推荐/发现/搜索/歌单/下载）+ player/favorites/history/settings/hotlist/playlist/[id]/discover-playlist/[id]/artist/[id]/album/[id]。
 
 - `components/` TopBar, PlayerBar, PlayerOverlay, SongRow, DiscoverTabs, SourceSwapModal, AddToPlaylistModal 等
+- `gestures/` 手势物理纯内核（拖拽关闭会话：位移/速度/判关，零 react-native 依赖，node 可测）+ `hooks/useDragToDismiss` 适配器——PlayerOverlay 与 BottomSheet 共用同一份物理
 - `stores/` Zustand（部分 AsyncStorage persist）：player/settings/favorite/history/playlist/search/discover/source/download/audioTag/logs
-- `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songProbe/songResources/sourceSwap, legacyMigration, cacheService
+- `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songProbe/songResources(严格搜索 + core 刷新编排适配器)/sourceSwap, legacyMigration, cacheService(身份键 + 可播资源值缓存)
 
 ## Shared Package (`packages/core/`)
 
 桌面/移动端共享。
 
-- `api/` 请求层：7 源直连客户端（`neteaseDirect`/`qqDirect`/`kugouDirect`/`miguDirect`/`kuwoDirect`/`qianqianDirect`/`sodaDirect`，能力面 = searchSongs/getToplists/内容方法，IPC 契约见上节）；`musicApi` 薄门面（probeSongsBatch、soda 分享解析等基础方法）；`qqPlaylist`/`playlistImport`（QQ 歌单解析与链接导入）；`neteaseWeapi`；`antiScrape`（UA 池/反同源连续）；`tlsFingerprint` + `transport`（可注入接缝，maxRedirects 透传）；`probeSongs` + `prefetchCache`（探测写预取）
+- `api/` 请求层：7 源直连客户端（`neteaseDirect`/`qqDirect`/`kugouDirect`/`miguDirect`/`kuwoDirect`/`qianqianDirect`/`sodaDirect`，能力面 = searchSongs/getToplists/内容方法，IPC 契约见上节）；`musicApi` 薄门面（probeSongsBatch、soda 分享解析等基础方法）；`qqPlaylist`/`playlistImport`（QQ 歌单解析与链接导入）；`neteaseWeapi`；`antiScrape`（UA 池/反同源连续）；`tlsFingerprint` + `transport`（可注入接缝，maxRedirects 透传）；`probeSongs` + `prefetchCache`（探测写预取；键 = 歌曲身份键，值 = `PlayableResource`）
 - `cache/` 缓存内核（CacheKernel/SongResourcesCache）
-- `shared/`：`sourceRouter`（来源开关 `auto|direct` 两态 + `sanitizeSourceModes` 洗白存量 'api'、直连客户端注册表、`searchSongsRouted`/`resolvePlayableSongRouted` 路由、`getToplistSongs` + `TOPLIST_SOURCE_IDS`）、`chartAggregate`（多源榜单聚合内核）、`searchOrchestrator`、`sourceSwap`、`songLyrics`、`updateChannels`（更新镜像探速）
-- `utils/`（songMatcher/songDedupe/lyricsParser/legacyUrl 等）
+- `shared/`：`sourceRouter`（来源开关 `auto|direct` 两态 + `sanitizeSourceModes` 洗白存量 'api'、直连客户端注册表、`searchSongsRouted`/`resolvePlayableSongRouted` 路由、`getToplistSongs` + `TOPLIST_SOURCE_IDS`）、`chartAggregate`（多源榜单聚合内核）、`searchOrchestrator`、`sourceSwap`、`songResourceRefresh`（可播资源刷新编排：取缓存 → 旧签名死链判定 → 精确匹配搜索 → 写缓存/写回，依赖注入）、`songLyrics`、`updateChannels`（更新镜像探速）
+- `utils/`（`songIdentity` 歌曲身份键：源 + 去源前缀真实 ID，多层嵌套按最外层源折叠；songMatcher/songDedupe/lyricsParser/legacyUrl 等）
 - `tier3/tier3Api` 订阅源执行器
 
 ```bash
