@@ -32,11 +32,23 @@ export interface DownloadTask {
   filePath?: string;
 }
 
+/**
+ * 进度推送最小间隔（毫秒）：进度是粗粒度读模型，axios 每个 chunk 都推 IPC
+ * 会把主进程→渲染层的通道打满（也顺带放大渲染层每次更新的成本）。
+ * 完成/失败仍即时推送，保证终态不丢。
+ */
+export const PROGRESS_THROTTLE_MS = 150;
+
 export interface DownloadOptions {
   downloadPath: string;
   onProgress?: (task: DownloadTask) => void;
   onComplete?: (task: DownloadTask) => void;
   onError?: (task: DownloadTask, error: Error) => void;
+}
+
+export interface DownloadServiceOptions {
+  /** 进度推送最小间隔（毫秒），默认 PROGRESS_THROTTLE_MS；测试可注入 */
+  progressThrottleMs?: number;
 }
 
 export class DownloadService {
@@ -46,6 +58,13 @@ export class DownloadService {
   private abortControllers: Map<string, AbortController> = new Map();
   private maxConcurrentDownloads: number = DEFAULT_MAX_CONCURRENT;
   private downloadPath: string = '';
+  private progressThrottleMs: number;
+  /** task.id → 上次推送进度的时间戳（节流窗口） */
+  private lastProgressNotifyAt: Map<string, number> = new Map();
+
+  constructor(options: DownloadServiceOptions = {}) {
+    this.progressThrottleMs = options.progressThrottleMs ?? PROGRESS_THROTTLE_MS;
+  }
 
   private async fetchCoverAsBuffer(coverUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
     if (!coverUrl) return null;
@@ -397,7 +416,7 @@ export class DownloadService {
           });
           task.progress = progress;
           this.tasks.set(task.id, task);
-          this.notifyProgress(task);
+          this.notifyProgressThrottled(task);
         }
       });
 
@@ -529,6 +548,18 @@ export class DownloadService {
     return sanitizeFileNameFragment(fileName);
   }
 
+  /**
+   * 进度节流：窗口内只推送一次（前沿触发）。task.progress 仍逐 chunk 更新，
+   * 终态由 notifyComplete/notifyError 即时补齐（progress=100）。
+   */
+  private notifyProgressThrottled(task: DownloadTask): void {
+    const now = Date.now();
+    const last = this.lastProgressNotifyAt.get(task.id) ?? 0;
+    if (now - last < this.progressThrottleMs) return;
+    this.lastProgressNotifyAt.set(task.id, now);
+    this.notifyProgress(task);
+  }
+
   private notifyProgress(task: DownloadTask): void {
     BrowserWindow.getAllWindows().forEach(window => {
       window.webContents.send('download:progress', task);
@@ -536,12 +567,14 @@ export class DownloadService {
   }
 
   private notifyComplete(task: DownloadTask): void {
+    this.lastProgressNotifyAt.delete(task.id);
     BrowserWindow.getAllWindows().forEach(window => {
       window.webContents.send('download:complete', task);
     });
   }
 
   private notifyError(task: DownloadTask, error: Error): void {
+    this.lastProgressNotifyAt.delete(task.id);
     BrowserWindow.getAllWindows().forEach(window => {
       window.webContents.send('download:error', { task, error: error.message });
     });

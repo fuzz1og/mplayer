@@ -17,14 +17,14 @@
 | `cache/diskBackend.ts` | 磁盘缓存后端（音频、封面、歌词；constructor 注入 cacheDir） |
 | `storage/db.ts` | Primary persistence (favorites, history, playlists, settings)；启动时跑旧签名端点迁移 |
 | `ipc/registerHandler.ts` | `registerIpcHandler` helpers |
-| `services/` | downloadService / localMusicService / updateService / chartAggregator |
+| `services/` | downloadService(进度按 150ms 聚合后推 IPC) / localMusicService / updateService / chartAggregator |
 | `tray/trayManager.ts` | System tray + context menu |
 
 ### Renderer Process (`src/renderer/`)
 
 - `router/index.tsx` HashRouter 全懒加载；页面在 `pages/`（推荐/发现/热榜/收藏/历史/歌单/队列/本地/歌手/专辑/设置等）
 - `store/` Zustand：playerStore, searchStore, favoriteStore, downloadStore, localStore
-- `services/` audioPlayer(Howler), searchService, sourceSwap, IpcClient, callMusicApi 等
+- `services/` audioPlayer(Howler), playbackClock(播放位置/时长读模型：点击/键盘 seek 语义 + 叶子窄订阅，位置/时长不进 store), searchService, sourceSwap, IpcClient, callMusicApi 等
 - `components/` PlayerBar/SongList/SongRow/LyricsDisplay 等通用件
 
 ## IPC Channels

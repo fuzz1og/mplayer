@@ -12,7 +12,6 @@ interface LyricsPageProps {
 const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const lyrics = usePlayerStore((s) => s.lyrics);
   const lyricsLoading = usePlayerStore((s) => s.lyricsLoading);
-  const position = usePlayerStore((s) => s.position);
   const currentSong = usePlayerStore((s) => s.currentSong);
   const seek = usePlayerStore((s) => s.seek);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -152,9 +151,9 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
             </div>
           ) : (
             <>
+              {/* 当前时间由 LyricsDisplay 自己订阅 playbackClock：页面不随采样 tick 重渲染 */}
               <LyricsDisplay
                 lrcContent={lyrics || ''}
-                currentTime={isNaN(position) ? 0 : position}
                 onLyricClick={handleLyricClick}
               />
               {!lyrics && (

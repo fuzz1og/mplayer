@@ -12,7 +12,7 @@ import TitleBar from '@/renderer/components/TitleBar';
 import TopBar from '@/renderer/components/TopBar';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
-import DownloadProgressModal from '@/renderer/components/DownloadProgressModal';
+import DownloadNotifications from '@/renderer/components/DownloadNotifications';
 import LyricsPage from '@/renderer/pages/LyricsPage';
 
 import './styles/global.css';
@@ -65,14 +65,12 @@ const App: React.FC = () => {
     navigate(0);
   }, [navigate]);
 
-  const {
-    currentKeyword,
-    sourceType,
-    setSourceType,
-  } = useSearchStore();
+  // 逐字段订阅：整 store 订阅会让搜索/收藏/下载的任何变化都重渲染 App 及整棵页面树
+  const currentKeyword = useSearchStore((s) => s.currentKeyword);
+  const sourceType = useSearchStore((s) => s.sourceType);
+  const setSourceType = useSearchStore((s) => s.setSourceType);
 
-  const { loadFavorites } = useFavoriteStore();
-  const { notifications, updateTask, closeNotification } = useDownloadStore();
+  const loadFavorites = useFavoriteStore((s) => s.loadFavorites);
 
   // 组件挂载时加载收藏列表
   useEffect(() => {
@@ -96,18 +94,19 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // 监听下载进度事件
+  // 监听下载进度事件：只经 store action 写入（订阅面在 DownloadNotifications，
+  // App 不订阅下载 store，进度事件不会重渲染页面树）
   useEffect(() => {
     const handleProgress = (_event: any, task: DownloadTask) => {
-      updateTask(task.id, { progress: task.progress, status: task.status });
+      useDownloadStore.getState().updateTask(task.id, { progress: task.progress, status: task.status });
     };
 
     const handleComplete = (_event: any, task: DownloadTask) => {
-      updateTask(task.id, { progress: 100, status: 'completed', filePath: task.filePath });
+      useDownloadStore.getState().updateTask(task.id, { progress: 100, status: 'completed', filePath: task.filePath });
     };
 
     const handleError = (_event: any, { task, error }: { task: DownloadTask; error: string }) => {
-      updateTask(task.id, { status: 'error', error });
+      useDownloadStore.getState().updateTask(task.id, { status: 'error', error });
     };
 
     ipcRenderer.on('download:progress', handleProgress);
@@ -119,7 +118,7 @@ const App: React.FC = () => {
       ipcRenderer.removeListener('download:complete', handleComplete);
       ipcRenderer.removeListener('download:error', handleError);
     };
-  }, [updateTask]);
+  }, []);
 
   useGlobalShortcuts();
 
@@ -228,16 +227,8 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* 下载进度弹窗 */}
-      {notifications.map((notification) =>
-        notification.isVisible ? (
-          <DownloadProgressModal
-            key={notification.id}
-            notification={notification}
-            onClose={() => closeNotification(notification.id)}
-          />
-        ) : null
-      )}
+      {/* 下载进度弹窗（订阅面在宿主内，App 不随下载进度重渲染） */}
+      <DownloadNotifications />
     </div>
   );
 };

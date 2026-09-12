@@ -19,8 +19,6 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
   const currentSong = usePlayerStore(s => s.currentSong);
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const volume = usePlayerStore(s => s.volume);
-  const position = usePlayerStore(s => s.position);
-  const duration = usePlayerStore(s => s.duration);
   const playMode = usePlayerStore(s => s.playMode);
   const pause = usePlayerStore(s => s.pause);
   const resume = usePlayerStore(s => s.resume);
@@ -175,12 +173,8 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           onNext={playNext}
           onModeChange={setPlayMode}
         />
-        <PlayerProgress
-          position={position}
-          duration={duration}
-          hasCurrentSong={!!currentSong}
-          onSeek={seek}
-        />
+        {/* 位置/时长不进播放栏：进度块自己订阅 playbackClock，tick 不重渲染 PlayerBar */}
+        <PlayerProgress hasCurrentSong={!!currentSong} onSeek={seek} />
       </div>
 
       {/* 右侧 - 功能按钮 */}
