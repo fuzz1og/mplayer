@@ -111,7 +111,7 @@ export default function CollapsingHero<T>({
 
   const navBg = scrollY.interpolate({
     inputRange: [0, collapseAt],
-    outputRange: ['rgba(255,255,255,0)', colors.bgSurface],
+    outputRange: ['transparent', colors.bgSurface],
     extrapolate: 'clamp',
   });
   const titleOpacity = scrollY.interpolate({

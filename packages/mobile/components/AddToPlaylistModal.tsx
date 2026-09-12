@@ -151,7 +151,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   itemCount: {
     ...textVariants.footnote,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
   },
   emptyBox: {
     alignItems: 'center',
@@ -159,7 +159,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   emptyText: {
     ...textVariants.callout,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     marginTop: spacing[3],
   },
   emptyHint: {

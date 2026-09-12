@@ -39,7 +39,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   subtitle: {
     ...textVariants.footnote,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     marginTop: 6,
   },
 });
