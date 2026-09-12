@@ -433,8 +433,12 @@ export const lightColors: ThemeColors = {
   inputPlaceholder: palette.gray400,
 
   /* 骨架屏 */
-  skeletonBase: palette.gray100,
-  skeletonShine: palette.gray200,
+  // 骨架屏（#318 真机实测）：原 gray100 #F5F5F7 比亮色页底 #F2F2F7 还浅，
+  // 对比度只有 1.02:1 —— 亮色下骨架块基本不可见（shimmer 更看不见）。
+  // 基色改 gray300：对页底 1.36:1 / 对白卡 1.52:1；高光用 gray100 反向提亮，
+  // shimmer 相对基色 1.4:1。可见度下限由 __tests__/skeletonContrast.test.ts 守住。
+  skeletonBase: palette.gray300,
+  skeletonShine: palette.gray100,
 };
 
 /**
