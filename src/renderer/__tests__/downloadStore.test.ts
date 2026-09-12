@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDownloadStore, getNotificationStats, getStatusText, getStatusColor } from '../store/downloadStore';
 import type { DownloadTask, DownloadNotification } from '../store/downloadStore';
 
@@ -109,6 +109,81 @@ describe('downloadStore', () => {
       // 应该只保留未完成的通知
       expect(useDownloadStore.getState().notifications).toHaveLength(1);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 进度事件的对象同一性（#305）：只重建真正变化的那一条通知/任务
+// ---------------------------------------------------------------------------
+describe('downloadStore 更新同一性', () => {
+  const makeTask = (id: string, progress = 0): DownloadTask => ({
+    id,
+    song: { id, name: `歌${id}`, artist: '周杰伦', album: '' },
+    progress,
+    status: 'downloading',
+  });
+
+  beforeEach(() => {
+    useDownloadStore.setState({ notifications: [] });
+  });
+
+  it('未命中的通知与任务保持引用，只有命中的那条被重建', () => {
+    const { addBatchDownload, addSingleDownload, updateTask } = useDownloadStore.getState();
+    addBatchDownload([makeTask('1'), makeTask('2')]);
+    addSingleDownload(makeTask('3'));
+
+    const before = useDownloadStore.getState().notifications;
+    const [batchBefore, singleBefore] = before;
+
+    updateTask('1', { progress: 30 });
+
+    const after = useDownloadStore.getState().notifications;
+    expect(after[0]).not.toBe(batchBefore);          // 命中的通知被重建
+    expect(after[1]).toBe(singleBefore);             // 未命中通知保持同一引用
+    expect(after[0].tasks[1]).toBe(batchBefore.tasks[1]); // 未命中任务保持同一引用
+    expect(after[0].tasks[0].progress).toBe(30);
+  });
+
+  it('更新值与现值全等时 state 不换、订阅者不被唤醒', () => {
+    const { addSingleDownload, updateTask } = useDownloadStore.getState();
+    addSingleDownload(makeTask('1', 0));
+    const state = useDownloadStore.getState();
+    const listener = vi.fn();
+    const unsubscribe = useDownloadStore.subscribe(listener);
+
+    updateTask('1', { progress: 0, status: 'downloading' });
+
+    expect(useDownloadStore.getState()).toBe(state);
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it('未命中任何任务时同样不通知订阅者', () => {
+    const { addSingleDownload, updateTask } = useDownloadStore.getState();
+    addSingleDownload(makeTask('1'));
+    const state = useDownloadStore.getState();
+    const listener = vi.fn();
+    const unsubscribe = useDownloadStore.subscribe(listener);
+
+    updateTask('missing', { progress: 80 });
+
+    expect(useDownloadStore.getState()).toBe(state);
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it('重复进度值只通知一次（主进程重复推送不放大重渲染）', () => {
+    const { addSingleDownload, updateTask } = useDownloadStore.getState();
+    addSingleDownload(makeTask('1'));
+    const listener = vi.fn();
+    const unsubscribe = useDownloadStore.subscribe(listener);
+
+    updateTask('1', { progress: 42 });
+    updateTask('1', { progress: 42 });
+    updateTask('1', { progress: 42 });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
   });
 });
 

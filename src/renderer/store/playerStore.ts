@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
+import { playbackClock } from '@/renderer/services/playbackClock';
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
 import { findExactMatch, getNextSongIndex, getPrevSongIndex, songUsesSongidLyrics, isSodaSource, isInlineLyrics } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
+import { moveItem } from '@/renderer/utils/reorder';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
 import { useSearchStore } from '@/renderer/store/searchStore';
 const ipcRenderer = window.electronAPI;
@@ -88,8 +90,6 @@ interface PlayerStoreState {
   isPlaying: boolean;
   isLoading: boolean;
   volume: number;
-  position: number;
-  duration: number;
   playerState: PlayerState;
   error: string | null;
   lyrics: string;
@@ -106,8 +106,6 @@ interface PlayerStoreActions {
   stop: () => void;
   seek: (position: number) => void;
   setVolume: (volume: number) => void;
-  setPosition: (position: number) => void;
-  setDuration: (duration: number) => void;
   setPlayerState: (state: PlayerState) => void;
   clearError: () => void;
   togglePlay: () => void;
@@ -132,12 +130,11 @@ const audioPlayer = getGlobalPlayer({
       isPlaying: state === 'playing',
       isLoading: state === 'loading'
     });
-  },
-  onPositionChange: (position) => {
-    usePlayerStore.getState().setPosition(position);
+    // 采样节奏归 playbackClock：只有真正在播放时才走表
+    playbackClock.setPlaying(state === 'playing');
   },
   onDurationChange: (duration) => {
-    usePlayerStore.getState().setDuration(duration);
+    playbackClock.setDuration(duration);
   },
   onLoadError: (error) => {
     usePlayerStore.setState({
@@ -151,6 +148,9 @@ const audioPlayer = getGlobalPlayer({
     state.playNext();
   }
 });
+
+// 时钟的采样源：只读传输层当前位置（轮询已从 audioPlayer 移出）
+playbackClock.connect(() => audioPlayer.getPosition());
 
 const initialQueue = loadQueue();
 
@@ -177,6 +177,13 @@ function prefetchNextUrl(state: PlayerStoreState): void {
   const nextSong = getNextSongInQueue(state);
   if (!nextSong || nextSong.sourceType === 'local') return;
 
+  // 自我预取守卫：单元素队列列表循环回绕会算出当前歌自己，预取自己无意义。
+  // 比较口径与下方 cacheKey 一致（`${sourceType}:${id}` 组合键）：跨源数字 id
+  // 相同不算同一首（kuwo:123 ≠ netease:123），只比 id 会误拦合法的下一首预取
+  const nextKey = `${nextSong.sourceType}:${nextSong.id}`;
+  const currentKey = state.currentSong ? `${state.currentSong.sourceType}:${state.currentSong.id}` : '';
+  if (nextKey === currentKey) return;
+
   // #171 后列表歌 url 恒为空串，预取不得以 url 为前提；
   // 缓存键必须含歌曲 id，否则同源空 url 歌曲共享一个 key 会串歌
   const cacheKey = `${nextSong.sourceType}:${nextSong.id}`;
@@ -199,8 +206,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   isPlaying: false,
   isLoading: false,
   volume: audioPlayer.getVolume(),
-  position: 0,
-  duration: 0,
   playerState: 'idle',
   error: null,
   lyrics: '',
@@ -224,10 +229,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         error: null,
         isLoading: true,
         currentSong: song,
-        position: 0,
         lyrics: '',
         lyricsLoading: false
       });
+      // 位置读模型归零（时长保留旧值到新曲加载完成，与旧 store 行为一致）
+      playbackClock.setPosition(0);
 
       let realUrl = song.url;
       let playbackNonFull = false;
@@ -307,15 +313,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         useSearchStore.getState().setAudioTag(song.id, 'valid');
       }
 
-      const duration = audioPlayer.getDuration();
+      playbackClock.setDuration(audioPlayer.getDuration());
 
       set({
-        duration: duration,
         isLoading: false,
         isPlaying: true
       });
-
-      prefetchNextUrl(get());
 
       // Fire-and-forget: 封面回填（点歌时 cover 可能为空，播放栏不显示兜底图）
       if (!song.cover) {
@@ -357,6 +360,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
       persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
 
+      // 预取必须放在队列 index 同步之后（#318）：手动点播路径（QueuePage 双击行、
+      // 历史/本地/发现页单曲点播）不先同步 index，若在 set({ currentSong }) 后立即
+      // 预取，会基于「新 currentSong + 旧 index」算出刚开播的这首歌自己——当前歌被
+      // 重复解析、真正的下一首漏预取。走到这里时各路径 index 均已就位：playNext/
+      // playPrevious/onEnd 在进 play 前已同步；页面级点播为 setCurrentPlaylist + play；
+      // 队列外点歌由上方 append 进队并置尾 index。失败/被取代（generation 早退）路径
+      // 不会走到这里。
+      prefetchNextUrl(get());
+
     } catch (error) {
       if (generation !== playGeneration) return;
       const messageText = error instanceof Error ? error.message : '播放失败';
@@ -382,11 +394,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   stop: () => {
     audioPlayer.stop();
+    playbackClock.reset();
     set({
       currentSong: null,
       isPlaying: false,
-      position: 0,
-      duration: 0,
       currentPlaylistIndex: -1
     });
     persistQueue(get().currentPlaylist, get().currentPlaylistIndex);
@@ -394,21 +405,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   seek: (position: number) => {
     audioPlayer.seek(position);
-    set({ position });
+    // 立即改写读模型：暂停中 seek 也要马上反映（不依赖下一次采样）
+    playbackClock.setPosition(position);
   },
 
   setVolume: (volume: number) => {
     const clampedVolume = Math.max(0, Math.min(100, volume));
     audioPlayer.setVolume(clampedVolume);
     set({ volume: clampedVolume });
-  },
-
-  setPosition: (position: number) => {
-    set({ position });
-  },
-
-  setDuration: (duration: number) => {
-    set({ duration });
   },
 
   setPlayerState: (state: PlayerState) => {
@@ -449,7 +453,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       if (currentSong) {
         audioPlayer.seek(0);
         audioPlayer.play();
-        set({ position: 0, isPlaying: true, error: null });
+        playbackClock.setPosition(0);
+        set({ isPlaying: true, error: null });
       }
       return;
     }
@@ -555,9 +560,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (toIndex < 0 || toIndex >= currentPlaylist.length) return;
     if (fromIndex === toIndex) return;
 
-    const newPlaylist = [...currentPlaylist];
-    const [moved] = newPlaylist.splice(fromIndex, 1);
-    newPlaylist.splice(toIndex, 0, moved);
+    // 索引数学走共享 moveItem：队列拖拽、本地歌单拖拽、store 内部同一份实现
+    const newPlaylist = moveItem(currentPlaylist, fromIndex, toIndex);
 
     // 同步更新 currentPlaylistIndex
     let newIndex = currentPlaylistIndex;
@@ -607,5 +611,6 @@ usePlayerStore.subscribe((state) => {
 });
 
 export function destroyPlayer(): void {
+  playbackClock.destroy();
   destroyGlobalPlayer();
 }

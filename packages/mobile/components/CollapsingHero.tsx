@@ -113,6 +113,33 @@ export default function CollapsingHero<T>({
 
   useEffect(() => setCoverFailed(false), [cover]);
 
+  const NAV_H = 52;
+  const COVER_H = 300 + insets.top; // 全出血：含状态栏高度
+  const collapseAt = COVER_H - NAV_H - insets.top; // 导航栏完全实心化的滚动点
+
+  const navBg = scrollY.interpolate({
+    inputRange: [0, collapseAt],
+    outputRange: ['transparent', colors.bgSurface],
+    extrapolate: 'clamp',
+  });
+  const titleOpacity = scrollY.interpolate({
+    inputRange: [collapseAt - 30, collapseAt],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const backColor = scrollY.interpolate({
+    inputRange: [collapseAt - 30, collapseAt],
+    outputRange: ['#FFFFFF', colors.textPrimary], // design-lint: ok 动画插值端点白：唱机收缩消失时的兜底色
+    extrapolate: 'clamp',
+  });
+
+  useEffect(() => {
+    const id = scrollY.addListener(({ value }) => {
+      setStatusStyle(value > collapseAt - 30 ? 'dark' : 'light');
+    });
+    return () => scrollY.removeListener(id);
+  }, [collapseAt, scrollY]);
+
   const handleCoverError = () => {
     setCoverFailed(true);
     onCoverError?.();

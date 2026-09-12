@@ -109,4 +109,37 @@ describe('prefetchCache（预取 URL 缓存）', () => {
   it('forgetPrefetchedUrl：条目不存在时静默无操作', () => {
     expect(() => forgetPrefetchedUrl(song())).not.toThrow();
   });
+
+  it('键 = 身份键：裸 id 与带前缀 id 共享条目（等价 id 收敛；旧裸键靠 TTL 自净）', () => {
+    setPrefetchedUrl(song({ id: '123', sourceType: 'netease' }), 'https://cdn.example.com/a.mp3', true);
+
+    expect(getPrefetchedUrl(song({ id: 'netease:123', sourceType: 'netease' }))?.url).toBe(
+      'https://cdn.example.com/a.mp3',
+    );
+  });
+
+  it('键 = 身份键：多层嵌套前缀按最外层源折叠', () => {
+    setPrefetchedUrl(
+      song({ id: 'kuwo:kugou:123', sourceType: 'kugou' }),
+      'https://cdn.example.com/b.mp3',
+      false,
+    );
+
+    expect(getPrefetchedUrl(song({ id: 'kuwo:123', sourceType: 'kuwo' }))?.url).toBe(
+      'https://cdn.example.com/b.mp3',
+    );
+    expect(getPrefetchedUrl(song({ id: 'kugou:123', sourceType: 'kugou' }))).toBeUndefined();
+  });
+
+  it('键 = 身份键：sourceType 缺失但 id 带前缀时按 id 前缀归属', () => {
+    setPrefetchedUrl(
+      song({ id: 'qq:7', sourceType: undefined as never }),
+      'https://cdn.example.com/c.mp3',
+      false,
+    );
+
+    expect(getPrefetchedUrl(song({ id: '7', sourceType: 'qq' }))?.url).toBe(
+      'https://cdn.example.com/c.mp3',
+    );
+  });
 });

@@ -1,8 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
+import { usePlaybackDuration, usePlaybackPosition } from '@/renderer/services/playbackClock';
 
 interface PlayerProgressProps {
-  position: number;
-  duration: number;
   hasCurrentSong: boolean;
   onSeek: (pos: number) => void;
 }
@@ -14,9 +13,15 @@ const formatTime = (seconds: number): string => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
+/**
+ * 播放进度块：位置的唯一消费者在叶子这一层——position/duration 由
+ * playbackClock 直接订阅，PlayerBar 不再随每 250ms 的采样重渲染。
+ */
 const PlayerProgress: React.FC<PlayerProgressProps> = React.memo(({
-  position, duration, hasCurrentSong, onSeek,
+  hasCurrentSong, onSeek,
 }) => {
+  const position = usePlaybackPosition();
+  const duration = usePlaybackDuration();
   const [isHovered, setIsHovered] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
 

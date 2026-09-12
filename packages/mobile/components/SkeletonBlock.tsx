@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { View, Animated, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
+import { opacity } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
@@ -53,6 +54,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     bottom: 0,
     width: 80,
     backgroundColor: colors.skeletonShine,
-    opacity: 0.6,
+    opacity: opacity.shimmer,
   },
 });

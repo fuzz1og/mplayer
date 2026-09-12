@@ -5,7 +5,8 @@ import { getNotificationStats, getStatusText, getStatusColor, useDownloadStore }
 
 interface DownloadProgressModalProps {
   notification: DownloadNotification;
-  onClose: () => void;
+  /** 传通知 id 而非闭包：宿主可传稳定的 store action，memo 才不会被新函数击穿 */
+  onClose: (notificationId: string) => void;
 }
 
 const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
@@ -13,6 +14,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
   onClose,
 }) => {
   const { type, tasks } = notification;
+  const handleClose = React.useCallback(() => onClose(notification.id), [onClose, notification.id]);
   const stats = getNotificationStats(notification);
 
   const isAllCompleted = stats.completed + stats.error === stats.total;
@@ -37,7 +39,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
           zIndex: 1000,
           animation: 'fadeIn 0.2s ease',
         }}
-        onClick={onClose}
+        onClick={handleClose}
       >
         <div
           style={{
@@ -75,7 +77,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 : '正在下载'}
             </h3>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               style={{
                 border: 'none',
                 background: 'transparent',
@@ -297,7 +299,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
         zIndex: 1000,
         animation: 'fadeIn 0.2s ease',
       }}
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         style={{
@@ -336,7 +338,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
               : `正在批量下载 (${stats.completed}/${stats.total})`}
           </h3>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               border: 'none',
               background: 'transparent',
@@ -567,4 +569,5 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
   );
 };
 
-export default DownloadProgressModal;
+// 通知对象保持同一性（downloadStore.updateTask）时，未变化的弹窗跳过重渲染
+export default React.memo(DownloadProgressModal);

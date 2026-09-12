@@ -85,5 +85,5 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   itemName: { ...textVariants.body, fontWeight: '400', color: colors.textPrimary },
   itemActive: { color: colors.accent },
   itemArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
-  empty: { ...textVariants.footnote, color: colors.textTertiary, textAlign: 'center', marginTop: spacing[10] },
+  empty: { ...textVariants.footnote, color: colors.textSecondary, textAlign: 'center', marginTop: spacing[10] },
 });

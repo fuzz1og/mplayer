@@ -5,6 +5,17 @@ export type SourceKey = 'netease' | 'qq' | 'kugou' | 'kuwo' | 'migu' | 'qianqian
 
 export type AudioTag = 'valid' | 'preview' | 'invalid';
 
+/**
+ * 可播资源值（ADR-0012）：直链 + 是否试听/不完整 + 写入时间。
+ * 两端外层缓存与 core 预取缓存共用这一种形状——播放路径不得把它收窄成 string，
+ * 否则预取命中的试听版会被回写成"完整版"（丢掉换源提示）。
+ */
+export interface PlayableResource {
+  url: string;
+  nonFull: boolean;
+  ts: number;
+}
+
 export interface SongBase {
   id: string;
   name: string;
