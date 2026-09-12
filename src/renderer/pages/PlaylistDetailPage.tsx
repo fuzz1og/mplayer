@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-const ipcRenderer = window.electronAPI;
 import { Play, ArrowLeft, Edit2, Music, Download, Trash2, Upload } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
@@ -13,12 +12,8 @@ import SortableSongRow from '@/renderer/components/SortableSongRow';
 import { useSortableReorder } from '@/renderer/hooks/useSortableReorder';
 import { moveItem } from '@/renderer/utils/reorder';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, Playlist } from '@mplayer/core';
-import { findExactMatch } from '@mplayer/core';
-import { mapPacedWithConcurrency } from '@/renderer/utils/async';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
-import { isLegacyDeadUrl } from '@mplayer/core';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
 const PlaylistDetailPage: React.FC = () => {
@@ -79,82 +74,6 @@ const PlaylistDetailPage: React.FC = () => {
 
   const { sensors, handleDragEnd } = useSortableReorder({ items: songs, onReorder: handleReorder });
 
-  const refreshPlaylistSongs = async (songs: Song[]): Promise<Song[]> => {
-    // 分批刷新（每批 3 首 + 批间间隔 + 限流退避）：上游服务端对同 IP
-    // 有窗口配额，整列表同时搜索会打爆 API，必须逐批慢刷
-    const results = await mapPacedWithConcurrency(songs, 3, async (song) => {
-        const cached = await IpcClient.invoke<{ url: string; cover: string; lrc: string } | null>('cache:getSongResources', song.id);
-        if (
-          cached &&
-          !isLegacyDeadUrl(cached.url) &&
-          !isLegacyDeadUrl(cached.cover) &&
-          !isLegacyDeadUrl(cached.lrc)
-        ) {
-          return { ...song, url: cached.url, cover: cached.cover, lrc: cached.lrc };
-        }
-
-        // 「按 ID 识别」死腿已删（自建 API 退役后 searchSongById 恒 null，#273）：
-        // 直接按歌名精确匹配（严格匹配防翻唱/Live 误配）
-        let fresh: Song | null = null;
-        if (song.name) {
-          try {
-            const searchResults = await callMusicApi(
-              'searchSongsRouted',
-              `${song.name} ${song.artist}`.trim(),
-              1,
-              song.sourceType,
-            );
-            fresh = (findExactMatch({ name: song.name, artist: song.artist }, searchResults) as Song | undefined) || null;
-          } catch {
-            fresh = null;
-          }
-        }
-        if (!fresh) return song;
-
-        // 写入缓存
-        await IpcClient.invoke<void>('cache:setSongResources', song.id, {
-          url: fresh.url || '',
-          cover: fresh.cover || '',
-          lrc: fresh.lrc || '',
-        });
-
-        // 写回 DB（下次启动不用重新搜索）
-        if (playlistId) {
-          ipcRenderer.invoke('playlist:updateSongData', playlistId, song.id, {
-            name: fresh.name || song.name,
-            artist: fresh.artist || song.artist,
-            album: fresh.album || song.album || '',
-            duration: fresh.duration || song.duration || 0,
-            url: fresh.url || '',
-            cover: fresh.cover || '',
-            lrc: fresh.lrc || '',
-            sourceType: fresh.sourceType || song.sourceType,
-          }).catch(() => {}); // fire-and-forget
-        }
-
-        return {
-          ...song,
-          name: fresh.name || song.name,
-          artist: fresh.artist || song.artist,
-          album: fresh.album || song.album || '',
-          duration: fresh.duration || song.duration || 0,
-          url: fresh.url || '',
-          cover: fresh.cover || '',
-          lrc: fresh.lrc || '',
-          sourceType: fresh.sourceType || song.sourceType,
-        };
-    });
-
-    return results.map((r, i) => {
-      if (r.status === 'rejected') {
-        // 单曲刷新失败不再完全静默：保留旧数据，但打日志便于排查（会话失效/上游限流）
-        console.warn(`[playlist:refresh] 刷新失败，保留旧数据: ${songs[i]?.name}`, r.reason);
-        return songs[i];
-      }
-      return r.value;
-    });
-  };
-
   const loadData = async () => {
     if (!playlistId) return;
 
@@ -167,9 +86,6 @@ const PlaylistDetailPage: React.FC = () => {
       setPlaylist(playlistData || null);
       setSongs(songsData);
       setLoading(false);
-      if (songsData && songsData.length > 0) {
-        refreshPlaylistSongs(songsData).then(setSongs).catch(console.error);
-      }
     } catch (error) {
       console.error('加载歌单详情失败:', error);
       setLoading(false);

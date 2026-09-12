@@ -151,8 +151,8 @@ test.describe('封面多场景 e2e', () => {
     console.log('[e2e] 收藏歌曲数:', rows);
     expect(rows).toBeGreaterThan(0);
 
-    // 收藏页加载时 refreshSongUrls 已自动补全封面（cache miss → 搜索），
-    // 等待封面出现（最多 70s）
+    // 整表补链已退役（#317）：收藏页行级懒恢复——空封面行挂载时逐行触发
+    // refreshSongCover（并发 3 + 冷却），url/lrc 不再批量补；等待封面逐行出现（最多 70s）
     let loaded = await countLoadedCovers();
     for (let i = 0; i < 70; i++) {
       await page.waitForTimeout(1000);
@@ -183,14 +183,15 @@ test.describe('封面多场景 e2e', () => {
     await clearCache();
     console.log('[e2e] 缓存已清空');
 
-    // 重新进入歌单：DB 里是过期签名的封面 URL → img 失败 → 兜底 → 自动按 ID 刷新
+    // 重新进入歌单：DB 里是过期签名的封面 URL → img 失败 → 行级兜底
+    // （refreshSongCover 名字搜索精确匹配换新签名封面；url/lrc 不再整表批量补）
     await openBabyBusPlaylist();
     const total = await countTotalCovers();
     const initial = await countLoadedCovers();
     console.log(`[e2e] 清缓存后初始已加载封面: ${initial}/${total}（应明显小于总数=大量兜底）`);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '40-stale-initial.png') });
 
-    // 等待失败封面自动刷新为真图（最多 80s）
+    // 等待失败封面逐行懒恢复为真图（最多 80s）
     const loaded = await waitCoversGrow(initial, total, 80);
     console.log(`[e2e] 清缓存后最终已加载封面: ${loaded}/${total}`);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '41-stale-refreshed.png') });

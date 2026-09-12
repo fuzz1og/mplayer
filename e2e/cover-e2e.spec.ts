@@ -80,12 +80,13 @@ test.describe('封面加载与失败刷新 e2e', () => {
     const totalImgs = await countTotalCovers();
     console.log(`[e2e] 页面 img 总数: ${totalImgs}`);
 
-    // 3. 初始（部分过期封面失败，可能显示兜底），等待失败封面自动刷新
+    // 3. 初始（部分过期封面/空封面失败，可能显示兜底），等待失败封面行级懒恢复
     const loadedBefore = await countLoadedCovers();
     console.log(`[e2e] 初始已加载封面: ${loadedBefore}/${totalImgs}`);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-playlist-initial.png') });
 
-    // 4. 等待封面刷新（最多 60s，直到大部分封面加载成功）
+    // 4. 等待封面逐行恢复（最多 60s，直到大部分封面加载成功；
+    //    整表补链已退役 #317，恢复靠行级 songCoverRefresh 逐行触发）
     let loaded = loadedBefore;
     for (let i = 0; i < 60 && loaded < totalImgs; i++) {
       await page.waitForTimeout(1000);
