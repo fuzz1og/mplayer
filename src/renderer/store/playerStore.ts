@@ -8,6 +8,7 @@ import { findExactMatch, getNextSongIndex, getPrevSongIndex, songUsesSongidLyric
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
+import { moveItem } from '@/renderer/utils/reorder';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
 import { useSearchStore } from '@/renderer/store/searchStore';
 const ipcRenderer = window.electronAPI;
@@ -545,9 +546,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (toIndex < 0 || toIndex >= currentPlaylist.length) return;
     if (fromIndex === toIndex) return;
 
-    const newPlaylist = [...currentPlaylist];
-    const [moved] = newPlaylist.splice(fromIndex, 1);
-    newPlaylist.splice(toIndex, 0, moved);
+    // 索引数学走共享 moveItem：队列拖拽、本地歌单拖拽、store 内部同一份实现
+    const newPlaylist = moveItem(currentPlaylist, fromIndex, toIndex);
 
     // 同步更新 currentPlaylistIndex
     let newIndex = currentPlaylistIndex;

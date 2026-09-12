@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Heart, Play } from 'lucide-react';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -20,32 +20,34 @@ const FavoritesPage: React.FC = () => {
 
   const [batchModalVisible, setBatchModalVisible] = useState(false);
   const [selectedSongsForPlaylist, setSelectedSongsForPlaylist] = useState<Song[]>([]);
+  // 收藏页的歌曲就是收藏本身：id 列表跟着 favorites 走，别在每次渲染新建数组（行 memo 会被击穿）
+  const favoriteIdList = useMemo(() => favorites.map(s => s.id), [favorites]);
 
   useEffect(() => {
     loadFavorites();
   }, [loadFavorites]);
 
-  const handleToggleFavorite = async (song: Song) => {
+  const handleToggleFavorite = useCallback(async (song: Song) => {
     try {
       await toggleFavorite(song);
     } catch (error) {
       console.error('收藏操作失败:', error);
     }
-  };
+  }, [toggleFavorite]);
 
-  const handlePlay = async (song: Song) => {
+  const handlePlay = useCallback(async (song: Song) => {
     await play(song);
-  };
+  }, [play]);
 
   // 封面加载失败 → 按 ID 重识别换新封面并更新收藏列表（收藏封面常为空/过期）
-  const handleCoverError = (song: Song) => {
+  const handleCoverError = useCallback((song: Song) => {
     void refreshSongCover(song).then((cover) => {
       if (!cover) return;
       useFavoriteStore.setState((state) => ({
         favorites: state.favorites.map((s) => (s.id === song.id ? { ...s, cover } : s)),
       }));
     });
-  };
+  }, []);
 
   const handlePlayAll = async () => {
     if (favorites.length > 0) {
@@ -55,12 +57,18 @@ const FavoritesPage: React.FC = () => {
   };
 
   // SongList 行内「加入歌单」由组件内部单曲弹窗闭环，此 prop 仅作成功通知（勿在此开弹窗）
-  const handleAddToPlaylist = (_song: Song) => {};
+  const handleAddToPlaylist = useCallback((_song: Song) => {}, []);
 
-  const handleBatchAddToPlaylist = (selectedSongs: Song[]) => {
+  const handleBatchAddToPlaylist = useCallback((selectedSongs: Song[]) => {
     setSelectedSongsForPlaylist(selectedSongs);
     setBatchModalVisible(true);
-  };
+  }, []);
+
+  const handleSwap = useCallback((original: Song, swapped: Song) => {
+    void useFavoriteStore.getState().replaceFavorite(original.id, swapped).catch((e) => {
+      console.error('换源保存到收藏失败:', e);
+    });
+  }, []);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -112,18 +120,14 @@ const FavoritesPage: React.FC = () => {
           songs={favorites}
           currentSongId={currentSong?.id}
           isPlaying={isPlaying}
-          favoriteIds={favorites.map(s => s.id)}
+          favoriteIds={favoriteIdList}
           onPlay={handlePlay}
           onToggleFavorite={handleToggleFavorite}
           onDownload={download}
           onBatchDownload={downloadBatch}
           onAddToPlaylist={handleAddToPlaylist}
           onBatchAddToPlaylist={handleBatchAddToPlaylist}
-          onSwap={(original, swapped) => {
-            void useFavoriteStore.getState().replaceFavorite(original.id, swapped).catch((e) => {
-              console.error('换源保存到收藏失败:', e);
-            });
-          }}
+          onSwap={handleSwap}
           onCoverError={handleCoverError}
           showCheckbox={true}
           enableBatchDownload={true}

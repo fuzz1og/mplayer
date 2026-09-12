@@ -1,23 +1,32 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Music2 } from 'lucide-react';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Song, SongGroup } from '@mplayer/core';
 import GroupHeaderRow from '@/renderer/components/GroupHeaderRow';
 import SongRow from '@/renderer/components/SongRow';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
-import { useSearchStore } from '@/renderer/store/searchStore';
-import { usePlayerStore } from '@/renderer/store/playerStore';
-import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
+import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
+import { useVirtualRows, SONG_ROW_HEIGHT } from '@/renderer/hooks/useVirtualRows';
 
 type FlatItem =
   | { type: 'group'; group: SongGroup }
   | { type: 'song'; groupKey: string; song: Song; index: number };
 
+const GROUP_HEADER_HEIGHT = 44;
+const noop = () => {};
+
 interface GroupedSongListProps {
+  /** 分组数据经 props 提供（页面做 searchStore 的适配器），组件不再自己订阅数据源 */
+  groups: SongGroup[];
+  expandedKeys: string[];
+  onToggleGroup: (key: string) => void;
+  onExpandAll: () => void;
+  onCollapseAll: () => void;
+  currentSongId?: string;
+  isPlaying?: boolean;
+  favoriteIds?: string[];
   onPlay: (song: Song) => void;
-  onAddToPlaylist: (song: Song) => void;
   onToggleFavorite: (song: Song) => void;
   onDownload?: (song: Song) => void;
   selectedIds: string[];
@@ -27,9 +36,20 @@ interface GroupedSongListProps {
   onLoadMore?: () => void;
 }
 
+/**
+ * 分组歌曲列表：与 SongList 共用同一套滚动/测量（useVirtualRows）与行实现（SongRow），
+ * 只多一层「组头 + 组内歌曲」的扁平化数据。
+ */
 const GroupedSongList: React.FC<GroupedSongListProps> = ({
+  groups,
+  expandedKeys,
+  onToggleGroup,
+  onExpandAll,
+  onCollapseAll,
+  currentSongId,
+  isPlaying = false,
+  favoriteIds = [],
   onPlay,
-  // onAddToPlaylist is not used directly - handleAddToPlaylistClick wraps it
   onToggleFavorite,
   onDownload,
   selectedIds,
@@ -38,22 +58,13 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   hasMore = false,
   onLoadMore,
 }) => {
-  const groups = useSearchStore(s => s.groups);
-  const expandedKeys = useSearchStore(s => s.expandedKeys);
-  const toggleGroup = useSearchStore(s => s.toggleGroup);
-  const expandAll = useSearchStore(s => s.expandAll);
-  const collapseAll = useSearchStore(s => s.collapseAll);
-
-  const currentSong = usePlayerStore(s => s.currentSong);
-  const isPlaying = usePlayerStore(s => s.isPlaying);
-  const favoriteIds = useFavoriteStore(s => s.favoriteIds);
-
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<Song | null>(null);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   const expandedSet = useMemo(() => new Set(expandedKeys), [expandedKeys]);
+  const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   const flatItems = useMemo(() => {
     const items: FlatItem[] = [];
@@ -68,17 +79,13 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
     return items;
   }, [groups, expandedSet]);
 
-  const rowVirtualizer = useVirtualizer({
-    count: flatItems.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: (index) => {
-      const item = flatItems[index];
-      return item.type === 'group' ? 44 : 64;
-    },
-    overscan: 5,
-  });
+  const latest = useLatest({ selectedIds, onSelectionChange, onPlay });
 
-  useInfiniteScroll(scrollRef, { onLoadMore: onLoadMore ?? (() => {}), loading, hasMore });
+  const stableOnToggleGroup = useStableCallback(onToggleGroup);
+  const stableOnExpandAll = useStableCallback(onExpandAll);
+  const stableOnCollapseAll = useStableCallback(onCollapseAll);
+  const stableOnToggleFavorite = useStableCallback(onToggleFavorite);
+  const stableOnDownload = useStableCallback(onDownload);
 
   const handleToggleDropdown = useCallback((songId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -98,29 +105,37 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
 
   const handlePlayFirst = useCallback((group: SongGroup) => {
     if (group.songs.length > 0) {
-      onPlay(group.songs[0]);
+      latest.current.onPlay(group.songs[0]);
     }
-  }, [onPlay]);
+  }, [latest]);
 
   const handleToggleSelect = useCallback((songId: string) => {
-    const next = selectedIds.includes(songId)
-      ? selectedIds.filter(id => id !== songId)
-      : [...selectedIds, songId];
-    onSelectionChange(next);
-  }, [selectedIds, onSelectionChange]);
+    const { selectedIds: current, onSelectionChange: change } = latest.current;
+    change(current.includes(songId) ? current.filter(id => id !== songId) : [...current, songId]);
+  }, [latest]);
 
   const allExpanded = groups.length > 0 && expandedKeys.length === groups.length;
 
   const toggleAll = useCallback(() => {
     if (allExpanded) {
-      collapseAll();
+      stableOnCollapseAll?.();
     } else {
-      expandAll();
+      stableOnExpandAll?.();
     }
-  }, [allExpanded, expandAll, collapseAll]);
+  }, [allExpanded, stableOnExpandAll, stableOnCollapseAll]);
 
-  const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  // 滚动/测量归模块：挂靠页面已有的滚动容器（本组件的 overflow:auto 容器），并按组头/歌曲高度虚拟化
+  const virtual = useVirtualRows({
+    count: flatItems.length,
+    enabled: flatItems.length > 0,
+    estimateSize: useCallback(
+      (index: number) => (flatItems[index]?.type === 'group' ? GROUP_HEADER_HEIGHT : SONG_ROW_HEIGHT),
+      [flatItems],
+    ),
+    overscan: 5,
+  });
+
+  useInfiniteScroll(virtual.scrollElement, { onLoadMore: onLoadMore ?? noop, loading, hasMore });
 
   if (loading && groups.length === 0) {
     return <SongListSkeleton showCheckbox={true} showIndex={false} />;
@@ -135,6 +150,52 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
     );
   }
 
+  const virtualRowStyle = (start: number, size: number, scrollMargin: number): React.CSSProperties => ({
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: `${size}px`,
+    transform: `translateY(${start - scrollMargin}px)`,
+  });
+
+  const renderItem = (item: FlatItem, style?: React.CSSProperties) => {
+    if (item.type === 'group') {
+      return (
+        <GroupHeaderRow
+          key={item.group.key}
+          group={item.group}
+          isExpanded={expandedSet.has(item.group.key)}
+          onToggle={() => stableOnToggleGroup?.(item.group.key)}
+          onPlayFirst={() => handlePlayFirst(item.group)}
+          style={style}
+        />
+      );
+    }
+    return (
+      <SongRow
+        key={`${item.groupKey}-${item.index}`}
+        song={item.song}
+        index={item.index}
+        isCurrentSong={currentSongId === item.song.id}
+        isPlaying={currentSongId === item.song.id && isPlaying}
+        isFavorite={favoriteSet.has(item.song.id)}
+        showIndex={false}
+        isSelected={selectedSet.has(item.song.id)}
+        moreOpen={activeDropdown === item.song.id}
+        onPlay={onPlay}
+        onToggleFavorite={stableOnToggleFavorite}
+        onDownload={stableOnDownload}
+        onAddToPlaylist={handleAddToPlaylistClick}
+        onToggleSelect={handleToggleSelect}
+        onToggleDropdown={handleToggleDropdown}
+        onCloseDropdown={handleCloseDropdown}
+        compact={false}
+        style={style}
+      />
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 10px' }}>
@@ -148,47 +209,20 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
           {allExpanded ? '全部折叠' : '全部展开'}
         </button>
       </div>
-      <div ref={scrollRef} style={{ overflow: 'auto', flex: 1 }}>
-        <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
-          {rowVirtualizer.getVirtualItems().map(virtualItem => {
-            const item = flatItems[virtualItem.index];
-            if (item.type === 'group') {
-              return (
-                <GroupHeaderRow
-                  key={item.group.key}
-                  group={item.group}
-                  isExpanded={expandedSet.has(item.group.key)}
-                  onToggle={() => toggleGroup(item.group.key)}
-                  onPlayFirst={() => handlePlayFirst(item.group)}
-                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: `${virtualItem.size}px`, transform: `translateY(${virtualItem.start}px)` }}
-                />
-              );
-            }
-            return (
-              <SongRow
-                key={`${item.groupKey}-${item.index}`}
-                song={item.song}
-                index={item.index}
-                isCurrentSong={currentSong?.id === item.song.id}
-                isPlaying={currentSong?.id === item.song.id && isPlaying}
-                isFavorite={favoriteSet.has(item.song.id)}
-                showIndex={false}
-                showCheckbox={false}
-                isSelected={selectedSet.has(item.song.id)}
-                showRemoveFromPlaylist={false}
-                activeDropdown={activeDropdown}
-                onPlay={onPlay}
-                onToggleFavorite={onToggleFavorite}
-                onDownload={onDownload}
-                onAddToPlaylist={handleAddToPlaylistClick}
-                onToggleSelect={handleToggleSelect}
-                onToggleDropdown={handleToggleDropdown}
-                onCloseDropdown={handleCloseDropdown}
-                compact={false}
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: `${virtualItem.size}px`, transform: `translateY(${virtualItem.start}px)` }}
-              />
-            );
-          })}
+      <div style={{ overflow: 'auto', flex: 1 }}>
+        <div
+          ref={virtual.rowsRef}
+          style={virtual.mode === 'virtual' ? { position: 'relative', height: `${virtual.totalSize}px`, width: '100%' } : undefined}
+        >
+          {virtual.mode === 'pending'
+            ? null
+            : virtual.mode === 'virtual'
+              ? virtual.items.map((virtualItem) => {
+                  const item = flatItems[virtualItem.index];
+                  if (!item) return null;
+                  return renderItem(item, virtualRowStyle(virtualItem.start, virtualItem.size, virtual.scrollMargin));
+                })
+              : flatItems.map((item) => renderItem(item))}
         </div>
         {hasMore && loading && (
           <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>

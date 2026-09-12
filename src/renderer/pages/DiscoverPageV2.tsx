@@ -326,6 +326,12 @@ const DiscoverPageV2: React.FC = () => {
   const hasMore = useSearchStore((s) => s.hasMore);
   const sourceType = useSearchStore((s) => s.sourceType);
   const searchError = useSearchStore((s) => s.error);
+  // 分组列表的数据源由页面（适配器）订阅，GroupedSongList 只通过 props 拿数据
+  const groupedResults = useSearchStore((s) => s.groups);
+  const expandedKeys = useSearchStore((s) => s.expandedKeys);
+  const toggleGroup = useSearchStore((s) => s.toggleGroup);
+  const expandAll = useSearchStore((s) => s.expandAll);
+  const collapseAll = useSearchStore((s) => s.collapseAll);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const { download } = useDownload();
@@ -448,8 +454,15 @@ const DiscoverPageV2: React.FC = () => {
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>{searchError}</div>
             ) : sourceType === 'all' ? (
               <GroupedSongList
+                groups={groupedResults}
+                expandedKeys={expandedKeys}
+                onToggleGroup={toggleGroup}
+                onExpandAll={expandAll}
+                onCollapseAll={collapseAll}
+                currentSongId={currentSong?.id}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
                 onPlay={(song: Song) => { void play(song); }}
-                onAddToPlaylist={() => {}} // 组件内部单曲弹窗闭环，此 prop 未被消费（必填占位）
                 onToggleFavorite={toggleFavorite}
                 onDownload={download}
                 selectedIds={[]}
