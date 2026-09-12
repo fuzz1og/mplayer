@@ -24,6 +24,7 @@
 
 - `router/index.tsx` HashRouter 全懒加载；页面在 `pages/`（推荐/发现/热榜/收藏/历史/歌单/队列/本地/歌手/专辑/设置等）
 - `store/` Zustand：playerStore, searchStore, favoriteStore, downloadStore, localStore
+- playerStore 播放失败处理：同曲 fresh 重试一次（`forgetPrefetchedUrl` + 重走路由链）→ 仍失败按播放模式自动跳下一首；连续失败达队列长度或没有别的歌则停止提示（对齐移动端）。下一首 URL 预取统一写 core 预取缓存（30min TTL、失败可遗忘），渲染层不再自建 URL Map；播放成功后的簿记异常（历史/队列/封面）不参与失败判定，避免误跳歌
 - `services/` audioPlayer(Howler), playbackClock(播放位置/时长读模型：点击/键盘 seek 语义 + 叶子窄订阅，位置/时长不进 store), searchService, sourceSwap, IpcClient, callMusicApi 等
 - `components/` PlayerBar/SongList/SongRow/LyricsDisplay 等通用件
 

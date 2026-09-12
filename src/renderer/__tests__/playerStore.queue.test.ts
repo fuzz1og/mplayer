@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Song } from '@mplayer/core';
+import { clearPrefetchCache, type Song } from '@mplayer/core';
 
 // --- Mock 准备：audioPlayer / callMusicApi / IpcClient / songCoverRefresh ---
 const audioPlayerMock = vi.hoisted(() => {
@@ -50,7 +50,7 @@ vi.mock('../utils/songCoverRefresh', () => ({
   refreshSongCover: vi.fn(async () => null),
 }));
 
-import { usePlayerStore, __clearPrefetchedUrlsForTests } from '../store/playerStore';
+import { usePlayerStore } from '../store/playerStore';
 import { playbackClock } from '../services/playbackClock';
 
 function song(id: string, name = '晴天', url = ''): Song {
@@ -79,7 +79,7 @@ function defaultCallMusicApi(): void {
 }
 
 beforeEach(() => {
-  __clearPrefetchedUrlsForTests();
+  clearPrefetchCache();
   usePlayerStore.setState({
     currentSong: null,
     isPlaying: false,
@@ -226,25 +226,26 @@ describe('播放链路：URL 解析 / 加载失败', () => {
     );
   });
 
-  it('加载失败：error 置位、isPlaying 停、不触发下一首（不跳歌）', async () => {
+  it('加载失败：先同曲 fresh 重试（不跳歌），重试成功继续播放同一首', async () => {
     const songs = [
       song('netease:1', '晴天', 'https://audio.example.com/1.mp3'),
       song('netease:2', '稻香', 'https://audio.example.com/2.mp3'),
     ];
     usePlayerStore.setState({
       currentPlaylist: songs, currentPlaylistIndex: 0, currentSong: songs[0], isPlaying: true,
+      playMode: '列表循环',
     });
 
-    // 模拟音频播放器 load 失败（onLoadError）
+    // 模拟音频播放器 load 失败（onLoadError）→ 走统一失败处理
     const onLoadError = capturedCallbacks.current.onLoadError as (error: Error) => void;
     onLoadError?.(new Error('加载音频失败: test'));
 
-    expect(usePlayerStore.getState().error).toBe('加载音频失败: test');
-    expect(usePlayerStore.getState().isPlaying).toBe(false);
-    expect(usePlayerStore.getState().isLoading).toBe(false);
-    // 不跳歌：没有触发下一首的 load/play，index 不变
-    expect(audioPlayerMock.player.load).not.toHaveBeenCalled();
-    expect(audioPlayerMock.player.play).not.toHaveBeenCalled();
+    // fresh 重试：不推进队列，重新解析并重新加载同一首（defaultCallMusicApi 解析成功）
+    await vi.waitFor(() =>
+      expect(audioPlayerMock.player.load).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'netease:1' }),
+      ),
+    );
     expect(usePlayerStore.getState().currentPlaylistIndex).toBe(0);
   });
 });
