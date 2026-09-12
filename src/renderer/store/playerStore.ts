@@ -4,7 +4,17 @@ import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/render
 import { playbackClock } from '@/renderer/services/playbackClock';
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
-import { findExactMatch, getNextSongIndex, getPrevSongIndex, songUsesSongidLyrics, isSodaSource, isInlineLyrics } from '@mplayer/core';
+import {
+  findExactMatch,
+  getNextSongIndex,
+  getPrevSongIndex,
+  songUsesSongidLyrics,
+  isSodaSource,
+  isInlineLyrics,
+  forgetPrefetchedUrl,
+  getPrefetchedUrl,
+  setPrefetchedUrl,
+} from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
@@ -99,8 +109,14 @@ interface PlayerStoreState {
   currentPlaylistIndex: number;
 }
 
+/** play() 内部选项：fresh = 换新 URL 重试；failureCount = 本次失败链已跳过的曲目数 */
+export interface PlaybackOptions {
+  fresh?: boolean;
+  failureCount?: number;
+}
+
 interface PlayerStoreActions {
-  play: (song: Song) => Promise<void>;
+  play: (song: Song, options?: PlaybackOptions) => Promise<void>;
   pause: () => void;
   resume: () => void;
   stop: () => void;
@@ -142,6 +158,9 @@ const audioPlayer = getGlobalPlayer({
       isPlaying: false,
       isLoading: false
     });
+    // 与 play() 的 catch 共用同一失败处理：attempt.handled 去重，一次失败只跑一轮
+    const attempt = activeAttempt;
+    if (attempt) void handlePlaybackFailure(error, attempt);
   },
   onEnd: () => {
     const state = usePlayerStore.getState();
@@ -155,12 +174,9 @@ playbackClock.connect(() => audioPlayer.getPosition());
 const initialQueue = loadQueue();
 
 // --- URL 预解析缓存 ---
-const prefetchedUrls = new Map<string, string>();
-
-/** 测试专用：清空模块级预取缓存，保证用例间隔离 */
-export function __clearPrefetchedUrlsForTests(): void {
-  prefetchedUrls.clear();
-}
+// 统一走 core 预取缓存（键 = `sourceType:id`，30min TTL，失败可遗忘）。
+// 桌面曾自建模块级 Map：无 TTL、失败不失效，带签名的过期直链会被无期限复用
+// 并直接喂给 Howler（onloaderror）——同一份语义不能存在两套规则。
 
 /**
  * 获取队列中下一首歌（不改变播放状态）
@@ -178,25 +194,98 @@ function prefetchNextUrl(state: PlayerStoreState): void {
   if (!nextSong || nextSong.sourceType === 'local') return;
 
   // 自我预取守卫：单元素队列列表循环回绕会算出当前歌自己，预取自己无意义。
-  // 比较口径与下方 cacheKey 一致（`${sourceType}:${id}` 组合键）：跨源数字 id
+  // 比较口径与 core 预取缓存键同口径（`${sourceType}:${id}` 组合键）：跨源数字 id
   // 相同不算同一首（kuwo:123 ≠ netease:123），只比 id 会误拦合法的下一首预取
   const nextKey = `${nextSong.sourceType}:${nextSong.id}`;
   const currentKey = state.currentSong ? `${state.currentSong.sourceType}:${state.currentSong.id}` : '';
   if (nextKey === currentKey) return;
 
-  // #171 后列表歌 url 恒为空串，预取不得以 url 为前提；
-  // 缓存键必须含歌曲 id，否则同源空 url 歌曲共享一个 key 会串歌
-  const cacheKey = `${nextSong.sourceType}:${nextSong.id}`;
-  if (prefetchedUrls.has(cacheKey)) return;
+  // 已有未过期条目（core 30min TTL）→ 播放时 core 内部 0 等待命中，无需重解析
+  if (getPrefetchedUrl(nextSong)) return;
 
-  // T12：带试听版检测的播放解析（nonFull 标记）；预取只关心 URL
+  // T12：带试听版检测的播放解析（nonFull 标记）；预取只关心 URL。
+  // #171 后列表歌 url 恒为空串，缓存键由 core 按 sourceType:id 推导。
   callMusicApi('resolvePlayableSongRouted', nextSong)
     .then((resolved: { url: string; nonFull: boolean }) => {
       if (resolved?.url) {
-        prefetchedUrls.set(cacheKey, resolved.url);
+        setPrefetchedUrl(nextSong, resolved.url, !!resolved.nonFull);
       }
     })
     .catch(() => {});
+}
+
+// --- 播放失败处理（对齐移动端 packages/mobile/services/audioPlayer.ts） ---
+/**
+ * 单次播放尝试的上下文。同一次 load 失败会同时触发 audioPlayer 回调与
+ * play() 的 catch，用 handled 去重，保证一次失败只跑一轮「重试 / 跳歌」。
+ */
+interface PlayAttempt {
+  songId: string;
+  fresh: boolean;
+  failureCount: number;
+  handled: boolean;
+}
+
+let activeAttempt: PlayAttempt | null = null;
+
+/** 失败原因归类（提示文案）：解析链穷尽 vs 播放器 / 网络 */
+function failureReasonText(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error ?? '');
+  return text.includes('无法获取音频 URL') ? '直连与全部订阅源均未命中' : '音源解析失败';
+}
+
+/**
+ * 统一失败处理：
+ * 1) 同曲 fresh 重试一次（先遗忘失败直链，再重走直连 → tier3）；
+ * 2) 仍失败 → 回写「不可播」徽标并自动跳下一首；
+ * 3) 没有别的歌 / 连续失败达队列长度 → 停止并提示（防整列表死链无限连跳）。
+ * 本地文件不会过期：不做 fresh 重试，失败直接跳。
+ */
+async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Promise<void> {
+  if (attempt.handled) return;
+  attempt.handled = true;
+  // 已被新一次 play 取代（用户手动切歌等）：旧失败不再处理
+  if (activeAttempt !== attempt) return;
+
+  const store = usePlayerStore.getState();
+  const song = store.currentSong;
+  if (!song || song.id !== attempt.songId) return;
+
+  const reasonText = failureReasonText(error);
+
+  if (!attempt.fresh && song.sourceType !== 'local') {
+    forgetPrefetchedUrl(song);
+    await store.play(song, { fresh: true, failureCount: attempt.failureCount });
+    return;
+  }
+
+  if (song.sourceType !== 'local') {
+    useSearchStore.getState().setAudioTag(song.id, 'invalid');
+  }
+
+  const nextIndex = getNextSongIndex(store.currentPlaylist, store.currentPlaylistIndex, store.playMode);
+  const nextSong = nextIndex >= 0 ? store.currentPlaylist[nextIndex] : null;
+  const noOtherSong = !nextSong || nextSong.id === song.id;
+  const exhausted = attempt.failureCount + 1 >= store.currentPlaylist.length;
+
+  if (noOtherSong || exhausted) {
+    audioPlayer.stop();
+    usePlayerStore.setState({
+      error: error instanceof Error ? error.message : '播放失败',
+      isLoading: false,
+      isPlaying: false
+    });
+    message.error(
+      noOtherSong
+        ? `《${song.name}》${reasonText}，且队列中没有其他歌曲，可尝试换源`
+        : `连续 ${attempt.failureCount + 1} 首无法播放，已暂停（试试换源）`
+    );
+    return;
+  }
+
+  usePlayerStore.setState({ currentPlaylistIndex: nextIndex });
+  message.warning(`《${song.name}》${reasonText}，已自动跳到下一首`);
+  await store.play(nextSong, { failureCount: attempt.failureCount + 1 });
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
@@ -214,7 +303,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   currentPlaylist: initialQueue.playlist,
   currentPlaylistIndex: initialQueue.index,
 
-  play: async (song: Song) => {
+  play: async (song: Song, options: PlaybackOptions = {}) => {
+    const { fresh = false, failureCount = 0 } = options;
     const { isLoading, currentSong } = get();
 
     if (isLoading && currentSong?.id === song.id) {
@@ -223,6 +313,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     const generation = ++playGeneration;
     audioPlayer.cancelLoad();
+    // 登记本次尝试：load 失败会同时触发 audioPlayer 回调与下方 catch，靠 attempt 去重
+    const attempt: PlayAttempt = { songId: song.id, fresh, failureCount, handled: false };
+    activeAttempt = attempt;
+    /** 是否已真正开始播放：用于区分「播放失败」与「播放后簿记异常」 */
+    let playStarted = false;
 
     try {
       set({
@@ -245,31 +340,26 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           console.error('获取汽水音乐可播放 URL 失败:', urlError);
         }
       } else if (song.sourceType !== 'local') {
-        // 与 prefetchNextUrl 的缓存键保持一致（含歌曲 id，防止空 url 同源串歌）
-        const cacheKey = `${song.sourceType}:${song.id}`;
-        const prefetched = prefetchedUrls.get(cacheKey);
-        if (prefetched) {
-          realUrl = prefetched;
-          prefetchedUrls.delete(cacheKey);
-        } else {
-          try {
-            // T12：带试听版检测的播放解析（nonFull 标记驱动换元提示）
-            const resolved = await callMusicApi('resolvePlayableSongRouted', song);
-            realUrl = resolved?.url || '';
-            if (resolved?.nonFull && realUrl) {
-              console.warn(`[player] 《${song.name}》解析结果为试听版（non-full），可换源获取完整版`);
-              song.nonFull = true;
-              playbackNonFull = true;
-              // 播放后按实际结果回写徽标（预取缓存命中时同样走到这里）：
-              // preview 立即播直连试听（秒出声），不再等 tier3
-              useSearchStore.getState().setAudioTag(song.id, 'preview');
-              message.info('当前为试听版，可换源获取完整版');
-            }
-          } catch (urlError) {
-            console.error('获取真实音频 URL 失败:', urlError);
-            message.error(urlError instanceof Error ? urlError.message : '无法播放此歌曲');
-            realUrl = '';
+        // fresh 重试语义：先遗忘该曲预取条目——里面是刚被证明失败的直链，
+        // 0 等待命中只会原地连败两次（core 预取缓存 30min TTL + 失败可遗忘）
+        if (fresh) forgetPrefetchedUrl(song);
+        try {
+          // T12：带试听版检测的播放解析（nonFull 标记驱动换元提示）。
+          // 预取命中在 core 内部完成，这里不再自建缓存分支。
+          const resolved = await callMusicApi('resolvePlayableSongRouted', song);
+          realUrl = resolved?.url || '';
+          if (resolved?.nonFull && realUrl) {
+            console.warn(`[player] 《${song.name}》解析结果为试听版（non-full），可换源获取完整版`);
+            song.nonFull = true;
+            playbackNonFull = true;
+            // preview 立即播直连试听（秒出声），不再等 tier3
+            useSearchStore.getState().setAudioTag(song.id, 'preview');
+            message.info('当前为试听版，可换源获取完整版');
           }
+        } catch (urlError) {
+          // 失败反馈与「重试 / 跳歌」决策统一交给 handlePlaybackFailure，避免重复 Toast
+          console.error('获取真实音频 URL 失败:', urlError);
+          realUrl = '';
         }
       }
 
@@ -293,8 +383,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       if (!realUrl) {
         set({ isLoading: false });
-        // 播放失败 → 列表回写「不可播」徽标 + 换源入口
-        useSearchStore.getState().setAudioTag(song.id, 'invalid');
+        // 「不可播」徽标回写与重试 / 跳歌决策统一在 handlePlaybackFailure
         throw new Error('无法获取音频 URL：可能为 VIP/无版权或直连暂不可用，可尝试换源');
       }
 
@@ -307,6 +396,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
 
       audioPlayer.play();
+      playStarted = true;
 
       // 完整版播放成功 → 回写 valid，清掉该行旧的失败徽标（试听版保留 preview）
       if (!playbackNonFull) {
@@ -371,14 +461,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     } catch (error) {
       if (generation !== playGeneration) return;
-      const messageText = error instanceof Error ? error.message : '播放失败';
-      set({
-        error: messageText,
-        isLoading: false,
-        isPlaying: false
-      });
-      // 用户直接点歌时即使调用方没做 catch，也保证有可见反馈。
-      message.error(messageText);
+      if (playStarted) {
+        // 播放已经开始：后面只是簿记（历史 / 队列 / 封面 / 歌词），异常不得当成播放失败误跳歌
+        console.error('播放后处理失败（不影响播放）:', error);
+        return;
+      }
+      // 先落定 loading/playing：load 失败可能只以 reject 形式到达（onLoadError 未触发），
+      // 不清掉会让 fresh 重试被 play() 的「同一首正在加载」守卫直接吞掉。
+      set({ isLoading: false, isPlaying: false });
+      // 解析 / 加载失败统一走失败处理：同曲 fresh 重试一次 → 仍失败自动跳下一首
+      await handlePlaybackFailure(error, attempt);
     }
   },
 

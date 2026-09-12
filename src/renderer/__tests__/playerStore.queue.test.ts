@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Song } from '@mplayer/core';
+import { clearPrefetchCache, getPrefetchedUrl, type Song } from '@mplayer/core';
 
 // --- Mock 准备：audioPlayer / callMusicApi / IpcClient / songCoverRefresh ---
 const audioPlayerMock = vi.hoisted(() => {
@@ -50,7 +50,7 @@ vi.mock('../utils/songCoverRefresh', () => ({
   refreshSongCover: vi.fn(async () => null),
 }));
 
-import { usePlayerStore, __clearPrefetchedUrlsForTests } from '../store/playerStore';
+import { usePlayerStore } from '../store/playerStore';
 import { playbackClock } from '../services/playbackClock';
 
 function song(id: string, name = '晴天', url = '', sourceType: Song['sourceType'] = 'netease'): Song {
@@ -62,12 +62,15 @@ function song(id: string, name = '晴天', url = '', sourceType: Song['sourceTyp
 
 /** 默认 callMusicApi 分发：routed 解析返回可用 URL，搜索/换源返回空 */
 function defaultCallMusicApi(): void {
-  callMusicApiMock.mockImplementation(async (method: string) => {
+  callMusicApiMock.mockImplementation(async (method: string, target?: Song) => {
     switch (method) {
       case 'resolvePlayableUrlRouted':
         return 'https://resolved.example.com/audio.mp3';
-      case 'resolvePlayableSongRouted':
-        return { url: 'https://resolved.example.com/audio.mp3', nonFull: false };
+      case 'resolvePlayableSongRouted': {
+        // 与 core resolvePlayableSongRouted 契约同口径：先查预取缓存，命中 0 等待返回
+        const prefetched = target ? getPrefetchedUrl(target) : undefined;
+        return prefetched ?? { url: 'https://resolved.example.com/audio.mp3', nonFull: false };
+      }
       case 'getSodaPlayableUrl':
         return '';
       case 'searchSongsRouted':
@@ -79,7 +82,7 @@ function defaultCallMusicApi(): void {
 }
 
 beforeEach(() => {
-  __clearPrefetchedUrlsForTests();
+  clearPrefetchCache();
   usePlayerStore.setState({
     currentSong: null,
     isPlaying: false,
@@ -226,25 +229,26 @@ describe('播放链路：URL 解析 / 加载失败', () => {
     );
   });
 
-  it('加载失败：error 置位、isPlaying 停、不触发下一首（不跳歌）', async () => {
+  it('加载失败：先同曲 fresh 重试（不跳歌），重试成功继续播放同一首', async () => {
     const songs = [
       song('netease:1', '晴天', 'https://audio.example.com/1.mp3'),
       song('netease:2', '稻香', 'https://audio.example.com/2.mp3'),
     ];
     usePlayerStore.setState({
       currentPlaylist: songs, currentPlaylistIndex: 0, currentSong: songs[0], isPlaying: true,
+      playMode: '列表循环',
     });
 
-    // 模拟音频播放器 load 失败（onLoadError）
+    // 模拟音频播放器 load 失败（onLoadError）→ 走统一失败处理
     const onLoadError = capturedCallbacks.current.onLoadError as (error: Error) => void;
     onLoadError?.(new Error('加载音频失败: test'));
 
-    expect(usePlayerStore.getState().error).toBe('加载音频失败: test');
-    expect(usePlayerStore.getState().isPlaying).toBe(false);
-    expect(usePlayerStore.getState().isLoading).toBe(false);
-    // 不跳歌：没有触发下一首的 load/play，index 不变
-    expect(audioPlayerMock.player.load).not.toHaveBeenCalled();
-    expect(audioPlayerMock.player.play).not.toHaveBeenCalled();
+    // fresh 重试：不推进队列，重新解析并重新加载同一首（defaultCallMusicApi 解析成功）
+    await vi.waitFor(() =>
+      expect(audioPlayerMock.player.load).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'netease:1' }),
+      ),
+    );
     expect(usePlayerStore.getState().currentPlaylistIndex).toBe(0);
   });
 });
@@ -253,21 +257,28 @@ describe('播放链路：URL 解析 / 加载失败', () => {
 // 队列下一首预取（#171 后列表歌 url 恒空：预取不得依赖 url；缓存键必须含歌曲 id）
 // ---------------------------------------------------------------------------
 describe('队列下一首预取（预取缓存键）', () => {
+  /** 本 describe 内的上游解析计数（routedResolverPerSong 清零）：预取缓存命中不算上游解析 */
+  const upstreamResolves = new Map<string, number>();
+
   function routedResolverPerSong(): void {
-    callMusicApiMock.mockImplementation(async (method: string, target?: { id?: string }) => {
+    upstreamResolves.clear();
+    callMusicApiMock.mockImplementation(async (method: string, target?: Song) => {
       if (method === 'resolvePlayableSongRouted') {
-        const url = `https://resolved.example.com/${target?.id}.mp3`;
-        return { url, nonFull: false };
+        // 与 core resolvePlayableSongRouted 契约同口径：先查预取缓存，命中 0 等待返回、
+        // 不产生上游解析（#318 的「不得被重复解析」约束的是上游解析次数）
+        const prefetched = target ? getPrefetchedUrl(target) : undefined;
+        if (prefetched) return prefetched;
+        const id = target?.id ?? '';
+        upstreamResolves.set(id, (upstreamResolves.get(id) ?? 0) + 1);
+        return { url: `https://resolved.example.com/${id}.mp3`, nonFull: false };
       }
       return undefined;
     });
   }
 
-  /** 统计本用例内某首歌被 resolvePlayableSongRouted 解析的次数（beforeEach 已重置 mock，不含先前用例的调用） */
+  /** 统计本用例内某首歌真正走到上游解析的次数（routedResolverPerSong 已清零） */
   function resolveCallsFor(id: string): number {
-    return callMusicApiMock.mock.calls.filter(
-      ([method, target]) => method === 'resolvePlayableSongRouted' && (target as { id?: string } | undefined)?.id === id,
-    ).length;
+    return upstreamResolves.get(id) ?? 0;
   }
 
   it('下一首即使 url 为空也触发预解析（#171 后搜索结果一律无 url）', async () => {
