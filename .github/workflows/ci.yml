@@ -51,12 +51,12 @@ jobs:
           java-version: 17
       # Gradle 官方 setup：自动缓存依赖(modules-2)/Build Cache(build-cache-1)/
       # transforms-3(AAR 解包)/wrapper，配 gradle.properties 的 org.gradle.caching=true
-      # 二次构建命中绝大多数编译产物。注意：不要与 actions/cache / setup-java cache:gradle 混用。
+      # 二次构建命中绝大多数编译产物。注意：不要与 actions/cache / setup-java cache:gradle 混用；
+      # setup-gradle 没有 cache 这个 input（那是 setup-java 的写法），写了会报 Unexpected input 警告且无效。
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: wrapper
-          cache: gradle
           cache-read-only: false
       - run: npm ci --ignore-scripts
       - run: npm run core:build
