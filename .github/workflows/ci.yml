@@ -60,11 +60,8 @@ jobs:
           cache-read-only: false
       - run: npm ci --ignore-scripts
       - run: npm run core:build
-      - name: Prebuild Android native project
-        working-directory: packages/mobile
-        run: npx expo prebuild --platform android --clean
-        env:
-          EXPO_DEBUG: 1
+      # android 原生目录已提交进 git（CNG 反向），直接增量构建 —— 与 release.yml 一致。
+      # prebuild --clean 会重写原生目录，等于每次冷启动，把上面的 Gradle 缓存收益抵消掉。
       - name: Build APK (release)
         working-directory: packages/mobile/android
         run: ./gradlew assembleRelease
