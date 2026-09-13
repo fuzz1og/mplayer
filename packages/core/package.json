@@ -25,7 +25,7 @@
     "buffer": "^6.0.3",
     "crypto-js": "^4.2.0",
     "iconv-lite": "^0.6.3",
-    "pako": "^2.1.0"
+    "pako": "^3.0.1"
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
