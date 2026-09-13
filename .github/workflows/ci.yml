@@ -49,23 +49,19 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - name: Cache Gradle
-        uses: actions/cache@v6
+      # Gradle 官方 setup：自动缓存依赖(modules-2)/Build Cache(build-cache-1)/
+      # transforms-3(AAR 解包)/wrapper，配 gradle.properties 的 org.gradle.caching=true
+      # 二次构建命中绝大多数编译产物。注意：不要与 actions/cache / setup-java cache:gradle 混用；
+      # setup-gradle 没有 cache 这个 input（那是 setup-java 的写法），写了会报 Unexpected input 警告且无效。
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          # key 只用 package-lock.json：gradle 依赖与版本号无关，避免 bump 版本导致缓存失效
-          key: ${{ runner.os }}-gradle-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          gradle-version: wrapper
+          cache-read-only: false
       - run: npm ci --ignore-scripts
       - run: npm run core:build
-      - name: Prebuild Android native project
-        working-directory: packages/mobile
-        run: npx expo prebuild --platform android --clean
-        env:
-          EXPO_DEBUG: 1
+      # android 原生目录已提交进 git（CNG 反向），直接增量构建 —— 与 release.yml 一致。
+      # prebuild --clean 会重写原生目录，等于每次冷启动，把上面的 Gradle 缓存收益抵消掉。
       - name: Build APK (release)
         working-directory: packages/mobile/android
         run: ./gradlew assembleRelease
