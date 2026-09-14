@@ -1,6 +1,7 @@
-# ADR-0004: 桌面端深色模式 + 语义 token 全面化（纯 CSS 双主题方案）
+# ADR-0013: 桌面端深色模式 + 语义 token 全面化（纯 CSS 双主题方案）
 
 - 状态：已接受（2026-08-23，经 grilling 设计会话 Q2=A「精修不换皮」定稿，spec 见 `docs/specs/2026-08-23-settings-download-ui-refine.md`）
+- 编号说明：原编号 ADR-0004 与《动效弹簧预设》撞号（同日建库并发取号所致），2026-09-13 整理文档命名时让出 0004、改列 0013。内容与决策日期不变。
 - 关联：移动端 `packages/mobile/theme/tokens.ts`（light/dark 双主题，本次桌面深色 token 以其为镜像基准）；ADR-0002（缓存语义层，无直接关系）
 
 ## 背景

@@ -1,7 +1,7 @@
 # 下载增强与可播放性预检差距清单（wayfinder research /r3）
 
-> 主参考 musicdl（primary source 源码）：`C:\Users\Admin\AppData\Local\Temp\musicdl-clone\musicdl\modules\`
-> MPlayer 现状（源码）：`D:\Playground\mplayer\`
+> 主参考 musicdl（primary source 源码）：`musicdl/modules/`
+> MPlayer 现状（源码）：`<repo>/`
 > 结论按「现状 → musicdl 做法 → TS 移植方案 → 桌面/移动端可行性 → 优先级」逐项给出。
 > 优先级：**P0** = 花小钱大收益、应先做；**P1** = 价值高但需解耦/引依赖；**P2** = 成本高或收益尚不确定。
 > 注：CLAUDE.md 中 `src/main/cache/cacheManager.ts` 已拆分，实为 `src/main/cache/diskBackend.ts` + `src/main/ipc/cache.ts`，报告据此引用。

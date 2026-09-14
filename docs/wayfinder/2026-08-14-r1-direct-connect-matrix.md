@@ -2,7 +2,7 @@
 
 > 目标：借鉴 musicdl（Python）的**直连**手法，让 MPlayer 客户端直接请求源站接口、逐步替代自建 API（POST `/`，参数 `input/filter/type/page`）。
 > 主参考（primary source，均已读源码）：
-> - musicdl 克隆：`C:\Users\Admin\AppData\Local\Temp\musicdl-clone\musicdl\modules\sources\{netease,qq,kugou,migu,kuwo,qianqian,soda}.py` 与 `utils\{neteaseutils,qqutils,kugouutils,kuwoutils,sodautils}.py`
+> - musicdl 克隆：`musicdl/modules/sources/{netease,qq,kugou,migu,kuwo,qianqian,soda}.py` 与 `utils/{neteaseutils,qqutils,kugouutils,kuwoutils,sodautils}.py`
 > - MPlayer 现状：`packages/core/src/api/musicApi.ts`、`packages/core/src/api/neteaseWeapi.ts`、`src/main/config.ts`
 > 结论一律以**源码本身**为准，标「需 R4 核实」处表示源码未覆盖或跨实现不一致、需实测。
 

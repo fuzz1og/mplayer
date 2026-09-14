@@ -3,7 +3,7 @@
 > wayfinder research ticket 的 /research AFK 研究资产。对照 musicdl（Python 下载器）的健壮性/反爬手法，逐一评估 MPlayer（Electron + React Native）请求层的现状与移植方案。以 primary source 源码为准，引用见各节。
 
 **主参考**
-- musicdl 源码：`C:\Users\Admin\AppData\Local\Temp\musicdl-clone\musicdl\`
+- musicdl 源码：`musicdl/`
   - `modules/sources/base.py`（`get`/`post` 重试、`_initsession`、`random_update_ua`、三阶段 header/cookie、curl_cffi）
   - `modules/utils/misc.py`（`usesearch|useparse|usedownloadheaderscookies` 装饰器、`AudioLinkTester`、`resp2json` 容错）
   - `modules/utils/ip.py`（`RandomIPGenerator`）
@@ -207,4 +207,4 @@
 2. **【P0】TLS 指纹伪装——仅桌面主进程，收敛到关键源站**：这是当前最大盲区（weapi 有加密却零指纹）。对齐 musicdl 的 `enable_*_curl_cffi` 按险情独立开关思路，用 curl-impersonate/cycletls **只对 weapi、QQ 网关、汽水来源**打指纹；RN 明确放弃（系统网络栈不可定制 TLS 指纹）。
 3. **【P1】把反爬从「一处可用」变成「全局默认」**：`getAntiScrapeHeaders` + `beforeRequest` 目前只被 QQ 一处调用，应接到所有源站请求（每源单例 client + 源级 Referer profile），并顺带接入 jsonrepair 容错。价值在于**一致性**——风控看的是整体行为，局部强、整体弱等于没做。
 
-> 附：`docs/wayfinder/gap-list.md` 的桌面/移动功能差距是「功能面」；本文件是「请求管道健壮性面」，二者互补，落地时建议并进同一迭代。
+> 附：`docs/wayfinder/2026-08-03-wayfinder-gap-list.md` 的桌面/移动功能差距是「功能面」；本文件是「请求管道健壮性面」，二者互补，落地时建议并进同一迭代。

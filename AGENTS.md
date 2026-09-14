@@ -2,7 +2,7 @@
 
 MPlayer 是一个跨平台音乐播放器（桌面 Electron + React，移动端 React Native/Expo），统一由 `@mplayer/core` 提供歌曲识别、播放地址解析与多源搜索能力。多源：netease / qq / kugou / migu / kuwo / qianqian / soda。
 
-> 架构决策 `docs/adr/` · 领域词汇 `CONTEXT.md` · 架构/测试细节 `docs/agents/` · 工程 skills 见下文 Agent skills
+> 架构决策 `docs/adr/`（索引见其 `README.md`）· 领域词汇 `CONTEXT.md` · 架构/测试细节 `docs/agents/` · 工程 skills 见下文 Agent skills
 
 ## Commands
 
