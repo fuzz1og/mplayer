@@ -1,5 +1,5 @@
 /**
- * 动效弹簧预设 —— 契约见 docs/adr/0004-design-motion-presets.md
+ * 动效弹簧预设 —— 契约见 ADR-0004（docs/adr/2026-08-23-design-motion-presets.md）
  *
  * 语义参数为 Apple 的 (ζ 阻尼比, response 秒)，RN core Animated (mass=1) 换算：
  *   stiffness = (2π/response)²    damping = 2ζ·(2π/response)

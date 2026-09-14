@@ -32,7 +32,7 @@
 
 ### 1. NetEase（网易云）
 
-**源码**：`musicdl\modules\sources\netease.py`、`musicdl\modules\utils\neteaseutils.py`、`D:\Playground\mplayer\packages\core\src\api\musicApi.ts`
+**源码**：`musicdl/modules/sources/netease.py`、`musicdl/modules/utils/neteaseutils.py`、`<repo>/packages/core/src/api/musicApi.ts`
 
 | 动作 | cookie 必需性 | 说明 |
 |---|---|---|
@@ -52,7 +52,7 @@
 
 ### 2. QQ 音乐
 
-**源码**：`musicdl\modules\sources\qq.py`、`musicdl\modules\utils\qqutils.py`
+**源码**：`musicdl/modules/sources/qq.py`、`musicdl/modules/utils/qqutils.py`
 
 | 动作 | cookie 必需性 | 说明 |
 |---|---|---|
@@ -70,7 +70,7 @@
 
 ### 3. Kugou（酷狗）
 
-**源码**：`musicdl\modules\sources\kugou.py`、`musicdl\modules\utils\kugouutils.py`
+**源码**：`musicdl/modules/sources/kugou.py`、`musicdl/modules/utils/kugouutils.py`
 
 | 动作 | cookie 必需性 | 说明 |
 |---|---|---|
@@ -88,7 +88,7 @@
 
 ### 4. Migu（咪咕）
 
-**源码**：`musicdl\modules\sources\migu.py`
+**源码**：`musicdl/modules/sources/migu.py`
 
 | 动作 | cookie 必需性 | 说明 |
 |---|---|---|
@@ -106,7 +106,7 @@
 
 ### 5. Kuwo（酷我）
 
-**源码**：`musicdl\modules\sources\kuwo.py`、`musicdl\modules\utils\kuwoutils.py`
+**源码**：`musicdl/modules/sources/kuwo.py`、`musicdl/modules/utils/kuwoutils.py`
 
 | 动作 | cookie 必需性 | 说明 |
 |---|---|---|
@@ -124,7 +124,7 @@
 
 ### 6. Qianqian（千千/太合）
 
-**源码**：`musicdl\modules\sources\qianqian.py`
+**源码**：`musicdl/modules/sources/qianqian.py`
 
 | 动作 | cookie 必需性 | 说明 |
 |---|---|---|
@@ -142,7 +142,7 @@
 
 ### 7. Soda（汽水音乐）
 
-**源码**：`musicdl\modules\sources\soda.py`、`D:\Playground\mplayer\packages\core\src\api\musicApi.ts`
+**源码**：`musicdl/modules/sources/soda.py`、`<repo>/packages/core/src/api/musicApi.ts`
 
 | 动作 | cookie 必需性 | 说明 |
 |---|---|---|
@@ -179,6 +179,6 @@
 
 ## 参考文件索引
 
-- `C:\Users\Admin\AppData\Local\Temp\musicdl-clone\musicdl\modules\sources\{netease,qq,kugou,kuwo,migu,qianqian,soda}.py`
-- `C:\Users\Admin\AppData\Local\Temp\musicdl-clone\musicdl\modules\utils\{misc,neteaseutils,cookies,qqutils,kugouutils,kuwoutils,sodautils}.py`
-- `D:\Playground\mplayer\packages\core\src\api\musicApi.ts`（`fetchSodaSharePage`、netease cloudsearch 注释）
+- `musicdl/modules/sources/{netease,qq,kugou,kuwo,migu,qianqian,soda}.py`
+- `musicdl/modules/utils/{misc,neteaseutils,cookies,qqutils,kugouutils,kuwoutils,sodautils}.py`
+- `<repo>/packages/core/src/api/musicApi.ts`（`fetchSodaSharePage`、netease cloudsearch 注释）

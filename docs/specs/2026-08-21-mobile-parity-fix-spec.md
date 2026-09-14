@@ -1,6 +1,6 @@
 # 移动端对齐修复 Spec（mobile-parity-gap-list 八项）
 
-> 依据：`docs/agents/mobile-parity-gap-list.md`（含 2026-08-21 真机复测结论）。
+> 依据：`docs/specs/2026-08-21-mobile-parity-gap-list.md`（含 2026-08-21 真机复测结论）。
 > 目标：移动端全面对齐桌面「自建 API 退役 → 直连 + tier3 订阅源接管」新链路。
 > 原则：机械替换项按清单直接改；**行为变更项（B/C 部分）按本 spec 的语义执行**，不要自由发挥。
 > 所有 UI 文案中文；每批提交前过 CLAUDE.md 验证顺序（lint → typecheck → test）。

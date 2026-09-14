@@ -287,7 +287,7 @@ export const textVariants = {
   caption: { fontSize: 12, fontWeight: '400', lineHeight: 16 },
   /** 徽章/角标 */
   micro: { fontSize: 11, fontWeight: '600', lineHeight: 14 },
-  /** iOS 设置页 Inset Grouped 三档层级（17/15/13，见 docs/agents/mobile-ios-design-guide.md） */
+  /** iOS 设置页 Inset Grouped 三档层级（17/15/13，见 docs/specs/2026-08-26-mobile-ios-design-guide.md） */
   settingsPrimary: { fontSize: 17, fontWeight: '400', lineHeight: 22 },
   settingsSecondary: { fontSize: 15, fontWeight: '400', lineHeight: 20 },
   settingsTertiary: { fontSize: 13, fontWeight: '400', lineHeight: 17 },

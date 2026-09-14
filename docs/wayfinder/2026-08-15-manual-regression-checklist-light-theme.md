@@ -1,7 +1,7 @@
 # 浅色主题真机回归手测清单（wayfinder #114）
 
 > Map #108 的验收资产。设备：OnePlus PKB110（Android 15）/ Expo Go。
-> 模式沿用 map #79 资产 `docs/wayfinder/manual-checklist.md`（#85）。
+> 模式沿用 map #79 资产 `docs/wayfinder/2026-08-03-manual-regression-checklist.md`（#85）。
 > 勾验方式：逐项操作 → 对照预期 → 通过打 ✓ / 失败记 ✗ + 现象。
 > **Expo Go 限制**：通知/锁屏控制被显式禁用（`isExpoGo` guard）——标注「需 dev build」的项在 Expo Go 下跳过，其余必须测。
 

@@ -53,7 +53,7 @@ export default function ChromeBlur({ style, children }: Props) {
       blurReductionFactor={Platform.OS === 'android' ? 1 : undefined}
       style={style}
     >
-      {/* Android 材质着色补偿（社区调研方案 B，见 docs/agents/mobile-blur-community-research.md）：
+      {/* Android 材质着色补偿（社区调研方案 B，见 docs/research/2026-08-26-mobile-blur-community-research.md）：
           iOS material = 模糊+饱和+着色三件套；Android expo-blur 只有模糊+弱着色、无饱和，
           高斯模糊采样天然压暗/稀释色彩 → 发灰。叠极低 alpha 中性色补「着色」、压发灰。
           iOS 不叠（BlurView 自带 material 着色，叠了双重着色）。 */}

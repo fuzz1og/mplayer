@@ -12,11 +12,14 @@ release
 docs/*
 !docs/agents/
 !docs/agents/*
+!docs/adr/
+!docs/adr/*
+!docs/research/
+!docs/research/*
 !docs/specs/
 !docs/specs/*
 !docs/wayfinder/
-!docs/adr/
-!docs/adr/*
+!docs/wayfinder/*
 
 # AI 配置目录（只忽略个人数据）
 .claude/plans/

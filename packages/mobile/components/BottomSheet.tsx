@@ -226,7 +226,7 @@ export default function BottomSheet({
               命中区对齐 Apple HIG：热区 48dp（HIG 建议 ≥44pt）+ hitSlop 上下各 8dp 外扩
               （HIG Accessibility：无边框元素周围约 24pt 内边距）；RN 的 hitSlop 会真实扩大
               原生命中矩形且不影响兄弟节点（遮罩）。依据见
-              docs/agents/mobile-bottom-sheet-drag-research.md */}
+              docs/research/2026-09-10-mobile-bottom-sheet-drag-research.md */}
           <View style={styles.grabberZone} hitSlop={{ top: 8, bottom: 8 }} {...panHandlers}>
             <View style={styles.handle} />
           </View>
@@ -255,7 +255,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   // 把手拖拽热区：48dp 命中区（Apple HIG 建议 ≥44pt；真机第三轮原总高仅 22dp，
   // 命中率低是「拉不到把手」体感的一部分；研究结论见
-  // docs/agents/mobile-bottom-sheet-drag-research.md）。JSX 侧再叠 hitSlop 上下各 8dp。
+  // docs/research/2026-09-10-mobile-bottom-sheet-drag-research.md）。JSX 侧再叠 hitSlop 上下各 8dp。
   // 视觉不变——handle 仍 4dp、在热区内居中，多出来的是透明命中范围
   grabberZone: {
     alignItems: 'center',

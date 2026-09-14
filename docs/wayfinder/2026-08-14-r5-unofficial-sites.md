@@ -3,10 +3,10 @@
 > 背景：MPlayer 计划直连源站替代不稳定的自建 API。musicdl（Python）除 7 个官方源外还有两类第三方源，本报告评估它们对 MPlayer 的价值与风险——尤其是作为 **VIP/版权歌曲兜底解析** 的可行性。
 >
 > 主参考（primary source，均直接读源码）：
-> - 爬虫下载站：`C:\Users\Admin\AppData\Local\Temp\musicdl-clone\musicdl\modules\thirdpartysites\`（17 站）
-> - 通用/聚合源：`C:\Users\Admin\AppData\Local\Temp\musicdl-clone\musicdl\modules\common\`（6 源）
-> - VIP/版权兜底链：`sources\netease.py` 的 `_parsewiththirdpartapis`（≈30 个解析 API）与 `sources\qq.py` 的 `_parsewiththirdpartapis`
-> - 会话/反爬基础：`sources\base.py`、`utils\misc.py`（`AudioLinkTester`/`usesearchheaderscookies`）
+> - 爬虫下载站：`musicdl/modules/thirdpartysites/`（17 站）
+> - 通用/聚合源：`musicdl/modules/common/`（6 源）
+> - VIP/版权兜底链：`sources/netease.py` 的 `_parsewiththirdpartapis`（≈30 个解析 API）与 `sources/qq.py` 的 `_parsewiththirdpartapis`
+> - 会话/反爬基础：`sources/base.py`、`utils/misc.py`（`AudioLinkTester`/`usesearchheaderscookies`）
 >
 > 结论一律以源码函数/路径为准。工作量 S/M/L 按「Electron 主进程 Node/TS 移植」口径估。
 
@@ -19,8 +19,8 @@
 | 层级 | 位置 | 是什么 | 对 MPlayer 的价值 |
 |---|---|---|---|
 | **A. 解析 API 聚合兜底** | `netease.py:_parsewiththirdpartapis`（L607）、`qq.py:_parsewiththirdpartapis`（L315） | 一串**第三方 Parse API**（JSON），会员/版权歌专用兜底，`netease` 约 30 个、`qq` 约 12 个 | **最高。这就是 ticket 问的「VIP/版权兜底解析」** |
-| **B. 下载站爬虫** | `thirdpartysites\`（17 站） | 网页刮取（HTML/CSS/JS 变量），多经夸克/蓝奏网盘中转 | 中低。真正的「版权兜底」——搜到官方源没有的再发布/网盘版 |
-| **C. 通用聚合/镜像 API** | `common\`（6 源） | 单站形如 MPlayer 自建 API 的聚合/镜像；及另类源 | 中。其 A 类中的 `gdstudio` 同时被挂进网易兜底链 |
+| **B. 下载站爬虫** | `thirdpartysites/`（17 站） | 网页刮取（HTML/CSS/JS 变量），多经夸克/蓝奏网盘中转 | 中低。真正的「版权兜底」——搜到官方源没有的再发布/网盘版 |
+| **C. 通用聚合/镜像 API** | `common/`（6 源） | 单站形如 MPlayer 自建 API 的聚合/镜像；及另类源 | 中。其 A 类中的 `gdstudio` 同时被挂进网易兜底链 |
 
 > **关键澄清**：ticket 把「VIP/版权歌曲兜底解析」与「非官方下载站」当成一回事，但源码显示**真正承担「VIP/版权兜底」的是 A 类**（`_parsewiththirdpartapis` 是网易/QQ 官方直连失败后的自动降级链），**而非 B 类下载站**。B 类是「正规官方源 / A 类都拿不到的稀有/版权被下架曲目」才用得上。下面逐层展开，末尾给明确推荐。
 
@@ -76,7 +76,7 @@ l4 = [lpz]                               # 无效或不稳
 
 ---
 
-## 第二部分：B 类 — 非官方下载站爬虫（`thirdpartysites\`，17 站）
+## 第二部分：B 类 — 非官方下载站爬虫（`thirdpartysites/`，17 站）
 
 ### 2.1 按「下载通道」的三大家族（这是最重要的同构分类）
 
@@ -135,7 +135,7 @@ l4 = [lpz]                               # 无效或不稳
 
 ---
 
-## 第三部分：C 类 — 通用/聚合源（`common\`，6 源）
+## 第三部分：C 类 — 通用/聚合源（`common/`，6 源）
 
 ### 3.1 两个模板族 + 三个另类
 
@@ -160,7 +160,7 @@ l4 = [lpz]                               # 无效或不稳
 
 ### 3.3 `gdstudio` 是 A/B/C 三类的粘合点
 
-它同时作为 `common\gdstudio.py` 独立客户端存在，又被 `netease.py::_parsewithgdstudioapi`（L541）纳入网易兜底链。说明 **C 类里的泛解析 API 与 A 类 vip 兜底 API 在 musicdl 作者眼里是同一种东西**——按 `source` 参数能解网易/QQ 等任意官方源。这对 A 类评估是加分项：这类「参数化的多源解析 API」比「单站下载站」泛化得多，移植价值更高。
+它同时作为 `common/gdstudio.py` 独立客户端存在，又被 `netease.py::_parsewithgdstudioapi`（L541）纳入网易兜底链。说明 **C 类里的泛解析 API 与 A 类 vip 兜底 API 在 musicdl 作者眼里是同一种东西**——按 `source` 参数能解网易/QQ 等任意官方源。这对 A 类评估是加分项：这类「参数化的多源解析 API」比「单站下载站」泛化得多，移植价值更高。
 
 ---
 
@@ -235,11 +235,11 @@ R1 报告（`r1-direct-connect-matrix.md`）已把 7 官方源直连排了优先
 
 ## 参考文件索引
 
-- `musicdl\modules\sources\netease.py`：`_parsewiththirdpartapis`(L607)、`_parsewithofficialapiv1`(L624)、`_parsewithgdstudioapi`(L541)、`_search`(L657)
-- `musicdl\modules\sources\qq.py`：`_parsewiththirdpartapis`(L315)、`_parsewithvkeysapi`(L54)、`_parsewithxcvtsapi`(L100)、`_parsewithlxmusicapi`(L143)
-- `musicdl\modules\sources\base.py`：`BaseMusicClient`（`get/post/get/session`、`enable_curl_cffi`、`maintain_session`、`quark_parser_config`）
-- `musicdl\modules\utils\misc.py`：`AudioLinkTester.test`(L339)、`VALID_AUDIO_EXTS`(L182)、`usesearchheaderscookies`(L116)
-- `musicdl\modules\thirdpartysites\*.py`：17 个下载站（见 2.2 表）
-- `musicdl\modules\common\{jbsou,xiaobai,myfreemp3,mp3juice,tunehub,gdstudio}.py`
-- `D:\Playground\mplayer\packages\core\src\api\musicApi.ts`：`searchSongs`（form `input/filter/type/page`，与 jbsou 同构）
-- 姊妹报告：`docs\wayfinder\r1-direct-connect-matrix.md`（7 官方源直连优先级）、`r4-cookie-matrix.md`
+- `musicdl/modules/sources/netease.py`：`_parsewiththirdpartapis`(L607)、`_parsewithofficialapiv1`(L624)、`_parsewithgdstudioapi`(L541)、`_search`(L657)
+- `musicdl/modules/sources/qq.py`：`_parsewiththirdpartapis`(L315)、`_parsewithvkeysapi`(L54)、`_parsewithxcvtsapi`(L100)、`_parsewithlxmusicapi`(L143)
+- `musicdl/modules/sources/base.py`：`BaseMusicClient`（`get/post/get/session`、`enable_curl_cffi`、`maintain_session`、`quark_parser_config`）
+- `musicdl/modules/utils/misc.py`：`AudioLinkTester.test`(L339)、`VALID_AUDIO_EXTS`(L182)、`usesearchheaderscookies`(L116)
+- `musicdl/modules/thirdpartysites/*.py`：17 个下载站（见 2.2 表）
+- `musicdl/modules/common/{jbsou,xiaobai,myfreemp3,mp3juice,tunehub,gdstudio}.py`
+- `<repo>/packages/core/src/api/musicApi.ts`：`searchSongs`（form `input/filter/type/page`，与 jbsou 同构）
+- 姊妹报告：`docs/wayfinder/2026-08-14-r1-direct-connect-matrix.md`（7 官方源直连优先级）、`r4-cookie-matrix.md`

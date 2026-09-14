@@ -149,6 +149,6 @@ MPlayer 全屏播放器 `PlayerOverlay` 当前背景是 `colors.bgPlayer`（浅�
 **二手（已标注，交叉验证）**
 - Spotify 风格主色渐变教程（nursaadat.dev，react-native-image-colors + LinearGradient）：https://www.nursaadat.dev/blog/react-native-dominant-color-with-gradient
 - react-native-image-colors 平台字段差异（CSDN，交叉验证）：https://blog.csdn.net/gitblog_00297/article/details/153726122
-- 团队已有调研（Android blur 发灰/饱和/坑）：`docs/agents/mobile-blur-community-research.md`
+- 团队已有调研（Android blur 发灰/饱和/坑）：`docs/research/2026-08-26-mobile-blur-community-research.md`
 
 > 未获取/无法打开：Apple HIG going-full-screen 正文、react-native-image-colors 官方 README（GitHub 抓取超时/404）——相关结论已标注「二手交叉验证」并建议复核。

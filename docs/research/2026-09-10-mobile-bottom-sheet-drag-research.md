@@ -302,7 +302,7 @@ worktree 有未提交改动（调研期间出现/变化，三文件 +50/−4）�
 | `…/@expo/ui/src/community/bottom-sheet/BottomSheet.ios.tsx` / `BottomSheet.android.tsx` | `presentationDragIndicator` / `interactiveDismissDisabled`；`showDragHandle` / `sheetGesturesEnabled` | §2.3 |
 | `…/@expo/ui/src/jetpack-compose/ModalBottomSheet/index.tsx` | `showDragHandle`(default true) / `sheetGesturesEnabled`(default true) / `DragHandle` slot | §2.3 §2.5 |
 | `.claude/worktrees/mobile-drag-session/packages/mobile/{components/BottomSheet.tsx,hooks/useDragToDismiss.ts,gestures/dragSession.ts}` | 本仓库实现与未提交改动 | §三 §四 R3 |
-| `packages/mobile/components/PlayerOverlay.tsx`、`packages/mobile/theme/motion.ts`、`scripts/mobile-e2e.sh`、`docs/adr/0004-design-motion-presets.md`、`docs/adr/0007-mobile-bottom-sheet-shell.md`、issue #301 | 对照基准、约束、e2e 注入坐标 | §三 §四 §五 |
+| `packages/mobile/components/PlayerOverlay.tsx`、`packages/mobile/theme/motion.ts`、`scripts/mobile-e2e.sh`、`docs/adr/2026-08-23-design-motion-presets.md`、`docs/adr/2026-08-26-mobile-bottom-sheet-shell.md`、issue #301 | 对照基准、约束、e2e 注入坐标 | §三 §四 §五 |
 
 ### 一手：上游源码 URL（tag `v0.86.2`，均已验证 200）
 
