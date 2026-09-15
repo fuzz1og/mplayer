@@ -20,6 +20,7 @@
 | ADR-0011 | 应用更新镜像通道 | `2026-08-28-update-mirror-channels.md` | 已接受 |
 | ADR-0012 | 歌曲身份与可播资源值语义 | `2026-09-10-song-identity-and-playable-resource.md` | 已接受 |
 | ADR-0013 | 桌面端深色模式 + 语义 token 全面化 | `2026-08-23-desktop-dark-mode-tokens.md` | 已接受（原编号 0004，让号说明见文件内） |
+| ADR-0014 | tier3 调度、预算与源归属 | `2026-09-14-tier3-scheduling-and-source-ownership.md` | 已接受 |
 
 ## 归档类文档命名总则
 
