@@ -16,10 +16,13 @@ import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
-import { findExactMatch } from '@mplayer/core';
-import type { AggregatedSongGroup } from '@/main/services/chartAggregator';
-import type { Album, Song, DiscoverPlaylist, Artist } from '@mplayer/core';
-import { CHART_CACHE_TTL as CHART_TTL } from '../../shared/chart';
+import { findExactMatch, pickToplistSongs, SOURCE_DISPLAY_NAMES, TOPLIST_SOURCE_IDS } from '@mplayer/core';
+import type { Album, Song, DiscoverPlaylist, Artist, ToplistSourceKey } from '@mplayer/core';
+
+/** 榜单源切换的可选项（#332 选项 A：单元榜 + 源切换）。 */
+const CHART_SOURCE_OPTIONS: ToplistSourceKey[] = ['netease', 'qq', 'kugou'];
+/** 榜单缓存 TTL（原 src/shared/chart.ts 的 CHART_CACHE_TTL，随聚合下线一并内联）。 */
+const CHART_TTL = 30 * 60 * 1000;
 
 type TabKey = 'charts' | 'albums' | 'playlists' | 'artists';
 type AreaKey = 'ALL' | 'ZH' | 'EA' | 'KR' | 'JP';
@@ -37,7 +40,6 @@ const TABS: TabDef[] = [
   { key: 'artists', label: '歌手', icon: <Mic2 size={16} /> },
 ];
 
-const SOURCES = ['netease', 'qq', 'kugou'];
 
 const PLAYLIST_CATEGORIES = [
   '全部', '流行', '摇滚', '民谣', '电子', '说唱',
@@ -56,12 +58,8 @@ function loadSavedTab(): TabKey {
   return (VALID_TABS as string[]).includes(saved as string) ? (saved as TabKey) : 'charts';
 }
 
-interface ChartCache {
-  hot: AggregatedSongGroup[] | null;
-  new: AggregatedSongGroup[] | null;
-  hotTimestamp: number;
-  newTimestamp: number;
-}
+/** 按源缓存榜单（#332：不再有跨源聚合，缓存以源为键）。 */
+type ChartCache = Record<string, { hot: Song[]; new: Song[]; timestamp: number }>;
 
 interface TabCache {
   albums: { data: Album[] | null; timestamp: number };
@@ -75,8 +73,9 @@ const DiscoverPageV2: React.FC = () => {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>(loadSavedTab);
-  const [hotGroups, setHotGroups] = useState<AggregatedSongGroup[]>([]);
-  const [newGroups, setNewGroups] = useState<AggregatedSongGroup[]>([]);
+  const [chartSource, setChartSource] = useState<ToplistSourceKey>('netease');
+  const [hotSongs, setHotSongs] = useState<Song[]>([]);
+  const [newSongs, setNewSongs] = useState<Song[]>([]);
   const [hotLoading, setHotLoading] = useState(true);
   const [newLoading, setNewLoading] = useState(true);
   const [hotError, setHotError] = useState<string | null>(null);
@@ -96,7 +95,7 @@ const DiscoverPageV2: React.FC = () => {
   const [playlistListError, setPlaylistListError] = useState<string | null>(null);
   const [playlistCategory, setPlaylistCategory] = useState('全部');
 
-  const cacheRef = useRef<ChartCache>({ hot: null, new: null, hotTimestamp: 0, newTimestamp: 0 });
+  const cacheRef = useRef<ChartCache>({});
   const tabCacheRef = useRef<TabCache>({
     albums: { data: null, timestamp: 0 },
     playlists: { data: null, timestamp: 0 },
@@ -105,59 +104,61 @@ const DiscoverPageV2: React.FC = () => {
   const playedChartIdRef = useRef<string | null>(null);
   const albumsFetchIdRef = useRef(0);
   const playlistsFetchIdRef = useRef(0);
-  const chartsFetchIdRef = useRef({ hot: 0, new: 0 });
+  const chartsFetchIdRef = useRef(0);
   const playlistListOffsetRef = useRef(0);
   const playlistListHasMoreRef = useRef(true);
   const playlistListLoadingMoreRef = useRef(false);
 
-  const fetchChart = useCallback(async (type: 'hot' | 'new') => {
-    const fetchId = type === 'hot' ? ++chartsFetchIdRef.current.hot : ++chartsFetchIdRef.current.new;
-    const cache = cacheRef.current;
-    const cached = type === 'hot' ? cache.hot : cache.new;
+  /**
+   * 拉取某源的榜单（#332 选项 A：单元榜 + 源切换）。
+   *
+   * 原实现走 `getAggregatedChart(type, SOURCES)` 把三源合成一张跨源榜；
+   * 现在每个源各自成榜。一次 `getToplists(source)` 即返回该源**全部**榜
+   * （含热歌/新歌），故热歌与新歌共用一次请求，不必分别拉。
+   */
+  const fetchCharts = useCallback(async (source: ToplistSourceKey) => {
+    const fetchId = ++chartsFetchIdRef.current;
+    const cached = cacheRef.current[source];
 
     // SWR: cached data stays visible while the background refresh runs
     if (cached) {
-      if (type === 'hot') { setHotGroups(cached); setHotLoading(false); }
-      else { setNewGroups(cached); setNewLoading(false); }
+      setHotSongs(cached.hot); setNewSongs(cached.new);
+      setHotLoading(false); setNewLoading(false);
     } else {
-      if (type === 'hot') { setHotLoading(true); setHotError(null); }
-      else { setNewLoading(true); setNewError(null); }
+      setHotLoading(true); setNewLoading(true);
+      setHotError(null); setNewError(null);
     }
 
-    const isCurrentFetch = () => fetchId === (type === 'hot' ? chartsFetchIdRef.current.hot : chartsFetchIdRef.current.new);
+    const isCurrentFetch = () => fetchId === chartsFetchIdRef.current;
 
     try {
-      const result = await callMusicApi('getAggregatedChart', type, SOURCES);
+      const groups = await callMusicApi('getToplists', source);
       if (!mountedRef.current || !isCurrentFetch()) return;
 
-      const groups = result?.songs || [];
-      if (type === 'hot') {
-        setHotGroups(groups);
-        cacheRef.current.hot = groups;
-        cacheRef.current.hotTimestamp = Date.now();
-      } else {
-        setNewGroups(groups);
-        cacheRef.current.new = groups;
-        cacheRef.current.newTimestamp = Date.now();
-      }
+      const ids = TOPLIST_SOURCE_IDS[source];
+      const hot = pickToplistSongs(groups || [], source, ids.hot);
+      const neu = pickToplistSongs(groups || [], source, ids.new);
+      setHotSongs(hot);
+      setNewSongs(neu);
+      cacheRef.current[source] = { hot, new: neu, timestamp: Date.now() };
     } catch (err: any) {
       if (!mountedRef.current || !isCurrentFetch()) return;
       if (!cached) {
         const errorMsg = err?.message || '加载失败';
-        if (type === 'hot') setHotError(errorMsg);
-        else setNewError(errorMsg);
+        setHotError(errorMsg);
+        setNewError(errorMsg);
       }
     } finally {
       if (!mountedRef.current || !isCurrentFetch()) return;
-      if (type === 'hot') setHotLoading(false);
-      else setNewLoading(false);
+      setHotLoading(false);
+      setNewLoading(false);
     }
   }, []);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
-  }, [fetchChart]);
+  }, [fetchCharts]);
 
   // 记录激活 tab,返回导航重挂载后恢复
   useEffect(() => {
@@ -233,9 +234,8 @@ const DiscoverPageV2: React.FC = () => {
 
   useEffect(() => {
     if (activeTab === 'charts') {
-      const now = Date.now();
-      if (!cacheRef.current.hot || now - cacheRef.current.hotTimestamp > CHART_TTL) fetchChart('hot');
-      if (!cacheRef.current.new || now - cacheRef.current.newTimestamp > CHART_TTL) fetchChart('new');
+      const cached = cacheRef.current[chartSource];
+      if (!cached || Date.now() - cached.timestamp > CHART_TTL) fetchCharts(chartSource);
     } else if (activeTab === 'albums') {
       setAlbumsError(null);
       fetchAlbums(albumsArea);
@@ -243,7 +243,7 @@ const DiscoverPageV2: React.FC = () => {
       setPlaylistListError(null);
       fetchPlaylistList(true);
     }
-  }, [activeTab, albumsArea, fetchChart, fetchAlbums, fetchPlaylistList]);
+  }, [activeTab, chartSource, albumsArea, fetchCharts, fetchAlbums, fetchPlaylistList]);
 
   const handleAlbumsAreaChange = (area: string) => {
     setAlbumsArea(area as AreaKey);
@@ -307,16 +307,10 @@ const DiscoverPageV2: React.FC = () => {
     && (!sourceType || currentSong?.sourceType === sourceType)
     && playedChartIdRef.current === chartId;
 
-  const handleRetryHot = () => {
-    cacheRef.current.hot = null;
-    cacheRef.current.hotTimestamp = 0;
-    fetchChart('hot');
-  };
-
-  const handleRetryNew = () => {
-    cacheRef.current.new = null;
-    cacheRef.current.newTimestamp = 0;
-    fetchChart('new');
+  /** 重试当前源的榜单（热歌与新歌共用一次请求，故共用同一个重试）。 */
+  const handleRetryCharts = () => {
+    delete cacheRef.current[chartSource];
+    fetchCharts(chartSource);
   };
 
   const searchLoading = useSearchStore((s) => s.loading);
@@ -612,27 +606,52 @@ const DiscoverPageV2: React.FC = () => {
         style={{ flex: 1, overflow: 'hidden', padding: activeTab === 'artists' ? 0 : 'var(--space-5) var(--space-6)' }}
       >
         {activeTab === 'charts' && (
-          <div style={{ height: '100%', display: 'flex', gap: 'var(--space-6)' }}>
-            <ChartPanel
-              title="热歌榜"
-              chartId="hot"
-              groups={hotGroups}
-              loading={hotLoading}
-              error={hotError}
-              onPlay={handlePlaySong}
-              isCurrentSong={isCurrentSong}
-              onRetry={handleRetryHot}
-            />
-            <ChartPanel
-              title="新歌榜"
-              chartId="new"
-              groups={newGroups}
-              loading={newLoading}
-              error={newError}
-              onPlay={handlePlaySong}
-              isCurrentSong={isCurrentSong}
-              onRetry={handleRetryNew}
-            />
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {/* 源切换（#332 选项 A）：不再把三源合成一张跨源榜，而是「切源看该源自己的榜」 */}
+            <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-5)', flexShrink: 0 }}>
+              {CHART_SOURCE_OPTIONS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setChartSource(s)}
+                  aria-pressed={chartSource === s}
+                  style={{
+                    padding: '4px 14px',
+                    borderRadius: 'var(--radius-full)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: chartSource === s ? 600 : 400,
+                    color: chartSource === s ? '#fff' : 'var(--text-secondary)',
+                    backgroundColor: chartSource === s ? 'var(--accent)' : 'var(--bg-hover)',
+                    transition: 'background-color 0.15s ease',
+                  }}
+                >
+                  {SOURCE_DISPLAY_NAMES[s]}
+                </button>
+              ))}
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 'var(--space-6)' }}>
+              <ChartPanel
+                title={`${SOURCE_DISPLAY_NAMES[chartSource]} · 热歌榜`}
+                chartId="hot"
+                songs={hotSongs}
+                loading={hotLoading}
+                error={hotError}
+                onPlay={handlePlaySong}
+                isCurrentSong={isCurrentSong}
+                onRetry={handleRetryCharts}
+              />
+              <ChartPanel
+                title={`${SOURCE_DISPLAY_NAMES[chartSource]} · 新歌榜`}
+                chartId="new"
+                songs={newSongs}
+                loading={newLoading}
+                error={newError}
+                onPlay={handlePlaySong}
+                isCurrentSong={isCurrentSong}
+                onRetry={handleRetryCharts}
+              />
+            </div>
           </div>
         )}
 

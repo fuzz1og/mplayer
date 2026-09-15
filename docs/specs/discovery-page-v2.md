@@ -7,12 +7,23 @@ Implemented and verified. PR #62 merged; review fixes landed in `codex/fix-revie
 ## Destination
 
 - 桌面端发现页重构为 V2：排行榜 / 新碟上架 / 猜你喜欢 / 歌单四个 Tab。
-- 三源排行榜聚合：网易、QQ、酷狗；热歌榜 + 新歌榜。
+- 排行榜：**单元榜 + 源切换**（网易 / QQ / 酷狗各自的热歌榜与新歌榜）。
+  （2026-09-14 对齐现状：原「三源聚合为一榜」已下线，见 Decisions。）
 - 搜索结果音频质量探测：SongRow 显示 `preview` / `invalid` badge，搜索后每首并发探测。
 
 ## Decisions
 
-- 排行榜聚合：聚合为主 + 源筛选，不单独分源 tab。
+- 排行榜形态（2026-09-14 改判，原决策「聚合为主 + 源筛选」作废）：**回归单元榜 + 源切换**。
+  理由与证据见 [ADR/决策 #332](https://github.com/fuzz1og/mplayer/issues/332) 与
+  `docs/wayfinder/2026-09-13-t2-charts-form-research.md`：单一流媒体产品里不存在「切换数据源」
+  这个概念（Spotify/Apple/YouTube/Deezer 均为单源自有，切的是地区/流派）；跨源聚合只存在于
+  聚合器（kworb/Last.fm）或拥有全量数据的数据商（Luminate/Billboard/TME 由你榜）。
+  本项目只有名次、没有绝对量，`Σ1/rank` 在业界找不到对应物，且会制造「内容重复」的观感。
+- 聚合内核已**整条下线**：core `chartAggregate`、`src/main/services/chartAggregator.ts`、
+  `getAggregatedChart` IPC、`src/shared/chart.ts` 全部删除（不留「有测试无消费方」的内核）。
+- 榜单详情：**通用组件 + 可选列**。各源提供程度不同——实测三源公共只有「名次」（由数组索引推导）；
+  「上期名次 / 在榜周数」只有 QQ 提供（`cur_count`/`old_count`/`in_count`），故不做按源分支的组件，
+  而是有值则渲染、无值则省略。
 - UI 布局：顶部 tab 切换，桌面端网格卡片。
 - audio probe：独立功能，但作为聚合前置依赖一起做；提取到 `packages/core`，desktop/mobile 共享。
 - 多源 API：酷狗全功能免费（UA only），QQ 排行榜+新歌免费，其他源需签名/反爬。

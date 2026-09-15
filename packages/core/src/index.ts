@@ -51,8 +51,8 @@ export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, probeSwapCandidates, applySwap } from './shared/sourceSwap.js';
 export { songUsesSongidLyrics, isSodaSource, isInlineLyrics } from './shared/songLyrics.js';
-export { aggregateChartSongs, aggregateToplistGroups, normalizeSongKey, CHART_DEFAULT_MISS } from './shared/chartAggregate.js';
-export type { AggregatedChartEntry } from './shared/chartAggregate.js';
+// 榜单聚合内核已下线（#332 裁决：回归单元榜 + 源切换）。聚合只在「存在跨源可比原生量」
+// 的产品里有意义；本项目只有名次、没有绝对量，Σ1/rank 在业界找不到对应物。
 export {
   UPDATE_SOURCE_DEFS,
   GITHUB_LATEST_BASE,

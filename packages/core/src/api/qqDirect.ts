@@ -333,6 +333,18 @@ function mapToplistTrack(item: any): Song | null {
   const songData = item?.data;
   if (!songData) return null;
   const albumMid = songData.album?.mid || '';
+  // 名次三件套在 **item 上**（与 data 同级），不在 data 内——2026-09-14 实测确认
+  // （item keys: Franking_value/cur_count/data/in_count/old_count）。
+  // QQ 是三源中唯一提供「上期名次 / 在榜周数」的源；此前被本函数整批丢弃。
+  // old_count === 0 表示新进榜（无可比上期），映射为 null。
+  const rankMeta =
+    typeof item.cur_count === 'number' || typeof item.old_count === 'number' || typeof item.in_count === 'number'
+      ? {
+          rank: typeof item.cur_count === 'number' ? item.cur_count : undefined,
+          prevRank: typeof item.old_count === 'number' ? (item.old_count === 0 ? null : item.old_count) : undefined,
+          weeks: typeof item.in_count === 'number' ? item.in_count : undefined,
+        }
+      : undefined;
   return {
     id: songData.mid || songData.id?.toString() || '',
     name: songData.name || '',
@@ -345,6 +357,7 @@ function mapToplistTrack(item: any): Song | null {
     lrc: '',
     duration: Math.floor(songData.interval || 0) || 0,
     sourceType: 'qq',
+    ...(rankMeta ? { rankMeta } : {}),
   };
 }
 

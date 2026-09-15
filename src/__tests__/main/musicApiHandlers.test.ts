@@ -12,9 +12,6 @@ import { clearDirectClients, registerDirectClient } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 
 // mock core api 依赖
-vi.mock('../../main/services/chartAggregator', () => ({
-  getAggregatedChart: vi.fn(async (type: string) => ({ songs: [], total: 0, type })),
-}));
 
 import { registerMusicApiCall } from '../../main/ipc/musicApiHandlers';
 
