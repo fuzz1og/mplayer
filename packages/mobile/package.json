@@ -38,7 +38,7 @@
     "react-native-web": "~0.21.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2",
+    "@babel/core": "^8.0.5",
     "@types/react": "~19.2.18",
     "expo-build-properties": "~57.0.13",
     "expo-dev-client": "~57.0.16",
