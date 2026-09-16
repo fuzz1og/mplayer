@@ -4,7 +4,7 @@ import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
-import { usePlayerStore } from '@/renderer/store/playerStore';
+import { usePlayerStore, warmupRestoredSong } from '@/renderer/store/playerStore';
 import { useDownloadStore, type DownloadTask } from '@/renderer/store/downloadStore';
 import { useGlobalShortcuts } from '@/renderer/hooks/useGlobalShortcuts';
 import Sidebar from '@/renderer/components/Sidebar';
@@ -76,6 +76,13 @@ const App: React.FC = () => {
   useEffect(() => {
     loadFavorites();
   }, [loadFavorites]);
+
+  // 冷启预热（#328）：队列还原了「当前歌」但传输层尚无 Howl，用户点播放需
+  // 走全链重解析。启动后台解析一次，让首次点播放命中 core 预取缓存（30min
+  // TTL）0 等待出声。只跑一次（空依赖），失败静默——真正播放时仍走正常失败链。
+  useEffect(() => {
+    warmupRestoredSong();
+  }, []);
 
   // Tray action handler
   useEffect(() => {

@@ -179,6 +179,26 @@ const initialQueue = loadQueue();
 // 并直接喂给 Howler（onloaderror）——同一份语义不能存在两套规则。
 
 /**
+ * 冷启预热：还原的当前歌曲在渲染层有歌名/封面，但传输层尚无 Howl，
+ * 用户点播放要走全链重解析（见 resume 守卫）。启动后台预解析一次，
+ * 让首次点播放命中 core 预取缓存（30min TTL）0 等待出声——这正是
+ * 「隔日打开软件，播放要等/要重试」的正解。
+ *
+ * 与 prefetchNextUrl 同口径：失败静默（真正播放时再走正常失败链），
+ * 不阻塞启动。由 App 挂载时调用一次（#328）。
+ */
+export function warmupRestoredSong(): void {
+  const { currentSong } = usePlayerStore.getState();
+  if (!currentSong || currentSong.sourceType === 'local') return;
+  if (getPrefetchedUrl(currentSong)) return;
+  callMusicApi('resolvePlayableSongRouted', currentSong)
+    .then((resolved: { url: string; nonFull: boolean }) => {
+      if (resolved?.url) setPrefetchedUrl(currentSong, resolved.url, !!resolved.nonFull);
+    })
+    .catch(() => {});
+}
+
+/**
  * 获取队列中下一首歌（不改变播放状态）
  * 导出供测试使用
  */
@@ -480,6 +500,26 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   resume: () => {
+    const { currentSong } = get();
+    // 无歌可播（空播放栏）：不得谎报 isPlaying——否则声波动画空转
+    // 且后续 togglePlay 会走进 pause 分支（同一类状态说谎，#328）。
+    if (!currentSong) return;
+    // 无可用音频时不能走「恢复播放」：传输层没有能出声的 Howl。
+    // 两种来源——冷启还原态（渲染层从队列还原了歌，传输层还在 idle）
+    // 与上次加载失败（error，howl 仍在但已死）。
+    // 此时 audioPlayer.play() 是静默空操作（其内部 howl/state 守卫），
+    // 而旧代码无条件 set({ isPlaying: true }) 会让声波动画空转、
+    // 进度条说谎（#328）。
+    // 改为走 play() 全链重新解析并从 0 播（位置不恢复 = #328 的裁决）。
+    // 修在这一层而非 PlayerBar：resume/togglePlay 共 5 个入口
+    // （播放栏 / 歌词页 / 全局快捷键 / 媒体键 / 托盘）。
+    const transportState = audioPlayer.getState();
+    if (transportState === 'idle' || transportState === 'error') {
+      // 上次是加载失败：先遗忘该曲预取条目（里面是刚被证明失败的直链），
+      // 否则 0 等待命中坏链接原地连败（与 handlePlaybackFailure 同口径）。
+      void get().play(currentSong, { fresh: transportState === 'error' });
+      return;
+    }
     audioPlayer.play();
     set({ isPlaying: true });
   },
