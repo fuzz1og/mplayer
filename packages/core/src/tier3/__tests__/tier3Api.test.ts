@@ -595,6 +595,45 @@ describe('searchTier3Songs（官方直连搜索失败后的第三方搜索兜底
     expect(songs[0]).toMatchObject({ name: '恋人', artist: '李荣浩' });
   });
 
+  it('声明值不认识时，搜索候选 sourceType 回退为查询源（不再污染成死值）', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [{
+        id: 'typo-search',
+        kind: 'search-then-resolve',
+        source: 'tidal',
+        allowedDomains: ['*.example.com'],
+        search: {
+          method: 'GET',
+          url: 'https://api.example.com/search?keyword={keyword}',
+          responseJsonPath: 'data',
+          itemsPath: 'data',
+          namePath: 'name',
+          artistPath: 'artist',
+          idPath: 'id',
+        },
+        resolve: {
+          method: 'GET',
+          url: 'https://api.example.com/url?id={id}',
+          responseJsonPath: 'data.url',
+        },
+      }],
+    });
+    const request = makeRequestMock({
+      'https://api.example.com/search?keyword=%E6%99%B4%E5%A4%A9': () =>
+        jsonResponse(
+          { data: [{ id: '1', name: '晴天', artist: '周杰伦' }] },
+          'https://api.example.com/search?keyword=x',
+        ),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    const songs = await searchTier3Songs('晴天', 1, 'qq');
+    expect(songs).toHaveLength(1);
+    expect(songs[0].sourceType).toBe('qq');
+  });
+
   it('搜索兜底不按 source 过滤（关键词候选无 id 错配风险），候选标记声明的来源', async () => {
     const manifest = JSON.stringify({
       version: 1,
@@ -681,6 +720,37 @@ describe('tier3SourceSource（ADR-0014 决策 6：只认显式声明 + 别名归
     expect(tier3SourceSource(mk('163'))).toBe('netease');
     expect(tier3SourceSource(mk('qishui'))).toBe('soda');
     expect(tier3SourceSource(mk('baidu'))).toBe('qianqian');
+  });
+
+  it('不认识/非本应用的值（tidal、spotify、拼写错误）视为未声明，不当作死源', () => {
+    // 只归一化不校验时，这些值会通过清单校验却永不匹配：解析腿静默变死源，
+    // 搜索腿还会把候选 sourceType 污染成该值 → decideRoute 抛「该源暂无直连实现」
+    // → 用户看到「可能为 VIP/无版权」的错误提示。local 不是可解析的音乐源，同理。
+    expect(tier3SourceSource(mk('tidal'))).toBeUndefined();
+    expect(tier3SourceSource(mk('spotify'))).toBeUndefined();
+    expect(tier3SourceSource(mk('unknown'))).toBeUndefined();
+    expect(tier3SourceSource(mk('local'))).toBeUndefined();
+    expect(tier3SourceSource(mk('tencentt'))).toBeUndefined();
+  });
+
+  it('声明了不认识 source 的 url-resolver 同样被拒绝（等同未声明，堵跨源错播）', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [{
+        id: 'typo-source',
+        kind: 'url-resolver',
+        source: 'tidal',
+        allowedDomains: ['cdn.example.com'],
+        resolve: { method: 'GET', url: 'https://api.example.com/url?id={id}', responseJsonPath: 'data.url' },
+      }],
+    });
+    const request = vi.fn();
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    expect(await createTier3Resolver()(song())).toBe('');
+    expect(request).not.toHaveBeenCalled();
+    expect(getTier3Stats()['typo-source'].skipped).toBe(1);
   });
 
   it('未声明的 url-resolver 在解析时被拒绝，不拿错源 id 去解析', async () => {

@@ -879,10 +879,29 @@ const SOURCE_ALIASES: Record<string, SourceKey> = {
   douyin: 'soda',
 };
 
-/** 规范化 source 值：去空白/小写后查别名表；未知值原样返回（由校验层拒绝）。 */
-export function normalizeTier3Source(value: string): string {
+/** MPlayer 规范音乐源键（不含 local——本地文件不是第三方源可解析的对象）。 */
+const TIER3_MUSIC_SOURCES: ReadonlySet<string> = new Set([
+  'netease',
+  'qq',
+  'kugou',
+  'kuwo',
+  'migu',
+  'qianqian',
+  'soda',
+]);
+
+/** 合法 source 值清单（报错/文档用）。 */
+const TIER3_SOURCE_VALUES = [...TIER3_MUSIC_SOURCES].join('/');
+
+/** 规范化 source 值：去空白/小写后查别名表，再校验是否落在规范集内。
+ *  **不认识的值返回 undefined（等同未声明）**——只归一化不校验时，`tidal`/拼写错误这类
+ *  值会通过清单校验但永不匹配：解析腿静默变死源，搜索腿还会把候选的 `sourceType`
+ *  污染成该值 → 播放时 `decideRoute` 找不到客户端 → 用户看到「可能为 VIP/无版权」的
+ *  错误提示（t6 §4.2②）。合法值见 TIER3_SOURCE_VALUES（含 `tencent`/`tx` 等别名）。 */
+export function normalizeTier3Source(value: string): SourceKey | undefined {
   const key = value.trim().toLowerCase();
-  return SOURCE_ALIASES[key] ?? key;
+  const canonical = SOURCE_ALIASES[key] ?? key;
+  return TIER3_MUSIC_SOURCES.has(canonical) ? (canonical as SourceKey) : undefined;
 }
 
 /**
@@ -912,7 +931,7 @@ function isSourceUsableFor(source: Tier3Source, songSource: SourceKey): boolean 
  *  现在：未声明即 undefined，由调用方决定是否拒绝（见 isSourceUsableFor）。 */
 export function tier3SourceSource(source: Tier3Source): SourceKey | undefined {
   if (!source.source) return undefined;
-  return normalizeTier3Source(source.source) as SourceKey;
+  return normalizeTier3Source(source.source);
 }
 
 async function resolveTier3(song: Song): Promise<string> {
@@ -936,7 +955,9 @@ async function resolveTier3(song: Song): Promise<string> {
         console.info(
           `[tier3] 源 ${source.id} 跳过（${declared
             ? `source mismatch: ${declared} != ${song.sourceType}`
-            : `未声明 source 的 url-resolver，拒绝以防跨源错配`
+            : source.source
+              ? `source 值 '${source.source}' 不是已知音乐源（合法值：${TIER3_SOURCE_VALUES} 及其别名）`
+              : `未声明 source 的 url-resolver，拒绝以防跨源错配`
             }）`,
         );
         continue;

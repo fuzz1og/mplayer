@@ -42,7 +42,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 ## 多源链路速览
 
 自建 API 已退役。**官方直连优先 → tier3 订阅源兜底**（移动端设置页 auto/direct 来源开关；两端设置页 tier3 订阅清单 + 每源统计；实现在 core `sourceRouter`/`tier3Api`）。
-探测语义 = 直连可播性（probeSongsBatch 直连解析并写预取缓存）；播放走 `resolvePlayableSongRouted`（预取命中 0 等待 → 直连 → tier3 → 失败）。旧 `api.php?get=*` 签名地址是死链，见 core `utils/legacyUrl`。请求硬化（UA 池/反同源连续/TLS 指纹伪装开关，weapi 试点）见 core `api/tlsFingerprint` 与 `api/transport`。
+探测语义 = 直连可播性（probeSongsBatch 直连解析并写预取缓存）；播放走 `resolvePlayableSongRouted`（预取命中 0 等待 → 直连 → tier3 → 失败）。旧 `api.php?get=*` 签名地址是死链，见 core `utils/legacyUrl`。请求硬化（UA 池/反同源连续/TLS 指纹伪装开关，weapi 试点）见 core `api/tlsFingerprint` 与 `api/transport`。tier3 订阅清单 schema 与 `source` 字段（源归属）合法值见 `docs/agents/tier3-manifest.md`。
 
 ## Git Workflow
 
