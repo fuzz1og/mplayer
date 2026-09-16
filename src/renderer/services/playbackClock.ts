@@ -14,6 +14,11 @@ import { useCallback, useRef, useSyncExternalStore } from 'react';
  *
  * 谁用谁订阅：进度条订阅 position/duration，歌词高亮只订阅「当前行序号」。
  * 传输层（audioPlayer）只保留 play/pause/seek/getPosition，不再自己轮询。
+ *
+ * seek 后不回跳：HTML5 media 的 `currentTime` 赋值是异步的（本项目 Howler 走
+ * `html5: true`），采样在 seek 真正生效前会读到旧位置。没有这道防，拖动/点击进度条
+ * 后下一个 tick 会把刚拖到的位置拽回去（视觉回跳）。到传输层追上目标前保持乐观值，
+ * 并留超时兜底（传输层 seek 失败时不至于把进度条冻在目标位置）。
  */
 
 export interface PlaybackSnapshot {
@@ -49,12 +54,19 @@ export interface PlaybackClock {
 
 export const DEFAULT_PLAYBACK_INTERVAL_MS = 250;
 
+/** seek 后「传输层已追上目标」的容差（秒）：HTML5 seek 落地位置可能有亚秒级误差。 */
+const SEEK_SETTLE_TOLERANCE_S = 1;
+/** seek 乐观值的兜底存活时间（毫秒）：超时即恢复按传输层采样（seek 失败不冻结进度条）。 */
+const SEEK_SETTLE_TIMEOUT_MS = 1500;
+
 export function createPlaybackClock(options: PlaybackClockOptions = {}): PlaybackClock {
   const intervalMs = options.intervalMs ?? DEFAULT_PLAYBACK_INTERVAL_MS;
 
   let snapshot: PlaybackSnapshot = { position: 0, duration: 0 };
   let samplePosition: () => number = () => 0;
   let timer: ReturnType<typeof setInterval> | null = null;
+  /** seek 乐观值：到传输层采样追上 target（或超时）之前，忽略采样结果 */
+  let pendingSeek: { target: number; until: number } | null = null;
   const listeners = new Set<() => void>();
 
   // 只有真正变化才换快照对象并通知：值相同（含 undefined 之外的 NaN 比对交给 React）不打扰订阅者
@@ -74,7 +86,16 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
   };
 
   const tick = (): void => {
-    emit({ position: samplePosition() });
+    const sampled = samplePosition();
+    if (pendingSeek) {
+      const settled =
+        Math.abs(sampled - pendingSeek.target) <= SEEK_SETTLE_TOLERANCE_S
+        || Date.now() >= pendingSeek.until;
+      // 传输层还没完成 seek：保持乐观位置，不把进度条拽回去
+      if (!settled) return;
+      pendingSeek = null;
+    }
+    emit({ position: sampled });
   };
 
   return {
@@ -102,6 +123,7 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
     },
 
     setPosition(position) {
+      pendingSeek = { target: position, until: Date.now() + SEEK_SETTLE_TIMEOUT_MS };
       emit({ position });
     },
 
@@ -110,11 +132,13 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
     },
 
     reset() {
+      pendingSeek = null;
       emit({ position: 0, duration: 0 });
     },
 
     destroy() {
       stopTimer();
+      pendingSeek = null;
       listeners.clear();
       samplePosition = () => 0;
       snapshot = { position: 0, duration: 0 };
