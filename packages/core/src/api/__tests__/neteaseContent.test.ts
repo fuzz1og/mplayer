@@ -262,10 +262,10 @@ describe('neteaseDirect 内容能力（#278 迁移）', () => {
 });
 
 describe('kugouDirect getToplists（#278 并入）', () => {
-  it('mobilecdn rank/song 请求形态 + ToplistGroup id=kugou:${rankid} + 字段映射', async () => {
+  it('v3 rank/song 请求形态（host=mobiles）+ ToplistGroup id=kugou:${rankid} + 字段映射', async () => {
     const seen = mockTransport([
       {
-        match: (u) => u.includes('mobilecdn.kugou.com/api/v3/rank/song'),
+        match: (u) => u.includes('mobiles.kugou.com/api/v3/rank/song'),
         respond: (req) => {
           const rankid = new URL(req.url).searchParams.get('rankid');
           expect(new URL(req.url).searchParams.get('pagesize')).toBe('50');
@@ -287,7 +287,7 @@ describe('kugouDirect getToplists（#278 并入）', () => {
     expect(groups[0].songs[0]).toMatchObject({
       id: 'hashA', name: '酷狗歌', artist: '酷狗歌手', album: '酷狗专辑', sourceType: 'kugou',
     });
-    expect(groups[0].songs[0].cover).toBe('https://imge/300x300/1.jpg');
+    expect(groups[0].songs[0].cover).toBe('https://imge/300/1.jpg');
     expect(seen.filter((r) => r.url.includes('rank/song'))).toHaveLength(2);
   });
 });

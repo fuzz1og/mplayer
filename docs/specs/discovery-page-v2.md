@@ -7,17 +7,29 @@ Implemented and verified. PR #62 merged; review fixes landed in `codex/fix-revie
 ## Destination
 
 - 桌面端发现页重构为 V2：排行榜 / 新碟上架 / 猜你喜欢 / 歌单四个 Tab。
-- 三源排行榜聚合：网易、QQ、酷狗；热歌榜 + 新歌榜。
+- 排行榜：**单元榜 + 源切换**（网易 / QQ / 酷狗各自的热歌榜与新歌榜）。
+  （2026-09-14 对齐现状：原「三源聚合为一榜」已下线，见 Decisions。）
 - 搜索结果音频质量探测：SongRow 显示 `preview` / `invalid` badge，搜索后每首并发探测。
 
 ## Decisions
 
-- 排行榜聚合：聚合为主 + 源筛选，不单独分源 tab。
+- 排行榜形态（2026-09-14 改判，原决策「聚合为主 + 源筛选」作废）：**回归单元榜 + 源切换**。
+  理由与证据见 [ADR/决策 #332](https://github.com/fuzz1og/mplayer/issues/332) 与
+  `docs/wayfinder/2026-09-13-t2-charts-form-research.md`：单一流媒体产品里不存在「切换数据源」
+  这个概念（Spotify/Apple/YouTube/Deezer 均为单源自有，切的是地区/流派）；跨源聚合只存在于
+  聚合器（kworb/Last.fm）或拥有全量数据的数据商（Luminate/Billboard/TME 由你榜）。
+  本项目只有名次、没有绝对量，`Σ1/rank` 在业界找不到对应物，且会制造「内容重复」的观感。
+- 聚合内核已**整条下线**：core `chartAggregate`、`src/main/services/chartAggregator.ts`、
+  `getAggregatedChart` IPC、`src/shared/chart.ts` 全部删除（不留「有测试无消费方」的内核）。
+- 榜单详情：**通用组件 + 可选列**。各源提供程度不同——实测三源公共只有「名次」（由数组索引推导，不落结构）；
+  「上期名次 / 在榜周数」只有 QQ 提供（`old_count`/`in_count`，2026-09-16 实测为**字符串**，按 Number 归一），
+  故不做按源分支的组件，而是有值则渲染、无值则省略。面板标题的榜单名取自 core `ToplistGroup.name`。
+- 榜单级元信息（榜单描述 / 更新频率 / 日期 / 封面）**未接线**：数据已在各源响应里，但需从三条榜单腿内部
+  透出，另开票；本期只做曲目级可选列。
 - UI 布局：顶部 tab 切换，桌面端网格卡片。
-- audio probe：独立功能，但作为聚合前置依赖一起做；提取到 `packages/core`，desktop/mobile 共享。
+- audio probe：独立功能，提取到 `packages/core`，desktop/mobile 共享。
 - 多源 API：酷狗全功能免费（UA only），QQ 排行榜+新歌免费，其他源需签名/反爬。
 - 搜索探测：搜索后每首并发探测，`PROBE_CONCURRENCY=15`，单首完成后立即更新 UI；旧搜索结果不会覆盖新搜索。
-- 聚合去重：折叠显示最优一首（可展开）；完整度 > 排名 > 默认源序；未上榜源加权 `missing=51`；失败源不参与评分。
 - 缓存：排行榜 30min、推荐 15min、新碟 1h；排行榜默认立即加载，其他 Tab 首次切换加载并缓存；切回排行榜按 TTL 刷新。
 - 新碟上架：多行自适应网格卡片 + 地区筛选（全部/华语/欧美/韩国/日本）。
 - 猜你喜欢：歌单网格。
@@ -43,8 +55,6 @@ Implemented and verified. PR #62 merged; review fixes landed in `codex/fix-revie
 
 ## Verification
 
-- `e2e/discover-v2.spec.ts` 14/14
-- `npm run typecheck`
-- `npm run lint`
-- `npm run test:run` 175/175
-- `npm run test:chart` 3/3
+- `./scripts/verify.sh`：lint（0 warning）→ design-lint → root typecheck → mobile typecheck → `npx vitest run` 46 files / 352 tests
+- `e2e/discover-v2.spec.ts`（桌面 Playwright，**不在 CI/verify 流程内**，属本地手工回归；排行榜断言已随单源榜形态更新）
+- 聚合内核下线后的 core 测试：`npx vitest run --config packages/core/vitest.config.ts`

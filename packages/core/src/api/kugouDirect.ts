@@ -34,7 +34,15 @@ const SEARCH_URL = 'https://songsearch.kugou.com/song_search_v2';
 const CDN_URL = 'https://trackercdn.kugou.com/i/v2';
 const LYRIC_SEARCH_URL = 'https://lyrics.kugou.com/search';
 const LYRIC_DOWNLOAD_URL = 'https://lyrics.kugou.com/download';
-const RANK_SONGS_URL = 'https://mobilecdn.kugou.com/api/v3/rank/song';
+/**
+ * 榜单歌曲接口 host（原 mobilecdn 老接口，#278 自桌面 kugouApi 挪入）。
+ * 2026-09-16 实测：`mobilecdn.kugou.com` 的 https 证书是腾讯云 CDN 默认证书
+ * （`*.cdn.myqcloud.com`），**不含该域名** → 任何校验证书的客户端都报
+ * `ERR_TLS_CERT_ALTNAME_INVALID`，榜单腿恒空（UI 显示「暂无排行榜数据」）。
+ * `mobiles.kugou.com` 同路径、同响应结构（`status=1` / `data.info[]`，50 首齐）、
+ * 证书 `*.kugou.com` 有效。原 host 明文 http 仍可取数，但不做 HTTPS 降级。
+ */
+const RANK_SONGS_URL = 'https://mobiles.kugou.com/api/v3/rank/song';
 const KGCLOUD_KEY = 'kgcloudv2';
 
 /** 榜单定义（rankid 与桌面 kugouApi 时代一致；热歌榜 8888 / 新歌榜 74534）。 */
@@ -154,7 +162,7 @@ export const kugouDirectClient: DirectSourceClient = {
 };
 
 /**
- * 榜单歌曲拉取（mobilecdn rank/song 老接口，#278 自桌面 kugouApi 挪入）。
+ * 榜单歌曲拉取（v3 rank/song，host 见 RANK_SONGS_URL 注释）。
  * 失败只打一行摘要返回空数组（榜单元数据在 Chart 页有兜底展示，不拖死整页）。
  */
 export async function getKugouRank(rankId: string, pageSize: number = 50): Promise<Song[]> {
@@ -184,10 +192,14 @@ export async function getKugouRank(rankId: string, pageSize: number = 50): Promi
   }
 }
 
-/** 榜单歌曲原生字段 → Song（mobilecdn info[] 形状：authors[]/album_sizable_cover）。 */
+/**
+ * 榜单歌曲原生字段 → Song（v3 rank/song `info[]` 形状：authors[]/album_sizable_cover）。
+ * 封面 `{size}` 必须替换为**尺寸数字**（与搜索腿一致用 `300`）：`300x300` 不是有效 token，
+ * 2026-09-16 实测 CDN 对无效 token 一律回默认音符图（50 首封面全同）；并统一升 https。
+ */
 function mapRankSong(raw: any): Song {
   const authors = (raw.authors || []).map((a: any) => a.author_name).join(' / ');
-  const cover = raw.album_sizable_cover?.replace('{size}', '300x300') || '';
+  const cover = String(raw.album_sizable_cover || '').replace(/\{size\}/g, '300').replace(/^http:/, 'https:');
   return {
     id: raw.hash || '',
     name: raw.songname || '',

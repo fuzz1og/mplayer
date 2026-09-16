@@ -1,6 +1,5 @@
 import type { musicApi, DirectSourceClient, SourceKey, ContentMethod } from '@mplayer/core';
 import { CONTENT_METHODS } from '@mplayer/core';
-import type { AggregatedChartResult } from '@/shared/chart';
 
 /**
  * music 域 IPC 单通道分发契约（ADR-0001）。
@@ -56,12 +55,10 @@ export type ContentMethodMap = {
 
 /**
  * 主进程独有组合方法（不在 core `musicApi` 对象上）。
- * - `getAggregatedChart`：多源排行榜聚合（chartAggregator）
  * - `getSodaPlayableUrl`：下载汽水音频到磁盘缓存并回放 file:// 直链（main.ts 扩展）
  * - `resolvePlaylistLink`：歌单分享短链跟随 302 返回落地 URL（playlistLinkResolver）
  */
 export interface MainOnlyMethods {
-  getAggregatedChart(type: 'hot' | 'new', sources: string[]): Promise<AggregatedChartResult>;
   getSodaPlayableUrl(trackId: string): Promise<string>;
   resolvePlaylistLink(url: string): Promise<string>;
 }

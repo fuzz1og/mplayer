@@ -67,9 +67,18 @@ export const TOPLIST_SOURCE_IDS = {
 /** 已实现 getToplists 能力的源（榜单 id 契约的键域；其余四源无该能力）。 */
 export type ToplistSourceKey = keyof typeof TOPLIST_SOURCE_IDS;
 
+/** 从 getToplists 全组结果中按 `${source}:${sourceId}` 取歌组本体（含榜单名等元信息）；无匹配 = undefined。 */
+export function pickToplistGroup(
+  groups: ToplistGroup[],
+  source: SourceKey,
+  sourceId: number | string,
+): ToplistGroup | undefined {
+  return groups.find((g) => g.id === `${source}:${sourceId}`);
+}
+
 /** 从 getToplists 全组结果中按 `${source}:${sourceId}` 取歌组（无匹配 = 空数组）。 */
 export function pickToplistSongs(groups: ToplistGroup[], source: SourceKey, sourceId: number | string): Song[] {
-  return groups.find((g) => g.id === `${source}:${sourceId}`)?.songs ?? [];
+  return pickToplistGroup(groups, source, sourceId)?.songs ?? [];
 }
 
 /** 单源榜单腿：经能力面 getToplists 取全组后按 id 取歌；无客户端/未实现能力抛错（双端统一错误风格）。 */

@@ -125,3 +125,62 @@ describe('resolveKugouLyricUrl（两步歌词）', () => {
     expect(result).toBe('');
   });
 });
+describe('kugouDirectClient.getToplists（榜单腿）', () => {
+  /** v3 rank/song 响应形状（`data.info[]` 平铺歌曲；原样复制实测字段）。 */
+  const rankOk = (rankid: string) => ({
+    status: 1,
+    data: {
+      total: 500,
+      info: [
+        {
+          hash: `${rankid}hash1`,
+          songname: '甲乙丙丁 (你我怎么两清)',
+          authors: [{ author_name: '李佳薇' }, { author_name: '另一人' }],
+          albumname: '专辑X',
+          duration: 210,
+          album_sizable_cover: 'http://imge.kugou.com/stdmusic/{size}/cover.jpg',
+        },
+      ],
+    },
+  });
+
+  it('走 mobiles.kugou.com 的 v3 rank 接口 + 映射 Song（#340：原 host https 证书不含该域名）', async () => {
+    const transport = vi.fn(async (req: any) => {
+      const rankid = new URL(req.url).searchParams.get('rankid') || '';
+      return jsonResponse(JSON.stringify(rankOk(rankid)));
+    });
+    setTransport(transport as any);
+
+    const groups = await kugouDirectClient.getToplists!();
+
+    const urls = transport.mock.calls.map((c: any) => new URL(c[0].url));
+    // host 是修复点：mobilecdn.kugou.com 的证书不含该域名 → 榜单腿恒空
+    expect(urls.map((u) => u.origin)).toEqual(['https://mobiles.kugou.com', 'https://mobiles.kugou.com']);
+    expect(urls[0].pathname).toBe('/api/v3/rank/song');
+    expect(urls.map((u) => u.searchParams.get('rankid'))).toEqual(['8888', '74534']);
+    expect(urls.every((u) => u.searchParams.get('page') === '1')).toBe(true);
+    expect(urls.every((u) => u.searchParams.get('pagesize') === '50')).toBe(true);
+
+    expect(groups.map((g) => g.id)).toEqual(['kugou:8888', 'kugou:74534']);
+    expect(groups.map((g) => g.name)).toEqual(['热歌榜', '新歌榜']);
+    expect(groups[0].songs[0]).toMatchObject({
+      id: '8888hash1',
+      name: '甲乙丙丁 (你我怎么两清)',
+      artist: '李佳薇 / 另一人',
+      album: '专辑X',
+      duration: 210,
+      sourceType: 'kugou',
+    });
+    // 封面 `{size}` → 尺寸数字 300（`300x300` 是无效 token，CDN 会回默认图）+ 升 https
+    expect(groups[0].songs[0].cover).toBe('https://imge.kugou.com/stdmusic/300/cover.jpg');
+  });
+
+  it('单榜失败返回空组不上抛（保持原 kugouApi 语义）', async () => {
+    setTransport((async () => { throw new Error('network down'); }) as any);
+
+    const groups = await kugouDirectClient.getToplists!();
+
+    expect(groups.map((g) => g.id)).toEqual(['kugou:8888', 'kugou:74534']);
+    expect(groups.every((g) => g.songs.length === 0)).toBe(true);
+  });
+});
