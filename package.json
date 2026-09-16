@@ -1,6 +1,6 @@
 {
   "name": "mplayer",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "private": true,
   "workspaces": [
     "packages/*"
@@ -43,6 +43,7 @@
     "esbuild": "0.25.2",
     "js-yaml": "^4.3.2",
     "@xmldom/xmldom": "^0.9.12",
+    "plist": "^3.1.1",
     "browserslist": "^4.28.9",
     "baseline-browser-mapping": "^2.11.23",
     "joi": "^18.2.9",

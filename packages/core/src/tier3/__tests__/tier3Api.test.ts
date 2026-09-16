@@ -94,6 +94,9 @@ const URL_RESOLVER_MANIFEST = JSON.stringify({
       id: 'demo-url',
       name: 'Demo URL',
       kind: 'url-resolver',
+      // ADR-0014 决策 6：url-resolver 必须显式声明 source（未声明即拒绝，
+      // 因为该腿没有内容级校验，放行等于把 A 源 id 塞给 B 源接口）
+      source: 'netease',
       allowedDomains: ['cdn.example.com'],
       timeoutMs: 3000,
       headers: { 'X-Demo': '1' },
@@ -247,7 +250,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song());
     expect(url).toBe('https://cdn.example.com/a.mp3');
-    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 1, misses: 0 } });
+    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 1, misses: 0, skipped: 0, searches: 0 } });
   });
 
   it('域名不在白名单 → 返回空串', async () => {
@@ -282,7 +285,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
     setTier3Enabled(true);
     expect(await createTier3Resolver()(song())).toBe('');
-    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 0, misses: 1 } });
+    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 0, misses: 1, skipped: 0, searches: 0 } });
   });
 
   it('多次解析按源累计命中/失败', async () => {
@@ -298,7 +301,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     await createTier3Resolver()(song());
     await createTier3Resolver()(song());
 
-    expect(getTier3Stats()['demo-url']).toEqual({ hits: 2, misses: 0 });
+    expect(getTier3Stats()['demo-url']).toEqual({ hits: 2, misses: 0, skipped: 0, searches: 0 });
   });
 
   it('url-resolver 声明 source 且与当前歌曲 source 不符时跳过，不拿错源 id 去解析', async () => {
@@ -340,7 +343,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     expect(await createTier3Resolver()(song())).toBe('');
   });
 
-  it('search-then-resolve 未声明 source 但从 resolve URL 推断（kw.php → kuwo），异源歌曲跳过', async () => {
+  it('未声明 source 的 search-then-resolve 仍可用（自带 isExactMatch 内容校验兜住）', async () => {
     const manifest = JSON.stringify({
       version: 1,
       sources: [
@@ -366,13 +369,20 @@ describe('createTier3Resolver（url-resolver）', () => {
         },
       ],
     });
-    const request = vi.fn();
+    // ADR-0014 决策 6：search-then-resolve 未声明 source 不再靠 URL 猜源，
+    // 而是**允许参与**（它自带 isExactMatch 歌名/歌手校验，错配由内容匹配兜住）。
+    // 这里让 search 返回空列表，验证确实发起了请求（而不是被 URL 推断跳过）。
+    const request = makeRequestMock({
+      'https://api.qqmp3.vip/api/songs.php?keyword=%E5%91%A8%E6%9D%B0%E4%BC%A6': () =>
+        jsonResponse({ data: [] }, 'https://api.qqmp3.vip/api/songs.php'),
+    });
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: manifest });
     setTier3Enabled(true);
-    // netease 歌曲不应把 id 塞给酷我系 search-then-resolve 源
     expect(await createTier3Resolver()(song({ sourceType: 'netease' }))).toBe('');
-    expect(request).not.toHaveBeenCalled();
+    // 关键：确实请求了（未被 URL 推断静默跳过）
+    expect(request).toHaveBeenCalled();
+    expect(request.mock.calls[0][0].url).toContain('songs.php');
   });
 
   it('上游 HTTP 200 但返回业务错误封套（code/message，如 vkeys 挂掉）→ 未命中', async () => {
@@ -585,7 +595,46 @@ describe('searchTier3Songs（官方直连搜索失败后的第三方搜索兜底
     expect(songs[0]).toMatchObject({ name: '恋人', artist: '李荣浩' });
   });
 
-  it('搜索兜底不按推断 source 过滤（关键词候选无 id 错配风险），候选标记真实来源', async () => {
+  it('声明值不认识时，搜索候选 sourceType 回退为查询源（不再污染成死值）', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [{
+        id: 'typo-search',
+        kind: 'search-then-resolve',
+        source: 'tidal',
+        allowedDomains: ['*.example.com'],
+        search: {
+          method: 'GET',
+          url: 'https://api.example.com/search?keyword={keyword}',
+          responseJsonPath: 'data',
+          itemsPath: 'data',
+          namePath: 'name',
+          artistPath: 'artist',
+          idPath: 'id',
+        },
+        resolve: {
+          method: 'GET',
+          url: 'https://api.example.com/url?id={id}',
+          responseJsonPath: 'data.url',
+        },
+      }],
+    });
+    const request = makeRequestMock({
+      'https://api.example.com/search?keyword=%E6%99%B4%E5%A4%A9': () =>
+        jsonResponse(
+          { data: [{ id: '1', name: '晴天', artist: '周杰伦' }] },
+          'https://api.example.com/search?keyword=x',
+        ),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    const songs = await searchTier3Songs('晴天', 1, 'qq');
+    expect(songs).toHaveLength(1);
+    expect(songs[0].sourceType).toBe('qq');
+  });
+
+  it('搜索兜底不按 source 过滤（关键词候选无 id 错配风险），候选标记声明的来源', async () => {
     const manifest = JSON.stringify({
       version: 1,
       sources: [
@@ -593,6 +642,7 @@ describe('searchTier3Songs（官方直连搜索失败后的第三方搜索兜底
           id: 'mitu-like',
           name: '酷我系搜索源',
           kind: 'search-then-resolve',
+          source: 'kuwo',
           allowedDomains: ['*.kuwo.cn'],
           search: {
             method: 'GET',
@@ -621,31 +671,185 @@ describe('searchTier3Songs（官方直连搜索失败后的第三方搜索兜底
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: manifest });
     setTier3Enabled(true);
-    // netease 查询也能用酷我系源搜候选（搜索无 id 错配），但 sourceType 标记真实来源 kuwo
+    // 搜索腿不过滤（ADR-0014 决策 6 的归属约束只针对 url-resolver 解析腿）；
+    // 候选 sourceType 取**声明的来源**（经别名归一化），而非查询源。
     const songs = await searchTier3Songs('恋人', 1, 'netease');
     expect(songs).toHaveLength(1);
     expect(songs[0]).toMatchObject({ name: '恋人', artist: '李荣浩', sourceType: 'kuwo' });
+    // 搜索腿统计此前完全未记，现已补上
+    expect(getTier3Stats()['mitu-like'].searches).toBe(1);
   });
 });
 
-describe('tier3SourceSource（URL 形态推断，CodeQL 高危告警修复）', () => {
-  const mk = (resolve: string): Tier3Source => ({
+describe('tier3SourceSource（ADR-0014 决策 6：只认显式声明 + 别名归一化）', () => {
+  const mk = (declared?: string): Tier3Source => ({
     id: 't',
     kind: 'url-resolver',
+    ...(declared === undefined ? {} : { source: declared }),
     allowedDomains: ['cdn.example.com'],
-    resolve: { method: 'GET', url: resolve, responseJsonPath: 'data.url' },
+    resolve: { method: 'GET', url: 'https://api.example.com/url?id={id}', responseJsonPath: 'data.url' },
   });
 
-  it('126.net / 91q.com 只按 hostname 后缀匹配，任意主机不得命中', () => {
-    expect(tier3SourceSource(mk('https://api.126.net/url?id={id}'))).toBe('netease');
-    expect(tier3SourceSource(mk('https://91q.com/url?id={id}'))).toBe('qianqian');
-    // 旧实现用整串 substring（includes），evil126.net.evil.example 这类会被误判
-    expect(tier3SourceSource(mk('https://not126.net.evil.example.com/url'))).toBeUndefined();
-    expect(tier3SourceSource(mk('https://x91q.com.evil.example/url'))).toBeUndefined();
+  it('未声明 source 时不再从 URL 推断（越权猜测已删除）', () => {
+    // 旧实现据 host/path 猜源；猜测会「猜不出则放行」，而 url-resolver 无内容校验
+    // → 打开跨源错播通道。现在一律 undefined，由 isSourceUsableFor 拒绝。
+    // 这些 URL 形态在旧实现里分别被猜成 netease / qq / kuwo。
+    const urlLike = (resolveUrl: string): Tier3Source => ({
+      id: 't',
+      kind: 'url-resolver',
+      allowedDomains: ['cdn.example.com'],
+      resolve: { method: 'GET', url: resolveUrl, responseJsonPath: 'data.url' },
+    });
+    expect(tier3SourceSource(urlLike('https://api.126.net/url?id={id}'))).toBeUndefined();
+    expect(tier3SourceSource(urlLike('https://api.example.com/qq?id={id}'))).toBeUndefined();
+    expect(tier3SourceSource(urlLike('https://api.example.com/api/kw.php?rid={id}'))).toBeUndefined();
   });
 
-  it('路径标记 /qq 与 kw.php 仍参与推断', () => {
-    expect(tier3SourceSource(mk('https://api.example.com/qq?id={id}'))).toBe('qq');
-    expect(tier3SourceSource(mk('https://api.example.com/api/kw.php?rid={id}'))).toBe('kuwo');
+  it('显式声明原样生效', () => {
+    expect(tier3SourceSource(mk('netease'))).toBe('netease');
+    expect(tier3SourceSource(mk('qq'))).toBe('qq');
+    expect(tier3SourceSource(mk('kuwo'))).toBe('kuwo');
+  });
+
+  it('别名归一化：生态里的异名收敛到规范源键', () => {
+    // GD Studio 用 tencent / lx 用 tx，MPlayer 用 qq——不归一化则永不匹配，静默变死源
+    expect(tier3SourceSource(mk('tencent'))).toBe('qq');
+    expect(tier3SourceSource(mk('tx'))).toBe('qq');
+    expect(tier3SourceSource(mk('QQ'))).toBe('qq');
+    expect(tier3SourceSource(mk('  qq  '))).toBe('qq');
+    expect(tier3SourceSource(mk('163'))).toBe('netease');
+    expect(tier3SourceSource(mk('qishui'))).toBe('soda');
+    expect(tier3SourceSource(mk('baidu'))).toBe('qianqian');
+  });
+
+  it('不认识/非本应用的值（tidal、spotify、拼写错误）视为未声明，不当作死源', () => {
+    // 只归一化不校验时，这些值会通过清单校验却永不匹配：解析腿静默变死源，
+    // 搜索腿还会把候选 sourceType 污染成该值 → decideRoute 抛「该源暂无直连实现」
+    // → 用户看到「可能为 VIP/无版权」的错误提示。local 不是可解析的音乐源，同理。
+    expect(tier3SourceSource(mk('tidal'))).toBeUndefined();
+    expect(tier3SourceSource(mk('spotify'))).toBeUndefined();
+    expect(tier3SourceSource(mk('unknown'))).toBeUndefined();
+    expect(tier3SourceSource(mk('local'))).toBeUndefined();
+    expect(tier3SourceSource(mk('tencentt'))).toBeUndefined();
+  });
+
+  it('声明了不认识 source 的 url-resolver 同样被拒绝（等同未声明，堵跨源错播）', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [{
+        id: 'typo-source',
+        kind: 'url-resolver',
+        source: 'tidal',
+        allowedDomains: ['cdn.example.com'],
+        resolve: { method: 'GET', url: 'https://api.example.com/url?id={id}', responseJsonPath: 'data.url' },
+      }],
+    });
+    const request = vi.fn();
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    expect(await createTier3Resolver()(song())).toBe('');
+    expect(request).not.toHaveBeenCalled();
+    expect(getTier3Stats()['typo-source'].skipped).toBe(1);
+  });
+
+  it('未声明的 url-resolver 在解析时被拒绝，不拿错源 id 去解析', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [{
+        id: 'no-source',
+        kind: 'url-resolver',
+        allowedDomains: ['cdn.example.com'],
+        resolve: { method: 'GET', url: 'https://api.example.com/url?id={id}', responseJsonPath: 'data.url' },
+      }],
+    });
+    const request = vi.fn();
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    expect(await createTier3Resolver()(song())).toBe('');
+    expect(request).not.toHaveBeenCalled();
+    // 跳过被计入统计（原实现在 continue 之后才取 stats，被跳过的源连计数都不进）
+    expect(getTier3Stats()['no-source'].skipped).toBe(1);
+  });
+});
+
+describe('ADR-0014 超时阶梯', () => {
+  it('单源默认超时 2s（原 15s 远超整链 6s 预算，使预算失去约束力）', async () => {
+    const seen: number[] = [];
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [{
+        id: 'no-timeout',
+        kind: 'url-resolver',
+        source: 'netease',
+        allowedDomains: ['cdn.example.com'],
+        // 不配 timeoutMs —— 走默认值
+        resolve: { method: 'GET', url: 'https://api.example.com/url?id={id}', responseJsonPath: 'data.url' },
+      }],
+    });
+    const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
+      if (req.responseType === 'arraybuffer') return audioResponse();
+      seen.push(req.timeoutMs ?? -1);
+      return jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, req.url);
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    await createTier3Resolver()(song());
+    expect(seen[0]).toBe(2_000);
+  });
+
+  it('嗅探超时独立（1s），不继承源声明的 timeoutMs', async () => {
+    const sniffTimeouts: number[] = [];
+    const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
+      if (req.responseType === 'arraybuffer') {
+        sniffTimeouts.push(req.timeoutMs ?? -1);
+        return audioResponse();
+      }
+      return jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, req.url);
+    });
+    setTier3Deps({ request });
+    // URL_RESOLVER_MANIFEST 声明了 timeoutMs: 3000
+    addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+    await createTier3Resolver()(song());
+    expect(sniffTimeouts).toEqual([1_000]);
+  });
+
+  it('搜索腿补上预算：源挂起时不无限等待，返回已收集结果', async () => {
+    vi.useFakeTimers();
+    try {
+      const manifest = JSON.stringify({
+        version: 1,
+        sources: [{
+          id: 'hangs',
+          kind: 'search-then-resolve',
+          allowedDomains: ['cdn.example.com'],
+          search: {
+            method: 'GET',
+            url: 'https://api.example.com/search?keyword={keyword}',
+            responseJsonPath: 'data',
+            itemsPath: 'data.list',
+            namePath: 'name',
+            idPath: 'id',
+          },
+          resolve: { method: 'GET', url: 'https://api.example.com/url?id={id}', responseJsonPath: 'data.url' },
+        }],
+      });
+      // 永不落定的源（模拟站点挂起）
+      const request = vi.fn(() => new Promise<TransportResponse>(() => {}));
+      setTier3Deps({ request });
+      addTier3SubscriptionFromText({ text: manifest });
+      setTier3Enabled(true);
+      const p = searchTier3Songs('晴天', 1, 'qq');
+      await vi.advanceTimersByTimeAsync(6_001);
+      const songs = await p;
+      // 关键：限时返回（不悬挂），结果是空（该源没产出）
+      expect(songs).toEqual([]);
+      expect(getTier3Stats()['hangs'].searches).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

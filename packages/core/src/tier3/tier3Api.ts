@@ -99,10 +99,19 @@ export interface Tier3State {
   subscriptions: Tier3Subscription[];
 }
 
-/** 每源累计解析统计（设置页展示；内存计数，本次会话有效）。 */
+/** 每源累计解析统计（设置页展示；内存计数，本次会话有效、不持久化）。
+ *  - hits / misses：解析腿命中与未命中；
+ *  - skipped：因 source 归属不匹配被跳过（ADR-0014：显式声明才过滤）；
+ *  - searches：搜索兜底腿参与的关键词搜索次数（此前完全未统计）；
+ *  - lastError：最近一次失败原因（排障用，非累计）。
+ *  仅会话内有效是有意为之：源健康度是时变的，昨日状态不应污染今日判断
+ *  （ADR-0014「坏源只做统计」，不做熔断/降权/持久化）。 */
 export interface Tier3SourceStats {
   hits: number;
   misses: number;
+  skipped: number;
+  searches: number;
+  lastError?: string;
 }
 
 export interface Tier3Deps {
@@ -110,8 +119,21 @@ export interface Tier3Deps {
   request?: (req: TransportRequest) => Promise<import('../api/transport.js').TransportResponse>;
 }
 
-const DEFAULT_TIMEOUT_MS = 15_000;
-const SNIFF_TIMEOUT_MS = 8_000;
+/** 单源解析请求超时（ADR-0014 超时阶梯：单源 2s 硬墙）。
+ *  原为 15_000，远超整链 6s 预算（sourceRouter 的 TIER3_BUDGET_MS），
+ *  使预算失去约束力——单源挂起即可吃光全链预算、饿死后续好源。
+ *  且 transport 的 maxRetries=3 会对超时类错误重试，实际耗时再被放大。 */
+const DEFAULT_TIMEOUT_MS = 2_000;
+/** 嗅探超时（ADR-0014 决策 3）：独立常量、不继承源 timeoutMs。
+ *  实测依据：首字节 ~0.39s（含 TLS 握手 ~0.19s），复用连接 ~0.19s；
+ *  且 1KB 与 1MB 的 Range 延迟无差别（成本在连接而非字节数）。 */
+const SNIFF_TIMEOUT_MS = 1_000;
+
+/** 搜索兜底腿整链预算（ADR-0014 决策 2「搜索腿补同款预算」）。
+ *  此前该腿**完全没有预算**（直接串行 await），实测 5 源各 2s = 10s 无上限。
+ *  与解析腿不同：搜索是「尽量找全」，故预算耗尽时**返回已收集的部分结果**
+ *  而不是丢弃——部分候选对用户仍有用，总比空列表好。 */
+const TIER3_SEARCH_BUDGET_MS = 6_000;
 
 /** 试听片段大小阈值：<1MB 视为片段（与 api/audioProbe.ts 的 PREVIEW_THRESHOLD 对齐，
  *  30s 128kbps ≈ 480KB）。tier3 解析到片段时宁可跳过，也不把试听版当完整版播。 */
@@ -123,7 +145,22 @@ let state: Tier3State = { enabled: false, subscriptions: [] };
 let persister: ((next: Tier3State) => void) | null = null;
 const tier3Stats = new Map<string, Tier3SourceStats>();
 
-/** 每源累计命中/失败次数（key = source.id）。 */
+/** 零值统计（新增字段都在此初始化，避免各处 `?? {...}` 漏字段）。 */
+function emptyStats(): Tier3SourceStats {
+  return { hits: 0, misses: 0, skipped: 0, searches: 0 };
+}
+
+/** 取（或初始化）某源的可变统计对象。 */
+function statsFor(id: string): Tier3SourceStats {
+  let s = tier3Stats.get(id);
+  if (!s) {
+    s = emptyStats();
+    tier3Stats.set(id, s);
+  }
+  return s;
+}
+
+/** 每源累计统计（key = source.id）。 */
 export function getTier3Stats(): Record<string, Tier3SourceStats> {
   return Object.fromEntries(tier3Stats);
 }
@@ -431,6 +468,11 @@ interface SniffResult {
   totalBytes: number | null;
 }
 
+/** 字节嗅探：取前 1KB 判定是否真音频（拒 text/html 错误页），并读总量判试听片段。
+ *  Range 维持 1KB（ADR-0014：实测 12B~1MB 延迟无差别，改字节数无收益）。
+ *  ⚠️ 已知未解决：若服务器忽略 Range（实测有主机对 bytes=0-1023 返回全量），
+ *  axios 会缓冲整个响应体直至超时 → 好 URL 被误判为坏源。需 transport 支持
+ *  响应字节上限/提前中断；未支持前如实记录，见 ADR-0014「后果」。 */
 async function sniffAudioUrl(url: string, source: Tier3Source, deps: Tier3Deps): Promise<SniffResult> {
   try {
     const req = deps.request || request;
@@ -442,7 +484,10 @@ async function sniffAudioUrl(url: string, source: Tier3Source, deps: Tier3Deps):
         'User-Agent': BROWSER_UA,
         ...(source.headers || {}),
       },
-      timeoutMs: source.timeoutMs || SNIFF_TIMEOUT_MS,
+      // ADR-0014 决策 3：嗅探超时独立，**不继承** source.timeoutMs——
+      // 「解析允许多慢」与「1KB 首字节该多快」是两件事。实测 1KB 与 1MB 的
+      // 延迟无差别（成本在连接建立 + TLS 握手 + 一个 RTT），故不缩小 Range。
+      timeoutMs: SNIFF_TIMEOUT_MS,
       responseType: 'arraybuffer',
     });
     if (res.status >= 400) return { ok: false, totalBytes: null };
@@ -643,12 +688,31 @@ export async function searchTier3Songs(keyword: string, _page: number, sourceKey
   console.info(`[tier3] 第三方搜索开始: ${keyword} (${sourceKey})`);
   const out: Song[] = [];
   const seen = new Set<string>();
+  const deadline = Date.now() + TIER3_SEARCH_BUDGET_MS;
+  // 单条预算 Promise 供所有源共用（而非每源起一个 setTimeout——那样未命中的
+  // 定时器会各自挂到 deadline，徒增事件循环负担，且测试里会拖住退出）。
+  let budgetTimer: ReturnType<typeof setTimeout> | undefined;
+  const budgetHit = new Promise<Tier3SearchItem[]>((resolve) => {
+    budgetTimer = setTimeout(() => resolve([]), TIER3_SEARCH_BUDGET_MS);
+  });
   for (const subscription of state.subscriptions) {
     for (const source of subscription.manifest.sources) {
       if (source.kind !== 'search-then-resolve' || !source.search) continue;
+      // 预算耗尽：返回已收集的部分候选（搜索语义是「尽量找全」，
+      // 已找到的对用户仍有用），并说明提前收尾。
+      if (Date.now() >= deadline) {
+        console.info(`[tier3] 搜索预算 ${TIER3_SEARCH_BUDGET_MS}ms 用尽，返回已收集的 ${out.length} 条候选`);
+        clearTimeout(budgetTimer);
+        return out;
+      }
+      // 搜索腿**不按 source 过滤**（ADR-0014 决策 6 只要求 url-resolver 的归属约束）：
+      // 搜索是「关键词候选」，不存在把 A 源 id 塞给 B 源解析器的错配风险，
+      // 且候选自带歌名/歌手匹配过滤。多留一个源 = 多一份兜底（用户抱怨「源不够用」）。
+      // 归属只用于给候选打正确的 sourceType（经别名归一化，见 :候选构造）。
       console.info(`[tier3] 源 ${source.id} 搜索请求: ${keyword}`);
+      statsFor(source.id).searches++;
       try {
-        const items = await searchTier3SourceItems(source, keyword);
+        const items = await Promise.race([searchTier3SourceItems(source, keyword), budgetHit]);
         // 只保留歌名与查询词强相关的候选：归一化后歌名必须等于查询词、或为查询词
         // 的一部分（查询词更具体，如「恋人 李荣浩」可匹配「恋人」）；反向
         // （「恋人」匹配「恋人未满」）会端上完全不同的歌，一律丢弃。
@@ -686,6 +750,7 @@ export async function searchTier3Songs(keyword: string, _page: number, sourceKey
       }
     }
   }
+  clearTimeout(budgetTimer);
   return out;
 }
 
@@ -785,40 +850,88 @@ export function setTier3Deps(deps: Tier3Deps): void {
   currentDeps = deps;
 }
 
-/** 从清单 URL 模板提取 hostname（用于音源推断）。 */
-function tier3HostOf(rawUrl: string): string {
-  try {
-    return new URL(rawUrl).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
+/** source 字段常见写法 → MPlayer 规范源键（ADR-0014 决策 6）。
+ *  生态里没有统一词汇表：同一平台在不同 API 里叫法不同（GD Studio 用 tencent、
+ *  lx 用 tx、MPlayer 用 qq）。不归一化则这些值会通过校验但永不匹配，
+ *  静默变成死源；更糟的是搜索候选的 sourceType 被污染成该值，播放时
+ *  decideRoute 找不到客户端 → 用户看到「可能为 VIP/无版权」的错误提示。 */
+const SOURCE_ALIASES: Record<string, SourceKey> = {
+  tencent: 'qq',
+  tx: 'qq',
+  qqmusic: 'qq',
+  '163': 'netease',
+  neteasecloud: 'netease',
+  'netease-cloud-music': 'netease',
+  '126': 'netease',
+  netease: 'netease',
+  qq: 'qq',
+  kugou: 'kugou',
+  kg: 'kugou',
+  kuwo: 'kuwo',
+  kw: 'kuwo',
+  migu: 'migu',
+  mg: 'migu',
+  qianqian: 'qianqian',
+  '91q': 'qianqian',
+  baidu: 'qianqian',
+  soda: 'soda',
+  qishui: 'soda',
+  douyin: 'soda',
+};
+
+/** MPlayer 规范音乐源键（不含 local——本地文件不是第三方源可解析的对象）。 */
+const TIER3_MUSIC_SOURCES: ReadonlySet<string> = new Set([
+  'netease',
+  'qq',
+  'kugou',
+  'kuwo',
+  'migu',
+  'qianqian',
+  'soda',
+]);
+
+/** 合法 source 值清单（报错/文档用）。 */
+const TIER3_SOURCE_VALUES = [...TIER3_MUSIC_SOURCES].join('/');
+
+/** 规范化 source 值：去空白/小写后查别名表，再校验是否落在规范集内。
+ *  **不认识的值返回 undefined（等同未声明）**——只归一化不校验时，`tidal`/拼写错误这类
+ *  值会通过清单校验但永不匹配：解析腿静默变死源，搜索腿还会把候选的 `sourceType`
+ *  污染成该值 → 播放时 `decideRoute` 找不到客户端 → 用户看到「可能为 VIP/无版权」的
+ *  错误提示（t6 §4.2②）。合法值见 TIER3_SOURCE_VALUES（含 `tencent`/`tx` 等别名）。 */
+export function normalizeTier3Source(value: string): SourceKey | undefined {
+  const key = value.trim().toLowerCase();
+  const canonical = SOURCE_ALIASES[key] ?? key;
+  return TIER3_MUSIC_SOURCES.has(canonical) ? (canonical as SourceKey) : undefined;
 }
 
-/** hostname 精确或子域匹配（`example.com` 匹配自身与 `*.example.com`）。 */
-function tier3HostIs(host: string, domain: string): boolean {
-  return host === domain || host.endsWith(`.${domain}`);
+/**
+ * 该源是否可用于解析「来源为 songSource 的歌」（ADR-0014 决策 6）。
+ *
+ * - 显式声明且与歌曲来源一致 → 可用；
+ * - 显式声明但不一致 → 不可用（原样，防跨源错配）；
+ * - **未声明**：search-then-resolve 可用（它自带 isExactMatch 歌名/歌手校验，
+ *   即便源不对也由内容匹配兜住）；**url-resolver 不可用**——该腿没有任何内容级
+ *   校验，放行一个不声明归属的 id 型解析器，就等于把 A 源的 id 塞给 B 源的接口，
+ *   可能返回完全不同的歌（这正是 source 字段原本要防的事）。
+ */
+function isSourceUsableFor(source: Tier3Source, songSource: SourceKey): boolean {
+  const declared = tier3SourceSource(source);
+  if (declared) return declared === songSource;
+  return source.kind !== 'url-resolver';
 }
 
-/** 源适用的原始音源：显式声明的 source 优先；未声明时从 URL 形态推断（两种 kind 都推断，
- *  避免酷我/酷狗等歌曲把自身 id 塞给 QQ/网易专用解析接口，导致返回完全不同的歌）。
- *  域名类标记只比对 hostname（精确/子域），不做整串 substring——126.net / 91q.com
- *  这类 substring 会被任意主机命中（CodeQL 高危告警「Incomplete URL substring
- *  sanitization」）；路径类标记（/qq、kw.php）与域名无关，保留 substring。 */
+/** 源适用的原始音源：**只认显式声明的 source**（ADR-0014 决策 6，含别名归一化）。
+ *
+ *  原实现会在 source 缺省时按 URL host/路径推断（越权猜测），猜不出则返回
+ *  undefined 让该源参与**任意源**的歌解析——而 url-resolver 这条腿没有任何
+ *  内容级校验（search-then-resolve 有 isExactMatch，url-resolver 只有域名白名单
+ *  + 字节嗅探），于是「猜不出」等于打开跨源错播通道：A 源的 id 被塞给 B 源的
+ *  解析接口，可能返回完全不同的歌。本函数原先的注释正是声称要防这件事。
+ *
+ *  现在：未声明即 undefined，由调用方决定是否拒绝（见 isSourceUsableFor）。 */
 export function tier3SourceSource(source: Tier3Source): SourceKey | undefined {
-  if (source.source) return source.source as SourceKey;
-  const hosts = [source.resolve.url, source.search?.url || '']
-    .map(tier3HostOf)
-    .filter(Boolean);
-  const hostText = hosts.join(' ');
-  const path = `${source.resolve.url} ${source.search?.url || ''}`.toLowerCase();
-  if (hostText.includes('tencent') || path.includes('/qq') || hostText.includes('qqmusic')) return 'qq';
-  if (hostText.includes('netease') || hostText.includes('music.163') || hosts.some((h) => tier3HostIs(h, '126.net'))) return 'netease';
-  if (hostText.includes('kuwo') || path.includes('kw.php')) return 'kuwo';
-  if (hostText.includes('kugou')) return 'kugou';
-  if (hostText.includes('migu')) return 'migu';
-  if (hostText.includes('qianqian') || hosts.some((h) => tier3HostIs(h, '91q.com'))) return 'qianqian';
-  if (hostText.includes('soda') || hostText.includes('qishui')) return 'soda';
-  return undefined;
+  if (!source.source) return undefined;
+  return normalizeTier3Source(source.source);
 }
 
 async function resolveTier3(song: Song): Promise<string> {
@@ -833,12 +946,22 @@ async function resolveTier3(song: Song): Promise<string> {
   console.info(`[tier3] 开始解析: 《${song.name}》${song.artist} (${song.sourceType}, id=${song.id})`);
   for (const subscription of state.subscriptions) {
     for (const source of subscription.manifest.sources) {
-      const effectiveSource = tier3SourceSource(source);
-      if (effectiveSource && effectiveSource !== song.sourceType) {
-        console.info(`[tier3] 源 ${source.id} 跳过（source mismatch: ${effectiveSource} != ${song.sourceType}）`);
+      // 归属判定（ADR-0014 决策 6）：显式声明须一致；未声明的 url-resolver 拒绝。
+      // 计数在跳过**之前**取——原实现在 continue 之后才取 stats，导致被跳过的源
+      // 连计数都不进，「源不够用」永远无法归因到「被过滤掉」还是「源本身挂了」。
+      if (!isSourceUsableFor(source, song.sourceType)) {
+        const declared = tier3SourceSource(source);
+        statsFor(source.id).skipped++;
+        console.info(
+          `[tier3] 源 ${source.id} 跳过（${declared
+            ? `source mismatch: ${declared} != ${song.sourceType}`
+            : source.source
+              ? `source 值 '${source.source}' 不是已知音乐源（合法值：${TIER3_SOURCE_VALUES} 及其别名）`
+              : `未声明 source 的 url-resolver，拒绝以防跨源错配`
+            }）`,
+        );
         continue;
       }
-      const stats = tier3Stats.get(source.id) ?? { hits: 0, misses: 0 };
       try {
         let url = '';
         if (source.kind === 'url-resolver') {
@@ -847,18 +970,18 @@ async function resolveTier3(song: Song): Promise<string> {
           url = await resolveSearchThenResolve(song, source);
         }
         if (url) {
-          stats.hits++;
-          tier3Stats.set(source.id, stats);
+          statsFor(source.id).hits++;
           console.info(`[tier3] 命中 source=${source.id}: ${url}`);
           return url;
         }
         console.info(`[tier3] source=${source.id} 未命中`);
       } catch (e) {
-        console.warn(`[tier3] source=${source.id} 失败: ${(e as Error)?.message || e}`);
+        const msg = (e as Error)?.message || String(e);
+        console.warn(`[tier3] source=${source.id} 失败: ${msg}`);
+        statsFor(source.id).lastError = msg;
         // 单源失败继续下一条；全失败返回空串由 sourceRouter 回退。
       }
-      stats.misses++;
-      tier3Stats.set(source.id, stats);
+      statsFor(source.id).misses++;
     }
   }
   console.warn(`[tier3] 全部订阅源未命中，回退下一链路: 《${song.name}》${song.artist}`);
