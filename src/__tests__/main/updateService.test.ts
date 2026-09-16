@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { UpdateService } from '../../main/services/updateService';
+import fs from 'fs';
+import path from 'path';
+import { UpdateService, platformAssetName } from '../../main/services/updateService';
 import { UPDATE_SOURCE_DEFS } from '@mplayer/core';
 
 vi.mock('electron-updater', () => ({
@@ -587,6 +589,75 @@ describe('UpdateService', () => {
       await tick();
       fireOnce(autoUpdater, 'error', new Error('cleanup'));
       await expect(first).rejects.toThrow('cleanup');
+    });
+  });
+
+  describe('更新资产名一致性（#350）', () => {
+    /** electron-builder.yml 顶层块里的 artifactName 模板（静态扫描，不引入 YAML 依赖） */
+    function artifactNameTemplate(block: string): string {
+      const yml = fs
+        .readFileSync(path.resolve(__dirname, '../../../electron-builder.yml'), 'utf8')
+        .split('\n');
+      const start = yml.findIndex(line => line.trim() === block + ':');
+      if (start < 0) throw new Error('electron-builder.yml 缺少 ' + block + ': 块');
+      for (let i = start + 1; i < yml.length; i++) {
+        if (yml[i].trim() && !/^\s/.test(yml[i])) break; // 到达下一个顶层块
+        const matched = /^\s+artifactName:\s*(\S.*?)\s*$/.exec(yml[i]);
+        if (matched) return matched[1];
+      }
+      throw new Error(block + ' 必须显式声明 artifactName：默认模板带空格，会让 feed 名与资产名分叉');
+    }
+
+    /** electron-builder 变量替换（本测试只涉及这三个宏） */
+    function renderName(tpl: string, version: string): string {
+      return tpl
+        .replace('${productName}', 'MPlayer')
+        .replace('${version}', version)
+        .replace('${ext}', 'exe');
+    }
+
+    it('win nsis/portable 产物名显式无空格，且与客户端兜底名逐字一致', () => {
+      const nsisTpl = artifactNameTemplate('nsis');
+      const portableTpl = artifactNameTemplate('portable');
+
+      for (const tpl of [nsisTpl, portableTpl]) {
+        expect(tpl).not.toContain(' '); // 含空格 → GitHub 上传时被改写成 `.`
+      }
+      for (const name of [renderName(nsisTpl, '1.8.1'), renderName(portableTpl, '1.8.1')]) {
+        expect(name).toMatch(/^[A-Za-z0-9._-]+$/); // GitHub 只保留这些字符
+      }
+      expect(renderName(nsisTpl, '1.8.1')).toBe('MPlayer-Setup-1.8.1.exe');
+      expect(renderName(portableTpl, '1.8.1')).toBe('MPlayer-1.8.1.exe');
+      // 磁盘名 == feed 名 == 资产名 == 客户端兜底名
+      expect(platformAssetName('win32', '1.8.1')).toBe(renderName(nsisTpl, '1.8.1'));
+    });
+
+    it('mac / linux 兜底名与既有产物名一致（本就不含空格）', () => {
+      expect(platformAssetName('darwin', '1.8.1')).toBe('MPlayer-1.8.1.dmg');
+      expect(platformAssetName('linux', '1.8.1')).toBe('MPlayer-1.8.1.AppImage');
+    });
+
+    it('feed 未给出资产名时 Windows 兜底名走连字符（#350）', async () => {
+      const svc = new UpdateService({ autoProbeOnCheck: false });
+      mockDbSettings({});
+
+      const { autoUpdater } = await import('electron-updater');
+      mockCheckPending(autoUpdater);
+
+      const promise = svc.checkForUpdates(5000);
+      await tick();
+      fireOnce(autoUpdater, 'update-available', { version: '1.8.1' }); // 无 files 字段
+      await promise;
+
+      const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+      try {
+        const res = await svc.openDownloadInBrowser();
+        expect(res.url).toBe(
+          'https://gh-proxy.com/https://github.com/fuzz1og/mplayer/releases/latest/download/MPlayer-Setup-1.8.1.exe',
+        );
+      } finally {
+        platformSpy.mockRestore();
+      }
     });
   });
 

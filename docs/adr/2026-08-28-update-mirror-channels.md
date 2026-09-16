@@ -22,6 +22,7 @@ GitHub 直连在国内不可靠，v1.7.x 更新链路出现三类故障：元数
 - 延迟探针 ≠ 吞吐（ghfast 实测低延迟限速大文件），已用停滞降权缓解；按吞吐采样测速列入后续优化（#262）。
 - `syncProxyEnv` 未配置时钉死直连，系统代理（Clash 等）对更新器不可见；是否改为跟随系统代理待定。
 - WSL2 dev 环境：Cloudflare 镜像诱导 Chromium 升级 QUIC(UDP 443)，镜像网络 UDP 转发不可靠导致下载 0% 停滞；dev 已 `disable-quic`（打包产物暂保持默认，待 Windows/mac 实测）。
+- **产物名必须无空格（#350）**：electron-builder 写 `latest.yml` 时把空格换成 `-`（`MPlayer-Setup-1.8.1.exe`），而 `gh release upload` 上传的磁盘原名被 GitHub 规范成 `.`（`MPlayer.Setup.1.8.1.exe`）——Windows 默认产物模板带空格，三者分叉会让更新直链 404（v1.7.3–v1.8.1 全中，镜像只是把 GitHub 的 404 原样转发）。win 的 `nsis`/`portable` 已显式声明无空格 `artifactName`，保证磁盘名 = feed 名 = 资产名；改产物名模板前先看 `electron-builder.yml` 注释与 `src/__tests__/main/updateService.test.ts` 的一致性测试。
 
 ## 验收截图（移动端真机）
 
