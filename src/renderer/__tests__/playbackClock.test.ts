@@ -123,4 +123,33 @@ describe('playbackClock（桌面播放时钟：采样节奏 / 暂停 / seek / �
     expect(vi.getTimerCount()).toBe(0);
     expect(listener).not.toHaveBeenCalled();
   });
+
+  it('seek 后传输层尚未追上时保持乐观位置（不回跳），追平后恢复采样', () => {
+    position = 10;
+    clock.setPlaying(true);
+    clock.setPosition(42);
+    expect(clock.getSnapshot().position).toBe(42);
+
+    // HTML5 media 的 currentTime 赋值是异步的：采样仍读到旧值 10，
+    // 不得把刚 seek 到的 42 拽回去（进度条回跳）
+    vi.advanceTimersByTime(DEFAULT_PLAYBACK_INTERVAL_MS * 2);
+    expect(clock.getSnapshot().position).toBe(42);
+
+    // 传输层追平（容差内）→ 恢复正常采样
+    position = 42.4;
+    vi.advanceTimersByTime(DEFAULT_PLAYBACK_INTERVAL_MS);
+    expect(clock.getSnapshot().position).toBe(42.4);
+  });
+
+  it('seek 后传输层始终追不上：超时兜底恢复采样（不把进度条冻结在目标位置）', () => {
+    position = 10;
+    clock.setPlaying(true);
+    clock.setPosition(42);
+
+    vi.advanceTimersByTime(1000); // 未到 1500ms 兜底窗口
+    expect(clock.getSnapshot().position).toBe(42);
+
+    vi.advanceTimersByTime(1000); // 越过窗口 → 接受传输层真实位置
+    expect(clock.getSnapshot().position).toBe(10);
+  });
 });
