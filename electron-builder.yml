@@ -42,10 +42,20 @@ win:
         - x64
   verifyUpdateCodeSignature: false
 nsis:
+  # 显式声明无空格产物名（#350）：默认模板 `${productName} Setup ${version}.${ext}` 带空格，
+  # electron-builder 写 latest.yml 时会把空格换成 `-`（MPlayer-Setup-1.8.1.exe），
+  # 而 CI 是 `--publish never` + publish job `gh release upload` 上传磁盘原名，
+  # GitHub 又把空格规范成 `.`（MPlayer.Setup.1.8.1.exe）→ feed 名与资产名分叉 → 更新 404。
+  # 磁盘名 = feed 名 = 资产名，三者必须逐字一致且无空格（一致性测试见
+  # src/__tests__/main/updateService.test.ts）。
+  artifactName: ${productName}-Setup-${version}.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+portable:
+  # 同理：默认 `${productName} ${version}.${ext}` 亦含空格
+  artifactName: ${productName}-${version}.${ext}
 mac:
   icon: resources/icon.png
   # electron-builder 26 起公证不再靠 env 自动检测隐式触发，需显式开启（凭据仍走 CI 注入的

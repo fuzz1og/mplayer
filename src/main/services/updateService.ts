@@ -44,6 +44,24 @@ const PROBE_CACHE_TTL_MS = 10 * 60 * 1000;
 const DOWNLOAD_FIRST_BYTE_MS = 25000;
 const DOWNLOAD_STALL_MS = 30000;
 
+/**
+ * 平台兜底资产名（#350）：官方 feed（latest.yml）没给出资产名时用它拼直链。
+ * 必须与 electron-builder.yml 里声明的产物名逐字一致——Windows 曾用默认模板
+ * `MPlayer Setup 1.8.1.exe`（空格），electron-builder 写进 feed 时改成 `MPlayer-Setup-1.8.1.exe`、
+ * GitHub 收资产时改成 `MPlayer.Setup.1.8.1.exe`，三者分叉导致下载 404。
+ * 产物名现已显式声明为无空格连字符形式，这里同步（一致性由测试守住）。
+ */
+export function platformAssetName(platform: NodeJS.Platform, version: string): string {
+  switch (platform) {
+    case 'darwin':
+      return `MPlayer-${version}.dmg`;
+    case 'win32':
+      return `MPlayer-Setup-${version}.exe`;
+    default:
+      return `MPlayer-${version}.AppImage`;
+  }
+}
+
 export class UpdateService {
   private mainWindow: BrowserWindow | null = null;
   private status: UpdateStatus = { status: 'idle' };
@@ -452,13 +470,7 @@ export class UpdateService {
     const def = this.activeSource ?? this.attemptOrder[0];
     const version = this.status.version;
     if (!def || !version) return { ok: false, error: '请先检查更新' };
-    const platformFallback =
-      process.platform === 'darwin'
-        ? `MPlayer-${version}.dmg`
-        : process.platform === 'win32'
-          ? `MPlayer.Setup.${version}.exe`
-          : `MPlayer-${version}.AppImage`;
-    const filename = this.lastAssetFiles[0] ?? platformFallback;
+    const filename = this.lastAssetFiles[0] ?? platformAssetName(process.platform, version);
     const url = buildAssetUrl(def, filename);
     try {
       await shell.openExternal(url);
