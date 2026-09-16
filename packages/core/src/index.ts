@@ -175,6 +175,7 @@ export {
   searchTier3Songs,
   getTier3Stats,
   clearTier3Stats,
+  normalizeTier3Source,
 } from './tier3/tier3Api.js';
 export type {
   Tier3Manifest,
