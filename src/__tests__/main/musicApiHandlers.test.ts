@@ -11,8 +11,6 @@ import type { MusicApiMethodMap } from '@/shared/musicApiContract';
 import { clearDirectClients, registerDirectClient } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 
-// mock core api 依赖
-
 import { registerMusicApiCall } from '../../main/ipc/musicApiHandlers';
 
 /** 拿到 ipcMain.handle('musicApi:call', ...) 注册的处理器 */

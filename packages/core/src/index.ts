@@ -130,6 +130,7 @@ export {
   resolvePlayableSongRouted,
   resolvePlayableSongDirect,
   setTier3Resolver,
+  pickToplistGroup,
   pickToplistSongs,
   getToplistSongs,
 } from './shared/sourceRouter.js';

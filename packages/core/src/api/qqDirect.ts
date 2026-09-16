@@ -1,5 +1,5 @@
 import CryptoJS from 'crypto-js';
-import type { Song } from '../types/index.js';
+import type { RankMeta, Song } from '../types/index.js';
 import type { DirectSourceClient, ToplistGroup } from '../shared/sourceRouter.js';
 import { request } from './transport.js';
 import { md5 } from '../utils/hash.js';
@@ -323,6 +323,32 @@ function toplistUrl(topid: number, date: string): string {
   return `${TOPLIST_URL}?${p.toString()}`;
 }
 
+/** 名次字段归一：v8 榜单把 `cur_count`/`old_count`/`in_count` 以**字符串**返回
+ * （2026-09-16 实测 topid=26/27、song_num=5/50/100 均为 str）；非数值 → undefined。 */
+function toCount(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * 榜单元数据（#332 决策 3「通用组件 + 可选列」）。
+ * 名次三件套在 **item 上**（与 data 同级，不在 data 内——item keys:
+ * Franking_value/cur_count/data/in_count/old_count）；QQ 是三源中唯一提供
+ * 「上期名次 / 在榜周数」的源，此前被本函数整批丢弃。
+ * 当前名次不落结构（消费方按数组索引推导）；`old_count === 0` = 新进榜 → null；
+ * `in_count === 0` = 本周新进、无「在榜 N 周」可言 → 不落值。
+ */
+function toRankMeta(item: any): RankMeta | undefined {
+  const prev = toCount(item?.old_count);
+  const weeks = toCount(item?.in_count);
+  if (prev === undefined && weeks === undefined) return undefined;
+  return {
+    ...(prev === undefined ? {} : { prevRank: prev === 0 ? null : prev }),
+    ...(weeks === undefined || weeks === 0 ? {} : { weeks }),
+  };
+}
+
 /**
  * v8 榜单单曲 → Song（原门面 mapQQToplistItem 语义，HotlistSong 视图废）。
  * id **优先取 songmid**：GetVkey 直连腿按 songmid 键控，数字 id 走直连恒为空
@@ -333,18 +359,7 @@ function mapToplistTrack(item: any): Song | null {
   const songData = item?.data;
   if (!songData) return null;
   const albumMid = songData.album?.mid || '';
-  // 名次三件套在 **item 上**（与 data 同级），不在 data 内——2026-09-14 实测确认
-  // （item keys: Franking_value/cur_count/data/in_count/old_count）。
-  // QQ 是三源中唯一提供「上期名次 / 在榜周数」的源；此前被本函数整批丢弃。
-  // old_count === 0 表示新进榜（无可比上期），映射为 null。
-  const rankMeta =
-    typeof item.cur_count === 'number' || typeof item.old_count === 'number' || typeof item.in_count === 'number'
-      ? {
-          rank: typeof item.cur_count === 'number' ? item.cur_count : undefined,
-          prevRank: typeof item.old_count === 'number' ? (item.old_count === 0 ? null : item.old_count) : undefined,
-          weeks: typeof item.in_count === 'number' ? item.in_count : undefined,
-        }
-      : undefined;
+  const rankMeta = toRankMeta(item);
   return {
     id: songData.mid || songData.id?.toString() || '',
     name: songData.name || '',

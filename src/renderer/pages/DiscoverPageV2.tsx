@@ -16,13 +16,45 @@ import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
-import { findExactMatch, pickToplistSongs, SOURCE_DISPLAY_NAMES, TOPLIST_SOURCE_IDS } from '@mplayer/core';
-import type { Album, Song, DiscoverPlaylist, Artist, ToplistSourceKey } from '@mplayer/core';
+import { findExactMatch, pickToplistGroup, SOURCE_DISPLAY_NAMES, TOPLIST_SOURCE_IDS } from '@mplayer/core';
+import type { Album, Song, DiscoverPlaylist, Artist, ChartKind, ToplistGroup, ToplistSourceKey } from '@mplayer/core';
 
-/** 榜单源切换的可选项（#332 选项 A：单元榜 + 源切换）。 */
-const CHART_SOURCE_OPTIONS: ToplistSourceKey[] = ['netease', 'qq', 'kugou'];
+/** 榜单源切换的可选项（#332 选项 A：单元榜 + 源切换）；键域取自 core，不本地维护字面量。 */
+const CHART_SOURCE_OPTIONS = Object.keys(TOPLIST_SOURCE_IDS) as ToplistSourceKey[];
+/** 榜单名兜底（源未返回该榜时用，见 toChartEntry）。 */
+const CHART_KIND_LABELS: Record<ChartKind, string> = { hot: '热歌榜', new: '新歌榜' };
 /** 榜单缓存 TTL（原 src/shared/chart.ts 的 CHART_CACHE_TTL，随聚合下线一并内联）。 */
 const CHART_TTL = 30 * 60 * 1000;
+
+/** 单榜数据：榜单名（core `ToplistGroup.name`——三源公共层唯一公共字段）+ 曲目。 */
+interface ChartEntry {
+  name: string;
+  songs: Song[];
+}
+
+/** 空榜（loading/失败占位）；`name` 为空时标题回落到 CHART_KIND_LABELS。 */
+const EMPTY_CHART: ChartEntry = { name: '', songs: [] };
+
+/** 从 getToplists 全组结果取单榜；无匹配 = 空榜（该源未实现/该榜缺失）。 */
+function toChartEntry(groups: ToplistGroup[] | null, source: ToplistSourceKey, sourceId: number | string): ChartEntry {
+  const group = pickToplistGroup(groups || [], source, sourceId);
+  return { name: group?.name ?? '', songs: group?.songs ?? [] };
+}
+
+/** 分段 pill 按钮样式（源切换与搜索结果二级 tab 共用，避免两处漂移；文字走语义 token 不写魔法色）。 */
+function pillStyle(active: boolean, extra?: React.CSSProperties): React.CSSProperties {
+  return {
+    border: 'none',
+    cursor: 'pointer',
+    borderRadius: 'var(--radius-full)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: active ? 600 : 400,
+    color: active ? 'var(--text-inverse)' : 'var(--text-secondary)',
+    backgroundColor: active ? 'var(--accent)' : 'var(--bg-hover)',
+    transition: 'background-color 0.15s ease',
+    ...extra,
+  };
+}
 
 type TabKey = 'charts' | 'albums' | 'playlists' | 'artists';
 type AreaKey = 'ALL' | 'ZH' | 'EA' | 'KR' | 'JP';
@@ -58,8 +90,8 @@ function loadSavedTab(): TabKey {
   return (VALID_TABS as string[]).includes(saved as string) ? (saved as TabKey) : 'charts';
 }
 
-/** 按源缓存榜单（#332：不再有跨源聚合，缓存以源为键）。 */
-type ChartCache = Record<string, { hot: Song[]; new: Song[]; timestamp: number }>;
+/** 按源缓存榜单（#332：不再有跨源聚合，缓存以源为键；键域 = ToplistSourceKey）。 */
+type ChartCache = Partial<Record<ToplistSourceKey, { hot: ChartEntry; new: ChartEntry; timestamp: number }>>;
 
 interface TabCache {
   albums: { data: Album[] | null; timestamp: number };
@@ -74,8 +106,8 @@ const DiscoverPageV2: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabKey>(loadSavedTab);
   const [chartSource, setChartSource] = useState<ToplistSourceKey>('netease');
-  const [hotSongs, setHotSongs] = useState<Song[]>([]);
-  const [newSongs, setNewSongs] = useState<Song[]>([]);
+  const [hotChart, setHotChart] = useState<ChartEntry>(EMPTY_CHART);
+  const [newChart, setNewChart] = useState<ChartEntry>(EMPTY_CHART);
   const [hotLoading, setHotLoading] = useState(true);
   const [newLoading, setNewLoading] = useState(true);
   const [hotError, setHotError] = useState<string | null>(null);
@@ -122,7 +154,7 @@ const DiscoverPageV2: React.FC = () => {
 
     // SWR: cached data stays visible while the background refresh runs
     if (cached) {
-      setHotSongs(cached.hot); setNewSongs(cached.new);
+      setHotChart(cached.hot); setNewChart(cached.new);
       setHotLoading(false); setNewLoading(false);
     } else {
       setHotLoading(true); setNewLoading(true);
@@ -136,11 +168,11 @@ const DiscoverPageV2: React.FC = () => {
       if (!mountedRef.current || !isCurrentFetch()) return;
 
       const ids = TOPLIST_SOURCE_IDS[source];
-      const hot = pickToplistSongs(groups || [], source, ids.hot);
-      const neu = pickToplistSongs(groups || [], source, ids.new);
-      setHotSongs(hot);
-      setNewSongs(neu);
-      cacheRef.current[source] = { hot, new: neu, timestamp: Date.now() };
+      const hot = toChartEntry(groups, source, ids.hot);
+      const fresh = toChartEntry(groups, source, ids.new);
+      setHotChart(hot);
+      setNewChart(fresh);
+      cacheRef.current[source] = { hot, new: fresh, timestamp: Date.now() };
     } catch (err: any) {
       if (!mountedRef.current || !isCurrentFetch()) return;
       if (!cached) {
@@ -235,7 +267,17 @@ const DiscoverPageV2: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'charts') {
       const cached = cacheRef.current[chartSource];
-      if (!cached || Date.now() - cached.timestamp > CHART_TTL) fetchCharts(chartSource);
+      if (!cached || Date.now() - cached.timestamp > CHART_TTL) {
+        fetchCharts(chartSource);
+      } else {
+        // 命中未过期缓存：必须把该源榜单铺回状态，否则会沿用上一个源的曲目（切源串榜）
+        setHotChart(cached.hot);
+        setNewChart(cached.new);
+        setHotError(null);
+        setNewError(null);
+        setHotLoading(false);
+        setNewLoading(false);
+      }
     } else if (activeTab === 'albums') {
       setAlbumsError(null);
       fetchAlbums(albumsArea);
@@ -312,6 +354,10 @@ const DiscoverPageV2: React.FC = () => {
     delete cacheRef.current[chartSource];
     fetchCharts(chartSource);
   };
+
+  /** 面板标题 = 源名 · 榜单名（榜单名取自 core ToplistGroup.name，缺失时回落通用名）。 */
+  const chartTitle = (kind: ChartKind, entry: ChartEntry) =>
+    `${SOURCE_DISPLAY_NAMES[chartSource]} · ${entry.name || CHART_KIND_LABELS[kind]}`;
 
   const searchLoading = useSearchStore((s) => s.loading);
   const searchLoadingMore = useSearchStore((s) => s.loadingMore);
@@ -419,14 +465,9 @@ const DiscoverPageV2: React.FC = () => {
               key={tab.key}
               aria-pressed={activeSearchTab === tab.key}
               onClick={() => setActiveSearchTab(tab.key)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '6px 16px', borderRadius: 'var(--radius-full)', border: 'none', cursor: 'pointer',
-                fontSize: 'var(--text-sm)', fontWeight: activeSearchTab === tab.key ? 600 : 400,
-                color: activeSearchTab === tab.key ? '#fff' : 'var(--text-secondary)',
-                backgroundColor: activeSearchTab === tab.key ? 'var(--accent)' : 'var(--bg-hover)',
-                transition: 'all 0.15s ease',
-              }}
+              style={pillStyle(activeSearchTab === tab.key, {
+                display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 16px',
+              })}
             >
               {tab.label}
               {tab.count > 0 && (
@@ -614,17 +655,7 @@ const DiscoverPageV2: React.FC = () => {
                   key={s}
                   onClick={() => setChartSource(s)}
                   aria-pressed={chartSource === s}
-                  style={{
-                    padding: '4px 14px',
-                    borderRadius: 'var(--radius-full)',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: 'var(--text-sm)',
-                    fontWeight: chartSource === s ? 600 : 400,
-                    color: chartSource === s ? '#fff' : 'var(--text-secondary)',
-                    backgroundColor: chartSource === s ? 'var(--accent)' : 'var(--bg-hover)',
-                    transition: 'background-color 0.15s ease',
-                  }}
+                  style={pillStyle(chartSource === s, { padding: '4px 14px' })}
                 >
                   {SOURCE_DISPLAY_NAMES[s]}
                 </button>
@@ -632,9 +663,9 @@ const DiscoverPageV2: React.FC = () => {
             </div>
             <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 'var(--space-6)' }}>
               <ChartPanel
-                title={`${SOURCE_DISPLAY_NAMES[chartSource]} · 热歌榜`}
+                title={chartTitle('hot', hotChart)}
                 chartId="hot"
-                songs={hotSongs}
+                songs={hotChart.songs}
                 loading={hotLoading}
                 error={hotError}
                 onPlay={handlePlaySong}
@@ -642,9 +673,9 @@ const DiscoverPageV2: React.FC = () => {
                 onRetry={handleRetryCharts}
               />
               <ChartPanel
-                title={`${SOURCE_DISPLAY_NAMES[chartSource]} · 新歌榜`}
+                title={chartTitle('new', newChart)}
                 chartId="new"
-                songs={newSongs}
+                songs={newChart.songs}
                 loading={newLoading}
                 error={newError}
                 onPlay={handlePlaySong}

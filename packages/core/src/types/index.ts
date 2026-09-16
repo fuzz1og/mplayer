@@ -26,20 +26,19 @@ export interface SongBase {
 }
 
 /**
- * 榜单元数据（#332）。**仅榜单渲染用**，不参与收藏/歌单/历史的语义。
+ * 榜单元数据（#332 决策 3）。**仅榜单渲染用**，不参与收藏/歌单/历史的语义。
  *
- * 各源提供程度不同——实测三源公共只有「名次」（且名次本就由数组索引推导）；
- * 「上期名次 / 在榜周数」**只有 QQ 提供**（`cur_count`/`old_count`/`in_count`）。
- * 网易 `lastRank` 语义不明（实测与当前位次无对应）故**弃用**；酷狗无对应字段。
+ * 名次本身不落结构——消费方按 `songs` 数组索引推导（见 `sourceRouter.ts`）；
+ * 这里只承载「数组索引给不出」的字段：实测三源里**只有 QQ** 提供
+ * 「上期名次 / 在榜周数」（`old_count`/`in_count`）。网易 `lastRank` 语义不明
+ * （实测与当前位次无对应）故**弃用**；酷狗无对应字段。
  * 消费方一律按「有则渲染、无则省略」处理——通用组件 + 可选列，不做按源分支的组件。
  */
 export interface RankMeta {
-  /** 当前名次（1-based）。缺省时消费方按数组索引推导。 */
-  rank?: number;
-  /** 上期名次；`null` = 新进榜；`undefined` = 该源不提供。 */
+  /** 上期名次；`null` = 新进榜（无可比上期）；`undefined` = 该源不提供。 */
   prevRank?: number | null;
-  /** 在榜周数；`undefined` = 该源不提供。 */
-  weeks?: number | null;
+  /** 在榜周数；`undefined` = 该源不提供（含本周新进：值为 0 时不落）。 */
+  weeks?: number;
 }
 
 export interface Song extends SongBase {

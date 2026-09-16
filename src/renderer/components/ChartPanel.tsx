@@ -2,18 +2,33 @@ import React from 'react';
 import { Music2, AlertCircle, Play } from 'lucide-react';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
-import type { Song } from '@mplayer/core';
+import type { ChartKind, Song } from '@mplayer/core';
 
 interface ChartPanelProps {
   title: string;
-  chartId: string;
+  chartId: ChartKind;
   /** 单源榜单曲目（ADR/decision #332：回归单元榜 + 源切换，不再有跨源聚合与折叠分组）。 */
   songs: Song[];
   loading: boolean;
   error: string | null;
-  onPlay: (song: Song, chartId?: string) => void;
-  isCurrentSong: (songId: string, sourceType?: string, chartId?: string) => boolean;
+  onPlay: (song: Song, chartId?: ChartKind) => void;
+  isCurrentSong: (songId: string, sourceType?: string, chartId?: ChartKind) => boolean;
   onRetry?: () => void;
+}
+
+/**
+ * 名次变化列（只有 QQ 提供 `old_count`）：
+ * 文案 = `''`（该源不提供）/ `NEW`（新进榜）/ `—`（持平）/ `↑n` / `↓n`；
+ * 配色沿用国内榜单惯例（红 = 名次前进，绿 = 后退）。`prevRank === null` = 新进榜。
+ */
+function rankDelta(prevRank: number | null | undefined, rank: number): { label: string; color: string } {
+  if (prevRank === undefined) return { label: '', color: 'var(--text-tertiary)' };
+  if (prevRank === null) return { label: 'NEW', color: 'var(--accent)' };
+  const delta = prevRank - rank;
+  if (delta === 0) return { label: '—', color: 'var(--text-tertiary)' };
+  return delta > 0
+    ? { label: `↑${delta}`, color: 'var(--danger)' }
+    : { label: `↓${-delta}`, color: 'var(--success)' };
 }
 
 /**
@@ -37,12 +52,16 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   isCurrentSong,
   onRetry,
 }) => {
+  const heading = (
+    <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
+      {title}
+    </h3>
+  );
+
   if (loading) {
     return (
       <div style={{ flex: 1, minWidth: 0 }}>
-        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
-          {title}
-        </h3>
+        {heading}
         <SongListSkeleton rowCount={15} showIndex />
       </div>
     );
@@ -51,9 +70,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   if (error) {
     return (
       <div style={{ flex: 1, minWidth: 0 }}>
-        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
-          {title}
-        </h3>
+        {heading}
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--danger)' }}>
           <AlertCircle size={22} style={{ marginBottom: '8px' }} />
           <div style={{ fontSize: 'var(--text-base)', marginBottom: '16px' }}>{error}</div>
@@ -63,7 +80,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
               style={{
                 padding: '8px 16px',
                 backgroundColor: 'var(--accent)',
-                color: 'white',
+                color: 'var(--text-inverse)',
                 border: 'none',
                 borderRadius: 'var(--radius-sm)',
                 cursor: 'pointer',
@@ -82,9 +99,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   if (songs.length === 0) {
     return (
       <div style={{ flex: 1, minWidth: 0 }}>
-        <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
-          {title}
-        </h3>
+        {heading}
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
           <Music2 size={24} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
           <div>暂无排行榜数据</div>
@@ -99,22 +114,11 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   const hasWeeks = songs.some((s) => s.rankMeta?.weeks !== undefined);
 
   const renderRow = (song: Song, index: number) => {
-    const rank = song.rankMeta?.rank ?? index + 1;
-    const prev = song.rankMeta?.prevRank;
+    // 名次 = 数组索引（#332 决策 3：名次不落结构）
+    const rank = index + 1;
     const weeks = song.rankMeta?.weeks;
     const current = isCurrentSong(song.id, song.sourceType, chartId);
-    // 名次变化：prevRank === null 表示新进榜；undefined 表示该源不提供。
-    // delta > 0 = 名次前进（数字变小），< 0 = 后退。
-    const delta: number | null = prev === undefined || prev === null ? null : prev - rank;
-    // 文案与配色在此处定死，避免 JSX 里对可空值反复收窄（TS 无法跨三元链推断）。
-    const deltaLabel = prev === undefined ? '' : prev === null ? 'NEW' : delta === 0 ? '—' : delta !== null && delta > 0 ? `↑${delta}` : delta !== null ? `↓${-delta}` : '';
-    const deltaColor = prev === undefined || delta === null || delta === 0
-      ? 'var(--text-tertiary)'
-      : prev === null
-        ? 'var(--accent)'
-        : delta > 0
-          ? 'var(--danger)'
-          : 'var(--success)';
+    const delta = rankDelta(song.rankMeta?.prevRank, rank);
 
     return (
       <div
@@ -146,9 +150,9 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
           <div style={{
             width: '34px', textAlign: 'center', fontSize: 'var(--text-xs)',
             fontVariantNumeric: 'tabular-nums', flexShrink: 0,
-            color: deltaColor,
+            color: delta.color,
           }}>
-            {deltaLabel}
+            {delta.label}
           </div>
         )}
 
@@ -174,7 +178,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
           </div>
           <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {song.artist}
-            {hasWeeks && weeks != null ? ` · 在榜 ${weeks} 周` : ''}
+            {hasWeeks && weeks ? ` · 在榜 ${weeks} 周` : ''}
           </div>
         </div>
 
@@ -186,11 +190,12 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   };
 
   return (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
-        {title}
-      </h3>
-      <div>{songs.map(renderRow)}</div>
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      {heading}
+      {/* 榜长可达 50（QQ 实测 song_num=100 也只回 50）/ 100+（网易整张歌单）→ 必须保留滚动容器 */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '4px' }}>
+        {songs.map(renderRow)}
+      </div>
     </div>
   );
 };

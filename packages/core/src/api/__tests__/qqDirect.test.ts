@@ -219,6 +219,8 @@ describe('qqDirectClient.getToplists（#279 自门面迁入）', () => {
     code: 0,
     songlist: [
       {
+        // 名次三件套在 item 上（与 data 同级），且实测为**字符串**（#332）
+        cur_count: '1', old_count: '1', in_count: '160',
         data: {
           mid: '001auUcH4WQs2V',
           id: 496054946,
@@ -228,7 +230,11 @@ describe('qqDirectClient.getToplists（#279 自门面迁入）', () => {
           interval: 245,
         },
       },
-      { data: { id: 900002, name: '缺mid的歌', singer: [{ name: '歌手C' }], album: { mid: '', name: '专辑B' } } },
+      {
+        // old_count='0' = 新进榜（→ prevRank null）；in_count='0' = 本周新进（不落 weeks）
+        cur_count: '2', old_count: '0', in_count: '0',
+        data: { id: 900002, name: '缺mid的歌', singer: [{ name: '歌手C' }], album: { mid: '', name: '专辑B' } },
+      },
       { data: null }, // 无 data 的条目跳过
     ],
   });
@@ -272,6 +278,21 @@ describe('qqDirectClient.getToplists（#279 自门面迁入）', () => {
     expect(songs[0].cover).toBe('https://y.gtimg.cn/music/photo_new/T002R300x300M000004HaG7p4ZkhXA_1.jpg');
     expect(songs[1].id).toBe('900002');
     expect(songs[1].duration).toBe(0);
+
+    // #332 可选列：字符串名次字段被归一；名次本身不落结构（由数组索引推导）
+    expect(songs[0].rankMeta).toEqual({ prevRank: 1, weeks: 160 });
+    expect(songs[1].rankMeta).toEqual({ prevRank: null });
+  });
+
+  it('条目无名次字段 → 不落 rankMeta（可选列「有值才渲染」）', async () => {
+    setTransport(toplistTransport(() => ({
+      code: 0,
+      songlist: [{ data: { mid: 'x1', id: 1, name: 'n', singer: [{ name: 's' }], album: { mid: 'm', name: 'a' } } }],
+    })) as any);
+
+    const groups = await qqDirectClient.getToplists!();
+
+    expect(groups[0].songs[0].rankMeta).toBeUndefined();
   });
 
   it('今天数据未更新（code≠0）→ 回退昨天的日期重试', async () => {
