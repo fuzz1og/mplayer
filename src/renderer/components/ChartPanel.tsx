@@ -2,6 +2,7 @@ import React from 'react';
 import { Music2, AlertCircle, Play } from 'lucide-react';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
+import { usePlayerStore } from '@/renderer/store/playerStore';
 import type { ChartKind, Song } from '@mplayer/core';
 
 interface ChartPanelProps {
@@ -52,6 +53,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   isCurrentSong,
   onRetry,
 }) => {
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const heading = (
     <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
       {title}
@@ -113,6 +115,17 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   /** 是否提供「在榜周数」（只有 QQ 有：in_count）。 */
   const hasWeeks = songs.some((s) => s.rankMeta?.weeks !== undefined);
 
+  /**
+   * 榜单行点播 = **整榜入队**（与 SongList 同语义）。
+   * 只调 onPlay(song) 会让 playerStore.play 的「不在队列就 append 单曲」把队列压成 1 首，
+   * 于是 getNextSongIndex 只能算出当前歌自己、prefetchNextUrl 的自我预取守卫直接吃掉预取
+   * ——下一首（尤其 QQ/酷狗）要等现场解析，换歌明显变慢。
+   */
+  const handlePlayRow = (song: Song, index: number): void => {
+    setCurrentPlaylist(songs, index);
+    onPlay(song, chartId);
+  };
+
   const renderRow = (song: Song, index: number) => {
     // 名次 = 数组索引（#332 决策 3：名次不落结构）
     const rank = index + 1;
@@ -123,7 +136,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
     return (
       <div
         key={`${chartId}:${song.sourceType}:${song.id}`}
-        onClick={() => onPlay(song, chartId)}
+        onClick={() => handlePlayRow(song, index)}
         style={{
           display: 'flex',
           alignItems: 'center',

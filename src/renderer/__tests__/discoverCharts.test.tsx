@@ -5,6 +5,7 @@ import { TOPLIST_SOURCE_IDS } from '@mplayer/core';
 import type { Song, ToplistGroup, ToplistSourceKey } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import DiscoverPageV2 from '@/renderer/pages/DiscoverPageV2';
+import ChartPanel from '@/renderer/components/ChartPanel';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 
@@ -96,5 +97,32 @@ describe('发现页 V2 排行榜（#332 单元榜 + 源切换）', () => {
     // 缓存命中不重复请求：netease 首次 + qq 切换 = 2 次
     const calls = callMusicApiMock.mock.calls.filter((c) => c[0] === 'getToplists');
     expect(calls).toHaveLength(2);
+  });
+
+  it('榜单行点播整榜入队（只播单曲会让队列恒 1 首，下一首预取永不触发）', () => {
+    const songs = [
+      song('qq', 'qq-1', '榜单一'),
+      song('qq', 'qq-2', '榜单二'),
+      song('qq', 'qq-3', '榜单三'),
+    ];
+    const onPlay = vi.fn();
+    render(
+      <ChartPanel
+        title="QQ · 热歌榜"
+        chartId="hot"
+        songs={songs}
+        loading={false}
+        error={null}
+        onPlay={onPlay}
+        isCurrentSong={() => false}
+      />
+    );
+
+    fireEvent.click(screen.getByText('榜单二'));
+
+    // 整榜入队 + 索引指向点击行：play() 末尾的 prefetchNextUrl 才有「下一首」可预取
+    expect(usePlayerStore.getState().currentPlaylist).toEqual(songs);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(1);
+    expect(onPlay).toHaveBeenCalledWith(songs[1], 'hot');
   });
 });
