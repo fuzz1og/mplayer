@@ -343,18 +343,30 @@ export default function SettingsPage() {
                     </ScalePress>
                   </View>
                 </View>
-                {Object.entries(tier3Stats).map(([sourceId, st]) => (
-                  <View key={sourceId} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
-                    <Text style={{ ...textVariants.settingsTertiary, color: colors.textPrimary, flex: 1 }} numberOfLines={1}>{sourceId}</Text>
-                    <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>命中 {st.hits} / 未命中 {st.misses}</Text>
-                  </View>
-                ))}
+                {Object.entries(tier3Stats).map(([sourceId, st]) => {
+                  // 声明了 source 才按源归属过滤：解析腿的 url-resolver 不声明会被拒绝，
+                  // 「跳过」计数让「源没命中」与「源被归属过滤」可区分（否则用户只看到源不够用）。
+                  const declared = tier3Subscriptions
+                    .flatMap((sub) => sub.manifest.sources)
+                    .find((s) => s.id === sourceId)?.source;
+                  return (
+                    <View key={sourceId} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
+                      <Text style={{ ...textVariants.settingsTertiary, color: colors.textPrimary, flex: 1 }} numberOfLines={1}>
+                        {sourceId}
+                        {declared ? ' · ' + declared : ''}
+                      </Text>
+                      <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>
+                        命中 {st.hits} / 未命中 {st.misses} / 跳过 {st.skipped ?? 0}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
             </View>
           )}
 
           {/* iOS footer：说明文字在组下方（8pt 距组）；原放在节标题下会与卡片粘连 */}
-          <Text style={styles.sectionFootnote}>官方直连失败后按订阅清单尝试第三方源，全部失败换元/标记不可播。实验性功能，不内置任何解析端点。</Text>
+          <Text style={styles.sectionFootnote}>官方直连失败后按订阅清单尝试第三方源，全部失败换元/标记不可播。清单条目可用 source 声明服务哪个音乐源（netease/qq/kugou/kuwo/migu/qianqian/soda，也认 tencent、tx、163 等别名）；url-resolver 不写会被拒绝，聚合端点请拆成多条条目。实验性功能，不内置任何解析端点。</Text>
         </View>
 
         {/* 缓存管理：统计 + 用量条 + 一键清理（对齐桌面 CacheSection） */}

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FlaskConical, Plus, Trash2, RefreshCw, FileJson, Link } from 'lucide-react';
 import { Button, Input, Switch, Tag, message, Typography } from 'antd';
-import type { Tier3State, Tier3Subscription } from '@mplayer/core';
+import type { Tier3Source, Tier3SourceStats, Tier3State, Tier3Subscription } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 
 /**
@@ -15,7 +15,7 @@ const { Text } = Typography;
 
 const Tier3Section: React.FC = () => {
   const [state, setState] = useState<Tier3State | null>(null);
-  const [stats, setStats] = useState<Record<string, { hits: number; misses: number }> | null>(null);
+  const [stats, setStats] = useState<Record<string, Tier3SourceStats> | null>(null);
   const [url, setUrl] = useState('');
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState(false);
@@ -26,7 +26,7 @@ const Tier3Section: React.FC = () => {
       setState(data);
       // 仅在开关开启且有订阅时展示每源累计命中/失败统计
       if (data.enabled && data.subscriptions.length > 0) {
-        const statData = await IpcClient.invoke<Record<string, { hits: number; misses: number }>>('settings:getTier3Stats');
+        const statData = await IpcClient.invoke<Record<string, Tier3SourceStats>>('settings:getTier3Stats');
         setStats(statData);
       } else {
         setStats(null);
@@ -145,13 +145,15 @@ const Tier3Section: React.FC = () => {
     return '粘贴';
   };
 
-  const sourceName = (sourceId: string): string => {
+  const sourceOf = (sourceId: string): Tier3Source | undefined => {
     for (const sub of state?.subscriptions ?? []) {
       const hit = sub.manifest.sources.find((s) => s.id === sourceId);
-      if (hit) return hit.name || hit.id;
+      if (hit) return hit;
     }
-    return sourceId;
+    return undefined;
   };
+
+  const sourceName = (sourceId: string): string => sourceOf(sourceId)?.name || sourceId;
 
   return (
     <section id="tier3" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
@@ -170,6 +172,12 @@ const Tier3Section: React.FC = () => {
         <Text type="secondary" style={{ display: 'block', fontSize: '13px', lineHeight: 1.6, marginBottom: '16px' }}>
           默认关闭。开启后，官方直连失败的歌曲会按订阅清单依次尝试第三方解析源；全部失败换元/标记不可播。
           第三方源随时可能失效，且清单由你自行订阅，本应用不内置任何解析端点。
+        </Text>
+        <Text type="secondary" style={{ display: 'block', fontSize: '12px', lineHeight: 1.6, marginBottom: '16px' }}>
+          清单条目可写 `source` 声明它服务于哪个音乐源（合法值：netease / qq / kugou / kuwo / migu / qianqian / soda，
+          也认 tencent、tx、163、qishui 等常见别名）。<b>url-resolver 不写 source 会被拒绝</b>——它按歌曲 ID 直取，
+          跨源会把 A 源的 ID 发给 B 源的接口、可能返回另一首歌；search-then-resolve 按歌名/歌手校验，不写也能兜底。
+          一个聚合端点服务多个源时，请把它拆成多条条目，各自声明 source。
         </Text>
 
         <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
@@ -256,23 +264,31 @@ const Tier3Section: React.FC = () => {
             <Text type="secondary" style={{ display: 'block', fontSize: '12px', marginBottom: '8px' }}>
               每源累计解析统计（本次会话）
             </Text>
-            {Object.entries(stats).map(([sourceId, s]) => (
-              <div
-                key={sourceId}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontSize: '13px',
-                  padding: '4px 0',
-                }}
-              >
-                <span style={{ color: 'var(--text-primary)' }}>{sourceName(sourceId)}</span>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-                  命中 {s.hits} · 失败 {s.misses}
-                </span>
-              </div>
-            ))}
+            {Object.entries(stats).map(([sourceId, s]) => {
+              const declared = sourceOf(sourceId)?.source;
+              return (
+                <div
+                  key={sourceId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '13px',
+                    padding: '4px 0',
+                  }}
+                >
+                  <span style={{ color: 'var(--text-primary)' }}>
+                    {sourceName(sourceId)}
+                    {declared ? (
+                      <Tag style={{ marginInlineStart: 6, marginInlineEnd: 0 }}>{declared}</Tag>
+                    ) : null}
+                  </span>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                    命中 {s.hits} · 失败 {s.misses} · 跳过 {s.skipped ?? 0}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
