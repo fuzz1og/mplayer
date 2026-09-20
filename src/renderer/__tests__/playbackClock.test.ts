@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createPlaybackClock, DEFAULT_PLAYBACK_INTERVAL_MS } from '../services/playbackClock';
+import { createPlaybackClock, DEFAULT_PLAYBACK_INTERVAL_MS, SEEK_SETTLE_TIMEOUT_MS } from '../services/playbackClock';
 
 /** 采样源：测试里手动改这个变量模拟传输层位置推进 */
 let position = 0;
@@ -122,5 +122,50 @@ describe('playbackClock（桌面播放时钟：采样节奏 / 暂停 / seek / �
 
     expect(vi.getTimerCount()).toBe(0);
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('seek 后传输层尚未追上时保持乐观位置（不回跳），追平后恢复采样', () => {
+    position = 10;
+    clock.setPlaying(true);
+    clock.setPosition(42);
+    expect(clock.getSnapshot().position).toBe(42);
+
+    // HTML5 media 的 currentTime 赋值是异步的：采样仍读到旧值 10，
+    // 不得把刚 seek 到的 42 拽回去（进度条回跳）
+    vi.advanceTimersByTime(DEFAULT_PLAYBACK_INTERVAL_MS * 2);
+    expect(clock.getSnapshot().position).toBe(42);
+
+    // 传输层追平（容差内）→ 恢复正常采样
+    position = 42.4;
+    vi.advanceTimersByTime(DEFAULT_PLAYBACK_INTERVAL_MS);
+    expect(clock.getSnapshot().position).toBe(42.4);
+  });
+
+  it('seek 后传输层始终追不上：超时兜底恢复采样（不把进度条冻结在目标位置）', () => {
+    position = 10;
+    clock.setPlaying(true);
+    clock.setPosition(42);
+
+    vi.advanceTimersByTime(SEEK_SETTLE_TIMEOUT_MS - DEFAULT_PLAYBACK_INTERVAL_MS); // 未到兜底窗口
+    expect(clock.getSnapshot().position).toBe(42);
+
+    vi.advanceTimersByTime(DEFAULT_PLAYBACK_INTERVAL_MS * 2); // 越过窗口 → 接受传输层真实位置
+    expect(clock.getSnapshot().position).toBe(10);
+  });
+
+  it('小幅 seek（目标落在旧采样 ±1s 内）也不回跳，传输层响应后恢复采样', () => {
+    position = 10;
+    clock.setPlaying(true);
+    clock.setPosition(10.5);
+    expect(clock.getSnapshot().position).toBe(10.5);
+
+    // 传输层尚未响应：采样仍是 10，与目标只差 0.5s——不得仅凭 ±1s 容差判成已追上
+    vi.advanceTimersByTime(DEFAULT_PLAYBACK_INTERVAL_MS * 2);
+    expect(clock.getSnapshot().position).toBe(10.5);
+
+    // 传输层落地 → 恢复采样
+    position = 10.8;
+    vi.advanceTimersByTime(DEFAULT_PLAYBACK_INTERVAL_MS);
+    expect(clock.getSnapshot().position).toBe(10.8);
   });
 });
