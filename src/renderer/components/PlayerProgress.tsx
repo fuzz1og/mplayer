@@ -64,6 +64,8 @@ const PlayerProgress: React.FC<PlayerProgressProps> = React.memo(({
     if (e.button !== 0) return; // 只接管主键（触摸/笔的 button 也是 0）
     suppressClickRef.current = false;
     e.preventDefault(); // 拖动时不要顺带选中文本
+    // preventDefault 会一并吞掉 mousedown 的默认聚焦，点击后键盘 seek（±5s/Home/End）会失效
+    e.currentTarget.focus({ preventScroll: true });
     try {
       e.currentTarget.setPointerCapture(e.pointerId); // 指针移出轨道也能继续拖
     } catch { /* jsdom / 内核不支持：退化为只在轨道内拖动 */ }

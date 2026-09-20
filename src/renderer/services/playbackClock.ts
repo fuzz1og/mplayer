@@ -55,9 +55,9 @@ export interface PlaybackClock {
 export const DEFAULT_PLAYBACK_INTERVAL_MS = 250;
 
 /** seek 后「传输层已追上目标」的容差（秒）：HTML5 seek 落地位置可能有亚秒级误差。 */
-const SEEK_SETTLE_TOLERANCE_S = 1;
+export const SEEK_SETTLE_TOLERANCE_S = 1;
 /** seek 乐观值的兜底存活时间（毫秒）：超时即恢复按传输层采样（seek 失败不冻结进度条）。 */
-const SEEK_SETTLE_TIMEOUT_MS = 1500;
+export const SEEK_SETTLE_TIMEOUT_MS = 1500;
 
 export function createPlaybackClock(options: PlaybackClockOptions = {}): PlaybackClock {
   const intervalMs = options.intervalMs ?? DEFAULT_PLAYBACK_INTERVAL_MS;
@@ -65,8 +65,8 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
   let snapshot: PlaybackSnapshot = { position: 0, duration: 0 };
   let samplePosition: () => number = () => 0;
   let timer: ReturnType<typeof setInterval> | null = null;
-  /** seek 乐观值：到传输层采样追上 target（或超时）之前，忽略采样结果 */
-  let pendingSeek: { target: number; until: number } | null = null;
+  /** seek 乐观值：到传输层采样响应（相对 seek 前位置变化）且追上 target（或超时）之前，忽略采样结果 */
+  let pendingSeek: { target: number; from: number; until: number } | null = null;
   const listeners = new Set<() => void>();
 
   // 只有真正变化才换快照对象并通知：值相同（含 undefined 之外的 NaN 比对交给 React）不打扰订阅者
@@ -88,10 +88,13 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
   const tick = (): void => {
     const sampled = samplePosition();
     if (pendingSeek) {
+      // 容差必须叠加「采样相对 seek 前位置已变化」：否则目标落在旧位置 ±1s 内的小幅 seek
+      // 会被误判成传输层已追上，下一个 tick 立刻回跳（与大幅 seek 同一根因）。
+      const responded = sampled !== pendingSeek.from;
       const settled =
-        Math.abs(sampled - pendingSeek.target) <= SEEK_SETTLE_TOLERANCE_S
+        (responded && Math.abs(sampled - pendingSeek.target) <= SEEK_SETTLE_TOLERANCE_S)
         || Date.now() >= pendingSeek.until;
-      // 传输层还没完成 seek：保持乐观位置，不把进度条拽回去
+      // 传输层还没响应 seek：保持乐观位置，不把进度条拽回去
       if (!settled) return;
       pendingSeek = null;
     }
@@ -123,7 +126,12 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
     },
 
     setPosition(position) {
-      pendingSeek = { target: position, until: Date.now() + SEEK_SETTLE_TIMEOUT_MS };
+      const from = samplePosition();
+      // 目标就是 seek 前位置（无位移 seek）：乐观值等于传输层真实值，不挂起——
+      // 否则正常播放推进会被容差判定挡住，白等一个兜底窗口
+      pendingSeek = position === from
+        ? null
+        : { target: position, from, until: Date.now() + SEEK_SETTLE_TIMEOUT_MS };
       emit({ position });
     },
 

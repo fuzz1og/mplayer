@@ -88,6 +88,21 @@ describe('PlayerProgress（进度条自订阅 playbackClock）', () => {
     expect(onSeek).toHaveBeenCalledWith(30); // 25% × 120s
   });
 
+  it('点击轨道后进度条保有焦点（preventDefault 不得吞掉键盘入口）', () => {
+    playbackClock.setPosition(30);
+    const onSeek = vi.fn();
+    render(<PlayerProgress hasCurrentSong onSeek={onSeek} />);
+    const slider = screen.getByRole('slider', { name: '播放进度' });
+    vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue(trackRect);
+
+    fireEvent.pointerDown(slider, { clientX: 50, button: 0, pointerId: 1 });
+    expect(document.activeElement).toBe(slider); // 去掉显式 focus 即转红
+
+    fireEvent.pointerUp(slider, { clientX: 50, pointerId: 1 });
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowRight' });
+    expect(onSeek).toHaveBeenLastCalledWith(35);
+  });
+
   it('键盘 ±5s / Home / End 语义不变', () => {
     playbackClock.setPosition(30);
     const onSeek = vi.fn();
