@@ -3,6 +3,7 @@ import type { TransportRequest, TransportResponse } from '../../api/transport.js
 import type { Song } from '../../types/index.js';
 import {
   addTier3SubscriptionFromText,
+  clearTier3ProbeCache,
   clearTier3Stats,
   createTier3Resolver,
   fetchTier3ManifestFromUrl,
@@ -168,6 +169,9 @@ beforeEach(() => {
   setTier3Deps({});
   setTier3Persister(null);
   clearTier3Stats();
+  // #361 探测结果按稳定 URL 缓存：跨用例复用同一 cdn URL 时必须清空，
+  // 否则前一条用例的探测结果会污染后一条（缓存命中 → 不发 Range）。
+  clearTier3ProbeCache();
 });
 
 describe('parseTier3Manifest', () => {
@@ -249,8 +253,9 @@ describe('createTier3Resolver（url-resolver）', () => {
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song());
-    expect(url).toBe('https://cdn.example.com/a.mp3');
-    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 1, misses: 0, skipped: 0, searches: 0 } });
+    // 解析响应只有 URL（无 name/artist/时长）→ 只剩 source 声明这一条信任（L5）。
+    expect(url).toEqual({ url: 'https://cdn.example.com/a.mp3', guard: 'none' });
+    expect(getTier3Stats()['demo-url']).toMatchObject({ hits: 1, misses: 0, skipped: 0, searches: 0 });
   });
 
   it('域名不在白名单 → 返回空串', async () => {
@@ -261,7 +266,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
     setTier3Enabled(true);
-    expect(await createTier3Resolver()(song())).toBe('');
+    expect(await createTier3Resolver()(song())).toBeNull();
   });
 
   it('非通配白名单不允许子域（安全边界）', async () => {
@@ -272,7 +277,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
     setTier3Enabled(true);
-    expect(await createTier3Resolver()(song())).toBe('');
+    expect(await createTier3Resolver()(song())).toBeNull();
   });
 
   it('字节嗅探失败（HTML 冒充音频）→ 返回空串', async () => {
@@ -284,8 +289,8 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
     setTier3Enabled(true);
-    expect(await createTier3Resolver()(song())).toBe('');
-    expect(getTier3Stats()).toEqual({ 'demo-url': { hits: 0, misses: 1, skipped: 0, searches: 0 } });
+    expect(await createTier3Resolver()(song())).toBeNull();
+    expect(getTier3Stats()['demo-url']).toMatchObject({ hits: 0, misses: 1, skipped: 0, searches: 0 });
   });
 
   it('多次解析按源累计命中/失败', async () => {
@@ -301,7 +306,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     await createTier3Resolver()(song());
     await createTier3Resolver()(song());
 
-    expect(getTier3Stats()['demo-url']).toEqual({ hits: 2, misses: 0, skipped: 0, searches: 0 });
+    expect(getTier3Stats()['demo-url']).toMatchObject({ hits: 2, misses: 0, skipped: 0, searches: 0 });
   });
 
   it('url-resolver 声明 source 且与当前歌曲 source 不符时跳过，不拿错源 id 去解析', async () => {
@@ -327,7 +332,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     addTier3SubscriptionFromText({ text: manifest });
     setTier3Enabled(true);
     // 当前是 netease 歌曲，不应把 netease id 塞给 qq-only 的 url-resolver
-    expect(await createTier3Resolver()(song({ sourceType: 'netease' }))).toBe('');
+    expect(await createTier3Resolver()(song({ sourceType: 'netease' }))).toBeNull();
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -340,7 +345,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
     setTier3Enabled(true);
-    expect(await createTier3Resolver()(song())).toBe('');
+    expect(await createTier3Resolver()(song())).toBeNull();
   });
 
   it('未声明 source 的 search-then-resolve 仍可用（自带 isExactMatch 内容校验兜住）', async () => {
@@ -379,7 +384,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: manifest });
     setTier3Enabled(true);
-    expect(await createTier3Resolver()(song({ sourceType: 'netease' }))).toBe('');
+    expect(await createTier3Resolver()(song({ sourceType: 'netease' }))).toBeNull();
     // 关键：确实请求了（未被 URL 推断静默跳过）
     expect(request).toHaveBeenCalled();
     expect(request.mock.calls[0][0].url).toContain('songs.php');
@@ -393,14 +398,14 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
     setTier3Enabled(true);
-    expect(await createTier3Resolver()(song())).toBe('');
+    expect(await createTier3Resolver()(song())).toBeNull();
   });
 
   it('默认关闭时不执行任何请求', async () => {
     const request = vi.fn();
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
-    expect(await createTier3Resolver()(song())).toBe('');
+    expect(await createTier3Resolver()(song())).toBeNull();
     expect(request).not.toHaveBeenCalled();
   });
 });
@@ -426,7 +431,8 @@ describe('createTier3Resolver（search-then-resolve）', () => {
     addTier3SubscriptionFromText({ text: SEARCH_RESOLVER_MANIFEST });
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song());
-    expect(url).toBe('https://cdn.example.com/b.mp3');
+    // 搜索条目自带歌名+歌手精确匹配 → L4 仅文本护栏。
+    expect(url).toEqual({ url: 'https://cdn.example.com/b.mp3', guard: 'text-only' });
     expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: 'GET' }));
   });
 
@@ -445,7 +451,7 @@ describe('createTier3Resolver（search-then-resolve）', () => {
     addTier3SubscriptionFromText({ text: SEARCH_RESOLVER_MANIFEST });
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song());
-    expect(url).toBe('https://cdn.example.com/c.mp3');
+    expect(url).toEqual({ url: 'https://cdn.example.com/c.mp3', guard: 'text-only' });
   });
 
   it('搜索无精确匹配 → 返回空串', async () => {
@@ -459,7 +465,7 @@ describe('createTier3Resolver（search-then-resolve）', () => {
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: SEARCH_RESOLVER_MANIFEST });
     setTier3Enabled(true);
-    expect(await createTier3Resolver()(song())).toBe('');
+    expect(await createTier3Resolver()(song())).toBeNull();
   });
 
   it('候选无歌手字段 + 目标歌手非空 → 拒绝（同名不同歌手不播，如李寒版《恋人》）', async () => {
@@ -471,7 +477,7 @@ describe('createTier3Resolver（search-then-resolve）', () => {
     addTier3SubscriptionFromText({ text: NO_ARTIST_MANIFEST });
     setTier3Enabled(true);
     // 目标歌手=李荣浩；候选无歌手字段 → 降级不允许（上游可能返回别的歌手的《恋人》）
-    expect(await createTier3Resolver()(song({ name: '恋人', artist: '李荣浩' }))).toBe('');
+    expect(await createTier3Resolver()(song({ name: '恋人', artist: '李荣浩' }))).toBeNull();
   });
 
   it('候选无歌手字段 + 目标歌手为空 → 歌名精确降级接受', async () => {
@@ -486,7 +492,7 @@ describe('createTier3Resolver（search-then-resolve）', () => {
     addTier3SubscriptionFromText({ text: NO_ARTIST_MANIFEST });
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song({ name: '恋人', artist: '' }));
-    expect(url).toBe('https://cdn.example.com/full.mp3');
+    expect(url).toEqual({ url: 'https://cdn.example.com/full.mp3', guard: 'text-only' });
   });
 });
 
@@ -748,7 +754,7 @@ describe('tier3SourceSource（ADR-0014 决策 6：只认显式声明 + 别名归
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: manifest });
     setTier3Enabled(true);
-    expect(await createTier3Resolver()(song())).toBe('');
+    expect(await createTier3Resolver()(song())).toBeNull();
     expect(request).not.toHaveBeenCalled();
     expect(getTier3Stats()['typo-source'].skipped).toBe(1);
   });
@@ -767,7 +773,7 @@ describe('tier3SourceSource（ADR-0014 决策 6：只认显式声明 + 别名归
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: manifest });
     setTier3Enabled(true);
-    expect(await createTier3Resolver()(song())).toBe('');
+    expect(await createTier3Resolver()(song())).toBeNull();
     expect(request).not.toHaveBeenCalled();
     // 跳过被计入统计（原实现在 continue 之后才取 stats，被跳过的源连计数都不进）
     expect(getTier3Stats()['no-source'].skipped).toBe(1);

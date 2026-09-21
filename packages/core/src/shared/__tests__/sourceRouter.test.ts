@@ -25,6 +25,8 @@ import {
   type DirectSourceClient,
   type SourceMode,
   type ToplistGroup,
+  type PlaybackGuard,
+  type Tier3Resolution,
 } from '../sourceRouter.js';
 
 /**
@@ -46,6 +48,9 @@ const song = (id: string, source: string, url = ''): Song => ({
   duration: 180,
   sourceType: source as Song['sourceType'],
 });
+
+/** tier3 解析产物（#361：resolver 返回 { url, guard } | null，未命中为 null）。 */
+const tier3Hit = (url: string, guard: PlaybackGuard = 'none'): Tier3Resolution => ({ url, guard });
 
 function makeClient(source: string, overrides: Partial<DirectSourceClient> = {}): DirectSourceClient {
   return {
@@ -262,7 +267,7 @@ describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地�
   });
 
   it('关闭时即使注入 resolver 也不调用（行为与现状一致）', async () => {
-    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    const tier3 = vi.fn(async () => tier3Hit('https://tier3.example.com/1.mp3'));
     setTier3Resolver(tier3);
     const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => { throw new Error('直连失败'); }) });
     registerDirectClient(client);
@@ -271,7 +276,7 @@ describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地�
   });
 
   it('开启 + resolver：直连失败后走 tier3，不再上抛', async () => {
-    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    const tier3 = vi.fn(async () => tier3Hit('https://tier3.example.com/1.mp3', 'source-duration'));
     setTier3Enabled(true);
     setTier3Resolver(tier3);
     const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => { throw new Error('直连失败'); }) });
@@ -283,14 +288,14 @@ describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地�
 
   it('开启但 resolver 返回空/抛错 → tier3 未命中后上抛（D2）', async () => {
     setTier3Enabled(true);
-    setTier3Resolver(vi.fn(async () => ''));
+    setTier3Resolver(vi.fn(async () => null));
     const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => { throw new Error('直连失败'); }) });
     registerDirectClient(client);
     await expect(resolvePlayableUrlRouted(song('1', 'netease', 'https://x/api.mp3'))).rejects.toThrow('直连失败');
   });
 
   it('开启 + resolver：直连返回空（无版权/VIP）也走 tier3，不返回空串', async () => {
-    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    const tier3 = vi.fn(async () => tier3Hit('https://tier3.example.com/1.mp3'));
     setTier3Enabled(true);
     setTier3Resolver(tier3);
     const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => '') });
@@ -301,7 +306,7 @@ describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地�
   });
 
   it('开启 + resolver 也返回空：直连空串原样返回（交换元层）', async () => {
-    const tier3 = vi.fn(async () => '');
+    const tier3 = vi.fn(async () => null);
     setTier3Enabled(true);
     setTier3Resolver(tier3);
     const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => '') });
@@ -313,7 +318,7 @@ describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地�
 
   it('direct 模式不经过 tier3（直连失败直接上抛）', async () => {
     setTier3Enabled(true);
-    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    const tier3 = vi.fn(async () => tier3Hit('https://tier3.example.com/1.mp3'));
     setTier3Resolver(tier3);
     const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => { throw new Error('直连失败'); }) });
     registerDirectClient(client);
@@ -323,7 +328,7 @@ describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地�
   });
 
   it('开启 + resolver：直连返回非空但 audioTag=invalid 时也走 tier3', async () => {
-    const tier3 = vi.fn(async () => 'https://tier3.example.com/1.mp3');
+    const tier3 = vi.fn(async () => tier3Hit('https://tier3.example.com/1.mp3'));
     setTier3Enabled(true);
     setTier3Resolver(tier3);
     const client = makeClient('netease', { resolvePlayableUrl: vi.fn(async () => 'https://direct.example.com/1.mp3') });
@@ -352,9 +357,9 @@ describe('tier3 同歌去重（#172 评论：同歌并行重复解析）', () =>
 
   it('同歌并发解析只调用一次 resolver，两个调用方拿到同一结果', async () => {
     setupEmptyDirect();
-    let resolveTier3!: (v: string) => void;
+    let resolveTier3!: (v: Tier3Resolution | null) => void;
     const tier3 = vi.fn(
-      () => new Promise<string>((r) => { resolveTier3 = r; })
+      () => new Promise<Tier3Resolution | null>((r) => { resolveTier3 = r; })
     );
     setTier3Resolver(tier3);
 
@@ -363,7 +368,7 @@ describe('tier3 同歌去重（#172 评论：同歌并行重复解析）', () =>
     const p2 = resolvePlayableSongRouted(s);
     // 让两条调用都进入 tier3 腿
     await vi.waitFor(() => expect(tier3).toHaveBeenCalledTimes(1));
-    resolveTier3('https://tier3.example.com/shared.m4a');
+    resolveTier3(tier3Hit('https://tier3.example.com/shared.m4a', 'audio-header'));
 
     const [r1, r2] = await Promise.all([p1, p2]);
     expect(tier3).toHaveBeenCalledTimes(1); // 上游只被打一次
@@ -373,7 +378,7 @@ describe('tier3 同歌去重（#172 评论：同歌并行重复解析）', () =>
 
   it('不同歌并发各自解析，互不共享', async () => {
     setupEmptyDirect();
-    const tier3 = vi.fn(async (_s: Song) => `https://tier3.example.com/${_s.id}.m4a`);
+    const tier3 = vi.fn(async (_s: Song) => tier3Hit(`https://tier3.example.com/${_s.id}.m4a`));
     setTier3Resolver(tier3);
 
     const [r1, r2] = await Promise.all([
@@ -387,7 +392,7 @@ describe('tier3 同歌去重（#172 评论：同歌并行重复解析）', () =>
 
   it('底层 Promise 结束后键移除：再次解析重新发起，不做结果缓存', async () => {
     setupEmptyDirect();
-    const tier3 = vi.fn(async () => 'https://tier3.example.com/x.mp3');
+    const tier3 = vi.fn(async () => tier3Hit('https://tier3.example.com/x.mp3'));
     setTier3Resolver(tier3);
 
     await resolvePlayableSongRouted(song('x', 'qq'));
@@ -399,9 +404,9 @@ describe('tier3 同歌去重（#172 评论：同歌并行重复解析）', () =>
     setupEmptyDirect();
     vi.useFakeTimers();
     try {
-      let resolveTier3!: (v: string) => void;
+      let resolveTier3!: (v: Tier3Resolution | null) => void;
       const tier3 = vi.fn(
-        () => new Promise<string>((r) => { resolveTier3 = r; })
+        () => new Promise<Tier3Resolution | null>((r) => { resolveTier3 = r; })
       );
       setTier3Resolver(tier3);
 
@@ -414,7 +419,7 @@ describe('tier3 同歌去重（#172 评论：同歌并行重复解析）', () =>
       expect(tier3).toHaveBeenCalledTimes(1); // 底层未被中断
 
       // 底层迟到命中 → finally 清键
-      resolveTier3('https://tier3.example.com/late.m4a');
+      resolveTier3(tier3Hit('https://tier3.example.com/late.m4a'));
       await vi.advanceTimersByTimeAsync(1);
 
       // 键已清：后续调用重新发起，不会接住已结束的旧 Promise

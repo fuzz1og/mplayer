@@ -2,6 +2,7 @@ import type { Album, Artist, DiscoverPlaylist, Song, SourceKey } from '../types/
 import { isTrialUrlInfo } from './playability.js';
 import type { UrlInfo } from './playability.js';
 import { getPrefetchedUrl } from '../api/prefetchCache.js';
+import type { PlaybackGuard, PlaybackVia } from './playbackGuard.js';
 
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
@@ -262,8 +263,19 @@ export function sanitizeSourceModes(
 // 默认关闭。本 spec 只预留开关位与插槽 hook，不实现解析逻辑；#144 落地时
 // 注入 resolver 并开启开关即可，回退链无需再改。
 
-/** tier3 解析器插槽：输入 song，返回解析到的可播 URL；未注入/关闭 = 不生效。 */
-export type Tier3Resolver = (song: Song) => Promise<string>;
+/**
+ * tier3 解析产物（#361）：URL + 护栏**证据等级**。
+ * 护栏决策在 tier3 执行器内按源逐条应用（不过就换下一个源），路由层只记录
+ * 结果等级用于诊断 / 后续 UI 决策，不重复判定。
+ */
+export interface Tier3Resolution {
+  url: string;
+  guard: PlaybackGuard;
+}
+
+/** tier3 解析器插槽：输入 song，返回解析到的可播 URL + 护栏等级；未命中返回 null。
+ *  未注入/关闭 = 不生效。 */
+export type Tier3Resolver = (song: Song) => Promise<Tier3Resolution | null>;
 
 let tier3Enabled = false;
 let tier3Resolver: Tier3Resolver | null = null;
@@ -331,7 +343,7 @@ const TIER3_BUDGET_MS = 6_000;
 //
 // 键在**底层 Promise 结束**（含失败）后才移除——预算超时的调用方放弃等待
 // 后，迟到的命中仍能被同键后续调用方（如 fresh 重试的 tier3 腿）接住。
-const tier3Inflight = new Map<string, Promise<string>>();
+const tier3Inflight = new Map<string, Promise<Tier3Resolution | null>>();
 
 /** 歌曲身份键：id 优先；无 id 的歌（热榜旧数据等）退回 名字+歌手。 */
 function tier3InflightKey(song: Song): string {
@@ -341,7 +353,7 @@ function tier3InflightKey(song: Song): string {
 }
 
 /** 共享的 tier3 解析：已有同键 in-flight 直接复用；否则调用 resolver 并登记。 */
-function tier3ResolveShared(song: Song, reason: string): Promise<string> {
+function tier3ResolveShared(song: Song, reason: string): Promise<Tier3Resolution | null> {
   const key = tier3InflightKey(song);
   const existing = tier3Inflight.get(key);
   if (existing) {
@@ -354,7 +366,7 @@ function tier3ResolveShared(song: Song, reason: string): Promise<string> {
       return await tier3Resolver!(song);
     } catch (e) {
       console.warn(`[tier3] resolver 抛错: ${(e as Error)?.message || e}`);
-      return '';
+      return null;
     } finally {
       tier3Inflight.delete(key);
     }
@@ -366,20 +378,20 @@ function tier3ResolveShared(song: Song, reason: string): Promise<string> {
 /** 直连失败后的 tier3 尝试（默认关闭，未注入直接跳过）。reason 用于日志区分触发原因。
  *  带总预算：慢源（mgmp3 20s 超时）不阻塞播放——预算内未命中按未命中处理。
  *  同歌并发调用共享同一条底层解析（见 tier3ResolveShared），预算仍按各调用方独立计时。 */
-async function tryTier3(song: Song, reason: string): Promise<string> {
+async function tryTier3(song: Song, reason: string): Promise<Tier3Resolution | null> {
   if (!tier3Enabled || !tier3Resolver) {
     console.info(`[tier3] ${reason}，但 tier3 未启用/未注入，直接回退: 《${song.name}》${song.artist}`);
-    return '';
+    return null;
   }
   try {
-    const url = await Promise.race([
+    const res = await Promise.race([
       tier3ResolveShared(song, reason),
-      new Promise<string>((resolve) => setTimeout(() => resolve(''), TIER3_BUDGET_MS)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), TIER3_BUDGET_MS)),
     ]);
-    return url?.startsWith('http') ? url : '';
+    return res && res.url?.startsWith('http') ? res : null;
   } catch (e) {
     console.warn(`[tier3] resolver 抛错: ${(e as Error)?.message || e}`);
-    return '';
+    return null;
   }
 }
 
@@ -387,8 +399,8 @@ async function tryTier3(song: Song, reason: string): Promise<string> {
  *  命中返回完整版可播对象（nonFull=false）；未命中/未配置返回 null，
  *  调用方退回直连试听并标 nonFull。tier3 未配置时 tryTier3 零成本返回。 */
 async function tryTier3Full(song: Song, reason: string): Promise<RoutedPlayable | null> {
-  const tier3Url = await tryTier3(song, reason);
-  return tier3Url ? { url: tier3Url, nonFull: false } : null;
+  const resolution = await tryTier3(song, reason);
+  return resolution ? tier3Playable(resolution) : null;
 }
 
 /** 搜索结果被探测标记为 invalid 时，即使直连返回了 URL 也优先换 tier3；
@@ -396,11 +408,17 @@ async function tryTier3Full(song: Song, reason: string): Promise<RoutedPlayable 
  *  试听版（preview/试听段）的完整版 tier3 兜底不在此函数——调用方
  *  resolvePlayableSongRouted 判定试听后统一走 tryTier3Full（命中换完整版、
  *  未命中退回直连试听并标 nonFull）。 */
-async function preferTier3WhenBad(song: Song, directUrl: string): Promise<string> {
-  if (song.audioTag !== 'invalid') return directUrl;
+interface PreferredDirectUrl {
+  url: string;
+  /** 非空 = 该 URL 来自 tier3（护栏已过）；null = 保留直连结果。 */
+  resolution: Tier3Resolution | null;
+}
+
+async function preferTier3WhenBad(song: Song, directUrl: string): Promise<PreferredDirectUrl> {
+  if (song.audioTag !== 'invalid') return { url: directUrl, resolution: null };
   const reason = '直连 URL 已被探测标记为无效（audioTag=invalid）';
-  const tier3Url = await tryTier3(song, reason);
-  return tier3Url || directUrl;
+  const resolution = await tryTier3(song, reason);
+  return resolution ? { url: resolution.url, resolution } : { url: directUrl, resolution: null };
 }
 
 /** 模式分派：无客户端/无能力统一按「直连不可用」处理——
@@ -461,25 +479,42 @@ export async function resolvePlayableUrlRouted(song: Song): Promise<string> {
     if (url) {
       // 搜索结果已被探测标记为无效时，即使直连返回了 URL 也先试 tier3；
       // 没有配置 tier3 则保持原直连结果，由上层继续按现状报错/换元。
-      return await preferTier3WhenBad(song, url);
+      return (await preferTier3WhenBad(song, url)).url;
     }
     // 直连返回空串（无版权/VIP）也进 tier3 兜底（默认关）；失败保持空串交换元层。
-    const tier3Url = await tryTier3(song, '直连返回空串（无版权/VIP）');
-    if (tier3Url) return tier3Url;
+    const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）');
+    if (tier3) return tier3.url;
     return url;
   } catch (err) {
     if (route.mode === 'direct') throw err;
     // tier3 插槽：直连失败后的兜底（默认关；#144 落地后启用）；未命中 = 上抛（D2）。
-    const tier3Url = await tryTier3(song, '直连解析失败');
-    if (tier3Url) return tier3Url;
+    const tier3 = await tryTier3(song, '直连解析失败');
+    if (tier3) return tier3.url;
     throw err;
   }
 }
 
-/** 路由解析结果：可播 URL + 试听版标记（T12，non-full 驱动换元触发）。 */
+// 护栏类型经路由层再导出：消费方（含测试）从播放解析入口同一处取类型。
+export type { PlaybackGuard, PlaybackVia };
+
+/** 路由解析结果：可播 URL + 试听版标记（T12）+ 来源腿 / 护栏等级（#361）。 */
 export interface RoutedPlayable {
   url: string;
   nonFull: boolean;
+  /** 解析来源腿：`direct` 直连 / `tier3` 第三方兜底（#361）。 */
+  via: PlaybackVia;
+  /** 护栏证据等级；直连腿恒为 `none`（护栏只约束 tier3 替换的 URL）（#361）。 */
+  guard: PlaybackGuard;
+}
+
+/** 直连腿结果：护栏不作用于直连 URL，恒 `via=direct` / `guard=none`。 */
+function directPlayable(url: string, nonFull: boolean): RoutedPlayable {
+  return { url, nonFull, via: 'direct', guard: 'none' };
+}
+
+/** tier3 腿结果：护栏已过，`nonFull=false`（兜底拿到的就是完整版）。 */
+function tier3Playable(resolution: Tier3Resolution): RoutedPlayable {
+  return { url: resolution.url, nonFull: false, via: 'tier3', guard: resolution.guard };
 }
 
 /**
@@ -497,10 +532,12 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
   const prefetched = getPrefetchedUrl(song);
   if (prefetched) {
     if (prefetched.nonFull) {
+      // #361：预取只存直连结果，但「试听版换完整版」这一跳进 tier3，
+      // 同样要过护栏（命中即 0 等待 ≠ 可以绕过验证）。
       const full = await tryTier3Full(song, `预取缓存命中但为试听版（nonFull），尝试 tier3 拿完整版`);
       if (full) return full;
     }
-    return prefetched;
+    return directPlayable(prefetched.url, prefetched.nonFull);
   }
 
   // 能力门含 resolveUrlInfo（UrlInfo 自带 url，仅有 UrlInfo 也可直连解析）
@@ -514,46 +551,45 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
         if (info.url) {
           // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL；
           // tier3 未命中则保留直连结果并按其权威字段判定试听版。
-          const url = await preferTier3WhenBad(song, info.url);
+          const picked = await preferTier3WhenBad(song, info.url);
+          if (picked.resolution) return tier3Playable(picked.resolution);
           const trial = isTrialUrlInfo(info, song.duration) || song.audioTag === 'preview';
           // 试听版也走 tier3 兜底尝试拿完整版（用户决策：试听无意义，兜底可能
           // 拿到完整版；tier3 未命中才退回直连试听）——tier3 拿到则 nonFull=false。
-          if (trial && url === info.url) {
+          if (trial) {
             const full = await tryTier3Full(song, `直连为试听版（nonFull），尝试 tier3 拿完整版`);
             if (full) return full;
           }
-          return {
-            url,
-            nonFull: trial && url === info.url,
-          };
+          return directPlayable(picked.url, trial);
         }
         // UrlInfo 存在但 url 为空（无版权/VIP）→ tier3 兜底（默认关）。
-        const tier3Url = await tryTier3(song, '直连 UrlInfo 无 url（无版权/VIP）');
-        if (tier3Url) return { url: tier3Url, nonFull: false };
-        return { url: '', nonFull: false };
+        const tier3 = await tryTier3(song, '直连 UrlInfo 无 url（无版权/VIP）');
+        if (tier3) return tier3Playable(tier3);
+        return directPlayable('', false);
       }
     }
     const url = await client.resolvePlayableUrl!(song);
     if (url) {
       // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL。
-      const u = await preferTier3WhenBad(song, url);
+      const picked = await preferTier3WhenBad(song, url);
+      if (picked.resolution) return tier3Playable(picked.resolution);
       // 搜索结果已被探测标为试听版（audioTag=preview，如酷我 VIP 歌的 M500 试听）：
       // 试听也走 tier3 兜底尝试拿完整版（tier3 未命中才退回直连试听）。
-      if (song.audioTag === 'preview' && u === url) {
+      if (song.audioTag === 'preview') {
         const full = await tryTier3Full(song, `直连为试听版（audioTag=preview），尝试 tier3 拿完整版`);
         if (full) return full;
       }
-      return { url: u, nonFull: u === url && song.audioTag === 'preview' };
+      return directPlayable(picked.url, song.audioTag === 'preview');
     }
     // 直连返回空串（无版权/VIP）→ tier3 兜底（默认关）；失败保持空串交换元层。
-    const tier3Url = await tryTier3(song, '直连返回空串（无版权/VIP）');
-    if (tier3Url) return { url: tier3Url, nonFull: false };
-    return { url: '', nonFull: false };
+    const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）');
+    if (tier3) return tier3Playable(tier3);
+    return directPlayable('', false);
   } catch (err) {
     if (route.mode === 'direct') throw err;
     // tier3 插槽：直连失败后的兜底（默认关；#144 落地后启用）；未命中 = 上抛（D2）。
-    const tier3Url = await tryTier3(song, '直连解析失败');
-    if (tier3Url) return { url: tier3Url, nonFull: false };
+    const tier3 = await tryTier3(song, '直连解析失败');
+    if (tier3) return tier3Playable(tier3);
     throw err;
   }
 }
@@ -566,20 +602,20 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
  */
 export async function resolvePlayableSongDirect(song: Song): Promise<RoutedPlayable> {
   const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl || !!c.resolveUrlInfo);
-  if (route.kind !== 'direct') return { url: '', nonFull: false };
+  if (route.kind !== 'direct') return directPlayable('', false);
   try {
     const client = route.client;
     if (client.resolveUrlInfo) {
       const info = await client.resolveUrlInfo(song);
       if (info?.url) {
-        return { url: info.url, nonFull: isTrialUrlInfo(info, song.duration) || song.audioTag === 'preview' };
+        return directPlayable(info.url, isTrialUrlInfo(info, song.duration) || song.audioTag === 'preview');
       }
-      return { url: '', nonFull: false };
+      return directPlayable('', false);
     }
     const url = await client.resolvePlayableUrl!(song);
-    return { url: url || '', nonFull: !!url && song.audioTag === 'preview' };
+    return directPlayable(url || '', !!url && song.audioTag === 'preview');
   } catch {
-    return { url: '', nonFull: false };
+    return directPlayable('', false);
   }
 }
 

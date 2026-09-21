@@ -141,6 +141,7 @@ export type {
   ContentCache,
   ContentMethod,
   Tier3Resolver,
+  Tier3Resolution,
   ChartKind,
   ToplistSourceKey,
 } from './shared/sourceRouter.js';
@@ -157,6 +158,11 @@ export { kugouDirectClient, ensureKugouCookie, resolveKugouLyricUrl } from './ap
 export { classifyLength, isTrialUrlInfo } from './api/audioProbe.js';
 export type { LengthClass, UrlInfo } from './api/audioProbe.js';
 export type { RoutedPlayable } from './shared/sourceRouter.js';
+// 播放护栏（#361）：决策纯函数 + 音频时长取证（L2）。
+export { evaluatePlaybackGuard, GUARD_TOLERANCE_SEC } from './shared/playbackGuard.js';
+export type { PlaybackGuard, PlaybackVia, PlaybackEvidence, GuardDecision } from './shared/playbackGuard.js';
+export { extractAudioDuration, hasMpegXingHeader, isTrustedHeaderDuration } from './shared/audioDuration.js';
+export type { AudioDurationEvidence } from './shared/audioDuration.js';
 export {
   parseTier3Manifest,
   fetchTier3ManifestFromUrl,
@@ -176,6 +182,7 @@ export {
   searchTier3Songs,
   getTier3Stats,
   clearTier3Stats,
+  clearTier3ProbeCache,
   normalizeTier3Source,
 } from './tier3/tier3Api.js';
 export type {
