@@ -859,3 +859,99 @@ describe('ADR-0014 超时阶梯', () => {
     }
   });
 });
+
+describe('单源硬墙与整链预算（#365，ADR-0014 决策 2）', () => {
+  const hangingManifest = (count: number, timeoutMs?: number): string =>
+    JSON.stringify({
+      version: 1,
+      sources: Array.from({ length: count }, (_, i) => ({
+        id: `s${i + 1}`,
+        kind: 'url-resolver',
+        source: 'netease',
+        allowedDomains: ['cdn.example.com'],
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        resolve: { method: 'GET', url: `https://api.example.com/s${i + 1}`, responseJsonPath: 'data.url' },
+      })),
+    });
+
+  it('清单 timeoutMs 只能收紧到 2s 硬墙（3000 → 2000）', async () => {
+    const seen: number[] = [];
+    const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
+      if (req.responseType !== 'arraybuffer') seen.push(req.timeoutMs ?? -1);
+      return req.responseType === 'arraybuffer'
+        ? audioResponse()
+        : jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, req.url);
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST }); // 声明了 timeoutMs: 3000
+    setTier3Enabled(true);
+
+    await createTier3Resolver()(song());
+
+    expect(seen[0]).toBe(2_000);
+  });
+
+  it('清单里更小的 timeoutMs 仍然生效（500 保持 500）', async () => {
+    const seen: number[] = [];
+    const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
+      if (req.responseType !== 'arraybuffer') seen.push(req.timeoutMs ?? -1);
+      return req.responseType === 'arraybuffer'
+        ? audioResponse()
+        : jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, req.url);
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: hangingManifest(1, 500) });
+    setTier3Enabled(true);
+
+    await createTier3Resolver()(song());
+
+    expect(seen[0]).toBe(500);
+  });
+
+  it('挂起的死源不再吃光整链预算：2s 后换下一个源并命中', async () => {
+    const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
+      if (req.url.endsWith('/s1')) return new Promise<TransportResponse>(() => {}); // 永不落定
+      if (req.responseType === 'arraybuffer') return audioResponse();
+      return jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3', song_play_time: 240 } }, req.url);
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: hangingManifest(2, 15_000) });
+    setTier3Enabled(true);
+
+    vi.useFakeTimers();
+    try {
+      const pending = createTier3Resolver()(song());
+      await vi.advanceTimersByTimeAsync(2_100);
+      const res = await pending;
+
+      expect(res).toEqual({ url: 'https://cdn.example.com/a.mp3', guard: 'source-duration' });
+      expect(request.mock.calls.map((c) => (c[0] as TransportRequest).url)).toContain('https://api.example.com/s2');
+      expect(getTier3Stats()['s1'].lastError).toContain('单源硬墙');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('整链预算用尽后不再启动后续源（3 × 2s 后第 4 源不被请求）', async () => {
+    const request = vi.fn(() => new Promise<TransportResponse>(() => {})); // 全部挂起
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: hangingManifest(4) });
+    setTier3Enabled(true);
+
+    vi.useFakeTimers();
+    try {
+      const pending = createTier3Resolver()(song());
+      await vi.advanceTimersByTimeAsync(6_500);
+      const res = await pending;
+
+      expect(res).toBeNull();
+      const requested = request.mock.calls.map((c) => (c[0] as TransportRequest).url);
+      expect(requested).toContain('https://api.example.com/s1');
+      expect(requested).toContain('https://api.example.com/s2');
+      expect(requested).toContain('https://api.example.com/s3');
+      expect(requested).not.toContain('https://api.example.com/s4');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

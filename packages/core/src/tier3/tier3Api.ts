@@ -9,6 +9,7 @@ import type { PlaybackEvidence, PlaybackGuard } from '../shared/playbackGuard.js
 import { extractAudioDuration } from '../shared/audioDuration.js';
 import type { AudioDurationEvidence } from '../shared/audioDuration.js';
 import {
+  TIER3_BUDGET_MS,
   setTier3Enabled as setRouterTier3Enabled,
   setTier3Resolver as setRouterTier3Resolver,
   setTier3SearchEnabled as setRouterTier3SearchEnabled,
@@ -140,6 +141,40 @@ export interface Tier3Deps {
  *  使预算失去约束力——单源挂起即可吃光全链预算、饿死后续好源。
  *  且 transport 的 maxRetries=3 会对超时类错误重试，实际耗时再被放大。 */
 const DEFAULT_TIMEOUT_MS = 2_000;
+
+/** 单源硬墙（ADR-0014 决策 2）：清单里的 `timeoutMs` 只能**收紧**到它以下，不能放大。
+ *  否则一个挂起的死源会合法地吃光整链 6s 预算，后面本可命中的好源一次都不会被请求
+ *  （实测：hk0cc 网关超时 10.9s + tangapi TLS 断开 20.7s，第三个源 1.0s 能命中却排不上）。 */
+const MAX_SOURCE_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
+
+/** 单源墙钟哨兵：与「源未命中返回 null」区分开，日志/统计口径不同。 */
+const SOURCE_TIMED_OUT = Symbol('tier3-source-timed-out');
+
+/** 单源有效超时 = `min(清单 timeoutMs, 2s 硬墙, 整链剩余预算)`。 */
+function effectiveSourceTimeout(source: Tier3Source, remainingBudgetMs: number): number {
+  const configured = source.timeoutMs || DEFAULT_TIMEOUT_MS;
+  return Math.max(1, Math.min(configured, MAX_SOURCE_TIMEOUT_MS, remainingBudgetMs));
+}
+
+/** 单源墙钟上限：把 transport 的重试（maxRetries=3，超时/TLS 类错误可重试）也算在内，
+ *  到点即换下一个源；底层请求自然结束、结果丢弃——与整链预算同一语义。 */
+async function withSourceDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T | typeof SOURCE_TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<typeof SOURCE_TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => resolve(SOURCE_TIMED_OUT), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** 嗅探超时（ADR-0014 决策 3）：独立常量、不继承源 timeoutMs。
  *  实测依据：首字节 ~0.39s（含 TLS 握手 ~0.19s），复用连接 ~0.19s；
  *  且 1KB 与 1MB 的 Range 延迟无差别（成本在连接而非字节数）。 */
@@ -424,6 +459,7 @@ function buildRequest(
   vars: TemplateVars,
   source: Tier3Source,
   responseType: 'text' | 'arraybuffer' = 'text',
+  timeoutMs?: number,
 ): TransportRequest {
   const headers: Record<string, string> = {
     'User-Agent': BROWSER_UA,
@@ -435,7 +471,7 @@ function buildRequest(
     url: fillTemplate(spec.url, vars, true),
     headers,
     body: spec.body ? fillTemplate(spec.body, vars, false) : undefined,
-    timeoutMs: source.timeoutMs || DEFAULT_TIMEOUT_MS,
+    timeoutMs: timeoutMs ?? (source.timeoutMs || DEFAULT_TIMEOUT_MS),
     responseType,
   };
 }
@@ -673,9 +709,10 @@ async function resolveFromRequestSpec(
   vars: TemplateVars,
   source: Tier3Source,
   deps: Tier3Deps,
+  timeoutMs: number,
 ): Promise<Tier3Candidate | null> {
   const req = deps.request || request;
-  const res = await req(buildRequest(spec, vars, source));
+  const res = await req(buildRequest(spec, vars, source, 'text', timeoutMs));
   if (res.status >= 400) return null;
   let body: unknown;
   try {
@@ -712,6 +749,7 @@ function metadataRoot(body: unknown, responseJsonPath: string): unknown {
 async function resolveSourceUrl(
   song: Song,
   source: Tier3Source,
+  timeoutMs: number,
   idOverride?: string,
   itemMeta?: { name?: string; artist?: string },
 ): Promise<Tier3Candidate | null> {
@@ -726,7 +764,7 @@ async function resolveSourceUrl(
     artist,
     keyword: `${name} ${artist}`.trim(),
   };
-  const candidate = await resolveFromRequestSpec(source.resolve, vars, source, deps);
+  const candidate = await resolveFromRequestSpec(source.resolve, vars, source, deps, timeoutMs);
   if (!candidate) return null;
   // 搜索条目自带的歌名/歌手比解析响应更可靠（解析响应常只有 URL）→ 覆盖文本证据。
   return {
@@ -739,12 +777,16 @@ async function resolveSourceUrl(
   };
 }
 
-async function resolveSearchThenResolve(song: Song, source: Tier3Source): Promise<Tier3Candidate | null> {
+async function resolveSearchThenResolve(
+  song: Song,
+  source: Tier3Source,
+  timeoutMs: number,
+): Promise<Tier3Candidate | null> {
   const deps = currentDeps;
   if (!source.search) return null;
   const vars = songVars(song);
   const req = deps.request || request;
-  const res = await req(buildRequest(source.search, vars, source));
+  const res = await req(buildRequest(source.search, vars, source, 'text', timeoutMs));
   if (res.status >= 400) return null;
   const items = getByPath(JSON.parse(bodyToText(res.body)), source.search.itemsPath);
   if (!Array.isArray(items)) return null;
@@ -778,7 +820,7 @@ async function resolveSearchThenResolve(song: Song, source: Tier3Source): Promis
     if (source.resolve && source.search.idPath) {
       const itemId = asString(getByPath(item, source.search.idPath));
       if (itemId) {
-        const resolved = await resolveSourceUrl(song, source, itemId, { name: itemName, artist: itemArtist });
+        const resolved = await resolveSourceUrl(song, source, timeoutMs, itemId, { name: itemName, artist: itemArtist });
         if (resolved) return resolved;
       }
     }
@@ -797,7 +839,11 @@ interface Tier3SearchItem {
   cover: string;
 }
 
-async function searchTier3SourceItems(source: Tier3Source, keyword: string): Promise<Tier3SearchItem[]> {
+async function searchTier3SourceItems(
+  source: Tier3Source,
+  keyword: string,
+  timeoutMs: number,
+): Promise<Tier3SearchItem[]> {
   if (source.kind !== 'search-then-resolve' || !source.search) return [];
   const deps = currentDeps;
   const vars: TemplateVars = {
@@ -808,7 +854,7 @@ async function searchTier3SourceItems(source: Tier3Source, keyword: string): Pro
     keyword,
   };
   const req = deps.request || request;
-  const res = await req(buildRequest(source.search, vars, source));
+  const res = await req(buildRequest(source.search, vars, source, 'text', timeoutMs));
   if (res.status >= 400) return [];
   const items = getByPath(JSON.parse(bodyToText(res.body)), source.search.itemsPath);
   if (!Array.isArray(items)) return [];
@@ -873,8 +919,11 @@ export async function searchTier3Songs(keyword: string, _page: number, sourceKey
       // 归属只用于给候选打正确的 sourceType（经别名归一化，见 :候选构造）。
       console.info(`[tier3] 源 ${source.id} 搜索请求: ${keyword}`);
       statsFor(source.id).searches++;
+      // 搜索腿同款单源硬墙（ADR-0014 决策 2「搜索腿补同款预算」）：
+      // 一个挂起的源不再能吃掉整条搜索腿的 6s（各源自己的重试也算在内）。
+      const searchTimeoutMs = effectiveSourceTimeout(source, deadline - Date.now());
       try {
-        const items = await Promise.race([searchTier3SourceItems(source, keyword), budgetHit]);
+        const items = await Promise.race([searchTier3SourceItems(source, keyword, searchTimeoutMs), budgetHit]);
         // 只保留歌名与查询词强相关的候选：归一化后歌名必须等于查询词、或为查询词
         // 的一部分（查询词更具体，如「恋人 李荣浩」可匹配「恋人」）；反向
         // （「恋人」匹配「恋人未满」）会端上完全不同的歌，一律丢弃。
@@ -1103,11 +1152,15 @@ export function tier3SourceSource(source: Tier3Source): SourceKey | undefined {
  *  L1 源自带时长（解析响应/搜索条目自动探测）→ L2 音频头解析（已取的头部字节）
  *  → L3 体积 × 8 ÷ 码率（优先源自称 br，缺失才用帧实测）→ L4 歌名 + 歌手精确匹配
  *  → L5 仅 source 声明。 */
-async function resolveTier3Candidate(song: Song, source: Tier3Source): Promise<Tier3Resolution | null> {
+async function resolveTier3Candidate(
+  song: Song,
+  source: Tier3Source,
+  timeoutMs: number,
+): Promise<Tier3Resolution | null> {
   const candidate =
     source.kind === 'url-resolver'
-      ? await resolveSourceUrl(song, source)
-      : await resolveSearchThenResolve(song, source);
+      ? await resolveSourceUrl(song, source, timeoutMs)
+      : await resolveSearchThenResolve(song, source, timeoutMs);
   if (!candidate) return null;
 
   // 候选自带证据（L1/L3/L4）+ 探测得到的 L2 头证据；码率优先源自称，缺失才用帧实测。
@@ -1145,6 +1198,9 @@ async function resolveTier3(song: Song): Promise<Tier3Resolution | null> {
     return null;
   }
   console.info(`[tier3] 开始解析: 《${song.name}》${song.artist} (${song.sourceType}, id=${song.id})`);
+  // 链内自持 deadline（ADR-0014 决策 2「整链 6s 软顶」）：不再只靠调用方的
+  // Promise.race——否则本腿会继续打上游、白耗配额，日志也看不出「预算已尽」。
+  const deadline = Date.now() + TIER3_BUDGET_MS;
   for (const subscription of state.subscriptions) {
     for (const source of subscription.manifest.sources) {
       // 归属判定（ADR-0014 决策 6）：显式声明须一致；未声明的 url-resolver 拒绝。
@@ -1163,14 +1219,25 @@ async function resolveTier3(song: Song): Promise<Tier3Resolution | null> {
         );
         continue;
       }
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        console.info(`[tier3] 整链预算 ${TIER3_BUDGET_MS}ms 用尽，停止尝试后续源: 《${song.name}》`);
+        return null;
+      }
+      // 单源硬墙：清单 timeoutMs 只能收紧，且不超过整链剩余预算（ADR-0014 决策 2）。
+      const timeoutMs = effectiveSourceTimeout(source, remaining);
       try {
-        const resolution = await resolveTier3Candidate(song, source);
-        if (resolution) {
+        const resolution = await withSourceDeadline(resolveTier3Candidate(song, source, timeoutMs), timeoutMs);
+        if (resolution === SOURCE_TIMED_OUT) {
+          console.info(`[tier3] 源 ${source.id} 超时（单源硬墙 ${timeoutMs}ms），换下一个源`);
+          statsFor(source.id).lastError = `单源硬墙 ${timeoutMs}ms 超时`;
+        } else if (resolution) {
           statsFor(source.id).hits++;
           console.info(`[tier3] 命中 source=${source.id}（guard=${resolution.guard}）: ${resolution.url}`);
           return resolution;
+        } else {
+          console.info(`[tier3] source=${source.id} 未命中`);
         }
-        console.info(`[tier3] source=${source.id} 未命中`);
       } catch (e) {
         const msg = (e as Error)?.message || String(e);
         console.warn(`[tier3] source=${source.id} 失败: ${msg}`);

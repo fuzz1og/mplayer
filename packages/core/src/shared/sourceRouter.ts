@@ -332,7 +332,7 @@ async function tryTier3Search(keyword: string, page: number, source: SourceKey):
 
 /** tier3 解析总预算：mitu/vkeys 类源命中通常 2-5s，mgmp3 类源超时 20s——
  *  预算截断避免播放被慢源拖死（超时按未命中处理，慢源请求自然结束，结果丢弃）。 */
-const TIER3_BUDGET_MS = 6_000;
+export const TIER3_BUDGET_MS = 6_000;
 
 // ── tier3 同歌去重（#172 评论：同歌并行重复解析）──────────────────────
 //
