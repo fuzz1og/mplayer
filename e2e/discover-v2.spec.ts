@@ -61,12 +61,13 @@ async function expectAnyState(locator: Locator, states: ExpectedState[]): Promis
 
 test.describe('发现页 V2 - 排行榜', () => {
 
-  const getFirstSongRow = () => page.locator('main [style*="cursor: pointer"]').first();
+  // 榜单行是 div（源切换控件是 button，故限定 div 以免把按钮当成行）
+  const getFirstSongRow = () => page.locator('main div[style*="cursor: pointer"]').first();
 
-  test('加载后显示热歌榜和新歌榜标题', async () => {
+  test('加载后显示当前源的热歌榜与新歌榜标题', async () => {
     await navigateToDiscover();
-    await expect(page.getByText('🔥 热歌榜')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('🎵 新歌榜')).toBeVisible();
+    await expect(page.getByText('网易云 · 热歌榜')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('网易云 · 新歌榜')).toBeVisible();
   });
 
   test('加载后显示歌曲行', async () => {
@@ -74,38 +75,21 @@ test.describe('发现页 V2 - 排行榜', () => {
     await expect(getFirstSongRow()).toBeVisible({ timeout: 15000 });
   });
 
-  test('歌曲行包含 SourceBadge', async () => {
+  test('源切换：点 QQ 后面板标题随源变化', async () => {
     await navigateToDiscover();
     await expect(getFirstSongRow()).toBeVisible({ timeout: 15000 });
 
-    // SourceBadge renders as colored text spans (not images)
-    const badges = page.locator('main span').filter({ hasText: /网易云|QQ|酷狗/ });
-    const count = await badges.count().catch(() => 0);
-    expect(count).toBeGreaterThan(0);
+    await page.locator('main').getByRole('button', { name: 'QQ', exact: true }).click();
+    await expect(page.getByText('QQ · 热歌榜')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('QQ · 新歌榜')).toBeVisible();
   });
 
-  test('展开后显示多源版本', async () => {
+  test('点击排行榜歌曲行播放', async () => {
     await navigateToDiscover();
     await expect(getFirstSongRow()).toBeVisible({ timeout: 15000 });
 
+    // 单源榜没有行内播放按钮：整行可点即播放
     await getFirstSongRow().click();
-    await page.waitForTimeout(500);
-
-    // Expanded section shows more rows
-    const rows = page.locator('main [style*="cursor: pointer"]');
-    expect(await rows.count()).toBeGreaterThan(1);
-  });
-
-  test('点击排行榜歌曲播放按钮', async () => {
-    await navigateToDiscover();
-    await expect(getFirstSongRow()).toBeVisible({ timeout: 15000 });
-
-    const playBtn = getFirstSongRow().locator('button').last();
-    if (await playBtn.isVisible().catch(() => false)) {
-      await playBtn.click();
-    } else {
-      await getFirstSongRow().dblclick();
-    }
     await page.waitForTimeout(3000);
 
     const playerText = await page.evaluate(() => {

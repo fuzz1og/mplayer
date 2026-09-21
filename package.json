@@ -30,7 +30,6 @@
     "typecheck:mobile": "npx tsc --noEmit --project packages/mobile/tsconfig.json",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:chart": "node scripts/testAggregatedChart.js",
     "mobile:e2e": "bash scripts/mobile-e2e.sh",
     "core:build": "npm run build -w packages/core"
   },
