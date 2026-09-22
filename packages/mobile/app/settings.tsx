@@ -356,7 +356,8 @@ export default function SettingsPage() {
                         {declared ? ' · ' + declared : ''}
                       </Text>
                       <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>
-                        命中 {st.hits} / 未命中 {st.misses} / 跳过 {st.skipped ?? 0}
+                        交付 {st.hits} / 丢弃 {st.discarded ?? 0} / 未命中 {st.misses} / 跳过 {st.skipped ?? 0}
+                        {st.guardRejected ? ` / 护栏拒绝 ${st.guardRejected}` : ''}
                       </Text>
                     </View>
                   );

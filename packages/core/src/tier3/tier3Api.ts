@@ -10,6 +10,8 @@ import { extractAudioDuration } from '../shared/audioDuration.js';
 import type { AudioDurationEvidence } from '../shared/audioDuration.js';
 import {
   TIER3_BUDGET_MS,
+  SOURCE_DISPLAY_NAMES,
+  getSourceMode,
   setTier3Enabled as setRouterTier3Enabled,
   setTier3Resolver as setRouterTier3Resolver,
   setTier3SearchEnabled as setRouterTier3SearchEnabled,
@@ -106,17 +108,27 @@ export interface Tier3State {
 }
 
 /** 每源累计解析统计（设置页展示；内存计数，本次会话有效、不持久化）。
- *  - hits / misses：解析腿命中与未命中；
+ *  - hits：**真正交付**给调用方的命中数——只有路由层在整链预算内采纳该候选才计
+ *    （#362：原先在 resolver 内部自增，预算超时被丢弃的迟到命中也被记成「命中」，
+ *    实测一个源 hits=17 而同一批歌 21/21 全部超时失败，设置页与体验相反）；
+ *  - resolved：resolver 产出的、过护栏的候选数（含迟到被丢弃的）；
+ *  - discarded：预算超时被丢弃的迟到命中数（= resolved - hits，读取时派生）；
+ *  - misses：解析腿未命中；
  *  - skipped：因 source 归属不匹配被跳过（ADR-0014：显式声明才过滤）；
  *  - searches：搜索兜底腿参与的关键词搜索次数（此前完全未统计）；
  *  - lastError：最近一次失败原因（排障用，非累计）；
- *  - guards / guardRejected：护栏（#361）按证据等级的命中与拒绝计数；
+ *  - guards / guardRejected：护栏（#361）按证据等级的命中与拒绝计数——与 resolved/misses
+ *    一样记 resolver 内部决策，**含预算超时后仍在后台跑完的迟到工作**；只有 hits 是交付口径；
  *  - sizeBitrateDeclared / sizeBitrateMeasured：L3 两条码率分支分别计数
  *    （ADR：帧实测码率在 ±2s 下会误判，必须与自称码率分开归因）。
  *  仅会话内有效是有意为之：源健康度是时变的，昨日状态不应污染今日判断
  *  （ADR-0014「坏源只做统计」，不做熔断/降权/持久化）。 */
 export interface Tier3SourceStats {
   hits: number;
+  /** resolver 产出（过护栏）的候选数；`hits` ≤ `resolved`。 */
+  resolved: number;
+  /** 预算超时被丢弃的迟到命中数（读取时按 resolved - hits 派生）。 */
+  discarded: number;
   misses: number;
   skipped: number;
   searches: number;
@@ -198,7 +210,7 @@ const tier3Stats = new Map<string, Tier3SourceStats>();
 
 /** 零值统计（新增字段都在此初始化，避免各处 `?? {...}` 漏字段）。 */
 function emptyStats(): Tier3SourceStats {
-  return { hits: 0, misses: 0, skipped: 0, searches: 0 };
+  return { hits: 0, resolved: 0, discarded: 0, misses: 0, skipped: 0, searches: 0 };
 }
 
 /** 取（或初始化）某源的可变统计对象。 */
@@ -211,9 +223,17 @@ function statsFor(id: string): Tier3SourceStats {
   return s;
 }
 
-/** 每源累计统计（key = source.id）。 */
+/** 每源累计统计（key = source.id）。
+ *  `discarded` 在读取时按 `resolved - hits` 派生：迟到命中与「路由层是否采纳」
+ *  的时序无法在写入侧无竞态地判定（同歌去重下多个调用方共享一条解析），
+ *  交付（hits）只由采纳方 commit，未交付的产出就是被丢弃的。 */
 export function getTier3Stats(): Record<string, Tier3SourceStats> {
-  return Object.fromEntries(tier3Stats);
+  return Object.fromEntries(
+    [...tier3Stats].map(([id, s]) => [
+      id,
+      { ...s, discarded: Math.max(0, (s.resolved ?? 0) - s.hits) },
+    ]),
+  );
 }
 
 /** 测试/重置用：清空统计。 */
@@ -1126,9 +1146,22 @@ export function normalizeTier3Source(value: string): SourceKey | undefined {
  *   可能返回完全不同的歌（这正是 source 字段原本要防的事）。
  */
 function isSourceUsableFor(source: Tier3Source, songSource: SourceKey): boolean {
+  return classifySourceOwnership(source, songSource) === 'usable';
+}
+
+/** 单源归属分类（ADR-0014 决策 6 的单一事实源；供过滤与失败归因共用，避免两处规则漂移）。
+ *  - `usable`：显式声明与歌曲来源一致；或**未声明/值不认识**的 search-then-resolve
+ *    （它自带歌名/歌手校验，即便源不对也由内容匹配兜住）；
+ *  - `mismatch`：显式声明了另一个音乐源；
+ *  - `undeclared`：未声明 source 的 url-resolver（拒绝，防跨源错配）；
+ *  - `unknown`：source 值不在规范集/别名表里的 url-resolver（等同未声明，拒绝）。 */
+type SourceOwnership = 'usable' | 'mismatch' | 'undeclared' | 'unknown';
+
+function classifySourceOwnership(source: Tier3Source, songSource: SourceKey): SourceOwnership {
+  if (!source.source) return source.kind === 'url-resolver' ? 'undeclared' : 'usable';
   const declared = tier3SourceSource(source);
-  if (declared) return declared === songSource;
-  return source.kind !== 'url-resolver';
+  if (!declared) return source.kind === 'url-resolver' ? 'unknown' : 'usable';
+  return declared === songSource ? 'usable' : 'mismatch';
 }
 
 /** 源适用的原始音源：**只认显式声明的 source**（ADR-0014 决策 6，含别名归一化）。
@@ -1143,6 +1176,109 @@ function isSourceUsableFor(source: Tier3Source, songSource: SourceKey): boolean 
 export function tier3SourceSource(source: Tier3Source): SourceKey | undefined {
   if (!source.source) return undefined;
   return normalizeTier3Source(source.source);
+}
+
+// ── 播放失败归因（#357）──────────────────────────────────────────────
+
+/**
+ * 播放失败归因（#357）：把「直连没拿到 URL + tier3 兜底情况」压成可操作的一类。
+ *
+ * 现状是一句「无法获取音频 URL：可能为 VIP/无版权或直连暂不可用」，把四种完全
+ * 不同的原因混在一起，还把用户引向「VIP/无版权」的错误方向（t6 §4.2② 实测：
+ * 清单写了不认识的 source 值 → 搜索候选 sourceType 被污染 → decideRoute 抛
+ * 「该源暂无直连实现」→ 用户最终看到的就是这句 VIP 提示）。
+ */
+export type PlaybackFailureKind =
+  /** 该源被设为「仅直连」，tier3 兜底被主动关掉（可操作：改回「自动」）。 */
+  | 'direct-only'
+  /** tier3 未开启（可操作：设置里开启）。 */
+  | 'tier3-disabled'
+  /** 已开启但没有订阅清单（可操作：添加订阅）。 */
+  | 'no-subscription'
+  /** 有订阅，但没有源声明服务于该歌来源（可操作：补 source 匹配条目 / 通用 search-then-resolve 源）。 */
+  | 'no-declared-source'
+  /** 有源但全部因 source 归属被跳过（未声明 source 的 url-resolver / 值不认识）。 */
+  | 'all-skipped'
+  /** 适用该来源的源都试过，未命中或超时（可操作：稍后重试 / 更换订阅）。 */
+  | 'sources-missed';
+
+/** 播放失败诊断结果（#357）：归因 + 计数 + 双端共享的可操作文案。 */
+export interface PlaybackFailureAdvice {
+  kind: PlaybackFailureKind;
+  /** 订阅清单声明的源总数。 */
+  declared: number;
+  /** 适用于本歌来源的源数（显式 source 匹配，或未声明的 search-then-resolve）。 */
+  usable: number;
+  /** 因 source 归属被跳过的源数。 */
+  skipped: number;
+  /** 用户可读、可操作的失败说明（双端共用同一份，避免文案漂移）。 */
+  message: string;
+}
+
+/**
+ * 播放失败归因（#357）：调用方在「直连 + tier3 都没拿到 URL」后调用，得到归因与
+ * 可操作文案。按**当前配置**推导（订阅清单 + 来源开关 + tier3 开关），不依赖
+ * 会话累计统计——那些是全局计数，不是「本次为什么失败」（ADR-0014 决策 5）。
+ *
+ * 纯读，无副作用；跨端（桌面经 IPC / 移动端直调）共用同一份文案。
+ */
+export function explainPlaybackFailure(song: Song): PlaybackFailureAdvice {
+  const key = song.sourceType as string;
+  const label = SOURCE_DISPLAY_NAMES[key] || key;
+  const sources = state.subscriptions.flatMap((sub) => sub.manifest.sources);
+  const declared = sources.length;
+
+  // 顺序有讲究：tier3 全局未开启时，「改为自动」并不能启用兜底——先报可真正解除
+  // 的开关（tier3 未开启），再报来源开关（仅直连），否则文案会把用户引向无效操作。
+  if (!state.enabled) {
+    return {
+      kind: 'tier3-disabled', declared, usable: 0, skipped: 0,
+      message: '直连没取到可播链接，第三方解析源（tier3）也未开启。可在设置中开启后重试',
+    };
+  }
+  if (getSourceMode(song.sourceType) === 'direct') {
+    return {
+      kind: 'direct-only', declared, usable: 0, skipped: 0,
+      message: `该源已设为「仅直连」，直连没取到可播链接。可在设置里把「${label}」的来源开关改为「自动」，启用第三方解析源兜底`,
+    };
+  }
+  if (declared === 0) {
+    return {
+      kind: 'no-subscription', declared, usable: 0, skipped: 0,
+      message: '已开启第三方解析源，但还没有订阅清单。添加一份 JSON 音源清单后即可自动兜底',
+    };
+  }
+
+  // 归属分类与解析腿共用同一个 classifier（避免两处规则漂移）。
+  const ownership = sources.map((s) => classifySourceOwnership(s, song.sourceType));
+  const countOf = (kind: SourceOwnership): number => ownership.filter((o) => o === kind).length;
+  const usable = countOf('usable');
+  const skipped = declared - usable;
+  if (usable > 0) {
+    return {
+      kind: 'sources-missed', declared, usable, skipped,
+      message: `适用「${label}」的 ${usable} 个订阅源都试过了，未命中或超时。源可能临时失效/限流，可稍后重试或更换订阅`,
+    };
+  }
+
+  // usable === 0：区分「没有源声明服务于该来源」与「有源但被归属过滤」。
+  const mismatch = countOf('mismatch');
+  if (mismatch > 0) {
+    return {
+      kind: 'no-declared-source', declared, usable, skipped,
+      message: `没有订阅源声明服务于「${label}」（有 ${mismatch} 个源声明的是其他平台）。可补一条 source: ${key} 的 url-resolver 条目，或一条通用的 search-then-resolve 源`,
+    };
+  }
+  const undeclared = countOf('undeclared');
+  const unknown = countOf('unknown');
+  const detail = [
+    undeclared > 0 ? `${undeclared} 个 url-resolver 未声明 source 被拒` : '',
+    unknown > 0 ? `${unknown} 个 source 值不是已知音乐源` : '',
+  ].filter(Boolean).join('、');
+  return {
+    kind: 'all-skipped', declared, usable, skipped,
+    message: `订阅里的源都不能兜底「${label}」：${detail}。可补一条声明 source: ${key} 的条目，或一条 search-then-resolve 源`,
+  };
 }
 
 // ── 护栏应用（#361）──────────────────────────────────────────────────
@@ -1232,9 +1368,22 @@ async function resolveTier3(song: Song): Promise<Tier3Resolution | null> {
           console.info(`[tier3] 源 ${source.id} 超时（单源硬墙 ${timeoutMs}ms），换下一个源`);
           statsFor(source.id).lastError = `单源硬墙 ${timeoutMs}ms 超时`;
         } else if (resolution) {
-          statsFor(source.id).hits++;
-          console.info(`[tier3] 命中 source=${source.id}（guard=${resolution.guard}）: ${resolution.url}`);
-          return resolution;
+          // #362：resolver 只记「产出」；「交付」由路由层在预算内采纳时 commit。
+          // 预算超时被丢弃的迟到命中仍会增加 resolved，但 hits 不动 →
+          // getTier3Stats 的 discarded = resolved - hits 即为丢弃数。
+          statsFor(source.id).resolved++;
+          console.info(`[tier3] 产出候选 source=${source.id}（guard=${resolution.guard}）: ${resolution.url}`);
+          const sourceId = source.id;
+          let committed = false;
+          return {
+            ...resolution,
+            commit: () => {
+              // 同歌去重下多个调用方共享同一条解析：交付只计一次（幂等）。
+              if (committed) return;
+              committed = true;
+              statsFor(sourceId).hits++;
+            },
+          };
         } else {
           console.info(`[tier3] source=${source.id} 未命中`);
         }

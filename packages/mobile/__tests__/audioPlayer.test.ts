@@ -556,6 +556,24 @@ describe('direct-first playback (spec #146 §8 移动端直连)', () => {
 
     expect(audioMocks.resolvePlayableSongRouted.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
+
+  it('routed chain throw → 用 core 归因文案（#357），不降级为「音源解析失败」', async () => {
+    const first = song('1');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    // 实时解析 + fresh 重试 + fresh 兜底各一次：解析链持续抛错（真机断网即此形态）
+    audioMocks.resolvePlayableSongRouted.mockRejectedValueOnce(new Error('Network Error'));
+    audioMocks.resolvePlayableSongRouted.mockRejectedValueOnce(new Error('Network Error'));
+    audioMocks.resolvePlayableSongRouted.mockRejectedValueOnce(new Error('Network Error'));
+
+    await playSong(first);
+    await flush();
+
+    // 解析链抛错与「返回空 URL」同属穷尽：Toast 文案来自 core explainPlaybackFailure
+    // （测试环境 tier3 未开启 → tier3-disabled），而不是泛化的「音源解析失败」。
+    const notice = useLogsStore.getState().notice;
+    expect(notice?.text).toContain('第三方解析源（tier3）也未开启');
+    expect(notice?.text).not.toContain('音源解析失败');
+  });
 });
 
 describe('togglePlay / seekTo', () => {

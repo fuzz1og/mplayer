@@ -31,6 +31,7 @@ export const BASE_METHODS = [
   'searchSongsRouted',
   'resolvePlayableUrlRouted',
   'resolvePlayableSongRouted',
+  'explainPlaybackFailure',
 ] as const;
 
 export type BaseMethod = (typeof BASE_METHODS)[number];

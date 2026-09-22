@@ -14,6 +14,7 @@ import {
   resolvePlayableSongRouted as routedResolveSong,
   resolvePlayableSongDirect as routedResolveSongDirect,
 } from '../shared/sourceRouter.js';
+import { explainPlaybackFailure as explainFailure } from '../tier3/tier3Api.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
 import { fetchLyricViaGateway } from './qqDirect.js';
@@ -563,4 +564,7 @@ export const musicApi = {
 
   /** 模式感知播放解析 + 试听版检测（T12：UrlInfo 完整时长校验 → nonFull 标记）。 */
   resolvePlayableSongRouted: (song: Song) => routedResolveSong(song),
+
+  /** 播放失败归因（#357）：直连 + tier3 都没拿到 URL 后，取可操作的原因与共享文案。 */
+  explainPlaybackFailure: (song: Song) => explainFailure(song),
 };

@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { forgetPrefetchedUrl, getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics } from '@mplayer/core';
+import { forgetPrefetchedUrl, getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics, explainPlaybackFailure } from '@mplayer/core';
 import type { PlayableResource, Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -30,6 +30,19 @@ let currentPlayId = 0;
 // playSong 进行中（解析 URL/创建播放器）：togglePlay 应忽略点击，
 // 避免 URL 解析期间反复触发 fresh 重试解析
 let preparingPlayback = false;
+
+/**
+ * 解析链穷尽（#357）：直连 + tier3 都没拿到 URL。
+ * 解析链**抛错**（直连/订阅源网络失败、该源暂无直连实现等）与「返回空 URL」同属
+ * 穷尽——必须与播放器/网络错误区分开，否则失败归因会被降级成泛化的「音源解析失败」
+ * （实测断网时直连抛 AxiosError，旧判定只认字符串 'no playable URL'，归因永远走不到）。
+ */
+class ResolutionChainError extends Error {
+  constructor(readonly cause: unknown) {
+    super(cause instanceof Error && cause.message ? cause.message : 'no playable URL');
+    this.name = 'ResolutionChainError';
+  }
+}
 
 // 缓存 URL「年轻」窗口（<10min 免探活直接播）：CDN 签名寿命 ~15-30min，
 // 窗口取下限避免年轻条目也白付探活延迟（丝滑路径 0 额外开销）。
@@ -315,7 +328,12 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       // 本地文件不会过期，不参与 fresh 重试（调用方已过滤 local 源）。
       // fresh 语义：先遗忘预取缓存里刚失败的直链，再重走完整路由解析链
       //（直连 → tier3）拿全新 URL；重试仍失败再退回同一条路由链兜底一次
-      const refreshed = await refreshPlayableUrl(song).catch(() => resolvePlayableUrlMobile(song));
+      let refreshed: { url: string; nonFull: boolean };
+      try {
+        refreshed = await refreshPlayableUrl(song).catch(() => resolvePlayableUrlMobile(song));
+      } catch (resolveErr) {
+        throw new ResolutionChainError(resolveErr);
+      }
       audioUrl = refreshed.url;
       playbackNonFull = refreshed.nonFull;
       // fresh 重试只解析 URL，不返回歌词；歌单/收藏缓存歌 lrc 为空，
@@ -350,8 +368,14 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
         playbackNonFull = cached.nonFull;
         void fetchLrcInBackground(song);
       } else {
-        // 无 url：路由解析（直连 → tier3 兜底），空结果交给下方直链校验上抛
-        const resolved = await resolvePlayableUrlMobile(song);
+        // 无 url：路由解析（直连 → tier3 兜底）。解析链抛错同样归一成 ResolutionChainError
+        // （下方空 URL 也抛同一类），失败归因才能与播放器错误区分（#357）。
+        let resolved: { url: string; lrc: string; nonFull: boolean };
+        try {
+          resolved = await resolvePlayableUrlMobile(song);
+        } catch (resolveErr) {
+          throw new ResolutionChainError(resolveErr);
+        }
         audioUrl = resolved.url;
         lrcUrl = resolved.lrc;
         playbackNonFull = resolved.nonFull;
@@ -370,7 +394,7 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       useLogsStore.getState().setNotice('info', '当前为试听版，可换源获取完整版');
     }
     if (playId !== currentPlayId) throw 'cancelled';
-    if (!audioUrl?.startsWith('http') && !audioUrl?.startsWith('file://')) throw new Error('no playable URL');
+    if (!audioUrl?.startsWith('http') && !audioUrl?.startsWith('file://')) throw new ResolutionChainError(null);
     log.addLog('info', `[耗时] 直链就绪: 《${song.name}》 解析耗时 ${Date.now() - t0}ms`);
     console.log(`[player] 直链URL: ${audioUrl.slice(0, 120)}`);
     usePlayerStore.getState().setPreparing(false);
@@ -453,11 +477,14 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     if (err === 'cancelled') return;
     const reason = String((err as Error)?.message || err);
     log.addLog('error', `《${song.name}》播放失败: ${reason}`);
-    // 完整堆栈打到 Metro 终端（移动端诊断 TypeError 等异常用）
-    console.error(`[player] 《${song.name}》播放失败堆栈:`, (err as Error)?.stack || err);
-    // 失败原因归类（Toast 文案用）：解析链穷尽 vs 其他（播放器/网络）
-    const exhausted = reason === 'no playable URL';
-    const reasonText = exhausted ? '直连与全部订阅源均未命中' : '音源解析失败';
+    // 完整堆栈打到 Metro 终端（移动端诊断 TypeError 等异常用）；包装错误取原始 cause
+    const cause = err instanceof ResolutionChainError ? err.cause : err;
+    console.error(`[player] 《${song.name}》播放失败堆栈:`, (cause as Error)?.stack || cause);
+    // 失败原因归类（Toast 文案用）：解析链穷尽 vs 其他（播放器/网络）。
+    // #357：穷尽时用 core 的失败归因（没有声明对应 source 的源 / 全部因归属被跳过 /
+    // 源都试了没命中 / tier3 未开启…），与桌面端共用同一份文案，不再统一报 VIP。
+    const exhausted = err instanceof ResolutionChainError;
+    const reasonText = exhausted ? explainPlaybackFailure(song).message : '音源解析失败';
     if (!fresh && song.sourceType !== 'local') {
       // 解析链穷尽时先回查缓存（#172）：后台预取可能恰在本轮解析期间拿到直链
       // 写入缓存（后台 3s 命中、前台 6s 预算耗尽失败的时序差）。命中且确系本轮
