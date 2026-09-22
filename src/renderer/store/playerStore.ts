@@ -262,11 +262,11 @@ class PlayableUrlMissingError extends Error {
 
 /** 失败原因归类（提示文案）：解析链穷尽（带归因）vs 播放器 / 网络 */
 function failureReasonText(error: unknown): string {
+  // 解析链穷尽只从 PlayableUrlMissingError 抛出（其余失败=播放器/网络）
   if (error instanceof PlayableUrlMissingError) {
     return error.advice?.message ?? '直连与全部订阅源均未命中';
   }
-  const text = error instanceof Error ? error.message : String(error ?? '');
-  return text.includes('无法获取音频 URL') ? '直连与全部订阅源均未命中' : '音源解析失败';
+  return '音源解析失败';
 }
 
 /**

@@ -1146,9 +1146,22 @@ export function normalizeTier3Source(value: string): SourceKey | undefined {
  *   可能返回完全不同的歌（这正是 source 字段原本要防的事）。
  */
 function isSourceUsableFor(source: Tier3Source, songSource: SourceKey): boolean {
+  return classifySourceOwnership(source, songSource) === 'usable';
+}
+
+/** 单源归属分类（ADR-0014 决策 6 的单一事实源；供过滤与失败归因共用，避免两处规则漂移）。
+ *  - `usable`：显式声明与歌曲来源一致；或**未声明/值不认识**的 search-then-resolve
+ *    （它自带歌名/歌手校验，即便源不对也由内容匹配兜住）；
+ *  - `mismatch`：显式声明了另一个音乐源；
+ *  - `undeclared`：未声明 source 的 url-resolver（拒绝，防跨源错配）；
+ *  - `unknown`：source 值不在规范集/别名表里的 url-resolver（等同未声明，拒绝）。 */
+type SourceOwnership = 'usable' | 'mismatch' | 'undeclared' | 'unknown';
+
+function classifySourceOwnership(source: Tier3Source, songSource: SourceKey): SourceOwnership {
+  if (!source.source) return source.kind === 'url-resolver' ? 'undeclared' : 'usable';
   const declared = tier3SourceSource(source);
-  if (declared) return declared === songSource;
-  return source.kind !== 'url-resolver';
+  if (!declared) return source.kind === 'url-resolver' ? 'unknown' : 'usable';
+  return declared === songSource ? 'usable' : 'mismatch';
 }
 
 /** 源适用的原始音源：**只认显式声明的 source**（ADR-0014 决策 6，含别名归一化）。
@@ -1236,7 +1249,10 @@ export function explainPlaybackFailure(song: Song): PlaybackFailureAdvice {
     };
   }
 
-  const usable = sources.filter((s) => isSourceUsableFor(s, song.sourceType)).length;
+  // 归属分类与解析腿共用同一个 classifier（避免两处规则漂移）。
+  const ownership = sources.map((s) => classifySourceOwnership(s, song.sourceType));
+  const countOf = (kind: SourceOwnership): number => ownership.filter((o) => o === kind).length;
+  const usable = countOf('usable');
   const skipped = declared - usable;
   if (usable > 0) {
     return {
@@ -1246,18 +1262,15 @@ export function explainPlaybackFailure(song: Song): PlaybackFailureAdvice {
   }
 
   // usable === 0：区分「没有源声明服务于该来源」与「有源但被归属过滤」。
-  const mismatch = sources.filter((s) => {
-    const d = tier3SourceSource(s);
-    return !!d && d !== song.sourceType;
-  }).length;
+  const mismatch = countOf('mismatch');
   if (mismatch > 0) {
     return {
       kind: 'no-declared-source', declared, usable, skipped,
       message: `没有订阅源声明服务于「${label}」（有 ${mismatch} 个源声明的是其他平台）。可补一条 source: ${key} 的 url-resolver 条目，或一条通用的 search-then-resolve 源`,
     };
   }
-  const undeclared = sources.filter((s) => !s.source).length;
-  const unknown = declared - undeclared;
+  const undeclared = countOf('undeclared');
+  const unknown = countOf('unknown');
   const detail = [
     undeclared > 0 ? `${undeclared} 个 url-resolver 未声明 source 被拒` : '',
     unknown > 0 ? `${unknown} 个 source 值不是已知音乐源` : '',
