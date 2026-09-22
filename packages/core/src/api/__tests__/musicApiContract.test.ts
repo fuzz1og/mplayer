@@ -37,7 +37,7 @@ describe('core musicApi 收编方法（ADR-0001）', () => {
   });
 
   it('probeSongsBatch 只走直连，不触发 tier3（探测=直连可播性，避免被慢源拖死）', async () => {
-    const tier3 = vi.fn(async () => 'https://tier3.example.com/x.mp3');
+    const tier3 = vi.fn(async () => ({ url: 'https://tier3.example.com/x.mp3', guard: 'none' as const }));
     setTier3Enabled(true);
     setTier3Resolver(tier3);
     registerDirectClient({

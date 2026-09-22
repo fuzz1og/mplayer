@@ -25,7 +25,7 @@ tier3 订阅源 = 用户自配的第三方解析源，作为官方直连失败�
 | `source` | ⚠️ | 该源**服务的音乐源**（见下节）。`url-resolver` 不写会被拒绝；`search-then-resolve` 不写＝通用兜底 |
 | `kind` | ✅ | `url-resolver`（按 ID 直取）或 `search-then-resolve`（先搜再解） |
 | `allowedDomains` | ✅ | 返回音频 URL 的域名白名单；`*.example.com` 才放行子域，普通 `example.com` 只放行自身 |
-| `timeoutMs` | — | 单源超时（默认 2s；整链另有 6s 预算） |
+| `timeoutMs` | — | 单源超时（默认 2s）。**只能收紧、不能放大**：实际生效值 = `min(timeoutMs, 2s 硬墙, 整链剩余预算)`——解析腿源间串行，一个挂起的死源若被允许跑 15s 会吃光整链 6s 预算，后面的好源一次都不会被请求（#365） |
 | `headers` | — | 合并进解析请求与嗅探请求的请求头 |
 | `resolve` | ✅ | 取链步骤：`{ method?, url, body?, responseJsonPath }` |
 | `search` | search-then-resolve ✅ | 搜索步骤：`resolve` 的字段 + `itemsPath/namePath/artistPath/idPath/urlPath/coverPath/albumPath` |
@@ -72,6 +72,23 @@ tier3 订阅源 = 用户自配的第三方解析源，作为官方直连失败�
 
 如果不想逐源拆，另一个省事的通用兜底是放**一条不声明 `source` 的 `search-then-resolve` 源**。
 
+## 兜底护栏：只替换 URL，分级验证（#361）
+
+tier3 只替换**流 URL**，绝不铸造新的歌曲身份（队列 / 收藏 / 历史 / 本地歌单零改写）。但第三方源返回的音频不保证就是点的那一首，因此每条候选在采用前要过护栏：
+
+| 等级 | 证据 | 来源 |
+|---|---|---|
+| L1 `source-duration` | 源自带时长 | 解析响应 / 搜索条目里的常见字段（`duration` / `Duration` / `song_play_time` / `play_time` / `playTime` 等，**自动探测**） |
+| L2 `audio-header` | 音频头解析时长 | 已取的头部字节（music-metadata；仅全局头容器可信：M4A/FLAC，或 MP3 带 Xing/Info、或已取全文件） |
+| L3 `size-bitrate` | `体积 × 8 ÷ 码率` | 体积 = Range 的 `content-range` 总量；码率优先**源自称 `br`**（自动探测），缺失才用帧实测 |
+| L4 `text-only` | 只验歌名 + 歌手精确匹配 | 搜索条目自带 / 解析响应里的 `name`/`artist` 常见字段 |
+| L5 `none` | 只剩 `source` 声明这一条**信任**（契约不是证据） | url-resolver 且响应无 name/artist |
+
+- 判据：`|候选时长 − 标称 Song.duration| ≤ 2s`。**不需要**在清单里声明 `durationPath`：常见字段自动探测，探不到就降级，不影响可用性。
+- 不过护栏**不静默播**：换下一个候选源；全部不过 → 走既有失败链路（返回空 URL）。
+- 预取缓存命中的试听版换完整版时，同样过护栏。
+- `auto` / `direct` 来源开关语义不变（`direct` 模式下直连抛错仍不回退 tier3）。
+
 ## 示例
 
 URL 直取型（声明归属）：
@@ -114,7 +131,7 @@ URL 直取型（声明归属）：
 
 ## 安全与限制
 
-- **域名白名单 + 字节嗅探**：返回的 URL 必须落在 `allowedDomains` 且前 1KB 是音频字节（拒 `text/html` 错误页）；完整大小 <1MB 的候选视为试听片段，跳过（宁可不播也不把试听当完整版）。
-- **预算**：单源解析默认 2s（`timeoutMs` 可覆盖），整链 6s；搜索腿 6s（耗尽返回已收集的部分候选）。嗅探独立 1s。
+- **域名白名单 + 字节嗅探**：返回的 URL 必须落在 `allowedDomains` 且取到的头部字节是音频（拒 `text/html` 错误页）；完整大小 <1MB 的候选视为试听片段，跳过（宁可不播也不把试听当完整版）。护栏取证与嗅探共用**一次 64KB Range**。
+- **预算**：单源 2s 硬墙（`timeoutMs` 只能收紧；连 transport 的重试一起算在墙钟内），整链 6s（预算用尽即停止启动后续源）；搜索腿 6s（耗尽返回已收集的部分候选）+ 同款单源硬墙。嗅探独立 1s。
 - **统计仅会话内**，不持久化、不做熔断/软降权（ADR-0014 决策 4/5）。
 - **已知未解决**：服务器忽略 `Range` 时会缓冲整个响应直到超时，好 URL 可能被误判为坏源（需 transport 支持响应字节上限/提前中断）。

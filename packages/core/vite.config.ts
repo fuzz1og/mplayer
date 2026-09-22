@@ -23,7 +23,10 @@ export default defineConfig({
       },
     },
     rollupOptions: {
-      external: ['axios'],
+      // music-metadata：护栏 L2 时长取证用的只读解析器（懒加载 import）。
+      // 与桌面主进程构建（根 vite.config.ts）一致地 external，避免把解析器
+      // 打进 core 产物；宿主/移动端从 node_modules 解析，缺失时护栏自动降级。
+      external: ['axios', 'music-metadata'],
     },
     // 产物被桌面/移动端打包器内联，sourcemap 只会白白增大 dist 体积
     sourcemap: false,

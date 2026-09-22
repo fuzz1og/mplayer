@@ -57,9 +57,10 @@ expo-router Stack + Tabs：`(tabs)/`（推荐/发现/搜索/歌单/下载）+ pl
 
 - `api/` 请求层：7 源直连客户端（`neteaseDirect`/`qqDirect`/`kugouDirect`/`miguDirect`/`kuwoDirect`/`qianqianDirect`/`sodaDirect`，能力面 = searchSongs/getToplists/内容方法，IPC 契约见上节）；`musicApi` 薄门面（probeSongsBatch、soda 分享解析等基础方法）；`qqPlaylist`/`playlistImport`（QQ 歌单解析与链接导入）；`neteaseWeapi`；`antiScrape`（UA 池/反同源连续）；`tlsFingerprint` + `transport`（可注入接缝，maxRedirects 透传）；`probeSongs` + `prefetchCache`（探测写预取；键 = 歌曲身份键，值 = `PlayableResource`）
 - `cache/` 缓存内核（CacheKernel/SongResourcesCache）
-- `shared/`：`sourceRouter`（来源开关 `auto|direct` 两态 + `sanitizeSourceModes` 洗白存量 'api'、直连客户端注册表、`searchSongsRouted`/`resolvePlayableSongRouted` 路由、`getToplistSongs`/`pickToplistGroup` + `TOPLIST_SOURCE_IDS`）、`searchOrchestrator`、`sourceSwap`、`songResourceRefresh`（可播资源刷新编排：取缓存 → 旧签名死链判定 → 精确匹配搜索 → 写缓存/写回，依赖注入）、`songLyrics`、`updateChannels`（更新镜像探速）
+- `shared/`：`sourceRouter`（来源开关 `auto|direct` 两态 + `sanitizeSourceModes` 洗白存量 'api'、直连客户端注册表、`searchSongsRouted`/`resolvePlayableSongRouted` 路由、`getToplistSongs`/`pickToplistGroup` + `TOPLIST_SOURCE_IDS`）、`playbackGuard`（tier3 兜底护栏决策纯函数：L1 源自带时长 → L2 音频头 → L3 体积÷码率 → L4 仅文本 → L5 仅 source 声明，±2s）、`audioDuration`（L2 时长取证：music-metadata 懒加载 + 头部时长可信性判定）、`searchOrchestrator`、`sourceSwap`、`songResourceRefresh`（可播资源刷新编排：取缓存 → 旧签名死链判定 → 精确匹配搜索 → 写缓存/写回，依赖注入）、`songLyrics`、`updateChannels`（更新镜像探速）
 - `utils/`（`songIdentity` 歌曲身份键：源 + 去源前缀真实 ID，多层嵌套按最外层源折叠；songMatcher/songDedupe/lyricsParser/legacyUrl 等）
-- `tier3/tier3Api` 订阅源执行器
+- `tier3/tier3Api` 订阅源执行器（`url-resolver`/`search-then-resolve`；每源候选过 `playbackGuard` 后才采用，不过护栏换下一个源）
+- 播放解析结果 `RoutedPlayable` = `{ url, nonFull, via: 'direct'|'tier3', guard: PlaybackGuard }`（#361）：tier3 只替换流 URL，绝不铸造新身份；直连腿 `guard='none'`
 
 ```bash
 npm run core:build   # 移动端 Metro 吃 dist 产物：改 core 后必须重建移动端才生效
