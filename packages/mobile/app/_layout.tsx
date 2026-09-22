@@ -1,12 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, LogBox } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { radius, textVariants } from '../theme/tokens';
 import { AnimatedBgProvider } from '../theme/AnimatedBg';
 import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setupLegacyMigration } from '../services/legacyMigration';
+import { startPerfMonitor, stopPerfMonitor, setPerfContext } from '../services/perfMonitor';
 import { setProxyUrl as setCoreProxyUrl, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
 
 // 启动即注册直连客户端（T02 网易 / T03 汽水 / T04 千千 / T05 咪咕 / T06 QQ / T07 酷狗 / T08 酷我）。
@@ -66,6 +67,21 @@ function PlaybackNoticeToast() {
       </View>
     </View>
   );
+}
+
+/** JS 帧率看门狗：持续掉帧时记一条 warn，现场含当前路由与播放器开合状态。 */
+function PerfWatchdog() {
+  const pathname = usePathname();
+  const showPlayer = usePlayerStore((s) => s.showPlayer);
+  useEffect(() => {
+    setPerfContext(() => `route=${pathname} player=${showPlayer ? 'open' : 'closed'}`);
+    return () => setPerfContext(null);
+  }, [pathname, showPlayer]);
+  useEffect(() => {
+    startPerfMonitor();
+    return () => stopPerfMonitor();
+  }, []);
+  return null;
 }
 
 /** 主题切换时同步系统窗口底色：消除 OS 层启动/切主题的白黑闪（M3，应用内切换瞬时无动画） */
@@ -128,6 +144,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <SystemBackgroundSync />
+      <PerfWatchdog />
       <AnimatedBgProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />

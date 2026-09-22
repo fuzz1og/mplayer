@@ -11,16 +11,17 @@
 | ADR-0002 | 缓存单一语义层 | `2026-08-15-cache-single-semantic-layer.md` | 已接受 |
 | ADR-0003 | 搜索编排器 | `2026-08-15-search-orchestrator.md` | 已接受 |
 | ADR-0004 | 动效弹簧预设契约 | `2026-08-23-design-motion-presets.md` | 已接受 |
-| ADR-0005 | 移动端毛玻璃 Chrome | `2026-08-26-mobile-frosted-chrome.md` | 已接受 |
+| ADR-0005 | 移动端毛玻璃 Chrome | `2026-08-26-mobile-frosted-chrome.md` | 已被 `2026-09-23-mobile-chrome-solid-gradient.md` 取代 |
 | ADR-0006 | 源文字对比度 token | `2026-08-26-source-text-contrast-tokens.md` | 已接受 |
 | ADR-0007 | 移动端底部弹层壳 | `2026-08-26-mobile-bottom-sheet-shell.md` | 已接受 |
 | ADR-0008 | 空队列隐藏迷你播放栏 | `2026-08-26-empty-playerbar-hidden.md` | 已接受 |
 | ADR-0009 | 不引入大标题导航 | `2026-08-26-mobile-large-title-nav.md` | 已接受（否决记录） |
-| ADR-0010 | Android BlurView blurTarget | `2026-08-26-android-blur-blurtarget.md` | 已接受 |
+| ADR-0010 | Android BlurView blurTarget | `2026-08-26-android-blur-blurtarget.md` | 已被 `2026-09-23-mobile-chrome-solid-gradient.md` 取代 |
 | ADR-0011 | 应用更新镜像通道 | `2026-08-28-update-mirror-channels.md` | 已接受 |
 | ADR-0012 | 歌曲身份与可播资源值语义 | `2026-09-10-song-identity-and-playable-resource.md` | 已接受 |
 | ADR-0013 | 桌面端深色模式 + 语义 token 全面化 | `2026-08-23-desktop-dark-mode-tokens.md` | 已接受（原编号 0004，让号说明见文件内） |
 | ADR-0014 | tier3 调度、预算与源归属 | `2026-09-14-tier3-scheduling-and-source-ownership.md` | 已接受 |
+| ADR-0015 | 悬浮 chrome 去毛玻璃（纯色+渐变） | `2026-09-23-mobile-chrome-solid-gradient.md` | 已接受 |
 
 ## 归档类文档命名总则
 

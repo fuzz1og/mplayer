@@ -14,7 +14,7 @@ import type { SourceOption } from '../stores/sourceStore';
 import { useSearchStore } from '../stores/searchStore';
 import SourceBadge from './SourceBadge';
 import BottomSheet from './BottomSheet';
-import ChromeBlur from './ChromeBlur';
+import ChromeSurface from './ChromeSurface';
 import { TOP_BAR_PAD_VERTICAL, SEARCH_BAR_HEIGHT } from './chromeMetrics';
 import ScalePress from './ScalePress';
 
@@ -60,7 +60,7 @@ export default function TopBar() {
   };
 
   return (
-    <ChromeBlur style={[styles.container, { paddingTop: insets.top + TOP_BAR_PAD_VERTICAL }]}>
+    <ChromeSurface style={[styles.container, { paddingTop: insets.top + TOP_BAR_PAD_VERTICAL }]}>
       {isSearchTab && (
         <ScalePress
           onPress={() => router.replace('/')}
@@ -137,7 +137,7 @@ export default function TopBar() {
           <Text style={styles.cancelText}>取消</Text>
         </ScalePress>
       </BottomSheet>
-    </ChromeBlur>
+    </ChromeSurface>
   );
 }
 
@@ -148,7 +148,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: TOP_BAR_PAD_VERTICAL,
     // paddingTop 由组件按 insets.top 动态注入（写死 52 在无刘海机型空一大截）
-    // 悬浮 chrome：毛玻璃材质由 ChromeBlur 提供（ADR-0005），此处透明
+    // 悬浮 chrome：毛玻璃材质由 ChromeSurface 提供（ADR-0005），此处透明
     backgroundColor: 'transparent',
   },
   searchBar: {
