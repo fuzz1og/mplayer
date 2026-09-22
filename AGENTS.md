@@ -13,7 +13,7 @@ npm run lint / typecheck / typecheck:mobile  # ESLint(零警告) / 双端 tsc
 npm run core:build               # 构建 @mplayer/core（改 core 后移动端必须重建）
 npm run test:run                 # vitest 单次（renderer）
 npm run mobile:e2e               # 移动端真机 e2e 一条龙（usbipd 直挂真机验收，见 e2e/README.md）
-./scripts/verify.sh              # 提交/发布前全量验证（lint+design-lint+双端 typecheck+test；fast 跳过 test）
+./scripts/verify.sh              # 提交/发布前全量验证（lint+design-lint+双端 typecheck+renderer 测试；fast 跳过 test）
 ./scripts/release.sh             # 一键发布（bump → 验证 → commit → tag → 触发 CI 构建）
 ```
 
@@ -50,6 +50,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 
 - **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。issue/PR 模板见 `.github/`（issue 标题 `[Bug]:` / `[Feature]:` 前缀；PR 正文用模板，验证清单含双端核对）。
 - **敏感信息不入库**：tier3 订阅地址、API key、本地缓存。
+- **截图不入库**：真机验收 / UI 截图传 PR comment，`docs/**/assets` 只留 ADR 正文引用的资产。
 - 分流边界（什么算文档类）、分支命名、Conventional Commits、验证顺序、PR 模板与清理的完整流程见 `docs/agents/git-workflow.md`。
 
 ## Agent skills
@@ -69,6 +70,6 @@ single-context：根 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。
 ### 项目 skills
 
 - `release-notes`（`.agents/skills/release-notes`）——publish 后按规格（亮点/分类变更/下载清单）用 `gh release edit` 更新 release 介绍
-- `release`（`.agents/skills/release`）——版本发布流程（`./scripts/release.sh` 一键发布 → 监控 CI → 更新介绍 → 验证产物）
+- `release`（`.agents/skills/release`）——版本发布流程（文档同步 → `./scripts/release.sh` 一键发布 → 监控 CI → 更新介绍 → 验证产物）
 - `new-component`（`.agents/skills/new-component`）——按项目模式生成 renderer 组件/页面/hook 模板
 - `mobile-device-debugging`（`.agents/skills/mobile-device-debugging`）——真机调试（usbipd 直挂 WSL / 原生 adb / 一条龙脚本 `scripts/mobile-debug.sh`）
