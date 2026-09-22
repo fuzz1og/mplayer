@@ -58,6 +58,45 @@ export function chromeRanges(chrome: CollapsingChrome): ChromeRanges {
   return { solid: [0, chrome.collapseAt], fade: [chrome.fadeStart, chrome.collapseAt] };
 }
 
+/**
+ * 导航条背景颜色插值的输入计划（#372）。
+ *
+ * RN 0.86 原生驱动里两条插值路径对 extrapolate 的处理**不一致**：
+ *   - 数值插值 InterpolationAnimatedNode::interpolateValue → interpolate()
+ *     （ReactCommon/react/renderer/animated/drivers/AnimationDriverUtils.h）**结算** extrapolate:'clamp'；
+ *   - 颜色插值 InterpolationAnimatedNode::interpolateColor()
+ *     （ReactCommon/react/renderer/animated/nodes/InterpolationAnimatedNode.cpp:104-152）**忽略** extrapolate，
+ *     直接 ratio = (value - inputMin)/(inputMax - inputMin)，再逐通道 static_cast<uint8_t>（超界即回绕）。
+ *
+ * 所以颜色节点不能直接吃原始 scrollY：滚过 collapseAt 后 ratio > 1，alpha 会在 1px 内
+ * 从 255 回绕到 0（条身消失），继续滚周期性闪烁偏色（深色模式尤其明显）。计划把颜色节点
+ * 串在数值 clamp 节点之后，保证颜色节点 ratio 恒 ∈ [0,1]。接线见 hooks/useCollapsingChrome.ts。
+ */
+export interface NavBackgroundPlan {
+  /** 第 1 段（数值插值）：scrollY → clamp 到 [0, collapseAt] */
+  inputClamp: {
+    inputRange: readonly [number, number];
+    outputRange: readonly [number, number];
+  };
+  /** 第 2 段（颜色插值）：输入必须是 inputClamp 的输出 */
+  color: {
+    inputRange: readonly [number, number];
+    outputRange: readonly [string, string];
+  };
+}
+
+/** 压在封面上的导航条起点色：透明白。封面上的「白洗」渐入是既有观感（勿改成纯 opacity 层） */
+export const NAV_BG_ON_COVER = 'rgba(255,255,255,0)'; // design-lint: ok 折叠头部导航条压在封面上的透明起点色（原生颜色插值端点，非主题表面）
+
+/** 由折叠阈值与主题 bgSurface 生成导航条背景的两段插值计划 */
+export function navBackgroundPlan(chrome: CollapsingChrome, bgSurface: string): NavBackgroundPlan {
+  const range = chromeRanges(chrome).solid;
+  return {
+    inputClamp: { inputRange: range, outputRange: range },
+    color: { inputRange: range, outputRange: [NAV_BG_ON_COVER, bgSurface] },
+  };
+}
+
 function clamp01(value: number): number {
   return value < 0 ? 0 : value > 1 ? 1 : value;
 }

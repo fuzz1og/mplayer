@@ -11,7 +11,8 @@
  * 两个前提（都已按 RN 0.86 源码核对）：
  *   1. 颜色插值可以走原生驱动：NativeAnimatedAllowlist 的 SUPPORTED_COLOR_STYLES
  *      含 backgroundColor/color，三套原生实现都支持 outputType:'color'
- *      （C++/Android Kotlin/iOS ObjC）。所以背景色插值原样保留，观感与旧实现逐值相同。
+ *      （C++/Android Kotlin/iOS ObjC）。但**颜色插值不结算 extrapolate**（与数值路径不同），
+ *      所以颜色节点必须串在数值 clamp 节点之后，否则滚过 collapseAt 后通道回绕（#372）。
  *   2. FlatList 必须换成 Animated.FlatList：VirtualizedList 明确要求
  *      native onScroll 的宿主组件由 Animated.createAnimatedComponent 包一层。
  *
@@ -27,6 +28,7 @@ import {
   chromeRanges,
   collapsingChrome,
   createStatusBarEdge,
+  navBackgroundPlan,
 } from '../components/collapsingChrome';
 import type { CollapsingChrome, StatusBarStyle } from '../components/collapsingChrome';
 import { useTheme } from '../theme/ThemeProvider';
@@ -36,7 +38,7 @@ export interface CollapsingChromeDriver {
   chrome: CollapsingChrome;
   /** 列表 onScroll：原生驱动 scrollY；JS 侧只做状态栏阈值边沿 */
   onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
-  /** 导航条背景（透明 → bgSurface）：原生驱动的颜色插值 */
+  /** 导航条背景（透明 → bgSurface）：原生驱动；输入先经数值 clamp（原生颜色插值不结算 extrapolate） */
   navBg: Animated.AnimatedInterpolation<string | number>;
   /** 标题淡入 / 返回图标换色进度 0 → 1：原生驱动 */
   fade: Animated.AnimatedInterpolation<string | number>;
@@ -67,16 +69,22 @@ export function useCollapsingChrome(): CollapsingChromeDriver {
     [chrome, scrollY],
   );
 
-  const navBg = useMemo(
-    () =>
-      scrollY.interpolate({
-        inputRange: [...ranges.solid],
-        // 起点留半透明白：封面上的导航条由「透明」渐入，「白洗」是既有观感（勿改成纯 opacity 层）
-        outputRange: ['rgba(255,255,255,0)', colors.bgSurface],
-        extrapolate: 'clamp',
-      }),
-    [colors.bgSurface, ranges, scrollY],
-  );
+  const navBg = useMemo(() => {
+    // 颜色节点必须吃数值 clamp 节点的输出：RN 0.86 原生颜色插值不结算 extrapolate，
+    // 直接吃原始 scrollY 会在滚过 collapseAt 后通道回绕（见 components/collapsingChrome.ts
+    // 的 navBackgroundPlan 注释 / #372）。两段都留在原生驱动，区间内观感逐值不变。
+    const plan = navBackgroundPlan(chrome, colors.bgSurface);
+    const clamped = scrollY.interpolate({
+      inputRange: [...plan.inputClamp.inputRange],
+      outputRange: [...plan.inputClamp.outputRange],
+      extrapolate: 'clamp',
+    });
+    return clamped.interpolate({
+      inputRange: [...plan.color.inputRange],
+      outputRange: [...plan.color.outputRange],
+      extrapolate: 'clamp',
+    });
+  }, [chrome, colors.bgSurface, scrollY]);
 
   const fade = useMemo(
     () =>

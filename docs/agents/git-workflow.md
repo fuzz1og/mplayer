@@ -24,7 +24,7 @@ cd .claude/worktrees/<slug>
 - 分支命名 `<type>/<slug>`：`feat/` `fix/` `docs/` `chore/` `refactor/`，slug 用短英文（如 `fix/mobile-parity-tier3`）。
 - 一个任务一个新 worktree + 新分支；不在旧分支上叠新工作。
 - `.claude/worktrees/` 已 gitignore，是默认的 worktree 位置。
-- worktree 缺 node_modules 就地 `npm install`，不要从主克隆复制（依赖漂移）。
+- worktree 缺 node_modules 就地 `npm install`，不要从主克隆复制（依赖漂移）；软链同理——真机调试时 `expo-router` 按「被转换文件的真实路径」反推 app root，会把源码解析回主克隆、打包到主克隆的 `app/`（见 `mobile-device-debugging` skill）。
 - 调试/测试必须在 worktree 内构建运行，不要 cd 回主克隆目录（缓存不一致难排查）。
 
 ## 3. 实现并验证

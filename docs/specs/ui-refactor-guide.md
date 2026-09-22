@@ -322,7 +322,7 @@ global.css 新增，命名与移动端逐字对应，跨端心智一致：
 
 - **半透明 chrome**：`BottomSafePlayerBar` / `TopBar` 用 `bgPlayer` 材质让内容从下面滚过。
   Android 真时 blur（expo-blur `experimentalBlurMethod`）在滚动区上有性能税——先用纯半透明材质上线，blur 只许在静态小面积 chrome 上真机验证后再开。
-- **滚动边缘效果替代硬边框**：`CollapsingHero` 已有 scroll-linked nav 底色渐变，扩展成"内容与浮动层交界处渐隐 mask"，删掉残余的 1px 分隔线。
+- **滚动边缘效果替代硬边框**：`CollapsingHero` 已有 scroll-linked nav 底色渐变，扩展成"内容与浮动层交界处渐隐 mask"，删掉残余的 1px 分隔线。（动这条链路时注意：原生颜色插值不结算 `extrapolate`，颜色节点前需数值 clamp，见 `docs/agents/architecture.md` 的 Mobile 节 / #372）
 - **按压反馈组件化**：封装 `ScalePress`（Pressable + onPressIn scale 0.97 + `pressScale` 弹簧回弹），逐步替换散落的 TouchableOpacity——opacity 变淡是 web 手感，scale 才是 iOS 手感。
 - 并入原 P5 内容：源色纪律审计（`sourceColors` 只出现在徽章）、暗色对比度全页面过检。
 

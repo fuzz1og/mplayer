@@ -20,6 +20,7 @@ description: MPlayer 真机调试环境：Android 手机经 usbipd 直挂进 WSL
 - **attach 报 `Device busy (exported)`**：Windows 正占用设备。两个来源：手机处于「文件传输/MTP」模式（下拉通知切成「仅充电」，USB 调试保持开）；或 Windows 侧 adb 被其他程序拉起（`/mnt/c/Users/Admin/scoop/shims/adb.exe kill-server`）。切换 USB 模式会让设备重新枚举，bind 可能要重做——直接重跑 usb-attach.sh。
 - **之前能用，突然 `no devices`**：usbipd 透传掉了（拔插、省电、重新枚举都会）。重跑 usb-attach.sh 即可。
 - **改了 core 必须重建**：移动端 Metro 吃 `packages/core/dist` 产物。dist 过期的典型症状是启动即 `undefined is not a function`（core 新导出不存在）——`npm run core:build` 后冷启 App；行为诡异时 `./scripts/mobile-debug.sh -c` 清 Metro 缓存。
+- **worktree 里调真机**：`packages/mobile/node_modules` 软链到主克隆时，`expo-router` 的 babel 插件按「被转换文件的真实路径」反推 app root（`babel-preset-expo` 的 `getExpoRouterAppRoot`），`_ctx.android.js` 的真实路径落在主克隆 → **打包的是主克隆的 `app/`**，worktree 的改动全部不生效（症状：改了没反应、真机跑的是旧代码）。确认真机跑的是哪份源码：从 logcat `Running "main"` 里取 `launchAsset.url`，追加 `&lazy=false` 后 curl，`grep` 你新加的标识串。修法：worktree 就地 `npm install`；临时救急用 `cp -al` 硬链主克隆的 `node_modules` 与 `packages/mobile/node_modules`（硬链的真实路径落在 worktree 内，app root 推导才正确）。
 - **Metro 报 500**：先 curl bundle URL 看错误体。常见根因是 Metro 实例的 projectRoot 不是 `packages/mobile`（陈年残留进程，解析到仓库根）——杀掉它用 mobile-debug.sh 重起。App 收到的 manifest 里 `projectRoot` 字段可直接验。
 - **多会话共抢一台手机**：其他 worktree 会话可能也在调试（各自 Metro 占 8082 等端口、互相拉起 App）。`adb kill-server` 会打掉**所有人**的 reverse 隧道——动过 server 后跑 `adb reverse --list` 确认自己的端口还在，App 的 `initialUri` 要指向自己的端口。
 - **双 transport 串线**：设备同时挂 USB + 无线两条 transport 时 reverse 静默不通（App 拉起但 JS 永远不跑、Metro 无 bundling 记录）。修法：`adb disconnect` 只留 USB，重建 reverse，冷启。mobile-debug.sh 已内置该检查。
