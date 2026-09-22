@@ -92,6 +92,10 @@ export default function PlayerOverlay({ onClose }: Props) {
   const panY = useRef(new Animated.Value(winH)).current;
   const lyricCache = useRef(new Map<string, LyricLine[]>()).current;
   const onCloseRef = useRef(onClose);
+  // 退场幂等闸：重复触发（手势 + 按钮 / 连点）不得重启退场动画——重启会打断
+  // 前一次 Animated.parallel，使其 finished=false，于是 onClose 永不触发，
+  // 全屏覆盖层（绝对定位、zIndex 1000）就留在原地挡住所有触摸（真机现象：退出后列表滚不动）。
+  const dismissingRef = useRef(false);
   const slideAnim = useRef<Animated.CompositeAnimation | null>(null);
   const insets = useSafeAreaInsets();
   onCloseRef.current = onClose;
@@ -351,10 +355,12 @@ export default function PlayerOverlay({ onClose }: Props) {
   };
 
   const dismiss = (velocityY = 0) => {
+    if (dismissingRef.current) return;
+    dismissingRef.current = true;
     if (reducedMotion) {
       // 减弱动效：原地淡出，不做大位移
       Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true })
-        .start(({ finished }) => { if (finished) { tapLight(); onCloseRef.current(); } });
+        .start(() => { tapLight(); onCloseRef.current(); });
       return;
     }
     // P0-2：下滑关闭时 translateY 弹簧下滑，同时淡出 + 轻微放大（同步减淡缩放）
@@ -367,8 +373,11 @@ export default function PlayerOverlay({ onClose }: Props) {
       }),
       Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
       Animated.spring(scale, { toValue: 1.04, useNativeDriver: true, ...springs.sheet }),
-    ]).start(({ finished }) => {
-      if (finished) { tapLight(); onCloseRef.current(); }
+    ]).start(() => {
+      // 不看 finished：退场意图已成立就必须关闭。中断（被其它动画打断）时若跳过
+      // onClose，覆盖层会残留并挡死触摸——这是「退出后突然滚不动」的根因。
+      tapLight();
+      onCloseRef.current();
     });
   };
 

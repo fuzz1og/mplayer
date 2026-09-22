@@ -10,7 +10,7 @@ import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import ScalePress from './ScalePress';
 import QueueListModal from './QueueListModal';
-import ChromeBlur from './ChromeBlur';
+import ChromeSurface from './ChromeSurface';
 import { tapLight } from '../utils/haptics';
 
 export default function PlayerBar() {
@@ -54,7 +54,7 @@ export default function PlayerBar() {
   };
 
   return (
-    <ChromeBlur style={styles.blurWrap}>
+    <ChromeSurface style={styles.blurWrap}>
     {/* 整栏点击主体用无动画 Pressable（#261 判例）：条内已有 4 个 ScalePress
         控制钮，整栏再缩放/变淡会双层反馈叠加，观感混乱 */}
     <Pressable
@@ -129,12 +129,12 @@ export default function PlayerBar() {
       {/* 队列弹层（#186 #5：抽共享 QueueListModal，基于 BottomSheet 壳） */}
       <QueueListModal visible={showQueue} onClose={() => setShowQueue(false)} />
     </Pressable>
-    </ChromeBlur>
+    </ChromeSurface>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  // 毛玻璃由 ChromeBlur 提供（ADR-0005），容器仅排版
+  // 毛玻璃由 ChromeSurface 提供（ADR-0005），容器仅排版
   blurWrap: {
     overflow: 'hidden',
   },

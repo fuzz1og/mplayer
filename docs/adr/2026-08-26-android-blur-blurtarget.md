@@ -1,5 +1,7 @@
 # Android 毛玻璃不生效：expo-blur SDK 55+ 需 blurTarget
 
+> 状态：**已被 `2026-09-23-mobile-chrome-solid-gradient.md` 取代**（2026-09-23：悬浮 chrome 改为主题纯色 + 线性渐变，移除毛玻璃）。
+
 ## 问题
 
 `ChromeBlur.tsx` 用 expo-blur 的 `BlurView`，传了 `experimentalBlurMethod="dimezisBlurView"` + Android 叠加 `bgPlayer` 半透明底，但在 Expo Go（Android 模拟器）上几乎无模糊效果，背景文字清晰透出。
