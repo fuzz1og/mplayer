@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { forgetPrefetchedUrl, getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics } from '@mplayer/core';
+import { forgetPrefetchedUrl, getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics, explainPlaybackFailure } from '@mplayer/core';
 import type { PlayableResource, Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -455,9 +455,11 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     log.addLog('error', `《${song.name}》播放失败: ${reason}`);
     // 完整堆栈打到 Metro 终端（移动端诊断 TypeError 等异常用）
     console.error(`[player] 《${song.name}》播放失败堆栈:`, (err as Error)?.stack || err);
-    // 失败原因归类（Toast 文案用）：解析链穷尽 vs 其他（播放器/网络）
+    // 失败原因归类（Toast 文案用）：解析链穷尽 vs 其他（播放器/网络）。
+    // #357：穷尽时用 core 的失败归因（没有声明对应 source 的源 / 全部因归属被跳过 /
+    // 源都试了没命中 / tier3 未开启…），与桌面端共用同一份文案，不再统一报 VIP。
     const exhausted = reason === 'no playable URL';
-    const reasonText = exhausted ? '直连与全部订阅源均未命中' : '音源解析失败';
+    const reasonText = exhausted ? explainPlaybackFailure(song).message : '音源解析失败';
     if (!fresh && song.sourceType !== 'local') {
       // 解析链穷尽时先回查缓存（#172）：后台预取可能恰在本轮解析期间拿到直链
       // 写入缓存（后台 3s 命中、前台 6s 预算耗尽失败的时序差）。命中且确系本轮

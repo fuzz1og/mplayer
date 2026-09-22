@@ -434,6 +434,43 @@ describe('tier3 同歌去重（#172 评论：同歌并行重复解析）', () =>
   });
 });
 
+describe('tier3 交付统计（#362：预算内采纳才算交付）', () => {
+  function setupEmptyDirect(): void {
+    registerDirectClient(makeClient('qq', { resolvePlayableUrl: vi.fn(async () => '') }));
+    setTier3Enabled(true);
+  }
+
+  it('预算内采纳 → 调用 resolution.commit 一次', async () => {
+    setupEmptyDirect();
+    const commit = vi.fn();
+    setTier3Resolver(vi.fn(async () => ({ ...tier3Hit('https://tier3.example.com/1.mp3'), commit })));
+    const res = await resolvePlayableSongRouted(song('fast', 'qq'));
+    expect(res.url).toBe('https://tier3.example.com/1.mp3');
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('预算超时丢弃迟到命中 → 不调用 commit（迟到命中不算交付）', async () => {
+    setupEmptyDirect();
+    vi.useFakeTimers();
+    try {
+      let resolveTier3!: (v: Tier3Resolution | null) => void;
+      const commit = vi.fn();
+      setTier3Resolver(vi.fn(() => new Promise<Tier3Resolution | null>((r) => { resolveTier3 = r; })));
+      const pending = resolvePlayableSongRouted(song('slow', 'qq'));
+      await vi.advanceTimersByTimeAsync(1);
+      // 整链预算（6s）耗尽 → 调用方按未命中处理（底层继续跑）
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect((await pending).url).toBe('');
+      // 底层迟到命中：URL 已被丢弃，交付回调不得触发
+      resolveTier3({ ...tier3Hit('https://tier3.example.com/late.mp3'), commit });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(commit).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('榜单取组 helper（#286：id 单一来源，双端消费）', () => {
   const group = (source: string, sourceId: number | string, ids: string[]): ToplistGroup => ({
     id: `${source}:${sourceId}`,

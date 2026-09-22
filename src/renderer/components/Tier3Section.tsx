@@ -284,7 +284,7 @@ const Tier3Section: React.FC = () => {
                     ) : null}
                   </span>
                   <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-                    命中 {s.hits} · 失败 {s.misses} · 跳过 {s.skipped ?? 0}
+                    交付 {s.hits} · 丢弃 {s.discarded ?? 0} · 失败 {s.misses} · 跳过 {s.skipped ?? 0}
                   </span>
                 </div>
               );

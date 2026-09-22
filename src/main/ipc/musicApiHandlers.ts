@@ -43,6 +43,7 @@ export function registerMusicApiCall(api: MusicApi): void {
     searchSongsRouted: (k: string, p: number, s: SourceKey) => api.searchSongsRouted(k, p, s),
     resolvePlayableUrlRouted: (song: Song) => api.resolvePlayableUrlRouted(song),
     resolvePlayableSongRouted: (song: Song) => api.resolvePlayableSongRouted(song),
+    explainPlaybackFailure: (song: Song) => api.explainPlaybackFailure(song),
     // ── main 独有组合方法 ─────────────────────────────────────────
     getSodaPlayableUrl: (trackId: string) => api.getSodaPlayableUrl(trackId),
     resolvePlaylistLink: (url: string) => api.resolvePlaylistLink(url),

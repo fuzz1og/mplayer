@@ -267,10 +267,17 @@ export function sanitizeSourceModes(
  * tier3 解析产物（#361）：URL + 护栏**证据等级**。
  * 护栏决策在 tier3 执行器内按源逐条应用（不过就换下一个源），路由层只记录
  * 结果等级用于诊断 / 后续 UI 决策，不重复判定。
+ *
+ * `commit`（#362）：交付回调——路由层在整链预算内真正采纳该候选时调用一次。
+ * resolver 内部不再直接自增「命中」：预算超时被丢弃的迟到命中只有产出、没有交付，
+ * 否则设置页会出现「命中数 > 实际交付数」（实测 hits=17 / 实际 0）。
+ * 自定义 resolver（测试/宿主）可省略。
  */
 export interface Tier3Resolution {
   url: string;
   guard: PlaybackGuard;
+  /** 交付回调（幂等）；由路由层在采纳时调用，用于「真正交付」统计。 */
+  commit?: () => void;
 }
 
 /** tier3 解析器插槽：输入 song，返回解析到的可播 URL + 护栏等级；未命中返回 null。
@@ -388,7 +395,11 @@ async function tryTier3(song: Song, reason: string): Promise<Tier3Resolution | n
       tier3ResolveShared(song, reason),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), TIER3_BUDGET_MS)),
     ]);
-    return res && res.url?.startsWith('http') ? res : null;
+    if (!res || !res.url?.startsWith('http')) return null;
+    // #362：只有 race 获胜、真正被调用方采纳的候选才算「交付」。
+    // 预算超时丢弃的迟到命中不会走到这里，其 commit 永不触发。
+    res.commit?.();
+    return res;
   } catch (e) {
     console.warn(`[tier3] resolver 抛错: ${(e as Error)?.message || e}`);
     return null;

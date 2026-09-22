@@ -26,6 +26,7 @@
 | tier3 调度、预算与源归属 | `2026-09-14-tier3-scheduling-and-source-ownership.md` | 已接受 |
 | tier3 兜底：只替换 URL、分级护栏与验证等级 | `2026-09-21-tier3-url-substitution.md` | 已接受 |
 | 悬浮 chrome 去毛玻璃（纯色+渐变） | `2026-09-23-mobile-chrome-solid-gradient.md` | 已接受 |
+| tier3 交付口径与播放失败归因 | `2026-09-23-tier3-failure-attribution.md` | 已接受 |
 
 ## 历史编号对照（冻结）
 

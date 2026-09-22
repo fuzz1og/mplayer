@@ -184,6 +184,7 @@ export {
   clearTier3Stats,
   clearTier3ProbeCache,
   normalizeTier3Source,
+  explainPlaybackFailure,
 } from './tier3/tier3Api.js';
 export type {
   Tier3Manifest,
@@ -196,4 +197,6 @@ export type {
   Tier3State,
   Tier3Deps,
   Tier3SourceStats,
+  PlaybackFailureKind,
+  PlaybackFailureAdvice,
 } from './tier3/tier3Api.js';

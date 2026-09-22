@@ -6,6 +6,7 @@ import {
   clearTier3ProbeCache,
   clearTier3Stats,
   createTier3Resolver,
+  explainPlaybackFailure,
   fetchTier3ManifestFromUrl,
   getTier3Stats,
   getTier3State,
@@ -18,6 +19,7 @@ import {
   tier3SourceSource,
 } from '../tier3Api.js';
 import type { Tier3Source } from '../tier3Api.js';
+import { setSourceMode, setSourceModes } from '../../shared/sourceRouter.js';
 
 /**
  * tier3Api 测试（#144）：
@@ -254,8 +256,9 @@ describe('createTier3Resolver（url-resolver）', () => {
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song());
     // 解析响应只有 URL（无 name/artist/时长）→ 只剩 source 声明这一条信任（L5）。
-    expect(url).toEqual({ url: 'https://cdn.example.com/a.mp3', guard: 'none' });
-    expect(getTier3Stats()['demo-url']).toMatchObject({ hits: 1, misses: 0, skipped: 0, searches: 0 });
+    expect(url).toMatchObject({ url: 'https://cdn.example.com/a.mp3', guard: 'none' });
+    // #362：resolver 只记「产出」（resolved）；「交付」（hits）由路由层预算内采纳时 commit。
+    expect(getTier3Stats()['demo-url']).toMatchObject({ resolved: 1, hits: 0, misses: 0, skipped: 0, searches: 0 });
   });
 
   it('域名不在白名单 → 返回空串', async () => {
@@ -290,7 +293,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
     setTier3Enabled(true);
     expect(await createTier3Resolver()(song())).toBeNull();
-    expect(getTier3Stats()['demo-url']).toMatchObject({ hits: 0, misses: 1, skipped: 0, searches: 0 });
+    expect(getTier3Stats()['demo-url']).toMatchObject({ resolved: 0, hits: 0, misses: 1, skipped: 0, searches: 0 });
   });
 
   it('多次解析按源累计命中/失败', async () => {
@@ -306,7 +309,7 @@ describe('createTier3Resolver（url-resolver）', () => {
     await createTier3Resolver()(song());
     await createTier3Resolver()(song());
 
-    expect(getTier3Stats()['demo-url']).toMatchObject({ hits: 2, misses: 0, skipped: 0, searches: 0 });
+    expect(getTier3Stats()['demo-url']).toMatchObject({ resolved: 2, hits: 0, misses: 0, skipped: 0, searches: 0 });
   });
 
   it('url-resolver 声明 source 且与当前歌曲 source 不符时跳过，不拿错源 id 去解析', async () => {
@@ -432,7 +435,7 @@ describe('createTier3Resolver（search-then-resolve）', () => {
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song());
     // 搜索条目自带歌名+歌手精确匹配 → L4 仅文本护栏。
-    expect(url).toEqual({ url: 'https://cdn.example.com/b.mp3', guard: 'text-only' });
+    expect(url).toMatchObject({ url: 'https://cdn.example.com/b.mp3', guard: 'text-only' });
     expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: 'GET' }));
   });
 
@@ -451,7 +454,7 @@ describe('createTier3Resolver（search-then-resolve）', () => {
     addTier3SubscriptionFromText({ text: SEARCH_RESOLVER_MANIFEST });
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song());
-    expect(url).toEqual({ url: 'https://cdn.example.com/c.mp3', guard: 'text-only' });
+    expect(url).toMatchObject({ url: 'https://cdn.example.com/c.mp3', guard: 'text-only' });
   });
 
   it('搜索无精确匹配 → 返回空串', async () => {
@@ -492,7 +495,7 @@ describe('createTier3Resolver（search-then-resolve）', () => {
     addTier3SubscriptionFromText({ text: NO_ARTIST_MANIFEST });
     setTier3Enabled(true);
     const url = await createTier3Resolver()(song({ name: '恋人', artist: '' }));
-    expect(url).toEqual({ url: 'https://cdn.example.com/full.mp3', guard: 'text-only' });
+    expect(url).toMatchObject({ url: 'https://cdn.example.com/full.mp3', guard: 'text-only' });
   });
 });
 
@@ -924,7 +927,7 @@ describe('单源硬墙与整链预算（#365，ADR-0014 决策 2）', () => {
       await vi.advanceTimersByTimeAsync(2_100);
       const res = await pending;
 
-      expect(res).toEqual({ url: 'https://cdn.example.com/a.mp3', guard: 'source-duration' });
+      expect(res).toMatchObject({ url: 'https://cdn.example.com/a.mp3', guard: 'source-duration' });
       expect(request.mock.calls.map((c) => (c[0] as TransportRequest).url)).toContain('https://api.example.com/s2');
       expect(getTier3Stats()['s1'].lastError).toContain('单源硬墙');
     } finally {
@@ -953,5 +956,91 @@ describe('单源硬墙与整链预算（#365，ADR-0014 决策 2）', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('交付口径（#362：命中不再虚报）', () => {
+  const setupHit = (): void => {
+    const request = makeRequestMock({
+      'https://api.example.com/url?id=123&source=netease': () =>
+        jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, 'https://api.example.com/url?id=123&source=netease'),
+      'https://cdn.example.com/a.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+  };
+
+  it('产出候选只增 resolved；路由层 commit 后才计 hits，discarded 归零', async () => {
+    setupHit();
+    const res = await createTier3Resolver()(song());
+    expect(res).not.toBeNull();
+    // 未被调用方采纳 → 计「丢弃」而不是「命中」
+    expect(getTier3Stats()['demo-url']).toMatchObject({ resolved: 1, hits: 0, discarded: 1 });
+    res?.commit?.();
+    expect(getTier3Stats()['demo-url']).toMatchObject({ resolved: 1, hits: 1, discarded: 0 });
+    // 同歌去重下多个调用方共享同一条解析：交付只计一次（幂等）
+    res?.commit?.();
+    expect(getTier3Stats()['demo-url'].hits).toBe(1);
+  });
+});
+
+describe('播放失败归因（#357）', () => {
+  beforeEach(() => setSourceModes({}));
+
+  const manifestOf = (items: unknown[]): string => JSON.stringify({ version: 1, sources: items });
+
+  it('tier3 未开启 → tier3-disabled（可操作：开启）', () => {
+    const advice = explainPlaybackFailure(song());
+    expect(advice.kind).toBe('tier3-disabled');
+    expect(advice.message).toContain('未开启');
+  });
+
+  it('已开启但无订阅 → no-subscription', () => {
+    setTier3Enabled(true);
+    expect(explainPlaybackFailure(song()).kind).toBe('no-subscription');
+  });
+
+  it('有适用源但都没命中 → sources-missed（带源数）', () => {
+    addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+    const advice = explainPlaybackFailure(song());
+    expect(advice.kind).toBe('sources-missed');
+    expect(advice.usable).toBe(1);
+    expect(advice.message).toContain('1 个订阅源');
+  });
+
+  it('源声明的是其他平台 → no-declared-source（可操作：补对应 source 条目）', () => {
+    addTier3SubscriptionFromText({
+      text: manifestOf([{
+        id: 'qq-only', kind: 'url-resolver', source: 'qq', allowedDomains: ['cdn.example.com'],
+        resolve: { method: 'GET', url: 'https://api.example.com/qq?id={id}', responseJsonPath: 'data.url' },
+      }]),
+    });
+    setTier3Enabled(true);
+    const advice = explainPlaybackFailure(song());
+    expect(advice.kind).toBe('no-declared-source');
+    expect(advice.message).toContain('source: netease');
+  });
+
+  it('有源但 url-resolver 未声明 source 被拒 → all-skipped（带跳过数）', () => {
+    addTier3SubscriptionFromText({
+      text: manifestOf([{
+        id: 'no-source', kind: 'url-resolver', allowedDomains: ['cdn.example.com'],
+        resolve: { method: 'GET', url: 'https://api.example.com/x?id={id}', responseJsonPath: 'data.url' },
+      }]),
+    });
+    setTier3Enabled(true);
+    const advice = explainPlaybackFailure(song());
+    expect(advice.kind).toBe('all-skipped');
+    expect(advice.skipped).toBe(1);
+    expect(advice.message).toContain('未声明 source');
+  });
+
+  it('该源设为仅直连 → direct-only（语义不变，只换可操作文案）', () => {
+    addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
+    setTier3Enabled(true);
+    setSourceMode('netease', 'direct');
+    expect(explainPlaybackFailure(song()).kind).toBe('direct-only');
   });
 });

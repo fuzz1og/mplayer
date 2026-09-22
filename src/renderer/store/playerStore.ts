@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import { playbackClock } from '@/renderer/services/playbackClock';
-import type { Song } from '@mplayer/core';
+import type { Song, PlaybackFailureAdvice } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
 import {
   findExactMatch,
@@ -248,8 +248,23 @@ interface PlayAttempt {
 
 let activeAttempt: PlayAttempt | null = null;
 
-/** 失败原因归类（提示文案）：解析链穷尽 vs 播放器 / 网络 */
+/**
+ * 解析链穷尽（直连 + tier3 都没拿到 URL）错误（#357）：携带 core 的失败归因。
+ * 归因由 core `explainPlaybackFailure` 按当前配置给出（无声明源 / 全被归属跳过 /
+ * 源都试了没命中 / tier3 未开启…），桌面经 IPC 取回，与移动端共用同一份文案。
+ */
+class PlayableUrlMissingError extends Error {
+  constructor(readonly advice: PlaybackFailureAdvice | null) {
+    super(advice?.message ?? '无法获取音频 URL：可能为 VIP/无版权或直连暂不可用，可尝试换源');
+    this.name = 'PlayableUrlMissingError';
+  }
+}
+
+/** 失败原因归类（提示文案）：解析链穷尽（带归因）vs 播放器 / 网络 */
 function failureReasonText(error: unknown): string {
+  if (error instanceof PlayableUrlMissingError) {
+    return error.advice?.message ?? '直连与全部订阅源均未命中';
+  }
   const text = error instanceof Error ? error.message : String(error ?? '');
   return text.includes('无法获取音频 URL') ? '直连与全部订阅源均未命中' : '音源解析失败';
 }
@@ -271,6 +286,8 @@ async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Prom
   const song = store.currentSong;
   if (!song || song.id !== attempt.songId) return;
 
+  // #357：解析链穷尽时 core 已给出可操作文案，不再追加泛化的「可尝试换源」。
+  const advice = error instanceof PlayableUrlMissingError ? error.advice : null;
   const reasonText = failureReasonText(error);
 
   if (!attempt.fresh && song.sourceType !== 'local') {
@@ -297,7 +314,9 @@ async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Prom
     });
     message.error(
       noOtherSong
-        ? `《${song.name}》${reasonText}，且队列中没有其他歌曲，可尝试换源`
+        ? advice
+          ? `《${song.name}》${reasonText}，且队列中没有其他歌曲`
+          : `《${song.name}》${reasonText}，且队列中没有其他歌曲，可尝试换源`
         : `连续 ${attempt.failureCount + 1} 首无法播放，已暂停（试试换源）`
     );
     return;
@@ -403,8 +422,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       if (!realUrl) {
         set({ isLoading: false });
+        // 失败归因（#357）：core 按当前配置给出可操作文案（没有声明对应 source 的源 /
+        // 全部因归属被跳过 / 源都试了没命中 / tier3 未开启…），双端共用同一份，
+        // 不再把用户引向「可能为 VIP/无版权」的错误方向。归因失败退回原通用文案。
+        const advice = await callMusicApi('explainPlaybackFailure', song).catch(() => null);
         // 「不可播」徽标回写与重试 / 跳歌决策统一在 handlePlaybackFailure
-        throw new Error('无法获取音频 URL：可能为 VIP/无版权或直连暂不可用，可尝试换源');
+        throw new PlayableUrlMissingError(advice);
       }
 
       const songWithRealUrl = { ...song, url: realUrl };
