@@ -14,7 +14,7 @@
 - [ ] 相关测试通过（`npx vitest run` 等）
 - [ ] 改了 `packages/core` → 已 `npm run core:build` 并重跑验证
 - [ ] 改了 `packages/mobile` 或 `packages/core` → 已附真机验收结论（机型 / 系统 / 网络环境，流程见 mobile-device-debugging skill）
-- [ ] UI 改动 → 已附截图
+- [ ] UI 改动 → 已在 PR comment 附截图（不入库）
 - [ ] 行为 / 命令 / 架构有变化 → 已同步更新 AGENTS.md / CONTEXT.md / 相关 ADR
 
 ## 备注

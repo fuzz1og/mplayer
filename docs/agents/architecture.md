@@ -48,9 +48,10 @@ expo-router Stack + Tabs：`(tabs)/`（推荐/发现/搜索/歌单/下载）+ pl
 
 - `components/` TopBar, PlayerBar, PlayerOverlay, SongRow, DiscoverTabs, SourceSwapModal, AddToPlaylistModal 等
 - `gestures/` 手势物理纯内核（拖拽关闭会话：位移/速度/判关，零 react-native 依赖，node 可测）+ `hooks/useDragToDismiss` 适配器——PlayerOverlay 与 BottomSheet 共用同一份物理
-- `components/collapsingChrome.ts` 折叠头部纯逻辑核心（阈值 / 进度 clamp / 状态栏边沿，零 react-native 依赖，node 可测）+ `hooks/useCollapsingChrome` 原生驱动接线，专辑 / 歌单 / 歌手 / 网络歌单四页共用 `CollapsingHero`。原生**颜色**插值不结算 `extrapolate`（数值路径结算）——颜色节点前必须串数值 clamp 节点（`navBackgroundPlan`），否则滚过折叠点后通道越界回绕、条身跳色（#372）
-- `stores/` Zustand（部分 AsyncStorage persist）：player/settings/favorite/history/playlist/search/discover/source/download/audioTag/logs
-- `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songProbe/songResources(严格搜索 + core 刷新编排适配器)/sourceSwap, legacyMigration, cacheService(身份键 + 可播资源值缓存)
+- `components/collapsingChrome.ts` 折叠头部纯逻辑核心（阈值 / 进度 clamp / 状态栏边沿，零 react-native 依赖，node 可测）+ `hooks/useCollapsingChrome` 原生驱动接线，专辑 / 歌手 / 网络歌单直接用 `CollapsingHero`，歌单详情经 `PlaylistHero` 适配层复用同一结构。原生**颜色**插值不结算 `extrapolate`（数值路径结算）——颜色节点前必须串数值 clamp 节点（`navBackgroundPlan`），否则滚过折叠点后通道越界回绕、条身跳色（#372）
+- `hooks/` 适配器：useCollapsingChrome（折叠头部原生驱动接线）、useDragToDismiss、usePressMutex、useReducedMotion、useRefreshedCover
+- `stores/` Zustand（部分 AsyncStorage persist）：player/settings/favorite/history/playlist/search/discover/source/download/downloadProgress/audioTag/logs/songActions
+- `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songProbe/songResources(严格搜索 + core 刷新编排适配器)/sourceSwap, legacyMigration, cacheService(身份键 + 可播资源值缓存), appUpdate/audioProbe/coverSearchSlot/perfMonitor/pressMutex/reducedMotion/sheetExit/songActionEffects/songSwapSession
 
 ## Shared Package (`packages/core/`)
 
