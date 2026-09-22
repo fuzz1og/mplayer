@@ -30,6 +30,35 @@ const padded = (full: Uint8Array, extra: number): Uint8Array => {
   return out;
 };
 
+/** 手工构造最小 FLAC 头（fLaC + STREAMINFO），用于构造「荒谬 totalSamples」场景。 */
+const syntheticFlac = (totalSamples: number, sampleRate = 44100): Uint8Array => {
+  const b: number[] = [0x66, 0x4c, 0x61, 0x43, 0x80];
+  const push = (v: number, n: number) => {
+    for (let i = n - 1; i >= 0; i--) b.push(Math.floor(v / 2 ** (8 * i)) & 0xff);
+  };
+  push(34, 3);
+  push(4096, 2);
+  push(4096, 2);
+  push(0, 3);
+  push(0, 3);
+  const bits: number[] = [];
+  const pushBits = (val: number, n: number) => {
+    for (let i = n - 1; i >= 0; i--) bits.push(Math.floor(val / 2 ** i) & 1);
+  };
+  pushBits(sampleRate, 20);
+  pushBits(1, 3); // channels-1 = 2ch
+  pushBits(15, 5); // bps-1 = 16bit
+  pushBits(Math.floor(totalSamples / 2 ** 32), 4);
+  pushBits(totalSamples >>> 0, 32);
+  for (let i = 0; i < bits.length; i += 8) {
+    let v = 0;
+    for (let j = 0; j < 8; j++) v = (v << 1) | (bits[i + j] || 0);
+    b.push(v);
+  }
+  for (let i = 0; i < 16; i++) b.push(0);
+  return Uint8Array.from(b);
+};
+
 describe('extractAudioDuration 格式矩阵', () => {
   it('M4A（moov 全局头）→ 时长精确且可信', async () => {
     const ev = await extractAudioDuration(fixture('sample.m4a'));
@@ -84,6 +113,18 @@ describe('extractAudioDuration 格式矩阵', () => {
     const ev = await extractAudioDuration(fixture('sample.aac'));
     expect(ev!.container).toMatch(/ADTS/i);
     expect(ev!.trusted).toBe(false);
+  });
+
+  it('荒谬头时长（>4h，如损坏的 STREAMINFO）→ 不可信（降级，而不是拿它误拒）', async () => {
+    const absurd = await extractAudioDuration(syntheticFlac(25_070 * 44_100), 23_000_000);
+    expect(absurd!.container).toMatch(/FLAC/i);
+    expect(absurd!.duration).toBeGreaterThan(4 * 3600);
+    expect(absurd!.trusted).toBe(false);
+
+    // 对照：同样的构造、正常时长 → 可信
+    const normal = await extractAudioDuration(syntheticFlac(242 * 44_100), 23_000_000);
+    expect(normal!.duration).toBeCloseTo(242, 0);
+    expect(normal!.trusted).toBe(true);
   });
 
   it('都拿不到：非音频字节 / 空字节 → null', async () => {

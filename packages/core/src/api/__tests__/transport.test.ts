@@ -7,6 +7,8 @@ import {
   setTransportRetryOptions,
   setTlsDegradeProvider,
   isTlsHandshakeError,
+  bodyToBytes,
+  bodyToText,
   type TransportRequest,
 } from '../transport.js';
 
@@ -293,4 +295,33 @@ describe('TLS 降级（T09，仅桌面）', () => {
     // RN 从不调用 setTlsDegradeProvider；此用例模拟「未注入」时行为不受降级影响
     expect(() => setTlsDegradeProvider(null)).not.toThrow();
   });
+
+describe('bodyToBytes / bodyToText（响应体形态归一）', () => {
+  it('ArrayBuffer（浏览器/RN）→ 字节逐位一致', () => {
+    const raw = Uint8Array.from([0x66, 0x4c, 0x61, 0x43, 0x00, 0xef, 0xbf, 0xbd]);
+    const out = bodyToBytes(raw.buffer.slice(0));
+    expect(Array.from(out)).toEqual(Array.from(raw));
+  });
+
+  it('Node Buffer（axios arraybuffer 在 Node 下的真实形态）→ 不被文本化损坏', () => {
+    // 回归：只判 instanceof ArrayBuffer 时 Buffer 会落到 String()+TextEncoder，
+    // 非 UTF-8 字节被替换成 U+FFFD（0xef 0xbf 0xbd）→ 音频头被毁。
+    const raw = Buffer.from([0x66, 0x4c, 0x61, 0x43, 0xff, 0xfe, 0x00, 0x80, 0x7f]);
+    expect(raw instanceof ArrayBuffer).toBe(false);
+    const out = bodyToBytes(raw);
+    expect(Array.from(out)).toEqual(Array.from(raw));
+  });
+
+  it('带 byteOffset 的 Uint8Array 视图 → 只取视图范围', () => {
+    const pool = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]);
+    const view = pool.subarray(3, 6);
+    expect(Array.from(bodyToBytes(view))).toEqual([4, 5, 6]);
+  });
+
+  it('文本 / 空值', () => {
+    expect(bodyToText(bodyToBytes('hello'))).toBe('hello');
+    expect(Array.from(bodyToBytes(null))).toEqual([]);
+    expect(Array.from(bodyToBytes(undefined))).toEqual([]);
+  });
+});
 });

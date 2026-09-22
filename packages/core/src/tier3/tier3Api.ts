@@ -1,5 +1,5 @@
 import type { Song, SourceKey } from '../types/index.js';
-import { request, bodyToText, type TransportRequest } from '../api/transport.js';
+import { request, bodyToBytes, bodyToText, type TransportRequest } from '../api/transport.js';
 import { BROWSER_UA } from '../utils/sourceReferer.js';
 import { isAudioBytes } from '../utils/sniffers.js';
 import { isExactMatch, normalize } from '../utils/songMatcher.js';
@@ -587,9 +587,9 @@ async function fetchAudioHead(url: string, source: Tier3Source, deps: Tier3Deps)
     if (res.status >= 400) return fail;
     const ct = String(res.headers['content-type'] || '');
     if (ct.includes('text/html')) return fail;
-    const bytes = res.body instanceof ArrayBuffer
-      ? new Uint8Array(res.body)
-      : new TextEncoder().encode(String(res.body));
+    // Node 下 axios arraybuffer 返回 Buffer（不是 ArrayBuffer）：必须走 bodyToBytes，
+    // 否则会落到文本分支把二进制毁掉（实测 FLAC 头 → 时长解析成 25069s）。
+    const bytes = bodyToBytes(res.body);
     if (!isAudioBytes(bytes)) return fail;
     // 206：Range 被支持，content-range 的 /total 是完整大小；200：Content-Length。
     let totalBytes: number | null = null;

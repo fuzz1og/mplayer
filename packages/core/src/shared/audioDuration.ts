@@ -70,6 +70,13 @@ export function hasMpegXingHeader(bytes: Uint8Array): boolean {
   return false;
 }
 
+/**
+ * 荒谬时长上限（4 小时）：没有任何单曲/有声书会超过它。超过即视为**头解析不可信**
+ * （例如 STREAMINFO 损坏/被错读），降级到 L3/L4/L5——而不是拿这个值去误拒一首正常的歌。
+ * 实测案例：字节被文本化损坏时 FLAC 头读成 25069s（≈7h）。
+ */
+const MAX_PLAUSIBLE_DURATION_SEC = 4 * 60 * 60;
+
 /** 头部时长是否可信（容器全局头 / 已取全文件 / MP3 带 Xing-Info）。 */
 export function isTrustedHeaderDuration(
   container: string | null,
@@ -115,6 +122,9 @@ export async function extractAudioDuration(
     container,
     duration,
     bitrateKbps,
-    trusted: !!duration && isTrustedHeaderDuration(container, bytes, totalBytes),
+    trusted:
+      !!duration &&
+      duration <= MAX_PLAUSIBLE_DURATION_SEC &&
+      isTrustedHeaderDuration(container, bytes, totalBytes),
   };
 }

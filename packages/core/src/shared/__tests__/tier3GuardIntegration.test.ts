@@ -56,6 +56,11 @@ function jsonResponse(body: unknown): TransportResponse {
   };
 }
 
+/**
+ * 音频响应。默认把字节**原样**当 body（Node 下 axios arraybuffer 返回 Buffer，
+ * 不是 ArrayBuffer）——这正是回归点：早期实现只判 `instanceof ArrayBuffer`，
+ * 非 ArrayBuffer 会被 String()+TextEncoder 文本化损坏，L2 头时长随即变垃圾。
+ */
 function audioResponse(bytes: Uint8Array, totalBytes: number): TransportResponse {
   return {
     status: 206,
@@ -63,9 +68,14 @@ function audioResponse(bytes: Uint8Array, totalBytes: number): TransportResponse
       'content-type': 'audio/mpeg',
       'content-range': `bytes 0-${bytes.length - 1}/${totalBytes}`,
     },
-    body: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    body: bytes,
     finalUrl: 'https://cdn.example.com',
   };
+}
+
+/** Node 形态：body 是 Buffer（`instanceof ArrayBuffer === false`）。 */
+function audioResponseBuffer(bytes: Uint8Array, totalBytes: number): TransportResponse {
+  return { ...audioResponse(Buffer.from(bytes), totalBytes) };
 }
 
 /** 合成 CBR MP3 帧（无 Xing/Info）：头时长不可信、但帧实测码率 ≈128kbps。 */
@@ -195,6 +205,20 @@ describe('护栏分级（L1–L5）走播放解析入口', () => {
 
     expect(res.guard).toBe('audio-header');
     expect(res.via).toBe('tier3');
+  });
+
+  it('回归：Node Buffer 响应体不被文本化损坏，L2 头时长仍然正确（#364 发现的根因）', async () => {
+    emptyDirect();
+    const m4a = fixture('sample.m4a');
+    setup([urlResolver('r1', 'netease')], {
+      'https://api.example.com/resolve-r1': jsonResponse({ data: { url: 'https://cdn.example.com/buf.m4a' } }),
+      // body 是 Buffer（不是 ArrayBuffer）：旧实现走 String()+TextEncoder → 头字节被毁
+      'https://cdn.example.com/buf.m4a': audioResponseBuffer(m4a, 5_000_000),
+    });
+
+    const res = await resolvePlayableSongRouted(song(5));
+
+    expect(res.guard).toBe('audio-header');
   });
 
   it('L3 体积 ÷ 码率：ADTS（无全局头）+ 源自称码率 → guard=size-bitrate（declared 分支）', async () => {

@@ -1,6 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request, bodyToText } from './transport.js';
+import { request, bodyToBytes, bodyToText } from './transport.js';
 
 /**
  * 咪咕直连客户端（T05 #151）。
@@ -49,10 +49,6 @@ export function decryptXorStream(raw: Uint8Array): Uint8Array {
     out[i] = (raw[i + 4] + seed - XOR_KEY.charCodeAt(i % XOR_KEY.length)) & 0xff;
   }
   return out;
-}
-
-function toBytes(body: string | ArrayBuffer): Uint8Array {
-  return typeof body === 'string' ? new TextEncoder().encode(body) : new Uint8Array(body);
 }
 
 /** cloudsearch 返回的咪咕原生 track → Song（字段名以实测/文档假设为准）。 */
@@ -137,7 +133,7 @@ export const miguDirectClient: DirectSourceClient = {
       timeoutMs: 10000,
     });
     if (res.status >= 400) throw new Error(`migu listen HTTP ${res.status}`);
-    const decrypted = decryptXorStream(toBytes(res.body));
+    const decrypted = decryptXorStream(bodyToBytes(res.body));
     const data = JSON.parse(new TextDecoder().decode(decrypted)) as {
       data?: { url?: string };
     };

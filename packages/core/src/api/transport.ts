@@ -44,7 +44,8 @@ export interface TransportRequest {
 export interface TransportResponse {
   status: number;
   headers: Record<string, string>;
-  body: string | ArrayBuffer;
+  /** 文本响应为 string；二进制响应在浏览器/RN 是 ArrayBuffer，**在 Node 是 Buffer**（Uint8Array）。 */
+  body: string | ArrayBuffer | Uint8Array;
   /** 重定向链终点地址；无重定向时为请求 URL。 */
   finalUrl: string;
   /** 会话失效响应（如 404「没有找到相关信息」/非法请求页）。标记后按 4xx 语义不重试。 */
@@ -60,8 +61,25 @@ export interface TransportProxyAgents {
 }
 
 /** 传输响应体 → 文本（直连客户端/预检共用，避免 4 处重复实现）。 */
-export function bodyToText(body: string | ArrayBuffer): string {
+export function bodyToText(body: string | ArrayBuffer | Uint8Array): string {
   return typeof body === 'string' ? body : new TextDecoder().decode(body);
+}
+
+/**
+ * 传输响应体 → 字节（音频字节嗅探 / 时长头解析共用）。
+ *
+ * ⚠️ 必须同时吃三种形态：浏览器/RN 的 `ArrayBuffer`、**Node 的 `Buffer`**
+ * （axios `responseType:'arraybuffer'` 在 Node 下返回 Buffer，`instanceof ArrayBuffer`
+ * 为 **false**），以及文本。只判 `instanceof ArrayBuffer` 会让 Node 落到
+ * `TextEncoder().encode(String(body))`——二进制按 UTF-8 替换字符（U+FFFD）被毁：
+ * 实测 FLAC 头 STREAMINFO 被读成 sr=44795 / totalSamples=5.7e10 / 时长 25069s，
+ * 于是护栏 L2 拿垃圾时长误拒一个本来完全正常的完整 FLAC。
+ */
+export function bodyToBytes(body: unknown): Uint8Array {
+  if (body instanceof ArrayBuffer) return new Uint8Array(body);
+  if (ArrayBuffer.isView(body)) return new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+  if (typeof body === 'string') return new TextEncoder().encode(body);
+  return new Uint8Array(0);
 }
 
 let active: Transport | null = null;
@@ -212,7 +230,7 @@ async function defaultTransport(req: TransportRequest): Promise<TransportRespons
   return {
     status: resp.status,
     headers: resp.headers as Record<string, string>,
-    body: resp.data as string | ArrayBuffer,
+    body: resp.data as string | ArrayBuffer | Uint8Array,
     finalUrl: finalUrl && /^https?:\/\//.test(finalUrl) ? finalUrl : req.url,
   };
 }
