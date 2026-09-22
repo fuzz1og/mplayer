@@ -41,6 +41,8 @@ tier3（用户自配的第三方解析源）是直连失败后的唯一兜底。
    `no-subscription`、`no-declared-source`（有源但声明的是其他平台）、`all-skipped`
    （有源但 url-resolver 未声明 source / source 值不认识被拒）、`sources-missed`
    （适用源都试了没命中或超时）。每类都带可操作建议与计数。
+   **优先级**：`tier3-disabled` → `direct-only` → 其余——先报「改了就能生效」的开关；
+   tier3 全局关闭时把用户引去改「仅直连→自动」是无效操作，会误导。
 4. **双端共用一份文案**：`message` 由 core 生成（中文文案在 core 已有先例：
    `SOURCE_DISPLAY_NAMES` / `SOURCE_MODE_OPTIONS`）。桌面经 `musicApi:call` 新增基础方法
    `explainPlaybackFailure` 取回，移动端直调 core；两端不再各自拼文案。
@@ -52,7 +54,8 @@ tier3（用户自配的第三方解析源）是直连失败后的唯一兜底。
 - 设置页「交付」= 真正被采纳的命中，不再出现「命中数 > 实际交付数」；「丢弃」让
   「源产出了但被预算丢掉」可归因——这是 ADR-0014 决策 4「坏源只做统计」能成立的前提。
 - 播放失败文案可操作且不误导；`skipped` / `usable` 计数让「源不够用」能定位到是
-  「没配对应 source」还是「配了但被过滤」还是「源本身挂了」。
+  「没配对应 source」还是「配了但被过滤」还是「源本身挂了」。设置页同时展示
+  `guardRejected`（拿到 URL 但护栏不过），护栏上线后「命中很多但放不出来」可归因。
 - 代价：`Tier3Resolution` 多一个可选回调（core 内部契约，自定义 resolver 可省略）；
   桌面 `musicApi` 基础方法多一条（契约派生，签名零重复）。
 - 归因按**当前配置**推导，不做「上一次解析」的会话快照：配置是用户可操作的唯一变量，

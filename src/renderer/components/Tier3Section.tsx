@@ -285,6 +285,7 @@ const Tier3Section: React.FC = () => {
                   </span>
                   <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
                     交付 {s.hits} · 丢弃 {s.discarded ?? 0} · 失败 {s.misses} · 跳过 {s.skipped ?? 0}
+                    {s.guardRejected ? ` · 护栏拒绝 ${s.guardRejected}` : ''}
                   </span>
                 </div>
               );

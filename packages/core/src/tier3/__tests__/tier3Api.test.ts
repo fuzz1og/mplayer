@@ -1043,4 +1043,9 @@ describe('播放失败归因（#357）', () => {
     setSourceMode('netease', 'direct');
     expect(explainPlaybackFailure(song()).kind).toBe('direct-only');
   });
+
+  it('tier3 全局未开启优先于仅直连（先给能真正解除的开关，避免误导）', () => {
+    setSourceMode('netease', 'direct');
+    expect(explainPlaybackFailure(song()).kind).toBe('tier3-disabled');
+  });
 });

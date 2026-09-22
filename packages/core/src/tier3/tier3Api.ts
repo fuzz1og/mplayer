@@ -1215,16 +1215,18 @@ export function explainPlaybackFailure(song: Song): PlaybackFailureAdvice {
   const sources = state.subscriptions.flatMap((sub) => sub.manifest.sources);
   const declared = sources.length;
 
-  if (getSourceMode(song.sourceType) === 'direct') {
-    return {
-      kind: 'direct-only', declared, usable: 0, skipped: 0,
-      message: `该源已设为「仅直连」，直连没取到可播链接。可在设置里把「${label}」的来源开关改为「自动」，启用第三方解析源兜底`,
-    };
-  }
+  // 顺序有讲究：tier3 全局未开启时，「改为自动」并不能启用兜底——先报可真正解除
+  // 的开关（tier3 未开启），再报来源开关（仅直连），否则文案会把用户引向无效操作。
   if (!state.enabled) {
     return {
       kind: 'tier3-disabled', declared, usable: 0, skipped: 0,
       message: '直连没取到可播链接，第三方解析源（tier3）也未开启。可在设置中开启后重试',
+    };
+  }
+  if (getSourceMode(song.sourceType) === 'direct') {
+    return {
+      kind: 'direct-only', declared, usable: 0, skipped: 0,
+      message: `该源已设为「仅直连」，直连没取到可播链接。可在设置里把「${label}」的来源开关改为「自动」，启用第三方解析源兜底`,
     };
   }
   if (declared === 0) {
