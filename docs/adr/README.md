@@ -15,16 +15,17 @@
 | 搜索编排器 | `2026-08-15-search-orchestrator.md` | 已接受 |
 | 动效弹簧预设契约 | `2026-08-23-design-motion-presets.md` | 已接受 |
 | 桌面端深色模式 + 语义 token 全面化 | `2026-08-23-desktop-dark-mode-tokens.md` | 已接受（原编号 0004，让号说明见文件内） |
-| Android BlurView blurTarget | `2026-08-26-android-blur-blurtarget.md` | 已接受 |
+| Android BlurView blurTarget | `2026-08-26-android-blur-blurtarget.md` | 已被 `2026-09-23-mobile-chrome-solid-gradient.md` 取代 |
 | 空队列隐藏迷你播放栏 | `2026-08-26-empty-playerbar-hidden.md` | 已接受 |
 | 移动端底部弹层壳 | `2026-08-26-mobile-bottom-sheet-shell.md` | 已接受 |
-| 移动端毛玻璃 Chrome | `2026-08-26-mobile-frosted-chrome.md` | 已接受 |
+| 移动端毛玻璃 Chrome | `2026-08-26-mobile-frosted-chrome.md` | 已被 `2026-09-23-mobile-chrome-solid-gradient.md` 取代 |
 | 不引入大标题导航 | `2026-08-26-mobile-large-title-nav.md` | 已接受（否决记录） |
 | 源文字对比度 token | `2026-08-26-source-text-contrast-tokens.md` | 已接受 |
 | 应用更新镜像通道 | `2026-08-28-update-mirror-channels.md` | 已接受 |
 | 歌曲身份与可播资源值语义 | `2026-09-10-song-identity-and-playable-resource.md` | 已接受 |
 | tier3 调度、预算与源归属 | `2026-09-14-tier3-scheduling-and-source-ownership.md` | 已接受 |
 | tier3 兜底：只替换 URL、分级护栏与验证等级 | `2026-09-21-tier3-url-substitution.md` | 已接受 |
+| 悬浮 chrome 去毛玻璃（纯色+渐变） | `2026-09-23-mobile-chrome-solid-gradient.md` | 已接受 |
 
 ## 历史编号对照（冻结）
 
