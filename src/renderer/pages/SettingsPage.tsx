@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Database, Folder, Shield, Download, Music, Zap, Fingerprint, FlaskConical, Palette } from 'lucide-react';
+import { Settings, Database, Folder, Shield, Download, Music, Zap, Fingerprint, FlaskConical, Palette, Activity } from 'lucide-react';
 import CacheSection from '@/renderer/components/CacheSection';
 import DownloadSection from '@/renderer/components/DownloadSection';
 import ProxySection from '@/renderer/components/ProxySection';
@@ -8,6 +8,7 @@ import AboutSection from '@/renderer/components/AboutSection';
 import SourceSection from '@/renderer/components/SourceSection';
 import TlsFingerprintSection from '@/renderer/components/TlsFingerprintSection';
 import Tier3Section from '@/renderer/components/Tier3Section';
+import PlaybackDiagnosticsSection from '@/renderer/components/PlaybackDiagnosticsSection';
 import AppearanceSection from '@/renderer/components/AppearanceSection';
 
 const NAV_ITEMS = [
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
   { id: 'download', label: '下载设置', icon: <Folder size={15} /> },
   { id: 'source', label: '直连状态', icon: <Zap size={15} /> },
   { id: 'tier3', label: '第三方解析源', icon: <FlaskConical size={15} /> },
+  { id: 'playback-trace', label: '播放诊断', icon: <Activity size={15} /> },
   { id: 'tls-fingerprint', label: 'TLS 指纹伪装', icon: <Fingerprint size={15} /> },
   { id: 'proxy', label: '网络代理', icon: <Shield size={15} /> },
   { id: 'update', label: '检查更新', icon: <Download size={15} /> },
@@ -80,6 +82,7 @@ const SettingsPage: React.FC = () => {
         <DownloadSection />
         <SourceSection />
         <Tier3Section />
+        <PlaybackDiagnosticsSection />
         <TlsFingerprintSection />
         <ProxySection />
         <UpdateSection />

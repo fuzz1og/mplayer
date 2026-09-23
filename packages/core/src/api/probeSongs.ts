@@ -1,5 +1,6 @@
 import type { Song, AudioTag } from '../types/index.js';
 import { probeAudioUrl } from './audioProbe.js';
+import { traceNow } from '../shared/playbackTrace.js';
 
 export interface ProbeOptions {
   /** Max concurrent probe requests. Default: 10 */
@@ -8,6 +9,8 @@ export interface ProbeOptions {
   onResult?: (songId: string, tag: AudioTag) => void;
   /** Resolve song URL before probing. Required if song.url is not directly playable */
   resolver?: (song: Song) => Promise<string>;
+  /** Per-song structured trace (#363): 解析腿与 URL 校验腿分开计时（不并入解析腿）。 */
+  onProbe?: (songId: string, resolveMs: number, validateMs: number, tag: AudioTag) => void;
 }
 
 /**
@@ -27,7 +30,7 @@ export async function probeSongs(
   songs: Song[],
   options: ProbeOptions = {},
 ): Promise<void> {
-  const { concurrency = 5, onResult, resolver } = options;
+  const { concurrency = 5, onResult, resolver, onProbe } = options;
 
   if (songs.length === 0) return;
 
@@ -46,7 +49,7 @@ export async function probeSongs(
       const song = songs[currentIndex++];
       activeCount++;
       pendingCount++;
-      probeOne(song, resolver)
+      probeOne(song, resolver, onProbe)
         .then((tag) => {
           onResult?.(song.id, tag);
         })
@@ -70,11 +73,18 @@ export async function probeSongs(
 async function probeOne(
   song: Song,
   resolver?: (song: Song) => Promise<string>,
+  onProbe?: (songId: string, resolveMs: number, validateMs: number, tag: AudioTag) => void,
 ): Promise<AudioTag> {
   let url = song.url;
+  let resolveMs = 0;
   if (resolver) {
+    const t0 = onProbe ? traceNow() : 0;
     url = await resolver(song);
+    if (onProbe) resolveMs = traceNow() - t0;
   }
   if (!url) return 'valid'; // fail open — don't block playback
-  return probeAudioUrl(url);
+  const t1 = onProbe ? traceNow() : 0;
+  const tag = await probeAudioUrl(url);
+  if (onProbe) onProbe(song.id, resolveMs, traceNow() - t1, tag);
+  return tag;
 }

@@ -19,6 +19,7 @@ import { registerLocalMusicIpc } from './ipc/localMusic';
 import { registerMusicApiCall } from './ipc/musicApiHandlers';
 import { resolvePlaylistLink } from './services/playlistLinkResolver';
 import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDownloadIpc, registerAppIpc, TIER3_SETTING_KEY } from './ipc/appSettingsUpdate';
+import { registerPlaybackTraceIpc } from './ipc/playbackTrace';
 import { registerCookiePersister, loadCookiesFromDisk } from './cookies/cookieAdapter';
 
 // WSLg HiDPI 修复：WSL 下 Windows 缩放（如 4K 屏 150%）不会透传给 Chromium，
@@ -353,6 +354,8 @@ app.whenReady().then(async () => {
   registerUpdateIpc(mainWindow);
   registerDownloadIpc();
   registerAppIpc();
+  // 播放解析链诊断（#363）：模块加载即注册 sink 环形缓冲，这里接线 IPC 暴露给设置页
+  registerPlaybackTraceIpc();
 
   // 对每个已有文件夹单独启动监视，确保 folderPath 正确传递
   getLocalMusicService().getFolders().then((existingFolders) => {

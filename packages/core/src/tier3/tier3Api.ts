@@ -8,6 +8,7 @@ import { evaluatePlaybackGuard } from '../shared/playbackGuard.js';
 import type { PlaybackEvidence, PlaybackGuard } from '../shared/playbackGuard.js';
 import { extractAudioDuration } from '../shared/audioDuration.js';
 import type { AudioDurationEvidence } from '../shared/audioDuration.js';
+import { classifyTraceError, traceNow } from '../shared/playbackTrace.js';
 import {
   TIER3_BUDGET_MS,
   SOURCE_DISPLAY_NAMES,
@@ -16,6 +17,7 @@ import {
   setTier3Resolver as setRouterTier3Resolver,
   setTier3SearchEnabled as setRouterTier3SearchEnabled,
   setTier3SearchResolver as setRouterTier3SearchResolver,
+  type Tier3LegCollector,
   type Tier3Resolution,
   type Tier3Resolver,
 } from '../shared/sourceRouter.js';
@@ -1336,11 +1338,16 @@ export function explainPlaybackFailure(song: Song): PlaybackFailureAdvice {
  *  L1 源自带时长（解析响应/搜索条目自动探测）→ L2 音频头解析（已取的头部字节）
  *  → L3 体积 × 8 ÷ 码率（优先源自称 br，缺失才用帧实测）→ L4 歌名 + 歌手精确匹配
  *  → L5 仅 source 声明。 */
+type Tier3CandidateOutcome =
+  | { kind: 'hit'; resolution: Tier3Resolution }
+  | { kind: 'rejected'; guard: PlaybackGuard }
+  | null;
+
 async function resolveTier3Candidate(
   song: Song,
   source: Tier3Source,
   timeoutMs: number,
-): Promise<Tier3Resolution | null> {
+): Promise<Tier3CandidateOutcome> {
   const candidate =
     source.kind === 'url-resolver'
       ? await resolveSourceUrl(song, source, timeoutMs)
@@ -1365,14 +1372,14 @@ async function resolveTier3Candidate(
   if (!decision.accepted) {
     stats.guardRejected = (stats.guardRejected ?? 0) + 1;
     console.info(`[tier3] 源 ${source.id} 候选未过护栏（guard=${decision.guard}）: ${decision.reason} — 换下一个源`);
-    return null;
+    return { kind: 'rejected', guard: decision.guard };
   }
   stats.guards = { ...(stats.guards ?? {}), [decision.guard]: (stats.guards?.[decision.guard] ?? 0) + 1 };
   console.info(`[tier3] 源 ${source.id} 候选通过护栏（guard=${decision.guard}）: ${decision.reason}`);
-  return { url: candidate.url, guard: decision.guard };
+  return { kind: 'hit', resolution: { url: candidate.url, guard: decision.guard } };
 }
 
-async function resolveTier3(song: Song): Promise<Tier3Resolution | null> {
+async function resolveTier3(song: Song, collect?: Tier3LegCollector): Promise<Tier3Resolution | null> {
   if (!state.enabled) {
     console.info(`[tier3] 未启用，跳过: 《${song.name}》${song.artist}`);
     return null;
@@ -1401,6 +1408,7 @@ async function resolveTier3(song: Song): Promise<Tier3Resolution | null> {
               : `未声明 source 的 url-resolver，拒绝以防跨源错配`
             }）`,
         );
+        collect?.({ sourceId: source.id, ms: 0, outcome: 'skipped' });
         continue;
       }
       const remaining = deadline - Date.now();
@@ -1410,21 +1418,27 @@ async function resolveTier3(song: Song): Promise<Tier3Resolution | null> {
       }
       // 单源硬墙：清单 timeoutMs 只能收紧，且不超过整链剩余预算（ADR-0014 决策 2）。
       const timeoutMs = effectiveSourceTimeout(source, remaining);
+      const sourceT0 = collect ? traceNow() : 0;
       try {
-        const resolution = await withSourceDeadline(resolveTier3Candidate(song, source, timeoutMs), timeoutMs);
-        if (resolution === SOURCE_TIMED_OUT) {
+        const outcome = await withSourceDeadline(resolveTier3Candidate(song, source, timeoutMs), timeoutMs);
+        const ms = collect ? traceNow() - sourceT0 : 0;
+        if (outcome === SOURCE_TIMED_OUT) {
           console.info(`[tier3] 源 ${source.id} 超时（单源硬墙 ${timeoutMs}ms），换下一个源`);
           statsFor(source.id).lastError = `单源硬墙 ${timeoutMs}ms 超时`;
-        } else if (resolution) {
+          collect?.({ sourceId: source.id, ms, outcome: 'error', errorClass: 'timeout' });
+        } else if (outcome?.kind === 'rejected') {
+          collect?.({ sourceId: source.id, ms, outcome: 'rejected', guard: outcome.guard });
+        } else if (outcome) {
           // #362：resolver 只记「产出」；「交付」由路由层在预算内采纳时 commit。
           // 预算超时被丢弃的迟到命中仍会增加 resolved，但 hits 不动 →
           // getTier3Stats 的 discarded = resolved - hits 即为丢弃数。
           statsFor(source.id).resolved++;
-          console.info(`[tier3] 产出候选 source=${source.id}（guard=${resolution.guard}）: ${resolution.url}`);
+          console.info(`[tier3] 产出候选 source=${source.id}（guard=${outcome.resolution.guard}）: ${outcome.resolution.url}`);
+          collect?.({ sourceId: source.id, ms, outcome: 'hit', guard: outcome.resolution.guard });
           const sourceId = source.id;
           let committed = false;
           return {
-            ...resolution,
+            ...outcome.resolution,
             commit: () => {
               // 同歌去重下多个调用方共享同一条解析：交付只计一次（幂等）。
               if (committed) return;
@@ -1434,12 +1448,14 @@ async function resolveTier3(song: Song): Promise<Tier3Resolution | null> {
           };
         } else {
           console.info(`[tier3] source=${source.id} 未命中`);
+          collect?.({ sourceId: source.id, ms, outcome: 'miss' });
         }
       } catch (e) {
         const msg = (e as Error)?.message || String(e);
         console.warn(`[tier3] source=${source.id} 失败: ${msg}`);
         statsFor(source.id).lastError = msg;
         // 单源失败继续下一条；全失败返回 null 由 sourceRouter 回退。
+        collect?.({ sourceId: source.id, ms: traceNow() - sourceT0, outcome: 'error', errorClass: classifyTraceError(e) });
       }
       statsFor(source.id).misses++;
     }

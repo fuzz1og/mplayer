@@ -163,6 +163,27 @@ export { evaluatePlaybackGuard, GUARD_TOLERANCE_SEC } from './shared/playbackGua
 export type { PlaybackGuard, PlaybackVia, PlaybackEvidence, GuardDecision } from './shared/playbackGuard.js';
 export { extractAudioDuration, hasMpegXingHeader, isTrustedHeaderDuration } from './shared/audioDuration.js';
 export type { AudioDurationEvidence } from './shared/audioDuration.js';
+// 播放解析链结构化 trace（#363）：core 出 trace，宿主落 sink。
+export {
+  setPlaybackTraceSink,
+  getPlaybackTraceSink,
+  isPlaybackTraceEnabled,
+  emitPlaybackTrace,
+  emitPlaybackProbeTrace,
+  createPlaybackTraceRing,
+  traceNow,
+  classifyTraceError,
+} from './shared/playbackTrace.js';
+export type {
+  PlaybackTrace,
+  PlaybackProbeTrace,
+  PlaybackTraceSink,
+  PlaybackTraceRing,
+  PlaybackTraceSourceLeg,
+  PlaybackLayer,
+  PlaybackTraceOutcome,
+  PlaybackTraceErrorClass,
+} from './shared/playbackTrace.js';
 export {
   parseTier3Manifest,
   fetchTier3ManifestFromUrl,

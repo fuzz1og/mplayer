@@ -15,6 +15,7 @@ import {
   resolvePlayableSongDirect as routedResolveSongDirect,
 } from '../shared/sourceRouter.js';
 import { explainPlaybackFailure as explainFailure } from '../tier3/tier3Api.js';
+import { emitPlaybackProbeTrace, isPlaybackTraceEnabled, traceNow } from '../shared/playbackTrace.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
 import { fetchLyricViaGateway } from './qqDirect.js';
@@ -536,6 +537,12 @@ export const musicApi = {
         }
         resolvedUrls.set(song.id, { url: url || '', nonFull });
         return url;
+      },
+      // #363：探测腿结构化 trace——resolveMs（直连解析）与 validateMs（URL 校验）
+      // 分开记，避免把校验成本错记到解析腿上。sink 为空时不构造记录。
+      onProbe: (songId, resolveMs, validateMs, tag) => {
+        if (!isPlaybackTraceEnabled()) return;
+        emitPlaybackProbeTrace({ ts: traceNow(), songId, resolveMs, validateMs, tag });
       },
       onResult: (songId, tag) => {
         const entry = resolvedUrls.get(songId);
