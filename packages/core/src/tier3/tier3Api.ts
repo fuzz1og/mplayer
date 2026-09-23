@@ -44,8 +44,11 @@ export interface Tier3RequestSpec {
   url: string;
   /** POST 请求体模板（原始填充，不 URL 编码）。 */
   body?: string;
-  /** JSON 响应取值路径，如 `data.url` / `data.list`。 */
-  responseJsonPath: string;
+  /** 响应取值方式（默认 `json`）：`json` 走 responseJsonPath；`redirect` 取重定向终点 URL。
+   *  `redirect` 用于 302 直跳音频的端点——响应体是音频字节，无法 JSON.parse。 */
+  responseKind?: 'json' | 'redirect';
+  /** JSON 响应取值路径，如 `data.url` / `data.list`；`responseKind:"redirect"` 时可省略。 */
+  responseJsonPath?: string;
 }
 
 export interface Tier3SearchSpec extends Tier3RequestSpec {
@@ -79,6 +82,9 @@ export interface Tier3Source {
   timeoutMs?: number;
   /** 单源请求头（会合并到 API 请求与字节嗅探请求）。 */
   headers?: Record<string, string>;
+  /** 按源归一化模板变量 `{id}`：逐条剥离前缀（如酷我 MUSICRID 的 `MUSIC_`）。
+   *  只影响 tier3 模板填充，不改 `Song.id` / 身份键 / 已持久化数据。 */
+  idNormalize?: { stripPrefixes: string[] };
   /** url-resolver 与 search-then-resolve 的取链步骤。 */
   resolve: Tier3RequestSpec;
   /** search-then-resolve 专用：搜索步骤。 */
@@ -338,8 +344,16 @@ function parseRequestSpec(value: unknown, label: string): Tier3RequestSpec {
   }
   const url = assertHttpUrlTemplate(value.url, `${label}.url`);
   const body = value.body === undefined ? undefined : assertString(value.body, `${label}.body`);
-  const responseJsonPath = assertString(value.responseJsonPath, `${label}.responseJsonPath`);
-  return { method, url, body, responseJsonPath };
+  const responseKind = value.responseKind === undefined ? 'json' : value.responseKind;
+  if (responseKind !== 'json' && responseKind !== 'redirect') {
+    throw new Error(`清单校验失败：${label}.responseKind 只能是 json 或 redirect`);
+  }
+  const responseJsonPath = value.responseJsonPath === undefined
+    ? responseKind === 'redirect'
+      ? undefined
+      : assertString(value.responseJsonPath, `${label}.responseJsonPath`)
+    : assertString(value.responseJsonPath, `${label}.responseJsonPath`);
+  return { method, url, body, responseKind, responseJsonPath };
 }
 
 function parseSearchSpec(value: unknown, label: string): Tier3SearchSpec {
@@ -369,6 +383,15 @@ function parseSource(value: unknown): Tier3Source {
     throw new Error(`清单校验失败：source(${id}).timeoutMs 必须是正数`);
   }
   const headers = assertOptionalHeaders(value.headers);
+  let idNormalize: { stripPrefixes: string[] } | undefined;
+  if (value.idNormalize !== undefined) {
+    if (!isRecord(value.idNormalize)) {
+      throw new Error(`清单校验失败：source(${id}).idNormalize 必须是对象`);
+    }
+    idNormalize = {
+      stripPrefixes: assertStringArray(value.idNormalize.stripPrefixes, `source(${id}).idNormalize.stripPrefixes`),
+    };
+  }
   const resolve = parseRequestSpec(value.resolve, `source(${id}).resolve`);
   const search = kind === 'search-then-resolve'
     ? parseSearchSpec(value.search, `source(${id}).search`)
@@ -381,6 +404,7 @@ function parseSource(value: unknown): Tier3Source {
     allowedDomains,
     timeoutMs,
     headers,
+    idNormalize,
     resolve,
     search,
   };
@@ -465,6 +489,16 @@ function songVars(song: Song): TemplateVars {
     artist: song.artist || '',
     keyword: `${song.name || ''} ${song.artist || ''}`.trim(),
   };
+}
+
+/** 按源剥离模板变量 `{id}` 的前缀（`idNormalize.stripPrefixes`）。
+ *  只影响 tier3 模板填充，不动 `Song.id` 与身份键——酷我搜索产出 `MUSIC_<rid>`，
+ *  而第三方酷我接口只认裸数字（#376 E1）。 */
+function normalizeSourceId(id: string, source: Tier3Source): string {
+  for (const prefix of source.idNormalize?.stripPrefixes || []) {
+    if (prefix && id.startsWith(prefix)) return id.slice(prefix.length);
+  }
+  return id;
 }
 
 function fillTemplate(template: string, vars: TemplateVars, encode: boolean): string {
@@ -673,7 +707,9 @@ interface Tier3Candidate {
 const SOURCE_DURATION_PATHS = ['duration', 'Duration', 'song_play_time', 'play_time', 'playTime', 'interval'];
 const SOURCE_BITRATE_PATHS = ['br', 'bitrate', 'bitRate', 'bit_rate'];
 const SOURCE_NAME_PATHS = ['name', 'song', 'songname', 'songName', 'song_name', 'title'];
-const SOURCE_ARTIST_PATHS = ['artist', 'singer', 'author', 'artists', 'singerName'];
+// `ar_name`（kangqiovo/网易系）与 `singer_name`（s01s 系）是实测中「能出链但被判
+// 歌手缺失」的两个字段名；不加会把好源整条拒掉（#376 E0）。
+const SOURCE_ARTIST_PATHS = ['artist', 'singer', 'author', 'artists', 'singerName', 'ar_name', 'singer_name'];
 
 function pickNumber(root: unknown, paths: string[]): number | null {
   for (const path of paths) {
@@ -732,8 +768,19 @@ async function resolveFromRequestSpec(
   timeoutMs: number,
 ): Promise<Tier3Candidate | null> {
   const req = deps.request || request;
-  const res = await req(buildRequest(spec, vars, source, 'text', timeoutMs));
+  const requestSpec = buildRequest(spec, vars, source, 'text', timeoutMs);
+  const res = await req(requestSpec);
   if (res.status >= 400) return null;
+  if (spec.responseKind === 'redirect') {
+    // 302 直跳型：响应体是音频字节，没有 JSON 可解析，候选 = 重定向终点。
+    // 白名单 / 字节嗅探 / 护栏对最终 URL 照常执行；文本证据为空（只剩音频头
+    // 时长），与「解析响应不带 name/artist」的 url-resolver 同档。
+    const finalUrl = res.finalUrl && res.finalUrl !== requestSpec.url ? res.finalUrl : '';
+    if (!finalUrl || !isAllowedUrl(finalUrl, source.allowedDomains)) return null;
+    const probe = await probeCandidate(finalUrl, source, deps);
+    if (!probe.ok || isTrialSized(probe.totalBytes, source, finalUrl)) return null;
+    return buildCandidate(finalUrl, probe, null, '', '');
+  }
   let body: unknown;
   try {
     body = JSON.parse(bodyToText(res.body));
@@ -748,13 +795,14 @@ async function resolveFromRequestSpec(
     console.warn(`[tier3] source=${source.id} 上游返回错误: code=${code} message=${message}`);
     return null;
   }
-  const url = toUrlCandidate(getByPath(body, spec.responseJsonPath));
+  const jsonPath = spec.responseJsonPath || '';
+  const url = toUrlCandidate(getByPath(body, jsonPath));
   if (!url || !isAllowedUrl(url, source.allowedDomains)) return null;
   const probe = await probeCandidate(url, source, deps);
   if (!probe.ok || isTrialSized(probe.totalBytes, source, url)) return null;
   // 元数据自动探测的根：URL 字段所在的对象（如 `data.url` → `data`），
   // 源普遍把 duration/br/name 与 url 平铺在同一层；取不到则退回整个响应体。
-  const meta = metadataRoot(body, spec.responseJsonPath);
+  const meta = metadataRoot(body, jsonPath);
   return buildCandidate(url, probe, meta, pickText(meta, SOURCE_NAME_PATHS), pickText(meta, SOURCE_ARTIST_PATHS));
 }
 
@@ -779,7 +827,7 @@ async function resolveSourceUrl(
   const artist = itemMeta?.artist || base.artist;
   const vars: TemplateVars = {
     ...base,
-    id: idOverride || base.id,
+    id: normalizeSourceId(idOverride || base.id, source),
     name,
     artist,
     keyword: `${name} ${artist}`.trim(),

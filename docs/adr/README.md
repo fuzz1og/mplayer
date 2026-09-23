@@ -27,6 +27,7 @@
 | tier3 兜底：只替换 URL、分级护栏与验证等级 | `2026-09-21-tier3-url-substitution.md` | 已接受 |
 | 悬浮 chrome 去毛玻璃（纯色+渐变） | `2026-09-23-mobile-chrome-solid-gradient.md` | 已接受 |
 | tier3 交付口径与播放失败归因 | `2026-09-23-tier3-failure-attribution.md` | 已接受 |
+| tier3 清单能力扩展：`{id}` 归一化、redirect 响应与护栏字段 | `2026-09-23-tier3-manifest-capability-extensions.md` | 已接受 |
 
 ## 历史编号对照（冻结）
 
