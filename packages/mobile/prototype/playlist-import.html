@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE · #382 移动端歌单导入（定稿：更多菜单 + 底部弹层向导）</title>
+<style>
+  :root{
+    --bg-base:#F2F2F7; --bg-surface:#FFFFFF; --bg-hover:#F5F5F7; --bg-active:#E8E8ED;
+    --text-primary:#1C1C1E; --text-secondary:#636366; --text-tertiary:#AEAEB2; --text-inverse:#FFFFFF;
+    --border-subtle:#F5F5F7; --border-default:#E8E8ED; --border-strong:#D1D1D6;
+    --accent:#2F5FD0; --accent-subtle:#E7EDFB;
+    --danger:#EF4444; --danger-text:#D31F1F;
+    --input-bg:#FAFAFA; --input-border:#E8E8ED; --placeholder:#AEAEB2;
+    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;--s12:48px;
+    --r-sm:6px;--r-md:10px;--r-sheet:12px;--r-full:9999px;
+    --src-netease:#C0392B;--src-qq:#128A4A;--src-kugou:#C75B00;--src-kuwo:#C75300;
+    --dot-netease:#E74C3C;--dot-qq:#1DB954;--dot-kugou:#FF8C00;--dot-kuwo:#FF6F00;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:#DDE1E7;min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:24px 16px 40px;gap:14px;
+  }
+  .caption{color:#4A4A52;font-size:13px;line-height:1.7;text-align:center;max-width:580px}
+  .caption b{color:#1C1C1E}
+  .caption code{background:#fff;border-radius:4px;padding:1px 5px;font-size:12px;color:#2F5FD0}
+  .phone{
+    width:390px;height:844px;background:var(--bg-base);border-radius:44px;overflow:hidden;
+    position:relative;box-shadow:0 24px 60px rgba(0,0,0,.28),0 0 0 10px #1b1b20,0 0 0 12px #2e2e36;
+    display:flex;flex-direction:column;
+  }
+  .statusbar{height:44px;flex:0 0 44px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--text-primary)}
+  .statusbar .icons{letter-spacing:1px;font-size:11px}
+
+  .navbar{display:flex;align-items:center;justify-content:space-between;padding:var(--s4) var(--s4) var(--s3);flex:0 0 auto}
+  .navtitle{font-size:15px;font-weight:500;color:var(--text-primary)}
+  .navright{min-width:44px;display:flex;justify-content:flex-end;align-items:center}
+  .back{font-size:24px;line-height:1;color:var(--text-secondary);width:22px;cursor:pointer}
+  .morebtn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:var(--r-full);
+    border:none;background:transparent;cursor:pointer;color:var(--text-secondary)}
+  .morebtn:hover{background:var(--bg-hover)}
+
+  .scroll{flex:1;overflow-y:auto;padding:0 var(--s4) var(--s12)}
+  .hero{display:flex;align-items:center;gap:var(--s4);margin-bottom:var(--s4)}
+  .cover{width:72px;height:72px;border-radius:var(--r-md);background:var(--bg-hover);display:flex;align-items:center;justify-content:center;font-size:26px}
+  .heroname{font-size:22px;font-weight:700;letter-spacing:-.5px;color:var(--text-primary)}
+  .herosub{font-size:13px;color:var(--text-secondary);margin-top:var(--s1)}
+  .banner{display:flex;align-items:center;gap:var(--s2);background:var(--bg-hover);border-radius:var(--r-sm);
+    padding:var(--s2) var(--s3);font-size:12px;color:var(--text-secondary);margin-bottom:var(--s3);line-height:1.45}
+  .row{display:flex;align-items:center;padding:var(--s3) 0;border-bottom:1px solid var(--border-subtle)}
+  .row.tap{cursor:pointer}
+  .row .idx{width:26px;text-align:center;color:var(--text-tertiary);font-size:11px}
+  .listicon{width:36px;height:36px;border-radius:var(--r-sm);background:var(--bg-hover);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:17px}
+  .meta{flex:1;min-width:0;display:flex;flex-direction:column;margin-left:var(--s3)}
+  .meta .n{font-size:15px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meta .n.dim{color:var(--text-tertiary)}
+  .meta .a{font-size:12px;color:var(--text-secondary);margin-top:2px}
+  .src{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;flex:0 0 auto}
+  .src i{width:6px;height:6px;border-radius:3px;display:inline-block}
+  .playerbar{flex:0 0 auto;display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s4);
+    background:var(--bg-surface);border-top:1px solid var(--border-subtle)}
+  .playercover{width:36px;height:36px;border-radius:var(--r-sm);background:var(--bg-hover)}
+
+  .field{display:flex;align-items:center;gap:var(--s2);background:var(--input-bg);border:1px solid var(--input-border);
+    border-radius:var(--r-sm);padding:var(--s3);margin-bottom:var(--s4)}
+  .field .ic{color:var(--text-tertiary);display:flex}
+  .field input{flex:1;border:none;outline:none;background:transparent;font-size:15px;color:var(--text-primary);font-family:inherit}
+  .field input::placeholder{color:var(--placeholder)}
+  .primary{width:100%;background:var(--accent);color:var(--text-inverse);border:none;border-radius:var(--r-sm);
+    padding:14px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
+  .primary[disabled]{opacity:.45;cursor:default}
+
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;z-index:20}
+  .scrim.center{align-items:center;justify-content:center}
+  .sheet{width:100%;background:var(--bg-surface);border-radius:var(--r-sheet) var(--r-sheet) 0 0;padding-bottom:var(--s6);
+    max-height:84%;overflow-y:auto;box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+  .grabber{width:36px;height:5px;border-radius:3px;background:var(--border-strong);margin:var(--s2) auto var(--s3)}
+  .sheetbody{padding:0 var(--s5)}
+  .sheetTitle{font-size:17px;font-weight:700;letter-spacing:-.2px;color:var(--text-primary);text-align:center}
+  .sheetSub{font-size:13px;color:var(--text-secondary);text-align:center;margin:var(--s2) 0 var(--s4);line-height:1.5}
+  .center{display:flex;flex-direction:column;align-items:center;gap:var(--s3);padding:var(--s8) 0;color:var(--accent)}
+  .spinner{width:22px;height:22px;border-radius:50%;border:2px solid var(--accent-subtle);border-top-color:var(--accent);animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .action{display:flex;align-items:center;gap:var(--s3);padding:14px 0;border-bottom:1px solid var(--border-subtle);
+    cursor:pointer;background:transparent;border-left:none;border-right:none;border-top:none;width:100%;font-family:inherit}
+  .action .lbl{font-size:16px;color:var(--text-primary)}
+  .action .ic{display:flex;color:var(--text-primary)}
+  .action.danger .lbl,.action.danger .ic{color:var(--danger-text)}
+  .cancelbtn{margin-top:var(--s3);padding:14px;border-radius:var(--r-md);background:var(--bg-hover);
+    text-align:center;font-size:16px;color:var(--text-secondary);cursor:pointer;border:none;width:100%;font-family:inherit}
+
+  .dialog{width:80%;max-width:320px;background:var(--bg-surface);border-radius:16px;padding:var(--s6)}
+  .dialog .dt{font-size:17px;font-weight:700;color:var(--text-primary);text-align:center;margin-bottom:var(--s4)}
+  .dialog .dm{font-size:14px;color:var(--text-secondary);text-align:center;line-height:1.5;margin-bottom:var(--s5)}
+  .dialog input{width:100%;background:var(--input-bg);border:1px solid var(--input-border);border-radius:var(--r-sm);
+    padding:11px 14px;font-size:15px;color:var(--text-primary);outline:none;font-family:inherit;margin-bottom:var(--s5)}
+  .dialog .acts{display:flex;gap:var(--s3)}
+  .dialog .acts button{flex:1;padding:11px;border-radius:var(--r-sm);border:none;font-size:15px;cursor:pointer;font-family:inherit}
+  .dialog .acts .no{background:var(--bg-hover);color:var(--text-secondary)}
+  .dialog .acts .yes{background:var(--accent);color:var(--text-inverse);font-weight:600}
+  .dialog .acts .yes.danger{background:var(--danger)}
+
+  .selectbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s1)}
+  .selectbar .cnt{font-size:13px;color:var(--text-secondary)}
+  .linkbtn{background:transparent;border:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  .preview-list{overflow-y:auto;margin-bottom:var(--s3)}
+  .cb{width:20px;height:20px;border-radius:4px;border:1.5px solid var(--border-strong);flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-inverse)}
+  .cb.on{background:var(--accent);border-color:var(--accent)}
+  .cb.dis{opacity:.4}
+
+  .track{height:6px;border-radius:3px;background:var(--bg-hover);overflow:hidden;margin-top:var(--s2)}
+  .fill{height:6px;background:var(--accent);transition:width .18s linear}
+  .pcount{font-size:13px;color:var(--text-secondary);margin-top:var(--s3)}
+  .pline{display:flex;align-items:center;gap:var(--s2);margin-top:var(--s2);font-size:12px;color:var(--text-secondary)}
+
+  .result{display:flex;flex-direction:column;align-items:center;gap:var(--s2);padding:var(--s6) var(--s5)}
+  .result .ok{width:44px;height:44px;border-radius:50%;background:var(--accent-subtle);color:var(--accent);display:flex;align-items:center;justify-content:center}
+  .result .t{font-size:17px;font-weight:700;color:var(--text-primary);margin-top:var(--s2)}
+  .result .s{font-size:13px;color:var(--text-secondary);margin-bottom:var(--s4);text-align:center}
+  .result .primary{width:auto;padding:12px 40px}
+</style>
+</head>
+<body>
+  <div class="caption">
+    <b>PROTOTYPE · wayfinder #382「移动端歌单导入」定稿</b><br />
+    头部「更多」（竖排三点）→ BottomSheet：<b>重命名 / 导入歌曲 / 删除歌单</b>；导入走已有 <b>BottomSheet</b> 分步向导<br />
+    删除 → <b>router.back() 回歌单列表</b>；列表页<b>长按删除保留</b>（原型里在歌单行上右键模拟长按）<br />
+    深链：<code>?sheet=menu|import|rename|delete</code> · <code>&amp;step=…</code> · <code>?page=list</code>
+  </div>
+  <div class="phone" id="phone"></div>
+
+<script>
+/* ── 假数据 ─────────────────────────────────────────────── */
+var PARSED = [
+  {id:'n1',name:'夜曲',artist:'周杰伦',src:'netease'},
+  {id:'n2',name:'稻香',artist:'周杰伦',src:'netease'},
+  {id:'n3',name:'晴天',artist:'周杰伦',src:'netease'},
+  {id:'n4',name:'七里香',artist:'周杰伦',src:'netease'},
+  {id:'n5',name:'花海',artist:'周杰伦',src:'netease'},
+  {id:'n6',name:'彩虹',artist:'周杰伦',src:'netease'},
+  {id:'n7',name:'青花瓷',artist:'周杰伦',src:'netease'},
+  {id:'n8',name:'搁浅',artist:'周杰伦',src:'netease'},
+  {id:'n9',name:'告白气球',artist:'周杰伦',src:'netease'},
+  {id:'n10',name:'简单爱',artist:'周杰伦',src:'netease'},
+  {id:'n11',name:'东风破',artist:'周杰伦',src:'netease'},
+  {id:'n12',name:'以父之名',artist:'周杰伦',src:'netease'}
+];
+var EXISTING = {n1:1, n5:1};
+var HOST_SONGS = [
+  {id:'h1',name:'夜曲',artist:'周杰伦',src:'netease'},
+  {id:'h2',name:'花海',artist:'周杰伦',src:'netease'},
+  {id:'h3',name:'晴天',artist:'周杰伦',src:'netease'},
+  {id:'h4',name:'富士山下',artist:'陈奕迅',src:'qq'},
+  {id:'h5',name:'海阔天空',artist:'Beyond',src:'kugou'},
+  {id:'h6',name:'起风了',artist:'买辣椒也用券',src:'kuwo'}
+];
+var SOURCE_LABEL = {netease:'网易云', qq:'QQ', kugou:'酷狗', kuwo:'酷我'};
+var LINK = 'https://music.163.com/#/playlist?id=24381616';
+
+var PLAYLISTS = [
+  {id:'p1', name:'我喜欢的音乐', count:6},
+  {id:'p2', name:'跑步 BGM', count:12},
+  {id:'p3', name:'深夜电台', count:8}
+];
+
+var state = {
+  page:'detail',              /* detail | list —— 删除后回 list（= router.back()） */
+  currentId:'p1',
+  sheet:null,                 /* null | menu | import | rename | delete */
+  step:'input', url:LINK, selected:{}, done:0,
+  renameValue:'我喜欢的音乐',
+  pendingDelete:null          /* 列表页长按待删的 id（null = 详情页删除当前歌单） */
+};
+var timers = [];
+
+function findPlaylist(id){ return PLAYLISTS.filter(function(p){ return p.id === id; })[0]; }
+function currentName(){ var p = findPlaylist(state.currentId); return p ? p.name : ''; }
+function pendingName(){ var p = findPlaylist(state.pendingDelete || state.currentId); return p ? p.name : ''; }
+
+/* ── 图标 ───────────────────────────────────────────────── */
+function svg(inner, size){
+  var s = size || 22;
+  return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+}
+function iconMore(){ return svg('<circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/>'); }
+function iconPencil(){ return svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>'); }
+function iconUpload(){ return svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'); }
+function iconTrash(){ return svg('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>'); }
+function iconLink(){ return svg('<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.8 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>', 18); }
+function iconCheck(){ return svg('<polyline points="20 6 9 17 4 12"/>', 22); }
+
+/* ── 导入流程 ───────────────────────────────────────────── */
+function importable(){ return PARSED.filter(function(s){ return !EXISTING[s.id]; }); }
+function chosen(){ return importable().filter(function(s){ return state.selected[s.id]; }); }
+function allSelected(){ return importable().every(function(s){ return state.selected[s.id]; }); }
+function initSelected(){ state.selected = {}; importable().forEach(function(s){ state.selected[s.id] = true; }); }
+initSelected();
+
+function clearTimers(){ timers.forEach(clearTimeout); timers = []; }
+function openSheet(k){
+  state.sheet = k;
+  if(k === 'import'){ clearTimers(); state.step = 'input'; state.done = 0; initSelected(); }
+  if(k === 'rename'){ state.renameValue = currentName(); }
+  if(k === 'delete'){ state.pendingDelete = null; }   /* 详情页删除 = 当前歌单 */
+  render();
+}
+function closeSheet(){ clearTimers(); state.sheet = null; render(); }
+function parseLink(){
+  clearTimers(); state.step = 'parsing'; render();
+  timers.push(setTimeout(function(){ state.step = 'preview'; render(); }, 900));
+}
+function startImport(){
+  var list = chosen(); if(!list.length) return;
+  clearTimers(); state.step = 'importing'; state.done = 0; render();
+  list.forEach(function(_, i){
+    timers.push(setTimeout(function(){
+      state.done = i + 1; render();
+      if(i === list.length - 1) timers.push(setTimeout(function(){ state.step = 'done'; render(); }, 300));
+    }, 260 * (i + 1)));
+  });
+}
+function toggle(id){ if(EXISTING[id]) return; state.selected[id] = !state.selected[id]; render(); }
+function toggleAll(){
+  var target = !allSelected();
+  importable().forEach(function(s){ state.selected[s.id] = target; });
+  render();
+}
+function confirmRename(){
+  var v = (state.renameValue || '').trim();
+  var p = findPlaylist(state.currentId);
+  if(v && p) p.name = v;
+  state.sheet = null; render();
+}
+/* 删除：从详情页删 → 回列表（router.back()）；从列表页长按删 → 留在列表 */
+function confirmDelete(){
+  var id = state.pendingDelete || state.currentId;
+  PLAYLISTS = PLAYLISTS.filter(function(p){ return p.id !== id; });
+  state.pendingDelete = null;
+  state.sheet = null;
+  if(state.page === 'detail'){
+    state.page = 'list';
+    var next = PLAYLISTS[0];
+    if(next) state.currentId = next.id;
+  }
+  render();
+}
+function openDetail(id){ state.currentId = id; state.page = 'detail'; render(); }
+
+/* ── 片段 ───────────────────────────────────────────────── */
+function srcBadge(src){
+  return '<span class="src" style="color:var(--src-' + src + ')"><i style="background:var(--dot-' + src + ')"></i>' + SOURCE_LABEL[src] + '</span>';
+}
+function statusbar(){ return '<div class="statusbar"><span>9:41</span><span class="icons">▮▮▮ ⌁ ▰</span></div>'; }
+function navBar(){
+  return '<div class="navbar"><span class="back" data-act="back">‹</span><span class="navtitle">歌单</span>' +
+    '<span class="navright"><button class="morebtn" data-act="menu" title="更多">' + iconMore() + '</button></span></div>';
+}
+function hero(){
+  return '<div class="hero"><div class="cover">♪</div><div><div class="heroname">' + currentName() + '</div>' +
+    '<div class="herosub">' + HOST_SONGS.length + ' 首</div></div></div>';
+}
+function hostSongs(){
+  return HOST_SONGS.map(function(s){
+    return '<div class="row"><span class="idx">▶</span><span class="meta"><span class="n">' + s.name + '</span>' +
+      '<span class="a">' + s.artist + '</span></span>' + srcBadge(s.src) + '</div>';
+  }).join('');
+}
+function playerBar(){
+  return '<div class="playerbar"><div class="playercover"></div><span class="meta"><span class="n">夜曲</span>' +
+    '<span class="a">周杰伦</span></span><span style="color:var(--text-secondary)">▶</span></div>';
+}
+function banner(text){ return '<div class="banner"><span>⇪</span><span>' + text + '</span></div>'; }
+function linkField(){
+  return '<div class="field"><span class="ic">' + iconLink() + '</span>' +
+    '<input id="linkinput" value="' + state.url + '" placeholder="粘贴网易云 / QQ 音乐歌单链接" autocapitalize="off" autocorrect="off" /></div>';
+}
+function previewList(maxH){
+  var rows = PARSED.map(function(s){
+    var already = !!EXISTING[s.id];
+    var on = !already && !!state.selected[s.id];
+    return '<div class="row"' + (already ? '' : ' data-act="toggle" data-id="' + s.id + '"') + '>' +
+      '<span class="cb' + (on ? ' on' : '') + (already ? ' dis' : '') + '">' + (on ? '✓' : '') + '</span>' +
+      '<span class="meta"><span class="n' + (already ? ' dim' : '') + '">' + s.name + '</span>' +
+      '<span class="a">' + s.artist + (already ? ' · 已在歌单' : '') + '</span></span>' + srcBadge(s.src) + '</div>';
+  }).join('');
+  return '<div class="preview-list"' + (maxH ? ' style="max-height:' + maxH + 'px"' : '') + '>' + rows + '</div>';
+}
+function selectBar(){
+  return '<div class="selectbar"><span class="cnt">已选 ' + chosen().length + ' 首</span>' +
+    '<button class="linkbtn" data-act="selectall">' + (allSelected() ? '取消全选' : '全选') + '</button></div>';
+}
+function progressBlock(){
+  var total = chosen().length || 1;
+  var pct = Math.round((state.done / total) * 100);
+  var cur = chosen()[state.done];
+  var line = cur ? ('<span class="spinner"></span><span>' + cur.name + ' - ' + cur.artist + '</span>')
+                 : ('<span>⏱</span><span>收尾…</span>');
+  return '<div><div class="track"><div class="fill" style="width:' + pct + '%"></div></div>' +
+    '<div class="pcount">' + state.done + ' / ' + chosen().length + '</div>' +
+    '<div class="pline">' + line + '</div></div>';
+}
+function resultBlock(){
+  var skipped = PARSED.length - importable().length;
+  return '<div class="result"><div class="ok">' + iconCheck() + '</div><div class="t">导入完成</div>' +
+    '<div class="s">成功导入 ' + chosen().length + ' 首' + (skipped ? '，' + skipped + ' 首已在歌单' : '') + '</div>' +
+    '<button class="primary" data-act="closeSheet">完成</button></div>';
+}
+
+/* ── 弹层 ───────────────────────────────────────────────── */
+function menuSheet(){
+  return '<div class="scrim" data-act="scrim"><div class="sheet" data-stop="1"><div class="grabber"></div>' +
+    '<div class="sheetbody"><div class="sheetTitle" style="margin-bottom:var(--s4)">' + currentName() + '</div>' +
+    '<button class="action" data-act="openRename"><span class="ic">' + iconPencil() + '</span><span class="lbl">重命名</span></button>' +
+    '<button class="action" data-act="openImport"><span class="ic">' + iconUpload() + '</span><span class="lbl">导入歌曲</span></button>' +
+    '<button class="action danger" data-act="openDelete" style="border-bottom:none"><span class="ic">' + iconTrash() + '</span><span class="lbl">删除歌单</span></button>' +
+    '<button class="cancelbtn" data-act="closeSheet">取消</button></div></div></div>';
+}
+function importSheet(){
+  var body = '';
+  if(state.step === 'input'){
+    body = '<div class="sheetTitle">导入歌单</div>' +
+      '<div class="sheetSub">支持网易云 / QQ 音乐歌单链接<br/>网易云完整链接或 163cn.tv 短链 · QQ 直链或分享短链</div>' +
+      linkField() + '<button class="primary" data-act="parse">解析链接</button>';
+  } else if(state.step === 'parsing'){
+    body = '<div class="center"><span class="spinner"></span><span class="sheetSub">正在解析歌单…</span></div>';
+  } else if(state.step === 'preview'){
+    var skipped = PARSED.length - importable().length;
+    body = '<div class="sheetTitle">选择要导入的歌曲</div>' +
+      '<div class="sheetSub">共 ' + PARSED.length + ' 首 · ' + skipped + ' 首已在歌单</div>' +
+      selectBar() + previewList(250) +
+      '<button class="primary" data-act="import"' + (chosen().length ? '' : ' disabled') + '>导入 ' + chosen().length + ' 首</button>';
+  } else if(state.step === 'importing'){
+    body = '<div class="sheetTitle">正在导入…</div>' + progressBlock();
+  } else {
+    body = resultBlock();
+  }
+  return '<div class="scrim" data-act="scrim"><div class="sheet" data-stop="1"><div class="grabber"></div>' +
+    '<div class="sheetbody">' + body + '</div></div></div>';
+}
+function renameDialog(){
+  return '<div class="scrim center" data-act="scrim"><div class="dialog" data-stop="1">' +
+    '<div class="dt">重命名歌单</div>' +
+    '<input id="renameinput" value="' + state.renameValue + '" placeholder="输入歌单名称" />' +
+    '<div class="acts"><button class="no" data-act="closeSheet">取消</button>' +
+    '<button class="yes" data-act="confirmRename">确认</button></div></div></div>';
+}
+function deleteDialog(){
+  return '<div class="scrim center" data-act="scrim"><div class="dialog" data-stop="1">' +
+    '<div class="dt">删除歌单</div>' +
+    '<div class="dm">确定要删除「' + pendingName() + '」吗？<br/>歌单内的歌曲不会被删除。</div>' +
+    '<div class="acts"><button class="no" data-act="closeSheet">取消</button>' +
+    '<button class="yes danger" data-act="confirmDelete">删除</button></div></div></div>';
+}
+
+/* ── 页面 ───────────────────────────────────────────────── */
+function detailPage(){
+  return statusbar() + navBar() +
+    '<div class="scroll">' + hero() +
+    banner('头部「更多」→ 重命名 / 导入歌曲 / 删除歌单；导入走已有 BottomSheet 向导；删除后 router.back() 回列表') +
+    hostSongs() + '</div>' + playerBar();
+}
+function listPage(){
+  var rows = PLAYLISTS.map(function(p){
+    return '<div class="row tap" data-act="openDetail" data-id="' + p.id + '" data-del="' + p.id + '">' +
+      '<span class="listicon">♪</span><span class="meta"><span class="n">' + p.name + '</span>' +
+      '<span class="a">' + p.count + ' 首</span></span><span style="color:var(--text-tertiary)">›</span></div>';
+  }).join('');
+  return statusbar() +
+    '<div class="scroll" style="padding-top:var(--s1)">' +
+    '<div style="font-size:28px;font-weight:700;letter-spacing:-.6px;color:var(--text-primary);margin:var(--s2) 0 var(--s4)">我的歌单</div>' +
+    banner('删除已回列表（= router.back()）。列表页长按删除保留：原型里在歌单行上右键模拟长按') +
+    '<div class="row tap" data-act="noop"><span class="listicon">♥</span><span class="meta"><span class="n">收藏</span><span class="a">我喜欢的歌曲</span></span><span style="color:var(--text-tertiary)">›</span></div>' +
+    '<div class="row tap" data-act="noop"><span class="listicon">⏱</span><span class="meta"><span class="n">播放历史</span><span class="a">最近播放的歌曲</span></span><span style="color:var(--text-tertiary)">›</span></div>' +
+    '<div style="font-size:13px;color:var(--text-secondary);padding:var(--s3) 0">我的歌单</div>' +
+    (rows || '<div style="padding:var(--s8) 0;text-align:center;font-size:14px;color:var(--text-secondary)">暂无歌单</div>') +
+    '</div>';
+}
+
+function render(){
+  var overlays = '';
+  if(state.sheet === 'menu') overlays = menuSheet();
+  else if(state.sheet === 'import') overlays = importSheet();
+  else if(state.sheet === 'rename') overlays = renameDialog();
+  else if(state.sheet === 'delete') overlays = deleteDialog();
+  document.getElementById('phone').innerHTML =
+    '<div style="flex:1;display:flex;flex-direction:column;min-height:0">' +
+    (state.page === 'list' ? listPage() : detailPage()) + '</div>' + overlays;
+}
+
+/* ── 事件 ───────────────────────────────────────────────── */
+document.addEventListener('click', function(e){
+  var el = e.target.closest('[data-act]');
+  if(!el) return;
+  var act = el.getAttribute('data-act');
+  if(act === 'scrim'){ if(e.target === el) closeSheet(); return; }
+  if(el.getAttribute('data-stop')) return;
+  if(act === 'menu') return openSheet('menu');
+  if(act === 'back') return (state.page = 'list', render());
+  if(act === 'openDetail') return openDetail(el.getAttribute('data-id'));
+  if(act === 'openRename') return openSheet('rename');
+  if(act === 'openImport') return openSheet('import');
+  if(act === 'openDelete') return openSheet('delete');
+  if(act === 'closeSheet') return closeSheet();
+  if(act === 'parse') return parseLink();
+  if(act === 'import') return startImport();
+  if(act === 'toggle') return toggle(el.getAttribute('data-id'));
+  if(act === 'selectall') return toggleAll();
+  if(act === 'confirmRename') return confirmRename();
+  if(act === 'confirmDelete') return confirmDelete();
+  if(act === 'noop') return;
+});
+document.addEventListener('input', function(e){
+  if(e.target && e.target.id === 'linkinput') state.url = e.target.value;
+  if(e.target && e.target.id === 'renameinput') state.renameValue = e.target.value;
+});
+/* 列表页长按删除（原型里右键模拟长按） */
+document.addEventListener('contextmenu', function(e){
+  var el = e.target.closest('[data-del]');
+  if(!el) return;
+  e.preventDefault();
+  state.pendingDelete = el.getAttribute('data-del');
+  state.sheet = 'delete';
+  render();
+});
+
+/* ── 深链（评审用）─────────────────────────────────────── */
+(function(){
+  var q = location.search;
+  var sh = /[?&]sheet=(menu|import|rename|delete)/.exec(q);
+  var st = /[?&]step=([a-z]+)/.exec(q);
+  if(/[?&]page=list/.test(q)) state.page = 'list';
+  if(sh) state.sheet = sh[1];
+  var ok = ['input','parsing','preview','importing','done'];
+  if(st && ok.indexOf(st[1]) >= 0){
+    state.step = st[1];
+    if(st[1] === 'done') state.done = chosen().length;
+    if(st[1] === 'importing') state.done = Math.max(1, Math.floor(chosen().length / 2));
+  }
+})();
+
+render();
+</script>
+</body>
+</html>
