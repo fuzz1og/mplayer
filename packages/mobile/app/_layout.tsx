@@ -8,6 +8,7 @@ import { addNotificationResponseListener, requestNotificationPermission, setupNo
 import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
 import { setupLegacyMigration } from '../services/legacyMigration';
 import { startPerfMonitor, stopPerfMonitor, setPerfContext } from '../services/perfMonitor';
+import { registerPlaybackTraceSink } from '../services/playbackTrace';
 import { setProxyUrl as setCoreProxyUrl, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
 
 // 启动即注册直连客户端（T02 网易 / T03 汽水 / T04 千千 / T05 咪咕 / T06 QQ / T07 酷狗 / T08 酷我）。
@@ -20,6 +21,11 @@ registerDirectClient(miguDirectClient);
 registerDirectClient(qqDirectClient);
 registerDirectClient(kuwoDirectClient);
 registerDirectClient(kugouDirectClient);
+
+// 播放解析链诊断埋点（#363 / ADR-2026-09-23-playback-trace-sink）：注册 core trace
+// sink（会话内内存环形缓冲，不落盘）。与直连客户端同样放模块顶层——首次播放解析
+// 早于任何 useEffect；模块单例 + 幂等守卫保证只注册一次。
+registerPlaybackTraceSink();
 
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';

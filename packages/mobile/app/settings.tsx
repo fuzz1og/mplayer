@@ -11,12 +11,13 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
-import { CircleCheck, RefreshCcw, RefreshCw, Download, CircleX, Trash2, Plus, Gauge } from 'lucide-react-native';
+import { CircleCheck, RefreshCcw, RefreshCw, Download, CircleX, Trash2, Plus, Gauge, Share2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MULTI_SOURCE_LIST, SOURCE_DISPLAY_NAMES, hasDirectClient, setTier3Enabled as setCoreTier3Enabled, addTier3SubscriptionFromUrl, addTier3SubscriptionFromText, removeTier3Subscription, refreshTier3Subscription, getTier3Stats, clearTier3Stats, UPDATE_SOURCE_DEFS } from '@mplayer/core';
-import type { Tier3SourceStats } from '@mplayer/core';
+import type { Tier3SourceStats, PlaybackTrace, PlaybackTraceSourceLeg } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
+import { listPlaybackTraces, listProbeTraces, clearPlaybackTraces, exportPlaybackTraces } from '../services/playbackTrace';
 import { checkLatestRelease, speedTestChannels, type ChannelSpeedResult } from '../services/appUpdate';
 import {opacity, radius, shadow, spacing, textVariants} from '../theme/tokens';
 import type { ThemeMode, ThemeColors } from '../theme/tokens';
@@ -32,6 +33,51 @@ const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
 
 /** 缓存占用条上限（对齐桌面 CacheSection 的 100MB 口径） */
 const MAX_CACHE_MB = 100;
+
+/** 播放诊断展示条数（最近记录，倒序） */
+const TRACE_DISPLAY_COUNT = 20;
+
+const LAYER_LABELS: Record<PlaybackTrace['layer'], string> = {
+  prefetch: '预取',
+  direct: '直连',
+  tier3: 'tier3',
+  fail: '失败',
+};
+
+const OUTCOME_LABELS: Record<PlaybackTraceSourceLeg['outcome'], string> = {
+  hit: '命中',
+  miss: '未命中',
+  error: '错误',
+  skipped: '跳过',
+  rejected: '护栏拒绝',
+  discarded: '丢弃',
+};
+
+const GUARD_LABELS: Record<NonNullable<PlaybackTrace['guard']>, string> = {
+  'source-duration': '源自带时长',
+  'audio-header': '音频头',
+  'size-bitrate': '体积码率',
+  'text-only': '文本',
+  none: '无',
+};
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function formatTraceMs(ms: number | null): string {
+  return ms == null ? '—' : Math.round(ms) + 'ms';
+}
+
+/** core traceNow 优先 performance.now（自启动单调 ms），退化 Date.now（epoch ms）。 */
+function formatTraceTime(ts: number): string {
+  if (ts > 1_000_000_000_000) {
+    const d = new Date(ts);
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+  const sec = Math.max(0, Math.floor(ts / 1000));
+  return '+' + Math.floor(sec / 60) + ':' + pad2(sec % 60);
+}
 
 export default function SettingsPage() {
   const { colors } = useTheme();
@@ -110,6 +156,34 @@ export default function SettingsPage() {
   const handleClearTier3Stats = (): void => {
     clearTier3Stats();
     setTier3Stats({});
+  };
+
+  // 播放诊断（#363）：core 环形缓冲快照，进入页面/手动刷新时读取（最近 20 条，倒序）
+  const [traces, setTraces] = useState<PlaybackTrace[]>([]);
+  const [probeCount, setProbeCount] = useState(0);
+  // 导出/清空对解析与探测两类 trace 都生效（探测也可能独立产生）
+  const hasTraces = traces.length > 0 || probeCount > 0;
+  const refreshTraces = (): void => {
+    setTraces(listPlaybackTraces().slice(-TRACE_DISPLAY_COUNT).reverse());
+    setProbeCount(listProbeTraces().length);
+  };
+  useEffect(() => {
+    refreshTraces();
+  }, []);
+
+  const handleExportTraces = async (): Promise<void> => {
+    try {
+      const path = await exportPlaybackTraces();
+      Alert.alert('已导出诊断', '文件已保存：' + path);
+    } catch (e: any) {
+      Alert.alert('导出失败', e?.message || '未知错误');
+    }
+  };
+
+  const handleClearTraces = (): void => {
+    clearPlaybackTraces();
+    setTraces([]);
+    setProbeCount(0);
   };
 
   const currentVersion = Constants.expoConfig?.version || '0.0.0';
@@ -368,6 +442,78 @@ export default function SettingsPage() {
 
           {/* iOS footer：说明文字在组下方（8pt 距组）；原放在节标题下会与卡片粘连 */}
           <Text style={styles.sectionFootnote}>官方直连失败后按订阅清单尝试第三方源，全部失败换元/标记不可播。清单条目可用 source 声明服务哪个音乐源（netease/qq/kugou/kuwo/migu/qianqian/soda，也认 tencent、tx、163 等别名）；url-resolver 不写会被拒绝，聚合端点请拆成多条条目。实验性功能，不内置任何解析端点。</Text>
+        </View>
+
+        {/* 播放诊断（#363 / ADR-2026-09-23-playback-trace-sink）：会话内最近 20 条解析链 trace */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>播放诊断</Text>
+          <View style={styles.group}>
+            <View style={styles.groupPad}>
+              <View style={styles.diagHead}>
+                <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>
+                  最近 {traces.length} 条解析 · {probeCount} 条探测（本次会话）
+                </Text>
+                <ScalePress onPress={refreshTraces} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
+                  <RefreshCw size={14} color={colors.textSecondary} />
+                </ScalePress>
+              </View>
+              {!hasTraces ? (
+                <Text style={styles.diagEmpty}>暂无播放诊断记录。播放一首歌后回到这里查看解析链。</Text>
+              ) : (
+                traces.map((t, i) => (
+                  <View key={t.ts + '-' + t.songId + '-' + i} style={[styles.diagItem, i > 0 && styles.diagItemSep]}>
+                    <View style={styles.diagRow}>
+                      <Text style={styles.diagSong} numberOfLines={1}>
+                        {t.songName}
+                        {t.artist ? ' · ' + t.artist : ''}
+                      </Text>
+                      <Text style={[styles.diagLayer, t.layer === 'fail' && styles.diagLayerFail]}>
+                        {LAYER_LABELS[t.layer]}
+                      </Text>
+                    </View>
+                    <Text style={styles.diagMeta} numberOfLines={1}>
+                      {formatTraceTime(t.ts)}
+                      {' · '}总 {Math.round(t.totalMs)}ms
+                      {' · '}直连 {formatTraceMs(t.directMs)}
+                      {t.tier3Engaged ? ' · tier3 ' + formatTraceMs(t.tier3Ms) + (t.tier3TimedOut ? '（超时）' : '') : ''}
+                      {t.guard ? ' · 护栏 ' + GUARD_LABELS[t.guard] : ''}
+                      {t.nonFull ? ' · 试听版' : ''}
+                      {t.prefetchHit ? ' · 预取命中' : ''}
+                    </Text>
+                    {t.reason ? (
+                      <Text style={styles.diagReason} numberOfLines={2}>{t.reason}</Text>
+                    ) : null}
+                    {t.sources.length > 0 ? (
+                      <Text style={styles.diagSources} numberOfLines={2}>
+                        {t.sources
+                          .map((s) => s.sourceId + ' ' + OUTCOME_LABELS[s.outcome] + (s.ms > 0 ? ' ' + Math.round(s.ms) + 'ms' : ''))
+                          .join(' · ')}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))
+              )}
+            </View>
+            <ScalePress
+              style={[styles.actionRow, styles.rowSep, !hasTraces && styles.actionRowDisabled]}
+              onPress={handleExportTraces}
+              disabled={!hasTraces}
+            >
+              <Share2 size={18} color={colors.accent} style={styles.btnIcon} />
+              <Text style={styles.actionRowText}>导出诊断</Text>
+            </ScalePress>
+            <ScalePress
+              style={[styles.actionRow, styles.rowSep, !hasTraces && styles.actionRowDisabled]}
+              onPress={handleClearTraces}
+              disabled={!hasTraces}
+            >
+              <Trash2 size={18} color={colors.danger} style={styles.btnIcon} />
+              <Text style={[styles.actionRowText, { color: colors.danger }]}>清空</Text>
+            </ScalePress>
+          </View>
+          <Text style={styles.sectionFootnote}>
+            仅保留本次会话最近 {TRACE_DISPLAY_COUNT} 条解析链展示，不落盘、不外传；「导出诊断」把完整缓冲（最多 200 条）写入应用文档目录并唤起系统分享。时间显示为 core 单调时钟（自应用启动计）。
+          </Text>
         </View>
 
         {/* 缓存管理：统计 + 用量条 + 一键清理（对齐桌面 CacheSection） */}
@@ -672,6 +818,59 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '400',
     paddingHorizontal: spacing[3],
     paddingVertical: 10,
+  },
+
+  /* 播放诊断（#363）：紧凑 trace 卡片 */
+  diagHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing[2],
+  },
+  diagEmpty: {
+    ...textVariants.settingsTertiary,
+    color: colors.textSecondary,
+    paddingVertical: spacing[2],
+  },
+  diagItem: {
+    paddingVertical: spacing[2],
+  },
+  diagItemSep: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle,
+  },
+  diagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  diagSong: {
+    ...textVariants.settingsSecondary,
+    color: colors.textPrimary,
+    flex: 1,
+    marginRight: spacing[2],
+  },
+  diagLayer: {
+    ...textVariants.micro,
+    color: colors.accent,
+  },
+  diagLayerFail: {
+    color: colors.dangerText,
+  },
+  diagMeta: {
+    ...textVariants.settingsTertiary,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  diagReason: {
+    ...textVariants.settingsTertiary,
+    color: colors.textTertiary,
+    marginTop: 2,
+  },
+  diagSources: {
+    ...textVariants.settingsTertiary,
+    color: colors.textTertiary,
+    marginTop: 2,
   },
 
   /* 缓存管理 */
