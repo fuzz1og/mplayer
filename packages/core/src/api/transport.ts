@@ -226,7 +226,11 @@ async function defaultTransport(req: TransportRequest): Promise<TransportRespons
       ? { httpAgent: agents.httpAgent as Parameters<typeof axios.request>[0]['httpAgent'], httpsAgent: agents.httpsAgent as Parameters<typeof axios.request>[0]['httpsAgent'] }
       : {}),
   });
-  const finalUrl = (resp.request as { responseURL?: string } | undefined)?.responseURL;
+  // axios + follow-redirects：重定向终点在 `request.res.responseUrl`；
+  // `request.responseURL` 在新版 axios 下恒为 undefined（#376 实测）——
+  // 取不到会让 finalUrl 永远等于请求 URL，302 型源全部失效。
+  const reqAny = resp.request as { responseURL?: string; res?: { responseUrl?: string } } | undefined;
+  const finalUrl = reqAny?.responseURL || reqAny?.res?.responseUrl;
   return {
     status: resp.status,
     headers: resp.headers as Record<string, string>,

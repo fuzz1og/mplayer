@@ -1049,3 +1049,169 @@ describe('播放失败归因（#357）', () => {
     expect(explainPlaybackFailure(song()).kind).toBe('tier3-disabled');
   });
 });
+
+describe('清单能力扩展（#376：E0 护栏字段 / E1 idNormalize / E2 redirect）', () => {
+  it('E0：ar_name / singer_name 作为歌手证据参与护栏，不再整条误拒', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [
+        {
+          id: 'e0',
+          kind: 'url-resolver',
+          source: 'netease',
+          allowedDomains: ['cdn.example.com'],
+          resolve: { url: 'https://api.example.com/url?id={id}', responseJsonPath: 'data.url' },
+        },
+      ],
+    });
+    const request = makeRequestMock({
+      'https://api.example.com/url?id=123': () =>
+        jsonResponse(
+          { data: { url: 'https://cdn.example.com/a.mp3', name: '晴天', ar_name: '周杰伦' } },
+          'https://api.example.com/url?id=123',
+        ),
+      'https://cdn.example.com/a.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    // 无时长证据 → L4 text-only；歌手字段在扩展前不在探测表里，会被判「歌名匹配、歌手缺失」拒掉。
+    const out = await createTier3Resolver()(song());
+    expect(out).toMatchObject({ url: 'https://cdn.example.com/a.mp3', guard: 'text-only' });
+  });
+
+  it('E1：idNormalize.stripPrefixes 在填充 {id} 前剥掉 MUSIC_ 前缀', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [
+        {
+          id: 'e1',
+          kind: 'url-resolver',
+          source: 'kuwo',
+          allowedDomains: ['cdn.example.com'],
+          idNormalize: { stripPrefixes: ['MUSIC_'] },
+          resolve: { url: 'https://api.example.com/url?id={id}', responseJsonPath: 'data.url' },
+        },
+      ],
+    });
+    // 路由键就是断言：mock 只登记裸数字 rid，若前缀没被剥掉会抛 unexpected request。
+    const request = makeRequestMock({
+      'https://api.example.com/url?id=123': () =>
+        jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, 'https://api.example.com/url?id=123'),
+      'https://cdn.example.com/a.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    const out = await createTier3Resolver()(song({ id: 'kuwo:MUSIC_123', sourceType: 'kuwo' }));
+    expect(out?.url).toBe('https://cdn.example.com/a.mp3');
+    expect(request.mock.calls[0][0].url).toBe('https://api.example.com/url?id=123');
+  });
+
+  it('E2：responseKind=redirect 取重定向终点，且可省略 responseJsonPath', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [
+        {
+          id: 'e2',
+          kind: 'url-resolver',
+          source: 'netease',
+          allowedDomains: ['cdn.example.com'],
+          resolve: { responseKind: 'redirect', url: 'https://api.example.com/go?id={id}' },
+        },
+      ],
+    });
+    const request = makeRequestMock({
+      'https://api.example.com/go?id=123': () => ({
+        status: 200,
+        headers: { 'content-type': 'audio/mpeg' },
+        body: 'binary-audio-bytes',
+        finalUrl: 'https://cdn.example.com/a.mp3',
+      }),
+      'https://cdn.example.com/a.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    const out = await createTier3Resolver()(song());
+    expect(out?.url).toBe('https://cdn.example.com/a.mp3');
+  });
+
+  it('E2：redirect 终点不在白名单 / 未发生重定向 → 未命中', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [
+        {
+          id: 'e2',
+          kind: 'url-resolver',
+          source: 'netease',
+          allowedDomains: ['cdn.example.com'],
+          resolve: { responseKind: 'redirect', url: 'https://api.example.com/go?id={id}' },
+        },
+      ],
+    });
+    const evil = makeRequestMock({
+      'https://api.example.com/go?id=123': () => ({
+        status: 200,
+        headers: {},
+        body: '',
+        finalUrl: 'https://evil.example.net/a.mp3',
+      }),
+    });
+    setTier3Deps({ request: evil });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+    expect(await createTier3Resolver()(song())).toBeNull();
+
+    // finalUrl 仍等于请求 URL（没发生重定向）→ 不把 API 地址当音频候选。
+    const noRedirect = makeRequestMock({
+      'https://api.example.com/go?id=123': () => ({
+        status: 200,
+        headers: {},
+        body: '',
+        finalUrl: 'https://api.example.com/go?id=123',
+      }),
+    });
+    setTier3Deps({ request: noRedirect });
+    expect(await createTier3Resolver()(song())).toBeNull();
+  });
+
+  it('E2/E1：非法 responseKind / 空 stripPrefixes 在清单校验阶段被拒', () => {
+    const badKind = {
+      version: 1,
+      sources: [
+        {
+          id: 'x',
+          kind: 'url-resolver',
+          allowedDomains: ['x.com'],
+          resolve: { url: 'https://x.com/a', responseKind: 'proxy' },
+        },
+      ],
+    };
+    expect(() => parseTier3Manifest(JSON.stringify(badKind))).toThrow('responseKind');
+
+    const badNormalize = {
+      version: 1,
+      sources: [
+        {
+          id: 'x',
+          kind: 'url-resolver',
+          allowedDomains: ['x.com'],
+          idNormalize: { stripPrefixes: [] },
+          resolve: { url: 'https://x.com/a', responseJsonPath: 'url' },
+        },
+      ],
+    };
+    expect(() => parseTier3Manifest(JSON.stringify(badNormalize))).toThrow('idNormalize');
+  });
+
+  it('E2：json 模式（默认）仍要求 responseJsonPath，行为不变', () => {
+    const missing = {
+      version: 1,
+      sources: [
+        { id: 'x', kind: 'url-resolver', allowedDomains: ['x.com'], resolve: { url: 'https://x.com/a' } },
+      ],
+    };
+    expect(() => parseTier3Manifest(JSON.stringify(missing))).toThrow('responseJsonPath');
+  });
+});

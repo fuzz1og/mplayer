@@ -76,6 +76,28 @@ describe('transport 接缝', () => {
       await new Promise<void>((r) => server.close(() => r()));
     }
   });
+
+  it('默认实现跟随重定向并回传重定向终点（#376：取 request.res.responseUrl）', async () => {
+    const server = http.createServer((req, res) => {
+      if (req.url === '/a') {
+        res.writeHead(302, { Location: '/b' });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const res = await request({ method: 'GET', url: `http://127.0.0.1:${port}/a`, timeoutMs: 3000 });
+      expect(res.status).toBe(200);
+      // 旧写法 `request.responseURL` 在新版 axios 下恒为 undefined → finalUrl 会错误地停在 /a。
+      expect(res.finalUrl).toBe(`http://127.0.0.1:${port}/b`);
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
+  });
 });
 
 /**

@@ -27,10 +27,13 @@ tier3 订阅源 = 用户自配的第三方解析源，作为官方直连失败�
 | `allowedDomains` | ✅ | 返回音频 URL 的域名白名单；`*.example.com` 才放行子域，普通 `example.com` 只放行自身 |
 | `timeoutMs` | — | 单源超时（默认 2s）。**只能收紧、不能放大**：实际生效值 = `min(timeoutMs, 2s 硬墙, 整链剩余预算)`——解析腿源间串行，一个挂起的死源若被允许跑 15s 会吃光整链 6s 预算，后面的好源一次都不会被请求（#365） |
 | `headers` | — | 合并进解析请求与嗅探请求的请求头 |
-| `resolve` | ✅ | 取链步骤：`{ method?, url, body?, responseJsonPath }` |
+| `idNormalize` | — | 按源归一化模板变量 `{id}`：`{ "stripPrefixes": ["…"] }`，填充前逐条剥离前缀。**只影响模板**，不改 `Song.id` / 身份键 / 已持久化数据。例：酷我直连 id 是 `MUSIC_<数字>`，而第三方酷我接口只认裸数字 |
+| `resolve` | ✅ | 取链步骤：`{ method?, url, body?, responseKind?, responseJsonPath? }` |
 | `search` | search-then-resolve ✅ | 搜索步骤：`resolve` 的字段 + `itemsPath/namePath/artistPath/idPath/urlPath/coverPath/albumPath` |
 
 模板变量（`url`/`body` 中可用）：`{id}` `{source}` `{name}` `{artist}` `{keyword}`。`{source}` 填的是 MPlayer 的规范源键（`qq`、`netease`…），不是上游 API 自己的叫法。
+
+`{id}` 是**源站真实 ID**（剥掉 `kuwo:` 这类源前缀后的值）。若上游要的形态与 MPlayer 的 id 不一致（例：酷我直连产出 `MUSIC_<数字>`，第三方酷我接口只认裸数字），用 `idNormalize.stripPrefixes` 归一——**不要把源站特例写进上游参数或指望执行器猜**。
 
 ## `source` 字段：源归属是安全边界，不是标签
 
@@ -53,6 +56,17 @@ tier3 订阅源 = 用户自配的第三方解析源，作为官方直连失败�
 | `search-then-resolve` | 不写 / 不认识 | ✅ **通用兜底**（任意源都试）——它按歌名/歌手搜索并做严格匹配，不存在 ID 错配 |
 
 设置页的「跳过」计数 = 因归属不匹配被跳过的次数，用来区分「源没命中」和「源被归属过滤」。
+
+### 响应取值：`responseKind`
+
+`resolve` / `search.resolve` 的 `responseKind` 决定候选 URL 从哪来：
+
+| 值 | 行为 |
+|---|---|
+| `json`（默认） | 解析响应体 JSON，按 `responseJsonPath` 取值；`responseJsonPath` 必填 |
+| `redirect` | 取 **transport 的重定向终点 URL**——用于 302 直跳音频的端点（响应体是音频字节，无法 JSON.parse）；`responseJsonPath` 可省略 |
+
+`redirect` 只改变「候选从哪来」：**域名白名单、64KB Range 字节嗅探、分级护栏对最终 URL 照常执行**。所以 `allowedDomains` 要写**最终音频域名**；未发生重定向（终点 == 请求 URL）或终点不在白名单 → 未命中。文本证据为空（响应没有 name/artist），护栏落在 L2/L3，探不到就 L5 `none`——与「解析响应不带 name/artist」的 url-resolver 同档。
 
 ### 聚合端点：一条端点服务多个源
 
@@ -81,7 +95,7 @@ tier3 只替换**流 URL**，绝不铸造新的歌曲身份（队列 / 收藏 / 
 | L1 `source-duration` | 源自带时长 | 解析响应 / 搜索条目里的常见字段（`duration` / `Duration` / `song_play_time` / `play_time` / `playTime` 等，**自动探测**） |
 | L2 `audio-header` | 音频头解析时长 | 已取的头部字节（music-metadata；仅全局头容器可信：M4A/FLAC，或 MP3 带 Xing/Info、或已取全文件） |
 | L3 `size-bitrate` | `体积 × 8 ÷ 码率` | 体积 = Range 的 `content-range` 总量；码率优先**源自称 `br`**（自动探测），缺失才用帧实测 |
-| L4 `text-only` | 只验歌名 + 歌手精确匹配 | 搜索条目自带 / 解析响应里的 `name`/`artist` 常见字段 |
+| L4 `text-only` | 只验歌名 + 歌手精确匹配 | 搜索条目自带 / 解析响应里的常见字段（歌名 `name`/`title`/`songName`…，歌手 `artist`/`singer`/`author`/`ar_name`/`singer_name`…，**自动探测**） |
 | L5 `none` | 只剩 `source` 声明这一条**信任**（契约不是证据） | url-resolver 且响应无 name/artist |
 
 - 判据：`|候选时长 − 标称 Song.duration| ≤ 2s`。**不需要**在清单里声明 `durationPath`：常见字段自动探测，探不到就降级，不影响可用性。
@@ -124,6 +138,37 @@ URL 直取型（声明归属）：
       "artistPath": "artist",
       "idPath": "id"
     },
+    "resolve": { "url": "https://api.example.com/url?id={id}", "responseJsonPath": "data.url" }
+  }]
+}
+```
+
+302 直跳型（`responseKind: "redirect"`；`allowedDomains` 写**最终音频域名**）：
+
+```json
+{
+  "version": 1,
+  "sources": [{
+    "id": "demo-redirect",
+    "kind": "url-resolver",
+    "source": "qq",
+    "allowedDomains": ["cdn.example.com"],
+    "resolve": { "responseKind": "redirect", "url": "https://api.example.com/go?id={id}" }
+  }]
+}
+```
+
+需要归一 `{id}` 形态时（`idNormalize`）：
+
+```json
+{
+  "version": 1,
+  "sources": [{
+    "id": "demo-normalize",
+    "kind": "url-resolver",
+    "source": "kuwo",
+    "allowedDomains": ["cdn.example.com"],
+    "idNormalize": { "stripPrefixes": ["MUSIC_"] },
     "resolve": { "url": "https://api.example.com/url?id={id}", "responseJsonPath": "data.url" }
   }]
 }
