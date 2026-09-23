@@ -71,8 +71,16 @@ export interface ImportResult {
 
 /** 链接导入编排的外部依赖（两端各自注入：桌面走 IPC，mobile 走本地 store/API） */
 export interface PlaylistImportDeps {
-  /** 把歌曲加入目标歌单 */
+  /** 把歌曲加入目标歌单（逐首；桌面 IPC 只有逐首写入的形态） */
   addSong: (playlistId: string | number, song: Song) => Promise<void>;
+  /**
+   * 可选：一次性批量写入（移动端本地 store）。
+   *
+   * 提供时整批只写一次：宿主只需一次持久化 + 一次渲染。
+   * 逐首 addSong 会让宿主每首写一次库、重渲染一次，长歌单下是 O(N²) 级开销
+   * （#383 真机实测：150 首逐首写 ≈ 45s，写库本身只占 192ms）。
+   */
+  addSongs?: (playlistId: string | number, songs: Song[]) => Promise<void>;
 }
 
 /**
@@ -130,7 +138,41 @@ export async function importFromLink(
 
   updateProgress({ skipped: skips.length });
 
-  // 逐个添加到歌单
+  // 批量腿：宿主能一次写完就整批写一次（移动端本地 store 走这条）。
+  // 逐首写 = 每首一次持久化 + 一次渲染；批量写把这两项都压成常数次。
+  if (deps.addSongs && toImport.length > 0) {
+    const batch = toImport.map((item) => item.song);
+    batch.forEach((song, i) => {
+      statuses[toImport[i].statusIndex] = { line: song.name + ' - ' + song.artist, status: 'searching' };
+    });
+    updateProgress({ currentLine: batch[0].name + ' - ' + batch[0].artist });
+
+    try {
+      await deps.addSongs(playlistId, batch);
+      batch.forEach((song, i) => {
+        successes.push({
+          line: song.name + ' - ' + song.artist,
+          song,
+          source: song.sourceType || 'netease'
+        });
+        statuses[toImport[i].statusIndex] = { line: song.name + ' - ' + song.artist, status: 'found', source: song.sourceType };
+      });
+    } catch (error) {
+      console.error('批量添加到歌单失败', error);
+      batch.forEach((song, i) => {
+        failures.push({
+          line: song.name + ' - ' + song.artist,
+          reason: '添加到歌单时出错'
+        });
+        statuses[toImport[i].statusIndex] = { line: song.name + ' - ' + song.artist, status: 'failed' };
+      });
+    }
+
+    updateProgress({ found: successes.length, failed: failures.length, currentLine: '' });
+    return { successes, failures, skips };
+  }
+
+  // 逐个添加到歌单（未提供批量写入时的兜底路径）
   for (let i = 0; i < toImport.length; i++) {
     const { song, statusIndex } = toImport[i];
     statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'searching' };

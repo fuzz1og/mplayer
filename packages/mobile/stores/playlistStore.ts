@@ -15,6 +15,8 @@ interface PlaylistStore {
   createPlaylist: (name: string) => void;
   deletePlaylist: (id: string) => void;
   addSong: (playlistId: string, song: Song) => void;
+  /** 批量加入：一次 set = 一次持久化 + 一次渲染（导入长歌单用；逐首 addSong 是 O(N²)） */
+  addSongs: (playlistId: string, songs: Song[]) => void;
   removeSong: (playlistId: string, songId: string) => void;
   replaceSong: (playlistId: string, oldSongId: string, newSong: Song) => void;
   renamePlaylist: (id: string, name: string) => void;
@@ -54,6 +56,16 @@ export const usePlaylistStore = create<PlaylistStore>()(
                 }
               : p,
           ),
+        })),
+
+      addSongs: (playlistId, songs) =>
+        set((state) => ({
+          playlists: state.playlists.map((p) => {
+            if (p.id !== playlistId) return p;
+            const have = new Set(p.songs.map((s) => s.id));
+            const fresh = songs.filter((s) => !have.has(s.id));
+            return fresh.length === 0 ? p : { ...p, songs: [...p.songs, ...fresh] };
+          }),
         })),
 
       removeSong: (playlistId, songId) =>

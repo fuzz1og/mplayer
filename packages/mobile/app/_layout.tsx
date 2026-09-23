@@ -39,7 +39,9 @@ import type { ThemeColors } from '../theme/tokens';
 // core 的搜索诊断 console.warn（单源识别失败等）在真机 dev 上会触发
 // LogBox 横幅盖住底部播放栏；诊断信息 Metro 终端可见，无需上屏
 // [player] 的「加载失败」等 error 日志同样走内部重试逻辑，属预期内错误
-LogBox.ignoreLogs(['[search]', '[player]']);
+// [qqPlaylist] 的「超出导入上限已截断」是预期行为（core 上限 1000），
+// 但它会在歌单导入向导解析 QQ 歌单时弹横幅挡住底部按钮（#383 真机验收发现）
+LogBox.ignoreLogs(['[search]', '[player]', '[qqPlaylist]']);
 
 /** 全局瞬态提示（真机上无法看终端 console，用 Toast 直接展示）：
  *  error=播放最终失败（红）；info=试听版提示等非错误反馈（蓝） */

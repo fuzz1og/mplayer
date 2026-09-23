@@ -37,6 +37,14 @@ describe('parsePlaylistUrl', () => {
     expect(parsePlaylistUrl('https://y.qq.com/n/ryqq_v2/playlist/7729596131')).toEqual({ type: 'qq', id: '7729596131' });
   });
 
+  it('recognizes qq ryqq_v2 direct links carrying share query params（#383）', () => {
+    expect(
+      parsePlaylistUrl(
+        'https://y.qq.com/n/ryqq_v2/playlist/8934447082?ADTAG=h5_share_playlist&redirecttag=mn.redirect.custom&mnst=0.98',
+      ),
+    ).toEqual({ type: 'qq', id: '8934447082' });
+  });
+
   it('recognizes qq h5 share pages with id（#280）', () => {
     expect(parsePlaylistUrl('https://i.y.qq.com/n2/m/share/details/taoge.html?id=5204875759')).toEqual({
       type: 'qq',
@@ -67,5 +75,29 @@ describe('importFromLink', () => {
     expect(result.successes[0].song.id).toBe('1');
     expect(result.skips).toHaveLength(1);
     expect(d.addSong).toHaveBeenCalledTimes(1);
+  });
+
+  it('走批量腿：整批只写一次，逐首 addSong 不再调用', async () => {
+    const songs = [song('1', 'A'), song('2', 'B'), song('3', 'C')];
+    const addSongs = vi.fn(async (_pid: string | number, _songs: Song[]) => {});
+    const d = deps({ addSongs });
+    const result = await importFromLink(5, songs, new Set(['1', '2', '3']), [song('3', 'C')], d, progress);
+    expect(addSongs).toHaveBeenCalledTimes(1);
+    expect(addSongs.mock.calls[0][0]).toBe(5);
+    expect(addSongs.mock.calls[0][1].map((s) => s.id)).toEqual(['1', '2']);
+    expect(d.addSong).not.toHaveBeenCalled();
+    expect(result.successes.map((s) => s.song.id)).toEqual(['1', '2']);
+    expect(result.skips).toHaveLength(1);
+  });
+
+  it('批量腿抛错：整批记为失败，不静默吞掉', async () => {
+    const songs = [song('1', 'A'), song('2', 'B')];
+    const addSongs = vi.fn(async (_pid: string | number, _songs: Song[]) => {
+      throw new Error('boom');
+    });
+    const d = deps({ addSongs });
+    const result = await importFromLink(5, songs, new Set(['1', '2']), [], d, progress);
+    expect(result.successes).toHaveLength(0);
+    expect(result.failures).toHaveLength(2);
   });
 });
