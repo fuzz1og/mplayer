@@ -58,10 +58,14 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
   // 取歌腿（识别链接 → 歌曲列表）在 service 里，便于单测；这里只注入默认实现
   const linkDeps = useMemo(() => defaultPlaylistLinkDeps(), []);
 
-  // core 只要求「把歌加进目标歌单」；mobile 侧是同步 store 写入，包一层 Promise
+  // mobile 侧是本地 store：提供 addSongs 走批量腿 —— 整批一次 set，
+  // 即一次持久化 + 一次渲染（逐首 addSong 会让每首都写库 + 重渲染，长歌单是 O(N²)）。
   const deps = useMemo<PlaylistImportDeps>(() => ({
     addSong: async (pid, song) => {
       usePlaylistStore.getState().addSong(String(pid), song);
+    },
+    addSongs: async (pid, batch) => {
+      usePlaylistStore.getState().addSongs(String(pid), batch);
     },
   }), []);
 
