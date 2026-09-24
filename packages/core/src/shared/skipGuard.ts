@@ -1,5 +1,6 @@
-import type { Song } from '../types/index.js';
+import type { PlayMode, Song } from '../types/index.js';
 import { identityKey } from '../utils/songIdentity.js';
+import { getNextSongIndex } from '../utils/queue.js';
 
 /**
  * 跳歌护栏（#385，spec 见 issue #385）：**「一首歌失败之后怎么办」的决策单点**。
@@ -49,8 +50,8 @@ export interface SkipGuardDecision {
 }
 
 /**
- * 终局失败后的决策（纯函数）。优先级：
- * 离线 → 停；关闭「失败即跳」→ 停；连续失败达上限 → 停；无下一首 → 停；
+ * 终局失败后的决策（纯函数）。优先级（spec #385 定序）：
+ * 离线 → 停；关闭「失败即跳」→ 停；**无下一首 → 停**；连续失败达上限 → 停；
  * 本地文件 → 跳（文案不同）；否则 → 跳。
  */
 export function decideAfterPlaybackFailure(input: SkipGuardInput): SkipGuardDecision {
@@ -62,11 +63,11 @@ export function decideAfterPlaybackFailure(input: SkipGuardInput): SkipGuardDeci
   if (!autoSkip) {
     return { action: 'stop', copy: `《${songName}》${reasonText}，已暂停（自动跳歌已关闭）` };
   }
-  if (consecutiveFailures >= SKIP_LIMIT) {
-    return { action: 'stop', copy: `连续 ${consecutiveFailures} 首无法播放，已暂停` };
-  }
   if (!hasNextSong) {
     return { action: 'stop', copy: `《${songName}》${reasonText}，且队列中没有其他歌曲` };
+  }
+  if (consecutiveFailures >= SKIP_LIMIT) {
+    return { action: 'stop', copy: `连续 ${consecutiveFailures} 首无法播放，已暂停` };
   }
   if (isLocal) {
     return { action: 'skip', copy: `《${songName}》本地文件无法播放，已自动跳到下一首` };
@@ -104,6 +105,31 @@ export function getFailureStreak(): number {
 /** 会话内已被证明失效的歌：跳歌选曲时应跳过（D4）。 */
 export function isKnownBadSong(song: Song): boolean {
   return badSongKeys.has(identityKey(song));
+}
+
+/**
+ * 跳歌候选（#385 D4）：沿播放模式从当前索引起找，**跳过会话内已证明失效的歌**
+ * （否则同一条坏歌链会被反复选中）。绕回自己 / 翻完一圈 → null，
+ * 由 `decideAfterPlaybackFailure` 判「无下一首 → 停」。
+ *
+ * 放 core 的理由（#385 的前提就是单一来源）：两端原本各写一份，语义极易漂移。
+ */
+export function pickNextSongAfterFailure(
+  playlist: Song[],
+  currentIndex: number,
+  playMode: PlayMode,
+  currentSongId: string,
+): { index: number; song: Song } | null {
+  let index = currentIndex;
+  for (let step = 0; step < playlist.length; step += 1) {
+    index = getNextSongIndex(playlist, index, playMode);
+    if (index < 0) return null;
+    const candidate = playlist[index];
+    if (!candidate || candidate.id === currentSongId) return null;
+    if (isKnownBadSong(candidate)) continue;
+    return { index, song: candidate };
+  }
+  return null;
 }
 
 /** 测试/重置用：清空连续计数与坏歌记忆。 */

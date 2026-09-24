@@ -7,6 +7,7 @@ import {
   resetFailureStreak,
   getFailureStreak,
   isKnownBadSong,
+  pickNextSongAfterFailure,
   clearSkipGuard,
   type SkipGuardInput,
 } from '../skipGuard.js';
@@ -60,6 +61,12 @@ describe('decideAfterPlaybackFailure（纯函数）', () => {
     expect(d.copy).toBe(`连续 ${SKIP_LIMIT} 首无法播放，已暂停`);
   });
 
+  it('优先级：无下一首优先于「达上限」（spec #385 定序）', () => {
+    const d = decideAfterPlaybackFailure(input({ consecutiveFailures: SKIP_LIMIT, hasNextSong: false }));
+    expect(d.action).toBe('stop');
+    expect(d.copy).toContain('队列中没有其他歌曲');
+  });
+
   it('没有下一首 → 停并说明', () => {
     const d = decideAfterPlaybackFailure(input({ hasNextSong: false, consecutiveFailures: 1 }));
     expect(d.action).toBe('stop');
@@ -109,5 +116,27 @@ describe('会话内状态（连续计数 + 坏歌记忆）', () => {
       decideAfterPlaybackFailure(input({ consecutiveFailures: n, hasNextSong: true })),
     );
     expect(decisions.map((d) => d.action)).toEqual(['skip', 'skip', 'stop']);
+  });
+});
+
+describe('pickNextSongAfterFailure（跳歌候选选曲，跳过坏歌）', () => {
+  const list = ['a', 'b', 'c', 'd'].map((id) => song(id, id === 'b' ? 'qq' : 'qq'));
+
+  it('沿播放模式找下一首；坏歌被跳过', () => {
+    registerTerminalFailure(list[1]); // b 已失效
+    expect(pickNextSongAfterFailure(list, 0, '列表循环', 'a')).toMatchObject({ index: 2, song: { id: 'c' } });
+  });
+
+  it('单曲循环（下一首 = 自己）→ null，交给决策判「无下一首」', () => {
+    expect(pickNextSongAfterFailure(list, 0, '单曲循环', 'a')).toBeNull();
+  });
+
+  it('整圈都被记坏 → null', () => {
+    list.forEach((s) => registerTerminalFailure(s));
+    expect(pickNextSongAfterFailure(list, 0, '列表循环', 'a')).toBeNull();
+  });
+
+  it('空队列 → null', () => {
+    expect(pickNextSongAfterFailure([], -1, '列表循环', 'a')).toBeNull();
   });
 });

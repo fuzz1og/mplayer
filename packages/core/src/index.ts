@@ -140,6 +140,7 @@ export {
   resetFailureStreak,
   getFailureStreak,
   isKnownBadSong,
+  pickNextSongAfterFailure,
   clearSkipGuard,
 } from './shared/skipGuard.js';
 export type { SkipGuardAction, SkipGuardInput, SkipGuardDecision } from './shared/skipGuard.js';

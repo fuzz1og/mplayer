@@ -14,7 +14,8 @@ import {
   decideAfterPlaybackFailure,
   registerTerminalFailure,
   resetFailureStreak,
-  isKnownBadSong,
+  getFailureStreak,
+  pickNextSongAfterFailure,
   OFFLINE_COPY,
 } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
@@ -274,27 +275,6 @@ function isOffline(): boolean {
 }
 
 /**
- * 选下一首（#385 D4）：沿播放模式从当前索引起找，**跳过会话内已证明失效的歌**
- * （否则同一条坏歌链会被反复选中）；绕回自己或无可跳 → null（交给 core 判「无下一首 → 停」）。
- */
-function pickNextPlayableSong(
-  state: PlayerStoreState,
-  current: Song,
-): { index: number; song: Song } | null {
-  const len = state.currentPlaylist.length;
-  let index = state.currentPlaylistIndex;
-  for (let step = 0; step < len; step += 1) {
-    index = getNextSongIndex(state.currentPlaylist, index, state.playMode);
-    if (index < 0) return null;
-    const candidate = state.currentPlaylist[index];
-    if (!candidate || candidate.id === current.id) return null;
-    if (isKnownBadSong(candidate)) continue;
-    return { index, song: candidate };
-  }
-  return null;
-}
-
-/**
  * 统一失败处理（#385：护栏语义与文案收敛到 core `skipGuard` 单一来源）：
  * 1) 同曲 fresh 重试一次（先遗忘失败直链，再重走直连 → tier3）；
  * 2) 仍失败 = **终局失败**：core 记一次（连续计数 +1、记住这首歌）；
@@ -321,17 +301,25 @@ async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Prom
     return;
   }
 
-  // 终局失败：core 单一来源地记一次（连续计数 +1、记住这首歌）
-  const consecutiveFailures = registerTerminalFailure(song);
-  if (song.sourceType !== 'local') {
+  const offline = isOffline();
+  // 离线不算「源失败」：不计数、不记坏歌（只提示离线）。非离线才是终局失败——
+  // core 单一来源地记一次（连续计数 +1、记住这首歌）。
+  const consecutiveFailures = offline ? getFailureStreak() : registerTerminalFailure(song);
+  if (!offline && song.sourceType !== 'local') {
     useSearchStore.getState().setAudioTag(song.id, 'invalid');
   }
 
-  const next = pickNextPlayableSong(store, song);
+  // 跳歌候选由 core 选（跳过会话内已证明失效的歌；两端同一份语义）
+  const next = pickNextSongAfterFailure(
+    store.currentPlaylist,
+    store.currentPlaylistIndex,
+    store.playMode,
+    song.id,
+  );
   const decision = decideAfterPlaybackFailure({
     songName: song.name,
     reasonText,
-    offline: isOffline(),
+    offline,
     autoSkip: getAutoSkipOnError(),
     hasNextSong: !!next,
     consecutiveFailures,
@@ -396,6 +384,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     let playStarted = false;
 
     try {
+      // #387 核对：isLoading 在这里就置位，直到 load 成功/失败才落定——覆盖**整段等待窗口**，
+      // 包含解析链（直连 3s 墙 + tier3 6s 兜底）与 audioPlayer 的 loading 态；播放键据此显示 spinner。
       set({
         error: null,
         isLoading: true,

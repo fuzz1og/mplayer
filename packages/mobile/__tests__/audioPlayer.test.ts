@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AudioStatus } from 'expo-audio';
 import type { Song } from '@mplayer/core';
-import { clearSkipGuard, getFailureStreak, registerTerminalFailure } from '@mplayer/core';
+import { clearSkipGuard, getFailureStreak, isKnownBadSong, registerTerminalFailure } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -824,21 +824,24 @@ describe('跳歌护栏（#385 core skipGuard 接线）', () => {
     await flush();
   }
 
-  it('断网 → 一次失败即停，文案含「离线」（不做 fresh 重试）', async () => {
+  it('断网 → 不进解析链：直接停并提示「离线」（不计数、不跳歌）', async () => {
     audioMocks.offline = true;
     const first = song('1');
     const second = song('2');
     usePlayerStore.setState({ queue: [first, second], currentIndex: 0, currentSong: first, isPlaying: true });
 
     await playSong(first);
-    emitStatus(status({ isLoaded: false, error: 'Network Error' }));
-    await vi.waitFor(() => expect(usePlayerStore.getState().isPlaying).toBe(false));
+    await flush();
 
-    // 离网快速失败：不换源重试（replace 不增加），也不跳下一首
-    expect(audioMocks.players[0].replaceCalls ?? 0).toBe(0);
+    // 离网快速失败（#385 D3）：一次上游解析都不发，连同曲 fresh 重试都没有
+    expect(audioMocks.resolvePlayableSongRouted).not.toHaveBeenCalled();
+    expect(audioMocks.players[0]?.replaceCalls ?? 0).toBe(0);
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
     expect(usePlayerStore.getState().currentSong?.id).toBe('1');
     expect(useLogsStore.getState().notice?.text).toContain('离线');
-    expect(getFailureStreak()).toBe(1);
+    // 离线不是「源失败」：不计数、不写坏歌记忆
+    expect(getFailureStreak()).toBe(0);
+    expect(isKnownBadSong(first)).toBe(false);
   });
 
   it('连续失败达固定上限 3 → 停（与队列长度无关）', async () => {

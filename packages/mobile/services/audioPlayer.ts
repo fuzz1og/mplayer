@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, isKnownBadSong } from '@mplayer/core';
+import { getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, pickNextSongAfterFailure, getFailureStreak, OFFLINE_COPY } from '@mplayer/core';
 import type { PlayableResource, Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -172,25 +172,13 @@ function attachPlaybackListener(p: Player): void {
 }
 
 /**
- * 选下一首（#385 D4）：沿播放模式从当前索引起找，**跳过会话内已证明失效的歌**
- * （否则同一条坏歌链会被反复选中）；绕回自己或无可跳 → null（交给 core 判「无下一首 → 停」）。
- * 原「队列长度相对阈值」（`nextSongAfterError(retryCount)`）已删：固定上限由 core
- * `SKIP_LIMIT` 决定，与队列长度无关。
- * 不修改 store（桌面 `pickNextPlayableSong` 同口径）；调用方命中后自行同步索引。
+ * 选下一首（#385 D4）——**语义与实现都在 core**（`pickNextSongAfterFailure`）：
+ * 沿播放模式找、跳过会话内已证明失效的歌；两端各写一份必然漂移，故收敛出 core。
+ * 原「队列长度相对阈值」（`nextSongAfterError(retryCount)`）已删：固定上限由 core SKIP_LIMIT 决定。
  */
 function pickNextPlayableSong(current: Song): { index: number; song: Song } | null {
   const s = usePlayerStore.getState();
-  const playMode = useSettingsStore.getState().playMode;
-  let index = s.currentIndex;
-  for (let step = 0; step < s.queue.length; step += 1) {
-    index = getNextSongIndex(s.queue, index, playMode);
-    if (index < 0) return null;
-    const candidate = s.queue[index];
-    if (!candidate || candidate.id === current.id) return null;
-    if (isKnownBadSong(candidate)) continue;
-    return { index, song: candidate };
-  }
-  return null;
+  return pickNextSongAfterFailure(s.queue, s.currentIndex, useSettingsStore.getState().playMode, current.id);
 }
 
 /**
@@ -209,11 +197,12 @@ async function handleTerminalPlaybackFailure(
   offline: boolean,
 ): Promise<void> {
   const log = useLogsStore.getState();
-  if (song.sourceType !== 'local') {
+  // 离线不算「源失败」：不计数、不记坏歌（只提示离线）。
+  if (!offline && song.sourceType !== 'local') {
     // 「不可播」徽标回写保留（引导换源）；是否跳歌由 core 决定
     useAudioTagStore.getState().setTag(song, 'invalid');
   }
-  const consecutiveFailures = registerTerminalFailure(song);
+  const consecutiveFailures = offline ? getFailureStreak() : registerTerminalFailure(song);
   const next = pickNextPlayableSong(song);
   const decision = decideAfterPlaybackFailure({
     songName: song.name,
@@ -390,6 +379,17 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   let playbackNonFull = false;
   log.addLog('info', `[耗时] 播放准备开始: 《${song.name}》 url=${song.url ? '有' : '无'} fresh=${fresh}`);
   usePlayerStore.getState().setPreparing(true);
+
+  // #385：离线快速失败——判定离线就直接停并告知，**不进解析链**
+  //（省掉同曲 fresh 重试 + 直连 3s 墙 + tier3 6s；与桌面 playerStore 同口径，文案同源）。
+  if (song.sourceType !== 'local' && (await isOffline())) {
+    await stopAllPlayers();
+    usePlayerStore.getState().pause();
+    usePlayerStore.getState().setPreparing(false);
+    log.addLog('warn', `《${song.name}》当前离线，已暂停播放`);
+    log.reportError(OFFLINE_COPY);
+    return;
+  }
 
   // 单例播放器：更新当前播放上下文（listener 从 ctx 读取）并复位去重标志
   playbackCtx = { song, playId, t0, fresh, retryCount };
