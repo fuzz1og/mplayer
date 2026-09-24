@@ -551,6 +551,20 @@ describe('直连腿墙钟（#389）', () => {
       vi.useRealTimers();
     }
   });
+
+  it('resolvePlayableUrlRouted（IPC 上的另一条直连解析腿）同样过墙', async () => {
+    vi.useFakeTimers();
+    try {
+      registerDirectClient(makeClient('qq', { resolvePlayableUrl: vi.fn(() => new Promise<string>(() => {})) }));
+      setSourceMode('qq', 'direct');
+      const pending = resolvePlayableUrlRouted(song('wall-ipc', 'qq'));
+      const assertion = expect(pending).rejects.toThrow('墙钟上限');
+      await vi.advanceTimersByTimeAsync(3_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('直连腿 trace（#389 / #392）', () => {
@@ -665,5 +679,47 @@ describe('tier3 跨歌在飞上限 K=3（ADR 2026-09-25 决策 8）', () => {
     expect(peak).toBe(3);
     expect(tier3).toHaveBeenCalledTimes(5);
     expect(getTier3InFlightCount()).toBe(0);
+  });
+
+  it('排队期间不计入 6s 预算：被排队的调用方在槽位到手前不会超时', async () => {
+    vi.useFakeTimers();
+    try {
+      const releases: (() => void)[] = [];
+      const tier3 = vi.fn(
+        () =>
+          new Promise<Tier3Resolution | null>((resolve) => {
+            releases.push(() => resolve(null));
+          }),
+      );
+      registerDirectClient(makeClient('qq', { resolvePlayableUrl: vi.fn(async () => '') }));
+      setTier3Enabled(true);
+      setTier3Resolver(tier3 as unknown as (song: Song) => Promise<Tier3Resolution | null>);
+
+      const pendings = ['a', 'b', 'c', 'd'].map((id) => resolvePlayableSongRouted(song(id, 'qq')));
+      let fourthSettled = false;
+      void pendings[3].then(() => { fourthSettled = true; });
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(tier3).toHaveBeenCalledTimes(3); // 3 个在飞，第 4 个排队
+
+      // 越过 6s 预算仍在等待：排队时间不计入预算（ADR 决策 8）
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(tier3).toHaveBeenCalledTimes(3);
+      expect(fourthSettled).toBe(false);
+
+      // 释放一个槽位 → 第 4 个才开始，此时它的 6s 才起算
+      releases.shift()!();
+      await vi.advanceTimersByTimeAsync(50);
+      expect(tier3).toHaveBeenCalledTimes(4);
+
+      while (releases.length > 0) {
+        releases.shift()!();
+        await vi.advanceTimersByTimeAsync(10);
+      }
+      await Promise.all(pendings);
+      expect(fourthSettled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

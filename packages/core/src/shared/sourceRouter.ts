@@ -487,10 +487,13 @@ function releaseTier3Slot(): void {
   else tier3InFlightCount = Math.max(0, tier3InFlightCount - 1);
 }
 
-/** 测试/重置用：清空排队与在飞计数（与 clearTier3ProbeCache 同取向）。 */
+/** 测试/重置用：清空排队、在飞去重表与在飞计数（与 clearTier3ProbeCache 同取向）。
+ *  排队者会被唤醒——否则它们的 `started` 永不 resolve，预算计时器不启动、promise 悬空。 */
 export function clearTier3Scheduling(): void {
-  tier3Queue.length = 0;
+  tier3Inflight.clear();
+  const waiters = tier3Queue.splice(0);
   tier3InFlightCount = 0;
+  for (const wake of waiters) wake();
 }
 
 /** 观测用：当前 tier3 在飞解析数（测试断言上限 K=3）。 */
@@ -551,6 +554,8 @@ async function tryTier3(song: Song, reason: string, ctx?: TraceCtx | null): Prom
     return null;
   }
   const t0 = ctx ? traceNow() : 0;
+  /** tier3 腿**活跃**耗时起点（槽位到手）；排队等待不计入——与 6s 预算同口径。 */
+  let activeT0 = 0;
   try {
     // 预算哨兵：区分「预算超时」与「resolver 正常返回 null（全源未命中）」——
     // 二者都让 race 得到 null，但只有前者算 timedOut（迟到命中才该记 discarded）。
@@ -560,6 +565,7 @@ async function tryTier3(song: Song, reason: string, ctx?: TraceCtx | null): Prom
     // 调用方会在没打过任何上游的情况下先超时（切歌场景 P50 反而退化）。
     const budgetExhausted = (async (): Promise<typeof BUDGET_EXHAUSTED> => {
       await run.started;
+      if (ctx) activeT0 = traceNow();
       return new Promise<typeof BUDGET_EXHAUSTED>((resolve) =>
         setTimeout(() => resolve(BUDGET_EXHAUSTED), TIER3_BUDGET_MS),
       );
@@ -567,7 +573,8 @@ async function tryTier3(song: Song, reason: string, ctx?: TraceCtx | null): Prom
     const winner = await Promise.race([run.result, budgetExhausted]);
     const res = winner === BUDGET_EXHAUSTED ? null : winner;
     if (ctx) {
-      ctx.tier3Ms = traceNow() - t0;
+      // 排队时间单列在 totalMs 里；tier3Ms 记「腿本身跑了多久」（与 6s 预算同口径）。
+      ctx.tier3Ms = traceNow() - (activeT0 || t0);
       ctx.tier3TimedOut = winner === BUDGET_EXHAUSTED;
     }
     if (!res || !res.url?.startsWith('http')) return null;
@@ -577,7 +584,7 @@ async function tryTier3(song: Song, reason: string, ctx?: TraceCtx | null): Prom
     return res;
   } catch (e) {
     if (ctx) {
-      ctx.tier3Ms = traceNow() - t0;
+      ctx.tier3Ms = traceNow() - (activeT0 || t0);
       ctx.tier3TimedOut = false;
     }
     console.warn(`[tier3] resolver 抛错: ${(e as Error)?.message || e}`);
@@ -643,6 +650,9 @@ export async function searchSongsRouted(
     throw new Error('该源暂无直连实现');
   }
   try {
+    // #389 评估结论：直连**搜索**腿暂不套墙——搜索腿语义是「尽量找全」，套墙会
+    // 静默截断列表结果（与解析腿「要么拿到 URL 要么失败」不同），需独立决策。
+    // 本票的墙只覆盖解析腿（resolveUrlInfo / resolvePlayableUrl）。
     const directSongs = await route.client.searchSongs!(query, page);
     if (directSongs.length > 0) return directSongs;
     // 直连返回空也视为“未命中”，进入 tier3 搜索兜底（若启用）。
@@ -665,7 +675,9 @@ export async function resolvePlayableUrlRouted(song: Song): Promise<string> {
   const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl);
   if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
   try {
-    const url = await route.client.resolvePlayableUrl!(song);
+    // 与 resolveRoutedInner 同一条腿：同样过 #389 的 3s 墙（本函数经 IPC 暴露，
+    // 是另一个「直连解析腿」入口，保证 wall 口径一致）。
+    const url = await directCall(null, route.client, 'resolvePlayableUrl', () => route.client.resolvePlayableUrl!(song));
     if (url) {
       // 搜索结果已被探测标记为无效时，即使直连返回了 URL 也先试 tier3；
       // 没有配置 tier3 则保持原直连结果，由上层继续按现状报错/换元。
