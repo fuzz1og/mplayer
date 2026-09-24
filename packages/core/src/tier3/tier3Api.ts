@@ -8,7 +8,7 @@ import type { PlaybackEvidence, PlaybackGuard } from '../shared/playbackGuard.js
 import { extractAudioDuration } from '../shared/audioDuration.js';
 import type { AudioDurationEvidence } from '../shared/audioDuration.js';
 import { classifyTraceError, traceNow } from '../shared/playbackTrace.js';
-import { fetchAudioHead as fetchAudioHeadBytes, type AudioHeadResult } from '../shared/audioHead.js';
+import { fetchAudioHead } from '../shared/audioHead.js';
 import {
   TIER3_BUDGET_MS,
   SOURCE_DISPLAY_NAMES,
@@ -167,7 +167,7 @@ const DEFAULT_TIMEOUT_MS = 2_000;
  *  `search-then-resolve` 的三段网络串行在**同一个墙**内（`withSourceDeadline` 包住
  *  `resolveTier3Candidate`，内含搜索 + 解析 + 嗅探），#388 实测一次 **2047ms 的成功路径**
  *  与一次 2081ms 被 2s 墙切掉；一步源 2s 余量充足（实测 max 1264ms / 1267ms）。
- *  3s 为安全余量，不是目标值。 */
+ *  3s 是 ADR 记的**安全余量（上界）**，不是目标值；本实现取 2s / 2.5s，均在该余量之内。 */
 const MAX_SOURCE_TIMEOUT_MS_BY_KIND: Record<Tier3SourceKind, number> = {
   'url-resolver': 2_000,
   'search-then-resolve': 2_500,
@@ -616,20 +616,16 @@ export function clearTier3ProbeCache(): void {
 /** 取头部字节：判定是否真音频（拒 text/html 错误页），并读完整大小。
  *  超时独立（ADR-0014 决策 3），**不继承** source.timeoutMs——
  *  「解析允许多慢」与「首字节该多快」是两件事。 */
-async function fetchAudioHead(url: string, source: Tier3Source, deps: Tier3Deps): Promise<AudioHeadResult> {
-  return fetchAudioHeadBytes(url, {
-    headers: { 'User-Agent': BROWSER_UA, ...(source.headers || {}) },
-    timeoutMs: SNIFF_TIMEOUT_MS,
-    request: deps.request,
-  });
-}
-
 /** 候选探测（带稳定 URL 缓存）：取头部字节 + 解析头时长，成功结果入缓存。 */
 async function probeCandidate(url: string, source: Tier3Source, deps: Tier3Deps): Promise<CandidateProbe> {
   const key = stableUrlKey(url);
   const cached = probeCache.get(key);
   if (cached && cached.expires > Date.now()) return cached.probe;
-  const head = await fetchAudioHead(url, source, deps);
+  const head = await fetchAudioHead(url, {
+    headers: { 'User-Agent': BROWSER_UA, ...(source.headers || {}) },
+    timeoutMs: SNIFF_TIMEOUT_MS,
+    request: deps.request,
+  });
   const probe: CandidateProbe = head.ok
     ? { ok: true, totalBytes: head.totalBytes, header: await extractAudioDuration(head.bytes, head.totalBytes) }
     : { ok: false, totalBytes: null, header: null };

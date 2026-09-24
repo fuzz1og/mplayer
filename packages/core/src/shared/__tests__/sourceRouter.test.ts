@@ -579,7 +579,7 @@ describe('直连腿 trace（#389 / #392）', () => {
     const traces: PlaybackTrace[] = [];
     setPlaybackTraceSink({ onResolve: (t) => traces.push(t) });
     try {
-      setDirectValidator(async () => ({ nonFull: false, validateMs: 7 }));
+      setDirectValidator(async () => ({ nonFull: false, verify: 'none', reason: '', validateMs: 7 }));
       registerDirectClient(makeClient('qq'));
       await resolvePlayableSongRouted(song('trace-2', 'qq'));
       expect(traces[0].validateMs).toBe(7);
@@ -591,7 +591,7 @@ describe('直连腿 trace（#389 / #392）', () => {
 
 describe('直连腿播放时取证接线（#392）', () => {
   it('无 resolveUrlInfo 的源 → 取证一次；短于标称 → nonFull', async () => {
-    const validate = vi.fn(async () => ({ nonFull: true, validateMs: 9 }));
+    const validate = vi.fn(async () => ({ nonFull: true, verify: 'audio-header' as const, reason: 'short', validateMs: 9 }));
     setDirectValidator(validate);
     registerDirectClient(makeClient('qq'));
     const res = await resolvePlayableSongRouted(song('qq1', 'qq'));
@@ -601,7 +601,7 @@ describe('直连腿播放时取证接线（#392）', () => {
   });
 
   it('有 resolveUrlInfo 的源（netease/soda）→ 零取证请求', async () => {
-    const validate = vi.fn(async () => ({ nonFull: true, validateMs: 1 }));
+    const validate = vi.fn(async () => ({ nonFull: true, verify: 'audio-header' as const, reason: 'short', validateMs: 1 }));
     setDirectValidator(validate);
     registerDirectClient(makeClient('netease', {
       resolveUrlInfo: vi.fn(async () => null),
@@ -613,7 +613,7 @@ describe('直连腿播放时取证接线（#392）', () => {
   });
 
   it('标称时长缺失 → 不取证（fail-open）', async () => {
-    const validate = vi.fn(async () => ({ nonFull: true, validateMs: 1 }));
+    const validate = vi.fn(async () => ({ nonFull: true, verify: 'audio-header' as const, reason: 'short', validateMs: 1 }));
     setDirectValidator(validate);
     registerDirectClient(makeClient('qq'));
     await resolvePlayableSongRouted({ ...song('qq2', 'qq'), duration: 0 });

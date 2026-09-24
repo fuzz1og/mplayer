@@ -17,7 +17,7 @@ import { isAudioBytes } from '../utils/sniffers.js';
  */
 
 /** 头部 Range 字节数（tier3 护栏取证与直连腿取证共用同一口径）。 */
-export const AUDIO_HEAD_RANGE_BYTES = 64 * 1024;
+const AUDIO_HEAD_RANGE_BYTES = 64 * 1024;
 
 export interface AudioHeadResult {
   /** ok = 拿到的是音频字节（非 HTML 错误页、非空）。 */

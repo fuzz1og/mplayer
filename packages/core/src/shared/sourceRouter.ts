@@ -3,7 +3,7 @@ import { isTrialUrlInfo } from './playability.js';
 import type { UrlInfo } from './playability.js';
 import { getPrefetchedUrl } from '../api/prefetchCache.js';
 import type { PlaybackGuard, PlaybackVia } from './playbackGuard.js';
-import { validateDirectUrlNonFull } from './directValidation.js';
+import { validateDirectUrlNonFull, type DirectValidationResult } from './directValidation.js';
 import {
   emitPlaybackTrace,
   isPlaybackTraceEnabled,
@@ -778,7 +778,7 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
  * 直连腿取证插槽（#392）：默认走 core 的 `validateDirectUrlNonFull`（真发一次 Range）。
  * 宿主/测试可注入替换——测试注入 stub 以保持**零 I/O**（与 `setTier3Resolver` 同构的接缝）。
  */
-export type DirectValidator = (song: Song, url: string) => Promise<{ nonFull: boolean; validateMs: number; reason?: string }>;
+export type DirectValidator = (song: Song, url: string) => Promise<DirectValidationResult>;
 
 let directValidator: DirectValidator | null = (song, url) => validateDirectUrlNonFull(song, url);
 
@@ -792,6 +792,8 @@ export function setDirectValidator(fn: DirectValidator | null): void {
  * 即 netease / soda 之外）+ 标称时长已知」时发起**一次** Range。netease / soda
  * 有权威 playTime，走既有 classifyLength 路径，**不增加任何请求**。
  * 结论只用于 nonFull 标记，不改播放路径；证据不足一律 fail-open（见 directValidation）。
+ *
+ * 成本在 **3s 直连墙之外**（成功路径追加 ≤1.5s Range）：失败路径的上界不变（3s 墙 + tier3 6s）。
  */
 async function validateDirectLeg(
   song: Song,
