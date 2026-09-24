@@ -23,7 +23,8 @@
 | 源文字对比度 token | `2026-08-26-source-text-contrast-tokens.md` | 已接受 |
 | 应用更新镜像通道 | `2026-08-28-update-mirror-channels.md` | 已接受 |
 | 歌曲身份与可播资源值语义 | `2026-09-10-song-identity-and-playable-resource.md` | 已接受 |
-| tier3 调度、预算与源归属 | `2026-09-14-tier3-scheduling-and-source-ownership.md` | 已接受 |
+| tier3 调度、预算与源归属 | `2026-09-14-tier3-scheduling-and-source-ownership.md` | 已接受（决策 1 的「并行」与决策 4 的「不做软降权」已被 `2026-09-25-tier3-source-scheduling.md` 取代） |
+| tier3 源的会话内调度 | `2026-09-25-tier3-source-scheduling.md` | 已接受 |
 | tier3 兜底：只替换 URL、分级护栏与验证等级 | `2026-09-21-tier3-url-substitution.md` | 已接受 |
 | 悬浮 chrome 去毛玻璃（纯色+渐变） | `2026-09-23-mobile-chrome-solid-gradient.md` | 已接受 |
 | tier3 交付口径与播放失败归因 | `2026-09-23-tier3-failure-attribution.md` | 已接受 |
