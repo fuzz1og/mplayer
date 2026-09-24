@@ -86,6 +86,8 @@ export default function SettingsPage() {
   const tier3Subscriptions = useSettingsStore((s) => s.tier3Subscriptions);
   const themeMode = useSettingsStore((s) => s.themeMode);
   const setThemeMode = useSettingsStore((s) => s.setThemeMode);
+  const autoSkipOnError = useSettingsStore((s) => s.autoSkipOnError);
+  const setAutoSkipOnError = useSettingsStore((s) => s.setAutoSkipOnError);
 
   // tier3 第三方解析源（#144）：默认关，移动端支持 URL / 手动粘贴
   const handleTier3Toggle = (value: boolean): void => {
@@ -297,6 +299,20 @@ export default function SettingsPage() {
               </View>
             </View>
           </View>
+        </View>
+
+        {/* 播放（#385）：失败即跳开关——双端同语义，决策与文案来自 core skipGuard */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>播放</Text>
+          <View style={styles.group}>
+            <View style={styles.rowSwitch}>
+              <Text style={[styles.modeLabel, { flex: 1 }]}>失败即跳</Text>
+              <View style={styles.switchWrap}>
+                <Switch value={autoSkipOnError} onValueChange={setAutoSkipOnError} style={styles.switch} />
+              </View>
+            </View>
+          </View>
+          <Text style={styles.sectionFootnote}>播放失败时自动跳到下一首；关闭后失败即暂停等你处理。</Text>
         </View>
 
         {/* 直连状态（T01：每源官方直连可用性；不再配置 auto/仅直连） */}

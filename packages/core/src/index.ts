@@ -131,6 +131,18 @@ export {
   pickToplistSongs,
   getToplistSongs,
 } from './shared/sourceRouter.js';
+// 跳歌护栏（#385）：终局失败后的决策单点 + 会话内连续计数/坏歌记忆。
+export {
+  SKIP_LIMIT,
+  OFFLINE_COPY,
+  decideAfterPlaybackFailure,
+  registerTerminalFailure,
+  resetFailureStreak,
+  getFailureStreak,
+  isKnownBadSong,
+  clearSkipGuard,
+} from './shared/skipGuard.js';
+export type { SkipGuardAction, SkipGuardInput, SkipGuardDecision } from './shared/skipGuard.js';
 export type {
   SourceMode,
   DirectSourceClient,

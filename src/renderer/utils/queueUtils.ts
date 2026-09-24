@@ -5,6 +5,7 @@ import { isLegacyDeadUrl } from '@mplayer/core';
 
 const QUEUE_STORAGE_KEY = 'mplayer_queue';
 const PLAY_MODE_KEY = 'playMode';
+const AUTO_SKIP_KEY = 'autoSkipOnError';
 
 export function getNextSong(
   playlist: Song[],
@@ -60,6 +61,27 @@ export function getInitialPlayMode(): PlayMode {
 export function persistPlayMode(mode: PlayMode): void {
   try {
     localStorage.setItem(PLAY_MODE_KEY, mode);
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * 「失败即跳」偏好（#385）：播放失败时是否自动跳下一首。
+ * 默认 **true**（保持现状行为，对齐 lx-music `autoSkipOnError` 默认）；关闭后
+ * 失败即暂停并提示，把决定权交还用户。与 playMode 同属渲染端播放偏好，故同存 localStorage。
+ */
+export function getAutoSkipOnError(): boolean {
+  try {
+    return localStorage.getItem(AUTO_SKIP_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export function persistAutoSkipOnError(value: boolean): void {
+  try {
+    localStorage.setItem(AUTO_SKIP_KEY, value ? 'true' : 'false');
   } catch {
     // ignore
   }

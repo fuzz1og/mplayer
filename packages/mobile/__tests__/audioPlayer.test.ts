@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AudioStatus } from 'expo-audio';
 import type { Song } from '@mplayer/core';
+import { clearSkipGuard, getFailureStreak, registerTerminalFailure } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
 import { useLogsStore } from '../stores/logsStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { cleanup, playSong, seekTo, togglePlay, fetchLrcInBackground } from '../services/audioPlayer';
 
 type StatusListener = (status: AudioStatus) => void;
@@ -82,6 +84,8 @@ const audioMocks = vi.hoisted(() => {
     urlAge: null as number | null,
     // 缓存资源值的 nonFull（试听版命中）
     cachedNonFull: false,
+    // 离线态（#385）：isOffline mock 的返回值
+    offline: false,
   };
 });
 
@@ -118,6 +122,11 @@ vi.mock('@mplayer/core', async (importOriginal) => {
 vi.mock('../services/notificationService', () => ({
   updateNotification: vi.fn(async () => {}),
   clearNotification: vi.fn(async () => {}),
+}));
+
+// #385：离线判定隔离在 networkState（原生 NetInfo 在单测环境不可用）
+vi.mock('../services/networkState', () => ({
+  isOffline: vi.fn(async () => audioMocks.offline),
 }));
 
 vi.mock('../services/cacheService', () => ({
@@ -201,6 +210,10 @@ beforeEach(() => {
   audioMocks.isUrlAlive.mockClear();
   audioMocks.urlAge = null;
   audioMocks.cachedNonFull = false;
+  audioMocks.offline = false;
+  // 失败即跳默认 true（保持现状）；护栏模块级计数/坏歌记忆必须逐用例清空
+  useSettingsStore.setState({ autoSkipOnError: true });
+  clearSkipGuard();
   useAudioTagStore.setState({ tags: {} });
   useLogsStore.setState({ notice: null });
 });
@@ -798,6 +811,96 @@ describe('lyrics lazy refresh (fetchLrcInBackground)', () => {
     expect(usePlayerStore.getState().currentSong?.lrc).toBe('');
     // 未预取歌词文本（无 lrc URL 可拉）
     expect(audioMocks.getLyrics).not.toHaveBeenCalled();
+  });
+});
+
+describe('跳歌护栏（#385 core skipGuard 接线）', () => {
+  /** 让当前歌走完「首轮失败 → fresh 重试 → 再失败」的终局路径 */
+  async function failCurrentSongTerminally(): Promise<void> {
+    const before = audioMocks.players[0].replaceCalls ?? 0;
+    emitStatus(status({ isLoaded: false, error: 'load failed' }));
+    await vi.waitFor(() => expect(audioMocks.players[0].replaceCalls ?? 0).toBeGreaterThan(before));
+    emitStatus(status({ isLoaded: false, error: 'load failed' }));
+    await flush();
+  }
+
+  it('断网 → 一次失败即停，文案含「离线」（不做 fresh 重试）', async () => {
+    audioMocks.offline = true;
+    const first = song('1');
+    const second = song('2');
+    usePlayerStore.setState({ queue: [first, second], currentIndex: 0, currentSong: first, isPlaying: true });
+
+    await playSong(first);
+    emitStatus(status({ isLoaded: false, error: 'Network Error' }));
+    await vi.waitFor(() => expect(usePlayerStore.getState().isPlaying).toBe(false));
+
+    // 离网快速失败：不换源重试（replace 不增加），也不跳下一首
+    expect(audioMocks.players[0].replaceCalls ?? 0).toBe(0);
+    expect(usePlayerStore.getState().currentSong?.id).toBe('1');
+    expect(useLogsStore.getState().notice?.text).toContain('离线');
+    expect(getFailureStreak()).toBe(1);
+  });
+
+  it('连续失败达固定上限 3 → 停（与队列长度无关）', async () => {
+    const queue = [song('1'), song('2'), song('3'), song('4')];
+    usePlayerStore.setState({ queue, currentIndex: 0, currentSong: queue[0], isPlaying: true });
+
+    await playSong(queue[0]);
+    // 第 1、2 首：终局失败 → 自动跳到下一首（计数 1、2）
+    for (let i = 0; i < 2; i += 1) {
+      await failCurrentSongTerminally();
+      await vi.waitFor(() => expect(usePlayerStore.getState().currentSong?.id).toBe(String(i + 2)));
+    }
+    // 第 3 首：计数达 SKIP_LIMIT → 停
+    await failCurrentSongTerminally();
+    await vi.waitFor(() => expect(usePlayerStore.getState().isPlaying).toBe(false));
+
+    expect(getFailureStreak()).toBe(3);
+    expect(usePlayerStore.getState().currentSong?.id).toBe('3');
+    expect(useLogsStore.getState().notice?.text).toContain('连续 3 首无法播放');
+  });
+
+  it('autoSkipOnError=false → 失败即停（文案含「自动跳歌已关闭」）', async () => {
+    useSettingsStore.setState({ autoSkipOnError: false });
+    const first = song('1');
+    const second = song('2');
+    usePlayerStore.setState({ queue: [first, second], currentIndex: 0, currentSong: first, isPlaying: true });
+
+    await playSong(first);
+    await failCurrentSongTerminally();
+    await vi.waitFor(() => expect(usePlayerStore.getState().isPlaying).toBe(false));
+
+    expect(usePlayerStore.getState().currentSong?.id).toBe('1');
+    expect(useLogsStore.getState().notice?.text).toContain('自动跳歌已关闭');
+  });
+
+  it('已记坏歌不再被选中（跳歌跳过它）', async () => {
+    const first = song('1');
+    const bad = song('2');
+    const third = song('3');
+    usePlayerStore.setState({ queue: [first, bad, third], currentIndex: 0, currentSong: first, isPlaying: true });
+    // bad 在会话内已被证明失效（如更早一轮失败）
+    registerTerminalFailure(bad);
+
+    await playSong(first);
+    await failCurrentSongTerminally();
+
+    await vi.waitFor(() => expect(usePlayerStore.getState().currentSong?.id).toBe('3'));
+    expect(audioMocks.players[0].uri).toBe('https://example.com/3.mp3');
+  });
+
+  it('成功开始播放 → 连续失败计数归零（手动点歌不清零由 core 语义保证）', async () => {
+    registerTerminalFailure(song('1'));
+    registerTerminalFailure(song('2'));
+    expect(getFailureStreak()).toBe(2);
+
+    const first = song('3');
+    usePlayerStore.setState({ queue: [first], currentIndex: 0, currentSong: first, isPlaying: true });
+    await playSong(first);
+    // 加载成功（出声）事件才是「成功开始播放」：移动端 play() 返回不代表能出声
+    emitStatus(status({ isLoaded: true, playing: true }));
+
+    expect(getFailureStreak()).toBe(0);
   });
 });
 
