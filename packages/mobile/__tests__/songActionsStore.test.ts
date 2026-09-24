@@ -11,8 +11,8 @@ function song(id: string, name = '晴天', sourceType: SourceKey = 'netease'): S
   return { id, name, artist: '周杰伦', album: '', duration: 240, sourceType, url: '', cover: '', lrc: '' };
 }
 
-function candidate(id: string, playable: boolean | null = true): SwapCandidate {
-  return { song: { ...song(id, '晴天', 'qq') }, exact: true, score: 1, playable, tag: null };
+function candidate(id: string): SwapCandidate {
+  return { song: { ...song(id, '晴天', 'qq') }, exact: true, score: 1 };
 }
 
 function deferred<T>() {

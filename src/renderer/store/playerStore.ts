@@ -194,11 +194,9 @@ export function warmupRestoredSong(): void {
   const { currentSong } = state;
   const targets: Song[] = [];
   if (currentSong && currentSong.sourceType !== 'local') targets.push(currentSong);
-  const next = currentSong
-    ? getNextSong(state.currentPlaylist, state.currentPlaylistIndex, state.playMode, currentSong)
-    : null;
+  const next = currentSong ? getNextSongInQueue(state) : null;
   if (next && next.sourceType !== 'local' && next.id !== currentSong?.id) targets.push(next);
-  for (const song of targets.slice(0, 2)) {
+  for (const song of targets) {
     callMusicApi('prefetchPlayableSong', song).catch(() => {});
   }
 }

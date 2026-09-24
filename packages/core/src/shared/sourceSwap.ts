@@ -1,16 +1,14 @@
-import type { Song, SourceKey, AudioTag } from '../types/index.js';
+import type { Song, SourceKey } from '../types/index.js';
 import { calculateSimilarity, isExactMatch } from '../utils/songMatcher.js';
 import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
 
-/** 换源候选：exact=精确匹配（同名同歌手原版）；score=相似度（0~1）；
- *  playable/tag = **零请求**错位检查的结论（null=未发现错位，false/'invalid'=URL-ID 错位）。
- *  #391：探测链删除后这里不再有任何网络探测结果。 */
+/** 换源候选：exact=精确匹配（同名同歌手原版）；score=相似度（0~1）。
+ *  #391：探测链删除后候选不再带任何可播性标记——唯一的 URL-ID 错位检查在
+ *  `searchSwapCandidates` 里直接把错位候选**剔除**，不留标记字段。 */
 export interface SwapCandidate {
   song: Song;
   exact: boolean;
   score: number;
-  playable: boolean | null;
-  tag: AudioTag | null;
 }
 
 /** 换源服务的外部依赖：搜索是平台边界（桌面走 IPC、移动端直调），
@@ -50,7 +48,7 @@ function urlIdMatchesSong(url: string, song: Song): boolean {
  *
  * **不做任何可播性探测**（#380 决议 D1 / #391）：探测判据反向（把「直连拿不到 URL」
  * 判成失效，而实测多数歌靠 tier3 才可播）且产物无消费者。唯一保留的是**零请求**的
- * URL-ID 错位检查——源数据错位的候选直接标失效。
+ * URL-ID 错位检查——错位候选直接剔除（切换过去播的是另一首歌，留着只会误导）。
  */
 export async function searchSwapCandidates(
   song: Song,
@@ -62,14 +60,17 @@ export async function searchSwapCandidates(
     const candidates = await deps.searchSongs(`${song.name} ${song.artist}`, 1, source);
     const target = { name: song.name, artist: song.artist };
     const ranked = candidates
-      .map((c) => ({
-        song: c,
-        exact: isExactMatch(target, c),
-        score: calculateSimilarity(target, c),
-        playable: null as boolean | null,
-        tag: null as AudioTag | null,
-      }))
+      .map((c) => ({ song: c, exact: isExactMatch(target, c), score: calculateSimilarity(target, c) }))
       .filter((c) => c.exact || c.score > 0)
+      // 零请求错位检查（#391 保留）：URL-ID 明显不符 = 源数据错位，直接剔除。
+      // 无 url 候选（路由时代天生无 url）天然不触发。先判后截断，保证仍能凑满 3 个可用候选。
+      .filter((c) => {
+        if (c.song.url && !urlIdMatchesSong(c.song.url, c.song)) {
+          deps.log?.('warn', `换源候选剔除: 《${c.song.name}》链接 ID 与歌曲不符（源数据错位）`);
+          return false;
+        }
+        return true;
+      })
       .sort((a, b) => (b.exact ? 1 : 0) - (a.exact ? 1 : 0) || b.score - a.score)
       .slice(0, 3);
     if (ranked.length === 0) {
@@ -82,15 +83,7 @@ export async function searchSwapCandidates(
           .join(' | ')})`
       );
     }
-    return ranked
-      .map((c) => {
-        // 仅针对**已有 url** 的候选；路由时代候选无 url，天然不做此校验
-        if (c.song.url && !urlIdMatchesSong(c.song.url, c.song)) {
-          deps.log?.('warn', `换源候选可疑: 《${c.song.name}》链接 ID 与歌曲不符（源数据错位）`);
-          return { ...c, playable: false, tag: 'invalid' as AudioTag };
-        }
-        return c;
-      });
+    return ranked;
   } catch (e: any) {
     deps.log?.('warn', `换源搜索失败: 《${song.name}》 → ${source} ${e?.message || e}`);
     return [];
@@ -113,6 +106,5 @@ export function applySwap(_song: Song, source: SourceKey, candidate: SwapCandida
     ...matched,
     sourceType: source,
     id: `${source}:${stripSourceIdPrefix(matched.id)}`,
-    audioTag: candidate.tag ?? matched.audioTag,
   } as Song;
 }

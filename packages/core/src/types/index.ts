@@ -47,7 +47,7 @@ export interface Song extends SongBase {
   lrc: string;
   /** 榜单元数据（#332）；仅榜单条目携带，持久化时是无害的附加字段。 */
   rankMeta?: RankMeta;
-  audioTag?: AudioTag;      // 搜索探测结果：无标记=未探测/正常, preview=片段, invalid=无法播放
+  audioTag?: AudioTag;      // 播放结果回写：无标记=正常, preview=试听片段, invalid=无法播放（#391 后不再由列表探测写入）
   /** T12 试听版检测：完整时长校验判为 trial（非完整版）时置 true，驱动换元触发。 */
   nonFull?: boolean;
   /** 源站返回的风格/标签（如咪咕 tags），可选，UI 可按需展示。 */

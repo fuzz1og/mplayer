@@ -48,16 +48,16 @@ describe('searchSwapCandidates', () => {
 });
 
 describe('URL-ID 错位检查（零请求，#391 保留）', () => {
-  it('searchSwapCandidates 直接标错位候选失效，不再有任何探测依赖', async () => {
+  it('searchSwapCandidates 直接剔除错位候选，不再有任何探测依赖', async () => {
     const deps = makeDeps();
     deps.searchSongs = vi.fn(async () => [
       { ...qqSong('123', '晴天'), url: 'https://api.example.com/302?get=url&id=999' },
+      { ...qqSong('124', '晴天'), url: 'https://api.example.com/302?get=url&id=124' },
     ]);
 
     const candidates = await searchSwapCandidates(neteaseSong('1', '晴天'), 'qq', deps);
 
-    expect(candidates[0].playable).toBe(false);
-    expect(candidates[0].tag).toBe('invalid');
+    expect(candidates.map((c) => c.song.id)).toEqual(['124']);
   });
 });
 
@@ -67,8 +67,6 @@ describe('applySwap', () => {
       song: qqSong('orig', '晴天'),
       exact: true,
       score: 1,
-      playable: null,
-      tag: null,
     };
 
     const swapped = applySwap(neteaseSong('1', '晴天'), 'qq', candidate);
@@ -86,8 +84,6 @@ describe('applySwap', () => {
       song: { ...qqSong('k1', '晴天'), sourceType: 'kuwo' },
       exact: true,
       score: 1,
-      playable: null,
-      tag: null,
     };
 
     const swapped = applySwap(kugouSong, 'kuwo', candidate);
@@ -100,8 +96,6 @@ describe('applySwap', () => {
       song: { ...qqSong('q1', '晴天'), id: '' },
       exact: false,
       score: 0.5,
-      playable: null,
-      tag: null,
     };
 
     expect(applySwap(neteaseSong('1', '晴天'), 'qq', candidate)).toBeNull();

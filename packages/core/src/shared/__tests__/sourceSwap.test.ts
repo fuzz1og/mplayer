@@ -69,24 +69,19 @@ describe('searchSwapCandidates', () => {
 
     const candidates = await searchSwapCandidates(neteaseSong('1', '晴天'), 'qq', deps);
 
-    const mismatched = candidates.find((c) => c.song.id === '123');
-    expect(mismatched?.playable).toBe(false);
-    expect(mismatched?.tag).toBe('invalid');
-    // id 一致的候选保持未标记（不再有任何网络探测）
-    expect(candidates.find((c) => c.song.id === '124')?.playable).toBeNull();
-    expect(candidates.find((c) => c.song.id === '124')?.tag).toBeNull();
+    // 错位候选被直接剔除，只剩 id 一致的那条（零请求）
+    expect(candidates.map((c) => c.song.id)).toEqual(['124']);
     expect(log).toHaveBeenCalledWith('warn', expect.stringContaining('链接 ID 与歌曲不符'));
   });
 
-  it('无 url 候选不做错位检查、也保持未标记（#391 后不再有任何探测）', async () => {
+  it('无 url 候选不做错位检查、原样保留（#391 后不再有任何探测）', async () => {
     const deps = makeDeps({
       searchSongs: vi.fn(async () => [{ ...qqSong('q1', '晴天'), url: '' }]),
     });
 
     const candidates = await searchSwapCandidates(neteaseSong('1', '晴天'), 'qq', deps);
 
-    expect(candidates[0].playable).toBeNull();
-    expect(candidates[0].tag).toBeNull();
+    expect(candidates.map((c) => c.song.id)).toEqual(['q1']);
   });
 });
 
@@ -96,8 +91,6 @@ describe('applySwap', () => {
       song: qqSong('orig', '晴天'),
       exact: true,
       score: 1,
-      playable: null,
-      tag: null,
     };
 
     const swapped = applySwap(neteaseSong('1', '晴天'), 'qq', candidate);
@@ -115,8 +108,6 @@ describe('applySwap', () => {
       song: { ...qqSong('k1', '晴天'), sourceType: 'kuwo' },
       exact: true,
       score: 1,
-      playable: null,
-      tag: null,
     };
 
     const swapped = applySwap(kugouSong, 'kuwo', candidate);
@@ -129,8 +120,6 @@ describe('applySwap', () => {
       song: { ...qqSong('m1', '晴天'), id: 'migu:1', sourceType: 'migu' },
       exact: true,
       score: 1,
-      playable: null,
-      tag: null,
     };
 
     const swapped = applySwap(neteaseSong('1', '晴天'), 'migu', candidate);
@@ -142,14 +131,14 @@ describe('applySwap', () => {
   it('rejects candidates without id; allows url-less candidates (resolved at play)', () => {
     const noId: SwapCandidate = {
       song: { ...qqSong('q1', '晴天'), id: '' },
-      exact: false, score: 0.5, playable: null, tag: null,
+      exact: false, score: 0.5,
     };
     expect(applySwap(neteaseSong('1', '晴天'), 'qq', noId)).toBeNull();
 
     // 无 url 候选可换：播放时 resolvePlayableSongRouted 现解析（预取缓存由门面写入）
     const urlLess: SwapCandidate = {
       song: { ...qqSong('q1', '晴天'), url: '' },
-      exact: true, score: 1, playable: null, tag: null,
+      exact: true, score: 1,
     };
     const swapped = applySwap(neteaseSong('1', '晴天'), 'qq', urlLess);
     expect(swapped).not.toBeNull();
