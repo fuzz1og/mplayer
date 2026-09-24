@@ -59,8 +59,8 @@ const invokeMock = vi.mocked(IpcClient.invoke);
 beforeEach(() => {
   invokeMock.mockClear();
   invokeMock.mockResolvedValue({ success: true, data: undefined });
-  // callMusicApi 分发：searchSongsRouted → searchSongsMock；routed 解析 → 可播 URL；
-  // probeSongsBatch 默认 → valid；其余 → undefined
+  // callMusicApi 分发：searchSongsRouted → searchSongsMock；routed 解析 → 可播 URL；其余 → undefined
+  // #391：探测（probeSongsBatch）已删除，换源流程只剩「搜索 → 选候选 → 应用」。
   callMusicApiMock.mockImplementation(async (method: string, ...args: any[]) => {
     switch (method) {
       case 'searchSongsRouted':
@@ -69,10 +69,6 @@ beforeEach(() => {
         return 'https://resolved.example.com/a.mp3';
       case 'resolvePlayableSongRouted':
         return { url: 'https://resolved.example.com/a.mp3', nonFull: false };
-      case 'probeSongsBatch': {
-        const songs = args[0] as Song[];
-        return songs.map((s) => ({ songId: s.id, tag: 'valid' as const }));
-      }
       default:
         return undefined;
     }
@@ -103,8 +99,7 @@ describe('SongList 单曲换源流程', () => {
     fireEvent.click(screen.getByRole('button', { name: '更多操作: 晴天' }));
     fireEvent.click(screen.getByRole('button', { name: '换源完整版' }));
     fireEvent.click(screen.getByRole('button', { name: 'QQ音乐' }));
-    // 等候选探测完成（出现「可播」徽标）再选择，确保换源结果带上探测标签
-    await screen.findByText('可播');
+    // 候选返回后直接选择（#391 后候选不再带可播性徽标）
     fireEvent.click(await screen.findByRole('button', { name: '晴天' }));
 
     await waitFor(() => {
@@ -115,7 +110,6 @@ describe('SongList 单曲换源流程', () => {
     expect(original.id).toBe('netease:1');
     expect(swapped.id).toBe('qq:1');
     expect(swapped.sourceType).toBe('qq');
-    expect(swapped.audioTag).toBe('valid');
     expect(usePlayerStore.getState().currentPlaylist[0].id).toBe('qq:1');
     expect(screen.getAllByText('QQ').length).toBeGreaterThan(0);
   });
@@ -176,28 +170,13 @@ describe('SongList 单曲换源流程', () => {
     });
   });
 
-  it('stale probe from a previous source does not overwrite the current candidates', async () => {
+  it('关闭弹层后，迟到的换源搜索结果不写回候选（请求序号守卫）', async () => {
     const s1 = song('netease:1');
-    let resolveOldProbe!: (value: { songId: string; tag: 'valid' }[]) => void;
-    const oldProbe = new Promise<{ songId: string; tag: 'valid' }[]>((resolve) => {
-      resolveOldProbe = resolve;
-    });
-    searchSongsMock.mockImplementation(async (kw: string, _page: number, source: string) => {
-      if (source === 'qq') return [{ ...song('1', '晴天', 'qq'), url: 'https://audio.qq.com/full.mp3' }];
-      if (source === 'kugou') return [{ ...song('k2', '晴天 (Live)', 'kugou'), url: 'https://audio.kugou.com/live.mp3' }];
+    let resolveSlowSearch!: (value: any[]) => void;
+    const slowSearch = new Promise<any[]>((resolve) => { resolveSlowSearch = resolve; });
+    searchSongsMock.mockImplementation(async (_kw: string, _page: number, source: string) => {
+      if (source === 'qq') return slowSearch; // QQ 搜索挂起
       return [];
-    });
-    callMusicApiMock.mockImplementation(async (method: string, ...args: any[]) => {
-      if (method === 'searchSongsRouted') return searchSongsMock(...args);
-      if (method === 'probeSongsBatch') {
-        const songs = args[0] as Song[];
-        const firstId = songs[0]?.id;
-        if (firstId === '1') return oldProbe; // QQ 候选探测挂起
-        return [{ songId: firstId, tag: 'valid' }];
-      }
-      if (method === 'resolvePlayableUrlRouted') return 'https://resolved.example.com/a.mp3';
-      if (method === 'resolvePlayableSongRouted') return { url: 'https://resolved.example.com/a.mp3', nonFull: false };
-      return undefined;
     });
 
     render(
@@ -209,19 +188,18 @@ describe('SongList 单曲换源流程', () => {
     fireEvent.click(screen.getByRole('button', { name: '更多操作: 晴天' }));
     fireEvent.click(screen.getByRole('button', { name: '换源完整版' }));
     fireEvent.click(screen.getByRole('button', { name: 'QQ音乐' }));
-    expect(await screen.findByRole('button', { name: '晴天' })).toBeInTheDocument();
+    // 搜索在途：弹层停在 loading 分支（无候选可选）
+    expect(await screen.findByText('正在搜索可切换版本…')).toBeInTheDocument();
 
-    // 探测未返回时切到酷狗
-    fireEvent.click(screen.getByRole('button', { name: '返回选择其他音乐源' }));
-    fireEvent.click(screen.getByRole('button', { name: '酷狗' }));
-    expect(await screen.findByRole('button', { name: '晴天 (Live)' })).toBeInTheDocument();
+    // 关闭弹层（onClose 递增请求序号）后，迟到的搜索结果不得写回候选
+    const closeBtn = document.querySelector('.ant-modal-close') as HTMLElement | null;
+    expect(closeBtn).not.toBeNull();
+    fireEvent.click(closeBtn!);
+    resolveSlowSearch([{ ...song('1', '晴天', 'qq'), url: 'https://audio.qq.com/full.mp3' }]);
 
-    // 旧源的慢探测姗姗来迟：不应覆盖酷狗候选
-    resolveOldProbe([{ songId: '1', tag: 'valid' }]);
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '晴天' })).toBeNull();
     });
-    expect(screen.getByRole('button', { name: '晴天 (Live)' })).toBeInTheDocument();
   });
 
   it('本地文件不显示换源入口（spec 范围外）', async () => {

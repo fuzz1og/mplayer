@@ -7,7 +7,7 @@ import { useLogsStore } from '../stores/logsStore';
 import type { SongActionEffects } from '../stores/songActionsStore';
 import { playSong } from './audioPlayer';
 import { downloadSong } from './downloadService';
-import { applySwap, probeSwapCandidates, searchSwapCandidates } from './sourceSwap';
+import { applySwap, searchSwapCandidates } from './sourceSwap';
 
 /**
  * song actions 的平台效果实现（#304）：Alert / 路由 / 播放器队列 / 下载 / 日志。
@@ -17,7 +17,6 @@ import { applySwap, probeSwapCandidates, searchSwapCandidates } from './sourceSw
  */
 export const nativeSongActionEffects: SongActionEffects = {
   search: searchSwapCandidates,
-  probe: probeSwapCandidates,
   apply: applySwap,
 
   /** 换源成功：替换队列（当前播放则续播）+ 诊断日志；未入队但正在播放的也续播 */
@@ -51,13 +50,6 @@ export const nativeSongActionEffects: SongActionEffects = {
 
   onApplyFailed: () => {
     Alert.alert('提示', '换源失败，请重试');
-  },
-
-  confirmUnplayable: (candidate, proceed) => {
-    Alert.alert('提示', `《${candidate.song.name}》探测为不可播（链接可能失效），仍要切换吗？`, [
-      { text: '取消', style: 'cancel' },
-      { text: '仍要切换', onPress: proceed },
-    ]);
   },
 
   /** 换源成功页停留 1.2s 再收起（会话侧带序号守卫，不会误关新弹层） */

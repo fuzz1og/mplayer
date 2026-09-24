@@ -34,7 +34,6 @@ export function registerMusicApiCall(api: MusicApi): void {
   // ── 基础方法 + main 独有组合方法（手写表，satisfies 钉死签名）──────
   const base = {
     // ── core musicApi 基础方法（泛型 forward）────────────────────
-    probeSongsBatch: (s: Song[]) => api.probeSongsBatch(s),
     prefetchPlayableSong: (song: Song) => api.prefetchPlayableSong(song),
     forgetPrefetchedSong: (song: Song) => api.forgetPrefetchedSong(song),
     getLyrics: (url: string) => api.getLyrics(url),

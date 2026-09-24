@@ -22,7 +22,6 @@ import { CONTENT_METHODS } from '@mplayer/core';
  * - `getLyricsBySongId` 已随歌词内聚删除（#242）。
  */
 export const BASE_METHODS = [
-  'probeSongsBatch',
   'prefetchPlayableSong',
   'forgetPrefetchedSong',
   'getLyrics',

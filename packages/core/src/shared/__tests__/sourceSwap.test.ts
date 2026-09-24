@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { searchSwapCandidates, probeSwapCandidates, applySwap } from '../sourceSwap.js';
+import { searchSwapCandidates, applySwap } from '../sourceSwap.js';
 import type { SwapCandidate, SourceSwapDeps } from '../sourceSwap.js';
-import type { Song, SourceKey, AudioTag } from '../../types/index.js';
+import type { Song, SourceKey } from '../../types/index.js';
 
 function neteaseSong(id: string, name: string): Song {
   return { id, name, artist: '周杰伦', album: '', duration: 240, sourceType: 'netease', url: 'https://audio.example.com/preview.mp3', cover: '', lrc: '' };
@@ -14,7 +14,6 @@ function qqSong(id: string, name: string, artist = '周杰伦'): Song {
 function makeDeps(overrides: Partial<SourceSwapDeps> = {}): SourceSwapDeps {
   return {
     searchSongs: vi.fn(async () => []),
-    probeSongs: vi.fn(async () => []),
     ...overrides,
   };
 }
@@ -57,70 +56,37 @@ describe('searchSwapCandidates', () => {
     await expect(searchSwapCandidates(neteaseSong('1', '晴天'), 'qq', failing)).resolves.toEqual([]);
     expect(log).toHaveBeenCalledWith('warn', expect.stringContaining('换源搜索失败'));
   });
-});
 
-describe('probeSwapCandidates', () => {
-  it('probes url-less candidates instead of pre-marking invalid (routed-era semantics)', async () => {
+  it('marks URL-ID 错位候选 invalid（零请求检查，源数据错位）', async () => {
+    const log = vi.fn();
     const deps = makeDeps({
-      probeSongs: vi.fn(async () => [{ songId: 'q1', tag: 'valid' as AudioTag }]),
-    });
-    const candidates: SwapCandidate[] = [
-      { song: { ...qqSong('q1', '晴天'), url: '' }, exact: true, score: 1, playable: null, tag: null },
-    ];
-
-    const probed = await probeSwapCandidates(candidates, deps);
-
-    // 路由时代候选天生无 url：送探测器自解析（并写预取缓存），不再预标失效
-    expect(deps.probeSongs).toHaveBeenCalledWith([candidates[0].song]);
-    expect(probed[0].playable).toBe(true);
-    expect(probed[0].tag).toBe('valid');
-  });
-
-  it('marks url-id mismatched candidates invalid (source data offset)', async () => {
-    const deps = makeDeps();
-    const candidates: SwapCandidate[] = [
-      { song: qqSong('123', '晴天'), exact: true, score: 1, playable: null, tag: null },
-    ];
-    candidates[0].song.url = 'https://api.example.com/302?get=url&id=999';
-
-    const probed = await probeSwapCandidates(candidates, deps);
-
-    expect(probed[0].song.id).toBe('123');
-    expect(probed[0].playable).toBe(false);
-    expect(probed[0].tag).toBe('invalid');
-    expect(deps.probeSongs).not.toHaveBeenCalled();
-  });
-
-  it('applies probe tags to matching candidates by song id', async () => {
-    const deps = makeDeps({
-      probeSongs: vi.fn(async () => [
-        { songId: 'q1', tag: 'preview' as AudioTag },
-        { songId: 'q2', tag: 'valid' as AudioTag },
+      log,
+      searchSongs: vi.fn(async () => [
+        { ...qqSong('123', '晴天'), url: 'https://api.example.com/302?get=url&id=999' },
+        { ...qqSong('124', '晴天'), url: 'https://api.example.com/302?get=url&id=124' },
       ]),
     });
-    const candidates: SwapCandidate[] = [
-      { song: qqSong('q1', '晴天'), exact: true, score: 1, playable: null, tag: null },
-      { song: qqSong('q2', '晴天 (Live)'), exact: false, score: 0.5, playable: null, tag: null },
-    ];
 
-    const probed = await probeSwapCandidates(candidates, deps);
+    const candidates = await searchSwapCandidates(neteaseSong('1', '晴天'), 'qq', deps);
 
-    expect(probed.find(c => c.song.id === 'q1')?.tag).toBe('preview');
-    expect(probed.find(c => c.song.id === 'q1')?.playable).toBe(true);
-    expect(probed.find(c => c.song.id === 'q2')?.tag).toBe('valid');
-    expect(deps.probeSongs).toHaveBeenCalledWith([qqSong('q1', '晴天'), qqSong('q2', '晴天 (Live)')]);
+    const mismatched = candidates.find((c) => c.song.id === '123');
+    expect(mismatched?.playable).toBe(false);
+    expect(mismatched?.tag).toBe('invalid');
+    // id 一致的候选保持未标记（不再有任何网络探测）
+    expect(candidates.find((c) => c.song.id === '124')?.playable).toBeNull();
+    expect(candidates.find((c) => c.song.id === '124')?.tag).toBeNull();
+    expect(log).toHaveBeenCalledWith('warn', expect.stringContaining('链接 ID 与歌曲不符'));
   });
 
-  it('keeps candidates unlabelled when probing fails', async () => {
-    const deps = makeDeps({ probeSongs: vi.fn(async () => { throw new Error('probe down'); }) });
-    const candidates: SwapCandidate[] = [
-      { song: qqSong('q1', '晴天'), exact: true, score: 1, playable: null, tag: null },
-    ];
+  it('无 url 候选不做错位检查、也保持未标记（#391 后不再有任何探测）', async () => {
+    const deps = makeDeps({
+      searchSongs: vi.fn(async () => [{ ...qqSong('q1', '晴天'), url: '' }]),
+    });
 
-    const probed = await probeSwapCandidates(candidates, deps);
+    const candidates = await searchSwapCandidates(neteaseSong('1', '晴天'), 'qq', deps);
 
-    expect(probed[0].playable).toBeNull();
-    expect(probed[0].tag).toBeNull();
+    expect(candidates[0].playable).toBeNull();
+    expect(candidates[0].tag).toBeNull();
   });
 });
 
@@ -130,8 +96,8 @@ describe('applySwap', () => {
       song: qqSong('orig', '晴天'),
       exact: true,
       score: 1,
-      playable: true,
-      tag: 'valid',
+      playable: null,
+      tag: null,
     };
 
     const swapped = applySwap(neteaseSong('1', '晴天'), 'qq', candidate);
@@ -141,7 +107,6 @@ describe('applySwap', () => {
     expect(swapped!.url).toContain('audio.qq.com');
     expect(swapped!.name).toBe('晴天');
     expect(swapped!.artist).toBe('周杰伦');
-    expect(swapped!.audioTag).toBe('valid'); // 候选探测结果写回，换源后行徽标立即反映
   });
 
   it('strips repeated source prefixes and keeps the target source real id', () => {
@@ -150,8 +115,8 @@ describe('applySwap', () => {
       song: { ...qqSong('k1', '晴天'), sourceType: 'kuwo' },
       exact: true,
       score: 1,
-      playable: true,
-      tag: 'valid',
+      playable: null,
+      tag: null,
     };
 
     const swapped = applySwap(kugouSong, 'kuwo', candidate);
@@ -164,8 +129,8 @@ describe('applySwap', () => {
       song: { ...qqSong('m1', '晴天'), id: 'migu:1', sourceType: 'migu' },
       exact: true,
       score: 1,
-      playable: true,
-      tag: 'valid',
+      playable: null,
+      tag: null,
     };
 
     const swapped = applySwap(neteaseSong('1', '晴天'), 'migu', candidate);
@@ -177,14 +142,14 @@ describe('applySwap', () => {
   it('rejects candidates without id; allows url-less candidates (resolved at play)', () => {
     const noId: SwapCandidate = {
       song: { ...qqSong('q1', '晴天'), id: '' },
-      exact: false, score: 0.5, playable: true, tag: 'valid',
+      exact: false, score: 0.5, playable: null, tag: null,
     };
     expect(applySwap(neteaseSong('1', '晴天'), 'qq', noId)).toBeNull();
 
-    // 无 url 候选可换：播放时 resolvePlayableSongRouted 现解析（探测已写预取缓存）
+    // 无 url 候选可换：播放时 resolvePlayableSongRouted 现解析（预取缓存由门面写入）
     const urlLess: SwapCandidate = {
       song: { ...qqSong('q1', '晴天'), url: '' },
-      exact: true, score: 1, playable: true, tag: 'valid',
+      exact: true, score: 1, playable: null, tag: null,
     };
     const swapped = applySwap(neteaseSong('1', '晴天'), 'qq', urlLess);
     expect(swapped).not.toBeNull();

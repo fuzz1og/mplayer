@@ -31,7 +31,9 @@ interface SourceSwapModalProps {
 /**
  * 单曲换源弹层：先选音乐源 → 显示该源匹配度高的候选版本（前 3）
  * → 用户自己选要切换到哪一首（精确匹配标「完整版」，其余显示相似度）。
- * 候选的可播性徽标与全局音频标签语言一致（可播 / 短时长 / 失效）。
+ *
+ * #391：探测删除后不再有「可播 / 短时长 / 失效 / 检测中」徽标——那些标记来自
+ * 已被证伪的直连探测判据（把 tier3 能救的歌判成失效），产物无消费者。
  */
 const SourceSwapModal: React.FC<SourceSwapModalProps> = ({
   open, songName, currentSource, candidates, loading, success,
@@ -78,15 +80,6 @@ const SourceSwapModal: React.FC<SourceSwapModalProps> = ({
                 <span style={{ display: 'block', fontSize: 'var(--text-base)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.song.name}</span>
                 <span style={{ display: 'block', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.song.artist}</span>
               </span>
-              {c.playable === false ? (
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--red-500)', flexShrink: 0 }}>失效</span>
-              ) : c.tag === 'preview' ? (
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--amber-500)', flexShrink: 0 }}>短时长</span>
-              ) : c.playable === true ? (
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--emerald-500)', flexShrink: 0 }}>可播</span>
-              ) : (
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', flexShrink: 0 }}>检测中…</span>
-              )}
               <span style={{ fontSize: 'var(--text-xs)', color: c.exact ? 'var(--emerald-500)' : 'var(--text-secondary)', flexShrink: 0 }}>
                 {c.exact ? '完整版' : `${Math.round(c.score * 100)}%`}
               </span>

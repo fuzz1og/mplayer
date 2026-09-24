@@ -9,7 +9,6 @@ vi.mock('electron', () => ({
 import { ipcMain } from 'electron';
 import type { MusicApiMethodMap } from '@/shared/musicApiContract';
 import { clearDirectClients, registerDirectClient } from '@mplayer/core';
-import type { Song } from '@mplayer/core';
 
 import { registerMusicApiCall } from '../../main/ipc/musicApiHandlers';
 
@@ -24,7 +23,8 @@ function getCallHandler() {
 
 function makeApi(methods: Partial<Record<keyof MusicApiMethodMap, unknown>>) {
   return {
-    probeSongsBatch: vi.fn(async (songs: Song[]) => songs.map((s) => ({ songId: s.id, tag: 'valid' as const }))),
+    prefetchPlayableSong: vi.fn(async () => null),
+    forgetPrefetchedSong: vi.fn(),
     getLyrics: vi.fn(async () => 'lrc text'),
     getSodaPlayableUrl: vi.fn(async (id: string) => `file:///${id}`),
     resolvePlaylistLink: vi.fn(async (url: string) => url),
@@ -158,14 +158,24 @@ describe('musicApi:call 单通道分发表', () => {
     });
   });
 
-  it('probeSongsBatch 转发空 url 保留 invalid 语义（交由 core 内实现）', async () => {
+  it('prefetchPlayableSong / forgetPrefetchedSong 转发到 core 门面（#390 写读路径）', async () => {
     const api = makeApi({});
-    (api.probeSongsBatch as any).mockResolvedValueOnce([{ songId: '1', tag: 'invalid' }]);
+    (api.prefetchPlayableSong as any).mockResolvedValueOnce({
+      url: 'https://cdn.example.com/a.mp3',
+      nonFull: false,
+    });
     registerMusicApiCall(api as any);
     const handler = getCallHandler();
 
-    const result = await handler({}, 'probeSongsBatch', [{ id: '1', url: '' }]);
-    expect(api.probeSongsBatch).toHaveBeenCalledWith([{ id: '1', url: '' }]);
-    expect(result).toEqual({ success: true, data: [{ songId: '1', tag: 'invalid' }] });
+    const prefetched = await handler({}, 'prefetchPlayableSong', { id: '1', url: '' });
+    expect(api.prefetchPlayableSong).toHaveBeenCalledWith({ id: '1', url: '' });
+    expect(prefetched).toEqual({
+      success: true,
+      data: { url: 'https://cdn.example.com/a.mp3', nonFull: false },
+    });
+
+    const forgotten = await handler({}, 'forgetPrefetchedSong', { id: '1', url: '' });
+    expect(api.forgetPrefetchedSong).toHaveBeenCalledWith({ id: '1', url: '' });
+    expect(forgotten).toEqual({ success: true, data: undefined });
   });
 });

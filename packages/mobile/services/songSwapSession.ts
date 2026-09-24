@@ -26,15 +26,12 @@ export const IDLE_SWAP_SNAPSHOT: SwapSnapshot = {
  */
 export interface SongSwapDeps {
   search(song: Song, source: SourceKey): Promise<SwapCandidate[]>;
-  probe(candidates: SwapCandidate[]): Promise<SwapCandidate[]>;
   apply(song: Song, source: SourceKey, candidate: SwapCandidate): Song | null;
   /** 换源成功后的通用效果：替换播放器队列 / 续播 / 诊断日志 */
   onApplied(original: Song, swapped: Song, candidate: SwapCandidate): void;
   /** 目标源没有可切换版本（提示文案由调用点决定） */
   onEmptySource(source: SourceKey): void;
   onApplyFailed(): void;
-  /** 候选探测为不可播：用户确认后才继续切换 */
-  confirmUnplayable(candidate: SwapCandidate, proceed: () => void): void;
   /** 成功后延时关闭；由调用点注入（真实 1200ms，测试可手动触发） */
   scheduleClose(run: () => void): void;
 }
@@ -49,7 +46,7 @@ export interface SongSwapSession {
   subscribe(listener: () => void): () => void;
   /** 打开弹层进入阶段 1（选源），重置上一次会话 */
   open(song: Song, handlers?: SongSwapHandlers): void;
-  /** 阶段 1：选目标源 → 搜索候选（前 3）→ 渐进探测可播性 */
+  /** 阶段 1：选目标源 → 搜索候选（前 3） */
   selectSource(source: SourceKey): Promise<void>;
   /** 阶段 2：选中候选 → 应用换源（队列 / 续播 / 通知父列表） */
   selectCandidate(candidate: SwapCandidate): void;
@@ -62,10 +59,10 @@ export interface SongSwapSession {
 /**
  * 单曲换源两阶段状态机（语义对齐桌面 src/renderer/hooks/useSongSwap.ts）。
  *
- * 序号守卫：open / selectSource / back / close 每次让 intent 自增；异步结果
- * （搜索、探测）回来时 intent 已变即丢弃——QQ→酷我快速切源时，QQ 的慢探测
- * 结果不会覆盖酷我的候选；关闭后再回来的结果也不会把弹层重新点亮。成功后的
- * 延时关闭同样带序号，不会误关期间新开的会话。
+ * 序号守卫：open / selectSource / back / close 每次让 intent 自增；异步搜索
+ * 结果回来时 intent 已变即丢弃——QQ→酷我快速切源时，QQ 的慢搜索结果不会覆盖
+ * 酷我的候选；关闭后再回来的结果也不会把弹层重新点亮。成功后的延时关闭同样
+ * 带序号，不会误关期间新开的会话。
  */
 export function createSwapSession(deps: SongSwapDeps): SongSwapSession {
   let snapshot: SwapSnapshot = IDLE_SWAP_SNAPSHOT;
@@ -126,18 +123,9 @@ export function createSwapSession(deps: SongSwapDeps): SongSwapSession {
         return;
       }
       set({ loading: false, source, candidates: found });
-      // 异步探测可播性：候选先显示（检测中），探测完成渐进更新标记
-      const probed = await deps.probe(found);
-      if (seq !== intent) return;
-      set({ candidates: probed });
     },
     selectCandidate(candidate) {
       if (!snapshot.source) return;
-      if (candidate.playable === false) {
-        // 探测为失效：确认后再切换（用户可能想试）
-        deps.confirmUnplayable(candidate, () => applyCandidate(candidate));
-        return;
-      }
       applyCandidate(candidate);
     },
     back() {

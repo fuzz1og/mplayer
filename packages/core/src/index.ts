@@ -6,9 +6,7 @@ export type { AntiScrapeHeaders } from './api/antiScrape.js';
 // #276 自建 API 机件归零：api 客户端/会话/拦截器/闸门/计时设施出口已删。
 // setProxyUrl/getProxyUrl 保留（代理注入替代确认悬而未决，mobile 设置页仍注入）。
 export { musicApi, setProxyUrl, getProxyUrl, decodeLyricBody } from './api/musicApi.js';
-export { probeAudio, probeAudioUrl, normalizeProbeUrl, isUrlAlive } from './api/audioProbe.js';
-export { probeSongs } from './api/probeSongs.js';
-export type { ProbeOptions } from './api/probeSongs.js';
+export { normalizeProbeUrl, isUrlAlive } from './api/audioProbe.js';
 export { forgetPrefetchedUrl, getPrefetchedUrl, setPrefetchedUrl, clearPrefetchCache } from './api/prefetchCache.js';
 export { dedupeSongs, checkDuplicate, filterDuplicates } from './utils/songDedupe.js';
 export type { DupStatus, DupResult, FilterResult } from './utils/songDedupe.js';
@@ -49,7 +47,7 @@ export { sanitizeFileNameFragment, makeSongFileName } from './utils/downloadFile
 export type { SongFileNameParts, SongFileNameDeps } from './utils/downloadFileName.js';
 export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
-export { searchSwapCandidates, probeSwapCandidates, applySwap } from './shared/sourceSwap.js';
+export { searchSwapCandidates, applySwap } from './shared/sourceSwap.js';
 export { songUsesSongidLyrics, isSodaSource, isInlineLyrics } from './shared/songLyrics.js';
 // 榜单聚合内核已下线（#332 裁决：回归单元榜 + 源切换）。聚合只在「存在跨源可比原生量」
 // 的产品里有意义；本项目只有名次、没有绝对量，Σ1/rank 在业界找不到对应物。
@@ -128,7 +126,6 @@ export {
   searchSongsRouted,
   resolvePlayableUrlRouted,
   resolvePlayableSongRouted,
-  resolvePlayableSongDirect,
   setTier3Resolver,
   pickToplistGroup,
   pickToplistSongs,
@@ -169,14 +166,12 @@ export {
   getPlaybackTraceSink,
   isPlaybackTraceEnabled,
   emitPlaybackTrace,
-  emitPlaybackProbeTrace,
   createPlaybackTraceRing,
   traceNow,
   classifyTraceError,
 } from './shared/playbackTrace.js';
 export type {
   PlaybackTrace,
-  PlaybackProbeTrace,
   PlaybackTraceSink,
   PlaybackTraceRing,
   PlaybackTraceSourceLeg,

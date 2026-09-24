@@ -67,21 +67,9 @@ export interface PlaybackTrace {
   sources: PlaybackTraceSourceLeg[];
 }
 
-/** 一次 `probeSongsBatch` 单曲的 trace：URL 校验成本单独记，不并入解析腿。 */
-export interface PlaybackProbeTrace {
-  ts: number;
-  songId: string;
-  /** 直连解析耗时（resolvePlayableSongDirect）。 */
-  resolveMs: number;
-  /** URL 探活/校验耗时（probeAudioUrl）。 */
-  validateMs: number;
-  tag: string;
-}
-
-/** 宿主注册的 sink；两个回调都可选。 */
+/** 宿主注册的 sink（#391：探测腿已删除，只剩解析 trace）。 */
 export interface PlaybackTraceSink {
   onResolve?(trace: PlaybackTrace): void;
-  onProbe?(trace: PlaybackProbeTrace): void;
 }
 
 let sink: PlaybackTraceSink | null = null;
@@ -102,10 +90,6 @@ export function isPlaybackTraceEnabled(): boolean {
 
 export function emitPlaybackTrace(trace: PlaybackTrace): void {
   sink?.onResolve?.(trace);
-}
-
-export function emitPlaybackProbeTrace(trace: PlaybackProbeTrace): void {
-  sink?.onProbe?.(trace);
 }
 
 /** 统一时钟：优先 performance.now（亚毫秒），退化到 Date.now。 */
@@ -132,14 +116,12 @@ export function classifyTraceError(err: unknown): PlaybackTraceErrorClass {
 export interface PlaybackTraceRing {
   sink: PlaybackTraceSink;
   listResolves(): PlaybackTrace[];
-  listProbes(): PlaybackProbeTrace[];
   clear(): void;
 }
 
 export function createPlaybackTraceRing(capacity = 200): PlaybackTraceRing {
   const cap = Math.max(1, capacity);
   const resolves: PlaybackTrace[] = [];
-  const probes: PlaybackProbeTrace[] = [];
   const push = <T>(arr: T[], item: T): void => {
     if (arr.length >= cap) arr.shift();
     arr.push(item);
@@ -147,13 +129,10 @@ export function createPlaybackTraceRing(capacity = 200): PlaybackTraceRing {
   return {
     sink: {
       onResolve: (t) => push(resolves, t),
-      onProbe: (t) => push(probes, t),
     },
     listResolves: () => [...resolves],
-    listProbes: () => [...probes],
     clear: () => {
       resolves.length = 0;
-      probes.length = 0;
     },
   };
 }

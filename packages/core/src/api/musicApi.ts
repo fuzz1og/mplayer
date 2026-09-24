@@ -1,21 +1,18 @@
 import axios from 'axios';
-import type { Song, SourceKey, SongGroup, AudioTag } from '../types/index.js';
+import type { Song, SourceKey, SongGroup } from '../types/index.js';
 import { cacheManager } from './memoryCacheManager.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { looksLikeLyrics } from '../download/lyrics.js';
 import { request, bodyToText } from './transport.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
-import { probeSongs } from './probeSongs.js';
-import { rememberProbeResult, setPrefetchedUrl, getPrefetchedUrl, forgetPrefetchedUrl } from './prefetchCache.js';
+import { setPrefetchedUrl, getPrefetchedUrl, forgetPrefetchedUrl } from './prefetchCache.js';
 import {
   searchSongsRouted as routedSearchSongs,
   resolvePlayableUrlRouted as routedResolveUrl,
   resolvePlayableSongRouted as routedResolveSong,
-  resolvePlayableSongDirect as routedResolveSongDirect,
 } from '../shared/sourceRouter.js';
 import { explainPlaybackFailure as explainFailure } from '../tier3/tier3Api.js';
-import { emitPlaybackProbeTrace, isPlaybackTraceEnabled, traceNow } from '../shared/playbackTrace.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
 import { fetchLyricViaGateway } from './qqDirect.js';
@@ -504,58 +501,6 @@ export const musicApi = {
 
   groupIntoSongGroups(allSongs: Song[]): SongGroup[] {
     return groupIntoSongGroupsUtil(allSongs);
-  },
-
-  /**
-   * 批量探测歌曲可播性（桌面换源/搜索结果探测），空 url → `invalid`。
-   * 复用 core `probeSongs` + `getAudioUrl` resolver：每首先解析直链再探测。
-   */
-  async probeSongsBatch(songs: Song[]): Promise<{ songId: string; tag: AudioTag }[]> {
-    const list = Array.isArray(songs) ? songs : [];
-    if (list.length === 0) return [];
-    const results: { songId: string; tag: AudioTag }[] = [];
-    // 记录每首解析后的最终 URL + 直连 nonFull 判定（空 → invalid，保持桌面现状）
-    const resolvedUrls = new Map<string, { url: string; nonFull: boolean }>();
-    const songsById = new Map(list.map((s) => [s.id, s]));
-    await probeSongs(list, {
-      concurrency: Math.min(5, Math.max(1, list.length)),
-      resolver: async (song) => {
-        let url = song.url;
-        let nonFull = false;
-        try {
-          // 探测只走**直连**路由（resolvePlayableSongDirect，无 tier3）：
-          // 探测语义 = 「直连可播性」，单请求/首、快，且不占用 tier3 上游配额、
-          // 不被 mgmp3 等慢源（20s 超时）拖死整批探测（标签秒出）。
-          // 播放仍走 resolvePlayableSongRouted（含 tier3 兜底）。
-          const routed = await routedResolveSongDirect(song);
-          if (routed?.url?.startsWith('http')) {
-            url = routed.url;
-            nonFull = routed.nonFull;
-          }
-        } catch {
-          // keep the original URL; probeAudioUrl will classify it
-        }
-        resolvedUrls.set(song.id, { url: url || '', nonFull });
-        return url;
-      },
-      // #363：探测腿结构化 trace——resolveMs（直连解析）与 validateMs（URL 校验）
-      // 分开记，避免把校验成本错记到解析腿上。sink 为空时不构造记录。
-      onProbe: (songId, resolveMs, validateMs, tag) => {
-        if (!isPlaybackTraceEnabled()) return;
-        emitPlaybackProbeTrace({ ts: traceNow(), songId, resolveMs, validateMs, tag });
-      },
-      onResult: (songId, tag) => {
-        const entry = resolvedUrls.get(songId);
-        results.push({ songId, tag: entry?.url ? tag : 'invalid' });
-        // 探测职责转型：打标签的同时把直连直链写入预取缓存（主进程内存，
-        // TTL 30min）——播放时 resolvePlayableSongRouted 先查缓存，命中 0 等待。
-        const target = songsById.get(songId);
-        if (target && entry?.url) {
-          rememberProbeResult(target, entry.url, tag, entry.nonFull);
-        }
-      },
-    });
-    return results;
   },
 
   /**

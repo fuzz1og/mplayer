@@ -213,8 +213,8 @@ const SNIFF_TIMEOUT_MS = 1_000;
  *  而不是丢弃——部分候选对用户仍有用，总比空列表好。 */
 const TIER3_SEARCH_BUDGET_MS = 6_000;
 
-/** 试听片段大小阈值：<1MB 视为片段（与 api/audioProbe.ts 的 PREVIEW_THRESHOLD 对齐，
- *  30s 128kbps ≈ 480KB）。tier3 解析到片段时宁可跳过，也不把试听版当完整版播。 */
+/** 试听片段大小阈值：<1MB 视为片段（30s 128kbps ≈ 480KB）。
+ *  tier3 解析到片段时宁可跳过，也不把试听版当完整版播。 */
 const TRIAL_BYTES_THRESHOLD = 1_048_576;
 
 // ── 状态（core 零 I/O，宿主注册 persister 落盘）──────────────────────

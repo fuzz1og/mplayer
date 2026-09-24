@@ -1,11 +1,6 @@
 import fs from 'fs';
 import { app, dialog } from 'electron';
-import {
-  createPlaybackTraceRing,
-  setPlaybackTraceSink,
-  type PlaybackProbeTrace,
-  type PlaybackTrace,
-} from '@mplayer/core';
+import { createPlaybackTraceRing, setPlaybackTraceSink, type PlaybackTrace } from '@mplayer/core';
 
 /**
  * 桌面播放解析链诊断 sink（#363 / ADR `2026-09-23-playback-trace-sink`）。
@@ -31,22 +26,16 @@ export function listPlaybackTraces(): PlaybackTrace[] {
   return ring.listResolves();
 }
 
-/** 当前会话最近若干条探测 trace（最旧 → 最新）。 */
-export function listProbeTraces(): PlaybackProbeTrace[] {
-  return ring.listProbes();
-}
-
-/** 清空当前会话的全部 trace（解析 + 探测）。 */
+/** 清空当前会话的全部 trace。 */
 export function clearPlaybackTraces(): void {
   ring.clear();
 }
 
-/** 导出文件结构：meta + 两条 trace 快照。 */
+/** 导出文件结构：meta + 解析 trace 快照（#391：探测 trace 已删除）。 */
 export interface PlaybackTraceExport {
   /** 导出元信息：导出时刻（ISO）与应用版本。 */
   meta: { exportedAt: string; appVersion: string };
   resolves: PlaybackTrace[];
-  probes: PlaybackProbeTrace[];
 }
 
 /** 组装导出内容（便于测试与复用，不触碰磁盘）。 */
@@ -54,7 +43,6 @@ export function buildPlaybackTraceExport(exportedAt: Date = new Date()): Playbac
   return {
     meta: { exportedAt: exportedAt.toISOString(), appVersion: app.getVersion() },
     resolves: ring.listResolves(),
-    probes: ring.listProbes(),
   };
 }
 

@@ -911,28 +911,3 @@ async function resolveRoutedInner(song: Song, ctx: TraceCtx | null): Promise<Rou
   }
 }
 
-/**
- * 直连-only 播放解析（搜索结果探测用，T12 预检）：
- * 只走直连客户端（resolveUrlInfo/resolvePlayableUrl），**无 tier3、无兜底**——
- * 探测语义 = 「直连可播性」：快（单请求）、不占用 tier3 上游配额、不被 mgmp3 等
- * 慢源（20s 超时）拖死整批探测。播放仍走 resolvePlayableSongRouted（含 tier3 兜底）。
- */
-export async function resolvePlayableSongDirect(song: Song): Promise<RoutedPlayable> {
-  const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl || !!c.resolveUrlInfo);
-  if (route.kind !== 'direct') return directPlayable('', false);
-  try {
-    const client = route.client;
-    if (client.resolveUrlInfo) {
-      const info = await client.resolveUrlInfo(song);
-      if (info?.url) {
-        return directPlayable(info.url, isTrialUrlInfo(info, song.duration) || song.audioTag === 'preview');
-      }
-      return directPlayable('', false);
-    }
-    const url = await client.resolvePlayableUrl!(song);
-    return directPlayable(url || '', !!url && song.audioTag === 'preview');
-  } catch {
-    return directPlayable('', false);
-  }
-}
-

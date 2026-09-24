@@ -29,9 +29,6 @@ const axiosMock = vi.hoisted(() => {
 
 const musicApiMock = vi.hoisted(() => ({
   getLyrics: vi.fn(async () => ''),
-  probeSongsBatch: vi.fn(async (songs: { id: string }[]) =>
-    songs.map((s) => ({ songId: s.id, tag: 'valid' as const }))
-  ),
 }));
 
 // 只覆写 routed 解析器与重试退避，其余 core 导出保持真实现

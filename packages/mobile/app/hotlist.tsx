@@ -15,7 +15,6 @@ import SongListSkeleton from '../components/SongListSkeleton';
 import SongRow from '../components/SongRow';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { playSong } from '../services/audioPlayer';
-import { probeSongsPrefetch } from '../services/songProbe';
 import { searchStrictMatch } from '../services/songResources';
 import { usePlayerStore } from '../stores/playerStore';
 import {spacing, textVariants} from '../theme/tokens';
@@ -49,9 +48,6 @@ export default function HotlistPage() {
       // fetcher 统一返回 Song[]（各源榜单均经能力面 getToplists，#279）
       const list = await config.fetcher();
       setSongs(list);
-      // 直连探测预取（与搜索/歌单/专辑页对齐）：直链写入预取缓存，
-      // 点播 0 等待秒播。榜单 id 已统一为 songmid（#172），QQ 榜探测有效。
-      void probeSongsPrefetch(list);
     } catch (err) {
       console.error('加载榜单失败:', err);
     }

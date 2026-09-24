@@ -16,7 +16,7 @@ P50 3120ms、27% 硬失败、坏源饿死好源等结论，但探针**未入库*
 2. **交付口径（#362）**：`hits` 只在路由层真正采纳时计，迟到命中是 `discarded`；
 3. **试听版换完整版（#361 后）**：预取命中不再是天然的 0 等待——试听版命中仍会进 tier3。
 
-这些语义散落在 `sourceRouter` / `tier3Api` / `probeSongs` 的接缝上，只有 core 知道；
+这些语义散落在 `sourceRouter` / `tier3Api`（早期还有 `probeSongs` 探测腿）的接缝上，只有 core 知道；
 宿主（桌面主进程 / 移动端 service）负责 I/O 与展示。核心问题是：**埋点写在哪一层、以什么
 形态常驻、用户能看到什么**。
 
@@ -29,13 +29,16 @@ P50 3120ms、27% 硬失败、坏源饿死好源等结论，但探针**未入库*
 2. **trace 是 side-channel，不改 `resolvePlayableSongRouted` 的返回契约。** 沿用 ADR-0012
    的可播资源值（`RoutedPlayable` 只加过 `via`/`guard`），trace 不塞进返回值，避免又一次
    跨端契约改动。
-3. **两条 trace 记录**：
+3. **trace 记录**：
    - `PlaybackTrace`（一次 `resolvePlayableSongRouted`）：`totalMs`、`layer`
      （`prefetch|direct|tier3|fail`）、`nonFull`、`prefetchHit`、`tier3Engaged`、`reason`、
-     `via`、`guard`、`directMs`/`directMethod`/`directSource`、`tier3Ms`/`tier3TimedOut`，
+     `via`、`guard`、`directMs`/`directMethod`/`directSource`、`directTimedOut`、
+     `validateMs`、`tier3Ms`/`tier3TimedOut`，
      以及**每源一条** `sources[]`：`{ sourceId, ms, outcome: hit|miss|error|skipped|rejected|discarded, errorClass?, guard? }`。
-   - `PlaybackProbeTrace`（`probeSongsBatch` 单曲）：`resolveMs` 与 `validateMs` **分开记**
-     ——URL 校验成本不在解析腿上，合并会虚高解析耗时。
+   - ~~`PlaybackProbeTrace`（`probeSongsBatch` 单曲）~~：**已随探测链删除（#391）**——
+     探测判据反向且产物无消费者，预解析改由 `prefetchPlayableSong` 门面承担；
+     `onProbe` / `emitPlaybackProbeTrace` / ring 的 `listProbes` 全部移除。
+     直连腿的时长取证成本改用 `PlaybackTrace.validateMs` 观测（#392）。
 4. **常驻：内存环形缓冲，会话内、不落盘、不外传。** core 导出 `createPlaybackTraceRing(capacity = 200)`
    给宿主复用（快照 list / clear）。只在用户点「导出诊断」时写文件。与 `tier3Stats` 的
    「仅会话内、不持久化」同取向，避免昨日状态污染今日判断。

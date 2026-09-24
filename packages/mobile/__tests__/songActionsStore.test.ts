@@ -21,18 +21,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const tick = () => new Promise<void>((resolve) => { setTimeout(resolve, 0); });
-
 function makeEffects(overrides: Partial<SongActionEffects> = {}) {
   const scheduled: (() => void)[] = [];
   const effects: SongActionEffects = {
     search: vi.fn(async () => [] as SwapCandidate[]),
-    probe: vi.fn(async (candidates: SwapCandidate[]) => candidates),
     apply: vi.fn((_song: Song, _source: SourceKey, c: SwapCandidate) => ({ ...c.song })),
     onApplied: vi.fn(),
     onEmptySource: vi.fn(),
     onApplyFailed: vi.fn(),
-    confirmUnplayable: vi.fn((_candidate: SwapCandidate, run: () => void) => run()),
     scheduleClose: vi.fn((run: () => void) => { scheduled.push(run); }),
     download: vi.fn(),
     searchArtist: vi.fn(),
@@ -110,26 +106,6 @@ describe('songActionsStore 换源编排', () => {
     await first;
     expect(state().swap.source).toBe('kuwo');
     expect(ids(state().swap.candidates)).toEqual(['k1']);
-  });
-
-  it('关闭换源弹层后在途探测结果被丢弃', async () => {
-    const probe = deferred<SwapCandidate[]>();
-    const { effects } = makeEffects({
-      search: vi.fn(async () => [candidate('q1')]),
-      probe: vi.fn(() => probe.promise),
-    });
-    configureSongActions(effects);
-    state().openSwap(song('n1'));
-
-    const pending = state().selectSwapSource('qq');
-    await tick();
-    state().closeSwap();
-    probe.resolve([candidate('q1-probed')]);
-    await pending;
-
-    // 弹层已关：在途探测被守卫丢弃，候选维持关闭那一刻的内容（退场动画用）
-    expect(state().swap.visible).toBe(false);
-    expect(ids(state().swap.candidates)).toEqual(['q1']);
   });
 
   it('换源成功：通知持有列表的父组件并延时收起弹层', async () => {

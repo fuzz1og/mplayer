@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { X, CircleCheck, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '../services/sourceSwap';
-import {radius, spacing, textVariants} from '../theme/tokens';
+import {spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import SourceBadge from './SourceBadge';
@@ -77,15 +77,6 @@ export default function SourceSwapModal({
                     <Text style={styles.itemText} numberOfLines={1}>{c.song.name}</Text>
                     <Text style={styles.itemArtist} numberOfLines={1}>{c.song.artist}</Text>
                   </View>
-                  {c.playable === false ? (
-                    <Text style={[styles.playTag, styles.playTagBad]}>失效</Text>
-                  ) : c.tag === 'preview' ? (
-                    <Text style={[styles.playTag, styles.playTagPreview]}>短时长</Text>
-                  ) : c.playable === true ? (
-                    <Text style={[styles.playTag, styles.playTagGood]}>可播</Text>
-                  ) : (
-                    <Text style={styles.playTag}>检测中…</Text>
-                  )}
                   <Text style={[styles.matchTag, c.exact && styles.matchTagExact]}>
                     {c.exact ? '完整版' : `${Math.round(c.score * 100)}%`}
                   </Text>
@@ -144,18 +135,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   matchTag: { ...textVariants.caption, color: colors.textSecondary, marginRight: spacing[2] },
   // ADR-0006：success 当文字走 successText 达标
   matchTagExact: { color: colors.successText },
-  playTag: { ...textVariants.micro, fontWeight: '400', color: colors.textSecondary, marginRight: 6 },
-  playTagGood: { color: colors.successText },
-  // 试听版标记：warning 不当正文色（M2-4），中性文字 + warningSubtle 底保留琥珀信号
-  playTagPreview: {
-    color: colors.textSecondary,
-    backgroundColor: colors.warningSubtle,
-    borderRadius: radius.xs,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  // ADR-0006：danger 当文字走 dangerText 达标
-  playTagBad: { color: colors.dangerText },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',

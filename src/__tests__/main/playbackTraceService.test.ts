@@ -21,14 +21,13 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 import fs from 'fs';
-import { emitPlaybackProbeTrace, emitPlaybackTrace } from '@mplayer/core';
-import type { PlaybackProbeTrace, PlaybackTrace } from '@mplayer/core';
+import { emitPlaybackTrace } from '@mplayer/core';
+import type { PlaybackTrace } from '@mplayer/core';
 import {
   buildPlaybackTraceExport,
   clearPlaybackTraces,
   exportPlaybackTraces,
   listPlaybackTraces,
-  listProbeTraces,
   PLAYBACK_TRACE_CAPACITY,
 } from '../../main/services/playbackTraceService';
 
@@ -59,10 +58,6 @@ function makeTrace(overrides: Partial<PlaybackTrace> = {}): PlaybackTrace {
   };
 }
 
-function makeProbe(overrides: Partial<PlaybackProbeTrace> = {}): PlaybackProbeTrace {
-  return { ts: 2, songId: 's1', resolveMs: 50, validateMs: 10, tag: 'valid', ...overrides };
-}
-
 beforeEach(() => {
   clearPlaybackTraces();
   vi.clearAllMocks();
@@ -70,17 +65,13 @@ beforeEach(() => {
 });
 
 describe('桌面播放诊断服务（ring list/clear + export）', () => {
-  it('模块加载已注册 sink：emit 后 list 能读到解析与探测 trace', () => {
+  it('模块加载已注册 sink：emit 后 list 能读到解析 trace', () => {
     emitPlaybackTrace(makeTrace({ songId: 'a', songName: '七里香' }));
-    emitPlaybackProbeTrace(makeProbe({ songId: 'a' }));
 
     const resolves = listPlaybackTraces();
-    const probes = listProbeTraces();
     expect(resolves).toHaveLength(1);
     expect(resolves[0].songId).toBe('a');
     expect(resolves[0].songName).toBe('七里香');
-    expect(probes).toHaveLength(1);
-    expect(probes[0].resolveMs).toBe(50);
   });
 
   it('list 返回副本：外部修改不影响缓冲', () => {
@@ -90,12 +81,10 @@ describe('桌面播放诊断服务（ring list/clear + export）', () => {
     expect(listPlaybackTraces()).toHaveLength(1);
   });
 
-  it('clearPlaybackTraces 同时清空解析与探测缓冲', () => {
+  it('clearPlaybackTraces 清空缓冲', () => {
     emitPlaybackTrace(makeTrace());
-    emitPlaybackProbeTrace(makeProbe());
     clearPlaybackTraces();
     expect(listPlaybackTraces()).toHaveLength(0);
-    expect(listProbeTraces()).toHaveLength(0);
   });
 
   it('环形缓冲维持容量上限并丢弃最旧记录', () => {
@@ -109,18 +98,15 @@ describe('桌面播放诊断服务（ring list/clear + export）', () => {
     expect(list[list.length - 1].songId).toBe(`s${total - 1}`);
   });
 
-  it('buildPlaybackTraceExport 含 meta（导出版本/时间）与两份快照', () => {
+  it('buildPlaybackTraceExport 含 meta（导出版本/时间）与解析快照', () => {
     emitPlaybackTrace(makeTrace({ songId: 'x' }));
-    emitPlaybackProbeTrace(makeProbe({ songId: 'x' }));
     const payload = buildPlaybackTraceExport(new Date('2026-09-23T00:00:00.000Z'));
     expect(payload.meta).toEqual({ exportedAt: '2026-09-23T00:00:00.000Z', appVersion: '9.9.9' });
     expect(payload.resolves).toHaveLength(1);
-    expect(payload.probes).toHaveLength(1);
   });
 
   it('exportPlaybackTraces 选路径后写入 JSON 并返回文件路径', async () => {
     emitPlaybackTrace(makeTrace({ songId: 'x', songName: '夜曲' }));
-    emitPlaybackProbeTrace(makeProbe({ songId: 'x' }));
     mocks.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: '/tmp/trace.json' });
 
     const result = await exportPlaybackTraces();
@@ -139,7 +125,6 @@ describe('桌面播放诊断服务（ring list/clear + export）', () => {
     expect(typeof written.meta.exportedAt).toBe('string');
     expect(written.resolves).toHaveLength(1);
     expect(written.resolves[0].songName).toBe('夜曲');
-    expect(written.probes).toHaveLength(1);
   });
 
   it('exportPlaybackTraces 用户取消时返回 null 且不写盘', async () => {

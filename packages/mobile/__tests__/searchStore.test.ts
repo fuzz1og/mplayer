@@ -22,14 +22,6 @@ vi.mock('@mplayer/core', async (importOriginal) => {
   };
 });
 
-vi.mock('../services/audioProbe', () => ({
-  probeAudio: vi.fn(async () => 'ok'),
-}));
-
-vi.mock('../services/songProbe', () => ({
-  probeSongsPrefetch: vi.fn(async () => {}),
-}));
-
 vi.mock('../stores/logsStore', () => ({
   useLogsStore: { getState: () => ({ addLog: vi.fn() }) },
 }));
