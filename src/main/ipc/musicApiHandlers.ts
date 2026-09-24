@@ -35,6 +35,8 @@ export function registerMusicApiCall(api: MusicApi): void {
   const base = {
     // ── core musicApi 基础方法（泛型 forward）────────────────────
     probeSongsBatch: (s: Song[]) => api.probeSongsBatch(s),
+    prefetchPlayableSong: (song: Song) => api.prefetchPlayableSong(song),
+    forgetPrefetchedSong: (song: Song) => api.forgetPrefetchedSong(song),
     getLyrics: (url: string) => api.getLyrics(url),
     getQqPlaylistSongs: (s: string | number) => api.getQqPlaylistSongs(s),
     getSodaAudioUrl: (trackId: string) => api.getSodaAudioUrl(trackId),

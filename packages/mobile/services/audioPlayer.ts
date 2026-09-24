@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { forgetPrefetchedUrl, getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics, explainPlaybackFailure } from '@mplayer/core';
+import { getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics, explainPlaybackFailure } from '@mplayer/core';
 import type { PlayableResource, Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -174,13 +174,14 @@ function nextSongAfterError(retryCount: number): Song | null {
 /**
  * 播放失败后为同一首歌获取全新可播 URL（fresh 重试语义）。
  * 收藏/历史里的 url 可能已过期（音乐源直链一般数小时失效）。
- * 先遗忘该歌的预取缓存条目——预取命中的是刚被证明失败的直链，0 等待
- * 命中只会连败两次；再重走完整路由解析链（直连 → tier3 兜底）。
+ * 重走完整路由解析链（直连 → tier3 兜底）。
  * 返回资源值（含 nonFull）：试听版重试同样带标记，不得被回写 valid。
  * 失败上抛，由调用方（playSong fresh 分支）兜底。
+ *
+ * #390：原 `forgetPrefetchedUrl(song)` 已删——移动端单进程从不写 core 预取缓存
+ * （它写的是自己的 12h `songResourcesCache`），该调用本来就没有对象可清。
  */
 async function refreshPlayableUrl(song: Song): Promise<PlayableResource> {
-  forgetPrefetchedUrl(song);
   const routed = await musicApi.resolvePlayableSongRouted(song);
   if (routed?.url?.startsWith('http')) {
     return { url: routed.url, nonFull: !!routed.nonFull, ts: Date.now() };

@@ -215,8 +215,8 @@ describe('播放失败：fresh 重试与自动跳歌（对齐移动端语义）'
   });
 });
 
-describe('预取缓存统一到 core（30min TTL + 失败可遗忘）', () => {
-  it('播放成功后下一首写入 core 预取缓存，可被 getPrefetchedUrl 命中', async () => {
+describe('预取必须落到读路径那一份缓存（#390）', () => {
+  it('下一首预取经 IPC 门面（prefetchPlayableSong），渲染层不再自写本地缓存', async () => {
     const a = song('pf-1', '晴天');
     const b = song('pf-2', '稻香');
     stateWith([a, b]);
@@ -224,20 +224,30 @@ describe('预取缓存统一到 core（30min TTL + 失败可遗忘）', () => {
     await usePlayerStore.getState().play(a);
 
     await vi.waitFor(() => {
-      expect(getPrefetchedUrl(b)).toEqual(
-        expect.objectContaining({ url: 'https://resolved.example.com/pf-2.mp3' }),
+      expect(callMusicApiMock).toHaveBeenCalledWith(
+        'prefetchPlayableSong',
+        expect.objectContaining({ id: 'pf-2' }),
       );
     });
+    // 关键回归断言：渲染层那份 prefetchCache 恒空——播放解析经 IPC 读的是主进程那份，
+    // 自写本地缓存等于空转（原实现正是如此，#390）。
+    expect(getPrefetchedUrl(b)).toBeUndefined();
   });
 
-  it('fresh 重试前会遗忘失败的预取直链（不再无限复用坏地址）', async () => {
+  it('fresh 重试前经 IPC 遗忘主进程那份预取直链（不再无限复用坏地址）', async () => {
     const a = song('pf-3', '晴天');
     const b = song('pf-4', '稻香');
     stateWith([a, b]);
     await usePlayerStore.getState().play(a);
-    await vi.waitFor(() => expect(getPrefetchedUrl(b)).toBeTruthy());
+    await vi.waitFor(() =>
+      expect(callMusicApiMock).toHaveBeenCalledWith(
+        'prefetchPlayableSong',
+        expect.objectContaining({ id: 'pf-4' }),
+      ),
+    );
 
     // b 解析失败 → fresh 重试必须先忘掉这条预取直链
+    callMusicApiMock.mockClear();
     callMusicApiMock.mockImplementation(async (method: string) => {
       if (method === 'resolvePlayableSongRouted') throw new Error('请求超时');
       if (method === 'searchSongsRouted') return [];
@@ -245,6 +255,9 @@ describe('预取缓存统一到 core（30min TTL + 失败可遗忘）', () => {
     });
     await usePlayerStore.getState().play(b);
 
-    expect(getPrefetchedUrl(b)).toBeUndefined();
+    expect(callMusicApiMock).toHaveBeenCalledWith(
+      'forgetPrefetchedSong',
+      expect.objectContaining({ id: 'pf-4' }),
+    );
   });
 });

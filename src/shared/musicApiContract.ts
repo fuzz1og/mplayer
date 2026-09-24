@@ -23,6 +23,8 @@ import { CONTENT_METHODS } from '@mplayer/core';
  */
 export const BASE_METHODS = [
   'probeSongsBatch',
+  'prefetchPlayableSong',
+  'forgetPrefetchedSong',
   'getLyrics',
   'getQqPlaylistSongs',
   'getSodaAudioUrl',

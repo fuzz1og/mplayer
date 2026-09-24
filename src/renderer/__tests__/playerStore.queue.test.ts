@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearPrefetchCache, getPrefetchedUrl, type Song } from '@mplayer/core';
+import { clearPrefetchCache, forgetPrefetchedUrl, getPrefetchedUrl, setPrefetchedUrl, type Song } from '@mplayer/core';
 
 // --- Mock 准备：audioPlayer / callMusicApi / IpcClient / songCoverRefresh ---
 const audioPlayerMock = vi.hoisted(() => {
@@ -262,15 +262,26 @@ describe('队列下一首预取（预取缓存键）', () => {
 
   function routedResolverPerSong(): void {
     upstreamResolves.clear();
+    const resolveUpstream = (target?: Song) => {
+      // 与 core resolvePlayableSongRouted 契约同口径：先查预取缓存，命中 0 等待返回、
+      // 不产生上游解析（#318 的「不得被重复解析」约束的是上游解析次数）
+      const prefetched = target ? getPrefetchedUrl(target) : undefined;
+      if (prefetched) return prefetched;
+      const id = target?.id ?? '';
+      upstreamResolves.set(id, (upstreamResolves.get(id) ?? 0) + 1);
+      return { url: `https://resolved.example.com/${id}.mp3`, nonFull: false };
+    };
     callMusicApiMock.mockImplementation(async (method: string, target?: Song) => {
-      if (method === 'resolvePlayableSongRouted') {
-        // 与 core resolvePlayableSongRouted 契约同口径：先查预取缓存，命中 0 等待返回、
-        // 不产生上游解析（#318 的「不得被重复解析」约束的是上游解析次数）
-        const prefetched = target ? getPrefetchedUrl(target) : undefined;
-        if (prefetched) return prefetched;
-        const id = target?.id ?? '';
-        upstreamResolves.set(id, (upstreamResolves.get(id) ?? 0) + 1);
-        return { url: `https://resolved.example.com/${id}.mp3`, nonFull: false };
+      if (method === 'resolvePlayableSongRouted') return resolveUpstream(target);
+      // #390：预取经门面在主进程执行——模拟「解析 + 写入读路径那一份缓存」
+      if (method === 'prefetchPlayableSong') {
+        const resolved = resolveUpstream(target);
+        if (target && resolved?.url) setPrefetchedUrl(target, resolved.url, !!resolved.nonFull);
+        return resolved;
+      }
+      if (method === 'forgetPrefetchedSong') {
+        if (target) forgetPrefetchedUrl(target);
+        return undefined;
       }
       return undefined;
     });
@@ -293,7 +304,7 @@ describe('队列下一首预取（预取缓存键）', () => {
     await usePlayerStore.getState().play(current);
     await vi.waitFor(() =>
       expect(callMusicApiMock).toHaveBeenCalledWith(
-        'resolvePlayableSongRouted',
+        'prefetchPlayableSong',
         expect.objectContaining({ id: 'pf-b' }),
       ),
     );
@@ -313,7 +324,7 @@ describe('队列下一首预取（预取缓存键）', () => {
     // 等预取把下一首（b）的解析结果写入缓存
     await vi.waitFor(() =>
       expect(callMusicApiMock).toHaveBeenCalledWith(
-        'resolvePlayableSongRouted',
+        'prefetchPlayableSong',
         expect.objectContaining({ id: 'qc-b' }),
       ),
     );
@@ -345,6 +356,10 @@ describe('队列下一首预取（预取缓存键）', () => {
 
     expect(callMusicApiMock).not.toHaveBeenCalledWith(
       'resolvePlayableSongRouted',
+      expect.objectContaining({ id: 'pl-local' }),
+    );
+    expect(callMusicApiMock).not.toHaveBeenCalledWith(
+      'prefetchPlayableSong',
       expect.objectContaining({ id: 'pl-local' }),
     );
   });
@@ -425,7 +440,7 @@ describe('队列下一首预取（预取缓存键）', () => {
     // 守卫口径须与 cacheKey 一致：b（kuwo:123）必须被预取
     await vi.waitFor(() =>
       expect(callMusicApiMock).toHaveBeenCalledWith(
-        'resolvePlayableSongRouted',
+        'prefetchPlayableSong',
         expect.objectContaining({ id: '123', sourceType: 'kuwo' }),
       ),
     );

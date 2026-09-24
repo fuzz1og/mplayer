@@ -7,7 +7,7 @@ import { looksLikeLyrics } from '../download/lyrics.js';
 import { request, bodyToText } from './transport.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
 import { probeSongs } from './probeSongs.js';
-import { rememberProbeResult } from './prefetchCache.js';
+import { rememberProbeResult, setPrefetchedUrl, getPrefetchedUrl, forgetPrefetchedUrl } from './prefetchCache.js';
 import {
   searchSongsRouted as routedSearchSongs,
   resolvePlayableUrlRouted as routedResolveUrl,
@@ -571,6 +571,31 @@ export const musicApi = {
 
   /** 模式感知播放解析 + 试听版检测（T12：UrlInfo 完整时长校验 → nonFull 标记）。 */
   resolvePlayableSongRouted: (song: Song) => routedResolveSong(song),
+
+  /**
+   * 解析并写入**读路径那一份**预取缓存（#390）。
+   *
+   * 桌面端 `@mplayer/core` 被分别打包进主进程与渲染进程，各自一份模块级
+   * `prefetchCache`——播放解析经 IPC 打的是**主进程那份**。所以预取必须经
+   * `musicApi:call` 在主进程执行（本方法在主进程跑，写的正是读路径）；移动端
+   * 单进程直调，天然同一份。
+   *
+   * 已有未过期条目直接返回（TTL 30min），不重复解析；解析失败上抛由调用方静默。
+   */
+  async prefetchPlayableSong(song: Song): Promise<{ url: string; nonFull: boolean } | null> {
+    const cached = getPrefetchedUrl(song);
+    if (cached) return cached;
+    const routed = await routedResolveSong(song);
+    if (!routed?.url?.startsWith('http')) return null;
+    setPrefetchedUrl(song, routed.url, !!routed.nonFull);
+    return { url: routed.url, nonFull: !!routed.nonFull };
+  },
+
+  /** 遗忘该歌的预取条目（#390）：fresh 重试前必须打到**主进程那份**缓存，
+   *  否则 `play(song,{fresh:true})` 会再次 0 等待命中刚被证明失败的直链。 */
+  forgetPrefetchedSong(song: Song): void {
+    forgetPrefetchedUrl(song);
+  },
 
   /** 播放失败归因（#357）：直连 + tier3 都没拿到 URL 后，取可操作的原因与共享文案。 */
   explainPlaybackFailure: (song: Song) => explainFailure(song),
