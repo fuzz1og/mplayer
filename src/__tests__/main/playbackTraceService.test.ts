@@ -50,6 +50,8 @@ function makeTrace(overrides: Partial<PlaybackTrace> = {}): PlaybackTrace {
     directMs: 100,
     directMethod: 'weapi',
     directSource: 'netease',
+    directTimedOut: false,
+    validateMs: null,
     tier3Ms: null,
     tier3TimedOut: false,
     sources: [],

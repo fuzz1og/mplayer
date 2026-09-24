@@ -1,7 +1,6 @@
 import type { Song, SourceKey } from '../types/index.js';
-import { request, bodyToBytes, bodyToText, type TransportRequest } from '../api/transport.js';
+import { request, bodyToText, type TransportRequest } from '../api/transport.js';
 import { BROWSER_UA } from '../utils/sourceReferer.js';
-import { isAudioBytes } from '../utils/sniffers.js';
 import { isExactMatch, normalize } from '../utils/songMatcher.js';
 import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
 import { evaluatePlaybackGuard } from '../shared/playbackGuard.js';
@@ -9,6 +8,7 @@ import type { PlaybackEvidence, PlaybackGuard } from '../shared/playbackGuard.js
 import { extractAudioDuration } from '../shared/audioDuration.js';
 import type { AudioDurationEvidence } from '../shared/audioDuration.js';
 import { classifyTraceError, traceNow } from '../shared/playbackTrace.js';
+import { fetchAudioHead as fetchAudioHeadBytes, type AudioHeadResult } from '../shared/audioHead.js';
 import {
   TIER3_BUDGET_MS,
   SOURCE_DISPLAY_NAMES,
@@ -162,18 +162,25 @@ export interface Tier3Deps {
  *  且 transport 的 maxRetries=3 会对超时类错误重试，实际耗时再被放大。 */
 const DEFAULT_TIMEOUT_MS = 2_000;
 
-/** 单源硬墙（ADR-0014 决策 2）：清单里的 `timeoutMs` 只能**收紧**到它以下，不能放大。
- *  否则一个挂起的死源会合法地吃光整链 6s 预算，后面本可命中的好源一次都不会被请求
- *  （实测：hk0cc 网关超时 10.9s + tangapi TLS 断开 20.7s，第三个源 1.0s 能命中却排不上）。 */
-const MAX_SOURCE_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
+/** 单源硬墙**按 kind 分档**（ADR 2026-09-25 决策 7；清单里的 `timeoutMs` 只能**收紧**到它
+ *  以下，不能放大）。原为扁平 2s（ADR-0014 决策 2）——但那对两步源结构性偏紧：
+ *  `search-then-resolve` 的三段网络串行在**同一个墙**内（`withSourceDeadline` 包住
+ *  `resolveTier3Candidate`，内含搜索 + 解析 + 嗅探），#388 实测一次 **2047ms 的成功路径**
+ *  与一次 2081ms 被 2s 墙切掉；一步源 2s 余量充足（实测 max 1264ms / 1267ms）。
+ *  3s 为安全余量，不是目标值。 */
+const MAX_SOURCE_TIMEOUT_MS_BY_KIND: Record<Tier3SourceKind, number> = {
+  'url-resolver': 2_000,
+  'search-then-resolve': 2_500,
+};
 
 /** 单源墙钟哨兵：与「源未命中返回 null」区分开，日志/统计口径不同。 */
 const SOURCE_TIMED_OUT = Symbol('tier3-source-timed-out');
 
-/** 单源有效超时 = `min(清单 timeoutMs, 2s 硬墙, 整链剩余预算)`。 */
+/** 单源有效超时 = `min(清单 timeoutMs, 该 kind 的硬墙, 整链剩余预算)`。 */
 function effectiveSourceTimeout(source: Tier3Source, remainingBudgetMs: number): number {
   const configured = source.timeoutMs || DEFAULT_TIMEOUT_MS;
-  return Math.max(1, Math.min(configured, MAX_SOURCE_TIMEOUT_MS, remainingBudgetMs));
+  const wall = MAX_SOURCE_TIMEOUT_MS_BY_KIND[source.kind] ?? DEFAULT_TIMEOUT_MS;
+  return Math.max(1, Math.min(configured, wall, remainingBudgetMs));
 }
 
 /** 单源墙钟上限：把 transport 的重试（maxRetries=3，超时/TLS 类错误可重试）也算在内，
@@ -570,13 +577,6 @@ function isAllowedUrl(url: string, allowedDomains: string[]): boolean {
 
 // ── 候选探测（#361：一次 64KB Range 同时做字节嗅探 + L2 头取证）──────
 
-/** 头部 Range 的原始结果：ok = 拿到的是音频字节；bytes = 已取头部字节。 */
-interface AudioHeadResult {
-  ok: boolean;
-  totalBytes: number | null;
-  bytes: Uint8Array;
-}
-
 /** 候选探测结果（字节嗅探 + 头时长取证）；按稳定 URL 缓存复用。 */
 interface CandidateProbe {
   ok: boolean;
@@ -586,15 +586,6 @@ interface CandidateProbe {
   header: AudioDurationEvidence | null;
 }
 
-/** 护栏取证 Range 字节数（#361）：**一次**请求同时喂字节嗅探（拒 text/html 错误页）
- *  与音频头解析（L2 时长）。ADR-0014 实测 1KB~1MB 延迟无差别（成本在连接建立 +
- *  TLS 握手 + 一个 RTT，不在字节数），故加大到 64KB 不额外付出连接成本。
- *  ⚠️ 已知未解决：若服务器忽略 Range（实测有主机对 bytes=0-1023 返回全量），
- *  axios 会缓冲整个响应体直至超时 → 好 URL 被误判为坏源。需 transport 支持
- *  响应字节上限/提前中断；未支持前如实记录，见 ADR-0014「后果」。 */
-const PROBE_RANGE_BYTES = 64 * 1024;
-
-const EMPTY_BYTES = new Uint8Array(0);
 
 /** 探测结果缓存（#361 实现决策「探测结果按稳定 URL 缓存」）：复用 audioProbe
  *  的键归一化思路（去时间戳/token 参数，同一条链每次签名不同也命中同一键），
@@ -626,44 +617,11 @@ export function clearTier3ProbeCache(): void {
  *  超时独立（ADR-0014 决策 3），**不继承** source.timeoutMs——
  *  「解析允许多慢」与「首字节该多快」是两件事。 */
 async function fetchAudioHead(url: string, source: Tier3Source, deps: Tier3Deps): Promise<AudioHeadResult> {
-  const fail: AudioHeadResult = { ok: false, totalBytes: null, bytes: EMPTY_BYTES };
-  try {
-    const req = deps.request || request;
-    const res = await req({
-      method: 'GET',
-      url,
-      headers: {
-        Range: `bytes=0-${PROBE_RANGE_BYTES - 1}`,
-        'User-Agent': BROWSER_UA,
-        ...(source.headers || {}),
-      },
-      timeoutMs: SNIFF_TIMEOUT_MS,
-      responseType: 'arraybuffer',
-    });
-    if (res.status >= 400) return fail;
-    const ct = String(res.headers['content-type'] || '');
-    if (ct.includes('text/html')) return fail;
-    // Node 下 axios arraybuffer 返回 Buffer（不是 ArrayBuffer）：必须走 bodyToBytes，
-    // 否则会落到文本分支把二进制毁掉（实测 FLAC 头 → 时长解析成 25069s）。
-    const bytes = bodyToBytes(res.body);
-    if (!isAudioBytes(bytes)) return fail;
-    // 206：Range 被支持，content-range 的 /total 是完整大小；200：Content-Length。
-    let totalBytes: number | null = null;
-    if (res.status === 206) {
-      const cr = String(res.headers['content-range'] || '');
-      const total = cr ? parseInt(cr.split('/')[1] || '', 10) : null;
-      if (total && Number.isFinite(total)) totalBytes = total;
-    } else {
-      const cl = String(res.headers['content-length'] || '');
-      if (cl) {
-        const n = parseInt(cl, 10);
-        if (Number.isFinite(n)) totalBytes = n;
-      }
-    }
-    return { ok: true, totalBytes, bytes };
-  } catch {
-    return fail;
-  }
+  return fetchAudioHeadBytes(url, {
+    headers: { 'User-Agent': BROWSER_UA, ...(source.headers || {}) },
+    timeoutMs: SNIFF_TIMEOUT_MS,
+    request: deps.request,
+  });
 }
 
 /** 候选探测（带稳定 URL 缓存）：取头部字节 + 解析头时长，成功结果入缓存。 */

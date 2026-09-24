@@ -1,7 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient, ToplistGroup } from '../shared/sourceRouter.js';
 import { request, bodyToText } from './transport.js';
-import { md5 } from '../utils/hash.js';
 import { getUserAgent } from './antiScrape.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import {
@@ -16,8 +15,9 @@ import {
  *
  * 直连替代自建 API（匿名设备 cookie 程序化自建）：
  * - 搜索：`GET songsearch.kugou.com/song_search_v2`（明文 JSON，lists[] 带 hash）。
- * - 播放 URL：**MD5 兜底**（不做 gateway 注册设备直连）：trackercdn `i/v2`，
- *   key = MD5(hash + 'kgcloudv2')，取 `data.url` 族字段。
+ * - 播放 URL：**免签名端点**（#393，ADR 2026-09-21 决策后果）：
+ *   `m.kugou.com/app/i/getSongInfo.php?cmd=playInfo&hash=`，取 `url` / `backup_url` 族字段
+ *   （旧 `trackercdn i/v2` + MD5(hash+'kgcloudv2') 已被上游风控闸住，实测 22/22 恒空）。
  * - 歌词：两步（lyrics.kugou.com/search 拿 candidates → download 拿 base64 content），
  *   Song.lrc 记为 search URL（hash+keyword），由 musicApi.getLyrics 经
  *   `resolveKugouLyricUrl` 两步解析。
@@ -31,7 +31,8 @@ import {
  */
 
 const SEARCH_URL = 'https://songsearch.kugou.com/song_search_v2';
-const CDN_URL = 'https://trackercdn.kugou.com/i/v2';
+/** 免签名播放信息端点（#393）：免签名 / 免 cookie / 免设备注册，替代被风控的 trackercdn i/v2。 */
+const SONG_INFO_URL = 'https://m.kugou.com/app/i/getSongInfo.php';
 const LYRIC_SEARCH_URL = 'https://lyrics.kugou.com/search';
 const LYRIC_DOWNLOAD_URL = 'https://lyrics.kugou.com/download';
 /**
@@ -43,7 +44,6 @@ const LYRIC_DOWNLOAD_URL = 'https://lyrics.kugou.com/download';
  * 证书 `*.kugou.com` 有效。原 host 明文 http 仍可取数，但不做 HTTPS 降级。
  */
 const RANK_SONGS_URL = 'https://mobiles.kugou.com/api/v3/rank/song';
-const KGCLOUD_KEY = 'kgcloudv2';
 
 /** 榜单定义（rankid 与桌面 kugouApi 时代一致；热歌榜 8888 / 新歌榜 74534）。 */
 const KUGOU_TOPLISTS: { rankId: string; name: string }[] = [
@@ -118,30 +118,42 @@ export const kugouDirectClient: DirectSourceClient = {
     return lists.map(mapTrack).filter((s) => s.id);
   },
 
+  /**
+   * 免签名播放 URL（#393）：ADR 2026-09-21 决策后果已定「改用免签名端点」——
+   * 定性是「直连被风控闸住」而非签名写错，签名端点 `i/v2` 恒回 `status:2` 且无 `data.url`。
+   * 契约不变：无版权/付费歌返回空串（不抛错），交既有链路走 tier3 兜底，不做特判。
+   */
   async resolvePlayableUrl(song: Song): Promise<string> {
-    const hash = song.id;
-    const key = md5(hash + KGCLOUD_KEY);
-    const params = new URLSearchParams({
-      cdnBackup: '1',
-      behavior: 'download',
-      pid: '1',
-      cmd: '21',
-      appid: '1001',
-      hash,
-      key,
-    });
+    const params = new URLSearchParams({ cmd: 'playInfo', hash: song.id });
     const res = await request({
       method: 'GET',
-      url: `${CDN_URL}/?${params.toString()}`,
+      url: `${SONG_INFO_URL}?${params.toString()}`,
       headers: KG_HEADERS(),
       timeoutMs: 10000,
     });
-    if (res.status >= 400) throw new Error(`酷狗 CDN HTTP ${res.status}`);
+    if (res.status >= 400) throw new Error(`酷狗 playInfo HTTP ${res.status}`);
     const data = JSON.parse(bodyToText(res.body)) as {
+      url?: unknown;
+      backup_url?: unknown;
+      backupUrl?: unknown;
+      mp3Url?: unknown;
+      backupMp3Url?: unknown;
       data?: { url?: unknown; backup_url?: unknown; backupUrl?: unknown; mp3Url?: unknown; backupMp3Url?: unknown };
     };
+    // 实测响应族：直链在**顶层** `url` / `backup_url`；保留嵌套 `data` 回退链，
+    // 兼容不同 cmd / 客户端字段漂移（择一命中即返回，找不到返回空串）。
     const raw =
-      data.data?.url || data.data?.backup_url || data.data?.backupUrl || data.data?.mp3Url || data.data?.backupMp3Url || '';
+      data.url ||
+      data.backup_url ||
+      data.backupUrl ||
+      data.mp3Url ||
+      data.backupMp3Url ||
+      data.data?.url ||
+      data.data?.backup_url ||
+      data.data?.backupUrl ||
+      data.data?.mp3Url ||
+      data.data?.backupMp3Url ||
+      '';
     const url = Array.isArray(raw) ? raw[0] : raw;
     return String(url || '').replace(/^http:/, 'https:');
   },

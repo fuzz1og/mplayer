@@ -894,6 +894,41 @@ describe('单源硬墙与整链预算（#365，ADR-0014 决策 2）', () => {
     expect(seen[0]).toBe(2_000);
   });
 
+  it('单源硬墙按 kind 分档：search-then-resolve 2.5s（ADR 2026-09-25 决策 7）', async () => {
+    const seen: number[] = [];
+    const manifest = JSON.stringify({
+      version: 1,
+      sources: [{
+        id: 'two-step',
+        kind: 'search-then-resolve',
+        source: 'qq',
+        allowedDomains: ['cdn.example.com'],
+        timeoutMs: 20_000,
+        search: {
+          method: 'GET',
+          url: 'https://api.example.com/search?keyword={keyword}',
+          responseJsonPath: 'data',
+          itemsPath: 'data.list',
+          namePath: 'name',
+          idPath: 'id',
+        },
+        resolve: { method: 'GET', url: 'https://api.example.com/url?id={id}', responseJsonPath: 'data.url' },
+      }],
+    });
+    const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
+      seen.push(req.timeoutMs ?? -1);
+      return jsonResponse({ data: { list: [] } }, req.url);
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifest });
+    setTier3Enabled(true);
+
+    await createTier3Resolver()(song({ id: 'qq:1', sourceType: 'qq' }));
+
+    // 两步源的三段网络串行在同一个单源墙内 → 分档到 2.5s（清单 20s 只能收紧不能放大）
+    expect(seen[0]).toBe(2_500);
+  });
+
   it('清单里更小的 timeoutMs 仍然生效（500 保持 500）', async () => {
     const seen: number[] = [];
     const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {

@@ -56,6 +56,10 @@ export interface PlaybackTrace {
   directMs: number | null;
   directMethod: string | null;
   directSource: string | null;
+  /** 直连腿是否被 3s 墙钟截断（#389）：截断即视为该腿失败 → 进 tier3 兜底。 */
+  directTimedOut: boolean;
+  /** 直连腿播放时时长取证耗时（#392）；未取证为 null。 */
+  validateMs: number | null;
   /** tier3 腿耗时与是否被整链预算截断。 */
   tier3Ms: number | null;
   tier3TimedOut: boolean;

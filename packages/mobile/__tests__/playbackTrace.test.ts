@@ -44,6 +44,8 @@ function makeTrace(overrides: Partial<PlaybackTrace> = {}): PlaybackTrace {
     directMs: 40,
     directMethod: 'getSongUrl',
     directSource: 'netease',
+    directTimedOut: false,
+    validateMs: null,
     tier3Ms: null,
     tier3TimedOut: false,
     sources: [{ sourceId: 'qianqian', ms: 12, outcome: 'hit' }],

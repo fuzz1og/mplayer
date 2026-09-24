@@ -3,6 +3,7 @@ import { isTrialUrlInfo } from './playability.js';
 import type { UrlInfo } from './playability.js';
 import { getPrefetchedUrl } from '../api/prefetchCache.js';
 import type { PlaybackGuard, PlaybackVia } from './playbackGuard.js';
+import { validateDirectUrlNonFull } from './directValidation.js';
 import {
   emitPlaybackTrace,
   isPlaybackTraceEnabled,
@@ -305,6 +306,10 @@ interface TraceCtx {
   directMs: number | null;
   directMethod: string | null;
   directSource: string | null;
+  /** 直连腿被 3s 墙钟截断（#389）。 */
+  directTimedOut: boolean;
+  /** 直连腿播放时时长取证耗时（#392）。 */
+  validateMs: number | null;
   tier3Engaged: boolean;
   tier3Ms: number | null;
   tier3TimedOut: boolean;
@@ -314,26 +319,69 @@ interface TraceCtx {
 function newTraceCtx(): TraceCtx {
   return {
     prefetchHit: false, prefetchedUrl: null, reason: '', directMs: null, directMethod: null,
-    directSource: null, tier3Engaged: false, tier3Ms: null, tier3TimedOut: false, legs: [],
+    directSource: null, directTimedOut: false, validateMs: null, tier3Engaged: false, tier3Ms: null,
+    tier3TimedOut: false, legs: [],
   };
 }
 
-/** 直连腿计时包装：ctx 为 null 时直接调用，不做任何计时/构造。 */
+/** 直连腿墙钟上限（#389）：tier3 有 2s/6s 墙，直连此前**完全裸露**在源自己的
+ *  `timeoutMs`（最长 30s）× transport 3 次重试下，最坏 20–30s 无声无反馈，
+ *  而这段时间 tier3 兜底腿还没开始。取 3s 与 tier3 单源墙同量级——直连是单请求腿，
+ *  且已有预取缓存兜低延迟路径（直连解析 P50 ~66ms，3s 余量充足）。 */
+const DIRECT_WALL_MS = 3_000;
+
+const DIRECT_TIMED_OUT = Symbol('direct-timed-out');
+
+/** 直连腿计时 + 墙钟包装：到点即视为该腿失败（进 tier3 兜底），底层请求自然结束、
+ *  结果丢弃——与 tier3 单源超时同一语义（`withSourceDeadline`）。ctx 为 null 时
+ *  仍施加墙（护栏不能因关闭 trace 而消失），只是不做计时。 */
 async function timedDirectCall<T>(
   ctx: TraceCtx | null,
   client: DirectSourceClient,
   method: string,
   call: () => Promise<T>,
-): Promise<T> {
-  if (!ctx) return call();
-  const t0 = traceNow();
+): Promise<T | typeof DIRECT_TIMED_OUT> {
+  const t0 = ctx ? traceNow() : 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await call();
+    return await Promise.race([
+      call(),
+      new Promise<typeof DIRECT_TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => resolve(DIRECT_TIMED_OUT), DIRECT_WALL_MS);
+      }),
+    ]);
   } finally {
-    ctx.directMs = traceNow() - t0;
-    ctx.directMethod = method;
-    ctx.directSource = client.key;
+    if (timer) clearTimeout(timer);
+    if (ctx) {
+      ctx.directMs = traceNow() - t0;
+      ctx.directMethod = method;
+      ctx.directSource = client.key;
+    }
   }
+}
+
+/** 直连墙超时错误：区分「源返回失败」与「我们没等它」——归因文案与日志口径不同。 */
+class DirectWallTimeoutError extends Error {
+  constructor(method: string) {
+    super(`直连 ${method} 超过 ${DIRECT_WALL_MS}ms 墙钟上限`);
+    this.name = 'DirectWallTimeoutError';
+  }
+}
+
+/** 直连调用：施加墙并计时；超时记 trace 后抛错，由既有 catch 走 tier3 兜底
+ *  （`direct` 模式则上抛——仅直连语义下墙超时就是失败）。 */
+async function directCall<T>(
+  ctx: TraceCtx | null,
+  client: DirectSourceClient,
+  method: string,
+  call: () => Promise<T>,
+): Promise<T> {
+  const outcome = await timedDirectCall(ctx, client, method, call);
+  if (outcome === DIRECT_TIMED_OUT) {
+    if (ctx) ctx.directTimedOut = true;
+    throw new DirectWallTimeoutError(method);
+  }
+  return outcome as T;
 }
 
 let tier3Enabled = false;
@@ -402,7 +450,53 @@ export const TIER3_BUDGET_MS = 6_000;
 //
 // 键在**底层 Promise 结束**（含失败）后才移除——预算超时的调用方放弃等待
 // 后，迟到的命中仍能被同键后续调用方（如 fresh 重试的 tier3 腿）接住。
-const tier3Inflight = new Map<string, Promise<Tier3Resolution | null>>();
+interface Tier3InflightRun {
+  /** 槽位到手（排队结束）时 resolve；调用方的 6s 预算从这里开始计（ADR 决策 8）。 */
+  started: Promise<void>;
+  /** 底层解析结果（同键调用方共享）。 */
+  result: Promise<Tier3Resolution | null>;
+}
+
+const tier3Inflight = new Map<string, Tier3InflightRun>();
+
+// ── 跨歌全局在飞上限 K=3（ADR 2026-09-25 决策 8）────────────────────
+//
+// 并发会放大「多首并发解析」这个既有乘数：串行下上游在飞数 = 在飞歌曲数。
+// 批量下载（并发 3）、快速连续切歌、失败跳歌链都能同时压多条解析，而此前
+// **跨歌上界不存在**（只有 `tier3Inflight` 的同歌去重）。#388 实测 qq 搜索在
+// 200ms 间隔下 12 次里 10 次撞 `code=2001` 速率墙——单源速率上限是真实约束。
+// 取 3 与既有下载并发 `DEFAULT_MAX_CONCURRENT` 同量级（第三方主机通常 2–3 台，
+// 「每台一条在飞」即可）。
+const MAX_TIER3_IN_FLIGHT = 3;
+let tier3InFlightCount = 0;
+const tier3Queue: (() => void)[] = [];
+
+/** 取槽位：有空位直接进；否则 FIFO 排队（ADR 决策 8）。 */
+function acquireTier3Slot(): Promise<void> {
+  if (tier3InFlightCount < MAX_TIER3_IN_FLIGHT) {
+    tier3InFlightCount++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => tier3Queue.push(resolve));
+}
+
+/** 让出槽位：队首等待者**直接接管**该槽位（计数不变），无人等待才递减。 */
+function releaseTier3Slot(): void {
+  const next = tier3Queue.shift();
+  if (next) next();
+  else tier3InFlightCount = Math.max(0, tier3InFlightCount - 1);
+}
+
+/** 测试/重置用：清空排队与在飞计数（与 clearTier3ProbeCache 同取向）。 */
+export function clearTier3Scheduling(): void {
+  tier3Queue.length = 0;
+  tier3InFlightCount = 0;
+}
+
+/** 观测用：当前 tier3 在飞解析数（测试断言上限 K=3）。 */
+export function getTier3InFlightCount(): number {
+  return tier3InFlightCount;
+}
 
 /** 歌曲身份键：id 优先；无 id 的歌（热榜旧数据等）退回 名字+歌手。 */
 function tier3InflightKey(song: Song): string {
@@ -411,8 +505,9 @@ function tier3InflightKey(song: Song): string {
     : `${song.sourceType}|name:${song.name}|${song.artist}`;
 }
 
-/** 共享的 tier3 解析：已有同键 in-flight 直接复用；否则调用 resolver 并登记。 */
-function tier3ResolveShared(song: Song, reason: string, ctx?: TraceCtx | null): Promise<Tier3Resolution | null> {
+/** 共享的 tier3 解析：已有同键 in-flight 直接复用；否则取 K=3 槽位、调用 resolver 并登记。
+ *  `started` 让调用方的预算从**槽位到手**起计——排队时间不算预算（ADR 决策 8）。 */
+function tier3ResolveShared(song: Song, reason: string, ctx?: TraceCtx | null): Tier3InflightRun {
   const key = tier3InflightKey(song);
   const existing = tier3Inflight.get(key);
   if (existing) {
@@ -423,7 +518,11 @@ function tier3ResolveShared(song: Song, reason: string, ctx?: TraceCtx | null): 
   }
   console.info(`[tier3] ${reason}，进入第三方解析源: 《${song.name}》${song.artist}`);
   const collect = ctx ? (leg: PlaybackTraceSourceLeg) => { ctx.legs.push(leg); } : undefined;
-  const inflight = (async () => {
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => { markStarted = resolve; });
+  const result = (async () => {
+    await acquireTier3Slot();
+    markStarted();
     try {
       return await tier3Resolver!(song, collect);
     } catch (e) {
@@ -431,10 +530,12 @@ function tier3ResolveShared(song: Song, reason: string, ctx?: TraceCtx | null): 
       return null;
     } finally {
       tier3Inflight.delete(key);
+      releaseTier3Slot();
     }
   })();
-  tier3Inflight.set(key, inflight);
-  return inflight;
+  const run: Tier3InflightRun = { started, result };
+  tier3Inflight.set(key, run);
+  return run;
 }
 
 /** 直连失败后的 tier3 尝试（默认关闭，未注入直接跳过）。reason 用于日志区分触发原因。
@@ -454,10 +555,16 @@ async function tryTier3(song: Song, reason: string, ctx?: TraceCtx | null): Prom
     // 预算哨兵：区分「预算超时」与「resolver 正常返回 null（全源未命中）」——
     // 二者都让 race 得到 null，但只有前者算 timedOut（迟到命中才该记 discarded）。
     const BUDGET_EXHAUSTED = Symbol('tier3-budget-exhausted');
-    const winner = await Promise.race([
-      tier3ResolveShared(song, reason, ctx),
-      new Promise<typeof BUDGET_EXHAUSTED>((resolve) => setTimeout(() => resolve(BUDGET_EXHAUSTED), TIER3_BUDGET_MS)),
-    ]);
+    const run = tier3ResolveShared(song, reason, ctx);
+    // ADR 2026-09-25 决策 8：K=3 排队期间**不计入** 6s 预算——否则被排在后面的
+    // 调用方会在没打过任何上游的情况下先超时（切歌场景 P50 反而退化）。
+    const budgetExhausted = (async (): Promise<typeof BUDGET_EXHAUSTED> => {
+      await run.started;
+      return new Promise<typeof BUDGET_EXHAUSTED>((resolve) =>
+        setTimeout(() => resolve(BUDGET_EXHAUSTED), TIER3_BUDGET_MS),
+      );
+    })();
+    const winner = await Promise.race([run.result, budgetExhausted]);
     const res = winner === BUDGET_EXHAUSTED ? null : winner;
     if (ctx) {
       ctx.tier3Ms = traceNow() - t0;
@@ -644,6 +751,8 @@ function emitResolveTrace(
     directMs: ctx.directMs,
     directMethod: ctx.directMethod,
     directSource: ctx.directSource,
+    directTimedOut: ctx.directTimedOut,
+    validateMs: ctx.validateMs,
     tier3Ms: ctx.tier3Ms,
     tier3TimedOut: ctx.tier3TimedOut,
     sources,
@@ -663,6 +772,40 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
     emitResolveTrace(song, ctx, t0, null, err);
     throw err;
   }
+}
+
+/**
+ * 直连腿取证插槽（#392）：默认走 core 的 `validateDirectUrlNonFull`（真发一次 Range）。
+ * 宿主/测试可注入替换——测试注入 stub 以保持**零 I/O**（与 `setTier3Resolver` 同构的接缝）。
+ */
+export type DirectValidator = (song: Song, url: string) => Promise<{ nonFull: boolean; validateMs: number; reason?: string }>;
+
+let directValidator: DirectValidator | null = (song, url) => validateDirectUrlNonFull(song, url);
+
+/** 注入/清除直连腿取证器；null = 关闭取证（不判定，等价 fail-open）。 */
+export function setDirectValidator(fn: DirectValidator | null): void {
+  directValidator = fn;
+}
+
+/**
+ * 直连腿播放时时长取证（#392）：仅当「该源**无权威时长**（未实现 resolveUrlInfo，
+ * 即 netease / soda 之外）+ 标称时长已知」时发起**一次** Range。netease / soda
+ * 有权威 playTime，走既有 classifyLength 路径，**不增加任何请求**。
+ * 结论只用于 nonFull 标记，不改播放路径；证据不足一律 fail-open（见 directValidation）。
+ */
+async function validateDirectLeg(
+  song: Song,
+  url: string,
+  client: DirectSourceClient,
+  ctx: TraceCtx | null,
+): Promise<{ nonFull: boolean }> {
+  if (!directValidator) return { nonFull: false };
+  if (client.resolveUrlInfo) return { nonFull: false };
+  if (!(typeof song.duration === 'number' && song.duration > 0)) return { nonFull: false };
+  const result = await directValidator(song, url);
+  if (ctx) ctx.validateMs = result.validateMs;
+  if (result.nonFull) console.info(`[player] 《${song.name}》直连腿取证为试听片段: ${result.reason ?? ''}`);
+  return { nonFull: result.nonFull };
 }
 
 /**
@@ -699,7 +842,7 @@ async function resolveRoutedInner(song: Song, ctx: TraceCtx | null): Promise<Rou
   try {
     const client = route.client;
     if (client.resolveUrlInfo) {
-      const info = await timedDirectCall(ctx, client, 'resolveUrlInfo', () => client.resolveUrlInfo!(song));
+      const info = await directCall(ctx, client, 'resolveUrlInfo', () => client.resolveUrlInfo!(song));
       if (info) {
         if (info.url) {
           // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL；
@@ -723,7 +866,7 @@ async function resolveRoutedInner(song: Song, ctx: TraceCtx | null): Promise<Rou
         return directPlayable('', false);
       }
     }
-    const url = await timedDirectCall(ctx, client, 'resolvePlayableUrl', () => client.resolvePlayableUrl!(song));
+    const url = await directCall(ctx, client, 'resolvePlayableUrl', () => client.resolvePlayableUrl!(song));
     if (url) {
       // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL。
       const picked = await preferTier3WhenBad(song, url, ctx);
@@ -734,8 +877,10 @@ async function resolveRoutedInner(song: Song, ctx: TraceCtx | null): Promise<Rou
         const full = await tryTier3Full(song, `直连为试听版（audioTag=preview），尝试 tier3 拿完整版`, ctx);
         if (full) return full;
       }
+      // #392：无权威时长的直连腿（resolveUrlInfo 只有 netease/soda 实现）播放时取证一次。
+      const validated = await validateDirectLeg(song, picked.url, client, ctx);
       if (ctx && !ctx.reason) ctx.reason = '直连解析成功';
-      return directPlayable(picked.url, song.audioTag === 'preview');
+      return directPlayable(picked.url, song.audioTag === 'preview' || validated.nonFull);
     }
     // 直连返回空串（无版权/VIP）→ tier3 兜底（默认关）；失败保持空串交换元层。
     const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）', ctx);

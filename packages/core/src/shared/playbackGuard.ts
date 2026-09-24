@@ -124,6 +124,45 @@ function judgeDuration(
   return { accepted: true, guard, reason: `时长一致（无文本证据）：${detail}` };
 }
 
+/** 时长证据的选定结果：秒数 + 证据等级 + 该等级适用的容差。 */
+export interface DurationEvidence {
+  seconds: number;
+  guard: PlaybackGuard;
+  toleranceSec: number;
+  /** 命中 L3 时的码率分支（L1/L2 无此字段）。 */
+  bitrateBranch?: 'declared' | 'measured';
+}
+
+/**
+ * 取**最高可用等级**的时长证据（纯函数）。L2 头时长不可信时继续降级而不是拿它误拒；
+ * 这也是「证据优先级」的单一来源——护栏决策与直连腿取证（#392）共用同一条降级链。
+ */
+export function pickDurationEvidence(evidence: PlaybackEvidence): DurationEvidence | null {
+  const sourceDuration = positive(evidence.sourceDuration);
+  if (sourceDuration) {
+    return { seconds: sourceDuration, guard: 'source-duration', toleranceSec: GUARD_TOLERANCE_SEC };
+  }
+
+  const headerDuration = positive(evidence.headerDuration);
+  if (evidence.headerTrusted && headerDuration) {
+    return { seconds: headerDuration, guard: 'audio-header', toleranceSec: GUARD_TOLERANCE_SEC };
+  }
+
+  const totalBytes = positive(evidence.totalBytes);
+  const bitrateKbps = positive(evidence.bitrateKbps);
+  if (totalBytes && bitrateKbps) {
+    const measured = evidence.bitrateDeclared === false;
+    return {
+      seconds: (totalBytes * 8) / (bitrateKbps * 1000),
+      guard: 'size-bitrate',
+      toleranceSec: measured ? MEASURED_BITRATE_TOLERANCE_SEC : GUARD_TOLERANCE_SEC,
+      bitrateBranch: measured ? 'measured' : 'declared',
+    };
+  }
+
+  return null;
+}
+
 /**
  * 护栏决策（纯函数）。证据优先级 L1→L5：**取最高可用等级判定**，
  * 该级不可信（如 ADTS 头时长）则继续降级，而不是拿不可信证据误拒。
@@ -131,26 +170,10 @@ function judgeDuration(
 export function evaluatePlaybackGuard(song: Song, evidence: PlaybackEvidence): GuardDecision {
   const nominalSec = positive(song.duration) ?? 0;
 
-  const sourceDuration = positive(evidence.sourceDuration);
-  if (sourceDuration) {
-    return judgeDuration(song, 'source-duration', sourceDuration, nominalSec, GUARD_TOLERANCE_SEC, evidence);
-  }
-
-  const headerDuration = positive(evidence.headerDuration);
-  if (evidence.headerTrusted && headerDuration) {
-    return judgeDuration(song, 'audio-header', headerDuration, nominalSec, GUARD_TOLERANCE_SEC, evidence);
-  }
-
-  const totalBytes = positive(evidence.totalBytes);
-  const bitrateKbps = positive(evidence.bitrateKbps);
-  if (totalBytes && bitrateKbps) {
-    const estimated = (totalBytes * 8) / (bitrateKbps * 1000);
-    const measured = evidence.bitrateDeclared === false;
-    const tolerance = measured ? MEASURED_BITRATE_TOLERANCE_SEC : GUARD_TOLERANCE_SEC;
-    return {
-      ...judgeDuration(song, 'size-bitrate', estimated, nominalSec, tolerance, evidence),
-      bitrateBranch: measured ? 'measured' : 'declared',
-    };
+  const duration = pickDurationEvidence(evidence);
+  if (duration) {
+    const decision = judgeDuration(song, duration.guard, duration.seconds, nominalSec, duration.toleranceSec, evidence);
+    return duration.bitrateBranch ? { ...decision, bitrateBranch: duration.bitrateBranch } : decision;
   }
 
   if (hasText(evidence)) {
