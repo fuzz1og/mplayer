@@ -404,6 +404,72 @@ describe('createTier3Resolver（url-resolver）', () => {
     expect(await createTier3Resolver()(song())).toBeNull();
   });
 
+  // #400：封套判定必须让位于「响应里有没有合法直链」。
+  // 上游用 HTTP 风格 code 表达成功（`{code:200,message:"成功",url:"…"}`）时，
+  // 若先判封套就会把带合法直链的响应整条拒掉。
+  const CODE200_MANIFEST = JSON.stringify({
+    version: 1,
+    sources: [
+      {
+        id: 'demo-code200',
+        kind: 'url-resolver',
+        source: 'netease',
+        allowedDomains: ['cdn.example.com'],
+        resolve: {
+          method: 'GET',
+          url: 'https://api.example.com/url?id={id}&source={source}',
+          responseJsonPath: 'url',
+        },
+      },
+    ],
+  });
+
+  it('业务错误封套 + 响应里带合法直链 → 仍交付（#400）', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/url?id=123&source=netease': () =>
+        jsonResponse(
+          { code: 200, message: '成功', url: 'https://cdn.example.com/ok.mp3' },
+          'https://api.example.com/url?id=123&source=netease',
+        ),
+      'https://cdn.example.com/ok.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: CODE200_MANIFEST });
+    setTier3Enabled(true);
+    expect(await createTier3Resolver()(song())).toMatchObject({ url: 'https://cdn.example.com/ok.mp3' });
+  });
+
+  it('业务错误封套 + 取不到直链 → 仍未命中，且保留 warn 归因（#400 不改变失败路径）', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const request = makeRequestMock({
+        'https://api.example.com/url?id=123&source=netease': () =>
+          jsonResponse({ code: 110000, message: '音源获取失败' }, 'https://api.example.com/url?id=123&source=netease'),
+      });
+      setTier3Deps({ request });
+      addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST });
+      setTier3Enabled(true);
+      expect(await createTier3Resolver()(song())).toBeNull();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('上游返回错误: code=110000 message=音源获取失败'));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('业务错误封套 + 直链不在白名单 → 未命中（白名单优先级不因 #400 改变）', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/url?id=123&source=netease': () =>
+        jsonResponse(
+          { code: 500, message: '内部错误', url: 'https://evil.example.net/x.mp3' },
+          'https://api.example.com/url?id=123&source=netease',
+        ),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: CODE200_MANIFEST });
+    setTier3Enabled(true);
+    expect(await createTier3Resolver()(song())).toBeNull();
+  });
+
   it('默认关闭时不执行任何请求', async () => {
     const request = vi.fn();
     setTier3Deps({ request });

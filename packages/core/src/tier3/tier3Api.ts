@@ -755,23 +755,34 @@ async function resolveFromRequestSpec(
   } catch {
     return null;
   }
-  // 上游返回 HTTP 200 但业务错误封套（如 vkeys 的 {code:110000,message:"…"}）：
-  // 记 warn 便于区分「上游挂了」与「无此歌」，避免日志里只有空洞的“未命中”。
-  const code = getByPath(body, 'code');
-  const message = getByPath(body, 'message');
-  if (typeof code === 'number' && code !== 0 && typeof message === 'string' && message) {
-    console.warn(`[tier3] source=${source.id} 上游返回错误: code=${code} message=${message}`);
-    return null;
-  }
   const jsonPath = spec.responseJsonPath || '';
   const url = toUrlCandidate(getByPath(body, jsonPath));
-  if (!url || !isAllowedUrl(url, source.allowedDomains)) return null;
+  // 先取值、后判封套：取到合法候选 URL 时不让封套否决。
+  // 部分上游用 `{code:200,message:"成功",url:"…"}` 表达成功（HTTP 风格 code），
+  // 先判封套会把带合法直链的响应整条拒掉——此时「响应里有没有直链」才该说了算。
+  // 只有**取不到可用 URL** 时才把业务错误封套当失败原因上报（如 vkeys 的
+  // `{code:110000,message:"…"}`），用于区分「上游挂了」与「无此歌」，
+  // 避免日志里只有空洞的“未命中”。
+  if (!url || !isAllowedUrl(url, source.allowedDomains)) {
+    warnOnBusinessError(body, source);
+    return null;
+  }
   const probe = await probeCandidate(url, source, deps);
   if (!probe.ok || isTrialSized(probe.totalBytes, source, url)) return null;
   // 元数据自动探测的根：URL 字段所在的对象（如 `data.url` → `data`），
   // 源普遍把 duration/br/name 与 url 平铺在同一层；取不到则退回整个响应体。
   const meta = metadataRoot(body, jsonPath);
   return buildCandidate(url, probe, meta, pickText(meta, SOURCE_NAME_PATHS), pickText(meta, SOURCE_ARTIST_PATHS));
+}
+
+/** HTTP 200 但业务错误封套（顶层 `code` 为非 0 数字 + 非空 `message` 字符串）→ 记 warn。
+ *  仅在**取不到可用候选 URL** 时调用：响应里已经有合法直链的源不该被封套判据否决。 */
+function warnOnBusinessError(body: unknown, source: Tier3Source): void {
+  const code = getByPath(body, 'code');
+  const message = getByPath(body, 'message');
+  if (typeof code === 'number' && code !== 0 && typeof message === 'string' && message) {
+    console.warn(`[tier3] source=${source.id} 上游返回错误: code=${code} message=${message}`);
+  }
 }
 
 /** URL 取值路径的父容器（`data.url` → `data`；单段路径 → 整个响应体）。 */
