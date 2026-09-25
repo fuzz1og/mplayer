@@ -18,6 +18,7 @@ interface PlayerBarProps {
 const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
   const currentSong = usePlayerStore(s => s.currentSong);
   const isPlaying = usePlayerStore(s => s.isPlaying);
+  const isLoading = usePlayerStore(s => s.isLoading); // #387 等待态
   const volume = usePlayerStore(s => s.volume);
   const playMode = usePlayerStore(s => s.playMode);
   const pause = usePlayerStore(s => s.pause);
@@ -166,6 +167,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
       >
         <PlayerControls
           isPlaying={isPlaying}
+          loading={isLoading}
           hasCurrentSong={!!currentSong}
           playMode={playMode}
           onPlayPause={handlePlayPause}

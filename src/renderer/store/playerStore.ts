@@ -11,12 +11,18 @@ import {
   songUsesSongidLyrics,
   isSodaSource,
   isInlineLyrics,
+  decideAfterPlaybackFailure,
+  registerTerminalFailure,
+  resetFailureStreak,
+  getFailureStreak,
+  pickNextSongAfterFailure,
+  OFFLINE_COPY,
 } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { moveItem } from '@/renderer/utils/reorder';
-import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode } from '@/renderer/utils/queueUtils';
+import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode, getAutoSkipOnError } from '@/renderer/utils/queueUtils';
 import { useSearchStore } from '@/renderer/store/searchStore';
 const ipcRenderer = window.electronAPI;
 
@@ -106,10 +112,9 @@ interface PlayerStoreState {
   currentPlaylistIndex: number;
 }
 
-/** play() 内部选项：fresh = 换新 URL 重试；failureCount = 本次失败链已跳过的曲目数 */
+/** play() 内部选项：fresh = 换新 URL 重试（#385 起连续跳歌计数由 core skipGuard 持有）。 */
 export interface PlaybackOptions {
   fresh?: boolean;
-  failureCount?: number;
 }
 
 interface PlayerStoreActions {
@@ -236,7 +241,6 @@ function prefetchNextUrl(state: PlayerStoreState): void {
 interface PlayAttempt {
   songId: string;
   fresh: boolean;
-  failureCount: number;
   handled: boolean;
 }
 
@@ -263,12 +267,20 @@ function failureReasonText(error: unknown): string {
   return '音源解析失败';
 }
 
+/** 离线判定（#385）：core 零 I/O，离线态由宿主注入 predicate。
+ *  桌面用 navigator 的**明确否定态**（在线但不可达由解析链自身的上界兜住：
+ *  直连 3s 墙 + tier3 6s + 固定跳歌上限）。 */
+function isOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
 /**
- * 统一失败处理：
+ * 统一失败处理（#385：护栏语义与文案收敛到 core `skipGuard` 单一来源）：
  * 1) 同曲 fresh 重试一次（先遗忘失败直链，再重走直连 → tier3）；
- * 2) 仍失败 → 回写「不可播」徽标并自动跳下一首；
- * 3) 没有别的歌 / 连续失败达队列长度 → 停止并提示（防整列表死链无限连跳）。
- * 本地文件不会过期：不做 fresh 重试，失败直接跳。
+ * 2) 仍失败 = **终局失败**：core 记一次（连续计数 +1、记住这首歌）；
+ * 3) core 决策：离线 / 关闭「失败即跳」/ 连续失败达固定上限 / 无下一首 → 停；
+ *    否则跳下一首（跳过坏歌）。文案一律取 `decision.copy`。
+ * 本地文件不会过期：不做 fresh 重试，失败直接进决策。
  */
 async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Promise<void> {
   if (attempt.handled) return;
@@ -280,46 +292,54 @@ async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Prom
   const song = store.currentSong;
   if (!song || song.id !== attempt.songId) return;
 
-  // #357：解析链穷尽时 core 已给出可操作文案，不再追加泛化的「可尝试换源」。
-  const advice = error instanceof PlayableUrlMissingError ? error.advice : null;
   const reasonText = failureReasonText(error);
 
   if (!attempt.fresh && song.sourceType !== 'local') {
     // #390：遗忘必须打到主进程那份缓存（渲染层那份无人读）
     await callMusicApi('forgetPrefetchedSong', song).catch(() => {});
-    await store.play(song, { fresh: true, failureCount: attempt.failureCount });
+    await store.play(song, { fresh: true });
     return;
   }
 
-  if (song.sourceType !== 'local') {
+  const offline = isOffline();
+  // 离线不算「源失败」：不计数、不记坏歌（只提示离线）。非离线才是终局失败——
+  // core 单一来源地记一次（连续计数 +1、记住这首歌）。
+  const consecutiveFailures = offline ? getFailureStreak() : registerTerminalFailure(song);
+  if (!offline && song.sourceType !== 'local') {
     useSearchStore.getState().setAudioTag(song.id, 'invalid');
   }
 
-  const nextIndex = getNextSongIndex(store.currentPlaylist, store.currentPlaylistIndex, store.playMode);
-  const nextSong = nextIndex >= 0 ? store.currentPlaylist[nextIndex] : null;
-  const noOtherSong = !nextSong || nextSong.id === song.id;
-  const exhausted = attempt.failureCount + 1 >= store.currentPlaylist.length;
+  // 跳歌候选由 core 选（跳过会话内已证明失效的歌；两端同一份语义）
+  const next = pickNextSongAfterFailure(
+    store.currentPlaylist,
+    store.currentPlaylistIndex,
+    store.playMode,
+    song.id,
+  );
+  const decision = decideAfterPlaybackFailure({
+    songName: song.name,
+    reasonText,
+    offline,
+    autoSkip: getAutoSkipOnError(),
+    hasNextSong: !!next,
+    consecutiveFailures,
+    isLocal: song.sourceType === 'local',
+  });
 
-  if (noOtherSong || exhausted) {
+  if (decision.action === 'stop' || !next) {
     audioPlayer.stop();
     usePlayerStore.setState({
       error: error instanceof Error ? error.message : '播放失败',
       isLoading: false,
       isPlaying: false
     });
-    message.error(
-      noOtherSong
-        ? advice
-          ? `《${song.name}》${reasonText}，且队列中没有其他歌曲`
-          : `《${song.name}》${reasonText}，且队列中没有其他歌曲，可尝试换源`
-        : `连续 ${attempt.failureCount + 1} 首无法播放，已暂停（试试换源）`
-    );
+    message.error(decision.copy);
     return;
   }
 
-  usePlayerStore.setState({ currentPlaylistIndex: nextIndex });
-  message.warning(`《${song.name}》${reasonText}，已自动跳到下一首`);
-  await store.play(nextSong, { failureCount: attempt.failureCount + 1 });
+  usePlayerStore.setState({ currentPlaylistIndex: next.index });
+  message.warning(decision.copy);
+  await store.play(next.song);
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
@@ -338,22 +358,34 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   currentPlaylistIndex: initialQueue.index,
 
   play: async (song: Song, options: PlaybackOptions = {}) => {
-    const { fresh = false, failureCount = 0 } = options;
+    const { fresh = false } = options;
     const { isLoading, currentSong } = get();
 
     if (isLoading && currentSong?.id === song.id) {
       return;
     }
 
+    // #385：离线快速失败——判定离线就直接停并告知，**不进解析链**
+    //（省掉直连 3s 墙 + tier3 6s；文案与终端决策取同一来源）。
+    if (song.sourceType !== 'local' && isOffline()) {
+      audioPlayer.stop();
+      activeAttempt = null;
+      set({ error: OFFLINE_COPY, isLoading: false, isPlaying: false, currentSong: song });
+      message.error(OFFLINE_COPY);
+      return;
+    }
+
     const generation = ++playGeneration;
     audioPlayer.cancelLoad();
     // 登记本次尝试：load 失败会同时触发 audioPlayer 回调与下方 catch，靠 attempt 去重
-    const attempt: PlayAttempt = { songId: song.id, fresh, failureCount, handled: false };
+    const attempt: PlayAttempt = { songId: song.id, fresh, handled: false };
     activeAttempt = attempt;
     /** 是否已真正开始播放：用于区分「播放失败」与「播放后簿记异常」 */
     let playStarted = false;
 
     try {
+      // #387 核对：isLoading 在这里就置位，直到 load 成功/失败才落定——覆盖**整段等待窗口**，
+      // 包含解析链（直连 3s 墙 + tier3 6s 兜底）与 audioPlayer 的 loading 态；播放键据此显示 spinner。
       set({
         error: null,
         isLoading: true,
@@ -436,6 +468,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       audioPlayer.play();
       playStarted = true;
+      // #385：真正开始播放 → 连续失败链中断（**只有这里**归零；手动点歌不清零）
+      resetFailureStreak();
 
       // 完整版播放成功 → 回写 valid，清掉该行旧的失败徽标（试听版保留 preview）
       if (!playbackNonFull) {
