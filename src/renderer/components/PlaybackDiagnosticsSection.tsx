@@ -31,6 +31,7 @@ const OUTCOME_META: Record<PlaybackTraceOutcome, { label: string; color: string 
   skipped: { label: '跳过', color: 'default' },
   rejected: { label: '护栏拒绝', color: 'orange' },
   discarded: { label: '迟到丢弃', color: 'purple' },
+  abandoned: { label: '放弃观测', color: 'default' },
 };
 
 /** 毫秒格式化：小于 1 秒显示 ms，否则保留两位秒。 */

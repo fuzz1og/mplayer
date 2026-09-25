@@ -30,8 +30,10 @@ import {
   type ToplistGroup,
   type PlaybackGuard,
   type Tier3Resolution,
+  type Tier3Resolver,
 } from '../sourceRouter.js';
 import { setPlaybackTraceSink, type PlaybackTrace } from '../playbackTrace.js';
+import { beginInit, isInitialized, noteSample, scoreOf } from '../sourceSchedule.js';
 
 /**
  * 来源开关与回退链测试（T01 切片 2；#277 SourceMode 收窄为 auto|direct 两态）。
@@ -721,5 +723,70 @@ describe('tier3 跨歌在飞上限 K=3（ADR 2026-09-25 决策 8）', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('会话内源调度接缝（#398：control / 调度快照 / 重置）', () => {
+  it('调用方预算用尽 → resolver 经 control.isAbandoned() 感知「放弃观测」', async () => {
+    vi.useFakeTimers();
+    try {
+      registerDirectClient(makeClient('qq', { resolvePlayableUrl: vi.fn(async () => '') }));
+      setTier3Enabled(true);
+      let sawAbandoned: boolean | null = null;
+      const tier3 = vi.fn(async (_s: Song, _c?: unknown, control?: { isAbandoned(): boolean }) => {
+        // 越过调用方的 6s 整链预算后才落定：此时剩余观测应按「放弃」记账（决策 6）
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
+        sawAbandoned = control?.isAbandoned() ?? null;
+        return null;
+      });
+      setTier3Resolver(tier3 as unknown as Tier3Resolver);
+
+      const pending = resolvePlayableSongRouted(song('abandoned-1', 'qq'));
+      await vi.advanceTimersByTimeAsync(6_100);
+      expect((await pending).url).toBe('');
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(sawAbandoned).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resolver 上报的调度快照落进 trace（sourceOrder / tier3InitWindow）', async () => {
+    const traces: PlaybackTrace[] = [];
+    setPlaybackTraceSink({ onResolve: (t) => traces.push(t) });
+    try {
+      registerDirectClient(makeClient('qq', { resolvePlayableUrl: vi.fn(async () => '') }));
+      setTier3Enabled(true);
+      const tier3 = vi.fn(
+        async (
+          _s: Song,
+          _c?: unknown,
+          control?: { reportSchedule?(report: { sourceOrder: string[]; initWindow: boolean }): void },
+        ) => {
+          control?.reportSchedule?.({ sourceOrder: ['b', 'a'], initWindow: true });
+          return tier3Hit('https://tier3.example.com/sched.mp3');
+        },
+      );
+      setTier3Resolver(tier3 as unknown as Tier3Resolver);
+
+      const res = await resolvePlayableSongRouted(song('sched-1', 'qq'));
+      expect(res.url).toBe('https://tier3.example.com/sched.mp3');
+      expect(traces[0].sourceOrder).toEqual(['b', 'a']);
+      expect(traces[0].tier3InitWindow).toBe(true);
+    } finally {
+      setPlaybackTraceSink(null);
+    }
+  });
+
+  it('clearTier3Scheduling 一并清空会话内健康度与单飞窗口', () => {
+    beginInit();
+    noteSample('x', { kind: 'complete', hit: true, ms: 0 });
+    expect(isInitialized()).toBe(true);
+    expect(scoreOf('x')).not.toBeNull();
+
+    clearTier3Scheduling();
+
+    expect(isInitialized()).toBe(false);
+    expect(scoreOf('x')).toBeNull();
   });
 });

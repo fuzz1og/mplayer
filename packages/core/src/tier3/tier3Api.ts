@@ -8,18 +8,33 @@ import type { PlaybackEvidence, PlaybackGuard } from '../shared/playbackGuard.js
 import { extractAudioDuration } from '../shared/audioDuration.js';
 import type { AudioDurationEvidence } from '../shared/audioDuration.js';
 import { classifyTraceError, traceNow } from '../shared/playbackTrace.js';
+import type { PlaybackTraceErrorClass, PlaybackTraceSourceLeg } from '../shared/playbackTrace.js';
+import {
+  beginInit,
+  clearSourceSchedule,
+  getSourceScheduleSnapshot,
+  noteSample,
+  orderSources,
+  scoreOf,
+  SCHEDULE_HEDGE_MS,
+  SCHEDULE_INIT_INFLIGHT,
+  type SourceSampleKind,
+} from '../shared/sourceSchedule.js';
 import { fetchAudioHead } from '../shared/audioHead.js';
 import {
   TIER3_BUDGET_MS,
   SOURCE_DISPLAY_NAMES,
   getSourceMode,
+  releaseTier3SourceSlot,
   setTier3Enabled as setRouterTier3Enabled,
   setTier3Resolver as setRouterTier3Resolver,
   setTier3SearchEnabled as setRouterTier3SearchEnabled,
   setTier3SearchResolver as setRouterTier3SearchResolver,
+  tryAcquireTier3SourceSlot,
   type Tier3LegCollector,
   type Tier3Resolution,
   type Tier3Resolver,
+  type Tier3RunControl,
 } from '../shared/sourceRouter.js';
 
 /**
@@ -149,6 +164,13 @@ export interface Tier3SourceStats {
   sizeBitrateDeclared?: number;
   /** L3 用**帧实测码率**估算的次数（含命中与误拒；#361——该分支在 ±2s 下会误判，需可归因）。 */
   sizeBitrateMeasured?: number;
+  /** 会话内健康度（#398）：EWMA 分（0–1），读取时由 `shared/sourceSchedule` 派生。
+   *  只用于**调整遍历顺序**，不做熔断、不禁用、不删源、不持久化。 */
+  healthScore?: number;
+  /** 计入健康度的样本数（截尾算 1 条、放弃观测不算、护栏拒绝与跳过不算）。 */
+  healthSamples?: number;
+  /** 是否已降级（连续失败 N=2）——只排到队尾，成功一次即回归（决策 3）。 */
+  demoted?: boolean;
 }
 
 export interface Tier3Deps {
@@ -255,11 +277,23 @@ function statsFor(id: string): Tier3SourceStats {
  *  的时序无法在写入侧无竞态地判定（同歌去重下多个调用方共享一条解析），
  *  交付（hits）只由采纳方 commit，未交付的产出就是被丢弃的。 */
 export function getTier3Stats(): Record<string, Tier3SourceStats> {
+  // #398：健康度与会话内调度状态同源（shared/sourceSchedule），读取时派生——
+  // 统计本身仍只记计数，避免两处各存一份分数而漂移。
+  const health = getSourceScheduleSnapshot();
   return Object.fromEntries(
-    [...tier3Stats].map(([id, s]) => [
-      id,
-      { ...s, discarded: Math.max(0, (s.resolved ?? 0) - s.hits) },
-    ]),
+    [...tier3Stats].map(([id, s]) => {
+      const h = health[id];
+      return [
+        id,
+        {
+          ...s,
+          discarded: Math.max(0, (s.resolved ?? 0) - s.hits),
+          ...(h && h.samples > 0
+            ? { healthScore: h.score, healthSamples: h.samples, demoted: h.demoted }
+            : {}),
+        },
+      ];
+    }),
   );
 }
 
@@ -291,6 +325,9 @@ export function getTier3Enabled(): boolean {
 
 export function setTier3Subscriptions(subscriptions: Tier3Subscription[]): void {
   state = { ...state, subscriptions };
+  // 订阅变更 = 源集合变了（#398 / ADR 决策 2 的重置时机）：清空会话内健康度，
+  // 免得用旧清单的样本给新清单的源定序。add / remove / refresh 全部经此处，单一收口。
+  clearSourceSchedule();
   syncRouter();
   persist();
 }
@@ -1356,7 +1393,252 @@ async function resolveTier3Candidate(
   return { kind: 'hit', resolution: { url: candidate.url, guard: decision.guard } };
 }
 
-async function resolveTier3(song: Song, collect?: Tier3LegCollector): Promise<Tier3Resolution | null> {
+// ── 会话内源调度（#398 / ADR 2026-09-25-tier3-source-scheduling 决策 1–6）──
+
+/** 单源一次尝试的结果（交付回调由调用方在采纳时补上）。 */
+type SourceAttempt =
+  | { kind: 'hit'; source: Tier3Source; ms: number; resolution: Tier3Resolution }
+  | { kind: 'rejected'; source: Tier3Source; ms: number; guard: PlaybackGuard }
+  | { kind: 'timeout'; source: Tier3Source; ms: number; timeoutMs: number }
+  | { kind: 'error'; source: Tier3Source; ms: number; errorClass: PlaybackTraceErrorClass }
+  | { kind: 'miss'; source: Tier3Source; ms: number };
+
+/** 一轮源遍历的收尾形态：命中 / 试完全部可用源仍未命中 / 预算或窗口提前结束。 */
+type Tier3LoopResult =
+  | { kind: 'hit'; attempt: Extract<SourceAttempt, { kind: 'hit' }> }
+  | { kind: 'missed' }
+  | { kind: 'exhausted' };
+
+/** 未启动的源（预算用尽 / 窗口收尾）：记「放弃观测」——只写 trace 与 lastKind，**不进健康度**
+ *  （决策 6：它反映的是预算不够，与源本身无关）。 */
+function markSourcesAbandoned(sources: readonly Tier3Source[], collect?: Tier3LegCollector): void {
+  for (const source of sources) {
+    noteSample(source.id, { kind: 'abandoned', hit: false, ms: 0 });
+    collect?.({ sourceId: source.id, ms: 0, outcome: 'abandoned', sampleKind: 'abandoned' });
+  }
+}
+
+/** 单源一次尝试：单源墙 → 统计 → 健康度采样 → trace leg。
+ *  `isCancelled` 标记「命中即交付时被放弃的在飞尝试」——其观测已在放弃处记为 abandoned，
+ *  这里不再重复记账（迟到落定的上游工作仍照旧写统计）。 */
+async function runSourceAttempt(
+  song: Song,
+  source: Tier3Source,
+  timeoutMs: number,
+  collect: Tier3LegCollector | undefined,
+  control: Tier3RunControl | undefined,
+  isCancelled?: () => boolean,
+): Promise<SourceAttempt> {
+  const t0 = traceNow();
+  let attempt: SourceAttempt;
+  try {
+    const outcome = await withSourceDeadline(resolveTier3Candidate(song, source, timeoutMs), timeoutMs);
+    const ms = traceNow() - t0;
+    if (outcome === SOURCE_TIMED_OUT) {
+      console.info(`[tier3] 源 ${source.id} 超时（单源硬墙 ${timeoutMs}ms），换下一个源`);
+      statsFor(source.id).lastError = `单源硬墙 ${timeoutMs}ms 超时`;
+      attempt = { kind: 'timeout', source, ms, timeoutMs };
+    } else if (outcome?.kind === 'rejected') {
+      attempt = { kind: 'rejected', source, ms, guard: outcome.guard };
+    } else if (outcome) {
+      // #362：resolver 只记「产出」；「交付」由路由层在预算内采纳时 commit。
+      // 预算超时被丢弃的迟到命中仍会增加 resolved，但 hits 不动 →
+      // getTier3Stats 的 discarded = resolved - hits 即为丢弃数。
+      statsFor(source.id).resolved++;
+      console.info(`[tier3] 产出候选 source=${source.id}（guard=${outcome.resolution.guard}）: ${outcome.resolution.url}`);
+      attempt = { kind: 'hit', source, ms, resolution: outcome.resolution };
+    } else {
+      console.info(`[tier3] source=${source.id} 未命中`);
+      attempt = { kind: 'miss', source, ms };
+    }
+  } catch (e) {
+    const msg = (e as Error)?.message || String(e);
+    console.warn(`[tier3] source=${source.id} 失败: ${msg}`);
+    statsFor(source.id).lastError = msg;
+    // 单源失败继续下一条；全失败返回 null 由 sourceRouter 回退。
+    attempt = { kind: 'error', source, ms: traceNow() - t0, errorClass: classifyTraceError(e) };
+  }
+  if (attempt.kind !== 'hit') statsFor(source.id).misses++;
+  if (isCancelled?.()) return attempt;
+
+  // 决策 6 三类分流。健康度**独立于 trace sink**（collect 只在 sink 打开时注入），故无条件记账；
+  // 护栏拒绝不记分（内容与这首歌不匹配，不是该源的健康信号），source gate 跳过在更外层就已 continue。
+  const sampleKind: SourceSampleKind | null = control?.isAbandoned()
+    ? 'abandoned'
+    : attempt.kind === 'rejected'
+      ? null
+      : attempt.kind === 'timeout'
+        ? 'censored'
+        : 'complete';
+  if (sampleKind) {
+    noteSample(source.id, {
+      kind: sampleKind,
+      hit: attempt.kind === 'hit',
+      ms: attempt.kind === 'timeout' ? timeoutMs : attempt.ms,
+    });
+  }
+  const leg: PlaybackTraceSourceLeg =
+    attempt.kind === 'hit'
+      ? { sourceId: source.id, ms: attempt.ms, outcome: 'hit', guard: attempt.resolution.guard }
+      : attempt.kind === 'rejected'
+        ? { sourceId: source.id, ms: attempt.ms, outcome: 'rejected', guard: attempt.guard }
+        : attempt.kind === 'timeout'
+          ? { sourceId: source.id, ms: attempt.ms, outcome: 'error', errorClass: 'timeout' }
+          : attempt.kind === 'error'
+            ? { sourceId: source.id, ms: attempt.ms, outcome: 'error', errorClass: attempt.errorClass }
+            : { sourceId: source.id, ms: attempt.ms, outcome: 'miss' };
+  if (sampleKind) {
+    leg.sampleKind = sampleKind;
+    if (sampleKind !== 'abandoned') leg.healthScore = scoreOf(source.id) ?? undefined;
+  }
+  collect?.(leg);
+  return attempt;
+}
+
+/** 常态遍历（决策 1：**不并行**，源内维持串行，只调整遍历顺序）。 */
+async function runSerialSources(
+  song: Song,
+  ordered: readonly Tier3Source[],
+  deadline: number,
+  collect?: Tier3LegCollector,
+  control?: Tier3RunControl,
+): Promise<Tier3LoopResult> {
+  for (let i = 0; i < ordered.length; i += 1) {
+    const source = ordered[i];
+    // 单源硬墙：清单 timeoutMs 只能收紧，且不超过整链剩余预算（ADR-0014 决策 2）。
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      console.info(`[tier3] 整链预算 ${TIER3_BUDGET_MS}ms 用尽，停止尝试后续源: 《${song.name}》`);
+      markSourcesAbandoned(ordered.slice(i), collect);
+      return { kind: 'exhausted' };
+    }
+    const attempt = await runSourceAttempt(song, source, effectiveSourceTimeout(source, remaining), collect, control);
+    if (attempt.kind === 'hit') return { kind: 'hit', attempt };
+  }
+  return { kind: 'missed' };
+}
+
+/**
+ * 初始化窗口（决策 4/5）：**第一首进 tier3 的歌本来那次解析**，零额外探测请求。
+ * 交错起手 H=600ms、在飞 ≤2、**不引入任何窗口级墙值**（单源墙沿用决策 7 的按 kind 常态墙，
+ * 被墙切掉的样本按决策 6 的截尾档降权）。任一命中即交付，不等在飞的另一条（其观测记「放弃」）。
+ *
+ * 并发上界（ADR 决策 5 修订）：窗口内的在飞**计入 K=3**，故第二条并行在飞要额外借一个槽位；
+ * 借不到就不交错起手，按单条继续——全局上游在飞上限因此恒为 3（不是「2 + K = 5」）。
+ */
+async function runInitWindow(
+  song: Song,
+  ordered: readonly Tier3Source[],
+  deadline: number,
+  collect?: Tier3LegCollector,
+  control?: Tier3RunControl,
+): Promise<Tier3LoopResult> {
+  interface InitEntry {
+    source: Tier3Source;
+    startedAt: number;
+    cancelled: { value: boolean };
+  }
+  const entries = new Map<number, InitEntry>();
+  let cursor = 0;
+  let hedgeTimer: ReturnType<typeof setTimeout> | undefined;
+  let finished = false;
+  let finish!: (result: Tier3LoopResult) => void;
+  const done = new Promise<Tier3LoopResult>((resolve) => { finish = resolve; });
+
+  const stopHedge = (): void => {
+    if (hedgeTimer) {
+      clearTimeout(hedgeTimer);
+      hedgeTimer = undefined;
+    }
+  };
+
+  /** 在飞的都落定、且没有更多源可起时收尾。 */
+  const settleIfIdle = (): void => {
+    if (finished || entries.size > 0) return;
+    finished = true;
+    stopHedge();
+    if (cursor < ordered.length) {
+      // 预算用尽 / 无可用 K 槽位：剩余源记「放弃观测」（不进健康度）。
+      markSourcesAbandoned(ordered.slice(cursor), collect);
+      finish({ kind: 'exhausted' });
+      return;
+    }
+    finish({ kind: 'missed' });
+  };
+
+  const onSettled = (key: number, attempt: SourceAttempt): void => {
+    entries.delete(key);
+    if (finished) return;
+    if (attempt.kind === 'hit') {
+      // 任一命中 → 立即交付，不等待在飞的另一条（决策 4）；其观测记「放弃」（决策 6）。
+      finished = true;
+      stopHedge();
+      for (const entry of entries.values()) {
+        entry.cancelled.value = true;
+        const ms = Date.now() - entry.startedAt;
+        noteSample(entry.source.id, { kind: 'abandoned', hit: false, ms });
+        collect?.({ sourceId: entry.source.id, ms, outcome: 'abandoned', sampleKind: 'abandoned' });
+      }
+      finish({ kind: 'hit', attempt });
+      return;
+    }
+    // 未命中即补下一个源（受在飞上限、剩余预算与 K 槽位约束）。
+    startNext();
+    settleIfIdle();
+  };
+
+  const startNext = (): boolean => {
+    if (finished || entries.size >= SCHEDULE_INIT_INFLIGHT || cursor >= ordered.length) return false;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return false;
+    const source = ordered[cursor];
+    const needExtraSlot = entries.size > 0;
+    if (needExtraSlot && !tryAcquireTier3SourceSlot()) return false;
+    const key = cursor;
+    cursor += 1;
+    const cancelled = { value: false };
+    const entry: InitEntry = { source, startedAt: Date.now(), cancelled };
+    entries.set(key, entry);
+    void (async () => {
+      let attempt: SourceAttempt;
+      try {
+        attempt = await runSourceAttempt(
+          song,
+          source,
+          effectiveSourceTimeout(source, remaining),
+          collect,
+          control,
+          () => cancelled.value,
+        );
+      } catch (e) {
+        // runSourceAttempt 自带兜底；这里是防御性的——窗口发起的是悬空 Promise，
+        // 未捕获的 reject 会变成 unhandled rejection 且窗口永不收尾。
+        const msg = (e as Error)?.message || String(e);
+        console.warn(`[tier3] source=${source.id} 调度异常: ${msg}`);
+        attempt = { kind: 'error', source, ms: 0, errorClass: classifyTraceError(e) };
+      } finally {
+        if (needExtraSlot) releaseTier3SourceSlot();
+      }
+      onSettled(key, attempt);
+    })();
+    return true;
+  };
+
+  startNext();
+  if (entries.size > 0 && cursor < ordered.length) {
+    hedgeTimer = setTimeout(() => {
+      if (!finished && entries.size === 1) startNext();
+    }, SCHEDULE_HEDGE_MS);
+  }
+  settleIfIdle();
+  return done;
+}
+
+async function resolveTier3(
+  song: Song,
+  collect?: Tier3LegCollector,
+  control?: Tier3RunControl,
+): Promise<Tier3Resolution | null> {
   if (!state.enabled) {
     console.info(`[tier3] 未启用，跳过: 《${song.name}》${song.artist}`);
     return null;
@@ -1369,11 +1651,13 @@ async function resolveTier3(song: Song, collect?: Tier3LegCollector): Promise<Ti
   // 链内自持 deadline（ADR-0014 决策 2「整链 6s 软顶」）：不再只靠调用方的
   // Promise.race——否则本腿会继续打上游、白耗配额，日志也看不出「预算已尽」。
   const deadline = Date.now() + TIER3_BUDGET_MS;
+
+  // ① 按清单顺序展平 + 归属分类（ADR-0014 决策 6）：显式声明须一致；未声明的 url-resolver 拒绝。
+  //    归属过滤**先于**排序，且逐源照旧触发（计数在跳过之前取）——否则 explainPlaybackFailure 的
+  //    all-skipped / no-declared-source 归因会失真。
+  const usable: Tier3Source[] = [];
   for (const subscription of state.subscriptions) {
     for (const source of subscription.manifest.sources) {
-      // 归属判定（ADR-0014 决策 6）：显式声明须一致；未声明的 url-resolver 拒绝。
-      // 计数在跳过**之前**取——原实现在 continue 之后才取 stats，导致被跳过的源
-      // 连计数都不进，「源不够用」永远无法归因到「被过滤掉」还是「源本身挂了」。
       if (!isSourceUsableFor(source, song.sourceType)) {
         const declared = tier3SourceSource(source);
         statsFor(source.id).skipped++;
@@ -1388,57 +1672,43 @@ async function resolveTier3(song: Song, collect?: Tier3LegCollector): Promise<Ti
         collect?.({ sourceId: source.id, ms: 0, outcome: 'skipped' });
         continue;
       }
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) {
-        console.info(`[tier3] 整链预算 ${TIER3_BUDGET_MS}ms 用尽，停止尝试后续源: 《${song.name}》`);
-        return null;
-      }
-      // 单源硬墙：清单 timeoutMs 只能收紧，且不超过整链剩余预算（ADR-0014 决策 2）。
-      const timeoutMs = effectiveSourceTimeout(source, remaining);
-      const sourceT0 = collect ? traceNow() : 0;
-      try {
-        const outcome = await withSourceDeadline(resolveTier3Candidate(song, source, timeoutMs), timeoutMs);
-        const ms = collect ? traceNow() - sourceT0 : 0;
-        if (outcome === SOURCE_TIMED_OUT) {
-          console.info(`[tier3] 源 ${source.id} 超时（单源硬墙 ${timeoutMs}ms），换下一个源`);
-          statsFor(source.id).lastError = `单源硬墙 ${timeoutMs}ms 超时`;
-          collect?.({ sourceId: source.id, ms, outcome: 'error', errorClass: 'timeout' });
-        } else if (outcome?.kind === 'rejected') {
-          collect?.({ sourceId: source.id, ms, outcome: 'rejected', guard: outcome.guard });
-        } else if (outcome) {
-          // #362：resolver 只记「产出」；「交付」由路由层在预算内采纳时 commit。
-          // 预算超时被丢弃的迟到命中仍会增加 resolved，但 hits 不动 →
-          // getTier3Stats 的 discarded = resolved - hits 即为丢弃数。
-          statsFor(source.id).resolved++;
-          console.info(`[tier3] 产出候选 source=${source.id}（guard=${outcome.resolution.guard}）: ${outcome.resolution.url}`);
-          collect?.({ sourceId: source.id, ms, outcome: 'hit', guard: outcome.resolution.guard });
-          const sourceId = source.id;
-          let committed = false;
-          return {
-            ...outcome.resolution,
-            commit: () => {
-              // 同歌去重下多个调用方共享同一条解析：交付只计一次（幂等）。
-              if (committed) return;
-              committed = true;
-              statsFor(sourceId).hits++;
-            },
-          };
-        } else {
-          console.info(`[tier3] source=${source.id} 未命中`);
-          collect?.({ sourceId: source.id, ms, outcome: 'miss' });
-        }
-      } catch (e) {
-        const msg = (e as Error)?.message || String(e);
-        console.warn(`[tier3] source=${source.id} 失败: ${msg}`);
-        statsFor(source.id).lastError = msg;
-        // 单源失败继续下一条；全失败返回 null 由 sourceRouter 回退。
-        collect?.({ sourceId: source.id, ms: traceNow() - sourceT0, outcome: 'error', errorClass: classifyTraceError(e) });
-      }
-      statsFor(source.id).misses++;
+      usable.push(source);
     }
   }
-  console.warn(`[tier3] 全部订阅源未命中，回退下一链路: 《${song.name}》${song.artist}`);
-  return null;
+  if (usable.length === 0) {
+    console.warn(`[tier3] 无可用源（全部因 source 归属被跳过）: 《${song.name}》${song.artist}`);
+    return null;
+  }
+
+  // ② 会话内健康度定序（决策 2/3）：**只改顺序，绝不缩减候选集**——usable 全部保留、仍会被尝试。
+  const ordered = orderSources(usable);
+  // ③ 单飞初始化窗口（决策 4/5）：整会话只有第一个够格的调用拿到 true（空清单不消耗窗口）。
+  const initMode = beginInit();
+  const sourceOrder = ordered.map((source) => source.id);
+  console.info(`[tier3] 源顺序: ${sourceOrder.join(',')}${initMode ? '（初始化窗口）' : ''}`);
+  control?.reportSchedule?.({ sourceOrder, initWindow: initMode });
+
+  const result = initMode
+    ? await runInitWindow(song, ordered, deadline, collect, control)
+    : await runSerialSources(song, ordered, deadline, collect, control);
+  if (result.kind !== 'hit') {
+    if (result.kind === 'missed') {
+      console.warn(`[tier3] 全部订阅源未命中，回退下一链路: 《${song.name}》${song.artist}`);
+    }
+    return null;
+  }
+
+  const sourceId = result.attempt.source.id;
+  let committed = false;
+  return {
+    ...result.attempt.resolution,
+    commit: () => {
+      // 同歌去重下多个调用方共享同一条解析：交付只计一次（幂等）。
+      if (committed) return;
+      committed = true;
+      statsFor(sourceId).hits++;
+    },
+  };
 }
 
 /** 供 sourceRouter 注入的 resolver（读取实时订阅状态）。 */

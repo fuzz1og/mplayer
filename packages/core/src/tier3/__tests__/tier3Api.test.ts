@@ -19,7 +19,21 @@ import {
   tier3SourceSource,
 } from '../tier3Api.js';
 import type { Tier3Source } from '../tier3Api.js';
-import { setSourceMode, setSourceModes } from '../../shared/sourceRouter.js';
+import {
+  clearTier3Scheduling,
+  getTier3InFlightCount,
+  registerDirectClient,
+  resolvePlayableSongRouted,
+  setSourceMode,
+  setSourceModes,
+} from '../../shared/sourceRouter.js';
+import { setPlaybackTraceSink, type PlaybackTrace } from '../../shared/playbackTrace.js';
+import {
+  beginInit,
+  getSourceScheduleSnapshot,
+  isInitialized,
+  scoreOf,
+} from '../../shared/sourceSchedule.js';
 
 /**
  * tier3Api 测试（#144）：
@@ -166,11 +180,22 @@ const NO_ARTIST_MANIFEST = JSON.stringify({
   ],
 });
 
+/** 关掉本用例的单飞初始化窗口（#398）：既有用例验证的是常态串行/预算路径，
+ *  窗口形态由「初始化窗口」专测覆盖。注意订阅变更（addTier3SubscriptionFromText）
+ *  会清空会话内调度状态并重新开窗，故需在解析前调用。 */
+function skipInitWindow(): void {
+  beginInit();
+}
+
 beforeEach(() => {
   loadTier3State(undefined);
   setTier3Deps({});
   setTier3Persister(null);
   clearTier3Stats();
+  // #398：跨歌 K 槽位 + 会话内健康度 + 单飞窗口同为模块级调度状态，用例间必须归零。
+  clearTier3Scheduling();
+  setPlaybackTraceSink(null);
+  setSourceModes({});
   // #361 探测结果按稳定 URL 缓存：跨用例复用同一 cdn URL 时必须清空，
   // 否则前一条用例的探测结果会污染后一条（缓存命中 → 不发 Range）。
   clearTier3ProbeCache();
@@ -1081,6 +1106,7 @@ describe('单源硬墙与整链预算（#365，ADR-0014 决策 2）', () => {
 
     vi.useFakeTimers();
     try {
+      skipInitWindow(); // 本用例验证常态串行路径的预算行为
       const pending = createTier3Resolver()(song());
       await vi.advanceTimersByTimeAsync(6_500);
       const res = await pending;
@@ -1351,5 +1377,226 @@ describe('清单能力扩展（#376：E0 护栏字段 / E1 idNormalize / E2 redi
       ],
     };
     expect(() => parseTier3Manifest(JSON.stringify(missing))).toThrow('responseJsonPath');
+  });
+});
+
+describe('会话内源调度（#398 / ADR 2026-09-25 决策 1–6）', () => {
+  const resolver = (id: string, source: string | undefined = 'netease'): Record<string, unknown> => ({
+    id,
+    kind: 'url-resolver',
+    ...(source ? { source } : {}),
+    allowedDomains: ['cdn.example.com'],
+    resolve: { method: 'GET', url: `https://api.example.com/${id}`, responseJsonPath: 'data.url' },
+  });
+  const manifestOf = (...items: unknown[]): string => JSON.stringify({ version: 1, sources: items });
+  const threeSources = manifestOf(resolver('s1'), resolver('s2'), resolver('s3'));
+
+  /** 直连腿返回空串 → 必经 tier3 兜底（走 sourceRouter 的完整链路）。 */
+  const emptyDirect = (): void => {
+    registerDirectClient({ key: 'netease', resolvePlayableUrl: vi.fn(async () => '') });
+  };
+  /** 只取解析腿的上游请求（排除音频嗅探/取证的 cdn 请求）。 */
+  const requestedUrls = (request: ReturnType<typeof vi.fn>): string[] =>
+    request.mock.calls
+      .map((call) => (call[0] as TransportRequest).url)
+      .filter((url) => url.startsWith('https://api.example.com/'));
+  const hitResponse = (id: string): TransportResponse =>
+    jsonResponse({ data: { url: `https://cdn.example.com/${id}.mp3`, song_play_time: 240 } }, `https://api.example.com/${id}`);
+
+  it('冷启动按清单顺序、候选集不变；有样本后按健康度定序（红线：只改顺序）', async () => {
+    const traces: PlaybackTrace[] = [];
+    setPlaybackTraceSink({ onResolve: (t) => traces.push(t) });
+    const request = makeRequestMock({
+      'https://api.example.com/s1': () => jsonResponse({ data: {} }, 'https://api.example.com/s1'),
+      'https://api.example.com/s2': () => jsonResponse({ data: {} }, 'https://api.example.com/s2'),
+      'https://api.example.com/s3': () => hitResponse('s3'),
+      'https://cdn.example.com/s3.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: threeSources });
+    setTier3Enabled(true);
+    emptyDirect();
+
+    skipInitWindow();
+    const first = await resolvePlayableSongRouted(song());
+    expect(first.url).toBe('https://cdn.example.com/s3.mp3');
+    // 冷启动零行为变化：清单顺序；命中在第 3 位时前两个照常被请求（绝不跳过候选）
+    expect(requestedUrls(request)).toEqual([
+      'https://api.example.com/s1',
+      'https://api.example.com/s2',
+      'https://api.example.com/s3',
+    ]);
+    expect(traces[0].sourceOrder).toEqual(['s1', 's2', 's3']);
+    expect(traces[0].tier3InitWindow).toBeUndefined();
+    // 三类分流：前两源完整未命中、第 3 源完整命中
+    expect(scoreOf('s1')).toBeCloseTo(0.35, 10);
+    expect(scoreOf('s2')).toBeCloseTo(0.35, 10);
+    // 命中样本含耗时（首次探测要加载时长解析器，故只断言「高于中性分」这个不变量）
+    expect(scoreOf('s3')!).toBeGreaterThan(0.5);
+
+    request.mockClear();
+    const second = await resolvePlayableSongRouted(song());
+    expect(second.url).toBe('https://cdn.example.com/s3.mp3');
+    // 定序生效：好源前置、只打一条上游；候选集仍逐元素齐全（sourceOrder 三个都在）
+    expect(requestedUrls(request)).toEqual(['https://api.example.com/s3']);
+    expect(traces[1].sourceOrder).toEqual(['s3', 's1', 's2']);
+  });
+
+  it('初始化窗口：交错起手 H=600ms、在飞 ≤2，且不引入任何窗口级墙值（决策 4 修订）', async () => {
+    vi.useFakeTimers();
+    try {
+      const seen: { url: string; timeoutMs: number | undefined }[] = [];
+      const request = vi.fn((req: TransportRequest): Promise<TransportResponse> => {
+        seen.push({ url: req.url, timeoutMs: req.timeoutMs });
+        return new Promise<TransportResponse>(() => {});
+      });
+      setTier3Deps({ request });
+      addTier3SubscriptionFromText({ text: threeSources });
+      setTier3Enabled(true);
+      emptyDirect();
+
+      const pending = resolvePlayableSongRouted(song());
+      await vi.advanceTimersByTimeAsync(500);
+      expect(seen.map((s) => s.url)).toEqual(['https://api.example.com/s1']);
+      await vi.advanceTimersByTimeAsync(200); // 越过 H=600ms → 交错起手第 2 条
+      expect(seen.map((s) => s.url)).toEqual(['https://api.example.com/s1', 'https://api.example.com/s2']);
+      // 窗口内沿用按 kind 的常态墙（url-resolver 2s）——「窗口墙 4s」已取消
+      expect(seen[0].timeoutMs).toBe(2_000);
+      expect(seen[1].timeoutMs).toBe(2_000);
+      // 窗口内的 2 条在飞计入 K=3：第二条额外借了一个槽位
+      expect(getTier3InFlightCount()).toBe(2);
+      await vi.advanceTimersByTimeAsync(7_000);
+      await pending;
+      expect(getTier3InFlightCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('窗口内任一命中即交付、不等在飞的另一条（其观测记「放弃」不进健康度）', async () => {
+    vi.useFakeTimers();
+    try {
+      const request = vi.fn((req: TransportRequest): Promise<TransportResponse> => {
+        if (req.url === 'https://api.example.com/s1') return new Promise<TransportResponse>(() => {});
+        if (req.url === 'https://api.example.com/s2') return Promise.resolve(hitResponse('s2'));
+        if (req.url === 'https://cdn.example.com/s2.mp3') return Promise.resolve(audioResponse());
+        throw new Error(`unexpected request: ${req.url}`);
+      });
+      setTier3Deps({ request });
+      addTier3SubscriptionFromText({ text: manifestOf(resolver('s1'), resolver('s2')) });
+      setTier3Enabled(true);
+      emptyDirect();
+
+      const pending = resolvePlayableSongRouted(song());
+      await vi.advanceTimersByTimeAsync(700); // 越过 H：s2 起手并命中
+      const res = await pending;
+      expect(res.url).toBe('https://cdn.example.com/s2.mp3');
+      // s1 的 2s 墙还没到 → 交付没有等它；观测记「放弃」（samples 不动、不进健康度）
+      expect(getSourceScheduleSnapshot()['s1']).toMatchObject({ samples: 0, lastKind: 'abandoned' });
+      expect(scoreOf('s1')).toBeNull();
+      expect(getSourceScheduleSnapshot()['s2']).toMatchObject({ samples: 1, lastKind: 'complete' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('全局上游在飞上限恒为 3：窗口占 2 条，至少给其他歌留 1 条（决策 5 修订）', async () => {
+    vi.useFakeTimers();
+    try {
+      const seen: string[] = [];
+      const request = vi.fn((req: TransportRequest): Promise<TransportResponse> => {
+        seen.push(req.url);
+        return new Promise<TransportResponse>(() => {});
+      });
+      setTier3Deps({ request });
+      addTier3SubscriptionFromText({ text: threeSources });
+      setTier3Enabled(true);
+      emptyDirect();
+
+      const first = resolvePlayableSongRouted(song({ id: 'netease:1', name: '歌1' }));
+      await vi.advanceTimersByTimeAsync(700); // 窗口起手 2 条在飞
+      expect(getTier3InFlightCount()).toBe(2);
+
+      const others = ['netease:2', 'netease:3'].map((id) => resolvePlayableSongRouted(song({ id, name: id })));
+      await vi.advanceTimersByTimeAsync(100);
+      // 窗口 2 条 + 第二首 1 条 = 3；第三首被 K=3 排队（未发上游）
+      expect(seen).toHaveLength(3);
+      expect(getTier3InFlightCount()).toBe(3);
+
+      // 放行到底：不泄漏槽位
+      await vi.advanceTimersByTimeAsync(20_000);
+      await Promise.all([first, ...others]);
+      expect(getTier3InFlightCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('截尾（被单源墙切掉）记 censored 并降权 w=0.5', async () => {
+    vi.useFakeTimers();
+    try {
+      const request = vi.fn((): Promise<TransportResponse> => new Promise<TransportResponse>(() => {}));
+      setTier3Deps({ request });
+      addTier3SubscriptionFromText({ text: manifestOf(resolver('s1')) });
+      setTier3Enabled(true);
+      const pending = createTier3Resolver()(song());
+      await vi.advanceTimersByTimeAsync(2_100);
+      expect(await pending).toBeNull();
+      expect(getSourceScheduleSnapshot()['s1']).toMatchObject({ samples: 1, lastKind: 'censored' });
+      // 中性分 0.5 → 0.85×0.5 + 0.15×reward(false)=0
+      expect(scoreOf('s1')).toBeCloseTo(0.425, 10);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('护栏拒绝与 source gate 跳过都不记分（只计数 + trace）', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/bad': () =>
+        jsonResponse({ data: { url: 'https://cdn.example.com/bad.mp3', song_play_time: 60 } }, 'https://api.example.com/bad'),
+      'https://cdn.example.com/bad.mp3': audioResponse,
+    });
+    setTier3Deps({ request });
+    // bad：netease 的 url-resolver，候选时长 60s vs 标称 240s → 护栏拒绝
+    // other：声明 qq → 对 netease 的歌被 source gate 跳过（我们没问它）
+    addTier3SubscriptionFromText({ text: manifestOf(resolver('bad'), resolver('other', 'qq')) });
+    setTier3Enabled(true);
+
+    expect(await createTier3Resolver()(song())).toBeNull();
+    expect(getTier3Stats()['bad'].guardRejected).toBe(1);
+    expect(getTier3Stats()['other'].skipped).toBe(1);
+    expect(getSourceScheduleSnapshot()['bad']).toBeUndefined();
+    expect(getSourceScheduleSnapshot()['other']).toBeUndefined();
+  });
+
+  it('订阅变更清空会话内健康度与单飞窗口（ADR 决策 2 的重置时机）', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/s1': () => jsonResponse({ data: {} }, 'https://api.example.com/s1'),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifestOf(resolver('s1')) });
+    setTier3Enabled(true);
+
+    expect(await createTier3Resolver()(song())).toBeNull();
+    expect(scoreOf('s1')).toBeCloseTo(0.35, 10);
+    expect(isInitialized()).toBe(true);
+
+    addTier3SubscriptionFromText({ text: manifestOf(resolver('s1')) });
+    expect(getSourceScheduleSnapshot()).toEqual({});
+    expect(scoreOf('s1')).toBeNull();
+    expect(isInitialized()).toBe(false);
+  });
+
+  it('会话内健康度派生进每源统计（getTier3Stats）供设置页展示', async () => {
+    const request = makeRequestMock({
+      'https://api.example.com/s1': () => jsonResponse({ data: {} }, 'https://api.example.com/s1'),
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: manifestOf(resolver('s1')) });
+    setTier3Enabled(true);
+
+    await createTier3Resolver()(song());
+    expect(getTier3Stats()['s1']).toMatchObject({ misses: 1, healthSamples: 1, demoted: false });
+    expect(getTier3Stats()['s1'].healthScore).toBeCloseTo(0.35, 10);
   });
 });

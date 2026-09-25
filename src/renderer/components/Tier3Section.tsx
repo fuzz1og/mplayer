@@ -262,7 +262,8 @@ const Tier3Section: React.FC = () => {
             }}
           >
             <Text type="secondary" style={{ display: 'block', fontSize: '12px', marginBottom: '8px' }}>
-              每源累计解析统计（本次会话）
+              每源累计解析统计（本次会话）。健康度按会话内样本调整遍历顺序——只改顺序、
+              不删源、不禁用，连续失败 2 次沉底、成功一次即回归（订阅变更时重置）。
             </Text>
             {Object.entries(stats).map(([sourceId, s]) => {
               const declared = sourceOf(sourceId)?.source;
@@ -286,6 +287,8 @@ const Tier3Section: React.FC = () => {
                   <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
                     交付 {s.hits} · 丢弃 {s.discarded ?? 0} · 失败 {s.misses} · 跳过 {s.skipped ?? 0}
                     {s.guardRejected ? ` · 护栏拒绝 ${s.guardRejected}` : ''}
+                    {s.healthScore != null ? ` · 健康度 ${s.healthScore.toFixed(2)}（${s.healthSamples ?? 0} 样本）` : ''}
+                    {s.demoted ? ' · 已降级' : ''}
                   </span>
                 </div>
               );

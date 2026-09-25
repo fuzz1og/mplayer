@@ -1,4 +1,5 @@
 import type { PlaybackGuard, PlaybackVia } from './playbackGuard.js';
+import type { SourceSampleKind } from './sourceSchedule.js';
 
 /**
  * 播放解析链结构化 trace（#363 / t5 埋点形态决策）。
@@ -14,8 +15,16 @@ import type { PlaybackGuard, PlaybackVia } from './playbackGuard.js';
 /** 命中层级：用户可感知的「这次从哪一层拿到 URL」。 */
 export type PlaybackLayer = 'prefetch' | 'direct' | 'tier3' | 'fail';
 
-/** 单源 outcome：hit=产出候选；rejected=候选未过护栏；discarded=迟到命中被预算丢弃。 */
-export type PlaybackTraceOutcome = 'hit' | 'miss' | 'error' | 'skipped' | 'rejected' | 'discarded';
+/** 单源 outcome：hit=产出候选；rejected=候选未过护栏；discarded=迟到命中被预算丢弃；
+ *  abandoned=观测被放弃（预算用尽未启动 / 命中即交付时不等在飞的另一条）。 */
+export type PlaybackTraceOutcome =
+  | 'hit'
+  | 'miss'
+  | 'error'
+  | 'skipped'
+  | 'rejected'
+  | 'discarded'
+  | 'abandoned';
 
 /** 失败分类：只做粗分，够设置页归因即可。 */
 export type PlaybackTraceErrorClass = 'timeout' | 'tls' | 'http4xx' | 'http5xx' | 'empty' | 'unknown';
@@ -28,6 +37,11 @@ export interface PlaybackTraceSourceLeg {
   outcome: PlaybackTraceOutcome;
   errorClass?: PlaybackTraceErrorClass;
   guard?: PlaybackGuard;
+  /** 本源的观测分流（#398 决策 6）：complete 正常计分 / censored 被单源墙截尾（降权 w=0.5）/
+   *  abandoned 放弃观测（不计分）。**护栏拒绝与 source gate 跳过不记分**，故不写该字段。 */
+  sampleKind?: SourceSampleKind;
+  /** 本样本计入后的会话内健康度（无计入样本时省略）。 */
+  healthScore?: number;
 }
 
 /** 一次 `resolvePlayableSongRouted` 的完整 trace。 */
@@ -63,8 +77,12 @@ export interface PlaybackTrace {
   /** tier3 腿耗时与是否被整链预算截断。 */
   tier3Ms: number | null;
   tier3TimedOut: boolean;
-  /** 每源 outcome（含 skipped/rejected/迟到 discarded）。 */
+  /** 每源 outcome（含 skipped/rejected/迟到 discarded/放弃 abandoned）。 */
   sources: PlaybackTraceSourceLeg[];
+  /** 本次 tier3 腿的**源遍历顺序**（定序后的可用源 id；未进 tier3 腿时不写）（#398）。 */
+  sourceOrder?: string[];
+  /** 本次解析是否处于会话内的初始化窗口（单飞；整会话至多一次）（#398）。 */
+  tier3InitWindow?: boolean;
 }
 
 /** 宿主注册的 sink（#391：探测腿已删除，只剩解析 trace）。 */
