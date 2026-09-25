@@ -21,7 +21,7 @@ npm run mobile:e2e               # 移动端真机 e2e 一条龙（usbipd 直挂
 
 ## Architecture
 
-- **Desktop** (`src/`): `contextIsolation: false`，renderer 直用 node。主进程（入口/缓存/storage/ipc/services/tray）与渲染进程（懒加载 router、Zustand、Howler、Ant Design 6）详见 `docs/agents/architecture.md`。
+- **Desktop** (`src/`): `contextIsolation: true` + `nodeIntegration: false`（`sandbox: false`），渲染层经 preload 桥 `window.electronAPI` 通信、无 Node 能力。主进程（入口/preload/缓存/storage/ipc/services/tray）与渲染进程（懒加载 router、Zustand、Howler、Ant Design 6）详见 `docs/agents/architecture.md`。
 - **Mobile** (`packages/mobile/`): expo-router Stack+Tabs，Zustand(AsyncStorage persist)，expo-audio，双主题 token + textVariants。
 - **Shared** (`packages/core/`): 双端共享 —— `api/` 多源直连客户端、cache 内核、`shared/` 源路由/解析、`tier3/` 订阅执行器、`utils/`。
 

@@ -4,19 +4,23 @@
 
 ## Desktop (Electron)
 
-`contextIsolation: false`, `nodeIntegration: true`. Renderer 直接 import 主进程模块。
+`contextIsolation: true`, `nodeIntegration: false`, `sandbox: false`, `webSecurity: true`。渲染层**没有** Node/require 能力，唯一 IPC 入口是 preload 桥 `window.electronAPI`（`src/main/preload.ts` + 契约 `src/shared/electronAPI.ts`）；主进程侧对每个 handle 做 sender 校验（`isTrustedIpcSender`/`checkIpcSender`）。
 
 ### Main Process (`src/main/`)
 
 | File | Role |
 |------|------|
-| `main.ts` | Entry. BrowserWindow (1400×900, hiddenInset), IPC 注册, global shortcuts, tray |
+| `main.ts` | Entry. BrowserWindow (1400×900, `frame: false` 自绘标题栏, autoHideMenuBar, show:false), preload 桥 + IPC 注册, global shortcuts, tray |
+| `preload.ts` | 唯一 IPC 桥：`contextBridge` 暴露 `window.electronAPI`；渲染层不 import 主进程模块 |
+| `env.ts` | 启动早期环境设置（`ELECTRON_GET_USE_PROXY` 等），`main.ts` 首行 import |
 | `hidpi.ts` | WSLg HiDPI 修复：读 Windows AppliedDPI → 强制 `force-device-scale-factor`；非 WSL 跳过；`MPLAYER_UI_SCALE` 可覆盖 |
 | `proxy.ts` | Electron session proxy config |
 | `api/musicApi.ts` | 壳：re-export core `musicApi` / client 配置（HTTP 客户端逻辑在 core） |
 | `cache/diskBackend.ts` | 磁盘缓存后端（音频、封面、歌词；constructor 注入 cacheDir） |
-| `storage/db.ts` | Primary persistence (favorites, history, playlists, settings)；启动时跑旧签名端点迁移 |
-| `ipc/registerHandler.ts` | `registerIpcHandler` helpers |
+| `storage/fileStorage.ts` | Primary persistence (favorites, history, playlists, settings，JSON 文件存储)；启动时跑旧签名端点迁移（清 `api.php?get=*` 的 url/cover/lrc 与 audioTag/nonFull） |
+| `storage/db.ts` | 兼容壳：re-export `getFileStorage()` |
+| `cookies/cookieAdapter.ts` | core `cookieManager` 的桌面落盘 adapter |
+| `ipc/*.ts` | `registerHandler` 辅助 + 各域注册（appSettingsUpdate / cache / favoriteHistoryPlaylist / localMusic / musicApiHandlers / playbackTrace） |
 | `services/` | downloadService(进度按 150ms 聚合后推 IPC) / localMusicService / updateService / playbackTraceService(播放解析链 trace 会话内环形缓冲 + 导出 JSON) / playlistLinkResolver(歌单链接 → 目标源歌单) |
 | `tray/trayManager.ts` | System tray + context menu |
 
@@ -24,7 +28,7 @@
 
 - `router/index.tsx` HashRouter 全懒加载；页面在 `pages/`（推荐/发现/热榜/收藏/历史/歌单/队列/本地/歌手/专辑/歌词/设置等）
 - `store/` Zustand：playerStore, searchStore, favoriteStore, downloadStore, localStore
-- playerStore 播放失败处理（#385 / #397）：处置由 core `shared/skipGuard` 单一决策（`decideAfterPlaybackFailure`）——同曲 fresh 重试一次（`forgetPrefetchedUrl` + 重走路由链）→ 仍失败即「终局失败」：**连续失败固定上限 3 首**（与队列长度无关）、**离线直接暂停不进解析链**、会话内**坏歌记忆**（跳歌时跳过已判坏的歌）；离线 predicate 与「失败即跳」偏好由宿主注入（偏好默认开，设置页可关）。下一首 URL 预取统一写 core 预取缓存（30min TTL、失败可遗忘），渲染层不再自建 URL Map；播放成功后的簿记异常（历史/队列/封面）不参与失败判定，避免误跳歌
+- playerStore 播放失败处理（#385 / #397）：处置由 core `shared/skipGuard` 单一决策（`decideAfterPlaybackFailure`）——同曲 fresh 重试一次（`forgetPrefetchedUrl` + 重走路由链）→ 仍失败即「终局失败」，core 记一次（计数 +1、记住这首歌）后按优先级决策：**离线 → 停**（不进解析链）／**关闭「失败即跳」→ 停**／**队列没有别的歌 → 停**／**连续失败达固定上限 3 首 → 停**（与队列长度无关）／否则跳下一首（跳歌时跳过坏歌记忆里的歌）。计数**只在真正开始播放时归零**（手动点歌不清零）；离线 predicate 与「失败即跳」偏好由宿主注入（偏好默认开，设置页可关），停播文案 core 单一来源。下一首 URL 预取统一写 core 预取缓存（30min TTL、失败可遗忘），渲染层不再自建 URL Map；播放成功后的簿记异常（历史/队列/封面）不参与失败判定，避免误跳歌
 - `services/` audioPlayer(Howler), playbackClock(播放位置/时长读模型：点击/拖动/键盘 seek + seek 乐观值防回跳 + 叶子窄订阅，位置/时长不进 store), searchService, sourceSwap, artistMetaCache, importService(文本/链接歌单导入), IpcClient, callMusicApi 等
 - `components/` PlayerBar/SongList/SongRow/LyricsDisplay 等通用件；设置页「播放诊断」区 `PlaybackDiagnosticsSection.tsx`（trace 快照 / 导出 / 清空）
 - **歌曲列表模块**（#302 整合）：`SongList.tsx` 独占虚拟滚动与滚动测量（`hooks/useVirtualRows` 自动挂靠页面已有滚动容器）、选中/收藏的 Set 索引、行级交互（下拉菜单/换源/勾选/批量栏/加入歌单弹窗）；`SongRow.tsx` 是唯一行实现（能力位 + `dragHandle`/`actions`/`fillTitle` 插槽），`SortableSongRow.tsx` 是它的 dnd 薄包装（队列页/本地歌单页共用，排序索引数学在 `utils/reorder.moveItem` + `hooks/useSortableReorder`），`GroupedSongList.tsx` 数据经 props（页面做 `searchStore` 适配器）并复用同一套滚动/虚拟化与行实现。页面只做数据与语义回调的适配器，不感知测量细节。
@@ -39,9 +43,10 @@
 加内容方法 = 直连客户端加方法 + `CONTENT_METHODS` 加字符串，其余自动（完整性测试兜底）。**不要在架构文档枚举方法清单**——那是契约文件的缓存。
 
 **语义通道**（ADR-0002）：`cache:*`（getSongResources/setSongResources/clear/getStats；封面磁盘字节通道已随封面直链直渲移除）、
-favorite/history/playlist/localMusic/settings/download/dialog/app/update/playbackTrace 各自的 `domain:action` 组
+favorite/history/playlist/localMusic/settings/download/dialog/app/update/playbackTrace/**window** 各自的 `domain:action` 组（`window:minimize|toggleMaximize|isMaximized|close`，供自绘标题栏用）
 （`playbackTrace:list|clear|export`，语义命名与 `settings:*` 同组）。
-Push（main→renderer）：`download:progress|complete|error`, `localMusic:folderChanged`, `tray:action`, `shortcut:action`, `update:status`。
+Push（main→renderer）：`download:progress|complete|error`, `localMusic:folderChanged`, `tray:action`, `shortcut:action`, `update:status`, `window:maximized`。
+反向（renderer→main，`send`）：`tray:state`（当前歌/播放态，供托盘菜单显示）。
 
 ## Mobile (Expo/React Native)
 
@@ -56,11 +61,11 @@ expo-router Stack + Tabs：`(tabs)/`（推荐 / 发现 / 歌单 / 本地歌曲�
 
 ## Shared Package (`packages/core/`)
 
-桌面/移动端共享。
+桌面/移动端共享。另有 `download/`（下载队列 / 标签 / 歌词落盘：container / queue / progress / tagging / lyrics）与 `cookies/`（cookie 管理器，宿主落盘走 adapter）。
 
-- `api/` 请求层：7 源直连客户端（`neteaseDirect`/`qqDirect`/`kugouDirect`/`miguDirect`/`kuwoDirect`/`qianqianDirect`/`sodaDirect`，能力面 = searchSongs/getToplists/内容方法，IPC 契约见上节）；`musicApi` 薄门面（预取门面 prefetchPlayableSong/forgetPrefetchedSong、soda 分享解析等基础方法）；`qqPlaylist`/`playlistImport`（QQ 歌单解析与链接导入）；`neteaseWeapi`；`antiScrape`（UA 池/反同源连续）；`tlsFingerprint` + `transport`（可注入接缝，maxRedirects 透传）；`prefetchCache`（写入方 = `prefetchPlayableSong` 门面，读 = 播放解析；键 = 歌曲身份键，值 = `PlayableResource`）。#391 已删探测链（`probeSongs`/`probeAudioUrl`/`probeSwapCandidates`/`PlaybackProbeTrace`）
+- `api/` 请求层：7 源直连客户端（`neteaseDirect`/`qqDirect`/`kugouDirect`/`miguDirect`/`kuwoDirect`/`qianqianDirect`/`sodaDirect`，能力面 = searchSongs/getToplists/内容方法，IPC 契约见上节）；`musicApi` 薄门面（预取门面 prefetchPlayableSong/forgetPrefetchedSong、soda 分享解析等基础方法）；`qqPlaylist`/`playlistImport`（QQ 歌单解析与链接导入）；`neteaseWeapi`；`antiScrape`（UA 池/反同源连续）；`tlsFingerprint` + `transport`（可注入接缝，maxRedirects 透传）；`prefetchCache`（写入方 = `prefetchPlayableSong` 门面，读 = 播放解析；键 = 歌曲身份键，值 = `PlayableResource`）、`audioProbe`（只剩 `isUrlAlive` 播放期直链活性闸）、`memoryCacheManager`。#391 已删探测链（`probeSongs`/`probeAudioUrl`/`probeSwapCandidates`/`PlaybackProbeTrace`）
 - `cache/` 缓存内核（CacheKernel/SongResourcesCache）
-- `shared/`：`sourceRouter`（来源开关 `auto|direct` 两态 + `sanitizeSourceModes` 洗白存量 'api'、直连客户端注册表、`searchSongsRouted`/`resolvePlayableSongRouted` 路由、`getToplistSongs`/`pickToplistGroup` + `TOPLIST_SOURCE_IDS`、tier3 跨歌在飞 K=3 槽位与初始化窗口的**槽位借用接缝**）、`sourceSchedule`（tier3 会话内源调度纯函数：健康度 EWMA 计分 / `orderSources` 只重排不筛选 / `beginInit` 单飞初始化窗口；模块级 Map、无 I/O、不落盘）、`playbackGuard`（护栏决策纯函数：L1 源自带时长 → L2 音频头 → L3 体积÷码率 → L4 仅文本 → L5 仅 source 声明，±2s；`pickDurationEvidence` 是时长证据降级链的**单一来源**，tier3 护栏与直连腿取证共用）、`audioDuration`（L2 时长取证：music-metadata 懒加载 + 头部时长可信性判定）、`audioHead`（一次 64KB Range 取头部字节 + 完整大小的取证接缝，tier3 嗅探与直连腿取证共用）、`directValidation`（直连腿播放时时长取证：仅无权威时长的源，判「比标称短」→ nonFull，证据不足 fail-open）、`skipGuard`（**跳歌护栏**：终局失败后的 `skip|stop` 纯决策 + 会话内连续失败计数/坏歌记忆；离线 predicate 与「失败即跳」偏好由宿主注入，文案单一来源）、`searchOrchestrator`、`sourceSwap`、`songResourceRefresh`（可播资源刷新编排：取缓存 → 旧签名死链判定 → 精确匹配搜索 → 写缓存/写回，依赖注入）、`songLyrics`、`updateChannels`（更新镜像探速）、`playbackTrace`（解析链 trace schema + sink 注册 + 环形缓冲；core 零 I/O，宿主落 sink）
+- `shared/`：`sourceRouter`（来源开关 `auto|direct` 两态 + `sanitizeSourceModes` 洗白存量 'api'、直连客户端注册表、`searchSongsRouted`/`resolvePlayableSongRouted` 路由、`getToplistSongs`/`pickToplistGroup` + `TOPLIST_SOURCE_IDS`、tier3 跨歌在飞 K=3 槽位与初始化窗口的**槽位借用接缝**）、`sourceSchedule`（tier3 会话内源调度纯函数：健康度 EWMA 计分 / `orderSources` 只重排不筛选 / `beginInit` 单飞初始化窗口；模块级 Map、无 I/O、不落盘）、`playbackGuard`（护栏决策纯函数：L1 源自带时长 → L2 音频头 → L3 体积÷码率 → L4 仅文本 → L5 仅 source 声明，±2s；`pickDurationEvidence` 是时长证据降级链的**单一来源**，tier3 护栏与直连腿取证共用）、`audioDuration`（L2 时长取证：music-metadata 懒加载 + 头部时长可信性判定）、`audioHead`（一次 64KB Range 取头部字节 + 完整大小的取证接缝，tier3 嗅探与直连腿取证共用）、`directValidation`（直连腿播放时时长取证：仅无权威时长的源，判「比标称短」→ nonFull，证据不足 fail-open）、`skipGuard`（**跳歌护栏**：终局失败后的 `skip|stop` 纯决策 + 会话内连续失败计数/坏歌记忆；离线 predicate 与「失败即跳」偏好由宿主注入，文案单一来源）、`playability`（可播性叶子模块，避免 `sourceRouter → audioProbe → musicApi` 循环导入）、`searchOrchestrator`、`sourceSwap`、`songResourceRefresh`（可播资源刷新编排：取缓存 → 旧签名死链判定 → 精确匹配搜索 → 写缓存/写回，依赖注入）、`songLyrics`、`updateChannels`（更新镜像探速）、`playbackTrace`（解析链 trace schema + sink 注册 + 环形缓冲；core 零 I/O，宿主落 sink）
 - `utils/`（`songIdentity` 歌曲身份键：源 + 去源前缀真实 ID，多层嵌套按最外层源折叠；songMatcher/songDedupe/lyricsParser/legacyUrl 等）
 - `tier3/tier3Api` 订阅源执行器（`url-resolver`/`search-then-resolve`；每源候选过 `playbackGuard` 后才采用，不过护栏换下一个源；单源墙按 kind 分档 url-resolver 2s / search-then-resolve 2.5s，路由层跨歌在飞上限 K=3 且排队不计入 6s 预算）；清单能力扩展 idNormalize / redirect 响应 / 护栏字段（ADR `2026-09-23-tier3-manifest-capability-extensions`，schema 见 `docs/agents/tier3-manifest.md`）
 - 播放解析结果 `RoutedPlayable` = `{ url, nonFull, via: 'direct'|'tier3', guard: PlaybackGuard }`（#361）：tier3 只替换流 URL，绝不铸造新身份；直连腿 `guard='none'`
