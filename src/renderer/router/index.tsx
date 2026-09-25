@@ -18,6 +18,7 @@ const ArtistDetailPage = lazy(() => import('@/renderer/pages/ArtistDetailPage'))
 const AlbumDetailPage = lazy(() => import('@/renderer/pages/AlbumDetailPage'));
 const DiscoverPlaylistListPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistListPage'));
 const DiscoverPlaylistDetailPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistDetailPage'));
+const LyricsPage = lazy(() => import('@/renderer/pages/LyricsPage'));
 
 // 加载状态组件
 const Loading = () => (
@@ -189,6 +190,16 @@ export const router = createHashRouter([
         element: (
           <Suspense fallback={<Loading />}>
             <DiscoverPlaylistDetailPage />
+          </Suspense>
+        ),
+      },
+      {
+        // 歌词页（#403）：从 App 内的 state 视图切换改为正式路由——侧边栏/搜索/前进后退
+        // 离开时画面跟着 URL 走（此前 URL 变了但主区域仍停在歌词页）
+        path: 'lyrics',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <LyricsPage />
           </Suspense>
         ),
       },

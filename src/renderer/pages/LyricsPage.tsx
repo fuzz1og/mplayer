@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import LyricsDisplay from '@/renderer/components/LyricsDisplay';
 import SongCover from '@/renderer/components/SongCover';
@@ -6,10 +7,19 @@ import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 
 interface LyricsPageProps {
-  onBack: () => void;
+  /** 自定义返回行为；缺省 = 回上一页（无历史时兜底回发现页）。 */
+  onBack?: () => void;
 }
 
 const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  // 路由化（#403）：歌词页是 /lyrics 路由，缺省返回走 history；直接打开（无历史）兜底回发现页
+  const goBack = useCallback(() => {
+    if (onBack) { onBack(); return; }
+    if (location.key === 'default') navigate('/discover', { replace: true });
+    else navigate(-1);
+  }, [onBack, location.key, navigate]);
   const lyrics = usePlayerStore((s) => s.lyrics);
   const lyricsLoading = usePlayerStore((s) => s.lyricsLoading);
   const currentSong = usePlayerStore((s) => s.currentSong);
@@ -23,11 +33,11 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   // Escape 键关闭歌词页面
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onBack();
+      if (e.key === 'Escape') goBack();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onBack]);
+  }, [goBack]);
 
   const handleLyricClick = (time: number) => {
     seek(time);
@@ -56,7 +66,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
       }}>
         <span style={{ color: 'var(--text-secondary)', fontSize: '16px' }}>暂无播放中的歌曲</span>
         <button
-          onClick={onBack}
+          onClick={goBack}
           style={{
             padding: '8px 16px',
             background: 'var(--accent)',
@@ -93,7 +103,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
         {/* 迷你播放器头部 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
           <button
-            onClick={onBack}
+            onClick={goBack}
             style={{
               display: 'flex',
               alignItems: 'center',

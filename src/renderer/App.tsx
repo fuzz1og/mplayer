@@ -13,15 +13,12 @@ import TopBar from '@/renderer/components/TopBar';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
 import DownloadNotifications from '@/renderer/components/DownloadNotifications';
-import LyricsPage from '@/renderer/pages/LyricsPage';
 
 import './styles/global.css';
 
 const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [showLyrics, setShowLyrics] = useState(false);
-
   // History navigation management
   const historyStack = useRef<string[]>([location.pathname]);
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -64,6 +61,12 @@ const App: React.FC = () => {
   const handleRefresh = useCallback(() => {
     navigate(0);
   }, [navigate]);
+
+  // 歌词页是 /lyrics 路由（#403）：封面 / 歌词按钮在歌词页上再点一次 = 返回上一页
+  const openLyrics = useCallback(() => {
+    if (location.pathname === '/lyrics') navigate(-1);
+    else navigate('/lyrics');
+  }, [location.pathname, navigate]);
 
   // 逐字段订阅：整 store 订阅会让搜索/收藏/下载的任何变化都重渲染 App 及整棵页面树
   const currentKeyword = useSearchStore((s) => s.currentKeyword);
@@ -222,15 +225,11 @@ const App: React.FC = () => {
               backgroundColor: 'var(--bg-base)',
             }}
           >
-            {showLyrics ? (
-              <LyricsPage onBack={() => setShowLyrics(false)} />
-            ) : (
-              <Outlet />
-            )}
+            <Outlet />
           </main>
 
           {/* 底部播放控制栏 */}
-          <PlayerBar onCoverClick={() => setShowLyrics(true)} />
+          <PlayerBar onCoverClick={openLyrics} />
         </div>
       </div>
 
