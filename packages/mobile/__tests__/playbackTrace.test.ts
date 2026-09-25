@@ -20,7 +20,6 @@ import { getPlaybackTraceSink } from '@mplayer/core';
 import {
   registerPlaybackTraceSink,
   listPlaybackTraces,
-  listProbeTraces,
   clearPlaybackTraces,
   serializePlaybackTraces,
   exportPlaybackTraces,
@@ -60,17 +59,14 @@ beforeEach(() => {
 });
 
 describe('playbackTrace（移动端诊断缓冲与导出）', () => {
-  it('注册 sink 后 list 读到 trace/probe，clear 清空', () => {
+  it('注册 sink 后 list 读到 trace，clear 清空', () => {
     expect(getPlaybackTraceSink()).not.toBeNull();
     getPlaybackTraceSink()!.onResolve?.(makeTrace({ songName: '夜曲' }));
-    getPlaybackTraceSink()!.onProbe?.({ ts: 1, songId: 'netease:2', resolveMs: 5, validateMs: 3, tag: 'probe' });
 
     expect(listPlaybackTraces().map((t) => t.songName)).toEqual(['夜曲']);
-    expect(listProbeTraces().map((p) => p.songId)).toEqual(['netease:2']);
 
     clearPlaybackTraces();
     expect(listPlaybackTraces()).toHaveLength(0);
-    expect(listProbeTraces()).toHaveLength(0);
   });
 
   it('serializePlaybackTraces 输出带版本/导出时刻的 JSON', () => {
@@ -79,14 +75,12 @@ describe('playbackTrace（移动端诊断缓冲与导出）', () => {
       version: number;
       exportedAt: number;
       resolutions: PlaybackTrace[];
-      probes: unknown[];
     };
 
     expect(parsed.version).toBe(1);
     expect(parsed.exportedAt).toBeGreaterThan(0);
     expect(parsed.resolutions).toHaveLength(1);
     expect(parsed.resolutions[0].songName).toBe('晴天');
-    expect(parsed.probes).toEqual([]);
   });
 
   it('exportPlaybackTraces 写入 documentDirectory 并调用 Share，返回文件路径', async () => {

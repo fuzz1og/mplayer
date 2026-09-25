@@ -1,25 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Download, Trash2, RefreshCw } from 'lucide-react';
 import { Button, Tag, Typography, message } from 'antd';
-import type {
-  PlaybackLayer,
-  PlaybackProbeTrace,
-  PlaybackTrace,
-  PlaybackTraceOutcome,
-} from '@mplayer/core';
+import type { PlaybackLayer, PlaybackTrace, PlaybackTraceOutcome } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 
 /**
  * 播放诊断设置区（#363 / ADR `2026-09-23-playback-trace-sink`）。
- * 展示本次会话最近若干条播放解析 / 探测 trace，支持清空与手动导出 JSON。
+ * 展示本次会话最近若干条播放解析 trace，支持清空与手动导出 JSON。
  * 数据只在主进程内存环形缓冲里，不落盘、不外传；关闭应用即消失。
+ *
+ * #391：探测 trace 已随探测链删除，本区只剩解析 trace。
  */
 
 const { Text } = Typography;
 
 /** 列表最多展示的条数（缓冲里可能更多，导出始终是完整快照）。 */
 const MAX_RESOLVE_ROWS = 20;
-const MAX_PROBE_ROWS = 20;
 
 const LAYER_META: Record<PlaybackLayer, { label: string; color: string }> = {
   prefetch: { label: '预取命中', color: 'green' },
@@ -52,17 +48,13 @@ function formatTime(ts: number | null | undefined): string {
 
 const PlaybackDiagnosticsSection: React.FC = () => {
   const [resolves, setResolves] = useState<PlaybackTrace[]>([]);
-  const [probes, setProbes] = useState<PlaybackProbeTrace[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const load = async (): Promise<void> => {
     try {
-      const data = await IpcClient.invoke<{ resolves: PlaybackTrace[]; probes: PlaybackProbeTrace[] }>(
-        'playbackTrace:list',
-      );
+      const data = await IpcClient.invoke<{ resolves: PlaybackTrace[] }>('playbackTrace:list');
       setResolves(data?.resolves ?? []);
-      setProbes(data?.probes ?? []);
     } catch (error) {
       console.error('加载播放诊断失败:', error);
     } finally {
@@ -94,7 +86,6 @@ const PlaybackDiagnosticsSection: React.FC = () => {
     try {
       await IpcClient.invoke('playbackTrace:clear');
       setResolves([]);
-      setProbes([]);
       message.success('播放诊断已清空');
     } catch (error) {
       console.error('清空播放诊断失败:', error);
@@ -106,8 +97,7 @@ const PlaybackDiagnosticsSection: React.FC = () => {
 
   // 缓冲最旧→最新；展示最近 N 条并从新到旧。
   const recentResolves = resolves.slice(-MAX_RESOLVE_ROWS).reverse();
-  const recentProbes = probes.slice(-MAX_PROBE_ROWS).reverse();
-  const isEmpty = resolves.length === 0 && probes.length === 0;
+  const isEmpty = resolves.length === 0;
 
   return (
     <section id="playback-trace" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
@@ -147,13 +137,13 @@ const PlaybackDiagnosticsSection: React.FC = () => {
             清空
           </Button>
           <Text type="secondary" style={{ alignSelf: 'center', fontSize: '12px', marginLeft: 'auto' }}>
-            解析 {resolves.length} 条 · 探测 {probes.length} 条
+            解析 {resolves.length} 条
           </Text>
         </div>
 
         {isEmpty ? (
           <Text type="secondary" style={{ fontSize: '13px' }}>
-            本次会话尚未记录播放解析 trace。播放或探测歌曲后再回到这里查看。
+            本次会话尚未记录播放解析 trace。播放歌曲后再回到这里查看。
           </Text>
         ) : (
           <>
@@ -190,6 +180,8 @@ const PlaybackDiagnosticsSection: React.FC = () => {
 
                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>
                         直连 {formatDuration(trace.directMs)}
+                        {trace.directTimedOut ? '（超时截断）' : ''}
+                        {trace.validateMs != null ? ` · 取证 ${formatDuration(trace.validateMs)}` : ''}
                         {' · '}tier3 {trace.tier3Ms == null ? '—' : formatDuration(trace.tier3Ms)}
                         {trace.tier3TimedOut ? '（超时截断）' : ''}
                         {trace.via ? ` · 来源 ${trace.via === 'tier3' ? '第三方' : '直连'}` : ''}
@@ -220,36 +212,6 @@ const PlaybackDiagnosticsSection: React.FC = () => {
               </div>
             )}
 
-            {recentProbes.length > 0 && (
-              <details style={{ marginTop: recentResolves.length > 0 ? '16px' : 0 }}>
-                <summary style={{ cursor: 'pointer', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                  探测 trace（共 {probes.length} 条，展示最近 {recentProbes.length} 条）
-                </summary>
-                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {recentProbes.map((probe, index) => (
-                    <div
-                      key={`${probe.ts}-${index}`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        fontSize: '12px',
-                        color: 'var(--text-secondary)',
-                        padding: '6px 10px',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: '6px',
-                      }}
-                    >
-                      <span style={{ color: 'var(--text-primary)' }}>{probe.songId || '未知歌曲'}</span>
-                      <span>解析 {formatDuration(probe.resolveMs)}</span>
-                      <span>校验 {formatDuration(probe.validateMs)}</span>
-                      {probe.tag ? <Tag style={{ marginInlineEnd: 0 }}>{probe.tag}</Tag> : null}
-                      <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>{formatTime(probe.ts)}</span>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
           </>
         )}
       </div>

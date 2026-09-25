@@ -1,18 +1,20 @@
-import type { SongGroup, Artist, SearchOrchestratorState } from '@mplayer/core';
+import type { Artist, SearchOrchestratorState } from '@mplayer/core';
 import { createSearchOrchestrator } from '@mplayer/core';
 import type { SourceKey as CoreSourceKey } from '@mplayer/core';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { callMusicApi } from './callMusicApi';
 
 const DEBOUNCE_DELAY = 300;
-const PROBE_BATCH_SIZE = 20;
 
 /**
  * 桌面搜索服务：SearchOrchestrator（ADR-0003）映射到 zustand searchStore。
  * 编排器自持状态/seq/组内合并（单一事实来源），本服务只做：
  * - source 路由（sourceType → route）
  * - subscribe 镜像（编排器状态 → store 的 groups/songs/currentKeyword/loading…）
- * - 探测副作用（逐批 probeResults，增量去重，避免对渐进程中已探测的源重复探测）
+ *
+ * #391：搜索结果的批量直连探测（probeSongsBatch 20/批）已删除——它是整列表扇出
+ * （整榜 ≤200 首 → ~400 请求），且判据反向、产物无消费者。预解析改由「队列下一首
+ * 预取 / 冷启预热」经 `prefetchPlayableSong` 门面完成（含 tier3、O(1) 成本）。
  */
 class SearchService {
   private debounceTimer: NodeJS.Timeout | null = null;
@@ -21,11 +23,6 @@ class SearchService {
     // 桌面并发 3：直连源对并发敏感，降低同时请求数避免风控/限流
     concurrency: 3,
   });
-  /** 已探测歌曲 id（每搜索会话重置），用于跨源渐进/翻页增量探测去重 */
-  private probedIds = new Set<string>();
-  /** 探测序号：search/searchAll/reset 时递增，用于丢弃旧搜索在途探测的迟到结果 */
-  private probeSeq = 0;
-
   constructor() {
     this.orchestrator.subscribe((o) => this.applyOrchestratorState(o));
   }
@@ -46,39 +43,8 @@ class SearchService {
       } else {
         updates.songs = o.results.flatMap((g) => g.songs);
       }
-      this.probeNewResults(o.results);
     }
     useSearchStore.setState(updates as any);
-  }
-
-  /**
-   * 对「上一批未探测过的新歌」逐批跑主进程探测（probeSongsBatch，20/批）。
-   * 探测职责 = **预取 URL**：主进程把直连解析出的直链写入预取缓存（30min TTL），
-   * 播放时 resolvePlayableSongRouted 命中即 0 等待。探测结果不再写渲染层
-   * audioTag——列表阶段不预显「片段/无效」预测徽标；徽标改为播放后按实际结果回写。
-   * 增量去重：渐进/翻页里只探测新增歌曲，不重复探测已探测过的源批次。
-   * 失败打开：探测永不阻断搜索渲染。探测序号校验：新搜索/reset 后（probeSeq 递增）
-   * 旧搜索在途批次直接跳过剩余批次，不再做无用功。
-   */
-  private probeNewResults(groups: SongGroup[]): void {
-    const allSongs = groups.flatMap((group) => group.songs);
-    if (allSongs.length === 0) return;
-    const newSongs = allSongs.filter((s) => !this.probedIds.has(s.id));
-    if (newSongs.length === 0) return;
-    for (const s of newSongs) this.probedIds.add(s.id);
-
-    const seq = this.probeSeq;
-    void (async () => {
-      for (let i = 0; i < newSongs.length; i += PROBE_BATCH_SIZE) {
-        const batch = newSongs.slice(i, i + PROBE_BATCH_SIZE);
-        try {
-          await callMusicApi('probeSongsBatch', batch);
-          if (seq !== this.probeSeq) return; // 已被新搜索/重置取代，丢弃在途探测结果
-        } catch {
-          // 失败打开：探测永不阻断搜索渲染。
-        }
-      }
-    })();
   }
 
   debouncedSearch(keyword: string): void {
@@ -91,15 +57,11 @@ class SearchService {
   search(keyword: string): Promise<void> {
     const { sourceType } = useSearchStore.getState();
     const route: 'all' | CoreSourceKey = sourceType === 'all' ? 'all' : (sourceType as CoreSourceKey);
-    this.probedIds.clear();
-    this.probeSeq++;
     return this.orchestrator.search(keyword, route);
   }
 
   searchAll(keyword: string): void {
     useSearchStore.setState({ sourceType: 'all' } as any);
-    this.probedIds.clear();
-    this.probeSeq++;
     void this.orchestrator.search(keyword, 'all');
   }
 
@@ -116,8 +78,6 @@ class SearchService {
   }
 
   reset(): void {
-    this.probedIds.clear();
-    this.probeSeq++;
     this.orchestrator.reset();
   }
 }

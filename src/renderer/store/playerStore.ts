@@ -11,9 +11,6 @@ import {
   songUsesSongidLyrics,
   isSodaSource,
   isInlineLyrics,
-  forgetPrefetchedUrl,
-  getPrefetchedUrl,
-  setPrefetchedUrl,
 } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
@@ -181,21 +178,27 @@ const initialQueue = loadQueue();
 /**
  * 冷启预热：还原的当前歌曲在渲染层有歌名/封面，但传输层尚无 Howl，
  * 用户点播放要走全链重解析（见 resume 守卫）。启动后台预解析一次，
- * 让首次点播放命中 core 预取缓存（30min TTL）0 等待出声——这正是
+ * 让首次点播放命中预取缓存（30min TTL）0 等待出声——这正是
  * 「隔日打开软件，播放要等/要重试」的正解。
+ *
+ * **#390 修正**：解析必须经 `musicApi:call` 落到**主进程**那份 `prefetchCache`
+ * ——播放解析经 IPC 读的是主进程的模块实例，渲染层自己写的那份没人读（此前
+ * `resolvePlayableSongRouted` + 本地 `setPrefetchedUrl` 的写法等于空转）。
+ * 覆盖面同时从「仅当前歌」扩到「当前歌 + 队列下一首」（限 2 首、内存、不落盘）。
  *
  * 与 prefetchNextUrl 同口径：失败静默（真正播放时再走正常失败链），
  * 不阻塞启动。由 App 挂载时调用一次（#328）。
  */
 export function warmupRestoredSong(): void {
-  const { currentSong } = usePlayerStore.getState();
-  if (!currentSong || currentSong.sourceType === 'local') return;
-  if (getPrefetchedUrl(currentSong)) return;
-  callMusicApi('resolvePlayableSongRouted', currentSong)
-    .then((resolved: { url: string; nonFull: boolean }) => {
-      if (resolved?.url) setPrefetchedUrl(currentSong, resolved.url, !!resolved.nonFull);
-    })
-    .catch(() => {});
+  const state = usePlayerStore.getState();
+  const { currentSong } = state;
+  const targets: Song[] = [];
+  if (currentSong && currentSong.sourceType !== 'local') targets.push(currentSong);
+  const next = currentSong ? getNextSongInQueue(state) : null;
+  if (next && next.sourceType !== 'local' && next.id !== currentSong?.id) targets.push(next);
+  for (const song of targets) {
+    callMusicApi('prefetchPlayableSong', song).catch(() => {});
+  }
 }
 
 /**
@@ -220,18 +223,9 @@ function prefetchNextUrl(state: PlayerStoreState): void {
   const currentKey = state.currentSong ? `${state.currentSong.sourceType}:${state.currentSong.id}` : '';
   if (nextKey === currentKey) return;
 
-  // 已有未过期条目（core 30min TTL）→ 播放时 core 内部 0 等待命中，无需重解析
-  if (getPrefetchedUrl(nextSong)) return;
-
-  // T12：带试听版检测的播放解析（nonFull 标记）；预取只关心 URL。
-  // #171 后列表歌 url 恒为空串，缓存键由 core 按 sourceType:id 推导。
-  callMusicApi('resolvePlayableSongRouted', nextSong)
-    .then((resolved: { url: string; nonFull: boolean }) => {
-      if (resolved?.url) {
-        setPrefetchedUrl(nextSong, resolved.url, !!resolved.nonFull);
-      }
-    })
-    .catch(() => {});
+  // #390：解析与写入都在**主进程**完成（core 门面 prefetchPlayableSong），
+  // 渲染层无法也不应自持缓存视图；「已有未过期条目」（30min TTL）由 core 侧跳过。
+  callMusicApi('prefetchPlayableSong', nextSong).catch(() => {});
 }
 
 // --- 播放失败处理（对齐移动端 packages/mobile/services/audioPlayer.ts） ---
@@ -291,7 +285,8 @@ async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Prom
   const reasonText = failureReasonText(error);
 
   if (!attempt.fresh && song.sourceType !== 'local') {
-    forgetPrefetchedUrl(song);
+    // #390：遗忘必须打到主进程那份缓存（渲染层那份无人读）
+    await callMusicApi('forgetPrefetchedSong', song).catch(() => {});
     await store.play(song, { fresh: true, failureCount: attempt.failureCount });
     return;
   }
@@ -380,8 +375,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       } else if (song.sourceType !== 'local') {
         // fresh 重试语义：先遗忘该曲预取条目——里面是刚被证明失败的直链，
-        // 0 等待命中只会原地连败两次（core 预取缓存 30min TTL + 失败可遗忘）
-        if (fresh) forgetPrefetchedUrl(song);
+        // 0 等待命中只会原地连败两次（core 预取缓存 30min TTL + 失败可遗忘）。
+        // #390：遗忘经 IPC 打到主进程那份缓存（渲染层那份没人读）。
+        if (fresh) await callMusicApi('forgetPrefetchedSong', song).catch(() => {});
         try {
           // T12：带试听版检测的播放解析（nonFull 标记驱动换元提示）。
           // 预取命中在 core 内部完成，这里不再自建缓存分支。

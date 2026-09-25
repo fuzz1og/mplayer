@@ -25,7 +25,7 @@
 - **主进程**：`src/main/ipc/musicApiHandlers.ts`——泛型 forward 自动转发 core 方法 + 手写 MainOnly 实现，整表 `satisfies MusicApiMethodMap`（方法名拼错 / 签名不符 / 漏方法 → 编译期必报错）；`ipcMain.handle('musicApi:call', …)` 查表分发，未知方法返回失败封套（`{ success: false, error: 'unknown musicApi method: …' }`），`ApiResponse` 封套语义不变。
 - **渲染端**：删除 `IpcMusicApi.ts`，改为泛型入口 `callMusicApi(method, ...args)`（`src/renderer/services/callMusicApi.ts`），类型自 `MusicApiMethodMap` 派生，全类型安全。
 - **收编动作（白名单从 3 缩到 1）**：
-  - `probeSongBatch`（main 手写 worker）→ core 新方法 `probeSongsBatch`（空 url → `invalid`，保持桌面现状；内部复用 core `probeSongs` + `getAudioUrl` resolver）；
+  - `probeSongBatch`（main 手写 worker）→ core 新方法 `probeSongsBatch`（空 url → `invalid`，保持桌面现状；内部复用 core `probeSongs` + `getAudioUrl` resolver）；**注：该探测链已于 #391 整套删除**（判据反向、产物无消费者），门面改为 `prefetchPlayableSong` / `forgetPrefetchedSong`；
   - `fillSongUrls` → core 薄方法（包装 `resolveNeteaseSongUrlsBySearch`）；
   - `invalidateCoverUrl` 补进 core `musicApi` 对象（与 `resolveCoverUrl` 同款一行）；
   - `lyrics:get` 作为 core 方法 `getLyrics` 并入；`api:getThrottleWait` 作为 `MainOnlyMethods.getThrottleWait` 并入；
@@ -39,7 +39,7 @@
 
 - 加一个 music 域方法 = core 加方法 + `MUSIC_API_METHODS` 加一个字符串，其余自动；编译期与测试期双重兜底，三份拷贝的漂移从「静默」变「必现」。
 - 渲染端所有 `ipcMusicApi.xxx(...)` 与裸 `invoke('musicApi:xxx', …)` 调用点改为 `callMusicApi('xxx', …)`，迁移量明确（约 15 个文件）。
-- core 新增 `probeSongsBatch` / `fillSongUrls` 两个薄方法，`invalidateCoverUrl` 补进对象——三处行为保持（空 url → `invalid` 语义不变）。
+- core 新增 `probeSongsBatch` / `fillSongUrls` 两个薄方法，`invalidateCoverUrl` 补进对象——三处行为保持（空 url → `invalid` 语义不变）。**#391 更正**：`probeSongsBatch` 已删除，其后继是预取门面 `prefetchPlayableSong`（写播放解析读的那份缓存）。
 - 其他 invoke 域（cache / favorite / history / playlist / localMusic / settings / download 等）与 main→renderer 推送通道不在本 ADR 范围；`cache:*` 双轨与 key 规则分散归候选 2 另行处理。
 
 ## 回退选项

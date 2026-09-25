@@ -5,7 +5,6 @@ import {
   forgetPrefetchedUrl,
   getPrefetchedUrl,
   PREFETCH_TTL_MS,
-  rememberProbeResult,
   setPrefetchedUrl,
 } from '../prefetchCache.js';
 
@@ -58,34 +57,6 @@ describe('prefetchCache（预取 URL 缓存）', () => {
     expect(getPrefetchedUrl(song({ sourceType: 'netease' }))?.url).toBe(
       'https://netease.example.com/1.mp3',
     );
-  });
-
-  it('rememberProbeResult：invalid 不缓存（直连死链不能进预取）', () => {
-    rememberProbeResult(song(), 'https://cdn.example.com/dead.mp3', 'invalid');
-
-    expect(getPrefetchedUrl(song())).toBeUndefined();
-  });
-
-  it('rememberProbeResult：空 URL 不缓存', () => {
-    rememberProbeResult(song(), '', 'valid');
-    rememberProbeResult(song(), 'not-a-url', 'valid');
-
-    expect(getPrefetchedUrl(song())).toBeUndefined();
-  });
-
-  it('rememberProbeResult：preview 标 nonFull，valid 不标', () => {
-    rememberProbeResult(song(), 'https://cdn.example.com/trial.mp3', 'preview');
-    expect(getPrefetchedUrl(song())?.nonFull).toBe(true);
-
-    clearPrefetchCache();
-    rememberProbeResult(song(), 'https://cdn.example.com/full.mp3', 'valid');
-    expect(getPrefetchedUrl(song())?.nonFull).toBe(false);
-  });
-
-  it('rememberProbeResult：直连权威判定 nonFull（如 UrlInfo 短时长）也能保留', () => {
-    rememberProbeResult(song(), 'https://cdn.example.com/trial.mp3', 'valid', true);
-
-    expect(getPrefetchedUrl(song())?.nonFull).toBe(true);
   });
 
   it('forgetPrefetchedUrl：移除该歌的预取条目（fresh 重试前遗忘失败直链）', () => {

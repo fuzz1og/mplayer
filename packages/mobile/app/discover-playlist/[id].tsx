@@ -10,7 +10,6 @@ import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
 import CollapsingHero from '../../components/CollapsingHero';
-import { probeSongsPrefetch } from '../../services/songProbe';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
@@ -48,12 +47,9 @@ export default function DiscoverPlaylistDetailPage() {
         setHasMore(page.songs.length < page.total);
         offsetRef.current = PAGE_SIZE;
         // 后台补齐缺失 URL（weapi by-ID 批量直链），完成后触发重渲染
-        // URL 补齐后直连探测：直链写入 core 预取缓存（播放 0 等待秒播）；
-        // 探测不再写列表徽标（预测常错，徽标改播放后回写）
         void getDirectClient('netease')!.resolvePlayableUrls!(page.songs).then(() => {
           if (!cancelled) {
             setSongs([...page.songs]);
-            void probeSongsPrefetch(page.songs);
           }
         });
       } catch (e: any) {
@@ -74,10 +70,9 @@ export default function DiscoverPlaylistDetailPage() {
         setSongs(prev => [...prev, ...page.songs]);
         offsetRef.current += PAGE_SIZE;
         setHasMore(offsetRef.current < page.total);
-        // 后台补齐本页缺失 URL + 补齐后直连探测预取（同首屏）
+        // 后台补齐本页缺失 URL（weapi by-ID 批量直链），完成后触发重渲染
         void getDirectClient('netease')!.resolvePlayableUrls!(page.songs).then(() => {
           setSongs(prev => [...prev]);
-          void probeSongsPrefetch(page.songs);
         });
       } else {
         setHasMore(false);

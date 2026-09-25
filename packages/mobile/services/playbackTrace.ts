@@ -3,7 +3,6 @@ import { Share } from 'react-native';
 import {
   createPlaybackTraceRing,
   setPlaybackTraceSink,
-  type PlaybackProbeTrace,
   type PlaybackTrace,
 } from '@mplayer/core';
 
@@ -37,11 +36,6 @@ export function listPlaybackTraces(): PlaybackTrace[] {
   return ring.listResolves();
 }
 
-/** 最近探测 trace 快照（旧→新）。 */
-export function listProbeTraces(): PlaybackProbeTrace[] {
-  return ring.listProbes();
-}
-
 /** 清空会话内诊断缓冲。 */
 export function clearPlaybackTraces(): void {
   ring.clear();
@@ -52,7 +46,6 @@ export interface PlaybackTraceExport {
   version: 1;
   exportedAt: number;
   resolutions: PlaybackTrace[];
-  probes: PlaybackProbeTrace[];
 }
 
 /**
@@ -64,7 +57,6 @@ export function serializePlaybackTraces(): string {
     version: 1,
     exportedAt: Date.now(),
     resolutions: ring.listResolves(),
-    probes: ring.listProbes(),
   };
   return JSON.stringify(payload, null, 2);
 }

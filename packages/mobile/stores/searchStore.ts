@@ -3,7 +3,6 @@ import { musicApi, createSearchOrchestrator } from '@mplayer/core';
 import type { SongGroup, SourceKey, SearchOrchestratorState } from '@mplayer/core';
 import { useSourceStore, SOURCE_OPTION_LABELS, type SourceOption } from './sourceStore';
 import { useLogsStore } from './logsStore';
-import { probeSongsPrefetch } from '../services/songProbe';
 
 interface SearchState {
   query: string;
@@ -21,7 +20,7 @@ interface SearchState {
 /**
  * 搜索编排器（ADR-0003）：多源渐进/单源路由、seq 防 stale、组内合并全部
  * 单一事实来源地收编在 core SearchOrchestrator。Store 退化为纯绑定：
- * subscribe 镜像 + source 路由 + 完成后统一探测 + 日志。
+ * subscribe 镜像 + source 路由 + 完成后日志。
  */
 const orchestrator = createSearchOrchestrator<SourceKey>({
   // 模式感知搜索（T01）：auto 直连优先（失败 tier3 兜底）/ direct 仅直连（#277 收窄）
@@ -30,7 +29,7 @@ const orchestrator = createSearchOrchestrator<SourceKey>({
   concurrency: 3,
 });
 
-export const useSearchStore = create<SearchState>((set, get) => {
+export const useSearchStore = create<SearchState>((set) => {
   /**
    * subscribe 镜像：编排器状态 → zustand。单源结果按所选源映射中文名
    * （编排器结果组 name = 源 key，渲染层 SingleSourceResults 用它作标题）。
@@ -68,11 +67,6 @@ export const useSearchStore = create<SearchState>((set, get) => {
       const t0 = Date.now();
       await orchestrator.search(query, route);
       useLogsStore.getState().addLog('info', `搜索完成: 词「${query}」耗时 ${Date.now() - t0}ms`);
-      // 探测在全部完成后统一跑（与搜索并发会抢手机网络带宽）
-      const { results } = get();
-      if (results.length > 0) {
-        await probeSongsPrefetch(results.flatMap((g) => g.songs));
-      }
     },
 
     loadMore: async () => {

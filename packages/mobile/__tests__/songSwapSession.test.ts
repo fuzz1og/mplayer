@@ -7,8 +7,8 @@ function song(id: string, name = '晴天', sourceType: SourceKey = 'netease'): S
   return { id, name, artist: '周杰伦', album: '', duration: 240, sourceType, url: '', cover: '', lrc: '' };
 }
 
-function candidate(id: string, playable: boolean | null = true): SwapCandidate {
-  return { song: { ...song(id, '晴天', 'qq') }, exact: true, score: 1, playable, tag: null };
+function candidate(id: string): SwapCandidate {
+  return { song: { ...song(id, '晴天', 'qq') }, exact: true, score: 1 };
 }
 
 function deferred<T>() {
@@ -17,18 +17,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const tick = () => new Promise<void>((resolve) => { setTimeout(resolve, 0); });
-
 function makeDeps(overrides: Partial<SongSwapDeps> = {}) {
   const scheduled: (() => void)[] = [];
   const deps: SongSwapDeps = {
     search: vi.fn(async () => [] as SwapCandidate[]),
-    probe: vi.fn(async (candidates: SwapCandidate[]) => candidates),
     apply: vi.fn((_song: Song, _source: SourceKey, c: SwapCandidate) => ({ ...c.song })),
     onApplied: vi.fn(),
     onEmptySource: vi.fn(),
     onApplyFailed: vi.fn(),
-    confirmUnplayable: vi.fn((_candidate: SwapCandidate, proceed: () => void) => proceed()),
     scheduleClose: vi.fn((run: () => void) => { scheduled.push(run); }),
     ...overrides,
   };
@@ -61,7 +57,6 @@ describe('createSwapSession 两阶段迁移', () => {
 
     expect(deps.onEmptySource).toHaveBeenCalledWith('qq');
     expect(session.getSnapshot()).toMatchObject({ loading: false, source: null, candidates: [] });
-    expect(deps.probe).not.toHaveBeenCalled();
   });
 
   it('无 source 时 selectCandidate 不生效', () => {
@@ -91,25 +86,6 @@ describe('createSwapSession 两阶段迁移', () => {
 
     close();
     expect(session.getSnapshot()).toMatchObject({ visible: false, candidates: [], source: null });
-  });
-
-  it('探测为不可播：用户确认后才切换', async () => {
-    let proceed: (() => void) | null = null;
-    const { deps } = makeDeps({
-      search: vi.fn(async () => [candidate('q1', false)]),
-      confirmUnplayable: vi.fn((_candidate: SwapCandidate, run: () => void) => { proceed = run; }),
-    });
-    const session = createSwapSession(deps);
-    session.open(song('n1'));
-    await session.selectSource('qq');
-
-    session.selectCandidate(candidate('q1', false));
-    expect(deps.confirmUnplayable).toHaveBeenCalledTimes(1);
-    expect(deps.apply).not.toHaveBeenCalled();
-
-    proceed!();
-    expect(deps.apply).toHaveBeenCalledTimes(1);
-    expect(deps.onApplied).toHaveBeenCalledTimes(1);
   });
 
   it('apply 失败：提示且不进入成功态', async () => {
@@ -144,7 +120,6 @@ describe('createSwapSession 两阶段迁移', () => {
     await search;
     expect(session.getSnapshot().candidates).toEqual([]);
     expect(deps.onEmptySource).not.toHaveBeenCalled();
-    expect(deps.probe).not.toHaveBeenCalled();
   });
 
   it('close：只隐藏弹层（保留内容播退场）并丢弃在途结果', async () => {
@@ -189,34 +164,7 @@ describe('createSwapSession 序号守卫', () => {
     // QQ 的慢结果被序号守卫丢弃，酷我的候选不被覆盖
     expect(session.getSnapshot().source).toBe('kuwo');
     expect(ids(session.getSnapshot().candidates)).toEqual(['k1']);
-    expect(deps.probe).toHaveBeenCalledTimes(1);
     expect(deps.onEmptySource).not.toHaveBeenCalled();
-  });
-
-  it('过期探测结果不覆盖当前源的候选', async () => {
-    const qqCandidates = [candidate('q1')];
-    const kuwoCandidates = [candidate('k1')];
-    const qqProbe = deferred<SwapCandidate[]>();
-    const { deps } = makeDeps({
-      search: vi.fn(async (_song: Song, source: SourceKey) => (source === 'qq' ? qqCandidates : kuwoCandidates)),
-      probe: vi.fn((candidates: SwapCandidate[]) =>
-        candidates[0].song.id === 'q1' ? qqProbe.promise : Promise.resolve(candidates)),
-    });
-    const session = createSwapSession(deps);
-    session.open(song('n1'));
-
-    const first = session.selectSource('qq');
-    await tick(); // QQ 搜索完成，探测挂起（候选先显示「检测中」）
-    expect(ids(session.getSnapshot().candidates)).toEqual(['q1']);
-
-    await session.selectSource('kuwo');
-    expect(ids(session.getSnapshot().candidates)).toEqual(['k1']);
-
-    qqProbe.resolve([{ ...candidate('q1'), playable: false }]);
-    await first;
-    // 迟到的 QQ 探测结果被丢弃
-    expect(ids(session.getSnapshot().candidates)).toEqual(['k1']);
-    expect(session.getSnapshot().source).toBe('kuwo');
   });
 
   it('成功后的延时关闭不会误关期间新开的会话', async () => {

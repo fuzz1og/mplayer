@@ -1,13 +1,7 @@
-import type { Song, AudioTag } from '../types/index.js';
 import { request } from './transport.js';
 
-export const PREVIEW_THRESHOLD = 1_048_576; // 1MB - 30s 128kbps ≈ 480KB, 1MB safe threshold
-// 手机网络下 4s 超时会让挂起请求拖慢整批探测(批 = 最慢一首);
-// 3s 折中:覆盖正常慢请求,拦截真正挂起的
-export const PROBE_TIMEOUT = 3000;
-
-// 探测请求头：源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格），
-// 不带/带错会 403 → 直链误判失效；部分 CDN 拒非浏览器 UA。
+// 活性闸请求头：源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格），
+// 不带/带错会 403；部分 CDN 拒非浏览器 UA。
 // UA 与按源 Referer 映射见 utils/sourceReferer.ts（core 共享，与 musicApi/播放器同一份）。
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 
@@ -19,10 +13,9 @@ function probeRequestHeaders(url: string): Record<string, string> {
 }
 
 /**
- * 探测/活性共用的 Range GET：统一走传输层（直连客户端/歌词门面同一传输接缝，
- * 默认 axios 实现，重试/超时行为一致；302 由 axios 自动跟随到 CDN 直链）。
- * 另带 CDN 防盗链头（Referer/UA，见 probeRequestHeaders）。
- * 网络异常直接上抛——极性由调用方定义（探测：异常=valid 不标记；活性：异常=false 死链）。
+ * 播放期直链活性闸的 Range GET：统一走传输层（与直连客户端/歌词门面同一传输接缝，
+ * 默认 axios 实现，重试/超时行为一致；302 由 axios 自动跟随到 CDN 直链），
+ * 并带 CDN 防盗链头（Referer/UA）。网络异常直接上抛——极性由调用方定义。
  */
 async function rangedGet(url: string, rangeEnd: number, timeoutMs: number) {
   return request({
@@ -34,88 +27,13 @@ async function rangedGet(url: string, rangeEnd: number, timeoutMs: number) {
   });
 }
 
-// 会话级探测缓存:同一首歌(同 id/稳定 url)重复搜索不重复探测
-// 带 TTL:过期链接探测 valid 后不能永久有效;瞬时 4xx 也不能永久标 invalid
-const PROBE_CACHE_TTL = 30 * 60 * 1000;
-const probeCache = new Map<string, { tag: AudioTag; expires: number }>();
-const PROBE_CACHE_MAX = 500;
-
-/**
- * 稳定缓存键:去掉 url 的时间戳参数(t=)与 soda 的 play_auth token,
- * 避免同一首歌每次搜索 url 不同导致缓存失效/堆积
- */
-function probeCacheKey(rawUrl: string): string {
-  try {
-    const u = new URL(rawUrl);
-    u.searchParams.delete('t');
-    u.searchParams.delete('timestamp');
-    u.searchParams.delete('play_auth');
-    return u.href;
-  } catch {
-    return rawUrl;
-  }
-}
-
-/**
- * Probe an absolute or relative audio URL and return its playability tag.
- * 全程 HEAD 跟随重定向(不下载 body),HEAD 拿不到大小(不支持/chunked)时
- * 用 Range GET 只取 1KB,完整大小从 content-range 获取。
- * 4xx/5xx 响应标记 invalid,网络异常不标记(valid)。
- */
-export async function probeAudioUrl(rawUrl: string, options?: { baseUrl?: string }): Promise<AudioTag> {
-  const cacheKey = probeCacheKey(rawUrl);
-  const cached = probeCache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) return cached.tag;
-
-  try {
-    const url = normalizeProbeUrl(rawUrl, options?.baseUrl);
-    if (!url.startsWith('http')) return 'invalid';
-
-    // Range GET 只取 1KB，完整大小从 content-range 获取；4xx/5xx 与
-    // text/html（反爬/非法请求页）标 invalid。
-    const resp = await rangedGet(url, 1023, PROBE_TIMEOUT);
-
-    const status = resp.status;
-    const ct = String(resp.headers['content-type'] || '');
-
-    // 4xx/5xx 与 text/html（签名过期/非法请求/反爬页）：
-    // 不可播。之前 fetch 探测把 142 字节错误页按 content-length 标成 preview，
-    // 属于误判；此路径只会在签名/URL 真失效或 CDN 防盗链拒绝时出现
-    if (status >= 400 || ct.includes('text/html')) {
-      probeCache.set(cacheKey, { tag: 'invalid', expires: Date.now() + PROBE_CACHE_TTL });
-      return 'invalid';
-    }
-
-    let contentLength: number | null = null;
-    if (status === 206) {
-      const cr = String(resp.headers['content-range'] || '');
-      const total = cr ? parseInt(cr.split('/')[1] || '', 10) : null;
-      if (total && Number.isFinite(total)) contentLength = total;
-    } else if (status < 300) {
-      // 200：Range 可能被 CDN 忽略（下载完整 body，超时由 axios timeout 兜底
-      // 中断 → catch → valid 不标记）；能拿到 content-length 就按大小分类
-      const cl = String(resp.headers['content-length'] || '');
-      if (cl) contentLength = parseInt(cl, 10);
-    }
-
-    let tag: AudioTag;
-    if (contentLength === null) tag = 'valid'; // Cannot get size, don't mark
-    else if (contentLength < PREVIEW_THRESHOLD) tag = 'preview';
-    else tag = 'valid';
-
-    if (probeCache.size >= PROBE_CACHE_MAX) probeCache.clear();
-    probeCache.set(cacheKey, { tag, expires: Date.now() + PROBE_CACHE_TTL });
-    return tag;
-  } catch {
-    return 'valid'; // Network errors etc. → don't mark, ensure playable
-  }
-}
-
 /**
  * 播放期直链活性闸：缓存命中的 URL 在交给播放器前快速确认活着。
- * 与 probeAudioUrl 的差别：网络异常/超时按**死链**处理（宁可多花一次
- * fresh 重解析，不赌原生播放器对死链 ~3s 才报 Source error）；不写探测
- * 缓存（活性结论时效极短，复用会误判）。
+ * 网络异常/超时按**死链**处理（宁可多花一次 fresh 重解析，不赌原生播放器对死链
+ * ~3s 才报 Source error）；**不写任何缓存**（活性结论时效极短，复用会误判）。
+ *
+ * #391：批量可播性探测（probeAudioUrl/probeAudio）已删除——判据反向（把「直连拿不到
+ * URL」判成失效，而多数歌靠 tier3 才可播）且产物无消费者；本模块只保留这条活性闸。
  */
 export async function isUrlAlive(rawUrl: string, timeoutMs = 1500): Promise<boolean> {
   try {
@@ -127,20 +45,6 @@ export async function isUrlAlive(rawUrl: string, timeoutMs = 1500): Promise<bool
   } catch {
     return false;
   }
-}
-
-/**
- * Probe a song URL and return its playability tag.
- */
-export const SODA_PREVIEW_SECONDS = 60;
-
-export async function probeAudio(song: Song, options?: { baseUrl?: string }): Promise<AudioTag> {
-  // Soda search results have no direct URL; playback resolves it later.
-  if (song.sourceType === 'soda' && !song.url) {
-    return song.duration > 0 && song.duration < SODA_PREVIEW_SECONDS ? 'preview' : 'valid';
-  }
-  if (!song.url) return 'invalid';
-  return probeAudioUrl(song.url, options);
 }
 
 export function normalizeProbeUrl(url: string, baseUrl?: string): string {

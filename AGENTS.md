@@ -42,7 +42,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 ## 多源链路速览
 
 自建 API 已退役。**官方直连优先 → tier3 订阅源兜底**（移动端设置页 auto/direct 来源开关；两端设置页 tier3 订阅清单 + 每源统计；实现在 core `sourceRouter`/`tier3Api`）。
-探测语义 = 直连可播性（probeSongsBatch 直连解析并写预取缓存）；播放走 `resolvePlayableSongRouted`（预取命中 0 等待 → 直连 → tier3 → 失败）；直连解析腿有独立 3s 墙钟，无权威时长的源在播放时对直连 URL 做一次时长取证以标记试听片段（#389 / #392）。旧 `api.php?get=*` 签名地址是死链，见 core `utils/legacyUrl`。请求硬化（UA 池/反同源连续/TLS 指纹伪装开关，weapi 试点）见 core `api/tlsFingerprint` 与 `api/transport`。tier3 订阅清单 schema 与 `source` 字段（源归属）合法值见 `docs/agents/tier3-manifest.md`。播放失败按 core `explainPlaybackFailure` 分级归因（无声明源 / 全被归属跳过 / 适用源都没命中 / tier3 未开启 / 仅直连），双端共用同一份文案；每源统计「交付」= 路由层真正采纳数，「丢弃」= 预算超时丢弃的迟到命中（ADR `docs/adr/2026-09-23-tier3-failure-attribution.md`）。播放解析链结构化 trace 由 core `shared/playbackTrace` 产出（`setPlaybackTraceSink`），宿主注册内存环形缓冲、双端设置页「播放诊断」区展示并手动导出（ADR `docs/adr/2026-09-23-playback-trace-sink.md`）。
+预解析 = 「队列下一首预取 / 冷启预热」经 core 门面 `prefetchPlayableSong`（含 tier3、写入播放解析读的那一份缓存）；播放走 `resolvePlayableSongRouted`（预取命中 0 等待 → 直连 → tier3 → 失败）；直连解析腿有独立 3s 墙钟，无权威时长的源在播放时对直连 URL 做一次时长取证以标记试听片段（#389 / #392）。旧 `api.php?get=*` 签名地址是死链，见 core `utils/legacyUrl`。请求硬化（UA 池/反同源连续/TLS 指纹伪装开关，weapi 试点）见 core `api/tlsFingerprint` 与 `api/transport`。tier3 订阅清单 schema 与 `source` 字段（源归属）合法值见 `docs/agents/tier3-manifest.md`。播放失败按 core `explainPlaybackFailure` 分级归因（无声明源 / 全被归属跳过 / 适用源都没命中 / tier3 未开启 / 仅直连），双端共用同一份文案；每源统计「交付」= 路由层真正采纳数，「丢弃」= 预算超时丢弃的迟到命中（ADR `docs/adr/2026-09-23-tier3-failure-attribution.md`）。播放解析链结构化 trace 由 core `shared/playbackTrace` 产出（`setPlaybackTraceSink`），宿主注册内存环形缓冲、双端设置页「播放诊断」区展示并手动导出（ADR `docs/adr/2026-09-23-playback-trace-sink.md`）。
 
 ## Git Workflow
 

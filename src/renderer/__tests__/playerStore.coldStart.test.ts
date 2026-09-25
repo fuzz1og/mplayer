@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearPrefetchCache, getPrefetchedUrl, type Song } from '@mplayer/core';
+import { clearPrefetchCache, forgetPrefetchedUrl, getPrefetchedUrl, setPrefetchedUrl, type Song } from '@mplayer/core';
 
 // --- Mock 准备：audioPlayer / callMusicApi / IpcClient / songCoverRefresh ---
 const audioPlayerMock = vi.hoisted(() => {
@@ -54,6 +54,17 @@ function defaultCallMusicApi(): void {
     switch (method) {
       case 'resolvePlayableSongRouted':
         return resolveRouted(target);
+      // #390：预取经门面在主进程执行——测试模拟「解析 + 写入读路径那份缓存」
+      case 'prefetchPlayableSong': {
+        const existing = target ? getPrefetchedUrl(target) : undefined;
+        if (existing) return existing;
+        const resolved = resolveRouted(target);
+        if (target && resolved?.url) setPrefetchedUrl(target, resolved.url, !!resolved.nonFull);
+        return resolved;
+      }
+      case 'forgetPrefetchedSong':
+        if (target) forgetPrefetchedUrl(target);
+        return undefined;
       case 'resolvePlayableUrlRouted':
         return 'https://resolved.example.com/audio.mp3';
       case 'searchSongsRouted':
@@ -188,28 +199,46 @@ describe('冷启还原态：resume 必须重走全链解析（#328）', () => {
 // ---------------------------------------------------------------------------
 // #328：冷启预热 —— 让首次点播放命中预取缓存 0 等待
 // ---------------------------------------------------------------------------
-describe('冷启预热 warmupRestoredSong（#328）', () => {
-  it('对还原的当前歌做一次直连解析并写入预取缓存', async () => {
+describe('冷启预热 warmupRestoredSong（#328 / #390）', () => {
+  it('经 IPC 门面预热还原的当前歌（写入主进程读路径）', async () => {
     const restored = song('1');
-    usePlayerStore.setState({ currentSong: restored });
+    usePlayerStore.setState({ currentSong: restored, currentPlaylist: [restored], currentPlaylistIndex: 0 });
 
     warmupRestoredSong();
     await flush();
 
-    expect(callMusicApiMock).toHaveBeenCalledWith('resolvePlayableSongRouted', expect.objectContaining({ id: '1' }));
+    expect(callMusicApiMock).toHaveBeenCalledWith('prefetchPlayableSong', expect.objectContaining({ id: '1' }));
     expect(getPrefetchedUrl(restored)?.url).toBe('https://resolved.example.com/audio.mp3');
   });
 
-  it('已有预取条目时不重复解析', async () => {
+  it('覆盖面扩到「当前歌 + 队列下一首」（限 2 首）', async () => {
     const restored = song('1');
-    const { setPrefetchedUrl } = await import('@mplayer/core');
-    setPrefetchedUrl(restored, 'https://warm.example.com/a.mp3', false);
-    usePlayerStore.setState({ currentSong: restored });
+    const next = song('2');
+    const third = song('3');
+    usePlayerStore.setState({
+      currentSong: restored,
+      currentPlaylist: [restored, next, third],
+      currentPlaylistIndex: 0,
+    });
 
     warmupRestoredSong();
     await flush();
 
-    expect(callMusicApiMock).not.toHaveBeenCalled();
+    expect(callMusicApiMock).toHaveBeenCalledWith('prefetchPlayableSong', expect.objectContaining({ id: '1' }));
+    expect(callMusicApiMock).toHaveBeenCalledWith('prefetchPlayableSong', expect.objectContaining({ id: '2' }));
+    expect(callMusicApiMock).not.toHaveBeenCalledWith('prefetchPlayableSong', expect.objectContaining({ id: '3' }));
+  });
+
+  it('已有预取条目时只委派一次（去重下沉到 core，渲染层读不到主进程缓存）', async () => {
+    const restored = song('1');
+    setPrefetchedUrl(restored, 'https://warm.example.com/a.mp3', false);
+    usePlayerStore.setState({ currentSong: restored, currentPlaylist: [restored], currentPlaylistIndex: 0 });
+
+    warmupRestoredSong();
+    await flush();
+
+    const prefetchCalls = callMusicApiMock.mock.calls.filter((c) => c[0] === 'prefetchPlayableSong');
+    expect(prefetchCalls).toHaveLength(1);
   });
 
   it('无还原歌曲或本地歌曲时不发请求', async () => {
@@ -228,7 +257,7 @@ describe('冷启预热 warmupRestoredSong（#328）', () => {
   it('解析失败静默（真正播放时再走正常失败链）', async () => {
     callMusicApiMock.mockRejectedValue(new Error('直连不可用'));
     const restored = song('1');
-    usePlayerStore.setState({ currentSong: restored });
+    usePlayerStore.setState({ currentSong: restored, currentPlaylist: [restored], currentPlaylistIndex: 0 });
 
     expect(() => warmupRestoredSong()).not.toThrow();
     await flush();

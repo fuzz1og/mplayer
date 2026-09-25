@@ -86,7 +86,6 @@ describe('searchService', () => {
       };
       (IpcClient.invoke as any).mockImplementation(async (_c: string, method?: string, _kw?: string, _p?: number, src?: string) => {
         if (method === 'searchSongsRouted') return bySource[src as string] || [];
-        if (method === 'probeSongsBatch') return [];
         return undefined;
       });
 
@@ -103,7 +102,7 @@ describe('searchService', () => {
       expect(IpcClient.invoke).toHaveBeenCalledWith('musicApi:call', 'searchSongsRouted', '晴天', 1, 'qq');
     });
 
-    it('探测批次仍走主进程 IPC 预取 URL，但不再写预测徽标', async () => {
+    it('搜索不再发起任何探测请求，也不写预测徽标（#391：探测链删除）', async () => {
       vi.useRealTimers();
       const { IpcClient } = await import('../services/IpcClient');
       const songs = Array.from({ length: 12 }, (_, i) => ({
@@ -114,72 +113,18 @@ describe('searchService', () => {
       }));
       (IpcClient.invoke as any).mockImplementation(async (channel: string, method?: string) => {
         if (channel === 'musicApi:call' && method === 'searchSongsRouted') return songs;
-        if (channel === 'musicApi:call' && method === 'probeSongsBatch') {
-          return songs.map((song) => ({ songId: song.id, tag: 'valid' as const }));
-        }
         return undefined;
       });
 
       await searchService.search('周杰伦');
+      await new Promise((r) => setTimeout(r, 0));
 
-      await vi.waitFor(() => {
-        const probeCalls = (IpcClient.invoke as any).mock.calls.filter(
-          (call: unknown[]) => call[0] === 'musicApi:call' && call[1] === 'probeSongsBatch'
-        );
-        expect(probeCalls).toHaveLength(1);
-        expect(probeCalls[0][2]).toHaveLength(songs.length);
-      });
-      // 列表阶段不预显徽标：探测结果只用于主进程预取缓存，不写渲染层 audioTag
-      expect(mockStore.setAudioTag).not.toHaveBeenCalled();
-    });
-
-    it('快速连搜：旧搜索在途探测被 seq 守卫跳过，新搜索仍发起预取探测', async () => {
-      vi.useRealTimers();
-      const { IpcClient } = await import('../services/IpcClient');
-
-      const firstSongs = [{ id: 'old1', name: '旧歌', artist: '歌手甲', url: '' }];
-      const secondSongs = [{ id: 'new1', name: '新歌', artist: '歌手乙', url: '' }];
-
-      // 第一次搜索的探测批次挂起（手动放行），第二次搜索立即返回
-      let releaseOldProbe: (() => void) | undefined;
-      let oldInFlight = false;
-      (IpcClient.invoke as any).mockImplementation(async (_ch: string, method?: string, arg?: unknown) => {
-        if (method === 'searchSongsRouted') {
-          return arg === '周杰伦' ? firstSongs : secondSongs;
-        }
-        if (method === 'probeSongsBatch') {
-          if (!oldInFlight) {
-            oldInFlight = true;
-            await new Promise<void>((resolve) => { releaseOldProbe = resolve; });
-            return [{ songId: 'old1', tag: 'stale' as const }];
-          }
-          return [{ songId: 'new1', tag: 'valid' as const }];
-        }
-        return undefined;
-      });
-
-      const p1 = searchService.search('周杰伦');
-      await vi.waitFor(() => expect(oldInFlight).toBe(true));
-      // 旧搜索在途时立即发起新搜索（probeSeq++ → 旧探测变 stale）
-      await searchService.search('新词');
-      // 旧搜索的探测姗姗来迟，但其结果不得写入
-      releaseOldProbe!();
-
-      await vi.waitFor(() => {
-        const tags = (IpcClient.invoke as any).mock.calls.filter(
-          (call: unknown[]) => call[1] === 'probeSongsBatch' && (call[2] as any[])[0]?.id === 'new1'
-        );
-        expect(tags).toHaveLength(1);
-      });
-      await p1;
-
-      // 探测结果一律不写渲染层徽标（预测徽标已废弃）；新搜索的预取探测必须发出
-      expect(mockStore.setAudioTag).not.toHaveBeenCalledWith('old1', 'stale');
-      expect(mockStore.setAudioTag).not.toHaveBeenCalledWith('new1', 'valid');
-      const newProbeCalls = (IpcClient.invoke as any).mock.calls.filter(
-        (call: unknown[]) => call[1] === 'probeSongsBatch' && (call[2] as any[])[0]?.id === 'new1'
+      const probeCalls = (IpcClient.invoke as any).mock.calls.filter(
+        (call: unknown[]) => call[1] === 'probeSongsBatch'
       );
-      expect(newProbeCalls).toHaveLength(1);
+      expect(probeCalls).toHaveLength(0);
+      // 列表阶段不预显徽标：探测已删除，徽标只在播放后按实际结果回写
+      expect(mockStore.setAudioTag).not.toHaveBeenCalled();
     });
   });
 

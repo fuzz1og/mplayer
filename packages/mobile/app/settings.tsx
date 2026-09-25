@@ -17,7 +17,7 @@ import { MULTI_SOURCE_LIST, SOURCE_DISPLAY_NAMES, hasDirectClient, setTier3Enabl
 import type { Tier3SourceStats, PlaybackTrace, PlaybackTraceSourceLeg } from '@mplayer/core';
 import { useSettingsStore } from '../stores/settingsStore';
 import { cacheKernel, getCacheStats } from '../services/cacheService';
-import { listPlaybackTraces, listProbeTraces, clearPlaybackTraces, exportPlaybackTraces } from '../services/playbackTrace';
+import { listPlaybackTraces, clearPlaybackTraces, exportPlaybackTraces } from '../services/playbackTrace';
 import { checkLatestRelease, speedTestChannels, type ChannelSpeedResult } from '../services/appUpdate';
 import {opacity, radius, shadow, spacing, textVariants} from '../theme/tokens';
 import type { ThemeMode, ThemeColors } from '../theme/tokens';
@@ -160,12 +160,9 @@ export default function SettingsPage() {
 
   // 播放诊断（#363）：core 环形缓冲快照，进入页面/手动刷新时读取（最近 20 条，倒序）
   const [traces, setTraces] = useState<PlaybackTrace[]>([]);
-  const [probeCount, setProbeCount] = useState(0);
-  // 导出/清空对解析与探测两类 trace 都生效（探测也可能独立产生）
-  const hasTraces = traces.length > 0 || probeCount > 0;
+  const hasTraces = traces.length > 0;
   const refreshTraces = (): void => {
     setTraces(listPlaybackTraces().slice(-TRACE_DISPLAY_COUNT).reverse());
-    setProbeCount(listProbeTraces().length);
   };
   useEffect(() => {
     refreshTraces();
@@ -183,7 +180,6 @@ export default function SettingsPage() {
   const handleClearTraces = (): void => {
     clearPlaybackTraces();
     setTraces([]);
-    setProbeCount(0);
   };
 
   const currentVersion = Constants.expoConfig?.version || '0.0.0';
@@ -451,7 +447,7 @@ export default function SettingsPage() {
             <View style={styles.groupPad}>
               <View style={styles.diagHead}>
                 <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>
-                  最近 {traces.length} 条解析 · {probeCount} 条探测（本次会话）
+                  最近 {traces.length} 条解析（本次会话）
                 </Text>
                 <ScalePress onPress={refreshTraces} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
                   <RefreshCw size={14} color={colors.textSecondary} />

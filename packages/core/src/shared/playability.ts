@@ -2,7 +2,7 @@
  * 可播性判定纯函数（T12 #158）。
  *
  * 独立叶子模块（零依赖）：完整时长校验（试听版检测）的单一事实来源，
- * 供 sourceRouter（播放解析 nonFull 标记）与 audioProbe（探测标签）引用，
+ * 供 sourceRouter（播放解析 nonFull 标记）与直连腿取证引用，
  * 避免 sourceRouter → audioProbe → musicApi 的循环导入。
  */
 

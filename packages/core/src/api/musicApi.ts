@@ -1,21 +1,18 @@
 import axios from 'axios';
-import type { Song, SourceKey, SongGroup, AudioTag } from '../types/index.js';
+import type { Song, SourceKey, SongGroup } from '../types/index.js';
 import { cacheManager } from './memoryCacheManager.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { looksLikeLyrics } from '../download/lyrics.js';
 import { request, bodyToText } from './transport.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
-import { probeSongs } from './probeSongs.js';
-import { rememberProbeResult } from './prefetchCache.js';
+import { setPrefetchedUrl, getPrefetchedUrl, forgetPrefetchedUrl } from './prefetchCache.js';
 import {
   searchSongsRouted as routedSearchSongs,
   resolvePlayableUrlRouted as routedResolveUrl,
   resolvePlayableSongRouted as routedResolveSong,
-  resolvePlayableSongDirect as routedResolveSongDirect,
 } from '../shared/sourceRouter.js';
 import { explainPlaybackFailure as explainFailure } from '../tier3/tier3Api.js';
-import { emitPlaybackProbeTrace, isPlaybackTraceEnabled, traceNow } from '../shared/playbackTrace.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
 import { resolveKugouLyricUrl } from './kugouDirect.js';
 import { fetchLyricViaGateway } from './qqDirect.js';
@@ -507,58 +504,6 @@ export const musicApi = {
   },
 
   /**
-   * 批量探测歌曲可播性（桌面换源/搜索结果探测），空 url → `invalid`。
-   * 复用 core `probeSongs` + `getAudioUrl` resolver：每首先解析直链再探测。
-   */
-  async probeSongsBatch(songs: Song[]): Promise<{ songId: string; tag: AudioTag }[]> {
-    const list = Array.isArray(songs) ? songs : [];
-    if (list.length === 0) return [];
-    const results: { songId: string; tag: AudioTag }[] = [];
-    // 记录每首解析后的最终 URL + 直连 nonFull 判定（空 → invalid，保持桌面现状）
-    const resolvedUrls = new Map<string, { url: string; nonFull: boolean }>();
-    const songsById = new Map(list.map((s) => [s.id, s]));
-    await probeSongs(list, {
-      concurrency: Math.min(5, Math.max(1, list.length)),
-      resolver: async (song) => {
-        let url = song.url;
-        let nonFull = false;
-        try {
-          // 探测只走**直连**路由（resolvePlayableSongDirect，无 tier3）：
-          // 探测语义 = 「直连可播性」，单请求/首、快，且不占用 tier3 上游配额、
-          // 不被 mgmp3 等慢源（20s 超时）拖死整批探测（标签秒出）。
-          // 播放仍走 resolvePlayableSongRouted（含 tier3 兜底）。
-          const routed = await routedResolveSongDirect(song);
-          if (routed?.url?.startsWith('http')) {
-            url = routed.url;
-            nonFull = routed.nonFull;
-          }
-        } catch {
-          // keep the original URL; probeAudioUrl will classify it
-        }
-        resolvedUrls.set(song.id, { url: url || '', nonFull });
-        return url;
-      },
-      // #363：探测腿结构化 trace——resolveMs（直连解析）与 validateMs（URL 校验）
-      // 分开记，避免把校验成本错记到解析腿上。sink 为空时不构造记录。
-      onProbe: (songId, resolveMs, validateMs, tag) => {
-        if (!isPlaybackTraceEnabled()) return;
-        emitPlaybackProbeTrace({ ts: traceNow(), songId, resolveMs, validateMs, tag });
-      },
-      onResult: (songId, tag) => {
-        const entry = resolvedUrls.get(songId);
-        results.push({ songId, tag: entry?.url ? tag : 'invalid' });
-        // 探测职责转型：打标签的同时把直连直链写入预取缓存（主进程内存，
-        // TTL 30min）——播放时 resolvePlayableSongRouted 先查缓存，命中 0 等待。
-        const target = songsById.get(songId);
-        if (target && entry?.url) {
-          rememberProbeResult(target, entry.url, tag, entry.nonFull);
-        }
-      },
-    });
-    return results;
-  },
-
-  /**
    * 模式感知搜索（来源开关 auto/direct/api，单一回退链：直连 → 自建 API）。
    * 供 SearchOrchestrator 的 searchOneSource 注入（桌面经 musicApi:call 契约，
    * 移动端 core 直调）。直连客户端由 T02+ 各源 ticket 注册。
@@ -571,6 +516,31 @@ export const musicApi = {
 
   /** 模式感知播放解析 + 试听版检测（T12：UrlInfo 完整时长校验 → nonFull 标记）。 */
   resolvePlayableSongRouted: (song: Song) => routedResolveSong(song),
+
+  /**
+   * 解析并写入**读路径那一份**预取缓存（#390）。
+   *
+   * 桌面端 `@mplayer/core` 被分别打包进主进程与渲染进程，各自一份模块级
+   * `prefetchCache`——播放解析经 IPC 打的是**主进程那份**。所以预取必须经
+   * `musicApi:call` 在主进程执行（本方法在主进程跑，写的正是读路径）；移动端
+   * 单进程直调，天然同一份。
+   *
+   * 已有未过期条目直接返回（TTL 30min），不重复解析；解析失败上抛由调用方静默。
+   */
+  async prefetchPlayableSong(song: Song): Promise<{ url: string; nonFull: boolean } | null> {
+    const cached = getPrefetchedUrl(song);
+    if (cached) return cached;
+    const routed = await routedResolveSong(song);
+    if (!routed?.url?.startsWith('http')) return null;
+    setPrefetchedUrl(song, routed.url, !!routed.nonFull);
+    return { url: routed.url, nonFull: !!routed.nonFull };
+  },
+
+  /** 遗忘该歌的预取条目（#390）：fresh 重试前必须打到**主进程那份**缓存，
+   *  否则 `play(song,{fresh:true})` 会再次 0 等待命中刚被证明失败的直链。 */
+  forgetPrefetchedSong(song: Song): void {
+    forgetPrefetchedUrl(song);
+  },
 
   /** 播放失败归因（#357）：直连 + tier3 都没拿到 URL 后，取可操作的原因与共享文案。 */
   explainPlaybackFailure: (song: Song) => explainFailure(song),

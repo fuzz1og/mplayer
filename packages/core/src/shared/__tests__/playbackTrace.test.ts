@@ -5,7 +5,6 @@ import {
   isPlaybackTraceEnabled,
   createPlaybackTraceRing,
   type PlaybackTrace,
-  type PlaybackProbeTrace,
 } from '../playbackTrace.js';
 import {
   registerDirectClient,
@@ -23,17 +22,10 @@ import { clearPrefetchCache, setPrefetchedUrl } from '../../api/prefetchCache.js
 beforeEach(() => { setDirectValidator(null); });
 import type { Song } from '../../types/index.js';
 
-// 探测的 URL 校验是系统边界：mock 掉 probeAudioUrl，让 trace 在无网络下可控。
-vi.mock('../../api/audioProbe.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/audioProbe.js')>();
-  return { ...actual, probeAudioUrl: vi.fn() };
-});
-import { probeAudioUrl } from '../../api/audioProbe.js';
-import { musicApi } from '../../api/musicApi.js';
-
 /**
  * 播放解析链结构化 trace（#363）：core 出 trace、宿主落 sink。
- * 覆盖：层级/腿/护栏字段、每源 leg、sink 关闭零成本、环形缓冲、探测腿 resolve/validate 拆分。
+ * 覆盖：层级/腿/护栏字段、每源 leg、sink 关闭零成本、环形缓冲。
+ * #391：探测腿（probeSongsBatch / onProbe）已删除，其用例一并移除。
  */
 
 const song = (id: string, source = 'netease', url = ''): Song => ({
@@ -63,7 +55,6 @@ beforeEach(() => {
   setTier3Enabled(false);
   setTier3Resolver(null);
   setPlaybackTraceSink(null);
-  vi.mocked(probeAudioUrl).mockReset();
 });
 
 describe('playbackTrace sink 接缝', () => {
@@ -98,7 +89,6 @@ describe('createPlaybackTraceRing（宿主常驻环形缓冲）', () => {
     expect(ring.listResolves().map((t) => t.songId)).toEqual(['2', '3']);
     ring.clear();
     expect(ring.listResolves()).toEqual([]);
-    expect(ring.listProbes()).toEqual([]);
   });
 
   it('返回快照，外部修改不影响缓冲', () => {
@@ -206,27 +196,3 @@ describe('resolvePlayableSongRouted 落 trace', () => {
   });
 });
 
-describe('probeSongsBatch 探测腿 trace', () => {
-  it('resolveMs / validateMs 分开记，tag 透传', async () => {
-    registerDirectClient(makeClient('netease'));
-    vi.mocked(probeAudioUrl).mockResolvedValue('valid');
-    const probes: PlaybackProbeTrace[] = [];
-    setPlaybackTraceSink({ onProbe: (t) => probes.push(t) });
-
-    const results = await musicApi.probeSongsBatch([song('1')]);
-    expect(results).toEqual([{ songId: '1', tag: 'valid' }]);
-    expect(probes).toHaveLength(1);
-    expect(probes[0].songId).toBe('1');
-    expect(probes[0].tag).toBe('valid');
-    expect(probes[0].resolveMs).toBeGreaterThanOrEqual(0);
-    expect(probes[0].validateMs).toBeGreaterThanOrEqual(0);
-  });
-
-  it('sink 关闭：不发射探测 trace', async () => {
-    registerDirectClient(makeClient('netease'));
-    vi.mocked(probeAudioUrl).mockResolvedValue('valid');
-    setPlaybackTraceSink(null);
-    await musicApi.probeSongsBatch([song('1')]);
-    expect(probeAudioUrl).toHaveBeenCalledTimes(1);
-  });
-});
