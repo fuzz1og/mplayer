@@ -9,10 +9,14 @@ import {
   resolvePlayableSongRouted,
   setTier3Enabled,
   setTier3Resolver,
+  setDirectValidator,
   type PlaybackGuard,
   type Tier3Resolution,
 } from '../sourceRouter.js';
 import { clearPrefetchCache, setPrefetchedUrl } from '../../api/prefetchCache.js';
+
+// #392 直连腿取证默认会真发 Range：本文件测路由语义，关闭取证以保持零 I/O。
+beforeEach(() => { setDirectValidator(null); });
 
 /**
  * T12 试听版检测 + 可播性预检测试（#158）。

@@ -14,9 +14,13 @@ import {
   setTier3Enabled,
   setTier3Resolver,
   resolvePlayableSongRouted,
+  setDirectValidator,
   type DirectSourceClient,
 } from '../sourceRouter.js';
 import { clearPrefetchCache, setPrefetchedUrl } from '../../api/prefetchCache.js';
+
+// #392 直连腿取证默认会真发 Range：本文件测 trace，关闭直连取证以保持零 I/O。
+beforeEach(() => { setDirectValidator(null); });
 import type { Song } from '../../types/index.js';
 
 // 探测的 URL 校验是系统边界：mock 掉 probeAudioUrl，让 trace 在无网络下可控。

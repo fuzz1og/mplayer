@@ -6,6 +6,7 @@ import {
   clearDirectClients,
   registerDirectClient,
   resolvePlayableSongRouted,
+  setDirectValidator,
   setSourceModes,
 } from '../sourceRouter.js';
 import {
@@ -17,6 +18,9 @@ import {
   type Tier3Subscription,
 } from '../../tier3/tier3Api.js';
 import { clearPrefetchCache, setPrefetchedUrl } from '../../api/prefetchCache.js';
+
+// #392 直连腿取证默认会真发 Range：本文件测 tier3 护栏，关闭直连取证以保持零 I/O。
+beforeEach(() => { setDirectValidator(null); });
 
 /**
  * tier3 兜底护栏集成测试（#361）。

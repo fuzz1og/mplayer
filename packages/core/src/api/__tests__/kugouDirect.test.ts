@@ -59,33 +59,63 @@ describe('kugouDirectClient.searchSongs', () => {
   });
 });
 
-describe('kugouDirectClient.resolvePlayableUrl（MD5 兜底）', () => {
-  it('trackercdn i/v2 带 MD5(hash+kgcloudv2) key 并取 data.url', async () => {
+describe('kugouDirectClient.resolvePlayableUrl（免签名端点，#393）', () => {
+  it('走 m.kugou.com getSongInfo.php(cmd=playInfo) 并取 url', async () => {
     const transport = vi.fn(async () =>
-      jsonResponse(JSON.stringify({ status: 1, data: { url: 'http://audio.kugou.com/1.mp3' } }))
+      jsonResponse(JSON.stringify({ status: 1, url: 'http://audio.kugou.com/1.mp3', backup_url: 'http://bk.kugou.com/1.mp3' }))
     );
     setTransport(transport as any);
 
     const url = await kugouDirectClient.resolvePlayableUrl!(kugouSong('abc123'));
 
     const req = transport.mock.calls[0][0];
-    expect(req.url).toContain('trackercdn.kugou.com/i/v2/');
+    expect(req.url).toContain('m.kugou.com/app/i/getSongInfo.php');
+    expect(req.url).toContain('cmd=playInfo');
     expect(req.url).toContain('hash=abc123');
+    // 免签名端点：不再带 md5 key / trackercdn 路径
+    expect(req.url).not.toContain('trackercdn');
+    expect(req.url).not.toContain('key=');
     expect(url).toBe('https://audio.kugou.com/1.mp3');
   });
 
-  it('取 backupUrl 族兜底字段', async () => {
+  it('url 缺失时回退 backup_url，再回退嵌套 data 族字段', async () => {
     setTransport(async () =>
-      jsonResponse(JSON.stringify({ status: 1, data: { backupUrl: 'http://backup.kugou.com/2.mp3' } })) as any
+      jsonResponse(JSON.stringify({ status: 1, backup_url: 'http://backup.kugou.com/2.mp3' })) as any
     );
-    const url = await kugouDirectClient.resolvePlayableUrl!(kugouSong('def456'));
-    expect(url).toBe('https://backup.kugou.com/2.mp3');
+    expect(await kugouDirectClient.resolvePlayableUrl!(kugouSong('def456'))).toBe('https://backup.kugou.com/2.mp3');
+
+    setTransport(async () =>
+      jsonResponse(JSON.stringify({ status: 1, data: { url: 'http://nested.kugou.com/3.mp3' } })) as any
+    );
+    expect(await kugouDirectClient.resolvePlayableUrl!(kugouSong('ghi789'))).toBe('https://nested.kugou.com/3.mp3');
   });
 
-  it('无 url 返回空串（换元层）', async () => {
-    setTransport(async () => jsonResponse(JSON.stringify({ status: 0, data: {} })) as any);
+  it('付费/无版权（status=0 且无 URL）返回空串，不抛错（交 tier3 兜底）', async () => {
+    setTransport(async () => jsonResponse(JSON.stringify({ status: 0, error: '需要付费' })) as any);
     const url = await kugouDirectClient.resolvePlayableUrl!(kugouSong());
     expect(url).toBe('');
+  });
+
+  it('回归：url 为空串 + backup_url 为空对象 → 空串，绝不返回 "[object Object]"', async () => {
+    // 线上真实响应（付费歌，如 陈奕迅《最佳损友》）：backup_url 是 {} 而非缺失。
+    // 旧的 `data.url || data.backup_url || …` 串会把 {} String 成 "[object Object]"，
+    // 被路由层当成直连成功 → tier3 与失败归因全被跳过 → 整源不可播。
+    setTransport(async () =>
+      jsonResponse(JSON.stringify({ status: 0, url: '', backup_url: {}, error: '需要付费', privilege: 10 })) as any
+    );
+    const url = await kugouDirectClient.resolvePlayableUrl!(kugouSong());
+    expect(url).toBe('');
+    expect(url).not.toContain('object');
+  });
+
+  it('url 是字符串数组时取第一个非空串（上游字段形态漂移）', async () => {
+    setTransport(async () =>
+      jsonResponse(JSON.stringify({ status: 1, url: ['', 'http://arr.kugou.com/1.mp3'] })) as any
+    );
+    expect(await kugouDirectClient.resolvePlayableUrl!(kugouSong())).toBe('https://arr.kugou.com/1.mp3');
+
+    setTransport(async () => jsonResponse(JSON.stringify({ status: 0, url: [], backup_url: {} })) as any);
+    expect(await kugouDirectClient.resolvePlayableUrl!(kugouSong())).toBe('');
   });
 });
 

@@ -877,6 +877,28 @@ describe('单源硬墙与整链预算（#365，ADR-0014 决策 2）', () => {
       })),
     });
 
+  /** 两步源清单（timeoutMs 省略时不写该字段，用于验证「默认值按 kind」）。 */
+  const twoStepManifest = (timeoutMs?: number): string =>
+    JSON.stringify({
+      version: 1,
+      sources: [{
+        id: 'two-step',
+        kind: 'search-then-resolve',
+        source: 'qq',
+        allowedDomains: ['cdn.example.com'],
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        search: {
+          method: 'GET',
+          url: 'https://api.example.com/search?keyword={keyword}',
+          responseJsonPath: 'data',
+          itemsPath: 'data.list',
+          namePath: 'name',
+          idPath: 'id',
+        },
+        resolve: { method: 'GET', url: 'https://api.example.com/url?id={id}', responseJsonPath: 'data.url' },
+      }],
+    });
+
   it('清单 timeoutMs 只能收紧到 2s 硬墙（3000 → 2000）', async () => {
     const seen: number[] = [];
     const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
@@ -887,6 +909,56 @@ describe('单源硬墙与整链预算（#365，ADR-0014 决策 2）', () => {
     });
     setTier3Deps({ request });
     addTier3SubscriptionFromText({ text: URL_RESOLVER_MANIFEST }); // 声明了 timeoutMs: 3000
+    setTier3Enabled(true);
+
+    await createTier3Resolver()(song());
+
+    expect(seen[0]).toBe(2_000);
+  });
+
+  it('单源硬墙按 kind 分档：search-then-resolve 2.5s（ADR 2026-09-25 决策 7）', async () => {
+    const seen: number[] = [];
+    const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
+      seen.push(req.timeoutMs ?? -1);
+      return jsonResponse({ data: { list: [] } }, req.url);
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: twoStepManifest(20_000) });
+    setTier3Enabled(true);
+
+    await createTier3Resolver()(song({ id: 'qq:1', sourceType: 'qq' }));
+
+    // 两步源的三段网络串行在同一个单源墙内 → 分档到 2.5s（清单 20s 只能收紧不能放大）
+    expect(seen[0]).toBe(2_500);
+  });
+
+  it('不写 timeoutMs → 默认吃满该 kind 的硬墙（两步源 2500，ADR 决策 7 补记）', async () => {
+    // #394 验收发现：默认值原为扁平 2s，于是「2s 会切掉实测 2047ms 成功路径」这条
+    // 分档理由，对任何没显式写 2500 的清单都依然成立——分档等于白设。
+    const seen: number[] = [];
+    const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
+      seen.push(req.timeoutMs ?? -1);
+      return jsonResponse({ data: { list: [] } }, req.url);
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: twoStepManifest() });
+    setTier3Enabled(true);
+
+    await createTier3Resolver()(song({ id: 'qq:1', sourceType: 'qq' }));
+
+    expect(seen[0]).toBe(2_500);
+  });
+
+  it('不写 timeoutMs → 一步源仍是 2s（默认按 kind 取，不是一律 2.5s）', async () => {
+    const seen: number[] = [];
+    const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
+      if (req.responseType !== 'arraybuffer') seen.push(req.timeoutMs ?? -1);
+      return req.responseType === 'arraybuffer'
+        ? audioResponse()
+        : jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3' } }, req.url);
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: hangingManifest(1) });
     setTier3Enabled(true);
 
     await createTier3Resolver()(song());
