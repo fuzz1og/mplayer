@@ -173,12 +173,24 @@ const MAX_SOURCE_TIMEOUT_MS_BY_KIND: Record<Tier3SourceKind, number> = {
   'search-then-resolve': 2_500,
 };
 
+/**
+ * 单源超时的**默认值**：不写 `timeoutMs` 时取该 kind 的硬墙本身（ADR 2026-09-25 决策 7 补记）。
+ *
+ * 决策 7 给两步源分档 2.5s 的理由是「2s 会切掉实测 2047ms 的成功路径」——若默认值仍是扁平的
+ * 2s，那条理由对**任何没显式写 2500 的清单**都依然成立，分档等于白设（#394 验收时发现：
+ * 用户清单的通用兜底条目写 2000，2.5s 的墙从未被碰到）。
+ * 显式写 `timeoutMs` 仍然只能收紧：`effectiveSourceTimeout` 会把它夹到硬墙以下。
+ */
+function defaultSourceTimeout(kind: Tier3SourceKind): number {
+  return MAX_SOURCE_TIMEOUT_MS_BY_KIND[kind] ?? DEFAULT_TIMEOUT_MS;
+}
+
 /** 单源墙钟哨兵：与「源未命中返回 null」区分开，日志/统计口径不同。 */
 const SOURCE_TIMED_OUT = Symbol('tier3-source-timed-out');
 
-/** 单源有效超时 = `min(清单 timeoutMs, 该 kind 的硬墙, 整链剩余预算)`。 */
+/** 单源有效超时 = `min(清单 timeoutMs ?? 该 kind 默认值, 该 kind 硬墙, 整链剩余预算)`。 */
 function effectiveSourceTimeout(source: Tier3Source, remainingBudgetMs: number): number {
-  const configured = source.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const configured = source.timeoutMs ?? defaultSourceTimeout(source.kind);
   const wall = MAX_SOURCE_TIMEOUT_MS_BY_KIND[source.kind] ?? DEFAULT_TIMEOUT_MS;
   return Math.max(1, Math.min(configured, wall, remainingBudgetMs));
 }
@@ -534,7 +546,7 @@ function buildRequest(
     url: fillTemplate(spec.url, vars, true),
     headers,
     body: spec.body ? fillTemplate(spec.body, vars, false) : undefined,
-    timeoutMs: timeoutMs ?? (source.timeoutMs || DEFAULT_TIMEOUT_MS),
+    timeoutMs: timeoutMs ?? source.timeoutMs ?? defaultSourceTimeout(source.kind),
     responseType,
   };
 }
