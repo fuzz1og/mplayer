@@ -17,15 +17,15 @@
 | `cache/diskBackend.ts` | 磁盘缓存后端（音频、封面、歌词；constructor 注入 cacheDir） |
 | `storage/db.ts` | Primary persistence (favorites, history, playlists, settings)；启动时跑旧签名端点迁移 |
 | `ipc/registerHandler.ts` | `registerIpcHandler` helpers |
-| `services/` | downloadService(进度按 150ms 聚合后推 IPC) / localMusicService / updateService / playbackTraceService(播放解析链 trace 会话内环形缓冲 + 导出 JSON) |
+| `services/` | downloadService(进度按 150ms 聚合后推 IPC) / localMusicService / updateService / playbackTraceService(播放解析链 trace 会话内环形缓冲 + 导出 JSON) / playlistLinkResolver(歌单链接 → 目标源歌单) |
 | `tray/trayManager.ts` | System tray + context menu |
 
 ### Renderer Process (`src/renderer/`)
 
-- `router/index.tsx` HashRouter 全懒加载；页面在 `pages/`（推荐/发现/热榜/收藏/历史/歌单/队列/本地/歌手/专辑/设置等）
+- `router/index.tsx` HashRouter 全懒加载；页面在 `pages/`（推荐/发现/热榜/收藏/历史/歌单/队列/本地/歌手/专辑/歌词/设置等）
 - `store/` Zustand：playerStore, searchStore, favoriteStore, downloadStore, localStore
-- playerStore 播放失败处理：同曲 fresh 重试一次（`forgetPrefetchedUrl` + 重走路由链）→ 仍失败按播放模式自动跳下一首；连续失败达队列长度或没有别的歌则停止提示（对齐移动端）。下一首 URL 预取统一写 core 预取缓存（30min TTL、失败可遗忘），渲染层不再自建 URL Map；播放成功后的簿记异常（历史/队列/封面）不参与失败判定，避免误跳歌
-- `services/` audioPlayer(Howler), playbackClock(播放位置/时长读模型：点击/拖动/键盘 seek + seek 乐观值防回跳 + 叶子窄订阅，位置/时长不进 store), searchService, sourceSwap, IpcClient, callMusicApi 等
+- playerStore 播放失败处理（#385 / #397）：处置由 core `shared/skipGuard` 单一决策（`decideAfterPlaybackFailure`）——同曲 fresh 重试一次（`forgetPrefetchedUrl` + 重走路由链）→ 仍失败即「终局失败」：**连续失败固定上限 3 首**（与队列长度无关）、**离线直接暂停不进解析链**、会话内**坏歌记忆**（跳歌时跳过已判坏的歌）；离线 predicate 与「失败即跳」偏好由宿主注入（偏好默认开，设置页可关）。下一首 URL 预取统一写 core 预取缓存（30min TTL、失败可遗忘），渲染层不再自建 URL Map；播放成功后的簿记异常（历史/队列/封面）不参与失败判定，避免误跳歌
+- `services/` audioPlayer(Howler), playbackClock(播放位置/时长读模型：点击/拖动/键盘 seek + seek 乐观值防回跳 + 叶子窄订阅，位置/时长不进 store), searchService, sourceSwap, artistMetaCache, importService(文本/链接歌单导入), IpcClient, callMusicApi 等
 - `components/` PlayerBar/SongList/SongRow/LyricsDisplay 等通用件；设置页「播放诊断」区 `PlaybackDiagnosticsSection.tsx`（trace 快照 / 导出 / 清空）
 - **歌曲列表模块**（#302 整合）：`SongList.tsx` 独占虚拟滚动与滚动测量（`hooks/useVirtualRows` 自动挂靠页面已有滚动容器）、选中/收藏的 Set 索引、行级交互（下拉菜单/换源/勾选/批量栏/加入歌单弹窗）；`SongRow.tsx` 是唯一行实现（能力位 + `dragHandle`/`actions`/`fillTitle` 插槽），`SortableSongRow.tsx` 是它的 dnd 薄包装（队列页/本地歌单页共用，排序索引数学在 `utils/reorder.moveItem` + `hooks/useSortableReorder`），`GroupedSongList.tsx` 数据经 props（页面做 `searchStore` 适配器）并复用同一套滚动/虚拟化与行实现。页面只做数据与语义回调的适配器，不感知测量细节。
 
@@ -45,14 +45,14 @@ Push（main→renderer）：`download:progress|complete|error`, `localMusic:fold
 
 ## Mobile (Expo/React Native)
 
-expo-router Stack + Tabs：`(tabs)/`（推荐/发现/搜索/歌单/下载）+ player/favorites/history/settings/hotlist/playlist/[id]/discover-playlist/[id]/artist/[id]/album/[id]。
+expo-router Stack + Tabs：`(tabs)/`（推荐 / 发现 / 歌单 / 本地歌曲；搜索页 `href: null` 不占 Tab，由顶栏进入）+ player/favorites/history/settings/hotlist/playlist/[id]/discover-playlist/[id]/artist/[id]/album/[id]。
 
 - `components/` TopBar, PlayerBar, PlayerOverlay, SongRow, DiscoverTabs, SourceSwapModal, AddToPlaylistModal 等
 - `gestures/` 手势物理纯内核（拖拽关闭会话：位移/速度/判关，零 react-native 依赖，node 可测）+ `hooks/useDragToDismiss` 适配器——PlayerOverlay 与 BottomSheet 共用同一份物理
 - `components/collapsingChrome.ts` 折叠头部纯逻辑核心（阈值 / 进度 clamp / 状态栏边沿，零 react-native 依赖，node 可测）+ `hooks/useCollapsingChrome` 原生驱动接线，专辑 / 歌手 / 网络歌单直接用 `CollapsingHero`，歌单详情经 `PlaylistHero` 适配层复用同一结构。原生**颜色**插值不结算 `extrapolate`（数值路径结算）——颜色节点前必须串数值 clamp 节点（`navBackgroundPlan`），否则滚过折叠点后通道越界回绕、条身跳色（#372）
 - `hooks/` 适配器：useCollapsingChrome（折叠头部原生驱动接线）、useDragToDismiss、usePressMutex、useReducedMotion、useRefreshedCover
 - `stores/` Zustand（部分 AsyncStorage persist）：player/settings/favorite/history/playlist/search/discover/source/download/downloadProgress/audioTag/logs/songActions
-- `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songResources(严格搜索 + core 刷新编排适配器)/sourceSwap, legacyMigration, cacheService(身份键 + 可播资源值缓存), appUpdate/coverSearchSlot/perfMonitor/pressMutex/reducedMotion/sheetExit/songActionEffects/songSwapSession/playbackTrace(启动时注册 sink + 会话内环形缓冲 + 导出)
+- `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songResources(严格搜索 + core 刷新编排适配器)/sourceSwap, legacyMigration, networkState(在线/离线 predicate，注入跳歌护栏), playlistLinkImport(歌单链接导入), cacheService(身份键 + 可播资源值缓存), appUpdate/coverSearchSlot/perfMonitor/pressMutex/reducedMotion/sheetExit/songActionEffects/songSwapSession/playbackTrace(启动时注册 sink + 会话内环形缓冲 + 导出)
 
 ## Shared Package (`packages/core/`)
 
