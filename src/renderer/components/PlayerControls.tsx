@@ -5,6 +5,8 @@ import type { PlayMode } from '@mplayer/core';
 
 interface PlayerControlsProps {
   isPlaying: boolean;
+  /** #387：解析/加载中（对齐移动端 preparing）——播放键位置显示 spinner。 */
+  loading?: boolean;
   hasCurrentSong: boolean;
   playMode: PlayMode;
   onPlayPause: () => void;
@@ -14,7 +16,7 @@ interface PlayerControlsProps {
 }
 
 const PlayerControls: React.FC<PlayerControlsProps> = React.memo(({
-  isPlaying, hasCurrentSong, playMode,
+  isPlaying, loading = false, hasCurrentSong, playMode,
   onPlayPause, onPrev, onNext, onModeChange,
 }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
@@ -31,7 +33,7 @@ const PlayerControls: React.FC<PlayerControlsProps> = React.memo(({
     <button
       onClick={onPlayPause}
       disabled={!hasCurrentSong}
-      aria-label={isPlaying ? '暂停' : '播放'}
+      aria-label={loading ? '加载中' : isPlaying ? '暂停' : '播放'}
       style={{
         border: 'none',
         background: hasCurrentSong ? 'var(--accent)' : 'var(--gray-300)',
@@ -47,7 +49,27 @@ const PlayerControls: React.FC<PlayerControlsProps> = React.memo(({
         opacity: hasCurrentSong ? 1 : 0.5,
       }}
     >
-      {isPlaying ? <Pause size={20} fill="white" /> : <Play size={20} fill="white" style={{ marginLeft: '2px' }} />}
+      {loading ? (
+        // #387：等待反馈——冷启 P50 约 1s 期间界面此前完全静止（移动端已有 preparing spinner）。
+        // 用全局 @keyframes spin（styles 里已定义），不引入新依赖。
+        <span
+          aria-hidden
+          data-testid="player-loading"
+          style={{
+            display: 'inline-block',
+            width: '18px',
+            height: '18px',
+            borderRadius: 'var(--radius-full)',
+            border: '2px solid var(--border-subtle)',
+            borderTopColor: 'var(--text-inverse)',
+            animation: 'spin 0.8s linear infinite',
+          }}
+        />
+      ) : isPlaying ? (
+        <Pause size={20} fill="white" />
+      ) : (
+        <Play size={20} fill="white" style={{ marginLeft: '2px' }} />
+      )}
     </button>
     <button
       onClick={onNext}

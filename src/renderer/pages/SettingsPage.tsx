@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Settings, Database, Folder, Shield, Download, Music, Zap, Fingerprint, FlaskConical, Palette, Activity } from 'lucide-react';
+import { Settings, Database, Folder, Shield, Download, Music, Music2, Zap, Fingerprint, FlaskConical, Palette, Activity } from 'lucide-react';
 import CacheSection from '@/renderer/components/CacheSection';
 import DownloadSection from '@/renderer/components/DownloadSection';
 import ProxySection from '@/renderer/components/ProxySection';
 import UpdateSection from '@/renderer/components/UpdateSection';
 import AboutSection from '@/renderer/components/AboutSection';
 import SourceSection from '@/renderer/components/SourceSection';
+import PlaybackSection from '@/renderer/components/PlaybackSection';
 import TlsFingerprintSection from '@/renderer/components/TlsFingerprintSection';
 import Tier3Section from '@/renderer/components/Tier3Section';
 import PlaybackDiagnosticsSection from '@/renderer/components/PlaybackDiagnosticsSection';
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
   { id: 'appearance', label: '外观', icon: <Palette size={15} /> },
   { id: 'cache', label: '缓存管理', icon: <Database size={15} /> },
   { id: 'download', label: '下载设置', icon: <Folder size={15} /> },
+  { id: 'playback', label: '播放', icon: <Music2 size={15} /> },
   { id: 'source', label: '直连状态', icon: <Zap size={15} /> },
   { id: 'tier3', label: '第三方解析源', icon: <FlaskConical size={15} /> },
   { id: 'playback-trace', label: '播放诊断', icon: <Activity size={15} /> },
@@ -80,6 +82,7 @@ const SettingsPage: React.FC = () => {
         <AppearanceSection />
         <CacheSection />
         <DownloadSection />
+        <PlaybackSection />
         <SourceSection />
         <Tier3Section />
         <PlaybackDiagnosticsSection />

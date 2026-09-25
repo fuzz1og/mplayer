@@ -13,7 +13,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 beforeEach(() => {
   loadSourceModes({});
   loadTier3State(undefined);
-  useSettingsStore.setState({ sourceModes: {}, tier3Enabled: false, tier3Subscriptions: [] });
+  useSettingsStore.setState({ sourceModes: {}, tier3Enabled: false, tier3Subscriptions: [], autoSkipOnError: true });
   vi.clearAllMocks();
 });
 
@@ -42,6 +42,25 @@ describe('settingsStore ↔ core 来源开关双向同步', () => {
     expect(getSourceMode('netease')).toBe('auto');
     // store 状态同步洗白（回写触发 persist 落盘干净数据）
     expect(useSettingsStore.getState().sourceModes).toEqual({ qq: 'auto' });
+  });
+});
+
+describe('失败即跳偏好（#385 autoSkipOnError）', () => {
+  it('出厂默认 true（保持现状行为：失败即自动跳）', () => {
+    expect(useSettingsStore.getInitialState().autoSkipOnError).toBe(true);
+  });
+
+  it('setAutoSkipOnError 更新 store（persist 中间件负责落盘）', () => {
+    useSettingsStore.getState().setAutoSkipOnError(false);
+    expect(useSettingsStore.getState().autoSkipOnError).toBe(false);
+  });
+
+  it('rehydrate 用户关掉的偏好 → 仍为关（不被默认值覆盖）', async () => {
+    (AsyncStorage.getItem as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      JSON.stringify({ state: { autoSkipOnError: false }, version: 0 }),
+    );
+    await useSettingsStore.persist.rehydrate();
+    expect(useSettingsStore.getState().autoSkipOnError).toBe(false);
   });
 });
 

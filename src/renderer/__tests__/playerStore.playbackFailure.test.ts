@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearPrefetchCache, getPrefetchedUrl, type Song } from '@mplayer/core';
+import { clearPrefetchCache, clearSkipGuard, getFailureStreak, getPrefetchedUrl, registerTerminalFailure, SKIP_LIMIT, type Song } from '@mplayer/core';
+import { message } from 'antd';
 
 // --- Mock 准备：audioPlayer / callMusicApi / IpcClient / songCoverRefresh ---
 const audioPlayerMock = vi.hoisted(() => {
@@ -78,6 +79,10 @@ function loadCallIds(): string[] {
 
 beforeEach(() => {
   clearPrefetchCache();
+  // #385：护栏状态是模块级会话状态，必须逐用例归零（否则计数/坏歌记忆跨用例泄漏）
+  clearSkipGuard();
+  localStorage.setItem('autoSkipOnError', 'true');
+  Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
   stateWith([]);
   audioPlayerMock.player.load.mockReset();
   audioPlayerMock.player.load.mockImplementation(async (_song?: Song) => {});
@@ -158,7 +163,7 @@ describe('播放失败：fresh 重试与自动跳歌（对齐移动端语义）'
     expect(resolves).toHaveLength(1);
   });
 
-  it('连续失败达队列长度 → 停止并报错，不死循环连跳', async () => {
+  it('连续失败达固定上限 → 停止并报错，不死循环连跳（与队列长度无关）', async () => {
     callMusicApiMock.mockImplementation(async (method: string) => {
       if (method === 'resolvePlayableSongRouted') throw new Error('请求超时');
       if (method === 'searchSongsRouted') return [];
@@ -169,12 +174,80 @@ describe('播放失败：fresh 重试与自动跳歌（对齐移动端语义）'
 
     await usePlayerStore.getState().play(songs[0]);
 
-    // 每首最多试 2 次（原解析 + fresh 重试）：3 首 = 6 次后停
+    // 每首最多试 2 次（原解析 + fresh 重试）；上限 = 固定 SKIP_LIMIT 首 → 6 次后停
     const resolves = callMusicApiMock.mock.calls.filter((c) => c[0] === 'resolvePlayableSongRouted');
-    expect(resolves).toHaveLength(6);
+    expect(resolves).toHaveLength(SKIP_LIMIT * 2);
     expect(audioPlayerMock.player.load).not.toHaveBeenCalled();
     expect(usePlayerStore.getState().isPlaying).toBe(false);
     expect(usePlayerStore.getState().error).toBeTruthy();
+  });
+
+  it('离线：不进解析链，立即停止并明确告知（#385 D3）', async () => {
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+    const errSpy = vi.spyOn(message, 'error').mockImplementation(() => undefined as never);
+    const a = song('off-1', '晴天');
+    stateWith([a, song('off-2', '稻香')], 0);
+
+    await usePlayerStore.getState().play(a);
+
+    // 一次解析都不发：直连 3s 墙与 tier3 6s 全部省掉
+    expect(callMusicApiMock).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('离线'));
+    errSpy.mockRestore();
+  });
+
+  it('关闭「失败即跳」：失败即停，不改写用户意图（#385 D6）', async () => {
+    localStorage.setItem('autoSkipOnError', 'false');
+    callMusicApiMock.mockImplementation(async (method: string) => {
+      if (method === 'resolvePlayableSongRouted') throw new Error('请求超时');
+      if (method === 'searchSongsRouted') return [];
+      return undefined;
+    });
+    const errSpy = vi.spyOn(message, 'error').mockImplementation(() => undefined as never);
+    const a = song('as-1', '晴天');
+    const b = song('as-2', '稻香');
+    stateWith([a, b], 0);
+
+    await usePlayerStore.getState().play(a);
+
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(0); // 不跳
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('自动跳歌已关闭'));
+    errSpy.mockRestore();
+  });
+
+  it('会话内已证明失效的歌不再被跳歌选中（#385 D4）', async () => {
+    const a = song('bad-a', '晴天');
+    const b = song('bad-b', '稻香');
+    const c = song('bad-c', '七里香');
+    registerTerminalFailure(b); // b 已在本会话被证明失效
+    callMusicApiMock.mockImplementation(async (method: string, target?: Song) => {
+      if (method === 'resolvePlayableSongRouted') {
+        if (target?.id === 'bad-a') throw new Error('请求超时');
+        return { url: 'https://resolved.example.com/' + target?.id + '.mp3', nonFull: false };
+      }
+      if (method === 'searchSongsRouted') return [];
+      return undefined;
+    });
+    stateWith([a, b, c], 0);
+
+    await usePlayerStore.getState().play(a);
+
+    // 跳过坏歌 b，直接落在 c
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(2);
+    expect(loadCallIds()).toContain('bad-c');
+    expect(loadCallIds()).not.toContain('bad-b');
+  });
+
+  it('成功播放后连续失败计数归零（手动点歌不清零，只有真正出声才清零）', async () => {
+    registerTerminalFailure(song('z-1', '晴天'));
+    expect(getFailureStreak()).toBe(1);
+    const ok = song('ok-1', '稻香');
+    stateWith([ok], 0);
+
+    await usePlayerStore.getState().play(ok);
+
+    expect(getFailureStreak()).toBe(0);
   });
 
   it('本地文件失败：不做 fresh 重试，直接跳下一首', async () => {

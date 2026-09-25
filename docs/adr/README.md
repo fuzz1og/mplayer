@@ -30,6 +30,7 @@
 | tier3 交付口径与播放失败归因 | `2026-09-23-tier3-failure-attribution.md` | 已接受 |
 | tier3 清单能力扩展：`{id}` 归一化、redirect 响应与护栏字段 | `2026-09-23-tier3-manifest-capability-extensions.md` | 已接受 |
 | 播放解析链结构化 trace（core trace + 宿主 sink） | `2026-09-23-playback-trace-sink.md` | 已接受 |
+| 播放失败的护栏语义（core 单一决策、固定上限、离线即停、坏歌记忆） | `2026-09-25-playback-skip-guard.md` | 已接受 |
 
 ## 历史编号对照（冻结）
 

@@ -33,6 +33,8 @@ interface SettingsState {
   updateChannel: string;
   /** 主题模式（#173）：system 跟随系统深浅色，light/dark 手动指定 */
   themeMode: ThemeMode;
+  /** 失败即跳（#385）：播放终局失败时自动跳下一首；false = 失败即停、等用户处理。默认 true 保持现状 */
+  autoSkipOnError: boolean;
   setProxyUrl: (url: string) => void;
   setPlayMode: (mode: PlayMode) => void;
   setDownloadDirUri: (uri: string) => void;
@@ -41,6 +43,7 @@ interface SettingsState {
   setTier3Subscriptions: (subscriptions: Tier3Subscription[]) => void;
   setUpdateChannel: (channel: string) => void;
   setThemeMode: (mode: ThemeMode) => void;
+  setAutoSkipOnError: (enabled: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -54,6 +57,7 @@ export const useSettingsStore = create<SettingsState>()(
       tier3Subscriptions: [],
       updateChannel: 'auto',
       themeMode: 'system',
+      autoSkipOnError: true,
       setProxyUrl: (url) => set({ proxyUrl: url }),
       setPlayMode: (mode) => set({ playMode: mode }),
       setDownloadDirUri: (uri) => set({ downloadDirUri: uri }),
@@ -62,6 +66,7 @@ export const useSettingsStore = create<SettingsState>()(
       setTier3Subscriptions: (subscriptions) => setCoreTier3Subscriptions(subscriptions),
       setUpdateChannel: (channel) => set({ updateChannel: channel }),
       setThemeMode: (mode) => set({ themeMode: mode }),
+      setAutoSkipOnError: (enabled) => set({ autoSkipOnError: enabled }),
     }),
     {
       name: 'settings-storage',

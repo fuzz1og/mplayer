@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics, explainPlaybackFailure } from '@mplayer/core';
+import { getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, pickNextSongAfterFailure, getFailureStreak, OFFLINE_COPY } from '@mplayer/core';
 import type { PlayableResource, Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -12,6 +12,7 @@ import { useAudioTagStore } from '../stores/audioTagStore';
 import { updateNotification, clearNotification } from './notificationService';
 import { getCachedResource, setCachedResource, deleteCachedResource, urlAgeMs } from './cacheService';
 import { searchStrictMatch } from './songResources';
+import { isOffline } from './networkState';
 
 type Player = ReturnType<typeof createAudioPlayer>;
 
@@ -111,32 +112,37 @@ function attachPlaybackListener(p: Player): void {
       if (status.error && !playbackFailed) {
         playbackFailed = true;
         log.addLog('error', `《${song.name}》加载失败: ${status.error}`);
-        if (!fresh && song.sourceType !== 'local') {
-          // 同一首歌换全新 URL 重试一次（收藏/历史里的 url 可能已过期）；
-          // 本地文件不会过期，失败直接跳下一首。
-          // 先清该歌的 URL 缓存：CDN 直链带时效签名，TTL 内签名过期会
-          // 反复命中同一条死链（Source error 的典型根因）
-          void deleteCachedResource(song);
-          log.addLog('warn', `《${song.name}》将使用新 URL 重试`);
-          setTimeout(() => { if (ctx.playId === currentPlayId) void playSong(song, retryCount, true); }, 0);
-        } else {
-          const nextSong = nextSongAfterError(retryCount);
-          if (nextSong) {
-            log.addLog('warn', `《${song.name}》播放失败，自动跳过`);
-            setTimeout(() => { if (ctx.playId === currentPlayId) void playSong(nextSong, retryCount + 1, false); }, 0);
-          } else {
-            // 队列已耗尽：停止假播放并提示
-            void stopAllPlayers();
-            usePlayerStore.getState().pause();
-            log.reportError(`《${song.name}》播放失败，且队列中没有其他歌曲，可长按歌曲换源`);
+        // #385：离线判定（core 零 I/O，宿主注入 predicate）。断网时不做同曲 fresh
+        // 重试（那会再烧一整条解析链），直接进终局护栏 → 一次失败即停 + 「离线」文案。
+        void (async () => {
+          const offline = await isOffline();
+          if (!fresh && song.sourceType !== 'local' && !offline) {
+            // 同一首歌换全新 URL 重试一次（收藏/历史里的 url 可能已过期）；
+            // 本地文件不会过期，失败直接跳下一首。
+            // 先清该歌的 URL 缓存：CDN 直链带时效签名，TTL 内签名过期会
+            // 反复命中同一条死链（Source error 的典型根因）
+            void deleteCachedResource(song);
+            log.addLog('warn', `《${song.name}》将使用新 URL 重试`);
+            setTimeout(() => { if (ctx.playId === currentPlayId) void playSong(song, retryCount, true); }, 0);
+            return;
           }
-        }
+          // 本次失败轮到别的 playId（用户已切歌/重试）：丢弃
+          if (ctx.playId !== currentPlayId) return;
+          // 播放器加载失败归因：core explainPlaybackFailure 面向「解析链穷尽」，
+          // 音频加载错误没有解析归因，沿用既有通用文案
+          await handleTerminalPlaybackFailure(song, '音源解析失败', retryCount, offline);
+        })();
       }
       return;
     }
 
     if (!playbackReadyLogged) {
       playbackReadyLogged = true;
+      // #385：真正加载成功（出声）→ 连续失败链中断（**只有这里**归零；手动点歌不清零，
+      // 与桌面 playerStore 同一语义——否则「断网中点歌 → 跳 3 首 → 再点」可无限循环）。
+      // 注意不能放在 startPlayback 的 player.play() 后：expo-audio 的加载错误是
+      // 异步事件，play() 返回时并不代表这首歌能出声（会误把失败歌算成成功、计数永远归零）。
+      resetFailureStreak();
       log.addLog('info', `[耗时] 播放器就绪(出声): 《${song.name}》 总耗时 ${Date.now() - t0}ms`);
     }
 
@@ -165,10 +171,68 @@ function attachPlaybackListener(p: Player): void {
   });
 }
 
-function nextSongAfterError(retryCount: number): Song | null {
+/**
+ * 选下一首（#385 D4）——**语义与实现都在 core**（`pickNextSongAfterFailure`）：
+ * 沿播放模式找、跳过会话内已证明失效的歌；两端各写一份必然漂移，故收敛出 core。
+ * 原「队列长度相对阈值」（`nextSongAfterError(retryCount)`）已删：固定上限由 core SKIP_LIMIT 决定。
+ */
+function pickNextPlayableSong(current: Song): { index: number; song: Song } | null {
   const s = usePlayerStore.getState();
-  if (retryCount + 1 >= s.queue.length) return null;
-  return s.next();
+  return pickNextSongAfterFailure(s.queue, s.currentIndex, useSettingsStore.getState().playMode, current.id);
+}
+
+/**
+ * 终局失败统一处理（#385）：**护栏语义与文案的唯一接线点**（listener 的音频加载
+ * 失败与 playSong catch 的解析失败都汇到这里）。
+ * 1) core 记一次终局失败（连续计数 +1、记住这首歌）；
+ * 2) 选下一首时跳过会话内已证明失效的歌；
+ * 3) core 决策：离线 / 关闭「失败即跳」/ 连续失败达固定上限 / 无下一首 → 停；否则跳；
+ * 4) 文案一律取 `decision.copy`（不再硬编码「可长按歌曲换源」等两套失败文案）。
+ * @param offline 已由调用方判定好的离线态（避免重复 NetInfo.fetch）
+ */
+async function handleTerminalPlaybackFailure(
+  song: Song,
+  reasonText: string,
+  retryCount: number,
+  offline: boolean,
+): Promise<void> {
+  const log = useLogsStore.getState();
+  // 离线不算「源失败」：不计数、不记坏歌（只提示离线）。
+  if (!offline && song.sourceType !== 'local') {
+    // 「不可播」徽标回写保留（引导换源）；是否跳歌由 core 决定
+    useAudioTagStore.getState().setTag(song, 'invalid');
+  }
+  const consecutiveFailures = offline ? getFailureStreak() : registerTerminalFailure(song);
+  const next = pickNextPlayableSong(song);
+  const decision = decideAfterPlaybackFailure({
+    songName: song.name,
+    reasonText,
+    offline,
+    autoSkip: useSettingsStore.getState().autoSkipOnError,
+    hasNextSong: !!next,
+    consecutiveFailures,
+    isLocal: song.sourceType === 'local',
+  });
+  if (decision.action === 'skip' && next) {
+    // 静默跳歌用户无感知（曾表现为点歌后 ~12s 无声无息）：Toast 说明去向
+    useLogsStore.getState().setNotice('error', decision.copy);
+    log.addLog('warn', `《${song.name}》播放失败，自动跳过（连续 ${consecutiveFailures} 首）`);
+    // 同步队列索引/当前歌（playSong 本身不改这两个 store 字段）
+    usePlayerStore.setState({
+      currentSong: next.song,
+      currentIndex: next.index,
+      currentTime: 0,
+      isPlaying: true,
+      hasPlayed: true,
+    });
+    await playSong(next.song, retryCount + 1, false);
+  } else {
+    // 停播（护栏判 stop；或判 skip 但已无可跳候选——core 的 copy 已覆盖该语义）
+    await stopAllPlayers();
+    usePlayerStore.getState().pause();
+    usePlayerStore.getState().setPreparing(false);
+    log.reportError(decision.copy);
+  }
 }
 
 /**
@@ -315,6 +379,17 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   let playbackNonFull = false;
   log.addLog('info', `[耗时] 播放准备开始: 《${song.name}》 url=${song.url ? '有' : '无'} fresh=${fresh}`);
   usePlayerStore.getState().setPreparing(true);
+
+  // #385：离线快速失败——判定离线就直接停并告知，**不进解析链**
+  //（省掉同曲 fresh 重试 + 直连 3s 墙 + tier3 6s；与桌面 playerStore 同口径，文案同源）。
+  if (song.sourceType !== 'local' && (await isOffline())) {
+    await stopAllPlayers();
+    usePlayerStore.getState().pause();
+    usePlayerStore.getState().setPreparing(false);
+    log.addLog('warn', `《${song.name}》当前离线，已暂停播放`);
+    log.reportError(OFFLINE_COPY);
+    return;
+  }
 
   // 单例播放器：更新当前播放上下文（listener 从 ctx 读取）并复位去重标志
   playbackCtx = { song, playId, t0, fresh, retryCount };
@@ -486,6 +561,11 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     // 源都试了没命中 / tier3 未开启…），与桌面端共用同一份文案，不再统一报 VIP。
     const exhausted = err instanceof ResolutionChainError;
     const reasonText = exhausted ? explainPlaybackFailure(song).message : '音源解析失败';
+    // 离线判定（#385 spec：core 零 I/O，离线态由宿主注入 predicate）。断网时不做
+    // 同曲 fresh 重试——那会再烧一整条解析链（直连 3s + tier3），正是本票要治的
+    // 「断网跳歌失控」；直接把本次失败当终局失败交给护栏 → stop + 「离线」文案。
+    const offline = await isOffline();
+
     if (!fresh && song.sourceType !== 'local') {
       // 解析链穷尽时先回查缓存（#172）：后台预取可能恰在本轮解析期间拿到直链
       // 写入缓存（后台 3s 命中、前台 6s 预算耗尽失败的时序差）。命中且确系本轮
@@ -506,28 +586,19 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
           return;
         }
       }
-      // 解析失败 → 同一首歌换新 URL 重试一次；本地文件失败直接跳歌。
-      // 重试保留：订阅源时灵时不灵（实测同歌第一轮全未命中、fresh 轮命中）。
-      log.addLog('warn', `《${song.name}》将使用新 URL 重试（${reasonText}）`);
-      await playSong(song, retryCount, true);
-    } else {
-      // 最终失败（fresh 重试也无效）：回写「不可播」徽标引导换源（local 源除外）
-      if (song.sourceType !== 'local') {
-        useAudioTagStore.getState().setTag(song, 'invalid');
+      if (!offline) {
+        // 解析失败 → 同一首歌换新 URL 重试一次；本地文件失败直接跳歌。
+        // 重试保留：订阅源时灵时不灵（实测同歌第一轮全未命中、fresh 轮命中）。
+        log.addLog('warn', `《${song.name}》将使用新 URL 重试（${reasonText}）`);
+        await playSong(song, retryCount, true);
+        return;
       }
-      const nextSong = nextSongAfterError(retryCount);
-      if (nextSong) {
-        // 静默跳歌用户无感知（曾表现为点歌后 ~12s 无声无息）：Toast 说明去向
-        useLogsStore.getState().setNotice('error', `《${song.name}》${reasonText}，已跳到下一首`);
-        log.addLog('warn', `《${song.name}》播放失败，自动跳过`);
-        await playSong(nextSong, retryCount + 1, false);
-      } else {
-        await stopAllPlayers();
-        usePlayerStore.getState().pause();
-        usePlayerStore.getState().setPreparing(false);
-        log.reportError(`《${song.name}》${reasonText}，且队列中没有其他歌曲。可长按歌曲换源，或稍后再试`);
-      }
+      log.addLog('warn', `《${song.name}》离线，跳过同曲重试直接进跳歌护栏`);
     }
+
+    // 终局失败（fresh 重试之后仍失败 / 离线即时终局 / 本地文件失败）：
+    // 护栏语义与文案的单一来源 = core `skipGuard`（#385），统一走 handleTerminalPlaybackFailure。
+    await handleTerminalPlaybackFailure(song, reasonText, retryCount, offline);
   } finally {
     preparingPlayback = false;
   }
