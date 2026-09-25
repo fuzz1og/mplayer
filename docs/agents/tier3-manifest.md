@@ -25,7 +25,7 @@ tier3 订阅源 = 用户自配的第三方解析源，作为官方直连失败�
 | `source` | ⚠️ | 该源**服务的音乐源**（见下节）。`url-resolver` 不写会被拒绝；`search-then-resolve` 不写＝通用兜底 |
 | `kind` | ✅ | `url-resolver`（按 ID 直取）或 `search-then-resolve`（先搜再解） |
 | `allowedDomains` | ✅ | 返回音频 URL 的域名白名单；`*.example.com` 才放行子域，普通 `example.com` 只放行自身 |
-| `timeoutMs` | — | 单源超时（默认 2s）。**只能收紧、不能放大**：实际生效值 = `min(timeoutMs, 该 kind 的单源硬墙, 整链剩余预算)`；硬墙按 kind 分档——`url-resolver` 2s / `search-then-resolve` 2.5s（ADR `2026-09-25-tier3-source-scheduling` 决策 7：两步源三段网络串行在同一个墙内，2s 会切掉实测 2047ms 的成功路径）。解析腿源间串行，一个挂起的死源若被允许跑 15s 会吃光整链 6s 预算，后面的好源一次都不会被请求（#365） |
+| `timeoutMs` | — | 单源超时，**不写 = 取该 kind 的硬墙**（`url-resolver` 2s / `search-then-resolve` 2.5s）。**只能收紧、不能放大**：实际生效值 = `min(timeoutMs ?? 该 kind 默认值, 该 kind 单源硬墙, 整链剩余预算)`；硬墙按 kind 分档来自 ADR `2026-09-25-tier3-source-scheduling` 决策 7（两步源三段网络串行在同一个墙内，2s 会切掉实测 2047ms 的成功路径）。**默认值也按 kind**（决策 7 补记，2026-09-25 #394 验收发现）：原实现沿用扁平默认 2s，导致明明显式给了两步源 2.5s 的墙，任何没手写 2500 的清单都拿不到它。解析腿源间串行，一个挂起的死源若被允许跑 15s 会吃光整链 6s 预算，后面的好源一次都不会被请求（#365） |
 | `headers` | — | 合并进解析请求与嗅探请求的请求头 |
 | `idNormalize` | — | 按源归一化模板变量 `{id}`：`{ "stripPrefixes": ["…"] }`，填充前逐条剥离前缀。**只影响模板**，不改 `Song.id` / 身份键 / 已持久化数据。例：酷我直连 id 是 `MUSIC_<数字>`，而第三方酷我接口只认裸数字 |
 | `resolve` | ✅ | 取链步骤：`{ method?, url, body?, responseKind?, responseJsonPath? }` |
