@@ -89,6 +89,25 @@ function mapTrack(t: any): Song {  const hash = String(t.hash || t.FileHash || '
   };
 }
 
+/**
+ * 取响应里第一个**非空字符串**播放地址（#393 修正，见 resolvePlayableUrl）。
+ * 不能写成 `data.url || data.backup_url || …`：付费/无版权歌实测回
+ * `{ url: '', backup_url: {} }`，而 `{}` 是 truthy → 会被 `String()` 成
+ * 字面量 `"[object Object]"` 当直链返回，路由层据此判「直连成功」（via=direct），
+ * tier3 兜底与失败归因**全被跳过**，表现为整源歌单点不可播（#394 验收暴露出）。
+ * 允许数组形态（上游字段有时是字符串数组），取第一个非空字符串。
+ */
+function pickPlayableUrl(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (Array.isArray(value)) {
+      const hit = value.find((item) => typeof item === 'string' && item.trim());
+      if (typeof hit === 'string') return hit.trim();
+    }
+  }
+  return '';
+}
+
 const KG_HEADERS = (): Record<string, string> => ({
   'user-agent': getUserAgent('kugou'),
   'Referer': 'https://www.kugou.com/',
@@ -141,21 +160,21 @@ export const kugouDirectClient: DirectSourceClient = {
       data?: { url?: unknown; backup_url?: unknown; backupUrl?: unknown; mp3Url?: unknown; backupMp3Url?: unknown };
     };
     // 实测响应族：直链在**顶层** `url` / `backup_url`；保留嵌套 `data` 回退链，
-    // 兼容不同 cmd / 客户端字段漂移（择一命中即返回，找不到返回空串）。
-    const raw =
-      data.url ||
-      data.backup_url ||
-      data.backupUrl ||
-      data.mp3Url ||
-      data.backupMp3Url ||
-      data.data?.url ||
-      data.data?.backup_url ||
-      data.data?.backupUrl ||
-      data.data?.mp3Url ||
-      data.data?.backupMp3Url ||
-      '';
-    const url = Array.isArray(raw) ? raw[0] : raw;
-    return String(url || '').replace(/^http:/, 'https:');
+    // 兼容不同 cmd / 客户端字段漂移（择一命中即返回，找不到返回**空串**）。
+    // 必须用 pickPlayableUrl 而非 `||` 串：空对象/空数组是 truthy（见该函数注释）。
+    const url = pickPlayableUrl(
+      data.url,
+      data.backup_url,
+      data.backupUrl,
+      data.mp3Url,
+      data.backupMp3Url,
+      data.data?.url,
+      data.data?.backup_url,
+      data.data?.backupUrl,
+      data.data?.mp3Url,
+      data.data?.backupMp3Url,
+    );
+    return url.replace(/^http:/, 'https:');
   },
 
   /**
