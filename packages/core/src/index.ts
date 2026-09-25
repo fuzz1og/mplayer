@@ -192,6 +192,31 @@ export type {
   PlaybackTraceOutcome,
   PlaybackTraceErrorClass,
 } from './shared/playbackTrace.js';
+// 会话内源调度（#398）：健康度定序 + 单飞初始化窗口（纯函数，模块级会话内状态、零 I/O）。
+export {
+  noteSample,
+  scoreOf,
+  orderSources,
+  beginInit,
+  isInitialized,
+  clearSourceSchedule,
+  getSourceScheduleSnapshot,
+  reward,
+  SCHEDULE_SCORE_MS_CAP,
+  SCHEDULE_EWMA_ALPHA,
+  SCHEDULE_CENSORED_WEIGHT,
+  SCHEDULE_DEMOTE_AFTER,
+  SCHEDULE_NEUTRAL_SCORE,
+  SCHEDULE_HEDGE_MS,
+  SCHEDULE_INIT_INFLIGHT,
+} from './shared/sourceSchedule.js';
+export type {
+  SourceSampleKind,
+  SourceSample,
+  SourceHealth,
+  SourceHealthSnapshot,
+} from './shared/sourceSchedule.js';
+export type { Tier3RunControl, Tier3ScheduleReport } from './shared/sourceRouter.js';
 export {
   parseTier3Manifest,
   fetchTier3ManifestFromUrl,

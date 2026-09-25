@@ -18,6 +18,7 @@ import {
   type Tier3Subscription,
 } from '../../tier3/tier3Api.js';
 import { clearPrefetchCache, setPrefetchedUrl } from '../../api/prefetchCache.js';
+import { clearTier3Scheduling } from '../sourceRouter.js';
 
 // #392 直连腿取证默认会真发 Range：本文件测 tier3 护栏，关闭直连取证以保持零 I/O。
 beforeEach(() => { setDirectValidator(null); });
@@ -138,6 +139,8 @@ beforeEach(() => {
   clearPrefetchCache();
   clearTier3Stats();
   clearTier3ProbeCache();
+  // #398：会话内健康度 / 单飞窗口 / 跨歌 K 槽位都是模块级状态，用例间必须归零。
+  clearTier3Scheduling();
   setSourceModes({});
   loadTier3State({ enabled: false, subscriptions: [] });
   setTier3Deps({});

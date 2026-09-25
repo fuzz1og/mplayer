@@ -11,6 +11,7 @@ import {
   type PlaybackTrace,
   type PlaybackTraceSourceLeg,
 } from './playbackTrace.js';
+import { clearSourceSchedule } from './sourceSchedule.js';
 
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
@@ -291,11 +292,28 @@ export interface Tier3Resolution {
 /** 每源 outcome 收集器（#363）：tier3 执行器逐源回调，路由层汇总进 trace。 */
 export type Tier3LegCollector = (leg: PlaybackTraceSourceLeg) => void;
 
+/** 一次 tier3 解析的**源调度快照**（#398）：定序后的可用源 id + 是否处于初始化窗口。 */
+export interface Tier3ScheduleReport {
+  sourceOrder: string[];
+  initWindow: boolean;
+}
+
+/** tier3 解析器的调用方控制面（#398）：健康度采样需要「调用方是否已放弃」，
+ *  而 trace sink 可能关闭——两者都不能依赖 collect（决策 6 的「放弃观测」）。 */
+export interface Tier3RunControl {
+  /** 调用方是否已放弃本次解析（整链预算用尽）→ 剩余观测记「放弃」，不进健康度。 */
+  isAbandoned(): boolean;
+  /** 上报本次源调度快照（仅 trace sink 打开时注入）。 */
+  reportSchedule?(report: Tier3ScheduleReport): void;
+}
+
 /** tier3 解析器插槽：输入 song，返回解析到的可播 URL + 护栏等级；未命中返回 null。
- *  未注入/关闭 = 不生效。可选 collect 用于把每源 outcome 交给调用方的 trace。 */
+ *  未注入/关闭 = 不生效。可选 collect 用于把每源 outcome 交给调用方的 trace；
+ *  可选 control 用于健康度采样（放弃判定）与调度快照上报（#398）。 */
 export type Tier3Resolver = (
   song: Song,
   collect?: Tier3LegCollector,
+  control?: Tier3RunControl,
 ) => Promise<Tier3Resolution | null>;
 
 /** 一次路由解析的 trace 累加器（#363）。关闭 sink 时为 null，热路径零构造。 */
@@ -314,13 +332,17 @@ interface TraceCtx {
   tier3Ms: number | null;
   tier3TimedOut: boolean;
   legs: PlaybackTraceSourceLeg[];
+  /** 本次 tier3 腿的源遍历顺序（#398；未进入 tier3 腿为 null）。 */
+  sourceOrder: string[] | null;
+  /** 本次解析是否处于初始化窗口（#398）。 */
+  tier3InitWindow: boolean;
 }
 
 function newTraceCtx(): TraceCtx {
   return {
     prefetchHit: false, prefetchedUrl: null, reason: '', directMs: null, directMethod: null,
     directSource: null, directTimedOut: false, validateMs: null, tier3Engaged: false, tier3Ms: null,
-    tier3TimedOut: false, legs: [],
+    tier3TimedOut: false, legs: [], sourceOrder: null, tier3InitWindow: false,
   };
 }
 
@@ -455,6 +477,9 @@ interface Tier3InflightRun {
   started: Promise<void>;
   /** 底层解析结果（同键调用方共享）。 */
   result: Promise<Tier3Resolution | null>;
+  /** 标记「调用方已放弃本次解析」（整链预算用尽）→ 剩余源观测记「放弃」，不进健康度
+   *  （#398 / ADR 决策 6）。同键共享一条解析时该标记是**运行级**的：任一调用方放弃即置位。 */
+  markAbandoned(): void;
 }
 
 const tier3Inflight = new Map<string, Tier3InflightRun>();
@@ -471,13 +496,31 @@ const MAX_TIER3_IN_FLIGHT = 3;
 let tier3InFlightCount = 0;
 const tier3Queue: (() => void)[] = [];
 
-/** 取槽位：有空位直接进；否则 FIFO 排队（ADR 决策 8）。 */
-function acquireTier3Slot(): Promise<void> {
+/** 非阻塞取槽位：有空位即占用并返回 true；满员返回 false（不排队）。 */
+function tryAcquireTier3Slot(): boolean {
   if (tier3InFlightCount < MAX_TIER3_IN_FLIGHT) {
     tier3InFlightCount++;
-    return Promise.resolve();
+    return true;
   }
+  return false;
+}
+
+/** 取槽位：有空位直接进；否则 FIFO 排队（ADR 决策 8）。 */
+function acquireTier3Slot(): Promise<void> {
+  if (tryAcquireTier3Slot()) return Promise.resolve();
   return new Promise<void>((resolve) => tier3Queue.push(resolve));
+}
+
+/** 初始化窗口的**第二条在飞**借用槽位（#398 / ADR 决策 5 修订）：窗口内的在飞**计入 K=3**，
+ *  即全局上游在飞上限恒为 3——窗口最多占 2 条、至少给其他歌留 1 条（不是「2 + K = 5」）。
+ *  非阻塞：借不到就不交错起手，按单条串行继续，绝不排队阻塞窗口自身的预算。 */
+export function tryAcquireTier3SourceSlot(): boolean {
+  return tryAcquireTier3Slot();
+}
+
+/** 归还窗口借用的槽位（与 `tryAcquireTier3SourceSlot` 成对；队首等待者直接接管）。 */
+export function releaseTier3SourceSlot(): void {
+  releaseTier3Slot();
 }
 
 /** 让出槽位：队首等待者**直接接管**该槽位（计数不变），无人等待才递减。 */
@@ -494,6 +537,8 @@ export function clearTier3Scheduling(): void {
   const waiters = tier3Queue.splice(0);
   tier3InFlightCount = 0;
   for (const wake of waiters) wake();
+  // #398：会话内健康度与单飞窗口同为调度状态，一并清空（测试重置接缝）。
+  clearSourceSchedule();
 }
 
 /** 观测用：当前 tier3 在飞解析数（测试断言上限 K=3）。 */
@@ -521,13 +566,24 @@ function tier3ResolveShared(song: Song, reason: string, ctx?: TraceCtx | null): 
   }
   console.info(`[tier3] ${reason}，进入第三方解析源: 《${song.name}》${song.artist}`);
   const collect = ctx ? (leg: PlaybackTraceSourceLeg) => { ctx.legs.push(leg); } : undefined;
+  let abandoned = false;
+  const control: Tier3RunControl = {
+    isAbandoned: () => abandoned,
+    // 调度快照只在 trace sink 打开时上报（热路径零构造的既有取向）。
+    reportSchedule: ctx
+      ? (report) => {
+          ctx.sourceOrder = report.sourceOrder;
+          ctx.tier3InitWindow = report.initWindow;
+        }
+      : undefined,
+  };
   let markStarted!: () => void;
   const started = new Promise<void>((resolve) => { markStarted = resolve; });
   const result = (async () => {
     await acquireTier3Slot();
     markStarted();
     try {
-      return await tier3Resolver!(song, collect);
+      return await tier3Resolver!(song, collect, control);
     } catch (e) {
       console.warn(`[tier3] resolver 抛错: ${(e as Error)?.message || e}`);
       return null;
@@ -536,7 +592,7 @@ function tier3ResolveShared(song: Song, reason: string, ctx?: TraceCtx | null): 
       releaseTier3Slot();
     }
   })();
-  const run: Tier3InflightRun = { started, result };
+  const run: Tier3InflightRun = { started, result, markAbandoned: () => { abandoned = true; } };
   tier3Inflight.set(key, run);
   return run;
 }
@@ -567,7 +623,11 @@ async function tryTier3(song: Song, reason: string, ctx?: TraceCtx | null): Prom
       await run.started;
       if (ctx) activeT0 = traceNow();
       return new Promise<typeof BUDGET_EXHAUSTED>((resolve) =>
-        setTimeout(() => resolve(BUDGET_EXHAUSTED), TIER3_BUDGET_MS),
+        setTimeout(() => {
+          // 预算用尽即「放弃观测」：resolver 里仍在跑的源按 abandoned 记账（#398 决策 6）。
+          run.markAbandoned();
+          resolve(BUDGET_EXHAUSTED);
+        }, TIER3_BUDGET_MS),
       );
     })();
     const winner = await Promise.race([run.result, budgetExhausted]);
@@ -768,6 +828,8 @@ function emitResolveTrace(
     tier3Ms: ctx.tier3Ms,
     tier3TimedOut: ctx.tier3TimedOut,
     sources,
+    ...(ctx.sourceOrder ? { sourceOrder: ctx.sourceOrder } : {}),
+    ...(ctx.tier3InitWindow ? { tier3InitWindow: true } : {}),
   });
 }
 
