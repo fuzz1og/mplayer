@@ -437,12 +437,14 @@ export default function SettingsPage() {
                     .flatMap((sub) => sub.manifest.sources)
                     .find((s) => s.id === sourceId)?.source;
                   return (
-                    <View key={sourceId} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
-                      <Text style={{ ...textVariants.settingsTertiary, color: colors.textPrimary, flex: 1 }} numberOfLines={1}>
+                    // 源名与统计**分行**：统计串随列数增长（交付/丢弃/未命中/跳过/护栏拒绝/健康度/已降级），
+                    // 同行并排会把源名挤成「sl…」这种不可读的省略（模拟器窄屏实测）——与下方播放诊断条目同版式
+                    <View key={sourceId} style={{ paddingVertical: 4 }}>
+                      <Text style={{ ...textVariants.settingsTertiary, color: colors.textPrimary }} numberOfLines={1}>
                         {sourceId}
                         {declared ? ' · ' + declared : ''}
                       </Text>
-                      <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>
+                      <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary, marginTop: 2 }}>
                         交付 {st.hits} / 丢弃 {st.discarded ?? 0} / 未命中 {st.misses} / 跳过 {st.skipped ?? 0}
                         {st.guardRejected ? ` / 护栏拒绝 ${st.guardRejected}` : ''}
                         {st.healthScore != null ? ` / 健康度 ${st.healthScore.toFixed(2)}` : ''}
