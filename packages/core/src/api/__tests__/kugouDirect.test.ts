@@ -95,6 +95,28 @@ describe('kugouDirectClient.resolvePlayableUrl（免签名端点，#393）', () 
     const url = await kugouDirectClient.resolvePlayableUrl!(kugouSong());
     expect(url).toBe('');
   });
+
+  it('回归：url 为空串 + backup_url 为空对象 → 空串，绝不返回 "[object Object]"', async () => {
+    // 线上真实响应（付费歌，如 陈奕迅《最佳损友》）：backup_url 是 {} 而非缺失。
+    // 旧的 `data.url || data.backup_url || …` 串会把 {} String 成 "[object Object]"，
+    // 被路由层当成直连成功 → tier3 与失败归因全被跳过 → 整源不可播。
+    setTransport(async () =>
+      jsonResponse(JSON.stringify({ status: 0, url: '', backup_url: {}, error: '需要付费', privilege: 10 })) as any
+    );
+    const url = await kugouDirectClient.resolvePlayableUrl!(kugouSong());
+    expect(url).toBe('');
+    expect(url).not.toContain('object');
+  });
+
+  it('url 是字符串数组时取第一个非空串（上游字段形态漂移）', async () => {
+    setTransport(async () =>
+      jsonResponse(JSON.stringify({ status: 1, url: ['', 'http://arr.kugou.com/1.mp3'] })) as any
+    );
+    expect(await kugouDirectClient.resolvePlayableUrl!(kugouSong())).toBe('https://arr.kugou.com/1.mp3');
+
+    setTransport(async () => jsonResponse(JSON.stringify({ status: 0, url: [], backup_url: {} })) as any);
+    expect(await kugouDirectClient.resolvePlayableUrl!(kugouSong())).toBe('');
+  });
 });
 
 describe('ensureKugouCookie（T13 设备 cookie）', () => {
