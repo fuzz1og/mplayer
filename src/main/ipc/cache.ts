@@ -57,7 +57,11 @@ export function registerCacheIpc(): void {
   registerIpcHandlerSimple('cache:clear', async () => {
     await cache.clear()
   })
-  registerIpcHandlerSimple('cache:getStats', () => {
+  registerIpcHandlerSimple('cache:getStats', async () => {
+    // stats() 是同步契约（读的是磁盘后端增量记账的内存索引），而索引在启动时异步装载。
+    // 启动后立刻打开设置页时索引可能还没好，先 await 一次，拿到的才是真实值（#410）。
+    getCacheKernel()
+    await diskBackend?.ensureIndexReady()
     return cache.getStats()
   })
 }
