@@ -54,6 +54,3 @@ export const SONG_ROW = {
   /** 行分隔线宽度（发丝线）。 */
   separatorWidth: StyleSheet.hairlineWidth,
 } as const;
-
-/** 行内容高度（不含分隔线）：两行文字 36 < 封面 44，故由封面决定。 */
-export const SONG_ROW_HEIGHT = paddingVertical * 2 + coverSize;

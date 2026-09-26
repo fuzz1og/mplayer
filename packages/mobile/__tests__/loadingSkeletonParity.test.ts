@@ -34,7 +34,14 @@ describe('骨架屏与真实结构同源（#416）', () => {
   });
 
   it('骨架里不再出现硬编码的行度量（44 封面 / 10 纵距 / 28 榜位列）', () => {
-    for (const file of ['components/SongRowSkeleton.tsx', 'components/SongListSkeleton.tsx', 'components/HotlistSkeleton.tsx']) {
+    // 覆盖**全部**骨架组件（含网格与推荐页），不是只扫列表那几个
+    for (const file of [
+      'components/SongRowSkeleton.tsx',
+      'components/SongListSkeleton.tsx',
+      'components/HotlistSkeleton.tsx',
+      'components/CoverGridSkeleton.tsx',
+      'components/RecommendSkeleton.tsx',
+    ]) {
       const s = read(file);
       expect(s, file).not.toMatch(/paddingVertical:\s*10\b/);
       expect(s, file).not.toMatch(/width:\s*44\b/);
@@ -61,6 +68,24 @@ describe('骨架屏与真实结构同源（#416）', () => {
     const search = stripComments(read('app/(tabs)/search.tsx'));
     expect(search).toContain('gridCardWidth');
     expect(search).not.toMatch(/SCREEN_WIDTH\s*-\s*24/);
+  });
+
+  it('numColumns 网格的列距写在 columnWrapperStyle（contentContainerStyle 的 gap 管不到行内）', () => {
+    // 漏写会让卡片左对齐、右侧空出 gap×(列数-1)，而骨架是 flexWrap + columnGap → 不同形
+    for (const file of ['app/(tabs)/search.tsx', 'components/DiscoverTabs.tsx']) {
+      const source = stripComments(read(file));
+      expect(source, file).toMatch(/columnWrapperStyle=\{\{?\s*(gap:|styles\.\w+)/);
+    }
+    expect(stripComments(read('app/(tabs)/search.tsx'))).toContain('artistRow');
+  });
+
+  it('歌词占位条的粗细与真文本同源（不再把字号抄第二份）', () => {
+    const overlay = read('components/PlayerOverlay.tsx');
+    expect(overlay).toMatch(/barHeight=\{LYRICS_PREVIEW_FONT_SIZE\}/);
+    expect(overlay).toMatch(/barHeight=\{LYRICS_FULL_FONT_SIZE\}/);
+    // 字号常量同时被真文本样式引用，改一处不会只改到占位
+    expect(overlay).toMatch(/fontSize: LYRICS_PREVIEW_FONT_SIZE/);
+    expect(overlay).toMatch(/fontSize: LYRICS_FULL_FONT_SIZE/);
   });
 
   it('歌手网格用「圆头像 + 居中名字」的骨架，不是歌曲行骨架', () => {

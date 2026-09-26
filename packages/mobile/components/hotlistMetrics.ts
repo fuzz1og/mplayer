@@ -16,7 +16,7 @@ export const HOTLIST_SECTION = {
   radius: radius.lg,
   /** 卡内标题行。 */
   headerPaddingHorizontal: spacing[4],
-  headerPaddingVertical: 12,
+  headerPaddingVertical: spacing[3],
   headerLineHeight: textVariants.sectionHeader.lineHeight,
   /** 每张卡预展示的歌曲数（真实页面同值，见 `songs.slice(0, HOTLIST_SECTION.previewRows)`）。 */
   previewRows: 5,

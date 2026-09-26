@@ -4,6 +4,7 @@ import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import SkeletonBlock from './SkeletonBlock';
 import SongRowSkeleton from './SongRowSkeleton';
+import { radius } from '../theme/tokens';
 import { SONG_ROW } from './songRowMetrics';
 import { HOTLIST_SECTION } from './hotlistMetrics';
 
@@ -54,7 +55,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sectionTitle: {
     height: HOTLIST_SECTION.headerLineHeight,
-    borderRadius: 4,
+    borderRadius: radius.xs,
     width: '46%',
   },
 });

@@ -147,6 +147,7 @@ export default function SearchPage() {
           data={artists}
           keyExtractor={(item) => String(item.id)}
           numColumns={3}
+          columnWrapperStyle={styles.artistRow}
           contentContainerStyle={[
             styles.artistGrid,
             { paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING },
@@ -289,8 +290,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   artistGrid: {
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[6],
-    columnGap: GRID_GAP,
   },
+  // numColumns 的**行容器**才认列距（contentContainerStyle 的 gap 管不到行内）——
+  // 与 DiscoverTabs 的 artistRow 同一写法，否则 3 卡左对齐、右侧空出 gap×2。
+  artistRow: { gap: GRID_GAP },
   artistCard: {
     width: gridCardWidth({ cols: 3 }),
     alignItems: 'center',
