@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TransportRequest, TransportResponse } from '../../api/transport.js';
+import type { TransportRequest, TransportResponse, TransportSignal } from '../../api/transport.js';
 import type { Song } from '../../types/index.js';
 import {
   addTier3SubscriptionFromText,
@@ -1468,6 +1468,36 @@ describe('会话内源调度（#398 / ADR 2026-09-25 决策 1–6）', () => {
       await vi.advanceTimersByTimeAsync(7_000);
       await pending;
       expect(getTier3InFlightCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('单源硬墙到点真的 abort 底层请求（#408）：signal 贯通，不再「换了源上一个还在压上游」', async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: TransportSignal[] = [];
+      const request = vi.fn((req: TransportRequest): Promise<TransportResponse> => {
+        signals.push(req.signal as TransportSignal);
+        // 永不落定：只能被墙 abort，用来证明「放弃等待」已经变成「真的停掉」。
+        return new Promise<TransportResponse>(() => {});
+      });
+      setTier3Deps({ request });
+      addTier3SubscriptionFromText({ text: manifestOf(resolver('s1')) });
+      setTier3Enabled(true);
+      emptyDirect();
+
+      const pending = resolvePlayableSongRouted(song());
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signals.length).toBeGreaterThan(0);
+      expect(signals[0]?.aborted).toBe(false);
+      // url-resolver 的按 kind 硬墙 = 2s（ADR 2026-09-25 决策 7）
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(signals[0]?.aborted).toBe(true);
+      await vi.advanceTimersByTimeAsync(7_000);
+      // 直连为空 + tier3 全超时 → 链路以空 URL 收场（不是抛错，语义由 skipGuard 处置）
+      const routed = await pending;
+      expect(routed.url).toBe('');
     } finally {
       vi.useRealTimers();
     }

@@ -88,7 +88,9 @@
   - **第二阶段 a（已落）**：**直连解析腿**的 signal 贯通——`resolvePlayableUrl` / `resolveUrlInfo` 接
     可选尾参，`timedDirectCall` 持有 `AbortController` 并在 3s 墙点 `abort()`；
     已接：netease / qq / kugou / kuwo / migu / qianqian / soda(`resolveUrlInfo`)。
-  - **第二阶段 b（待做）**：**tier3 腿**的 signal 贯通——`withSourceDeadline` 持有 `AbortController`，
-    经 `resolveTier3Candidate` → `resolveSourceUrl` / `resolveSearchThenResolve` → `buildRequest` 下传。
+  - **第二阶段 b（已落）**：**tier3 解析腿**的 signal 贯通——`withSourceDeadline` 改为吃工厂函数
+    并持有 `AbortController`，经 `resolveTier3Candidate` → `resolveSourceUrl` / `resolveSearchThenResolve`
+    → `buildRequest` 下传到 `TransportRequest.signal`。单源墙到点即 abort。
+    **未接**：tier3 **搜索腿**（`searchTier3SourceItems`，其预算独立，见 ADR 2026-09-25 决策 9）。
   - **第三阶段（待指标）**：429 / `Retry-After` 退避与每 host pacing。
   - **未收口**：上述 4 处 `axios` 直连绕过点（含汽水解析腿拿不到取消）。
