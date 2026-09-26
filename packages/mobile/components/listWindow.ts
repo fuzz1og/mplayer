@@ -1,27 +1,20 @@
 /**
- * 列表窗口档位 —— 全应用一份（#411）。
+ * 列表窗口档位 —— **只列与 RN 默认不同的值**（#411）。
  *
- * 此前 11 个 FlatList 各走默认：`windowSize=21`（约 21 屏的挂载窗口）、
- * `initialNumToRender=10`、`maxToRenderPerBatch=10`、`removeClippedSubviews` 未开。
- * 手机端长列表（热榜 / 搜索 / 队列）滚动时同时挂载的行数远超一屏所需。
+ * RN（已核对 `@react-native/virtualized-lists` 源码）默认：
+ * `windowSize 21` / `maxToRenderPerBatch 10` / `initialNumToRender 10` /
+ * `updateCellsBatchingPeriod 50`。
  *
- * 这里的取值取向：**只留够滑一屏的余量**。`windowSize: 7` 表示视口上下各留约 3 屏，
- * 快速滑动仍有内容、又不会把整份列表挂满；`removeClippedSubviews` 在 Android 上
- * 把滚出视口的行从原生层级摘掉（对固定行高的列表安全——本项目所有歌曲行等高）。
+ * 初版这里把这五项全写了一遍，其中三项与默认同值（纯噪声，还让人以为改过）、
+ * 一项 `removeClippedSubviews: true` 在 **iOS 上是行为变更**——RN 的 FlatList 文档写明
+ * 「The default value is true for Android」，iOS 默认 false 是有原因的（该开关在 iOS 有
+ * 已知裁剪问题）。显式打开等于把 iOS 拉进那个坑，而 Android 本来就开着、收益为零。
+ *
+ * 所以这里只留**真正改动的两项**：窗口从 21 屏收到 7 屏、每批渲染从 10 降到 8。
  */
-export const LIST_WINDOW = {
-  initialNumToRender: 10,
-  maxToRenderPerBatch: 8,
-  updateCellsBatchingPeriod: 50,
-  windowSize: 7,
-  removeClippedSubviews: true,
-} as const;
-
-/** 直接摊到 FlatList 上的那组 props。 */
 export const listWindowProps = {
-  initialNumToRender: LIST_WINDOW.initialNumToRender,
-  maxToRenderPerBatch: LIST_WINDOW.maxToRenderPerBatch,
-  updateCellsBatchingPeriod: LIST_WINDOW.updateCellsBatchingPeriod,
-  windowSize: LIST_WINDOW.windowSize,
-  removeClippedSubviews: LIST_WINDOW.removeClippedSubviews,
+  /** 视口上下各留约 3 屏（默认 21 屏 ≈ 把整份长列表都挂上）。 */
+  windowSize: 7,
+  /** 每批少渲染一点，让滚动中的每一帧更短。 */
+  maxToRenderPerBatch: 8,
 } as const;

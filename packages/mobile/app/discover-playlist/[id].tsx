@@ -13,6 +13,7 @@ import CollapsingHero from '../../components/CollapsingHero';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
+import { replaceSongInList } from '../../services/songListOps';
 import { textVariants } from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -111,7 +112,7 @@ export default function DiscoverPlaylistDetailPage() {
   // 单曲换源后更新列表。useCallback（#411）：此前是 renderItem 里的内联箭头，
   // 每帧新引用会把 SongRow 的 memo 击穿。
   const handleSwap = useCallback((original: Song, swapped: Song) => {
-    setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)));
+    setSongs((prev) => replaceSongInList(prev, original.id, swapped));
   }, []);
 
   return (

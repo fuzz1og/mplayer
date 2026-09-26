@@ -12,6 +12,7 @@ import ScalePress from '../../components/ScalePress';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CircleAlert, Music2, User } from 'lucide-react-native';
 import { getDirectClient } from '@mplayer/core';
+import type { SongGroup } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -19,7 +20,7 @@ import SongList from '../../components/SongList';
 import type { SongListRow } from '../../components/SongList';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
-import {radius, spacing, textVariants} from '../../theme/tokens';
+import { radius, textVariants } from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
@@ -179,10 +180,46 @@ export default function SearchPage() {
 }
 
 interface ResultsListProps {
-  results: import('@mplayer/core').SongGroup[];
+  results: SongGroup[];
   loadMore: () => Promise<void>;
   loadingMore: boolean;
   hasMore: boolean;
+}
+
+/**
+ * **拍平**搜索结果（#411）：把「组」拆成「组头行 + 歌曲行」。
+ *
+ * 此前把「组」当 cell、组内 `group.songs.map()` 全量渲染——一个 30 首的组就是一次性
+ * 挂 30 行，虚拟化完全绕过去了。拍平后才是逐行虚拟化。
+ *
+ * 两种视图只差组头的内容与档位（多源 = 歌名 — 歌手 +「N 个版本」；单源 = 源名 +「N 首」），
+ * 所以共用一个函数。key 用 `组键:歌曲 id`（歌曲 id 含源前缀，组内不会重），**不含 index**。
+ */
+function flattenSongGroups(results: SongGroup[], mode: 'multi' | 'single'): SongListRow[] {
+  const flat: SongListRow[] = [];
+  for (const group of results) {
+    const hasHeader = mode === 'multi' ? Boolean(group.name || group.artist) : Boolean(group.name);
+    if (hasHeader) {
+      flat.push({
+        kind: 'groupHeader',
+        key: `${group.key}:header`,
+        title: group.name,
+        subtitle: mode === 'multi' ? group.artist || undefined : undefined,
+        note: group.songs.length > 1 ? `${group.songs.length} ${mode === 'multi' ? '个版本' : '首'}` : undefined,
+        quiet: mode === 'single',
+      });
+    }
+    for (const song of group.songs) {
+      flat.push({
+        kind: 'song',
+        key: `${group.key}:${song.id}`,
+        song,
+        showSource: true,
+        queueSongs: group.songs,
+      });
+    }
+  }
+  return flat;
 }
 
 /**
@@ -192,33 +229,7 @@ function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: Results
   const insets = useSafeAreaInsets();
   const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
 
-  // **拍平**（#411）：此前把「组」当 cell、组内 `group.songs.map()` 全量渲染，
-  // 一个 30 首的组就是一次性挂 30 行——虚拟化完全绕过去了。拍平成「组头 + 歌曲行」后
-  // 才是逐行虚拟化；key 用 `组键:歌曲 id`（歌曲 id 含源前缀，组内不会重），不含 index。
-  const rows = useMemo<SongListRow[]>(() => {
-    const flat: SongListRow[] = [];
-    for (const group of results) {
-      if (group.name || group.artist) {
-        flat.push({
-          kind: 'groupHeader',
-          key: `${group.key}:header`,
-          title: group.name,
-          subtitle: group.artist || undefined,
-          note: group.songs.length > 1 ? `${group.songs.length} 个版本` : undefined,
-        });
-      }
-      for (const song of group.songs) {
-        flat.push({
-          kind: 'song',
-          key: `${group.key}:${song.id}`,
-          song,
-          showSource: true,
-          queueSongs: group.songs,
-        });
-      }
-    }
-    return flat;
-  }, [results]);
+  const rows = useMemo(() => flattenSongGroups(results, 'multi'), [results]);
 
   return (
     <SongList
@@ -238,31 +249,7 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
   const insets = useSafeAreaInsets();
   const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
 
-  // 同样是拍平（#411）：单源视图组头只是更轻的「静默档」（quiet）。
-  const rows = useMemo<SongListRow[]>(() => {
-    const flat: SongListRow[] = [];
-    for (const group of results) {
-      if (group.name) {
-        flat.push({
-          kind: 'groupHeader',
-          key: `${group.key}:header`,
-          title: group.name,
-          note: group.songs.length > 1 ? `${group.songs.length} 首` : undefined,
-          quiet: true,
-        });
-      }
-      for (const song of group.songs) {
-        flat.push({
-          kind: 'song',
-          key: `${group.key}:${song.id}`,
-          song,
-          showSource: true,
-          queueSongs: group.songs,
-        });
-      }
-    }
-    return flat;
-  }, [results]);
+  const rows = useMemo(() => flattenSongGroups(results, 'single'), [results]);
 
   return (
     <SongList
@@ -278,27 +265,8 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
   container: { flex: 1 },
-  groupSection: { marginBottom: 12 },
-  // 组头 = 沟槽对齐的静默标签（无卡片底）：多源视图标题是歌名，单源视图标题是源名，
-  // 行保持全出血——沿用推荐页「标签 + 全出血行」的列表语言，避免内嵌卡与行断裂
-  groupHeader: {
-    ...textVariants.subhead,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: 4,
-  },
-  groupHeaderLabel: {
-    ...textVariants.footnote,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: 4,
-  },
-  groupArtist: { color: colors.textSecondary, fontWeight: '400' },
-  groupCount: { ...textVariants.caption, color: colors.textTertiary, fontWeight: '400', marginLeft: spacing[2] },
+  // 组头样式已随「拍平」搬进 components/SongList.tsx（groupHeader / groupHeaderQuiet 两档）：
+  // 组头现在是列表里的**行**，样式跟着行组件走，不再由页面各写一份（#411）。
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',

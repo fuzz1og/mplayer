@@ -138,6 +138,10 @@ export default function RecommendPage() {
             {shownSongs.length === 0 ? (
               <Text style={styles.emptyText}>暂无推荐歌曲</Text>
             ) : (
+              // 这一页**不是同构歌曲列表**（同屏还有猜你喜欢的网格卡片），
+              // 所以不套 components/SongList（#411 的范围是「同构歌曲长列表」）。
+              // 行组件只拿到 song + queueSongs，没有回调 → memo 天然生效；
+              // key 带 index 在这里也无害：本列表只整体替换（换一批），不存在单条删除。
               shownSongs.map((s, i) => (
                 <SongRow key={`${s.id}-${i}`} song={s} queueSongs={shownSongs} />
               ))

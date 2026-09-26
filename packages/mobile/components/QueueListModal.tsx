@@ -16,15 +16,25 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * 队列行高 = 纵向内距 ×2 + 歌名（body 行高）+ 歌手（caption 行高 + marginTop 2）。
+ * 行高从 token 派生，不手抄数字（评审意见：布局常量与组件样式要同源）。
+ */
+const QUEUE_ROW_HEIGHT =
+  spacing[3] * 2 + textVariants.body.lineHeight + textVariants.caption.lineHeight + 2;
+
 /** 队列行：memo + 稳定回调（#411）。此前 renderItem 内联箭头，且 key 拼了 index。 */
 const QueueRow = memo(function QueueRow({
   song,
   isCurrent,
+  accent,
   onSelect,
   styles,
 }: {
   song: Song;
   isCurrent: boolean;
+  /** 直接给颜色：此前把整个 styles 塞进 prop 再反向取 `styles.itemActive.color`（#411 评审） */
+  accent: string;
   onSelect: (song: Song) => void;
   styles: ReturnType<typeof makeStyles>;
 }) {
@@ -41,7 +51,7 @@ const QueueRow = memo(function QueueRow({
         </Text>
         <Text style={styles.itemArtist}>{song.artist}</Text>
       </View>
-      {isCurrent && <Play size={16} color={styles.itemActive.color as string} />}
+      {isCurrent && <Play size={16} color={accent} />}
     </ScalePress>
   );
 });
@@ -83,9 +93,15 @@ export default function QueueListModal({ visible, onClose }: Props) {
 
   const renderItem = useCallback(
     ({ item }: { item: { song: Song; key: string } }) => (
-      <QueueRow song={item.song} isCurrent={currentSong?.id === item.song.id} onSelect={handleSelect} styles={styles} />
+      <QueueRow
+        song={item.song}
+        isCurrent={currentSong?.id === item.song.id}
+        accent={colors.accent}
+        onSelect={handleSelect}
+        styles={styles}
+      />
     ),
-    [currentSong?.id, handleSelect, styles],
+    [colors.accent, currentSong?.id, handleSelect, styles],
   );
 
   return (
@@ -101,6 +117,13 @@ export default function QueueListModal({ visible, onClose }: Props) {
         keyExtractor={(row) => row.key}
         renderItem={renderItem}
         {...listWindowProps}
+        // 队列行也是固定行高（paddingVertical 12×2 + 歌名/歌手两行）：给出偏移，
+        // 让长队列滚动时不必逐行测量（#411 验收：「有固定行高的列表页提供 getItemLayout」）
+        getItemLayout={(_data, index) => ({
+          length: QUEUE_ROW_HEIGHT,
+          offset: QUEUE_ROW_HEIGHT * index,
+          index,
+        })}
         ListEmptyComponent={<Text style={styles.empty}>队列为空</Text>}
       />
     </BottomSheet>

@@ -12,9 +12,9 @@ import { listWindowProps } from './listWindow';
 import { computeSongListLayout } from './songListLayout';
 import type { SongListRow } from './songListLayout';
 
-// 行模型与布局算术在 songListLayout.ts（不依赖 react-native，可被单测直接覆盖）；
-// 这里 re-export 是为了调用方只认 `components/SongList` 一个入口。
-export { computeSongListLayout, songListRowHeight } from './songListLayout';
+// 行模型与布局算术在 songListLayout.ts（不依赖 react-native，可被单测直接覆盖）。
+// 这里只 re-export **类型**：调用方（各列表页）建 rows 时需要它；布局函数由测试直接
+// import 深模块，不再从这里转发（多一层转发只会多一个没人用的出口）。
 export type { SongListRow } from './songListLayout';
 
 /**

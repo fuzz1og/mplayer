@@ -14,6 +14,7 @@ import CollapsingHero from '../../components/CollapsingHero';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
+import { replaceSongInList } from '../../services/songListOps';
 import {radius, shadow, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -93,7 +94,7 @@ export default function ArtistDetailPage() {
   // 单曲换源后更新列表（SongRow 更多菜单触发；不更新会显示旧的源条目）。
   // useCallback（#411）：SongRow 的 prop，引用必须稳定（函数式更新 → 零依赖）。
   const handleSwap = useCallback((original: Song, swapped: Song) => {
-    setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)));
+    setSongs((prev) => replaceSongInList(prev, original.id, swapped));
   }, []);
 
   const handlePlayAll = () => {

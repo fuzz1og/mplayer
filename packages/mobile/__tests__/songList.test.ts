@@ -122,6 +122,36 @@ describe('列表渲染纪律（#411）', () => {
     expect(read('components/CollapsingHero.tsx')).toContain('listWindowProps');
   });
 
+  it('不显式打开 removeClippedSubviews（Android 默认已开，iOS 默认关是有原因的）', () => {
+    // RN FlatList 文档：「The default value is true for Android」——iOS 默认 false，
+    // 因为它在该平台有已知裁剪问题。显式传 true 等于把 iOS 拉进那个坑、Android 收益为零。
+    const window = stripComments(read('components/listWindow.ts'));
+    expect(window).not.toContain('removeClippedSubviews');
+  });
+
+  it('固定行高的队列列表也给 getItemLayout，且行高从 token 派生', () => {
+    const queue = read('components/QueueListModal.tsx');
+    expect(queue).toContain('getItemLayout');
+    expect(queue).toMatch(/QUEUE_ROW_HEIGHT =[\s\S]*textVariants\.body\.lineHeight/);
+  });
+
+  it('「列表内原位替换」只有一份实现（三个 hero 页共用）', () => {
+    expect(read('services/songListOps.ts')).toContain('export function replaceSongInList');
+    for (const file of ['app/album/[id].tsx', 'app/artist/[id].tsx', 'app/discover-playlist/[id].tsx']) {
+      const source = stripComments(read(file));
+      expect(source, file).toContain('replaceSongInList');
+      // 不再各写一份 map 替换体
+      expect(source, file).not.toMatch(/prev\.map\(\(s\) => \(s\.id === original\.id/);
+    }
+  });
+
+  it('搜索页的拍平只有一处实现（两种视图共用 flattenSongGroups）', () => {
+    const search = stripComments(read('app/(tabs)/search.tsx'));
+    expect(search).toContain('function flattenSongGroups');
+    // 组内 map 已消失；两处调用同一函数
+    expect((search.match(/flattenSongGroups\(results, '/g) ?? []).length).toBe(2);
+  });
+
   it('整店订阅已改为选择器订阅', () => {
     expect(read('app/favorites.tsx')).toMatch(/useFavoriteStore\(\(s\) => s\.favorites\)/);
     expect(read('app/history.tsx')).toMatch(/useHistoryStore\(\(s\) => s\.history\)/);
