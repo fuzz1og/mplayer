@@ -88,6 +88,33 @@ describe('#410 DiskCacheBackend：真异步 + O(1) 统计', () => {
     expect(await second.keys()).toHaveLength(2);
   });
 
+  it('同一目录的多个实例共享索引（否则 A 写的条目在 B 的 stats/keys 里永远看不见）', async () => {
+    // main.ts 为汽水音频另建了一个 DiskCacheBackend，指向同一个 userData/cache。
+    // 索引若按实例各持一份，kernel 后端的 stats() 就统计不到 `bin:soda:*`——
+    // 而改成索引之前的实现是现遍历目录，能统计到（回归）。
+    const kernelBackend = new DiskCacheBackend(dir);
+    const audioBackend = new DiskCacheBackend(dir);
+
+    await kernelBackend.write(':json:song:1', encoder.encode('{"url":"u"}'));
+    await audioBackend.write('bin:soda:9', encoder.encode('xx'));
+
+    expect(kernelBackend.stats().fileCount).toBe(2);
+    expect(audioBackend.stats().fileCount).toBe(2);
+    expect(await kernelBackend.keys()).toContain('bin:soda:9');
+  });
+
+  it('clear 后同目录另一实例的索引同时归零（不留幽灵条目）', async () => {
+    const a = new DiskCacheBackend(dir);
+    const b = new DiskCacheBackend(dir);
+    await a.write(':json:song:1', encoder.encode('{"url":"u"}'));
+    expect(b.stats().fileCount).toBe(1);
+
+    await b.clear();
+
+    expect(a.stats().fileCount).toBe(0);
+    expect(await a.keys()).toEqual([]);
+  });
+
   it('并发写入被写队列串行化，互不踩踏', async () => {
     const backend = new DiskCacheBackend(dir);
     await Promise.all(

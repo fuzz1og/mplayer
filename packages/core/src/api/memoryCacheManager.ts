@@ -1,4 +1,5 @@
 import type { Song } from '../types/index.js';
+import { evictLruOverflow, touchLru } from '../cache/lru.js';
 
 // 缓存项类型
 interface CacheItem<T> {
@@ -25,17 +26,9 @@ export class CacheManager {
     return this.cache.size;
   }
 
-  /**
-   * 超限淘汰队首（最久未用）。
-   * Map 的迭代顺序 = 插入顺序，配合 get/set 时的「挪到队尾」即为 LRU。
-   */
+  /** 超限淘汰队首（最久未用）——原语在 core/cache/lru，与 L1 后端同一份。 */
   private evictOverflow(): void {
-    if (this.maxEntries <= 0) return;
-    while (this.cache.size > this.maxEntries) {
-      const oldest = this.cache.keys().next().value;
-      if (oldest === undefined) break;
-      this.cache.delete(oldest);
-    }
+    evictLruOverflow(this.cache, this.maxEntries);
   }
 
   // 默认过期时间配置（毫秒）
@@ -79,9 +72,8 @@ export class CacheManager {
       return null;
     }
 
-    // 命中即最近使用：delete + set 挪到队尾，否则热键会先被淘汰
-    this.cache.delete(key);
-    this.cache.set(key, item);
+    // 命中即最近使用，否则热键会先被淘汰
+    touchLru(this.cache, key);
     return item.data;
   }
 

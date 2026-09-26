@@ -1,4 +1,4 @@
-import { cacheDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync, deleteAsync } from 'expo-file-system/legacy'
+import { cacheDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync, deleteAsync, getInfoAsync } from 'expo-file-system/legacy'
 import { cacheKeyType, md5 } from '@mplayer/core'
 import type { CacheBackend } from '@mplayer/core'
 
@@ -54,33 +54,51 @@ export class MobileFileBackend implements CacheBackend {
   }
 
   /**
-   * 装载索引。索引不存在 = 首启，或从旧版本升级——旧版本的条目全部落在
-   * `bin/`（上面第 1 条 bug），新代码按类型目录去找一条也命中不了，那批缓存
-   * 本来就已经不可达；直接整目录清掉重新开始，比逐个文件过桥补判更划算。
+   * 装载索引。两种情况必须分开处理（一次 `getInfoAsync` 探测，不是逐文件）：
+   *
+   * - **索引文件不存在** = 首启，或从旧版本升级——旧版本的条目全部落在 `bin/`
+   *   （上面第 1 条 bug），新代码按类型目录去找一条也命中不了，那批缓存本来就已经
+   *   不可达；直接整目录清掉重新开始，比逐个文件过桥补判更划算。
+   * - **索引文件在但读/解析失败** = 索引坏了，**不能连缓存文件一起清**：那会把一次
+   *   瞬时读失败升级成整份缓存丢失。本次统计从 0 起，缓存读写照常（`read` 不依赖索引）。
    */
   private async loadIndex(): Promise<void> {
+    let exists = false
     try {
-      const raw = await readAsStringAsync(this.indexPath, { encoding: 'utf8' })
-      const parsed = JSON.parse(raw) as Record<string, IndexEntry>
-      for (const [hash, entry] of Object.entries(parsed)) {
-        if (!entry || typeof entry.size !== 'number' || typeof entry.key !== 'string') continue
-        this.index.set(hash, {
-          key: entry.key,
-          size: entry.size,
-          expiresAt: typeof entry.expiresAt === 'number' ? entry.expiresAt : 0,
-        })
-      }
-      this.recount()
+      const info = await getInfoAsync(this.indexPath)
+      exists = info.exists === true
     } catch {
-      this.index.clear()
-      this.recount()
-      try {
-        await deleteAsync(this.baseDir, { idempotent: true })
-      } catch {
-        // 目录不存在 = 本来就没缓存
-      }
-      await this.persistIndex()
+      exists = false
     }
+
+    if (exists) {
+      try {
+        const raw = await readAsStringAsync(this.indexPath, { encoding: 'utf8' })
+        const parsed = JSON.parse(raw) as Record<string, IndexEntry>
+        for (const [hash, entry] of Object.entries(parsed)) {
+          if (!entry || typeof entry.size !== 'number' || typeof entry.key !== 'string') continue
+          this.index.set(hash, {
+            key: entry.key,
+            size: entry.size,
+            expiresAt: typeof entry.expiresAt === 'number' ? entry.expiresAt : 0,
+          })
+        }
+      } catch {
+        // 坏索引：保持空表即可，磁盘缓存不动
+        this.index.clear()
+      }
+      this.recount()
+      return
+    }
+
+    this.index.clear()
+    this.recount()
+    try {
+      await deleteAsync(this.baseDir, { idempotent: true })
+    } catch {
+      // 目录不存在 = 本来就没缓存
+    }
+    await this.persistIndex()
   }
 
   private recount(): void {

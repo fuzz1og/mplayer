@@ -85,6 +85,11 @@ export class FileStorage {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly SAVE_DELAY: number = 200; // 200ms 防抖延迟
   private lastBackupAt: Partial<Record<Domain, number>> = {};
+  /**
+   * 写串行。`setSetting` 是**立即直写**（不走防抖），而防抖回调/flush 可能在批写同一域——
+   * 两者会落到同一个 `${target}.tmp` 上。串行之后「同一文件的写入」不再交错。
+   */
+  private writeChain: Promise<unknown> = Promise.resolve();
 
   private ensurePaths(): void {
     if (this.dataDir) return;
@@ -177,9 +182,9 @@ export class FileStorage {
     ]);
 
     const legacy = this.legacyData;
-    this.data.favorites = this.convertFavorites(favorites ?? legacy?.favorites ?? []);
-    this.data.playHistory = this.convertHistory(history ?? legacy?.playHistory ?? []);
-    this.data.playlists = this.convertPlaylists(playlists ?? legacy?.playlists ?? []);
+    this.data.favorites = this.convertDated<Favorite>(favorites ?? legacy?.favorites ?? [], 'createdAt');
+    this.data.playHistory = this.convertDated<PlayHistory>(history ?? legacy?.playHistory ?? [], 'playedAt');
+    this.data.playlists = this.convertDated<Playlist>(playlists ?? legacy?.playlists ?? [], 'createdAt');
     this.data.playlistSongs = (playlistSongs as PlaylistSong[]) ?? legacy?.playlistSongs ?? [];
 
     // 还没落到分域文件的老数据：首次写入时五个域一起写，成功后才退役单文件
@@ -212,14 +217,17 @@ export class FileStorage {
     }
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      void this.flushPending().catch((error) => {
+      void this.drainDirty().catch((error) => {
         console.error('防抖写入失败:', error);
       });
     }, this.SAVE_DELAY);
   }
 
-  /** 落盘当前脏域。失败时把域放回脏集，避免「写失败 = 数据丢失」。 */
-  private async flushPending(): Promise<void> {
+  /**
+   * 取走脏域并落盘。失败时把域放回脏集，避免「写失败 = 数据丢失」。
+   * 防抖回调与 `flushSave` 共用这一条路径（两处原本是逐行同形的两份实现）。
+   */
+  private async drainDirty(): Promise<void> {
     if (!this.isDirty) return;
     const domains = [...this.dirtyDomains];
     this.dirtyDomains.clear();
@@ -243,16 +251,10 @@ export class FileStorage {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-    if (!this.isDirty) return;
-    const domains = [...this.dirtyDomains];
-    this.dirtyDomains.clear();
-    this.isDirty = false;
     try {
-      await this.writeDomains(domains);
+      await this.drainDirty();
     } catch (error) {
       console.error('立即写入失败:', error);
-      for (const domain of domains) this.dirtyDomains.add(domain);
-      this.isDirty = true;
       throw error;
     }
   }
@@ -274,7 +276,19 @@ export class FileStorage {
    * 原子替换之后不再需要旧实现的「失败时从 backup 恢复」——目标文件要么是上一版
    * 完整内容，要么是新一版完整内容，不存在写一半的中间态。
    */
-  private async writeDomainFile(domain: Domain): Promise<void> {
+  private writeDomainFile(domain: Domain): Promise<void> {
+    const run = this.writeChain.then(
+      () => this.writeDomainFileNow(domain),
+      () => this.writeDomainFileNow(domain),
+    );
+    this.writeChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async writeDomainFileNow(domain: Domain): Promise<void> {
     const target = this.domainPath(domain);
     const temp = `${target}.tmp`;
     const payload = JSON.stringify(this.serializeDomain(domain));
@@ -337,32 +351,23 @@ export class FileStorage {
     return true;
   }
 
-  private convertFavorites(raw: unknown): Favorite[] {
-    return ((raw as any[]) || []).map((f: any) => ({
-      ...f,
-      createdAt: f.createdAt instanceof Date ? f.createdAt : new Date(f.createdAt)
-    }));
-  }
-
-  private convertHistory(raw: unknown): PlayHistory[] {
-    return ((raw as any[]) || []).map((h: any) => ({
-      ...h,
-      playedAt: h.playedAt instanceof Date ? h.playedAt : new Date(h.playedAt)
-    }));
-  }
-
-  private convertPlaylists(raw: unknown): Playlist[] {
-    return ((raw as any[]) || []).map((p: any) => ({
-      ...p,
-      createdAt: p.createdAt instanceof Date ? p.createdAt : new Date(p.createdAt)
+  /**
+   * 把某个日期字段从 ISO 字符串还原为 Date。
+   * 三个域的条目形状相同、只有字段名不同（favorites/playlists 用 createdAt、
+   * history 用 playedAt），所以只有一个转换函数。
+   */
+  private convertDated<T>(raw: unknown, field: 'createdAt' | 'playedAt'): T[] {
+    return (((raw as any[]) || [])).map((item: any) => ({
+      ...item,
+      [field]: item[field] instanceof Date ? item[field] : new Date(item[field])
     }));
   }
 
   private convertDates(data: any): StorageData {
     return {
-      favorites: this.convertFavorites(data.favorites),
-      playHistory: this.convertHistory(data.playHistory),
-      playlists: this.convertPlaylists(data.playlists),
+      favorites: this.convertDated<Favorite>(data.favorites, 'createdAt'),
+      playHistory: this.convertDated<PlayHistory>(data.playHistory, 'playedAt'),
+      playlists: this.convertDated<Playlist>(data.playlists, 'createdAt'),
       playlistSongs: data.playlistSongs || [],
       settings: data.settings || {}
     } as StorageData;

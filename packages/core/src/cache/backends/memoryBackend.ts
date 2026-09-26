@@ -1,4 +1,5 @@
 import type { CacheBackend } from '../types'
+import { evictLruOverflow, touchLru } from '../lru'
 
 export interface MemoryBackendOptions {
   /**
@@ -25,14 +26,7 @@ export function createMemoryBackend(options: MemoryBackendOptions = {}): CacheBa
   const map = new Map<string, Entry>()
   let capacity = options.maxEntries && options.maxEntries > 0 ? options.maxEntries : 0
 
-  const evictOverflow = (): void => {
-    if (capacity <= 0) return
-    while (map.size > capacity) {
-      const oldest = map.keys().next().value
-      if (oldest === undefined) break
-      map.delete(oldest)
-    }
-  }
+  const evictOverflow = (): void => evictLruOverflow(map, capacity)
 
   return {
     setCapacity(maxEntries: number): void {
@@ -46,9 +40,8 @@ export function createMemoryBackend(options: MemoryBackendOptions = {}): CacheBa
         map.delete(key)
         return null
       }
-      // 命中即最近使用：delete + set 把它挪到队尾
-      map.delete(key)
-      map.set(key, item)
+      // 命中即最近使用
+      touchLru(map, key)
       return item.data
     },
     async write(key: string, data: Uint8Array, expiresAt?: number): Promise<void> {

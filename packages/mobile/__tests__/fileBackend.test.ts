@@ -27,9 +27,9 @@ const mocks = vi.hoisted(() => {
       calls.readDir++;
       return [] as string[];
     },
-    getInfoAsync: async () => {
+    getInfoAsync: async (path: string) => {
       calls.getInfo++;
-      return { exists: false };
+      return { exists: files.has(path) };
     },
   };
 });
@@ -65,14 +65,17 @@ describe('#410 MobileFileBackend', () => {
     expect(paths.filter(p => p.includes('/mplayer-cache/bin/'))).toHaveLength(1);
   });
 
-  it('磁盘统计读内存索引：getInfoAsync 零调用（不再逐文件过桥）', async () => {
+  it('磁盘统计读内存索引：过桥次数不随文件数增长（冷启探测索引文件至多 1 次）', async () => {
     const backend = new MobileFileBackend();
-    await backend.write(':json:song:1', new Uint8Array([1, 2, 3, 4]));
-    await backend.write(':json:song:2', new Uint8Array([1, 2, 3, 4, 5]));
+    for (let i = 0; i < 30; i++) {
+      await backend.write(`:json:song:${i}`, new Uint8Array([1, 2, 3]));
+    }
 
+    mocks.calls.getInfo = 0; // 只统计统计接口本身的过桥
     const stats = await backend.getDiskStats();
 
-    expect(stats).toEqual({ fileCount: 2, totalSize: 9 });
+    expect(stats).toEqual({ fileCount: 30, totalSize: 90 });
+    // 此前是「每个文件一次 getInfoAsync」→ 这里会是 30
     expect(mocks.calls.getInfo).toBe(0);
   });
 
@@ -99,16 +102,18 @@ describe('#410 MobileFileBackend', () => {
     expect(await backend.read(':json:song:1')).toBeNull();
   });
 
-  it('索引持久化：新实例从 index.json 恢复统计（无需重新扫描目录）', async () => {
+  it('索引持久化：新实例从 index.json 恢复统计（一次探测，不逐文件）', async () => {
     const first = new MobileFileBackend();
     await first.write(':json:song:1', new Uint8Array([1, 2, 3]));
     await new Promise(resolve => setTimeout(resolve, 600)); // 索引写入是防抖的
 
+    mocks.calls.getInfo = 0; // 只统计「第二个实例冷启装载索引」这一次
     const second = new MobileFileBackend();
     const stats = await second.getDiskStats();
 
     expect(stats).toEqual({ fileCount: 1, totalSize: 3 });
-    expect(mocks.calls.getInfo).toBe(0);
+    // 冷启恰好探测一次索引文件是否存在；不逐文件过桥（否则这里会等于 fileCount）
+    expect(mocks.calls.getInfo).toBe(1);
     expect(mocks.calls.readDir).toBe(0);
   });
 
