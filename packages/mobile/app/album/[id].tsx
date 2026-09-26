@@ -73,7 +73,7 @@ export default function AlbumDetailPage() {
     return t > 0 ? String(new Date(t).getFullYear()) : '';
   })();
 
-  if (loading) return <SongListSkeleton />;
+  if (loading) return <SongListSkeleton showSource />;
 
   return (
     <View style={styles.container}>

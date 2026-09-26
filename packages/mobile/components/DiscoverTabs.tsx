@@ -17,21 +17,21 @@ import SegmentedTabs from './SegmentedTabs';
 import TextTabs from './TextTabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight, LIST_TAIL_PADDING } from './chromeMetrics';
-import SongListSkeleton from './SongListSkeleton';
 import CoverGridSkeleton from './CoverGridSkeleton';
+import HotlistSkeleton from './HotlistSkeleton';
+import { GRID_CARD } from './gridCardMetrics';
+import { HOTLIST_SECTION } from './hotlistMetrics';
+import { SONG_ROW } from './songRowMetrics';
 import LoadMoreFooter from './LoadMoreFooter';
 import { useDiscoverStore, HotlistItem } from '../stores/discoverStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong as playAudio } from '../services/audioPlayer';
 import { searchStrictMatch } from '../services/songResources';
-import { gridCardWidth } from './gridMetrics';
+import { gridCardWidth, GRID_GAP } from './gridMetrics';
 
 /** 网格统一度量：16pt 页面沟槽（与分段控件/分类行同轴），列间 12；公式见 gridMetrics */
 const gridCardW = gridCardWidth({ cols: 2 });
 const artistCardW = gridCardWidth({ cols: 3 });
-/** 网格列间距（gridCardWidth 默认同值；columnWrapperStyle/grid 样式 gap 引用） */
-const GRID_GAP = spacing[3];
-
 /** 整页宽度：分页滚动（按页 scrollToOffset/翻页判定）用，非卡片宽度（卡片宽度见 gridMetrics） */
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -108,14 +108,16 @@ function HotlistContent() {
 
   useEffect(() => { load(); }, []);
 
-  if (loading) return <SongListSkeleton />;
-
   const SECTIONS = [
     { key: 'neteaseHotlist' as const, title: '网易云音乐 · 热歌榜', sourceType: 'netease' as SourceKey },
     { key: 'qqHotlist' as const, title: 'QQ 音乐 · 热歌榜', sourceType: 'qq' as SourceKey },
     { key: 'neteaseNew' as const, title: '网易云音乐 · 新歌榜', sourceType: 'netease' as SourceKey },
     { key: 'qqNew' as const, title: 'QQ 音乐 · 新歌榜', sourceType: 'qq' as SourceKey },
   ];
+
+  // 首屏 loading：**镜像真实分组结构**（N 张卡片 × 标题行 + 每卡 5 行），
+  // 不再复用平铺列表骨架——那个既没有卡片也没有标题行，数据到达时整页重排（#416）。
+  if (loading) return <HotlistSkeleton sections={SECTIONS.length} />;
 
   return (
     <ScrollView style={styles.tabContent} contentContainerStyle={[styles.tabContentInnerHotlist, { paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + LIST_TAIL_PADDING }]}>
@@ -166,7 +168,7 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
       >
         <Text style={styles.sectionTitle}>{title} ›</Text>
       </ScalePress>
-      {songs.slice(0, 5).map((song, i) => (
+      {songs.slice(0, HOTLIST_SECTION.previewRows).map((song, i) => (
         <ScalePress
           key={song.id + String(i)}
           style={[styles.songRow, i > 0 && styles.songRowSep]}
@@ -264,8 +266,17 @@ function AlbumsContent() {
     setRefreshing(false);
   }, [load]);
 
-  // 首屏(无数据)整页 loading;分类切换保留旧数据,避免闪烁
-  if (loading && albums.length === 0) return <CoverGridSkeleton />;
+  // 首屏(无数据)整页 loading;分类切换保留旧数据,避免闪烁。
+  // 分类条**必须一起渲染**：真实页面里它固定在网格上方，loading 时省略会让
+  // 数据到达后网格整体下移一格（#416）。
+  if (loading && albums.length === 0) {
+    return (
+      <View style={styles.tabContent}>
+        <CategoryPills items={ALBUM_AREAS} activeValue={area} onSelect={setArea} />
+        <CoverGridSkeleton columns={CARD_COLS} />
+      </View>
+    );
+  }
 
   const renderItem = ({ item: album }: { item: Album }) => (
     <ScalePress
@@ -390,8 +401,15 @@ function PlaylistContent() {
     }
   }, [loadingMore, hasMore, category]);
 
-  // 首屏(无数据)整页 loading;分类切换保留旧列表
-  if (loading && playlists.length === 0) return <CoverGridSkeleton />;
+  // 首屏(无数据)整页 loading;分类切换保留旧列表（分类条同上：不能省）
+  if (loading && playlists.length === 0) {
+    return (
+      <View style={styles.tabContent}>
+        <CategoryPills items={PLAYLIST_CATEGORIES} activeValue={category} onSelect={setCategory} />
+        <CoverGridSkeleton columns={CARD_COLS} />
+      </View>
+    );
+  }
 
   const renderItem = ({ item: p }: { item: DiscoverPlaylist }) => (
     <ScalePress
@@ -525,8 +543,16 @@ function ArtistContent() {
     }
   }, [loadingMore, hasMore, artists.length, category]);
 
-  // 首屏(无数据)整页 loading;分类切换保留旧列表
-  if (loading && artists.length === 0) return <CoverGridSkeleton columns={3} />;
+  // 首屏(无数据)整页 loading;分类切换保留旧列表（分类条同上：不能省）。
+  // 歌手网格是**圆头像 + 居中名字**，故 variant='artist'（#416）。
+  if (loading && artists.length === 0) {
+    return (
+      <View style={styles.tabContent}>
+        <CategoryPills items={ARTIST_CATEGORIES} activeValue={category} onSelect={setCategory} />
+        <CoverGridSkeleton columns={CARD_COLS} variant="artist" />
+      </View>
+    );
+  }
 
   const renderItem = ({ item: a }: { item: any }) => (
     <ScalePress
@@ -606,66 +632,70 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   // Hotlist section styles：iOS inset grouped（指南 §2.3/§2.5）——白组坐灰底靠明度差分层，
   // 无阴影无边框；标题行/歌曲行之间发丝线分隔；水平缩进对齐 16pt 页面沟槽
+  // 分组卡片度量取自 hotlistMetrics（#416：骨架屏是它的同形替身，两处同源）
   section: {
     backgroundColor: colors.bgSurface,
-    marginHorizontal: spacing[4],
-    marginTop: spacing[5],
-    borderRadius: radius.lg,
+    marginHorizontal: HOTLIST_SECTION.marginHorizontal,
+    marginTop: HOTLIST_SECTION.marginTop,
+    borderRadius: HOTLIST_SECTION.radius,
     overflow: 'hidden',
   },
   sectionHeader: {
-    paddingHorizontal: spacing[4],
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: HOTLIST_SECTION.headerPaddingHorizontal,
+    paddingVertical: HOTLIST_SECTION.headerPaddingVertical,
+    borderBottomWidth: SONG_ROW.separatorWidth,
     borderBottomColor: colors.borderSubtle,
   },
   sectionTitle: {
     ...textVariants.sectionHeader,
     color: colors.textPrimary,
   },
+  // 歌曲行度量与 SongRow 同源（songRowMetrics）；此前这里另写了一套（封面间距 10 对 12）
   songRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingVertical: 10,
+    paddingHorizontal: SONG_ROW.paddingHorizontal,
+    paddingVertical: SONG_ROW.paddingVertical,
   },
   songRowSep: {
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: SONG_ROW.separatorWidth,
     borderTopColor: colors.borderSubtle,
   },
   rank: {
     ...textVariants.subhead,
     fontWeight: '600',
     color: colors.textTertiary,
-    width: 28,
+    width: SONG_ROW.rankWidth,
     textAlign: 'center',
+    marginRight: SONG_ROW.rankGap,
   },
   cover: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.sm,
-    marginRight: 10,
+    width: SONG_ROW.coverSize,
+    height: SONG_ROW.coverSize,
+    borderRadius: SONG_ROW.coverRadius,
+    marginRight: SONG_ROW.coverGap,
   },
   songInfo: { flex: 1 },
   songName: { ...textVariants.subhead, fontWeight: '400', color: colors.textPrimary },
   songArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
   // 专辑/歌单网格卡片：封面方圆角 md，标题两行截断，副行 meta——
   // 垂直节奏走 token（name 8 / meta 2），列距 gap 统一 12，无逐卡 margin
+  // 网格卡片度量取自 gridCardMetrics（#416：CoverGridSkeleton 与真实网格同源）
   gridCover: {
-    borderRadius: radius.md,
+    borderRadius: GRID_CARD.coverRadius,
     backgroundColor: colors.bgHover,
   },
   gridName: {
     ...textVariants.footnote,
     fontWeight: '500',
     color: colors.textPrimary,
-    marginTop: spacing[2],
+    marginTop: GRID_CARD.nameGap,
   },
   gridMeta: {
     ...textVariants.micro,
     fontWeight: '400',
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: GRID_CARD.metaGap,
   },
   // Artist grid styles
   artistGrid: {
@@ -682,18 +712,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   artistCard: {
     width: artistCardW,
     alignItems: 'center',
-    marginBottom: spacing[4],
+    marginBottom: GRID_CARD.artistCardBottom,
   },
   artistAvatar: {
-    width: 72,
-    height: 72,
+    width: GRID_CARD.artistAvatarSize,
+    height: GRID_CARD.artistAvatarSize,
     borderRadius: radius.full,
     backgroundColor: colors.bgHover,
   },
   artistName: {
     ...textVariants.footnote,
     color: colors.textPrimary,
-    marginTop: spacing[2],
+    marginTop: GRID_CARD.nameGap,
     textAlign: 'center',
   },
 });
