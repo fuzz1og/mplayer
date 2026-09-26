@@ -23,6 +23,7 @@ import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
+import { useLogsStore } from '../stores/logsStore';
 import {radius, shadow, spacing, textVariants, turntable, playerForeground, playerBackground} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -254,6 +255,16 @@ export default function PlayerOverlay({ onClose }: Props) {
   const [lyricsLoading, setLyricsLoading] = useState(false);
   useEffect(() => {
     if (!song) { setLyricLines([]); setLyricsLoading(false); return; }
+    // #409 埋点：[耗时] 歌词就绪——本票把歌词从「列表内联」改成「播放期按 ID 直取」，
+    // 首行延迟从 0 变成一次 RTT，必须可观测（与仓里 [耗时] 播放器就绪同约定）。
+    const lyricsT0 = Date.now();
+    const logKind = () => (isInlineLyrics(song.sourceType, song.lrc)
+      ? 'inline(存量)'
+      : song.lrc
+        ? 'url'
+        : songUsesSongidLyrics(song.sourceType)
+          ? (isSodaSource(song.sourceType) ? 'songid:soda' : 'songid:netease')
+          : 'none');
     const abort = new AbortController();
     // 网易（#409）：列表结果 lrc 恒空 → cacheKey 走 songid，播放期按 songId 直取；
     // 存量数据的内联文本走 inline；其余源 lrc 为取词 URL（getLyrics 门面）；汽水按 trackId 直取。
@@ -274,6 +285,7 @@ export default function PlayerOverlay({ onClose }: Props) {
     if (cached) {
       setLyricLines(cached);
       setLyricsLoading(false);
+      useLogsStore.getState().addLog('info', `[耗时] 歌词就绪(会话缓存): 《${song.name}》 ${Date.now() - lyricsT0}ms · ${logKind()} · ${cached.length} 行`);
       return;
     }
     setLyricsLoading(true);
@@ -291,6 +303,10 @@ export default function PlayerOverlay({ onClose }: Props) {
       const parsed = parseLRC(lrc);
       lyricCache.set(cacheKey, parsed.lines);
       setLyricLines(parsed.lines);
+      useLogsStore.getState().addLog(
+        'info',
+        `[耗时] 歌词就绪: 《${song.name}》 ${Date.now() - lyricsT0}ms · ${logKind()} · ${parsed.lines.length} 行`,
+      );
       // 拿到空词（lrc URL 被拒/无词）≠ 加载失败不抛错：非网易源再给搜索兜底
       // 一次机会（网易 by-id 已是权威答案，纯音乐不再白搜）。结果同 URL 时
       // fetchLrcInBackground 内部按无变化返回，不会循环。
