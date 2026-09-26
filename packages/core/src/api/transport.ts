@@ -34,6 +34,17 @@ export interface TransportSignal {
  */
 export type TransportSignalAcceptsAbortSignal = AbortSignal extends TransportSignal ? true : never;
 
+/**
+ * 单次出网调用的选项（能力方法的**可选尾参**，向后兼容）。
+ *
+ * 目前只有取消信号：墙钟到点时由**墙的持有者** abort（directCall 的 3s 直连墙、
+ * tier3 的单源墙 / 整链预算），把「放弃等待」变成真的停掉底层请求。
+ * 墙的语义留在各腿，transport 不感知时间——这是 #399 要守住的分工。
+ */
+export interface TransportCallOptions {
+  signal?: TransportSignal;
+}
+
 export interface TransportRequest {
   method: 'GET' | 'POST';
   url: string;

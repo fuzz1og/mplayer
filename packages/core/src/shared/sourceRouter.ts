@@ -12,6 +12,7 @@ import {
   type PlaybackTraceSourceLeg,
 } from './playbackTrace.js';
 import { clearSourceSchedule } from './sourceSchedule.js';
+import type { TransportCallOptions } from '../api/transport.js';
 
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
@@ -125,10 +126,16 @@ export interface DirectSourceClient {
   // ── 基础能力 ─────────────────────────────────────────────────────
   /** 源站搜索（直连）。未实现则不提供。 */
   searchSongs?: (keyword: string, page: number) => Promise<Song[]>;
-  /** 播放 URL 直连解析；无版权/VIP 返回 ''（交给换元层）。 */
-  resolvePlayableUrl?: (song: Song) => Promise<string>;
+  /**
+   * 播放 URL 直连解析；无版权/VIP 返回 ''（交给换元层）。
+   * `opts.signal`：可选的取消信号——由**墙的持有者**（directCall 的 3s 直连墙）传入，
+   * 墙到点即 abort，把「放弃等待」变成真的停掉底层请求（#408）。
+   * 未实现该参数的源（如汽水：其分享页不经 transport 接缝）不受影响，函数形参少
+   * 在 TS 里仍满足本签名。
+   */
+  resolvePlayableUrl?: (song: Song, opts?: TransportCallOptions) => Promise<string>;
   /** 权威完整时长验证字段（T12 预检使用；按源覆盖，可不提供）。 */
-  resolveUrlInfo?: (song: Song) => Promise<UrlInfo | null>;
+  resolveUrlInfo?: (song: Song, opts?: TransportCallOptions) => Promise<UrlInfo | null>;
   // ── 内容能力（#239 接口形态）────────────────────────────────────
   /** 歌手搜索（searchNeteaseArtists 迁入）。 */
   searchArtists?: (keyword: string, limit: number) => Promise<Artist[]>;
@@ -361,15 +368,21 @@ async function timedDirectCall<T>(
   ctx: TraceCtx | null,
   client: DirectSourceClient,
   method: string,
-  call: () => Promise<T>,
+  call: (opts: TransportCallOptions) => Promise<T>,
 ): Promise<T | typeof DIRECT_TIMED_OUT> {
   const t0 = ctx ? traceNow() : 0;
+  // #408：墙的持有者持有 AbortController，到点 abort——底层请求（含 transport 重试）
+  // 立刻停掉，不再「放弃等待但继续压上游」。
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      call(),
+      call({ signal: controller.signal }),
       new Promise<typeof DIRECT_TIMED_OUT>((resolve) => {
-        timer = setTimeout(() => resolve(DIRECT_TIMED_OUT), DIRECT_WALL_MS);
+        timer = setTimeout(() => {
+          controller.abort();
+          resolve(DIRECT_TIMED_OUT);
+        }, DIRECT_WALL_MS);
       }),
     ]);
   } finally {
@@ -396,7 +409,7 @@ async function directCall<T>(
   ctx: TraceCtx | null,
   client: DirectSourceClient,
   method: string,
-  call: () => Promise<T>,
+  call: (opts: TransportCallOptions) => Promise<T>,
 ): Promise<T> {
   const outcome = await timedDirectCall(ctx, client, method, call);
   if (outcome === DIRECT_TIMED_OUT) {
@@ -737,7 +750,9 @@ export async function resolvePlayableUrlRouted(song: Song): Promise<string> {
   try {
     // 与 resolveRoutedInner 同一条腿：同样过 #389 的 3s 墙（本函数经 IPC 暴露，
     // 是另一个「直连解析腿」入口，保证 wall 口径一致）。
-    const url = await directCall(null, route.client, 'resolvePlayableUrl', () => route.client.resolvePlayableUrl!(song));
+    const url = await directCall(null, route.client, 'resolvePlayableUrl', (opts) =>
+      route.client.resolvePlayableUrl!(song, opts),
+    );
     if (url) {
       // 搜索结果已被探测标记为无效时，即使直连返回了 URL 也先试 tier3；
       // 没有配置 tier3 则保持原直连结果，由上层继续按现状报错/换元。
@@ -918,7 +933,7 @@ async function resolveRoutedInner(song: Song, ctx: TraceCtx | null): Promise<Rou
   try {
     const client = route.client;
     if (client.resolveUrlInfo) {
-      const info = await directCall(ctx, client, 'resolveUrlInfo', () => client.resolveUrlInfo!(song));
+      const info = await directCall(ctx, client, 'resolveUrlInfo', (opts) => client.resolveUrlInfo!(song, opts));
       if (info) {
         if (info.url) {
           // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL；
@@ -942,7 +957,7 @@ async function resolveRoutedInner(song: Song, ctx: TraceCtx | null): Promise<Rou
         return directPlayable('', false);
       }
     }
-    const url = await directCall(ctx, client, 'resolvePlayableUrl', () => client.resolvePlayableUrl!(song));
+    const url = await directCall(ctx, client, 'resolvePlayableUrl', (opts) => client.resolvePlayableUrl!(song, opts));
     if (url) {
       // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL。
       const picked = await preferTier3WhenBad(song, url, ctx);

@@ -1,6 +1,6 @@
 import CryptoJS from 'crypto-js';
 import { getTlsFingerprintConfig } from './tlsFingerprint.js';
-import { request } from './transport.js';
+import { request, type TransportCallOptions } from './transport.js';
 
 /**
  * 网易云 weapi 加密请求(参考 NeteaseCloudMusicApi 的 weapi 算法)
@@ -70,7 +70,11 @@ export function weapiEncrypt(
 
 /** POST weapi 请求,path 形如 '/v6/playlist/detail',返回响应 JSON。
  *  经 transport.request 统一出网（T01 接缝，双端可用，测试注入 mock 传输驱动）。 */
-export async function weapiRequest<T>(path: string, data: Record<string, unknown>): Promise<T> {
+export async function weapiRequest<T>(
+  path: string,
+  data: Record<string, unknown>,
+  opts?: TransportCallOptions,
+): Promise<T> {
   // T10 #156：险情开关开启（仅桌面）时附加指纹头。指纹 httpsAgent 为桌面侧
   // axios 承载能力，经 transport 接缝不透传（接缝无 agent 通道），仅头生效。
   const fingerprint = getTlsFingerprintConfig();
@@ -87,6 +91,7 @@ export async function weapiRequest<T>(path: string, data: Record<string, unknown
     },
     body: new URLSearchParams(weapiEncrypt(data)).toString(),
     timeoutMs: 8000,
+    signal: opts?.signal,
   });
   if (typeof res.body !== 'string') {
     throw new Error('weapi 响应非文本');

@@ -1,6 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request, bodyToBytes, bodyToText } from './transport.js';
+import { request, bodyToBytes, bodyToText, type TransportCallOptions } from './transport.js';
 
 /**
  * 咪咕直连客户端（T05 #151）。
@@ -112,7 +112,7 @@ export const miguDirectClient: DirectSourceClient = {
     return (data.songResultData?.result || data.data?.songList || []).map(mapTrack).filter((s) => s.id);
   },
 
-  async resolvePlayableUrl(song: Song): Promise<string> {
+  async resolvePlayableUrl(song: Song, opts?: TransportCallOptions): Promise<string> {
     const params = new URLSearchParams({
       contentId: song.id,
       resourceType: '2',
@@ -131,6 +131,7 @@ export const miguDirectClient: DirectSourceClient = {
       },
       responseType: 'arraybuffer',
       timeoutMs: 10000,
+      signal: opts?.signal,
     });
     if (res.status >= 400) throw new Error(`migu listen HTTP ${res.status}`);
     const decrypted = decryptXorStream(bodyToBytes(res.body));

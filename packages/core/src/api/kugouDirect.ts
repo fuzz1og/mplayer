@@ -1,6 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient, ToplistGroup } from '../shared/sourceRouter.js';
-import { request, bodyToText } from './transport.js';
+import { request, bodyToText, type TransportCallOptions } from './transport.js';
 import { getUserAgent } from './antiScrape.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import {
@@ -142,13 +142,14 @@ export const kugouDirectClient: DirectSourceClient = {
    * 定性是「直连被风控闸住」而非签名写错，签名端点 `i/v2` 恒回 `status:2` 且无 `data.url`。
    * 契约不变：无版权/付费歌返回空串（不抛错），交既有链路走 tier3 兜底，不做特判。
    */
-  async resolvePlayableUrl(song: Song): Promise<string> {
+  async resolvePlayableUrl(song: Song, opts?: TransportCallOptions): Promise<string> {
     const params = new URLSearchParams({ cmd: 'playInfo', hash: song.id });
     const res = await request({
       method: 'GET',
       url: `${SONG_INFO_URL}?${params.toString()}`,
       headers: KG_HEADERS(),
       timeoutMs: 10000,
+      signal: opts?.signal,
     });
     if (res.status >= 400) throw new Error(`酷狗 playInfo HTTP ${res.status}`);
     const data = JSON.parse(bodyToText(res.body)) as {

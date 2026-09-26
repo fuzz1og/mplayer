@@ -44,7 +44,17 @@
      与主进程 transport 不同进程，插不进去；
    - **下载服务**：两端各自已有独立并发门控（桌面 `DEFAULT_MAX_CONCURRENT`、手机端 expo-file-system）；
    - **图片**：两端都是原生 `Image` 直接拉 CDN，不过 core。
-   写入本条的用途是让下一个读者不必再问「为什么图片不受管」。
+
+   **另有一类「接缝漏洞」：直接 `axios` 出网、绕过 transport 的调用点。** 它们既不受闸门约束，
+   也不受取消约束，且没有重试 / 代理注入 / 测试可注入性。2026-09-26 静态盘点结果：
+   - `packages/core/src/api/musicApi.ts:228`（汽水分享页 `_ROUTER_DATA`，**在汽水解析腿上**）、
+     `:291`（汽水 track_v2 兜底）、`:366`（链接解析）；
+   - `src/main/main.ts:48`（桌面汽水音频整段下载）。
+
+   本轮**只记录、不收口**：把 `axios.get` 改成 `request()` 会同时引入重试与代理语义，
+   属行为变更，混进「机械地加一个可选 signal」的改动里会污染 review。
+   后果是**汽水的解析腿拿不到取消**（`resolvePlayableUrl` 无法接 signal）——这是已知缺口，不是遗漏。
+   写入本条的用途是让下一个读者不必再问「为什么图片不受管」以及「为什么汽水没接 signal」。
 6. **可观测性。** 暴露最小集合：当前在飞数、并发峰值、最长排队等待，落在**既有的设置页诊断板块**，
    不新增面板、不做独立页面（对齐 ADR `2026-09-25-tier3-source-scheduling.md` 决策 2 的口径）。
    计数只在诊断区被读，不进每次请求的热路径。
@@ -72,8 +82,13 @@
   依赖第 6 条的可观测性来判定是否要调——这也是为什么指标与闸门同批落地。
 - **ADR-0014 后果里挂着的「服务器忽略 Range 时的全量缓冲需响应字节上限/提前中断，依赖 transport 是否支持」
   仍未解决。** 本次不做，如实记录，不假装已解决。
-- **分阶段落地**：
-  - **第一阶段（#408 本票）**：闸门 + `signal` 字段 + 重试的 abort 感知 + 指标 + 测试。
-  - **第二阶段（跟随票）**：7 个直连客户端的 capability 方法接可选 signal，
-    `timedDirectCall` / `withSourceDeadline` 在墙点 `abort()`，把「放弃等待」变成「真的停掉」。
+- **分阶段落地**（#408 同一张票、同一分支，逐步提交）：
+  - **第一阶段（已落）**：闸门 + `TransportRequest.signal` + `TransportCallOptions` + 重试的 abort 感知
+    + 指标 + 测试。接口向后兼容，23 个生产调用点零改动。
+  - **第二阶段 a（已落）**：**直连解析腿**的 signal 贯通——`resolvePlayableUrl` / `resolveUrlInfo` 接
+    可选尾参，`timedDirectCall` 持有 `AbortController` 并在 3s 墙点 `abort()`；
+    已接：netease / qq / kugou / kuwo / migu / qianqian / soda(`resolveUrlInfo`)。
+  - **第二阶段 b（待做）**：**tier3 腿**的 signal 贯通——`withSourceDeadline` 持有 `AbortController`，
+    经 `resolveTier3Candidate` → `resolveSourceUrl` / `resolveSearchThenResolve` → `buildRequest` 下传。
   - **第三阶段（待指标）**：429 / `Retry-After` 退避与每 host pacing。
+  - **未收口**：上述 4 处 `axios` 直连绕过点（含汽水解析腿拿不到取消）。
