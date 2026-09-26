@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { memo, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View, Text, Image, StyleSheet, type GestureResponderEvent,
 } from 'react-native';
@@ -41,7 +41,13 @@ interface SongRowProps {
  * PlayerBar 纪律）+ hooks/usePressMutex 同步认领，替代旧的
  * `pressingAction` state + setTimeout(100)（读上一次渲染闭包值，JS 忙时漏判）。
  */
-export default function SongRow({
+/**
+ * **memo**：长列表滚动的每一帧都会重挂父组件，行组件必须只在自身数据变化时重渲染。
+ * 前提是父组件传下来的回调**引用稳定**（页面用 `useCallback`，且对外只传
+ * `onPress(song)` 这种不带下标的签名——带下标就得在 renderItem 里包箭头函数，
+ * memo 当场失效）。见 #411 与 `components/SongList.tsx` 的说明。
+ */
+function SongRow({
   song,
   rank,
   onPress,
@@ -57,7 +63,8 @@ export default function SongRow({
   const pressMutex = usePressMutex();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  // 按 (sourceType:id) 订阅探测标签:每批探测完成只重渲染对应的行,标签渐进式出现
+  // 按身份键精确订阅播放副产物标签（短时长 / 无效）：只有播放过的歌会有标签，
+  // 没播过的行永远读不到值，也就不会因此重渲染（#391 退役了「批量探测」链路）
   const audioTag = useAudioTagStore((s) => s.tags[tagKey(song)]);
 
   const favorited = isFav;
@@ -247,3 +254,5 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginLeft: spacing[1],
   },
 });
+
+export default memo(SongRow);

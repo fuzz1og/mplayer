@@ -1,31 +1,51 @@
-import { View, Text, FlatList, StyleSheet } from 'react-native';
-import ScalePress from '../components/ScalePress';
+import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import SongRow from '../components/SongRow';
+import SongList from '../components/SongList';
+import type { SongListRow } from '../components/SongList';
 import EmptyState from '../components/EmptyState';
 import { Clock } from 'lucide-react-native';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useHistoryStore } from '../stores/historyStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
-import { useMemo } from 'react';
-import {spacing, textVariants} from '../theme/tokens';
+import { useCallback, useMemo } from 'react';
+import type { Song } from '@mplayer/core';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
 export default function HistoryPage() {
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { history, removeHistory, clearHistory } = useHistoryStore();
+  // 选择器订阅（#411）：此前解构整个 store
+  const history = useHistoryStore((s) => s.history);
+  const removeHistory = useHistoryStore((s) => s.removeHistory);
+  const clearHistory = useHistoryStore((s) => s.clearHistory);
 
-  const handlePlay = (index: number) => {
-    if (history.length === 0) return;
-    usePlayerStore.getState().setQueue(history, index);
-    const song = history[index];
-    if (song) playSong(song);
-  };
+  const handlePlay = useCallback(
+    (song: Song) => {
+      const index = history.findIndex((s) => s.id === song.id);
+      if (index < 0) return;
+      usePlayerStore.getState().setQueue(history, index);
+      playSong(song);
+    },
+    [history],
+  );
+
+  const handleRemove = useCallback((song: Song) => removeHistory(song.id), [removeHistory]);
+
+  const headerAction = useMemo(() => ({ label: '清空', onPress: clearHistory, danger: true }), [clearHistory]);
+
+  // 行 key 用**歌曲 id**，不拼 index（#411）：historyStore 按 id 去重，
+  // 此前 `${id}-${index}` 会让「删掉一项」把它后面所有行全部重挂载。
+  const rows = useMemo<SongListRow[]>(
+    () => [
+      { kind: 'sectionHeader', key: 'header', title: '播放历史', action: headerAction },
+      ...history.map((song) => ({ kind: 'song' as const, key: song.id, song, showSource: true })),
+    ],
+    [history, headerAction],
+  );
 
   return (
     <View style={styles.container}>
@@ -42,25 +62,10 @@ export default function HistoryPage() {
         {history.length === 0 ? (
           <EmptyState icon={Clock} title="还没有播放记录" />
         ) : (
-          <FlatList
-            data={history}
-            keyExtractor={(item, index) => `${item.id}-${index}`}
-            ListHeaderComponent={
-              <View style={styles.header}>
-                <Text style={styles.headerTitle}>播放历史</Text>
-                <ScalePress onPress={clearHistory} style={styles.clearBtn}>
-                  <Text style={styles.clearText}>清空</Text>
-                </ScalePress>
-              </View>
-            }
-            renderItem={({ item, index }) => (
-              <SongRow
-                song={item}
-                showSource
-                onPress={() => handlePlay(index)}
-                onRemove={(s) => removeHistory(s.id)}
-              />
-            )}
+          <SongList
+            rows={rows}
+            onPress={handlePlay}
+            onRemove={handleRemove}
             contentContainerStyle={styles.list}
           />
         )}
@@ -72,29 +77,7 @@ export default function HistoryPage() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    ...textVariants.sectionHeader,
-    fontWeight: '600',
-  },
-  clearBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  clearText: {
-    color: colors.dangerText,
-    ...textVariants.subhead,
-    fontWeight: '400',
-  },
+  // 表头（title + 清空）已改为列表里的 sectionHeader 行（#411）：
+  // 用 ListHeaderComponent 会让 getItemLayout 的偏移语义与表头高度打架，而它是固定行高的。
   list: {},
 });

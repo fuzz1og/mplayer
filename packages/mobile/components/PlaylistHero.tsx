@@ -3,7 +3,7 @@
  * 通用结构在 CollapsingHero；这里只负责封面来源与列表行。
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Pressable } from 'react-native';
 import type { Playlist } from '../stores/playlistStore';
 import { usePlayerStore } from '../stores/playerStore';
@@ -35,6 +35,19 @@ export default function PlaylistHero({
   // 原生 <Image> 直连 CDN 直链渲染
   const { cover, handleError } = useRefreshedCover(playlist.songs[0] || null);
 
+  // renderItem 提 useCallback（#411）：行组件的 prop（queueSongs / onSwap / onRemove）
+  // 都来自 props 或 playlist，引用稳定，行组件的 memo 才真正生效。
+  const renderItem = useCallback(
+    ({ item }: { item: Song }) => (
+      // 长按删除的行包装：SongRow 自带 ScalePress 按压反馈，这里只承接手势不做视觉
+      // （原 activeOpacity={1} 语义），故用无动画 Pressable
+      <Pressable onLongPress={() => onRemoveSong(item)}>
+        <SongRow song={item} showSource queueSongs={playlist.songs} onSwap={onSwap} onRemove={onRemoveSong} />
+      </Pressable>
+    ),
+    [onRemoveSong, onSwap, playlist.songs],
+  );
+
   return (
     <CollapsingHero
       cover={cover}
@@ -47,13 +60,7 @@ export default function PlaylistHero({
       onAction={() => playAll(playlist)}
       data={playlist.songs}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => (
-        // 长按删除的行包装：SongRow 自带 ScalePress 按压反馈，这里只承接
-        // 手势不做视觉（原 activeOpacity={1} 语义），故用无动画 Pressable
-        <Pressable onLongPress={() => onRemoveSong(item)}>
-          <SongRow song={item} showSource queueSongs={playlist.songs} onSwap={onSwap} onRemove={onRemoveSong} />
-        </Pressable>
-      )}
+      renderItem={renderItem}
     />
   );
 }

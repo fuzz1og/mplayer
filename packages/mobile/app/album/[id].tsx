@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet,
 } from 'react-native';
@@ -12,6 +12,7 @@ import CollapsingHero from '../../components/CollapsingHero';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
+import { replaceSongInList } from '../../services/songListOps';
 import { textVariants } from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -63,10 +64,12 @@ export default function AlbumDetailPage() {
     playSong(songs[0]);
   };
 
-  // 单曲换源后更新列表（SongRow 更多菜单触发）
-  const handleSwap = (original: Song, swapped: Song) => {
-    setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)));
-  };
+  // 单曲换源后更新列表（SongRow 更多菜单触发）。
+  // useCallback（#411）：它是 SongRow 的 prop，内联箭头会让 memo 逐帧失效；
+  // setSongs 的函数式更新不依赖 songs，所以可以做到零依赖、引用永久稳定。
+  const handleSwap = useCallback((original: Song, swapped: Song) => {
+    setSongs((prev) => replaceSongInList(prev, original.id, swapped));
+  }, []);
 
   const year = (() => {
     const t = Number(album?.publishTime || 0);

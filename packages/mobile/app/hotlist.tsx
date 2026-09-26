@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
-  FlatList,
   StyleSheet,
   RefreshControl,
   Text,
@@ -12,7 +11,8 @@ import { StatusBar } from 'expo-status-bar';
 import { getToplistSongs, TOPLIST_SOURCE_IDS } from '@mplayer/core';
 import type { Song, SourceKey } from '@mplayer/core';
 import SongListSkeleton from '../components/SongListSkeleton';
-import SongRow from '../components/SongRow';
+import SongList from '../components/SongList';
+import type { SongListRow } from '../components/SongList';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { playSong } from '../services/audioPlayer';
 import { searchStrictMatch } from '../services/songResources';
@@ -63,6 +63,30 @@ export default function HotlistPage() {
     setRefreshing(false);
   }, [fetchSongs]);
 
+  // 稳定回调（#411）：对外只收 song，heat 榜需要的下标在这里现算
+  const handlePress = useCallback(
+    async (song: Song) => {
+      const index = songs.findIndex((s) => s.id === song.id);
+      // 热榜数据不含 url/lrc：路由搜索（直连 + tier3 兜底）+ 严格匹配，
+      // 命中后只回填 url/lrc 再播原歌——不播搜索结果本体（防同名 cover 错播）
+      let s: Song = song;
+      if (!song.url) {
+        try {
+          const hit = await searchStrictMatch(song);
+          if (hit) s = { ...song, url: hit.url || '', lrc: hit.lrc || '' };
+        } catch {}
+      }
+      usePlayerStore.getState().setQueue(songs, Math.max(0, index));
+      playSong(s);
+    },
+    [songs],
+  );
+
+  const rows = useMemo<SongListRow[]>(
+    () => songs.map((song, i) => ({ kind: 'song' as const, key: song.id, song, rank: i + 1 })),
+    [songs],
+  );
+
   if (!config) {
     return (
       <View style={styles.container}>
@@ -97,30 +121,13 @@ export default function HotlistPage() {
           }}
         />
         {loading ? (
+          // 榜位列（rank）在 master 的 SongListSkeleton 里没有占位 —— 属 #416（PR #418）范围，
+          // 本票不重复改骨架，避免两个 PR 撞同一个文件
           <SongListSkeleton />
         ) : (
-          <FlatList
-            data={songs}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item, index }) => (
-              <SongRow
-                song={item}
-                rank={index + 1}
-                onPress={async (song) => {
-                  // 热榜数据不含 url/lrc：路由搜索（直连 + tier3 兜底）+ 严格匹配，
-                  // 命中后只回填 url/lrc 再播原歌——不播搜索结果本体（防同名 cover 错播）
-                  let s: Song = song;
-                  if (!song.url) {
-                    try {
-                      const hit = await searchStrictMatch(song);
-                      if (hit) s = { ...song, url: hit.url || '', lrc: hit.lrc || '' };
-                    } catch {}
-                  }
-                  usePlayerStore.getState().setQueue(songs, index);
-                  playSong(s);
-                }}
-              />
-            )}
+          <SongList
+            rows={rows}
+            onPress={handlePress}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}

@@ -37,6 +37,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { COVER_FOG_H } from './collapsingChrome';
 import { useCollapsingChrome } from '../hooks/useCollapsingChrome';
 import ScalePress from './ScalePress';
+import { listWindowProps } from './listWindow';
 
 /** 返回图标压在封面上的颜色（旧 color 插值起点色；深色主题下 textInverse 是深色，不能替代） */
 const BACK_ICON_ON_COVER = '#FFFFFF'; // design-lint: ok 折叠头部返回图标起点色：白
@@ -156,6 +157,9 @@ export default function CollapsingHero<T>({
         data={data}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
+        // 窗口档位与 SongList 同源（#411）。这里**不给 getItemLayout**：
+        // 列表头是可折叠 Hero（高度随封面/标签/滚动变），算错的偏移比不给更糟。
+        {...listWindowProps}
         onScroll={onScroll}
         scrollEventThrottle={16}
         onEndReached={onEndReached}
