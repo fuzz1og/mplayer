@@ -1,6 +1,6 @@
 export * from './types/index.js';
 export { MULTI_SOURCE_LIST } from './constants.js';
-export { cacheManager } from './api/memoryCacheManager.js';
+export { cacheManager, CacheManager as MemoryCacheManager, MEMORY_CACHE_MAX_ENTRIES } from './api/memoryCacheManager.js';
 export { RateLimiter, beforeRequest, getAntiScrapeHeaders, getApiRequestHeaders, getUserAgent, resetUaContinuity, UA_POOL_SIZE, safeParseJSON } from './api/antiScrape.js';
 export type { AntiScrapeHeaders } from './api/antiScrape.js';
 // #276 自建 API 机件归零：api 客户端/会话/拦截器/闸门/计时设施出口已删。
@@ -77,6 +77,7 @@ export {
 } from './api/qqPlaylist.js';
 export { CacheKernel } from './cache/cacheKernel.js';
 export { createMemoryBackend } from './cache/backends/memoryBackend.js';
+export { cacheKeyType } from './cache/cacheKey.js';
 export { DEFAULT_TTL } from './cache/ttl.js';
 export { SongResourcesCache, SONGS_TTL_MS } from './cache/songResourcesCache.js';
 export type { SongResources, SongResourcesCacheOptions } from './cache/songResourcesCache.js';
