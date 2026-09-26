@@ -25,6 +25,7 @@ cd .claude/worktrees/<slug>
 - 一个任务一个新 worktree + 新分支；不在旧分支上叠新工作。
 - `.claude/worktrees/` 已 gitignore，是默认的 worktree 位置。
 - worktree 缺 node_modules 就地 `npm install`，不要从主克隆复制（依赖漂移）；软链同理——真机调试时 `expo-router` 按「被转换文件的真实路径」反推 app root，会把源码解析回主克隆、打包到主克隆的 `app/`（见 `mobile-device-debugging` skill）。
+- **跳过 `npm install` 会让类型检查静默对着主克隆的 core 跑**：worktree 没有自己的 `node_modules` 时，`@mplayer/core` 会沿目录向上解析到主克隆的 `node_modules/@mplayer/core`（指向主克隆的 `packages/core`），于是 `typecheck` / `typecheck:mobile` 检查的是**主克隆的 core，而不是你正在改的那份**——改了 core 的公开接口却全绿（或反之报一堆莫名其妙的错）都出自这里。绕开安装只做局部验证时，**以 CI 为准**（CI 会 `npm ci` + `core:build`）。
 - 调试/测试必须在 worktree 内构建运行，不要 cd 回主克隆目录（缓存不一致难排查）。
 
 ## 3. 实现并验证
