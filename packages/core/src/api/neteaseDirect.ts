@@ -16,10 +16,13 @@ import { cacheManager } from './memoryCacheManager.js';
  * - 内容能力（#239/#240，自 musicApi 门面迁入）：榜单/推荐/歌单/歌手/专辑，
  *   weapi 优先、旧明文接口兜底；全部经 transport.request 接缝出网（双端可用）。
  *
- * **歌词内聚（#242）**：网易直连接口天然不带歌词字段（cloudsearch 实测无 lrc），
- * 内容方法返回前内部 `fillLyrics` 按 songId 批量拉词填 `Song.lrc`（LRC 文本内联，
- * 非取词 URL）——消费端拿到即完整 Song，播放期无需再按 songId 取词。
- * 缓存 key `lyric_id_${songId}`、TTL 1 天、命中零请求、空词也缓存。
+ * **歌词按需直取（#409，取代 #242 的列表内联）**：网易直连接口天然不带歌词字段
+ * （cloudsearch 实测无 lrc）。原实现在**每个内容方法返回前**对列表中每一首歌各发一次
+ * 取词请求（`fillLyrics`，并发 8、窗口 10s）——代价是打开发现页/推荐页一次就打出
+ * 数百次上游请求，而界面只用得到歌名/歌手/封面。现改为**播放期按 songId 直取**：
+ * `getNeteaseLyrics(songId)`，key `lyric_id_${songId}`、TTL 1 天、命中零请求、空词也缓存。
+ * 列表结果里的 `Song.lrc` 因此**恒为空**，消费端不得再假设它带词（双端决策见 core
+ * `shared/songLyrics.ts`）。
  *
  * `resolveUrlInfo` 提供权威完整时长验证字段（url/br/size/playTime/fee/payed）。
  */
@@ -36,11 +39,6 @@ const PLAYLIST_TTL_MS = 5 * 60 * 1000;           // 歌单列表/详情 5min
 const PAGE_TTL_MS = 10 * 60 * 1000;              // 歌单歌曲/专辑详情/歌手专辑 10min
 const ALBUMS_TTL_MS = 60 * 60 * 1000;            // 新碟 1h
 const RECOMMENDED_TTL_MS = 15 * 60 * 1000;       // 推荐 15min
-
-/** fillLyrics 单次调用请求预算：防歌词端点故障把整页拖死（超时剩余歌留空，
- *  播放期由搜索兜底补词）；并发上限实测 8 并发不被限。 */
-const FILL_CONCURRENCY = 8;
-const FILL_BUDGET_MS = 10_000;
 
 /** 网易云榜单定义（热歌榜/新歌榜，playlistId 与门面时代一致）。 */
 const NETEASE_TOPLISTS: { sourceId: number; name: string }[] = [
@@ -193,45 +191,29 @@ async function fetchLyricBySongId(songId: string): Promise<string> {
 }
 
 /**
- * 网易歌词内聚（#242）：内容方法返回前按 songId 批量拉词填 `Song.lrc`（内联 LRC 文本）。
- * - 缓存经 ContentCache（构造注入，默认 cacheManager），key `lyric_id_${songId}`、TTL 1 天
- *   （复用歌词缓存语义）；命中零请求，防刷新页面大量拉词；
+ * 按 songId 取网易歌词（#409 取代 #242 的列表内联批量取词）。
+ *
+ * 语义与原地批量实现逐条保持一致，只是**调用时机从「列表返回前」改成「播放期按需」**：
+ * - key `lyric_id_${songId}`、TTL 1 天；命中零请求；
  * - **空词也缓存**（值包 `{v}` 对象以区分「无缓存」与「确认无词」——纯音乐/无词歌
- *   不再反复请求；此为 #242 对 #246「空歌词不入库」的显式反转）；
- * - 拉取失败不缓存（保留重试机会）、单首失败不影响整表；
- * - 总预算 10s：超时剩余歌留空，播放期由搜索兜底补词。
+ *   不再反复请求；此为 #242 对 #246「空歌词不入库」的显式反转，继续沿用）；
+ * - 拉取失败不缓存（保留重试机会）、失败返回空串（不上抛：歌词拿不到不该让播放失败）。
  */
-async function fillLyrics(songs: Song[], cache: ContentCache): Promise<void> {
-  const targets = songs.filter((s) => s.sourceType === 'netease' && s.id && !s.lrc);
-  if (targets.length === 0) return;
-  const uncached: Song[] = [];
-  for (const s of targets) {
-    const hit = cache.get<{ v: string }>(`lyric_id_${s.id}`);
-    if (hit) {
-      if (hit.v) s.lrc = hit.v;
-    } else {
-      uncached.push(s);
-    }
+export async function getNeteaseLyrics(songId: string): Promise<string> {
+  if (!songId) return '';
+  const cacheKey = `lyric_id_${songId}`;
+  const hit = cacheManager.get<{ v: string }>(cacheKey);
+  if (hit) return hit.v;
+  try {
+    const lrc = await fetchLyricBySongId(songId);
+    cacheManager.set(cacheKey, { v: lrc }, LYRIC_TTL_MS);
+    return lrc;
+  } catch {
+    return '';
   }
-  if (uncached.length === 0) return;
-  const deadline = Date.now() + FILL_BUDGET_MS;
-  let idx = 0;
-  const workers = Array.from({ length: Math.min(FILL_CONCURRENCY, uncached.length) }, async () => {
-    while (idx < uncached.length && Date.now() < deadline) {
-      const song = uncached[idx++];
-      try {
-        const lrc = await fetchLyricBySongId(song.id);
-        cache.set(`lyric_id_${song.id}`, { v: lrc }, LYRIC_TTL_MS);
-        if (lrc) song.lrc = lrc;
-      } catch {
-        // 单首失败不影响整表
-      }
-    }
-  });
-  await Promise.all(workers);
 }
 
-/** 明文 cloudsearch 搜索 → Song[]（无歌词字段，lrc 由 fillLyrics 内聚填充）。 */
+/** 明文 cloudsearch 搜索 → Song[]（不含歌词字段；播放期按 songId 直取，见 #409）。 */
 async function neteaseSearchSongs(keyword: string, page = 1): Promise<Song[]> {
   const params = new URLSearchParams({
     s: keyword,
@@ -448,17 +430,15 @@ export const defaultContentCache: ContentCache = {
 
 /**
  * 网易直连客户端工厂（D6 构造注入 ContentCache，默认 cacheManager）。
- * 测试可注入内存假缓存验证 fillLyrics 缓存语义（命中零请求/空词也缓存）。
+ * 测试可注入内存假缓存验证按需取词缓存语义（命中零请求/空词也缓存）。
  */
 export function createNeteaseDirectClient(contentCache: ContentCache = defaultContentCache): DirectSourceClient {
   return {
     key: 'netease',
 
-    /** 明文 cloudsearch 搜索；返回前 fillLyrics 内联歌词（#242）。 */
+    /** 明文 cloudsearch 搜索（列表不带歌词，播放期按 songId 直取，见 #409）。 */
     async searchSongs(keyword: string, page = 1): Promise<Song[]> {
-      const songs = await neteaseSearchSongs(keyword, page);
-      await fillLyrics(songs, contentCache);
-      return songs;
+      return neteaseSearchSongs(keyword, page);
     },
 
     /** weapi 播放 URL；VIP/无版权返回空串 → 交给换元层 / 明确不可播。 */
@@ -492,7 +472,7 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       }
     },
 
-    /** 榜单（热歌榜/新歌榜）；返回前 fillLyrics。 */
+    /** 榜单（热歌榜/新歌榜）。 */
     async getToplists(): Promise<ToplistGroup[]> {
       const cacheKey = 'netease_toplists';
       const cached = contentCache.get<ToplistGroup[]>(cacheKey);
@@ -504,16 +484,13 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
           songs: await fetchToplistSongs(t.sourceId),
         }))
       );
-      for (const g of groups) {
-        await fillLyrics(g.songs, contentCache);
-      }
       if (groups.some((g) => g.songs.length > 0)) {
         contentCache.set(cacheKey, groups, TOPLIST_TTL_MS);
       }
       return groups;
     },
 
-    /** 每日推荐歌曲（原 getRecommendedSongs）；返回前 fillLyrics。 */
+    /** 每日推荐歌曲（原 getRecommendedSongs）。 */
     async getRecommendedSongs(limit: number): Promise<Song[]> {
       // cacheKey 必须包含 limit：接口按 limit 返回不同数量的歌
       const cacheKey = `personalized_newsong_${limit}`;
@@ -532,7 +509,6 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
         duration: s.duration ? Math.floor(s.duration / 1000) : s.song?.duration ? Math.floor(s.song.duration / 1000) : 0,
         sourceType: 'netease' as const,
       }));
-      await fillLyrics(songs, contentCache);
       contentCache.set(cacheKey, songs, RECOMMENDED_TTL_MS);
       return songs;
     },
@@ -603,7 +579,7 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       }
     },
 
-    /** 专辑详情 + 专辑歌曲；返回前补播放 URL（点开即播）与 fillLyrics。 */
+    /** 专辑详情 + 专辑歌曲；返回前补播放 URL（点开即播）。 */
     async getAlbumDetail(albumId: string): Promise<{ album: Album; songs: Song[] } | null> {
       const cacheKey = `album_detail_${albumId}`;
       const cached = contentCache.get<{ album: Album; songs: Song[] }>(cacheKey);
@@ -623,7 +599,6 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
         return null;
       }
       await this.resolvePlayableUrls!(songs);
-      await fillLyrics(songs, contentCache);
       const result = { album, songs };
       // 空结果不缓存,避免瞬时故障 10 分钟内无法自愈
       if (songs.length > 0) contentCache.set(cacheKey, result, PAGE_TTL_MS);
@@ -653,7 +628,7 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       return { artist, hotSongs: songsRes.songs, albums: albumsRes.albums };
     },
 
-    /** 歌手歌曲（分页；order: hot|time；weapi 失败回退旧接口）；返回前 fillLyrics。 */
+    /** 歌手歌曲（分页；order: hot|time；weapi 失败回退旧接口）。 */
     async getArtistSongs(artistId: string, offset: number, limit: number, order: string = 'hot'): Promise<{ songs: Song[]; total: number }> {
       const cacheKey = `artist_songs_${artistId}_${offset}_${limit}_${order}`;
       const cached = contentCache.get<{ songs: Song[]; total: number }>(cacheKey);
@@ -678,7 +653,6 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
           return { songs: [], total: 0 };
         }
       }
-      await fillLyrics(songs, contentCache);
       const result = { songs, total };
       contentCache.set(cacheKey, result, SEARCH_TTL_MS);
       return result;
@@ -775,7 +749,7 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
     /**
      * 歌单歌曲（分页 + 全量合一）：offset/limit 分页取（详情页滚动加载），
      * limit <= 0 = 全量（导入/播放全部，按 1000 id/批并行取详情）。
-     * 详情与播放地址互不依赖，同批并行请求省一个 RTT；返回前 fillLyrics。
+     * 详情与播放地址互不依赖，同批并行请求省一个 RTT。
      */
     async getPlaylistSongs(id: number, offset: number = 0, limit: number = 50): Promise<{ songs: Song[]; total: number }> {
       const cacheKey = `netease_playlist_songs_${id}_${offset}_${limit}`;
@@ -812,8 +786,6 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
           console.error(`[neteaseDirect] getPlaylistSongs 失败(旧接口) (id=${id}):`, error2);
         }
       }
-
-      await fillLyrics(songs, contentCache);
 
       const result = { songs, total: trackIds.length };
       // 空结果不缓存,避免瞬时故障导致 10 分钟内无法自愈

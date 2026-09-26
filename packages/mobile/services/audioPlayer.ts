@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, isSodaSource, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, pickNextSongAfterFailure, getFailureStreak, OFFLINE_COPY } from '@mplayer/core';
+import { getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, songUsesSongidLyrics, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, pickNextSongAfterFailure, getFailureStreak, OFFLINE_COPY } from '@mplayer/core';
 import type { PlayableResource, Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -265,13 +265,22 @@ async function refreshPlayableUrl(song: Song): Promise<PlayableResource> {
  */
 export async function fetchLrcInBackground(song: Song, force = false, refreshCover = false): Promise<void> {
   const log = useLogsStore.getState();
-  if ((!force && song.lrc) || song.sourceType === 'local' || !song.name) return;
+  if (song.sourceType === 'local' || !song.name) return;
+  // songid 直取源（网易 #409 / 汽水）：歌词由播放器按源内 ID 直取，搜索补不出更好的结果，
+  // 这里的搜索只为封面。封面已在且未要求刷新时直接返回——否则「每播一首多一次搜索请求」，
+  // 正好把 #409 省下的请求又打回来（列表结果 lrc 恒空后，旧的 !force && song.lrc 早退不再成立）。
+  const songidLyrics = songUsesSongidLyrics(song.sourceType);
+  if (songidLyrics) {
+    if (!refreshCover && song.cover?.startsWith('http')) return;
+  } else if (!force && song.lrc) {
+    return;
+  }
   try {
     const fresh = await searchStrictMatch(song);
     if (!fresh) return;
-    // 汽水：搜索不带 lrc（searchSongsSoda 恒空），歌词由 PlayerOverlay 直取
-    // 分享页（getSodaLyrics，songid cacheKey）；此处只处理封面补全
-    if (isSodaSource(song.sourceType)) {
+    // songid 直取源（网易 #409 / 汽水）：歌词不靠搜索（列表 lrc 恒空、搜索也拿不到），
+    // 此处只处理封面补全
+    if (songidLyrics) {
       const cur = usePlayerStore.getState().currentSong;
       if (cur?.id !== song.id) return;
       const coverChanged = refreshCover
@@ -298,7 +307,7 @@ export async function fetchLrcInBackground(song: Song, force = false, refreshCov
       : !!fresh.cover?.startsWith('http') && !cur.cover;
     if (!lrcChanged && !coverChanged) return; // 资源仍有效，无需刷新
     // 预取歌词文本（core 歌词缓存预热，全屏播放器打开秒显）；
-    // 网易搜索兜底返回的是内联歌词文本（#242 fillLyrics），无需再走 URL 门面
+    // 内联文本只可能来自存量数据（#409 之后列表不带词），命中的无需再走 URL 门面
     if (lrcChanged && !isInlineLyrics(song.sourceType, fresh.lrc)) void musicApi.getLyrics(fresh.lrc).catch(() => {});
     usePlayerStore.setState({
       currentSong: {

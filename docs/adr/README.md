@@ -32,6 +32,7 @@
 | 播放解析链结构化 trace（core trace + 宿主 sink） | `2026-09-23-playback-trace-sink.md` | 已接受 |
 | 播放失败的护栏语义（core 单一决策、固定上限、离线即停、坏歌记忆） | `2026-09-25-playback-skip-guard.md` | 已接受 |
 | 出网治理：transport 双层在飞闸门与 AbortSignal 贯通 | `2026-09-26-outbound-request-governance.md` | 已接受 |
+| 歌词按 ID 直取：列表不再内联歌词 | `2026-09-26-lyrics-by-id-not-inlined.md` | 已接受（取代 #242 的「网易歌词内聚进内容能力」形态） |
 
 ## 历史编号对照（冻结）
 

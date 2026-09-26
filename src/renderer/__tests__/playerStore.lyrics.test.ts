@@ -123,3 +123,44 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
     expect(usePlayerStore.getState().lyricsLoading).toBe(false);
   });
 });
+describe('网易歌词按需直取（#409：列表不再内联，播放期按 songId 取）', () => {
+  it('lrc 为空的网易歌 → 走 getNeteaseLyrics，且不再触发搜索补全', async () => {
+    const s1 = song('1'); // lrc: '' —— #409 之后列表结果就是这个形态
+    callMusicApiMock.mockImplementation(async (method: string) => {
+      // 播放解析腿（与歌词无关）也必须给答案，否则 play() 会先失败、走不到取词
+      if (method === 'resolvePlayableSongRouted') return { url: s1.url, nonFull: false };
+      if (method === 'getNeteaseLyrics') return LYRICS_TEXT;
+      return undefined;
+    });
+
+    usePlayerStore.setState({ currentPlaylist: [s1], currentPlaylistIndex: 0, currentSong: s1 });
+    await usePlayerStore.getState().play(s1);
+
+    await vi.waitFor(() => {
+      expect(usePlayerStore.getState().lyrics).toBe(LYRICS_TEXT);
+    }, { timeout: 3000 });
+
+    const methods = callMusicApiMock.mock.calls.map((c) => c[0]);
+    expect(callMusicApiMock).toHaveBeenCalledWith('getNeteaseLyrics', '1');
+    // 关键：songid 直取源跳过搜索补全——否则「列表省下的请求」会从播放路径漏回来
+    expect(methods).not.toContain('searchSongsRouted');
+  });
+
+  it('存量数据的内联 LRC 文本仍直接使用（零请求）', async () => {
+    const s1 = { ...song('1'), lrc: '[00:00.00]存量内联歌词' };
+    callMusicApiMock.mockImplementation(async (method: string) => {
+      if (method === 'resolvePlayableSongRouted') return { url: s1.url, nonFull: false };
+      return undefined;
+    });
+    usePlayerStore.setState({ currentPlaylist: [s1], currentPlaylistIndex: 0, currentSong: s1 });
+    await usePlayerStore.getState().play(s1);
+
+    await vi.waitFor(() => {
+      expect(usePlayerStore.getState().lyrics).toBe('[00:00.00]存量内联歌词');
+    }, { timeout: 3000 });
+
+    const methods = callMusicApiMock.mock.calls.map((c) => c[0]);
+    expect(methods).not.toContain('getNeteaseLyrics');
+    expect(methods).not.toContain('getLyrics');
+  });
+});

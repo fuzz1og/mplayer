@@ -38,7 +38,7 @@ const ipcRenderer = window.electronAPI;
  * fetchLrcInBackground 的 force 路径。返回空串 = 无歌词（不重试）。
  */
 async function loadLyricsWithRetry(song: Song): Promise<string> {
-  // 网易歌词已内聚进内容能力（#242 fillLyrics）：Song.lrc 即 LRC 文本，直接用
+  // 存量持久化数据兼容：网易的 lrc 可能是 #409 之前写入的内联 LRC 文本，直接当文本用
   if (isInlineLyrics(song.sourceType, song.lrc)) return song.lrc;
 
   const searchLrc = async (): Promise<string> => {
@@ -54,20 +54,23 @@ async function loadLyricsWithRetry(song: Song): Promise<string> {
     callMusicApi('getLyrics', lrcUrl);
 
   let lrc = song.lrc && song.lrc.trim() !== '' ? song.lrc : '';
-  // 歌词为空时搜索补全：网易搜索兜底返回的也是内联文本（#242）；汽水搜索恒空，
-  // 跳过（分享页按 trackId 直取 getSodaLyrics）；其余源返回取词 URL
+  // 歌词为空时搜索补全：songid 直取源（网易 #409 / 汽水）跳过——搜索拿不到歌词，
+  // 按 ID 直取才是权威答案，搜索只会多打一次请求；其余源返回取词 URL
   if (!lrc && !songUsesSongidLyrics(song.sourceType)) {
     lrc = await searchLrc();
   }
-  // 搜索兜底命中的内联文本（网易）直接返回
+  // 搜索兜底命中的内联文本（只可能来自存量数据）直接返回
   if (lrc && isInlineLyrics(song.sourceType, lrc)) return lrc;
 
   const lrcUrl = lrc;
   if (!lrcUrl) {
-    // 汽水：分享页免登录结构化歌词（searchSongsSoda 不带 lrc，track_v2 需登录态，
-    // 分享页 _ROUTER_DATA.lyrics.sentences 免登录可拿，getSodaLyrics 转 LRC 文本）
-    if (isSodaSource(song.sourceType) && song.id) {
-      return callMusicApi('getSodaLyrics', String(song.id));
+    // songid 直取源：列表结果不带歌词，播放期按源内 ID 直取
+    // - 网易（#409）：getNeteaseLyrics(songId) → 歌词端点，key lyric_id_<id>、TTL 1 天
+    // - 汽水：分享页免登录结构化歌词（track_v2 需登录态），getSodaLyrics 转 LRC 文本
+    if (songUsesSongidLyrics(song.sourceType) && song.id) {
+      return isSodaSource(song.sourceType)
+        ? callMusicApi('getSodaLyrics', String(song.id))
+        : callMusicApi('getNeteaseLyrics', String(song.id));
     }
     return '';
   }

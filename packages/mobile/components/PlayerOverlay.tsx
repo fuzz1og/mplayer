@@ -249,14 +249,14 @@ export default function PlayerOverlay({ onClose }: Props) {
     }
   };
 
-  // 加载歌词：网易内容能力已把 LRC 文本内联进 song.lrc（fillLyrics，#242）；
-  // 其余源优先歌曲自带 lrc URL（取词 URL）；汽水用分享页免登录结构化歌词（getSodaLyrics）
+  // 加载歌词：songid 直取源（网易 #409 / 汽水）按源内 ID 直取；其余源优先歌曲自带
+  // lrc URL（取词 URL）。存量数据里网易的 lrc 仍可能是内联文本，由 isInlineLyrics 兜住。
   const [lyricsLoading, setLyricsLoading] = useState(false);
   useEffect(() => {
     if (!song) { setLyricLines([]); setLyricsLoading(false); return; }
     const abort = new AbortController();
-    // 网易歌词内聚（#242）：内容能力返回的 Song.lrc 即 LRC 文本（内联），直接用；
-    // 其余源 lrc 为取词 URL（getLyrics 门面）；汽水按 trackId 直取分享页歌词。
+    // 网易（#409）：列表结果 lrc 恒空 → cacheKey 走 songid，播放期按 songId 直取；
+    // 存量数据的内联文本走 inline；其余源 lrc 为取词 URL（getLyrics 门面）；汽水按 trackId 直取。
     const inline = isInlineLyrics(song.sourceType, song.lrc);
     const cacheKey = inline
       ? `inline:${song.id}`
@@ -281,8 +281,10 @@ export default function PlayerOverlay({ onClose }: Props) {
       ? Promise.resolve(song.lrc)
       : song.lrc
         ? musicApi.getLyrics(song.lrc)
-        : isSodaSource(song.sourceType)
-          ? musicApi.getSodaLyrics(String(song.id))
+        : songUsesSongidLyrics(song.sourceType)
+          ? isSodaSource(song.sourceType)
+            ? musicApi.getSodaLyrics(String(song.id))
+            : musicApi.getNeteaseLyrics(String(song.id))
           : Promise.resolve('');
     load.then(lrc => {
       if (abort.signal.aborted) return;
