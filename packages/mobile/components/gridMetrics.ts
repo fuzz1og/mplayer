@@ -15,6 +15,13 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 /** 页面沟槽：与节标题/分段控件/分类行同轴（默认 16） */
 const PAGE_GUTTER = spacing[4];
 
+/**
+ * 网格列间距（默认 12）—— 与 `gridCardWidth` 的 gap 默认值是**同一个数**。
+ * 调用方（真实网格的 columnWrapperStyle、骨架屏的列间距）一律引用本常量，
+ * 不要再各自写 `spacing[3]`（#416：DiscoverTabs 与 CoverGridSkeleton 各写了一份）。
+ */
+export const GRID_GAP = spacing[3];
+
 export interface GridCardWidthOptions {
   /** 列数（2/3） */
   cols: number;
@@ -24,6 +31,6 @@ export interface GridCardWidthOptions {
   gutter?: number;
 }
 
-export function gridCardWidth({ cols, gap = spacing[3], gutter = PAGE_GUTTER }: GridCardWidthOptions): number {
+export function gridCardWidth({ cols, gap = GRID_GAP, gutter = PAGE_GUTTER }: GridCardWidthOptions): number {
   return (SCREEN_WIDTH - gutter * 2 - gap * (cols - 1)) / cols;
 }

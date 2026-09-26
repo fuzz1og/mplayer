@@ -84,7 +84,7 @@ export default function DiscoverPlaylistDetailPage() {
     }
   };
 
-  if (loading) return <SongListSkeleton />;
+  if (loading) return <SongListSkeleton showSource />;
   if (!playlist) {
     return (
       <View style={styles.empty}>

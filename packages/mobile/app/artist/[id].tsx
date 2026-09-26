@@ -101,7 +101,7 @@ export default function ArtistDetailPage() {
     playSong(songs[0]);
   };
 
-  if (loading) return <SongListSkeleton />;
+  if (loading) return <SongListSkeleton showSource />;
 
   return (
     <View style={styles.container}>

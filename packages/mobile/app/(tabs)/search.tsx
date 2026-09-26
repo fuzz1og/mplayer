@@ -5,7 +5,6 @@ import {
   FlatList,
   StyleSheet,
   Image,
-  Dimensions,
   Animated,
 } from 'react-native';
 import ScalePress from '../../components/ScalePress';
@@ -17,6 +16,9 @@ import { useSourceStore } from '../../stores/sourceStore';
 import { usePlayerStore } from '../../stores/playerStore';
 import SongRow from '../../components/SongRow';
 import SongListSkeleton from '../../components/SongListSkeleton';
+import CoverGridSkeleton from '../../components/CoverGridSkeleton';
+import { GRID_CARD } from '../../components/gridCardMetrics';
+import { GRID_GAP, gridCardWidth } from '../../components/gridMetrics';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import {radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
@@ -31,7 +33,6 @@ const SEARCH_TABS: { key: SearchTab; label: string }[] = [
   { key: 'artists', label: '歌手' },
 ];
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type SearchTab = 'songs' | 'artists';
 
@@ -112,7 +113,7 @@ export default function SearchPage() {
       {activeTab === 'songs' ? (
         // 渐进搜索:有结果就显示(即使还在加载),骨架屏只在无结果时出现
         loading && results.length === 0 ? (
-          <SongListSkeleton />
+          <SongListSkeleton showSource />
         ) : error && results.length === 0 ? (
           <View style={styles.emptyContainer}>
             <CircleAlert size={48} color={colors.danger} />
@@ -132,10 +133,9 @@ export default function SearchPage() {
           </View>
         )
       ) : artistsLoading ? (
-        // 歌手加载也用骨架屏
-        <View style={{ paddingTop: 8 }}>
-          <SongListSkeleton rows={6} />
-        </View>
+        // 歌手加载：**必须用网格骨架**（真实结果是 3 列圆头像 + 居中名字）。
+        // 此前这里是 SongListSkeleton——歌手页加载出「歌曲行」形状，结构完全不匹配（#416）。
+        <CoverGridSkeleton columns={3} variant="artist" />
       ) : artistsError ? (
         <View style={styles.emptyContainer}>
           <CircleAlert size={48} color={colors.danger} />
@@ -147,6 +147,7 @@ export default function SearchPage() {
           data={artists}
           keyExtractor={(item) => String(item.id)}
           numColumns={3}
+          columnWrapperStyle={styles.artistRow}
           contentContainerStyle={[
             styles.artistGrid,
             { paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING },
@@ -283,19 +284,24 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: { ...textVariants.callout, color: colors.textSecondary, marginTop: 12 },
+  // 歌手网格与发现页歌手网格统一：宽度走 gridMetrics（#416 前这里是
+  // (SCREEN_WIDTH - 24) / 3 —— 与 gridMetrics「禁止在调用方重写公式」相悖的第三个公式），
+  // 度量走 gridCardMetrics，骨架屏（CoverGridSkeleton variant="artist"）与页面同源。
   artistGrid: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[6],
   },
+  // numColumns 的**行容器**才认列距（contentContainerStyle 的 gap 管不到行内）——
+  // 与 DiscoverTabs 的 artistRow 同一写法，否则 3 卡左对齐、右侧空出 gap×2。
+  artistRow: { gap: GRID_GAP },
   artistCard: {
-    width: (SCREEN_WIDTH - 24) / 3,
+    width: gridCardWidth({ cols: 3 }),
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: GRID_CARD.artistCardBottom,
   },
   artistAvatar: {
-    width: 72,
-    height: 72,
+    width: GRID_CARD.artistAvatarSize,
+    height: GRID_CARD.artistAvatarSize,
     borderRadius: radius.full,
     backgroundColor: colors.bgHover,
   },
@@ -307,7 +313,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   artistName: {
     ...textVariants.footnote,
     color: colors.textPrimary,
-    marginTop: 6,
+    marginTop: GRID_CARD.nameGap,
     textAlign: 'center',
   },
 });
