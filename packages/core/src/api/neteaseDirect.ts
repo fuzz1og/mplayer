@@ -1,7 +1,7 @@
 import type { Album, Artist, DiscoverPlaylist, Song } from '../types/index.js';
 import type { ContentCache, DirectSourceClient, ToplistGroup } from '../shared/sourceRouter.js';
 import type { UrlInfo } from '../shared/playability.js';
-import { request, bodyToText } from './transport.js';
+import { request, bodyToText, type TransportCallOptions } from './transport.js';
 import { weapiRequest } from './neteaseWeapi.js';
 import { getUserAgent } from './antiScrape.js';
 import { cacheManager } from './memoryCacheManager.js';
@@ -262,7 +262,7 @@ async function neteaseSearchSongs(keyword: string, page = 1): Promise<Song[]> {
 }
 
 /** weapi 播放 URL 权威完整时长验证字段（T12 预检用）。无版权/VIP → null。 */
-async function neteaseResolveUrlInfo(song: Song): Promise<UrlInfo | null> {
+async function neteaseResolveUrlInfo(song: Song, opts?: TransportCallOptions): Promise<UrlInfo | null> {
   const data = await weapiRequest<{
     code: number;
     data?: {
@@ -276,11 +276,15 @@ async function neteaseResolveUrlInfo(song: Song): Promise<UrlInfo | null> {
       payed?: number;
       code?: number;
     }[];
-  }>('/song/enhance/player/url/v1', {
-    ids: '[' + song.id + ']',
-    level: 'standard',
-    encodeType: 'mp3',
-  });
+  }>(
+    '/song/enhance/player/url/v1',
+    {
+      ids: '[' + song.id + ']',
+      level: 'standard',
+      encodeType: 'mp3',
+    },
+    opts,
+  );
   if (data.code !== 200 || !data.data?.length) return null;
   const it = data.data[0];
   if (!it.url) return null;
@@ -458,8 +462,8 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
     },
 
     /** weapi 播放 URL；VIP/无版权返回空串 → 交给换元层 / 明确不可播。 */
-    async resolvePlayableUrl(song: Song): Promise<string> {
-      const info = await neteaseResolveUrlInfo(song);
+    async resolvePlayableUrl(song: Song, opts?: TransportCallOptions): Promise<string> {
+      const info = await neteaseResolveUrlInfo(song, opts);
       return info?.url || '';
     },
 

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { acquireOutboundSlot, TransportAbortError } from './outboundGate.js';
 
 /**
  * 传输接缝（T01）—— core 请求层底部的统一可注入传输。
@@ -13,6 +14,36 @@ import axios from 'axios';
  * - `responseType: 'arraybuffer'` 供需要字节内容的调用（探测/302 解析）使用；
  * - `finalUrl` 为最终地址（重定向链终点），无则回退请求 URL。
  */
+
+/**
+ * 协作式取消信号（#408 / ADR \`2026-09-26-outbound-request-governance\`）。
+ *
+ * 结构化声明而非直接用全局 \`AbortSignal\`：core 的 \`lib\` 只有 ES2020，
+ * 这里只声明本层真正读的两个成员，DOM / Node / RN 的 AbortSignal 都满足它。
+ */
+export interface TransportSignal {
+  readonly aborted: boolean;
+  addEventListener?: (type: 'abort', listener: () => void) => void;
+  removeEventListener?: (type: 'abort', listener: () => void) => void;
+}
+
+/**
+ * 编译期保护：调用方手里的是真实 \`AbortSignal\`（DOM / Node / RN），
+ * 它必须能赋给 TransportSignal——否则下游接 signal 时会集体报错。
+ * 断言失败 = 结构化声明过窄，改这里而不是改调用点。
+ */
+export type TransportSignalAcceptsAbortSignal = AbortSignal extends TransportSignal ? true : never;
+
+/**
+ * 单次出网调用的选项（能力方法的**可选尾参**，向后兼容）。
+ *
+ * 目前只有取消信号：墙钟到点时由**墙的持有者** abort（directCall 的 3s 直连墙、
+ * tier3 的单源墙 / 整链预算），把「放弃等待」变成真的停掉底层请求。
+ * 墙的语义留在各腿，transport 不感知时间——这是 #399 要守住的分工。
+ */
+export interface TransportCallOptions {
+  signal?: TransportSignal;
+}
 
 export interface TransportRequest {
   method: 'GET' | 'POST';
@@ -39,6 +70,12 @@ export interface TransportRequest {
    * 移动端默认实现不处理此标记（RN 无法配置 TLS），因此天然不降级。
    */
   tlsDegrade?: boolean;
+  /**
+   * 协作式取消（#408）：墙钟到点 / 组件卸载时由调用方 abort。
+   * 排队期间 abort → 从闸门队列摘除；在飞期间 abort → 透传给底层传输。
+   * 被 abort 的请求**不会**调用底层传输，且**不重试**。
+   */
+  signal?: TransportSignal;
 }
 
 export interface TransportResponse {
@@ -105,7 +142,12 @@ export function getTransportProxyAgents(): (() => TransportProxyAgents) | null {
   return proxyAgentsProvider;
 }
 
-/** 统一请求入口：有注入传输走注入，否则走默认 axios 实现。 */
+/**
+ * 统一请求入口：有注入传输走注入，否则走默认 axios 实现。
+ *
+ * 出网纪律（#408）：所有出网都经本函数，因此**双层在飞闸门**（全局 + 每 host）
+ * 落在这里而不是各调用点。调用方零改动即继承排队与取消语义。
+ */
 export async function request(req: TransportRequest): Promise<TransportResponse> {
   const raw = active ?? defaultTransport;
   return requestWithRetry(req, raw);
@@ -181,19 +223,27 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
+/**
+ * 统一重试 + TLS 降级 + **出网闸门**（#408）。
+ *
+ * 闸门纪律：**每一次真实尝试各占一个槽位**（重试是新的出网，重新取槽），
+ * 槽位在底层传输 settle 后释放。排队期间与在飞期间都响应 `signal`。
+ */
 async function requestWithRetry(req: TransportRequest, raw: Transport): Promise<TransportResponse> {
   const opts = retryOptions;
   let degraded = false; // 是否已做过一次降级重试
   for (let attempt = 0; ; attempt += 1) {
+    // 已取消：连槽位都不取（排队中的取消由 acquireOutboundSlot 自己结算）。
+    if (req.signal?.aborted) throw new TransportAbortError();
+    const release = await acquireOutboundSlot(req.url, req.signal);
     const outReq: TransportRequest = degraded ? { ...req, tlsDegrade: true } : req;
+    let res: TransportResponse;
     try {
-      const res = await raw(outReq);
-      // 4xx/2xx/3xx 与「会话失效」不重试；5xx 在预算内指数退避重试。
-      const retryable = res.status >= 500 && !res.sessionInvalid;
-      if (!retryable) return res;
-      if (attempt >= opts.maxRetries) return res;
-      await sleep(backoffDelay(attempt, opts.baseDelayMs));
+      res = await raw(outReq);
     } catch (err) {
+      release();
+      // 取消不是网络故障：不降级、不重试，原样上抛（上层据此区分「我们没等」与「源失败」）。
+      if (req.signal?.aborted) throw new TransportAbortError();
       // 内容直链 TLS 握手失败：桌面（已注入提供者）用降级配置恰好重试一次（不消耗预算）。
       if (!degraded && req.content && isTlsHandshakeError(err) && tlsDegradeProvider) {
         degraded = true;
@@ -205,6 +255,12 @@ async function requestWithRetry(req: TransportRequest, raw: Transport): Promise<
       }
       throw err;
     }
+    release();
+    // 4xx/2xx/3xx 与「会话失效」不重试；5xx 在预算内指数退避重试。
+    const retryable = res.status >= 500 && !res.sessionInvalid;
+    if (!retryable) return res;
+    if (attempt >= opts.maxRetries) return res;
+    await sleep(backoffDelay(attempt, opts.baseDelayMs));
   }
 }
 
@@ -217,6 +273,8 @@ async function defaultTransport(req: TransportRequest): Promise<TransportRespons
     headers: req.headers,
     data: req.body,
     timeout: req.timeoutMs || 12000,
+    // 协作式取消（#408）：与闸门配合，把「放弃等待」变成真的停掉底层请求。
+    signal: req.signal,
     responseType: req.responseType === 'arraybuffer' ? 'arraybuffer' : 'text',
     maxRedirects: req.maxRedirects,
     validateStatus: () => true,

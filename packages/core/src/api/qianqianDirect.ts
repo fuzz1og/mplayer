@@ -1,6 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request } from './transport.js';
+import { request, type TransportCallOptions } from './transport.js';
 import { md5 } from '../utils/hash.js';
 import { getUserAgent } from './antiScrape.js';
 
@@ -49,13 +49,14 @@ function signedParams(params: Record<string, string>): Record<string, string> {
 }
 
 /** GET + 签名 query，返回响应 JSON；非 2xx 抛错。 */
-async function signedGet<T>(url: string, params: Record<string, string>): Promise<T> {
+async function signedGet<T>(url: string, params: Record<string, string>, opts?: TransportCallOptions): Promise<T> {
   const query = new URLSearchParams(signedParams(params));
   const res = await request({
     method: 'GET',
     url: `${url}?${query.toString()}`,
     headers: { ...BASE_HEADERS() },
     timeoutMs: 8000,
+    signal: opts?.signal,
   });
   if (typeof res.body !== 'string') {
     throw new Error('qianqian 响应非文本');
@@ -105,14 +106,14 @@ export const qianqianDirectClient: DirectSourceClient = {
   },
 
   /** 千千播放 URL 直连；VIP/无版权无有效 URL → 返回空串（交换元层 / 明确不可播）。 */
-  async resolvePlayableUrl(song: Song): Promise<string> {
+  async resolvePlayableUrl(song: Song, opts?: TransportCallOptions): Promise<string> {
     for (const rate of RATES) {
       const data = await signedGet<{
         data?: {
           path?: string;
           trail_audio_info?: { path?: string };
         };
-      }>(TRACKLINK_URL, { TSID: song.id, appid: APPID, rate });
+      }>(TRACKLINK_URL, { TSID: song.id, appid: APPID, rate }, opts);
       const path = data.data?.path || data.data?.trail_audio_info?.path || '';
       if (path && path.startsWith('http')) {
         return path.startsWith('http:') ? path.replace(/^http:/, 'https:') : path;

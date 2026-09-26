@@ -1,7 +1,7 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
 import type { UrlInfo } from '../shared/playability.js';
-import { request, bodyToText } from './transport.js';
+import { request, bodyToText, type TransportCallOptions } from './transport.js';
 import { getUserAgent } from './antiScrape.js';
 import { musicApi } from './musicApi.js';
 
@@ -33,7 +33,7 @@ export const sodaDirectClient: DirectSourceClient = {
    *  匿名 track_v2 返回 200 空 body（2026-08 实测，需 PC 登录态 Cookie），
    *  空 body 时降级分享页（fetchSodaSharePage 的 duration 字段，免登录），
    *  分享页也失败则返回 null（探测标不可用，不再抛错卡链路）。 */
-  async resolveUrlInfo(song: Song) {
+  async resolveUrlInfo(song: Song, opts?: TransportCallOptions) {
     const params = new URLSearchParams({
       track_id: song.id,
       media_type: 'track',
@@ -48,6 +48,7 @@ export const sodaDirectClient: DirectSourceClient = {
         url: `${TRACK_V2_URL}?${params.toString()}`,
         headers: { 'user-agent': getUserAgent('soda') },
         timeoutMs: 10000,
+        signal: opts?.signal,
       });
     } catch {
       res = { status: 0, headers: {}, body: new Uint8Array(), finalUrl: '' } as any;

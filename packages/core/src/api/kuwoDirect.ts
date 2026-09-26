@@ -2,7 +2,7 @@ import pako from 'pako';
 import iconv from 'iconv-lite';
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request, bodyToText } from './transport.js';
+import { request, bodyToText, type TransportCallOptions } from './transport.js';
 import { getUserAgent } from './antiScrape.js';
 
 /**
@@ -238,7 +238,7 @@ export const kuwoDirectClient: DirectSourceClient = {
     return data.abslist.map(mapTrack).filter((s) => s.id);
   },
 
-  async resolvePlayableUrl(song: Song): Promise<string> {
+  async resolvePlayableUrl(song: Song, opts?: TransportCallOptions): Promise<string> {
     const rid = song.id.replace(/^MUSIC_/, '');
     const query =
       `user=0&corp=kuwo&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&p2p=1&type=convert_url2&sig=0&format=mp3&rid=${rid}`;
@@ -247,6 +247,7 @@ export const kuwoDirectClient: DirectSourceClient = {
       url: `${MOBI_URL}?f=kuwo&q=${encodeURIComponent(encryptQuery(query))}`,
       headers: { 'user-agent': getUserAgent('kuwo') },
       timeoutMs: 10000,
+      signal: opts?.signal,
     });
     if (res.status >= 400) throw new Error(`酷我 mobi HTTP ${res.status}`);
     const text = bodyToText(res.body);

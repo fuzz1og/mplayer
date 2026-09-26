@@ -34,6 +34,8 @@ import {
 } from '../sourceRouter.js';
 import { setPlaybackTraceSink, type PlaybackTrace } from '../playbackTrace.js';
 import { beginInit, isInitialized, noteSample, scoreOf } from '../sourceSchedule.js';
+import { request, setTransport, type TransportSignal } from '../../api/transport.js';
+import { resetOutboundGate } from '../../api/outboundGate.js';
 
 /**
  * 来源开关与回退链测试（T01 切片 2；#277 SourceMode 收窄为 auto|direct 两态）。
@@ -564,6 +566,44 @@ describe('直连腿墙钟（#389）', () => {
       await vi.advanceTimersByTimeAsync(3_000);
       await assertion;
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('墙到点真的 abort 底层请求（#408）：signal 贯通到 transport，且取消不重试', async () => {
+    vi.useFakeTimers();
+    let transportCalls = 0;
+    let seenSignal: TransportSignal | undefined;
+    try {
+      setTransport((req) => {
+        transportCalls += 1;
+        seenSignal = req.signal;
+        // 模拟真实网络：不落定，直到被 abort（axios 取消表现为「无 response 的网络错误」，
+        // 不特判就会被 isRetryableNetworkError 当成可重试 —— 这正是本用例要钉住的）。
+        return new Promise((_resolve, reject) => {
+          req.signal?.addEventListener?.('abort', () => {
+            reject(Object.assign(new Error('canceled'), { code: 'ERR_CANCELED', isAxiosError: true }));
+          });
+        });
+      });
+      registerDirectClient(
+        makeClient('qq', {
+          // 客户端把墙持有者给的 signal 透传进 transport —— 这是本票要建立的链路。
+          resolvePlayableUrl: (_song, opts) =>
+            request({ method: 'GET', url: 'https://u.y.qq.com/wall', signal: opts?.signal }).then(() => 'hit'),
+        }),
+      );
+      setSourceMode('qq', 'direct');
+      const pending = resolvePlayableUrlRouted(song('wall-abort', 'qq'));
+      const assertion = expect(pending).rejects.toThrow('墙钟上限');
+      await vi.advanceTimersByTimeAsync(3_000);
+      await assertion;
+      // 取消不是网络故障：只能出网一次（若被当成可重试网络错误，这里会 > 1）。
+      expect(transportCalls).toBe(1);
+      expect(seenSignal?.aborted).toBe(true);
+    } finally {
+      setTransport(null);
+      resetOutboundGate();
       vi.useRealTimers();
     }
   });

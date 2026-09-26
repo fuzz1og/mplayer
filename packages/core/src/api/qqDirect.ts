@@ -1,7 +1,7 @@
 import CryptoJS from 'crypto-js';
 import type { RankMeta, Song } from '../types/index.js';
 import type { DirectSourceClient, ToplistGroup } from '../shared/sourceRouter.js';
-import { request } from './transport.js';
+import { request, type TransportCallOptions } from './transport.js';
 import { md5 } from '../utils/hash.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { getUserAgent } from './antiScrape.js';
@@ -181,7 +181,7 @@ function buildQimeiPayload(): Record<string, unknown> {
 }
 
 /** 获取 QIMEI36 设备指纹（会话内缓存；失败用静态兜底值，匿名可用）。 */
-export async function obtainQimei(): Promise<string> {
+export async function obtainQimei(opts?: TransportCallOptions): Promise<string> {
   const ts = Math.floor(Date.now() / 1000);
   const payload = buildQimeiPayload();
   const cryptKey = randomFrom(RANDOM_ALPHABET, 16);
@@ -206,6 +206,7 @@ export async function obtainQimei(): Promise<string> {
       },
       body: JSON.stringify({ app: 0, os: 1, qimeiParams: { key, params, time: String(ts), nonce, sign, extra } }),
       timeoutMs: 8000,
+      signal: opts?.signal,
     });
     const outer = JSON.parse(
       typeof res.body === 'string' ? res.body : new TextDecoder().decode(res.body),
@@ -224,8 +225,8 @@ export function resetQqDirectForTests(): void {
   cachedQ36 = null;
 }
 
-async function ensureQ36(): Promise<string> {
-  if (!cachedQ36) cachedQ36 = await obtainQimei();
+async function ensureQ36(opts?: TransportCallOptions): Promise<string> {
+  if (!cachedQ36) cachedQ36 = await obtainQimei(opts);
   return cachedQ36;
 }
 
@@ -270,13 +271,14 @@ const MUSICU_HEADERS = {
   'Referer': 'https://y.qq.com/',
 };
 
-export async function musicuPost(body: Record<string, unknown>): Promise<any> {
+export async function musicuPost(body: Record<string, unknown>, opts?: TransportCallOptions): Promise<any> {
   const res = await request({
     method: 'POST',
     url: MUSICU_URL,
     headers: MUSICU_HEADERS,
     body: JSON.stringify(body),
     timeoutMs: 8000,
+    signal: opts?.signal,
   });
   if (res.status >= 400) throw new Error(`QQ musicu HTTP ${res.status}`);
   return JSON.parse(typeof res.body === 'string' ? res.body : new TextDecoder().decode(res.body));
@@ -444,8 +446,8 @@ export const qqDirectClient: DirectSourceClient = {
     return list.map(mapTrack).filter((s: Song) => s.id);
   },
 
-  async resolvePlayableUrl(song: Song): Promise<string> {
-    const q36 = await ensureQ36();
+  async resolvePlayableUrl(song: Song, opts?: TransportCallOptions): Promise<string> {
+    const q36 = await ensureQ36(opts);
     const mid = song.id;
     const body = {
       comm: buildCommon(q36),
@@ -460,7 +462,7 @@ export const qqDirectClient: DirectSourceClient = {
         },
       },
     };
-    const data = await musicuPost(body);
+    const data = await musicuPost(body, opts);
     const moduleRes = data['music.vkey.GetVkey.UrlGetVkey'];
     if (moduleRes?.code !== 0) throw new Error(`QQ GetVkey code=${String(moduleRes?.code)}`);
     const purl = moduleRes?.data?.midurlinfo?.[0]?.purl || '';

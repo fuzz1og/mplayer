@@ -93,6 +93,23 @@ export {
   getTransportProxyAgents,
   isTlsHandshakeError,
 } from './api/transport.js';
+// 取消信号类型（其余 transport 类型在下方既有导出里）
+export type { TransportSignal } from './api/transport.js';
+// 出网闸门（#408）：宿主只读诊断 + 测试/真机调参接缝（接口本身在 transport 内部）。
+export {
+  acquireOutboundSlot,
+  outboundHostOf,
+  getOutboundGateOptions,
+  setOutboundGateOptions,
+  getOutboundInFlightCount,
+  getOutboundQueuedCount,
+  getOutboundGateStats,
+  resetOutboundGate,
+  isTransportAbortError,
+  TransportAbortError,
+  DEFAULT_OUTBOUND_GATE,
+} from './api/outboundGate.js';
+export type { OutboundGateOptions, OutboundGateStats, ReleaseOutboundSlot } from './api/outboundGate.js';
 export type { Transport, TransportRequest, TransportResponse, TransportRetryOptions, TlsDegradeAgents, TransportProxyAgents } from './api/transport.js';
 export {
   TLS_FINGERPRINT_SETTING_KEY,
