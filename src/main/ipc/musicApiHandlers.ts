@@ -40,6 +40,7 @@ export function registerMusicApiCall(api: MusicApi): void {
     getQqPlaylistSongs: (s: string | number) => api.getQqPlaylistSongs(s),
     getSodaAudioUrl: (trackId: string) => api.getSodaAudioUrl(trackId),
     getSodaLyrics: (trackId: string) => api.getSodaLyrics(trackId),
+    getNeteaseLyrics: (songId: string) => api.getNeteaseLyrics(songId),
     parseSodaShareLink: (link: string) => api.parseSodaShareLink(link),
     searchSongsRouted: (k: string, p: number, s: SourceKey) => api.searchSongsRouted(k, p, s),
     resolvePlayableUrlRouted: (song: Song) => api.resolvePlayableUrlRouted(song),

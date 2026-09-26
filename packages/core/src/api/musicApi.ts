@@ -6,6 +6,7 @@ import { decodeBase64Utf8 } from '../utils/base64.js';
 import { looksLikeLyrics } from '../download/lyrics.js';
 import { request, bodyToText } from './transport.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
+import { getNeteaseLyrics as fetchNeteaseLyrics } from './neteaseDirect.js';
 import { setPrefetchedUrl, getPrefetchedUrl, forgetPrefetchedUrl } from './prefetchCache.js';
 import {
   searchSongsRouted as routedSearchSongs,
@@ -323,6 +324,15 @@ export const musicApi = {
    * 分享页 audioWithLyricsOption.lyrics.sentences 已是结构化时间轴，
    * 无需 track_v2 的登录态 Cookie；无歌词返回空串。
    */
+  /**
+   * 获取网易歌词（#409：取代内容方法的列表内联批量取词）。
+   * 播放期按 songId 直取，缓存 key `lyric_id_${songId}`、TTL 1 天、空词也缓存。
+   * 与 getSodaLyrics 同形：拿不到返回空串，不上抛（歌词缺失不该让播放失败）。
+   */
+  async getNeteaseLyrics(songId: string): Promise<string> {
+    return fetchNeteaseLyrics(songId);
+  },
+
   async getSodaLyrics(trackId: string): Promise<string> {
     if (!trackId) return '';
     const cacheKey = `soda_lyric_${trackId}`;

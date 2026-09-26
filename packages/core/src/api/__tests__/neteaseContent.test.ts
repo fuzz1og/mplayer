@@ -1,9 +1,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { setTransport, type TransportRequest } from '../transport.js';
+import { setTransport, setTransportRetryOptions, type TransportRequest } from '../transport.js';
 import {
   createNeteaseDirectClient,
-  defaultContentCache,
+  getNeteaseLyrics,
 } from '../neteaseDirect.js';
+import { cacheManager } from '../memoryCacheManager.js';
 import { kugouDirectClient } from '../kugouDirect.js';
 import type { ContentCache } from '../../shared/sourceRouter.js';
 import type { Song } from '../../types/index.js';
@@ -11,12 +12,13 @@ import type { Song } from '../../types/index.js';
 /**
  * 内容能力测试（#278）：接缝 = transport（mock 传输驱动全部出网）。
  * 覆盖：请求形态（weapi path / 明文 URL）、字段映射（ToplistGroup/统一 Song/rank 索引推导）、
- * fillLyrics 缓存语义（命中零请求 / 空词也缓存 / 失败不缓存）、
- * getPlaylistSongs 分页+全量合一、酷狗榜单 id 规则。
+ * **列表不带歌词**（#409：内容方法零取词请求）、getNeteaseLyrics 按需取词缓存语义
+ * （命中零请求 / 空词也缓存 / 失败不缓存）、getPlaylistSongs 分页+全量合一、酷狗榜单 id 规则。
  */
 
 afterEach(() => {
   setTransport(null);
+  setTransportRetryOptions(null);
   vi.restoreAllMocks();
 });
 
@@ -81,13 +83,6 @@ describe('neteaseDirect 内容能力（#278 迁移）', () => {
           return json(playlistDetail(detailCalls === 1 ? [track(1, '歌一'), track(2, '歌二')] : [track(3, '歌三')]));
         },
       },
-      {
-        match: (u) => u.includes('/api/song/lyric'),
-        respond: (req) => {
-          const id = new URL(req.url).searchParams.get('id');
-          return json({ lrc: { lyric: `[00:01.00]歌词${id}` } });
-        },
-      },
     ]);
     const client = createNeteaseDirectClient(fakeCache());
     const groups = await client.getToplists!();
@@ -98,27 +93,19 @@ describe('neteaseDirect 内容能力（#278 迁移）', () => {
     expect(groups[0].songs[0]).toMatchObject({
       id: '1', name: '歌一', artist: '歌手A', album: '专辑A', sourceType: 'netease',
     });
-    expect(groups[0].songs[0].lrc).toBe('[00:01.00]歌词1');
-    // weapi 出网 2 次（两个榜单）+ 歌词 3 次（fillLyrics 每首一拉）
+    // #409：列表不再内联歌词——这是本次改动的核心断言（原实现每首歌各发一次取词请求）
+    expect(groups[0].songs[0].lrc).toBe('');
     expect(seen.filter((r) => r.url.includes('/weapi/v6/playlist/detail'))).toHaveLength(2);
-    expect(seen.filter((r) => r.url.includes('/api/song/lyric'))).toHaveLength(3);
+    expect(seen.filter((r) => r.url.includes('/api/song/lyric'))).toHaveLength(0);
   });
 
-  it('fillLyrics 缓存语义：命中零请求、空词也缓存（{v} 包装）、失败不缓存', async () => {
+  it('getNeteaseLyrics：播放期按需直取；命中零请求、空词也缓存（{v} 包装）、失败不缓存', async () => {
+    cacheManager.clearAll();
+    // 本用例数的是「逻辑请求」次数：关掉 transport 重试，否则 5xx 会被重试 4 次（maxRetries=3）
+    setTransportRetryOptions({ maxRetries: 0, baseDelayMs: 0 });
     let lyricCalls = 0;
     let fail = false;
-    const seen = mockTransport([
-      {
-        match: (u) => u.includes('cloudsearch'),
-        respond: (req) => {
-          const body = new URLSearchParams(req.body);
-          const kw = body.get('s') || '';
-          return json({
-            code: 200,
-            result: { songs: kw === 'x' ? [track(1, '纯音乐'), track(2, '正常歌')] : [track(3, '故障歌')] },
-          });
-        },
-      },
+    mockTransport([
       {
         match: (u) => u.includes('/api/song/lyric'),
         respond: (req) => {
@@ -130,47 +117,40 @@ describe('neteaseDirect 内容能力（#278 迁移）', () => {
         },
       },
     ]);
-    const cache = fakeCache();
-    const client = createNeteaseDirectClient(cache);
 
-    // 第一次搜索：纯音乐拉到空词（缓存）、正常歌拉到词
-    await client.searchSongs!('x', 1);
-    expect(lyricCalls).toBe(2);
-    // 空词已缓存（值包 {v} 对象区分「无缓存」与「确认无词」）
-    expect(cache.store.get('lyric_id_1')).toEqual({ v: '' });
+    // 空词：取到空串，且**空词也缓存**（值包 {v} 区分「无缓存」与「确认无词」）
+    expect(await getNeteaseLyrics('1')).toBe('');
+    expect(lyricCalls).toBe(1);
+    expect(cacheManager.get('lyric_id_1')).toEqual({ v: '' });
+    expect(await getNeteaseLyrics('1')).toBe(''); // 命中缓存零请求
+    expect(lyricCalls).toBe(1);
 
-    // 第二次搜索：两首都命中缓存零请求（防刷新页面大量拉词）
-    await client.searchSongs!('x', 1);
-    expect(lyricCalls).toBe(2);
-
-    // 失败不缓存（HTTP 500 抛错，保留重试机会）
+    // 失败：返回空串（歌词拿不到不该让播放失败）、且不缓存（保留重试机会）
     fail = true;
-    await client.searchSongs!('y', 1);
-    const callsAfterFail = lyricCalls;
-    expect(cache.store.has('lyric_id_3')).toBe(false);
-    fail = false;
-    await client.searchSongs!('y', 1);
-    expect(lyricCalls).toBe(callsAfterFail + 1); // 故障歌重试成功
-    expect(cache.store.get('lyric_id_3')).toEqual({ v: '[00:01.00]词3' });
-    void seen;
+    expect(await getNeteaseLyrics('3')).toBe('');
+    expect(cacheManager.get('lyric_id_3')).toBeNull();
+    expect(lyricCalls).toBe(2);
 
-    // 默认 ContentCache（cacheManager 包装）get/set 语义等价
-    expect(defaultContentCache.get('not-exist')).toBeNull();
+    fail = false;
+    expect(await getNeteaseLyrics('3')).toBe('[00:01.00]词3');
+    expect(lyricCalls).toBe(3);
+    expect(cacheManager.get('lyric_id_3')).toEqual({ v: '[00:01.00]词3' });
   });
 
-  it('searchSongs：搜索结果同样内联歌词（#242：直连搜索天然无 lrc 字段）', async () => {
+  it('searchSongs：搜索结果不带歌词、零取词请求（#409）', async () => {
     const seen = mockTransport([
       {
         match: (u) => u.includes('cloudsearch'),
         respond: () => json({ code: 200, result: { songs: [track(7, '搜到的歌')] } }),
       },
-      { match: (u) => u.includes('/api/song/lyric'), respond: (req) => json({ lrc: { lyric: `[00:01.00]词${new URL(req.url).searchParams.get('id')}` } }) },
     ]);
     const client = createNeteaseDirectClient(fakeCache());
     const songs = await client.searchSongs!('晴天', 1);
     expect(songs).toHaveLength(1);
-    expect(songs[0].lrc).toBe('[00:01.00]词7');
-    expect(seen.filter((r) => r.url.includes('/api/song/lyric'))).toHaveLength(1);
+    expect(songs[0].lrc).toBe('');
+    expect(seen.filter((r) => r.url.includes('/api/song/lyric'))).toHaveLength(0);
+    // 列表规模与请求数解耦：一首歌一次搜索，不随结果条数放大
+    expect(seen).toHaveLength(1);
   });
 
   it('getPlaylistSongs：分页取（offset/limit）+ limit<=0 全量；详情与播放地址同批并行', async () => {
@@ -188,7 +168,6 @@ describe('neteaseDirect 内容能力（#278 迁移）', () => {
         },
       },
       { match: (u) => u.includes('/song/enhance/player/url'), respond: () => json({ code: 200, data: ids.map((id) => ({ id, url: `https://cdn/${id}.mp3` })) }) },
-      { match: (u) => u.includes('/api/song/lyric'), respond: (req) => json({ lrc: { lyric: `[00:01.00]词${new URL(req.url).searchParams.get('id')}` } }) },
     ]);
     const client = createNeteaseDirectClient(fakeCache());
 
@@ -202,19 +181,22 @@ describe('neteaseDirect 内容能力（#278 迁移）', () => {
     const full = await client.getPlaylistSongs!(200, 0, 0);
     expect(full.songs).toHaveLength(5);
     expect(seen.filter((r) => r.url.includes('/weapi/v6/playlist/detail'))).toHaveLength(2);
+    // #409：5 首全量也不再逐首取词（原实现这里是 5 次 /api/song/lyric）
+    expect(full.songs.every((s) => s.lrc === '')).toBe(true);
+    expect(seen.filter((r) => r.url.includes('/api/song/lyric'))).toHaveLength(0);
   });
 
-  it('getAlbumDetail：/v1/album/{id} 单请求，专辑歌曲补 URL + 内联歌词', async () => {
-    mockTransport([
+  it('getAlbumDetail：/v1/album/{id} 单请求，专辑歌曲补 URL、不带歌词（#409）', async () => {
+    const seen = mockTransport([
       { match: (u) => u.includes('/weapi/v1/album/'), respond: () => json({ code: 200, album: { id: 9, name: '专辑九', artists: [{ name: '歌手A' }], picUrl: 'https://x/y.jpg' }, songs: [track(1, '歌一')] }) },
       { match: (u) => u.includes('/song/enhance/player/url'), respond: () => json({ code: 200, data: [{ id: 1, url: 'https://cdn/1.mp3' }] }) },
-      { match: (u) => u.includes('/api/song/lyric'), respond: () => json({ lrc: { lyric: '[00:01.00]词1' } }) },
     ]);
     const client = createNeteaseDirectClient(fakeCache());
     const detail = await client.getAlbumDetail!('9');
     expect(detail).not.toBeNull();
     expect(detail!.album).toMatchObject({ id: '9', name: '专辑九', artist: '歌手A' });
-    expect(detail!.songs[0]).toMatchObject({ url: 'https://cdn/1.mp3', lrc: '[00:01.00]词1' });
+    expect(detail!.songs[0]).toMatchObject({ url: 'https://cdn/1.mp3', lrc: '' });
+    expect(seen.filter((r) => r.url.includes('/api/song/lyric'))).toHaveLength(0);
   });
 
   it('getArtists：cat 透传映射 weapi /v1/artist/list type/area（1001 → 华语男）', async () => {
@@ -240,12 +222,11 @@ describe('neteaseDirect 内容能力（#278 迁移）', () => {
       { match: (u) => u.includes('/api/artist?id='), respond: () => json({ artist: { id: 55, name: '歌手甲', picUrl: 'https://p/1.jpg' } }) },
       { match: (u) => u.includes('/weapi/v1/artist/songs'), respond: () => json({ code: 200, songs: [track(1, '歌一')], total: 1 }) },
       { match: (u) => u.includes('/weapi/artist/albums/'), respond: () => json({ code: 200, hotAlbums: [{ id: 9, name: '专辑九', artists: [{ name: '歌手A' }] }], total: 1, more: false }) },
-      { match: (u) => u.includes('/api/song/lyric'), respond: () => json({ lrc: { lyric: '[00:01.00]词1' } }) },
     ]);
     const client = createNeteaseDirectClient(fakeCache());
     const detail = await client.getArtistDetail!('55');
     expect(detail.artist).toMatchObject({ id: '55', name: '歌手甲' });
-    expect(detail.hotSongs[0].lrc).toBe('[00:01.00]词1');
+    expect(detail.hotSongs[0].lrc).toBe(''); // #409：列表不带词
     expect(detail.albums[0]).toMatchObject({ id: '9', name: '专辑九' });
   });
 

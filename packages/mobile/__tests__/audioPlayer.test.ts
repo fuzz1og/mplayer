@@ -752,21 +752,22 @@ describe('lyrics lazy refresh (fetchLrcInBackground)', () => {
   const FRESH_LRC = 'https://api.example.com/lrc?id=1&sign=NEWSIGN&t=200';
 
   it('fills an empty lrc URL from a strict search', async () => {
-    const first = song('1');
+    // 用 qq：取词 URL 契约仍适用于非 songid 源（网易/汽水已改为按 ID 直取，#409）
+    const first = { ...song('1'), sourceType: 'qq' as const };
     // routed 严格匹配搜索返回同名同歌手候选（findExactMatch 命中）
     audioMocks.searchSongsRouted.mockResolvedValueOnce([{ ...first, lrc: FRESH_LRC }]);
     usePlayerStore.setState({ currentSong: first, currentIndex: 0, queue: [first], isPlaying: true });
 
     await fetchLrcInBackground(first);
 
-    expect(audioMocks.searchSongsRouted).toHaveBeenCalledWith('song-1 artist', 1, 'netease');
+    expect(audioMocks.searchSongsRouted).toHaveBeenCalledWith('song-1 artist', 1, 'qq');
     expect(usePlayerStore.getState().currentSong?.lrc).toBe(FRESH_LRC);
     expect(audioMocks.getLyrics).toHaveBeenCalledWith(FRESH_LRC); // 歌词文本预取
   });
 
   it('lazy refresh (non-force) does NOT swap a URL that only changed sign', async () => {
     // 同一资源的新签名：归一化 key 相同 → 不替换（防止封面/歌词伪刷新）
-    const first = song('1', 'https://example.com/1.mp3');
+    const first = { ...song('1', 'https://example.com/1.mp3'), sourceType: 'qq' as const };
     const cur = { ...first, lrc: STALE_LRC };
     audioMocks.searchSongsRouted.mockResolvedValueOnce([{ ...first, lrc: FRESH_LRC }]);
     usePlayerStore.setState({ currentSong: cur, currentIndex: 0, queue: [first], isPlaying: true });
@@ -780,7 +781,7 @@ describe('lyrics lazy refresh (fetchLrcInBackground)', () => {
   it('force refresh DOES swap a stale lrc URL even when only the sign changed', async () => {
     // 歌词加载失败驱动（force）：旧 URL 已证明失效，新签名 URL 必须能换上来，
     // 否则归一化 key 相同会永远命中失效 URL，歌词再也刷新不出来
-    const first = song('1', 'https://example.com/1.mp3');
+    const first = { ...song('1', 'https://example.com/1.mp3'), sourceType: 'qq' as const };
     const cur = { ...first, lrc: STALE_LRC };
     audioMocks.searchSongsRouted.mockResolvedValueOnce([{ ...first, lrc: FRESH_LRC }]);
     usePlayerStore.setState({ currentSong: cur, currentIndex: 0, queue: [first], isPlaying: true });
@@ -789,6 +790,34 @@ describe('lyrics lazy refresh (fetchLrcInBackground)', () => {
 
     expect(usePlayerStore.getState().currentSong?.lrc).toBe(FRESH_LRC);
     expect(audioMocks.getLyrics).toHaveBeenCalledWith(FRESH_LRC);
+  });
+
+  it('netease（#409 songid 源）：只处理封面，绝不搜索补词', async () => {
+    // 列表结果不带词（lrc 恒空）后，若这里仍按「空 lrc → 搜索」处理，
+    // 每播一首就会多打一次搜索请求，正好把 #409 省下的请求打回来。
+    const ne = { ...song('1'), cover: '' };
+    audioMocks.searchSongsRouted.mockResolvedValueOnce([{
+      ...ne,
+      cover: 'https://p1.music.126.net/new.jpg',
+      lrc: '',
+    }]);
+    usePlayerStore.setState({ currentSong: ne, currentIndex: 0, queue: [ne], isPlaying: true });
+
+    await fetchLrcInBackground(ne);
+
+    expect(usePlayerStore.getState().currentSong?.cover).toBe('https://p1.music.126.net/new.jpg');
+    expect(usePlayerStore.getState().currentSong?.lrc).toBe('');
+    expect(audioMocks.getLyrics).not.toHaveBeenCalled();
+  });
+
+  it('netease 封面已在且未要求刷新 → 一次搜索都不打（#409 关键回归断言）', async () => {
+    const ne = { ...song('1'), cover: 'https://p1.music.126.net/x.jpg' };
+    usePlayerStore.setState({ currentSong: ne, currentIndex: 0, queue: [ne], isPlaying: true });
+
+    await fetchLrcInBackground(ne);
+
+    expect(audioMocks.searchSongsRouted).not.toHaveBeenCalled();
+    expect(audioMocks.getLyrics).not.toHaveBeenCalled();
   });
 
   it('soda: only fills cover, never swaps lrc (search has no lrc; lyrics come from share page)', async () => {
