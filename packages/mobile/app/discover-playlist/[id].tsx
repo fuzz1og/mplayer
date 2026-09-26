@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet,
 } from 'react-native';
@@ -108,6 +108,12 @@ export default function DiscoverPlaylistDetailPage() {
     playSong(songs[0]);
   };
 
+  // 单曲换源后更新列表。useCallback（#411）：此前是 renderItem 里的内联箭头，
+  // 每帧新引用会把 SongRow 的 memo 击穿。
+  const handleSwap = useCallback((original: Song, swapped: Song) => {
+    setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)));
+  }, []);
+
   return (
     <View style={styles.container}>
       <SafeAreaView edges={[]} style={{ flex: 1 }}>
@@ -124,14 +130,7 @@ export default function DiscoverPlaylistDetailPage() {
           data={songs}
           keyExtractor={(item, i) => `${item.id}-${i}`}
           renderItem={({ item }) => (
-            <SongRow
-              song={item}
-              showSource
-              queueSongs={songs}
-              onSwap={(original, swapped) =>
-                setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)))
-              }
-            />
+            <SongRow song={item} showSource queueSongs={songs} onSwap={handleSwap} />
           )}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}

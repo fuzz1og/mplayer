@@ -62,6 +62,20 @@ export default function DiscoverTabs() {
 
   const insets = useSafeAreaInsets();
 
+  // 分页 renderItem 提成 useCallback（#411）：此前是内联箭头，每次父组件渲染都换新引用。
+  // 它**必须**依赖 activeIndex（惰性挂载后面的 tab），所以引用在切换 tab 时变化是预期内的。
+  const renderPage = useCallback(
+    ({ index }: { index: number }) => (
+      <View style={{ width: SCREEN_WIDTH }}>
+        {index === 0 && <HotlistContent />}
+        {index === 1 && activeIndex >= 1 && <AlbumsContent />}
+        {index === 2 && activeIndex >= 2 && <PlaylistContent />}
+        {index === 3 && activeIndex >= 3 && <ArtistContent />}
+      </View>
+    ),
+    [activeIndex],
+  );
+
   return (
     <View style={[styles.container, { paddingTop: topChromeHeight(insets.top) }]}>
       <View style={styles.tabHeader}>
@@ -79,14 +93,7 @@ export default function DiscoverTabs() {
         keyExtractor={(t) => t.key}
         initialNumToRender={1}
         windowSize={3}
-        renderItem={({ index }) => (
-          <View style={{ width: SCREEN_WIDTH }}>
-            {index === 0 && <HotlistContent />}
-            {index === 1 && activeIndex >= 1 && <AlbumsContent />}
-            {index === 2 && activeIndex >= 2 && <PlaylistContent />}
-            {index === 3 && activeIndex >= 3 && <ArtistContent />}
-          </View>
-        )}
+        renderItem={renderPage}
       >
       </FlatList>
     </View>

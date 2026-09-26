@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet,
 } from 'react-native';
@@ -63,10 +63,12 @@ export default function AlbumDetailPage() {
     playSong(songs[0]);
   };
 
-  // 单曲换源后更新列表（SongRow 更多菜单触发）
-  const handleSwap = (original: Song, swapped: Song) => {
+  // 单曲换源后更新列表（SongRow 更多菜单触发）。
+  // useCallback（#411）：它是 SongRow 的 prop，内联箭头会让 memo 逐帧失效；
+  // setSongs 的函数式更新不依赖 songs，所以可以做到零依赖、引用永久稳定。
+  const handleSwap = useCallback((original: Song, swapped: Song) => {
     setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)));
-  };
+  }, []);
 
   const year = (() => {
     const t = Number(album?.publishTime || 0);

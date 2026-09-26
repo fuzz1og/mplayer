@@ -15,7 +15,8 @@ import { getDirectClient } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
 import { usePlayerStore } from '../../stores/playerStore';
-import SongRow from '../../components/SongRow';
+import SongList from '../../components/SongList';
+import type { SongListRow } from '../../components/SongList';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import {radius, spacing, textVariants} from '../../theme/tokens';
@@ -188,30 +189,41 @@ interface ResultsListProps {
  * 多源搜索(全部源)结果:按歌分组,标题 = 歌名 — 歌手,组内为各源版本
  */
 function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: ResultsListProps) {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
+
+  // **拍平**（#411）：此前把「组」当 cell、组内 `group.songs.map()` 全量渲染，
+  // 一个 30 首的组就是一次性挂 30 行——虚拟化完全绕过去了。拍平成「组头 + 歌曲行」后
+  // 才是逐行虚拟化；key 用 `组键:歌曲 id`（歌曲 id 含源前缀，组内不会重），不含 index。
+  const rows = useMemo<SongListRow[]>(() => {
+    const flat: SongListRow[] = [];
+    for (const group of results) {
+      if (group.name || group.artist) {
+        flat.push({
+          kind: 'groupHeader',
+          key: `${group.key}:header`,
+          title: group.name,
+          subtitle: group.artist || undefined,
+          note: group.songs.length > 1 ? `${group.songs.length} 个版本` : undefined,
+        });
+      }
+      for (const song of group.songs) {
+        flat.push({
+          kind: 'song',
+          key: `${group.key}:${song.id}`,
+          song,
+          showSource: true,
+          queueSongs: group.songs,
+        });
+      }
+    }
+    return flat;
+  }, [results]);
+
   return (
-    <FlatList
-      key="song-results"
-      data={results}
-      keyExtractor={(item) => item.key}
+    <SongList
+      rows={rows}
       contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING }}
-      renderItem={({ item: group }) => (
-        <View style={styles.groupSection}>
-          {(group.name || group.artist) ? (
-            <Text style={styles.groupHeader}>
-              {group.name}
-              {group.artist ? <Text style={styles.groupArtist}> — {group.artist}</Text> : null}
-              {group.songs.length > 1 && <Text style={styles.groupCount}>· {group.songs.length} 个版本</Text>}
-            </Text>
-          ) : null}
-          {group.songs.map((song, i) => (
-            <SongRow key={`${song.id}-${i}`} song={song} showSource queueSongs={group.songs} />
-          ))}
-        </View>
-      )}
       onEndReached={loadMore}
       onEndReachedThreshold={0.5}
       ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={results.length > 0} />}
@@ -223,29 +235,39 @@ function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: Results
  * 单源搜索结果:按源分组,标题 = 源名,组内为该源歌曲列表
  */
 function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: ResultsListProps) {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
+
+  // 同样是拍平（#411）：单源视图组头只是更轻的「静默档」（quiet）。
+  const rows = useMemo<SongListRow[]>(() => {
+    const flat: SongListRow[] = [];
+    for (const group of results) {
+      if (group.name) {
+        flat.push({
+          kind: 'groupHeader',
+          key: `${group.key}:header`,
+          title: group.name,
+          note: group.songs.length > 1 ? `${group.songs.length} 首` : undefined,
+          quiet: true,
+        });
+      }
+      for (const song of group.songs) {
+        flat.push({
+          kind: 'song',
+          key: `${group.key}:${song.id}`,
+          song,
+          showSource: true,
+          queueSongs: group.songs,
+        });
+      }
+    }
+    return flat;
+  }, [results]);
+
   return (
-    <FlatList
-      key="song-results"
-      data={results}
-      keyExtractor={(item) => item.key}
+    <SongList
+      rows={rows}
       contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING }}
-      renderItem={({ item: group }) => (
-        <View style={styles.groupSection}>
-          {group.name ? (
-            <Text style={styles.groupHeaderLabel}>
-              {group.name}
-              {group.songs.length > 1 && <Text style={styles.groupCount}>· {group.songs.length} 首</Text>}
-            </Text>
-          ) : null}
-          {group.songs.map((song, i) => (
-            <SongRow key={`${song.id}-${i}`} song={song} showSource queueSongs={group.songs} />
-          ))}
-        </View>
-      )}
       onEndReached={loadMore}
       onEndReachedThreshold={0.5}
       ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={results.length > 0} />}

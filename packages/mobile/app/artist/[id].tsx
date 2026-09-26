@@ -90,10 +90,11 @@ export default function ArtistDetailPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // 单曲换源后更新列表（SongRow 更多菜单触发；不更新会显示旧的源条目）
-  const handleSwap = (original: Song, swapped: Song) => {
+  // 单曲换源后更新列表（SongRow 更多菜单触发；不更新会显示旧的源条目）。
+  // useCallback（#411）：SongRow 的 prop，引用必须稳定（函数式更新 → 零依赖）。
+  const handleSwap = useCallback((original: Song, swapped: Song) => {
     setSongs((prev) => prev.map((s) => (s.id === original.id ? swapped : s)));
-  };
+  }, []);
 
   const handlePlayAll = () => {
     if (songs.length === 0) return;
