@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,9 @@ import {
 } from 'react-native';
 import ScalePress from '../../components/ScalePress';
 import { useLocalSearchParams, router } from 'expo-router';
-import { CircleAlert, Music2, User } from 'lucide-react-native';
-import { getDirectClient } from '@mplayer/core';
-import type { SongGroup } from '@mplayer/core';
+import { CircleAlert, ListMusic, Music2, User } from 'lucide-react-native';
+import { formatPlayCount, getDirectClient } from '@mplayer/core';
+import type { DiscoverPlaylist, SongGroup } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -33,13 +33,15 @@ import TextTabs from '../../components/TextTabs';
 const SEARCH_TABS: { key: SearchTab; label: string }[] = [
   { key: 'songs', label: '歌曲' },
   { key: 'artists', label: '歌手' },
+  { key: 'playlists', label: '歌单' },
 ];
 
 
-type SearchTab = 'songs' | 'artists';
+type SearchTab = 'songs' | 'artists' | 'playlists';
 
-// 歌手搜索序号（模块级）：慢响应不得覆盖新关键词的结果
+// 歌手/歌单搜索序号（模块级）：慢响应不得覆盖新关键词的结果
 let artistSearchSeq = 0;
+let playlistSearchSeq = 0;
 
 export default function SearchPage() {
   const { colors } = useTheme();
@@ -70,6 +72,38 @@ export default function SearchPage() {
   const [artists, setArtists] = useState<any[]>([]);
   const [artistsLoading, setArtistsLoading] = useState(false);
   const [artistsError, setArtistsError] = useState(false);
+  // 歌单（#415）：懒加载 —— 只有切到「歌单」tab 才发请求（见 searchPlaylists）
+  const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
+  const [playlistsLoading, setPlaylistsLoading] = useState(false);
+  const [playlistsError, setPlaylistsError] = useState(false);
+  /** 已发起搜索的关键词：同关键词来回切 tab 不重复发（换关键词时清空）。 */
+  const playlistKeywordRef = useRef<string | null>(null);
+
+  /**
+   * 歌单搜索（#415）。**懒加载**：只有切到「歌单」tab 才调 —— `cloudsearch/pc` 已是
+   * 搜索页在用的腿（关键词变化时网易打 1 发搜索），歌单搜索若也随关键词无条件再打一发，
+   * 该腿请求数直接翻倍。core 侧另有 6h 缓存 + 同键单飞兜底，这里只做「同关键词只发一次」。
+   */
+  const searchPlaylists = async (kw: string, force = false) => {
+    if (!kw) return;
+    if (!force && playlistKeywordRef.current === kw) return;
+    playlistKeywordRef.current = kw;
+    const seq = ++playlistSearchSeq;
+    setPlaylistsLoading(true);
+    setPlaylistsError(false);
+    try {
+      const page = await getDirectClient('netease')!.searchPlaylists!(kw, 30);
+      if (seq !== playlistSearchSeq) return; // 已被新搜索取代，丢弃迟到结果
+      setPlaylists(page.playlists);
+    } catch (e: any) {
+      if (seq !== playlistSearchSeq) return;
+      console.error('[Search] playlists error:', e.message);
+      setPlaylists([]);
+      setPlaylistsError(true);
+    } finally {
+      if (seq === playlistSearchSeq) setPlaylistsLoading(false);
+    }
+  };
 
   // 歌手搜索序号：慢响应不得覆盖新关键词的结果
   const searchArtists = async (kw: string) => {
@@ -95,6 +129,10 @@ export default function SearchPage() {
       search(q);
     }
     if (q) searchArtists(q);
+    // 歌单：#415 换关键词作废旧结果与「已搜索」标记，但**不在这里发请求**（懒加载）
+    playlistKeywordRef.current = null;
+    setPlaylists([]);
+    setPlaylistsError(false);
   }, [q]);
 
   // 切换源时重新搜索（歌手仅网易云，不随源变）
@@ -104,11 +142,16 @@ export default function SearchPage() {
 
   return (
     <Animated.View style={[styles.container, { paddingTop: topChromeHeight(insets.top), backgroundColor: animatedBg }]}>
-      {/* 歌曲/歌手（后续可扩展歌单/专辑）：文字 tabs + 下划线，与发现页二级分类同语言 */}
+      {/* 歌曲/歌手/歌单（#415）：文字 tabs + 下划线，与发现页二级分类同语言 */}
       <TextTabs
         tabs={SEARCH_TABS}
         activeKey={activeTab}
-        onSelect={(key) => setActiveTab(key as SearchTab)}
+        onSelect={(key) => {
+          const next = key as SearchTab;
+          setActiveTab(next);
+          // 懒加载：切到「歌单」tab 才打这一发（同关键词重复切不会重复发）
+          if (next === 'playlists') void searchPlaylists(q);
+        }}
         scrollable={false}
       />
 
@@ -132,6 +175,54 @@ export default function SearchPage() {
           <View style={styles.emptyContainer}>
             <Music2 size={48} color={colors.textDisabled} />
             <Text style={styles.emptyText}>搜索歌曲和歌手</Text>
+          </View>
+        )
+      ) : activeTab === 'playlists' ? (
+        // 歌单（#415）：复用发现页同款 2 列方图卡片与既有歌单详情页
+        playlistsLoading && playlists.length === 0 ? (
+          <CoverGridSkeleton columns={2} />
+        ) : playlistsError ? (
+          <View style={styles.emptyContainer}>
+            <CircleAlert size={48} color={colors.danger} />
+            <Text style={[styles.emptyText, { color: colors.danger }]}>歌单搜索失败</Text>
+            <ScalePress style={styles.retryButton} onPress={() => void searchPlaylists(q, true)}>
+              <Text style={styles.retryText}>重试</Text>
+            </ScalePress>
+          </View>
+        ) : playlists.length > 0 ? (
+          <FlatList
+            key="playlist-results"
+            data={playlists}
+            keyExtractor={(item) => String(item.id)}
+            numColumns={2}
+            columnWrapperStyle={styles.playlistRow}
+            contentContainerStyle={[
+              styles.playlistGrid,
+              { paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING },
+            ]}
+            renderItem={({ item: p }) => (
+              <ScalePress
+                style={styles.playlistCard}
+                onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
+              >
+                {p.coverImgUrl ? (
+                  <Image source={{ uri: p.coverImgUrl }} style={styles.playlistCover} />
+                ) : (
+                  <View style={[styles.playlistCover, styles.playlistCoverFallback]}>
+                    <ListMusic size={28} color={colors.textDisabled} />
+                  </View>
+                )}
+                <Text style={styles.playlistName} numberOfLines={2}>{p.name}</Text>
+                <Text style={styles.playlistMeta} numberOfLines={1}>
+                  {p.playCount ? formatPlayCount(p.playCount) : ''}
+                </Text>
+              </ScalePress>
+            )}
+          />
+        ) : (
+          <View style={styles.emptyContainer}>
+            <ListMusic size={48} color={colors.textDisabled} />
+            <Text style={styles.emptyText}>没有搜到歌单，去发现页看看歌单广场</Text>
           </View>
         )
       ) : artistsLoading ? (
@@ -274,6 +365,42 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: { ...textVariants.callout, color: colors.textSecondary, marginTop: 12 },
+  retryButton: {
+    marginTop: spacing[4],
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[2],
+    borderRadius: radius.full,
+    backgroundColor: colors.bgHover,
+  },
+  retryText: { ...textVariants.footnote, color: colors.accent },
+  // 歌单网格（#415）：与发现页歌单 tab 同款 2 列方图卡片。
+  // 度量统一走 gridMetrics/gridCardMetrics（#416：禁止在调用方重写宽度公式）。
+  playlistGrid: {
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[6],
+  },
+  // numColumns 的**行容器**才认列距（与 artistRow 同一写法）
+  playlistRow: { gap: GRID_GAP },
+  playlistCard: { width: gridCardWidth({ cols: 2 }) },
+  playlistCover: {
+    width: gridCardWidth({ cols: 2 }),
+    height: gridCardWidth({ cols: 2 }),
+    borderRadius: GRID_CARD.coverRadius,
+    backgroundColor: colors.bgHover,
+  },
+  playlistCoverFallback: { justifyContent: 'center', alignItems: 'center' },
+  playlistName: {
+    ...textVariants.footnote,
+    fontWeight: '500',
+    color: colors.textPrimary,
+    marginTop: GRID_CARD.nameGap,
+  },
+  playlistMeta: {
+    ...textVariants.micro,
+    fontWeight: '400',
+    color: colors.textSecondary,
+    marginTop: GRID_CARD.metaGap,
+  },
   // 歌手网格与发现页歌手网格统一：宽度走 gridMetrics（#416 前这里是
   // (SCREEN_WIDTH - 24) / 3 —— 与 gridMetrics「禁止在调用方重写公式」相悖的第三个公式），
   // 度量走 gridCardMetrics，骨架屏（CoverGridSkeleton variant="artist"）与页面同源。
