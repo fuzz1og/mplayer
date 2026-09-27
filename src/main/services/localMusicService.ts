@@ -128,14 +128,15 @@ class LocalMusicService {
    * 提取音频内嵌封面并落盘到 data/covers/（按图片内容 hash 命名，天然去重；
    * 同一张封面多首歌共享一个文件）。写入失败静默返回 undefined，不影响扫描。
    */
-  private persistCover(pic: { format: string; data: Uint8Array } | undefined): string | undefined {
+  private async persistCover(pic: { format: string; data: Uint8Array } | undefined): Promise<string | undefined> {
     if (!pic || !pic.data || pic.data.length === 0) return undefined;
     try {
       const ext = extensionForCover(pic.format || '');
       const hash = crypto.createHash('md5').update(pic.data).digest('hex');
       const coverPath = path.join(this.coversDir, `${hash}${ext}`);
-      if (!fs.existsSync(coverPath)) {
-        fs.writeFileSync(coverPath, Buffer.from(pic.data));
+      // 异步存在性检查 + 写入（#412）：封面可能几百 KB，扫描上千首歌时同步写会卡住主进程
+      if (!(await fileExists(coverPath))) {
+        await fsp.writeFile(coverPath, pic.data);
       }
       return coverPath;
     } catch {
@@ -161,7 +162,7 @@ class LocalMusicService {
         sourceType: 'local',
         filePath,
         // 审查修复：封面落盘为独立文件，JSON 只存绝对路径（不再 base64 内嵌膨胀）
-        coverPath: this.persistCover(tag.picture?.[0]),
+        coverPath: await this.persistCover(tag.picture?.[0]),
         format: ext,
         fileSize: stats.size,
       };

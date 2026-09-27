@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
  * 注释里常常**引用**被禁掉的旧写法。
  */
 const testDir = dirname(fileURLToPath(String(import.meta.url)));
-const read = (rel: string) => readFileSync(join(testDir, '..', '..', rel), 'utf8');
+/** 仓库根：本文件在 <root>/src/__tests__/main/ 下 */
+const read = (rel: string) => readFileSync(join(testDir, '..', '..', '..', rel), 'utf8');
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 describe('主进程同步 I/O 纪律（#412）', () => {

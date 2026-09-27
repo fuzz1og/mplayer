@@ -6,7 +6,8 @@ import type { Song } from '@mplayer/core';
 import { useSearchStore } from '../store/searchStore';
 
 const testDir = dirname(fileURLToPath(String(import.meta.url)));
-const read = (rel: string) => readFileSync(join(testDir, '..', rel), 'utf8');
+/** 本文件在 <root>/src/renderer/__tests__/ 下，基准取 <root>/src */
+const read = (rel: string) => readFileSync(join(testDir, '..', '..', rel), 'utf8');
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 function song(id: string, name = id): Song {
@@ -87,8 +88,10 @@ describe('列表 memo 纪律（#412）', () => {
     const src = stripComments(read('renderer/components/GroupedSongList.tsx'));
     expect(src).toContain('const VirtualRow = React.memo(');
     expect(src).toMatch(/<VirtualRow[\s\S]{0,200}start=\{virtualItem\.start\}/);
-    // 行组件不再接收 style={...}
-    expect(src).not.toMatch(/<SongRow[\s\S]{0,900}?style=\{/);
+    // 行组件本身不再接收 style={...}（只看 <SongRow ... /> 这一块，别扫到文件里别的 style）
+    const songRowBlock = /<SongRow[\s\S]*?\/>/.exec(src)?.[0] ?? '';
+    expect(songRowBlock).not.toBe('');
+    expect(songRowBlock).not.toContain('style=');
   });
 
   it('组头的回调自带分组，避免父组件逐行包闭包', () => {
