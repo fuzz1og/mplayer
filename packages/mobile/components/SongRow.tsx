@@ -18,6 +18,7 @@ import { playSong } from '../services/audioPlayer';
 import { searchStrictMatch } from '../services/songResources';
 import { withCoverSearchSlot } from '../services/coverSearchSlot';
 import ScalePress from './ScalePress';
+import { SONG_ROW } from './songRowMetrics';
 
 interface SongRowProps {
   song: Song;
@@ -168,41 +169,42 @@ export default function SongRow({
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 4 }}
       >
         <Heart
-          size={20}
+          size={SONG_ROW.actionIconSize}
           color={favorited ? colors.accent : colors.textTertiary}
           fill={favorited ? colors.accent : 'none'}
         />
       </ScalePress>
       <ScalePress onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
-        <EllipsisVertical size={18} color={colors.textTertiary} />
+        <EllipsisVertical size={SONG_ROW.actionIconSizeCompact} color={colors.textTertiary} />
       </ScalePress>
     </ScalePress>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  // 行度量一律取自 songRowMetrics（#416：骨架屏与真实行同源，禁止在此写死数值）
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingVertical: 10,
+    paddingHorizontal: SONG_ROW.paddingHorizontal,
+    paddingVertical: SONG_ROW.paddingVertical,
     backgroundColor: colors.bgSurface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: SONG_ROW.separatorWidth,
     borderBottomColor: colors.borderSubtle,
   },
   rank: {
     ...textVariants.subhead,
     fontWeight: '600',
     color: colors.textSecondary,
-    width: 28,
+    width: SONG_ROW.rankWidth,
     textAlign: 'center',
-    marginRight: spacing[1],
+    marginRight: SONG_ROW.rankGap,
   },
   cover: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.sm,
-    marginRight: spacing[3],
+    width: SONG_ROW.coverSize,
+    height: SONG_ROW.coverSize,
+    borderRadius: SONG_ROW.coverRadius,
+    marginRight: SONG_ROW.coverGap,
   },
   coverPlaceholder: {
     backgroundColor: colors.bgHover,
@@ -211,7 +213,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   info: {
     flex: 1,
-    marginRight: spacing[2],
+    marginRight: SONG_ROW.infoGap,
   },
   name: {
     ...textVariants.subhead,
@@ -220,7 +222,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   artist: {
     ...textVariants.caption,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: SONG_ROW.artistGap,
   },
   tagBadgePreview: {
     borderRadius: radius.xs,
@@ -240,10 +242,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...textVariants.micro, // 归一：10 → micro(11)
   },
   favoriteBtn: {
-    padding: spacing[1],
+    padding: SONG_ROW.actionPadding,
   },
   moreBtn: {
-    padding: spacing[1],
-    marginLeft: spacing[1],
+    padding: SONG_ROW.actionPadding,
+    marginLeft: SONG_ROW.actionGap,
   },
 });

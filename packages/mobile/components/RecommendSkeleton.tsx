@@ -1,13 +1,12 @@
-import { useMemo } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight, SECTION_TAIL_PADDING } from './chromeMetrics';
-import { gridCardWidth } from './gridMetrics';
+import { GRID_GAP, gridCardWidth } from './gridMetrics';
+import { GRID_CARD } from './gridCardMetrics';
+import SongRowSkeleton from './SongRowSkeleton';
 import { useAnimatedBg } from '../theme/AnimatedBg';
-import { useTheme } from '../theme/ThemeProvider';
 import { usePlayerStore } from '../stores/playerStore';
 import { radius, spacing } from '../theme/tokens';
-import type { ThemeColors } from '../theme/tokens';
 import SkeletonBlock from './SkeletonBlock';
 import { RECOMMEND_BATCH_SIZE, RECOMMEND_GRID_COLS } from './recommendMetrics';
 
@@ -26,12 +25,10 @@ import { RECOMMEND_BATCH_SIZE, RECOMMEND_GRID_COLS } from './recommendMetrics';
  * 修前白底 + 深色骨架块，修后与真实页面同底（含主题切换过渡）。
  */
 export default function RecommendSkeleton() {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const animatedBg = useAnimatedBg();
   // ADR-0008：首次播放前迷你播放栏隐藏，让位随之缩小（与真实页同一判定）
   const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const cardW = gridCardWidth({ cols: RECOMMEND_GRID_COLS });
 
   return (
@@ -51,14 +48,10 @@ export default function RecommendSkeleton() {
               <SkeletonBlock style={styles.actionBlock} />
             </View>
           </View>
+          {/* 今日推荐的行就是 SongRow（含收藏/更多两列），故直接复用同一行的骨架（#416）：
+              此前这里手写且漏了右侧动作列，歌名可用宽度与真实行不同 → 数据到达时位移 */}
           {Array.from({ length: RECOMMEND_BATCH_SIZE }, (_, i) => (
-            <View key={i} style={styles.row}>
-              <SkeletonBlock style={styles.cover} />
-              <View style={styles.info}>
-                <SkeletonBlock style={styles.line} />
-                <SkeletonBlock style={[styles.line, styles.lineShort]} />
-              </View>
-            </View>
+            <SongRowSkeleton key={i} showActions />
           ))}
         </View>
 
@@ -80,7 +73,8 @@ export default function RecommendSkeleton() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+// 本骨架不含任何取色（骨架块自己带主题色，歌曲行在 SongRowSkeleton），故是模块级常量
+const styles = StyleSheet.create({
   container: { flex: 1 },
   // 与真实页 styles.section 同值
   section: { paddingHorizontal: spacing[4], marginTop: spacing[4] },
@@ -94,24 +88,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   titleBlock: { width: 72, height: 18, borderRadius: radius.sm },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   actionBlock: { width: 52, height: 14, borderRadius: radius.sm },
-  // 行度量与 SongRow.container 逐项对齐（16 横距 / 10 纵距 / 44 封面 / hairline 分隔线 / bgSurface）
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingVertical: 10,
-    backgroundColor: colors.bgSurface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
-  },
-  cover: { width: 44, height: 44, borderRadius: radius.sm, marginRight: spacing[3] },
-  info: { flex: 1 },
-  // 名称行（textVariants.subhead）与歌手行（caption + marginTop 2）
-  line: { height: 13, borderRadius: radius.sm, width: '55%' },
-  lineShort: { width: '32%', marginTop: 8 },
+  // 歌曲行的度量在 SongRowSkeleton/songRowMetrics；这里只留网格卡片
   gridTitle: { marginBottom: spacing[3] },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] },
-  gridCover: { borderRadius: radius.md },
-  gridName: { height: 12, borderRadius: radius.sm, width: '80%', marginTop: spacing[2] },
-  gridMeta: { width: '45%', marginTop: 6 },
+  // 与真实页 styles.grid 同值（flex-wrap，gap 两轴都算）
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
+  gridCover: { borderRadius: GRID_CARD.coverRadius },
+  gridName: {
+    height: GRID_CARD.nameLineHeight,
+    borderRadius: radius.xs,
+    width: '80%',
+    marginTop: GRID_CARD.nameGap,
+  },
+  gridMeta: { height: GRID_CARD.metaLineHeight, borderRadius: radius.xs, width: '45%', marginTop: GRID_CARD.metaGap },
 });

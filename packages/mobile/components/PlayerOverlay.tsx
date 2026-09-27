@@ -32,6 +32,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useDragToDismiss } from '../hooks/useDragToDismiss';
 import { tapLight } from '../utils/haptics';
 import ScalePress from './ScalePress';
+import LyricsSkeleton from './LyricsSkeleton';
 
 /** 唱盘尺寸（#186 #4 + 真机反馈 + 布局优化）：底部操作行合并进控制行后省出空间，
  *  按屏宽 72% / 屏高 36% 缩放（收一档四周留白对称，配合唱盘弹性居中悬浮感；
@@ -49,6 +50,12 @@ const LYRICS_PREVIEW_LINE_H = 26;
 const LYRICS_PREVIEW_HEIGHT = LYRICS_PREVIEW_LINE_H * 3;
 /** 全屏歌词页单行高 = lyricsFullLine（lineHeight 24 + marginVertical 6×2）+ ScalePress paddingVertical 4×2 */
 const LYRICS_FULL_LINE_H = 44;
+/**
+ * 歌词两档字号 —— 占位条的粗细必须与真文本同源，否则改字号时这里会悄悄漂移。
+ * 与下方 styles.lyricLine / styles.lyricsFullLine 的 fontSize 是同一组值（样式里直接引用本常量）。
+ */
+const LYRICS_PREVIEW_FONT_SIZE = 13;
+const LYRICS_FULL_FONT_SIZE = 16;
 
 interface Props {
   onClose: () => void;
@@ -592,16 +599,14 @@ export default function PlayerOverlay({ onClose }: Props) {
                     showsVerticalScrollIndicator={false}
                   />
                 ) : lyricsLoading ? (
+                  /* #416：预览区与全屏歌词页共用同一个占位组件（此前只有这里有） */
                   <View style={styles.lyricsList}>
-                    {[0, 1, 2].map((i) => (
-                      <View
-                        key={i}
-                        style={[
-                          styles.skeletonLine,
-                          { width: `${82 - (i % 3) * 12}%` },
-                        ]}
-                      />
-                    ))}
+                    <LyricsSkeleton
+                      rows={3}
+                      lineHeight={LYRICS_PREVIEW_LINE_H}
+                      barHeight={LYRICS_PREVIEW_FONT_SIZE}
+                      color={fg.skeleton}
+                    />
                   </View>
                 ) : (
                   /* issue #246：空歌词渲染占位行保持歌词区高度，避免普通视图塌缩（P1-5 加图标+方向文案） */
@@ -683,8 +688,23 @@ export default function PlayerOverlay({ onClose }: Props) {
                     )}
                     showsVerticalScrollIndicator={false}
                   />
+                ) : lyricsLoading ? (
+                  /* #416：全屏歌词页此前**没有加载分支**，加载中直接显示「这首歌暂无歌词」——
+                     歌词没加载完 ≠ 这首歌没有歌词，那是假陈述。#409 改成按 ID 直取后
+                     这段窗口是一次网络往返（真机实测 P50 ≈ 227ms），必须给占位。
+                     与预览区共用同一个 LyricsSkeleton，行高与真实 FlatList 的
+                     getItemLayout 同值（LYRICS_FULL_LINE_H），加载完成不跳版。 */
+                  <View style={styles.lyricsFullList}>
+                    <LyricsSkeleton
+                      rows={Math.ceil(winH / LYRICS_FULL_LINE_H)}
+                      lineHeight={LYRICS_FULL_LINE_H}
+                      barHeight={LYRICS_FULL_FONT_SIZE}
+                      color={fg.skeleton}
+                      style={styles.lyricsFullContent}
+                    />
+                  </View>
                 ) : (
-                  /* P1-5：歌词页空态（图标 + 方向文案） */
+                  /* P1-5：歌词页空态（图标 + 方向文案）；只在**加载结束且确实无词**时出现 */
                   <View style={styles.lyricsFullEmpty}>
                     <MicVocal size={24} color={colors.textDisabled} />
                     <Text style={styles.lyricsEmptyText}>这首歌暂无歌词</Text>
@@ -1039,18 +1059,10 @@ const makeStyles = (colors: ThemeColors, fg: PlayerFg) => StyleSheet.create({
   },
   // 真机反馈：普通视图歌词——灰行小、蓝行明显大一号、行距收紧。
   // P1-3：行高固定（避免 scrollToIndex 抖动），active 行用 scale+颜色过渡（见 renderItem），不再跳字号
-  lyricLine: { color: fg.tertiary, fontSize: 13, textAlign: 'center', marginVertical: 4, lineHeight: 18 },
+  lyricLine: { color: fg.tertiary, fontSize: LYRICS_PREVIEW_FONT_SIZE, textAlign: 'center', marginVertical: 4, lineHeight: 18 },
   lyricLineActive: { fontWeight: '600' },
-  // 歌词骨架屏：行高/间距与 lyricLine 一致,占位稳定避免加载后跳动
-  skeletonLine: {
-    alignSelf: 'center',
-    height: 15,
-    borderRadius: radius.full,
-    backgroundColor: fg.skeleton,
-    marginVertical: 6,
-  },
   // 真机反馈：歌词页歌词——灰行小、蓝行明显大、行距收紧。P1-3：行高固定，active 用 scale 过渡
-  lyricsFullLine: { color: fg.lyricFull, fontSize: 16, textAlign: 'center', marginVertical: 6, lineHeight: 24 },
+  lyricsFullLine: { color: fg.lyricFull, fontSize: LYRICS_FULL_FONT_SIZE, textAlign: 'center', marginVertical: 6, lineHeight: 24 },
   lyricsFullLineActive: { fontWeight: '600' },
   // P1-5：空歌词占位（图标 + 方向文案）
   lyricsEmpty: {
