@@ -40,21 +40,29 @@ describe('主进程同步 I/O 纪律（#412）', () => {
     expect(src).toContain('await fileExists(cachedPath)');
   });
 
-  it('cache/bin 有大小预算，落盘后异步回收', () => {
+  it('汽水音频缓存有大小预算，落盘后异步回收', () => {
     const src = stripComments(read('src/main/main.ts'));
     expect(src).toContain('SODA_AUDIO_CACHE_MAX_BYTES');
-    expect(src).toContain('void enforceBinBudget(sodaAudioBinDir, SODA_AUDIO_CACHE_MAX_BYTES)');
-    // 磁盘布局不往调用方泄漏：bin 目录由缓存后端推导（ADR-0002 的取向），
-    // main.ts 里不该出现手拼的 ...'cache', 'bin'
+    expect(src).toContain('SODA_AUDIO_CACHE_KEY_PREFIX');
+    expect(src).toContain(
+      'void enforceKeyBudget(audioCacheBackend, SODA_AUDIO_CACHE_KEY_PREFIX, SODA_AUDIO_CACHE_MAX_BYTES)',
+    );
+    // 磁盘布局不往调用方泄漏：main.ts 里不该出现手拼的 ...'cache', 'bin'
     expect(src).not.toMatch(/path\.join\([^)]*'cache', 'bin'/);
-    expect(src).toContain('binDirOf(audioCacheBackend)');
+    expect(src).not.toContain('readdir');
+  });
 
-    // 回收实现本身在缓存模块里，且必须异步
+  it('回收按 key 前缀精确淘汰，不扫目录误伤其它 bin 条目', () => {
     const budget = stripComments(read('src/main/cache/binCacheBudget.ts'));
-    expect(budget).toContain('export function binDirOf');
-    expect(budget).toContain('export async function enforceBinBudget');
-    expect(budget).toContain('await fsp.readdir(binDir)');
-    expect(budget).not.toContain('readdirSync');
+    expect(budget).toContain('export async function enforceKeyBudget');
+    // 用后端 keys() + 前缀筛选（#410 的接口），而不是 readdir 整个 bin 目录
+    expect(budget).toContain('await backend.keys()');
+    expect(budget).toContain('key.startsWith(keyPrefix)');
+    expect(budget).not.toContain('readdir');
+    // 路径由后端解释
+    expect(budget).toContain('backend.getFilePath(key)');
+    // 全程异步
+    expect(budget).not.toContain('statSync');
     expect(budget).not.toContain('unlinkSync');
   });
 

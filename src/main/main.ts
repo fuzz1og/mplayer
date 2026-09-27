@@ -5,7 +5,7 @@ import axios from 'axios';
 import { applyWslHidpiFix } from './hidpi';
 
 import { DiskCacheBackend } from './cache/diskBackend';
-import { binDirOf, enforceBinBudget } from './cache/binCacheBudget';
+import { enforceKeyBudget } from './cache/binCacheBudget';
 import { fileExists } from './utils/fsAsync';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
@@ -36,17 +36,19 @@ if (!app.isPackaged) {
 }
 /**
  * 汽水音频缓存大小预算（#412）。此前 `cache/bin` 只写不清，重装前会一直长下去。
- * 回收策略与目录推导都在 `cache/binCacheBudget`（缓存模块自己解释磁盘布局）。
+ * 回收策略在 `cache/binCacheBudget`：按 key 前缀精确淘汰（不误伤其它 bin 条目），
+ * 路径由后端 `getFilePath` 解释（磁盘布局不往调用方泄漏）。
  */
 const SODA_AUDIO_CACHE_MAX_BYTES = 512 * 1024 * 1024;
+/** 汽水音频的缓存 key 前缀（与下面 cacheKey 的拼法同源） */
+const SODA_AUDIO_CACHE_KEY_PREFIX = 'bin:soda:';
 
 /** 路径 → file:// URL（`getSodaPlayableUrl` 三处都要用，避免同一个正则抄三遍） */
 const toFileUrl = (filePath: string): string => 'file:///' + filePath.replace(/\\/g, '/');
 
 // 扩展 musicApi：添加主进程特有的音频缓存方法
 const audioCacheBackend = new DiskCacheBackend(path.join(app.getPath('userData'), 'cache'))
-// bin 目录由缓存后端自己推导（ADR-0002：磁盘布局不往调用方泄漏）
-const sodaAudioBinDir = binDirOf(audioCacheBackend)
+
 const musicApi = {
   ...coreMusicApi,
   async getSodaPlayableUrl(trackId: string): Promise<string> {
@@ -70,7 +72,7 @@ const musicApi = {
       // 落盘后顺带把 bin 目录压回预算（fire-and-forget，不阻塞播放）。
       const audioBytes = dl.data instanceof Uint8Array ? dl.data : new Uint8Array(dl.data as ArrayBuffer)
       await audioCacheBackend.write(cacheKey, audioBytes)
-      void enforceBinBudget(sodaAudioBinDir, SODA_AUDIO_CACHE_MAX_BYTES)
+      void enforceKeyBudget(audioCacheBackend, SODA_AUDIO_CACHE_KEY_PREFIX, SODA_AUDIO_CACHE_MAX_BYTES)
       return toFileUrl(audioCacheBackend.getFilePath(cacheKey))
     } catch (dlErr) {
       console.error('下载汽水音频到缓存失败，回退直链:', dlErr);
