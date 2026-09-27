@@ -66,7 +66,11 @@ export const TIER3_SOURCE_WALL_FALLBACK_MS = 2_000;
  *  实测依据：首字节 ~0.39s（含 TLS 握手 ~0.19s），复用连接 ~0.19s；且 1KB 与 1MB 的
  *  Range 延迟无差别（成本在连接而非字节数）。
  *
- *  ADR-0014 决策 3 给它的定位是「独立 1s」：与源 `timeoutMs` 无关，也不随清单变化。 */
+ *  ADR-0014 决策 3 给它的定位是「独立 1s」：与源 `timeoutMs` 无关，也不随清单变化。
+ *
+ *  **不占单源墙**（#399）：嗅探期间单源墙暂停计时（`tier3Api` 的 `SourceClock`），
+ *  它自己按本值计时；但它**计入整链** `TIER3_CHAIN_BUDGET_MS`——所以单源上界变成
+ *  「墙 + 1s」之后，整链上界仍是 6s，不会膨胀成「6s + N×1s」。 */
 export const TIER3_SNIFF_TIMEOUT_MS = 1_000;
 
 /** 订阅清单拉取超时（管理面请求，与解析腿无关：订阅 URL 没有 kind、没有 kind 墙可依）。
