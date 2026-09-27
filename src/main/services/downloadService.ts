@@ -1,4 +1,5 @@
 import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import axios from 'axios';
 import MP3Tag from 'mp3tag.js';
@@ -38,6 +39,27 @@ export interface DownloadTask {
  * 完成/失败仍即时推送，保证终态不丢。
  */
 export const PROGRESS_THROTTLE_MS = 150;
+
+/**
+ * 内嵌封面上限（#412）。mp3tag.js 的 APIC 契约是 `data: Array<number>`，所以封面
+ * 一定要经 `Array.from` 摊成 number 数组——5MB 封面就是 500 万个元素的 JS 数组
+ * （约 40MB 堆）。超过这个尺寸就不内嵌（只是没有内嵌封面，音频与其它标签照写）。
+ */
+export const MAX_EMBEDDED_COVER_BYTES = 1024 * 1024;
+
+/** 容器判定只看前 12 字节（core `detectAudioContainer`），读到 16 字节足够 */
+const AUDIO_HEADER_BYTES = 16;
+
+async function readAudioHeader(filePath: string): Promise<Uint8Array> {
+  const handle = await fsp.open(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(AUDIO_HEADER_BYTES);
+    const { bytesRead } = await handle.read(buf, 0, AUDIO_HEADER_BYTES, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+}
 
 export interface DownloadOptions {
   downloadPath: string;
@@ -92,7 +114,10 @@ export class DownloadService {
    */
   private async writeMetadata(song: Song, filePath: string): Promise<void> {
     try {
-      const buffer = fs.readFileSync(filePath);
+      // 标签写入本身需要整文件（mp3tag.js 要解析/重排容器），所以这里避不开全量读；
+      // 但**必须异步**——这条路在下载完成时跑，同步读一份 50MB FLAC 会把主进程事件循环
+      // 连同 IPC、托盘、封面刷新一起卡住（#412）。
+      const buffer = await fsp.readFile(filePath);
       const container = detectAudioContainer(buffer);
       const strategy = tagStrategyForContainer(container);
       if (strategy === 'skip') {
@@ -103,13 +128,25 @@ export class DownloadService {
       }
 
       const coverInfo = await this.fetchCoverAsBuffer(song.cover);
+      // mp3tag.js 的 APIC 契约就是 `data: Array<number>`（types/id3v2/frames.d.ts），
+      // 所以这一次 `Array.from` 转不掉：5MB 封面会摊成 500 万个元素的 JS 数组
+      // （约 40MB 堆）。改为**只内嵌小图**，把膨胀规模 bound 住（#412）。
+      const embeddableCover =
+        coverInfo && coverInfo.buffer.byteLength <= MAX_EMBEDDED_COVER_BYTES ? coverInfo : null;
+      if (coverInfo && !embeddableCover) {
+        console.log(
+          `[DownloadService] 封面 ${coverInfo.buffer.byteLength} 字节超过内嵌上限 ${MAX_EMBEDDED_COVER_BYTES}，跳过内嵌（不影响音频）`,
+        );
+      }
       const frames = buildID3Frames({
         title: song.name || '',
         artist: song.artist || '',
         album: song.album || '',
         // 真实时长（秒 → 毫秒）；song.duration 缺失/为 0 时 core 自动跳过 TLEN
         durationMs: (song.duration || 0) * 1000,
-        cover: coverInfo ? { format: coverInfo.mime, bytes: Array.from(coverInfo.buffer) } : undefined,
+        cover: embeddableCover
+          ? { format: embeddableCover.mime, bytes: Array.from(embeddableCover.buffer) }
+          : undefined,
       });
 
       const mp3tag = new MP3Tag(buffer);
@@ -151,7 +188,7 @@ export class DownloadService {
       const outBuf = mp3tag.buffer instanceof ArrayBuffer
         ? Buffer.from(mp3tag.buffer)
         : mp3tag.buffer;
-      fs.writeFileSync(filePath, outBuf);
+      await fsp.writeFile(filePath, outBuf);
     } catch (err) {
       console.error('[DownloadService] 写入标签异常:', err);
     }
@@ -161,15 +198,17 @@ export class DownloadService {
    * 按文件字节头修正扩展名（Content-Type 不可靠时的二次校验，评审修复）。
    * 真实容器与当前扩展名不一致时重命名并更新任务；检测失败/无需修正则原样返回。
    */
-  private correctContainerFileName(filePath: string, task: DownloadTask): string {
+  private async correctContainerFileName(filePath: string, task: DownloadTask): Promise<string> {
     try {
-      const container = detectAudioContainer(fs.readFileSync(filePath));
+      // 容器判定只看文件头 12 字节（core detectAudioContainer），
+      // 此前为此把整个文件读进内存——白读一份 50MB（#412）
+      const container = detectAudioContainer(await readAudioHeader(filePath));
       if (container === 'unknown') return filePath;
       const correctExt = extensionForContainer(container);
       const currentExt = path.extname(filePath);
       if (!currentExt || currentExt === correctExt) return filePath;
       const correctedPath = filePath.slice(0, filePath.length - currentExt.length) + correctExt;
-      fs.renameSync(filePath, correctedPath);
+      await fsp.rename(filePath, correctedPath);
       task.filePath = correctedPath;
       this.tasks.set(task.id, task);
       console.log(`[DownloadService] 按字节头修正扩展名: ${path.basename(filePath)} → ${path.basename(correctedPath)}`);
@@ -200,7 +239,7 @@ export class DownloadService {
     }
     const sidecarPath = path.join(path.dirname(filePath), lrcSidecarName(path.basename(filePath)));
     try {
-      fs.writeFileSync(sidecarPath, content, 'utf-8');
+      await fsp.writeFile(sidecarPath, content, 'utf-8');
       console.log(`[DownloadService] 已写入歌词侧车: ${sidecarPath}`);
     } catch (err) {
       console.error('[DownloadService] 写 .lrc 文件失败:', err);
@@ -467,7 +506,7 @@ export class DownloadService {
       // 写入标签元数据（title/artist/album/封面/真实时长）与 .lrc 歌词侧车
       // 先按字节头修正扩展名：源站 Content-Type 不可靠（FLAC 报 audio/mpeg 等）时，
       // 按真实容器重命名，避免 FLAC/M4A 错标成 .mp3（对齐移动端 correctContainerName）
-      actualFilePath = this.correctContainerFileName(actualFilePath, task);
+      actualFilePath = await this.correctContainerFileName(actualFilePath, task);
       await this.writeMetadata(task.song, actualFilePath);
       await this.writeLyricsSidecar(task.song, actualFilePath);
 

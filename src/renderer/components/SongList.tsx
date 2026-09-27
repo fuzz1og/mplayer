@@ -20,6 +20,7 @@ const batchBtnStyle: React.CSSProperties = {
 };
 import SongRow from './SongRow';
 import SongListSkeleton from './SongListSkeleton';
+import VirtualRow from './VirtualRow';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
 import { useVirtualRows, SONG_ROW_HEIGHT } from '@/renderer/hooks/useVirtualRows';
 
@@ -411,18 +412,14 @@ const SongList: React.FC<SongListProps> = ({
                 const song = displaySongs[item.index];
                 if (!song) return null;
                 return (
-                  <div
+                  <VirtualRow
                     key={song.id}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      transform: `translateY(${item.start - virtual.scrollMargin}px)`,
-                    }}
+                    start={item.start}
+                    size={item.size}
+                    scrollMargin={virtual.scrollMargin}
                   >
                     {renderRow(song, item.index)}
-                  </div>
+                  </VirtualRow>
                 );
               })
             : displaySongs.map((song, index) => renderRow(song, index))}
