@@ -66,7 +66,8 @@ const ArtistDetailPage: React.FC = () => {
 
   // ── 专辑 tab:发行年表(分页 + 无限滚动) ──
   const [albums, setAlbums] = useState<Album[]>([]);
-  const [albumsTotal, setAlbumsTotal] = useState(0);
+  // null = 上游未给可信总数（还有下一页时 total 会被 limit 截断/缺失，见 core #417）
+  const [albumsTotal, setAlbumsTotal] = useState<number | null>(null);
   const [albumsLoading, setAlbumsLoading] = useState(false);
   const [albumsLoadingMore, setAlbumsLoadingMore] = useState(false);
   const [albumsHasMore, setAlbumsHasMore] = useState(false);
@@ -83,12 +84,15 @@ const ArtistDetailPage: React.FC = () => {
     if (reset) {
       setAlbumsLoading(true);
       setAlbumsError(null);
+      setAlbumsTotal(null);
     } else {
       setAlbumsLoadingMore(true);
     }
     try {
       const offset = reset ? 0 : albumsOffsetRef.current;
-      const { albums: page, total: pageTotal, more } = await callMusicApi('getArtistAlbums', 'netease', artistId, offset, ALBUM_PAGE_SIZE);
+      const { albums: page, total: pageTotal, more, ok } = await callMusicApi('getArtistAlbums', 'netease', artistId, offset, ALBUM_PAGE_SIZE);
+      // #417：抓取失败与「该歌手确实零专辑」在 core 层已可区分（ok），失败走错误态而不是空态
+      if (!ok) throw new Error('加载专辑失败');
       setAlbums(prev => reset ? page : [...prev, ...page]);
       setAlbumsTotal(pageTotal);
       albumsOffsetRef.current = offset + ALBUM_PAGE_SIZE;
@@ -219,7 +223,9 @@ const ArtistDetailPage: React.FC = () => {
                 <div style={{ fontSize: '14px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <span>
                     {activeTab === 'albums'
-                      ? `共 ${albumsTotal || '--'} 张专辑`
+                      ? albumsTotal !== null
+                        ? `共 ${albumsTotal} 张专辑`
+                        : `已加载 ${albums.length} 张`
                       : `共 ${total || '--'} 首歌曲`}
                   </span>
                   {activeTab !== 'albums' && (

@@ -1,4 +1,5 @@
 import { request } from './transport.js';
+import { URL_ALIVE_PROBE_TIMEOUT_MS } from '../shared/playbackBudgets.js';
 
 // 活性闸请求头：源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格），
 // 不带/带错会 403；部分 CDN 拒非浏览器 UA。
@@ -35,7 +36,7 @@ async function rangedGet(url: string, rangeEnd: number, timeoutMs: number) {
  * #391：批量可播性探测（probeAudioUrl/probeAudio）已删除——判据反向（把「直连拿不到
  * URL」判成失效，而多数歌靠 tier3 才可播）且产物无消费者；本模块只保留这条活性闸。
  */
-export async function isUrlAlive(rawUrl: string, timeoutMs = 1500): Promise<boolean> {
+export async function isUrlAlive(rawUrl: string, timeoutMs = URL_ALIVE_PROBE_TIMEOUT_MS): Promise<boolean> {
   try {
     const url = normalizeProbeUrl(rawUrl);
     if (!url.startsWith('http')) return false;

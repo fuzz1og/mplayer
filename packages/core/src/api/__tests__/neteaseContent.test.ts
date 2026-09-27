@@ -219,7 +219,7 @@ describe('neteaseDirect 内容能力（#278 迁移）', () => {
 
   it('getArtistDetail：合并歌手信息 + hotSongs + albums（一次调用渲染歌手页首屏）', async () => {
     mockTransport([
-      { match: (u) => u.includes('/api/artist?id='), respond: () => json({ artist: { id: 55, name: '歌手甲', picUrl: 'https://p/1.jpg' } }) },
+      { match: (u) => u.includes('/api/v1/artist/55'), respond: () => json({ code: 200, artist: { id: 55, name: '歌手甲', picUrl: 'https://p/1.jpg', albumSize: 31, musicSize: 407 } }) },
       { match: (u) => u.includes('/weapi/v1/artist/songs'), respond: () => json({ code: 200, songs: [track(1, '歌一')], total: 1 }) },
       { match: (u) => u.includes('/weapi/artist/albums/'), respond: () => json({ code: 200, hotAlbums: [{ id: 9, name: '专辑九', artists: [{ name: '歌手A' }] }], total: 1, more: false }) },
     ]);
@@ -239,6 +239,126 @@ describe('neteaseDirect 内容能力（#278 迁移）', () => {
     await client.resolvePlayableUrls!(songs as Song[]);
     expect(songs[0].url).toBe('https://cdn/1.mp3');
     expect(songs[1].url).toBe(''); // VIP/无版权保持空
+  });
+});
+
+describe('neteaseDirect 专辑/歌手数据面（#407 P0 / #417）', () => {
+  const albumBody = (extra: Record<string, unknown> = {}) => ({
+    code: 200,
+    album: {
+      id: 9,
+      name: '专辑九',
+      artists: [{ id: 55, name: '歌手A' }],
+      picUrl: 'https://x/y.jpg',
+      company: '厂牌X',
+      description: '简介本文',
+      subType: '录音室版',
+      size: 12,
+      publishTime: 1744646400000,
+      ...extra,
+    },
+    songs: [{ ...track(1, '歌一'), no: 3 }],
+  });
+  const urlRoute = { match: (u: string) => u.includes('/song/enhance/player/url'), respond: () => json({ code: 200, data: [{ id: 1, url: 'https://cdn/1.mp3' }] }) };
+
+  it('getAlbumDetail：同一响应补元数据（company/description/subType/size/artistId）+ publishTime 归一 + 缓存键含源', async () => {
+    const cache = fakeCache();
+    let albumCalls = 0;
+    mockTransport([
+      { match: (u) => u.includes('/weapi/v1/album/'), respond: () => { albumCalls++; return json(albumBody()); } },
+      urlRoute,
+    ]);
+    const client = createNeteaseDirectClient(cache);
+    const detail = await client.getAlbumDetail!('9');
+
+    expect(detail!.album).toMatchObject({
+      id: '9', name: '专辑九', artist: '歌手A',
+      sourceType: 'netease', artistId: '55',
+      company: '厂牌X', description: '简介本文', subType: '录音室版', trackCount: 12,
+      publishTime: '1744646400000',
+    });
+    expect(detail!.songs[0]).toMatchObject({ id: '1', url: 'https://cdn/1.mp3', lrc: '' });
+    // 缓存键含源：同一数字 id 在不同源语义不同，不含源必然串键
+    expect(cache.store.has('album_detail_netease_9')).toBe(true);
+    await client.getAlbumDetail!('9');
+    expect(albumCalls).toBe(1);
+  });
+
+  it('getAlbumDetail：weapi 失败 → 明文 /api/v1/album/{id} 兜底（/api/album/{id} 实测 code=-462，不可用）', async () => {
+    const seen = mockTransport([
+      { match: (u) => u.includes('/weapi/v1/album/'), respond: () => json({ code: -462, album: null }) },
+      { match: (u) => u.includes('/api/v1/album/9'), respond: () => json(albumBody()) },
+      urlRoute,
+    ]);
+    const client = createNeteaseDirectClient(fakeCache());
+    const detail = await client.getAlbumDetail!('9');
+    expect(detail!.album).toMatchObject({ sourceType: 'netease', artistId: '55', company: '厂牌X' });
+    expect(seen.some((r) => r.url.includes('/api/v1/album/9'))).toBe(true);
+  });
+
+  it('getAlbumDetail：两腿都失败 → null，且空结果不缓存（瞬时故障能自愈）', async () => {
+    const cache = fakeCache();
+    let calls = 0;
+    mockTransport([
+      { match: (u) => u.includes('/v1/album/'), respond: () => { calls++; return json({ code: 500, album: null }); } },
+    ]);
+    const client = createNeteaseDirectClient(cache);
+    expect(await client.getAlbumDetail!('9')).toBeNull();
+    expect(await client.getAlbumDetail!('9')).toBeNull();
+    expect(calls).toBeGreaterThan(1);
+    expect([...cache.store.keys()].some((k) => k.startsWith('album_detail'))).toBe(false);
+  });
+
+  it('getArtistAlbums：翻页以 more 为准（more=true → total 未知 = null）；limit 钳到 ≤1000 并进缓存键', async () => {
+    const cache = fakeCache();
+    mockTransport([
+      { match: (u) => u.includes('/weapi/artist/albums/'), respond: () => json({ code: 200, hotAlbums: [{ id: 9, name: '专辑九', artists: [{ id: 55, name: '歌手A' }] }], more: true }) },
+    ]);
+    const client = createNeteaseDirectClient(cache);
+    const res = await client.getArtistAlbums!('55', 0, 5000);
+    expect(res).toMatchObject({ ok: true, more: true, total: null });
+    expect(res.albums[0]).toMatchObject({ id: '9', sourceType: 'netease', artistId: '55' });
+    expect(cache.store.has('artist_albums_55_0_1000')).toBe(true);
+  });
+
+  it('getArtistAlbums：weapi 失败 → 明文 /api/artist/albums/{id} 兜底；more=false 时 total 精确', async () => {
+    const seen = mockTransport([
+      { match: (u) => u.includes('/weapi/artist/albums/'), respond: () => json({ code: 500 }) },
+      { match: (u) => u.includes('/api/artist/albums/55'), respond: () => json({ code: 200, hotAlbums: [{ id: 9, name: '专辑九', artists: [{ id: 55, name: '歌手A' }] }], more: false }) },
+    ]);
+    const client = createNeteaseDirectClient(fakeCache());
+    const res = await client.getArtistAlbums!('55', 30, 30);
+    expect(res).toMatchObject({ ok: true, more: false, total: 31 });
+    expect(seen.some((r) => r.url.includes('/api/artist/albums/55'))).toBe(true);
+  });
+
+  it('getArtistAlbums：两腿都失败 → ok=false（页面据此说「加载失败」而不是「暂无专辑」）且不缓存', async () => {
+    const cache = fakeCache();
+    mockTransport([
+      { match: (u) => u.includes('/artist/albums/'), respond: () => json({ code: 500 }) },
+    ]);
+    const client = createNeteaseDirectClient(cache);
+    const res = await client.getArtistAlbums!('55', 0, 30);
+    expect(res).toEqual({ albums: [], total: null, more: false, ok: false });
+    expect([...cache.store.keys()].some((k) => k.startsWith('artist_albums'))).toBe(false);
+  });
+
+  it('getArtistInfo：按 id 走 /api/v1/artist/{id}（不再用 /api/artist?id= 死链，也不再按名字搜）', async () => {
+    const seen = mockTransport([
+      { match: (u) => u.includes('/api/v1/artist/5196'), respond: () => json({ code: 200, artist: { id: 5196, name: '陶喆', picUrl: 'https://p1/tao.jpg', alias: ['David Tao'], albumSize: 31, musicSize: 407 } }) },
+    ]);
+    const client = createNeteaseDirectClient(fakeCache());
+    const artist = await client.getArtistInfo!('5196');
+    expect(artist).toMatchObject({ id: '5196', name: '陶喆', sourceType: 'netease', albumSize: 31 });
+    expect(seen[0].url).toContain('/api/v1/artist/5196');
+  });
+
+  it('getArtistAlbums：成功但该歌手确实零专辑 → ok=true（空态不是错误态）', async () => {
+    mockTransport([
+      { match: (u) => u.includes('/artist/albums/'), respond: () => json({ code: 200, hotAlbums: [], more: false }) },
+    ]);
+    const client = createNeteaseDirectClient(fakeCache());
+    expect(await client.getArtistAlbums!('55', 0, 30)).toMatchObject({ ok: true, albums: [], more: false, total: 0 });
   });
 });
 
