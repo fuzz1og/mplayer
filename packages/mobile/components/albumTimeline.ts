@@ -19,7 +19,13 @@ export interface AlbumYearGroup {
   albums: Album[];
 }
 
-/** 专辑发行年份（`publishTime` 是 epoch ms 字符串，见 core `utils/publishTime`）；取不到给空串。 */
+/**
+ * 专辑发行年份（`publishTime` 是 epoch ms 字符串，见 core `utils/publishTime`）；取不到给空串。
+ *
+ * 年份按**本地时区**取：源站给的发行日是「当地日」（网易多为 CN 当地零点，UTC 表示会落在前一天
+ * 16:00Z），按本地时区取才是用户看到的那个年份。
+ * 代价：**贴着年边界的单测夹具会随运行环境时区变**（CI 是 UTC）——夹具请用年中日期。
+ */
 export function albumYear(album: Album): string {
   const t = Number(album.publishTime || 0);
   if (!Number.isFinite(t) || t <= 0) return '';

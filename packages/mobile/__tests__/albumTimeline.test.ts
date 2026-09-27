@@ -35,8 +35,11 @@ describe('歌手专辑时间线（#417 P0.1）', () => {
   it('按年份降序分组；组内按发行时间降序', () => {
     const groups = groupAlbumsByYear([album('a', Y1997), album('b', Y2025), album('c', Y2002)]);
     expect(groups.map((g) => g.year)).toEqual(['2025', '2002', '1997']);
-    const twoIn2013a = groupAlbumsByYear([album('x', '1356969600000'), album('y', '1375315200000')]);
-    expect(twoIn2013a[0].albums.map((s) => s.id)).toEqual(['y', 'x']);
+    // 夹具必须离年末有富余：年份按**本地时区**取（网易的发行日是 CN 当地日，
+    // 用本地时区取年份才是用户看到的年份），贴着年边界的夹具会在 CI（UTC）与
+    // 本机（UTC+8）给出不同的年份 —— 2026-09-27 就是这么红过一次的。
+    const twoIn2013 = groupAlbumsByYear([album('x', '1367366400000'), album('y', '1375315200000')]);
+    expect(twoIn2013[0].albums.map((s) => s.id)).toEqual(['y', 'x']);
   });
 
   it('无发行时间的归「未知年份」且恒排最后', () => {
