@@ -73,6 +73,19 @@ let pendingSeek: PendingSeek | null = null;
 let playbackFailed = false;
 let playbackReadyLogged = false;
 
+/**
+ * 把回调推迟到「当前任务之后」，**不用定时器**（#405）。
+ *
+ * Android 后台（Activity 暂停）时 ReactHost 会挂起 JS 定时器：新架构下 timer 是宿主侧
+ * 实现，onHostPause 暂停、onHostResume 才把逾期回调补跑。于是写在
+ * setTimeout(…, 0) 里的「曲末推进 / 同曲 fresh 重试」在后台根本不执行，表现为
+ * **后台播完一首就停住、一回前台立刻接着播下一首**（2026-09-27 dev build 实测）。
+ * 微任务只依赖 JS 运行时自身的任务队列，不受该暂停影响，语义等同「让出当前任务」。
+ */
+function deferMicrotask(run: () => void): void {
+  void Promise.resolve().then(run);
+}
+
 export async function initAudio(): Promise<void> {
   await setAudioModeAsync({
     playsInSilentMode: true,
@@ -126,7 +139,8 @@ function attachPlaybackListener(p: Player): void {
             // 反复命中同一条死链（Source error 的典型根因）
             void deleteCachedResource(song);
             log.addLog('warn', `《${song.name}》将使用新 URL 重试`);
-            setTimeout(() => { if (ctx.playId === currentPlayId) void playSong(song, retryCount, true); }, 0);
+            // 不用 setTimeout：后台会被宿主挂起（见 deferMicrotask 注释）
+            deferMicrotask(() => { if (ctx.playId === currentPlayId) void playSong(song, retryCount, true); });
             return;
           }
           // 本次失败轮到别的 playId（用户已切歌/重试）：丢弃
@@ -167,9 +181,11 @@ function attachPlaybackListener(p: Player): void {
     if (status.didJustFinish && !playbackFinished) {
       playbackFinished = true;
       const nextSong = s.next();
-      if (nextSong) setTimeout(() => {
+      // #405：曲末推进不能依赖定时器——后台时宿主挂起 JS 定时器，
+      // 逾期回调要等回到前台才补跑（「后台不切歌、一回前台立刻切」就是这么来的）
+      if (nextSong) deferMicrotask(() => {
         if (ctx.playId === currentPlayId) void playSong(nextSong, 0, false);
-      }, 0);
+      });
       else {
         // 队列播完：同步 store 状态（否则 UI 一直显示"播放中"且 togglePlay 失效）
         void stopAllPlayers();
