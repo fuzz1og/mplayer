@@ -13,6 +13,7 @@ import {
 } from './playbackTrace.js';
 import { clearSourceSchedule } from './sourceSchedule.js';
 import type { TransportCallOptions } from '../api/transport.js';
+import { DIRECT_WALL_MS, TIER3_CHAIN_BUDGET_MS } from './playbackBudgets.js';
 
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
@@ -436,11 +437,8 @@ function newTraceCtx(): TraceCtx {
   };
 }
 
-/** 直连腿墙钟上限（#389）：tier3 有 2s/6s 墙，直连此前**完全裸露**在源自己的
- *  `timeoutMs`（最长 30s）× transport 3 次重试下，最坏 20–30s 无声无反馈，
- *  而这段时间 tier3 兜底腿还没开始。取 3s 与 tier3 单源墙同量级——直连是单请求腿，
- *  且已有预取缓存兜低延迟路径（直连解析 P50 ~66ms，3s 余量充足）。 */
-const DIRECT_WALL_MS = 3_000;
+// 直连腿墙钟上限 = DIRECT_WALL_MS（值、理由与「4.5s 才是成功路径上界」的口径见
+// shared/playbackBudgets.ts）。
 
 const DIRECT_TIMED_OUT = Symbol('direct-timed-out');
 
@@ -555,9 +553,9 @@ async function tryTier3Search(keyword: string, page: number, source: SourceKey):
   }
 }
 
-/** tier3 解析总预算：mitu/vkeys 类源命中通常 2-5s，mgmp3 类源超时 20s——
- *  预算截断避免播放被慢源拖死（超时按未命中处理，慢源请求自然结束，结果丢弃）。 */
-export const TIER3_BUDGET_MS = 6_000;
+// tier3 解析总预算 = TIER3_CHAIN_BUDGET_MS（见 shared/playbackBudgets.ts）：
+// mitu/vkeys 类源命中通常 2-5s，mgmp3 类源超时 20s——预算截断避免播放被慢源拖死
+//（超时按未命中处理，结果丢弃）。
 
 // ── tier3 同歌去重（#172 评论：同歌并行重复解析）──────────────────────
 //
@@ -723,7 +721,7 @@ async function tryTier3(song: Song, reason: string, ctx?: TraceCtx | null): Prom
           // 预算用尽即「放弃观测」：resolver 里仍在跑的源按 abandoned 记账（#398 决策 6）。
           run.markAbandoned();
           resolve(BUDGET_EXHAUSTED);
-        }, TIER3_BUDGET_MS),
+        }, TIER3_CHAIN_BUDGET_MS),
       );
     })();
     const winner = await Promise.race([run.result, budgetExhausted]);

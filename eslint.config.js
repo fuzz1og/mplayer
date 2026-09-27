@@ -8,7 +8,10 @@ const mobileTouchableWhitelist = [];
 module.exports = tseslint.config(
   // Global ignores
   {
-    ignores: ['dist/', 'dist-electron/', 'coverage/', 'node_modules/', 'packages/core/dist/', 'packages/core/coverage/', '.expo/', 'packages/mobile/.expo/', 'src/main/storage/fileStorage.ts', '.dsh-worktrees/', '.claude/worktrees/'],
+    // e2e/artifacts/：真机验收的驱动脚本与产物（截图/report），已被 .gitignore 覆盖。
+    // 不排掉的话，每次做验收都会因为驱动脚本里的调试性 unused var 让 `npm run lint` 变红——
+    // 而 lint 只该管入库的代码。
+    ignores: ['dist/', 'dist-electron/', 'coverage/', 'node_modules/', 'packages/core/dist/', 'packages/core/coverage/', '.expo/', 'packages/mobile/.expo/', 'src/main/storage/fileStorage.ts', '.dsh-worktrees/', '.claude/worktrees/', 'e2e/artifacts/'],
   },
   // Base recommended rules
   ...tseslint.configs.recommended,

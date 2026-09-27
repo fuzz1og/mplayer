@@ -43,6 +43,7 @@ vi.mock('../services/IpcClient', () => ({ IpcClient: { invoke: ipcInvokeMock } }
 vi.mock('../utils/songCoverRefresh', () => ({ refreshSongCover: vi.fn(async () => null) }));
 
 import { usePlayerStore } from '../store/playerStore';
+import { playbackClock } from '../services/playbackClock';
 
 function song(id: string, name: string, url = ''): Song {
   return { id, name, artist: '周杰伦', album: '', duration: 240, sourceType: 'netease', url, cover: '', lrc: '' };
@@ -187,11 +188,14 @@ describe('播放失败：fresh 重试与自动跳歌（对齐移动端语义）'
     const errSpy = vi.spyOn(message, 'error').mockImplementation(() => undefined as never);
     const a = song('off-1', '晴天');
     stateWith([a, song('off-2', '稻香')], 0);
+    // 上一首已经播到 2:00：读模型必须跟着这次失败归零（否则播放栏停在旧进度）
+    playbackClock.setPosition(120);
 
     await usePlayerStore.getState().play(a);
 
     // 一次解析都不发：直连 3s 墙与 tier3 6s 全部省掉
     expect(callMusicApiMock).not.toHaveBeenCalled();
+    expect(playbackClock.getSnapshot().position).toBe(0);
     expect(usePlayerStore.getState().isPlaying).toBe(false);
     expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('离线'));
     errSpy.mockRestore();

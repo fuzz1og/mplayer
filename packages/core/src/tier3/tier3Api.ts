@@ -22,7 +22,14 @@ import {
 } from '../shared/sourceSchedule.js';
 import { fetchAudioHead } from '../shared/audioHead.js';
 import {
-  TIER3_BUDGET_MS,
+  TIER3_CHAIN_BUDGET_MS,
+  TIER3_MANIFEST_FETCH_TIMEOUT_MS,
+  TIER3_SEARCH_BUDGET_MS,
+  TIER3_SNIFF_TIMEOUT_MS,
+  TIER3_SOURCE_WALL_FALLBACK_MS,
+  TIER3_SOURCE_WALL_MS_BY_KIND,
+} from '../shared/playbackBudgets.js';
+import {
   SOURCE_DISPLAY_NAMES,
   getSourceMode,
   releaseTier3SourceSlot,
@@ -95,7 +102,9 @@ export interface Tier3Source {
   kind: Tier3SourceKind;
   /** 返回音频 URL 的域名白名单；支持 `*.example.com` 通配子域。 */
   allowedDomains: string[];
-  /** 单源超时（毫秒），默认 15000。 */
+  /** 单源超时（毫秒）。**不写 = 取该 kind 的硬墙本身**（url-resolver 2000 / 
+   *  search-then-resolve 2500）；写了也只能**收紧**到硬墙以下（`effectiveSourceTimeout`），
+   *  不能放大。这是唯一面向用户的墙值旋钮（#399）。 */
   timeoutMs?: number;
   /** 单源请求头（会合并到 API 请求与字节嗅探请求）。 */
   headers?: Record<string, string>;
@@ -178,22 +187,18 @@ export interface Tier3Deps {
   request?: (req: TransportRequest) => Promise<import('../api/transport.js').TransportResponse>;
 }
 
-/** 单源解析请求超时（ADR-0014 超时阶梯：单源 2s 硬墙）。
- *  原为 15_000，远超整链 6s 预算（sourceRouter 的 TIER3_BUDGET_MS），
- *  使预算失去约束力——单源挂起即可吃光全链预算、饿死后续好源。
- *  且 transport 的 maxRetries=3 会对超时类错误重试，实际耗时再被放大。 */
-const DEFAULT_TIMEOUT_MS = 2_000;
+// 单源墙 / 整链预算 / 嗅探超时集中在 shared/playbackBudgets.ts（#399）。
+// 这里原先的 DEFAULT_TIMEOUT_MS = 15_000 远超整链 6s 预算，使预算失去约束力——
+// 单源挂起即可吃光全链预算、饿死后续好源；且 transport 的 maxRetries=3 会对超时类
+// 错误重试，实际耗时再被放大。现在它只剩「kind 未知时的兜底」这一个身份。
 
 /** 单源硬墙**按 kind 分档**（ADR 2026-09-25 决策 7；清单里的 `timeoutMs` 只能**收紧**到它
  *  以下，不能放大）。原为扁平 2s（ADR-0014 决策 2）——但那对两步源结构性偏紧：
- *  `search-then-resolve` 的三段网络串行在**同一个墙**内（`withSourceDeadline` 包住
- *  `resolveTier3Candidate`，内含搜索 + 解析 + 嗅探），#388 实测一次 **2047ms 的成功路径**
- *  与一次 2081ms 被 2s 墙切掉；一步源 2s 余量充足（实测 max 1264ms / 1267ms）。
+ *  `search-then-resolve` 的**搜索 + 解析**串行在同一个墙内（`withSourceDeadline` 包住
+ *  `resolveTier3Candidate`；嗅探自 #399 起不占该墙——见 `SourceClock`），#388 实测一次
+ *  **2047ms 的成功路径**与一次 2081ms 被 2s 墙切掉；一步源 2s 余量充足（max 1264ms）。
  *  3s 是 ADR 记的**安全余量（上界）**，不是目标值；本实现取 2s / 2.5s，均在该余量之内。 */
-const MAX_SOURCE_TIMEOUT_MS_BY_KIND: Record<Tier3SourceKind, number> = {
-  'url-resolver': 2_000,
-  'search-then-resolve': 2_500,
-};
+const MAX_SOURCE_TIMEOUT_MS_BY_KIND: Record<Tier3SourceKind, number> = TIER3_SOURCE_WALL_MS_BY_KIND;
 
 /**
  * 单源超时的**默认值**：不写 `timeoutMs` 时取该 kind 的硬墙本身（ADR 2026-09-25 决策 7 补记）。
@@ -204,7 +209,7 @@ const MAX_SOURCE_TIMEOUT_MS_BY_KIND: Record<Tier3SourceKind, number> = {
  * 显式写 `timeoutMs` 仍然只能收紧：`effectiveSourceTimeout` 会把它夹到硬墙以下。
  */
 function defaultSourceTimeout(kind: Tier3SourceKind): number {
-  return MAX_SOURCE_TIMEOUT_MS_BY_KIND[kind] ?? DEFAULT_TIMEOUT_MS;
+  return MAX_SOURCE_TIMEOUT_MS_BY_KIND[kind] ?? TIER3_SOURCE_WALL_FALLBACK_MS;
 }
 
 /** 单源墙钟哨兵：与「源未命中返回 null」区分开，日志/统计口径不同。 */
@@ -213,46 +218,90 @@ const SOURCE_TIMED_OUT = Symbol('tier3-source-timed-out');
 /** 单源有效超时 = `min(清单 timeoutMs ?? 该 kind 默认值, 该 kind 硬墙, 整链剩余预算)`。 */
 function effectiveSourceTimeout(source: Tier3Source, remainingBudgetMs: number): number {
   const configured = source.timeoutMs ?? defaultSourceTimeout(source.kind);
-  const wall = MAX_SOURCE_TIMEOUT_MS_BY_KIND[source.kind] ?? DEFAULT_TIMEOUT_MS;
+  const wall = MAX_SOURCE_TIMEOUT_MS_BY_KIND[source.kind] ?? TIER3_SOURCE_WALL_FALLBACK_MS;
   return Math.max(1, Math.min(configured, wall, remainingBudgetMs));
 }
 
+/** 单源墙的**可暂停**墙钟（#399）。
+ *
+ *  墙的语义 = 「搜索 + 解析」的硬上界。嗅探（一次 64KB Range + 头解析）是另一件事：
+ *  ADR-0014 决策 3 给它的是**独立 1s**。但实现上它嵌在单源墙内，于是两步源出现
+ *  「2.5s 的墙里含着 1s 嗅探」，搜索 + 解析只剩 1.5s（#388 实测 2047ms 的**成功路径**
+ *  贴墙被切）。这里把墙做成可暂停：嗅探期间停表，恢复时按剩余额度续走。
+ *
+ *  **整链预算不受影响**：嗅探仍落在 sourceRouter 的 TIER3_CHAIN_BUDGET_MS race 之内，
+ *  所以「单源上界 = 墙 + 1s」不会膨胀成「整链上界 = 6s + N×1s」。 */
+interface SourceClock {
+  /** 进入不计入墙的阶段（嗅探）。 */
+  pause(): void;
+  /** 离开该阶段：按剩余额度续走；额度已耗尽则立刻到期。 */
+  resume(): void;
+}
+
+function createSourceClock(timeoutMs: number, onExpire: () => void) {
+  let remaining = timeoutMs;
+  let armedAt = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const clear = () => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+  };
+  const arm = () => {
+    armedAt = Date.now();
+    timer = setTimeout(() => {
+      timer = undefined;
+      onExpire();
+    }, Math.max(1, remaining));
+  };
+  return {
+    start: arm,
+    stop: clear,
+    pause() {
+      if (timer === undefined) return;
+      clear();
+      remaining -= Date.now() - armedAt;
+    },
+    resume() {
+      if (timer !== undefined) return;
+      if (remaining > 0) arm();
+      else onExpire();
+    },
+  };
+}
+
 /** 单源墙钟上限：把 transport 的重试（maxRetries=3，超时/TLS 类错误可重试）也算在内，
- *  到点即换下一个源。
+ *  到点即换下一个源。计时内容 = 搜索 + 解析（嗅探由 SourceClock 暂停，见上）。
  *
  *  #408：墙的持有者持有 AbortController，到点先 abort 再结算——底层请求（含 transport 重试）
  *  立刻停掉，不再「换了下一个源，上一个还在压上游」。墙值语义未变（仍属 #399 的口径范围）。 */
 async function withSourceDeadline<T>(
-  run: (signal: TransportSignal) => Promise<T>,
+  run: (signal: TransportSignal, clock: SourceClock) => Promise<T>,
   timeoutMs: number,
 ): Promise<T | typeof SOURCE_TIMED_OUT> {
   const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let expire!: () => void;
+  const expired = new Promise<typeof SOURCE_TIMED_OUT>((resolve) => {
+    expire = () => {
+      controller.abort();
+      resolve(SOURCE_TIMED_OUT);
+    };
+  });
+  const clock = createSourceClock(timeoutMs, expire);
+  clock.start();
   try {
-    return await Promise.race([
-      run(controller.signal),
-      new Promise<typeof SOURCE_TIMED_OUT>((resolve) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          resolve(SOURCE_TIMED_OUT);
-        }, timeoutMs);
-      }),
-    ]);
+    return await Promise.race([run(controller.signal, clock), expired]);
   } finally {
-    if (timer) clearTimeout(timer);
+    clock.stop();
   }
 }
 
-/** 嗅探超时（ADR-0014 决策 3）：独立常量、不继承源 timeoutMs。
- *  实测依据：首字节 ~0.39s（含 TLS 握手 ~0.19s），复用连接 ~0.19s；
- *  且 1KB 与 1MB 的 Range 延迟无差别（成本在连接而非字节数）。 */
-const SNIFF_TIMEOUT_MS = 1_000;
+// 嗅探超时 = TIER3_SNIFF_TIMEOUT_MS（独立常量、不继承源 timeoutMs、不占单源墙）
+// 见 shared/playbackBudgets.ts。
 
-/** 搜索兜底腿整链预算（ADR-0014 决策 2「搜索腿补同款预算」）。
- *  此前该腿**完全没有预算**（直接串行 await），实测 5 源各 2s = 10s 无上限。
- *  与解析腿不同：搜索是「尽量找全」，故预算耗尽时**返回已收集的部分结果**
- *  而不是丢弃——部分候选对用户仍有用，总比空列表好。 */
-const TIER3_SEARCH_BUDGET_MS = 6_000;
+// 搜索兜底腿整链预算 = TIER3_SEARCH_BUDGET_MS（见 shared/playbackBudgets.ts）。
+// 此前该腿**完全没有预算**（直接串行 await），实测 5 源各 2s = 10s 无上限。
 
 /** 试听片段大小阈值：<1MB 视为片段（30s 128kbps ≈ 480KB）。
  *  tier3 解析到片段时宁可跳过，也不把试听版当完整版播。 */
@@ -674,24 +723,35 @@ export function clearTier3ProbeCache(): void {
 /** 取头部字节：判定是否真音频（拒 text/html 错误页），并读完整大小。
  *  超时独立（ADR-0014 决策 3），**不继承** source.timeoutMs——
  *  「解析允许多慢」与「首字节该多快」是两件事。 */
+/** 单次解析的运行期依赖：注入 deps（currentDeps）+ 本次的单源墙钟（嗅探期间暂停，#399）。 */
+interface ResolveDeps extends Tier3Deps {
+  sourceClock?: SourceClock;
+}
+
 /** 候选探测（带稳定 URL 缓存）：取头部字节 + 解析头时长，成功结果入缓存。 */
-async function probeCandidate(url: string, source: Tier3Source, deps: Tier3Deps): Promise<CandidateProbe> {
+async function probeCandidate(url: string, source: Tier3Source, deps: ResolveDeps): Promise<CandidateProbe> {
   const key = stableUrlKey(url);
   const cached = probeCache.get(key);
-  if (cached && cached.expires > Date.now()) return cached.probe;
-  const head = await fetchAudioHead(url, {
-    headers: { 'User-Agent': BROWSER_UA, ...(source.headers || {}) },
-    timeoutMs: SNIFF_TIMEOUT_MS,
-    request: deps.request,
-  });
-  const probe: CandidateProbe = head.ok
-    ? { ok: true, totalBytes: head.totalBytes, header: await extractAudioDuration(head.bytes, head.totalBytes) }
-    : { ok: false, totalBytes: null, header: null };
-  if (probe.ok) {
-    if (probeCache.size >= PROBE_CACHE_MAX) probeCache.clear();
-    probeCache.set(key, { probe, expires: Date.now() + PROBE_CACHE_TTL_MS });
+  if (cached && cached.expires > Date.now()) return cached.probe; // 缓存命中 = 无网络，不占墙
+  // #399：嗅探不占单源墙——暂停墙钟；它自身仍受 fetchAudioHead 的 TIER3_SNIFF_TIMEOUT_MS 约束。
+  deps.sourceClock?.pause();
+  try {
+    const head = await fetchAudioHead(url, {
+      headers: { 'User-Agent': BROWSER_UA, ...(source.headers || {}) },
+      timeoutMs: TIER3_SNIFF_TIMEOUT_MS,
+      request: deps.request,
+    });
+    const probe: CandidateProbe = head.ok
+      ? { ok: true, totalBytes: head.totalBytes, header: await extractAudioDuration(head.bytes, head.totalBytes) }
+      : { ok: false, totalBytes: null, header: null };
+    if (probe.ok) {
+      if (probeCache.size >= PROBE_CACHE_MAX) probeCache.clear();
+      probeCache.set(key, { probe, expires: Date.now() + PROBE_CACHE_TTL_MS });
+    }
+    return probe;
+  } finally {
+    deps.sourceClock?.resume();
   }
-  return probe;
 }
 
 /** 试听片段闸：完整大小 <1MB 视为片段（拿不到大小时不臆断，与旧行为一致）。 */
@@ -778,7 +838,7 @@ async function resolveFromRequestSpec(
   spec: Tier3RequestSpec,
   vars: TemplateVars,
   source: Tier3Source,
-  deps: Tier3Deps,
+  deps: ResolveDeps,
   timeoutMs: number,
   signal?: TransportSignal,
 ): Promise<Tier3Candidate | null> {
@@ -847,8 +907,9 @@ async function resolveSourceUrl(
   idOverride?: string,
   itemMeta?: { name?: string; artist?: string },
   signal?: TransportSignal,
+  depsOverride?: ResolveDeps,
 ): Promise<Tier3Candidate | null> {
-  const deps = currentDeps;
+  const deps = depsOverride ?? currentDeps;
   const base = songVars(song);
   const name = itemMeta?.name || base.name;
   const artist = itemMeta?.artist || base.artist;
@@ -877,8 +938,9 @@ async function resolveSearchThenResolve(
   source: Tier3Source,
   timeoutMs: number,
   signal?: TransportSignal,
+  depsOverride?: ResolveDeps,
 ): Promise<Tier3Candidate | null> {
-  const deps = currentDeps;
+  const deps = depsOverride ?? currentDeps;
   if (!source.search) return null;
   const vars = songVars(song);
   const req = deps.request || request;
@@ -916,7 +978,7 @@ async function resolveSearchThenResolve(
     if (source.resolve && source.search.idPath) {
       const itemId = asString(getByPath(item, source.search.idPath));
       if (itemId) {
-        const resolved = await resolveSourceUrl(song, source, timeoutMs, itemId, { name: itemName, artist: itemArtist }, signal);
+        const resolved = await resolveSourceUrl(song, source, timeoutMs, itemId, { name: itemName, artist: itemArtist }, signal, deps);
         if (resolved) return resolved;
       }
     }
@@ -1078,7 +1140,7 @@ export async function fetchTier3ManifestFromUrl(url: string): Promise<Tier3Manif
     method: 'GET',
     url,
     headers: { Accept: 'application/json', 'User-Agent': BROWSER_UA },
-    timeoutMs: DEFAULT_TIMEOUT_MS,
+    timeoutMs: TIER3_MANIFEST_FETCH_TIMEOUT_MS,
     responseType: 'text',
   });
   if (res.status >= 400) {
@@ -1374,11 +1436,14 @@ async function resolveTier3Candidate(
   source: Tier3Source,
   timeoutMs: number,
   signal?: TransportSignal,
+  clock?: SourceClock,
 ): Promise<Tier3CandidateOutcome> {
+  // 墙钟随调用链下到嗅探处：嗅探期间暂停计时（#399）。无墙钟（如不设墙的调用）时行为不变。
+  const deps: ResolveDeps = clock ? { ...currentDeps, sourceClock: clock } : currentDeps;
   const candidate =
     source.kind === 'url-resolver'
-      ? await resolveSourceUrl(song, source, timeoutMs, undefined, undefined, signal)
-      : await resolveSearchThenResolve(song, source, timeoutMs, signal);
+      ? await resolveSourceUrl(song, source, timeoutMs, undefined, undefined, signal, deps)
+      : await resolveSearchThenResolve(song, source, timeoutMs, signal, deps);
   if (!candidate) return null;
 
   // 候选自带证据（L1/L3/L4）+ 探测得到的 L2 头证据；码率优先源自称，缺失才用帧实测。
@@ -1446,7 +1511,7 @@ async function runSourceAttempt(
   let attempt: SourceAttempt;
   try {
     const outcome = await withSourceDeadline(
-      (signal) => resolveTier3Candidate(song, source, timeoutMs, signal),
+      (signal, clock) => resolveTier3Candidate(song, source, timeoutMs, signal, clock),
       timeoutMs,
     );
     const ms = traceNow() - t0;
@@ -1524,7 +1589,7 @@ async function runSerialSources(
     // 单源硬墙：清单 timeoutMs 只能收紧，且不超过整链剩余预算（ADR-0014 决策 2）。
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
-      console.info(`[tier3] 整链预算 ${TIER3_BUDGET_MS}ms 用尽，停止尝试后续源: 《${song.name}》`);
+      console.info(`[tier3] 整链预算 ${TIER3_CHAIN_BUDGET_MS}ms 用尽，停止尝试后续源: 《${song.name}》`);
       markSourcesAbandoned(ordered.slice(i), collect);
       return { kind: 'exhausted' };
     }
@@ -1666,7 +1731,7 @@ async function resolveTier3(
   console.info(`[tier3] 开始解析: 《${song.name}》${song.artist} (${song.sourceType}, id=${song.id})`);
   // 链内自持 deadline（ADR-0014 决策 2「整链 6s 软顶」）：不再只靠调用方的
   // Promise.race——否则本腿会继续打上游、白耗配额，日志也看不出「预算已尽」。
-  const deadline = Date.now() + TIER3_BUDGET_MS;
+  const deadline = Date.now() + TIER3_CHAIN_BUDGET_MS;
 
   // ① 按清单顺序展平 + 归属分类（ADR-0014 决策 6）：显式声明须一致；未声明的 url-resolver 拒绝。
   //    归属过滤**先于**排序，且逐源照旧触发（计数在跳过之前取）——否则 explainPlaybackFailure 的
