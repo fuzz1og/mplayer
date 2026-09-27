@@ -13,8 +13,15 @@
  * 日期串按 **UTC 零点** 解析：发行日期是「日」粒度的日历事实，按本地时区解析会随设备时区漂移一天。
  */
 
-/** ≥ 1e12 视为毫秒；更小的纯数字按秒（10 位秒 ≈ 1.7e9，13 位毫秒 ≈ 1.7e12）。 */
-const MS_THRESHOLD = 1e12;
+/**
+ * 秒/毫秒分界：**1e11**（≈ 1973-03 的毫秒值）。
+ *
+ * **不能用 1e12**：那会把 1973–2001-09 之间的毫秒值（**12 位**，如陶喆《I Believe》
+ * 2001 年的 `996595200000`）误判成秒、再 ×1000，落到公元 33550 年。真机验收
+ * （2026-09-27）抓到的就是这个：歌手专辑时间线页的年份显示成 33550 / 32132 / 31908。
+ * 10 位秒（`1.7e9`）与 12 位毫秒（`9.9e11`）之间隔着两个数量级，1e11 落在安全区。
+ */
+const MS_THRESHOLD = 1e11;
 const YEAR_MIN = 1900;
 const YEAR_MAX = 2100;
 
@@ -40,5 +47,10 @@ export function normalizePublishTime(raw: unknown): string {
 
 function fromEpoch(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '';
-  return String(n >= MS_THRESHOLD ? n : n * 1000);
+  const ms = n >= MS_THRESHOLD ? n : n * 1000;
+  // 归一化后必须落在可解释的年份区间：微秒级输入（16 位）会算出公元 3 万年，
+  // 与其显示一个荒谬年份，不如按「源未提供」处理（消费方按「无」渲染）。
+  const year = new Date(ms).getFullYear();
+  if (!Number.isFinite(year) || year < YEAR_MIN || year > YEAR_MAX) return '';
+  return String(ms);
 }

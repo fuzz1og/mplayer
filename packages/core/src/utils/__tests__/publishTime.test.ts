@@ -32,6 +32,19 @@ describe('normalizePublishTime：各源发行时间 → epoch ms 字符串', () 
     expect(normalizePublishTime('2026/07/26')).toBe('1785024000000');
   });
 
+  it('12 位毫秒（1973–2001-09 之间的发行时间）不被当成秒级数字', () => {
+    // 真机验收抓到的回归：这是 2001 年的**毫秒**值，不是秒。误判成秒会 ×1000 →
+    // 公元 33550 年（专辑时间线页年份显示 33550/32132/31908 就是这么来的）。
+    expect(normalizePublishTime(996595200000)).toBe('996595200000');
+    expect(normalizePublishTime(951840000000)).toBe('951840000000');
+    expect(normalizePublishTime('996595200000')).toBe('996595200000');
+  });
+
+  it('超出可解释年份区间的输入按「源未提供」处理（微秒级 16 位不再算出公元 3 万年）', () => {
+    expect(normalizePublishTime(996595200000000)).toBe('');
+    expect(normalizePublishTime('1744646400000000')).toBe('');
+  });
+
   it('1997 年（陶喆 David Tao）不被当成秒级数字', () => {
     expect(normalizePublishTime('1997-12-05')).toBe('881280000000');
   });
