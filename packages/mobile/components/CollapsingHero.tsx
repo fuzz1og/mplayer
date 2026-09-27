@@ -72,8 +72,6 @@ interface CollapsingHeroProps<T> {
    * 给了 `metaItems` 就忽略 `meta`。
    */
   metaItems?: string[];
-  /** 主次操作行（#406 二期）：播放按钮之后的页面级动作插槽（收藏/下载/分享…） */
-  actions?: React.ReactNode;
   /** 章节头（#406 二期）：信息区与列表之间的「歌曲 · N 首」，用来收口灰/白接缝 */
   sectionHeader?: string;
   /**
@@ -110,7 +108,6 @@ export default function CollapsingHero<T>({
   subtitle,
   meta,
   metaItems,
-  actions,
   sectionHeader,
   surface,
   tags,
@@ -232,7 +229,6 @@ export default function CollapsingHero<T>({
                   <Text style={styles.playText}>{actionLabel}</Text>
                 </ScalePress>
               ) : null}
-              {actions ? <View style={styles.actionsRow}>{actions}</View> : null}
             </View>
             {sectionHeader ? (
               <View style={[styles.sectionHeader, surface ? styles.sectionHeaderSurface : null]}>
@@ -306,7 +302,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   infoSurface: { backgroundColor: colors.bgSurface },
-  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[3] },
   sectionHeader: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],

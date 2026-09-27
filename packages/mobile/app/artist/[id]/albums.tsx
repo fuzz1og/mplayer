@@ -90,7 +90,7 @@ export default function ArtistAlbumsPage() {
 
   const openAlbum = useCallback((album: Album) => {
     router.push(
-      `/album/${album.id}?name=${encodeURIComponent(album.name)}&pic=${encodeURIComponent(album.picUrl)}&artist=${encodeURIComponent(album.artist)}&source=netease` as never,
+      `/album/${album.id}?name=${encodeURIComponent(album.name)}&pic=${encodeURIComponent(album.picUrl)}&artist=${encodeURIComponent(album.artist)}&source=netease` as any,
     );
   }, []);
 
