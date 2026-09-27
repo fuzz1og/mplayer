@@ -80,6 +80,8 @@ export default function SearchPage() {
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
   const [playlistsLoadingMore, setPlaylistsLoadingMore] = useState(false);
   const [playlistsMore, setPlaylistsMore] = useState(false);
+  /** 翻页失败（#415 真机验收抓到）：**不能**退化成「已加载全部」——用户看不出失败也没法重试。 */
+  const [playlistsMoreError, setPlaylistsMoreError] = useState(false);
   const [playlistsError, setPlaylistsError] = useState(false);
   /** 已发起搜索的关键词：同关键词来回切 tab 不重复发（换关键词时清空）。 */
   const playlistKeywordRef = useRef<string | null>(null);
@@ -97,6 +99,7 @@ export default function SearchPage() {
     setPlaylistsLoading(true);
     setPlaylistsError(false);
     setPlaylistsMore(false);
+    setPlaylistsMoreError(false);
     try {
       const page = await getDirectClient('netease')!.searchPlaylists!(kw, PLAYLIST_PAGE_SIZE);
       if (seq !== playlistSearchSeq) return; // 已被新搜索取代，丢弃迟到结果
@@ -117,9 +120,13 @@ export default function SearchPage() {
    * 之后每多一页都要靠滚动触发；core 侧同键单飞 + 6h 缓存兜底重复。
    * 关键词以 `playlistKeywordRef` 为准（切 tab 只保证首屏已发），序号守卫与首屏同一套。
    */
-  const loadMorePlaylists = async () => {
+  const loadMorePlaylists = async (force = false) => {
     const kw = playlistKeywordRef.current;
     if (!kw || playlistsLoading || playlistsLoadingMore || !playlistsMore) return;
+    // 失败后不再被滚动自动重试（onEndReached 会在到底处反复触发，等于拿请求砸上游），
+    // 必须由用户点页脚那一行来 force
+    if (playlistsMoreError && !force) return;
+    if (force) setPlaylistsMoreError(false);
     const seq = playlistSearchSeq;
     setPlaylistsLoadingMore(true);
     try {
@@ -134,7 +141,8 @@ export default function SearchPage() {
     } catch (e: any) {
       if (seq !== playlistSearchSeq) return;
       console.error('[Search] playlists loadMore error:', e.message);
-      setPlaylistsMore(false);
+      // 不 setPlaylistsMore(false)：那会让页脚显示「已加载全部」，把失败说成到底
+      setPlaylistsMoreError(true);
     } finally {
       if (seq === playlistSearchSeq) setPlaylistsLoadingMore(false);
     }
@@ -238,11 +246,19 @@ export default function SearchPage() {
             onEndReached={() => void loadMorePlaylists()}
             onEndReachedThreshold={0.5}
             ListFooterComponent={
-              <LoadMoreFooter
-                loadingMore={playlistsLoadingMore}
-                hasMore={playlistsMore}
-                hasData={playlists.length > 0}
-              />
+              playlistsMoreError ? (
+                <View style={styles.footerCenter}>
+                  <ScalePress style={styles.retryButton} onPress={() => void loadMorePlaylists(true)}>
+                    <Text style={styles.retryText}>加载更多失败，点此重试</Text>
+                  </ScalePress>
+                </View>
+              ) : (
+                <LoadMoreFooter
+                  loadingMore={playlistsLoadingMore}
+                  hasMore={playlistsMore}
+                  hasData={playlists.length > 0}
+                />
+              )
             }
             renderItem={({ item: p }) => (
               <ScalePress
@@ -417,6 +433,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgHover,
   },
   retryText: { ...textVariants.footnote, color: colors.accent },
+  /** 页脚重试兜底：翻页失败时替代 LoadMoreFooter 的那一行 */
+  footerCenter: { alignItems: 'center', paddingVertical: spacing[4] },
   // 歌单网格（#415）：与发现页歌单 tab 同款 2 列方图卡片。
   // 度量统一走 gridMetrics/gridCardMetrics（#416：禁止在调用方重写宽度公式）。
   playlistGrid: {
