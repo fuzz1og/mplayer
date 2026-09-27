@@ -1,5 +1,10 @@
 import axios from 'axios';
 import { acquireOutboundSlot, TransportAbortError } from './outboundGate.js';
+import {
+  TRANSPORT_DEFAULT_TIMEOUT_MS,
+  TRANSPORT_MAX_RETRIES,
+  TRANSPORT_RETRY_BASE_DELAY_MS,
+} from '../shared/playbackBudgets.js';
 
 /**
  * 传输接缝（T01）—— core 请求层底部的统一可注入传输。
@@ -162,7 +167,10 @@ export interface TransportRetryOptions {
   baseDelayMs: number;
 }
 
-const DEFAULT_RETRY_OPTIONS: TransportRetryOptions = { maxRetries: 3, baseDelayMs: 100 };
+const DEFAULT_RETRY_OPTIONS: TransportRetryOptions = {
+  maxRetries: TRANSPORT_MAX_RETRIES,
+  baseDelayMs: TRANSPORT_RETRY_BASE_DELAY_MS,
+};
 let retryOptions: TransportRetryOptions = { ...DEFAULT_RETRY_OPTIONS };
 
 /** 重置/自定义重试策略；传 null 恢复默认（maxRetries=3，base=100ms）。 */
@@ -272,7 +280,7 @@ async function defaultTransport(req: TransportRequest): Promise<TransportRespons
     url: req.url,
     headers: req.headers,
     data: req.body,
-    timeout: req.timeoutMs || 12000,
+    timeout: req.timeoutMs || TRANSPORT_DEFAULT_TIMEOUT_MS,
     // 协作式取消（#408）：与闸门配合，把「放弃等待」变成真的停掉底层请求。
     signal: req.signal,
     responseType: req.responseType === 'arraybuffer' ? 'arraybuffer' : 'text',
