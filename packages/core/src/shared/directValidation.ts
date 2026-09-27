@@ -5,6 +5,7 @@ import { extractAudioDuration } from './audioDuration.js';
 import { fetchAudioHead } from './audioHead.js';
 import { pickDurationEvidence, type PlaybackEvidence } from './playbackGuard.js';
 import { traceNow } from './playbackTrace.js';
+import { DIRECT_VALIDATION_TIMEOUT_MS } from './playbackBudgets.js';
 
 /**
  * 直连腿播放时时长取证（#392，来源：wayfinder 票 #380 决议 D3）。
@@ -45,8 +46,8 @@ export interface DirectValidationDeps {
   extract?: typeof extractAudioDuration;
 }
 
-/** 取证 Range 超时：独立小额（一次头请求），不继承任何源 timeoutMs。 */
-const VALIDATION_TIMEOUT_MS = 1_500;
+// 取证 Range 超时 = DIRECT_VALIDATION_TIMEOUT_MS（独立小额、不继承任何源 timeoutMs）
+// 见 shared/playbackBudgets.ts（#399）；它在 3s 直连墙之外，故直连腿成功路径上界是 4.5s。
 
 /**
  * 直连 URL 播放时取证（#392）。调用方须已保证「直连腿 + 该源无权威时长 +
@@ -73,7 +74,7 @@ export async function validateDirectUrlNonFull(
   const referer = refererForSourceKey(song.sourceType);
   const head = await fetchAudioHead(url, {
     headers: { 'User-Agent': BROWSER_UA, ...(referer ? { Referer: referer } : {}) },
-    timeoutMs: VALIDATION_TIMEOUT_MS,
+    timeoutMs: DIRECT_VALIDATION_TIMEOUT_MS,
     request: deps?.request,
   });
   if (!head.ok) return done(false, 'none', 'Range 取证失败 / 非音频字节（fail-open）');

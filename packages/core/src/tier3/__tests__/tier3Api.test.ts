@@ -1098,6 +1098,37 @@ describe('单源硬墙与整链预算（#365，ADR-0014 决策 2）', () => {
     }
   });
 
+  it('嗅探不占单源墙：2s 墙内 1.8s 解析 + 0.9s 嗅探仍命中（#399）', async () => {
+    // 墙的语义 = 「搜索 + 解析」的硬上界；嗅探（ADR-0014 决策 3 的独立 1s）不占它。
+    // 修前：1.8s 解析 + 0.9s 嗅探 = 2.7s > 2s 墙 → 判超时，一首本来能播的歌白解析一次。
+    const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const request = vi.fn(async (req: TransportRequest): Promise<TransportResponse> => {
+      if (req.responseType === 'arraybuffer') {
+        await delay(900); // 嗅探
+        return audioResponse();
+      }
+      await delay(1_800); // 解析
+      return jsonResponse({ data: { url: 'https://cdn.example.com/a.mp3', song_play_time: 240 } }, req.url);
+    });
+    setTier3Deps({ request });
+    addTier3SubscriptionFromText({ text: hangingManifest(1) });
+    skipInitWindow();
+    setTier3Enabled(true);
+
+    vi.useFakeTimers();
+    try {
+      const pending = createTier3Resolver()(song());
+      await vi.advanceTimersByTimeAsync(3_000);
+      const res = await pending;
+
+      expect(res).toMatchObject({ url: 'https://cdn.example.com/a.mp3', guard: 'source-duration' });
+      // 没被记成超时（修前这里是「单源硬墙 2000ms 超时」）
+      expect(getTier3Stats()['s1'].lastError).toBeFalsy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('整链预算用尽后不再启动后续源（3 × 2s 后第 4 源不被请求）', async () => {
     const request = vi.fn(() => new Promise<TransportResponse>(() => {})); // 全部挂起
     setTier3Deps({ request });
