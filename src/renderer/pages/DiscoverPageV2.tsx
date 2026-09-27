@@ -400,10 +400,15 @@ const DiscoverPageV2: React.FC = () => {
   const [artistError, setArtistError] = useState(false);
   const artistSearchSeqRef = useRef(0);
 
-  // 「歌单」tab 结果：#415 懒加载——**只有切到该 tab 才发请求**（见 ensurePlaylistsSearch）
+  // 「歌单」tab 结果：#415 懒加载——**只有切到该 tab 才发请求**（见 ensurePlaylistsSearch），
+  // 之后每多一页都靠滚动触发（见 loadMorePlaylists）
   const [playlistResults, setPlaylistResults] = useState<DiscoverPlaylist[]>([]);
   const [playlistLoading, setPlaylistLoading] = useState(false);
+  const [playlistLoadingMore, setPlaylistLoadingMore] = useState(false);
   const [playlistError, setPlaylistError] = useState<string | null>(null);
+  const [playlistMore, setPlaylistMore] = useState(false);
+  const [playlistMoreError, setPlaylistMoreError] = useState(false);
+  const playlistScrollRef = useRef<HTMLDivElement>(null);
   const playlistSearchSeqRef = useRef(0);
   /** 已发起/已完成搜索的关键词（同一关键词切来切去不重复发；换关键词时清空）。 */
   const playlistSearchKeywordRef = useRef<string | null>(null);
@@ -422,10 +427,13 @@ const DiscoverPageV2: React.FC = () => {
     const seq = ++playlistSearchSeqRef.current;
     setPlaylistLoading(true);
     setPlaylistError(null);
-    searchService.searchPlaylists(keyword)
+    setPlaylistMore(false);
+    setPlaylistMoreError(false);
+    searchService.searchPlaylists(keyword, PLAYLIST_PAGE_SIZE)
       .then((page) => {
         if (seq !== playlistSearchSeqRef.current) return; // 已被新搜索取代，丢弃迟到结果
         setPlaylistResults(page.playlists);
+        setPlaylistMore(page.more);
       })
       .catch((err: any) => {
         if (seq !== playlistSearchSeqRef.current) return;
@@ -436,6 +444,43 @@ const DiscoverPageV2: React.FC = () => {
         if (seq === playlistSearchSeqRef.current) setPlaylistLoading(false);
       });
   }, []);
+
+  /**
+   * 歌单分页（#415）：**滚到底才发下一页**——懒加载的第二半。首屏只在切到「歌单」tab 时发，
+   * 之后每多一页都靠滚动触发；core 侧同键单飞 + 6h 缓存兜底重复。
+   * 失败不把整屏打成错误态（那会把已拿到的结果也藏掉），只把页脚换成可重试的一行。
+   */
+  const loadMorePlaylists = useCallback(() => {
+    const keyword = playlistSearchKeywordRef.current;
+    if (!keyword || playlistLoading || playlistLoadingMore || !playlistMore) return;
+    const seq = playlistSearchSeqRef.current;
+    setPlaylistLoadingMore(true);
+    setPlaylistMoreError(false);
+    searchService.searchPlaylists(keyword, PLAYLIST_PAGE_SIZE, playlistResults.length)
+      .then((page) => {
+        if (seq !== playlistSearchSeqRef.current) return;
+        // 按 id 去重：上游 offset 分页偶有重叠，直接 concat 会让 React key 撞车
+        setPlaylistResults((prev) => {
+          const seen = new Set(prev.map((p) => p.id));
+          return [...prev, ...page.playlists.filter((p) => !seen.has(p.id))];
+        });
+        setPlaylistMore(page.more);
+      })
+      .catch((err: any) => {
+        if (seq !== playlistSearchSeqRef.current) return;
+        setPlaylistMoreError(true);
+        console.error('[Discover] 加载更多歌单失败:', err);
+      })
+      .finally(() => {
+        if (seq === playlistSearchSeqRef.current) setPlaylistLoadingMore(false);
+      });
+  }, [playlistLoading, playlistLoadingMore, playlistMore, playlistResults.length]);
+
+  useInfiniteScroll(playlistScrollRef, {
+    onLoadMore: loadMorePlaylists,
+    loading: playlistLoading || playlistLoadingMore,
+    hasMore: activeSearchTab === 'playlists' && playlistMore,
+  });
 
   const handleSearchTabChange = (tab: 'songs' | 'artists' | 'playlists') => {
     setActiveSearchTab(tab);
@@ -590,7 +635,7 @@ const DiscoverPageV2: React.FC = () => {
           ) : activeSearchTab === 'playlists' ? (
             // 歌单 tab（#415）：复用发现页同一张歌单网格与既有详情页；空态文案区分
             // 「搜索歌单」与发现页一级的「歌单广场」（两者语义不同，见 PlaylistPageGrid.emptyText）
-            <div style={{ height: '100%', overflowY: 'auto', padding: '24px' }}>
+            <div ref={playlistScrollRef} style={{ height: '100%', overflowY: 'auto', padding: '24px' }}>
               <PlaylistPageGrid
                 playlists={playlistResults}
                 loading={playlistLoading}
@@ -599,6 +644,23 @@ const DiscoverPageV2: React.FC = () => {
                 onPlaylistSelect={handlePlaylistSelect}
                 emptyText="没有搜到歌单，去发现页看看歌单广场"
               />
+              {playlistLoadingMore && (
+                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中…</div>
+              )}
+              {playlistMoreError && !playlistLoadingMore && (
+                <div style={{ padding: '16px', textAlign: 'center', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text-tertiary)' }}>加载更多失败</span>
+                  <button
+                    onClick={loadMorePlaylists}
+                    style={{ marginLeft: '8px', padding: '4px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                  >
+                    重试
+                  </button>
+                </div>
+              )}
+              {!playlistMore && !playlistLoadingMore && !playlistMoreError && playlistResults.length > 0 && (
+                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>已加载全部歌单</div>
+              )}
             </div>
           ) : artistLoading && artistResults.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>正在搜索歌手…</div>

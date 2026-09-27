@@ -155,6 +155,51 @@ describe('搜索结果 歌单 tab（#415）', () => {
     expect(await screen.findByText('重试成功')).toBeInTheDocument();
   });
 
+  it('无限滚动：滚到底才发下一页（offset = 已加载数），到底显示「已加载全部歌单」', async () => {
+    searchPlaylistsMock
+      .mockResolvedValueOnce({ playlists: [playlist(1, '助眠精选')], total: 2, more: true })
+      .mockResolvedValueOnce({ playlists: [playlist(2, '深夜钢琴')], total: 2, more: false });
+    useSearchStore.setState({ currentKeyword: '助眠', sourceType: 'all', songs: [], groups: [], loading: false, hasMore: false });
+
+    const { container } = renderPage();
+    await gotoTab(/歌单/);
+    await waitFor(() => expect(playlistCalls()).toHaveLength(1));
+    expect(await screen.findByText('助眠精选')).toBeInTheDocument();
+    // 没滚之前不发第二页（懒加载的第二半）
+    expect(playlistCalls()).toHaveLength(1);
+
+    // 滚动容器 = 歌单 tab 那个 overflowY:auto 的 div（useInfiniteScroll 挂它）
+    const scroller = container.querySelector('div[style*="overflow-y: auto"]');
+    expect(scroller).not.toBeNull();
+    fireEvent.scroll(scroller!);
+
+    await waitFor(() => expect(playlistCalls()).toHaveLength(2));
+    expect(playlistCalls()[1]).toEqual(['searchPlaylists', 'netease', '助眠', 30, 1]);
+    expect(await screen.findByText('深夜钢琴')).toBeInTheDocument();
+    // more=false → 页脚到底文案，且不再请求
+    expect(await screen.findByText('已加载全部歌单')).toBeInTheDocument();
+    fireEvent.scroll(scroller!);
+    expect(playlistCalls()).toHaveLength(2);
+  });
+
+  it('加载更多失败：已拿到的结果仍在（不整屏变错误态），页脚给重试', async () => {
+    searchPlaylistsMock
+      .mockResolvedValueOnce({ playlists: [playlist(1, '助眠精选')], total: 2, more: true })
+      .mockRejectedValueOnce(new Error('网络错误'));
+    useSearchStore.setState({ currentKeyword: '助眠', sourceType: 'all', songs: [], groups: [], loading: false, hasMore: false });
+
+    const { container } = renderPage();
+    await gotoTab(/歌单/);
+    await waitFor(() => expect(playlistCalls()).toHaveLength(1));
+    expect(await screen.findByText('助眠精选')).toBeInTheDocument();
+
+    fireEvent.scroll(container.querySelector('div[style*="overflow-y: auto"]')!);
+
+    expect(await screen.findByText('加载更多失败')).toBeInTheDocument();
+    // 首屏结果没有被错误态顶掉
+    expect(screen.getByText('助眠精选')).toBeInTheDocument();
+  });
+
   it('换关键词后「歌单」tab 未加载过，切过去用新关键词请求', async () => {
     useSearchStore.setState({ currentKeyword: '助眠', sourceType: 'all', songs: [], groups: [], loading: false, hasMore: false });
     renderPage();

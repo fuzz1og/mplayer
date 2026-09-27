@@ -43,6 +43,9 @@ type SearchTab = 'songs' | 'artists' | 'playlists';
 let artistSearchSeq = 0;
 let playlistSearchSeq = 0;
 
+/** 歌单搜索每页张数（core 内部钳到 ≤100；30 与发现页歌单网格一致）。 */
+const PLAYLIST_PAGE_SIZE = 30;
+
 export default function SearchPage() {
   const { colors } = useTheme();
   const animatedBg = useAnimatedBg();
@@ -75,6 +78,8 @@ export default function SearchPage() {
   // 歌单（#415）：懒加载 —— 只有切到「歌单」tab 才发请求（见 searchPlaylists）
   const [playlists, setPlaylists] = useState<DiscoverPlaylist[]>([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
+  const [playlistsLoadingMore, setPlaylistsLoadingMore] = useState(false);
+  const [playlistsMore, setPlaylistsMore] = useState(false);
   const [playlistsError, setPlaylistsError] = useState(false);
   /** 已发起搜索的关键词：同关键词来回切 tab 不重复发（换关键词时清空）。 */
   const playlistKeywordRef = useRef<string | null>(null);
@@ -91,10 +96,12 @@ export default function SearchPage() {
     const seq = ++playlistSearchSeq;
     setPlaylistsLoading(true);
     setPlaylistsError(false);
+    setPlaylistsMore(false);
     try {
-      const page = await getDirectClient('netease')!.searchPlaylists!(kw, 30);
+      const page = await getDirectClient('netease')!.searchPlaylists!(kw, PLAYLIST_PAGE_SIZE);
       if (seq !== playlistSearchSeq) return; // 已被新搜索取代，丢弃迟到结果
       setPlaylists(page.playlists);
+      setPlaylistsMore(page.more);
     } catch (e: any) {
       if (seq !== playlistSearchSeq) return;
       console.error('[Search] playlists error:', e.message);
@@ -102,6 +109,34 @@ export default function SearchPage() {
       setPlaylistsError(true);
     } finally {
       if (seq === playlistSearchSeq) setPlaylistsLoading(false);
+    }
+  };
+
+  /**
+   * 歌单分页（#415）：**滚到底才发下一页**——懒加载的第二半。首屏只在切到「歌单」tab 时发，
+   * 之后每多一页都要靠滚动触发；core 侧同键单飞 + 6h 缓存兜底重复。
+   * 关键词以 `playlistKeywordRef` 为准（切 tab 只保证首屏已发），序号守卫与首屏同一套。
+   */
+  const loadMorePlaylists = async () => {
+    const kw = playlistKeywordRef.current;
+    if (!kw || playlistsLoading || playlistsLoadingMore || !playlistsMore) return;
+    const seq = playlistSearchSeq;
+    setPlaylistsLoadingMore(true);
+    try {
+      const page = await getDirectClient('netease')!.searchPlaylists!(kw, PLAYLIST_PAGE_SIZE, playlists.length);
+      if (seq !== playlistSearchSeq) return;
+      // 按 id 去重：上游 offset 分页偶有重叠，直接 concat 会让 FlatList 的 key 撞车
+      setPlaylists((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...prev, ...page.playlists.filter((p) => !seen.has(p.id))];
+      });
+      setPlaylistsMore(page.more);
+    } catch (e: any) {
+      if (seq !== playlistSearchSeq) return;
+      console.error('[Search] playlists loadMore error:', e.message);
+      setPlaylistsMore(false);
+    } finally {
+      if (seq === playlistSearchSeq) setPlaylistsLoadingMore(false);
     }
   };
 
@@ -200,6 +235,15 @@ export default function SearchPage() {
               styles.playlistGrid,
               { paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING },
             ]}
+            onEndReached={() => void loadMorePlaylists()}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              <LoadMoreFooter
+                loadingMore={playlistsLoadingMore}
+                hasMore={playlistsMore}
+                hasData={playlists.length > 0}
+              />
+            }
             renderItem={({ item: p }) => (
               <ScalePress
                 style={styles.playlistCard}
