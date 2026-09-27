@@ -7,6 +7,7 @@ import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
 import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { cleanup, playSong, seekTo, togglePlay, fetchLrcInBackground } from '../services/audioPlayer';
+import { updateNotification } from '../services/notificationService';
 
 type StatusListener = (status: AudioStatus) => void;
 
@@ -23,7 +24,9 @@ interface MockPlayer {
   remove: () => void;
   replace: (source: { uri: string }) => void;
   replaceCalls?: number;
-  updateLockScreenMetadata: () => void;
+  updateLockScreenMetadata: (meta: { title?: string }) => void;
+  /** 锁屏元数据更新记录（#405：曲末推进后必须显示当前这首） */
+  lockScreenMeta: { title?: string }[];
 }
 
 const audioMocks = vi.hoisted(() => {
@@ -50,7 +53,10 @@ const audioMocks = vi.hoisted(() => {
       },
       seekTo: async () => {},
       setActiveForLockScreen: () => {},
-      updateLockScreenMetadata: () => {},
+      lockScreenMeta: [] as { title?: string }[],
+      updateLockScreenMetadata: (meta: { title?: string }) => {
+        player.lockScreenMeta.push(meta);
+      },
       replace: (source: { uri: string }) => {
         // 单播放器复用：replace 换源不创建新实例
         player.uri = source.uri;
@@ -215,7 +221,8 @@ beforeEach(() => {
   useSettingsStore.setState({ autoSkipOnError: true });
   clearSkipGuard();
   useAudioTagStore.setState({ tags: {} });
-  useLogsStore.setState({ notice: null });
+  useLogsStore.setState({ notice: null, entries: [] });
+  vi.mocked(updateNotification).mockClear();
 });
 
 afterEach(async () => {
@@ -936,3 +943,221 @@ describe('跳歌护栏（#385 core skipGuard 接线）', () => {
   });
 });
 
+describe('#405 曲末推进（后台播放可靠性）', () => {
+  /** 曲末状态：ExoPlayer 播完（原生 ENDED 边沿） */
+  const FINISH = { isLoaded: true, playing: false, didJustFinish: true, currentTime: 100, duration: 100 };
+
+  function seedQueue(songs: Song[], index = 0, playMode = '列表循环'): void {
+    useSettingsStore.setState({ playMode: playMode as never });
+    usePlayerStore.setState({
+      queue: songs,
+      currentIndex: index,
+      currentSong: songs[index],
+      isPlaying: true,
+    });
+  }
+
+  // 注意：预取去重表是**会话级**的（同一首不重复解析），所以每个用例用独立 song id，
+  // 否则前一个用例预取过的 id 会把后一个用例的预取直接短路掉。
+
+  it('曲末推进不依赖定时器：didJustFinish 后同一 tick 完成 replace + play（不留 ENDED 窗口）', async () => {
+    const first = song('b1');
+    // 下一首自带直链（收藏/历史/换源后的常态）→ 曲末可在同一同步 tick 换源
+    const second = song('b2', 'https://cdn.example.com/b2.mp3');
+    seedQueue([first, second]);
+
+    await playSong(first);
+    const p = audioMocks.players[0];
+
+    emitStatus(status(FINISH));
+
+    // 不 await 任何 timer / 微任务：store 与播放器都必须已经切到第二首。
+    // 旧实现是 setTimeout(…, 0)，本断言就是「不再多一跳」的回归门。
+    expect(usePlayerStore.getState().currentSong?.id).toBe('b2');
+    expect(p.uri).toBe('https://cdn.example.com/b2.mp3');
+    expect(p.playing).toBe(true);
+    // 单播放器复用：不新建实例（不出现两首同播）
+    expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(1);
+    expect(audioMocks.players.filter(x => x.playing).length).toBe(1);
+  });
+
+  it('预取交接槽命中 → 曲末同一 tick 换源（不留 ENDED 窗口）', async () => {
+    const first = song('c1');
+    const second = song('c2'); // 无自带 url：只能靠预取拿到直链
+    seedQueue([first, second]);
+
+    await playSong(first);
+    // 等起播时那次预取把直链写进交接槽（同一份也写缓存）
+    await vi.waitFor(() =>
+      expect(audioMocks.storageSet).toHaveBeenCalledWith(
+        second,
+        expect.objectContaining({ url: 'https://example.com/c2.mp3' })
+      )
+    );
+    const p = audioMocks.players[0];
+
+    emitStatus(status(FINISH));
+
+    expect(usePlayerStore.getState().currentSong?.id).toBe('c2');
+    expect(p.uri).toBe('https://example.com/c2.mp3');
+    expect(p.playing).toBe(true);
+    expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(1);
+  });
+
+  it('同步换源路径下曲末事件连发也只前进一首（重入守卫）', async () => {
+    const first = song('d1');
+    const second = song('d2', 'https://cdn.example.com/d2.mp3');
+    const third = song('d3', 'https://cdn.example.com/d3.mp3');
+    seedQueue([first, second, third]);
+
+    await playSong(first);
+    emitStatus(status(FINISH));
+    emitStatus(status(FINISH)); // 同一 ENDED 态重复上报
+    await flush();
+
+    expect(usePlayerStore.getState().currentSong?.id).toBe('d2');
+    expect(audioMocks.players[0].uri).toBe('https://cdn.example.com/d2.mp3');
+  });
+
+  it('队列播完（store 已无下一首）→ 停播并同步 store 为暂停', async () => {
+    const first = song('e1');
+    seedQueue([first]);
+    await playSong(first);
+    const p = audioMocks.players[0];
+    const uriBefore = p.uri;
+
+    // 队列被清空（用户清空队列 / 条目被移除）：曲末无下一首 → 收尾
+    usePlayerStore.setState({ queue: [], currentIndex: -1 });
+    emitStatus(status(FINISH));
+    await flush();
+
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+    expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(1);
+    expect(p.uri).toBe(uriBefore);
+    expect(
+      useLogsStore.getState().entries.some(e => e.message.includes('[推进]') && e.message.includes('song-e1'))
+    ).toBe(true);
+  });
+
+  it('单曲循环：曲末重播当前首（不换歌、不重建播放器）', async () => {
+    const first = song('f1');
+    const second = song('f2', 'https://cdn.example.com/f2.mp3');
+    seedQueue([first, second], 0, '单曲循环');
+
+    await playSong(first);
+    const p = audioMocks.players[0];
+    emitStatus(status(FINISH));
+    await flush();
+
+    expect(usePlayerStore.getState().currentSong?.id).toBe('f1');
+    expect(p.uri).toBe('https://example.com/f1.mp3');
+    expect(p.playing).toBe(true);
+    expect(audioMocks.createAudioPlayer).toHaveBeenCalledTimes(1);
+  });
+
+  it('随机播放：曲末推进到 core getNextSongIndex 选出的下一首（不重复当前首）', async () => {
+    const queue = [
+      song('g1'),
+      song('g2', 'https://cdn.example.com/g2.mp3'),
+      song('g3', 'https://cdn.example.com/g3.mp3'),
+    ];
+    seedQueue(queue, 0, '随机播放');
+
+    await playSong(queue[0]);
+    emitStatus(status(FINISH));
+    await flush();
+
+    const id = usePlayerStore.getState().currentSong?.id;
+    expect(id === 'g2' || id === 'g3').toBe(true);
+    expect(audioMocks.players[0].uri).toBe(`https://cdn.example.com/${id}.mp3`);
+  });
+
+  it('列表循环：末首曲末回卷到队首（队列不算播完）', async () => {
+    const first = song('h1', 'https://cdn.example.com/h1.mp3');
+    const second = song('h2', 'https://cdn.example.com/h2.mp3');
+    seedQueue([first, second], 1);
+
+    await playSong(second);
+    emitStatus(status(FINISH));
+    await flush();
+
+    expect(usePlayerStore.getState().currentSong?.id).toBe('h1');
+    expect(audioMocks.players[0].uri).toBe('https://cdn.example.com/h1.mp3');
+  });
+
+  it('预取提前：剩余 ≤15s 触发下一首预取，重复状态更新不重复解析', async () => {
+    const first = song('i1');
+    const second = song('i2');
+    seedQueue([first]);
+    await playSong(first); // 队列只有一首：起播时的预取提前返回
+    await flush();
+    audioMocks.resolvePlayableSongRouted.mockClear();
+
+    // 播放中队列补上下一首（列表懒加载常态）
+    usePlayerStore.setState({ queue: [first, second], currentIndex: 0 });
+
+    // 剩余 90s：不触发预取
+    emitStatus(status({ isLoaded: true, playing: true, currentTime: 10, duration: 100 }));
+    await flush();
+    expect(audioMocks.resolvePlayableSongRouted).not.toHaveBeenCalled();
+
+    // 剩余 10s：触发一次
+    emitStatus(status({ isLoaded: true, playing: true, currentTime: 90, duration: 100 }));
+    await vi.waitFor(() => expect(audioMocks.resolvePlayableSongRouted).toHaveBeenCalledWith(second));
+    expect(audioMocks.resolvePlayableSongRouted).toHaveBeenCalledTimes(1);
+
+    // 状态更新 250ms 一次：同一首不得重复解析
+    emitStatus(status({ isLoaded: true, playing: true, currentTime: 91, duration: 100 }));
+    emitStatus(status({ isLoaded: true, playing: true, currentTime: 92, duration: 100 }));
+    await flush();
+    expect(audioMocks.resolvePlayableSongRouted).toHaveBeenCalledTimes(1);
+  });
+
+  it('起播时已成功预取的下一首，剩余 ≤15s 不再重复解析（成功即记入去重表）', async () => {
+    const first = song('j1');
+    const second = song('j2');
+    seedQueue([first, second]);
+
+    await playSong(first);
+    await vi.waitFor(() =>
+      expect(audioMocks.storageSet).toHaveBeenCalledWith(second, expect.anything())
+    );
+    const resolvedSecond = () =>
+      audioMocks.resolvePlayableSongRouted.mock.calls.filter(c => (c[0] as Song).id === 'j2').length;
+    expect(resolvedSecond()).toBe(1);
+
+    emitStatus(status({ isLoaded: true, playing: true, currentTime: 90, duration: 100 }));
+    await flush();
+
+    expect(resolvedSecond()).toBe(1);
+  });
+
+  it('推进后立即刷新锁屏元数据与通知（显示当前这首）', async () => {
+    const first = song('k1');
+    const second = song('k2', 'https://cdn.example.com/k2.mp3');
+    seedQueue([first, second]);
+
+    await playSong(first);
+    vi.mocked(updateNotification).mockClear();
+    audioMocks.players[0].lockScreenMeta.length = 0;
+
+    emitStatus(status(FINISH));
+
+    expect(audioMocks.players[0].lockScreenMeta.at(-1)?.title).toBe('song-k2');
+    expect(vi.mocked(updateNotification)).toHaveBeenCalledWith(second, true);
+  });
+
+  it('曲末推进留下常驻诊断日志（回答后台 didJustFinish 到底有没有到）', async () => {
+    const first = song('l1');
+    const second = song('l2', 'https://cdn.example.com/l2.mp3');
+    seedQueue([first, second]);
+
+    await playSong(first);
+    useLogsStore.setState({ entries: [] });
+
+    emitStatus(status(FINISH));
+
+    const messages = useLogsStore.getState().entries.map(e => e.message);
+    expect(messages.some(m => m.includes('[推进]') && m.includes('song-l1') && m.includes('song-l2'))).toBe(true);
+  });
+});

@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, songUsesSongidLyrics, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, pickNextSongAfterFailure, getFailureStreak, OFFLINE_COPY } from '@mplayer/core';
+import { getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, songUsesSongidLyrics, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, pickNextSongAfterFailure, getFailureStreak, identityKey, OFFLINE_COPY } from '@mplayer/core';
 import type { PlayableResource, Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -51,6 +51,15 @@ const URL_PROBE_FREE_MS = 10 * 60 * 1000;
 // 后台预取跳过窗口（<5min 已有直链不重解析）：预取的目的是切歌秒开，
 // 条目还新鲜时重解析只会重复 tier3 全链请求、与前台播放抢手机带宽。
 const PREFETCH_SKIP_FRESH_MS = 5 * 60 * 1000;
+// 预取提前量（#405）：剩余播放时间 ≤ 15s 时补一次「下一首」预取。
+// 旧实现只有「播放成功后」一发：那一发没命中（tier3 未开 / 网络抖动）时，
+// 曲末才当场解析，ExoPlayer 停在 STATE_ENDED 的窗口被拉到秒级——本票要治的窗口。
+const PREFETCH_LEAD_SEC = 15;
+// 预取失败后的冷却（#405）：状态更新每 250ms 一次，失败若不冷却会在曲末前
+// 反复重烧整条解析链；成功后由「成功窗口」去重（与新鲜缓存窗口同量级）。
+const PREFETCH_FAIL_COOLDOWN_MS = 30 * 1000;
+// 曲末同步换源交接槽的直链有效期：CDN 签名寿命 ~15-30min，取 5min 与预取新鲜窗口同量级
+const IMMEDIATE_SOURCE_TTL_MS = 5 * 60 * 1000;
 
 // ── 单播放器复用的当前播放上下文 ──────────────────────────────
 // listener 只在播放器创建时挂一次（replace 换源复用同一 ExoPlayer），
@@ -70,6 +79,26 @@ let playbackFinished = false;
 let playbackFailed = false;
 let playbackReadyLogged = false;
 
+// ── #405 后台曲末推进的应用层机件 ───────────────────────────────
+// 背景：曲末推进完全在 JS（didJustFinish → store.next() → playSong），而通知栏
+// 上/下一首也是 expo-notifications 的 JS 回调（expo-audio 原生侧主动移除了
+// prev/next 媒体会话命令）。所以「后台能自动接下一首」等价于「JS 在曲末那一刻必须活着」。
+// 怀疑的真机制（本票核心假设，见 advanceOnFinish）：ExoPlayer 停在 STATE_ENDED
+// → expo-audio 的前台服务/媒体会话掉线 → 进程失去前台优先级 → 被冻结。
+
+/** 曲末同步换源交接槽：预取拿到直链时同步放一份，曲末可不 await 就换源。键 = core 身份键。 */
+const immediateSources = new Map<string, { url: string; nonFull: boolean; ts: number }>();
+/**
+ * 曲末推进守卫：从「已决定推进」到「新源上报常规状态」之间为 true。
+ * 这期间到达的状态都属于已在 ENDED 的旧源，不能当新歌的状态用
+ * （否则会把旧源的「就绪」算到新歌头上、或一次曲末连跳多首）。
+ */
+let finishAdvancePending = false;
+/** 预取在飞去重（#405）：同一首不并发解析两次。 */
+const prefetchInFlight = new Set<string>();
+/** 预取结果记忆（#405）：成功窗口内不重解析 / 失败后冷却，避免曲末前反复烧解析链。 */
+const prefetchLastResult = new Map<string, { ok: boolean; at: number }>();
+
 export async function initAudio(): Promise<void> {
   await setAudioModeAsync({
     playsInSilentMode: true,
@@ -87,6 +116,8 @@ export async function initAudio(): Promise<void> {
  * 旧播放器可能仍在出声（换源/切歌时表现为两首歌同时播放）。
  */
 async function stopAllPlayers(): Promise<void> {
+  // 播放器即将被销毁：曲末推进守卫随之作废（旧源的任何 ENDED 上报都已无意义）
+  finishAdvancePending = false;
   for (const p of livePlayers) {
     try { await p.pause(); } catch {}
     try { p.remove(); } catch {}
@@ -107,6 +138,16 @@ function attachPlaybackListener(p: Player): void {
     if (!ctx || ctx.playId !== currentPlayId) return;
     const { song, t0, fresh, retryCount } = ctx;
     const log = useLogsStore.getState();
+
+    // 曲末推进守卫（#405）：已决定推进、新源还没上报常规状态时，到达的状态都属于
+    // 已在 ENDED 的旧源（原生 didJustFinish 是 ENDED 边沿，但周期状态上报仍可能
+    // 在边界情况下重复送到 JS）：
+    // - didJustFinish / playbackState='ended' → 吞掉，否则一次曲末会连跳多首；
+    // - 其余（新源的 buffering/ready/error）→ 视为新源已接管，解除守卫并正常处理。
+    if (finishAdvancePending) {
+      if (status.didJustFinish || status.playbackState === 'ended') return;
+      finishAdvancePending = false;
+    }
 
     if (!status.isLoaded) {
       if (status.error && !playbackFailed) {
@@ -156,19 +197,61 @@ function attachPlaybackListener(p: Player): void {
     s.setCurrentTime(status.currentTime);
     s.setDuration(status.duration || 0);
 
+    // 预取提前（#405）：剩余播放时间 ≤ 15s 时补一次「下一首」预取，给曲末推进留出
+    // 解析时间，让 ExoPlayer 不至于在 ENDED 上等一整条解析链。
+    // 重复触发由 prefetchNextSong 内部去重（在飞 / 成功窗口 / 失败冷却）兜住。
+    if (status.duration > 0) {
+      const remaining = status.duration - status.currentTime;
+      if (remaining > 0 && remaining <= PREFETCH_LEAD_SEC) prefetchNextSong();
+    }
+
     if (status.didJustFinish && !playbackFinished) {
       playbackFinished = true;
-      const nextSong = s.next();
-      if (nextSong) setTimeout(() => {
-        if (ctx.playId === currentPlayId) void playSong(nextSong, 0, false);
-      }, 0);
-      else {
-        // 队列播完：同步 store 状态（否则 UI 一直显示"播放中"且 togglePlay 失效）
-        void stopAllPlayers();
-        usePlayerStore.getState().pause();
-      }
+      advanceOnFinish(ctx);
     }
   });
+}
+
+/**
+ * 曲末推进（#405）：**同步**换到下一首，绝不让播放器留在 STATE_ENDED。
+ *
+ * 旧实现在这里是 `setTimeout(() => playSong(next, 0, false), 0)`：多一跳就多一个
+ * 「JS 被挂起 / 进程被降权」时整段丢掉的点，而这段时间 ExoPlayer 一直停在
+ * STATE_ENDED。怀疑的真机制（本票核心假设，最终判定依赖真机「30 秒判别法」）：
+ *   ExoPlayer 进 STATE_ENDED → 原生 intendedPlayingState=false
+ *   （node_modules/expo-audio/android/src/main/java/expo/modules/audio/BaseAudioPlayer.kt:100-107）
+ *   → Media3 会话不再需要前台服务 → expo-audio 的 AudioControlsService 撤下前台提升
+ *   （…/service/AudioControlsService.kt:319-321 onUpdateNotification、:422 stopForeground）
+ *   → 进程失去 FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK 优先级 → 被系统冻结
+ *   → 曲末推进（完全在 JS）永远不发生，表现为「播完即停」。
+ * 所以「尽快离开 ENDED」本身就是要修的东西：下一首直链**已经在手**时
+ * （预取交接槽 / 歌自带 url），在**同一同步 tick** 完成 replace+play。
+ *
+ * 队列播完（store 给不出下一首）→ 收尾：停播 + store 同步 paused。
+ * 失败/跳歌处置**全部**委托 core `shared/skipGuard`（listener 的加载失败与
+ * playSong catch 的解析失败仍汇到 handleTerminalPlaybackFailure，本函数不参与决策）。
+ */
+function advanceOnFinish(ctx: PlaybackCtx): void {
+  const log = useLogsStore.getState();
+  const nextSong = usePlayerStore.getState().next();
+  // 常驻诊断日志（#405）：回答「后台 didJustFinish 到底有没有到、推进走到哪一步」，
+  // 不打印 URL/凭据等敏感信息。
+  if (!nextSong) {
+    log.addLog('info', `[推进] 曲末: 《${ctx.song.name}》→ 队列播放结束，停止播放`);
+    finishAdvancePending = false;
+    void stopAllPlayers();
+    usePlayerStore.getState().pause();
+    return;
+  }
+  // 同步换源可用性：只有**同步**拿得到直链才走「同 tick replace+play」
+  const immediate = takeImmediateSource(nextSong);
+  log.addLog(
+    'info',
+    `[推进] 曲末: 《${ctx.song.name}》→ 《${nextSong.name}》${immediate ? '（同步换源，无 ENDED 停留）' : '（需解析，先离开 ENDED）'}`,
+  );
+  // 守卫必须在 playSong 之前置位：同步换源路径会立刻换源并可能立刻收到状态上报
+  finishAdvancePending = true;
+  void playSong(nextSong, 0, false, immediate ?? undefined);
 }
 
 /**
@@ -344,8 +427,45 @@ export async function resolvePlayableUrlMobile(song: Song): Promise<{ url: strin
  */
 
 /**
- * 切歌预取：播放成功后，后台并行解析队列下一首的播放 URL，
- * 结果写入 URL 持久化缓存——用户切歌时缓存命中，播放器直连 CDN 秒开。
+ * 曲末同步换源交接槽写入（#405）：预取拿到直链时同步放一份。
+ * 与 URL 缓存写的是同一个直链（不新造缓存），但**同步可读**——
+ * 曲末推进因此可以不 await 任何东西就完成 replace+play。
+ */
+function putImmediateSource(song: Song, url: string, nonFull: boolean): void {
+  if (!song?.id || !url?.startsWith('http')) return;
+  // 手动切歌不走 takeImmediateSource（交接槽只在曲末推进时消费），
+  // 顺手清理超期条目，避免长会话里堆着一批用不上的签名直链。
+  if (immediateSources.size > 32) {
+    const now = Date.now();
+    for (const [k, v] of immediateSources) {
+      if (now - v.ts > IMMEDIATE_SOURCE_TTL_MS) immediateSources.delete(k);
+    }
+  }
+  immediateSources.set(identityKey(song), { url, nonFull, ts: Date.now() });
+}
+
+/**
+ * 取走曲末同步换源用的直链（取走即删，避免复用过期签名 URL；超期按未命中）。
+ * 优先级与正常播放一致：歌自带 url（收藏/历史/本地）→ 预取交接槽。
+ */
+function takeImmediateSource(song: Song): { url: string; nonFull: boolean } | null {
+  if (song.url?.startsWith('file://') || song.url?.startsWith('http')) {
+    return { url: song.url, nonFull: false };
+  }
+  if (!song.id) return null;
+  const key = identityKey(song);
+  const hit = immediateSources.get(key);
+  immediateSources.delete(key);
+  if (!hit) return null;
+  if (Date.now() - hit.ts > IMMEDIATE_SOURCE_TTL_MS) return null;
+  return { url: hit.url, nonFull: hit.nonFull };
+}
+
+/**
+ * 切歌预取：播放成功后 + 曲末前剩余 ≤15s（#405）后台并行解析队列下一首的播放 URL，
+ * 结果写入 URL 持久化缓存与同步交接槽——用户切歌/曲末推进时缓存命中，
+ * 播放器直连 CDN 秒开（曲末不留在 STATE_ENDED）。
+ * 同一首不重复解析：在飞去重 + 成功窗口 + 失败冷却（见下方 prefetchLastResult）。
  */
 function prefetchNextSong(): void {
   try {
@@ -362,13 +482,33 @@ function prefetchNextSong(): void {
     // 跳过重解析（VIP 歌重解析要整条 tier3 链，白烧带宽还拖慢前台）。
     const age = urlAgeMs(next);
     if (age != null && age < PREFETCH_SKIP_FRESH_MS) return;
+    // #405 去重：曲末前的状态更新每 250ms 一次，同一首只能解析一次
+    // （成功 → 窗口内不再解析；失败 → 冷却后才有资格重试）。
+    const key = identityKey(next);
+    if (prefetchInFlight.has(key)) return;
+    const last = prefetchLastResult.get(key);
+    if (last) {
+      const since = Date.now() - last.at;
+      if (last.ok ? since < PREFETCH_SKIP_FRESH_MS : since < PREFETCH_FAIL_COOLDOWN_MS) return;
+    }
+    prefetchInFlight.add(key);
     void (async () => {
-      const resolved = await resolvePlayableUrlMobile(next);
-      if (resolved.url?.startsWith('http') && next.id) {
-        void setCachedResource(next, { url: resolved.url, nonFull: resolved.nonFull, ts: Date.now() });
+      try {
+        const resolved = await resolvePlayableUrlMobile(next);
+        if (resolved.url?.startsWith('http') && next.id) {
+          putImmediateSource(next, resolved.url, resolved.nonFull);
+          await setCachedResource(next, { url: resolved.url, nonFull: resolved.nonFull, ts: Date.now() });
+          prefetchLastResult.set(key, { ok: true, at: Date.now() });
+        } else {
+          prefetchLastResult.set(key, { ok: false, at: Date.now() });
+        }
+        if (resolved.lrc) void musicApi.getLyrics(resolved.lrc).catch(() => {});
+      } catch {
+        prefetchLastResult.set(key, { ok: false, at: Date.now() });
+      } finally {
+        prefetchInFlight.delete(key);
       }
-      if (resolved.lrc) void musicApi.getLyrics(resolved.lrc).catch(() => {});
-    })().catch(() => {});
+    })();
   } catch {
     // 预取失败不影响播放
   }
@@ -379,37 +519,105 @@ function prefetchNextSong(): void {
  * @param retryCount 级联跳歌计数（防止全部失效时无限循环）
  * @param fresh 为 true 时绕过原有 url，重新解析全新可播 URL
  */
-export async function playSong(song: Song, retryCount = 0, fresh = false): Promise<void> {
+export async function playSong(
+  song: Song,
+  retryCount = 0,
+  fresh = false,
+  immediate?: { url: string; nonFull: boolean },
+): Promise<void> {
   const playId = ++currentPlayId;
   const log = useLogsStore.getState();
   preparingPlayback = true;
   const t0 = Date.now();
   // 本次播放解析结果是否为试听版（驱动 valid/preview 徽标回写）
-  let playbackNonFull = false;
-  log.addLog('info', `[耗时] 播放准备开始: 《${song.name}》 url=${song.url ? '有' : '无'} fresh=${fresh}`);
+  let playbackNonFull = !!immediate?.nonFull;
+  log.addLog('info', `[耗时] 播放准备开始: 《${song.name}》 url=${song.url ? '有' : '无'} fresh=${fresh}${immediate ? ' 同步起播=是' : ''}`);
   usePlayerStore.getState().setPreparing(true);
 
-  // #385：离线快速失败——判定离线就直接停并告知，**不进解析链**
-  //（省掉同曲 fresh 重试 + 直连 3s 墙 + tier3 6s；与桌面 playerStore 同口径，文案同源）。
-  if (song.sourceType !== 'local' && (await isOffline())) {
-    await stopAllPlayers();
-    usePlayerStore.getState().pause();
-    usePlayerStore.getState().setPreparing(false);
-    log.addLog('warn', `《${song.name}》当前离线，已暂停播放`);
-    log.reportError(OFFLINE_COPY);
-    return;
-  }
-
-  // 单例播放器：更新当前播放上下文（listener 从 ctx 读取）并复位去重标志
+  // 单例播放器：更新当前播放上下文（listener 从 ctx 读取）并复位去重标志。
+  // **必须在任何 await 之前**：曲末同步起播（#405）要求「换源 + ctx 更新」同 tick 落地，
+  // 否则旧源随后上报的状态会被算到新歌头上。
   playbackCtx = { song, playId, t0, fresh, retryCount };
   playbackFinished = false;
   playbackFailed = false;
   playbackReadyLogged = false;
 
+  /**
+   * 把音频源交给唯一播放器并起播（**同步**）。
+   * 单播放器复用（replace 换源）：永远只有一个 ExoPlayer 实例，
+   * 切歌/重试不存在「旧播放器停止 vs 新播放器启动」的叠加窗口
+   * （多个实例切换时旧实例停止与新实例出声短暂重叠 = 两首歌同播）。
+   */
+  const startSourceOnPlayer = (audioUrl: string): void => {
+    // 播放器请求头：CDN 可能校验 UA/Referer。Referer 按源映射官方域名——
+    // 网易云 CDN（music.126.net）宽松不校验，酷狗/QQ 等 CDN 防盗链校验
+    // Referer 域名，带错 Referer（如 API 域名）会 403 → 播放失败跳下一首
+    // （图片 CDN 校验宽松所以封面正常、音频失败）。UA 保持浏览器特征。
+    // UA 与按源 Referer 映射见 core utils/sourceReferer（musicApi/audioProbe 同一份）
+    const source = {
+      uri: audioUrl,
+      headers: {
+        'User-Agent': BROWSER_UA,
+        'Referer': refererForSourceKey(song.sourceType as string) || '',
+      },
+    };
+    let active = player;
+    if (active) {
+      active.replace(source);
+    } else {
+      active = createAudioPlayer(source, { updateInterval: 250 });
+      livePlayers.add(active);
+      player = active;
+      attachPlaybackListener(active);
+      if (!isExpoGo) {
+        active.setActiveForLockScreen(true, {
+          title: song.name,
+          artist: song.artist,
+          albumTitle: song.album,
+          artworkUrl: song.cover || undefined,
+        });
+      }
+    }
+    // 换源后**立即**更新锁屏元数据（replace 复用同一 player，标题要跟着换）：
+    // 曲末推进后锁屏/通知栏必须显示的是当前这首（#405）。
+    if (!isExpoGo) {
+      try {
+        active.updateLockScreenMetadata({
+          title: song.name,
+          artist: song.artist,
+          albumTitle: song.album,
+          artworkUrl: song.cover || undefined,
+        });
+      } catch {}
+    }
+    active.play();
+  };
+
   const startPlayback = async (): Promise<void> => {
     let audioUrl: string;
     let lrcUrl = song.lrc || '';
-    if (fresh) {
+    if (!immediate?.url) {
+      // #385：离线快速失败——判定离线就直接停并告知，**不进解析链**
+      //（省掉同曲 fresh 重试 + 直连 3s 墙 + tier3 6s；与桌面 playerStore 同口径，文案同源）。
+      // 曲末同步起播（immediate）不走这里：直链已在手，不会再发上游请求，
+      // 而 NetInfo 查询本身可能耗时——正是「停在 ENDED」的窗口来源之一。
+      if (song.sourceType !== 'local' && (await isOffline())) {
+        await stopAllPlayers();
+        usePlayerStore.getState().pause();
+        usePlayerStore.getState().setPreparing(false);
+        log.addLog('warn', `《${song.name}》当前离线，已暂停播放`);
+        log.reportError(OFFLINE_COPY);
+        return;
+      }
+    }
+    if (immediate?.url) {
+      // 曲末同步起播（#405）：直链已在手，不 await 任何东西就换源，
+      // ExoPlayer 从 ENDED 直接进新源（下方 startSourceOnPlayer 是纯同步调用）。
+      // 直链里没有歌词：缺词时后台并行补（fire-and-forget，不引入 await 跳跃）。
+      audioUrl = immediate.url;
+      playbackNonFull = immediate.nonFull;
+      if (!song.lrc) void fetchLrcInBackground(song);
+    } else if (fresh) {
       // 本地文件不会过期，不参与 fresh 重试（调用方已过滤 local 源）。
       // fresh 语义：先遗忘预取缓存里刚失败的直链，再重走完整路由解析链
       //（直连 → tier3）拿全新 URL；重试仍失败再退回同一条路由链兜底一次
@@ -491,51 +699,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       );
     }
 
-    // 播放器请求头：CDN 可能校验 UA/Referer。Referer 按源映射官方域名——
-    // 网易云 CDN（music.126.net）宽松不校验，酷狗/QQ 等 CDN 防盗链校验
-    // Referer 域名，带错 Referer（如 API 域名）会 403 → 播放失败跳下一首
-    // （图片 CDN 校验宽松所以封面正常、音频失败）。UA 保持浏览器特征。
-    // UA 与按源 Referer 映射见 core utils/sourceReferer（musicApi/audioProbe 同一份）
-    const playerHeaders: Record<string, string> = {
-      'User-Agent': BROWSER_UA,
-      'Referer': (() => {
-        const official = refererForSourceKey(song.sourceType as string);
-        return official || '';
-      })(),
-    };
-
-    // 单播放器复用（replace 换源）：永远只有一个 ExoPlayer 实例，
-    // 切歌/重试不存在「旧播放器停止 vs 新播放器启动」的叠加窗口
-    // （多个实例切换时旧实例停止与新实例出声短暂重叠 = 两首歌同播）。
-    const source = { uri: audioUrl, headers: playerHeaders };
-    if (player) {
-      player.replace(source);
-    } else {
-      const nextPlayer = createAudioPlayer(source, { updateInterval: 250 });
-      livePlayers.add(nextPlayer);
-      player = nextPlayer;
-      attachPlaybackListener(nextPlayer);
-      if (!isExpoGo) {
-        nextPlayer.setActiveForLockScreen(true, {
-          title: song.name,
-          artist: song.artist,
-          albumTitle: song.album,
-          artworkUrl: song.cover || undefined,
-        });
-      }
-    }
-    // 换源后更新锁屏元数据（replace 复用同一 player，标题要跟着换）
-    if (!isExpoGo && player) {
-      try {
-        player.updateLockScreenMetadata({
-          title: song.name,
-          artist: song.artist,
-          albumTitle: song.album,
-          artworkUrl: song.cover || undefined,
-        });
-      } catch {}
-    }
-    player.play();
+    // 交给唯一播放器并起播（同步；曲末同步起播路径同样走这里 → 单播放器复用不变）
+    startSourceOnPlayer(audioUrl);
 
     // 播放资源值落缓存（歌曲资源语义层，12h TTL）：下次(含重启后)直接命中,秒起;无 id 的歌不写。
     // nonFull 原样写入——试听版不得被收窄成"完整版"
