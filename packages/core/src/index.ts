@@ -14,6 +14,7 @@ export { groupIntoSongGroups } from './utils/groupIntoSongGroups.js';
 export { calculateSimilarity, findBestMatch, isExactMatch, findExactMatch } from './utils/songMatcher.js';
 export { getNextSongIndex, getPrevSongIndex } from './utils/queue.js';
 export { isLegacyDeadUrl, clearLegacyDeadResources } from './utils/legacyUrl.js';
+export { normalizePublishTime } from './utils/publishTime.js';
 export { pickRandomBatch } from './utils/recommendBatch.js';
 export type { RandomBatchResult } from './utils/recommendBatch.js';
 export { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from './utils/lyricsParser.js';
@@ -148,6 +149,8 @@ export {
   pickToplistGroup,
   pickToplistSongs,
   getToplistSongs,
+  getAlbumDetailRouted,
+  getArtistInfoRouted,
 } from './shared/sourceRouter.js';
 // 跳歌护栏（#385）：终局失败后的决策单点 + 会话内连续计数/坏歌记忆。
 export {
@@ -168,6 +171,7 @@ export type {
   ToplistGroup,
   ContentCache,
   ContentMethod,
+  AlbumDetailOutcome,
   Tier3Resolver,
   Tier3Resolution,
   ChartKind,
