@@ -97,7 +97,7 @@ export default function HotlistPage() {
           }}
         />
         {loading ? (
-          <SongListSkeleton />
+          <SongListSkeleton showRank />
         ) : (
           <FlatList
             data={songs}
