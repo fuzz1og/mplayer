@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight, SECTION_TAIL_PADDING } from '../../components/chromeMetrics';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { gridCardWidth } from '../../components/gridMetrics';
+import { GRID_CARD } from '../../components/gridCardMetrics';
 
 import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
 import { cacheManager, getDirectClient, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
@@ -16,7 +17,7 @@ import { RECOMMEND_BATCH_SIZE, RECOMMEND_GRID_COLS } from '../../components/reco
 import ScalePress, { pressScale } from '../../components/ScalePress';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
-import {radius, spacing, textVariants} from '../../theme/tokens';
+import { spacing, textVariants } from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -138,6 +139,10 @@ export default function RecommendPage() {
             {shownSongs.length === 0 ? (
               <Text style={styles.emptyText}>暂无推荐歌曲</Text>
             ) : (
+              // 这一页**不是同构歌曲列表**（同屏还有猜你喜欢的网格卡片），
+              // 所以不套 components/SongList（#411 的范围是「同构歌曲长列表」）。
+              // 行组件只拿到 song + queueSongs，没有回调 → memo 天然生效；
+              // key 带 index 在这里也无害：本列表只整体替换（换一批），不存在单条删除。
               shownSongs.map((s, i) => (
                 <SongRow key={`${s.id}-${i}`} song={s} queueSongs={shownSongs} />
               ))
@@ -219,7 +224,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing[3],
   },
-  gridCover: { borderRadius: radius.md, backgroundColor: colors.bgSurface },
+  // 网格卡片度量与 RecommendSkeleton 同源（#416）
+  gridCover: { borderRadius: GRID_CARD.coverRadius, backgroundColor: colors.bgSurface },
   gridCoverFallback: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -229,12 +235,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...textVariants.footnote,
     fontWeight: '500',
     color: colors.textPrimary,
-    marginTop: spacing[2],
+    marginTop: GRID_CARD.nameGap,
   },
   gridMeta: {
     ...textVariants.micro,
     fontWeight: '400',
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: GRID_CARD.metaGap,
   },
 });

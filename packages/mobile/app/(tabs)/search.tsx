@@ -5,20 +5,24 @@ import {
   FlatList,
   StyleSheet,
   Image,
-  Dimensions,
   Animated,
 } from 'react-native';
 import ScalePress from '../../components/ScalePress';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CircleAlert, Music2, User } from 'lucide-react-native';
 import { getDirectClient } from '@mplayer/core';
+import type { SongGroup } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
 import { usePlayerStore } from '../../stores/playerStore';
-import SongRow from '../../components/SongRow';
+import SongList from '../../components/SongList';
+import type { SongListRow } from '../../components/SongList';
 import SongListSkeleton from '../../components/SongListSkeleton';
+import CoverGridSkeleton from '../../components/CoverGridSkeleton';
+import { GRID_CARD } from '../../components/gridCardMetrics';
+import { GRID_GAP, gridCardWidth } from '../../components/gridMetrics';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
-import {radius, spacing, textVariants} from '../../theme/tokens';
+import { radius, spacing, textVariants } from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
@@ -31,7 +35,6 @@ const SEARCH_TABS: { key: SearchTab; label: string }[] = [
   { key: 'artists', label: '歌手' },
 ];
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type SearchTab = 'songs' | 'artists';
 
@@ -112,7 +115,7 @@ export default function SearchPage() {
       {activeTab === 'songs' ? (
         // 渐进搜索:有结果就显示(即使还在加载),骨架屏只在无结果时出现
         loading && results.length === 0 ? (
-          <SongListSkeleton />
+          <SongListSkeleton showSource />
         ) : error && results.length === 0 ? (
           <View style={styles.emptyContainer}>
             <CircleAlert size={48} color={colors.danger} />
@@ -132,10 +135,9 @@ export default function SearchPage() {
           </View>
         )
       ) : artistsLoading ? (
-        // 歌手加载也用骨架屏
-        <View style={{ paddingTop: 8 }}>
-          <SongListSkeleton rows={6} />
-        </View>
+        // 歌手加载：**必须用网格骨架**（真实结果是 3 列圆头像 + 居中名字）。
+        // 此前这里是 SongListSkeleton——歌手页加载出「歌曲行」形状，结构完全不匹配（#416）。
+        <CoverGridSkeleton columns={3} variant="artist" />
       ) : artistsError ? (
         <View style={styles.emptyContainer}>
           <CircleAlert size={48} color={colors.danger} />
@@ -147,6 +149,7 @@ export default function SearchPage() {
           data={artists}
           keyExtractor={(item) => String(item.id)}
           numColumns={3}
+          columnWrapperStyle={styles.artistRow}
           contentContainerStyle={[
             styles.artistGrid,
             { paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING },
@@ -178,40 +181,61 @@ export default function SearchPage() {
 }
 
 interface ResultsListProps {
-  results: import('@mplayer/core').SongGroup[];
+  results: SongGroup[];
   loadMore: () => Promise<void>;
   loadingMore: boolean;
   hasMore: boolean;
 }
 
 /**
+ * **拍平**搜索结果（#411）：把「组」拆成「组头行 + 歌曲行」。
+ *
+ * 此前把「组」当 cell、组内 `group.songs.map()` 全量渲染——一个 30 首的组就是一次性
+ * 挂 30 行，虚拟化完全绕过去了。拍平后才是逐行虚拟化。
+ *
+ * 两种视图只差组头的内容与档位（多源 = 歌名 — 歌手 +「N 个版本」；单源 = 源名 +「N 首」），
+ * 所以共用一个函数。key 用 `组键:歌曲 id`（歌曲 id 含源前缀，组内不会重），**不含 index**。
+ */
+function flattenSongGroups(results: SongGroup[], mode: 'multi' | 'single'): SongListRow[] {
+  const flat: SongListRow[] = [];
+  for (const group of results) {
+    const hasHeader = mode === 'multi' ? Boolean(group.name || group.artist) : Boolean(group.name);
+    if (hasHeader) {
+      flat.push({
+        kind: 'groupHeader',
+        key: `${group.key}:header`,
+        title: group.name,
+        subtitle: mode === 'multi' ? group.artist || undefined : undefined,
+        note: group.songs.length > 1 ? `${group.songs.length} ${mode === 'multi' ? '个版本' : '首'}` : undefined,
+        quiet: mode === 'single',
+      });
+    }
+    for (const song of group.songs) {
+      flat.push({
+        kind: 'song',
+        key: `${group.key}:${song.id}`,
+        song,
+        showSource: true,
+        queueSongs: group.songs,
+      });
+    }
+  }
+  return flat;
+}
+
+/**
  * 多源搜索(全部源)结果:按歌分组,标题 = 歌名 — 歌手,组内为各源版本
  */
 function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: ResultsListProps) {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
+
+  const rows = useMemo(() => flattenSongGroups(results, 'multi'), [results]);
+
   return (
-    <FlatList
-      key="song-results"
-      data={results}
-      keyExtractor={(item) => item.key}
+    <SongList
+      rows={rows}
       contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING }}
-      renderItem={({ item: group }) => (
-        <View style={styles.groupSection}>
-          {(group.name || group.artist) ? (
-            <Text style={styles.groupHeader}>
-              {group.name}
-              {group.artist ? <Text style={styles.groupArtist}> — {group.artist}</Text> : null}
-              {group.songs.length > 1 && <Text style={styles.groupCount}>· {group.songs.length} 个版本</Text>}
-            </Text>
-          ) : null}
-          {group.songs.map((song, i) => (
-            <SongRow key={`${song.id}-${i}`} song={song} showSource queueSongs={group.songs} />
-          ))}
-        </View>
-      )}
       onEndReached={loadMore}
       onEndReachedThreshold={0.5}
       ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={results.length > 0} />}
@@ -223,29 +247,15 @@ function MultiSourceResults({ results, loadMore, loadingMore, hasMore }: Results
  * 单源搜索结果:按源分组,标题 = 源名,组内为该源歌曲列表
  */
 function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: ResultsListProps) {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
+
+  const rows = useMemo(() => flattenSongGroups(results, 'single'), [results]);
+
   return (
-    <FlatList
-      key="song-results"
-      data={results}
-      keyExtractor={(item) => item.key}
+    <SongList
+      rows={rows}
       contentContainerStyle={{ paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING }}
-      renderItem={({ item: group }) => (
-        <View style={styles.groupSection}>
-          {group.name ? (
-            <Text style={styles.groupHeaderLabel}>
-              {group.name}
-              {group.songs.length > 1 && <Text style={styles.groupCount}>· {group.songs.length} 首</Text>}
-            </Text>
-          ) : null}
-          {group.songs.map((song, i) => (
-            <SongRow key={`${song.id}-${i}`} song={song} showSource queueSongs={group.songs} />
-          ))}
-        </View>
-      )}
       onEndReached={loadMore}
       onEndReachedThreshold={0.5}
       ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={results.length > 0} />}
@@ -256,46 +266,32 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
   container: { flex: 1 },
-  groupSection: { marginBottom: 12 },
-  // 组头 = 沟槽对齐的静默标签（无卡片底）：多源视图标题是歌名，单源视图标题是源名，
-  // 行保持全出血——沿用推荐页「标签 + 全出血行」的列表语言，避免内嵌卡与行断裂
-  groupHeader: {
-    ...textVariants.subhead,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: 4,
-  },
-  groupHeaderLabel: {
-    ...textVariants.footnote,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: 4,
-  },
-  groupArtist: { color: colors.textSecondary, fontWeight: '400' },
-  groupCount: { ...textVariants.caption, color: colors.textTertiary, fontWeight: '400', marginLeft: spacing[2] },
+  // 组头样式已随「拍平」搬进 components/SongList.tsx（groupHeader / groupHeaderQuiet 两档）：
+  // 组头现在是列表里的**行**，样式跟着行组件走，不再由页面各写一份（#411）。
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   emptyText: { ...textVariants.callout, color: colors.textSecondary, marginTop: 12 },
+  // 歌手网格与发现页歌手网格统一：宽度走 gridMetrics（#416 前这里是
+  // (SCREEN_WIDTH - 24) / 3 —— 与 gridMetrics「禁止在调用方重写公式」相悖的第三个公式），
+  // 度量走 gridCardMetrics，骨架屏（CoverGridSkeleton variant="artist"）与页面同源。
   artistGrid: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[6],
   },
+  // numColumns 的**行容器**才认列距（contentContainerStyle 的 gap 管不到行内）——
+  // 与 DiscoverTabs 的 artistRow 同一写法，否则 3 卡左对齐、右侧空出 gap×2。
+  artistRow: { gap: GRID_GAP },
   artistCard: {
-    width: (SCREEN_WIDTH - 24) / 3,
+    width: gridCardWidth({ cols: 3 }),
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: GRID_CARD.artistCardBottom,
   },
   artistAvatar: {
-    width: 72,
-    height: 72,
+    width: GRID_CARD.artistAvatarSize,
+    height: GRID_CARD.artistAvatarSize,
     borderRadius: radius.full,
     backgroundColor: colors.bgHover,
   },
@@ -307,7 +303,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   artistName: {
     ...textVariants.footnote,
     color: colors.textPrimary,
-    marginTop: 6,
+    marginTop: GRID_CARD.nameGap,
     textAlign: 'center',
   },
 });

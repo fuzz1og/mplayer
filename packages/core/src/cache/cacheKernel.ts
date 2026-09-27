@@ -21,6 +21,9 @@ export class CacheKernel implements CachePort {
     this.l2 = options.l2
     this.maxMemoryEntries = options.maxMemoryEntries ?? 1000
     this.namespace = options.namespace ?? ''
+    // 把容量下传到 L1 后端（淘汰下沉在 backend，内核只负责告知）。#410：
+    // 此前 maxMemoryEntries 只在这里赋值，从未被任何地方读取，L1 只增不减。
+    this.l1?.setCapacity?.(this.maxMemoryEntries)
   }
 
   private prefix(key: string, type: 'json' | 'bin'): string {

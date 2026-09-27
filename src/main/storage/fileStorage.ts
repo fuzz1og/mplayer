@@ -1,3 +1,4 @@
+import fsp from 'fs/promises';
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
@@ -11,6 +12,37 @@ interface StorageData {
   playlistSongs: PlaylistSong[];
   settings: Record<string, any>;
 }
+
+/**
+ * 存储域 —— **一份独立文件**（#410）。
+ *
+ * 此前五个域挤在一个 `storage.json` 里：任何一处改动（加一首收藏、切一个设置开关）
+ * 都 `JSON.stringify(data, null, 2)` 重写**整个**文件，还附带一次全文件 `copyFileSync`
+ * 备份。收藏/历史/歌单越多，单次改动越贵；`setSetting` 更是**跳过防抖立即全量写**，
+ * 用户在设置页连点几下就是几次全量重写。
+ *
+ * 现在每个域各自一个文件、各自原子替换（写临时文件 + rename），改动只落对应域。
+ */
+type Domain = 'settings' | 'favorites' | 'history' | 'playlists' | 'playlistSongs';
+
+const DOMAIN_FILENAMES: Record<Domain, string> = {
+  settings: 'settings.json',
+  favorites: 'favorites.json',
+  history: 'history.json',
+  playlists: 'playlists.json',
+  playlistSongs: 'playlistSongs.json',
+};
+const ALL_DOMAINS: Domain[] = ['settings', 'favorites', 'history', 'playlists', 'playlistSongs'];
+
+/** 上一版的单文件（迁移源；分域文件齐了之后退役为 .migrated） */
+const LEGACY_FILENAME = 'storage.json';
+const LEGACY_RETIRED_FILENAME = 'storage.json.migrated';
+
+/**
+ * 备份周期。此前**每次写入**都先 `copyFileSync` 一份 .backup —— 大文件下等于每次改动
+ * 多写一遍全量数据。改为同一域最多每 10 分钟留一份上一版内容，够人工回溯即可。
+ */
+const BACKUP_INTERVAL_MS = 10 * 60 * 1000;
 
 // 审查修复：ID 唯一化。旧实现用裸 Date.now() 作主键，同毫秒内连续操作
 //（批量收藏 / 快速加歌单）会生成相同 ID，导致去重误判、按 ID 删除错乱。
@@ -27,7 +59,11 @@ const MAX_HISTORY_ITEMS = 200;
 
 export class FileStorage {
   private dataDir: string = '';
-  private dataFile: string = '';
+  private legacyPath: string = '';
+  private legacyRetiredPath: string = '';
+  private domainPaths: Partial<Record<Domain, string>> = {};
+  private backupPaths: Partial<Record<Domain, string>> = {};
+
   private data: StorageData = {
     favorites: [],
     playHistory: [],
@@ -36,79 +72,173 @@ export class FileStorage {
     settings: {}
   };
   private initialized: boolean = false;
+  /** 分域装载（异步，只做一次）；同步路径只碰 settings */
+  private loadPromise: Promise<void> | null = null;
+  /** 单文件时代的数据；分域文件齐了之后为 null（不再读那份大文件） */
+  private legacyData: StorageData | null = null;
+  /** 老数据尚未落到分域文件：首次写入要把五个域都写一遍，成功后才退役单文件 */
+  private needsMigrationWrite: boolean = false;
 
   // 防抖写入机制
   private isDirty: boolean = false;
+  private dirtyDomains = new Set<Domain>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly SAVE_DELAY: number = 200; // 200ms 防抖延迟
+  private lastBackupAt: Partial<Record<Domain, number>> = {};
+  /**
+   * 写串行。`setSetting` 是**立即直写**（不走防抖），而防抖回调/flush 可能在批写同一域——
+   * 两者会落到同一个 `${target}.tmp` 上。串行之后「同一文件的写入」不再交错。
+   */
+  private writeChain: Promise<unknown> = Promise.resolve();
 
-  private ensureInitialized(): void {
-    if (this.initialized) return;
+  private ensurePaths(): void {
+    if (this.dataDir) return;
     const userDataPath = app.getPath('userData');
     this.dataDir = path.join(userDataPath, 'data');
-    this.dataFile = path.join(this.dataDir, 'storage.json');
-    this.init();
+    this.legacyPath = path.join(this.dataDir, LEGACY_FILENAME);
+    this.legacyRetiredPath = path.join(this.dataDir, LEGACY_RETIRED_FILENAME);
+    for (const domain of ALL_DOMAINS) {
+      const target = path.join(this.dataDir, DOMAIN_FILENAMES[domain]);
+      this.domainPaths[domain] = target;
+      this.backupPaths[domain] = `${target}.backup`;
+    }
+  }
+
+  private domainPath(domain: Domain): string {
+    const target = this.domainPaths[domain];
+    if (!target) throw new Error(`存储域路径未初始化: ${domain}`);
+    return target;
+  }
+
+  private backupPath(domain: Domain): string {
+    return this.backupPaths[domain] as string;
+  }
+
+  /**
+   * 同步初始化。**只有 settings 走同步读**——`getSettingSync` 在 app ready 前就被
+   * `config.ts` 调用，必须同步可得。其余域（收藏 / 历史 / 歌单）由 `ensureLoaded()`
+   * 异步装载：启动路径不再同步解析整份用户数据（#410：此前 `loadData()` 同步读
+   * 并把全部域 `JSON.parse` 一遍）。
+   */
+  private ensureInitialized(): void {
+    if (this.initialized) return;
+    this.ensurePaths();
+    fs.mkdirSync(this.dataDir, { recursive: true });
+    // 分域文件齐全 = 已完成迁移，那份单文件不必再读（老用户升级后这一读就消失）
+    this.legacyData = this.hasAllDomainFiles() ? null : this.readLegacySync();
+    this.data.settings = this.readSettingsSync();
     this.initialized = true;
   }
 
-  private init(): void {
-    fs.mkdirSync(this.dataDir, { recursive: true });
-    this.loadData();
-    // 自建 API 退役后自动清理旧 302 端点残留：不删歌曲，只清死链字段。
-    if (this.migrateLegacyData()) {
-      void this.writeWithTransaction(this.data).catch((error) => {
-        console.error('迁移旧歌曲数据写入失败:', error);
-      });
-    }
+  private hasAllDomainFiles(): boolean {
+    return ALL_DOMAINS.every((domain) => fs.existsSync(this.domainPath(domain)));
   }
 
-  private loadData(): void {
+  private readSettingsSync(): Record<string, any> {
     try {
-      if (fs.existsSync(this.dataFile)) {
-        const jsonData = fs.readFileSync(this.dataFile, 'utf-8');
-        const parsedData = JSON.parse(jsonData);
-
-        // 验证数据完整性
-        if (!this.validateDataIntegrity(parsedData)) {
-          throw new Error('数据完整性验证失败');
-        }
-
-        // 转换日期字符串为Date对象
-        this.data = this.convertDates(parsedData);
-      } else {
-        this.data = this.getInitialData();
+      if (fs.existsSync(this.domainPath('settings'))) {
+        const parsed = JSON.parse(fs.readFileSync(this.domainPath('settings'), 'utf-8'));
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
       }
     } catch (error) {
-      console.error('加载数据失败，使用默认数据:', error);
-      this.data = this.getInitialData();
+      console.error('加载设置失败，使用默认值:', error);
+    }
+    return (this.legacyData?.settings as Record<string, any>) ?? {};
+  }
+
+  private readLegacySync(): StorageData | null {
+    try {
+      if (!fs.existsSync(this.legacyPath)) return null;
+      const parsedData = JSON.parse(fs.readFileSync(this.legacyPath, 'utf-8'));
+      if (!this.validateDataIntegrity(parsedData)) throw new Error('数据完整性验证失败');
+      return this.convertDates(parsedData);
+    } catch (error) {
+      console.error('加载旧版单文件数据失败，忽略:', error);
+      return null;
     }
   }
 
-  private async saveData(): Promise<void> {
+  /** 分域装载（幂等）。所有异步读写入口都先 await 它。 */
+  private ensureLoaded(): Promise<void> {
+    if (!this.loadPromise) this.loadPromise = this.loadAll();
+    return this.loadPromise;
+  }
+
+  private async loadAll(): Promise<void> {
+    this.ensureInitialized();
+    const readDomain = async (name: string): Promise<unknown> => {
+      try {
+        return JSON.parse(await fsp.readFile(path.join(this.dataDir, name), 'utf-8'));
+      } catch {
+        return null;
+      }
+    };
+
+    const [favorites, history, playlists, playlistSongs] = await Promise.all([
+      readDomain(DOMAIN_FILENAMES.favorites),
+      readDomain(DOMAIN_FILENAMES.history),
+      readDomain(DOMAIN_FILENAMES.playlists),
+      readDomain(DOMAIN_FILENAMES.playlistSongs),
+    ]);
+
+    const legacy = this.legacyData;
+    this.data.favorites = this.convertDated<Favorite>(favorites ?? legacy?.favorites ?? [], 'createdAt');
+    this.data.playHistory = this.convertDated<PlayHistory>(history ?? legacy?.playHistory ?? [], 'playedAt');
+    this.data.playlists = this.convertDated<Playlist>(playlists ?? legacy?.playlists ?? [], 'createdAt');
+    this.data.playlistSongs = (playlistSongs as PlaylistSong[]) ?? legacy?.playlistSongs ?? [];
+
+    // 还没落到分域文件的老数据：首次写入时五个域一起写，成功后才退役单文件
+    this.needsMigrationWrite = legacy !== null;
+
+    // 自建 API 退役后自动清理旧 302 端点残留：不删歌曲，只清死链字段。
+    if (this.migrateLegacyData()) {
+      this.markDirty('favorites', 'history', 'playlistSongs');
+    } else if (this.needsMigrationWrite) {
+      this.markDirty(...ALL_DOMAINS);
+    }
+  }
+
+  private async saveData(...domains: Domain[]): Promise<void> {
     if (!this.initialized) return;
+    this.markDirty(...domains);
+  }
 
-    // 标记为脏数据
+  private markDirty(...domains: Domain[]): void {
+    for (const domain of domains) this.dirtyDomains.add(domain);
     this.isDirty = true;
+    this.scheduleWrite();
+  }
 
+  private scheduleWrite(): void {
     // 清除之前的定时器（防抖）
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-
-    // 设置新的定时器
-    this.saveTimer = setTimeout(async () => {
-      try {
-        if (this.isDirty) {
-          await this.writeWithTransaction(this.data);
-          this.isDirty = false;
-        }
-      } catch (error) {
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      void this.drainDirty().catch((error) => {
         console.error('防抖写入失败:', error);
-      } finally {
-        this.saveTimer = null;
-      }
+      });
     }, this.SAVE_DELAY);
+  }
+
+  /**
+   * 取走脏域并落盘。失败时把域放回脏集，避免「写失败 = 数据丢失」。
+   * 防抖回调与 `flushSave` 共用这一条路径（两处原本是逐行同形的两份实现）。
+   */
+  private async drainDirty(): Promise<void> {
+    if (!this.isDirty) return;
+    const domains = [...this.dirtyDomains];
+    this.dirtyDomains.clear();
+    this.isDirty = false;
+    try {
+      await this.writeDomains(domains);
+    } catch (error) {
+      for (const domain of domains) this.dirtyDomains.add(domain);
+      this.isDirty = true;
+      throw error;
+    }
   }
 
   /**
@@ -116,74 +246,86 @@ export class FileStorage {
    * 跳过防抖机制，确保数据不丢失
    */
   async flushSave(): Promise<void> {
-    if (!this.initialized) return;
-
-    // 清除防抖定时器
+    await this.ensureLoaded();
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-
-    // 如果有脏数据，立即写入
-    if (this.isDirty) {
-      try {
-        await this.writeWithTransaction(this.data);
-        this.isDirty = false;
-      } catch (error) {
-        console.error('立即写入失败:', error);
-        throw error;
-      }
+    try {
+      await this.drainDirty();
+    } catch (error) {
+      console.error('立即写入失败:', error);
+      throw error;
     }
   }
 
-  private writeWithTransaction(data: StorageData): Promise<void> {
-    const tempPath = this.dataFile + '.tmp';
-    const backupPath = this.dataFile + '.backup';
+  private async writeDomains(requested: Domain[]): Promise<void> {
+    // 迁移未完成时，一次把五个域都写出来，之后才允许退役单文件
+    const domains = this.needsMigrationWrite ? ALL_DOMAINS : requested;
+    for (const domain of domains) {
+      await this.writeDomainFile(domain);
+    }
+    if (this.needsMigrationWrite) {
+      this.needsMigrationWrite = false;
+      await this.retireLegacyFile();
+    }
+  }
 
-    return new Promise((resolve, reject) => {
-      try {
-        // 1. 创建当前文件的备份
-        if (fs.existsSync(this.dataFile)) {
-          fs.copyFileSync(this.dataFile, backupPath);
-        }
+  /**
+   * 单域原子写入：先写 `.tmp` 再 rename。
+   * 原子替换之后不再需要旧实现的「失败时从 backup 恢复」——目标文件要么是上一版
+   * 完整内容，要么是新一版完整内容，不存在写一半的中间态。
+   */
+  private writeDomainFile(domain: Domain): Promise<void> {
+    const run = this.writeChain.then(
+      () => this.writeDomainFileNow(domain),
+      () => this.writeDomainFileNow(domain),
+    );
+    this.writeChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
 
-        // 2. 写入临时文件
-        const jsonData = JSON.stringify(data, null, 2);
-        fs.writeFileSync(tempPath, jsonData, 'utf-8');
+  private async writeDomainFileNow(domain: Domain): Promise<void> {
+    const target = this.domainPath(domain);
+    const temp = `${target}.tmp`;
+    const payload = JSON.stringify(this.serializeDomain(domain));
+    await this.maybeBackup(domain);
+    await fsp.writeFile(temp, payload, 'utf-8');
+    await fsp.rename(temp, target);
+  }
 
-        // 3. 确保临时文件写入成功
-        if (!fs.existsSync(tempPath)) {
-          throw new Error('临时文件写入失败');
-        }
+  /** 周期备份上一版内容（同一域最多每 BACKUP_INTERVAL_MS 一次）。 */
+  private async maybeBackup(domain: Domain): Promise<void> {
+    const now = Date.now();
+    const last = this.lastBackupAt[domain] ?? 0;
+    if (now - last < BACKUP_INTERVAL_MS) return;
+    this.lastBackupAt[domain] = now;
+    try {
+      await fsp.copyFile(this.domainPath(domain), this.backupPath(domain));
+    } catch {
+      // 首次写入时还没有旧文件
+    }
+  }
 
-        // 4. 原子性替换原文件
-        fs.renameSync(tempPath, this.dataFile);
+  private async retireLegacyFile(): Promise<void> {
+    try {
+      await fsp.rename(this.legacyPath, this.legacyRetiredPath);
+    } catch {
+      // 没有单文件（新用户）或已退役
+    }
+  }
 
-        // 5. 清理备份文件（可选，可保留作为历史备份）
-        if (fs.existsSync(backupPath)) {
-          fs.unlinkSync(backupPath);
-        }
-
-        resolve();
-
-      } catch (error) {
-        // 发生错误时尝试恢复备份
-        if (fs.existsSync(backupPath)) {
-          try {
-            fs.renameSync(backupPath, this.dataFile);
-          } catch (restoreError) {
-            console.error('数据恢复失败:', restoreError);
-          }
-        }
-
-        // 清理临时文件
-        if (fs.existsSync(tempPath)) {
-          fs.unlinkSync(tempPath);
-        }
-
-        reject(error);
-      }
-    });
+  private serializeDomain(domain: Domain): unknown {
+    switch (domain) {
+      case 'settings': return this.data.settings;
+      case 'favorites': return this.data.favorites;
+      case 'history': return this.data.playHistory;
+      case 'playlists': return this.data.playlists;
+      case 'playlistSongs': return this.data.playlistSongs;
+    }
   }
 
   private validateDataIntegrity(data: StorageData): boolean {
@@ -209,25 +351,26 @@ export class FileStorage {
     return true;
   }
 
+  /**
+   * 把某个日期字段从 ISO 字符串还原为 Date。
+   * 三个域的条目形状相同、只有字段名不同（favorites/playlists 用 createdAt、
+   * history 用 playedAt），所以只有一个转换函数。
+   */
+  private convertDated<T>(raw: unknown, field: 'createdAt' | 'playedAt'): T[] {
+    return (((raw as any[]) || [])).map((item: any) => ({
+      ...item,
+      [field]: item[field] instanceof Date ? item[field] : new Date(item[field])
+    }));
+  }
+
   private convertDates(data: any): StorageData {
-    const converted = {
-      favorites: (data.favorites || []).map((f: any) => ({
-        ...f,
-        createdAt: new Date(f.createdAt)
-      })),
-      playHistory: (data.playHistory || []).map((h: any) => ({
-        ...h,
-        playedAt: new Date(h.playedAt)
-      })),
-      playlists: (data.playlists || []).map((p: any) => ({
-        ...p,
-        createdAt: new Date(p.createdAt)
-      })),
+    return {
+      favorites: this.convertDated<Favorite>(data.favorites, 'createdAt'),
+      playHistory: this.convertDated<PlayHistory>(data.playHistory, 'playedAt'),
+      playlists: this.convertDated<Playlist>(data.playlists, 'createdAt'),
       playlistSongs: data.playlistSongs || [],
       settings: data.settings || {}
-    };
-
-    return converted as StorageData;
+    } as StorageData;
   }
 
   /**
@@ -286,18 +429,9 @@ export class FileStorage {
     return changed;
   }
 
-  private getInitialData(): StorageData {
-    return {
-      favorites: [],
-      playHistory: [],
-      playlists: [],
-      playlistSongs: [],
-      settings: {}
-    };
-  }
-
   // Favorites
   async addFavorite(song: Song): Promise<number> {
+    await this.ensureLoaded();
     const existing = this.data.favorites.find(f => f.songId === song.id);
     if (existing) {
       return existing.id!;
@@ -319,7 +453,7 @@ export class FileStorage {
     };
 
     this.data.favorites.push(favorite);
-    await this.saveData();
+    await this.saveData('favorites');
     return id;
   }
 
@@ -328,23 +462,27 @@ export class FileStorage {
    * 保持收藏时间与排序位置；历史与下载记录不追溯改写。
    */
   async replaceFavoriteSong(oldSongId: string, newSong: Song): Promise<void> {
+    await this.ensureLoaded();
     const favorite = this.data.favorites.find(f => f.songId === oldSongId);
     if (!favorite) return;
     favorite.songId = newSong.id;
     favorite.song = newSong as SongBase;
-    await this.saveData();
+    await this.saveData('favorites');
   }
 
   async removeFavorite(songId: string): Promise<void> {
+    await this.ensureLoaded();
     this.data.favorites = this.data.favorites.filter(f => f.songId !== songId);
-    await this.saveData();
+    await this.saveData('favorites');
   }
 
   async isFavorite(songId: string): Promise<boolean> {
+    await this.ensureLoaded();
     return this.data.favorites.some(f => f.songId === songId);
   }
 
   async getFavorites(): Promise<SongBase[]> {
+    await this.ensureLoaded();
     return this.data.favorites
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .map(f => f.song);
@@ -352,6 +490,7 @@ export class FileStorage {
 
   // Play History
   async addToPlayHistory(song: Song): Promise<number> {
+    await this.ensureLoaded();
     const id = nextId();
     const songBase: SongBase = {
       id: song.id,
@@ -369,32 +508,36 @@ export class FileStorage {
     };
 
     this.data.playHistory.push(historyItem);
-    // 审查修复：历史上限截断（与移动端 max 200 对齐），防止 storage.json 无限增长
+    // 审查修复：历史上限截断（与移动端 max 200 对齐），防止存储无限增长
     if (this.data.playHistory.length > MAX_HISTORY_ITEMS) {
       this.data.playHistory = this.data.playHistory.slice(-MAX_HISTORY_ITEMS);
     }
-    await this.saveData();
+    await this.saveData('history');
     return id;
   }
 
   async getPlayHistory(limit: number = 50): Promise<PlayHistory[]> {
+    await this.ensureLoaded();
     return this.data.playHistory
       .sort((a, b) => b.playedAt.getTime() - a.playedAt.getTime())
       .slice(0, limit);
   }
 
   async clearPlayHistory(): Promise<void> {
+    await this.ensureLoaded();
     this.data.playHistory = [];
-    await this.saveData();
+    await this.saveData('history');
   }
 
   async removeFromPlayHistory(songId: string): Promise<void> {
+    await this.ensureLoaded();
     this.data.playHistory = this.data.playHistory.filter(h => h.songId !== songId);
-    await this.saveData();
+    await this.saveData('history');
   }
 
   // Playlists
   async createPlaylist(name: string, description?: string): Promise<number> {
+    await this.ensureLoaded();
     const id = nextId();
     const playlist: Playlist = {
       id,
@@ -404,11 +547,12 @@ export class FileStorage {
     };
 
     this.data.playlists.push(playlist);
-    await this.saveData();
+    await this.saveData('playlists');
     return id;
   }
 
   async getPlaylists(): Promise<Playlist[]> {
+    await this.ensureLoaded();
     return this.data.playlists
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .map((playlist) => {
@@ -422,6 +566,7 @@ export class FileStorage {
   }
 
   async getPlaylist(playlistId: number): Promise<Playlist | undefined> {
+    await this.ensureLoaded();
     const playlist = this.data.playlists.find(p => p.id === playlistId);
     if (!playlist) return undefined;
     const songs = this.data.playlistSongs.filter(song => song.playlistId === playlistId);
@@ -433,14 +578,16 @@ export class FileStorage {
   }
 
   async updatePlaylist(playlistId: number, playlist: Partial<Playlist>): Promise<void> {
+    await this.ensureLoaded();
     const index = this.data.playlists.findIndex(p => p.id === playlistId);
     if (index !== -1) {
       this.data.playlists[index] = { ...this.data.playlists[index], ...playlist };
-      await this.saveData();
+      await this.saveData('playlists');
     }
   }
 
   async deletePlaylist(playlistId: number): Promise<void> {
+    await this.ensureLoaded();
     // 验证歌单是否存在
     const playlist = this.data.playlists.find(p => p.id === playlistId);
     if (!playlist) {
@@ -455,8 +602,8 @@ export class FileStorage {
       // 2. 删除歌单本身
       this.data.playlists = this.data.playlists.filter(p => p.id !== playlistId);
 
-      // 3. 保存更改
-      await this.saveData();
+      // 3. 保存更改（两个域一起落）
+      await this.saveData('playlists', 'playlistSongs');
     } catch (error) {
       console.error('删除歌单失败:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
@@ -466,6 +613,7 @@ export class FileStorage {
 
   // Playlist Songs
   async addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
+    await this.ensureLoaded();
     // 验证歌单是否存在
     const playlist = this.data.playlists.find(p => p.id === playlistId);
     if (!playlist) {
@@ -503,7 +651,7 @@ export class FileStorage {
     };
 
     this.data.playlistSongs.push(playlistSong);
-    await this.saveData();
+    await this.saveData('playlistSongs');
     return id;
   }
 
@@ -516,13 +664,15 @@ export class FileStorage {
   }
 
   async removeSongFromPlaylist(playlistId: number, songId: string): Promise<void> {
+    await this.ensureLoaded();
     this.data.playlistSongs = this.data.playlistSongs.filter(
       ps => !(ps.playlistId === playlistId && ps.songId === songId)
     );
-    await this.saveData();
+    await this.saveData('playlistSongs');
   }
 
   async getPlaylistSongs(playlistId: number): Promise<SongBase[]> {
+    await this.ensureLoaded();
     return this.data.playlistSongs
       .filter(ps => ps.playlistId === playlistId)
       .sort((a, b) => a.order - b.order)
@@ -530,12 +680,13 @@ export class FileStorage {
   }
 
   async updatePlaylistSongOrder(playlistId: number, songId: string, order: number): Promise<void> {
+    await this.ensureLoaded();
     const item = this.data.playlistSongs.find(
       ps => ps.playlistId === playlistId && ps.songId === songId
     );
     if (item) {
       item.order = order;
-      await this.saveData();
+      await this.saveData('playlistSongs');
     }
   }
 
@@ -544,16 +695,18 @@ export class FileStorage {
    * 保持排序位置不变。
    */
   async replacePlaylistSong(playlistId: number, oldSongId: string, newSong: Song): Promise<void> {
+    await this.ensureLoaded();
     const item = this.data.playlistSongs.find(
       ps => ps.playlistId === playlistId && ps.songId === oldSongId
     );
     if (!item) return;
     item.songId = newSong.id;
     item.song = newSong as Song;
-    await this.saveData();
+    await this.saveData('playlistSongs');
   }
 
   async reorderSongIds(playlistId: number, songIds: string[]): Promise<void> {
+    await this.ensureLoaded();
     const existing = this.data.playlistSongs.filter(ps => ps.playlistId === playlistId);
     const existingMap = new Map(existing.map(ps => [ps.songId, ps]));
 
@@ -571,23 +724,24 @@ export class FileStorage {
 
     this.data.playlistSongs = this.data.playlistSongs.filter(ps => ps.playlistId !== playlistId);
     this.data.playlistSongs.push(...allSongs);
-    await this.saveData();
+    await this.saveData('playlistSongs');
   }
 
   // Settings
   async setSetting<T>(key: string, value: T): Promise<void> {
-    this.ensureInitialized();
+    await this.ensureLoaded();
     this.data.settings[key] = value;
-    // 设置项需要立即写入磁盘，避免防抖导致重启后丢失
-    await this.writeWithTransaction(this.data);
+    // 设置项需要立即写入磁盘，避免防抖导致重启后丢失。
+    // 只写 settings.json —— 此前是「跳过防抖立即全量重写整个存储」（#410）。
+    await this.writeDomainFile('settings');
   }
 
   async getSetting<T>(key: string): Promise<T | undefined> {
-    this.ensureInitialized();
+    await this.ensureLoaded();
     return this.data.settings[key] as T | undefined;
   }
 
-  // 同步方法，供 config.ts 使用
+  // 同步方法，供 config.ts 使用（只依赖 settings，见 ensureInitialized）
   getSettingSync<T>(key: string): T | undefined {
     try {
       this.ensureInitialized();
