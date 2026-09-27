@@ -3,6 +3,7 @@ import { Music2 } from 'lucide-react';
 import type { Song, SongGroup } from '@mplayer/core';
 import GroupHeaderRow from '@/renderer/components/GroupHeaderRow';
 import SongRow from '@/renderer/components/SongRow';
+import VirtualRow from '@/renderer/components/VirtualRow';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
@@ -15,35 +16,6 @@ type FlatItem =
 
 const GROUP_HEADER_HEIGHT = 44;
 const noop = () => {};
-
-/**
- * 虚拟化行的定位包裹层（#412）：只吃数字，坐标一变就只有这一行重渲染；
- * 行组件本身因此不必再接收「每帧新建的 style 对象」，`React.memo` 才真正生效。
- */
-const VirtualRow = React.memo(function VirtualRow({
-  start,
-  size,
-  scrollMargin,
-  children,
-}: {
-  start: number;
-  size: number;
-  scrollMargin: number;
-  children: React.ReactNode;
-}) {
-  const style = useMemo<React.CSSProperties>(
-    () => ({
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: `${size}px`,
-      transform: `translateY(${start - scrollMargin}px)`,
-    }),
-    [size, start, scrollMargin],
-  );
-  return <div style={style}>{children}</div>;
-});
 
 interface GroupedSongListProps {
   /** 分组数据经 props 提供（页面做 searchStore 的适配器），组件不再自己订阅数据源 */

@@ -43,10 +43,28 @@ describe('主进程同步 I/O 纪律（#412）', () => {
   it('cache/bin 有大小预算，落盘后异步回收', () => {
     const src = stripComments(read('src/main/main.ts'));
     expect(src).toContain('SODA_AUDIO_CACHE_MAX_BYTES');
-    expect(src).toMatch(/function pruneBinCache/);
-    expect(src).toContain('void pruneBinCache(sodaAudioBinDir)');
-    // 回收本身也必须异步
-    expect(src).toContain('await fsp.readdir(binDir)');
+    expect(src).toContain('void enforceBinBudget(sodaAudioBinDir, SODA_AUDIO_CACHE_MAX_BYTES)');
+    // 磁盘布局不往调用方泄漏：bin 目录由缓存后端推导（ADR-0002 的取向），
+    // main.ts 里不该出现手拼的 ...'cache', 'bin'
+    expect(src).not.toMatch(/path\.join\([^)]*'cache', 'bin'/);
+    expect(src).toContain('binDirOf(audioCacheBackend)');
+
+    // 回收实现本身在缓存模块里，且必须异步
+    const budget = stripComments(read('src/main/cache/binCacheBudget.ts'));
+    expect(budget).toContain('export function binDirOf');
+    expect(budget).toContain('export async function enforceBinBudget');
+    expect(budget).toContain('await fsp.readdir(binDir)');
+    expect(budget).not.toContain('readdirSync');
+    expect(budget).not.toContain('unlinkSync');
+  });
+
+  it('异步存在性检查只有一份实现', () => {
+    const helper = stripComments(read('src/main/utils/fsAsync.ts'));
+    expect(helper).toContain('export async function fileExists');
+    // 两处调用方都引用它，而不是各自再写一份
+    expect(stripComments(read('src/main/main.ts'))).toContain("from './utils/fsAsync'");
+    expect(stripComments(read('src/main/services/localMusicService.ts'))).toContain("from '../utils/fsAsync'");
+    expect(stripComments(read('src/main/services/localMusicService.ts'))).not.toMatch(/async function fileExists/);
   });
 
   it('本地曲库：异步遍历 + 有界并发 + 原子写盘', () => {

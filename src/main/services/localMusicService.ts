@@ -3,6 +3,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 import { app } from 'electron';
+import { fileExists } from '../utils/fsAsync';
 import type { LocalFolder, LocalSong } from '@mplayer/core';
 
 const SUPPORTED_FORMATS = new Set(['.mp3', '.flac', '.wav', '.ogg']);
@@ -24,15 +25,7 @@ const PARSE_CONCURRENCY = 4;
 /** fs.watch 事件合并窗口（#412）：一次「复制专辑」会派发成百上千条 rename 事件 */
 const WATCH_DEBOUNCE_MS = 400;
 
-/** 异步存在性检查（#412）：`fs.existsSync` 在扫描/监听回调里同步打磁盘 */
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fsp.stat(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
+
 
 function extensionForCover(mime: string): string {
   return COVER_EXT_BY_MIME[mime] || DEFAULT_COVER_EXT;

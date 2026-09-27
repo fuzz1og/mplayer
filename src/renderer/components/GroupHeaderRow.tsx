@@ -12,11 +12,10 @@ interface GroupHeaderRowProps {
    */
   onToggle: (groupKey: string) => void;
   onPlayFirst: (group: SongGroup) => void;
-  style?: React.CSSProperties;
 }
 
 const GroupHeaderRow: React.FC<GroupHeaderRowProps> = ({
-  group, isExpanded, onToggle, onPlayFirst, style,
+  group, isExpanded, onToggle, onPlayFirst,
 }) => {
   const sourceCount = new Set(group.songs.map(s => s.sourceType)).size;
 
@@ -30,7 +29,6 @@ const GroupHeaderRow: React.FC<GroupHeaderRowProps> = ({
         cursor: 'pointer',
         borderBottom: '1px solid var(--border-subtle)',
         backgroundColor: 'var(--bg-surface)',
-        ...style,
       }}
       onClick={() => onPlayFirst(group)}
     >

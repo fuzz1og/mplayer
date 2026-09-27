@@ -1,11 +1,12 @@
 import './env'; // 必须第一个 import，设置 ELECTRON_GET_USE_PROXY
 import { app, BrowserWindow, ipcMain, session, globalShortcut, shell } from 'electron';
 import path from 'path';
-import fsp from 'fs/promises';
 import axios from 'axios';
 import { applyWslHidpiFix } from './hidpi';
 
 import { DiskCacheBackend } from './cache/diskBackend';
+import { binDirOf, enforceBinBudget } from './cache/binCacheBudget';
+import { fileExists } from './utils/fsAsync';
 import { downloadService } from './services/downloadService';
 import { db } from './storage/db';
 import { musicApi as coreMusicApi, loadSourceModes, sanitizeSourceModes, setTlsDegradeProvider, setTlsFingerprintAgentProvider, loadTlsFingerprint, TLS_FINGERPRINT_SETTING_KEY, loadTier3State, setTransportProxyAgents } from './api/musicApi';
@@ -33,65 +34,19 @@ applyWslHidpiFix();
 if (!app.isPackaged) {
   app.commandLine.appendSwitch('disable-quic');
 }
-
 /**
  * 汽水音频缓存大小预算（#412）。此前 `cache/bin` 只写不清，重装前会一直长下去。
- * 超预算时按 mtime 最旧的先删——缓存文件被删是安全的（下次播放按需重下）。
+ * 回收策略与目录推导都在 `cache/binCacheBudget`（缓存模块自己解释磁盘布局）。
  */
 const SODA_AUDIO_CACHE_MAX_BYTES = 512 * 1024 * 1024;
 
 /** 路径 → file:// URL（`getSodaPlayableUrl` 三处都要用，避免同一个正则抄三遍） */
 const toFileUrl = (filePath: string): string => 'file:///' + filePath.replace(/\\/g, '/');
 
-/** 异步存在性检查：播放请求路径上不要用 `fs.existsSync` 同步打磁盘（#412） */
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fsp.stat(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * 把 `cache/bin` 的总字节压回预算内（#412）：目录扫描 + stat 都是异步的，
- * 由调用方 fire-and-forget（清理失败绝不能影响播放出 URL）。
- */
-async function pruneBinCache(binDir: string): Promise<void> {
-  try {
-    const names = await fsp.readdir(binDir);
-    const entries = await Promise.all(
-      names.map(async (name) => {
-        const full = path.join(binDir, name);
-        try {
-          const st = await fsp.stat(full);
-          return st.isFile() ? { full, size: st.size, at: st.mtimeMs } : null;
-        } catch {
-          return null;
-        }
-      }),
-    );
-    const files = entries.filter((e): e is { full: string; size: number; at: number } => e !== null);
-    let total = files.reduce((sum, f) => sum + f.size, 0);
-    if (total <= SODA_AUDIO_CACHE_MAX_BYTES) return;
-    files.sort((a, b) => a.at - b.at);
-    for (const file of files) {
-      if (total <= SODA_AUDIO_CACHE_MAX_BYTES) break;
-      try {
-        await fsp.unlink(file.full);
-        total -= file.size;
-      } catch {
-        // 单个文件删不掉（占用等）就跳过，不影响其它
-      }
-    }
-  } catch {
-    // 目录不存在等：无可清理
-  }
-}
-
 // 扩展 musicApi：添加主进程特有的音频缓存方法
 const audioCacheBackend = new DiskCacheBackend(path.join(app.getPath('userData'), 'cache'))
-const sodaAudioBinDir = path.join(app.getPath('userData'), 'cache', 'bin')
+// bin 目录由缓存后端自己推导（ADR-0002：磁盘布局不往调用方泄漏）
+const sodaAudioBinDir = binDirOf(audioCacheBackend)
 const musicApi = {
   ...coreMusicApi,
   async getSodaPlayableUrl(trackId: string): Promise<string> {
@@ -108,11 +63,14 @@ const musicApi = {
         responseType: 'arraybuffer',
         timeout: 30000,
       });
-      // 直接以 ArrayBuffer 建视图（#412）：此前先 `Buffer.from(dl.data)` 复制一份，
-      // 再 `new Uint8Array(buffer)`，一首歌的音频在内存里存在三份。
+      // 零拷贝（#412）：axios 在 Node 下的 arraybuffer 响应给的就是 Buffer，而 Buffer
+      // 本身就是 Uint8Array——直接透传即可。此前先 `Buffer.from(dl.data)` 复制一份，
+      // 再 `new Uint8Array(buffer)` 又复制一份（TypedArray 构造器吃 TypedArray 是复制），
+      // 一首歌的音频在内存里存在三份。
       // 落盘后顺带把 bin 目录压回预算（fire-and-forget，不阻塞播放）。
-      await audioCacheBackend.write(cacheKey, new Uint8Array(dl.data as ArrayBuffer))
-      void pruneBinCache(sodaAudioBinDir)
+      const audioBytes = dl.data instanceof Uint8Array ? dl.data : new Uint8Array(dl.data as ArrayBuffer)
+      await audioCacheBackend.write(cacheKey, audioBytes)
+      void enforceBinBudget(sodaAudioBinDir, SODA_AUDIO_CACHE_MAX_BYTES)
       return toFileUrl(audioCacheBackend.getFilePath(cacheKey))
     } catch (dlErr) {
       console.error('下载汽水音频到缓存失败，回退直链:', dlErr);

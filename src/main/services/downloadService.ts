@@ -47,12 +47,14 @@ export const PROGRESS_THROTTLE_MS = 150;
  */
 export const MAX_EMBEDDED_COVER_BYTES = 1024 * 1024;
 
-/** 只读文件头（容器判定只看前 12 字节，见 core `detectAudioContainer`） */
-async function readAudioHeader(filePath: string, bytes = 16): Promise<Uint8Array> {
+/** 容器判定只看前 12 字节（core `detectAudioContainer`），读到 16 字节足够 */
+const AUDIO_HEADER_BYTES = 16;
+
+async function readAudioHeader(filePath: string): Promise<Uint8Array> {
   const handle = await fsp.open(filePath, 'r');
   try {
-    const buf = Buffer.alloc(bytes);
-    const { bytesRead } = await handle.read(buf, 0, bytes, 0);
+    const buf = Buffer.alloc(AUDIO_HEADER_BYTES);
+    const { bytesRead } = await handle.read(buf, 0, AUDIO_HEADER_BYTES, 0);
     return buf.subarray(0, bytesRead);
   } finally {
     await handle.close();

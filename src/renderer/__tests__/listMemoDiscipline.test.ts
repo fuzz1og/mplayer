@@ -57,6 +57,23 @@ describe('searchStore.setAudioTag 局部更新（#412）', () => {
     expect(groups[0].songs[0]).toBe(g1.songs[0]);
   });
 
+  it('同一首歌出现在多个组时，每个命中的组都要刷新', () => {
+    const dup = song('dup');
+    const g1 = { key: 'g1', name: 'A', artist: '', songs: [dup] } as never;
+    const g2 = { key: 'g2', name: 'B', artist: '', songs: [{ ...dup }] } as never;
+    const g3 = { key: 'g3', name: 'C', artist: '', songs: [song('other')] } as never;
+    useSearchStore.setState({ songs: [], groups: [g1, g2, g3] });
+
+    useSearchStore.getState().setAudioTag('dup', 'valid');
+
+    const groups = useSearchStore.getState().groups;
+    expect(groups[0]).not.toBe(g1);
+    expect(groups[1]).not.toBe(g2);
+    expect(groups[2]).toBe(g3);
+    expect((groups[0].songs[0] as Song).audioTag).toBe('valid');
+    expect((groups[1].songs[0] as Song).audioTag).toBe('valid');
+  });
+
   it('扁平 songs 命中时只换那一首', () => {
     const s1 = song('s1');
     const s2 = song('s2');
@@ -84,14 +101,31 @@ describe('列表 memo 纪律（#412）', () => {
     expect(src).not.toMatch(/onPlayFirst=\{\(\) =>/);
   });
 
-  it('虚拟化行的定位走只吃数字的 memo 包裹层，而不是给行组件塞 style', () => {
+  it('虚拟化定位是**一份**共享实现（VirtualRow），且只吃数字', () => {
+    const shared = stripComments(read('renderer/components/VirtualRow.tsx'));
+    expect(shared).toContain('const VirtualRow = React.memo(');
+    // props 只有数字 → 数字相等即不重渲染
+    expect(shared).toContain('start: number;');
+    expect(shared).toContain('size: number;');
+    expect(shared).toContain('scrollMargin: number;');
+
+    // 两处列表都用它，不再各自在 map 里现场拼 style
+    for (const file of ['renderer/components/SongList.tsx', 'renderer/components/GroupedSongList.tsx']) {
+      const src = stripComments(read(file));
+      // 同目录的组件用相对路径、跨目录用 @ 别名，两种都算
+      expect(src, file).toMatch(/import VirtualRow from '(\.\/|@\/renderer\/components\/)VirtualRow'/);
+      expect(src, file).toContain('<VirtualRow');
+      expect(src, file).not.toMatch(/position: 'absolute'/);
+    }
+  });
+
+  it('行组件不再接收每帧新建的 style 对象', () => {
     const src = stripComments(read('renderer/components/GroupedSongList.tsx'));
-    expect(src).toContain('const VirtualRow = React.memo(');
-    expect(src).toMatch(/<VirtualRow[\s\S]{0,200}start=\{virtualItem\.start\}/);
-    // 行组件本身不再接收 style={...}（只看 <SongRow ... /> 这一块，别扫到文件里别的 style）
     const songRowBlock = /<SongRow[\s\S]*?\/>/.exec(src)?.[0] ?? '';
     expect(songRowBlock).not.toBe('');
     expect(songRowBlock).not.toContain('style=');
+    // 组头也不再有 style 这个死 prop
+    expect(stripComments(read('renderer/components/GroupHeaderRow.tsx'))).not.toContain('style?:');
   });
 
   it('组头的回调自带分组，避免父组件逐行包闭包', () => {

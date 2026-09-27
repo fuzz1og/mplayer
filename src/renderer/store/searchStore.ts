@@ -88,17 +88,20 @@ export const useSearchStore = create<SearchState>((set) => ({
       return { songs: newSongs };
     }
 
-    // 分组视图：只重建**包含这首歌的那一组**（#412）。
+    // 分组视图：**只重建真正包含这首歌的那些组**（#412）。
     // 此前无论命中与否都把整份 groups 全量 map 一遍（每首歌都新建对象）——
     // 一次「播放成功」事件就能让整表换新，订阅 groups 的组件全部重渲染。
-    const groupIndex = state.groups.findIndex(group => group.songs.some(s => s.id === songId));
-    if (groupIndex === -1) return {}; // 未命中：state 不变，不惊动任何订阅者
-    const group = state.groups[groupIndex];
-    const newGroups = [...state.groups];
-    newGroups[groupIndex] = {
-      ...group,
-      songs: group.songs.map(s => (s.id === songId ? { ...s, audioTag: tag } : s)),
-    };
+    // 注意不能只取第一个命中组：同一首歌可以合法出现在多个组里。
+    let hit = false;
+    const newGroups = state.groups.map(group => {
+      if (!group.songs.some(s => s.id === songId)) return group; // 未命中的组保持同一引用
+      hit = true;
+      return {
+        ...group,
+        songs: group.songs.map(s => (s.id === songId ? { ...s, audioTag: tag } : s)),
+      };
+    });
+    if (!hit) return {}; // 一处都没命中：state 不变，不惊动任何订阅者
 
     return { groups: newGroups };
   }),
