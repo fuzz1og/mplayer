@@ -85,6 +85,17 @@ _Avoid_: 探测缓存、URL 缓存、秒播缓存
 对这些源：列表结果里的 `Song.lrc` **恒为空**（内容方法不再内联歌词），播放期由消费端按 ID 取词（网易 `getNeteaseLyrics(songId)` / 汽水 `getSodaLyrics(trackId)`）；搜索补词无意义且会多打一次请求，故 `fetchLrcInBackground` 对它们只处理封面。
 #409 之前网易靠内容方法**列表内联**歌词（每首歌各发一次取词请求，打开发现页一次就是数百次）——该形态已废弃；存量持久化数据里的内联 LRC 文本由 `isInlineLyrics` 兜住。
 _Avoid_: 内联歌词源、songid 源（口语可，术语用「按 ID 直取歌词源」）、取词源
+
+**专辑默认源**:
+一张专辑所归属的音乐源。专辑是**源内实体**——同一个数字 id 在不同源是完全不同的专辑，因此专辑的身份与缓存一律是 `源 + 源内 id` 二元组，跨源不互送 id。
+它同时是「行徽章要不要显示」的比较基准：整张专辑同源是常态，逐行重复挂同源徽章是零信息量，只有**行的源 ≠ 专辑默认源**（单曲换源之后）才显示。
+_Avoid_: 专辑源、主源（都用「专辑默认源」）
+
+**内容能力不支持** vs **内容能力失败**:
+两种必须区分的事实：前者 = 该源**没有实现**这项内容能力（换源或换入口才有意义，重试无意义）；后者 = 源有这项能力但这次**没取到**（风控/超时/空响应，重试有意义）。
+页面的三态（成功 / 不支持 / 失败）与文案都建立在这个区分上——把它压成同一个「空结果」，就会出现「该来源暂不支持」被显示成「暂无内容」，用户点重试永远不成功。
+_Avoid_: 无结果、空态（空态是**取到了但确实为空**，与这两者都不同）
+
 **汽水歌词**:
 汽水歌词可通过**分享页免登录**获取：`music.douyin.com/qishui/share/track?track_id={id}` 的 `_ROUTER_DATA.audioWithLyricsOption.lyrics.sentences[]`（结构化时间轴 startMs/endMs/text/words，lyricType=krc），无需登录态；分享页同时返回音频直链（encrypt=false 未加密）与 `trackInfo.playable_range`（试听窗口，Cover 歌也有该字段却给完整版，**不能**作试听/完整判别依据；可靠判别 = `trackInfo.preview.duration` 或实际音频时长）。track_v2 接口（`api.qishui.com/luna/pc/track_v2`）也含 `lyric.content`（KRC 文本），但需 PC 客户端登录态 Cookie（sessionid），匿名请求 200 空 body——完整版/高音质音频亦需凭证 + CENC 解密（社区方案 qishui-decrypt / musicdl，软件不实现，仅记录）。搜索接口当前路径为 `api.qishui.com/luna/search/track`（无 pc 段，免登录）；旧 `luna/pc/search/track` 已失效返回空 body。桌面歌词接线：`loadLyricsWithRetry` 的 soda 分支调 `getSodaLyrics`（分享页转 LRC，lrc=URL 契约不变）。移动端接线：PlayerOverlay 的 soda 歌 cacheKey 用 songid、load 走 `getSodaLyrics` 直取文本；`fetchLrcInBackground` 对 soda 只补封面不搜索歌词。双端歌词决策（按 ID 直取 / 搜索补全 / 存量内联兼容）共用 core `songLyrics` helper 防漂移；网易自 #409 起同样按 songId 直取，不再是 soda 特判。下载侧 .lrc 仍按 song.lrc（URL）驱动，soda 恒空故不生成——留待下载侧专项。
 _Avoid_: 匿名 track_v2、汽水歌词源、soda 歌词（匿名直连取不回）
