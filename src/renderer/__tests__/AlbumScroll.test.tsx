@@ -7,8 +7,8 @@ describe('AlbumScroll', () => {
     const { container } = render(
       <AlbumScroll
         albums={[
-          { id: '1', name: 'Album 1', artist: 'Artist 1', picUrl: '', publishTime: '' },
-          { id: '2', name: 'Album 2', artist: 'Artist 2', picUrl: '', publishTime: '' },
+          { id: '1', name: 'Album 1', artist: 'Artist 1', picUrl: '', publishTime: '', sourceType: 'netease' },
+          { id: '2', name: 'Album 2', artist: 'Artist 2', picUrl: '', publishTime: '', sourceType: 'netease' },
         ]}
         loading={false}
         error={null}

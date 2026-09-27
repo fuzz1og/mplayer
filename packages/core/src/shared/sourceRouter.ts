@@ -1,4 +1,4 @@
-import type { Album, Artist, DiscoverPlaylist, Song, SourceKey } from '../types/index.js';
+import type { Album, AlbumDetail, Artist, DiscoverPlaylist, Song, SourceKey } from '../types/index.js';
 import { isTrialUrlInfo } from './playability.js';
 import type { UrlInfo } from './playability.js';
 import { getPrefetchedUrl } from '../api/prefetchCache.js';
@@ -31,6 +31,14 @@ import { DIRECT_WALL_MS, TIER3_CHAIN_BUDGET_MS } from './playbackBudgets.js';
  */
 
 export type SourceMode = 'auto' | 'direct';
+
+/** 歌手专辑分页结果（#417）。`total=null` = 上游未给可信总数；`ok=false` = 抓取失败。 */
+export interface ArtistAlbumsPage {
+  albums: Album[];
+  total: number | null;
+  more: boolean;
+  ok: boolean;
+}
 
 /** 来源中文名（设置页/状态展示共用，桌面/移动端同一份，避免双端漂移）。 */
 export const SOURCE_DISPLAY_NAMES: Record<string, string> = {
@@ -103,6 +111,55 @@ export async function getToplistSongs(source: SourceKey, sourceId: number | stri
 }
 
 /**
+ * 单源专辑详情腿（#407 P0）：能力缺失与抓取失败给**可区分**语义。
+ *
+ * 旧形态是页面里写死 `getDirectClient('netease')!.getAlbumDetail!(id)`（双重断言）——
+ * 无客户端、无能力、返回 null 三种情况静默降级成同一屏「路由参数 + 暂无歌曲」，
+ * 与「专辑真的没歌」「链接坏了」不可区分，也没有重试入口。
+ *
+ * 与 `getToplistSongs` 的差异：那条腿没有 UI 三态需求（抛错即可），而专辑页要**按
+ * 失败原因选文案**（「该来源暂不支持专辑详情」vs「加载失败，重试」），所以这里返回
+ * 判别联合而不是抛错。
+ *
+ * 未做（P0 之外）：#407 方案 7 的「按专辑名 + 歌手走各源 searchSongs 严格匹配补曲目」
+ * 兜底——当前只有网易实现专辑详情，`unsupported` 在真实链路上不可达；等逐源专辑腿
+ * （P1+）落地时一并实现（届时签名需要带上专辑名/歌手，不再只有 id）。
+ */
+/**
+ * 按 id 取歌手信息（#417）：未实现该能力的源返回 null（调用方保留入口带来的名字/头像）。
+ */
+export async function getArtistInfoRouted(source: SourceKey, artistId: string): Promise<Artist | null> {
+  const client = getDirectClient(source);
+  if (!client?.getArtistInfo) return null;
+  try {
+    return await client.getArtistInfo(artistId);
+  } catch {
+    return null;
+  }
+}
+
+export type AlbumDetailOutcome =
+  | { ok: true; album: Album; songs: Song[] }
+  | { ok: false; reason: 'unsupported' | 'failed'; message: string };
+
+export async function getAlbumDetailRouted(source: SourceKey, albumId: string): Promise<AlbumDetailOutcome> {
+  const client = getDirectClient(source);
+  if (!client?.getAlbumDetail) {
+    return { ok: false, reason: 'unsupported', message: `源 ${source} 未实现内容能力 getAlbumDetail` };
+  }
+  try {
+    const detail = await client.getAlbumDetail(albumId);
+    if (!detail) {
+      return { ok: false, reason: 'failed', message: `专辑详情获取失败 (${source}:${albumId})` };
+    }
+    return { ok: true, album: detail.album, songs: detail.songs };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: 'failed', message: `专辑详情获取异常 (${source}:${albumId}): ${message}` };
+  }
+}
+
+/**
  * 内容缓存抽象（D6 #239）：直连客户端经构造注入访问宿主缓存，
  * core 默认实现包一层 cacheManager（同语义：get 命中返回数据 / 未命中 null，
  * set 由后端决定空值是否入缓存）。仅网易内容实现先行，接口先定型。
@@ -148,16 +205,30 @@ export interface DirectSourceClient {
   getRecommendedPlaylists?: (limit: number) => Promise<DiscoverPlaylist[]>;
   /** 新碟上架（area 分类 + 分页）。 */
   getNewAlbums?: (area: string, offset: number, limit: number) => Promise<Album[]>;
-  /** 专辑详情 + 专辑歌曲。 */
-  getAlbumDetail?: (albumId: string) => Promise<{ album: Album; songs: Song[] } | null>;
+  /** 专辑详情 + 专辑歌曲（失败返回 null；页面用 `getAlbumDetailRouted` 取可区分语义）。 */
+  getAlbumDetail?: (albumId: string) => Promise<AlbumDetail | null>;
   /** 歌手分类列表（cat 透传，offset/limit 分页）。 */
   getArtists?: (cat: number, offset: number, limit: number) => Promise<{ artists: Artist[]; total: number; more: boolean }>;
   /** 歌手详情合并（hotSongs + albums，一次调用渲染歌手页首屏）。 */
   getArtistDetail?: (artistId: string) => Promise<{ artist: Artist | null; hotSongs: Song[]; albums: Album[] }>;
+  /**
+   * 歌手信息（**按 id**；#417）。
+   * 歌手页原来用 `searchArtists(名字, 1)` 取第一条，网易存在同名多实体
+   * （「陶喆」有 5196 与 31213543），从其中一个进去会显示另一个的名字/头像；按 id 取不会串。
+   */
+  getArtistInfo?: (artistId: string) => Promise<Artist | null>;
   /** 歌手歌曲（分页；order: hot|time）。 */
   getArtistSongs?: (artistId: string, offset: number, limit: number, order?: string) => Promise<{ songs: Song[]; total: number }>;
-  /** 歌手专辑（分页；#278 保留独立方法：桌面歌手页专辑年表需无限滚动）。 */
-  getArtistAlbums?: (artistId: string, offset: number, limit: number) => Promise<{ albums: Album[]; total: number; more: boolean }>;
+/**
+   * 歌手专辑（分页；#278 保留独立方法：桌面歌手页专辑年表需无限滚动）。
+   *
+   * #417：**翻页只以 `more` 为准**。上游 `total` 在 `more=true` 时被 limit 截断或直接
+   * 缺失（实测 `/api/artist/albums/5196?limit=3` 根本没有 `total` 字段），拿它渲染
+   * 「共 N 张专辑」必然偏小；故 `total` 用 `number | null` 区分「未知」与「确实是 0」
+   * ——`more=false` 时是精确值，`more=true` 时为 `null`。
+   * `ok` 区分「失败」与「该歌手确实零专辑」：前者页面给「加载失败，重试」。
+   */
+  getArtistAlbums?: (artistId: string, offset: number, limit: number) => Promise<ArtistAlbumsPage>;
   /** 歌单列表（cat + order + 分页）。 */
   getPlaylists?: (cat: string, order: string, offset: number, limit: number) => Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }>;
   /** 歌单详情。 */
@@ -184,6 +255,7 @@ export const CONTENT_METHODS = [
   'getAlbumDetail',
   'getArtists',
   'getArtistDetail',
+  'getArtistInfo',
   'getArtistSongs',
   'getArtistAlbums',
   'getPlaylists',
@@ -193,6 +265,17 @@ export const CONTENT_METHODS = [
 ] as const satisfies readonly (keyof DirectSourceClient)[];
 
 export type ContentMethod = (typeof CONTENT_METHODS)[number];
+
+/**
+ * 反向断言（#407 顺手补的守卫）：上面的 `satisfies` 只保证「清单 ⊆ 接口」——
+ * **接口加了方法却漏登记清单不报错**，该方法会静默不进桌面 IPC
+ * （`src/main/ipc/musicApiHandlers.ts` 按这份清单循环分派）。
+ * 这里断言「接口方法 = 清单 ∪ 基础能力」的差集为空，把漏登记变成编译期错误。
+ * 新增**非内容**的基础能力时，把名字加进 `BasicCapability` 即可。
+ */
+type BasicCapability = 'key' | 'resolvePlayableUrl' | 'resolveUrlInfo';
+type AssertNever<T extends never> = T;
+export type ContentMethodCoverage = AssertNever<Exclude<keyof DirectSourceClient, ContentMethod | BasicCapability>>;
 
 // ── 直连客户端注册表 ────────────────────────────────────────────────
 
