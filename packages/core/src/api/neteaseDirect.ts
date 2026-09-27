@@ -29,6 +29,12 @@ import { cacheManager } from './memoryCacheManager.js';
 
 const CLOUDSEARCH_URL = 'https://music.163.com/api/cloudsearch/pc';
 const PAGE_SIZE = 30;
+/** cloudsearch/pc 的 `limit` 硬上限：上游对 `limit>100` 直接返回 `code=400`。 */
+const CLOUDSEARCH_MAX_LIMIT = 100;
+/** cloudsearch/pc 的 `type`（社区逆向类型表：1 单曲 / 100 歌手 / 1000 歌单）。 */
+const CLOUDSEARCH_TYPE_SONG = 1;
+const CLOUDSEARCH_TYPE_ARTIST = 100;
+const CLOUDSEARCH_TYPE_PLAYLIST = 1000;
 const LYRIC_URL = 'https://music.163.com/api/song/lyric';
 
 // ── 缓存 TTL（对齐门面旧语义）──────────────────────────────────────
@@ -133,6 +139,18 @@ function mapArtist(a: any): Artist {
 /** 歌手头像缓存，供 HTML 爬取分类歌手时补图（原门面 artistPicCache 迁入）。 */
 const artistPicCache = new Map<string, string>();
 
+/**
+ * 歌单搜索的同键在飞去重（#415 单飞）。与 `tier3Inflight` 同取向：底层 promise
+ * **结算后才出表**，迟到的同键调用方仍能 join 同一条结果。
+ *
+ * 放在客户端（而不是各端 UI）是因为上游**只有一个**：桌面经 IPC 落在主进程的同一
+ * 客户端实例、移动端在进程内。UI 侧的「切 tab 才发」管懒加载，这里管并发去重。
+ */
+const playlistSearchInflight = new Map<
+  string,
+  Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }>
+>();
+
 /** 兜底：旧明文接口（无加密）获取网易云歌单，返回 playlist 对象或 null。 */
 async function fetchNeteasePlaylistLegacy(playlistId: number): Promise<any | null> {
   const data = await plaintextGetJson<any>(`https://music.163.com/api/playlist/detail?id=${playlistId}`);
@@ -213,13 +231,20 @@ export async function getNeteaseLyrics(songId: string): Promise<string> {
   }
 }
 
-/** 明文 cloudsearch 搜索 → Song[]（不含歌词字段；播放期按 songId 直取，见 #409）。 */
-async function neteaseSearchSongs(keyword: string, page = 1): Promise<Song[]> {
+/**
+ * 明文 cloudsearch 单次搜索（#415 起单曲 `type=1` / 歌手 `type=100` / 歌单 `type=1000`
+ * 共用同一条腿）：只负责「发请求 + 校验 code」，返回上游 `result`，字段映射留给调用方。
+ *
+ * 请求形态与头**逐字沿用**原 `neteaseSearchSongs`（不新增头、不加签名/加密）。
+ * 非 200 的 `code` 一律抛错（`405/406` 风控、`400` 参数错误、`500` 上游异常）——
+ * **绝不静默返回空数组**：那会把「被限流/出错」伪装成「没有结果」。
+ */
+async function cloudsearchSearch(keyword: string, type: number, limit: number, offset: number): Promise<any> {
   const params = new URLSearchParams({
     s: keyword,
-    type: '1',
-    limit: String(PAGE_SIZE),
-    offset: String((page - 1) * PAGE_SIZE),
+    type: String(type),
+    limit: String(limit),
+    offset: String(offset),
   });
   const res = await request({
     method: 'POST',
@@ -236,11 +261,50 @@ async function neteaseSearchSongs(keyword: string, page = 1): Promise<Song[]> {
   if (typeof res.body !== 'string') {
     throw new Error('cloudsearch 响应非文本');
   }
-  const data = JSON.parse(res.body) as { code: number; message?: string; result?: { songs?: any[] } };
+  const data = JSON.parse(res.body) as { code: number; message?: string; result?: any };
   if (data.code !== 200) {
     throw new Error(`cloudsearch code=${data.code} ${data.message || ''}`);
   }
-  return (data.result?.songs || []).map(mapTrack);
+  return data.result;
+}
+
+/** cloudsearch `limit` 钳制：非正数/非法值兜底 1，上限 {@link CLOUDSEARCH_MAX_LIMIT}（上游 `limit>100 → code=400`）。 */
+function clampCloudsearchLimit(limit: number): number {
+  const n = Math.floor(Number(limit));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, CLOUDSEARCH_MAX_LIMIT);
+}
+
+/** cloudsearch `offset` 归一：负数/非法值按 0 处理（越界由上游 `playlistCount=0` 表达，core 不设上限）。 */
+function normalizeCloudsearchOffset(offset: number | undefined): number {
+  const n = Math.floor(Number(offset));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** 明文 cloudsearch 搜索 → Song[]（不含歌词字段；播放期按 songId 直取，见 #409）。 */
+async function neteaseSearchSongs(keyword: string, page = 1): Promise<Song[]> {
+  const result = await cloudsearchSearch(keyword, CLOUDSEARCH_TYPE_SONG, PAGE_SIZE, (page - 1) * PAGE_SIZE);
+  return ((result?.songs || []) as any[]).map(mapTrack);
+}
+
+/**
+ * cloudsearch 原生歌单 → `DiscoverPlaylist`（#415：字段 1:1 可映射，不需要新类型）。
+ * - 上游 `coverImgUrl` 实测为 `http://`：桌面 Electron 混合内容会被拦 → 统一转 https；
+ * - `creator` 可能为 null、`playCount`/`trackCount` 可能缺失 → 兜底；
+ * - `tags`：cloudsearch/pc 的歌单对象**没有该字段**（`officialTags` 是官方推荐位标签，
+ *   语义不同，不当 tags 用）→ 补 `[]`。
+ */
+function mapPlaylist(p: any): DiscoverPlaylist {
+  return {
+    id: p.id,
+    name: p.name || '',
+    coverImgUrl: (p.coverImgUrl || '').replace(/^http:/, 'https:'),
+    playCount: p.playCount || 0,
+    trackCount: p.trackCount || 0,
+    creator: { nickname: p.creator?.nickname || '' },
+    tags: [],
+    description: p.description || '',
+  };
 }
 
 /** weapi 播放 URL 权威完整时长验证字段（T12 预检用）。无版权/VIP → null。 */
@@ -451,25 +515,76 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
 
     // ── 内容能力（#278 自门面迁入）────────────────────────────────
 
-    /** 歌手搜索（原 searchNeteaseArtists；cloudsearch weapi 被风控，走旧明文接口）。 */
+    /**
+     * 歌手搜索（#415 从 `GET /api/search/get/web?type=100` 迁到本条腿 `type=100`）。
+     *
+     * 迁移理由（两条一起解决）：
+     * 1. 旧腿是调研里**唯一被实测封禁**的腿——无间隔连打时先 `code=500` 再全 type
+     *    `code=405/406 操作频繁`、冷却量级 ≥10 分钟；`cloudsearch/pc` 同一时间窗内全程 200。
+     * 2. 旧实现 catch 后**静默 `return []`**，「被限流」与「真没这个歌手」在 UI 上
+     *    不可区分（都显示「未找到」）。迁到本条腿后与搜索/歌单共用同一份
+     *    `code !== 200 → 抛错` 逻辑：失败抛错（双端本就有错误态分支），
+     *    `code=200` + 空数组才是「真没这个歌手」。
+     */
     async searchArtists(keyword: string, limit: number): Promise<Artist[]> {
-      const cacheKey = `search_artists_${keyword}_${limit}`;
+      const kw = keyword.trim();
+      const cacheKey = `search_artists_${kw}_${limit}`;
       const cached = contentCache.get<Artist[]>(cacheKey);
       if (cached && Array.isArray(cached)) return cached;
-      try {
-        // 注:cloudsearch weapi 已被网易云风控(code=50000005,无 cookie 必现),
-        // 直接走旧接口(已做 https 头像修复);后续若接入 cookie 机制可恢复 weapi 优先
-        const data = await plaintextGetJson<any>(
-          `https://music.163.com/api/search/get/web?s=${encodeURIComponent(keyword)}&type=100&limit=${limit}`
-        );
-        const rawArtists: any[] = data?.result?.artists || [];
-        const artists = rawArtists.map(mapArtist);
-        contentCache.set(cacheKey, artists, SEARCH_TTL_MS);
-        return artists;
-      } catch (error) {
-        console.error('[neteaseDirect] 搜索歌手失败:', error);
-        return [];
+      const result = await cloudsearchSearch(kw, CLOUDSEARCH_TYPE_ARTIST, clampCloudsearchLimit(limit), 0);
+      const artists = ((result?.artists || []) as any[]).map(mapArtist);
+      // 空结果不缓存：失败绝不伪装成结果，且「真无命中」不占 6h（保留自愈）
+      if (artists.length > 0) contentCache.set(cacheKey, artists, SEARCH_TTL_MS);
+      return artists;
+    },
+
+    /**
+     * 歌单搜索（#415）：与 `searchSongs` **同一条明文腿**（`cloudsearch/pc` `type=1000`），
+     * 复用既有 transport 接缝与头，**不新增签名 / 不新增加密 / 不新增请求头**。
+     *
+     * 分页：该端点**不返回 `hasMore`** → `more = offset + limit < playlistCount` 推导；
+     * `offset` 越界时上游返回 `code=200 + playlistCount=0` → `{ playlists: [], total: 0, more: false }`，
+     * **视为到底，不是错误**（不抛错、不弹失败）。
+     *
+     * 边界：`limit` 内部钳制 ≤100（上游 `limit>100 → code=400`）；空关键词本地拒绝
+     * （上游空 `s` 同样 `code=400`，本地拒绝省一次请求且错误语义可区分）。
+     *
+     * 缓存：key 含关键词 + limit + offset，TTL 6h（与搜索/歌手同档）；**空结果不缓存**。
+     * 并发：同 key 单飞（见 `playlistSearchInflight`）。
+     */
+    async searchPlaylists(
+      keyword: string,
+      limit: number,
+      offset = 0,
+    ): Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }> {
+      const kw = keyword.trim();
+      if (!kw) {
+        throw new Error('歌单搜索需要非空关键词（上游空 s 为 code=400）');
       }
+      const size = clampCloudsearchLimit(limit);
+      const start = normalizeCloudsearchOffset(offset);
+      const cacheKey = `search_playlists_${kw}_${size}_${start}`;
+      const cached = contentCache.get<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }>(cacheKey);
+      if (cached) return cached;
+
+      const existing = playlistSearchInflight.get(cacheKey);
+      if (existing) return existing;
+
+      const run = async () => {
+        const result = await cloudsearchSearch(kw, CLOUDSEARCH_TYPE_PLAYLIST, size, start);
+        const playlists = ((result?.playlists || []) as any[]).map(mapPlaylist);
+        const total = typeof result?.playlistCount === 'number' ? result.playlistCount : 0;
+        const page = { playlists, total, more: start + size < total };
+        // 空结果不缓存：瞬时故障与「越界到底」都不该占 6h（与 getPlaylistSongs 同取向）
+        if (playlists.length > 0) contentCache.set(cacheKey, page, SEARCH_TTL_MS);
+        return page;
+      };
+
+      const pending = run().finally(() => {
+        playlistSearchInflight.delete(cacheKey);
+      });
+      playlistSearchInflight.set(cacheKey, pending);
+      return pending;
     },
 
     /** 榜单（热歌榜/新歌榜）。 */
