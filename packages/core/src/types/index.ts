@@ -100,7 +100,8 @@ export interface Artist {
   trans?: string;
   albumSize: number;
   musicSize: number;
-  sourceType: string;
+  /** 源归属（#407：由宽松的 `string` 收紧为 SourceKey，省掉每个消费方各自断言）。 */
+  sourceType: SourceKey;
 }
 
 export interface LocalSong {
@@ -135,12 +136,44 @@ export interface DiscoverPlaylist {
   description: string;
 }
 
+/**
+ * 专辑（#407 P0 契约）。
+ *
+ * `sourceType` **必填**：同一数字 id 在不同源语义完全不同，缓存键与路由一律以
+ * `source + id` 二元组为准（旧的 `album_detail_${id}` 键在多源后必然串键）。
+ *
+ * 元数据一律**有则渲染、无则省略**（同 RankMeta 取向）；不做按源分支的组件。
+ * 注意：`sourceType`/`artistId` 只有网易腿在填，其余源实现子集时按需补齐。
+ */
 export interface Album {
   id: string;
   name: string;
   picUrl: string;
   artist: string;
+  /** 发行时间：**统一为 epoch ms 字符串**（''​= 源未提供）。归一在源腿内做，见 `utils/publishTime`。 */
   publishTime: string;
+  /** 源归属；必填。 */
+  sourceType: SourceKey;
+  /** 主歌手 id（歌手页可点）；源不提供时缺省。 */
+  artistId?: string;
+  /** 发行公司 / 厂牌。 */
+  company?: string;
+  /** 专辑简介（可能很长，UI 需截断）。 */
+  description?: string;
+  /** 风格 / 类型（网易 tags、QQ genre、咪咕 albumClass…）。 */
+  genre?: string;
+  /** 语言。 */
+  language?: string;
+  /** 上游声明的曲目数（可能与 songs.length 不一致）。 */
+  trackCount?: number;
+  /** 子类型（网易 subType，如「录音室版」）。 */
+  subType?: string;
+}
+
+/** 专辑详情腿的统一返回（专辑元信息 + 曲目）。 */
+export interface AlbumDetail {
+  album: Album;
+  songs: Song[];
 }
 
 /** 播放模式 — 与 mobile/settingsStore.ts 对齐 */

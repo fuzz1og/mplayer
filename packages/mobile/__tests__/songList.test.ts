@@ -103,7 +103,7 @@ describe('列表渲染纪律（#411）', () => {
       expect(source, file).not.toMatch(/on(Swap|Remove|Press)=\{[^}]*=>/);
     }
     // hero 页（album/artist/playlist）的 onSwap 同样必须稳定
-    for (const file of ['app/album/[id].tsx', 'app/artist/[id].tsx', 'app/discover-playlist/[id].tsx']) {
+    for (const file of ['app/album/[id].tsx', 'app/artist/[id]/index.tsx', 'app/discover-playlist/[id].tsx']) {
       expect(read(file), file).toMatch(/const handleSwap = useCallback/);
     }
   });
@@ -137,7 +137,7 @@ describe('列表渲染纪律（#411）', () => {
 
   it('「列表内原位替换」只有一份实现（三个 hero 页共用）', () => {
     expect(read('services/songListOps.ts')).toContain('export function replaceSongInList');
-    for (const file of ['app/album/[id].tsx', 'app/artist/[id].tsx', 'app/discover-playlist/[id].tsx']) {
+    for (const file of ['app/album/[id].tsx', 'app/artist/[id]/index.tsx', 'app/discover-playlist/[id].tsx']) {
       const source = stripComments(read(file));
       expect(source, file).toContain('replaceSongInList');
       // 不再各写一份 map 替换体

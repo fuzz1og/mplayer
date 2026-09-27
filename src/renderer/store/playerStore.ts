@@ -373,6 +373,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (song.sourceType !== 'local' && isOffline()) {
       audioPlayer.stop();
       activeAttempt = null;
+      // #397 验收遗留：这里也必须归零位置读模型。否则播放栏显示「刚点的歌 + 上一首的
+      // 00:05 / 05:19」——歌名换了、进度没换，一次「已停止」说了假话（与 #328 同源）。
+      // 时长保留旧值到新曲加载完成，与下方正常路径同一口径。
+      playbackClock.setPosition(0);
       set({ error: OFFLINE_COPY, isLoading: false, isPlaying: false, currentSong: song });
       message.error(OFFLINE_COPY);
       return;

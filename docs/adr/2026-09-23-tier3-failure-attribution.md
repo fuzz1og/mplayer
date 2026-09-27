@@ -48,6 +48,9 @@ tier3（用户自配的第三方解析源）是直连失败后的唯一兜底。
    `explainPlaybackFailure` 取回，移动端直调 core；两端不再各自拼文案。
 5. **单源 2s 硬墙**（#362 缺陷 2）已由既有实现落地（`effectiveSourceTimeout` =
    `min(清单 timeoutMs, 2s, 整链剩余预算)`），本 ADR 不再重复决策，仅记录其为既定口径。
+   （⚠️ 该式里的扁平「2s」与顺序**已被 `2026-09-25-tier3-source-scheduling.md` 决策 7 取代为按 kind
+   分档**（url-resolver 2s / search-then-resolve 2.5s）；完整的四层时限口径见
+   `2026-09-27-playback-budget-layers.md`。）
 
 ## 后果
 

@@ -42,7 +42,7 @@ function makeApi(methods: Partial<Record<keyof MusicApiMethodMap, unknown>>) {
     searchNeteaseArtists: vi.fn(async () => []),
     getNewAlbums: vi.fn(async () => []),
     getAlbumDetail: vi.fn(async () => null),
-    getArtistAlbums: vi.fn(async () => ({ albums: [], total: 0, more: false })),
+    getArtistAlbums: vi.fn(async () => ({ albums: [], total: 0, more: false, ok: true })),
     getRecommendedPlaylists: vi.fn(async () => []),
     getRecommendedSongs: vi.fn(async () => []),
     getSodaAudioUrl: vi.fn(async () => ''),

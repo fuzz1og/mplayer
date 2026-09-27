@@ -13,6 +13,7 @@ import { updateNotification, clearNotification } from './notificationService';
 import { getCachedResource, setCachedResource, deleteCachedResource, urlAgeMs } from './cacheService';
 import { searchStrictMatch } from './songResources';
 import { isOffline } from './networkState';
+import { acceptsTransportTime, beginSeek, type PendingSeek } from './seekReconcile';
 
 type Player = ReturnType<typeof createAudioPlayer>;
 
@@ -76,6 +77,8 @@ interface PlaybackCtx {
 let playbackCtx: PlaybackCtx | null = null;
 // per-player 去重：didJustFinish / error 只处理一次，防止双触发跳歌
 let playbackFinished = false;
+/** #423：松手 seek 后的对账窗口（声明的乐观值）；null = 正常跟随传输位置。 */
+let pendingSeek: PendingSeek | null = null;
 let playbackFailed = false;
 let playbackReadyLogged = false;
 
@@ -194,7 +197,12 @@ function attachPlaybackListener(p: Player): void {
       s.pause();
     }
 
-    s.setCurrentTime(status.currentTime);
+    // #423：seek 之后传输层未必立刻追上——对账窗口内丢弃旧值，UI 保持乐观位置；
+    // 追上（容差内）或超时兜底后才清掉窗口、恢复跟随（与桌面 playbackClock.pendingSeek 同构）。
+    if (acceptsTransportTime(pendingSeek, status.currentTime, Date.now())) {
+      pendingSeek = null;
+      s.setCurrentTime(status.currentTime);
+    }
     s.setDuration(status.duration || 0);
 
     // 预取提前（#405）：剩余播放时间 ≤ 15s 时补一次「下一首」预取，给曲末推进留出
@@ -541,6 +549,8 @@ export async function playSong(
   playbackFinished = false;
   playbackFailed = false;
   playbackReadyLogged = false;
+  // 换歌：上一首的 seek 目标不再有意义（否则新歌开头会被乐观值压住到超时）
+  pendingSeek = null;
 
   /**
    * 把音频源交给唯一播放器并起播（**同步**）。
@@ -809,6 +819,8 @@ export async function togglePlay(): Promise<void> {
 
 export async function seekTo(timeSec: number): Promise<void> {
   if (player) {
+    // 乐观值 + 对账窗口：seekTo 返回 ≠ 状态已刷新，窗口内不被旧心跳覆盖（#423）
+    pendingSeek = beginSeek(timeSec, Date.now());
     await player.seekTo(timeSec);
   }
 }

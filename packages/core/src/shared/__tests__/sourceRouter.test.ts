@@ -24,6 +24,7 @@ import {
   clearTier3Scheduling,
   pickToplistSongs,
   getToplistSongs,
+  getAlbumDetailRouted,
   TOPLIST_SOURCE_IDS,
   type DirectSourceClient,
   type SourceMode,
@@ -830,3 +831,47 @@ describe('会话内源调度接缝（#398：control / 调度快照 / 重置）',
     expect(scoreOf('x')).toBeNull();
   });
 });
+
+describe('专辑详情腿 helper（#407：能力缺失与抓取失败可区分）', () => {
+  const albumOf = (source: string) => ({
+    id: '9',
+    name: '专辑九',
+    picUrl: '',
+    artist: '歌手A',
+    publishTime: '1744646400000',
+    sourceType: source as Song['sourceType'],
+  });
+
+  beforeEach(() => {
+    clearDirectClients();
+  });
+
+  it('无客户端 / 未实现能力 → unsupported（不是「加载失败」，页面据此说「该来源暂不支持专辑详情」）', async () => {
+    const missing = await getAlbumDetailRouted('netease', '9');
+    expect(missing).toMatchObject({ ok: false, reason: 'unsupported' });
+    expect((missing as { message: string }).message).toBe('源 netease 未实现内容能力 getAlbumDetail');
+
+    registerDirectClient(makeClient('netease'));
+    expect(await getAlbumDetailRouted('netease', '9')).toMatchObject({ ok: false, reason: 'unsupported' });
+  });
+
+  it('源支持但抓取失败（null 或抛错）→ failed（页面据此给「加载失败，重试」）', async () => {
+    registerDirectClient(makeClient('netease', { getAlbumDetail: vi.fn(async () => null) }));
+    expect(await getAlbumDetailRouted('netease', '9')).toMatchObject({ ok: false, reason: 'failed' });
+
+    registerDirectClient(makeClient('netease', { getAlbumDetail: vi.fn(async () => { throw new Error('风控'); }) }));
+    const res = await getAlbumDetailRouted('netease', '9');
+    expect(res).toMatchObject({ ok: false, reason: 'failed' });
+    expect((res as { message: string }).message).toContain('风控');
+  });
+
+  it('成功路径：透传专辑与曲目', async () => {
+    registerDirectClient(makeClient('netease', {
+      getAlbumDetail: vi.fn(async () => ({ album: albumOf('netease'), songs: [song('1', 'netease')] })),
+    }));
+    const res = await getAlbumDetailRouted('netease', '9');
+    expect(res).toMatchObject({ ok: true, album: { id: '9', sourceType: 'netease' } });
+    expect((res as { songs: Song[] }).songs.map((s) => s.id)).toEqual(['1']);
+  });
+});
+

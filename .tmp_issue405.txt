@@ -1,0 +1,23 @@
+author:	fuzz1og
+association:	owner
+edited:	false
+status:	none
+--
+## 补充：现场 30 秒判别法（区分 H1/H2/H3）
+
+移动端的**通知栏媒体按钮也是 JS 侧处理**的：`setNotificationCategoryAsync` 注册了 上一首 / 播放暂停 / 下一首（`packages/mobile/services/notificationService.ts:64-80`，三个都是 `opensAppToForeground: false`），回调走 `Notifications.addNotificationResponseReceivedListener`（同文件 :89，JS listener）。
+
+所以下次复现时按这个顺序点一遍，就能把根因范围缩到一处：
+
+| 观察到 | 指向 |
+|---|---|
+| 后台曲末停住后，点**通知栏「下一首」没反应**；回到 App 前台后一切正常 | **JS 运行时被冻结/挂起**（H1/H3）——推进逻辑在 JS，后台根本没机会跑 |
+| 后台点「下一首」**能切歌**，但曲末仍不自动接 | 通知回调活着（JS 没事），是 **`didJustFinish` → `s.next()` 这一段**的问题（H1 变体：事件没到） |
+| 「下一首」能切但**新歌不出声**（或立刻停） | 后台**换源/解析失败**（H2） |
+| 曲末停住后，**回到前台立刻自动接上下一首** | H3 最像（进程被冻结，回调只是被推迟到前台） |
+
+另外顺手看两处日志（`scripts/mobile-debug.sh` 一条龙会抓）：
+
+- 曲末后 **有没有** `[player] 开始播放《下一首》…` —— 没有 = 推进没发生（H1/H3）；有但无声 = H2；
+- 有没有 `《当前曲》加载失败` 或 tier3/直连解析报错 —— 有 = 解析链在后台失败。
+--
