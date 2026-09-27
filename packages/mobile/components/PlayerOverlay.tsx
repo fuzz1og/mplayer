@@ -809,14 +809,29 @@ const ProgressBlock = memo(function ProgressBlock({
 }) {
   const currentTime = usePlayerStore(s => s.currentTime);
   const duration = usePlayerStore(s => s.duration);
+  /**
+   * 拖动期间**冻结受控值**（#423）。
+   *
+   * `value` 是受控 prop，由 250ms 心跳写回的 `currentTime` 驱动，而心跳并不跟手指走：
+   * 不冻住的话，拖动过程中每 250ms 就往原生 SeekBar 推一次 `setValue(播放位置)`，
+   * 拇指被一次次拽回原位——真机表现就是「点一下能跳、按住拖不动那个圆钮」。
+   * 冻住之后拖动期间 prop 恒定，React 不再下发 `value`，原生拇指自由跟手；
+   * 松手才写 store + seekTo。时间标签仍跟手（走 dragTime，不回写 `value`）。
+   */
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragTime, setDragTime] = useState(0);
+  const shownTime = dragFrom === null ? currentTime : dragTime;
   return (
     <View style={styles.progressWrap}>
       <Slider
         style={{ width: sliderWidth(winW) }}
         minimumValue={0}
         maximumValue={Math.max(duration, 1)}
-        value={currentTime}
+        value={dragFrom === null ? currentTime : dragFrom}
+        onSlidingStart={(t) => { setDragFrom(t); setDragTime(t); }}
+        onValueChange={(t) => { if (dragFrom !== null) setDragTime(t); }}
         onSlidingComplete={(t) => {
+          setDragFrom(null);
           // 拖动 seek 同样乐观同步：松手高亮/时间立即跟手，不等 250ms 心跳
           usePlayerStore.getState().setCurrentTime(t);
           void seekTo(t);
@@ -828,7 +843,7 @@ const ProgressBlock = memo(function ProgressBlock({
         thumbTintColor={colors.accent}
       />
       <View style={[styles.timeRow, { width: sliderWidth(winW) }]}>
-        <Text style={styles.time}>{formatTime(currentTime)}</Text>
+        <Text style={styles.time}>{formatTime(shownTime)}</Text>
         <Text style={styles.time}>{formatTime(duration)}</Text>
       </View>
     </View>
