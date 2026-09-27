@@ -22,7 +22,7 @@ import CoverGridSkeleton from '../../components/CoverGridSkeleton';
 import { GRID_CARD } from '../../components/gridCardMetrics';
 import { GRID_GAP, gridCardWidth } from '../../components/gridMetrics';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
-import { radius, textVariants } from '../../theme/tokens';
+import { radius, spacing, textVariants } from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';

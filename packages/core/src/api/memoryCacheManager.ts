@@ -1,4 +1,5 @@
 import type { Song } from '../types/index.js';
+import { evictLruOverflow, touchLru } from '../cache/lru.js';
 
 // 缓存项类型
 interface CacheItem<T> {
@@ -7,9 +8,28 @@ interface CacheItem<T> {
   expiration: number; // 过期时间（毫秒）
 }
 
+/**
+ * 条目上限（LRU）。搜索 / 热榜 / 歌词 / 歌单列表与详情都是**可重取的派生数据**，
+ * 超出上限淘汰最久未用的那条即可，不需要淘汰策略之外的语义（#410）。
+ * 与 CacheKernel 的 L1 同一条纪律：内存缓存必须声明并真正执行容量。
+ */
+export const MEMORY_CACHE_MAX_ENTRIES = 500;
+
 // 缓存管理器类
-class CacheManager {
+export class CacheManager {
   private cache: Map<string, CacheItem<any>> = new Map();
+
+  constructor(private readonly maxEntries: number = MEMORY_CACHE_MAX_ENTRIES) {}
+
+  /** 当前条目数（容量纪律的观测点 / 测试用）。 */
+  get size(): number {
+    return this.cache.size;
+  }
+
+  /** 超限淘汰队首（最久未用）——原语在 core/cache/lru，与 L1 后端同一份。 */
+  private evictOverflow(): void {
+    evictLruOverflow(this.cache, this.maxEntries);
+  }
 
   // 默认过期时间配置（毫秒）
   private defaultExpirations = {
@@ -52,6 +72,8 @@ class CacheManager {
       return null;
     }
 
+    // 命中即最近使用，否则热键会先被淘汰
+    touchLru(this.cache, key);
     return item.data;
   }
 
@@ -65,11 +87,14 @@ class CacheManager {
     if (Array.isArray(data) && data.length === 0) return;
     if (typeof data === 'string' && data.trim() === '') return;
 
+    // 覆盖写同样挪到队尾（先删后插）
+    this.cache.delete(key);
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
       expiration
     });
+    this.evictOverflow();
   }
 
   /**

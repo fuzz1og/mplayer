@@ -31,6 +31,12 @@ export interface CacheBackend {
   write(key: string, data: Uint8Array, expiresAt?: number): Promise<void>
   /** 返回条目绝对过期时间戳（ms），无过期信息返回 0；未实现时内核回退保守策略。 */
   getExpiryAt?(key: string): Promise<number>
+  /**
+   * 设置条目上限（LRU 淘汰）。内存后端实现，磁盘后端忽略。
+   * `CacheKernel` 用它在构造时把 `maxMemoryEntries` 下传——此前该选项
+   * 只是「声明 / 默认值 / 赋值」三处命中、**没有任何读取**，#410。
+   */
+  setCapacity?(maxEntries: number): void
   delete(key: string): Promise<void>
   clear(): Promise<void>
   keys(): Promise<string[]>
