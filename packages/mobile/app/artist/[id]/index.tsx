@@ -1,6 +1,7 @@
 /**
  * 歌手页（#417）。三处根因各自修法：
- * ① 专辑不再截断到 20 张：首屏 limit=100，`more` 为准翻页（横滑未尾的「加载更多」卡片续页）；
+ * ① 专辑不再截断到 20 张：横滑条只做**预览**（首屏 limit=100），分区标题右侧的「更多」进
+ *    `albums` 时间线页（按年份分区、纵向滚动看全部，久石让 243 张也能看完）；
  * ② 头像/名字不再按名字搜第一条：首屏直接用入口带来的 name/pic 渲染（零请求秒出），
  *    随后按 id 走 `getArtistInfoRouted` 校正（网易同名多实体「陶喆」5196 / 31213543 不再串号）；
  * ③ 专辑抓取失败不再静默成「暂无专辑」：core 给了 `ok`，失败走「加载失败，点此重试」。
@@ -12,22 +13,22 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, Image, StyleSheet, ScrollView,
 } from 'react-native';
-import ScalePress from '../../components/ScalePress';
+import ScalePress from '../../../components/ScalePress';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { Disc3 } from 'lucide-react-native';
+import { ChevronRight, Disc3 } from 'lucide-react-native';
 import { getArtistInfoRouted, getDirectClient, type Artist, type Song, type Album } from '@mplayer/core';
-import SongListSkeleton from '../../components/SongListSkeleton';
-import LoadMoreFooter from '../../components/LoadMoreFooter';
-import SongRow from '../../components/SongRow';
-import CollapsingHero from '../../components/CollapsingHero';
-import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
-import { usePlayerStore } from '../../stores/playerStore';
-import { playSong } from '../../services/audioPlayer';
-import { replaceSongInList } from '../../services/songListOps';
-import { radius, shadow, spacing, textVariants, typography } from '../../theme/tokens';
-import type { ThemeColors } from '../../theme/tokens';
-import { useTheme } from '../../theme/ThemeProvider';
+import SongListSkeleton from '../../../components/SongListSkeleton';
+import LoadMoreFooter from '../../../components/LoadMoreFooter';
+import SongRow from '../../../components/SongRow';
+import CollapsingHero from '../../../components/CollapsingHero';
+import BottomSafePlayerBar from '../../../components/BottomSafePlayerBar';
+import { usePlayerStore } from '../../../stores/playerStore';
+import { playSong } from '../../../services/audioPlayer';
+import { replaceSongInList } from '../../../services/songListOps';
+import { radius, shadow, spacing, textVariants, typography } from '../../../theme/tokens';
+import type { ThemeColors } from '../../../theme/tokens';
+import { useTheme } from '../../../theme/ThemeProvider';
 
 /** 专辑分区首屏页大小（#417：社区口径 lx-music 默认 100；core 自控上限 1000） */
 const ALBUM_PAGE_SIZE = 100;
@@ -44,7 +45,6 @@ export default function ArtistDetailPage() {
   const [hasMore, setHasMore] = useState(true);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [albumsTotal, setAlbumsTotal] = useState<number | null>(null);
-  const [albumsMore, setAlbumsMore] = useState(false);
   const [albumsError, setAlbumsError] = useState(false);
   const [albumReloadKey, setAlbumReloadKey] = useState(0);
 
@@ -97,7 +97,7 @@ export default function ArtistDetailPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // 专辑分区：首屏一页，`more` 为准续页（#417 ①）
+  // 专辑分区：只取**首屏一页**做预览；全量在同目录的 albums 时间线页里按 `more` 续页（#417 ①）
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -108,25 +108,16 @@ export default function ArtistDetailPage() {
         if (!r.ok) { setAlbumsError(true); return; }
         setAlbums(r.albums);
         setAlbumsTotal(r.total);
-        setAlbumsMore(r.more);
       })
       .catch((e) => { if (!cancelled) { console.error('[ArtistDetail] albums error:', e); setAlbumsError(true); } });
     return () => { cancelled = true; };
   }, [id, albumReloadKey]);
 
-  const loadMoreAlbums = useCallback(async () => {
-    if (!id || !albumsMore) return;
-    try {
-      const r = await getDirectClient('netease')!.getArtistAlbums!(id, albums.length, ALBUM_PAGE_SIZE);
-      if (!r.ok) { setAlbumsError(true); return; }
-      setAlbums(prev => [...prev, ...r.albums]);
-      setAlbumsTotal(r.total);
-      setAlbumsMore(r.more);
-    } catch (e) {
-      console.error('[ArtistDetail] loadMoreAlbums error:', e);
-      setAlbumsError(true);
-    }
-  }, [id, albumsMore, albums.length]);
+  // 「查看全部专辑」（#417 P0.1）：时间线页按年份分区 + 纵向滚动看全部，横滑条放不下 243 张
+  const openAllAlbums = useCallback(() => {
+    if (!id) return;
+    router.push(`/artist/${id}/albums?name=${encodeURIComponent(displayName)}` as any);
+  }, [id, displayName]);
 
   // 单曲换源后更新列表（SongRow 更多菜单触发；不更新会显示旧的源条目）。
   // useCallback（#411）：SongRow 的 prop，引用必须稳定（函数式更新 → 零依赖）。
@@ -149,9 +140,17 @@ export default function ArtistDetailPage() {
 
   const albumsHeader = (
     <View style={styles.albumsSection}>
-      <Text style={styles.albumsTitle}>
-        {albumsTotal !== null ? `专辑 · ${albumsTotal} 张` : albums.length > 0 ? `专辑 · 已加载 ${albums.length} 张` : '专辑'}
-      </Text>
+      <View style={styles.albumsTitleRow}>
+        <Text style={styles.albumsTitle}>
+          {albumsTotal !== null ? `专辑 · ${albumsTotal} 张` : albums.length > 0 ? `专辑 · 已加载 ${albums.length} 张` : '专辑'}
+        </Text>
+        {albums.length > 0 ? (
+          <ScalePress style={styles.albumsMore} onPress={openAllAlbums} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.albumsMoreText}>更多</Text>
+            <ChevronRight size={16} color={colors.textTertiary} />
+          </ScalePress>
+        ) : null}
+      </View>
       {albumsError ? (
         <ScalePress style={styles.albumsRetry} onPress={() => setAlbumReloadKey(k => k + 1)}>
           <Text style={styles.albumsRetryText}>加载失败，点此重试</Text>
@@ -174,13 +173,6 @@ export default function ArtistDetailPage() {
               <Text style={styles.albumName} numberOfLines={1}>{a.name}</Text>
             </ScalePress>
           ))}
-          {albumsMore ? (
-            <ScalePress style={[styles.albumCard, styles.albumMoreCard]} onPress={loadMoreAlbums}>
-              <View style={[styles.albumCover, styles.albumCoverFallback]}>
-                <Text style={styles.albumMoreText}>加载更多</Text>
-              </View>
-            </ScalePress>
-          ) : null}
         </ScrollView>
       )}
     </View>
@@ -227,7 +219,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   flex: { flex: 1 },
   albumsSection: { paddingTop: spacing[3], paddingBottom: spacing[2], paddingLeft: spacing[4] },
-  albumsTitle: { ...textVariants.body, fontWeight: typography.weights.semibold, color: colors.textPrimary, marginBottom: spacing[3] },
+  albumsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: spacing[4],
+    marginBottom: spacing[3],
+  },
+  albumsTitle: { ...textVariants.body, fontWeight: typography.weights.semibold, color: colors.textPrimary },
+  albumsMore: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  albumsMoreText: { ...textVariants.footnote, color: colors.textTertiary },
   albumsRetry: {
     alignSelf: 'flex-start',
     paddingVertical: spacing[2],
@@ -244,10 +245,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: spacing[2],
     marginRight: spacing[3],
   },
-  albumMoreCard: { justifyContent: 'center' },
   albumCover: { width: 100, height: 100, borderRadius: radius.sm, backgroundColor: colors.bgHover },
   albumCoverFallback: { justifyContent: 'center', alignItems: 'center' },
-  albumMoreText: { ...textVariants.footnote, color: colors.textSecondary },
   albumName: { ...textVariants.caption, color: colors.textTertiary, marginTop: 6 },
   avatarFallback: { color: colors.textInverse, fontSize: 56, fontWeight: typography.weights.bold },
   empty: { paddingVertical: 60, alignItems: 'center' },
