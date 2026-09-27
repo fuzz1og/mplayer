@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Headphones, Trash2, ListMusic } from 'lucide-react';
 import { Modal } from 'antd';
 import { DndContext, closestCenter } from '@dnd-kit/core';
@@ -43,6 +43,25 @@ const QueuePage: React.FC = () => {
   const clearQueue = usePlayerStore((s) => s.clearQueue);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const [showBatchModal, setShowBatchModal] = useState(false);
+
+  /**
+   * 行尾操作用**渲染函数**（#412）：此前 `actions={<QueueRowActions .../>}` 每帧新建元素，
+   * `SortableSongRow` 的 memo 永远失效 → 播放状态一变整个队列全部重渲染。
+   */
+  const renderQueueActions = useCallback(
+    (song: Song, index: number) => (
+      <QueueRowActions
+        song={song}
+        index={index}
+        onAddToPlaylist={setAddToPlaylistSong}
+        onRemove={removeFromQueue}
+      />
+    ),
+    [removeFromQueue],
+  );
+
+  /** SortableContext 的 items：每次渲染新建数组会让 dnd-kit 认为顺序集合变了（#412） */
+  const queueIds = useMemo(() => currentPlaylist.map((s) => s.id), [currentPlaylist]);
   // 行内「加入歌单」单曲弹窗
   const [addToPlaylistSong, setAddToPlaylistSong] = useState<Song | null>(null);
 
@@ -120,7 +139,7 @@ const QueuePage: React.FC = () => {
               <div style={{ width: '60px', textAlign: 'center' }}>操作</div>
             </div>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={currentPlaylist.map(s => s.id)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={queueIds} strategy={verticalListSortingStrategy}>
                 {currentPlaylist.map((song, index) => (
                   <SortableSongRow
                     key={song.id}
@@ -132,14 +151,7 @@ const QueuePage: React.FC = () => {
                     albumWidth={120}
                     onPlay={play}
                     onCoverError={handleCoverError}
-                    actions={
-                      <QueueRowActions
-                        song={song}
-                        index={index}
-                        onAddToPlaylist={setAddToPlaylistSong}
-                        onRemove={removeFromQueue}
-                      />
-                    }
+                    renderActions={renderQueueActions}
                   />
                 ))}
               </SortableContext>

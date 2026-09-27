@@ -109,11 +109,14 @@ export function useVirtualRows({ count, enabled, estimateSize, overscan = 8 }: U
       observer.observe(rowsRef.current!.parentElement ?? rowsRef.current!);
     }
     window.addEventListener('resize', measure);
-    scrollElement.addEventListener('scroll', measure, { passive: true });
+    // **不监听 scroll**（#412）：scrollMargin = rows.top - container.top + container.scrollTop，
+    // 而滚动时 scrollTop 增量与 rows.top 的减量相抵，这个和不随滚动变化。
+    // 此前把它挂在 scroll 上，等于每个滚动事件都强制两次 getBoundingClientRect（同步布局），
+    // 白白吃掉滚动帧的时间。偏移真正会变的时机（批量栏展开、头部加载、窗口尺寸）
+    // 都由上面的 ResizeObserver 与 resize 覆盖。
     return () => {
       observer?.disconnect();
       window.removeEventListener('resize', measure);
-      scrollElement.removeEventListener('scroll', measure);
     };
   }, [scrollElement]);
 
