@@ -66,6 +66,21 @@ interface CollapsingHeroProps<T> {
   subtitle?: string;
   /** 元信息（"8 首"、"2024 · 8 首"） */
   meta?: string;
+  /**
+   * 指标行（#406 二期）：与 `meta` 同位置，但按 ` · ` 拆成多项并挂
+   * `tabular-nums`（"2025 · 15 首 · 52 分钟" 这类含数字的排，等宽数字才不会跳列）。
+   * 给了 `metaItems` 就忽略 `meta`。
+   */
+  metaItems?: string[];
+  /** 主次操作行（#406 二期）：播放按钮之后的页面级动作插槽（收藏/下载/分享…） */
+  actions?: React.ReactNode;
+  /** 章节头（#406 二期）：信息区与列表之间的「歌曲 · N 首」，用来收口灰/白接缝 */
+  sectionHeader?: string;
+  /**
+   * 信息区改用 `bgSurface`（#406 二期）。默认 false = 保持既有四页观感不变；
+   * 专辑页置真，消除「信息区灰底 → 第一行白底」的横向灰带。
+   */
+  surface?: boolean;
   /** 标签行（网络歌单） */
   tags?: string[];
   /** 播放按钮文字 */
@@ -94,6 +109,10 @@ export default function CollapsingHero<T>({
   title,
   subtitle,
   meta,
+  metaItems,
+  actions,
+  sectionHeader,
+  surface,
   tags,
   actionLabel,
   onAction,
@@ -190,10 +209,14 @@ export default function CollapsingHero<T>({
               />
             </View>
             {/* 信息区：封面下方独立实心区域（不叠封面、不透明） */}
-            <View style={styles.info}>
+            <View style={[styles.info, surface ? styles.infoSurface : null]}>
               <Text style={styles.title} numberOfLines={2}>{title}</Text>
               {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
-              {meta ? <Text style={styles.meta}>{meta}</Text> : null}
+              {metaItems && metaItems.length > 0 ? (
+                <Text style={styles.metaItems} numberOfLines={1}>{metaItems.join(' · ')}</Text>
+              ) : meta ? (
+                <Text style={styles.meta}>{meta}</Text>
+              ) : null}
               {tags && tags.length > 0 ? (
                 <View style={styles.tagsRow}>
                   {tags.map((t) => (
@@ -209,7 +232,13 @@ export default function CollapsingHero<T>({
                   <Text style={styles.playText}>{actionLabel}</Text>
                 </ScalePress>
               ) : null}
+              {actions ? <View style={styles.actionsRow}>{actions}</View> : null}
             </View>
+            {sectionHeader ? (
+              <View style={[styles.sectionHeader, surface ? styles.sectionHeaderSurface : null]}>
+                <Text style={styles.sectionHeaderText}>{sectionHeader}</Text>
+              </View>
+            ) : null}
             {listHeader}
           </View>
         }
@@ -266,9 +295,25 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: spacing[4],
     paddingBottom: spacing[3],
   },
-  title: { color: colors.textPrimary, fontSize: typography.sizes['3xl'], fontWeight: '800' },
+  // 字重回到 token 标尺（#406）：原先硬编码 800，而 weights 只有 400/500/600/700
+  title: { color: colors.textPrimary, fontSize: typography.sizes['3xl'], fontWeight: typography.weights.bold },
   subtitle: { color: colors.textSecondary, fontSize: typography.sizes.base, marginTop: spacing[1] },
   meta: { color: colors.textSecondary, fontSize: typography.sizes.sm, marginTop: spacing[1] },
+  metaItems: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.sm,
+    marginTop: spacing[1],
+    fontVariant: ['tabular-nums'],
+  },
+  infoSurface: { backgroundColor: colors.bgSurface },
+  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[3] },
+  sectionHeader: {
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[2],
+  },
+  sectionHeaderSurface: { backgroundColor: colors.bgSurface },
+  sectionHeaderText: { color: colors.textSecondary, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginTop: spacing[2] },
   tag: {
     backgroundColor: colors.bgHover,
@@ -276,7 +321,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing[3],
     paddingVertical: 3,
   },
-  tagText: { color: colors.textSecondary, fontSize: 11 },
+  tagText: { color: colors.textSecondary, fontSize: typography.sizes.xs },
   playBtn: {
     flexDirection: 'row',
     alignItems: 'center',
