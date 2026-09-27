@@ -1,4 +1,4 @@
-import type { Artist, SearchOrchestratorState } from '@mplayer/core';
+import type { Artist, DiscoverPlaylist, SearchOrchestratorState } from '@mplayer/core';
 import { createSearchOrchestrator } from '@mplayer/core';
 import type { SourceKey as CoreSourceKey } from '@mplayer/core';
 import { useSearchStore } from '@/renderer/store/searchStore';
@@ -71,6 +71,22 @@ class SearchService {
    */
   async searchArtists(keyword: string, limit = 30): Promise<Artist[]> {
     return callMusicApi('searchArtists', 'netease', keyword, limit);
+  }
+
+  /**
+   * 搜索歌单（#415，仅网易云源有歌单搜索接口）：结果由调用方持有，
+   * 搜索结果页的「歌单」tab 用它加载。
+   *
+   * **懒加载**：调用方必须只在切到「歌单」tab 时调它——`cloudsearch/pc` 已是搜索页
+   * 在用腿（关键词变化时网易打 1 发搜索），无条件再打一发会让该腿请求数翻倍。
+   * 分页终止由 core 的 `more`（`offset + limit < playlistCount` 推导）表达。
+   */
+  async searchPlaylists(
+    keyword: string,
+    limit = 30,
+    offset = 0,
+  ): Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }> {
+    return callMusicApi('searchPlaylists', 'netease', keyword, limit, offset);
   }
 
   loadMore(): Promise<void> {
