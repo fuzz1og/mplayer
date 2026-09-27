@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
+import { useEffect, useMemo, useRef, useState, memo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, ScrollView,
   Animated, Alert, useWindowDimensions, Easing,
@@ -440,33 +440,6 @@ export default function PlayerOverlay({ onClose }: Props) {
     onGestureEnd: () => { setTimeout(() => { isPagingRef.current = false; }, 400); },
   });
 
-  /**
-   * 进度条拖动期间**关掉分页 ScrollView 的滚动**（#423）。
-   *
-   * 为什么必须在**按下**时就关、而不能等 onSlidingStart：Android 的 AbsSeekBar 在
-   * `isInScrollingContainer()` 为真时，要等 |x - downX| 超过自己的 touch slop 才
-   * `startDrag()`；而 ViewGroup 的 `onInterceptTouchEvent` **先于**子 View 拿到同一个
-   * MOVE，横向分页 ScrollView 在同一个 slop 上先拦截 → 子级收 ACTION_CANCEL →
-   * SeekBar 永远没 startDrag（onSlidingStart 也不触发）。这就是「点得动、拖不动」
-   * 的主因（RN #32103；库侧没有 requestDisallowInterceptTouchEvent）。
-   *
-   * 依据：RN 的 ReactHorizontalScrollView.onInterceptTouchEvent 首行是
-   * `if (!mScrollEnabled) return false;` —— 按下即置 false 即短路整条拦截路径。
-   * 恢复：滑动结束回调 + 4s 兜底定时器（点按不会触发滑动回调）。
-   */
-  const [pagerScrollEnabled, setPagerScrollEnabled] = useState(true);
-  const pagerHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const holdPagerScroll = useCallback(() => {
-    setPagerScrollEnabled(false);
-    if (pagerHoldTimer.current) clearTimeout(pagerHoldTimer.current);
-    pagerHoldTimer.current = setTimeout(() => { pagerHoldTimer.current = null; setPagerScrollEnabled(true); }, 4000);
-  }, []);
-  const releasePagerScroll = useCallback(() => {
-    if (pagerHoldTimer.current) { clearTimeout(pagerHoldTimer.current); pagerHoldTimer.current = null; }
-    setPagerScrollEnabled(true);
-  }, []);
-  useEffect(() => () => { if (pagerHoldTimer.current) clearTimeout(pagerHoldTimer.current); }, []);
-
   if (!song) return null;
 
   return (
@@ -528,8 +501,6 @@ export default function PlayerOverlay({ onClose }: Props) {
           style={styles.pager}
           horizontal
           pagingEnabled
-          /* #423：按住进度行期间为 false——否则横向分页会在 slop 上先拦截、把滑块拖动吃掉 */
-          scrollEnabled={pagerScrollEnabled}
           nestedScrollEnabled
           bounces={false}
           overScrollMode="never"
@@ -648,12 +619,8 @@ export default function PlayerOverlay({ onClose }: Props) {
                 )}
               </MaskedView>
 
-            {/* 进度条 + 时间行：叶子组件自订阅 currentTime（250ms 心跳不打全树）。
-                #423：外层 View 只做「按下即关分页滚动」的 capture 观察者（返回 false，
-                不抢 responder），滑块的触摸与手感完全不受影响。 */}
-            <View onStartShouldSetResponderCapture={() => { holdPagerScroll(); return false; }}>
-              <ProgressBlock styles={styles} colors={colors} fg={fg} winW={winW} onScrubEnd={releasePagerScroll} />
-            </View>
+            {/* 进度条 + 时间行：叶子组件自订阅 currentTime（250ms 心跳不打全树） */}
+            <ProgressBlock styles={styles} colors={colors} fg={fg} winW={winW} />
 
             {/* 控制按钮（真机反馈：循环模式最左、队列最右，与播放三键构成五件布局；
                 原底部操作行合并至此，腾出空间给唱盘） */}
@@ -833,14 +800,12 @@ const LyricSyncer = memo(function LyricSyncer({
  * 250ms 心跳只重渲染这块小子树，进度/时间照常实时，全屏播放器其余部分不动。
  */
 const ProgressBlock = memo(function ProgressBlock({
-  styles, colors, fg, winW, onScrubEnd,
+  styles, colors, fg, winW,
 }: {
   styles: ReturnType<typeof makeStyles>;
   colors: ThemeColors;
   fg: PlayerFg;
   winW: number;
-  /** 滑动结束（含点按 seek）→ 让调用方恢复分页滚动（#423） */
-  onScrubEnd?: () => void;
 }) {
   const currentTime = usePlayerStore(s => s.currentTime);
   const duration = usePlayerStore(s => s.duration);
@@ -867,7 +832,6 @@ const ProgressBlock = memo(function ProgressBlock({
         onValueChange={(t) => { if (dragFrom !== null) setDragTime(t); }}
         onSlidingComplete={(t) => {
           setDragFrom(null);
-          onScrubEnd?.();
           // 拖动 seek 同样乐观同步：松手高亮/时间立即跟手，不等 250ms 心跳
           usePlayerStore.getState().setCurrentTime(t);
           void seekTo(t);
