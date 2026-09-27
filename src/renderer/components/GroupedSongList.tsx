@@ -16,6 +16,35 @@ type FlatItem =
 const GROUP_HEADER_HEIGHT = 44;
 const noop = () => {};
 
+/**
+ * 虚拟化行的定位包裹层（#412）：只吃数字，坐标一变就只有这一行重渲染；
+ * 行组件本身因此不必再接收「每帧新建的 style 对象」，`React.memo` 才真正生效。
+ */
+const VirtualRow = React.memo(function VirtualRow({
+  start,
+  size,
+  scrollMargin,
+  children,
+}: {
+  start: number;
+  size: number;
+  scrollMargin: number;
+  children: React.ReactNode;
+}) {
+  const style = useMemo<React.CSSProperties>(
+    () => ({
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: `${size}px`,
+      transform: `translateY(${start - scrollMargin}px)`,
+    }),
+    [size, start, scrollMargin],
+  );
+  return <div style={style}>{children}</div>;
+});
+
 interface GroupedSongListProps {
   /** 分组数据经 props 提供（页面做 searchStore 的适配器），组件不再自己订阅数据源 */
   groups: SongGroup[];
@@ -150,31 +179,27 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
     );
   }
 
-  const virtualRowStyle = (start: number, size: number, scrollMargin: number): React.CSSProperties => ({
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: `${size}px`,
-    transform: `translateY(${start - scrollMargin}px)`,
-  });
-
-  const renderItem = (item: FlatItem, style?: React.CSSProperties) => {
+  /**
+   * 虚拟化行的**定位**不再当 `style` prop 传给行组件（#412）。`SongRow`/`GroupHeaderRow`
+   * 都是 `React.memo`，而每行每帧都新建一个 style 对象等于给它们塞一个永远不相等的 prop，
+   * memo 形同虚设。这里把定位收进一个只吃**数字**的 memo 包裹层，行组件拿到的 props
+   * 就只剩它自己的数据。
+   */
+  const renderItem = (item: FlatItem) => {
     if (item.type === 'group') {
       return (
         <GroupHeaderRow
           key={item.group.key}
           group={item.group}
           isExpanded={expandedSet.has(item.group.key)}
-          onToggle={() => stableOnToggleGroup?.(item.group.key)}
-          onPlayFirst={() => handlePlayFirst(item.group)}
-          style={style}
+          onToggle={stableOnToggleGroup ?? noop}
+          onPlayFirst={handlePlayFirst}
         />
       );
     }
     return (
       <SongRow
-        key={`${item.groupKey}-${item.index}`}
+        key={`${item.groupKey}-${item.song.id}`}
         song={item.song}
         index={item.index}
         isCurrentSong={currentSongId === item.song.id}
@@ -191,7 +216,6 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
         onToggleDropdown={handleToggleDropdown}
         onCloseDropdown={handleCloseDropdown}
         compact={false}
-        style={style}
       />
     );
   };
@@ -220,7 +244,16 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
               ? virtual.items.map((virtualItem) => {
                   const item = flatItems[virtualItem.index];
                   if (!item) return null;
-                  return renderItem(item, virtualRowStyle(virtualItem.start, virtualItem.size, virtual.scrollMargin));
+                  return (
+                    <VirtualRow
+                      key={item.type === 'group' ? item.group.key : `${item.groupKey}-${item.song.id}`}
+                      start={virtualItem.start}
+                      size={virtualItem.size}
+                      scrollMargin={virtual.scrollMargin}
+                    >
+                      {renderItem(item)}
+                    </VirtualRow>
+                  );
                 })
               : flatItems.map((item) => renderItem(item))}
         </div>

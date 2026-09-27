@@ -321,6 +321,17 @@ const DiscoverPageV2: React.FC = () => {
     navigate(`/discover-playlist/${pl.id}`);
   };
 
+  /**
+   * 搜索结果列表的播放回调（#412）：此前两处都是内联箭头 `(song) => void play(song)`，
+   * 每次渲染新建引用。行组件是 memo 的，回调引用必须稳定。
+   */
+  const handleSearchPlay = useCallback((song: Song) => { void play(song); }, [play]);
+  /** 搜索多源视图不提供多选：稳定的空数组/空实现，避免每帧新建引用 */
+  const EMPTY_SELECTION = useRef<string[]>([]).current;
+  /** 搜索多源视图不提供分页：稳定空实现，避免每帧新建 */
+  const handleNoSelectionChange = useCallback((_ids: string[]) => {}, []);
+  const handleSearchLoadMore = useCallback(() => { void searchService.loadMore(); }, []);
+
   const handlePlaySong = async (song: Song, chartId?: string) => {
     if (chartId) playedChartIdRef.current = chartId;
     try {
@@ -497,14 +508,14 @@ const DiscoverPageV2: React.FC = () => {
                 currentSongId={currentSong?.id}
                 isPlaying={isPlaying}
                 favoriteIds={favoriteIds}
-                onPlay={(song: Song) => { void play(song); }}
+                onPlay={handleSearchPlay}
                 onToggleFavorite={toggleFavorite}
                 onDownload={download}
-                selectedIds={[]}
-                onSelectionChange={() => {}}
+                selectedIds={EMPTY_SELECTION}
+                onSelectionChange={handleNoSelectionChange}
                 loading={searchLoading || searchLoadingMore}
                 hasMore={hasMore}
-                onLoadMore={() => searchService.loadMore()}
+                onLoadMore={handleSearchLoadMore}
               />
             ) : (
               <div ref={singleSourceScrollRef} style={{ height: '100%', overflowY: 'auto' }}>
@@ -513,7 +524,7 @@ const DiscoverPageV2: React.FC = () => {
                   currentSongId={currentSong?.id}
                   isPlaying={isPlaying}
                   favoriteIds={favoriteIds}
-                  onPlay={(song: Song) => { void play(song); }}
+                  onPlay={handleSearchPlay}
                   onToggleFavorite={toggleFavorite}
                   onDownload={download}
                   showCheckbox={false}

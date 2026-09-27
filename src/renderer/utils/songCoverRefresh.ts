@@ -19,16 +19,44 @@ const inFlightRefreshes = new Map<string, Promise<string | null>>();
 // （服务端对同 IP 并发有硬限制，core 全局闸门再兜底）
 const REFRESH_MAX_CONCURRENT = 3;
 let refreshInFlight = 0;
+/**
+ * 等待槽位的 FIFO 队列（#412）。
+ *
+ * 此前是 `while (inFlight >= 3) await sleep(200)` 的**忙等轮询**：被限流的调用每 200ms
+ * 醒一次、每秒白烧 5 个定时器，且唤醒顺序不保证公平。改成队列后由「释放槽位的人」
+ * 直接唤醒下一个，零轮询、天然 FIFO。
+ */
+const waitingForSlot: Array<() => void> = [];
 
 async function withRefreshLimit<T>(fn: () => Promise<T>): Promise<T> {
-  while (refreshInFlight >= REFRESH_MAX_CONCURRENT) {
-    await new Promise((r) => setTimeout(r, 200));
+  if (refreshInFlight >= REFRESH_MAX_CONCURRENT) {
+    await new Promise<void>((resolve) => waitingForSlot.push(resolve));
   }
   refreshInFlight++;
   try {
     return await fn();
   } finally {
     refreshInFlight--;
+    waitingForSlot.shift()?.();
+  }
+}
+
+/**
+ * 会话级 Map 的容量护栏（#412）：`attempts` 与 `lastRefreshAt` 此前**只写不清**——
+ * 封面持久失效的大列表挂着不动，键会随「见过的歌」一直累积。超过上限时先清过期项，
+ * 再按插入顺序淘汰最旧（丢掉的只是「重试计数/冷却」这类记忆，不影响正确性）。
+ */
+const MAX_REMEMBERED_KEYS = 500;
+function pruneRemembered<V>(map: Map<string, V>, atOf: (value: V) => number, ttl: number): void {
+  if (map.size <= MAX_REMEMBERED_KEYS) return;
+  const now = Date.now();
+  for (const [key, value] of map) {
+    if (now - atOf(value) > ttl) map.delete(key);
+  }
+  while (map.size > MAX_REMEMBERED_KEYS) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
   }
 }
 
@@ -71,6 +99,8 @@ export function refreshSongCover(song: Song): Promise<string | null> {
   if (count >= MAX_ATTEMPTS) return Promise.resolve(null);
   attempts.set(attemptKey, { count: count + 1, at: Date.now() });
   lastRefreshAt.set(attemptKey, Date.now());
+  pruneRemembered(attempts, (v) => v.at, ATTEMPT_RESET_TTL);
+  pruneRemembered(lastRefreshAt, (v) => v, LAST_REFRESH_TTL);
 
   const promise = withRefreshLimit(async () => {
     // 缓存优先：先读 URL 缓存，已有可用封面直接复用（收藏/历史行每 session 挂载触发，

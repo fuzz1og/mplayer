@@ -1,4 +1,5 @@
 import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 import { app } from 'electron';
@@ -17,6 +18,21 @@ const COVER_EXT_BY_MIME: Record<string, string> = {
   'image/gif': '.gif',
 };
 const DEFAULT_COVER_EXT = '.jpg';
+
+/** 同一目录内解析音频标签的并发上限（#412）：串行解析一张专辑要等 12 个来回，全并发又会一次推出几百个解析 */
+const PARSE_CONCURRENCY = 4;
+/** fs.watch 事件合并窗口（#412）：一次「复制专辑」会派发成百上千条 rename 事件 */
+const WATCH_DEBOUNCE_MS = 400;
+
+/** 异步存在性检查（#412）：`fs.existsSync` 在扫描/监听回调里同步打磁盘 */
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fsp.stat(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function extensionForCover(mime: string): string {
   return COVER_EXT_BY_MIME[mime] || DEFAULT_COVER_EXT;
@@ -48,6 +64,10 @@ class LocalMusicService {
   private store: LocalMusicStore = { folders: [] };
   private watchers: Map<string, fs.FSWatcher> = new Map();
   private initialized: boolean = false;
+  /** 写盘串行链（#412）：避免并发 saveStore 的 tmp→rename 交错 */
+  private saveChain: Promise<void> = Promise.resolve();
+  /** fs.watch 事件合并定时器：fullPath → timer（destroy/stopWatching 时统一清） */
+  private watchTimers: Map<string, NodeJS.Timeout> = new Map();
   private userDataPath?: string;
 
   constructor(userDataPath?: string) {
@@ -78,8 +98,25 @@ class LocalMusicService {
     }
   }
 
-  private saveStore(): void {
-    fs.writeFileSync(this.storeFile, JSON.stringify(this.store, null, 2), 'utf-8');
+  /**
+   * 保存曲库（#412）。
+   *
+   * 此前是 `fs.writeFileSync` **全量同步重写**整个 JSON：曲库上万首时每次增删/改标签
+   * 都要主进程同步写一次大文件（UI 与 IPC 一起卡住），写一半崩溃还会留下半个文件。
+   * 现在改成异步 + 临时文件原子替换 + 串行化（并发调用按序落盘，rename 不交错）。
+   */
+  private async saveStore(): Promise<void> {
+    this.saveChain = this.saveChain.then(async () => {
+      const payload = JSON.stringify(this.store, null, 2);
+      const tmpFile = `${this.storeFile}.tmp`;
+      try {
+        await fsp.writeFile(tmpFile, payload, 'utf-8');
+        await fsp.rename(tmpFile, this.storeFile);
+      } catch (err) {
+        console.error('[LocalMusic] 保存曲库失败:', err);
+      }
+    });
+    return this.saveChain;
   }
 
   private isSupportedFormat(filePath: string): boolean {
@@ -137,13 +174,23 @@ class LocalMusicService {
     const songs: LocalSong[] = [];
 
     const walkDir = async (dir: string) => {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      // 异步遍历（#412）：此前 readdirSync 在递归里同步打磁盘
+      const entries = await fsp.readdir(dir, { withFileTypes: true });
+      const files: string[] = [];
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           await walkDir(fullPath);
         } else if (entry.isFile() && this.isSupportedFormat(entry.name)) {
-          const song = await this.parseFile(fullPath);
+          files.push(fullPath);
+        }
+      }
+      // 同一目录内**有界并发**解析（#412）：此前逐个 await parseFile，
+      // 一张 12 首的专辑要串 12 个来回；全并发又会一次推出几百个标签解析。
+      for (let i = 0; i < files.length; i += PARSE_CONCURRENCY) {
+        const batch = files.slice(i, i + PARSE_CONCURRENCY);
+        const parsed = await Promise.all(batch.map((file) => this.parseFile(file)));
+        for (const song of parsed) {
           if (song) songs.push(song);
         }
       }
@@ -173,7 +220,7 @@ class LocalMusicService {
     };
 
     this.store.folders.push(folderData);
-    this.saveStore();
+    await this.saveStore();
 
     return {
       folder: { path: folderPath, name: folderData.name, songCount: songs.length, lastScanned: new Date(folderData.lastScanned) },
@@ -185,7 +232,7 @@ class LocalMusicService {
     this.ensureInitialized();
     this.stopWatching(folderPath);
     this.store.folders = this.store.folders.filter(f => f.path !== folderPath);
-    this.saveStore();
+    await this.saveStore();
   }
 
   async getFolders(): Promise<LocalFolder[]> {
@@ -214,7 +261,7 @@ class LocalMusicService {
       folder.songs = songs;
       folder.lastScanned = new Date().toISOString();
     }
-    this.saveStore();
+    await this.saveStore();
   }
 
   destroy(): void {
@@ -222,26 +269,41 @@ class LocalMusicService {
       watcher.close();
     }
     this.watchers.clear();
+    this.clearWatchTimers();
+  }
+
+  /** fs.watch 事件合并后的落地处理（#412）：存在性检查也改异步 */
+  private async handleWatchEvent(
+    fullPath: string,
+    onChange: (type: 'add' | 'remove', songs: LocalSong[], songIds: string[]) => void,
+  ): Promise<void> {
+    if (!(await fileExists(fullPath))) {
+      onChange('remove', [], [fullPath]);
+      return;
+    }
+    if (!this.isSupportedFormat(fullPath)) return;
+    const song = await this.parseFile(fullPath);
+    if (song) onChange('add', [song], []);
   }
 
   startWatching(folderPath: string, onChange: (type: 'add' | 'remove', songs: LocalSong[], songIds: string[]) => void): void {
     if (this.watchers.has(folderPath)) return;
 
     const watcher = fs.watch(folderPath, { recursive: true }, (eventType, filename) => {
-      if (!filename) return;
+      if (!filename || eventType !== 'rename') return;
       const fullPath = path.join(folderPath, filename);
-      const isSupported = this.isSupportedFormat(fullPath);
-
-      if (eventType === 'rename') {
-        const exists = fs.existsSync(fullPath);
-        if (exists && isSupported) {
-          this.parseFile(fullPath).then(song => {
-            if (song) onChange('add', [song], []);
-          });
-        } else if (!exists) {
-          onChange('remove', [], [fullPath]);
-        }
-      }
+      // **事件合并**（#412）：此前每条 rename 都立刻同步 existsSync + parseFile + IPC。
+      // 复制一张专辑会派发成百上千条事件（每个文件 add 往往还伴随 change/rename 数条），
+      // 于是同一秒里可能有几百次标签解析与 IPC 推送。合并窗口内只保留最后一次。
+      const pending = this.watchTimers.get(fullPath);
+      if (pending) clearTimeout(pending);
+      this.watchTimers.set(
+        fullPath,
+        setTimeout(() => {
+          this.watchTimers.delete(fullPath);
+          void this.handleWatchEvent(fullPath, onChange);
+        }, WATCH_DEBOUNCE_MS),
+      );
     });
 
     // 审查修复：目录被移除/权限变化时 fs.watch 会派发 error，不监听将抛出未捕获异常
@@ -260,6 +322,13 @@ class LocalMusicService {
       watcher.close();
       this.watchers.delete(folderPath);
     }
+    this.clearWatchTimers();
+  }
+
+  /** 清掉已排队的 fs.watch 合并定时器（#412）：目录停了就不该再有落地的解析与推送 */
+  private clearWatchTimers(): void {
+    for (const timer of this.watchTimers.values()) clearTimeout(timer);
+    this.watchTimers.clear();
   }
 
   startWatchingAll(onChange: (type: 'add' | 'remove', songs: LocalSong[], songIds: string[]) => void): void {
@@ -274,6 +343,7 @@ class LocalMusicService {
       watcher.close();
     }
     this.watchers.clear();
+    this.clearWatchTimers();
   }
 }
 

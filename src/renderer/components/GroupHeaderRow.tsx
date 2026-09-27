@@ -5,8 +5,13 @@ import type { SongGroup } from '@mplayer/core';
 interface GroupHeaderRowProps {
   group: SongGroup;
   isExpanded: boolean;
-  onToggle: () => void;
-  onPlayFirst: () => void;
+  /**
+   * 回调**带上自己的分组**而不是由父组件包一层闭包（#412）：`onToggle={() => f(group.key)}`
+   * 这种写法每次渲染都是新引用，会把本组件的 `React.memo` 直接击穿——列表滚动/任意状态
+   * 变化都会让所有组头重渲染。
+   */
+  onToggle: (groupKey: string) => void;
+  onPlayFirst: (group: SongGroup) => void;
   style?: React.CSSProperties;
 }
 
@@ -27,10 +32,10 @@ const GroupHeaderRow: React.FC<GroupHeaderRowProps> = ({
         backgroundColor: 'var(--bg-surface)',
         ...style,
       }}
-      onClick={onPlayFirst}
+      onClick={() => onPlayFirst(group)}
     >
       <button
-        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+        onClick={(e) => { e.stopPropagation(); onToggle(group.key); }}
         aria-label={isExpanded ? '折叠分组' : '展开分组'}
         style={{
           border: 'none',
@@ -80,7 +85,7 @@ const GroupHeaderRow: React.FC<GroupHeaderRowProps> = ({
       </span>
 
       <button
-        onClick={(e) => { e.stopPropagation(); onPlayFirst(); }}
+        onClick={(e) => { e.stopPropagation(); onPlayFirst(group); }}
         aria-label="播放分组第一首"
         style={{
           border: 'none',

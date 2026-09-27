@@ -88,13 +88,17 @@ export const useSearchStore = create<SearchState>((set) => ({
       return { songs: newSongs };
     }
 
-    // Update in groups
-    const newGroups = state.groups.map(group => ({
+    // 分组视图：只重建**包含这首歌的那一组**（#412）。
+    // 此前无论命中与否都把整份 groups 全量 map 一遍（每首歌都新建对象）——
+    // 一次「播放成功」事件就能让整表换新，订阅 groups 的组件全部重渲染。
+    const groupIndex = state.groups.findIndex(group => group.songs.some(s => s.id === songId));
+    if (groupIndex === -1) return {}; // 未命中：state 不变，不惊动任何订阅者
+    const group = state.groups[groupIndex];
+    const newGroups = [...state.groups];
+    newGroups[groupIndex] = {
       ...group,
-      songs: group.songs.map(song =>
-        song.id === songId ? { ...song, audioTag: tag } : song
-      )
-    }));
+      songs: group.songs.map(s => (s.id === songId ? { ...s, audioTag: tag } : s)),
+    };
 
     return { groups: newGroups };
   }),

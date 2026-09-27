@@ -64,9 +64,12 @@ export default defineConfig({
     assetsInlineLimit: 4096,
     rollupOptions: {
       output: {
+        // 只钉真正全局共享的运行时；**不钉 antd**（#412）。
+        // 此前 `antd: ['antd']` 把整个组件库塞进一个 chunk：入口只要用到任何一个
+        // antd 组件，这个 chunk 就整体进首屏，路由级（懒加载页面）的按需拆分被抹平。
+        // 去掉后交给 Rollup 按实际 import 图切分——每个路由只带自己用到的部分。
         manualChunks: {
           vendor: ['react', 'react-dom', 'zustand'],
-          antd: ['antd'],
           howler: ['howler'],
           icons: ['lucide-react'],
           axios: ['axios']
