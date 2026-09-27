@@ -121,9 +121,7 @@ export default function HotlistPage() {
           }}
         />
         {loading ? (
-          // 榜位列（rank）在 master 的 SongListSkeleton 里没有占位 —— 属 #416（PR #418）范围，
-          // 本票不重复改骨架，避免两个 PR 撞同一个文件
-          <SongListSkeleton />
+          <SongListSkeleton showRank />
         ) : (
           <SongList
             rows={rows}
