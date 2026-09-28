@@ -63,8 +63,12 @@ describe('窗口定序 planNextIndexes（§5.5 / §7.3）', () => {
     expect(planNextIndexes(queue, 1, 3, new Set(), '列表循环')).toEqual([2, 3, 4]);
   });
 
-  it('越过队列尾部即停（不绕回，绕回由 core/播放模式决定）', () => {
-    expect(planNextIndexes(queue, 3, 3, new Set(), '列表循环')).toEqual([4]);
+  it('列表循环：走到底绕回队首续队列（原生 repeatMode 恒为 OFF，绕圈语义在 JS）', () => {
+    expect(planNextIndexes(queue, 3, 3, new Set(), '列表循环')).toEqual([4, 0, 1]);
+  });
+
+  it('单曲循环不补窗（原生 REPEAT_MODE_ONE 负责）', () => {
+    expect(planNextIndexes(queue, 0, 3, new Set(), '单曲循环')).toEqual([]);
   });
 
   it('已在原生手里的 key 不重复投喂', () => {
@@ -90,8 +94,9 @@ describe('窗口定序 planNextIndexes（§5.5 / §7.3）', () => {
     }
   });
 
-  it('随机模式在队列只剩当前一首时取不到候选 → 返回空（原生按窗口耗尽处理）', () => {
-    expect(planNextIndexes([song('only')], 0, 3, new Set(), '随机播放')).toEqual([]);
+  it('队列只剩一首时随机/列表循环都只能重复它（原生 append 后重新起播）', () => {
+    expect(planNextIndexes([song('only')], 0, 3, new Set(), '随机播放')).toEqual([0]);
+    expect(planNextIndexes([song('only')], 0, 3, new Set(), '列表循环')).toEqual([0]);
   });
 
   it('count<=0 或空队列直接返回空', () => {

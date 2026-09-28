@@ -26,9 +26,16 @@ internal class AdvancePolicy {
   @Volatile
   var loopMode: String = LOOP_OFF
 
+  /**
+   * 只对「单曲循环」用原生 repeat；**绝不用 REPEAT_MODE_ALL**。
+   *
+   * 原生播放列表只是 JS 队列的一个**窗口**（loadQueue 一首 + patchQueue 追加），
+   * 用 REPEAT_MODE_ALL 会让窗口绕回自己（把早就播过的歌当成「列表循环」重播），
+   * 也不会向 JS 要新歌。列表循环 / 随机都由 JS 端 `planNextIndexes` 续队列
+   * （规格 §7.3：随机由 JS 定序，原生只顺序推进）。
+   */
   fun repeatMode(): Int = when (loopMode) {
     LOOP_SINGLE -> Player.REPEAT_MODE_ONE
-    LOOP_ALL -> Player.REPEAT_MODE_ALL
     else -> Player.REPEAT_MODE_OFF
   }
 

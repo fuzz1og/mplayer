@@ -83,38 +83,50 @@ export function planNextIndexes(
   playMode: string
 ): number[] {
   if (queue.length === 0 || count <= 0) return [];
+  // 单曲循环由原生 REPEAT_MODE_ONE 处理：不补窗（补了也永远不会播到）
+  if (playMode === '单曲循环') return [];
+
   const planned: number[] = [];
   const localExcluded = new Set(excluded);
   let cursor = fromIndex;
+  let guard = 0;
+  // 上限：最多绕队列两圈找候选（excluded 命中时只跳过，不无限自旋）
+  const maxIter = queue.length * 2 + 6;
 
-  while (planned.length < count) {
+  while (planned.length < count && guard < maxIter) {
+    guard += 1;
     let next: number;
+
     if (playMode === '随机播放' && queue.length > 1) {
       next = getNextSongIndex(queue, cursor, '随机播放');
-      let guard = 0;
-      while ((next < 0 || next === cursor || localExcluded.has(prefetchKey(queue[next]))) && guard < queue.length * 2) {
+      let inner = 0;
+      while (
+        (next < 0 || next === cursor || localExcluded.has(prefetchKey(queue[next]))) &&
+        inner < queue.length * 2
+      ) {
         next = Math.floor(Math.random() * queue.length);
         if (next === cursor) next = (next + 1) % queue.length;
-        guard += 1;
+        inner += 1;
       }
       if (next < 0 || next === cursor || localExcluded.has(prefetchKey(queue[next]))) {
-        // 随机取不到新项（队列太小 / 全在窗口里）→ 退化为顺序，保证窗口仍能被填满
-        next = cursor + 1;
+        next = (cursor + 1) % queue.length;
       }
     } else {
+      // 列表循环：走到底就绕回 JS 队列头部（原生 repeatMode 恒 OFF，绕圈语义在 JS）
       next = cursor + 1;
+      if (next >= queue.length) next = 0;
     }
 
-    if (next < 0 || next >= queue.length) break;
     if (localExcluded.has(prefetchKey(queue[next]))) {
+      // 已经在原生手里（或这一轮刚计划过）→ 跳过继续找，绝不返回重复项
       cursor = next;
-      if (playMode !== '随机播放' && next >= queue.length - 1) break;
+      if (next === fromIndex) break;
       continue;
     }
+
     localExcluded.add(prefetchKey(queue[next]));
     planned.push(next);
     cursor = next;
-    if (playMode === '随机播放' && planned.length >= queue.length - 1) break;
   }
 
   return planned;

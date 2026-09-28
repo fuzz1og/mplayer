@@ -17,7 +17,9 @@ import { resolvePlayableUrlMobile } from './songResolution';
 import {
   initNativePlayer,
   isNativeEngine,
+  nativeNext,
   nativePlaySong,
+  nativePrev,
   nativeSeekTo,
   nativeStop,
   nativeSyncLoopMode,
@@ -756,6 +758,33 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   } finally {
     preparingPlayback = false;
   }
+}
+
+/**
+ * UI「下一首」/「上一首」的引擎无关入口。
+ *
+ * **原生引擎下必须走原生**（`Native.next()/prev()`）：原生播放列表是权威队列，
+ * 如果这里改成 `playerStore.next() + playSong(song)`，会把原生队列
+ * 换成一个只有一首的 `loadQueue`，预取窗口与曲末原生推进全部落空
+ * （而且 UI next 与锁屏 next 会各走一套随机语义 → 语义漂移）。
+ */
+export function skipNext(): void {
+  if (isNativeEngine()) {
+    nativeNext();
+    return;
+  }
+  const song = usePlayerStore.getState().next();
+  if (song) void playSong(song);
+}
+
+export function skipPrev(): void {
+  if (isNativeEngine()) {
+    nativePrev();
+    return;
+  }
+  usePlayerStore.getState().prev();
+  const song = usePlayerStore.getState().currentSong;
+  if (song) void playSong(song);
 }
 
 export async function togglePlay(): Promise<void> {

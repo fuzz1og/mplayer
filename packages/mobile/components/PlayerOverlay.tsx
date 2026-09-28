@@ -13,7 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
-import { togglePlay, seekTo, playSong, fetchLrcInBackground } from '../services/audioPlayer';
+import { togglePlay, seekTo, skipNext, skipPrev, fetchLrcInBackground } from '../services/audioPlayer';
 import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import QueueListModal from './QueueListModal';
@@ -75,8 +75,6 @@ export default function PlayerOverlay({ onClose }: Props) {
   const isFav = useFavoriteStore(s => s.isFavorite(song?.id || ''));
   const addFavorite = useFavoriteStore(s => s.addFavorite);
   const removeFavorite = useFavoriteStore(s => s.removeFavorite);
-  const next = usePlayerStore(s => s.next);
-  const prev = usePlayerStore(s => s.prev);
   const playMode = useSettingsStore(s => s.playMode);
   const setPlayMode = useSettingsStore(s => s.setPlayMode);
 
@@ -368,15 +366,11 @@ export default function PlayerOverlay({ onClose }: Props) {
   };
 
   const handlePrev = () => {
-    prev();
-    const newSong = usePlayerStore.getState().currentSong;
-    if (newSong) playSong(newSong);
+    skipPrev();
   };
 
   const handleNext = () => {
-    next();
-    const newSong = usePlayerStore.getState().currentSong;
-    if (newSong) playSong(newSong);
+    skipNext();
   };
 
   const dismiss = (velocityY = 0) => {
