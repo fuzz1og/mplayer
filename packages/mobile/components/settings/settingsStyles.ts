@@ -8,7 +8,7 @@ import { useTheme } from '../../theme/ThemeProvider';
  * 设置页共享样式（#425 拆段）：区段各成自治组件后，样式仍只有**这一个定义点**——
  * 各区段 import 本模块，不把同一份度量抄进 8 个文件（#416「同形/同源」约定）。
  */
-export const makeSettingsStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeSettingsStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bgBase,
