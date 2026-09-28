@@ -12,15 +12,23 @@ import { getNeteaseLyrics } from '../api/neteaseDirect.js';
  *   视口变化会被反复触发（滚动/重排/换页），没有这层，同一首会被打 N 次；
  * - **可取消**：行离开视口 / 列表卸载时 `cancel*`，**排队中的请求从 transport 闸门
  *   摘除、绝不进入底层传输**；取消过的 key 不算结算，重新进入视口可以再来一次；
- * - **预算**：单次入队最多接纳 `LYRICS_HYDRATION_BURST_BUDGET` 个候选，
- *   防止调用方把整页数据一次性塞进来；已结算记忆有上限，超限整体清空
- *   （清空是安全的：真正的歌词缓存还在，命中零请求）。
+ * - **预算**：**单次入队**最多接纳 `LYRICS_HYDRATION_BURST_BUDGET`(30) 个候选，
+ *   多出来的记入 `dropped`、不派发——这是「调用方把整页数据一次性塞进来」的兜底，
+ *   **不是吞吐上限**：调用方分批入队时不受它限制，上游请求数 = 实际采纳数
+ *   （分 10 批入队 100 首就是 100 次请求，总量只由 transport 闸门与分批节奏决定）。
+ *   已结算记忆另有上限，超限整体清空（清空是安全的：真正的歌词缓存还在，命中零请求）。
+ *
+ * 「什么时候算进入视口」**不在本模块判定**——那是消费端的可见性策略。移动端
+ * `components/songListHydration` 取的是「**可见集合停稳 300ms 后按整屏请求**」，比票面
+ * 的「行进入视口」严：滑过但未停稳的行不请求（#421 防抢帧的取舍），并在同一拍把
+ * 「本次离开可见集合的 key」回调到这里的 `cancel*`。
  *
  * **明确不做**（边界见 #429 / ADR `2026-09-26-outbound-request-governance`）：
  * 本模块**不持有任何并发上限与出网限速**——那是 `api/transport` 的双层闸门（#408）
  * 的唯一职责。这里派发出去的每一次取词都只是 `request()` 的一个排队者，
  * 上游在飞峰值 = 闸门上限，与本模块无关。`lyricsHydrator.test.ts` 用假 transport
- * 断言了这条分工（100 首入队 → 100 次上游请求、同 host 峰值 ≤ 2）。
+ * 断言了这条分工的两种口径：**分批**入队 100 首（10 批 × 10）→ 上游恰好 100 次请求、
+ * 同 host 峰值 ≤ 2；**单次**入队 100 首 → 只采纳 30 条出网、其余 70 条记 `dropped`。
  *
  * 取词实现复用既有链路（网易 `getNeteaseLyrics`：key `lyric_id_${songId}`、TTL 1 天、
  * 空词也缓存），本模块**不新写网络请求**。汽水虽同属「按 ID 直取歌词源」，但它的取词
@@ -59,7 +67,15 @@ export interface LyricsHydrationStats {
   settled: number;
 }
 
-/** 单次入队接纳上限：进视口的行天然有界（一屏十几行），这是防「整页塞进来」的兜底。 */
+/**
+ * **单次入队**接纳上限（不是吞吐上限，口径见模块头注释）。
+ *
+ * 取 30 的理由：一次进可见集合的行天然有界——歌曲行高 64dp（`songListLayout`
+ * 的 `SONG_ROW_LAYOUT_HEIGHT`），6.7" 竖屏可见区约 12–16 行，消费端还带
+ * `itemVisiblePercentThreshold: 50`，30 ≈ 一屏的 2 倍，给「小屏 / 横屏 / 分屏」
+ * 留余量；同时它仍然拦得住「整页塞进来」。正常调用方（移动端停稳闸每次只交一屏）
+ * 永远碰不到这个值——碰到它就是调用方没分批，是 bug 信号而不是常态。
+ */
 export const LYRICS_HYDRATION_BURST_BUDGET = 30;
 
 /** 已结算记忆上限：超限整体清空（真缓存仍在，重新入队命中零请求）。 */
@@ -169,6 +185,9 @@ function rememberSettled(songId: string): void {
  *
  * 已被 transport 排队、尚未进入底层传输的请求会**从队列摘除**（#408 的协作式取消），
  * 因此「取消后不再出网」是真的不再出网，而不只是丢弃结果。
+ *
+ * 消费端的调用时机：列表卸载时收回自己入队过的全部 key；**行滑出可见集合时**由停稳闸
+ * 在同一拍算出差集后调用（见 `packages/mobile/components/songListHydration`）。
  */
 export function cancelLyricsHydration(
   candidates: LyricsHydrationCandidate | readonly LyricsHydrationCandidate[],

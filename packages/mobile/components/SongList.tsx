@@ -12,7 +12,7 @@ import ScalePress from './ScalePress';
 import { listWindowProps } from './listWindow';
 import { computeSongListLayout } from './songListLayout';
 import type { SongListRow } from './songListLayout';
-import { createViewportLyricsSettler } from './songListHydration';
+import { createViewportLyricsSettler, lyricsCandidateKey } from './songListHydration';
 import type { ViewportLyricsSettler } from './songListHydration';
 
 /**
@@ -134,17 +134,31 @@ export default function SongList({
    *   视口追踪），所以用 useRef 持有一份；候选只来自本次回调拿到的行，不闭包 `rows`。
    * - 真正入队的是 `settler`：可见集合**停稳** `VIEWPORT_SETTLE_MS` 后才交付（#421），
    *   滑动期间滚过的行不入队——一次甩动不会把整份歌单打出去。
+   * - 收回也在同一拍：停稳时算出「本次离开可见集合的 key」交给 `cancelLyricsHydration`。
+   *   滑出视口的行不该继续占着出网机会，且排队的取词会被 transport 从队列摘除。
    */
-  // 本列表入队过的候选：卸载时要按 key 收回（hydrator 是全局单例，不能整体清场）。
+  // 本列表入队过的候选（key → 候选）：卸载时要按 key 收回（hydrator 是全局单例，
+  // 不能整体清场）；行滑出可见集合时也在同一本账上划掉。
   const enqueuedRef = useRef(new Map<string, LyricsHydrationCandidate>());
   const settlerRef = useRef<ViewportLyricsSettler | null>(null);
   if (settlerRef.current === null) {
     settlerRef.current = createViewportLyricsSettler({
       enqueue: (candidates) => {
         for (const candidate of candidates) {
-          enqueuedRef.current.set(`${candidate.sourceType}:${candidate.id}`, candidate);
+          const key = lyricsCandidateKey(candidate);
+          if (key !== null) enqueuedRef.current.set(key, candidate);
         }
         enqueueLyricsHydration(candidates);
+      },
+      // 停稳那一拍算出的「本次离开可见集合的 key」：从账本划掉并收回。排队中的取词
+      // 从 transport 闸门摘除、绝不进入底层传输（#408 的协作式取消）；已结算的 key
+      // 在 hydrator 里本就跳过，故成本只是 O(离开行数)。
+      cancel: (candidates) => {
+        for (const candidate of candidates) {
+          const key = lyricsCandidateKey(candidate);
+          if (key !== null) enqueuedRef.current.delete(key);
+        }
+        cancelLyricsHydration(candidates);
       },
     });
   }

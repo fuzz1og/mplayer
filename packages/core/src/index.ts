@@ -58,9 +58,15 @@ export {
   enqueueLyricsHydration,
   cancelLyricsHydration,
   cancelAllLyricsHydration,
+  // 宿主接缝：桌面渲染层经 IPC 注入主进程取词器（它的歌词缓存在主进程，见 #441）。
+  setLyricsHydratorDeps,
+} from './shared/lyricsHydrator.js';
+// 以下是**测试/诊断接缝**（与 `setTier3Deps` 同性质，**不是对外契约**）：前两个给
+// 单测与真机诊断读「在飞 / 已结算」的即时状态，最后一个给会话切换与单测重置。
+// 宿主不要拿它们驱动业务逻辑。
+export {
   awaitLyricsHydrationIdle,
   getLyricsHydrationStats,
-  setLyricsHydratorDeps,
   resetLyricsHydrator,
 } from './shared/lyricsHydrator.js';
 export type {

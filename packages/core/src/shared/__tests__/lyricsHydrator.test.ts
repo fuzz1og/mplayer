@@ -116,7 +116,7 @@ describe('lyricsHydrator 入队纪律（#429）', () => {
     cancelAllLyricsHydration();
   });
 
-  it('单次入队预算：调用方把整页塞进来时只派发前 N 个，其余计入 dropped', () => {
+  it('单次入队 100 首：只派发前 LYRICS_HYDRATION_BURST_BUDGET 个，其余计入 dropped', () => {
     const fake = deferredFetcher();
     setLyricsHydratorDeps({ fetchLyrics: fake.fetcher });
 
@@ -192,7 +192,7 @@ describe('lyricsHydrator 经 transport 出网（#429 边界：并发/限速全�
     setOutboundGateOptions({ maxGlobal: 6, maxPerHost: 2 });
   });
 
-  it('分 10 批入队 100 首：上游恰好 100 次请求，同 host 并发峰值 ≤ 2（无第三套并发策略）', async () => {
+  it('分批入队 100 首（10 批 × 10）：上游恰好 100 次请求（= 实际采纳数），同 host 并发峰值 ≤ 2（无第三套并发策略）', async () => {
     const seen: TransportRequest[] = [];
     setTransport(async (req) => {
       seen.push(req);
@@ -205,6 +205,8 @@ describe('lyricsHydrator 经 transport 出网（#429 边界：并发/限速全�
       };
     });
 
+    // 预算是**单次入队**上限、不是吞吐上限：分批进来就不受它限制，
+    // 上游请求数 = 实际采纳数。
     const songs = Array.from({ length: 100 }, (_, i) => song(String(i)));
     for (const batch of chunk(songs, 10)) enqueueLyricsHydration(batch);
     await awaitLyricsHydrationIdle();
@@ -215,6 +217,31 @@ describe('lyricsHydrator 经 transport 出网（#429 边界：并发/限速全�
     expect(gate.peakPerHost).toBeLessThanOrEqual(2);
     expect(gate.peakInFlight).toBeLessThanOrEqual(6);
     expect(getLyricsHydrationStats()).toMatchObject({ dispatched: 100, dropped: 0, inFlight: 0 });
+  });
+
+  it('单次入队 100 首：底层传输恰好被采纳的 30 条触达，其余 70 条 dropped（预算口径可断言）', async () => {
+    const seen: TransportRequest[] = [];
+    setTransport(async (req) => {
+      seen.push(req);
+      await tick();
+      return {
+        status: 200,
+        headers: {},
+        body: JSON.stringify({ lrc: { lyric: '[00:01.00]词' } }),
+        finalUrl: req.url,
+      };
+    });
+
+    enqueueLyricsHydration(Array.from({ length: 100 }, (_, i) => song(String(i))));
+    await awaitLyricsHydrationIdle();
+
+    expect(seen).toHaveLength(LYRICS_HYDRATION_BURST_BUDGET);
+    expect(getLyricsHydrationStats()).toMatchObject({
+      dispatched: LYRICS_HYDRATION_BURST_BUDGET,
+      dropped: 100 - LYRICS_HYDRATION_BURST_BUDGET,
+      inFlight: 0,
+    });
+    expect(getOutboundGateStats().queued).toBe(0);
   });
 
   it('取消后不再出网：排队项从闸门摘除，底层传输一次都不进', async () => {
