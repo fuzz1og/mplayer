@@ -125,7 +125,11 @@ class PlayerModule : Module() {
       PlayerBridge.setEventSink { name, payload -> sendEvent(name, payload) }
       // expo-modules-core 的 appContext.reactContext 静态类型是 Context，
       // 运行时实例是 ReactApplicationContext（AppContext.kt 的 WeakReference<ReactApplicationContext>）。
-      (appContext.reactContext as? ReactContext)?.let { PlayerBridge.registerReactContext(it) }
+      (appContext.reactContext as? ReactContext)?.let {
+        PlayerBridge.registerReactContext(it)
+        // App 启动即拉起 PlayerService：第一次点播时 media3 会话已就绪
+        ServiceLauncher.ensure(it)
+      }
     }
 
     OnDestroy {
@@ -174,27 +178,44 @@ class PlayerModule : Module() {
       )
     }
 
-    Function("play") { requireService().play() }
+    // 同步命令不能阻塞 JS 线程 → 服务未就绪时挂起（PlayerBridge 会在 onCreate 后补跑）
+    Function("play") { withService { it.play() } }
 
-    Function("pause") { requireService().pause() }
+    Function("pause") { withService { it.pause() } }
 
-    Function("next") { requireService().next() }
+    Function("next") { withService { it.next() } }
 
-    Function("prev") { requireService().prev() }
+    Function("prev") { withService { it.prev() } }
 
-    Function("seek") { seconds: Double -> requireService().seek(seconds) }
+    Function("seek") { seconds: Double -> withService { it.seek(seconds) } }
 
-    Function("setLoop") { mode: String -> requireService().setLoop(mode) }
+    Function("setLoop") { mode: String -> withService { it.setLoop(mode) } }
 
-    Function("setRate") { rate: Double -> requireService().setRate(rate) }
+    Function("setRate") { rate: Double -> withService { it.setRate(rate) } }
 
-    Function("setPolicy") { policy: PolicyInput -> requireService().setPolicy(policy.toSnapshot()) }
+    Function("setPolicy") { policy: PolicyInput -> withService { it.setPolicy(policy.toSnapshot()) } }
 
-    Function("stop") { requireService().stop() }
+    Function("stop") { withService { it.stop() } }
   }
 
-  private fun requireService(): PlayerService =
-    PlayerBridge.service ?: throw ServiceUnavailableException()
+  /** AsyncFunction（后台线程）可用：拉起服务并等它就绪。 */
+  private fun requireService(): PlayerService {
+    PlayerBridge.service?.let { return it }
+    appContext.reactContext?.let { ServiceLauncher.ensure(it) }
+    return PlayerBridge.awaitService(3_000L) ?: throw ServiceUnavailableException()
+  }
+
+  /** 同步 Function（JS 线程）用：服务未就绪则挂起，绝不阻塞。 */
+  private fun withService(action: (PlayerService) -> Unit) {
+    val context = appContext.reactContext ?: return
+    PlayerBridge.runWhenReady(context) { service ->
+      try {
+        action(service)
+      } catch (_: Throwable) {
+        // 命令失败不影响 JS 侧后续调用
+      }
+    }
+  }
 
   private fun idleState(): Map<String, Any?> = mapOf(
     "revision" to 0L,

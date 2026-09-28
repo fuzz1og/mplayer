@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="mplayer_native_channel_description">后台播放与锁屏控制</string>
-    <string name="mplayer_native_channel_id">music-playback-native</string>
-    <string name="mplayer_native_channel_name">正在播放</string>
-</resources>

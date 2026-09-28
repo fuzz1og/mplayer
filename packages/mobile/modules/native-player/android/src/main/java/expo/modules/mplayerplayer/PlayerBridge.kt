@@ -2,10 +2,14 @@
 
 package expo.modules.mplayerplayer
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.jstasks.HeadlessJsTaskContext
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Module ↔ Service 的唯一通道。
@@ -28,6 +32,55 @@ internal object PlayerBridge {
   private var sink: ((String, Map<String, Any?>) -> Unit)? = null
 
   private val main = Handler(Looper.getMainLooper())
+
+  /** 服务实例还没起来时挂起的命令（`next`/`play` 这类同步命令不能阻塞 JS 线程）。 */
+  private val pendingActions = ConcurrentLinkedQueue<(PlayerService) -> Unit>()
+
+  @Volatile
+  private var serviceLatch = CountDownLatch(1)
+
+  /** Service.onCreate 调用：注册实例 + 放行等待者 + 补跑挂起命令。 */
+  fun onServiceReady(next: PlayerService) {
+    service = next
+    serviceLatch.countDown()
+    while (true) {
+      val action = pendingActions.poll() ?: break
+      try {
+        action(next)
+      } catch (_: Throwable) {
+        // 命令失败不影响服务生命周期
+      }
+    }
+  }
+
+  /** Service.onDestroy 调用。 */
+  fun onServiceGone() {
+    service = null
+    // CountDownLatch 不可重置 → 换一个新的，下一次启动重新等
+    serviceLatch = CountDownLatch(1)
+  }
+
+  /** 等 Service 起来（只在后台线程调用，例如 AsyncFunction 的协程）。 */
+  fun awaitService(timeoutMs: Long): PlayerService? {
+    service?.let { return it }
+    try {
+      serviceLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+    } catch (_: InterruptedException) {
+      Thread.currentThread().interrupt()
+    }
+    return service
+  }
+
+  /** 同步命令入口：服务已在就直接跑，否则挂起 + 拉起服务。 */
+  fun runWhenReady(context: Context, action: (PlayerService) -> Unit) {
+    val current = service
+    if (current != null) {
+      action(current)
+      return
+    }
+    pendingActions.add(action)
+    ServiceLauncher.ensure(context)
+  }
 
   fun setEventSink(next: ((String, Map<String, Any?>) -> Unit)?) {
     sink = next

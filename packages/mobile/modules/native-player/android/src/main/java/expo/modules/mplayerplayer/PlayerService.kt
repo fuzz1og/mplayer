@@ -143,7 +143,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     cancelErrorRetry()
     persist()
     PrefetchBridge.releaseAll()
-    if (PlayerBridge.service === this) PlayerBridge.service = null
+    PlayerBridge.onServiceGone()
     session?.release()
     session = null
     controller?.release()
@@ -880,9 +880,16 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     }
   }
 
-  /** headers 里的凭据不入盘（§9.3）。 */
+/**
+   * 落盘（§9.3）。
+   *
+   * **禁止在这里读 ExoPlayer**：`persist()` 会被 `loadQueue`/`patchQueue`（expo
+   * AsyncFunction 的后台线程）直接调用，而 ExoPlayer 只能在其 application looper
+   * 上访问 —— 真机实测会打 `Expected thread: 'main'` 警告（
+   * `player-accessed-on-wrong-thread`），并可能读到不一致状态。
+   * 位置一律取主线程维护的 `stateCache`（progress tick / 各事件里刷新）。
+   */
   private fun persist() {
-    val ctrl = controller
     val json = JSONObject()
     try {
       val queue = store.snapshot()
@@ -893,7 +900,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       json.put("tracks", tracks)
       json.put("index", store.currentIndex())
       json.put("revision", store.currentRevision())
-      json.put("positionMs", ctrl?.positionMs() ?: 0L)
+      json.put("positionMs", (stateCache["positionMs"] as? Number)?.toLong() ?: 0L)
       json.put("playWhenReady", userWantsPlay)
       json.put("loopMode", policy.loopMode)
       prefs?.edit()?.putString(KEY_SNAPSHOT, json.toString())?.apply()

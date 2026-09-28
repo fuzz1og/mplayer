@@ -1,5 +1,4 @@
 import { AppRegistry } from 'react-native';
-import { getNextSongIndex } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import {
   NativePlayer,
@@ -20,6 +19,18 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useLogsStore } from '../stores/logsStore';
 import { getCachedResource, setCachedResource, urlAgeMs } from './cacheService';
 import { resolvePlayableUrlMobile } from './songResolution';
+import {
+  PREFETCH_SKIP_FRESH_MS,
+  beginResolve,
+  endResolve,
+  isCoolingDown,
+  isInFlight,
+  markFailed,
+  markSucceeded,
+  planNextIndexes,
+  prefetchKey,
+  PREFETCH_LEAD_SEC,
+} from './queuePrefetch';
 
 /**
  * 原生播放引擎（规格 §2.1/§4.3/§5）。
@@ -30,9 +41,6 @@ import { resolvePlayableUrlMobile } from './songResolution';
  * 本文件不 import `audioPlayer.ts`（避免循环依赖）：需要引擎外的东西时走 hooks。
  */
 
-/** 三层去重的参数（沿用 PR #433 的取值，规格 §5.5） */
-const PREFETCH_SKIP_FRESH_MS = 5 * 60 * 1000;
-const PREFETCH_FAIL_COOLDOWN_MS = 30 * 1000;
 /** 无过期信息的直链给一个保守上限（§6.1 / R8），避免「一路播到 403 才发现」 */
 const EXPIRY_FALLBACK_MS = 30 * 60 * 1000;
 /** core SKIP_LIMIT（packages/core/src/shared/skipGuard.ts） */
@@ -55,18 +63,12 @@ let headlessRegistered = false;
 /** 原生列表的本地镜像（key/songId，顺序与原生一致）——用于补窗去重与随机定序 */
 let nativeMirror: Array<{ key: string; songId: string }> = [];
 
-/** 在飞去重 + 成功窗口 + 失败冷却（§5.5） */
-const prefetchInFlight = new Set<string>();
-const prefetchSucceededAt = new Map<string, number>();
-const prefetchFailedAt = new Map<string, number>();
-
 export function isNativeEngine(): boolean {
   return isNativePlayerAvailable;
 }
 
-export function songKey(song: Song): string {
-  return song.id || `${song.name}|${song.artist ?? ''}`;
-}
+/** @deprecated 用 queuePrefetch 的 `prefetchKey`；保留此别名避免调用点漂移 */
+export const songKey = prefetchKey;
 
 /** 播放模式 → 原生 loopMode（随机由 JS 定序、原生只顺序推进，§7.3 建议方案） */
 export function toLoopMode(playMode: string): LoopMode {
@@ -167,6 +169,11 @@ export function initNativePlayer(next: NativePlayerHooks): void {
 
   NativePlayer.addListener('progress', (event) => {
     hooks.onProgress?.(event.positionMs / 1000, event.durationMs / 1000);
+    // 剩余 ≤ 15s 补一次窗口（§5.5）：不再是保命机制，只为降低踩空概率。
+    // feedWindow 自身有在飞/新鲜/冷却三层去重，这里不需要额外节流。
+    if (event.durationMs > 0 && (event.durationMs - event.positionMs) / 1000 <= PREFETCH_LEAD_SEC) {
+      void feedWindow();
+    }
   });
 
   NativePlayer.addListener('queueEnded', (event) => {
@@ -233,7 +240,7 @@ export async function nativePlaySong(song: Song, fresh = false): Promise<Track> 
 
   const state = safeState();
   nativeMirror = [{ key: track.meta.key, songId: track.songId }];
-  prefetchSucceededAt.set(track.meta.key, Date.now());
+  markSucceeded(track.meta.key);
 
   await NP.loadQueue({
     revision: (state?.revision ?? 0) + 1,
@@ -285,51 +292,6 @@ export function nativeState(): PlayerState | null {
 // ── 补窗 ────────────────────────────────────────────────
 
 /**
- * 计划下 N 个待播 index。
- * - 顺序模式：index+1, index+2, …
- * - 随机模式（§7.3 建议方案）：由 JS 按 core 规则定序，原生只顺序推进
- *   → 预取窗口天然知道下一首是谁，锁屏 next 与 UI next 语义一致。
- */
-function planNextIndexes(queue: Song[], fromIndex: number, count: number, excluded: Set<string>): number[] {
-  const playMode = useSettingsStore.getState().playMode;
-  const planned: number[] = [];
-  const localExcluded = new Set(excluded);
-  let cursor = fromIndex;
-
-  while (planned.length < count) {
-    let next: number;
-    if (playMode === '随机播放' && queue.length > 1) {
-      next = getNextSongIndex(queue, cursor, '随机播放');
-      let guard = 0;
-      while ((next < 0 || localExcluded.has(songKey(queue[next]))) && guard < queue.length * 2) {
-        next = Math.floor(Math.random() * queue.length);
-        if (next === cursor) next = (next + 1) % queue.length;
-        guard += 1;
-      }
-      if (next < 0 || localExcluded.has(songKey(queue[next]))) {
-        next = cursor + 1;
-      }
-    } else {
-      next = cursor + 1;
-    }
-    if (next < 0 || next >= queue.length) break;
-    if (localExcluded.has(songKey(queue[next]))) {
-      cursor = next;
-      if (playMode !== '随机播放' && next >= queue.length - 1) break;
-      continue;
-    }
-    localExcluded.add(songKey(queue[next]));
-    planned.push(next);
-    cursor = next;
-    if (playMode === '随机播放') {
-      // 随机模式持续随机取，直到取不到新的（用 guard 防死循环）
-      if (planned.length >= queue.length - 1) break;
-    }
-  }
-  return planned;
-}
-
-/**
  * 前台/后台共用的补窗函数（§5.4：两路共用同一条 JS 函数，避免两份解析逻辑）。
  * 增量投喂（`patchQueue({append})`），不重发整表。
  */
@@ -349,29 +311,33 @@ export async function feedWindow(need?: number): Promise<void> {
 
   const target = Math.max(1, need ?? currentPolicy().prefetchAhead);
   const existing = new Set(nativeMirror.map((entry) => entry.key));
-  const wantedIndexes = planNextIndexes(queue, jsIndex, target, existing);
+  const wantedIndexes = planNextIndexes(
+    queue,
+    jsIndex,
+    target,
+    existing,
+    useSettingsStore.getState().playMode
+  );
 
   const append: Track[] = [];
   for (const index of wantedIndexes) {
     const song = queue[index];
     if (!song) continue;
     const key = songKey(song);
-    if (prefetchInFlight.has(key)) continue;
-    const failAt = prefetchFailedAt.get(key);
-    if (failAt && Date.now() - failAt < PREFETCH_FAIL_COOLDOWN_MS) continue;
-    prefetchInFlight.add(key);
+    if (isInFlight(key) || isCoolingDown(key)) continue;
+    if (!beginResolve(key)) continue;
     try {
       const track = await resolveTrack(song, false);
       if (track) {
         append.push(track);
-        prefetchSucceededAt.set(key, Date.now());
+        markSucceeded(key);
       } else {
-        prefetchFailedAt.set(key, Date.now());
+        markFailed(key);
       }
     } catch {
-      prefetchFailedAt.set(key, Date.now());
+      markFailed(key);
     } finally {
-      prefetchInFlight.delete(key);
+      endResolve(key);
     }
   }
 
@@ -406,7 +372,7 @@ async function refreshFailedTrack(event: PlaybackErrorEvent): Promise<void> {
     const state = safeState();
     const result = await NP.patchQueue({ baseRevision: state?.revision ?? 0, upsert: [track] });
     if (result.accepted) {
-      prefetchSucceededAt.set(track.meta.key, Date.now());
+      markSucceeded(track.meta.key);
       useLogsStore.getState().addLog('warn', `《${song.name}》直链失效，已换新 URL 重试`);
     }
   } catch {

@@ -9,7 +9,6 @@ import { useHistoryStore } from '../stores/historyStore';
 import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAudioTagStore } from '../stores/audioTagStore';
-import { updateNotification, clearNotification } from './notificationService';
 import { getCachedResource, setCachedResource, deleteCachedResource, urlAgeMs } from './cacheService';
 import { searchStrictMatch } from './songResources';
 import { isOffline } from './networkState';
@@ -486,7 +485,7 @@ async function nativePlaySongFlow(song: Song, retryCount: number, fresh: boolean
     let track;
     try {
       track = await nativePlaySong(song, fresh);
-    } catch (err) {
+    } catch {
       const reasonText = explainPlaybackFailure(song).message;
       log.addLog('error', `《${song.name}》播放失败: ${reasonText}`);
       const offline = await isOffline();
@@ -696,7 +695,6 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       useAudioTagStore.getState().setTag(song, 'valid');
     }
     useHistoryStore.getState().addHistory(song);
-    void updateNotification(song, true).catch(() => {});
     // 预取下一首直链（切歌秒开）
     prefetchNextSong();
   };
@@ -791,14 +789,12 @@ export async function togglePlay(): Promise<void> {
     usePlayerStore.getState().pause();
     if (song) {
       log.addLog('info', `暂停《${song.name}》`);
-      void updateNotification(song, false).catch(() => {});
     }
   } else {
     player.play();
     usePlayerStore.getState().resume();
     if (song) {
       log.addLog('info', `继续播放《${song.name}》`);
-      void updateNotification(song, true).catch(() => {});
     }
   }
 }
@@ -819,7 +815,4 @@ export async function seekTo(timeSec: number): Promise<void> {
 
 export async function cleanup(): Promise<void> {
   await stopAllPlayers();
-  if (!isNativeEngine()) {
-    await clearNotification().catch(() => {});
-  }
 }
