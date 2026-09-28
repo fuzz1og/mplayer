@@ -1,4 +1,4 @@
-import { request, bodyToBytes, type Transport } from '../api/transport.js';
+import { request, bodyToBytes, type Transport, type TransportSignal } from '../api/transport.js';
 import { isAudioBytes } from '../utils/sniffers.js';
 
 /**
@@ -34,7 +34,7 @@ const FAIL: AudioHeadResult = { ok: false, totalBytes: null, bytes: EMPTY_BYTES 
 /** 取音频头部字节 + 完整大小；任何失败（网络 / 非音频 / 4xx）返回 ok=false，不上抛。 */
 export async function fetchAudioHead(
   url: string,
-  opts: { headers?: Record<string, string>; timeoutMs: number; request?: Transport },
+  opts: { headers?: Record<string, string>; timeoutMs: number; request?: Transport; signal?: TransportSignal },
 ): Promise<AudioHeadResult> {
   try {
     const req = opts.request || request;
@@ -44,6 +44,8 @@ export async function fetchAudioHead(
       headers: { Range: `bytes=0-${AUDIO_HEAD_RANGE_BYTES - 1}`, ...(opts.headers || {}) },
       timeoutMs: opts.timeoutMs,
       responseType: 'arraybuffer',
+      // #424：整链预算耗尽时 abort 这次取证（此前只能等它自己超时）。
+      signal: opts.signal,
     });
     if (res.status >= 400) return FAIL;
     const ct = String(res.headers['content-type'] || '');

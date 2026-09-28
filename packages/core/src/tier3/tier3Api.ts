@@ -279,6 +279,7 @@ function createSourceClock(timeoutMs: number, onExpire: () => void) {
 async function withSourceDeadline<T>(
   run: (signal: TransportSignal, clock: SourceClock) => Promise<T>,
   timeoutMs: number,
+  outerSignal?: TransportSignal,
 ): Promise<T | typeof SOURCE_TIMED_OUT> {
   const controller = new AbortController();
   let expire!: () => void;
@@ -288,12 +289,18 @@ async function withSourceDeadline<T>(
       resolve(SOURCE_TIMED_OUT);
     };
   });
+  // #424：整链预算耗尽（`control.signal`）与单源墙到点走同一条路——abort 在飞请求、
+  // 本源立即结算，不再「调用方已经放弃，上游还在压配额」。
+  const onOuterAbort = (): void => expire();
+  if (outerSignal?.aborted) expire();
+  else outerSignal?.addEventListener?.('abort', onOuterAbort);
   const clock = createSourceClock(timeoutMs, expire);
   clock.start();
   try {
     return await Promise.race([run(controller.signal, clock), expired]);
   } finally {
     clock.stop();
+    outerSignal?.removeEventListener?.('abort', onOuterAbort);
   }
 }
 
@@ -1513,6 +1520,8 @@ async function runSourceAttempt(
     const outcome = await withSourceDeadline(
       (signal, clock) => resolveTier3Candidate(song, source, timeoutMs, signal, clock),
       timeoutMs,
+      // #424：整链预算耗尽时中止本次源尝试（缺省 = 只有单源墙）。
+      control?.signal,
     );
     const ms = traceNow() - t0;
     if (outcome === SOURCE_TIMED_OUT) {
@@ -1586,6 +1595,12 @@ async function runSerialSources(
 ): Promise<Tier3LoopResult> {
   for (let i = 0; i < ordered.length; i += 1) {
     const source = ordered[i];
+    // #424：调用方的整链预算已耗尽 → 不再起新源，剩余按「放弃观测」记账。
+    if (control?.signal?.aborted) {
+      console.info(`[tier3] 整链预算已用尽（abort），停止尝试后续源: 《${song.name}》`);
+      markSourcesAbandoned(ordered.slice(i), collect);
+      return { kind: 'exhausted' };
+    }
     // 单源硬墙：清单 timeoutMs 只能收紧，且不超过整链剩余预算（ADR-0014 决策 2）。
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
@@ -1670,6 +1685,8 @@ async function runInitWindow(
 
   const startNext = (): boolean => {
     if (finished || entries.size >= SCHEDULE_INIT_INFLIGHT || cursor >= ordered.length) return false;
+    // #424：调用方整链预算耗尽 → 不再起新源（在飞的那条由 withSourceDeadline 的 abort 收尾）。
+    if (control?.signal?.aborted) return false;
     const remaining = deadline - Date.now();
     if (remaining <= 0) return false;
     const source = ordered[cursor];

@@ -47,6 +47,23 @@ export const TIER3_CHAIN_BUDGET_MS = 6_000;
  *  与解析腿不同：搜索是「尽量找全」，预算耗尽**返回已收集的部分结果**而不是丢弃。 */
 export const TIER3_SEARCH_BUDGET_MS = 6_000;
 
+/** 解析链**整链预算**（#424）：一次 `resolvePlayableSongRouted` / `resolvePlayableUrlRouted`
+ *  从入口到出结果（或失败）的**活跃时间**总上界 = 直连腿墙 + 一条 tier3 腿预算。
+ *
+ *  它是 2026-09-27-playback-budget-layers 四层时限之外新补的那一层：**整链 deadline**。
+ *  此前「一首歌最多等多久」只能把常量相加推出来（3s + 6s + 第二条 tier3 腿 6s = 最坏 15s）。
+ *  取 9s 而不是更小值，是为了**不缩任何一条腿的局部墙**：直连腿仍拿满 3s、第一条 tier3 腿
+ *  仍拿满 6s，被压缩的只有「试听换完整版」的第二条 tier3 腿——它只吃剩余额度，
+ *  这也是 15s 那条路径的成因。
+ *
+ *  **排队不走表**：等待 tier3 K=3 槽位期间暂停（ADR 2026-09-25 决策 8），所以 9s 是活跃时间；
+ *  用户可见等待 = 9s + 可能的 K=3 排队时间。
+ *
+ *  **失败链口径**：一次播放失败 = 1 次链预算（宿主的 fresh 重试是**再一次**链预算）；
+ *  `skipGuard` 连续 `SKIP_LIMIT` 首才停。详见 `shared/skipGuard.ts` 的
+ *  `WORST_CASE_SILENT_MS`——把「最坏无声多久」也变成一个可断言的值。 */
+export const RESOLUTION_CHAIN_BUDGET_MS = DIRECT_WALL_MS + TIER3_CHAIN_BUDGET_MS;
+
 /** tier3 **单源硬墙**按 kind 分档（ADR 2026-09-25 决策 7；取代 ADR-0014 决策 2 的扁平 2s）。
  *
  *  两步源的三段网络（搜索 + 解析 + 嗅探）在同一个墙内，扁平 2s 结构性偏紧：#388 实测
