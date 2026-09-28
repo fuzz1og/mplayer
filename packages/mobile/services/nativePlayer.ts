@@ -319,27 +319,38 @@ export async function feedWindow(need?: number): Promise<void> {
     useSettingsStore.getState().playMode
   );
 
-  const append: Track[] = [];
-  for (const index of wantedIndexes) {
-    const song = queue[index];
-    if (!song) continue;
-    const key = songKey(song);
-    if (isInFlight(key) || isCoolingDown(key)) continue;
-    if (!beginResolve(key)) continue;
-    try {
-      const track = await resolveTrack(song, false);
-      if (track) {
-        append.push(track);
-        markSucceeded(key);
-      } else {
+  // 并行解析窗口（core 的 tier3 执行器本身有 K=3 闸门，串行只会把补窗时间乘 3，
+  // 真机表现为「JS 线程长时间忙碌」）。结果按队列顺序收集，保持 append 顺序稳定。
+  const candidates = wantedIndexes
+    .map((index) => queue[index])
+    .filter((song): song is Song => !!song)
+    .filter((song) => {
+      const key = songKey(song);
+      if (isInFlight(key) || isCoolingDown(key)) return false;
+      if (!beginResolve(key)) return false;
+      return true;
+    });
+
+  const settled = await Promise.all(
+    candidates.map(async (song) => {
+      const key = songKey(song);
+      try {
+        const track = await resolveTrack(song, false);
+        if (track) {
+          markSucceeded(key);
+          return track;
+        }
         markFailed(key);
+        return null;
+      } catch {
+        markFailed(key);
+        return null;
+      } finally {
+        endResolve(key);
       }
-    } catch {
-      markFailed(key);
-    } finally {
-      endResolve(key);
-    }
-  }
+    })
+  );
+  const append: Track[] = settled.filter((track): track is Track => !!track);
 
   if (append.length === 0) return;
 

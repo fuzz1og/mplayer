@@ -122,6 +122,14 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
 
   override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+    // FGS 诊断（真机 T6/T7 的关键取证）：media3 只有在 startPlaying 为真时才会调
+    // startForeground；这里把「它认为要不要前台」和播放器真实状态一起打出来。
+    Log.i(
+      TAG,
+      "onUpdateNotification startFG=$startInForegroundRequired " +
+        "playing=${controller?.isPlaying()} playWhenReady=${controller?.playWhenReady()} " +
+        "state=${controller?.player?.playbackState}"
+    )
     super.onUpdateNotification(session, startInForegroundRequired)
     val nowForeground = startInForegroundRequired
     if (nowForeground != foreground) {

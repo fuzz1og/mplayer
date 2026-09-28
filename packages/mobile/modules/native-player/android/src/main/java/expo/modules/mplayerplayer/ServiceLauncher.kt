@@ -36,6 +36,9 @@ internal object ServiceLauncher {
     }
   }
 
+  @Volatile
+  private var lastLoggedState: String? = null
+
   fun ensure(context: Context): Boolean {
     val intent = Intent(context, PlayerService::class.java).apply {
       action = MediaSessionService.SERVICE_INTERFACE
@@ -60,6 +63,13 @@ internal object ServiceLauncher {
         Log.w(TAG, "bindService failed", error)
         bound = false
       }
+    }
+    // 只在状态变化时打日志：真机排查「服务是 started 还是只 bound」就看这一行
+    // （只 bound 的服务没有 FGS 保护，handleAudioFocus/startForeground 都会退化）
+    val state = "start=$started bind=$bound"
+    if (state != lastLoggedState) {
+      lastLoggedState = state
+      Log.i(TAG, "ServiceLauncher.ensure: $state")
     }
     return started || bound
   }
