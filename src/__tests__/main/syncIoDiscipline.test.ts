@@ -31,10 +31,14 @@ describe('主进程同步 I/O 纪律（#412）', () => {
     expect(src).toMatch(/detectAudioContainer\(await readAudioHeader/);
   });
 
-  it('汽水音频不再复制多份，且播放请求路径上没有 existsSync', () => {
+  it('汽水音频流式落盘（不再整段进内存），且播放请求路径上没有 existsSync', () => {
     const src = stripComments(read('src/main/main.ts'));
-    expect(src).not.toContain('Buffer.from(dl.data)');
-    expect(src).toContain('new Uint8Array(dl.data as ArrayBuffer)');
+    // #426：arraybuffer 整段进内存 → stream + 后端流式入口
+    expect(src).not.toContain("responseType: 'arraybuffer'");
+    expect(src).toContain("responseType: 'stream'");
+    expect(src).toContain('await audioCacheBackend.writeFromStream(cacheKey, dl.data)');
+    // ADR-0002：调用方不自己开写流，路径与 meta 都由后端解释
+    expect(src).not.toContain('createWriteStream');
     // 存在性检查改异步（fileExists 用 fsp.stat）
     expect(src).not.toMatch(/fs\.existsSync\(cachedPath\)/);
     expect(src).toContain('await fileExists(cachedPath)');
@@ -75,15 +79,20 @@ describe('主进程同步 I/O 纪律（#412）', () => {
     expect(stripComments(read('src/main/services/localMusicService.ts'))).not.toMatch(/async function fileExists/);
   });
 
-  it('本地曲库：异步遍历 + 有界并发 + 原子写盘', () => {
+  it('本地曲库：异步遍历 + 有界并发 + 分片原子写盘', () => {
     const src = stripComments(read('src/main/services/localMusicService.ts'));
     expect(src).not.toContain('readdirSync');
     expect(src).not.toContain('writeFileSync');
     expect(src).toContain('PARSE_CONCURRENCY');
     expect(src).toContain('await fsp.readdir(dir');
-    // 全量重写改成 tmp + rename 原子替换，并经 saveChain 串行化
+    // #426：整份重写 → 分表（folders.json + songs-<hash>.json），每片 tmp + rename 原子替换，
+    // 并经 saveChain 串行化
     expect(src).toContain('this.saveChain');
-    expect(src).toMatch(/await fsp\.rename\(tmpFile, this\.storeFile\)/);
+    expect(src).toContain('FOLDERS_INDEX_FILE');
+    expect(src).toContain('SONGS_SHARD_PREFIX');
+    expect(src).toMatch(/await fsp\.rename\(temp, target\)/);
+    // 不再把整个 store 一次 stringify 落盘
+    expect(src).not.toContain('JSON.stringify(this.store');
   });
 
   it('fs.watch 事件合并，且落地处理里的存在性检查是异步的', () => {

@@ -1,6 +1,8 @@
 import fsp from 'fs/promises'
+import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
+import { Transform, pipeline } from 'stream'
 import { cacheKeyType, isImageBytes, isAudioBytes, type CacheBackend, type CacheStats } from '@mplayer/core'
 
 /**
@@ -63,6 +65,64 @@ function classifyEntry(key: string, data: Uint8Array): EntryKind {
   return 'audio'
 }
 
+/** 流式写入的临时文件后缀：不属于索引，崩溃残留由索引装载时清扫（#426）。 */
+const STREAM_TEMP_SUFFIX = '.tmp'
+/** 二进制条目只按文件头判定 kind，16 字节足够（与 `classifyEntry` 的二进制分支同源）。 */
+const BINARY_CLASSIFY_BYTES = 16
+/** JSON 条目要整份 parse 才与 `write()` 同口径：上限之内缓存全文，超过就归 `other`。 */
+const JSON_CLASSIFY_MAX_BYTES = 1024 * 1024
+
+/** 流式写入的产出：落盘字节数 + 分类所需的头部（不回读文件、不整段驻留内存）。 */
+interface StreamedEntry {
+  size: number
+  head: Buffer
+  /** 头部被上限截断（只可能是 JSON 条目超过 1MB）——此时无法与 write() 同口径判定 */
+  headTruncated: boolean
+}
+
+function classifyStreamedEntry(key: string, entry: StreamedEntry): EntryKind {
+  if (cacheKeyType(key) === 'json' && entry.headTruncated) return 'other'
+  return classifyEntry(key, entry.head)
+}
+
+/**
+ * 把可读流原样写进 `filePath`，边写边统计字节数并留一份头部（#426）。
+ *
+ * 用 `pipeline` 而不是手接 data/error：任一侧出错时它会**销毁上游**（下载流不会被留在
+ * 半路继续拉数据），并把错误原样抛给调用方。
+ */
+function pipeToFile(source: NodeJS.ReadableStream, filePath: string, headLimit: number): Promise<StreamedEntry> {
+  return new Promise((resolve, reject) => {
+    let size = 0
+    let head = Buffer.alloc(0)
+    const meter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        size += chunk.length
+        if (head.length < headLimit) {
+          head = Buffer.concat([head, chunk.subarray(0, headLimit - head.length)])
+        }
+        callback(null, chunk)
+      },
+    })
+    pipeline(source, meter, fs.createWriteStream(filePath), (error) => {
+      if (error) reject(error)
+      else resolve({ size, head, headTruncated: size > headLimit })
+    })
+  })
+}
+
+/** 中断时掐掉上游：调用方（如 axios 流）不该在写入失败后继续拉数据。 */
+function destroySource(source: NodeJS.ReadableStream): void {
+  const destroyable = source as { destroy?: () => void }
+  if (typeof destroyable.destroy === 'function') destroyable.destroy()
+}
+
+/** `writeFromStream` 的选项：语义与 `write()` 的第三参一致。 */
+export interface WriteFromStreamOptions {
+  /** 绝对过期时间戳（ms）；0 / undefined 表示永不过期。 */
+  expiresAt?: number
+}
+
 /**
  * 一个缓存目录的**全进程共享状态**。
  *
@@ -115,6 +175,7 @@ class SharedCacheIndex {
 
   private async loadIndex(): Promise<void> {
     await this.ensureDirs()
+    await this.sweepStreamTemps()
     let files: string[] = []
     try {
       files = await fsp.readdir(this.metaDir)
@@ -143,6 +204,29 @@ class SharedCacheIndex {
       }
     }
     this.recount()
+  }
+
+  /**
+   * 清扫崩溃残留的流式临时文件（#426）。
+   *
+   * 跑在索引装载这一刻：所有写入方都要先 `await ensureIndex()`，所以此时不可能有正在写的
+   * 临时文件；进程被杀留下的那半个文件在这里消失，「中断不留文件」在崩溃场景下也成立。
+   */
+  private async sweepStreamTemps(): Promise<void> {
+    for (const type of ['json', 'bin']) {
+      const dir = path.join(this.cacheDir, type)
+      let files: string[] = []
+      try {
+        files = await fsp.readdir(dir)
+      } catch {
+        continue
+      }
+      await Promise.all(
+        files
+          .filter((file) => file.endsWith(STREAM_TEMP_SUFFIX))
+          .map((file) => fsp.rm(path.join(dir, file), { force: true }).catch(() => undefined)),
+      )
+    }
   }
 
   /**
@@ -309,6 +393,63 @@ export class DiskCacheBackend implements CacheBackend {
       }
       this.shared.applyRecord(hash, record)
     })
+  }
+
+  /**
+   * 流式写入（#426）：边收边写临时文件 → 完成后**原子 rename** → 由后端写 meta 并记账。
+   *
+   * 与 `write()` 的语义对齐：同一 key 规则（同一 hash、同一 json/bin 目录）、同一份 meta
+   * 记账、同一个共享写队列。区别只在**队列只圈住收尾那一步**——整段下载若占着队列，会把
+   * 其它缓存写饿死几十秒。临时文件名带随机后缀，同一 key 的并发流式写各写各的，不互相截断。
+   *
+   * 中断（source 抛错 / 被 destroy / 磁盘写失败）只删临时文件：最终路径与 meta 一个字节
+   * 不动，于是 `stats()`/`keys()` 里既看不到半成品条目，也不留孤儿记账；目标 key 上原有
+   * 的旧条目也原样保留。
+   */
+  async writeFromStream(
+    key: string,
+    source: NodeJS.ReadableStream,
+    opts: WriteFromStreamOptions = {},
+  ): Promise<void> {
+    await this.shared.ensureIndex()
+    const hash = this.hashKey(key)
+    const filePath = this.resolvePath(key)
+    await fsp.mkdir(path.dirname(filePath), { recursive: true })
+    const tempPath = `${filePath}.${crypto.randomUUID()}${STREAM_TEMP_SUFFIX}`
+
+    let payload: StreamedEntry
+    try {
+      payload = await pipeToFile(
+        source,
+        tempPath,
+        cacheKeyType(key) === 'json' ? JSON_CLASSIFY_MAX_BYTES : BINARY_CLASSIFY_BYTES,
+      )
+    } catch (error) {
+      destroySource(source)
+      await fsp.rm(tempPath, { force: true }).catch(() => undefined)
+      throw error
+    }
+
+    const record: MetaRecord = {
+      key,
+      size: payload.size,
+      expiresAt: opts.expiresAt && opts.expiresAt > 0 ? opts.expiresAt : 0,
+      kind: classifyStreamedEntry(key, payload),
+    }
+    try {
+      await this.shared.enqueue(async () => {
+        await fsp.rename(tempPath, filePath)
+        try {
+          await fsp.writeFile(this.metaPath(hash), JSON.stringify(record))
+        } catch (error) {
+          console.error('写入缓存元数据失败:', error)
+        }
+        this.shared.applyRecord(hash, record)
+      })
+    } catch (error) {
+      await fsp.rm(tempPath, { force: true }).catch(() => undefined)
+      throw error
+    }
   }
 
   async getExpiryAt(key: string): Promise<number> {
