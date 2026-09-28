@@ -145,6 +145,19 @@ internal class QueueStore {
     revision
   }
 
+  /**
+   * 丢掉队首 `count` 项并把 index 前移（长会话防膨胀；配合 ExoPlayer 侧 removeMediaItem(0)）。
+   * 返回实际丢掉的条数。
+   */
+  fun dropLeading(count: Int): Int = synchronized(lock) {
+    val drop = count.coerceIn(0, maxOf(0, index))
+    if (drop == 0) return 0
+    repeat(drop) { tracks.removeAt(0) }
+    index -= drop
+    revision += 1
+    drop
+  }
+
   fun currentRevision(): Long = synchronized(lock) { revision }
 
   fun currentIndex(): Int = synchronized(lock) { index }

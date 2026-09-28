@@ -152,6 +152,9 @@ export function initNativePlayer(next: NativePlayerHooks): void {
 
   NativePlayer.addListener('trackChanged', (event) => {
     pruneMirror(event.toKey);
+    // 原生可能刚裁剪过历史（长会话防膨胀）→ 用权威快照重建 mirror，
+    // 否则 JS 的去重集会残留已不存在的 key，补窗时会漏投。
+    syncMirrorFromNative();
     const song = findSong(event.songId, event.toKey);
     if (event.reason === 'errorSkip' && song) {
       hooks.onTrackChanged?.(song, 'errorSkip');
@@ -260,10 +263,18 @@ function reconcileQueueFromNative(state: PlayerState | null): boolean {
     currentIndex: index,
     hasPlayed: true,
   });
-  useLogsStore
-    .getState()
-    .addLog('info', `已从原生队列对账 ${songs.length} 首（当前第 ${index + 1} 首）`);
+  const summary = `已从原生队列对账 ${songs.length} 首（当前第 ${index + 1} 首：${songs[index]?.name ?? ''}）`;
+  console.log(`[player] ${summary}`);
+  useLogsStore.getState().addLog('info', summary);
   return true;
+}
+
+/** 用原生权威快照重建 JS 的列表镜像（裁剪后必须同步）。 */
+function syncMirrorFromNative(): void {
+  const state = safeState();
+  if (state?.tracks?.length) {
+    nativeMirror = state.tracks.map((track) => ({ key: track.key, songId: track.songId }));
+  }
 }
 
 function safeState(): PlayerState | null {

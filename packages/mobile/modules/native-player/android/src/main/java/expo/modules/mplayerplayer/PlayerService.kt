@@ -339,6 +339,18 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
         }
       }
 
+      // 长会话防膨胀：原生播放列表只保留「当前项前 KEEP_BEFORE 项」起的内容。
+      // patchQueue 是 append-only，跑几小时会像 T4 那样攒到 89+ 项（MediaItem 很轻，
+      // 但不该无界增长；JS 侧在 trackChanged 时用 getState().tracks 重新同步 mirror）。
+      val currentIdx = ctrl.currentIndex()
+      if (currentIdx > KEEP_BEFORE && ctrl.player.mediaItemCount > MAX_NATIVE_ITEMS) {
+        val dropped = store.dropLeading(currentIdx - KEEP_BEFORE)
+        if (dropped > 0) {
+          repeat(minOf(dropped, ctrl.player.mediaItemCount - 1)) { ctrl.removeItemAt(0) }
+          Log.i(TAG, "trimmed $dropped leading items (listNow=${ctrl.player.mediaItemCount})")
+        }
+      }
+
       holePending = false
       cancelWindowHoleDeadline()
 
@@ -1020,6 +1032,10 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
     /** 过期后等 JS 灌新 URL 的上限（core 解析链 3~9s，#424）。 */
     private const val REFRESH_WAIT_MS = 10_000L
+
+    /** 长会话裁剪阈值：播放列表超过这个条数才回收历史（保留当前项前 KEEP_BEFORE 项）。 */
+    private const val MAX_NATIVE_ITEMS = 60
+    private const val KEEP_BEFORE = 10
   }
 }
 
