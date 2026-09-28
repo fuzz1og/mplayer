@@ -70,13 +70,19 @@ const PLAINTEXT_HEADERS: Record<string, string> = {
   'Referer': 'https://music.163.com/',
 };
 
-/** 明文 GET（transport 接缝出网）→ 文本。 */
-async function plaintextGetText(url: string): Promise<string> {
+/**
+ * 明文 GET（transport 接缝出网）→ 文本。
+ *
+ * `options.signal` 一路透传到 transport：排队中的请求可从闸门队列摘除、在飞的请求
+ * 真的被 abort（#408 协作式取消）。歌词预取（#429）靠它做到「取消后不再出网」。
+ */
+async function plaintextGetText(url: string, options?: TransportCallOptions): Promise<string> {
   const res = await request({
     method: 'GET',
     url,
     headers: PLAINTEXT_HEADERS,
     timeoutMs: 30000,
+    signal: options?.signal,
   });
   if (res.status >= 400) {
     throw new Error(`网易明文接口 HTTP ${res.status}: ${url}`);
@@ -85,8 +91,8 @@ async function plaintextGetText(url: string): Promise<string> {
 }
 
 /** 明文 GET → JSON。 */
-async function plaintextGetJson<T>(url: string): Promise<T> {
-  const text = await plaintextGetText(url);
+async function plaintextGetJson<T>(url: string, options?: TransportCallOptions): Promise<T> {
+  const text = await plaintextGetText(url, options);
   return JSON.parse(text) as T;
 }
 
@@ -204,9 +210,10 @@ async function fetchNeteaseSongUrlMap(ids: number[]): Promise<Map<number, string
 }
 
 /** 按网易云 songId 拉歌词文本（LRC）；无歌词（纯音乐等）返回空串。 */
-async function fetchLyricBySongId(songId: string): Promise<string> {
+async function fetchLyricBySongId(songId: string, options?: TransportCallOptions): Promise<string> {
   const data = await plaintextGetJson<{ lrc?: { lyric?: string } }>(
-    `${LYRIC_URL}?id=${encodeURIComponent(songId)}&lv=1&kv=1&tv=-1`
+    `${LYRIC_URL}?id=${encodeURIComponent(songId)}&lv=1&kv=1&tv=-1`,
+    options
   );
   return data.lrc?.lyric || '';
 }
@@ -219,14 +226,20 @@ async function fetchLyricBySongId(songId: string): Promise<string> {
  * - **空词也缓存**（值包 `{v}` 对象以区分「无缓存」与「确认无词」——纯音乐/无词歌
  *   不再反复请求；此为 #242 对 #246「空歌词不入库」的显式反转，继续沿用）；
  * - 拉取失败不缓存（保留重试机会）、失败返回空串（不上抛：歌词拿不到不该让播放失败）。
+ *
+ * `options.signal`（#429）：预取入队的取消语义——取消 = 这次不取，**失败语义不变**
+ * （取消也走 catch 返回空串，调用方靠自己的 signal 区分「没取」与「取不到」）。
  */
-export async function getNeteaseLyrics(songId: string): Promise<string> {
+export async function getNeteaseLyrics(
+  songId: string,
+  options?: TransportCallOptions
+): Promise<string> {
   if (!songId) return '';
   const cacheKey = `lyric_id_${songId}`;
   const hit = cacheManager.get<{ v: string }>(cacheKey);
   if (hit) return hit.v;
   try {
-    const lrc = await fetchLyricBySongId(songId);
+    const lrc = await fetchLyricBySongId(songId, options);
     cacheManager.set(cacheKey, { v: lrc }, LYRIC_TTL_MS);
     return lrc;
   } catch {

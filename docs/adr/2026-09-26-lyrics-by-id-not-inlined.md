@@ -57,6 +57,10 @@ IPC 单通道回传（`musicApiHandlers` 原样回传），整歌单 payload 可
   播放一首网易歌新增 **1** 次取词请求（按需），重复播放由 `lyric_id_<id>` 缓存兜住。
 - **歌词首行延迟**：从「列表加载时已就绪」变为「播放时一次 RTT」。由 PlayerOverlay 的
   `lyricsLoading` 与桌面 `lyricsLoading` 覆盖，**不阻塞出声**（歌词获取本就是 fire-and-forget）。
+  **后续（#429）**：取词时机再前移一档——列表里**行进入视口**即经 core `shared/lyricsHydrator`
+  预取（同 songId single-flight / 可取消 / 单次入队预算；并发与限速仍只有 transport 双层闸门
+  `#408` 一套），于是「播放时一次 RTT」只对**从未进入过视口**的歌成立。预取是 best-effort：
+  失败不重试、空词与失败都记入会话内已结算，兜底仍是播放期取词。
 - **桌面 IPC payload 不再含 LRC 全文**，整歌单回传从 MB 级降回 KB 级。
 - **下载侧 `.lrc` 仍按 `song.lrc`（URL）驱动**：网易/汽水恒空故不生成侧车歌词——这是既有缺口
   （记录在 #412），本决策未改变，也不假装已解决。

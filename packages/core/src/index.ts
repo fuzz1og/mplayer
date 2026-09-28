@@ -50,6 +50,25 @@ export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, applySwap } from './shared/sourceSwap.js';
 export { songUsesSongidLyrics, isSodaSource, isInlineLyrics } from './shared/songLyrics.js';
+// 歌词入队取词（#429）：可见期预取的入队 / single-flight / 取消 / 预算单点。
+// 并发与限速不在本模块——那是 transport 双层闸门（#408）的职责。
+export {
+  LYRICS_HYDRATION_BURST_BUDGET,
+  LYRICS_HYDRATION_SETTLED_LIMIT,
+  enqueueLyricsHydration,
+  cancelLyricsHydration,
+  cancelAllLyricsHydration,
+  awaitLyricsHydrationIdle,
+  getLyricsHydrationStats,
+  setLyricsHydratorDeps,
+  resetLyricsHydrator,
+} from './shared/lyricsHydrator.js';
+export type {
+  LyricsHydrationCandidate,
+  LyricsHydrationStats,
+  LyricsHydratorDeps,
+  LyricsFetcher,
+} from './shared/lyricsHydrator.js';
 // 榜单聚合内核已下线（#332 裁决：回归单元榜 + 源切换）。聚合只在「存在跨源可比原生量」
 // 的产品里有意义；本项目只有名次、没有绝对量，Σ1/rank 在业界找不到对应物。
 export {

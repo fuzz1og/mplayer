@@ -1,8 +1,9 @@
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactElement } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import type { ListRenderItemInfo, RefreshControlProps, StyleProp, ViewStyle } from 'react-native';
-import type { Song } from '@mplayer/core';
+import type { LyricsHydrationCandidate, Song } from '@mplayer/core';
+import { cancelLyricsHydration, enqueueLyricsHydration } from '@mplayer/core';
 import { spacing, textVariants } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -11,6 +12,19 @@ import ScalePress from './ScalePress';
 import { listWindowProps } from './listWindow';
 import { computeSongListLayout } from './songListLayout';
 import type { SongListRow } from './songListLayout';
+import { createViewportLyricsSettler } from './songListHydration';
+import type { ViewportLyricsSettler } from './songListHydration';
+
+/**
+ * 视口回调只在**真正读到的那部分**上收口：ViewToken 的形状由 react-native 决定，
+ * 这里结构化声明，免得把 @react-native/virtualized-lists 这个传递依赖引进来。
+ */
+interface ViewableRowToken<T> {
+  item: T;
+}
+interface ViewableRowsInfo<T> {
+  viewableItems: ViewableRowToken<T>[];
+}
 
 // 行模型与布局算术在 songListLayout.ts（不依赖 react-native，可被单测直接覆盖）。
 // 这里只 re-export **类型**：调用方（各列表页）建 rows 时需要它；布局函数由测试直接
@@ -111,6 +125,46 @@ export default function SongList({
 
   const keyExtractor = useCallback((row: SongListRow) => row.key, []);
 
+  /**
+   * 「行进入视口」= 预取该行歌词（#429）：点开播放器时歌词已在 core 缓存里，不必再等
+   * 一次 RTT。接线只到这里——去重 / single-flight / 取消 / 预算在 core
+   * `shared/lyricsHydrator`，并发与每 host 限速在 transport 双层闸门（#408）。
+   *
+   * - 回调**必须是稳定引用**：RN 不支持热换 `onViewableItemsChanged`（换了会重设
+   *   视口追踪），所以用 useRef 持有一份；候选只来自本次回调拿到的行，不闭包 `rows`。
+   * - 真正入队的是 `settler`：可见集合**停稳** `VIEWPORT_SETTLE_MS` 后才交付（#421），
+   *   滑动期间滚过的行不入队——一次甩动不会把整份歌单打出去。
+   */
+  // 本列表入队过的候选：卸载时要按 key 收回（hydrator 是全局单例，不能整体清场）。
+  const enqueuedRef = useRef(new Map<string, LyricsHydrationCandidate>());
+  const settlerRef = useRef<ViewportLyricsSettler | null>(null);
+  if (settlerRef.current === null) {
+    settlerRef.current = createViewportLyricsSettler({
+      enqueue: (candidates) => {
+        for (const candidate of candidates) {
+          enqueuedRef.current.set(`${candidate.sourceType}:${candidate.id}`, candidate);
+        }
+        enqueueLyricsHydration(candidates);
+      },
+    });
+  }
+  const onViewableItemsChanged = useRef(({ viewableItems }: ViewableRowsInfo<SongListRow>) => {
+    settlerRef.current?.onViewableRows(viewableItems.map((token) => token.item));
+  }).current;
+  // 只设阈值、不设 minimumViewTime：RN 的 minimumViewTime 只是**推迟**报告那次快照
+  // （快照里的行可能早已滑出屏幕），停稳判定统一由 settler 一处负责。
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+
+  // 卸载时先丢掉待交付项，再收回本列表发起、尚未结算的预取：只取消自己入队过的 key，
+  // 别的列表在飞的取词不受影响；未结算的 key 之后重新进入视口还会再来一次。
+  useEffect(
+    () => () => {
+      settlerRef.current?.dispose();
+      cancelLyricsHydration([...enqueuedRef.current.values()]);
+    },
+    []
+  );
+
   return (
     <FlatList
       testID={testID}
@@ -127,6 +181,8 @@ export default function SongList({
       onEndReached={onEndReached}
       onEndReachedThreshold={onEndReachedThreshold}
       refreshControl={refreshControl}
+      viewabilityConfig={viewabilityConfig}
+      onViewableItemsChanged={onViewableItemsChanged}
     />
   );
 }
