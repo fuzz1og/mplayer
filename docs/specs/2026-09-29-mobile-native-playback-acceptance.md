@@ -93,7 +93,7 @@ adb -s N7TOAIMFOJPFIV7D shell am start -a android.intent.action.VIEW \
 | T8 | ✅ 通过 | `MPlayerPrefetch: task start id=11` / `task finish id=11` 成对出现（headless 任务真的起得来、跑得完）；配套 `patchQueue received → release prefetch window` |
 | T9 | ◐ 部分通过 | **随机播放**：`补窗 mode=随机播放 计划=[4,1,7] 实投=3` / `计划=[5,8,9]` —— 非顺序、计划内不重复 ⇒ JS 定序生效（原生只顺序推进，故锁屏 next 与 UI next 同序）。**单曲循环**：整轮**无任何 `补窗` 日志** ⇒ `planNextIndexes` 正确返回空、不向原生投喂下一首。**列表循环**：T1 的 5 首顺序连播即是；「绕回队尾」只有单测覆盖（`planNextIndexes(queue,3,3,…) === [4,0,1]`），设备上未构造出真·队尾。**「队列播完收尾」**：循环模式下不可达，未验 |
 
-| T10 | ◐ 部分通过 | **R8 充分性已证**：release 包 `PlayerService created` + `MediaController connected` + 媒体会话注册 + headless `task start/finish` + `LoadQueueInput/PatchQueueInput` Record 转换正常，无 `ClassNotFoundException`/`NoClassDefFoundError`。**播放复跑未执行**：release 应用需要 tier3 订阅，而该 emulator 实例的触摸注入不触发应用的 `ScalePress`（`+ 添加 URL 订阅` 毫无反应、无 Alert），原生 `Switch`/`TextInput` 正常 |
+| T10 | ✅ 通过 | release 包（R8 + shrinkResources，**36MB** vs debug 116MB）在模拟器上：`PlayerService created` + `MediaController connected` + 会话注册 + headless `task start/finish` + `补窗 mode=列表循环 计划=[1,2,3] 实投=3`（JS 定序与桥都在）+ `开始播放《海屿你》（149ms）`；**前台服务**：`com.mplayer.mobile/expo.modules.mplayerplayer.PlayerService isForeground=true types=00000002`（mediaPlayback）、`channel=music-playback-native`、`category=transport`；**通知跟随换曲**：`android.title=明知故犯` / `android.text=Max李玄`（已从海屿你推进）；熄屏后持续 `onUpdateNotification startFG=true playing=true state=3`；无 `ClassNotFoundException`/`NoClassDefFoundError`。tier3 为本地临时注入（**构建产物与源码均未入库，验完已回退**）。未复跑：release 侧的 T3 过期判据 |
 
 ### 验收过程中发现并修掉的真实缺陷
 
