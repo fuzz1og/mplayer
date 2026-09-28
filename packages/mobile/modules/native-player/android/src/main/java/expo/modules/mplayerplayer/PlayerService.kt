@@ -69,6 +69,17 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   @Volatile
   private var awaitingRefreshKey: String? = null
 
+  /**
+   * 用户在窗口边界按了「下一首」但在原生列表里已经没有下一项。
+   *
+   * 此时 `next()` 会走「踩空」分支向 JS 要歌，但**播放器是 PLAYING 而不是 ENDED**，
+   * 所以补窗落地时不会触发续播逻辑 —— 新补进来的歌只会躺在列表里，锁屏/UI 的
+   * 「下一首」表现为静默失灵（真机 T2 实测）。用这个标志记住「这一跳是用户要的」，
+   * 等新项到了再真正切过去。
+   */
+  @Volatile
+  private var pendingUserNext = false
+
   private var windowHoleDeadline: Runnable? = null
   private var errorRetry: Runnable? = null
   private var destroyed = false
@@ -343,6 +354,17 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
         ctrl.player.playWhenReady = userWantsPlay
       }
 
+      // 用户在窗口边界按的「下一首」：新项到了才真正切过去（T2）
+      if (pendingUserNext && ctrl.player.mediaItemCount > 0) {
+        pendingUserNext = false
+        val at = ctrl.currentIndex()
+        if (at < ctrl.player.mediaItemCount - 1) {
+          ctrl.player.seekToNextMediaItem()
+          ctrl.player.playWhenReady = userWantsPlay
+          Log.i(TAG, "pendingUserNext → advanced to index=${at + 1}/${ctrl.player.mediaItemCount}")
+        }
+      }
+
       // 补窗到位 + 之前停在缓冲边界 + 用户意图仍是「想播」 → 续播（T8）
       if (userWantsPlay && ctrl.player.playbackState == Player.STATE_ENDED && ctrl.player.mediaItemCount > 0) {
         ctrl.player.seekTo(Math.min(store.currentIndex(), ctrl.player.mediaItemCount - 1), 0L)
@@ -371,6 +393,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   fun pause() {
     userWantsPlay = false
+    pendingUserNext = false
     val ctrl = controller ?: return
     main.post {
       ctrl.player.pause()
@@ -383,9 +406,11 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     userWantsPlay = true
     main.post {
       if (ctrl.player.mediaItemCount == 0) {
+        pendingUserNext = true
         requestTracks(NeedReason.HOLE)
       } else if (ctrl.currentIndex() >= ctrl.player.mediaItemCount - 1) {
         // 用户主动 next 踩空 → 立即 queueEnded，不重试（§4.1）
+        pendingUserNext = true
         ctrl.player.pause()
         emit(Events.QUEUE_ENDED, mapOf("reason" to EndReason.WINDOW_HOLE, "index" to ctrl.currentIndex(), "revision" to store.currentRevision()))
         requestTracks(NeedReason.HOLE)
@@ -456,6 +481,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
     val ctrl = controller ?: return
+    pendingUserNext = false
     if (mediaItem == null) return
     val index = ctrl.currentIndex()
     store.moveTo(index)
