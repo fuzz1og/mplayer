@@ -135,6 +135,29 @@ describe('解析链总预算（#424）', () => {
     expect(getTier3InFlightCount()).toBe(0);
   });
 
+  it('K=3 槽位被永不落定的解析占满时，排队的第 4 首仍在自己的整链预算内 reject（无界等待已闭）', async () => {
+    vi.useFakeTimers();
+    setTier3Enabled(true);
+    setTier3Resolver(vi.fn(() => new Promise<Tier3Resolution | null>(() => {})) as unknown as Tier3Resolver);
+    registerDirectClient({
+      key: 'qq',
+      searchSongs: vi.fn(async () => []),
+      resolvePlayableUrl: vi.fn(async () => ''), // 直连秒回空串 → 立刻进 tier3
+    });
+    // 三首占满 K=3 槽位（其解析永不落定，槽位不会归还）
+    const holders = ['h1', 'h2', 'h3'].map((id) => resolvePlayableSongRouted(song(id, 'qq')).catch(() => null));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(getTier3InFlightCount()).toBe(3);
+
+    const queued = resolvePlayableSongRouted(song('q4', 'qq'));
+    const assertion = expect(queued).rejects.toBeInstanceOf(ResolutionBudgetExhaustedError);
+    await vi.advanceTimersByTimeAsync(8_900);
+    await vi.advanceTimersByTimeAsync(200); // 9s：链总预算到点，不再无限等槽位
+    await assertion;
+    expect(getTier3InFlightCount()).toBe(3); // 占位者仍持有（fake resolver 永不落定）
+    void holders;
+  });
+
   it('各腿局部墙语义不变：直连腿仍 3s、第一条 tier3 腿仍拿满 6s', async () => {
     vi.useFakeTimers();
     registerDirectClient({

@@ -32,15 +32,13 @@ describe('resolutionBudget（#424 解析链总预算）', () => {
     budget.dispose();
   });
 
-  it('pause 期间不走表（tier3 K=3 排队不计入解析链总预算）', () => {
+  it('是墙钟、不暂停：tier3 K=3 排队时间照走（否则槽位占满时整链会无界等待）', () => {
     vi.useFakeTimers();
     const budget = createResolutionBudget(9_000);
     vi.advanceTimersByTime(4_000);
-    budget.pause();
-    vi.advanceTimersByTime(60_000);
     expect(budget.remainingMs()).toBe(5_000);
-    budget.resume();
-    vi.advanceTimersByTime(5_000);
+    // 「排队 60s」这段没有可暂停的接缝：走表照走，到点即耗尽。
+    vi.advanceTimersByTime(60_000);
     expect(budget.remainingMs()).toBe(0);
     expect(budget.exhausted()).toBe(true);
     budget.dispose();

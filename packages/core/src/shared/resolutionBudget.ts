@@ -22,9 +22,10 @@ import { RESOLUTION_CHAIN_BUDGET_MS } from './playbackBudgets.js';
  * 2. **耗尽即 abort**：预算到点触发 `onExpire` 监听（直连腿 abort 底层请求；tier3 腿
  *    由 resolver 的 `control.signal` 停掉在飞源并中止遍历），链本身以
  *    {@link ResolutionBudgetExhaustedError} reject，不再无限等。
- * 3. **排队不走表**：等待 tier3 K=3 槽位期间 `pause()`（ADR 2026-09-25 决策 8 的既有口径：
- *    「被排在后面的调用方不该在没打过任何上游的情况下先超时」）。故 `RESOLUTION_CHAIN_BUDGET_MS`
- *    是**活跃时间**上界，用户可见等待还需加上 K=3 排队时间。
+ * 3. **它是墙钟，不暂停**。K=3 槽位排队**计入**本预算——否则三个槽位被占满时整链会
+ *    **无界等待**（「链总在 T 毫秒内结算」就不成立了）。ADR 2026-09-25 决策 8 的
+ *    「排队不计入预算」仍然成立，但**只针对 tier3 腿预算**：腿预算从**槽位到手**起计
+ *    （见 `sourceRouter.tryTier3`），两条口径各管一层、互不干扰。
  */
 
 /** 解析链总预算耗尽的哨兵错误：与「源失败」「单源墙超时」「tier3 腿预算用尽」都不同——
@@ -40,24 +41,19 @@ export class ResolutionBudgetExhaustedError extends Error {
 }
 
 /**
- * 一次解析链的预算对象。实现是**可暂停的墙钟**：已消耗时间 = 激活状态下走过的时间之和。
+ * 一次解析链的预算对象：从创建那一刻起计的**墙钟**（不暂停）。
  * 计时器在创建时就起（`onExpire` 监听不能依赖「有人 race 了哨兵」），`dispose()` 停表；
  * 没人 race 的哨兵 promise 不产生 unhandled rejection。
- * unhandled rejection，也不该拖住进程退出。
  */
 export interface ResolutionBudget {
   /** 预算总额（ms）。 */
   readonly totalMs: number;
-  /** 剩余预算（ms，>=0）；暂停期间不走表。 */
+  /** 剩余预算（ms，>=0）。 */
   remainingMs(): number;
   /** 本腿可用时限 = min(本腿局部墙, 剩余预算)。 */
   clamp(legWallMs: number): number;
   /** 预算是否已耗尽（0 剩余，或已触发）。 */
   exhausted(): boolean;
-  /** 暂停走表（等待 tier3 K=3 槽位：排队不计入预算）。 */
-  pause(): void;
-  /** 恢复走表；额度已耗尽则立刻触发。 */
-  resume(): void;
   /** 注册「预算耗尽」回调（abort 底层 / 记放弃观测）；返回注销函数。 */
   onExpire(listener: () => void): () => void;
   /** 预算耗尽时 reject 的哨兵（与 {@link exhausted} / {@link onExpire} 同一族命名）；
@@ -68,9 +64,7 @@ export interface ResolutionBudget {
 }
 
 export function createResolutionBudget(totalMs: number = RESOLUTION_CHAIN_BUDGET_MS): ResolutionBudget {
-  let elapsedMs = 0;
-  let activeSince: number | null = Date.now();
-  let pauseDepth = 0;
+  const startedAt = Date.now();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let fired = false;
   let disposed = false;
@@ -85,16 +79,9 @@ export function createResolutionBudget(totalMs: number = RESOLUTION_CHAIN_BUDGET
     }
   };
 
-  const elapsed = (): number => elapsedMs + (activeSince === null ? 0 : Date.now() - activeSince);
+  const elapsed = (): number => Date.now() - startedAt;
 
   const remainingMs = (): number => (fired ? 0 : Math.max(0, totalMs - elapsed()));
-
-  const consume = (): void => {
-    if (activeSince !== null) {
-      elapsedMs += Date.now() - activeSince;
-      activeSince = null;
-    }
-  };
 
   /** 监听器只是副作用（abort / 放弃观测）：单个失败不得影响链路结算。 */
   const notify = (listener: () => void): void => {
@@ -108,7 +95,6 @@ export function createResolutionBudget(totalMs: number = RESOLUTION_CHAIN_BUDGET
   const fire = (): void => {
     if (fired || disposed) return;
     fired = true;
-    consume();
     clearTimer();
     for (const listener of listeners) notify(listener);
     rejectExpired?.(new ResolutionBudgetExhaustedError(totalMs));
@@ -116,8 +102,8 @@ export function createResolutionBudget(totalMs: number = RESOLUTION_CHAIN_BUDGET
 
   const arm = (): void => {
     clearTimer();
-    if (disposed || fired || activeSince === null) return;
-    const rest = totalMs - elapsedMs;
+    if (disposed || fired) return;
+    const rest = totalMs - elapsed();
     if (rest <= 0) {
       fire();
       return;
@@ -132,19 +118,6 @@ export function createResolutionBudget(totalMs: number = RESOLUTION_CHAIN_BUDGET
     remainingMs,
     clamp: (legWallMs: number) => Math.max(0, Math.min(legWallMs, remainingMs())),
     exhausted: () => fired || remainingMs() <= 0,
-    pause() {
-      pauseDepth += 1;
-      if (pauseDepth > 1 || activeSince === null) return;
-      consume();
-      clearTimer();
-    },
-    resume() {
-      if (pauseDepth === 0) return;
-      pauseDepth -= 1;
-      if (pauseDepth > 0 || activeSince !== null || fired || disposed) return;
-      activeSince = Date.now();
-      arm();
-    },
     onExpire(listener: () => void) {
       if (fired) {
         notify(listener);
@@ -165,7 +138,6 @@ export function createResolutionBudget(totalMs: number = RESOLUTION_CHAIN_BUDGET
     dispose() {
       if (disposed) return;
       disposed = true;
-      consume();
       clearTimer();
       listeners.clear();
     },

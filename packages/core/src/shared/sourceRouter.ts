@@ -761,16 +761,13 @@ async function tryTier3(
       abortController.abort();
       run.markAbandoned();
     });
-    // ADR 2026-09-25 决策 8：K=3 排队期间**不计入**预算（tier3 腿预算与 #424 的解析链总预算都不计）
-    // ——否则被排在后面的调用方会在没打过任何上游的情况下先超时（切歌场景 P50 反而退化）。
-    // #424：腿预算再取 `min(6s, 解析链总预算的剩余)`，于是「试听换完整版」的第二条 tier3 腿只吃剩余额度。
+    // ADR 2026-09-25 决策 8：K=3 排队期间**不计入 tier3 腿预算**——腿预算从**槽位到手**起计，
+    // 否则被排在后面的调用方会在没打过任何上游的情况下先超时（切歌场景 P50 反而退化）。
+    // #424：但**解析链总预算是墙钟、照走排队时间**——否则三个槽位被占满时整链会无界等待，
+    // 「链总在 T 毫秒内结算」就不成立了。两条口径各管一层。
+    // 腿预算再取 `min(6s, 解析链总预算的剩余)`，于是「试听换完整版」的第二条 tier3 腿只吃剩余额度。
     const budgetExhausted = (async (): Promise<typeof BUDGET_EXHAUSTED> => {
-      budget.pause();
-      try {
-        await run.started;
-      } finally {
-        budget.resume();
-      }
+      await run.started;
       if (ctx) activeT0 = traceNow();
       const legBudgetMs = budget.clamp(TIER3_CHAIN_BUDGET_MS);
       return new Promise<typeof BUDGET_EXHAUSTED>((resolve) =>
