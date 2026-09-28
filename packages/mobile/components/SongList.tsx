@@ -169,8 +169,11 @@ export default function SongList({
   // （快照里的行可能早已滑出屏幕），停稳判定统一由 settler 一处负责。
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
-  // 卸载时先丢掉待交付项，再收回本列表发起、尚未结算的预取：只取消自己入队过的 key，
-  // 别的列表在飞的取词不受影响；未结算的 key 之后重新进入视口还会再来一次。
+  // 卸载时先丢掉待交付项，再收回本列表入队过、尚未结算的预取。
+  // ⚠️ 已知取舍：hydrator 按 songId 全局在飞、**没有调用方身份**，所以「收回」是 key 级的——
+  // 若另一个列表此刻也在飞同一首歌，这次取消会一并 abort 它（代价是那次预取白做，
+  // 重新进入视口会再来一次，不会发错数据）。要按调用方隔离得给 hydrator 加 owner 维度，
+  // 本 PR 不做。
   useEffect(
     () => () => {
       settlerRef.current?.dispose();

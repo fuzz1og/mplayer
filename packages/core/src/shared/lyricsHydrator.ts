@@ -12,7 +12,8 @@ import { getNeteaseLyrics } from '../api/neteaseDirect.js';
  *   视口变化会被反复触发（滚动/重排/换页），没有这层，同一首会被打 N 次；
  * - **可取消**：行离开视口 / 列表卸载时 `cancel*`，**排队中的请求从 transport 闸门
  *   摘除、绝不进入底层传输**；取消过的 key 不算结算，重新进入视口可以再来一次；
- * - **预算**：**单次入队**最多接纳 `LYRICS_HYDRATION_BURST_BUDGET`(30) 个候选，
+ * - **单次入队接纳上限**（**不是时间预算**——`shared/playbackBudgets` 里的「预算」是
+ *   编排层共享的时间池，两者别混）：**单次入队**最多接纳 `LYRICS_HYDRATION_BURST_CAP`(30) 个候选，
  *   多出来的记入 `dropped`、不派发——这是「调用方把整页数据一次性塞进来」的兜底，
  *   **不是吞吐上限**：调用方分批入队时不受它限制，上游请求数 = 实际采纳数
  *   （分 10 批入队 100 首就是 100 次请求，总量只由 transport 闸门与分批节奏决定）。
@@ -29,6 +30,12 @@ import { getNeteaseLyrics } from '../api/neteaseDirect.js';
  * 上游在飞峰值 = 闸门上限，与本模块无关。`lyricsHydrator.test.ts` 用假 transport
  * 断言了这条分工的两种口径：**分批**入队 100 首（10 批 × 10）→ 上游恰好 100 次请求、
  * 同 host 峰值 ≤ 2；**单次**入队 100 首 → 只采纳 30 条出网、其余 70 条记 `dropped`。
+ *
+ * **已知叠加风险（未在本 PR 处理，如实记录）**：预取与播放解析走**同一个 host**
+ * （`music.163.com`），而 `api/transport` 的同 host 闸门是严格 FIFO。快速滚动时，
+ * 上百条「30s 超时 + transport 默认 `maxRetries=3`」的取词可能排在播放解析之前抢 host 槽，
+ * 把「点开就播」的手感拖慢——本模块的「失败不重试」只作用于自身，不改变 transport 层的重试。
+ * 缓解方向（另开票）：预取在播放解析在飞时让路、或给取词一个与预取语义相称的更小 timeoutMs。
  *
  * 取词实现复用既有链路（网易 `getNeteaseLyrics`：key `lyric_id_${songId}`、TTL 1 天、
  * 空词也缓存），本模块**不新写网络请求**。汽水虽同属「按 ID 直取歌词源」，但它的取词
@@ -53,7 +60,7 @@ export interface LyricsHydrationStats {
   dispatched: number;
   /** 因在飞/已结算被跳过的入队次数（single-flight 命中数）。 */
   deduped: number;
-  /** 因单次入队预算被丢弃的候选数。 */
+  /** 因单次入队接纳上限被丢弃的候选数。 */
   dropped: number;
   /** 源不在预取范围（当前只做网易）被跳过的候选数。 */
   unsupported: number;
@@ -68,7 +75,7 @@ export interface LyricsHydrationStats {
 }
 
 /**
- * **单次入队**接纳上限（不是吞吐上限，口径见模块头注释）。
+ * **单次入队**接纳上限（不是吞吐上限、更不是时间预算，口径见模块头注释）。
  *
  * 取 30 的理由：一次进可见集合的行天然有界——歌曲行高 64dp（`songListLayout`
  * 的 `SONG_ROW_LAYOUT_HEIGHT`），6.7" 竖屏可见区约 12–16 行，消费端还带
@@ -76,7 +83,7 @@ export interface LyricsHydrationStats {
  * 留余量；同时它仍然拦得住「整页塞进来」。正常调用方（移动端停稳闸每次只交一屏）
  * 永远碰不到这个值——碰到它就是调用方没分批，是 bug 信号而不是常态。
  */
-export const LYRICS_HYDRATION_BURST_BUDGET = 30;
+export const LYRICS_HYDRATION_BURST_CAP = 30;
 
 /** 已结算记忆上限：超限整体清空（真缓存仍在，重新入队命中零请求）。 */
 export const LYRICS_HYDRATION_SETTLED_LIMIT = 500;
@@ -130,7 +137,7 @@ export function enqueueLyricsHydration(
       stats.deduped += 1;
       continue;
     }
-    if (accepted >= LYRICS_HYDRATION_BURST_BUDGET) {
+    if (accepted >= LYRICS_HYDRATION_BURST_CAP) {
       stats.dropped += 1;
       continue;
     }

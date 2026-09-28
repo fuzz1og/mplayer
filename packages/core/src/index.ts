@@ -50,10 +50,10 @@ export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, applySwap } from './shared/sourceSwap.js';
 export { songUsesSongidLyrics, isSodaSource, isInlineLyrics } from './shared/songLyrics.js';
-// 歌词入队取词（#429）：可见期预取的入队 / single-flight / 取消 / 预算单点。
+// 歌词入队取词（#429）：可见期预取的入队 / single-flight / 取消 / 单次接纳上限单点。
 // 并发与限速不在本模块——那是 transport 双层闸门（#408）的职责。
 export {
-  LYRICS_HYDRATION_BURST_BUDGET,
+  LYRICS_HYDRATION_BURST_CAP,
   LYRICS_HYDRATION_SETTLED_LIMIT,
   enqueueLyricsHydration,
   cancelLyricsHydration,

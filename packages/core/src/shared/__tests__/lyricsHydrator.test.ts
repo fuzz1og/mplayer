@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
-  LYRICS_HYDRATION_BURST_BUDGET,
+  LYRICS_HYDRATION_BURST_CAP,
   LYRICS_HYDRATION_SETTLED_LIMIT,
   awaitLyricsHydrationIdle,
   cancelAllLyricsHydration,
@@ -116,16 +116,16 @@ describe('lyricsHydrator 入队纪律（#429）', () => {
     cancelAllLyricsHydration();
   });
 
-  it('单次入队 100 首：只派发前 LYRICS_HYDRATION_BURST_BUDGET 个，其余计入 dropped', () => {
+  it('单次入队 100 首：只派发前 LYRICS_HYDRATION_BURST_CAP 个，其余计入 dropped', () => {
     const fake = deferredFetcher();
     setLyricsHydratorDeps({ fetchLyrics: fake.fetcher });
 
     enqueueLyricsHydration(Array.from({ length: 100 }, (_, i) => song(String(i))));
 
-    expect(fake.calls).toHaveLength(LYRICS_HYDRATION_BURST_BUDGET);
+    expect(fake.calls).toHaveLength(LYRICS_HYDRATION_BURST_CAP);
     expect(getLyricsHydrationStats()).toMatchObject({
-      dispatched: LYRICS_HYDRATION_BURST_BUDGET,
-      dropped: 100 - LYRICS_HYDRATION_BURST_BUDGET,
+      dispatched: LYRICS_HYDRATION_BURST_CAP,
+      dropped: 100 - LYRICS_HYDRATION_BURST_CAP,
     });
 
     cancelAllLyricsHydration();
@@ -235,10 +235,10 @@ describe('lyricsHydrator 经 transport 出网（#429 边界：并发/限速全�
     enqueueLyricsHydration(Array.from({ length: 100 }, (_, i) => song(String(i))));
     await awaitLyricsHydrationIdle();
 
-    expect(seen).toHaveLength(LYRICS_HYDRATION_BURST_BUDGET);
+    expect(seen).toHaveLength(LYRICS_HYDRATION_BURST_CAP);
     expect(getLyricsHydrationStats()).toMatchObject({
-      dispatched: LYRICS_HYDRATION_BURST_BUDGET,
-      dropped: 100 - LYRICS_HYDRATION_BURST_BUDGET,
+      dispatched: LYRICS_HYDRATION_BURST_CAP,
+      dropped: 100 - LYRICS_HYDRATION_BURST_CAP,
       inFlight: 0,
     });
     expect(getOutboundGateStats().queued).toBe(0);
