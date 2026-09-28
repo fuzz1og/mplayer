@@ -412,6 +412,11 @@ export async function feedWindow(need?: number): Promise<void> {
 
   if (append.length === 0) return;
 
+  // T9 取证：窗口定序的计划 vs 实投（顺序/随机/绕回都能从这一行看出来）
+  console.log(
+    `[player] 补窗 mode=${useSettingsStore.getState().playMode} 计划=[${wantedIndexes.join(',')}] 实投=${append.length}`
+  );
+
   const revision = nativeStateNow?.revision ?? 0;
   try {
     const result = await NP.patchQueue({ baseRevision: revision, append });

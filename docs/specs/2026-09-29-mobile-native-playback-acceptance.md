@@ -89,9 +89,10 @@ adb -s N7TOAIMFOJPFIV7D shell am start -a android.intent.action.VIEW \
 | T4 | ✅ 通过 | `am force-stop` → 重启：`restored 89 tracks at index=5 position=0` + `PlayerService created` + `MediaController connected`；会话回到 `PAUSED`（**不自动续播**）；`FATAL EXCEPTION` 无 |
 | T5 | ⏸ 未执行 | 需真机 USB（雷电飞行模式会断 adb，实测：`echo adb_ok` 返空、`127.0.0.1:5555` offline、重启 VM 后 adbd 未恢复）。手机当前离线，等重新接入 |
 | T6 | ✅ 通过 | `dumpsys notification --noredact`：本包 **1 条**媒体通知；`android.title=两 难` / `android.text=加木`；播放中 `isForeground=true`、`onUpdateNotification startFG=true` |
-| T7 | ⏸ 未执行 | 需设备可解锁划任务卡；雷电无 root 时 `am kill` 对前台服务进程是空操作（这本身是 FGS 生效的旁证），待用新实例补 |
+| T7 | ✅ 通过 | 播放中划掉任务卡 + 回 HOME：进程存活（pid 不变）、`isForeground=true`、通知仍在，且 media3 继续刷新前台通知（`startFG` 5→7）⇒ 默认保活（§9.2「不重写 onTaskRemoved」） |
 | T8 | ✅ 通过 | `MPlayerPrefetch: task start id=11` / `task finish id=11` 成对出现（headless 任务真的起得来、跑得完）；配套 `patchQueue received → release prefetch window` |
-| T9 | ⏸ 未执行 | 四种播放模式的设备侧验证（模式语义已有单测：`queuePrefetch.test.ts` 覆盖顺序/随机/单曲/绕回） |
+| T9 | ◐ 部分通过 | **随机播放**：`补窗 mode=随机播放 计划=[4,1,7] 实投=3` / `计划=[5,8,9]` —— 非顺序、计划内不重复 ⇒ JS 定序生效（原生只顺序推进，故锁屏 next 与 UI next 同序）。**单曲循环**：整轮**无任何 `补窗` 日志** ⇒ `planNextIndexes` 正确返回空、不向原生投喂下一首。**列表循环**：T1 的 5 首顺序连播即是；「绕回队尾」只有单测覆盖（`planNextIndexes(queue,3,3,…) === [4,0,1]`），设备上未构造出真·队尾。**「队列播完收尾」**：循环模式下不可达，未验 |
+
 | T10 | ◐ 部分通过 | **R8 充分性已证**：release 包 `PlayerService created` + `MediaController connected` + 媒体会话注册 + headless `task start/finish` + `LoadQueueInput/PatchQueueInput` Record 转换正常，无 `ClassNotFoundException`/`NoClassDefFoundError`。**播放复跑未执行**：release 应用需要 tier3 订阅，而该 emulator 实例的触摸注入不触发应用的 `ScalePress`（`+ 添加 URL 订阅` 毫无反应、无 Alert），原生 `Switch`/`TextInput` 正常 |
 
 ### 验收过程中发现并修掉的真实缺陷
