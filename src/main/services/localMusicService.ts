@@ -65,14 +65,17 @@ interface StoredFolder {
   lastScanned: string;
 }
 
-/** 一次落盘要动哪些文件（分片粒度：加/删一个目录只碰它那一片） */
-interface PersistChange {
-  /** 目录清单（folders.json）是否变了 */
+/**
+ * 一次落盘要声明什么（#426）：分片写哪些目录、清单是否可能变了。
+ *
+ * **不声明要删哪些分片**——删除意图在 `pendingShardDrops` 里累积，由 persist 任务执行时拿
+ * **当前** store 现算该不该删（消除「调用时快照」在 remove→re-add 竞态下的半更新窗口）。
+ */
+interface PersistScope {
+  /** 目录清单（folders.json）是否可能变了 */
   index?: boolean;
-  /** 需要重写的歌曲分片（目录路径） */
-  songs?: string[];
-  /** 需要删除的歌曲分片（目录路径） */
-  removed?: string[];
+  /** 需要重写分片的目录路径（任务执行时仍在 store 里的才写） */
+  write?: string[];
 }
 
 let mmModule: typeof import('music-metadata') | null = null;
@@ -102,6 +105,12 @@ export class LocalMusicService {
   private needsMigrationWrite: boolean = false;
   /** 清单已可作数，但旧单文件还在（迁移中途被打断）：下次落盘顺手退役 */
   private needsLegacyRetire: boolean = false;
+  /** 装载后的孤儿分片清扫（串行链第一棒）：公开方法 await 它，装载语义才确定 */
+  private readyPromise: Promise<void> = Promise.resolve();
+  /** 内存里的目录清单与磁盘不一致（上一次清单写失败）：下一次落盘必须重写清单 */
+  private indexDirty: boolean = false;
+  /** 提交之后待删的分片（目录路径）：删除意图在这里累积，由 persist 任务按**当前** store 算该不该删 */
+  private pendingShardDrops: Set<string> = new Set();
   /** fs.watch 事件合并定时器：fullPath → timer（destroy/stopWatching 时统一清） */
   private watchTimers: Map<string, NodeJS.Timeout> = new Map();
   private userDataPath?: string;
@@ -123,6 +132,15 @@ export class LocalMusicService {
     fs.mkdirSync(this.coversDir, { recursive: true });
     this.loadStore();
     this.initialized = true;
+  }
+
+  /**
+   * 初始化 + 等装载后的孤儿清扫跑完（#426）：公开方法都走这里，读写看到的才是确定视图。
+   * 同步入口（`startWatchingAll`）只用 `ensureInitialized()`，清扫仍会在后台串行链上跑。
+   */
+  private ensureReady(): Promise<void> {
+    this.ensureInitialized();
+    return this.readyPromise;
   }
 
   /**
@@ -153,6 +171,9 @@ export class LocalMusicService {
       };
       // 迁移中途被打断（清单已写、单文件还没退役）：下次落盘顺手清掉
       this.needsLegacyRetire = fs.existsSync(this.legacyStoreFile);
+      // 清单装载完成 = 「清单是唯一真相」成立：清扫它未引用的分片与残留临时文件。
+      // 作为串行链的第一棒入队，之后任何 persist 都排在它后面（同实例内不会与清扫抢跑）。
+      this.readyPromise = this.enqueue(() => this.sweepOrphanShards());
       return;
     }
 
@@ -205,11 +226,13 @@ export class LocalMusicService {
    * （并发调用按序落盘，同一个分片的 tmp 不会交错）。额外一条：**载荷在任务真正执行时才取**
    * ——后到的写拿到的必然是最新的内存状态，不会用旧快照覆盖新数据。
    */
-  private persist(change: PersistChange): Promise<void> {
-    const run = this.saveChain.then(
-      () => this.persistNow(change),
-      () => this.persistNow(change),
-    );
+  private persist(scope: PersistScope): Promise<void> {
+    return this.enqueue(() => this.persistNow(scope));
+  }
+
+  /** 串行链：落盘与清扫都排在这条链上（先入先执行），不会互相抢跑 */
+  private enqueue<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.saveChain.then(task, task);
     this.saveChain = run.then(
       () => undefined,
       () => undefined,
@@ -217,32 +240,100 @@ export class LocalMusicService {
     return run;
   }
 
-  private async persistNow(change: PersistChange): Promise<void> {
+  /**
+   * 落盘（#426）：**目录清单是提交点**，顺序本身就是崩溃安全的边界。
+   *
+   * 1. **先写数据分片**（本次触及的目录，载荷此时才从当前 store 取）——数据先于引用；
+   * 2. **再写 `folders.json`**（提交点）；
+   * 3. **提交之后**才删清单不再引用的分片。
+   *
+   * 任意两步之间崩溃都只会留下**孤儿分片**（清单不引用 → 不可见，由装载或后续落盘清扫），
+   * 不会出现「清单指向一个不存在的分片」——那等于那个目录的歌全丢（master 的单文件是全有/全无）。
+   *
+   * 清单写失败**不静默吞**：置 `indexDirty` 并上抛，下一次 persist 必然重写清单，内存与磁盘
+   * 不会永久停在「内存已变、磁盘陈旧」上。
+   */
+  private async persistNow(scope: PersistScope): Promise<void> {
     // 老单文件尚未拆片：这一次把目录清单与**所有**分片一次写齐，成功后才退役单文件
     const migrating = this.needsMigrationWrite;
-    const songs = migrating ? this.store.folders.map((folder) => folder.path) : change.songs ?? [];
-    try {
-      for (const folderPath of songs) {
-        const folder = this.store.folders.find((item) => item.path === folderPath);
-        if (folder) await this.writeShard(folder);
+    const shardsToWrite = migrating
+      ? this.store.folders.map((folder) => folder.path)
+      : scope.write ?? [];
+
+    // 1) 数据先落盘（任务执行时才从当前 store 取那个目录的最新歌曲）
+    for (const folderPath of shardsToWrite) {
+      const folder = this.store.folders.find((item) => item.path === folderPath);
+      if (folder) await this.writeShard(folder);
+    }
+
+    // 2) 清单是提交点
+    if (migrating || scope.index || this.indexDirty) {
+      try {
+        await this.writeFoldersIndex();
+        this.indexDirty = false;
+      } catch (err) {
+        this.indexDirty = true;
+        console.error('[LocalMusic] 写目录清单失败（下次落盘重试）:', err);
+        throw err;
       }
-      for (const folderPath of change.removed ?? []) {
+    }
+
+    if (migrating) {
+      this.needsMigrationWrite = false;
+      this.needsLegacyRetire = true;
+    }
+    if (this.needsLegacyRetire) {
+      await this.retireLegacyStore();
+      this.needsLegacyRetire = false;
+    }
+
+    // 3) 提交之后清理：清单不再引用的分片现在删才安全
+    await this.dropUnreferencedShards();
+  }
+
+  /**
+   * 提交之后的分片删除：`pendingShardDrops` 里的目录，**拿当前 store 现算**是否还在。
+   *
+   * 还在 store 里（`removeFolder` 之后又 `addFolder` 同一路径）→ 什么都不删，消除「后到的
+   * persist 用旧快照删掉刚重建的分片」的半更新窗口。崩在删除之前 / `rm` 失败 → 只留孤儿
+   * 分片（不可见），留在集合里等下一次落盘重试，或由装载时的清扫兜底。
+   */
+  private async dropUnreferencedShards(): Promise<void> {
+    for (const folderPath of [...this.pendingShardDrops]) {
+      if (this.store.folders.some((folder) => folder.path === folderPath)) {
+        this.pendingShardDrops.delete(folderPath);
+        continue;
+      }
+      try {
         await fsp.rm(this.songsFilePath(folderPath), { force: true });
         this.shardDigests.delete(folderPath);
+        this.pendingShardDrops.delete(folderPath);
+      } catch (err) {
+        // 删不掉不影响正确性（清单已不引用它），留在集合里下次重试
+        console.error('[LocalMusic] 删除分片失败（下次落盘重试）:', err);
       }
-      if (migrating || change.index) {
-        await this.writeFoldersIndex();
+    }
+  }
+
+  /**
+   * 孤儿分片清扫（#426）：**清单是唯一真相** —— 它没引用的分片（「写完分片、写清单前崩溃」
+   * 或「清单已提交、删分片失败」的产物）都不可见，这里删掉；`tmp→rename` 中途留下的
+   * `.tmp` 一并清掉。跑在本实例串行链的第一棒（装载之后、任何落盘之前），不会误删正在写的文件。
+   */
+  private async sweepOrphanShards(): Promise<void> {
+    let entries: string[] = [];
+    try {
+      entries = await fsp.readdir(this.dataDir);
+    } catch {
+      return;
+    }
+    const referenced = new Set(this.store.folders.map((folder) => this.songsFilePath(folder.path)));
+    for (const name of entries) {
+      const fullPath = path.join(this.dataDir, name);
+      const isShard = name.startsWith(SONGS_SHARD_PREFIX) && name.endsWith(SONGS_SHARD_SUFFIX);
+      if ((isShard && !referenced.has(fullPath)) || name.endsWith('.tmp')) {
+        await fsp.rm(fullPath, { force: true }).catch(() => undefined);
       }
-      if (migrating) {
-        this.needsMigrationWrite = false;
-        this.needsLegacyRetire = true;
-      }
-      if (this.needsLegacyRetire) {
-        await this.retireLegacyStore();
-        this.needsLegacyRetire = false;
-      }
-    } catch (err) {
-      console.error('[LocalMusic] 保存曲库失败:', err);
     }
   }
 
@@ -276,18 +367,6 @@ export class LocalMusicService {
     } catch {
       // 没有单文件（新用户）或已退役
     }
-  }
-
-  /**
-   * 替换某个目录的歌曲列表：曲库的**单目录变更**入口。
-   * 内容没变（指纹相同）一个字节都不写；变了只重写**这一个分片**。
-   */
-  async updateFolderSongs(folderPath: string, songs: LocalSong[]): Promise<void> {
-    this.ensureInitialized();
-    const folder = this.store.folders.find((item) => item.path === folderPath);
-    if (!folder) return;
-    folder.songs = songs;
-    await this.persist({ songs: [folderPath] });
   }
 
   private isSupportedFormat(filePath: string): boolean {
@@ -373,7 +452,7 @@ export class LocalMusicService {
   }
 
   async addFolder(folderPath: string): Promise<{ folder: LocalFolder; songs: LocalSong[] }> {
-    this.ensureInitialized();
+    await this.ensureReady();
 
     const existing = this.store.folders.find(f => f.path === folderPath);
     if (existing) {
@@ -392,8 +471,9 @@ export class LocalMusicService {
     };
 
     this.store.folders.push(folderData);
-    // 先落歌曲分片、再落目录清单（数据先于引用，不会出现「清单指向空分片」）
-    await this.persist({ index: true, songs: [folderPath] });
+    // 先落歌曲分片、再落目录清单（清单是提交点）：崩在中间只留孤儿分片（清单不含该目录
+    // → 不可见），等价于这次添加没发生，不会出现「清单指向空分片」
+    await this.persist({ index: true, write: [folderPath] });
 
     return {
       folder: { path: folderPath, name: folderData.name, songCount: songs.length, lastScanned: new Date(folderData.lastScanned) },
@@ -402,14 +482,17 @@ export class LocalMusicService {
   }
 
   async removeFolder(folderPath: string): Promise<void> {
-    this.ensureInitialized();
+    await this.ensureReady();
     this.stopWatching(folderPath);
     this.store.folders = this.store.folders.filter(f => f.path !== folderPath);
-    await this.persist({ index: true, removed: [folderPath] });
+    // 顺序反过来：清单先落盘（提交点，不再引用该目录），分片在提交之后删。
+    // 崩在中间只留不可见的孤儿分片——master 的单文件是全有/全无，这里不再丢歌。
+    this.pendingShardDrops.add(folderPath);
+    await this.persist({ index: true });
   }
 
   async getFolders(): Promise<LocalFolder[]> {
-    this.ensureInitialized();
+    await this.ensureReady();
     return this.store.folders.map(f => ({
       path: f.path,
       name: f.name,
@@ -419,7 +502,7 @@ export class LocalMusicService {
   }
 
   async getSongs(folderPath?: string): Promise<LocalSong[]> {
-    this.ensureInitialized();
+    await this.ensureReady();
     if (folderPath) {
       const folder = this.store.folders.find(f => f.path === folderPath);
       return folder ? folder.songs : [];
@@ -432,12 +515,12 @@ export class LocalMusicService {
    * 指纹比对：只有内容真的变了的目录才重写它那一片（#426）。
    */
   async refresh(): Promise<void> {
-    this.ensureInitialized();
+    await this.ensureReady();
     for (const folder of this.store.folders) {
       folder.songs = await this.scanFolder(folder.path);
       folder.lastScanned = new Date().toISOString();
     }
-    await this.persist({ index: true, songs: this.store.folders.map((folder) => folder.path) });
+    await this.persist({ index: true, write: this.store.folders.map((folder) => folder.path) });
   }
 
   destroy(): void {
