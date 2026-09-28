@@ -465,6 +465,15 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   override fun onIsPlayingChanged(isPlaying: Boolean) {
     emitStateChanged()
+    // media3 在「没有 controller 连接」的场景下不会自己触发通知更新：
+    // `onUpdateNotification`/`onUpdateNotificationInternal` 只由 public 的
+    // `triggerNotificationUpdate()` 驱动（1.9.0 字节码实测：jar 内无任何调用点）。
+    // 我们的 JS 走自写 bridge 而不是 MediaController，所以必须自己叫一次
+    // —— 否则会话没有媒体通知，也就没有 FGS 提升（会被系统 idle 停掉）。
+    triggerNotificationUpdate()
+    if (isPlaying) {
+      Log.i(TAG, "onIsPlayingChanged(true) → triggerNotificationUpdate")
+    }
     refreshState()
   }
 

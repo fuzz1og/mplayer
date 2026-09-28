@@ -9,7 +9,11 @@ import android.content.ServiceConnection
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import androidx.core.content.ContextCompat
+import androidx.media3.session.MediaController
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.ListenableFuture
 
 /**
  * 拉起 [PlayerService]。
@@ -26,6 +30,9 @@ internal object ServiceLauncher {
 
   private var bound = false
 
+  @Volatile
+  private var controllerFuture: ListenableFuture<MediaController>? = null
+
   private val connection = object : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
       bound = true
@@ -38,6 +45,36 @@ internal object ServiceLauncher {
 
   @Volatile
   private var lastLoggedState: String? = null
+
+  /**
+   * 连一个 media3 `MediaController` 上去。
+   *
+   * 这一步是**媒体通知与前台服务的前提**：media3 只有在 controller 连接时才把
+   * session 注册进内部 stub，而通知/FGS 提升依赖 `getSessions()` 非空。
+   * 连不上不影响播放（JS 仍走自写 bridge），只是会退回「没有通知、没有 FGS」的退化态。
+   */
+  private fun ensureController(context: Context) {
+    if (PlayerBridge.controller != null || controllerFuture != null) return
+    try {
+      val token = SessionToken(context, ComponentName(context, PlayerService::class.java))
+      val future = MediaController.Builder(context, token).buildAsync()
+      controllerFuture = future
+      future.addListener(
+        {
+          try {
+            PlayerBridge.controller = future.get()
+            Log.i(TAG, "MediaController connected (session registered → media notification/FGS available)")
+          } catch (error: Throwable) {
+            controllerFuture = null
+            Log.w(TAG, "MediaController failed to connect", error)
+          }
+        },
+        ContextCompat.getMainExecutor(context)
+      )
+    } catch (error: Throwable) {
+      Log.w(TAG, "ensureController failed", error)
+    }
+  }
 
   fun ensure(context: Context): Boolean {
     val intent = Intent(context, PlayerService::class.java).apply {
@@ -66,7 +103,9 @@ internal object ServiceLauncher {
     }
     // 只在状态变化时打日志：真机排查「服务是 started 还是只 bound」就看这一行
     // （只 bound 的服务没有 FGS 保护，handleAudioFocus/startForeground 都会退化）
-    val state = "start=$started bind=$bound"
+    ensureController(context)
+
+    val state = "start=$started bind=$bound controller=${PlayerBridge.controller != null}"
     if (state != lastLoggedState) {
       lastLoggedState = state
       Log.i(TAG, "ServiceLauncher.ensure: $state")
