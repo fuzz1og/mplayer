@@ -34,17 +34,22 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
 
 1. **先证明跑的是你的代码**：从 logcat `Running "main"` 里取 `launchAsset.url`，追加 `&lazy=false` 后 curl，`grep` 你新加的标识串；manifest 的 `projectRoot` 要是你的 worktree。跑错源码时后面的结论全部作废。
 2. **截图**：`adb exec-out screencap -p > <用例>.png`（pwsh 7 / bash 字节安全；Windows PowerShell 5.1 会改编码，改用 `adb shell screencap -p /sdcard/x.png` + `adb pull`）。存仓库外（`%TEMP%\mplayer-acceptance\`），文件名用 `<PR 号>-<序号>-<用例>.png`，别用 `s1.png`；同类用例要固化就跑 `npm run mobile:e2e`（截图落 `e2e/artifacts/`，已 gitignore）。
-3. **交互坐标按当前设备取**：先 `adb shell wm size`。**`adb shell input tap` 在部分机型（OnePlus）静默无效，改 `adb shell input -d 0 tap X Y`**；快速滑动用连打 `input swipe`。tab 栏在屏幕底部（OnePlus 上 y≈2602–2648，2680 已落进系统手势区）。
+3. **交互坐标按当前设备取**：先 `adb shell wm size`，坐标就是截图里的物理像素。**点不动时先怀疑"点偏了"，不要先怀疑"输入被拦"**——PKB110 / ColorOS 16 实测 `adb shell input tap` 是生效的（点启动器图标能打开对应 App）。`input -d 0 tap X Y` 只在 display id 不为 0 时才有意义（`adb shell dumpsys display | grep -m1 mDisplayId`；本机 id=0，两种写法等效）。快速滑动用连打 `input swipe`；`onEndReached` 那类要滚动的验收，`input keyevent 20`（DPAD_DOWN）连打更稳（触摸滑动的落点/惯性更难控）。tab 栏在屏幕底部（OnePlus 上 y≈2602–2648，2680 已落进系统手势区）。
+   - **别用错误判据**：`input tap` 点状态栏**不会**拉下通知栏（ColorOS 上本就不拉），拿它当"输入被拦"的证据会误判整轮验收（实测踩过）。判别输入是否生效，用**点启动器图标看前台 Activity**（`dumpsys activity activities | grep -m1 topResumedActivity`）这种有唯一答案的目标。
 4. **量化证据要配「真的动了」**：`[perf]` warn 只在**连续 2 个 2s 窗口 < 30fps** 时上报（`packages/mobile/services/perfMonitor.ts`，后台暂停窗口不报）。所以「零 warn」单独不成立——必须同时给出「列表滚到第 N 名 / 打开了哪个页面」。
 5. **收尾**：验收结束停掉 Metro。`adb kill-server` 会打掉所有人的 reverse——动过 server 后 `adb reverse --list` 确认自己的端口还在。
 
-## 图附到 PR 正文
+## 图附到 PR（正文 / 验收评论）
 
-`gh pr edit <PR> --attach '<png>#<图注>'`（本机 gh 2.101.0 已验证；`gh pr edit --help` 里没有 `--attach` 就是版本太老）。**必须在 git 仓库目录内执行**，临时目录里会报 not a git repository。
+`gh pr edit <PR> --attach '<png>#<图注>'`（PR 正文）或 `gh pr comment <PR> --attach '<png>#<图注>'`（追加一条评论；验收结论本来就是评论时用这个，别去动 PR 正文）。（本机 gh 2.101.0 已验证；`gh pr edit --help` 里没有 `--attach` 就是版本太老）。**必须在 git 仓库目录内执行**，临时目录里会报 not a git repository。
+
+- 上传**不是走 REST API**：评论图片是浏览器会话专属通道（`POST /<owner>/<repo>/upload/policies/assets` + S3），拿 token 直接打只会 422。要程序化上传就用上面的 `--attach`，不要自己拼那个端点。
+- 评论正文改错了用 `gh api -X PATCH repos/{owner}/{repo}/issues/comments/<id> -F body=@body.md` 精确覆盖（`gh pr comment --edit-last` 也能改，但它只认"自己最后一条"）。
 
 - **可靠做法是两步**：① `--attach` 把图传上去（可重复，一次最多 50 个）——正文里**没被引用**的附件会以 `![图注](URL)` 追加到正文末尾；② `gh pr view <PR> --json body --jq .body` 读出 `user-attachments` URL，用 `--body-file` 把正文排成「说明 → 图」，末尾那份重复删掉。
 - 一步到位的唯一前提：正文里的链接目标与 `--attach` 传入路径**逐字一致**（实测 `![x](D:\...\shot.png)` + `--attach 'D:\...\shot.png#x'` 会被改写成上传后的 URL；写 basename 或 `./shot.png` 不命中，只会多追加一份）。
 - **正文只引上传后的 URL**：本地路径（含相对路径）不渲染，会显示成裂图。
+- **传完要验，别只看命令退出码**：① 读回正文（`gh pr view <PR> --json body --jq .body` / `gh api .../issues/comments/<id> --jq .body`），每个图片引用都应是 `user-attachments` URL、本地路径残留为 0；② 公开仓库再抓一次 PR 页面 HTML，确认 asset id 出现在渲染产物里；③ 抽一个 asset `GET`（带浏览器 UA）应回 `200` + `Content-Type: image/png` + PNG 魔数 `89 50 4e 47`——**别用 HEAD 判断**，`user-attachments` 对 HEAD 回 403。
 - 图注写「这张图证明了什么」（如「热榜滚到第 194–200 名 → `getItemLayout` 偏移算术正确」），不写文件名；部分文件上传失败时正文仍会更新，看退出码。
 
 ## 陷阱速查
