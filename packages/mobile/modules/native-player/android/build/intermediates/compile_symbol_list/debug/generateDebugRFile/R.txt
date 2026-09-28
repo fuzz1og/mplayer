@@ -1,0 +1,5 @@
+int drawable ic_stat_mplayer 0x0
+int raw keep 0x0
+int string mplayer_native_channel_description 0x0
+int string mplayer_native_channel_id 0x0
+int string mplayer_native_channel_name 0x0

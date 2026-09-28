@@ -1,0 +1,6 @@
+expo.modules.mplayerplayer
+drawable ic_stat_mplayer
+raw keep
+string mplayer_native_channel_description
+string mplayer_native_channel_id
+string mplayer_native_channel_name

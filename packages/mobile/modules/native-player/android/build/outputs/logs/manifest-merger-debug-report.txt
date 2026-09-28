@@ -1,0 +1,64 @@
+-- Merging decision tree log ---
+manifest
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:1:1-27:12
+INJECTED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:1:1-27:12
+	package
+		INJECTED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml
+	xmlns:android
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:1:11-69
+uses-permission#android.permission.FOREGROUND_SERVICE
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:4:3-75
+	android:name
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:4:20-72
+uses-permission#android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:5:3-90
+	android:name
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:5:20-87
+uses-permission#android.permission.WAKE_LOCK
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:7:3-66
+	android:name
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:7:20-63
+uses-permission#android.permission.POST_NOTIFICATIONS
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:8:3-75
+	android:name
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:8:20-72
+uses-permission#android.permission.ACCESS_NETWORK_STATE
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:9:3-77
+	android:name
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:9:20-74
+application
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:11:3-26:17
+service#expo.modules.mplayerplayer.PlayerService
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:12:5-25:15
+	android:exported
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:14:7-31
+	android:foregroundServiceType
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:15:7-52
+	android:name
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:13:7-62
+intent-filter#action:name:androidx.media3.session.MediaSessionService
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:16:7-18:23
+action#androidx.media3.session.MediaSessionService
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:17:9-78
+	android:name
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:17:17-75
+intent-filter#action:name:androidx.media3.session.MediaLibraryService
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:19:7-21:23
+action#androidx.media3.session.MediaLibraryService
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:20:9-78
+	android:name
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:20:17-75
+intent-filter#action:name:android.media.browse.MediaBrowserService
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:22:7-24:23
+action#android.media.browse.MediaBrowserService
+ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:23:9-75
+	android:name
+		ADDED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml:23:17-72
+uses-sdk
+INJECTED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml
+INJECTED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from D:\Playground\mplayer\.claude\worktrees\native-player\packages\mobile\modules\native-player\android\src\main\AndroidManifest.xml
