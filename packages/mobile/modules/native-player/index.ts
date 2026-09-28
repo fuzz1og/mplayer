@@ -47,8 +47,23 @@ export type Policy = {
 
 export type LoopMode = 'off' | 'all' | 'single';
 
+/** 原生队列里的一项（冷启对账用；不含 url —— 那是原生的私有状态） */
+export type NativeTrackInfo = {
+  key: string;
+  songId: string;
+  title?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  artworkUrl?: string | null;
+  durationMs?: number;
+  nonFull?: boolean;
+  sourceType?: string | null;
+};
+
 export type PlayerState = {
   revision: number;
+  /** 原生权威队列快照（§4.3：JS 冷启/回前台据此重建 playerStore.queue） */
+  tracks?: NativeTrackInfo[];
   index: number;
   playing: boolean;
   playWhenReady: boolean;

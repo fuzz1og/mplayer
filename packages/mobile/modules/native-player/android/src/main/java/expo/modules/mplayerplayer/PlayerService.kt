@@ -65,6 +65,10 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   @Volatile
   private var lastNeedAtMs = 0L
 
+  /** 正在等 JS 用 patchQueue({upsert}) 灌新 URL 的 key（过期重试用，§6.2）。 */
+  @Volatile
+  private var awaitingRefreshKey: String? = null
+
   private var windowHoleDeadline: Runnable? = null
   private var errorRetry: Runnable? = null
   private var destroyed = false
@@ -166,6 +170,22 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val cached = stateCache
     val current = store.current()
     return cached + mapOf(
+      // 队列快照（§4.3 冷启对账）：JS 的 playerStore 不持久化，进程重启后
+      // 只能靠原生把「权威队列」还给 JS —— 否则 JS 反查不到 Song，
+      // 既画不出 UI，也无法对过期项重解析（§6.2）。
+      "tracks" to store.all().map { record ->
+        mapOf(
+          "key" to record.key,
+          "songId" to record.songId,
+          "title" to record.title,
+          "artist" to record.artist,
+          "album" to record.album,
+          "artworkUrl" to record.artworkUrl,
+          "durationMs" to record.durationMs,
+          "nonFull" to record.nonFull,
+          "sourceType" to record.sourceType
+        )
+      },
       "revision" to store.currentRevision(),
       "index" to store.currentIndex(),
       "queueSize" to store.size(),
@@ -310,6 +330,18 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
       holePending = false
       cancelWindowHoleDeadline()
+
+      // 过期重试：JS 刚把新 URL 灌进来（replaceItemAt 已换掉 MediaItem）→ 立刻重播，
+      // 不等 10s 兜底（这就是「1s 内重试一次」的真实语义：尽快离开坏源）。
+      val pendingKey = awaitingRefreshKey
+      val refreshed = if (pendingKey == null) null else upsert.orEmpty().firstOrNull { it.key == pendingKey }
+      if (refreshed != null) {
+        awaitingRefreshKey = null
+        cancelErrorRetry()
+        Log.i(TAG, "fresh url arrived for key=${refreshed.key} → re-prepare & resume")
+        ctrl.player.prepare()
+        ctrl.player.playWhenReady = userWantsPlay
+      }
 
       // 补窗到位 + 之前停在缓冲边界 + 用户意图仍是「想播」 → 续播（T8）
       if (userWantsPlay && ctrl.player.playbackState == Player.STATE_ENDED && ctrl.player.mediaItemCount > 0) {
@@ -651,8 +683,14 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
     when (classification.kind) {
       ErrorKind.EXPIRED -> {
+        // §6.2：标记失效 → 发 playbackError{retrying} → **等 JS 用 patchQueue({upsert}) 灌新 URL**。
+        // 原生只发 1s 就盲重试是错的：core 解析链要 3~9s（#424），必然来不及，
+        // 真机上表现为「恢复出来的旧直链过期 → 3 次重试全失败 → 直接跳过」。
+        // 这里把 1s 当**下限**，真正等到 upsert 到达就立刻换源重播；10s 兜底再盲试一次。
         record?.invalidated = true
-        scheduleRetry(key, index, position, playWhenReady, 1_000L)
+        awaitingRefreshKey = key
+        Log.i(TAG, "awaiting fresh url for key=$key (up to ${REFRESH_WAIT_MS}ms)")
+        scheduleRetry(key, index, position, playWhenReady, REFRESH_WAIT_MS)
       }
 
       ErrorKind.AUDIO_SINK -> scheduleRetry(key, index, position, playWhenReady, 3_000L)
@@ -726,6 +764,12 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
     val record = store.findByKey(key)
     record?.failed = true
+    if (awaitingRefreshKey == key) awaitingRefreshKey = null
+    Log.w(
+      TAG,
+      "skip failed item key=$key kind=${classification.kind} retries=${record?.retryCount} " +
+        "skippedThisSession=$skippedThisSession/${policy.skipLimit}"
+    )
 
     emit(
       Events.PLAYBACK_ERROR,
@@ -947,6 +991,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     private const val SESSION_ID = "MPlayerNativePlayer"
     private const val PREFS_NAME = "mplayer_native_player"
     private const val KEY_SNAPSHOT = "snapshot"
+
+    /** 过期后等 JS 灌新 URL 的上限（core 解析链 3~9s，#424）。 */
+    private const val REFRESH_WAIT_MS = 10_000L
   }
 }
 

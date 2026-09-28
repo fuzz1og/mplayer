@@ -147,6 +147,9 @@ export function initNativePlayer(next: NativePlayerHooks): void {
   if (started || !NativePlayer) return;
   started = true;
 
+  // 冷启对账：服务可能已经按快照恢复了队列，先把 JS 队列补齐再挂监听。
+  reconcileQueueFromNative(safeState());
+
   NativePlayer.addListener('trackChanged', (event) => {
     pruneMirror(event.toKey);
     const song = findSong(event.songId, event.toKey);
@@ -201,6 +204,10 @@ export function initNativePlayer(next: NativePlayerHooks): void {
 }
 
 function findSong(songId?: string | null, key?: string | null): Song | null {
+  // 反查不到时（典型：进程重启后原生已恢复、JS 队列还空着）先对账一次再找
+  if (usePlayerStore.getState().queue.length === 0) {
+    reconcileQueueFromNative(safeState());
+  }
   const queue = usePlayerStore.getState().queue;
   if (songId) {
     const byId = queue.find((s) => s.id === songId);
@@ -217,6 +224,46 @@ function findSong(songId?: string | null, key?: string | null): Song | null {
 function pruneMirror(toKey: string): void {
   const at = nativeMirror.findIndex((entry) => entry.key === toKey);
   nativeMirror = at >= 0 ? nativeMirror.slice(at) : nativeMirror.slice(-1);
+}
+
+/**
+ * 用原生的权威队列重建 JS 的 playerStore（§4.3 的**单向对账**）。
+ *
+ * 为什么必须做：`playerStore` 不持久化，进程被系统杀掉后 JS 的 queue 是空的，
+ * 而原生已经按落盘快照恢复了队列。此时若不对账：
+ * ① UI 显示空播放器；② `findSong` 反查不到 Song → 过期项无法重解析 → 只能跳歌。
+ *
+ * 只在「JS 队列为空」或「与原生队列不一致」时重建，避免覆盖前台刚设好的队列。
+ */
+function reconcileQueueFromNative(state: PlayerState | null): boolean {
+  const tracks = state?.tracks;
+  if (!tracks || tracks.length === 0) return false;
+
+  const store = usePlayerStore.getState();
+  if (store.queue.length === tracks.length && store.currentSong) return false;
+
+  const songs: Song[] = tracks.map((track) => ({
+    id: track.songId || track.key,
+    name: track.title || track.key,
+    artist: track.artist ?? undefined,
+    album: track.album ?? undefined,
+    cover: track.artworkUrl ?? undefined,
+    duration: track.durationMs ? track.durationMs / 1000 : undefined,
+    sourceType: (track.sourceType as Song['sourceType']) ?? undefined,
+    lrc: '',
+  } as Song));
+
+  const index = Math.min(Math.max(0, state?.index ?? 0), songs.length - 1);
+  usePlayerStore.setState({
+    queue: songs,
+    currentSong: songs[index],
+    currentIndex: index,
+    hasPlayed: true,
+  });
+  useLogsStore
+    .getState()
+    .addLog('info', `已从原生队列对账 ${songs.length} 首（当前第 ${index + 1} 首）`);
+  return true;
 }
 
 function safeState(): PlayerState | null {
@@ -379,15 +426,21 @@ async function refreshFailedTrack(event: PlaybackErrorEvent): Promise<void> {
   if (!song) return;
   try {
     const track = await resolveTrack(song, true);
-    if (!track) return;
+    if (!track) {
+      console.warn(`[player] 过期重试：${song.name} 重解析未拿到可用直链`);
+      return;
+    }
     const state = safeState();
     const result = await NP.patchQueue({ baseRevision: state?.revision ?? 0, upsert: [track] });
+    console.log(
+      `[player] 过期重试：${song.name} 已灌入新直链 accepted=${result.accepted} stale=${!!result.stale}`
+    );
     if (result.accepted) {
       markSucceeded(track.meta.key);
       useLogsStore.getState().addLog('warn', `《${song.name}》直链失效，已换新 URL 重试`);
     }
-  } catch {
-    // 交给原生兜底（计数上限 → 跳过）
+  } catch (error) {
+    console.warn(`[player] 过期重试失败：${song.name}`, error);
   }
 }
 
@@ -418,6 +471,14 @@ export function registerNativeHeadless(): boolean {
 }
 
 /** 供诊断/日志用：原生是否可用 + headless 通道是否拿到 */
+/** 回前台/冷启对账入口（§4.3）：原生是唯一权威，单向覆盖 store。 */
+export function reconcileFromNative(): void {
+  const state = safeState();
+  if (reconcileQueueFromNative(state)) {
+    void feedWindow();
+  }
+}
+
 export function nativeDiagnostics(): { available: boolean; headless: boolean; state: PlayerState | null } {
   return {
     available: isNativePlayerAvailable,
