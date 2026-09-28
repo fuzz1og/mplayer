@@ -357,7 +357,7 @@ PR #433 在 JS 侧给预取加的三层去重（其 diff 常量与语义）在 C
 
 每期的「回滚点」= 上一期通过后的 commit（每期独立可 revert）。
 
-### P0 —— dev build 包名后缀（原 PR #435，已 CLOSED，**必须重落**）
+### P0 —— dev build 包名后缀（PR #435，**现为 OPEN，合它或 cherry-pick**；见验收手册）
 - **改动文件**：`packages/mobile/android/app/build.gradle:123-126` 的 `debug` 块加 `applicationIdSuffix '.dev'` + `versionNameSuffix '-dev'`；`.agents/skills/mobile-device-debugging/SKILL.md` 补一节「何时必须用 dev build + 出包/拉起命令」。
 - **为什么是 P0**：Expo Go 不可用（`audioPlayer.ts:24,528` 的 `isExpoGo` 分支 + 插件不生效），没有与 release 共存的 dev build 就**无法验收任何后续期**。
 - **验收判据（真机）**：`./gradlew assembleDebug` 出包 → 安装后 `adb shell pm list packages | grep mplayer` 同时出现 `com.mplayer.mobile` 与 `com.mplayer.mobile.dev`；两个包都能启动；dev 包走 `adb reverse tcp:8081` + dev-client 深链连上 Metro。
