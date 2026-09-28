@@ -30,7 +30,7 @@ export const OFFLINE_COPY = '当前处于离线状态，已暂停播放';
  * 最坏无声窗口（#424 口径）：从「第一首开始解析」到「护栏判停」的**可断言上界**。
  *
  * 推导（每一条都是既有语义，不是新行为）：
- * - 一次尝试 = **一条解析链**，其整链上界 = `RESOLUTION_CHAIN_BUDGET_MS`（#424 新增的单一值）；
+ * - 一次尝试 = **一条解析链**，其解析链总预算（deadline）= `RESOLUTION_CHAIN_BUDGET_MS`（#424 新增的单一值）；
  * - 每首歌终局失败前会做 **第一次 + fresh 重试一次** = 2 条链（桌面 `playerStore.play` 的
  *   `fresh: true`、移动端 `refreshPlayableUrl`）；
  * - 连续失败达 {@link SKIP_LIMIT} 首才停 → 最多 `SKIP_LIMIT` 首。

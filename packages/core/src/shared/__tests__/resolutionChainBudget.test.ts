@@ -23,9 +23,10 @@ import {
   setTier3Enabled,
 } from '../../tier3/tier3Api.js';
 import { beginInit } from '../sourceSchedule.js';
+import { ResolutionBudgetExhaustedError } from '../resolutionBudget.js';
 
 /**
- * 解析链**整链 deadline**（#424）的入口级验收。
+ * **解析链总预算**（#424）的入口级验收。
  *
  * 背景：此前「一首歌最多让用户等多久」不存在于任何一处，只能把 5 个常量相加推出来
  * （直连 3s + tier3 6s + 第二条 tier3 腿 6s = 最坏 15s），且各腿只是「放弃等待」——
@@ -48,7 +49,7 @@ const song = (id: string, source = 'netease', overrides: Partial<Song> = {}): So
   ...overrides,
 });
 
-/** 永不落定的直连腿（只能被 3s 墙 / 整链预算收口）。 */
+/** 永不落定的直连腿（只能被 3s 墙 / 解析链总预算收口）。 */
 const hangingDirect = (source = 'qq') =>
   registerDirectClient({
     key: source as 'qq',
@@ -56,7 +57,7 @@ const hangingDirect = (source = 'qq') =>
     resolvePlayableUrl: vi.fn(() => new Promise<string>(() => {})),
   });
 
-/** 四个 url-resolver 源（每个单源硬墙 2s）——足以把 tier3 腿撑到整链预算边界。 */
+/** 四个 url-resolver 源（每个单源硬墙 2s）——足以把 tier3 腿撑到解析链总预算边界。 */
 const fourSlowSources = JSON.stringify({
   version: 1,
   sources: ['s1', 's2', 's3', 's4'].map((id) => ({
@@ -85,7 +86,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('解析链整链预算（#424）', () => {
+describe('解析链总预算（#424）', () => {
   it('预算是参数不是模块级全局态：并发两首歌各自计时，互不牵连', async () => {
     vi.useFakeTimers();
     hangingDirect();
@@ -103,7 +104,7 @@ describe('解析链整链预算（#424）', () => {
     expect(longSettled).toBe(true);
   });
 
-  it('预算耗尽 → 通过 control.signal abort 在飞的 tier3、槽位归零、链以整链预算 reject', async () => {
+  it('预算耗尽 → 通过 control.signal abort 在飞的 tier3、槽位归零、链以预算错误 reject', async () => {
     vi.useFakeTimers();
     const signals: AbortSignal[] = [];
     const tier3 = vi.fn((_s: Song, _c?: unknown, control?: { signal?: AbortSignal }) => {
@@ -120,14 +121,14 @@ describe('解析链整链预算（#424）', () => {
     hangingDirect();
 
     const pending = resolvePlayableSongRouted(song('a-chain', 'qq'));
-    const assertion = expect(pending).rejects.toThrow('整链预算');
+    const assertion = expect(pending).rejects.toBeInstanceOf(ResolutionBudgetExhaustedError);
     await vi.advanceTimersByTimeAsync(3_000); // 直连 3s 墙到点 → 进 tier3
     expect(tier3).toHaveBeenCalledTimes(1);
     expect(signals).toHaveLength(1);
     expect(signals[0].aborted).toBe(false);
     expect(getTier3InFlightCount()).toBe(1);
 
-    await vi.advanceTimersByTimeAsync(6_000); // 整链 9s 到点
+    await vi.advanceTimersByTimeAsync(6_000); // 解析链总预算 9s 到点
     await assertion;
     expect(signals[0].aborted).toBe(true); // 「放弃等待」变成「真的停掉」
     await vi.advanceTimersByTimeAsync(10);
@@ -150,14 +151,14 @@ describe('解析链整链预算（#424）', () => {
     let url = '';
     void pending.then((r) => { settled = true; url = r.url; }, () => { settled = true; });
     await vi.advanceTimersByTimeAsync(5_900);
-    expect(settled).toBe(false); // 腿预算 6s 未到，整链预算（9s）还管不到它
+    expect(settled).toBe(false); // 腿预算 6s 未到，解析链总预算（9s）还管不到它
     await vi.advanceTimersByTimeAsync(200);
     expect(settled).toBe(true);
-    expect(url).toBe(''); // 腿预算先到 → 按未命中返回直连空串（不是整链 reject）
+    expect(url).toBe(''); // 腿预算先到 → 按未命中返回直连空串（不是总预算 reject）
     expect(tier3).toHaveBeenCalledTimes(1);
   });
 
-  it('第二条 tier3 腿（试听换完整版）只吃剩余额度：整链在 9s 收口，不再叠加成 15s', async () => {
+  it('第二条 tier3 腿（试听换完整版）只吃剩余额度：链在 9s 收口，不再叠加成 15s', async () => {
     vi.useFakeTimers();
     let calls = 0;
     const tier3 = vi.fn(() => {
@@ -182,7 +183,7 @@ describe('解析链整链预算（#424）', () => {
     });
 
     const pending = resolvePlayableSongRouted(song('two-legs', 'netease', { audioTag: 'invalid', duration: 240 }));
-    const assertion = expect(pending).rejects.toThrow('整链预算');
+    const assertion = expect(pending).rejects.toBeInstanceOf(ResolutionBudgetExhaustedError);
     await vi.advanceTimersByTimeAsync(3_900);
     expect(tier3).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(150);
@@ -192,13 +193,13 @@ describe('解析链整链预算（#424）', () => {
     await assertion;
   });
 
-  it('resolvePlayableUrlRouted（IPC 另一入口）同样受整链预算约束', async () => {
+  it('resolvePlayableUrlRouted（IPC 另一入口）同样受解析链总预算约束', async () => {
     vi.useFakeTimers();
     hangingDirect();
     setTier3Enabled(true);
     setTier3Resolver(vi.fn(() => new Promise<Tier3Resolution | null>(() => {})) as unknown as Tier3Resolver);
     const pending = resolvePlayableUrlRouted(song('url-chain', 'qq'));
-    const assertion = expect(pending).rejects.toThrow('整链预算');
+    const assertion = expect(pending).rejects.toBeInstanceOf(ResolutionBudgetExhaustedError);
     await vi.advanceTimersByTimeAsync(9_000);
     await assertion;
   });

@@ -373,7 +373,7 @@ export function sanitizeSourceModes(
  * 护栏决策在 tier3 执行器内按源逐条应用（不过就换下一个源），路由层只记录
  * 结果等级用于诊断 / 后续 UI 决策，不重复判定。
  *
- * `commit`（#362）：交付回调——路由层在整链预算内真正采纳该候选时调用一次。
+ * `commit`（#362）：交付回调——路由层在 tier3 腿预算内真正采纳该候选时调用一次。
  * resolver 内部不再直接自增「命中」：预算超时被丢弃的迟到命中只有产出、没有交付，
  * 否则设置页会出现「命中数 > 实际交付数」（实测 hits=17 / 实际 0）。
  * 自定义 resolver（测试/宿主）可省略。
@@ -397,11 +397,11 @@ export interface Tier3ScheduleReport {
 /** tier3 解析器的调用方控制面（#398）：健康度采样需要「调用方是否已放弃」，
  *  而 trace sink 可能关闭——两者都不能依赖 collect（决策 6 的「放弃观测」）。 */
 export interface Tier3RunControl {
-  /** 调用方是否已放弃本次解析（整链预算用尽）→ 剩余观测记「放弃」，不进健康度。 */
+  /** 调用方是否已放弃本次解析（tier3 腿预算或解析链总预算用尽）→ 剩余观测记「放弃」，不进健康度。 */
   isAbandoned(): boolean;
   /** 上报本次源调度快照（仅 trace sink 打开时注入）。 */
   reportSchedule?(report: Tier3ScheduleReport): void;
-  /** 整链预算耗尽信号（#424）：resolver 据此 **abort 在飞源请求并停止遍历后续源**，
+  /** 解析链总预算耗尽信号（#424）：resolver 据此 **abort 在飞源请求并停止遍历后续源**，
    *  「放弃等待」由此变成「真的停掉」（与 #408 给单源墙建的链路同构）。缺省 = 不生效。 */
   signal?: AbortSignal;
 }
@@ -454,7 +454,7 @@ const DIRECT_TIMED_OUT = Symbol('direct-timed-out');
  *  结果丢弃——与 tier3 单源超时同一语义（`withSourceDeadline`）。ctx 为 null 时
  *  仍施加墙（护栏不能因关闭 trace 而消失），只是不做计时。
  *
- *  #424：本腿墙 = `min(DIRECT_WALL_MS, 整链剩余预算)`，且整链预算耗尽时一并 abort。
+ *  #424：本腿墙 = `min(DIRECT_WALL_MS, 解析链总预算的剩余额度)`，且总预算耗尽时一并 abort。
  *  预算已尽则**不发起调用**——「没打过上游就超时」比「打一发再放弃」诚实（也不会白耗上游配额）。 */
 async function timedDirectCall<T>(
   ctx: TraceCtx | null,
@@ -475,7 +475,7 @@ async function timedDirectCall<T>(
     return DIRECT_TIMED_OUT;
   }
   // #408：墙的持有者持有 AbortController，到点 abort——底层请求（含 transport 重试）
-  // 立刻停掉，不再「放弃等待但继续压上游」。#424：整链预算耗尽同样走这条 abort。
+  // 立刻停掉，不再「放弃等待但继续压上游」。#424：解析链总预算耗尽同样走这条 abort。
   const controller = new AbortController();
   const offExpire = budget.onExpire(() => controller.abort());
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -596,7 +596,7 @@ interface Tier3InflightRun {
   started: Promise<void>;
   /** 底层解析结果（同键调用方共享）。 */
   result: Promise<Tier3Resolution | null>;
-  /** 标记「调用方已放弃本次解析」（整链预算用尽）→ 剩余源观测记「放弃」，不进健康度
+  /** 标记「调用方已放弃本次解析」（tier3 腿预算或解析链总预算用尽）→ 剩余源观测记「放弃」，不进健康度
    *  （#398 / ADR 决策 6）。同键共享一条解析时该标记是**运行级**的：任一调用方放弃即置位。 */
   markAbandoned(): void;
 }
@@ -692,7 +692,7 @@ function tier3ResolveShared(
   const collect = ctx ? (leg: PlaybackTraceSourceLeg) => { ctx.legs.push(leg); } : undefined;
   let abandoned = false;
   const control: Tier3RunControl = {
-    // #424：整链预算耗尽信号——resolver 据此 abort 在飞源并停止遍历（首个调用方的
+    // #424：解析链总预算耗尽信号——resolver 据此 abort 在飞源并停止遍历（首个调用方的
     // 预算持有该 signal；同歌共享一条解析时该 signal 是**运行级**的，与 markAbandoned 同取向）。
     ...(signal ? { signal } : {}),
     isAbandoned: () => abandoned,
@@ -733,9 +733,9 @@ async function tryTier3(
   ctx: TraceCtx | null,
   budget: ResolutionBudget,
 ): Promise<Tier3Resolution | null> {
-  // #424：整链预算已尽 → 不发起新腿（连上游都不打，日志可见）。
+  // #424：解析链总预算已尽 → 不发起新腿（连上游都不打，日志可见）。
   if (budget.exhausted()) {
-    console.info(`[tier3] ${reason}，但整链预算已用尽，不进入第三方解析: 《${song.name}》${song.artist}`);
+    console.info(`[tier3] ${reason}，但解析链总预算已用尽，不进入第三方解析: 《${song.name}》${song.artist}`);
     return null;
   }
   if (ctx) {
@@ -749,7 +749,7 @@ async function tryTier3(
   const t0 = ctx ? traceNow() : 0;
   /** tier3 腿**活跃**耗时起点（槽位到手）；排队等待不计入——与 6s 预算同口径。 */
   let activeT0 = 0;
-  /** #424：整链预算耗尽 = abort 在飞源 + 记「放弃观测」（与腿预算耗尽同一语义）。 */
+  /** #424：解析链总预算耗尽 = abort 在飞源 + 记「放弃观测」（与腿预算耗尽同一语义）。 */
   const abortController = new AbortController();
   let offExpire: (() => void) | undefined;
   try {
@@ -761,9 +761,9 @@ async function tryTier3(
       abortController.abort();
       run.markAbandoned();
     });
-    // ADR 2026-09-25 决策 8：K=3 排队期间**不计入**预算（腿预算与 #424 的整链预算都不计）
+    // ADR 2026-09-25 决策 8：K=3 排队期间**不计入**预算（tier3 腿预算与 #424 的解析链总预算都不计）
     // ——否则被排在后面的调用方会在没打过任何上游的情况下先超时（切歌场景 P50 反而退化）。
-    // #424：腿预算再取 `min(6s, 整链剩余)`，于是「试听换完整版」的第二条 tier3 腿只吃剩余额度。
+    // #424：腿预算再取 `min(6s, 解析链总预算的剩余)`，于是「试听换完整版」的第二条 tier3 腿只吃剩余额度。
     const budgetExhausted = (async (): Promise<typeof BUDGET_EXHAUSTED> => {
       budget.pause();
       try {
@@ -890,7 +890,7 @@ export async function searchSongsRouted(
   }
 }
 
-/** 解析链入口的可选参数（#424）：测试与特殊宿主可覆盖整链预算，缺省
+/** 解析链入口的可选参数（#424）：测试与特殊宿主可覆盖解析链总预算，缺省
  *  `RESOLUTION_CHAIN_BUDGET_MS`。预算**由参数传递、不是模块级全局态**——并发解析
  *  多首歌时各自计时，互不干扰。 */
 export interface ResolutionOptions {
@@ -904,9 +904,9 @@ export interface ResolutionOptions {
 export async function resolvePlayableUrlRouted(song: Song, options?: ResolutionOptions): Promise<string> {
   const budget = createResolutionBudget(options?.budgetMs);
   try {
-    // #424：整链 deadline 兜底——各腿已按 `min(本腿墙, 剩余预算)` 夹过，这里保证
+    // #424：解析链总预算兜底——各腿已按 `min(本腿墙, 剩余)` 夹过，这里保证
     // 「无论哪条腿、无论 resolver 怎么实现，链都在预算内 reject」。
-    return await Promise.race([resolvePlayableUrlInner(song, budget), budget.expired()]);
+    return await Promise.race([resolvePlayableUrlInner(song, budget), budget.whenExhausted()]);
   } finally {
     budget.dispose();
   }
@@ -982,7 +982,7 @@ function emitResolveTrace(
       : result!.via === 'tier3'
         ? 'tier3'
         : 'direct';
-  // 迟到命中被整链预算丢弃 → leg 记 discarded，与 tier3Stats.discarded 同口径。
+  // 迟到命中被 tier3 腿预算丢弃 → leg 记 discarded，与 tier3Stats.discarded 同口径。
   const sources = ctx.tier3TimedOut
     ? ctx.legs.map((leg) => (leg.outcome === 'hit' ? { ...leg, outcome: 'discarded' as const } : leg))
     : ctx.legs;
@@ -1026,9 +1026,9 @@ export async function resolvePlayableSongRouted(song: Song, options?: Resolution
   const t0 = ctx ? traceNow() : 0;
   const budget = createResolutionBudget(options?.budgetMs);
   try {
-    // #424：整链 deadline 兜底（见 resolvePlayableUrlRouted）。各腿已按剩余预算夹过；
+    // #424：解析链总预算兜底（见 resolvePlayableUrlRouted）。各腿已按剩余预算夹过；
     // 这里保证「链一定在预算内结算」，不再出现 3 + 6 + 6 = 15s 的无声等待。
-    const result = await Promise.race([resolveRoutedInner(song, ctx, budget), budget.expired()]);
+    const result = await Promise.race([resolveRoutedInner(song, ctx, budget), budget.whenExhausted()]);
     if (ctx) emitResolveTrace(song, ctx, t0, result, null);
     return result;
   } catch (err) {
@@ -1046,7 +1046,7 @@ export async function resolvePlayableSongRouted(song: Song, options?: Resolution
 export type DirectValidator = (
   song: Song,
   url: string,
-  /** #424：整链预算给的时限与中止信号；不传 = 用默认取证墙。 */
+  /** #424：解析链总预算给的时限与中止信号；不传 = 用默认取证墙。 */
   opts?: DirectValidationOptions,
 ) => Promise<DirectValidationResult>;
 
@@ -1076,10 +1076,10 @@ async function validateDirectLeg(
   if (!directValidator) return { nonFull: false };
   if (client.resolveUrlInfo) return { nonFull: false };
   if (!(typeof song.duration === 'number' && song.duration > 0)) return { nonFull: false };
-  // #424：取证是直连腿的一部分，同样取 min(本腿墙, 整链剩余)；预算已尽则跳过（fail-open）。
+  // #424：取证是直连腿的一部分，同样取 min(本腿墙, 总预算剩余)；总预算已尽则跳过（fail-open）。
   const timeoutMs = budget.clamp(DIRECT_VALIDATION_TIMEOUT_MS);
   if (timeoutMs <= 0) {
-    console.info(`[player] 《${song.name}》整链预算已用尽，跳过直连腿时长取证（fail-open）`);
+    console.info(`[player] 《${song.name}》解析链总预算已用尽，跳过直连腿时长取证（fail-open）`);
     return { nonFull: false };
   }
   const controller = new AbortController();

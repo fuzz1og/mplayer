@@ -3,13 +3,13 @@ import { createResolutionBudget, ResolutionBudgetExhaustedError } from '../resol
 import { DIRECT_WALL_MS, RESOLUTION_CHAIN_BUDGET_MS, TIER3_CHAIN_BUDGET_MS } from '../playbackBudgets.js';
 
 /**
- * 整链预算单测（#424）。
+ * 解析链总预算单测（#424）。
  *
  * 被测的是「可暂停的墙钟」这一件事：取小（clamp）、暂停不走表（tier3 K=3 排队）、
  * 到点触发监听并以哨兵错误结算、dispose 后彻底停表。
  */
 
-describe('resolutionBudget（#424 解析链整链预算）', () => {
+describe('resolutionBudget（#424 解析链总预算）', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -32,7 +32,7 @@ describe('resolutionBudget（#424 解析链整链预算）', () => {
     budget.dispose();
   });
 
-  it('pause 期间不走表（tier3 K=3 排队不计入整链预算）', () => {
+  it('pause 期间不走表（tier3 K=3 排队不计入解析链总预算）', () => {
     vi.useFakeTimers();
     const budget = createResolutionBudget(9_000);
     vi.advanceTimersByTime(4_000);
@@ -46,12 +46,12 @@ describe('resolutionBudget（#424 解析链整链预算）', () => {
     budget.dispose();
   });
 
-  it('到点：onExpire 恰好触发一次，expired() 以 ResolutionBudgetExhaustedError 结算', async () => {
+  it('到点：onExpire 恰好触发一次，whenExhausted() 以 ResolutionBudgetExhaustedError 结算', async () => {
     vi.useFakeTimers();
     const budget = createResolutionBudget(1_000);
     const fired = vi.fn();
     budget.onExpire(fired);
-    const assertion = expect(budget.expired()).rejects.toBeInstanceOf(ResolutionBudgetExhaustedError);
+    const assertion = expect(budget.whenExhausted()).rejects.toBeInstanceOf(ResolutionBudgetExhaustedError);
     await vi.advanceTimersByTimeAsync(999);
     expect(fired).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
@@ -66,7 +66,7 @@ describe('resolutionBudget（#424 解析链整链预算）', () => {
     const budget = createResolutionBudget(1_000);
     const fired = vi.fn();
     budget.onExpire(fired);
-    void budget.expired().catch(() => {});
+    void budget.whenExhausted().catch(() => {});
     budget.dispose();
     await vi.advanceTimersByTimeAsync(5_000);
     expect(fired).not.toHaveBeenCalled();

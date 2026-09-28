@@ -46,7 +46,7 @@ export interface DirectValidationDeps {
   extract?: typeof extractAudioDuration;
 }
 
-/** 取证调用的可选约束（#424）：整链预算把它夹小、并在预算耗尽时 abort。 */
+/** 取证调用的可选约束（#424）：解析链总预算把它夹小、并在预算耗尽时 abort。 */
 export interface DirectValidationOptions {
   /** 本次取证可用时限；缺省 `DIRECT_VALIDATION_TIMEOUT_MS`。 */
   timeoutMs?: number;
@@ -79,7 +79,7 @@ export async function validateDirectUrlNonFull(
   if (!url.startsWith('http')) return done(false, 'none', '非 http URL，不取证');
 
   const referer = refererForSourceKey(song.sourceType);
-  // #424：整链预算把它夹小（min(本腿墙, 剩余预算)），预算耗尽即 abort 这次 Range。
+  // #424：解析链总预算把它夹小（min(本腿墙, 剩余)），预算耗尽即 abort 这次 Range。
   const head = await fetchAudioHead(url, {
     headers: { 'User-Agent': BROWSER_UA, ...(referer ? { Referer: referer } : {}) },
     timeoutMs: deps?.timeoutMs ?? DIRECT_VALIDATION_TIMEOUT_MS,

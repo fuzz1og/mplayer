@@ -143,8 +143,8 @@ describe('pickNextSongAfterFailure（跳歌候选选曲，跳过坏歌）', () =
   });
 });
 
-describe('最坏无声窗口（#424：护栏能吃整链预算）', () => {
-  it('= SKIP_LIMIT 首 ×（原始 + fresh 重试）2 条链 × 整链预算，是个可断言的值', () => {
+describe('最坏无声窗口（#424：护栏能吃解析链总预算）', () => {
+  it('= SKIP_LIMIT 首 ×（原始 + fresh 重试）2 条链 × 解析链总预算，是个可断言的值', () => {
     expect(RESOLUTION_CHAIN_BUDGET_MS).toBe(9_000);
     expect(WORST_CASE_SILENT_MS).toBe(SKIP_LIMIT * 2 * RESOLUTION_CHAIN_BUDGET_MS);
     expect(WORST_CASE_SILENT_MS).toBe(54_000);
