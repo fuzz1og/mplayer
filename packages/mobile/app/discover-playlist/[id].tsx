@@ -85,6 +85,15 @@ export default function DiscoverPlaylistDetailPage() {
     }
   };
 
+  // 单曲换源后更新列表。useCallback（#411）：此前是 renderItem 里的内联箭头，
+  // 每帧新引用会把 SongRow 的 memo 击穿。
+  // ⚠️ 必须落在下面两处 early return **之前**：hook 在早返回之后被调用会改变 hook 顺序，
+  // 首屏 loading 返回骨架、数据到达后这一行才被执行 → 「Rendered more hooks than during
+  // the previous render」整页崩（#448 真机验收发现；门禁见 eslint react-hooks/rules-of-hooks）。
+  const handleSwap = useCallback((original: Song, swapped: Song) => {
+    setSongs((prev) => replaceSongInList(prev, original.id, swapped));
+  }, []);
+
   if (loading) return <SongListSkeleton showSource />;
   if (!playlist) {
     return (
@@ -108,12 +117,6 @@ export default function DiscoverPlaylistDetailPage() {
     usePlayerStore.getState().setQueue(songs, 0);
     playSong(songs[0]);
   };
-
-  // 单曲换源后更新列表。useCallback（#411）：此前是 renderItem 里的内联箭头，
-  // 每帧新引用会把 SongRow 的 memo 击穿。
-  const handleSwap = useCallback((original: Song, swapped: Song) => {
-    setSongs((prev) => replaceSongInList(prev, original.id, swapped));
-  }, []);
 
   return (
     <View style={styles.container}>
