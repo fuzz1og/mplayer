@@ -9,10 +9,29 @@ import { useHistoryStore } from '../stores/historyStore';
 import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAudioTagStore } from '../stores/audioTagStore';
-import { updateNotification, clearNotification } from './notificationService';
 import { getCachedResource, setCachedResource, deleteCachedResource, urlAgeMs } from './cacheService';
 import { searchStrictMatch } from './songResources';
 import { isOffline } from './networkState';
+import { acceptsTransportTime, beginSeek, type PendingSeek } from './seekReconcile';
+import { resolvePlayableUrlMobile } from './songResolution';
+import {
+  initNativePlayer,
+  isNativeEngine,
+  nativeNext,
+  nativePlaySong,
+  nativePrev,
+  nativeSeekTo,
+  nativeStop,
+  nativeSyncLoopMode,
+  nativeTogglePlay,
+  registerNativeHeadless,
+  songKey,
+} from './nativePlayer';
+import type { ChangeReason, PlaybackErrorEvent } from '../modules/native-player';
+
+// resolvePlayableUrlMobile 已迁到 services/songResolution.ts（打断 nativePlayer ↔ audioPlayer 的循环依赖）；
+// 这里保持既有导出面不变（18 个消费方 + 测试直接 import 这个名字）。
+export { resolvePlayableUrlMobile };
 
 type Player = ReturnType<typeof createAudioPlayer>;
 
@@ -67,10 +86,69 @@ interface PlaybackCtx {
 let playbackCtx: PlaybackCtx | null = null;
 // per-player 去重：didJustFinish / error 只处理一次，防止双触发跳歌
 let playbackFinished = false;
+/** #423：松手 seek 后的对账窗口（声明的乐观值）；null = 正常跟随传输位置。 */
+let pendingSeek: PendingSeek | null = null;
 let playbackFailed = false;
 let playbackReadyLogged = false;
 
 export async function initAudio(): Promise<void> {
+  if (isNativeEngine()) {
+    // 方案 C：原生持队列 + 原生推进（规格 §2/§4）。
+    // 先注册 headless 补窗任务体 + 把 HeadlessJsTaskContext 寄存到原生（§5.2）。
+    registerNativeHeadless();
+    initNativePlayer({
+      onTrackChanged: (song, reason: ChangeReason) => {
+        if (!song) return;
+        if (reason === 'errorSkip') {
+          // 原生侧跳过一次失败项：与 core 的坏歌记忆对账（§7.2 可诊断性）
+          useAudioTagStore.getState().setTag(song, 'invalid');
+          return;
+        }
+        const queue = usePlayerStore.getState().queue;
+        const index = queue.findIndex((s) => songKey(s) === songKey(song));
+        usePlayerStore.getState().applyNativeState({
+          song,
+          index,
+          isPlaying: true,
+          currentTime: 0,
+        });
+        playbackCtx = null;
+        if (reason !== 'restore') {
+          useHistoryStore.getState().addHistory(song);
+        }
+        void fetchLrcInBackground(song);
+      },
+      onProgress: (positionSec, durationSec) => {
+        const now = Date.now();
+        if (!acceptsTransportTime(pendingSeek, positionSec, now)) return;
+        pendingSeek = null;
+        usePlayerStore.getState().setCurrentTime(positionSec);
+        if (durationSec > 0) usePlayerStore.getState().setDuration(durationSec);
+      },
+      onPlayingChanged: (playing) => {
+        usePlayerStore.setState({ isPlaying: playing });
+      },
+      onQueueEnded: () => {
+        usePlayerStore.getState().pause();
+      },
+      onPlaybackError: (event: PlaybackErrorEvent) => {
+        // 原生跳过一次失败项 → 落进现有 playbackTrace 环形缓冲，使「原生计数」与「core 计数」可对账
+        const song = usePlayerStore
+          .getState()
+          .queue.find((s) => songKey(s) === event.key);
+        if (song) {
+          useLogsStore.getState().addLog(
+            event.disposition === 'skipped' ? 'warn' : 'info',
+            `《${song.name}》原生播放错误(${event.code}${event.httpStatus ? ` ${event.httpStatus}` : ''}) → ${event.disposition}`
+          );
+        }
+      },
+      onTerminalFailure: async (song, reason) => {
+        await handleTerminalPlaybackFailure(song, reason, 0, await isOffline());
+      },
+    });
+    return;
+  }
   await setAudioModeAsync({
     playsInSilentMode: true,
     shouldPlayInBackground: true,
@@ -87,6 +165,10 @@ export async function initAudio(): Promise<void> {
  * 旧播放器可能仍在出声（换源/切歌时表现为两首歌同时播放）。
  */
 async function stopAllPlayers(): Promise<void> {
+  if (isNativeEngine()) {
+    // 原生引擎下 livePlayers 恒空；停止语义要落到 PlayerService（stop → 撤通知 + 降级）
+    nativeStop();
+  }
   for (const p of livePlayers) {
     try { await p.pause(); } catch {}
     try { p.remove(); } catch {}
@@ -153,7 +235,12 @@ function attachPlaybackListener(p: Player): void {
       s.pause();
     }
 
-    s.setCurrentTime(status.currentTime);
+    // #423：seek 之后传输层未必立刻追上——对账窗口内丢弃旧值，UI 保持乐观位置；
+    // 追上（容差内）或超时兜底后才清掉窗口、恢复跟随（与桌面 playbackClock.pendingSeek 同构）。
+    if (acceptsTransportTime(pendingSeek, status.currentTime, Date.now())) {
+      pendingSeek = null;
+      s.setCurrentTime(status.currentTime);
+    }
     s.setDuration(status.duration || 0);
 
     if (status.didJustFinish && !playbackFinished) {
@@ -328,14 +415,7 @@ export async function fetchLrcInBackground(song: Song, force = false, refreshCov
  * 交给调用方按「解析链穷尽」处理（no playable URL → 换源提示/跳歌）。
  * 返回 {url, lrc, nonFull}（nonFull=试听版/片段，驱动「可换源」提示与 preview 徽标）。
  */
-export async function resolvePlayableUrlMobile(song: Song): Promise<{ url: string; lrc: string; nonFull: boolean }> {
-  const routed = await musicApi.resolvePlayableSongRouted(song);
-  return {
-    url: routed?.url?.startsWith('http') ? routed.url : '',
-    lrc: song.lrc || '',
-    nonFull: !!routed?.nonFull,
-  };
-}
+// （resolvePlayableUrlMobile 定义见 services/songResolution.ts，本文件顶部已 import + re-export）
 
 /**
  * 资源 URL 归一化 key（shared core）：302 端点的 t/sign 等签名参数每次
@@ -379,7 +459,73 @@ function prefetchNextSong(): void {
  * @param retryCount 级联跳歌计数（防止全部失效时无限循环）
  * @param fresh 为 true 时绕过原有 url，重新解析全新可播 URL
  */
+/**
+ * 方案 C 的播放入口：解析当前曲 → `loadQueue` 起播 → `feedWindow()` 补窗。
+ *
+ * 失败处置与 expo-audio 路径**共用同一套 core `skipGuard`**（#385）：
+ * 同曲 fresh 重试一次 → 终局失败交 `handleTerminalPlaybackFailure`。
+ */
+async function nativePlaySongFlow(song: Song, retryCount: number, fresh: boolean): Promise<void> {
+  const log = useLogsStore.getState();
+  const t0 = Date.now();
+  preparingPlayback = true;
+  usePlayerStore.getState().setPreparing(true);
+
+  try {
+    if (song.sourceType !== 'local' && (await isOffline())) {
+      usePlayerStore.getState().pause();
+      usePlayerStore.getState().setPreparing(false);
+      log.addLog('warn', `《${song.name}》当前离线，已暂停播放`);
+      log.reportError(OFFLINE_COPY);
+      return;
+    }
+
+    pendingSeek = null;
+    playbackFinished = false;
+    playbackFailed = false;
+
+    let track;
+    try {
+      track = await nativePlaySong(song, fresh);
+    } catch {
+      const reasonText = explainPlaybackFailure(song).message;
+      log.addLog('error', `《${song.name}》播放失败: ${reasonText}`);
+      const offline = await isOffline();
+      if (!fresh && song.sourceType !== 'local' && !offline) {
+        log.addLog('warn', `《${song.name}》将使用新 URL 重试（${reasonText}）`);
+        preparingPlayback = false;
+        await playSong(song, retryCount, true);
+        return;
+      }
+      await handleTerminalPlaybackFailure(song, reasonText, retryCount, offline);
+      return;
+    }
+
+    const nonFull = !!track?.meta.nonFull;
+    usePlayerStore.getState().setPreparing(false);
+    nativeSyncLoopMode();
+    if (nonFull) {
+      useAudioTagStore.getState().setTag(song, 'preview');
+      useLogsStore.getState().setNotice('info', '当前为试听版，可换源获取完整版');
+    } else {
+      useAudioTagStore.getState().setTag(song, 'valid');
+    }
+    useHistoryStore.getState().addHistory(song);
+    log.addLog(
+      'info',
+      `开始播放《${song.name}》- ${song.artist}${fresh ? '（新URL重试）' : ''}（准备耗时 ${Date.now() - t0}ms）`
+    );
+    void fetchLrcInBackground(song);
+  } finally {
+    preparingPlayback = false;
+  }
+}
+
 export async function playSong(song: Song, retryCount = 0, fresh = false): Promise<void> {
+  if (isNativeEngine()) {
+    await nativePlaySongFlow(song, retryCount, fresh);
+    return;
+  }
   const playId = ++currentPlayId;
   const log = useLogsStore.getState();
   preparingPlayback = true;
@@ -405,6 +551,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   playbackFinished = false;
   playbackFailed = false;
   playbackReadyLogged = false;
+  // 换歌：上一首的 seek 目标不再有意义（否则新歌开头会被乐观值压住到超时）
+  pendingSeek = null;
 
   const startPlayback = async (): Promise<void> => {
     let audioUrl: string;
@@ -549,7 +697,6 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       useAudioTagStore.getState().setTag(song, 'valid');
     }
     useHistoryStore.getState().addHistory(song);
-    void updateNotification(song, true).catch(() => {});
     // 预取下一首直链（切歌秒开）
     prefetchNextSong();
   };
@@ -613,9 +760,50 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
   }
 }
 
+/**
+ * UI「下一首」/「上一首」的引擎无关入口。
+ *
+ * **原生引擎下必须走原生**（`Native.next()/prev()`）：原生播放列表是权威队列，
+ * 如果这里改成 `playerStore.next() + playSong(song)`，会把原生队列
+ * 换成一个只有一首的 `loadQueue`，预取窗口与曲末原生推进全部落空
+ * （而且 UI next 与锁屏 next 会各走一套随机语义 → 语义漂移）。
+ */
+export function skipNext(): void {
+  if (isNativeEngine()) {
+    nativeNext();
+    return;
+  }
+  const song = usePlayerStore.getState().next();
+  if (song) void playSong(song);
+}
+
+export function skipPrev(): void {
+  if (isNativeEngine()) {
+    nativePrev();
+    return;
+  }
+  usePlayerStore.getState().prev();
+  const song = usePlayerStore.getState().currentSong;
+  if (song) void playSong(song);
+}
+
 export async function togglePlay(): Promise<void> {
   const log = useLogsStore.getState();
   const song = usePlayerStore.getState().currentSong;
+
+  if (isNativeEngine()) {
+    if (preparingPlayback) return;
+    const playing = usePlayerStore.getState().isPlaying;
+    nativeTogglePlay(playing);
+    if (playing) {
+      usePlayerStore.getState().pause();
+      if (song) log.addLog('info', `暂停《${song.name}》`);
+    } else {
+      usePlayerStore.getState().resume();
+      if (song) log.addLog('info', `继续播放《${song.name}》`);
+    }
+    return;
+  }
 
   if (!player) {
     // 正在解析 URL/创建播放器：忽略点击（防止反复触发 fresh 重试解析）
@@ -630,25 +818,30 @@ export async function togglePlay(): Promise<void> {
     usePlayerStore.getState().pause();
     if (song) {
       log.addLog('info', `暂停《${song.name}》`);
-      void updateNotification(song, false).catch(() => {});
     }
   } else {
     player.play();
     usePlayerStore.getState().resume();
     if (song) {
       log.addLog('info', `继续播放《${song.name}》`);
-      void updateNotification(song, true).catch(() => {});
     }
   }
 }
 
 export async function seekTo(timeSec: number): Promise<void> {
+  if (isNativeEngine()) {
+    // 乐观值 + 对账窗口（#423）：原生 progress 1s 粒度，窗口内不被旧心跳覆盖
+    pendingSeek = beginSeek(timeSec, Date.now());
+    nativeSeekTo(timeSec);
+    return;
+  }
   if (player) {
+    // 乐观值 + 对账窗口：seekTo 返回 ≠ 状态已刷新，窗口内不被旧心跳覆盖（#423）
+    pendingSeek = beginSeek(timeSec, Date.now());
     await player.seekTo(timeSec);
   }
 }
 
 export async function cleanup(): Promise<void> {
   await stopAllPlayers();
-  await clearNotification().catch(() => {});
 }

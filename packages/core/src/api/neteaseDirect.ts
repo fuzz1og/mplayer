@@ -1,6 +1,7 @@
-import type { Album, Artist, DiscoverPlaylist, Song } from '../types/index.js';
-import type { ContentCache, DirectSourceClient, ToplistGroup } from '../shared/sourceRouter.js';
+import type { Album, AlbumDetail, Artist, DiscoverPlaylist, Song } from '../types/index.js';
+import type { ArtistAlbumsPage, ContentCache, DirectSourceClient, ToplistGroup } from '../shared/sourceRouter.js';
 import type { UrlInfo } from '../shared/playability.js';
+import { normalizePublishTime } from '../utils/publishTime.js';
 import { request, bodyToText, type TransportCallOptions } from './transport.js';
 import { weapiRequest } from './neteaseWeapi.js';
 import { getUserAgent } from './antiScrape.js';
@@ -29,6 +30,12 @@ import { cacheManager } from './memoryCacheManager.js';
 
 const CLOUDSEARCH_URL = 'https://music.163.com/api/cloudsearch/pc';
 const PAGE_SIZE = 30;
+/** cloudsearch/pc 的 `limit` 硬上限：上游对 `limit>100` 直接返回 `code=400`。 */
+const CLOUDSEARCH_MAX_LIMIT = 100;
+/** cloudsearch/pc 的 `type`（社区逆向类型表：1 单曲 / 100 歌手 / 1000 歌单）。 */
+const CLOUDSEARCH_TYPE_SONG = 1;
+const CLOUDSEARCH_TYPE_ARTIST = 100;
+const CLOUDSEARCH_TYPE_PLAYLIST = 1000;
 const LYRIC_URL = 'https://music.163.com/api/song/lyric';
 
 // ── 缓存 TTL（对齐门面旧语义）──────────────────────────────────────
@@ -39,6 +46,9 @@ const PLAYLIST_TTL_MS = 5 * 60 * 1000;           // 歌单列表/详情 5min
 const PAGE_TTL_MS = 10 * 60 * 1000;              // 歌单歌曲/专辑详情/歌手专辑 10min
 const ALBUMS_TTL_MS = 60 * 60 * 1000;            // 新碟 1h
 const RECOMMENDED_TTL_MS = 15 * 60 * 1000;       // 推荐 15min
+
+// 歌手专辑页大小自控上限（#417 实测：limit ≥ 2000 → 上游 code=-460）
+const ALBUM_PAGE_MAX = 1000;
 
 /** 网易云榜单定义（热歌榜/新歌榜，playlistId 与门面时代一致）。 */
 const NETEASE_TOPLISTS: { sourceId: number; name: string }[] = [
@@ -103,17 +113,34 @@ function mapTrack(t: any): Song {
   };
 }
 
-/** 网易云专辑字段统一映射（weapi artist 单对象 / 旧接口 artists 数组，兼容两种形状）。 */
+/**
+ * 网易云专辑字段统一映射（weapi artist 单对象 / 旧接口 artists 数组，兼容两种形状）。
+ *
+ * #407：原先只取 5 个字段，上游响应里的公司/简介/子类型/曲目数全部被丢弃。
+ * 字段名按 2026-09-27 实测（`/api/v1/album/267786859` 与 `/api/artist/albums/5196`
+ * 的 album 对象同形状）：company / description / subType / size / tags / publishTime。
+ * 元数据一律「有则渲染、无则省略」——取不到就不给字段，不做占位。
+ */
 function normalizeNeteaseAlbum(raw: any): Album {
   const rawArtist = raw.artists || raw.artist || [];
   const artistList = Array.isArray(rawArtist) ? rawArtist : [rawArtist];
   const artist = artistList.map((a: any) => a?.name || '').filter(Boolean).join(' / ') || '';
+  const primaryArtistId = artistList.find((a: any) => a?.id != null)?.id;
+  const tags = typeof raw.tags === 'string' ? raw.tags : Array.isArray(raw.tags) ? raw.tags.filter(Boolean).join(' / ') : '';
   return {
     id: String(raw.id),
     name: raw.name || raw.album?.name || '',
     picUrl: raw.picUrl || raw.album?.picUrl || raw.coverImgUrl || '',
     artist,
-    publishTime: raw.publishTime || raw.publish_time || '',
+    publishTime: normalizePublishTime(raw.publishTime ?? raw.publish_time),
+    sourceType: 'netease',
+    artistId: primaryArtistId != null ? String(primaryArtistId) : undefined,
+    company: raw.company || undefined,
+    description: raw.description || raw.briefDesc || undefined,
+    genre: tags || undefined,
+    language: raw.language || undefined,
+    trackCount: typeof raw.size === 'number' ? raw.size : undefined,
+    subType: raw.subType || undefined,
   };
 }
 
@@ -132,6 +159,18 @@ function mapArtist(a: any): Artist {
 
 /** 歌手头像缓存，供 HTML 爬取分类歌手时补图（原门面 artistPicCache 迁入）。 */
 const artistPicCache = new Map<string, string>();
+
+/**
+ * 歌单搜索的同键在飞去重（#415 单飞）。与 `tier3Inflight` 同取向：底层 promise
+ * **结算后才出表**，迟到的同键调用方仍能 join 同一条结果。
+ *
+ * 放在客户端（而不是各端 UI）是因为上游**只有一个**：桌面经 IPC 落在主进程的同一
+ * 客户端实例、移动端在进程内。UI 侧的「切 tab 才发」管懒加载，这里管并发去重。
+ */
+const playlistSearchInflight = new Map<
+  string,
+  Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }>
+>();
 
 /** 兜底：旧明文接口（无加密）获取网易云歌单，返回 playlist 对象或 null。 */
 async function fetchNeteasePlaylistLegacy(playlistId: number): Promise<any | null> {
@@ -213,13 +252,20 @@ export async function getNeteaseLyrics(songId: string): Promise<string> {
   }
 }
 
-/** 明文 cloudsearch 搜索 → Song[]（不含歌词字段；播放期按 songId 直取，见 #409）。 */
-async function neteaseSearchSongs(keyword: string, page = 1): Promise<Song[]> {
+/**
+ * 明文 cloudsearch 单次搜索（#415 起单曲 `type=1` / 歌手 `type=100` / 歌单 `type=1000`
+ * 共用同一条腿）：只负责「发请求 + 校验 code」，返回上游 `result`，字段映射留给调用方。
+ *
+ * 请求形态与头**逐字沿用**原 `neteaseSearchSongs`（不新增头、不加签名/加密）。
+ * 非 200 的 `code` 一律抛错（`405/406` 风控、`400` 参数错误、`500` 上游异常）——
+ * **绝不静默返回空数组**：那会把「被限流/出错」伪装成「没有结果」。
+ */
+async function cloudsearchSearch(keyword: string, type: number, limit: number, offset: number): Promise<any> {
   const params = new URLSearchParams({
     s: keyword,
-    type: '1',
-    limit: String(PAGE_SIZE),
-    offset: String((page - 1) * PAGE_SIZE),
+    type: String(type),
+    limit: String(limit),
+    offset: String(offset),
   });
   const res = await request({
     method: 'POST',
@@ -236,11 +282,50 @@ async function neteaseSearchSongs(keyword: string, page = 1): Promise<Song[]> {
   if (typeof res.body !== 'string') {
     throw new Error('cloudsearch 响应非文本');
   }
-  const data = JSON.parse(res.body) as { code: number; message?: string; result?: { songs?: any[] } };
+  const data = JSON.parse(res.body) as { code: number; message?: string; result?: any };
   if (data.code !== 200) {
     throw new Error(`cloudsearch code=${data.code} ${data.message || ''}`);
   }
-  return (data.result?.songs || []).map(mapTrack);
+  return data.result;
+}
+
+/** cloudsearch `limit` 钳制：非正数/非法值兜底 1，上限 {@link CLOUDSEARCH_MAX_LIMIT}（上游 `limit>100 → code=400`）。 */
+function clampCloudsearchLimit(limit: number): number {
+  const n = Math.floor(Number(limit));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, CLOUDSEARCH_MAX_LIMIT);
+}
+
+/** cloudsearch `offset` 归一：负数/非法值按 0 处理（越界由上游 `playlistCount=0` 表达，core 不设上限）。 */
+function normalizeCloudsearchOffset(offset: number | undefined): number {
+  const n = Math.floor(Number(offset));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** 明文 cloudsearch 搜索 → Song[]（不含歌词字段；播放期按 songId 直取，见 #409）。 */
+async function neteaseSearchSongs(keyword: string, page = 1): Promise<Song[]> {
+  const result = await cloudsearchSearch(keyword, CLOUDSEARCH_TYPE_SONG, PAGE_SIZE, (page - 1) * PAGE_SIZE);
+  return ((result?.songs || []) as any[]).map(mapTrack);
+}
+
+/**
+ * cloudsearch 原生歌单 → `DiscoverPlaylist`（#415：字段 1:1 可映射，不需要新类型）。
+ * - 上游 `coverImgUrl` 实测为 `http://`：桌面 Electron 混合内容会被拦 → 统一转 https；
+ * - `creator` 可能为 null、`playCount`/`trackCount` 可能缺失 → 兜底；
+ * - `tags`：cloudsearch/pc 的歌单对象**没有该字段**（`officialTags` 是官方推荐位标签，
+ *   语义不同，不当 tags 用）→ 补 `[]`。
+ */
+function mapPlaylist(p: any): DiscoverPlaylist {
+  return {
+    id: p.id,
+    name: p.name || '',
+    coverImgUrl: (p.coverImgUrl || '').replace(/^http:/, 'https:'),
+    playCount: p.playCount || 0,
+    trackCount: p.trackCount || 0,
+    creator: { nickname: p.creator?.nickname || '' },
+    tags: [],
+    description: p.description || '',
+  };
 }
 
 /** weapi 播放 URL 权威完整时长验证字段（T12 预检用）。无版权/VIP → null。 */
@@ -412,10 +497,17 @@ async function fetchArtistsByHtml(catId: number, cache: ContentCache): Promise<{
   }
 }
 
-/** 歌手单曲信息（明文 api/artist?id=，getArtistDetail 用）。 */
+/**
+ * 歌手信息（明文 `/api/v1/artist/{id}`，getArtistDetail 用）。
+ *
+ * #417：原先用的 `/api/artist?id=` 实测 **code=404（死链，对照请求正常，非限流）**，
+ * 于是 `getArtistDetail` 的 `artist` 恒为 null（hotSongs/albums 正常）。
+ * 换成 `/api/v1/artist/{id}`：实测匿名 code=200，且 `albumSize` 是权威值
+ * （专辑对象内嵌的 `artist.albumSize` 会偏小：陶喆实测 30 vs 31）。
+ */
 async function fetchArtistInfo(artistId: string): Promise<Artist | null> {
   try {
-    const data = await plaintextGetJson<any>(`https://music.163.com/api/artist?id=${artistId}`);
+    const data = await plaintextGetJson<any>(`https://music.163.com/api/v1/artist/${artistId}`);
     return data?.artist ? mapArtist(data.artist) : null;
   } catch {
     return null;
@@ -451,25 +543,76 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
 
     // ── 内容能力（#278 自门面迁入）────────────────────────────────
 
-    /** 歌手搜索（原 searchNeteaseArtists；cloudsearch weapi 被风控，走旧明文接口）。 */
+    /**
+     * 歌手搜索（#415 从 `GET /api/search/get/web?type=100` 迁到本条腿 `type=100`）。
+     *
+     * 迁移理由（两条一起解决）：
+     * 1. 旧腿是调研里**唯一被实测封禁**的腿——无间隔连打时先 `code=500` 再全 type
+     *    `code=405/406 操作频繁`、冷却量级 ≥10 分钟；`cloudsearch/pc` 同一时间窗内全程 200。
+     * 2. 旧实现 catch 后**静默 `return []`**，「被限流」与「真没这个歌手」在 UI 上
+     *    不可区分（都显示「未找到」）。迁到本条腿后与搜索/歌单共用同一份
+     *    `code !== 200 → 抛错` 逻辑：失败抛错（双端本就有错误态分支），
+     *    `code=200` + 空数组才是「真没这个歌手」。
+     */
     async searchArtists(keyword: string, limit: number): Promise<Artist[]> {
-      const cacheKey = `search_artists_${keyword}_${limit}`;
+      const kw = keyword.trim();
+      const cacheKey = `search_artists_${kw}_${limit}`;
       const cached = contentCache.get<Artist[]>(cacheKey);
       if (cached && Array.isArray(cached)) return cached;
-      try {
-        // 注:cloudsearch weapi 已被网易云风控(code=50000005,无 cookie 必现),
-        // 直接走旧接口(已做 https 头像修复);后续若接入 cookie 机制可恢复 weapi 优先
-        const data = await plaintextGetJson<any>(
-          `https://music.163.com/api/search/get/web?s=${encodeURIComponent(keyword)}&type=100&limit=${limit}`
-        );
-        const rawArtists: any[] = data?.result?.artists || [];
-        const artists = rawArtists.map(mapArtist);
-        contentCache.set(cacheKey, artists, SEARCH_TTL_MS);
-        return artists;
-      } catch (error) {
-        console.error('[neteaseDirect] 搜索歌手失败:', error);
-        return [];
+      const result = await cloudsearchSearch(kw, CLOUDSEARCH_TYPE_ARTIST, clampCloudsearchLimit(limit), 0);
+      const artists = ((result?.artists || []) as any[]).map(mapArtist);
+      // 空结果不缓存：失败绝不伪装成结果，且「真无命中」不占 6h（保留自愈）
+      if (artists.length > 0) contentCache.set(cacheKey, artists, SEARCH_TTL_MS);
+      return artists;
+    },
+
+    /**
+     * 歌单搜索（#415）：与 `searchSongs` **同一条明文腿**（`cloudsearch/pc` `type=1000`），
+     * 复用既有 transport 接缝与头，**不新增签名 / 不新增加密 / 不新增请求头**。
+     *
+     * 分页：该端点**不返回 `hasMore`** → `more = offset + limit < playlistCount` 推导；
+     * `offset` 越界时上游返回 `code=200 + playlistCount=0` → `{ playlists: [], total: 0, more: false }`，
+     * **视为到底，不是错误**（不抛错、不弹失败）。
+     *
+     * 边界：`limit` 内部钳制 ≤100（上游 `limit>100 → code=400`）；空关键词本地拒绝
+     * （上游空 `s` 同样 `code=400`，本地拒绝省一次请求且错误语义可区分）。
+     *
+     * 缓存：key 含关键词 + limit + offset，TTL 6h（与搜索/歌手同档）；**空结果不缓存**。
+     * 并发：同 key 单飞（见 `playlistSearchInflight`）。
+     */
+    async searchPlaylists(
+      keyword: string,
+      limit: number,
+      offset = 0,
+    ): Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }> {
+      const kw = keyword.trim();
+      if (!kw) {
+        throw new Error('歌单搜索需要非空关键词（上游空 s 为 code=400）');
       }
+      const size = clampCloudsearchLimit(limit);
+      const start = normalizeCloudsearchOffset(offset);
+      const cacheKey = `search_playlists_${kw}_${size}_${start}`;
+      const cached = contentCache.get<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }>(cacheKey);
+      if (cached) return cached;
+
+      const existing = playlistSearchInflight.get(cacheKey);
+      if (existing) return existing;
+
+      const run = async () => {
+        const result = await cloudsearchSearch(kw, CLOUDSEARCH_TYPE_PLAYLIST, size, start);
+        const playlists = ((result?.playlists || []) as any[]).map(mapPlaylist);
+        const total = typeof result?.playlistCount === 'number' ? result.playlistCount : 0;
+        const page = { playlists, total, more: start + size < total };
+        // 空结果不缓存：瞬时故障与「越界到底」都不该占 6h（与 getPlaylistSongs 同取向）
+        if (playlists.length > 0) contentCache.set(cacheKey, page, SEARCH_TTL_MS);
+        return page;
+      };
+
+      const pending = run().finally(() => {
+        playlistSearchInflight.delete(cacheKey);
+      });
+      playlistSearchInflight.set(cacheKey, pending);
+      return pending;
     },
 
     /** 榜单（热歌榜/新歌榜）。 */
@@ -579,10 +722,17 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       }
     },
 
-    /** 专辑详情 + 专辑歌曲；返回前补播放 URL（点开即播）。 */
-    async getAlbumDetail(albumId: string): Promise<{ album: Album; songs: Song[] } | null> {
-      const cacheKey = `album_detail_${albumId}`;
-      const cached = contentCache.get<{ album: Album; songs: Song[] }>(cacheKey);
+    /**
+     * 专辑详情 + 专辑歌曲；返回前补播放 URL（点开即播）。
+     *
+     * #407：① 缓存键含源（`album_detail_netease_${id}`）——同一数字 id 在不同源语义不同；
+     * ② weapi 失败补**明文兜底腿** `/api/v1/album/{id}`（实测匿名 code=200、同响应含
+     *    company/description/subType/size/songs[].no）。注意**不是** `/api/album/{id}`：
+     *    那条实测 code=-462（风控），照旧文档写会误判成签名问题。
+     */
+    async getAlbumDetail(albumId: string): Promise<AlbumDetail | null> {
+      const cacheKey = `album_detail_netease_${albumId}`;
+      const cached = contentCache.get<AlbumDetail>(cacheKey);
       if (cached) return cached;
       let album: Album;
       let songs: Song[];
@@ -595,11 +745,21 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
         // 专辑歌曲字段与歌单同构(ar/al/dt),复用同一映射
         songs = (data.songs || []).map(mapTrack);
       } catch (error) {
-        console.error(`[neteaseDirect] getAlbumDetail weapi 失败 (albumId=${albumId}):`, error);
-        return null;
+        console.error(`[neteaseDirect] getAlbumDetail weapi 失败,回退明文 (albumId=${albumId}):`, error);
+        try {
+          const data = await plaintextGetJson<any>(`https://music.163.com/api/v1/album/${albumId}`);
+          if (data?.code !== 200 || !data.album) {
+            throw new Error(`明文接口返回异常 (code=${data?.code})`);
+          }
+          album = normalizeNeteaseAlbum(data.album);
+          songs = (data.songs || []).map(mapTrack);
+        } catch (error2) {
+          console.error(`[neteaseDirect] getAlbumDetail 失败(明文兜底) (albumId=${albumId}):`, error2);
+          return null;
+        }
       }
       await this.resolvePlayableUrls!(songs);
-      const result = { album, songs };
+      const result: AlbumDetail = { album, songs };
       // 空结果不缓存,避免瞬时故障 10 分钟内无法自愈
       if (songs.length > 0) contentCache.set(cacheKey, result, PAGE_TTL_MS);
       return result;
@@ -616,6 +776,11 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
         if (cat === 0) return fetchArtistsByApi(offset, limit, initial, contentCache);
       }
       return fetchArtistsByHtml(cat, contentCache);
+    },
+
+    /** 歌手信息（按 id，明文 /api/v1/artist/{id}；#417 歌手页首屏校正）。 */
+    async getArtistInfo(artistId: string): Promise<Artist | null> {
+      return fetchArtistInfo(artistId);
     },
 
     /** 歌手详情合并（hotSongs + albums，一次调用渲染歌手页首屏）。 */
@@ -658,28 +823,53 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       return result;
     },
 
-    /** 歌手专辑（分页；#278 保留：桌面歌手页专辑年表需无限滚动）。 */
-    async getArtistAlbums(artistId: string, offset: number, limit: number): Promise<{ albums: Album[]; total: number; more: boolean }> {
-      const cacheKey = `artist_albums_${artistId}_${offset}_${limit}`;
-      const cached = contentCache.get<{ albums: Album[]; total: number; more: boolean }>(cacheKey);
+    /**
+     * 歌手专辑（分页；#278 保留：桌面歌手页专辑年表需无限滚动）。
+     *
+     * #417：① **翻页只以 `more` 为准**——上游 `total` 在 `more=true` 时被 limit 截断，
+     * 甚至直接缺失（实测 `/api/artist/albums/5196?limit=3` 返回体里没有 `total`），
+     * 拿它渲染「共 N 张专辑」必然偏小；故 `more=true` → `total=null`（未知），
+     * `more=false` → `offset + albums.length`（精确）。
+     * ② 失败给 `ok:false`，页面据此给「加载失败，重试」而不是静默的「暂无专辑」；
+     *    空专辑（合法）是 `ok:true + albums:[]`。
+     * ③ `limit` 自控上限 1000（实测 ≥2000 → code=-460）；社区默认页大小 100。
+     * ④ weapi 失败回退明文 `/api/artist/albums/{id}`（实测同数据、同 `more`、匿名可用）。
+     */
+    async getArtistAlbums(artistId: string, offset: number, limit: number): Promise<ArtistAlbumsPage> {
+      const safeLimit = Math.min(Math.max(Math.trunc(limit) || 0, 1), ALBUM_PAGE_MAX);
+      const cacheKey = `artist_albums_${artistId}_${offset}_${safeLimit}`;
+      const cached = contentCache.get<ArtistAlbumsPage>(cacheKey);
       if (cached) return cached;
+
+      const build = (rawAlbums: any[], more: boolean): ArtistAlbumsPage => {
+        const albums = rawAlbums.map(normalizeNeteaseAlbum);
+        return { albums, total: more ? null : offset + albums.length, more, ok: true };
+      };
+      const remember = (result: ArtistAlbumsPage): ArtistAlbumsPage => {
+        if (result.albums.length > 0) contentCache.set(cacheKey, result, PAGE_TTL_MS);
+        return result;
+      };
+
       try {
-        const data = await weapiRequest<any>(`/artist/albums/${artistId}`, { offset, limit, total: true });
+        const data = await weapiRequest<any>(`/artist/albums/${artistId}`, { offset, limit: safeLimit, total: true });
         if (data.code !== 200) {
           throw new Error(`获取歌手专辑失败 (artistId=${artistId})`);
         }
-        const rawAlbums: any[] = data.hotAlbums || data.albums || [];
-        const albums = rawAlbums.map(normalizeNeteaseAlbum);
-        const result = {
-          albums,
-          total: typeof data.total === 'number' ? data.total : albums.length + offset,
-          more: data.more !== false,
-        };
-        contentCache.set(cacheKey, result, PAGE_TTL_MS);
-        return result;
+        return remember(build(data.hotAlbums || data.albums || [], data.more !== false));
       } catch (error) {
-        console.error(`[neteaseDirect] getArtistAlbums 失败 (artistId=${artistId}):`, error);
-        return { albums: [], total: 0, more: false };
+        console.error(`[neteaseDirect] getArtistAlbums weapi 失败,回退明文 (artistId=${artistId}):`, error);
+        try {
+          const data = await plaintextGetJson<any>(
+            `https://music.163.com/api/artist/albums/${artistId}?offset=${offset}&limit=${safeLimit}`
+          );
+          if (data?.code !== 200) {
+            throw new Error(`明文接口返回异常 (code=${data?.code})`);
+          }
+          return remember(build(data.hotAlbums || data.albums || [], data.more === true));
+        } catch (error2) {
+          console.error(`[neteaseDirect] getArtistAlbums 失败(明文兜底) (artistId=${artistId}):`, error2);
+          return { albums: [], total: null, more: false, ok: false };
+        }
       }
     },
 

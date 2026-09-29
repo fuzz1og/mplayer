@@ -1,0 +1,11 @@
+{
+  "name": "@mplayer/native-player",
+  "version": "1.0.0",
+  "description": "MPlayer 原生播放器 Expo Module：ExoPlayer 持队列 + 原生推进 + media3 媒体会话（仅 Android）",
+  "main": "index.ts",
+  "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "peerDependencies": {
+    "expo": "*"
+  }
+}

@@ -40,6 +40,14 @@ const App: React.FC = () => {
     }
   }, [location.pathname, historyIndex]);
 
+  // #403：歌词是「播放器的层」（与移动端全屏播放器同构），**不是一条路由**——它不占
+  // 导航栈，任何一次导航都该把它收起来。此前 showLyrics 从置位到复位只有歌词页自己的
+  // 「返回」一处，于是侧边栏 / 顶部搜索 / 前进后退全都「URL 变了、画面没变」。
+  // 信号取 location.key 而非 pathname：点当前页（重复导航到同一路径）也会换 key。
+  useEffect(() => {
+    setShowLyrics(false);
+  }, [location.key]);
+
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex < historyStack.current.length - 1;
 
@@ -229,8 +237,9 @@ const App: React.FC = () => {
             )}
           </main>
 
-          {/* 底部播放控制栏 */}
-          <PlayerBar onCoverClick={() => setShowLyrics(true)} />
+          {/* 底部播放控制栏：封面/歌词按钮是「歌词层」开关——再点一次关灯留在当前页
+              （不做 navigate(-1)：那会把用户甩到历史上一站，不如可预测） */}
+          <PlayerBar onCoverClick={() => setShowLyrics((visible) => !visible)} />
         </div>
       </div>
 

@@ -9,11 +9,16 @@ interface PlaylistPageGridProps {
   error: string | null;
   onRetry: () => void;
   onPlaylistSelect?: (playlist: DiscoverPlaylist) => void;
+  /**
+   * 空态文案（#415）。发现页一级「歌单」= 广场分类列表、搜索结果页二级「歌单」=
+   * 关键词搜索，两者语义不同；搜索侧必须换文案，否则用户会以为两者等价。
+   */
+  emptyText?: string;
 }
 
 const SKELETON_COUNT = 6;
 
-const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading, error, onRetry, onPlaylistSelect }) => {
+const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading, error, onRetry, onPlaylistSelect, emptyText = '暂无歌单' }) => {
   if (loading) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 'var(--space-4)', alignContent: 'start' }}>
@@ -46,7 +51,7 @@ const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading,
     return (
       <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
         <ListMusic size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
-        <div>暂无歌单</div>
+        <div>{emptyText}</div>
       </div>
     );
   }
