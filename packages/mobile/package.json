@@ -41,8 +41,8 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.2.18",
-    "expo-build-properties": "~57.0.13",
-    "expo-dev-client": "~57.0.16",
+    "expo-build-properties": "~57.0.22",
+    "expo-dev-client": "~57.0.19",
     "typescript": "~6.0.3"
   },
   "license": "PolyForm-Noncommercial-1.0.0"
