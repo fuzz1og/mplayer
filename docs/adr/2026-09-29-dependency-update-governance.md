@@ -24,6 +24,8 @@ GitHub 官方唯一给出的分组示例也落在低风险层：`you can combine
    官方保证在 CI 下非零退出（文档 `It exits with non-zero in Continuous Integration (CI).` + 源码 `Log.exit(..., 1)` 双证）。实测在坏掉的 master 上输出 `react-native@0.87.1 - expected version: 0.86.3` 等 9 条并 **exit 1**，**秒级、零 Gradle、零 keystore**。
 3. **机器人继续负责其余依赖**：保留 `prod-patch` 分组（production 只合 patch）、`dev-non-major` 分组、分级 `cooldown`。
 4. **生态耦合集的升级动作固定为 `npx expo install --fix`**（或随 SDK 大版本升级整体推进），不再由机器人驱动；一致性由决策 2 的门禁兜住。
+5. **workspace 依赖树规范**：`expo` 全仓**只保留一份** —— 根与 `packages/mobile` 声明同一范围（当前 `~57.0.26`）。实测根写 `~57.0.25`、mobile 写 `~57.0.26` 时，npm 会在 `packages/mobile/node_modules` 下再装一份（`node_modules/expo@57.0.25` 与 `packages/mobile/node_modules/expo@57.0.26` 并存），于是「根 `node_modules/expo` 是哪个版本」变成陷阱。同理 `@types/react` / `@types/react-dom` 的范围不得逃出 SDK 的 `relatedPackages`（`~19.2.4` / `~19.2.3`）。
+   **并且：`expo install --check` 只校验「已装版本」，不校验 package.json 的声明地板** —— 实测 `expo-asset: ~57.0.13`（SDK 期望 `~57.0.18`）、`expo-file-system: ~57.0.5`（期望 `~57.0.7`）、`expo-font: ~57.0.1`（期望 `~57.0.4`）、`@babel/core: ^7.25.2`（期望 `^7.29.0`）都能全绿通过。声明地板必须人工按 SDK 期望对齐。
 
 ## 备选与否决
 
@@ -40,4 +42,6 @@ GitHub 官方唯一给出的分组示例也落在低风险层：`you can combine
 - **SDK 升级变成显式动作**：生态耦合集不再收到 minor/major 的自动 PR。代价是不再被机器人提醒「有新 SDK」；收益是不会再有机器人把一个未适配的 RN minor 混进 19 条的批次。
 - **安全更新不受影响**：`update-types` 只作用于 version updates；安全更新另走通道且不占 `open-pull-requests-limit`。
 - **本决策不改变「原生只在发版期构建」**：CI 边界 ADR 的后果节已补记本次事故与处置指针。
+- **落地成果**：`expo` 由两份收敛为一份（根 `node_modules/expo@57.0.26`，`packages/mobile/node_modules/expo` 消失），lockfile 相应减少 329 行；`@types/react` / `@types/react-dom` 的范围收回 SDK `relatedPackages` 内；`expo-asset` / `expo-file-system` / `expo-font` / `@babel/core` 的声明地板按 SDK 期望抬齐；`music-metadata`、`wait-on` 抬到 latest（同一 major 内）。全程用 `npm ci --ignore-scripts`（与 CI 同款）验证 lock 与三个 manifest 同步。
+- **未解决：metro 家族与 `@expo/metro` 的精确要求不一致**。`@expo/metro@56.0.2` 与 RN 的 `@react-native/community-cli-plugin@0.86.3` 都要求**精确** `metro@0.84.5`，而根 `overrides` 写的 `^0.84.5` 会解析成 **0.84.6** —— `npm ls` 因此把 `metro` / `metro-config` / `metro-transform-worker` 标为 `invalid`（`expo-doctor` 报同一条）。修法明确（override 钉成 `0.84.5`），但本轮**未能落地**：npm 10.9.8 的 arborist 在「从零重解析」路径上崩溃（`TypeError: Cannot read properties of null (reading 'edgesOut')` at `build-ideal-tree.js #loadPeerSet`；去掉 metro override 后同样崩，故与 override 无关），而对 lock 做外科手术会让 npm 顺手剪掉父级需要的嵌套依赖（`npm ci` 随即报 `Missing: hermes-estree@0.35.0 / agent-base@7.1.4 / negotiator@1.1.0 / mime-db@1.54.0`）。留待用更新的 npm 或 `--force` 路径单独处理。**该 `invalid` 是既有状态（HEAD 的 lock 里同样存在），本决策既未引入也未加重它。**
 - 未解决：`expo-check` 是否设为 master 的必需检查，留到合并后（必需检查引用的 job 必须先在 master 存在）。

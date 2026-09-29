@@ -48,5 +48,7 @@ cd packages/mobile/android
 ```
 
 - **Windows 前置**：SDK 自带的 CMake 3.22.1 打包的是 **Ninja 1.10.2**，有已知长路径 bug，C++ 阶段会报 `ninja: error: manifest 'build.ninja' still dirty after 100 tries`（实测 arm64-v8a / armeabi-v7a 都会撞上）。把该 `cmake/<ver>/bin/ninja.exe` 换成 **≥1.12** 即可通过——与 React Native Reanimated 的 *Building for Android on Windows* 指南给出的解法一致。**Linux 不受影响**（发版的 `build-mobile` 跑 ubuntu-latest）。
-- 原生依赖的版本基线是 **Expo SDK 的期望版本**，判定命令 `npx expo install --check`；不要单独 bump `react-native` / `react-native-screens` / `safe-area-context` / `slider` / `svg`（`.github/dependabot.yml` 已对这些加 ignore），要升就整族随 SDK 一起升。
+- 原生依赖的版本基线是 **Expo SDK 的期望版本**，判定命令 `npx expo install --check`（即 `./scripts/verify.sh expo`）；不要单独 bump `react-native` / `react-native-screens` / `safe-area-context` / `slider` / `svg`（`.github/dependabot.yml` 已对这些加 ignore），要升就整族随 SDK 一起升。
+- **`expo install --check` 只看「已装版本」，不看 package.json 的声明地板**——地板落后它照样绿，所以声明地板要人工按 SDK 期望对齐；`expo` 全仓只保留一份（根与 `packages/mobile` 同范围）。见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
+- `npx expo-doctor` 只作参考、不作门禁：它会额外报本仓**设计性**的两条——`overrides` 把 metro 钉在 0.84.6 而 `@expo/metro` 要求精确 0.84.5；原生目录已提交 + `app.json` 配置的 CNG 反向布局被判「未同步」。
 
