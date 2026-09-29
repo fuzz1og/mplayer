@@ -5,6 +5,28 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    # 新版本先冷却再提 PR：避开「刚发布就被投毒」的窗口（安全更新不受 cooldown 限制）。
+    # 冷却天数必须在 1~90；未显式配置时 Dependabot 也会默认冷却 3 天。
+    cooldown:
+      default-days: 5
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+    # 把同类低风险升级合并成一个 PR，避免每周刷出十几条历史（#446）。
+    # 分组只覆盖非大版本；major 仍逐条提 PR，保留单独评估。
+    groups:
+      prod-non-major:
+        applies-to: version-updates
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      dev-non-major:
+        applies-to: version-updates
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
     ignore:
       # electron 由 electron-builder 配套版本管理，避免依赖混乱
       - dependency-name: electron
@@ -16,6 +38,13 @@ updates:
       # 单独 bump 必然 ERESOLVE，须成对升级，这里整体忽略
       - dependency-name: react
       - dependency-name: react-dom
+      # esbuild 与根 overrides 钉死同一版本（vite 经 override 统一解析），
+      # 只 bump devDependency 会被 override 吃掉、只剩声明漂移；要升级须两处一起改，故不自动提 PR
+      - dependency-name: esbuild
+      # async-storage 3.x 是破坏性大版本（scoped storage / 批量 API 改名 / Android 额外安装步骤），
+      # 迁移前不自动提 PR，见 #446
+      - dependency-name: "@react-native-async-storage/async-storage"
+        update-types: ["version-update:semver-major"]
     labels:
       - dependencies
     commit-message:
