@@ -1,0 +1,4 @@
+# 仓库内 shell 脚本一律按 LF 检出：Windows 本机 core.autocrlf=true 会把它们转成 CRLF，
+# 于是 bash ./scripts/*.sh 报 $'\r': command not found（见 docs/agents/git-workflow.md）。
+# 注意：git 里本来就是 LF 存储，这条只是约束检出侧。
+*.sh text eol=lf
