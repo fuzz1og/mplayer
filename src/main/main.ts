@@ -62,16 +62,18 @@ const musicApi = {
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        responseType: 'arraybuffer',
+        // 流式（#426）：此前 responseType: 'arraybuffer' 把**整首歌**先抱进内存再落盘，
+        // 一首无损几十 MB 就是主进程里几十 MB 的常驻峰值（#412 只把三份拷贝降到一份）。
+        // 现在边下边落盘，内存里只过 64KB 级的 chunk；timeout 仍是 30s，作用在流的静默上
+        //（卡住不动即中断，不会因为文件大而误杀）。
+        responseType: 'stream',
         timeout: 30000,
       });
-      // 零拷贝（#412）：axios 在 Node 下的 arraybuffer 响应给的就是 Buffer，而 Buffer
-      // 本身就是 Uint8Array——直接透传即可。此前先 `Buffer.from(dl.data)` 复制一份，
-      // 再 `new Uint8Array(buffer)` 又复制一份（TypedArray 构造器吃 TypedArray 是复制），
-      // 一首歌的音频在内存里存在三份。
+      // 落盘走后端流式入口（ADR-0002：缓存元数据只能由后端写）。调用方不碰路径、不自己
+      // createWriteStream——绕过后端写盘，条目就会从 stats()/keys() 里消失，而汽水音频的
+      // 512MB 预算回收正是靠 keys() 找人的（#410/#412）。
+      await audioCacheBackend.writeFromStream(cacheKey, dl.data)
       // 落盘后顺带把 bin 目录压回预算（fire-and-forget，不阻塞播放）。
-      const audioBytes = dl.data instanceof Uint8Array ? dl.data : new Uint8Array(dl.data as ArrayBuffer)
-      await audioCacheBackend.write(cacheKey, audioBytes)
       void enforceKeyBudget(audioCacheBackend, SODA_AUDIO_CACHE_KEY_PREFIX, SODA_AUDIO_CACHE_MAX_BYTES)
       return toFileUrl(audioCacheBackend.getFilePath(cacheKey))
     } catch (dlErr) {

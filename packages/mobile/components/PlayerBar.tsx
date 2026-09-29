@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, Loader2 } from 'lucide-react-native';
 import { usePlayerStore } from '../stores/playerStore';
-import { togglePlay, playSong, fetchLrcInBackground } from '../services/audioPlayer';
+import { togglePlay, skipNext, skipPrev, fetchLrcInBackground } from '../services/audioPlayer';
 import { opacity, radius, spacing, textVariants } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -18,8 +18,6 @@ export default function PlayerBar() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const currentSong = usePlayerStore(s => s.currentSong);
   const isPlaying = usePlayerStore(s => s.isPlaying);
-  const next = usePlayerStore(s => s.next);
-  const prev = usePlayerStore(s => s.prev);
   const setShowPlayer = usePlayerStore(s => s.setShowPlayer);
   const preparing = usePlayerStore(s => s.preparing);
   const [showQueue, setShowQueue] = useState(false);
@@ -85,7 +83,7 @@ export default function PlayerBar() {
       {currentSong && (
         <View style={styles.controls}>
           <ScalePress
-            onPress={(e) => { e?.stopPropagation(); prev(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
+            onPress={(e) => { e?.stopPropagation(); skipPrev(); }}
             style={styles.btn}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 2 }}
           >
@@ -108,7 +106,7 @@ export default function PlayerBar() {
             )}
           </ScalePress>
           <ScalePress
-            onPress={(e) => { e?.stopPropagation(); next(); const s = usePlayerStore.getState().currentSong; if (s) playSong(s); }}
+            onPress={(e) => { e?.stopPropagation(); skipNext(); }}
             style={styles.btn}
             hitSlop={{ top: 6, bottom: 6, left: 2, right: 6 }}
           >

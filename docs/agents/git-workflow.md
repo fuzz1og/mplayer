@@ -56,9 +56,10 @@ gh pr create --base master --title "<type(scope): 中文摘要>" --body-file .gi
 
 - **PR 模板是唯一事实源**：正文一律用 `.github/PULL_REQUEST_TEMPLATE.md`（四段：变更内容 / 关联 issue / 验证 / 备注），流程文档只引用、不重写模板内容，不要在 `--body` 里手写别的格式。
 - 验证清单逐项勾选（双端核对）：`core:build`、双端 typecheck、真机验收、UI 截图、文档同步。**CI 红不合**：验证顺序绿且 CI 绿才进入下一步。
-- 截图 / 录屏传 **PR comment**（`gh pr comment <PR> --body-file` 或网页直接拖入），**不入库** `docs/**/assets` —— 仓库只留活文档，以及 ADR 正文引用的资产。
+- 截图 / 录屏传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'` / `gh pr comment <PR> --attach '<png>#<图注>'`，两者同一套机制：正文里没被引用的附件会追加到末尾，排版走两步法，见 `mobile-device-debugging` skill），**不入库** `docs/**/assets` —— 仓库只留活文档，以及 ADR 正文引用的资产。**追加一条验收评论**（不动 PR 正文）用后者；正文是模板四段结构时尤其别把图塞进正文。
+- **附图后要验引用**：读回来逐个检查（正文 `gh pr view <PR> --json body --jq .body`，评论 `gh api repos/{owner}/{repo}/issues/comments/<id> --jq .body`）——每个图片引用都必须是 `user-attachments` URL，残留本地路径就是裂图；公开仓库可再抓一次 PR 页面 HTML 确认 asset id 在渲染产物里。
 - **CI 绿后停在人审**：PR 交给人工 review 与合并，agent 不自行合并、不设 auto-merge。收到 review 意见回本 worktree 继续修，push 自动更新同一 PR。
-- 改了 `packages/mobile` 或 `packages/core` 的 PR 必须附真机验收结论（流程见 `.agents/skills/mobile-device-debugging`；固化断言可跑 `npm run mobile:e2e` 一条龙，见 `e2e/README.md`）。
+- 改了 `packages/mobile` 或 `packages/core` 的 PR 必须附真机验收结论与**证据图**（没上真机就照实写「未做 + 原因」，不许写「已附截图」而没附；流程见 `.agents/skills/mobile-device-debugging`；固化断言可跑 `npm run mobile:e2e` 一条龙，见 `e2e/README.md`）。
 - 行为/命令/架构有变化的，同一个 PR 里更新 AGENTS.md / CONTEXT.md / 相关 ADR。
 - 开 PR 前先合入最新 `origin/master`，冲突就地解决。
 

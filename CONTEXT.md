@@ -88,6 +88,7 @@ _Avoid_: 探测缓存、URL 缓存、秒播缓存
 歌词**按源内 ID 直取**、不经 `Song.lrc` URL 契约、也不靠搜索补全的音乐源（网易 #409 / 汽水）。判别 = core `shared/songLyrics.songUsesSongidLyrics(sourceType)`。
 对这些源：列表结果里的 `Song.lrc` **恒为空**（内容方法不再内联歌词），播放期由消费端按 ID 取词（网易 `getNeteaseLyrics(songId)` / 汽水 `getSodaLyrics(trackId)`）；搜索补词无意义且会多打一次请求，故 `fetchLrcInBackground` 对它们只处理封面。
 #409 之前网易靠内容方法**列表内联**歌词（每首歌各发一次取词请求，打开发现页一次就是数百次）——该形态已废弃；存量持久化数据里的内联 LRC 文本由 `isInlineLyrics` 兜住。
+#429 起**移动端**列表把取词时机再前移一档：**行进入视口**即经 core `shared/lyricsHydrator` 入队预取（同 songId single-flight、可取消、单次入队有预算），点开播放器时歌词已在缓存里；预取是 best-effort——**失败不重试**（失败风暴的兜底是播放期取词），并发与限速仍只有 transport 双层闸门一套。这里刻意严于「进入视口」：**可见集合停稳 300ms 后才按整屏请求**，滑过但未停稳的行不请求（#421 防抢帧），行滑出可见集合时在同一次停稳判定里 `cancel*`。**桌面端未接（#441）**：桌面列表的可见集合来自 `useVirtualRows.items`，它缺停稳信号（每帧都可能变），且桌面歌词缓存在**主进程**、需经 `setLyricsHydratorDeps` 注入 IPC 取词器。
 _Avoid_: 内联歌词源、songid 源（口语可，术语用「按 ID 直取歌词源」）、取词源
 
 **专辑默认源**:

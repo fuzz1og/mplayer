@@ -202,6 +202,18 @@ export interface DirectSourceClient {
   // ── 内容能力（#239 接口形态）────────────────────────────────────
   /** 歌手搜索（searchNeteaseArtists 迁入）。 */
   searchArtists?: (keyword: string, limit: number) => Promise<Artist[]>;
+  /**
+   * 关键词搜索歌单（#415）。与 `getPlaylists`（广场分类列表，无关键词）能力不重叠。
+   *
+   * `offset` 不是可选装饰：网易 `cloudsearch/pc` **不返回 `hasMore`**，翻页终止只能由
+   * `offset + limit < playlistCount` 推导，返回值里的 `more` 就是该推导的落点
+   * （形状与同族 `getPlaylists` 逐字一致）；`offset` 越界 = `more:false`，**不是错误**。
+   */
+  searchPlaylists?: (
+    keyword: string,
+    limit: number,
+    offset?: number,
+  ) => Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }>;
   /** 榜单全集（热榜/新歌榜…，id=`${source}:${sourceId}`）。 */
   getToplists?: () => Promise<ToplistGroup[]>;
   /** 每日推荐歌曲。 */
@@ -253,6 +265,7 @@ export interface DirectSourceClient {
 export const CONTENT_METHODS = [
   'searchSongs',
   'searchArtists',
+  'searchPlaylists',
   'getToplists',
   'getRecommendedSongs',
   'getRecommendedPlaylists',

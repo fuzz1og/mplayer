@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知小图标只以「资源名字符串」被 media3 引用，shrinkResources 会误裁 → 显式 keep。 -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+  tools:keep="@drawable/ic_stat_mplayer" />

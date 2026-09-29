@@ -4,8 +4,8 @@ import { Stack, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { radius, textVariants } from '../theme/tokens';
 import { AnimatedBgProvider } from '../theme/AnimatedBg';
-import { addNotificationResponseListener, requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
-import { initAudio, togglePlay, playSong } from '../services/audioPlayer';
+import { requestNotificationPermission, setupNotificationChannel } from '../services/notificationService';
+import { initAudio } from '../services/audioPlayer';
 import { setupLegacyMigration } from '../services/legacyMigration';
 import { startPerfMonitor, stopPerfMonitor, setPerfContext } from '../services/perfMonitor';
 import { registerPlaybackTraceSink } from '../services/playbackTrace';
@@ -119,27 +119,6 @@ export default function RootLayout() {
     // 布局（Stack 内容被压缩到屏幕一半）。请求走 RN 原生栈；
     // 旧 apiClient 会话机件与耗时日志设施已随 #276 归零删除。
 
-    const sub = addNotificationResponseListener((response) => {
-      const data = response.notification.request.content.data;
-      const actionId = response.actionIdentifier;
-
-      if (actionId === 'play-pause') {
-        togglePlay();
-      } else if (actionId === 'next') {
-        usePlayerStore.getState().next();
-        const nextSong = usePlayerStore.getState().currentSong;
-        if (nextSong) playSong(nextSong);
-      } else if (actionId === 'prev') {
-        usePlayerStore.getState().prev();
-        const prevSong = usePlayerStore.getState().currentSong;
-        if (prevSong) playSong(prevSong);
-      } else if (data?.songId) {
-        // 点击通知正文 → 打开播放器
-        setShowPlayer(true);
-      }
-    });
-
-    return () => sub.remove();
   }, []);
 
   // 启动时将已保存的设置同步到 core 模块
