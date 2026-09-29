@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { PanResponder } from 'react-native';
 import type { Animated, GestureResponderHandlers, PanResponderInstance } from 'react-native';
 import {
@@ -6,6 +6,7 @@ import {
   isVerticalDragClaim, shouldCaptureDrag,
 } from '../gestures/dragSession';
 import type { DragClaimMode } from '../gestures/dragSession';
+import { beginDragProbe, endDragProbe, sampleDragProbe } from '../services/dragJankProbe';
 
 /** 适配器参数：把纯拖拽会话内核（gestures/dragSession）绑到一个 Animated.Value + PanResponder */
 export interface DragToDismissOptions {
@@ -57,6 +58,11 @@ export interface DragToDismissOptions {
   onGestureStart?: () => void;
   /** 手势结束（可选）：release 与 terminate 都会回调（两条路径共用生命周期，不复位标记会漏） */
   onGestureEnd?: () => void;
+  /**
+   * 跟手探针的接入点名（#430，缺省 `unknown`）：`[drag]` 日志与 perf 现场靠它区分
+   * 「哪个面在卡」——BottomSheet 壳与全屏播放器的宿主与内容结构不同，混成一个数就没法归因。
+   */
+  probeLabel?: string;
 }
 
 /**
@@ -77,6 +83,10 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
   // 关着的时候不清白：等下一次真正落在本层的手势（否则会留着上一轮的 true）
   if (options.enabled === false) sequence.end();
   const panResponderRef = useRef<PanResponderInstance | null>(null);
+
+  // 宿主在手势中途卸载（面板被判关后连壳一起消失）时收口探针：否则 active 会一直挂着，
+  // perfMonitor 的 drag 现场就永久显示「在拖」。没有活跃手势时 end 是空操作。
+  useEffect(() => () => endDragProbe(Date.now()), []);
 
   if (panResponderRef.current === null) {
     panResponderRef.current = PanResponder.create({
@@ -110,6 +120,7 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
         const { value, onGestureStart } = optionsRef.current;
         sequence.begin(); // grant 即 owned（start 模式在 DOWN 时就已成响应者）
         session.grab();
+        beginDragProbe(Date.now(), optionsRef.current.probeLabel);
         onGestureStart?.();
         // 可中断：抓住当前呈现值接管进行中的动画（getValue 异步 → 就绪前的 move 被内核丢弃）
         value.stopAnimation((v) => session.calibrate(v));
@@ -118,11 +129,15 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
         const { value, rubberbandSize } = optionsRef.current;
         // 时间基准取 JS 单调时钟的「处理时刻」：位置（gs.dy）也取自处理时刻，两者同源才自洽。
         // 真机上 nativeEvent.timestamp 的单位/可用性不可靠，会让速度自采样恒为 0。
-        const next = session.move({ dy: gs.dy, timestamp: Date.now(), rubberbandSize });
+        const now = Date.now();
+        const next = session.move({ dy: gs.dy, timestamp: now, rubberbandSize });
         if (next !== null) value.setValue(next);
+        // 同一时刻喂探针：内核要「位置与时间同源」，探针量「相邻回调隔了多久」
+        sampleDragProbe(now);
       },
       onPanResponderRelease: () => {
         sequence.end(); // 本次触摸序列结束
+        endDragProbe(Date.now());
         const { onDismiss, onSnapBack, onGestureEnd, rubberbandSize, dismissSize, positionRatio } = optionsRef.current;
         const basis = dismissSize ?? rubberbandSize;
         const ratio = positionRatio ?? 0;
@@ -133,6 +148,7 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
       },
       onPanResponderTerminate: () => {
         sequence.end();
+        endDragProbe(Date.now());
         const { onSnapBack, onGestureEnd } = optionsRef.current;
         onSnapBack(session.terminate().velocity);
         onGestureEnd?.();

@@ -305,9 +305,24 @@ npm run mobile:e2e                          # 同上（包一层 npm script）
 - usbipd 直挂的 attach 掉线是常态，脚本带自愈（重挂 + 重建 reverse + 复活 logcat 捕获），设备彻底消失（拔线/关调试）才 FAIL；
 - 点歌断言依赖真实网络音源解析，接口故障会命中 FAIL——这是真实验收语义，不是脚本 bug。
 
+## 移动端帧计时取证（性能）
+
+`scripts/mobile-frame-stats.sh` 用**系统侧**采集量「用户看得见的那一层」的 **UI 帧率**：`dumpsys gfxinfo <pkg> framestats`（应用侧逐帧，UI 线程管线）+ `dumpsys SurfaceFlinger --latency`（显示侧上屏，独立视角）。release 构建可用、不需要 App 配合、窗口天然 ≈2s。
+
+```bash
+MOBILE_FRAME_SWIPE='628 900 628 1900 2000' MOBILE_FRAME_LABEL=busy scripts/mobile-frame-stats.sh
+MOBILE_FRAME_WAIT=8 MOBILE_FRAME_LABEL=idle scripts/mobile-frame-stats.sh          # 留窗口手拖
+MOBILE_FRAME_PARSE_DIR=e2e/artifacts/frame-idle-20260929-120000 scripts/mobile-frame-stats.sh   # 复算已有 dump
+```
+
+原始 dump 与 `frame-stats.json` 存档到 `e2e/artifacts/frame-<label>-<时间戳>/`（已 gitignore）。
+
+⚠ 两个限制：**（1）** 本 App 的拖拽跟手跑在 JS 线程，JS 卡住时面板是「冻住」而不是「画得慢」——UI 线程根本没被要求出新帧，帧统计可能反而很健康，所以本脚本的输出**不能单独定罪**，必须与 App 侧 `[drag]` 日志（`services/dragJankProbe`）合看；**（2）** `adb shell input swipe` 是 120Hz 线性 MOVE 流，有真实事件密度但没有真实手指速度曲线，A/B 两臂用同一种注入即可自洽。协议与判据见 `docs/research/2026-09-29-mobile-drag-jank-protocol.md`。
+
 ## 相关文件
 
 - `e2e/electron-e2e.spec.ts` 等 `*.spec.ts` - 桌面端 Playwright 测试场景
+- `scripts/mobile-frame-stats.sh` - 移动端帧计时取证（性能，adb 驱动）
 - `scripts/mobile-e2e.sh` - 移动端真机 e2e 一条龙脚本
 - `e2e/README.md` - 本文档
 - `e2e/artifacts/` - 移动端 e2e 截图与 logcat 存档（gitignore）

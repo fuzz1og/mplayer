@@ -1,6 +1,6 @@
 import CryptoJS from 'crypto-js';
 import type { RankMeta, Song } from '../types/index.js';
-import type { DirectSourceClient, ToplistGroup } from '../shared/sourceRouter.js';
+import type { DirectSourceClient, ToplistDetail, ToplistGroup } from '../shared/sourceRouter.js';
 import { request, type TransportCallOptions } from './transport.js';
 import { md5 } from '../utils/hash.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
@@ -474,6 +474,28 @@ export const qqDirectClient: DirectSourceClient = {
    * 榜单全集（热歌榜 26 / 新歌榜 27；#279 自门面迁入）。
    * 单榜失败返回空组（保持原门面失败不抛语义）；至少一榜有歌才写缓存。
    */
+  /**
+   * 榜单元数据：**只给得起名字**，其余如实留空。
+   *
+   * 封面与播放量拿不到——Q 音榜单索引接口 `musicToplist.ToplistInfoServer.GetToplist`
+   * 匿名恒拒（code 500005，见本文件顶部注释），日更接口 `fcg_v8_toplist_cp` 只回
+   * `update_time`/`comment_num`/`total_song_num`，**没有封面字段**。
+   * 所以 `coverImgUrl` 恒为 ''、`playCount` 为 null —— 消费端据此走生成兜底封面，
+   * 而不是把「拿不到」渲染成失败。名字取自榜单 id 契约表（与榜单页同源，不二次请求）。
+   */
+  async getToplistDetail(sourceId: number | string): Promise<ToplistDetail | null> {
+    const known = QQ_TOPLISTS.find((t) => String(t.topid) === String(sourceId));
+    if (!known) return null;
+    return {
+      id: sourceId,
+      name: known.name,
+      coverImgUrl: '',
+      playCount: null,
+      description: '',
+      updateTime: null,
+    };
+  },
+
   async getToplists(): Promise<ToplistGroup[]> {
     const cached = cacheManager.get<ToplistGroup[]>(QQ_TOPLIST_CACHE_KEY);
     if (cached && cached.length > 0) return cached;

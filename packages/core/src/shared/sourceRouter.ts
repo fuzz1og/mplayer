@@ -116,6 +116,54 @@ export async function getToplistSongs(source: SourceKey, sourceId: number | stri
 }
 
 /**
+ * 榜单元数据（#465）：榜单详情页 Hero 用。榜单是**源内实体**（身份 = 源 + 源内 id），与专辑同构。
+ *
+ * `coverImgUrl` 允许空串——**那是「该源拿不到封面」，不是失败**：Q 音榜单索引接口
+ * `musicToplist.ToplistInfoServer.GetToplist` 匿名恒拒（code 500005，qqDirect 实测记录），
+ * 日更接口只回 `update_time`/`comment_num`，没有封面字段。消费端必须自带**兜底封面**
+ * （移动端 components/CoverFallback），不得把空封面渲染成加载失败。
+ */
+export interface ToplistDetail {
+  id: number | string;
+  name: string;
+  /** 空串 = 该源不提供封面（走兜底），不是抓取失败 */
+  coverImgUrl: string;
+  /** null = 该源不提供播放量（不编造 0） */
+  playCount: number | null;
+  description: string;
+  /** 最近更新时间（epoch ms）；null = 该源不提供 */
+  updateTime: number | null;
+}
+
+/**
+ * 单源榜单元数据腿（#465）：与 `getAlbumDetailRouted` 同一条纪律——
+ * 「该源没有这项能力」与「源支持但这次没取到」必须可区分（页面三态据此给文案）。
+ */
+export type ToplistDetailOutcome =
+  | { ok: true; detail: ToplistDetail }
+  | { ok: false; reason: 'unsupported' | 'failed'; message: string };
+
+export async function getToplistDetailRouted(
+  source: SourceKey,
+  sourceId: number | string,
+): Promise<ToplistDetailOutcome> {
+  const client = getDirectClient(source);
+  if (!client?.getToplistDetail) {
+    return { ok: false, reason: 'unsupported', message: `源 ${source} 未实现内容能力 getToplistDetail` };
+  }
+  try {
+    const detail = await client.getToplistDetail(sourceId);
+    if (!detail) {
+      return { ok: false, reason: 'failed', message: `榜单元数据获取失败 (${source}:${sourceId})` };
+    }
+    return { ok: true, detail };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: 'failed', message: `榜单元数据获取异常 (${source}:${sourceId}): ${message}` };
+  }
+}
+
+/**
  * 单源专辑详情腿（#407 P0）：能力缺失与抓取失败给**可区分**语义。
  *
  * 旧形态是页面里写死 `getDirectClient('netease')!.getAlbumDetail!(id)`（双重断言）——
@@ -216,6 +264,11 @@ export interface DirectSourceClient {
   ) => Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }>;
   /** 榜单全集（热榜/新歌榜…，id=`${source}:${sourceId}`）。 */
   getToplists?: () => Promise<ToplistGroup[]>;
+  /**
+   * 榜单元数据（#465）。未实现 = 该源不提供榜单元数据（当前只有网易实现：它的榜单 id
+   * 本身就是歌单 id，直接复用歌单详情）；返回 null = 源支持但这次没取到。
+   */
+  getToplistDetail?: (sourceId: number | string) => Promise<ToplistDetail | null>;
   /** 每日推荐歌曲。 */
   getRecommendedSongs?: (limit: number) => Promise<Song[]>;
   /** 推荐歌单。 */
@@ -279,6 +332,7 @@ export const CONTENT_METHODS = [
   'getPlaylists',
   'getPlaylistDetail',
   'getPlaylistSongs',
+  'getToplistDetail',
   'resolvePlayableUrls',
 ] as const satisfies readonly (keyof DirectSourceClient)[];
 

@@ -10,6 +10,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -39,7 +40,14 @@ internal class PlaybackController(
     .setReadTimeoutMs(30_000)
     .setAllowCrossProtocolRedirects(true)
 
-  private val dataSourceFactory = ResolvingDataSource.Factory(httpFactory, guard.resolver)
+  /**
+   * 数据源必须**按 scheme 分派**：`DefaultHttpDataSource` 只认 http(s)，`file://`（已下载歌曲的本地播放）
+   * 交给它会直接 IO 失败——表现为 media3 `ERROR_CODE_IO_UNSPECIFIED`(2000)、分级落到 `other`，
+   * 用户侧就是「本地歌曲标着已下载、点了却播不出声，还把队列耗尽」（#464）。
+   * `DefaultDataSource` 会按 scheme 选 delegate：file:// → FileDataSource，http(s) → httpFactory。
+   */
+  private val baseFactory = DefaultDataSource.Factory(context, httpFactory)
+  private val dataSourceFactory = ResolvingDataSource.Factory(baseFactory, guard.resolver)
 
   val player: ExoPlayer = ExoPlayer.Builder(context)
     .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))

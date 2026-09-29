@@ -8,6 +8,7 @@ import { requestNotificationPermission, setupNotificationChannel } from '../serv
 import { initAudio } from '../services/audioPlayer';
 import { setupLegacyMigration } from '../services/legacyMigration';
 import { startPerfMonitor, stopPerfMonitor, setPerfContext } from '../services/perfMonitor';
+import { describeDragActivity } from '../services/dragJankProbe';
 import { registerPlaybackTraceSink } from '../services/playbackTrace';
 import { setProxyUrl as setCoreProxyUrl, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
 
@@ -77,12 +78,15 @@ function PlaybackNoticeToast() {
   );
 }
 
-/** JS 帧率看门狗：持续掉帧时记一条 warn，现场含当前路由与播放器开合状态。 */
+/** JS 帧率看门狗：持续掉帧时记一条 warn，现场含当前路由、播放器开合与拖拽活动。
+ *  drag 现场在**读取时刻**求值（不是渲染快照），且必须覆盖「刚拖过」：帧率告警要连续 2 个 2s
+ *  窗口达标才落盘，也就是最早在拖拽结束后 4s 才报——只报瞬时状态的话，这行告警永远显示没在拖。 */
 function PerfWatchdog() {
   const pathname = usePathname();
   const showPlayer = usePlayerStore((s) => s.showPlayer);
   useEffect(() => {
-    setPerfContext(() => `route=${pathname} player=${showPlayer ? 'open' : 'closed'}`);
+    setPerfContext(() =>
+      `route=${pathname} player=${showPlayer ? 'open' : 'closed'} drag=${describeDragActivity(Date.now())}`);
     return () => setPerfContext(null);
   }, [pathname, showPlayer]);
   useEffect(() => {
