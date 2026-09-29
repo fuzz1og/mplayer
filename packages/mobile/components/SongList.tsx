@@ -1,8 +1,9 @@
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactElement } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import type { ListRenderItemInfo, RefreshControlProps, StyleProp, ViewStyle } from 'react-native';
-import type { Song } from '@mplayer/core';
+import type { LyricsHydrationCandidate, Song } from '@mplayer/core';
+import { cancelLyricsHydration, enqueueLyricsHydration } from '@mplayer/core';
 import { spacing, textVariants } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -11,6 +12,19 @@ import ScalePress from './ScalePress';
 import { listWindowProps } from './listWindow';
 import { computeSongListLayout } from './songListLayout';
 import type { SongListRow } from './songListLayout';
+import { createViewportLyricsSettler, lyricsCandidateKey } from './songListHydration';
+import type { ViewportLyricsSettler } from './songListHydration';
+
+/**
+ * 视口回调只在**真正读到的那部分**上收口：ViewToken 的形状由 react-native 决定，
+ * 这里结构化声明，免得把 @react-native/virtualized-lists 这个传递依赖引进来。
+ */
+interface ViewableRowToken<T> {
+  item: T;
+}
+interface ViewableRowsInfo<T> {
+  viewableItems: ViewableRowToken<T>[];
+}
 
 // 行模型与布局算术在 songListLayout.ts（不依赖 react-native，可被单测直接覆盖）。
 // 这里只 re-export **类型**：调用方（各列表页）建 rows 时需要它；布局函数由测试直接
@@ -111,6 +125,63 @@ export default function SongList({
 
   const keyExtractor = useCallback((row: SongListRow) => row.key, []);
 
+  /**
+   * 「行进入视口」= 预取该行歌词（#429）：点开播放器时歌词已在 core 缓存里，不必再等
+   * 一次 RTT。接线只到这里——去重 / single-flight / 取消 / 预算在 core
+   * `shared/lyricsHydrator`，并发与每 host 限速在 transport 双层闸门（#408）。
+   *
+   * - 回调**必须是稳定引用**：RN 不支持热换 `onViewableItemsChanged`（换了会重设
+   *   视口追踪），所以用 useRef 持有一份；候选只来自本次回调拿到的行，不闭包 `rows`。
+   * - 真正入队的是 `settler`：可见集合**停稳** `VIEWPORT_SETTLE_MS` 后才交付（#421），
+   *   滑动期间滚过的行不入队——一次甩动不会把整份歌单打出去。
+   * - 收回也在同一拍：停稳时算出「本次离开可见集合的 key」交给 `cancelLyricsHydration`。
+   *   滑出视口的行不该继续占着出网机会，且排队的取词会被 transport 从队列摘除。
+   */
+  // 本列表入队过的候选（key → 候选）：卸载时要按 key 收回（hydrator 是全局单例，
+  // 不能整体清场）；行滑出可见集合时也在同一本账上划掉。
+  const enqueuedRef = useRef(new Map<string, LyricsHydrationCandidate>());
+  const settlerRef = useRef<ViewportLyricsSettler | null>(null);
+  if (settlerRef.current === null) {
+    settlerRef.current = createViewportLyricsSettler({
+      enqueue: (candidates) => {
+        for (const candidate of candidates) {
+          const key = lyricsCandidateKey(candidate);
+          if (key !== null) enqueuedRef.current.set(key, candidate);
+        }
+        enqueueLyricsHydration(candidates);
+      },
+      // 停稳那一拍算出的「本次离开可见集合的 key」：从账本划掉并收回。排队中的取词
+      // 从 transport 闸门摘除、绝不进入底层传输（#408 的协作式取消）；已结算的 key
+      // 在 hydrator 里本就跳过，故成本只是 O(离开行数)。
+      cancel: (candidates) => {
+        for (const candidate of candidates) {
+          const key = lyricsCandidateKey(candidate);
+          if (key !== null) enqueuedRef.current.delete(key);
+        }
+        cancelLyricsHydration(candidates);
+      },
+    });
+  }
+  const onViewableItemsChanged = useRef(({ viewableItems }: ViewableRowsInfo<SongListRow>) => {
+    settlerRef.current?.onViewableRows(viewableItems.map((token) => token.item));
+  }).current;
+  // 只设阈值、不设 minimumViewTime：RN 的 minimumViewTime 只是**推迟**报告那次快照
+  // （快照里的行可能早已滑出屏幕），停稳判定统一由 settler 一处负责。
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+
+  // 卸载时先丢掉待交付项，再收回本列表入队过、尚未结算的预取。
+  // ⚠️ 已知取舍：hydrator 按 songId 全局在飞、**没有调用方身份**，所以「收回」是 key 级的——
+  // 若另一个列表此刻也在飞同一首歌，这次取消会一并 abort 它（代价是那次预取白做，
+  // 重新进入视口会再来一次，不会发错数据）。要按调用方隔离得给 hydrator 加 owner 维度，
+  // 本 PR 不做。
+  useEffect(
+    () => () => {
+      settlerRef.current?.dispose();
+      cancelLyricsHydration([...enqueuedRef.current.values()]);
+    },
+    []
+  );
+
   return (
     <FlatList
       testID={testID}
@@ -127,6 +198,8 @@ export default function SongList({
       onEndReached={onEndReached}
       onEndReachedThreshold={onEndReachedThreshold}
       refreshControl={refreshControl}
+      viewabilityConfig={viewabilityConfig}
+      onViewableItemsChanged={onViewableItemsChanged}
     />
   );
 }
