@@ -175,6 +175,7 @@ export {
   pickToplistSongs,
   getToplistSongs,
   getAlbumDetailRouted,
+  getToplistDetailRouted,
   getArtistInfoRouted,
 } from './shared/sourceRouter.js';
 // 跳歌护栏（#385）：终局失败后的决策单点 + 会话内连续计数/坏歌记忆。
@@ -197,6 +198,8 @@ export type {
   ContentCache,
   ContentMethod,
   AlbumDetailOutcome,
+  ToplistDetail,
+  ToplistDetailOutcome,
   Tier3Resolver,
   Tier3Resolution,
   ChartKind,
