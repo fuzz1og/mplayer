@@ -14,6 +14,7 @@ import { ActivityIndicator, FlatList, Image, StyleSheet, Text, View } from 'reac
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Disc3, ImageOff } from 'lucide-react-native';
 import { getDirectClient, type Album } from '@mplayer/core';
+import { logCoverError } from '../../../services/coverDiagnostics';
 import EmptyState from '../../../components/EmptyState';
 import ScalePress from '../../../components/ScalePress';
 import CoverGridSkeleton from '../../../components/CoverGridSkeleton';
@@ -108,7 +109,12 @@ export default function ArtistAlbumsPage() {
         {item.albums.map((album) => (
           <ScalePress key={album.id} style={styles.card} onPress={() => openAlbum(album)}>
             {album.picUrl ? (
-              <Image source={{ uri: album.picUrl }} style={styles.cover} />
+              <Image
+                source={{ uri: album.picUrl }}
+                style={styles.cover}
+                // 此前这处连 onError 都没有：图挂了就是一块灰，日志里一行都没有（#465 验收实测）
+                onError={() => logCoverError('album-grid', album.picUrl)}
+              />
             ) : (
               <View style={[styles.cover, styles.coverFallback]}>
                 <Disc3 size={28} color={colors.textTertiary} />

@@ -276,11 +276,19 @@ worktree 有未提交改动（调研期间出现/变化，三文件 +50/−4）�
 
 **M5（验证纪律，否则修了也不知道修没修好）：**
 
-- e2e 不要用「弹层消失」当作「拖拽生效」的断言（遮罩点按同样会消失）。改用 `[drag] release basis=… vy=… → dismiss` 这条 dev-only 日志（已存在）作为「拖拽路径真的跑到判关」的证据；或在拖动中截图比对面板顶部 y。
+- e2e 不要用「弹层消失」当作「拖拽生效」的断言（遮罩点按同样会消失）。改用 `[drag]` 这条 dev-only 日志作为「拖拽路径真的跑到判关」的证据；或在拖动中截图比对面板顶部 y。**（2026-09-29 更正**：此处的 `[drag] release basis=… vy=…` 当时确实存在，但已在 5efdf56 连同真机诊断日志一起删除——本条早就写「已存在」是过期陈述。**#430 起 `[drag]` 换了语义重新存在**：记的是跟手帧距统计，见 `2026-09-29-mobile-drag-jank-protocol.md`。）
 - swipe 起点改为「面板顶部 + 20dp」并且**先断言该点确实落在把手热区内**（可临时在 `onStartShouldSetPanResponder` 打点验证）。
 - 真机验证时同时覆盖：面板短（内容少）与面板高（内容多）两种形态——判关基准在 worktree 已从 `winH` 改为 `sheetHeight`，两者行为不同。
 
-**明确不做（越界项）：** 不引 `react-native-gesture-handler` / `reanimated`（ADR-0004 载体条款：core Animated 的 `velocity` + `stopAnimation` 已覆盖需求）；不把整个面板设为可拖（ADR-0007 与 #186 已否决：会点内容误关、与 FlatList 抢滚动）；不改成 `@expo/ui` 的原生 bottom sheet（会改变弹层形态与既有 6 个消费方，且需要新的原生构建面）。
+**明确不做（越界项，2026-09-10 当时的口径）：** 不引 `react-native-gesture-handler` / `reanimated`（ADR-0004 载体条款：core Animated 的 `velocity` + `stopAnimation` 已覆盖需求）；不把整个面板设为可拖（ADR-0007 与 #186 已否决：会点内容误关、与 FlatList 抢滚动）；不改成 `@expo/ui` 的原生 bottom sheet（会改变弹层形态与既有 6 个消费方，且需要新的原生构建面）。
+
+> **2026-09-29 状态更新（#430，仅供参考、非决定）**：上一条的两个理由前提已部分变化——
+> (a) 「不把整个面板设为可拖」出于**手写壳**里整块拖动会跟内容滚动抢响应者；若改走**平台原生 sheet**，
+> 这份协调由系统承担（Material 3 / iOS 系统 sheet 都是整块可拖），两条便不在同一前提下对立，
+> 但**「手写壳 + 整块可拖」仍然是被否的那条**。
+> (b) 「需要新的原生构建面」的成本需重估：`@expo/ui` 57.0.12 已在依赖树里（`expo-router` 的依赖），
+> 不过「已在依赖树」不等于「已进 Android 构建」，仍需一次 release 构建确认。
+> 迁移与否以 #430 的复现结论为准；协议与判据见 `2026-09-29-mobile-drag-jank-protocol.md`。
 
 ---
 

@@ -179,6 +179,7 @@ export default function BottomSheet({
     claimMode: 'start',
     // 10 = 把手热区的认领阈值（PlayerOverlay 全屏面板用 24）：只作 'start' 模式下的 move 兜底
     claimThreshold: 10,
+    probeLabel: 'sheet', // 跟手探针归因用（#430）：弹层壳是一个接入点，覆盖全 App 约十处弹层
     onDismiss: requestClose, // 快甩/过半 → 先播退场、finished 后再通知父级
     // 未判关 / 系统抢走手势 → 弹簧回弹到 0，release 继承松手速度，terminate 走零速兜底
     onSnapBack: (vy) => {

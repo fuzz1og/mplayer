@@ -25,7 +25,7 @@ import {
   Image,
   Animated,
 } from 'react-native';
-import type { FlatListProps, ListRenderItem } from 'react-native';
+import type { FlatListProps, ListRenderItem, RefreshControlProps } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Music2, Play, ArrowLeft } from 'lucide-react-native';
@@ -34,6 +34,7 @@ import { StatusBar } from 'expo-status-bar';
 import { radius, spacing, typography } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import { logCoverError } from '../services/coverDiagnostics';
 import { COVER_FOG_H } from './collapsingChrome';
 import { useCollapsingChrome } from '../hooks/useCollapsingChrome';
 import ScalePress from './ScalePress';
@@ -56,6 +57,12 @@ interface CollapsingHeroProps<T> {
   onCoverError?: () => void;
   /** 无封面/加载失败占位图标（默认音符） */
   fallbackIcon?: React.ReactNode;
+  /**
+   * 整块兜底封面（#465）：`cover` 为空或加载失败时**铺满封面区**渲染它，优先于 `fallbackIcon`。
+   * 用于「该源根本没有封面」（如 Q 音榜单：榜单索引接口匿名恒拒）——给一张生成封面，
+   * 而不是一个居中的音符图标。
+   */
+  coverFallback?: React.ReactNode;
   /** 折叠后的导航标题 */
   navTitle: string;
   /** 悬浮导航栏右侧动作插槽（铅笔等页面动作；headerShown:false 后 Stack headerRight 不渲染） */
@@ -93,6 +100,8 @@ interface CollapsingHeroProps<T> {
   listHeader?: React.ReactElement | null;
   onEndReached?: () => void;
   onEndReachedThreshold?: number;
+  /** 下拉刷新（透传给内部 FlatList）。Hero 页此前没有这个槽，榜单页换过来会丢掉刷新 */
+  refreshControl?: React.ReactElement<RefreshControlProps>;
   ListFooterComponent?: React.ReactElement | null;
   /** 空列表兜底（列表为空且无封面时仍显示信息区） */
   ListEmptyComponent?: React.ReactElement | null;
@@ -102,6 +111,7 @@ export default function CollapsingHero<T>({
   cover,
   onCoverError,
   fallbackIcon,
+  coverFallback,
   navTitle,
   navRight,
   title,
@@ -119,6 +129,7 @@ export default function CollapsingHero<T>({
   listHeader,
   onEndReached,
   onEndReachedThreshold,
+  refreshControl,
   ListFooterComponent,
   ListEmptyComponent,
 }: CollapsingHeroProps<T>) {
@@ -131,6 +142,7 @@ export default function CollapsingHero<T>({
   useEffect(() => setCoverFailed(false), [cover]);
 
   const handleCoverError = () => {
+    logCoverError('hero', cover);
     setCoverFailed(true);
     onCoverError?.();
   };
@@ -180,6 +192,7 @@ export default function CollapsingHero<T>({
         scrollEventThrottle={16}
         onEndReached={onEndReached}
         onEndReachedThreshold={onEndReachedThreshold}
+        refreshControl={refreshControl}
         ListFooterComponent={ListFooterComponent ?? undefined}
         ListEmptyComponent={ListEmptyComponent ?? undefined}
         contentContainerStyle={{ paddingBottom: 24 }}
@@ -194,6 +207,8 @@ export default function CollapsingHero<T>({
                   resizeMode="cover"
                   onError={handleCoverError}
                 />
+              ) : coverFallback ? (
+                <View style={styles.coverImg}>{coverFallback}</View>
               ) : (
                 <View style={styles.coverFallback}>
                   {fallbackIcon ?? <Music2 size={72} color={colors.textInverse} />}

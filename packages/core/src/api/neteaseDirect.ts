@@ -1,5 +1,5 @@
 import type { Album, AlbumDetail, Artist, DiscoverPlaylist, Song } from '../types/index.js';
-import type { ArtistAlbumsPage, ContentCache, DirectSourceClient, ToplistGroup } from '../shared/sourceRouter.js';
+import type { ArtistAlbumsPage, ContentCache, DirectSourceClient, ToplistDetail, ToplistGroup } from '../shared/sourceRouter.js';
 import type { UrlInfo } from '../shared/playability.js';
 import { normalizePublishTime } from '../utils/publishTime.js';
 import { request, bodyToText, type TransportCallOptions } from './transport.js';
@@ -947,6 +947,24 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       };
       contentCache.set(cacheKey, playlist, PLAYLIST_TTL_MS);
       return playlist;
+    },
+
+    /**
+     * 榜单元数据（#465）：网易的榜单 id **本身就是歌单 id**（`fetchToplistSongs` 走的就是
+     * `/v6/playlist/detail`），因此直接复用歌单详情能力——零新请求路径、零新解析、零新缓存键。
+     * 只补一项 `updateTime: null`（榜单日更信息不在歌单详情里，且 Hero 不依赖它）。
+     */
+    async getToplistDetail(sourceId: number | string): Promise<ToplistDetail | null> {
+      const playlist = await this.getPlaylistDetail!(Number(sourceId));
+      if (!playlist) return null;
+      return {
+        id: sourceId,
+        name: playlist.name,
+        coverImgUrl: playlist.coverImgUrl,
+        playCount: playlist.playCount,
+        description: playlist.description ?? '',
+        updateTime: null,
+      };
     },
 
     /**
