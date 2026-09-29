@@ -327,7 +327,7 @@ function AlbumsContent() {
             <View style={styles.catErrorBox}>
               <Text style={styles.catErrorText}>加载失败，下拉重试</Text>
             </View>
-          ) : null
+          ) : undefined
         }
       />
     </View>
@@ -462,7 +462,7 @@ function PlaylistContent() {
             <View style={styles.catErrorBox}>
               <Text style={styles.catErrorText}>加载失败，下拉重试</Text>
             </View>
-          ) : null
+          ) : undefined
         }
         ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={playlists.length > 0} />}
       />
@@ -605,7 +605,7 @@ function ArtistContent() {
             <View style={styles.catErrorBox}>
               <Text style={styles.catErrorText}>加载失败，下拉重试</Text>
             </View>
-          ) : null
+          ) : undefined
         }
         ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={artists.length > 0} />}
       />

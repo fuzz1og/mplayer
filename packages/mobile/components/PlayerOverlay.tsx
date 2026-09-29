@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState, memo } from 'react';
+import { useEffect, useMemo, useRef, useState, memo, type ComponentRef, type ComponentType, type ReactNode } from 'react';
 import {
   View, Text, StyleSheet, FlatList, ScrollView,
   Animated, Alert, useWindowDimensions, Easing,
 } from 'react-native';
 import type { NativeSyntheticEvent, NativeScrollEvent, StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import MaskedView from '@react-native-masked-view/masked-view';
+import MaskedViewBase from '@react-native-masked-view/masked-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, Repeat, Shuffle, Heart, CirclePlus, Download, Music, MicVocal, ListMusic, MessageSquareText, Disc3, X, MoreVertical } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
@@ -33,6 +33,17 @@ import { useDragToDismiss } from '../hooks/useDragToDismiss';
 import { tapLight } from '../utils/haptics';
 import ScalePress from './ScalePress';
 import LyricsSkeleton from './LyricsSkeleton';
+
+/**
+ * RN 0.87 收紧 JSX 元素类型后，@react-native-masked-view/masked-view 0.3.x 自带的 class
+ * 组件类型不再被识别为合法 JSX 组件（TS2607 / TS2786）。这里退化成宽松的组件类型绕开，
+ * 待上游修正 typings 后删除本断言。
+ */
+const MaskedView = MaskedViewBase as unknown as ComponentType<{
+  style?: StyleProp<ViewStyle>;
+  maskElement?: ReactNode;
+  children?: ReactNode;
+}>;
 
 /** 唱盘尺寸（#186 #4 + 真机反馈 + 布局优化）：底部操作行合并进控制行后省出空间，
  *  按屏宽 72% / 屏高 36% 缩放（收一档四周留白对称，配合唱盘弹性居中悬浮感；
@@ -153,7 +164,7 @@ export default function PlayerOverlay({ onClose }: Props) {
   // 词/封横向分页（真机反馈 #2）：不再自造 PanResponder 平移（Fabric 下框架 gestureState
   // 被清零/晚到，引发「切不回」「整屏闪」一系列问题），改用核心组件原生分页——
   // horizontal + pagingEnabled 的吸附/速度物理全在原生侧，JS 只做图标状态同步。
-  const pagerRef = useRef<ScrollView>(null);
+  const pagerRef = useRef<ComponentRef<typeof ScrollView>>(null);
   // 分页拖动期间暂停歌词自动滚动（scrollToIndex 动画与跟手渲染抢 JS 线程）
   const isPagingRef = useRef(false);
   /** 图标切页：scrollTo 走原生分页动画；减弱动效直接跳页 */

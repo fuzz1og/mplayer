@@ -180,8 +180,8 @@ export default function CollapsingHero<T>({
         scrollEventThrottle={16}
         onEndReached={onEndReached}
         onEndReachedThreshold={onEndReachedThreshold}
-        ListFooterComponent={ListFooterComponent}
-        ListEmptyComponent={ListEmptyComponent}
+        ListFooterComponent={ListFooterComponent ?? undefined}
+        ListEmptyComponent={ListEmptyComponent ?? undefined}
         contentContainerStyle={{ paddingBottom: 24 }}
         ListHeaderComponent={
           <View>
