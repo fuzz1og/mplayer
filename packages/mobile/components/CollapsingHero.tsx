@@ -34,6 +34,7 @@ import { StatusBar } from 'expo-status-bar';
 import { radius, spacing, typography } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
+import { logCoverError } from '../services/coverDiagnostics';
 import { COVER_FOG_H } from './collapsingChrome';
 import { useCollapsingChrome } from '../hooks/useCollapsingChrome';
 import ScalePress from './ScalePress';
@@ -141,6 +142,7 @@ export default function CollapsingHero<T>({
   useEffect(() => setCoverFailed(false), [cover]);
 
   const handleCoverError = () => {
+    logCoverError('hero', cover);
     setCoverFailed(true);
     onCoverError?.();
   };

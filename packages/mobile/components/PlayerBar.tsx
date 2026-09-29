@@ -3,6 +3,7 @@ import {
   View, Text, Image, Pressable, StyleSheet, Animated, Easing,
 } from 'react-native';
 import { Music, SkipBack, CirclePause, CirclePlay, SkipForward, ListMusic, Loader2 } from 'lucide-react-native';
+import { logCoverError } from '../services/coverDiagnostics';
 import { usePlayerStore } from '../stores/playerStore';
 import { togglePlay, skipNext, skipPrev, fetchLrcInBackground } from '../services/audioPlayer';
 import { opacity, radius, spacing, textVariants } from '../theme/tokens';
@@ -45,6 +46,7 @@ export default function PlayerBar() {
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [currentSong?.cover]);
   const handleCoverError = () => {
+    logCoverError('player-bar', currentSong?.cover);
     setCoverFailed(true);
     if (currentSong) {
       void fetchLrcInBackground(currentSong, true, true);

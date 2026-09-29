@@ -11,6 +11,7 @@ import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, R
 import type { LucideIcon } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
+import { logCoverError } from '../services/coverDiagnostics';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { togglePlay, seekTo, skipNext, skipPrev, fetchLrcInBackground } from '../services/audioPlayer';
@@ -259,6 +260,7 @@ export default function PlayerOverlay({ onClose }: Props) {
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [song?.cover]);
   const handleCoverError = () => {
+    logCoverError('player-overlay', song?.cover);
     setCoverFailed(true);
     if (song) {
       // 封面自身失效：强制搜索换新签名封面（见 fetchLrcInBackground）
