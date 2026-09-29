@@ -65,10 +65,11 @@ updates:
       - dependency-name: "@vitejs/plugin-react"
         versions: [">=5"]
       # typescript 7 目前装不上：typescript-eslint（含最新 8.71.0）peer 上限是 <6.1.0，
-      # npm install 直接 ERESOLVE（Dependabot 自己的 update job 也报 peer 错误）。6.x 仍正常提
+      # npm install 直接 ERESOLVE。6.x 仍可正常提；等上游支持 TS 7 再放开这条
       - dependency-name: typescript
         versions: [">=7"]
-      # @babel/core 8 与 metro 冲突（metro 0.84 依赖 @babel/core ^7.25.2），须与 metro / RN 一并评估
+      # @babel/core 8 与 metro 冲突（metro 0.84 依赖 @babel/core ^7.25.2），
+      # 须与 metro / RN 一并评估，不单独提 PR
       - dependency-name: "@babel/core"
         versions: [">=8"]
     labels:
