@@ -3,7 +3,11 @@ import { isTrialUrlInfo } from './playability.js';
 import type { UrlInfo } from './playability.js';
 import { getPrefetchedUrl } from '../api/prefetchCache.js';
 import type { PlaybackGuard, PlaybackVia } from './playbackGuard.js';
-import { validateDirectUrlNonFull, type DirectValidationResult } from './directValidation.js';
+import {
+  validateDirectUrlNonFull,
+  type DirectValidationOptions,
+  type DirectValidationResult,
+} from './directValidation.js';
 import {
   emitPlaybackTrace,
   isPlaybackTraceEnabled,
@@ -13,7 +17,8 @@ import {
 } from './playbackTrace.js';
 import { clearSourceSchedule } from './sourceSchedule.js';
 import type { TransportCallOptions } from '../api/transport.js';
-import { DIRECT_WALL_MS, TIER3_CHAIN_BUDGET_MS } from './playbackBudgets.js';
+import { DIRECT_VALIDATION_TIMEOUT_MS, DIRECT_WALL_MS, TIER3_CHAIN_BUDGET_MS } from './playbackBudgets.js';
+import { createResolutionBudget, type ResolutionBudget } from './resolutionBudget.js';
 
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
@@ -381,7 +386,7 @@ export function sanitizeSourceModes(
  * 护栏决策在 tier3 执行器内按源逐条应用（不过就换下一个源），路由层只记录
  * 结果等级用于诊断 / 后续 UI 决策，不重复判定。
  *
- * `commit`（#362）：交付回调——路由层在整链预算内真正采纳该候选时调用一次。
+ * `commit`（#362）：交付回调——路由层在 tier3 腿预算内真正采纳该候选时调用一次。
  * resolver 内部不再直接自增「命中」：预算超时被丢弃的迟到命中只有产出、没有交付，
  * 否则设置页会出现「命中数 > 实际交付数」（实测 hits=17 / 实际 0）。
  * 自定义 resolver（测试/宿主）可省略。
@@ -405,10 +410,13 @@ export interface Tier3ScheduleReport {
 /** tier3 解析器的调用方控制面（#398）：健康度采样需要「调用方是否已放弃」，
  *  而 trace sink 可能关闭——两者都不能依赖 collect（决策 6 的「放弃观测」）。 */
 export interface Tier3RunControl {
-  /** 调用方是否已放弃本次解析（整链预算用尽）→ 剩余观测记「放弃」，不进健康度。 */
+  /** 调用方是否已放弃本次解析（tier3 腿预算或解析链总预算用尽）→ 剩余观测记「放弃」，不进健康度。 */
   isAbandoned(): boolean;
   /** 上报本次源调度快照（仅 trace sink 打开时注入）。 */
   reportSchedule?(report: Tier3ScheduleReport): void;
+  /** 解析链总预算耗尽信号（#424）：resolver 据此 **abort 在飞源请求并停止遍历后续源**，
+   *  「放弃等待」由此变成「真的停掉」（与 #408 给单源墙建的链路同构）。缺省 = 不生效。 */
+  signal?: AbortSignal;
 }
 
 /** tier3 解析器插槽：输入 song，返回解析到的可播 URL + 护栏等级；未命中返回 null。
@@ -457,17 +465,32 @@ const DIRECT_TIMED_OUT = Symbol('direct-timed-out');
 
 /** 直连腿计时 + 墙钟包装：到点即视为该腿失败（进 tier3 兜底），底层请求自然结束、
  *  结果丢弃——与 tier3 单源超时同一语义（`withSourceDeadline`）。ctx 为 null 时
- *  仍施加墙（护栏不能因关闭 trace 而消失），只是不做计时。 */
+ *  仍施加墙（护栏不能因关闭 trace 而消失），只是不做计时。
+ *
+ *  #424：本腿墙 = `min(DIRECT_WALL_MS, 解析链总预算的剩余额度)`，且总预算耗尽时一并 abort。
+ *  预算已尽则**不发起调用**——「没打过上游就超时」比「打一发再放弃」诚实（也不会白耗上游配额）。 */
 async function timedDirectCall<T>(
   ctx: TraceCtx | null,
   client: DirectSourceClient,
   method: string,
   call: (opts: TransportCallOptions) => Promise<T>,
+  budget: ResolutionBudget,
 ): Promise<T | typeof DIRECT_TIMED_OUT> {
   const t0 = ctx ? traceNow() : 0;
+  const wallMs = budget.clamp(DIRECT_WALL_MS);
+  if (wallMs <= 0) {
+    if (ctx) {
+      ctx.directMs = traceNow() - t0;
+      ctx.directMethod = method;
+      ctx.directSource = client.key;
+      ctx.directTimedOut = true;
+    }
+    return DIRECT_TIMED_OUT;
+  }
   // #408：墙的持有者持有 AbortController，到点 abort——底层请求（含 transport 重试）
-  // 立刻停掉，不再「放弃等待但继续压上游」。
+  // 立刻停掉，不再「放弃等待但继续压上游」。#424：解析链总预算耗尽同样走这条 abort。
   const controller = new AbortController();
+  const offExpire = budget.onExpire(() => controller.abort());
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -476,11 +499,12 @@ async function timedDirectCall<T>(
         timer = setTimeout(() => {
           controller.abort();
           resolve(DIRECT_TIMED_OUT);
-        }, DIRECT_WALL_MS);
+        }, wallMs);
       }),
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+    offExpire();
     if (ctx) {
       ctx.directMs = traceNow() - t0;
       ctx.directMethod = method;
@@ -504,8 +528,9 @@ async function directCall<T>(
   client: DirectSourceClient,
   method: string,
   call: (opts: TransportCallOptions) => Promise<T>,
+  budget: ResolutionBudget,
 ): Promise<T> {
-  const outcome = await timedDirectCall(ctx, client, method, call);
+  const outcome = await timedDirectCall(ctx, client, method, call, budget);
   if (outcome === DIRECT_TIMED_OUT) {
     if (ctx) ctx.directTimedOut = true;
     throw new DirectWallTimeoutError(method);
@@ -584,7 +609,7 @@ interface Tier3InflightRun {
   started: Promise<void>;
   /** 底层解析结果（同键调用方共享）。 */
   result: Promise<Tier3Resolution | null>;
-  /** 标记「调用方已放弃本次解析」（整链预算用尽）→ 剩余源观测记「放弃」，不进健康度
+  /** 标记「调用方已放弃本次解析」（tier3 腿预算或解析链总预算用尽）→ 剩余源观测记「放弃」，不进健康度
    *  （#398 / ADR 决策 6）。同键共享一条解析时该标记是**运行级**的：任一调用方放弃即置位。 */
   markAbandoned(): void;
 }
@@ -662,7 +687,12 @@ function tier3InflightKey(song: Song): string {
 
 /** 共享的 tier3 解析：已有同键 in-flight 直接复用；否则取 K=3 槽位、调用 resolver 并登记。
  *  `started` 让调用方的预算从**槽位到手**起计——排队时间不算预算（ADR 决策 8）。 */
-function tier3ResolveShared(song: Song, reason: string, ctx?: TraceCtx | null): Tier3InflightRun {
+function tier3ResolveShared(
+  song: Song,
+  reason: string,
+  ctx?: TraceCtx | null,
+  signal?: AbortSignal,
+): Tier3InflightRun {
   const key = tier3InflightKey(song);
   const existing = tier3Inflight.get(key);
   if (existing) {
@@ -675,6 +705,9 @@ function tier3ResolveShared(song: Song, reason: string, ctx?: TraceCtx | null): 
   const collect = ctx ? (leg: PlaybackTraceSourceLeg) => { ctx.legs.push(leg); } : undefined;
   let abandoned = false;
   const control: Tier3RunControl = {
+    // #424：解析链总预算耗尽信号——resolver 据此 abort 在飞源并停止遍历（首个调用方的
+    // 预算持有该 signal；同歌共享一条解析时该 signal 是**运行级**的，与 markAbandoned 同取向）。
+    ...(signal ? { signal } : {}),
     isAbandoned: () => abandoned,
     // 调度快照只在 trace sink 打开时上报（热路径零构造的既有取向）。
     reportSchedule: ctx
@@ -707,7 +740,17 @@ function tier3ResolveShared(song: Song, reason: string, ctx?: TraceCtx | null): 
 /** 直连失败后的 tier3 尝试（默认关闭，未注入直接跳过）。reason 用于日志区分触发原因。
  *  带总预算：慢源（mgmp3 20s 超时）不阻塞播放——预算内未命中按未命中处理。
  *  同歌并发调用共享同一条底层解析（见 tier3ResolveShared），预算仍按各调用方独立计时。 */
-async function tryTier3(song: Song, reason: string, ctx?: TraceCtx | null): Promise<Tier3Resolution | null> {
+async function tryTier3(
+  song: Song,
+  reason: string,
+  ctx: TraceCtx | null,
+  budget: ResolutionBudget,
+): Promise<Tier3Resolution | null> {
+  // #424：解析链总预算已尽 → 不发起新腿（连上游都不打，日志可见）。
+  if (budget.exhausted()) {
+    console.info(`[tier3] ${reason}，但解析链总预算已用尽，不进入第三方解析: 《${song.name}》${song.artist}`);
+    return null;
+  }
   if (ctx) {
     ctx.tier3Engaged = true;
     ctx.reason = reason;
@@ -719,22 +762,33 @@ async function tryTier3(song: Song, reason: string, ctx?: TraceCtx | null): Prom
   const t0 = ctx ? traceNow() : 0;
   /** tier3 腿**活跃**耗时起点（槽位到手）；排队等待不计入——与 6s 预算同口径。 */
   let activeT0 = 0;
+  /** #424：解析链总预算耗尽 = abort 在飞源 + 记「放弃观测」（与腿预算耗尽同一语义）。 */
+  const abortController = new AbortController();
+  let offExpire: (() => void) | undefined;
   try {
     // 预算哨兵：区分「预算超时」与「resolver 正常返回 null（全源未命中）」——
     // 二者都让 race 得到 null，但只有前者算 timedOut（迟到命中才该记 discarded）。
     const BUDGET_EXHAUSTED = Symbol('tier3-budget-exhausted');
-    const run = tier3ResolveShared(song, reason, ctx);
-    // ADR 2026-09-25 决策 8：K=3 排队期间**不计入** 6s 预算——否则被排在后面的
-    // 调用方会在没打过任何上游的情况下先超时（切歌场景 P50 反而退化）。
+    const run = tier3ResolveShared(song, reason, ctx, abortController.signal);
+    offExpire = budget.onExpire(() => {
+      abortController.abort();
+      run.markAbandoned();
+    });
+    // ADR 2026-09-25 决策 8：K=3 排队期间**不计入 tier3 腿预算**——腿预算从**槽位到手**起计，
+    // 否则被排在后面的调用方会在没打过任何上游的情况下先超时（切歌场景 P50 反而退化）。
+    // #424：但**解析链总预算是墙钟、照走排队时间**——否则三个槽位被占满时整链会无界等待，
+    // 「链总在 T 毫秒内结算」就不成立了。两条口径各管一层。
+    // 腿预算再取 `min(6s, 解析链总预算的剩余)`，于是「试听换完整版」的第二条 tier3 腿只吃剩余额度。
     const budgetExhausted = (async (): Promise<typeof BUDGET_EXHAUSTED> => {
       await run.started;
       if (ctx) activeT0 = traceNow();
+      const legBudgetMs = budget.clamp(TIER3_CHAIN_BUDGET_MS);
       return new Promise<typeof BUDGET_EXHAUSTED>((resolve) =>
         setTimeout(() => {
           // 预算用尽即「放弃观测」：resolver 里仍在跑的源按 abandoned 记账（#398 决策 6）。
           run.markAbandoned();
           resolve(BUDGET_EXHAUSTED);
-        }, TIER3_CHAIN_BUDGET_MS),
+        }, legBudgetMs),
       );
     })();
     const winner = await Promise.race([run.result, budgetExhausted]);
@@ -756,14 +810,21 @@ async function tryTier3(song: Song, reason: string, ctx?: TraceCtx | null): Prom
     }
     console.warn(`[tier3] resolver 抛错: ${(e as Error)?.message || e}`);
     return null;
+  } finally {
+    offExpire?.();
   }
 }
 
 /** 试听版也先试 tier3 拿完整版（用户决策：试听无意义，兜底可能拿完整）：
  *  命中返回完整版可播对象（nonFull=false）；未命中/未配置返回 null，
  *  调用方退回直连试听并标 nonFull。tier3 未配置时 tryTier3 零成本返回。 */
-async function tryTier3Full(song: Song, reason: string, ctx?: TraceCtx | null): Promise<RoutedPlayable | null> {
-  const resolution = await tryTier3(song, reason, ctx);
+async function tryTier3Full(
+  song: Song,
+  reason: string,
+  ctx: TraceCtx | null,
+  budget: ResolutionBudget,
+): Promise<RoutedPlayable | null> {
+  const resolution = await tryTier3(song, reason, ctx, budget);
   return resolution ? tier3Playable(resolution) : null;
 }
 
@@ -778,10 +839,15 @@ interface PreferredDirectUrl {
   resolution: Tier3Resolution | null;
 }
 
-async function preferTier3WhenBad(song: Song, directUrl: string, ctx?: TraceCtx | null): Promise<PreferredDirectUrl> {
+async function preferTier3WhenBad(
+  song: Song,
+  directUrl: string,
+  ctx: TraceCtx | null,
+  budget: ResolutionBudget,
+): Promise<PreferredDirectUrl> {
   if (song.audioTag !== 'invalid') return { url: directUrl, resolution: null };
   const reason = '直连 URL 已被探测标记为无效（audioTag=invalid）';
-  const resolution = await tryTier3(song, reason, ctx);
+  const resolution = await tryTier3(song, reason, ctx, budget);
   return resolution ? { url: resolution.url, resolution } : { url: directUrl, resolution: null };
 }
 
@@ -834,32 +900,54 @@ export async function searchSongsRouted(
   }
 }
 
+/** 解析链入口的可选参数（#424）：测试与特殊宿主可覆盖解析链总预算，缺省
+ *  `RESOLUTION_CHAIN_BUDGET_MS`。预算**由参数传递、不是模块级全局态**——并发解析
+ *  多首歌时各自计时，互不干扰。 */
+export interface ResolutionOptions {
+  budgetMs?: number;
+}
+
 /**
  * 模式感知播放 URL 解析（请求层回退链的 URL 腿）。
  * 直连返回空串（无版权/VIP）= 原样上抛，由换元层处理；直连失败且 tier3 未命中 = 上抛。
  */
-export async function resolvePlayableUrlRouted(song: Song): Promise<string> {
+export async function resolvePlayableUrlRouted(song: Song, options?: ResolutionOptions): Promise<string> {
+  const budget = createResolutionBudget(options?.budgetMs);
+  try {
+    // #424：解析链总预算兜底——各腿已按 `min(本腿墙, 剩余)` 夹过，这里保证
+    // 「无论哪条腿、无论 resolver 怎么实现，链都在预算内 reject」。
+    return await Promise.race([resolvePlayableUrlInner(song, budget), budget.whenExhausted()]);
+  } finally {
+    budget.dispose();
+  }
+}
+
+async function resolvePlayableUrlInner(song: Song, budget: ResolutionBudget): Promise<string> {
   const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl);
   if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
   try {
     // 与 resolveRoutedInner 同一条腿：同样过 #389 的 3s 墙（本函数经 IPC 暴露，
     // 是另一个「直连解析腿」入口，保证 wall 口径一致）。
-    const url = await directCall(null, route.client, 'resolvePlayableUrl', (opts) =>
-      route.client.resolvePlayableUrl!(song, opts),
+    const url = await directCall(
+      null,
+      route.client,
+      'resolvePlayableUrl',
+      (opts) => route.client.resolvePlayableUrl!(song, opts),
+      budget,
     );
     if (url) {
       // 搜索结果已被探测标记为无效时，即使直连返回了 URL 也先试 tier3；
       // 没有配置 tier3 则保持原直连结果，由上层继续按现状报错/换元。
-      return (await preferTier3WhenBad(song, url)).url;
+      return (await preferTier3WhenBad(song, url, null, budget)).url;
     }
     // 直连返回空串（无版权/VIP）也进 tier3 兜底（默认关）；失败保持空串交换元层。
-    const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）');
+    const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）', null, budget);
     if (tier3) return tier3.url;
     return url;
   } catch (err) {
     if (route.mode === 'direct') throw err;
     // tier3 插槽：直连失败后的兜底（默认关；#144 落地后启用）；未命中 = 上抛（D2）。
-    const tier3 = await tryTier3(song, '直连解析失败');
+    const tier3 = await tryTier3(song, '直连解析失败', null, budget);
     if (tier3) return tier3.url;
     throw err;
   }
@@ -904,7 +992,7 @@ function emitResolveTrace(
       : result!.via === 'tier3'
         ? 'tier3'
         : 'direct';
-  // 迟到命中被整链预算丢弃 → leg 记 discarded，与 tier3Stats.discarded 同口径。
+  // 迟到命中被 tier3 腿预算丢弃 → leg 记 discarded，与 tier3Stats.discarded 同口径。
   const sources = ctx.tier3TimedOut
     ? ctx.legs.map((leg) => (leg.outcome === 'hit' ? { ...leg, outcome: 'discarded' as const } : leg))
     : ctx.legs;
@@ -942,18 +1030,22 @@ function emitResolveTrace(
   });
 }
 
-export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlayable> {
-  // sink 为空：直接走原路径，零构造零计时（#363 开销约束）。
-  if (!isPlaybackTraceEnabled()) return resolveRoutedInner(song, null);
-  const ctx = newTraceCtx();
-  const t0 = traceNow();
+export async function resolvePlayableSongRouted(song: Song, options?: ResolutionOptions): Promise<RoutedPlayable> {
+  // sink 为空：不构造 trace ctx、不做计时（#363 开销约束）。
+  const ctx = isPlaybackTraceEnabled() ? newTraceCtx() : null;
+  const t0 = ctx ? traceNow() : 0;
+  const budget = createResolutionBudget(options?.budgetMs);
   try {
-    const result = await resolveRoutedInner(song, ctx);
-    emitResolveTrace(song, ctx, t0, result, null);
+    // #424：解析链总预算兜底（见 resolvePlayableUrlRouted）。各腿已按剩余预算夹过；
+    // 这里保证「链一定在预算内结算」，不再出现 3 + 6 + 6 = 15s 的无声等待。
+    const result = await Promise.race([resolveRoutedInner(song, ctx, budget), budget.whenExhausted()]);
+    if (ctx) emitResolveTrace(song, ctx, t0, result, null);
     return result;
   } catch (err) {
-    emitResolveTrace(song, ctx, t0, null, err);
+    if (ctx) emitResolveTrace(song, ctx, t0, null, err);
     throw err;
+  } finally {
+    budget.dispose();
   }
 }
 
@@ -961,9 +1053,15 @@ export async function resolvePlayableSongRouted(song: Song): Promise<RoutedPlaya
  * 直连腿取证插槽（#392）：默认走 core 的 `validateDirectUrlNonFull`（真发一次 Range）。
  * 宿主/测试可注入替换——测试注入 stub 以保持**零 I/O**（与 `setTier3Resolver` 同构的接缝）。
  */
-export type DirectValidator = (song: Song, url: string) => Promise<DirectValidationResult>;
+export type DirectValidator = (
+  song: Song,
+  url: string,
+  /** #424：解析链总预算给的时限与中止信号；不传 = 用默认取证墙。 */
+  opts?: DirectValidationOptions,
+) => Promise<DirectValidationResult>;
 
-let directValidator: DirectValidator | null = (song, url) => validateDirectUrlNonFull(song, url);
+let directValidator: DirectValidator | null = (song, url, opts) =>
+  validateDirectUrlNonFull(song, url, { timeoutMs: opts?.timeoutMs, signal: opts?.signal });
 
 /** 注入/清除直连腿取证器；null = 关闭取证（不判定，等价 fail-open）。 */
 export function setDirectValidator(fn: DirectValidator | null): void {
@@ -983,11 +1081,25 @@ async function validateDirectLeg(
   url: string,
   client: DirectSourceClient,
   ctx: TraceCtx | null,
+  budget: ResolutionBudget,
 ): Promise<{ nonFull: boolean }> {
   if (!directValidator) return { nonFull: false };
   if (client.resolveUrlInfo) return { nonFull: false };
   if (!(typeof song.duration === 'number' && song.duration > 0)) return { nonFull: false };
-  const result = await directValidator(song, url);
+  // #424：取证是直连腿的一部分，同样取 min(本腿墙, 总预算剩余)；总预算已尽则跳过（fail-open）。
+  const timeoutMs = budget.clamp(DIRECT_VALIDATION_TIMEOUT_MS);
+  if (timeoutMs <= 0) {
+    console.info(`[player] 《${song.name}》解析链总预算已用尽，跳过直连腿时长取证（fail-open）`);
+    return { nonFull: false };
+  }
+  const controller = new AbortController();
+  const offExpire = budget.onExpire(() => controller.abort());
+  let result: DirectValidationResult;
+  try {
+    result = await directValidator(song, url, { timeoutMs, signal: controller.signal });
+  } finally {
+    offExpire();
+  }
   if (ctx) ctx.validateMs = result.validateMs;
   if (result.nonFull) console.info(`[player] 《${song.name}》直连腿取证为试听片段: ${result.reason ?? ''}`);
   return { nonFull: result.nonFull };
@@ -1000,7 +1112,11 @@ async function validateDirectLeg(
  * 空 URL（无版权/VIP）原样上抛（nonFull=false），由换元层处理；
  * 直连失败且 tier3 未命中 = 上抛（D2 语义）。
  */
-async function resolveRoutedInner(song: Song, ctx: TraceCtx | null): Promise<RoutedPlayable> {
+async function resolveRoutedInner(
+  song: Song,
+  ctx: TraceCtx | null,
+  budget: ResolutionBudget,
+): Promise<RoutedPlayable> {
   // 预取缓存命中（探测阶段已解析并验证过的直链，30min TTL）→ 0 等待直接播，
   // 绝不等待预取队列；未命中才实时走完整解析链。
   // 命中且 nonFull（试听版）→ 也走 tier3 兜底尝试拿完整版（用户决策：试听无意义，
@@ -1015,7 +1131,7 @@ async function resolveRoutedInner(song: Song, ctx: TraceCtx | null): Promise<Rou
     if (prefetched.nonFull) {
       // #361：预取只存直连结果，但「试听版换完整版」这一跳进 tier3，
       // 同样要过护栏（命中即 0 等待 ≠ 可以绕过验证）。
-      const full = await tryTier3Full(song, `预取缓存命中但为试听版（nonFull），尝试 tier3 拿完整版`, ctx);
+      const full = await tryTier3Full(song, `预取缓存命中但为试听版（nonFull），尝试 tier3 拿完整版`, ctx, budget);
       if (full) return full;
     }
     return directPlayable(prefetched.url, prefetched.nonFull);
@@ -1027,55 +1143,55 @@ async function resolveRoutedInner(song: Song, ctx: TraceCtx | null): Promise<Rou
   try {
     const client = route.client;
     if (client.resolveUrlInfo) {
-      const info = await directCall(ctx, client, 'resolveUrlInfo', (opts) => client.resolveUrlInfo!(song, opts));
+      const info = await directCall(ctx, client, 'resolveUrlInfo', (opts) => client.resolveUrlInfo!(song, opts), budget);
       if (info) {
         if (info.url) {
           // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL；
           // tier3 未命中则保留直连结果并按其权威字段判定试听版。
-          const picked = await preferTier3WhenBad(song, info.url, ctx);
+          const picked = await preferTier3WhenBad(song, info.url, ctx, budget);
           if (picked.resolution) return tier3Playable(picked.resolution);
           const trial = isTrialUrlInfo(info, song.duration) || song.audioTag === 'preview';
           // 试听版也走 tier3 兜底尝试拿完整版（用户决策：试听无意义，兜底可能
           // 拿到完整版；tier3 未命中才退回直连试听）——tier3 拿到则 nonFull=false。
           if (trial) {
-            const full = await tryTier3Full(song, `直连为试听版（nonFull），尝试 tier3 拿完整版`, ctx);
+            const full = await tryTier3Full(song, `直连为试听版（nonFull），尝试 tier3 拿完整版`, ctx, budget);
             if (full) return full;
           }
           if (ctx && !ctx.reason) ctx.reason = '直连解析成功';
           return directPlayable(picked.url, trial);
         }
         // UrlInfo 存在但 url 为空（无版权/VIP）→ tier3 兜底（默认关）。
-        const tier3 = await tryTier3(song, '直连 UrlInfo 无 url（无版权/VIP）', ctx);
+        const tier3 = await tryTier3(song, '直连 UrlInfo 无 url（无版权/VIP）', ctx, budget);
         if (tier3) return tier3Playable(tier3);
         if (ctx && !ctx.tier3Engaged) ctx.reason = '直连 UrlInfo 无 url（无版权/VIP）';
         return directPlayable('', false);
       }
     }
-    const url = await directCall(ctx, client, 'resolvePlayableUrl', (opts) => client.resolvePlayableUrl!(song, opts));
+    const url = await directCall(ctx, client, 'resolvePlayableUrl', (opts) => client.resolvePlayableUrl!(song, opts), budget);
     if (url) {
       // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL。
-      const picked = await preferTier3WhenBad(song, url, ctx);
+      const picked = await preferTier3WhenBad(song, url, ctx, budget);
       if (picked.resolution) return tier3Playable(picked.resolution);
       // 搜索结果已被探测标为试听版（audioTag=preview，如酷我 VIP 歌的 M500 试听）：
       // 试听也走 tier3 兜底尝试拿完整版（tier3 未命中才退回直连试听）。
       if (song.audioTag === 'preview') {
-        const full = await tryTier3Full(song, `直连为试听版（audioTag=preview），尝试 tier3 拿完整版`, ctx);
+        const full = await tryTier3Full(song, `直连为试听版（audioTag=preview），尝试 tier3 拿完整版`, ctx, budget);
         if (full) return full;
       }
       // #392：无权威时长的直连腿（resolveUrlInfo 只有 netease/soda 实现）播放时取证一次。
-      const validated = await validateDirectLeg(song, picked.url, client, ctx);
+      const validated = await validateDirectLeg(song, picked.url, client, ctx, budget);
       if (ctx && !ctx.reason) ctx.reason = '直连解析成功';
       return directPlayable(picked.url, song.audioTag === 'preview' || validated.nonFull);
     }
     // 直连返回空串（无版权/VIP）→ tier3 兜底（默认关）；失败保持空串交换元层。
-    const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）', ctx);
+    const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）', ctx, budget);
     if (tier3) return tier3Playable(tier3);
     if (ctx && !ctx.tier3Engaged) ctx.reason = '直连返回空串（无版权/VIP）';
     return directPlayable('', false);
   } catch (err) {
     if (route.mode === 'direct') throw err;
     // tier3 插槽：直连失败后的兜底（默认关；#144 落地后启用）；未命中 = 上抛（D2）。
-    const tier3 = await tryTier3(song, '直连解析失败', ctx);
+    const tier3 = await tryTier3(song, '直连解析失败', ctx, budget);
     if (tier3) return tier3Playable(tier3);
     if (ctx && !ctx.tier3Engaged) ctx.reason = '直连解析失败';
     throw err;

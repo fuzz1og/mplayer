@@ -140,7 +140,7 @@ export interface Tier3State {
 }
 
 /** 每源累计解析统计（设置页展示；内存计数，本次会话有效、不持久化）。
- *  - hits：**真正交付**给调用方的命中数——只有路由层在整链预算内采纳该候选才计
+ *  - hits：**真正交付**给调用方的命中数——只有路由层在 tier3 腿预算内采纳该候选才计
  *    （#362：原先在 resolver 内部自增，预算超时被丢弃的迟到命中也被记成「命中」，
  *    实测一个源 hits=17 而同一批歌 21/21 全部超时失败，设置页与体验相反）；
  *  - resolved：resolver 产出的、过护栏的候选数（含迟到被丢弃的）；
@@ -187,8 +187,8 @@ export interface Tier3Deps {
   request?: (req: TransportRequest) => Promise<import('../api/transport.js').TransportResponse>;
 }
 
-// 单源墙 / 整链预算 / 嗅探超时集中在 shared/playbackBudgets.ts（#399）。
-// 这里原先的 DEFAULT_TIMEOUT_MS = 15_000 远超整链 6s 预算，使预算失去约束力——
+// 单源墙 / tier3 腿预算 / 嗅探超时集中在 shared/playbackBudgets.ts（#399）。
+// 这里原先的 DEFAULT_TIMEOUT_MS = 15_000 远超 tier3 腿 6s 预算，使预算失去约束力——
 // 单源挂起即可吃光全链预算、饿死后续好源；且 transport 的 maxRetries=3 会对超时类
 // 错误重试，实际耗时再被放大。现在它只剩「kind 未知时的兜底」这一个身份。
 
@@ -215,7 +215,7 @@ function defaultSourceTimeout(kind: Tier3SourceKind): number {
 /** 单源墙钟哨兵：与「源未命中返回 null」区分开，日志/统计口径不同。 */
 const SOURCE_TIMED_OUT = Symbol('tier3-source-timed-out');
 
-/** 单源有效超时 = `min(清单 timeoutMs ?? 该 kind 默认值, 该 kind 硬墙, 整链剩余预算)`。 */
+/** 单源有效超时 = `min(清单 timeoutMs ?? 该 kind 默认值, 该 kind 硬墙, tier3 腿剩余预算)`。 */
 function effectiveSourceTimeout(source: Tier3Source, remainingBudgetMs: number): number {
   const configured = source.timeoutMs ?? defaultSourceTimeout(source.kind);
   const wall = MAX_SOURCE_TIMEOUT_MS_BY_KIND[source.kind] ?? TIER3_SOURCE_WALL_FALLBACK_MS;
@@ -229,8 +229,8 @@ function effectiveSourceTimeout(source: Tier3Source, remainingBudgetMs: number):
  *  「2.5s 的墙里含着 1s 嗅探」，搜索 + 解析只剩 1.5s（#388 实测 2047ms 的**成功路径**
  *  贴墙被切）。这里把墙做成可暂停：嗅探期间停表，恢复时按剩余额度续走。
  *
- *  **整链预算不受影响**：嗅探仍落在 sourceRouter 的 TIER3_CHAIN_BUDGET_MS race 之内，
- *  所以「单源上界 = 墙 + 1s」不会膨胀成「整链上界 = 6s + N×1s」。 */
+ *  **tier3 腿预算不受影响**：嗅探仍落在 sourceRouter 的 TIER3_CHAIN_BUDGET_MS race 之内，
+ *  所以「单源上界 = 墙 + 1s」不会膨胀成「腿的上界 = 6s + N×1s」。 */
 interface SourceClock {
   /** 进入不计入墙的阶段（嗅探）。 */
   pause(): void;
@@ -279,6 +279,7 @@ function createSourceClock(timeoutMs: number, onExpire: () => void) {
 async function withSourceDeadline<T>(
   run: (signal: TransportSignal, clock: SourceClock) => Promise<T>,
   timeoutMs: number,
+  outerSignal?: TransportSignal,
 ): Promise<T | typeof SOURCE_TIMED_OUT> {
   const controller = new AbortController();
   let expire!: () => void;
@@ -288,19 +289,25 @@ async function withSourceDeadline<T>(
       resolve(SOURCE_TIMED_OUT);
     };
   });
+  // #424：解析链总预算耗尽（`control.signal`）与单源墙到点走同一条路——abort 在飞请求、
+  // 本源立即结算，不再「调用方已经放弃，上游还在压配额」。
+  const onOuterAbort = (): void => expire();
+  if (outerSignal?.aborted) expire();
+  else outerSignal?.addEventListener?.('abort', onOuterAbort);
   const clock = createSourceClock(timeoutMs, expire);
   clock.start();
   try {
     return await Promise.race([run(controller.signal, clock), expired]);
   } finally {
     clock.stop();
+    outerSignal?.removeEventListener?.('abort', onOuterAbort);
   }
 }
 
 // 嗅探超时 = TIER3_SNIFF_TIMEOUT_MS（独立常量、不继承源 timeoutMs、不占单源墙）
 // 见 shared/playbackBudgets.ts。
 
-// 搜索兜底腿整链预算 = TIER3_SEARCH_BUDGET_MS（见 shared/playbackBudgets.ts）。
+// 搜索兜底腿预算 = TIER3_SEARCH_BUDGET_MS（见 shared/playbackBudgets.ts）。
 // 此前该腿**完全没有预算**（直接串行 await），实测 5 源各 2s = 10s 无上限。
 
 /** 试听片段大小阈值：<1MB 视为片段（30s 128kbps ≈ 480KB）。
@@ -1513,6 +1520,8 @@ async function runSourceAttempt(
     const outcome = await withSourceDeadline(
       (signal, clock) => resolveTier3Candidate(song, source, timeoutMs, signal, clock),
       timeoutMs,
+      // #424：解析链总预算耗尽时中止本次源尝试（缺省 = 只有单源墙）。
+      control?.signal,
     );
     const ms = traceNow() - t0;
     if (outcome === SOURCE_TIMED_OUT) {
@@ -1586,10 +1595,16 @@ async function runSerialSources(
 ): Promise<Tier3LoopResult> {
   for (let i = 0; i < ordered.length; i += 1) {
     const source = ordered[i];
-    // 单源硬墙：清单 timeoutMs 只能收紧，且不超过整链剩余预算（ADR-0014 决策 2）。
+    // #424：调用方的解析链总预算已耗尽 → 不再起新源，剩余按「放弃观测」记账。
+    if (control?.signal?.aborted) {
+      console.info(`[tier3] 解析链总预算已用尽（abort），停止尝试后续源: 《${song.name}》`);
+      markSourcesAbandoned(ordered.slice(i), collect);
+      return { kind: 'exhausted' };
+    }
+    // 单源硬墙：清单 timeoutMs 只能收紧，且不超过 tier3 腿剩余预算（ADR-0014 决策 2）。
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
-      console.info(`[tier3] 整链预算 ${TIER3_CHAIN_BUDGET_MS}ms 用尽，停止尝试后续源: 《${song.name}》`);
+      console.info(`[tier3] tier3 腿预算 ${TIER3_CHAIN_BUDGET_MS}ms 用尽，停止尝试后续源: 《${song.name}》`);
       markSourcesAbandoned(ordered.slice(i), collect);
       return { kind: 'exhausted' };
     }
@@ -1670,6 +1685,8 @@ async function runInitWindow(
 
   const startNext = (): boolean => {
     if (finished || entries.size >= SCHEDULE_INIT_INFLIGHT || cursor >= ordered.length) return false;
+    // #424：调用方解析链总预算耗尽 → 不再起新源（在飞的那条由 withSourceDeadline 的 abort 收尾）。
+    if (control?.signal?.aborted) return false;
     const remaining = deadline - Date.now();
     if (remaining <= 0) return false;
     const source = ordered[cursor];

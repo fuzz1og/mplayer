@@ -775,7 +775,7 @@ describe('会话内源调度接缝（#398：control / 调度快照 / 重置）',
       setTier3Enabled(true);
       let sawAbandoned: boolean | null = null;
       const tier3 = vi.fn(async (_s: Song, _c?: unknown, control?: { isAbandoned(): boolean }) => {
-        // 越过调用方的 6s 整链预算后才落定：此时剩余观测应按「放弃」记账（决策 6）
+        // 越过调用方的 6s tier3 腿预算后才落定：此时剩余观测应按「放弃」记账（决策 6）
         await new Promise((resolve) => setTimeout(resolve, 10_000));
         sawAbandoned = control?.isAbandoned() ?? null;
         return null;

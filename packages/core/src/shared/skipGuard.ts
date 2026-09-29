@@ -1,6 +1,7 @@
 import type { PlayMode, Song } from '../types/index.js';
 import { identityKey } from '../utils/songIdentity.js';
 import { getNextSongIndex } from '../utils/queue.js';
+import { RESOLUTION_CHAIN_BUDGET_MS } from './playbackBudgets.js';
 
 /**
  * 跳歌护栏（#385，spec 见 issue #385）：**「一首歌失败之后怎么办」的决策单点**。
@@ -24,6 +25,20 @@ export const SKIP_LIMIT = 3;
 
 /** 离线文案（单一来源）：宿主可在**进解析链之前**用它快速失败（#385「不进解析链」）。 */
 export const OFFLINE_COPY = '当前处于离线状态，已暂停播放';
+
+/**
+ * 最坏无声窗口（#424 口径）：从「第一首开始解析」到「护栏判停」的**可断言上界**。
+ *
+ * 推导（每一条都是既有语义，不是新行为）：
+ * - 一次尝试 = **一条解析链**，其解析链总预算（deadline）= `RESOLUTION_CHAIN_BUDGET_MS`（#424 新增的单一值）；
+ * - 每首歌终局失败前会做 **第一次 + fresh 重试一次** = 2 条链（桌面 `playerStore.play` 的
+ *   `fresh: true`、移动端 `refreshPlayableUrl`）；
+ * - 连续失败达 {@link SKIP_LIMIT} 首才停 → 最多 `SKIP_LIMIT` 首。
+ *
+ * 于是上界 = `SKIP_LIMIT × 2 × 链预算`。#424 之前没有这个值：单链最坏是散落常量之和的
+ * 15s，用户视角的无声期既算不出也测不了。
+ */
+export const WORST_CASE_SILENT_MS = SKIP_LIMIT * 2 * RESOLUTION_CHAIN_BUDGET_MS;
 
 export type SkipGuardAction = 'skip' | 'stop';
 
