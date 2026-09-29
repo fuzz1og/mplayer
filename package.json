@@ -71,7 +71,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "antd": "^6.6.2",
     "axios": "^1.6.2",
-    "concurrently": "^8.2.2",
+    "concurrently": "^10.0.5",
     "dotenv": "^17.4.2",
     "electron": "^41.7.1",
     "electron-builder": "^26.15.7",
