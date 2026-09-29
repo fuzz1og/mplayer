@@ -430,6 +430,7 @@ export default function PlayerOverlay({ onClose }: Props) {
     // 24 = 全屏面板的认领阈值（BottomSheet 把手热区只有 ~28px 高，那里用 10 更跟手）。
     // 抬高 + dy 严格占优是为了横向分页 / 歌词列表滚动优先认领，防斜滑误判
     claimThreshold: 24,
+    probeLabel: 'player', // 跟手探针归因用（#430）：全屏播放器是另一个接入点
     // 封面页开启「纵向优先」（真机 review）：从唱盘起手的拇指弧线是「先横后竖」，
     // 起始几帧 |dy| 还不占优，横向分页 ScrollView 会先认领且再也不放手 → 拉不下来。
     // capture 阶段用同一条竖直判定抢回纵向意图；歌词页不开（竖滑仍是歌词滚动）。

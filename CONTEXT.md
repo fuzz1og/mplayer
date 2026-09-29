@@ -104,3 +104,21 @@ _Avoid_: 无结果、空态（空态是**取到了但确实为空**，与这两�
 **汽水歌词**:
 汽水歌词可通过**分享页免登录**获取：`music.douyin.com/qishui/share/track?track_id={id}` 的 `_ROUTER_DATA.audioWithLyricsOption.lyrics.sentences[]`（结构化时间轴 startMs/endMs/text/words，lyricType=krc），无需登录态；分享页同时返回音频直链（encrypt=false 未加密）与 `trackInfo.playable_range`（试听窗口，Cover 歌也有该字段却给完整版，**不能**作试听/完整判别依据；可靠判别 = `trackInfo.preview.duration` 或实际音频时长）。track_v2 接口（`api.qishui.com/luna/pc/track_v2`）也含 `lyric.content`（KRC 文本），但需 PC 客户端登录态 Cookie（sessionid），匿名请求 200 空 body——完整版/高音质音频亦需凭证 + CENC 解密（社区方案 qishui-decrypt / musicdl，软件不实现，仅记录）。搜索接口当前路径为 `api.qishui.com/luna/search/track`（无 pc 段，免登录）；旧 `luna/pc/search/track` 已失效返回空 body。桌面歌词接线：`loadLyricsWithRetry` 的 soda 分支调 `getSodaLyrics`（分享页转 LRC，lrc=URL 契约不变）。移动端接线：PlayerOverlay 的 soda 歌 cacheKey 用 songid、load 走 `getSodaLyrics` 直取文本；`fetchLrcInBackground` 对 soda 只补封面不搜索歌词。双端歌词决策（按 ID 直取 / 搜索补全 / 存量内联兼容）共用 core `songLyrics` helper 防漂移；网易自 #409 起同样按 songId 直取，不再是 soda 特判。下载侧 .lrc 仍按 song.lrc（URL）驱动，soda 恒空故不生成——留待下载侧专项。
 _Avoid_: 匿名 track_v2、汽水歌词源、soda 歌词（匿名直连取不回）
+
+**拖拽关闭**:
+竖直下拉手势关掉一个面板（全屏播放器 / 底部弹层）。一次手势只有两种结局：**判关**（动量投影落点越过面板比例，或位置兜底越过比例）或**回弹**；手势被系统抢走（来电等）一律回弹、不判关。
+_Avoid_: 下滑关闭、滑动删除、下拉刷新
+
+**拖拽接入点**:
+一个 `useDragToDismiss` 接入点——当前恰好 2 个：`BottomSheet` 壳与全屏播放器。它与**UI 实例数**不是一回事：壳的一个接入点覆盖全 App 约十处弹层；「横向分页」是原生 ScrollView 分页，**不属于**本链路。
+_Avoid_: 拖拽面（#430 用它数出 4 个，实际接入点 2 个）、手势点
+
+**拖拽会话内核**:
+拖拽关闭的纯物理实现（`gestures/dragSession`）：位移计算、速度自采样、松手判决。零 react-native 依赖、零时钟调用（时间戳由适配器注入），node 环境直接可测。**它不等于 `@mplayer/core`**——那是双端共享的业务内核。
+_Avoid_: 内核（单称，与 core 撞音）、core 手势、手势引擎
+
+**JS 帧率 / UI 帧率**:
+两个**不同线程**的帧率，任何一次「掉帧」讨论都必须带线程限定词。**JS 帧率** = JS 线程 rAF 回调的频率（`services/perfMonitor` 量的就是它）；**UI 帧率** = 渲染线程真正出帧的频率（`dumpsys gfxinfo` / SurfaceFlinger 量的）。
+拖拽跟手跑在 JS 线程，JS 被占住时面板是**冻住**而不是**画得慢**——那一刻 UI 帧率可能反而很健康。所以「掉帧」不能单称。
+_Avoid_: 掉帧（单称）、卡顿、fps（不带线程限定）
+
