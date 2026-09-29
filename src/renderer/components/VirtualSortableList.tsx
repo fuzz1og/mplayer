@@ -39,6 +39,10 @@ const estimateSongRow = () => SONG_ROW_HEIGHT;
  * 3. 被拖的行会随窗口推进而被卸载（拖到视口外时），所以拖拽视觉走常驻的 `DragOverlay`
  *    （官方对虚拟化列表的措辞是 "you will absolutely want to use a drag overlay"）。
  *    overlay 用 portal 挂到 body，以免被滚动容器的 overflow 裁剪；主题 token 在 `:root`，不受影响。
+ * 4. `scrollMargin` 只在「滚动容器 / `rowsRef` 的父节点」尺寸变化时重测（见 `useVirtualRows`）。
+ *    所以**列表上方任何会变高的东西（批量栏、提示条）都必须与列表同处一个父容器内**——
+ *    放在本组件之外、滚动容器之内时，`scrollMargin` 会停在旧值，窗口与真实位置整体错开
+ *    一条栏的高度（有界，但一直错着），而且没有任何报错。
  */
 function VirtualSortableList<T extends { id: string }>({
   items,
