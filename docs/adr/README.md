@@ -39,6 +39,7 @@
 | 解析链的整链 deadline：一次解析一个预算、各腿取小、耗尽即 abort（#424） | `2026-09-28-resolution-chain-deadline.md` | 已接受（在 2026-09-27 的四层之上补「整链」一层） |
 | 原生持队列 + 原生推进（方案 C，含随机语义定序） | `2026-09-29-native-playback-ownership.md` | 已接受 |
 | 队列页虚拟化：窗口化挂载与 dnd-kit 共存 | `2026-09-29-queue-virtualized-sortable-list.md` | 已接受 |
+| CI 验证边界：唯一入口、测试分片、原生按路径触发 | `2026-09-29-ci-verification-boundary.md` | 已接受 |
 
 ## 历史编号对照（冻结）
 
