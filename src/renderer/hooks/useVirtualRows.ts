@@ -5,6 +5,12 @@ import { useLatest } from '@/renderer/hooks/useLatest';
 /** SongRow 行高：44px 封面 + 上下各 10px 内边距（见 SongRow 的 padding） */
 export const SONG_ROW_HEIGHT = 64;
 
+/**
+ * 行数达到该阈值才启用窗口化：短列表整表渲染，省掉测量与首帧探测。
+ * 列表的共享口径（#428），各列表别再各写一份。
+ */
+export const VIRTUALIZE_THRESHOLD = 30;
+
 /** plain = 整表渲染；pending = 已进入虚拟化阈值、仍在探测滚动容器；virtual = 只挂窗口内的行 */
 export type VirtualRowsMode = 'plain' | 'pending' | 'virtual';
 

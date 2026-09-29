@@ -22,7 +22,7 @@ import SongRow from './SongRow';
 import SongListSkeleton from './SongListSkeleton';
 import VirtualRow from './VirtualRow';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
-import { useVirtualRows, SONG_ROW_HEIGHT } from '@/renderer/hooks/useVirtualRows';
+import { useVirtualRows, SONG_ROW_HEIGHT, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
 
 interface SongListProps {
   songs: Song[];
@@ -53,9 +53,6 @@ interface SongListProps {
   /** 封面加载失败时回调，由持有歌曲列表的层按 ID 重识别换新封面 */
   onCoverError?: (song: Song) => void;
 }
-
-/** 行数达到该阈值才启用虚拟滚动：短列表整表渲染，省掉测量与首帧探测 */
-const VIRTUALIZE_THRESHOLD = 30;
 
 const estimateSongRow = () => SONG_ROW_HEIGHT;
 
