@@ -52,6 +52,43 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
 - **传完要验，别只看命令退出码**：① 读回正文（`gh pr view <PR> --json body --jq .body` / `gh api .../issues/comments/<id> --jq .body`），每个图片引用都应是 `user-attachments` URL、本地路径残留为 0；② 公开仓库再抓一次 PR 页面 HTML，确认 asset id 出现在渲染产物里；③ 抽一个 asset `GET`（带浏览器 UA）应回 `200` + `Content-Type: image/png` + PNG 魔数 `89 50 4e 47`——**别用 HEAD 判断**，`user-attachments` 对 HEAD 回 403。
 - 图注写「这张图证明了什么」（如「热榜滚到第 194–200 名 → `getItemLayout` 偏移算术正确」），不写文件名；部分文件上传失败时正文仍会更新，看退出码。
 
+## dev build（非 Expo Go）：验后台播放 / FGS / 锁屏媒体会话
+
+**Expo Go 验不了这一层**：Expo Go 下 expo-audio 不 bind/start `AudioControlsService`（media3 `MediaSessionService`），且本仓库在 Expo Go 主动跳过 `setActiveForLockScreen`（`packages/mobile/services/audioPlayer.ts:528-535`）——没有前台服务就没有「后台持续播放」，也看不到媒体会话与锁屏控件。凡涉及后台播放 / FGS / 锁屏与通知控件 / 曲末切歌的验收，一律用 dev build。
+
+dev build 的包名带 `.dev` 后缀（`android/app/build.gradle` 的 debug 变体 `applicationIdSuffix '.dev'`），**与 release 共存**，不会覆盖测试机上的正式包。
+
+```bash
+# 1. 出包（本地构建；路径要短——见陷阱「CMake 250 字符对象路径」）
+cd packages/mobile/android
+./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a
+#   产物 app/build/outputs/apk/debug/app-debug.apk，包名 com.mplayer.mobile.dev
+
+# 2. 装（用 push + pm install，别用 adb install：80MB 流式安装在本环境卡死过 adb server）
+adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/mplayer-dev.apk
+adb shell pm install -r /data/local/tmp/mplayer-dev.apk
+
+# 3. 拉起（scheme 与 release 共用 → 直接发 mplayer:// 会弹选择器，必须用显式组件）
+adb reverse tcp:8081 tcp:8081
+adb shell am start -n com.mplayer.mobile.dev/com.mplayer.mobile.MainActivity \
+  -a android.intent.action.VIEW \
+  -d 'mplayer://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081'
+```
+
+首次启动会有 dev-client 引导页与 `POST_NOTIFICATIONS` 权限框，**都要点过**（否则 FGS 通知发不出来）。
+
+启动后确认三件事都成立（不成立说明还在 Expo Go 语义下）：
+
+```bash
+adb shell dumpsys activity services com.mplayer.mobile.dev | grep -E 'AudioControlsService|isForeground'
+#   → ... expo.modules.audio.service.AudioControlsService ... isForeground=true types=0x2（mediaPlayback）
+adb shell dumpsys media_session | grep mplayer.mobile.dev
+#   → Media button session is com.mplayer.mobile.dev/androidx.media3.session.id.N
+adb shell dumpsys notification --noredact | grep music-playback
+```
+
+**附带好处**：debug 构建的 `console.log` 在 logcat 可见（release 会把 JS 日志剥掉），所以 `[player]` 一类排查要在 dev build 上做。
+
 ## 陷阱速查
 
 - **attach 报 `Device busy (exported)`**：Windows 正占用设备。两个来源：手机处于「文件传输/MTP」模式（下拉通知切成「仅充电」，USB 调试保持开）；或另一条回路的 adb 被拉起（`/mnt/c/Users/Admin/scoop/shims/adb.exe kill-server`）。切换 USB 模式会让设备重新枚举，bind 可能要重做——重跑 usb-attach.sh。
@@ -63,5 +100,7 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
 - **Metro 报 500**：先 curl bundle URL 看错误体。常见根因是 Metro 实例的 projectRoot 不是 `packages/mobile`（陈年残留进程，解析到仓库根）——杀掉它重起。App 收到的 manifest 里 `projectRoot` 字段可直接验。
 - **多会话共抢一台手机**：其他 worktree 会话可能也在调试（各自 Metro 占 8082 等端口、互相拉起 App）。`adb kill-server` 会打掉**所有人**的 reverse 隧道——动过 server 后跑 `adb reverse --list` 确认自己的端口还在，App 的 `initialUri` 要指向自己的端口。
 - **双 transport 串线**：设备同时挂 USB + 无线两条 transport 时 reverse 静默不通（App 拉起但 JS 永远不跑、Metro 无 bundling 记录）。修法：`adb disconnect` 只留 USB，重建 reverse，冷启。mobile-debug.sh 已内置该检查。
+- **`adb install` 把 server 卡死 / 5037 被抢**：实测 80MB 的 `adb install` 能把 adb server 卡到 `adb devices` 都超时。处置：改 `adb push` + `adb shell pm install`；仍卡死就查占用者（Windows：`Get-NetTCPConnection -LocalPort 5037 -State Listen`）——`D:\leidian\LDPlayer14\adb.exe` 与 scoop 的 `android-clt\...\adb.exe` 都会抢 5037，杀掉后让 WSL 侧 `~/.local/bin/adb start-server` 接管。
+- **CMake 250 字符对象路径上限**：在深层 worktree（如 `.claude/worktrees/<name>`）里跑 `./gradlew assembleDebug` 会因原生模块对象路径过长失败，症状是 CMake 警告 `CMAKE_OBJECT_PATH_MAX` + `ninja: error: manifest 'build.ninja' still dirty after 100 tries`。修法：换到路径更短的检出（主克隆）构建，或加 `subst` 短盘符。
 - **验证隧道别用手机侧 nc**：Android toybox nc 静默失败。以 Metro bundling 日志 + ReactNativeJS 日志为准。
 - **无线调试（不用 USB 的备用路线）**：镜像网络下手机可直连开发机局域网 IP 拉 bundle（Hyper-V 防火墙需放行 8081）；无线 adb 端口每次重连随机，`adb mdns services` 扫 `_adb-tls-connect._tcp`，配对码 30 秒过期。适合临时看 UI，长会话仍走 USB。
