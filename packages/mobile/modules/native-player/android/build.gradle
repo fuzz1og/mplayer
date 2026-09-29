@@ -1,0 +1,43 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.mplayerplayer'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.mplayerplayer"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+    // R8 只在 release 生效（app/build.gradle 的 minifyEnabled）；这里给模块自己的 keep 规则。
+    consumerProguardFiles 'proguard-rules.pro'
+  }
+
+  compileOptions {
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+  lint {
+    abortOnError false
+  }
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  // RN 0.86 的 headless 任务上下文 / ReactContext（§5.2 的 headless 补窗通道）。
+  // 版本由 react-native gradle plugin 的依赖替换提供（与 expo-modules-core 同写法）。
+  implementation 'com.facebook.react:react-android'
+
+  // media3 必须与 expo-audio 预编译 AAR 解析到的版本一致：1.9.0。
+  // 绝不上 1.10.x —— Gradle 取最高版本会把 expo-audio 一起顶到未验证版本。
+  def media3Version = "1.9.0"
+  implementation "androidx.media3:media3-session:$media3Version"
+  implementation "androidx.media3:media3-exoplayer:$media3Version"
+  implementation "androidx.media3:media3-datasource:$media3Version"
+  implementation 'androidx.core:core-ktx:1.15.0'
+}

@@ -122,6 +122,10 @@ android {
     }
     buildTypes {
         debug {
+            // P0：dev build 与 release 共存（Expo Go 不可用 → 没有 dev build 就无法真机验收）。
+            // 不影响 release 变体，CI 只跑 release。
+            applicationIdSuffix '.dev'
+            versionNameSuffix '-dev'
             signingConfig signingConfigs.debug
         }
         release {

@@ -1,0 +1,6 @@
+<resources>
+  <!-- 独立渠道：不复用 expo-notifications 的 music-playback（IMPORTANCE_HIGH） -->
+  <string name="mplayer_native_channel_id">music-playback-native</string>
+  <string name="mplayer_native_channel_name">正在播放</string>
+  <string name="mplayer_native_channel_description">后台播放与锁屏控制</string>
+</resources>

@@ -26,6 +26,18 @@ interface PlayerState {
   setDuration: (dur: number) => void;
   setShowPlayer: (show: boolean) => void;
   setPreparing: (preparing: boolean) => void;
+  /**
+   * 原生对账入口（规格 §4.3）：后台期间队列索引的真相源是原生，
+   * 回前台/事件到达时**单向**把原生状态写进 store。禁止双向写（否则出现第二个真相源）。
+   * 只覆盖传入的字段，未传字段保持 store 现值。
+   */
+  applyNativeState: (patch: {
+    song?: Song | null;
+    index?: number;
+    isPlaying?: boolean;
+    currentTime?: number;
+    duration?: number;
+  }) => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -82,4 +94,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setDuration: (dur) => set({ duration: dur }),
   setShowPlayer: (show) => set({ showPlayer: show }),
   setPreparing: (preparing) => set({ preparing }),
+
+  applyNativeState: (patch) => {
+    const next: Partial<PlayerState> = {};
+    if (patch.song !== undefined && patch.song) {
+      next.currentSong = patch.song;
+      next.hasPlayed = true;
+    }
+    if (patch.index !== undefined && patch.index >= 0) next.currentIndex = patch.index;
+    if (patch.isPlaying !== undefined) next.isPlaying = patch.isPlaying;
+    if (patch.currentTime !== undefined && Number.isFinite(patch.currentTime)) {
+      next.currentTime = patch.currentTime;
+    }
+    if (patch.duration !== undefined && Number.isFinite(patch.duration) && patch.duration > 0) {
+      next.duration = patch.duration;
+    }
+    if (Object.keys(next).length > 0) set(next);
+  },
 }));

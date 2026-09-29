@@ -71,3 +71,44 @@ adb -s N7TOAIMFOJPFIV7D shell am start -a android.intent.action.VIEW \
 - **随机语义未定案**（规格 §7.3 / §P6 前置）：需要先写 ADR，否则 T9 的「随机」一项无判据。
 - **R3（后台 core 墙钟是否触发）未定论**：T8 会直接暴露；若后台解析跑不完，P4 的降级形态才是实际可达。
 - **T10 的 R8 keep 规则**要等 P1 的 proguard 片段落地才能验。
+
+
+---
+
+## 执行结果（方案 C 落地后，2026-09-29）
+
+> 设备：真机 OnePlus PKB110 / Android 16（ColorOS）· 雷电模拟器 LDPlayer 14（Android 14 / x86_64，另起干净实例 720×1280）
+> 构建：debug（`com.mplayer.mobile.dev`，arm64-v8a / x86_64）+ release（`com.mplayer.mobile`，R8+shrink，x86_64）
+> 说明：tier3 订阅地址属敏感信息，只在设备上运行期配置，**不入库**。
+
+| # | 结果 | 取证 |
+| --- | --- | --- |
+| T1 | ✅ 通过 | 雷电熄屏静置 30 拍全程 `PLAYING`；标题序列 `海屿你 → 明知故犯 → 遐想 → 甲乙丙丁 → 两 难`（**5 首连续自动推进**）；`isForeground=true` 30/30；`dumpsys media_session` 无第二会话 |
+| T2 | ✅ 通过 | 熄屏后媒体键：`两 难 →(NEXT)→ 我不难过 →(PREV)→ 两 难 →(NEXT)→ 我不难过`，`metadata` 跟随 |
+| T3 | ✅ 通过 | 真机真实过期直链（进程重启后恢复的旧快照）：`player error kind=expired` → `awaiting fresh url` → `retrying … after 1000ms` → `attempt 1/2/3` → `skip failed item … retries=3 skippedThisSession=1/3`；不卡死 |
+| T4 | ✅ 通过 | `am force-stop` → 重启：`restored 89 tracks at index=5 position=0` + `PlayerService created` + `MediaController connected`；会话回到 `PAUSED`（**不自动续播**）；`FATAL EXCEPTION` 无 |
+| T5 | ⏸ 未执行 | 需真机 USB（雷电飞行模式会断 adb，实测：`echo adb_ok` 返空、`127.0.0.1:5555` offline、重启 VM 后 adbd 未恢复）。手机当前离线，等重新接入 |
+| T6 | ✅ 通过 | `dumpsys notification --noredact`：本包 **1 条**媒体通知；`android.title=两 难` / `android.text=加木`；播放中 `isForeground=true`、`onUpdateNotification startFG=true` |
+| T7 | ✅ 通过 | 播放中划掉任务卡 + 回 HOME：进程存活（pid 不变）、`isForeground=true`、通知仍在，且 media3 继续刷新前台通知（`startFG` 5→7）⇒ 默认保活（§9.2「不重写 onTaskRemoved」） |
+| T8 | ✅ 通过 | `MPlayerPrefetch: task start id=11` / `task finish id=11` 成对出现（headless 任务真的起得来、跑得完）；配套 `patchQueue received → release prefetch window` |
+| T9 | ◐ 部分通过 | **随机播放**：`补窗 mode=随机播放 计划=[4,1,7] 实投=3` / `计划=[5,8,9]` —— 非顺序、计划内不重复 ⇒ JS 定序生效（原生只顺序推进，故锁屏 next 与 UI next 同序）。**单曲循环**：整轮**无任何 `补窗` 日志** ⇒ `planNextIndexes` 正确返回空、不向原生投喂下一首。**列表循环**：T1 的 5 首顺序连播即是；「绕回队尾」只有单测覆盖（`planNextIndexes(queue,3,3,…) === [4,0,1]`），设备上未构造出真·队尾。**「队列播完收尾」**：循环模式下不可达，未验 |
+
+| T10 | ✅ 通过 | release 包（R8 + shrinkResources，**36MB** vs debug 116MB）在模拟器上：`PlayerService created` + `MediaController connected` + 会话注册 + headless `task start/finish` + `补窗 mode=列表循环 计划=[1,2,3] 实投=3`（JS 定序与桥都在）+ `开始播放《海屿你》（149ms）`；**前台服务**：`com.mplayer.mobile/expo.modules.mplayerplayer.PlayerService isForeground=true types=00000002`（mediaPlayback）、`channel=music-playback-native`、`category=transport`；**通知跟随换曲**：`android.title=明知故犯` / `android.text=Max李玄`（已从海屿你推进）；熄屏后持续 `onUpdateNotification startFG=true playing=true state=3`；无 `ClassNotFoundException`/`NoClassDefFoundError`。tier3 为本地临时注入（**构建产物与源码均未入库，验完已回退**）。未复跑：release 侧的 T3 过期判据 |
+
+### 验收过程中发现并修掉的真实缺陷
+
+1. **从来没有 `MediaController` ⇒ 没有媒体通知、没有前台服务**（`da94e53`）
+   media3 1.9.0 字节码：`triggerNotificationUpdate()` 只遍历 `getSessions()`，而 `getSessions()` 仅在**有 controller 连接**时才有内容。JS 走自写 bridge，于是 session 从未注册 → 无通知 → 无 FGS → 系统 `Stopping service due to app idle`，后台播放断（真机表现为「连播 4 首后 PAUSED」）。
+2. **过期项只等 1s 就盲重试，装不下 core 的 3–9s 解析链**（`5261c5c`）
+   改为把 1s 当**下限**：发 `playbackError{retrying}` 后等 JS `patchQueue({upsert})`（10s 兜底）。
+3. **进程重启后 JS 的 `playerStore.queue` 是空的**（`5261c5c`）
+   `playerStore` 没接 persist，原生恢复了队列而 JS 不知道这些歌是谁 → 无法重解析、UI 空播放器。按 §4.3 补 `PlayerState.tracks` + `reconcileQueueFromNative()`（原生权威、JS 单向对账）。
+4. **窗口边界处「下一首」静默失灵**（`bf8ec2d`）
+   `next()` 踩空分支会 `pause()` 并向 JS 要歌，但补窗落地的续播条件写的是 `playbackState == STATE_ENDED` → 新歌只躺在列表里。改用 `pendingUserNext` 单独记用户意图。
+5. **长会话原生播放列表无界增长**（`b714a5e`）
+   `patchQueue` 是 append-only，T4 打印出 `restored 89 tracks`。加 `QueueStore.dropLeading` + 超过 60 项时裁剪（保留当前项前 10 项），并让 JS 在 `trackChanged` 时用 `getState().tracks` 重建 mirror。
+
+### 已知未完成项（供人工接手）
+
+- T5 真机断网即停；T7 划任务卡；T9 四种模式；T10 的 release 播放复跑（需在 release 应用里配置 tier3）。
+- 遗留告警：`Introspectable data is missing for class expo.modules.mplayerplayer.*Input`（Record 走反射转换，纯性能，不影响正确性）。
