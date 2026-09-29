@@ -56,6 +56,12 @@ interface CollapsingHeroProps<T> {
   onCoverError?: () => void;
   /** 无封面/加载失败占位图标（默认音符） */
   fallbackIcon?: React.ReactNode;
+  /**
+   * 整块兜底封面（#465）：`cover` 为空或加载失败时**铺满封面区**渲染它，优先于 `fallbackIcon`。
+   * 用于「该源根本没有封面」（如 Q 音榜单：榜单索引接口匿名恒拒）——给一张生成封面，
+   * 而不是一个居中的音符图标。
+   */
+  coverFallback?: React.ReactNode;
   /** 折叠后的导航标题 */
   navTitle: string;
   /** 悬浮导航栏右侧动作插槽（铅笔等页面动作；headerShown:false 后 Stack headerRight 不渲染） */
@@ -102,6 +108,7 @@ export default function CollapsingHero<T>({
   cover,
   onCoverError,
   fallbackIcon,
+  coverFallback,
   navTitle,
   navRight,
   title,
@@ -194,6 +201,8 @@ export default function CollapsingHero<T>({
                   resizeMode="cover"
                   onError={handleCoverError}
                 />
+              ) : coverFallback ? (
+                <View style={styles.coverImg}>{coverFallback}</View>
               ) : (
                 <View style={styles.coverFallback}>
                   {fallbackIcon ?? <Music2 size={72} color={colors.textInverse} />}

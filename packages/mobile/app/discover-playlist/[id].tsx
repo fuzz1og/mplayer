@@ -6,7 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { getDirectClient, formatPlayCount, type Song } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
-import SongListSkeleton from '../../components/SongListSkeleton';
+import HeroSkeleton from '../../components/HeroSkeleton';
+import CoverFallback from '../../components/CoverFallback';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
 import CollapsingHero from '../../components/CollapsingHero';
@@ -94,7 +95,8 @@ export default function DiscoverPlaylistDetailPage() {
     setSongs((prev) => replaceSongInList(prev, original.id, swapped));
   }, []);
 
-  if (loading) return <SongListSkeleton showSource />;
+  // 骨架与真实首屏同源（#465）：Hero 占屏约 40%，此前只画列表骨架 → 数据到达时整页跳一次
+  if (loading) return <HeroSkeleton rows={8} showSource />;
   if (!playlist) {
     return (
       <View style={styles.empty}>
@@ -124,6 +126,7 @@ export default function DiscoverPlaylistDetailPage() {
         <Stack.Screen options={{ title: playlist.name, headerShown: false }} />
         <CollapsingHero
           cover={playlist.coverImgUrl}
+          coverFallback={<CoverFallback name={playlist.name} />}
           navTitle={playlist.name}
           title={playlist.name}
           subtitle={playlist.creator?.nickname ?? '未知'}
