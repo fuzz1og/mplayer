@@ -27,17 +27,18 @@ cd .claude/worktrees/<slug>
 - worktree 缺 node_modules 就地 `npm install`，不要从主克隆复制（依赖漂移）；软链同理——真机调试时 `expo-router` 按「被转换文件的真实路径」反推 app root，会把源码解析回主克隆、打包到主克隆的 `app/`（见 `mobile-device-debugging` skill）。
 - **跳过 `npm install` 会让类型检查静默对着主克隆的 core 跑**：worktree 没有自己的 `node_modules` 时，`@mplayer/core` 会沿目录向上解析到主克隆的 `node_modules/@mplayer/core`（指向主克隆的 `packages/core`），于是 `typecheck` / `typecheck:mobile` 检查的是**主克隆的 core，而不是你正在改的那份**——改了 core 的公开接口却全绿（或反之报一堆莫名其妙的错）都出自这里。绕开安装只做局部验证时，**以 CI 为准**（CI 会 `npm ci` + `core:build`）。
 - 调试/测试必须在 worktree 内构建运行，不要 cd 回主克隆目录（缓存不一致难排查）。
-- 新 worktree 检出的 `scripts/*.sh` 在本机（`core.autocrlf=true` 且脚本以 CRLF 入库）**带 CRLF**，`bash scripts/verify.sh` 会直接报 `$'\r': command not found` / `syntax error`。就地归一成 LF 再跑；`git status` 会因此显示这 6 个脚本被改，**提交前 `git checkout -- scripts/` 还原**，不要把它们混进业务 PR。
+- 新 worktree 检出的 `scripts/*.sh` 在本机 Windows（`core.autocrlf=true`）**被检出成 CRLF** —— git 里存的本来就是 LF，仓库 `.gitattributes` 已对 `*.sh` 固定 `eol=lf`（若你看到 CRLF，说明本机是 `.gitattributes` 生效前克隆的，重新克隆即可）。CRLF 会让 `bash scripts/verify.sh` 直接报 `$'\r': command not found` / `syntax error`；就地归一成 LF 再跑即可。这只改工作区、不改仓库内容，**不需要**为此做 `git checkout` 或把它排除在提交之外。
 
 ## 3. 实现并验证
 
 在 worktree 内跑全量验证，全绿才算任务完成：
 
 ```bash
-./scripts/verify.sh   # lint → design-lint → 双端 typecheck → test:run；加 fast 跳过测试
+./scripts/verify.sh   # 全量：static（core:build → lint → design-lint → 双端 typecheck → build）
+                      #      + renderer / main / core / mobile 四套测试；也可只跑某个 scope
 ```
 
-改了 `packages/core` 追加：`npm run core:build` 后重跑验证（Metro 吃 dist 产物，不重建等于白改）。
+改了 `packages/core` 不需要额外步骤：`verify.sh` 每个 scope 都会先 `core:build`（Metro 与测试吃 dist 产物，不重建等于白改）。验证项与 CI job 的对应关系见 `docs/agents/testing.md` 的矩阵与 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`。
 
 ## 4. 提交
 

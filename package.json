@@ -30,8 +30,10 @@
     "typecheck:mobile": "npx tsc --noEmit --project packages/mobile/tsconfig.json",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:main": "vitest run --config vitest.main.config.ts",
     "mobile:e2e": "bash scripts/mobile-e2e.sh",
-    "core:build": "npm run build -w packages/core"
+    "core:build": "npm run build -w packages/core",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "buffer": "^6.0.3",

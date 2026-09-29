@@ -21,6 +21,14 @@ on:
 permissions:
   contents: write
 
+# 同一版本的重复触发（重跑 / 重推 tag / dispatch 后再推 tag）归到同一组串行执行：
+# 并发构建会互相踩同一个 release（实测 v1.7.3 一天内 8 次运行、v1.2.0 13 次）。
+# 用 cancel-in-progress: false 而不是 true —— 发布跑在 publish 阶段要上传产物，
+# 中途取消可能留下半个 release，宁可排队也不要打断。
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   # ── Create version tag (dispatch with version only) ──
   create-tag:
@@ -56,6 +64,13 @@ jobs:
           git add -A
           git commit -m "chore: bump version to ${{ inputs.version }}"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          # 幂等守卫：远端已有同名 tag 说明这个版本已经发过。继续打 tag 会把已发布的
+          # tag 搬到新 commit 上（实测 v1.4.0/v1.5.0 被重推、同版本重复构建），
+          # 旧配置更是直接崩在 `fatal: tag ... already exists`。这里改成明确报错并给出出路。
+          if git ls-remote --exit-code --tags origin "v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::v${{ inputs.version }} 已存在于远端。若只是重跑构建，请重跑该 tag 的 workflow；要发新版本请换版本号。" >&2
+            exit 1
+          fi
           git tag -f v${{ inputs.version }}
           # Push commit only — don't push tag (avoids duplicate tag-push workflow)
           git push origin HEAD
@@ -347,8 +362,10 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            # 不用 --force：create-tag 已保证远端没有同名 tag；这里若撞上说明有并发或
+            # 人为干预，宁可让 job 红掉，也不要静默改写一个已发布 tag 的指向。
             git tag -f "$TAG"
-            git push origin "$TAG" --force
+            git push origin "$TAG"
           fi
 
           # Create if not exists（用 generate-notes 兜底）；已存在的 release 不覆盖 body，

@@ -11,13 +11,15 @@ npm run dev / electron:dev       # Vite dev (5174) / 完整 Electron dev
 npm run build / electron:build   # 生产构建 / 打包当前平台
 npm run lint / typecheck / typecheck:mobile  # ESLint(零警告) / 双端 tsc
 npm run core:build               # 构建 @mplayer/core（改 core 后移动端必须重建）
-npm run test:run                 # vitest 单次（renderer）
+npm run test:run                 # vitest 单次（renderer + src/__tests__ 顶层）
+npm run test:main                # vitest 单次（主进程，node env，独立 config）
 npm run mobile:e2e               # 移动端真机 e2e 一条龙（usbipd 直挂真机验收，见 e2e/README.md）
-./scripts/verify.sh              # 提交/发布前全量验证（lint+design-lint+双端 typecheck+renderer 测试；fast 跳过 test）
-./scripts/release.sh             # 一键发布（bump → 验证 → commit → tag → 触发 CI 构建）
+./scripts/verify.sh              # 验证唯一入口（all=static+四套测试；也可只跑 static/renderer/main/core/mobile）
+./scripts/release.sh             # 一键发布（验证 → bump → commit → 推 master → tag → 触发 CI 构建）
 ```
 
-**验证顺序**：`lint → design-lint → typecheck → test:run`，提交前全绿（pre-commit 钩子强制 root+mobile typecheck + staged lint，见 `.githooks/pre-commit`）。
+**验证顺序的唯一出处是 `scripts/verify.sh`**，CI 五个 job 直接调它的分片，不在 workflow 里另拼步骤。全量 = `static`（core:build → lint → design-lint → 双端 typecheck → build）+ 四套测试（renderer / main / core / mobile；矩阵见 `docs/agents/testing.md`）。边界与理由见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`。
+pre-commit 钩子（`.githooks/pre-commit`，`npm install` 经 `prepare` 自动接线）只做 root+mobile typecheck + staged lint，是本地加速而非闸门——闸门是 CI 的必需状态检查。
 
 ## Architecture
 
@@ -38,7 +40,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 ### Mobile
 - 双主题 token（system/light/dark 三态，默认跟随系统）+ `textVariants` 语义变体（`packages/mobile/theme/tokens.ts`）。
 - Audio: expo-audio（非 Howler）；手势 PanResponder + Animated；Metro 吃 `packages/core/dist`（core 改动必须 `core:build`）。
-- Android 发布构建（CNG 反向）：原生目录 `packages/mobile/android/` 提交进 git，CI 直接 `./gradlew assembleRelease bundleRelease` 增量构建（不再每次 prebuild）。release 签名 keystore base64 存 GitHub Secrets（`ANDROID_KEYSTORE_*`），build.gradle 从环境变量读取、无 env 回退 debug 签名；版本号由 build.gradle 从 `app.json` 显式读取；产物 APK（arm64-v8a+armeabi-v7a，R8+shrinkResources）+ AAB 一并上传。Gradle 缓存走 `gradle/actions/setup-gradle@v6`（勿混用 actions/cache）。
+- Android 发布构建（CNG 反向）：原生目录 `packages/mobile/android/` 提交进 git，不再每次 prebuild。**发版**由 `release.yml` 的 `build-mobile` 跑 `./gradlew assembleRelease bundleRelease --no-daemon`，产物 APK（arm64-v8a+armeabi-v7a，R8+shrinkResources）+ AAB 一并上传；release 签名 keystore base64 存 GitHub Secrets（`ANDROID_KEYSTORE_*`），build.gradle 从环境变量读取、无 env 回退 debug 签名；版本号由 build.gradle 从 `app.json` 显式读取。**只在发版期构建**：PR 与 push 只做静态检查与四套测试，不编译原生（代价与残余风险见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`）。Gradle 缓存走 `gradle/actions/setup-gradle@v6`（勿混用 actions/cache）。
 
 ## 多源链路速览
 

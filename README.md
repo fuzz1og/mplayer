@@ -88,7 +88,8 @@ npm run start               # 启动 Expo dev server
 npm run lint                # ESLint（零警告）
 npm run typecheck           # 桌面端类型检查
 npm run typecheck:mobile    # 移动端类型检查
-npm run test:run            # 渲染端测试
+npm run test:run            # 渲染端 + src/__tests__ 顶层测试
+npm run test:main           # 主进程测试（node env）
 npm run core:build          # 构建共享包（改 core 后移动端必须重建）
 ```
 
@@ -98,7 +99,7 @@ npm run core:build          # 构建共享包（改 core 后移动端必须重�
 
 ## 📦 发布
 
-推送 `v*` tag 自动触发 GitHub Actions 构建（桌面三平台 + Android APK）并上传 GitHub Releases，应用内可检查更新：
+推送 `v*` tag 自动触发 GitHub Actions 构建（桌面三平台 + Android APK/AAB）并上传 GitHub Releases，应用内可检查更新：
 
 ```bash
 ./scripts/release.sh patch   # 一键发布（验证 → bump → commit → tag → 触发 CI）

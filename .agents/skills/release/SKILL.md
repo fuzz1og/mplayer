@@ -14,7 +14,7 @@ description: MPlayer 版本发布流程——发版前文档同步、版本递�
    - 内部按序执行：分支检查（必须 master）→ 验证（`scripts/verify.sh`）→ `node scripts/version-bump.js`（同步 package.json / package-lock.json / app.json / mobile+core package.json 共 5 处）→ commit → push master → 打 tag → push tag
 3. **监控构建**：`gh run list --workflow=release.yml --limit 1` / `gh run watch`
 4. **更新 release 介绍**：publish job 结束后，按 `.agents/skills/release-notes` 规格用详细文案覆盖自动生成介绍
-5. **验证产物**：`gh release view <tag>`（桌面三平台 + APK 命名 `MPlayer-v{ver}.apk`）
+5. **验证产物**：`gh release view <tag>`（桌面三平台 + APK `MPlayer-v{ver}.apk` + AAB `MPlayer-v{ver}.aab`，AAB 供上架 Google Play）
 
 ## 文档同步（发版前）
 
@@ -26,7 +26,7 @@ description: MPlayer 版本发布流程——发版前文档同步、版本递�
 
 1. **目录地图与清单**（最易腐烂）：`docs/agents/architecture.md` 的 components / hooks / stores / services 列表、`AGENTS.md` 与 `README.md` 的架构与目录描述 —— 对着 `ls`、`package.json`、`git grep` 逐条改。
 2. **能力 / 数量陈述**：README 的「N 种播放模式」、Tab 数、详情页清单、技术栈版本 —— 与实现和依赖版本比对。
-3. **测试与验证描述**：`docs/agents/testing.md` 的 setup mock 清单、`AGENTS.md` 的 `verify.sh` 覆盖范围 —— 与 `vitest.config.ts` / `scripts/verify.sh` 对齐。
+3. **测试与验证描述**：`docs/agents/testing.md` 的 setup mock 清单与四套件矩阵、`AGENTS.md` 的 `verify.sh` 覆盖范围 —— 与 `vite.config.ts` 的 `test` 段 / `vitest.main.config.ts` / `packages/*/vitest.config.ts` / `scripts/verify.sh` 对齐（**根目录没有 `vitest.config.ts`**）。
 4. **截图与资产**：真机 / UI 截图传 PR comment、**不入库**；`docs/**/assets` 只留 ADR 正文引用的资产，无任何文档引用的孤儿截图直接 `git rm`。
 5. **本轮行为变化**：命令 / 行为 / 架构有变时，同一批改动里更新 `AGENTS.md` / `CONTEXT.md` / 相关 ADR。
 
