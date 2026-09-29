@@ -79,7 +79,7 @@
     "electron-builder": "^26.15.7",
     "esbuild": "0.25.2",
     "eslint": "^8.55.0",
-    "expo": "~57.0.9",
+    "expo": "~57.0.25",
     "fs-extra": "^11.2.0",
     "howler": "^2.2.4",
     "http-proxy-agent": "^9.0.0",
