@@ -192,9 +192,9 @@ export default function SongList({
       getItemLayout={ListHeaderComponent ? undefined : getItemLayout}
       {...listWindowProps}
       contentContainerStyle={contentContainerStyle}
-      ListHeaderComponent={ListHeaderComponent}
-      ListFooterComponent={ListFooterComponent}
-      ListEmptyComponent={ListEmptyComponent}
+      ListHeaderComponent={ListHeaderComponent ?? undefined}
+      ListFooterComponent={ListFooterComponent ?? undefined}
+      ListEmptyComponent={ListEmptyComponent ?? undefined}
       onEndReached={onEndReached}
       onEndReachedThreshold={onEndReachedThreshold}
       refreshControl={refreshControl}

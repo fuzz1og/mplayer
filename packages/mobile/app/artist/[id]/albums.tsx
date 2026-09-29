@@ -194,7 +194,7 @@ export default function ArtistAlbumsPage() {
             <ScalePress style={styles.footerRetry} onPress={() => void loadMore()}>
               <Text style={styles.footerRetryText}>加载失败，点此重试</Text>
             </ScalePress>
-          ) : null
+          ) : undefined
         }
       />
     </View>
