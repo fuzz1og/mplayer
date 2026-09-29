@@ -33,7 +33,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "typescript": "^5.3.3",
     "vite": "^7.3.6",
-    "vite-plugin-dts": "^5.0.3",
+    "vite-plugin-dts": "^5.1.1",
     "vitest": "^4.1.11"
   },
   "license": "PolyForm-Noncommercial-1.0.0"
