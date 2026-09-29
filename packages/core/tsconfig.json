@@ -4,7 +4,8 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "lib": ["ES2020"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "types": ["node"]
   },
   "include": ["src"],
   "exclude": ["src/**/__tests__", "src/**/*.test.ts", "src/**/*.test.tsx"]
