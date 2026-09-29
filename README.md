@@ -91,7 +91,10 @@ npm run typecheck:mobile    # 移动端类型检查
 npm run test:run            # 渲染端 + src/__tests__ 顶层测试
 npm run test:main           # 主进程测试（node env）
 npm run core:build          # 构建共享包（改 core 后移动端必须重建）
+./scripts/verify.sh         # 提交前全量验证：静态检查 + 四套测试 + Expo 依赖一致性（可加 scope 只跑一片）
 ```
+
+**依赖版本基线**：`expo` / `expo-*` / `react-native*` / `@react-native-community/*` 的版本由 **Expo SDK 决定**，不是「semver 允许的最新」—— 要升就用 `npx expo install --fix`，校验走 `./scripts/verify.sh expo`（CI 的 `expo-check`）。全仓只保留**一份** `expo`（根与 `packages/mobile` 声明同一范围），两处范围不一致会逼出第二份副本。理由与边界见 [ADR](docs/adr/2026-09-29-dependency-update-governance.md)。
 
 桌面端 E2E（Playwright）：先 `npm run dev`（Vite，5174）再 `npx playwright test`（spec 在 `e2e/`，不在 CI/verify 流程，属本地手工回归）
 

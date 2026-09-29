@@ -25,8 +25,9 @@ flat config（`eslint.config.js`），全局 ignores 与 `--no-warn-ignored` 语
 | Main（主进程） | `vitest.main.config.ts`（node + v8 coverage） | `npm run test:main` | ✅ | `test (main)` |
 | Core | `packages/core/vitest.config.ts`（node + v8 coverage） | `npm test -w packages/core` | ✅ | `test (core)` |
 | Mobile | `packages/mobile/vitest.config.ts`（node） | `npx vitest run --config packages/mobile/vitest.config.ts` | ✅ | `test (mobile)` |
+| Expo 依赖一致性 | 读 Expo 远端 SDK 期望版本（`api.expo.dev`） | `CI=1 npx expo install --check`（`./scripts/verify.sh expo`） | ✅ | `expo-check` |
 
-CI 的 `check` 与四个 `test` 分片都只是 `./scripts/verify.sh <scope>` 的包装；本地全量 = `./scripts/verify.sh`。Playwright 的 `e2e/` **不在**任何自动化里（见文末）。
+CI 的 `check`、四个 `test` 分片与 `expo-check` 都只是 `./scripts/verify.sh <scope>` 的包装；本地全量 = `./scripts/verify.sh`。**`expo` 是本仓唯一「上游可能让它自己变红」的检查**：Expo 发布新的期望补丁时会与仓库改动无关地变红，处置是 `npx expo install --fix`（理由见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`）。Playwright 的 `e2e/` **不在**任何自动化里（见文末）。
 
 - **Renderer（root）**: Vitest + jsdom + @testing-library；配置在 `vite.config.ts` 的 `test` 段（**无独立根 vitest.config.ts**），`include` 覆盖 `src/renderer/__tests__/**` 与 `src/__tests__/*.test.{ts,tsx}`（**仅顶层**；`src/__tests__/main/**` 归 Main 套件，不再在 jsdom 下重复跑一遍）。setup mock electron / `window.electronAPI`、matchMedia、ResizeObserver，并全局 stub antd message/notification；测试各自定义局部 `song()` 构造器（无共享 factory）。`npx vitest run` / `npm run test:run`（**依赖 `packages/core/dist`，先 `npm run core:build`**）
 - **Main**: `vitest.main.config.ts`（node env），global electron mock，默认开 v8 coverage（`src/main/**`）。`npm run test:main`
@@ -47,5 +48,7 @@ cd packages/mobile/android
 ```
 
 - **深层 worktree 的路径长度是真凶**：在 `.claude/worktrees/<name>` 这类深路径里构建，原生模块的对象路径会顶到 CMake 的 250 字符上限，症状是 `ninja: error: manifest 'build.ninja' still dirty after 100 tries`（**不是**依赖坏了，实测 arm64-v8a / armeabi-v7a / x86_64 都会撞）。两条修法任选：换到短路径检出或给 worktree 加 `subst` 短盘符（详见 skill `mobile-device-debugging` 的陷阱速查「CMake 250 字符对象路径上限」），或把 SDK 自带的 `cmake/<ver>/bin/ninja.exe`（3.22.1 里是 1.10.2）换成 **≥1.12**（较新 Ninja 处理长路径）。**Linux 不受影响**（发版的 `build-mobile` 跑 ubuntu-latest）。
-- 原生依赖的版本基线是 **Expo SDK 的期望版本**，判定命令 `npx expo install --check`；不要单独 bump `react-native` / `react-native-screens` / `safe-area-context` / `slider` / `svg`（`.github/dependabot.yml` 已对这些加 ignore），要升就整族随 SDK 一起升。
+- 原生依赖的版本基线是 **Expo SDK 的期望版本**，判定命令 `npx expo install --check`（即 `./scripts/verify.sh expo`）；不要单独 bump `react-native` / `react-native-screens` / `safe-area-context` / `slider` / `svg`（`.github/dependabot.yml` 已对这些加 ignore），要升就整族随 SDK 一起升。
+- **`expo install --check` 只看「已装版本」，不看 package.json 的声明地板**——地板落后它照样绿，所以声明地板要人工按 SDK 期望对齐；`expo` 全仓只保留一份（根与 `packages/mobile` 同范围）。见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
+- `npx expo-doctor` 只作参考、不作门禁：它会额外报本仓**设计性**的两条——`overrides` 把 metro 钉在 0.84.6 而 `@expo/metro` 要求精确 0.84.5；原生目录已提交 + `app.json` 配置的 CNG 反向布局被判「未同步」。
 

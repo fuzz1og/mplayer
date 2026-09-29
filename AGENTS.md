@@ -14,11 +14,11 @@ npm run core:build               # 构建 @mplayer/core（改 core 后移动端�
 npm run test:run                 # vitest 单次（renderer + src/__tests__ 顶层）
 npm run test:main                # vitest 单次（主进程，node env，独立 config）
 npm run mobile:e2e               # 移动端真机 e2e 一条龙（usbipd 直挂真机验收，见 e2e/README.md）
-./scripts/verify.sh              # 验证唯一入口（all=static+四套测试；也可只跑 static/renderer/main/core/mobile）
+./scripts/verify.sh              # 验证唯一入口（all=static+四套测试+Expo 依赖一致性；也可只跑某个 scope）
 ./scripts/release.sh             # 一键发布（验证 → bump → commit → 推 master → tag → 触发 CI 构建）
 ```
 
-**验证顺序的唯一出处是 `scripts/verify.sh`**，CI 五个 job 直接调它的分片，不在 workflow 里另拼步骤。全量 = `static`（core:build → lint → design-lint → 双端 typecheck → build）+ 四套测试（renderer / main / core / mobile；矩阵见 `docs/agents/testing.md`）。边界与理由见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`。
+**验证顺序的唯一出处是 `scripts/verify.sh`**，CI 各 job 直接调它的分片（`check` + 四个 `test` + `expo-check`），不在 workflow 里另拼步骤。全量 = `static`（core:build → lint → design-lint → 双端 typecheck → build）+ 四套测试（renderer / main / core / mobile；矩阵见 `docs/agents/testing.md`）+ `expo`（Expo SDK 依赖一致性）。边界与理由见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`；依赖升级治理见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
 pre-commit 钩子（`.githooks/pre-commit`，`npm install` 经 `prepare` 自动接线）只做 root+mobile typecheck + staged lint，是本地加速而非闸门——闸门是 CI 的必需状态检查。
 
 ## Architecture
@@ -41,6 +41,13 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 - 双主题 token（system/light/dark 三态，默认跟随系统）+ `textVariants` 语义变体（`packages/mobile/theme/tokens.ts`）。
 - Audio: expo-audio（非 Howler）；手势 PanResponder + Animated；Metro 吃 `packages/core/dist`（core 改动必须 `core:build`）。
 - Android 发布构建（CNG 反向）：原生目录 `packages/mobile/android/` 提交进 git，不再每次 prebuild。**发版**由 `release.yml` 的 `build-mobile` 跑 `./gradlew assembleRelease bundleRelease --no-daemon`，产物 APK（arm64-v8a+armeabi-v7a，R8+shrinkResources）+ AAB 一并上传；release 签名 keystore base64 存 GitHub Secrets（`ANDROID_KEYSTORE_*`），build.gradle 从环境变量读取、无 env 回退 debug 签名；版本号由 build.gradle 从 `app.json` 显式读取。**只在发版期构建**：PR 与 push 只做静态检查与四套测试，不编译原生（代价与残余风险见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`）。Gradle 缓存走 `gradle/actions/setup-gradle@v6`（勿混用 actions/cache）。
+
+### 依赖版本基线
+- **生态耦合集**（`expo`、`expo-*`、`react-native`、`react-native-*`、`@react-native-community/*`、`@react-native-async-storage/async-storage`）的版本基线 = **Expo SDK 的期望值**，不是「semver 允许的最新」。升级动作是 `npx expo install --fix`，校验是 `./scripts/verify.sh expo`（CI 的 `expo-check` job）。
+- **全仓只允许一份 `expo`**：根与 `packages/mobile` 必须声明**同一范围**（当前 `~57.0.26`）。写不同范围会让 npm 在 `packages/mobile/node_modules` 下再装一份，于是「根 `node_modules/expo` 是哪个版本」变成陷阱（实测踩过）。同理 `@types/react` / `@types/react-dom` 的范围不得逃出 SDK 的 `relatedPackages`（`~19.2.4` / `~19.2.3`）。
+- **`expo install --check` 只校验「已装版本」，看不见 package.json 的声明地板**：地板落后照样全绿（实测曾出现 `expo-asset: ~57.0.13` 而 SDK 期望 `~57.0.18`），所以声明地板要人工对齐。
+- **未解决**：根 `overrides` 的 `metro: ^0.84.5` 会解析成 0.84.6，而 `@expo/metro` 与 RN 的 `@react-native/community-cli-plugin` 都要求**精确** 0.84.5（`npm ls` 报 `invalid`）。改法已明确，但本轮落地受阻（npm 10.9.8 arborist 崩在从零重解析）——详见 ADR 的「后果」。
+- 机器人的职责边界见 `.github/dependabot.yml` 的 ignore 段；决策与否决理由见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
 
 ## 多源链路速览
 

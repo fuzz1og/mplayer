@@ -53,3 +53,20 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: ./scripts/verify.sh ${{ matrix.scope }}
+
+  # Expo SDK 依赖一致性：依赖集偏离 SDK 期望版本时红。
+  # 这是 #478 那类事故的廉价网 —— 秒级、不需要 Gradle/keystore，
+  # 因此不必为了它恢复「PR 期跑原生构建」（见 ADR 2026-09-29-dependency-update-governance）。
+  # 注意：它读 Expo 远端 SDK 元数据，上游发新期望补丁时会独立变红，
+  # 红了跑 expo install --fix 即可，与仓库改动无关。
+  expo-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: ./scripts/verify.sh expo

@@ -35,7 +35,8 @@ cd .claude/worktrees/<slug>
 
 ```bash
 ./scripts/verify.sh   # 全量：static（core:build → lint → design-lint → 双端 typecheck → build）
-                      #      + renderer / main / core / mobile 四套测试；也可只跑某个 scope
+                      #      + renderer / main / core / mobile 四套测试 + expo（SDK 依赖一致性）
+                      #      也可只跑某个 scope
 ```
 
 改了 `packages/core` 不需要额外步骤：`verify.sh` 每个 scope 都会先 `core:build`（Metro 与测试吃 dist 产物，不重建等于白改）。验证项与 CI job 的对应关系见 `docs/agents/testing.md` 的矩阵与 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`。

@@ -39,6 +39,8 @@
 - **「验证什么」收敛到一处**：改验证范围只改 `scripts/verify.sh`，CI 与文档自动跟随。代价是 5 个 job 各自跑一次 `core:build`（约 8s），换分片独立与失败只影响一片。
 - **原生构建的验证点只剩发版期**：PR/push 不再编译 Kotlin/Gradle。发版流水线仍是闸门——`publish` 要求 `build-mobile` 成功（`release.yml` 的 `if` 条件），所以原生构建失败**不会发出坏版本**，代价是**一次失败的发布尝试**（用 GitHub 的 re-run 重试即可，不必重打 tag）。
 - **已记录的残余风险（明知的取舍）**：原生依赖 bump（如 2026-09-29 的 `react-native-screens` 4.27.0）与 AAB 打包路径都只在 tag 期才被编译；RN bundle（Metro）这一类失败的证据强度有限——2026-09-12 那次 `check` 先挂在 lint 上，`mobile tsc` 未执行，因此**「tsc 是否也能抓到同类错误」未经验证**，该空洞可能本就不存在。
-- **必做后续（合并之后）**：给 master 的 ruleset `protect-master` 加 required status checks（`check` + 四个 `test` 分片）。顺序不可颠倒：job 必须先存在于 master。
+- **上一条的残余风险已于 2026-09-29 兑现**：`react-native 0.86.2 → 0.87.1`（0.x 的 minor，实际是破坏性升级、且不在 Expo SDK 57 的支持矩阵内）随 Dependabot 的 production 分组混进 19 条的批次（#449 → #466），把 master 的 Android 发版构建打破（#478，修复 #481）——而 PR CI 因本决策「原生只在发版期构建」一路全绿。
+  处置**不是**恢复 PR 期的原生 Gradle 构建，而是：把生态耦合集从 semver 机器人手里收回，并新增 **`expo install --check` 门禁**（秒级、零 Gradle，直接命中这一类失败）——见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
+- **必做后续（合并之后）**：给 master 的 ruleset `protect-master` 加 required status checks（`check` + 四个 `test` 分片；`expo-check` 见下条权衡）。顺序不可颠倒：job 必须先存在于 master。
 - **未解决、留给后续**：`release.yml` 的 `workflow_dispatch` 通道保留未动——dispatch-with-version 会在 publish 阶段推 tag，从而再触发一次 tag-push 构建（同版本构建 2 次）。这是独立的流水线设计问题，需先确认手工出包的使用场景。
 - 本决策不碰 `docs/research/`、`docs/specs/` 下的日期存档；那里「CI 会跑 X」若与现状不符，属历史快照，不回改。
