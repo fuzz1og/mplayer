@@ -4,6 +4,7 @@ import {
   getUserAgent,
   getApiRequestHeaders,
   resetUaContinuity,
+  safeParseJSON,
   UA_POOL_SIZE,
 } from '../antiScrape.js';
 
@@ -91,5 +92,35 @@ describe('T11 API 态最小请求头（两态中的 API 态）', () => {
       expect(seen.has(ua)).toBe(false);
       seen.add(ua);
     }
+  });
+});
+
+describe('safeParseJSON：脆弱响应的容错降级', () => {
+  it('标准 JSON 直接解析', () => {
+    expect(safeParseJSON('{"a":1}')).toEqual({ a: 1 });
+    expect(safeParseJSON('[1,2,3]')).toEqual([1, 2, 3]);
+  });
+
+  it('HTML 包裹 / 前导垃圾 / 尾逗号都能裁出 JSON（含 </script > 形态）', () => {
+    expect(safeParseJSON('<html><body>{"a":1}</body></html>')).toEqual({ a: 1 });
+    expect(safeParseJSON('<script>{"a":1}</script >')).toEqual({ a: 1 });
+    expect(safeParseJSON('<script>{"a":1}</script>')).toEqual({ a: 1 });
+    expect(safeParseJSON('window.x = {"a":1,};')).toEqual({ a: 1 });
+    expect(safeParseJSON('garbage prefix [1,2,3,] trailing')).toEqual([1, 2, 3]);
+  });
+
+  it('空串 / 无 JSON 结构返回 null 不抛', () => {
+    expect(safeParseJSON('')).toBeNull();
+    expect(safeParseJSON('   ')).toBeNull();
+    expect(safeParseJSON('plain text')).toBeNull();
+    expect(safeParseJSON('<script>var a = 1;</script>')).toBeNull();
+  });
+
+  it('病态重复 <script 前缀线性返回（ReDoS 回归：不再跑 script 剥离正则）', () => {
+    // 旧 /<script[^>]*>([\s\S]*?)<\/script>/i 在「重复 <script 前缀」上是 O(n²)。
+    const evil = '<script'.repeat(40000);
+    const startedAt = Date.now();
+    expect(safeParseJSON(evil)).toBeNull();
+    expect(Date.now() - startedAt).toBeLessThan(1500);
   });
 });

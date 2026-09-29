@@ -18,8 +18,8 @@ import { cacheManager } from './memoryCacheManager.js';
  * - 边界（外层 code 恒 0，必须看内层信号）：歌单不存在/已删除 = `data.code=-100006`；
  *   隐私歌单 = `dirinfo.title` 含「隐私」且 `songnum=0`——都映射为明确错误。
  * - 短链（`c6.y.qq.com/base/fcgi-bin/u?__=xxx`）：默认传输自动跟随重定向，落地地址取
- *   `finalUrl`；mock 传输不跟随时退回 `Location` 头。落地页再走直链正则提取 disstid，
- *   落地为 `playsong.html` 歌曲链接则给出明确错误。
+ *   `finalUrl`；mock 传输不跟随时退回 `Location` 头。落地页按 URL 结构提取 disstid（见下方
+ *   「QQ 链接识别」小节），落地为 `playsong.html` 歌曲链接则给出明确错误。
  * - 曲目 `url` 留空：播放时由 resolvePlayableSongRouted 路由解析，导入不逐首 GetVkey。
  * - 缓存照网易歌单模式（10 分钟，空结果不缓存）。
  *
@@ -38,36 +38,101 @@ export const QQ_PLAYLIST_MAX_SONGS = 1000;
 /** 短链重定向解析最多跟随的跳数（实测链长 ≤3：短链 → H5/落地页）。 */
 const MAX_SHORT_LINK_HOPS = 3;
 
-/** QQ App 分享短链（`c6.y.qq.com/base/fcgi-bin/u?__=xxx`）。 */
-export const QQ_SHORT_LINK_RE = /(?:https?:\/\/)?(?:c\d+\.y\.qq\.com|y\.qq\.com)[^\s]*[?&]__=[^&\s]+/i;
+// ── QQ 链接识别：按 URL 结构判定，不对整串文本跑正则 ──────────────
+//
+// 分享链接是用户粘贴的不受信文本：对整串跑「字面量 + 无界通配」正则，在「重复
+// `y.qq.com` 前缀」这类输入上是 O(n²)（CodeQL js/polynomial-redos #17/#18），
+// 且子串判定会把 `y.qq.com.evil.com` 也当成 QQ 域。统一改走 `new URL` 的
+// hostname / pathname / searchParams（RN 侧 URL 实现已由 core 其它模块在用），
+// 顺带把 host 判定收紧成标签级比对。
 
-/** web 歌单页直链：`y.qq.com/n/ryqq{,_v2}/playlist/{id}`（兼容旧 yqq 前缀）。 */
-const QQ_WEB_PLAYLIST_RE = /y\.qq\.com\/(?:n\/)?(?:ryqq|yqq)(?:_v2)?\/playlist\/(\d+)/i;
+/** QQ 音乐主域（其子域同属：i.y.qq.com / c6.y.qq.com / u.y.qq.com…）。 */
+const QQ_HOST = 'y.qq.com';
 
-/** H5 分享页：`taoge.html?id={id}` / `playlist.html?id={id}`（i.y.qq.com 等）。 */
-const QQ_H5_PLAYLIST_RE = /y\.qq\.com\/(?:[^\s?#]*\/)?(?:taoge|playlist)\.html\?(?:[^#\s]*&)?id=(\d+)/i;
+/** host 是否为 `suffix` 本身或其后代（标签级比对，非子串判定）。 */
+function isHostWithin(hostname: string, suffix: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, '');
+  const base = suffix.toLowerCase();
+  return host === base || host.endsWith(`.${base}`);
+}
 
-/** 歌曲分享落地页（`playsong.html?songmid=...`，不是歌单）。 */
-const QQ_SONG_PAGE_RE = /playsong\.html/i;
+/** 分隔链接与说明文字的字符：空白、引号、括号与中英文标点（分享文案会把链接包在这些字符之间）。 */
+const URL_TOKEN_BOUNDARY_RE = /[\s"'`<>()（）【】《》「」『』，。、；：！？…·,;]/;
+
+/** 候选 token → http(s) URL（缺协议头补 `https://`——用户常直接粘 `y.qq.com/...`）；解析失败返回 null。 */
+function tryParseHttpUrl(token: string): URL | null {
+  const text = token.trim();
+  if (!text) return null;
+  try {
+    const parsed = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+    return /^https?:$/.test(parsed.protocol) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
- * 从 QQ 音乐 URL 直接提取歌单 disstid（纯函数，不发请求）。
- * 覆盖 web 歌单页直链与 H5 分享页（taoge.html / playlist.html）；短链与歌曲链接
- * 返回 null。parsePlaylistUrl 的 QQ 直链分支与本模块共用此函数，避免双份正则漂移。
+ * 含 QQ 域的分享文本 → URL。
+ *
+ * 分享文案常把链接夹在说明文字里（旧的不锚定正则正是靠这点容忍度工作的），
+ * 所以先定位 `y.qq.com`，再向两侧扩到 token 边界，最后交给 URL 解析：
+ * 容忍度不变，但 host / pathname / query 的判定从此基于结构而非子串。
+ */
+function parseQqUrl(raw: string): URL | null {
+  const text = (raw || '').trim();
+  if (!text) return null;
+  const hostAt = text.toLowerCase().indexOf(QQ_HOST);
+  if (hostAt === -1) return null;
+
+  let start = hostAt;
+  while (start > 0 && !URL_TOKEN_BOUNDARY_RE.test(text[start - 1]!)) start -= 1;
+  let end = hostAt + QQ_HOST.length;
+  while (end < text.length && !URL_TOKEN_BOUNDARY_RE.test(text[end]!)) end += 1;
+  return tryParseHttpUrl(text.slice(start, end));
+}
+
+/** web 歌单页路径：`/n/ryqq{,_v2}/playlist/{id}`（兼容旧 `/n/yqq/...`）。 */
+const QQ_WEB_PLAYLIST_PATH_RE = /^(?:\/n)?\/(?:ryqq|yqq)(?:_v2)?\/playlist\/(\d+)$/;
+
+/** H5 分享页文件名：`taoge.html` / `playlist.html`（`id` 在 query 里，可不在首位）。 */
+const QQ_H5_PLAYLIST_FILES = new Set(['taoge.html', 'playlist.html']);
+
+/**
+ * 从 QQ 音乐 URL 提取歌单 disstid（纯函数，不发请求）。
+ * 覆盖 web 歌单页直链（`/n/ryqq{,_v2}/playlist/{id}`）与 H5 分享页
+ * （`taoge.html?id=` / `playlist.html?id=`）；短链与歌曲链接返回 null。
+ * parsePlaylistUrl 的 QQ 直链分支与本模块共用此函数，避免双份判定漂移。
  */
 export function extractQqPlaylistIdFromUrl(url: string): number | null {
-  if (!url) return null;
-  return Number(url.match(QQ_WEB_PLAYLIST_RE)?.[1] ?? url.match(QQ_H5_PLAYLIST_RE)?.[1] ?? '') || null;
+  const parsed = parseQqUrl(url);
+  if (!parsed || !isHostWithin(parsed.hostname, QQ_HOST)) return null;
+
+  const webMatch = QQ_WEB_PLAYLIST_PATH_RE.exec(parsed.pathname);
+  if (webMatch) return Number(webMatch[1]) || null;
+
+  const fileName = (parsed.pathname.split('/').pop() || '').toLowerCase();
+  if (QQ_H5_PLAYLIST_FILES.has(fileName)) {
+    const id = parsed.searchParams.get('id');
+    return id && /^\d+$/.test(id) ? Number(id) : null;
+  }
+  return null;
 }
 
 /** 是否为歌曲分享页链接（playsong.html，非歌单）。 */
 export function isQqSongLink(url: string): boolean {
-  return !!url && QQ_SONG_PAGE_RE.test(url) && /[?&](songmid|songid)=[^&\s]+/i.test(url);
+  const parsed = parseQqUrl(url);
+  if (!parsed || !isHostWithin(parsed.hostname, QQ_HOST)) return false;
+  if (!/(?:^|\/)playsong\.html$/i.test(parsed.pathname)) return false;
+  return !!(parsed.searchParams.get('songmid') || parsed.searchParams.get('songid'));
 }
 
-/** 是否为 QQ App 分享短链（需跟随 302 解析）。 */
+/** 是否为 QQ App 分享短链（`c6.y.qq.com/base/fcgi-bin/u?__=xxx`，需跟随 302 解析）。 */
 export function isQqShortLink(url: string): boolean {
-  return !!url && QQ_SHORT_LINK_RE.test(url);
+  const parsed = parseQqUrl(url);
+  if (!parsed) return false;
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
+  if (host !== QQ_HOST && !/^c\d*\.y\.qq\.com$/.test(host)) return false;
+  return parsed.searchParams.get('__') !== null;
 }
 
 /** 歌单链接解析失败统一错误文案。 */

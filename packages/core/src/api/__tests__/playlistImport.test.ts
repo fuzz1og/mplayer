@@ -64,6 +64,26 @@ describe('parsePlaylistUrl', () => {
     expect(parsePlaylistUrl('')).toBeNull();
     expect(parsePlaylistUrl('https://example.com/foo')).toBeNull();
   });
+
+  it('netease 直链只认 /playlist 路径：song/album/artist 带同一 id 也不误判', () => {
+    expect(parsePlaylistUrl('https://music.163.com/song?id=123456')).toBeNull();
+    expect(parsePlaylistUrl('https://music.163.com/album?id=123456')).toBeNull();
+    expect(parsePlaylistUrl('https://music.163.com/artist?id=123456')).toBeNull();
+    // 手机端域名与 hash 路由照旧
+    expect(parsePlaylistUrl('https://y.music.163.com/m/playlist?id=123456')).toEqual({ type: 'netease', id: '123456' });
+    expect(parsePlaylistUrl('https://music.163.com/#/playlist?id=123456&userid=9')).toEqual({ type: 'netease', id: '123456' });
+    // 分享文案里夹带的链接照旧识别（保留旧容忍度）
+    expect(parsePlaylistUrl('分享我的歌单 https://music.163.com/playlist?id=123456 来自网易云')).toEqual({ type: 'netease', id: '123456' });
+  });
+
+  it('病态重复前缀线性返回（ReDoS 回归：不再用 music.163.com.* 回溯正则）', () => {
+    // 旧正则 music\.163\.com.*\/playlist...[?&]id= 在「重复 music.163.com 前缀」上是
+    // O(n²)。这里给宽裕但有意义的墙钟上限（新实现 ~5ms）。
+    const evil = 'music.163.com'.repeat(12000);
+    const startedAt = Date.now();
+    expect(parsePlaylistUrl(evil)).toBeNull();
+    expect(Date.now() - startedAt).toBeLessThan(1500);
+  });
 });
 
 describe('importFromLink', () => {

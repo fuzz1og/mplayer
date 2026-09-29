@@ -104,6 +104,34 @@ describe('纯函数：链接形态识别', () => {
     expect(isQqShortLink('c6.y.qq.com/base/fcgi-bin/u?__=w3lqEpOHACLO')).toBe(true);
     expect(isQqShortLink('https://y.qq.com/n/ryqq/playlist/7729596131')).toBe(false);
   });
+
+  it('host 判定收紧：伪装 host / 别的站点 query 里的 QQ URL 都不再命中，真子域照常', () => {
+    // 旧正则按整串子串判定，y.qq.com.evil.com 与「外站 query 里塞 QQ URL」都会被认成 QQ
+    expect(extractQqPlaylistIdFromUrl('https://y.qq.com.evil.com/n/ryqq/playlist/7729596131')).toBeNull();
+    expect(extractQqPlaylistIdFromUrl('https://evil.com/?u=https://y.qq.com/n/ryqq/playlist/1')).toBeNull();
+    expect(isQqShortLink('https://evil.com/?u=https://c6.y.qq.com/base/fcgi-bin/u?__=x')).toBe(false);
+    expect(isQqSongLink('https://evil.com/v8/playsong.html?songmid=x')).toBe(false);
+    // 真子域照常：H5 分享页在 i.y.qq.com / i2.y.qq.com
+    expect(extractQqPlaylistIdFromUrl('https://i.y.qq.com/n2/m/share/details/taoge.html?id=5204875759')).toBe(5204875759);
+    expect(extractQqPlaylistIdFromUrl('https://i2.y.qq.com/n3/other/pages/details/playlist.html?id=930054744')).toBe(930054744);
+  });
+
+  it('分享文案里夹带的链接照旧识别（说明文字不打断判定，保留旧容忍度）', () => {
+    expect(extractQqPlaylistIdFromUrl('分享我的歌单：https://y.qq.com/n/ryqq/playlist/7729596131 来自QQ音乐')).toBe(7729596131);
+    expect(extractQqPlaylistIdFromUrl('看看这个 https://i.y.qq.com/n2/m/share/details/taoge.html?id=5204875759，很好听')).toBe(5204875759);
+    expect(isQqShortLink('【歌单】https://c6.y.qq.com/base/fcgi-bin/u?__=w3lqEpOHACLO')).toBe(true);
+  });
+
+  it('病态重复前缀线性返回（ReDoS 回归：链接判定不再跑整串正则）', () => {
+    // 旧 SHORT/H5 正则在「重复 y.qq.com/ 前缀」上是 O(n²)：实测 18 万字符 ≈ 1s、
+    // 36 万字符 ≈ 4s。这里给宽裕但有意义的墙钟上限（新实现 ~5ms）。
+    const evil = 'y.qq.com/'.repeat(40000);
+    const startedAt = Date.now();
+    expect(extractQqPlaylistIdFromUrl(evil)).toBeNull();
+    expect(isQqShortLink(evil)).toBe(false);
+    expect(isQqSongLink(evil)).toBe(false);
+    expect(Date.now() - startedAt).toBeLessThan(1500);
+  });
 });
 
 describe('resolveQqPlaylistDisstid', () => {
@@ -207,7 +235,8 @@ describe('getQqPlaylistSongs（CgiGetDiss 匿名直连）', () => {
 
   it('入参兼容：数字串 / 直链 / 短链统一到 disstid', async () => {
     const transport = vi.fn(async (req: any) => {
-      if (req.url.includes('c6.y.qq.com')) {
+      // host 精确比对：整串 includes 会把 evil.com/?x=c6.y.qq.com 也认作 QQ 短链
+      if (new URL(req.url).hostname === 'c6.y.qq.com') {
         return jsonResponse({}, { headers: { location: 'https://y.qq.com/n/ryqq/playlist/7729596131' } });
       }
       return jsonResponse(dissBody([dissTrack('m1', '歌')]));
