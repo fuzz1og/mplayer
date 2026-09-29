@@ -50,6 +50,16 @@ updates:
       # 迁移前不自动提 PR，见 #446
       - dependency-name: "@react-native-async-storage/async-storage"
         update-types: ["version-update:semver-major"]
+      # ── RN 原生家族：版本由 Expo SDK 决定，必须与 SDK 升级一起动 ──
+      # 这些包单独 bump 会让原生构建与 SDK 期望脱节。#466 把 react-native 抬到 0.87.1
+      # 就是这么把 Android 发版构建打挂的（RN 0.87 → AGP 9.2.1 → Gradle >=9.4.1 →
+      # Gradle 9.4.1 内嵌 Kotlin 2.3.0 与 Expo 57 的 Kotlin 2.1.20 插件编译器冲突），见 #478。
+      # 判定基准是 `npx expo install --check`；要升级就整族一起升（含 Expo SDK 升级）。
+      - dependency-name: react-native
+      - dependency-name: react-native-safe-area-context
+      - dependency-name: react-native-screens
+      - dependency-name: react-native-svg
+      - dependency-name: "@react-native-community/slider"
       # @vitejs/plugin-react 5+ 的 peer 是 vite ^8.0.0（只有 4.x 支持 vite ^4~^7）。
       # 要升它必须连 vite 8 一起升，属成对决策；采用 vite 8 前不提 PR（与上面 vite 的 ignore 呼应）
       - dependency-name: "@vitejs/plugin-react"

@@ -11,6 +11,8 @@ local.properties
 *.iml
 *.hprof
 .cxx/
+# Kotlin 2.x 增量编译产物（Gradle 构建时生成在原生目录里；原生目录已提交进 git，必须忽略）
+.kotlin/
 
 # generated inline modules
 app/src/main/java/inline/

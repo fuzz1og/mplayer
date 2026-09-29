@@ -35,3 +35,17 @@ CI 的 `check` 与四个 `test` 分片都只是 `./scripts/verify.sh <scope>` �
 - 构造器注入可测性：diskBackend(cacheDir)、localMusicService(userDataPath)
 - E2E 桌面: Playwright 在 `e2e/`，测试服务器 `npm run dev`（Vite，5174）；spec 不在 CI/verify 流程，属本地手工回归
 - E2E 移动端: 真机一条龙 `npm run mobile:e2e`（`scripts/mobile-e2e.sh`，adb + logcat + uiautomator 驱动，前置/断言/局限见 `e2e/README.md`）
+
+## 原生发版构建（本机）
+
+PR / push 的 CI **不编译原生**（边界与理由见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`），要本机验证就跑发版同款命令：
+
+```bash
+cd packages/mobile/android
+./gradlew assembleRelease bundleRelease --no-daemon
+# 产物：app/build/outputs/apk/release/app-release.apk 与 app/build/outputs/bundle/release/app-release.aab
+```
+
+- **Windows 前置**：SDK 自带的 CMake 3.22.1 打包的是 **Ninja 1.10.2**，有已知长路径 bug，C++ 阶段会报 `ninja: error: manifest 'build.ninja' still dirty after 100 tries`（实测 arm64-v8a / armeabi-v7a 都会撞上）。把该 `cmake/<ver>/bin/ninja.exe` 换成 **≥1.12** 即可通过——与 React Native Reanimated 的 *Building for Android on Windows* 指南给出的解法一致。**Linux 不受影响**（发版的 `build-mobile` 跑 ubuntu-latest）。
+- 原生依赖的版本基线是 **Expo SDK 的期望版本**，判定命令 `npx expo install --check`；不要单独 bump `react-native` / `react-native-screens` / `safe-area-context` / `slider` / `svg`（`.github/dependabot.yml` 已对这些加 ignore），要升就整族随 SDK 一起升。
+
