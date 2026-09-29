@@ -34,7 +34,7 @@ export default function HeroSkeleton({
     <View style={[styles.container, { backgroundColor: colors.bgBase }]}>
       {/* 封面块：与真实 Hero 同一个 coverH */}
       <View style={{ height: coverH, backgroundColor: colors.bgSurface }}>
-        <View style={[styles.fog, { height: COVER_FOG_H, backgroundColor: colors.bgBase, opacity: 0.6 }]} />
+        <View style={[styles.fog, { height: COVER_FOG_H, backgroundColor: colors.bgBase }]} />
       </View>
       {/* 信息区：大标题 + 副标题 + 指标行 */}
       <View style={styles.info}>

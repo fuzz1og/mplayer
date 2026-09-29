@@ -31,6 +31,6 @@ export default function CoverFallback({ name, label }: { name: string; label?: s
 
 const styles = StyleSheet.create({
   fill: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
-  glyph: { color: 'rgba(255,255,255,0.92)', fontSize: 96, fontWeight: '700' },
-  label: { position: 'absolute', left: 16, bottom: 16, fontSize: 12, color: 'rgba(255,255,255,0.85)' },
+  glyph: { color: 'rgba(255,255,255,0.92)', fontSize: 96, fontWeight: '700' }, // design-lint: ok 压在生成封面插画上的前景字（非主题表面色）
+  label: { position: 'absolute', left: 16, bottom: 16, fontSize: 12, color: 'rgba(255,255,255,0.85)' }, // design-lint: ok 同上
 });

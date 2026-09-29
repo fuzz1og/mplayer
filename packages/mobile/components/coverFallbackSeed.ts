@@ -6,13 +6,15 @@
  */
 
 /** 6 组深浅主题通用的低饱和色对（不抢真实封面，也不至于糊成一块灰）。 */
+// 下面是「生成的封面图」的配色，不是 UI 表面色：它模拟的是一张专辑/榜单封面插画，
+// 没有主题 token 语义（深浅主题下都该是同一张图），故整表豁免 design-lint。
 export const FALLBACK_PALETTES: readonly (readonly [string, string])[] = [
-  ['#2B3A67', '#4A6FA5'],
-  ['#4A2B4F', '#8E5C8F'],
-  ['#1F3D3A', '#2F7A6B'],
-  ['#4A3520', '#A5703C'],
-  ['#2A2F4A', '#5C6BC0'],
-  ['#3D2230', '#9C5262'],
+  ['#2B3A67', '#4A6FA5'], // design-lint: ok 兜底封面插画配色（非 UI 表面色）
+  ['#4A2B4F', '#8E5C8F'], // design-lint: ok 兜底封面插画配色（非 UI 表面色）
+  ['#1F3D3A', '#2F7A6B'], // design-lint: ok 兜底封面插画配色（非 UI 表面色）
+  ['#4A3520', '#A5703C'], // design-lint: ok 兜底封面插画配色（非 UI 表面色）
+  ['#2A2F4A', '#5C6BC0'], // design-lint: ok 兜底封面插画配色（非 UI 表面色）
+  ['#3D2230', '#9C5262'], // design-lint: ok 兜底封面插画配色（非 UI 表面色）
 ];
 
 /** FNV-1a 截断哈希：确定性，同一 seed 永远同一桶。 */
