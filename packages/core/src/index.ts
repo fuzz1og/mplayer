@@ -50,6 +50,31 @@ export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, applySwap } from './shared/sourceSwap.js';
 export { songUsesSongidLyrics, isSodaSource, isInlineLyrics } from './shared/songLyrics.js';
+// 歌词入队取词（#429）：可见期预取的入队 / single-flight / 取消 / 单次接纳上限单点。
+// 并发与限速不在本模块——那是 transport 双层闸门（#408）的职责。
+export {
+  LYRICS_HYDRATION_BURST_CAP,
+  LYRICS_HYDRATION_SETTLED_LIMIT,
+  enqueueLyricsHydration,
+  cancelLyricsHydration,
+  cancelAllLyricsHydration,
+  // 宿主接缝：桌面渲染层经 IPC 注入主进程取词器（它的歌词缓存在主进程，见 #441）。
+  setLyricsHydratorDeps,
+} from './shared/lyricsHydrator.js';
+// 以下是**测试/诊断接缝**（与 `setTier3Deps` 同性质，**不是对外契约**）：前两个给
+// 单测与真机诊断读「在飞 / 已结算」的即时状态，最后一个给会话切换与单测重置。
+// 宿主不要拿它们驱动业务逻辑。
+export {
+  awaitLyricsHydrationIdle,
+  getLyricsHydrationStats,
+  resetLyricsHydrator,
+} from './shared/lyricsHydrator.js';
+export type {
+  LyricsHydrationCandidate,
+  LyricsHydrationStats,
+  LyricsHydratorDeps,
+  LyricsFetcher,
+} from './shared/lyricsHydrator.js';
 // 榜单聚合内核已下线（#332 裁决：回归单元榜 + 源切换）。聚合只在「存在跨源可比原生量」
 // 的产品里有意义；本项目只有名次、没有绝对量，Σ1/rank 在业界找不到对应物。
 export {
