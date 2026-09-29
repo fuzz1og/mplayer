@@ -4,7 +4,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    # 上限只是安全阀，不是策展工具。原先 10 条会被占满，把积压的 35 项更新
+    # 静默挡住，直到旧 PR 清空才一次性放闸——分组已经负责收敛数量，这里上调避免再憋。
+    open-pull-requests-limit: 20
     # 新版本先冷却再提 PR：避开「刚发布就被投毒」的窗口（安全更新不受 cooldown 限制）。
     # 冷却天数必须在 1~90；未显式配置时 Dependabot 也会默认冷却 3 天。
     cooldown:
@@ -13,14 +15,17 @@ updates:
       semver-minor-days: 7
       semver-patch-days: 3
     # 把同类低风险升级合并成一个 PR，避免每周刷出十几条历史（#446）。
-    # 分组只覆盖非大版本；major 仍逐条提 PR，保留单独评估。
+    # major 始终逐条提 PR，保留单独评估。
     groups:
-      prod-non-major:
+      # production 只分组 patch。注意 semver 对 0.x 包的定义：minor 就是破坏性升级，
+      # 实测 react-native 0.86→0.87、iconv-lite 0.6→0.7 都曾把 CI 打红，
+      # 所以 production 的 minor 一律逐条提，不进分组。
+      prod-patch:
         applies-to: version-updates
         dependency-type: production
         update-types:
-          - minor
           - patch
+      # development 依赖不随产物发布，且 CI 覆盖双端 typecheck + 测试，minor 可一并分组。
       dev-non-major:
         applies-to: version-updates
         dependency-type: development
