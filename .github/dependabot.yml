@@ -50,6 +50,18 @@ updates:
       # 迁移前不自动提 PR，见 #446
       - dependency-name: "@react-native-async-storage/async-storage"
         update-types: ["version-update:semver-major"]
+      # @vitejs/plugin-react 5+ 的 peer 是 vite ^8.0.0（只有 4.x 支持 vite ^4~^7）。
+      # 要升它必须连 vite 8 一起升，属成对决策；采用 vite 8 前不提 PR（与上面 vite 的 ignore 呼应）
+      - dependency-name: "@vitejs/plugin-react"
+        versions: [">=5"]
+      # typescript 7 目前装不上：typescript-eslint（含最新 8.71.0）peer 上限是 <6.1.0，
+      # npm install 直接 ERESOLVE。6.x 仍可正常提；等上游支持 TS 7 再放开这条
+      - dependency-name: typescript
+        versions: [">=7"]
+      # @babel/core 8 与 metro 冲突（metro 0.84 依赖 @babel/core ^7.25.2），
+      # 须与 metro / RN 一并评估，不单独提 PR
+      - dependency-name: "@babel/core"
+        versions: [">=8"]
     labels:
       - dependencies
     commit-message:
