@@ -31,7 +31,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
-      # 验证命令的唯一出处是 scripts/verify.sh，CI 不再自己拼步骤（避免文档/CI 漂移）
+      # 验证命令的唯一出处是 scripts/verify.mjs（scripts/verify.sh 只是两行 shim，
+      # 这里走 shim 顺带把它一起验证）；CI 不再自己拼步骤（避免文档/CI 漂移）
       - run: ./scripts/verify.sh static
 
   # 四套测试拆成独立分片并行跑（矩阵的每个 entry 是一个独立 job / 独立 check 名）：

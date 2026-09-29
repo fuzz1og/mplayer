@@ -44,3 +44,23 @@
 - **必做后续（合并之后）**：给 master 的 ruleset `protect-master` 加 required status checks（`check` + 四个 `test` 分片；`expo-check` 见下条权衡）。顺序不可颠倒：job 必须先存在于 master。
 - **未解决、留给后续**：`release.yml` 的 `workflow_dispatch` 通道保留未动——dispatch-with-version 会在 publish 阶段推 tag，从而再触发一次 tag-push 构建（同版本构建 2 次）。这是独立的流水线设计问题，需先确认手工出包的使用场景。
 - 本决策不碰 `docs/research/`、`docs/specs/` 下的日期存档；那里「CI 会跑 X」若与现状不符，属历史快照，不回改。
+
+## 更新（2026-09-30，#500）
+
+决策 1 的**入口实现**从 bash 换成 Node：`scripts/verify.mjs` 成为唯一事实源，`scripts/verify.sh` 退化为两行 shim
+（`exec node ...`）；scope 集合与步骤序列逐字不变，**决策 1 的语义不变**（仍然只有一个入口、CI 不另拼步骤）。
+
+原因是踩到了一条没被记录的 Windows 坑：`Get-Command bash` 的第一顺位常常是
+`C:\WINDOWS\system32\bash.exe`（WSL），于是 WSL 的 **Linux** node 去跑 Windows 装的 `node_modules`，
+在 `core:build` 里报 `Cannot find module @rollup/rollup-linux-x64-gnu` —— 错误完全不指向成因，
+且每个在 Windows 上跑验证的人与 agent 都会撞一次（本仓的主力开发机就是 Windows）。Node 是本项目的硬依赖，
+脚本因此跨 pwsh / cmd / Git Bash / WSL / CI 行为一致。`design-lint.sh` 同样移植为 `design-lint.mjs`，
+输出与退出码已与 bash 版逐字对拍（干净树 + 植入 4 条违规含豁免行，两边完全一致）。
+
+- CI 的三处 `./scripts/verify.sh <scope>` **未改**（走 shim，顺带把 shim 一起验证）；新增 `npm run verify`，
+  Windows / PowerShell / cmd / Git Bash 通用（含 `-- <scope>`）。
+- `verify.mjs` 增加一条**起跑前自检**：`node_modules` 的平台与当前 node 不一致时直接给人话
+  （点名「你在用 Windows 装的依赖跑 Linux node（WSL）」并给两条处置），把上面那个「长得像 rollup 的问题」提前拦成明确的平台错误。
+- 仍未移植（有意）：`release.sh`（低频人工动作）与 `mobile-*.sh`（绑定 adb / 真机回路）——它们仍需要 bash，
+  且 CRLF 那条老坑对它们继续成立（见 `docs/agents/git-workflow.md`）。
+

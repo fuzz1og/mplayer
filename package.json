@@ -26,6 +26,8 @@
     "electron:build:mac": "npm run build && electron-builder --mac",
     "electron:build:linux": "npm run build && electron-builder --linux",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+    "design-lint": "node scripts/design-lint.mjs",
+    "verify": "node scripts/verify.mjs",
     "typecheck": "tsc --noEmit",
     "typecheck:mobile": "npx tsc --noEmit --project packages/mobile/tsconfig.json",
     "test": "vitest",
