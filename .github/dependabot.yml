@@ -46,20 +46,35 @@ updates:
       # esbuild 与根 overrides 钉死同一版本（vite 经 override 统一解析），
       # 只 bump devDependency 会被 override 吃掉、只剩声明漂移；要升级须两处一起改，故不自动提 PR
       - dependency-name: esbuild
-      # async-storage 3.x 是破坏性大版本（scoped storage / 批量 API 改名 / Android 额外安装步骤），
-      # 迁移前不自动提 PR，见 #446
+      # ── 生态耦合集：版本选择权归 Expo SDK，不归 semver 机器人 ──────────────
+      # 为什么整组排除 minor+major（一手来源见 docs/research/2026-09-29-dependency-update-policy.md
+      # 与 ADR docs/adr/2026-09-29-dependency-update-governance.md）：
+      # - semver 规范 §4：0.y.z「Anything MAY change at any time」，0.x 的 minor 就是破坏性升级；
+      # - Dependabot 只按 x.y.z 字面分位（官方原文："Dependabot assumes that versions in this
+      #   form are always major.minor.patch."），识别不出 0.x 的破坏性 —— #478 的成因正是
+      #   react-native 0.86.2 → 0.87.1 被当成 minor 混进 19 条的批次；
+      # - Expo 官方要求 "Upgrade all dependencies to match the installed SDK version"，
+      #   即期望版本由 SDK 决定，而不是「semver 允许的最新」。升级动作走 expo install --fix，
+      #   一致性由 CI 的 expo-check job（scripts/verify.sh expo）兜住。
+      # 事故的完整因果链（吸收 #481 的注释）：#466 把 react-native 抬到 0.87.1 → RN 0.87 的
+      # gradle 插件把 AGP 提到 9.2.1 → AGP 9.2.1 要求 Gradle ≥9.4.1（仓库 wrapper 钉 9.3.1）
+      # → 升到 9.4.1 后其内嵌 Kotlin 2.3.0 与 Expo 57 的 Kotlin 2.1.20 插件编译器冲突（#478）。
+      # 只挡 version updates 的 minor/major；官方明文 update-types 不影响 security updates，
+      # 所以每个包的 patch 与安全补丁照常提 PR。
+      - dependency-name: "expo*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "react-native-*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@react-native-community/*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@react-native-masked-view/*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "@react-native-async-storage/async-storage"
-        update-types: ["version-update:semver-major"]
-      # ── RN 原生家族：版本由 Expo SDK 决定，必须与 SDK 升级一起动 ──
-      # 这些包单独 bump 会让原生构建与 SDK 期望脱节。#466 把 react-native 抬到 0.87.1
-      # 就是这么把 Android 发版构建打挂的（RN 0.87 → AGP 9.2.1 → Gradle >=9.4.1 →
-      # Gradle 9.4.1 内嵌 Kotlin 2.3.0 与 Expo 57 的 Kotlin 2.1.20 插件编译器冲突），见 #478。
-      # 判定基准是 `npx expo install --check`；要升级就整族一起升（含 Expo SDK 升级）。
-      - dependency-name: react-native
-      - dependency-name: react-native-safe-area-context
-      - dependency-name: react-native-screens
-      - dependency-name: react-native-svg
-      - dependency-name: "@react-native-community/slider"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       # @vitejs/plugin-react 5+ 的 peer 是 vite ^8.0.0（只有 4.x 支持 vite ^4~^7）。
       # 要升它必须连 vite 8 一起升，属成对决策；采用 vite 8 前不提 PR（与上面 vite 的 ignore 呼应）
       - dependency-name: "@vitejs/plugin-react"
