@@ -12,6 +12,7 @@
 ## ✨ 特性
 
 - **🎧 多源聚合播放** — 7 源官方直连，可播性探测 + 预取缓存，播放零等待出声；直连失败按订阅清单降级到第三方解析源，解析腿按**会话内健康度**定序（只改顺序、不缩减候选集）
+- **🔒 后台播放与锁屏控制** — Android 走自写 Kotlin 模块（media3 ExoPlayer 原生持队列 + 原生推进 + `MediaLibraryService` 媒体会话）：后台保活，通知栏与锁屏控制跟随换曲；iOS 回落 expo-audio
 - **🔀 单曲换源** — 完整版优先 + 可播性探测 + 原位替换，失效音源一键换源
 - **📱 双端一致** — 桌面（Electron + React）与移动端（Expo + React Native）共享 core，功能与数据语义对齐
 - **🌗 深色模式** — 移动端双主题 token 体系 + textVariants 语义变体，跟随系统或手动切换
@@ -79,7 +80,7 @@ npm run start               # 启动 Expo dev server
 | 端 | 技术 |
 |----|------|
 | 桌面 | Electron 41 · React 19 · TypeScript · Vite 7 · Zustand · Ant Design 6 · Howler · electron-builder · electron-updater |
-| 移动 | Expo 57 · React Native 0.86 · expo-router · expo-audio · Zustand · AsyncStorage · lucide-react-native |
+| 移动 | Expo 57 · React Native 0.86 · expo-router · media3/ExoPlayer（自写 Kotlin 播放模块）· expo-audio（iOS 回落）· Zustand · AsyncStorage · lucide-react-native |
 | 共享 | `@mplayer/core`：多源直连客户端、歌曲识别/匹配、播放地址解析、缓存内核、tier3 执行器 |
 
 ## 🛠️ 开发
