@@ -40,7 +40,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 ### Mobile
 - 双主题 token（system/light/dark 三态，默认跟随系统）+ `textVariants` 语义变体（`packages/mobile/theme/tokens.ts`）。
 - Audio: expo-audio（非 Howler）；手势 PanResponder + Animated；Metro 吃 `packages/core/dist`（core 改动必须 `core:build`）。
-- Android 发布构建（CNG 反向）：原生目录 `packages/mobile/android/` 提交进 git，不再每次 prebuild。**发版**由 `release.yml` 的 `build-mobile` 跑 `./gradlew assembleRelease bundleRelease --no-daemon`，产物 APK（arm64-v8a+armeabi-v7a，R8+shrinkResources）+ AAB 一并上传；release 签名 keystore base64 存 GitHub Secrets（`ANDROID_KEYSTORE_*`），build.gradle 从环境变量读取、无 env 回退 debug 签名；版本号由 build.gradle 从 `app.json` 显式读取。**发版前的原生闸门**是 `mobile-native.yml`：只在原生相关路径（`packages/mobile/android/**`、`modules/**`、`app.json`、`package.json`、`package-lock.json`）变动时触发，同样跑 `assembleRelease bundleRelease`，但故意不解 keystore（fork PR 拿不到 secrets）。Gradle 缓存走 `gradle/actions/setup-gradle@v6`（勿混用 actions/cache）。
+- Android 发布构建（CNG 反向）：原生目录 `packages/mobile/android/` 提交进 git，不再每次 prebuild。**发版**由 `release.yml` 的 `build-mobile` 跑 `./gradlew assembleRelease bundleRelease --no-daemon`，产物 APK（arm64-v8a+armeabi-v7a，R8+shrinkResources）+ AAB 一并上传；release 签名 keystore base64 存 GitHub Secrets（`ANDROID_KEYSTORE_*`），build.gradle 从环境变量读取、无 env 回退 debug 签名；版本号由 build.gradle 从 `app.json` 显式读取。**只在发版期构建**：PR 与 push 只做静态检查与四套测试，不编译原生（代价与残余风险见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`）。Gradle 缓存走 `gradle/actions/setup-gradle@v6`（勿混用 actions/cache）。
 
 ## 多源链路速览
 
