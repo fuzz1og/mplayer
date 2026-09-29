@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import pako from 'pako';
+import { deflate } from 'pako';
 import iconv from 'iconv-lite';
 import type { Song } from '../../types/index.js';
 import { setTransport } from '../transport.js';
@@ -64,7 +64,7 @@ describe('decodeKuwoLyricBody（歌词管线）', () => {
     let bin = '';
     for (const b of xored) bin += String.fromCharCode(b);
     const b64 = btoa(bin);
-    const compressed = pako.deflate(new TextEncoder().encode(b64));
+    const compressed = deflate(new TextEncoder().encode(b64));
     const buf = new Uint8Array(10 + 4 + compressed.length);
     buf.set(new TextEncoder().encode('tp=content\r\n\r\n'), 0);
     buf.set(compressed, 14);

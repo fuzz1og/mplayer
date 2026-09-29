@@ -1,4 +1,4 @@
-import pako from 'pako';
+import { inflate } from 'pako';
 import iconv from 'iconv-lite';
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
@@ -171,7 +171,7 @@ export function decodeKuwoLyricBody(buf: Uint8Array, isLyricx = true): string {
   const split = latin.indexOf('\r\n\r\n');
   if (split < 0) return '';
   try {
-    const inflated = pako.inflate(buf.slice(split + 4));
+    const inflated = inflate(buf.slice(split + 4));
     if (!isLyricx) return iconv.decode(Buffer.from(inflated), 'gb18030');
     const b64 = new TextDecoder('utf-8').decode(inflated).trim();
     const bin = atob(b64);
