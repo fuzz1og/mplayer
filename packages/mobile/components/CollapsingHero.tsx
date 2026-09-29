@@ -25,7 +25,7 @@ import {
   Image,
   Animated,
 } from 'react-native';
-import type { FlatListProps, ListRenderItem } from 'react-native';
+import type { FlatListProps, ListRenderItem, RefreshControlProps } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Music2, Play, ArrowLeft } from 'lucide-react-native';
@@ -99,6 +99,8 @@ interface CollapsingHeroProps<T> {
   listHeader?: React.ReactElement | null;
   onEndReached?: () => void;
   onEndReachedThreshold?: number;
+  /** 下拉刷新（透传给内部 FlatList）。Hero 页此前没有这个槽，榜单页换过来会丢掉刷新 */
+  refreshControl?: React.ReactElement<RefreshControlProps>;
   ListFooterComponent?: React.ReactElement | null;
   /** 空列表兜底（列表为空且无封面时仍显示信息区） */
   ListEmptyComponent?: React.ReactElement | null;
@@ -126,6 +128,7 @@ export default function CollapsingHero<T>({
   listHeader,
   onEndReached,
   onEndReachedThreshold,
+  refreshControl,
   ListFooterComponent,
   ListEmptyComponent,
 }: CollapsingHeroProps<T>) {
@@ -187,6 +190,7 @@ export default function CollapsingHero<T>({
         scrollEventThrottle={16}
         onEndReached={onEndReached}
         onEndReachedThreshold={onEndReachedThreshold}
+        refreshControl={refreshControl}
         ListFooterComponent={ListFooterComponent ?? undefined}
         ListEmptyComponent={ListEmptyComponent ?? undefined}
         contentContainerStyle={{ paddingBottom: 24 }}
