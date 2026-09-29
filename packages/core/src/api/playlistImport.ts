@@ -25,10 +25,16 @@ export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
   const trimmedUrl = url.trim();
 
   // Full NetEase URL: https://music.163.com/#/playlist?id=xxx or https://music.163.com/playlist?id=xxx
-  // 必须匹配 /playlist 路径：song/album/artist 链接同样带 id=，不校验路径会导入错歌单
-  const neteaseMatch = trimmedUrl.match(/music\.163\.com.*\/playlist[^?\s]*[?&]id=(\d+)/);
+  // 必须匹配 /playlist 路径：song/album/artist 链接同样带 id=，不校验路径会导入错歌单。
+  // 先定位 `/playlist` 再在尾巴上取首个 query id：`[^\s?]*\?id=` 里通配类与 `?` 不相交，
+  // 无回溯歧义；旧的 `music\.163\.com.*\/playlist[^?\s]*[?&]id=` 在「重复 music.163.com
+  // 前缀」的粘贴文本上是 O(n²)（CodeQL js/polynomial-redos）。
+  const neteaseHostAt = trimmedUrl.indexOf('music.163.com');
+  const neteasePathAt = neteaseHostAt === -1 ? -1 : trimmedUrl.indexOf('/playlist', neteaseHostAt);
+  const neteaseMatch =
+    neteasePathAt === -1 ? null : trimmedUrl.slice(neteasePathAt).match(/^\/playlist[^\s?]*\?id=(\d+)/);
   if (neteaseMatch) {
-    return { type: 'netease', id: neteaseMatch[1] };
+    return { type: 'netease', id: neteaseMatch[1]! };
   }
 
   // Short link: http://163cn.tv/xxx or https://163cn.tv/xxx
@@ -37,7 +43,7 @@ export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
     return { type: 'netease-short', url: trimmedUrl };
   }
 
-  // QQ Music（#280 原生化，正则与 qqPlaylist 共用防漂移）：
+  // QQ Music（#280 原生化，判定与 qqPlaylist 共用防漂移）：
   // - web 歌单页直链 y.qq.com/n/ryqq{,_v2}/playlist/{id} 与 H5 分享页
   //   taoge.html?id= / playlist.html?id= → 带出歌单 id；
   // - App 分享短链 c6.y.qq.com/base/fcgi-bin/u?__=xxx → 返回 url，播放侧解析 302；

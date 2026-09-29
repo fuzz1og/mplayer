@@ -288,10 +288,12 @@ export async function beforeRequest(): Promise<void> {
 // ── 容错 JSON 解析（T11 / r2 §5c）─────────────────────────────
 //
 // sourceUrl 源站偶发非 JSON（HTML 包裹 / 尾逗号 / 单引号 / 前导垃圾）时，
-// 直接 JSON.parse 会让整链路炸掉。此处做三级降级，失败返回 null 不抛：
-//   JSON.parse → 去尾逗号/HTML 包裹裁剪后再试 → 最终返回 null。
-// 决策：默认启用但保守——不引入第三方 jsonrepair（避免 RN 打包体积/依赖），
-// 覆盖最常见的中毒形态即可；失败交给调用方兜底（返回 null 不炸链路）。
+// 直接 JSON.parse 会让整链路炸掉。此处做两级降级，失败返回 null 不抛：
+//   JSON.parse → 从首个 `{`/`[` 裁到最后一个 `}`/`]`（顺带去尾逗号）→ 返回 null。
+// 决策：默认启用但保守——不引入第三方 jsonrepair（避免 RN 打包体积/依赖）；
+// 也不做 `<script>` 正则剥离——那条正则既漏 `</script >`（CodeQL js/bad-tag-filter），
+// 又对整串不可信响应可多项式回溯（js/polynomial-redos），而 script 体本身极少
+// 是合法 JSON；「HTML 包里裹 JSON」由括号裁剪覆盖（首尾垃圾照样能裁出来）。
 
 export function safeParseJSON(text: string): unknown {
   if (typeof text !== 'string' || text.trim() === '') return null;
@@ -300,24 +302,19 @@ export function safeParseJSON(text: string): unknown {
   try {
     return JSON.parse(raw);
   } catch {
-    // 降级 1：剥离常见 HTML 包裹（<script>…</script> / <pre>…</pre> 内 JSON）
-    let candidate = null as string | null;
-    const script = raw.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
-    candidate = script ? script[1]!.trim() : null;
+    // 降级：从「第一个 { 或 [」裁到「最后一个 } 或 ]」，取出 HTML 包裹/前导垃圾里的 JSON
+    // 子串。纯 indexOf/lastIndexOf：不对整串不可信响应跑正则（理由见上方小节注释）。
+    const objStart = raw.indexOf('{');
+    const arrStart = raw.indexOf('[');
+    const start = objStart === -1 ? arrStart : arrStart === -1 ? objStart : Math.min(objStart, arrStart);
+    if (start === -1) return null;
 
-    // 降级 2：从「{」到文件尾裁剪出 JSON 对象 / 数组子串
-    if (!candidate) {
-      const objStart = raw.indexOf('{');
-      const arrStart = raw.indexOf('[');
-      const start = objStart === -1 ? arrStart : Math.min(objStart, arrStart);
-      if (start === -1) return null;
-      // 去尾逗号：裁剪到最后一个 } 或 ]
-      const end = Math.max(raw.lastIndexOf('}'), raw.lastIndexOf(']'));
-      candidate = end > start ? raw.slice(start, end + 1) : raw.slice(start);
-    }
-
+    const end = Math.max(raw.lastIndexOf('}'), raw.lastIndexOf(']'));
+    const candidate = end > start ? raw.slice(start, end + 1) : raw.slice(start);
     if (!candidate) return null;
+
     try {
+      // 去尾逗号：`{"a":1,}` → `{"a":1}`
       return JSON.parse(candidate.replace(/,(\s*[}\]])/g, '$1'));
     } catch {
       return null;
