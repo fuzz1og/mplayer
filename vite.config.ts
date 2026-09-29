@@ -83,7 +83,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    include: ['src/renderer/__tests__/**/*.test.{ts,tsx}', 'src/__tests__/**/*.test.{ts,tsx}'],
+    // 只收渲染层与 src/__tests__ 顶层的用例；主进程测试（src/__tests__/main/**）
+    // 归 vitest.main.config.ts（node env）+ npm run test:main —— 否则同一批用例会在
+    // jsdom 与 node 两种环境下各跑一遍（见 ADR 2026-09-29-ci-verification-boundary）
+    include: ['src/renderer/__tests__/**/*.test.{ts,tsx}', 'src/__tests__/*.test.{ts,tsx}'],
     setupFiles: ['src/renderer/__tests__/setup.ts']
   }
 });

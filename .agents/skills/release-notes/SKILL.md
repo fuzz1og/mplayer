@@ -34,7 +34,7 @@ description: 为 MPlayer 的 GitHub Release 生成并更新详细介绍（版本
 - **Windows**: `MPlayer-Setup-{ver}.exe`（安装包，~XMB）
 - **macOS**: `MPlayer-{ver}.dmg`（x64）/ `MPlayer-{ver}-arm64.dmg`（Apple Silicon）
 - **Linux**: `MPlayer-{ver}.AppImage` / `mplayer_{ver}_amd64.deb`
-- **Android**: `MPlayer-v{ver}.apk`
+- **Android**: `MPlayer-v{ver}.apk`（安装包）/ `MPlayer-v{ver}.aab`（Google Play 上架包）
 
 **Full Changelog**: https://github.com/fuzz1og/mplayer/compare/{prev}...{tag}
 ```

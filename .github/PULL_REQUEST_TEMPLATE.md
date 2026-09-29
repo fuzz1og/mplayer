@@ -11,9 +11,9 @@
 - [ ] `npm run lint` 通过
 - [ ] `npm run typecheck` 通过（桌面端）
 - [ ] `npx tsc --noEmit --project packages/mobile/tsconfig.json` 通过（移动端）
-- [ ] 相关测试通过（`npx vitest run` 等）
+- [ ] 相关测试通过（`./scripts/verify.sh` 一把过；或按套件：`test:run` / `test:main` / `npm test -w packages/core` / mobile 配置）
 - [ ] 改了 `packages/core` → 已 `npm run core:build` 并重跑验证
-- [ ] 改了 `packages/mobile` 或 `packages/core` → 已附真机验收结论与**证据图**（机型 / 系统 / 网络环境；图挂 PR 正文，流程见 mobile-device-debugging skill）
+- [ ] 改了 `packages/mobile` 或 `packages/core` → 已附真机验收结论与**证据图**（机型 / 系统 / 网络环境；图挂 PR 正文，流程见 mobile-device-debugging skill）。**这是人工约定，CI/钩子不做校验**
 - [ ] UI / 真机验收有可视证据 → 已在 PR **正文**附图（`gh pr edit --attach`，不入库）
 - [ ] 行为 / 命令 / 架构有变化 → 已同步更新 AGENTS.md / CONTEXT.md / 相关 ADR
 

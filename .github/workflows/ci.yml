@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: ['*']
+    # 只监听 master。功能分支的验证交给 pull_request —— 旧配置写的 ['*'] 并不匹配带
+    # 斜杠的分支名（本仓库分支规范是 <type>/<slug>），实测全历史 push 事件 0 次命中
+    # 功能分支，等于没触发（见 ADR 2026-09-29-ci-verification-boundary）。
+    branches: [master]
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -12,11 +15,15 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # master 的运行永不被取消：合并后的复核是「这份代码在 master 上验证过」的唯一证据，
+  # 被下一次合并取消会让 master 静默处于未验证状态（旧配置实测近 30 次里 11 次 cancelled）。
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
+  # 静态验证 + 构建：core:build → lint → design-lint → 双端 typecheck → build
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -24,51 +31,25 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
-      # Build core first (desktop/mobile import @mplayer/core from its dist/)
-      - run: npm run core:build
-      # Root (Electron)
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run build
-      # Mobile typecheck
-      - run: npx tsc --noEmit --project packages/mobile/tsconfig.json
-      # Mobile tests
-      - run: npx vitest run --config packages/mobile/vitest.config.ts
+      # 验证命令的唯一出处是 scripts/verify.sh，CI 不再自己拼步骤（避免文档/CI 漂移）
+      - run: ./scripts/verify.sh static
 
-  # Mobile Android APK
-  mobile-android:
-    if: github.event_name != 'pull_request'
+  # 四套测试拆成独立分片并行跑（矩阵的每个 entry 是一个独立 job / 独立 check 名）：
+  # renderer（renderer + src/__tests__ 顶层）/ main（node env）/ core / mobile
+  test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # 一片失败不连坐取消其余片，失败定位与重跑都只影响一片
+      fail-fast: false
+      matrix:
+        scope: [renderer, main, core, mobile]
+    name: test (${{ matrix.scope }})
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 17
-      # Gradle 官方 setup：自动缓存依赖(modules-2)/Build Cache(build-cache-1)/
-      # transforms-3(AAR 解包)/wrapper，配 gradle.properties 的 org.gradle.caching=true
-      # 二次构建命中绝大多数编译产物。注意：不要与 actions/cache / setup-java cache:gradle 混用；
-      # setup-gradle 没有 cache 这个 input（那是 setup-java 的写法），写了会报 Unexpected input 警告且无效。
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: wrapper
-          cache-read-only: false
       - run: npm ci --ignore-scripts
-      - run: npm run core:build
-      # android 原生目录已提交进 git（CNG 反向），直接增量构建 —— 与 release.yml 一致。
-      # prebuild --clean 会重写原生目录，等于每次冷启动，把上面的 Gradle 缓存收益抵消掉。
-      - name: Build APK (release)
-        working-directory: packages/mobile/android
-        run: ./gradlew assembleRelease
-        env:
-          GRADLE_OPTS: "-Xmx4096m"
-      - name: Upload APK
-        uses: actions/upload-artifact@v7
-        with:
-          name: mplayer-mobile-apk
-          path: packages/mobile/android/app/build/outputs/apk/release/*.apk
+      - run: ./scripts/verify.sh ${{ matrix.scope }}
