@@ -1,13 +1,12 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { Headphones, Trash2, ListMusic } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Headphones, Trash2, ListMusic, GripVertical } from 'lucide-react';
 import { Modal } from 'antd';
-import { DndContext, closestCenter } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
+import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
-import { useSortableReorder } from '@/renderer/hooks/useSortableReorder';
+import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
 
@@ -33,6 +32,13 @@ const QueueRowActions: React.FC<{
   </div>
 );
 
+/** overlay 里的静态拖拽把手：只是视觉延续，不接 dnd（overlay 内容整体 pointer-events: none） */
+const previewDragHandle = (
+  <span aria-hidden style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>
+    <GripVertical size={14} />
+  </span>
+);
+
 const QueuePage: React.FC = () => {
   const currentPlaylist = usePlayerStore((s) => s.currentPlaylist);
   const currentSong = usePlayerStore((s) => s.currentSong);
@@ -43,6 +49,8 @@ const QueuePage: React.FC = () => {
   const clearQueue = usePlayerStore((s) => s.clearQueue);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  // 行内「加入歌单」单曲弹窗
+  const [addToPlaylistSong, setAddToPlaylistSong] = useState<Song | null>(null);
 
   /**
    * 行尾操作用**渲染函数**（#412）：此前 `actions={<QueueRowActions .../>}` 每帧新建元素，
@@ -60,11 +68,6 @@ const QueuePage: React.FC = () => {
     [removeFromQueue],
   );
 
-  /** SortableContext 的 items：每次渲染新建数组会让 dnd-kit 认为顺序集合变了（#412） */
-  const queueIds = useMemo(() => currentPlaylist.map((s) => s.id), [currentPlaylist]);
-  // 行内「加入歌单」单曲弹窗
-  const [addToPlaylistSong, setAddToPlaylistSong] = useState<Song | null>(null);
-
   // 封面加载失败 → 按 ID 重识别换新封面并更新队列/当前歌曲（旧签名封面永远失败）
   const handleCoverError = useCallback((song: Song) => {
     void refreshSongCover(song).then((cover) => {
@@ -80,11 +83,44 @@ const QueuePage: React.FC = () => {
     });
   }, [setCurrentPlaylist]);
 
-  // 拖拽排序：索引数学收在共享 hook 里，本页只声明「谁挪到了哪」
-  const { sensors, handleDragEnd } = useSortableReorder({
-    items: currentPlaylist,
-    onReorder: reorderQueue,
-  });
+  const currentSongId = currentSong?.id;
+
+  /** 窗口内可排序行：内部用 useSortable 注册，index 由列表给的是**全量下标** */
+  const renderQueueRow = useCallback(
+    (song: Song, index: number) => (
+      <SortableSongRow
+        song={song}
+        index={index}
+        isCurrentSong={currentSongId === song.id}
+        isPlaying={isPlaying}
+        fillTitle
+        albumWidth={120}
+        onPlay={play}
+        onCoverError={handleCoverError}
+        renderActions={renderQueueActions}
+      />
+    ),
+    [currentSongId, isPlaying, play, handleCoverError, renderQueueActions],
+  );
+
+  /** 拖拽 overlay 里的同一行：**非 sortable**（同一 id 二次注册会冲突） */
+  const renderQueueDragPreview = useCallback(
+    (song: Song, index: number) => (
+      <SongRow
+        song={song}
+        index={index}
+        isCurrentSong={currentSongId === song.id}
+        isPlaying={isPlaying}
+        fillTitle
+        albumWidth={120}
+        dragHandle={previewDragHandle}
+        onPlay={play}
+        onCoverError={handleCoverError}
+        actions={renderQueueActions(song, index)}
+      />
+    ),
+    [currentSongId, isPlaying, play, handleCoverError, renderQueueActions],
+  );
 
   const handleClearQueue = () => {
     Modal.confirm({
@@ -138,24 +174,13 @@ const QueuePage: React.FC = () => {
               <div style={{ width: '120px' }}>专辑</div>
               <div style={{ width: '60px', textAlign: 'center' }}>操作</div>
             </div>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={queueIds} strategy={verticalListSortingStrategy}>
-                {currentPlaylist.map((song, index) => (
-                  <SortableSongRow
-                    key={song.id}
-                    song={song}
-                    index={index}
-                    isCurrentSong={currentSong?.id === song.id}
-                    isPlaying={isPlaying}
-                    fillTitle
-                    albumWidth={120}
-                    onPlay={play}
-                    onCoverError={handleCoverError}
-                    renderActions={renderQueueActions}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
+            {/* 窗口化 + 可排序：挂载行数与视口成正比（#428 / ADR 2026-09-29-queue-virtualized-sortable-list） */}
+            <VirtualSortableList
+              items={currentPlaylist}
+              renderRow={renderQueueRow}
+              renderDragPreview={renderQueueDragPreview}
+              onReorder={reorderQueue}
+            />
           </>
         )}
       </div>

@@ -109,8 +109,8 @@ describe('列表 memo 纪律（#412）', () => {
     expect(shared).toContain('size: number;');
     expect(shared).toContain('scrollMargin: number;');
 
-    // 两处列表都用它，不再各自在 map 里现场拼 style
-    for (const file of ['renderer/components/SongList.tsx', 'renderer/components/GroupedSongList.tsx']) {
+    // 三个列表消费者都用它，不再各自在 map 里现场拼 style
+    for (const file of ['renderer/components/SongList.tsx', 'renderer/components/GroupedSongList.tsx', 'renderer/components/VirtualSortableList.tsx']) {
       const src = stripComments(read(file));
       // 同目录的组件用相对路径、跨目录用 @ 别名，两种都算
       expect(src, file).toMatch(/import VirtualRow from '(\.\/|@\/renderer\/components\/)VirtualRow'/);
@@ -145,8 +145,26 @@ describe('列表 memo 纪律（#412）', () => {
     const page = stripComments(read('renderer/pages/QueuePage.tsx'));
     expect(page).toContain('renderQueueActions');
     expect(page).not.toMatch(/actions=\{\s*</);
-    expect(page).toMatch(/const queueIds = useMemo/);
-    expect(page).toContain('items={queueIds}');
+    // #428：队列页不再自己接 dnd-kit，也不再有裸 map —— 全量 id / items / DragOverlay 收在共享能力里
+    expect(page).toContain('renderQueueDragPreview');
+    expect(page).not.toMatch(/@dnd-kit/);
+    expect(page).not.toContain('currentPlaylist.map');
+  });
+
+  it('队列窗口化与可排序收在共享能力里（#428）', () => {
+    const list = stripComments(read('renderer/components/VirtualSortableList.tsx'));
+    // items 必须是**全量有序 id** 且 memo 化：dnd-kit 的排序下标来自它，不是 DOM 顺序
+    expect(list).toMatch(/const ids = useMemo\(\(\) => items\.map\(\(item\) => item\.id\), \[items\]\)/);
+    expect(list).toContain('items={ids}');
+    expect(list).toContain('strategy={verticalListSortingStrategy}');
+    // 被拖行会随窗口推进被卸载 → 拖拽视觉走常驻 DragOverlay，portal 到 body 免被 overflow 裁剪
+    expect(list).toContain('<DragOverlay>');
+    expect(list).toContain('createPortal(');
+    expect(list).toContain('renderDragPreview');
+    // 行高/阈值是共享口径，不另立一套
+    expect(list).toContain('threshold = VIRTUALIZE_THRESHOLD');
+    expect(stripComments(read('renderer/hooks/useVirtualRows.ts'))).toContain('export const VIRTUALIZE_THRESHOLD');
+    expect(stripComments(read('renderer/components/SongList.tsx'))).not.toMatch(/const VIRTUALIZE_THRESHOLD/);
   });
 
   it('搜索页的列表回调走 useCallback', () => {
