@@ -39,7 +39,7 @@
     "buffer": "^6.0.3",
     "electron-updater": "^6.8.9",
     "mp3tag.js": "^3.17.0",
-    "music-metadata": "^11.15.0"
+    "music-metadata": "^11.16.1"
   },
   "overrides": {
     "esbuild": "0.25.2",
@@ -68,8 +68,8 @@
     "@testing-library/user-event": "^14.6.7",
     "@types/fs-extra": "^11.0.4",
     "@types/howler": "^2.2.13",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
+    "@types/react": "~19.2.18",
+    "@types/react-dom": "~19.2.4",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@typescript-eslint/parser": "^8.70.0",
     "@vitejs/plugin-react": "^4.2.1",
@@ -82,7 +82,7 @@
     "esbuild": "0.25.2",
     "eslint": "^10.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "expo": "~57.0.25",
+    "expo": "~57.0.26",
     "fs-extra": "^11.4.0",
     "globals": "^17.12.0",
     "howler": "^2.2.4",
@@ -101,7 +101,7 @@
     "vite-plugin-electron": "^1.1.2",
     "vite-plugin-electron-renderer": "^1.0.0",
     "vitest": "^4.1.11",
-    "wait-on": "^9.1.0",
+    "wait-on": "^9.5.1",
     "zustand": "^5.0.15"
   },
   "license": "PolyForm-Noncommercial-1.0.0"
