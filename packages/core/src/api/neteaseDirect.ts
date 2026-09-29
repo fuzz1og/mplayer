@@ -791,15 +791,27 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       return fetchArtistsByHtml(cat, contentCache);
     },
 
-    /** 歌手信息（按 id，明文 /api/v1/artist/{id}；#417 歌手页首屏校正）。 */
+    /**
+     * 歌手信息（按 id，明文 /api/v1/artist/{id}；#417 歌手页首屏校正）。
+     *
+     * #496 补缓存：此前这是唯一**完全不过缓存**的内容能力——歌手页每次进入都会实打一次
+     * 明文接口（入口带来的 name/pic 只够首帧，按 id 校正那一次是净请求）。TTL 与
+     * `getArtistSongs` 同档（6h）：头像/名字不是分钟级会变的数据。
+     */
     async getArtistInfo(artistId: string): Promise<Artist | null> {
-      return fetchArtistInfo(artistId);
+      const cacheKey = `artist_info_${artistId}`;
+      const cached = contentCache.get<Artist>(cacheKey);
+      if (cached) return cached;
+      const artist = await fetchArtistInfo(artistId);
+      // 失败（null）不缓存：保留重试机会
+      if (artist) contentCache.set(cacheKey, artist, SEARCH_TTL_MS);
+      return artist;
     },
 
     /** 歌手详情合并（hotSongs + albums，一次调用渲染歌手页首屏）。 */
     async getArtistDetail(artistId: string): Promise<{ artist: Artist | null; hotSongs: Song[]; albums: Album[] }> {
       const [artist, songsRes, albumsRes] = await Promise.all([
-        fetchArtistInfo(artistId),
+        this.getArtistInfo!(artistId),
         this.getArtistSongs!(artistId, 0, 50, 'hot'),
         this.getArtistAlbums!(artistId, 0, 30),
       ]);

@@ -11,7 +11,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, Image, StyleSheet, ScrollView,
+  View, Text, StyleSheet, FlatList,
 } from 'react-native';
 import ScalePress from '../../../components/ScalePress';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,6 +22,7 @@ import SongListSkeleton from '../../../components/SongListSkeleton';
 import LoadMoreFooter from '../../../components/LoadMoreFooter';
 import SongRow from '../../../components/SongRow';
 import CollapsingHero from '../../../components/CollapsingHero';
+import LazyCover from '../../../components/LazyCover';
 import BottomSafePlayerBar from '../../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { playSong } from '../../../services/audioPlayer';
@@ -30,8 +31,16 @@ import { radius, shadow, spacing, textVariants, typography } from '../../../them
 import type { ThemeColors } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 
-/** 专辑分区首屏页大小（#417：社区口径 lx-music 默认 100；core 自控上限 1000） */
+/**
+ * 专辑分区首屏页大小（#417：社区口径 lx-music 默认 100；core 自控上限 1000）。
+ *
+ * 这是**数据**页大小，不是「一次挂 100 张封面」的许可（#496）：横滑条已是横向
+ * `FlatList`（窗口 3 屏），封面统一过 `LazyCover` 的在飞闸门。
+ */
 const ALBUM_PAGE_SIZE = 100;
+
+/** 横滑条 keyExtractor（模块级，不随渲染新建） */
+const albumKey = (a: Album) => a.id;
 
 export default function ArtistDetailPage() {
   const { colors } = useTheme();
@@ -138,6 +147,25 @@ export default function ArtistDetailPage() {
     [songs, handleSwap],
   );
 
+  const renderAlbumCard = useCallback(
+    ({ item: a }: { item: Album }) => (
+      <ScalePress
+        style={styles.albumCard}
+        onPress={() => router.push(`/album/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl)}&artist=${encodeURIComponent(a.artist)}&source=netease` as any)}
+      >
+        {a.picUrl ? (
+          <LazyCover uri={a.picUrl} style={styles.albumCover} />
+        ) : (
+          <View style={[styles.albumCover, styles.albumCoverFallback]}>
+            <Disc3 size={24} color={colors.textTertiary} />
+          </View>
+        )}
+        <Text style={styles.albumName} numberOfLines={1}>{a.name}</Text>
+      </ScalePress>
+    ),
+    [styles, colors.textTertiary],
+  );
+
   const albumsHeader = (
     <View style={styles.albumsSection}>
       <View style={styles.albumsTitleRow}>
@@ -156,24 +184,18 @@ export default function ArtistDetailPage() {
           <Text style={styles.albumsRetryText}>加载失败，点此重试</Text>
         </ScalePress>
       ) : albums.length === 0 ? null : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {albums.map(a => (
-            <ScalePress
-              key={a.id}
-              style={styles.albumCard}
-              onPress={() => router.push(`/album/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl)}&artist=${encodeURIComponent(a.artist)}&source=netease` as any)}
-            >
-              {a.picUrl ? (
-                <Image source={{ uri: a.picUrl }} style={styles.albumCover} />
-              ) : (
-                <View style={[styles.albumCover, styles.albumCoverFallback]}>
-                  <Disc3 size={24} color={colors.textTertiary} />
-                </View>
-              )}
-              <Text style={styles.albumName} numberOfLines={1}>{a.name}</Text>
-            </ScalePress>
-          ))}
-        </ScrollView>
+        // 横向 FlatList：只挂可视窗口附近的卡，不再一次把 100 张全挂上（#496）。
+        // 不能给 getItemLayout —— 卡片高度随字号/主题变，算错比不给更糟。
+        <FlatList
+          horizontal
+          data={albums}
+          keyExtractor={albumKey}
+          renderItem={renderAlbumCard}
+          showsHorizontalScrollIndicator={false}
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          windowSize={3}
+        />
       )}
     </View>
   );

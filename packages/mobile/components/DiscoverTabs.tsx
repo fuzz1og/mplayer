@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Dimensions,
-  Image, FlatList, RefreshControl,
+  FlatList, RefreshControl,
 } from 'react-native';
 import { Music, Disc3, ListMusic, User } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -18,6 +18,8 @@ import TextTabs from './TextTabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight, LIST_TAIL_PADDING } from './chromeMetrics';
 import CoverGridSkeleton from './CoverGridSkeleton';
+import LazyCover from './LazyCover';
+import { listWindowProps } from './listWindow';
 import HotlistSkeleton from './HotlistSkeleton';
 import { GRID_CARD } from './gridCardMetrics';
 import { HOTLIST_SECTION } from './hotlistMetrics';
@@ -184,7 +186,7 @@ function SectionCard({ title, songs, routeKey, sourceType }: { title: string; so
         >
           <Text style={[styles.rank, i < 3 && { color: colors.rankText[i] }]}>{i + 1}</Text>
           {song.cover ? (
-            <Image source={{ uri: song.cover }} style={styles.cover} />
+            <LazyCover uri={song.cover} style={styles.cover} />
           ) : (
             <View style={[styles.cover, { backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
               <Music size={20} color={colors.textDisabled} />
@@ -292,7 +294,7 @@ function AlbumsContent() {
       onPress={() => router.push(`/album/${album.id}?name=${encodeURIComponent(album.name)}&pic=${encodeURIComponent(album.picUrl)}&artist=${encodeURIComponent(album.artist)}` as any)}
     >
       {album.picUrl ? (
-        <Image source={{ uri: album.picUrl }} style={[styles.gridCover, { width: gridCardW, height: gridCardW }]} />
+        <LazyCover uri={album.picUrl} style={[styles.gridCover, { width: gridCardW, height: gridCardW }]} />
       ) : (
         <View style={[styles.gridCover, { width: gridCardW, height: gridCardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
           <Disc3 size={32} color={colors.textDisabled} />
@@ -317,6 +319,8 @@ function AlbumsContent() {
         data={albums}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
+        // 窗口档与其它长列表同源（#411）：RN 默认 21 屏对网格等于整份挂上
+        {...listWindowProps}
         numColumns={CARD_COLS}
         columnWrapperStyle={{ gap: GRID_GAP }}
         refreshControl={
@@ -425,7 +429,7 @@ function PlaylistContent() {
       onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
     >
       {p.coverImgUrl ? (
-        <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: gridCardW, height: gridCardW }]} />
+        <LazyCover uri={p.coverImgUrl} style={[styles.gridCover, { width: gridCardW, height: gridCardW }]} />
       ) : (
         <View style={[styles.gridCover, { width: gridCardW, height: gridCardW, backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
           <ListMusic size={32} color={colors.textDisabled} />
@@ -450,6 +454,8 @@ function PlaylistContent() {
         data={playlists}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
+        // 窗口档与其它长列表同源（#411）：RN 默认 21 屏对网格等于整份挂上
+        {...listWindowProps}
         numColumns={CARD_COLS}
         columnWrapperStyle={{ gap: GRID_GAP }}
         onEndReached={loadMore}
@@ -568,7 +574,7 @@ function ArtistContent() {
       onPress={() => router.push(`/artist/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl || '')}` as any)}
     >
       {a.picUrl ? (
-        <Image source={{ uri: a.picUrl }} style={styles.artistAvatar} />
+        <LazyCover uri={a.picUrl} style={styles.artistAvatar} />
       ) : (
         <View style={[styles.artistAvatar, { backgroundColor: colors.bgHover, justifyContent: 'center', alignItems: 'center' }]}>
           <User size={28} color={colors.textDisabled} />
@@ -592,6 +598,8 @@ function ArtistContent() {
         data={artists}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
+        // 窗口档与其它长列表同源（#411）：RN 默认 21 屏对网格等于整份挂上
+        {...listWindowProps}
         numColumns={CARD_COLS}
         // 卡片宽按含 2×12 gap 计算，行必须补 gap 才满宽居中（否则 3 卡左对齐、右侧空 24dp）
         columnWrapperStyle={styles.artistRow}

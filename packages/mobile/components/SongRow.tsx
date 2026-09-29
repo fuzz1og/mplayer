@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState, useMemo } from 'react';
 import {
-  View, Text, Image, StyleSheet, type GestureResponderEvent,
+  View, Text, StyleSheet, type GestureResponderEvent,
 } from 'react-native';
 import { Music, Heart, EllipsisVertical } from 'lucide-react-native';
 import {radius, spacing, textVariants} from '../theme/tokens';
@@ -19,6 +19,7 @@ import { playSong } from '../services/audioPlayer';
 import { searchStrictMatch } from '../services/songResources';
 import { withCoverSearchSlot } from '../services/coverSearchSlot';
 import ScalePress from './ScalePress';
+import LazyCover from './LazyCover';
 import { SONG_ROW } from './songRowMetrics';
 
 interface SongRowProps {
@@ -139,7 +140,7 @@ function SongRow({
       )}
 
       {cover ? (
-        <Image source={{ uri: cover }} style={styles.cover} onError={handleCoverError} />
+        <LazyCover uri={cover} style={styles.cover} onError={handleCoverError} />
       ) : (
         <View style={[styles.cover, styles.coverPlaceholder]}>
           <Music size={22} color={colors.textDisabled} />
