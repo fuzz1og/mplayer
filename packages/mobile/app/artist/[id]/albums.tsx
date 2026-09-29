@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Disc3, ImageOff } from 'lucide-react-native';
 import { getDirectClient, type Album } from '@mplayer/core';
@@ -18,6 +18,8 @@ import { logCoverError } from '../../../services/coverDiagnostics';
 import EmptyState from '../../../components/EmptyState';
 import ScalePress from '../../../components/ScalePress';
 import CoverGridSkeleton from '../../../components/CoverGridSkeleton';
+import LazyCover from '../../../components/LazyCover';
+import { listWindowProps } from '../../../components/listWindow';
 import { GRID_CARD } from '../../../components/gridCardMetrics';
 import { GRID_GAP, gridCardWidth } from '../../../components/gridMetrics';
 import {
@@ -29,8 +31,13 @@ import { radius, spacing, textVariants, typography } from '../../../theme/tokens
 import type { ThemeColors } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 
-/** 每页张数（core 自控上限 1000；100 是社区口径，也是久石让 243 张的 3 页） */
-const PAGE_SIZE = 100;
+/**
+ * 每页张数（core 自控上限 1000）。
+ *
+ * #496：这里从 100 收到 30——每页 30 张 = 10 行，配合 `listWindowProps`（窗口 7 屏）
+ * 与 `LazyCover` 的在飞闸门，进页面不再一次挂 100 张封面。桌面端同一能力用的也是 30。
+ */
+const PAGE_SIZE = 30;
 const CARD_W = gridCardWidth({ cols: ALBUM_TIMELINE_COLS });
 
 export default function ArtistAlbumsPage() {
@@ -109,8 +116,8 @@ export default function ArtistAlbumsPage() {
         {item.albums.map((album) => (
           <ScalePress key={album.id} style={styles.card} onPress={() => openAlbum(album)}>
             {album.picUrl ? (
-              <Image
-                source={{ uri: album.picUrl }}
+              <LazyCover
+                uri={album.picUrl}
                 style={styles.cover}
                 // 此前这处连 onError 都没有：图挂了就是一块灰，日志里一行都没有（#465 验收实测）
                 onError={() => logCoverError('album-grid', album.picUrl)}
@@ -185,6 +192,8 @@ export default function ArtistAlbumsPage() {
         data={items}
         keyExtractor={(item) => item.key}
         renderItem={renderItem}
+        // 窗口档与其它长列表同源（#411）：RN 默认 21 屏对 3 列网格等于整份挂上
+        {...listWindowProps}
         contentContainerStyle={styles.listContent}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}

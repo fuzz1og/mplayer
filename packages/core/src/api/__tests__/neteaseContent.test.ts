@@ -353,6 +353,32 @@ describe('neteaseDirect 专辑/歌手数据面（#407 P0 / #417）', () => {
     expect(seen[0].url).toContain('/api/v1/artist/5196');
   });
 
+  it('getArtistInfo：命中内容缓存后零请求（#496）', async () => {
+    const cache = fakeCache();
+    const seen = mockTransport([
+      { match: (u) => u.includes('/api/v1/artist/5196'), respond: () => json({ code: 200, artist: { id: 5196, name: '陶喆', picUrl: 'https://p1/tao.jpg' } }) },
+    ]);
+    const client = createNeteaseDirectClient(cache);
+    const first = await client.getArtistInfo!('5196');
+    const second = await client.getArtistInfo!('5196');
+    expect(second).toEqual(first);
+    expect(seen).toHaveLength(1);
+    expect(cache.store.has('artist_info_5196')).toBe(true);
+  });
+
+  it('getArtistInfo：失败不缓存，下一次仍重试（#496）', async () => {
+    const cache = fakeCache();
+    let calls = 0;
+    mockTransport([
+      { match: (u) => u.includes('/api/v1/artist/5196'), respond: () => { calls++; return json({ code: 200, artist: null }); } },
+    ]);
+    const client = createNeteaseDirectClient(cache);
+    expect(await client.getArtistInfo!('5196')).toBeNull();
+    expect(await client.getArtistInfo!('5196')).toBeNull();
+    expect(calls).toBe(2);
+    expect([...cache.store.keys()].some((k) => k.startsWith('artist_info'))).toBe(false);
+  });
+
   it('getArtistAlbums：成功但该歌手确实零专辑 → ok=true（空态不是错误态）', async () => {
     mockTransport([
       { match: (u) => u.includes('/artist/albums/'), respond: () => json({ code: 200, hotAlbums: [], more: false }) },

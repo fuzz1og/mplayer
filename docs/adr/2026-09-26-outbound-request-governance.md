@@ -94,3 +94,11 @@
     **未接**：tier3 **搜索腿**（`searchTier3SourceItems`，其预算独立，见 ADR 2026-09-25 决策 9）。
   - **第三阶段（待指标）**：429 / `Retry-After` 退避与每 host pacing。
   - **未收口**：上述 4 处 `axios` 直连绕过点（含汽水解析腿拿不到取消）。
+
+## 更新（2026-09-30，#496）
+
+决策 5 把**图片**排除在闸门之外，理由成立（原生 `Image` 直连 CDN，不过 core），但代价在列表规模下兑现了：
+歌手页一次挂 100 张专辑封面 → 上游限流 → 连已发出的图也卡住拿不到。该条**在移动端**已被
+`docs/adr/2026-09-30-mobile-cover-load-gate.md` 部分收回：封面补一层宿主侧在飞闸门
+（`packages/mobile/services/coverLoadGate`，在飞上限 6 + FIFO + 槽位墙钟），渲染统一走 `LazyCover`。
+**core 出网闸门本身不变**，图片仍不进 transport；桌面端封面也不在其列。
