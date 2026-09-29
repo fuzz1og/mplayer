@@ -26,6 +26,7 @@ import {
   getToplistSongs,
   getAlbumDetailRouted,
   TOPLIST_SOURCE_IDS,
+  getToplistDetailRouted,
   type DirectSourceClient,
   type SourceMode,
   type ToplistGroup,
@@ -874,4 +875,43 @@ describe('专辑详情腿 helper（#407：能力缺失与抓取失败可区分�
     expect((res as { songs: Song[] }).songs.map((s) => s.id)).toEqual(['1']);
   });
 });
+
+describe('榜单元数据腿（#465）', () => {
+  const detail = {
+    id: 3778678, name: '热歌榜', coverImgUrl: 'https://x/c.jpg',
+    playCount: 141, description: 'desc', updateTime: null as number | null,
+  };
+
+  it('源未实现 getToplistDetail → unsupported（与「取不到」必须可区分）', async () => {
+    registerDirectClient({ key: 'netease' } as DirectSourceClient);
+    const out = await getToplistDetailRouted('netease', 1);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toBe('unsupported');
+  });
+
+  it('实现但返回 null → failed', async () => {
+    registerDirectClient({ key: 'netease', getToplistDetail: async () => null } as DirectSourceClient);
+    const out = await getToplistDetailRouted('netease', 1);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toBe('failed');
+  });
+
+  it('抛错 → failed（异常不冒到页面）', async () => {
+    registerDirectClient({ key: 'netease', getToplistDetail: async () => { throw new Error('boom'); } } as DirectSourceClient);
+    const out = await getToplistDetailRouted('netease', 1);
+    expect(out.ok).toBe(false);
+    if (!out.ok) { expect(out.reason).toBe('failed'); expect(out.message).toContain('boom'); }
+  });
+
+  it('成功 → 原样带出元数据；coverImgUrl 空串 / playCount null 是「该源不提供」而非失败', async () => {
+    registerDirectClient({ key: 'netease', getToplistDetail: async () => detail } as DirectSourceClient);
+    expect(await getToplistDetailRouted('netease', 3778678)).toEqual({ ok: true, detail });
+
+    registerDirectClient({ key: 'qq', getToplistDetail: async () => ({ ...detail, coverImgUrl: '', playCount: null }) } as DirectSourceClient);
+    const bare = await getToplistDetailRouted('qq', 26);
+    expect(bare.ok).toBe(true);
+    if (bare.ok) { expect(bare.detail.coverImgUrl).toBe(''); expect(bare.detail.playCount).toBeNull(); }
+  });
+});
+
 

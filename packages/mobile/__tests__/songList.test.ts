@@ -83,7 +83,9 @@ describe('列表渲染纪律（#411）', () => {
   });
 
   it('列表页不再自己拿 FlatList 铺 SongRow（一律走 SongList）', () => {
-    for (const file of ['app/favorites.tsx', 'app/history.tsx', 'app/hotlist.tsx']) {
+    // hotlist 自 #465 起是 **Hero 页**（列表由 CollapsingHero 承载、行在 renderItem 里给），
+    // 已不属于「平铺列表页」这一类 —— 对它改由下面那条独立断言约束，不在这里放宽。
+    for (const file of ['app/favorites.tsx', 'app/history.tsx']) {
       const source = read(file);
       expect(source, file).toContain("from '../components/SongList'");
       expect(source, file).not.toMatch(/<SongRow/);
@@ -93,6 +95,13 @@ describe('列表渲染纪律（#411）', () => {
     expect(search).not.toContain('group.songs.map(');
     // 注意排除 <SongListSkeleton（前缀相同）：\s 或 / 才说明是 SongList 本身
     expect((search.match(/<SongList[\s/]/g) ?? []).length).toBe(2);
+  });
+
+  it('榜单详情页（#465 起为 Hero 页）：列表由 CollapsingHero 承载、行回调稳定', () => {
+    const source = read('app/hotlist.tsx');
+    expect(source).toContain('components/CollapsingHero');
+    expect(source).toContain('const renderItem = useCallback');
+    expect(source).not.toMatch(/on(Swap|Remove|Press)=\{[^}]*=>/);
   });
 
   it('行回调是 useCallback 且不内联（否则 SongRow 的 memo 逐帧失效）', () => {

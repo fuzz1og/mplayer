@@ -53,11 +53,11 @@ Push（main→renderer）：`download:progress|complete|error`, `localMusic:fold
 expo-router Stack + Tabs：`(tabs)/`（推荐 / 发现 / 歌单 / 本地歌曲；搜索页 `href: null` 不占 Tab，由顶栏进入）+ player/favorites/history/settings/hotlist/playlist/[id]/discover-playlist/[id]/artist/[id]/album/[id]。
 
 - `components/` TopBar, PlayerBar, PlayerOverlay, SongRow, DiscoverTabs, SourceSwapModal, AddToPlaylistModal 等；`SongList` 用 `viewabilityConfig` 的可见回调 + `components/songListHydration` 的**停稳闸**（可见集合 `VIEWPORT_SETTLE_MS` 内不再变化才按整屏入队，上滑中滚过的行不入队——#421）把「行进入视口」接到 core `lyricsHydrator` 预取歌词（#429）；**同一拍**还算出本次离开可见集合的 key 交给 `cancelLyricsHydration` 收回，卸载时只收回本列表入队过的 key
-- `gestures/` 手势物理纯内核（拖拽关闭会话：位移/速度/判关，零 react-native 依赖，node 可测）+ `hooks/useDragToDismiss` 适配器——PlayerOverlay 与 BottomSheet 共用同一份物理
+- `gestures/` 手势物理纯内核（拖拽关闭会话：位移/速度/判关，零 react-native 依赖，node 可测）+ `hooks/useDragToDismiss` 适配器——PlayerOverlay 与 BottomSheet 共用同一份物理。同目录 `dragJank`（#430）量「相邻 move 回调隔了多久」：拖拽跟手跑在 JS 线程，**跟手掉帧**是「回调被推迟」而不是「渲染变慢」，故与 `services/dragJankProbe` 现场、`scripts/mobile-frame-stats.sh`（系统侧帧计时）合看才下判语
 - `components/collapsingChrome.ts` 折叠头部纯逻辑核心（阈值 / 进度 clamp / 状态栏边沿，零 react-native 依赖，node 可测）+ `hooks/useCollapsingChrome` 原生驱动接线，专辑 / 歌手 / 网络歌单直接用 `CollapsingHero`，歌单详情经 `PlaylistHero` 适配层复用同一结构。原生**颜色**插值不结算 `extrapolate`（数值路径结算）——颜色节点前必须串数值 clamp 节点（`navBackgroundPlan`），否则滚过折叠点后通道越界回绕、条身跳色（#372）
 - `hooks/` 适配器：useCollapsingChrome（折叠头部原生驱动接线）、useDragToDismiss、usePressMutex、useReducedMotion、useRefreshedCover
 - `stores/` Zustand（部分 AsyncStorage persist）：player/settings/favorite/history/playlist/search/discover/source/download/downloadProgress/audioTag/logs/songActions
-- `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songResources(严格搜索 + core 刷新编排适配器)/sourceSwap, legacyMigration, networkState(在线/离线 predicate，注入跳歌护栏), playlistLinkImport(歌单链接导入), cacheService(身份键 + 可播资源值缓存), appUpdate/coverSearchSlot/perfMonitor/pressMutex/reducedMotion/sheetExit/songActionEffects/songSwapSession/playbackTrace(启动时注册 sink + 会话内环形缓冲 + 导出)
+- `services/` audioPlayer(expo-audio), notificationService, downloadService(SAF), songResources(严格搜索 + core 刷新编排适配器)/sourceSwap, legacyMigration, networkState(在线/离线 predicate，注入跳歌护栏), playlistLinkImport(歌单链接导入), cacheService(身份键 + 可播资源值缓存), appUpdate/coverSearchSlot/perfMonitor(JS 帧率看门狗)/dragJankProbe(拖拽跟手采样与上报)/pressMutex/reducedMotion/sheetExit/songActionEffects/songSwapSession/playbackTrace(启动时注册 sink + 会话内环形缓冲 + 导出)
 
 ## Shared Package (`packages/core/`)
 

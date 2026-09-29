@@ -7,6 +7,7 @@ import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { type Song, SourceKey } from '@mplayer/core';
+import { logCoverError } from '../services/coverDiagnostics';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { useAudioTagStore, tagKey } from '../stores/audioTagStore';
@@ -80,6 +81,7 @@ function SongRow({
   }, [song.cover]);
 
   const handleCoverError = () => {
+    logCoverError('song-row', cover);
     if (coverFallbackUsed.current || !song.name) return;
     coverFallbackUsed.current = true;
     setCover('');

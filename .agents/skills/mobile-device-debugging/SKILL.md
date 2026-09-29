@@ -87,7 +87,13 @@ adb shell dumpsys media_session | grep mplayer.mobile.dev
 adb shell dumpsys notification --noredact | grep music-playback
 ```
 
-**附带好处**：debug 构建的 `console.log` 在 logcat 可见（release 会把 JS 日志剥掉），所以 `[player]` 一类排查要在 dev build 上做。
+**附带好处**：debug 构建的 `console.log` 在 logcat 可见，所以 `[player]` 一类排查优先在 dev build 上做。
+
+> **更正（2026-09-29）**：此处原写「release 会把 JS 日志剥掉」——**该说法在本仓没有机制支撑**。
+> Expo 默认**不**剥离 `console`，要显式开 Terser 的 `drop_console` 才剥（<https://docs.expo.dev/guides/minify/>）；
+> 而本仓 `packages/mobile/metro.config.js` 没有设 `transformer.minifierConfig`、`packages/mobile/babel.config.js`
+> 也没有 console 剥离插件。所以 release 包上 `console` 到底可不可见**应以实测为准**（尚未实测）。
+> 详见 `docs/research/2026-09-29-mobile-developer-mode-and-diagnostics.md` §0。
 
 ## 陷阱速查
 
