@@ -1,5 +1,7 @@
-import type { Song } from '@mplayer/core';
+import type { ShuffleState, Song } from '@mplayer/core';
+import { createShuffleState, insertNextInShuffle } from '@mplayer/core';
 import { prefetchKey } from './queuePrefetch';
+import { sameOrder } from './shuffleMode';
 
 /**
  * 「下一首播放」的规划结果（#495）。
@@ -33,14 +35,13 @@ export interface PlayNextPlan {
  * - 队列为空 / 没有当前曲（currentIndex < 0）→ 调用方走「直接开始播放」（见
  *   `stores/playerStore.insertNext` 的 started 分支），这里只负责纯队列数学。
  *
- * ⚠️ **随机播放分支尚未定义**（用户在决策「固定插到随机序列里的下一位置」；core 的
- * `getNextSongIndex` 随机分支今天是「每次现随机、无记忆」，没有稳定序列可插）。
- * 所以这里**不发明**随机语义：`playMode === '随机播放'` 暂按顺序路径返回。
- * 结论落地后**只改这一个函数**——入参已含 playMode，返回的是完整 sequence，
- * 双端（iOS/回落引擎的 splice、Android 原生 index+1）一起生效，调用方零改动。
+ * ⚠️ **随机分支**（#519）不在这里：随机序是与成员序并列的**另一份数据**（`ShuffleState`），
+ * 而本函数返回的是成员序 sequence。随机的落点见下面的 `planPlayNextShuffle`——
+ * 成员序不因随机被重排，随机由 core `insertNextInShuffle` 放到「序列里当前曲的下一格」。
+ * 调用方（`stores/playerStore.ts`）按 playMode 分派；顺序模式的语义与桌面 #506 逐条对齐不变。
  */
 export function planPlayNext(queue: Song[], currentIndex: number, song: Song, playMode: string): PlayNextPlan {
-  void playMode; // 随机分支待定义：唯一接缝放在这里
+  void playMode; // 随机分支在 planPlayNextShuffle：唯一接缝仍在本文件
 
   const key = prefetchKey(song);
   const at = queue.findIndex((s) => prefetchKey(s) === key);
@@ -64,4 +65,49 @@ export function planPlayNext(queue: Song[], currentIndex: number, song: Song, pl
   // 移动分支保留队列里那份对象（与桌面 #506 同口径）
   next.splice(insertAt, 0, at >= 0 && existing ? existing : song);
   return { sequence: next, insertAt, alreadyInSequence: at >= 0, moved: at >= 0, noop: false };
+}
+
+/** 随机模式下的「下一首播放」规划（#519）：成员 + 随机序两份结果。 */
+export interface PlayNextShufflePlan {
+  /** 成员序（新歌**追加到末尾**；已在队列则原样保留同一份数组引用）。 */
+  queue: Song[];
+  /** 随机序（把该曲放到序列里当前曲的下一格；幂等命中时原样）。 */
+  shuffle: ShuffleState;
+  /** 该曲此前已在队列里（移动语义，与顺序路径同口径）。 */
+  moved: boolean;
+  /** 一字未改（已在「当前曲下一格」/ 点的是当前曲）——连点幂等。 */
+  noop: boolean;
+}
+
+/**
+ * 随机模式的「下一首播放」（#519）：**成员序不动、随机序移动**。
+ *
+ * 语义全部来自 core `insertNextInShuffle`（与桌面 #506 的 insertNext 同一条契约）：
+ * - 插入点是「当前曲在**序列**里的下一格」（不是成员下标 currentIndex+1）；
+ * - 已在序列 → 移动（不复制、保留队列里那份 Song 对象）；
+ * - 已在目标格 / 点的是当前曲 → no-op（连点幂等）；
+ * - 成员由调用方维护：不在队列的新歌**追加到成员末尾**（列表循环序拿到的是追加语义）。
+ *
+ * ⚠️ 调用方需保证 `song.id` 与队列里各首的 id 都非空（core 的序列以歌曲 id 为身份）；
+ * 无 id 的歌走顺序路径（见 `playerStore.insertNext` 的分派条件）。
+ */
+export function planPlayNextShuffle(
+  queue: Song[],
+  currentIndex: number,
+  song: Song,
+  shuffle: ShuffleState | null,
+): PlayNextShufflePlan {
+  const key = prefetchKey(song);
+  const existing = queue.findIndex((s) => prefetchKey(s) === key);
+  const nextQueue = existing >= 0 ? queue : [...queue, song];
+  const current = queue.length === 0 ? -1 : Math.min(Math.max(currentIndex, 0), queue.length - 1);
+  const base = shuffle ?? createShuffleState(nextQueue, { currentIndex: current });
+  const nextShuffle = insertNextInShuffle(base, nextQueue, song.id, current);
+  return {
+    queue: nextQueue,
+    shuffle: nextShuffle,
+    moved: existing >= 0,
+    // 幂等判据：序列一字未改（core 在「已在下一格 / 点的是当前曲」时原样返回）
+    noop: sameOrder(nextShuffle.order, base.order) && nextQueue === queue,
+  };
 }

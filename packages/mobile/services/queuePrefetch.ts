@@ -1,5 +1,5 @@
-import { getNextSongIndex } from '@mplayer/core';
-import type { Song } from '@mplayer/core';
+import { applyShuffleOrder, getNextSongIndex } from '@mplayer/core';
+import type { ShuffleState, Song } from '@mplayer/core';
 
 /**
  * 预取窗口的状态与定序（规格 §5.5 / §7.3）。
@@ -10,9 +10,14 @@ import type { Song } from '@mplayer/core';
  *    - 成功窗口 `PREFETCH_SKIP_FRESH_MS`：5min 内已成功的 key 不重复解析
  *      （与既有的 12h 资源缓存叠加，避免重复烧整条 tier3 链）；
  *    - 失败冷却 `PREFETCH_FAIL_COOLDOWN_MS`：失败后 30s 内不再重烧整条解析链。
- * 2. **窗口定序**：顺序模式取 index+1、+2…；随机模式由 JS 按 core 规则定序
- *    （`getNextSongIndex`，每次随机且 ≠ 当前），原生只顺序推进
- *    —— 这样预取窗口天然知道下一首是谁，锁屏 next 与 UI next 语义一致。
+ * 2. **窗口定序**：顺序模式取 index+1、+2…；随机模式按 core 的**稳定随机序列**
+ *    （#511 方案 A / #519 接线：`applyShuffleOrder` 的顺序，游标由 playerStore 持有）
+ *    取「当前曲之后的 N 首」——同一稳态下计划**收敛为同一批**，原生只顺序推进。
+ *    这样预取窗口天然知道下一首是谁，锁屏 next 与 UI next 语义一致。
+ *
+ * ⚠️ 下面的**无序列兜底**分支（`playMode === '随机播放' && !shuffle`）保留的是 #511 之前的
+ * 「防重复现抽」行为，只为兼容「序列还没建立」的调用方；它是每轮重抽的，不要在正常路径上走到
+ * （#519 的自激循环就出在这里的旧行为上）。
  */
 
 export const PREFETCH_SKIP_FRESH_MS = 5 * 60 * 1000;
@@ -74,17 +79,42 @@ export function resetPrefetchState(): void {
  *
  * @param excluded 已在原生手里的 key（`nativeMirror`）——不重复投喂
  * @param playMode settingsStore 的播放模式（'单曲循环' | '随机播放' | '列表循环'）
+ * @param shuffle 稳定随机序列（#519）；随机模式下**有序列就按序列定序**，不再现抽
  */
 export function planNextIndexes(
   queue: Song[],
   fromIndex: number,
   count: number,
   excluded: Set<string>,
-  playMode: string
+  playMode: string,
+  shuffle?: ShuffleState | null
 ): number[] {
   if (queue.length === 0 || count <= 0) return [];
   // 单曲循环由原生 REPEAT_MODE_ONE 处理：不补窗（补了也永远不会播到）
   if (playMode === '单曲循环') return [];
+
+  // 随机（#519）：定序交给 core 的**稳定序列**（游标推进），同一稳态下计划收敛为同一批。
+  // 旧实现每轮 Math.random 重抽一批 → 「补窗 → patchQueue → 状态变化 → 再补窗」自激循环：
+  // 原生窗口每轮被换成完全不同的一批歌，下一首永远等不到（真机 9 分钟 0 次换歌）。
+  if (playMode === '随机播放' && shuffle && queue.length > 1) {
+    const ordered = applyShuffleOrder(queue, shuffle);
+    const currentSong = queue[fromIndex];
+    const at = ordered.findIndex((s) => s === currentSong || (!!s.id && s.id === currentSong?.id));
+    // 当前曲不在序列里（id 缺失等）→ 当作「在序列起点之前」，从序列开头取
+    const anchor = at >= 0 ? at : ordered.length - 1;
+    const local = new Set(excluded);
+    const byOrder: number[] = [];
+    for (let k = 1; k <= ordered.length && byOrder.length < count; k += 1) {
+      const candidate = ordered[(anchor + k) % ordered.length];
+      const key = prefetchKey(candidate);
+      if (local.has(key)) continue;
+      const memberIndex = queue.indexOf(candidate);
+      if (memberIndex < 0) continue;
+      local.add(key);
+      byOrder.push(memberIndex);
+    }
+    return byOrder;
+  }
 
   const planned: number[] = [];
   const localExcluded = new Set(excluded);
@@ -97,6 +127,7 @@ export function planNextIndexes(
     guard += 1;
     let next: number;
 
+    // 无序列兜底（兼容路径，见文件头 ⚠️）：随机模式还没建立稳定序列时退回「防重复现抽」
     if (playMode === '随机播放' && queue.length > 1) {
       next = getNextSongIndex(queue, cursor, '随机播放');
       let inner = 0;
