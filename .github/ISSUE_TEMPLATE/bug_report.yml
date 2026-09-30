@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        感谢提交 bug！请尽量填写以下信息，越详细越容易复现和修复。
+        感谢提交 bug！正文 ≤ 30 行就够：先说清现象与复现；排查过程、长日志放评论。
   - type: input
     id: version
     attributes:
@@ -60,13 +60,14 @@ body:
     id: actual
     attributes:
       label: 实际行为
-      description: 实际发生了什么（与期望行为的差异）
+      description: 实际发生了什么（与期望行为的差异）。用平实语言先说结论，别整段贴日志。
     validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
       label: 复现步骤
+      description: 从零开始的步骤，别人照着能复现；不确定的地方直说。
       placeholder: |
         1. 打开 ...
         2. 点击 ...
@@ -85,4 +86,4 @@ body:
     id: logs
     attributes:
       label: 日志 / 截图
-      description: 报错信息、DevTools console 输出、截图等
+      description: 报错信息、DevTools console 输出、截图等；长日志放评论或代码块摘要。
