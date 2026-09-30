@@ -35,11 +35,25 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
 验收结论要可复核：**每个验收项配一条能看的证据**，没有就写「未做 + 原因」，别写「已附截图」而没附。
 
 1. **先证明跑的是你的代码**：从 logcat `Running "main"` 里取 `launchAsset.url`，追加 `&lazy=false` 后 curl，`grep` 你新加的标识串；manifest 的 `projectRoot` 要是你的 worktree。跑错源码时后面的结论全部作废。
-2. **截图**：**先裁感兴趣区域再读**（全屏 PNG 1.5–2.6MB，连读十几张代价很高）；能用埋点日志判读就别截图——例：`[cover] 加载失败 0`、`[perf]` 窗口 warn 比一张截图更省也更硬。`adb exec-out screencap -p > <用例>.png`（pwsh 7 / bash 字节安全；Windows PowerShell 5.1 会改编码，改用 `adb shell screencap -p /sdcard/x.png` + `adb pull`）。存仓库外（`%TEMP%\mplayer-acceptance\`），文件名用 `<PR 号>-<序号>-<用例>.png`，别用 `s1.png`；同类用例要固化就跑 `npm run mobile:e2e`（截图落 `e2e/artifacts/`，已 gitignore）。
-3. **交互坐标按当前设备取**：先 `adb shell wm size`，坐标就是截图里的物理像素。**点不动时先怀疑"点偏了"，不要先怀疑"输入被拦"**——PKB110 / ColorOS 16 实测 `adb shell input tap` 是生效的（点启动器图标能打开对应 App）。`input -d 0 tap X Y` 只在 display id 不为 0 时才有意义（`adb shell dumpsys display | grep -m1 mDisplayId`；本机 id=0，两种写法等效）。快速滑动用连打 `input swipe`；`onEndReached` 那类要滚动的验收，`input keyevent 20`（DPAD_DOWN）连打更稳（触摸滑动的落点/惯性更难控）。tab 栏在屏幕底部（OnePlus 上 y≈2602–2648，2680 已落进系统手势区）。
+2. **要坐标、要文案断言，先 dump 再截图**：`adb shell uiautomator dump /sdcard/ui.xml` + `adb pull` 拿到带 `text=` / `bounds=` 的树（RN 组件会映射成原生节点；实测一次调用就能定位「播放队列 (7)」「明知故犯」这类元素并给出 `bounds`）。现成驱动与坑见 `e2e/README.md`（动画/滚动中会间歇性吐空壳树，要重试 + 弃旧快照）。**截图退居视觉复核**，别用它猜坐标。
+3. **截图**：**先裁感兴趣区域再读**（全屏 PNG 1.5–2.6MB，连读十几张代价很高）；能用埋点日志判读就别截图——例：`[cover] 加载失败 0`、`[perf]` 窗口 warn 比一张截图更省也更硬。`adb exec-out screencap -p > <用例>.png`（pwsh 7 / bash 字节安全；Windows PowerShell 5.1 会改编码，改用 `adb shell screencap -p /sdcard/x.png` + `adb pull`）。存仓库外（`%TEMP%\mplayer-acceptance\`），文件名用 `<PR 号>-<序号>-<用例>.png`，别用 `s1.png`；同类用例要固化就跑 `npm run mobile:e2e`（截图落 `e2e/artifacts/`，已 gitignore）。
+4. **交互坐标按当前设备取**：先 `adb shell wm size`，坐标就是截图里的物理像素。**点不动时先怀疑"点偏了"，不要先怀疑"输入被拦"**——PKB110 / ColorOS 16 实测 `adb shell input tap` 是生效的（点启动器图标能打开对应 App）——但**应用内的 RN Pressable 是已知例外**，点不动多半不是坐标问题，见下节「验收准备别靠点触摸应用内 UI」。`input -d 0 tap X Y` 只在 display id 不为 0 时才有意义（`adb shell dumpsys display | grep -m1 mDisplayId`；本机 id=0，两种写法等效）。快速滑动用连打 `input swipe`；`onEndReached` 那类要滚动的验收，`input keyevent 20`（DPAD_DOWN）连打更稳（触摸滑动的落点/惯性更难控）。tab 栏在屏幕底部（OnePlus 上 y≈2602–2648，2680 已落进系统手势区）。
    - **别用错误判据**：`input tap` 点状态栏**不会**拉下通知栏（ColorOS 上本就不拉），拿它当"输入被拦"的证据会误判整轮验收（实测踩过）。判别输入是否生效，用**点启动器图标看前台 Activity**（`dumpsys activity activities | grep -m1 topResumedActivity`）这种有唯一答案的目标。
-4. **量化证据要配「真的动了」**：`[perf]` warn 只在**连续 2 个 2s 窗口 < 30fps** 时上报（`packages/mobile/services/perfMonitor.ts`，后台暂停窗口不报）。所以「零 warn」单独不成立——必须同时给出「列表滚到第 N 名 / 打开了哪个页面」。
-5. **收尾**：验收结束停掉 Metro。`adb kill-server` 会打掉所有人的 reverse——动过 server 后 `adb reverse --list` 确认自己的端口还在。
+5. **量化证据要配「真的动了」**：`[perf]` warn 只在**连续 2 个 2s 窗口 < 30fps** 时上报（`packages/mobile/services/perfMonitor.ts`，后台暂停窗口不报）。所以「零 warn」单独不成立——必须同时给出「列表滚到第 N 名 / 打开了哪个页面」。
+   **长采样脚本要给每个 adb 调用套 `timeout`**（如 `A() { timeout 25 adb -s "$S" "$@"; }`）：实测一次 `dumpsys` 挂住，让 23 分钟的采样在**第 6 个样本静默停摆**，而任务状态仍显示 running——不加超时就会交出一轮「看着在跑、其实没数据」的取证。
+6. **收尾**：验收结束停掉 Metro。`adb kill-server` 会打掉所有人的 reverse——动过 server 后 `adb reverse --list` 确认自己的端口还在。
+
+## 验收准备别靠点触摸应用内 UI
+
+RN 的 `ScalePress` 对注入触摸**时灵时不灵**：同一实例上，设置齿轮 / 「+ 添加 URL 订阅」/ 播放模式按钮对 `input tap`、长按式 `input swipe x y x y 200`、5 次连点**全无响应**（齿轮有 ripple 却不导航；按钮连 Alert 都不弹，说明 handler 压根没跑），而同屏原生 `Switch` / `TextInput` 正常。**点不动且没有任何状态变化（无 Alert、无导航、无日志）时，先怀疑「这个控件不吃注入触摸」**，别继续换坐标试。
+
+可靠替代——验收准备要的是「设备处于某个状态」，不是「按钮被按过」：
+
+- **导航**用深链，不点按钮：`adb shell am start -a android.intent.action.VIEW -d 'mplayer://settings' -p com.mplayer.mobile.dev`。
+- **配置**用临时注入，不填表单：在 `packages/mobile/app/_layout.tsx` 临时调 `core.addTier3SubscriptionFromUrl(...)` + `setTier3Enabled(true)`，跑一次让它**落进 AsyncStorage**，随后**立刻回退源码**——设备照常可用，敏感值全程不入库（tier3 实测就是这么配上的）。
+- **断言**用 dump 的文本，不靠看像素（见取证 §2）。
+
+release 包 applicationId 不同（`com.mplayer.mobile` vs `.dev`），dev 上配好的数据**不会带过去**，且 release 没有 dev 工具——要验 release 的播放判据，只能用**带注入的构建**（构建产物本身也不入库）。
 
 ## 图附到 PR（正文 / 验收评论）
 
@@ -89,7 +103,9 @@ adb shell dumpsys media_session | grep mplayer.mobile.dev
 adb shell dumpsys notification --noredact | grep music-playback
 ```
 
-**附带好处**：debug 构建的 `console.log` 在 logcat 可见，所以 `[player]` 一类排查优先在 dev build 上做。
+**附带好处**：`console.log` 在 logcat 可见，所以 `[player]` 一类排查优先在 dev build 上做。
+
+**应用内日志本来就进 logcat，别重复埋点**：`useLogsStore.addLog` 会镜像 `console`（`packages/mobile/stores/logsStore.ts`），`info` 的级别门禁只作用于**应用内缓冲**（dev build 或设置页「开发者模式」才收 info，#477）——为取证再加一份 `console.log` 是重复劳动。分级与开关见 `docs/research/2026-09-29-mobile-developer-mode-and-diagnostics.md`。
 
 > **更正（2026-09-30 · #477 收口）**：此处原写「release 会把 JS 日志剥掉」——**本仓没有这个机制，确定不剥**。
 > Expo 默认**不**剥离 `console`，要显式开 Terser 的 `drop_console` 才剥（<https://docs.expo.dev/guides/minify/>）；
@@ -114,4 +130,7 @@ adb shell dumpsys notification --noredact | grep music-playback
 - **`adb install` 把 server 卡死 / 5037 被抢**：实测 80MB 的 `adb install` 能把 adb server 卡到 `adb devices` 都超时。处置：改 `adb push` + `adb shell pm install`；仍卡死就查占用者（Windows：`Get-NetTCPConnection -LocalPort 5037 -State Listen`）——`D:\leidian\LDPlayer14\adb.exe` 与 scoop 的 `android-clt\...\adb.exe` 都会抢 5037，杀掉后让 WSL 侧 `~/.local/bin/adb start-server` 接管。
 - **CMake 250 字符对象路径上限**：在深层 worktree（如 `.claude/worktrees/<name>`）里跑 `./gradlew assembleDebug` 会因原生模块对象路径过长失败，症状是 CMake 警告 `CMAKE_OBJECT_PATH_MAX` + `ninja: error: manifest 'build.ninja' still dirty after 100 tries`。修法：换到路径更短的检出（主克隆）构建，或加 `subst` 短盘符。
 - **验证隧道别用手机侧 nc**：Android toybox nc 静默失败。以 Metro bundling 日志 + ReactNativeJS 日志为准。
+- **模拟器飞行模式会连 adb 一起断，且不可恢复**：雷电上 `cmd connectivity airplane-mode enable` 后 `adb shell` 立即返空、`127.0.0.1:5555` 变 offline，`ldconsole quit/launch` 重启 VM 后 **adbd 也不回来**（实例报废）。**断网类验收一律走真机 USB**（`svc wifi disable && svc data disable` 不影响 USB adb）。实例报废后重建：`ldconsole add --name <n>` + `launch --index <i>`，**端口 = 5555 + 2×index**（index 1 → 5557），且**新实例默认 720×1280**，坐标要重新 `wm size` 取。
+- **「进程被杀后恢复」用 `am force-stop`，不要用 `am kill`**：`am kill` 对**带前台服务的进程是空操作**（pid 不变）——这本身可当「FGS 真的生效」的旁证，但验不了恢复路径；模拟器又没有 `su`，`kill -9` 用不了。`am force-stop` 更狠（连服务一起停），验出来更硬。
+- **多步 adb 编排写成脚本再跑**：内联进 `pwsh -Command` 会被吃掉引号/反斜杠/`$`（实测踩过 `unknown command adb`）。脚本连同**探针**都写 `%TEMP%`，别落在 worktree 根——`git add -A` 会把它带进提交（实测补了一个 `chore:` 才删掉）。
 - **无线调试（不用 USB 的备用路线）**：镜像网络下手机可直连开发机局域网 IP 拉 bundle（Hyper-V 防火墙需放行 8081）；无线 adb 端口每次重连随机，`adb mdns services` 扫 `_adb-tls-connect._tcp`，配对码 30 秒过期。适合临时看 UI，长会话仍走 USB。
