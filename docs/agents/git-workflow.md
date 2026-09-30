@@ -64,6 +64,8 @@ gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tm
 - **面向人写，不写工作日志**：先给结论（改了什么、要 reviewer 做什么），再给细节；一段一个意思；箭头链、名词堆叠与 `文件:行` 留给 ADR 与 issue。**正文预算 ≤ 40 行 / ≤ 1500 字**，CI 已证明的（lint / typecheck / 四套测试 / `core:build` / `build`）不要抄。
 - **长文去该去的地方**：取舍与方案对比写 ADR，排查过程写 issue 评论，正文只留 reviewer 决策所需——**只链接，不复述**。
 - **PR 之前 issue 要可开工**：`Fixes #N` 指向的 issue 应已带 `ready-for-agent`（验收标准明确）；纯文档 / chore / 依赖升级 / 紧急修复不受此限。
+- **自动关闭 issue 靠关闭关键字**：`Fixes #N` / `Closes #N` / `Resolves #N` 必须**独立成行、前后留白**——粘在中文标点后面（`「…」。Fixes #123。`）不会被识别；`Refs #N` 只是引用、**不关闭**；标题里的 `（#123）` 也不算。要关就写 `Closes`，并同时写进提交信息（见 §4）。
+- **合并前自查关闭引用**：`gh pr view <N> --json closingIssuesReferences`，为空说明这次合并不会自动关 issue——该字段在 PR 创建时解析、**事后改正文不回填**，所以关键字要在建 PR 那一次就写对。
 - **验证以 CI 为准**：`check` + 四个 `test` + `expo-check` 绿是硬门槛（**CI 红不合**）。正文只勾 CI 证明不了的两条（真机 / UI 证据、文档同步），不要逐条抄 lint / typecheck / 测试 / `core:build`。
 - 截图 / 录屏传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'` / `gh pr comment <PR> --attach '<png>#<图注>'`，两者同一套机制：正文里没被引用的附件会追加到末尾，排版走两步法，见 `mobile-device-debugging` skill），**不入库** `docs/**/assets` —— 仓库只留活文档，以及 ADR 正文引用的资产。**追加一条验收评论**（不动 PR 正文）用后者；正文用模板结构时尤其别把图塞进正文。
 - **附图后要验引用**：读回来逐个检查（正文 `gh pr view <PR> --json body --jq .body`，评论 `gh api repos/{owner}/{repo}/issues/comments/<id> --jq .body`）——每个图片引用都必须是 `user-attachments` URL，残留本地路径就是裂图；公开仓库可再抓一次 PR 页面 HTML 确认 asset id 在渲染产物里。
