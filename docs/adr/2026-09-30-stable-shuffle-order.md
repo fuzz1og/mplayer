@@ -56,5 +56,5 @@
 - issue #511 · PR #506（桌面「下一首播放」）· #494 / #495（移动端）
 - core `packages/core/src/utils/shuffleOrder.ts`、`packages/core/src/utils/queue.ts`、`packages/core/src/shared/skipGuard.ts`
 - 桌面 `src/renderer/store/playerStore.ts`、`src/renderer/utils/queueUtils.ts`、`src/renderer/pages/QueuePage.tsx`
-- 移动端接缝：`packages/mobile/services/queueInsert.ts` 的 `planPlayNext`（#515 已合入 master；随机分支消费由 #520 落地）与 `packages/mobile/services/queuePrefetch.ts` 的 `planNextIndexes`（预取窗口定序）。本 PR 不改 `packages/mobile`。
+- 移动端接缝：`packages/mobile/services/queueInsert.ts` 的 `planPlayNext`（#515 已合入 master；随机分支消费由 #520 落地）与 `packages/mobile/services/queuePrefetch.ts` 的 `planNextIndexes`（预取窗口定序）。
 - `2026-09-29-native-playback-ownership.md`（JS 定序、原生顺序推进）
