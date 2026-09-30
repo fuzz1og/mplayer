@@ -27,6 +27,8 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -46,10 +48,18 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
     }
   }, [isVisible]);
 
-  const handleAddToPlaylist = async (playlistId: number) => {
+  /**
+   * 把本次批量加入目标歌单。
+   * @param isNew 新歌单必然没有重复/同名，跳过预读与确认直接写。
+   *              out-of-scope（#489 票面）：批量路径仍是逐首 playlist:addSong，
+   *              若大歌单实测可感卡顿，另开「桌面批量写歌单改批量 IPC」票。
+   */
+  const addSongsToPlaylist = async (playlistId: number, isNew: boolean) => {
     setAdding(true);
     try {
-      const existingSongs = await IpcClient.invoke<Song[]>('playlist:getSongs', playlistId);
+      const existingSongs = isNew
+        ? []
+        : await IpcClient.invoke<Song[]>('playlist:getSongs', playlistId);
       const filtered = filterDuplicates(existingSongs, songs);
 
       const skipCount = filtered.duplicates.length;
@@ -97,6 +107,24 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
       message.error('添加失败，请重试');
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleAddToPlaylist = (playlistId: number) => addSongsToPlaylist(playlistId, false);
+
+  /** 新建歌单后**立即**把本次批量加入该新歌单（一轮写入，不要求用户再点一次） */
+  const handleCreateAndAdd = async () => {
+    const name = newPlaylistName.trim();
+    if (!name) return;
+    setCreating(true);
+    try {
+      const newId = await IpcClient.invoke<number>('playlist:create', name);
+      setNewPlaylistName('');
+      await addSongsToPlaylist(newId, true);
+    } catch (_error) {
+      message.error('操作失败，请重试');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -269,32 +297,33 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
                   }}
                 >
                   <ListMusic size={32} style={{ marginBottom: '12px' }} />
-                  <div style={{ fontSize: '14px' }}>暂无歌单</div>
+                  <div style={{ fontSize: '14px' }}>还没有歌单</div>
+                  <div style={{ fontSize: '12px', marginTop: '4px' }}>在下方输入名字即可新建</div>
                 </div>
               ) : (
                 playlists.map((playlist) => (
                   <div
                     key={playlist.id}
-                    onClick={() => handleAddToPlaylist(playlist.id)}
+                    onClick={() => { if (!adding && !creating) handleAddToPlaylist(playlist.id); }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '12px',
                       padding: '12px',
                       borderRadius: '8px',
-                      cursor: adding ? 'not-allowed' : 'pointer',
+                      cursor: adding || creating ? 'not-allowed' : 'pointer',
                       transition: 'all 0.15s ease',
-                      opacity: adding ? 0.7 : 1,
-                      pointerEvents: adding ? 'none' : 'auto',
+                      opacity: adding || creating ? 0.7 : 1,
+                      pointerEvents: adding || creating ? 'none' : 'auto',
                     }}
                     onMouseEnter={(e) => {
-                      if (!adding) {
+                      if (!adding && !creating) {
                         e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
                         e.currentTarget.style.transform = 'translateX(4px)';
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (!adding) {
+                      if (!adding && !creating) {
                         e.currentTarget.style.backgroundColor = 'transparent';
                         e.currentTarget.style.transform = 'translateX(0)';
                       }
@@ -356,6 +385,51 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
             <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>正在添加歌曲...</span>
           </div>
         )}
+
+        {/* 新建歌单（与单曲版 AddToPlaylistModal 同构）：新建后立即把本次批量写入 */}
+        <div style={{
+          marginTop: '16px',
+          paddingTop: '16px',
+          borderTop: '1px solid var(--border-subtle)',
+        }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              value={newPlaylistName}
+              onChange={(e) => setNewPlaylistName(e.target.value)}
+              placeholder="新建歌单..."
+              disabled={adding || creating}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                border: '1px solid var(--border-default)',
+                borderRadius: '6px',
+                fontSize: '14px',
+                backgroundColor: 'var(--bg-base)',
+                color: 'var(--text-primary)',
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreateAndAdd();
+              }}
+            />
+            <button
+              onClick={handleCreateAndAdd}
+              disabled={adding || creating || !newPlaylistName.trim()}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: 'var(--accent)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                cursor: adding || creating || !newPlaylistName.trim() ? 'not-allowed' : 'pointer',
+                opacity: adding || creating || !newPlaylistName.trim() ? 0.5 : 1,
+              }}
+            >
+              {creating || adding ? '处理中...' : `新建并加入 ${songs.length} 首`}
+            </button>
+          </div>
+        </div>
 
       </div>
     </div>
