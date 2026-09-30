@@ -31,7 +31,7 @@
 
 - **可序列化形态**：`{ order: string[]; cursor: number }` 本身即存储形态，直接 JSON 持久化/恢复；`order` 必须是队列 id 的排列，恢复时用 `syncShuffleCursor(state, queue, currentIndex)` 对齐（丢多余的、补缺的、游标对到当前曲）。
 - **取下一首 / 上一首（纯查询，不改 state）**：`getNextSongIndex(queue, currentIndex, playMode, shuffle)` / `getPrevSongIndex(...)`。传入 state 时函数会**先把游标对到 `queue[currentIndex]`** 再前进/后退一格并映射回队列下标——调用方只要给出「当前在哪」即可，不必自己维护游标。预取窗口要同时拿推进后的 state 就用 `stepShuffle(state, queue, ±1) → { index, state }`。
-- **「下一首播放」/ 原生 `insertAfterCurrent`**：`insertNextInShuffle(state, queue, songId, currentIndex)`。语义与桌面 #506 逐条对齐，也与移动端 #515 的 `planPlayNext`（`packages/mobile/services/queueInsert.ts`，已合入 master）对齐：已在序列 → **移动**（不复制，保留队列里那份 Song 对象）；不在 → 插入；已在「当前曲下一格」或点的是当前曲 → **no-op**（连点幂等）。调用方负责把 songId 先加进**队列成员**（追加即可），序列插入由该函数负责。移动端 `planPlayNext` 目前 `void playMode`（**随机分支仍留空**）：落地时用「当前曲在序列里的下一格」这一份语义，Android 原生只按最终顺序 `append`（沿用 `2026-09-29-native-playback-ownership.md` 的「JS 定序、原生顺序推进」，不用 `setShuffleModeEnabled`）。预取窗口另见 `queuePrefetch.ts` 的 `planNextIndexes`。
+- **「下一首播放」/ 原生 `insertAfterCurrent`**：`insertNextInShuffle(state, queue, songId, currentIndex)`。语义与桌面 #506 逐条对齐，也与移动端 #515 的 `planPlayNext`（`packages/mobile/services/queueInsert.ts`，已合入 master）对齐：已在序列 → **移动**（不复制，保留队列里那份 Song 对象）；不在 → 插入；已在「当前曲下一格」或点的是当前曲 → **no-op**（连点幂等）。调用方负责把 songId 先加进**队列成员**（追加即可），序列插入由该函数负责。移动端随机分支的消费由 #520 落地（`planPlayNextShuffle` + 稳定序列，仍在 `services/queueInsert.ts`）；本 ADR 的「移动端消费契约」即为它的验收依据。Android 原生只按最终顺序 `append`（沿用 `2026-09-29-native-playback-ownership.md` 的「JS 定序、原生顺序推进」，不用 `setShuffleModeEnabled`）。预取窗口另见 `queuePrefetch.ts` 的 `planNextIndexes`。
 - **预取窗口**：`applyShuffleOrder(queue, state)` 返回**按随机序重排的完整队列**（等长、纯展示/取窗），移动端按原生当前位置切片取窗，替代现在按 `planNextIndexes` 现算的窗口。
 - **成员编辑**：删歌用 `syncShuffleCursor`（或 `normalizeShuffleOrder`）对齐；原位换源用 `replaceShuffleSongId(state, fromId, toId)`（同格换 id、顺序不动）。
 
@@ -56,5 +56,5 @@
 - issue #511 · PR #506（桌面「下一首播放」）· #494 / #495（移动端）
 - core `packages/core/src/utils/shuffleOrder.ts`、`packages/core/src/utils/queue.ts`、`packages/core/src/shared/skipGuard.ts`
 - 桌面 `src/renderer/store/playerStore.ts`、`src/renderer/utils/queueUtils.ts`、`src/renderer/pages/QueuePage.tsx`
-- 移动端接缝：`packages/mobile/services/queueInsert.ts` 的 `planPlayNext`（#515 已合入 master；随机分支待按本 ADR 落地）与 `packages/mobile/services/queuePrefetch.ts` 的 `planNextIndexes`（预取窗口定序）。本 PR 不改 `packages/mobile`。
+- 移动端接缝：`packages/mobile/services/queueInsert.ts` 的 `planPlayNext`（#515 已合入 master；随机分支消费由 #520 落地）与 `packages/mobile/services/queuePrefetch.ts` 的 `planNextIndexes`（预取窗口定序）。本 PR 不改 `packages/mobile`。
 - `2026-09-29-native-playback-ownership.md`（JS 定序、原生顺序推进）
