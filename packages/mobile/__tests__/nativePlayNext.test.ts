@@ -129,10 +129,19 @@ vi.mock('../services/notificationService', () => ({
   clearNotification: async () => {},
 }));
 vi.mock('../services/networkState', () => ({ isOffline: async () => false }));
+// 换源效果（songActionEffects）的模块级依赖：本文件只验「换源怎么落到随机序」，
+// 下载/路由/搜索都替身掉（否则 expo-file-system / expo-router 在 node 环境里拖不进来）。
+vi.mock('expo-router', () => ({ router: { push: vi.fn() } }));
+vi.mock('../services/downloadService', () => ({ downloadSong: vi.fn(async () => {}) }));
+vi.mock('../services/sourceSwap', () => ({
+  applySwap: vi.fn(async () => null),
+  searchSwapCandidates: vi.fn(async () => []),
+}));
 
 import { feedWindow, nativePlayNext, nativeStop } from '../services/nativePlayer';
 import { playNextInQueue } from '../services/audioPlayer';
 import { planPlayNext } from '../services/queueInsert';
+import { nativeSongActionEffects } from '../services/songActionEffects';
 import { prefetchKey, resetPrefetchState } from '../services/queuePrefetch';
 import { usePlayerStore } from '../stores/playerStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -500,5 +509,112 @@ describe('#518：插入后「下一首」= 被插入的那首；补窗基准不�
     expect(outcome.reason).toBe('unsupported');
     expect(usePlayerStore.getState().queue.map((s) => s.id)).toEqual(['A', 'B', 'C']);
     expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'B', 'C']);
+  });
+});
+
+/**
+ * #519：随机模式的**原生喂窗口**必须按稳定随机序，而不是每轮现抽一批。
+ *
+ * 现场（#519）：`补窗 mode=随机播放 计划=[120,72,68]→[93,170,87]→…` 每秒换一整批全新下标、
+ * 9 分钟 0 条 `开始播放`。这里钉住「同一稳态下第一轮喂的就是序列下一批、第二轮不再换一批」。
+ */
+describe('#519：随机模式的补窗按稳定随机序（不再自激重抽）', () => {
+  function lastAppendKeys(): string[] {
+    return (fake.patchCalls.at(-1)?.append ?? []).map((t) => t.meta.key);
+  }
+
+  it('第一轮按随机序喂下一批；第二轮收敛（不再换一批全新的）', async () => {
+    const queue = setQueue(['A', 'B', 'C', 'D', 'E', 'F'], 0);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['A', 'C', 'E', 'B', 'D', 'F'], cursor: 0 } });
+    // 原生此刻只有当前曲 A
+    fake.state.tracks = [{ key: prefetchKey(queue[0]), songId: 'A' }];
+    fake.state.index = 0;
+    fake.state.key = prefetchKey(song('A'));
+    // 旧实现忽略序列、每轮现抽：用「每次调用都不同」的随机源让它稳定地换批（不靠运气）
+    let n = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => {
+      n += 1;
+      return (n % 6) / 6;
+    });
+
+    await feedWindow(2);
+    expect(lastAppendKeys()).toEqual([prefetchKey(song('C')), prefetchKey(song('E'))]);
+
+    fake.patchCalls.length = 0;
+    await feedWindow(2);
+    // 继续沿**同一份序列**往后补（不是换一批全新的随机下标）
+    expect(lastAppendKeys()).toEqual([prefetchKey(song('B')), prefetchKey(song('D'))]);
+    // 原生列表 = 随机序的前缀：这就是「计划收敛」的判据（旧实现每轮换一批，永远拼不出前缀）
+    expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'C', 'E', 'B', 'D']);
+
+    // 序列最后一首
+    fake.patchCalls.length = 0;
+    await feedWindow(2);
+    expect(lastAppendKeys()).toEqual([prefetchKey(song('F'))]);
+    expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'C', 'E', 'B', 'D', 'F']);
+
+    // 序列全部喂完后：再补窗没有新候选（收敛，不再重抽、不再增长）
+    fake.patchCalls.length = 0;
+    await feedWindow(2);
+    expect(lastAppendKeys()).toEqual([]);
+  });
+
+  it('原生推进到序列下一首后，窗口继续沿同一份序列补（不重抽）', async () => {
+    const queue = setQueue(['A', 'B', 'C', 'D', 'E', 'F'], 0);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['A', 'C', 'E', 'B', 'D', 'F'], cursor: 0 } });
+    fake.state.tracks = [
+      { key: prefetchKey(queue[0]), songId: 'A' },
+      { key: prefetchKey(song('C')), songId: 'C' },
+    ];
+    fake.state.index = 0;
+    fake.state.key = prefetchKey(song('A'));
+    await feedWindow(2);
+    expect(lastAppendKeys()).toEqual([prefetchKey(song('E')), prefetchKey(song('B'))]);
+
+    // 原生推进到 C（index=1，key 跟着变）→ 下一批从 C 之后继续：E/B 已在手里 → 补 D、F
+    fake.state.index = 1;
+    fake.state.key = prefetchKey(song('C'));
+    fake.patchCalls.length = 0;
+    await feedWindow(2);
+    expect(lastAppendKeys()).toEqual([prefetchKey(song('D')), prefetchKey(song('F'))]);
+    expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'C', 'E', 'B', 'D', 'F']);
+  });
+});
+
+/**
+ * #520 blocker 2（评审）：原位换源**必然换 id**，必须走 ADR 指定的 core
+ * `replaceShuffleSongId`（同格换 id、顺序不动），否则：
+ * - 换的是当前曲 → `setQueue` 后 `orderMatchesQueue` 为假 → **整条随机序重洗**；
+ * - 换的不是当前曲 → 旧 id 滞留在序列里 → 下次对齐时该曲被**挪到序列末尾**。
+ */
+describe('#520 blocker 2：原位换源就地换 id（不重洗、不留旧 id）', () => {
+  it('换当前曲：序列就地换 id，长度/位置/顺序都不变', async () => {
+    setQueue(['A', 'B', 'C'], 1);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['A', 'B', 'C'], cursor: 1 } });
+
+    nativeSongActionEffects.onApplied(song('B'), song('B2'), { exact: true } as never);
+    await flush();
+
+    const st = usePlayerStore.getState();
+    expect(st.queue.map((s) => s.id)).toEqual(['A', 'B2', 'C']);
+    expect(st.shuffle?.order).toEqual(['A', 'B2', 'C']);
+    expect(st.shuffle?.cursor).toBe(1);
+  });
+
+  it('换非当前曲：序列里就地换 id，旧 id 不滞留', () => {
+    setQueue(['A', 'B', 'C'], 0);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['C', 'B', 'A'], cursor: 2 } });
+
+    nativeSongActionEffects.onApplied(song('C'), song('C2'), { exact: false } as never);
+
+    const st = usePlayerStore.getState();
+    expect(st.queue.map((s) => s.id)).toEqual(['A', 'B', 'C2']);
+    expect(st.shuffle?.order).toEqual(['C2', 'B', 'A']);
+    expect(st.shuffle?.order).not.toContain('C');
+    expect(st.shuffle?.cursor).toBe(2);
   });
 });

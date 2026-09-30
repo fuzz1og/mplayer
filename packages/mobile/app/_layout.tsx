@@ -112,6 +112,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     initAudio().catch(() => {});
+    // 随机序（#519）：冷启读回落盘的稳定序列（只补空），保证「重启后顺序不变」
+    void usePlayerStore.getState().hydrateShuffle();
     // 存量数据迁移：persist rehydrate 完成后清理旧签名死链（幂等，见 legacyMigration）
     setupLegacyMigration();
     // Android 13+ 需先请求 POST_NOTIFICATIONS 运行时权限，通知/锁屏控制才可用
