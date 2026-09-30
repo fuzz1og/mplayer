@@ -61,6 +61,28 @@
   Windows / PowerShell / cmd / Git Bash 通用（含 `-- <scope>`）。
 - `verify.mjs` 增加一条**起跑前自检**：`node_modules` 的平台与当前 node 不一致时直接给人话
   （点名「你在用 Windows 装的依赖跑 Linux node（WSL）」并给两条处置），把上面那个「长得像 rollup 的问题」提前拦成明确的平台错误。
-- 仍未移植（有意）：`release.sh`（低频人工动作）与 `mobile-*.sh`（绑定 adb / 真机回路）——它们仍需要 bash，
+- 仍未移植（当时有意）：`release.sh`（低频人工动作）与 `mobile-*.sh`（绑定 adb / 真机回路）——它们仍需要 bash，
   且 CRLF 那条老坑对它们继续成立（见 `docs/agents/git-workflow.md`）。
+
+## 更新（2026-09-30，#502）：剩余 bash 脚本一并收口
+
+上一条里「仍未移植」的那批脚本已按同一形态全部移植（`.mjs` 事实源 + `.sh` 两行 shim）：
+
+| 脚本 | 说明 |
+|---|---|
+| `release.mjs` | 一键发布；子进程改用数组参数（不拼命令行）→ 用户给的目标版本没有注入面 |
+| `dev-mobile.mjs` | Expo dev server |
+| `mobile-debug.mjs` | 真机调试一条龙 |
+| `mobile-frame-stats.mjs` | 帧计时取证；解析段原为内嵌 Python heredoc → JS 重写，**去掉 python3 依赖** |
+| `mobile-e2e.mjs` | 真机 e2e 一条龙；uiautomator XML 解析与 manifest projectRoot 提取改 JS，**不再需要 python3** |
+| `mobile-device/usb-attach.mjs` | usbipd 把手机 attach 进 WSL（本就只在 WSL 里有意义） |
+
+- 两处**有意**的行为差异（都是去掉环境耦合）：仓库根改由脚本自身位置推导（原 `git rev-parse` 在
+  「Windows 建的 worktree + WSL 侧跑」时解析 Windows 绝对路径会失败，原脚本自己记过这条限制）；不再要求 python3。
+- 可无设备验证的部分已对拍：`mobile-frame-stats.mjs` 复算 `e2e/artifacts/frame-A1` 的产物与
+  原 bash+python 版**逐字段一致**（对拍时抓到一处真实分叉：原实现的注释写 `ceil(p*n)-1`，代码实际是
+  `int(p*n)-1`，移植按**代码实际行为**对齐，否则 p90/p99 会不一致）；`mobile-e2e.mjs` 的
+  uiautomator XML 解析与 Python 版在同一份探针 XML 上**逐例一致**（含锚定模式因 NUL 不命中的行为、`&amp;` 实体解码）。
+- **真机部分仍需复跑一次**：`mobile-e2e.mjs` / `mobile-debug.mjs` 的设备路径（adb + uiautomator + logcat）
+  在无设备环境里不可验证，按仓库约定属人工环节。
 

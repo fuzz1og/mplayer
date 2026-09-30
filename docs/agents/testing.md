@@ -35,7 +35,7 @@ CI 的 `check`、四个 `test` 分片与 `expo-check` 都只是 `verify.mjs <sco
 - **Mobile**: `packages/mobile/vitest.config.ts`（node env），setup（`__tests__/setup.ts`）全局替身三件：`react-native` 最小面（AppRegistry/NativeModules/Platform/Share/NativeEventEmitter）、`expo`（`requireOptionalNativeModule` → null = 走回落引擎路径）、AsyncStorage；要验原生引擎的用例在自己的文件里 `vi.mock('expo')` 换假原生模块。store 测试用纯 getState/setState。`npx vitest run --config packages/mobile/vitest.config.ts`（按值 import `@mplayer/core` → 先 `npm run core:build`；`verify` 已内置这一步）
 - 构造器注入可测性：diskBackend(cacheDir)、localMusicService(userDataPath)
 - E2E 桌面: Playwright 在 `e2e/`，测试服务器 `npm run dev`（Vite，5174）；spec 不在 CI/verify 流程，属本地手工回归
-- E2E 移动端: 真机一条龙 `npm run mobile:e2e`（`scripts/mobile-e2e.sh`，adb + logcat + uiautomator 驱动，前置/断言/局限见 `e2e/README.md`）
+- E2E 移动端: 真机一条龙 `npm run mobile:e2e`（`scripts/mobile-e2e.mjs`，adb + logcat + uiautomator 驱动，前置/断言/局限见 `e2e/README.md`）
 
 ## 原生发版构建（本机）
 
