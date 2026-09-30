@@ -2,7 +2,7 @@
 
 MPlayer 是一个跨平台音乐播放器（桌面 Electron + React，移动端 React Native/Expo），统一由 `@mplayer/core` 提供歌曲识别、播放地址解析与多源搜索能力。多源：netease / qq / kugou / migu / kuwo / qianqian / soda。
 
-> 架构决策 `docs/adr/`（索引见其 `README.md`）· 领域词汇 `CONTEXT.md` · 架构/测试细节 `docs/agents/` · 工程 skills 见下文 Agent skills
+> 架构决策 `docs/adr/`（索引见其 `README.md`）· 领域词汇 `GLOSSARY.md` · 架构/测试细节 `docs/agents/` · 工程 skills 见下文 Agent skills
 
 ## Commands
 
@@ -57,7 +57,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 链路的现状与口径只在下面几处维护，改动前按需读，不要在本文件里另记一份：
 
 - **模块与常量**：`docs/agents/architecture.md` 的 `api/` / `shared/` / `tier3/` 三节 —— 路由、四层时限与解析链总预算（`playbackBudgets` / `resolutionBudget`）、健康度定序（`sourceSchedule`）、出网闸门（`outboundGate`）、预取缓存（`prefetchCache`）。
-- **语义词汇**：`CONTEXT.md` —— 播放时限层次 / tier3 交付 / 跳歌护栏 / 初始化窗口 / 直连 / 按 ID 直取歌词源。
+- **语义词汇**：`GLOSSARY.md` —— 播放时限层次 / tier3 交付 / 跳歌护栏 / 初始化窗口 / 直连 / 按 ID 直取歌词源。
 - **tier3 清单**：schema 与 `source`（源归属）合法值见 `docs/agents/tier3-manifest.md`。
 - **决策与口径**：时限 ADR `2026-09-27-playback-budget-layers.md` + `2026-09-28-resolution-chain-deadline.md` · 出网 ADR `2026-09-26-outbound-request-governance.md` · 调度 ADR `2026-09-25-tier3-source-scheduling.md` · 失败归因与交付/丢弃 ADR `2026-09-23-tier3-failure-attribution.md` · trace ADR `2026-09-23-playback-trace-sink.md` · 专辑/歌手契约 ADR `2026-09-27-album-and-artist-content-contract.md` · 网易歌单搜索 ADR `2026-09-27-netease-playlist-search.md` · 旧 `api.php?get=*` 死链见 core `utils/legacyUrl`。
 
@@ -65,7 +65,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 
 **只有文档类修改可以直接 push `master`；其余修改（含 bugfix）一律从最新 `master` 建 worktree，完成后 PR，CI 绿后等人工审核，不自行合并。**
 
-- **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。issue/PR 模板见 `.github/`（issue 标题 `[Bug]:` / `[Feature]:` 前缀；PR 正文用模板，验证清单含双端核对）。
+- **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。标题前缀：模板预置的 `[Bug]:` / `[Feature]:`，另有 `[Perf]:` / `[Tooling]:` / `[Chore]:`。PR 正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的 4 段写——验证以 CI 为准，正文只留 CI 证明不了的证据。
 - **敏感信息不入库**：tier3 订阅地址、API key、本地缓存。
 - **截图不入库**：真机验收 / UI 截图传 **PR 正文**（`gh pr edit <PR> --attach '<png>#<图注>'`），`docs/**/assets` 只留 ADR 正文引用的资产。
 - 分流边界（什么算文档类）、分支命名、Conventional Commits、验证顺序、PR 模板与清理的完整流程见 `docs/agents/git-workflow.md`。
@@ -82,7 +82,7 @@ GitHub Issues via `gh` CLI。见 `docs/agents/issue-tracker.md`。
 
 ### Domain docs
 
-single-context：根 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。
+single-context：根 `GLOSSARY.md` + `docs/adr/`。见 `docs/agents/domain.md`。
 
 ### 项目 skills
 
