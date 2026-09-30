@@ -14,15 +14,16 @@
 | Babel | `packages/mobile/babel.config.js:4` 只有 `'babel-preset-expo'`，无任何 remove-console 插件；`babel-plugin-transform-remove-console` 不在依赖里 |
 | Metro | `packages/mobile/metro.config.js:1-19` 未设 `transform.minifierConfig` |
 | Metro 默认值 | 默认 `minifierConfig` 里没有 `drop_console`（`metro-config/src/defaults/index.js:120-136`）；`metro-minify-terser/src/minifier.js:27-49` 原样透传 config |
-| preset | `babel-preset-expo@57.0.7` 整个 `build/` 逐目录搜索，**无** `remove-console` / `drop_console` 命中 |
-| release 实际只做 | `--minify true`（`BundleHermesCTask.kt:168-169`）+ R8（`app.json:43-44` 的 `enableMinifyInReleaseBuilds`）。**R8 只作用于 Java/Kotlin**，且 `proguard-rules.pro` 里没有 `-assumenosideeffects android.util.Log` |
+| preset | `babel-preset-expo@57.0.13`（lock 实装版本；package.json 声明 `~57.0.5` 范围，见 `package-lock.json`）整个 `build/` 逐目录搜索，**无** `remove-console` / `drop_console` 命中 |
+| release 实际只做 | **`--minify false`**：决定值的是 `TaskConfiguration.kt:80` 的 `minifyEnabled.set(!isHermesEnabledInThisVariant)`，本仓 `android/gradle.properties:43` `hermesEnabled=true` → false；`BundleHermesCTask.kt:168-169` 只负责把该布尔拼进命令行（**不是它决定 true**）。`@expo/metro-config` 的 `shouldMinify` 因此返回 false，**terser 根本不跑**；之后只有 `hermesc -O`。另加 R8（`app.json:43-44` 的 `enableMinifyInReleaseBuilds`），**R8 只作用于 Java/Kotlin**，且 `proguard-rules.pro` 里没有 `-assumenosideeffects android.util.Log` |
+| 验收方式（#477） | 不需真机 release 包：`npx expo export:embed --platform android --dev false --minify false --reset-cache …` 后 grep 产物中 `console.log` 计数 > 0 即证「release 侧无剥离」 |
 
 **反证（决定性）**：`@react-native/js-polyfills/console.js:579-589` 的 `console → global.nativeLoggingHook` 路径**没有 `__DEV__` 门控**
 （该文件 `:582`/`:659` 的 `__DEV__` 只用于保留 debugger console），而钩子由 JSI **无条件绑定**
 （`ReactCommon/jsitooling/react/runtime/JSRuntimeBindings.cpp:14-31`）。
 
-> **仍未实测**：release 包（`com.mplayer.mobile`）里 `console` 在 logcat 上实际可不可见。配置层面已证「无剥离机制」，
-> 但没在真机上跑过 release 包——这一条留在 §5，也是 #477 的验收项。
+> **已按 #477 验收方式闭合**：配置层面证「无剥离机制」，并由 `expo export:embed`（`--dev false`）产物 grep 出 `console.*` 计数 > 0 作为可复核证据；
+> **仍不主张**在真机 release 包的 logcat 上实测过——那需要在发版期构建 release 包，本片不做（见 §5）。
 
 ### 0.2 真正的构建能力差**不在日志**，而在没有 Metro / LogBox / dev-client
 
@@ -59,7 +60,7 @@ MPlayer 现在**没有开发者模式**：诊断能力散在四个服务里、�
 - `packages/mobile/android/app/build.gradle:128` → debug 变体 `applicationIdSuffix '.dev'`，与 release 共存。
 - 三个运行环境：Expo Go、dev build（`.dev`）、release（`com.mplayer.mobile`）。
 - 设置页 8 个区段（`packages/mobile/components/settings/`）：About / Appearance / Cache / Diagnostics / DirectStatus / Playback / Tier3 / Update——**没有一个是开发者语义**。
-- 依赖现状（`packages/mobile/package.json`）：**已是依赖** `expo-constants:22`、`expo-file-system:23`、`expo-dev-client:45`（devDependency）；
+- 依赖现状（`packages/mobile/package.json`）：**已是依赖** `expo-constants`、`expo-file-system`、`expo-build-properties`、`expo-dev-client`（均 `~57.0.x`）；
   **不是依赖** `expo-application`、`expo-sharing`、`expo-updates`（要新增）。
 - **本仓没有 `eas.json`**（root 与 `packages/mobile` 均无），`app.json` 无 `updates` 键，CI 直接 `./gradlew assembleRelease`
   ⇒ §4.5 那套「构建 profile / 更新 channel」官方机制**在本仓尚未启用**，要用得从零建。
@@ -76,10 +77,13 @@ MPlayer 现在**没有开发者模式**：诊断能力散在四个服务里、�
 ### 3.1 首片（改动面可控，宜一次做完）
 
 1. **`services/devMode.ts`**：`isDevMode()` / `setDevMode(on)` / 订阅；状态存 `stores/settingsStore`（沿用既有 AsyncStorage persist），**不新引入依赖**。
-2. **入口**：设置页 `AboutSection` 的版本行**连点 7 次**（依据见 §4.4），开启后才追加 `DeveloperSection`。
-3. **门禁的是级别而不是有无**：给 `logsStore` 加 `silent | normal | verbose`，把四套策略收敛成「常态只记 warn/error，`verbose` 才记 info」；
-   `dragJankProbe` 的 `__DEV__` 判断改成 `__DEV__ || isDevMode()`（**dev 构建行为不变**）。
-4. **补读取入口**：`DeveloperSection` 里加日志查看器（读 `logsStore.entries`）+ 「导出诊断」。
+   另有共享判定 `isDiagnosticsEnabled() = isDevBuild() || isDevMode()`——把 `dragJankProbe` 里私有的 `__DEV__` 判断提成唯一实现。
+2. **入口（#477 已定稿，与此处原方案不同）**：设置页一个**显式开关**「开发者模式」（**不是** `AboutSection` 版本行连点 7 次——该手势方案作废），
+   开关本身常驻可见、开启后诊断内容才出现。原「隐藏入口的先例」论证见 §4.5（保留为背景，不作为本仓方案）。
+3. **门禁的是详细度而不是埋点存在**：给 `logsStore` 加两态级别（**关 = normal 只记 warn/error，开 = verbose 记 info**，不再设 `silent`），
+   `dragJankProbe` 的 `__DEV__` 判断改走共享 `isDiagnosticsEnabled()`（**dev 构建行为不变**）；
+   `perfMonitor` / `coverDiagnostics` / `playbackTrace` 的 warn/error 档**一律常开**——开关只 gate `[耗时]` 那一档 info。
+4. **补读取入口**：`DeveloperSection` 里加日志查看器（读 `logsStore.entries` 最近 100 条）+ 「清空日志」+ 「导出诊断」。
    **零新增依赖**：照 `services/playbackTrace.ts:88-93` 的既有姿势（`expo-file-system/legacy` 写文档目录 + RN `Share.share`），该文件 `:83` 就注明了「不新增依赖」。
 5. **隐私口径不变**：不落盘、不外传（除用户主动导出）；**不做**远程上报——也正因此无需做数据收集申报（§4.6）。
 
@@ -122,7 +126,7 @@ RN 官方页（<https://reactnative.dev/docs/global-__DEV__>）：「inlined dur
 | 可用 `Constants.debugMode` | 「true when the app is running in debug mode (__DEV__)」，<https://docs.expo.dev/versions/latest/sdk/constants/>（`expo-constants` **已是依赖**） |
 | 可用 `Constants.executionEnvironment` / `expoConfig` / `expoConfig.extra` | 同上 |
 
-### 4.4 门禁的对象：级别，不是布尔
+### 4.4 门禁的对象：级别，不是布尔（也是「只 gate 详细度」的外部依据）
 
 | 结论 | 原文引用 | 出处 |
 |---|---|---|
@@ -130,11 +134,14 @@ RN 官方页（<https://reactnative.dev/docs/global-__DEV__>）：「inlined dur
 | Apple 统一日志的级别体系，且**级别决定落盘** | 「The various log levels that the unified logging system provides.」；「The log level determines which messages stay in memory and which go to disk.」 | <https://developer.apple.com/documentation/os/oslogtype.md> · <https://developer.apple.com/documentation/os/logger.md> |
 | 埋点**默认脱敏**有第一方依据 | 「the system redacts the value of that string or object by default」（要 `privacy: .public` 才可见） | <https://developer.apple.com/documentation/os/logger.md> |
 
-### 4.5 隐藏入口的先例
+### 4.5 隐藏入口的先例（**#477 已否决该路线，本节仅作背景**）
+
+> 本仓最终采用「设置页一个显式开关」，**不做连点手势/隐藏入口**：开关本身可见即满足「诊断内容不轻易暴露」，
+> 而隐藏入口会把「用户被要求复现一次给我看」变成不可能。下面几行是当初的调研依据，保留以免后人重走。
 
 | 结论 | 原文引用 | 出处 |
 |---|---|---|
-| Android 开发者选项：连点 Build number **7 次** | 「Tap the Build Number option **seven times** until you see the message `You are now a developer!`」；「On Android 4.2 and higher, you must enable this screen.」 | <https://developer.android.com/studio/debug/dev-options> |
+| ~~Android 开发者选项：连点 Build number 7 次~~（**本仓不采用**，见本节开头） | 「Tap the Build Number option **seven times** until you see the message `You are now a developer!`」；「On Android 4.2 and higher, you must enable this screen.」 | <https://developer.android.com/studio/debug/dev-options> |
 | Apple 的门是**条件出现**（仅与 Mac 配对后出现），不是常驻 | 「Developer Mode only appears in Settings if you initiate pairing or if you previously paired the device to a Mac.」 | <https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device> |
 | Chrome 用内部 scheme 承载开关 | 「The special URL of interest here is `chrome://flags`.」 | <https://developer.chrome.com/blog/browser-flags> |
 
@@ -160,8 +167,9 @@ RN 官方页（<https://reactnative.dev/docs/global-__DEV__>）：「inlined dur
 
 ## 5. 未取到 / 仍需实测
 
-1. **release 包上 JS `console` 在 logcat 究竟可不可见**：配置层面已证「无剥离机制」（§0.1 四层 + 反证），但**没在真机上跑过 release 包**。
-   这是 #477 的验收项；结论出来后再决定要不要把 skill 那句话彻底删掉（现在是「已更正 + 标注需实测」）。
+1. **release 包上 JS `console` 在 logcat 究竟可不可见**：配置层面已证「无剥离机制」（§0.1 四层 + 反证），
+   并由 #477 的 `expo export:embed --dev false` 产物 grep 计数 > 0 作为可复核证据（PR 内可跑）。
+   **仍未做**：在真机 release 包上实测 logcat——那需要发版期构建 release 包，本票明确不做；skill 那句话已从「以实测为准」改为确定表述并指向本票证据。
 2. `expo-application` / `expo-sharing` / `expo-updates` 若要引入，需确认 SDK 57 下的具体版本与是否需要 prebuild（本方案首片**不需要**它们）。
 3. EAS profile / `expo-updates` channel 的原文细节未展开（首片不需要；真要启用时再核，且要先从零建 `eas.json`）。
 

@@ -89,11 +89,14 @@ adb shell dumpsys notification --noredact | grep music-playback
 
 **附带好处**：debug 构建的 `console.log` 在 logcat 可见，所以 `[player]` 一类排查优先在 dev build 上做。
 
-> **更正（2026-09-29）**：此处原写「release 会把 JS 日志剥掉」——**该说法在本仓没有机制支撑**。
+> **更正（2026-09-30 · #477 收口）**：此处原写「release 会把 JS 日志剥掉」——**本仓没有这个机制，确定不剥**。
 > Expo 默认**不**剥离 `console`，要显式开 Terser 的 `drop_console` 才剥（<https://docs.expo.dev/guides/minify/>）；
-> 而本仓 `packages/mobile/metro.config.js` 没有设 `transformer.minifierConfig`、`packages/mobile/babel.config.js`
-> 也没有 console 剥离插件。所以 release 包上 `console` 到底可不可见**应以实测为准**（尚未实测）。
-> 详见 `docs/research/2026-09-29-mobile-developer-mode-and-diagnostics.md` §0。
+> 而本仓 `packages/mobile/metro.config.js` 未设 `transformer.minifierConfig`、`babel.config.js` 无 console 剥离插件，
+> 且 Hermes 变体走的是 `--minify false`（`@react-native/gradle-plugin` 的
+> `TaskConfiguration.kt:80` 按 `hermesEnabled` 取反，本仓 `android/gradle.properties:43` 为 true），
+> 于是 terser 根本不跑。**可复核证据**：`npx expo export:embed --platform android --dev false --minify false …`
+> 后 grep 产物中 `console.log` 计数 > 0（#477 PR 内可跑，不需真机 release 包）。
+> 结论与四层证据见 `docs/research/2026-09-29-mobile-developer-mode-and-diagnostics.md` §0.1。
 
 ## 陷阱速查
 
