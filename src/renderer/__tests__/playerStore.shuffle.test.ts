@@ -398,9 +398,14 @@ describe('随机序的编辑（拖拽 / 删除 / 换源）', () => {
 
 // ---------------------------------------------------------------------------
 // #511 评审 blocker：失败跳歌也要同步游标（否则序列当场失效、预取按坏歌算下一首）
+//
+// 陷阱：跳歌路径末尾的 play() 在**正常成功路径**里还会再 sync 一次游标（幂等），
+// 会掩盖跳歌路径自己那次写入——所以回归测试必须走 play() **早退**的路径。
+// 本测试在「跳歌落定瞬间断网」，让随后的 play(B) 在离线快速失败分支同步早退，
+// 于是只有跳歌路径写的游标能留下来：修前代码上本测试变红。
 // ---------------------------------------------------------------------------
 describe('失败跳歌同步随机游标（#511 评审 blocker）', () => {
-  it('随机模式首曲彻底解析失败 → 跳到序列下一首，游标跟着 index 走', async () => {
+  it('跳歌后 play() 早退（离线）→ 游标与落盘仍跟随新 index（修前代码上本测试红）', async () => {
     const songs = baseSongs();
     usePlayerStore.setState({
       currentPlaylist: songs,
@@ -427,13 +432,72 @@ describe('失败跳歌同步随机游标（#511 评审 blocker）', () => {
       }
     });
 
-    await usePlayerStore.getState().play(songs[0]);
+    // 跳歌把 index 定到 1 的那一刻起模拟断网：随后 play(B) 在「离线快速失败」分支
+    // **同步早退**，走不到 play() 内的队列同步——只有跳歌路径自己写的游标能留下来。
+    let online = true;
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+    const unsubscribe = usePlayerStore.subscribe((state) => {
+      if (state.currentPlaylistIndex === 1) online = false;
+    });
+
+    try {
+      await usePlayerStore.getState().play(songs[0]);
+    } finally {
+      unsubscribe();
+      Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true });
+    }
 
     const s = usePlayerStore.getState();
-    expect(s.currentSong?.id).toBe(B);
     expect(s.currentPlaylistIndex).toBe(1);
+    expect(s.currentSong?.id).toBe(B);
     // 关键断言：游标 = 当前播放曲在序列中的位置，不再停在坏歌 A 上
     expect(s.shuffle!.cursor).toBe(1);
+    expect(s.shuffle!.order[s.shuffle!.cursor]).toBe(B);
+    // 落盘同样带新游标（play 早退不写盘，只有跳歌路径写了）
+    expect(JSON.parse(localStorage.getItem('mplayer_queue') || '{}').shuffle?.cursor).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #511 评审 B：收敛唯一入口引入的行为差异——逐条声明，不留悬空语义
+// ---------------------------------------------------------------------------
+describe('随机序同步的行为边界（#511 评审 B）', () => {
+  it('B-a：随机模式 + 无序列 + stop() → 不凭空造序列（保持 null）', () => {
+    const songs = baseSongs();
+    usePlayerStore.setState({
+      currentPlaylist: songs, currentPlaylistIndex: 0, currentSong: songs[0],
+      playMode: '随机播放', shuffle: null, isPlaying: true,
+    });
+
+    usePlayerStore.getState().stop();
+
+    expect(usePlayerStore.getState().shuffle).toBeNull();
+  });
+
+  it('B-a 补：随机模式 + 无序列时成员增删/拖拽也不凭空造序列（保持 null）', () => {
+    const songs = baseSongs();
+    usePlayerStore.setState({
+      currentPlaylist: songs, currentPlaylistIndex: 0, currentSong: songs[0],
+      playMode: '随机播放', shuffle: null,
+    });
+
+    usePlayerStore.getState().removeFromQueue(1);
+    usePlayerStore.getState().reorderQueue(0, 2);
+
+    expect(usePlayerStore.getState().shuffle).toBeNull();
+  });
+
+  it('B-b：列表模式 play() 遇残缺 order → 归一为全排列（声明保留，属改进）', async () => {
+    const songs = baseSongs();
+    usePlayerStore.setState({
+      currentPlaylist: songs, currentPlaylistIndex: 0, currentSong: songs[0],
+      playMode: '列表循环', shuffle: { order: [A], cursor: 0 },
+    });
+
+    await usePlayerStore.getState().play(songs[1]);
+
+    const s = usePlayerStore.getState();
+    expect([...s.shuffle!.order].sort()).toEqual([A, B, C, D]);
     expect(s.shuffle!.order[s.shuffle!.cursor]).toBe(B);
   });
 });
