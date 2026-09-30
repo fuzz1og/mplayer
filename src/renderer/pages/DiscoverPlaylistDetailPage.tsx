@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Play, Music2 } from 'lucide-react';
 import { Modal, message } from 'antd';
@@ -206,7 +207,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
             {playlist.coverImgUrl && (
               <img
                 key={playlist.coverImgUrl}
-                src={playlist.coverImgUrl}
+                src={coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)}
                 alt={playlist.name}
                 loading="lazy"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}

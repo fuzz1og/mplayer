@@ -31,7 +31,7 @@
 | tier3 清单能力扩展：`{id}` 归一化、redirect 响应与护栏字段 | `2026-09-23-tier3-manifest-capability-extensions.md` | 已接受 |
 | 播放解析链结构化 trace（core trace + 宿主 sink） | `2026-09-23-playback-trace-sink.md` | 已接受 |
 | 播放失败的护栏语义（core 单一决策、固定上限、离线即停、坏歌记忆） | `2026-09-25-playback-skip-guard.md` | 已接受 |
-| 出网治理：transport 双层在飞闸门与 AbortSignal 贯通 | `2026-09-26-outbound-request-governance.md` | 已接受（决策 5 的「图片不受闸门约束」在移动端封面已被 `2026-09-30-mobile-cover-load-gate.md` 部分收回） |
+| 出网治理：transport 双层在飞闸门与 AbortSignal 贯通 | `2026-09-26-outbound-request-governance.md` | 已接受（#496 曾在移动端叠加封面闸门、实测后撤销：见 `2026-09-30-mobile-cover-loading.md`） |
 | 歌词按 ID 直取：列表不再内联歌词 | `2026-09-26-lyrics-by-id-not-inlined.md` | 已接受（取代 #242 的「网易歌词内聚进内容能力」形态） |
 | 专辑与歌手内容契约：source 贯通、缓存键含源、可区分失败语义 | `2026-09-27-album-and-artist-content-contract.md` | 已接受 |
 | 播放链路的时限层次：单请求超时 / 墙 / 预算 / 闸门排队（#399） | `2026-09-27-playback-budget-layers.md` | 已接受（取代 2026-09-14 决策 2 的扁平单源 2s 墙；追认 2026-09-25 决策 7 的分档） |
@@ -41,7 +41,7 @@
 | 队列页虚拟化：窗口化挂载与 dnd-kit 共存 | `2026-09-29-queue-virtualized-sortable-list.md` | 已接受 |
 | CI 验证边界：唯一入口、测试分片、原生留发版期 | `2026-09-29-ci-verification-boundary.md` | 已接受（原生留发版期的残余风险已于 2026-09-29 兑现，#478；处置见 `2026-09-29-dependency-update-governance.md`；入口实现 2026-09-30 改为 Node，见文末更新） |
 | 依赖升级治理：机器人只管 patch，生态耦合集交给 SDK 对齐 | `2026-09-29-dependency-update-governance.md` | 已接受 |
-| 移动端封面在飞闸门与专辑列表窗口化 | `2026-09-30-mobile-cover-load-gate.md` | 已接受（部分收回 `2026-09-26-outbound-request-governance.md` 决策 5 的「图片不受闸门约束」） |
+| 移动端封面加载：窗口化 + 失败重试（不设闸门） | `2026-09-30-mobile-cover-loading.md` | 已接受（同日修订：初版「在飞闸门」实测后撤销；决策 5 不变） |
 
 ## 历史编号对照（冻结）
 

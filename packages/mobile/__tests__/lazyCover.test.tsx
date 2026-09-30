@@ -4,96 +4,108 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * LazyCover（#496）组件契约：
- * 1. 未拿到槽位不挂 Image（= 不发请求），到手后才挂；
- * 2. onLoad / onError / 卸载三处都归还槽位（闸门额度不漏）；
- * 3. uri 为空不占槽位。
+ * 1. `uri` 为空只渲染占位 `View`；有 uri 直接挂 `Image`（**没有闸门排队**）；
+ * 2. 失败**重试一次**（间隔 `COVER_RETRY_DELAY_MS`），仍失败才回调 `onError`；
+ * 3. 换 uri 重新获得一次重试机会。
  *
- * 这里把 `react-native` 与 `services/coverLoadGate` 都换成受控替身：
- * 闸门由用例手动放行，Image 的 onLoad / onError 用点击触发（不依赖 RN 原生事件）。
+ * `react-native` 换成受控替身：Image 的 onError 用点击触发（不依赖 RN 原生事件）。
+ * 注意替身**不给外层挂 onLoad**——避免「点 error 冒泡触发 load」把用例搅在一起。
  */
-
-const gate = vi.hoisted(() => {
-  const releases: ReturnType<typeof vi.fn>[] = [];
-  const resolvers: (() => void)[] = [];
-  const acquire = vi.fn(() => {
-    let resolve!: () => void;
-    const ready = new Promise<void>((r) => { resolve = r; });
-    const release = vi.fn();
-    resolvers.push(resolve);
-    releases.push(release);
-    return { ready, release };
-  });
-  return {
-    acquire,
-    releases,
-    resolvers,
-    reset() {
-      releases.length = 0;
-      resolvers.length = 0;
-      acquire.mockClear();
-    },
-  };
-});
 
 vi.mock('react-native', async () => {
   const React = await import('react');
   return {
     Image: (props: any) => React.createElement(
       'div',
-      { 'data-testid': 'cover-image', onClick: props.onLoad },
+      { 'data-testid': 'cover-image', 'data-uri': props.source?.uri },
       React.createElement('span', { 'data-testid': 'cover-error', onClick: props.onError }),
     ),
     View: () => React.createElement('div', { 'data-testid': 'cover-box' }),
   };
 });
 
-vi.mock('../services/coverLoadGate', () => ({
-  coverLoadGate: { acquire: gate.acquire },
-}));
-
-import LazyCover from '../components/LazyCover';
+import LazyCover, { COVER_RETRY_DELAY_MS } from '../components/LazyCover';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 
 const URI = 'https://p1.music.126.net/cover.jpg';
 
 describe('LazyCover', () => {
-  beforeEach(() => { gate.reset(); });
-  afterEach(() => { cleanup(); });
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); cleanup(); });
 
-  it('未拿到槽位不挂 Image，到手后才挂', async () => {
-    render(<LazyCover uri={URI} />);
-    expect(gate.acquire).toHaveBeenCalledTimes(1);
+  it('uri 为空只渲染占位，不挂 Image', () => {
+    render(<LazyCover />);
     expect(screen.queryByTestId('cover-image')).toBeNull();
     expect(screen.getByTestId('cover-box')).toBeTruthy();
+  });
 
-    await act(async () => { gate.resolvers[0](); });
+  it('有 uri 直接挂 Image（不再等槽位）', () => {
+    render(<LazyCover uri={URI} />);
+    expect(screen.getByTestId('cover-image')).toBeTruthy();
+    expect(screen.queryByTestId('cover-box')).toBeNull();
+  });
+
+  it('失败后重试一次；仍失败才回调 onError，且不再重试', () => {
+    const onError = vi.fn();
+    render(<LazyCover uri={URI} onError={onError} />);
+
+    fireEvent.click(screen.getByTestId('cover-error'));
+    expect(onError).not.toHaveBeenCalled(); // 首挂失败只是安排重试
+    act(() => { vi.advanceTimersByTime(COVER_RETRY_DELAY_MS); });
+    expect(screen.getByTestId('cover-image')).toBeTruthy(); // 已重新挂载
+
+    fireEvent.click(screen.getByTestId('cover-error'));
+    expect(onError).toHaveBeenCalledTimes(1); // 重试也失败 → 上报
+
+    act(() => { vi.advanceTimersByTime(COVER_RETRY_DELAY_MS * 5); });
+    expect(onError).toHaveBeenCalledTimes(1); // 只重试一次
+  });
+
+  it('换 uri 后重新获得一次重试机会', () => {
+    const onError = vi.fn();
+    const view = render(<LazyCover uri={URI} onError={onError} />);
+
+    fireEvent.click(screen.getByTestId('cover-error'));
+    act(() => { vi.advanceTimersByTime(COVER_RETRY_DELAY_MS); });
+    fireEvent.click(screen.getByTestId('cover-error'));
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    view.rerender(<LazyCover uri={URI + '?v=2'} onError={onError} />);
+    fireEvent.click(screen.getByTestId('cover-error'));
+    act(() => { vi.advanceTimersByTime(COVER_RETRY_DELAY_MS); });
+    expect(onError).toHaveBeenCalledTimes(1); // 新图的首挂失败仍只是安排重试
     expect(screen.getByTestId('cover-image')).toBeTruthy();
   });
 
-  it('图片 load 后归还槽位', async () => {
+  it('http 封面按 CDN 缩略图取（?param=WxH）', () => {
     render(<LazyCover uri={URI} />);
-    await act(async () => { gate.resolvers[0](); });
-    fireEvent.click(screen.getByTestId('cover-image'));
-    expect(gate.releases[0]).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('cover-image').getAttribute('data-uri')).toBe(
+      URI + '?param=' + COVER_SIZE.thumb + 'y' + COVER_SIZE.thumb,
+    );
   });
 
-  it('图片 error 后归还槽位并回调 onError', async () => {
+  it('已有 param 的不重复拼；非 http（本地文件 / data:）原样', () => {
+    render(<LazyCover uri={URI + '?param=100y100'} />);
+    expect(screen.getByTestId('cover-image').getAttribute('data-uri')).toBe(URI + '?param=100y100');
+
+    cleanup();
+    render(<LazyCover uri="file:///tmp/a.jpg" />);
+    expect(screen.getByTestId('cover-image').getAttribute('data-uri')).toBe('file:///tmp/a.jpg');
+  });
+
+  it('coverThumbUrl 只处理已知机制的源', () => {
+    expect(coverThumbUrl('https://p1.music.126.net/a==/b.jpg', 100)).toBe('https://p1.music.126.net/a==/b.jpg?param=100y100');
+    expect(coverThumbUrl('https://p1.music.126.net/a==/b.jpg?q=1', 100)).toBe('https://p1.music.126.net/a==/b.jpg?q=1&param=100y100');
+    expect(coverThumbUrl('file:///a.jpg', 100)).toBe('file:///a.jpg');
+    expect(coverThumbUrl('https://p1.music.126.net/a==/b.jpg?param=9y9', 100)).toBe('https://p1.music.126.net/a==/b.jpg?param=9y9');
+  });
+
+  it('卸载后不再触发重试', () => {
     const onError = vi.fn();
-    render(<LazyCover uri={URI} onError={onError} />);
-    await act(async () => { gate.resolvers[0](); });
+    const view = render(<LazyCover uri={URI} onError={onError} />);
     fireEvent.click(screen.getByTestId('cover-error'));
-    expect(gate.releases[0]).toHaveBeenCalledTimes(1);
-    expect(onError).toHaveBeenCalledTimes(1);
-  });
-
-  it('卸载归还槽位', () => {
-    const view = render(<LazyCover uri={URI} />);
     view.unmount();
-    expect(gate.releases[0]).toHaveBeenCalledTimes(1);
-  });
-
-  it('uri 为空不占槽位', () => {
-    render(<LazyCover />);
-    expect(gate.acquire).not.toHaveBeenCalled();
-    expect(screen.getByTestId('cover-box')).toBeTruthy();
+    act(() => { vi.advanceTimersByTime(COVER_RETRY_DELAY_MS * 5); });
+    expect(onError).not.toHaveBeenCalled();
   });
 });

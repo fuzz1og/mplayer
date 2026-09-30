@@ -18,6 +18,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import {
   View,
   Text,
@@ -202,7 +203,7 @@ export default function CollapsingHero<T>({
             <View style={{ height: chrome.coverH }}>
               {showCover ? (
                 <Image
-                  source={{ uri: cover }}
+                  source={{ uri: coverThumbUrl(cover, COVER_SIZE.hero) }}
                   style={styles.coverImg}
                   resizeMode="cover"
                   onError={handleCoverError}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { ListMusic } from 'lucide-react';
 import { formatPlayCount } from '@mplayer/core';
 import type { DiscoverPlaylist } from '@mplayer/core';
@@ -74,7 +75,7 @@ const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading,
             {pl.coverImgUrl && (
               <img
                 key={pl.coverImgUrl}
-                src={pl.coverImgUrl}
+                src={coverThumbUrl(pl.coverImgUrl, COVER_SIZE.thumb)}
                 alt={pl.name}
                 loading="lazy"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}

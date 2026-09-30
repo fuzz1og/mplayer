@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Disc3 } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
@@ -112,7 +113,7 @@ const AlbumDetailPage: React.FC = () => {
             {displayPic && (
               <img
                 key={displayPic}
-                src={displayPic}
+                src={coverThumbUrl(displayPic, COVER_SIZE.thumb)}
                 alt={displayName}
                 loading="lazy"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}

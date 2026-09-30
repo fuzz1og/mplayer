@@ -6,7 +6,7 @@ import { Music, Heart, EllipsisVertical } from 'lucide-react-native';
 import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import { type Song, SourceKey } from '@mplayer/core';
+import { type Song, SourceKey, COVER_SIZE } from '@mplayer/core';
 import { logCoverError } from '../services/coverDiagnostics';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
@@ -140,7 +140,7 @@ function SongRow({
       )}
 
       {cover ? (
-        <LazyCover uri={cover} style={styles.cover} onError={handleCoverError} />
+        <LazyCover uri={cover} thumbSize={COVER_SIZE.row} style={styles.cover} onError={handleCoverError} />
       ) : (
         <View style={[styles.cover, styles.coverPlaceholder]}>
           <Music size={22} color={colors.textDisabled} />

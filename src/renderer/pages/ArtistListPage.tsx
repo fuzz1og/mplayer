@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Mic2 } from 'lucide-react';
 import type { Artist } from '@mplayer/core';
@@ -54,7 +55,7 @@ const ArtistCard: React.FC<{ artist: Artist; onClick: () => void }> = ({ artist,
     >
       {artist.picUrl ? (
         <img
-          src={artist.picUrl}
+          src={coverThumbUrl(artist.picUrl, COVER_SIZE.icon)}
           alt={artist.name}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           loading="lazy"

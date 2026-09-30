@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { ListMusic, Music2 } from 'lucide-react';
 
 interface SongCoverBaseProps {
   /** 封面直链；空值直接显示占位。 */
   src?: string;
   alt?: string;
+  /** CDN 缩略图档位（默认 icon；大图卡片传 `COVER_SIZE.thumb`/`hero`） */
+  thumbSize?: number;
   /** 加载失败回调（搜索式刷新等后续动作由调用方决定，本组件无解析/无缓存语义）。 */
   onError?: () => void;
   /** 透传到 img（如绝对定位于容器）。 */
@@ -29,6 +32,7 @@ type SongCoverProps = SongCoverBaseProps &
 const SongCover = ({
   src,
   alt = '',
+  thumbSize = COVER_SIZE.icon,
   variant,
   iconSize,
   onError,
@@ -94,7 +98,7 @@ const SongCover = ({
 
   return (
     <img
-      src={src}
+      src={coverThumbUrl(src, thumbSize)}
       alt={alt}
       loading="lazy"
       onError={() => {

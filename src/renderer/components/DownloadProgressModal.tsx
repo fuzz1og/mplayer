@@ -1,4 +1,5 @@
 import React from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { X, CheckCircle, AlertCircle, Loader2, Trash2, Music2 } from 'lucide-react';
 import type { DownloadNotification } from '@/renderer/store/downloadStore';
 import { getNotificationStats, getStatusText, getStatusColor, useDownloadStore } from '@/renderer/store/downloadStore';
@@ -128,7 +129,7 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
               {task.song.cover && (
                 <img
                   key={task.song.cover}
-                  src={task.song.cover}
+                  src={coverThumbUrl(task.song.cover, COVER_SIZE.row)}
                   alt={task.song.name}
                   loading="lazy"
                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
