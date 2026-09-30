@@ -163,18 +163,19 @@ describe('列表 memo 纪律（#412）', () => {
     }
   });
 
-  it('本地歌单页接入共享的窗口化排序列表（#445）', () => {
+  it('本地歌单页接入共享的窗口化排序列表（#445 / #488）', () => {
     const page = stripComments(read('renderer/pages/PlaylistDetailPage.tsx'));
     expect(page).toContain('VirtualSortableList');
-    // 全量 songs 直接交给能力层；memo 由能力内部的 ids useMemo 保证
-    expect(page).toContain('items={songs}');
-    // 两个渲染函数（sortable 行 + 非 sortable 预览）从**同一份** props 展开：
-    // 本页 19 个 prop，抄两份必然静默漂移
+    // 展示集合（#445 是全量 songs，memo 由能力内部保证；#488 起是过滤派生的 visibleSongs）交给能力层；
+    // 两种形态都是 memo 化引用——窗口化与 dnd-kit 的下标来源必须是同一个数组，不能内联 .map( 新建
+    expect(page).toContain('items={visibleSongs}');
+    // 三个渲染函数（sortable 行 + 非 sortable 预览 + 过滤态静态行）从**同一份** props 展开：
+    // 本页 19 个 prop，抄三份必然静默漂移
     expect(page).toContain('const sharedRowProps = useMemo(');
     expect(page).toContain('const buildRowProps = useCallback(');
-    expect((page.match(/\{\.\.\.buildRowProps\(song, index\)\}/g) ?? []).length).toBe(2);
+    expect((page.match(/\{\.\.\.buildRowProps\(song, index\)\}/g) ?? []).length).toBe(3);
     expect(page).toContain('dragHandle={previewDragHandle}');
-    // 提示条 / 批量栏 / 表头走 header 插槽（与 rowsRef 同父由组件结构保证，见 VirtualSortableList）
+    // 提示条 / 批量栏 / 表头 / 过滤框走 header 插槽（与 rowsRef 同父由组件结构保证，见 VirtualSortableList）
     expect(page).toContain('header={');
   });
 
