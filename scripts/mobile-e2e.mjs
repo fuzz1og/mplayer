@@ -24,6 +24,7 @@
  *   MOBILE_E2E_WAIT_DEVICE     无设备时轮询等待秒数，默认 20
  *   MOBILE_E2E_BOOT_TIMEOUT    冷启断言超时秒数，默认 240
  *   MOBILE_E2E_START_METRO     端口无 Metro 时是否代为拉起（1 是 / 0 否），默认 1
+ *   MOBILE_E2E_HOTLIST         走查的目标榜单，默认「QQ 音乐 · 新歌榜」
  *
  * 前置：手机经 usbipd 直挂进 WSL（scripts/mobile-device/usb-attach.sh）；
  *       @mplayer/core 已构建（dist 过期症状：启动即 undefined is not a function，本脚本识别为明确 FAIL）。
@@ -43,6 +44,9 @@ const WAIT_DEVICE = process.env.MOBILE_E2E_WAIT_DEVICE ?? '20';
 const BOOT_TIMEOUT = process.env.MOBILE_E2E_BOOT_TIMEOUT ?? '240';
 const START_METRO = process.env.MOBILE_E2E_START_METRO ?? '1';
 const EXP_PKG = 'host.exp.exponent';
+// 走查的目标榜单。默认 QQ 音乐 · 新歌榜（原脚本的选择）；某台机器的网络/订阅源解析不了
+// 该源的曲子时，可用它换一个源跑完整条链（例如 MOBILE_E2E_HOTLIST='网易云音乐 · 新歌榜'）。
+const HOTLIST_TITLE = process.env.MOBILE_E2E_HOTLIST ?? 'QQ 音乐 · 新歌榜';
 const ART = path.join(REPO, 'e2e', 'artifacts');
 const LCAT_FILE = path.join(ART, 'mobile-logcat.log');
 const DUMP_FILE = path.join(ART, 'mobile-uidump.xml');
@@ -53,8 +57,12 @@ const REF_W = 1256;
 const REF_H = 2760;
 const TAB_DISCOVER_X = 466;
 const TAB_DISCOVER_Y = 2593; // 底部 tab「发现」
-const SONG2_X = 628;
-const SONG2_Y = 814; // 榜单详情页列表第 2 行
+// （原 SONG2_X/SONG2_Y「榜单详情页列表第 2 行」的固定坐标已删：改为按当前 dump 的第 2 个 rank 节点定位）
+
+// 定位「纯数字文本」节点用的模式。注意 uiCenterOf/uiCentersOf 的 hay 是 `text + NUL + content-desc`，
+// 所以这里必须显式吃掉那个 NUL——写成 `^[0-9]{1,3}$` 会因为末尾的 NUL 而**永远不匹配**
+// （uiCountText 只看 text，没有这个问题，两处模式不能混用）。
+const RANK_NODE_RE = '^[0-9]{1,3}\u0000';
 
 let SCREEN_W = 0;
 let SCREEN_H = 0;
@@ -272,23 +280,28 @@ function eachNode(xml) {
  * 注意 hay 里那个 NUL：锚定式模式（如 ^(发现)$）因此在原实现里也**匹配不到**，
  * 调用方本就准备了坐标兜底——移植保持同一行为，不做「修正」。
  */
-function uiCenterOf(pattern, file) {
+/** 所有命中节点的中心坐标（文档顺序）。同一套 hay 语义，只是收全量而非首个 */
+function uiCentersOf(pattern, file) {
   const xml = readText(file);
   let re;
-  try { re = new RegExp(pattern); } catch { return null; }
+  try { re = new RegExp(pattern); } catch { return []; }
+  const out = [];
   for (const tag of eachNode(xml)) {
     const hay = (attrOf(tag, 'text') ?? '') + '\u0000' + (attrOf(tag, 'content-desc') ?? '');
     if (!re.test(hay)) continue;
     const m = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(attrOf(tag, 'bounds') ?? '');
-    if (m) {
-      const l = Number(m[1]);
-      const t = Number(m[2]);
-      const r = Number(m[3]);
-      const b = Number(m[4]);
-      return [Math.floor((l + r) / 2), Math.floor((t + b) / 2)];
-    }
+    if (!m) continue;
+    out.push([
+      Math.floor((Number(m[1]) + Number(m[3])) / 2),
+      Math.floor((Number(m[2]) + Number(m[4])) / 2),
+    ]);
   }
-  return null;
+  return out;
+}
+
+/** 首个命中节点的中心坐标（等价原 Python ui_center_of） */
+function uiCenterOf(pattern, file) {
+  return uiCentersOf(pattern, file)[0] ?? null;
 }
 
 /** 原 Python ui_count_text：text 命中正则的节点数（只看 text，不看 content-desc） */
@@ -433,7 +446,16 @@ if ((await metroStatus(5000)).includes('packager-status:running')) {
   const [file, args] = process.platform === 'win32'
     ? ['cmd.exe', ['/d', '/s', '/c', 'npx expo start --localhost --port ' + PORT]]
     : ['npx', ['expo', 'start', '--localhost', '--port', PORT]];
-  const child = spawn(file, args, { cwd: mobileDir, detached: true, stdio: ['ignore', out, out] });
+  // Windows 上 node 把 localhost 解析成 ::1 优先，`--localhost` 于是只绑 IPv6：
+  // 而本脚本的健康探针与 adb reverse 都走 127.0.0.1 → 自己起的 Metro 自己看不见。
+  // --dns-result-order=ipv4first 让 localhost 先解析到 127.0.0.1，保留 --localhost 语义的同时绑回 IPv4。
+  const nodeOptions = [process.env.NODE_OPTIONS, '--dns-result-order=ipv4first'].filter(Boolean).join(' ');
+  const child = spawn(file, args, {
+    cwd: mobileDir,
+    detached: true,
+    stdio: ['ignore', out, out],
+    env: { ...process.env, NODE_OPTIONS: nodeOptions },
+  });
   child.unref();
   let ready = 0;
   for (let i = 0; i < 90; i++) {
@@ -575,42 +597,88 @@ if (rankNodes < 4) {
 record('discover', 'PASS', '四分区（网易云/QQ · 热歌/新歌）齐，rank 行 ' + rankNodes + ' 个');
 
 // ---------- 6. 榜单详情页 ----------
-if (!(await uiTapText('QQ 音乐 · 新歌榜', 3, 1))) {
+if (!(await uiTapText(HOTLIST_TITLE, 3, 1))) {
   shot('mobile-03-hotlist-tap-fail.png');
-  record('hotlist-detail', 'FAIL', '找不到「QQ 音乐 · 新歌榜」分区头可点（截图 mobile-03-hotlist-tap-fail.png）');
+  record('hotlist-detail', 'FAIL', '找不到「' + HOTLIST_TITLE + '」分区头可点（截图 mobile-03-hotlist-tap-fail.png）');
   abortAfter(['play']);
 }
 await sleep(2000);
-// 详情页断言：全量列表渲染（top100；rank 数字节点足够多即代表列表行在。
-// 可视行数随迷你播放栏/Toast 浮动，阈值取宽松的 8，语义是「列表真的渲染了行」）
+// 详情页断言：**页面身份 + 列表行都渲染了**。
+// 不用「rank 数字节点 ≥8」——那条判据是**视口相关**的：封面 hero 按 dp 占高，逻辑视口越小占比越大。
+// 雷电 2160x3840@960 的逻辑视口只有 360x640dp，只装得下 2 行（真机参考机更多），于是同一份代码在
+// 「列表明明渲染了」的情况下被判 FAIL。改用不依赖视口的三条：
+//   · 信息块「共 N 首」——app/hotlist.tsx 里只有 songs.length > 0 才渲染，等价于列表数据已到；
+//   · 「播放全部」动作位——加载态走的是 HeroSkeleton，此时两者都不在（骨架屏不会误判成 PASS）；
+//   · 至少 1 个 rank 行——证明行真的画出来了，而不只是数据到了。
 const detailDeadline = Date.now() + 30000;
 let detailRanks = 0;
+let detailTotal = '';
+let detailAction = false;
 while (Date.now() < detailDeadline) {
   if (!(await dumpUi())) { if (!deviceOk()) await healDevice(); }
+  const dump = readText(DUMP_FILE);
   detailRanks = uiCountText('^[0-9]{1,3}$', DUMP_FILE);
-  if (detailRanks >= 8) break;
+  const total = /text="共 ([0-9]+) 首"/.exec(dump);
+  detailTotal = total ? total[1] : '';
+  detailAction = dump.includes('text="播放全部"');
+  if (detailTotal !== '' && detailAction && detailRanks >= 1) break;
   await sleep(2000);
 }
 shot('mobile-03-hotlist-detail.png');
-if (detailRanks >= 8) {
-  record('hotlist-detail', 'PASS', 'QQ 音乐 · 新歌榜详情页全量列表渲染（rank 节点 ' + detailRanks + ' 个）');
+if (detailTotal !== '' && detailAction && detailRanks >= 1) {
+  record('hotlist-detail', 'PASS', HOTLIST_TITLE + '详情页：信息块「共 ' + detailTotal + ' 首」+ 播放全部 + 可见 rank 行 ' + detailRanks + ' 个（列表已渲染）');
 } else {
-  record('hotlist-detail', 'FAIL', '详情页列表未渲染全（rank 节点仅 ' + detailRanks + ' 个，应 ≥8）。截图 mobile-03-hotlist-detail.png');
+  const lack = [];
+  if (detailTotal === '') lack.push('信息块「共 N 首」');
+  if (!detailAction) lack.push('「播放全部」动作位');
+  if (detailRanks < 1) lack.push('可见 rank 行');
+  record('hotlist-detail', 'FAIL', '详情页未渲染（缺 ' + lack.join(' / ') + '）。截图 mobile-03-hotlist-detail.png');
   abortAfter(['play']);
 }
 
 // ---------- 7. 点歌出声 ----------
-const [SX, SY] = scaleXy(SONG2_X, SONG2_Y);
+// 目标是列表里的一首歌行，但第 2 行得**完整露出来**才点得中：小视口上封面 hero 把列表压到
+// 屏幕最底部，第 2 行常常只露一条边、还落在迷你播放栏底下——雷电 2160x3840@960 实测：
+// 第 1 行 rank 徽章高 108px，第 2 行只剩 18px（bounds [96,3462][264,3480]），按中心点必空。
+// 所以先上滑一屏收起 hero 把列表让出来，再按当前 dump 里的第 2 个 rank 节点定位；
+// 不用参考机固定坐标——那只是按分辨率等比缩放，而 hero 高度以 dp 计，跨设备不是固定比例。
+const SWIPE_X = Math.floor(SCREEN_W / 2);
+await adbQuiet(['shell', 'input', 'swipe',
+  String(SWIPE_X), String(Math.floor(SCREEN_H * 0.55)),
+  String(SWIPE_X), String(Math.floor(SCREEN_H * 0.25)), '300']);
+await sleep(1500);
+if (!(await dumpUi())) { if (!deviceOk()) await healDevice(); }
+const rowYs = uiCentersOf(RANK_NODE_RE, DUMP_FILE).map((p) => p[1]).sort((a, b) => a - b);
+if (rowYs.length < 1) {
+  record('play', 'FAIL', '上滑后详情页仍无可见 rank 行，点不到歌。当前设备：' + currentDevices());
+  abortAfter([]);
+}
+const SX = SWIPE_X;
+const SY = rowYs.length >= 2 ? rowYs[1] : rowYs[0];
+const rowNote = rowYs.length >= 2 ? '第 2 个' : '（列表只露 1 行，取第 1 个）';
 if (!(await devTap(SX, SY))) {
   record('play', 'FAIL', '点列表第 2 行失败（设备掉线且自愈未果）。当前设备：' + currentDevices());
   abortAfter([]);
 }
-detail('点列表第 2 行：(' + SX + ',' + SY + ')');
+detail('点列表行：(' + SX + ',' + SY + ')，取 ' + rowNote + '可见 rank 行');
 // RN 的 console.log('[player]', msg) 多参数在 logcat 里渲染为 '[player]', 'msg'（引号逗号分隔），
 // 不能带 "[player] " 前缀匹配，直接匹配消息本体
 if (!(await logcatWait('开始播放《', 20))) {
   shot('mobile-04-playing-fail.png');
-  record('play', 'FAIL', '点歌后 20s 无「开始播放《」日志——点击未命中歌曲行或播放流程未发起');
+  // 分诊：**点空了** 与 **点中了但解析失败** 处置完全不同，别混成一句「点击未命中」。
+  // 实测（雷电 + QQ 新歌榜）：点击命中，播放准备开始都打了，死在「直连返回空串 + 订阅源全部
+  // 因 source 归属被跳过」——那是环境/订阅内容问题，不是脚本问题。
+  const log = readText(LCAT_FILE);
+  const tried = /播放准备开始: 《([^》]+)》/.exec(log);
+  const noSource = /无可用源（全部因 source 归属被跳过）/.test(log);
+  const noUrl = /播放失败: no playable URL/.test(log);
+  let why = '点击未命中歌曲行或播放流程未发起';
+  if (tried) {
+    why = '点中了《' + tried[1] + '》但播放解析没成功';
+    if (noSource) why += '：全部订阅源都因 source 归属被跳过（该曲所属平台没有对应的订阅源）';
+    else if (noUrl) why += '：no playable URL（直连返回空串且没有可用订阅源）';
+  }
+  record('play', 'FAIL', '点歌后 20s 无「开始播放《」日志——' + why);
   printSummary();
   process.exit(1);
 }
