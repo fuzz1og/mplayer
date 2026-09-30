@@ -56,12 +56,16 @@ Commit 信息用 Conventional Commits：`type(scope): 中文描述`。type 取 f
 
 ```bash
 git push -u origin <branch>
-gh pr create --base master --title "<type(scope): 中文摘要>" --body-file .github/PULL_REQUEST_TEMPLATE.md
+# 正文先写进临时文件；gh 不会自动套模板，别把模板文件本身当 --body-file
+gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tmp/pr-body.md
 ```
 
-- **PR 模板是唯一事实源**：正文一律用 `.github/PULL_REQUEST_TEMPLATE.md`（四段：变更内容 / 关联 issue / 验证 / 备注），流程文档只引用、不重写模板内容，不要在 `--body` 里手写别的格式。
-- 验证清单逐项勾选（双端核对）：`core:build`、双端 typecheck、真机验收、UI 截图、文档同步。**CI 红不合**：验证顺序绿且 CI 绿才进入下一步。
-- 截图 / 录屏传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'` / `gh pr comment <PR> --attach '<png>#<图注>'`，两者同一套机制：正文里没被引用的附件会追加到末尾，排版走两步法，见 `mobile-device-debugging` skill），**不入库** `docs/**/assets` —— 仓库只留活文档，以及 ADR 正文引用的资产。**追加一条验收评论**（不动 PR 正文）用后者；正文是模板四段结构时尤其别把图塞进正文。
+- **PR 模板是唯一事实源**：正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的段写（HUMAN / 一句话 / 要重点看什么 / 人验过的 / 深挖），流程文档只引用、不重写模板内容。`gh` **不会**自动套模板——把模板文件直接当 `--body-file` 提交的是模板原件，必须自己按段填。
+- **面向人写，不写工作日志**：先给结论（改了什么、要 reviewer 做什么），再给细节；一段一个意思；箭头链、名词堆叠与 `文件:行` 留给 ADR 与 issue。**正文预算 ≤ 40 行 / ≤ 1500 字**，CI 已证明的（lint / typecheck / 四套测试 / `core:build` / `build`）不要抄。
+- **长文去该去的地方**：取舍与方案对比写 ADR，排查过程写 issue 评论，正文只留 reviewer 决策所需——**只链接，不复述**。
+- **PR 之前 issue 要可开工**：`Fixes #N` 指向的 issue 应已带 `ready-for-agent`（验收标准明确）；纯文档 / chore / 依赖升级 / 紧急修复不受此限。
+- **验证以 CI 为准**：`check` + 四个 `test` + `expo-check` 绿是硬门槛（**CI 红不合**）。正文只勾 CI 证明不了的两条（真机 / UI 证据、文档同步），不要逐条抄 lint / typecheck / 测试 / `core:build`。
+- 截图 / 录屏传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'` / `gh pr comment <PR> --attach '<png>#<图注>'`，两者同一套机制：正文里没被引用的附件会追加到末尾，排版走两步法，见 `mobile-device-debugging` skill），**不入库** `docs/**/assets` —— 仓库只留活文档，以及 ADR 正文引用的资产。**追加一条验收评论**（不动 PR 正文）用后者；正文用模板结构时尤其别把图塞进正文。
 - **附图后要验引用**：读回来逐个检查（正文 `gh pr view <PR> --json body --jq .body`，评论 `gh api repos/{owner}/{repo}/issues/comments/<id> --jq .body`）——每个图片引用都必须是 `user-attachments` URL，残留本地路径就是裂图；公开仓库可再抓一次 PR 页面 HTML 确认 asset id 在渲染产物里。
 - **CI 绿后停在人审**：PR 交给人工 review 与合并，agent 不自行合并、不设 auto-merge。收到 review 意见回本 worktree 继续修，push 自动更新同一 PR。
 - 改了 `packages/mobile` 或 `packages/core` 的 PR 必须附真机验收结论与**证据图**（没上真机就照实写「未做 + 原因」，不许写「已附截图」而没附；流程见 `.agents/skills/mobile-device-debugging`；固化断言可跑 `npm run mobile:e2e` 一条龙，见 `e2e/README.md`）。

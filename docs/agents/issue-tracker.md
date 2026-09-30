@@ -13,6 +13,21 @@ Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all op
 
 Infer the repo from `git remote -v` - `gh` does this automatically when run inside a clone.
 
+## 写 issue（给人看）
+
+- **用对应 Form 的字段当骨架**：`bug_report.yml` / `feature_request.yml` 的字段就是小节；不适用的字段连标题一起删掉，别留空 `###`。`gh issue create` **不会**自动套模板，正文要自己按字段填。
+- **先给结论，再给证据**：第一段说清「谁遇到什么、期望什么」；`文件:行` 只在 reviewer 真要去看时给。
+- **正文 ≤ 30 行**：根因分析、候选方案对比、实测数据写评论或 `docs/research/`，正文只留问题与验收标准。
+
+### Agent brief（`ready-for-agent` 的契约）
+
+issue 移到 `ready-for-agent` 时补一条评论，作为 AFK agent 的唯一权威规格（正文与讨论只是背景）：
+
+- **不写文件路径、不写行号**（会腐烂）——写接口、类型、行为契约；
+- **完成标准可验收**：每条能判「做了 / 没做」，不接受「理解到位」这类措辞；
+- **范围边界明确**：哪些明确不做、去哪张票；
+- **写行为，不写实现步骤**。
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
