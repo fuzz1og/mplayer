@@ -101,6 +101,13 @@ class PatchQueueInput : Record {
 
   @Field
   var removeKeys: List<String>? = null
+
+  /**
+   * 「下一首播放」（#494）：把这一首放到**当前曲之后**（已在队列则移动，不在则插入）。
+   * 与既有三个字段同构，透传给 [PlayerService.patchQueue]。
+   */
+  @Field
+  var insertAfterCurrent: TrackInput? = null
 }
 
 // ------------------------------------------------------------------ 异常
@@ -174,7 +181,8 @@ class PlayerModule : Module() {
         baseRevision = input.baseRevision.toLong(),
         append = input.append?.map { it.toRecord() },
         upsert = input.upsert?.map { it.toRecord() },
-        removeKeys = input.removeKeys
+        removeKeys = input.removeKeys,
+        insertAfterCurrent = input.insertAfterCurrent?.toRecord()
       )
     }
 

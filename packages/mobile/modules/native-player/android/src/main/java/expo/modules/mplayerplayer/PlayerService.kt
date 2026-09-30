@@ -307,9 +307,17 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     baseRevision: Long,
     append: List<TrackRecord>?,
     upsert: List<TrackRecord>?,
-    removeKeys: List<String>?
+    removeKeys: List<String>?,
+    insertAfterCurrent: TrackRecord? = null
   ): Map<String, Any?> {
     val ctrl = controller ?: return mapOf("accepted" to false, "revision" to 0L, "stale" to false)
+
+    // 「下一首播放」（#494）：单独一条语义路径，不与 append/upsert/removeKeys 混用。
+    // 必须放在这里**同步**返回结果——Android 侧 AsyncFunction 是后台线程，而
+    // ExoPlayer 只能在 application looper（主线程）上访问，所以把主线程那段包成 Future 等回来。
+    if (insertAfterCurrent != null) {
+      return applyInsertAfterCurrent(ctrl, baseRevision, insertAfterCurrent)
+    }
 
     val beforeKeys = store.all().map { it.key }.toHashSet()
     val outcome = store.patch(baseRevision, append, upsert, removeKeys)
@@ -388,6 +396,113 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     PrefetchBridge.onTracksPatched()
     persist()
     return mapOf("accepted" to true, "revision" to outcome.revision, "stale" to false)
+  }
+
+  /**
+   * 「下一首播放」（#494）：已入队 → 移动到 index+1；未入队 → 插入 index+1；当前 index 不动。
+   *
+   * 三步：① 主线程**先问一次** COMMAND_CHANGE_MEDIA_ITEMS（不可用时 media3 是裸 return，
+   * 插入会被静默丢弃）→ 变成可观测的失败；② QueueStore 同步落语义；③ 主线程落到 player。
+   *
+   * 时序：只在**已 in-flight 的队列**上增删（store 已经非空），不在 `replaceQueue` 之后紧跟
+   * add —— 那是 androidx/media#3272 的窗口。
+   */
+  private fun applyInsertAfterCurrent(
+    ctrl: PlaybackController,
+    baseRevision: Long,
+    record: TrackRecord
+  ): Map<String, Any?> {
+    val available = try {
+      postAndAwait(ctrl) { it.canChangeMediaItems() } == true
+    } catch (error: Throwable) {
+      Log.w(TAG, "playNext: availableCommands probe failed", error)
+      false
+    }
+    if (!available) {
+      Log.w(TAG, "playNext rejected: player does not expose COMMAND_CHANGE_MEDIA_ITEMS")
+      return mapOf(
+        "accepted" to false,
+        "revision" to store.currentRevision(),
+        "stale" to false,
+        "error" to PlayNextError.UNSUPPORTED
+      )
+    }
+
+    // store 的语义是同步的：拿到 queued/moved 之后才知道要不要动 player
+    val outcome = store.insertAfterCurrent(baseRevision, record)
+    if (!outcome.accepted) {
+      return mapOf("accepted" to false, "revision" to outcome.revision, "stale" to outcome.stale)
+    }
+
+    if (outcome.changed) {
+      val target = store.currentIndex() + 1
+      try {
+        postAndAwait(ctrl) { service ->
+          val count = service.player.mediaItemCount
+          if (outcome.moved) {
+            // 直接问 player 要 source index（不靠 worker 线程读 player）：
+            // 取的是**移动前**的位置，与 target 同一坐标系。
+            val from = (0 until count).firstOrNull { service.player.getMediaItemAt(it).mediaId == record.key }
+            if (from == null) {
+              Log.w(TAG, "playNext: source item vanished from player, inserting instead")
+              service.insertItemsAt(target, listOf(record))
+            } else {
+              // 先摘后插两条调用，而不是 moveMediaItem：语义等价且下标解释无歧义
+              // （moveMediaItem 的 destinationIndex 是「移动后」的下标）。两条调用发生在
+              // 同一个主线程任务里 → 中间不会插入别的队列改动。
+              service.player.removeMediaItem(from)
+              val dest = if (from < target) target - 1 else target
+              service.insertItemsAt(dest, listOf(record))
+            }
+          } else {
+            service.insertItemsAt(target, listOf(record))
+          }
+          true
+        }
+      } catch (error: Throwable) {
+        Log.w(TAG, "playNext: player mutation failed", error)
+        return mapOf(
+          "accepted" to false,
+          "revision" to store.currentRevision(),
+          "stale" to false,
+          "error" to PlayNextError.FAILED
+        )
+      }
+    }
+
+    Log.i(
+      TAG,
+      "playNext key=${record.key} queued=${outcome.queued} moved=${outcome.moved} " +
+        "changed=${outcome.changed} revision=${outcome.revision}"
+    )
+    PrefetchBridge.onTracksPatched()
+    persist()
+    refreshState()
+
+    val result = HashMap<String, Any?>()
+    result["accepted"] = true
+    result["revision"] = outcome.revision
+    result["stale"] = false
+    result["changed"] = outcome.changed
+    result["queued"] = outcome.queued
+    result["moved"] = outcome.moved
+    return result
+  }
+
+  /**
+   * 在 [ctrl] 自己的 application looper（主线程）上跑一段 player 访问并等结果。
+   * 5s 是防呆上限（这段逻辑本身是纯内存操作）：超时/中断一律抛，由调用方降级成可观测失败。
+   */
+  private fun <T> postAndAwait(ctrl: PlaybackController, block: (PlaybackController) -> T): T {
+    val future = java.util.concurrent.CompletableFuture<T>()
+    main.post {
+      try {
+        future.complete(block(ctrl))
+      } catch (error: Throwable) {
+        future.completeExceptionally(error)
+      }
+    }
+    return future.get(5, java.util.concurrent.TimeUnit.SECONDS)
   }
 
   fun play() {
@@ -1037,6 +1152,14 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     private const val MAX_NATIVE_ITEMS = 60
     private const val KEEP_BEFORE = 10
   }
+}
+
+/** 「下一首播放」的可观测失败码（#494 第 5 条：绝不静默丢弃）。 */
+internal object PlayNextError {
+  /** player 没暴露 COMMAND_CHANGE_MEDIA_ITEMS（media3 会静默丢弃，必须显式报错）。 */
+  const val UNSUPPORTED = "unsupported"
+  /** 主线程落 player 时抛错/超时。 */
+  const val FAILED = "failed"
 }
 
 /** policy 的不可变快照（Module → Service 传参）。 */

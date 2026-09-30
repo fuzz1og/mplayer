@@ -77,6 +77,22 @@ class TrackRecord(
 internal class PatchOutcome(val accepted: Boolean, val revision: Long, val stale: Boolean)
 
 /**
+ * 「下一首播放」的结果（#494）。
+ *
+ * - [changed] = 队列**实际发生变化**（幂等命中时为 false，且不 bump revision）；
+ * - [queued] = 这首歌此前已在队列里（无论本次新移入还是本来就恰好在 index+1）；
+ * - [moved] = 本次把它从别处**移动**过来（false = 新插入，或幂等命中没动）。
+ */
+internal class InsertOutcome(
+  val accepted: Boolean,
+  val revision: Long,
+  val stale: Boolean,
+  val changed: Boolean,
+  val queued: Boolean,
+  val moved: Boolean
+)
+
+/**
  * 权威队列（在原生侧）。
  *
  * `revision` 由原生单调递增；JS 的 `patchQueue` 必须带对 `baseRevision`，否则返回 stale
@@ -136,6 +152,41 @@ internal class QueueStore {
 
     if (changed) revision += 1
     PatchOutcome(true, revision, false)
+  }
+
+  /**
+   * 「下一首播放」（#494）：把 [incoming] 放到**当前项之后**（index+1），当前 index 不动。
+   *
+   * 语义（issue/ADR 已定）：**已在队列 → 移动，不在队列 → 插入**。为什么不复制：
+   * ① 同一首歌在队列出现多次会让列表页的拖拽排序对重复项不可用
+   * （ADR 2026-09-29-queue-virtualized-sortable-list）；
+   * ② media3 历史上对「完全相等的重复 MediaItem」崩过（androidx/media#290）。
+   * 「移动」同时让该动作对用户**幂等**（连点两次结果稳定）。
+   *
+   * 不能复用 [moveTo]：它移的是**播放指针**（index），这里要移的是**曲目在列表里的位置**。
+   * 幂等命中（该曲恰好已经在 index+1）时**不动**队列、**不 bump revision**。
+   */
+  fun insertAfterCurrent(baseRevision: Long, incoming: TrackRecord): InsertOutcome = synchronized(lock) {
+    if (baseRevision != revision) {
+      return InsertOutcome(false, revision, true, false, false, false)
+    }
+
+    val at = tracks.indexOfFirst { it.key == incoming.key }
+    val queued = at >= 0
+    if (at == index) {
+      // 点的是「正在播的这一首」：它已经是当前项，队列无变化
+      return InsertOutcome(true, revision, false, false, true, false)
+    }
+    if (at == index + 1) {
+      // 幂等命中：已经就在「下一首」位置
+      return InsertOutcome(true, revision, false, false, true, false)
+    }
+
+    if (at >= 0) tracks.removeAt(at)
+    val insertAt = (index + 1).coerceIn(0, tracks.size)
+    tracks.add(insertAt, incoming)
+    revision += 1
+    InsertOutcome(true, revision, false, true, queued, at >= 0)
   }
 
   fun clear(): Long = synchronized(lock) {
