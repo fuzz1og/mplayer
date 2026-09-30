@@ -2,7 +2,8 @@
 /**
  * docs-gate.mjs — 活文档的两条机械门禁（#523）。
  *
- * 活文档里最容易腐烂的两处恰好都是机械可判的，所以交给脚本，不写进评审标准：
+ * 文档里最容易腐烂、或最不该出现的三处恰好都是机械可判的，所以交给脚本，不写进评审标准
+ * （规则 1/2 针对活文档；规则 3 是敏感内容扫描，与它们相反、必须扫历史存档，见 checkSensitiveContent）：
  *
  * 1. shim 指针：scripts/*.sh 现在全是两行 shim（各自 exec node 同名 .mjs，#500 / #502）。
  *    把 .sh 当入口推荐，等于让读者在 Windows 上撞 WSL 的 Linux bash —— 这正是 #500 修掉、
@@ -12,8 +13,9 @@
  *    （binCacheBudget / fsAsync / outboundGate / 移动端 6 个 services …）。规则：配置目录里的
  *    每个实现文件名都必须在该文档出现过。
  *
- * 有意不扫：.github/workflows/**（有意走 shim，顺带把 shim 本身验证掉）、历史存档
- * docs/{adr,research,specs,wayfinder}（不回改）、*.test.* 与 TABLE_ALLOW（有意不记的实现）。
+ * 有意不扫（**仅限规则 1/2**）：.github/workflows/**（有意走 shim，顺带把 shim 本身验证掉）、
+ * 历史存档 docs/{adr,research,specs,wayfinder}（不回改）、*.test.* 与 TABLE_ALLOW（有意不记的实现）。
+ * **规则 3 反过来 —— 必须扫历史存档**，理由见 checkSensitiveContent。
  *
  * 用法: node scripts/docs-gate.mjs    （static 分片的第一步，CI 的 check job 顺带覆盖）
  */
@@ -125,6 +127,76 @@ function checkTableDrift() {
   return { violations, checked };
 }
 
+/**
+ * 规则 3：文档不得出现真实个人信息 / 会话凭证（#526）。
+ *
+ * 与规则 1/2 相反：**本规则必须扫历史存档**（docs/{adr,research,specs,wayfinder}）。
+ * 「存档不回改」是漂移类检查的理由（不想逼人回改历史措辞），对「这段内容本就不该存在」不成立 ——
+ * 2026-07-29 的咪咕抓包文档里躺着一个 base64 手机号，正因为门禁只看活文档，
+ * 它在公开仓库里放了约两个月，最后靠人工复盘才翻出来。
+ *
+ * 规则刻意**窄而确定**，不做熵 / 通用 hex 扫描：本仓 32 位 hex 有 251 处（提交号、哈希），
+ * 那种规则第一天就会被关掉。这四条在 101 个 tracked 文档上 0 误报，且对事故版本必抓
+ * （复现：git show cdb2ad9:docs/research/2026-07-29-multi-source-api-research.md 喂给本脚本）。
+ * 命中一律**打码**输出 —— 门禁把泄露值打进 CI 日志，等于再泄露一次。
+ */
+const SENSITIVE_ROOTS = ['AGENTS.md', 'README.md', 'GLOSSARY.md', 'CODING_STANDARDS.md', 'SECURITY.md', 'docs', '.github', '.agents'];
+const SENSITIVE_EXT = ['.md', '.yml', '.yaml', '.json'];
+/** 占位符 / 说明性写法：命中这些形态就不算真值（含「已打码」的占位形式）。 */
+const PLACEHOLDER = /<[^>]*>|\$\{|\{\{|\.\.\.|xxx|your[_-]|example|placeholder|redacted|占位|打码/i;
+
+const SENSITIVE_RULES = [
+  { // 本次事故就是这条抓的：值经 base64 编码，grep「手机号」永远看不见
+    name: 'base64 手机号',
+    re: /\b(?:msisdn|phone|mobile|tel)\b\s*[:=]\s*["']?([A-Za-z0-9+/]{8,}={0,2})["']?/gi,
+    value: (m) => m[1],
+    hit: (v) => {
+      try {
+        const dec = Buffer.from(v + '='.repeat((4 - (v.length % 4)) % 4), 'base64').toString('utf8');
+        return /^1[3-9]\d{9}$/.test(dec);
+      } catch { return false; }
+    },
+  },
+  { name: '裸手机号', re: /(?<![\w])1[3-9]\d{9}(?![\w])/g, value: (m) => m[0], hit: () => true },
+  { name: '会话 sid', re: /sid=USS[0-9a-f]{16,}/gi, value: (m) => m[0], hit: () => true },
+  { name: 'Bearer 凭据', re: /Bearer\s+([A-Za-z0-9._-]{24,})/g, value: (m) => m[1], hit: () => true },
+  { name: '密钥字面量', re: /\b(?:api[_-]?key|secret|token|password|passwd)\b\s*[:=]\s*["']([A-Za-z0-9_+/=-]{16,})["']/gi, value: (m) => m[1], hit: () => true },
+];
+
+/** 打码：门禁的输出本身不能成为新的泄露点。 */
+function mask(v) {
+  if (v.length <= 6) return v[0] + '*'.repeat(v.length - 1);
+  return v.slice(0, 2) + '*'.repeat(Math.min(8, v.length - 4)) + v.slice(-2);
+}
+
+/** 规则 3：敏感内容扫描（**含**历史存档与文档目录下的未跟踪文件 —— git add -A 的风险面）。 */
+function checkSensitiveContent() {
+  const violations = [];
+  const files = [];
+  for (const rel of SENSITIVE_ROOTS) {
+    const abs = path.join(ROOT, rel);
+    if (!existsSync(abs)) continue;
+    if (statSync(abs).isFile()) files.push(abs);
+    else walkFiles(abs, SENSITIVE_EXT, files);
+  }
+  for (const file of files) {
+    const rel = toRel(file);
+    readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, i) => {
+      for (const rule of SENSITIVE_RULES) {
+        rule.re.lastIndex = 0;
+        let m;
+        while ((m = rule.re.exec(line)) !== null) {
+          const raw = rule.value(m);
+          if (!raw || PLACEHOLDER.test(raw) || PLACEHOLDER.test(m[0])) continue;
+          if (!rule.hit(raw)) continue;
+          violations.push(rel + ':' + (i + 1) + '  [' + rule.name + '] ' + mask(raw));
+        }
+      }
+    });
+  }
+  return { violations, scanned: files.length };
+}
+
 const scriptsDir = path.join(ROOT, 'scripts');
 const shimBases = readdirSync(scriptsDir)
   .filter((n) => n.endsWith('.sh') && existsSync(path.join(scriptsDir, n.replace(/\.sh$/, '.mjs'))))
@@ -132,7 +204,8 @@ const shimBases = readdirSync(scriptsDir)
 
 const shim = checkShimPointers(shimBases);
 const table = checkTableDrift();
-const violations = [...shim.violations, ...table.violations];
+const sensitive = checkSensitiveContent();
+const violations = [...shim.violations, ...table.violations, ...sensitive.violations];
 
 if (violations.length > 0) {
   console.error('✗ 文档门禁未过（' + violations.length + ' 条）：\n');
@@ -142,7 +215,8 @@ if (violations.length > 0) {
     '  处置：',
     '    - 「把 shim 当命令推荐」→ 改成 npm run <script>；.sh 只作等价写法，同句带上 shim / 兼容 / 等价写法',
     '    - 「未记录」→ 在 ' + TABLE_DOC + ' 补上该文件，或在 docs-gate.mjs 的 TABLE_ALLOW 写明为什么不必记',
+    '    - 「[敏感内容]」→ 把真值换成占位符（如 <base64(手机号)>），或把该文件移出仓库（见 AGENTS.md「敏感信息不入库」）',
   ].join('\n'));
   process.exit(1);
 }
-console.log('✓ 文档门禁：shim 指针 ' + shim.compliant + ' 行合规（' + shimBases.length + ' 个 shim），文件表 ' + table.checked + ' 个文件已记录');
+console.log('✓ 文档门禁：shim 指针 ' + shim.compliant + ' 行合规（' + shimBases.length + ' 个 shim），文件表 ' + table.checked + ' 个文件已记录，敏感扫描 ' + sensitive.scanned + ' 个文件');
