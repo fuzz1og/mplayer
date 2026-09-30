@@ -1,7 +1,8 @@
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
+import type { ShuffleState } from '@mplayer/core';
 import { getNextSongIndex } from '@mplayer/core';
-import { isLegacyDeadUrl } from '@mplayer/core';
+import { isLegacyDeadUrl, syncShuffleCursor } from '@mplayer/core';
 
 const QUEUE_STORAGE_KEY = 'mplayer_queue';
 const PLAY_MODE_KEY = 'playMode';
@@ -12,21 +13,26 @@ export function getNextSong(
   currentIndex: number,
   playMode: PlayMode,
   currentSong: Song | null,
+  shuffle?: ShuffleState | null,
 ): Song | null {
   if (!currentSong) return null;
-  const nextIndex = getNextSongIndex(playlist, currentIndex, playMode);
+  const nextIndex = getNextSongIndex(playlist, currentIndex, playMode, shuffle);
   return nextIndex === -1 ? null : playlist[nextIndex];
 }
 
-export function persistQueue(playlist: Song[], index: number): void {
+/**
+ * 落盘队列：成员 + 当前下标 + **随机序列**（#511）。
+ * 序列与游标存的是同一个可序列化对象（core `ShuffleState`），重启后顺序不变。
+ */
+export function persistQueue(playlist: Song[], index: number, shuffle?: ShuffleState | null): void {
   try {
-    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify({ playlist, index }));
+    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify({ playlist, index, shuffle: shuffle ?? null }));
   } catch (e) {
     console.error('持久化播放队列失败:', e);
   }
 }
 
-export function loadQueue(): { playlist: Song[]; index: number } {
+export function loadQueue(): { playlist: Song[]; index: number; shuffle: ShuffleState | null } {
   try {
     const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
     if (raw) {
@@ -38,16 +44,29 @@ export function loadQueue(): { playlist: Song[]; index: number } {
             ? { ...song, url: '', cover: '', lrc: '' }
             : song,
         );
+        const safeIndex = index >= 0 && index < playlist.length ? index : -1;
         return {
           playlist,
-          index: index >= 0 && index < playlist.length ? index : -1,
+          index: safeIndex,
+          // 存量/损坏数据兜底：成员对齐 + 游标对到当前曲（不是排列也会被修正成排列）
+          shuffle: parseShuffleState(data.shuffle, playlist, safeIndex),
         };
       }
     }
   } catch (e) {
     console.error('加载播放队列失败:', e);
   }
-  return { playlist: [], index: -1 };
+  return { playlist: [], index: -1, shuffle: null };
+}
+
+/** 反序列化随机序列：形状不对就丢弃（null）；形状对就与恢复的队列/下标对齐。 */
+function parseShuffleState(raw: unknown, playlist: Song[], index: number): ShuffleState | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const candidate = raw as { order?: unknown; cursor?: unknown };
+  if (!Array.isArray(candidate.order) || candidate.order.length === 0) return null;
+  if (!candidate.order.every((id): id is string => typeof id === 'string')) return null;
+  if (typeof candidate.cursor !== 'number' || !Number.isFinite(candidate.cursor)) return null;
+  return syncShuffleCursor({ order: candidate.order, cursor: candidate.cursor }, playlist, index);
 }
 
 export function getInitialPlayMode(): PlayMode {

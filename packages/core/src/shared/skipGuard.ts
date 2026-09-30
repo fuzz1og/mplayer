@@ -1,6 +1,7 @@
 import type { PlayMode, Song } from '../types/index.js';
 import { identityKey } from '../utils/songIdentity.js';
 import { getNextSongIndex } from '../utils/queue.js';
+import type { ShuffleState } from '../utils/shuffleOrder.js';
 import { RESOLUTION_CHAIN_BUDGET_MS } from './playbackBudgets.js';
 
 /**
@@ -134,10 +135,12 @@ export function pickNextSongAfterFailure(
   currentIndex: number,
   playMode: PlayMode,
   currentSongId: string,
+  /** 稳定随机序列（#511）：随机模式下沿序列找候选，而不是每次现抽。 */
+  shuffle?: ShuffleState | null,
 ): { index: number; song: Song } | null {
   let index = currentIndex;
   for (let step = 0; step < playlist.length; step += 1) {
-    index = getNextSongIndex(playlist, index, playMode);
+    index = getNextSongIndex(playlist, index, playMode, shuffle);
     if (index < 0) return null;
     const candidate = playlist[index];
     if (!candidate || candidate.id === currentSongId) return null;
