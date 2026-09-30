@@ -35,8 +35,8 @@ describe('队列持久化带稳定随机序列（#511）', () => {
     expect(loadQueue().shuffle).toBeNull();
   });
 
-  it('不传 shuffle 落盘为 null（不会残留旧序列）', () => {
-    persistQueue([song('a')], 0);
+  it('显式传 null = 没有序列（落盘 null，不会残留旧序列）', () => {
+    persistQueue([song('a')], 0, null);
 
     expect(JSON.parse(localStorage.getItem(KEY) || '{}').shuffle).toBeNull();
   });

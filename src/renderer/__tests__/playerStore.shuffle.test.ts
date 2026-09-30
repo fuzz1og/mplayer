@@ -359,6 +359,21 @@ describe('随机序的编辑（拖拽 / 删除 / 换源）', () => {
     expect(shuffleOf()!.order).toEqual([A, B, C, D]);
   });
 
+  it('reorderShuffle：order 残缺时先归一，不再静默拒绝（评审 major 1）', () => {
+    const songs = baseSongs();
+    usePlayerStore.setState({
+      currentPlaylist: songs, currentPlaylistIndex: 0, currentSong: songs[0],
+      playMode: '随机播放', shuffle: { order: [A], cursor: 0 },
+    });
+
+    // 显示序 = applyShuffleOrder = [A,B,C,D]（缺的补末尾）；拖第 3 行（C）到第 1 行
+    usePlayerStore.getState().reorderShuffle(2, 0);
+
+    const s = usePlayerStore.getState();
+    expect(s.shuffle!.order).toEqual([C, A, B, D]); // 归一 [A,B,C,D] 后 moveItem(2 → 0)
+    expect(s.shuffle!.order[s.shuffle!.cursor]).toBe(A);
+  });
+
   it('removeFromQueue：序列同步删 id、游标跟随', () => {
     seed([A, B, C, D], 1); // 当前 B
 
@@ -378,5 +393,47 @@ describe('随机序的编辑（拖拽 / 删除 / 换源）', () => {
     const s = usePlayerStore.getState();
     expect(s.shuffle!.order).toEqual([A, B, 'netease:99', D]);
     expect(s.shuffle!.cursor).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #511 评审 blocker：失败跳歌也要同步游标（否则序列当场失效、预取按坏歌算下一首）
+// ---------------------------------------------------------------------------
+describe('失败跳歌同步随机游标（#511 评审 blocker）', () => {
+  it('随机模式首曲彻底解析失败 → 跳到序列下一首，游标跟着 index 走', async () => {
+    const songs = baseSongs();
+    usePlayerStore.setState({
+      currentPlaylist: songs,
+      currentPlaylistIndex: 0,
+      currentSong: songs[0],
+      playMode: '随机播放',
+      shuffle: { order: [A, B, C, D], cursor: 0 },
+      isPlaying: true,
+    });
+
+    // A（第 1 首）全链拿不到 url：直连返回空、搜索无结果；其余歌曲正常
+    callMusicApiMock.mockImplementation(async (method: string, target?: Song) => {
+      switch (method) {
+        case 'resolvePlayableSongRouted':
+          return target?.id === A
+            ? { url: '', nonFull: false }
+            : { url: 'https://resolved.example.com/ok.mp3', nonFull: false };
+        case 'searchSongsRouted':
+          return [];
+        case 'explainPlaybackFailure':
+          return null;
+        default:
+          return undefined;
+      }
+    });
+
+    await usePlayerStore.getState().play(songs[0]);
+
+    const s = usePlayerStore.getState();
+    expect(s.currentSong?.id).toBe(B);
+    expect(s.currentPlaylistIndex).toBe(1);
+    // 关键断言：游标 = 当前播放曲在序列中的位置，不再停在坏歌 A 上
+    expect(s.shuffle!.cursor).toBe(1);
+    expect(s.shuffle!.order[s.shuffle!.cursor]).toBe(B);
   });
 });

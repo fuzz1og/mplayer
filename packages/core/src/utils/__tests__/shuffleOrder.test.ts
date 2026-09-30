@@ -166,6 +166,14 @@ describe('insertNextInShuffle（随机序里的「下一首播放」）', () => 
     const next = insertNextInShuffle({ order: ['a', 'b', 'c'], cursor: -1 }, [song('a'), song('b'), song('c')], 'c', -1);
     expect(next.order).toEqual(['c', 'a', 'b']);
   });
+
+  it('传入残缺 order → 先归一再插入，结果仍是队列 id 的全排列（评审 minor 1）', () => {
+    const next = insertNextInShuffle({ order: ['a'], cursor: 0 }, [song('a'), song('b'), song('c')], 'c', 0);
+    // 归一 → [a,b,c]，把 c 移到 a 之后 → [a,c,b]
+    expect(next.order).toEqual(['a', 'c', 'b']);
+    expect([...next.order].sort()).toEqual(['a', 'b', 'c']);
+    expect(next.order[next.cursor]).toBe('a');
+  });
 });
 
 describe('replaceShuffleSongId（队列原位换源）', () => {

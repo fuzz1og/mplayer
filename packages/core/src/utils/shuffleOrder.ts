@@ -132,8 +132,10 @@ export function stepShuffle(
 
 /**
  * 「下一首播放」在随机序里的落点：把 `songId` 放到`当前曲`的**下一格**。
+ * - **先归一**（与其他导出函数同口径）：成员对齐成 `queue` 的一个排列，游标对到当前曲；
+ *   否则传入残缺 order 时会把新 id 插进非全排列，落盘的序列就不守恒；
  * - 已在序列里 → 移动（不复制），幂等（已在目标格则原样返回）；
- * - 不在序列里 → 插入。调用方需保证 `songId` 已在 `queue` 里（队列成员由调用方维护）；
+ * - 不在序列里 → 插入。**前置条件：`songId` 已在 `queue` 里**（队列成员由调用方维护）；
  * - 点的是当前曲本身 → 无「下一格」可插，原样返回；
  * - 无当前曲（currentIndex 越界）→ 插到序列开头。
  * 游标始终重算为「当前曲在新序列中的位置」，移动导致的整体平移不会算错。
@@ -144,8 +146,12 @@ export function insertNextInShuffle(
   songId: string,
   currentIndex: number,
 ): ShuffleState {
-  const base = syncShuffleCursor(state, queue, currentIndex);
+  const normalized = normalizeShuffleOrder(state, queue);
   const currentId = songIdAt(queue, currentIndex);
+  const base: ShuffleState = {
+    order: normalized.order,
+    cursor: currentId ? normalized.order.indexOf(currentId) : -1,
+  };
   if (currentId && songId === currentId) return base;
 
   const anchor = currentId ? base.order.indexOf(currentId) : -1;
