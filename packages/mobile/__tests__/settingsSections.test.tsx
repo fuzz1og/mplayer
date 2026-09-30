@@ -68,6 +68,7 @@ import AppearanceSection from '../components/settings/AppearanceSection';
 import PlaybackSection from '../components/settings/PlaybackSection';
 import DirectStatusSection from '../components/settings/DirectStatusSection';
 import Tier3Section from '../components/settings/Tier3Section';
+import DeveloperModeSection from '../components/settings/DeveloperModeSection';
 import DiagnosticsSection from '../components/settings/DiagnosticsSection';
 import CacheSection from '../components/settings/CacheSection';
 import AboutSection from '../components/settings/AboutSection';
@@ -82,6 +83,7 @@ const SECTIONS: { name: string; node: ReactNode; text: string }[] = [
   { name: 'PlaybackSection', node: <PlaybackSection />, text: '失败即跳' },
   { name: 'DirectStatusSection', node: <DirectStatusSection />, text: '直连状态' },
   { name: 'Tier3Section', node: <Tier3Section />, text: '添加 URL 订阅' },
+  { name: 'DeveloperModeSection', node: <DeveloperModeSection />, text: '开发者模式' },
   { name: 'DiagnosticsSection', node: <DiagnosticsSection />, text: '暂无播放诊断记录。播放一首歌后回到这里查看解析链。' },
   { name: 'CacheSection', node: <CacheSection />, text: '清理缓存' },
   { name: 'AboutSection', node: <AboutSection />, text: '当前版本' },
@@ -89,7 +91,7 @@ const SECTIONS: { name: string; node: ReactNode; text: string }[] = [
 ];
 
 beforeEach(() => {
-  useSettingsStore.setState({ themeMode: 'system', updateChannel: 'auto', tier3Enabled: false, tier3Subscriptions: [], autoSkipOnError: true });
+  useSettingsStore.setState({ themeMode: 'system', updateChannel: 'auto', tier3Enabled: false, tier3Subscriptions: [], autoSkipOnError: true, devMode: false });
 });
 
 afterEach(() => {
@@ -201,13 +203,51 @@ describe('设置页区段（#425）', () => {
       );
     });
     const text = document.body.textContent ?? '';
-    // 顺序即拆段前 settings.tsx 的区段顺序（视觉零变化的一部分）
-    const labels = ['外观', '播放', '直连状态', '第三方解析源（tier3）', '播放诊断', '缓存管理', '关于'];
+    // 顺序即 settings.tsx 的区段顺序（#477 在 tier3 之后插了「开发者选项」，诊断区随开关显隐）
+    const labels = ['外观', '播放', '直连状态', '第三方解析源（tier3）', '开发者选项', '缓存管理', '关于'];
     let last = -1;
     for (const label of labels) {
       const at = text.indexOf(label);
       expect(at, label).toBeGreaterThan(last);
       last = at;
     }
+  });
+});
+
+describe('开发者模式开关（#477）：诊断区默认不出现', () => {
+  const DIAG_EMPTY = '暂无播放诊断记录。播放一首歌后回到这里查看解析链。';
+  const LOG_EMPTY = '暂无日志记录。';
+  const TOGGLE_LABEL = '开发者模式';
+
+  const mountPage = async () => {
+    await act(async () => {
+      render(
+        <ThemeProvider>
+          <SettingsPage />
+        </ThemeProvider>,
+      );
+    });
+    return document.body.textContent ?? '';
+  };
+
+  it('关（默认）：开关常驻可见，诊断区不渲染', async () => {
+    await mountPage();
+
+    // 开关本身必须可见——若开关也藏在开关后面，用户永远打不开
+    expect(screen.getAllByText(TOGGLE_LABEL).length).toBeGreaterThan(0);
+    expect(screen.queryByText(DIAG_EMPTY)).toBeNull();
+    expect(screen.queryByText(LOG_EMPTY)).toBeNull();
+  });
+
+  it('开：同一个页面重渲染后诊断区出现（日志查看器 + trace 列表）', async () => {
+    await mountPage();
+    expect(screen.queryByText(DIAG_EMPTY)).toBeNull();
+
+    act(() => {
+      useSettingsStore.getState().setDevMode(true);
+    });
+
+    expect(screen.getByText(DIAG_EMPTY)).toBeTruthy();
+    expect(screen.getByText(LOG_EMPTY)).toBeTruthy();
   });
 });

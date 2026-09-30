@@ -3,6 +3,7 @@ import { View, Text, Alert } from 'react-native';
 import { RefreshCw, Share2, Trash2 } from 'lucide-react-native';
 import type { PlaybackTrace, PlaybackTraceSourceLeg } from '@mplayer/core';
 import { listPlaybackTraces, clearPlaybackTraces, exportPlaybackTraces } from '../../services/playbackTrace';
+import { useLogsStore, type LogLevel } from '../../stores/logsStore';
 import { textVariants } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import ScalePress from '../ScalePress';
@@ -10,6 +11,10 @@ import { useSettingsStyles } from './settingsStyles';
 
 /** 播放诊断展示条数（最近记录，倒序） */
 const TRACE_DISPLAY_COUNT = 20;
+/** 应用内日志展示条数：与 logsStore 环形缓冲容量（MAX_ENTRIES = 100）同量，不分页 */
+const LOG_DISPLAY_COUNT = 100;
+
+const LEVEL_LABELS: Record<LogLevel, string> = { info: 'INFO', warn: 'WARN', error: 'ERROR' };
 
 const LAYER_LABELS: Record<PlaybackTrace['layer'], string> = {
   prefetch: '预取',
@@ -44,6 +49,11 @@ function formatTraceMs(ms: number | null): string {
   return ms == null ? '—' : Math.round(ms) + 'ms';
 }
 
+function formatLogTime(ts: number): string {
+  const d = new Date(ts);
+  return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+}
+
 /** core traceNow 优先 performance.now（自启动单调 ms），退化 Date.now（epoch ms）。 */
 function formatTraceTime(ts: number): string {
   if (ts > 1_000_000_000_000) {
@@ -55,8 +65,13 @@ function formatTraceTime(ts: number): string {
 }
 
 /**
- * 播放诊断区段（#363 / ADR-2026-09-23-playback-trace-sink）：会话内最近 20 条解析链 trace。
+ * 播放诊断区段（#363 / ADR-2026-09-23-playback-trace-sink）：会话内最近 20 条解析链 trace
+ * + 应用内日志查看器（#477：最近 100 条 logsStore 缓冲 + 清空日志）。
  * 自治组件：自持 traces 快照与导出/清空副作用，页面不再持有诊断状态（#425）。
+ *
+ * **本区段不再被设置页无条件挂载**：ADR 决策 6 改为「默认折叠在开发者模式之后」，
+ * `app/settings.tsx` 只在 `devMode` 打开时渲染它（#477）。组件本身不自判开关，
+ * 便于测试直接挂载两种内容。
  */
 export default function DiagnosticsSection() {
   const { colors } = useTheme();
@@ -70,6 +85,16 @@ export default function DiagnosticsSection() {
   useEffect(() => {
     refreshTraces();
   }, []);
+
+  // 日志缓冲是外部可变数组：订阅 store（新日志自动进面板），「刷新」再取一次原始快照
+  const logEntries = useLogsStore((s) => s.entries);
+  const clearLogs = useLogsStore((s) => s.clearLogs);
+  const [logSnapshot, setLogSnapshot] = useState(logEntries);
+  useEffect(() => {
+    setLogSnapshot(logEntries);
+  }, [logEntries]);
+  const refreshLogs = (): void => setLogSnapshot(useLogsStore.getState().entries);
+  const recentLogs = logSnapshot.slice(-LOG_DISPLAY_COUNT).reverse();
 
   const handleExportTraces = async (): Promise<void> => {
     try {
@@ -88,7 +113,49 @@ export default function DiagnosticsSection() {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>播放诊断</Text>
+
       <View style={styles.group}>
+        <View style={styles.groupPad}>
+          <View style={styles.diagHead}>
+            <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>
+              最近 {recentLogs.length} 条日志
+            </Text>
+            <ScalePress onPress={refreshLogs} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
+              <RefreshCw size={14} color={colors.textSecondary} />
+            </ScalePress>
+          </View>
+          {recentLogs.length === 0 ? (
+            <Text style={styles.diagEmpty}>暂无日志记录。</Text>
+          ) : (
+            recentLogs.map((e, i) => (
+              <View key={e.ts + '-' + i} style={[styles.diagItem, i > 0 && styles.diagItemSep]}>
+                <Text style={styles.diagMeta} numberOfLines={1}>
+                  {formatLogTime(e.ts)} · {LEVEL_LABELS[e.level]}
+                </Text>
+                <Text
+                  style={[
+                    styles.diagReason,
+                    e.level === 'error' && { color: colors.dangerText },
+                    e.level === 'warn' && { color: colors.textPrimary },
+                  ]}
+                >
+                  {e.message}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+        <ScalePress
+          style={[styles.actionRow, styles.rowSep, recentLogs.length === 0 && styles.actionRowDisabled]}
+          onPress={clearLogs}
+          disabled={recentLogs.length === 0}
+        >
+          <Trash2 size={18} color={colors.danger} style={styles.btnIcon} />
+          <Text style={[styles.actionRowText, { color: colors.danger }]}>清空日志</Text>
+        </ScalePress>
+      </View>
+
+      <View style={[styles.group, styles.groupGap]}>
         <View style={styles.groupPad}>
           <View style={styles.diagHead}>
             <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>
@@ -153,7 +220,8 @@ export default function DiagnosticsSection() {
         </ScalePress>
       </View>
       <Text style={styles.sectionFootnote}>
-        仅保留本次会话最近 {TRACE_DISPLAY_COUNT} 条解析链展示，不落盘、不外传；「导出诊断」把完整缓冲（最多 200 条）写入应用文档目录并唤起系统分享。时间显示为 core 单调时钟（自应用启动计）。
+        日志与应用内诊断只保留本次会话内存缓冲（日志最近 {LOG_DISPLAY_COUNT} 条、解析链最多 200 条），
+        不落盘、不外传。「导出诊断」把完整解析链缓冲写入应用文档目录并唤起系统分享。时间显示为本地时间 / core 单调时钟（自应用启动计）。
       </Text>
     </View>
   );

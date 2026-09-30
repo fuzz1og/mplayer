@@ -14,6 +14,7 @@ import { searchStrictMatch } from './songResources';
 import { isOffline } from './networkState';
 import { acceptsTransportTime, beginSeek, type PendingSeek } from './seekReconcile';
 import { resolvePlayableUrlMobile } from './songResolution';
+import { isDiagnosticsEnabled } from './devMode';
 import {
   feedWindow,
   initNativePlayer,
@@ -633,7 +634,8 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     if (playId !== currentPlayId) throw 'cancelled';
     if (!audioUrl?.startsWith('http') && !audioUrl?.startsWith('file://')) throw new ResolutionChainError(null);
     log.addLog('info', `[耗时] 直链就绪: 《${song.name}》 解析耗时 ${Date.now() - t0}ms`);
-    console.log(`[player] 直链URL: ${audioUrl.slice(0, 120)}`);
+    // #477：签名直链不进无条件 console（release 不剥 console，logcat 会变成用户可见的东西）
+    if (isDiagnosticsEnabled()) console.log(`[player] 直链URL: ${audioUrl.slice(0, 120)}`);
     usePlayerStore.getState().setPreparing(false);
 
     // 兜底补歌词：把解析到的歌词 URL 写回 currentSong，触发全屏播放器加载歌词
