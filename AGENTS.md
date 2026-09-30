@@ -14,8 +14,8 @@ npm run core:build               # 构建 @mplayer/core（改 core 后移动端�
 npm run test:run                 # vitest 单次（renderer + src/__tests__ 顶层）
 npm run test:main                # vitest 单次（主进程，node env，独立 config）
 npm run mobile:e2e               # 移动端真机 e2e 一条龙（usbipd 直挂真机验收，见 e2e/README.md）
-./scripts/verify.sh              # 验证唯一入口（all=static+四套测试+Expo 依赖一致性；也可只跑某个 scope）
-npm run verify -- <scope>        # 同上；实现在 scripts/verify.mjs。**Windows 用这条**（Windows 上 bash 可能是 WSL 的 Linux bash，见 #500）
+npm run verify -- <scope>        # 验证唯一入口（all=static+四套测试+Expo 依赖一致性；也可只跑某个 scope）；实现在 scripts/verify.mjs
+./scripts/verify.sh              # 等价写法（两行 shim；Windows 上别用 bash 调它——那个 bash 可能是 WSL 的，见 #500）
 npm run release                  # 一键发布（= ./scripts/release.mjs；验证 → bump → commit → 推 master → tag → 触发 CI 构建）
 ```
 

@@ -97,7 +97,7 @@ npm run verify              # 提交前全量验证：静态检查 + 四套测�
 ./scripts/verify.sh        # 等价写法（两行 shim，转调 scripts/verify.mjs）
 ```
 
-**依赖版本基线**：`expo` / `expo-*` / `react-native*` / `@react-native-community/*` 的版本由 **Expo SDK 决定**，不是「semver 允许的最新」—— 要升就用 `npx expo install --fix`，校验走 `npm run verify -- expo`（= `./scripts/verify.sh expo`；CI 的 `expo-check`）。全仓只保留**一份** `expo`（根与 `packages/mobile` 声明同一范围），两处范围不一致会逼出第二份副本。理由与边界见 [ADR](docs/adr/2026-09-29-dependency-update-governance.md)。
+**依赖版本基线**：`expo` / `expo-*` / `react-native*` / `@react-native-community/*` 的版本由 **Expo SDK 决定**，不是「semver 允许的最新」—— 要升就用 `npx expo install --fix`，校验走 `npm run verify -- expo`（CI 的 `expo-check`）。全仓只保留**一份** `expo`（根与 `packages/mobile` 声明同一范围），两处范围不一致会逼出第二份副本。理由与边界见 [ADR](docs/adr/2026-09-29-dependency-update-governance.md)。
 
 桌面端 E2E（Playwright）：先 `npm run dev`（Vite，5174）再 `npx playwright test`（spec 在 `e2e/`，不在 CI/verify 流程，属本地手工回归）
 

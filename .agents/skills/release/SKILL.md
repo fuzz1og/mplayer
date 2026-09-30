@@ -10,9 +10,10 @@ description: MPlayer 版本发布流程——发版前文档同步、版本递�
 ## 流程
 
 1. **文档同步**（发版前必做，须在 bump / 打 tag / 触发 CI 构建之前完成）：**先调用 `writing-for-agents` skill**，用它的规则更新并同步全部活文档，再按下节清单逐类核对；改完提交后再发版。
-2. **一键发布**：`./scripts/release.sh <patch|minor|major|版本号> [--skip-verify]`
-   - 内部按序执行：分支检查（必须 master）→ 验证（`scripts/verify.sh`）→ `node scripts/version-bump.js`（同步 package.json / package-lock.json / app.json / mobile+core package.json 共 5 处）→ commit → push master → 打 tag → push tag
-3. **监控构建**：`gh run list --workflow=release.yml --limit 1` / `gh run watch`
+2. **一键发布**：`npm run release -- <patch|minor|major|版本号> [--skip-verify]`
+   - 入口用 `npm run release`（`./scripts/release.sh` 是两行 shim；Windows 上别用 bash 调它——那个 bash 可能是 WSL 的，见 #500）
+   - 内部按序执行：分支检查（必须 master）→ 验证（`scripts/verify.mjs`）→ `node scripts/version-bump.js`（同步 package.json / package-lock.json / app.json / mobile+core package.json 共 5 处）→ commit → push master → 打 tag → push tag
+3. **监控构建**：`gh run list --workflow=release.yml --limit 1` 取 run id，再用 `gh run view <id> --json status,conclusion` 轮询（要分片状态就 `.jobs[]`）——`gh run watch` 每 20s 重印整棵 job 树，读回来几乎全是重复
 4. **更新 release 介绍**：publish job 结束后，按 `.agents/skills/release-notes` 规格用详细文案覆盖自动生成介绍
 5. **验证产物**：`gh release view <tag>`（桌面三平台 + APK `MPlayer-v{ver}.apk` + AAB `MPlayer-v{ver}.aab`，AAB 供上架 Google Play）
 
@@ -28,7 +29,7 @@ description: MPlayer 版本发布流程——发版前文档同步、版本递�
 
 1. **目录地图与清单**（最易腐烂）：`docs/agents/architecture.md` 的 components / hooks / stores / services 列表、`AGENTS.md` 与 `README.md` 的架构与目录描述 —— 对着 `ls`、`package.json`、`git grep` 逐条改。
 2. **能力 / 数量陈述**：README 的「N 种播放模式」、Tab 数、详情页清单、技术栈版本；`docs/agents/domain.md` 的活文档份数与清单 —— 与实现、依赖版本、目录实际内容比对。
-3. **测试与验证描述**：`docs/agents/testing.md` 的 setup mock 清单与四套件矩阵、`AGENTS.md` 的 `verify.sh` 覆盖范围 —— 与 `vite.config.ts` 的 `test` 段 / `vitest.main.config.ts` / `packages/*/vitest.config.ts` / `scripts/verify.sh` 对齐（**根目录没有 `vitest.config.ts`**）。
+3. **测试与验证描述**：`docs/agents/testing.md` 的 setup mock 清单与四套件矩阵、`AGENTS.md` 的 `verify.sh` 覆盖范围 —— 与 `vite.config.ts` 的 `test` 段 / `vitest.main.config.ts` / `packages/*/vitest.config.ts` / `scripts/verify.mjs` 对齐（**根目录没有 `vitest.config.ts`**）。
 4. **截图与资产**：真机 / UI 截图传 PR comment、**不入库**；`docs/**/assets` 只留 ADR 正文引用的资产，无任何文档引用的孤儿截图直接 `git rm`。
 5. **本轮行为变化**：命令 / 行为 / 架构有变时，同一批改动里更新 `AGENTS.md` / `GLOSSARY.md` / 相关 ADR。
 6. **常驻预算**：`AGENTS.md` 每轮都载入，只放「所有分支都要」的内容 + 指针；细节推给 `docs/agents/*` / `GLOSSARY.md` / ADR。要新增长内容时先问它是否只服务某一条分支——是，就加指针、不要就地展开。
