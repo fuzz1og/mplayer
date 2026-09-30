@@ -44,6 +44,18 @@ CI 的 `check`、四个 `test` 分片与 `expo-check` 都只是 `verify.mjs <sco
 - E2E 桌面: Playwright 在 `e2e/`，测试服务器 `npm run dev`（Vite，5174）；spec 不在 CI/verify 流程，属本地手工回归
 - E2E 移动端: 真机一条龙 `npm run mobile:e2e`（`scripts/mobile-e2e.mjs`，adb + logcat + uiautomator 驱动，前置/断言/局限见 `e2e/README.md`）
 
+### 回归测试的「修前红」配方
+
+bugfix 的测试要证明「修前会红」，否则它在 CI 里只是装饰（规则见 `CODING_STANDARDS.md`）。固定五步：
+
+1. 记下**修前 sha**（该实现最后一次被改之前的提交，通常是分支基座）。
+2. 先记绿：`npx vitest run <测试文件> -t '<用例名>'`。
+3. **只回退实现文件**（测试保持新版）：`git checkout <修前 sha> -- <实现文件>`，或临时投毒关键行。
+4. 再跑同一条命令 → **必须红**；把红原文与退出码写进 PR 的 `Evidence`。
+5. `git checkout -- <实现文件>` 还原 → 重跑确认绿 → `git status` 干净。
+
+**第 4 步不红 = 测试没钉住行为**，最常见原因是**下游另有一次同名写入把它覆盖了**（#516 实测：跳歌路径写的游标被随后 `play()` 的同步覆盖，测试因此永远绿）——这时要把实验改成能隔离那一次写入的场景（如让 `play()` 早退）。
+
 ## 原生发版构建（本机）
 
 PR / push 的 CI **不编译原生**（边界与理由见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`），要本机验证就跑发版同款命令：

@@ -134,3 +134,10 @@ adb shell dumpsys notification --noredact | grep music-playback
 - **「进程被杀后恢复」用 `am force-stop`，不要用 `am kill`**：`am kill` 对**带前台服务的进程是空操作**（pid 不变）——这本身可当「FGS 真的生效」的旁证，但验不了恢复路径；模拟器又没有 `su`，`kill -9` 用不了。`am force-stop` 更狠（连服务一起停），验出来更硬。
 - **多步 adb 编排写成脚本再跑**：内联进 `pwsh -Command` 会被吃掉引号/反斜杠/`$`（实测踩过 `unknown command adb`）。脚本连同**探针**都写 `%TEMP%`，别落在 worktree 根——`git add -A` 会把它带进提交（实测补了一个 `chore:` 才删掉）。
 - **无线调试（不用 USB 的备用路线）**：镜像网络下手机可直连开发机局域网 IP 拉 bundle（Hyper-V 防火墙需放行 8081）；无线 adb 端口每次重连随机，`adb mdns services` 扫 `_adb-tls-connect._tcp`，配对码 30 秒过期。适合临时看 UI，长会话仍走 USB。
+
+- **adb 命令卡死（本机最常撞）**：雷电自带一份 `adb.exe` 与 scoop 的抢 5037 → 任何 `adb` 命令挂住。修法：杀光 `adb` 进程 → 只用 scoop 的 `adb start-server` → **重新 `adb reverse`**。⚠️ **daemon 重启会清空所有 reverse 隧道**（实测别的会话的 daemon 崩掉，把 8099 一起带走），所以「App 突然连不上 Metro」先查 `adb reverse --list`，别先怀疑 App。**别** `adb connect 127.0.0.1:5555`——会造出同一台设备的**重复 transport**。
+- **`uiautomator dump` 在动画界面必失败**：报 `ERROR: could not get idle state`，dump 恒空。已知触发：**播放页**（唱片动画）、**底部弹层入场动画期间**。这不是坐标写错，别反复重试——改用 logcat 断言（如 `[player] 补窗 mode=… 计划=[…]`）或截图裁切判读。#514 的长按选择模式、#515 的 `moved` 分支两条验收因此**无法**用合成输入完成，需要真人手指。
+- **原生包架构要与设备匹配**：真机 arm64-v8a、雷电模拟器 x86_64 → 装错报 `INSTALL_FAILED_NO_MATCHING_ABIS`。构建加 `-PreactNativeArchitectures=<abi>`；工作区现成的 `app-debug.apk` 往往是模拟器用的 x86_64，别直接往真机上装。
+- **`pm install` 报 `Failed to restorecon`**（`INSTALL_FAILED_MEDIA_UNAVAILABLE`）：从 `/data/local/tmp` 装会撞（SELinux 上下文还原失败）。改 `adb push` 到 **`/sdcard/`** 再 `pm install -r`。
+- **深层 worktree 里构建原生必失败**：CMake 对象路径超 Windows 260 字符上限，报 `Filename longer than 260 characters` 或 `build.ninja still dirty after 100 tries`。修法：在**短路径**检出构建（如 `D:\npw`），或在主克隆里建临时分支构建；别在 `.claude/worktrees/<长名>` 里硬试。
+- **现场日志要在起 App 之前就开始录**：`adb -s <serial> logcat -v time > <全路径>` 挂后台任务。本轮「随机模式歌不换」正是靠 51MB 现场里 `计划=[120,72,68]→[93,170,87]` 的横跳定位的；PowerShell 里 **`%TEMP%` 不会展开**，必须写全路径。
