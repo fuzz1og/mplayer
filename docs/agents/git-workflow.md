@@ -3,7 +3,7 @@
 进 `master` 只有两条路，先按改动性质分流：
 
 - **默认走 worktree 路径** —— 一切非文档类修改（feat / **fix** / chore / refactor / test / perf，修 bug 与做功能同待遇）。流程：开/认领 issue → 从最新 `master` 建 worktree → 实现 + 验证 → 推分支开 PR → CI 绿后交人工审核。**agent 到此为止，不自行合并。**
-- **例外是文档直推** —— 只改 Markdown（`*.md`、`docs/**`，含 AGENTS.md / CONTEXT.md / ADR）且不碰代码、配置、依赖时，可在主克隆直接 commit + push `master`，commit 前缀 `docs:`，无需 issue。代码+文档混合改动不算文档类，整单走 worktree 路径。
+- **例外是文档直推** —— 只改 Markdown（`*.md`、`docs/**`，含 AGENTS.md / GLOSSARY.md / ADR）且不碰代码、配置、依赖时，可在主克隆直接 commit + push `master`，commit 前缀 `docs:`，无需 issue。代码+文档混合改动不算文档类，整单走 worktree 路径。
 
 ## 1. 认领工作
 
@@ -62,7 +62,7 @@ git push -u origin <branch>
 gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tmp/pr-body.md
 ```
 
-- **PR 模板是唯一事实源**：正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的段写（一句话 / 要重点看什么 / 验证证据 / 深挖），流程文档只引用、不重写模板内容。`gh` **不会**自动套模板——把模板文件直接当 `--body-file` 提交的是模板原件，必须自己按段填。
+- **PR 模板是唯一事实源**：正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的段写（一句话 / 要重点看什么 / 验证证据 / 深挖），流程文档只引用、不重写模板内容。**会话里挂载的外部/harness skill（如 `pr`）给的模板段名不同时，以本仓模板为准**，不要套用外部模板——它对别的仓成立，对本仓就是漂移。`gh` **不会**自动套模板——把模板文件直接当 `--body-file` 提交的是模板原件，必须自己按段填。
 - **面向人写，不写工作日志**：先给结论（改了什么、要 reviewer 做什么），再给细节；一段一个意思；箭头链、名词堆叠与 `文件:行` 留给 ADR 与 issue。**正文预算 ≤ 40 行 / ≤ 1500 字**，CI 已证明的（lint / typecheck / 四套测试 / `core:build` / `build`）不要抄。
 - **长文去该去的地方**：取舍与方案对比写 ADR，排查过程写 issue 评论，正文只留 reviewer 决策所需——**只链接，不复述**。
 - **PR 之前 issue 要可开工**：`Fixes #N` 指向的 issue 应已带 `ready-for-agent`（验收标准明确）；纯文档 / chore / 依赖升级 / 紧急修复不受此限。
@@ -74,7 +74,8 @@ gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tm
 - **附图后要验引用**：读回来逐个检查（正文 `gh pr view <PR> --json body --jq .body`，评论 `gh api repos/{owner}/{repo}/issues/comments/<id> --jq .body`）——每个图片引用都必须是 `user-attachments` URL，残留本地路径就是裂图；公开仓库可再抓一次 PR 页面 HTML 确认 asset id 在渲染产物里。
 - **CI 绿后停在人审**：PR 交给人工 review 与合并，agent 不自行合并、不设 auto-merge。收到 review 意见回本 worktree 继续修，push 自动更新同一 PR。
 - 改了 `packages/mobile` 或 `packages/core` 的 PR 必须附真机验收结论与**证据图**（没上真机就照实写「未做 + 原因」，不许写「已附截图」而没附；流程见 `.agents/skills/mobile-device-debugging`；固化断言可跑 `npm run mobile:e2e` 一条龙，见 `e2e/README.md`）。
-- 行为/命令/架构有变化的，同一个 PR 里更新 AGENTS.md / CONTEXT.md / 相关 ADR。
+- 行为/命令/架构有变化的，同一个 PR 里更新 AGENTS.md / GLOSSARY.md / 相关 ADR。
+- **分支可能被并发会话动过**：`--force-with-lease` 被拒（`stale info`）就是「远端有你没见过的提交」的信号——先 `git log --oneline HEAD..origin/<branch>` 看多了什么，再决定 merge 还是真的覆盖；直接重试会覆盖别人的提交。
 - 开 PR 前先合入最新 `origin/master`，冲突就地解决。
 
 ## 6. 人工合并后清理

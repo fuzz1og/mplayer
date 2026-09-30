@@ -32,6 +32,8 @@ function makeEffects(overrides: Partial<SongActionEffects> = {}) {
     scheduleClose: vi.fn((run: () => void) => { scheduled.push(run); }),
     download: vi.fn(),
     searchArtist: vi.fn(),
+    // 「下一首播放」（#495）：控制器侧只透传，这里给个成功回执
+    insertNext: vi.fn(async () => ({ queued: true, moved: false })),
     ...overrides,
   };
   return { effects, close: () => scheduled.forEach((run) => run()) };

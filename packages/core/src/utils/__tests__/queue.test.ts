@@ -68,3 +68,43 @@ describe('getPrevSongIndex', () => {
     expect(getPrevSongIndex([song('1')], 0, '随机播放')).toBe(0);
   });
 });
+// ---------------------------------------------------------------------------
+// #511 稳定随机序列：随机分支消费「洗牌序 + 游标」（上一首回上一张）
+// ---------------------------------------------------------------------------
+describe('随机播放的稳定序列（#511）', () => {
+  const songs = [song('1'), song('2'), song('3')];
+  /** 洗牌序 3 → 1 → 2；当前曲 = '1'（队列下标 0，序列游标 1） */
+  const state = { order: ['3', '1', '2'], cursor: 1 };
+
+  it('next：游标前进一格（映射回队列下标）', () => {
+    expect(getNextSongIndex(songs, 0, '随机播放', state)).toBe(1); // '2'
+  });
+
+  it('prev：游标后退一格——回序列里的上一张，不再现抽（行为变更）', () => {
+    expect(getPrevSongIndex(songs, 0, '随机播放', state)).toBe(2); // '3'
+  });
+
+  it('prev 之后 next 回到原曲（可逆）', () => {
+    const back = getPrevSongIndex(songs, 0, '随机播放', state); // → '3'（下标 2）
+    expect(getNextSongIndex(songs, back, '随机播放', state)).toBe(0); // → '1'
+  });
+
+  it('无序列：保留旧的防重复现抽行为（兼容路径，钉住）', () => {
+    for (let i = 0; i < 50; i++) {
+      expect(getNextSongIndex(songs, 1, '随机播放')).not.toBe(1);
+      expect(getPrevSongIndex(songs, 1, '随机播放')).not.toBe(1);
+    }
+  });
+
+  it('单元素队列：有序列时两个方向都归位该曲', () => {
+    const only = [song('1')];
+    expect(getNextSongIndex(only, 0, '随机播放', { order: ['1'], cursor: 0 })).toBe(0);
+    expect(getPrevSongIndex(only, 0, '随机播放', { order: ['1'], cursor: 0 })).toBe(0);
+  });
+
+  it('空队列 / 越界 index 仍是 -1（与有无序列无关）', () => {
+    expect(getNextSongIndex([], 0, '随机播放', { order: [], cursor: -1 })).toBe(-1);
+    expect(getNextSongIndex(songs, 9, '随机播放', state)).toBe(-1);
+    expect(getPrevSongIndex(songs, -1, '随机播放', state)).toBe(-1);
+  });
+});

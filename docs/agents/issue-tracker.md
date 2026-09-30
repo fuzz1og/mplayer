@@ -11,6 +11,9 @@ Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all op
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
 
+- **读上游仓库的文件**（调研 / 对照时）：`gh api repos/<owner>/<repo>/contents/<path> -H 'Accept: application/vnd.github.raw'`。本机 `web_fetch` 打 `github.com` / `raw.githubusercontent.com` 会直接失败、jsdelivr 会被 cross-origin redirect 拦住——别在这条路上连试三次。
+- **列本仓文件**用 `git ls-files`（比 glob 快，且天然排除 `node_modules` 与未跟踪文件）。
+
 Infer the repo from `git remote -v` - `gh` does this automatically when run inside a clone.
 
 ## 写 issue（给人看）

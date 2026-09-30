@@ -47,6 +47,26 @@ export type Policy = {
 
 export type LoopMode = 'off' | 'all' | 'single';
 
+/**
+ * `patchQueue` 的回执。
+ *
+ * `stale` = baseRevision 落后（本轮丢弃，调用方重读 revision 后重试）；
+ * `error` 只在「下一首播放」（#494）路径上出现：media3 的命令级失败过去是**静默丢弃**的，
+ * 这里把它变成调用方能看见、能提示用户的原因（`unsupported` / `failed`）。
+ */
+export type PatchQueueResult = {
+  accepted: boolean;
+  revision: number;
+  stale: boolean;
+  /** 队列是否真的变了（幂等命中 = false） */
+  changed?: boolean;
+  /** 之前已在原生队列里（无论新移入还是本来就在 index+1） */
+  queued?: boolean;
+  /** 本次是从别处移动过来（false = 新插入，或幂等命中没动） */
+  moved?: boolean;
+  error?: 'unsupported' | 'failed';
+};
+
 /** 原生队列里的一项（冷启对账用；不含 url —— 那是原生的私有状态） */
 export type NativeTrackInfo = {
   key: string;
@@ -166,7 +186,12 @@ export type NativePlayerModule = {
     append?: Track[];
     upsert?: Track[];
     removeKeys?: string[];
-  }): Promise<{ accepted: boolean; revision: number; stale: boolean }>;
+    /**
+     * 「下一首播放」（#494）：把这一首放到**当前曲之后**（已在队列则移动、不在则插入）。
+     * 单独一条语义路径；`error` 非空 = 可观测失败（`unsupported` / `failed`），绝不静默丢弃。
+     */
+    insertAfterCurrent?: Track;
+  }): Promise<PatchQueueResult>;
   play(): void;
   pause(): void;
   next(): void;

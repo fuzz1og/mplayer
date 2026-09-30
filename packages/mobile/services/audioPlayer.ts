@@ -16,15 +16,19 @@ import { acceptsTransportTime, beginSeek, type PendingSeek } from './seekReconci
 import { resolvePlayableUrlMobile } from './songResolution';
 import { isDiagnosticsEnabled } from './devMode';
 import {
+  feedWindow,
   initNativePlayer,
   isNativeEngine,
   nativeNext,
+  nativePlayNext,
   nativePlaySong,
   nativePrev,
   nativeSeekTo,
+  nativeState,
   nativeStop,
   nativeSyncLoopMode,
   nativeTogglePlay,
+  reconcileFromNative,
   registerNativeHeadless,
   songKey,
 } from './nativePlayer';
@@ -787,6 +791,63 @@ export function skipPrev(): void {
   usePlayerStore.getState().prev();
   const song = usePlayerStore.getState().currentSong;
   if (song) void playSong(song);
+}
+
+/** 「下一首播放」的结果（#495） */
+export type PlayNextOutcome = {
+  queued: boolean;
+  moved: boolean;
+  /** 该曲已经恰好在「下一首」位置（或就是当前曲）→ 队列未变，UI 应告知「已就位」 */
+  noop?: boolean;
+  /** 失败原因；`undefined` = 成功 */
+  reason?: 'unsupported' | 'failed' | 'unsupported-engine';
+};
+
+/**
+ * 行菜单「下一首播放」的**引擎无关**入口（#495）。
+ *
+ * - 先落 `playerStore.insertNext`（iOS/回落引擎的队列 100% 在 JS，这一步就是全部；
+ *   原生引擎下它同时让 UI 立刻看到插队结果，原生侧随后由 trackChanged 对账）；
+ * - 原生引擎再走 `nativePlayNext`（解析 → patchQueue({insertAfterCurrent})）。
+ *
+ * 与 [skipNext] 同一条分派约定：**原生引擎下队列操作的权威在原生**，
+ * 绝不用 `playSong(song)` 去换一个只有一首的原生队列。
+ */
+export async function playNextInQueue(song: Song): Promise<PlayNextOutcome> {
+  if (!isNativeEngine()) {
+    // 队列 100% 在 JS（iOS / 回落引擎）：`insertNext` 就是全部。没有当前曲时它已把这首
+    // 设为当前曲，这里再真正起播一次（与桌面 #506「队列为空 ⇒ 等价于开始播放这首」同口径）。
+    const inserted = usePlayerStore.getState().insertNext(song);
+    if (inserted.started) await playSong(song);
+    return { queued: true, moved: inserted.moved, noop: inserted.noop };
+  }
+
+  // 原生引擎：**不先动 JS 队列**（队列权威在原生）。空队列/无当前曲时原生没有「当前曲之后」
+  // 这个位置，走 playSong 的 loadQueue（单曲队列）而不是插队——与桌面 #506 的降级一致。
+  const native = nativeState();
+  if (!native || (native.tracks?.length ?? 0) === 0 || (native.index ?? -1) < 0) {
+    await playSong(song);
+    return { queued: true, moved: false, noop: false };
+  }
+
+  const result = await nativePlayNext(song);
+  if (!result.queued) return { queued: false, moved: false, reason: result.reason };
+  // ⚠️ 不能再用 `reconcileFromNative(true)` 重建 JS 队列（#518 的根因）：
+  // 原生队列只是 JS 队列的**预取窗口**（ADR 2026-09-29-native-playback-ownership §2：
+  // `loadQueue` 一首 + `patchQueue({append})` 追加），不是整张歌单。用窗口重建 JS 队列会
+  // ① 把用户的完整歌单缩成几首窗口歌；② 把补窗基准从「歌单下标」跳成「窗口下标」
+  // —— 真机现场 `计划=[28,29,30]` 与 `计划=[0]` 反复横跳，推进的下一首成了窗口歌。
+  // 这里改用同一套纯队列数学**就地**同步：完整队列与当前曲位置都不动，基准因此不回跳。
+  const store = usePlayerStore.getState();
+  if (store.queue.length > 0 && store.currentSong && store.currentIndex >= 0) {
+    store.insertNext(song);
+    // 基准落定后再补一轮窗口（nativePlayNext 里那轮是插队前的基准，已被 feedWindow 丢弃）
+    void feedWindow();
+  } else {
+    // JS 队列为空（冷启 / 进程重启后原生已按快照恢复）→ 原生快照是唯一的对账来源
+    reconcileFromNative(true);
+  }
+  return { queued: true, moved: result.moved, noop: result.noop };
 }
 
 export async function togglePlay(): Promise<void> {

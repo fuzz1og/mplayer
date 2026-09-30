@@ -115,6 +115,42 @@ internal class PlaybackController(
     player.addMediaItems(records.map(::toMediaItem))
   }
 
+  /**
+   * 队列是否允许增删改（#494 第 5 条）。
+   *
+   * `MediaControllerImplBase` 在命令不可用时是**裸 return**——无异常、无日志，插入会被
+   * **静默丢弃**。所以桥/服务在动手前必须先问一次，把「不可用」变成调用方能看见的失败。
+   */
+  fun canChangeMediaItems(): Boolean =
+    player.availableCommands.contains(Player.COMMAND_CHANGE_MEDIA_ITEMS)
+
+  /**
+   * 在 [index] 处插入 [records]（`addMediaItems`，media3 stable API，见 #494）。
+   *
+   * 下标钳制：`min(index, mediaItemCount)`——超界时 media3 自己就是追加到末尾，安全；
+   * **绝不能传负数**（`checkArgument(index >= 0)` 会抛）。
+   */
+  fun insertItemsAt(index: Int, records: List<TrackRecord>) {
+    if (records.isEmpty()) return
+    val count = player.mediaItemCount
+    val safe = minOf(index.coerceAtLeast(0), count)
+    player.addMediaItems(safe, records.map(::toMediaItem))
+  }
+
+  /**
+   * 把 [from] 处的条目移到 [to]（`moveMediaItem`，media3 stable API，见 #494）。
+   *
+   * 只做边界检查、不做纠偏：负数会撞 `checkArgument`（调用方负责钳制），越界返回 false
+   * 让调用方能把它记成可观测的失败。
+   */
+  fun moveItem(from: Int, to: Int): Boolean {
+    val count = player.mediaItemCount
+    if (from < 0 || from >= count) return false
+    if (to < 0 || to >= count) return false
+    player.moveMediaItem(from, to)
+    return true
+  }
+
   fun replaceItemAt(index: Int, record: TrackRecord) {
     if (index < 0 || index >= player.mediaItemCount) return
     player.replaceMediaItem(index, toMediaItem(record))

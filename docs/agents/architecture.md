@@ -1,6 +1,6 @@
 # MPlayer 架构细节
 
-低频参考：主进程/渲染进程结构、IPC 通道契约。每轮决策需要先读此处（配合 `CONTEXT.md` 与 `docs/adr/`）。
+低频参考：主进程/渲染进程结构、IPC 通道契约。每轮决策需要先读此处（配合 `GLOSSARY.md` 与 `docs/adr/`）。
 
 ## Desktop (Electron)
 

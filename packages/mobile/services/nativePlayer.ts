@@ -8,6 +8,7 @@ import {
   type ErrorDisposition,
   type LoopMode,
   type NativePlayerEvents,
+  type PatchQueueResult,
   type PlaybackErrorEvent,
   type PlayerState,
   type Policy,
@@ -238,12 +239,14 @@ function pruneMirror(toKey: string): void {
  *
  * 只在「JS 队列为空」或「与原生队列不一致」时重建，避免覆盖前台刚设好的队列。
  */
-function reconcileQueueFromNative(state: PlayerState | null): boolean {
+function reconcileQueueFromNative(state: PlayerState | null, force = false): boolean {
   const tracks = state?.tracks;
   if (!tracks || tracks.length === 0) return false;
 
   const store = usePlayerStore.getState();
-  if (store.queue.length === tracks.length && store.currentSong) return false;
+  // 长度相同且已有当前曲时**默认不重建**（避免覆盖前台刚设好的队列）。
+  // `force` 用于「下一首播放」：移动分支不改变长度，但**顺序**变了，必须重建。
+  if (!force && store.queue.length === tracks.length && store.currentSong) return false;
 
   const songs: Song[] = tracks.map((track) => ({
     id: track.songId || track.key,
@@ -275,6 +278,28 @@ function syncMirrorFromNative(): void {
   if (state?.tracks?.length) {
     nativeMirror = state.tracks.map((track) => ({ key: track.key, songId: track.songId }));
   }
+}
+
+/**
+ * 「已经在原生手里」的 key 集合——**按原生当前位置切片**（#495 第 3 条的补窗坑）。
+ *
+ * 旧的 `new Set(nativeMirror.map(k => k.key))` 是**与位置无关的 key 集合**：它把排在当前曲
+ * **之前**的历史也算成「已投喂」。补窗走到队尾绕回队首时，这些 key 会被逐个跳过 → 窗口
+ * 整个空掉（连续插队/长会话后尤其明显），原生只能在缓冲边界停下踩空。
+ * 按 `state.index` 之后切片后，历史不再挡住绕回的候选。
+ *
+ * 用原生快照而不是 `nativeMirror` 还有一个原因：插队是**移动**，原生顺序会与 JS 队列顺序
+ * 分叉（如 JS [A,B,C,D] vs 原生 [A,C,B]），任何「按 JS 位置去镜像里找」的匹配都会错位。
+ * 快照的 `tracks` / `index` 是原生自己的坐标系，天然正确。
+ */
+function nativeAheadKeys(state: PlayerState | null): Set<string> {
+  const tracks = state?.tracks;
+  if (!tracks || tracks.length === 0) {
+    // 快照里没有队列（服务刚起/未对账）→ 退回镜像全集，宁可少喂也不重复喂
+    return new Set(nativeMirror.map((entry) => entry.key));
+  }
+  const index = Math.min(Math.max(state?.index ?? 0, 0), tracks.length - 1);
+  return new Set(tracks.slice(index).map((track) => track.key));
 }
 
 function safeState(): PlayerState | null {
@@ -329,6 +354,88 @@ export function nativeNext(): void {
   void feedWindow();
 }
 
+/** 「下一首播放」的结果（#495）。`reason` 只在 `queued=false` 时有值。 */
+export type NativePlayNextResult = {
+  queued: boolean;
+  moved: boolean;
+  /** 队列一字未改（该曲已在下一首位置 / 就是当前曲）——连点幂等 */
+  noop: boolean;
+  reason?: 'unsupported' | 'failed' | 'unsupported-engine';
+};
+
+/**
+ * 「下一首播放」（#495）：把 [song] 放到原生队列的**当前曲之后**。
+ *
+ * 顺序（真机 T2/T9 的教训，别调换）：**先解析**（可能要跑整条 core 解析链，期间原生
+ * revision 会因补窗推进）→ **再拿新 revision** patch → `stale` 时重读 revision **重试一次**
+ * （用户点了就要落地，不能像补窗那样等下一轮水位事件）→ 成功后**按位置重建镜像**。
+ *
+ * `stale` 重试的空档如果不重读 revision：正巧撞上原生自动推进/补窗落地，插入会被丢弃，
+ * 用户侧表现为「点了下一首播放但没生效」。
+ */
+export async function nativePlayNext(song: Song): Promise<NativePlayNextResult> {
+  const NP = NativePlayer;
+  if (!NP) return { queued: false, moved: false, noop: false, reason: 'unsupported-engine' };
+
+  // 不经 `isCoolingDown`（30s 失败冷却）/ `isFresh`（5min 新鲜度）闸门：那是**补窗**的去重策略，
+  // 用户显式点「下一首播放」时若沿用，会变成「30s 内静默无效」。这里要么投进去、要么报错。
+  const track = await resolveTrack(song, false);
+  if (!track) {
+    console.warn(`[player] 下一首播放：${song.name} 解析不到可用直链`);
+    return { queued: false, moved: false, noop: false, reason: 'failed' };
+  }
+
+  let baseRevision = safeState()?.revision ?? 0;
+  let result: PatchQueueResult | null = null;
+  try {
+    result = await NP.patchQueue({ baseRevision, insertAfterCurrent: track });
+    if (result.stale) {
+      // 原生 revision 在解析期间动过 → 重读一次再投（#495 要求的「重试一次」）
+      baseRevision = safeState()?.revision ?? result.revision;
+      result = await NP.patchQueue({ baseRevision, insertAfterCurrent: track });
+    }
+  } catch (error) {
+    console.warn(`[player] 下一首播放失败：${song.name}`, error);
+    return { queued: false, moved: false, noop: false, reason: 'failed' };
+  }
+
+  if (!result.accepted) {
+    console.warn(
+      `[player] 下一首播放未落地：${song.name} error=${result.error ?? 'unknown'} stale=${result.stale}`
+    );
+    return { queued: false, moved: false, noop: false, reason: result.error ?? 'failed' };
+  }
+
+  // 桥必须给出**正面证据**（changed/queued/moved 任一个是 boolean）才能算落地。
+  // 老原生模块（APK 未含 #494 原语）对未知的 `insertAfterCurrent` 字段静默忽略，
+  // 回包只有 accepted/revision/stale；旧代码用 `result.changed !== false` 判断，
+  // `undefined !== false` 恒真 → 于是提示「已设为下一首」而原生队列一字未改
+  // （#518 真机现场：插队后对账仍是 4 首，推进下一首播的是原来的窗口歌）。
+  // 宁可报可观测的失败，也不能给用户看「假成功」（#494 验收标准同款要求）。
+  const spokeInsert =
+    typeof result.changed === 'boolean' ||
+    typeof result.queued === 'boolean' ||
+    typeof result.moved === 'boolean';
+  if (!spokeInsert) {
+    console.warn(
+      `[player] 下一首播放未落地：${song.name} 原生桥未返回插队语义（原生模块不支持 insertAfterCurrent）`
+    );
+    return { queued: false, moved: false, noop: false, reason: 'unsupported' };
+  }
+
+  markSucceeded(track.meta.key);
+  // 按位置重建镜像（不能沿用补窗的 push）：插队后原生顺序变了，镜像必须跟着变，
+  // 否则 pruneMirror（按 toKey 切片）与 jsIndex 推导会一路错下去。
+  syncMirrorFromNative();
+  console.log(
+    `[player] 下一首播放：${song.name} queued=${result.queued === true} moved=${result.moved === true} ` +
+      `changed=${result.changed === true}`
+  );
+  // 窗口重算：插队把原来的 index+1 挤到 index+2，位置感知的 excluded 会把它重新纳入候选
+  void feedWindow();
+  return { queued: true, moved: result.moved === true, noop: result.changed === false };
+}
+
 export function nativePrev(): void {
   NativePlayer?.prev();
 }
@@ -362,13 +469,15 @@ export async function feedWindow(need?: number): Promise<void> {
   if (queue.length === 0) return;
 
   const nativeStateNow = safeState();
-  const currentKey = nativeStateNow?.key ?? nativeMirror[nativeMirror.length - 1]?.key ?? null;
-  let jsIndex = currentKey ? queue.findIndex((s) => songKey(s) === currentKey) : -1;
-  if (jsIndex < 0) jsIndex = playerState.currentIndex;
+  const nativeKey = nativeStateNow?.key ?? null;
+  const currentKey = nativeKey ?? nativeMirror[nativeMirror.length - 1]?.key ?? null;
+  const byKey = currentKey ? queue.findIndex((s) => songKey(s) === currentKey) : -1;
+  // 原生当前曲反查不到 JS 队列时（对账前的窗口）退回 store 索引
+  const jsIndex = byKey >= 0 ? byKey : playerState.currentIndex;
   if (jsIndex < 0) return;
 
   const target = Math.max(1, need ?? currentPolicy().prefetchAhead);
-  const existing = new Set(nativeMirror.map((entry) => entry.key));
+  const existing = nativeAheadKeys(nativeStateNow);
   const wantedIndexes = planNextIndexes(
     queue,
     jsIndex,
@@ -408,6 +517,15 @@ export async function feedWindow(need?: number): Promise<void> {
       }
     })
   );
+  // 基准稳定性（#518）：本轮计划是在上面那份 `queue` **快照**上算出来的，而解析要花数秒。
+  // 期间队列若被整体替换（插队就地同步 / 切歌单 / 对账重建），旧基准算出来的候选绝不能落地
+  // —— 真机上「补窗换了基准」正是这么来的：`计划=[28,29,30]` 与 `计划=[0]` 反复横跳。
+  // 丢弃是安全的：换基准的那条路径一定会再触发一轮补窗（水位事件 / playSong / 插队）。
+  if (usePlayerStore.getState().queue !== queue) {
+    console.log('[player] 补窗丢弃：解析期间队列基准已变更');
+    return;
+  }
+
   const append: Track[] = settled.filter((track): track is Track => !!track);
 
   if (append.length === 0) return;
@@ -487,10 +605,15 @@ export function registerNativeHeadless(): boolean {
 }
 
 /** 供诊断/日志用：原生是否可用 + headless 通道是否拿到 */
-/** 回前台/冷启对账入口（§4.3）：原生是唯一权威，单向覆盖 store。 */
-export function reconcileFromNative(): void {
+/**
+ * 回前台/冷启对账入口（§4.3）：原生是唯一权威，单向覆盖 store。
+ *
+ * `force = true` 用于「下一首播放」成功之后：移动分支**队列长度不变但顺序变了**，
+ * 默认的「长度相同就不重建」会留下一个顺序错误的 JS 队列（队列页会显示错序）。
+ */
+export function reconcileFromNative(force = false): void {
   const state = safeState();
-  if (reconcileQueueFromNative(state)) {
+  if (reconcileQueueFromNative(state, force)) {
     void feedWindow();
   }
 }

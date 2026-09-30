@@ -92,6 +92,9 @@ beforeEach(() => {
     lyricsLoading: false,
     currentPlaylist: [],
     currentPlaylistIndex: -1,
+    // #516 把 shuffle 引进 store 后必须一并重置：否则「随机播放防重复」用例会
+    // 继承上一条用例的序列，表现为 ~1/5 随机失败（线 H 实测）。
+    shuffle: null,
   });
   audioPlayerMock.player.load.mockClear();
   audioPlayerMock.player.play.mockClear();
