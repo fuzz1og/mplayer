@@ -5,7 +5,7 @@
 本项目有两套 e2e：
 
 - **桌面端（Electron / Web）**：`e2e/*.spec.ts` 用标准 `@playwright/test` 编写（`electron-e2e.spec.ts` 等以 `_electron.launch` 驱动 Electron），`npx playwright test` 运行；另有部分场景按 **MCP Playwright** 交互式风格人工执行（Claude Code 会话内用浏览器自动化工具）。
-- **移动端真机**：`scripts/mobile-e2e.sh`，adb + logcat + uiautomator 驱动真机，与 Playwright 无关。见下文[「移动端真机 e2e」](#移动端真机-e2e)。
+- **移动端真机**：`scripts/mobile-e2e.mjs`，adb + logcat + uiautomator 驱动真机，与 Playwright 无关。见下文[「移动端真机 e2e」](#移动端真机-e2e)。
 
 > 注意：`e2e/` 下的 `*.spec.ts` **不在 CI/verify 流程里**，属本地手工回归工具；`playwright.config.ts` 的 `testDir` 指向本目录。
 
@@ -264,11 +264,11 @@ source ~/.bashrc
 
 ## 移动端真机 e2e
 
-`scripts/mobile-e2e.sh` 把「usbipd 直挂真机 → Metro → 冷启 → UI 走查 → 点歌出声」的手工验收流程固化为一条命令（adb 驱动，非 Playwright，跑在 WSL 开发机侧，不改 App 代码）。
+`scripts/mobile-e2e.mjs` 把「usbipd 直挂真机 → Metro → 冷启 → UI 走查 → 点歌出声」的手工验收流程固化为一条命令（adb 驱动，非 Playwright，跑在 WSL 开发机侧，不改 App 代码）。
 
 ### 前置条件
 
-1. Android 真机经 usbipd 直挂进 WSL：`scripts/mobile-device/usb-attach.sh`（透传掉线重挂：`adb kill-server` 后 `usbipd attach --wsl --busid <busid>`，见 mobile-device-debugging skill 的陷阱清单）；
+1. Android 真机经 usbipd 直挂进 WSL：`scripts/mobile-device/usb-attach.mjs`（透传掉线重挂：`adb kill-server` 后 `usbipd attach --wsl --busid <busid>`，见 mobile-device-debugging skill 的陷阱清单）；
 2. `@mplayer/core` 已构建（`packages/core/dist` 过期的症状是启动即 `undefined is not a function`，脚本会识别为明确 FAIL）；
 3. Metro：8081 已有健康 Metro 则直接复用（校验归属、不杀不起第二个）；没有则脚本代为拉起。
 4. 依赖：`adb`（`~/.local/bin/adb`）、`python3`（uiautomator dump 解析）。
@@ -276,9 +276,9 @@ source ~/.bashrc
 ### 运行方式
 
 ```bash
-scripts/mobile-e2e.sh                       # 唯一设备 + 8081 Metro
-MOBILE_E2E_SERIAL=<serial> scripts/mobile-e2e.sh          # 多设备时指定
-MOBILE_E2E_DIR=/path/to/other/packages/mobile scripts/mobile-e2e.sh   # 复用别的 checkout/worktree 的 Metro
+scripts/mobile-e2e.mjs                       # 唯一设备 + 8081 Metro
+MOBILE_E2E_SERIAL=<serial> scripts/mobile-e2e.mjs          # 多设备时指定
+MOBILE_E2E_DIR=/path/to/other/packages/mobile scripts/mobile-e2e.mjs   # 复用别的 checkout/worktree 的 Metro
 npm run mobile:e2e                          # 同上（包一层 npm script）
 ```
 
@@ -307,12 +307,12 @@ npm run mobile:e2e                          # 同上（包一层 npm script）
 
 ## 移动端帧计时取证（性能）
 
-`scripts/mobile-frame-stats.sh` 用**系统侧**采集量「用户看得见的那一层」的 **UI 帧率**：`dumpsys gfxinfo <pkg> framestats`（应用侧逐帧，UI 线程管线）+ `dumpsys SurfaceFlinger --latency`（显示侧上屏，独立视角）。release 构建可用、不需要 App 配合、窗口天然 ≈2s。
+`scripts/mobile-frame-stats.mjs` 用**系统侧**采集量「用户看得见的那一层」的 **UI 帧率**：`dumpsys gfxinfo <pkg> framestats`（应用侧逐帧，UI 线程管线）+ `dumpsys SurfaceFlinger --latency`（显示侧上屏，独立视角）。release 构建可用、不需要 App 配合、窗口天然 ≈2s。
 
 ```bash
-MOBILE_FRAME_SWIPE='628 900 628 1900 2000' MOBILE_FRAME_LABEL=busy scripts/mobile-frame-stats.sh
-MOBILE_FRAME_WAIT=8 MOBILE_FRAME_LABEL=idle scripts/mobile-frame-stats.sh          # 留窗口手拖
-MOBILE_FRAME_PARSE_DIR=e2e/artifacts/frame-idle-20260929-120000 scripts/mobile-frame-stats.sh   # 复算已有 dump
+MOBILE_FRAME_SWIPE='628 900 628 1900 2000' MOBILE_FRAME_LABEL=busy scripts/mobile-frame-stats.mjs
+MOBILE_FRAME_WAIT=8 MOBILE_FRAME_LABEL=idle scripts/mobile-frame-stats.mjs          # 留窗口手拖
+MOBILE_FRAME_PARSE_DIR=e2e/artifacts/frame-idle-20260929-120000 scripts/mobile-frame-stats.mjs   # 复算已有 dump
 ```
 
 原始 dump 与 `frame-stats.json` 存档到 `e2e/artifacts/frame-<label>-<时间戳>/`（已 gitignore）。
@@ -322,8 +322,8 @@ MOBILE_FRAME_PARSE_DIR=e2e/artifacts/frame-idle-20260929-120000 scripts/mobile-f
 ## 相关文件
 
 - `e2e/electron-e2e.spec.ts` 等 `*.spec.ts` - 桌面端 Playwright 测试场景
-- `scripts/mobile-frame-stats.sh` - 移动端帧计时取证（性能，adb 驱动）
-- `scripts/mobile-e2e.sh` - 移动端真机 e2e 一条龙脚本
+- `scripts/mobile-frame-stats.mjs` - 移动端帧计时取证（性能，adb 驱动）
+- `scripts/mobile-e2e.mjs` - 移动端真机 e2e 一条龙脚本
 - `e2e/README.md` - 本文档
 - `e2e/artifacts/` - 移动端 e2e 截图与 logcat 存档（gitignore）
 

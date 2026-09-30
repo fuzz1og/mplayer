@@ -25,17 +25,17 @@ flat config（`eslint.config.js`），全局 ignores 与 `--no-warn-ignored` 语
 | Main（主进程） | `vitest.main.config.ts`（node + v8 coverage） | `npm run test:main` | ✅ | `test (main)` |
 | Core | `packages/core/vitest.config.ts`（node + v8 coverage） | `npm test -w packages/core` | ✅ | `test (core)` |
 | Mobile | `packages/mobile/vitest.config.ts`（node） | `npx vitest run --config packages/mobile/vitest.config.ts` | ✅ | `test (mobile)` |
-| Expo 依赖一致性 | 读 Expo 远端 SDK 期望版本（`api.expo.dev`） | `CI=1 npx expo install --check`（`./scripts/verify.sh expo`） | ✅ | `expo-check` |
+| Expo 依赖一致性 | 读 Expo 远端 SDK 期望版本（`api.expo.dev`） | `CI=1 npx expo install --check`（`npm run verify -- expo`） | ✅ | `expo-check` |
 
-CI 的 `check`、四个 `test` 分片与 `expo-check` 都只是 `./scripts/verify.sh <scope>` 的包装；本地全量 = `./scripts/verify.sh`。**`expo` 是本仓唯一「上游可能让它自己变红」的检查**：Expo 发布新的期望补丁时会与仓库改动无关地变红，处置是 `npx expo install --fix`（理由见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`）。Playwright 的 `e2e/` **不在**任何自动化里（见文末）。
+CI 的 `check`、四个 `test` 分片与 `expo-check` 都只是 `verify.mjs <scope>` 的包装（`./scripts/verify.sh` 是它的两行 shim）；本地全量 = `npm run verify`（Windows 用这条——Windows 上 `bash` 可能是 WSL 的 Linux bash，见 #500）。**`expo` 是本仓唯一「上游可能让它自己变红」的检查**：Expo 发布新的期望补丁时会与仓库改动无关地变红，处置是 `npx expo install --fix`（理由见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`）。Playwright 的 `e2e/` **不在**任何自动化里（见文末）。
 
 - **Renderer（root）**: Vitest + jsdom + @testing-library；配置在 `vite.config.ts` 的 `test` 段（**无独立根 vitest.config.ts**），`include` 覆盖 `src/renderer/__tests__/**` 与 `src/__tests__/*.test.{ts,tsx}`（**仅顶层**；`src/__tests__/main/**` 归 Main 套件，不再在 jsdom 下重复跑一遍）。setup mock electron / `window.electronAPI`、matchMedia、ResizeObserver，并全局 stub antd message/notification；测试各自定义局部 `song()` 构造器（无共享 factory）。`npx vitest run` / `npm run test:run`（**依赖 `packages/core/dist`，先 `npm run core:build`**）
 - **Main**: `vitest.main.config.ts`（node env），global electron mock，默认开 v8 coverage（`src/main/**`）。`npm run test:main`
 - **Core**: `npx vitest run --config packages/core/vitest.config.ts`（走源码 alias，**不需要** dist），默认开 v8 coverage
-- **Mobile**: `packages/mobile/vitest.config.ts`（node env），setup（`__tests__/setup.ts`）全局替身三件：`react-native` 最小面（AppRegistry/NativeModules/Platform/Share/NativeEventEmitter）、`expo`（`requireOptionalNativeModule` → null = 走回落引擎路径）、AsyncStorage；要验原生引擎的用例在自己的文件里 `vi.mock('expo')` 换假原生模块。store 测试用纯 getState/setState。`npx vitest run --config packages/mobile/vitest.config.ts`（按值 import `@mplayer/core` → 先 `npm run core:build`；`verify.sh` 已内置这一步）
+- **Mobile**: `packages/mobile/vitest.config.ts`（node env），setup（`__tests__/setup.ts`）全局替身三件：`react-native` 最小面（AppRegistry/NativeModules/Platform/Share/NativeEventEmitter）、`expo`（`requireOptionalNativeModule` → null = 走回落引擎路径）、AsyncStorage；要验原生引擎的用例在自己的文件里 `vi.mock('expo')` 换假原生模块。store 测试用纯 getState/setState。`npx vitest run --config packages/mobile/vitest.config.ts`（按值 import `@mplayer/core` → 先 `npm run core:build`；`verify` 已内置这一步）
 - 构造器注入可测性：diskBackend(cacheDir)、localMusicService(userDataPath)
 - E2E 桌面: Playwright 在 `e2e/`，测试服务器 `npm run dev`（Vite，5174）；spec 不在 CI/verify 流程，属本地手工回归
-- E2E 移动端: 真机一条龙 `npm run mobile:e2e`（`scripts/mobile-e2e.sh`，adb + logcat + uiautomator 驱动，前置/断言/局限见 `e2e/README.md`）
+- E2E 移动端: 真机一条龙 `npm run mobile:e2e`（`scripts/mobile-e2e.mjs`，adb + logcat + uiautomator 驱动，前置/断言/局限见 `e2e/README.md`）
 
 ## 原生发版构建（本机）
 
