@@ -12,12 +12,19 @@ interface Playlist {
 
 interface PlaylistStore {
   playlists: Playlist[];
-  createPlaylist: (name: string) => void;
+  /** 新建歌单并返回新歌单 id（调用方要「新建后立即写入」时必须拿到 id） */
+  createPlaylist: (name: string) => string;
   deletePlaylist: (id: string) => void;
   addSong: (playlistId: string, song: Song) => void;
   /** 批量加入：一次 set = 一次持久化 + 一次渲染（导入长歌单用；逐首 addSong 是 O(N²)） */
   addSongs: (playlistId: string, songs: Song[]) => void;
   removeSong: (playlistId: string, songId: string) => void;
+  /**
+   * 批量移除：一次 set = 一次持久化 + 一次渲染（批量操作条用）。
+   * songIds 按集合语义处理（重复无副作用）；空数组不做无谓 set；
+   * 其余歌保持原有相对顺序。
+   */
+  removeSongs: (playlistId: string, songIds: string[]) => void;
   replaceSong: (playlistId: string, oldSongId: string, newSong: Song) => void;
   renamePlaylist: (id: string, name: string) => void;
 }
@@ -31,13 +38,16 @@ export const usePlaylistStore = create<PlaylistStore>()(
     (set) => ({
       playlists: [],
 
-      createPlaylist: (name) =>
+      createPlaylist: (name) => {
+        const id = generateId();
         set((state) => ({
           playlists: [
             ...state.playlists,
-            { id: generateId(), name, songs: [], createdAt: Date.now() },
+            { id, name, songs: [], createdAt: Date.now() },
           ],
-        })),
+        }));
+        return id;
+      },
 
       deletePlaylist: (id) =>
         set((state) => ({
@@ -76,6 +86,18 @@ export const usePlaylistStore = create<PlaylistStore>()(
               : p,
           ),
         })),
+
+      removeSongs: (playlistId, songIds) => {
+        if (songIds.length === 0) return;
+        const drop = new Set(songIds);
+        set((state) => ({
+          playlists: state.playlists.map((p) =>
+            p.id === playlistId
+              ? { ...p, songs: p.songs.filter((s) => !drop.has(s.id)) }
+              : p,
+          ),
+        }));
+      },
 
       // 歌单内替换一首（单曲换源持久化：原位换掉旧歌，保持顺序）
       replaceSong: (playlistId, oldSongId, newSong) =>
