@@ -6,6 +6,7 @@ import SongRow from '@/renderer/components/SongRow';
 import VirtualRow from '@/renderer/components/VirtualRow';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
+import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
 import { useVirtualRows, SONG_ROW_HEIGHT } from '@/renderer/hooks/useVirtualRows';
@@ -28,6 +29,8 @@ interface GroupedSongListProps {
   isPlaying?: boolean;
   favoriteIds?: string[];
   onPlay: (song: Song) => void;
+  /** 「下一首播放」（#491）：缺省直接用 playerStore.insertNext（与 SongList 同一缺省） */
+  onPlayNext?: (song: Song) => void;
   onToggleFavorite: (song: Song) => void;
   onDownload?: (song: Song) => void;
   selectedIds: string[];
@@ -51,6 +54,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   isPlaying = false,
   favoriteIds = [],
   onPlay,
+  onPlayNext,
   onToggleFavorite,
   onDownload,
   selectedIds,
@@ -60,6 +64,11 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   onLoadMore,
 }) => {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  /** 与 SongList 同一缺省：队列真相源在 playerStore，不要求每个页面各写一遍 */
+  const handlePlayNext = useMemo(
+    () => onPlayNext ?? ((target: Song) => { void usePlayerStore.getState().insertNext(target); }),
+    [onPlayNext],
+  );
   const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<Song | null>(null);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
 
@@ -184,6 +193,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
         onToggleFavorite={stableOnToggleFavorite}
         onDownload={stableOnDownload}
         onAddToPlaylist={handleAddToPlaylistClick}
+        onPlayNext={handlePlayNext}
         onToggleSelect={handleToggleSelect}
         onToggleDropdown={handleToggleDropdown}
         onCloseDropdown={handleCloseDropdown}

@@ -44,6 +44,11 @@ interface SongListProps {
   enableBatchDelete?: boolean;
   onBatchDelete?: (songs: Song[]) => void;
   onAddToPlaylist?: (song: Song) => void;
+  /**
+   * 「下一首播放」（#491）：缺省直接用 playerStore.insertNext（所有列表统一获得该动作）。
+   * 页面只有在需要自己的簿记时才传。
+   */
+  onPlayNext?: (song: Song) => void;
   enableBatchAddToPlaylist?: boolean;
   onBatchAddToPlaylist?: (songs: Song[]) => void;
   showRemoveFromPlaylist?: boolean;
@@ -81,6 +86,7 @@ const SongList: React.FC<SongListProps> = ({
   enableBatchDelete = false,
   onBatchDelete,
   onAddToPlaylist,
+  onPlayNext,
   enableBatchAddToPlaylist = false,
   onBatchAddToPlaylist,
   showRemoveFromPlaylist = false,
@@ -162,6 +168,16 @@ const SongList: React.FC<SongListProps> = ({
     const { selectedIds: current, onSelectionChange: change } = latest.current;
     change(current.includes(songId) ? current.filter(id => id !== songId) : [...current, songId]);
   }, [latest]);
+
+  /**
+   *「下一首播放」缺省实现：队列真相源在 playerStore，所有用 SongList 的页面共享同一动作，
+   * 不需要 8 个页面各写一遍（页面传了 onPlayNext 则以其为准）。
+   * 用 useMemo 固定身份：菜单项每次渲染新建数组，但处理器身份稳定，行 memo 不受影响。
+   */
+  const handlePlayNext = useMemo(
+    () => onPlayNext ?? ((target: Song) => { void usePlayerStore.getState().insertNext(target); }),
+    [onPlayNext],
+  );
 
   const handleAddToPlaylistSuccess = useCallback(() => {
     if (onAddToPlaylist && selectedSongForPlaylist) {
@@ -256,6 +272,7 @@ const SongList: React.FC<SongListProps> = ({
       onToggleFavorite={stableOnToggleFavorite}
       onDownload={stableOnDownload}
       onAddToPlaylist={handleAddToPlaylistClick}
+      onPlayNext={handlePlayNext}
       onRemoveFromPlaylist={stableOnRemoveFromPlaylist}
       onSwap={handleSwap}
       onCoverError={stableOnCoverError}
