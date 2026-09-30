@@ -1,5 +1,4 @@
 import { AppRegistry } from 'react-native';
-import { createShuffleState, stepShuffle } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import {
   NativePlayer,
@@ -443,42 +442,37 @@ export async function nativePlayNext(song: Song): Promise<NativePlayNextResult> 
 /**
  * 上一首（#519）：随机模式下沿**随机序**回退。
  *
- * 原生列表在随机模式下就是按序列喂出来的窗口（`feedWindow` 按序列 append），
- * 所以「原生列表的上一格 == 序列上一张」时直接交给原生（不打断当前播放、无重缓冲）；
- * 序列上一张不在原生列表里（会话开头 / 已被裁剪）→ 只能起播它：没有 prepend 原语，
+ * 游标推进只有一份实现（store 的 `stepShuffle(-1)`，#520 minor 2）：这里**只判断**
+ * 「序列上一张能不能交给原生」——原生列表在随机模式下就是按序列喂出来的窗口
+ * （`feedWindow` 按序列 append），所以「原生列表的上一格 == 序列上一张」时直接交给原生
+ * （不打断当前播放、无重缓冲）；否则（会话开头 / 已被裁剪）只能起播它：没有 prepend 原语，
  * 硬走原生 prev 会变成重播当前曲（用户观感就是「上一首没反应」）。
  */
 export function nativePrev(): void {
   const NP = NativePlayer;
   if (!NP) return;
-  const store = usePlayerStore.getState();
   const playMode = useSettingsStore.getState().playMode;
 
-  if (playMode === '随机播放' && store.queue.length > 0 && store.currentIndex >= 0) {
-    const base = store.shuffle ?? createShuffleState(store.queue, { currentIndex: store.currentIndex });
-    const step = stepShuffle(base, store.queue, -1);
-    const target = step.index >= 0 ? store.queue[step.index] : null;
-    if (target) {
-      const native = safeState();
-      const prevKey = native && native.index > 0 ? native.tracks?.[native.index - 1]?.key : null;
-      if (prevKey && prevKey === songKey(target)) {
-        usePlayerStore.setState({ shuffle: step.state });
-        NP.prev();
-        void feedWindow();
-        return;
+  if (playMode === '随机播放') {
+    const store = usePlayerStore.getState();
+    if (store.queue.length > 0 && store.currentIndex >= 0) {
+      const targetIndex = store.stepShuffle(-1);
+      if (targetIndex >= 0) {
+        const target = usePlayerStore.getState().queue[targetIndex];
+        const native = safeState();
+        const prevKey = native && native.index > 0 ? native.tracks?.[native.index - 1]?.key : null;
+        if (target && prevKey && prevKey === songKey(target)) {
+          // 原生列表的上一格就是序列上一张 → 交给原生（游标已由 stepShuffle 落好）
+          NP.prev();
+          void feedWindow();
+          return;
+        }
+        if (target) {
+          // 序列上一张不在原生手里 → 起播它（窗口随后按同一份序列补齐）
+          void nativePlaySong(target);
+          return;
+        }
       }
-      // 序列上一张不在原生手里 → 起播它（窗口随后按同一份序列补齐）
-      usePlayerStore.setState({
-        queue: store.queue,
-        currentSong: target,
-        currentIndex: step.index,
-        shuffle: step.state,
-        isPlaying: true,
-        currentTime: 0,
-        hasPlayed: true,
-      });
-      void nativePlaySong(target);
-      return;
     }
   }
 

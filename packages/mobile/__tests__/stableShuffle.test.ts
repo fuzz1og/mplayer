@@ -207,3 +207,94 @@ describe('#519 ④ 落盘 / 恢复 / 队列页', () => {
     expect(selectQueueSongs(queue, '随机播放', shuffle)).toEqual(applyShuffleOrder(queue, shuffle));
   });
 });
+
+/**
+ * #520 blocker 1（评审）：冷启/对账把 JS 队列换成原生快照（= 预取窗口）后，**不能**用全量
+ * normalize 对齐——窗口外的 id 会被丢掉，而且 store 订阅立刻落盘 ⇒ 随机序**永久截断**
+ * （评审实测 12 首 → 5 首；Android 上只要歌单 > 窗口就必现）。
+ *
+ * 作用域（Lead 二轮补充，避免把「截断 bug」换成「膨胀 bug」）：
+ * - **窗口态**（对账 / 冷启 hydrate / 逐曲游标同步）：**只补不丢**；
+ * - **权威态**（`setQueue` 拿到整张歌单）：裁剪幽灵 id + 补新成员；id 集合变化则整批重洗。
+ */
+describe('#520 blocker 1：窗口态只补不丢，权威态才裁剪', () => {
+  const FULL = Array.from({ length: 12 }, (_, i) => `s${i}`);
+  const WINDOW = ['s2', 's3', 's4', 's5', 's6'];
+
+  function windowState(): void {
+    const q = WINDOW.map(song);
+    usePlayerStore.setState({ queue: q, currentSong: q[1], currentIndex: 1, hasPlayed: true });
+  }
+
+  it('窗口态：冷启后 12 首序列仍是 12 首（不截断，落盘也是 12）', async () => {
+    vi.mocked(AsyncStorage.getItem).mockResolvedValueOnce(JSON.stringify({ order: FULL, cursor: 0 }));
+    windowState();
+    await usePlayerStore.getState().hydrateShuffle();
+
+    const st = usePlayerStore.getState().shuffle;
+    expect(st?.order).toHaveLength(12);
+    expect(st?.order).toEqual(FULL);
+    expect(st?.cursor).toBe(FULL.indexOf('s3'));
+    await Promise.resolve();
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(SHUFFLE_STORAGE_KEY, JSON.stringify(st));
+  });
+
+  it('窗口态：对账（syncShuffleCursorToCurrent）不裁剪序列', () => {
+    usePlayerStore.setState({ shuffle: { order: FULL, cursor: 0 } });
+    windowState();
+    usePlayerStore.getState().syncShuffleCursorToCurrent();
+    expect(usePlayerStore.getState().shuffle?.order).toEqual(FULL);
+  });
+
+  it('权威态：同一张歌单删掉一首后重新 setQueue → 裁剪幽灵 id', () => {
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: FULL, cursor: 0 } });
+    const members = FULL.filter((id) => id !== 's7').map(song);
+    usePlayerStore.getState().setQueue(members, 0);
+
+    const st = usePlayerStore.getState().shuffle;
+    expect(st?.order).not.toContain('s7');
+    expect(st?.order).toEqual(FULL.filter((id) => id !== 's7'));
+  });
+
+  it('权威态：换成另一张歌单 → 由新成员集重建（无幽灵、长度 = 新成员数）', () => {
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: FULL, cursor: 0 } });
+    usePlayerStore.getState().setQueue(['x0', 'x1', 'x2', 'x3'].map(song), 1);
+
+    const st = usePlayerStore.getState().shuffle;
+    expect(st?.order).toHaveLength(4);
+    expect(new Set(st?.order)).toEqual(new Set(['x0', 'x1', 'x2', 'x3']));
+    expect(st?.order.some((id) => id.startsWith('s'))).toBe(false);
+  });
+});
+
+/** #520 minors：③ 坏 cursor 不能让 `next()` 原地返回；④ 重复 id 的队列展示行数不减。 */
+describe('#520 minors', () => {
+  it('minor 3a：store 里 cursor=0.5（非整数）不能让 next 原地返回当前曲', () => {
+    setQueue(['A', 'B', 'C'], 0); // 当前 = A，且序列首也是 A：坏游标被当成 -1 时 next 会「原地返回」
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['A', 'C', 'B'], cursor: 0.5 } });
+
+    const next = usePlayerStore.getState().next();
+    expect(next).not.toBeNull();
+    expect(next?.id).not.toBe('A');
+    expect(usePlayerStore.getState().currentIndex).toBe(2); // 序列 A→C：下一首是 C
+  });
+
+  it('minor 3b：盘上的坏 cursor 在 load 处就夹取成 -1（脏值不进 store）', async () => {
+    vi.mocked(AsyncStorage.getItem).mockResolvedValueOnce(
+      JSON.stringify({ order: ['C', 'A', 'B'], cursor: 0.5 })
+    );
+    // 队列为空（冷启早期）→ hydrate 只能原样存盘上的值，但必须是已夹取过的
+    await usePlayerStore.getState().hydrateShuffle();
+    expect(usePlayerStore.getState().shuffle).toEqual({ order: ['C', 'A', 'B'], cursor: -1 });
+  });
+
+  it('minor 4：重复 id 的队列在随机模式展示行数不减（按成员下标映射，不去重）', () => {
+    const queue = ['A', 'B', 'A'].map(song);
+    const display = selectQueueSongs(queue, '随机播放', { order: ['A', 'B'], cursor: 0 });
+    expect(display).toHaveLength(3);
+    expect(ids(display)).toEqual(['A', 'B', 'A']);
+  });
+});

@@ -129,10 +129,19 @@ vi.mock('../services/notificationService', () => ({
   clearNotification: async () => {},
 }));
 vi.mock('../services/networkState', () => ({ isOffline: async () => false }));
+// 换源效果（songActionEffects）的模块级依赖：本文件只验「换源怎么落到随机序」，
+// 下载/路由/搜索都替身掉（否则 expo-file-system / expo-router 在 node 环境里拖不进来）。
+vi.mock('expo-router', () => ({ router: { push: vi.fn() } }));
+vi.mock('../services/downloadService', () => ({ downloadSong: vi.fn(async () => {}) }));
+vi.mock('../services/sourceSwap', () => ({
+  applySwap: vi.fn(async () => null),
+  searchSwapCandidates: vi.fn(async () => []),
+}));
 
 import { feedWindow, nativePlayNext, nativeStop } from '../services/nativePlayer';
 import { playNextInQueue } from '../services/audioPlayer';
 import { planPlayNext } from '../services/queueInsert';
+import { nativeSongActionEffects } from '../services/songActionEffects';
 import { prefetchKey, resetPrefetchState } from '../services/queuePrefetch';
 import { usePlayerStore } from '../stores/playerStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -571,5 +580,41 @@ describe('#519：随机模式的补窗按稳定随机序（不再自激重抽）
     await feedWindow(2);
     expect(lastAppendKeys()).toEqual([prefetchKey(song('D')), prefetchKey(song('F'))]);
     expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'C', 'E', 'B', 'D', 'F']);
+  });
+});
+
+/**
+ * #520 blocker 2（评审）：原位换源**必然换 id**，必须走 ADR 指定的 core
+ * `replaceShuffleSongId`（同格换 id、顺序不动），否则：
+ * - 换的是当前曲 → `setQueue` 后 `orderMatchesQueue` 为假 → **整条随机序重洗**；
+ * - 换的不是当前曲 → 旧 id 滞留在序列里 → 下次对齐时该曲被**挪到序列末尾**。
+ */
+describe('#520 blocker 2：原位换源就地换 id（不重洗、不留旧 id）', () => {
+  it('换当前曲：序列就地换 id，长度/位置/顺序都不变', async () => {
+    setQueue(['A', 'B', 'C'], 1);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['A', 'B', 'C'], cursor: 1 } });
+
+    nativeSongActionEffects.onApplied(song('B'), song('B2'), { exact: true } as never);
+    await flush();
+
+    const st = usePlayerStore.getState();
+    expect(st.queue.map((s) => s.id)).toEqual(['A', 'B2', 'C']);
+    expect(st.shuffle?.order).toEqual(['A', 'B2', 'C']);
+    expect(st.shuffle?.cursor).toBe(1);
+  });
+
+  it('换非当前曲：序列里就地换 id，旧 id 不滞留', () => {
+    setQueue(['A', 'B', 'C'], 0);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['C', 'B', 'A'], cursor: 2 } });
+
+    nativeSongActionEffects.onApplied(song('C'), song('C2'), { exact: false } as never);
+
+    const st = usePlayerStore.getState();
+    expect(st.queue.map((s) => s.id)).toEqual(['A', 'B', 'C2']);
+    expect(st.shuffle?.order).toEqual(['C2', 'B', 'A']);
+    expect(st.shuffle?.order).not.toContain('C');
+    expect(st.shuffle?.cursor).toBe(2);
   });
 });

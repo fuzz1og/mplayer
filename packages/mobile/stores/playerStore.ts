@@ -1,13 +1,20 @@
 import { create } from 'zustand'
 import type { ShuffleState, Song } from '@mplayer/core'
-import { createShuffleState, getNextSongIndex, stepShuffle, syncShuffleCursor } from '@mplayer/core'
+import {
+  createShuffleState,
+  getNextSongIndex,
+  replaceShuffleSongId as coreReplaceShuffleSongId,
+  stepShuffle,
+} from '@mplayer/core'
 import { useSettingsStore } from './settingsStore'
 import { prefetchKey } from '../services/queuePrefetch'
 import { planPlayNext, planPlayNextShuffle } from '../services/queueInsert'
 import {
+  alignShuffleForMembers,
+  alignShuffleForWindow,
   ensureShuffleFor,
   loadShuffleState,
-  orderMatchesQueue,
+  orderCoversQueue,
   sameOrder,
   saveShuffleState,
 } from '../services/shuffleMode'
@@ -52,10 +59,20 @@ interface PlayerState {
    */
   insertNext: (song: Song) => { started: boolean; moved: boolean; noop: boolean };
   /**
+   * 沿随机序**步进一格**并把结果写回 store（`1` 下一首 / `-1` 上一首）。返回目标成员下标，`-1` = 无目标。
+   *
+   * 唯一实现：`next`/`prev`/`nativePrev` 都调它（#520 minor 2——此前 store 与 nativePlayer
+   * 各复制了一份「步进游标 + 落 store」）。按 ADR 契约，步进前**先把游标对到当前曲**，
+   * 所以盘上/内存里的游标损坏或陈旧都不会让推进失效（#520 minor 3）。
+   */
+  stepShuffle: (direction: 1 | -1) => number;
+  /**
    * 确保有一份覆盖当前队列的随机序（进随机、换队列、喂窗口前调用）。
-   * 已有且仍是**这批歌**的排列 → 只把游标对到当前曲（不重洗，会话内顺序稳定）。
+   * 已有且仍是**这批歌**的排列 → 窗口态只补不丢地把游标对到当前曲（不重洗，会话内顺序稳定）。
    */
   ensureShuffle: () => void;
+  /** 原位换源（#520 blocker 2）：随机序里把 `fromId` **就地**换成 `toId`（同格换 id、顺序与游标不动）。 */
+  replaceShuffleSongId: (fromId: string, toId: string) => void;
   /** 把游标对到**当前曲**（原生推进 / 对账之后调用）；没有序列或没有当前曲时不动。 */
   syncShuffleCursorToCurrent: () => void;
   /** 冷启恢复：从 AsyncStorage 读回随机序（只补空，不覆盖内存里已有的）。 */
@@ -95,24 +112,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   resume: () => set({ isPlaying: true }),
 
   next: () => {
-    const { queue, currentIndex, shuffle } = get();
+    const { queue, currentIndex } = get();
     const playMode = useSettingsStore.getState().playMode;
 
     // 随机（#519）：消费**稳定序列**——游标前进一格（没有序列就按当前队列现洗一份）。
     // 旧实现走 core 的「每次现抽」：无记忆 → 补窗每轮换一批（#519 的自激循环）。
     if (playMode === '随机播放' && queue.length > 0 && currentIndex >= 0) {
-      const base = shuffle ?? createShuffleState(queue, { currentIndex });
-      const step = stepShuffle(base, queue, 1);
-      if (step.index < 0) return null;
-      set({
-        currentSong: queue[step.index],
-        currentIndex: step.index,
-        shuffle: step.state,
-        isPlaying: true,
-        currentTime: 0,
-        hasPlayed: true,
-      });
-      return get().currentSong;
+      return get().stepShuffle(1) >= 0 ? get().currentSong : null;
     }
 
     const nextIndex = getNextSongIndex(queue, currentIndex, playMode);
@@ -122,7 +128,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   prev: () => {
-    const { queue, currentIndex, shuffle } = get();
+    const { queue, currentIndex } = get();
     if (queue.length === 0 || currentIndex < 0) return;
     const playMode = useSettingsStore.getState().playMode;
 
@@ -134,16 +140,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // 随机（#519 = #511 的行为变更）：游标**后退一格**——回到序列里的上一张。
     // 旧实现与 next 共用同一「现抽」→ 回的是一张新随机曲，从不回上一张。
     if (playMode === '随机播放') {
-      const base = shuffle ?? createShuffleState(queue, { currentIndex });
-      const step = stepShuffle(base, queue, -1);
-      if (step.index < 0) return;
-      set({
-        currentSong: queue[step.index],
-        currentIndex: step.index,
-        shuffle: step.state,
-        isPlaying: true,
-        currentTime: 0,
-      });
+      get().stepShuffle(-1);
       return;
     }
 
@@ -201,13 +198,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const idx = Math.max(0, Math.min(startIndex, songs.length - 1));
     const playMode = useSettingsStore.getState().playMode;
     const { shuffle } = get();
-    // #519：同一批歌（封面回填 / 同列表再点播）→ 沿用既有序列，只对游标（不重洗）；
-    // 换了歌单 → 随机模式下按新队列重洗一份，否则清掉（下次进随机再洗）。
-    const nextShuffle = shuffle && orderMatchesQueue(shuffle.order, songs)
-      ? syncShuffleCursor(shuffle, songs, idx)
-      : playMode === '随机播放'
-        ? ensureShuffleFor(songs, idx, null)
-        : null;
+    // #519 / #520 blocker 1：`setQueue` 是**权威态**（入参是整张歌单，不是原生窗口），
+    // 所以只有这里允许裁剪幽灵 id（已从歌单移除的歌）——否则「只补不丢」会让序列无限膨胀。
+    let nextShuffle: ShuffleState | null = null;
+    if (shuffle && orderCoversQueue(shuffle.order, songs)) {
+      nextShuffle = alignShuffleForMembers(shuffle, songs, idx);
+    } else if (playMode === '随机播放') {
+      // 队列里出现了序列没有的歌 = 整批换歌单 → 按 ADR 重洗一份（此时旧序列整体作废）
+      nextShuffle = ensureShuffleFor(songs, idx, null);
+    }
     set({
       queue: songs,
       currentSong: songs[idx],
@@ -261,7 +260,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const byKey = queue.findIndex((s) => prefetchKey(s) === prefetchKey(currentSong));
     const index = byKey >= 0 ? byKey : currentIndex;
     if (index < 0 || index >= queue.length) return;
-    const next = syncShuffleCursor(shuffle, queue, index);
+    // **窗口态**：对账/逐曲同步拿到的队列可能只是原生预取窗口 → 只补不丢（#520 blocker 1）
+    const next = alignShuffleForWindow(shuffle, queue, index);
     if (sameOrder(shuffle.order, next.order) && shuffle.cursor === next.cursor) return;
     set({ shuffle: next });
   },
@@ -271,10 +271,41 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const restored = await loadShuffleState();
     if (!restored || get().shuffle) return;
     const { queue, currentIndex } = get();
-    // 盘上的序列可能属于更大的歌单（冷启后 JS 队列 = 原生窗口）→ 对齐到当前队列与当前曲
-    const aligned = queue.length > 0 ? syncShuffleCursor(restored, queue, currentIndex) : restored;
+    // **窗口态**：冷启时 JS 队列 = 原生快照（预取窗口，可能是整张歌单的子集）
+    // → 只补不丢，绝不 normalize（否则窗口外的 id 被删掉并立刻落盘 = 序列永久截断）
+    const aligned = queue.length > 0 ? alignShuffleForWindow(restored, queue, currentIndex) : restored;
     set({ shuffle: aligned });
     console.log(`[player] 随机序已从盘上恢复：${aligned.order.length} 首（游标 ${aligned.cursor}）`);
+  },
+
+  stepShuffle: (direction) => {
+    const { queue, currentIndex, currentSong, shuffle } = get();
+    if (!currentSong || queue.length === 0 || currentIndex < 0) return -1;
+    // 当前曲的成员下标：优先按 key 反查（`play()` 只写 currentSong、不写 currentIndex）
+    const byKey = queue.findIndex((s) => prefetchKey(s) === prefetchKey(currentSong));
+    const at = byKey >= 0 ? byKey : Math.min(Math.max(currentIndex, 0), queue.length - 1);
+    const base = shuffle ?? createShuffleState(queue, { currentIndex: at });
+    // ADR 契约：先把游标对到「当前在哪」，再前进/后退一格（损坏/陈旧游标因此不会让推进失效）
+    const anchored = alignShuffleForWindow(base, queue, at);
+    const step = stepShuffle(anchored, queue, direction);
+    if (step.index < 0 || !queue[step.index]) return -1;
+    set({
+      currentSong: queue[step.index],
+      currentIndex: step.index,
+      shuffle: step.state,
+      isPlaying: true,
+      currentTime: 0,
+      hasPlayed: true,
+    });
+    return step.index;
+  },
+
+  replaceShuffleSongId: (fromId, toId) => {
+    const { shuffle } = get();
+    if (!shuffle) return;
+    const next = coreReplaceShuffleSongId(shuffle, fromId, toId);
+    if (next === shuffle) return;
+    set({ shuffle: next });
   },
 }));
 

@@ -10,9 +10,14 @@ import type { ShuffleState, Song } from '@mplayer/core';
  *    - 成功窗口 `PREFETCH_SKIP_FRESH_MS`：5min 内已成功的 key 不重复解析
  *      （与既有的 12h 资源缓存叠加，避免重复烧整条 tier3 链）；
  *    - 失败冷却 `PREFETCH_FAIL_COOLDOWN_MS`：失败后 30s 内不再重烧整条解析链。
- * 2. **窗口定序**：顺序模式取 index+1、+2…；随机模式由 JS 按 core 规则定序
- *    （`getNextSongIndex`，每次随机且 ≠ 当前），原生只顺序推进
- *    —— 这样预取窗口天然知道下一首是谁，锁屏 next 与 UI next 语义一致。
+ * 2. **窗口定序**：顺序模式取 index+1、+2…；随机模式按 core 的**稳定随机序列**
+ *    （#511 方案 A / #519 接线：`applyShuffleOrder` 的顺序，游标由 playerStore 持有）
+ *    取「当前曲之后的 N 首」——同一稳态下计划**收敛为同一批**，原生只顺序推进。
+ *    这样预取窗口天然知道下一首是谁，锁屏 next 与 UI next 语义一致。
+ *
+ * ⚠️ 下面的**无序列兜底**分支（`playMode === '随机播放' && !shuffle`）保留的是 #511 之前的
+ * 「防重复现抽」行为，只为兼容「序列还没建立」的调用方；它是每轮重抽的，不要在正常路径上走到
+ * （#519 的自激循环就出在这里的旧行为上）。
  */
 
 export const PREFETCH_SKIP_FRESH_MS = 5 * 60 * 1000;
@@ -122,6 +127,7 @@ export function planNextIndexes(
     guard += 1;
     let next: number;
 
+    // 无序列兜底（兼容路径，见文件头 ⚠️）：随机模式还没建立稳定序列时退回「防重复现抽」
     if (playMode === '随机播放' && queue.length > 1) {
       next = getNextSongIndex(queue, cursor, '随机播放');
       let inner = 0;
