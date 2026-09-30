@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Headphones, Trash2, ListMusic, GripVertical } from 'lucide-react';
 import { Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -8,7 +8,7 @@ import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
 import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
-import type { Song } from '@mplayer/core';
+import { applyShuffleOrder, type Song } from '@mplayer/core';
 
 /** 队列行的行尾操作：加入歌单 + 从队列移除（沿用队列页原有的常驻图标按钮） */
 const QueueRowActions: React.FC<{
@@ -43,14 +43,50 @@ const QueuePage: React.FC = () => {
   const currentPlaylist = usePlayerStore((s) => s.currentPlaylist);
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const playMode = usePlayerStore((s) => s.playMode);
+  const shuffle = usePlayerStore((s) => s.shuffle);
   const play = usePlayerStore((s) => s.play);
   const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
   const reorderQueue = usePlayerStore((s) => s.reorderQueue);
+  const reorderShuffle = usePlayerStore((s) => s.reorderShuffle);
   const clearQueue = usePlayerStore((s) => s.clearQueue);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const [showBatchModal, setShowBatchModal] = useState(false);
   // 行内「加入歌单」单曲弹窗
   const [addToPlaylistSong, setAddToPlaylistSong] = useState<Song | null>(null);
+
+  /**
+   * 随机模式（#511）下显示的是**随机序**——用户因此「看得到随机」，且显示顺序与实际推进顺序一致。
+   * 非随机模式仍是 currentPlaylist 原顺序。两者等长、同一批歌曲对象。
+   */
+  const displayPlaylist = useMemo(
+    () => (playMode === '随机播放' ? applyShuffleOrder(currentPlaylist, shuffle) : currentPlaylist),
+    [playMode, currentPlaylist, shuffle],
+  );
+
+  /**
+   * 行尾「移除」拿到的下标属于**显示序**（随机模式下 ≠ currentPlaylist 下标），
+   * 按 id 映射回成员下标再删，否则删错歌。
+   */
+  const handleRemoveByDisplayIndex = useCallback(
+    (displayIndex: number) => {
+      const target = displayPlaylist[displayIndex];
+      if (!target) return;
+      const playlistIndex = currentPlaylist.findIndex((s) => s.id === target.id);
+      if (playlistIndex === -1) return;
+      removeFromQueue(playlistIndex);
+    },
+    [displayPlaylist, currentPlaylist, removeFromQueue],
+  );
+
+  /** 拖拽松手：随机模式改的是随机序本身，其余模式改成员顺序 */
+  const handleReorder = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (playMode === '随机播放') reorderShuffle(fromIndex, toIndex);
+      else reorderQueue(fromIndex, toIndex);
+    },
+    [playMode, reorderShuffle, reorderQueue],
+  );
 
   /**
    * 行尾操作用**渲染函数**（#412）：此前 `actions={<QueueRowActions .../>}` 每帧新建元素，
@@ -62,10 +98,10 @@ const QueuePage: React.FC = () => {
         song={song}
         index={index}
         onAddToPlaylist={setAddToPlaylistSong}
-        onRemove={removeFromQueue}
+        onRemove={handleRemoveByDisplayIndex}
       />
     ),
-    [removeFromQueue],
+    [handleRemoveByDisplayIndex],
   );
 
   // 封面加载失败 → 按 ID 重识别换新封面并更新队列/当前歌曲（旧签名封面永远失败）
@@ -134,7 +170,8 @@ const QueuePage: React.FC = () => {
   };
 
   const handleSaveToPlaylist = () => {
-    if (currentPlaylist.length === 0) return;
+    if (displayPlaylist.length === 0) return;
+    // 保存的是用户**看到的顺序**（随机模式下即随机序）
     setShowBatchModal(true);
   };
 
@@ -145,7 +182,7 @@ const QueuePage: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Headphones size={24} color="var(--text-secondary)" />
             <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>播放队列</h1>
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>· {currentPlaylist.length} 首歌曲</span>
+            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>· {displayPlaylist.length} 首歌曲</span>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={handleClearQueue} disabled={currentPlaylist.length === 0}
@@ -161,7 +198,7 @@ const QueuePage: React.FC = () => {
       </div>
 
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {currentPlaylist.length === 0 ? (
+        {displayPlaylist.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', color: 'var(--text-tertiary)' }}>
             <Headphones size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
             <div style={{ fontSize: 'var(--text-base)' }}>暂无歌曲，去发现音乐吧</div>
@@ -176,10 +213,10 @@ const QueuePage: React.FC = () => {
             </div>
             {/* 窗口化 + 可排序：挂载行数与视口成正比（#428 / ADR 2026-09-29-queue-virtualized-sortable-list） */}
             <VirtualSortableList
-              items={currentPlaylist}
+              items={displayPlaylist}
               renderRow={renderQueueRow}
               renderDragPreview={renderQueueDragPreview}
-              onReorder={reorderQueue}
+              onReorder={handleReorder}
             />
           </>
         )}
@@ -195,7 +232,7 @@ const QueuePage: React.FC = () => {
 
       <BatchAddToPlaylistModal
         isVisible={showBatchModal}
-        songs={currentPlaylist}
+        songs={displayPlaylist}
         onClose={() => setShowBatchModal(false)}
       />
     </div>

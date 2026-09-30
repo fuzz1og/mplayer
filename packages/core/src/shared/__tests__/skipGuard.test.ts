@@ -141,6 +141,17 @@ describe('pickNextSongAfterFailure（跳歌候选选曲，跳过坏歌）', () =
   it('空队列 → null', () => {
     expect(pickNextSongAfterFailure([], -1, '列表循环', 'a')).toBeNull();
   });
+
+  it('#511：随机模式传入稳定序列 → 沿序列找候选（不再现抽），坏歌仍被跳过', () => {
+    // 序列 d → a → c → b；当前 a（list 下标 0）→ 随机序下一格是 c
+    expect(pickNextSongAfterFailure(list, 0, '随机播放', 'a', { order: ['d', 'a', 'c', 'b'], cursor: 1 }))
+      .toMatchObject({ index: 2, song: { id: 'c' } });
+
+    // c 记坏后沿同一序列继续跳过它 → b（list 下标 1）
+    registerTerminalFailure(list[2]);
+    expect(pickNextSongAfterFailure(list, 0, '随机播放', 'a', { order: ['d', 'a', 'c', 'b'], cursor: 1 }))
+      .toMatchObject({ index: 1, song: { id: 'b' } });
+  });
 });
 
 describe('最坏无声窗口（#424：护栏能吃解析链总预算）', () => {
