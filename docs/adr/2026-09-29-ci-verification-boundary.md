@@ -86,3 +86,17 @@
 - **真机部分仍需复跑一次**：`mobile-e2e.mjs` / `mobile-debug.mjs` 的设备路径（adb + uiautomator + logcat）
   在无设备环境里不可验证，按仓库约定属人工环节。
 
+## 更新（2026-10-01，#523）：static 增加文档门禁
+
+决策 1（验证只有一个入口）不变，`static` 的步骤序列多了一步，排在最前：`docs-gate.mjs`（秒级、不依赖安装）。
+**没有加 CI job**：`check` job 跑的就是 `verify.sh static`，顺带覆盖。
+
+它把两条「人肉核对」变成机械门禁：活文档里把 `scripts/*.sh`（现全为两行 shim）当命令推荐；
+`docs/agents/architecture.md` 的文件表漏记实现文件（1.8.5 复盘一次就漏了 10 处）。边界：只扫活文档的 Markdown
+（历史存档 `docs/{adr,research,specs,wayfinder}` 不回改；`.github/workflows/**` 有意走 shim，要验证 shim 本身），
+允许清单在脚本里。
+
+同批还加了两条同族的前置拦截：`verify.mjs` 自检**依赖树与 `package-lock.json` 一致**（依赖提交合并后
+`node_modules` 落后时，症状原本落在 `lint` 的 `Cannot find module` 与 `core:build` 的 `pako` TS7016 上）；
+`.githooks/pre-commit` 在 mobile typecheck 前保证 `packages/core/dist` 新鲜（dist 落后会报假 `TS2305`）。
+

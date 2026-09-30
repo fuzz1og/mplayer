@@ -39,7 +39,7 @@ cd .claude/worktrees/<slug>
 ```bash
 npm run verify        # 全量（Windows / PowerShell / cmd / Git Bash 通用；实现在 scripts/verify.mjs）
 ./scripts/verify.sh   # 等价写法（两行 shim，转调 scripts/verify.mjs）
-                      # 全量：static（core:build → lint → design-lint → 双端 typecheck → build）
+                      # 全量：static（docs 门禁 → core:build → lint → design-lint → 双端 typecheck → build）
                       #      + renderer / main / core / mobile 四套测试 + expo（SDK 依赖一致性）
                       #      也可只跑某个 scope：npm run verify -- static
 ```

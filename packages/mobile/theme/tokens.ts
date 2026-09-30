@@ -373,7 +373,7 @@ export interface ThemeColors {
 
 /**
  * 不透明度语义值（#318 审计）：组件里不再写裸 `0.x`，与主题无关，双端共用。
- * 门禁由 scripts/design-lint.sh 守着（components/app 内出现 `opacity: 0.x` 即 fail）。
+ * 门禁由 scripts/design-lint.mjs 守着（components/app 内出现 `opacity: 0.x` 即 fail）。
  */
 export const opacity = {
   /** 禁用/不可操作内容（歌单重命名按钮等） */

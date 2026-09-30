@@ -13,7 +13,7 @@
  *
  * 用法:
  *   npm run verify                     # all：static + renderer + main + core + mobile + expo
- *   npm run verify -- static           # core:build + lint + design-lint + 双端 typecheck + build
+ *   npm run verify -- static           # docs 门禁 + core:build + lint + design-lint + 双端 typecheck + build
  *   npm run verify -- renderer         # 根 vitest（renderer + src/__tests__ 顶层）
  *   npm run verify -- main             # 主进程 vitest（node env，独立 config）
  *   npm run verify -- core             # @mplayer/core vitest
@@ -23,7 +23,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -93,6 +93,7 @@ function assertNodeModulesMatchPlatform() {
  *  Metro 与测试吃 dist 产物，不重建等于白改。 */
 const SHARDS = {
   static: [
+    ['docs 门禁', 'node scripts/docs-gate.mjs'],
     ['core:build', 'npm run core:build'],
     ['lint', 'npm run lint'],
     ['design-lint', 'node scripts/design-lint.mjs'],
@@ -186,6 +187,50 @@ function newestMtime(dir) {
   return newest;
 }
 
+/**
+ * 运行前自检：node_modules 的版本必须与 package-lock.json 一致（#523）。
+ *
+ * 依赖 PR 合并后本机 node_modules 必然落后，症状却落在别处：lint 报
+ * Cannot find module 'eslint-plugin-react-hooks'、core:build 报 pako 的 TS7016 ——
+ * 两条都不指向「该 npm ci 了」。这里拿 npm 自己写的 node_modules/.package-lock.json
+ * 对账（它就是「实际装了什么」的账本），非可选依赖缺失或版本不同即拦下。
+ *
+ * 跳过 link（workspace 链接）、optional（按平台装的），以及**workspace 清单条目**（packages/* 只有 name/version，
+ * 没有 resolved/integrity —— 那是 manifest 的镜像，不是「装出来的包」；它的版本漂移是 version-bump 的事，见 #524）。
+ */
+function assertNodeModulesMatchLockfile() {
+  const readJson = (p) => {
+    try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; }
+  };
+  const want = readJson(path.join(ROOT, 'package-lock.json'));
+  const have = readJson(path.join(ROOT, 'node_modules', '.package-lock.json'));
+  if (!want || !have) return; // 没装依赖是另一回事，让 npm 自己报
+  const wantPkgs = want.packages ?? {};
+  const havePkgs = have.packages ?? {};
+  const drift = [];
+  for (const [key, entry] of Object.entries(wantPkgs)) {
+    if (!key || entry.link || entry.optional) continue;
+    if (!entry.resolved && !entry.integrity) continue; // workspace 清单条目（见上）
+    const installed = havePkgs[key];
+    if (!installed) drift.push(key + '（未安装）');
+    else if (installed.version !== entry.version) drift.push(key + '（lock ' + entry.version + ' ≠ 装的 ' + installed.version + '）');
+  }
+  if (drift.length === 0) {
+    console.log('✓ 依赖自检：node_modules 与 package-lock.json 一致');
+    return;
+  }
+  console.error([
+    '✗ node_modules 与 package-lock.json 不一致（' + drift.length + ' 处，前 5 条）：',
+    ...drift.slice(0, 5).map((d) => '    ' + d),
+    '',
+    '  最常见的成因：依赖相关的提交合并进来之后没重装。',
+    '',
+    '  处置：npm ci --ignore-scripts（与 CI 同款）；若要跑 electron:dev / electron:build，',
+    '  再补 npm rebuild electron（--ignore-scripts 会跳过它的 postinstall，见 docs/agents/testing.md）。',
+  ].join('\n'));
+  process.exit(1);
+}
+
 const SCOPES = {
   all: ['static', 'renderer', 'main', 'core', 'mobile', 'expo'],
   static: ['static'],
@@ -204,6 +249,7 @@ if (!Object.hasOwn(SCOPES, SCOPE)) {
 }
 
 assertNodeModulesMatchPlatform();
+assertNodeModulesMatchLockfile();
 assertCoreIsFromThisCheckout({ requireDist: false });
 
 for (const shard of SCOPES[SCOPE]) {

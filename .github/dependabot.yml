@@ -55,7 +55,7 @@ updates:
       #   react-native 0.86.2 → 0.87.1 被当成 minor 混进 19 条的批次；
       # - Expo 官方要求 "Upgrade all dependencies to match the installed SDK version"，
       #   即期望版本由 SDK 决定，而不是「semver 允许的最新」。升级动作走 expo install --fix，
-      #   一致性由 CI 的 expo-check job（scripts/verify.sh expo）兜住。
+      #   一致性由 CI 的 expo-check job（npm run verify -- expo）兜住。
       # 事故的完整因果链（吸收 #481 的注释）：#466 把 react-native 抬到 0.87.1 → RN 0.87 的
       # gradle 插件把 AGP 提到 9.2.1 → AGP 9.2.1 要求 Gradle ≥9.4.1（仓库 wrapper 钉 9.3.1）
       # → 升到 9.4.1 后其内嵌 Kotlin 2.3.0 与 Expo 57 的 Kotlin 2.1.20 插件编译器冲突（#478）。
