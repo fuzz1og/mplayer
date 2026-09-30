@@ -7,16 +7,31 @@ import {
   Alert,
   Modal,
   TextInput,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ScalePress from '../../components/ScalePress';
 import { CircleAlert, MoreVertical, Music2, Pencil, Trash2, Upload } from 'lucide-react-native';
-import { useLocalSearchParams, Stack, router } from 'expo-router';
+import { useLocalSearchParams, Stack, router, useFocusEffect } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
+import { useFavoriteStore } from '../../stores/favoriteStore';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import PlaylistHero from '../../components/PlaylistHero';
+import PlaylistBatchBar from '../../components/PlaylistBatchBar';
+import AddToPlaylistModal from '../../components/AddToPlaylistModal';
 import BottomSheet from '../../components/BottomSheet';
 import PlaylistImportSheet from '../../components/PlaylistImportSheet';
+import {
+  NO_SELECTION,
+  areAllSelected,
+  deselectAll,
+  enterSelection,
+  pickSelected,
+  selectAll,
+  toggleSelection,
+  type PlaylistSelection,
+} from '../../components/playlistSelection';
+import { downloadSong } from '../../services/downloadService';
 import type { Song } from '@mplayer/core';
 import {opacity, radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
@@ -28,6 +43,8 @@ export default function PlaylistDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlists = usePlaylistStore((s) => s.playlists);
   const removeSong = usePlaylistStore((s) => s.removeSong);
+  const removeSongs = usePlaylistStore((s) => s.removeSongs);
+  const addFavorites = useFavoriteStore((s) => s.addFavorites);
   const renamePlaylist = usePlaylistStore((s) => s.renamePlaylist);
   const replaceSong = usePlaylistStore((s) => s.replaceSong);
   const deletePlaylist = usePlaylistStore((s) => s.deletePlaylist);
@@ -100,6 +117,98 @@ export default function PlaylistDetailPage() {
     setImportVisible(true);
   }, []);
 
+  // ── 选择模式（#490）────────────────────────────────────────────────────────
+  // 状态收在一个对象里：模式与已选集合必须同时变化（见 components/playlistSelection.ts）。
+  const [selection, setSelection] = useState<PlaylistSelection>(NO_SELECTION);
+  // 已选曲目取**当前完整列表**的交集（按列表顺序），批量写入的顺序因此可预期
+  const selectedSongs = useMemo(
+    () => (playlist ? pickSelected(playlist.songs, selection) : []),
+    [playlist, selection],
+  );
+  /** 批量「加入歌单」的目标：非 null 时打开现成选择器的 songs 形态（不另做第二个选择器） */
+  const [addTargets, setAddTargets] = useState<Song[] | null>(null);
+
+  const handleLongPressSong = useCallback((song: Song) => {
+    setSelection((cur) => enterSelection(cur, song.id));
+  }, []);
+
+  const handleToggleSong = useCallback((song: Song) => {
+    setSelection((cur) => toggleSelection(cur, song.id));
+  }, []);
+
+  const handleExitSelection = useCallback(() => setSelection(NO_SELECTION), []);
+
+  // 全选 / 取消全选作用于 playlist.songs（完整列表），与 FlatList 的可见窗口无关
+  const handleToggleSelectAll = useCallback(() => {
+    setSelection((cur) => {
+      const songs = playlist?.songs ?? [];
+      return areAllSelected(cur, songs) ? deselectAll() : selectAll(songs.map((s) => s.id));
+    });
+  }, [playlist]);
+
+  // 返回键先退出选择模式（Android 硬件返回），再轮到页面返回
+  useFocusEffect(
+    useCallback(() => {
+      if (!selection.mode) return undefined;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        setSelection(NO_SELECTION);
+        return true;
+      });
+      return () => sub.remove();
+    }, [selection.mode]),
+  );
+
+  const handleBatchRemove = useCallback(() => {
+    if (!playlist || selectedSongs.length === 0) return;
+    const ids = selectedSongs.map((s) => s.id);
+    Alert.alert('移除歌曲', `确定从歌单移除选中的 ${ids.length} 首歌曲吗？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '移除',
+        style: 'destructive',
+        onPress: () => {
+          // 一次 removeSongs = 一次 set（一次持久化 + 一次渲染），绝不逐首 removeSong
+          removeSongs(playlist.id, ids);
+          setSelection(NO_SELECTION);
+        },
+      },
+    ]);
+  }, [playlist, removeSongs, selectedSongs]);
+
+  const handleBatchFavorite = useCallback(() => {
+    if (selectedSongs.length === 0) return;
+    addFavorites(selectedSongs);
+    setSelection(NO_SELECTION);
+    Alert.alert('提示', `已收藏 ${selectedSongs.length} 首`);
+  }, [addFavorites, selectedSongs]);
+
+  const handleBatchDownload = useCallback(() => {
+    const songs = selectedSongs;
+    if (songs.length === 0) return;
+    setSelection(NO_SELECTION);
+    // 逐首下载是下载服务的既有粒度（并发由 downloadService 的槽位门控），
+    // 这里只做一次汇总提示，不逐首弹窗
+    void Promise.allSettled(songs.map((s) => downloadSong(s))).then((results) => {
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      Alert.alert(
+        '批量下载',
+        failed === 0
+          ? `已完成 ${songs.length} 首下载`
+          : `完成 ${songs.length - failed} 首，失败 ${failed} 首`,
+      );
+    });
+  }, [selectedSongs]);
+
+  const handleBatchAddToPlaylist = useCallback(() => {
+    if (selectedSongs.length === 0) return;
+    setAddTargets(selectedSongs);
+  }, [selectedSongs]);
+
+  const handleCloseAddToPlaylist = useCallback(() => {
+    setAddTargets(null);
+    setSelection(NO_SELECTION);
+  }, []);
+
   if (deleting) {
     return <View style={styles.container} />;
   }
@@ -170,6 +279,11 @@ export default function PlaylistDetailPage() {
             onRemoveSong={handleRemoveSong}
             onSwap={handleSwap}
             navRight={moreButton}
+            selection={selection}
+            onExitSelection={handleExitSelection}
+            onLongPressSong={handleLongPressSong}
+            onToggleSong={handleToggleSong}
+            onToggleAll={handleToggleSelectAll}
           />
         )}
 
@@ -258,7 +372,25 @@ export default function PlaylistDetailPage() {
           existingSongs={playlist.songs}
           onClose={() => setImportVisible(false)}
         />
+
+        {/* 批量加入歌单：复用行内「更多 → 加入歌单」的同一个选择器（songs 形态，一次 addSongs），
+            不另做第二个弹层（#489 已给它补了就地新建歌单入口） */}
+        <AddToPlaylistModal
+          visible={addTargets !== null}
+          songs={addTargets ?? undefined}
+          onClose={handleCloseAddToPlaylist}
+        />
       </SafeAreaView>
+      {/* 底部操作条：紧贴放在播放栏之前 → 两者上下相接、不重叠，安全区仍归播放栏 */}
+      {selection.mode ? (
+        <PlaylistBatchBar
+          count={selectedSongs.length}
+          onAddToPlaylist={handleBatchAddToPlaylist}
+          onDownload={handleBatchDownload}
+          onRemove={handleBatchRemove}
+          onFavorite={handleBatchFavorite}
+        />
+      ) : null}
       <BottomSafePlayerBar />
     </View>
   );
