@@ -22,6 +22,8 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
    - B：插线 → `adb devices` 出现机型序列号（`unauthorized` 见陷阱）。
    - C：`usb-attach.mjs`（每次重新插拔都要重跑）→ `mobile-debug.mjs` 一条龙：重置 adb → 双 transport 检查 → `adb reverse` → 起/复用 Metro（日志 `packages/mobile/.expo/dev/logs/start.log`）→ 冷启 → 挂 logcat。`--no-cold-start` 不杀 App，`-c` 清 Metro 缓存。
 2. **起 Metro 并接上**（A/B 手工）：**在 worktree 内**跑 `npx expo start` → `adb reverse tcp:8081 tcp:8081` → 冷启。
+   - **一条会话只起一个 Metro、端口固定**（记进会话便签）。实测踩过：一轮会话起了 8 次（8090→8097），每次 `--clear` 重建 40–60s，白等十几分钟。`--clear` 只在怀疑 transform 缓存时用；**重启 Metro 后必须重新 `adb reverse`**。
+   - **后台 dev server 会被系统静默回收**（日志无报错、退出码 1，实测两次）。遇到「App 突然连不上」先查 dev server 任务/日志，别先怀疑 App。
    - 模拟器里只能用 `127.0.0.1`，`localhost` 拉不到 bundle。
    - **首次冷构建** bundle 约 12MB，Expo Go 会先报 `Failed to download remote update`：先在设备内 `adb shell curl` 预热 manifest 与其中的 `launchAsset.url`，再开 App 即正常。
 3. **冷启 + 看日志**：`adb shell am force-stop host.exp.exponent` → `adb shell am start -a android.intent.action.VIEW -d "exp://127.0.0.1:8081"` → `adb logcat -v time ReactNativeJS:V ExpoModulesCore:V ActivityTaskManager:I *:S`。`ReactNativeJS` 是 App 自己的日志（`[player]` / `[search]` / `[tier3]` 前缀）。
@@ -33,7 +35,7 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
 验收结论要可复核：**每个验收项配一条能看的证据**，没有就写「未做 + 原因」，别写「已附截图」而没附。
 
 1. **先证明跑的是你的代码**：从 logcat `Running "main"` 里取 `launchAsset.url`，追加 `&lazy=false` 后 curl，`grep` 你新加的标识串；manifest 的 `projectRoot` 要是你的 worktree。跑错源码时后面的结论全部作废。
-2. **截图**：`adb exec-out screencap -p > <用例>.png`（pwsh 7 / bash 字节安全；Windows PowerShell 5.1 会改编码，改用 `adb shell screencap -p /sdcard/x.png` + `adb pull`）。存仓库外（`%TEMP%\mplayer-acceptance\`），文件名用 `<PR 号>-<序号>-<用例>.png`，别用 `s1.png`；同类用例要固化就跑 `npm run mobile:e2e`（截图落 `e2e/artifacts/`，已 gitignore）。
+2. **截图**：**先裁感兴趣区域再读**（全屏 PNG 1.5–2.6MB，连读十几张代价很高）；能用埋点日志判读就别截图——例：`[cover] 加载失败 0`、`[perf]` 窗口 warn 比一张截图更省也更硬。`adb exec-out screencap -p > <用例>.png`（pwsh 7 / bash 字节安全；Windows PowerShell 5.1 会改编码，改用 `adb shell screencap -p /sdcard/x.png` + `adb pull`）。存仓库外（`%TEMP%\mplayer-acceptance\`），文件名用 `<PR 号>-<序号>-<用例>.png`，别用 `s1.png`；同类用例要固化就跑 `npm run mobile:e2e`（截图落 `e2e/artifacts/`，已 gitignore）。
 3. **交互坐标按当前设备取**：先 `adb shell wm size`，坐标就是截图里的物理像素。**点不动时先怀疑"点偏了"，不要先怀疑"输入被拦"**——PKB110 / ColorOS 16 实测 `adb shell input tap` 是生效的（点启动器图标能打开对应 App）。`input -d 0 tap X Y` 只在 display id 不为 0 时才有意义（`adb shell dumpsys display | grep -m1 mDisplayId`；本机 id=0，两种写法等效）。快速滑动用连打 `input swipe`；`onEndReached` 那类要滚动的验收，`input keyevent 20`（DPAD_DOWN）连打更稳（触摸滑动的落点/惯性更难控）。tab 栏在屏幕底部（OnePlus 上 y≈2602–2648，2680 已落进系统手势区）。
    - **别用错误判据**：`input tap` 点状态栏**不会**拉下通知栏（ColorOS 上本就不拉），拿它当"输入被拦"的证据会误判整轮验收（实测踩过）。判别输入是否生效，用**点启动器图标看前台 Activity**（`dumpsys activity activities | grep -m1 topResumedActivity`）这种有唯一答案的目标。
 4. **量化证据要配「真的动了」**：`[perf]` warn 只在**连续 2 个 2s 窗口 < 30fps** 时上报（`packages/mobile/services/perfMonitor.ts`，后台暂停窗口不报）。所以「零 warn」单独不成立——必须同时给出「列表滚到第 N 名 / 打开了哪个页面」。

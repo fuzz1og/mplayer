@@ -23,7 +23,8 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -120,6 +121,71 @@ const SHARDS = {
   ],
 };
 
+/**
+ * 运行前自检：**验证实际读到的 core dist，必须存在且不落后于本 checkout 的 core 源码**（#521）。
+ *
+ * 一条规则同时覆盖两种真实踩过的坑：
+ * 1. worktree 用 junction 共享 node_modules 时，`@mplayer/core` 解析到**主 clone** 的 dist ——
+ *    你在本树改的 core（含新导出）根本没进验证；症状是移动端报 `TS2305 has no exported member`
+ *    或测试找不到新导出，看着像代码错。
+ * 2. 改了 core 忘了 `core:build`：dist 是旧的，测试全绿但验的是旧代码（更危险）。
+ *
+ * `requireDist: false`（启动时）只提示、不拦：`core` 分片走源码 alias，本就不需要 dist。
+ * `requireDist: true`（每次 core:build 之后）必须存在且不落后 —— 要证的就是「消费者读到的是刚构建的这份」。
+ */
+function assertCoreIsFromThisCheckout({ requireDist }) {
+  const localCore = path.join(ROOT, 'packages', 'core');
+  const localSrc = path.join(localCore, 'src');
+  if (!existsSync(localSrc)) return; // 不是本仓结构，交给别的检查
+  let coreDir;
+  try {
+    const require = createRequire(path.join(ROOT, 'package.json'));
+    coreDir = path.dirname(require.resolve('@mplayer/core/package.json'));
+  } catch {
+    return; // 没装依赖是另一回事，让 npm 自己报
+  }
+  const dist = path.join(coreDir, 'dist', 'index.d.ts');
+  const inRepo = coreDir === ROOT || coreDir.startsWith(ROOT + path.sep);
+  if (!existsSync(dist)) {
+    if (!requireDist) {
+      console.log(`✓ core 来源：${coreDir}（尚无 dist，core 分片走源码 alias）`);
+      return;
+    }
+    console.error([
+      `✗ core:build 之后仍读不到 dist：${dist}`,
+      `  本 checkout 的 core：${localCore}`,
+      '',
+      '  处置：让 \`@mplayer/core\`（根与 packages/mobile 的 node_modules）指向本 checkout 的 packages/core，',
+      '  再 npm run core:build —— worktree 用 junction 共享 node_modules 时最容易踩。',
+    ].join('\n'));
+    process.exit(1);
+  }
+  // 新鲜度只在 core:build 之后判：启动时 dist 可能是上一轮的产物，那一刻判会误伤（分片自己会先重建）
+  if (requireDist && newestMtime(localSrc) > statSync(dist).mtimeMs) {
+    console.error([
+      '✗ 验证实际读到的 core dist 落后于本 checkout 的 core 源码。',
+      `   本 checkout 源码：${localSrc}`,
+      `   实际读到的 dist：${dist}${inRepo ? '' : '  ← 不在本 checkout 内（worktree 的 core 链接指向别处）'}`,
+      '',
+      '  先 npm run core:build；若 dist 仍不在本 checkout 内，则把 \`@mplayer/core\` 的链接',
+      '  （根与 packages/mobile 的 node_modules）改指向本 checkout 的 packages/core ——',
+      '  否则你在本树构建的 core 没有任何消费者会读到。',
+    ].join('\n'));
+    process.exit(1);
+  }
+  console.log(`✓ core 自检：读到的 dist 不落后于本 checkout 源码（${coreDir}）`);
+}
+
+/** 目录下所有文件的最新 mtime（只用于构建产物新鲜度判断） */
+function newestMtime(dir) {
+  let newest = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    newest = Math.max(newest, entry.isDirectory() ? newestMtime(p) : statSync(p).mtimeMs);
+  }
+  return newest;
+}
+
 const SCOPES = {
   all: ['static', 'renderer', 'main', 'core', 'mobile', 'expo'],
   static: ['static'],
@@ -138,9 +204,14 @@ if (!Object.hasOwn(SCOPES, SCOPE)) {
 }
 
 assertNodeModulesMatchPlatform();
+assertCoreIsFromThisCheckout({ requireDist: false });
 
 for (const shard of SCOPES[SCOPE]) {
-  for (const [label, commandLine, options] of SHARDS[shard]) runStep(label, commandLine, options);
+  for (const [label, commandLine, options] of SHARDS[shard]) {
+    runStep(label, commandLine, options);
+    // 构建后立刻自证：消费者解析到的那份 dist 就是刚构建的这份（#521 的 junction 陷阱）
+    if (label === 'core:build') assertCoreIsFromThisCheckout({ requireDist: true });
+  }
 }
 
 console.log(`✓ verify passed (${SCOPE})`);
