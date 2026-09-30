@@ -21,7 +21,7 @@ import {
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
-import { moveItem } from '@/renderer/utils/reorder';
+import { insertAfter, moveItem } from '@/renderer/utils/reorder';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode, getAutoSkipOnError } from '@/renderer/utils/queueUtils';
 import { useSearchStore } from '@/renderer/store/searchStore';
 const ipcRenderer = window.electronAPI;
@@ -133,6 +133,13 @@ interface PlayerStoreActions {
   setPlayMode: (mode: PlayMode) => void;
   playNext: () => void;
   playPrevious: () => void;
+  /**
+   * 「下一首播放」（#491）：把该曲放到**当前曲之后**，不切歌、不打断当前播放。
+   * 已在队列时**移动**（不复制）——复制会制造「同一首歌在队列出现多次」这个本仓
+   * 已知坏状态（dnd-kit 的 items.indexOf(id) 对重复项索引歧义）。
+   * 队列为空 / 尚无当前曲 → 等价于「开始播放这首」。
+   */
+  insertNext: (song: Song) => Promise<void>;
   setCurrentPlaylist: (playlist: Song[], currentIndex?: number) => void;
   replaceQueueSong: (originalId: string, swapped: Song) => Promise<void>;
   removeFromQueue: (index: number) => void;
@@ -674,6 +681,53 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (prevIndex === -1) return;
     set({ currentPlaylistIndex: prevIndex });
     get().play(currentPlaylist[prevIndex]);
+  },
+
+  insertNext: async (song: Song) => {
+    const { currentPlaylist, currentPlaylistIndex, currentSong } = get();
+
+    // 队列为空：没有「下一首」这个位置，等价于「开始播放这首」
+    if (currentPlaylist.length === 0) {
+      set({ currentPlaylist: [song], currentPlaylistIndex: 0 });
+      persistQueue([song], 0);
+      await get().play(song);
+      return;
+    }
+
+    // 有队列但无当前曲（stop() 之后的形态：队列留着、index = -1）：
+    // 没有「当前曲之后」这个位置，等价于「开始播放这首」，不往队列里插
+    if (currentPlaylistIndex === -1) {
+      await get().play(song);
+      return;
+    }
+
+    // 已在队列 → 移动；否则 → 插入。**按 id 判定**（与 removeFromQueue/replaceQueueSong 的队列身份口径一致）。
+    // 移动分支刻意**保留队列里那份 song 对象**：用户点的可能来自刚刷新过的列表（封面不同），
+    // 「已在队列」的语义是「挪位置」，静默换掉一份元数据会让队列条目突变。
+    const existingIndex = currentPlaylist.findIndex(s => s.id === song.id);
+
+    // 幂等：它已经在「当前曲之后」这一位 → 什么都不做（连点两次结果稳定、队列长度不变）
+    if (existingIndex === currentPlaylistIndex + 1) return;
+
+    let nextQueue: Song[];
+    let nextIndex = currentPlaylistIndex;
+
+    if (existingIndex === -1) {
+      // 插入：当前位置之后，当前曲不动
+      nextQueue = insertAfter(currentPlaylist, currentPlaylistIndex, song);
+    } else {
+      // 移动：**移除源条目之后**当前曲的下标会变——源下标在当前曲之前时，当前曲左移一格。
+      // 目标位 = 移动后「当前曲」的下一格，不是原来的 currentIndex+1（否则会把歌插到当前曲再后面一格）。
+      nextIndex = existingIndex < currentPlaylistIndex ? currentPlaylistIndex - 1 : currentPlaylistIndex;
+      nextQueue = moveItem(currentPlaylist, existingIndex, nextIndex + 1);
+    }
+
+    // 移动分支若当前曲本身被挪动才需要改指针；上面 nextIndex 已按此算好，插入分支恒等于原值。
+    set({ currentPlaylist: nextQueue, currentPlaylistIndex: nextIndex });
+    persistQueue(nextQueue, nextIndex);
+
+    // 队列里没这首、且当前没有在播的曲目 → 直接开始播它（有在播的曲子则**绝不打断**，这是本动作的核心承诺）
+    if (existingIndex === -1 && !currentSong) await get().play(song);
   },
 
   setCurrentPlaylist: (playlist: Song[], currentIndex: number = -1) => {

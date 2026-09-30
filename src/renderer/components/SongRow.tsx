@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Trash2, ListMusic, RefreshCw, User } from 'lucide-react';
+import { Play, Trash2, ListMusic, RefreshCw, User, ListPlus } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
@@ -28,6 +28,8 @@ interface SongRowProps {
   onToggleFavorite?: (song: Song) => void;
   onDownload?: (song: Song) => void;
   onAddToPlaylist?: (song: Song) => void;
+  /** 「下一首播放」（#491）：把该曲挪/插到当前曲之后，不打断当前播放 */
+  onPlayNext?: (song: Song) => void;
   onRemoveFromPlaylist?: (song: Song) => void;
   /** 换源成功回调：父组件用它更新自己的列表 state（收藏/歌单页同时持久化） */
   onSwap?: (original: Song, swapped: Song) => void;
@@ -59,7 +61,7 @@ const SongRow: React.FC<SongRowProps> = ({
   song, index, isCurrentSong = false, isPlaying = false, isFavorite = false,
   showIndex = true, showCheckbox = false, isSelected = false, showRemoveFromPlaylist = false,
   moreOpen = false, onPlay, onToggleFavorite, onDownload,
-  onAddToPlaylist, onRemoveFromPlaylist, onToggleSelect,
+  onAddToPlaylist, onPlayNext, onRemoveFromPlaylist, onToggleSelect,
   onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, albumWidth = 180,
   fillTitle = false, dragHandle, actions, rowRef, compact = false, style,
 }) => {
@@ -78,9 +80,12 @@ const SongRow: React.FC<SongRowProps> = ({
     navigate('/discover');
   };
 
-  // 操作统一收进「更多」菜单：加入歌单（提供处理器才有入口）、换源、查看歌手、从歌单移除（危险项居末）；
-  // 本地文件不提供换源（spec 范围外）
+  // 操作统一收进「更多」菜单：下一首播放（#491，提供处理器才有入口）、加入歌单、换源、查看歌手、
+  // 从歌单移除（危险项居末）；本地文件不提供换源（spec 范围外）
   const menuItems: RowActionItem[] = [];
+  if (onPlayNext) {
+    menuItems.push({ key: 'playNext', label: '下一首播放', icon: <ListPlus size={14} />, onClick: () => onPlayNext(song) });
+  }
   if (onAddToPlaylist) {
     menuItems.push({ key: 'playlist', label: '加入歌单', icon: <ListMusic size={14} />, onClick: () => onAddToPlaylist(song) });
   }

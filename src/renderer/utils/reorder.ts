@@ -11,6 +11,18 @@ export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
 }
 
 /**
+ * 把 item 插到 afterIndex **之后**（afterIndex = -1 即插到列表开头）。
+ * 与 moveItem 同属「列表索引数学只此一份」：桌面队列的「下一首播放」用它算插入位。
+ * 越界下标一律夹到合法区间（UI 调用方，宁可插错也不能崩）。
+ */
+export function insertAfter<T>(list: readonly T[], afterIndex: number, item: T): T[] {
+  const next = [...list];
+  const at = Math.max(-1, Math.min(afterIndex, next.length - 1)) + 1;
+  next.splice(at, 0, item);
+  return next;
+}
+
+/**
  * dnd-kit 的 active/over id → 语义下标。任一侧找不到（拖到列表外/自己身上）返回 null。
  */
 export function reorderIndices<T extends { id: string }>(
