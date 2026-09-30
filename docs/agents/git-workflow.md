@@ -67,7 +67,7 @@ gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tm
 - **长文去该去的地方**：取舍与方案对比写 ADR，排查过程写 issue 评论，正文只留 reviewer 决策所需——**只链接，不复述**。
 - **PR 之前 issue 要可开工**：`Fixes #N` 指向的 issue 应已带 `ready-for-agent`（验收标准明确）；纯文档 / chore / 依赖升级 / 紧急修复不受此限。
 - **自动关闭 issue 靠关闭关键字**：`Fixes #N` / `Closes #N` / `Resolves #N` 必须**独立成行、前后留白**——粘在中文标点后面（`「…」。Fixes #123。`）不会被识别；`Refs #N` 只是引用、**不关闭**；标题里的 `（#123）` 也不算。要关就写 `Closes`，并同时写进提交信息（见 §4）。
-- **合并前自查关闭引用**：`gh pr view <N> --json closingIssuesReferences`，为空说明这次合并不会自动关 issue——该字段在 PR 创建时解析、**事后改正文不回填**（实测：写法正确也回填不了）。若确认关键字已独立成行、前后留白却**仍然为空**（本仓实测多个 PR 如此，而 #484 / #497 / #505 正常，原因未明），补救是：正文补一行「合并后请手动关闭 #N」，合并时把 `Closes #N` 写进 squash 提交信息，或合并后手动关。
+- **合并前自查关闭引用**：`gh pr view <N> --json closingIssuesReferences`，**为空不要慌**——该字段在 PR **创建时**解析，实测会漏（#506 创建时为空、合并后 #491 **照常自动关闭**）。判据仍是关键字**独立成行、前后留白**；`Refs #N` 与标题里的 `（#N）` 不算。事后改正文**不会回填**这个字段（别靠改正文去「修」它）。要确定性，仍在正文补一行「合并后请手动关闭 #N」当兜底。
 - **`--base` 必须是 `master`**：`ci.yml` 的 `pull_request.branches` 只监听 `master`，**base 指向功能分支的「堆叠 PR」拿不到任何 CI**（`gh pr checks` 回 `no checks reported`），等于绕过硬门槛。需要「B 依赖 A 的改动」时：分支照旧从 A 的分支起（或 rebase 到它），但 PR 的 base 用 `master`，正文写明依赖与合并顺序——A 合并后本 PR 的 diff 会自动收敛到只剩自己的改动。⚠️ **改 base 不会重跑 CI**（Actions 只认 opened / synchronize / reopened），要触发就 push 一次或 close + reopen。
 - **验证以 CI 为准**：`check` + 四个 `test` + `expo-check` 绿是硬门槛（**CI 红不合**）。正文只勾 CI 证明不了的两条（真机 / UI 证据、文档同步），不要逐条抄 lint / typecheck / 测试 / `core:build`。
 - 截图 / 录屏传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'` / `gh pr comment <PR> --attach '<png>#<图注>'`，两者同一套机制：正文里没被引用的附件会追加到末尾，排版走两步法，见 `mobile-device-debugging` skill），**不入库** `docs/**/assets` —— 仓库只留活文档，以及 ADR 正文引用的资产。**追加一条验收评论**（不动 PR 正文）用后者；正文用模板结构时尤其别把图塞进正文。
