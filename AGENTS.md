@@ -2,7 +2,7 @@
 
 MPlayer 是一个跨平台音乐播放器（桌面 Electron + React，移动端 React Native/Expo），统一由 `@mplayer/core` 提供歌曲识别、播放地址解析与多源搜索能力。多源：netease / qq / kugou / migu / kuwo / qianqian / soda。
 
-> 架构决策 `docs/adr/`（索引见其 `README.md`）· 领域词汇 `GLOSSARY.md` · 架构/测试细节 `docs/agents/` · 评审标准 `CODING_STANDARDS.md` · 工程 skills 见下文 Agent skills
+> 动手前先查 `docs/specs/`（规格）与 `docs/research/`（调研）——常已有答案，别再派人重搜；其余入口：决策 `docs/adr/`（索引见其 `README.md`）· 会话资产 `docs/wayfinder/` · 活文档 `docs/agents/` · 词汇 `GLOSSARY.md` · 评审标准 `CODING_STANDARDS.md` · 工程 skills 见下文 Agent skills
 
 ## Commands
 
@@ -45,9 +45,10 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 
 ### 依赖版本基线
 - **生态耦合集**（`expo`、`expo-*`、`react-native`、`react-native-*`、`@react-native-community/*`、`@react-native-async-storage/async-storage`）的版本基线 = **Expo SDK 的期望值**，不是「semver 允许的最新」。升级动作是 `npx expo install --fix`，校验是 `npm run verify -- expo`（CI 的 `expo-check` job）。
-- **全仓只允许一份 `expo`**：根与 `packages/mobile` 必须声明**同一范围**（当前 `~57.0.26`）。写不同范围会让 npm 在 `packages/mobile/node_modules` 下再装一份，于是「根 `node_modules/expo` 是哪个版本」变成陷阱（实测踩过）。同理 `@types/react` / `@types/react-dom` 的范围不得逃出 SDK 的 `relatedPackages`（`~19.2.4` / `~19.2.3`）。
-- **`expo install --check` 只校验「已装版本」，看不见 package.json 的声明地板**：地板落后照样全绿（实测曾出现 `expo-asset: ~57.0.13` 而 SDK 期望 `~57.0.18`），所以声明地板要人工对齐。
-- **未解决**：根 `overrides` 把 metro 钉在 0.84.6，而 `@expo/metro@56.0.2` 要求**精确** 0.84.5；改法已明确（override 钉成 0.84.5），落地受阻于 npm 10.9.8 arborist 从零重解析崩溃 —— 细节见 ADR `docs/adr/2026-09-29-dependency-update-governance.md` 的「后果」。
+- **全仓只允许一份 `expo`**：根与 `packages/mobile` 必须声明**同一范围**。写不同范围会让 npm 在 `packages/mobile/node_modules` 下再装一份，于是「根 `node_modules/expo` 是哪个版本」变成陷阱（实测踩过）。同理 `@types/react` / `@types/react-dom` 的范围不得逃出 SDK 的 `relatedPackages`。
+- **`expo install --check` 只校验「已装版本」，看不见 package.json 的声明地板**：地板落后照样全绿（实测踩过），所以声明地板要人工对齐。
+- **未解决**：根 `overrides` 把 metro 钉在一个与 `@expo/metro` 所要求的**精确版本**相冲突的值上；改法已明确，落地受阻于 npm arborist 从零重解析崩溃 —— 具体版本与改法见 ADR `docs/adr/2026-09-29-dependency-update-governance.md` 的「后果」。
+- **版本字面量不抄在本文件**（无时间戳的「当前值」必然腐烂成误导）：范围的真相在 `package.json` 与 `npx expo install --check` 的当前输出，来龙去脉在上一条的 ADR。
 - 机器人的职责边界见 `.github/dependabot.yml` 的 ignore 段；决策与否决理由见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
 
 ## 多源链路速览
