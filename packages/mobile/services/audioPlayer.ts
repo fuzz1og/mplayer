@@ -15,6 +15,7 @@ import { isOffline } from './networkState';
 import { acceptsTransportTime, beginSeek, type PendingSeek } from './seekReconcile';
 import { resolvePlayableUrlMobile } from './songResolution';
 import {
+  feedWindow,
   initNativePlayer,
   isNativeEngine,
   nativeNext,
@@ -829,9 +830,21 @@ export async function playNextInQueue(song: Song): Promise<PlayNextOutcome> {
 
   const result = await nativePlayNext(song);
   if (!result.queued) return { queued: false, moved: false, reason: result.reason };
-  // 原生队列已变（移动分支长度不变但顺序变了）→ **强制**按原生重建 JS 队列，
-  // 否则移动后 JS 侧顺序会一直是旧的（队列页显示错序），直到下一次 trackChanged。
-  reconcileFromNative(true);
+  // ⚠️ 不能再用 `reconcileFromNative(true)` 重建 JS 队列（#518 的根因）：
+  // 原生队列只是 JS 队列的**预取窗口**（ADR 2026-09-29-native-playback-ownership §2：
+  // `loadQueue` 一首 + `patchQueue({append})` 追加），不是整张歌单。用窗口重建 JS 队列会
+  // ① 把用户的完整歌单缩成几首窗口歌；② 把补窗基准从「歌单下标」跳成「窗口下标」
+  // —— 真机现场 `计划=[28,29,30]` 与 `计划=[0]` 反复横跳，推进的下一首成了窗口歌。
+  // 这里改用同一套纯队列数学**就地**同步：完整队列与当前曲位置都不动，基准因此不回跳。
+  const store = usePlayerStore.getState();
+  if (store.queue.length > 0 && store.currentSong && store.currentIndex >= 0) {
+    store.insertNext(song);
+    // 基准落定后再补一轮窗口（nativePlayNext 里那轮是插队前的基准，已被 feedWindow 丢弃）
+    void feedWindow();
+  } else {
+    // JS 队列为空（冷启 / 进程重启后原生已按快照恢复）→ 原生快照是唯一的对账来源
+    reconcileFromNative(true);
+  }
   return { queued: true, moved: result.moved, noop: result.noop };
 }
 

@@ -406,13 +406,30 @@ export async function nativePlayNext(song: Song): Promise<NativePlayNextResult> 
     return { queued: false, moved: false, noop: false, reason: result.error ?? 'failed' };
   }
 
+  // 桥必须给出**正面证据**（changed/queued/moved 任一个是 boolean）才能算落地。
+  // 老原生模块（APK 未含 #494 原语）对未知的 `insertAfterCurrent` 字段静默忽略，
+  // 回包只有 accepted/revision/stale；旧代码用 `result.changed !== false` 判断，
+  // `undefined !== false` 恒真 → 于是提示「已设为下一首」而原生队列一字未改
+  // （#518 真机现场：插队后对账仍是 4 首，推进下一首播的是原来的窗口歌）。
+  // 宁可报可观测的失败，也不能给用户看「假成功」（#494 验收标准同款要求）。
+  const spokeInsert =
+    typeof result.changed === 'boolean' ||
+    typeof result.queued === 'boolean' ||
+    typeof result.moved === 'boolean';
+  if (!spokeInsert) {
+    console.warn(
+      `[player] 下一首播放未落地：${song.name} 原生桥未返回插队语义（原生模块不支持 insertAfterCurrent）`
+    );
+    return { queued: false, moved: false, noop: false, reason: 'unsupported' };
+  }
+
   markSucceeded(track.meta.key);
   // 按位置重建镜像（不能沿用补窗的 push）：插队后原生顺序变了，镜像必须跟着变，
   // 否则 pruneMirror（按 toKey 切片）与 jsIndex 推导会一路错下去。
   syncMirrorFromNative();
   console.log(
-    `[player] 下一首播放：${song.name} queued=${!!result.queued} moved=${!!result.moved} ` +
-      `changed=${result.changed !== false}`
+    `[player] 下一首播放：${song.name} queued=${result.queued === true} moved=${result.moved === true} ` +
+      `changed=${result.changed === true}`
   );
   // 窗口重算：插队把原来的 index+1 挤到 index+2，位置感知的 excluded 会把它重新纳入候选
   void feedWindow();
@@ -500,6 +517,15 @@ export async function feedWindow(need?: number): Promise<void> {
       }
     })
   );
+  // 基准稳定性（#518）：本轮计划是在上面那份 `queue` **快照**上算出来的，而解析要花数秒。
+  // 期间队列若被整体替换（插队就地同步 / 切歌单 / 对账重建），旧基准算出来的候选绝不能落地
+  // —— 真机上「补窗换了基准」正是这么来的：`计划=[28,29,30]` 与 `计划=[0]` 反复横跳。
+  // 丢弃是安全的：换基准的那条路径一定会再触发一轮补窗（水位事件 / playSong / 插队）。
+  if (usePlayerStore.getState().queue !== queue) {
+    console.log('[player] 补窗丢弃：解析期间队列基准已变更');
+    return;
+  }
+
   const append: Track[] = settled.filter((track): track is Track => !!track);
 
   if (append.length === 0) return;

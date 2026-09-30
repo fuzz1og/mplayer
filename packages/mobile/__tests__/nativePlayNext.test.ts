@@ -370,7 +370,7 @@ describe('playNextInQueue：引擎无关入口（#495）', () => {
     expect(usePlayerStore.getState().queue.map((s) => s.id)).toEqual(['A', 'B', 'C']);
   });
 
-  it('原生引擎：成功后按原生顺序**强制**重建 JS 队列（移动分支长度不变但顺序变了）', async () => {
+  it('原生引擎：成功后 JS 队列就地同步（不重建、不缩成原生窗口）', async () => {
     setQueue(['A', 'B', 'C'], 0);
     fake.state.tracks = [
       { key: prefetchKey(song('A')), songId: 'A' },
@@ -383,5 +383,122 @@ describe('playNextInQueue：引擎无关入口（#495）', () => {
     // 原生 [A, C, B] → JS 队列必须逐项一致（默认对账在长度相同时会跳过）
     expect(usePlayerStore.getState().queue.map((s) => s.id)).toEqual(['A', 'C', 'B']);
     expect(usePlayerStore.getState().currentSong?.id).toBe('A');
+  });
+});
+
+/**
+ * #518 的失败用例：真机现场「设为下一首的歌没有被播」。
+ *
+ * 现场三件事必须都在测试里钉住：
+ * ① 原生只持**预取窗口**（loadQueue 一首 + 补窗追加），JS 队列才是完整歌单；
+ * ② 插队成功后**不得**用原生窗口重建 JS 队列（那会把歌单缩成几首窗口歌，并让补窗基准
+ *    从「歌单下标」跳成「窗口下标」——真机 `计划=[28,29,30]` ↔ `计划=[0]` 反复横跳）；
+ * ③ 原生桥没报插队语义（老 APK / 未重编译原生）时，必须回**可观测失败**，
+ *    不能因为 `accepted=true` 就提示「已设为下一首」（真机日志实锤的那条）。
+ */
+describe('#518：插入后「下一首」= 被插入的那首；补窗基准不回跳', () => {
+  /** 原生推进 = index+1（PlayerService.next → seekToNextMediaItem），故「下一首」= index+1 */
+  function nativeNextId(): string | undefined {
+    return fake.state.tracks[fake.state.index + 1]?.songId;
+  }
+
+  function appendedKeys(): string[] {
+    return fake.patchCalls.flatMap((call) => (call.append ?? []).map((t) => t.meta.key));
+  }
+
+  /** 原生窗口只有 [C, D, E]（当前曲 + 补窗两首），JS 队列是七首完整歌单 */
+  function longQueueWithShortNativeWindow(): void {
+    setQueue(['A', 'B', 'C', 'D', 'E', 'F', 'H'], 2);
+    fake.state.tracks = ['C', 'D', 'E'].map((id) => ({ key: prefetchKey(song(id)), songId: id }));
+    fake.state.index = 0;
+    fake.state.key = prefetchKey(song('C'));
+  }
+
+  it('原生只持窗口 → 插队后 JS 队列不被缩成窗口，当前曲位置不动、下一首是 G', async () => {
+    longQueueWithShortNativeWindow();
+
+    const outcome = await playNextInQueue(song('G'));
+    await flush();
+
+    expect(outcome.queued).toBe(true);
+    // ① 原生推进的下一格就是被插入的 G（不是补窗喂进去的窗口歌）
+    expect(nativeNextId()).toBe('G');
+    // ② JS 队列仍是完整歌单，G 落在当前曲之后；当前曲与下标都不因插队而跳
+    const state = usePlayerStore.getState();
+    expect(state.queue.map((s) => s.id)).toEqual(['A', 'B', 'C', 'G', 'D', 'E', 'F', 'H']);
+    expect(state.currentSong?.id).toBe('C');
+    expect(state.currentIndex).toBe(2);
+    expect(state.queue[state.currentIndex + 1]?.id).toBe('G');
+  });
+
+  it('插队后继续补窗：基准仍是完整歌单的当前曲，不回跳到窗口下标/队首', async () => {
+    longQueueWithShortNativeWindow();
+    await playNextInQueue(song('G'));
+    await flush();
+
+    // 只考察「插队之后的那一轮补窗」：基准若被换成原生窗口 [C,G,D,E]，
+    // 这里会因为「窗口里的歌都已在原生手里」而一个候选都算不出来（→ []）。
+    fake.patchCalls.length = 0;
+    await feedWindow(3);
+
+    const keys = appendedKeys();
+    expect(keys.length).toBeGreaterThan(0);
+    // 紧接当前曲（歌单第 3 首 C）之后、还没进原生的第一首 = F
+    expect(keys[0]).toBe(prefetchKey(song('F')));
+    // 被插入的 G 已在原生手里 → 绝不重复喂
+    expect(keys).not.toContain(prefetchKey(song('G')));
+  });
+
+  it('解析期间 JS 队列基准被整体替换 → 这一轮补窗必须丢弃（不按旧基准投喂）', async () => {
+    setQueue(['A', 'B', 'C', 'D'], 0);
+    fake.state.tracks = [{ key: prefetchKey(song('A')), songId: 'A' }];
+    fake.state.index = 0;
+    fake.state.key = prefetchKey(song('A'));
+
+    let release!: () => void;
+    resolution.resolvePlayableUrlMobile.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ url: 'https://cdn.example.com/B.mp3', nonFull: false });
+        })
+    );
+
+    const round = feedWindow(1); // 此刻基于 [A,B,C,D] 计划出 B
+    await flush();
+    setQueue(['A', 'Z', 'C', 'D'], 0); // 基准被整体替换（新数组）
+    release();
+    await round;
+
+    // 旧基准算出来的 B 不得落地：它既不在新队列的「当前曲之后」，还会把原生窗口带偏
+    expect(appendedKeys()).toEqual([]);
+  });
+
+  it('桥没报插队语义（老原生模块）→ 返回可观测失败，绝不假装成功', async () => {
+    setQueue(['A', 'B', 'C'], 0);
+    fake.state.tracks = ['A', 'B', 'C'].map((id) => ({ key: prefetchKey(song(id)), songId: id }));
+    fake.state.index = 0;
+    fake.state.key = prefetchKey(song('A'));
+    // 真机 APK 实测：dex 里没有 insertAfterCurrent；老桥回包只有 accepted/revision/stale。
+    // 旧实现把 "changed !== false" 当 changed=true → 日志 `changed=true` + 提示「已设为下一首」，
+    // 而原生队列一字未改（对账仍是 4 首）→ 推进下一首播的是原来的窗口歌。
+    fake.forced.push({ accepted: true, revision: 5, stale: false });
+
+    const result = await nativePlayNext(song('C'));
+    expect(result.queued).toBe(false);
+    expect(result.reason).toBe('unsupported');
+  });
+
+  it('桥没报插队语义时 UI 侧同样回失败：队列/原生都不许出现「假成功」', async () => {
+    setQueue(['A', 'B', 'C'], 0);
+    fake.state.tracks = ['A', 'B', 'C'].map((id) => ({ key: prefetchKey(song(id)), songId: id }));
+    fake.state.index = 0;
+    fake.state.key = prefetchKey(song('A'));
+    fake.forced.push({ accepted: true, revision: 5, stale: false });
+
+    const outcome = await playNextInQueue(song('C'));
+    expect(outcome.queued).toBe(false);
+    expect(outcome.reason).toBe('unsupported');
+    expect(usePlayerStore.getState().queue.map((s) => s.id)).toEqual(['A', 'B', 'C']);
+    expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'B', 'C']);
   });
 });
