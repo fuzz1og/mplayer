@@ -35,6 +35,8 @@ interface SettingsState {
   themeMode: ThemeMode;
   /** 失败即跳（#385）：播放终局失败时自动跳下一首；false = 失败即停、等用户处理。默认 true 保持现状 */
   autoSkipOnError: boolean;
+  /** 开发者模式（#477）：显式开关，默认关；开 = 诊断详细度 verbose（info 进日志缓冲）+ 设置页出现诊断面板 */
+  devMode: boolean;
   setProxyUrl: (url: string) => void;
   setPlayMode: (mode: PlayMode) => void;
   setDownloadDirUri: (uri: string) => void;
@@ -44,6 +46,7 @@ interface SettingsState {
   setUpdateChannel: (channel: string) => void;
   setThemeMode: (mode: ThemeMode) => void;
   setAutoSkipOnError: (enabled: boolean) => void;
+  setDevMode: (enabled: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -58,6 +61,7 @@ export const useSettingsStore = create<SettingsState>()(
       updateChannel: 'auto',
       themeMode: 'system',
       autoSkipOnError: true,
+      devMode: false,
       setProxyUrl: (url) => set({ proxyUrl: url }),
       setPlayMode: (mode) => set({ playMode: mode }),
       setDownloadDirUri: (uri) => set({ downloadDirUri: uri }),
@@ -67,6 +71,7 @@ export const useSettingsStore = create<SettingsState>()(
       setUpdateChannel: (channel) => set({ updateChannel: channel }),
       setThemeMode: (mode) => set({ themeMode: mode }),
       setAutoSkipOnError: (enabled) => set({ autoSkipOnError: enabled }),
+      setDevMode: (enabled) => set({ devMode: enabled }),
     }),
     {
       name: 'settings-storage',
