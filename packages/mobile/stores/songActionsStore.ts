@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Song, SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '../services/sourceSwap';
+import type { PlayNextOutcome } from '../services/audioPlayer';
 import {
   createSwapSession,
   IDLE_SWAP_SNAPSHOT,
@@ -39,6 +40,12 @@ export interface PlaylistSheetState {
 export interface SongActionEffects extends SongSwapDeps {
   download(song: Song): void;
   searchArtist(song: Song): void;
+  /**
+   * 「下一首播放」（#495）：把这首歌放到当前曲之后。
+   * 失败必须让用户看得见（`queued=false` + `reason`）——解析失败/命令不可用/引擎不支持
+   * 在过去都是静默的，用户只会觉得「点了没反应」。
+   */
+  insertNext(song: Song): Promise<PlayNextOutcome>;
 }
 
 /**

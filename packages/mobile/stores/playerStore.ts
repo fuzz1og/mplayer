@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import type { Song } from '@mplayer/core'
 import { getNextSongIndex } from '@mplayer/core'
 import { useSettingsStore } from './settingsStore'
+import { prefetchKey } from '../services/queuePrefetch'
+import { planPlayNext } from '../services/queueInsert'
 
 interface PlayerState {
   currentSong: Song | null;
@@ -22,6 +24,18 @@ interface PlayerState {
   next: () => Song | null;
   prev: () => void;
   setQueue: (songs: Song[], startIndex?: number) => void;
+  /**
+   * 「下一首播放」（#495）：把 `song` 放到当前曲之后。
+   *
+   * 与桌面 #506（`playerStore.insertNext`）和 Android `QueueStore.insertAfterCurrent`
+   * 同一套语义：已在队列 → **移动**（不复制、保留队列里那份对象、长度不变）；不在 → 插入；
+   * 已在下一首位置 / 就是当前曲 → no-op（连点幂等）；当前曲不被打断。
+   *
+   * `started = true`：队列为空 / 没有当前曲（currentIndex < 0）→ **等价于开始播放这首**
+   * （与桌面 #506 同口径），调用方据此决定要不要真正起播。
+   * `moved` = 从队列别处移动过来。
+   */
+  insertNext: (song: Song) => { started: boolean; moved: boolean; noop: boolean };
   setCurrentTime: (time: number) => void;
   setDuration: (dur: number) => void;
   setShowPlayer: (show: boolean) => void;
@@ -82,6 +96,36 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     const prevIdx = (currentIndex - 1 + queue.length) % queue.length;
     set({ currentSong: queue[prevIdx], currentIndex: prevIdx, isPlaying: true, currentTime: 0 });
+  },
+
+  insertNext: (song) => {
+    const { queue, currentIndex, currentSong } = get();
+    // 队列为空 / 没有当前曲：没有「当前曲之后」这个位置 → 等价于开始播放这首（桌面 #506 同口径）
+    if (queue.length === 0 || currentIndex < 0 || !currentSong) {
+      set({
+        queue: queue.length === 0 ? [song] : queue,
+        currentIndex: queue.length === 0 ? 0 : currentIndex,
+        currentSong: song,
+        isPlaying: true,
+        currentTime: 0,
+        hasPlayed: true,
+      });
+      return { started: true, moved: false, noop: false };
+    }
+    // 当前曲的 index 优先按 key 反查（`play()` 只写 currentSong、不写 currentIndex），
+    // 反查不到才退回 currentIndex。
+    const byKey = queue.findIndex((s) => prefetchKey(s) === prefetchKey(currentSong));
+    const current = byKey >= 0 ? byKey : Math.min(Math.max(currentIndex, 0), queue.length - 1);
+    const plan = planPlayNext(queue, current, song, useSettingsStore.getState().playMode);
+    if (plan.noop) return { started: false, moved: false, noop: true };
+    // currentIndex 由 indexOf(currentSong) 重新推导，`next()` 因此仍指向同一首
+    const nextCurrent = plan.sequence.findIndex((s) => prefetchKey(s) === prefetchKey(currentSong));
+    set({
+      queue: plan.sequence,
+      currentIndex: nextCurrent >= 0 ? nextCurrent : currentIndex,
+      hasPlayed: true,
+    });
+    return { started: false, moved: plan.moved, noop: false };
   },
 
   setQueue: (songs, startIndex = 0) => {
