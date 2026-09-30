@@ -56,8 +56,9 @@ describe('PlaylistDetailPage 窗口化（#445）', () => {
     const wrapper = rowsRef.parentElement as HTMLElement;
     expect(rowsRef).not.toBe(wrapper);
 
-    const tableHeader = wrapper.children[0] as HTMLElement;
-    expect(tableHeader.textContent).toContain('标题');
+    // 表头不一定是第一个子节点（#488 在列表上方加了过滤框），按内容定位
+    const tableHeader = Array.from(wrapper.children).find((child) => child.textContent?.includes('标题')) as HTMLElement;
+    expect(tableHeader).toBeTruthy();
     expect(tableHeader.parentElement).toBe(wrapper);
     expect(rowsRef.parentElement).toBe(wrapper);
 
