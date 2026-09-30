@@ -1,5 +1,7 @@
 # MPlayer
 
+> 2026-10-01 由 `CONTEXT.md` 更名。历史存档（`docs/adr/` / `research` / `specs` / `wayfinder`）与代码注释里出现的 `CONTEXT.md` 都指本文件。
+
 MPlayer 是一个跨平台音乐播放器（桌面 Electron + React，移动端 React Native），统一由 `@mplayer/core` 提供歌曲识别、播放地址解析与多源搜索能力。
 
 ## Language
@@ -121,4 +123,3 @@ _Avoid_: 内核（单称，与 core 撞音）、core 手势、手势引擎
 两个**不同线程**的帧率，任何一次「掉帧」讨论都必须带线程限定词。**JS 帧率** = JS 线程 rAF 回调的频率（`services/perfMonitor` 量的就是它）；**UI 帧率** = 渲染线程真正出帧的频率（`dumpsys gfxinfo` / SurfaceFlinger 量的）。
 拖拽跟手跑在 JS 线程，JS 被占住时面板是**冻住**而不是**画得慢**——那一刻 UI 帧率可能反而很健康。所以「掉帧」不能单称。
 _Avoid_: 掉帧（单称）、卡顿、fps（不带线程限定）
-
