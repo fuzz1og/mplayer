@@ -75,3 +75,22 @@ follow-redirects 下**恒为 undefined**（实测最终地址在 `resp.request.r
 - 已知遗留：`redirect` 模式的文本证据为空，护栏只能靠音频头/体积码率，对「容器头
   不可信」（如无 Xing 头的 MP3）会退到 L3 或 `none`——与既有 url-resolver 同风险等级，
   未新增暴露面。
+
+## 更新（2026-09-25 实现状态复核）
+
+清单能力扩展的落地情况（复核依据是一份**本地**调研文件，不入库）：
+
+| 项 | 本 ADR 决策 | 实现状态 |
+| --- | --- | --- |
+| **E0** 护栏字段 `ar_name` / `singer_name` | 增补 | ✅ 已实现（`tier3Api.ts`，测试 `tier3Api.test.ts`） |
+| **E1** `idNormalize.stripPrefixes` | 新增可选字段 | ✅ 已实现 |
+| **E2** `responseKind: "json" \| "redirect"` | 新增可选字段 | ✅ 已实现 |
+| 修 `finalUrl` 取值 | `responseURL \|\| res.responseUrl` | ✅ 已实现（`api/transport.ts`） |
+| **E3** `bodyEncoding: "form"` | 本 ADR「本次不做」 | ❌ 未实现（仍无「非它不可」的源） |
+| **E4** `responseKind: "text"` + `regexPath` | 本次不做 | ❌ 未实现 |
+| **E5** `resolve.steps[]` | 本次不做 | ❌ 未实现 |
+| **E6** `kind: "script"` | 已否决 | ❌ 仍在校验阶段被拒 |
+
+- **E0/E1/E2 三项承诺已全部兑现**；E3/E4/E5 是本 ADR 明确留给后续的，**不是欠账**。
+- **一处软件层误判已修**：业务错误封套（HTTP 200 + 顶层 `code` 非 0 + 非空 `message`）此前会否决带合法直链的响应。现改为**先取值、后判封套** —— 取到合法候选 URL 时不因封套判失败，只有**取不到 URL** 时才把它当失败原因上报（见 `packages/core/src/tier3/tier3Api.ts` 该处注释）。
+- **一处覆盖缺口（未修）**：`{keyword}` 用在 url-resolver 的 `resolve` 里机制上一直成立（`songVars` 两类 kind 共用），但测试里 `{keyword}` 全部出现在 `search.url`，`resolve.url` 只用过 `{id}`/`{source}`；已有源依赖它。补用例即可，不是新机制。
