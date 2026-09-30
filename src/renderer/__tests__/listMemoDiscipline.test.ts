@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Song } from '@mplayer/core';
@@ -147,8 +147,51 @@ describe('列表 memo 纪律（#412）', () => {
     expect(page).not.toMatch(/actions=\{\s*</);
     // #428：队列页不再自己接 dnd-kit，也不再有裸 map —— 全量 id / items / DragOverlay 收在共享能力里
     expect(page).toContain('renderQueueDragPreview');
-    expect(page).not.toMatch(/@dnd-kit/);
     expect(page).not.toContain('currentPlaylist.map');
+  });
+
+  it('renderer 页面不自己接 dnd-kit，也不内联新建排序 id 数组（#428 / #445 通用规则）', () => {
+    const dir = join(testDir, '..', '..', 'renderer', 'pages');
+    const pages = readdirSync(dir).filter((f) => f.endsWith('.tsx'));
+    expect(pages.length).toBeGreaterThan(5);
+    for (const file of pages) {
+      const src = stripComments(read(`renderer/pages/${file}`));
+      // 窗口化 + 可排序是共享能力（VirtualSortableList / SongList），页面不自己拼 DndContext
+      expect(src, file).not.toMatch(/@dnd-kit/);
+      // items={list.map(...)} 每帧新建数组：dnd-kit 的排序下标来自这份 items，必须 memo 化
+      expect(src, file).not.toMatch(/items=\{\s*[\w.]*\.map\(/);
+    }
+  });
+
+  it('本地歌单页接入共享的窗口化排序列表（#445）', () => {
+    const page = stripComments(read('renderer/pages/PlaylistDetailPage.tsx'));
+    expect(page).toContain('VirtualSortableList');
+    // 全量 songs 直接交给能力层；memo 由能力内部的 ids useMemo 保证
+    expect(page).toContain('items={songs}');
+    // 两个渲染函数（sortable 行 + 非 sortable 预览）从**同一份** props 展开：
+    // 本页 19 个 prop，抄两份必然静默漂移
+    expect(page).toContain('const sharedRowProps = useMemo(');
+    expect(page).toContain('const buildRowProps = useCallback(');
+    expect((page.match(/\{\.\.\.buildRowProps\(song, index\)\}/g) ?? []).length).toBe(2);
+    expect(page).toContain('dragHandle={previewDragHandle}');
+    // 提示条 / 批量栏 / 表头走 header 插槽（与 rowsRef 同父由组件结构保证，见 VirtualSortableList）
+    expect(page).toContain('header={');
+  });
+
+  it('行高 64 是布局唯一来源：没有 measureElement，estimateSize 就是布局（#445）', () => {
+    const hooks = stripComments(read('renderer/hooks/useVirtualRows.ts'));
+    expect(hooks).toContain('export const SONG_ROW_HEIGHT = 64');
+    const list = stripComments(read('renderer/components/VirtualSortableList.tsx'));
+    expect(list).toContain('const estimateSongRow = () => SONG_ROW_HEIGHT');
+    // 全仓没有 measureElement → virtualItem.size 永远等于 estimateSize：
+    // 真实行高与常量不符时行会互相压叠且不报错，所以常量必须与 SongRow 的布局一致
+    expect(list).not.toContain('measureElement');
+    expect(stripComments(read('renderer/components/VirtualRow.tsx'))).toMatch(/height: `\$\{size\}px`/);
+    const row = stripComments(read('renderer/components/SongRow.tsx'));
+    // 44px 封面盒 + 上下各 10px 内边距 = 64；标题/副标题 nowrap 不换行，专辑列可有可无
+    expect(row).toContain("width: '44px', height: '44px'");
+    expect(row).toContain("padding: compact ? '8px 12px' : '10px 16px'");
+    expect(row).toContain("whiteSpace: 'nowrap'");
   });
 
   it('队列窗口化与可排序收在共享能力里（#428）', () => {

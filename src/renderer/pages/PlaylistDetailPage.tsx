@@ -1,20 +1,26 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { Play, ArrowLeft, Edit2, Music, Download, Trash2, Upload } from 'lucide-react';
+import { Play, ArrowLeft, Edit2, Music, Download, Trash2, Upload, GripVertical } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
-import { DndContext, closestCenter } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import SongCover from '@/renderer/components/SongCover';
+import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
-import { useSortableReorder } from '@/renderer/hooks/useSortableReorder';
+import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { moveItem } from '@/renderer/utils/reorder';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
+
+/** overlay 里的静态拖拽把手：只是视觉延续，不接 dnd（overlay 内容整体 pointer-events: none） */
+const previewDragHandle = (
+  <span aria-hidden style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>
+    <GripVertical size={14} />
+  </span>
+);
 
 const PlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -71,8 +77,6 @@ const PlaylistDetailPage: React.FC = () => {
       setIsReordering(false);
     }
   }, [playlistId, songs]);
-
-  const { sensors, handleDragEnd } = useSortableReorder({ items: songs, onReorder: handleReorder });
 
   const loadData = async () => {
     if (!playlistId) return;
@@ -198,6 +202,50 @@ const PlaylistDetailPage: React.FC = () => {
     }
     // 只依赖 playlistId：loadData 每次渲染虽是新身份，但内部只用 playlistId 与稳定的 setState
   }, [playlistId]);
+
+  /**
+   * 行 props 里与具体歌曲无关的部分（#445）：sortable 行与**非 sortable 的拖拽预览**必须逐项
+   * 一致，而本页比队列页多出 14 个 prop，两份渲染器各抄一遍会静默漂移。
+   * 两个渲染函数都从这一份展开，差异只剩「谁注册 useSortable / 谁带静态拖拽把手」。
+   */
+  const sharedRowProps = useMemo(() => ({
+    isPlaying,
+    showCheckbox: true,
+    onToggleSelect: handleToggleSelect,
+    showRemoveFromPlaylist: true,
+    onRemoveFromPlaylist: handleRemoveFromPlaylist,
+    showAlbum: false,
+    fillTitle: true,
+    onPlay: handlePlay,
+    onDownload: handleDownload,
+    onSwap: handleSongSwapped,
+    onToggleFavorite: toggleFavorite,
+    onCoverError: handleCoverError,
+  }), [
+    isPlaying, handleToggleSelect, handleRemoveFromPlaylist, handlePlay, handleDownload,
+    handleSongSwapped, toggleFavorite, handleCoverError,
+  ]);
+
+  const buildRowProps = useCallback((song: Song, index: number) => ({
+    ...sharedRowProps,
+    song,
+    index,
+    isCurrentSong: currentSong?.id === song.id,
+    isSelected: selectedIdSet.has(song.id),
+    isFavorite: favoriteIdSet.has(song.id),
+  }), [sharedRowProps, currentSong?.id, selectedIdSet, favoriteIdSet]);
+
+  /** 窗口内的可排序行：useSortable 由 SortableSongRow 内部注册，index 是**全量下标** */
+  const renderSongRow = useCallback(
+    (song: Song, index: number) => <SortableSongRow {...buildRowProps(song, index)} />,
+    [buildRowProps],
+  );
+
+  /** 拖拽 overlay 里的同一行：**非 sortable**（同一 id 二次注册会冲突） */
+  const renderSongDragPreview = useCallback(
+    (song: Song, index: number) => <SongRow {...buildRowProps(song, index)} dragHandle={previewDragHandle} />,
+    [buildRowProps],
+  );
 
   const handleEditPlaylist = async () => {
     if (!playlistId || !editName.trim()) return;
@@ -330,67 +378,53 @@ const PlaylistDetailPage: React.FC = () => {
             <div style={{ fontSize: '12px', marginTop: '8px', color: 'var(--text-tertiary)' }}>去发现音乐添加歌曲吧</div>
           </div>
         ) : (
-          <>
-        {isReordering && (
-          <div style={{ padding: '8px 16px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-            正在保存排序...
-          </div>
-        )}
-        {/* Batch action bar */}
-        {selectedIds.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(47, 95, 208, 0.08)', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>已选择 {selectedIds.length} 项</span>
-            <button onClick={handleBatchDownload}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12px' }}>
-              <Download size={12} /> 批量下载
-            </button>
-            <button onClick={handleBatchDelete}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--danger)', fontSize: '12px' }}>
-              <Trash2 size={12} /> 批量移除
-            </button>
-          </div>
-        )}
-        {/* Table header */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
-          <div style={{ width: '40px', textAlign: 'center' }}>
-            <input
-              type="checkbox"
-              checked={songs.length > 0 && selectedIds.length === songs.length}
-              onChange={handleSelectAll}
-              style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
-            />
-          </div>
-          <div style={{ width: '50px', textAlign: 'center' }}>#</div>
-          <div style={{ flex: 1 }}>标题</div>
-          <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
-        </div>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={songs.map(s => s.id)} strategy={verticalListSortingStrategy}>
-            {songs.map((song, index) => (
-              <SortableSongRow
-                key={song.id}
-                song={song}
-                index={index}
-                isCurrentSong={currentSong?.id === song.id}
-                isPlaying={isPlaying}
-                showCheckbox
-                isSelected={selectedIdSet.has(song.id)}
-                onToggleSelect={handleToggleSelect}
-                showRemoveFromPlaylist
-                onRemoveFromPlaylist={handleRemoveFromPlaylist}
-                showAlbum={false}
-                fillTitle
-                onPlay={handlePlay}
-                onDownload={handleDownload}
-                onSwap={handleSongSwapped}
-                isFavorite={favoriteIdSet.has(song.id)}
-                onToggleFavorite={toggleFavorite}
-                onCoverError={handleCoverError}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
-        </>
+          /* 窗口化 + 可排序收在共享能力里（#445）：页面不再自建 DndContext/SortableContext，
+             也不再 items={songs.map(...)}（每帧新建数组，dnd-kit 的排序下标来源必须是稳定引用）。 */
+          <VirtualSortableList
+            items={songs}
+            header={
+              <>
+                {/* 提示条 + 批量栏 + 表头（#445）：与 rowsRef 同父由组件的真实 <div> wrapper 保证。
+                    放在组件之外时 scrollMargin 会停在旧值 → 勾选一首歌整表错位一条栏高，且不报错。 */}
+                {isReordering && (
+                  <div style={{ padding: '8px 16px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                    正在保存排序...
+                  </div>
+                )}
+                {/* Batch action bar */}
+                {selectedIds.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(47, 95, 208, 0.08)', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>已选择 {selectedIds.length} 项</span>
+                    <button onClick={handleBatchDownload}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12px' }}>
+                      <Download size={12} /> 批量下载
+                    </button>
+                    <button onClick={handleBatchDelete}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--danger)', fontSize: '12px' }}>
+                      <Trash2 size={12} /> 批量移除
+                    </button>
+                  </div>
+                )}
+                {/* Table header */}
+                <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
+                  <div style={{ width: '40px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={songs.length > 0 && selectedIds.length === songs.length}
+                      onChange={handleSelectAll}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
+                    />
+                  </div>
+                  <div style={{ width: '50px', textAlign: 'center' }}>#</div>
+                  <div style={{ flex: 1 }}>标题</div>
+                  <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
+                </div>
+              </>
+            }
+            renderRow={renderSongRow}
+            renderDragPreview={renderSongDragPreview}
+            onReorder={handleReorder}
+          />
         )}
         </div>
 

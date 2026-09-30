@@ -41,10 +41,11 @@ function mountScrollContainer(): HTMLDivElement {
   return el;
 }
 
-function renderList(items: Item[], container?: HTMLElement) {
+function renderList(items: Item[], container?: HTMLElement, header?: React.ReactNode) {
   return render(
     <VirtualSortableList
       items={items}
+      header={header}
       renderRow={(item, index) => <SortableRow item={item} index={index} />}
       renderDragPreview={(item, index) => <PreviewRow item={item} index={index} />}
       onReorder={() => {}}
@@ -52,6 +53,9 @@ function renderList(items: Item[], container?: HTMLElement) {
     container ? { container } : undefined,
   );
 }
+
+/** rowsRef（行容器）现在是 wrapper 的子节点：wrapper 必须是真的 DOM 节点，不能是 Fragment */
+const rowsContainer = (root: HTMLElement) => root.firstElementChild as HTMLElement;
 
 const mountedRows = () => document.querySelectorAll('[data-testid^="row-"]');
 
@@ -72,7 +76,21 @@ describe('VirtualSortableList：窗口化（#428）', () => {
     expect(document.querySelector('[data-testid="row-netease:0"]')).toBeTruthy();
     expect(document.querySelector('[data-testid="row-netease:199"]')).toBeNull();
     // 200 行 × 64px：滚动条长度反映整份队列（分页/懒加载做不到这一点）
-    expect((container.firstElementChild as HTMLElement).style.height).toBe('12800px');
+    expect((rowsContainer(container).firstElementChild as HTMLElement).style.height).toBe('12800px');
+  });
+
+  it('wrapper 是真实 DOM 节点，header 与行容器同父（#445：scrollMargin 的测量锚点）', () => {
+    const items = Array.from({ length: 3 }, (_, i) => song(i));
+    const { container } = renderList(items, undefined, <div data-testid="header">提示条</div>);
+
+    const wrapper = rowsContainer(container);
+    // rowsRef 必须是 wrapper 的子节点（Fragment 不产生 DOM 节点，会越过它落到滚动容器上）
+    const rows = wrapper.lastElementChild as HTMLElement;
+    expect(rows).not.toBe(wrapper);
+    expect(rows.parentElement).toBe(wrapper);
+    // header 与 rowsRef **同父**：列表上方会变高的东西由结构保证
+    expect(document.querySelector('[data-testid="header"]')!.parentElement).toBe(wrapper);
+    expect(wrapper.contains(document.querySelector('[data-testid="row-netease:0"]'))).toBe(true);
   });
 
   it('传给 dnd-kit 的是全量有序 id：滚到中段后行拿到的仍是全量下标', async () => {

@@ -21,6 +21,20 @@ interface VirtualSortableListProps<T extends { id: string }> {
   renderDragPreview: (item: T, index: number) => React.ReactNode;
   /** 松手后提交，参数都是**全量下标** */
   onReorder: (fromIndex: number, toIndex: number) => void;
+  /**
+   * 列表上方的内容（提示条 / 批量栏 / 表头）。**渲染在 `rowsRef` 的同一个父节点内**——
+   * `useVirtualRows` 只在「滚动容器 / `rowsRef` 的父节点」尺寸变化时重测 `scrollMargin`，
+   * 放到本组件之外就会让窗口与真实行位置整体错开一条栏高（静默、有界、不报错）。
+   * 传 Fragment 即可（同父由本组件的真实 <div> wrapper 保证）；默认 undefined，队列页零改动。
+   */
+  header?: React.ReactNode;
+  /**
+   * 行高。**它不是估计，它就是布局。** 全仓没有 `measureElement`（`VirtualRow` 把 `size`
+   * 直接写成 `height` 且没有 `overflow:hidden`），所以 `virtualItem.size` 永远等于本函数的
+   * 返回值；真实行高与之不符时行会压到下一行身上、spacer 总高与滚动条一起偏，**而且不报错**。
+   * 默认 `SONG_ROW_HEIGHT = 64`（唯一来源：`SongRow` 的 44px 封面盒 + 上下各 10px 内边距）；
+   * `compact` 会把行高变成 60px，调用方必须自己传 `estimateSize`。
+   */
   estimateSize?: (index: number) => number;
   overscan?: number;
   threshold?: number;
@@ -31,7 +45,7 @@ const estimateSongRow = () => SONG_ROW_HEIGHT;
 /**
  * 「窗口化 + 可排序」列表（#428 / ADR `2026-09-29-queue-virtualized-sortable-list.md`）。
  *
- * 它替调用方扛住三条容易踩坏、且踩坏了不报错只静默失效的约束：
+ * 它替调用方扛住五条容易踩坏、且踩坏了不报错只静默失效的约束：
  * 1. `SortableContext items` 必须是**全量有序 id** 且 memo 化 —— dnd-kit 的排序下标来自这个数组，
  *    不是 DOM 顺序，所以窗口化卸载的行照样参与排序；
  * 2. `setNodeRef` 由行自身持有（`VirtualRow` 只是定位壳）—— dnd-kit 测量时剥离的是**被测元素
@@ -40,15 +54,19 @@ const estimateSongRow = () => SONG_ROW_HEIGHT;
  *    （官方对虚拟化列表的措辞是 "you will absolutely want to use a drag overlay"）。
  *    overlay 用 portal 挂到 body，以免被滚动容器的 overflow 裁剪；主题 token 在 `:root`，不受影响。
  * 4. `scrollMargin` 只在「滚动容器 / `rowsRef` 的父节点」尺寸变化时重测（见 `useVirtualRows`）。
- *    所以**列表上方任何会变高的东西（批量栏、提示条）都必须与列表同处一个父容器内**——
+ *    所以**列表上方任何会变高的东西（批量栏、提示条、表头）都必须与列表同处一个父容器内**——
  *    放在本组件之外、滚动容器之内时，`scrollMargin` 会停在旧值，窗口与真实位置整体错开
- *    一条栏的高度（有界，但一直错着），而且没有任何报错。
+ *    一条栏的高度（有界，但一直错着），而且没有任何报错。这一步现在由结构保证：
+ *    走 `header` 插槽的内容渲染在 rowsRef 的同一父节点（真实 <div> wrapper）内。
+ * 5. `estimateSize` **就是布局**（见该 prop 的注释）：全仓没有 `measureElement`，`size` 直接
+ *    当 `height` 用。真实行高变了却不改 `estimateSize`，行会互相压叠，而且不报错。
  */
 function VirtualSortableList<T extends { id: string }>({
   items,
   renderRow,
   renderDragPreview,
   onReorder,
+  header,
   estimateSize = estimateSongRow,
   overscan = 8,
   threshold = VIRTUALIZE_THRESHOLD,
@@ -88,25 +106,33 @@ function VirtualSortableList<T extends { id: string }>({
       onDragCancel={handleDragCancel}
     >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        <div
-          ref={virtual.rowsRef}
-          style={virtual.mode === 'virtual' ? { position: 'relative', height: `${virtual.totalSize}px` } : undefined}
-        >
-          {virtual.mode === 'pending'
-            ? null
-            : virtual.mode === 'virtual'
-              ? virtual.items.map((row) => {
-                  const item = items[row.index];
-                  if (!item) return null;
-                  return (
-                    <VirtualRow key={item.id} start={row.start} size={row.size} scrollMargin={virtual.scrollMargin}>
-                      {renderRow(item, row.index)}
-                    </VirtualRow>
-                  );
-                })
-              : items.map((item, index) => (
-                  <React.Fragment key={item.id}>{renderRow(item, index)}</React.Fragment>
-                ))}
+        {/*
+          真实 <div>，**不能是 Fragment**：它必须是 rowsRef.parentElement（ResizeObserver 与
+          scrollMargin 的测量锚点）。header 与 rowsRef 同处这一层，于是「列表上方会变高的东西」
+          不再靠接入者记得读 ADR（#445）。
+        */}
+        <div>
+          {header}
+          <div
+            ref={virtual.rowsRef}
+            style={virtual.mode === 'virtual' ? { position: 'relative', height: `${virtual.totalSize}px` } : undefined}
+          >
+            {virtual.mode === 'pending'
+              ? null
+              : virtual.mode === 'virtual'
+                ? virtual.items.map((row) => {
+                    const item = items[row.index];
+                    if (!item) return null;
+                    return (
+                      <VirtualRow key={item.id} start={row.start} size={row.size} scrollMargin={virtual.scrollMargin}>
+                        {renderRow(item, row.index)}
+                      </VirtualRow>
+                    );
+                  })
+                : items.map((item, index) => (
+                    <React.Fragment key={item.id}>{renderRow(item, index)}</React.Fragment>
+                  ))}
+          </div>
         </div>
       </SortableContext>
 
