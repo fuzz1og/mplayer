@@ -65,7 +65,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 
 **只有文档类修改可以直接 push `master`；其余修改（含 bugfix）一律从最新 `master` 建 worktree，完成后 PR，CI 绿后等人工审核，不自行合并。**
 
-- **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。标题前缀：模板预置的 `[Bug]:` / `[Feature]:`，另有 `[Perf]:` / `[Tooling]:` / `[Chore]:`。PR 正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的 4 段写——验证以 CI 为准，正文只留 CI 证明不了的证据。
+- **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。标题前缀：模板预置的 `[Bug]:` / `[Feature]:`，另有 `[Perf]:` / `[Tooling]:` / `[Chore]:`。PR 正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的三段写（`Summary` / `Evidence` / `Merge Danger`，与 `pr` skill 同形）——验证以 CI 为准，正文只留 CI 证明不了的证据。
 - **敏感信息不入库**：tier3 订阅地址、API key、本地缓存。
 - **截图不入库**：真机验收 / UI 截图传 **PR 正文**（`gh pr edit <PR> --attach '<png>#<图注>'`），`docs/**/assets` 只留 ADR 正文引用的资产。
 - 分流边界（什么算文档类）、分支命名、Conventional Commits、验证顺序、PR 模板与清理的完整流程见 `docs/agents/git-workflow.md`。

@@ -62,8 +62,9 @@ git push -u origin <branch>
 gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tmp/pr-body.md
 ```
 
-- **PR 模板是唯一事实源**：正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的段写（一句话 / 要重点看什么 / 验证证据 / 深挖），流程文档只引用、不重写模板内容。**会话里挂载的外部/harness skill（如 `pr`）给的模板段名不同时，以本仓模板为准**，不要套用外部模板——它对别的仓成立，对本仓就是漂移。`gh` **不会**自动套模板——把模板文件直接当 `--body-file` 提交的是模板原件，必须自己按段填。
+- **PR 模板是唯一事实源**：正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的三段写（`Summary` / `Evidence` / `Merge Danger`）——段名与 `pr` skill 同形，会话里挂了它照它的写法走即可；本仓附加项（关闭关键字、正文预算、附图、两条门禁）在模板的 HTML 注释里，流程文档只引用、不重写模板内容。`gh` **不会**自动套模板——把模板文件直接当 `--body-file` 提交的是模板原件，必须自己按段填。
 - **面向人写，不写工作日志**：先给结论（改了什么、要 reviewer 做什么），再给细节；一段一个意思；箭头链、名词堆叠与 `文件:行` 留给 ADR 与 issue。**正文预算 ≤ 40 行 / ≤ 1500 字**，CI 已证明的（lint / typecheck / 四套测试 / `core:build` / `build`）不要抄。
+- **`Merge Danger` 必填**：回退代价（`one-way` 走不回去 / `two-way` 能走回去）与影响面（一个词，如 layout shift / 消费端破坏 / 移动端适配）；没有风险也要写 `two-way` + 一个词。争议点 / 高风险点写进 `Summary`（1–3 条）。
 - **长文去该去的地方**：取舍与方案对比写 ADR，排查过程写 issue 评论，正文只留 reviewer 决策所需——**只链接，不复述**。
 - **PR 之前 issue 要可开工**：`Fixes #N` 指向的 issue 应已带 `ready-for-agent`（验收标准明确）；纯文档 / chore / 依赖升级 / 紧急修复不受此限。
 - **自动关闭 issue 靠关闭关键字**：`Fixes #N` / `Closes #N` / `Resolves #N` 必须**独立成行、前后留白**——粘在中文标点后面（`「…」。Fixes #123。`）不会被识别；`Refs #N` 只是引用、**不关闭**；标题里的 `（#123）` 也不算。要关就写 `Closes`，并同时写进提交信息（见 §4）。
