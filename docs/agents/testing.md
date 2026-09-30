@@ -29,6 +29,9 @@ flat config（`eslint.config.js`），全局 ignores 与 `--no-warn-ignored` 语
 
 CI 的 `check`、四个 `test` 分片与 `expo-check` 都只是 `verify.mjs <scope>` 的包装（`./scripts/verify.sh` 是它的两行 shim）；本地全量 = `npm run verify`（Windows 用这条——Windows 上 `bash` 可能是 WSL 的 Linux bash，见 #500）。**`expo` 是本仓唯一「上游可能让它自己变红」的检查**：Expo 发布新的期望补丁时会与仓库改动无关地变红，处置是 `npx expo install --fix`（理由见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`）。Playwright 的 `e2e/` **不在**任何自动化里（见文末）。
 
+- **本机判定口径（#521）**：`all` 会先 `build` 再连跑四套件。本机同时开着模拟器 / Metro，或把多套件**并行**跑时，`waitFor` 型集成用例会顶到超时，表现为**每次挂不同的用例**（实测 ImportWorkflow / sourceSwapFlow / LinkPreviewTable 轮流中招），单独跑分片则稳定全绿。**判绿用分片单跑（`npm run verify -- renderer` 等），不要并行跑多套件**；CI 的四个 `test` job 是独立 runner，不受此影响。
+- **`@mplayer/core` 的来源**：worktree 共享 node_modules（junction）时，`@mplayer/core` 可能解析到**主 clone** 的 `packages/core/dist`，于是新增导出报 `TS2305 has no exported member`（像代码错，实为环境错）。`verify.mjs` 现在启动即自证来源，并在每次 `core:build` 后自证「消费者解析到的 dist 就是刚构建的这份」。
+
 - **Renderer（root）**: Vitest + jsdom + @testing-library；配置在 `vite.config.ts` 的 `test` 段（**无独立根 vitest.config.ts**），`include` 覆盖 `src/renderer/__tests__/**` 与 `src/__tests__/*.test.{ts,tsx}`（**仅顶层**；`src/__tests__/main/**` 归 Main 套件，不再在 jsdom 下重复跑一遍）。setup mock electron / `window.electronAPI`、matchMedia、ResizeObserver，并全局 stub antd message/notification；测试各自定义局部 `song()` 构造器（无共享 factory）。`npx vitest run` / `npm run test:run`（**依赖 `packages/core/dist`，先 `npm run core:build`**）
 - **Main**: `vitest.main.config.ts`（node env），global electron mock，默认开 v8 coverage（`src/main/**`）。`npm run test:main`
 - **Core**: `npx vitest run --config packages/core/vitest.config.ts`（走源码 alias，**不需要** dist），默认开 v8 coverage
