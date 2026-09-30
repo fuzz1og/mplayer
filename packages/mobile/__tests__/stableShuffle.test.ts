@@ -246,17 +246,24 @@ describe('#520 blocker 1：窗口态只补不丢，权威态才裁剪', () => {
     expect(usePlayerStore.getState().shuffle?.order).toEqual(FULL);
   });
 
-  it('权威态：同一张歌单删掉一首后重新 setQueue → 裁剪幽灵 id', () => {
+  it('权威态：同一张歌单删掉一首后重新 setQueue → 裁剪幽灵 id 且保留既有相对顺序', () => {
     useSettingsStore.setState({ playMode: '随机播放' });
     usePlayerStore.setState({ shuffle: { order: FULL, cursor: 0 } });
     const members = FULL.filter((id) => id !== 's7').map(song);
     usePlayerStore.getState().setQueue(members, 0);
 
     const st = usePlayerStore.getState().shuffle;
+    // 判别力所在（修前红在这条前缀断言）：旧实现见 id 集合变化就**整批重洗** → 幸存成员的
+    // 相对顺序被打乱。⚠️ 「无 s7」与「长度 = 新成员数」在修前**也成立**（重洗顺带做到了），
+    // 所以它们不是这条用例的判别力，只是顺带的护栏。
+    const surviving = FULL.filter((id) => id !== 's7');
+    expect(st?.order.slice(0, surviving.length)).toEqual(surviving);
+    expect(st?.order).toHaveLength(members.length);
     expect(st?.order).not.toContain('s7');
-    expect(st?.order).toEqual(FULL.filter((id) => id !== 's7'));
   });
 
+  // 行为护栏（regression guard），**不是**红→绿钉子：修前走「整批重洗」同样能得到新成员集的排列，
+  // 这条防的是「以后退化成保留旧序列 / 把幽灵 id 串进来」。
   it('权威态：换成另一张歌单 → 由新成员集重建（无幽灵、长度 = 新成员数）', () => {
     useSettingsStore.setState({ playMode: '随机播放' });
     usePlayerStore.setState({ shuffle: { order: FULL, cursor: 0 } });
