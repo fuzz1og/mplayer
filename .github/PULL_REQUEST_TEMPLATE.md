@@ -1,22 +1,27 @@
-## 变更内容
+<!-- 预算：≤ 40 行 / ≤ 1500 字。CI 已证明的（lint / typecheck / 四个测试 / core:build / build）不要抄。
+     发帖前删掉本文件里的所有 <!-- --> 注释。
+     如果你是 AI agent：不要改动下面的 HUMAN 段；作者对所有提交内容负责。 -->
 
-<!-- 描述本次改动做了什么、为什么。跨端改动（core/desktop/mobile）请说明影响范围 -->
+## HUMAN（人填；创建时留空，评审时填写；agent 不得改动）
 
-## 关联 issue
+<!-- 我亲自验了什么、我要求 reviewer 重点看什么、我不同意 agent 的哪一点。 -->
 
-<!-- 如有关联，写 Fixes #123 / Closes #456 -->
+## 一句话
 
-## 验证
+<!-- 改了什么 + `Fixes #N` + 谁看到什么变化。最多 3 行，先给结论。 -->
 
-- [ ] `npm run lint` 通过
-- [ ] `npm run typecheck` 通过（桌面端）
-- [ ] `npx tsc --noEmit --project packages/mobile/tsconfig.json` 通过（移动端）
-- [ ] 相关测试通过（`./scripts/verify.sh` 一把过；或按套件：`test:run` / `test:main` / `npm test -w packages/core` / mobile 配置）
-- [ ] 改了 `packages/core` → 已 `npm run core:build` 并重跑验证
-- [ ] 改了 `packages/mobile` 或 `packages/core` → 已附真机验收结论与**证据图**（机型 / 系统 / 网络环境；图挂 PR 正文，流程见 mobile-device-debugging skill）。**这是人工约定，CI/钩子不做校验**
-- [ ] UI / 真机验收有可视证据 → 已在 PR **正文**附图（`gh pr edit --attach`，不入库）
-- [ ] 行为 / 命令 / 架构有变化 → 已同步更新 AGENTS.md / CONTEXT.md / 相关 ADR
+## 要重点看什么
 
-## 备注
+<!-- 争议点 / 高风险点 / 需要人判断的地方，1–3 条；没有就写「无」。 -->
 
-<!-- 回归风险（涉及哪些来源 netease/qq/kugou/…、哪些端）、本次不做（out-of-scope）、其他需要 reviewer 注意的点 -->
+## 人验过的（CI 证明不了的）
+
+<!-- 只写「跑什么命令 / 点了哪里，看到什么现象」；说不出这句就等于没验。
+     UI 与真机改动必须附图：`gh pr edit <PR> --attach '<png>#<图注>'`（图不入库），没上真机写「未做 + 原因」。
+     取舍与排查过程写进 ADR / issue 评论，正文只链接、不复述。 -->
+- [ ] 真机 / UI 有可视证据 → 已附图（或「未做 + 一句原因」）
+- [ ] 行为 / 命令 / 架构有变化 → 已同步 `AGENTS.md` / `CONTEXT.md` / 相关 ADR
+
+## 深挖（可选，到此为止也行）
+
+<!-- ADR / issue / 设计文档链接。 -->
