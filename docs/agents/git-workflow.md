@@ -75,6 +75,7 @@ gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tm
 - **CI 绿后停在人审**：PR 交给人工 review 与合并，agent 不自行合并、不设 auto-merge。收到 review 意见回本 worktree 继续修，push 自动更新同一 PR。
 - 改了 `packages/mobile` 或 `packages/core` 的 PR 必须附真机验收结论与**证据图**（没上真机就照实写「未做 + 原因」，不许写「已附截图」而没附；流程见 `.agents/skills/mobile-device-debugging`；固化断言可跑 `npm run mobile:e2e` 一条龙，见 `e2e/README.md`）。
 - 行为/命令/架构有变化的，同一个 PR 里更新 AGENTS.md / CONTEXT.md / 相关 ADR。
+- **分支可能被并发会话动过**：`--force-with-lease` 被拒（`stale info`）就是「远端有你没见过的提交」的信号——先 `git log --oneline HEAD..origin/<branch>` 看多了什么，再决定 merge 还是真的覆盖；直接重试会覆盖别人的提交。
 - 开 PR 前先合入最新 `origin/master`，冲突就地解决。
 
 ## 6. 人工合并后清理

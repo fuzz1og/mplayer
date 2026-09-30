@@ -32,6 +32,7 @@ description: MPlayer 版本发布流程——发版前文档同步、版本递�
 4. **截图与资产**：真机 / UI 截图传 PR comment、**不入库**；`docs/**/assets` 只留 ADR 正文引用的资产，无任何文档引用的孤儿截图直接 `git rm`。
 5. **本轮行为变化**：命令 / 行为 / 架构有变时，同一批改动里更新 `AGENTS.md` / `CONTEXT.md` / 相关 ADR。
 6. **常驻预算**：`AGENTS.md` 每轮都载入，只放「所有分支都要」的内容 + 指针；细节推给 `docs/agents/*` / `CONTEXT.md` / ADR。要新增长内容时先问它是否只服务某一条分支——是，就加指针、不要就地展开。
+7. **`.github/` 模板与文档里对它的描述**：模板的段 / 勾选项 / 标题前缀的表述散在 `AGENTS.md`、`git-workflow.md`、`issue-tracker.md`，改模板时同批改描述——这类描述最容易被上一次改动落空（实测：删掉验证清单后 `AGENTS.md` 仍写着「验证清单含双端核对」）。
 
 提交走文档直推（`docs:` 前缀直接 push `master`），不需要 issue 与 worktree。
 
