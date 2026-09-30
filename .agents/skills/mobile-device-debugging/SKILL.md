@@ -10,7 +10,7 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
 | 回路 | 何时用 | 入口 |
 |---|---|---|
 | **A · 雷电模拟器**（默认优先） | 会话跑在 Windows、验 UI / 渲染 / JS 层 | `D:\leidian\LDPlayer14\ldconsole.exe`（`C:\leidian` 是空壳） |
-| **B · Windows 原生 adb** | 要真实机型 / 网络 / 原生能力 | `C:\Users\Admin\scoop\apps\android-clt\current\platform-tools\adb.exe` |
+| **B · Windows 原生 adb** | 要真实机型 / 网络 / 原生能力 | `C:\Users\<用户名>\scoop\apps\android-clt\current\platform-tools\adb.exe` |
 | **C · WSL + usbipd** | 在 WSL 里开发时 | `./scripts/mobile-device/usb-attach.mjs` + `./scripts/mobile-debug.mjs` |
 
 回路 C 的前提：手机 USB 经 usbipd-win 直挂进 WSL，全系统只有一个 adb server——WSL 原生版（udev 规则 `/etc/udev/rules.d/51-android-usbip.rules`），Windows 侧一律不用。**本机（DSH 跑在 Windows）实际走 A/B**：usbipd 里手机显示 `Shared`（未 attach）是正常的，别 attach 进 WSL。
@@ -118,7 +118,7 @@ adb shell dumpsys notification --noredact | grep music-playback
 
 ## 陷阱速查
 
-- **attach 报 `Device busy (exported)`**：Windows 正占用设备。两个来源：手机处于「文件传输/MTP」模式（下拉通知切成「仅充电」，USB 调试保持开）；或另一条回路的 adb 被拉起（`/mnt/c/Users/Admin/scoop/shims/adb.exe kill-server`）。切换 USB 模式会让设备重新枚举，bind 可能要重做——重跑 usb-attach.mjs。
+- **attach 报 `Device busy (exported)`**：Windows 正占用设备。两个来源：手机处于「文件传输/MTP」模式（下拉通知切成「仅充电」，USB 调试保持开）；或另一条回路的 adb 被拉起（`/mnt/c/Users/<用户名>/scoop/shims/adb.exe kill-server`）。切换 USB 模式会让设备重新枚举，bind 可能要重做——重跑 usb-attach.mjs。
 - **之前能用，突然 `no devices`**：usbipd 透传掉了（拔插、省电、重新枚举都会）。重跑 usb-attach.mjs 即可。
 - **开发态验收用 Expo Go，不是装机 APK**：`com.mplayer.mobile` 是 release 构建（无 DEBUGGABLE），跑打包 JS、不连 Metro——看不到 `Running "main"` 与 bundling 日志就是这个原因。
 - **原生能力必须 dev client**：Expo Go 下 `setActiveForLockScreen` 被跳过（`services/audioPlayer.ts` 的 `if (!isExpoGo)`）、`enableBackgroundPlayback` 插件不生效（#327）——后台播放 / 锁屏 / 通知栏类验收在 Expo Go 上得到的结论无效，别写进 PR。
