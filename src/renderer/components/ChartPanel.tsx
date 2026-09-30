@@ -1,4 +1,5 @@
 import React from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { Music2, AlertCircle, Play } from 'lucide-react';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
@@ -172,7 +173,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
         <div style={{ position: 'relative', width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
           {song.cover ? (
             <img
-              src={song.cover}
+              src={coverThumbUrl(song.cover, COVER_SIZE.row)}
               alt=""
               loading="lazy"
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}

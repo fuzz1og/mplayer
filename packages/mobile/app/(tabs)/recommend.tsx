@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, RefreshControl, StyleSheet, Image, Animated,
+  View, Text, RefreshControl, StyleSheet, Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
 import { cacheManager, getDirectClient, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
 import RecommendSkeleton from '../../components/RecommendSkeleton';
+import LazyCover from '../../components/LazyCover';
 import { RECOMMEND_BATCH_SIZE, RECOMMEND_GRID_COLS } from '../../components/recommendMetrics';
 import ScalePress, { pressScale } from '../../components/ScalePress';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -164,7 +165,7 @@ export default function RecommendPage() {
                     onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
                   >
                     {p.coverImgUrl ? (
-                      <Image source={{ uri: p.coverImgUrl }} style={[styles.gridCover, { width: cardW, height: cardW }]} />
+                      <LazyCover uri={p.coverImgUrl} style={[styles.gridCover, { width: cardW, height: cardW }]} />
                     ) : (
                       <View style={[styles.gridCover, styles.gridCoverFallback]}>
                         <ListMusic size={32} color={colors.textDisabled} />

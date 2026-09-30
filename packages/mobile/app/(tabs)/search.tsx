@@ -4,7 +4,6 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  Image,
   Animated,
 } from 'react-native';
 import ScalePress from '../../components/ScalePress';
@@ -19,6 +18,8 @@ import SongList from '../../components/SongList';
 import type { SongListRow } from '../../components/SongList';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import CoverGridSkeleton from '../../components/CoverGridSkeleton';
+import LazyCover from '../../components/LazyCover';
+import { listWindowProps } from '../../components/listWindow';
 import { GRID_CARD } from '../../components/gridCardMetrics';
 import { GRID_GAP, gridCardWidth } from '../../components/gridMetrics';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
@@ -237,6 +238,8 @@ export default function SearchPage() {
             key="playlist-results"
             data={playlists}
             keyExtractor={(item) => String(item.id)}
+            // 窗口档与其它长列表同源（#411）
+            {...listWindowProps}
             numColumns={2}
             columnWrapperStyle={styles.playlistRow}
             contentContainerStyle={[
@@ -266,7 +269,7 @@ export default function SearchPage() {
                 onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
               >
                 {p.coverImgUrl ? (
-                  <Image source={{ uri: p.coverImgUrl }} style={styles.playlistCover} />
+                  <LazyCover uri={p.coverImgUrl} style={styles.playlistCover} />
                 ) : (
                   <View style={[styles.playlistCover, styles.playlistCoverFallback]}>
                     <ListMusic size={28} color={colors.textDisabled} />
@@ -299,6 +302,8 @@ export default function SearchPage() {
           key="artist-results"
           data={artists}
           keyExtractor={(item) => String(item.id)}
+          // 窗口档与其它长列表同源（#411）
+          {...listWindowProps}
           numColumns={3}
           columnWrapperStyle={styles.artistRow}
           contentContainerStyle={[
@@ -311,7 +316,7 @@ export default function SearchPage() {
               onPress={() => router.push(`/artist/${a.id}?name=${encodeURIComponent(a.name)}&pic=${encodeURIComponent(a.picUrl || '')}` as any)}
             >
               {a.picUrl ? (
-                <Image source={{ uri: a.picUrl }} style={styles.artistAvatar} />
+                <LazyCover uri={a.picUrl} style={styles.artistAvatar} />
               ) : (
                 <View style={[styles.artistAvatar, styles.artistAvatarFallback]}>
                   <User size={28} color={colors.textDisabled} />

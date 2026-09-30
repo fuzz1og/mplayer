@@ -1,4 +1,5 @@
 import React from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { Disc3 } from 'lucide-react';
 import type { Album } from '@mplayer/core';
 
@@ -85,7 +86,7 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
                   {album.picUrl && (
                     <img
                       key={album.picUrl}
-                      src={album.picUrl}
+                      src={coverThumbUrl(album.picUrl, COVER_SIZE.icon)}
                       alt={album.name}
                       loading="lazy"
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { Disc3, Play } from 'lucide-react';
 import type { Album } from '@mplayer/core';
 
@@ -122,7 +123,7 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
                     {album.picUrl && (
                       <img
                         key={album.picUrl}
-                        src={album.picUrl}
+                        src={coverThumbUrl(album.picUrl, COVER_SIZE.thumb)}
                         alt={album.name}
                         loading="lazy"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}

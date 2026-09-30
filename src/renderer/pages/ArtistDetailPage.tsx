@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
@@ -200,7 +201,7 @@ const ArtistDetailPage: React.FC = () => {
               >
                 {displayPic ? (
                   <img
-                    src={displayPic}
+                    src={coverThumbUrl(displayPic, COVER_SIZE.thumb)}
                     alt={displayName || ''}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />

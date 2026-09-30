@@ -1,4 +1,5 @@
 import React from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useNavigate } from 'react-router-dom';
 import type { DiscoverPlaylist } from '@mplayer/core';
 import { formatPlayCount } from '@mplayer/core';
@@ -31,7 +32,7 @@ const DiscoverPlaylistCard: React.FC<DiscoverPlaylistCardProps> = ({ playlist })
     >
       <div style={{ position: 'relative', paddingTop: '100%', backgroundColor: 'var(--skeleton-base)' }}>
         <img
-          src={playlist.coverImgUrl}
+          src={coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)}
           alt={playlist.name}
           loading="lazy"
           style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}

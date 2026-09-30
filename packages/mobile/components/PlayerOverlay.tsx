@@ -12,6 +12,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
 import { logCoverError } from '../services/coverDiagnostics';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { togglePlay, seekTo, skipNext, skipPrev, fetchLrcInBackground } from '../services/audioPlayer';
@@ -528,7 +529,7 @@ export default function PlayerOverlay({ onClose }: Props) {
                   <View style={[styles.platter, { width: plinthSize(winW, winH) - 30, height: plinthSize(winW, winH) - 30 }]} />
                   {song?.cover && !coverFailed ? (
                     <Animated.Image
-                      source={{ uri: song.cover }}
+                      source={{ uri: coverThumbUrl(song.cover, COVER_SIZE.hero) }}
                       style={[styles.cover, { width: plinthSize(winW, winH) - 40, height: plinthSize(winW, winH) - 40, transform: [{ rotate: spin }] }]}
                       onError={handleCoverError}
                     />

@@ -1,4 +1,5 @@
 import React from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { Play, RefreshCw, Music2 } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import SongCover from './SongCover';
@@ -86,7 +87,7 @@ const DailyRecommend: React.FC<DailyRecommendProps> = ({ songs, loading, onPlay,
         style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', minHeight: '360px', cursor: 'pointer', backgroundColor: 'var(--bg-hover)', border: '1px solid var(--border-default)' }}
       >
         <SongCover
-          src={featured?.cover}
+          src={featured?.cover ? coverThumbUrl(featured.cover, COVER_SIZE.hero) : featured?.cover}
           alt={featured?.name ?? ''}
           variant="gradient"
           style={{ position: 'absolute', inset: 0 }}

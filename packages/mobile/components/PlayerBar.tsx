@@ -13,6 +13,7 @@ import ScalePress from './ScalePress';
 import QueueListModal from './QueueListModal';
 import ChromeSurface from './ChromeSurface';
 import { tapLight } from '../utils/haptics';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 
 export default function PlayerBar() {
   const { colors } = useTheme();
@@ -65,7 +66,7 @@ export default function PlayerBar() {
       {/* 专辑封面 */}
       <View style={styles.coverWrap}>
         {currentSong?.cover && !coverFailed ? (
-          <Image source={{ uri: currentSong.cover }} style={styles.cover} onError={handleCoverError} />
+          <Image source={{ uri: coverThumbUrl(currentSong.cover, COVER_SIZE.icon) }} style={styles.cover} onError={handleCoverError} />
         ) : (
           <Music size={24} color={colors.textTertiary} />
         )}

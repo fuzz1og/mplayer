@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { message } from 'antd';
 import { ArrowLeft, Flame, Disc3, ListMusic, Mic2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -691,7 +692,7 @@ const DiscoverPageV2: React.FC = () => {
                       }}
                     >
                       {a.picUrl ? (
-                        <img src={a.picUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={coverThumbUrl(a.picUrl, COVER_SIZE.icon)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
                         a.name.charAt(0)
                       )}
