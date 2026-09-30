@@ -250,6 +250,9 @@ export default function PlayerOverlay({ onClose }: Props) {
     const idx = PLAY_MODES.indexOf(playMode);
     const nextMode = PLAY_MODES[(idx + 1) % PLAY_MODES.length];
     setPlayMode(nextMode);
+    // #519：进随机就把**稳定序列**建起来（同一会话内不重洗；已有序列只对游标）。
+    // 补窗 / next / prev 也会懒建兜底，这里只是让「刚切过去」立刻有序列可用。
+    if (nextMode === '随机播放') usePlayerStore.getState().ensureShuffle();
   };
 
   useEffect(() => {

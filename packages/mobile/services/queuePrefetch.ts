@@ -1,5 +1,5 @@
-import { getNextSongIndex } from '@mplayer/core';
-import type { Song } from '@mplayer/core';
+import { applyShuffleOrder, getNextSongIndex } from '@mplayer/core';
+import type { ShuffleState, Song } from '@mplayer/core';
 
 /**
  * 预取窗口的状态与定序（规格 §5.5 / §7.3）。
@@ -74,17 +74,42 @@ export function resetPrefetchState(): void {
  *
  * @param excluded 已在原生手里的 key（`nativeMirror`）——不重复投喂
  * @param playMode settingsStore 的播放模式（'单曲循环' | '随机播放' | '列表循环'）
+ * @param shuffle 稳定随机序列（#519）；随机模式下**有序列就按序列定序**，不再现抽
  */
 export function planNextIndexes(
   queue: Song[],
   fromIndex: number,
   count: number,
   excluded: Set<string>,
-  playMode: string
+  playMode: string,
+  shuffle?: ShuffleState | null
 ): number[] {
   if (queue.length === 0 || count <= 0) return [];
   // 单曲循环由原生 REPEAT_MODE_ONE 处理：不补窗（补了也永远不会播到）
   if (playMode === '单曲循环') return [];
+
+  // 随机（#519）：定序交给 core 的**稳定序列**（游标推进），同一稳态下计划收敛为同一批。
+  // 旧实现每轮 Math.random 重抽一批 → 「补窗 → patchQueue → 状态变化 → 再补窗」自激循环：
+  // 原生窗口每轮被换成完全不同的一批歌，下一首永远等不到（真机 9 分钟 0 次换歌）。
+  if (playMode === '随机播放' && shuffle && queue.length > 1) {
+    const ordered = applyShuffleOrder(queue, shuffle);
+    const currentSong = queue[fromIndex];
+    const at = ordered.findIndex((s) => s === currentSong || (!!s.id && s.id === currentSong?.id));
+    // 当前曲不在序列里（id 缺失等）→ 当作「在序列起点之前」，从序列开头取
+    const anchor = at >= 0 ? at : ordered.length - 1;
+    const local = new Set(excluded);
+    const byOrder: number[] = [];
+    for (let k = 1; k <= ordered.length && byOrder.length < count; k += 1) {
+      const candidate = ordered[(anchor + k) % ordered.length];
+      const key = prefetchKey(candidate);
+      if (local.has(key)) continue;
+      const memberIndex = queue.indexOf(candidate);
+      if (memberIndex < 0) continue;
+      local.add(key);
+      byOrder.push(memberIndex);
+    }
+    return byOrder;
+  }
 
   const planned: number[] = [];
   const localExcluded = new Set(excluded);

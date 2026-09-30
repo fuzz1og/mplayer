@@ -502,3 +502,74 @@ describe('#518：插入后「下一首」= 被插入的那首；补窗基准不�
     expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'B', 'C']);
   });
 });
+
+/**
+ * #519：随机模式的**原生喂窗口**必须按稳定随机序，而不是每轮现抽一批。
+ *
+ * 现场（#519）：`补窗 mode=随机播放 计划=[120,72,68]→[93,170,87]→…` 每秒换一整批全新下标、
+ * 9 分钟 0 条 `开始播放`。这里钉住「同一稳态下第一轮喂的就是序列下一批、第二轮不再换一批」。
+ */
+describe('#519：随机模式的补窗按稳定随机序（不再自激重抽）', () => {
+  function lastAppendKeys(): string[] {
+    return (fake.patchCalls.at(-1)?.append ?? []).map((t) => t.meta.key);
+  }
+
+  it('第一轮按随机序喂下一批；第二轮收敛（不再换一批全新的）', async () => {
+    const queue = setQueue(['A', 'B', 'C', 'D', 'E', 'F'], 0);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['A', 'C', 'E', 'B', 'D', 'F'], cursor: 0 } });
+    // 原生此刻只有当前曲 A
+    fake.state.tracks = [{ key: prefetchKey(queue[0]), songId: 'A' }];
+    fake.state.index = 0;
+    fake.state.key = prefetchKey(song('A'));
+    // 旧实现忽略序列、每轮现抽：用「每次调用都不同」的随机源让它稳定地换批（不靠运气）
+    let n = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => {
+      n += 1;
+      return (n % 6) / 6;
+    });
+
+    await feedWindow(2);
+    expect(lastAppendKeys()).toEqual([prefetchKey(song('C')), prefetchKey(song('E'))]);
+
+    fake.patchCalls.length = 0;
+    await feedWindow(2);
+    // 继续沿**同一份序列**往后补（不是换一批全新的随机下标）
+    expect(lastAppendKeys()).toEqual([prefetchKey(song('B')), prefetchKey(song('D'))]);
+    // 原生列表 = 随机序的前缀：这就是「计划收敛」的判据（旧实现每轮换一批，永远拼不出前缀）
+    expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'C', 'E', 'B', 'D']);
+
+    // 序列最后一首
+    fake.patchCalls.length = 0;
+    await feedWindow(2);
+    expect(lastAppendKeys()).toEqual([prefetchKey(song('F'))]);
+    expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'C', 'E', 'B', 'D', 'F']);
+
+    // 序列全部喂完后：再补窗没有新候选（收敛，不再重抽、不再增长）
+    fake.patchCalls.length = 0;
+    await feedWindow(2);
+    expect(lastAppendKeys()).toEqual([]);
+  });
+
+  it('原生推进到序列下一首后，窗口继续沿同一份序列补（不重抽）', async () => {
+    const queue = setQueue(['A', 'B', 'C', 'D', 'E', 'F'], 0);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['A', 'C', 'E', 'B', 'D', 'F'], cursor: 0 } });
+    fake.state.tracks = [
+      { key: prefetchKey(queue[0]), songId: 'A' },
+      { key: prefetchKey(song('C')), songId: 'C' },
+    ];
+    fake.state.index = 0;
+    fake.state.key = prefetchKey(song('A'));
+    await feedWindow(2);
+    expect(lastAppendKeys()).toEqual([prefetchKey(song('E')), prefetchKey(song('B'))]);
+
+    // 原生推进到 C（index=1，key 跟着变）→ 下一批从 C 之后继续：E/B 已在手里 → 补 D、F
+    fake.state.index = 1;
+    fake.state.key = prefetchKey(song('C'));
+    fake.patchCalls.length = 0;
+    await feedWindow(2);
+    expect(lastAppendKeys()).toEqual([prefetchKey(song('D')), prefetchKey(song('F'))]);
+    expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'C', 'E', 'B', 'D', 'F']);
+  });
+});

@@ -1,4 +1,5 @@
 import { AppRegistry } from 'react-native';
+import { createShuffleState, stepShuffle } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import {
   NativePlayer,
@@ -266,6 +267,9 @@ function reconcileQueueFromNative(state: PlayerState | null, force = false): boo
     currentIndex: index,
     hasPlayed: true,
   });
+  // 随机序（#519）：队列被整体重建（冷启/裁剪后对账）→ 把游标对到实际在播的那首。
+  // 序列本身不重洗（同会话稳定）；盘上恢复的那份也只做增量对齐。
+  usePlayerStore.getState().syncShuffleCursorToCurrent();
   const summary = `已从原生队列对账 ${songs.length} 首（当前第 ${index + 1} 首：${songs[index]?.name ?? ''}）`;
   console.log(`[player] ${summary}`);
   useLogsStore.getState().addLog('info', summary);
@@ -436,8 +440,50 @@ export async function nativePlayNext(song: Song): Promise<NativePlayNextResult> 
   return { queued: true, moved: result.moved === true, noop: result.changed === false };
 }
 
+/**
+ * 上一首（#519）：随机模式下沿**随机序**回退。
+ *
+ * 原生列表在随机模式下就是按序列喂出来的窗口（`feedWindow` 按序列 append），
+ * 所以「原生列表的上一格 == 序列上一张」时直接交给原生（不打断当前播放、无重缓冲）；
+ * 序列上一张不在原生列表里（会话开头 / 已被裁剪）→ 只能起播它：没有 prepend 原语，
+ * 硬走原生 prev 会变成重播当前曲（用户观感就是「上一首没反应」）。
+ */
 export function nativePrev(): void {
-  NativePlayer?.prev();
+  const NP = NativePlayer;
+  if (!NP) return;
+  const store = usePlayerStore.getState();
+  const playMode = useSettingsStore.getState().playMode;
+
+  if (playMode === '随机播放' && store.queue.length > 0 && store.currentIndex >= 0) {
+    const base = store.shuffle ?? createShuffleState(store.queue, { currentIndex: store.currentIndex });
+    const step = stepShuffle(base, store.queue, -1);
+    const target = step.index >= 0 ? store.queue[step.index] : null;
+    if (target) {
+      const native = safeState();
+      const prevKey = native && native.index > 0 ? native.tracks?.[native.index - 1]?.key : null;
+      if (prevKey && prevKey === songKey(target)) {
+        usePlayerStore.setState({ shuffle: step.state });
+        NP.prev();
+        void feedWindow();
+        return;
+      }
+      // 序列上一张不在原生手里 → 起播它（窗口随后按同一份序列补齐）
+      usePlayerStore.setState({
+        queue: store.queue,
+        currentSong: target,
+        currentIndex: step.index,
+        shuffle: step.state,
+        isPlaying: true,
+        currentTime: 0,
+        hasPlayed: true,
+      });
+      void nativePlaySong(target);
+      return;
+    }
+  }
+
+  NP.prev();
+  void feedWindow();
 }
 
 export function nativeStop(): void {
@@ -476,6 +522,12 @@ export async function feedWindow(need?: number): Promise<void> {
   const jsIndex = byKey >= 0 ? byKey : playerState.currentIndex;
   if (jsIndex < 0) return;
 
+  const playModeNow = useSettingsStore.getState().playMode;
+  // 随机序（#519）：进随机后第一次补窗就建一份（懒建，避免 setPlayMode 跨 store 回调）。
+  // 已有序列且仍是这批歌 → 只对游标，不重洗。
+  if (playModeNow === '随机播放') usePlayerStore.getState().ensureShuffle();
+  const shuffleNow = usePlayerStore.getState().shuffle;
+
   const target = Math.max(1, need ?? currentPolicy().prefetchAhead);
   const existing = nativeAheadKeys(nativeStateNow);
   const wantedIndexes = planNextIndexes(
@@ -483,7 +535,8 @@ export async function feedWindow(need?: number): Promise<void> {
     jsIndex,
     target,
     existing,
-    useSettingsStore.getState().playMode
+    playModeNow,
+    shuffleNow
   );
 
   // 并行解析窗口（core 的 tier3 执行器本身有 K=3 闸门，串行只会把补窗时间乘 3，
