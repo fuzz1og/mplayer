@@ -19,6 +19,7 @@
  *   npm run verify -- core             # @mplayer/core vitest
  *   npm run verify -- mobile           # packages/mobile vitest
  *   npm run verify -- expo             # Expo SDK 依赖一致性（expo install --check）
+ *   npm run verify -- stack            # 只跑堆叠自检（本分支是否基于 origin/master + 相对 master 的文件集合）
  *   npm run verify -- fast             # = static（兼容旧用法：跳过全部测试）
  */
 
@@ -231,6 +232,47 @@ function assertNodeModulesMatchLockfile() {
   process.exit(1);
 }
 
+/**
+ * 堆叠 PR 的合入前自检（#520 / #517 实测）。
+ *
+ * 本仓允许「base 写 master、分支堆叠在别的分支上」（`ci.yml` 只对 base=master 跑 CI），
+ * 但合入前**必须确认基座已合**——否则本分支会把基座那份**旧拷贝**一起带进 master
+ * （#520 实测：栈底带着 #516 的旧版 core/desktop 改动；先合 #520 就会把旧版桌面改动写回 master）。
+ *
+ * 判据是**确定性**的：HEAD 是否以 `origin/master` 为祖先。不是 → 提示并列出相对 master 的
+ * 文件集合，供逐项确认「是否都属于本票」。**只提示、不失败**：堆叠本身是合法形态。
+ */
+function reportBranchBase() {
+  const git = (args) => spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+  const hasRef = (ref) => git(['rev-parse', '--verify', '--quiet', ref]).status === 0;
+  if (!hasRef('HEAD')) return;
+  if (!hasRef('origin/master')) {
+    console.log('• 堆叠自检：本地无 origin/master，跳过（先 `git fetch origin`）');
+    return;
+  }
+  const isAncestor = (a, b) => git(['merge-base', '--is-ancestor', a, b]).status === 0;
+  if (isAncestor('origin/master', 'HEAD')) {
+    console.log('✓ 分支已基于 origin/master');
+    return;
+  }
+  // 三态判定的第二态：HEAD 是 master 的祖先 = 分支**已合入**（或本地落后）——这**不是**堆叠。
+  // 实测（#520 合入后）：漏了这一态就会打印「未基于 master + 0 个文件」，比不检查还误导。
+  if (isAncestor('HEAD', 'origin/master')) {
+    console.log('• 本分支已在 origin/master 的历史里（多半已合入、或本地落后）：切新分支或 pull --rebase 即可，不涉及堆叠处置');
+    return;
+  }
+  const files = (git(['diff', '--name-only', 'origin/master...HEAD']).stdout ?? '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  console.log([
+    '⚠ 本分支未基于 origin/master（= 堆叠 PR；合法，但**合入前必须确认基座已合**）。',
+    `  相对 master 的文件集合（${files.length} 个）——逐项确认是否都属于本票：`,
+    ...files.map((f) => `    ${f}`),
+    '  基座已合 → `git fetch origin master && git rebase origin/master` 收敛；未合 → 等它合入。',
+  ].join('\n'));
+}
+
 const SCOPES = {
   all: ['static', 'renderer', 'main', 'core', 'mobile', 'expo'],
   static: ['static'],
@@ -240,6 +282,7 @@ const SCOPES = {
   core: ['core'],
   mobile: ['mobile'],
   expo: ['expo'],
+  stack: [], // 无步骤：只跑上面的 pre-check（reportBranchBase），合入前手工跑
 };
 
 if (!Object.hasOwn(SCOPES, SCOPE)) {
@@ -251,6 +294,7 @@ if (!Object.hasOwn(SCOPES, SCOPE)) {
 assertNodeModulesMatchPlatform();
 assertNodeModulesMatchLockfile();
 assertCoreIsFromThisCheckout({ requireDist: false });
+reportBranchBase();
 
 for (const shard of SCOPES[SCOPE]) {
   for (const [label, commandLine, options] of SHARDS[shard]) {
