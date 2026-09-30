@@ -829,7 +829,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // 随机（#511）：播放顺序由序列说了算——插到**随机序里当前曲的下一格**。
     // 队列成员只负责「在不在」，新歌追加进成员即可；当前曲与播放指针都不动。
-    // 点的是当前曲本身 / 已在目标格 → no-op（与移动端 planPlayNext 同口径，连点幂等）。
+    // 点的是当前曲本身 / 已在目标格 → no-op（与 #506 列表分支的幂等语义一致；移动端接缝见 ADR）。
     if (playMode === '随机播放') {
       const currentId = currentPlaylist[currentPlaylistIndex]?.id;
       if (song.id === currentId) return;

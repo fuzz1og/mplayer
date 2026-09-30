@@ -11,7 +11,7 @@
 - core `utils/queue.ts` 的 `nextRandomIndex` 是 do/while **现抽一个 ≠ currentIndex 的下标**：无记忆、无可持久化状态。
 - `getNextSongIndex` 与 `getPrevSongIndex` **共用**它 → 随机模式下「上一首」不是回上一张，而是再抽一次（与随机序同源的在库 bug）。
 - 桌面 `currentPlaylist` 就是插入顺序，`QueuePage` 直接渲染它；移动端原生队列是 JS 按 `planNextIndexes` 排的预取窗口（补窗重排后会漂）。两端都没有「随机序」。
-- 于是「在随机序列里插到当前曲的下一格」**没有落点**：桌面 #506 的 `insertNext`、移动端 #495 的 `planPlayNext` 都显式把随机的语义留空等本票。
+- 于是「在随机序列里插到当前曲的下一格」**没有落点**：桌面 #506 的 `insertNext`、移动端 #495 的 `planPlayNext` 都显式把随机的语义留空等本票。（`planPlayNext` 在 **PR #515** 的 `packages/mobile/services/queueInsert.ts`，尚未合入 master；master 上移动端的等价接缝是 `packages/mobile/services/queuePrefetch.ts` 的 `planNextIndexes`。）
 
 用户诉求三条：随机下「下一首播放」插到当前曲下一格；「上一首」回上一张；队列页看得到随机顺序。
 
@@ -31,7 +31,7 @@
 
 - **可序列化形态**：`{ order: string[]; cursor: number }` 本身即存储形态，直接 JSON 持久化/恢复；`order` 必须是队列 id 的排列，恢复时用 `syncShuffleCursor(state, queue, currentIndex)` 对齐（丢多余的、补缺的、游标对到当前曲）。
 - **取下一首 / 上一首（纯查询，不改 state）**：`getNextSongIndex(queue, currentIndex, playMode, shuffle)` / `getPrevSongIndex(...)`。传入 state 时函数会**先把游标对到 `queue[currentIndex]`** 再前进/后退一格并映射回队列下标——调用方只要给出「当前在哪」即可，不必自己维护游标。预取窗口要同时拿推进后的 state 就用 `stepShuffle(state, queue, ±1) → { index, state }`。
-- **「下一首播放」/ 原生 `insertAfterCurrent`**：`insertNextInShuffle(state, queue, songId, currentIndex)`。语义与桌面 #506 / 移动端 `planPlayNext` 逐条对齐：已在序列 → **移动**（不复制，保留队列里那份 Song 对象）；不在 → 插入；已在「当前曲下一格」或点的是当前曲 → **no-op**（连点幂等）。调用方负责把 songId 先加进**队列成员**（追加即可），序列插入由该函数负责。移动端 `services/queueInsert.ts` 的 `planPlayNext` 现在 `void playMode`（随机留空）：落地随机分支时用「当前曲在序列里的下一格」这一份语义，Android 原生只按最终顺序 `append`（沿用 `2026-09-29-native-playback-ownership.md` 的「JS 定序、原生顺序推进」，不用 `setShuffleModeEnabled`）。
+- **「下一首播放」/ 原生 `insertAfterCurrent`**：`insertNextInShuffle(state, queue, songId, currentIndex)`。语义与桌面 #506 逐条对齐，也与移动端 #515 的 `planPlayNext`（`packages/mobile/services/queueInsert.ts`，**随 #515 合入后生效**）对齐：已在序列 → **移动**（不复制，保留队列里那份 Song 对象）；不在 → 插入；已在「当前曲下一格」或点的是当前曲 → **no-op**（连点幂等）。调用方负责把 songId 先加进**队列成员**（追加即可），序列插入由该函数负责。**#515 合入前**，master 上移动端的等价接缝是 `queuePrefetch.ts` 的 `planNextIndexes`——它只定序预取窗口，尚无「插到当前曲下一格」这个动作。#515 的 `planPlayNext` 现在 `void playMode`（随机留空）：落地随机分支时用「当前曲在序列里的下一格」这一份语义，Android 原生只按最终顺序 `append`（沿用 `2026-09-29-native-playback-ownership.md` 的「JS 定序、原生顺序推进」，不用 `setShuffleModeEnabled`）。
 - **预取窗口**：`applyShuffleOrder(queue, state)` 返回**按随机序重排的完整队列**（等长、纯展示/取窗），移动端按原生当前位置切片取窗，替代现在按 `planNextIndexes` 现算的窗口。
 - **成员编辑**：删歌用 `syncShuffleCursor`（或 `normalizeShuffleOrder`）对齐；原位换源用 `replaceShuffleSongId(state, fromId, toId)`（同格换 id、顺序不动）。
 
@@ -56,5 +56,5 @@
 - issue #511 · PR #506（桌面「下一首播放」）· #494 / #495（移动端）
 - core `packages/core/src/utils/shuffleOrder.ts`、`packages/core/src/utils/queue.ts`、`packages/core/src/shared/skipGuard.ts`
 - 桌面 `src/renderer/store/playerStore.ts`、`src/renderer/utils/queueUtils.ts`、`src/renderer/pages/QueuePage.tsx`
-- 移动端接缝 `packages/mobile/services/queueInsert.ts`（#495；本 PR 不改）
+- 移动端接缝：master 上是 `packages/mobile/services/queuePrefetch.ts` 的 `planNextIndexes`；`packages/mobile/services/queueInsert.ts` 的 `planPlayNext` 随 **PR #515**（#495）合入后生效。本 PR 不改 `packages/mobile`。
 - `2026-09-29-native-playback-ownership.md`（JS 定序、原生顺序推进）
