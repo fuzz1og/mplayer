@@ -29,7 +29,7 @@ Single-context repo (most repos):
 Two classes, one rule — 决定加不加日期前缀看**文档是否会原地长期维护**：
 
 - **存档类**（定稿即不再改：ADR / spec / 调研 / 验证记录）→ `YYYY-MM-DD-<slug>.md`，日期 = 定稿日。并发开发无需协调取号，天然不冲突（原 `0004` 双份撞号即顺序取号所致，已让号修正，见 `docs/adr/README.md`）。
-- **活文档**（原地长期维护）→ 裸 `kebab-case.md`。仅限 `docs/agents/` 的 6 份（architecture / testing / git-workflow / domain / issue-tracker / triage-labels，其中 3 份路径被 `/setup-matt-pocock-skills` 硬编码）+ 根 `CONTEXT.md` / `AGENTS.md`。
+- **活文档**（原地长期维护）→ 裸 `kebab-case.md`。仅限 `docs/agents/` 的 7 份（architecture / testing / git-workflow / domain / issue-tracker / triage-labels / tier3-manifest，其中 3 份路径被 `/setup-matt-pocock-skills` 硬编码）+ 根 `CONTEXT.md` / `AGENTS.md`。
 - 目录分工：`docs/adr/` 决策 · `docs/specs/` 规格 · `docs/research/` 调研 · `docs/wayfinder/` 会话资产 · `docs/agents/` 仅活文档。
 - ADR 的决策编号 `ADR-NNNN` 保留为**内容内稳定引用标识**（90 处代码/文档引用不改），查 `docs/adr/README.md` 定位文件。新 ADR 不再取号。
 

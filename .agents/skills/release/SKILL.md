@@ -9,7 +9,7 @@ description: MPlayer 版本发布流程——发版前文档同步、版本递�
 
 ## 流程
 
-1. **文档同步**（发版前必做，步骤见下节）：把活文档对齐到当前代码，改完提交后再发。
+1. **文档同步**（发版前必做，须在 bump / 打 tag / 触发 CI 构建之前完成）：**先调用 `writing-for-agents` skill**，用它的规则更新并同步全部活文档，再按下节清单逐类核对；改完提交后再发版。
 2. **一键发布**：`./scripts/release.sh <patch|minor|major|版本号> [--skip-verify]`
    - 内部按序执行：分支检查（必须 master）→ 验证（`scripts/verify.sh`）→ `node scripts/version-bump.js`（同步 package.json / package-lock.json / app.json / mobile+core package.json 共 5 处）→ commit → push master → 打 tag → push tag
 3. **监控构建**：`gh run list --workflow=release.yml --limit 1` / `gh run watch`
@@ -18,21 +18,24 @@ description: MPlayer 版本发布流程——发版前文档同步、版本递�
 
 ## 文档同步（发版前）
 
-发布前把活文档对齐到当前代码，避免 README / AGENTS.md / `docs/agents/*` 的描述与实现脱节。
+**入口是 `writing-for-agents` skill**：先加载它、按它写（context pointer / 信息层级 / 剪除），本节的清单只规定 MPlayer 要核对**哪些**文档与事实。
+
+发布前把活文档对齐到当前代码，避免 `README.md` / `AGENTS.md` / `CONTEXT.md` / `docs/agents/*` 的描述与实现脱节。
 
 **只改活文档**：`docs/adr/` 的 ADR 与所有 `YYYY-MM-DD-<slug>.md` 存档（research / wayfinder / specs）是历史记录，不回改；决策变了另写一份 ADR。
 
 逐类核对，每条都以代码为准：
 
 1. **目录地图与清单**（最易腐烂）：`docs/agents/architecture.md` 的 components / hooks / stores / services 列表、`AGENTS.md` 与 `README.md` 的架构与目录描述 —— 对着 `ls`、`package.json`、`git grep` 逐条改。
-2. **能力 / 数量陈述**：README 的「N 种播放模式」、Tab 数、详情页清单、技术栈版本 —— 与实现和依赖版本比对。
+2. **能力 / 数量陈述**：README 的「N 种播放模式」、Tab 数、详情页清单、技术栈版本；`docs/agents/domain.md` 的活文档份数与清单 —— 与实现、依赖版本、目录实际内容比对。
 3. **测试与验证描述**：`docs/agents/testing.md` 的 setup mock 清单与四套件矩阵、`AGENTS.md` 的 `verify.sh` 覆盖范围 —— 与 `vite.config.ts` 的 `test` 段 / `vitest.main.config.ts` / `packages/*/vitest.config.ts` / `scripts/verify.sh` 对齐（**根目录没有 `vitest.config.ts`**）。
 4. **截图与资产**：真机 / UI 截图传 PR comment、**不入库**；`docs/**/assets` 只留 ADR 正文引用的资产，无任何文档引用的孤儿截图直接 `git rm`。
 5. **本轮行为变化**：命令 / 行为 / 架构有变时，同一批改动里更新 `AGENTS.md` / `CONTEXT.md` / 相关 ADR。
+6. **常驻预算**：`AGENTS.md` 每轮都载入，只放「所有分支都要」的内容 + 指针；细节推给 `docs/agents/*` / `CONTEXT.md` / ADR。要新增长内容时先问它是否只服务某一条分支——是，就加指针、不要就地展开。
 
 提交走文档直推（`docs:` 前缀直接 push `master`），不需要 issue 与 worktree。
 
-**完成标准**：`master` 与 `origin/master` 一致、`git status` 干净，且上面每一类都真的在代码里核过（不是"看起来对"）。
+**完成标准**：`master` 与 `origin/master` 一致、`git status` 干净，且已加载 `writing-for-agents` skill、上面每一类都真的在代码里核过（不是"看起来对"）。
 
 ## 要点
 
