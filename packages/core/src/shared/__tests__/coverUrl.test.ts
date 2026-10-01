@@ -28,6 +28,43 @@ describe('coverThumbUrl', () => {
     expect(coverThumbUrl(v1, 500)).toBe('https://y.gtimg.cn/music/photo_new/T002R500x500M000abc123_1.jpg');
   });
 
+  /**
+   * #537：QQ 的路径模板**不是**任意尺寸都能拼——CDN 只对白名单里的档位返回 200
+   * （实测 120/150/180/300/500/800；200/320/1080 恒 404）。拼错档位在 UI 上表现为
+   * 「封面永久灰」且不报错：v1.8.6 桌面端 QQ 全灰就是这个（行封面默认 icon 档 200）。
+   */
+  describe('QQ 档位白名单（#537）', () => {
+    const base = 'https://y.gtimg.cn/music/photo_new/T002R300x300M000abc123.jpg';
+    const SUPPORTED = [120, 150, 180, 300, 500, 800];
+
+    const requestedSize = (url: string): number => {
+      const matched = /R(\d+)x\d+M/.exec(url);
+      if (!matched) throw new Error('不是 QQ 路径模板：' + url);
+      return Number(matched[1]);
+    };
+
+    it('每个 COVER_SIZE 档位吸附后的尺寸都在白名单里', () => {
+      for (const tier of Object.values(COVER_SIZE)) {
+        const size = requestedSize(coverThumbUrl(base, tier));
+        expect(SUPPORTED, '档位 ' + tier + ' → ' + size).toContain(size);
+      }
+    });
+
+    it('吸附方向：取不超过请求值的最大档；比最小档还小取最小档', () => {
+      expect(requestedSize(coverThumbUrl(base, COVER_SIZE.icon))).toBe(180);
+      expect(requestedSize(coverThumbUrl(base, COVER_SIZE.thumb))).toBe(300);
+      expect(requestedSize(coverThumbUrl(base, COVER_SIZE.hero))).toBe(800);
+      expect(requestedSize(coverThumbUrl(base, 60))).toBe(120);
+      expect(requestedSize(coverThumbUrl(base, Number.NaN))).toBe(120);
+    });
+
+    it('幂等：吸附过的 URL 再吸附不变', () => {
+      const once = coverThumbUrl(base, COVER_SIZE.icon);
+      expect(coverThumbUrl(once, COVER_SIZE.icon)).toBe(once);
+      expect(coverThumbUrl(once, COVER_SIZE.hero)).toBe(coverThumbUrl(base, COVER_SIZE.hero));
+    });
+  });
+
   it('未验证机制的源一律原样返回（酷狗 / 酷我 / 咪咕 / 千千 / 汽水签名图）', () => {
     for (const url of [
       'https://imge.kugou.com/stdmusic/20230101/abc.jpg',
