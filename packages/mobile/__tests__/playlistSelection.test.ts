@@ -141,8 +141,29 @@ describe('歌单页选择模式的接线（#490 源码守卫）', () => {
     expect(page).not.toMatch(/\.forEach\([^)]*addSong\(/);
   });
 
-  it('选择模式是行内交互，不新增页面级「批量管理」入口（票面备选方案已否决）', () => {
+  it('入口有二：长按（挂在**行自身**的可按压组件上）+ 英雄区可见「选择」键', () => {
+    const hero = stripComments(read('components/PlaylistHero.tsx'));
+    const row = stripComments(read('components/SongRow.tsx'));
+    // 长按必须挂在 SongRow 自身的 ScalePress 上：外层再包一层 Pressable 会被内层吞掉手势
+    // （真机验收实测：外层写法下长按只会播放歌曲 → 批量模式不可达，2026-10-01 ADR 修订）
+    expect(hero).not.toMatch(/<Pressable[\s\S]{0,120}onLongPress/);
+    expect(hero).toMatch(/onLongPress=\{\(\) => onLongPressSong\(item\)\}/);
+    expect(row).toMatch(/onLongPress=\{onLongPress\}/);
+    // 可见入口：英雄区次级动作；选择模式内不渲染（入口让位给顶部条「完成」）
+    expect(hero).toMatch(/secondaryActionLabel=\{selectionMode \? undefined : '选择'\}/);
+    expect(hero).toContain('onSecondaryAction={onEnterSelection}');
     const page = stripComments(read('app/playlist/[id].tsx'));
-    expect(page).not.toContain('批量管理');
+    expect(page).toMatch(/onEnterSelection=\{handleEnterSelection\}/);
+    // 显式入口进模式时**不预选**任何行（与桌面 SongList 的「批量管理」一致）
+    expect(page).toMatch(/setSelection\(\{ mode: true, ids: new Set\(\) \}\)/);
+  });
+
+  it('Hero 次级动作与主按钮同款「两者都给才渲染」，不传的页面渲染不变', () => {
+    const hero = stripComments(read('components/CollapsingHero.tsx'));
+    expect(hero).toMatch(/secondaryActionLabel && onSecondaryAction \?/);
+    // 贴左/上间距落在动作行上；主按钮把这两条移出去了（否则两处都写会叠加间距）
+    expect(hero).toContain('styles.actionRow');
+    expect(hero).toContain('marginTop: spacing[3]');
+    expect(hero).not.toMatch(/playBtn: \{[^}]*marginTop/);
   });
 });

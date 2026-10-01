@@ -39,6 +39,12 @@ interface SongRowProps {
   selectionMode?: boolean;
   /** 选择模式下本行是否已选中（决定勾选圈形态与行底色） */
   selected?: boolean;
+  /**
+   * 长按整行（选择模式入口）。**必须挂在行自身的 ScalePress 上**：外层再套一个
+   * <Pressable onLongPress> 会被内层吞掉——内层先成为 responder，外层的长按永不触发
+   * （真机验收 #514 实测：外层写法下长按只会播放歌曲）。
+   */
+  onLongPress?: () => void;
 }
 
 /**
@@ -67,6 +73,7 @@ function SongRow({
   onRemove,
   selectionMode = false,
   selected = false,
+  onLongPress,
 }: SongRowProps) {
   const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
@@ -143,6 +150,7 @@ function SongRow({
       style={[styles.container, selected && styles.containerSelected]}
       pressScaleTo={0.98}
       onPress={handlePress}
+      onLongPress={onLongPress}
     >
       {/* 选择模式：#490 勾选圈占榜位同槽位；未选中是空心圈，选中填 accent */}
       {selectionMode && (

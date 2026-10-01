@@ -93,6 +93,13 @@ interface CollapsingHeroProps<T> {
   actionLabel?: string;
   /** 播放回调 */
   onAction?: () => void;
+  /**
+   * 次级动作（主按钮右侧的次要按钮，如歌单页的「选择」）。
+   * 与 `actionLabel`/`onAction` 同款「两者都给才渲染」，且主按钮缺席时次级也不渲染。
+   */
+  secondaryActionLabel?: string;
+  /** 次级动作回调 */
+  onSecondaryAction?: () => void;
   /** 列表数据 */
   data: T[];
   keyExtractor: (item: T, index: number) => string;
@@ -124,6 +131,8 @@ export default function CollapsingHero<T>({
   tags,
   actionLabel,
   onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
   data,
   keyExtractor,
   renderItem,
@@ -240,10 +249,17 @@ export default function CollapsingHero<T>({
                 </View>
               ) : null}
               {actionLabel && onAction ? (
-                <ScalePress style={styles.playBtn} onPress={onAction}>
-                  <Play size={18} color={colors.textInverse} fill={colors.textInverse} />
-                  <Text style={styles.playText}>{actionLabel}</Text>
-                </ScalePress>
+                <View style={styles.actionRow}>
+                  <ScalePress style={styles.playBtn} onPress={onAction}>
+                    <Play size={18} color={colors.textInverse} fill={colors.textInverse} />
+                    <Text style={styles.playText}>{actionLabel}</Text>
+                  </ScalePress>
+                  {secondaryActionLabel && onSecondaryAction ? (
+                    <ScalePress style={styles.secondaryBtn} onPress={onSecondaryAction}>
+                      <Text style={styles.secondaryText}>{secondaryActionLabel}</Text>
+                    </ScalePress>
+                  ) : null}
+                </View>
               ) : null}
             </View>
             {sectionHeader ? (
@@ -333,16 +349,35 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: 3,
   },
   tagText: { color: colors.textSecondary, fontSize: typography.sizes.xs },
-  playBtn: {
+  // 动作行：主/次按钮共处一行，行本身承担贴左与上间距（只挂主按钮时视觉与旧版逐像素一致）
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
+    gap: spacing[2],
+    marginTop: spacing[3],
+  },
+  playBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing[2],
     backgroundColor: colors.accent,
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[2],
     borderRadius: radius.full,
-    marginTop: spacing[3],
   },
   playText: { color: colors.textInverse, fontSize: typography.sizes.base, fontWeight: '600' },
+  // 次级动作：描边胶囊（与主按钮同高同圆角），双主题都用语义 token 保证在 bgBase 上可辨
+  secondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[2],
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.bgHover,
+  },
+  secondaryText: { color: colors.textPrimary, fontSize: typography.sizes.base, fontWeight: '600' },
 });

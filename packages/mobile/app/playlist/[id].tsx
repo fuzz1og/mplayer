@@ -138,6 +138,12 @@ export default function PlaylistDetailPage() {
 
   const handleExitSelection = useCallback(() => setSelection(NO_SELECTION), []);
 
+  /**
+   * 英雄区「选择」按钮：进入选择模式且**不预选任何行**（与桌面 SongList 的「批量管理」一致）；
+   * 进入后行内点击变为「切换选中」（见 PlaylistHero.renderItem）。
+   */
+  const handleEnterSelection = useCallback(() => setSelection({ mode: true, ids: new Set() }), []);
+
   // 全选 / 取消全选作用于 playlist.songs（完整列表），与 FlatList 的可见窗口无关
   const handleToggleSelectAll = useCallback(() => {
     setSelection((cur) => {
@@ -284,6 +290,7 @@ export default function PlaylistDetailPage() {
             onLongPressSong={handleLongPressSong}
             onToggleSong={handleToggleSong}
             onToggleAll={handleToggleSelectAll}
+            onEnterSelection={handleEnterSelection}
           />
         )}
 
