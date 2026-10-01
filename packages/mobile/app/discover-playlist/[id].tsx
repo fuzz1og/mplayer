@@ -1,21 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet,
+  View, Text, StyleSheet, Alert, Modal, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { getDirectClient, formatPlayCount, type Song } from '@mplayer/core';
+import { Download } from 'lucide-react-native';
 import type { DiscoverPlaylist } from '@mplayer/core';
 import HeroSkeleton from '../../components/HeroSkeleton';
 import CoverFallback from '../../components/CoverFallback';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import SongRow from '../../components/SongRow';
+import ScalePress from '../../components/ScalePress';
 import CollapsingHero from '../../components/CollapsingHero';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
 import { replaceSongInList } from '../../services/songListOps';
-import { textVariants } from '../../theme/tokens';
+import { usePlaylistStore } from '../../stores/playlistStore';
+import { exportSongsToLocalPlaylist } from '../../services/playlistExport';
+import { radius, spacing, textVariants } from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -31,6 +35,12 @@ export default function DiscoverPlaylistDetailPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const offsetRef = useRef(0);
+  const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
+  const addSongs = usePlaylistStore((s) => s.addSongs);
+  /** 导出进行中（防重复触发；hero 的 navRight 因此置灰） */
+  const [exporting, setExporting] = useState(false);
+  /** 已取回全量、等用户确认的待导出歌单（null = 未在确认中） */
+  const [exportConfirm, setExportConfirm] = useState<{ name: string; songs: Song[] } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -95,6 +105,49 @@ export default function DiscoverPlaylistDetailPage() {
     setSongs((prev) => replaceSongInList(prev, original.id, swapped));
   }, []);
 
+  /**
+   * 导出确认后的落库：一次 addSongs = 一次 set = 一次持久化（stores/playlistStore.ts），
+   * 绝不照抄桌面的逐首 playlist:addSong。
+   */
+  const handleExport = async (target: { name: string; songs: Song[] }) => {
+    // 注意：**不能**在这里再判 `exporting`。取歌阶段那面旗是在 finally 里落的，
+    // 与「确认弹层渲染完成 → 用户点导出」是同一条时间线——真机实测：弹层渲染得够快时
+    // 该旗仍为 true，确认会被静默吞掉（点了「导出」什么也不发生）。
+    // 这段本身是同步落库，不需要旗；防重复由弹层「点一次即关」+ 按钮 disabled 承担。
+    try {
+      exportSongsToLocalPlaylist({ createPlaylist, addSongs }, target.name, target.songs);
+      Alert.alert('导出完成', `已导出 ${target.songs.length} 首到「${target.name}」`);
+    } catch (e: any) {
+      Alert.alert('导出失败', e?.message ?? '请稍后重试');
+    }
+  };
+
+  /**
+   * hero 右上角「导出到本地歌单」（#492）：取歌复用导入腿的全量取，
+   * 确认框与桌面同构（曲目数 + 歌单名）。按票面决定走「全量重取一次」，
+   * 不干扰页面自身按 PAGE_SIZE 的分页状态。
+   */
+  const handleExportToLocal = async () => {
+    if (exporting || !playlist) return;
+    setExporting(true);
+    try {
+      const client = getDirectClient('netease');
+      if (!client?.getPlaylistSongs) throw new Error('网易歌单能力不可用');
+      // limit <= 0 = 全量（getPlaylistSongs 合一语义，#278）
+      const full = await client.getPlaylistSongs(Number(id), 0, 0);
+      const all = full.songs ?? [];
+      if (all.length === 0) {
+        Alert.alert('导出失败', '歌单不存在或没有歌曲');
+        return;
+      }
+      setExportConfirm({ name: playlist.name, songs: all });
+    } catch (e: any) {
+      Alert.alert('导出失败', e?.message ?? '请稍后重试');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // 骨架与真实首屏同源（#465）：Hero 占屏约 40%，此前只画列表骨架 → 数据到达时整页跳一次
   if (loading) return <HeroSkeleton rows={8} showSource />;
   if (!playlist) {
@@ -120,6 +173,17 @@ export default function DiscoverPlaylistDetailPage() {
     playSong(songs[0]);
   };
 
+  const moreButton = (
+    <ScalePress
+      style={styles.moreBtn}
+      onPress={() => void handleExportToLocal()}
+      disabled={exporting}
+      hitSlop={{ left: 8, right: 8, top: 8, bottom: 8 }}
+    >
+      <Download size={22} color={colors.textSecondary} />
+    </ScalePress>
+  );
+
   return (
     <View style={styles.container}>
       <SafeAreaView edges={[]} style={{ flex: 1 }}>
@@ -134,6 +198,7 @@ export default function DiscoverPlaylistDetailPage() {
           tags={playlist.tags}
           actionLabel="播放全部"
           onAction={handlePlayAll}
+          navRight={moreButton}
           data={songs}
           keyExtractor={(item, i) => `${item.id}-${i}`}
           renderItem={({ item }) => (
@@ -145,6 +210,42 @@ export default function DiscoverPlaylistDetailPage() {
         />
       </SafeAreaView>
       <BottomSafePlayerBar />
+
+      {/* 导出确认：文案与桌面同构（曲目数 + 歌单名） */}
+      <Modal
+        visible={exportConfirm !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => setExportConfirm(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setExportConfirm(null)}>
+          <Pressable style={styles.modalContent} onPress={() => {}}>
+            <Text style={styles.modalTitle}>导出到本地歌单</Text>
+            <Text style={styles.modalBody}>
+              {exportConfirm
+                ? `确定将歌单「${exportConfirm.name}」（${exportConfirm.songs.length} 首歌曲）导出为一个新的本地歌单吗？`
+                : ''}
+            </Text>
+            <View style={styles.modalActions}>
+              <ScalePress style={styles.cancelBtn} onPress={() => setExportConfirm(null)}>
+                <Text style={styles.cancelText}>取消</Text>
+              </ScalePress>
+              <ScalePress
+                style={styles.confirmBtn}
+                onPress={() => {
+                  const target = exportConfirm;
+                  setExportConfirm(null);
+                  if (target) void handleExport(target);
+                }}
+              >
+                <Text style={styles.confirmText}>导出</Text>
+              </ScalePress>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -152,4 +253,45 @@ export default function DiscoverPlaylistDetailPage() {
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   empty: { flex: 1, backgroundColor: colors.bgBase, justifyContent: 'center', alignItems: 'center' },
+
+  moreBtn: { marginRight: spacing[2] },
+
+  // 导出确认弹窗（对齐本地歌单页的重命名弹窗样式）
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: colors.bgOverlay,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
+    padding: spacing[6],
+    width: '82%',
+  },
+  modalTitle: {
+    ...textVariants.title,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: spacing[3],
+    textAlign: 'center',
+  },
+  modalBody: { ...textVariants.callout, color: colors.textSecondary, textAlign: 'center' },
+  modalActions: { flexDirection: 'row', marginTop: spacing[5], gap: spacing[3] },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgHover,
+    alignItems: 'center',
+  },
+  cancelText: { ...textVariants.body, fontWeight: '400', color: colors.textSecondary },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+  },
+  confirmText: { ...textVariants.body, fontWeight: '600', color: colors.textInverse },
 });
