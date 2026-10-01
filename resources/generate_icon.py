@@ -1,200 +1,318 @@
+#!/usr/bin/env python3
 """
-Generate MPlayer icon: artistic 6+9 music note
-Stylized numbers with rotation, gradients, glow, and musical decorations.
+MPlayer 图标生成器 —— 从 resources/icon.svg 派生全部位图产物。
+
+用法:  python resources/generate_icon.py
+
+只依赖 Pillow（和旧版 generate_icon.py 一样）。SVG 只解析本文件用到的那一个子集：
+<linearGradient> + <rect rx> + <path d>（M/L/C/A/Z），不引入 SVG 渲染库。
+
+产物:
+  resources/icon.png             1024        electron-builder mac/linux 打包 + Electron 窗口图标
+  resources/icon.ico             16/32/48/256 Windows 安装包 / exe
+  resources/icon_tray.png        16          系统托盘
+  resources/icon-foreground.png  1024        Android 自适应图标前景（音符居中，占 66% 安全区）
+  public/icon.png                128         渲染层 TitleBar（显示 16px）
+  packages/mobile/android/app/src/main/res/mipmap-{m,h,xh,xxh,xxxh}dpi/
+      ic_launcher.webp           48/72/96/144/192      旧版方形图标
+      ic_launcher_round.webp     48/72/96/144/192      旧版圆形图标
+      ic_launcher_foreground.webp 108/162/216/324/432  自适应图标前景
+
+不生成 drawable-*/splashscreen_logo.png —— 那是 expo-splash-screen 的模板占位图，
+且 styles.xml 把 @drawable/splashscreen_logo 当 windowBackground（会被拉伸到整屏），
+换图需要先配 app.json 的 splash 配置重生成原生资源，属于另一件事。
 """
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
-import struct
-import os
+
+import io
 import math
+import os
+import re
+import struct
 
-SIZE = 1024
+from PIL import Image, ImageDraw
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SVG_PATH = os.path.join(ROOT, 'resources', 'icon.svg')
+ANDROID_RES = os.path.join(ROOT, 'packages', 'mobile', 'android', 'app', 'src', 'main', 'res')
+
+# 自适应图标安全区：内容需落在画布中心 66% 的圆内
+SAFE_ZONE = 0.66
+# 密度 -> (ic_launcher 边长, ic_launcher_foreground 边长)
+DENSITIES = {
+    'mdpi': (48, 108),
+    'hdpi': (72, 162),
+    'xhdpi': (96, 216),
+    'xxhdpi': (144, 324),
+    'xxxhdpi': (192, 432),
+}
 
 
-def draw_gradient_bg(size):
-    """Deep purple-blue gradient rounded rectangle"""
-    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    for y in range(size):
-        t = y / size
-        r = int(0x5B + (0x2D - 0x5B) * t)
-        g = int(0x4E + (0x6A - 0x5E) * t)
-        b = int(0xD8 + (0xE0 - 0xD8) * t)
-        draw.line([(0, y), (size - 1, y)], fill=(r, g, b, 255))
-    mask = Image.new('L', (size, size), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([6, 6, size - 6, size - 6], radius=44, fill=255)
+# ---------------------------------------------------------------- SVG 解析
+
+def parse_svg(path):
+    svg = open(path, encoding='utf-8').read()
+
+    vb = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
+    if not vb:
+        raise SystemExit('icon.svg: 缺少 viewBox')
+    size = float(vb.group(1))
+
+    rect = re.search(r'<rect id="tile"[^>]*rx="([\d.]+)"', svg)
+    if not rect:
+        raise SystemExit('icon.svg: 缺少 <rect id="tile" rx="...">')
+    radius = float(rect.group(1))
+
+    grad = re.search(r'<linearGradient id="tile"[^>]*>(.*?)</linearGradient>', svg, re.S)
+    if not grad:
+        raise SystemExit('icon.svg: 缺少 <linearGradient id="tile">')
+    attrs = dict(re.findall(r'(x1|y1|x2|y2)="([\d.]+)"', grad.group(0)))
+    stops = [(float(o), c) for o, c in
+             re.findall(r'<stop offset="([\d.]+)" stop-color="(#[0-9A-Fa-f]{6})"', grad.group(1))]
+    if len(stops) < 2:
+        raise SystemExit('icon.svg: 渐变至少要有两个 stop')
+
+    mark = re.search(r'<g id="mark"[^>]*>(.*?)</g>', svg, re.S)
+    if not mark:
+        raise SystemExit('icon.svg: 缺少 <g id="mark">')
+    d = re.search(r'\bd="([^"]+)"', mark.group(1))
+    fill = re.search(r'fill="(#[0-9A-Fa-f]{6})"', mark.group(1))
+    if not d:
+        raise SystemExit('icon.svg: mark 里缺少 <path d="...">')
+
+    return {
+        'size': size,
+        'radius': radius,
+        'grad': {k: float(v) for k, v in attrs.items()},
+        'stops': stops,
+        'path': d.group(1),
+        'fill': fill.group(1) if fill else '#FFFFFF',
+    }
+
+
+# ---------------------------------------------------------------- 路径离散化
+
+def _cubic(p0, p1, p2, p3, t):
+    u = 1 - t
+    return (
+        u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0],
+        u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1],
+    )
+
+
+def _arc(p0, rx, ry, phi_deg, large_arc, sweep, p1, steps):
+    """SVG 椭圆弧 endpoint -> center 参数化后采样（F.6.5）。"""
+    phi = math.radians(phi_deg)
+    cos_phi, sin_phi = math.cos(phi), math.sin(phi)
+    dx, dy = (p0[0] - p1[0]) / 2.0, (p0[1] - p1[1]) / 2.0
+    x1p = cos_phi * dx + sin_phi * dy
+    y1p = -sin_phi * dx + cos_phi * dy
+    rx, ry = abs(rx), abs(ry)
+    lam = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry)
+    if lam > 1:
+        s = math.sqrt(lam)
+        rx, ry = rx * s, ry * s
+    num = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p
+    den = rx * rx * y1p * y1p + ry * ry * x1p * x1p
+    co = math.sqrt(max(0.0, num / den)) if den else 0.0
+    if large_arc == sweep:
+        co = -co
+    cxp = co * rx * y1p / ry
+    cyp = -co * ry * x1p / rx
+    cx = cos_phi * cxp - sin_phi * cyp + (p0[0] + p1[0]) / 2.0
+    cy = sin_phi * cxp + cos_phi * cyp + (p0[1] + p1[1]) / 2.0
+
+    def angle(ux, uy, vx, vy):
+        dot = (ux * vx + uy * vy) / (math.hypot(ux, uy) * math.hypot(vx, vy))
+        a = math.acos(max(-1.0, min(1.0, dot)))
+        return -a if ux * vy - uy * vx < 0 else a
+
+    ux, uy = (x1p - cxp) / rx, (y1p - cyp) / ry
+    vx, vy = (-x1p - cxp) / rx, (-y1p - cyp) / ry
+    theta1 = angle(1, 0, ux, uy)
+    delta = angle(ux, uy, vx, vy)
+    if not sweep and delta > 0:
+        delta -= 2 * math.pi
+    elif sweep and delta < 0:
+        delta += 2 * math.pi
+
+    out = []
+    for i in range(steps + 1):
+        t = theta1 + delta * i / steps
+        out.append((
+            cx + rx * math.cos(t) * cos_phi - ry * math.sin(t) * sin_phi,
+            cy + rx * math.cos(t) * sin_phi + ry * math.sin(t) * cos_phi,
+        ))
+    return out
+
+
+def flatten(d, curve_steps=64, arc_steps=96):
+    """把 M/L/C/A/Z 子集离散成多边形顶点。"""
+    points, cur, start = [], (0.0, 0.0), None
+    for cmd, argstr in re.findall(r'([MLCAZ])([^MLCAZ]*)', d):
+        nums = [float(x) for x in re.findall(r'-?\d*\.?\d+', argstr)]
+        if cmd == 'M':
+            cur = (nums[0], nums[1])
+            start = cur
+            points.append(cur)
+        elif cmd == 'L':
+            cur = (nums[0], nums[1])
+            points.append(cur)
+        elif cmd == 'C':
+            p1, p2, p3 = (nums[0], nums[1]), (nums[2], nums[3]), (nums[4], nums[5])
+            for i in range(1, curve_steps + 1):
+                points.append(_cubic(cur, p1, p2, p3, i / curve_steps))
+            cur = p3
+        elif cmd == 'A':
+            rx, ry, rot, laf, sf, x, y = nums
+            seg = _arc(cur, rx, ry, rot, int(laf), int(sf), (x, y), arc_steps)
+            points.extend(seg[1:])
+            cur = (x, y)
+        elif cmd == 'Z':
+            if start is not None:
+                points.append(start)
+    return points
+
+
+# ---------------------------------------------------------------- 光栅化
+
+def _hex_to_rgb(h):
+    h = h.lstrip('#')
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _gradient(size, grad, stops):
+    """按 objectBoundingBox 的线性渐变方向生成底图（低分辨率算完再放大，足够平滑）。"""
+    lo = 96
+    x1, y1 = grad['x1'] * lo, grad['y1'] * lo
+    x2, y2 = grad['x2'] * lo, grad['y2'] * lo
+    dx, dy = x2 - x1, y2 - y1
+    denom = dx * dx + dy * dy or 1.0
+    base = Image.new('RGB', (lo, lo))
+    px = base.load()
+    for y in range(lo):
+        for x in range(lo):
+            t = ((x - x1) * dx + (y - y1) * dy) / denom
+            t = max(0.0, min(1.0, t))
+            for i in range(len(stops) - 1):
+                o0, c0 = stops[i]
+                o1, c1 = stops[i + 1]
+                if o0 <= t <= o1:
+                    k = 0.0 if o1 == o0 else (t - o0) / (o1 - o0)
+                    a, b = _hex_to_rgb(c0), _hex_to_rgb(c1)
+                    px[x, y] = tuple(round(a[j] + (b[j] - a[j]) * k) for j in range(3))
+                    break
+            else:
+                px[x, y] = _hex_to_rgb(stops[-1][1] if t > stops[-1][0] else stops[0][1])
+    return base.resize((size, size), Image.BICUBIC)
+
+
+def _ss_for(size):
+    """小尺寸多超采样，大尺寸够用就行（Pillow 的 LANCZOS 缩放在做抗锯齿）。"""
+    if size <= 48:
+        return 8
+    if size <= 256:
+        return 4
+    return 2
+
+
+def render_tile(spec, size, round_clip=False):
+    """圆角方形砖 + 音符（桌面图标 / Android 旧版图标）。"""
+    ss = _ss_for(size)
+    big = size * ss
+    scale = big / spec['size']
+
+    img = _gradient(big, spec['grad'], spec['stops']).convert('RGBA')
+    mask = Image.new('L', (big, big), 0)
+    radius = spec['radius'] * scale
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, big - 1, big - 1], radius=radius, fill=255)
+    if round_clip:
+        mask = Image.new('L', (big, big), 0)
+        ImageDraw.Draw(mask).ellipse([0, 0, big - 1, big - 1], fill=255)
     img.putalpha(mask)
-    return img
+
+    poly = [(x * scale, y * scale) for x, y in spec['points']]
+    note = Image.new('RGBA', (big, big), (0, 0, 0, 0))
+    ImageDraw.Draw(note).polygon(poly, fill=_hex_to_rgb(spec['fill']) + (255,))
+    img = Image.alpha_composite(img, note)
+    return img.resize((size, size), Image.LANCZOS)
 
 
-def rotate_text(size, text, font, color, angle, center):
-    """Render text, rotate it, return layer"""
-    # Step 1: Render text on a square canvas (centered)
-    text_size = int(size * 0.8)
-    layer = Image.new('RGBA', (text_size, text_size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(layer)
+def render_foreground(spec, size):
+    """Android 自适应图标前景：音符居中，长边占安全区（中心 66% 圆的内接正方形）。"""
+    ss = _ss_for(size)
+    big = size * ss
+    xs = [p[0] for p in spec['points']]
+    ys = [p[1] for p in spec['points']]
+    w, h = max(xs) - min(xs), max(ys) - min(ys)
+    scale = (big * SAFE_ZONE) / max(w, h)
+    cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
 
-    bbox = draw.textbbox((0, 0), text, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
-    tx = (text_size - tw) // 2 - bbox[0]
-    ty = (text_size - th) // 2 - bbox[1]
-    draw.text((tx, ty), text, font=font, fill=color)
-
-    # Step 2: Rotate with expand=True (canvas grows, no black fill)
-    rotated = layer.rotate(angle, resample=Image.BICUBIC, expand=True)
-
-    # Step 3: Find content bounding box and crop tight
-    alpha = rotated.split()[3]
-    content_bbox = alpha.getbbox()
-    if content_bbox:
-        rotated = rotated.crop(content_bbox)
-        # Center of the text in rotated space
-        rot_cx = text_size // 2
-        rot_cy = text_size // 2
-        # After expand+crop, the center shifted
-        new_cx = rot_cx - content_bbox[0]
-        new_cy = rot_cy - content_bbox[1]
-    else:
-        new_cx = text_size // 2
-        new_cy = text_size // 2
-
-    # Step 4: Scale to fit if needed, then paste at target center
-    rw, rh = rotated.size
-    if rw > size or rh > size:
-        scale = min(size / rw, size / rh) * 0.9
-        rotated = rotated.resize((int(rw * scale), int(rh * scale)), Image.BICUBIC)
-        new_cx = int(new_cx * scale)
-        new_cy = int(new_cy * scale)
-
-    result = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    paste_x = int(center[0] - new_cx)
-    paste_y = int(center[1] - new_cy)
-    result.paste(rotated, (paste_x, paste_y))
-
-    # Clip to canvas bounds (remove any overflow)
-    return result.crop((0, 0, size, size))
+    img = Image.new('RGBA', (big, big), (0, 0, 0, 0))
+    poly = [((x - cx) * scale + big / 2, (y - cy) * scale + big / 2) for x, y in spec['points']]
+    ImageDraw.Draw(img).polygon(poly, fill=_hex_to_rgb(spec['fill']) + (255,))
+    return img.resize((size, size), Image.LANCZOS)
 
 
-def create_glow_layer(size, source_layer, radius=8, intensity=1.4):
-    """Create a soft glow from an existing layer"""
-    glow = source_layer.copy()
-    glow = glow.filter(ImageFilter.GaussianBlur(radius=radius))
-    r, g, b, a = glow.split()
-    a = a.point(lambda x: min(255, int(x * intensity)))
-    glow.putalpha(a)
-    return glow
-
-
-def create_icon():
-    img = draw_gradient_bg(SIZE)
-    font_path = "C:/Windows/Fonts/arialbd.ttf"
-
-    white = (255, 255, 255, 220)
-    white_bright = (255, 255, 255, 255)
-
-    # === "6" - large, slightly rotated, bottom-left ===
-    font_six = ImageFont.truetype(font_path, 150)
-    six_layer = rotate_text(SIZE, "6", font_six, white, angle=-12, center=(108, 155))
-
-    # === "9" - smaller, slightly rotated, top-right ===
-    font_nine = ImageFont.truetype(font_path, 100)
-    nine_layer = rotate_text(SIZE, "9", font_nine, white, angle=8, center=(162, 60))
-
-    # === Glow layers ===
-    glow_six = create_glow_layer(SIZE, six_layer, radius=12, intensity=1.6)
-    glow_nine = create_glow_layer(SIZE, nine_layer, radius=10, intensity=1.4)
-
-    # Compose: glow first, then numbers
-    img = Image.alpha_composite(img, glow_six)
-    img = Image.alpha_composite(img, glow_nine)
-    img = Image.alpha_composite(img, six_layer)
-    img = Image.alpha_composite(img, nine_layer)
-
-    # === Musical decorations ===
-    deco = Image.new('RGBA', (SIZE, SIZE), (0, 0, 0, 0))
-    deco_draw = ImageDraw.Draw(deco)
-    deco_color = (255, 255, 255, 100)
-
-    # Small floating music notes (♪) as decoration
-    # Note 1: top-left area
-    def draw_mini_note(d, cx, cy, sz, color):
-        # Note head
-        d.ellipse([cx - sz, cy - sz//2, cx + sz, cy + sz//2], fill=color)
-        # Stem
-        d.line([(cx + sz - 1, cy - sz//2), (cx + sz - 1, cy - sz*2)], fill=color, width=max(1, sz//3))
-        # Flag
-        flag_pts = []
-        for i in range(10):
-            t = i / 9
-            x = cx + sz - 1 + sz * 0.8 * t
-            y = cy - sz*2 + sz * 1.2 * t * t
-            flag_pts.append((x, y))
-        for i in range(len(flag_pts) - 1):
-            d.line([flag_pts[i], flag_pts[i+1]], fill=color, width=max(1, sz//3))
-
-    draw_mini_note(deco_draw, 55, 55, 6, deco_color)
-    draw_mini_note(deco_draw, 200, 190, 5, deco_color)
-    draw_mini_note(deco_draw, 45, 210, 4, (255, 255, 255, 60))
-
-    # Sound wave arcs near the top-right
-    for i in range(3):
-        r = 12 + i * 8
-        arc_color = (255, 255, 255, 50 - i * 12)
-        deco_draw.arc([200 - r, 30 - r, 200 + r, 30 + r], 200, 340,
-                      fill=arc_color, width=2)
-
-    img = Image.alpha_composite(img, deco)
-
-    return img
-
-
-def create_ico(images, output_path):
-    sizes = [16, 32, 48, 256]
-    prepared = []
+def write_ico(image, path, sizes=(16, 32, 48, 256)):
+    """手写 ICO。<=48 用 BMP 条目（32 位 + AND 掩码，老工具也认），256 用 PNG 条目
+    （Vista+ 支持；不压缩的话单这一张就 262KB，整个 ico 会胖十倍）。"""
+    entries = []
     for sz in sizes:
-        resized = images[0].resize((sz, sz), Image.LANCZOS)
-        prepared.append((sz, resized.tobytes()))
+        small = image.resize((sz, sz), Image.LANCZOS)
+        if sz >= 256:
+            buf = io.BytesIO()
+            small.save(buf, 'PNG')
+            entries.append((sz, buf.getvalue()))
+        else:
+            rgba = small.tobytes()
+            header = struct.pack('<IiiHHIIiiII', 40, sz, sz * 2, 1, 32, 0,
+                                 len(rgba) + sz * 4 * 2, 0, 0, 0, 0)
+            entries.append((sz, header + rgba + bytes(sz * 4 * 2)))
 
-    header_size = 6
-    dir_entry_size = 16
-    data_offset = header_size + dir_entry_size * len(prepared)
+    offset = 6 + 16 * len(entries)
+    with open(path, 'wb') as f:
+        f.write(struct.pack('<HHH', 0, 1, len(entries)))
+        for sz, blob in entries:
+            dim = sz if sz < 256 else 0
+            f.write(struct.pack('<BBBBHHII', dim, dim, 0, 0, 1, 32, len(blob), offset))
+            offset += len(blob)
+        for _, blob in entries:
+            f.write(blob)
 
-    image_data_list = []
-    for sz, rgba_data in prepared:
-        bmp_header = struct.pack('<IiiHHIIiiII',
-            40, sz, sz * 2, 1, 32, 0,
-            len(rgba_data) + sz * 4 * 2, 0, 0, 0, 0)
-        and_mask = bytes(sz * 4 * 2)
-        image_data_list.append(bmp_header + rgba_data + and_mask)
 
-    with open(output_path, 'wb') as f:
-        f.write(struct.pack('<HHH', 0, 1, len(prepared)))
-        current_offset = data_offset
-        for i, (sz, _) in enumerate(prepared):
-            w = sz if sz < 256 else 0
-            h = sz if sz < 256 else 0
-            f.write(struct.pack('<BBBBHHII',
-                w, h, 0, 0, 1, 32, len(image_data_list[i]), current_offset))
-            current_offset += len(image_data_list[i])
-        for data in image_data_list:
-            f.write(data)
-
+# ---------------------------------------------------------------- 主流程
 
 def main():
-    output_dir = os.path.dirname(os.path.abspath(__file__))
-    print("Generating artistic 6+9 music note icon...")
-    icon_256 = create_icon()
+    spec = parse_svg(SVG_PATH)
+    spec['points'] = flatten(spec['path'])
+    print('icon.svg 解析完成：%d 个多边形顶点' % len(spec['points']))
 
-    icon_256.save(os.path.join(output_dir, 'icon.png'), 'PNG')
-    print(f"  Saved: icon.png")
+    def save(img, *parts):
+        path = os.path.join(ROOT, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        img.save(path)
+        print('  %-72s %s' % ('/'.join(parts), img.size))
 
-    icon_256.resize((16, 16), Image.LANCZOS).save(
-        os.path.join(output_dir, 'icon_tray.png'), 'PNG')
-    print(f"  Saved: icon_tray.png")
+    master = render_tile(spec, 1024)
+    save(master, 'resources', 'icon.png')
+    save(render_tile(spec, 16), 'resources', 'icon_tray.png')
+    save(render_tile(spec, 128), 'public', 'icon.png')
+    save(render_foreground(spec, 1024), 'resources', 'icon-foreground.png')
 
-    create_ico([icon_256], os.path.join(output_dir, 'icon.ico'))
-    print(f"  Saved: icon.ico")
-    print("Done!")
+    ico = os.path.join(ROOT, 'resources', 'icon.ico')
+    write_ico(master, ico)
+    print('  %-72s %s' % ('resources/icon.ico', '16/32/48/256'))
+
+    for density, (launcher, foreground) in DENSITIES.items():
+        folder = os.path.join(ANDROID_RES, 'mipmap-' + density)
+        os.makedirs(folder, exist_ok=True)
+        render_tile(spec, launcher).save(os.path.join(folder, 'ic_launcher.webp'), 'WEBP', lossless=True)
+        render_tile(spec, launcher, round_clip=True).save(os.path.join(folder, 'ic_launcher_round.webp'), 'WEBP', lossless=True)
+        render_foreground(spec, foreground).save(os.path.join(folder, 'ic_launcher_foreground.webp'), 'WEBP', lossless=True)
+        print('  %-72s %s' % ('mipmap-%s/ic_launcher{,_round,_foreground}.webp' % density,
+                              '%d / %d' % (launcher, foreground)))
+
+    print('完成。')
 
 
 if __name__ == '__main__':

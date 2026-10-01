@@ -17,6 +17,7 @@ npm run mobile:e2e               # 移动端真机 e2e 一条龙（usbipd 直挂
 npm run verify -- <scope>        # 验证唯一入口（all=static+四套测试+Expo 依赖一致性；也可只跑某个 scope）；实现在 scripts/verify.mjs
 ./scripts/verify.sh              # 等价写法（两行 shim；Windows 上别用 bash 调它——那个 bash 可能是 WSL 的，见 #500）
 npm run release                  # 一键发布（= ./scripts/release.mjs；验证 → bump → commit → 推 master → tag → 触发 CI 构建）
+python resources/generate_icon.py  # 从 resources/icon.svg 重建全部图标产物（改图标只改 SVG，产物别手改）
 ```
 
 **验证顺序的唯一出处是 `scripts/verify.mjs`**（`scripts/verify.sh` 只是两行 shim：CI 与文档沿用旧调用串，步骤一律在 .mjs 里），CI 各 job 直接调它的分片（`check` + 四个 `test` + `expo-check`），不在 workflow 里另拼步骤。全量 = `static`（docs 门禁 → core:build → lint → design-lint → 双端 typecheck → build）+ 四套测试（renderer / main / core / mobile；矩阵见 `docs/agents/testing.md`）+ `expo`（Expo SDK 依赖一致性）。边界与理由见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`；依赖升级治理见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
@@ -68,7 +69,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 
 - **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。标题前缀：模板预置的 `[Bug]:` / `[Feature]:`，另有 `[Perf]:` / `[Tooling]:` / `[Chore]:`。PR 正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的三段写（`Summary` / `Evidence` / `Merge Danger`，与 `pr` skill 同形）——验证以 CI 为准，正文只留 CI 证明不了的证据。
 - **敏感信息不入库**：tier3 订阅地址、API key、本地缓存。机械门禁见 `scripts/docs-gate.mjs` 的敏感扫描（**含** `docs/{adr,research,specs,wayfinder}` 存档与文档目录下的未跟踪文件），命中即 CI 红。
-- **截图不入库**：真机验收 / UI 截图传 **PR 正文**（`gh pr edit <PR> --attach '<png>#<图注>'`），`docs/**/assets` 只留 ADR 正文引用的资产。
+- **验收截图不入库，活文档配图入库**：真机验收 / UI 走查的**证据图**传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'`）——PR 是它的一次性载体，入库只会攒下一堆没人再看第二眼的二进制。反过来，**活文档正文长期引用的产品图**（README 截图、logo）**必须入库**，放 `docs/assets/`。判据是「有没有一个长期存在的正文在引用它」，不是「它是不是截图」。
 - 分流边界（什么算文档类）、分支命名、Conventional Commits、验证顺序、PR 模板与清理的完整流程见 `docs/agents/git-workflow.md`。
 
 ## Agent skills

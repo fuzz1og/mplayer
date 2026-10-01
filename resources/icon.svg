@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MPlayer logo —— 唯一几何真源。
+  改这里，然后跑： python resources/generate_icon.py
+  所有位图产物（桌面 png/ico/tray、Android mipmap、自适应前景）都由这个文件派生，不要手改产物。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3D7BD9"/>
+      <stop offset="1" stop-color="#1F4399"/>
+    </linearGradient>
+  </defs>
+  <!-- 砖：圆角方形，radius 232/1024 = 22.7% -->
+  <rect id="tile" x="0" y="0" width="1024" height="1024" rx="232" fill="url(#tile)"/>
+  <!-- 音符：一条闭合路径。头(椭圆) / 杆 / 旗连成一体，两处凹角用三次贝塞尔做圆角过渡 -->
+  <g id="mark" fill="#FFFFFF">
+    <path d="M 430 500 L 430 238 C 430 208 446 190 470 190 C 488 190 502 196 518 200 C 660 226 800 300 858 424 C 874 460 864 492 842 506 C 808 468 730 396 640 350 C 600 336 570 330 556 330 C 526 330 500 326 500 356 L 500 652 A 175 142 -20 1 1 370 545 C 410 548 430 540 430 500 Z"/>
+  </g>
+</svg>
