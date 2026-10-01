@@ -253,21 +253,31 @@ def render_foreground(spec, size):
     return img.resize((size, size), Image.LANCZOS)
 
 
-def write_ico(image, path, sizes=(16, 32, 48, 256)):
+def write_ico(render, path, sizes=(16, 32, 48, 256)):
     """手写 ICO。<=48 用 BMP 条目（32 位 + AND 掩码，老工具也认），256 用 PNG 条目
-    （Vista+ 支持；不压缩的话单这一张就 262KB，整个 ico 会胖十倍）。"""
+    （Vista+ 支持；不压缩的话单这一张就 262KB，整个 ico 会胖十倍）。
+
+    BMP 条目的像素顺序是 **BGRA**（Windows 的 DIB 约定），不是 Pillow 的 RGBA。
+    写反的后果不是「稍微不对」而是**红蓝互换**：蓝砖直接变橙棕（1.8.6 就这么错的）。
+    每个尺寸都由 render(sz) 按目标像素原生渲染，而不是从 1024 母版缩下来 ——
+    16px 上两者差别肉眼可见。
+    """
     entries = []
     for sz in sizes:
-        small = image.resize((sz, sz), Image.LANCZOS)
+        small = render(sz)
+        if small.size != (sz, sz):
+            raise SystemExit('render(%d) 返回了 %s，尺寸不对' % (sz, small.size))
         if sz >= 256:
             buf = io.BytesIO()
             small.save(buf, 'PNG')
             entries.append((sz, buf.getvalue()))
         else:
-            rgba = small.tobytes()
+            r, g, b, a = small.convert('RGBA').split()
+            bgra = Image.merge('RGBA', (b, g, r, a)).tobytes()      # RGBA -> BGRA
+            mask_len = ((sz + 31) // 32) * 4 * sz                    # 1bpp 掩码，按 4 字节对齐
             header = struct.pack('<IiiHHIIiiII', 40, sz, sz * 2, 1, 32, 0,
-                                 len(rgba) + sz * 4 * 2, 0, 0, 0, 0)
-            entries.append((sz, header + rgba + bytes(sz * 4 * 2)))
+                                 len(bgra) + mask_len, 0, 0, 0, 0)
+            entries.append((sz, header + bgra + bytes(mask_len)))
 
     offset = 6 + 16 * len(entries)
     with open(path, 'wb') as f:
@@ -278,6 +288,45 @@ def write_ico(image, path, sizes=(16, 32, 48, 256)):
             offset += len(blob)
         for _, blob in entries:
             f.write(blob)
+
+
+def verify_ico(path, render, sizes):
+    """回读 ICO 的每一条并与设计稿逐像素比对。
+
+    自己解析 ICO 目录取指定尺寸的条目 —— **不能**靠 Image.open(ico)：它默认只给最大的那一帧，
+    im.size = (w, h) 那条路实测不可靠（负向测试里把 BGRA 写回 RGBA，它照样报「一致」）。
+    通道顺序写反这类错误结构完全合法、尺寸也齐全，唯有解码回像素才露馅 ——
+    1.8.6 的橙棕 installer 图标就是漏在这里。
+
+    注意：行序按写出的原样解（top-down）。1.8.6 的 installer 实际渲染出来音符是正的、
+    只有颜色反了，说明 Windows 这一路就是按 top-down 读的；本校验因此管不住行序，只管通道。
+    """
+    data = open(path, 'rb').read()
+    count = struct.unpack('<HHH', data[:6])[2]
+    checked = []
+    for i in range(count):
+        w, _h, _cc, _r, _p, _bpp, blob_size, offset = struct.unpack(
+            '<BBBBHHII', data[6 + 16 * i:22 + 16 * i])
+        sz = w or 256
+        if sz not in sizes:
+            continue
+        blob = data[offset:offset + blob_size]
+        if blob[:8] == b'\x89PNG\r\n\x1a\n':
+            got = Image.open(io.BytesIO(blob)).convert('RGBA')
+        else:
+            px = blob[40:40 + sz * sz * 4]
+            got = Image.merge('RGBA', tuple(
+                Image.frombytes('L', (sz, sz), px[c::4]) for c in (2, 1, 0, 3)))   # BGRA -> RGBA
+        ref = render(sz)
+        if got.size != ref.size:
+            raise SystemExit('icon.ico 的 %dpx 条目尺寸是 %s，应为 %s' % (sz, got.size, ref.size))
+        # 逐字节比较，别用 ImageChops.difference(...).getbbox() —— getbbox 默认
+        # alpha_only=True，两张 alpha 相同的图差值恒为 None，颜色全错也报「一致」（踩过）。
+        if got.tobytes() != ref.tobytes():
+            raise SystemExit('icon.ico 的 %dpx 条目与设计稿不一致（十有八九是通道顺序写反了）' % sz)
+        checked.append(sz)
+    print('  %-72s %s' % ('resources/icon.ico 回读校验',
+                          '%d 条逐像素一致（%s）' % (len(checked), '/'.join(str(c) for c in checked))))
 
 
 # ---------------------------------------------------------------- 主流程
@@ -300,8 +349,9 @@ def main():
     save(render_foreground(spec, 1024), 'resources', 'icon-foreground.png')
 
     ico = os.path.join(ROOT, 'resources', 'icon.ico')
-    write_ico(master, ico)
+    write_ico(lambda sz: render_tile(spec, sz), ico)
     print('  %-72s %s' % ('resources/icon.ico', '16/32/48/256'))
+    verify_ico(ico, lambda sz: render_tile(spec, sz), (16, 32, 48, 256))
 
     for density, (launcher, foreground) in DENSITIES.items():
         folder = os.path.join(ANDROID_RES, 'mipmap-' + density)
