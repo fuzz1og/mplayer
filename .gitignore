@@ -20,6 +20,9 @@ docs/*
 !docs/specs/*
 !docs/wayfinder/
 !docs/wayfinder/*
+# 活文档配图（README 截图 / logo）：docs/* 默认忽略，这里单独放行
+docs/assets/
+!docs/assets/
 
 # AI 配置目录（只忽略个人数据）
 .claude/plans/
