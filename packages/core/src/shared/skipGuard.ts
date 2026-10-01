@@ -135,8 +135,13 @@ export function pickNextSongAfterFailure(
   currentIndex: number,
   playMode: PlayMode,
   currentSongId: string,
-  /** 稳定随机序列（#511）：随机模式下沿序列找候选，而不是每次现抽。 */
-  shuffle?: ShuffleState | null,
+  /**
+   * 稳定随机序列（#511）：随机模式下沿序列找候选，而不是每次现抽。
+   * **必填**（#541）：此前可选，移动端 audioPlayer 忘传 → 静默退回「防重复现抽」，
+   * 于是 ADR 2026-09-30 决策 5 要求的「失败跳歌沿序列找候选」在移动端从未生效。
+   * 表达「没有序列」请显式传 `null`。
+   */
+  shuffle: ShuffleState | null,
 ): { index: number; song: Song } | null {
   let index = currentIndex;
   for (let step = 0; step < playlist.length; step += 1) {

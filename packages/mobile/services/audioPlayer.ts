@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { getNextSongIndex, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, songUsesSongidLyrics, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, pickNextSongAfterFailure, getFailureStreak, OFFLINE_COPY } from '@mplayer/core';
+import { planAdvance, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, songUsesSongidLyrics, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, pickNextSongAfterFailure, getFailureStreak, OFFLINE_COPY } from '@mplayer/core';
 import type { PlayableResource, Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -270,7 +270,15 @@ function attachPlaybackListener(p: Player): void {
  */
 function pickNextPlayableSong(current: Song): { index: number; song: Song } | null {
   const s = usePlayerStore.getState();
-  return pickNextSongAfterFailure(s.queue, s.currentIndex, useSettingsStore.getState().playMode, current.id);
+  // #541：shuffle 必传（此前漏传 → core 静默退回「防重复现抽」，
+  // 「失败跳歌沿序列找候选」这条 ADR 2026-09-30 决策 5 的语义在这里从未生效）。
+  return pickNextSongAfterFailure(
+    s.queue,
+    s.currentIndex,
+    useSettingsStore.getState().playMode,
+    current.id,
+    s.shuffle ?? null,
+  );
 }
 
 /**
@@ -439,7 +447,16 @@ function prefetchNextSong(): void {
     if (st.queue.length <= 1 || st.currentIndex < 0) return;
     // 与真实切歌同一套索引逻辑（随机模式预取随机位置，避免总预取同一首）
     const playMode = useSettingsStore.getState().playMode;
-    const nextIdx = getNextSongIndex(st.queue, st.currentIndex, playMode);
+    // #541：预取必须与真实切歌同一套推进语义——此前漏传 shuffle，
+    // 随机模式下预取的是「现抽」位置，与实际播放的下一首不是同一首（预取白做）。
+    const nextIdx = planAdvance({
+      queue: st.queue,
+      currentIndex: st.currentIndex,
+      playMode,
+      shuffle: st.shuffle ?? null,
+      direction: 1,
+      cause: 'user',
+    }).index;
     if (nextIdx < 0) return;
     const next = st.queue[nextIdx];
     if (!next?.name || next.sourceType === 'local') return;

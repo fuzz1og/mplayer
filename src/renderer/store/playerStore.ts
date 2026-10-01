@@ -6,8 +6,7 @@ import type { Song, PlaybackFailureAdvice, ShuffleState, ShuffleStep } from '@mp
 import type { PlayMode } from '@mplayer/core';
 import {
   findExactMatch,
-  getNextSongIndex,
-  getPrevSongIndex,
+  planAdvance,
   createShuffleState,
   normalizeShuffleOrder,
   syncShuffleCursor,
@@ -778,14 +777,21 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
 
-    // 列表循环统一收敛到 core getNextSongIndex（回绕）
-    const nextIndex = getNextSongIndex(currentPlaylist, currentPlaylistIndex, playMode);
-    if (nextIndex === -1) {
+    // #541：列表循环推进收敛到 core planAdvance（回绕 + 落点动作单一来源）
+    const plan = planAdvance({
+      queue: currentPlaylist,
+      currentIndex: currentPlaylistIndex,
+      playMode,
+      shuffle: get().shuffle,
+      direction: 1,
+      cause: 'user',
+    });
+    if (plan.effect === 'none') {
       get().stop();
       return;
     }
-    set({ currentPlaylistIndex: nextIndex });
-    get().play(currentPlaylist[nextIndex]);
+    set({ currentPlaylistIndex: plan.index });
+    get().play(currentPlaylist[plan.index]);
   },
 
   playPrevious: () => {
@@ -804,11 +810,19 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
 
-    // 单曲循环 / 列表循环统一收敛到 core getPrevSongIndex（单曲不做重播、列表回绕）
-    const prevIndex = getPrevSongIndex(currentPlaylist, currentPlaylistIndex, playMode);
-    if (prevIndex === -1) return;
-    set({ currentPlaylistIndex: prevIndex });
-    get().play(currentPlaylist[prevIndex]);
+    // #541：单曲循环 / 列表循环统一收敛到 core planAdvance
+    // （单曲 prev = 回上一首不重播，与移动端现在同口径）
+    const plan = planAdvance({
+      queue: currentPlaylist,
+      currentIndex: currentPlaylistIndex,
+      playMode,
+      shuffle: get().shuffle,
+      direction: -1,
+      cause: 'user',
+    });
+    if (plan.effect === 'none') return;
+    set({ currentPlaylistIndex: plan.index });
+    get().play(currentPlaylist[plan.index]);
   },
 
   insertNext: async (song: Song) => {
