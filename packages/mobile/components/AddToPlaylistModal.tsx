@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { CircleCheck, ListMusic, Plus } from 'lucide-react-native';
 import type { Song, SourceKey } from '@mplayer/core';
+import { writeSongsToPlaylist } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
 import {radius, spacing, textVariants, opacity} from '../theme/tokens';
@@ -36,6 +37,7 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
   const addSongs = usePlaylistStore(s => s.addSongs);
   const removeSong = usePlaylistStore(s => s.removeSong);
   const createPlaylist = usePlaylistStore(s => s.createPlaylist);
+  const deletePlaylist = usePlaylistStore(s => s.deletePlaylist);
   const [addedName, setAddedName] = useState<string | null>(null);
   const [addedCount, setAddedCount] = useState(0);
   const [newName, setNewName] = useState('');
@@ -108,21 +110,37 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
    * 就地新建歌单并**立即**把本次曲目写进去（一轮写入，不要求用户再点一次）。
    * createPlaylist 返回新 id；批量走 addSongs（整批一次 set），单曲走 addSong。
    */
-  const handleCreateAndAdd = () => {
+  const handleCreateAndAdd = async () => {
     const name = newName.trim();
     if (!name) return;
+    const target = batchSongs ?? (song ? [song] : []);
+    if (target.length === 0) {
+      // 两个入参都没给：没有可写的曲目——关掉即可（不必先建一个空歌单）
+      onClose();
+      return;
+    }
     try {
-      const id = createPlaylist(name);
-      if (batchSongs) {
-        addSongs(id, batchSongs);
-        showSuccess(name, batchSongs.length);
-      } else if (song) {
-        addSong(id, song);
-        showSuccess(name, 1);
-      } else {
-        // 两个入参都没给：新歌单已建，但没有可写的曲目——关掉即可
-        onClose();
+      // #542：新建 + 写入走 core 编排——**写入失败会删掉刚建的空歌单**（#493 验收标准）。
+      // 此前这里 create 成功后 addSongs/addSong 抛错只弹「新建歌单失败」，空歌单留下来了。
+      const result = await writeSongsToPlaylist(
+        { createName: name, songs: target },
+        {
+          addSongs: async (pid, songs) => addSongs(String(pid), songs),
+          createPlaylist: async (n) => createPlaylist(n),
+          deletePlaylist: async (pid) => {
+            deletePlaylist(String(pid));
+          },
+        },
+      );
+      if (!result.ok) {
+        Alert.alert(
+          '新建歌单失败',
+          result.rolledBack ? '添加歌曲失败，已撤销新建的歌单' : result.error || '请重试',
+        );
+        return;
       }
+      showSuccess(name, result.added);
+      onClose();
     } catch (e) {
       Alert.alert('新建歌单失败', e instanceof Error && e.message ? e.message : '请重试');
     }

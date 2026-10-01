@@ -111,6 +111,8 @@ export { rawSongId, identityKey, identityKeyFrom } from './utils/songIdentity.js
 export { refreshSongResource } from './shared/songResourceRefresh.js';
 export type { SongResourceRefreshDeps } from './shared/songResourceRefresh.js';
 export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
+export { writeSongsToPlaylist } from './shared/playlistWrite.js';
+export type { PlaylistWriteDeps, PlaylistWriteResult } from './shared/playlistWrite.js';
 export type { PlaylistUrlInfo, ProgressState, ImportResult, PlaylistImportDeps, ImportSource } from './api/playlistImport.js';
 export {
   getQqPlaylistSongs,
