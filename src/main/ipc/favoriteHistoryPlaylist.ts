@@ -25,6 +25,8 @@ export function registerPlaylistIpc(db: Db): void {
   registerIpcHandler('playlist:update', (playlistId: number, playlist: any) => db.updatePlaylist(playlistId, playlist));
   registerIpcHandler('playlist:delete', (playlistId: number) => db.deletePlaylist(playlistId));
   registerIpcHandler('playlist:addSong', (playlistId: number, song: any) => db.addSongToPlaylist(playlistId, song));
+  // 批量加入（#493）：整批一次落盘，返回真正新增的条目 id（部分成功；0 首 = []，不抛错）
+  registerIpcHandler('playlist:addSongs', (playlistId: number, songs: any[]) => db.addSongsToPlaylist(playlistId, songs));
   registerIpcHandler('playlist:removeSong', (playlistId: number, songId: string) => db.removeSongFromPlaylist(playlistId, songId));
   registerIpcHandler('playlist:getSongs', (playlistId: number) => db.getPlaylistSongs(playlistId));
   registerIpcHandler('playlist:updateSongsOrder', (playlistId: number, songId: string, order: number) => db.updatePlaylistSongOrder(playlistId, songId, order));

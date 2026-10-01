@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { ArrowLeft, AlertCircle, ListPlus } from 'lucide-react';
+import { message, Modal } from 'antd';
 import SongList from '@/renderer/components/SongList';
+import { IpcClient } from '@/renderer/services/IpcClient';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -28,6 +30,7 @@ const HotlistDetailPage: React.FC = () => {
   const [hotlist, setHotlist] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [savingAll, setSavingAll] = useState(false);
 
   const play = usePlayerStore((s) => s.play);
   const currentSong = usePlayerStore((s) => s.currentSong);
@@ -54,6 +57,53 @@ const HotlistDetailPage: React.FC = () => {
   useEffect(() => {
     loadHotlist();
   }, [loadHotlist]);
+
+  /**
+   * 「保存全部到新歌单」（#493）：确认弹层写明榜单名 + 曲目数，确认后新建本地歌单并一次写入全部曲目。
+   * 失败时**删除刚建的空歌单**再报错——不留空歌单（验收标准）。
+   */
+  const handleSaveAllToNewPlaylist = () => {
+    if (hotlist.length === 0) return;
+    const { title } = config;
+    const count = hotlist.length;
+    Modal.confirm({
+      title: '保存全部到新歌单',
+      content: `确定把「${title}」的 ${count} 首歌曲保存成新的本地歌单「${title}」吗？`,
+      okText: '保存',
+      cancelText: '取消',
+      onOk: async () => {
+        setSavingAll(true);
+        let createdId: number | null = null;
+        try {
+          createdId = await IpcClient.invoke<number>(
+            'playlist:create',
+            title,
+            `来自榜单: ${title}`,
+          );
+          // 批量写入：整批一次落盘（#493 验收「只触发一次持久化」），返回真正新增的条目 id
+          const addedIds = await IpcClient.invoke<number[]>('playlist:addSongs', createdId, hotlist);
+          if (addedIds.length === 0) {
+            throw new Error('没有歌曲被写入新歌单');
+          }
+          message.success(`已保存 ${addedIds.length} 首歌曲到新歌单「${title}」`);
+          navigate('/playlists');
+        } catch (err) {
+          console.error('保存全部到新歌单失败:', err);
+          if (createdId !== null) {
+            // 回滚半成品：不留空/半截歌单
+            try {
+              await IpcClient.invoke('playlist:delete', createdId);
+            } catch (cleanupErr) {
+              console.error('回滚新歌单失败:', cleanupErr);
+            }
+          }
+          message.error(`保存失败，已取消创建歌单`);
+        } finally {
+          setSavingAll(false);
+        }
+      },
+    });
+  };
 
   const handlePlay = async (song: Song) => {
     const keyword = `${song.name} ${song.artist}`;
@@ -123,7 +173,30 @@ const HotlistDetailPage: React.FC = () => {
         >
           {config.title}
         </h1>
-        <div style={{ width: '140px' }} />
+        <button
+          onClick={handleSaveAllToNewPlaylist}
+          disabled={hotlist.length === 0 || savingAll}
+          title={`把「${config.title}」的 ${hotlist.length} 首歌曲保存到新歌单`}
+          style={{
+            border: '1px solid var(--border-default)',
+            background: 'transparent',
+            cursor: hotlist.length === 0 || savingAll ? 'not-allowed' : 'pointer',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            color: 'var(--text-primary)',
+            transition: 'all 0.2s ease',
+            fontSize: '13px',
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            opacity: hotlist.length === 0 || savingAll ? 0.5 : 1,
+          }}
+        >
+          <ListPlus size={16} />
+          <span>{savingAll ? '保存中...' : `保存全部到新歌单（${hotlist.length}）`}</span>
+        </button>
       </div>
 
       {/* 内容区域 */}

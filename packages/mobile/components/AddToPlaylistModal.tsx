@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, Alert,
+  View, Text, StyleSheet, Alert, TextInput, Platform,
 } from 'react-native';
-import { CircleCheck, ListMusic } from 'lucide-react-native';
+import { CircleCheck, ListMusic, Plus } from 'lucide-react-native';
 import type { Song, SourceKey } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
 import { SOURCE_LABELS } from '../stores/sourceStore';
-import {radius, spacing, textVariants} from '../theme/tokens';
+import {radius, spacing, textVariants, opacity} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import BottomSheet from './BottomSheet';
@@ -18,19 +18,57 @@ function sourceLabel(sourceType?: string): string {
 
 interface Props {
   visible: boolean;
-  song: Song | null;
+  /** 单曲模式：与 songs 互斥 */
+  song?: Song | null;
+  /**
+   * 批量模式：与 song 互斥。点击歌单只调一次 addSongs（整批一次 set = 一次持久化），
+   * 不逐首弹同名 Alert——跨源同名在批量语义下直接并入（与桌面 BatchAddToPlaylistModal 同做法）。
+   */
+  songs?: Song[] | null;
   onClose: () => void;
 }
 
-export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
+export default function AddToPlaylistModal({ visible, song, songs, onClose }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const playlists = usePlaylistStore(s => s.playlists);
   const addSong = usePlaylistStore(s => s.addSong);
+  const addSongs = usePlaylistStore(s => s.addSongs);
   const removeSong = usePlaylistStore(s => s.removeSong);
+  const createPlaylist = usePlaylistStore(s => s.createPlaylist);
   const [addedName, setAddedName] = useState<string | null>(null);
+  const [addedCount, setAddedCount] = useState(0);
+  const [newName, setNewName] = useState('');
+
+  const batchSongs = songs && songs.length > 0 ? songs : null;
+  const isBatch = batchSongs !== null;
+  const targetCount = isBatch ? batchSongs.length : 1;
+
+  // 每次打开都是一次全新的加入流程：名字输入与成功态都要复位
+  useEffect(() => {
+    if (visible) {
+      setNewName('');
+      setAddedName(null);
+      setAddedCount(0);
+    }
+  }, [visible]);
+
+  const showSuccess = useCallback((playlistName: string, count: number) => {
+    setAddedName(playlistName);
+    setAddedCount(count);
+    setTimeout(() => {
+      setAddedName(null);
+      onClose();
+    }, 1200);
+  }, [onClose]);
 
   const handleSelect = (playlistId: string, playlistName: string) => {
+    // —— 批量模式：整批只写一轮 ——
+    if (batchSongs) {
+      addSongs(playlistId, batchSongs);
+      showSuccess(playlistName, batchSongs.length);
+      return;
+    }
     if (!song) return;
     const playlist = playlists.find((p) => p.id === playlistId);
     // 同一首歌（同 id）已在歌单中 → 直接提示不加
@@ -55,8 +93,7 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
             onPress: () => {
               removeSong(playlistId, dup.id);
               addSong(playlistId, song);
-              setAddedName(playlistName);
-              showSuccess();
+              showSuccess(playlistName, 1);
             },
           },
         ]
@@ -64,35 +101,84 @@ export default function AddToPlaylistModal({ visible, song, onClose }: Props) {
       return;
     }
     addSong(playlistId, song);
-    setAddedName(playlistName);
-    showSuccess();
+    showSuccess(playlistName, 1);
   };
 
-  const showSuccess = () => {
-    setTimeout(() => {
-      setAddedName(null);
-      onClose();
-    }, 1200);
+  /**
+   * 就地新建歌单并**立即**把本次曲目写进去（一轮写入，不要求用户再点一次）。
+   * createPlaylist 返回新 id；批量走 addSongs（整批一次 set），单曲走 addSong。
+   */
+  const handleCreateAndAdd = () => {
+    const name = newName.trim();
+    if (!name) return;
+    try {
+      const id = createPlaylist(name);
+      if (batchSongs) {
+        addSongs(id, batchSongs);
+        showSuccess(name, batchSongs.length);
+      } else if (song) {
+        addSong(id, song);
+        showSuccess(name, 1);
+      } else {
+        // 两个入参都没给：新歌单已建，但没有可写的曲目——关掉即可
+        onClose();
+      }
+    } catch (e) {
+      Alert.alert('新建歌单失败', e instanceof Error && e.message ? e.message : '请重试');
+    }
   };
+
+  const emptyName = newName.trim().length === 0;
 
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       {addedName ? (
         <View style={styles.successBox}>
           <CircleCheck size={48} color={colors.accent} />
-          <Text style={styles.successText}>已加入歌单「{addedName}」</Text>
+          <Text style={styles.successText}>
+            {isBatch
+              ? `已加入 ${addedCount} 首到「${addedName}」`
+              : `已加入歌单「${addedName}」`}
+          </Text>
         </View>
       ) : (
         <>
           <Text style={styles.title}>加入歌单</Text>
-          {song && (
+          {isBatch ? (
+            <Text style={styles.songName} numberOfLines={1}>本次选择的 {targetCount} 首歌曲</Text>
+          ) : song ? (
             <Text style={styles.songName} numberOfLines={1}>{song.name}</Text>
-          )}
+          ) : null}
+
+          {/* 新建歌单行：空态下这是唯一可用的操作，所以放在列表之前 */}
+          <View style={styles.createRow}>
+            <TextInput
+              style={styles.createInput}
+              value={newName}
+              onChangeText={setNewName}
+              placeholder="新建歌单..."
+              placeholderTextColor={colors.inputPlaceholder}
+              returnKeyType="done"
+              onSubmitEditing={handleCreateAndAdd}
+              autoCorrect={false}
+            />
+            <ScalePress
+              style={[styles.createBtn, emptyName && styles.createBtnDisabled]}
+              onPress={handleCreateAndAdd}
+              disabled={emptyName}
+            >
+              <Plus size={16} color={colors.textInverse} />
+              <Text style={styles.createBtnText}>
+                {isBatch ? `新建并加入 ${targetCount} 首` : '新建并加入'}
+              </Text>
+            </ScalePress>
+          </View>
+
           {playlists.length === 0 ? (
             <View style={styles.emptyBox}>
               <ListMusic size={40} color={colors.textTertiary} />
-              <Text style={styles.emptyText}>暂无歌单</Text>
-              <Text style={styles.emptyHint}>请先在歌单页面创建</Text>
+              <Text style={styles.emptyText}>还没有歌单</Text>
+              <Text style={styles.emptyHint}>在上方输入名字即可新建</Text>
             </View>
           ) : (
             <View style={styles.list}>
@@ -131,6 +217,40 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: spacing[5],
+  },
+  createRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    marginBottom: spacing[3],
+  },
+  createInput: {
+    flex: 1,
+    // Android TextInput 在定高容器里自带内边距，同 TopBar 的处理：显式给高度与垂直居中
+    height: Platform.OS === 'android' ? 44 : 40,
+    paddingHorizontal: spacing[3],
+    paddingVertical: 0,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgHover,
+    color: colors.textPrimary,
+    ...textVariants.callout,
+  },
+  createBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    height: Platform.OS === 'android' ? 44 : 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
+  },
+  createBtnDisabled: {
+    opacity: opacity.disabled,
+  },
+  createBtnText: {
+    ...textVariants.footnote,
+    fontWeight: '600',
+    color: colors.textInverse,
   },
   list: {
     marginBottom: spacing[3],

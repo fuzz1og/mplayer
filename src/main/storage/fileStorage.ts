@@ -655,6 +655,52 @@ export class FileStorage {
     return id;
   }
 
+  /**
+   * 批量加入歌单（#493）——整批**只落一次盘**（一次 saveData('playlistSongs')），
+   * 供榜单页「保存全部到新歌单」这类大列表使用；逐首 addSongToPlaylist 会 N 次全量重写 JSON。
+   *
+   * 契约（与调用方约定，刻意与逐首版不同）：
+   * - 歌单存在校验一次；逐首 validateSongData，**不合法/重复的跳过**，不整批抛错；
+   * - 按 songId 去重（对歌单已有 + 本批内部），返回真正新增的 PlaylistSong id 列表；
+   * - 顺序按传入顺序接着当前 maxOrder 递增；容量上限 1000/歌单，放不下的部分截断；
+   * - **部分成功**：一个都放不进去时返回 []（不抛错）——由调用方按「0 首成功」给文案，
+   *   并负责回滚空歌单（#493 验收：绝不允许既没报错又留下空歌单）。
+   * - 刻意不做「跨源同名确认」：批量语义下直接并入（与移动端批量、桌面 BatchAddToPlaylistModal 一致）。
+   */
+  async addSongsToPlaylist(playlistId: number, songs: Song[]): Promise<number[]> {
+    await this.ensureLoaded();
+    const playlist = this.data.playlists.find(p => p.id === playlistId);
+    if (!playlist) {
+      throw new Error(`歌单不存在: ${playlistId}`);
+    }
+
+    const currentSongs = this.data.playlistSongs.filter(ps => ps.playlistId === playlistId);
+    const seen = new Set(currentSongs.map(ps => ps.songId));
+    let maxOrder = currentSongs.reduce((max, ps) => Math.max(max, ps.order), -1);
+
+    const addedIds: number[] = [];
+    for (const song of songs) {
+      if (currentSongs.length + addedIds.length >= 1000) break; // 容量上限：放不下的截断
+      if (!song || !song.id || seen.has(song.id)) continue;
+      if (!this.validateSongData(song)) continue;
+      seen.add(song.id);
+      const id = nextId();
+      this.data.playlistSongs.push({
+        id,
+        playlistId,
+        songId: song.id,
+        song: song as Song,
+        order: ++maxOrder,
+      });
+      addedIds.push(id);
+    }
+
+    if (addedIds.length > 0) {
+      await this.saveData('playlistSongs');
+    }
+    return addedIds;
+  }
+
   private validateSongData(song: Song): boolean {
     if (!song.id || !song.name || !song.artist) return false;
     // 在线歌曲的 url 由播放链路懒解析（预取缓存 → 直连 → tier3），
