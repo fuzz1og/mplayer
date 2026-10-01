@@ -29,7 +29,7 @@ cd .claude/worktrees/<slug>
 - **rebase 到「动过 `packages/core` 的新 master」之后必须重跑 `core:build`**：Metro 吃 `packages/core/dist`，而 TypeScript 从 `core/src` 解析——两条路不一致时 `typecheck` 与 CI **全绿**，真机却 **runtime undefined** 崩在第一个用到新导出量的地方（实测：#507 把 `COVER_SIZE` 加进 core，rebase 后未重建 dist 的 worktree 首启直接 `Render Error: Cannot read property 'row' of undefined`）。`npm run core:build` + 重启 Metro 即解；CI 之所以看不出来，是因为它每步都先 `core:build`。
 - 调试/测试必须在 worktree 内构建运行，不要 cd 回主克隆目录（缓存不一致难排查）。
 - **Metro 必须在 `packages/mobile` 里起**，不要在 worktree 根目录跑 `npx expo start`：根 `package.json` 的 `main` 指不到 app 入口（`ConfigError: Cannot resolve entry file`），而且 Expo 会顺手改写根 `tsconfig.json`（`extends` 改成 `expo/tsconfig.base`）并把 worktree 弄脏——记得 `git checkout -- tsconfig.json`。
-- 新 worktree 检出的 `scripts/*.sh` 在本机 Windows（`core.autocrlf=true`）**被检出成 CRLF** —— git 里存的本来就是 LF，仓库 `.gitattributes` 已对 `*.sh` 固定 `eol=lf`（若你看到 CRLF，说明本机是 `.gitattributes` 生效前克隆的，重新克隆即可）。CRLF 会让 `bash scripts/*.sh` 直接报 `$'\r': command not found` / `syntax error`；就地归一成 LF 再跑即可。这只改工作区、不改仓库内容，**不需要**为此做 `git checkout` 或把它排除在提交之外。**验证入口已不吃这一条**：验证、设计 lint、发布与真机脚本都已迁到 Node（#500 / #502），`scripts/*.sh` 现在全是两行 shim（各自 `exec node` 同名 `.mjs`），CRLF 不再影响任何一条流程。
+- 新 worktree 检出的 `scripts/*.sh` 在本机 Windows（`core.autocrlf=true`）**被检出成 CRLF** —— git 里存的本来就是 LF，仓库 `.gitattributes` 已对 `*.sh` 固定 `eol=lf`（若你看到 CRLF，说明本机是 `.gitattributes` 生效前克隆的，重新克隆即可）。CRLF 会让 `bash scripts/*.sh` 直接报 `$'\r': command not found` / `syntax error`；就地归一成 LF 再跑即可。这只改工作区、不改仓库内容，**不需要**为此做 `git checkout` 或把它排除在提交之外。**验证入口已不吃这一条**：验证、设计 lint、发布与真机脚本都已迁到 Node（#500 / #502），`scripts/*.sh` 现在全是 shim（各自 `exec node` 同名 `.mjs`），CRLF 不再影响任何一条流程。
 - **Windows 上不要用 `bash` 跑验证**：`Get-Command bash` 的第一顺位常常是 `C:\WINDOWS\system32\bash.exe`（WSL），于是 WSL 的 **Linux** node 去用 Windows 装的 `node_modules` —— 报错却落成 `Cannot find module @rollup/rollup-linux-x64-gnu`，完全不指向成因（#500）。用 `npm run verify -- <scope>`；`verify.mjs` 起跑前会自检平台并直接给出人话提示。
 
 ## 3. 实现并验证
@@ -38,7 +38,7 @@ cd .claude/worktrees/<slug>
 
 ```bash
 npm run verify        # 全量（Windows / PowerShell / cmd / Git Bash 通用；实现在 scripts/verify.mjs）
-./scripts/verify.sh   # 等价写法（两行 shim，转调 scripts/verify.mjs）
+./scripts/verify.sh   # 等价写法（shim，转调 scripts/verify.mjs）
                       # 全量：static（docs 门禁 → core:build → lint → design-lint → 双端 typecheck → build）
                       #      + renderer / main / core / mobile 四套测试 + expo（SDK 依赖一致性）
                       #      也可只跑某个 scope：npm run verify -- static

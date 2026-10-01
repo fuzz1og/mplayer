@@ -54,7 +54,7 @@ Push（main→renderer）：`download:progress|complete|error`, `localMusic:fold
 
 ## Mobile (Expo/React Native)
 
-expo-router Stack + Tabs：`(tabs)/`（推荐 / 发现 / 歌单 / 本地歌曲；搜索页 `href: null` 不占 Tab，由顶栏进入）+ player/favorites/history/settings/hotlist/playlist/[id]/discover-playlist/[id]/artist/[id]（`/albums` 为专辑时间线页，#417）/album/[id]。
+expo-router Stack + Tabs：`(tabs)/`（推荐 / 发现 / 歌单 / 本地歌曲；搜索页 `href: null` 不占 Tab，由顶栏进入）+ player/favorites/history/settings/hotlist/playlist/[id]/discover-playlist/[id]/artist/[id]（下设 `artist/[id]/albums` 专辑时间线页，#417）/album/[id]。
 
 - `modules/native-player/` 自写 Kotlin Expo Module（Android 播放引擎，ADR `2026-09-29-native-playback-ownership`）：`PlayerModule`（Expo Module 定义 + Record 入参）/`PlayerBridge`（media3 `MediaController` 连接 + HeadlessJsTask 补窗）· `PlaybackController`（ExoPlayer 持队列 + 原生推进）· `PlayerService`/`ServiceLauncher`（`MediaLibraryService` 媒体会话 / 前台服务 / 通知与锁屏）· `QueueStore`（原生队列模型与 load/patch）· `AdvancePolicy`（推进决策参数容器：只消费 JS 下发的 policy，语义源仍是 core `skipGuard`）· `ErrorPolicy`/`ErrorCodes`（原生错误分级：只分级，文案与坏歌记忆在 core）· `ExpiryGuard`（直链过期的本地拦截）· `PrefetchBridge`（原生补窗预取）· `Events`（模块级事件名，全部是「通知」性质、不驱动原生推进）。JS 侧入口 `index.ts`，接线在 `services/nativePlayer`
 - `components/` TopBar, PlayerBar, PlayerOverlay, SongRow, DiscoverTabs, SourceSwapModal, AddToPlaylistModal 等；列表/网格封面统一走 `LazyCover`（同形占位 + 失败重试一次；**不设闸门**，并发靠 `listWindowProps` 窗口化）+ core `shared/coverUrl.ts` 的 `coverThumbUrl`（按**各源 CDN 机制**要缩略图：网易 `?param=WxH`、QQ 路径模板 `R{size}x{size}`、未验证机制的源原样返回——#496，ADR `2026-09-30-mobile-cover-loading`）；`SongList` 用 `viewabilityConfig` 的可见回调 + `components/songListHydration` 的**停稳闸**（可见集合 `VIEWPORT_SETTLE_MS` 内不再变化才按整屏入队，上滑中滚过的行不入队——#421）把「行进入视口」接到 core `lyricsHydrator` 预取歌词（#429）；**同一拍**还算出本次离开可见集合的 key 交给 `cancelLyricsHydration` 收回，卸载时只收回本列表入队过的 key

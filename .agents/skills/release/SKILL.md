@@ -11,7 +11,7 @@ description: MPlayer 版本发布流程——发版前文档同步、版本递�
 
 1. **文档同步**（发版前必做，须在 bump / 打 tag / 触发 CI 构建之前完成）：**先调用 `writing-for-agents` skill**，用它的规则更新并同步全部活文档，再按下节清单逐类核对；改完提交后再发版。
 2. **一键发布**：`npm run release -- <patch|minor|major|版本号> [--skip-verify]`
-   - 入口用 `npm run release`（`./scripts/release.sh` 是两行 shim；Windows 上别用 bash 调它——那个 bash 可能是 WSL 的，见 #500）
+   - 入口用 `npm run release`（`./scripts/release.sh` 是 shim；Windows 上别用 bash 调它——那个 bash 可能是 WSL 的，见 #500）
    - 内部按序执行：分支检查（必须 master）→ 验证（`scripts/verify.mjs`）→ `node scripts/version-bump.js`（同步 package.json / package-lock.json / app.json / mobile+core package.json 共 5 处）→ commit → push master → 打 tag → push tag
 3. **监控构建**：`gh run list --workflow=release.yml --limit 1` 取 run id，再用 `gh run view <id> --json status,conclusion` 轮询（要分片状态就 `.jobs[]`）——`gh run watch` 每 20s 重印整棵 job 树，读回来几乎全是重复
 4. **更新 release 介绍**：publish job 结束后，按 `.agents/skills/release-notes` 规格用详细文案覆盖自动生成介绍

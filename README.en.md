@@ -148,12 +148,12 @@ flowchart LR
 
 | Area | What it does |
 | --- | --- |
-| Playback | Multi-source search, hot charts, three play modes (repeat one / repeat all / shuffle), lyrics, global shortcuts, cover-version detection, skip-on-failure (on by default, can be turned off) |
+| Playback | Multi-source search, hot charts, three play modes (repeat one / repeat all / shuffle), play next, lyrics, global shortcuts, cover-version detection, skip-on-failure (on by default, can be turned off) |
 | Source switching | Per-track switching (full-version preference + playability probing + in-place replacement) |
 | Search | Songs / artists tabs, artist browsing and detail, strict-match backfill for songs without a URL |
 | Favourites / history | Automatic URL refresh written back to the DB; auto-recorded, viewable and clearable |
-| Playlists | Create / delete, drag-and-drop ordering, batch operations, import from text or links |
-| Discover | Recommendations / charts / new releases / playlists / artists, album pages, save with one click |
+| Playlists | Create / delete, drag-and-drop ordering, batch operations (create a playlist in place), filter by title / artist, import from text or links |
+| Discover | Recommendations / charts / new releases / playlists / artists, album pages, one-click save (charts can save everything into a new playlist) |
 | Cache | Prefetch cache (instant playback), cover and audio disk cache, stats and clearing |
 | Network | Direct-status panel for all 7 sources, tier3 subscriptions with per-source stats (delivered / discarded / missed / skipped / guard-rejected / health), diagnostic export, HTTP proxy, TLS fingerprint spoofing |
 | Download / local | Single and batch downloads with progress; folder scanning, ID3 parsing, change watching |
@@ -161,10 +161,11 @@ flowchart LR
 ## 📱 Mobile features
 
 - **Four bottom tabs**: Recommend / Discover / Playlists / Local (Recommend by default; search lives in the top bar rather than a tab)
-- **Full-screen player**: swipe left for lyrics, play modes, favourites, queue
+- **Full-screen player**: swipe left for lyrics, play modes, favourites, queue, play next
+- **Playlists**: batch select and batch actions, create-and-add in place, export a discovered playlist to a local playlist with one click
 - **Dark mode**: follow system / light / dark
 - **Downloads**: saved to the public Downloads folder via SAF
-- **Settings**: direct-source settings (auto / direct per source), tier3 subscriptions with per-source stats (including health), proxy, update check, cache, playback log, playback diagnostics
+- **Settings**: direct-source settings (auto / direct per source), tier3 subscriptions with per-source stats (including health), update check, cache, playback log, playback diagnostics
 - **Detail pages**: charts / playlists / albums / artists / discovered playlists
 
 The full route table lives in [docs/agents/architecture.md](docs/agents/architecture.md) (agent-facing) and the `packages/mobile/app/` directory.
@@ -214,7 +215,7 @@ npm run test:main           # main-process tests (node env)
 npm run core:build          # build the shared package (required after core changes)
 npm run verify              # full pre-commit verification: static checks + four test suites + Expo dependency consistency
                             #   (pass a scope to run one slice); implemented in scripts/verify.mjs
-./scripts/verify.sh         # equivalent form (a two-line shim that forwards to scripts/verify.mjs)
+./scripts/verify.sh         # equivalent form (a shim that forwards to scripts/verify.mjs)
 ```
 
 > [!TIP]
@@ -230,7 +231,7 @@ npm run verify              # full pre-commit verification: static checks + four
 Pushing a `v*` tag triggers GitHub Actions to build (three desktop platforms + Android APK / AAB) and upload to GitHub Releases; the app can check for updates in place:
 
 ```bash
-npm run release -- patch     # one-shot release (= ./scripts/release.mjs; verify → bump → commit → tag → trigger CI)
+npm run release -- patch     # one-shot release (= ./scripts/release.mjs; verify → bump → commit → push master → tag → trigger CI)
 ```
 
 ## 🙏 Credits

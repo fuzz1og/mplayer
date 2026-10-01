@@ -15,12 +15,12 @@ npm run test:run                 # vitest 单次（renderer + src/__tests__ 顶�
 npm run test:main                # vitest 单次（主进程，node env，独立 config）
 npm run mobile:e2e               # 移动端真机 e2e 一条龙（usbipd 直挂真机验收，见 e2e/README.md）
 npm run verify -- <scope>        # 验证唯一入口（all=static+四套测试+Expo 依赖一致性；也可只跑某个 scope）；实现在 scripts/verify.mjs
-./scripts/verify.sh              # 等价写法（两行 shim；Windows 上别用 bash 调它——那个 bash 可能是 WSL 的，见 #500）
-npm run release                  # 一键发布（= ./scripts/release.mjs；验证 → bump → commit → 推 master → tag → 触发 CI 构建）
+./scripts/verify.sh              # 等价写法（shim，只 exec 同名 .mjs；Windows 上别用 bash 调它——那个 bash 可能是 WSL 的，见 #500）
+npm run release -- <patch|minor|major|版本号>  # 一键发布（= ./scripts/release.mjs；验证 → bump → commit → 推 master → tag → 触发 CI 构建）
 python resources/generate_icon.py  # 从 resources/icon.svg 重建全部图标产物（改图标只改 SVG，产物别手改）
 ```
 
-**验证顺序的唯一出处是 `scripts/verify.mjs`**（`scripts/verify.sh` 只是两行 shim：CI 与文档沿用旧调用串，步骤一律在 .mjs 里），CI 各 job 直接调它的分片（`check` + 四个 `test` + `expo-check`），不在 workflow 里另拼步骤。全量 = `static`（docs 门禁 → core:build → lint → design-lint → 双端 typecheck → build）+ 四套测试（renderer / main / core / mobile；矩阵见 `docs/agents/testing.md`）+ `expo`（Expo SDK 依赖一致性）。边界与理由见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`；依赖升级治理见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
+**验证顺序的唯一出处是 `scripts/verify.mjs`**（`scripts/verify.sh` 只是 shim：CI 与文档沿用旧调用串，步骤一律在 .mjs 里），CI 各 job 直接调它的分片（`check` + 四个 `test` + `expo-check`），不在 workflow 里另拼步骤。全量 = `static`（docs 门禁 → core:build → lint → design-lint → 双端 typecheck → build）+ 四套测试（renderer / main / core / mobile；矩阵见 `docs/agents/testing.md`）+ `expo`（Expo SDK 依赖一致性）。边界与理由见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`；依赖升级治理见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
 pre-commit 钩子（`.githooks/pre-commit`，`npm install` 经 `prepare` 自动接线）只做 root+mobile typecheck（mobile 前先保证 `packages/core/dist` 新鲜，落后就地 `core:build`）+ staged lint，是本地加速而非闸门——闸门是 CI 的必需状态检查。
 
 ## Architecture
