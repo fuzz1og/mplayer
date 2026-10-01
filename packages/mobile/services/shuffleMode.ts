@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createShuffleState, syncShuffleCursor } from '@mplayer/core';
+import { alignShuffleOrder, createShuffleState } from '@mplayer/core';
 import type { ShuffleState, Song } from '@mplayer/core';
 
 /**
@@ -52,16 +52,8 @@ export function alignShuffleForWindow(
   queue: Song[],
   currentIndex: number,
 ): ShuffleState {
-  const seen = new Set(state.order);
-  const order = [...state.order];
-  for (const song of queue) {
-    if (song.id && !seen.has(song.id)) {
-      order.push(song.id);
-      seen.add(song.id);
-    }
-  }
-  const currentId = queue[currentIndex]?.id;
-  return { order, cursor: currentId ? order.indexOf(currentId) : -1 };
+  // #543：对齐策略已收进 core（作用域显式），这里只保留名字以便既有调用点不改。
+  return alignShuffleOrder(state, queue, currentIndex, 'window');
 }
 
 /**
@@ -73,7 +65,8 @@ export function alignShuffleForMembers(
   queue: Song[],
   currentIndex: number,
 ): ShuffleState {
-  return syncShuffleCursor(state, queue, currentIndex);
+  // #543：同 alignShuffleForWindow，策略在 core；authoritative = 完整成员集。
+  return alignShuffleOrder(state, queue, currentIndex, 'authoritative');
 }
 
 /**
