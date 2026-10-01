@@ -36,6 +36,7 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
 
 1. **先证明跑的是你的代码**：从 logcat `Running "main"` 里取 `launchAsset.url`，追加 `&lazy=false` 后 curl，`grep` 你新加的标识串；manifest 的 `projectRoot` 要是你的 worktree。跑错源码时后面的结论全部作废。
 2. **要坐标、要文案断言，先 dump 再截图**：`adb shell uiautomator dump /sdcard/ui.xml` + `adb pull` 拿到带 `text=` / `bounds=` 的树（RN 组件会映射成原生节点；实测一次调用就能定位「播放队列 (7)」「明知故犯」这类元素并给出 `bounds`）。现成驱动与坑见 `e2e/README.md`（动画/滚动中会间歇性吐空壳树，要重试 + 弃旧快照）。**截图退居视觉复核**，别用它猜坐标。
+   **dump 是单行 XML**：别用按行读取/截断的工具读它（实测 read 类工具会把那一行截断，正则静默匹配 0 个节点，看着像"空树"）——用 Node `fs.readFileSync` 或 python 解析后再取 `text=` / `bounds=`。
 3. **截图**：**先裁感兴趣区域再读**（全屏 PNG 1.5–2.6MB，连读十几张代价很高）；能用埋点日志判读就别截图——例：`[cover] 加载失败 0`、`[perf]` 窗口 warn 比一张截图更省也更硬。`adb exec-out screencap -p > <用例>.png`（pwsh 7 / bash 字节安全；Windows PowerShell 5.1 会改编码，改用 `adb shell screencap -p /sdcard/x.png` + `adb pull`）。存仓库外（`%TEMP%\mplayer-acceptance\`），文件名用 `<PR 号>-<序号>-<用例>.png`，别用 `s1.png`；同类用例要固化就跑 `npm run mobile:e2e`（截图落 `e2e/artifacts/`，已 gitignore）。
 4. **交互坐标按当前设备取**：先 `adb shell wm size`，坐标就是截图里的物理像素。**点不动时先怀疑"点偏了"，不要先怀疑"输入被拦"**——PKB110 / ColorOS 16 实测 `adb shell input tap` 是生效的（点启动器图标能打开对应 App）——但**应用内的 RN Pressable 是已知例外**，点不动多半不是坐标问题，见下节「验收准备别靠点触摸应用内 UI」。`input -d 0 tap X Y` 只在 display id 不为 0 时才有意义（`adb shell dumpsys display | grep -m1 mDisplayId`；本机 id=0，两种写法等效）。快速滑动用连打 `input swipe`；`onEndReached` 那类要滚动的验收，`input keyevent 20`（DPAD_DOWN）连打更稳（触摸滑动的落点/惯性更难控）。tab 栏在屏幕底部（OnePlus 上 y≈2602–2648，2680 已落进系统手势区）。
    - **别用错误判据**：`input tap` 点状态栏**不会**拉下通知栏（ColorOS 上本就不拉），拿它当"输入被拦"的证据会误判整轮验收（实测踩过）。判别输入是否生效，用**点启动器图标看前台 Activity**（`dumpsys activity activities | grep -m1 topResumedActivity`）这种有唯一答案的目标。
@@ -46,6 +47,8 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
 ## 验收准备别靠点触摸应用内 UI
 
 RN 的 `ScalePress` 对注入触摸**时灵时不灵**：同一实例上，设置齿轮 / 「+ 添加 URL 订阅」/ 播放模式按钮对 `input tap`、长按式 `input swipe x y x y 200`、5 次连点**全无响应**（齿轮有 ripple 却不导航；按钮连 Alert 都不弹，说明 handler 压根没跑），而同屏原生 `Switch` / `TextInput` 正常。**点不动且没有任何状态变化（无 Alert、无导航、无日志）时，先怀疑「这个控件不吃注入触摸」**，别继续换坐标试。
+
+**先自检注入本身有没有效**：拿一个**已知可长按**的控件做对照（本机实测：长按「我的歌单」页的歌单卡片 → 弹「删除歌单」确认）。`input swipe x y x y <ms>`（同点、>=500ms）与 `input motionevent DOWN/…/UP` 都能触发长按；**对照组生效而目标不响应**时，才轮到怀疑「这个控件不吃注入触摸」或「手势被组件树吞掉」——2026-10-01 就是靠这条把「注入无效」与「外层 Pressable 被内层吞掉」分开，才定性到 responder 归属（#514）。
 
 可靠替代——验收准备要的是「设备处于某个状态」，不是「按钮被按过」：
 
@@ -126,6 +129,7 @@ adb shell dumpsys notification --noredact | grep music-playback
 - **worktree 里调真机**：`packages/mobile/node_modules` 软链到主克隆时，`expo-router` 的 babel 插件按「被转换文件的真实路径」反推 app root（`babel-preset-expo` 的 `getExpoRouterAppRoot`），`_ctx.android.js` 的真实路径落在主克隆 → **打包的是主克隆的 `app/`**，worktree 的改动全部不生效（症状：改了没反应）。修法：worktree 就地 `npm install`；临时救急用 `cp -al` 硬链主克隆的 `node_modules` 与 `packages/mobile/node_modules`（硬链的真实路径落在 worktree 内，app root 推导才正确）。
 - **Metro 报 500**：先 curl bundle URL 看错误体。常见根因是 Metro 实例的 projectRoot 不是 `packages/mobile`（陈年残留进程，解析到仓库根）——杀掉它重起。App 收到的 manifest 里 `projectRoot` 字段可直接验。
 - **多会话共抢一台手机**：其他 worktree 会话可能也在调试（各自 Metro 占 8082 等端口、互相拉起 App）。`adb kill-server` 会打掉**所有人**的 reverse 隧道——动过 server 后跑 `adb reverse --list` 确认自己的端口还在，App 的 `initialUri` 要指向自己的端口。
+- **归属对照：同一台设备上再起一个 Metro（8082）跑 master**：分支上某控件不响应 / 行为可疑时，用 master 的 bundle 复现一次（`adb reverse tcp:8082 tcp:8082` → `am start … exp://127.0.0.1:8082`），就能把「本 PR 引入」与「既有行为」分开——#514 的长按吞手势就是这样定性为既有模式（对照图进了 PR 评论）。用完记得 `adb reverse tcp:8081 tcp:8081` 切回自己的端口并冷启。
 - **双 transport 串线**：设备同时挂 USB + 无线两条 transport 时 reverse 静默不通（App 拉起但 JS 永远不跑、Metro 无 bundling 记录）。修法：`adb disconnect` 只留 USB，重建 reverse，冷启。mobile-debug.mjs 已内置该检查。
 - **`adb install` 把 server 卡死 / 5037 被抢**：实测 80MB 的 `adb install` 能把 adb server 卡到 `adb devices` 都超时。处置：改 `adb push` + `adb shell pm install`；仍卡死就查占用者（Windows：`Get-NetTCPConnection -LocalPort 5037 -State Listen`）——`D:\leidian\LDPlayer14\adb.exe` 与 scoop 的 `android-clt\...\adb.exe` 都会抢 5037，杀掉后让 WSL 侧 `~/.local/bin/adb start-server` 接管。
 - **CMake 250 字符对象路径上限**：在深层 worktree（如 `.claude/worktrees/<name>`）里跑 `./gradlew assembleDebug` 会因原生模块对象路径过长失败，症状是 CMake 警告 `CMAKE_OBJECT_PATH_MAX` + `ninja: error: manifest 'build.ninja' still dirty after 100 tries`。修法：换到路径更短的检出（主克隆）构建，或加 `subst` 短盘符。
