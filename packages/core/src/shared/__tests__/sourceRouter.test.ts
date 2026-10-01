@@ -362,6 +362,68 @@ describe('tier3 插槽（预留：默认关，未注入不生效；#144 落地�
   });
 });
 
+/**
+ * #539：两条入口腿曾经**各写一遍**编排，且 URL 腿漏了 audioTag=preview 的完整版兜底
+ * ——两条腿语义分叉。现在 URL 腿是 resolveRoutedInner 的薄适配，这组用例钉死
+ * 「同一个 song，两个入口得到同一条 URL」，防止编排再次各写一份。
+ */
+describe('两条解析入口腿语义一致（#539）', () => {
+  /** 同一个 song 分别走 URL 腿与 Song 腿，断言取到的 URL 相同。 */
+  async function bothLegs(s: Song): Promise<{ urlLeg: string; songLeg: string }> {
+    const urlLeg = await resolvePlayableUrlRouted(s);
+    const songLeg = (await resolvePlayableSongRouted(s)).url;
+    return { urlLeg, songLeg };
+  }
+
+  it('直连成功：两条腿拿到同一条直链', async () => {
+    registerDirectClient(makeClient('netease'));
+    const { urlLeg, songLeg } = await bothLegs(song('same-1', 'netease'));
+    expect(urlLeg).toBe('https://direct.example.com/1.mp3');
+    expect(songLeg).toBe(urlLeg);
+  });
+
+  it('audioTag=preview + tier3 命中：URL 腿也走完整版兜底（此前漏掉的语义）', async () => {
+    const tier3 = vi.fn(async () => tier3Hit('https://tier3.example.com/full.mp3'));
+    setTier3Enabled(true);
+    setTier3Resolver(tier3);
+    registerDirectClient(makeClient('netease'));
+    const trial = { ...song('trial-1', 'netease'), audioTag: 'preview' as const };
+
+    const { urlLeg, songLeg } = await bothLegs(trial);
+    expect(urlLeg).toBe('https://tier3.example.com/full.mp3');
+    expect(songLeg).toBe(urlLeg);
+  });
+
+  it('audioTag=preview + tier3 未命中：两条腿都退回直连试听 URL', async () => {
+    setTier3Enabled(true);
+    setTier3Resolver(vi.fn(async () => null));
+    registerDirectClient(makeClient('netease'));
+    const trial = { ...song('trial-2', 'netease'), audioTag: 'preview' as const };
+
+    const { urlLeg, songLeg } = await bothLegs(trial);
+    expect(urlLeg).toBe('https://direct.example.com/1.mp3');
+    expect(songLeg).toBe(urlLeg);
+  });
+
+  it('直连返回空串 + tier3 命中：两条腿都拿到 tier3 URL', async () => {
+    setTier3Enabled(true);
+    setTier3Resolver(vi.fn(async () => tier3Hit('https://tier3.example.com/1.mp3')));
+    registerDirectClient(makeClient('netease', { resolvePlayableUrl: vi.fn(async () => '') }));
+
+    const { urlLeg, songLeg } = await bothLegs(song('empty-1', 'netease'));
+    expect(urlLeg).toBe('https://tier3.example.com/1.mp3');
+    expect(songLeg).toBe(urlLeg);
+  });
+
+  it('音频=试听且 URL 腿不产出 nonFull：试听标记仍由 Song 腿单一给出', async () => {
+    setDirectValidator(async () => ({ nonFull: true, verify: 'audio-header' as const, reason: 'short', validateMs: 1 }));
+    registerDirectClient(makeClient('qq'));
+    const res = await resolvePlayableSongRouted(song('nf-1', 'qq'));
+    // URL 腿只返回字符串（接口不含 nonFull），完整信息仍走 Song 腿。
+    expect(res).toMatchObject({ nonFull: true, via: 'direct' });
+  });
+});
+
 describe('tier3 同歌去重（#172 评论：同歌并行重复解析）', () => {
   /** 直连返回空串 + tier3 兜底启用的环境：resolvePlayableSongRouted 必经 tier3 腿 */
   function setupEmptyDirect(): void {
