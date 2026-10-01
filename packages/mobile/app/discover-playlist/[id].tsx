@@ -110,15 +110,15 @@ export default function DiscoverPlaylistDetailPage() {
    * 绝不照抄桌面的逐首 playlist:addSong。
    */
   const handleExport = async (target: { name: string; songs: Song[] }) => {
-    if (exporting) return;
-    setExporting(true);
+    // 注意：**不能**在这里再判 `exporting`。取歌阶段那面旗是在 finally 里落的，
+    // 与「确认弹层渲染完成 → 用户点导出」是同一条时间线——真机实测：弹层渲染得够快时
+    // 该旗仍为 true，确认会被静默吞掉（点了「导出」什么也不发生）。
+    // 这段本身是同步落库，不需要旗；防重复由弹层「点一次即关」+ 按钮 disabled 承担。
     try {
       exportSongsToLocalPlaylist({ createPlaylist, addSongs }, target.name, target.songs);
       Alert.alert('导出完成', `已导出 ${target.songs.length} 首到「${target.name}」`);
     } catch (e: any) {
       Alert.alert('导出失败', e?.message ?? '请稍后重试');
-    } finally {
-      setExporting(false);
     }
   };
 
