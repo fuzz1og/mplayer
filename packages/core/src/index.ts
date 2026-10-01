@@ -24,7 +24,9 @@ export {
   insertNextInShuffle,
   replaceShuffleSongId,
   applyShuffleOrder,
+  alignShuffleOrder,
 } from './utils/shuffleOrder.js';
+export type { ShuffleScope } from './utils/shuffleOrder.js';
 export type {
   ShuffleState,
   ShuffleStep,

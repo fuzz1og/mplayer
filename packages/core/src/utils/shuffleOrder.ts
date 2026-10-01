@@ -198,6 +198,47 @@ export function applyShuffleOrder(
   return ordered;
 }
 
+/**
+ * 对齐的**作用域**（#543）：调用方手里的 `queue` 是完整成员集，还是只是原生预取窗口？
+ *
+ * 这个区别此前只活在移动端的注释里（`services/shuffleMode.ts` 文件头），
+ * 两端各写一份对齐函数，且规则**已经分叉**：
+ * - `authoritative`：队列是完整成员集 → 允许裁剪幽灵 id（只在这里清理）；
+ * - `window`：队列可能只是子集（原生预取窗口）→ **只补不丢**，
+ *   否则窗口外的 id 会被删掉，而 store 订阅会立刻落盘 ⇒ 随机序**永久截断**
+ *   （#520 评审实测：12 首 → 5 首）。
+ */
+export type ShuffleScope = 'authoritative' | 'window';
+
+/**
+ * 对齐序列（#543）：作用域**显式**，不再让调用方从上下文推断。
+ *
+ * - `window`：保留既有顺序，把队列里新出现的 id 追加到末尾，游标对到当前曲；
+ * - `authoritative`：裁剪幽灵 id + 补新成员 + 对游标（= 原 `syncShuffleCursor`）。
+ *
+ * 两种作用域都不重洗（会话内顺序稳定的既有语义不变）。
+ */
+export function alignShuffleOrder(
+  state: ShuffleState,
+  queue: readonly Song[],
+  currentIndex: number,
+  scope: ShuffleScope = 'authoritative',
+): ShuffleState {
+  if (scope === 'window') {
+    const seen = new Set(state.order);
+    const order = [...state.order];
+    for (const song of queue) {
+      if (song.id && !seen.has(song.id)) {
+        order.push(song.id);
+        seen.add(song.id);
+      }
+    }
+    const currentId = songIdAt(queue, currentIndex);
+    return { order, cursor: currentId ? order.indexOf(currentId) : -1 };
+  }
+  return syncShuffleCursor(state, queue, currentIndex);
+}
+
 /** 取 `list[index]` 的 id；下标非法返回 null（数组越界一律走这条，不抛）。 */
 function itemAt<T>(list: readonly T[], index: number): T | null {
   if (!Number.isInteger(index) || index < 0 || index >= list.length) return null;
