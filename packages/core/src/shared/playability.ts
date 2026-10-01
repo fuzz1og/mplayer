@@ -36,3 +36,34 @@ export interface UrlInfo {
 export function isTrialUrlInfo(info: UrlInfo, songDurationSec: number): boolean {
   return classifyLength(info.playTime, songDurationSec) === 'trial';
 }
+
+/**
+ * 直连结果的试听判定（#539：**唯一事实来源**）。
+ *
+ * 此前 sourceRouter 的三个调用点各写一套布尔式（预取缓存的 nonFull / UrlInfo 的
+ * isTrialUrlInfo || audioTag==='preview' / 纯 audioTag==='preview'），其中一条腿还
+ * 少算了 audioTag，导致两条入口腿语义分叉。现在全部收敛到这里：
+ *
+ * - **audioTag=preview**（搜索期标记，如酷我 VIP 歌的 M500 试听）→ 试听；
+ * - **UrlInfo 权威时长明显短于标称**（isTrialUrlInfo）→ 试听；
+ * - **直连腿播放时取证判为片段**（validatedNonFull，仅无权威时长的源会走）→ 试听。
+ *
+ * 三者是「或」关系：任一命中即非完整版。
+ * _Avoid_: 试听版检测、nonFull 判定（分散在调用点的布尔式）
+ */
+export function isNonFullDirect(params: {
+  /** 歌曲的搜索期标记（audioTag==='preview' 表示已知试听片段）。 */
+  audioTag?: string | null;
+  /** 直连客户端的权威时长信息（resolveUrlInfo）；无则跳过该判据。 */
+  info?: UrlInfo | null;
+  /** 歌曲标称时长（秒），供 isTrialUrlInfo 比较。 */
+  duration?: number | null;
+  /** #392：直连腿播放时取证结果（仅无权威时长的源会发一次 Range）。 */
+  validatedNonFull?: boolean;
+}): boolean {
+  if (params.audioTag === 'preview') return true;
+  if (params.info && typeof params.duration === 'number') {
+    if (isTrialUrlInfo(params.info, params.duration)) return true;
+  }
+  return params.validatedNonFull === true;
+}

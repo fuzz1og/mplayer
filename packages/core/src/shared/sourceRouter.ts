@@ -1,5 +1,5 @@
 import type { Album, AlbumDetail, Artist, DiscoverPlaylist, Song, SourceKey } from '../types/index.js';
-import { isTrialUrlInfo } from './playability.js';
+import { isNonFullDirect } from './playability.js';
 import type { UrlInfo } from './playability.js';
 import { getPrefetchedUrl } from '../api/prefetchCache.js';
 import type { PlaybackGuard, PlaybackVia } from './playbackGuard.js';
@@ -976,35 +976,19 @@ export async function resolvePlayableUrlRouted(song: Song, options?: ResolutionO
   }
 }
 
+/**
+ * URL 腿（IPC 暴露的另一个「直连解析腿」入口）。
+ *
+ * #539：此前它与 resolveRoutedInner **各写一遍**「直连 → preferTier3WhenBad → tier3 → 上抛」，
+ * 并且漏了 audioTag=preview 的完整版兜底——两条入口腿的语义已经分叉。
+ * 现在它只是 resolveRoutedInner 的一层薄适配：编排只有一份，URL 腿顺带拿到完整版兜底。
+ *
+ * 注意：本入口不产出 nonFull / via / guard（接口只返回 URL 字符串），
+ * 需要完整信息的调用方应直接用 resolvePlayableSongRouted。
+ */
 async function resolvePlayableUrlInner(song: Song, budget: ResolutionBudget): Promise<string> {
-  const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl);
-  if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
-  try {
-    // 与 resolveRoutedInner 同一条腿：同样过 #389 的 3s 墙（本函数经 IPC 暴露，
-    // 是另一个「直连解析腿」入口，保证 wall 口径一致）。
-    const url = await directCall(
-      null,
-      route.client,
-      'resolvePlayableUrl',
-      (opts) => route.client.resolvePlayableUrl!(song, opts),
-      budget,
-    );
-    if (url) {
-      // 搜索结果已被探测标记为无效时，即使直连返回了 URL 也先试 tier3；
-      // 没有配置 tier3 则保持原直连结果，由上层继续按现状报错/换元。
-      return (await preferTier3WhenBad(song, url, null, budget)).url;
-    }
-    // 直连返回空串（无版权/VIP）也进 tier3 兜底（默认关）；失败保持空串交换元层。
-    const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）', null, budget);
-    if (tier3) return tier3.url;
-    return url;
-  } catch (err) {
-    if (route.mode === 'direct') throw err;
-    // tier3 插槽：直连失败后的兜底（默认关；#144 落地后启用）；未命中 = 上抛（D2）。
-    const tier3 = await tryTier3(song, '直连解析失败', null, budget);
-    if (tier3) return tier3.url;
-    throw err;
-  }
+  // ctx 传 null：本入口不参与 trace（保持既有行为——URL 腿从未落 trace）。
+  return (await resolveRoutedInner(song, null, budget)).url;
 }
 
 // 护栏类型经路由层再导出：消费方（含测试）从播放解析入口同一处取类型。
@@ -1182,13 +1166,19 @@ async function resolveRoutedInner(
       ctx.prefetchedUrl = prefetched.url;
       ctx.reason = '预取缓存命中';
     }
-    if (prefetched.nonFull) {
+    // #539：试听判定走 core 唯一实现（此前此处只看了缓存的 nonFull，漏了 audioTag=preview）。
+    const prefetchedNonFull = isNonFullDirect({
+      audioTag: song.audioTag,
+      duration: song.duration,
+      validatedNonFull: prefetched.nonFull,
+    });
+    if (prefetchedNonFull) {
       // #361：预取只存直连结果，但「试听版换完整版」这一跳进 tier3，
       // 同样要过护栏（命中即 0 等待 ≠ 可以绕过验证）。
       const full = await tryTier3Full(song, `预取缓存命中但为试听版（nonFull），尝试 tier3 拿完整版`, ctx, budget);
       if (full) return full;
     }
-    return directPlayable(prefetched.url, prefetched.nonFull);
+    return directPlayable(prefetched.url, prefetchedNonFull);
   }
 
   // 能力门含 resolveUrlInfo（UrlInfo 自带 url，仅有 UrlInfo 也可直连解析）
@@ -1204,7 +1194,8 @@ async function resolveRoutedInner(
           // tier3 未命中则保留直连结果并按其权威字段判定试听版。
           const picked = await preferTier3WhenBad(song, info.url, ctx, budget);
           if (picked.resolution) return tier3Playable(picked.resolution);
-          const trial = isTrialUrlInfo(info, song.duration) || song.audioTag === 'preview';
+          // #539：唯一试听判定（audioTag=preview 或 UrlInfo 权威时长明显偏短）。
+          const trial = isNonFullDirect({ audioTag: song.audioTag, info, duration: song.duration });
           // 试听版也走 tier3 兜底尝试拿完整版（用户决策：试听无意义，兜底可能
           // 拿到完整版；tier3 未命中才退回直连试听）——tier3 拿到则 nonFull=false。
           if (trial) {
@@ -1226,16 +1217,22 @@ async function resolveRoutedInner(
       // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL。
       const picked = await preferTier3WhenBad(song, url, ctx, budget);
       if (picked.resolution) return tier3Playable(picked.resolution);
-      // 搜索结果已被探测标为试听版（audioTag=preview，如酷我 VIP 歌的 M500 试听）：
-      // 试听也走 tier3 兜底尝试拿完整版（tier3 未命中才退回直连试听）。
-      if (song.audioTag === 'preview') {
-        const full = await tryTier3Full(song, `直连为试听版（audioTag=preview），尝试 tier3 拿完整版`, ctx, budget);
-        if (full) return full;
-      }
       // #392：无权威时长的直连腿（resolveUrlInfo 只有 netease/soda 实现）播放时取证一次。
       const validated = await validateDirectLeg(song, picked.url, client, ctx, budget);
+      // #539：唯一试听判定（audioTag=preview 或取证判为片段）。
+      const trial = isNonFullDirect({
+        audioTag: song.audioTag,
+        duration: song.duration,
+        validatedNonFull: validated.nonFull,
+      });
+      // 搜索结果已被探测标为试听版（audioTag=preview，如酷我 VIP 歌的 M500 试听）：
+      // 试听也走 tier3 兜底尝试拿完整版（tier3 未命中才退回直连试听）。
+      if (trial) {
+        const full = await tryTier3Full(song, `直连为试听版（nonFull），尝试 tier3 拿完整版`, ctx, budget);
+        if (full) return full;
+      }
       if (ctx && !ctx.reason) ctx.reason = '直连解析成功';
-      return directPlayable(picked.url, song.audioTag === 'preview' || validated.nonFull);
+      return directPlayable(picked.url, trial);
     }
     // 直连返回空串（无版权/VIP）→ tier3 兜底（默认关）；失败保持空串交换元层。
     const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）', ctx, budget);
