@@ -226,6 +226,8 @@ describe('播放链路：URL 解析 / 加载失败', () => {
 
     await usePlayerStore.getState().play(s1);
 
+    // #544：兜底仍由渲染层发起搜索，但规则已改走 core `refreshSongResource`
+    // （守卫唯一：非 http / 旧签名死链 / audioTag=invalid 不采用）。
     expect(callMusicApiMock).toHaveBeenCalledWith('searchSongsRouted', '晴天 周杰伦', 1, 'netease');
     expect(audioPlayerMock.player.load).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'netease:1', url: foundUrl }),

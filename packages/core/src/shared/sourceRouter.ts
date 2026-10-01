@@ -1,7 +1,8 @@
 import type { Album, AlbumDetail, Artist, DiscoverPlaylist, Song, SourceKey } from '../types/index.js';
 import { isNonFullDirect } from './playability.js';
 import type { UrlInfo } from './playability.js';
-import { getPrefetchedUrl } from '../api/prefetchCache.js';
+import { getPrefetchedUrl, setPrefetchedUrl } from '../api/prefetchCache.js';
+import { refreshSongResource } from './songResourceRefresh.js';
 import type { PlaybackGuard, PlaybackVia } from './playbackGuard.js';
 import {
   validateDirectUrlNonFull,
@@ -882,6 +883,69 @@ async function tryTier3Full(
   return resolution ? tier3Playable(resolution) : null;
 }
 
+/**
+ * **严格搜索腿**（#544）：直连与 tier3 都没拿到 URL 时的最后一条腿。
+ *
+ * 这条规则此前在桌面的 4 个调用点各抄了一份弱化版
+ * （`playerStore` 的播放与歌词、`DiscoverPageV2`、`songCoverRefresh`）：
+ * 「搜索 → findExactMatch → 取 hit.url」，**没有**下面这三条守卫，也不写缓存。
+ * core 的 `refreshSongResource` 一直有完整规则，但只有 1 个消费者（移动端），
+ * 深 module 被绕过了。
+ *
+ * 现在守卫收敛到 `songResourceRefresh`：非 http / 旧签名死链 / audioTag=invalid
+ * 一律不采用；采用后写回预取缓存（下次 0 等待）；nonFull 保留。
+ *
+ * 不变量与 `refreshSongResource` 一致：**拿不到就返回 null**，
+ * 调用方继续按既有语义处理（不得用空 url 覆盖已有的有效值）。
+ */
+async function trySearchLeg(
+  song: Song,
+  ctx: TraceCtx | null,
+  _budget: ResolutionBudget,
+): Promise<RoutedPlayable | null> {
+  // 本地文件与汽水不走搜索腿（与桌面既有的排除条件同口径）
+  if (song.sourceType === 'local' || song.sourceType === 'soda') return null;
+  if (!song.name) return null;
+
+  try {
+    const resource = await refreshSongResource(song, {
+      readCache: async () => getPrefetchedUrl(song),
+      writeCache: async (_s, resource) => setPrefetchedUrl(song, resource.url, resource.nonFull),
+      // 默认走 core 自己的路由搜索（直连优先 + tier3 搜索兜底），宿主可注入替换。
+      search: async (s) => (strictSearch ?? defaultStrictSearch)(s),
+      log: (level, message) => {
+        const line = `[resolve] ${message}`;
+        if (level === 'warn') console.warn(line);
+        else console.info(line);
+      },
+    });
+    if (!resource?.url?.startsWith('http')) return null;
+    if (ctx) ctx.reason = '直连与 tier3 均未取到 URL，严格搜索腿命中';
+    // 搜索腿拿到的仍是该源的直链：via=direct、guard=none（护栏只约束 tier3 替换的 URL）。
+    return directPlayable(resource.url, resource.nonFull);
+  } catch (e) {
+    console.warn(`[resolve] 严格搜索腿失败: 《${song.name}》${(e as Error)?.message || e}`);
+    return null;
+  }
+}
+
+/** 默认严格搜索（#544）：走 core 的路由搜索，与用户在搜索页看到的同一条链。 */
+async function defaultStrictSearch(song: Song): Promise<Song[]> {
+  const keyword = `${song.name} ${song.artist}`.trim();
+  if (!keyword) return [];
+  return searchSongsRouted(keyword, 1, song.sourceType);
+}
+
+/** 严格搜索端口（#544）：宿主注入「按歌名+歌手严格搜索」，未注入则用默认路由搜索。 */
+export type StrictSearchFn = (song: Song) => Promise<Song[]>;
+
+let strictSearch: StrictSearchFn | null = null;
+
+/** 注入/清除严格搜索腿（桌面 = IPC searchSongsRouted；移动端 = 直连搜索）。 */
+export function setStrictSearch(fn: StrictSearchFn | null): void {
+  strictSearch = fn;
+}
+
 /** 搜索结果被探测标记为 invalid 时，即使直连返回了 URL 也优先换 tier3；
  *  tier3 未命中（未启用/未注入/全源失败）则保留直连结果，由上层按现状处理。
  *  试听版（preview/试听段）的完整版 tier3 兜底不在此函数——调用方
@@ -1237,6 +1301,10 @@ async function resolveRoutedInner(
     // 直连返回空串（无版权/VIP）→ tier3 兜底（默认关）；失败保持空串交换元层。
     const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）', ctx, budget);
     if (tier3) return tier3Playable(tier3);
+    // #544：tier3 也没拿到 → 走**严格搜索腿**（此前桌面在手抄的弱化版里做这件事，
+    // 缺三条守卫：非 http / 旧签名死链 / audioTag=invalid；现在守卫只有一处）。
+    const searched = await trySearchLeg(song, ctx, budget);
+    if (searched) return searched;
     if (ctx && !ctx.tier3Engaged) ctx.reason = '直连返回空串（无版权/VIP）';
     return directPlayable('', false);
   } catch (err) {

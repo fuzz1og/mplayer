@@ -84,6 +84,8 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
     // callMusicApi 分发：searchSongsRouted → searchSongsMock（hoisted，测试注入）；getLyrics → 歌词实现
     callMusicApiMock.mockImplementation(async (method: string) => {
       if (method === 'searchSongsRouted') return searchSongsMock();
+      // #544：解析入口必须给答案，否则 play() 在解析步就返回、走不到取词
+      if (method === 'resolvePlayableSongRouted') return { url: 'https://audio.example.com/1.mp3', nonFull: false };
       if (method === 'getLyrics') {
         lyricsGetCalls++;
         if (lyricsGetCalls === 1) throw new Error('歌词会话失效（非法请求）');
@@ -111,6 +113,7 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
     // searchSongsMock 默认返回 []（beforeEach 已设）：搜不到 → 重搜仍拿不到 lrc
     callMusicApiMock.mockImplementation(async (method: string) => {
       if (method === 'searchSongsRouted') return searchSongsMock();
+      if (method === 'resolvePlayableSongRouted') return { url: 'https://audio.example.com/1.mp3', nonFull: false };
       if (method === 'getLyrics') throw new Error('歌词会话失效（非法请求）');
       return undefined;
     });

@@ -194,6 +194,7 @@ export {
   searchSongsRouted,
   resolvePlayableUrlRouted,
   resolvePlayableSongRouted,
+  setStrictSearch,
   setTier3Resolver,
   pickToplistGroup,
   pickToplistSongs,
