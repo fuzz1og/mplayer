@@ -93,7 +93,7 @@
 | 动作 | cookie 必需性 | 说明 |
 |---|---|---|
 | 搜索 | **无 cookie 可用** | migu.py `_search` L107 打 `c.musicapp.migu.cn/v1.0/content/search_all.do`（`_constructsearchurls` L50）；仅 headers（含 `ua: Android_migu`、`version`、`channel`），无 cookie。 |
-| 播放 URL | **无 cookie 可用** | migu.py `_parsewithofficialapiv1` L79 打 `c.musicapp.migu.cn/strategy/listen-url/h5/v2.4`，仅 headers；fallback `listenSong.do` 硬编码 `userId=15548614588710179085069`（L81）。响应可能带 `MIGU_KEY` 对称加密（`_decryptresp` L58-65），但密钥内置于客户端，与 cookie 无关。 |
+| 播放 URL | **无 cookie 可用** | migu.py `_parsewithofficialapiv1` L79 打 `c.musicapp.migu.cn/strategy/listen-url/h5/v2.4`，仅 headers；fallback `listenSong.do` 硬编码 `userId=<第三方硬编码常量>`（L81）。响应可能带 `MIGU_KEY` 对称加密（`_decryptresp` L58-65），但密钥内置于客户端，与 cookie 无关。 |
 | 歌词 | **无 cookie 可用** | migu.py L94-95 从 `lyricUrl`/`lrcUrl` 匿名拉取。 |
 
 - **具体 cookie**：无。
@@ -146,7 +146,7 @@
 
 | 动作 | cookie 必需性 | 说明 |
 |---|---|---|
-| 搜索 | **匿名 cookie / 设备指纹必须（可无感生成）** | soda.py `_search` L169 打 `api.qishui.com/luna/pc/search/track`（`_constructsearchurls` L63）；查询参数含 `device_id: self.device_id`（L61），`device_id` 可取默认硬编码 `"3753066532709850"`（L35）或任意生成，匿名单设备即可搜索。 |
+| 搜索 | **匿名 cookie / 设备指纹必须（可无感生成）** | soda.py `_search` L169 打 `api.qishui.com/luna/pc/search/track`（`_constructsearchurls` L63）；查询参数含 `device_id: self.device_id`（L61），`device_id` 可取默认硬编码 `<第三方硬编码 device_id>`（L35）或任意生成，匿名单设备即可搜索。 |
 | 播放 URL | **匿名可用（分享页直链，无 cookie）** | soda.py `_getsongmetainfo` L100 抓 `music.douyin.com/qishui/share/track?track_id={id}` 的 `_ROUTER_DATA`，解析 `audioWithLyricsOption` 直链——**全程无 cookie**。MPlayer `musicApi.ts` `fetchSodaSharePage` L287-316 已实现并注释「无需 Cookie」。VIP/无损档需 `X-Helios/X-Medusa` 认证头（soda.py L37-38 硬编码缺省），但非无损场景可完全绕开。 |
 | 歌词 | **无 cookie 可用** | 分享页 `_ROUTER_DATA` 的 `lyrics.sentences` 一并带出（soda.py L104-108），或 VIP 接口 lyric content（L153），匿名可用。 |
 

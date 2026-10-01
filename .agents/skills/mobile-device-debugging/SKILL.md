@@ -10,7 +10,7 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
 | 回路 | 何时用 | 入口 |
 |---|---|---|
 | **A · 雷电模拟器**（默认优先） | 会话跑在 Windows、验 UI / 渲染 / JS 层 | `D:\leidian\LDPlayer14\ldconsole.exe`（`C:\leidian` 是空壳） |
-| **B · Windows 原生 adb** | 要真实机型 / 网络 / 原生能力 | `C:\Users\Admin\scoop\apps\android-clt\current\platform-tools\adb.exe` |
+| **B · Windows 原生 adb** | 要真实机型 / 网络 / 原生能力 | `C:\Users\<用户名>\scoop\apps\android-clt\current\platform-tools\adb.exe` |
 | **C · WSL + usbipd** | 在 WSL 里开发时 | `./scripts/mobile-device/usb-attach.mjs` + `./scripts/mobile-debug.mjs` |
 
 回路 C 的前提：手机 USB 经 usbipd-win 直挂进 WSL，全系统只有一个 adb server——WSL 原生版（udev 规则 `/etc/udev/rules.d/51-android-usbip.rules`），Windows 侧一律不用。**本机（DSH 跑在 Windows）实际走 A/B**：usbipd 里手机显示 `Shared`（未 attach）是正常的，别 attach 进 WSL。
@@ -22,6 +22,8 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
    - B：插线 → `adb devices` 出现机型序列号（`unauthorized` 见陷阱）。
    - C：`usb-attach.mjs`（每次重新插拔都要重跑）→ `mobile-debug.mjs` 一条龙：重置 adb → 双 transport 检查 → `adb reverse` → 起/复用 Metro（日志 `packages/mobile/.expo/dev/logs/start.log`）→ 冷启 → 挂 logcat。`--no-cold-start` 不杀 App，`-c` 清 Metro 缓存。
 2. **起 Metro 并接上**（A/B 手工）：**在 worktree 内**跑 `npx expo start` → `adb reverse tcp:8081 tcp:8081` → 冷启。
+   - **一条会话只起一个 Metro、端口固定**（记进会话便签）。实测踩过：一轮会话起了 8 次（8090→8097），每次 `--clear` 重建 40–60s，白等十几分钟。`--clear` 只在怀疑 transform 缓存时用；**重启 Metro 后必须重新 `adb reverse`**。
+   - **后台 dev server 会被系统静默回收**（日志无报错、退出码 1，实测两次）。遇到「App 突然连不上」先查 dev server 任务/日志，别先怀疑 App。
    - 模拟器里只能用 `127.0.0.1`，`localhost` 拉不到 bundle。
    - **首次冷构建** bundle 约 12MB，Expo Go 会先报 `Failed to download remote update`：先在设备内 `adb shell curl` 预热 manifest 与其中的 `launchAsset.url`，再开 App 即正常。
 3. **冷启 + 看日志**：`adb shell am force-stop host.exp.exponent` → `adb shell am start -a android.intent.action.VIEW -d "exp://127.0.0.1:8081"` → `adb logcat -v time ReactNativeJS:V ExpoModulesCore:V ActivityTaskManager:I *:S`。`ReactNativeJS` 是 App 自己的日志（`[player]` / `[search]` / `[tier3]` 前缀）。
@@ -33,11 +35,25 @@ description: MPlayer 移动端真机 / 模拟器验收：三条回路（雷电�
 验收结论要可复核：**每个验收项配一条能看的证据**，没有就写「未做 + 原因」，别写「已附截图」而没附。
 
 1. **先证明跑的是你的代码**：从 logcat `Running "main"` 里取 `launchAsset.url`，追加 `&lazy=false` 后 curl，`grep` 你新加的标识串；manifest 的 `projectRoot` 要是你的 worktree。跑错源码时后面的结论全部作废。
-2. **截图**：`adb exec-out screencap -p > <用例>.png`（pwsh 7 / bash 字节安全；Windows PowerShell 5.1 会改编码，改用 `adb shell screencap -p /sdcard/x.png` + `adb pull`）。存仓库外（`%TEMP%\mplayer-acceptance\`），文件名用 `<PR 号>-<序号>-<用例>.png`，别用 `s1.png`；同类用例要固化就跑 `npm run mobile:e2e`（截图落 `e2e/artifacts/`，已 gitignore）。
-3. **交互坐标按当前设备取**：先 `adb shell wm size`，坐标就是截图里的物理像素。**点不动时先怀疑"点偏了"，不要先怀疑"输入被拦"**——PKB110 / ColorOS 16 实测 `adb shell input tap` 是生效的（点启动器图标能打开对应 App）。`input -d 0 tap X Y` 只在 display id 不为 0 时才有意义（`adb shell dumpsys display | grep -m1 mDisplayId`；本机 id=0，两种写法等效）。快速滑动用连打 `input swipe`；`onEndReached` 那类要滚动的验收，`input keyevent 20`（DPAD_DOWN）连打更稳（触摸滑动的落点/惯性更难控）。tab 栏在屏幕底部（OnePlus 上 y≈2602–2648，2680 已落进系统手势区）。
+2. **要坐标、要文案断言，先 dump 再截图**：`adb shell uiautomator dump /sdcard/ui.xml` + `adb pull` 拿到带 `text=` / `bounds=` 的树（RN 组件会映射成原生节点；实测一次调用就能定位「播放队列 (7)」「明知故犯」这类元素并给出 `bounds`）。现成驱动与坑见 `e2e/README.md`（动画/滚动中会间歇性吐空壳树，要重试 + 弃旧快照）。**截图退居视觉复核**，别用它猜坐标。
+3. **截图**：**先裁感兴趣区域再读**（全屏 PNG 1.5–2.6MB，连读十几张代价很高）；能用埋点日志判读就别截图——例：`[cover] 加载失败 0`、`[perf]` 窗口 warn 比一张截图更省也更硬。`adb exec-out screencap -p > <用例>.png`（pwsh 7 / bash 字节安全；Windows PowerShell 5.1 会改编码，改用 `adb shell screencap -p /sdcard/x.png` + `adb pull`）。存仓库外（`%TEMP%\mplayer-acceptance\`），文件名用 `<PR 号>-<序号>-<用例>.png`，别用 `s1.png`；同类用例要固化就跑 `npm run mobile:e2e`（截图落 `e2e/artifacts/`，已 gitignore）。
+4. **交互坐标按当前设备取**：先 `adb shell wm size`，坐标就是截图里的物理像素。**点不动时先怀疑"点偏了"，不要先怀疑"输入被拦"**——PKB110 / ColorOS 16 实测 `adb shell input tap` 是生效的（点启动器图标能打开对应 App）——但**应用内的 RN Pressable 是已知例外**，点不动多半不是坐标问题，见下节「验收准备别靠点触摸应用内 UI」。`input -d 0 tap X Y` 只在 display id 不为 0 时才有意义（`adb shell dumpsys display | grep -m1 mDisplayId`；本机 id=0，两种写法等效）。快速滑动用连打 `input swipe`；`onEndReached` 那类要滚动的验收，`input keyevent 20`（DPAD_DOWN）连打更稳（触摸滑动的落点/惯性更难控）。tab 栏在屏幕底部（OnePlus 上 y≈2602–2648，2680 已落进系统手势区）。
    - **别用错误判据**：`input tap` 点状态栏**不会**拉下通知栏（ColorOS 上本就不拉），拿它当"输入被拦"的证据会误判整轮验收（实测踩过）。判别输入是否生效，用**点启动器图标看前台 Activity**（`dumpsys activity activities | grep -m1 topResumedActivity`）这种有唯一答案的目标。
-4. **量化证据要配「真的动了」**：`[perf]` warn 只在**连续 2 个 2s 窗口 < 30fps** 时上报（`packages/mobile/services/perfMonitor.ts`，后台暂停窗口不报）。所以「零 warn」单独不成立——必须同时给出「列表滚到第 N 名 / 打开了哪个页面」。
-5. **收尾**：验收结束停掉 Metro。`adb kill-server` 会打掉所有人的 reverse——动过 server 后 `adb reverse --list` 确认自己的端口还在。
+5. **量化证据要配「真的动了」**：`[perf]` warn 只在**连续 2 个 2s 窗口 < 30fps** 时上报（`packages/mobile/services/perfMonitor.ts`，后台暂停窗口不报）。所以「零 warn」单独不成立——必须同时给出「列表滚到第 N 名 / 打开了哪个页面」。
+   **长采样脚本要给每个 adb 调用套 `timeout`**（如 `A() { timeout 25 adb -s "$S" "$@"; }`）：实测一次 `dumpsys` 挂住，让 23 分钟的采样在**第 6 个样本静默停摆**，而任务状态仍显示 running——不加超时就会交出一轮「看着在跑、其实没数据」的取证。
+6. **收尾**：验收结束停掉 Metro。`adb kill-server` 会打掉所有人的 reverse——动过 server 后 `adb reverse --list` 确认自己的端口还在。
+
+## 验收准备别靠点触摸应用内 UI
+
+RN 的 `ScalePress` 对注入触摸**时灵时不灵**：同一实例上，设置齿轮 / 「+ 添加 URL 订阅」/ 播放模式按钮对 `input tap`、长按式 `input swipe x y x y 200`、5 次连点**全无响应**（齿轮有 ripple 却不导航；按钮连 Alert 都不弹，说明 handler 压根没跑），而同屏原生 `Switch` / `TextInput` 正常。**点不动且没有任何状态变化（无 Alert、无导航、无日志）时，先怀疑「这个控件不吃注入触摸」**，别继续换坐标试。
+
+可靠替代——验收准备要的是「设备处于某个状态」，不是「按钮被按过」：
+
+- **导航**用深链，不点按钮：`adb shell am start -a android.intent.action.VIEW -d 'mplayer://settings' -p com.mplayer.mobile.dev`。
+- **配置**用临时注入，不填表单：在 `packages/mobile/app/_layout.tsx` 临时调 `core.addTier3SubscriptionFromUrl(...)` + `setTier3Enabled(true)`，跑一次让它**落进 AsyncStorage**，随后**立刻回退源码**——设备照常可用，敏感值全程不入库（tier3 实测就是这么配上的）。
+- **断言**用 dump 的文本，不靠看像素（见取证 §2）。
+
+release 包 applicationId 不同（`com.mplayer.mobile` vs `.dev`），dev 上配好的数据**不会带过去**，且 release 没有 dev 工具——要验 release 的播放判据，只能用**带注入的构建**（构建产物本身也不入库）。
 
 ## 图附到 PR（正文 / 验收评论）
 
@@ -87,17 +103,22 @@ adb shell dumpsys media_session | grep mplayer.mobile.dev
 adb shell dumpsys notification --noredact | grep music-playback
 ```
 
-**附带好处**：debug 构建的 `console.log` 在 logcat 可见，所以 `[player]` 一类排查优先在 dev build 上做。
+**附带好处**：`console.log` 在 logcat 可见，所以 `[player]` 一类排查优先在 dev build 上做。
 
-> **更正（2026-09-29）**：此处原写「release 会把 JS 日志剥掉」——**该说法在本仓没有机制支撑**。
+**应用内日志本来就进 logcat，别重复埋点**：`useLogsStore.addLog` 会镜像 `console`（`packages/mobile/stores/logsStore.ts`），`info` 的级别门禁只作用于**应用内缓冲**（dev build 或设置页「开发者模式」才收 info，#477）——为取证再加一份 `console.log` 是重复劳动。分级与开关见 `docs/research/2026-09-29-mobile-developer-mode-and-diagnostics.md`。
+
+> **更正（2026-09-30 · #477 收口）**：此处原写「release 会把 JS 日志剥掉」——**本仓没有这个机制，确定不剥**。
 > Expo 默认**不**剥离 `console`，要显式开 Terser 的 `drop_console` 才剥（<https://docs.expo.dev/guides/minify/>）；
-> 而本仓 `packages/mobile/metro.config.js` 没有设 `transformer.minifierConfig`、`packages/mobile/babel.config.js`
-> 也没有 console 剥离插件。所以 release 包上 `console` 到底可不可见**应以实测为准**（尚未实测）。
-> 详见 `docs/research/2026-09-29-mobile-developer-mode-and-diagnostics.md` §0。
+> 而本仓 `packages/mobile/metro.config.js` 未设 `transformer.minifierConfig`、`babel.config.js` 无 console 剥离插件，
+> 且 Hermes 变体走的是 `--minify false`（`@react-native/gradle-plugin` 的
+> `TaskConfiguration.kt:80` 按 `hermesEnabled` 取反，本仓 `android/gradle.properties:43` 为 true），
+> 于是 terser 根本不跑。**可复核证据**：`npx expo export:embed --platform android --dev false --minify false …`
+> 后 grep 产物中 `console.log` 计数 > 0（#477 PR 内可跑，不需真机 release 包）。
+> 结论与四层证据见 `docs/research/2026-09-29-mobile-developer-mode-and-diagnostics.md` §0.1。
 
 ## 陷阱速查
 
-- **attach 报 `Device busy (exported)`**：Windows 正占用设备。两个来源：手机处于「文件传输/MTP」模式（下拉通知切成「仅充电」，USB 调试保持开）；或另一条回路的 adb 被拉起（`/mnt/c/Users/Admin/scoop/shims/adb.exe kill-server`）。切换 USB 模式会让设备重新枚举，bind 可能要重做——重跑 usb-attach.mjs。
+- **attach 报 `Device busy (exported)`**：Windows 正占用设备。两个来源：手机处于「文件传输/MTP」模式（下拉通知切成「仅充电」，USB 调试保持开）；或另一条回路的 adb 被拉起（`/mnt/c/Users/<用户名>/scoop/shims/adb.exe kill-server`）。切换 USB 模式会让设备重新枚举，bind 可能要重做——重跑 usb-attach.mjs。
 - **之前能用，突然 `no devices`**：usbipd 透传掉了（拔插、省电、重新枚举都会）。重跑 usb-attach.mjs 即可。
 - **开发态验收用 Expo Go，不是装机 APK**：`com.mplayer.mobile` 是 release 构建（无 DEBUGGABLE），跑打包 JS、不连 Metro——看不到 `Running "main"` 与 bundling 日志就是这个原因。
 - **原生能力必须 dev client**：Expo Go 下 `setActiveForLockScreen` 被跳过（`services/audioPlayer.ts` 的 `if (!isExpoGo)`）、`enableBackgroundPlayback` 插件不生效（#327）——后台播放 / 锁屏 / 通知栏类验收在 Expo Go 上得到的结论无效，别写进 PR。
@@ -109,4 +130,14 @@ adb shell dumpsys notification --noredact | grep music-playback
 - **`adb install` 把 server 卡死 / 5037 被抢**：实测 80MB 的 `adb install` 能把 adb server 卡到 `adb devices` 都超时。处置：改 `adb push` + `adb shell pm install`；仍卡死就查占用者（Windows：`Get-NetTCPConnection -LocalPort 5037 -State Listen`）——`D:\leidian\LDPlayer14\adb.exe` 与 scoop 的 `android-clt\...\adb.exe` 都会抢 5037，杀掉后让 WSL 侧 `~/.local/bin/adb start-server` 接管。
 - **CMake 250 字符对象路径上限**：在深层 worktree（如 `.claude/worktrees/<name>`）里跑 `./gradlew assembleDebug` 会因原生模块对象路径过长失败，症状是 CMake 警告 `CMAKE_OBJECT_PATH_MAX` + `ninja: error: manifest 'build.ninja' still dirty after 100 tries`。修法：换到路径更短的检出（主克隆）构建，或加 `subst` 短盘符。
 - **验证隧道别用手机侧 nc**：Android toybox nc 静默失败。以 Metro bundling 日志 + ReactNativeJS 日志为准。
+- **模拟器飞行模式会连 adb 一起断，且不可恢复**：雷电上 `cmd connectivity airplane-mode enable` 后 `adb shell` 立即返空、`127.0.0.1:5555` 变 offline，`ldconsole quit/launch` 重启 VM 后 **adbd 也不回来**（实例报废）。**断网类验收一律走真机 USB**（`svc wifi disable && svc data disable` 不影响 USB adb）。实例报废后重建：`ldconsole add --name <n>` + `launch --index <i>`，**端口 = 5555 + 2×index**（index 1 → 5557），且**新实例默认 720×1280**，坐标要重新 `wm size` 取。
+- **「进程被杀后恢复」用 `am force-stop`，不要用 `am kill`**：`am kill` 对**带前台服务的进程是空操作**（pid 不变）——这本身可当「FGS 真的生效」的旁证，但验不了恢复路径；模拟器又没有 `su`，`kill -9` 用不了。`am force-stop` 更狠（连服务一起停），验出来更硬。
+- **多步 adb 编排写成脚本再跑**：内联进 `pwsh -Command` 会被吃掉引号/反斜杠/`$`（实测踩过 `unknown command adb`）。脚本连同**探针**都写 `%TEMP%`，别落在 worktree 根——`git add -A` 会把它带进提交（实测补了一个 `chore:` 才删掉）。
 - **无线调试（不用 USB 的备用路线）**：镜像网络下手机可直连开发机局域网 IP 拉 bundle（Hyper-V 防火墙需放行 8081）；无线 adb 端口每次重连随机，`adb mdns services` 扫 `_adb-tls-connect._tcp`，配对码 30 秒过期。适合临时看 UI，长会话仍走 USB。
+
+- **adb 命令卡死（本机最常撞）**：雷电自带一份 `adb.exe` 与 scoop 的抢 5037 → 任何 `adb` 命令挂住。修法：杀光 `adb` 进程 → 只用 scoop 的 `adb start-server` → **重新 `adb reverse`**。⚠️ **daemon 重启会清空所有 reverse 隧道**（实测别的会话的 daemon 崩掉，把 8099 一起带走），所以「App 突然连不上 Metro」先查 `adb reverse --list`，别先怀疑 App。**别** `adb connect 127.0.0.1:5555`——会造出同一台设备的**重复 transport**。
+- **`uiautomator dump` 在动画界面必失败**：报 `ERROR: could not get idle state`，dump 恒空。已知触发：**播放页**（唱片动画）、**底部弹层入场动画期间**。这不是坐标写错，别反复重试——改用 logcat 断言（如 `[player] 补窗 mode=… 计划=[…]`）或截图裁切判读。#514 的长按选择模式、#515 的 `moved` 分支两条验收因此**无法**用合成输入完成，需要真人手指。
+- **原生包架构要与设备匹配**：真机 arm64-v8a、雷电模拟器 x86_64 → 装错报 `INSTALL_FAILED_NO_MATCHING_ABIS`。构建加 `-PreactNativeArchitectures=<abi>`；工作区现成的 `app-debug.apk` 往往是模拟器用的 x86_64，别直接往真机上装。
+- **`pm install` 报 `Failed to restorecon`**（`INSTALL_FAILED_MEDIA_UNAVAILABLE`）：从 `/data/local/tmp` 装会撞（SELinux 上下文还原失败）。改 `adb push` 到 **`/sdcard/`** 再 `pm install -r`。
+- **深层 worktree 里构建原生必失败**：CMake 对象路径超 Windows 260 字符上限，报 `Filename longer than 260 characters` 或 `build.ninja still dirty after 100 tries`。修法：在**短路径**检出构建（如 `D:\npw`），或在主克隆里建临时分支构建；别在 `.claude/worktrees/<长名>` 里硬试。
+- **现场日志要在起 App 之前就开始录**：`adb -s <serial> logcat -v time > <全路径>` 挂后台任务。本轮「随机模式歌不换」正是靠 51MB 现场里 `计划=[120,72,68]→[93,170,87]` 的横跳定位的；PowerShell 里 **`%TEMP%` 不会展开**，必须写全路径。

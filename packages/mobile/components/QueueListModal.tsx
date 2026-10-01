@@ -5,6 +5,8 @@ import { spacing, textVariants } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { usePlayerStore } from '../stores/playerStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { selectQueueSongs } from '../services/shuffleMode';
 import { playSong } from '../services/audioPlayer';
 import { listWindowProps } from './listWindow';
 import BottomSheet from './BottomSheet';
@@ -64,7 +66,19 @@ export default function QueueListModal({ visible, onClose }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const queue = usePlayerStore(s => s.queue);
+  const shuffle = usePlayerStore(s => s.shuffle);
   const currentSong = usePlayerStore(s => s.currentSong);
+  const playMode = useSettingsStore(s => s.playMode);
+
+  /**
+   * 展示序（#519）：随机模式下**按随机序**展示（用户明确要求「队列要让用户也能看到那个随机」），
+   * 其它模式仍是成员序（列表循环序）。`applyShuffleOrder` 返回的是队列里同一批 Song 对象，
+   * 所以下面的 indexOf 反查与当前曲高亮照旧成立。
+   */
+  const displayQueue = useMemo(
+    () => selectQueueSongs(queue, playMode, shuffle),
+    [queue, playMode, shuffle]
+  );
 
   /**
    * 稳定回调（#411）：用**对象身份**而不是 id 找下标 —— 队列里可以合法地出现同一首歌两次
@@ -84,12 +98,12 @@ export default function QueueListModal({ visible, onClose }: Props) {
    */
   const rows = useMemo(() => {
     const seen = new Map<string, number>();
-    return queue.map((song) => {
+    return displayQueue.map((song) => {
       const nth = (seen.get(song.id) ?? 0) + 1;
       seen.set(song.id, nth);
       return { song, key: nth === 1 ? song.id : `${song.id}#${nth}` };
     });
-  }, [queue]);
+  }, [displayQueue]);
 
   const renderItem = useCallback(
     ({ item }: { item: { song: Song; key: string } }) => (

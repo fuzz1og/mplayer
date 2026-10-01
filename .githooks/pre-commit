@@ -5,6 +5,15 @@ set -e
 echo "→ root typecheck..."
 npx tsc --noEmit
 
+# mobile typecheck 读 @mplayer/core 的 dist（不是源码）：pull / rebase 到动过 core 的 master 后
+# dist 会落后，报出的是 TS2305「has no exported member」这类假错——看着像代码坏，其实是产物旧。
+echo "→ core dist 新鲜度..."
+CORE_DIST="packages/core/dist/index.d.ts"
+if [ ! -f "$CORE_DIST" ] || [ -n "$(find packages/core/src -newer "$CORE_DIST" -print -quit)" ]; then
+  echo "  dist 落后/缺失 → core:build"
+  npm run core:build
+fi
+
 echo "→ mobile typecheck..."
 npx tsc --noEmit --project packages/mobile/tsconfig.json
 

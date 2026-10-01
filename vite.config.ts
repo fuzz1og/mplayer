@@ -87,6 +87,9 @@ export default defineConfig({
     // 归 vitest.main.config.ts（node env）+ npm run test:main —— 否则同一批用例会在
     // jsdom 与 node 两种环境下各跑一遍（见 ADR 2026-09-29-ci-verification-boundary）
     include: ['src/renderer/__tests__/**/*.test.{ts,tsx}', 'src/__tests__/*.test.{ts,tsx}'],
-    setupFiles: ['src/renderer/__tests__/setup.ts']
+    setupFiles: ['src/renderer/__tests__/setup.ts'],
+    // 默认 5s 对「渲染 + 等异步状态」的集成用例在忙机器上不够（#521 实测每次挂不同用例）；
+    // CI 的分片是独立 runner，这里放宽不会掩盖真失败。
+    testTimeout: 20_000
   }
 });

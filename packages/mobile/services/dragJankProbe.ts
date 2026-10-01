@@ -3,7 +3,7 @@
  *
  * 上报策略（与 perfMonitor 同一哲学——常态不刷屏）：
  *   - **跟手掉帧的手势：一律 warn**，release 构建上也能从 logcat / 应用内日志拿到；
- *   - **干净的手势：只在 dev 构建记 info** —— A/B 需要「没掉帧」也有正证据，
+ *   - **干净的手势：只在诊断开启（dev 构建或开发者模式）记 info** —— A/B 需要「没掉帧」也有正证据，
  *     否则「零 warn」既可能是真没卡、也可能是探针根本没跑
  *     （见 mobile-device-debugging skill 里对 perfMonitor 的同款告诫）。
  *
@@ -11,8 +11,7 @@
  */
 import { createDragJankMeter, formatDragJank, isJanky } from '../gestures/dragJank';
 import { useLogsStore } from '../stores/logsStore';
-
-declare const __DEV__: boolean;
+import { isDiagnosticsEnabled } from './devMode';
 
 /**
  * 「刚拖过」的判定窗口（ms）。存在的理由：perfMonitor 的帧率分支要**连续 2 个 2s 窗口**
@@ -26,14 +25,6 @@ let active = false;
 let label = 'unknown';
 let lastEndedAt = -1;
 let lastJanky = false;
-
-/**
- * dev 构建判定。vitest 的 node 环境没有 __DEV__（RN 运行时才注入），
- * 裸读会 ReferenceError，故走 typeof。
- */
-function isDevBuild(): boolean {
-  return typeof __DEV__ !== 'undefined' && __DEV__ === true;
-}
 
 /** 手势认领（PanResponderGrant）：开启一次采样。label = 拖拽接入点名 */
 export function beginDragProbe(at: number, surface = 'unknown'): void {
@@ -58,7 +49,7 @@ export function endDragProbe(at: number): void {
   lastJanky = isJanky(report);
   const message = formatDragJank(report, label);
   if (lastJanky) useLogsStore.getState().addLog('warn', message);
-  else if (isDevBuild()) useLogsStore.getState().addLog('info', message);
+  else if (isDiagnosticsEnabled()) useLogsStore.getState().addLog('info', message);
 }
 
 /**

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { Play, ArrowLeft, Edit2, Music, Download, Trash2, Upload, GripVertical } from 'lucide-react';
+import { Play, ArrowLeft, Edit2, Music, Download, Trash2, Upload, GripVertical, Search, X } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -10,6 +10,7 @@ import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
 import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { moveItem } from '@/renderer/utils/reorder';
+import { filterSongsByQuery } from '@/renderer/utils/songFilter';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
@@ -50,6 +51,24 @@ const PlaylistDetailPage: React.FC = () => {
   // 歌单头图直链直渲（恒取 playlist.cover / songs[0].cover）：加载失败由容器渐变兜底
   const detailCoverSrc = (playlist?.cover || songs[0]?.cover) || '';
 
+  /**
+   * 歌单内过滤（#488）：**只影响展示集合**——不重排、不改 `order`、过滤态一次都不发
+   * `playlist:reorderFull`（连拖拽入口都不渲染，见 renderStaticRow）。
+   *
+   * `songs` 永远是全量有序的那一份，`visibleSongs` 只是它的派生视图，所以清空输入回到全量时
+   * 顺序与过滤前逐项相同（单测钉住）。
+   */
+  const [filterQuery, setFilterQuery] = useState('');
+  const isFiltering = filterQuery.trim().length > 0;
+  const visibleSongs = useMemo(() => filterSongsByQuery(songs, filterQuery), [songs, filterQuery]);
+  // 批量操作的作用域：过滤态只认**可见**的已选项；被过滤掉的选中项原样留着，清空过滤后回来
+  const visibleSelectedIds = useMemo(() => {
+    if (!isFiltering) return selectedIds;
+    const visibleIdSet = new Set(visibleSongs.map((song) => song.id));
+    return selectedIds.filter((songId) => visibleIdSet.has(songId));
+  }, [isFiltering, visibleSongs, selectedIds]);
+  const allVisibleSelected = visibleSongs.length > 0 && visibleSelectedIds.length === visibleSongs.length;
+
   // 封面加载失败 → 按 ID 重识别换新封面并更新列表状态（旧封面签名过期后同一 URL 永远失败）
   const handleCoverError = useCallback((song: Song) => {
     void refreshSongCover(song).then((cover) => {
@@ -61,7 +80,9 @@ const PlaylistDetailPage: React.FC = () => {
   // 拖拽排序：dnd 事件 → (from, to) 由共享 hook 折算，本页只负责乐观更新 + 落库；
   // 索引数学走共享 moveItem，本地歌单页不再手写 splice
   const handleReorder = useCallback(async (oldIndex: number, newIndex: number) => {
-    if (!playlistId) return;
+    // 过滤态下 (from, to) 是**展示集合**的下标，当成全量下标落库会写坏整个歌单的顺序（#488）。
+    // 结构上过滤态也不渲染拖拽手柄（走非 sortable 行），这里是第二道闸。
+    if (!playlistId || isFiltering) return;
     const newSongIds = moveItem(songs.map(s => s.id), oldIndex, newIndex);
 
     // Optimistically update UI
@@ -76,7 +97,7 @@ const PlaylistDetailPage: React.FC = () => {
     } finally {
       setIsReordering(false);
     }
-  }, [playlistId, songs]);
+  }, [playlistId, songs, isFiltering]);
 
   const loadData = async () => {
     if (!playlistId) return;
@@ -109,6 +130,8 @@ const PlaylistDetailPage: React.FC = () => {
     await play(song);
   }, [play]);
 
+  // 「播放全部 / 下载全部」是**歌单级**动作，不受页内过滤影响（#488 只改展示集合，见上）；
+  // 受过滤影响的是「勾选 + 批量栏」那条路径，作用域见 visibleSelectedIds
   const handlePlayAll = async () => {
     if (songs.length > 0) {
       setCurrentPlaylist(songs, 0);
@@ -142,7 +165,8 @@ const PlaylistDetailPage: React.FC = () => {
   };
 
   const handleBatchDownload = async () => {
-    const toDownload = songs.filter(s => selectedIds.includes(s.id));
+    // 过滤态只下载**可见**的已选项（#488）：非过滤态 visibleSongs === songs，行为不变
+    const toDownload = visibleSongs.filter(s => selectedIdSet.has(s.id));
     if (toDownload.length === 0) return;
     try {
       await downloadBatch(toDownload);
@@ -153,22 +177,25 @@ const PlaylistDetailPage: React.FC = () => {
   };
 
   const handleBatchDelete = () => {
-    if (selectedIds.length === 0) return;
+    // 只移除**可见**的已选项（#488）：界面只显示这些，落库结果必须与界面一致
+    const ids = visibleSelectedIds;
+    if (ids.length === 0) return;
     Modal.confirm({
       title: '批量移除',
-      content: `确定要从歌单移除选中的 ${selectedIds.length} 首歌曲吗？`,
+      content: `确定要从歌单移除选中的 ${ids.length} 首歌曲吗？`,
       okText: '移除',
       cancelText: '取消',
       onOk: async () => {
         if (!playlistId) return;
-        const count = selectedIds.length;
+        const removedIdSet = new Set(ids);
         try {
-          for (const songId of selectedIds) {
+          for (const songId of ids) {
             await IpcClient.invoke<void>('playlist:removeSong', playlistId, songId);
           }
-          setSelectedIds([]);
+          // 只摘掉被移除的这批：被过滤掉的已选项保留（#488）
+          setSelectedIds((prev) => prev.filter((songId) => !removedIdSet.has(songId)));
           loadData();
-          message.success(`已移除 ${count} 首歌曲`);
+          message.success(`已移除 ${ids.length} 首歌曲`);
         } catch (_error) {
           message.error('批量移除失败');
         }
@@ -182,13 +209,18 @@ const PlaylistDetailPage: React.FC = () => {
     );
   }, []);
 
+  /** 全选只作用于**当前可见**集合（#488）：过滤态不碰被过滤掉的项，非过滤态等价于原来的全选/全不选 */
   const handleSelectAll = useCallback(() => {
-    if (selectedIds.length === songs.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(songs.map(s => s.id));
-    }
-  }, [songs, selectedIds.length]);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        for (const song of visibleSongs) next.delete(song.id);
+      } else {
+        for (const song of visibleSongs) next.add(song.id);
+      }
+      return [...next];
+    });
+  }, [allVisibleSelected, visibleSongs]);
 
   const handleRemoveFromPlaylist = useCallback(async (song: Song) => {
     if (!playlistId) return;
@@ -244,6 +276,16 @@ const PlaylistDetailPage: React.FC = () => {
   /** 拖拽 overlay 里的同一行：**非 sortable**（同一 id 二次注册会冲突） */
   const renderSongDragPreview = useCallback(
     (song: Song, index: number) => <SongRow {...buildRowProps(song, index)} dragHandle={previewDragHandle} />,
+    [buildRowProps],
+  );
+
+  /**
+   * 过滤态的行（#488）：**不注册 `useSortable`**、也就不带拖拽手柄——拖拽入口在结构上不存在。
+   * 过滤集合的下标不是全量下标，落点一旦被当成全量下标就会写坏 order；所以这里不给入口，
+   * 而不是让它拖完再被 `handleReorder` 拒绝（那道闸仍在，见上）。
+   */
+  const renderStaticRow = useCallback(
+    (song: Song, index: number) => <SongRow {...buildRowProps(song, index)} />,
     [buildRowProps],
   );
 
@@ -379,11 +421,43 @@ const PlaylistDetailPage: React.FC = () => {
           </div>
         ) : (
           /* 窗口化 + 可排序收在共享能力里（#445）：页面不再自建 DndContext/SortableContext，
-             也不再 items={songs.map(...)}（每帧新建数组，dnd-kit 的排序下标来源必须是稳定引用）。 */
+             也不再 items={songs.map(...)}（每帧新建数组，dnd-kit 的排序下标来源必须是稳定引用）。
+             items 传**展示集合**（#488）：窗口化与 dnd-kit 的下标来源必须是同一个 memo 化数组，
+             而过滤态行走 renderStaticRow（不注册 useSortable），可见集合的下标不会被当成全量下标。 */
           <VirtualSortableList
-            items={songs}
+            items={visibleSongs}
             header={
               <>
+                {/* 歌单内过滤（#488）：只改展示集合，不重排/不改 order/不碰 playlist:reorderFull。
+                    输入框走 header 插槽 → 与 rowsRef 同处一个父容器，它变高不会让 scrollMargin
+                    停在旧值（同 #445 口径，见 VirtualSortableList 的约束 4）。 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <Search size={14} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
+                  <input
+                    type="text"
+                    value={filterQuery}
+                    onChange={(e) => setFilterQuery(e.target.value)}
+                    placeholder="按歌名或歌手过滤"
+                    aria-label="按歌名或歌手过滤"
+                    autoComplete="off"
+                    style={{ flex: 1, minWidth: 0, padding: '6px 10px', border: '1px solid var(--border-default)', borderRadius: '6px', backgroundColor: 'transparent', color: 'var(--text-primary)', fontSize: '13px' }}
+                  />
+                  {isFiltering && (
+                    <>
+                      <span style={{ flexShrink: 0, fontSize: '12px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+                        {visibleSongs.length} / {songs.length} 首
+                      </span>
+                      <button
+                        onClick={() => setFilterQuery('')}
+                        aria-label="清空过滤"
+                        title="清空过滤"
+                        style={{ display: 'flex', alignItems: 'center', flexShrink: 0, padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </>
+                  )}
+                </div>
                 {/* 提示条 + 批量栏 + 表头（#445）：与 rowsRef 同父由组件的真实 <div> wrapper 保证。
                     放在组件之外时 scrollMargin 会停在旧值 → 勾选一首歌整表错位一条栏高，且不报错。 */}
                 {isReordering && (
@@ -391,10 +465,10 @@ const PlaylistDetailPage: React.FC = () => {
                     正在保存排序...
                   </div>
                 )}
-                {/* Batch action bar */}
-                {selectedIds.length > 0 && (
+                {/* Batch action bar：只统计**可见**的已选项，与批量操作的作用域一致（#488） */}
+                {visibleSelectedIds.length > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(47, 95, 208, 0.08)', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>已选择 {selectedIds.length} 项</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>已选择 {visibleSelectedIds.length} 项</span>
                     <button onClick={handleBatchDownload}
                       style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12px' }}>
                       <Download size={12} /> 批量下载
@@ -410,8 +484,10 @@ const PlaylistDetailPage: React.FC = () => {
                   <div style={{ width: '40px', textAlign: 'center' }}>
                     <input
                       type="checkbox"
-                      checked={songs.length > 0 && selectedIds.length === songs.length}
+                      checked={allVisibleSelected}
                       onChange={handleSelectAll}
+                      aria-label="全选可见歌曲"
+                      title={isFiltering ? '全选当前过滤结果' : '全选'}
                       style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
                     />
                   </div>
@@ -419,9 +495,15 @@ const PlaylistDetailPage: React.FC = () => {
                   <div style={{ flex: 1 }}>标题</div>
                   <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
                 </div>
+                {/* 过滤态命中为空：没有可渲染的行，给一句明确的空态而不是只剩表头（#488） */}
+                {isFiltering && visibleSongs.length === 0 && (
+                  <div style={{ padding: '48px 16px', textAlign: 'center', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                    没有匹配「{filterQuery.trim()}」的歌曲
+                  </div>
+                )}
               </>
             }
-            renderRow={renderSongRow}
+            renderRow={isFiltering ? renderStaticRow : renderSongRow}
             renderDragPreview={renderSongDragPreview}
             onReorder={handleReorder}
           />

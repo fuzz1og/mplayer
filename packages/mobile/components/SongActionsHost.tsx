@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Text, StyleSheet } from 'react-native';
-import { ArrowLeftRight, Download, ListMusic, Trash2, User } from 'lucide-react-native';
+import { ArrowLeftRight, Download, ListMusic, ListPlus, Trash2, User } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import type { Song } from '@mplayer/core';
 import { radius, spacing, textVariants } from '../theme/tokens';
@@ -50,10 +50,22 @@ export default function SongActionsHost() {
   const song: Song | null = actionSheet?.song ?? null;
   const onRemove = actionSheet?.handlers.onRemove;
 
-  // 动作集合与顺序与旧行内一致：加入歌单 / 下载 / 换源完整版 / 搜索歌手 /（可选）移除
+  // 动作集合与顺序：下一首播放（#495，与桌面 #491 同款 icon/label）/ 加入歌单 / 下载 /
+  // 换源完整版 / 搜索歌手 /（可选）移除。
+  // ⚠️ 本组件是**全应用单实例**：这一项等于出现在所有列表的行菜单里（收藏/历史/本地音乐/
+  // 搜索/专辑/歌手/歌单/队列）——通用动作，刻意如此（覆盖范围见 PR 正文）。
   const actions = useMemo<ActionItem[]>(() => {
     if (!song) return [];
     const items: ActionItem[] = [
+      {
+        key: 'playNext',
+        icon: ListPlus,
+        label: '下一首播放',
+        onPress: () => {
+          closeActions();
+          void nativeSongActionEffects.insertNext(song);
+        },
+      },
       { key: 'playlist', icon: ListMusic, label: '加入歌单', onPress: () => openAddToPlaylist(song) },
       { key: 'download', icon: Download, label: '下载', onPress: () => { closeActions(); nativeSongActionEffects.download(song); } },
       { key: 'swap', icon: ArrowLeftRight, label: '换源完整版', onPress: () => openSwap(song, actionSheet?.handlers) },

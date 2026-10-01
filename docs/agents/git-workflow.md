@@ -3,7 +3,7 @@
 进 `master` 只有两条路，先按改动性质分流：
 
 - **默认走 worktree 路径** —— 一切非文档类修改（feat / **fix** / chore / refactor / test / perf，修 bug 与做功能同待遇）。流程：开/认领 issue → 从最新 `master` 建 worktree → 实现 + 验证 → 推分支开 PR → CI 绿后交人工审核。**agent 到此为止，不自行合并。**
-- **例外是文档直推** —— 只改 Markdown（`*.md`、`docs/**`，含 AGENTS.md / CONTEXT.md / ADR）且不碰代码、配置、依赖时，可在主克隆直接 commit + push `master`，commit 前缀 `docs:`，无需 issue。代码+文档混合改动不算文档类，整单走 worktree 路径。
+- **例外是文档直推** —— 只改 Markdown（`*.md`、`docs/**`，含 AGENTS.md / GLOSSARY.md / ADR）且不碰代码、配置、依赖时，可在主克隆直接 commit + push `master`，commit 前缀 `docs:`，无需 issue。代码+文档混合改动不算文档类，整单走 worktree 路径。
 
 ## 1. 认领工作
 
@@ -29,7 +29,7 @@ cd .claude/worktrees/<slug>
 - **rebase 到「动过 `packages/core` 的新 master」之后必须重跑 `core:build`**：Metro 吃 `packages/core/dist`，而 TypeScript 从 `core/src` 解析——两条路不一致时 `typecheck` 与 CI **全绿**，真机却 **runtime undefined** 崩在第一个用到新导出量的地方（实测：#507 把 `COVER_SIZE` 加进 core，rebase 后未重建 dist 的 worktree 首启直接 `Render Error: Cannot read property 'row' of undefined`）。`npm run core:build` + 重启 Metro 即解；CI 之所以看不出来，是因为它每步都先 `core:build`。
 - 调试/测试必须在 worktree 内构建运行，不要 cd 回主克隆目录（缓存不一致难排查）。
 - **Metro 必须在 `packages/mobile` 里起**，不要在 worktree 根目录跑 `npx expo start`：根 `package.json` 的 `main` 指不到 app 入口（`ConfigError: Cannot resolve entry file`），而且 Expo 会顺手改写根 `tsconfig.json`（`extends` 改成 `expo/tsconfig.base`）并把 worktree 弄脏——记得 `git checkout -- tsconfig.json`。
-- 新 worktree 检出的 `scripts/*.sh` 在本机 Windows（`core.autocrlf=true`）**被检出成 CRLF** —— git 里存的本来就是 LF，仓库 `.gitattributes` 已对 `*.sh` 固定 `eol=lf`（若你看到 CRLF，说明本机是 `.gitattributes` 生效前克隆的，重新克隆即可）。CRLF 会让 `bash scripts/*.sh` 直接报 `$'\r': command not found` / `syntax error`；就地归一成 LF 再跑即可。这只改工作区、不改仓库内容，**不需要**为此做 `git checkout` 或把它排除在提交之外。**验证入口已不吃这一条**：`verify` / `design-lint` 是 Node 脚本（#500），CRLF 只影响剩余的真 bash 脚本（`release.sh` / `mobile-*.sh`）。
+- 新 worktree 检出的 `scripts/*.sh` 在本机 Windows（`core.autocrlf=true`）**被检出成 CRLF** —— git 里存的本来就是 LF，仓库 `.gitattributes` 已对 `*.sh` 固定 `eol=lf`（若你看到 CRLF，说明本机是 `.gitattributes` 生效前克隆的，重新克隆即可）。CRLF 会让 `bash scripts/*.sh` 直接报 `$'\r': command not found` / `syntax error`；就地归一成 LF 再跑即可。这只改工作区、不改仓库内容，**不需要**为此做 `git checkout` 或把它排除在提交之外。**验证入口已不吃这一条**：验证、设计 lint、发布与真机脚本都已迁到 Node（#500 / #502），`scripts/*.sh` 现在全是两行 shim（各自 `exec node` 同名 `.mjs`），CRLF 不再影响任何一条流程。
 - **Windows 上不要用 `bash` 跑验证**：`Get-Command bash` 的第一顺位常常是 `C:\WINDOWS\system32\bash.exe`（WSL），于是 WSL 的 **Linux** node 去用 Windows 装的 `node_modules` —— 报错却落成 `Cannot find module @rollup/rollup-linux-x64-gnu`，完全不指向成因（#500）。用 `npm run verify -- <scope>`；`verify.mjs` 起跑前会自检平台并直接给出人话提示。
 
 ## 3. 实现并验证
@@ -39,7 +39,7 @@ cd .claude/worktrees/<slug>
 ```bash
 npm run verify        # 全量（Windows / PowerShell / cmd / Git Bash 通用；实现在 scripts/verify.mjs）
 ./scripts/verify.sh   # 等价写法（两行 shim，转调 scripts/verify.mjs）
-                      # 全量：static（core:build → lint → design-lint → 双端 typecheck → build）
+                      # 全量：static（docs 门禁 → core:build → lint → design-lint → 双端 typecheck → build）
                       #      + renderer / main / core / mobile 四套测试 + expo（SDK 依赖一致性）
                       #      也可只跑某个 scope：npm run verify -- static
 ```
@@ -62,8 +62,9 @@ git push -u origin <branch>
 gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tmp/pr-body.md
 ```
 
-- **PR 模板是唯一事实源**：正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的段写（一句话 / 要重点看什么 / 验证证据 / 深挖），流程文档只引用、不重写模板内容。`gh` **不会**自动套模板——把模板文件直接当 `--body-file` 提交的是模板原件，必须自己按段填。
+- **PR 模板是唯一事实源**：正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的三段写（`Summary` / `Evidence` / `Merge Danger`）——段名与 `pr` skill 同形，会话里挂了它照它的写法走即可；本仓附加项（关闭关键字、正文预算、附图、两条门禁）在模板的 HTML 注释里，流程文档只引用、不重写模板内容。`gh` **不会**自动套模板——把模板文件直接当 `--body-file` 提交的是模板原件，必须自己按段填。
 - **面向人写，不写工作日志**：先给结论（改了什么、要 reviewer 做什么），再给细节；一段一个意思；箭头链、名词堆叠与 `文件:行` 留给 ADR 与 issue。**正文预算 ≤ 40 行 / ≤ 1500 字**，CI 已证明的（lint / typecheck / 四套测试 / `core:build` / `build`）不要抄。
+- **`Merge Danger` 必填**：回退代价（`one-way` 走不回去 / `two-way` 能走回去）与影响面（一个词，如 layout shift / 消费端破坏 / 移动端适配）；没有风险也要写 `two-way` + 一个词。争议点 / 高风险点写进 `Summary`（1–3 条）。
 - **长文去该去的地方**：取舍与方案对比写 ADR，排查过程写 issue 评论，正文只留 reviewer 决策所需——**只链接，不复述**。
 - **PR 之前 issue 要可开工**：`Fixes #N` 指向的 issue 应已带 `ready-for-agent`（验收标准明确）；纯文档 / chore / 依赖升级 / 紧急修复不受此限。
 - **自动关闭 issue 靠关闭关键字**：`Fixes #N` / `Closes #N` / `Resolves #N` 必须**独立成行、前后留白**——粘在中文标点后面（`「…」。Fixes #123。`）不会被识别；`Refs #N` 只是引用、**不关闭**；标题里的 `（#123）` 也不算。要关就写 `Closes`，并同时写进提交信息（见 §4）。
@@ -74,7 +75,8 @@ gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tm
 - **附图后要验引用**：读回来逐个检查（正文 `gh pr view <PR> --json body --jq .body`，评论 `gh api repos/{owner}/{repo}/issues/comments/<id> --jq .body`）——每个图片引用都必须是 `user-attachments` URL，残留本地路径就是裂图；公开仓库可再抓一次 PR 页面 HTML 确认 asset id 在渲染产物里。
 - **CI 绿后停在人审**：PR 交给人工 review 与合并，agent 不自行合并、不设 auto-merge。收到 review 意见回本 worktree 继续修，push 自动更新同一 PR。
 - 改了 `packages/mobile` 或 `packages/core` 的 PR 必须附真机验收结论与**证据图**（没上真机就照实写「未做 + 原因」，不许写「已附截图」而没附；流程见 `.agents/skills/mobile-device-debugging`；固化断言可跑 `npm run mobile:e2e` 一条龙，见 `e2e/README.md`）。
-- 行为/命令/架构有变化的，同一个 PR 里更新 AGENTS.md / CONTEXT.md / 相关 ADR。
+- 行为/命令/架构有变化的，同一个 PR 里更新 AGENTS.md / GLOSSARY.md / 相关 ADR。
+- **分支可能被并发会话动过**：`--force-with-lease` 被拒（`stale info`）就是「远端有你没见过的提交」的信号——先 `git log --oneline HEAD..origin/<branch>` 看多了什么，再决定 merge 还是真的覆盖；直接重试会覆盖别人的提交。
 - 开 PR 前先合入最新 `origin/master`，冲突就地解决。
 
 ## 6. 人工合并后清理

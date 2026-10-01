@@ -85,7 +85,7 @@
 - **歌词**：`GET http://lyrics.kugou.com/search?{keyword,duration,hash}` → `candidates[0].{id,accesskey}`，再 `GET http://lyrics.kugou.com/download?ver=1&client=pc&id=&accesskey=&fmt=lrc&charset=utf8`，`content` **base64** 解码。
 
 ### 3.2 加密/签名
-- **Android gateway**：`kugouutils.py` `signatureandroid`（MD5，secret `OIlwieks28dk2k092lksi2UIkp`，key 用 `signkey`=MD5(hash+secret+appid+mid+userid)），且注册设备用 AES-CBC（随机 key→MD5 前 16/后 16 作 key/iv）+ RSA-PKCS1v15。JS 重实现成本 **M**（AES/RSA/MD5 都齐，但设备注册协议繁琐）。
+- **Android gateway**：`kugouutils.py` `signatureandroid`（MD5，secret 为上游 `kugouutils.py` 里的常量（**本仓不记密钥字面量**），key 用 `signkey`=MD5(hash+secret+appid+mid+userid)），且注册设备用 AES-CBC（随机 key→MD5 前 16/后 16 作 key/iv）+ RSA-PKCS1v15。JS 重实现成本 **M**（AES/RSA/MD5 都齐，但设备注册协议繁琐）。
 - 兜底 `i/v2` 只需 MD5(hash+`kgcloudv2`)——**S**。
 
 ### 3.3 Cookie
@@ -110,7 +110,7 @@
 - **歌词**：`search_result['lyricUrl']` 或 `GET https://app.c.nf.migu.cn/MIGUM3.0/strategy/pc/listen/v1.0?...toneFlag=PQ` 取 `data.lrcUrl`，再 GET lrcUrl（`Referer: y.migu.cn`）。
 
 ### 4.2 加密/签名
-- 任务描述「咪咕 AES-CBC」需修正：源码 `migu.py:_decryptresp` 用的是**自定义 XOR 换位流**（`raw[3]` 取 seed，`(byte + seed - key[i%len]) & 0xFF`，key=`Jk8qzuePiJ1qE3mDYhLQ3T73DtDoAhLP`），触发条件为响应头 `signature=="1"` 或正文以 `\xab\xcd\x01` 开头。
+- 任务描述「咪咕 AES-CBC」需修正：源码 `migu.py:_decryptresp` 用的是**自定义 XOR 换位流**（`raw[3]` 取 seed，`(byte + seed - key[i%len]) & 0xFF`，key 为上游 `migu.py:_decryptresp` 里的常量（**本仓不记密钥字面量**）），触发条件为响应头 `signature=="1"` 或正文以 `\xab\xcd\x01` 开头。
   - JS 重实现成本 **S**（纯字节运算，几行）。
 - 无 MD5/HMAC/RSA 请求签名（与千千/酷狗不同）。
 
@@ -132,11 +132,11 @@
 ### 5.1 端点
 - **搜索**：`GET http://www.kuwo.cn/search/searchMusicBykeyWord?`（`kuwo.py:_constructsearchurls`），query `{vipver:1, client:"kt", ft:"music", cluster:0, strategy:2012, encoding:utf8, rformat:"json", mobi:1, issubtitle:1, show_copyright_off:1, pn, rn, all:keyword}` → `abslist[]`（id 形如 `MUSIC_xxx`）。
 - **歌曲元数据**：`GET https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId=`（iPhone UA）；兜底 HTML `https://www.kuwo.cn/play_detail/{rid}`（`_getsongmetainfo`）。
-- **播放 URL**：`GET http://mobi.kuwo.cn/mobi.s?f=kuwo&q=<encryptquery>`，`encryptquery = base64( DES-CBC(key='ylzsxkwm') of "user=0&corp=kuwo&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&p2p=1&type=convert_url2&sig=0&format=mp3&rid=<rid>" )`，响应文本里正则提取 `http...`（`_parsewithofficialapiv1`）。备选 mflac/mgg 加密档通过 `convert_url2&format=mp3` 换成 320k/flac 亦可，但加密音频解码不稳定。
-- **歌词**：`GET http://newlyric.kuwo.cn/newlyric.lrc?<params>`，`params = base64( XOR("user=12345,web,web,web&requester=localhost&req=1&rid=MUSIC_<id>&lrcx=1", key='yeelion') )`；响应 `tp=content` 头部后 zlib 解压 → base64 → XOR('yeelion') → **gb18030** 解码（`kuwoutils.buildlyricsparams/decodelyrics`）。
+- **播放 URL**：`GET http://mobi.kuwo.cn/mobi.s?f=kuwo&q=<encryptquery>`，`encryptquery = base64( DES-CBC(key=上游 `kuwoutils.py` 的常量) of "user=0&corp=kuwo&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&p2p=1&type=convert_url2&sig=0&format=mp3&rid=<rid>" )`，响应文本里正则提取 `http...`（`_parsewithofficialapiv1`）。备选 mflac/mgg 加密档通过 `convert_url2&format=mp3` 换成 320k/flac 亦可，但加密音频解码不稳定。
+- **歌词**：`GET http://newlyric.kuwo.cn/newlyric.lrc?<params>`，`params = base64( XOR("user=12345,web,web,web&requester=localhost&req=1&rid=MUSIC_<id>&lrcx=1", key=上游 `kuwoutils.py` 的常量) )`；响应 `tp=content` 头部后 zlib 解压 → base64 → XOR(上游 `kuwoutils.py` 的常量) → **gb18030** 解码（`kuwoutils.buildlyricsparams/decodelyrics`）。
 
 ### 5.2 加密/签名
-- 任务描述「酷我 AES-CBC」需修正：native URL 用的是**自实现 DES**（`kuwoutils.crypt/des64/subkeys`，key `ylzsxkwm`），JS 需迁移整套位运算 DES（**M**——无现成 npm 库，要照搬 `kuwoutils.py` 纯 JS）。歌词用 **XOR + zlib**（**S**）。
+- 任务描述「酷我 AES-CBC」需修正：native URL 用的是**自实现 DES**（`kuwoutils.crypt/des64/subkeys`，key 见上游），JS 需迁移整套位运算 DES（**M**——无现成 npm 库，要照搬 `kuwoutils.py` 纯 JS）。歌词用 **XOR + zlib**（**S**）。
 - 对 RN 尤其不友好：`zlib`/`gb18030` 在 RN 无内建。
 
 ### 5.3 Cookie
@@ -160,7 +160,7 @@
 - **歌词**：直接 GET `search_result['lyric']`（明文 lrc URL），UTF-8 文本（`_parsewithofficialapiv1`）。
 
 ### 6.2 加密/签名
-- **`sign = MD5( sorted_param_string + secret )`**，secret=`0b50b02fd0d73a9c4c8c3a781c30845f`，并先加 `timestamp`（`_addsignandtstoparams`）。JS 成本 **S**（node:crypto md5）。
+- **`sign = MD5( sorted_param_string + secret )`**，secret 为上游 `musicdl` 千千实现里的常量（**本仓不记密钥字面量**），并先加 `timestamp`（`_addsignandtstoparams`）。JS 成本 **S**（node:crypto md5）。
 - 可选 `authorization: access_token <token>` 头（有登录 cookie 时）。
 
 ### 6.3 Cookie
@@ -301,12 +301,12 @@
 3. 已在用的 `searchSongsSoda`/`getSodaAudioUrl`/`parseSodaShareLink` 纳入直连层统一管理。
 
 ### 13.3 Qianqian（第一批）
-1. `qianqianSign(params)`：补 `timestamp`，`sign=md5(sorted_kv+secret)`，secret=`0b50b02fd0d73a9c4c8c3a781c30845f`。
+1. `qianqianSign(params)`：补 `timestamp`，`sign=md5(sorted_kv+secret)`，secret 为上游 `musicdl` 千千实现里的常量（**本仓不记密钥字面量**）。
 2. 新增 `searchSongs` → `GET music.91q.com/v1/search`（`word/type/pageNo/pageSize/appid`+sign）；`resolvePlayableUrl` → `GET music.91q.com/v1/song/tracklink`（`TSID/appid/rate`+sign）取 `data.path`；歌词取 `search_result.lyric`。
 3. 头固定带 `referer: https://music.91q.com/player`、`from: web`。
 
 ### 13.4 Migu（第二梯队）
-1. `decryptMigu(resp)`：按 `body` 是否以 `\xab\xcd\x01` 开头或 `signature=="1"` 头，走 XOR 换位（seed=byte[3]，key=`Jk8qzuePiJ1qE3mDYhLQ3T73DtDoAhLP`）再 `JSON.parse`。
+1. `decryptMigu(resp)`：按 `body` 是否以 `\xab\xcd\x01` 开头或 `signature=="1"` 头，走 XOR 换位（seed=byte[3]，key 为上游 `migu.py:_decryptresp` 里的常量（**本仓不记密钥字面量**））再 `JSON.parse`。
 2. 搜索 `search_all.do`；URL `strategy/listen-url/h5/v2.4`（头带 `signature:"1"`/`birth:"h5page"`）；歌词经 `pc/listen/v1.0` 取 lrcUrl。
 3. 播放 URL 用 `toneFlag` 轮询 LQ/PQ/HQ/SQ，取首个 `data.url` 以 http 开头的档。
 

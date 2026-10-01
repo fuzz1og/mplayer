@@ -488,14 +488,14 @@ curl -s "http://search.kuwo.cn/r.s?client=kt&all=%E5%91%A8%E6%9D%B0%E4%BC%A6&pn=
 ### 4.1 搜索 ✅ 公开可用（需静态签名头）
 
 ```bash
-curl -s "https://jadeite.migu.cn/music_search/v3/search/searchAll?feature=1111000000&pageNo=1&comprehensivePage=1&pageSize=20&sort=0&text=%E4%BA%94%E6%9C%88%E5%A4%A9&sid=USSab7de0bd38234653ac85a3591a566297409eda027553446b9824718c90fa290f&isCopyright=1&isCorrect=1" \
+curl -s "https://jadeite.migu.cn/music_search/v3/search/searchAll?feature=1111000000&pageNo=1&comprehensivePage=1&pageSize=20&sort=0&text=%E4%BA%94%E6%9C%88%E5%A4%A9&sid=<会话 sid>&isCopyright=1&isCorrect=1" \
   -H "User-Agent: Mozilla/5.0 (Linux; U; Android 9; zh-cn; MI 6 Build/PKQ1.190118.001)" \
-  -H "ms: 46222b35d5efc10c" \
+  -H "ms: <设备指纹>" \
   -H "channel: 0146921" \
-  -H "sign: d98e82581dc8f0b62725084ba8a0bcf2" \
+  -H "sign: <静态签名>" \
   -H "uiVersion: A_music_3.17.0" \
   -H "ua: Android_migu" \
-  -H "msisdn: MTUwMDEzNjAxNTc=" \
+  -H "msisdn: <base64(手机号)>" \
   -H "timestamp: 1743651699474"
 ```
 
@@ -876,12 +876,12 @@ curl -s "http://search.kuwo.cn/r.s?client=kt&all=%E5%91%A8%E6%9D%B0%E4%BC%A6&pn=
 ### 咪咕
 ```bash
 # 搜索 (需静态签名头)
-curl -s "https://jadeite.migu.cn/music_search/v3/search/searchAll?feature=1111000000&pageNo=1&comprehensivePage=1&pageSize=20&sort=0&text=%E4%BA%94%E6%9C%88%E5%A4%A9&sid=USSab7de0bd38234653ac85a3591a566297409eda027553446b9824718c90fa290f&isCopyright=1&isCorrect=1" \
+curl -s "https://jadeite.migu.cn/music_search/v3/search/searchAll?feature=1111000000&pageNo=1&comprehensivePage=1&pageSize=20&sort=0&text=%E4%BA%94%E6%9C%88%E5%A4%A9&sid=<会话 sid>&isCopyright=1&isCorrect=1" \
   -H "User-Agent: Mozilla/5.0 (Linux; U; Android 9; zh-cn; MI 6)" \
-  -H "ms: 46222b35d5efc10c" -H "channel: 0146921" \
-  -H "sign: d98e82581dc8f0b62725084ba8a0bcf2" \
+  -H "ms: <设备指纹>" -H "channel: 0146921" \
+  -H "sign: <静态签名>" \
   -H "uiVersion: A_music_3.17.0" -H "ua: Android_migu" \
-  -H "msisdn: MTUwMDEzNjAxNTc=" -H "timestamp: 1743651699474"
+  -H "msisdn: <base64(手机号)>" -H "timestamp: 1743651699474"
 ```
 
 ---
