@@ -16,8 +16,8 @@
       "package": "com.mplayer.mobile",
       "versionCode": 26,
       "adaptiveIcon": {
-        "foregroundImage": "../../resources/icon.png",
-        "backgroundColor": "#1a1a2e"
+        "foregroundImage": "../../resources/icon-foreground.png",
+        "backgroundColor": "#2F5FD0"
       }
     },
     "web": {
