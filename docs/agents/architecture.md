@@ -26,6 +26,8 @@
 | `services/` | downloadService(进度按 150ms 聚合后推 IPC) / localMusicService / updateService / playbackTraceService(播放解析链 trace 会话内环形缓冲 + 导出 JSON) / playlistLinkResolver(歌单链接 → 目标源歌单) |
 | `tray/trayManager.ts` | System tray + context menu |
 
+> **写盘口径**：`storage/fileStorage.ts` 的 `saveData()` 是 **200 ms 防抖的脏标记**（`markDirty → scheduleWrite`），多次调用会被 `drainDirty / writeDomains` 合并成一次原子写（写 `.tmp` + rename）。**凡是要下「N 首 = N 次落盘 / 大列表会卡在写盘」这类结论，先读这里**——实测：一次批量 IPC（200 首）与逐首 5 次 IPC 都只产生 **1** 次物理写，两次路径的差别在渲染↔主进程的调用次数，不在物理写次数（2026-10-01 实测，见 #514 验收评论）。
+
 ### Renderer Process (`src/renderer/`)
 
 - `router/index.tsx` HashRouter 全懒加载；页面在 `pages/`（推荐/发现/热榜/收藏/历史/歌单/队列/本地/歌手/专辑/歌词/设置等）

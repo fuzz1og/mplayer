@@ -34,14 +34,21 @@ CI 的 `check`、四个 `test` 分片与 `expo-check` 都只是 `verify.mjs <sco
 - **`verify` 的运行前自检**（先拦，不让你从别处的报错反推环境）：平台与当前 node 一致（#500）、**依赖树与 `package-lock.json` 一致**（#523：`node_modules` 落后时直接给「先 `npm ci`」的人话处置，不让 `lint` 的 `Cannot find module` 或 `core:build` 的 `pako` TS7016 替它背锅）；`core:build` 之后还会自证消费者读到的 dist 就是刚构建的这份（#521）。
 - **`static` 的第一步是文档门禁**（`node scripts/docs-gate.mjs`，#523）：活文档里把 `scripts/*.sh`（现全为两行 shim）当命令推荐，或 `docs/agents/architecture.md` 的文件表漏记实现文件，都会让 `static` 与 CI 的 `check` 变红。允许清单（有意不记的文件）在脚本里；历史存档与非 Markdown 不扫。
 - **`@mplayer/core` 的来源**：worktree 共享 node_modules（junction）时，`@mplayer/core` 可能解析到**主 clone** 的 `packages/core/dist`，于是新增导出报 `TS2305 has no exported member`（像代码错，实为环境错）。`verify.mjs` 现在启动即自证来源，并在每次 `core:build` 后自证「消费者解析到的 dist 就是刚构建的这份」。
+  **但 junction 借不来构建**：Vite 把配置文件临时写到 `<root>/node_modules/.vite-temp/`（经 junction 落到**主 clone**），从那里向上解析永远看不到 worktree 的 `packages/core/node_modules`（`vite-plugin-dts` 装在那里）——`npm run core:build` 报 `Cannot find package 'vite-plugin-dts'`，连带 pre-commit 的 core 新鲜度自检也过不去。worktree 里要跑构建 / `verify` 就**真 `npm install`**（或 `cp -al` 硬链），只 junction root node_modules 只够 typecheck / lint。
 - **本机 `node_modules` 可能落后 `package-lock.json`**：CI 走 `npm ci` 装 lock 的版本，主 clone 的可能是更早装的（实测踩过：`babel-preset-expo` 本机 57.0.5 而 lock 是 57.0.13，`react-native` 0.86.2 而 lock 是 0.87.1）。**凡要「引用已安装版本」下结论（读 `node_modules` 源码、报依赖版本、判定上游行为），先 `npm ci`，或只引用 lockfile 的版本**——否则结论对 CI 不成立，而且看起来完全像事实。`verify` 起跑前现在也会直接拦下这种树（#523）。
+- **桌面手动驱动 Electron（agent / CDP 场景）**：`_electron.launch` 在本机（DSH 会话内）会起出一个白屏（渲染层报 `renderer.bundle.js script failed to run`），退路是自己起 + `connectOverCDP`，但有四条前置，缺一条就是「白屏」或「Electron 变纯 Node」：
+  1. **清掉 `ELECTRON_RUN_AS_NODE`**（DSH 会传给子进程）：留着 Electron 退化成纯 Node，启动即 `Cannot read properties of undefined (reading 'getVersion')`。`scripts/start-electron-dev.mjs` 已代为清理；
+  2. **`packages/core/dist` 必须新鲜**（`npm run core:build`）：Vite 吃 dist、typecheck 吃源码，dist 落后时**白屏**，只有渲染层控制台里有 `does not provide an export named '…'`；
+  3. 手动 spawn 要带 `VITE_DEV_SERVER_URL=http://localhost:5174`——主进程的 IPC sender 校验按它放行，漏了则所有 IPC 被拒；
+  4. 路由是 **HashRouter**：`http://localhost:5174/#/hotlist/netease`（写成 `/hotlist/netease` 会落在首页，看起来像"页面不存在"）。
+  起法：`node scripts/start-electron-dev.mjs --remote-debugging-port=9222` → Playwright `chromium.connectOverCDP('http://127.0.0.1:9222')`；截图走 CDP `Page.captureScreenshot`（`page.screenshot()` 在字体没就绪时会卡在 "waiting for fonts to load"）。四条都是一次性踩坑记录（2026-10-01，桌面真机验收）。
 
 - **Renderer（root）**: Vitest + jsdom + @testing-library；配置在 `vite.config.ts` 的 `test` 段（**无独立根 vitest.config.ts**），`include` 覆盖 `src/renderer/__tests__/**` 与 `src/__tests__/*.test.{ts,tsx}`（**仅顶层**；`src/__tests__/main/**` 归 Main 套件，不再在 jsdom 下重复跑一遍）。setup mock electron / `window.electronAPI`、matchMedia、ResizeObserver，并全局 stub antd message/notification；测试各自定义局部 `song()` 构造器（无共享 factory）。`npx vitest run` / `npm run test:run`（**依赖 `packages/core/dist`，先 `npm run core:build`**）
 - **Main**: `vitest.main.config.ts`（node env），global electron mock，默认开 v8 coverage（`src/main/**`）。`npm run test:main`
 - **Core**: `npx vitest run --config packages/core/vitest.config.ts`（走源码 alias，**不需要** dist），默认开 v8 coverage
 - **Mobile**: `packages/mobile/vitest.config.ts`（node env），setup（`__tests__/setup.ts`）全局替身三件：`react-native` 最小面（AppRegistry/NativeModules/Platform/Share/NativeEventEmitter）、`expo`（`requireOptionalNativeModule` → null = 走回落引擎路径）、AsyncStorage；要验原生引擎的用例在自己的文件里 `vi.mock('expo')` 换假原生模块。store 测试用纯 getState/setState。`npx vitest run --config packages/mobile/vitest.config.ts`（按值 import `@mplayer/core` → 先 `npm run core:build`；`verify` 已内置这一步）
 - 构造器注入可测性：diskBackend(cacheDir)、localMusicService(userDataPath)
-- E2E 桌面: Playwright 在 `e2e/`，测试服务器 `npm run dev`（Vite，5174）；spec 不在 CI/verify 流程，属本地手工回归
+- E2E 桌面: Playwright 在 `e2e/`，测试服务器 `npm run dev`（Vite，5174）；spec 不在 CI/verify 流程，属本地手工回归。**手动驱动（CDP 接管真实窗口）的前置与退路见上面「桌面手动驱动 Electron」那条**
 - E2E 移动端: 真机一条龙 `npm run mobile:e2e`（`scripts/mobile-e2e.mjs`，adb + logcat + uiautomator 驱动，前置/断言/局限见 `e2e/README.md`）
 
 ### 回归测试的「修前红」配方
