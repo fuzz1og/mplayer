@@ -8,6 +8,8 @@
 - **移动端真机**：`scripts/mobile-e2e.mjs`，adb + logcat + uiautomator 驱动真机，与 Playwright 无关。见下文[「移动端真机 e2e」](#移动端真机-e2e)。
 
 > 注意：`e2e/` 下的 `*.spec.ts` **不在 CI/verify 流程里**，属本地手工回归工具；`playwright.config.ts` 的 `testDir` 指向本目录。
+>
+> 手动驱动桌面端（`_electron.launch` 白屏时的退路：自己起 Electron + `connectOverCDP`）的四条前置，见 `docs/agents/testing.md`「桌面手动驱动 Electron」那条。
 
 ## 快速开始
 
