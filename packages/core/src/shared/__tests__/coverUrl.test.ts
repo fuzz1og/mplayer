@@ -50,18 +50,34 @@ describe('coverThumbUrl', () => {
       }
     });
 
-    it('吸附方向：取不超过请求值的最大档；比最小档还小取最小档', () => {
+    /**
+     * 全域断言（规格原句：「QQ 源在**任何**缩略图档位下生成的 URL…不得产出 404」）：
+     * `coverThumbUrl` 的 size 是任意 number，只钉 4 个 COVER_SIZE 档位兜不住这句话。
+     * 修前实现按请求值原样拼 R{size}x{size}，这条会红；修后必须恒绿。
+     */
+    it('全域断言：1..1200 每个整数请求档都不得落到白名单外', () => {
+      const outside: string[] = [];
+      for (let size = 1; size <= 1200; size += 1) {
+        const produced = requestedSize(coverThumbUrl(base, size));
+        if (!SUPPORTED.includes(produced)) outside.push(size + ' → ' + produced);
+      }
+      expect(outside).toEqual([]);
+    });
+
+    it('吸附方向：向下取不超过请求值的最大档；比最小档还小取最小档', () => {
       expect(requestedSize(coverThumbUrl(base, COVER_SIZE.icon))).toBe(180);
       expect(requestedSize(coverThumbUrl(base, COVER_SIZE.thumb))).toBe(300);
       expect(requestedSize(coverThumbUrl(base, COVER_SIZE.hero))).toBe(800);
       expect(requestedSize(coverThumbUrl(base, 60))).toBe(120);
       expect(requestedSize(coverThumbUrl(base, Number.NaN))).toBe(120);
+      // 超出上限：没有「不超过它的上界档」，落最大档
+      expect(requestedSize(coverThumbUrl(base, Number.POSITIVE_INFINITY))).toBe(800);
     });
 
-    it('幂等：吸附过的 URL 再吸附不变', () => {
+    it('幂等只对同一请求档成立；换更小的请求档会跟着变小（请求语义）', () => {
       const once = coverThumbUrl(base, COVER_SIZE.icon);
       expect(coverThumbUrl(once, COVER_SIZE.icon)).toBe(once);
-      expect(coverThumbUrl(once, COVER_SIZE.hero)).toBe(coverThumbUrl(base, COVER_SIZE.hero));
+      expect(coverThumbUrl(once, COVER_SIZE.row)).toBe(coverThumbUrl(base, COVER_SIZE.row));
     });
   });
 
