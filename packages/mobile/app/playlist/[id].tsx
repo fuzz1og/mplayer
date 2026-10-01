@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ScalePress from '../../components/ScalePress';
-import { CircleAlert, MoreVertical, Music2, Pencil, Trash2, Upload } from 'lucide-react-native';
+import { CheckSquare, CircleAlert, MoreVertical, Music2, Pencil, Trash2, Upload } from 'lucide-react-native';
 import { useLocalSearchParams, Stack, router, useFocusEffect } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import { useFavoriteStore } from '../../stores/favoriteStore';
@@ -344,10 +344,21 @@ export default function PlaylistDetailPage() {
           </Pressable>
         </Modal>
 
-        {/* 「更多」操作面板：重命名 / 导入歌曲 / 删除歌单（对齐 SongActionsHost 的行式面板） */}
+        {/* 「更多」操作面板：选择歌曲 / 重命名 / 导入歌曲 / 删除歌单（对齐 SongActionsHost 的行式面板） */}
         <BottomSheet visible={actionsVisible} onClose={() => setActionsVisible(false)}>
           <View style={styles.actionsBody}>
             <Text style={styles.actionsTitle} numberOfLines={1}>{playlist.name}</Text>
+            {/* 批量模式的第三个入口（ADR 2026-10-01 决策 4）：面板首项，行为同英雄区「选择」 */}
+            <ScalePress
+              style={styles.actionItem}
+              onPress={() => {
+                setActionsVisible(false);
+                handleEnterSelection();
+              }}
+            >
+              <CheckSquare size={22} color={colors.textPrimary} />
+              <Text style={styles.actionLabel}>选择歌曲</Text>
+            </ScalePress>
             <ScalePress
               style={styles.actionItem}
               onPress={() => {

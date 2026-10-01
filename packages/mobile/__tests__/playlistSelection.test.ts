@@ -141,7 +141,7 @@ describe('歌单页选择模式的接线（#490 源码守卫）', () => {
     expect(page).not.toMatch(/\.forEach\([^)]*addSong\(/);
   });
 
-  it('入口有二：长按（挂在**行自身**的可按压组件上）+ 英雄区可见「选择」键', () => {
+  it('入口有三：长按（挂在**行自身**）+ 英雄区「选择」+ ⋮ 面板「选择歌曲」', () => {
     const hero = stripComments(read('components/PlaylistHero.tsx'));
     const row = stripComments(read('components/SongRow.tsx'));
     // 长按必须挂在 SongRow 自身的 ScalePress 上：外层再包一层 Pressable 会被内层吞掉手势
@@ -156,6 +156,9 @@ describe('歌单页选择模式的接线（#490 源码守卫）', () => {
     expect(page).toMatch(/onEnterSelection=\{handleEnterSelection\}/);
     // 显式入口进模式时**不预选**任何行（与桌面 SongList 的「批量管理」一致）
     expect(page).toMatch(/setSelection\(\{ mode: true, ids: new Set\(\) \}\)/);
+    // 第三入口：⋮ 面板首项「选择歌曲」也走同一个 handleEnterSelection（先关面板再进模式）
+    expect(page).toContain('选择歌曲');
+    expect(page).toMatch(/setActionsVisible\(false\);\s*handleEnterSelection\(\)/);
   });
 
   it('Hero 次级动作与主按钮同款「两者都给才渲染」，不传的页面渲染不变', () => {
