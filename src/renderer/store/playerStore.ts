@@ -22,6 +22,7 @@ import {
   resetFailureStreak,
   getFailureStreak,
   pickNextSongAfterFailure,
+  refreshSongResource,
   OFFLINE_COPY,
 } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
@@ -535,14 +536,22 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       }
 
-      // 无 url 歌曲（直连解析失败 / 列表未带 url）：按歌名搜索解析一次，
-      // 失败走下方报错。「受保护端点死链 fresh 兜底」分支已随 searchSongById
-      // 死腿删除（自建 API 退役后恒 null，#273）。
+      // 无 url 歌曲（直连解析失败 / 列表未带 url）：#544 起不再手抄规则，
+      // 改调 core 的 `refreshSongResource`（守卫唯一：非 http / 旧签名死链 /
+      // audioTag=invalid 一律不采用；采用后写回预取缓存）。
+      // 此前这里的弱化版只做「搜索 → findExactMatch → 取 hit.url」，缺这三条守卫。
       if (!realUrl && song.sourceType !== 'local' && song.sourceType !== 'soda' && song.name) {
         try {
-          const results = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`.trim(), 1, song.sourceType);
-          const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
-          if (hit?.url) realUrl = hit.url;
+          const resource = await refreshSongResource(song, {
+            readCache: async () => null, // 解析链刚失败过，缓存里没有可用项
+            writeCache: async () => {
+              // 写回也走主进程那份缓存（渲染层那份没人读，见 #390）
+              await callMusicApi('prefetchPlayableSong', song).catch(() => {});
+            },
+            search: async (s) =>
+              (await callMusicApi('searchSongsRouted', `${s.name} ${s.artist}`.trim(), 1, s.sourceType)) as Song[],
+          });
+          if (resource?.url) realUrl = resource.url;
         } catch (urlError) {
           console.error('播放时搜索歌曲 URL 失败:', urlError);
         }
