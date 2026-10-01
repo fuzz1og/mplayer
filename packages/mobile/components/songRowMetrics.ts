@@ -46,6 +46,10 @@ export const SONG_ROW = {
    */
   sourceBadgeWidth: 44,
   sourceBadgeHeight: 18,
+  /** 选择模式（#490）的勾选圈：圈径 / 圈线宽 / 勾号尺寸（行首，占榜位列同槽位）。 */
+  selectCircleSize: 22,
+  selectCircleBorder: 1.5,
+  selectIconSize: 14,
   /** 右侧动作列：收藏 + 更多（图标尺寸 / 触控内距 / 两钮间距）。 */
   actionIconSize: 20,
   actionIconSizeCompact: 18,

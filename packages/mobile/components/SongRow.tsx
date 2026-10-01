@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, type GestureResponderEvent,
 } from 'react-native';
-import { Music, Heart, EllipsisVertical } from 'lucide-react-native';
+import { Check, Music, Heart, EllipsisVertical } from 'lucide-react-native';
 import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -32,6 +32,19 @@ interface SongRowProps {
   onSwap?: (original: Song, swapped: Song) => void;
   /** 提供后「更多」菜单显示「移除」项（歌单/播放历史列表用；由父组件决定移除语义与确认） */
   onRemove?: (song: Song) => void;
+  /**
+   * 选择模式（#490）：行首出现勾选圈、行内收藏/更多收起；
+   * 行的点击语义由父组件经 onPress 接管为「切换选中」（不再播放）。
+   */
+  selectionMode?: boolean;
+  /** 选择模式下本行是否已选中（决定勾选圈形态与行底色） */
+  selected?: boolean;
+  /**
+   * 长按整行（选择模式入口）。**必须挂在行自身的 ScalePress 上**：外层再套一个
+   * <Pressable onLongPress> 会被内层吞掉——内层先成为 responder，外层的长按永不触发
+   * （真机验收 #514 实测：外层写法下长按只会播放歌曲）。
+   */
+  onLongPress?: () => void;
 }
 
 /**
@@ -58,6 +71,9 @@ function SongRow({
   queueSongs,
   onSwap,
   onRemove,
+  selectionMode = false,
+  selected = false,
+  onLongPress,
 }: SongRowProps) {
   const isFav = useFavoriteStore((s) => s.isFavorite(song.id));
   const addFavorite = useFavoriteStore((s) => s.addFavorite);
@@ -131,10 +147,18 @@ function SongRow({
 
   return (
     <ScalePress
-      style={styles.container}
+      style={[styles.container, selected && styles.containerSelected]}
       pressScaleTo={0.98}
       onPress={handlePress}
+      onLongPress={onLongPress}
     >
+      {/* 选择模式：#490 勾选圈占榜位同槽位；未选中是空心圈，选中填 accent */}
+      {selectionMode && (
+        <View style={[styles.selectCircle, selected && styles.selectCircleOn]}>
+          {selected ? <Check size={SONG_ROW.selectIconSize} color={colors.textInverse} /> : null}
+        </View>
+      )}
+
       {rank !== undefined && (
         <Text style={[styles.rank, rank <= 3 && { color: colors.rankText[rank - 1] }]}>{rank}</Text>
       )}
@@ -173,20 +197,25 @@ function SongRow({
         </View>
       )}
 
-      <ScalePress
-        onPress={handleFavorite}
-        style={styles.favoriteBtn}
-        hitSlop={{ top: 12, bottom: 12, left: 12, right: 4 }}
-      >
-        <Heart
-          size={SONG_ROW.actionIconSize}
-          color={favorited ? colors.accent : colors.textTertiary}
-          fill={favorited ? colors.accent : 'none'}
-        />
-      </ScalePress>
-      <ScalePress onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
-        <EllipsisVertical size={SONG_ROW.actionIconSizeCompact} color={colors.textTertiary} />
-      </ScalePress>
+      {/* 选择模式下行内动作收起：此时点行是「切换选中」，留着爱心/更多只会互相打架 */}
+      {!selectionMode && (
+        <>
+          <ScalePress
+            onPress={handleFavorite}
+            style={styles.favoriteBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 4 }}
+          >
+            <Heart
+              size={SONG_ROW.actionIconSize}
+              color={favorited ? colors.accent : colors.textTertiary}
+              fill={favorited ? colors.accent : 'none'}
+            />
+          </ScalePress>
+          <ScalePress onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
+            <EllipsisVertical size={SONG_ROW.actionIconSizeCompact} color={colors.textTertiary} />
+          </ScalePress>
+        </>
+      )}
     </ScalePress>
   );
 }
@@ -201,6 +230,23 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgSurface,
     borderBottomWidth: SONG_ROW.separatorWidth,
     borderBottomColor: colors.borderSubtle,
+  },
+  containerSelected: {
+    backgroundColor: colors.accentSubtle,
+  },
+  selectCircle: {
+    width: SONG_ROW.selectCircleSize,
+    height: SONG_ROW.selectCircleSize,
+    borderRadius: SONG_ROW.selectCircleSize / 2,
+    borderWidth: SONG_ROW.selectCircleBorder,
+    borderColor: colors.textTertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SONG_ROW.coverGap,
+  },
+  selectCircleOn: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   rank: {
     ...textVariants.subhead,
