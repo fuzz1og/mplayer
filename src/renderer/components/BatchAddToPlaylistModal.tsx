@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ListMusic } from 'lucide-react';
 import { message, Modal } from 'antd';
-import { filterDuplicates } from '@mplayer/core';
+import { filterDuplicates, writeSongsToPlaylist } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Song, Playlist } from '@mplayer/core';
 
@@ -118,9 +118,25 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
     if (!name) return;
     setCreating(true);
     try {
-      const newId = await IpcClient.invoke<number>('playlist:create', name);
+      // #542：整批写入 + 失败回滚都交给 core 编排。
+      // 此前这里 create 成功后 addSongs 抛错只弹「操作失败」，空歌单留下来了。
+      const result = await writeSongsToPlaylist(
+        { createName: name, songs },
+        {
+          addSongs: async (pid, songs) => {
+            await IpcClient.invoke('playlist:addSongs', pid, songs);
+          },
+          createPlaylist: async (n) => IpcClient.invoke<number>('playlist:create', n),
+          deletePlaylist: async (pid) => {
+            await IpcClient.invoke('playlist:delete', pid);
+          },
+        },
+      );
+      if (!result.ok) {
+        message.error(result.rolledBack ? '添加失败，已撤销新建的歌单' : result.error || '操作失败，请重试');
+        return;
+      }
       setNewPlaylistName('');
-      await addSongsToPlaylist(newId, true);
     } catch (_error) {
       message.error('操作失败，请重试');
     } finally {

@@ -41,12 +41,16 @@ describe('榜单页「保存全部到新歌单」（#493）', () => {
 describe('桌面批量加入歌单可就地新建（#489）', () => {
   const source = read('renderer/components/BatchAddToPlaylistModal.tsx');
 
-  it('新建行调 playlist:create，并立即把本次批量写入（同一次交互内完成）', () => {
+  it('新建行走 core 写入编排（create → 整批写入 → 失败回滚，同一次交互内完成）', () => {
     const code = stripComments(source);
-    expect(code).toContain("'playlist:create'");
-    expect(code).toMatch(/handleCreateAndAdd/);
-    // 新建后的写入与「选中已有歌单」复用同一条添加路径
-    expect(code).toMatch(/await addSongsToPlaylist\(newId, true\)/);
+    // #542：编排已收进 core `writeSongsToPlaylist`——这里只断言**接线仍在**：
+    // 就地新建（createName）+ 整批写入（addSongs）+ 回滚（deletePlaylist）三件事都接上了。
+    expect(code).toContain('writeSongsToPlaylist');
+    expect(code).toContain('createName');
+    expect(code).toContain("'playlist:addSongs'");
+    expect(code).toContain("'playlist:delete'");
+    // 硬约束「失败不留空歌单」不再靠读源码文本保证——
+    // 它现在是 core 编排的契约，由 packages/core/src/shared/__tests__/playlistWrite.test.ts 断言。
   });
 
   it('新歌单必然无重复，跳过预读 getSongs 与同名确认', () => {

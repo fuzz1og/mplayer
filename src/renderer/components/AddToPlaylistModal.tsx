@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ListMusic } from 'lucide-react';
 import { message, Modal } from 'antd';
-import { checkDuplicate, type DupResult } from '@mplayer/core';
+import { checkDuplicate, writeSongsToPlaylist, type DupResult } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import SongCover from '@/renderer/components/SongCover';
 import type { Song, Playlist } from '@mplayer/core';
@@ -97,8 +97,24 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 
     setCreating(true);
     try {
-      const newId = await IpcClient.invoke<number>('playlist:create', newPlaylistName.trim());
-      await addSongToPlaylist(newId, song);
+      // #542：新建 + 写入走 core 编排——写入失败会**删掉刚建的空歌单**（#493 验收标准）。
+      // 此前这里 create 成功后 add 抛错只弹「操作失败」，新歌单留下来了但是空的。
+      const result = await writeSongsToPlaylist(
+        { createName: newPlaylistName.trim(), songs: [song] },
+        {
+          addSong: async (pid, s) => {
+            await IpcClient.invoke('playlist:addSong', pid, s);
+          },
+          createPlaylist: async (name) => IpcClient.invoke<number>('playlist:create', name),
+          deletePlaylist: async (pid) => {
+            await IpcClient.invoke('playlist:delete', pid);
+          },
+        },
+      );
+      if (!result.ok) {
+        message.error(result.rolledBack ? '添加失败，已撤销新建的歌单' : result.error || '操作失败，请重试');
+        return;
+      }
       message.success(`已添加到歌单「${newPlaylistName.trim()}」`);
       onClose();
       if (onSuccess) {
