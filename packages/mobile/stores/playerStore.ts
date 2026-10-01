@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { ShuffleState, Song } from '@mplayer/core'
 import {
   createShuffleState,
-  getNextSongIndex,
+  planAdvance,
   replaceShuffleSongId as coreReplaceShuffleSongId,
   stepShuffle,
 } from '@mplayer/core'
@@ -112,40 +112,69 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   resume: () => set({ isPlaying: true }),
 
   next: () => {
-    const { queue, currentIndex } = get();
+    const { queue, currentIndex, shuffle } = get();
     const playMode = useSettingsStore.getState().playMode;
 
-    // 随机（#519）：消费**稳定序列**——游标前进一格（没有序列就按当前队列现洗一份）。
-    // 旧实现走 core 的「每次现抽」：无记忆 → 补窗每轮换一批（#519 的自激循环）。
+    // #541：推进落点由 core planAdvance 单一决定（含「单曲循环 = 重播当前曲」）。
+    // 随机模式仍走 stepShuffle 分支：移动端需要先按「窗口/权威」作用域对齐序列，
+    // 这份对齐策略还留在 store（收敛见 #543），planAdvance 只负责推进本身。
     if (playMode === '随机播放' && queue.length > 0 && currentIndex >= 0) {
       return get().stepShuffle(1) >= 0 ? get().currentSong : null;
     }
 
-    const nextIndex = getNextSongIndex(queue, currentIndex, playMode);
-    if (nextIndex === -1) return null;
-    set({ currentSong: queue[nextIndex], currentIndex: nextIndex, isPlaying: true, currentTime: 0, hasPlayed: true });
+    const plan = planAdvance({
+      queue,
+      currentIndex,
+      playMode,
+      shuffle: shuffle ?? null,
+      direction: 1,
+      cause: 'user',
+    });
+    if (plan.effect === 'none') return null;
+    // 单曲循环：重播当前曲（seek 0），不重新解析 URL——与桌面同口径（#541）。
+    if (plan.effect === 'restart-current') {
+      set({ isPlaying: true, currentTime: 0 });
+      return get().currentSong;
+    }
+    set({
+      currentSong: queue[plan.index],
+      currentIndex: plan.index,
+      isPlaying: true,
+      currentTime: 0,
+      hasPlayed: true,
+    });
     return get().currentSong;
   },
 
   prev: () => {
-    const { queue, currentIndex } = get();
+    const { queue, currentIndex, shuffle } = get();
     if (queue.length === 0 || currentIndex < 0) return;
     const playMode = useSettingsStore.getState().playMode;
 
-    if (playMode === '单曲循环') {
-      set({ currentTime: 0, isPlaying: true });
-      return;
-    }
-
-    // 随机（#519 = #511 的行为变更）：游标**后退一格**——回到序列里的上一张。
-    // 旧实现与 next 共用同一「现抽」→ 回的是一张新随机曲，从不回上一张。
+    // 随机（#519 = #511 的行为变更）：游标后退一格，回到序列里的上一张。
     if (playMode === '随机播放') {
       get().stepShuffle(-1);
       return;
     }
 
-    const prevIdx = (currentIndex - 1 + queue.length) % queue.length;
-    set({ currentSong: queue[prevIdx], currentIndex: prevIdx, isPlaying: true, currentTime: 0 });
+    // #541：单曲循环的 prev 此前在移动端是「重播当前曲」，与桌面（回上一首）不一致，
+    // 而 core/queue.ts 的注释长期断言「与桌面一致」——读者会相信它。
+    // 现在以 planAdvance 的契约为唯一口径：单曲循环 + prev = 回上一首。
+    const plan = planAdvance({
+      queue,
+      currentIndex,
+      playMode,
+      shuffle: shuffle ?? null,
+      direction: -1,
+      cause: 'user',
+    });
+    if (plan.effect === 'none') return;
+    set({
+      currentSong: queue[plan.index],
+      currentIndex: plan.index,
+      isPlaying: true,
+      currentTime: 0,
+    });
   },
 
   insertNext: (song) => {

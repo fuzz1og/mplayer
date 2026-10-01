@@ -1,7 +1,7 @@
 import type { Song } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
 import type { ShuffleState } from '@mplayer/core';
-import { getNextSongIndex } from '@mplayer/core';
+import { planAdvance } from '@mplayer/core';
 import { isLegacyDeadUrl, syncShuffleCursor } from '@mplayer/core';
 
 const QUEUE_STORAGE_KEY = 'mplayer_queue';
@@ -16,8 +16,16 @@ export function getNextSong(
   shuffle?: ShuffleState | null,
 ): Song | null {
   if (!currentSong) return null;
-  const nextIndex = getNextSongIndex(playlist, currentIndex, playMode, shuffle);
-  return nextIndex === -1 ? null : playlist[nextIndex];
+  // #541：推进落点统一走 planAdvance（与 playNext 同一份语义，不再各算一次）
+  const plan = planAdvance({
+    queue: playlist,
+    currentIndex,
+    playMode,
+    shuffle: shuffle ?? null,
+    direction: 1,
+    cause: 'user',
+  });
+  return plan.effect === 'none' ? null : playlist[plan.index];
 }
 
 /**
