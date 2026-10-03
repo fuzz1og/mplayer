@@ -84,6 +84,16 @@ describe('歌单加入未解析歌曲（直连架构：搜索结果 url 为空�
     expect(songs[0].artist).toBe('Various Artists');
   });
 
+  // #553：逐首版此前按裸 Song.id 判「已在歌单」并直接 return——跨源同 id 被吞。
+  it('⭐ 逐首加入按身份键判重：跨源同 id 是两首歌', async () => {
+    const storage = new FileStorage();
+    const playlistId = await storage.createPlaylist('跨源单曲');
+    await storage.addSongToPlaylist(playlistId, song('123', '晴天', 'netease'));
+    await storage.addSongToPlaylist(playlistId, song('123', '晴天', 'qq'));
+
+    expect((await storage.getPlaylistSongs(playlistId)).map(s => s.sourceType)).toEqual(['netease', 'qq']);
+  });
+
   it('still rejects songs missing identity fields', async () => {
     const storage = new FileStorage();
     const playlistId = await storage.createPlaylist('测试歌单');
@@ -120,7 +130,7 @@ describe('批量加入歌单 addSongsToPlaylist（#493：整批只落一次盘�
     expect(songs.map(s => s.id)).toEqual(['seed', ...batch.map(s => s.id)]);
   });
 
-  it('按 songId 去重：歌单已有的与本批内部的都跳过，返回真正新增的 id', async () => {
+  it('按歌曲身份键去重：歌单已有的与本批内部的都跳过，返回真正新增的 id', async () => {
     const storage = new FileStorage();
     const playlistId = await storage.createPlaylist('去重');
     await storage.addSongToPlaylist(playlistId, song('a'));
@@ -130,6 +140,18 @@ describe('批量加入歌单 addSongsToPlaylist（#493：整批只落一次盘�
     expect(added).toHaveLength(2); // 只有 b、c
     const songs = await storage.getPlaylistSongs(playlistId);
     expect(songs.map(s => s.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  // #553：落库去重此前按裸 Song.id——跨源同 id 是两首不同的歌，会被静默当成同一首丢掉。
+  it('⭐ 跨源同 id 是两首歌：本批与歌单已有的同 rawId 不同源，两个都进', async () => {
+    const storage = new FileStorage();
+    const playlistId = await storage.createPlaylist('跨源');
+    await storage.addSongsToPlaylist(playlistId, [song('123', '晴天', 'netease')]);
+
+    const added = await storage.addSongsToPlaylist(playlistId, [song('123', '晴天', 'qq')]);
+
+    expect(added).toHaveLength(1);
+    expect((await storage.getPlaylistSongs(playlistId)).map(s => s.sourceType)).toEqual(['netease', 'qq']);
   });
 
   it('不合法的歌跳过而不是整批抛错（部分成功）', async () => {

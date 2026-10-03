@@ -27,12 +27,20 @@ export interface PlaylistSnapshot {
   capacity: number;
 }
 
-/** 构建目标歌单快照（capacity 缺省 1000，与桌面 fileStorage 的上限一致）。 */
+/**
+ * 歌单容量上限的**唯一来源**（1000/歌单）。
+ *
+ * 此前字面量在四处各写一份（core 常量 / 本文件缺省 / 桌面 adapter / 移动 adapter），
+ * 改一处不会传导到别处。桌面 fileStorage 的真实截断上限与本文件同源。
+ */
+export const DEFAULT_PLAYLIST_CAPACITY = 1000;
+
+/** 构建目标歌单快照（capacity 缺省 = {@link DEFAULT_PLAYLIST_CAPACITY}）。 */
 export function createPlaylistSnapshot(input: {
   songs: readonly Song[];
   capacity?: number;
 }): PlaylistSnapshot {
-  return { songs: input.songs, capacity: input.capacity ?? 1000 };
+  return { songs: input.songs, capacity: input.capacity ?? DEFAULT_PLAYLIST_CAPACITY };
 }
 
 /** 名称归一：空 artist 与缺 artist 等价，避免 'x|' 与 'x|null' 分裂成两类。 */
@@ -74,11 +82,6 @@ export function classifySong(targetSongs: readonly Song[], newSong: Song): DupRe
   if (crossSource) return { status: 'nameConflict', existingSong: crossSource };
 
   return { status: 'ok' };
-}
-
-/** 旧接口（渲染层预览用）：等价于对目标歌单逐条跑 classifySong 取第一条命中。 */
-export function checkDuplicate(targetSongs: Song[], newSong: Song): DupResult {
-  return classifySong(targetSongs, newSong);
 }
 
 export function filterDuplicates(targetSongs: Song[], newSongs: Song[]): FilterResult {

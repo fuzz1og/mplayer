@@ -24,8 +24,9 @@ interface Props {
   song?: Song | null;
   /**
    * 批量模式：与 song 互斥。点击歌单只调一次 addSongs（整批一次 set = 一次持久化），
-   * 不逐首弹同名 Alert——跨源同名在批量语义下由 core 编排并入（#553：
-   * 桌面 BatchAddToPlaylistModal 另会整批问一次同名确认，两端「并入」的结论一致）。
+   * 不逐首弹同名 Alert——本弹窗**不传** resolveNameConflict，跨源同名走 core 的
+   * **默认并入**（#556 评审 A4：缺省是「并入」，不是「既不写入也不计数」地静默丢弃）。
+   * 桌面 BatchAddToPlaylistModal 会整批问一次同名确认，答「继续添加」= 同一结论。
    */
   songs?: Song[] | null;
   onClose: () => void;

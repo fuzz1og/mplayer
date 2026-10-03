@@ -1,4 +1,5 @@
 import type { PlayableResource, Song } from '../types/index.js';
+import type { TransportCallOptions } from '../api/transport.js';
 import { isLegacyDeadUrl } from '../utils/legacyUrl.js';
 import { findExactMatch } from '../utils/songMatcher.js';
 
@@ -28,11 +29,12 @@ import { findExactMatch } from '../utils/songMatcher.js';
  * `timeoutMs` 是这次搜索可用时限（已按 `min(本腿墙, 链总预算剩余)` 夹过）；
  * `signal` 在链总预算耗尽或本腿到点时 abort —— 端口应把它透传给底层请求，
  * 并把「已 aborted」当作正常失败（返回空候选），不要上抛。
+ *
+ * **与 `TransportCallOptions` 是同一个形状**（#556 评审 A1）：腿端口与 transport
+ * 端口各写一份结构相同的类型，会让「端口收下了、实现没读」这种假接缝在类型上
+ * 无法被发现。这里直接取别名——搜索端口能收的，正是 transport 能消费的。
  */
-export interface LegOptions {
-  timeoutMs?: number;
-  signal?: AbortSignal;
-}
+export type LegOptions = TransportCallOptions;
 
 export interface SongResourceRefreshDeps {
   /**

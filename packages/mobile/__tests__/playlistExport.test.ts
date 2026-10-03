@@ -55,7 +55,11 @@ describe('exportSongsToLocalPlaylist（#492 导出到本地歌单）', () => {
       store.addSongs(playlistId, list);
     });
 
-    const result = await exportSongsToLocalPlaylist({ createPlaylist, addSongs }, '网络歌单', songs);
+    const result = await exportSongsToLocalPlaylist(
+      { createPlaylist, addSongs, deletePlaylist: (id: string) => store.deletePlaylist(id) },
+      '网络歌单',
+      songs,
+    );
 
     expect(result.ok).toBe(true);
     expect(result.playlistId).toBe('pl-1');
@@ -71,6 +75,7 @@ describe('exportSongsToLocalPlaylist（#492 导出到本地歌单）', () => {
       {
         createPlaylist: (name) => usePlaylistStore.getState().createPlaylist(name),
         addSongs: (playlistId, list) => usePlaylistStore.getState().addSongs(playlistId, list),
+        deletePlaylist: (playlistId) => usePlaylistStore.getState().deletePlaylist(playlistId),
       },
       '网易热歌',
       songs,
@@ -82,18 +87,31 @@ describe('exportSongsToLocalPlaylist（#492 导出到本地歌单）', () => {
     expect(all[0].songs.map((s) => s.id)).toEqual(['a', 'b']);
   });
 
-  it('addSongs 抛错 → ok=false 且已回滚（不留空歌单），不静默吞错', async () => {
-    const createPlaylist = vi.fn((_name: string) => 'pl-x');
+  // #556 评审 B4：回滚腿此前传的是空实现 deletePlaylist: () => {}——core 记
+  // rolledBack=true 并弹「已撤销新建的歌单」，而空歌单还在 store 里。本用例把
+  // 「确实调了真删、store 里也确实没有了」一起断言；旧实现两处都红。
+  it('⭐ addSongs 抛错 → ok=false，且回滚真的删掉新歌单（不留空歌单）', async () => {
+    const store = statefulStore();
+    const id = store.createPlaylist('会失败');
+    const createPlaylist = vi.fn((_name: string) => id);
     const addSongs = vi.fn((_playlistId: string, _songs: Song[]) => {
       throw new Error('存储写入失败');
     });
+    const deletePlaylist = vi.fn((playlistId: string) => store.deletePlaylist(playlistId));
 
-    const result = await exportSongsToLocalPlaylist({ createPlaylist, addSongs }, '会失败', [song('a')]);
+    const result = await exportSongsToLocalPlaylist(
+      { createPlaylist, addSongs, deletePlaylist },
+      '会失败',
+      [song('a')],
+    );
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain('存储写入失败');
+    expect(result.rolledBack).toBe(true);
     expect(createPlaylist).toHaveBeenCalledTimes(1);
     expect(addSongs).toHaveBeenCalledTimes(1);
+    expect(deletePlaylist).toHaveBeenCalledWith(id);
+    expect(store.playlists.has(id)).toBe(false); // 空歌单没留下
   });
 });
 

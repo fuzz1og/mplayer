@@ -22,12 +22,10 @@ import { identityKey } from '../utils/songIdentity.js';
  * 显式通道（宿主返回的新增数少于指派数即截断），不再静默。
  */
 
-/** 目标歌单快照与构造器（#553：判据模块是唯一来源，这里转出给写入编排的调用方）。 */
-export { createPlaylistSnapshot } from '../utils/songDedupe.js';
+/** 目标歌单快照与构造器（#553：判据模块是唯一来源，这里转出给写入编排的调用方）。
+ *  DEFAULT_PLAYLIST_CAPACITY 同样转出（#556 评审 C：容量上限只允许一个落点）。 */
+export { createPlaylistSnapshot, DEFAULT_PLAYLIST_CAPACITY } from '../utils/songDedupe.js';
 export type { PlaylistSnapshot } from '../utils/songDedupe.js';
-
-/** 目标歌单默认容量上限（与桌面 fileStorage 的 1000/歌单一致）。 */
-export const DEFAULT_PLAYLIST_CAPACITY = 1000;
 
 /** 落点：批内重复/已存在命中（duplicate 或同源同名同歌手）。 */
 export interface PlaylistDuplicate {
@@ -56,8 +54,12 @@ export interface PlaylistWriteDeps {
    * 给 0 会让编排把写入当失败；确实不知道就改成只提供 `addSong`。
    */
   addSongs?: (playlistId: string | number, songs: Song[]) => Promise<number>;
-  /** 逐首写入（addSongs 缺失时的回落）。 */
-  addSong?: (playlistId: string | number, song: Song) => Promise<void>;
+  /**
+   * 逐首写入（addSongs 缺失时的回落）。
+   * 返回**真实新增条数**（0 = 宿主没收下、1 = 新增）；确知不了就返回 void，
+   * 编排按「调用成功 = 1 首」记账——不要为了凑数编一个值（#554 / #556 评审 B2）。
+   */
+  addSong?: (playlistId: string | number, song: Song) => Promise<number | void>;
   /** 新建歌单，返回新 id（就地新建场景必填）。 */
   createPlaylist?: (name: string) => Promise<string | number>;
   /** 删除歌单（回滚用；就地新建场景必填，否则无法保证「不留空歌单」）。 */
@@ -66,6 +68,10 @@ export interface PlaylistWriteDeps {
    * 同名异源怎么处置（宿主 adapter 的第二个回调）。
    * 一次收到**整批**冲突，宿主可以合成一个弹层问一次；返回单个决议 = 整批同处置，
    * 返回数组 = 逐首处置；'skip' 的歌被本编排丢弃。
+   *
+   * **不提供 = 默认并入**（#556 评审 A4）：跨源同名同歌手是同一段录音的另一个来源，
+   * 默认口径是「并进去」，绝不静默丢弃。想「问用户」或「跳过」的宿主必须显式给回调
+   * ——桌面两个弹窗都给了（弹同名确认）；不显式给 = 接受默认并入。
    */
   resolveNameConflict?: (
     conflicts: readonly PlaylistNameConflict[],
@@ -213,24 +219,30 @@ export async function writeSongsToPlaylist(
   // 同名异源裁决（宿主 adapter 的第二个回调）：一次收整批，宿主可以只问一次。
   let toWrite = fresh;
   let droppedConflicts = 0;
-  if (conflicts.length > 0 && deps.resolveNameConflict) {
-    let decisions: readonly NameConflictResolution[];
-    try {
-      const verdict = await deps.resolveNameConflict(conflicts);
-      decisions = Array.isArray(verdict) ? verdict : conflicts.map(() => verdict);
-    } catch (e) {
-      return fail(`同名确认失败: ${(e as Error)?.message || e}`, {
-        skipped: batchDuplicates.length + duplicates.length,
-        invalid: rejections.length,
-        duplicateNames: conflicts.length,
-        duplicates,
-        conflicts,
-      });
+  if (conflicts.length > 0) {
+    if (!deps.resolveNameConflict) {
+      // 宿主没声明策略 → 默认**并入**（#556 评审 A4）。旧行为是「既不写入也不计数」，
+      // 冲突歌凭空消失：这是缺省值撒谎，不是裁决。
+      toWrite = [...fresh, ...conflicts.map((c) => c.song)];
+    } else {
+      let decisions: readonly NameConflictResolution[];
+      try {
+        const verdict = await deps.resolveNameConflict(conflicts);
+        decisions = Array.isArray(verdict) ? verdict : conflicts.map(() => verdict);
+      } catch (e) {
+        return fail(`同名确认失败: ${(e as Error)?.message || e}`, {
+          skipped: batchDuplicates.length + duplicates.length,
+          invalid: rejections.length,
+          duplicateNames: conflicts.length,
+          duplicates,
+          conflicts,
+        });
+      }
+      // 裁决为 'add' 的冲突歌要并入写入；'skip' 的丢弃（同时计入 skipped 与 duplicateNames）。
+      const accepted = conflicts.filter((_, i) => decisions[i] !== 'skip');
+      droppedConflicts = conflicts.length - accepted.length;
+      toWrite = [...fresh, ...accepted.map((c) => c.song)];
     }
-    // 裁决为 'add' 的冲突歌要并入写入；'skip' 的丢弃（同时计入 skipped 与 duplicateNames）。
-    const accepted = conflicts.filter((_, i) => decisions[i] !== 'skip');
-    droppedConflicts = conflicts.length - accepted.length;
-    toWrite = [...fresh, ...accepted.map((c) => c.song)];
   }
 
   const baseCounts = {
@@ -241,8 +253,16 @@ export async function writeSongsToPlaylist(
     conflicts,
   };
 
-  // 一首都不用写：不是错误（全是重复/全被裁决掉了），如实回报 0 新增。
+  // 一首都不用写：已有歌单场景不是错误（全是重复/全被裁决掉了），如实回报 0 新增；
+  // **新建场景则不能谎报**（#556 评审 B5）：什么都没写就报 ok 会让调用点弹
+  // 「已新建歌单…并添加 0 首」并关窗，而歌单根本没建（违反 #551「新歌单出现在列表」）。
   if (toWrite.length === 0) {
+    if (params.createName?.trim()) {
+      return fail('没有可写入的歌曲（全部已存在或不合格），未新建歌单', {
+        ...baseCounts,
+        requested: 0,
+      });
+    }
     return {
       ...fail('', baseCounts),
       ok: true,
@@ -341,8 +361,10 @@ async function writeBatch(
   if (!deps.addSong) throw new Error('宿主未提供写入能力');
   let added = 0;
   for (const song of songs) {
-    await deps.addSong(playlistId, song);
-    added += 1;
+    // #556 评审 B2：逐首腿此前无条件 added += 1（宿主说没写进去也照记）。
+    // 宿主能回报 0/1 就用它；回报 void（确知不了）才按 1 计。
+    const reported = await deps.addSong(playlistId, song);
+    added += typeof reported === 'number' ? reported : 1;
   }
   return { added };
 }

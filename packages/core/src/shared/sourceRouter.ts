@@ -621,8 +621,15 @@ export function setTier3Resolver(resolver: Tier3Resolver | null): void {
   tier3Resolver = resolver;
 }
 
-/** tier3 搜索兜底插槽：官方直连搜索失败时返回第三方候选歌曲；未注入/关闭 = 不生效。 */
-export type Tier3SearchResolver = (keyword: string, page: number, source: SourceKey) => Promise<Song[]>;
+/** tier3 搜索兜底插槽：官方直连搜索失败时返回第三方候选歌曲；未注入/关闭 = 不生效。
+ *  `opts`（#556 评审 A1/B3）：链尾搜索腿的墙钟与取消信号——resolver 应把它透传到
+ *  出网请求，让「预算耗尽即 abort」在 tier3 搜索兜底这一截也真的停掉在飞请求。 */
+export type Tier3SearchResolver = (
+  keyword: string,
+  page: number,
+  source: SourceKey,
+  opts?: LegOptions,
+) => Promise<Song[]>;
 
 let tier3SearchEnabled = false;
 let tier3SearchResolver: Tier3SearchResolver | null = null;
@@ -639,15 +646,16 @@ export function setTier3SearchResolver(resolver: Tier3SearchResolver | null): vo
   tier3SearchResolver = resolver;
 }
 
-/** 直连搜索失败后的 tier3 搜索兜底（默认关闭，未注入直接跳过）。 */
-async function tryTier3Search(keyword: string, page: number, source: SourceKey): Promise<Song[]> {
+/** 直连搜索失败后的 tier3 搜索兜底（默认关闭，未注入直接跳过）。
+ *  `opts`（#556 评审 B3）：直连搜索拿到的墙钟与取消信号，同样交给 tier3 搜索 resolver。 */
+async function tryTier3Search(keyword: string, page: number, source: SourceKey, opts?: LegOptions): Promise<Song[]> {
   if (!tier3SearchEnabled || !tier3SearchResolver) {
     console.info(`[tier3] 直连搜索失败，但 tier3 搜索未启用/未注入，跳过: ${keyword} (${source})`);
     return [];
   }
   console.info(`[tier3] 直连搜索失败，进入第三方搜索兜底: ${keyword} (${source})`);
   try {
-    const songs = await tier3SearchResolver(keyword, page, source);
+    const songs = await tier3SearchResolver(keyword, page, source, opts);
     console.info(`[tier3] 第三方搜索返回 ${songs.length} 首: ${keyword} (${source})`);
     return songs;
   } catch (e) {
@@ -1060,7 +1068,7 @@ export async function searchSongsRouted(
 ): Promise<Song[]> {
   const route = decideRoute(source, (c) => !!c.searchSongs);
   if (route.kind === 'direct-unavailable') {
-    const tier3Songs = await tryTier3Search(query, page, source);
+    const tier3Songs = await tryTier3Search(query, page, source, opts);
     if (tier3Songs.length > 0) return tier3Songs;
     throw new Error('该源暂无直连实现');
   }
@@ -1073,12 +1081,12 @@ export async function searchSongsRouted(
     const directSongs = await route.client.searchSongs!(query, page, opts);
     if (directSongs.length > 0) return directSongs;
     // 直连返回空也视为“未命中”，进入 tier3 搜索兜底（若启用）。
-    const tier3Songs = await tryTier3Search(query, page, source);
+    const tier3Songs = await tryTier3Search(query, page, source, opts);
     if (tier3Songs.length > 0) return tier3Songs;
     return directSongs;
   } catch (err) {
     // 直连搜索失败 → 第三方订阅搜索兜底（若启用）；tier3 未命中 = 原样上抛（D2）。
-    const tier3Songs = await tryTier3Search(query, page, source);
+    const tier3Songs = await tryTier3Search(query, page, source, opts);
     if (tier3Songs.length > 0) return tier3Songs;
     throw err;
   }

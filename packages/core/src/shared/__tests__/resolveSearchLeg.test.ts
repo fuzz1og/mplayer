@@ -160,7 +160,9 @@ describe('解析链搜索腿覆盖两条入口分支（#556）', () => {
     expect(searchSongs).toHaveBeenCalledTimes(1);
   });
 
-  it('搜索腿到点 abort 底层搜索，不再无限等', async () => {
+  // 本测试证明的是**端口语义**：腿墙到点时编排把 abort 交给搜索端口（假实现据此取消）。
+  // 「底层请求真的被停」由 searchSongsOptsWiring.test.ts 从各源 transport 行为上钉住。
+  it('搜索腿到点 → 编排把 abort 交给搜索端口', async () => {
     vi.useFakeTimers();
     try {
       let aborted = false;

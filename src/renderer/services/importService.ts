@@ -29,13 +29,18 @@ export const desktopPlaylistWriter: DesktopPlaylistWriter = createDesktopPlaylis
  */
 export function importDepsFor(writer: DesktopPlaylistWriter = desktopPlaylistWriter): PlaylistImportDeps {
   return {
+    // 不传 resolveNameConflict：导入是无人值守的整批操作，跨源同名走 core 的
+    // 「默认并入」（#556 评审 A4）——与移动端导入腿同一口径。
+    // 回报 result.added（#556 评审 B6）：宿主说没写进去的歌不能再记 success。
     addSong: async (playlistId, song) => {
       const result = await writer.add({ playlistId, songs: [song] });
       if (!result.ok) throw new Error(result.error || '添加失败');
+      return result.added;
     },
     addSongs: async (playlistId, songs) => {
       const result = await writer.add({ playlistId, songs });
       if (!result.ok) throw new Error(result.error || '添加失败');
+      return result.added;
     },
   };
 }

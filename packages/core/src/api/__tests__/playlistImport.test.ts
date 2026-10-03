@@ -110,6 +110,26 @@ describe('importFromLink', () => {
     expect(result.skips).toHaveLength(1);
   });
 
+  // #556 评审 B6：宿主调了写入却丢掉结果（哪怕只写进去一半），编排仍把整批记 success
+  // 就是谎报——真实新增数由宿主回报。
+  it('⭐ 批量腿宿主只收下一半 → 剩下的记 failure，不整批记 success', async () => {
+    const songs = [song('1', 'A'), song('2', 'B'), song('3', 'C')];
+    const addSongs = vi.fn(async (_pid: string | number, list: Song[]) => list.length - 1);
+    const d = deps({ addSongs });
+    const result = await importFromLink(5, songs, new Set(['1', '2', '3']), [], d, progress);
+    expect(result.successes).toHaveLength(2);
+    expect(result.failures).toHaveLength(1);
+  });
+
+  it('⭐ 逐首腿宿主回报 0（没写进去）→ 记 skip，不记 success', async () => {
+    const songs = [song('1', 'A'), song('2', 'B')];
+    const addSong = vi.fn(async (_pid: string | number, s: Song) => (s.id === '2' ? 0 : 1));
+    const d = deps({ addSong });
+    const result = await importFromLink(5, songs, new Set(['1', '2']), [], d, progress);
+    expect(result.successes.map((s) => s.song.id)).toEqual(['1']);
+    expect(result.skips).toHaveLength(1);
+  });
+
   it('批量腿抛错：整批记为失败，不静默吞掉', async () => {
     const songs = [song('1', 'A'), song('2', 'B')];
     const addSongs = vi.fn(async (_pid: string | number, _songs: Song[]) => {

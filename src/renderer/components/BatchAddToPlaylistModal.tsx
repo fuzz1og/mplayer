@@ -97,6 +97,8 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
     setCreating(true);
     try {
       // #542/#552：整批写入 + 失败回滚都交给 adapter 背后的 core 编排。
+      // 不传 resolveNameConflict：新歌单目标快照为空，结构上不存在同名冲突；
+      // core 的「默认并入」缺省在此不会触发（#556 评审 A4——缺省值绝不静默丢弃）。
       const result = await desktopWriter.createAndAdd({ name, songs });
       if (!result.ok) {
         message.error(result.rolledBack ? '添加失败，已撤销新建的歌单' : result.error || '操作失败，请重试');

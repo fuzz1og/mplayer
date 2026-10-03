@@ -2,6 +2,7 @@ import type { Song } from '@mplayer/core';
 import {
   createPlaylistSnapshot,
   writeSongsToPlaylist,
+  DEFAULT_PLAYLIST_CAPACITY,
 } from '@mplayer/core';
 import type {
   NameConflictDecisions,
@@ -54,9 +55,6 @@ export interface MobilePlaylistWriter {
   }): Promise<PlaylistWriteResult>;
 }
 
-/** 移动端本地歌单容量事实（本地 store 无硬上限，取与桌面同口径的默认值）。 */
-const MOBILE_PLAYLIST_CAPACITY = 1000;
-
 /**
  * 造一个移动端写入 adapter。
  *
@@ -72,7 +70,8 @@ export function createMobilePlaylistWriter(port?: MobilePlaylistStorePort): Mobi
 
   const readTarget = (playlistId: string | number) => ({
     songs: [...readSongs(playlistId)],
-    capacity: MOBILE_PLAYLIST_CAPACITY,
+    // 容量事实来自 core（本地 store 无硬上限，取与桌面同口径的唯一常量）。
+    capacity: DEFAULT_PLAYLIST_CAPACITY,
   });
 
   const base = {
@@ -120,6 +119,12 @@ export function exportSongsToLocalPlaylist(
   deps: {
     createPlaylist: (name: string) => string;
     addSongs: (playlistId: string, songs: Song[]) => void;
+    /**
+     * 删除歌单（写入失败时的回滚）。
+     * **必须是真删**（#556 评审 B4）：此前这里传的是空实现 `() => {}`，core 据此
+     * 记 rolledBack=true 并弹「已撤销新建的歌单」，而空歌单还在 store 里——谎报回滚。
+     */
+    deletePlaylist: (playlistId: string) => void;
   },
   name: string,
   songs: Song[],
@@ -134,7 +139,11 @@ export function exportSongsToLocalPlaylist(
       shadow.set(id, []);
       return id;
     },
-    deletePlaylist: () => {},
+    // 回滚腿接真实删除（#556 评审 B4）：影子清单与宿主 store 一起删。
+    deletePlaylist: (id) => {
+      deps.deletePlaylist(id);
+      shadow.delete(id);
+    },
     addSong: () => 0,
     addSongs: (playlistId, list) => {
       deps.addSongs(playlistId, list);

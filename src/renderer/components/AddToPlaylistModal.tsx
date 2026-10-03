@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ListMusic } from 'lucide-react';
 import { message, Modal } from 'antd';
-import { classifySong, type DupResult } from '@mplayer/core';
+import { classifySong, SOURCE_DISPLAY_NAMES, type DupResult } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import type { DesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
@@ -33,15 +33,10 @@ function askNameConflict(existingLabel: string): Promise<'add' | 'skip'> {
   });
 }
 
+/** 来源中文名（#556 评审 C）：用 core 的 SOURCE_DISPLAY_NAMES，不再本地维护第三份表。
+ *  旧实现在 default 分支把未知来源（含 migu）一律叫「QQ」。 */
 function sourceLabelZh(sourceType?: string): string {
-  switch (sourceType) {
-    case 'netease': return '网易云';
-    case 'kugou': return '酷狗';
-    case 'kuwo': return '酷我';
-    case 'qianqian': return '千千';
-    case 'soda': return '汽水';
-    default: return 'QQ';
-  }
+  return SOURCE_DISPLAY_NAMES[sourceType ?? ''] ?? '未知';
 }
 
 const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
@@ -118,6 +113,8 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
     try {
       // #542/#552：新建 + 写入走 adapter 背后的 core 编排——
       // 写入失败会**删掉刚建的空歌单**（#493 验收标准）。
+      // 不传 resolveNameConflict：新歌单的目标快照是空的，结构上不可能有同名冲突，
+      // core 的「默认并入」缺省在这里不会被触发（#556 评审 A4）。
       const result = await desktopWriter.createAndAdd({
         name: newPlaylistName.trim(),
         songs: [song],

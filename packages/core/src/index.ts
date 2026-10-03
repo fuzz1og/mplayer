@@ -8,7 +8,7 @@ export type { AntiScrapeHeaders } from './api/antiScrape.js';
 export { musicApi, setProxyUrl, getProxyUrl, decodeLyricBody } from './api/musicApi.js';
 export { normalizeProbeUrl, isUrlAlive } from './api/audioProbe.js';
 export { forgetPrefetchedUrl, getPrefetchedUrl, setPrefetchedUrl, clearPrefetchCache } from './api/prefetchCache.js';
-export { dedupeSongs, checkDuplicate, filterDuplicates, classifySong, createPlaylistSnapshot } from './utils/songDedupe.js';
+export { dedupeSongs, filterDuplicates, classifySong, createPlaylistSnapshot, DEFAULT_PLAYLIST_CAPACITY } from './utils/songDedupe.js';
 export type { DupStatus, DupResult, FilterResult, PlaylistSnapshot } from './utils/songDedupe.js';
 export { groupIntoSongGroups } from './utils/groupIntoSongGroups.js';
 export { calculateSimilarity, findBestMatch, isExactMatch, findExactMatch } from './utils/songMatcher.js';
@@ -114,7 +114,7 @@ export { rawSongId, identityKey, identityKeyFrom } from './utils/songIdentity.js
 export { refreshSongResource } from './shared/songResourceRefresh.js';
 export type { SongResourceRefreshDeps, LegOptions } from './shared/songResourceRefresh.js';
 export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
-export { writeSongsToPlaylist, songWriteRejection, DEFAULT_PLAYLIST_CAPACITY } from './shared/playlistWrite.js';
+export { writeSongsToPlaylist, songWriteRejection } from './shared/playlistWrite.js';
 export type {
   PlaylistWriteDeps,
   PlaylistWriteResult,

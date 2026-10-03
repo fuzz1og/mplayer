@@ -42,12 +42,32 @@ export type TransportSignalAcceptsAbortSignal = AbortSignal extends TransportSig
 /**
  * 单次出网调用的选项（能力方法的**可选尾参**，向后兼容）。
  *
- * 目前只有取消信号：墙钟到点时由**墙的持有者** abort（directCall 的 3s 直连墙、
- * tier3 的单源墙 / 整链预算），把「放弃等待」变成真的停掉底层请求。
- * 墙的语义留在各腿，transport 不感知时间——这是 #399 要守住的分工。
+ * - `signal`：墙钟到点时由**墙的持有者** abort（directCall 的 3s 直连墙、
+ *   tier3 的单源墙 / 整链预算、解析链尾巴的搜索腿墙），把「放弃等待」变成
+ *   真的停掉底层请求。
+ * - `timeoutMs`：这次调用**可用时限的上限**（#556：墙的持有者按
+ *   `min(本腿墙, 链总预算剩余)` 算出来的值）。实现用
+ *   {@link cappedRequestTimeout} 取 `min(源自有时限, 本值)` 交给
+ *   `TransportRequest.timeoutMs`——只收紧不放大，源自己的墙仍是上界。
+ *
+ * 墙的**持有权**仍在各腿（腿决定何时 abort / 给多久），transport 只消费；
+ * 这是 #399 要守住的分工。
  */
 export interface TransportCallOptions {
   signal?: TransportSignal;
+  timeoutMs?: number;
+}
+
+/**
+ * 能力方法把「墙的持有者给的可用时限」换算成单次请求超时：
+ * 取 `min(源自己声明的时限, opts.timeoutMs)`，只收紧不放大。
+ * 未给 `opts.timeoutMs`（各端自身刷新等无墙调用点）时保持源时限不变。
+ */
+export function cappedRequestTimeout(baseMs: number, opts?: TransportCallOptions): number {
+  const cap = opts?.timeoutMs;
+  return typeof cap === 'number' && Number.isFinite(cap) && cap > 0
+    ? Math.min(baseMs, cap)
+    : baseMs;
 }
 
 export interface TransportRequest {

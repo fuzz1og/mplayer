@@ -2,6 +2,7 @@ import type { Song } from '@mplayer/core';
 import {
   createPlaylistSnapshot,
   writeSongsToPlaylist,
+  DEFAULT_PLAYLIST_CAPACITY,
 } from '@mplayer/core';
 import type {
   NameConflictDecisions,
@@ -55,9 +56,6 @@ export interface DesktopPlaylistWriter {
   }): Promise<PlaylistWriteResult>;
 }
 
-/** 目标歌单容量事实（桌面 fileStorage 的 1000/歌单，#554 随目标快照进 interface）。 */
-const DESKTOP_PLAYLIST_CAPACITY = 1000;
-
 /** 缺省 IPC 面 = IpcClient（与渲染层其余调用同一通道，测试可只 mock 它）。 */
 const defaultPort: DesktopPlaylistIpcPort = {
   invoke: <T>(channel: string, ...args: unknown[]) => IpcClient.invoke<T>(channel, ...args),
@@ -75,7 +73,8 @@ export function createDesktopPlaylistWriter(
   const readTarget = async (playlistId: string | number) => {
     const pid = Number(playlistId);
     const songs = await invoke<Song[]>('playlist:getSongs', pid);
-    return { songs: songs ?? [], capacity: DESKTOP_PLAYLIST_CAPACITY };
+    // 容量事实来自 core（#554 随目标快照进 interface；上限只允许一个落点）。
+    return { songs: songs ?? [], capacity: DEFAULT_PLAYLIST_CAPACITY };
   };
 
   const makeDeps = (

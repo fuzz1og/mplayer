@@ -185,4 +185,36 @@ describe('importFromLink', () => {
     expect(channels.filter((c: string) => c === 'playlist:getSongs')).toHaveLength(1);
     expect(channels).not.toContain('playlist:addSong');
   });
+
+  /**
+   * #556 评审 B6：`importDepsFor` 此前调了 writer.add 却**丢掉 result**——宿主只写进去
+   * 一半，编排照样整批记 success。现在把 result.added 回报给 core。
+   */
+  it('⭐ 批量腿宿主只收下一半 → 另一半记 failure，不整批记 success', async () => {
+    const songs: Song[] = [
+      { id: 'a', name: 'A', artist: 'x', sourceType: 'netease' } as Song,
+      { id: 'b', name: 'B', artist: 'x', sourceType: 'netease' } as Song,
+      { id: 'c', name: 'C', artist: 'x', sourceType: 'netease' } as Song,
+    ];
+    const { IpcClient } = await import('@/renderer/services/IpcClient');
+    (IpcClient.invoke as any).mockImplementation((channel: string, ...args: unknown[]) => {
+      if (channel === 'playlist:getSongs') return Promise.resolve([]);
+      // 宿主只接纳前 2 首（容量截断 / 自己的判据）
+      if (channel === 'playlist:addSongs') return Promise.resolve((args[1] as unknown[]).slice(0, 2));
+      return Promise.resolve(undefined);
+    });
+
+    const result = await coreImportFromLink(
+      5,
+      songs,
+      new Set(['a', 'b', 'c']),
+      [],
+      importDepsFor(createDesktopPlaylistWriter()),
+      vi.fn(),
+    );
+
+    expect(result.successes).toHaveLength(2);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0].reason).toContain('未写入歌单');
+  });
 });

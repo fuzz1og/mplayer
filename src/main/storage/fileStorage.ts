@@ -3,7 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
 import type { Song, SongBase, Favorite, PlayHistory, Playlist, PlaylistSong } from '@mplayer/core';
-import { clearLegacyDeadResources } from '@mplayer/core';
+import { clearLegacyDeadResources, identityKeyFrom, DEFAULT_PLAYLIST_CAPACITY } from '@mplayer/core';
+
+/** 存量行的身份键（#553）：优先用行里的 song.sourceType，缺失时退回 songId 的源前缀。 */
+function playlistSongKey(ps: Pick<PlaylistSong, 'songId' | 'song'>): string {
+  return identityKeyFrom(ps.song?.sourceType, ps.song?.id ?? ps.songId);
+}
 
 interface StorageData {
   favorites: Favorite[];
@@ -625,9 +630,11 @@ export class FileStorage {
       throw new Error('歌曲数据不完整');
     }
 
-    // 检查歌曲是否已经存在于歌单中
+    // 检查歌曲是否已经存在于歌单中（#553：判据 = 身份键，不是裸 Song.id——
+    // 跨源同 id 是两首不同的歌，裸 id 会把它们静默当成同一首）。
+    const songKey = identityKeyFrom(song.sourceType, song.id);
     const existing = this.data.playlistSongs.find(
-      ps => ps.playlistId === playlistId && ps.songId === song.id
+      ps => ps.playlistId === playlistId && playlistSongKey(ps) === songKey
     );
     if (existing) {
       return existing.id!;
@@ -637,7 +644,7 @@ export class FileStorage {
     // 与批量版的静默截断不同——批量版有 truncated 显式通道（#554），逐首版没有，
     // 所以这里只能抛。两版语义的差异是刻意的，见 addSongsToPlaylist 的注释。
     const currentSongs = this.data.playlistSongs.filter(ps => ps.playlistId === playlistId);
-    if (currentSongs.length >= 1000) { // 限制1000首歌
+    if (currentSongs.length >= DEFAULT_PLAYLIST_CAPACITY) { // 容量上限的唯一来源在 core
       throw new Error('歌单已达到最大容量限制');
     }
 
@@ -663,14 +670,15 @@ export class FileStorage {
    *
    * 契约（与调用方约定，刻意与逐首版不同）：
    * - 歌单存在校验一次；逐首 validateSongData，**不合法/重复的跳过**，不整批抛错；
-   * - 按 songId 去重（对歌单已有 + 本批内部），返回真正新增的 PlaylistSong id 列表；
-   * - 顺序按传入顺序接着当前 maxOrder 递增；容量上限 1000/歌单，放不下的部分截断；
+   * - 按**歌曲身份键**去重（对歌单已有 + 本批内部，`identityKeyFrom`），返回真正新增的
+   *   PlaylistSong id 列表；跨源同 id 是两首不同的歌，不再被当成同一首（#553）；
+   * - 顺序按传入顺序接着当前 maxOrder 递增；容量上限 = core `DEFAULT_PLAYLIST_CAPACITY`，放不下的部分截断；
    * - **部分成功**：一个都放不进去时返回 []（不抛错）——由调用方按「0 首成功」给文案，
    *   并负责回滚空歌单（#493 验收：绝不允许既没报错又留下空歌单）。
-   * - 容量满时**静默截断**（只写到 1000 为止）；截断事实由调用方按「返回的新增数 < 指派数」
+   * - 容量满时**静默截断**（只写到上限为止）；截断事实由调用方按「返回的新增数 < 指派数」
    *   判定并形成显式通道（#554：core `PlaylistWriteResult.truncated`）。
    *   逐首版本模块满则**抛错**——单个操作没有「部分成功」这回事，必须给出失败信号。
-   * - **不做跨源同名裁决**：本层只按 `Song.id` 去重（存量数据的安全网）。
+   * - **不做跨源同名裁决**：本层只按**身份键**去重（存量数据的安全网，跨源同名同歌手会并存）。
    *   「同名异源要不要并入」是**调用方**的事：core 写入编排（#553）在写入前用
    *   `classifySong` 产出 NEW / DUPLICATE / NAME_CONFLICT 三类落点，桌面
    *   BatchAddToPlaylistModal 会对 NAME_CONFLICT 弹同名确认。此前这条注释声称
@@ -684,15 +692,18 @@ export class FileStorage {
     }
 
     const currentSongs = this.data.playlistSongs.filter(ps => ps.playlistId === playlistId);
-    const seen = new Set(currentSongs.map(ps => ps.songId));
+    // #553：同源判定走身份键（与 core 写入编排、移动端 store 同一份判据）。
+    const seen = new Set(currentSongs.map((ps) => playlistSongKey(ps)));
     let maxOrder = currentSongs.reduce((max, ps) => Math.max(max, ps.order), -1);
 
     const addedIds: number[] = [];
     for (const song of songs) {
-      if (currentSongs.length + addedIds.length >= 1000) break; // 容量上限：放不下的截断
-      if (!song || !song.id || seen.has(song.id)) continue;
+      if (currentSongs.length + addedIds.length >= DEFAULT_PLAYLIST_CAPACITY) break; // 容量上限：放不下的截断
+      if (!song || !song.id) continue;
+      const key = identityKeyFrom(song.sourceType, song.id);
+      if (seen.has(key)) continue;
       if (!this.validateSongData(song)) continue;
-      seen.add(song.id);
+      seen.add(key);
       const id = nextId();
       this.data.playlistSongs.push({
         id,

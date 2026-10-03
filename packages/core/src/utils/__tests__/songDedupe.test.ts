@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Song } from '../../types/index.js';
-import { checkDuplicate, classifySong, createPlaylistSnapshot } from '../songDedupe.js';
+import { classifySong, createPlaylistSnapshot, DEFAULT_PLAYLIST_CAPACITY } from '../songDedupe.js';
 
 /**
  * 歌单写入的「同一首歌」判据（#553）——**唯一一份**实现。
@@ -65,27 +65,10 @@ describe('classifySong（#553 歌单写入的统一判据）', () => {
 });
 
 describe('createPlaylistSnapshot（写入编排的目标快照入参）', () => {
-  it('capacity 有默认值，显式传入时透传', () => {
-    expect(createPlaylistSnapshot({ songs: [] }).capacity).toBe(1000);
+  it('capacity 有默认值（唯一常量），显式传入时透传', () => {
+    // 缺省值 = 唯一常量本身：两条断言互为约束，改一处漏一处会红。
+    expect(createPlaylistSnapshot({ songs: [] }).capacity).toBe(DEFAULT_PLAYLIST_CAPACITY);
+    expect(DEFAULT_PLAYLIST_CAPACITY).toBe(1000);
     expect(createPlaylistSnapshot({ songs: [], capacity: 3 }).capacity).toBe(3);
-  });
-});
-
-describe('checkDuplicate（旧接口，收敛为 classifySong 的包装）', () => {
-  it('returns duplicate when same name and same source', () => {
-    const neteaseSong = song('1', '晴天', '周杰伦');
-    expect(checkDuplicate([neteaseSong], neteaseSong).status).toBe('duplicate');
-  });
-
-  it('returns nameConflict when same name and artist but different source', () => {
-    const neteaseSong = song('1', '晴天', '周杰伦', 'netease');
-    const qqSong = song('2', '晴天', '周杰伦', 'qq');
-    const result = checkDuplicate([neteaseSong], qqSong);
-    expect(result.status).toBe('nameConflict');
-    expect(result.existingSong?.sourceType).toBe('netease');
-  });
-
-  it('returns ok when no conflict', () => {
-    expect(checkDuplicate([song('1', '晴天', '周杰伦')], song('3', '七里香', '周杰伦')).status).toBe('ok');
   });
 });

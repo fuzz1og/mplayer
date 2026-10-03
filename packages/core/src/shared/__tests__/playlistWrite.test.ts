@@ -99,6 +99,29 @@ describe('writeSongsToPlaylist（#542 歌单写入编排）', () => {
     expect(store.calls.addSong).toBe(0);
   });
 
+  // #556 评审 B2：逐首腿此前无条件 added += 1——宿主说「没写进去」也照记。
+  it('⭐ 逐首腿回报真实结果：宿主拒收的那首不计入 added', async () => {
+    const store = fakeStore();
+    store.playlists.set('1', []);
+    let called = 0;
+    const res = await writeSongsToPlaylist(
+      { playlistId: '1', target: snapshot(store, '1'), songs: [song('a'), song('b')] },
+      {
+        ...store.deps,
+        addSongs: undefined,
+        addSong: async (id, s) => {
+          called += 1;
+          if (s.id === 'b') return 0; // 宿主自己的判据/容量没收下
+          store.playlists.get(String(id))!.push(s);
+          return 1;
+        },
+      },
+    );
+    expect(called).toBe(2);
+    expect(res.added).toBe(1); // 修前无条件 +1 → 2
+    expect(res.invalid).toBe(1);
+  });
+
   it('宿主没有 addSongs → 回落逐首，结果一致', async () => {
     const store = fakeStore();
     store.playlists.set('1', []);
@@ -278,6 +301,20 @@ describe('四类落点（#553：new / duplicate / nameConflict / invalid 各一�
     expect(songWriteRejection(song('ok'))).toBeNull();
   });
 
+  // #556 评审 A4：旧行为是「没给回调 = 既不写入也不计数」——冲突歌凭空消失（缺省值撒谎）。
+  it('⭐ nameConflict 且宿主未给裁决回调 → 默认并入：真的写进去，不静默丢弃', async () => {
+    const store = fakeStore();
+    store.playlists.set('1', [song('a', '晴天', '周杰伦', 'netease')]);
+    const res = await writeSongsToPlaylist(
+      { playlistId: '1', target: snapshot(store, '1'), songs: [song('b', '晴天', '周杰伦', 'qq')] },
+      { ...store.deps, resolveNameConflict: undefined },
+    );
+    expect(res.ok).toBe(true);
+    expect(res.added).toBe(1); // 争议歌落到了宿主
+    expect(res.skipped).toBe(0); // 不再「既不写入也不计数」
+    expect(res.duplicateNames).toBe(1); // 冲突事实仍如实计数
+  });
+
   it('全部落点都为空（全是重复）→ 仍算成功，added=0 且不写宿主', async () => {
     const store = fakeStore();
     store.playlists.set('1', [song('a', '晴天', '周杰伦')]);
@@ -332,6 +369,20 @@ describe('写入结果契约（#554：added 是真值、容量截断有显式通
     expect(res.added).toBe(2);
     expect(res.invalid).toBe(1);
     expect(res.capacity).toBe(2);
+  });
+
+  // #556 评审 B5：新建场景在「没有可写的歌」时先于新建分支返回 ok:true/created:false，
+  // 调用点据此弹「已新建歌单…并添加 0 首」并关窗——歌单根本没建（违反 #551）。
+  it('⭐ 新建歌单但一首都没写（全不合格）→ 失败，且不谎报「已新建」', async () => {
+    const store = fakeStore();
+    const broken = { ...song('x'), artist: '' };
+    const res = await writeSongsToPlaylist({ createName: '新歌单', songs: [broken] }, store.deps);
+    expect(res.ok).toBe(false);
+    expect(res.created).toBe(false);
+    expect(res.added).toBe(0);
+    expect(res.error).toContain('未新建歌单');
+    expect(store.calls.create).toBe(0); // 没有建出空歌单
+    expect(store.playlists.size).toBe(0);
   });
 
   it('新歌单一首都没写进去 → 失败并回滚（不留空歌单）', async () => {
