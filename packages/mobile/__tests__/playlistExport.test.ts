@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePlaylistStore } from '../stores/playlistStore';
 import {
+  createMobileImportDeps,
   createMobilePlaylistWriter,
   exportSongsToLocalPlaylist,
 } from '../services/playlistExport';
-import type { Song } from '@mplayer/core';
+import type { MobilePlaylistWriter } from '../services/playlistExport';
+import type { PlaylistWriteResult, Song } from '@mplayer/core';
 
 function song(id: string, name = id): Song {
   return { id, name, artist: '测试歌手', sourceType: 'netease' } as Song;
@@ -29,12 +31,6 @@ function statefulStore() {
     },
     deletePlaylist: (id: string) => {
       playlists.delete(id);
-    },
-    addSong: (id: string, s: Song) => {
-      const list = playlists.get(id) ?? [];
-      if (!list.some((x) => x.id === s.id)) list.push(s);
-      playlists.set(id, list);
-      return 1;
     },
     addSongs: (id: string, songs: Song[]) => {
       const list = playlists.get(id) ?? [];
@@ -168,5 +164,47 @@ describe('createMobilePlaylistWriter（#552 移动端写入 adapter）', () => {
     expect(resolver).toHaveBeenCalledTimes(1);
     expect(result.added).toBe(1);
     expect(result.duplicateNames).toBe(1);
+  });
+});
+
+/** 造一个只关心 add 返回值的写入 adapter 替身（#556 评审 B6 的行为测法）。 */
+function stubWriter(add: MobilePlaylistWriter['add']): MobilePlaylistWriter {
+  return {
+    readTarget: () => ({ songs: [], capacity: 1000 }),
+    add,
+    createAndAdd: async () => ({ added: 0, ok: true } as PlaylistWriteResult),
+  };
+}
+
+/**
+ * #556 评审 B6：移动链接导入此前在 PlaylistImportSheet 里 `await writer.add` 后
+ * **丢掉 result 返 void**——宿主丢歌时 core 按「void = 整批成功」记账，导入结果谎报成功。
+ * 这里把 deps 抽出来做行为测试：宿主真实新增数必须回传，报失败必须抛错。
+ */
+describe('createMobileImportDeps（#556 评审 B6：链接导入不再吞写入结果）', () => {
+  it('⭐ addSongs 回传宿主真实新增数（宿主丢歌时不再谎报整批成功）', async () => {
+    const writer = stubWriter(vi.fn(async () => ({ added: 1, ok: true } as PlaylistWriteResult)));
+    const deps = createMobileImportDeps(writer);
+
+    const reported = await deps.addSongs!('pl-1', [song('a'), song('b'), song('c')]);
+
+    // 修前内联 deps 返回 void → core 把 3 首全记 success；修后只有真写进去的 1 首。
+    expect(reported).toBe(1);
+  });
+
+  it('addSong 单首腿也回传真实新增数（0 = 宿主没收下）', async () => {
+    const writer = stubWriter(vi.fn(async () => ({ added: 0, ok: true } as PlaylistWriteResult)));
+    const deps = createMobileImportDeps(writer);
+
+    expect(await deps.addSong('pl-1', song('a'))).toBe(0);
+  });
+
+  it('宿主报失败 → 抛错（core 记失败，不记 success）', async () => {
+    const writer = stubWriter(
+      vi.fn(async () => ({ added: 0, ok: false, error: '歌单不存在' } as PlaylistWriteResult)),
+    );
+    const deps = createMobileImportDeps(writer);
+
+    await expect(deps.addSongs!('pl-1', [song('a')])).rejects.toThrow('歌单不存在');
   });
 });

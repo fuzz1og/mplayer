@@ -49,17 +49,17 @@ export type NameConflictDecisions = NameConflictResolution | readonly NameConfli
 /** 写入编排的外部依赖（桌面走 IpcClient，移动走 usePlaylistStore）。 */
 export interface PlaylistWriteDeps {
   /**
-   * 一次性写入整批歌曲（优先；宿主不支持时可只给 addSong 走逐首）。
-   * **返回真正新增的歌数**（#554）——宿主报不出真值时给 `songs.length` 是撒谎，
-   * 给 0 会让编排把写入当失败；确实不知道就改成只提供 `addSong`。
+   * **唯一的写入端口**：一次性写入整批歌曲。
+   *
+   * 返回**真正新增的歌数**（#554）——宿主报不出真值时给 `songs.length` 是撒谎，
+   * 给 0 会让编排把写入当失败；确实不知道就让宿主自己报（而不是编一个值）。
+   *
+   * #556 评审 B2：此前的逐首回落腿（`addSong`）在产线上不可达——桌面与移动两个
+   * adapter 都有批量能力、都必给 addSongs，只有测试 fake 才会只给 addSong。留着
+   * 它等于给「只有 fake 走得到的分支」发许可证，本模块只保留唯一被走到的批量腿。
+   * 缺少本端口时写入直接失败（不静默降级逐首）。
    */
-  addSongs?: (playlistId: string | number, songs: Song[]) => Promise<number>;
-  /**
-   * 逐首写入（addSongs 缺失时的回落）。
-   * 返回**真实新增条数**（0 = 宿主没收下、1 = 新增）；确知不了就返回 void，
-   * 编排按「调用成功 = 1 首」记账——不要为了凑数编一个值（#554 / #556 评审 B2）。
-   */
-  addSong?: (playlistId: string | number, song: Song) => Promise<number | void>;
+  addSongs: (playlistId: string | number, songs: Song[]) => Promise<number>;
   /** 新建歌单，返回新 id（就地新建场景必填）。 */
   createPlaylist?: (name: string) => Promise<string | number>;
   /** 删除歌单（回滚用；就地新建场景必填，否则无法保证「不留空歌单」）。 */
@@ -80,7 +80,7 @@ export interface PlaylistWriteDeps {
 
 /** 一次写入的结果（#554：调用方据此给文案，不再各自猜）。 */
 export interface PlaylistWriteResult {
-  /** **宿主回报的真实新增歌数**（#554：不是请求数；逐首回落时为成功写入的条数）。 */
+  /** **宿主回报的真实新增歌数**（#554：不是请求数）。 */
   added: number;
   /** 判据命中/批内重复而跳过的歌数（不含 invalid）。 */
   skipped: number;
@@ -110,12 +110,13 @@ export interface PlaylistWriteResult {
   ok: boolean;
 }
 
-/** 歌被宿主写入路径拒收的原因（与 fileStorage.validateSongData 同口径，零 I/O）。 */
+/** 歌被宿主写入路径拒收的原因（零 I/O）。 */
 export type SongWriteRejection = 'missing-fields' | 'local-without-url' | null;
 
 /**
- * 宿主写入路径会不会收下这首歌（#553：判据单点下沉的一部分）。
- * 与桌面 fileStorage.validateSongData 同口径；不合格的歌在编排里就被摘出来，
+ * 宿主写入路径会不会收下这首歌（#553 判据单点下沉；#556 评审 C：跨端唯一来源）。
+ * 桌面 `fileStorage` 的写入路径（逐首与批量两处）直接消费本函数，不再各留一份
+ * `validateSongData`——两端判据因此不可能分叉。不合格的歌在编排里就被摘出来，
  * 免得「建了歌单才发现一首都不合法」。
  */
 export function songWriteRejection(song: Song | null | undefined): SongWriteRejection {
@@ -148,7 +149,7 @@ function dedupeBatch(songs: readonly Song[]): { unique: Song[]; duplicates: Song
  * 往目标歌单写入一批歌（#542 / #553 / #554）。
  *
  * - 目标歌单快照（已有曲目 + 容量）由调用方传入；就地新建时快照是空的；
- * - 已有目标歌单：整批写（优先 `addSongs`，缺失则逐首 `addSong`）；
+ * - 已有目标歌单：整批一次写入（唯一写入口 `addSongs`，不再有逐首回落腿）；
  * - 就地新建（`createName` 非空）：先建 → 再写 → **任一步失败即删除新歌单**，
  *   保证 #493 的「失败不留空歌单」在**所有**入口成立；
  * - 每首歌的落点由 `classifySong` 产出：duplicate 跳过、nameConflict 问宿主、其余写入；
@@ -346,25 +347,17 @@ export async function writeSongsToPlaylist(
 }
 
 /**
- * 实际落写：优先整批（一次持久化 + 一次渲染），缺失才逐首。
- * 返回宿主**真实接纳**的歌数（#554）：整批腿要宿主回报，逐首腿数成功条数。
+ * 实际落写：一次整批写入（一次持久化 + 一次渲染）。
+ * 返回宿主**真实接纳**的歌数（#554）。
+ *
+ * #556 评审 B2：逐首回落腿因产线不可达已删（见 `PlaylistWriteDeps.addSongs` 注释）；
+ * 本函数只剩唯一一条被产线走到的批量腿。
  */
 async function writeBatch(
   playlistId: string | number,
   songs: Song[],
   deps: PlaylistWriteDeps,
 ): Promise<{ added: number }> {
-  if (deps.addSongs) {
-    const added = await deps.addSongs(playlistId, songs);
-    return { added: typeof added === 'number' ? added : songs.length };
-  }
-  if (!deps.addSong) throw new Error('宿主未提供写入能力');
-  let added = 0;
-  for (const song of songs) {
-    // #556 评审 B2：逐首腿此前无条件 added += 1（宿主说没写进去也照记）。
-    // 宿主能回报 0/1 就用它；回报 void（确知不了）才按 1 计。
-    const reported = await deps.addSong(playlistId, song);
-    added += typeof reported === 'number' ? reported : 1;
-  }
+  const added = await deps.addSongs(playlistId, songs);
   return { added };
 }

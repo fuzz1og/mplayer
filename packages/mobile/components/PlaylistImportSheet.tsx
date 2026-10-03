@@ -4,7 +4,7 @@ import { Check, CircleCheck, Link2, Loader2 } from 'lucide-react-native';
 import { classifySong, importFromLink } from '@mplayer/core';
 import type { Song, ProgressState, ImportResult, PlaylistImportDeps } from '@mplayer/core';
 import { defaultPlaylistLinkDeps, fetchPlaylistSongsFromLink } from '../services/playlistLinkImport';
-import { createMobilePlaylistWriter } from '../services/playlistExport';
+import { createMobileImportDeps } from '../services/playlistExport';
 import { radius, spacing, textVariants, opacity } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -68,17 +68,9 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
   // #552：mobile 侧是本地 store，写入统一走 adapter（判据/编排在 core）；
   // 提供 addSongs 走批量腿——整批一次 set，即一次持久化 + 一次渲染
   //（逐首 addSong 会让每首都写库 + 重渲染，长歌单是 O(N²)）。
-  const deps = useMemo<PlaylistImportDeps>(() => {
-    const writer = createMobilePlaylistWriter();
-    return {
-      addSong: async (pid, song) => {
-        await writer.add({ playlistId: pid, songs: [song] });
-      },
-      addSongs: async (pid, batch) => {
-        await writer.add({ playlistId: pid, songs: batch });
-      },
-    };
-  }, []);
+  // #556 评审 B6：deps 收进 playlistExport.createMobileImportDeps——`writer.add` 的
+  // `result.added`（宿主真实新增数）必须回传给 core，不能再丢成 void 冒充整批成功。
+  const deps = useMemo<PlaylistImportDeps>(() => createMobileImportDeps(), []);
 
   const reset = useCallback(() => {
     setStep('input');

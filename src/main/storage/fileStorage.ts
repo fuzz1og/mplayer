@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
 import type { Song, SongBase, Favorite, PlayHistory, Playlist, PlaylistSong } from '@mplayer/core';
-import { clearLegacyDeadResources, identityKeyFrom, DEFAULT_PLAYLIST_CAPACITY } from '@mplayer/core';
+import { clearLegacyDeadResources, identityKeyFrom, songWriteRejection, DEFAULT_PLAYLIST_CAPACITY } from '@mplayer/core';
 
 /** 存量行的身份键（#553）：优先用行里的 song.sourceType，缺失时退回 songId 的源前缀。 */
 function playlistSongKey(ps: Pick<PlaylistSong, 'songId' | 'song'>): string {
@@ -625,8 +625,9 @@ export class FileStorage {
       throw new Error(`歌单不存在: ${playlistId}`);
     }
 
-    // 验证歌曲数据完整性
-    if (!this.validateSongData(song)) {
+    // 验证歌曲数据完整性（#556 评审 C：判据单点在 core `songWriteRejection`，
+    // 本层不再各留一份 validateSongData）。
+    if (songWriteRejection(song) !== null) {
       throw new Error('歌曲数据不完整');
     }
 
@@ -669,7 +670,7 @@ export class FileStorage {
    * 供榜单页「保存全部到新歌单」这类大列表使用；逐首 addSongToPlaylist 会 N 次全量重写 JSON。
    *
    * 契约（与调用方约定，刻意与逐首版不同）：
-   * - 歌单存在校验一次；逐首 validateSongData，**不合法/重复的跳过**，不整批抛错；
+   * - 歌单存在校验一次；逐首用 core `songWriteRejection` 判定，**不合法/重复的跳过**，不整批抛错；
    * - 按**歌曲身份键**去重（对歌单已有 + 本批内部，`identityKeyFrom`），返回真正新增的
    *   PlaylistSong id 列表；跨源同 id 是两首不同的歌，不再被当成同一首（#553）；
    * - 顺序按传入顺序接着当前 maxOrder 递增；容量上限 = core `DEFAULT_PLAYLIST_CAPACITY`，放不下的部分截断；
@@ -702,7 +703,7 @@ export class FileStorage {
       if (!song || !song.id) continue;
       const key = identityKeyFrom(song.sourceType, song.id);
       if (seen.has(key)) continue;
-      if (!this.validateSongData(song)) continue;
+      if (songWriteRejection(song) !== null) continue;
       seen.add(key);
       const id = nextId();
       this.data.playlistSongs.push({
@@ -719,14 +720,6 @@ export class FileStorage {
       await this.saveData('playlistSongs');
     }
     return addedIds;
-  }
-
-  private validateSongData(song: Song): boolean {
-    if (!song.id || !song.name || !song.artist) return false;
-    // 在线歌曲的 url 由播放链路懒解析（预取缓存 → 直连 → tier3），
-    // 搜索结果入库时 url 为空是常态；本地歌曲的 url 即文件路径，必须存在。
-    if (song.sourceType === 'local' && !song.url) return false;
-    return true;
   }
 
   async removeSongFromPlaylist(playlistId: number, songId: string): Promise<void> {

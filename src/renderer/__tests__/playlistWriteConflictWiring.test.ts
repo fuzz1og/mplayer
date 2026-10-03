@@ -2,6 +2,17 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { createPlaylistSnapshot, writeSongsToPlaylist } from '@mplayer/core';
+import type { Song } from '@mplayer/core';
+
+const song = (
+  id: string,
+  name = `歌${id}`,
+  artist = '歌手',
+  sourceType: Song['sourceType'] = 'netease',
+): Song => ({
+  id, name, artist, album: '', url: '', cover: '', lrc: '', duration: 180, sourceType,
+});
 
 const testDir = dirname(fileURLToPath(String(import.meta.url)));
 /** src/renderer/__tests__ → 仓库根 */
@@ -17,10 +28,28 @@ const readRepo = (rel: string) => readFileSync(join(repoRoot, rel), 'utf8');
  * 或新增一个省掉回调的调用点却不说明，都会红。
  */
 describe('歌单写入的同名冲突接线（#556 评审 A4）', () => {
-  it('core 有「未给回调 = 默认并入」这条分支（不是静默丢弃）', () => {
-    const core = readRepo('packages/core/src/shared/playlistWrite.ts');
-    expect(core).toContain('if (!deps.resolveNameConflict)');
-    expect(core).toContain('默认并入');
+  // 这条此前是 `toContain('默认并入')` 的文本断言——注释写对就能糊弄。改成行为守卫：
+  // 真的调一次 core，争议歌必须落到宿主的写入端口上（修前「既不写入也不计数」时红）。
+  it('core 未给裁决回调 = 默认并入（行为：争议歌真的写进去，不静默丢弃）', async () => {
+    const existing = [song('a', '晴天', '周杰伦', 'netease')];
+    const written: Song[] = [];
+    const res = await writeSongsToPlaylist(
+      {
+        playlistId: '1',
+        target: createPlaylistSnapshot({ songs: existing }),
+        songs: [song('b', '晴天', '周杰伦', 'qq')],
+      },
+      {
+        addSongs: async (_id, songs) => {
+          written.push(...songs);
+          return songs.length;
+        },
+      },
+    );
+
+    expect(res.ok).toBe(true);
+    expect(res.duplicateNames).toBe(1);
+    expect(written.map((s) => s.id)).toEqual(['b']);
   });
 
   it('两端 adapter 都把 resolveNameConflict 透传进 core 编排', () => {
