@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ListMusic } from 'lucide-react';
 import { message, Modal } from 'antd';
-import { checkDuplicate, writeSongsToPlaylist, type DupResult } from '@mplayer/core';
+import { classifySong, type DupResult } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
+import type { DesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import SongCover from '@/renderer/components/SongCover';
 import type { Song, Playlist } from '@mplayer/core';
 
@@ -14,10 +16,32 @@ interface AddToPlaylistModalProps {
   onSuccess?: () => void;
 }
 
-async function addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
-  const playlist = await IpcClient.invoke<Playlist | undefined>('playlist:get', playlistId);
-  if (!playlist) throw new Error('歌单不存在');
-  return IpcClient.invoke<number>('playlist:addSong', playlistId, song);
+/** 桌面唯一的写入 adapter（#552）：IPC 形状与编排都在它后面，这里只留文案与关闭时机。 */
+const desktopWriter: DesktopPlaylistWriter = createDesktopPlaylistWriter();
+
+/** 把「同名异源」交给用户裁决（adapter 的第二个回调）。 */
+function askNameConflict(existingLabel: string): Promise<'add' | 'skip'> {
+  return new Promise((resolve) => {
+    Modal.confirm({
+      title: '同名歌曲',
+      content: `该歌单已有同名歌曲「${existingLabel}」，是否继续添加？`,
+      okText: '继续添加',
+      cancelText: '取消',
+      onOk: () => resolve('add'),
+      onCancel: () => resolve('skip'),
+    });
+  });
+}
+
+function sourceLabelZh(sourceType?: string): string {
+  switch (sourceType) {
+    case 'netease': return '网易云';
+    case 'kugou': return '酷狗';
+    case 'kuwo': return '酷我';
+    case 'qianqian': return '千千';
+    case 'soda': return '汽水';
+    default: return 'QQ';
+  }
 }
 
 const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
@@ -40,8 +64,8 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 
       const results = new Map<number, DupResult>();
       for (const p of playlistsData) {
-        const songs = await IpcClient.invoke<Song[]>('playlist:getSongs', p.id);
-        results.set(p.id, checkDuplicate(songs, song));
+        const target = await desktopWriter.readTarget(p.id);
+        results.set(p.id, classifySong(target.songs, song));
       }
       setDupResults(results);
     } catch (error) {
@@ -63,28 +87,23 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
       message.warning('该歌曲已存在于歌单中');
       return;
     }
-    if (dup?.status === 'nameConflict') {
-      Modal.confirm({
-        title: '同名歌曲',
-        content: `该歌单已有同名歌曲「${song.name}」（来自${dup.existingSong?.sourceType === 'netease' ? '网易云' : dup.existingSong?.sourceType === 'kugou' ? '酷狗' : dup.existingSong?.sourceType === 'kuwo' ? '酷我' : dup.existingSong?.sourceType === 'qianqian' ? '千千' : dup.existingSong?.sourceType === 'soda' ? '汽水' : 'QQ'}），是否继续添加？`,
-        okText: '继续添加',
-        cancelText: '取消',
-        onOk: async () => {
-          try {
-            await addSongToPlaylist(playlistId, song);
-            message.success(`已添加到歌单`);
-            onClose();
-            if (onSuccess) onSuccess();
-          } catch (_error) {
-            message.error('添加失败，请重试');
-          }
-        },
-      });
-      return;
-    }
-
     try {
-      await addSongToPlaylist(playlistId, song);
+      // #552：编排（判据 / 单曲写入 / 同名裁决）全在 adapter 后面；
+      // 这里只留文案与关闭时机。同名时由 adapter 回调问一次（含来源文案）。
+      const result = await desktopWriter.add({
+        playlistId,
+        songs: [song],
+        resolveNameConflict: async (conflicts) =>
+          askNameConflict(
+            `${conflicts[0]?.existingSong?.name ?? song.name}（来自${sourceLabelZh(conflicts[0]?.existingSong?.sourceType)}）`,
+          ),
+      });
+      if (!result.ok) throw new Error(result.error || '添加失败');
+      if (result.added === 0) {
+        message.warning('该歌曲已存在于歌单中');
+        return;
+      }
+      message.success(`已添加到歌单`);
       onClose();
       if (onSuccess) onSuccess();
     } catch (_error) {
@@ -97,20 +116,12 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 
     setCreating(true);
     try {
-      // #542：新建 + 写入走 core 编排——写入失败会**删掉刚建的空歌单**（#493 验收标准）。
-      // 此前这里 create 成功后 add 抛错只弹「操作失败」，新歌单留下来了但是空的。
-      const result = await writeSongsToPlaylist(
-        { createName: newPlaylistName.trim(), songs: [song] },
-        {
-          addSong: async (pid, s) => {
-            await IpcClient.invoke('playlist:addSong', pid, s);
-          },
-          createPlaylist: async (name) => IpcClient.invoke<number>('playlist:create', name),
-          deletePlaylist: async (pid) => {
-            await IpcClient.invoke('playlist:delete', pid);
-          },
-        },
-      );
+      // #542/#552：新建 + 写入走 adapter 背后的 core 编排——
+      // 写入失败会**删掉刚建的空歌单**（#493 验收标准）。
+      const result = await desktopWriter.createAndAdd({
+        name: newPlaylistName.trim(),
+        songs: [song],
+      });
       if (!result.ok) {
         message.error(result.rolledBack ? '添加失败，已撤销新建的歌单' : result.error || '操作失败，请重试');
         return;

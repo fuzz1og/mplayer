@@ -1,5 +1,8 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { parsePlaylistUrl, importFromLink } from '../services/importService';
+import { parsePlaylistUrl, importFromLink, importDepsFor } from '../services/importService';
+import { createDesktopPlaylistWriter } from '../services/playlistWriteAdapter';
+import { importFromLink as coreImportFromLink } from '@mplayer/core';
+import type { Song } from '@mplayer/core';
 
 // Mock IpcClient
 vi.mock('@/renderer/services/IpcClient', () => ({
@@ -71,8 +74,10 @@ describe('importFromLink', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     const { IpcClient } = await import('@/renderer/services/IpcClient');
-    (IpcClient.invoke as any).mockImplementation((channel: string) => {
+    (IpcClient.invoke as any).mockImplementation((channel: string, ...args: unknown[]) => {
       if (channel === 'playlist:get') return Promise.resolve({ id: 1, name: 'Test' });
+      if (channel === 'playlist:getSongs') return Promise.resolve([]);
+      if (channel === 'playlist:addSongs') return Promise.resolve((args[1] as unknown[]) ?? []);
       if (channel === 'playlist:addSong') return Promise.resolve(1);
       return Promise.resolve(undefined);
     });
@@ -147,5 +152,37 @@ describe('importFromLink', () => {
     // With the default mock (resolved value), this should succeed
     expect(result.successes).toHaveLength(1);
     expect(result.failures).toHaveLength(0);
+  });
+
+  /**
+   * #552：桌面链接导入此前每首歌 **2 次 IPC**（`playlist:get` 校验 + `playlist:addSong`），
+   * 1000 首 = 2000 次。批量腿已由 core `importFromLink` 留好，缺的只是桌面 adapter 把它接上：
+   * 现在 = 读一次目标快照 + 写一次（1 + 1）。
+   */
+  it('走批量腿：1 次 playlist:getSongs + 1 次 playlist:addSongs，0 次逐首', async () => {
+    const songs: Song[] = [
+      { id: 'a', name: 'A', artist: 'x', sourceType: 'netease' } as Song,
+      { id: 'b', name: 'B', artist: 'x', sourceType: 'netease' } as Song,
+      { id: 'c', name: 'C', artist: 'x', sourceType: 'netease' } as Song,
+    ];
+    const invoke = (await import('@/renderer/services/IpcClient')).IpcClient.invoke as any;
+    const writer = createDesktopPlaylistWriter({
+      invoke: (channel: string, ...args: unknown[]) => invoke(channel, ...args),
+    });
+
+    const result = await coreImportFromLink(
+      5,
+      songs,
+      new Set(['a', 'b', 'c']),
+      [],
+      importDepsFor(writer),
+      vi.fn(),
+    );
+
+    expect(result.successes.map((s) => s.song.id).sort()).toEqual(['a', 'b', 'c']);
+    const channels = invoke.mock.calls.map((c: unknown[]) => c[0]);
+    expect(channels.filter((c: string) => c === 'playlist:addSongs')).toHaveLength(1);
+    expect(channels.filter((c: string) => c === 'playlist:getSongs')).toHaveLength(1);
+    expect(channels).not.toContain('playlist:addSong');
   });
 });

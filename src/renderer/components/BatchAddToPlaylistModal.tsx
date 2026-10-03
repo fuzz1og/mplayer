@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, ListMusic } from 'lucide-react';
 import { message, Modal } from 'antd';
-import { filterDuplicates, writeSongsToPlaylist } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
+import type { DesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import type { Song, Playlist } from '@mplayer/core';
 
-async function addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
-  const playlist = await IpcClient.invoke<Playlist | undefined>('playlist:get', playlistId);
-  if (!playlist) throw new Error('歌单不存在');
-  return IpcClient.invoke<number>('playlist:addSong', playlistId, song);
-}
+/** 桌面唯一的写入 adapter（#552）：批量腿走 `playlist:addSongs`（一次落盘一次渲染）。 */
+const desktopWriter: DesktopPlaylistWriter = createDesktopPlaylistWriter();
 
 interface BatchAddToPlaylistModalProps {
   songs: Song[];
@@ -49,57 +47,37 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
   }, [isVisible]);
 
   /**
-   * 把本次批量加入目标歌单。
-   * @param isNew 新歌单必然没有重复/同名，跳过预读与确认直接写。
-   *              out-of-scope（#489 票面）：批量路径仍是逐首 playlist:addSong，
-   *              若大歌单实测可感卡顿，另开「桌面批量写歌单改批量 IPC」票。
+   * 把本次批量加入目标歌单（#552）：判据、批内去重、同名裁决、回滚都在 adapter 后面。
+   * 批量腿走 adapter 的 `playlist:addSongs`——整批一次落盘，不再逐首 playlist:addSong。
    */
-  const addSongsToPlaylist = async (playlistId: number, isNew: boolean) => {
+  const addSongsToPlaylist = async (playlistId: number) => {
     setAdding(true);
     try {
-      const existingSongs = isNew
-        ? []
-        : await IpcClient.invoke<Song[]>('playlist:getSongs', playlistId);
-      const filtered = filterDuplicates(existingSongs, songs);
+      const result = await desktopWriter.add({
+        playlistId,
+        songs,
+        resolveNameConflict: (conflicts) =>
+          new Promise<'add' | 'skip'>((resolve) => {
+            Modal.confirm({
+              title: '同名歌曲',
+              content: `有 ${conflicts.length} 首歌曲同名但来自不同平台，是否继续添加？`,
+              okText: '继续添加',
+              cancelText: '取消',
+              onOk: () => resolve('add'),
+              onCancel: () => resolve('skip'),
+            });
+          }),
+      });
+      if (!result.ok) throw new Error(result.error || '添加失败');
 
-      const skipCount = filtered.duplicates.length;
-      const conflictCount = filtered.conflicts.length;
-
-      if (filtered.ok.length === 0 && filtered.conflicts.length === 0) {
+      if (result.added === 0) {
         message.info('所有歌曲已存在于该歌单中');
-        setAdding(false);
         return;
       }
 
-      if (conflictCount > 0) {
-        Modal.confirm({
-          title: '同名歌曲',
-          content: `有 ${conflictCount} 首歌曲同名但来自不同平台，是否继续添加？`,
-          okText: '继续添加',
-          cancelText: '取消',
-          onOk: async () => {
-            const toAdd = [...filtered.ok, ...filtered.conflicts];
-            for (const song of toAdd) {
-              await addSongToPlaylist(playlistId, song);
-            }
-            const msg = skipCount > 0
-              ? `已跳过 ${skipCount} 首重复歌曲，添加 ${toAdd.length} 首`
-              : `已添加 ${toAdd.length} 首歌曲`;
-            message.success(msg);
-            onClose();
-            if (onSuccess) onSuccess();
-          },
-        });
-        setAdding(false);
-        return;
-      }
-
-      for (const song of filtered.ok) {
-        await addSongToPlaylist(playlistId, song);
-      }
-      const msg = skipCount > 0
-        ? `已跳过 ${skipCount} 首重复歌曲，添加 ${filtered.ok.length} 首`
-        : `已添加 ${filtered.ok.length} 首歌曲`;
+      const msg = result.skipped > 0
+        ? `已跳过 ${result.skipped} 首重复歌曲，添加 ${result.added} 首`
+        : `已添加 ${result.added} 首歌曲`;
       message.success(msg);
       onClose();
       if (onSuccess) onSuccess();
@@ -110,7 +88,7 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
     }
   };
 
-  const handleAddToPlaylist = (playlistId: number) => addSongsToPlaylist(playlistId, false);
+  const handleAddToPlaylist = (playlistId: number) => addSongsToPlaylist(playlistId);
 
   /** 新建歌单后**立即**把本次批量加入该新歌单（一轮写入，不要求用户再点一次） */
   const handleCreateAndAdd = async () => {
@@ -118,20 +96,8 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
     if (!name) return;
     setCreating(true);
     try {
-      // #542：整批写入 + 失败回滚都交给 core 编排。
-      // 此前这里 create 成功后 addSongs 抛错只弹「操作失败」，空歌单留下来了。
-      const result = await writeSongsToPlaylist(
-        { createName: name, songs },
-        {
-          addSongs: async (pid, songs) => {
-            await IpcClient.invoke('playlist:addSongs', pid, songs);
-          },
-          createPlaylist: async (n) => IpcClient.invoke<number>('playlist:create', n),
-          deletePlaylist: async (pid) => {
-            await IpcClient.invoke('playlist:delete', pid);
-          },
-        },
-      );
+      // #542/#552：整批写入 + 失败回滚都交给 adapter 背后的 core 编排。
+      const result = await desktopWriter.createAndAdd({ name, songs });
       if (!result.ok) {
         message.error(result.rolledBack ? '添加失败，已撤销新建的歌单' : result.error || '操作失败，请重试');
         return;
