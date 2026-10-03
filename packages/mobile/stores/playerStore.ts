@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ShuffleState, Song } from '@mplayer/core'
+import type { AdvanceEffect, ShuffleState, Song } from '@mplayer/core'
 import {
   createShuffleState,
   planAdvance,
@@ -25,6 +25,13 @@ import {
 function currentMemberIndex(queue: Song[], currentIndex: number, currentSong: Song | null): number {
   const byKey = currentSong ? queue.findIndex((s) => prefetchKey(s) === prefetchKey(currentSong)) : -1;
   return byKey >= 0 ? byKey : Math.min(Math.max(currentIndex, 0), queue.length - 1);
+}
+
+/** `advance` 的结果：core 决定的落点与 effect（宿主据此决定「怎么落」）。 */
+export interface AdvanceOutcome {
+  /** 目标成员下标；-1 = 无目标（`effect: 'none'`）。 */
+  index: number;
+  effect: AdvanceEffect;
 }
 
 interface PlayerState {
@@ -72,10 +79,14 @@ interface PlayerState {
    * 随机模式下先按窗口态对齐序列——没有序列就现洗一份（前置步骤）
    * （#520 minor 2/3：此前 store 与 nativePlayer 各复制了一份「步进游标 + 落 store」；
    * 且盘上/内存里的游标损坏或陈旧不得让推进失效），落点与 effect 一律由 core `planAdvance`
-   * 决定，这里只执行 effect：`none` → -1（不动）；`restart-current` → 重播当前曲（不换歌）；
-   * `load-target` → 换到 `queue[plan.index]`。返回目标成员下标（`-1` = 无目标）。
+   * 决定，这里只执行 effect：`none` → 不动；`restart-current` → 重播当前曲（不换歌）；
+   * `load-target` → 换到 `queue[index]`。
+   *
+   * 返回 `{ index, effect }`：JS 引擎按 effect 直接落地；原生引擎还要把这个 effect 交给
+   * `nativePlayer.nativeStep` 决定**交付方式**（交原生顺序推进 / 起播目标曲 / seek 0 重播），
+   * 所以 effect 必须随落点一起回来，不能让原生宿主自己猜（#555）。
    */
-  advance: (direction: 1 | -1) => number;
+  advance: (direction: 1 | -1) => AdvanceOutcome;
   /**
    * 确保有一份覆盖当前队列的随机序（进随机、换队列、喂窗口前调用）。
    * 已有且仍是**这批歌**的排列 → 窗口态只补不丢地把游标对到当前曲（不重洗，会话内顺序稳定）。
@@ -124,7 +135,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   next: () => {
     // #555：随机模式也走同一条落点（core planAdvance，含「单曲循环 / 单元素 = 重播当前曲」），
     // effect 由 advance 执行——此前随机分支在这里 stepShuffle 后 return，绕开了 effect。
-    return get().advance(1) >= 0 ? get().currentSong : null;
+    return get().advance(1).index >= 0 ? get().currentSong : null;
   },
 
   prev: () => {
@@ -265,7 +276,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   advance: (direction) => {
     const { queue, currentIndex, currentSong, shuffle } = get();
-    if (queue.length === 0 || currentIndex < 0) return -1;
+    if (queue.length === 0 || currentIndex < 0) return { index: -1, effect: 'none' };
     const playMode = useSettingsStore.getState().playMode;
     // 当前曲的成员下标：优先按 key 反查（`play()` 只写 currentSong、不写 currentIndex）。
     const at = playMode === '随机播放' ? currentMemberIndex(queue, currentIndex, currentSong) : currentIndex;
@@ -280,7 +291,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       direction,
       shuffleScope: 'window',
     });
-    if (plan.effect === 'none') return -1;
+    if (plan.effect === 'none') return { index: -1, effect: 'none' };
     const patch: Partial<PlayerState> = { isPlaying: true, currentTime: 0, currentIndex: plan.index };
     if (plan.shuffle !== shuffle) patch.shuffle = plan.shuffle;
     // restart-current（单曲循环 / 单元素队列）：目标是当前曲——不换歌，只重播。
@@ -289,7 +300,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       patch.hasPlayed = true;
     }
     set(patch);
-    return plan.index;
+    return { index: plan.index, effect: plan.effect };
   },
 
   replaceShuffleSongId: (fromId, toId) => {

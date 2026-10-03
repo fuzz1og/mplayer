@@ -47,6 +47,30 @@ JS 对网络回调仍有反应、原生确实发了事件、FGS 全程 `isForegr
 （`setShuffleModeEnabled(true)` 不外露顺序，会让窗口算不出下一首）。
 代价：随机序列在窗口内是「预定的」，用户切歌后按新位置重排（已列入 P6 验收项）。
 
+### 落点决策（#555 补充，2026-10-04）
+
+「下一首/上一首落到哪」的唯一来源是 core `planAdvance`。原生路径的实现分两层：
+
+- **JS 侧 UI 入口**（`audioPlayer.skipNext/skipPrev` → `nativePlayer.nativeStep`）：
+  先经 `playerStore.advance` 拿 core 的 `{ index, effect }`，再按 effect 交付：
+  `restart-current` → `seek(0)` 重播（不重新解析）；`load-target` 且**原生窗口的相邻格 ==
+  core 落点** → 交原生顺序推进；否则 `nativePlaySong(落点)` 起播（见下残余）。
+- **锁屏 / 媒体会话的 next/prev**：由 media3 `MediaSession` 直接对 ExoPlayer 顺序推进，
+  **不经 JS**。它的正确性不来自「按下时算落点」，而来自**原生列表顺序本身就是 JS 按 core
+  计划（`planNextIndexes` / 随机序）喂出来的窗口**：稳态下相邻格 == 计划落点，顺序推进即落点。
+  列表循环 / 随机的绕圈语义由 JS 补窗接管（`AdvancePolicy` 恒 `REPEAT_MODE_OFF`，
+  仅单曲循环用 `REPEAT_MODE_ONE`）。
+
+**未落地 / 残余（如实记录）**：
+
+- 原生模块**没有「跳到指定 index」原语**（只有 `next`/`prev`/`seek(秒)`），所以「落点不在原生
+  相邻格」时只能 `nativePlaySong`（单曲 `loadQueue` 起播再补窗）：会打断当前播放，并多一次
+  解析/重缓冲。稳态窗口内不会走到（相邻格命中），只在会话开头、历史被裁剪、或队列与窗口分叉时。
+- 锁屏 next 在**窗口边界**仍是原生「踩空 → `requestTracks` → `pendingUserNext`」：落点要等补窗
+  到位后由原生顺序推进落定，不是按按下的那一刻的 `planAdvance` 结果。这是 media3 会话命令
+  不经 JS 的固有边界；要收掉需在原生 `SessionCallback` 拦 `COMMAND_SEEK_TO_NEXT_MEDIA_ITEM`
+  并回 JS 决策（超出本 ADR 的 JS 侧范围，未做）。
+
 ## 备选与否决
 
 | 备选 | 否决理由 |
