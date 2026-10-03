@@ -909,7 +909,9 @@ async function trySearchLeg(
 
   try {
     const resource = await refreshSongResource(song, {
-      readCache: async () => getPrefetchedUrl(song),
+      // 不提供 readCache（#557）：播放路径在进入搜索腿之前早已查过预取缓存，
+      // 而预取缓存只交出 { url, nonFull }（剥掉 ts），给不出端口要的完整 PlayableResource。
+      // 此前这里塞的是假端口，端口改可选后直接不传。
       writeCache: async (_s, resource) => setPrefetchedUrl(song, resource.url, resource.nonFull),
       // 默认走 core 自己的路由搜索（直连优先 + tier3 搜索兜底），宿主可注入替换。
       search: async (s) => (strictSearch ?? defaultStrictSearch)(s),
