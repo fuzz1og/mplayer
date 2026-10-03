@@ -22,13 +22,27 @@ import { findExactMatch } from '../utils/songMatcher.js';
  * 下次刷新再试。写缓存/写回端口抛错只记日志，不影响已采用的结果返回
  * （缓存是加速器，不是事实源）。
  */
+/**
+ * 腿调用选项（#556）：墙钟由**墙的持有者**（解析链）持有，端口只消费它。
+ *
+ * `timeoutMs` 是这次搜索可用时限（已按 `min(本腿墙, 链总预算剩余)` 夹过）；
+ * `signal` 在链总预算耗尽或本腿到点时 abort —— 端口应把它透传给底层请求，
+ * 并把「已 aborted」当作正常失败（返回空候选），不要上抛。
+ */
+export interface LegOptions {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
 export interface SongResourceRefreshDeps {
   /** 读缓存端口（TTL 由各端缓存自身管控；未命中/无有效 url 返回 null）。 */
   readCache: (song: Song) => Promise<PlayableResource | null>;
   /** 写缓存端口：只有编排判定可采用的资源才会调用。 */
   writeCache: (song: Song, resource: PlayableResource) => Promise<void>;
-  /** 严格搜索端口：返回候选（平台注入直连/tier3 路由搜索），精确匹配守卫在编排内。 */
-  search: (song: Song) => Promise<Song[]>;
+  /** 严格搜索端口：返回候选（平台注入直连/tier3 路由搜索），精确匹配守卫在编排内。
+   *  `opts`（#556）可选：只有**解析链尾巴**这一条调用路径会传墙钟与取消信号；
+   *  各端自身的刷新调用点（封面/歌词兜底）不传，行为与改动前一致。 */
+  search: (song: Song, opts?: LegOptions) => Promise<Song[]>;
   /** 可选写回端口：匹配成功后把候选的其它字段（封面/歌词等）写回平台存储。 */
   writeBack?: (song: Song, matched: Song) => void | Promise<void>;
   /** 可选死链判定，默认 core isLegacyDeadUrl（已退役签名端点）。 */
@@ -43,6 +57,7 @@ export interface SongResourceRefreshDeps {
 export async function refreshSongResource(
   song: Song,
   deps: SongResourceRefreshDeps,
+  opts?: LegOptions,
 ): Promise<PlayableResource | null> {
   const isDead = deps.isDeadUrl ?? isLegacyDeadUrl;
   const now = deps.now ?? (() => Date.now());
@@ -55,7 +70,7 @@ export async function refreshSongResource(
   const target = { name: song.name, artist: song.artist };
   let candidates: Song[];
   try {
-    candidates = await deps.search(song);
+    candidates = await deps.search(song, opts);
   } catch (e: any) {
     // e. 失败打开：搜索异常不抛给调用方（与移动端现状一致）
     deps.log?.('warn', `资源刷新搜索失败: 《${song.name}》${e?.message || e}`);
