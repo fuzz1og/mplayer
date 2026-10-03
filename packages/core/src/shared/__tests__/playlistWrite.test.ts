@@ -31,7 +31,7 @@ const song = (id: string, name = `歌${id}`, artist = '歌手', sourceType: Song
 function fakeStore(options: { capacity?: number } = {}) {
   const playlists = new Map<string, Song[]>();
   let seq = 0;
-  const calls = { addSongs: 0, addSong: 0, create: 0, del: 0 };
+  const calls = { addSongs: 0, create: 0, del: 0 };
   const deps: PlaylistWriteDeps = {
     addSongs: async (id, songs) => {
       calls.addSongs += 1;
@@ -41,12 +41,6 @@ function fakeStore(options: { capacity?: number } = {}) {
       const fresh = songs.filter((s) => !have.has(s.id));
       target.push(...fresh);
       return fresh.length;
-    },
-    addSong: async (id, s) => {
-      calls.addSong += 1;
-      if (!playlists.has(String(id))) throw new Error('歌单不存在');
-      const target = playlists.get(String(id))!;
-      if (!target.some((x) => x.id === s.id)) target.push(s);
     },
     createPlaylist: async () => {
       calls.create += 1;
@@ -86,7 +80,7 @@ function snapshot(
  * 宿主的真实返回值被整个丢掉。这里把四类落点、回滚、容量截断与真值 added 一起钉死。
  */
 describe('writeSongsToPlaylist（#542 歌单写入编排）', () => {
-  it('已有歌单：整批写入一次（addSongs 优先，不逐首）', async () => {
+  it('已有歌单：整批写入一次', async () => {
     const store = fakeStore();
     store.playlists.set('1', []);
     const res = await writeSongsToPlaylist(
@@ -96,42 +90,30 @@ describe('writeSongsToPlaylist（#542 歌单写入编排）', () => {
     expect(res.ok).toBe(true);
     expect(res.added).toBe(2);
     expect(store.calls.addSongs).toBe(1);
-    expect(store.calls.addSong).toBe(0);
   });
 
-  // #556 评审 B2：逐首腿此前无条件 added += 1——宿主说「没写进去」也照记。
-  it('⭐ 逐首腿回报真实结果：宿主拒收的那首不计入 added', async () => {
+  // #556 评审 B2：逐首回落腿在产线上不可达（两个 adapter 都只给批量端口），已删。
+  // 宿主漏给批量端口时必须**明确失败**，不能静默降级成「逐首 + 请求数记账」。
+  // 修前：core 会走 addSong 回落腿并报 ok=true（红线）；修后：批量端口缺失即失败。
+  it('⭐ 宿主未提供批量写入能力 → 明确失败，不静默回落逐首', async () => {
     const store = fakeStore();
     store.playlists.set('1', []);
-    let called = 0;
-    const res = await writeSongsToPlaylist(
-      { playlistId: '1', target: snapshot(store, '1'), songs: [song('a'), song('b')] },
-      {
-        ...store.deps,
-        addSongs: undefined,
-        addSong: async (id, s) => {
-          called += 1;
-          if (s.id === 'b') return 0; // 宿主自己的判据/容量没收下
-          store.playlists.get(String(id))!.push(s);
-          return 1;
-        },
+    const legacyDeps = {
+      ...store.deps,
+      addSongs: undefined,
+      // 旧形状：只有逐首端口（产线上两个 adapter 都不会这样给）
+      addSong: async (id: string | number, s: Song) => {
+        store.playlists.get(String(id))!.push(s);
+        return 1;
       },
-    );
-    expect(called).toBe(2);
-    expect(res.added).toBe(1); // 修前无条件 +1 → 2
-    expect(res.invalid).toBe(1);
-  });
-
-  it('宿主没有 addSongs → 回落逐首，结果一致', async () => {
-    const store = fakeStore();
-    store.playlists.set('1', []);
+    } as unknown as PlaylistWriteDeps;
     const res = await writeSongsToPlaylist(
-      { playlistId: '1', target: snapshot(store, '1'), songs: [song('a'), song('b')] },
-      { ...store.deps, addSongs: undefined },
+      { playlistId: '1', target: snapshot(store, '1'), songs: [song('a')] },
+      legacyDeps,
     );
-    expect(res.ok).toBe(true);
-    expect(res.added).toBe(2);
-    expect(store.calls.addSong).toBe(2);
+    expect(res.ok).toBe(false);
+    expect(res.added).toBe(0);
+    expect(store.calls.addSongs).toBe(0);
   });
 
   it('批内重复会被去掉并计入 skipped', async () => {

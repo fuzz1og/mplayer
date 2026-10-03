@@ -66,6 +66,19 @@ describe('createDesktopPlaylistWriter（#552 桌面写入 adapter）', () => {
     expect(result.invalid).toBe(1);
   });
 
+  // #556 评审 B2：此前 IPC 返回非数组时回落 `songs.length`——请求数冒充真实新增数。
+  // 宿主没回报结果 = 不知道写进去几首，必须报失败，不能编一个真值。
+  it('⭐ playlist:addSongs 返回不可解析结果 → 报失败，不拿请求数冒充新增', async () => {
+    const ipc = fakeIpc({ 'playlist:getSongs': [], 'playlist:addSongs': () => undefined });
+    const writer = createDesktopPlaylistWriter(ipc.port);
+
+    const result = await writer.add({ playlistId: 7, songs: [song('a'), song('b')] });
+
+    expect(result.ok).toBe(false);
+    expect(result.added).toBe(0);
+    expect(result.error).toContain('未返回新增歌曲列表');
+  });
+
   it('目标歌单已有同源同一首歌 → 不发 write IPC，如实报 skipped', async () => {
     const ipc = fakeIpc({ 'playlist:getSongs': [song('a')] });
     const writer = createDesktopPlaylistWriter(ipc.port);

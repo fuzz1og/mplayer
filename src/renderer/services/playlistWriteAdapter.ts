@@ -25,8 +25,13 @@ import { IpcClient } from '@/renderer/services/IpcClient';
  * - **读目标歌单**：`playlist:getSongs`（+ 容量上限事实），产出 `PlaylistSnapshot`；
  * - **同名时怎么办**：`resolveNameConflict`，一次收整批冲突，交调用方裁决。
  *
- * #554：`addSongs` 走 `playlist:addSongs` 并**回传宿主真实新增数`**，
- * 不再让 core 的 `added` 变成「请求数」。
+ * #554：`addSongs` 走 `playlist:addSongs` 并**回传宿主真实新增数**——IPC 返回的是
+ * 真正写进去的 PlaylistSong id 列表，长度才是真值；返回不可解析时报失败，
+ * 不拿请求数冒充（#556 评审 B2）。
+ *
+ * #556 评审 B2：不再给 core 的逐首回落端口 `addSong`——桌面宿主本来就只有批量能力
+ * （`playlist:addSongs`），逐首腿在产线上不可达（只有测试 fake 走）。留着它等于
+ * 给「只有 fake 走得到的分支」发许可证。
  */
 
 /** 桌面 adapter 依赖的 IPC 面（只依赖这一个方法，测试可塞假实现）。 */
@@ -82,13 +87,16 @@ export function createDesktopPlaylistWriter(
       conflicts: readonly PlaylistNameConflict[],
     ) => Promise<NameConflictDecisions> | NameConflictDecisions,
   ): PlaylistWriteDeps => ({
-    // 批量腿（#552：桌面链接导入从每首 2 次 IPC 降到 1 + 1）——回传真实新增数（#554）
+    // 唯一写入端口（#556 评审 B2）：桌面宿主只有批量能力。
+    // #552：桌面链接导入从每首 2 次 IPC 降到 1 + 1；#554：回传真实新增数。
     addSongs: async (pid, songs) => {
       const added = await invoke<number[]>('playlist:addSongs', Number(pid), songs);
-      return Array.isArray(added) ? added.length : songs.length;
-    },
-    addSong: async (pid, song) => {
-      await invoke<number>('playlist:addSong', Number(pid), song);
+      // #556 评审 B2：IPC 返回不可解析时**不能**用 `songs.length` 冒充「真实新增数」
+      // ——那正是把请求数谎报成宿主真值。明确失败，由编排如实记账为失败。
+      if (!Array.isArray(added)) {
+        throw new Error('playlist:addSongs 未返回新增歌曲列表');
+      }
+      return added.length;
     },
     // core 只传歌单名；描述由 `createAndAdd` 的调用点覆盖（见下）。
     createPlaylist: (name) => invoke<number>('playlist:create', name),

@@ -6,6 +6,7 @@ import {
 } from '@mplayer/core';
 import type {
   NameConflictDecisions,
+  PlaylistImportDeps,
   PlaylistNameConflict,
   PlaylistWriteResult,
 } from '@mplayer/core';
@@ -16,8 +17,11 @@ import { usePlaylistStore } from '../stores/playlistStore';
  *
  * 桌面走 IPC、移动走 `usePlaylistStore`——**编排与判据都在 core**，
  * 两端只提供两个回调：「读目标歌单」与「同名时怎么办」。
- * 顺带把 #554 的「added 是真值」在移动侧兑现：`addSong` / `addSongs`
- * 改为回报**真实新增数**（本地 store 去重后实际 append 的条数）。
+ * 顺带把 #554 的「added 是真值」在移动侧兑现：`addSongs`
+ * 回报**真实新增数**（本地 store 去重后实际 append 的条数）。
+ *
+ * #556 评审 B2：本地 store 有批量能力，逐首回落端口已删（只有测试 fake 才会只给
+ * `addSong`）。链接导入的写入依赖另见 `createMobileImportDeps`（#556 评审 B6）。
  */
 
 /** 移动端 adapter 依赖的本地 store 面（测试可注入假实现）。 */
@@ -28,8 +32,6 @@ export interface MobilePlaylistStorePort {
   createPlaylist(name: string): string;
   /** 删除歌单（回滚用）。 */
   deletePlaylist(id: string): void;
-  /** 逐首写入，返回**真实新增**条数（已存在 = 0）。 */
-  addSong(playlistId: string, song: Song): number;
   /** 整批写入，返回**真实新增**条数（一次 set = 一次持久化 + 一次渲染）。 */
   addSongs(playlistId: string, songs: Song[]): number;
 }
@@ -75,12 +77,7 @@ export function createMobilePlaylistWriter(port?: MobilePlaylistStorePort): Mobi
   });
 
   const base = {
-    // 逐首腿：core 的 `addSong` 契约是 Promise<void>（真实新增数在整批腿上回报）。
-    addSong: async (pid: string | number, song: Song) => {
-      const id = String(pid);
-      if (port) port.addSong(id, song);
-      else usePlaylistStore.getState().addSong(id, song);
-    },
+    // 唯一写入端口（#556 评审 B2）：本地 store 有批量能力，逐首回落腿已删。
     addSongs: async (pid: string | number, songs: Song[]) => {
       const id = String(pid);
       const before = readSongs(id).length;
@@ -144,7 +141,6 @@ export function exportSongsToLocalPlaylist(
       deps.deletePlaylist(id);
       shadow.delete(id);
     },
-    addSong: () => 0,
     addSongs: (playlistId, list) => {
       deps.addSongs(playlistId, list);
       const before = shadow.get(playlistId)?.length ?? 0;
@@ -153,4 +149,29 @@ export function exportSongsToLocalPlaylist(
     },
   });
   return writer.createAndAdd({ name, songs });
+}
+
+/**
+ * 移动端链接导入的写入依赖（#556 评审 B6）。
+ *
+ * 此前这段直接写在 `PlaylistImportSheet` 里：`await writer.add(...)` 之后**丢掉
+ * result 返 void**，于是宿主（本地 store）明明丢歌，core 也按「void = 整批成功」
+ * 记账（`playlistImport.ts` 的批量腿）。桌面 `importService.importDepsFor` 早已
+ * 回报 `result.added`；这里抽出同形的移动版，带行为测试，由弹窗注入。
+ */
+export function createMobileImportDeps(
+  writer: MobilePlaylistWriter = createMobilePlaylistWriter(),
+): PlaylistImportDeps {
+  return {
+    addSong: async (playlistId, song) => {
+      const result = await writer.add({ playlistId, songs: [song] });
+      if (!result.ok) throw new Error(result.error || '添加失败');
+      return result.added;
+    },
+    addSongs: async (playlistId, songs) => {
+      const result = await writer.add({ playlistId, songs });
+      if (!result.ok) throw new Error(result.error || '添加失败');
+      return result.added;
+    },
+  };
 }
