@@ -164,7 +164,8 @@ describe('searchSongsRouted 路由矩阵', () => {
     const client = makeClient('netease');
     registerDirectClient(client);
     const result = await searchSongsRouted('晴天', 1, 'netease');
-    expect(client.searchSongs).toHaveBeenCalledWith('晴天', 1);
+    // #556：第三个可选参数是腿调用选项（墙钟/取消信号）的透传位，本入口不传时为 undefined。
+    expect(client.searchSongs).toHaveBeenCalledWith('晴天', 1, undefined);
     expect(result[0].id).toBe('direct-1');
   });
 

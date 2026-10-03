@@ -20,7 +20,6 @@ import {
   resetFailureStreak,
   getFailureStreak,
   pickNextSongAfterFailure,
-  refreshSongResource,
   OFFLINE_COPY,
 } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
@@ -46,11 +45,14 @@ async function loadLyricsWithRetry(song: Song): Promise<string> {
   // 存量持久化数据兼容：网易的 lrc 可能是 #409 之前写入的内联 LRC 文本，直接当文本用
   if (isInlineLyrics(song.sourceType, song.lrc)) return song.lrc;
 
+  // #556：只接受**精确匹配**的歌词（此前 `hit || results[0]` 在无精确匹配时取第一条，
+  // 正是 #544 / ADR-0012 要杀的翻唱误配；移动端同场景只认精确匹配）。候选里没有
+  // 同名同歌手 → 返回空串 = 本轮无歌词，而不是挂上别人的歌词。
   const searchLrc = async (): Promise<string> => {
     try {
       const results = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`, 1, song.sourceType);
       const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
-      return (hit || results[0])?.lrc?.trim() || '';
+      return hit?.lrc?.trim() || '';
     } catch {
       return '';
     }
@@ -572,27 +574,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       }
 
-      // 无 url 歌曲（直连解析失败 / 列表未带 url）：#544 起不再手抄规则，
-      // 改调 core 的 `refreshSongResource`（守卫唯一：非 http / 旧签名死链 /
-      // audioTag=invalid 一律不采用；采用后写回预取缓存）。
-      // 此前这里的弱化版只做「搜索 → findExactMatch → 取 hit.url」，缺这三条守卫。
-      if (!realUrl && song.sourceType !== 'local' && song.sourceType !== 'soda' && song.name) {
-        try {
-          const resource = await refreshSongResource(song, {
-            readCache: async () => null, // 解析链刚失败过，缓存里没有可用项
-            writeCache: async () => {
-              // 写回也走主进程那份缓存（渲染层那份没人读，见 #390）
-              await callMusicApi('prefetchPlayableSong', song).catch(() => {});
-            },
-            search: async (s) =>
-              (await callMusicApi('searchSongsRouted', `${s.name} ${s.artist}`.trim(), 1, s.sourceType)) as Song[],
-          });
-          if (resource?.url) realUrl = resource.url;
-        } catch (urlError) {
-          console.error('播放时搜索歌曲 URL 失败:', urlError);
-        }
-      }
-
+      // #556：这里此前补着一份「搜索腿」适配器——core 的搜索腿只覆盖「直连返回空串」
+      // 分支，且其 writeCache 走 prefetchPlayableSong 会**再跑一整条解析链**（直连 3s
+      // + tier3 6s，还被 await）。现在 core 的两个分支（空串 / 抛错）都落到同一条
+      // 尾巴并写回预取缓存，桌面不需要任何适配器，删掉整块（含那次保证落空的二次搜索）。
       if (generation !== playGeneration) {
         set({ isLoading: false });
         return;
