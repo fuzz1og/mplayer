@@ -136,7 +136,13 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
         message.error(result.rolledBack ? '添加失败，已撤销新建的歌单' : result.error || '操作失败，请重试');
         return;
       }
+      // #551：成功反馈与关闭三件套——8dc86fd（#542）迁移时弄丢了它们，
+      // 表现为弹层不关闭、无提示、新歌单不进列表（用户可再点一次造出同名歌单）。
+      // 口径与「加入已有歌单」（:100-105）以及单曲版 AddToPlaylistModal 一致。
       setNewPlaylistName('');
+      message.success(`已新建歌单「${name}」并添加 ${result.added} 首`);
+      onClose();
+      if (onSuccess) onSuccess();
     } catch (_error) {
       message.error('操作失败，请重试');
     } finally {

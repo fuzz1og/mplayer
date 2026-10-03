@@ -139,8 +139,10 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
         );
         return;
       }
+      // #551：这里**不要**再 onClose——showSuccess 自己设成功态、1.2s 后才关闭
+      // （见 :58-65）。紧跟一次 onClose 会把成功态在同一拍吃掉，
+      // 「已加入 N 首」用户实际看不到。
       showSuccess(name, result.added);
-      onClose();
     } catch (e) {
       Alert.alert('新建歌单失败', e instanceof Error && e.message ? e.message : '请重试');
     }
