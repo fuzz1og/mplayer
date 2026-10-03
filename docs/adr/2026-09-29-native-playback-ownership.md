@@ -55,8 +55,11 @@ JS 对网络回调仍有反应、原生确实发了事件、FGS 全程 `isForegr
   先经 `playerStore.advance` 拿 core 的 `{ index, effect }`，再按 effect 交付：
   `restart-current` → `seek(0)` 重播（不重新解析）；`load-target` 且**原生窗口的相邻格 ==
   core 落点** → 交原生顺序推进；否则 `nativePlaySong(落点)` 起播（见下残余）。
-- **锁屏 / 媒体会话的 next/prev**：由 media3 `MediaSession` 直接对 ExoPlayer 顺序推进，
-  **不经 JS**。它的正确性不来自「按下时算落点」，而来自**原生列表顺序本身就是 JS 按 core
+- **锁屏 / 媒体会话的 next/prev**：承载它的是**本模块自己的** `PlayerService` 里的
+  `MediaLibrarySession`；但 `SessionCallback`（`PlayerService.kt:1004`）只覆写了
+  `onPlaybackResumption`，**没有拦截跳曲** —— 于是会话命令落进 media3 的默认路径：直接对
+  ExoPlayer `seekToNextMediaItem()`，**绕过我们自己的 `PlaybackController.next()/prev()`**
+  （`:531`）。它的正确性不来自「按下时算落点」，而来自**原生列表顺序本身就是 JS 按 core
   计划（`planNextIndexes` / 随机序）喂出来的窗口**：稳态下相邻格 == 计划落点，顺序推进即落点。
   列表循环 / 随机的绕圈语义由 JS 补窗接管（`AdvancePolicy` 恒 `REPEAT_MODE_OFF`，
   仅单曲循环用 `REPEAT_MODE_ONE`）。
@@ -66,10 +69,16 @@ JS 对网络回调仍有反应、原生确实发了事件、FGS 全程 `isForegr
 - 原生模块**没有「跳到指定 index」原语**（只有 `next`/`prev`/`seek(秒)`），所以「落点不在原生
   相邻格」时只能 `nativePlaySong`（单曲 `loadQueue` 起播再补窗）：会打断当前播放，并多一次
   解析/重缓冲。稳态窗口内不会走到（相邻格命中），只在会话开头、历史被裁剪、或队列与窗口分叉时。
-- 锁屏 next 在**窗口边界**仍是原生「踩空 → `requestTracks` → `pendingUserNext`」：落点要等补窗
-  到位后由原生顺序推进落定，不是按按下的那一刻的 `planAdvance` 结果。这是 media3 会话命令
-  不经 JS 的固有边界；要收掉需在原生 `SessionCallback` 拦 `COMMAND_SEEK_TO_NEXT_MEDIA_ITEM`
-  并回 JS 决策（超出本 ADR 的 JS 侧范围，未做）。
+- **锁屏 next 在窗口边界会卡住一拍**：`pendingUserNext = true` 只在 `PlaybackController.next()`
+  （`:536`/`:540`）里设置，而 `onMediaItemTransition`（`:611`）反而会清掉它 —— 所以会话的
+  默认跳曲路径**既不 emit `QUEUE_ENDED(WINDOW_HOLE)`、也不置 `pendingUserNext`**：在原生
+  窗口最后一项上按下就是**空操作**，补窗只可能由 `onMediaItemTransition` 里的
+  `maybeRequestTracks(LOW_WATER)`（`:640`）顺带发生，用户得**再按一次**。与 UI next（有完整的
+  踩空 → emit 事件 → `requestTracks(HOLE)` → 补窗到位后自动推进）**语义不一致**。
+  **收法就在本模块内**（不是 media3 固有限制）：在 `SessionCallback` 拦
+  `COMMAND_SEEK_TO_NEXT/PREVIOUS_MEDIA_ITEM` 并转给 `PlaybackController.next()/prev()`，
+  即与 UI 走同一条路径。属原生改动：**PR / push 不编译原生**（见 ADR
+  `2026-09-29-ci-verification-boundary`），须在发版期 `./gradlew` 或本机构建验证。
 
 ## 备选与否决
 
