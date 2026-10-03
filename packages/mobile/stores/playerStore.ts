@@ -4,7 +4,6 @@ import {
   createShuffleState,
   planAdvance,
   replaceShuffleSongId as coreReplaceShuffleSongId,
-  stepShuffle,
 } from '@mplayer/core'
 import { useSettingsStore } from './settingsStore'
 import { prefetchKey } from '../services/queuePrefetch'
@@ -18,6 +17,15 @@ import {
   sameOrder,
   saveShuffleState,
 } from '../services/shuffleMode'
+
+/**
+ * 当前曲在 `queue` 里的成员下标（#520 minor 3）：优先按 key 反查——`play()` 只写 currentSong、
+ * 不写 currentIndex，所以下标以「正在播的那首」为准；反查不到才退回（夹取过的）currentIndex。
+ */
+function currentMemberIndex(queue: Song[], currentIndex: number, currentSong: Song | null): number {
+  const byKey = currentSong ? queue.findIndex((s) => prefetchKey(s) === prefetchKey(currentSong)) : -1;
+  return byKey >= 0 ? byKey : Math.min(Math.max(currentIndex, 0), queue.length - 1);
+}
 
 interface PlayerState {
   currentSong: Song | null;
@@ -59,13 +67,15 @@ interface PlayerState {
    */
   insertNext: (song: Song) => { started: boolean; moved: boolean; noop: boolean };
   /**
-   * 沿随机序**步进一格**并把结果写回 store（`1` 下一首 / `-1` 上一首）。返回目标成员下标，`-1` = 无目标。
+   * 推进一格（#555：`next` / `prev` / `nativePrev` 的**唯一实现**）。
    *
-   * 唯一实现：`next`/`prev`/`nativePrev` 都调它（#520 minor 2——此前 store 与 nativePlayer
-   * 各复制了一份「步进游标 + 落 store」）。按 ADR 契约，步进前**先把游标对到当前曲**，
-   * 所以盘上/内存里的游标损坏或陈旧都不会让推进失效（#520 minor 3）。
+   * 随机模式下先按窗口态对齐序列——没有序列就现洗一份（前置步骤）
+   * （#520 minor 2/3：此前 store 与 nativePlayer 各复制了一份「步进游标 + 落 store」；
+   * 且盘上/内存里的游标损坏或陈旧不得让推进失效），落点与 effect 一律由 core `planAdvance`
+   * 决定，这里只执行 effect：`none` → -1（不动）；`restart-current` → 重播当前曲（不换歌）；
+   * `load-target` → 换到 `queue[plan.index]`。返回目标成员下标（`-1` = 无目标）。
    */
-  stepShuffle: (direction: 1 | -1) => number;
+  advance: (direction: 1 | -1) => number;
   /**
    * 确保有一份覆盖当前队列的随机序（进随机、换队列、喂窗口前调用）。
    * 已有且仍是**这批歌**的排列 → 窗口态只补不丢地把游标对到当前曲（不重洗，会话内顺序稳定）。
@@ -112,69 +122,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   resume: () => set({ isPlaying: true }),
 
   next: () => {
-    const { queue, currentIndex, shuffle } = get();
-    const playMode = useSettingsStore.getState().playMode;
-
-    // #541：推进落点由 core planAdvance 单一决定（含「单曲循环 = 重播当前曲」）。
-    // 随机模式仍走 stepShuffle 分支：移动端需要先按「窗口/权威」作用域对齐序列，
-    // 这份对齐策略还留在 store（收敛见 #543），planAdvance 只负责推进本身。
-    if (playMode === '随机播放' && queue.length > 0 && currentIndex >= 0) {
-      return get().stepShuffle(1) >= 0 ? get().currentSong : null;
-    }
-
-    const plan = planAdvance({
-      queue,
-      currentIndex,
-      playMode,
-      shuffle: shuffle ?? null,
-      direction: 1,
-      cause: 'user',
-    });
-    if (plan.effect === 'none') return null;
-    // 单曲循环：重播当前曲（seek 0），不重新解析 URL——与桌面同口径（#541）。
-    if (plan.effect === 'restart-current') {
-      set({ isPlaying: true, currentTime: 0 });
-      return get().currentSong;
-    }
-    set({
-      currentSong: queue[plan.index],
-      currentIndex: plan.index,
-      isPlaying: true,
-      currentTime: 0,
-      hasPlayed: true,
-    });
-    return get().currentSong;
+    // #555：随机模式也走同一条落点（core planAdvance，含「单曲循环 / 单元素 = 重播当前曲」），
+    // effect 由 advance 执行——此前随机分支在这里 stepShuffle 后 return，绕开了 effect。
+    return get().advance(1) >= 0 ? get().currentSong : null;
   },
 
   prev: () => {
-    const { queue, currentIndex, shuffle } = get();
-    if (queue.length === 0 || currentIndex < 0) return;
-    const playMode = useSettingsStore.getState().playMode;
-
-    // 随机（#519 = #511 的行为变更）：游标后退一格，回到序列里的上一张。
-    if (playMode === '随机播放') {
-      get().stepShuffle(-1);
-      return;
-    }
-
-    // #541：单曲循环的 prev 此前在移动端是「重播当前曲」，与桌面（回上一首）不一致，
-    // 而 core/queue.ts 的注释长期断言「与桌面一致」——读者会相信它。
-    // 现在以 planAdvance 的契约为唯一口径：单曲循环 + prev = 回上一首。
-    const plan = planAdvance({
-      queue,
-      currentIndex,
-      playMode,
-      shuffle: shuffle ?? null,
-      direction: -1,
-      cause: 'user',
-    });
-    if (plan.effect === 'none') return;
-    set({
-      currentSong: queue[plan.index],
-      currentIndex: plan.index,
-      isPlaying: true,
-      currentTime: 0,
-    });
+    // #555：与 next 同一条路（此前随机分支自己 stepShuffle 后 return）。
+    // 单曲循环 + prev = 回上一首（不重播），由 core 的契约决定。
+    get().advance(-1);
   },
 
   insertNext: (song) => {
@@ -307,26 +263,33 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     console.log(`[player] 随机序已从盘上恢复：${aligned.order.length} 首（游标 ${aligned.cursor}）`);
   },
 
-  stepShuffle: (direction) => {
+  advance: (direction) => {
     const { queue, currentIndex, currentSong, shuffle } = get();
-    if (!currentSong || queue.length === 0 || currentIndex < 0) return -1;
-    // 当前曲的成员下标：优先按 key 反查（`play()` 只写 currentSong、不写 currentIndex）
-    const byKey = queue.findIndex((s) => prefetchKey(s) === prefetchKey(currentSong));
-    const at = byKey >= 0 ? byKey : Math.min(Math.max(currentIndex, 0), queue.length - 1);
-    const base = shuffle ?? createShuffleState(queue, { currentIndex: at });
-    // ADR 契约：先把游标对到「当前在哪」，再前进/后退一格（损坏/陈旧游标因此不会让推进失效）
-    const anchored = alignShuffleForWindow(base, queue, at);
-    const step = stepShuffle(anchored, queue, direction);
-    if (step.index < 0 || !queue[step.index]) return -1;
-    set({
-      currentSong: queue[step.index],
-      currentIndex: step.index,
-      shuffle: step.state,
-      isPlaying: true,
-      currentTime: 0,
-      hasPlayed: true,
+    if (queue.length === 0 || currentIndex < 0) return -1;
+    const playMode = useSettingsStore.getState().playMode;
+    // 当前曲的成员下标：优先按 key 反查（`play()` 只写 currentSong、不写 currentIndex）。
+    const at = playMode === '随机播放' ? currentMemberIndex(queue, currentIndex, currentSong) : currentIndex;
+    // 前置步骤：随机模式没有序列就现洗一份；序列本身的对齐（含「游标对到当前曲」）在 core 里，
+    // 作用域显式传 window —— JS 队列可能只是原生预取窗口，对齐只能补、不能丢（#520 blocker 1）。
+    const base = shuffle ?? (playMode === '随机播放' ? createShuffleState(queue, { currentIndex: at }) : null);
+    const plan = planAdvance({
+      queue,
+      currentIndex: at,
+      playMode,
+      shuffle: base,
+      direction,
+      shuffleScope: 'window',
     });
-    return step.index;
+    if (plan.effect === 'none') return -1;
+    const patch: Partial<PlayerState> = { isPlaying: true, currentTime: 0, currentIndex: plan.index };
+    if (plan.shuffle !== shuffle) patch.shuffle = plan.shuffle;
+    // restart-current（单曲循环 / 单元素队列）：目标是当前曲——不换歌，只重播。
+    if (plan.effect === 'load-target') {
+      patch.currentSong = queue[plan.index];
+      patch.hasPlayed = true;
+    }
+    set(patch);
+    return plan.index;
   },
 
   replaceShuffleSongId: (fromId, toId) => {

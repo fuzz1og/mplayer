@@ -16,7 +16,7 @@ const song = (id: string): Song => ({
 
 const queue = [song('1'), song('2'), song('3')];
 
-/** 造一个完整的 AdvanceInput，缺省是「列表循环 / 下一首 / 用户点按 / 无序列」。 */
+/** 造一个完整的 AdvanceInput，缺省是「列表循环 / 下一首 / 无序列」。 */
 function input(overrides: Partial<AdvanceInput> = {}): AdvanceInput {
   return {
     queue,
@@ -24,7 +24,6 @@ function input(overrides: Partial<AdvanceInput> = {}): AdvanceInput {
     playMode: '列表循环',
     shuffle: null,
     direction: 1,
-    cause: 'user',
     ...overrides,
   };
 }
@@ -102,9 +101,32 @@ describe('planAdvance（#541 推进落点唯一来源）', () => {
     expect(planAdvance(input({ playMode: '单曲循环', shuffle, direction: -1 })).shuffle).toBe(shuffle);
   });
 
-  it('cause 不改变推进结果（只用于宿主侧语义区分）', () => {
-    for (const cause of ['user', 'track-end', 'failure'] as const) {
-      expect(planAdvance(input({ cause, direction: 1 }))).toMatchObject({ index: 1 });
-    }
+  // #555：调用方手里的 queue 可能只是原生预取窗口 —— 作用域显式传入，
+  // 让窗口语义也能走这条同一条推进路径（此前移动端因此只能自己 stepShuffle，绕开 effect）。
+  it('随机播放 + shuffleScope: window：窗口外的 id 不被裁掉（只补不丢）', () => {
+    const window = [song('1'), song('2')];
+    const plan = planAdvance(input({
+      queue: window,
+      currentIndex: 0,
+      playMode: '随机播放',
+      shuffle: { order: ['3', '1', '2', '4'], cursor: 1 },
+      direction: 1,
+      shuffleScope: 'window',
+    }));
+    expect(plan.index).toBe(1); // 序列里 '1' 的下一格是 '2' → 成员下标 1
+    expect(plan.shuffle?.order).toEqual(['3', '1', '2', '4']); // 窗口外的 '3' / '4' 保留
+    expect(plan.shuffle?.cursor).toBe(2);
+  });
+
+  it('随机播放 + 缺省作用域（authoritative）：窗口外的 id 被裁掉（桌面口径）', () => {
+    const plan = planAdvance(input({
+      queue: [song('1'), song('2')],
+      currentIndex: 0,
+      playMode: '随机播放',
+      shuffle: { order: ['3', '1', '2', '4'], cursor: 1 },
+      direction: 1,
+    }));
+    expect(plan.index).toBe(1);
+    expect(plan.shuffle?.order).toEqual(['1', '2']);
   });
 });

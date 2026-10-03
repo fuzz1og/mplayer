@@ -455,7 +455,6 @@ function prefetchNextSong(): void {
       playMode,
       shuffle: st.shuffle ?? null,
       direction: 1,
-      cause: 'user',
     }).index;
     if (nextIdx < 0) return;
     const next = st.queue[nextIdx];

@@ -108,10 +108,10 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// 队列推进：playNext / playPrevious 收敛到 core getNextSongIndex / getPrevSongIndex
+// 队列推进：playNext / playPrevious 的落点收敛到 core planAdvance
 // ---------------------------------------------------------------------------
-describe('playNext（core getNextSongIndex 收敛）', () => {
-  it('单曲循环：刻意走 seek(0)+play 特例，不触发 load/play 主链路（避免 reload）', () => {
+describe('playNext（core planAdvance 收敛）', () => {
+  it('单曲循环 → 宿主执行 restart-current：seek(0) 复播、不触发 load 主链路（避免 reload）', () => {
     const s1 = song('netease:1', '晴天', 'https://audio.example.com/1.mp3');
     usePlayerStore.setState({
       currentPlaylist: [s1], currentPlaylistIndex: 0, currentSong: s1, playMode: '单曲循环',
@@ -172,7 +172,7 @@ describe('playNext（core getNextSongIndex 收敛）', () => {
   });
 });
 
-describe('playPrevious（core getPrevSongIndex 收敛）', () => {
+describe('playPrevious（core planAdvance 收敛）', () => {
   it('列表循环：index 0 回绕到最后一首并加载播放', async () => {
     const songs = [
       song('netease:1', '晴天', 'https://audio.example.com/1.mp3'),
@@ -205,6 +205,36 @@ describe('playPrevious（core getPrevSongIndex 收敛）', () => {
     expect(idx).not.toBe(1);
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(idx).toBeLessThan(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #555：宿主确实执行 core planAdvance 的 effect
+// （core 的 advancePlan.test.ts 只测纯函数，测不到宿主；这里的宿主 = playerStore）
+//
+// 修前：随机分支自己 stepShuffle 后无条件 play()，绕开 planAdvance 的 effect，
+// 于是 core 判为 restart-current 的落点（单元素队列回到当前曲）在桌面被落成「重新解析 + load」。
+// 本用例在修前代码上变红（load 被调用），修后绿（seek(0) 重播）。
+// ---------------------------------------------------------------------------
+describe('宿主执行 planAdvance 的 effect（#555）', () => {
+  it('随机播放 + 单元素队列 → restart-current：seek(0) 重播，不重新解析/load', async () => {
+    const only = song('netease:1', '晴天', 'https://audio.example.com/1.mp3');
+    usePlayerStore.setState({
+      currentPlaylist: [only],
+      currentPlaylistIndex: 0,
+      currentSong: only,
+      playMode: '随机播放',
+      shuffle: { order: ['netease:1'], cursor: 0 },
+    });
+
+    usePlayerStore.getState().playNext();
+    // 让异步播放链路（解析 → load）跑完：修前随机分支无条件走 play()，这里会 load
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(audioPlayerMock.player.seek).toHaveBeenCalledWith(0);
+    expect(audioPlayerMock.player.play).toHaveBeenCalled();
+    expect(audioPlayerMock.player.load).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(0);
   });
 });
 
