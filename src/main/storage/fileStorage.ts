@@ -633,7 +633,9 @@ export class FileStorage {
       return existing.id!;
     }
 
-    // 检查歌单容量限制（可选）
+    // 容量上限：**逐首版满则抛错**（单个操作无法「部分成功」，调用方需要显式失败信号）。
+    // 与批量版的静默截断不同——批量版有 truncated 显式通道（#554），逐首版没有，
+    // 所以这里只能抛。两版语义的差异是刻意的，见 addSongsToPlaylist 的注释。
     const currentSongs = this.data.playlistSongs.filter(ps => ps.playlistId === playlistId);
     if (currentSongs.length >= 1000) { // 限制1000首歌
       throw new Error('歌单已达到最大容量限制');
@@ -665,7 +667,14 @@ export class FileStorage {
    * - 顺序按传入顺序接着当前 maxOrder 递增；容量上限 1000/歌单，放不下的部分截断；
    * - **部分成功**：一个都放不进去时返回 []（不抛错）——由调用方按「0 首成功」给文案，
    *   并负责回滚空歌单（#493 验收：绝不允许既没报错又留下空歌单）。
-   * - 刻意不做「跨源同名确认」：批量语义下直接并入（与移动端批量、桌面 BatchAddToPlaylistModal 一致）。
+   * - 容量满时**静默截断**（只写到 1000 为止）；截断事实由调用方按「返回的新增数 < 指派数」
+   *   判定并形成显式通道（#554：core `PlaylistWriteResult.truncated`）。
+   *   逐首版本模块满则**抛错**——单个操作没有「部分成功」这回事，必须给出失败信号。
+   * - **不做跨源同名裁决**：本层只按 `Song.id` 去重（存量数据的安全网）。
+   *   「同名异源要不要并入」是**调用方**的事：core 写入编排（#553）在写入前用
+   *   `classifySong` 产出 NEW / DUPLICATE / NAME_CONFLICT 三类落点，桌面
+   *   BatchAddToPlaylistModal 会对 NAME_CONFLICT 弹同名确认。此前这条注释声称
+   *   「批量语义下直接并入」，与事实（弹确认）相反。
    */
   async addSongsToPlaylist(playlistId: number, songs: Song[]): Promise<number[]> {
     await this.ensureLoaded();

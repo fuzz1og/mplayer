@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView } from 'react-native';
 import { Check, CircleCheck, Link2, Loader2 } from 'lucide-react-native';
-import { importFromLink } from '@mplayer/core';
+import { classifySong, importFromLink } from '@mplayer/core';
 import type { Song, ProgressState, ImportResult, PlaylistImportDeps } from '@mplayer/core';
 import { defaultPlaylistLinkDeps, fetchPlaylistSongsFromLink } from '../services/playlistLinkImport';
+import { createMobilePlaylistWriter } from '../services/playlistExport';
 import { radius, spacing, textVariants, opacity } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
-import { usePlaylistStore } from '../stores/playlistStore';
 import BottomSheet from './BottomSheet';
 import ScalePress from './ScalePress';
 
@@ -22,9 +22,13 @@ interface Props {
   onClose: () => void;
 }
 
-/** 与 core importFromLink 的去重键保持一致（歌名|歌手） */
-function dedupeKey(song: Song): string {
-  return song.name + '|' + (song.artist || '');
+/**
+ * 预览里「已在歌单」的判据（#553）：走 core `classifySong`——
+ * 与写入编排（importFromLink / adapter）用的是**同一份**判据，不再各写一份 key。
+ */
+function isAlreadyInPlaylist(existingSongs: readonly Song[], song: Song): boolean {
+  const verdict = classifySong(existingSongs, song);
+  return verdict.status === 'duplicate' || verdict.status === 'nameConflict';
 }
 
 /**
@@ -49,8 +53,11 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
 
-  const existingKeys = useMemo(() => new Set(existingSongs.map(dedupeKey)), [existingSongs]);
-  const importable = useMemo(() => songs.filter((s) => !existingKeys.has(dedupeKey(s))), [songs, existingKeys]);
+  const alreadyIn = useMemo(
+    () => new Set(songs.filter((s) => isAlreadyInPlaylist(existingSongs, s)).map((s) => s.id)),
+    [songs, existingSongs],
+  );
+  const importable = useMemo(() => songs.filter((s) => !alreadyIn.has(s.id)), [songs, alreadyIn]);
   const skippedCount = songs.length - importable.length;
   const chosen = useMemo(() => importable.filter((s) => selected.has(s.id)), [importable, selected]);
   const allSelected = importable.length > 0 && importable.every((s) => selected.has(s.id));
@@ -58,16 +65,20 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
   // 取歌腿（识别链接 → 歌曲列表）在 service 里，便于单测；这里只注入默认实现
   const linkDeps = useMemo(() => defaultPlaylistLinkDeps(), []);
 
-  // mobile 侧是本地 store：提供 addSongs 走批量腿 —— 整批一次 set，
-  // 即一次持久化 + 一次渲染（逐首 addSong 会让每首都写库 + 重渲染，长歌单是 O(N²)）。
-  const deps = useMemo<PlaylistImportDeps>(() => ({
-    addSong: async (pid, song) => {
-      usePlaylistStore.getState().addSong(String(pid), song);
-    },
-    addSongs: async (pid, batch) => {
-      usePlaylistStore.getState().addSongs(String(pid), batch);
-    },
-  }), []);
+  // #552：mobile 侧是本地 store，写入统一走 adapter（判据/编排在 core）；
+  // 提供 addSongs 走批量腿——整批一次 set，即一次持久化 + 一次渲染
+  //（逐首 addSong 会让每首都写库 + 重渲染，长歌单是 O(N²)）。
+  const deps = useMemo<PlaylistImportDeps>(() => {
+    const writer = createMobilePlaylistWriter();
+    return {
+      addSong: async (pid, song) => {
+        await writer.add({ playlistId: pid, songs: [song] });
+      },
+      addSongs: async (pid, batch) => {
+        await writer.add({ playlistId: pid, songs: batch });
+      },
+    };
+  }, []);
 
   const reset = useCallback(() => {
     setStep('input');
@@ -100,13 +111,13 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
     try {
       const fetched = await fetchPlaylistSongsFromLink(trimmed, linkDeps);
       setSongs(fetched);
-      setSelected(new Set(fetched.filter((s) => !existingKeys.has(dedupeKey(s))).map((s) => s.id)));
+      setSelected(new Set(fetched.filter((s) => !isAlreadyInPlaylist(existingSongs, s)).map((s) => s.id)));
       setStep('preview');
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : '解析链接失败，请检查网络连接');
       setStep('input');
     }
-  }, [url, existingKeys, linkDeps]);
+  }, [url, existingSongs, linkDeps]);
 
   const handleImport = useCallback(async () => {
     if (chosen.length === 0) return;
@@ -191,7 +202,7 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
           {error && <Text style={styles.error}>{error}</Text>}
           <ScrollView style={styles.list} nestedScrollEnabled>
             {songs.map((song) => {
-              const already = existingKeys.has(dedupeKey(song));
+              const already = alreadyIn.has(song.id);
               const on = !already && selected.has(song.id);
               return (
                 <ScalePress

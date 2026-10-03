@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { identityKey } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 
 interface Playlist {
@@ -15,8 +16,16 @@ interface PlaylistStore {
   /** 新建歌单并返回新歌单 id（调用方要「新建后立即写入」时必须拿到 id） */
   createPlaylist: (name: string) => string;
   deletePlaylist: (id: string) => void;
+  /**
+   * 单曲加入。去重判据 = core **歌曲身份键**（源 + 去源前缀真实 ID，ADR-0012）；
+   * 裸 id 与 `${source}:${rawId}` 收敛为同一首（#553）。
+   */
   addSong: (playlistId: string, song: Song) => void;
-  /** 批量加入：一次 set = 一次持久化 + 一次渲染（导入长歌单用；逐首 addSong 是 O(N²)） */
+  /**
+   * 批量加入：一次 set = 一次持久化 + 一次渲染（导入长歌单用；逐首 addSong 是 O(N²)）。
+   * 去重判据同上（core `identityKey`），**不再用裸 `Song.id`**——
+   * 跨源同 id 曾被静默当成同一首丢掉（#553）。
+   */
   addSongs: (playlistId: string, songs: Song[]) => void;
   removeSong: (playlistId: string, songId: string) => void;
   /**
@@ -60,7 +69,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
             p.id === playlistId
               ? {
                   ...p,
-                  songs: p.songs.some((s) => s.id === song.id)
+                  songs: p.songs.some((s) => identityKey(s) === identityKey(song))
                     ? p.songs
                     : [...p.songs, song],
                 }
@@ -72,8 +81,8 @@ export const usePlaylistStore = create<PlaylistStore>()(
         set((state) => ({
           playlists: state.playlists.map((p) => {
             if (p.id !== playlistId) return p;
-            const have = new Set(p.songs.map((s) => s.id));
-            const fresh = songs.filter((s) => !have.has(s.id));
+            const have = new Set(p.songs.map((s) => identityKey(s)));
+            const fresh = songs.filter((s) => !have.has(identityKey(s)));
             return fresh.length === 0 ? p : { ...p, songs: [...p.songs, ...fresh] };
           }),
         })),
