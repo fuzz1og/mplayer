@@ -35,8 +35,16 @@ export interface LegOptions {
 }
 
 export interface SongResourceRefreshDeps {
-  /** 读缓存端口（TTL 由各端缓存自身管控；未命中/无有效 url 返回 null）。 */
-  readCache: (song: Song) => Promise<PlayableResource | null>;
+  /**
+   * 读缓存端口（可选；TTL 由各端缓存自身管控，未命中/无有效 url 返回 null）。
+   *
+   * 可选的理由（#557）：不是每个调用方都持有「能交出完整 `PlayableResource`」的缓存。
+   * 解析链的严格搜索腿（`sourceRouter.trySearchLeg`）就是这种情况——它在直连与 tier3
+   * 之后才被调用，播放路径早已查过预取缓存，而预取缓存只交出 `{ url, nonFull }`（剥掉 ts）。
+   * 此前端口必填，逼得那条腿塞一个假适配器（`readCache: async () => null`）。
+   * 不提供该端口 = 跳过规则 a，直接走搜索。
+   */
+  readCache?: (song: Song) => Promise<PlayableResource | null>;
   /** 写缓存端口：只有编排判定可采用的资源才会调用。 */
   writeCache: (song: Song, resource: PlayableResource) => Promise<void>;
   /** 严格搜索端口：返回候选（平台注入直连/tier3 路由搜索），精确匹配守卫在编排内。
@@ -62,9 +70,11 @@ export async function refreshSongResource(
   const isDead = deps.isDeadUrl ?? isLegacyDeadUrl;
   const now = deps.now ?? (() => Date.now());
 
-  // a. 缓存命中且非死链 → 直接返回，不搜索
-  const cached = await deps.readCache(song);
-  if (cached?.url && !isDead(cached.url)) return cached;
+  // a. 缓存命中且非死链 → 直接返回，不搜索（未提供读缓存端口则跳过这一条）
+  if (deps.readCache) {
+    const cached = await deps.readCache(song);
+    if (cached?.url && !isDead(cached.url)) return cached;
+  }
 
   // b. 未命中/死链 → 严格搜索，仅采用精确匹配
   const target = { name: song.name, artist: song.artist };

@@ -944,8 +944,8 @@ async function trySearchLeg(
       refreshSongResource(
         song,
         {
-          // getPrefetchedUrl 返回 PlayableResource | undefined，端口要的是 | null（#557）
-          readCache: async () => getPrefetchedUrl(song) ?? null,
+          // 不提供 readCache（#557）：播放路径在进入搜索腿之前早已查过预取缓存；
+          // 该端口如今可选，不传 = 跳过规则 a、直接走搜索。
           writeCache: async (_s, resource) => setPrefetchedUrl(song, resource.url, resource.nonFull),
           // 与用户在搜索页看到的同一条链（直连优先 + tier3 搜索兜底）——core 自己的实现，
           // 不再需要宿主注入「严格搜索」适配器（#556 删掉 setStrictSearch 的理由）。
