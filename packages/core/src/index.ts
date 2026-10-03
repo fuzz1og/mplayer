@@ -112,7 +112,7 @@ export type { SwapCandidate, SourceSwapDeps } from './shared/sourceSwap.js';
 export { stripSourceIdPrefix } from './utils/sourceIdPrefix.js';
 export { rawSongId, identityKey, identityKeyFrom } from './utils/songIdentity.js';
 export { refreshSongResource } from './shared/songResourceRefresh.js';
-export type { SongResourceRefreshDeps } from './shared/songResourceRefresh.js';
+export type { SongResourceRefreshDeps, LegOptions } from './shared/songResourceRefresh.js';
 export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
 export { writeSongsToPlaylist } from './shared/playlistWrite.js';
 export type { PlaylistWriteDeps, PlaylistWriteResult } from './shared/playlistWrite.js';
@@ -194,7 +194,6 @@ export {
   searchSongsRouted,
   resolvePlayableUrlRouted,
   resolvePlayableSongRouted,
-  setStrictSearch,
   setTier3Resolver,
   pickToplistGroup,
   pickToplistSongs,

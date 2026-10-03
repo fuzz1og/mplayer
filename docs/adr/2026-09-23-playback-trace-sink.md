@@ -35,6 +35,10 @@ P50 3120ms、27% 硬失败、坏源饿死好源等结论，但探针**未入库*
      `via`、`guard`、`directMs`/`directMethod`/`directSource`、`directTimedOut`、
      `validateMs`、`tier3Ms`/`tier3TimedOut`，
      以及**每源一条** `sources[]`：`{ sourceId, ms, outcome: hit|miss|error|skipped|rejected|discarded, errorClass?, guard? }`。
+     解析链尾巴的**严格搜索腿**（#556 补记）也是这条链上的一条腿，按同一形状记进
+     `sources[]`，`sourceId` 取 `search:<sourceType>`（如 `search:netease`）——
+     与 tier3 的每源 leg 并存而不冲突：搜索腿只在 tier3 未命中后才跑，
+     `sourceId` 前缀把两者区分开；tier3 腿预算超时的 discarded 映射同样覆盖它。
    - ~~`PlaybackProbeTrace`（`probeSongsBatch` 单曲）~~：**已随探测链删除（#391）**——
      探测判据反向且产物无消费者，预解析改由 `prefetchPlayableSong` 门面承担；
      `onProbe` / `emitPlaybackProbeTrace` / ring 的 `listProbes` 全部移除。

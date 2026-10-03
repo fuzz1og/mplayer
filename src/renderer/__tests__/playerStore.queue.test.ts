@@ -212,12 +212,13 @@ describe('playPrevious（core getPrevSongIndex 收敛）', () => {
 // 播放链路固化
 // ---------------------------------------------------------------------------
 describe('播放链路：URL 解析 / 加载失败', () => {
-  it('无 url 歌曲：按歌手名搜索解析 url 后加载（兜底）', async () => {
+  it('无 url 歌曲：URL 全部由 core 解析链给出，渲染层不再自己补搜索腿', async () => {
     const s1 = song('netease:1', '晴天', ''); // url 为空
     const foundUrl = 'https://found.example.com/1.mp3';
     callMusicApiMock.mockImplementation(async (method: string) => {
       if (method === 'resolvePlayableUrlRouted') return ''; // 无真实解析
-      if (method === 'resolvePlayableSongRouted') return { url: '', nonFull: false }; // 无真实解析
+      // #556：搜索腿已收进 core 的两个分支（空串 / 抛错），这里模拟 core 命中。
+      if (method === 'resolvePlayableSongRouted') return { url: foundUrl, nonFull: false };
       if (method === 'searchSongsRouted') return [{ ...s1, url: foundUrl, lrc: '' }];
       if (method === 'getSodaPlayableUrl') return '';
       return undefined;
@@ -226,12 +227,12 @@ describe('播放链路：URL 解析 / 加载失败', () => {
 
     await usePlayerStore.getState().play(s1);
 
-    // #544：兜底仍由渲染层发起搜索，但规则已改走 core `refreshSongResource`
-    // （守卫唯一：非 http / 旧签名死链 / audioTag=invalid 不采用）。
-    expect(callMusicApiMock).toHaveBeenCalledWith('searchSongsRouted', '晴天 周杰伦', 1, 'netease');
     expect(audioPlayerMock.player.load).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'netease:1', url: foundUrl }),
     );
+    // #556：搜索腿不需要桌面适配器——渲染层这一块（原 playerStore.ts:542-557）已删除，
+    // 它此前在 core 已经搜过一次之后又搜一次（保证落空的第二次上游请求）。
+    expect(callMusicApiMock).not.toHaveBeenCalledWith('searchSongsRouted', '晴天 周杰伦', 1, 'netease');
   });
 
   it('加载失败：先同曲 fresh 重试（不跳歌），重试成功继续播放同一首', async () => {

@@ -35,13 +35,11 @@ export function setPrefetchedUrl(song: Song, url: string, nonFull: boolean): voi
 /**
  * 读取预取缓存；过期条目按未命中处理并顺手清理。
  *
- * 返回**完整条目**（含 `ts`）而不是剥掉时间戳的窄形状（#557）：
- * 读取方「资源刷新编排」（`shared/songResourceRefresh` 的 `readCache` 端口）会把
- * 命中值**当作本次结果直接返回**，端口类型要求完整 `PlayableResource`；
- * 此前剥掉 `ts` 的窄形状与该端口不兼容，而 core 自己的 typecheck 当时没有任何门禁
- * 跑到它，于是这个不匹配一直没人发现。
+ * 返回**剥掉时间戳**的窄形状是刻意的（由 prefetchCache.test.ts 钉住）：
+ * TTL 在缓存内部自管，读取方只关心 url 与 nonFull。
+ * #557 的教训：不要为了迁就某个端口而加宽它——该修的是那个端口。
  */
-export function getPrefetchedUrl(song: Song): PlayableResource | undefined {
+export function getPrefetchedUrl(song: Song): { url: string; nonFull: boolean } | undefined {
   const key = identityKey(song);
   const entry = prefetchCache.get(key);
   if (!entry) return undefined;
@@ -49,7 +47,7 @@ export function getPrefetchedUrl(song: Song): PlayableResource | undefined {
     prefetchCache.delete(key);
     return undefined;
   }
-  return { url: entry.url, nonFull: entry.nonFull, ts: entry.ts };
+  return { url: entry.url, nonFull: entry.nonFull };
 }
 
 /** 遗忘单歌预取条目：播放失败 fresh 重试前调用，避免重走路由解析时
