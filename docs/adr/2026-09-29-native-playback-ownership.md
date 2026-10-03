@@ -75,10 +75,13 @@ JS 对网络回调仍有反应、原生确实发了事件、FGS 全程 `isForegr
   窗口最后一项上按下就是**空操作**，补窗只可能由 `onMediaItemTransition` 里的
   `maybeRequestTracks(LOW_WATER)`（`:640`）顺带发生，用户得**再按一次**。与 UI next（有完整的
   踩空 → emit 事件 → `requestTracks(HOLE)` → 补窗到位后自动推进）**语义不一致**。
-  **收法就在本模块内**（不是 media3 固有限制）：在 `SessionCallback` 拦
-  `COMMAND_SEEK_TO_NEXT/PREVIOUS_MEDIA_ITEM` 并转给 `PlaybackController.next()/prev()`，
-  即与 UI 走同一条路径。属原生改动：**PR / push 不编译原生**（见 ADR
-  `2026-09-29-ci-verification-boundary`），须在发版期 `./gradlew` 或本机构建验证。
+  **收法就在本模块内**（不是 media3 固有限制）：用 `ForwardingPlayer` 包住 ExoPlayer，
+  覆写 `seekToNext`/`seekToPrevious`（媒体会话的 next/prev 命令就是经播放器下推的）转给
+  `PlaybackController.next()/prev()`，即与 UI 走同一条路径。**不要用
+  `MediaSession.Callback.onPlayerCommandRequest`——它在 media3 1.9 已 deprecated**
+  （见 `docs/research/2026-09-27-android-background-playback.md` §4）。
+  属原生改动：**PR / push 不编译原生**（见 ADR `2026-09-29-ci-verification-boundary`），
+  须在发版期 `./gradlew` 或本机构建验证——因此在做之前必须先能跑原生编译。
 
 ## 备选与否决
 
