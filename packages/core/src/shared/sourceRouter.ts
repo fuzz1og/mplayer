@@ -51,15 +51,23 @@ export interface ArtistAlbumsPage {
   ok: boolean;
 }
 
-/** 来源中文名（设置页/状态展示共用，桌面/移动端同一份，避免双端漂移）。 */
+/**
+ * 来源中文名（双端唯一一份：设置页 / 状态展示 / 列表来源标签 / 搜索结果分组共用）。
+ *
+ * #556 评审 C 续：移动端 `stores/sourceStore.ts` 的 `SOURCE_LABELS` 改为引用本表，不再各自
+ * 维护字面量。收敛时按「真实中文名」取值：QQ 用全名 `QQ音乐`（徽标里的缩写 `QQ` 仍由各自
+ * 紧凑组件自带表），并补上移动端有、core 曾缺的 `local`。`Record<string, string>` 的宽索引
+ * 是给「按任意字符串查表」的调用点（未知来源回退），不改类型以免破坏这些调用点。
+ */
 export const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   netease: '网易云',
-  qq: 'QQ',
+  qq: 'QQ音乐',
   kugou: '酷狗',
   kuwo: '酷我',
   migu: '咪咕',
   qianqian: '千千',
   soda: '汽水',
+  local: '本地',
 };
 
 /** 来源开关选项（桌面/移动端设置 UI 共用；自建 API 已退役，仅剩两态）。 */

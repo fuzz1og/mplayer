@@ -23,8 +23,9 @@ import { identityKey } from '../utils/songIdentity.js';
  */
 
 /** 目标歌单快照与构造器（#553：判据模块是唯一来源，这里转出给写入编排的调用方）。
- *  DEFAULT_PLAYLIST_CAPACITY 同样转出（#556 评审 C：容量上限只允许一个落点）。 */
-export { createPlaylistSnapshot, DEFAULT_PLAYLIST_CAPACITY } from '../utils/songDedupe.js';
+ *  容量上限不在这里转出：它由 barrel 从 `utils/songDedupe` 直出，只留一条导出路径
+ *  （#556 评审 C 续：删掉此前与 barrel 并行的 Duplicated/Middle Man 转出）。 */
+export { createPlaylistSnapshot } from '../utils/songDedupe.js';
 export type { PlaylistSnapshot } from '../utils/songDedupe.js';
 
 /** 落点：批内重复/已存在命中（duplicate 或同源同名同歌手）。 */

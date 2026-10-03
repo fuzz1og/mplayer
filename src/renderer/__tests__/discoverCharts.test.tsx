@@ -81,10 +81,10 @@ describe('发现页 V2 排行榜（#332 单元榜 + 源切换）', () => {
     expect(screen.getByText('网易云 · 新歌榜')).toBeInTheDocument();
 
     // 切 QQ：换成 QQ 榜单 + 可选列（上期名次/在榜周数）渲染
-    fireEvent.click(screen.getByRole('button', { name: 'QQ' }));
+    fireEvent.click(screen.getByRole('button', { name: 'QQ音乐' }));
     expect(await screen.findByText('qq 热歌')).toBeInTheDocument();
     expect(screen.queryByText('netease 热歌')).toBeNull();
-    expect(screen.getByText('QQ · 热歌榜')).toBeInTheDocument();
+    expect(screen.getByText('QQ音乐 · 热歌榜')).toBeInTheDocument();
     expect(screen.getByText('↑4')).toBeInTheDocument(); // prevRank 5 - rank 1
     expect(screen.getByText(/在榜 3 周/)).toBeInTheDocument();
 

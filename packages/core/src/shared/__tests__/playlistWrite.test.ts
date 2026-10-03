@@ -1,13 +1,17 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import type { Song } from '../../types/index.js';
 import {
   writeSongsToPlaylist,
   createPlaylistSnapshot,
   songWriteRejection,
-  DEFAULT_PLAYLIST_CAPACITY,
   type PlaylistWriteDeps,
   type PlaylistSnapshot,
 } from '../playlistWrite.js';
+// 容量常量的唯一导出路径是 barrel 从 utils/songDedupe 直出（#556 评审 C 续）
+import { DEFAULT_PLAYLIST_CAPACITY } from '../../utils/songDedupe.js';
 
 const song = (id: string, name = `歌${id}`, artist = '歌手', sourceType: Song['sourceType'] = 'netease'): Song => ({
   id,
@@ -400,3 +404,26 @@ describe('写入结果契约（#554：added 是真值、容量截断有显式通
     expect(store.playlists.size).toBe(0);
   });
 });
+
+/** 读 core 源文件（vitest root = packages/core） */
+const testDir = dirname(fileURLToPath(String(import.meta.url)));
+const readSource = (rel: string) => readFileSync(join(testDir, rel), 'utf8');
+/** 源码断言必须去注释：注释里常常引用被删掉的旧写法 */
+const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+/**
+ * #556 评审 C 续：容量上限只允许一处。定义在 `utils/songDedupe`、由 barrel 直出；
+ * `shared/playlistWrite` 此前同时转出它，成了第二条 re-export 路径（Duplicated/Middle Man）。
+ */
+describe('DEFAULT_PLAYLIST_CAPACITY 单条导出路径（#556 评审 C 续）', () => {
+  it('playlistWrite 不再转出容量常量（中间人已删）', () => {
+    expect(stripComments(readSource('../playlistWrite.ts'))).not.toContain('DEFAULT_PLAYLIST_CAPACITY');
+  });
+
+  it('公共出口仍从 utils/songDedupe 直出，不经 playlistWrite', () => {
+    expect(stripComments(readSource('../../index.ts'))).toContain(
+      "DEFAULT_PLAYLIST_CAPACITY } from './utils/songDedupe.js'",
+    );
+  });
+});
+
