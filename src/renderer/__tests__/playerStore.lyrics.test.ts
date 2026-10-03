@@ -108,6 +108,30 @@ describe('歌词获取失败自动重试（会话失效 → 重搜新签名）',
     expect(callMusicApiMock).toHaveBeenCalledWith('getLyrics', FRESH_LRC);
   });
 
+  it('搜索候选里没有精确匹配 → 不采用第一名的歌词（防翻唱误配）', async () => {
+    // qq 不是 songid 直取源（网易/汽水才跳过搜索补全），所以这条走的是搜索补全路径。
+    const s1 = { ...song('1'), sourceType: 'qq' as Song['sourceType'] };
+    callMusicApiMock.mockImplementation(async (method: string) => {
+      if (method === 'searchSongsRouted') return searchSongsMock();
+      if (method === 'resolvePlayableSongRouted') return { url: s1.url, nonFull: false };
+      // 旧实现会把翻唱候选的 lrc URL 当成本歌的歌词并取回——正是这条路径要挡住的。
+      if (method === 'getLyrics') return '翻唱歌词';
+      return undefined;
+    });
+    // 候选里只有同名**不同歌手**的翻唱（非精确匹配），它带着歌词 URL——
+    // 旧实现 `(hit || results[0])?.lrc` 会把这条 URL 当成本歌的歌词。
+    searchSongsMock.mockResolvedValue([
+      { ...s1, id: 'qq:cover', artist: '某翻唱', lrc: FRESH_LRC },
+    ]);
+
+    usePlayerStore.setState({ currentPlaylist: [s1], currentPlaylistIndex: 0, currentSong: s1 });
+    await usePlayerStore.getState().play(s1);
+
+    await vi.waitFor(() => expect(usePlayerStore.getState().lyricsLoading).toBe(false), { timeout: 3000 });
+    expect(usePlayerStore.getState().lyrics).toBe('');
+    expect(callMusicApiMock).not.toHaveBeenCalledWith('getLyrics', FRESH_LRC);
+  });
+
   it('重搜仍拿不到歌词 URL 时不再重试，歌词为空', async () => {
     const s1 = { ...song('1'), lrc: STALE_LRC };
     // searchSongsMock 默认返回 []（beforeEach 已设）：搜不到 → 重搜仍拿不到 lrc

@@ -2,7 +2,7 @@ import type { Album, AlbumDetail, Artist, DiscoverPlaylist, Song } from '../type
 import type { ArtistAlbumsPage, ContentCache, DirectSourceClient, ToplistDetail, ToplistGroup } from '../shared/sourceRouter.js';
 import type { UrlInfo } from '../shared/playability.js';
 import { normalizePublishTime } from '../utils/publishTime.js';
-import { request, bodyToText, type TransportCallOptions } from './transport.js';
+import { request, bodyToText, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
 import { weapiRequest } from './neteaseWeapi.js';
 import { getUserAgent } from './antiScrape.js';
 import { cacheManager } from './memoryCacheManager.js';
@@ -273,7 +273,13 @@ export async function getNeteaseLyrics(
  * 非 200 的 `code` 一律抛错（`405/406` 风控、`400` 参数错误、`500` 上游异常）——
  * **绝不静默返回空数组**：那会把「被限流/出错」伪装成「没有结果」。
  */
-async function cloudsearchSearch(keyword: string, type: number, limit: number, offset: number): Promise<any> {
+async function cloudsearchSearch(
+  keyword: string,
+  type: number,
+  limit: number,
+  offset: number,
+  opts?: TransportCallOptions,
+): Promise<any> {
   const params = new URLSearchParams({
     s: keyword,
     type: String(type),
@@ -290,7 +296,8 @@ async function cloudsearchSearch(keyword: string, type: number, limit: number, o
       'Referer': 'https://music.163.com/',
     },
     body: params.toString(),
-    timeoutMs: 8000,
+    timeoutMs: cappedRequestTimeout(8000, opts),
+    signal: opts?.signal,
   });
   if (typeof res.body !== 'string') {
     throw new Error('cloudsearch 响应非文本');
@@ -316,8 +323,8 @@ function normalizeCloudsearchOffset(offset: number | undefined): number {
 }
 
 /** 明文 cloudsearch 搜索 → Song[]（不含歌词字段；播放期按 songId 直取，见 #409）。 */
-async function neteaseSearchSongs(keyword: string, page = 1): Promise<Song[]> {
-  const result = await cloudsearchSearch(keyword, CLOUDSEARCH_TYPE_SONG, PAGE_SIZE, (page - 1) * PAGE_SIZE);
+async function neteaseSearchSongs(keyword: string, page = 1, opts?: TransportCallOptions): Promise<Song[]> {
+  const result = await cloudsearchSearch(keyword, CLOUDSEARCH_TYPE_SONG, PAGE_SIZE, (page - 1) * PAGE_SIZE, opts);
   return ((result?.songs || []) as any[]).map(mapTrack);
 }
 
@@ -541,9 +548,10 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
   return {
     key: 'netease',
 
-    /** 明文 cloudsearch 搜索（列表不带歌词，播放期按 songId 直取，见 #409）。 */
-    async searchSongs(keyword: string, page = 1): Promise<Song[]> {
-      return neteaseSearchSongs(keyword, page);
+    /** 明文 cloudsearch 搜索（列表不带歌词，播放期按 songId 直取，见 #409）。
+     *  `opts`（#556 评审 A1）：链尾搜索腿的墙钟与取消信号透传给 transport。 */
+    async searchSongs(keyword: string, page = 1, opts?: TransportCallOptions): Promise<Song[]> {
+      return neteaseSearchSongs(keyword, page, opts);
     },
 
     /** weapi 播放 URL；VIP/无版权返回空串 → 交给换元层 / 明确不可播。 */

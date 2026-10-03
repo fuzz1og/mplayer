@@ -11,7 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ShuffleState, Song } from '@mplayer/core';
-import { applyShuffleOrder } from '@mplayer/core';
+import { applyShuffleOrder, planAdvance } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { planNextIndexes } from '../services/queuePrefetch';
@@ -303,5 +303,46 @@ describe('#520 minors', () => {
     const display = selectQueueSongs(queue, '随机播放', { order: ['A', 'B'], cursor: 0 });
     expect(display).toHaveLength(3);
     expect(ids(display)).toEqual(['A', 'B', 'A']);
+  });
+});
+
+/**
+ * #555：宿主确实执行 core `planAdvance` 的 effect。
+ *
+ * core 的 advancePlan.test.ts 只测纯函数，测不到宿主；移动端的宿主 = playerStore，
+ * 这里断言的正是「落点与 effect 被宿主执行」的可观测结果——随机模式也必须走这条
+ * （此前随机分支自己 stepShuffle 后 return，effect 契约对移动端不成立）。
+ */
+describe('#555 宿主执行 planAdvance 的 effect', () => {
+  it('随机播放 + 单元素队列：restart-current → 不换歌、回到播放起点', () => {
+    setQueue(['A'], 0);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: S(['A'], 0), currentTime: 12, isPlaying: false });
+    // core 契约：单元素队列的随机推进 = restart-current（目标就是当前曲）
+    expect(
+      planAdvance({
+        queue: usePlayerStore.getState().queue,
+        currentIndex: 0,
+        playMode: '随机播放',
+        shuffle: S(['A'], 0),
+        direction: 1,
+        shuffleScope: 'window',
+      }).effect,
+    ).toBe('restart-current');
+
+    expect(usePlayerStore.getState().next()?.id).toBe('A');
+
+    const st = usePlayerStore.getState();
+    expect(st.currentIndex).toBe(0);
+    expect(st.isPlaying).toBe(true);
+    expect(st.currentTime).toBe(0);
+  });
+
+  it('列表循环：load-target → 换到 core 给出的目标曲', () => {
+    setQueue(['A', 'B', 'C'], 0);
+    useSettingsStore.setState({ playMode: '列表循环' });
+
+    expect(usePlayerStore.getState().next()?.id).toBe('B');
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
   });
 });

@@ -1,7 +1,7 @@
 import CryptoJS from 'crypto-js';
 import type { RankMeta, Song } from '../types/index.js';
 import type { DirectSourceClient, ToplistDetail, ToplistGroup } from '../shared/sourceRouter.js';
-import { request, type TransportCallOptions } from './transport.js';
+import { request, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
 import { md5 } from '../utils/hash.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { getUserAgent } from './antiScrape.js';
@@ -205,7 +205,7 @@ export async function obtainQimei(opts?: TransportCallOptions): Promise<string> 
         'content-type': 'application/json',
       },
       body: JSON.stringify({ app: 0, os: 1, qimeiParams: { key, params, time: String(ts), nonce, sign, extra } }),
-      timeoutMs: 8000,
+      timeoutMs: cappedRequestTimeout(8000, opts),
       signal: opts?.signal,
     });
     const outer = JSON.parse(
@@ -277,7 +277,7 @@ export async function musicuPost(body: Record<string, unknown>, opts?: Transport
     url: MUSICU_URL,
     headers: MUSICU_HEADERS,
     body: JSON.stringify(body),
-    timeoutMs: 8000,
+    timeoutMs: cappedRequestTimeout(8000, opts),
     signal: opts?.signal,
   });
   if (res.status >= 400) throw new Error(`QQ musicu HTTP ${res.status}`);
@@ -420,8 +420,9 @@ async function fetchToplistSongs(topid: number): Promise<Song[]> {
 export const qqDirectClient: DirectSourceClient = {
   key: 'qq',
 
-  async searchSongs(keyword: string, page = 1): Promise<Song[]> {
-    const q36 = await ensureQ36();
+  /** `opts`（#556 评审 A1）：链尾搜索腿的墙钟与取消信号透传给 transport（含 QIMEI 取号腿）。 */
+  async searchSongs(keyword: string, page = 1, opts?: TransportCallOptions): Promise<Song[]> {
+    const q36 = await ensureQ36(opts);
     const body = {
       comm: buildCommon(q36),
       'music.search.SearchCgiService.DoSearchForQQMusicMobile': {
@@ -438,7 +439,7 @@ export const qqDirectClient: DirectSourceClient = {
         },
       },
     };
-    const data = await musicuPost(body);
+    const data = await musicuPost(body, opts);
     const moduleRes = data['music.search.SearchCgiService.DoSearchForQQMusicMobile'];
     if (moduleRes?.code !== 0) throw new Error(`QQ 搜索 code=${String(moduleRes?.code)}`);
     // 新版 musicu 返回 `data.body.item_song`；旧版是 `data.song.list`，这里兼容两者。

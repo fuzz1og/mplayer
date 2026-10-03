@@ -1,4 +1,5 @@
 import type { PlayableResource, Song } from '../types/index.js';
+import type { TransportCallOptions } from '../api/transport.js';
 import { isLegacyDeadUrl } from '../utils/legacyUrl.js';
 import { findExactMatch } from '../utils/songMatcher.js';
 
@@ -22,13 +23,36 @@ import { findExactMatch } from '../utils/songMatcher.js';
  * 下次刷新再试。写缓存/写回端口抛错只记日志，不影响已采用的结果返回
  * （缓存是加速器，不是事实源）。
  */
+/**
+ * 腿调用选项（#556）：墙钟由**墙的持有者**（解析链）持有，端口只消费它。
+ *
+ * `timeoutMs` 是这次搜索可用时限（已按 `min(本腿墙, 链总预算剩余)` 夹过）；
+ * `signal` 在链总预算耗尽或本腿到点时 abort —— 端口应把它透传给底层请求，
+ * 并把「已 aborted」当作正常失败（返回空候选），不要上抛。
+ *
+ * **与 `TransportCallOptions` 是同一个形状**（#556 评审 A1）：腿端口与 transport
+ * 端口各写一份结构相同的类型，会让「端口收下了、实现没读」这种假接缝在类型上
+ * 无法被发现。这里直接取别名——搜索端口能收的，正是 transport 能消费的。
+ */
+export type LegOptions = TransportCallOptions;
+
 export interface SongResourceRefreshDeps {
-  /** 读缓存端口（TTL 由各端缓存自身管控；未命中/无有效 url 返回 null）。 */
-  readCache: (song: Song) => Promise<PlayableResource | null>;
+  /**
+   * 读缓存端口（可选；TTL 由各端缓存自身管控，未命中/无有效 url 返回 null）。
+   *
+   * 可选的理由（#557）：不是每个调用方都持有「能交出完整 `PlayableResource`」的缓存。
+   * 解析链的严格搜索腿（`sourceRouter.trySearchLeg`）就是这种情况——它在直连与 tier3
+   * 之后才被调用，播放路径早已查过预取缓存，而预取缓存只交出 `{ url, nonFull }`（剥掉 ts）。
+   * 此前端口必填，逼得那条腿塞一个假适配器（`readCache: async () => null`）。
+   * 不提供该端口 = 跳过规则 a，直接走搜索。
+   */
+  readCache?: (song: Song) => Promise<PlayableResource | null>;
   /** 写缓存端口：只有编排判定可采用的资源才会调用。 */
   writeCache: (song: Song, resource: PlayableResource) => Promise<void>;
-  /** 严格搜索端口：返回候选（平台注入直连/tier3 路由搜索），精确匹配守卫在编排内。 */
-  search: (song: Song) => Promise<Song[]>;
+  /** 严格搜索端口：返回候选（平台注入直连/tier3 路由搜索），精确匹配守卫在编排内。
+   *  `opts`（#556）可选：只有**解析链尾巴**这一条调用路径会传墙钟与取消信号；
+   *  各端自身的刷新调用点（封面/歌词兜底）不传，行为与改动前一致。 */
+  search: (song: Song, opts?: LegOptions) => Promise<Song[]>;
   /** 可选写回端口：匹配成功后把候选的其它字段（封面/歌词等）写回平台存储。 */
   writeBack?: (song: Song, matched: Song) => void | Promise<void>;
   /** 可选死链判定，默认 core isLegacyDeadUrl（已退役签名端点）。 */
@@ -43,19 +67,22 @@ export interface SongResourceRefreshDeps {
 export async function refreshSongResource(
   song: Song,
   deps: SongResourceRefreshDeps,
+  opts?: LegOptions,
 ): Promise<PlayableResource | null> {
   const isDead = deps.isDeadUrl ?? isLegacyDeadUrl;
   const now = deps.now ?? (() => Date.now());
 
-  // a. 缓存命中且非死链 → 直接返回，不搜索
-  const cached = await deps.readCache(song);
-  if (cached?.url && !isDead(cached.url)) return cached;
+  // a. 缓存命中且非死链 → 直接返回，不搜索（未提供读缓存端口则跳过这一条）
+  if (deps.readCache) {
+    const cached = await deps.readCache(song);
+    if (cached?.url && !isDead(cached.url)) return cached;
+  }
 
   // b. 未命中/死链 → 严格搜索，仅采用精确匹配
   const target = { name: song.name, artist: song.artist };
   let candidates: Song[];
   try {
-    candidates = await deps.search(song);
+    candidates = await deps.search(song, opts);
   } catch (e: any) {
     // e. 失败打开：搜索异常不抛给调用方（与移动端现状一致）
     deps.log?.('warn', `资源刷新搜索失败: 《${song.name}》${e?.message || e}`);

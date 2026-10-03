@@ -32,7 +32,13 @@ export function setPrefetchedUrl(song: Song, url: string, nonFull: boolean): voi
   prefetchCache.set(identityKey(song), { url, nonFull, ts: Date.now() });
 }
 
-/** 读取预取缓存；过期条目按未命中处理并顺手清理。 */
+/**
+ * 读取预取缓存；过期条目按未命中处理并顺手清理。
+ *
+ * 返回**剥掉时间戳**的窄形状是刻意的（由 prefetchCache.test.ts 钉住）：
+ * TTL 在缓存内部自管，读取方只关心 url 与 nonFull。
+ * #557 的教训：不要为了迁就某个端口而加宽它——该修的是那个端口。
+ */
 export function getPrefetchedUrl(song: Song): { url: string; nonFull: boolean } | undefined {
   const key = identityKey(song);
   const entry = prefetchCache.get(key);

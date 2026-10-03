@@ -65,11 +65,27 @@ export function createShuffleState(
 }
 
 /**
- * 队列成员变化后的**增量对齐**：丢掉已不在队列的 id、把新进队列的 id 追加到末尾
- * （即「刚加进来的歌排在随机序最后」），游标跟随它原先指向的那首歌。
- * 不改相对顺序——这是「会话内顺序稳定」的落点。
+ * 成员对齐（作用域显式，#543/#555）：把 `state.order` 对齐成「相对 `queue` 合法」的序列，
+ * 游标跟随它原先指向的那首歌；不改相对顺序——这是「会话内顺序稳定」的落点。
+ *
+ * - `authoritative`：队列是完整成员集 → 丢掉已不在队列的 id（幽灵 id 的唯一清理时机）、
+ *   把新进队列的 id 追加到末尾；
+ * - `window`：队列可能只是原生**预取窗口**（子集）→ **只补不丢**，
+ *   否则窗口外的 id 会被删掉，而 store 订阅会立刻落盘 ⇒ 随机序**永久截断**（#520 实测 12 → 5）。
  */
-export function normalizeShuffleOrder(state: ShuffleState, queue: readonly Song[]): ShuffleState {
+function alignMembers(state: ShuffleState, queue: readonly Song[], scope: ShuffleScope): ShuffleState {
+  const anchoredId = itemAt(state.order, state.cursor);
+  if (scope === 'window') {
+    const seen = new Set(state.order);
+    const order = [...state.order];
+    for (const song of queue) {
+      if (song.id && !seen.has(song.id)) {
+        order.push(song.id);
+        seen.add(song.id);
+      }
+    }
+    return { order, cursor: anchoredId ? order.indexOf(anchoredId) : -1 };
+  }
   const queueIds = new Set(queue.map((song) => song.id));
   const order: string[] = [];
   const kept = new Set<string>();
@@ -85,8 +101,14 @@ export function normalizeShuffleOrder(state: ShuffleState, queue: readonly Song[
       kept.add(song.id);
     }
   }
-  const anchoredId = itemAt(state.order, state.cursor);
   return { order, cursor: anchoredId ? order.indexOf(anchoredId) : -1 };
+}
+
+/**
+ * {@link alignMembers} 的 `authoritative` 口径（既有调用点沿用的名字）。
+ */
+export function normalizeShuffleOrder(state: ShuffleState, queue: readonly Song[]): ShuffleState {
+  return alignMembers(state, queue, 'authoritative');
 }
 
 /**
@@ -105,6 +127,8 @@ export function syncShuffleCursor(
 
 /**
  * 游标推进一格（dir = 1 下一首 / -1 上一首），回绕。
+ * 成员先按 `scope` 对齐（缺省 authoritative；window = 只补不丢，窗口外的 id 不裁），
+ * 游标沿用对齐后的值——调用方要「先对到当前曲」请先跑 {@link alignShuffleOrder}。
  * 游标越界（持久化数据损坏等）一律当作 -1 处理：next 从序列开头起、prev 从末尾起。
  * 单元素序列两个方向都归位到该曲（与既有「队列 ≤ 1 归位」行为一致）。
  */
@@ -112,8 +136,9 @@ export function stepShuffle(
   state: ShuffleState,
   queue: readonly Song[],
   direction: 1 | -1,
+  scope: ShuffleScope = 'authoritative',
 ): ShuffleStep {
-  const normalized = normalizeShuffleOrder(state, queue);
+  const normalized = alignMembers(state, queue, scope);
   const total = normalized.order.length;
   if (total === 0 || queue.length === 0) {
     return { index: -1, state: normalized };
@@ -224,19 +249,9 @@ export function alignShuffleOrder(
   currentIndex: number,
   scope: ShuffleScope = 'authoritative',
 ): ShuffleState {
-  if (scope === 'window') {
-    const seen = new Set(state.order);
-    const order = [...state.order];
-    for (const song of queue) {
-      if (song.id && !seen.has(song.id)) {
-        order.push(song.id);
-        seen.add(song.id);
-      }
-    }
-    const currentId = songIdAt(queue, currentIndex);
-    return { order, cursor: currentId ? order.indexOf(currentId) : -1 };
-  }
-  return syncShuffleCursor(state, queue, currentIndex);
+  const aligned = alignMembers(state, queue, scope);
+  const currentId = songIdAt(queue, currentIndex);
+  return { order: aligned.order, cursor: currentId ? aligned.order.indexOf(currentId) : -1 };
 }
 
 /** 取 `list[index]` 的 id；下标非法返回 null（数组越界一律走这条，不抛）。 */

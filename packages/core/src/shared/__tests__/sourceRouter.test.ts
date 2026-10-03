@@ -164,7 +164,8 @@ describe('searchSongsRouted 路由矩阵', () => {
     const client = makeClient('netease');
     registerDirectClient(client);
     const result = await searchSongsRouted('晴天', 1, 'netease');
-    expect(client.searchSongs).toHaveBeenCalledWith('晴天', 1);
+    // #556：第三个可选参数是腿调用选项（墙钟/取消信号）的透传位，本入口不传时为 undefined。
+    expect(client.searchSongs).toHaveBeenCalledWith('晴天', 1, undefined);
     expect(result[0].id).toBe('direct-1');
   });
 
@@ -203,7 +204,8 @@ describe('searchSongsRouted 路由矩阵', () => {
     registerDirectClient(client);
     setSourceMode('netease', 'direct');
     const result = await searchSongsRouted('陶喆', 1, 'netease');
-    expect(tier3Search).toHaveBeenCalledWith('陶喆', 1, 'netease');
+    // 第 4 参是 #556 的墙钟/取消信号（未给 = undefined）——resolver 签名随之加宽。
+    expect(tier3Search).toHaveBeenCalledWith('陶喆', 1, 'netease', undefined);
     expect(result[0].id).toBe('tier3-1');
   });
 
@@ -222,7 +224,7 @@ describe('searchSongsRouted 路由矩阵', () => {
     registerDirectClient(client);
     setSourceMode('netease', 'direct');
     const result = await searchSongsRouted('晴天', 1, 'netease');
-    expect(tier3Search).toHaveBeenCalledWith('晴天', 1, 'netease');
+    expect(tier3Search).toHaveBeenCalledWith('晴天', 1, 'netease', undefined);
     expect(result[0].id).toBe('tier3-1');
   });
 
@@ -233,6 +235,22 @@ describe('searchSongsRouted 路由矩阵', () => {
     setSourceMode('netease', 'direct');
     const result = await searchSongsRouted('晴天', 1, 'netease');
     expect(result[0].id).toBe('tier3-1');
+  });
+
+  it('⭐ #556 评审 B3：搜索腿的 opts（墙钟 + 取消信号）交给 tier3 搜索 resolver', async () => {
+    const tier3Search = vi.fn(async () => [song('tier3-1', 'netease')]);
+    setTier3SearchEnabled(true);
+    setTier3SearchResolver(tier3Search);
+    const client = makeClient('netease', { searchSongs: vi.fn(async () => []) });
+    registerDirectClient(client);
+    setSourceMode('netease', 'direct');
+
+    const controller = new AbortController();
+    const opts = { timeoutMs: 1_234, signal: controller.signal };
+    await searchSongsRouted('陶喆', 1, 'netease', opts);
+
+    // 修前：tryTier3Search 不收 opts，resolver 只收到 3 个实参（第 4 个恒 undefined）→ 红。
+    expect(tier3Search).toHaveBeenCalledWith('陶喆', 1, 'netease', opts);
   });
 });
 

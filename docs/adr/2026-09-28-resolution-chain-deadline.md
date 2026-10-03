@@ -73,6 +73,12 @@
      （a）`withSourceDeadline` 中止**在飞源**请求、`runSourceAttempt` 按既有「放弃观测」记账，
      （b）停止遍历后续源，剩余源记「放弃观测」（不进健康度，决策 6 口径不变）；
    - 直连腿取证：按剩余夹小，并同样可被 abort（总预算已尽则跳过，fail-open）；
+   - 严格搜索腿（#556 补记；评审 A1/B3 补齐直连那截）：解析链尾巴那一次搜索取
+     `min(SEARCH_LEG_WALL_MS, 剩余预算)`，到点即 abort；预算已尽则**连上游都不打**
+     （与 `tryTier3` 同口径）。`signal` 与收窄后的 `timeoutMs` 经 `searchSongsRouted`
+     透传到**七个直连源**的 `searchSongs` 并进 `transport`，也交给 tier3 搜索 resolver
+     （`Tier3SearchResolver` 第 4 参）的中止链——两截都真的停掉在飞请求，由
+     `api/__tests__/searchSongsOptsWiring.test.ts` 逐源从出网行为上钉住。
    - 链本身以 `ResolutionBudgetExhaustedError` reject；**返回契约与抛错语义不变**
      （`2026-09-23-tier3-failure-attribution.md` 的约束继续成立），宿主仍走既有失败路径。
 
@@ -105,6 +111,12 @@
   `WORST_CASE_SILENT_MS` 让「最坏等多久」成为可读、可断言的单一值（各有单测钉住）。
 - **各腿局部墙语义不变**：直连 3s、单源硬墙按 kind 2s/2.5s、tier3 腿 6s、嗅探独立 1s 全部保留；
   新增的只是「谁都不得超过解析链总预算的剩余」这一条。
+- **严格搜索腿的 abort 两截都已落地**（#556 + 评审 A1/B3）：tier3 搜索 resolver 与七个
+  直连源（netease / qq / kugou / kuwo / migu / qianqian / soda）的 `searchSongs` 都收
+  `TransportCallOptions`，把 `signal` 与 `min(源自有时限, 可用时限)` 交给 transport——到点真的停掉
+  在飞搜索请求，而不再是「链不再等它、请求继续跑完」。守卫：
+  `api/__tests__/searchSongsOptsWiring.test.ts`（逐源断言搜索路径上每一次出网请求都带
+  cap 后的 `timeoutMs` 与 `signal`）。
 - **底层工作真的会停**：总预算耗尽会 abort 在飞请求（直连腿 / tier3 源尝试），
   tier3 K=3 槽位随解析收尾归还，「in-flight 归零」有入口级测试钉住。
 - 新文件/新常量：`shared/resolutionBudget.ts`、`playbackBudgets.RESOLUTION_CHAIN_BUDGET_MS`、

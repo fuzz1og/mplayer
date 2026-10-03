@@ -455,7 +455,6 @@ function prefetchNextSong(): void {
       playMode,
       shuffle: st.shuffle ?? null,
       direction: 1,
-      cause: 'user',
     }).index;
     if (nextIdx < 0) return;
     const next = st.queue[nextIdx];
@@ -786,10 +785,12 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
 /**
  * UI「下一首」/「上一首」的引擎无关入口。
  *
- * **原生引擎下必须走原生**（`Native.next()/prev()`）：原生播放列表是权威队列，
- * 如果这里改成 `playerStore.next() + playSong(song)`，会把原生队列
- * 换成一个只有一首的 `loadQueue`，预取窗口与曲末原生推进全部落空
- * （而且 UI next 与锁屏 next 会各走一套随机语义 → 语义漂移）。
+ * **原生引擎下必须走 `nativeNext`/`nativePrev`**：原生播放列表是权威队列，
+ * 如果这里改成 `playerStore.next() + playSong(song)`，会把原生队列整体换成一首的
+ * `loadQueue`（预取窗口与曲末原生推进全部落空）。
+ * 原生入口自身（#555）不再自己判断落点：`nativePlayer.nativeStep` 先用 store `advance`
+ * 拿 core `planAdvance` 的 `{ index, effect }`，再按 effect 与原生窗口现状交付
+ * （相邻格匹配 → 原生顺序推进；否则起播目标曲；`restart-current` → `seek(0)` 重播）。
  */
 export function skipNext(): void {
   if (isNativeEngine()) {

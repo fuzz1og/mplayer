@@ -31,6 +31,26 @@ describe('playlistStore.createPlaylist（就地新建的公共前置）', () => 
   });
 });
 
+describe('playlistStore 写入去重判据（#553：identityKey，不是裸 Song.id）', () => {
+  const sourced = (id: string, sourceType: Song['sourceType']): Song =>
+    ({ ...song(id, '同名的歌'), id, artist: '同一歌手', sourceType });
+
+  it('跨源同 rawId 不算同一首：两首都要留下（旧判据按裸 id 会静默丢掉一首）', () => {
+    const id = usePlaylistStore.getState().createPlaylist('跨源同 id');
+    usePlaylistStore.getState().addSongs(id, [sourced('123', 'netease'), sourced('123', 'qq')]);
+    const target = usePlaylistStore.getState().playlists.find((p) => p.id === id);
+    expect(target?.songs.map((s) => s.sourceType)).toEqual(['netease', 'qq']);
+  });
+
+  it('同源裸 id 与带源前缀 id 收敛为同一首（ADR-0012），只留一条', () => {
+    const id = usePlaylistStore.getState().createPlaylist('前缀归一');
+    usePlaylistStore.getState().addSong(id, sourced('123', 'netease'));
+    usePlaylistStore.getState().addSong(id, sourced('netease:123', 'netease'));
+    const target = usePlaylistStore.getState().playlists.find((p) => p.id === id);
+    expect(target?.songs).toHaveLength(1);
+  });
+});
+
 describe('playlistStore.removeSongs（批量移除一次 set）', () => {
   it('移除 N 首只触发 1 次 store 更新，其余保持原有相对顺序', () => {
     const id = usePlaylistStore.getState().createPlaylist('批量移除');

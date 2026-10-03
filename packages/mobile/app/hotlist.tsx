@@ -26,7 +26,7 @@ import HeroSkeleton from '../components/HeroSkeleton';
 import SongRow from '../components/SongRow';
 import BottomSheet from '../components/BottomSheet';
 import ScalePress from '../components/ScalePress';
-import { usePlaylistStore } from '../stores/playlistStore';
+import { createMobilePlaylistWriter } from '../services/playlistExport';
 
 /** 榜单行：只承载歌 + 榜位（不动 SongList 的判别联合，Hero 的 data 只要这个形状） */
 type HotlistRow = { kind: 'song'; key: string; song: Song; rank: number };
@@ -61,10 +61,6 @@ export default function HotlistPage() {
   const [saveVisible, setSaveVisible] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [saving, setSaving] = useState(false);
-
-  const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
-  const addSongs = usePlaylistStore((s) => s.addSongs);
-  const deletePlaylist = usePlaylistStore((s) => s.deletePlaylist);
 
   const config = key ? API_MAP[key] : undefined;
 
@@ -155,23 +151,26 @@ export default function HotlistPage() {
 
   const closeSaveSheet = useCallback(() => setSaveVisible(false), []);
 
-  const handleSaveAll = useCallback(() => {
+  const handleSaveAll = useCallback(async () => {
     const name = saveName.trim();
     if (!name || songs.length === 0 || saving) return;
     setSaving(true);
-    let createdId: string | null = null;
     try {
-      createdId = createPlaylist(name);
-      addSongs(createdId, songs);
+      // #552：新建 + 整批写入 + 失败回滚交给移动端 adapter 背后的 core 编排。
+      // 成功文案用宿主真实新增数（#554：result.added，不是请求数 songs.length）。
+      const result = await createMobilePlaylistWriter().createAndAdd({ name, songs });
+      if (!result.ok) {
+        Alert.alert('保存失败', result.rolledBack ? '添加歌曲失败，已撤销新建的歌单' : result.error || '请稍后重试');
+        return;
+      }
       setSaveVisible(false);
-      Alert.alert('已保存', `已把《${displayName}》的 ${songs.length} 首保存到新歌单「${name}」`);
+      Alert.alert('已保存', `已把《${displayName}》的 ${result.added} 首保存到新歌单「${name}」`);
     } catch (e) {
-      if (createdId) deletePlaylist(createdId);
       Alert.alert('保存失败', e instanceof Error && e.message ? e.message : '请稍后重试，未留下空歌单');
     } finally {
       setSaving(false);
     }
-  }, [saveName, songs, saving, createPlaylist, addSongs, deletePlaylist, displayName]);
+  }, [saveName, songs, saving, displayName]);
 
   const rows = useMemo<HotlistRow[]>(
     () => songs.map((song, i) => ({ kind: 'song' as const, key: song.id, song, rank: i + 1 })),

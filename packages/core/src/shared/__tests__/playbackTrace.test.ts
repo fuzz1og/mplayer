@@ -160,8 +160,14 @@ describe('resolvePlayableSongRouted 落 trace', () => {
     expect(t.via).toBeNull();
     // resolver 正常返回 null（全源未命中）≠ 预算超时：只有后者才该把迟到命中记 discarded。
     expect(t.tier3TimedOut).toBe(false);
-    expect(t.reason).toBe('直连返回空串（无版权/VIP）');
-    expect(t.sources).toEqual([{ sourceId: 'S2', ms: 0, outcome: 'skipped' }]);
+    // #556：tier3 跑过之后搜索腿也会跑（此处无 searchSongs 能力 → 未命中），
+    // 终局原因因此是「两个上游腿都没取到 URL」而不是单说直连空串。
+    expect(t.reason).toBe('直连与 tier3 均未取到 URL');
+    expect(t.sources).toEqual([
+      { sourceId: 'S2', ms: 0, outcome: 'skipped' },
+      // 搜索腿也在这条链上：同一份 outcome 口径、单一身份位（#556）。
+      { sourceId: 'search:netease', ms: expect.any(Number), outcome: 'miss' },
+    ]);
   });
 
   it('预取命中：layer=prefetch、0 次直连调用', async () => {

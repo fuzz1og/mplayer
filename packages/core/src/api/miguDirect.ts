@@ -1,6 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request, bodyToBytes, bodyToText, type TransportCallOptions } from './transport.js';
+import { request, bodyToBytes, bodyToText, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
 
 /**
  * 咪咕直连客户端（T05 #151）。
@@ -86,7 +86,8 @@ function mapTrack(t: any): Song {
 export const miguDirectClient: DirectSourceClient = {
   key: 'migu',
 
-  async searchSongs(keyword: string, page = 1): Promise<Song[]> {
+  /** `opts`（#556 评审 A1）：链尾搜索腿的墙钟与取消信号透传给 transport。 */
+  async searchSongs(keyword: string, page = 1, opts?: TransportCallOptions): Promise<Song[]> {
     const params = new URLSearchParams({
       text: keyword,
       pageNo: String(page),
@@ -99,7 +100,8 @@ export const miguDirectClient: DirectSourceClient = {
       method: 'GET',
       url: `${SEARCH_URL}?${params.toString()}`,
       headers: MIGU_HEADERS,
-      timeoutMs: 8000,
+      timeoutMs: cappedRequestTimeout(8000, opts),
+      signal: opts?.signal,
     });
     if (res.status >= 400) throw new Error(`migu 搜索 HTTP ${res.status}`);
     const data = JSON.parse(bodyToText(res.body)) as {

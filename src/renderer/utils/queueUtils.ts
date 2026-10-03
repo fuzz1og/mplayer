@@ -23,7 +23,6 @@ export function getNextSong(
     playMode,
     shuffle: shuffle ?? null,
     direction: 1,
-    cause: 'user',
   });
   return plan.effect === 'none' ? null : playlist[plan.index];
 }

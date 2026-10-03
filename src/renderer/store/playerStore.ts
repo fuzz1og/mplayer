@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { message } from 'antd';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import { playbackClock } from '@/renderer/services/playbackClock';
-import type { Song, PlaybackFailureAdvice, ShuffleState, ShuffleStep } from '@mplayer/core';
+import type { Song, PlaybackFailureAdvice, ShuffleState, AdvancePlan } from '@mplayer/core';
 import type { PlayMode } from '@mplayer/core';
 import {
   findExactMatch,
@@ -10,7 +10,6 @@ import {
   createShuffleState,
   normalizeShuffleOrder,
   syncShuffleCursor,
-  stepShuffle,
   insertNextInShuffle,
   replaceShuffleSongId,
   songUsesSongidLyrics,
@@ -21,7 +20,6 @@ import {
   resetFailureStreak,
   getFailureStreak,
   pickNextSongAfterFailure,
-  refreshSongResource,
   OFFLINE_COPY,
 } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
@@ -47,11 +45,14 @@ async function loadLyricsWithRetry(song: Song): Promise<string> {
   // 存量持久化数据兼容：网易的 lrc 可能是 #409 之前写入的内联 LRC 文本，直接当文本用
   if (isInlineLyrics(song.sourceType, song.lrc)) return song.lrc;
 
+  // #556：只接受**精确匹配**的歌词（此前 `hit || results[0]` 在无精确匹配时取第一条，
+  // 正是 #544 / ADR-0012 要杀的翻唱误配；移动端同场景只认精确匹配）。候选里没有
+  // 同名同歌手 → 返回空串 = 本轮无歌词，而不是挂上别人的歌词。
   const searchLrc = async (): Promise<string> => {
     try {
       const results = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`, 1, song.sourceType);
       const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
-      return (hit || results[0])?.lrc?.trim() || '';
+      return hit?.lrc?.trim() || '';
     } catch {
       return '';
     }
@@ -301,12 +302,50 @@ function syncShuffle(
 }
 
 /**
- * next / prev：先把游标对到**当前播放曲**（防脏数据导致游标漂移），再消费序列推进一格。
- * 没有序列且非随机 → null（调用方走列表循环）。
+ * next / prev 的**落点**（#555）：随机模式下先把序列对到当前播放曲——没有序列就现洗一份
+ * （`ensure`，防脏数据导致游标漂移），再把对齐后的序列作为入参交给 core `planAdvance`。
+ * **落点与 effect 只在 core 一处决定**，宿主只执行 effect；非随机模式序列原样传入。
  */
-function stepShuffleFromCurrent(state: PlayerStoreState, direction: 1 | -1): ShuffleStep | null {
-  const base = syncShuffle(state, state.currentPlaylist, state.currentPlaylistIndex, { ensure: true });
-  return base ? stepShuffle(base, state.currentPlaylist, direction) : null;
+function planAdvanceFromCurrent(state: PlayerStoreState, direction: 1 | -1): AdvancePlan {
+  const shuffle = state.playMode === '随机播放'
+    ? syncShuffle(state, state.currentPlaylist, state.currentPlaylistIndex, { ensure: true })
+    : state.shuffle;
+  return planAdvance({
+    queue: state.currentPlaylist,
+    currentIndex: state.currentPlaylistIndex,
+    playMode: state.playMode,
+    shuffle,
+    direction,
+  });
+}
+
+/**
+ * 执行 core `planAdvance` 给出的 effect（#555）：宿主只负责「怎么落」。
+ * - `restart-current`：目标是当前曲 → seek(0) 重播，**不重新解析 URL**
+ *   （避免切走 → reload 的音轨闪烁，桌面既有行为）；
+ * - `load-target`：换下标并按主链路加载播放。
+ * `none` 由调用方处置（playNext = stop、playPrevious = 不动）。
+ */
+function applyAdvanceEffect(
+  plan: AdvancePlan,
+  context: {
+    currentSong: Song | null;
+    playlist: Song[];
+    set: (patch: Partial<PlayerStoreState>) => void;
+    play: (song: Song) => void;
+  },
+): void {
+  const { currentSong, playlist, set, play } = context;
+  if (plan.effect === 'restart-current') {
+    if (!currentSong) return;
+    audioPlayer.seek(0);
+    audioPlayer.play();
+    playbackClock.setPosition(0);
+    set({ isPlaying: true, error: null, currentPlaylistIndex: plan.index, shuffle: plan.shuffle });
+    return;
+  }
+  set({ currentPlaylistIndex: plan.index, shuffle: plan.shuffle });
+  play(playlist[plan.index]);
 }
 
 /**
@@ -535,27 +574,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       }
 
-      // 无 url 歌曲（直连解析失败 / 列表未带 url）：#544 起不再手抄规则，
-      // 改调 core 的 `refreshSongResource`（守卫唯一：非 http / 旧签名死链 /
-      // audioTag=invalid 一律不采用；采用后写回预取缓存）。
-      // 此前这里的弱化版只做「搜索 → findExactMatch → 取 hit.url」，缺这三条守卫。
-      if (!realUrl && song.sourceType !== 'local' && song.sourceType !== 'soda' && song.name) {
-        try {
-          const resource = await refreshSongResource(song, {
-            readCache: async () => null, // 解析链刚失败过，缓存里没有可用项
-            writeCache: async () => {
-              // 写回也走主进程那份缓存（渲染层那份没人读，见 #390）
-              await callMusicApi('prefetchPlayableSong', song).catch(() => {});
-            },
-            search: async (s) =>
-              (await callMusicApi('searchSongsRouted', `${s.name} ${s.artist}`.trim(), 1, s.sourceType)) as Song[],
-          });
-          if (resource?.url) realUrl = resource.url;
-        } catch (urlError) {
-          console.error('播放时搜索歌曲 URL 失败:', urlError);
-        }
-      }
-
+      // #556：这里此前补着一份「搜索腿」适配器——core 的搜索腿只覆盖「直连返回空串」
+      // 分支，且其 writeCache 走 prefetchPlayableSong 会**再跑一整条解析链**（直连 3s
+      // + tier3 6s，还被 await）。现在 core 的两个分支（空串 / 抛错）都落到同一条
+      // 尾巴并写回预取缓存，桌面不需要任何适配器，删掉整块（含那次保证落空的二次搜索）。
       if (generation !== playGeneration) {
         set({ isLoading: false });
         return;
@@ -755,83 +777,46 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   playNext: () => {
-    const { currentPlaylist, currentPlaylistIndex, playMode, currentSong } = get();
+    const { currentPlaylist, currentPlaylistIndex } = get();
 
     if (currentPlaylist.length === 0 || currentPlaylistIndex === -1) {
       get().stop();
       return;
     }
 
-    // 单曲循环：刻意保留 seek(0)+play 特例（走 seek 复播而非 play()/URL，
-    // 避免切走 → reload 的音轨闪烁），不走 core 队列算法与 play() 主链路
-    if (playMode === '单曲循环') {
-      if (currentSong) {
-        audioPlayer.seek(0);
-        audioPlayer.play();
-        playbackClock.setPosition(0);
-        set({ isPlaying: true, error: null });
-      }
-      return;
-    }
-
-    // 随机（#511）：消费稳定序列——游标前进一格（没有序列就按当前队列现洗一份）
-    if (playMode === '随机播放') {
-      const step = stepShuffleFromCurrent(get(), 1);
-      if (!step || step.index === -1) {
-        get().stop();
-        return;
-      }
-      set({ currentPlaylistIndex: step.index, shuffle: step.state });
-      get().play(currentPlaylist[step.index]);
-      return;
-    }
-
-    // #541：列表循环推进收敛到 core planAdvance（回绕 + 落点动作单一来源）
-    const plan = planAdvance({
-      queue: currentPlaylist,
-      currentIndex: currentPlaylistIndex,
-      playMode,
-      shuffle: get().shuffle,
-      direction: 1,
-      cause: 'user',
-    });
+    // #555：随机 / 单曲 / 列表三条路统一由 core planAdvance 决定落点与 effect
+    // （此前随机与单曲各有一条提前 return 的旁路，effect 契约对桌面不成立），
+    // 这里只按 effect 落：restart-current 走 seek(0) 复播、不重新解析（桌面既有行为）。
+    const plan = planAdvanceFromCurrent(get(), 1);
     if (plan.effect === 'none') {
       get().stop();
       return;
     }
-    set({ currentPlaylistIndex: plan.index });
-    get().play(currentPlaylist[plan.index]);
+    applyAdvanceEffect(plan, {
+      currentSong: get().currentSong,
+      playlist: currentPlaylist,
+      set,
+      play: get().play,
+    });
   },
 
   playPrevious: () => {
-    const { currentPlaylist, currentPlaylistIndex, playMode } = get();
+    const { currentPlaylist, currentPlaylistIndex } = get();
 
     if (currentPlaylist.length === 0 || currentPlaylistIndex === -1) {
       return;
     }
 
-    // 随机（#511 行为变更）：游标后退一格——回到序列里的上一张，不再现抽
-    if (playMode === '随机播放') {
-      const step = stepShuffleFromCurrent(get(), -1);
-      if (!step || step.index === -1) return;
-      set({ currentPlaylistIndex: step.index, shuffle: step.state });
-      get().play(currentPlaylist[step.index]);
-      return;
-    }
-
-    // #541：单曲循环 / 列表循环统一收敛到 core planAdvance
-    // （单曲 prev = 回上一首不重播，与移动端现在同口径）
-    const plan = planAdvance({
-      queue: currentPlaylist,
-      currentIndex: currentPlaylistIndex,
-      playMode,
-      shuffle: get().shuffle,
-      direction: -1,
-      cause: 'user',
-    });
+    // #555：与 playNext 同一条路（此前随机分支自己 stepShuffle 后提前 return）；
+    // 单曲循环 + prev = 回上一首（不重播），单元素队列 = restart-current，均由 core 决定。
+    const plan = planAdvanceFromCurrent(get(), -1);
     if (plan.effect === 'none') return;
-    set({ currentPlaylistIndex: plan.index });
-    get().play(currentPlaylist[plan.index]);
+    applyAdvanceEffect(plan, {
+      currentSong: get().currentSong,
+      playlist: currentPlaylist,
+      set,
+      play: get().play,
+    });
   },
 
   insertNext: async (song: Song) => {

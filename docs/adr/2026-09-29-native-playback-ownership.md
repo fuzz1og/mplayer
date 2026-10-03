@@ -47,6 +47,50 @@ JS 对网络回调仍有反应、原生确实发了事件、FGS 全程 `isForegr
 （`setShuffleModeEnabled(true)` 不外露顺序，会让窗口算不出下一首）。
 代价：随机序列在窗口内是「预定的」，用户切歌后按新位置重排（已列入 P6 验收项）。
 
+### 落点决策（#555 补充，2026-10-04）
+
+「下一首/上一首落到哪」的唯一来源是 core `planAdvance`。原生路径的实现分两层：
+
+- **JS 侧 UI 入口**（`audioPlayer.skipNext/skipPrev` → `nativePlayer.nativeStep`）：
+  先经 `playerStore.advance` 拿 core 的 `{ index, effect }`，再按 effect 交付：
+  `restart-current` → `seek(0)` 重播（不重新解析）；`load-target` 且**原生窗口的相邻格 ==
+  core 落点** → 交原生顺序推进；否则 `nativePlaySong(落点)` 起播（见下残余）。
+- **锁屏 / 媒体会话的 next/prev**：承载它的是**本模块自己的** `PlayerService` 里的
+  `MediaLibrarySession`；但 `SessionCallback`（`PlayerService.kt:1029`）只覆写了
+  `onPlaybackResumption`，**没有拦截跳曲** —— 于是会话命令落进 media3 的默认路径：直接对
+  ExoPlayer `seekToNextMediaItem()`，**绕过我们自己的 `PlayerService.next()/prev()`**
+  （`PlayerService.kt:531`/`:552`）。它的正确性不来自「按下时算落点」，而来自**原生列表顺序本身就是 JS 按 core
+  计划（`planNextIndexes` / 随机序）喂出来的窗口**：稳态下相邻格 == 计划落点，顺序推进即落点。
+  列表循环 / 随机的绕圈语义由 JS 补窗接管（`AdvancePolicy` 恒 `REPEAT_MODE_OFF`，
+  仅单曲循环用 `REPEAT_MODE_ONE`）。
+
+**未落地 / 残余（如实记录）**：
+
+- 原生模块**没有「跳到指定 index」原语**（只有 `next`/`prev`/`seek(秒)`），所以「落点不在原生
+  相邻格」时只能 `nativePlaySong`（单曲 `loadQueue` 起播再补窗）：会打断当前播放，并多一次
+  解析/重缓冲。稳态窗口内不会走到（相邻格命中），只在会话开头、历史被裁剪、或队列与窗口分叉时。
+
+**已落地（#561，2026-10-04）**：
+
+- **锁屏 / 媒体会话的 next/prev 与 UI 走同一条路**：`PlayerService` 用 `ForwardingPlayer`
+  （androidx.media3.common）的子类 `SessionPlayer` 包住 ExoPlayer，再交给
+  `MediaLibrarySession.Builder(this, SessionPlayer(ctrl.player), ...)`（`onCreate`）。
+  实测 media3 1.9.0 的下推链是 `MediaSessionStub` → 内部 `PlayerWrapper : ForwardingPlayer`
+  → `ForwardingPlayer.seekToNext[MediaItem]()` → 本包装；故覆写 `seekToNext()`/
+  `seekToNextMediaItem()`/`seekToPrevious()`/`seekToPreviousMediaItem()` 四个方法
+  （`PlayerService.kt:1019` 起），把**用户发起的**会话跳曲转给 `PlayerService.next()/prev()`
+  （`PlayerService.kt:531`/`:552`）——与 UI 入口（`PlayerModule.next/prev` →
+  `PlayerService.next/prev`）同一函数。窗口最后一项上的会话 next 因此同样走
+  `pendingUserNext = true` + 暂停 + `QUEUE_ENDED(WINDOW_HOLE)` + `requestTracks(HOLE)`，
+  补窗到位后自动前进，不再要按第二次。**未采用 `MediaSession.Callback.onPlayerCommandRequest`**
+  （media3 1.9 已 deprecated，见 `docs/research/2026-09-27-android-background-playback.md` §2.1）。
+  **双跳防护**：这四个覆写**不调 super**——被接管的命令不会再落到播放器默认路径；服务内部
+  代码一律持原始 `ctrl.player`（`next()`/`prev()`/`handleEnded()` 里的 `seekToNextMediaItem()`），
+  服务自己发起的推进不会二次经过本包装。曲末 AUTO 推进是 ExoPlayer 的内部行为，不经过
+  `Player.seekTo*`，不会被误拦成用户 next。属原生改动：**PR / push 不编译原生**（见 ADR
+  `2026-09-29-ci-verification-boundary`），已按 `docs/agents/testing.md`「原生发版构建（本机）」
+  在本 worktree 跑通 `./gradlew assembleRelease bundleRelease --no-daemon`（证据见 PR 正文）。
+
 ## 备选与否决
 
 | 备选 | 否决理由 |
