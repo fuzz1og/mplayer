@@ -8,16 +8,26 @@ import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
 import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
+import { COL_INDEX, colStyle } from '@/renderer/components/songTableColumns';
 import { applyShuffleOrder, type Song } from '@mplayer/core';
 
 /** 队列行的行尾操作：加入歌单 + 从队列移除（沿用队列页原有的常驻图标按钮） */
+/**
+ * 队列页操作列宽。表头与行必须同为这个值——此前表头写 60px、行写 90px，
+ * 两处各自写死，于是「操作」标签比下面的图标偏了 30px 且不报错。
+ */
+const QUEUE_ACTIONS_W = 90;
+
+/** 队列页专辑列宽；行的 albumWidth 也取这个值 */
+const QUEUE_ALBUM_W = 120;
+
 const QueueRowActions: React.FC<{
   song: Song;
   index: number;
   onAddToPlaylist: (song: Song) => void;
   onRemove: (index: number) => void;
 }> = ({ song, index, onAddToPlaylist, onRemove }) => (
-  <div style={{ width: '90px', display: 'flex', justifyContent: 'center', gap: '4px', flexShrink: 0 }}>
+  <div style={{ width: QUEUE_ACTIONS_W + 'px', display: 'flex', justifyContent: 'center', gap: '4px', flexShrink: 0 }}>
     <button
       onClick={(e) => { e.stopPropagation(); onAddToPlaylist(song); }}
       aria-label="加入歌单"
@@ -130,7 +140,7 @@ const QueuePage: React.FC = () => {
         isCurrentSong={currentSongId === song.id}
         isPlaying={isPlaying}
         fillTitle
-        albumWidth={120}
+        albumWidth={QUEUE_ALBUM_W}
         onPlay={play}
         onCoverError={handleCoverError}
         renderActions={renderQueueActions}
@@ -148,7 +158,7 @@ const QueuePage: React.FC = () => {
         isCurrentSong={currentSongId === song.id}
         isPlaying={isPlaying}
         fillTitle
-        albumWidth={120}
+        albumWidth={QUEUE_ALBUM_W}
         dragHandle={previewDragHandle}
         onPlay={play}
         onCoverError={handleCoverError}
@@ -206,10 +216,10 @@ const QueuePage: React.FC = () => {
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
-              <div style={{ width: '50px', textAlign: 'center' }}>#</div>
+              <div style={{ ...colStyle(COL_INDEX), textAlign: 'center' }}>#</div>
               <div style={{ flex: 1 }}>标题</div>
-              <div style={{ width: '120px' }}>专辑</div>
-              <div style={{ width: '60px', textAlign: 'center' }}>操作</div>
+              <div style={colStyle(QUEUE_ALBUM_W)}>专辑</div>
+              <div style={{ width: QUEUE_ACTIONS_W + 'px', textAlign: 'center' }}>操作</div>
             </div>
             {/* 窗口化 + 可排序：挂载行数与视口成正比（#428 / ADR 2026-09-29-queue-virtualized-sortable-list） */}
             <VirtualSortableList

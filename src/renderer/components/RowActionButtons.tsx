@@ -2,6 +2,7 @@ import React from 'react';
 import { Heart, Download, MoreHorizontal } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import RowActionMenu, { type RowActionItem } from '@/renderer/components/RowActionMenu';
+import { COL_ACTIONS, colStyle } from '@/renderer/components/songTableColumns';
 
 interface RowActionButtonsProps {
   song: Song;
@@ -43,7 +44,7 @@ const RowActionButtons: React.FC<RowActionButtonsProps> = ({
   onCloseMore,
   menuItems,
 }) => (
-  <div style={{ width: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexShrink: 0 }}>
+  <div style={{ ...colStyle(COL_ACTIONS), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
     {onDownload && (
       <button
         onClick={(e) => { e.stopPropagation(); onDownload(song); }}
