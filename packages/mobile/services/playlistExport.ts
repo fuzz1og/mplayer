@@ -162,6 +162,9 @@ export function createMobileImportDeps(
   writer: MobilePlaylistWriter = createMobilePlaylistWriter(),
 ): PlaylistImportDeps {
   return {
+    // 不传 resolveNameConflict：**导入是无人值守的整批操作**，跨源同名走 core 的
+    // 「默认并入」——与桌面 importService.importDepsFor 同一口径（#560 复核后确认这条
+    // 双端一致是**有意的**，不是缺口；批量弹窗那条腿才是缺口，已接上）。
     addSong: async (playlistId, song) => {
       const result = await writer.add({ playlistId, songs: [song] });
       if (!result.ok) throw new Error(result.error || '添加失败');
