@@ -8,6 +8,8 @@ export interface DownloadItem {
   songId: string;
   name: string;
   artist: string;
+  /** 下载时的封面直链（远端；列表封面用，失效则占位）。旧记录无此字段 → 渲染占位 */
+  cover?: string;
   fileName: string;
   status: 'downloading' | 'done' | 'error';
   /** 同步到公共下载目录后的 SAF content:// uri（未同步则无） */
@@ -24,7 +26,7 @@ export interface DownloadItem {
 interface DownloadState {
   items: DownloadItem[];
   addItem: (item: DownloadItem) => void;
-  updateStatus: (key: string, patch: Partial<Pick<DownloadItem, 'status' | 'error' | 'publicUri' | 'fileName'>>) => void;
+  updateStatus: (key: string, patch: Partial<Pick<DownloadItem, 'status' | 'error' | 'publicUri' | 'fileName' | 'cover'>>) => void;
   removeItem: (key: string) => void;
   /** 清除失败条目：下载失败已自动移除，此处清理历史残留的 error 条目（本地歌曲页挂载时调用） */
   purgeFailed: () => void;

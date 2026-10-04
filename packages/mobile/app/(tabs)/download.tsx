@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, FlatList, Alert, Animated } from 'react-native';
 import { memo, useCallback, useEffect, useMemo } from 'react';
-import { Download, Music, Trash2, ChevronRight } from 'lucide-react-native';
+import { Download, Trash2, ChevronRight } from 'lucide-react-native';
 import { Paths } from 'expo-file-system';
 import type { Song } from '@mplayer/core';
 import { useDownloadStore, type DownloadItem } from '../../stores/downloadStore';
@@ -12,6 +12,7 @@ import {radius, shadow, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import ScalePress, { pressScale } from '../../components/ScalePress';
+import LazyCover from '../../components/LazyCover';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight, LIST_TAIL_PADDING } from '../../components/chromeMetrics';
@@ -159,7 +160,7 @@ const DownloadRow = memo(function DownloadRow({
     >
       <View style={styles.rowMain}>
         <View style={styles.coverWrap}>
-          <Music size={22} color={colors.textSecondary} />
+          <LazyCover uri={item.cover} style={styles.cover} />
         </View>
         <View style={styles.info}>
           <Text style={[styles.name, isCurrent && styles.nameActive]} numberOfLines={1}>
@@ -232,6 +233,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     marginRight: spacing[3],
   },
+  cover: { width: 44, height: 44, borderRadius: radius.sm },
   info: { flex: 1, marginRight: spacing[3] },
   name: { ...textVariants.body, fontWeight: '600', color: colors.textPrimary },
   nameActive: { color: colors.accent },

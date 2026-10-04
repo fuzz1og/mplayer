@@ -1,20 +1,25 @@
 import { File, Directory, Paths } from 'expo-file-system';
 import { StorageAccessFramework } from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
+import MP3Tag from 'mp3tag.js';
 import type { Song, AudioContainer } from '@mplayer/core';
 import {
-  musicApi,
   md5,
+  BROWSER_UA,
+  buildID3Frames,
   detectAudioContainer,
   extensionForContainer,
   lrcSidecarName,
   looksLikeLyrics,
+  refererForSourceKey,
+  tagStrategyForContainer,
   estimateDownloadProgress,
   retryBackoffMs,
   DEFAULT_MAX_RETRIES,
   DEFAULT_MAX_CONCURRENT,
   makeSongFileName,
 } from '@mplayer/core';
+import { resolveLyricsText } from './lyrics';
 import { useDownloadStore } from '../stores/downloadStore';
 import { useDownloadProgressStore } from '../stores/downloadProgressStore';
 import { useLogsStore } from '../stores/logsStore';
@@ -38,6 +43,42 @@ function mimeForContainer(container: AudioContainer): string {
       return 'audio/ogg';
     default:
       return 'audio/mpeg';
+  }
+}
+
+/** 内嵌封面字节上限（对齐桌面 downloadService）：超限则只写文本标签，不撑爆内存 */
+const MAX_EMBEDDED_COVER_BYTES = 1024 * 1024;
+
+/** ID3v2 padding：预留便于后续改标签（m4a 不写，见 ADR 2026-10-04） */
+const ID3V2_PADDING = 2048;
+
+/** mp3tag 在 node/CJS 下回 Buffer、在 RN（无 Buffer）下回 ArrayBuffer —— 统一成 Uint8Array */
+function toUint8Array(value: unknown): Uint8Array {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  const view = value as { buffer?: ArrayBufferLike; byteOffset?: number; byteLength?: number } | null;
+  if (view?.buffer) return new Uint8Array(view.buffer, view.byteOffset ?? 0, view.byteLength ?? 0);
+  return new Uint8Array(0);
+}
+
+/**
+ * 抓封面字节用于内嵌：按源带 Referer，超过 MAX_EMBEDDED_COVER_BYTES 或失败返回 undefined
+ * （只写文本标签）。**列表封面不经过这里**——那是远端直链（见 GLOSSARY「列表封面」）。
+ */
+async function fetchEmbeddableCover(song: Song): Promise<{ format: string; bytes: number[] } | undefined> {
+  const coverUrl = song.cover?.trim();
+  if (!coverUrl) return undefined;
+  try {
+    const headers: Record<string, string> = { 'User-Agent': BROWSER_UA };
+    const referer = refererForSourceKey(song.sourceType || 'netease');
+    if (referer) headers.Referer = referer;
+    const res = await fetch(coverUrl, { headers });
+    if (!res.ok) return undefined;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength === 0 || buf.byteLength > MAX_EMBEDDED_COVER_BYTES) return undefined;
+    return { format: res.headers.get('content-type') || 'image/jpeg', bytes: Array.from(buf) };
+  } catch {
+    return undefined;
   }
 }
 
@@ -196,6 +237,7 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     artist: song.artist,
     fileName,
     status: 'downloading',
+    cover: song.cover || undefined,
     addedAt: Date.now(),
   });
   // 重新下载：清掉上一次残留的瞬时进度（进度不落盘，状态才落盘）
@@ -216,6 +258,10 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     if (corrected.fileName !== fileName) {
       updateStatus(itemKey, { fileName: corrected.fileName });
     }
+
+    // 内嵌元数据（ADR 2026-10-04：只写 MP3；失败静默）——必须在同步公共目录之前，
+    // 否则公共副本没有标签。
+    await writeMetadata(file, song, corrected.container);
 
     // 写入 .lrc 歌词侧车（与音频同名同目录）；歌词不可用/获取失败不影响下载结果
     await writeLyricsSidecar(song, corrected.fileName, corrected.container);
@@ -302,16 +348,83 @@ async function downloadWithRetry(song: Song, realUrl: string, file: File, itemKe
   throw lastError instanceof Error ? lastError : new Error(`下载失败《${song.name}》`);
 }
 
-/** 写入 .lrc 歌词侧车（私有目录，与音频同名）。获取失败/非可用 LRC 时跳过。 */
-async function writeLyricsSidecar(song: Song, fileName: string, _container: AudioContainer): Promise<void> {
-  const lrcUrl = song.lrc?.trim();
-  if (!lrcUrl) return;
-  let content: string;
+/**
+ * 把元数据内嵌进音频文件（ADR 2026-10-04：**只承诺 MP3**）。
+ *
+ * 容器决策走 core `tagStrategyForContainer`：m4a 经 mp3tag 写的是 ID32 box（非 iTunes
+ * ilst/covr），media3/ExoPlayer 与 Apple 系读不到，属假达标，故本端不写；
+ * FLAC/Ogg 灌 ID3 会毁文件，必须 skip。写回走「临时文件 + 覆盖 move」原子替换，
+ * 失败时原文件保持完好；整体静默——元数据写失败不得影响下载结果。
+ */
+async function writeMetadata(file: File, song: Song, container: AudioContainer): Promise<void> {
+  const log = useLogsStore.getState();
+  if (tagStrategyForContainer(container) !== 'id3') return;
+  let tmp: File | null = null;
   try {
-    content = await musicApi.getLyrics(lrcUrl);
-  } catch {
-    return;
+    const bytes = await file.bytes();
+    // mp3tag 只接受 ArrayBuffer/Buffer：Uint8Array 会直接抛 TypeError（实测）
+    const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const cover = await fetchEmbeddableCover(song);
+    const frames = buildID3Frames({
+      title: song.name || '',
+      artist: song.artist || '',
+      album: song.album || '',
+      durationMs: (song.duration || 0) * 1000,
+      cover,
+    });
+
+    const tag = new MP3Tag(ab);
+    tag.read();
+    if (tag.error) {
+      log.addLog('warn', `内嵌元数据：读取标签失败（跳过）《${song.name}》: ${tag.error}`);
+      return;
+    }
+    tag.tags.title = song.name || '';
+    tag.tags.artist = song.artist || '';
+    tag.tags.album = song.album || '';
+    if (!tag.tags.v2) {
+      (tag.tags as unknown as Record<string, unknown>).v2 = {};
+    }
+    tag.tags.v2!.TIT2 = frames.v2.TIT2;
+    tag.tags.v2!.TPE1 = frames.v2.TPE1;
+    tag.tags.v2!.TALB = frames.v2.TALB;
+    if (frames.v2.TLEN != null) tag.tags.v2!.TLEN = frames.v2.TLEN;
+    if (frames.v2.APIC) {
+      tag.tags.v2!.APIC = frames.v2.APIC.map((apic) => ({
+        format: apic.format,
+        type: apic.type,
+        description: apic.description,
+        data: apic.data,
+      }));
+    }
+
+    tag.save({ id3v2: { padding: ID3V2_PADDING } });
+    if (tag.error) {
+      log.addLog('warn', `内嵌元数据：写入标签失败（跳过）《${song.name}》: ${tag.error}`);
+      return;
+    }
+
+    const out = toUint8Array(tag.buffer);
+    // 临时文件 + 覆盖 move：同目录 rename，写坏也只坏临时文件
+    tmp = new File(downloadDir, `${file.name}.tmp`);
+    await tmp.create({ overwrite: true, intermediates: true });
+    await tmp.write(out);
+    await tmp.move(file, { overwrite: true });
+    tmp = null;
+  } catch (e) {
+    log.addLog('warn', `内嵌元数据失败（不影响下载）《${song.name}》: ${toErrorMessage(e)}`);
+  } finally {
+    if (tmp) {
+      try {
+        if (tmp.exists) await tmp.delete();
+      } catch { /* 忽略清理失败 */ }
+    }
   }
+}
+
+/** 写入 .lrc 歌词侧车（私有目录，与音频同名）。取词决策走 core 单点，不可用/失败时跳过。 */
+async function writeLyricsSidecar(song: Song, fileName: string, _container: AudioContainer): Promise<void> {
+  const content = await resolveLyricsText(song);
   if (!looksLikeLyrics(content)) return;
   const lrcName = lrcSidecarName(fileName);
   const lrcFile = new File(downloadDir, lrcName);
@@ -323,8 +436,7 @@ async function writeLyricsSidecar(song: Song, fileName: string, _container: Audi
 
 /** 将 .lrc 侧车同步到 SAF 公共目录（失败向下游静默）。 */
 async function writePublicLyrics(song: Song, fileName: string, dirUri: string): Promise<void> {
-  if (!song.lrc?.trim()) return;
-  const content = await musicApi.getLyrics(song.lrc.trim()).catch(() => '');
+  const content = await resolveLyricsText(song);
   if (!looksLikeLyrics(content)) return;
   const lrcName = lrcSidecarName(fileName);
   const privateUri = new File(downloadDir, lrcName).uri;
