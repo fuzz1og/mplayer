@@ -7,6 +7,8 @@ import {
   md5,
   BROWSER_UA,
   buildID3Frames,
+  COVER_SIZE,
+  coverThumbUrl,
   detectAudioContainer,
   extensionForContainer,
   lrcSidecarName,
@@ -72,7 +74,9 @@ async function fetchEmbeddableCover(song: Song): Promise<{ format: string; bytes
     const headers: Record<string, string> = { 'User-Agent': BROWSER_UA };
     const referer = refererForSourceKey(song.sourceType || 'netease');
     if (referer) headers.Referer = referer;
-    const res = await fetch(coverUrl, { headers });
+    // 按源 CDN 机制要 embed 档缩略图（core 单点，ADR 2026-09-30）：内嵌体积直接等于
+    // 每个下载文件变大的量，原图动辄 540KB；不认识的源原样返回，仍受 1MB 上限兜底。
+    const res = await fetch(coverThumbUrl(coverUrl, COVER_SIZE.embed), { headers });
     if (!res.ok) return undefined;
     const buf = new Uint8Array(await res.arrayBuffer());
     if (buf.byteLength === 0 || buf.byteLength > MAX_EMBEDDED_COVER_BYTES) return undefined;
