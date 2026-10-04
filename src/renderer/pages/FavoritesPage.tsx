@@ -1,10 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { Heart, Play } from 'lucide-react';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
-import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
 
@@ -18,8 +17,6 @@ const FavoritesPage: React.FC = () => {
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const { download, downloadBatch } = useDownload();
 
-  const [batchModalVisible, setBatchModalVisible] = useState(false);
-  const [selectedSongsForPlaylist, setSelectedSongsForPlaylist] = useState<Song[]>([]);
   // 收藏页的歌曲就是收藏本身：id 列表跟着 favorites 走，别在每次渲染新建数组（行 memo 会被击穿）
   const favoriteIdList = useMemo(() => favorites.map(s => s.id), [favorites]);
 
@@ -58,11 +55,6 @@ const FavoritesPage: React.FC = () => {
 
   // SongList 行内「加入歌单」由组件内部单曲弹窗闭环，此 prop 仅作成功通知（勿在此开弹窗）
   const handleAddToPlaylist = useCallback((_song: Song) => {}, []);
-
-  const handleBatchAddToPlaylist = useCallback((selectedSongs: Song[]) => {
-    setSelectedSongsForPlaylist(selectedSongs);
-    setBatchModalVisible(true);
-  }, []);
 
   const handleSwap = useCallback((original: Song, swapped: Song) => {
     void useFavoriteStore.getState().replaceFavorite(original.id, swapped).catch((e) => {
@@ -126,7 +118,6 @@ const FavoritesPage: React.FC = () => {
           onDownload={download}
           onBatchDownload={downloadBatch}
           onAddToPlaylist={handleAddToPlaylist}
-          onBatchAddToPlaylist={handleBatchAddToPlaylist}
           onSwap={handleSwap}
           onCoverError={handleCoverError}
           showCheckbox={true}
@@ -135,16 +126,6 @@ const FavoritesPage: React.FC = () => {
           emptyText="暂无收藏歌曲"
         />
       </div>
-
-      {/* 批量添加到歌单弹窗 */}
-      <BatchAddToPlaylistModal
-        isVisible={batchModalVisible}
-        songs={selectedSongsForPlaylist}
-        onClose={() => {
-          setBatchModalVisible(false);
-          setSelectedSongsForPlaylist([]);
-        }}
-      />
     </div>
   );
 };
