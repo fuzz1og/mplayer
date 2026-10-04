@@ -47,6 +47,26 @@ export type NameConflictResolution = 'add' | 'skip';
 /** 整批同处置（单值）或逐首处置（与 conflicts 等长的数组）。 */
 export type NameConflictDecisions = NameConflictResolution | readonly NameConflictResolution[];
 
+/**
+ * 宿主向用户问「同名异源怎么处置」时的文案——**双端同一份**（#560）。
+ *
+ * 为什么放 core：桌面与移动是同一个动作的两种渲染（antd `Modal.confirm` / RN `Alert`），
+ * 问的却必须是同一句话。各自写一份 = 迟早分叉，而分叉后没人会同时看两端。
+ * 与 `OFFLINE_COPY`（core/shared/skipGuard）同一条纪律：跨端共用的用户可见文案，
+ * 落点只有一个。
+ *
+ * 只覆盖 **adapter 的 `resolveNameConflict` 接缝**（整批一次裁决）：
+ * 单曲腿的同名确认在两端各有各的交互（桌面「是否继续添加」/ 移动「替换为新版」），
+ * 不在本常量范围内。
+ */
+export const NAME_CONFLICT_COPY = {
+  title: '同名歌曲',
+  confirmText: '继续添加',
+  cancelText: '取消',
+  /** `count` = 本批需要裁决的歌数（= `conflicts.length`）。 */
+  message: (count: number) => `有 ${count} 首歌曲同名但来自不同平台，是否继续添加？`,
+} as const;
+
 /** 写入编排的外部依赖（桌面走 IpcClient，移动走 usePlaylistStore）。 */
 export interface PlaylistWriteDeps {
   /**

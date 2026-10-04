@@ -7,6 +7,7 @@ import type { Song, SourceKey } from '@mplayer/core';
 import { classifySong } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
 import { createMobilePlaylistWriter } from '../services/playlistExport';
+import { promptNameConflict } from './nameConflictPrompt';
 import { SOURCE_LABELS } from '../stores/sourceStore';
 import {radius, spacing, textVariants, opacity} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
@@ -24,9 +25,12 @@ interface Props {
   song?: Song | null;
   /**
    * 批量模式：与 song 互斥。点击歌单只调一次 addSongs（整批一次 set = 一次持久化），
-   * 不逐首弹同名 Alert——本弹窗**不传** resolveNameConflict，跨源同名走 core 的
-   * **默认并入**（#556 评审 A4：缺省是「并入」，不是「既不写入也不计数」地静默丢弃）。
-   * 桌面 BatchAddToPlaylistModal 会整批问一次同名确认，答「继续添加」= 同一结论。
+   * 不逐首弹同名 Alert。
+   *
+   * #560：遇「同名异源」时**整批问一次**（`promptNameConflict`，文案与桌面同一份
+   * core `NAME_CONFLICT_COPY`）。此前这里不传 resolveNameConflict，冲突歌按 core 的
+   * 默认口径**静默并入**——同一个动作桌面会问、移动端不问。链接导入腿仍走默认并入
+   * （与桌面 importService 同一口径，见 nameConflictPrompt 的说明）。
    */
   songs?: Song[] | null;
   onClose: () => void;
@@ -65,7 +69,11 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
   const handleSelect = async (playlistId: string, playlistName: string) => {
     // —— 批量模式：整批只写一轮（adapter 背后是 core 编排，失败会回滚新建的歌单）——
     if (batchSongs) {
-      const result = await createMobilePlaylistWriter().add({ playlistId, songs: batchSongs });
+      const result = await createMobilePlaylistWriter().add({
+        playlistId,
+        songs: batchSongs,
+        resolveNameConflict: promptNameConflict,
+      });
       if (!result.ok) {
         Alert.alert('添加失败', result.error || '请稍后重试');
         return;

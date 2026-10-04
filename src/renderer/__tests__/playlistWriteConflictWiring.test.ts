@@ -63,16 +63,44 @@ describe('歌单写入的同名冲突接线（#556 评审 A4）', () => {
 
   it('每个省掉回调的调用点都在源码里写下「默认并入」口径', () => {
     for (const file of [
-      // 移动批量弹窗：对已有歌单整批写，冲突走 core 缺省
-      'packages/mobile/components/AddToPlaylistModal.tsx',
       // 桌面单曲弹窗：新建路径目标快照为空，冲突结构上不可能发生
       'src/renderer/components/AddToPlaylistModal.tsx',
       // 桌面批量弹窗：同上
       'src/renderer/components/BatchAddToPlaylistModal.tsx',
-      // 两端导入腿：无人值守的整批操作
+      // 两端导入腿：无人值守的整批操作（桌面注释里明写「与移动端导入腿同一口径」）
       'src/renderer/services/importService.ts',
+      'packages/mobile/services/playlistExport.ts',
     ]) {
       expect(readRepo(file), file).toContain('默认并入');
     }
+  });
+
+  /**
+   * #560：「批量加入已有歌单」这个动作两端都必须**真的问**，且问的是**同一句话**。
+   *
+   * 缺陷形态：移动端批量腿不传 resolveNameConflict（core 走默认并入）→ 同一个动作
+   * 桌面会问、移动端不问，用户没得拒绝。修法 = 移动批量腿接上裁决回调。
+   *
+   * 两句断言各挡一类回退：
+   * - 移动批量腿必须接回调（否则退回静默并入）；
+   * - **字面量只许出现在 core**：两端各自硬编码一份文案 = 迟早分叉，分叉后没人同时看两端
+   *   （与 OFFLINE_COPY 同一条纪律）。
+   */
+  it('#560：移动批量腿接上裁决回调，且两端问的是同一句话（文案只在 core）', () => {
+    const mobileModal = readRepo('packages/mobile/components/AddToPlaylistModal.tsx');
+    expect(mobileModal).toMatch(/resolveNameConflict:\s*promptNameConflict/);
+
+    for (const file of [
+      'packages/mobile/components/nameConflictPrompt.ts',
+      'src/renderer/components/BatchAddToPlaylistModal.tsx',
+    ]) {
+      const src = readRepo(file);
+      expect(src, file).toContain('NAME_CONFLICT_COPY');
+      expect(src, file + ' 不该再硬编码同名确认文案').not.toContain('同名但来自不同平台');
+    }
+
+    // 文案本体只在 core 一处
+    const core = readRepo('packages/core/src/shared/playlistWrite.ts');
+    expect(core).toContain('同名但来自不同平台');
   });
 });

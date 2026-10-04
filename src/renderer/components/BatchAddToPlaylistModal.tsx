@@ -4,6 +4,7 @@ import { message, Modal } from 'antd';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import type { DesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
+import { NAME_CONFLICT_COPY } from '@mplayer/core';
 import type { Song, Playlist } from '@mplayer/core';
 
 /** 桌面唯一的写入 adapter（#552）：批量腿走 `playlist:addSongs`（一次落盘一次渲染）。 */
@@ -56,13 +57,15 @@ const BatchAddToPlaylistModal: React.FC<BatchAddToPlaylistModalProps> = ({
       const result = await desktopWriter.add({
         playlistId,
         songs,
+        // 文案来自 core 的 `NAME_CONFLICT_COPY`（#560）：与移动端批量腿问的是同一句话，
+        // 两端各自硬编码一份迟早分叉。
         resolveNameConflict: (conflicts) =>
           new Promise<'add' | 'skip'>((resolve) => {
             Modal.confirm({
-              title: '同名歌曲',
-              content: `有 ${conflicts.length} 首歌曲同名但来自不同平台，是否继续添加？`,
-              okText: '继续添加',
-              cancelText: '取消',
+              title: NAME_CONFLICT_COPY.title,
+              content: NAME_CONFLICT_COPY.message(conflicts.length),
+              okText: NAME_CONFLICT_COPY.confirmText,
+              cancelText: NAME_CONFLICT_COPY.cancelText,
               onOk: () => resolve('add'),
               onCancel: () => resolve('skip'),
             });

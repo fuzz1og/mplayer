@@ -114,7 +114,7 @@ export { rawSongId, identityKey, identityKeyFrom } from './utils/songIdentity.js
 export { refreshSongResource } from './shared/songResourceRefresh.js';
 export type { SongResourceRefreshDeps, LegOptions } from './shared/songResourceRefresh.js';
 export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
-export { writeSongsToPlaylist, songWriteRejection } from './shared/playlistWrite.js';
+export { writeSongsToPlaylist, songWriteRejection, NAME_CONFLICT_COPY } from './shared/playlistWrite.js';
 export type {
   PlaylistWriteDeps,
   PlaylistWriteResult,
