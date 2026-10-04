@@ -16,6 +16,8 @@ describe('封面取图尺寸（#496）', () => {
     expect(read('components/CollapsingHero.tsx')).toContain('coverThumbUrl(cover, COVER_SIZE.hero)');
     expect(read('components/PlayerBar.tsx')).toContain('coverThumbUrl(currentSong.cover, COVER_SIZE.icon)');
     expect(read('components/PlayerOverlay.tsx')).toContain('coverThumbUrl(song.cover, COVER_SIZE.hero)');
+    // 内嵌到文件的封面同样要缩略档：它直接决定每个下载文件变大多少
+    expect(read('services/downloadService.ts')).toContain('coverThumbUrl(coverUrl, COVER_SIZE.embed)');
   });
 
   it('歌曲行（列表里数量最多）按 row 档位取', () => {

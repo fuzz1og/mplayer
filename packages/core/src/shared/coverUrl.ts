@@ -32,6 +32,12 @@ export const COVER_SIZE = {
   thumb: 320,
   /** 全出血 Hero / 全屏播放器 */
   hero: 1080,
+  /**
+   * 内嵌进音频文件的封面（下载打标）：给系统/第三方播放器看，不需要 hero 档。
+   * **网易档位的字节数不是单调的**（实测同一张图 500 档 73 KB 反而大于 640 档 41 KB），
+   * 所以这里取已实测的 640（QQ 白名单会向下吸附到存在的 500 档）。
+   */
+  embed: 640,
 } as const;
 
 const NETEASE_HOST = /^https?:\/\/p\d+\.music\.126\.net\//;

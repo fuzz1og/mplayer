@@ -323,18 +323,23 @@ describe('内嵌元数据（ADR 2026-10-04：只写 MP3；原子替换；失败�
 
   it('MP3：写 ID3 文本帧 + 封面 APIC，且走「临时文件 + 覆盖 move」', async () => {
     fsMocks.headerBytes = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0, 0, 0, 0]); // ID3v2.3
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), {
-          status: 200,
-          headers: { 'content-type': 'image/jpeg' },
-        })
-      )
+    const fetchMock = vi.fn(async () =>
+      new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), {
+        status: 200,
+        headers: { 'content-type': 'image/jpeg' },
+      })
     );
+    vi.stubGlobal('fetch', fetchMock);
     try {
-      const file = await downloadSong(makeSong({ cover: 'http://cdn.example.com/c.jpg' }) as any);
+      const file = await downloadSong(makeSong({ cover: 'https://p2.music.126.net/abc.jpg' }) as any);
 
+      // 内嵌封面走 embed 档缩略图（core 单点），而不是原图；按源带 Referer
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://p2.music.126.net/abc.jpg?param=640y640',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Referer: expect.any(String) }),
+        })
+      );
       expect(fsMocks.binaryWrites).toHaveLength(1);
       const text = Array.from(fsMocks.binaryWrites[0].data.slice(0, 4096))
         .map((b) => String.fromCharCode(b))
