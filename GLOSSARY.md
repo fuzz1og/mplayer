@@ -111,6 +111,18 @@ _Avoid_: 无结果、空态（空态是**取到了但确实为空**，与这两�
 汽水歌词可通过**分享页免登录**获取：`music.douyin.com/qishui/share/track?track_id={id}` 的 `_ROUTER_DATA.audioWithLyricsOption.lyrics.sentences[]`（结构化时间轴 startMs/endMs/text/words，lyricType=krc），无需登录态；分享页同时返回音频直链（encrypt=false 未加密）与 `trackInfo.playable_range`（试听窗口，Cover 歌也有该字段却给完整版，**不能**作试听/完整判别依据；可靠判别 = `trackInfo.preview.duration` 或实际音频时长）。track_v2 接口（`api.qishui.com/luna/pc/track_v2`）也含 `lyric.content`（KRC 文本），但需 PC 客户端登录态 Cookie（sessionid），匿名请求 200 空 body——完整版/高音质音频亦需凭证 + CENC 解密（社区方案 qishui-decrypt / musicdl，软件不实现，仅记录）。搜索接口当前路径为 `api.qishui.com/luna/search/track`（无 pc 段，免登录）；旧 `luna/pc/search/track` 已失效返回空 body。桌面歌词接线：`loadLyricsWithRetry` 的 soda 分支调 `getSodaLyrics`（分享页转 LRC，lrc=URL 契约不变）。移动端接线：PlayerOverlay 的 soda 歌 cacheKey 用 songid、load 走 `getSodaLyrics` 直取文本；`fetchLrcInBackground` 对 soda 只补封面不搜索歌词。双端歌词决策（按 ID 直取 / 搜索补全 / 存量内联兼容）共用 core `songLyrics` helper 防漂移；网易自 #409 起同样按 songId 直取，不再是 soda 特判。下载侧 .lrc 仍按 song.lrc（URL）驱动，soda 恒空故不生成——留待下载侧专项。
 _Avoid_: 匿名 track_v2、汽水歌词源、soda 歌词（匿名直连取不回）
 
+**内嵌元数据**:
+写进音频文件字节自身的曲目信息（标题/歌手/专辑/时长/封面），随文件被复制到任何位置都带着，不依赖本 App 的数据记录。与**歌词侧车**是两个不同机制——歌词不内嵌。本项目只对 MP3 承诺内嵌（ID3v2）；M4A 经 mp3tag 写出的是 ID3v2-in-MP4 的 `ID32` box，而非 iTunes `ilst`/`covr`，media3/ExoPlayer 与 Apple 系读取方看不到，因此不构成 m4a 的内嵌承诺；FLAC/Ogg 不写（灌 ID3 会损坏文件）。
+_Avoid_: 元数据（单称）、标签、ID3（它是 MP3 的载体格式，不是概念）
+
+**歌词侧车**:
+与音频文件同目录、同主名的 `.lrc` 文本（`song.mp3` → `song.lrc`），是歌词落盘的**唯一**形态——本项目不把歌词内嵌进音频。主流播放器都按「同目录同主名」发现侧车；MediaStore 不索引 `.lrc`，发现靠扫盘/SAF。侧车内容按**按 ID 直取歌词源**分派获取；存量内联文本直接落盘。
+_Avoid_: 歌词文件、外挂歌词、嵌入歌词（本项目不嵌入歌词）
+
+**列表封面**:
+App 内列表行渲染的封面，数据源是**远端封面直链**（CDN 缩略档），不落文件、不随下载文件走。它与文件里的封面（属**内嵌元数据**）是两份独立副本、各自可失效；下载记录持久化的是这个直链。渲染统一走 `LazyCover`（空值同形占位 + 失败重试一次）。
+_Avoid_: 下载封面、本地封面（它并不在本地）、专辑图
+
 **拖拽关闭**:
 竖直下拉手势关掉一个面板（全屏播放器 / 底部弹层）。一次手势只有两种结局：**判关**（动量投影落点越过面板比例，或位置兜底越过比例）或**回弹**；手势被系统抢走（来电等）一律回弹、不判关。
 _Avoid_: 下滑关闭、滑动删除、下拉刷新
