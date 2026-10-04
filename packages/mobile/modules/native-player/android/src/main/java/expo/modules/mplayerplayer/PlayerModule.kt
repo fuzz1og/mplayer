@@ -108,6 +108,15 @@ class PatchQueueInput : Record {
    */
   @Field
   var insertAfterCurrent: TrackInput? = null
+
+  /**
+   * #563：JS 显式回报「这一轮 HOLE 补窗零候选」。
+   *
+   * 与「append 传空数组」的区别是**语义显式**：原生据此把待决的「用户下一首」
+   * 落成确定结局（绕回已有项 / 诚实结束），而不是把它丢掉。
+   */
+  @Field
+  var refillEmpty: Boolean = false
 }
 
 // ------------------------------------------------------------------ 异常
@@ -182,6 +191,7 @@ class PlayerModule : Module() {
         append = input.append?.map { it.toRecord() },
         upsert = input.upsert?.map { it.toRecord() },
         removeKeys = input.removeKeys,
+        refillEmpty = input.refillEmpty,
         insertAfterCurrent = input.insertAfterCurrent?.toRecord()
       )
     }

@@ -5,6 +5,9 @@
  * 所以既有全部测试跑的都是 expo-audio；这里在本文件里 `vi.mock('expo')` 覆盖成**假原生模块**，
  * 让「原生引擎」这条路径第一次被 JS 侧测试覆盖。
  */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song } from '@mplayer/core';
 import type { PatchQueueResult } from '../modules/native-player';
@@ -16,6 +19,7 @@ const fake = vi.hoisted(() => {
     baseRevision: number;
     append?: { songId: string; meta: { key: string } }[];
     insertAfterCurrent?: { songId: string; meta: { key: string } };
+    refillEmpty?: boolean;
   };
   const state = { revision: 5, index: 0, key: 'A' as string | null, tracks: [] as FakeTrack[] };
   const patchCalls: PatchInput[] = [];
@@ -509,6 +513,140 @@ describe('#518：插入后「下一首」= 被插入的那首；补窗基准不�
     expect(outcome.reason).toBe('unsupported');
     expect(usePlayerStore.getState().queue.map((s) => s.id)).toEqual(['A', 'B', 'C']);
     expect(fake.state.tracks.map((t) => t.songId)).toEqual(['A', 'B', 'C']);
+  });
+});
+
+/**
+ * #563：原生窗口**最后一项**上按 next，若本轮补窗零新增（候选全已在原生手里被 QueueStore 去重），
+ * 待决的用户意图必须落成确定结局，且 LOW_WATER 不再每 2s 重问。
+ *
+ * ⚠️ 结局落定在 Kotlin（pendingUserNext / 终局闩），fake-only 的 Vitest **跑不了 Kotlin 私有标志**。
+ * 这里做两件能做的：① 假原生桥钉住 JS 的可观测契约（零候选的 HOLE 必须回执、LOW_WATER 不回执、
+ * 绕回候选照投）；② 文件末尾的源码契约守卫钉住原生那半段实现确实存在。
+ */
+describe('#563：窗口尾部零新增补窗', () => {
+  /** 原生窗口 [A, B, C]，当前停在队尾 C；列表循环下 JS 的「下一首」应绕回 A/B。 */
+  function tailFixture(): void {
+    const queue = setQueue(['A', 'B', 'C'], 2);
+    fake.state.tracks = queue.map((s) => ({ key: prefetchKey(s), songId: s.id }));
+    fake.state.index = 2;
+    fake.state.key = prefetchKey(song('C'));
+  }
+
+  it('HOLE 补窗零候选 → 回执原生（refillEmpty），绝不静默返回', async () => {
+    tailFixture();
+    // 所有候选都解析不出直链（模拟「没有可投喂的新项」）→ append 为空
+    resolution.resolvePlayableUrlMobile.mockResolvedValueOnce({ url: '', nonFull: false } as never);
+    resolution.resolvePlayableUrlMobile.mockResolvedValueOnce({ url: '', nonFull: false } as never);
+
+    await feedWindow(undefined, 'hole');
+
+    expect(fake.patchCalls).toHaveLength(1);
+    expect(fake.patchCalls[0].refillEmpty).toBe(true);
+    expect(fake.patchCalls[0].append).toBeUndefined();
+  });
+
+  it('LOW_WATER 零候选不回执原生（只有 HOLE 才有等待中的意图）', async () => {
+    tailFixture();
+    resolution.resolvePlayableUrlMobile.mockResolvedValueOnce({ url: '', nonFull: false } as never);
+    resolution.resolvePlayableUrlMobile.mockResolvedValueOnce({ url: '', nonFull: false } as never);
+
+    await feedWindow();
+
+    expect(fake.patchCalls).toHaveLength(0);
+  });
+
+  it('候选正被别的补窗轮解析（在飞）→ 不把并发空轮当终局回执', async () => {
+    tailFixture();
+    let release!: () => void;
+    resolution.resolvePlayableUrlMobile.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ url: 'https://cdn.example.com/A.mp3', nonFull: false });
+        })
+    );
+    resolution.resolvePlayableUrlMobile.mockResolvedValueOnce({ url: '', nonFull: false } as never);
+
+    const first = feedWindow(undefined, 'hole'); // 占住 A（in-flight）
+    await flush();
+    await feedWindow(undefined, 'hole'); // A 在飞 / B 冷却中 → 本轮零候选，但不得回执
+    expect(fake.patchCalls).toHaveLength(0);
+
+    release();
+    await first;
+    // 第一轮正常投喂 A（非空 append），不是 refillEmpty
+    expect(fake.patchCalls.some((call) => call.refillEmpty === true)).toBe(false);
+  });
+
+  it('尾部绕回：候选已在原生窗口里（A/B）→ 照投给原生去重，不重复入队', async () => {
+    tailFixture();
+
+    await feedWindow(undefined, 'hole');
+
+    const appended = (fake.patchCalls[0]?.append ?? []).map((t) => t.meta.key);
+    expect(appended).toEqual([prefetchKey(song('A')), prefetchKey(song('B'))]);
+    // QueueStore 去重：原生窗口一字未增（原生侧 added=0，由 #563 的补丁路径解 pendingUserNext）
+    expect(fake.state.tracks.map((t) => t.key)).toEqual(
+      ['A', 'B', 'C'].map((id) => prefetchKey(song(id)))
+    );
+    expect(fake.state.tracks).toHaveLength(3);
+  });
+});
+
+/**
+ * #563 原生那半段的**源码契约守卫**。
+ *
+ * Vitest 是 Node 环境 + 假原生桥，无法执行 Kotlin（更无法断言私有标志）；真机行为验收也不在本
+ * 变更范围。这里的守卫只能证明「实现确实存在、且形状是这段」，**不能替代 Kotlin 编译/设备验证**。
+ */
+describe('#563 原生终局闩：源码契约守卫（不替代 Kotlin 编译/设备验证）', () => {
+  const MODULE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+  const read = (rel: string) => readFileSync(join(MODULE_ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
+  const playerService = read(
+    'modules/native-player/android/src/main/java/expo/modules/mplayerplayer/PlayerService.kt'
+  );
+
+  function body(start: string, end: string): string {
+    const from = playerService.indexOf(start);
+    expect(from, `找不到 ${start}`).toBeGreaterThanOrEqual(0);
+    const to = playerService.indexOf(end, from + start.length);
+    expect(to, `找不到 ${end}`).toBeGreaterThan(from);
+    return playerService.slice(from, to);
+  }
+
+  it('patchQueue 按「补丁后真正新增的条数」解析：绕回已有项或诚实结束', () => {
+    const patch = body('  fun patchQueue(', '  private fun firstExistingAppendIndex(');
+    expect(patch).toContain('val addedCount = newItems.size');
+    expect(patch).toContain('firstExistingAppendIndex(append)');
+    expect(patch).toContain('finishAtTail(ctrl)');
+
+    const finish = body('  private fun finishAtTail(', '  private fun isExhaustedAtCurrent(');
+    expect(finish).toContain('markExhausted()');
+    expect(finish).toContain('EndReason.EXHAUSTED');
+  });
+
+  it('LOW_WATER 在当前 (revision,index) 已闩住时直接返回（终结 ~2s 重问）', () => {
+    const maybe = body('  private fun maybeRequestTracks(', '  /** 发 needTracks');
+    expect(maybe).toContain('isExhaustedAtCurrent()');
+    expect(maybe).toContain('NeedReason.LOW_WATER');
+    // 闩检查必须在真正发 needTracks 之前
+    expect(maybe.indexOf('isExhaustedAtCurrent()')).toBeLessThan(maybe.indexOf('requestTracks(reason)'));
+  });
+
+  it('显式用户意图 / 曲目切换 / 新队列都会清除终局闩', () => {
+    expect(body('  fun play(', '  fun pause(')).toContain('clearExhausted()');
+    expect(body('  fun next(', '  fun prev(')).toContain('clearExhausted()');
+    expect(body('  fun prev(', '  fun seek(')).toContain('clearExhausted()');
+    expect(
+      body('  override fun onMediaItemTransition(', '  override fun onPlaybackStateChanged(')
+    ).toContain('clearExhausted()');
+    expect(body('  fun loadQueue(', '  fun patchQueue(')).toContain('clearExhausted()');
+  });
+
+  it('JS 只对 HOLE 的零候选回执 refillEmpty', () => {
+    const js = read('services/nativePlayer.ts');
+    expect(js).toMatch(/reason === 'hole' && !plannedInFlight/);
+    expect(js).toMatch(/refillEmpty: true/);
   });
 });
 

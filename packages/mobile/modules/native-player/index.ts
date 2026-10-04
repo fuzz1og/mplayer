@@ -191,6 +191,11 @@ export type NativePlayerModule = {
      * 单独一条语义路径；`error` 非空 = 可观测失败（`unsupported` / `failed`），绝不静默丢弃。
      */
     insertAfterCurrent?: Track;
+    /**
+     * #563：HOLE 补窗一轮**零候选**时的显式回执。原生据此给待决的「用户下一首」
+     * 一个确定结局（绕回窗口里已有的项 / 诚实结束），不让意图悬空、不让水位 tick 空转。
+     */
+    refillEmpty?: boolean;
   }): Promise<PatchQueueResult>;
   play(): void;
   pause(): void;

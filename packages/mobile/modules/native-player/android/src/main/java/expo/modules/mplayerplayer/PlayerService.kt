@@ -81,6 +81,20 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   @Volatile
   private var pendingUserNext = false
 
+  /**
+   * 终局闩（#563）：在当前 (revision, index) 上已判定「补窗也推进不了」。
+   *
+   * 窗口尾部零新增补窗若只是把 [pendingUserNext] 丢掉，用户意图既没推进也没结束，
+   * 且每 1s 的 LOW_WATER tick 会永远重复要歌。这里把它钉在当前 (revision, index) 上，
+   * 让 maybeRequestTracks(LOW_WATER) 直接返回；显式用户意图（play/next/prev）、
+   * 曲目切换与新队列（revision 变）都会让它失效。
+   */
+  @Volatile
+  private var exhaustedAtRevision = -1L
+
+  @Volatile
+  private var exhaustedAtIndex = -1
+
   private var windowHoleDeadline: Runnable? = null
   private var errorRetry: Runnable? = null
   private var destroyed = false
@@ -289,6 +303,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     store.load(tracks, startIndex)
     userWantsPlay = playWhenReady
     holePending = false
+    clearExhausted()
     skippedThisSession = 0
     lastKey = store.current()?.key
     cancelWindowHoleDeadline()
@@ -309,6 +324,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     append: List<TrackRecord>?,
     upsert: List<TrackRecord>?,
     removeKeys: List<String>?,
+    /** #563：JS 显式回报「这一轮 HOLE 补窗零候选」 */
+    refillEmpty: Boolean = false,
     insertAfterCurrent: TrackRecord? = null
   ): Map<String, Any?> {
     val ctrl = controller ?: return mapOf("accepted" to false, "revision" to 0L, "stale" to false)
@@ -331,6 +348,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     append.orEmpty().forEach { if (!beforeKeys.contains(it.key)) newItems.add(it) }
     upsert.orEmpty().forEach { if (!beforeKeys.contains(it.key)) newItems.add(it) }
     val replacedUpserts = upsert.orEmpty().filter { beforeKeys.contains(it.key) }
+    // #563：本次补丁**真正新增**的条数（store 去重后的权威事实）——零新增才走绕回/终局分支。
+    val addedCount = newItems.size
 
     main.post {
       if (newItems.isNotEmpty()) ctrl.appendItems(newItems)
@@ -375,19 +394,41 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
         ctrl.player.playWhenReady = userWantsPlay
       }
 
-      // 用户在窗口边界按的「下一首」：新项到了才真正切过去（T2）
+      // 用户在窗口边界按的「下一首」：按**补丁后**的实际结果给出确定结局（#563）。
+      // 旧实现在队尾零新增时把 pendingUserNext 丢掉就完事：既没推进也没结束，
+      // 用户看到「按了下一首，音乐停在暂停」，LOW_WATER 还会每 2s 重新要一轮。
       if (pendingUserNext && ctrl.player.mediaItemCount > 0) {
         pendingUserNext = false
         val at = ctrl.currentIndex()
         if (at < ctrl.player.mediaItemCount - 1) {
           ctrl.player.seekToNextMediaItem()
           ctrl.player.playWhenReady = userWantsPlay
+          clearExhausted()
           Log.i(TAG, "pendingUserNext → advanced to index=${at + 1}/${ctrl.player.mediaItemCount}")
+        } else {
+          // 零新增时，候选可能已在窗口别处（列表循环绕回，排在当前曲之前）→ 切过去是正当的
+          val existing = if (addedCount == 0) firstExistingAppendIndex(append) else -1
+          if (existing >= 0) {
+            store.moveTo(existing)
+            ctrl.player.seekTo(existing, 0L)
+            ctrl.player.playWhenReady = userWantsPlay
+            clearExhausted()
+            Log.i(TAG, "pendingUserNext → wrapped to existing index=$existing (added=0)")
+          } else {
+            // 真的没有可推进项 → 诚实结束，并闩住当前 (revision, index)
+            finishAtTail(ctrl)
+          }
         }
+      } else if (refillEmpty && !isExhaustedAtCurrent() && ctrl.player.mediaItemCount > 0 &&
+        ctrl.currentIndex() >= ctrl.player.mediaItemCount - 1
+      ) {
+        // 没有未决意图（已被别处清掉）但 JS 明确回报零候选 → 同样在队尾诚实结束
+        finishAtTail(ctrl)
       }
 
-      // 补窗到位 + 之前停在缓冲边界 + 用户意图仍是「想播」 → 续播（T8）
-      if (userWantsPlay && ctrl.player.playbackState == Player.STATE_ENDED && ctrl.player.mediaItemCount > 0) {
+      // 补窗到位 + 之前停在缓冲边界 + 用户意图仍是「想播」 → 续播（T8）。
+      // refillEmpty 的零候选回执不算「补窗到位」，不能借它触发「续播」。
+      if (userWantsPlay && !refillEmpty && ctrl.player.playbackState == Player.STATE_ENDED && ctrl.player.mediaItemCount > 0) {
         ctrl.player.seekTo(Math.min(store.currentIndex(), ctrl.player.mediaItemCount - 1), 0L)
         ctrl.player.play()
       }
@@ -397,6 +438,60 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     PrefetchBridge.onTracksPatched()
     persist()
     return mapOf("accepted" to true, "revision" to outcome.revision, "stale" to false)
+  }
+
+  /**
+   * 本轮 append 里**已经在 store 中**的第一项下标（#563 的列表循环绕回）。
+   *
+   * JS 的候选按 core 计划（含绕回）算出；store.patch 去重后它们可能一条都没新增
+   * ——因为已经在窗口的别处（通常排在当前曲之前）。返回它，调用方 seek 过去即完成
+   * 「下一首」，不需要重复入队。
+   */
+  private fun firstExistingAppendIndex(append: List<TrackRecord>?): Int {
+    append.orEmpty().forEach { record ->
+      val at = store.indexOfKey(record.key)
+      if (at >= 0) return at
+    }
+    return -1
+  }
+
+  /**
+   * 诚实地结束（#563）：队尾、零新增、也没有可绕回的项 →「没有下一首」，不是「等歌」。
+   *
+   * 清掉播放意图并闩住当前 (revision, index)，让 LOW_WATER 不再重问；
+   * 这里用 EXHAUSTED 是因为 JS 的 queueEnded 监听只对非 exhausted 的 reason 再补窗。
+   */
+  private fun finishAtTail(ctrl: PlaybackController) {
+    userWantsPlay = false
+    holePending = false
+    cancelWindowHoleDeadline()
+    ctrl.player.pause()
+    markExhausted()
+    Log.i(
+      TAG,
+      "no advanceable item at tail (revision=${store.currentRevision()} index=${store.currentIndex()}) → exhausted"
+    )
+    emit(
+      Events.QUEUE_ENDED,
+      mapOf("reason" to EndReason.EXHAUSTED, "index" to ctrl.currentIndex(), "revision" to store.currentRevision())
+    )
+  }
+
+  /**
+   * #563：当前 (revision, index) 是否已判定「补窗也推进不了」。
+   * revision / index 一变，旧闩自然失效（无需显式清）。
+   */
+  private fun isExhaustedAtCurrent(): Boolean =
+    exhaustedAtRevision == store.currentRevision() && exhaustedAtIndex == store.currentIndex()
+
+  private fun markExhausted() {
+    exhaustedAtRevision = store.currentRevision()
+    exhaustedAtIndex = store.currentIndex()
+  }
+
+  private fun clearExhausted() {
+    exhaustedAtRevision = -1L
+    exhaustedAtIndex = -1
   }
 
   /**
@@ -508,6 +603,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   fun play() {
     userWantsPlay = true
+    clearExhausted()
     val ctrl = controller ?: return
     main.post {
       if (ctrl.player.mediaItemCount == 0 && store.size() > 0) {
@@ -532,6 +628,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   fun next() {
     val ctrl = controller ?: return
     userWantsPlay = true
+    clearExhausted()
     main.post {
       if (ctrl.player.mediaItemCount == 0) {
         pendingUserNext = true
@@ -552,6 +649,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   fun prev() {
     val ctrl = controller ?: return
+    clearExhausted()
     main.post {
       if (ctrl.player.mediaItemCount > 0) ctrl.player.seekToPreviousMediaItem()
       refreshState()
@@ -610,6 +708,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
     val ctrl = controller ?: return
     pendingUserNext = false
+    clearExhausted()
     if (mediaItem == null) return
     val index = ctrl.currentIndex()
     store.moveTo(index)
@@ -761,6 +860,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   private fun maybeRequestTracks(reason: String) {
     if (controller == null) return
+    // #563：当前 (revision,index) 已判定「补窗也推进不了」→ 不再自动要歌，终结 ~2s 重问循环。
+    // HOLE 是显式用户动作（next）直接调 requestTracks，不经过这里，天然放行。
+    if (reason == NeedReason.LOW_WATER && isExhaustedAtCurrent()) return
     if (reason == NeedReason.LOW_WATER && !policy.isLowWater(store.aheadCount())) return
     // 水位事件去重：同一水位只发一次，补进来后由 aheadCount 复位
     if (reason == NeedReason.LOW_WATER && store.aheadCount() > policy.prefetchAhead) return
