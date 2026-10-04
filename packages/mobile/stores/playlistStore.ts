@@ -25,8 +25,9 @@ interface PlaylistStore {
    * 批量加入：一次 set = 一次持久化 + 一次渲染（导入长歌单用；逐首 addSong 是 O(N²)）。
    * 去重判据同上（core `identityKey`），**不再用裸 `Song.id`**——
    * 跨源同 id 曾被静默当成同一首丢掉（#553）。
+   * 返回**真实新增条数**（去重后实际 append 的条数；批内重复与已存在的不计，#559）。
    */
-  addSongs: (playlistId: string, songs: Song[]) => void;
+  addSongs: (playlistId: string, songs: Song[]) => number;
   removeSong: (playlistId: string, songId: string) => void;
   /**
    * 批量移除：一次 set = 一次持久化 + 一次渲染（批量操作条用）。
@@ -77,15 +78,29 @@ export const usePlaylistStore = create<PlaylistStore>()(
           ),
         })),
 
-      addSongs: (playlistId, songs) =>
+      addSongs: (playlistId, songs) => {
+        // #559：真实新增数在 updater 里数出来。zustand 的 set 同步跑完 updater，所以
+        // set 返回后即可读；persist 的落盘是它自己的后续动作，不 await（内存先行）。
+        let added = 0;
         set((state) => ({
           playlists: state.playlists.map((p) => {
             if (p.id !== playlistId) return p;
             const have = new Set(p.songs.map((s) => identityKey(s)));
-            const fresh = songs.filter((s) => !have.has(identityKey(s)));
+            // 边判定边把身份键并入 have：批内重复只收第一条（旧写法只建一次 have 不复用，
+            // 批内重复会被双双 append，返回的条数也就不可信）。
+            const fresh: Song[] = [];
+            for (const s of songs) {
+              const key = identityKey(s);
+              if (have.has(key)) continue;
+              have.add(key);
+              fresh.push(s);
+            }
+            added = fresh.length;
             return fresh.length === 0 ? p : { ...p, songs: [...p.songs, ...fresh] };
           }),
-        })),
+        }));
+        return added;
+      },
 
       removeSong: (playlistId, songId) =>
         set((state) => ({
