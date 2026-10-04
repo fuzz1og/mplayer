@@ -36,12 +36,18 @@ const safMocks = vi.hoisted(() => {
 // 控制下载产物字节头，模拟 FLAC / MP3 容器
 const fsMocks = vi.hoisted(() => {
   const headerBytes = new Uint8Array([0x66, 0x4c, 0x61, 0x43]); // fLaC
+  /** 二进制写入记录（内嵌元数据）；.lrc 走字符串写，分开记 */
+  const binaryWrites: { uri: string; data: Uint8Array }[] = [];
+  const stringWrites: { uri: string; content: string }[] = [];
+  const moves: { from: string; to: string; overwrite?: boolean }[] = [];
+  /** 模拟 file.bytes() 读失败（元数据写失败不阻断下载） */
+  const bytesError = { value: false };
   const downloadFileAsync = vi.fn(async (_url: string, file: any, options?: any) => {
     options?.onProgress?.({ bytesWritten: 512, totalBytes: -1 });
     file.header = headerBytes;
     return file;
   });
-  return { headerBytes, downloadFileAsync };
+  return { headerBytes, binaryWrites, stringWrites, moves, bytesError, downloadFileAsync };
 });
 
 vi.mock('react-native', () => ({
@@ -62,19 +68,37 @@ vi.mock('expo-file-system', () => {
     get name(): string {
       return this.uri.split('/').pop()!;
     }
-    slice(_start: number, _end: number) {
-      // 模拟下载产物字节头（本测试固定为 FLAC fLaC）；slice 同步返回 Blob 形对象
-      const buf = new ArrayBuffer(16);
-      new Uint8Array(buf).set(Uint8Array.from(fsMocks.headerBytes)); // 0x66 0x4c 0x61 0x43
-      return { arrayBuffer: async (): Promise<ArrayBuffer> => buf };
+    /** expo File 局部读：open() → FileHandle#readBytes（旧写法 slice().arrayBuffer() 在 RN 上不存在） */
+    open() {
+      const data = Uint8Array.from(fsMocks.headerBytes);
+      let pos = 0;
+      return {
+        readBytes: (len: number) => {
+          const out = data.slice(pos, pos + len);
+          pos += out.length;
+          return out;
+        },
+        close: () => {},
+      };
     }
     async delete() {
       this.exists = false;
     }
     async create() {}
-    async write() {}
-    async move() {
-      this.exists = true;
+    /** expo File#bytes() 返回 Uint8Array（真机同形），元数据写入读的就是它 */
+    async bytes(): Promise<Uint8Array> {
+      if (fsMocks.bytesError.value) throw new Error('read failed');
+      return Uint8Array.from(fsMocks.headerBytes);
+    }
+    async write(content: string | Uint8Array) {
+      if (typeof content === 'string') fsMocks.stringWrites.push({ uri: this.uri, content });
+      else fsMocks.binaryWrites.push({ uri: this.uri, data: content });
+    }
+    /** move(dest, { overwrite }): 临时文件覆盖到目标（同目录 rename 的模拟） */
+    async move(destination: any, options?: { overwrite?: boolean }) {
+      fsMocks.moves.push({ from: this.uri, to: destination.uri, overwrite: options?.overwrite });
+      destination.exists = true;
+      this.uri = destination.uri;
     }
     static downloadFileAsync = fsMocks.downloadFileAsync;
   }
@@ -87,7 +111,14 @@ vi.mock('expo-file-system', () => {
   };
 });
 
+// lyrics.ts → songResources → cacheService → fileBackend 也吃 legacy 的文件 API（L2 磁盘缓存）
 vi.mock('expo-file-system/legacy', () => ({
+  cacheDirectory: 'file:///cache/',
+  readAsStringAsync: vi.fn(async () => ''),
+  writeAsStringAsync: vi.fn(async () => {}),
+  makeDirectoryAsync: vi.fn(async () => {}),
+  deleteAsync: vi.fn(async () => {}),
+  getInfoAsync: vi.fn(async () => ({ exists: false })),
   StorageAccessFramework: {
     createFileAsync: safMocks.createFileAsync,
     readAsStringAsync: safMocks.readAsStringAsync,
@@ -106,6 +137,9 @@ vi.mock('@mplayer/core', async () => {
     musicApi: {
       ...actual.musicApi,
       getLyrics: vi.fn(async () => '[00:12.00]你好'),
+      getNeteaseLyrics: vi.fn(async () => '[00:01.00]网易词'),
+      getSodaLyrics: vi.fn(async () => '[00:02.00]汽水词'),
+      searchSongsRouted: vi.fn(async () => []),
     },
   };
 });
@@ -209,6 +243,10 @@ describe('downloadSong（T15 容器修正 + .lrc 侧车 + 进度，T16 未知总
     useSettingsStore.setState({ downloadDirUri: '' });
     useDownloadStore.setState({ items: [] });
     fsMocks.headerBytes = new Uint8Array([0x66, 0x4c, 0x61, 0x43]); // 默认 FLAC，验证扩展名修正
+    fsMocks.binaryWrites.length = 0;
+    fsMocks.stringWrites.length = 0;
+    fsMocks.moves.length = 0;
+    fsMocks.bytesError.value = false;
   });
 
   it('下载后按字节头嗅探重命名为正确扩展名并写入 .lrc 侧车', async () => {
@@ -269,5 +307,103 @@ describe('downloadSong（T15 容器修正 + .lrc 侧车 + 进度，T16 未知总
     } finally {
       fsMocks.downloadFileAsync.mockImplementation(originalImpl as never);
     }
+  });
+});
+
+describe('内嵌元数据（ADR 2026-10-04：只写 MP3；原子替换；失败不阻断）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useSettingsStore.setState({ downloadDirUri: '' });
+    useDownloadStore.setState({ items: [] });
+    fsMocks.binaryWrites.length = 0;
+    fsMocks.stringWrites.length = 0;
+    fsMocks.moves.length = 0;
+    fsMocks.bytesError.value = false;
+  });
+
+  it('MP3：写 ID3 文本帧 + 封面 APIC，且走「临时文件 + 覆盖 move」', async () => {
+    fsMocks.headerBytes = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0, 0, 0, 0]); // ID3v2.3
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), {
+          status: 200,
+          headers: { 'content-type': 'image/jpeg' },
+        })
+      )
+    );
+    try {
+      const file = await downloadSong(makeSong({ cover: 'http://cdn.example.com/c.jpg' }) as any);
+
+      expect(fsMocks.binaryWrites).toHaveLength(1);
+      const text = Array.from(fsMocks.binaryWrites[0].data.slice(0, 4096))
+        .map((b) => String.fromCharCode(b))
+        .join('');
+      expect(text.startsWith('ID3')).toBe(true);
+      expect(text).toContain('TIT2');
+      expect(text).toContain('TPE1');
+      expect(text).toContain('TALB');
+      expect(text).toContain('APIC');
+
+      expect(fsMocks.moves).toHaveLength(1);
+      expect(fsMocks.moves[0].from.endsWith('.tmp')).toBe(true);
+      expect(fsMocks.moves[0].overwrite).toBe(true);
+      expect(fsMocks.moves[0].to).toBe(file.uri);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('FLAC：不写标签（灌 ID3 会毁文件）', async () => {
+    fsMocks.headerBytes = new Uint8Array([0x66, 0x4c, 0x61, 0x43]); // fLaC
+    await downloadSong(makeSong() as any);
+    expect(fsMocks.binaryWrites).toHaveLength(0);
+    // 只允许 correctContainerName 的扩展名修正 move，不允许 .tmp 元数据写回
+    expect(fsMocks.moves.filter((m) => m.from.endsWith('.tmp'))).toHaveLength(0);
+  });
+
+  it('M4A：不写 ID32（非 iTunes ilst/covr，media3/ExoPlayer 与 Apple 读不到）', async () => {
+    fsMocks.headerBytes = new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20]); // ftyp M4A
+    await downloadSong(makeSong() as any);
+    expect(fsMocks.binaryWrites).toHaveLength(0);
+  });
+
+  it('元数据读失败：下载仍 done，不产生写入', async () => {
+    fsMocks.headerBytes = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0, 0, 0, 0]);
+    fsMocks.bytesError.value = true;
+    await downloadSong(makeSong() as any);
+    expect(fsMocks.binaryWrites).toHaveLength(0);
+    expect(useDownloadStore.getState().items[0].status).toBe('done');
+  });
+});
+
+describe('歌词侧车取词分派（core planLyricsFetch 单点）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useSettingsStore.setState({ downloadDirUri: '' });
+    useDownloadStore.setState({ items: [] });
+    fsMocks.binaryWrites.length = 0;
+    fsMocks.stringWrites.length = 0;
+    fsMocks.moves.length = 0;
+    fsMocks.bytesError.value = false;
+    fsMocks.headerBytes = new Uint8Array([0x66, 0x4c, 0x61, 0x43]);
+  });
+
+  it('网易（按 ID 直取源）走 getNeteaseLyrics 并落 .lrc，不触发搜索补词', async () => {
+    await downloadSong(makeSong({ sourceType: 'netease', lrc: '' }) as any);
+    expect(musicApi.getNeteaseLyrics).toHaveBeenCalledWith('1');
+    expect(musicApi.searchSongsRouted).not.toHaveBeenCalled();
+    expect(fsMocks.stringWrites.some((w) => w.content.includes('网易词'))).toBe(true);
+  });
+
+  it('汽水（按 ID 直取源）走 getSodaLyrics', async () => {
+    await downloadSong(makeSong({ sourceType: 'soda', lrc: '' }) as any);
+    expect(musicApi.getSodaLyrics).toHaveBeenCalledWith('1');
+    expect(musicApi.searchSongsRouted).not.toHaveBeenCalled();
+  });
+
+  it('非直取源且 lrc 为空：搜索补全一次（#409 允许的唯一搜索场景）', async () => {
+    await downloadSong(makeSong({ sourceType: 'kugou', lrc: '' }) as any);
+    expect(musicApi.searchSongsRouted).toHaveBeenCalled();
   });
 });

@@ -20,7 +20,7 @@ import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import QueueListModal from './QueueListModal';
 import BottomSheet from './BottomSheet';
-import { parseLRC, musicApi, findCurrentLyricIndex, songUsesSongidLyrics, isSodaSource, isInlineLyrics } from '@mplayer/core';
+import { parseLRC, musicApi, findCurrentLyricIndex, planLyricsFetch } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
@@ -280,22 +280,23 @@ export default function PlayerOverlay({ onClose }: Props) {
     // #409 埋点：[耗时] 歌词就绪——本票把歌词从「列表内联」改成「播放期按 ID 直取」，
     // 首行延迟从 0 变成一次 RTT，必须可观测（与仓里 [耗时] 播放器就绪同约定）。
     const lyricsT0 = Date.now();
-    const logKind = () => (isInlineLyrics(song.sourceType, song.lrc)
+    // 取词决策由 core `planLyricsFetch` 单点给出（与下载侧车共用同一份，防漂移）。
+    const plan = planLyricsFetch(song);
+    const logKind = () => (plan.kind === 'inline'
       ? 'inline(存量)'
-      : song.lrc
+      : plan.kind === 'url'
         ? 'url'
-        : songUsesSongidLyrics(song.sourceType)
-          ? (isSodaSource(song.sourceType) ? 'songid:soda' : 'songid:netease')
+        : plan.kind === 'songid'
+          ? `songid:${plan.source}`
           : 'none');
     const abort = new AbortController();
-    // 网易（#409）：列表结果 lrc 恒空 → cacheKey 走 songid，播放期按 songId 直取；
-    // 存量数据的内联文本走 inline；其余源 lrc 为取词 URL（getLyrics 门面）；汽水按 trackId 直取。
-    const inline = isInlineLyrics(song.sourceType, song.lrc);
-    const cacheKey = inline
+    // 网易/汽水（#409）：列表结果 lrc 恒空 → cacheKey 走 songid，播放期按源内 ID 直取；
+    // 存量数据的内联文本走 inline；其余源 lrc 为取词 URL（getLyrics 门面）。
+    const cacheKey = plan.kind === 'inline'
       ? `inline:${song.id}`
-      : song.lrc
-        ? song.lrc
-        : songUsesSongidLyrics(song.sourceType) ? `songid:${song.id}` : '';
+      : plan.kind === 'url'
+        ? plan.url
+        : plan.kind === 'songid' ? `songid:${song.id}` : '';
     if (!cacheKey) {
       setLyricLines([]);
       setLyricsLoading(false);
@@ -311,14 +312,14 @@ export default function PlayerOverlay({ onClose }: Props) {
       return;
     }
     setLyricsLoading(true);
-    const load = inline
-      ? Promise.resolve(song.lrc)
-      : song.lrc
-        ? musicApi.getLyrics(song.lrc)
-        : songUsesSongidLyrics(song.sourceType)
-          ? isSodaSource(song.sourceType)
-            ? musicApi.getSodaLyrics(String(song.id))
-            : musicApi.getNeteaseLyrics(String(song.id))
+    const load = plan.kind === 'inline'
+      ? Promise.resolve(plan.text)
+      : plan.kind === 'url'
+        ? musicApi.getLyrics(plan.url)
+        : plan.kind === 'songid'
+          ? plan.source === 'soda'
+            ? musicApi.getSodaLyrics(plan.id)
+            : musicApi.getNeteaseLyrics(plan.id)
           : Promise.resolve('');
     load.then(lrc => {
       if (abort.signal.aborted) return;

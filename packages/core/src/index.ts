@@ -69,7 +69,8 @@ export type { SongFileNameParts, SongFileNameDeps } from './utils/downloadFileNa
 export { createSearchOrchestrator } from './shared/searchOrchestrator.js';
 export type { SearchOrchestrator, SearchOrchestratorState, SearchOrchestratorConfig, SearchRoute } from './shared/searchOrchestrator.js';
 export { searchSwapCandidates, applySwap } from './shared/sourceSwap.js';
-export { songUsesSongidLyrics, isSodaSource, isInlineLyrics } from './shared/songLyrics.js';
+export { songUsesSongidLyrics, isSodaSource, isInlineLyrics, planLyricsFetch } from './shared/songLyrics.js';
+export type { LyricsFetchPlan } from './shared/songLyrics.js';
 // 封面按源机制要缩略图（#496）：网易 ?param=WxH / QQ 路径模板 R{size}x{size} / 其余源原样。
 export { COVER_SIZE, coverThumbUrl } from './shared/coverUrl.js';
 // 歌词入队取词（#429）：可见期预取的入队 / single-flight / 取消 / 单次接纳上限单点。

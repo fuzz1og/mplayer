@@ -34,3 +34,28 @@ export function songUsesSongidLyrics(sourceType: SourceKey): boolean {
 export function isSodaSource(sourceType: SourceKey): boolean {
   return sourceType === 'soda';
 }
+
+/** 取词决策的结果（纯数据，不含 I/O）：消费端按 kind 接具体取词实现。 */
+export type LyricsFetchPlan =
+  | { kind: 'inline'; text: string }
+  | { kind: 'url'; url: string }
+  | { kind: 'songid'; source: 'netease' | 'soda'; id: string }
+  | { kind: 'none' };
+
+/**
+ * **取词决策单点**（播放与下载侧车共用，防两处各判一次导致漂移）：
+ * - `inline`：存量持久化数据里的内联 LRC 文本，直接当文本用；
+ * - `url`：非「按 ID 直取」源的取词 URL（经 `getLyrics` 门面拉取）；
+ * - `songid`：网易/汽水按源内 ID 直取；
+ * - `none`：非直取源且 lrc 为空 → 调用方可选择「搜索补全一次」（#409 允许的唯一搜索场景）。
+ *
+ * 只做决策、不做请求：I/O 归各端（桌面主进程 / 移动端 services）。
+ */
+export function planLyricsFetch(song: Pick<Song, 'sourceType' | 'id' | 'lrc'>): LyricsFetchPlan {
+  if (isInlineLyrics(song.sourceType, song.lrc)) return { kind: 'inline', text: song.lrc };
+  const url = song.lrc?.trim();
+  if (url) return { kind: 'url', url };
+  if (isSodaSource(song.sourceType)) return { kind: 'songid', source: 'soda', id: String(song.id) };
+  if (songUsesSongidLyrics(song.sourceType)) return { kind: 'songid', source: 'netease', id: String(song.id) };
+  return { kind: 'none' };
+}
