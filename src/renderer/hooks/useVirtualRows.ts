@@ -103,14 +103,20 @@ export function useVirtualRows({ count, enabled, estimateSize, overscan = 8 }: U
     initialRect,
   });
 
-  // 探测滚动祖先（依赖行容器的挂载：enabled 由 false 变 true 时重新探测）
+  //
+  // 探测滚动祖先。**不按 enabled 门控**——短列表（< VIRTUALIZE_THRESHOLD）不虚拟化，
+  // 但照样挂在页面的滚动容器上，照样需要知道容器的 padding-top 才能把 sticky 表头
+  // 压回内容区。此前只在 enabled 时探测（且 enabled=false 时还主动置 null），于是
+  // 「带内边距的页面 + 少于 30 首」表头又会浮高一个 padding，缝重新出现（实测 12 首
+  // 时 top 回到 0px、gap 回到 24）。是否真的虚拟化仍由 canVirtualize 说了算，这里只管探测。
+  //
+  // 依赖里带 count，并用「是否已探到」兜底一次：列表可能先渲染骨架屏、行容器稍后才
+  // 挂载，mount 那一次探测会落空；节点挂上后 count 变化时会再探一次。
   useLayoutEffect(() => {
-    if (!enabled) {
-      setScrollElement(null);
-      return;
-    }
-    setScrollElement(findScrollParent(rowsRef.current));
-  }, [enabled]);
+    if (!rowsRef.current) return;
+    const found = findScrollParent(rowsRef.current);
+    setScrollElement((prev) => (prev === found ? prev : found));
+  }, [enabled, count, scrollElement === null]);
 
   // 测量并跟随「列表在滚动容器内的偏移」：批量栏展开、页面头部加载等都会改变它
   useLayoutEffect(() => {
