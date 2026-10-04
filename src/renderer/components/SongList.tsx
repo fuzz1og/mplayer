@@ -50,7 +50,13 @@ interface SongListProps {
    * 页面只有在需要自己的簿记时才传。
    */
   onPlayNext?: (song: Song) => void;
+  /**
+   * 批量加入歌单（#562）：**只开这一个开关就能用**——弹窗与写入都在本组件内部闭环
+   * （`BatchAddToPlaylistModal` 自己走桌面 adapter 落盘）。此前点击还要求同时传
+   * `onBatchAddToPlaylist`，于是只传开关的四个页面渲染出一个点了没反应的死按钮。
+   */
   enableBatchAddToPlaylist?: boolean;
+  /** 批量加入**成功**后的通知（可选）。页面别在这里再开一个弹窗——弹窗归本组件。 */
   onBatchAddToPlaylist?: (songs: Song[]) => void;
   showRemoveFromPlaylist?: boolean;
   onRemoveFromPlaylist?: (song: Song) => void;
@@ -211,7 +217,8 @@ const SongList: React.FC<SongListProps> = ({
   };
 
   const handleBatchAddToPlaylist = () => {
-    if (!onBatchAddToPlaylist || selectedIds.length === 0) return;
+    // #562：不要求页面传回调——弹窗在本组件内部，开了开关就该能用（回调只是成功通知）。
+    if (selectedIds.length === 0) return;
     const selectedSongs = displaySongs.filter(song => selectedIdSet.has(song.id));
     setSelectedSongsForPlaylist(selectedSongs);
     setShowBatchAddToPlaylistModal(true);
