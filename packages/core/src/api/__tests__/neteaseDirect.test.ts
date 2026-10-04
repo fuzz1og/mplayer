@@ -1,6 +1,7 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { setTransport, type TransportRequest } from '../transport.js';
 import { neteaseDirectClient } from '../neteaseDirect.js';
+import { cacheManager } from '../memoryCacheManager.js';
 import { weapiRequest } from '../neteaseWeapi.js';
 import type { Song } from '../../types/index.js';
 
@@ -10,6 +11,13 @@ import type { Song } from '../../types/index.js';
  * 覆盖：cloudsearch 搜索映射、weapi URL 解析（含字段映射）、VIP/无版权空 URL、
  *       失败时错误上抛（供 sourceRouter auto 回退自建 API）。
  */
+
+// #498：searchSongs / resolvePlayableUrls 接上了内容缓存（默认 cacheManager）。
+// 本文件刻意用**同一个关键词**驱动「成功 / 风控 / 网络错误」三条路径——不复位缓存的话，
+// 第一条用例的成功结果会把后面两条直接短路掉（实测：两条失败用例变成从缓存里 resolve）。
+beforeEach(() => {
+  cacheManager.clearAll();
+});
 
 afterEach(() => {
   setTransport(null);

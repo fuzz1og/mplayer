@@ -76,5 +76,6 @@
 - **未解决**：
   - 本机仍有 p1/p2 偶发失败（宿主 `curl` 200、App 内失败）——根因待单独排查（可能与 HTTP/2 连接复用或
     CDN 对设备侧 UA/UA-less 请求的处理有关）。
-  - 内容元数据落盘：`ContentCache` 仍是**同步**接口（core 侧），移动端磁盘 L2（`CacheKernel`）接不上。
-    已单独成票 **#498**，本票不碰。
+  - 内容元数据落盘（**#498 方案 A 已落地**）：`ContentCache` **保持同步接口不变**，`CacheKernel` 的异步约束改用「L1 同步 + L2 写穿 + 首帧后限量回填」绕开——
+    装配在移动端 `services/contentCache.ts`、纯逻辑在 `cache/contentCacheLayers.ts`、内核键约定在 `cache/contentKeys.ts`；
+    同批还落了方案 C（`searchSongs` 6h、`resolvePlayableUrls` 10min）。方案 B（接口改可异步）**评估后不做**：A 已拿到冷启收益，不值得动跨端契约。

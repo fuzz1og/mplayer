@@ -1,6 +1,7 @@
 import { cacheDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync, deleteAsync, getInfoAsync } from 'expo-file-system/legacy'
 import { cacheKeyType, md5 } from '@mplayer/core'
 import type { CacheBackend } from '@mplayer/core'
+import { isContentCacheKey } from './contentKeys'
 
 interface IndexEntry {
   /** 原始缓存键（内核格式 `ns:type:key`）——有了它 keys() 返回的就是真键，可以直接 remove */
@@ -223,9 +224,24 @@ export class MobileFileBackend implements CacheBackend {
   /**
    * 磁盘占用统计（设置页展示）。
    * 读内存索引 → **O(1)、零过桥**；此前对每个文件 `getInfoAsync` 串行过桥。
+   *
+   * #498：额外分出**内容元数据**条目（歌手/专辑/歌单/榜单/推荐…）——此前设置页
+   * 只看得到播放 URL 一类，内容缓存落盘后等于「占了地方但看不见」。
    */
-  async getDiskStats(): Promise<{ fileCount: number; totalSize: number }> {
+  async getDiskStats(): Promise<{
+    fileCount: number
+    totalSize: number
+    contentFileCount: number
+    contentTotalSize: number
+  }> {
     await this.ensureIndex()
-    return { fileCount: this.fileCount, totalSize: this.totalSize }
+    let contentFileCount = 0
+    let contentTotalSize = 0
+    for (const entry of this.index.values()) {
+      if (!isContentCacheKey(entry.key)) continue
+      contentFileCount++
+      contentTotalSize += entry.size
+    }
+    return { fileCount: this.fileCount, totalSize: this.totalSize, contentFileCount, contentTotalSize }
   }
 }
