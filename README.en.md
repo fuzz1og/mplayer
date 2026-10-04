@@ -142,7 +142,7 @@ flowchart LR
 
 - **Desktop** (`src/`): `contextIsolation: true` + `nodeIntegration: false` (`sandbox: false`); the renderer talks over the preload bridge `window.electronAPI` and has no Node access. Main process (entry / preload / cache / storage / ipc / services / tray) and renderer (lazy router, Zustand, Howler, Ant Design 6) are documented in [docs/agents/architecture.md](docs/agents/architecture.md).
 - **Mobile** (`packages/mobile/`): expo-router Stack + Tabs, Zustand (AsyncStorage persist), dual-theme tokens + textVariants. The playback engine is a hand-written Kotlin Expo Module (`modules/native-player/`, media3 ExoPlayer owning the queue + native progression + `MediaLibraryService`) on Android, falling back to expo-audio on iOS.
-- **Shared** (`packages/core/`): `api/` direct clients per source, the cache kernel, `shared/` source routing and resolution, the `tier3/` subscription executor, `utils/`.
+- **Shared** (`packages/core/`): `api/` direct clients per source, the cache kernel, `shared/` source routing and resolution, the `tier3/` subscription executor, `utils/`, `cookies/` (cookie manager), `download/` (download queue / tagging / lyrics).
 
 ## 💻 Desktop features
 

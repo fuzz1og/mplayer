@@ -25,7 +25,7 @@ flat config（`eslint.config.js`），全局 ignores 与 `--no-warn-ignored` 语
 | Main（主进程） | `vitest.main.config.ts`（node + v8 coverage） | `npm run test:main` | ✅ | `test (main)` |
 | Core | `packages/core/vitest.config.ts`（node + v8 coverage） | `npm test -w packages/core` | ✅ | `test (core)` |
 | Mobile | `packages/mobile/vitest.config.ts`（node） | `npx vitest run --config packages/mobile/vitest.config.ts` | ✅ | `test (mobile)` |
-| Expo 依赖一致性 | 读 Expo 远端 SDK 期望版本（`api.expo.dev`） | `CI=1 npx expo install --check`（`npm run verify -- expo`） | ✅ | `expo-check` |
+| Expo 依赖一致性 | 读 Expo 远端 SDK 期望版本（`api.expo.dev`） | `(cd packages/mobile && CI=1 npx expo install --check)`（`npm run verify -- expo`） | ✅ | `expo-check` |
 
 CI 的 `check`、四个 `test` 分片与 `expo-check` 都只是 `verify.mjs <scope>` 的包装（`./scripts/verify.sh` 是它的 shim）；本地全量 = `npm run verify`（Windows 用这条——Windows 上 `bash` 可能是 WSL 的 Linux bash，见 #500）。**`expo` 是本仓唯一「上游可能让它自己变红」的检查**：Expo 发布新的期望补丁时会与仓库改动无关地变红，处置是 `npx expo install --fix`（理由见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`）。Playwright 的 `e2e/` **不在**任何自动化里（见文末）。
 

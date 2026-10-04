@@ -142,7 +142,7 @@ flowchart LR
 
 - **Desktop**（`src/`）：`contextIsolation: true` + `nodeIntegration: false`（`sandbox: false`），渲染层经 preload 桥 `window.electronAPI` 通信、无 Node 能力。主进程（入口 / preload / 缓存 / storage / ipc / services / tray）与渲染进程（懒加载 router、Zustand、Howler、Ant Design 6）详见 [docs/agents/architecture.md](docs/agents/architecture.md)。
 - **Mobile**（`packages/mobile/`）：expo-router Stack + Tabs，Zustand（AsyncStorage persist），双主题 token + textVariants。播放引擎 Android 走自写 Kotlin Expo Module `modules/native-player/`（media3 ExoPlayer 持队列 + 原生推进 + `MediaLibraryService`），iOS 回落 expo-audio。
-- **Shared**（`packages/core/`）：`api/` 多源直连客户端、cache 内核、`shared/` 源路由与解析、`tier3/` 订阅执行器、`utils/`。
+- **Shared**（`packages/core/`）：`api/` 多源直连客户端、cache 内核、`shared/` 源路由与解析、`tier3/` 订阅执行器、`utils/`、`cookies/`（cookie 管理器）、`download/`（下载队列 / 标签 / 歌词落盘）。
 
 ## 💻 桌面端功能
 
