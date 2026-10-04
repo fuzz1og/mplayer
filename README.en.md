@@ -164,7 +164,7 @@ flowchart LR
 - **Full-screen player**: swipe left for lyrics, play modes, favourites, queue, play next
 - **Playlists**: batch select and batch actions, create-and-add in place, export a discovered playlist to a local playlist with one click
 - **Dark mode**: follow system / light / dark
-- **Downloads**: saved to the public Downloads folder via SAF
+- **Downloads**: saved to the public Downloads folder via SAF; MP3 metadata embedded (title / artist / album / cover) plus a sibling `.lrc` lyrics sidecar; covers shown in the download list
 - **Settings**: direct-source settings (auto / direct per source), tier3 subscriptions with per-source stats (including health), update check, cache, playback log, playback diagnostics
 - **Detail pages**: charts / playlists / albums / artists / discovered playlists
 
