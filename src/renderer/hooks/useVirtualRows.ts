@@ -56,6 +56,23 @@ function findScrollParent(from: HTMLElement | null): HTMLElement | null {
 }
 
 /**
+ * sticky 元素要让表头贴住**内容区**上边时，`top` 相对滚动视口上边应有的偏移。
+ *
+ * `position: sticky` 的参照系是**滚动视口**（容器的 border box）上边，而列表内容从**内容区**
+ * （padding 之内）开始排布，两者差一个 padding-top。写 `top: 0` 时表头会比它该在的位置高出一个
+ * padding，浮到内容上方，列表内容就从表头上方那条缝里露出半截（发现歌单详情页等带内边距的页面）。
+ * 所以这里返回**负的** padding-top，把表头压回内容区上边。
+ *
+ * 容器没有 padding（绝大多数页面）时返回 0，行为与原先的 `top: 0` 完全一致。
+ */
+export function stickyTopForContent(scrollElement: HTMLElement | null): number {
+  if (!scrollElement) return 0;
+  const paddingTop = parseFloat(getComputedStyle(scrollElement).paddingTop);
+  if (!Number.isFinite(paddingTop) || paddingTop === 0) return 0;
+  return -paddingTop;
+}
+
+/**
  * 歌曲列表模块的滚动/测量接缝：行数达到阈值时自动虚拟化，且虚拟化挂靠在
  * 页面既有的滚动容器上（不要求页面传入 ref，也不改页面 DOM 结构）。
  * 探测不到滚动祖先时安全退回整表渲染。
