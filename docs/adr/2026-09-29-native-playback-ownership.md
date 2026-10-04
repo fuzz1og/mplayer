@@ -87,9 +87,26 @@ JS 对网络回调仍有反应、原生确实发了事件、FGS 全程 `isForegr
   **双跳防护**：这四个覆写**不调 super**——被接管的命令不会再落到播放器默认路径；服务内部
   代码一律持原始 `ctrl.player`（`next()`/`prev()`/`handleEnded()` 里的 `seekToNextMediaItem()`），
   服务自己发起的推进不会二次经过本包装。曲末 AUTO 推进是 ExoPlayer 的内部行为，不经过
-  `Player.seekTo*`，不会被误拦成用户 next。属原生改动：**PR / push 不编译原生**（见 ADR
-  `2026-09-29-ci-verification-boundary`），已按 `docs/agents/testing.md`「原生发版构建（本机）」
-  在本 worktree 跑通 `./gradlew assembleRelease bundleRelease --no-daemon`（证据见 PR 正文）。
+  `Player.seekTo*`，不会被误拦成用户 next。
+- **命令可用性前置检查必须一并放开（同日在真机上被证伪后补上）**：只覆写 seek 方法**不生效**。
+  反编译 media3 1.9.0 的 `MediaSessionStub`：它在跑 SessionTask **之前**先经
+  `ConnectedControllersManager.isPlayerCommandAvailable(...)` 判定，不可用即回
+  `SessionResult(-4)` 直接返回、**不进 SessionTask**，覆写永远不被调用。而该判定取的是
+  `PlayerWrapper.getAvailableCommands().contains(command)`（**不是** `isCommandAvailable`）。
+  底层 ExoPlayer 在原生窗口最后一项（列表循环/随机恒 `REPEAT_MODE_OFF`）把
+  `COMMAND_SEEK_TO_NEXT` 报为不可用——真机表现为锁屏 next 空操作、`PlaybackState.actions`
+  丢掉 32（`ACTION_SKIP_TO_NEXT`）。故 `SessionPlayer` 同时覆写 `isCommandAvailable(command)`
+  （仅这四个 seek 命令返回 true，其余 `super`）与 `getAvailableCommands()`（在 `super`
+  基础上 `add` 这四个命令，通知栏/锁屏才显示按钮）；**只放开这四个**，其余沿用底层判定。
+- **验收以设备实测为准（dev build `x86_64`）**：`./gradlew assembleDebug
+  -PreactNativeArchitectures=x86_64`，`adb push` + `pm install -r`（不用 `adb install`），
+  显式组件拉起。原生窗口最后一项发 `cmd media_session dispatch next`：`PlaybackState`
+  变 `PAUSED`、`active item id=0`、`actions=7340029`（保住 32 位），随后补窗落地
+  `MPlayerNativePlayer: pendingUserNext → advanced to index=1/3`、`active item id=1`、
+  回到 `PLAYING`——**自动前进，不是空操作**。阳性对照（窗口内有下一项）同一命令
+  `active item id` 1→2、不出现 `pendingUserNext`。属原生改动：**PR / push 不编译原生**
+  （见 ADR `2026-09-29-ci-verification-boundary`）；本机 `assembleRelease` 只能证明**能编译**，
+  行为验收以设备实测为准。
 
 ## 备选与否决
 

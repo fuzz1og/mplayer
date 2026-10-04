@@ -1024,6 +1024,38 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     override fun seekToPrevious() { prev() }
 
     override fun seekToPreviousMediaItem() { prev() }
+
+    /**
+     * media3 的命令可用性**前置检查**（#561 真机 FAIL 的根因）。
+     *
+     * 下推链不只看我们覆写的 seek 方法：MediaSessionStub 在跑 SessionTask **之前**先经
+     * ConnectedControllersManager.isPlayerCommandAvailable(...) 判命令是否可用
+     * （反编译 1.9.0：不可用即回 SessionResult(-4) 直接返回，**不进 SessionTask**），
+     * 而该判定取的是 PlayerWrapper.getAvailableCommands() 是否含该命令。
+     * 底层 ExoPlayer 在原生窗口最后一项（列表循环/随机恒 REPEAT_MODE_OFF）把
+     * COMMAND_SEEK_TO_NEXT 报为不可用 —— 于是上面四个覆写根本不会被调用，表现为空操作。
+     * 这里显式声明这四个命令可用（getAvailableCommands 同步包含，通知栏/锁屏按钮才显示）；
+     * **只放开这四个**，其余一律沿用底层 ExoPlayer 的判定。
+     */
+    override fun isCommandAvailable(command: Int): Boolean {
+      return when (command) {
+        Player.COMMAND_SEEK_TO_NEXT,
+        Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+        Player.COMMAND_SEEK_TO_PREVIOUS,
+        Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> true
+        else -> super.isCommandAvailable(command)
+      }
+    }
+
+    override fun getAvailableCommands(): Player.Commands {
+      return Player.Commands.Builder()
+        .addAll(super.getAvailableCommands())
+        .add(Player.COMMAND_SEEK_TO_NEXT)
+        .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+        .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+        .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+        .build()
+    }
   }
 
   private inner class SessionCallback : MediaLibrarySession.Callback {
