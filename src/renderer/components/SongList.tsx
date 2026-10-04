@@ -22,7 +22,7 @@ import SongRow from './SongRow';
 import SongListSkeleton from './SongListSkeleton';
 import VirtualRow from './VirtualRow';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
-import { useVirtualRows, SONG_ROW_HEIGHT, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
+import { useVirtualRows, stickyTopForContent, SONG_ROW_HEIGHT, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
 
 interface SongListProps {
   songs: Song[];
@@ -233,6 +233,11 @@ const SongList: React.FC<SongListProps> = ({
     estimateSize: estimateSongRow,
   });
 
+  // 表头贴住**内容区**上边（而不是滚动视口上边）：两者差滚动容器的 padding-top。
+  // 不补这一截，带内边距的页面（发现歌单详情页等）表头会浮到内容上方，
+  // 上一行从表头上方的缝里露出半截。无内边距的页面为 0，行为与原先一致。
+  const headerStickyTop = stickyTopForContent(virtual.scrollElement);
+
   if (displaySongs.length === 0) {
     if (loading) {
       return <SongListSkeleton showCheckbox={showCheckbox} showIndex={showIndex} />;
@@ -378,7 +383,7 @@ const SongList: React.FC<SongListProps> = ({
       {showHeader && (
         <div
           style={{
-            position: 'sticky', top: 0, zIndex: 3,
+            position: 'sticky', top: headerStickyTop, zIndex: 3,
             backgroundColor: 'var(--bg-base)',
             backdropFilter: 'blur(8px)',
             display: 'flex',
