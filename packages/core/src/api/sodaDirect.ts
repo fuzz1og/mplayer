@@ -23,8 +23,8 @@ const TRACK_V2_URL = 'https://api.qishui.com/luna/pc/track_v2';
 export const sodaDirectClient: DirectSourceClient = {
   key: 'soda',
 
-  /** 复用 musicApi 既有汽水直连搜索。 */
-  searchSongs: (keyword, page = 1) => musicApi.searchSongsSoda(keyword, page),
+  /** 复用 musicApi 既有汽水直连搜索。`opts`（#556 评审 A1）透传墙钟与取消。 */
+  searchSongs: (keyword, page = 1, opts) => musicApi.searchSongsSoda(keyword, page, opts),
 
   /** 分享页直链优先（musicApi.getSodaAudioUrl 已实现），失败降级 track_v2。 */
   resolvePlayableUrl: (song) => musicApi.getSodaAudioUrl(song.id),

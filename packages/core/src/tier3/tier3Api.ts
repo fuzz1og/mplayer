@@ -1,5 +1,5 @@
 import type { Song, SourceKey } from '../types/index.js';
-import { request, bodyToText, type TransportRequest, type TransportSignal } from '../api/transport.js';
+import { request, bodyToText, cappedRequestTimeout, type TransportCallOptions, type TransportRequest, type TransportSignal } from '../api/transport.js';
 import { BROWSER_UA } from '../utils/sourceReferer.js';
 import { isExactMatch, normalize } from '../utils/songMatcher.js';
 import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
@@ -1008,6 +1008,7 @@ async function searchTier3SourceItems(
   source: Tier3Source,
   keyword: string,
   timeoutMs: number,
+  opts?: TransportCallOptions,
 ): Promise<Tier3SearchItem[]> {
   if (source.kind !== 'search-then-resolve' || !source.search) return [];
   const deps = currentDeps;
@@ -1019,7 +1020,12 @@ async function searchTier3SourceItems(
     keyword,
   };
   const req = deps.request || request;
-  const res = await req(buildRequest(source.search, vars, source, 'text', timeoutMs));
+  const res = await req({
+    ...buildRequest(source.search, vars, source, 'text', timeoutMs),
+    // #556 评审 B3：链尾搜索腿的墙钟与取消信号也透传到 tier3 搜索的出网请求。
+    timeoutMs: cappedRequestTimeout(timeoutMs, opts),
+    signal: opts?.signal,
+  });
   if (res.status >= 400) return [];
   const items = getByPath(JSON.parse(bodyToText(res.body)), source.search.itemsPath);
   if (!Array.isArray(items)) return [];
@@ -1056,25 +1062,34 @@ async function searchTier3SourceItems(
  * 候选的 sourceType 标记为其真实来源（tier3SourceSource 推断，如 mitu→kuwo），
  * 让点击播放时解析链的 source 防护与候选一致，而不是伪装成查询源。
  */
-export async function searchTier3Songs(keyword: string, _page: number, sourceKey: SourceKey): Promise<Song[]> {
+export async function searchTier3Songs(
+  keyword: string,
+  _page: number,
+  sourceKey: SourceKey,
+  opts?: TransportCallOptions,
+): Promise<Song[]> {
   if (!state.enabled || state.subscriptions.length === 0) return [];
+  // 墙持有者已经放弃（链总预算耗尽 / 本腿到点）→ 连上游都不打（#556 评审 B3）。
+  if (opts?.signal?.aborted) return [];
   console.info(`[tier3] 第三方搜索开始: ${keyword} (${sourceKey})`);
   const out: Song[] = [];
   const seen = new Set<string>();
-  const deadline = Date.now() + TIER3_SEARCH_BUDGET_MS;
+  // 本腿墙 = min(tier3 自己的搜索预算, 墙持有者给的可用时限)，与直连搜索腿同口径。
+  const budgetMs = cappedRequestTimeout(TIER3_SEARCH_BUDGET_MS, opts);
+  const deadline = Date.now() + budgetMs;
   // 单条预算 Promise 供所有源共用（而非每源起一个 setTimeout——那样未命中的
   // 定时器会各自挂到 deadline，徒增事件循环负担，且测试里会拖住退出）。
   let budgetTimer: ReturnType<typeof setTimeout> | undefined;
   const budgetHit = new Promise<Tier3SearchItem[]>((resolve) => {
-    budgetTimer = setTimeout(() => resolve([]), TIER3_SEARCH_BUDGET_MS);
+    budgetTimer = setTimeout(() => resolve([]), budgetMs);
   });
   for (const subscription of state.subscriptions) {
     for (const source of subscription.manifest.sources) {
       if (source.kind !== 'search-then-resolve' || !source.search) continue;
       // 预算耗尽：返回已收集的部分候选（搜索语义是「尽量找全」，
       // 已找到的对用户仍有用），并说明提前收尾。
-      if (Date.now() >= deadline) {
-        console.info(`[tier3] 搜索预算 ${TIER3_SEARCH_BUDGET_MS}ms 用尽，返回已收集的 ${out.length} 条候选`);
+      if (opts?.signal?.aborted || Date.now() >= deadline) {
+        console.info(`[tier3] 搜索预算 ${budgetMs}ms 用尽，返回已收集的 ${out.length} 条候选`);
         clearTimeout(budgetTimer);
         return out;
       }
@@ -1088,7 +1103,7 @@ export async function searchTier3Songs(keyword: string, _page: number, sourceKey
       // 一个挂起的源不再能吃掉整条搜索腿的 6s（各源自己的重试也算在内）。
       const searchTimeoutMs = effectiveSourceTimeout(source, deadline - Date.now());
       try {
-        const items = await Promise.race([searchTier3SourceItems(source, keyword, searchTimeoutMs), budgetHit]);
+        const items = await Promise.race([searchTier3SourceItems(source, keyword, searchTimeoutMs, opts), budgetHit]);
         // 只保留歌名与查询词强相关的候选：归一化后歌名必须等于查询词、或为查询词
         // 的一部分（查询词更具体，如「恋人 李荣浩」可匹配「恋人」）；反向
         // （「恋人」匹配「恋人未满」）会端上完全不同的歌，一律丢弃。

@@ -96,6 +96,9 @@ const SHARDS = {
   static: [
     ['docs 门禁', 'node scripts/docs-gate.mjs'],
     ['core:build', 'npm run core:build'],
+    // #557：core 自己的 typecheck 此前谁都不跑——core 是双端共享的核心，
+    // 它的类型错误当时只有人肉跑 npm run typecheck -w packages/core 才能发现。
+    ['core typecheck', 'npm run typecheck -w packages/core'],
     ['lint', 'npm run lint'],
     ['design-lint', 'node scripts/design-lint.mjs'],
     ['root typecheck', 'npm run typecheck'],

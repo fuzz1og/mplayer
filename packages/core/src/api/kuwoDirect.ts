@@ -2,7 +2,7 @@ import { inflate } from 'pako';
 import iconv from 'iconv-lite';
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request, bodyToText, type TransportCallOptions } from './transport.js';
+import { request, bodyToText, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
 import { getUserAgent } from './antiScrape.js';
 
 /**
@@ -210,7 +210,8 @@ function mapTrack(t: any): Song {
 export const kuwoDirectClient: DirectSourceClient = {
   key: 'kuwo',
 
-  async searchSongs(keyword: string, page = 1): Promise<Song[]> {
+  /** `opts`（#556 评审 A1）：链尾搜索腿的墙钟与取消信号透传给 transport。 */
+  async searchSongs(keyword: string, page = 1, opts?: TransportCallOptions): Promise<Song[]> {
     const params = new URLSearchParams({
       vipver: '1',
       client: 'kt',
@@ -230,7 +231,8 @@ export const kuwoDirectClient: DirectSourceClient = {
       method: 'GET',
       url: `${SEARCH_URL}?${params.toString()}`,
       headers: { 'user-agent': getUserAgent('kuwo'), Referer: 'http://www.kuwo.cn/' },
-      timeoutMs: 8000,
+      timeoutMs: cappedRequestTimeout(8000, opts),
+      signal: opts?.signal,
     });
     if (res.status >= 400) throw new Error(`酷我搜索 HTTP ${res.status}`);
     const data = JSON.parse(bodyToText(res.body)) as { abslist?: any[] };

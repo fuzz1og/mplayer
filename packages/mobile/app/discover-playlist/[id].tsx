@@ -37,6 +37,8 @@ export default function DiscoverPlaylistDetailPage() {
   const offsetRef = useRef(0);
   const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
   const addSongs = usePlaylistStore((s) => s.addSongs);
+  // 回滚要用真删（#556 评审 B4）：写入失败时 core 会删掉刚建的空歌单。
+  const deletePlaylist = usePlaylistStore((s) => s.deletePlaylist);
   /** 导出进行中（防重复触发；hero 的 navRight 因此置灰） */
   const [exporting, setExporting] = useState(false);
   /** 已取回全量、等用户确认的待导出歌单（null = 未在确认中） */
@@ -115,8 +117,17 @@ export default function DiscoverPlaylistDetailPage() {
     // 该旗仍为 true，确认会被静默吞掉（点了「导出」什么也不发生）。
     // 这段本身是同步落库，不需要旗；防重复由弹层「点一次即关」+ 按钮 disabled 承担。
     try {
-      exportSongsToLocalPlaylist({ createPlaylist, addSongs }, target.name, target.songs);
-      Alert.alert('导出完成', `已导出 ${target.songs.length} 首到「${target.name}」`);
+      // #552：落库走 core 写入编排（adapter 内），失败已回滚；added 是真实新增数（#554）。
+      const result = await exportSongsToLocalPlaylist(
+        { createPlaylist, addSongs, deletePlaylist },
+        target.name,
+        target.songs,
+      );
+      if (!result.ok) {
+        Alert.alert('导出失败', result.rolledBack ? '写入失败，已撤销新建的歌单' : result.error || '请稍后重试');
+        return;
+      }
+      Alert.alert('导出完成', `已导出 ${result.added} 首到「${target.name}」`);
     } catch (e: any) {
       Alert.alert('导出失败', e?.message ?? '请稍后重试');
     }

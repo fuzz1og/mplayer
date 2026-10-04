@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -110,7 +111,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val ctrl = PlaybackController(applicationContext, store, guard, this)
     controller = ctrl
 
-    val builder = MediaLibrarySession.Builder(this, ctrl.player, SessionCallback())
+    val builder = MediaLibrarySession.Builder(this, SessionPlayer(ctrl.player), SessionCallback())
       .setId(SESSION_ID)
     launchIntent()?.let { builder.setSessionActivity(it) }
     session = builder.build()
@@ -1000,6 +1001,62 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   }
 
   // ---------------------------------------------------------------- session callback
+
+  /**
+   * 交给 [MediaLibrarySession] 的 Player 包装（#561）。
+   *
+   * 会话的「上一首/下一首」命令由 media3 经 Player 下推（`MediaSessionStub` →
+   * `PlayerWrapper : ForwardingPlayer` → 本包装），默认会直接调 ExoPlayer 的
+   * `seekToNext[MediaItem]()`，绕过 `next()`/`prev()` 承载的窗口边界策略
+   * （踩空 → `pendingUserNext` + 暂停 + `QUEUE_ENDED(WINDOW_HOLE)` + 补窗）。
+   * 这里把**用户发起的**会话跳曲改道到 `next()`/`prev()`，与 UI 入口走同一条路。
+   *
+   * 双跳防护：覆写后**不调 super**——被接管的命令不会再落到播放器默认路径；
+   * 内部代码一律持原始 `ctrl.player`（见 `next()`/`prev()`/`handleEnded()`），
+   * 所以服务自己发起的 `seekToNextMediaItem()` 不会再经过本包装。
+   * 曲末 AUTO 推进是 ExoPlayer 的内部行为，不经过 `Player.seekTo*`，不会被误当用户 next。
+   */
+  private inner class SessionPlayer(player: Player) : ForwardingPlayer(player) {
+    override fun seekToNext() { next() }
+
+    override fun seekToNextMediaItem() { next() }
+
+    override fun seekToPrevious() { prev() }
+
+    override fun seekToPreviousMediaItem() { prev() }
+
+    /**
+     * media3 的命令可用性**前置检查**（#561 真机 FAIL 的根因）。
+     *
+     * 下推链不只看我们覆写的 seek 方法：MediaSessionStub 在跑 SessionTask **之前**先经
+     * ConnectedControllersManager.isPlayerCommandAvailable(...) 判命令是否可用
+     * （反编译 1.9.0：不可用即回 SessionResult(-4) 直接返回，**不进 SessionTask**），
+     * 而该判定取的是 PlayerWrapper.getAvailableCommands() 是否含该命令。
+     * 底层 ExoPlayer 在原生窗口最后一项（列表循环/随机恒 REPEAT_MODE_OFF）把
+     * COMMAND_SEEK_TO_NEXT 报为不可用 —— 于是上面四个覆写根本不会被调用，表现为空操作。
+     * 这里显式声明这四个命令可用（getAvailableCommands 同步包含，通知栏/锁屏按钮才显示）；
+     * **只放开这四个**，其余一律沿用底层 ExoPlayer 的判定。
+     */
+    override fun isCommandAvailable(command: Int): Boolean {
+      return when (command) {
+        Player.COMMAND_SEEK_TO_NEXT,
+        Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+        Player.COMMAND_SEEK_TO_PREVIOUS,
+        Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> true
+        else -> super.isCommandAvailable(command)
+      }
+    }
+
+    override fun getAvailableCommands(): Player.Commands {
+      return Player.Commands.Builder()
+        .addAll(super.getAvailableCommands())
+        .add(Player.COMMAND_SEEK_TO_NEXT)
+        .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+        .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+        .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+        .build()
+    }
+  }
 
   private inner class SessionCallback : MediaLibrarySession.Callback {
     override fun onPlaybackResumption(

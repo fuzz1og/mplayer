@@ -108,10 +108,10 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// 队列推进：playNext / playPrevious 收敛到 core getNextSongIndex / getPrevSongIndex
+// 队列推进：playNext / playPrevious 的落点收敛到 core planAdvance
 // ---------------------------------------------------------------------------
-describe('playNext（core getNextSongIndex 收敛）', () => {
-  it('单曲循环：刻意走 seek(0)+play 特例，不触发 load/play 主链路（避免 reload）', () => {
+describe('playNext（core planAdvance 收敛）', () => {
+  it('单曲循环 → 宿主执行 restart-current：seek(0) 复播、不触发 load 主链路（避免 reload）', () => {
     const s1 = song('netease:1', '晴天', 'https://audio.example.com/1.mp3');
     usePlayerStore.setState({
       currentPlaylist: [s1], currentPlaylistIndex: 0, currentSong: s1, playMode: '单曲循环',
@@ -172,7 +172,7 @@ describe('playNext（core getNextSongIndex 收敛）', () => {
   });
 });
 
-describe('playPrevious（core getPrevSongIndex 收敛）', () => {
+describe('playPrevious（core planAdvance 收敛）', () => {
   it('列表循环：index 0 回绕到最后一首并加载播放', async () => {
     const songs = [
       song('netease:1', '晴天', 'https://audio.example.com/1.mp3'),
@@ -209,15 +209,46 @@ describe('playPrevious（core getPrevSongIndex 收敛）', () => {
 });
 
 // ---------------------------------------------------------------------------
+// #555：宿主确实执行 core planAdvance 的 effect
+// （core 的 advancePlan.test.ts 只测纯函数，测不到宿主；这里的宿主 = playerStore）
+//
+// 修前：随机分支自己 stepShuffle 后无条件 play()，绕开 planAdvance 的 effect，
+// 于是 core 判为 restart-current 的落点（单元素队列回到当前曲）在桌面被落成「重新解析 + load」。
+// 本用例在修前代码上变红（load 被调用），修后绿（seek(0) 重播）。
+// ---------------------------------------------------------------------------
+describe('宿主执行 planAdvance 的 effect（#555）', () => {
+  it('随机播放 + 单元素队列 → restart-current：seek(0) 重播，不重新解析/load', async () => {
+    const only = song('netease:1', '晴天', 'https://audio.example.com/1.mp3');
+    usePlayerStore.setState({
+      currentPlaylist: [only],
+      currentPlaylistIndex: 0,
+      currentSong: only,
+      playMode: '随机播放',
+      shuffle: { order: ['netease:1'], cursor: 0 },
+    });
+
+    usePlayerStore.getState().playNext();
+    // 让异步播放链路（解析 → load）跑完：修前随机分支无条件走 play()，这里会 load
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(audioPlayerMock.player.seek).toHaveBeenCalledWith(0);
+    expect(audioPlayerMock.player.play).toHaveBeenCalled();
+    expect(audioPlayerMock.player.load).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 播放链路固化
 // ---------------------------------------------------------------------------
 describe('播放链路：URL 解析 / 加载失败', () => {
-  it('无 url 歌曲：按歌手名搜索解析 url 后加载（兜底）', async () => {
+  it('无 url 歌曲：URL 全部由 core 解析链给出，渲染层不再自己补搜索腿', async () => {
     const s1 = song('netease:1', '晴天', ''); // url 为空
     const foundUrl = 'https://found.example.com/1.mp3';
     callMusicApiMock.mockImplementation(async (method: string) => {
       if (method === 'resolvePlayableUrlRouted') return ''; // 无真实解析
-      if (method === 'resolvePlayableSongRouted') return { url: '', nonFull: false }; // 无真实解析
+      // #556：搜索腿已收进 core 的两个分支（空串 / 抛错），这里模拟 core 命中。
+      if (method === 'resolvePlayableSongRouted') return { url: foundUrl, nonFull: false };
       if (method === 'searchSongsRouted') return [{ ...s1, url: foundUrl, lrc: '' }];
       if (method === 'getSodaPlayableUrl') return '';
       return undefined;
@@ -226,12 +257,12 @@ describe('播放链路：URL 解析 / 加载失败', () => {
 
     await usePlayerStore.getState().play(s1);
 
-    // #544：兜底仍由渲染层发起搜索，但规则已改走 core `refreshSongResource`
-    // （守卫唯一：非 http / 旧签名死链 / audioTag=invalid 不采用）。
-    expect(callMusicApiMock).toHaveBeenCalledWith('searchSongsRouted', '晴天 周杰伦', 1, 'netease');
     expect(audioPlayerMock.player.load).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'netease:1', url: foundUrl }),
     );
+    // #556：搜索腿不需要桌面适配器——渲染层这一块（原 playerStore.ts:542-557）已删除，
+    // 它此前在 core 已经搜过一次之后又搜一次（保证落空的第二次上游请求）。
+    expect(callMusicApiMock).not.toHaveBeenCalledWith('searchSongsRouted', '晴天 周杰伦', 1, 'netease');
   });
 
   it('加载失败：先同曲 fresh 重试（不跳歌），重试成功继续播放同一首', async () => {

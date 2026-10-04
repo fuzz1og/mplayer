@@ -4,8 +4,9 @@ import {
 } from 'react-native';
 import { CircleCheck, ListMusic, Plus } from 'lucide-react-native';
 import type { Song, SourceKey } from '@mplayer/core';
-import { writeSongsToPlaylist } from '@mplayer/core';
+import { classifySong } from '@mplayer/core';
 import { usePlaylistStore } from '../stores/playlistStore';
+import { createMobilePlaylistWriter } from '../services/playlistExport';
 import { SOURCE_LABELS } from '../stores/sourceStore';
 import {radius, spacing, textVariants, opacity} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
@@ -23,7 +24,9 @@ interface Props {
   song?: Song | null;
   /**
    * 批量模式：与 song 互斥。点击歌单只调一次 addSongs（整批一次 set = 一次持久化），
-   * 不逐首弹同名 Alert——跨源同名在批量语义下直接并入（与桌面 BatchAddToPlaylistModal 同做法）。
+   * 不逐首弹同名 Alert——本弹窗**不传** resolveNameConflict，跨源同名走 core 的
+   * **默认并入**（#556 评审 A4：缺省是「并入」，不是「既不写入也不计数」地静默丢弃）。
+   * 桌面 BatchAddToPlaylistModal 会整批问一次同名确认，答「继续添加」= 同一结论。
    */
   songs?: Song[] | null;
   onClose: () => void;
@@ -33,11 +36,6 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const playlists = usePlaylistStore(s => s.playlists);
-  const addSong = usePlaylistStore(s => s.addSong);
-  const addSongs = usePlaylistStore(s => s.addSongs);
-  const removeSong = usePlaylistStore(s => s.removeSong);
-  const createPlaylist = usePlaylistStore(s => s.createPlaylist);
-  const deletePlaylist = usePlaylistStore(s => s.deletePlaylist);
   const [addedName, setAddedName] = useState<string | null>(null);
   const [addedCount, setAddedCount] = useState(0);
   const [newName, setNewName] = useState('');
@@ -64,51 +62,71 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
     }, 1200);
   }, [onClose]);
 
-  const handleSelect = (playlistId: string, playlistName: string) => {
-    // —— 批量模式：整批只写一轮 ——
+  const handleSelect = async (playlistId: string, playlistName: string) => {
+    // —— 批量模式：整批只写一轮（adapter 背后是 core 编排，失败会回滚新建的歌单）——
     if (batchSongs) {
-      addSongs(playlistId, batchSongs);
-      showSuccess(playlistName, batchSongs.length);
+      const result = await createMobilePlaylistWriter().add({ playlistId, songs: batchSongs });
+      if (!result.ok) {
+        Alert.alert('添加失败', result.error || '请稍后重试');
+        return;
+      }
+      if (result.added === 0) {
+        Alert.alert('提示', '所选歌曲都已在歌单中');
+        return;
+      }
+      showSuccess(playlistName, result.added);
       return;
     }
     if (!song) return;
+
+    // 单曲模式的判据（#553）由 core `classifySong` 产出（adapter 内）——
+    // 「同源同名不同歌手」不再被误判为已存在。
     const playlist = playlists.find((p) => p.id === playlistId);
-    // 同一首歌（同 id）已在歌单中 → 直接提示不加
-    if (playlist?.songs.some((s) => s.id === song.id)) {
+    const verdict = classifySong(playlist?.songs ?? [], song);
+
+    // 跨源同名同歌手：先问用户。「替换为新版」在**写入前**移除旧版，
+    // 于是 adapter 看不到冲突、直接把新版写进去（旧实现是 UI 里拔掉再 addSong）。
+    if (verdict.status === 'nameConflict') {
+      const dup = verdict.existingSong;
+      const replace = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          '发现同名歌曲',
+          `歌单中已有「${song.name}」的${sourceLabel(dup?.sourceType)}版本，要替换成这首${sourceLabel(song.sourceType)}版本吗？`,
+          [
+            { text: '取消', style: 'cancel', onPress: () => resolve(false) },
+            // 保留原版 = 什么都不做，直接关闭（不能显示"已加入"成功提示）
+            { text: '保留原版', onPress: () => resolve(false) },
+            { text: '替换为新版', onPress: () => resolve(true) },
+          ],
+        );
+      });
+      if (!replace) {
+        onClose();
+        return;
+      }
+      if (dup) usePlaylistStore.getState().removeSong(playlistId, dup.id);
+    } else if (verdict.status === 'duplicate') {
       Alert.alert('提示', '这首歌已在歌单中');
       return;
     }
-    // 跨源同名同歌手 → 弹窗让用户选保留哪首
-    const dup = playlist?.songs.find(
-      (s) => s.name === song.name && s.artist === song.artist && s.sourceType !== song.sourceType
-    );
-    if (dup) {
-      Alert.alert(
-        '发现同名歌曲',
-        `歌单中已有「${song.name}」的${sourceLabel(dup.sourceType)}版本，要替换成这首${sourceLabel(song.sourceType)}版本吗？`,
-        [
-          { text: '取消', style: 'cancel' },
-          // 保留原版 = 什么都没做，直接关闭（不能显示"已加入"成功提示）
-          { text: '保留原版', onPress: onClose },
-          {
-            text: '替换为新版',
-            onPress: () => {
-              removeSong(playlistId, dup.id);
-              addSong(playlistId, song);
-              showSuccess(playlistName, 1);
-            },
-          },
-        ]
-      );
+
+    const result = await createMobilePlaylistWriter().add({ playlistId, songs: [song] });
+
+    if (!result.ok) {
+      Alert.alert('添加失败', result.error || '请稍后重试');
       return;
     }
-    addSong(playlistId, song);
-    showSuccess(playlistName, 1);
+    if (result.added === 0) {
+      // 判据命中「这首歌已在歌单中」（duplicate），或用户选了保留原版
+      if (result.skipped > 0) Alert.alert('提示', '这首歌已在歌单中');
+      return;
+    }
+    showSuccess(playlistName, result.added);
   };
 
   /**
    * 就地新建歌单并**立即**把本次曲目写进去（一轮写入，不要求用户再点一次）。
-   * createPlaylist 返回新 id；批量走 addSongs（整批一次 set），单曲走 addSong。
+   * 走 adapter 的 `createAndAdd`：批量内置整批一次 set，失败会回滚刚建的空歌单（#493）。
    */
   const handleCreateAndAdd = async () => {
     const name = newName.trim();
@@ -120,18 +138,9 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
       return;
     }
     try {
-      // #542：新建 + 写入走 core 编排——**写入失败会删掉刚建的空歌单**（#493 验收标准）。
-      // 此前这里 create 成功后 addSongs/addSong 抛错只弹「新建歌单失败」，空歌单留下来了。
-      const result = await writeSongsToPlaylist(
-        { createName: name, songs: target },
-        {
-          addSongs: async (pid, songs) => addSongs(String(pid), songs),
-          createPlaylist: async (n) => createPlaylist(n),
-          deletePlaylist: async (pid) => {
-            deletePlaylist(String(pid));
-          },
-        },
-      );
+      // #542/#552：新建 + 写入走移动端 adapter 背后的 core 编排——
+      // **写入失败会删掉刚建的空歌单**（#493 验收标准）。
+      const result = await createMobilePlaylistWriter().createAndAdd({ name, songs: target });
       if (!result.ok) {
         Alert.alert(
           '新建歌单失败',
@@ -139,8 +148,10 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
         );
         return;
       }
+      // #551：这里**不要**再 onClose——showSuccess 自己设成功态、1.2s 后才关闭
+      // （见 :58-65）。紧跟一次 onClose 会把成功态在同一拍吃掉，
+      // 「已加入 N 首」用户实际看不到。
       showSuccess(name, result.added);
-      onClose();
     } catch (e) {
       Alert.alert('新建歌单失败', e instanceof Error && e.message ? e.message : '请重试');
     }

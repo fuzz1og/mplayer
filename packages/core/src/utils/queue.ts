@@ -1,13 +1,12 @@
 import type { PlayMode, Song } from '../types/index.js';
-import { stepShuffle, syncShuffleCursor, type ShuffleState } from './shuffleOrder.js';
+import {
+  alignShuffleOrder,
+  stepShuffle,
+  syncShuffleCursor,
+  type ShuffleScope,
+  type ShuffleState,
+} from './shuffleOrder.js';
 
-/**
- * 推进的触发来源（#541）。语义差异只在「单曲循环 + 下一首」这一处：
- * - `user` / `failure`：用户点按或失败跳歌 → 单曲循环下「重播当前曲」；
- * - `track-end`：一曲播完自然推进 → 单曲循环下由播放层自己循环，
- *   planAdvance 同样给「重播」，宿主按自己的循环语义执行。
- */
-export type AdvanceCause = 'user' | 'track-end' | 'failure';
 
 /**
  * 宿主该执行的落点动作（#541）：core 只回答「推进到哪」，**怎么落**由宿主按它执行。
@@ -41,7 +40,12 @@ export interface AdvanceInput {
   shuffle: ShuffleState | null;
   /** 1 = 下一首，-1 = 上一首。 */
   direction: 1 | -1;
-  cause: AdvanceCause;
+  /**
+   * 随机序列的对齐**作用域**（#543/#555）：调用方手里的 `queue` 是完整成员集
+   * （`authoritative`，缺省）还是只是原生**预取窗口**（`window`，只补不丢）。
+   * 随机分支在推进前用它对序列做增量对齐，所以窗口语义也能走同一条推进路径。
+   */
+  shuffleScope?: ShuffleScope;
 }
 
 /**
@@ -58,11 +62,12 @@ export interface AdvanceInput {
  * - 单曲循环 + **上一首** → `load-target` 回到上一首（**不**重播当前曲）。
  *   这条此前只写在注释里（「与桌面 playPrevious 保持一致」）而移动端实际是重播，
  *   现在它是可执行契约，两端同此；
- * - 随机播放 → 沿稳定序列前进/后退一格并回绕，返回推进后的序列；
+ * - 随机播放 → **先按 `shuffleScope` 对齐序列**（成员增量 + 游标对到当前曲），
+ *   再沿序列前进/后退一格并回绕，返回推进后的序列；
  * - 列表循环 → (i ± 1 + len) % len，序列原样返回。
  */
 export function planAdvance(input: AdvanceInput): AdvancePlan {
-  const { queue, currentIndex, playMode, shuffle, direction } = input;
+  const { queue, currentIndex, playMode, shuffle, direction, shuffleScope = 'authoritative' } = input;
   const none: AdvancePlan = { index: -1, shuffle, effect: 'none' };
   if (queue.length === 0 || currentIndex < 0 || currentIndex >= queue.length) return none;
 
@@ -79,7 +84,8 @@ export function planAdvance(input: AdvanceInput): AdvancePlan {
       const index = nextRandomIndex(queue, currentIndex);
       return { index, shuffle: null, effect: index === currentIndex ? 'restart-current' : 'load-target' };
     }
-    const stepped = stepShuffle(syncShuffleCursor(shuffle, queue, currentIndex), queue, direction);
+    const anchored = alignShuffleOrder(shuffle, queue, currentIndex, shuffleScope);
+    const stepped = stepShuffle(anchored, queue, direction, shuffleScope);
     if (stepped.index < 0) return none;
     return {
       index: stepped.index,
