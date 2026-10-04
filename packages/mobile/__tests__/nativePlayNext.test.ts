@@ -648,6 +648,18 @@ describe('#563 原生终局闩：源码契约守卫（不替代 Kotlin 编译/�
     expect(js).toMatch(/reason === 'hole' && !plannedInFlight/);
     expect(js).toMatch(/refillEmpty: true/);
   });
+
+  it('#574：末项「JS 送了候选却零新增」也拉闩，且只闩水位、不冒充队列结束', () => {
+    const patch = body('  fun patchQueue(', '  private fun firstExistingAppendIndex(');
+    const from = patch.indexOf('} else if (!append.isNullOrEmpty()');
+    expect(from, '找不到 #574 的稳态水位分支').toBeGreaterThan(-1);
+    const branch = patch.slice(from);
+    expect(branch).toContain('addedCount == 0');
+    expect(branch).toContain('markExhausted()');
+    // 只闩 LOW_WATER：不暂停、不发 QUEUE_ENDED——播放没结束，曲末仍由原生 repeatMode 绕回
+    expect(branch).not.toContain('finishAtTail(ctrl)');
+    expect(branch).not.toContain('EndReason.EXHAUSTED');
+  });
 });
 
 /**

@@ -424,6 +424,21 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       ) {
         // 没有未决意图（已被别处清掉）但 JS 明确回报零候选 → 同样在队尾诚实结束
         finishAtTail(ctrl)
+      } else if (!append.isNullOrEmpty() && addedCount == 0 && !isExhaustedAtCurrent() &&
+        ctrl.player.mediaItemCount > 0 && ctrl.currentIndex() >= ctrl.player.mediaItemCount - 1
+      ) {
+        // #574：**稳态水位**这条路的终止条件。整个歌单都已经在原生队列里、当前又停在窗口末项时，
+        // JS 的计划只能绕回到「已在队列里」的歌（列表循环/随机的绕回）→ store.patch 去重后新增
+        // 恒为 0；而它既不是 pendingUserNext（用户没按下一首）也不是 refillEmpty（HOLE 回执），
+        // 旧实现于是没有任何终止条件：LOW_WATER 每 ~2s 重问一次（真机实测 25s / 13 次 headless）。
+        // 这里只对「JS 送了候选、末项却零新增」这一**轮内事实**上闩：不暂停、不发 QUEUE_ENDED
+        // ——播放没有结束，曲末仍由原生 repeatMode 绕回；闩按 (revision,index) 失效，任何真正的
+        // 新增补丁 / 切歌 / 显式 play·next·prev 都会自动解开（见 isExhaustedAtCurrent）。
+        markExhausted()
+        Log.i(
+          TAG,
+          "no growth at window tail (revision=${store.currentRevision()} index=${ctrl.currentIndex()}) → latch LOW_WATER"
+        )
       }
 
       // 补窗到位 + 之前停在缓冲边界 + 用户意图仍是「想播」 → 续播（T8）。
