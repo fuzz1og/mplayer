@@ -8,6 +8,7 @@ import {
   type ErrorDisposition,
   type LoopMode,
   type NativePlayerEvents,
+  type NeedReason,
   type PatchQueueResult,
   type PlaybackErrorEvent,
   type PlayerState,
@@ -185,11 +186,15 @@ export function initNativePlayer(next: NativePlayerHooks): void {
 
   NativePlayer.addListener('queueEnded', (event) => {
     hooks.onQueueEnded?.(event);
-    if (event.reason !== 'exhausted') void feedWindow();
+    // windowHole = 用户主动 next 踩空（原生已 pause 并要歌）→ 按 HOLE 补：
+    // 零候选时必须回执原生，否则 pendingUserNext 永远悬着（#563）
+    if (event.reason !== 'exhausted') {
+      void feedWindow(undefined, event.reason === 'windowHole' ? 'hole' : undefined);
+    }
   });
 
-  NativePlayer.addListener('needTracks', () => {
-    void feedWindow();
+  NativePlayer.addListener('needTracks', (event) => {
+    void feedWindow(undefined, event.reason);
   });
 
   NativePlayer.addListener('playbackError', (event) => {
@@ -515,7 +520,7 @@ export function nativeState(): PlayerState | null {
  * 前台/后台共用的补窗函数（§5.4：两路共用同一条 JS 函数，避免两份解析逻辑）。
  * 增量投喂（`patchQueue({append})`），不重发整表。
  */
-export async function feedWindow(need?: number): Promise<void> {
+export async function feedWindow(need?: number, reason?: NeedReason): Promise<void> {
   const NP = NativePlayer;
   if (!NP) return;
 
@@ -547,6 +552,13 @@ export async function feedWindow(need?: number): Promise<void> {
     playModeNow,
     shuffleNow
   );
+
+  // #563：本轮计划里是否有候选正被**别的**补窗轮解析（在飞）。有的话，本轮的「零新增」
+  // 只是并发去重的空轮，不能当「真的没有下一首」回执原生（否则会把别的轮的结果判成终局）。
+  const plannedInFlight = wantedIndexes.some((index) => {
+    const song = queue[index];
+    return !!song && isInFlight(songKey(song));
+  });
 
   // 并行解析窗口（core 的 tier3 执行器本身有 K=3 闸门，串行只会把补窗时间乘 3，
   // 真机表现为「JS 线程长时间忙碌」）。结果按队列顺序收集，保持 append 顺序稳定。
@@ -590,7 +602,13 @@ export async function feedWindow(need?: number): Promise<void> {
 
   const append: Track[] = settled.filter((track): track is Track => !!track);
 
-  if (append.length === 0) return;
+  if (append.length === 0) {
+    // HOLE 补窗零候选（解析失败 / 全在飞 / 全被去重）也必须回执原生（#563）：
+    // 否则待决的「用户下一首」悬着、播放停在暂停，LOW_WATER 每 2s 再要一轮。
+    // LOW_WATER 的空轮不打扰原生（那只是稳态没候选），只回执 HOLE。
+    if (reason === 'hole' && !plannedInFlight) await acknowledgeEmptyRefill();
+    return;
+  }
 
   // T9 取证：窗口定序的计划 vs 实投（顺序/随机/绕回都能从这一行看出来）
   console.log(
@@ -611,6 +629,22 @@ export async function feedWindow(need?: number): Promise<void> {
     });
   } catch {
     // 补窗失败不影响播放：原生会在缓冲边界停下并等下一次补窗
+  }
+}
+
+/**
+ * 回执原生「这一轮 HOLE 补窗零候选」（#563）。
+ *
+ * 只发一次、stale 就丢：revision 变了说明别的补丁已经落地，那条路径自己会解这个意图。
+ * 失败也不阻塞——原生仍有 hole 超时/水位兜底。
+ */
+async function acknowledgeEmptyRefill(): Promise<void> {
+  const NP = NativePlayer;
+  if (!NP) return;
+  try {
+    await NP.patchQueue({ baseRevision: safeState()?.revision ?? 0, refillEmpty: true });
+  } catch {
+    // 回执失败不阻塞：原生仍有 hole 超时兜底
   }
 }
 
@@ -651,9 +685,9 @@ export function registerNativeHeadless(): boolean {
   if (!NativePlayer) return false;
   if (!headlessRegistered) {
     headlessRegistered = true;
-    AppRegistry.registerHeadlessTask(PREFETCH_TASK_KEY, () => async () => {
+    AppRegistry.registerHeadlessTask(PREFETCH_TASK_KEY, () => async (data?: { reason?: NeedReason }) => {
       try {
-        await feedWindow();
+        await feedWindow(undefined, data?.reason);
       } catch {
         // headless 任务失败 = 窗口没补上 → 原生在缓冲边界停下（§5.3）
       }
