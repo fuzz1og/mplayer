@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Song } from '../../types/index.js';
 import { classifyLength, isTrialUrlInfo, type UrlInfo } from '../../api/audioProbe.js';
+import { isNonFullDirect } from '../playability.js';
 import {
   registerDirectClient,
   clearDirectClients,
@@ -87,6 +88,54 @@ describe('classifyLength 完整时长校验', () => {
     const info: UrlInfo = { url: 'https://x.mp3', br: 128, size: 1000, playTime: 30_000, fee: 1, payed: 0 };
     expect(isTrialUrlInfo(info, 240)).toBe(true);
     expect(isTrialUrlInfo({ ...info, playTime: 240_000 }, 240)).toBe(false);
+  });
+});
+
+/**
+ * #539：试听判定的**唯一实现**。
+ * 此前 sourceRouter 的三个调用点各写一套布尔式（预取 nonFull / isTrialUrlInfo||audioTag /
+ * 纯 audioTag），其中一条入口腿还漏了 audioTag，两条腿语义分叉。这里用矩阵钉死：
+ * 三个信号任一命中即试听，且三者互不掩盖。
+ */
+describe('isNonFullDirect（#539 试听判定唯一来源）', () => {
+  const info = (playTimeMs: number): UrlInfo => ({
+    url: 'https://x.mp3',
+    br: 128,
+    size: 1000,
+    playTime: playTimeMs,
+    fee: 1,
+    payed: 0,
+  });
+
+  it('三个信号全无 → 完整版', () => {
+    expect(isNonFullDirect({ audioTag: undefined, duration: 240 })).toBe(false);
+    expect(isNonFullDirect({ audioTag: 'full', info: info(240_000), duration: 240 })).toBe(false);
+  });
+
+  it('audioTag=preview → 试听（即使权威时长是完整的）', () => {
+    expect(isNonFullDirect({ audioTag: 'preview', info: info(240_000), duration: 240 })).toBe(true);
+  });
+
+  it('UrlInfo 权威时长明显偏短 → 试听', () => {
+    expect(isNonFullDirect({ audioTag: undefined, info: info(30_000), duration: 240 })).toBe(true);
+  });
+
+  it('取证判为片段 → 试听', () => {
+    expect(isNonFullDirect({ audioTag: undefined, duration: 240, validatedNonFull: true })).toBe(true);
+  });
+
+  it('三个信号同时命中 → 仍是试听（不因重复而翻转）', () => {
+    expect(
+      isNonFullDirect({ audioTag: 'preview', info: info(30_000), duration: 240, validatedNonFull: true }),
+    ).toBe(true);
+  });
+
+  it('缺标称时长时不臆断：只有 UrlInfo 判据失效，其余照常', () => {
+    // duration 缺失 → isTrialUrlInfo 走 classifyLength 的 unknown，不判试听
+    expect(isNonFullDirect({ info: info(30_000), duration: 0 })).toBe(false);
+    // 但 audioTag 与取证不依赖标称时长
+    expect(isNonFullDirect({ audioTag: 'preview', duration: 0 })).toBe(true);
+    expect(isNonFullDirect({ duration: 0, validatedNonFull: true })).toBe(true);
   });
 });
 

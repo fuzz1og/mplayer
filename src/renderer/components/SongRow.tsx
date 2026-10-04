@@ -8,6 +8,7 @@ import SourceSwapModal from '@/renderer/components/SourceSwapModal';
 import SongCover from '@/renderer/components/SongCover';
 import { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import RowActionButtons from '@/renderer/components/RowActionButtons';
+import { COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_ALBUM, colStyle } from '@/renderer/components/songTableColumns';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -62,7 +63,7 @@ const SongRow: React.FC<SongRowProps> = ({
   showIndex = true, showCheckbox = false, isSelected = false, showRemoveFromPlaylist = false,
   moreOpen = false, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onPlayNext, onRemoveFromPlaylist, onToggleSelect,
-  onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, albumWidth = 180,
+  onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, albumWidth = COL_ALBUM,
   fillTitle = false, dragHandle, actions, rowRef, compact = false, style,
 }) => {
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
@@ -135,7 +136,7 @@ const SongRow: React.FC<SongRowProps> = ({
       }}
     >
       {showCheckbox && (
-        <div style={{ width: '40px', textAlign: 'center' }}>
+        <div style={{ ...colStyle(COL_CHECKBOX), textAlign: 'center' }}>
           <input
             type="checkbox"
             checked={isSelected}
@@ -145,7 +146,7 @@ const SongRow: React.FC<SongRowProps> = ({
         </div>
       )}
       {(showIndex || dragHandle) && (
-        <div style={{ width: showIndex ? '50px' : '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+        <div style={{ ...colStyle(showIndex ? COL_INDEX : COL_INDEX_COMPACT), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
           {dragHandle}
           {showIndex && (isCurrentSong && isPlaying ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>

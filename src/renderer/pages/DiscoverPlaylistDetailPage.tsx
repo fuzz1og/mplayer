@@ -7,13 +7,17 @@ import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
-import { IpcClient } from '@/renderer/services/IpcClient';
+import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
+import type { DesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import type { Song, DiscoverPlaylist } from '@mplayer/core';
 import { formatPlayCount } from '@mplayer/core';
 
 const PAGE_SIZE = 20;
+
+/** 桌面唯一的写入 adapter（#552）：新建/整批写入/失败回滚全在它后面。 */
+const desktopWriter: DesktopPlaylistWriter = createDesktopPlaylistWriter();
 
 const DiscoverPlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -131,21 +135,16 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
               songsToSave = full.songs;
             }
           }
-          const playlistId = await IpcClient.invoke<number>(
-            'playlist:create',
-            playlist.name,
-            playlist.description || `来自网易云歌单: ${playlist.name}`
-          );
-          let addedCount = 0;
-          for (const song of songsToSave) {
-            try {
-              await IpcClient.invoke<number>('playlist:addSong', playlistId, song);
-              addedCount++;
-            } catch (e) {
-              console.error('添加歌曲失败:', song.name, e);
-            }
-          }
-          message.success(`成功保存 ${addedCount} 首歌曲到本地歌单`);
+          // #552：新建 + 整批写入 + 失败回滚交给 adapter 背后的 core 编排。
+          // 本页此前逐首 addSong、**无回滚**、失败只 console.error 却照样 message.success——
+          // 现在失败会把刚建的空歌单删掉并如实报错，不再谎报成功。
+          const result = await desktopWriter.createAndAdd({
+            name: playlist.name,
+            songs: songsToSave,
+            description: playlist.description || `来自网易云歌单: ${playlist.name}`,
+          });
+          if (!result.ok) throw new Error(result.error || '保存失败');
+          message.success(`成功保存 ${result.added} 首歌曲到本地歌单`);
           navigate('/playlists');
         } catch (error) {
           console.error('保存到本地失败:', error);

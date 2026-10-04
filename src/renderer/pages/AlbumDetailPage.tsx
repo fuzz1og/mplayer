@@ -102,7 +102,13 @@ const AlbumDetailPage: React.FC = () => {
         <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName || '专辑'}</h1>
         <div style={{ width: '140px' }} />
       </div>
-      {/* 专辑卡片区:固定不滚动,布局与歌单详情页一致 */}
+      {/*
+       * 专辑卡片区:固定不滚动(所以下面滚动容器的 padding-top 是 0)。
+       *
+       * 注意:SongList 的表头是 sticky 的,它靠 stickyTopForContent() 对齐滚动容器的
+       * **内容区**上边,所以这里给不给 padding-top 表头都不会错位了。改这个值时不需要
+       * 再考虑表头——但反过来,如果有人把卡片挪进下面的滚动容器,布局会整体变一次。
+       */}
       <div style={{ padding: '24px 24px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
           <div style={{ position: 'relative', width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', backgroundColor: 'var(--bg-hover)' }}>

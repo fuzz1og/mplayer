@@ -4,7 +4,7 @@ import { cacheManager } from './memoryCacheManager.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { looksLikeLyrics } from '../download/lyrics.js';
-import { request, bodyToText } from './transport.js';
+import { request, bodyToText, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
 import { getNeteaseLyrics as fetchNeteaseLyrics } from './neteaseDirect.js';
 import { setPrefetchedUrl, getPrefetchedUrl, forgetPrefetchedUrl } from './prefetchCache.js';
@@ -144,7 +144,7 @@ export const musicApi = {
    * 搜索汽水音乐 (直接调用 api.qishui.com)
    * 注：搜索结果不含 audio_url，播放/探测时会通过 trackId 单独解析直链
    */
-  async searchSongsSoda(keyword: string, page: number = 1): Promise<Song[]> {
+  async searchSongsSoda(keyword: string, page: number = 1, opts?: TransportCallOptions): Promise<Song[]> {
     const cacheKey = `soda_search_${keyword}_${page}`;
     const cached = cacheManager.getSearchCache(cacheKey, page, 'soda');
     if (cached) return cached;
@@ -166,7 +166,8 @@ export const musicApi = {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
       },
-      timeoutMs: 15000,
+      timeoutMs: cappedRequestTimeout(15000, opts),
+      signal: opts?.signal,
     });
     if (res.status < 200 || res.status >= 300) {
       throw new Error(`汽水搜索 HTTP ${res.status}`);
@@ -518,8 +519,8 @@ export const musicApi = {
    * 供 SearchOrchestrator 的 searchOneSource 注入（桌面经 musicApi:call 契约，
    * 移动端 core 直调）。直连客户端由 T02+ 各源 ticket 注册。
    */
-  searchSongsRouted: (query: string, page: number, source: SourceKey) =>
-    routedSearchSongs(query, page, source),
+  searchSongsRouted: (query: string, page: number, source: SourceKey, opts?: TransportCallOptions) =>
+    routedSearchSongs(query, page, source, opts),
 
   /** 模式感知播放 URL 解析（请求层回退链 URL 腿；无版权/VIP 返回 '' 交换元层）。 */
   resolvePlayableUrlRouted: (song: Song) => routedResolveUrl(song),

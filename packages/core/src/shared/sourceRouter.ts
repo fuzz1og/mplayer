@@ -1,7 +1,8 @@
 import type { Album, AlbumDetail, Artist, DiscoverPlaylist, Song, SourceKey } from '../types/index.js';
-import { isTrialUrlInfo } from './playability.js';
+import { isNonFullDirect } from './playability.js';
 import type { UrlInfo } from './playability.js';
-import { getPrefetchedUrl } from '../api/prefetchCache.js';
+import { getPrefetchedUrl, setPrefetchedUrl } from '../api/prefetchCache.js';
+import { refreshSongResource, type LegOptions } from './songResourceRefresh.js';
 import type { PlaybackGuard, PlaybackVia } from './playbackGuard.js';
 import {
   validateDirectUrlNonFull,
@@ -17,7 +18,12 @@ import {
 } from './playbackTrace.js';
 import { clearSourceSchedule } from './sourceSchedule.js';
 import type { TransportCallOptions } from '../api/transport.js';
-import { DIRECT_VALIDATION_TIMEOUT_MS, DIRECT_WALL_MS, TIER3_CHAIN_BUDGET_MS } from './playbackBudgets.js';
+import {
+  DIRECT_VALIDATION_TIMEOUT_MS,
+  DIRECT_WALL_MS,
+  SEARCH_LEG_WALL_MS,
+  TIER3_CHAIN_BUDGET_MS,
+} from './playbackBudgets.js';
 import { createResolutionBudget, type ResolutionBudget } from './resolutionBudget.js';
 
 /**
@@ -45,15 +51,23 @@ export interface ArtistAlbumsPage {
   ok: boolean;
 }
 
-/** 来源中文名（设置页/状态展示共用，桌面/移动端同一份，避免双端漂移）。 */
+/**
+ * 来源中文名（双端唯一一份：设置页 / 状态展示 / 列表来源标签 / 搜索结果分组共用）。
+ *
+ * #556 评审 C 续：移动端 `stores/sourceStore.ts` 的 `SOURCE_LABELS` 改为引用本表，不再各自
+ * 维护字面量。收敛时按「真实中文名」取值：QQ 用全名 `QQ音乐`（徽标里的缩写 `QQ` 仍由各自
+ * 紧凑组件自带表），并补上移动端有、core 曾缺的 `local`。`Record<string, string>` 的宽索引
+ * 是给「按任意字符串查表」的调用点（未知来源回退），不改类型以免破坏这些调用点。
+ */
 export const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   netease: '网易云',
-  qq: 'QQ',
+  qq: 'QQ音乐',
   kugou: '酷狗',
   kuwo: '酷我',
   migu: '咪咕',
   qianqian: '千千',
   soda: '汽水',
+  local: '本地',
 };
 
 /** 来源开关选项（桌面/移动端设置 UI 共用；自建 API 已退役，仅剩两态）。 */
@@ -235,8 +249,11 @@ export interface ContentCache {
 export interface DirectSourceClient {
   key: SourceKey;
   // ── 基础能力 ─────────────────────────────────────────────────────
-  /** 源站搜索（直连）。未实现则不提供。 */
-  searchSongs?: (keyword: string, page: number) => Promise<Song[]>;
+  /** 源站搜索（直连）。未实现则不提供。
+   *  `opts.signal`（#556）：可选的取消信号——由**墙的持有者**（解析链尾巴的
+   *  严格搜索腿）传入，腿到点或链总预算耗尽即 abort。未声明该参数的源不受影响
+   *  （函数形参少在 TS 里仍满足本签名，与 resolvePlayableUrl 同一约定）。 */
+  searchSongs?: (keyword: string, page: number, opts?: TransportCallOptions) => Promise<Song[]>;
   /**
    * 播放 URL 直连解析；无版权/VIP 返回 ''（交给换元层）。
    * `opts.signal`：可选的取消信号——由**墙的持有者**（directCall 的 3s 直连墙）传入，
@@ -498,6 +515,8 @@ interface TraceCtx {
   tier3Ms: number | null;
   tier3TimedOut: boolean;
   legs: PlaybackTraceSourceLeg[];
+  /** 严格搜索腿（#556）：本次链尾是否搜过、搜了多久、什么结果。null = 没走到它。 */
+  searchLeg: PlaybackTraceSourceLeg | null;
   /** 本次 tier3 腿的源遍历顺序（#398；未进入 tier3 腿为 null）。 */
   sourceOrder: string[] | null;
   /** 本次解析是否处于初始化窗口（#398）。 */
@@ -508,7 +527,7 @@ function newTraceCtx(): TraceCtx {
   return {
     prefetchHit: false, prefetchedUrl: null, reason: '', directMs: null, directMethod: null,
     directSource: null, directTimedOut: false, validateMs: null, tier3Engaged: false, tier3Ms: null,
-    tier3TimedOut: false, legs: [], sourceOrder: null, tier3InitWindow: false,
+    tier3TimedOut: false, legs: [], searchLeg: null, sourceOrder: null, tier3InitWindow: false,
   };
 }
 
@@ -610,8 +629,15 @@ export function setTier3Resolver(resolver: Tier3Resolver | null): void {
   tier3Resolver = resolver;
 }
 
-/** tier3 搜索兜底插槽：官方直连搜索失败时返回第三方候选歌曲；未注入/关闭 = 不生效。 */
-export type Tier3SearchResolver = (keyword: string, page: number, source: SourceKey) => Promise<Song[]>;
+/** tier3 搜索兜底插槽：官方直连搜索失败时返回第三方候选歌曲；未注入/关闭 = 不生效。
+ *  `opts`（#556 评审 A1/B3）：链尾搜索腿的墙钟与取消信号——resolver 应把它透传到
+ *  出网请求，让「预算耗尽即 abort」在 tier3 搜索兜底这一截也真的停掉在飞请求。 */
+export type Tier3SearchResolver = (
+  keyword: string,
+  page: number,
+  source: SourceKey,
+  opts?: LegOptions,
+) => Promise<Song[]>;
 
 let tier3SearchEnabled = false;
 let tier3SearchResolver: Tier3SearchResolver | null = null;
@@ -628,15 +654,16 @@ export function setTier3SearchResolver(resolver: Tier3SearchResolver | null): vo
   tier3SearchResolver = resolver;
 }
 
-/** 直连搜索失败后的 tier3 搜索兜底（默认关闭，未注入直接跳过）。 */
-async function tryTier3Search(keyword: string, page: number, source: SourceKey): Promise<Song[]> {
+/** 直连搜索失败后的 tier3 搜索兜底（默认关闭，未注入直接跳过）。
+ *  `opts`（#556 评审 B3）：直连搜索拿到的墙钟与取消信号，同样交给 tier3 搜索 resolver。 */
+async function tryTier3Search(keyword: string, page: number, source: SourceKey, opts?: LegOptions): Promise<Song[]> {
   if (!tier3SearchEnabled || !tier3SearchResolver) {
     console.info(`[tier3] 直连搜索失败，但 tier3 搜索未启用/未注入，跳过: ${keyword} (${source})`);
     return [];
   }
   console.info(`[tier3] 直连搜索失败，进入第三方搜索兜底: ${keyword} (${source})`);
   try {
-    const songs = await tier3SearchResolver(keyword, page, source);
+    const songs = await tier3SearchResolver(keyword, page, source, opts);
     console.info(`[tier3] 第三方搜索返回 ${songs.length} 首: ${keyword} (${source})`);
     return songs;
   } catch (e) {
@@ -882,6 +909,122 @@ async function tryTier3Full(
   return resolution ? tier3Playable(resolution) : null;
 }
 
+/**
+ * **严格搜索腿**（#544 / #556）：直连与 tier3 都没拿到 URL 时解析链的最后一条腿。
+ *
+ * 这条规则此前在桌面的 4 个调用点各抄了一份弱化版
+ * （`playerStore` 的播放与歌词、`DiscoverPageV2`、`songCoverRefresh`）：
+ * 「搜索 → findExactMatch → 取 hit.url」，**没有**下面这三条守卫，也不写缓存。
+ * core 的 `refreshSongResource` 一直有完整规则，但只有 1 个消费者（移动端），
+ * 深 module 被绕过了。
+ *
+ * 现在守卫收敛到 `songResourceRefresh`：非 http / 旧签名死链 / audioTag=invalid
+ * 一律不采用；采用后写回预取缓存（下次 0 等待）；nonFull 保留。
+ *
+ * **#556 的两处收口**：
+ * - **零适配器**：主机此前要 `setStrictSearch` 注入一份「搜索」实现，但那两份实现
+ *   与 core 自己的 `searchSongsRouted` 逐字等价（桌面 `resolvePlayableSongRouted`
+ *   本就在主进程跑）——删掉模块级插槽，直接用 core 的路由搜索；
+ * - **纳入整链预算**：腿墙 `SEARCH_LEG_WALL_MS` 取 `min(本腿墙, 链总预算剩余)`，
+ *   预算耗尽则连上游都不打（与 `tryTier3` 同口径）。
+ *
+ * 不变量与 `refreshSongResource` 一致：**拿不到就返回 null**，
+ * 调用方继续按既有语义处理（不得用空 url 覆盖已有的有效值）。
+ */
+async function trySearchLeg(
+  song: Song,
+  ctx: TraceCtx | null,
+  budget: ResolutionBudget,
+): Promise<RoutedPlayable | null> {
+  // 本地文件与汽水不走搜索腿（与桌面既有的排除条件同口径）
+  if (song.sourceType === 'local' || song.sourceType === 'soda') return null;
+  if (!song.name) return null;
+
+  const wallMs = budget.clamp(SEARCH_LEG_WALL_MS);
+  if (wallMs <= 0) {
+    console.info(`[resolve] 严格搜索腿：解析链总预算已用尽，不发起搜索: 《${song.name}》`);
+    if (ctx) ctx.searchLeg = { sourceId: `search:${song.sourceType}`, ms: 0, outcome: 'skipped' };
+    return null;
+  }
+
+  // 墙的持有者持有 AbortController（与 timedDirectCall / tryTier3 同构）：
+  // 本腿到点或链总预算耗尽都 abort，把「放弃等待」变成真的停掉上游搜索。
+  const controller = new AbortController();
+  const offExpire = budget.onExpire(() => controller.abort());
+  const TIMED_OUT = Symbol('search-leg-timed-out');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const t0 = ctx ? traceNow() : 0;
+  try {
+    const opts: LegOptions = { timeoutMs: wallMs, signal: controller.signal };
+    const outcome = await Promise.race([
+      refreshSongResource(
+        song,
+        {
+          // 不提供 readCache（#557）：播放路径在进入搜索腿之前早已查过预取缓存；
+          // 该端口如今可选，不传 = 跳过规则 a、直接走搜索。
+          writeCache: async (_s, resource) => setPrefetchedUrl(song, resource.url, resource.nonFull),
+          // 与用户在搜索页看到的同一条链（直连优先 + tier3 搜索兜底）——core 自己的实现，
+          // 不再需要宿主注入「严格搜索」适配器（#556 删掉 setStrictSearch 的理由）。
+          search: async (s, legOpts) => defaultStrictSearch(s, legOpts),
+          log: (level, message) => {
+            const line = `[resolve] ${message}`;
+            if (level === 'warn') console.warn(line);
+            else console.info(line);
+          },
+        },
+        opts,
+      ),
+      new Promise<typeof TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          resolve(TIMED_OUT);
+        }, wallMs);
+      }),
+    ]);
+    if (outcome === TIMED_OUT) {
+      if (ctx) {
+        ctx.searchLeg = { sourceId: `search:${song.sourceType}`, ms: traceNow() - t0, outcome: 'error', errorClass: 'timeout' };
+      }
+      console.warn(`[resolve] 严格搜索腿超过 ${wallMs}ms 墙钟上限: 《${song.name}》`);
+      return null;
+    }
+    const resource = outcome;
+    if (ctx) {
+      ctx.searchLeg = {
+        sourceId: `search:${song.sourceType}`,
+        ms: traceNow() - t0,
+        outcome: resource?.url?.startsWith('http') ? 'hit' : 'miss',
+      };
+    }
+    if (!resource?.url?.startsWith('http')) return null;
+    if (ctx) ctx.reason = '直连与 tier3 均未取到 URL，严格搜索腿命中';
+    // 搜索腿拿到的仍是该源的直链：via=direct、guard=none（护栏只约束 tier3 替换的 URL）。
+    return directPlayable(resource.url, resource.nonFull);
+  } catch (e) {
+    if (ctx) {
+      ctx.searchLeg = { sourceId: `search:${song.sourceType}`, ms: traceNow() - t0, outcome: 'error' };
+    }
+    console.warn(`[resolve] 严格搜索腿失败: 《${song.name}》${(e as Error)?.message || e}`);
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+    offExpire();
+  }
+}
+
+/**
+ * 严格搜索（#544）：走 core 的路由搜索，与用户在搜索页看到的同一条链。
+ * `opts`（#556）把链尾这次搜索的墙钟与取消信号透传下去——`searchSongsRouted`
+ * 的**直连搜索跳**不套墙（#389 决策：搜索要「尽量找全」），这里约束的是**这一次**
+ * 搜索的整体时限，并保证预算耗尽时不再发起新的上游调用。
+ */
+async function defaultStrictSearch(song: Song, opts?: LegOptions): Promise<Song[]> {
+  const keyword = `${song.name} ${song.artist}`.trim();
+  if (!keyword) return [];
+  if (opts?.signal?.aborted) return [];
+  return searchSongsRouted(keyword, 1, song.sourceType, opts);
+}
+
 /** 搜索结果被探测标记为 invalid 时，即使直连返回了 URL 也优先换 tier3；
  *  tier3 未命中（未启用/未注入/全源失败）则保留直连结果，由上层按现状处理。
  *  试听版（preview/试听段）的完整版 tier3 兜底不在此函数——调用方
@@ -929,10 +1072,11 @@ export async function searchSongsRouted(
   query: string,
   page: number,
   source: SourceKey,
+  opts?: LegOptions,
 ): Promise<Song[]> {
   const route = decideRoute(source, (c) => !!c.searchSongs);
   if (route.kind === 'direct-unavailable') {
-    const tier3Songs = await tryTier3Search(query, page, source);
+    const tier3Songs = await tryTier3Search(query, page, source, opts);
     if (tier3Songs.length > 0) return tier3Songs;
     throw new Error('该源暂无直连实现');
   }
@@ -940,15 +1084,17 @@ export async function searchSongsRouted(
     // #389 评估结论：直连**搜索**腿暂不套墙——搜索腿语义是「尽量找全」，套墙会
     // 静默截断列表结果（与解析腿「要么拿到 URL 要么失败」不同），需独立决策。
     // 本票的墙只覆盖解析腿（resolveUrlInfo / resolvePlayableUrl）。
-    const directSongs = await route.client.searchSongs!(query, page);
+    // #556：本入口只多收一个**可选**信号（链尾搜索腿的墙），不在这里施加墙——
+    // 墙的持有者是 caller（见 trySearchLeg）。
+    const directSongs = await route.client.searchSongs!(query, page, opts);
     if (directSongs.length > 0) return directSongs;
     // 直连返回空也视为“未命中”，进入 tier3 搜索兜底（若启用）。
-    const tier3Songs = await tryTier3Search(query, page, source);
+    const tier3Songs = await tryTier3Search(query, page, source, opts);
     if (tier3Songs.length > 0) return tier3Songs;
     return directSongs;
   } catch (err) {
     // 直连搜索失败 → 第三方订阅搜索兜底（若启用）；tier3 未命中 = 原样上抛（D2）。
-    const tier3Songs = await tryTier3Search(query, page, source);
+    const tier3Songs = await tryTier3Search(query, page, source, opts);
     if (tier3Songs.length > 0) return tier3Songs;
     throw err;
   }
@@ -976,35 +1122,19 @@ export async function resolvePlayableUrlRouted(song: Song, options?: ResolutionO
   }
 }
 
+/**
+ * URL 腿（IPC 暴露的另一个「直连解析腿」入口）。
+ *
+ * #539：此前它与 resolveRoutedInner **各写一遍**「直连 → preferTier3WhenBad → tier3 → 上抛」，
+ * 并且漏了 audioTag=preview 的完整版兜底——两条入口腿的语义已经分叉。
+ * 现在它只是 resolveRoutedInner 的一层薄适配：编排只有一份，URL 腿顺带拿到完整版兜底。
+ *
+ * 注意：本入口不产出 nonFull / via / guard（接口只返回 URL 字符串），
+ * 需要完整信息的调用方应直接用 resolvePlayableSongRouted。
+ */
 async function resolvePlayableUrlInner(song: Song, budget: ResolutionBudget): Promise<string> {
-  const route = decideRoute(song.sourceType, (c) => !!c.resolvePlayableUrl);
-  if (route.kind === 'direct-unavailable') throw new Error('该源暂无直连实现');
-  try {
-    // 与 resolveRoutedInner 同一条腿：同样过 #389 的 3s 墙（本函数经 IPC 暴露，
-    // 是另一个「直连解析腿」入口，保证 wall 口径一致）。
-    const url = await directCall(
-      null,
-      route.client,
-      'resolvePlayableUrl',
-      (opts) => route.client.resolvePlayableUrl!(song, opts),
-      budget,
-    );
-    if (url) {
-      // 搜索结果已被探测标记为无效时，即使直连返回了 URL 也先试 tier3；
-      // 没有配置 tier3 则保持原直连结果，由上层继续按现状报错/换元。
-      return (await preferTier3WhenBad(song, url, null, budget)).url;
-    }
-    // 直连返回空串（无版权/VIP）也进 tier3 兜底（默认关）；失败保持空串交换元层。
-    const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）', null, budget);
-    if (tier3) return tier3.url;
-    return url;
-  } catch (err) {
-    if (route.mode === 'direct') throw err;
-    // tier3 插槽：直连失败后的兜底（默认关；#144 落地后启用）；未命中 = 上抛（D2）。
-    const tier3 = await tryTier3(song, '直连解析失败', null, budget);
-    if (tier3) return tier3.url;
-    throw err;
-  }
+  // ctx 传 null：本入口不参与 trace（保持既有行为——URL 腿从未落 trace）。
+  return (await resolveRoutedInner(song, null, budget)).url;
 }
 
 // 护栏类型经路由层再导出：消费方（含测试）从播放解析入口同一处取类型。
@@ -1047,9 +1177,13 @@ function emitResolveTrace(
         ? 'tier3'
         : 'direct';
   // 迟到命中被 tier3 腿预算丢弃 → leg 记 discarded，与 tier3Stats.discarded 同口径。
-  const sources = ctx.tier3TimedOut
-    ? ctx.legs.map((leg) => (leg.outcome === 'hit' ? { ...leg, outcome: 'discarded' as const } : leg))
-    : ctx.legs;
+  // #556：严格搜索腿也是这条链上的一条腿，同一份 discarded 口径覆盖它。
+  const collectLeg = (leg: PlaybackTraceSourceLeg): PlaybackTraceSourceLeg =>
+    ctx.tier3TimedOut && leg.outcome === 'hit' ? { ...leg, outcome: 'discarded' } : leg;
+  const sources = [
+    ...ctx.legs.map(collectLeg),
+    ...(ctx.searchLeg ? [collectLeg(ctx.searchLeg)] : []),
+  ];
   const reason = err
     ? `解析抛错: ${(err as Error)?.message || String(err)}`
     : ctx.reason || (layer === 'fail' ? '全部链路未取得 URL' : '直连解析成功');
@@ -1182,13 +1316,19 @@ async function resolveRoutedInner(
       ctx.prefetchedUrl = prefetched.url;
       ctx.reason = '预取缓存命中';
     }
-    if (prefetched.nonFull) {
+    // #539：试听判定走 core 唯一实现（此前此处只看了缓存的 nonFull，漏了 audioTag=preview）。
+    const prefetchedNonFull = isNonFullDirect({
+      audioTag: song.audioTag,
+      duration: song.duration,
+      validatedNonFull: prefetched.nonFull,
+    });
+    if (prefetchedNonFull) {
       // #361：预取只存直连结果，但「试听版换完整版」这一跳进 tier3，
       // 同样要过护栏（命中即 0 等待 ≠ 可以绕过验证）。
       const full = await tryTier3Full(song, `预取缓存命中但为试听版（nonFull），尝试 tier3 拿完整版`, ctx, budget);
       if (full) return full;
     }
-    return directPlayable(prefetched.url, prefetched.nonFull);
+    return directPlayable(prefetched.url, prefetchedNonFull);
   }
 
   // 能力门含 resolveUrlInfo（UrlInfo 自带 url，仅有 UrlInfo 也可直连解析）
@@ -1204,7 +1344,8 @@ async function resolveRoutedInner(
           // tier3 未命中则保留直连结果并按其权威字段判定试听版。
           const picked = await preferTier3WhenBad(song, info.url, ctx, budget);
           if (picked.resolution) return tier3Playable(picked.resolution);
-          const trial = isTrialUrlInfo(info, song.duration) || song.audioTag === 'preview';
+          // #539：唯一试听判定（audioTag=preview 或 UrlInfo 权威时长明显偏短）。
+          const trial = isNonFullDirect({ audioTag: song.audioTag, info, duration: song.duration });
           // 试听版也走 tier3 兜底尝试拿完整版（用户决策：试听无意义，兜底可能
           // 拿到完整版；tier3 未命中才退回直连试听）——tier3 拿到则 nonFull=false。
           if (trial) {
@@ -1226,27 +1367,47 @@ async function resolveRoutedInner(
       // 搜索结果已被探测标记为无效时，优先用 tier3 换一个可播 URL。
       const picked = await preferTier3WhenBad(song, url, ctx, budget);
       if (picked.resolution) return tier3Playable(picked.resolution);
-      // 搜索结果已被探测标为试听版（audioTag=preview，如酷我 VIP 歌的 M500 试听）：
-      // 试听也走 tier3 兜底尝试拿完整版（tier3 未命中才退回直连试听）。
-      if (song.audioTag === 'preview') {
-        const full = await tryTier3Full(song, `直连为试听版（audioTag=preview），尝试 tier3 拿完整版`, ctx, budget);
-        if (full) return full;
-      }
       // #392：无权威时长的直连腿（resolveUrlInfo 只有 netease/soda 实现）播放时取证一次。
       const validated = await validateDirectLeg(song, picked.url, client, ctx, budget);
+      // #539：唯一试听判定（audioTag=preview 或取证判为片段）。
+      const trial = isNonFullDirect({
+        audioTag: song.audioTag,
+        duration: song.duration,
+        validatedNonFull: validated.nonFull,
+      });
+      // 搜索结果已被探测标为试听版（audioTag=preview，如酷我 VIP 歌的 M500 试听）：
+      // 试听也走 tier3 兜底尝试拿完整版（tier3 未命中才退回直连试听）。
+      if (trial) {
+        const full = await tryTier3Full(song, `直连为试听版（nonFull），尝试 tier3 拿完整版`, ctx, budget);
+        if (full) return full;
+      }
       if (ctx && !ctx.reason) ctx.reason = '直连解析成功';
-      return directPlayable(picked.url, song.audioTag === 'preview' || validated.nonFull);
+      return directPlayable(picked.url, trial);
     }
     // 直连返回空串（无版权/VIP）→ tier3 兜底（默认关）；失败保持空串交换元层。
     const tier3 = await tryTier3(song, '直连返回空串（无版权/VIP）', ctx, budget);
     if (tier3) return tier3Playable(tier3);
-    if (ctx && !ctx.tier3Engaged) ctx.reason = '直连返回空串（无版权/VIP）';
+    // #544：tier3 也没拿到 → 走**严格搜索腿**（此前桌面在手抄的弱化版里做这件事，
+    // 缺三条守卫：非 http / 旧签名死链 / audioTag=invalid；现在守卫只有一处）。
+    const searched = await trySearchLeg(song, ctx, budget);
+    if (searched) return searched;
+    // #556：搜索腿已记进 ctx.searchLeg；这里只补「为什么最终没拿到 URL」。
+    if (ctx) {
+      ctx.reason = ctx.tier3Engaged
+        ? '直连与 tier3 均未取到 URL'
+        : '直连返回空串（无版权/VIP）';
+    }
     return directPlayable('', false);
   } catch (err) {
     if (route.mode === 'direct') throw err;
     // tier3 插槽：直连失败后的兜底（默认关；#144 落地后启用）；未命中 = 上抛（D2）。
     const tier3 = await tryTier3(song, '直连解析失败', ctx, budget);
     if (tier3) return tier3Playable(tier3);
+    // #556：抛错分支此前**没有搜索腿**——只有「直连返回空串」那条走得到它，于是
+    // 桌面只能自己补一份（重跑整条链 + 再打一次保证落空的上游搜索）。现在两个分支
+    // 落到同一条尾巴；搜索也没命中则**保留原错误上抛**（语义不变，D2）。
+    const searched = await trySearchLeg(song, ctx, budget);
+    if (searched) return searched;
     if (ctx && !ctx.tier3Engaged) ctx.reason = '直连解析失败';
     throw err;
   }

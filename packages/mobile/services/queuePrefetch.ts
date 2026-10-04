@@ -127,9 +127,11 @@ export function planNextIndexes(
     guard += 1;
     let next: number;
 
-    // 无序列兜底（兼容路径，见文件头 ⚠️）：随机模式还没建立稳定序列时退回「防重复现抽」
+    // 无序列兜底（兼容路径，见文件头 ⚠️）：随机模式还没建立稳定序列时退回「防重复现抽」。
+    // #541：这里**刻意**传 null（不是漏传）——有序列时走上面 :99 的 applyShuffleOrder 分支，
+    // 只有「随机模式但序列尚未建立」才落到这条路径，且它后面还夹了一层 excluded 重试。
     if (playMode === '随机播放' && queue.length > 1) {
-      next = getNextSongIndex(queue, cursor, '随机播放');
+      next = getNextSongIndex(queue, cursor, '随机播放', null);
       let inner = 0;
       while (
         (next < 0 || next === cursor || localExcluded.has(prefetchKey(queue[next]))) &&

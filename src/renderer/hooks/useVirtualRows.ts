@@ -56,6 +56,23 @@ function findScrollParent(from: HTMLElement | null): HTMLElement | null {
 }
 
 /**
+ * sticky 元素要让表头贴住**内容区**上边时，`top` 相对滚动视口上边应有的偏移。
+ *
+ * `position: sticky` 的参照系是**滚动视口**（容器的 border box）上边，而列表内容从**内容区**
+ * （padding 之内）开始排布，两者差一个 padding-top。写 `top: 0` 时表头会比它该在的位置高出一个
+ * padding，浮到内容上方，列表内容就从表头上方那条缝里露出半截（发现歌单详情页等带内边距的页面）。
+ * 所以这里返回**负的** padding-top，把表头压回内容区上边。
+ *
+ * 容器没有 padding（绝大多数页面）时返回 0，行为与原先的 `top: 0` 完全一致。
+ */
+export function stickyTopForContent(scrollElement: HTMLElement | null): number {
+  if (!scrollElement) return 0;
+  const paddingTop = parseFloat(getComputedStyle(scrollElement).paddingTop);
+  if (!Number.isFinite(paddingTop) || paddingTop === 0) return 0;
+  return -paddingTop;
+}
+
+/**
  * 歌曲列表模块的滚动/测量接缝：行数达到阈值时自动虚拟化，且虚拟化挂靠在
  * 页面既有的滚动容器上（不要求页面传入 ref，也不改页面 DOM 结构）。
  * 探测不到滚动祖先时安全退回整表渲染。
@@ -86,14 +103,20 @@ export function useVirtualRows({ count, enabled, estimateSize, overscan = 8 }: U
     initialRect,
   });
 
-  // 探测滚动祖先（依赖行容器的挂载：enabled 由 false 变 true 时重新探测）
+  //
+  // 探测滚动祖先。**不按 enabled 门控**——短列表（< VIRTUALIZE_THRESHOLD）不虚拟化，
+  // 但照样挂在页面的滚动容器上，照样需要知道容器的 padding-top 才能把 sticky 表头
+  // 压回内容区。此前只在 enabled 时探测（且 enabled=false 时还主动置 null），于是
+  // 「带内边距的页面 + 少于 30 首」表头又会浮高一个 padding，缝重新出现（实测 12 首
+  // 时 top 回到 0px、gap 回到 24）。是否真的虚拟化仍由 canVirtualize 说了算，这里只管探测。
+  //
+  // 依赖里带 count，并用「是否已探到」兜底一次：列表可能先渲染骨架屏、行容器稍后才
+  // 挂载，mount 那一次探测会落空；节点挂上后 count 变化时会再探一次。
   useLayoutEffect(() => {
-    if (!enabled) {
-      setScrollElement(null);
-      return;
-    }
-    setScrollElement(findScrollParent(rowsRef.current));
-  }, [enabled]);
+    if (!rowsRef.current) return;
+    const found = findScrollParent(rowsRef.current);
+    setScrollElement((prev) => (prev === found ? prev : found));
+  }, [enabled, count, scrollElement === null]);
 
   // 测量并跟随「列表在滚动容器内的偏移」：批量栏展开、页面头部加载等都会改变它
   useLayoutEffect(() => {

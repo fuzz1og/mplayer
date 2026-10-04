@@ -1,6 +1,6 @@
 import type { Song } from '../types/index.js';
 import type { DirectSourceClient } from '../shared/sourceRouter.js';
-import { request, type TransportCallOptions } from './transport.js';
+import { request, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
 import { md5 } from '../utils/hash.js';
 import { getUserAgent } from './antiScrape.js';
 
@@ -55,7 +55,7 @@ async function signedGet<T>(url: string, params: Record<string, string>, opts?: 
     method: 'GET',
     url: `${url}?${query.toString()}`,
     headers: { ...BASE_HEADERS() },
-    timeoutMs: 8000,
+    timeoutMs: cappedRequestTimeout(8000, opts),
     signal: opts?.signal,
   });
   if (typeof res.body !== 'string') {
@@ -93,15 +93,15 @@ function mapTrack(t: QianqianTrack): Song {
 export const qianqianDirectClient: DirectSourceClient = {
   key: 'qianqian',
 
-  /** 千千搜索直连。returns: 页歌曲（含 lrc 直连 URL）。 */
-  async searchSongs(keyword: string, page = 1): Promise<Song[]> {
+  /** 千千搜索直连。returns: 页歌曲（含 lrc 直连 URL）。`opts`（#556 评审 A1）透传墙钟与取消。 */
+  async searchSongs(keyword: string, page = 1, opts?: TransportCallOptions): Promise<Song[]> {
     const data = await signedGet<{ data?: { typeTrack?: QianqianTrack[] } }>(SEARCH_URL, {
       word: keyword,
       type: '1',
       pageNo: String(page),
       pageSize: '10',
       appid: APPID,
-    });
+    }, opts);
     return (data.data?.typeTrack || []).map(mapTrack);
   },
 

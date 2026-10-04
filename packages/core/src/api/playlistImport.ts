@@ -1,4 +1,5 @@
 import type { Song, SourceKey } from '../types/index.js';
+import { classifySong } from '../utils/songDedupe.js';
 import { extractQqPlaylistIdFromUrl, isQqShortLink } from './qqPlaylist.js';
 
 /** 可搜索导入的音乐源（local 本地文件无搜索能力，排除） */
@@ -77,16 +78,22 @@ export interface ImportResult {
 
 /** 链接导入编排的外部依赖（两端各自注入：桌面走 IPC，mobile 走本地 store/API） */
 export interface PlaylistImportDeps {
-  /** 把歌曲加入目标歌单（逐首；桌面 IPC 只有逐首写入的形态） */
-  addSong: (playlistId: string | number, song: Song) => Promise<void>;
+  /**
+   * 把歌曲加入目标歌单（逐首；桌面 IPC 只有逐首写入的形态）。
+   * 返回**真实新增条数**（0 = 宿主没收下）或 void（确知不了，按成功计）。
+   */
+  addSong: (playlistId: string | number, song: Song) => Promise<number | void>;
   /**
    * 可选：一次性批量写入（移动端本地 store）。
    *
    * 提供时整批只写一次：宿主只需一次持久化 + 一次渲染。
    * 逐首 addSong 会让宿主每首写一次库、重渲染一次，长歌单下是 O(N²) 级开销
    * （#383 真机实测：150 首逐首写 ≈ 45s，写库本身只占 192ms）。
+   *
+   * 返回**真实新增条数**或 void（确知不了，按整批成功计）——#556 评审 B6：
+   * 宿主调了写入却丢掉结果（哪怕只写进去一半），编排仍把整批记 success 就是谎报。
    */
-  addSongs?: (playlistId: string | number, songs: Song[]) => Promise<void>;
+  addSongs?: (playlistId: string | number, songs: Song[]) => Promise<number | void>;
 }
 
 /**
@@ -128,12 +135,14 @@ export async function importFromLink(
     return { successes, failures, skips };
   }
 
-  // 检查重复歌曲
-  const existingKeys = new Set(existingSongs.map(s => `${s.name}|${s.artist || ''}`));
+  // 检查重复歌曲（#553：判据只有 core `classifySong` 一份——此前这里是
+  // 「name|artist」自建 key，与写入编排、移动端预览各写一份、互不相同）。
+  // duplicate 与 nameConflict 都视为「已在歌单中」（跨源同名同歌手是同一段录音的另一个来源）。
   const toImport: { song: Song; statusIndex: number }[] = [];
 
   for (const song of selectedSongs) {
-    if (existingKeys.has(`${song.name}|${song.artist || ''}`)) {
+    const verdict = classifySong(existingSongs, song);
+    if (verdict.status === 'duplicate' || verdict.status === 'nameConflict') {
       skips.push({ line: `${song.name} - ${song.artist}`, reason: '已在歌单中' });
       statuses.push({ line: `${song.name} - ${song.artist}`, status: 'skipped' });
     } else {
@@ -154,14 +163,27 @@ export async function importFromLink(
     updateProgress({ currentLine: batch[0].name + ' - ' + batch[0].artist });
 
     try {
-      await deps.addSongs(playlistId, batch);
+      const reported = await deps.addSongs(playlistId, batch);
+      // #556 评审 B6：宿主回报的真实新增数决定成败；void = 确知不了，按整批成功计。
+      // 宿主丢弃的条目按「批尾」归属——聚合计数（成功/失败各几首）是准的，
+      // 具体是哪几首由宿主内部策略（容量截断 / 判据命中）决定，不保证顺序。
+      const accepted =
+        typeof reported === 'number' ? Math.max(0, Math.min(batch.length, reported)) : batch.length;
       batch.forEach((song, i) => {
-        successes.push({
-          line: song.name + ' - ' + song.artist,
-          song,
-          source: song.sourceType || 'netease'
-        });
-        statuses[toImport[i].statusIndex] = { line: song.name + ' - ' + song.artist, status: 'found', source: song.sourceType };
+        if (i < accepted) {
+          successes.push({
+            line: song.name + ' - ' + song.artist,
+            song,
+            source: song.sourceType || 'netease'
+          });
+          statuses[toImport[i].statusIndex] = { line: song.name + ' - ' + song.artist, status: 'found', source: song.sourceType };
+        } else {
+          failures.push({
+            line: song.name + ' - ' + song.artist,
+            reason: '未写入歌单（重复或超出容量）',
+          });
+          statuses[toImport[i].statusIndex] = { line: song.name + ' - ' + song.artist, status: 'failed' };
+        }
       });
     } catch (error) {
       console.error('批量添加到歌单失败', error);
@@ -185,13 +207,19 @@ export async function importFromLink(
     updateProgress({ currentLine: `${song.name} - ${song.artist}` });
 
     try {
-      await deps.addSong(playlistId, song);
-      successes.push({
-        line: `${song.name} - ${song.artist}`,
-        song,
-        source: song.sourceType || 'netease'
-      });
-      statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'found', source: song.sourceType };
+      const reported = await deps.addSong(playlistId, song);
+      if (reported === 0) {
+        // 宿主明确回报「没写进去」（重复/容量）——不再记 success（#556 评审 B6）。
+        skips.push({ line: `${song.name} - ${song.artist}`, reason: '已在歌单中' });
+        statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'skipped' };
+      } else {
+        successes.push({
+          line: `${song.name} - ${song.artist}`,
+          song,
+          source: song.sourceType || 'netease'
+        });
+        statuses[statusIndex] = { line: `${song.name} - ${song.artist}`, status: 'found', source: song.sourceType };
+      }
     } catch (error) {
       console.error(`添加到歌单失败: ${song.name}`, error);
       failures.push({

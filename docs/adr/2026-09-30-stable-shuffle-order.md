@@ -35,6 +35,19 @@
 - **预取窗口**：`applyShuffleOrder(queue, state)` 返回**按随机序重排的完整队列**（等长、纯展示/取窗），移动端按原生当前位置切片取窗，替代现在按 `planNextIndexes` 现算的窗口。
 - **成员编辑**：删歌用 `syncShuffleCursor`（或 `normalizeShuffleOrder`）对齐；原位换源用 `replaceShuffleSongId(state, fromId, toId)`（同格换 id、顺序不动）。
 
+## 追加决策（#543，2026-10-02）：对齐的**作用域**是显式参数
+
+> 起因：本 ADR 只规定了移动端**消费哪些** core 函数，没有规定「调用方手里的 `queue` 是不是完整成员集」这一条语义。它此前只活在 `packages/mobile/services/shuffleMode.ts` 的文件头注释里，于是两端各写一份对齐函数且规则**分叉**：桌面 `syncShuffle` 走 `normalizeShuffleOrder`（**丢掉**不在队列的 id），移动端窗口态刻意「只补不丢」。代价已被实测记录一次——#520 评审的**随机序 12 首 → 5 首永久截断**（窗口态误跑全量 normalize，而 store 订阅立刻落盘）。
+
+**决策**：对齐的作用域收进 core，作为 `alignShuffleOrder` 的显式参数 `scope`：
+
+- `scope: 'authoritative'`（默认）= 调用方的 `queue` **是完整成员集** → 裁剪幽灵 id + 补新成员 + 游标对到 `queue[currentIndex]`。幽灵 id **只在**这个作用域清理。
+- `scope: 'window'` = 调用方的 `queue` **可能只是子集**（移动端原生预取窗口 / 对账 / 冷启 hydrate）→ **只补不丢**，窗口外的 id 一律保留。
+
+两种作用域都**不重洗**（决策 4 的「增量对齐」不变）。调用方的义务只剩一句：声明自己手里的队列属于哪种作用域。
+
+落点：core `utils/shuffleOrder.ts` 的 `alignShuffleOrder`；移动端 `alignShuffleForWindow` / `alignShuffleForMembers` 退化为它的薄适配。规则本身由 core 用例钉住（含「12→5」的回归断言）。
+
 ## 备选与否决
 
 | 备选 | 否决理由 |

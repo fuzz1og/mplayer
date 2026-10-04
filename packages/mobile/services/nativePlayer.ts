@@ -352,9 +352,60 @@ export function nativeSeekTo(seconds: number): void {
   NativePlayer?.seek(seconds);
 }
 
+/**
+ * 原生引擎的推进交付（#555）：**落点由 core planAdvance 单点决定**。
+ *
+ * `playerStore.advance` 是 planAdvance 的唯一执行者，返回 `{ index, effect }`；
+ * 本函数只把「core 决定的落点」落到原生队列上，按 effect + 原生窗口现状选交付方式：
+ *
+ * - `none`：JS 队列还不可用（冷启对账前的空队列）→ 交回原生按它自己的队列走一步；
+ * - `restart-current`：目标就是当前曲（单曲循环 / 单元素队列）→ `seek(0)` 回起点重播，
+ *   **不重新解析 URL**（core effect 的契约）；
+ * - `load-target`：原生窗口的下一格/上一格恰好就是 core 落点 → 交原生顺序推进
+ *   （不打断当前播放、无重缓冲）；否则（会话开头 / 已被裁剪 / 队列与窗口分叉）起播目标曲
+ *   ——没有 prepend / 跳项原语，硬走原生 prev 在队首会变成空操作（真机观感「上一首没反应」）。
+ *
+ * 注：锁屏/媒体会话的 next/prev 由 media3 直接顺序推进，不经本函数；它的正确性来自
+ * **原生列表的顺序本身就是 JS 按 core 计划喂出来的窗口**（见 ADR 2026-09-29-native-playback-ownership）。
+ */
+function nativeStep(direction: 1 | -1): void {
+  const NP = NativePlayer;
+  if (!NP) return;
+
+  const { index: targetIndex, effect } = usePlayerStore.getState().advance(direction);
+  const target = targetIndex >= 0 ? usePlayerStore.getState().queue[targetIndex] : null;
+
+  // JS 队列还不可用（对账前）：交回原生按它自己的队列走一步（含无目标）
+  if (!target || effect === 'none') {
+    if (direction === 1) NP.next();
+    else NP.prev();
+    void feedWindow();
+    return;
+  }
+
+  if (effect === 'restart-current') {
+    NP.seek(0);
+    NP.play();
+    void feedWindow();
+    return;
+  }
+
+  const native = safeState();
+  const neighborKey =
+    native && native.index >= 0 ? native.tracks?.[native.index + direction]?.key ?? null : null;
+  if (neighborKey && neighborKey === songKey(target)) {
+    if (direction === 1) NP.next();
+    else NP.prev();
+    void feedWindow();
+    return;
+  }
+  // 目标不在原生此刻的相邻位置 → 起播它（`nativePlaySong` 内部自带补窗）
+  void nativePlaySong(target);
+}
+
+/** UI「下一首」：落点来自 core planAdvance（见 nativeStep）。 */
 export function nativeNext(): void {
-  NativePlayer?.next();
-  void feedWindow();
+  nativeStep(1);
 }
 
 /** 「下一首播放」的结果（#495）。`reason` 只在 `queued=false` 时有值。 */
@@ -439,45 +490,9 @@ export async function nativePlayNext(song: Song): Promise<NativePlayNextResult> 
   return { queued: true, moved: result.moved === true, noop: result.changed === false };
 }
 
-/**
- * 上一首（#519）：随机模式下沿**随机序**回退。
- *
- * 游标推进只有一份实现（store 的 `stepShuffle(-1)`，#520 minor 2）：这里**只判断**
- * 「序列上一张能不能交给原生」——原生列表在随机模式下就是按序列喂出来的窗口
- * （`feedWindow` 按序列 append），所以「原生列表的上一格 == 序列上一张」时直接交给原生
- * （不打断当前播放、无重缓冲）；否则（会话开头 / 已被裁剪）只能起播它：没有 prepend 原语，
- * 硬走原生 prev 会变成重播当前曲（用户观感就是「上一首没反应」）。
- */
+/** UI「上一首」：与 nativeNext 同一条落点判断（见 nativeStep）。 */
 export function nativePrev(): void {
-  const NP = NativePlayer;
-  if (!NP) return;
-  const playMode = useSettingsStore.getState().playMode;
-
-  if (playMode === '随机播放') {
-    const store = usePlayerStore.getState();
-    if (store.queue.length > 0 && store.currentIndex >= 0) {
-      const targetIndex = store.stepShuffle(-1);
-      if (targetIndex >= 0) {
-        const target = usePlayerStore.getState().queue[targetIndex];
-        const native = safeState();
-        const prevKey = native && native.index > 0 ? native.tracks?.[native.index - 1]?.key : null;
-        if (target && prevKey && prevKey === songKey(target)) {
-          // 原生列表的上一格就是序列上一张 → 交给原生（游标已由 stepShuffle 落好）
-          NP.prev();
-          void feedWindow();
-          return;
-        }
-        if (target) {
-          // 序列上一张不在原生手里 → 起播它（窗口随后按同一份序列补齐）
-          void nativePlaySong(target);
-          return;
-        }
-      }
-    }
-  }
-
-  NP.prev();
-  void feedWindow();
+  nativeStep(-1);
 }
 
 export function nativeStop(): void {

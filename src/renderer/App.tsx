@@ -14,6 +14,7 @@ import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
 import DownloadNotifications from '@/renderer/components/DownloadNotifications';
 import LyricsPage from '@/renderer/pages/LyricsPage';
+import ErrorBoundary from '@/renderer/components/ErrorBoundary';
 
 import './styles/global.css';
 
@@ -230,11 +231,18 @@ const App: React.FC = () => {
               backgroundColor: 'var(--bg-base)',
             }}
           >
-            {showLyrics ? (
-              <LyricsPage onBack={() => setShowLyrics(false)} />
-            ) : (
-              <Outlet />
-            )}
+            {/*
+             * 错误边界包住页面内容：桌面窗口没有 URL、没有刷新、没有返回键，
+             * 渲染层一旦抛错此前会整窗变白——侧边栏/播放器/设置全消失，只能重启。
+             * 现在一个页面出错 = 一个页面出错，且给一个「重试」让用户自救。
+             */}
+            <ErrorBoundary>
+              {showLyrics ? (
+                <LyricsPage onBack={() => setShowLyrics(false)} />
+              ) : (
+                <Outlet />
+              )}
+            </ErrorBoundary>
           </main>
 
           {/* 底部播放控制栏：封面/歌词按钮是「歌词层」开关——再点一次关灯留在当前页

@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, ListPlus } from 'lucide-react';
 import { message, Modal } from 'antd';
 import SongList from '@/renderer/components/SongList';
-import { IpcClient } from '@/renderer/services/IpcClient';
+import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
+import type { DesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -20,6 +21,9 @@ const HOTLIST_CONFIG: Record<HotlistType, { source: SourceKey; sourceId: number;
   qq: { source: 'qq', sourceId: TOPLIST_SOURCE_IDS.qq.hot, title: 'QQ音乐热歌榜' },
   qq_new: { source: 'qq', sourceId: TOPLIST_SOURCE_IDS.qq.new, title: 'QQ音乐新歌榜' },
 };
+
+/** 桌面唯一的写入 adapter（#552）：新建/批量写入/失败回滚全在它后面。 */
+const desktopWriter: DesktopPlaylistWriter = createDesktopPlaylistWriter();
 
 const HotlistDetailPage: React.FC = () => {
   const { type } = useParams<{ type: HotlistType }>();
@@ -73,31 +77,20 @@ const HotlistDetailPage: React.FC = () => {
       cancelText: '取消',
       onOk: async () => {
         setSavingAll(true);
-        let createdId: number | null = null;
         try {
-          createdId = await IpcClient.invoke<number>(
-            'playlist:create',
-            title,
-            `来自榜单: ${title}`,
-          );
-          // 批量写入：整批一次落盘（#493 验收「只触发一次持久化」），返回真正新增的条目 id
-          const addedIds = await IpcClient.invoke<number[]>('playlist:addSongs', createdId, hotlist);
-          if (addedIds.length === 0) {
-            throw new Error('没有歌曲被写入新歌单');
-          }
-          message.success(`已保存 ${addedIds.length} 首歌曲到新歌单「${title}」`);
+          // #552：新建 + 整批写入 + 失败回滚都交给 adapter 背后的 core 编排
+          // （整批一次落盘——#493「只触发一次持久化」；failed 时删掉刚建的空歌单）。
+          const result = await desktopWriter.createAndAdd({
+            name: title,
+            songs: hotlist,
+            description: `来自榜单: ${title}`,
+          });
+          if (!result.ok) throw new Error(result.error || '保存失败');
+          message.success(`已保存 ${result.added} 首歌曲到新歌单「${title}」`);
           navigate('/playlists');
         } catch (err) {
           console.error('保存全部到新歌单失败:', err);
-          if (createdId !== null) {
-            // 回滚半成品：不留空/半截歌单
-            try {
-              await IpcClient.invoke('playlist:delete', createdId);
-            } catch (cleanupErr) {
-              console.error('回滚新歌单失败:', cleanupErr);
-            }
-          }
-          message.error(`保存失败，已取消创建歌单`);
+          message.error('保存失败，已取消创建歌单');
         } finally {
           setSavingAll(false);
         }
