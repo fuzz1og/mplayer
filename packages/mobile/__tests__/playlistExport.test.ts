@@ -35,7 +35,12 @@ function statefulStore() {
     addSongs: (id: string, songs: Song[]) => {
       const list = playlists.get(id) ?? [];
       const have = new Set(list.map((x) => x.id));
-      const fresh = songs.filter((s) => !have.has(s.id));
+      // 与 store 同判据：边收边并入 have，批内重复只收第一条，返回值才等于真实新增数。
+      const fresh = songs.filter((s) => {
+        if (have.has(s.id)) return false;
+        have.add(s.id);
+        return true;
+      });
       playlists.set(id, [...list, ...fresh]);
       return fresh.length;
     },
@@ -47,9 +52,9 @@ describe('exportSongsToLocalPlaylist（#492 导出到本地歌单）', () => {
     const songs = [song('a'), song('b'), song('c')];
     const store = statefulStore();
     const createPlaylist = vi.fn((name: string) => store.createPlaylist(name));
-    const addSongs = vi.fn((playlistId: string, list: Song[]) => {
-      store.addSongs(playlistId, list);
-    });
+    const addSongs = vi.fn((playlistId: string, list: Song[]) =>
+      store.addSongs(playlistId, list),
+    );
 
     const result = await exportSongsToLocalPlaylist(
       { createPlaylist, addSongs, deletePlaylist: (id: string) => store.deletePlaylist(id) },
@@ -81,6 +86,23 @@ describe('exportSongsToLocalPlaylist（#492 导出到本地歌单）', () => {
     expect(all).toHaveLength(1);
     expect(all[0].name).toBe('网易热歌');
     expect(all[0].songs.map((s) => s.id)).toEqual(['a', 'b']);
+  });
+
+  it('⭐ added 取 deps.addSongs 的返回值（#559），不再用影子清单长度差编数', async () => {
+    const songs = [song('a'), song('b'), song('c')];
+    const result = await exportSongsToLocalPlaylist(
+      {
+        createPlaylist: () => 'pl-x',
+        addSongs: () => 1, // 宿主只收下 1 首
+        deletePlaylist: () => {},
+      },
+      '网络歌单',
+      songs,
+    );
+
+    // 修前：影子清单记下整批 3 条，按长度差谎报「已导出 3 首」。
+    expect(result.ok).toBe(true);
+    expect(result.added).toBe(1);
   });
 
   // #556 评审 B4：回滚腿此前传的是空实现 deletePlaylist: () => {}——core 记
@@ -132,6 +154,24 @@ describe('createMobilePlaylistWriter（#552 移动端写入 adapter）', () => {
     expect(result.added).toBe(2);
     expect(result.skipped).toBe(1);
     expect(listener).toHaveBeenCalledTimes(1); // 一次 set = 一次持久化 + 一次渲染
+  });
+
+  it('⭐ added 取宿主返回值，不再靠 readSongs 前后长度差估算（#559）', async () => {
+    const store = statefulStore();
+    // 宿主确实写进去了，但读侧看不到增量（并发写入 / 视图滞后）——旧实现按长度差会回报 0。
+    const writer = createMobilePlaylistWriter({
+      ...store,
+      readSongs: () => [],
+      addSongs: (id, songs) => {
+        store.addSongs(id, songs);
+        return songs.length;
+      },
+    });
+
+    const result = await writer.add({ playlistId: 'pl-1', songs: [song('a'), song('b')] });
+
+    expect(result.ok).toBe(true);
+    expect(result.added).toBe(2);
   });
 
   it('就地新建写入失败 → 回滚删除新歌单（#493：不留空歌单）', async () => {

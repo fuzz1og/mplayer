@@ -18,7 +18,8 @@ import { usePlaylistStore } from '../stores/playlistStore';
  * 桌面走 IPC、移动走 `usePlaylistStore`——**编排与判据都在 core**，
  * 两端只提供两个回调：「读目标歌单」与「同名时怎么办」。
  * 顺带把 #554 的「added 是真值」在移动侧兑现：`addSongs`
- * 回报**真实新增数**（本地 store 去重后实际 append 的条数）。
+ * 回报**真实新增数**（本地 store 去重后实际 append 的条数）；#559 起本地
+ * `playlistStore.addSongs` 直接返回该条数，这里只做透传，不再估算。
  *
  * #556 评审 B2：本地 store 有批量能力，逐首回落端口已删（只有测试 fake 才会只给
  * `addSong`）。链接导入的写入依赖另见 `createMobileImportDeps`（#556 评审 B6）。
@@ -78,13 +79,11 @@ export function createMobilePlaylistWriter(port?: MobilePlaylistStorePort): Mobi
 
   const base = {
     // 唯一写入端口（#556 评审 B2）：本地 store 有批量能力，逐首回落腿已删。
+    // #559：新增数直接取宿主的返回值，不再 readSongs 前后长度差估算——估算在
+    // 批内重复、已被判重丢弃、并发写入下都不是真值。
     addSongs: async (pid: string | number, songs: Song[]) => {
       const id = String(pid);
-      const before = readSongs(id).length;
-      if (port) port.addSongs(id, songs);
-      else usePlaylistStore.getState().addSongs(id, songs);
-      const after = readSongs(id).length;
-      return Math.max(0, after - before);
+      return port ? port.addSongs(id, songs) : usePlaylistStore.getState().addSongs(id, songs);
     },
     createPlaylist: async (name: string) =>
       port ? port.createPlaylist(name) : usePlaylistStore.getState().createPlaylist(name),
@@ -115,7 +114,8 @@ export function createMobilePlaylistWriter(port?: MobilePlaylistStorePort): Mobi
 export function exportSongsToLocalPlaylist(
   deps: {
     createPlaylist: (name: string) => string;
-    addSongs: (playlistId: string, songs: Song[]) => void;
+    /** 整批写入，返回**真实新增**条数（#559：宿主 store 才是真值的来源）。 */
+    addSongs: (playlistId: string, songs: Song[]) => number;
     /**
      * 删除歌单（写入失败时的回滚）。
      * **必须是真删**（#556 评审 B4）：此前这里传的是空实现 `() => {}`，core 据此
@@ -126,8 +126,8 @@ export function exportSongsToLocalPlaylist(
   name: string,
   songs: Song[],
 ): Promise<PlaylistWriteResult> {
-  // 就地新建分支里写入腿是「整批一次 addSongs」，所以新增数就是本次送入的条数；
-  // readSongs 只需在写入腿里读得回自己的影子清单（#554 的 added 因此是真值）。
+  // 影子清单让假端口的读侧自洽（写入腿里 readSongs 读得回自己）；#559 起 added
+  // 不再由它算长度差，而是原样透传 deps.addSongs 的返回值。
   const shadow = new Map<string, Song[]>();
   const writer = createMobilePlaylistWriter({
     readSongs: (id) => shadow.get(id) ?? [],
@@ -142,10 +142,9 @@ export function exportSongsToLocalPlaylist(
       shadow.delete(id);
     },
     addSongs: (playlistId, list) => {
-      deps.addSongs(playlistId, list);
-      const before = shadow.get(playlistId)?.length ?? 0;
+      const added = deps.addSongs(playlistId, list);
       shadow.set(playlistId, list);
-      return list.length - before;
+      return added;
     },
   });
   return writer.createAndAdd({ name, songs });

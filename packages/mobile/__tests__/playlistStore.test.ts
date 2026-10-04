@@ -51,6 +51,39 @@ describe('playlistStore 写入去重判据（#553：identityKey，不是裸 Song
   });
 });
 
+describe('playlistStore.addSongs（#559：返回真实新增数）', () => {
+  it('⭐ 批内重复 + 已存在的歌 → 返回真正 append 的条数，且只 append 去重后的歌', () => {
+    const id = usePlaylistStore.getState().createPlaylist('回归 #559');
+    usePlaylistStore.getState().addSong(id, song('a'));
+
+    const added = usePlaylistStore.getState().addSongs(id, [
+      song('a'), // 已存在
+      song('b'),
+      song('b'), // 批内重复
+      song('c'),
+      song('c'), // 批内重复
+    ]);
+
+    const target = usePlaylistStore.getState().playlists.find((p) => p.id === id);
+    // 修前：返回 void（undefined），且批内重复的 b、c 各写两条。
+    expect(added).toBe(2);
+    expect(target?.songs.map((s) => s.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('全部已存在（含批内重复）→ 返回 0', () => {
+    const id = usePlaylistStore.getState().createPlaylist('全重复');
+    usePlaylistStore.getState().addSong(id, song('a'));
+
+    expect(usePlaylistStore.getState().addSongs(id, [song('a'), song('a')])).toBe(0);
+    const target = usePlaylistStore.getState().playlists.find((p) => p.id === id);
+    expect(target?.songs.map((s) => s.id)).toEqual(['a']);
+  });
+
+  it('目标歌单不存在 → 返回 0（不虚报）', () => {
+    expect(usePlaylistStore.getState().addSongs('不存在', [song('a')])).toBe(0);
+  });
+});
+
 describe('playlistStore.removeSongs（批量移除一次 set）', () => {
   it('移除 N 首只触发 1 次 store 更新，其余保持原有相对顺序', () => {
     const id = usePlaylistStore.getState().createPlaylist('批量移除');
