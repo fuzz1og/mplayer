@@ -23,6 +23,7 @@ import SongListSkeleton from './SongListSkeleton';
 import VirtualRow from './VirtualRow';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
 import { useVirtualRows, stickyTopForContent, SONG_ROW_HEIGHT, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
+import { COL_CHECKBOX, COL_INDEX, COL_ALBUM, COL_ACTIONS, colStyle } from '@/renderer/components/songTableColumns';
 
 interface SongListProps {
   songs: Song[];
@@ -240,7 +241,9 @@ const SongList: React.FC<SongListProps> = ({
 
   if (displaySongs.length === 0) {
     if (loading) {
-      return <SongListSkeleton showCheckbox={showCheckbox} showIndex={showIndex} />;
+      // 骨架屏必须与真实表头同列：专辑列是否显示由同一份 hasAlbum 决定，
+    // 否则加载态的行比加载后窄，列错位在数据到达前看不出来。
+    return <SongListSkeleton showCheckbox={showCheckbox} showIndex={showIndex} showAlbum={hasAlbum} />;
     }
     return (
       <div
@@ -396,7 +399,7 @@ const SongList: React.FC<SongListProps> = ({
           }}
         >
           {(showCheckbox || batchMode) && (
-            <div style={{ width: '40px', textAlign: 'center' }}>
+            <div style={{ ...colStyle(COL_CHECKBOX), textAlign: 'center' }}>
               <input
                 type="checkbox"
                 checked={displaySongs.length > 0 && selectedIds.length === displaySongs.length}
@@ -411,11 +414,11 @@ const SongList: React.FC<SongListProps> = ({
             </div>
           )}
           {showIndex && (
-            <div style={{ width: '50px', textAlign: 'center' }}>#</div>
+            <div style={{ ...colStyle(COL_INDEX), textAlign: 'center' }}>#</div>
           )}
           <div style={{ flex: 1 }}>标题</div>
-          {hasAlbum && <div style={{ width: '180px' }}>专辑</div>}
-          <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
+          {hasAlbum && <div style={colStyle(COL_ALBUM)}>专辑</div>}
+          <div style={{ ...colStyle(COL_ACTIONS), textAlign: 'center' }}>操作</div>
         </div>
       )}
 
