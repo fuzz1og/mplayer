@@ -74,7 +74,7 @@ describe('#410 MobileFileBackend', () => {
     mocks.calls.getInfo = 0; // 只统计统计接口本身的过桥
     const stats = await backend.getDiskStats();
 
-    expect(stats).toEqual({ fileCount: 30, totalSize: 90 });
+    expect(stats).toEqual({ fileCount: 30, totalSize: 90, contentFileCount: 0, contentTotalSize: 0 });
     // 此前是「每个文件一次 getInfoAsync」→ 这里会是 30
     expect(mocks.calls.getInfo).toBe(0);
   });
@@ -85,10 +85,10 @@ describe('#410 MobileFileBackend', () => {
     await backend.write(':json:song:2', new Uint8Array([1, 2]));
 
     await backend.delete(':json:song:1');
-    expect(await backend.getDiskStats()).toEqual({ fileCount: 1, totalSize: 2 });
+    expect(await backend.getDiskStats()).toEqual({ fileCount: 1, totalSize: 2, contentFileCount: 0, contentTotalSize: 0 });
 
     await backend.clear();
-    expect(await backend.getDiskStats()).toEqual({ fileCount: 0, totalSize: 0 });
+    expect(await backend.getDiskStats()).toEqual({ fileCount: 0, totalSize: 0, contentFileCount: 0, contentTotalSize: 0 });
   });
 
   it('TTL 随索引持久化并在读时生效（此前 write 直接丢弃 expiresAt）', async () => {
@@ -111,10 +111,24 @@ describe('#410 MobileFileBackend', () => {
     const second = new MobileFileBackend();
     const stats = await second.getDiskStats();
 
-    expect(stats).toEqual({ fileCount: 1, totalSize: 3 });
+    expect(stats).toEqual({ fileCount: 1, totalSize: 3, contentFileCount: 0, contentTotalSize: 0 });
     // 冷启恰好探测一次索引文件是否存在；不逐文件过桥（否则这里会等于 fileCount）
     expect(mocks.calls.getInfo).toBe(1);
     expect(mocks.calls.readDir).toBe(0);
+  });
+
+  it('#498：统计把内容元数据单独分类（:json:content: 才算，播放资源值不算）', async () => {
+    const backend = new MobileFileBackend();
+    await backend.write(':json:song:netease:1', new Uint8Array([1, 2]));
+    await backend.write(':json:content:album_detail_1', new Uint8Array([1, 2, 3]));
+    await backend.write(':json:content:artist_info_9', new Uint8Array([1]));
+
+    expect(await backend.getDiskStats()).toEqual({
+      fileCount: 3,
+      totalSize: 6,
+      contentFileCount: 2,
+      contentTotalSize: 4,
+    });
   });
 
   it('keys() 返回真键（索引里存了原始 key），可直接交给 delete', async () => {
@@ -124,6 +138,6 @@ describe('#410 MobileFileBackend', () => {
     expect(await backend.keys()).toEqual([':json:song:1']);
 
     await backend.delete((await backend.keys())[0]);
-    expect(await backend.getDiskStats()).toEqual({ fileCount: 0, totalSize: 0 });
+    expect(await backend.getDiskStats()).toEqual({ fileCount: 0, totalSize: 0, contentFileCount: 0, contentTotalSize: 0 });
   });
 });

@@ -548,10 +548,21 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
   return {
     key: 'netease',
 
-    /** 明文 cloudsearch 搜索（列表不带歌词，播放期按 songId 直取，见 #409）。
-     *  `opts`（#556 评审 A1）：链尾搜索腿的墙钟与取消信号透传给 transport。 */
+    /**
+     * 明文 cloudsearch 搜索（列表不带歌词，播放期按 songId 直取，见 #409）。
+     *  `opts`（#556 评审 A1）：链尾搜索腿的墙钟与取消信号透传给 transport。
+     *
+     * #498/C：本条腿此前**零缓存**——同一关键词连续搜两次就是两次上游请求。
+     * 现按「关键词 + 页」落 6h 内容缓存，与 `searchArtists` 同一条纪律：
+     * **空结果不缓存**（失败绝不伪装成「没结果」，真无命中也不占 6h、保留自愈）。
+     */
     async searchSongs(keyword: string, page = 1, opts?: TransportCallOptions): Promise<Song[]> {
-      return neteaseSearchSongs(keyword, page, opts);
+      const cacheKey = `search_songs_${keyword}_${page}`;
+      const cached = contentCache.get<Song[]>(cacheKey);
+      if (cached && Array.isArray(cached)) return cached;
+      const songs = await neteaseSearchSongs(keyword, page, opts);
+      if (songs.length > 0) contentCache.set(cacheKey, songs, SEARCH_TTL_MS);
+      return songs;
     },
 
     /** weapi 播放 URL；VIP/无版权返回空串 → 交给换元层 / 明确不可播。 */
@@ -1034,10 +1045,32 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       return result;
     },
 
-    /** 批量补齐可播放 URL（原 resolveNeteaseSongUrls：weapi by-ID 批量直连）。 */
+    /**
+     * 批量补齐可播放 URL（原 resolveNeteaseSongUrls：weapi by-ID 批量直连）。
+     *
+     * #498/C：本条腿此前**零缓存**——专辑/歌单详情每次 cache miss 都要重打一次。
+     * 现按**排序后的 id 列表**落 10min 内容缓存（与详情同档 TTL）：同一份列表在
+     * TTL 内再补一次是 0 请求，且命中时连「一个可播项都没有」的结果一起复用
+     * （VIP/无版权歌本就不在 map 里，逐 id 缓存会让整单无歌的情况每次都重打）。
+     * 列表不同（分页错位）则如实重新请求。
+     */
     async resolvePlayableUrls(songs: Song[]): Promise<void> {
       const ids = songs.map((s) => Number(s.id)).filter((id) => Number.isFinite(id) && id > 0);
-      const urlMap = await fetchNeteaseSongUrlMap(ids);
+      if (ids.length === 0) return;
+      const cacheKey = `song_urls_${[...ids].sort((a, b) => a - b).join('_')}`;
+      const cached = contentCache.get<Record<string, string>>(cacheKey);
+      let urlMap: Map<number, string>;
+      if (cached && typeof cached === 'object') {
+        urlMap = new Map(Object.entries(cached).map(([id, url]) => [Number(id), url]));
+      } else {
+        urlMap = await fetchNeteaseSongUrlMap(ids);
+        // 整单一个可播项都没有（全 VIP/下架）不缓存：那是上游状态，10min 内可能就变了
+        if (urlMap.size > 0) {
+          const record: Record<string, string> = {};
+          for (const [id, url] of urlMap) record[String(id)] = url;
+          contentCache.set(cacheKey, record, PAGE_TTL_MS);
+        }
+      }
       for (const song of songs) {
         const u = urlMap.get(Number(song.id));
         if (u) song.url = u;

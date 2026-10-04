@@ -9,7 +9,8 @@ import type { PlayableResource, Song } from '@mplayer/core';
 import { MobileFileBackend } from '../cache/fileBackend';
 
 // L1 内存 + L2 文件（expo cacheDirectory）双层缓存；设置页可查看统计并一键清理（对齐桌面 CacheSection）。
-const fileBackend = new MobileFileBackend();
+/** 磁盘后端实例：内容缓存层（#498）也要用它读键与过期时间做启动回填。 */
+export const fileBackend = new MobileFileBackend();
 const kernel = new CacheKernel({
   l1: createMemoryBackend(),
   l2: fileBackend,
@@ -25,8 +26,16 @@ export const songResources = new SongResourcesCache({ kernel });
 
 export const cacheKernel = kernel;
 
-/** 磁盘缓存占用统计（设置页展示） */
-export async function getCacheStats(): Promise<{ fileCount: number; totalSize: number }> {
+/**
+ * 磁盘缓存占用统计（设置页展示）。
+ * #498：除总占用外还带**内容元数据**条目数/占用（内容缓存落盘后要看得见）。
+ */
+export async function getCacheStats(): Promise<{
+  fileCount: number;
+  totalSize: number;
+  contentFileCount: number;
+  contentTotalSize: number;
+}> {
   return fileBackend.getDiskStats();
 }
 

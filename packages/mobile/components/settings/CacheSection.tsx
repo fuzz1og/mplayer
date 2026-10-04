@@ -19,7 +19,7 @@ export default function CacheSection() {
   const styles = useSettingsStyles();
 
   // 缓存统计（进入页面加载一次，清理后刷新）
-  const [cacheStats, setCacheStats] = useState({ fileCount: 0, totalSize: 0 });
+  const [cacheStats, setCacheStats] = useState({ fileCount: 0, totalSize: 0, contentFileCount: 0, contentTotalSize: 0 });
   useEffect(() => {
     let cancelled = false;
     getCacheStats().then((s) => { if (!cancelled) setCacheStats(s); });
@@ -47,6 +47,10 @@ export default function CacheSection() {
         <View style={styles.groupPad}>
           <Text style={styles.cacheStatsText}>
             缓存文件 {cacheStats.fileCount} 个 · {(cacheStats.totalSize / 1024 / 1024).toFixed(1)} MB / {MAX_CACHE_MB} MB
+          </Text>
+          {/* #498：内容元数据单独列一行——此前统计里只有播放 URL，内容缓存落了盘也看不见 */}
+          <Text style={styles.cacheStatsText}>
+            其中内容元数据 {cacheStats.contentFileCount} 个 · {(cacheStats.contentTotalSize / 1024).toFixed(0)} KB
           </Text>
           <View style={styles.cacheBarWrap}>
             <View

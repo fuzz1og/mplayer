@@ -10,12 +10,14 @@ import { setupLegacyMigration } from '../services/legacyMigration';
 import { startPerfMonitor, stopPerfMonitor, setPerfContext } from '../services/perfMonitor';
 import { describeDragActivity } from '../services/dragJankProbe';
 import { registerPlaybackTraceSink } from '../services/playbackTrace';
-import { setProxyUrl as setCoreProxyUrl, registerDirectClient, neteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
+import { setProxyUrl as setCoreProxyUrl, registerDirectClient, createNeteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
+import { mobileContentCache, backfillContentCache } from '../services/contentCache';
 
 // 启动即注册直连客户端（T02 网易 / T03 汽水 / T04 千千 / T05 咪咕 / T06 QQ / T07 酷狗 / T08 酷我）。
 // 必须在模块顶层注册：发现页首屏数据请求（getToplists 等）早于任何 useEffect 执行，
 // 注册若放在 effect 里会撞上未注册窗口期（getDirectClient 返回 undefined 直接崩溃）。
-registerDirectClient(neteaseDirectClient);
+// #498：网易客户端注入移动端内容缓存（L1 内存 + L2 磁盘写穿）——桌面用 core 默认的那份
+registerDirectClient(createNeteaseDirectClient(mobileContentCache));
 registerDirectClient(sodaDirectClient);
 registerDirectClient(qianqianDirectClient);
 registerDirectClient(miguDirectClient);
@@ -120,6 +122,11 @@ export default function RootLayout() {
     // （#93；Expo Go 下内部直接返回 false，不弹系统授权框）
     requestNotificationPermission().catch(() => {});
     setupNotificationChannel().catch(() => {});
+    // #498/A：首帧后（effect 已提交）再回填内容缓存——限量、不阻塞启动；
+    // 冷启的第一次访问仍会打一轮上游（get 是同步的），收益从第二次起算
+    setTimeout(() => {
+      void backfillContentCache().catch(() => {});
+    }, 0);
     // 注意：WebView 网络桥已移除——常驻隐藏 WebView 在 Android
     // （Expo Go + Fabric + Android 16）下会破坏 react-native-screens 的
     // 布局（Stack 内容被压缩到屏幕一半）。请求走 RN 原生栈；

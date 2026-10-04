@@ -48,7 +48,8 @@ vi.mock('expo-router', () => ({ Stack: { Screen: () => null } }));
 vi.mock('../hooks/useReducedMotion', () => ({ useReducedMotion: () => false }));
 
 vi.mock('../services/cacheService', () => ({
-  getCacheStats: vi.fn(async () => ({ fileCount: 3, totalSize: 1024 * 1024 })),
+  // #498：统计里多了一行「内容元数据」，假件按新形状给全
+  getCacheStats: vi.fn(async () => ({ fileCount: 3, totalSize: 1024 * 1024, contentFileCount: 1, contentTotalSize: 2048 })),
   cacheKernel: { clear: vi.fn(async () => undefined) },
 }));
 
