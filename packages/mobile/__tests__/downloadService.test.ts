@@ -68,11 +68,18 @@ vi.mock('expo-file-system', () => {
     get name(): string {
       return this.uri.split('/').pop()!;
     }
-    slice(_start: number, _end: number) {
-      // 模拟下载产物字节头（本测试固定为 FLAC fLaC）；slice 同步返回 Blob 形对象
-      const buf = new ArrayBuffer(16);
-      new Uint8Array(buf).set(Uint8Array.from(fsMocks.headerBytes)); // 0x66 0x4c 0x61 0x43
-      return { arrayBuffer: async (): Promise<ArrayBuffer> => buf };
+    /** expo File 局部读：open() → FileHandle#readBytes（旧写法 slice().arrayBuffer() 在 RN 上不存在） */
+    open() {
+      const data = Uint8Array.from(fsMocks.headerBytes);
+      let pos = 0;
+      return {
+        readBytes: (len: number) => {
+          const out = data.slice(pos, pos + len);
+          pos += out.length;
+          return out;
+        },
+        close: () => {},
+      };
     }
     async delete() {
       this.exists = false;

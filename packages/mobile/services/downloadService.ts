@@ -155,8 +155,14 @@ async function correctContainerName(
 ): Promise<{ fileName: string; container: AudioContainer }> {
   let head = new Uint8Array(0);
   try {
-    const buf = await file.slice(0, 16).arrayBuffer();
-    head = new Uint8Array(buf);
+    // 局部读必须走 FileHandle#readBytes：expo File 的 slice() 返回 RN Blob，RN 的 Blob
+    // 没有 arrayBuffer()，实测读头静默失败 → 容器恒判 unknown（FLAC/M4A 从不会被改名）。
+    const handle = file.open();
+    try {
+      head = handle.readBytes(16);
+    } finally {
+      handle.close();
+    }
   } catch { /* 读头失败则沿用默认容器 */ }
   const container = detectAudioContainer(head);
   const correctExt = extensionForContainer(container);
