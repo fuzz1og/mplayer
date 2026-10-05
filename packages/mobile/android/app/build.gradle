@@ -123,7 +123,7 @@ android {
     buildTypes {
         debug {
             // dev build 与 release 共存：真机验收后台播放 / FGS / 锁屏媒体会话必须跑在
-            // 非 Expo Go 环境（见 .agents/skills/mobile-device-debugging），而测试机通常
+            // 非 Expo Go 环境（见 .agents/skills/runtime-verification），而测试机通常
             // 已装 release com.mplayer.mobile——加后缀避免 dev build 覆盖 release。
             applicationIdSuffix '.dev'
             versionNameSuffix '-dev'

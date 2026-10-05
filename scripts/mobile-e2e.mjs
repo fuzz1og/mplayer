@@ -430,7 +430,7 @@ record('device', 'PASS', '在位 serial=' + SERIAL + '，屏幕 ' + SCREEN_W + '
 if (adbQuiet(['reverse', 'tcp:' + PORT, 'tcp:' + PORT]) === 0) {
   record('reverse', 'PASS', '手机侧 localhost:' + PORT + ' → 本机 ' + PORT);
 } else {
-  record('reverse', 'FAIL', 'adb reverse 失败（重跑前先 adb kill-server，或按 mobile-device-debugging skill 排查）');
+  record('reverse', 'FAIL', 'adb reverse 失败（重跑前先 adb kill-server，或按 runtime-verification skill 排查）');
   abortAfter(['metro', 'coldstart', 'discover', 'hotlist-detail', 'play']);
 }
 
