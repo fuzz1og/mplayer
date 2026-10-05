@@ -45,12 +45,9 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 - Android 原生构建（CNG 反向）：原生目录 `packages/mobile/android/` 提交进 git，不再每次 prebuild；**PR / push 不编译原生**，只在发版期由 `release.yml` 的 `build-mobile` 跑 `./gradlew assembleRelease bundleRelease`（产物、签名 keystore、Gradle 缓存的接线见 `release.yml`；本机复现与依赖基线见 `docs/agents/testing.md`「原生发版构建（本机）」；边界与残余风险见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`）。
 
 ### 依赖版本基线
-- **生态耦合集**（`expo`、`expo-*`、`react-native`、`react-native-*`、`@react-native-community/*`、`@react-native-async-storage/async-storage`）的版本基线 = **Expo SDK 的期望值**，不是「semver 允许的最新」。升级动作是 `npx expo install --fix`，校验是 `npm run verify -- expo`（CI 的 `expo-check` job）。
-- **全仓只允许一份 `expo`**：根与 `packages/mobile` 必须声明**同一范围**。写不同范围会让 npm 在 `packages/mobile/node_modules` 下再装一份，于是「根 `node_modules/expo` 是哪个版本」变成陷阱（实测踩过）。同理 `@types/react` / `@types/react-dom` 的范围不得逃出 SDK 的 `relatedPackages`。
-- **`expo install --check` 只校验「已装版本」，看不见 package.json 的声明地板**：地板落后照样全绿（实测踩过），所以声明地板要人工对齐。
-- **未解决**：根 `overrides` 把 metro 钉在一个与 `@expo/metro` 所要求的**精确版本**相冲突的值上；改法已明确，落地受阻于 npm arborist 从零重解析崩溃 —— 具体版本与改法见 ADR `docs/adr/2026-09-29-dependency-update-governance.md` 的「后果」。
-- **版本字面量不抄在本文件**（无时间戳的「当前值」必然腐烂成误导）：范围的真相在 `package.json` 与 `npx expo install --check` 的当前输出，来龙去脉在上一条的 ADR。
-- 机器人的职责边界见 `.github/dependabot.yml` 的 ignore 段；决策与否决理由见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
+- **生态耦合集的基线 = Expo SDK 的期望值**，不是 semver 最新：升级动作 `npx expo install --fix`，校验 `npm run verify -- expo`。**别拿「`expo install --check` 全绿」当对齐依据**——它只看已装版本，看不见 `package.json` 的地板；全仓只允许一份 `expo`（根与 `packages/mobile` 同一范围）。
+- **版本字面量不抄在本文件**（无时间戳的「当前值」必然腐烂成误导）：范围的真相在 `package.json` 与 `npx expo install --check` 的当前输出。
+- 各条实测、未解决项（metro `overrides` 与 `@expo/metro` 的精确要求冲突）、机器人职责边界与决策理由：ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
 
 ## 多源链路速览
 
@@ -67,7 +64,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 
 **只有文档类修改可以直接 push `master`；其余修改（含 bugfix）一律从最新 `master` 建 worktree，完成后 PR，CI 绿后等人工审核，不自行合并。**
 
-- **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。标题前缀：模板预置的 `[Bug]:` / `[Feature]:`，另有 `[Perf]:` / `[Tooling]:` / `[Chore]:`。PR 正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的三段写（`Summary` / `Evidence` / `Merge Danger`，与 `pr` skill 同形）——验证以 CI 为准，正文只留 CI 证明不了的证据。
+- **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。标题前缀：模板预置的 `[Bug]:` / `[Feature]:`，另有 `[Perf]:` / `[Tooling]:` / `[Chore]:`。
 - **敏感信息不入库**：tier3 订阅地址、API key、本地缓存。机械门禁见 `scripts/docs-gate.mjs` 的敏感扫描（**含** `docs/{adr,research,specs,wayfinder}` 存档与文档目录下的未跟踪文件），命中即 CI 红。
 - **验收截图不入库，活文档配图入库**：真机验收 / UI 走查的**证据图**传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'`）——PR 是它的一次性载体，入库只会攒下一堆没人再看第二眼的二进制。反过来，**活文档正文长期引用的产品图**（README 截图、logo）**必须入库**，放 `docs/assets/`。判据是「有没有一个长期存在的正文在引用它」，不是「它是不是截图」。
 - 分流边界（什么算文档类）、分支命名、Conventional Commits、验证顺序、PR 模板与清理的完整流程见 `docs/agents/git-workflow.md`。
