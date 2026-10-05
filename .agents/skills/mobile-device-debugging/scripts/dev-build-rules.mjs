@@ -1,9 +1,9 @@
 /**
- * mobile-dev-build 的纯判据（零 I/O、零副作用）。
+ * dev build 一条龙的纯判据（零 I/O、零副作用）。
  *
  * 抽成独立模块的理由：下面每一条都是「实测踩过、跑真机才验得到」的判定，必须能被
- * `node --test` 直接 import 钉住（`scripts/__tests__/mobile-dev-build.test.js`）。
- * runner（`scripts/mobile-dev-build.mjs`）只负责按这些判据编排命令。
+ * `node --test` 直接 import 钉住（`./__tests__/dev-build.test.js`）。
+ * runner（`./dev-build.mjs`）只负责按这些判据编排命令。
  */
 
 export const DEV_BUILD = {

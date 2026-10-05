@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * mobile-dev-build.mjs — dev build（非 Expo Go）一条龙：出包 → 装 → reverse → 拉起 → 自检。
+ * dev-build.mjs — dev build（非 Expo Go）一条龙：出包 → 装 → reverse → 拉起 → 自检。
  *
- * 为什么需要它：`mobile-device-debugging` skill 的「dev build」一节原先把整条链写成裸 bash，
- * 而其中每一步背后都有一条实测踩过的坑。命令抄在文档里就会被人手抄错、凭记忆漏掉处置；
- * 固定进脚本后坑由代码承担，文档只讲「何时用、跑完必须成立什么」。判据在
- * `scripts/mobile-dev-build-rules.mjs`（可被单测直接 import），本文件只做编排。
+ * 本脚本是 `mobile-device-debugging` skill 包的一部分（`scripts/`），只服务它的
+ * 「dev build」一节。原先那条链写成裸 bash 躺在 SKILL.md 里，而每一步背后都有一条实测踩过的坑：
+ * 命令抄在文档里就会被人手抄错、凭记忆漏掉处置。固定进脚本后坑由代码承担，
+ * SKILL.md 只讲「何时用、跑完必须成立什么」。判据在 `./dev-build-rules.mjs`（可被单测直接 import），
+ * 本文件只做编排。
  *
- * 脚本固化的五条坑（编号沿用 skill 的「陷阱速查」）：
+ * 脚本固化的五条坑（编号沿用 SKILL.md 的「陷阱速查」）：
  *   1. 架构必须与设备匹配 —— 装错报 `INSTALL_FAILED_NO_MATCHING_ABIS`（真机 arm64-v8a、
  *      雷电模拟器 x86_64）。按设备 `ro.product.cpu.abi` 自动取，不再手填。
  *   2. **不用 `adb install`** —— 实测 80MB 的流式安装能把 adb server 卡到 `adb devices` 都超时；
@@ -18,12 +19,12 @@
  *      长度告警，并给出「换短路径检出」的处置。
  *   5. **拉起必须用显式组件** —— scheme 与 release 共用，直接发 `mplayer://` 会弹选择器。
  *
- * 用法：
- *   node scripts/mobile-dev-build.mjs                 # 完整回路（出包 + 装 + 拉起 + 自检）
- *   node scripts/mobile-dev-build.mjs --dry-run       # 只打印计划，不碰 gradle / adb
- *   node scripts/mobile-dev-build.mjs --skip-build    # 跳过 gradle（APK 已存在时）
- *   node scripts/mobile-dev-build.mjs --abi x86_64    # 显式指定架构（默认探测设备）
- *   node scripts/mobile-dev-build.mjs --serial <s>    # 多设备时指定
+ * 用法（仓库根执行；也可用 npm 别名 `npm run mobile:dev-build`）：
+ *   node .agents/skills/mobile-device-debugging/scripts/dev-build.mjs              # 完整回路
+ *   …/dev-build.mjs --dry-run      # 只打印计划，不碰 gradle / adb
+ *   …/dev-build.mjs --skip-build   # 跳过 gradle（APK 已存在时）
+ *   …/dev-build.mjs --abi x86_64   # 显式指定架构（默认探测设备）
+ *   …/dev-build.mjs --serial <s>   # 多设备时指定
  *
  * 环境变量：
  *   MOBILE_ADB=<path>    指定 adb。本机常见「雷电自带 adb 与 scoop 的抢 5037」，
@@ -45,9 +46,10 @@ import {
   needsSdcardFallback,
   devClientUri,
   shortPathWarning,
-} from './mobile-dev-build-rules.mjs';
+} from './dev-build-rules.mjs';
 
-export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+/** 仓库根：本文件在 `<root>/.agents/skills/mobile-device-debugging/scripts/` 下，向上 4 层 */
+export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 export const ANDROID_DIR = path.join(ROOT, 'packages', 'mobile', 'android');
 export const APK_PATH = path.join(ANDROID_DIR, ...DEV_BUILD.apkRelPath);
 
@@ -76,7 +78,8 @@ function parseArgs(argv) {
 function printUsage() {
   console.log(`dev build 一条龙：出包 → 装 → reverse → 拉起 → 自检
 
-  node scripts/mobile-dev-build.mjs [选项]
+  npm run mobile:dev-build [选项]
+  （等价：node .agents/skills/mobile-device-debugging/scripts/dev-build.mjs）
 
   --dry-run     只打印将执行的计划（含短路径告警），不碰 gradle / adb
   --skip-build  跳过 gradle 出包（APK 必须已存在）

@@ -1,9 +1,9 @@
 /**
- * mobile-dev-build-rules.mjs 的判据测试（#581）。
+ * `scripts/dev-build-rules.mjs` 的判据测试（#581）。
  *
- * 用 node:test 跑（`node --test scripts/__tests__/mobile-dev-build.test.js`），**零依赖、
- * 不碰 adb / gradle / 设备**：这里钉的是「实测踩过的坑」对应的判定，跑真机才验得到，
- * 所以必须能被单测钉住。
+ * 用 node:test 跑（`node --test .agents/skills/mobile-device-debugging/scripts/__tests__/dev-build.test.js`），
+ * **零依赖、不碰 adb / gradle / 设备**：这里钉的是「实测踩过的坑」对应的判定，
+ * 那些只有跑真机才验得到，所以必须能被单测钉住。
  *
  * **未覆盖**：真机出包、`pm install` 实际行为、三条 `dumpsys` 自检的现场命中 ——
  * 那些要设备 + 真构建，跑 `npm run mobile:dev-build` 验。
@@ -11,7 +11,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const rulesPromise = import('../mobile-dev-build-rules.mjs');
+const rulesPromise = import('../dev-build-rules.mjs');
 
 test('gradleExecutable：Windows 用 .bat，其余用 ./gradlew', async () => {
   const { gradleExecutable } = await rulesPromise;
