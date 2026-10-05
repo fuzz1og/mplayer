@@ -325,6 +325,7 @@ MOBILE_FRAME_PARSE_DIR=e2e/artifacts/frame-idle-20260929-120000 scripts/mobile-f
 
 - `e2e/electron-e2e.spec.ts` 等 `*.spec.ts` - 桌面端 Playwright 测试场景
 - `scripts/mobile-frame-stats.mjs` - 移动端帧计时取证（性能，adb 驱动）
+- `scripts/mobile-ui.mjs` - uiautomator dump 的取树 / 查节点 / 点按（`dump` / `find` / `tap`，adb 驱动）
 - `scripts/mobile-e2e.mjs` - 移动端真机 e2e 一条龙脚本
 - `e2e/README.md` - 本文档
 - `e2e/artifacts/` - 移动端 e2e 截图与 logcat 存档（gitignore）
