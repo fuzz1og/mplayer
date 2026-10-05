@@ -71,7 +71,9 @@
 ### 2.2 桌面侧：跑一次真 Electron 的摩擦点（已核实）
 
 - 12 个 `e2e/*.spec.ts` 全部走 `_electron.launch`，但**在 DSH 会话里白屏**（`testing.md:40`，唯一可行路径是 CDP）；且**没有 npm script**，`scripts/verify.mjs` 里也没有 e2e scope → 没有稳定入口。
-- 规格腐化：`cover-e2e.spec.ts:16` 与 `cover-scenarios.spec.ts:16` 仍打 **5173**（Vite 是 5174）；`discover-v2.spec.ts:10` 指向已退役的自建 API；10/12 个 spec 不传 `VITE_DEV_SERVER_URL`，于是它们测的是**预构建的 `dist/index.html`**，不是工作副本。
+- 规格腐化：`cover-e2e.spec.ts:16` 与 `cover-scenarios.spec.ts:16` 仍打 **5173**（Vite 是 5174）；`discover-v2.spec.ts:10` 指向已退役的自建 API；**12 个里 9 个**完全不传 `VITE_DEV_SERVER_URL`（只有 `player-bar-add-to-playlist.spec.ts:41` 传对），于是它们测的是**预构建的 `dist/index.html`**，不是工作副本。
+- **身份锚在桌面端有个隐藏陷阱**（写 references 时新发现）：`vite.config.ts:53-54` 配了 `port: 5174` 但**没有 `strictPort`**，5174 被别的 checkout 占用时 Vite 会自增到 5175，而 `scripts/start-electron-dev.mjs:10` 照样注入 `VITE_DEV_SERVER_URL=http://localhost:5174` → 你驱动的其实是**另一个工作树的渲染层**，IPC 前缀校验也照放行、界面看起来完全正常。所以桌面身份锚的第 1 步是读 Vite 输出确认 `Local: http://localhost:5174/`。
+- 另有两条目视修正：路由是 `createHashRouter`（不是 `HashRouter`），hash URL 结论不变；`data-testid` 并非完全没用（生产代码 1 处，`PlayerControls.tsx:57`），但稳定的钩子是 `.song-row` 这个 class。
 - 主进程日志**没有文件落点**：`console.*` 只到 stdout/stderr（`start-electron-dev.mjs:32-35` 是 `stdio:'inherit'`）→ agent 拿不到主进程真相。
 - **没有单实例锁**（`src/main` grep `requestSingleInstanceLock` = 0 命中）+ 关窗即隐藏（`src/main/main.ts:169-174`）→ 泄漏的实例会与下一次运行共享同一份 `%APPDATA%\mplayer`，取证被污染。
 
