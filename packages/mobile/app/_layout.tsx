@@ -35,6 +35,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
 import PlayerOverlay from '../components/PlayerOverlay';
 import SongActionsHost from '../components/SongActionsHost';
+import UpdatePromptHost from '../components/UpdatePromptHost';
 import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
 import * as SystemUI from 'expo-system-ui';
 import type { ThemeColors } from '../theme/tokens';
@@ -165,6 +166,8 @@ export default function RootLayout() {
         <PlaybackNoticeToast />
         {/* 歌曲行弹层宿主（#304）：全应用单实例，替所有 SongRow 承担操作面板/加入歌单/换源 */}
         <SongActionsHost />
+        {/* 启动更新弹窗宿主（#579）：全应用单实例，自己负责延时检查与忽略版本 */}
+        <UpdatePromptHost />
       </AnimatedBgProvider>
     </ThemeProvider>
   );

@@ -15,14 +15,18 @@ interface NavItem {
   key: string;
   icon: React.ReactNode;
   label: string;
+  /** 右侧圆点徽标（#579：「设置」项表示有可用更新） */
+  badge?: boolean;
 }
 
 interface SidebarProps {
   currentPage: string;
   onPageChange: (page: string) => void;
+  /** 有可用更新时在左下「设置」项旁显示徽标（#579 / ADR 决策 3） */
+  updateAvailable?: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange, updateAvailable = false }) => {
   const mainNavItems: NavItem[] = [
     { key: 'recommend', icon: <Sparkles size={18} />, label: '推荐' },
     { key: 'discover', icon: <Compass size={18} />, label: '发现音乐' },
@@ -76,6 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
         onClick={() => onPageChange(item.key)}
         style={navItemStyle(isActive)}
         aria-current={isActive ? 'page' : undefined}
+        aria-label={item.badge ? `${item.label}（有可用更新）` : undefined}
         onMouseEnter={(e) => {
           if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
         }}
@@ -101,6 +106,24 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
           {item.icon}
         </span>
         <span>{item.label}</span>
+        {/* 更新徽标（#579）：靠右居中的小圆点，不影响其余 nav item（badge 未设即不渲染） */}
+        {item.badge && (
+          <span
+            data-testid="update-badge"
+            title="有新版本可更新"
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              right: 'var(--space-3)',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: '8px',
+              height: '8px',
+              borderRadius: 'var(--radius-full)',
+              backgroundColor: 'var(--accent)',
+            }}
+          />
+        )}
       </button>
     );
   };
@@ -150,7 +173,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
           borderTop: '1px solid var(--border-subtle)',
         }}
       >
-        {renderNavItem({ key: 'settings', icon: <Settings size={18} />, label: '设置' })}
+        {renderNavItem({ key: 'settings', icon: <Settings size={18} />, label: '设置', badge: updateAvailable })}
       </div>
     </aside>
   );
