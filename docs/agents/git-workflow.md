@@ -50,7 +50,8 @@ npm run verify        # 全量（Windows / PowerShell / cmd / Git Bash 通用；
 
 Commit 信息用 Conventional Commits：`type(scope): 中文描述`。type 取 feat/fix/docs/chore/refactor/test/perf；scope 取涉及端（core/desktop/mobile/ci），多端逗号并列（如 `feat(core,desktop): …`），与现有历史一致。
 
-- 一个 commit 讲一件事；纯格式化/重命名不与行为改动混提。
+- 一个 commit 讲一件事；纯格式化/重命名不与行为改动混提。**这是「每条 commit 只装一件事」，不是「一个 PR 只留一条 commit」**——PR 里多条 commit 是常态。
+- **已推送的分支只追加 commit**：分支一旦 `git push` 出去（PR 已开、可能有人在看），后续修改就**追加新 commit 再 push**，让每次修正（含「初版方案被推翻」）留在历史里。`git commit --amend` 与 `git push --force-with-lease` 属于**尚未推送**的提交。收成一条 commit 是**合并时**的动作（squash merge 或人工整理），不在评审中途重写历史——重写会作废别人已经看过的 SHA（包括自己在 issue / PR 评论里引用过的那个；引用当场失效），在 PR 时间线上留下 `force-pushed` 噪音，并把「为什么改主意」从历史里抹掉。
 - commit 里关联 issue（`Closes #N`，合并时自动关闭）。
 - 敏感信息不入库：tier3 订阅地址、个人 API key、本地真实缓存数据不进 commit。
 
@@ -74,10 +75,10 @@ gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tm
 - **验收证据图**（截图 / 录屏）传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'` / `gh pr comment <PR> --attach '<png>#<图注>'`，两者同一套机制：正文里没被引用的附件会追加到末尾，排版走两步法，见 `mobile-device-debugging` skill），**不入库**——PR 是这类图的一次性载体，把验收图塞进 `docs/**/assets` 正是这条要拦的事。**追加一条验收评论**（不动 PR 正文）用后者；正文用模板结构时尤其别把图塞进正文。
 - **活文档配图反过来必须入库**：README 截图、logo 这类被长期正文引用的产品图放 `docs/assets/`（`docs/*` 默认忽略整个目录，已用 `!docs/assets/` 放行），并在引用它的正文里写明来源与再生成方式。判据是「有没有一个长期存在的正文在引用它」，不是「它是不是截图」。
 - **附图后要验引用**：读回来逐个检查（正文 `gh pr view <PR> --json body --jq .body`，评论 `gh api repos/{owner}/{repo}/issues/comments/<id> --jq .body`）——每个图片引用都必须是 `user-attachments` URL，残留本地路径就是裂图；公开仓库可再抓一次 PR 页面 HTML 确认 asset id 在渲染产物里。
-- **CI 绿后停在人审**：PR 交给人工 review 与合并，agent 不自行合并、不设 auto-merge。收到 review 意见回本 worktree 继续修，push 自动更新同一 PR。
+- **CI 绿后停在人审**：PR 交给人工 review 与合并，agent 不自行合并、不设 auto-merge。收到 review 意见回本 worktree 继续修，按 §4「只追加 commit」push，同一 PR 自动更新。
 - 改了 `packages/mobile` 或 `packages/core` 的 PR 必须附真机验收结论与**证据图**（没上真机就照实写「未做 + 原因」，不许写「已附截图」而没附；流程见 `.agents/skills/mobile-device-debugging`；固化断言可跑 `npm run mobile:e2e` 一条龙，见 `e2e/README.md`）。
 - 行为/命令/架构有变化的，同一个 PR 里更新 AGENTS.md / GLOSSARY.md / 相关 ADR。
-- **分支可能被并发会话动过**：`--force-with-lease` 被拒（`stale info`）就是「远端有你没见过的提交」的信号——先 `git log --oneline HEAD..origin/<branch>` 看多了什么，再决定 merge 还是真的覆盖；直接重试会覆盖别人的提交。
+- **同一分支上的并行会话**：默认「只追加」（§4），所以协作靠先 `git fetch` 再决定 merge。确需重写历史时才动用 `--force-with-lease`——被拒（`stale info`）就是「远端有你没见过的提交」的信号：先 `git log --oneline HEAD..origin/<branch>` 看多了什么，再决定 merge 还是覆盖；直接重试会覆盖别人的提交。
 - 开 PR 前先合入最新 `origin/master`，冲突就地解决。
 
 ## 6. 人工合并后清理
