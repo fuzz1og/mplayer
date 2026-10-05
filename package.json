@@ -35,6 +35,7 @@
     "test:main": "vitest run --config vitest.main.config.ts",
     "mobile:e2e": "node scripts/mobile-e2e.mjs",
     "mobile:debug": "node scripts/mobile-debug.mjs",
+    "mobile:dev-build": "node scripts/mobile-dev-build.mjs",
     "mobile:frame-stats": "node scripts/mobile-frame-stats.mjs",
     "mobile:usb-attach": "node scripts/mobile-device/usb-attach.mjs",
     "dev:mobile": "node scripts/dev-mobile.mjs",
