@@ -6,7 +6,7 @@
  * 那些只有跑真机才验得到，所以必须能被单测钉住。
  *
  * **未覆盖**：真机出包、`pm install` 实际行为、三条 `dumpsys` 自检的现场命中 ——
- * 那些要设备 + 真构建，跑 `npm run mobile:dev-build` 验。
+ * 那些要设备 + 真构建，接上设备跑 `../dev-build.mjs` 验。
  */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');

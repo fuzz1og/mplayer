@@ -77,7 +77,7 @@ release 包 applicationId 不同（`com.mplayer.mobile` vs `.dev`），dev 上�
 
 dev build 的包名带 `.dev` 后缀（`android/app/build.gradle` 的 debug 变体 `applicationIdSuffix '.dev'`），**与 release 共存**，不会覆盖测试机上的正式包。
 
-**执行固定进脚本**：`npm run mobile:dev-build`（本包 `scripts/dev-build.mjs`）一条龙做完 出包 → 装 → reverse → 显式组件拉起 → 自检。架构按设备 ABI 自动选、`push` + `pm install`、restorecon 回落、短路径告警等坑的处置都在脚本里（清单见 `scripts/dev-build.mjs` 文件头与本文「陷阱速查」）。先看它打算做什么用 `--dry-run`；APK 已出好可加 `--skip-build`；雷电与 scoop 两份 `adb` 抢 5037 时用 `MOBILE_ADB=<path>` 钉死一份。
+**执行固定进脚本**：跑本包的 `scripts/dev-build.mjs`（仓库根执行：`node .agents/skills/mobile-device-debugging/scripts/dev-build.mjs`），一条龙做完 出包 → 装 → reverse → 显式组件拉起 → 自检。架构按设备 ABI 自动选、`push` + `pm install`、restorecon 回落、短路径告警等坑的处置都在脚本里（清单见 `scripts/dev-build.mjs` 文件头与本文「陷阱速查」）。先看它打算做什么用 `--dry-run`；APK 已出好可加 `--skip-build`；雷电与 scoop 两份 `adb` 抢 5037 时用 `MOBILE_ADB=<path>` 钉死一份。
 
 **成立标准**：脚本末尾三条自检（FGS 前台服务 / media3 媒体会话 / 播放通知）**全 PASS** 才算真的在 dev build 语义下；任一不成立就是在 Expo Go 语义下，结论作废。只能人工做的两步——点过 dev-client 引导页、放行 `POST_NOTIFICATIONS`，不做 FGS 通知发不出来。
 

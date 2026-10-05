@@ -19,7 +19,7 @@
  *      长度告警，并给出「换短路径检出」的处置。
  *   5. **拉起必须用显式组件** —— scheme 与 release 共用，直接发 `mplayer://` 会弹选择器。
  *
- * 用法（仓库根执行；也可用 npm 别名 `npm run mobile:dev-build`）：
+ * 用法（仓库根执行）：
  *   node .agents/skills/mobile-device-debugging/scripts/dev-build.mjs              # 完整回路
  *   …/dev-build.mjs --dry-run      # 只打印计划，不碰 gradle / adb
  *   …/dev-build.mjs --skip-build   # 跳过 gradle（APK 已存在时）
@@ -78,8 +78,7 @@ function parseArgs(argv) {
 function printUsage() {
   console.log(`dev build 一条龙：出包 → 装 → reverse → 拉起 → 自检
 
-  npm run mobile:dev-build [选项]
-  （等价：node .agents/skills/mobile-device-debugging/scripts/dev-build.mjs）
+  node .agents/skills/mobile-device-debugging/scripts/dev-build.mjs [选项]
 
   --dry-run     只打印将执行的计划（含短路径告警），不碰 gradle / adb
   --skip-build  跳过 gradle 出包（APK 必须已存在）
