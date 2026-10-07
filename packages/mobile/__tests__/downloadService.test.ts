@@ -525,8 +525,20 @@ describe('内嵌封面自适应档位（#575：640 → 320，按字节上限降�
     expect(useDownloadStore.getState().items[0].status).toBe('done');
   });
 
-  it('首个请求失败（非 2xx）→ 放弃封面，不再试下一档；下载仍 done', async () => {
-    const calls = stubFetch(() => new Response(null, { status: 500 }));
+  /** 一次取图的失败形态：第 0 档与降档档都要各验一遍（降档失败不得丢已成功档） */
+  const failures: [string, () => Response][] = [
+    ['非 2xx', () => new Response(null, { status: 404 })],
+    ['空响应体', () => body(0)],
+    [
+      '抛错',
+      () => {
+        throw new Error('network down');
+      },
+    ],
+  ];
+
+  it.each(failures)('第 0 档失败（%s）→ 放弃封面，不再试下一档；下载仍 done', async (_label, fail) => {
+    const calls = stubFetch(() => fail());
 
     await downloadSong(makeSong({ cover: COVER }) as any);
 
@@ -535,8 +547,24 @@ describe('内嵌封面自适应档位（#575：640 → 320，按字节上限降�
     expect(useDownloadStore.getState().items[0].status).toBe('done');
   });
 
-  it('降档请求失败 → 放弃整份封面（现状语义：宁缺毋滥），不阻断下载', async () => {
-    const calls = stubFetch((url) => (url === URL_640 ? body(196_609) : new Response(null, { status: 404 })));
+  /**
+   * 降档失败**不得**把已经取到的那一份一起丢掉：否则「为省体积新增的降档」反而在
+   * 这一支上比改前（单档 640）可用性更差——改前 640 档 ≤1 MB 是会内嵌的。
+   */
+  it.each(failures)('降档失败（%s）→ 停止降档，采用已成功取到的 640 档', async (_label, fail) => {
+    const calls = stubFetch((url) => (url === URL_640 ? body(196_609) : fail()));
+
+    await downloadSong(makeSong({ cover: COVER }) as any);
+
+    expect(calls).toEqual([URL_640, URL_320]);
+    expect(apicWritten()).toBe(true);
+    // 采用第 0 档 196,609 B：阈值是**目标**不是硬上限（全超阈值时链中最小档也会内嵌）
+    expect(writtenBytes()).toBeGreaterThanOrEqual(196_609);
+    expect(useDownloadStore.getState().items[0].status).toBe('done');
+  });
+
+  it('降档失败但第 0 档已超 1 MB 兜底 → 仍放弃（兜底优先于「用已成功档」）', async () => {
+    const calls = stubFetch((url) => (url === URL_640 ? body(1_200_000) : new Response(null, { status: 404 })));
 
     await downloadSong(makeSong({ cover: COVER }) as any);
 

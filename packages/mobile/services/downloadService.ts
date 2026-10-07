@@ -68,9 +68,14 @@ function toUint8Array(value: unknown): Uint8Array {
  * 首个「够小」（`embedCoverWithinBudget`，≤ `EMBED_COVER_MAX_BYTES`）的档位采用；全超阈值时采用
  * 链中最小的一份；最终仍受 `MAX_EMBEDDED_COVER_BYTES`（1 MB）兜底，超则 `undefined`（只写文本标签）。
  *
- * 请求次数上限 = 链长（`embedCoverUrlChain` 已对等价 URL 去重，未验证机制的源不会重复下原图）；
- * 任一次请求抛错 / 非 2xx / 空响应体 → 整份封面放弃（`undefined`）：宁可不写封面，也不把一份
- * 大小不明的图写进 ID3，且不阻断下载。**列表封面不经过这里**——那是远端直链（见 GLOSSARY「列表封面」）。
+ * 请求次数上限 = 链长（`embedCoverUrlChain` 已对等价 URL 去重，未验证机制的源不会重复下原图）。
+ * `EMBED_COVER_MAX_BYTES` 是**目标**不是硬上限：链里所有档都超阈值时仍会内嵌链中最小的一份
+ * （可能 > 阈值，例如 #575 实测的 206,858 B），真正的硬顶是 1 MB。
+ *
+ * 失败规则（**降档不得牺牲可用性**）：
+ * - 第 0 档失败（抛错 / 非 2xx / 空响应体）→ `undefined`（与改前单档语义一致，只写文本标签）；
+ * - 降档失败 → 停止降档，改用**已成功取到的那一份**（若其 ≤ 1 MB），而不是把整份封面丢掉。
+ * 任一支都不阻断下载。**列表封面不经过这里**——那是远端直链（见 GLOSSARY「列表封面」）。
  */
 async function fetchEmbeddableCover(song: Song): Promise<{ format: string; bytes: number[] } | undefined> {
   const coverUrl = song.cover?.trim();
@@ -84,12 +89,22 @@ async function fetchEmbeddableCover(song: Song): Promise<{ format: string; bytes
     // （320 档 168 KB）；不认识的源链上各档同 URL（幂等），去重后仍只请求一次。
     let picked: { format: string; bytes: Uint8Array } | undefined;
     for (const url of embedCoverUrlChain(coverUrl)) {
-      const res = await fetch(url, { headers });
-      if (!res.ok) return undefined;
-      const buf = new Uint8Array(await res.arrayBuffer());
-      if (buf.byteLength === 0) return undefined;
+      let buf: Uint8Array;
+      let format: string;
+      try {
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error(`封面响应非 2xx：${res.status}`);
+        buf = new Uint8Array(await res.arrayBuffer());
+        if (buf.byteLength === 0) throw new Error('封面响应体为空');
+        format = res.headers.get('content-type') || 'image/jpeg';
+      } catch {
+        // 第 0 档就失败：没有已成功的档可退，只写文本标签（与改前一致）
+        if (!picked) return undefined;
+        // 降档失败：停止降档，退回已成功取到的那一份——省体积不该把可用性弄差
+        break;
+      }
       // 链越靠后档位越小：留最近一次成功的作为「全超阈值」时的兜底
-      picked = { format: res.headers.get('content-type') || 'image/jpeg', bytes: buf };
+      picked = { format, bytes: buf };
       if (embedCoverWithinBudget(buf.byteLength)) break;
     }
     if (!picked || picked.bytes.byteLength > MAX_EMBEDDED_COVER_BYTES) return undefined;
