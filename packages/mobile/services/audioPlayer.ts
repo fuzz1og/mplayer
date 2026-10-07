@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioStatus } from 'expo-audio';
 import type { EventSubscription } from 'expo-modules-core';
 import Constants, { AppOwnership } from 'expo-constants';
-import { planAdvance, musicApi, resourceUrlKey, BROWSER_UA, refererForSourceKey, isUrlAlive, songUsesSongidLyrics, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, pickNextSongAfterFailure, getFailureStreak, OFFLINE_COPY } from '@mplayer/core';
+import { planAdvance, musicApi, resourceUrlKey, requestHeadersFor, isUrlAlive, songUsesSongidLyrics, isInlineLyrics, explainPlaybackFailure, decideAfterPlaybackFailure, registerTerminalFailure, resetFailureStreak, pickNextSongAfterFailure, getFailureStreak, OFFLINE_COPY } from '@mplayer/core';
 import type { PlayableResource, Song } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useHistoryStore } from '../stores/historyStore';
@@ -665,14 +665,9 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     // 网易云 CDN（music.126.net）宽松不校验，酷狗/QQ 等 CDN 防盗链校验
     // Referer 域名，带错 Referer（如 API 域名）会 403 → 播放失败跳下一首
     // （图片 CDN 校验宽松所以封面正常、音频失败）。UA 保持浏览器特征。
-    // UA 与按源 Referer 映射见 core utils/sourceReferer（musicApi/audioProbe 同一份）
-    const playerHeaders: Record<string, string> = {
-      'User-Agent': BROWSER_UA,
-      'Referer': (() => {
-        const official = refererForSourceKey(song.sourceType as string);
-        return official || '';
-      })(),
-    };
+    // #592：整份头取 core 单点 `requestHeadersFor`（未知源不带 Referer，
+    // 不再发空字符串 Referer）；Android 原生主引擎走同一份（nativePlayer.headersFor）。
+    const playerHeaders = requestHeadersFor(song.sourceType);
 
     // 单播放器复用（replace 换源）：永远只有一个 ExoPlayer 实例，
     // 切歌/重试不存在「旧播放器停止 vs 新播放器启动」的叠加窗口

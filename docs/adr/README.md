@@ -46,6 +46,7 @@
 | 移动端歌单页批量模式入口：长按（挂在行自身）+ 英雄区可见「选择」 | `2026-10-01-mobile-playlist-batch-entry.md` | 已接受（修订 #490 票面的「显式入口已否决」） |
 | 移动端下载内嵌元数据的边界：只承诺 MP3 + 歌词侧车 | `2026-10-04-mobile-download-metadata-boundary.md` | 已接受 |
 | 补窗结算契约：`patchQueue` 的 outcome 是显式入参 | `2026-10-07-window-patch-settle-contract.md` | 已接受（决策；**本轮未落地实现**） |
+| 每源请求头单点，Android 原生开始发 UA/Referer（#592） | `2026-10-08-per-source-request-headers.md` | 已接受（网络行为变更：Android 从 0 头改为 UA+Referer，A/B 取证见 PR） |
 | 进入即检查更新：桌面徽标 + 静默下载 + 应用内确认后退出安装；移动端弹窗跳浏览器（#579） | `2026-10-05-update-prompt-and-silent-desktop-download.md` | 已接受（部分取代 `2026-08-28-update-mirror-channels.md` 决策 3 的**桌面端**） |
 
 ## 历史编号对照（冻结）

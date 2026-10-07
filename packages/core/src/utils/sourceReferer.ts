@@ -51,3 +51,36 @@ export function refererForUrl(url: string): string | undefined {
 export function refererForSourceKey(sourceKey: string): string | undefined {
   return REFERER_BY_SOURCE[sourceKey];
 }
+
+/**
+ * **「每源播放/下载请求头」的唯一事实来源**（#592）。
+ *
+ * 为什么必须有单点：`BROWSER_UA` 与 `REFERER_BY_SOURCE` 都是本文件的私有事实。
+ * #592 之前，移动端 `audioPlayer.ts`（expo-audio 路径）、`downloadService.ts`（内嵌封面）
+ * 各自手拼一份，而 `nativePlayer.ts` 的 `headersFor` 是个恒 `undefined` 的空壳
+ * → **Android 主引擎（media3）这条路上每源请求头实际没被应用**，原生
+ * `ExpiryGuard.withRequestHeaders` 因此空转。拼装点一多，「源表加了新源」这种事
+ * 就只会修到其中几处。
+ *
+ * 语义（调用方不要再叠加、也不要改写）：
+ * - `User-Agent` 恒为 [BROWSER_UA]：部分 CDN 拒非浏览器 UA。
+ * - `Referer` **按 `Song.sourceType`（netease/kugou/...）** 取官方站点域名；源表同时
+ *   兼容 `api.php` 的 type 形状（`wy`/`kg`），两种 key 都能命中。
+ * - **未知源 / `soda` / `local` / 缺省一律不带 `Referer`**——没有可冒用的官方域名时
+ *   宁可不带头：空字符串 `Referer` 是「带错头」，比不带更容易被防盗链拒。
+ *
+ * 刻意不归入本函数的两类调用点（语义不同，别顺手改）：
+ * - `audioProbe.ts` 的活性闸 / `musicApi.ts` 的歌词请求：Referer 由 **URL** 推导
+ *   （`refererForUrl`，含 QQ 歌词页 / 酷狗 / 酷我歌词端点这类按 URL 的特例），
+ *   与「按源」不是同一回事。
+ * - 各源 API 客户端（`qqDirect`/`neteaseDirect`/`antiScrape` 等）自己的请求头：
+ *   那是**接口调用**头（含 UA 轮换、签名、Cookie），不是播放/下载头。
+ *
+ * 每次返回**新对象**：调用方可以安全地摊开或改写，不会污染源表。
+ */
+export function requestHeadersFor(source?: string): Record<string, string> {
+  const headers: Record<string, string> = { 'User-Agent': BROWSER_UA };
+  const referer = source ? REFERER_BY_SOURCE[source] : undefined;
+  if (referer) headers.Referer = referer;
+  return headers;
+}
