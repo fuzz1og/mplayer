@@ -333,7 +333,7 @@ global.css 新增，命名与移动端逐字对应，跨端心智一致：
 - reduced motion：`AccessibilityInfo.isReduceMotionEnabled` + `reduceMotionChanged` 监听 → 浮层开合退化为 cross-fade、唱机旋转停止（§14：减弱动效≠没反馈）。
 - 主题切换避免亮度跳变（根背景色随主题平滑过渡）。
 
-**依赖注意**：expo-haptics 是 native module，需要 dev-client rebuild（`expo run:android`）；真机验收走 `mobile-device-debugging` skill 流程。core 无改动，无需 `core:build`。
+**依赖注意**：expo-haptics 是 native module，需要 dev-client rebuild（`expo run:android`）；真机验收走 `runtime-verification` skill 流程。core 无改动，无需 `core:build`。
 
 ---
 

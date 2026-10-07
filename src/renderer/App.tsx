@@ -6,6 +6,7 @@ import { searchService } from '@/renderer/services/searchService';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { usePlayerStore, warmupRestoredSong } from '@/renderer/store/playerStore';
 import { useDownloadStore, type DownloadTask } from '@/renderer/store/downloadStore';
+import { useUpdateStore, isUpdatePending } from '@/renderer/store/updateStore';
 import { useGlobalShortcuts } from '@/renderer/hooks/useGlobalShortcuts';
 import Sidebar from '@/renderer/components/Sidebar';
 import TitleBar from '@/renderer/components/TitleBar';
@@ -13,6 +14,7 @@ import TopBar from '@/renderer/components/TopBar';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
 import DownloadNotifications from '@/renderer/components/DownloadNotifications';
+import UpdateReadyDialog from '@/renderer/components/UpdateReadyDialog';
 import LyricsPage from '@/renderer/pages/LyricsPage';
 import ErrorBoundary from '@/renderer/components/ErrorBoundary';
 
@@ -92,6 +94,11 @@ const App: React.FC = () => {
   useEffect(() => {
     warmupRestoredSong();
   }, []);
+
+  // 更新状态桥（#579）：订阅 push + 拉一次快照。启动检查可能早于本组件挂载，
+  // 只靠 push 会丢事件，所以必须靠快照兜底（ADR 不变量 I2/I3）。
+  const updateAvailable = useUpdateStore((s) => isUpdatePending(s.status));
+  useEffect(() => useUpdateStore.getState().initUpdateBridge(), []);
 
   // Tray action handler
   useEffect(() => {
@@ -194,6 +201,7 @@ const App: React.FC = () => {
         {/* 左侧导航栏 */}
         <Sidebar
           currentPage={getActiveSidebarKey()}
+          updateAvailable={updateAvailable}
           onPageChange={(page) => {
             // 切换页面时清除搜索状态
             useSearchStore.getState().reset();
@@ -253,6 +261,9 @@ const App: React.FC = () => {
 
       {/* 下载进度弹窗（订阅面在宿主内，App 不随下载进度重渲染） */}
       <DownloadNotifications />
+
+      {/* 更新已下载 → 退出应用安装的确认框（#579；订阅面在宿主内） */}
+      <UpdateReadyDialog />
     </div>
   );
 };

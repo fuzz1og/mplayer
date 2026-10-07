@@ -11,7 +11,7 @@
  * 之后跑 node scripts/mobile-debug.mjs 进入调试回路。
  *
  * 注意：路径按 WSL 约定硬编码（/mnt/c/...），因此**只在 WSL 里有意义** —— 这是原脚本的语义，
- * 移植不改。Windows 原生 adb 回路（mobile-device-debugging skill 第二条）不走本脚本。
+ * 移植不改。Windows 原生 adb 回路（runtime-verification skill 第二条）不走本脚本。
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';

@@ -19,6 +19,7 @@ import { registerFavoriteIpc, registerHistoryIpc, registerPlaylistIpc } from './
 import { registerLocalMusicIpc } from './ipc/localMusic';
 import { registerMusicApiCall } from './ipc/musicApiHandlers';
 import { resolvePlaylistLink } from './services/playlistLinkResolver';
+import { updateService, STARTUP_FLOW_DELAY_MS } from './services/updateService';
 import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDownloadIpc, registerAppIpc, TIER3_SETTING_KEY } from './ipc/appSettingsUpdate';
 import { registerPlaybackTraceIpc } from './ipc/playbackTrace';
 import { registerCookiePersister, loadCookiesFromDisk } from './cookies/cookieAdapter';
@@ -109,6 +110,34 @@ function isTrustedIpcSender(frame: Electron.WebFrameMain | null | undefined): bo
 /** 单个 IPC 调用的 sender 校验；不通过返回错误信息（null 表示通过）。 */
 export function checkIpcSender(frame: Electron.WebFrameMain | null | undefined): string | null {
   return isTrustedIpcSender(frame) ? null : `IPC 来源不受信任: ${frame?.url ?? 'unknown'}`;
+}
+
+/**
+ * 启动检查更新（#579 / ADR `2026-10-05-update-prompt-and-silent-desktop-download.md` 决策 1、4、5）。
+ *
+ * 首帧后延时触发，避开首屏请求高峰。**不假设时序**：`registerUpdateIpc` 之前有一次
+ * `await db.getSetting()`，若窗口在那之前就加载完，`once('did-finish-load')` 会永远等不到——
+ * 所以按 `isLoading()` 分开处理（对齐 Electron 的 `ready-to-show`/`did-finish-load` 惯例）。
+ * **一次性守卫**：dev 下 HMR、以及 macOS `activate` 重建窗口，都会让加载事件再次触发，只排期第一次。
+ * 流程本身全程静默（失败只记日志、绝不 throw），所以这里既不 await 也不 catch。
+ * 渲染层也不依赖它的时序：`update:getStatus` 会在首帧补一次快照。
+ */
+let startupUpdateFlowStarted = false;
+function scheduleStartupUpdateFlow(mainWindow: BrowserWindow): void {
+  if (startupUpdateFlowStarted) return;
+  startupUpdateFlowStarted = true;
+
+  const schedule = () => {
+    setTimeout(() => {
+      void updateService.runStartupFlow();
+    }, STARTUP_FLOW_DELAY_MS);
+  };
+
+  if (mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.once('did-finish-load', schedule);
+  } else {
+    schedule();
+  }
 }
 
 function createWindow() {
@@ -373,6 +402,7 @@ app.whenReady().then(async () => {
   registerDialogIpc();
   registerSettingsIpc();
   registerUpdateIpc(mainWindow);
+  scheduleStartupUpdateFlow(mainWindow);
   registerDownloadIpc();
   registerAppIpc();
   // 播放解析链诊断（#363）：模块加载即注册 sink 环形缓冲，这里接线 IPC 暴露给设置页

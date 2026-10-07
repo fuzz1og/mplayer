@@ -1,4 +1,5 @@
 import type { Song, SourceKey } from '../types/index.js';
+import type { PlaylistWriteResult } from '../shared/playlistWrite.js';
 import { classifySong } from '../utils/songDedupe.js';
 import { extractQqPlaylistIdFromUrl, isQqShortLink } from './qqPlaylist.js';
 
@@ -94,6 +95,48 @@ export interface PlaylistImportDeps {
    * 宿主调了写入却丢掉结果（哪怕只写进去一半），编排仍把整批记 success 就是谎报。
    */
   addSongs?: (playlistId: string | number, songs: Song[]) => Promise<number | void>;
+}
+
+/**
+ * 链接导入写入腿需要的最小宿主面（#594）。
+ *
+ * 桌面 DesktopPlaylistWriter 与移动 MobilePlaylistWriter 都满足它——两端写入
+ * adapter 的差异（IPC / 本地 store）藏在各自的 add 后面，本模块只认「给我歌单 id
+ * 和一批歌，返回 core 的写入结果」这一件事。
+ */
+export interface PlaylistImportWriterPort {
+  add(params: {
+    playlistId: string | number;
+    songs: readonly Song[];
+  }): Promise<PlaylistWriteResult>;
+}
+
+/**
+ * 由「歌单写入 adapter」装配链接导入的写入依赖（#594：双端**唯一一份**装配）。
+ *
+ * 此前这段在两个宿主里逐字各写一份（renderer importService.importDepsFor 与
+ * mobile playlistExport.createMobileImportDeps），删掉任意一份另一份原样可用
+ * ——是复制品而非被复用的能力。现在装配在本模块，两端只注入各自的 I/O。
+ *
+ * 口径（#556 评审 A4/B6，原因见实现处注释）：
+ * - **不传 resolveNameConflict**：导入是无人值守的整批操作，跨源同名走 core 的
+ *   「默认并入」，绝不静默丢弃。
+ * - **回报宿主的真实新增数**：宿主说没写进去的歌不能在编排里记 success；
+ *   ok=false 一律抛错，由编排如实记 failure。
+ */
+export function importDepsFor(writer: PlaylistImportWriterPort): PlaylistImportDeps {
+  return {
+    addSong: async (playlistId, song) => {
+      const result = await writer.add({ playlistId, songs: [song] });
+      if (!result.ok) throw new Error(result.error || '添加失败');
+      return result.added;
+    },
+    addSongs: async (playlistId, songs) => {
+      const result = await writer.add({ playlistId, songs });
+      if (!result.ok) throw new Error(result.error || '添加失败');
+      return result.added;
+    },
+  };
 }
 
 /**

@@ -531,17 +531,115 @@ function newTraceCtx(): TraceCtx {
   };
 }
 
+// ── 腿墙（#593）────────────────────────────────────────────────────────────
+//
+// clamp + AbortController + budget.onExpire + race + timer 这套「腿墙」此前在四条腿上
+// 逐字各持一份（直连腿 / tier3 腿 / 严格搜索腿 / 直连取证腿；腿数从 3 涨到 4）。
+// 墙的语义从此只在这里维护一次：**本腿墙钟 = min(本腿局部墙, 解析链总预算剩余)**，
+// 到点或预算耗尽都按各腿的「放弃」语义收口。各腿的语义差异保留为显式入口
+// （见 runWithLegWall 的 options）——它们是口径不同，不是同一个模板的特例。
+
+/** 交给腿的「墙的持有者」：本腿可用墙钟（已 clamp 总预算）与到点/预算耗尽即 abort 的信号。 */
+interface LegWall {
+  wallMs: number;
+  signal: AbortSignal;
+}
+
+/** 一次腿墙的结算：预算已尽未发起 / 墙到点 / 腿自己跑完（含 enforce 为 run 的内部结算）。 */
+type LegWallOutcome<T> =
+  | { kind: 'ok'; value: T; wallMs: number }
+  | { kind: 'timed-out'; wallMs: number }
+  | { kind: 'skipped' };
+
+/** 腿被放弃时对底层做什么（各腿语义差异的显式入口，见 runWithLegWall）。 */
+interface LegWallAbandon {
+  /** 本腿墙到点：缺省 signal.abort()。tier3 腿只记「放弃观测」（迟到命中丢弃），不硬停源。 */
+  onWallExpire?: (controller: AbortController) => void;
+  /** 解析链总预算耗尽：一律 abort 在飞请求，这里是在此之上的追加动作（tier3 腿记放弃观测）。 */
+  onBudgetExpire?: () => void;
+}
+
+interface LegWallOptions {
+  /**
+   * **排队不计时、槽位到手才起计**（tier3 腿；ADR 2026-09-25 决策 8）。
+   *
+   * 在 controller 建好后**同步**调用，返回「墙才开始计时」的那个 promise：墙与 clamp 都等它
+   * 结算。被排队的调用方若从调用那刻起计墙，会在没打过任何上游的情况下先超时（切歌场景
+   * P50 反而退化）。其余三条腿没有排队闸门，走默认「调用即起计」——那是**另一条口径**，
+   * 不是这个模板的特例。注意解析链总预算（墙钟、不暂停）仍照走排队时间，由 budget 自己的
+   * timer 负责；排队期间耗尽时本模块已挂好的 onBudgetExpire 仍会 abort 在飞源。
+   */
+  startGate?: (signal: AbortSignal) => Promise<unknown>;
+  /**
+   * **墙由腿自己持有**（取值为 run，直连取证腿）：模块只给 clamp / 预算 abort / 信号，
+   * 不另起一个等额 timer。取证腿的墙是 transport 的 timeoutMs（fetchAudioHead 内部结算），
+   * 再起一个同额度的 timer 只会让「谁先到点」变成竞态，并吞掉取证器自己的 fail-open 兜底口径。
+   */
+  enforce?: 'timer' | 'run';
+  /** 放弃语义（见 LegWallAbandon）；缺省 = 到点即 abort、预算耗尽即 abort。 */
+  abandon?: LegWallAbandon;
+}
+
+const LEG_WALL_TIMED_OUT = Symbol('leg-wall-timed-out');
+
+/** 缺省放弃动作：真的停掉在飞请求（#408 起墙的持有者持有 AbortController）。 */
+const abortLeg = (controller: AbortController): void => controller.abort();
+
+/**
+ * 腿墙的唯一实现（#593）：clamp 本腿墙、挂解析链总预算的 abort、按需起墙钟 timer 并 race。
+ * 四条腿（直连 / tier3 / 严格搜索 / 直连取证）共用；各自的语义差异走上面的显式入口。
+ */
+async function runWithLegWall<T>(
+  legWallMs: number,
+  budget: ResolutionBudget,
+  run: (leg: LegWall) => Promise<T>,
+  opts?: LegWallOptions,
+): Promise<LegWallOutcome<T>> {
+  const controller = new AbortController();
+  // 排队闸门必须同步起跑：tier3 的槽位排队从这一刻开始，run 要到闸门结算后才拿得到 result。
+  const gate = opts?.startGate?.(controller.signal);
+  // 预算耗尽一律 abort 在飞请求；追加动作由腿声明（tier3 记「放弃观测」）。
+  const offExpire = budget.onExpire(() => {
+    controller.abort();
+    opts?.abandon?.onBudgetExpire?.();
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    if (gate) await gate;
+    // clamp 在闸门之后：tier3 腿只吃「槽位到手时」的剩余额度（第二条腿因此不再叠加满额）。
+    const wallMs = budget.clamp(legWallMs);
+    // 预算已尽则不发起调用——「没打过上游就超时」比「打一发再放弃」诚实（也不白耗上游配额）。
+    if (wallMs <= 0) return { kind: 'skipped' };
+    const leg: LegWall = { wallMs, signal: controller.signal };
+    if (opts?.enforce === 'run') return { kind: 'ok', value: await run(leg), wallMs };
+    const winner = await Promise.race([
+      run(leg),
+      new Promise<typeof LEG_WALL_TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => {
+          (opts?.abandon?.onWallExpire ?? abortLeg)(controller);
+          resolve(LEG_WALL_TIMED_OUT);
+        }, wallMs);
+      }),
+    ]);
+    if (winner === LEG_WALL_TIMED_OUT) return { kind: 'timed-out', wallMs };
+    return { kind: 'ok', value: winner as T, wallMs };
+  } finally {
+    if (timer) clearTimeout(timer);
+    offExpire();
+  }
+}
+
 // 直连腿墙钟上限 = DIRECT_WALL_MS（值、理由与「4.5s 才是成功路径上界」的口径见
 // shared/playbackBudgets.ts）。
 
 const DIRECT_TIMED_OUT = Symbol('direct-timed-out');
 
 /** 直连腿计时 + 墙钟包装：到点即视为该腿失败（进 tier3 兜底），底层请求自然结束、
- *  结果丢弃——与 tier3 单源超时同一语义（`withSourceDeadline`）。ctx 为 null 时
+ *  结果丢弃——与 tier3 单源超时同一语义（withSourceDeadline）。ctx 为 null 时
  *  仍施加墙（护栏不能因关闭 trace 而消失），只是不做计时。
  *
- *  #424：本腿墙 = `min(DIRECT_WALL_MS, 解析链总预算的剩余额度)`，且总预算耗尽时一并 abort。
- *  预算已尽则**不发起调用**——「没打过上游就超时」比「打一发再放弃」诚实（也不会白耗上游配额）。 */
+ *  #424 / #593：本腿墙 = min(DIRECT_WALL_MS, 解析链总预算剩余)，预算已尽则不发起调用；
+ *  墙的持有者、abort 与计时统一由 runWithLegWall 持有（四条腿共用）。 */
 async function timedDirectCall<T>(
   ctx: TraceCtx | null,
   client: DirectSourceClient,
@@ -550,34 +648,15 @@ async function timedDirectCall<T>(
   budget: ResolutionBudget,
 ): Promise<T | typeof DIRECT_TIMED_OUT> {
   const t0 = ctx ? traceNow() : 0;
-  const wallMs = budget.clamp(DIRECT_WALL_MS);
-  if (wallMs <= 0) {
-    if (ctx) {
-      ctx.directMs = traceNow() - t0;
-      ctx.directMethod = method;
-      ctx.directSource = client.key;
-      ctx.directTimedOut = true;
-    }
-    return DIRECT_TIMED_OUT;
-  }
-  // #408：墙的持有者持有 AbortController，到点 abort——底层请求（含 transport 重试）
-  // 立刻停掉，不再「放弃等待但继续压上游」。#424：解析链总预算耗尽同样走这条 abort。
-  const controller = new AbortController();
-  const offExpire = budget.onExpire(() => controller.abort());
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([
-      call({ signal: controller.signal }),
-      new Promise<typeof DIRECT_TIMED_OUT>((resolve) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          resolve(DIRECT_TIMED_OUT);
-        }, wallMs);
-      }),
-    ]);
+    const outcome = await runWithLegWall(DIRECT_WALL_MS, budget, (leg) => call({ signal: leg.signal }));
+    if (outcome.kind !== 'ok') {
+      // 预算已尽（未发起）或墙到点（已 abort）：都算本腿失败，由 directCall 归因上抛。
+      if (ctx) ctx.directTimedOut = true;
+      return DIRECT_TIMED_OUT;
+    }
+    return outcome.value;
   } finally {
-    if (timer) clearTimeout(timer);
-    offExpire();
     if (ctx) {
       ctx.directMs = traceNow() - t0;
       ctx.directMethod = method;
@@ -843,41 +922,36 @@ async function tryTier3(
   const t0 = ctx ? traceNow() : 0;
   /** tier3 腿**活跃**耗时起点（槽位到手）；排队等待不计入——与 6s 预算同口径。 */
   let activeT0 = 0;
-  /** #424：解析链总预算耗尽 = abort 在飞源 + 记「放弃观测」（与腿预算耗尽同一语义）。 */
-  const abortController = new AbortController();
-  let offExpire: (() => void) | undefined;
+  /** 同歌并发共享的那条底层解析（在 startGate 里创建，run 只负责取它的 result）。 */
+  let shared: Tier3InflightRun | undefined;
   try {
-    // 预算哨兵：区分「预算超时」与「resolver 正常返回 null（全源未命中）」——
-    // 二者都让 race 得到 null，但只有前者算 timedOut（迟到命中才该记 discarded）。
-    const BUDGET_EXHAUSTED = Symbol('tier3-budget-exhausted');
-    const run = tier3ResolveShared(song, reason, ctx, abortController.signal);
-    offExpire = budget.onExpire(() => {
-      abortController.abort();
-      run.markAbandoned();
+    const outcome = await runWithLegWall<Tier3Resolution | null>(TIER3_CHAIN_BUDGET_MS, budget, () => shared!.result, {
+      startGate: (signal) => {
+        // ADR 2026-09-25 决策 8：K=3 排队期间**不计入 tier3 腿预算**——腿预算从**槽位到手**起计，
+        // 否则被排在后面的调用方会在没打过任何上游的情况下先超时（切歌场景 P50 反而退化）。
+        // 这与另外三条腿「调用即起计」是**两条口径**，故作为显式入口保留，而不是套模板。
+        shared = tier3ResolveShared(song, reason, ctx, signal);
+        return shared.started.then(() => {
+          if (ctx) activeT0 = traceNow();
+        });
+      },
+      // 腿预算再取 min(6s, 解析链总预算的剩余)，于是「试听换完整版」的第二条 tier3 腿只吃剩余额度。
+      // #424：但**解析链总预算是墙钟、照走排队时间**——否则三个槽位被占满时整链会无界等待，
+      // 「链总在 T 毫秒内结算」就不成立了。两条口径各管一层：排队期间预算耗尽时，模块里已挂好的
+      // onBudgetExpire 仍会 abort 在飞源并记「放弃观测」。
+      abandon: {
+        // 腿预算到点 = 「放弃观测」（resolver 里仍在跑的源按 abandoned 记账，#398 决策 6；迟到命中
+        // 丢弃）——它**不硬停源**（硬停源是解析链总预算的语义），故覆盖缺省的 abort。
+        onWallExpire: () => shared!.markAbandoned(),
+        // 解析链总预算耗尽 = 模块缺省的 abort + 追加「放弃观测」（与腿预算耗尽同一语义）。
+        onBudgetExpire: () => shared!.markAbandoned(),
+      },
     });
-    // ADR 2026-09-25 决策 8：K=3 排队期间**不计入 tier3 腿预算**——腿预算从**槽位到手**起计，
-    // 否则被排在后面的调用方会在没打过任何上游的情况下先超时（切歌场景 P50 反而退化）。
-    // #424：但**解析链总预算是墙钟、照走排队时间**——否则三个槽位被占满时整链会无界等待，
-    // 「链总在 T 毫秒内结算」就不成立了。两条口径各管一层。
-    // 腿预算再取 `min(6s, 解析链总预算的剩余)`，于是「试听换完整版」的第二条 tier3 腿只吃剩余额度。
-    const budgetExhausted = (async (): Promise<typeof BUDGET_EXHAUSTED> => {
-      await run.started;
-      if (ctx) activeT0 = traceNow();
-      const legBudgetMs = budget.clamp(TIER3_CHAIN_BUDGET_MS);
-      return new Promise<typeof BUDGET_EXHAUSTED>((resolve) =>
-        setTimeout(() => {
-          // 预算用尽即「放弃观测」：resolver 里仍在跑的源按 abandoned 记账（#398 决策 6）。
-          run.markAbandoned();
-          resolve(BUDGET_EXHAUSTED);
-        }, legBudgetMs),
-      );
-    })();
-    const winner = await Promise.race([run.result, budgetExhausted]);
-    const res = winner === BUDGET_EXHAUSTED ? null : winner;
+    const res = outcome.kind === 'ok' ? outcome.value : null;
     if (ctx) {
       // 排队时间单列在 totalMs 里；tier3Ms 记「腿本身跑了多久」（与 6s 预算同口径）。
       ctx.tier3Ms = traceNow() - (activeT0 || t0);
-      ctx.tier3TimedOut = winner === BUDGET_EXHAUSTED;
+      ctx.tier3TimedOut = outcome.kind !== 'ok';
     }
     if (!res || !res.url?.startsWith('http')) return null;
     // #362：只有 race 获胜、真正被调用方采纳的候选才算「交付」。
@@ -891,8 +965,6 @@ async function tryTier3(
     }
     console.warn(`[tier3] resolver 抛错: ${(e as Error)?.message || e}`);
     return null;
-  } finally {
-    offExpire?.();
   }
 }
 
@@ -940,24 +1012,13 @@ async function trySearchLeg(
   if (song.sourceType === 'local' || song.sourceType === 'soda') return null;
   if (!song.name) return null;
 
-  const wallMs = budget.clamp(SEARCH_LEG_WALL_MS);
-  if (wallMs <= 0) {
-    console.info(`[resolve] 严格搜索腿：解析链总预算已用尽，不发起搜索: 《${song.name}》`);
-    if (ctx) ctx.searchLeg = { sourceId: `search:${song.sourceType}`, ms: 0, outcome: 'skipped' };
-    return null;
-  }
-
-  // 墙的持有者持有 AbortController（与 timedDirectCall / tryTier3 同构）：
-  // 本腿到点或链总预算耗尽都 abort，把「放弃等待」变成真的停掉上游搜索。
-  const controller = new AbortController();
-  const offExpire = budget.onExpire(() => controller.abort());
-  const TIMED_OUT = Symbol('search-leg-timed-out');
-  let timer: ReturnType<typeof setTimeout> | undefined;
   const t0 = ctx ? traceNow() : 0;
   try {
-    const opts: LegOptions = { timeoutMs: wallMs, signal: controller.signal };
-    const outcome = await Promise.race([
-      refreshSongResource(
+    // 墙的持有者持有 AbortController（直连腿 / tier3 腿 / 取证腿共用 runWithLegWall）：
+    // 本腿到点或链总预算耗尽都 abort，把「放弃等待」变成真的停掉上游搜索。
+    const outcome = await runWithLegWall(SEARCH_LEG_WALL_MS, budget, (leg) => {
+      const opts: LegOptions = { timeoutMs: leg.wallMs, signal: leg.signal };
+      return refreshSongResource(
         song,
         {
           // 不提供 readCache（#557）：播放路径在进入搜索腿之前早已查过预取缓存；
@@ -973,22 +1034,21 @@ async function trySearchLeg(
           },
         },
         opts,
-      ),
-      new Promise<typeof TIMED_OUT>((resolve) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          resolve(TIMED_OUT);
-        }, wallMs);
-      }),
-    ]);
-    if (outcome === TIMED_OUT) {
+      );
+    });
+    if (outcome.kind === 'skipped') {
+      console.info(`[resolve] 严格搜索腿：解析链总预算已用尽，不发起搜索: 《${song.name}》`);
+      if (ctx) ctx.searchLeg = { sourceId: `search:${song.sourceType}`, ms: 0, outcome: 'skipped' };
+      return null;
+    }
+    if (outcome.kind === 'timed-out') {
       if (ctx) {
         ctx.searchLeg = { sourceId: `search:${song.sourceType}`, ms: traceNow() - t0, outcome: 'error', errorClass: 'timeout' };
       }
-      console.warn(`[resolve] 严格搜索腿超过 ${wallMs}ms 墙钟上限: 《${song.name}》`);
+      console.warn(`[resolve] 严格搜索腿超过 ${outcome.wallMs}ms 墙钟上限: 《${song.name}》`);
       return null;
     }
-    const resource = outcome;
+    const resource = outcome.value;
     if (ctx) {
       ctx.searchLeg = {
         sourceId: `search:${song.sourceType}`,
@@ -1006,9 +1066,6 @@ async function trySearchLeg(
     }
     console.warn(`[resolve] 严格搜索腿失败: 《${song.name}》${(e as Error)?.message || e}`);
     return null;
-  } finally {
-    if (timer) clearTimeout(timer);
-    offExpire();
   }
 }
 
@@ -1271,23 +1328,24 @@ async function validateDirectLeg(
   ctx: TraceCtx | null,
   budget: ResolutionBudget,
 ): Promise<{ nonFull: boolean }> {
-  if (!directValidator) return { nonFull: false };
+  const validator = directValidator;
+  if (!validator) return { nonFull: false };
   if (client.resolveUrlInfo) return { nonFull: false };
   if (!(typeof song.duration === 'number' && song.duration > 0)) return { nonFull: false };
-  // #424：取证是直连腿的一部分，同样取 min(本腿墙, 总预算剩余)；总预算已尽则跳过（fail-open）。
-  const timeoutMs = budget.clamp(DIRECT_VALIDATION_TIMEOUT_MS);
-  if (timeoutMs <= 0) {
+  // #424 / #593：取证是直连腿的一部分，同样取 min(本腿墙, 总预算剩余)；总预算已尽则跳过（fail-open）。
+  // 墙由取证器自己持有（transport 的 timeoutMs，见 fetchAudioHead），故 enforce 为 run：模块只给
+  // clamp / 预算 abort / 信号，不另起一个等额 timer 与它抢结算（理由见 runWithLegWall 的注释）。
+  const outcome = await runWithLegWall(
+    DIRECT_VALIDATION_TIMEOUT_MS,
+    budget,
+    (leg) => validator(song, url, { timeoutMs: leg.wallMs, signal: leg.signal }),
+    { enforce: 'run' },
+  );
+  if (outcome.kind !== 'ok') {
     console.info(`[player] 《${song.name}》解析链总预算已用尽，跳过直连腿时长取证（fail-open）`);
     return { nonFull: false };
   }
-  const controller = new AbortController();
-  const offExpire = budget.onExpire(() => controller.abort());
-  let result: DirectValidationResult;
-  try {
-    result = await directValidator(song, url, { timeoutMs, signal: controller.signal });
-  } finally {
-    offExpire();
-  }
+  const result = outcome.value;
   if (ctx) ctx.validateMs = result.validateMs;
   if (result.nonFull) console.info(`[player] 《${song.name}》直连腿取证为试听片段: ${result.reason ?? ''}`);
   return { nonFull: result.nonFull };

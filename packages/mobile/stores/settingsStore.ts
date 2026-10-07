@@ -31,6 +31,11 @@ interface SettingsState {
   tier3Subscriptions: Tier3Subscription[];
   /** 更新下载通道（#262/#263）：'auto' 测速择优，或指定源 id；镜像优先、直连垫底 */
   updateChannel: string;
+  /**
+   * 用户已「叉掉」的更新版本号（#579）：同版本不再弹窗，下个版本仍弹。
+   * 粒度 = 版本号字符串（不含 v 前缀，与 checkLatestRelease 的 version 同形）
+   */
+  dismissedUpdateVersion: string | null;
   /** 主题模式（#173）：system 跟随系统深浅色，light/dark 手动指定 */
   themeMode: ThemeMode;
   /** 失败即跳（#385）：播放终局失败时自动跳下一首；false = 失败即停、等用户处理。默认 true 保持现状 */
@@ -44,6 +49,7 @@ interface SettingsState {
   setTier3Enabled: (enabled: boolean) => void;
   setTier3Subscriptions: (subscriptions: Tier3Subscription[]) => void;
   setUpdateChannel: (channel: string) => void;
+  setDismissedUpdateVersion: (version: string | null) => void;
   setThemeMode: (mode: ThemeMode) => void;
   setAutoSkipOnError: (enabled: boolean) => void;
   setDevMode: (enabled: boolean) => void;
@@ -59,6 +65,7 @@ export const useSettingsStore = create<SettingsState>()(
       tier3Enabled: false,
       tier3Subscriptions: [],
       updateChannel: 'auto',
+      dismissedUpdateVersion: null,
       themeMode: 'system',
       autoSkipOnError: true,
       devMode: false,
@@ -69,6 +76,7 @@ export const useSettingsStore = create<SettingsState>()(
       setTier3Enabled: (enabled) => setCoreTier3Enabled(enabled),
       setTier3Subscriptions: (subscriptions) => setCoreTier3Subscriptions(subscriptions),
       setUpdateChannel: (channel) => set({ updateChannel: channel }),
+      setDismissedUpdateVersion: (version) => set({ dismissedUpdateVersion: version }),
       setThemeMode: (mode) => set({ themeMode: mode }),
       setAutoSkipOnError: (enabled) => set({ autoSkipOnError: enabled }),
       setDevMode: (enabled) => set({ devMode: enabled }),

@@ -19,7 +19,7 @@
 
 - **Before:**
   **After:**
-- [ ] 真机 / UI 有可视证据 → 已附图（或「未做 + 一句原因」）
+- [ ] 真机 / UI 有可视证据 → 已附图（或「未做 + 一句原因」），并写明证据来自哪一层（真 Electron / 打包产物 / Chromium+stub / 真机 + 哪个 runtime）
 - [ ] 行为 / 命令 / 架构有变化 → 已同步 `AGENTS.md` / `GLOSSARY.md` / 相关 ADR
 
 ## Merge Danger

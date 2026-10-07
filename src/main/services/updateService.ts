@@ -45,6 +45,15 @@ const DOWNLOAD_FIRST_BYTE_MS = 25000;
 const DOWNLOAD_STALL_MS = 30000;
 
 /**
+ * 启动检查（#579）：进入应用后自动检查一次。
+ * - 超时取 8s，比设置页手动检查的默认 10s 短：启动这次不该与首屏请求抢带宽
+ * - 首帧后延时 3s 再触发，避开首屏请求高峰
+ * 依据：ADR `2026-10-05-update-prompt-and-silent-desktop-download.md` 决策 1 与其「后果」段。
+ */
+export const STARTUP_CHECK_TIMEOUT_MS = 8000;
+export const STARTUP_FLOW_DELAY_MS = 3000;
+
+/**
  * 平台兜底资产名（#350）：官方 feed（latest.yml）没给出资产名时用它拼直链。
  * 必须与 electron-builder.yml 里声明的产物名逐字一致——Windows 曾用默认模板
  * `MPlayer Setup 1.8.1.exe`（空格），electron-builder 写进 feed 时改成 `MPlayer-Setup-1.8.1.exe`、
@@ -76,6 +85,13 @@ export class UpdateService {
   private activeSource: UpdateSourceDef | null = null;
   /** 最近一次检查拿到的官方资产文件名（latest-*.yml files[].url） */
   private lastAssetFiles: string[] = [];
+
+  /**
+   * 已下载的更新产物路径（#579），取自 `update-downloaded` 事件的 `downloadedFile`。
+   * 只用于「是否已下好、能不能装」的判断；实际安装由 `autoUpdater.quitAndInstall` 负责
+   * （它自己持有 `installerPath`，不读这里）。
+   */
+  private downloadedFiles: string[] = [];
 
   /** probe 结果缓存：id → 延迟 ms / null（失败） */
   private probeResults: UpdateLatencyMap = new Map();
@@ -340,8 +356,15 @@ export class UpdateService {
         );
       };
 
-      const onDownloaded = () => {
+      /**
+       * 产物路径来自**事件本身**（`UpdateDownloadedEvent.downloadedFile`），而不是
+       * `downloadUpdate()` 的 resolve 值：两者时序不保证，而启动流程紧接着就要用这个路径
+       * （#579）。绑事件既不引入竞态，也不会因为 promise 的 resolve 迟到而卡住下载流程。
+       */
+      const onDownloaded = (info?: { downloadedFile?: string }) => {
         clearTimeout(watchdog);
+        // 记下产物路径，供「能不能装」的判断用（实际安装路径由 electron-updater 自己持有）
+        if (info?.downloadedFile) this.downloadedFiles = [info.downloadedFile];
         this.updateStatus({ status: 'downloaded' });
         resolve();
       };
@@ -480,6 +503,57 @@ export class UpdateService {
     }
   }
 
+  /**
+   * 启动自动流程（#579 / ADR 决策 1、4）：检查 → 有新版则**静默后台下载**。
+   *
+   * 下载到这里就结束：状态推到 `downloaded` 后由渲染层弹确认框，**用户确认才退出安装**
+   * （见 `installDownloadedUpdate`）。启动流程不得自行退出应用。
+   *
+   * **全程静默**：任何一步失败都只记日志并返回，绝不 throw、不弹窗、不阻断启动。
+   * 单飞由 `checkForUpdates` / `downloadUpdate` 各自的守卫保证。
+   */
+  async runStartupFlow(opts?: { checkTimeoutMs?: number }): Promise<void> {
+    const timeoutMs = opts?.checkTimeoutMs ?? STARTUP_CHECK_TIMEOUT_MS;
+    try {
+      const status = await this.checkForUpdates(timeoutMs);
+      if (status.status !== 'available') return;
+      await this.downloadUpdate();
+    } catch (err: any) {
+      console.warn(`[update] 启动检查流程失败（静默）：${err?.message ?? err}`);
+    }
+  }
+
+  /** 是否已拿到可安装的本地安装包 */
+  hasDownloadedInstaller(): boolean {
+    return this.downloadedFiles.length > 0;
+  }
+
+  /**
+   * 退出应用并安装已下载的更新，装完自动重启（#579 / ADR 决策 4、5）。
+   *
+   * 语义 = `quitAndInstall(true, true)`：
+   * - `isSilent = true` → 给 NSIS 传 `/S`。**静默是有前提的**：用户已经在这个应用内的
+   *   确认框里点过「立即安装并重启」，所以不需要安装器再问一遍。
+   * - `isForceRunAfter = true` → 传 `--force-run`，装完自动把应用拉起来。
+   *
+   * 退出由 electron-updater 做：它先 spawn 安装器（带 `--updated`，安装器因此不会弹
+   * 「应用正在运行」提示、直接接管），再 `app.quit()`；`install()` 内部置
+   * `quitAndInstallCalled`，所以退出时 `autoInstallOnAppQuit` 不会再装第二次。
+   */
+  installDownloadedUpdate(): { ok: boolean; error?: string } {
+    if (this.status.status !== 'downloaded' && !this.hasDownloadedInstaller()) {
+      return { ok: false, error: '更新尚未下载完成' };
+    }
+    autoUpdater.quitAndInstall(true, true);
+    return { ok: true };
+  }
+
+  /**
+   * 立即退出并安装（`--updated` 路径的裸封装，不带参数）。
+   *
+   * 设置页与启动流程都不用这条——它们走 `installDownloadedUpdate()`（明确 `/S` + 重启）。
+   * 保留是为了将来做「可见安装向导」的入口：那样会弹 NSIS 自己的界面。
+   */
   quitAndInstall(): void {
     autoUpdater.quitAndInstall();
   }

@@ -149,7 +149,10 @@ export function registerUpdateIpc(mainWindow: BrowserWindow): void {
   registerIpcHandler('update:download', () => updateService.downloadUpdate());
   // 浏览器下载模式（#262 联调定案）：把获胜通道的资产直链交给系统浏览器
   registerIpcHandler('update:downloadInBrowser', async () => updateService.openDownloadInBrowser());
-  registerIpcHandlerSimple('update:install', () => updateService.quitAndInstall());
+  // 启动检查可能早于渲染层订阅（#579）：渲染层首帧用这条拉一次快照，之后才只认 update:status push
+  registerIpcHandlerSimple('update:getStatus', () => updateService.getStatus());
+  // 退出应用并静默安装已下载的更新，装完自动重启（#579）：用户已在应用内确认框点过确认
+  registerIpcHandler('update:install', async () => updateService.installDownloadedUpdate());
   registerIpcHandlerSimple('update:getVersion', () => updateService.getVersion());
   // 更新通道（#262）：源清单/当前选择 + 测速；setChannel 内部校验非法值
   registerIpcHandlerSimple('update:getChannels', async () => ({

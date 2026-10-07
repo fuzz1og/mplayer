@@ -3,6 +3,7 @@ import {
   createPlaylistSnapshot,
   writeSongsToPlaylist,
   DEFAULT_PLAYLIST_CAPACITY,
+  importDepsFor as coreImportDepsFor,
 } from '@mplayer/core';
 import type {
   NameConflictDecisions,
@@ -151,29 +152,14 @@ export function exportSongsToLocalPlaylist(
 }
 
 /**
- * 移动端链接导入的写入依赖（#556 评审 B6）。
+ * 移动端链接导入的写入依赖（#556 评审 B6 抽出；#594 装配下沉 core）。
  *
- * 此前这段直接写在 `PlaylistImportSheet` 里：`await writer.add(...)` 之后**丢掉
- * result 返 void**，于是宿主（本地 store）明明丢歌，core 也按「void = 整批成功」
- * 记账（`playlistImport.ts` 的批量腿）。桌面 `importService.importDepsFor` 早已
- * 回报 `result.added`；这里抽出同形的移动版，带行为测试，由弹窗注入。
+ * 装配本体在 core `importDepsFor`——移动端**不再持有第二份**：这里只把
+ * 「默认 writer」接上（缺省 writer 每次调用读 `usePlaylistStore.getState()`，
+ * 见 `createMobilePlaylistWriter`）。口径（默认并入、回报真实新增数）见 core 注释。
  */
 export function createMobileImportDeps(
   writer: MobilePlaylistWriter = createMobilePlaylistWriter(),
 ): PlaylistImportDeps {
-  return {
-    // 不传 resolveNameConflict：**导入是无人值守的整批操作**，跨源同名走 core 的
-    // 「默认并入」——与桌面 importService.importDepsFor 同一口径（#560 复核后确认这条
-    // 双端一致是**有意的**，不是缺口；批量弹窗那条腿才是缺口，已接上）。
-    addSong: async (playlistId, song) => {
-      const result = await writer.add({ playlistId, songs: [song] });
-      if (!result.ok) throw new Error(result.error || '添加失败');
-      return result.added;
-    },
-    addSongs: async (playlistId, songs) => {
-      const result = await writer.add({ playlistId, songs });
-      if (!result.ok) throw new Error(result.error || '添加失败');
-      return result.added;
-    },
-  };
+  return coreImportDepsFor(writer);
 }

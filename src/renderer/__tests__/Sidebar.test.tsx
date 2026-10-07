@@ -58,4 +58,20 @@ describe('Sidebar', () => {
     render(<Sidebar {...defaultProps} />);
     expect(screen.getByText('设置')).toBeInTheDocument();
   });
+
+  // #579：徽标挂在左下「设置」项旁
+  describe('更新徽标（#579）', () => {
+    it('updateAvailable 为 true 时设置项出现徽标且带可访问名', () => {
+      render(<Sidebar {...defaultProps} updateAvailable />);
+      expect(screen.getByTestId('update-badge')).toBeInTheDocument();
+      expect(screen.getByLabelText('设置（有可用更新）')).toBeInTheDocument();
+    });
+
+    it('updateAvailable 为 false（默认）时不渲染徽标', () => {
+      render(<Sidebar {...defaultProps} />);
+      expect(screen.queryByTestId('update-badge')).not.toBeInTheDocument();
+      // 无徽标时不加 aria-label，可访问名退回按钮文本
+      expect(screen.getByRole('button', { name: '设置' })).toBeInTheDocument();
+    });
+  });
 });
