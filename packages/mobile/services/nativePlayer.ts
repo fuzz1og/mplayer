@@ -9,6 +9,7 @@ import {
   type LoopMode,
   type NativePlayerEvents,
   type NeedReason,
+  type PatchOutcome,
   type PatchQueueResult,
   type PlaybackErrorEvent,
   type PlayerState,
@@ -186,8 +187,9 @@ export function initNativePlayer(next: NativePlayerHooks): void {
 
   NativePlayer.addListener('queueEnded', (event) => {
     hooks.onQueueEnded?.(event);
-    // windowHole = 用户主动 next 踩空（原生已 pause 并要歌）→ 按 HOLE 补：
-    // 零候选时必须回执原生，否则 pendingUserNext 永远悬着（#563）
+    // windowHole = 用户主动 next 踩空（原生已 pause 并要歌）→ 按 HOLE 补。
+    // #591：第二个参数只是**诊断标签**（原 `NeedReason`），不再决定回执/结算走哪条；
+    // 零候选是否会终结由原生按 `outcome: 'empty'` 判定。
     if (event.reason !== 'exhausted') {
       void feedWindow(undefined, event.reason === 'windowHole' ? 'hole' : undefined);
     }
@@ -308,6 +310,23 @@ function nativeAheadKeys(state: PlayerState | null): Set<string> {
   }
   const index = Math.min(Math.max(state?.index ?? 0, 0), tracks.length - 1);
   return new Set(tracks.slice(index).map((track) => track.key));
+}
+
+/**
+ * 「已经在原生 store 里」的 key 集合（#591 的 outcome 判定用）——**全量**，不按位置切片。
+ *
+ * 与 [nativeAheadKeys] 的区别是刻意的：补窗的「要不要投喂」看的是**当前位置之后**缺什么
+ * （绕回队首的候选必须重新投喂）；而 outcome 的 `'deduped'` 看的是「投出去的候选是不是
+ * 全已在原生手里」——列表循环/随机的绕回候选恰恰排在当前曲**之前**，按位置切片会漏判成
+ * `'grown'`，让 #563 的「末项 + 零新增」重新退回「意图悬空、每 2s 空转」。
+ */
+function nativeStoreKeys(state: PlayerState | null): Set<string> {
+  const tracks = state?.tracks;
+  if (!tracks || tracks.length === 0) {
+    // 快照里没有队列（服务刚起/未对账）→ 退回镜像全集（与 nativeAheadKeys 同口径）
+    return new Set(nativeMirror.map((entry) => entry.key));
+  }
+  return new Set(tracks.map((track) => track.key));
 }
 
 function safeState(): PlayerState | null {
@@ -602,22 +621,46 @@ export async function feedWindow(need?: number, reason?: NeedReason): Promise<vo
 
   const append: Track[] = settled.filter((track): track is Track => !!track);
 
+  // #591 结算契约：outcome 由 JS 如实上报，原生只读它判定终局。用**投喂前**的原生全量
+  // 快照（不是位置切片）比对「候选是不是已在原生手里」——这是原生无论如何数 `addedCount`
+  // 都看不见的区分（零候选 vs 稳态绕回）。
+  const storeKeys = nativeStoreKeys(nativeStateNow);
+
   if (append.length === 0) {
-    // HOLE 补窗零候选（解析失败 / 全在飞 / 全被去重）也必须回执原生（#563）：
-    // 否则待决的「用户下一首」悬着、播放停在暂停，LOW_WATER 每 2s 再要一轮。
-    // LOW_WATER 的空轮不打扰原生（那只是稳态没候选），只回执 HOLE。
-    if (reason === 'hole' && !plannedInFlight) await acknowledgeEmptyRefill();
+    // 零候选：本轮**一个候选都没投出**。并发闸门是契约的一部分——若计划里的候选正被别的
+    // 补窗轮解析（plannedInFlight），那一轮会自己给出 `grown`/`deduped`（或它也报 `empty`）；
+    // 本轮抢报 `empty` 会把「还在等一轮」误判成终局。闸门外的零候选一律如实上报。
+    console.log(
+      `[player] 补窗零候选 mode=${useSettingsStore.getState().playMode} reason=${reason ?? '-'} ` +
+        `计划=[${wantedIndexes.join(',')}] inFlight=${plannedInFlight}`
+    );
+    if (plannedInFlight) return;
+    try {
+      await NP.patchQueue({
+        baseRevision: nativeStateNow?.revision ?? 0,
+        outcome: 'empty',
+      });
+    } catch {
+      // 上报失败不阻塞：原生仍有 hole 超时 / 水位兜底
+    }
     return;
   }
 
-  // T9 取证：窗口定序的计划 vs 实投（顺序/随机/绕回都能从这一行看出来）
+  // `append` 全已在原生 store 里 = 稳态绕回（去重后零新增）→ 本轮唯一的终局信号；
+  // 只要有一条是新项就是稳态推进，原生不做终局判定。
+  const outcome: PatchOutcome = append.every((track) => storeKeys.has(track.meta.key))
+    ? 'deduped'
+    : 'grown';
+
+  // T9 取证：窗口定序的计划 vs 实投 vs 结算结论（顺序/随机/绕回都能从这一行看出来）
   console.log(
-    `[player] 补窗 mode=${useSettingsStore.getState().playMode} 计划=[${wantedIndexes.join(',')}] 实投=${append.length}`
+    `[player] 补窗 mode=${useSettingsStore.getState().playMode} reason=${reason ?? '-'} ` +
+      `计划=[${wantedIndexes.join(',')}] 实投=${append.length} outcome=${outcome}`
   );
 
   const revision = nativeStateNow?.revision ?? 0;
   try {
-    const result = await NP.patchQueue({ baseRevision: revision, append });
+    const result = await NP.patchQueue({ baseRevision: revision, append, outcome });
     if (result.stale) {
       // 原生 revision 已变（例如刚 loadQueue）→ 丢弃本轮，下一轮水位事件自然重来
       return;
@@ -629,22 +672,6 @@ export async function feedWindow(need?: number, reason?: NeedReason): Promise<vo
     });
   } catch {
     // 补窗失败不影响播放：原生会在缓冲边界停下并等下一次补窗
-  }
-}
-
-/**
- * 回执原生「这一轮 HOLE 补窗零候选」（#563）。
- *
- * 只发一次、stale 就丢：revision 变了说明别的补丁已经落地，那条路径自己会解这个意图。
- * 失败也不阻塞——原生仍有 hole 超时/水位兜底。
- */
-async function acknowledgeEmptyRefill(): Promise<void> {
-  const NP = NativePlayer;
-  if (!NP) return;
-  try {
-    await NP.patchQueue({ baseRevision: safeState()?.revision ?? 0, refillEmpty: true });
-  } catch {
-    // 回执失败不阻塞：原生仍有 hole 超时兜底
   }
 }
 

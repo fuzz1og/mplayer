@@ -110,13 +110,13 @@ class PatchQueueInput : Record {
   var insertAfterCurrent: TrackInput? = null
 
   /**
-   * #563：JS 显式回报「这一轮 HOLE 补窗零候选」。
+   * #591：本轮补窗的**结算结论**（`"grown"` / `"deduped"` / `"empty"`，见 [SettleOutcome]）。
    *
-   * 与「append 传空数组」的区别是**语义显式**：原生据此把待决的「用户下一首」
-   * 落成确定结局（绕回已有项 / 诚实结束），而不是把它丢掉。
+   * 原生只读它结算终局（原先的 `refillEmpty` 布尔已退场：它是三值域里 `"empty"` 的一个
+   * 投影，丢掉了「去重后的零新增」与「压根没投」的区分）。null = 调用方没做结算。
    */
   @Field
-  var refillEmpty: Boolean = false
+  var outcome: String? = null
 }
 
 // ------------------------------------------------------------------ 异常
@@ -191,7 +191,7 @@ class PlayerModule : Module() {
         append = input.append?.map { it.toRecord() },
         upsert = input.upsert?.map { it.toRecord() },
         removeKeys = input.removeKeys,
-        refillEmpty = input.refillEmpty,
+        outcome = input.outcome,
         insertAfterCurrent = input.insertAfterCurrent?.toRecord()
       )
     }

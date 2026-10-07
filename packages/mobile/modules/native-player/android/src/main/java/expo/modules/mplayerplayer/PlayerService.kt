@@ -324,8 +324,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     append: List<TrackRecord>?,
     upsert: List<TrackRecord>?,
     removeKeys: List<String>?,
-    /** #563：JS 显式回报「这一轮 HOLE 补窗零候选」 */
-    refillEmpty: Boolean = false,
+    /** #591：JS 显式上报的本轮结算结论（[SettleOutcome]）；null = 调用方没做结算。 */
+    outcome: String? = null,
     insertAfterCurrent: TrackRecord? = null
   ): Map<String, Any?> {
     val ctrl = controller ?: return mapOf("accepted" to false, "revision" to 0L, "stale" to false)
@@ -338,17 +338,24 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     }
 
     val beforeKeys = store.all().map { it.key }.toHashSet()
-    val outcome = store.patch(baseRevision, append, upsert, removeKeys)
-    if (!outcome.accepted) {
-      return mapOf("accepted" to false, "revision" to outcome.revision, "stale" to outcome.stale)
+    val patchResult = store.patch(baseRevision, append, upsert, removeKeys)
+    if (!patchResult.accepted) {
+      return mapOf("accepted" to false, "revision" to patchResult.revision, "stale" to patchResult.stale)
     }
+
+    // #591：结算的入参前置条件（'deduped' 必须真投了候选；'empty' 必须一个都没投）。
+    // 非法组合**只拒绝结算**（补丁照常落地，不丢数据）——原 `refillEmpty` 留下的语义空洞
+    // 就藏在这种「同一份入参在两条分支里含义不同」的地方，这里让它无处可藏：调用方标注错，
+    // 原生记一条 warn 并按「未结算」处理，绝不替它猜。
+    val settled = settleOutcomeOf(outcome, append, upsert)
 
     // store 里已经去重过：这里只按「补丁前是否已存在」区分「新增」与「替换」
     val newItems = ArrayList<TrackRecord>()
     append.orEmpty().forEach { if (!beforeKeys.contains(it.key)) newItems.add(it) }
     upsert.orEmpty().forEach { if (!beforeKeys.contains(it.key)) newItems.add(it) }
     val replacedUpserts = upsert.orEmpty().filter { beforeKeys.contains(it.key) }
-    // #563：本次补丁**真正新增**的条数（store 去重后的权威事实）——零新增才走绕回/终局分支。
+    // 本次补丁**真正新增**的条数（store 去重后的权威事实）。#591 之后它只作诊断
+    // （结算由 JS 的 outcome 决定）——不再是终局判据，但仍如实记录在结算日志里。
     val addedCount = newItems.size
 
     main.post {
@@ -394,56 +401,60 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
         ctrl.player.playWhenReady = userWantsPlay
       }
 
-      // 用户在窗口边界按的「下一首」：按**补丁后**的实际结果给出确定结局（#563）。
-      // 旧实现在队尾零新增时把 pendingUserNext 丢掉就完事：既没推进也没结束，
-      // 用户看到「按了下一首，音乐停在暂停」，LOW_WATER 还会每 2s 重新要一轮。
+      // ── 补窗结算（#591 契约）────────────────────────────────────────────
+      // outcome 是 JS 的显式入参，原生**只读它**：不再数 `addedCount` 推断「零新增算不算终局」，
+      // 也不再看 `reason`（已退化为诊断标签）。原先的三条分支收拢成两条：
+      //   'deduped'：候选全被去重 → 本轮唯一的终局信号（绕回 / 诚实结束 / 只闩水位）
+      //   'empty'  ：一个候选都没投出 → 终局只对「用户踩空」有意义
+      //   'grown' / 未结算：有新增（或清理轮）→ 不做终局判定，只在几何位置上维持既有推进。
       if (pendingUserNext && ctrl.player.mediaItemCount > 0) {
         pendingUserNext = false
         val at = ctrl.currentIndex()
         if (at < ctrl.player.mediaItemCount - 1) {
+          // 队尾还有格（'grown' 的新项就追加在当前之后）→ 推进，与旧行为一致
           ctrl.player.seekToNextMediaItem()
           ctrl.player.playWhenReady = userWantsPlay
           clearExhausted()
           Log.i(TAG, "pendingUserNext → advanced to index=${at + 1}/${ctrl.player.mediaItemCount}")
         } else {
-          // 零新增时，候选可能已在窗口别处（列表循环绕回，排在当前曲之前）→ 切过去是正当的
-          val existing = if (addedCount == 0) firstExistingAppendIndex(append) else -1
+          // 末项：只有「投出的候选全已在 store 里」（'deduped'）才可能绕回——列表循环/随机
+          // 会把排在当前曲**之前**的歌重新规划出来。'empty' 没有候选可绕。
+          val existing = if (settled == SettleOutcome.DEDUPED) firstExistingAppendIndex(append) else -1
           if (existing >= 0) {
             store.moveTo(existing)
             ctrl.player.seekTo(existing, 0L)
             ctrl.player.playWhenReady = userWantsPlay
             clearExhausted()
-            Log.i(TAG, "pendingUserNext → wrapped to existing index=$existing (added=0)")
+            Log.i(
+              TAG,
+              "pendingUserNext → wrapped to existing index=$existing (outcome=deduped added=$addedCount)"
+            )
           } else {
             // 真的没有可推进项 → 诚实结束，并闩住当前 (revision, index)
             finishAtTail(ctrl)
           }
         }
-      } else if (refillEmpty && !isExhaustedAtCurrent() && ctrl.player.mediaItemCount > 0 &&
+      } else if ((settled == SettleOutcome.DEDUPED || settled == SettleOutcome.EMPTY) &&
+        !isExhaustedAtCurrent() && ctrl.player.mediaItemCount > 0 &&
         ctrl.currentIndex() >= ctrl.player.mediaItemCount - 1
       ) {
-        // 没有未决意图（已被别处清掉）但 JS 明确回报零候选 → 同样在队尾诚实结束
-        finishAtTail(ctrl)
-      } else if (!append.isNullOrEmpty() && addedCount == 0 && !isExhaustedAtCurrent() &&
-        ctrl.player.mediaItemCount > 0 && ctrl.currentIndex() >= ctrl.player.mediaItemCount - 1
-      ) {
-        // #574：**稳态水位**这条路的终止条件。整个歌单都已经在原生队列里、当前又停在窗口末项时，
-        // JS 的计划只能绕回到「已在队列里」的歌（列表循环/随机的绕回）→ store.patch 去重后新增
-        // 恒为 0；而它既不是 pendingUserNext（用户没按下一首）也不是 refillEmpty（HOLE 回执），
-        // 旧实现于是没有任何终止条件：LOW_WATER 每 ~2s 重问一次（真机实测 25s / 13 次 headless）。
-        // 这里只对「JS 送了候选、末项却零新增」这一**轮内事实**上闩：不暂停、不发 QUEUE_ENDED
-        // ——播放没有结束，曲末仍由原生 repeatMode 绕回；闩按 (revision,index) 失效，任何真正的
-        // 新增补丁 / 切歌 / 显式 play·next·prev 都会自动解开（见 isExhaustedAtCurrent）。
+        // #574 的稳态水位终止条件，现在由 outcome 驱动：整个歌单都已在原生队列里、当前又停在
+        // 窗口末项时，JS 的计划只能绕回到「已在队列里」的歌（'deduped'），或压根规划不出候选
+        // （'empty'）——旧实现只有 #574 补的那条「append 非空且零新增」特例有终止条件，其余
+        // 每 ~2s 重问一次（真机实测 25s / 13 次 headless）。这里只对**本轮事实**上闩：不暂停、
+        // 不发 QUEUE_ENDED——播放没有结束，曲末仍由原生 repeatMode 绕回；闩按 (revision,index)
+        // 失效，任何真正的切歌 / 显式 play·next·prev 都会自动解开（见 isExhaustedAtCurrent）。
         markExhausted()
         Log.i(
           TAG,
-          "no growth at window tail (revision=${store.currentRevision()} index=${ctrl.currentIndex()}) → latch LOW_WATER"
+          "no growth at window tail (outcome=$settled added=$addedCount " +
+            "revision=${store.currentRevision()} index=${ctrl.currentIndex()}) → latch LOW_WATER"
         )
       }
 
       // 补窗到位 + 之前停在缓冲边界 + 用户意图仍是「想播」 → 续播（T8）。
-      // refillEmpty 的零候选回执不算「补窗到位」，不能借它触发「续播」。
-      if (userWantsPlay && !refillEmpty && ctrl.player.playbackState == Player.STATE_ENDED && ctrl.player.mediaItemCount > 0) {
+      // 'empty'（一个候选都没投出）不算「补窗到位」，不能借它触发「续播」。
+      if (userWantsPlay && settled != SettleOutcome.EMPTY && ctrl.player.playbackState == Player.STATE_ENDED && ctrl.player.mediaItemCount > 0) {
         ctrl.player.seekTo(Math.min(store.currentIndex(), ctrl.player.mediaItemCount - 1), 0L)
         ctrl.player.play()
       }
@@ -452,7 +463,38 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
     PrefetchBridge.onTracksPatched()
     persist()
-    return mapOf("accepted" to true, "revision" to outcome.revision, "stale" to false)
+    return mapOf("accepted" to true, "revision" to patchResult.revision, "stale" to false)
+  }
+
+  /**
+   * #591：结算入参的**前置条件**校验（契约的一部分）。
+   *
+   * 合法组合：`'deduped'` 必须真投了候选（append/upsert 非空）；`'empty'` 必须一个都没投；
+   * `'grown'` 不额外约束；`null` = 调用方没做结算。非法组合**只拒绝结算**（补丁照常落地，
+   * 不丢数据），返回 null 并按「未结算」处理，同时记一条 warn —— 标注错是调用方的责任，
+   * 原生不再替它二次校验（那正是旧 `refillEmpty` 的空洞来源）。
+   */
+  private fun settleOutcomeOf(
+    outcome: String?,
+    append: List<TrackRecord>?,
+    upsert: List<TrackRecord>?
+  ): String? {
+    if (outcome == null) return null
+    val hasCandidates = !append.isNullOrEmpty() || !upsert.isNullOrEmpty()
+    val legal = when (outcome) {
+      SettleOutcome.DEDUPED -> hasCandidates
+      SettleOutcome.EMPTY -> !hasCandidates
+      SettleOutcome.GROWN -> true
+      else -> false
+    }
+    if (!legal) {
+      Log.w(
+        TAG,
+        "patchQueue: illegal outcome=$outcome (append=${append?.size ?: 0} upsert=${upsert?.size ?: 0}) → 不结算"
+      )
+      return null
+    }
+    return outcome
   }
 
   /**
