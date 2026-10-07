@@ -412,3 +412,146 @@ describe('歌词侧车取词分派（core planLyricsFetch 单点）', () => {
     expect(musicApi.searchSongsRouted).toHaveBeenCalled();
   });
 });
+
+/**
+ * #575：内嵌封面按**降级链 + 字节上限**取图。这里断言的是可指认的**请求 URL 序列**
+ * 与最终写进文件的封面体积——不是「大概降过档」。
+ *
+ * 真机量级（#575）：源图恰好 600×600 PNG 的资产上，640 档 = 492,501 B（等于原图），
+ * 320 档 = 168,453 B；上限 192 KB 落在两者之间。
+ */
+describe('内嵌封面自适应档位（#575：640 → 320，按字节上限降级）', () => {
+  const THRESHOLD = 192 * 1024;
+  const COVER = 'https://p2.music.126.net/abc.jpg';
+  const URL_640 = COVER + '?param=640y640';
+  const URL_320 = COVER + '?param=320y320';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useSettingsStore.setState({ downloadDirUri: '' });
+    useDownloadStore.setState({ items: [] });
+    fsMocks.binaryWrites.length = 0;
+    fsMocks.stringWrites.length = 0;
+    fsMocks.moves.length = 0;
+    fsMocks.bytesError.value = false;
+    // 可写 MP3（ID3v2.3 头）：确保走 writeMetadata 的 id3 分支
+    fsMocks.headerBytes = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0, 0, 0, 0]);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** 记录请求顺序；handler 按 URL / 第几次请求决定响应 */
+  function stubFetch(handler: (url: string, callIndex: number) => Response | Promise<Response>): string[] {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: unknown) => {
+        calls.push(String(url));
+        return handler(String(url), calls.length - 1);
+      })
+    );
+    return calls;
+  }
+
+  const body = (n: number) =>
+    new Response(new Uint8Array(n), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+
+  /** 写回文件是否含 APIC 帧（取封面失败时只写文本帧） */
+  function apicWritten(): boolean {
+    const written = fsMocks.binaryWrites[0]?.data;
+    if (!written) return false;
+    const head = Array.from(written.slice(0, 4096))
+      .map((b) => String.fromCharCode(b))
+      .join('');
+    return head.includes('APIC');
+  }
+
+  /** 写回文件体积 ≈ 音频 + 文本帧 + 采用的那份封面（用来指认「用的是哪一档」） */
+  const writtenBytes = () => fsMocks.binaryWrites[0]?.data.length ?? 0;
+
+  it('大图：先请求 640，超上限后降 320，最终嵌入 320 档（#575 实测 492,501 → 168,453 B）', async () => {
+    const calls = stubFetch((url) => (url === URL_640 ? body(492_501) : body(168_453)));
+
+    await downloadSong(makeSong({ cover: COVER }) as any);
+
+    expect(calls).toEqual([URL_640, URL_320]);
+    expect(apicWritten()).toBe(true);
+    // 写回体积 ≈ 168 KB；若 640 档（492 KB）被采用，会 > THRESHOLD
+    expect(writtenBytes()).toBeGreaterThan(100_000);
+    expect(writtenBytes()).toBeLessThan(THRESHOLD);
+  });
+
+  it('小图：640 档已在上限内 → 只请求 640，不降档', async () => {
+    const calls = stubFetch(() => body(4_096));
+
+    await downloadSong(makeSong({ cover: COVER }) as any);
+
+    expect(calls).toEqual([URL_640]);
+    expect(apicWritten()).toBe(true);
+  });
+
+  it('全部超阈值：请求到链尾，采用链中最小的一份', async () => {
+    const calls = stubFetch((url) => (url === URL_640 ? body(196_609) : body(250_000)));
+
+    await downloadSong(makeSong({ cover: COVER }) as any);
+
+    expect(calls).toEqual([URL_640, URL_320]);
+    // 采用 320 档（250 KB），不是 640 档（196,609 B）
+    expect(apicWritten()).toBe(true);
+    expect(writtenBytes()).toBeGreaterThan(240_000);
+  });
+
+  it('640 档超 1 MB：降 320 档而不是整份放弃（640 档 > 1 MB 时旧实现直接丢封面）', async () => {
+    const calls = stubFetch((url) => (url === URL_640 ? body(1_200_000) : body(150_000)));
+
+    await downloadSong(makeSong({ cover: COVER }) as any);
+
+    expect(calls).toEqual([URL_640, URL_320]);
+    expect(apicWritten()).toBe(true);
+    expect(writtenBytes()).toBeLessThan(THRESHOLD);
+  });
+
+  it('链尾仍超 1 MB 兜底：整份封面放弃，只写文本标签', async () => {
+    // 未验证机制的源（链去重后只有一个 URL）拿回 1.2 MB → 超 MAX_EMBEDDED_COVER_BYTES
+    const kugou = 'https://imge.kugou.com/stdmusic/20230101/abc.jpg';
+    const calls = stubFetch(() => body(1_200_000));
+
+    await downloadSong(makeSong({ cover: kugou, sourceType: 'kugou' }) as any);
+
+    expect(calls).toEqual([kugou]);
+    expect(apicWritten()).toBe(false);
+    expect(useDownloadStore.getState().items[0].status).toBe('done');
+  });
+
+  it('首个请求失败（非 2xx）→ 放弃封面，不再试下一档；下载仍 done', async () => {
+    const calls = stubFetch(() => new Response(null, { status: 500 }));
+
+    await downloadSong(makeSong({ cover: COVER }) as any);
+
+    expect(calls).toEqual([URL_640]);
+    expect(apicWritten()).toBe(false);
+    expect(useDownloadStore.getState().items[0].status).toBe('done');
+  });
+
+  it('降档请求失败 → 放弃整份封面（现状语义：宁缺毋滥），不阻断下载', async () => {
+    const calls = stubFetch((url) => (url === URL_640 ? body(196_609) : new Response(null, { status: 404 })));
+
+    await downloadSong(makeSong({ cover: COVER }) as any);
+
+    expect(calls).toEqual([URL_640, URL_320]);
+    expect(apicWritten()).toBe(false);
+    expect(useDownloadStore.getState().items[0].status).toBe('done');
+  });
+
+  it('未验证机制的源：链去重后只请求一次原图（不会把同一张图下两遍）', async () => {
+    const kugou = 'https://imge.kugou.com/stdmusic/20230101/abc.jpg';
+    const calls = stubFetch(() => body(196_609));
+
+    await downloadSong(makeSong({ cover: kugou, sourceType: 'kugou' }) as any);
+
+    expect(calls).toEqual([kugou]);
+    expect(apicWritten()).toBe(true);
+  });
+});

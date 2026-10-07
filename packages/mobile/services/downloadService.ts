@@ -7,8 +7,8 @@ import {
   md5,
   BROWSER_UA,
   buildID3Frames,
-  COVER_SIZE,
-  coverThumbUrl,
+  embedCoverUrlChain,
+  embedCoverWithinBudget,
   detectAudioContainer,
   extensionForContainer,
   lrcSidecarName,
@@ -64,8 +64,13 @@ function toUint8Array(value: unknown): Uint8Array {
 }
 
 /**
- * 抓封面字节用于内嵌：按源带 Referer，超过 MAX_EMBEDDED_COVER_BYTES 或失败返回 undefined
- * （只写文本标签）。**列表封面不经过这里**——那是远端直链（见 GLOSSARY「列表封面」）。
+ * 抓封面字节用于内嵌：按源带 Referer，按 core 降级链（`EMBED_COVER_TIERS` = 640 → 320）取图，
+ * 首个「够小」（`embedCoverWithinBudget`，≤ `EMBED_COVER_MAX_BYTES`）的档位采用；全超阈值时采用
+ * 链中最小的一份；最终仍受 `MAX_EMBEDDED_COVER_BYTES`（1 MB）兜底，超则 `undefined`（只写文本标签）。
+ *
+ * 请求次数上限 = 链长（`embedCoverUrlChain` 已对等价 URL 去重，未验证机制的源不会重复下原图）；
+ * 任一次请求抛错 / 非 2xx / 空响应体 → 整份封面放弃（`undefined`）：宁可不写封面，也不把一份
+ * 大小不明的图写进 ID3，且不阻断下载。**列表封面不经过这里**——那是远端直链（见 GLOSSARY「列表封面」）。
  */
 async function fetchEmbeddableCover(song: Song): Promise<{ format: string; bytes: number[] } | undefined> {
   const coverUrl = song.cover?.trim();
@@ -74,13 +79,21 @@ async function fetchEmbeddableCover(song: Song): Promise<{ format: string; bytes
     const headers: Record<string, string> = { 'User-Agent': BROWSER_UA };
     const referer = refererForSourceKey(song.sourceType || 'netease');
     if (referer) headers.Referer = referer;
-    // 按源 CDN 机制要 embed 档缩略图（core 单点，ADR 2026-09-30）：内嵌体积直接等于
-    // 每个下载文件变大的量，原图动辄 540KB；不认识的源原样返回，仍受 1MB 上限兜底。
-    const res = await fetch(coverThumbUrl(coverUrl, COVER_SIZE.embed), { headers });
-    if (!res.ok) return undefined;
-    const buf = new Uint8Array(await res.arrayBuffer());
-    if (buf.byteLength === 0 || buf.byteLength > MAX_EMBEDDED_COVER_BYTES) return undefined;
-    return { format: res.headers.get('content-type') || 'image/jpeg', bytes: Array.from(buf) };
+    // 按源 CDN 机制要缩略图（core 单点，ADR 2026-09-30）：内嵌体积直接等于每个下载文件变大的量。
+    // #575 实测「源图恰好 600×600 的 PNG」上 640 档等于原图 492 KB，超字节上限就顺着链降一档
+    // （320 档 168 KB）；不认识的源链上各档同 URL（幂等），去重后仍只请求一次。
+    let picked: { format: string; bytes: Uint8Array } | undefined;
+    for (const url of embedCoverUrlChain(coverUrl)) {
+      const res = await fetch(url, { headers });
+      if (!res.ok) return undefined;
+      const buf = new Uint8Array(await res.arrayBuffer());
+      if (buf.byteLength === 0) return undefined;
+      // 链越靠后档位越小：留最近一次成功的作为「全超阈值」时的兜底
+      picked = { format: res.headers.get('content-type') || 'image/jpeg', bytes: buf };
+      if (embedCoverWithinBudget(buf.byteLength)) break;
+    }
+    if (!picked || picked.bytes.byteLength > MAX_EMBEDDED_COVER_BYTES) return undefined;
+    return { format: picked.format, bytes: Array.from(picked.bytes) };
   } catch {
     return undefined;
   }

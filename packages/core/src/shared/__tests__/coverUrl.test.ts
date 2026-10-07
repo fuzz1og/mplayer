@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { COVER_SIZE, coverThumbUrl } from '../coverUrl.js';
+import {
+  COVER_SIZE,
+  coverThumbUrl,
+  EMBED_COVER_MAX_BYTES,
+  EMBED_COVER_TIERS,
+  embedCoverWithinBudget,
+  embedCoverUrlChain,
+} from '../coverUrl.js';
 
 /**
  * 按源机制要缩略图（#496）。**这里锁的是安全边界**：
@@ -98,5 +105,70 @@ describe('coverThumbUrl', () => {
     expect(coverThumbUrl('', 200)).toBe('');
     expect(coverThumbUrl('file:///tmp/a.jpg', 200)).toBe('file:///tmp/a.jpg');
     expect(coverThumbUrl('data:image/png;base64,AAA', 200)).toBe('data:image/png;base64,AAA');
+  });
+});
+
+/**
+ * #575：内嵌封面**自适应档位 + 字节上限**。这里锁的是降级链的形状与判据的边界：
+ * 链必须从大到小、判据在上限处是**闭区间**、未验证机制的源去重后**只请求一次**
+ * （不能因为多了一档就把同一张原图下两遍，那会把「省体积」改成「翻倍流量」）。
+ *
+ * 真机量级（#575，`Referer: https://music.163.com/`，资产 287398）：
+ * 640 档 492,501 B（源图恰好 600×600 PNG，等于原图）/ 320 档 168,453 B。
+ */
+describe('内嵌封面降级链（#575）', () => {
+  const netease = 'https://p2.music.126.net/Pzxy6py26NgNmhJjYMf2RQ==/109951169724216323.jpg';
+  const qq = 'https://y.gtimg.cn/music/photo_new/T002R300x300M000abc123.jpg';
+
+  it('上限 192 KB；链为 640 → 320 且严格递减', () => {
+    expect(EMBED_COVER_MAX_BYTES).toBe(192 * 1024);
+    expect(EMBED_COVER_TIERS).toEqual([COVER_SIZE.embed, COVER_SIZE.thumb]);
+    for (let i = 1; i < EMBED_COVER_TIERS.length; i += 1) {
+      expect(EMBED_COVER_TIERS[i], '链必须从大到小').toBeLessThan(EMBED_COVER_TIERS[i - 1]);
+    }
+  });
+
+  it('判据 embedCoverWithinBudget：上限处闭区间；0 / 负数 / NaN / Infinity 不算「够小」', () => {
+    expect(embedCoverWithinBudget(1)).toBe(true);
+    expect(embedCoverWithinBudget(EMBED_COVER_MAX_BYTES)).toBe(true);
+    expect(embedCoverWithinBudget(EMBED_COVER_MAX_BYTES + 1)).toBe(false);
+    // #575 实测的两个锚点：320 档可采用，640 档必须继续降档
+    expect(embedCoverWithinBudget(168_453)).toBe(true);
+    expect(embedCoverWithinBudget(492_501)).toBe(false);
+    // 空响应体是「取图失败」，不是「够小」——不能把 0 字节当封面写进 ID3
+    expect(embedCoverWithinBudget(0)).toBe(false);
+    expect(embedCoverWithinBudget(-1)).toBe(false);
+    expect(embedCoverWithinBudget(Number.NaN)).toBe(false);
+    expect(embedCoverWithinBudget(Number.POSITIVE_INFINITY)).toBe(false);
+  });
+
+  it('候选 URL 链：网易拆成 640 / 320 两个不同 URL', () => {
+    expect(embedCoverUrlChain(netease)).toEqual([
+      netease + '?param=640y640',
+      netease + '?param=320y320',
+    ]);
+  });
+
+  it('候选 URL 链：QQ 经白名单吸附成 R500x500 / R300x300', () => {
+    expect(embedCoverUrlChain(qq)).toEqual([
+      'https://y.gtimg.cn/music/photo_new/T002R500x500M000abc123.jpg',
+      'https://y.gtimg.cn/music/photo_new/T002R300x300M000abc123.jpg',
+    ]);
+  });
+
+  it('候选 URL 链：未验证机制的源去重成一条（不会把同一张原图下两遍）', () => {
+    const kugou = 'https://imge.kugou.com/stdmusic/20230101/abc.jpg';
+    expect(embedCoverUrlChain(kugou)).toEqual([kugou]);
+    // 已带 param= 的网易 URL 幂等：两档算出同一个 URL，同样只请求一次
+    expect(embedCoverUrlChain(netease + '?param=100y100')).toEqual([netease + '?param=100y100']);
+    // 本地文件 / data: 也不动，且去重
+    expect(embedCoverUrlChain('file:///tmp/a.jpg')).toEqual(['file:///tmp/a.jpg']);
+    expect(embedCoverUrlChain('')).toEqual([]);
+  });
+
+  it('候选 URL 链永不长于档位链（请求次数上限 = 链长）', () => {
+    for (const url of [netease, qq, 'https://imge.kugou.com/a.jpg', 'file:///tmp/a.jpg']) {
+      expect(embedCoverUrlChain(url).length, url).toBeLessThanOrEqual(EMBED_COVER_TIERS.length);
+    }
   });
 });

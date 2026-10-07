@@ -34,11 +34,34 @@ export const COVER_SIZE = {
   hero: 1080,
   /**
    * 内嵌进音频文件的封面（下载打标）：给系统/第三方播放器看，不需要 hero 档。
+   * 它是降级链的**起点**而非唯一档位（`EMBED_COVER_TIERS` = 640 → 320）：#575 实测
+   * 「源图恰好 600×600 的 PNG」上 640 档等于原图 492 KB，会在字节上限处降到 320 档（168 KB）。
    * **网易档位的字节数不是单调的**（实测同一张图 500 档 73 KB 反而大于 640 档 41 KB），
-   * 所以这里取已实测的 640（QQ 白名单会向下吸附到存在的 500 档）。
+   * 所以起点取已实测的 640（QQ 白名单会向下吸附到存在的 500 档）。
    */
   embed: 640,
 } as const;
+
+/**
+ * 内嵌封面的**字节上限**（#575）：降级链上某档取到的字节数 `≤` 本值就采用，不再往下降。
+ *
+ * 取值理由（2026-10-08 host 侧实测，`Referer: https://music.163.com/`，网易热歌榜前 20 首 +
+ * #575 的资产 287398）：640 档的字节数在样本里是**双峰**的——15/20 落在 4–182 KB（本来就便宜），
+ * 5/20 落在 211 KB–1.01 MB（`?param=640y640` 在「源图恰好 ≤640px」时等于原图，整张 PNG 灌进来）。
+ * 192 KB = 196,608 B 落在这两簇之间的空档（便宜簇最大 181,943 B < 阈值 < 贵簇最小 211,540 B），
+ * 对这批样本，182–211 KB 间任何取值决策都一样；取 192 KB 只是好记。**别只按某个源调这个数**——
+ * 它是「要不要为了封面多花 ~0.19 MB」的产品取舍，改动要同步 ADR 2026-10-04 决策 9。
+ */
+export const EMBED_COVER_MAX_BYTES = 192 * 1024;
+
+/**
+ * 内嵌封面的**降级链**（#575）：从大到小依次取图，首个「够小」（见 `embedCoverWithinBudget`）
+ * 的采用；全超上限时采用链中**最小的最后一份**（由调用方 `fetchEmbeddableCover` 兜底）。
+ *
+ * 顺序即「先清晰、后省体积」的取舍顺序；**请求次数上限 = 链长**（`embedCoverUrlChain` 还会对
+ * 等价 URL 去重）。改动链要一并改测试与 ADR。
+ */
+export const EMBED_COVER_TIERS: readonly number[] = [COVER_SIZE.embed, COVER_SIZE.thumb];
 
 const NETEASE_HOST = /^https?:\/\/p\d+\.music\.126\.net\//;
 const QQ_HOST = /^https?:\/\/(y\.gtimg\.cn|y\.qq\.com|qpic\.y\.qq\.com)\//;
@@ -90,4 +113,36 @@ export function coverThumbUrl(url: string, size: number = COVER_SIZE.thumb): str
     return url.replace(QQ_TEMPLATE, 'R' + snapped + 'x' + snapped + 'M');
   }
   return url;
+}
+
+/**
+ * 纯判据：已取到的这一份**是否已经够小、可以采用**（`true` = 停止降档）。
+ *
+ * - `0 < byteLength ≤ EMBED_COVER_MAX_BYTES` → 采用；
+ * - 超上限 → 继续往链的下一个（更小）档位走（由调用方负责，core 不替它发请求）；
+ * - `0` / 负数 / `NaN` / `Infinity` → **不是**「够小」。空响应体是取图失败，不能当封面写进 ID3；
+ *   无穷大则是「永远超上限」的自然表达（`Infinity` 不会被误判成够小）。
+ *
+ * 上限处是**闭区间**：正好 192 KB 采用（`>` 才降档）。
+ */
+export function embedCoverWithinBudget(byteLength: number): boolean {
+  return Number.isFinite(byteLength) && byteLength > 0 && byteLength <= EMBED_COVER_MAX_BYTES;
+}
+
+/**
+ * 把一张封面 URL 展开成**按降级链去重后的候选序列**（`EMBED_COVER_TIERS` 逐个过
+ * `coverThumbUrl`，同一 URL 只留一次）。
+ *
+ * 去重是必需的，不是优化：未验证机制的源（酷狗/酷我/咪咕/千千/汽水）在每个档位都**原样返回**，
+ * 不去重就会把同一张原图下两遍——把「省体积」变成「翻倍流量」。空 URL 返回 `[]`（无候选，调用方
+ * 直接放弃）。
+ */
+export function embedCoverUrlChain(coverUrl: string): string[] {
+  if (!coverUrl) return [];
+  const out: string[] = [];
+  for (const size of EMBED_COVER_TIERS) {
+    const url = coverThumbUrl(coverUrl, size);
+    if (!out.includes(url)) out.push(url);
+  }
+  return out;
 }
