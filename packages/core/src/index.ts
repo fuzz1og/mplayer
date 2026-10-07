@@ -114,7 +114,7 @@ export { stripSourceIdPrefix } from './utils/sourceIdPrefix.js';
 export { rawSongId, identityKey, identityKeyFrom } from './utils/songIdentity.js';
 export { refreshSongResource } from './shared/songResourceRefresh.js';
 export type { SongResourceRefreshDeps, LegOptions } from './shared/songResourceRefresh.js';
-export { parsePlaylistUrl, importFromLink } from './api/playlistImport.js';
+export { parsePlaylistUrl, importFromLink, importDepsFor } from './api/playlistImport.js';
 export { writeSongsToPlaylist, songWriteRejection, NAME_CONFLICT_COPY } from './shared/playlistWrite.js';
 export type {
   PlaylistWriteDeps,
@@ -125,7 +125,7 @@ export type {
   NameConflictDecisions,
   SongWriteRejection,
 } from './shared/playlistWrite.js';
-export type { PlaylistUrlInfo, ProgressState, ImportResult, PlaylistImportDeps, ImportSource } from './api/playlistImport.js';
+export type { PlaylistUrlInfo, ProgressState, ImportResult, PlaylistImportDeps, PlaylistImportWriterPort, ImportSource } from './api/playlistImport.js';
 export {
   getQqPlaylistSongs,
   resolveQqPlaylistDisstid,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { parsePlaylistUrl, importFromLink } from '../playlistImport.js';
-import type { PlaylistImportDeps } from '../playlistImport.js';
+import { parsePlaylistUrl, importFromLink, importDepsFor } from '../playlistImport.js';
+import type { PlaylistImportDeps, PlaylistImportWriterPort } from '../playlistImport.js';
+import type { PlaylistWriteResult } from '../../shared/playlistWrite.js';
 import type { Song } from '../../types/index.js';
 
 function song(id: string, name: string, artist = 'a'): Song {
@@ -141,3 +142,43 @@ describe('importFromLink', () => {
     expect(result.failures).toHaveLength(2);
   });
 });
+
+/** 造一个最小写入 adapter 替身（#594：装配只认 add 的返回值）。 */
+function writer(add: PlaylistImportWriterPort['add']): PlaylistImportWriterPort {
+  return { add };
+}
+
+/**
+ * #594：链接导入的写入 deps 装配此前在两端逐字各一份（renderer importService 与
+ * mobile playlistExport），删掉任意一份另一份原样可用。下沉 core 后，行为在这里
+ * 单点验证；两端只剩「默认 writer」的转调。
+ */
+describe('importDepsFor（#594：双端唯一一份装配）', () => {
+  it('批量腿整批一次写，回传宿主真实新增数', async () => {
+    const add = vi.fn(async () => ({ ok: true, added: 1 } as PlaylistWriteResult));
+    const batch = [song('1', 'A'), song('2', 'B'), song('3', 'C')];
+
+    expect(await importDepsFor(writer(add)).addSongs!(7, batch)).toBe(1);
+    // 一次调用、整批过去（不拆成逐首），且不多带 resolveNameConflict——
+    // 导入是无人值守的整批操作，同名走 core 默认并入（#556 评审 A4）。
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledWith({ playlistId: 7, songs: batch });
+  });
+
+  it('逐首腿回传宿主真实新增数（0 = 宿主没收下，不吞成 success）', async () => {
+    const add = vi.fn(async () => ({ ok: true, added: 0 } as PlaylistWriteResult));
+    const one = song('1', 'A');
+
+    expect(await importDepsFor(writer(add)).addSong('pl-1', one)).toBe(0);
+    expect(add).toHaveBeenCalledWith({ playlistId: 'pl-1', songs: [one] });
+  });
+
+  it('宿主报失败 → 抛宿主原文；无原文 → 抛「添加失败」（core 记 failure，不记 success）', async () => {
+    const failed = vi.fn(async () => ({ ok: false, added: 0, error: '歌单不存在' } as PlaylistWriteResult));
+    await expect(importDepsFor(writer(failed)).addSongs!('pl-1', [song('1', 'A')])).rejects.toThrow('歌单不存在');
+
+    const silent = vi.fn(async () => ({ ok: false, added: 0, error: '' } as PlaylistWriteResult));
+    await expect(importDepsFor(writer(silent)).addSong('pl-1', song('1', 'A'))).rejects.toThrow('添加失败');
+  });
+});
+
