@@ -24,7 +24,7 @@ cd .claude/worktrees/<slug>
 - 分支命名 `<type>/<slug>`：`feat/` `fix/` `docs/` `chore/` `refactor/` `perf/`（与 commit type 同表；`perf/` 是本仓既有的性能类分支前缀），slug 用短英文（如 `fix/mobile-parity-tier3`）。
 - 一个任务一个新 worktree + 新分支；不在旧分支上叠新工作。
 - `.claude/worktrees/` 已 gitignore，是默认的 worktree 位置。
-- worktree 缺 node_modules 就地 `npm install`，不要从主克隆复制（依赖漂移）；软链同理——真机调试时 `expo-router` 按「被转换文件的真实路径」反推 app root，会把源码解析回主克隆、打包到主克隆的 `app/`（见 `mobile-device-debugging` skill）。
+- worktree 缺 node_modules 就地 `npm install`，不要从主克隆复制（依赖漂移）；软链同理——真机调试时 `expo-router` 按「被转换文件的真实路径」反推 app root，会把源码解析回主克隆、打包到主克隆的 `app/`（见 `runtime-verification` skill）。
 - **跳过 `npm install` 会让类型检查静默对着主克隆的 core 跑**：worktree 没有自己的 `node_modules` 时，`@mplayer/core` 会沿目录向上解析到主克隆的 `node_modules/@mplayer/core`（指向主克隆的 `packages/core`），于是 `typecheck` / `typecheck:mobile` 检查的是**主克隆的 core，而不是你正在改的那份**——改了 core 的公开接口却全绿（或反之报一堆莫名其妙的错）都出自这里。绕开安装只做局部验证时，**以 CI 为准**（CI 会 `npm ci` + `core:build`）。
 - **rebase 到「动过 `packages/core` 的新 master」之后必须重跑 `core:build`**：Metro 吃 `packages/core/dist`，而 TypeScript 从 `core/src` 解析——两条路不一致时 `typecheck` 与 CI **全绿**，真机却 **runtime undefined** 崩在第一个用到新导出量的地方（实测：#507 把 `COVER_SIZE` 加进 core，rebase 后未重建 dist 的 worktree 首启直接 `Render Error: Cannot read property 'row' of undefined`）。`npm run core:build` + 重启 Metro 即解；CI 之所以看不出来，是因为它每步都先 `core:build`。
 - 调试/测试必须在 worktree 内构建运行，不要 cd 回主克隆目录（缓存不一致难排查）。
@@ -72,11 +72,11 @@ gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tm
 - **合并前自查关闭引用**：`gh pr view <N> --json closingIssuesReferences`，**为空不要慌**——该字段在 PR **创建时**解析，实测会漏（#506 创建时为空、合并后 #491 **照常自动关闭**）。判据仍是关键字**独立成行、前后留白**；`Refs #N` 与标题里的 `（#N）` 不算。事后改正文**不会回填**这个字段（别靠改正文去「修」它）。要确定性，仍在正文补一行「合并后请手动关闭 #N」当兜底。
 - **`--base` 必须是 `master`**：`ci.yml` 的 `pull_request.branches` 只监听 `master`，**base 指向功能分支的「堆叠 PR」拿不到任何 CI**（`gh pr checks` 回 `no checks reported`），等于绕过硬门槛。需要「B 依赖 A 的改动」时：分支照旧从 A 的分支起（或 rebase 到它），但 PR 的 base 用 `master`，正文写明依赖与合并顺序——A 合并后本 PR 的 diff 会自动收敛到只剩自己的改动。⚠️ **改 base 不会重跑 CI**（Actions 只认 opened / synchronize / reopened），要触发就 push 一次或 close + reopen。
 - **验证以 CI 为准**：`check` + 四个 `test` + `expo-check` 绿是硬门槛（**CI 红不合**）。正文只勾 CI 证明不了的两条（真机 / UI 证据、文档同步），不要逐条抄 lint / typecheck / 测试 / `core:build`。
-- **验收证据图**（截图 / 录屏）传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'` / `gh pr comment <PR> --attach '<png>#<图注>'`，两者同一套机制：正文里没被引用的附件会追加到末尾，排版走两步法，见 `mobile-device-debugging` skill），**不入库**——PR 是这类图的一次性载体，把验收图塞进 `docs/**/assets` 正是这条要拦的事。**追加一条验收评论**（不动 PR 正文）用后者；正文用模板结构时尤其别把图塞进正文。
+- **验收证据图**（截图 / 录屏）传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'` / `gh pr comment <PR> --attach '<png>#<图注>'`，两者同一套机制：正文里没被引用的附件会追加到末尾，排版走两步法，见 `runtime-verification` skill），**不入库**——PR 是这类图的一次性载体，把验收图塞进 `docs/**/assets` 正是这条要拦的事。**追加一条验收评论**（不动 PR 正文）用后者；正文用模板结构时尤其别把图塞进正文。
 - **活文档配图反过来必须入库**：README 截图、logo 这类被长期正文引用的产品图放 `docs/assets/`（`docs/*` 默认忽略整个目录，已用 `!docs/assets/` 放行），并在引用它的正文里写明来源与再生成方式。判据是「有没有一个长期存在的正文在引用它」，不是「它是不是截图」。
 - **附图后要验引用**：读回来逐个检查（正文 `gh pr view <PR> --json body --jq .body`，评论 `gh api repos/{owner}/{repo}/issues/comments/<id> --jq .body`）——每个图片引用都必须是 `user-attachments` URL，残留本地路径就是裂图；公开仓库可再抓一次 PR 页面 HTML 确认 asset id 在渲染产物里。
 - **CI 绿后停在人审**：PR 交给人工 review 与合并，agent 不自行合并、不设 auto-merge。收到 review 意见回本 worktree 继续修，push 自动更新同一 PR。
-- 改了 `packages/mobile` 或 `packages/core` 的 PR 必须附真机验收结论与**证据图**（没上真机就照实写「未做 + 原因」，不许写「已附截图」而没附；流程见 `.agents/skills/mobile-device-debugging`；固化断言可跑 `npm run mobile:e2e` 一条龙，见 `e2e/README.md`）。
+- **真机验收按改动面定层级**：改 `packages/mobile` / `packages/core` 的 PR 必须附真机结论与**证据图**（固化断言可跑 `npm run mobile:e2e` 一条龙，见 `e2e/README.md`）；改 `src/renderer` 的至少要有真实 Chromium 的证据；**改到 `src/main` / preload / IPC 契约 / 托盘 / 打包与更新器时必须是真的 Electron 或打包产物**——浏览器 + stub `window.electronAPI` 证的只有渲染层几何，碰不到 preload 与主进程。Evidence 里写明证据来自哪一层（真 Electron / 打包产物 / Chromium+stub / 真机 + 哪个 runtime）：没写明就等于没验；没做就照实写「未做 + 原因」，不许写「已附截图」而没附。流程与分层判据见 `.agents/skills/runtime-verification`。
 - 行为/命令/架构有变化的，同一个 PR 里更新 AGENTS.md / GLOSSARY.md / 相关 ADR。
 - **分支可能被并发会话动过**：`--force-with-lease` 被拒（`stale info`）就是「远端有你没见过的提交」的信号——先 `git log --oneline HEAD..origin/<branch>` 看多了什么，再决定 merge 还是真的覆盖；直接重试会覆盖别人的提交。
 - 开 PR 前先合入最新 `origin/master`，冲突就地解决。

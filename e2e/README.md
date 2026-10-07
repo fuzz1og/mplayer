@@ -270,10 +270,10 @@ source ~/.bashrc
 
 ### 前置条件
 
-1. Android 真机经 usbipd 直挂进 WSL：`scripts/mobile-device/usb-attach.mjs`（透传掉线重挂：`adb kill-server` 后 `usbipd attach --wsl --busid <busid>`，见 mobile-device-debugging skill 的陷阱清单）；
+1. Android 真机经 usbipd 直挂进 WSL：`scripts/mobile-device/usb-attach.mjs`（透传掉线重挂：`adb kill-server` 后 `usbipd attach --wsl --busid <busid>`，见 runtime-verification skill 的陷阱清单）；
 2. `@mplayer/core` 已构建（`packages/core/dist` 过期的症状是启动即 `undefined is not a function`，脚本会识别为明确 FAIL）；
 3. Metro：8081 已有健康 Metro 则直接复用（校验归属、不杀不起第二个）；没有则脚本代为拉起。
-4. 依赖：`adb`（`~/.local/bin/adb`）、`python3`（uiautomator dump 解析）。
+4. 依赖：`adb`（`~/.local/bin/adb`）。uiautomator dump 的解析已在脚本内用 Node 完成（#502 起不需要 `python3`）。
 
 ### 运行方式
 
@@ -297,7 +297,7 @@ npm run mobile:e2e                          # 同上（包一层 npm script）
 | `metro` | dev server 健康 + manifest `extra.expoClient._internal.projectRoot` 匹配预期目录 | 识破陈年 Metro / 别的 worktree 起的 Metro 串线 |
 | `coldstart` | logcat 有 `Running "main"` + `存量数据迁移完成`，且无 `undefined is not a function` | 前两者 = JS 跑起来 + 启动迁移接线跑到；后者 = core dist 断裂症状（FAIL） |
 | `discover` | 点「发现」tab 后，排行榜四分区（网易云/QQ · 热歌/新歌）标题齐 + rank 数字行渲染 | 分区标题文本走 uiautomator dump 断言；截图存档供人工复核 |
-| `hotlist-detail` | 点「QQ 音乐 · 新歌榜」分区头进详情页，全量列表 rank 节点 ≥8 | 可视行数随迷你播放栏/Toast 浮动，阈值取宽松值；语义是「列表真的渲染了行」 |
+| `hotlist-detail` | 点「QQ 音乐 · 新歌榜」分区头进详情页，信息块「共 N 首」+「播放全部」动作位 + ≥1 个可见 rank 行 | 早期判据「rank 节点 ≥8」已废弃——它视口相关（封面 hero 按 dp 占高，视口越小占比越大）；加载态走 HeroSkeleton，三项都不在，不会误判成 PASS |
 | `play` | 点列表第 2 首歌后，logcat 有 `[player] 开始播放《…》` + `播放器就绪(出声)`，屏幕上出现歌名文本 | 出声断言 + 底部迷你播放栏 UI 断言；截图存档 |
 
 ### 局限
