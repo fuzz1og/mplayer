@@ -36,6 +36,9 @@
  * 环境变量：
  *   MOBILE_ADB=<path>            钉死用哪份 adb（本机常见「雷电自带 adb 与 scoop 的抢 5037」）
  *   MOBILE_GRADLE=<path>         钉死 gradle（默认 android 目录下的 gradlew / gradlew.bat）
+ *   ↑ 这两个变量**只钉死二进制路径**（多份 adb 抢 5037 时用来选定用哪份），
+ *     **不是** 5037 争抢的自动处置 —— 脚本不检测争抢、不重试。争抢的诊断与处置在
+ *     `adbHangHint()` 的超时文案里（Get-NetTCPConnection → 认 pid → 只留一份 → 重建 reverse）。
  *   MOBILE_ADB_TIMEOUT_MS        每条 adb 调用的超时（默认 30000）
  *   MOBILE_LAUNCH_TIMEOUT_MS     拉起后等 JS bundle 的预算（默认 90000）
  *   MOBILE_POSTPLAY_TIMEOUT_MS   --after-play 等「去播一首」的预算（默认 120000）
@@ -55,6 +58,7 @@ import {
   DEV_BUILD,
   LAUNCH_TIMEOUT_ENV,
   POSTPLAY_TIMEOUT_ENV,
+  adbBinaryFor,
   adbHangHint,
   adbTimeoutMs,
   checkPlan,
@@ -64,7 +68,7 @@ import {
   devClientUri,
   findSymbolInApk,
   gradleArgs,
-  gradleExecutable,
+  gradleBinaryFor,
   identityAnchor,
   isServiceForeground,
   launchTimeoutMs,
@@ -142,8 +146,9 @@ function printUsage() {
 // ── 执行 ─────────────────────────────────────────────────────────
 
 const opts = parseArgs(process.argv.slice(2));
-const gradle = process.env.MOBILE_GRADLE || path.join(ANDROID_DIR, gradleExecutable());
-const ADB = process.env.MOBILE_ADB || 'adb';
+// 这两个 env 只是「路径钉死」；争抢的检测/重试不在这里（见 rules 的 adbBinaryFor 注释与 adbHangHint）。
+const gradle = gradleBinaryFor(process.env, ANDROID_DIR);
+const ADB = adbBinaryFor(process.env);
 const ADB_TIMEOUT = adbTimeoutMs(process.env[ADB_TIMEOUT_ENV]);
 const LAUNCH_TIMEOUT = launchTimeoutMs(process.env[LAUNCH_TIMEOUT_ENV]);
 const POSTPLAY_TIMEOUT = postPlayTimeoutMs(process.env[POSTPLAY_TIMEOUT_ENV]);
