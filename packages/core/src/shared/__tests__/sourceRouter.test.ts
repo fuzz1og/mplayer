@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, vi, expectTypeOf } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Song } from '../../types/index.js';
 import {
   registerDirectClient,
@@ -993,5 +996,41 @@ describe('榜单元数据腿（#465）', () => {
     if (bare.ok) { expect(bare.detail.coverImgUrl).toBe(''); expect(bare.detail.playCount).toBeNull(); }
   });
 });
+
+/** 读 core 源文件（vitest root = packages/core） */
+const testDir = dirname(fileURLToPath(String(import.meta.url)));
+const readSource = (rel: string) => readFileSync(join(testDir, rel), 'utf8');
+/** 源码断言必须去注释：注释里常常引用被删掉的旧写法 */
+const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+/**
+ * 腿墙持有者唯一（#593）。
+ *
+ * clamp + AbortController + budget.onExpire + race + timer 这套「腿墙」此前在四条腿上
+ * 逐字各持一份：直连腿（timedDirectCall）、tier3 腿（tryTier3）、严格搜索腿（trySearchLeg）、
+ * 直连取证腿（validateDirectLeg）。腿数从 3 涨到 4 后，墙的语义改一次要改四处且极易漂移。
+ *
+ * 本块是这次抽取的守卫：钉死「墙的持有者」在 sourceRouter.ts 里只有一处，四条腿的墙常量
+ * 都必须交给同一个 runWithLegWall。抽取前此块为红（AbortController ×4、budget.onExpire ×4、
+ * 无 runWithLegWall），抽取后为绿。
+ */
+describe('腿墙持有者唯一（#593）', () => {
+  const source = stripComments(readSource('../sourceRouter.ts'));
+
+  it('全文件只有一份墙的持有者（一个 AbortController、一处 budget.onExpire）', () => {
+    expect(source.match(/new AbortController\(\)/g) ?? []).toHaveLength(1);
+    expect(source.match(/budget\.onExpire\(/g) ?? []).toHaveLength(1);
+  });
+
+  it('四条腿的墙常量都交给同一个 runWithLegWall', () => {
+    const walls = ['DIRECT_WALL_MS', 'TIER3_CHAIN_BUDGET_MS', 'SEARCH_LEG_WALL_MS', 'DIRECT_VALIDATION_TIMEOUT_MS'];
+    for (const wall of walls) {
+      expect(source, `${wall} 未经 runWithLegWall 上墙`).toMatch(new RegExp(`runWithLegWall[\\s\\S]{0,200}?${wall}`));
+    }
+    // 1 处定义 + 四条腿各一处调用；多出第五条腿时这里会红，提醒同改。
+    expect(source.match(/runWithLegWall/g) ?? []).toHaveLength(5);
+  });
+});
+
 
 
