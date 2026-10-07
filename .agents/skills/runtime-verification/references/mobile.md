@@ -69,7 +69,7 @@ node scripts/mobile-debug.mjs --no-cold-start # 不杀 App，热拉起
 **多设备时每条 adb 都要写 `-s <serial>`**——不带就报 `more than one device/emulator`（见陷阱「多设备」）。
 
 1. **要坐标、要文案断言，先 dump 再截图**：`adb shell uiautomator dump /sdcard/ui.xml` + `adb pull` 拿到带 `text=` / `bounds=` 的树（RN 组件会映射成原生节点；实测一次调用就定位到「播放队列 (7)」「明知故犯」这类元素并给出 `bounds`）。现成驱动与坑见 `e2e/README.md`（动画 / 滚动中会间歇性吐空壳树，要重试 + 弃旧快照）。**截图退居视觉复核**，别拿它猜坐标。
-   **dump 是单行 XML**：别用按行读取/截断的工具读它（实测 read 类工具会把那一行截断，正则静默匹配 0 个节点，看着像「空树」）——用 Node `fs.readFileSync` 或 python 解析后再取 `text=` / `bounds=`。
+   **dump 是单行 XML**：别用按行读取/截断的工具读它（实测 read 类工具会把那一行截断，正则静默匹配 0 个节点，看着像「空树」）——用 Node `fs.readFileSync` 或 python 解析后再取 `text=` / `bounds=`；解析这一步现在是命令：`node scripts/mobile-ui.mjs find '<re>'`（`dump` / `find` / `tap`，坐标与文案一起给，省掉手写 dump→bounds→tap 循环）。
 2. **截图**：**先裁感兴趣区域再读**（全屏 PNG 1.5–2.6MB，连读十几张代价很高）；能用埋点日志判读就别截图——`[cover] 加载失败 0` 这种一行日志比一张截图更省也更硬。`adb exec-out screencap -p > <用例>.png`（pwsh 7 / bash 字节安全；Windows PowerShell 5.1 会改编码，改用 `adb shell screencap -p /sdcard/x.png` + `adb pull`）。存仓库外（`$env:TEMP\mplayer-acceptance\`），文件名 `<PR 号>-<序号>-<用例>.png`，别用 `s1.png`；同类用例要固化就跑 `npm run mobile:e2e`（截图落 `e2e/artifacts/`，已 gitignore）。
 3. **交互坐标按当前设备取**：先 `adb shell wm size`，坐标就是截图里的物理像素。**点不动时先怀疑「点偏了」，别先怀疑「输入被拦」**——PKB110 / ColorOS 16 实测 `adb shell input tap` 是生效的（点启动器图标能打开对应 App）——但**应用内的 RN Pressable 是已知例外**，见下一节。`input -d 0 tap X Y` 只在 display id 不为 0 时才有意义（`adb shell dumpsys display | grep -m1 mDisplayId`；本机 id=0）。快速滑动用连打 `input swipe`；`onEndReached` 那类要滚动的验收，`input keyevent 20`（DPAD_DOWN）连打更稳。tab 栏在屏幕底部（OnePlus 上 y≈2602–2648，2680 已落进系统手势区）。
    **别用错误判据**：`input tap` 点状态栏**不会**拉下通知栏（ColorOS 上本就不拉），拿它当「输入被拦」的证据会误判整轮验收。判别输入是否生效，用**点启动器图标看前台 Activity**（`dumpsys activity activities | grep -m1 topResumedActivity`）这种有唯一答案的目标。

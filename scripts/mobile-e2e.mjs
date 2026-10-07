@@ -35,6 +35,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { centerOf, centersOf, countText } from './mobile-ui.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = process.env.MOBILE_E2E_PORT ?? '8081';
@@ -252,69 +253,9 @@ async function dumpUi() {
   return false;
 }
 
-/** 取 XML 属性值（等价 ElementTree 的 get：缺属性 → null，同时解实体） */
-function attrOf(tag, name) {
-  const m = new RegExp('(?:^|\\s)' + name + '="([^"]*)"').exec(tag);
-  return m ? xmlUnescape(m[1]) : null;
-}
-
-/** XML 实体解码：ElementTree 会解，正则直读不会——不解就会在含 & 的文本上分叉 */
-function xmlUnescape(value) {
-  return value
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#([0-9]+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&');
-}
-
-/** 逐个 <node ...> 标签（uiautomator dump 是平铺节点，无嵌套语义可用） */
-function eachNode(xml) {
-  return xml.match(/<node\b[^>]*>/g) ?? [];
-}
-
-/**
- * 原 Python ui_center_of：首个 (text + NUL + content-desc) 命中正则的节点 → 其中心坐标。
- * 注意 hay 里那个 NUL：锚定式模式（如 ^(发现)$）因此在原实现里也**匹配不到**，
- * 调用方本就准备了坐标兜底——移植保持同一行为，不做「修正」。
- */
-/** 所有命中节点的中心坐标（文档顺序）。同一套 hay 语义，只是收全量而非首个 */
-function uiCentersOf(pattern, file) {
-  const xml = readText(file);
-  let re;
-  try { re = new RegExp(pattern); } catch { return []; }
-  const out = [];
-  for (const tag of eachNode(xml)) {
-    const hay = (attrOf(tag, 'text') ?? '') + '\u0000' + (attrOf(tag, 'content-desc') ?? '');
-    if (!re.test(hay)) continue;
-    const m = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(attrOf(tag, 'bounds') ?? '');
-    if (!m) continue;
-    out.push([
-      Math.floor((Number(m[1]) + Number(m[3])) / 2),
-      Math.floor((Number(m[2]) + Number(m[4])) / 2),
-    ]);
-  }
-  return out;
-}
-
-/** 首个命中节点的中心坐标（等价原 Python ui_center_of） */
-function uiCenterOf(pattern, file) {
-  return uiCentersOf(pattern, file)[0] ?? null;
-}
-
-/** 原 Python ui_count_text：text 命中正则的节点数（只看 text，不看 content-desc） */
-function uiCountText(pattern, file) {
-  const xml = readText(file);
-  let re;
-  try { re = new RegExp(pattern); } catch { return 0; }
-  let n = 0;
-  for (const tag of eachNode(xml)) {
-    if (re.test(attrOf(tag, 'text') ?? '')) n += 1;
-  }
-  return n;
-}
+const uiCentersOf = (pattern, file) => centersOf(readText(file), pattern);
+const uiCenterOf = (pattern, file) => centerOf(readText(file), pattern);
+const uiCountText = (pattern, file) => countText(readText(file), pattern);
 
 /** 按文本找元素并点按；rounds=最多尝试轮数（每轮找不到且 allowScroll 时上滑再找） */
 async function uiTapText(pattern, rounds, allowScroll) {
