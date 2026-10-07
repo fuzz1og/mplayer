@@ -48,6 +48,22 @@ export type Policy = {
 export type LoopMode = 'off' | 'all' | 'single';
 
 /**
+ * 补窗（`feedWindow` → `patchQueue`）的**结算结论**（#591）。
+ *
+ * 契约：JS 每轮如实上报 outcome，原生只读 outcome 结算「这一轮算不算终局」，
+ * 两端不再各自从旁证（`append.length` / `addedCount` / `reason`）推断。
+ * 三值互斥；缺失 = 调用方没做结算（仅 `removeKeys` 的清理轮）。
+ * 见 ADR `docs/adr/2026-10-07-window-patch-settle-contract.md`。
+ */
+export type PatchOutcome =
+  /** 本轮投出的候选里**至少一条**在原生 store 里是新项 */
+  | 'grown'
+  /** 本轮投出的候选**全部**已存在于原生 store（去重后零新增）；只在 append/upsert 非空时合法 */
+  | 'deduped'
+  /** 本轮**一个候选都没投出**（解析失败 / 全在冷却 / 全在飞且不是本轮在飞的那批）；append/upsert 必须为空 */
+  | 'empty';
+
+/**
  * `patchQueue` 的回执。
  *
  * `stale` = baseRevision 落后（本轮丢弃，调用方重读 revision 后重试）；
@@ -192,10 +208,10 @@ export type NativePlayerModule = {
      */
     insertAfterCurrent?: Track;
     /**
-     * #563：HOLE 补窗一轮**零候选**时的显式回执。原生据此给待决的「用户下一首」
-     * 一个确定结局（绕回窗口里已有的项 / 诚实结束），不让意图悬空、不让水位 tick 空转。
+     * 本轮补窗的**结算结论**（#591）。原生只读它结算「算不算终局」，不再自行数
+     * `addedCount` 或看 `reason`。缺失 = 调用方没做结算（仅 `removeKeys` 的清理轮）。
      */
-    refillEmpty?: boolean;
+    outcome?: PatchOutcome;
   }): Promise<PatchQueueResult>;
   play(): void;
   pause(): void;

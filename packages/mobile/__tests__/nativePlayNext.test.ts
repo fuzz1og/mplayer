@@ -19,7 +19,7 @@ const fake = vi.hoisted(() => {
     baseRevision: number;
     append?: { songId: string; meta: { key: string } }[];
     insertAfterCurrent?: { songId: string; meta: { key: string } };
-    refillEmpty?: boolean;
+    outcome?: 'grown' | 'deduped' | 'empty';
   };
   const state = { revision: 5, index: 0, key: 'A' as string | null, tracks: [] as FakeTrack[] };
   const patchCalls: PatchInput[] = [];
@@ -517,14 +517,15 @@ describe('#518：插入后「下一首」= 被插入的那首；补窗基准不�
 });
 
 /**
- * #563：原生窗口**最后一项**上按 next，若本轮补窗零新增（候选全已在原生手里被 QueueStore 去重），
- * 待决的用户意图必须落成确定结局，且 LOW_WATER 不再每 2s 重问。
+ * #591 补窗结算契约：`feedWindow` 的每一轮必须**如实上报 outcome**，原生只读 outcome 结算。
  *
- * ⚠️ 结局落定在 Kotlin（pendingUserNext / 终局闩），fake-only 的 Vitest **跑不了 Kotlin 私有标志**。
- * 这里做两件能做的：① 假原生桥钉住 JS 的可观测契约（零候选的 HOLE 必须回执、LOW_WATER 不回执、
- * 绕回候选照投）；② 文件末尾的源码契约守卫钉住原生那半段实现确实存在。
+ * 两条原本各修一端的场景（#563 / #574）现在只是同一个契约的两个取值；这里钉住 JS 这一半
+ * 的可观测契约（**修前会红**：旧实现根本不发 outcome，原生只能自己数 addedCount 推断）。
+ *
+ * ⚠️ 「原生据此绕回 / 只闩水位」那半段落在 Kotlin 的私有分支里，fake-only 的 Vitest 跑不了；
+ * 文件末尾的源码契约守卫只证明形状存在，真正的行为验收必须真机（见 PR 正文的 logcat 原文）。
  */
-describe('#563：窗口尾部零新增补窗', () => {
+describe('#591 补窗结算契约（JS 侧如实上报 outcome）', () => {
   /** 原生窗口 [A, B, C]，当前停在队尾 C；列表循环下 JS 的「下一首」应绕回 A/B。 */
   function tailFixture(): void {
     const queue = setQueue(['A', 'B', 'C'], 2);
@@ -533,30 +534,68 @@ describe('#563：窗口尾部零新增补窗', () => {
     fake.state.key = prefetchKey(song('C'));
   }
 
-  it('HOLE 补窗零候选 → 回执原生（refillEmpty），绝不静默返回', async () => {
+  // —— 两条「修前会红」的用例 ——
+
+  it('#563 场景：原生窗口末项 + 补窗零新增（候选全已在原生手里）→ 上报 deduped', async () => {
     tailFixture();
-    // 所有候选都解析不出直链（模拟「没有可投喂的新项」）→ append 为空
+
+    await feedWindow(undefined, 'hole');
+
+    expect(fake.patchCalls).toHaveLength(1);
+    const call = fake.patchCalls[0];
+    // 旧实现这一轮只发 append（outcome 缺失）→ 原生只能数 addedCount 猜终局
+    expect(call.outcome).toBe('deduped');
+    // 'deduped' 必须**真的投了**候选（契约的入参前置条件）
+    expect((call.append ?? []).map((t) => t.meta.key)).toEqual([
+      prefetchKey(song('A')),
+      prefetchKey(song('B')),
+    ]);
+    // QueueStore 全去重 → 原生队列一字未增、revision 不动（绕回的候选本来就在窗口里）
+    expect(fake.state.tracks).toHaveLength(3);
+    expect(fake.state.revision).toBe(5);
+  });
+
+  it('#574 场景：稳态水位（LOW_WATER）末项绕回 → 同样上报 deduped', async () => {
+    tailFixture();
+
+    // 无 reason = LOW_WATER（progressTick 每 1s 一次的那个来源）
+    await feedWindow();
+
+    expect(fake.patchCalls).toHaveLength(1);
+    // #574 只改了 Kotlin：旧实现下这一轮没有任何 outcome，原生只能靠「append 非空且零新增」特例
+    expect(fake.patchCalls[0].outcome).toBe('deduped');
+    expect(fake.state.revision).toBe(5);
+  });
+
+  // —— 契约的其余边界 ——
+
+  it('零候选 → outcome=empty；不再有「第二次、不带 append 的回执轮」', async () => {
+    tailFixture();
+    // 所有候选都解析不出直链（模拟「一个候选都没投出」）→ append 为空
     resolution.resolvePlayableUrlMobile.mockResolvedValueOnce({ url: '', nonFull: false } as never);
     resolution.resolvePlayableUrlMobile.mockResolvedValueOnce({ url: '', nonFull: false } as never);
 
     await feedWindow(undefined, 'hole');
 
     expect(fake.patchCalls).toHaveLength(1);
-    expect(fake.patchCalls[0].refillEmpty).toBe(true);
+    expect(fake.patchCalls[0].outcome).toBe('empty');
     expect(fake.patchCalls[0].append).toBeUndefined();
+    // 空轮不推进原生 revision（ADR 后果 #5）：否则别的在飞轮会被无谓判成 stale
+    expect(fake.state.revision).toBe(5);
   });
 
-  it('LOW_WATER 零候选不回执原生（只有 HOLE 才有等待中的意图）', async () => {
+  it('LOW_WATER 零候选同样如实上报 outcome=empty（reason 已退化为诊断标签）', async () => {
     tailFixture();
     resolution.resolvePlayableUrlMobile.mockResolvedValueOnce({ url: '', nonFull: false } as never);
     resolution.resolvePlayableUrlMobile.mockResolvedValueOnce({ url: '', nonFull: false } as never);
 
     await feedWindow();
 
-    expect(fake.patchCalls).toHaveLength(0);
+    expect(fake.patchCalls).toHaveLength(1);
+    expect(fake.patchCalls[0].outcome).toBe('empty');
   });
 
-  it('候选正被别的补窗轮解析（在飞）→ 不把并发空轮当终局回执', async () => {
+  it('候选正被别的补窗轮解析（在飞）→ 本轮不上报（契约里的并发闸门）', async () => {
     tailFixture();
     let release!: () => void;
     resolution.resolvePlayableUrlMobile.mockImplementationOnce(
@@ -569,37 +608,25 @@ describe('#563：窗口尾部零新增补窗', () => {
 
     const first = feedWindow(undefined, 'hole'); // 占住 A（in-flight）
     await flush();
-    await feedWindow(undefined, 'hole'); // A 在飞 / B 冷却中 → 本轮零候选，但不得回执
+    await feedWindow(undefined, 'hole'); // A 在飞 / B 冷却中 → 本轮零候选，但不得抢报 empty
     expect(fake.patchCalls).toHaveLength(0);
 
     release();
     await first;
-    // 第一轮正常投喂 A（非空 append），不是 refillEmpty
-    expect(fake.patchCalls.some((call) => call.refillEmpty === true)).toBe(false);
-  });
-
-  it('尾部绕回：候选已在原生窗口里（A/B）→ 照投给原生去重，不重复入队', async () => {
-    tailFixture();
-
-    await feedWindow(undefined, 'hole');
-
-    const appended = (fake.patchCalls[0]?.append ?? []).map((t) => t.meta.key);
-    expect(appended).toEqual([prefetchKey(song('A')), prefetchKey(song('B'))]);
-    // QueueStore 去重：原生窗口一字未增（原生侧 added=0，由 #563 的补丁路径解 pendingUserNext）
-    expect(fake.state.tracks.map((t) => t.key)).toEqual(
-      ['A', 'B', 'C'].map((id) => prefetchKey(song(id)))
-    );
-    expect(fake.state.tracks).toHaveLength(3);
+    // 第一轮投了 A（已在原生手里）→ 它自己给出 deduped；整轮不会出现 empty
+    expect(fake.patchCalls.some((call) => call.outcome === 'empty')).toBe(false);
+    expect(fake.patchCalls.at(-1)?.outcome).toBe('deduped');
   });
 });
 
 /**
- * #563 原生那半段的**源码契约守卫**。
+ * #591 原生结算的**源码契约守卫**。
  *
- * Vitest 是 Node 环境 + 假原生桥，无法执行 Kotlin（更无法断言私有标志）；真机行为验收也不在本
- * 变更范围。这里的守卫只能证明「实现确实存在、且形状是这段」，**不能替代 Kotlin 编译/设备验证**。
+ * Vitest 是 Node 环境 + 假原生桥，无法执行 Kotlin（更无法断言私有标志）。这里的守卫只能证明
+ * 「实现确实存在、形状是这段」，**不能替代 Kotlin 编译/设备验证**——#591 的行为验收在真机上
+ * （PR 正文的两个场景 + 阳性对照的 logcat 原文）。
  */
-describe('#563 原生终局闩：源码契约守卫（不替代 Kotlin 编译/设备验证）', () => {
+describe('#591 原生结算：源码契约守卫（不替代 Kotlin 编译/设备验证）', () => {
   const MODULE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
   const read = (rel: string) => readFileSync(join(MODULE_ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
   const playerService = read(
@@ -614,15 +641,28 @@ describe('#563 原生终局闩：源码契约守卫（不替代 Kotlin 编译/�
     return playerService.slice(from, to);
   }
 
-  it('patchQueue 按「补丁后真正新增的条数」解析：绕回已有项或诚实结束', () => {
-    const patch = body('  fun patchQueue(', '  private fun firstExistingAppendIndex(');
+  it('patchQueue 只读 outcome 结算：deduped 绕回/结束，empty 也拉闩', () => {
+    const patch = body('  fun patchQueue(', '  /**\n   * #591：结算入参的');
+    expect(patch).toContain('settleOutcomeOf(outcome, append, upsert)');
+    expect(patch).toContain('settled == SettleOutcome.DEDUPED');
+    expect(patch).toContain('settled == SettleOutcome.EMPTY');
     expect(patch).toContain('val addedCount = newItems.size');
     expect(patch).toContain('firstExistingAppendIndex(append)');
     expect(patch).toContain('finishAtTail(ctrl)');
+    // addedCount 退为诊断：不再单独充当终局判据
+    expect(patch).not.toContain('if (addedCount == 0)');
+    expect(patch).not.toContain('input.refillEmpty');
 
     const finish = body('  private fun finishAtTail(', '  private fun isExhaustedAtCurrent(');
     expect(finish).toContain('markExhausted()');
     expect(finish).toContain('EndReason.EXHAUSTED');
+  });
+
+  it('结算入参的前置条件：deduped 必须有候选、empty 必须没有', () => {
+    const validate = body('  private fun settleOutcomeOf(', '  /**\n   * 本轮 append 里');
+    expect(validate).toContain('SettleOutcome.DEDUPED -> hasCandidates');
+    expect(validate).toContain('SettleOutcome.EMPTY -> !hasCandidates');
+    expect(validate).toContain('return null');
   });
 
   it('LOW_WATER 在当前 (revision,index) 已闩住时直接返回（终结 ~2s 重问）', () => {
@@ -643,18 +683,19 @@ describe('#563 原生终局闩：源码契约守卫（不替代 Kotlin 编译/�
     expect(body('  fun loadQueue(', '  fun patchQueue(')).toContain('clearExhausted()');
   });
 
-  it('JS 只对 HOLE 的零候选回执 refillEmpty', () => {
+  it('JS 每轮如实上报 outcome，refillEmpty 与第二次回执轮一起退场', () => {
     const js = read('services/nativePlayer.ts');
-    expect(js).toMatch(/reason === 'hole' && !plannedInFlight/);
-    expect(js).toMatch(/refillEmpty: true/);
+    expect(js).toMatch(/outcome: 'empty'/);
+    expect(js).toMatch(/const outcome: PatchOutcome = append\.every/);
+    expect(js).not.toMatch(/refillEmpty|acknowledgeEmptyRefill/);
   });
 
-  it('#574：末项「JS 送了候选却零新增」也拉闩，且只闩水位、不冒充队列结束', () => {
-    const patch = body('  fun patchQueue(', '  private fun firstExistingAppendIndex(');
-    const from = patch.indexOf('} else if (!append.isNullOrEmpty()');
+  it('#574：稳态水位末项（outcome=deduped/empty）也拉闩，且只闩水位、不冒充队列结束', () => {
+    const patch = body('  fun patchQueue(', '  /**\n   * #591：结算入参的');
+    const from = patch.indexOf('} else if ((settled == SettleOutcome.DEDUPED');
     expect(from, '找不到 #574 的稳态水位分支').toBeGreaterThan(-1);
     const branch = patch.slice(from);
-    expect(branch).toContain('addedCount == 0');
+    expect(branch).toContain('settled == SettleOutcome.EMPTY');
     expect(branch).toContain('markExhausted()');
     // 只闩 LOW_WATER：不暂停、不发 QUEUE_ENDED——播放没结束，曲末仍由原生 repeatMode 绕回
     expect(branch).not.toContain('finishAtTail(ctrl)');
