@@ -50,6 +50,19 @@ export function requestHeadersFor(source?: string): Record<string, string> {
 | `packages/mobile/services/downloadService.ts` 内嵌封面 | `requestHeadersFor(song.sourceType)` | 不再兜底 `|| 'netease'`；取图循环归 #575，此处只改请求头 |
 | `packages/core/src/shared/directValidation.ts` 直连腿取证 | `requestHeadersFor(song.sourceType)` | 与播放器同源 |
 
+### 2b. 与票面验收口径的显式 carve-out：唯一一处「实际发出的头」变了
+
+#592 票面第一条验收写的是「单点 module 落地，双端与原生都引用它（结构变更，**不改现有实际发出的头**）」。本票**有意违反**这句话的一个角落，评审时请按这里核对，别按字面判不达标：
+
+| 情形 | 改前 | 改后 |
+| --- | --- | --- |
+| 已知源（netease/qq/kugou/kuwo/migu/qianqian） | UA + 对应官方 Referer | **逐字段不变**（同值） |
+| 未知源 / `soda` / 缺 `sourceType`，`audioPlayer`（expo-audio） | UA + **`Referer: ''`**（空字符串） | UA（**不带** Referer） |
+| 未知源 / 缺 `sourceType`，`downloadService` 内嵌封面 | UA + Referer **兜底成 netease** | UA（**不带** Referer） |
+| `local` / `file://` | nativePlayer 恒 `undefined`；expo-audio 路径仍带头 | 统一 **不带头** |
+
+改前那两种「源缺失」行为本身就是缺陷（空 Referer 是畸形头；netease 兜底是拿别人的域名去冒用），修它必然改到「实际发出的头」。**除这一角，其余调用点与调用点之间的头逐字段不变**；Android 侧的增幅是「从 0 头到与 iOS 相同的头」，属本票正向变更（§3）。
+
 ### 3. Android 原生真的开始发头（网络行为变更）
 
 - JS 端 `headersFor` 返回单点的头 → `Track.headers` 非空 → Kotlin `TrackInput.toRecord()` 得到非空 `Map` → `ExpiryGuard.resolve()` 命中 `dataSpec.withRequestHeaders(record.headers)`，**media3 的 `DefaultHttpDataSource` 在 302 跟跳后仍会带上这份头**（`AllowCrossProtocolRedirects` 已开，重定向由它自己重建连接并复制请求头）。
@@ -65,6 +78,14 @@ export function requestHeadersFor(source?: string): Record<string, string> {
 - 影响面：只影响「restore 后由**原生**直接推进、而 JS 还没把该曲重新 patch/upsert 回来」的那一段请求。常态路径（JS 解析 → `loadQueue`/`patchQueue`/`upsert`/`insertAfterCurrent` 投喂）都带头。
 - 为什么本票不修：它动的是**落盘契约 + restore 路径的验收**（要真机杀进程复现），面比「每源请求头单点」大；且本票的原生面越薄，A/B 取证越干净。已在 `PlayerService.kt` 的 `persist()` 处留注释指向本节。
 - 跟进：单独开票处理（要么让快照保留 headers——UA/Referer 是静态常量、不含凭据；要么在 restore 后强制 JS 重新 upsert 窗口）。
+
+### 3c. 已知边界：带上自定义头后 media3 不再发 `Icy-MetaData: 1`（实测）
+
+**现象（device 队友两组对照实测）**：同一首歌，不带头时音频请求里有 `Icy-MetaData: 1`；带上本单点的 `{User-Agent, Referer}` 后该头**消失**。
+
+- 解释（机制未在 media3 源码层面深挖，只记现象与最可能的成因）：`ExpiryGuard` 走的是 `DataSpec.withRequestHeaders(record.headers)`，它**替换**这条 DataSpec 的头集合，media3 `DefaultHttpDataSource` 自己拼进请求的那套 ICY 探测参数随之不再出现。对照组（不带自定义头）走 `headers.isEmpty() → return dataSpec`，media3 的原装头集合保留 → `Icy-MetaData: 1` 在。
+- 影响面：**静态 mp3 / flac 无影响**——响应里没有 ICY 元数据块，ExoPlayer 本来也走不到 `IcyHeaders` 那条解析路径（判码率/时长走的是容器头与 Range，见 `shared/audioDuration.ts`）。**真 ICY / Shoutcast 流会改变 ExoPlayer 行为**（拿不到 ICY 元数据与其中携带的码率/名称）。
+- 本项目 7 个源里**没有**这类流，本票**未验证**该场景；将来接直播 / 网络电台时必须在**那时**重估。届时的处置方向：在真正需要 ICY 的那条解析路径上把 `Icy-MetaData: 1` 显式并进 headers，**不要**塞进 `requestHeadersFor` 的默认值（静态歌不该多带一个无用头）。
 
 ### 4. 队列入口核对（「消除空壳」的一部分）
 
@@ -106,6 +127,7 @@ export function requestHeadersFor(source?: string): Record<string, string> {
 ### 结构变更证明了什么
 
 - 每源头的**唯一事实来源**是 `requestHeadersFor`：源表增删只需改 core 一处；四个调用点不再各拼一份，`nativePlayer.headersFor` 不再是空壳。
+- **「不改现有实际发出的头」有一处显式 carve-out**（未知源 / 缺 `sourceType` 的空 Referer 与 netease 兜底 → 统一不带 Referer，逐字段见 §2b）——这是本票唯一一处改动已有请求头的地方，其余已知源逐字段不变。
 - 单测（JS 侧，可指认）：core `utils/__tests__/sourceReferer.test.ts` 覆盖各源 Referer / `wy`·`kg` 形状 / 未知源与 `local` 不带 Referer / 返回新对象；mobile `__tests__/nativePlayerHeaders.test.ts` 断言 `buildTrack` 的 `headers`（含 `local` 与 `file://` 无头）。
 
 ### 行为变更（Android 开始发头）证明了什么
@@ -118,7 +140,7 @@ export function requestHeadersFor(source?: string): Record<string, string> {
 ### 得到与代价
 
 - **得到**：iOS / Android / 下载三条路径同一份头；未知源不发畸形空 Referer；原生 `ExpiryGuard` 的注入分支从死代码变成活路径（restore 那一段除外，见 3b）。
-- **代价 / 风险**：Android 侧从「0 头」变成「带官方 Referer 的浏览器头」，上游风控与成功率是**实测问题不是推理问题**——可能变好（防盗链 CDN 放行）也可能触发更严的风控；因此 A/B 取证与回退路径是决策的一部分。另有一处已知边界未修（3b：restore 快照不带头），它不改变本决策的正常路径结论，但会限制「Android 现在真的发头」这句话的适用范围。
+- **代价 / 风险**：Android 侧从「0 头」变成「带官方 Referer 的浏览器头」，上游风控与成功率是**实测问题不是推理问题**——可能变好（防盗链 CDN 放行）也可能触发更严的风控；因此 A/B 取证与回退路径是决策的一部分。另有已知边界：3b（restore 快照不带头，限制「Android 现在真的发头」的适用范围）与 3c（带上自定义头后 media3 不再发 `Icy-MetaData: 1`，静态歌无影响、真 ICY 流未验证）。
 - **回退方式（two-way）**：`nativePlayer.ts` 的 `headersFor` 改回 `return undefined`（一行）即回到「Android 0 头」；core 单点与三处调用点保留，结构与单点不受影响。
 
 ## 参考
