@@ -687,4 +687,112 @@ describe('UpdateService', () => {
       expect(mockWindow.webContents.send).toBeDefined();
     });
   });
+
+  describe('启动检查流程（#579）', () => {
+    const INSTALLER = 'C:\\Users\\u\\AppData\\Local\\mplayer-updater\\pending\\MPlayer-Setup-1.9.0.exe';
+
+    it('无新版本时既不下载也不安装', async () => {
+      const { autoUpdater } = await import('electron-updater');
+      mockCheckPending(autoUpdater);
+
+      const flow = updateService.runStartupFlow({ checkTimeoutMs: 200 });
+      await tick();
+      fireOnce(autoUpdater, 'update-not-available');
+      await flow;
+
+      expect(autoUpdater.downloadUpdate).not.toHaveBeenCalled();
+      expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+      expect(updateService.getStatus().status).toBe('not-available');
+    });
+
+    it('有新版本时只静默下载，不自行退出应用（退出要等用户确认）', async () => {
+      const { autoUpdater } = await import('electron-updater');
+      mockCheckPending(autoUpdater);
+      // 故意让 downloadUpdate() 永不 resolve：产物路径取自 update-downloaded 事件，
+      // 实现不得依赖 promise 的 resolve 时序（否则这里会卡住）
+      vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
+
+      const flow = updateService.runStartupFlow({ checkTimeoutMs: 500 });
+      await tick();
+      fireOnce(autoUpdater, 'update-available', { version: '1.9.0' });
+      await tick();
+      fireOnce(autoUpdater, 'update-downloaded', { downloadedFile: INSTALLER });
+      await flow;
+
+      expect(autoUpdater.downloadUpdate).toHaveBeenCalled();
+      // 启动流程不得自己退出应用——退出只能由用户点确认后触发（ADR 决策 4）
+      expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+      expect(updateService.getStatus().status).toBe('downloaded');
+      expect(updateService.hasDownloadedInstaller()).toBe(true);
+    });
+
+    it('检查抛错时静默返回、不抛出（不变量 I1）', async () => {
+      const { autoUpdater } = await import('electron-updater');
+      mockCheckReject(autoUpdater, 'all channels down');
+
+      await expect(updateService.runStartupFlow({ checkTimeoutMs: 200 })).resolves.toBeUndefined();
+      expect(updateService.getStatus().status).toBe('error');
+      expect(autoUpdater.downloadUpdate).not.toHaveBeenCalled();
+    });
+
+    it('下载抛错时静默返回、不抛出（不变量 I1）', async () => {
+      const { autoUpdater } = await import('electron-updater');
+      // 首次检查挂起（等我们放行 update-available）；降级重试立即失败——
+      // 否则 downloadUpdate 内部的 checkWithCurrentFeed(15000) 会拖满测试超时
+      let checkCalls = 0;
+      vi.mocked(autoUpdater.checkForUpdates).mockImplementation(() => {
+        checkCalls += 1;
+        return checkCalls === 1 ? new Promise(() => {}) : Promise.reject(new Error('mirror check fail'));
+      });
+      vi.mocked(autoUpdater.downloadUpdate).mockRejectedValue(new Error('Download failed'));
+
+      const flow = updateService.runStartupFlow({ checkTimeoutMs: 500 });
+      await tick();
+      fireOnce(autoUpdater, 'update-available', { version: '1.9.0' });
+      await flow;
+
+      expect(updateService.getStatus().status).toBe('error');
+    });
+  });
+
+  describe('退出并安装已下载的更新（#579）', () => {
+    const INSTALLER = 'C:\\tmp\\MPlayer-Setup-1.9.0.exe';
+
+    /** 只完成「检查 + 下载」，把安装动作留给用例自己触发 */
+    async function downloadOnly(svc: UpdateService) {
+      const { autoUpdater } = await import('electron-updater');
+      vi.mocked(autoUpdater.checkForUpdates).mockReturnValue(new Promise(() => {}));
+      vi.mocked(autoUpdater.downloadUpdate).mockReturnValue(new Promise(() => {}));
+
+      const check = svc.checkForUpdates(500);
+      await tick();
+      fireOnce(autoUpdater, 'update-available', { version: '1.9.0' });
+      await check;
+
+      const dl = svc.downloadUpdate();
+      await tick();
+      fireOnce(autoUpdater, 'update-downloaded', { downloadedFile: INSTALLER });
+      await dl;
+    }
+
+    it('还没下载完就调用 → 返回失败且不退出应用', async () => {
+      const { autoUpdater } = await import('electron-updater');
+      const res = updateService.installDownloadedUpdate();
+
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain('尚未下载');
+      expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+    });
+
+    it('下载完成后调用 → quitAndInstall(true, true)：静默安装 + 装完自动重启', async () => {
+      const { autoUpdater } = await import('electron-updater');
+      const svc = new UpdateService({ autoProbeOnCheck: false });
+      await downloadOnly(svc);
+      expect(svc.getStatus().status).toBe('downloaded');
+
+      expect(svc.installDownloadedUpdate()).toEqual({ ok: true });
+      // 两个参数缺一不可：/S（用户已在应用内确认过）与 --force-run（装完拉起应用）
+      expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+    });
+  });
 });

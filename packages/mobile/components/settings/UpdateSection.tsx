@@ -8,6 +8,7 @@ import { checkLatestRelease, speedTestChannels, type ChannelSpeedResult } from '
 import { textVariants } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import ScalePress, { pressScale } from '../ScalePress';
+import UpdateAvailableInfo from './UpdateAvailableInfo';
 import { useSettingsStyles } from './settingsStyles';
 
 /**
@@ -146,17 +147,12 @@ export default function UpdateSection() {
       )}
       {updateState === 'available' && (
         <View style={[styles.groupPad, styles.rowSep]}>
-          <Text style={styles.updateAvailableText}>发现新版本 v{latestVersion}</Text>
-          {releaseNotes ? (
-            <Text style={styles.releaseNotes} numberOfLines={4}>
-              {releaseNotes}
-            </Text>
-          ) : null}
-          {needsMigration && (
-            <Text style={[styles.releaseNotes, { color: colors.danger }]}>
-              注意：旧版本签名机制不同，若安装报「签名不一致/重复签名」，请先卸载旧版再安装本更新包
-            </Text>
-          )}
+          {/* 与启动弹窗共用同一份信息块（#579）：迁移提示是安全相关文案，不能两处分叉 */}
+          <UpdateAvailableInfo
+            version={latestVersion}
+            releaseNotes={releaseNotes}
+            needsMigration={needsMigration}
+          />
           <ScalePress style={styles.updateBtn} onPress={handleUpdate}>
             <Download size={18} color={colors.textInverse} style={styles.btnIcon} />
             <Text style={styles.updateBtnText}>立即更新</Text>
