@@ -24,7 +24,7 @@ GitHub 官方唯一给出的分组示例也落在低风险层：`you can combine
    官方保证在 CI 下非零退出（文档 `It exits with non-zero in Continuous Integration (CI).` + 源码 `Log.exit(..., 1)` 双证）。实测在坏掉的 master 上输出 `react-native@0.87.1 - expected version: 0.86.3` 等 9 条并 **exit 1**，**秒级、零 Gradle、零 keystore**。
 3. **机器人继续负责其余依赖**：保留 `prod-patch` 分组（production 只合 patch）、`dev-non-major` 分组、分级 `cooldown`。
 4. **生态耦合集的升级动作固定为 `npx expo install --fix`**（或随 SDK 大版本升级整体推进），不再由机器人驱动；一致性由决策 2 的门禁兜住。
-5. **workspace 依赖树规范**：`expo` 全仓**只保留一份** —— 根与 `packages/mobile` 声明同一范围（当前 `~57.0.26`）。实测根写 `~57.0.25`、mobile 写 `~57.0.26` 时，npm 会在 `packages/mobile/node_modules` 下再装一份（`node_modules/expo@57.0.25` 与 `packages/mobile/node_modules/expo@57.0.26` 并存），于是「根 `node_modules/expo` 是哪个版本」变成陷阱。同理 `@types/react` / `@types/react-dom` 的范围不得逃出 SDK 的 `relatedPackages`（`~19.2.4` / `~19.2.3`）。
+5. **workspace 依赖树规范**：`expo` 全仓**只保留一份** —— 根与 `packages/mobile` 声明同一范围（当前值以 `package.json` 与 `npx expo install --check` 的输出为准；本文件不抄版本字面量）。实测根写 `~57.0.25`、mobile 写 `~57.0.26` 时，npm 会在 `packages/mobile/node_modules` 下再装一份（`node_modules/expo@57.0.25` 与 `packages/mobile/node_modules/expo@57.0.26` 并存），于是「根 `node_modules/expo` 是哪个版本」变成陷阱。同理 `@types/react` / `@types/react-dom` 的范围不得逃出 SDK 的 `relatedPackages`（`~19.2.4` / `~19.2.3`）。
    **并且：`expo install --check` 只校验「已装版本」，不校验 package.json 的声明地板** —— 实测 `expo-asset: ~57.0.13`（SDK 期望 `~57.0.18`）、`expo-file-system: ~57.0.5`（期望 `~57.0.7`）、`expo-font: ~57.0.1`（期望 `~57.0.4`）、`@babel/core: ^7.25.2`（期望 `^7.29.0`）都能全绿通过。声明地板必须人工按 SDK 期望对齐。
 
 ## 备选与否决
