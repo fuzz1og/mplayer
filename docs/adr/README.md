@@ -45,6 +45,7 @@
 | 随机播放重建为稳定随机序列：洗牌序 + 游标（#511） | `2026-09-30-stable-shuffle-order.md` | 已接受（随机分支语义变更：有序列时 prev 回上一张；无序列保留旧现抽） |
 | 移动端歌单页批量模式入口：长按（挂在行自身）+ 英雄区可见「选择」 | `2026-10-01-mobile-playlist-batch-entry.md` | 已接受（修订 #490 票面的「显式入口已否决」） |
 | 移动端下载内嵌元数据的边界：只承诺 MP3 + 歌词侧车 | `2026-10-04-mobile-download-metadata-boundary.md` | 已接受 |
+| 补窗结算契约：`patchQueue` 的 outcome 是显式入参 | `2026-10-07-window-patch-settle-contract.md` | 已接受（决策；**本轮未落地实现**） |
 
 ## 历史编号对照（冻结）
 
