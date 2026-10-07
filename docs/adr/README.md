@@ -21,7 +21,7 @@
 | 移动端毛玻璃 Chrome | `2026-08-26-mobile-frosted-chrome.md` | 已被 `2026-09-23-mobile-chrome-solid-gradient.md` 取代 |
 | 不引入大标题导航 | `2026-08-26-mobile-large-title-nav.md` | 已接受（否决记录） |
 | 源文字对比度 token | `2026-08-26-source-text-contrast-tokens.md` | 已接受 |
-| 应用更新镜像通道 | `2026-08-28-update-mirror-channels.md` | 已接受 |
+| 应用更新镜像通道 | `2026-08-28-update-mirror-channels.md` | 已接受（决策 3 的**桌面端**已被 `2026-10-05-update-prompt-and-silent-desktop-download.md` 取代；移动端与决策 1/2/4/5 不变） |
 | 歌曲身份与可播资源值语义 | `2026-09-10-song-identity-and-playable-resource.md` | 已接受 |
 | tier3 调度、预算与源归属 | `2026-09-14-tier3-scheduling-and-source-ownership.md` | 已接受（决策 1 的「并行」与决策 4 的「不做软降权」已被 `2026-09-25-tier3-source-scheduling.md` 取代） |
 | tier3 源的会话内调度 | `2026-09-25-tier3-source-scheduling.md` | 已接受 |
@@ -46,6 +46,7 @@
 | 移动端歌单页批量模式入口：长按（挂在行自身）+ 英雄区可见「选择」 | `2026-10-01-mobile-playlist-batch-entry.md` | 已接受（修订 #490 票面的「显式入口已否决」） |
 | 移动端下载内嵌元数据的边界：只承诺 MP3 + 歌词侧车 | `2026-10-04-mobile-download-metadata-boundary.md` | 已接受 |
 | 补窗结算契约：`patchQueue` 的 outcome 是显式入参 | `2026-10-07-window-patch-settle-contract.md` | 已接受（决策；**本轮未落地实现**） |
+| 进入即检查更新：桌面徽标 + 静默下载 + 应用内确认后退出安装；移动端弹窗跳浏览器（#579） | `2026-10-05-update-prompt-and-silent-desktop-download.md` | 已接受（部分取代 `2026-08-28-update-mirror-channels.md` 决策 3 的**桌面端**） |
 
 ## 历史编号对照（冻结）
 
