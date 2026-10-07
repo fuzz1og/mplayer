@@ -89,6 +89,8 @@ export function requestHeadersFor(source?: string): Record<string, string> {
 | `src/main/services/playlistLinkResolver.ts`（桌面短链 302） | 它只跟 `163cn.tv` / `music.163.com` 两个域名的歌单分享重定向，**只有 netease 一种来源**、不涉及播放/下载音频，也没有 Referer 语义；它的 UA 字面量是「桌面主进程请求头」问题，与每源播放头无关（本次不动） |
 | 各源 API 客户端（`qqDirect`/`neteaseDirect`/`antiScrape`/`tier3Api` 等） | 那是**接口调用**头（含 UA 轮换、签名、Cookie），不是播放/下载头 |
 
+**`directValidation` 与 `audioProbe` 的分界（别把前者也误归到「按 URL」）**：`directValidation.validateDirectUrlNonFull(song, url)` 探的是**该源直连腿自己解析出来的 URL**（调用前提就是「直连腿 + 该源无权威时长」），`song.sourceType` 对这条 URL 是权威归属 → 按源头正确，改前它也正是用 `refererForSourceKey(song.sourceType)`，语义未变。`audioProbe.isUrlAlive(url)` 则是**通用活性闸**：URL 可能来自缓存 / tier3 订阅（托管域与归属源可能不同），只能按 URL 特征推。
+
 ## 备选与否决
 
 | 备选 | 否决理由 |
