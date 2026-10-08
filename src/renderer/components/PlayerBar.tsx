@@ -29,9 +29,10 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
   const playNext = usePlayerStore(s => s.playNext);
   const playPrevious = usePlayerStore(s => s.playPrevious);
 
-  const isFavorite = useFavoriteStore((s) => s.isFavorite);
+  // 收藏态必须选**数据**（原生布尔）：选 store 上的 isFavorite 方法拿到的是稳定引用，
+  // favoriteIds 变化不触发重渲染，心形永远停在旧值（#620，引入于 af107fb）。
+  const fav = useFavoriteStore((s) => (currentSong ? s.favoriteIds.includes(currentSong.id) : false));
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
-  const fav = currentSong ? isFavorite(currentSong.id) : false;
   // 当前歌加入歌单弹窗（播放栏直达入口）
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const { download } = useDownload();
