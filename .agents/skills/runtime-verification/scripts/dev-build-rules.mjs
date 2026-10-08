@@ -20,6 +20,7 @@
  *      证明设备上跑的确实是这份产物。
  *   9. （`ROOT` 推导在 runner 里，那边一句注释点名耦合。）
  */
+import path from 'node:path';
 import zlib from 'node:zlib';
 
 // ── 常量 ─────────────────────────────────────────────────────────
@@ -75,6 +76,28 @@ export const FRESH_INSTALL_TOLERANCE_MS = 5_000;
 
 export function gradleExecutable(platform = process.platform) {
   return platform === 'win32' ? 'gradlew.bat' : './gradlew';
+}
+
+/**
+ * `MOBILE_ADB` 的语义（#582 评审第 8 条）：**只钉死二进制路径**。
+ *
+ * 本机常见「雷电自带 adb 与 scoop 的抢 5037」——多份 adb 互相踢 server 时，用这个变量
+ * 选定**用哪一份**，仅此而已。这里**不**做争抢检测、不做重试、不做选主：5037 的诊断与
+ * 处置在 `adbHangHint()`（`Get-NetTCPConnection -LocalPort 5037` → 认 pid → 只留一份 →
+ * 重建 reverse）。想「自动处置争抢」的读者别在这儿加逻辑 —— 那属于 `adbHangHint` 的文案面。
+ *
+ * 空串沿用 `env.MOBILE_ADB || 'adb'` 的语义 = 未设（不 trim，行为与原脚本一致）。
+ */
+export function adbBinaryFor(env = {}) {
+  return env?.MOBILE_ADB || 'adb';
+}
+
+/**
+ * `MOBILE_GRADLE` 的语义：同样只是钉死二进制路径；未设时回落 android 目录下按平台取的
+ * `gradlew.bat` / `./gradlew`（回落值仍由 `gradleExecutable()` 决定，不在这里另造一套）。
+ */
+export function gradleBinaryFor(env = {}, androidDir, platform = process.platform) {
+  return env?.MOBILE_GRADLE || path.join(androidDir, gradleExecutable(platform));
 }
 
 export function gradleArgs(task = DEV_BUILD.buildTask, abi = 'arm64-v8a') {

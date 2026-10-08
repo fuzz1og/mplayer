@@ -19,6 +19,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const zlib = require('node:zlib');
+const path = require('node:path');
 
 const rulesPromise = import('../dev-build-rules.mjs');
 
@@ -433,4 +434,33 @@ test('findSymbolInApk：解压后扫条目（store 与 deflate 都要命中）�
   assert.equal(findSymbolInApk(Buffer.from('not a zip at all'), 'x').found, null);
   assert.equal(findSymbolInApk(apk, '  ').found, null);
   assert.equal(readZipEntries(Buffer.from('not a zip')).length, 0);
+});
+
+// ── 缺陷 8（字面缺口）：MOBILE_ADB / MOBILE_GRADLE 只是「路径钉死」，不是 5037 争抢的处置 ──
+// 评审原话：它「既不检测争抢也不重试，只是允许钉死路径；在没有测试覆盖的情况下它更接近
+// 测试钩子而不是处置」。所以这里钉死**它就是路径钉死**这一语义，并补上此前为零的覆盖；
+// 5037 的检测/处置在 adbHangHint()（已有用例），此处不假装有检测、也不许回归成自动处置。
+
+test('adbBinaryFor：MOBILE_ADB 钉死二进制路径；未设/空串回落 PATH 上的 adb（缺陷 8）', async () => {
+  const { adbBinaryFor } = await rulesPromise;
+  const pinned = 'D:\\leidian\\LDPlayer14\\adb.exe';
+  assert.equal(adbBinaryFor({ MOBILE_ADB: pinned }), pinned);
+  assert.equal(adbBinaryFor({ MOBILE_ADB: 'adb' }), 'adb');
+  assert.equal(adbBinaryFor({}), 'adb');
+  assert.equal(adbBinaryFor(), 'adb');
+  // 空串按未设处理（沿用 `process.env.MOBILE_ADB || 'adb'` 的既有语义，不是新行为）
+  assert.equal(adbBinaryFor({ MOBILE_ADB: '' }), 'adb');
+});
+
+test('gradleBinaryFor：MOBILE_GRADLE 钉死二进制路径；未设回落 android 目录下的 gradlew(.bat)（缺陷 8）', async () => {
+  const { gradleBinaryFor, gradleExecutable } = await rulesPromise;
+  const pinned = 'D:\\tools\\gradle\\bin\\gradle.bat';
+  assert.equal(gradleBinaryFor({ MOBILE_GRADLE: pinned }, 'D:\\repo\\android', 'win32'), pinned);
+  assert.equal(gradleBinaryFor({}, 'D:\\repo\\android', 'win32'), path.join('D:\\repo\\android', 'gradlew.bat'));
+  assert.equal(gradleBinaryFor({}, '/repo/android', 'linux'), path.join('/repo/android', './gradlew'));
+  // 空串按未设处理
+  assert.equal(gradleBinaryFor({ MOBILE_GRADLE: '' }, '/repo/android', 'darwin'), path.join('/repo/android', './gradlew'));
+  // 回落值仍由既有 gradleExecutable() 决定（不在这里另造一套平台判定）
+  assert.equal(gradleBinaryFor({}, '/r/a', 'win32'), path.join('/r/a', gradleExecutable('win32')));
+  assert.equal(gradleBinaryFor({}, '/r/a', 'darwin'), path.join('/r/a', gradleExecutable('darwin')));
 });
