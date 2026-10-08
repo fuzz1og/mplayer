@@ -13,12 +13,14 @@ import {
   detectAudioContainer,
   estimateDownloadProgress,
   extensionForContainer,
+  findExactMatch,
   looksLikeLyrics,
   lrcSidecarName,
+  planAudioTagging,
+  planLyricsFetch,
   resolvePlayableSongRouted,
   retryBackoffMs,
   sanitizeFileNameFragment,
-  tagStrategyForContainer,
   takeNextQueued,
   DEFAULT_MAX_CONCURRENT,
   DEFAULT_MAX_RETRIES,
@@ -46,6 +48,9 @@ export const PROGRESS_THROTTLE_MS = 150;
  * （约 40MB 堆）。超过这个尺寸就不内嵌（只是没有内嵌封面，音频与其它标签照写）。
  */
 export const MAX_EMBEDDED_COVER_BYTES = 1024 * 1024;
+
+/** ID3v2 padding：预留便于后续改标签（只对 MP3 写；M4A/FLAC 由 core plan 拦下） */
+const ID3V2_PADDING = 2048;
 
 /** 容器判定只看前 12 字节（core `detectAudioContainer`），读到 16 字节足够 */
 const AUDIO_HEADER_BYTES = 16;
@@ -108,9 +113,11 @@ export class DownloadService {
   }
 
   /**
-   * 写入音频元数据（title/artist/album/封面/真实时长）。按容器类型选择标签写入
-   * 方式（见 core download/tagging）：MP3 走 mp3tag.js ID3；M4A 走 mp3tag.js 的
-   * MP4/ID32 容器写入；FLAC/Ogg 等 mp3tag.js 不支持容器 → 明确跳过，不错灌 ID3。
+   * 写入音频元数据（title/artist/album/封面/真实时长）。**写不写由 core
+   * `planAudioTagging` 单点决定**（#607，与移动端同一份计划）：本项目只对 MP3
+   * 承诺内嵌元数据。M4A 跳过——mp3tag.js 写的是 `moov > udta > meta > ID32`
+   * （ID3v2-in-MP4），iTunes `ilst`/`covr` 一个字节不动，music-metadata /
+   * media3-ExoPlayer / Apple 系都读不到，是读不回的假标签；FLAC/Ogg 等同样跳过。
    */
   private async writeMetadata(song: Song, filePath: string): Promise<void> {
     try {
@@ -119,11 +126,9 @@ export class DownloadService {
       // 连同 IPC、托盘、封面刷新一起卡住（#412）。
       const buffer = await fsp.readFile(filePath);
       const container = detectAudioContainer(buffer);
-      const strategy = tagStrategyForContainer(container);
-      if (strategy === 'skip') {
-        console.log(
-          `[DownloadService] 容器(${container})不支持写 ID3，跳过标签写入（避免错灌）: ${filePath}`
-        );
+      const plan = planAudioTagging(container);
+      if (plan.strategy !== 'id3') {
+        console.log(`[DownloadService] ${plan.skipReason}: ${filePath}`);
         return;
       }
 
@@ -175,10 +180,8 @@ export class DownloadService {
         }));
       }
 
-      const isM4a = container === 'm4a';
-      mp3tag.save({
-        id3v2: { padding: isM4a ? 0 : 2048 },
-      });
+      // 只有 MP3/ID3 会走到这里（M4A 已在上面被 plan 拦下）：预留 padding 便于后续改标签
+      mp3tag.save({ id3v2: { padding: ID3V2_PADDING } });
 
       if (mp3tag.error) {
         console.error('[DownloadService] 写入标签失败:', mp3tag.error);
@@ -220,15 +223,38 @@ export class DownloadService {
   }
 
   /**
-   * 写入 .lrc 歌词侧车文件（与音频同目录同名）。源站有歌词（song.lrc 为歌词 URL）
-   * 时才尝试；抓取失败/内容非可用 LRC（非法请求页等）则跳过，不影响音频下载结果。
+   * 写入 .lrc 歌词侧车文件（与音频同目录同名）。
+   *
+   * **取词决策在 core 单点**（`planLyricsFetch`，与播放侧同一份，防两处各判一次而漂移）：
+   * 存量内联文本直接用；`song.lrc` 为取词 URL 走 getLyrics；网易/汽水按源内 ID 直取
+   * （#412：此前只认 `song.lrc`，这两源列表结果 lrc 恒空故从不写侧车）；其余源 lrc 为空
+   * 才搜索补全一次（#409 允许的唯一搜索场景）。抓取失败/内容非可用 LRC（非法请求页等）
+   * 则跳过，不影响音频下载结果。
    */
   private async writeLyricsSidecar(song: Song, filePath: string): Promise<void> {
-    const lrcUrl = song.lrc?.trim();
-    if (!lrcUrl) return;
+    const plan = planLyricsFetch(song);
     let content: string;
     try {
-      content = await musicApi.getLyrics(lrcUrl);
+      switch (plan.kind) {
+        case 'inline':
+          content = plan.text;
+          break;
+        case 'url':
+          content = await musicApi.getLyrics(plan.url);
+          break;
+        case 'songid':
+          content = plan.source === 'soda'
+            ? await musicApi.getSodaLyrics(plan.id)
+            : await musicApi.getNeteaseLyrics(plan.id);
+          break;
+        case 'none': {
+          // 非按 ID 直取源且 lrc 为空 → 搜索补全一次，只认 core 精确匹配（防翻唱误配）
+          const found = await this.searchLyricsLrc(song);
+          if (!found) return;
+          content = await musicApi.getLyrics(found);
+          break;
+        }
+      }
     } catch (err) {
       console.error('[DownloadService] 获取歌词失败，跳过 .lrc 写入:', err);
       return;
@@ -243,6 +269,17 @@ export class DownloadService {
       console.log(`[DownloadService] 已写入歌词侧车: ${sidecarPath}`);
     } catch (err) {
       console.error('[DownloadService] 写 .lrc 文件失败:', err);
+    }
+  }
+
+  /** 非「按 ID 直取」源且 lrc 为空时的搜索补全：只认 core 精确匹配（与播放侧同一守卫）。 */
+  private async searchLyricsLrc(song: Song): Promise<string> {
+    try {
+      const results = await musicApi.searchSongsRouted(`${song.name} ${song.artist}`, 1, song.sourceType);
+      const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
+      return hit?.lrc?.trim() || '';
+    } catch {
+      return '';
     }
   }
 

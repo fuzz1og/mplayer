@@ -44,10 +44,11 @@
 | 移动端封面加载：窗口化 + 失败重试（不设闸门） | `2026-09-30-mobile-cover-loading.md` | 已接受（同日修订：初版「在飞闸门」实测后撤销；决策 5 不变） |
 | 随机播放重建为稳定随机序列：洗牌序 + 游标（#511） | `2026-09-30-stable-shuffle-order.md` | 已接受（随机分支语义变更：有序列时 prev 回上一张；无序列保留旧现抽） |
 | 移动端歌单页批量模式入口：长按（挂在行自身）+ 英雄区可见「选择」 | `2026-10-01-mobile-playlist-batch-entry.md` | 已接受（修订 #490 票面的「显式入口已否决」） |
-| 移动端下载内嵌元数据的边界：只承诺 MP3 + 歌词侧车 | `2026-10-04-mobile-download-metadata-boundary.md` | 已接受 |
-| 补窗结算契约：`patchQueue` 的 outcome 是显式入参 | `2026-10-07-window-patch-settle-contract.md` | 已接受（决策；**本轮未落地实现**） |
-| 每源请求头单点，Android 原生开始发 UA/Referer（#592） | `2026-10-08-per-source-request-headers.md` | 已接受（网络行为变更：Android 从 0 头改为 UA+Referer，A/B 取证见 PR） |
+| 移动端下载内嵌元数据的边界：只承诺 MP3 + 歌词侧车 | `2026-10-04-mobile-download-metadata-boundary.md` | 已接受（「只承诺 MP3」的**跨端**口径与实测依据见 `2026-10-08-download-tag-write-boundary.md`） |
+| 补窗结算契约：`patchQueue` 的 outcome 是显式入参 | `2026-10-07-window-patch-settle-contract.md` | 已接受（决策；**已由 #600 部分落地**——1-4 项已实现，5-6 项待办） |
 | 进入即检查更新：桌面徽标 + 静默下载 + 应用内确认后退出安装；移动端弹窗跳浏览器（#579） | `2026-10-05-update-prompt-and-silent-desktop-download.md` | 已接受（部分取代 `2026-08-28-update-mirror-channels.md` 决策 3 的**桌面端**） |
+| 下载内嵌元数据的容器口径：只承诺 MP3，两端消费同一份计划（#607） | `2026-10-08-download-tag-write-boundary.md` | 已接受（把「只承诺 MP3」从移动端扩到跨端；删去无容器映射的 `mp4` 策略） |
+| 每源请求头单点（#592 结构半，已由 #625 落地）+ Android 原生开始发头（**行为变更、未取证**） | `2026-10-08-per-source-request-headers.md` | 结构半已接受；**行为变更未取证、不得合并**（PR #602：缺真机 / 可解析 QQ·酷狗样本对照 / 302 抓包） |
 
 ## 历史编号对照（冻结）
 

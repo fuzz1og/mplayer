@@ -665,8 +665,9 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     // 网易云 CDN（music.126.net）宽松不校验，酷狗/QQ 等 CDN 防盗链校验
     // Referer 域名，带错 Referer（如 API 域名）会 403 → 播放失败跳下一首
     // （图片 CDN 校验宽松所以封面正常、音频失败）。UA 保持浏览器特征。
-    // #592：整份头取 core 单点 `requestHeadersFor`（未知源不带 Referer，
-    // 不再发空字符串 Referer）；Android 原生主引擎走同一份（nativePlayer.headersFor）。
+    // #592：整份头取 core 单点 `requestHeadersFor`（未知源不再发空字符串 Referer）。
+    // 注意：Android 原生主引擎仍走 nativePlayer 的空壳——「让它也带这份头」是 #592
+    // 的另一半（网络行为变更，需真机取证），见 ADR 2026-10-08-per-source-request-headers。
     const playerHeaders = requestHeadersFor(song.sourceType);
 
     // 单播放器复用（replace 换源）：永远只有一个 ExoPlayer 实例，

@@ -241,8 +241,8 @@ export type {
 export { SOURCE_DISPLAY_NAMES, SOURCE_MODE_OPTIONS, CONTENT_METHODS, TOPLIST_SOURCE_IDS } from './shared/sourceRouter.js';
 export { detectAudioContainer, containerFromContentType, extensionForContainer, replaceExtension } from './download/container.js';
 export type { AudioContainer } from './download/container.js';
-export { tagStrategyForContainer, buildID3Frames, ID3_FRAME_TLEN } from './download/tagging.js';
-export type { TagStrategy, ID3Frames, BuildID3FramesInput, CoverFrameData } from './download/tagging.js';
+export { tagStrategyForContainer, planAudioTagging, buildID3Frames, ID3_FRAME_TLEN } from './download/tagging.js';
+export type { TagStrategy, AudioTaggingPlan, ID3Frames, BuildID3FramesInput, CoverFrameData } from './download/tagging.js';
 export { lrcSidecarName, looksLikeLyrics } from './download/lyrics.js';
 export { estimateDownloadProgress } from './download/progress.js';
 export type { ProgressInput } from './download/progress.js';

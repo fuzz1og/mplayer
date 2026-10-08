@@ -53,14 +53,18 @@ export function refererForSourceKey(sourceKey: string): string | undefined {
 }
 
 /**
- * **「每源播放/下载请求头」的唯一事实来源**（#592）。
+ * **「每源播放/下载请求头」的唯一事实来源**（#592 结构半）。
  *
- * 为什么必须有单点：`BROWSER_UA` 与 `REFERER_BY_SOURCE` 都是本文件的私有事实。
- * #592 之前，移动端 `audioPlayer.ts`（expo-audio 路径）、`downloadService.ts`（内嵌封面）
- * 各自手拼一份，而 `nativePlayer.ts` 的 `headersFor` 是个恒 `undefined` 的空壳
- * → **Android 主引擎（media3）这条路上每源请求头实际没被应用**，原生
- * `ExpiryGuard.withRequestHeaders` 因此空转。拼装点一多，「源表加了新源」这种事
- * 就只会修到其中几处。
+ * 为什么必须有单点：`BROWSER_UA` 与 `REFERER_BY_SOURCE` 都是本文件的私有事实，
+ * 但拼装动作此前散在各宿主——移动端 `audioPlayer.ts`（expo-audio 回落路径）与
+ * `downloadService.ts`（内嵌封面）各自手拼一份，core `shared/directValidation.ts`
+ * （直连腿时长取证）再手拼一份。拼装点一多，「源表加了新源」这种事就只会修到其中几处。
+ *
+ * 已知但**不在本函数范围内**的结构空洞：`packages/mobile/services/nativePlayer.ts`
+ * 的 `headersFor(song)` 仍是恒 `undefined` 的空壳 → Android 原生主引擎（media3）这条
+ * 路上每源请求头实际没被应用，原生 `ExpiryGuard.withRequestHeaders` 因此空转。
+ * 「让它也取这一份」是 #592 的另一半：**网络行为变更，需真机取证后再决策**，
+ * 见 ADR `2026-10-08-per-source-request-headers.md`。
  *
  * 语义（调用方不要再叠加、也不要改写）：
  * - `User-Agent` 恒为 [BROWSER_UA]：部分 CDN 拒非浏览器 UA。

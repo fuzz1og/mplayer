@@ -34,8 +34,9 @@ describe('sourceReferer', () => {
   });
 });
 
-// #592：每源播放/下载请求头的唯一事实来源（移动端 expo-audio 路径、内嵌封面、
-// Android 原生 media3 的 Track.headers 都取这一份）。
+// #592（结构半）：每源播放/下载请求头的唯一事实来源。拼装点：移动端 expo-audio
+// 回落路径、内嵌封面、core 直连腿取证都取这一份。Android 原生那条路（nativePlayer
+// 的空壳）不在本笔，见 ADR。
 describe('requestHeadersFor（#592 单点）', () => {
   it('已知源：UA + 对应官方站点 Referer', () => {
     expect(requestHeadersFor('netease')).toEqual({
@@ -87,4 +88,3 @@ describe('requestHeadersFor（#592 单点）', () => {
     expect(b.Referer).toBe('https://y.qq.com/');
   });
 });
-

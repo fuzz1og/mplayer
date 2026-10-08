@@ -78,7 +78,7 @@ export async function validateDirectUrlNonFull(
   if (!nominal) return done(false, 'none', '标称时长缺失，不取证（fail-open）');
   if (!url.startsWith('http')) return done(false, 'none', '非 http URL，不取证');
 
-  // #592：每源播放请求头取 core 单点（UA + 按源 Referer），与播放器/原生同源。
+  // #592：每源播放请求头取 core 单点（UA + 按源 Referer），与播放器/下载同源。
   // #424：解析链总预算把它夹小（min(本腿墙, 剩余)），预算耗尽即 abort 这次 Range。
   const head = await fetchAudioHead(url, {
     headers: requestHeadersFor(song.sourceType),

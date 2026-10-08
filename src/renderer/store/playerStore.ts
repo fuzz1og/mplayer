@@ -12,9 +12,8 @@ import {
   syncShuffleCursor,
   insertNextInShuffle,
   replaceShuffleSongId,
-  songUsesSongidLyrics,
-  isSodaSource,
   isInlineLyrics,
+  planLyricsFetch,
   decideAfterPlaybackFailure,
   registerTerminalFailure,
   resetFailureStreak,
@@ -36,15 +35,15 @@ const ipcRenderer = window.electronAPI;
  * Fire-and-forget，不阻塞播放。
  */
 /**
- * 歌词获取（含失败重试）：优先歌曲自带 lrc URL；为空则搜索补全。
- * 获取失败（getLyrics 对「非法请求」页抛错 = 签名与会话绑定、会话已轮换，
- * 旧签名 URL 永远失败）→ 重搜拿新签名 lrc URL 重试一次，对齐手机端
+ * 歌词获取（含失败重试）。**取词决策在 core 单点**（`planLyricsFetch`，与下载侧车同一份）：
+ * 这里只把 plan 的 kind 接到具体取词实现——存量内联文本直接用；`url` 走 getLyrics；
+ * 网易/汽水按源内 ID 直取；`none`（非按 ID 直取源且 lrc 为空）搜索补全一次。
+ *
+ * 失败重试（仅 URL 腿）：getLyrics 对「非法请求」页抛错 = 签名与会话绑定、会话已轮换，
+ * 旧签名 URL 永远失败 → 重搜拿新签名 lrc URL 重试一次，对齐手机端
  * fetchLrcInBackground 的 force 路径。返回空串 = 无歌词（不重试）。
  */
 async function loadLyricsWithRetry(song: Song): Promise<string> {
-  // 存量持久化数据兼容：网易的 lrc 可能是 #409 之前写入的内联 LRC 文本，直接当文本用
-  if (isInlineLyrics(song.sourceType, song.lrc)) return song.lrc;
-
   // #556：只接受**精确匹配**的歌词（此前 `hit || results[0]` 在无精确匹配时取第一条，
   // 正是 #544 / ADR-0012 要杀的翻唱误配；移动端同场景只认精确匹配）。候选里没有
   // 同名同歌手 → 返回空串 = 本轮无歌词，而不是挂上别人的歌词。
@@ -60,27 +59,24 @@ async function loadLyricsWithRetry(song: Song): Promise<string> {
   const fetchLyrics = (lrcUrl: string): Promise<string> =>
     callMusicApi('getLyrics', lrcUrl);
 
-  let lrc = song.lrc && song.lrc.trim() !== '' ? song.lrc : '';
-  // 歌词为空时搜索补全：songid 直取源（网易 #409 / 汽水）跳过——搜索拿不到歌词，
-  // 按 ID 直取才是权威答案，搜索只会多打一次请求；其余源返回取词 URL
-  if (!lrc && !songUsesSongidLyrics(song.sourceType)) {
-    lrc = await searchLrc();
-  }
-  // 搜索兜底命中的内联文本（只可能来自存量数据）直接返回
-  if (lrc && isInlineLyrics(song.sourceType, lrc)) return lrc;
-
-  const lrcUrl = lrc;
-  if (!lrcUrl) {
-    // songid 直取源：列表结果不带歌词，播放期按源内 ID 直取
+  // 取词决策在 core 单点（`planLyricsFetch`，与下载侧车同一份，防漂移），这里只接 I/O。
+  const plan = planLyricsFetch(song);
+  if (plan.kind === 'inline') return plan.text;
+  if (plan.kind === 'songid') {
+    // 按 ID 直取源：列表结果不带歌词，播放期按源内 ID 直取
     // - 网易（#409）：getNeteaseLyrics(songId) → 歌词端点，key lyric_id_<id>、TTL 1 天
     // - 汽水：分享页免登录结构化歌词（track_v2 需登录态），getSodaLyrics 转 LRC 文本
-    if (songUsesSongidLyrics(song.sourceType) && song.id) {
-      return isSodaSource(song.sourceType)
-        ? callMusicApi('getSodaLyrics', String(song.id))
-        : callMusicApi('getNeteaseLyrics', String(song.id));
-    }
-    return '';
+    return plan.source === 'soda'
+      ? callMusicApi('getSodaLyrics', plan.id)
+      : callMusicApi('getNeteaseLyrics', plan.id);
   }
+
+  // `url`：歌曲自带取词 URL；`none`：非按 ID 直取源且 lrc 为空 → 搜索补全一次
+  //（#409 允许的唯一搜索场景）。搜索结果里的内联文本（存量数据）直接当文本用。
+  const lrcUrl = plan.kind === 'url' ? plan.url : await searchLrc();
+  if (!lrcUrl) return '';
+  if (isInlineLyrics(song.sourceType, lrcUrl)) return lrcUrl;
+
   try {
     return await fetchLyrics(lrcUrl);
   } catch (err) {
