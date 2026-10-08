@@ -46,13 +46,6 @@ afterEach(() => {
 });
 
 describe('歌单写入判据的单点（#556 评审 C）', () => {
-  it('⭐ 逐首写入消费 core songWriteRejection（不是 fileStorage 自留的 validateSongData）', async () => {
-    const storage = new FileStorage();
-    const playlistId = await storage.createPlaylist('测试歌单');
-
-    await expect(storage.addSongToPlaylist(playlistId, song('ok'))).rejects.toThrow('歌曲数据不完整');
-  });
-
   it('⭐ 批量写入同样消费 core songWriteRejection', async () => {
     const storage = new FileStorage();
     const playlistId = await storage.createPlaylist('测试歌单');

@@ -29,17 +29,25 @@ const axiosMock = vi.hoisted(() => {
 
 const musicApiMock = vi.hoisted(() => ({
   getLyrics: vi.fn(async () => ''),
+  // 取词计划（core planLyricsFetch）在下载侧接到的具体实现：按 ID 直取两源 + 非直取源搜索补全
+  getNeteaseLyrics: vi.fn(async () => ''),
+  getSodaLyrics: vi.fn(async () => ''),
+  searchSongsRouted: vi.fn(async () => []),
 }));
 
 // 只覆写 routed 解析器与重试退避，其余 core 导出保持真实现
 const routedResolveMock = vi.hoisted(() => ({ resolve: vi.fn() }));
+// #608：取词决策单点守卫——默认透传 core 真实现，个别用例投毒成固定 plan
+const planLyricsFetchMock = vi.hoisted(() => ({ fn: vi.fn() }));
 
 vi.mock('@mplayer/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@mplayer/core')>();
+  planLyricsFetchMock.fn.mockImplementation(actual.planLyricsFetch);
   return {
     ...actual,
     resolvePlayableSongRouted: routedResolveMock.resolve,
     retryBackoffMs: () => 0,
+    planLyricsFetch: (song: Parameters<typeof actual.planLyricsFetch>[0]) => planLyricsFetchMock.fn(song),
   };
 });
 
@@ -381,5 +389,65 @@ describe('DownloadService 进度节流（#305）', () => {
     // 两首任务各自的首次进度都要推出去（不能因共享窗口被吞掉）
     expect(channels.filter((c) => c === 'download:progress').length).toBeGreaterThanOrEqual(2);
     expect(channels.filter((c) => c === 'download:complete')).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #608：下载侧车取词决策收敛到 core planLyricsFetch（此前只认 song.lrc）
+// ---------------------------------------------------------------------------
+describe('DownloadService 取词决策单点（#608）', () => {
+  let service: DownloadService;
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mplayer-dl-plan-'));
+    service = new DownloadService();
+    service.initialize({ downloadPath: dir });
+    routedResolveMock.resolve.mockReset();
+    routedResolveMock.resolve.mockImplementation(async (song: Song) => ({ url: song.url, nonFull: false }));
+    musicApiMock.getLyrics.mockClear();
+    musicApiMock.getNeteaseLyrics.mockClear();
+    musicApiMock.getSodaLyrics.mockClear();
+    musicApiMock.searchSongsRouted.mockClear();
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function writtenLrc(): string {
+    const files = require('fs').readdirSync(dir) as string[];
+    const lrcFile = files.find((f) => f.endsWith('.lrc'));
+    expect(lrcFile, '未写出 .lrc 侧车').toBeTruthy();
+    return readFileSync(join(dir, lrcFile as string), 'utf-8');
+  }
+
+  it('⭐ 计划为 inline：直接落盘计划文本，不再按 song.lrc 走 getLyrics', async () => {
+    planLyricsFetchMock.fn.mockReturnValueOnce({ kind: 'inline', text: '[00:00.00]计划注入的歌词' });
+    // 有意带 URL：旧实现只认 song.lrc，会去 getLyrics 而不是用计划文本
+    const song = makeSong({ lrc: 'http://example.com/lyric.lrc' });
+    serveDownload('audio/mpeg');
+
+    const tasks = await service.addBatchDownloads([song]);
+    await ticks();
+
+    expect(tasks[0].status).toBe('completed');
+    expect(writtenLrc()).toContain('计划注入的歌词');
+    expect(musicApiMock.getLyrics).not.toHaveBeenCalled();
+  });
+
+  it('⭐ 计划为 songid：按计划给的源与 ID 直取（#412：网易/汽水此前恒不写侧车）', async () => {
+    planLyricsFetchMock.fn.mockReturnValueOnce({ kind: 'songid', source: 'netease', id: 'PLAN-ID' });
+    musicApiMock.getNeteaseLyrics.mockResolvedValueOnce('[00:01.00]网易计划词');
+    const song = makeSong({ lrc: 'http://example.com/lyric.lrc' });
+    serveDownload('audio/mpeg');
+
+    const tasks = await service.addBatchDownloads([song]);
+    await ticks();
+
+    expect(tasks[0].status).toBe('completed');
+    expect(musicApiMock.getNeteaseLyrics).toHaveBeenCalledWith('PLAN-ID');
+    expect(musicApiMock.getLyrics).not.toHaveBeenCalled();
+    expect(writtenLrc()).toContain('网易计划词');
   });
 });
