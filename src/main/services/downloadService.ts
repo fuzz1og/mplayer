@@ -16,11 +16,11 @@ import {
   findExactMatch,
   looksLikeLyrics,
   lrcSidecarName,
+  planAudioTagging,
   planLyricsFetch,
   resolvePlayableSongRouted,
   retryBackoffMs,
   sanitizeFileNameFragment,
-  tagStrategyForContainer,
   takeNextQueued,
   DEFAULT_MAX_CONCURRENT,
   DEFAULT_MAX_RETRIES,
@@ -48,6 +48,9 @@ export const PROGRESS_THROTTLE_MS = 150;
  * （约 40MB 堆）。超过这个尺寸就不内嵌（只是没有内嵌封面，音频与其它标签照写）。
  */
 export const MAX_EMBEDDED_COVER_BYTES = 1024 * 1024;
+
+/** ID3v2 padding：预留便于后续改标签（只对 MP3 写；M4A/FLAC 由 core plan 拦下） */
+const ID3V2_PADDING = 2048;
 
 /** 容器判定只看前 12 字节（core `detectAudioContainer`），读到 16 字节足够 */
 const AUDIO_HEADER_BYTES = 16;
@@ -110,9 +113,11 @@ export class DownloadService {
   }
 
   /**
-   * 写入音频元数据（title/artist/album/封面/真实时长）。按容器类型选择标签写入
-   * 方式（见 core download/tagging）：MP3 走 mp3tag.js ID3；M4A 走 mp3tag.js 的
-   * MP4/ID32 容器写入；FLAC/Ogg 等 mp3tag.js 不支持容器 → 明确跳过，不错灌 ID3。
+   * 写入音频元数据（title/artist/album/封面/真实时长）。**写不写由 core
+   * `planAudioTagging` 单点决定**（#607，与移动端同一份计划）：本项目只对 MP3
+   * 承诺内嵌元数据。M4A 跳过——mp3tag.js 写的是 `moov > udta > meta > ID32`
+   * （ID3v2-in-MP4），iTunes `ilst`/`covr` 一个字节不动，music-metadata /
+   * media3-ExoPlayer / Apple 系都读不到，是读不回的假标签；FLAC/Ogg 等同样跳过。
    */
   private async writeMetadata(song: Song, filePath: string): Promise<void> {
     try {
@@ -121,11 +126,9 @@ export class DownloadService {
       // 连同 IPC、托盘、封面刷新一起卡住（#412）。
       const buffer = await fsp.readFile(filePath);
       const container = detectAudioContainer(buffer);
-      const strategy = tagStrategyForContainer(container);
-      if (strategy === 'skip') {
-        console.log(
-          `[DownloadService] 容器(${container})不支持写 ID3，跳过标签写入（避免错灌）: ${filePath}`
-        );
+      const plan = planAudioTagging(container);
+      if (plan.strategy !== 'id3') {
+        console.log(`[DownloadService] ${plan.skipReason}: ${filePath}`);
         return;
       }
 
@@ -177,10 +180,8 @@ export class DownloadService {
         }));
       }
 
-      const isM4a = container === 'm4a';
-      mp3tag.save({
-        id3v2: { padding: isM4a ? 0 : 2048 },
-      });
+      // 只有 MP3/ID3 会走到这里（M4A 已在上面被 plan 拦下）：预留 padding 便于后续改标签
+      mp3tag.save({ id3v2: { padding: ID3V2_PADDING } });
 
       if (mp3tag.error) {
         console.error('[DownloadService] 写入标签失败:', mp3tag.error);

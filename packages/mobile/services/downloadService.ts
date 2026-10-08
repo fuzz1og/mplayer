@@ -14,7 +14,7 @@ import {
   lrcSidecarName,
   looksLikeLyrics,
   refererForSourceKey,
-  tagStrategyForContainer,
+  planAudioTagging,
   estimateDownloadProgress,
   retryBackoffMs,
   DEFAULT_MAX_RETRIES,
@@ -359,16 +359,17 @@ async function downloadWithRetry(song: Song, realUrl: string, file: File, itemKe
 }
 
 /**
- * 把元数据内嵌进音频文件（ADR 2026-10-04：**只承诺 MP3**）。
+ * 把元数据内嵌进音频文件（ADR 2026-10-04 / 2026-10-08：**只承诺 MP3**）。
  *
- * 容器决策走 core `tagStrategyForContainer`：m4a 经 mp3tag 写的是 ID32 box（非 iTunes
- * ilst/covr），media3/ExoPlayer 与 Apple 系读不到，属假达标，故本端不写；
- * FLAC/Ogg 灌 ID3 会毁文件，必须 skip。写回走「临时文件 + 覆盖 move」原子替换，
- * 失败时原文件保持完好；整体静默——元数据写失败不得影响下载结果。
+ * 写不写由 core `planAudioTagging` 单点决定（#607，与桌面消费同一份计划）：m4a 经
+ * mp3tag 写的是 ID32 box（非 iTunes ilst/covr），media3/ExoPlayer 与 Apple 系读不到，
+ * 属假达标；FLAC/Ogg 灌 ID3 会毁文件——两端都跳过，理由同出 core 一句。
+ * 写回走「临时文件 + 覆盖 move」原子替换，失败时原文件保持完好；整体静默——
+ * 元数据写失败不得影响下载结果。
  */
 async function writeMetadata(file: File, song: Song, container: AudioContainer): Promise<void> {
   const log = useLogsStore.getState();
-  if (tagStrategyForContainer(container) !== 'id3') return;
+  if (planAudioTagging(container).strategy !== 'id3') return;
   let tmp: File | null = null;
   try {
     const bytes = await file.bytes();
