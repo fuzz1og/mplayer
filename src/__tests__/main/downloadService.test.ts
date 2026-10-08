@@ -75,7 +75,7 @@ vi.mock('electron', () => {
 vi.mock('mp3tag.js', () => {
   return {
     default: class FakeMP3Tag {
-      buffer: { data: Uint8Array } | Uint8Array = { data: new Uint8Array([0x49, 0x44, 0x33]) };
+      buffer: ArrayBuffer | Uint8Array = new Uint8Array([0x49, 0x44, 0x33]).buffer;
       tags: any = {};
       error = '';
       constructor() {
@@ -83,7 +83,8 @@ vi.mock('mp3tag.js', () => {
       }
       read() {}
       save() {
-        this.buffer = { data: new Uint8Array([1, 2, 3]) };
+        // 真 mp3tag 在 node 下回 ArrayBuffer；mock 回 Buffer 契约一致，写回才不抛
+        this.buffer = new Uint8Array([1, 2, 3]).buffer;
       }
       get bufferData() {
         return Buffer.from([1, 2, 3]);
@@ -170,6 +171,30 @@ describe('DownloadService (T15 多格式标签 + .lrc 侧车)', () => {
     expect(files.some((f) => f.endsWith('.flac'))).toBe(true);
     // 容器不支持 ID3 → mp3tag.js 不被实例化（未错灌 ID3）
     expect(mp3tagMock.instantiated).toBe(0);
+  });
+
+  it('M4A Content-Type 产物存为 .m4a 且不触发标签写入（ID32 标准读取方读不回，#607）', async () => {
+    const song = makeSong();
+    // 真 ftyp 头：detectAudioContainer 才认 m4a（否则退化成 unknown，走不到这条分支）
+    serveDownload('audio/mp4', '\u0000\u0000\u0000\u001cftypM4A ' + 'x'.repeat(32));
+    const tasks = await service.addBatchDownloads([song]);
+    await ticks();
+
+    expect(tasks[0].status).toBe('completed');
+    const files = require('fs').readdirSync(dir) as string[];
+    expect(files.some((f) => f.endsWith('.m4a'))).toBe(true);
+    // core planAudioTagging 判 m4a=skip → mp3tag.js 不被实例化（不写读不回的 ID32 假标签）
+    expect(mp3tagMock.instantiated).toBe(0);
+  });
+
+  it('MP3（真 ID3 头）仍写标签——收敛不误伤唯一承诺的容器', async () => {
+    const song = makeSong();
+    serveDownload('audio/mpeg', 'ID3\u0004\u0000\u0000\u0000\u0000\u0000\u0000' + 'x'.repeat(64));
+    const tasks = await service.addBatchDownloads([song]);
+    await ticks();
+
+    expect(tasks[0].status).toBe('completed');
+    expect(mp3tagMock.instantiated).toBe(1);
   });
 
   it('无歌词（lrc 为空）时不写 .lrc 侧车', async () => {
