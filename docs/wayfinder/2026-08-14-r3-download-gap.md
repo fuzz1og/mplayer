@@ -14,7 +14,8 @@
 - **歌曲 URL 解析**：`packages/core/src/api/musicApi.ts` 的 `getAudioUrl()`（`L518-574`）`maxRedirects:3`、`validateStatus:<400`、拿 `responseUrl` 后写 URL 缓存，但**不校验 Content-Type / 扩展名 / 是否真的音频**——解析成功≠可播放。
 - **playable 解析链**：`packages/core/src/shared/resolvePlayableUrl.ts` 的 `resolvePlayableUrl()`/`resolvePlayableSong()` 只保证拿到 http URL，无预检；`getAudioUrl` 在这里兜底（`L60`）。
 - **缓存**：`src/main/ipc/cache.ts` + `src/main/cache/diskBackend.ts`。已按 URL md5 缓存音频，`diskBackend.isAudio()` 已做首字节嗅探（ID3/fLaC/OggS/ftyp/MPEG sync，`L142-149`）——**字节嗅探的基建在桌面端已部分存在**，只差 URL 级预检层。
-- **依赖现状**（package.json）：已依赖 `music-metadata@11`（**只读解析器，可读但不写标签**）与 `mp3tag.js@3.17`（**只写 ID3/MP3**）。**无任何 ffmpeg / tag 写多格式库**。
+- **依赖现状**（package.json）：已依赖 `music-metadata@11`（**只读解析器，可读但不写标签**）与 `mp3tag.js@3.17`（**只有 MP3 写得出标准标签**）。**无任何 ffmpeg / tag 写多格式库**。
+  > 2026-10-08 实测更正：`mp3tag.js@3.17` 对 MP4 **确有**写入路径，但只写 `moov > udta > meta > ID32`（ID3v2-in-MP4），原 `ilst` 一个字节不动，music-metadata / media3-ExoPlayer / Apple 系均读不回——即「有写入路径」≠「支持」。原文的「只写 ID3/MP3」据此细化；实测原文与决策见 `docs/adr/2026-10-08-download-tag-write-boundary.md`。
 - **.lrc**：全仓无下载后写 `.lrc` 的逻辑（grep `.lrc` 仅 lyrics 缓存/解析用）。
 
 ---
@@ -78,7 +79,7 @@
 - **标签/封面嵌入（差距点）**：
   - 用 `mp3tag.js`（`MPlayer downloadService L53-102`）：只 cover **MP3/ID3**。对 `.flac/.ogg/.m4a/.wav` 也灌 ID3（`writeMetadata` 不看格式，只对 m4a 改 padding `L85-88`），**是错的做法**——FLAC 落 ID3 是垃圾数据，且封面用 `APIC`（MP3 专属）。M4A 封面应走 `covr`、FLAC 应走 `METADATA_BLOCK_PICTURE`。
   - 写标签会**整体 read+save 覆写文件**（`L55-98`），无 `audioreadable` 校验、无原子写/临时文件回滚——比 musicdl 的 `safeeditaudio`（`songinfoutils.py L78-96`）弱。
-  - `music-metadata` 是**纯解析器，不写**；`mp3tag.js` 是**纯 MP3 写入**。多格式写入二者都缺。
+  - `music-metadata` 是**纯解析器，不写**；`mp3tag.js` 只有 MP3 写得出标准读取方可见的标签（MP4 分支只写 `ID32`，2026-10-08 实测见上）。多格式写入二者都缺。
 
 ### musicdl 做法（`songinfoutils.py`）
 - `supplsonginfothensavelyricsthenwritetags`（`L39-59`）：下载后 `TinyTag.get(path)` 解析真实 `bitrate/samplerate/channels/duration/codec`，回填 SongInfo。
@@ -93,6 +94,7 @@
 - **多格式标签/封面**：**决策点**——`mp3tag.js` 只够 MP3。移植方案二选一：
   - A（P1，推荐）：引入 `music-tag` / `node-taglib-sharp` 之类**跨格式 tag 写入库**，按 ext 分支写（MP3/FLAC/M4A/WAV）。改动大但一劳永逸。
   - B（P2，轻量）：保留 mp3tag.js 仅限 `.mp3`；其他格式跳过标签或仅 `.lrc`，并**修复现在对 FLAC/M4A 错灌 ID3 的行为**（至少按 ext 判断，不写就不写）。
+    > 2026-10-08 状态：**B 已落地**——两端口径统一为「只承诺 MP3」，判定收敛到 core `planAudioTagging` 单点（#607 / ADR `2026-10-08-download-tag-write-boundary.md`）；A（引跨格式库写标准 `ilst`/`covr`）仍未做。
 - **脚手架**：照 `safeeditaudio` 加「写临时文件 + 校验 + `os.replace`」+ `audioreadable` 前置，避免半截文件。
 
 ### 桌面/移动端可行性
@@ -172,7 +174,7 @@
 | 1 | HEAD→GET 可播放性预检 + 格式推断链（≤8KB 嗅探） | 桌面全量 P0 / core 轻量 P1 | **P0** |
 | 2 | 质量阶梯 + 位率门控（`file_size*8 < bitrate*duration`） | 桌面+core | **P0**（下载/音质选择侧） |
 | 3 | `.lrc` 落盘 + music-metadata 真实参数 | 两端 | **P0** |
-| 3b | 多格式标签/封面（修正 mp3tag 错灌 ID3 → 按 ext 分支/引跨格式库） | 桌面 | **P1** |
+| 3b | 多格式标签/封面（修正 mp3tag 错灌 ID3 → 按 ext 分支/引跨格式库） | 桌面 | **P1**（2026-10-08：「只写 MP3」的跨端口径已落地，见 `docs/adr/2026-10-08-download-tag-write-boundary.md`；引库写标准 m4a 标签仍待评估） |
 | 4 | HLS JS 版（AES 合并） | 桌面 P1 / 移动端 P1（不 remux） | **P1** |
 | 4b | ffmpeg-static 捆绑 + remux | 桌面 | P2 |
 | 5a | 未知总量进度 | 两端 core | P0 |
