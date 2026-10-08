@@ -13,8 +13,10 @@ import {
   detectAudioContainer,
   estimateDownloadProgress,
   extensionForContainer,
+  findExactMatch,
   looksLikeLyrics,
   lrcSidecarName,
+  planLyricsFetch,
   resolvePlayableSongRouted,
   retryBackoffMs,
   sanitizeFileNameFragment,
@@ -220,15 +222,38 @@ export class DownloadService {
   }
 
   /**
-   * 写入 .lrc 歌词侧车文件（与音频同目录同名）。源站有歌词（song.lrc 为歌词 URL）
-   * 时才尝试；抓取失败/内容非可用 LRC（非法请求页等）则跳过，不影响音频下载结果。
+   * 写入 .lrc 歌词侧车文件（与音频同目录同名）。
+   *
+   * **取词决策在 core 单点**（`planLyricsFetch`，与播放侧同一份，防两处各判一次而漂移）：
+   * 存量内联文本直接用；`song.lrc` 为取词 URL 走 getLyrics；网易/汽水按源内 ID 直取
+   * （#412：此前只认 `song.lrc`，这两源列表结果 lrc 恒空故从不写侧车）；其余源 lrc 为空
+   * 才搜索补全一次（#409 允许的唯一搜索场景）。抓取失败/内容非可用 LRC（非法请求页等）
+   * 则跳过，不影响音频下载结果。
    */
   private async writeLyricsSidecar(song: Song, filePath: string): Promise<void> {
-    const lrcUrl = song.lrc?.trim();
-    if (!lrcUrl) return;
+    const plan = planLyricsFetch(song);
     let content: string;
     try {
-      content = await musicApi.getLyrics(lrcUrl);
+      switch (plan.kind) {
+        case 'inline':
+          content = plan.text;
+          break;
+        case 'url':
+          content = await musicApi.getLyrics(plan.url);
+          break;
+        case 'songid':
+          content = plan.source === 'soda'
+            ? await musicApi.getSodaLyrics(plan.id)
+            : await musicApi.getNeteaseLyrics(plan.id);
+          break;
+        case 'none': {
+          // 非按 ID 直取源且 lrc 为空 → 搜索补全一次，只认 core 精确匹配（防翻唱误配）
+          const found = await this.searchLyricsLrc(song);
+          if (!found) return;
+          content = await musicApi.getLyrics(found);
+          break;
+        }
+      }
     } catch (err) {
       console.error('[DownloadService] 获取歌词失败，跳过 .lrc 写入:', err);
       return;
@@ -243,6 +268,17 @@ export class DownloadService {
       console.log(`[DownloadService] 已写入歌词侧车: ${sidecarPath}`);
     } catch (err) {
       console.error('[DownloadService] 写 .lrc 文件失败:', err);
+    }
+  }
+
+  /** 非「按 ID 直取」源且 lrc 为空时的搜索补全：只认 core 精确匹配（与播放侧同一守卫）。 */
+  private async searchLyricsLrc(song: Song): Promise<string> {
+    try {
+      const results = await musicApi.searchSongsRouted(`${song.name} ${song.artist}`, 1, song.sourceType);
+      const hit = findExactMatch({ name: song.name, artist: song.artist }, results) as Song | undefined;
+      return hit?.lrc?.trim() || '';
+    } catch {
+      return '';
     }
   }
 

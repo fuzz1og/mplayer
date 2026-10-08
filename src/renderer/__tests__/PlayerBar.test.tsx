@@ -43,6 +43,9 @@ describe('PlayerBar', () => {
   };
 
   const mockFavoriteStore = {
+    // PlayerBar 的收藏态现在直接选 favoriteIds（#620）：替身必须给出同一字段，
+    // 否则 selector 在替身上读 undefined.includes 会崩。
+    favoriteIds: [] as string[],
     isFavorite: vi.fn(),
     toggleFavorite: vi.fn()
   };
