@@ -45,6 +45,18 @@ vi.mock('../utils/songCoverRefresh', () => ({
   refreshSongCover: vi.fn(async () => null),
 }));
 
+// #608：取词决策单点守卫——默认透传 core 真实现，个别用例投毒成固定 plan
+const planLyricsFetchMock = vi.hoisted(() => ({ fn: vi.fn() }));
+
+vi.mock('@mplayer/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mplayer/core')>();
+  planLyricsFetchMock.fn.mockImplementation(actual.planLyricsFetch);
+  return {
+    ...actual,
+    planLyricsFetch: (s: Parameters<typeof actual.planLyricsFetch>[0]) => planLyricsFetchMock.fn(s),
+  };
+});
+
 import { usePlayerStore } from '../store/playerStore';
 
 const STALE_LRC = 'https://api.example.com/api.php?get=lrc&id=1&sign=OLDSIGN&t=1';
@@ -189,5 +201,29 @@ describe('网易歌词按需直取（#409：列表不再内联，播放期按 so
     const methods = callMusicApiMock.mock.calls.map((c) => c[0]);
     expect(methods).not.toContain('getNeteaseLyrics');
     expect(methods).not.toContain('getLyrics');
+  });
+});
+
+describe('歌词取词决策单一来源 core planLyricsFetch（#608）', () => {
+  it('⭐ 计划给 inline 就零请求直用计划文本（不再自判源 / 自行搜索补全）', async () => {
+    planLyricsFetchMock.fn.mockReturnValueOnce({ kind: 'inline', text: '[00:00.00]计划注入' });
+    // qq + lrc 空：旧实现会走搜索补全；计划已定 inline，就必须零请求
+    const s1 = { ...song('1'), sourceType: 'qq' as Song['sourceType'], lrc: '' };
+    callMusicApiMock.mockImplementation(async (method: string) => {
+      if (method === 'resolvePlayableSongRouted') return { url: s1.url, nonFull: false };
+      if (method === 'getLyrics') return '不该被取回的歌词';
+      return undefined;
+    });
+    searchSongsMock.mockResolvedValue([{ ...s1, lrc: FRESH_LRC }]);
+
+    usePlayerStore.setState({ currentPlaylist: [s1], currentPlaylistIndex: 0, currentSong: s1 });
+    await usePlayerStore.getState().play(s1);
+
+    await vi.waitFor(() => {
+      expect(usePlayerStore.getState().lyrics).toBe('[00:00.00]计划注入');
+    }, { timeout: 3000 });
+
+    expect(searchSongsMock).not.toHaveBeenCalled();
+    expect(callMusicApiMock).not.toHaveBeenCalledWith('getLyrics', expect.anything());
   });
 });

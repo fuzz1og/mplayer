@@ -59,9 +59,7 @@ describe('原位替换（单曲换源持久化）', () => {
   it('replacing a playlist song keeps its order position', async () => {
     const storage = new FileStorage();
     const playlistId = await storage.createPlaylist('测试歌单');
-    await storage.addSongToPlaylist(playlistId, song('netease:1'));
-    await storage.addSongToPlaylist(playlistId, song('netease:2'));
-    await storage.addSongToPlaylist(playlistId, song('netease:3'));
+    await storage.addSongsToPlaylist(playlistId, [song('netease:1'), song('netease:2'), song('netease:3')]);
 
     await storage.replacePlaylistSong(playlistId, 'netease:2', song('qq:2', '晴天', 'qq'));
 
@@ -77,44 +75,21 @@ describe('歌单加入未解析歌曲（直连架构：搜索结果 url 为空�
     const playlistId = await storage.createPlaylist('测试歌单');
     const unresolved: Song = { ...song('1481587458', 'Take on Me'), artist: 'Various Artists', url: '' };
 
-    await storage.addSongToPlaylist(playlistId, unresolved);
+    const added = await storage.addSongsToPlaylist(playlistId, [unresolved]);
 
+    expect(added).toHaveLength(1);
     const songs = await storage.getPlaylistSongs(playlistId);
     expect(songs.map(s => s.id)).toEqual(['1481587458']);
     expect(songs[0].artist).toBe('Various Artists');
   });
-
-  // #553：逐首版此前按裸 Song.id 判「已在歌单」并直接 return——跨源同 id 被吞。
-  it('⭐ 逐首加入按身份键判重：跨源同 id 是两首歌', async () => {
-    const storage = new FileStorage();
-    const playlistId = await storage.createPlaylist('跨源单曲');
-    await storage.addSongToPlaylist(playlistId, song('123', '晴天', 'netease'));
-    await storage.addSongToPlaylist(playlistId, song('123', '晴天', 'qq'));
-
-    expect((await storage.getPlaylistSongs(playlistId)).map(s => s.sourceType)).toEqual(['netease', 'qq']);
-  });
-
-  it('still rejects songs missing identity fields', async () => {
-    const storage = new FileStorage();
-    const playlistId = await storage.createPlaylist('测试歌单');
-
-    await expect(storage.addSongToPlaylist(playlistId, { ...song('x'), name: '' })).rejects.toThrow('歌曲数据不完整');
-    await expect(storage.addSongToPlaylist(playlistId, { ...song('x'), artist: '' })).rejects.toThrow('歌曲数据不完整');
-  });
-
-  it('local songs still require a file path', async () => {
-    const storage = new FileStorage();
-    const playlistId = await storage.createPlaylist('测试歌单');
-    const noPath: Song = { ...song('local:1', '本地歌', 'local'), url: '' };
-
-    await expect(storage.addSongToPlaylist(playlistId, noPath)).rejects.toThrow('歌曲数据不完整');
-  });
+  // #610：逐首腿（addSongToPlaylist）已删——「身份键判重」「不合法/本地缺 path」
+  // 的等价断言由下方批量腿用例继续覆盖（跨源同 id / 不合法跳过）。
 });
 describe('批量加入歌单 addSongsToPlaylist（#493：整批只落一次盘）', () => {
   it('整批一次 saveData，顺序按传入顺序接着 maxOrder 递增', async () => {
     const storage = new FileStorage();
     const playlistId = await storage.createPlaylist('榜单');
-    await storage.addSongToPlaylist(playlistId, song('seed'));
+    await storage.addSongsToPlaylist(playlistId, [song('seed')]);
 
     const saveSpy = vi.spyOn(storage as unknown as { saveData: (...d: string[]) => Promise<void> }, 'saveData');
     const batch = Array.from({ length: 500 }, (_, i) => song(`n:${i}`, `歌${i}`));
@@ -122,7 +97,7 @@ describe('批量加入歌单 addSongsToPlaylist（#493：整批只落一次盘�
     const added = await storage.addSongsToPlaylist(playlistId, batch);
 
     expect(added).toHaveLength(500);
-    // 整批只落一次盘（逐首 addSongToPlaylist 会是 500 次）
+    // 整批只落一次盘（一次 addSongsToPlaylist = 一次 saveData('playlistSongs')）
     expect(saveSpy).toHaveBeenCalledTimes(1);
     expect(saveSpy).toHaveBeenCalledWith('playlistSongs');
 
@@ -133,7 +108,7 @@ describe('批量加入歌单 addSongsToPlaylist（#493：整批只落一次盘�
   it('按歌曲身份键去重：歌单已有的与本批内部的都跳过，返回真正新增的 id', async () => {
     const storage = new FileStorage();
     const playlistId = await storage.createPlaylist('去重');
-    await storage.addSongToPlaylist(playlistId, song('a'));
+    await storage.addSongsToPlaylist(playlistId, [song('a')]);
 
     const added = await storage.addSongsToPlaylist(playlistId, [song('a'), song('b'), song('b'), song('c')]);
 
