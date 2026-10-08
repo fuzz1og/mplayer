@@ -40,7 +40,7 @@ export type { RandomBatchResult } from './utils/recommendBatch.js';
 export { parseLRC, findCurrentLyricIndex, formatLyricsTime, generateLRC } from './utils/lyricsParser.js';
 export type { LyricLine, ParsedLyrics } from './utils/lyricsParser.js';
 export { formatPlayCount } from './utils/format.js';
-export { BROWSER_UA, refererForApiType, refererForUrl, refererForSourceKey } from './utils/sourceReferer.js';
+export { BROWSER_UA, refererForApiType, refererForUrl, refererForSourceKey, requestHeadersFor } from './utils/sourceReferer.js';
 export { resourceUrlKey } from './utils/resourceKey.js';
 export {
   MANAGE_COOKIE_TTL_MS,
