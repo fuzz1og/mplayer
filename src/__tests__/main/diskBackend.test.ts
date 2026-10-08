@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -49,15 +49,33 @@ describe('#410 DiskCacheBackend：真异步 + O(1) 统计', () => {
     expect(fs.readdirSync(path.join(dir, 'json'))).toHaveLength(2);
   });
 
+  /**
+   * #510：TTL 是绝对时间戳，**不要用真墙钟赌「写→读 < 40ms」** —— 忙机器上这段窗口
+   * 实测 p90 已达 1.4s（40ms 预算的 35 倍），断言会在与改动无关的 PR 上翻红。
+   * 这里用假时钟（只假 `Date`，其余定时器保持真实）原子地表达「未到期 / 已到期」，
+   * 两条语义都留着：未到期命中且内容往返一致、到期未命中且条目被删。
+   */
   it('读写往返；TTL 到期后视为未命中并删除条目', async () => {
-    const backend = new DiskCacheBackend(dir);
-    await backend.write(':json:song:1', encoder.encode('{"url":"u"}'), Date.now() + 40);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const backend = new DiskCacheBackend(dir);
+      const base = new Date('2026-01-01T00:00:00.000Z').getTime();
+      vi.setSystemTime(base);
+      await backend.write(':json:song:1', encoder.encode('{"url":"u"}'), base + 40);
 
-    expect(await backend.read(':json:song:1')).not.toBeNull();
-    await new Promise(resolve => setTimeout(resolve, 60));
+      // 未到期（还差 1ms）：命中，且内容往返一致
+      vi.setSystemTime(base + 39);
+      const hit = await backend.read(':json:song:1');
+      expect(hit).not.toBeNull();
+      expect(new TextDecoder().decode(hit!)).toBe('{"url":"u"}');
 
-    expect(await backend.read(':json:song:1')).toBeNull();
-    expect(await backend.keys()).not.toContain(':json:song:1');
+      // 到期（now >= expiresAt）：视为未命中，并把条目删掉
+      vi.setSystemTime(base + 40);
+      expect(await backend.read(':json:song:1')).toBeNull();
+      expect(await backend.keys()).not.toContain(':json:song:1');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('统计按写入/删除/清空增量维护', async () => {
