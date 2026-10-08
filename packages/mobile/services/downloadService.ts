@@ -273,8 +273,11 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
     // 否则公共副本没有标签。
     await writeMetadata(file, song, corrected.container);
 
-    // 写入 .lrc 歌词侧车（与音频同名同目录）；歌词不可用/获取失败不影响下载结果
-    await writeLyricsSidecar(song, corrected.fileName, corrected.container);
+    // 写入 .lrc 歌词侧车（与音频同名同目录）；歌词不可用/获取失败不影响下载结果。
+    // 取词只做一次（#611）：同一份文本先落私有侧车，授权公共目录时再复用同一份同步，
+    // 不再让「私有侧车」与「公共同步」各取一遍。
+    const lyricsText = await resolveLyricsText(song);
+    await writeLyricsSidecar(lyricsText, corrected.fileName, { kind: 'private' });
 
     // 已授权公共目录时同步一份到系统下载目录；失败不阻断（私有副本仍可播放）。
     // 未授权时不弹系统目录选择器：默认保存在应用私有目录，用户可在下载页「保存位置」卡主动授权。
@@ -289,8 +292,8 @@ async function doDownload(song: Song, fileName: string): Promise<File> {
           }
           publicUri = await writePublicCopy(file.uri, corrected.fileName, dirUri, mimeForContainer(corrected.container));
           log.addLog('info', `已同步到公共下载目录《${song.name}》`);
-          // 歌词侧车同样同步到公共目录（失败不阻断音频）
-          await writePublicLyrics(song, corrected.fileName, dirUri).catch(() => {});
+          // 歌词侧车同样同步到公共目录（失败不阻断音频）；复用上面取到的那一份，不重复取词
+          await writeLyricsSidecar(lyricsText, corrected.fileName, { kind: 'public', dirUri }).catch(() => {});
         } catch (e: unknown) {
           // 写入中途失败时清掉半成品公共文件，避免留下空文件
           if (publicUri) {
@@ -432,25 +435,29 @@ async function writeMetadata(file: File, song: Song, container: AudioContainer):
   }
 }
 
-/** 写入 .lrc 歌词侧车（私有目录，与音频同名）。取词决策走 core 单点，不可用/失败时跳过。 */
-async function writeLyricsSidecar(song: Song, fileName: string, _container: AudioContainer): Promise<void> {
-  const content = await resolveLyricsText(song);
+/** .lrc 侧车落点：私有下载目录（与音频同名，公共副本的复制源）或已授权的 SAF 公共目录。 */
+type LyricsSink = { kind: 'private' } | { kind: 'public'; dirUri: string };
+
+/**
+ * 把**已取到**的歌词文本落到指定落点（落点参数化）。
+ *
+ * 取词由调用方一次完成（#611）：同一份文本按落点分别落私有侧车与公共副本，不再各取一遍。
+ * 内容不可用（core `looksLikeLyrics` 判定）或写出失败一律静默——.lrc 不影响音频结果；
+ * 公共落点从私有侧车复制，故须先写私有。
+ */
+async function writeLyricsSidecar(content: string, fileName: string, sink: LyricsSink): Promise<void> {
   if (!looksLikeLyrics(content)) return;
   const lrcName = lrcSidecarName(fileName);
+  if (sink.kind === 'public') {
+    const privateUri = new File(downloadDir, lrcName).uri;
+    await writePublicCopy(privateUri, lrcName, sink.dirUri, 'text/plain');
+    return;
+  }
   const lrcFile = new File(downloadDir, lrcName);
   try {
     await lrcFile.create({ overwrite: true, intermediates: true });
     await lrcFile.write(content);
   } catch { /* .lrc 写失败不影响音频结果 */ }
-}
-
-/** 将 .lrc 侧车同步到 SAF 公共目录（失败向下游静默）。 */
-async function writePublicLyrics(song: Song, fileName: string, dirUri: string): Promise<void> {
-  const content = await resolveLyricsText(song);
-  if (!looksLikeLyrics(content)) return;
-  const lrcName = lrcSidecarName(fileName);
-  const privateUri = new File(downloadDir, lrcName).uri;
-  await writePublicCopy(privateUri, lrcName, dirUri, 'text/plain');
 }
 
 /** 已下载歌曲的本地 file:// 播放 URI（未下载/文件丢失返回 null） */

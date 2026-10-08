@@ -18,6 +18,8 @@ const safMocks = vi.hoisted(() => {
   const readAsStringAsync = vi.fn(async (_uri: string, _options?: unknown) => 'QUJDRA==');
   const writeAsStringAsync = vi.fn(async () => {});
   const deleteAsync = vi.fn(async () => {});
+  /** 目录授权有效性检查（isDirGrantValid）读目录；缺了它公共落点分支在测试里不可达 */
+  const readDirectoryAsync = vi.fn(async (_uri: string): Promise<string[]> => []);
   const requestDirectoryPermissionsAsync = vi.fn(
     async (): Promise<{ granted: boolean; directoryUri: string | null }> => ({
       granted: true,
@@ -29,6 +31,7 @@ const safMocks = vi.hoisted(() => {
     readAsStringAsync,
     writeAsStringAsync,
     deleteAsync,
+    readDirectoryAsync,
     requestDirectoryPermissionsAsync,
   };
 });
@@ -124,6 +127,7 @@ vi.mock('expo-file-system/legacy', () => ({
     readAsStringAsync: safMocks.readAsStringAsync,
     writeAsStringAsync: safMocks.writeAsStringAsync,
     deleteAsync: safMocks.deleteAsync,
+    readDirectoryAsync: safMocks.readDirectoryAsync,
     requestDirectoryPermissionsAsync: safMocks.requestDirectoryPermissionsAsync,
   },
 }));
@@ -410,5 +414,17 @@ describe('歌词侧车取词分派（core planLyricsFetch 单点）', () => {
   it('非直取源且 lrc 为空：搜索补全一次（#409 允许的唯一搜索场景）', async () => {
     await downloadSong(makeSong({ sourceType: 'kugou', lrc: '' }) as any);
     expect(musicApi.searchSongsRouted).toHaveBeenCalled();
+  });
+
+  it('已授权公共目录时同一首歌词只取一次（#611 守卫：私有侧车与公共同步复用同一份文本）', async () => {
+    useSettingsStore.setState({ downloadDirUri: 'content://downloads/' });
+    await downloadSong(makeSong() as any);
+
+    // 落点有两个（私有 .lrc + SAF 公共副本），但取词只有一次
+    expect(musicApi.getLyrics).toHaveBeenCalledTimes(1);
+    // 两个落点都写到了：私有 .lrc 有内容，公共副本经 SAF 写出
+    expect(fsMocks.stringWrites.some((w) => w.uri.endsWith('.lrc') && w.content.includes('你好'))).toBe(true);
+    expect(safMocks.createFileAsync).toHaveBeenCalledWith('content://downloads/', expect.stringMatching(/\.lrc$/), 'text/plain');
+    expect(useDownloadStore.getState().items[0].status).toBe('done');
   });
 });
