@@ -5,7 +5,6 @@ import MP3Tag from 'mp3tag.js';
 import type { Song, AudioContainer } from '@mplayer/core';
 import {
   md5,
-  BROWSER_UA,
   buildID3Frames,
   COVER_SIZE,
   coverThumbUrl,
@@ -13,7 +12,7 @@ import {
   extensionForContainer,
   lrcSidecarName,
   looksLikeLyrics,
-  refererForSourceKey,
+  requestHeadersFor,
   planAudioTagging,
   estimateDownloadProgress,
   retryBackoffMs,
@@ -71,9 +70,9 @@ async function fetchEmbeddableCover(song: Song): Promise<{ format: string; bytes
   const coverUrl = song.cover?.trim();
   if (!coverUrl) return undefined;
   try {
-    const headers: Record<string, string> = { 'User-Agent': BROWSER_UA };
-    const referer = refererForSourceKey(song.sourceType || 'netease');
-    if (referer) headers.Referer = referer;
+    // #592：每源请求头取 core 单点（UA + 按源 Referer）。注意语义变化：源缺失时
+    // 不再兜底成 netease 的 Referer——没有可冒用的官方域名就不带头。
+    const headers = requestHeadersFor(song.sourceType);
     // 按源 CDN 机制要 embed 档缩略图（core 单点，ADR 2026-09-30）：内嵌体积直接等于
     // 每个下载文件变大的量，原图动辄 540KB；不认识的源原样返回，仍受 1MB 上限兜底。
     const res = await fetch(coverThumbUrl(coverUrl, COVER_SIZE.embed), { headers });
