@@ -60,5 +60,5 @@ https://<soda-cdn>/<sig>/<sig>/video/tos/cn/.../?a=8478&ch=0&cr=5&dr=0&cd=0|0|0|
 - 已知边界（本笔不修，写清判据）：
   1. **`song.url` 快路径不经出口**——移动端 audioPlayer 的 `audioUrl = song.url` 与桌面主进程 `getSodaPlayableUrl`（IPC 缓存腿，直接 `axios.get`）。两者都只在 JS/Node 栈里发请求，栈自己会转义，不是 `java.net.URI` 那条路；桌面 soda 下载改走出口后也不再有第三条。
   2. **移动端存量资源缓存（12h TTL）里可能还有脏 URL**：活性闸用 JS fetch 判活会放行，一次播放失败后 `fresh` 重试重解析、由出口归一——影响上界是「每个脏条目至多一次失败」，不做批量洗数据。
-- 证据层级：归一与出口= 单元（Node，真 core 解析链 + 注入假客户端）；下载链消费出口 = 静态守卫 + 主进程 vitest；**真机 soda 下载 = 未取证**（本机无设备 / 无 AVD，CI 亦不编译原生），待补 logcat 原文。
+- 证据层级：归一与出口= 单元（Node，真 core 解析链 + 注入假客户端）；下载链消费出口 = 静态守卫 + 主进程 vitest；**真机 soda 下载 = 已过**（2026-10-10 雷电 emulator-5556 / Android 14 / x86_64 dev build；包身份锚 lastUpdateTime=2026-10-10 00:05:21）：走移动端下载的真实接缝 `resolvePlayableUrlMobile` 取到的直链 `hasRawPipe=false`，`File.downloadFileAsync` 成功落盘；同一台设备、同一会话用未剥到出口的旁腿 `musicApi.getSodaAudioUrl`（返 `hasRawPipe=true`）复现了票面原故障——downloadFileAsync 被原生拒。logcat 原文见 PR #632 验收评论。**仍未覆盖**：CDN 侧字节完整性 / 时长一致性；以及 `musicApi.getSodaAudioUrl` 这条不经出口的残留旁腿（下条）。
 - 回退（two-way）：删掉出口那一处调用即回到原状；桌面 soda 分支整段可原样还原。
