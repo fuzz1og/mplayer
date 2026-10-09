@@ -429,23 +429,15 @@ export class DownloadService {
     try {
       let realUrl: string;
 
-      if (task.song.sourceType === 'soda') {
-        if (task.song.url) {
-          realUrl = task.song.url;
-        } else {
-          try {
-            realUrl = await musicApi.getSodaAudioUrl(task.song.id);
-          } catch (urlError) {
-            console.error('[DownloadService] 获取汽水音乐音频 URL 失败:', urlError);
-            realUrl = '';
-          }
-        }
-      } else if (task.song.sourceType === 'local') {
+      if (task.song.sourceType === 'local') {
         // 本地歌曲的 url 即文件路径，直接使用
         realUrl = task.song.url;
       } else {
         // 按身份解析（预取缓存 → 直连 → tier3）：#171 后列表歌 url 恒空，
-        // 旧签名死链（api.php?get=*）由解析链按歌曲 id 重取，绝不再交给下载流
+        // 旧签名死链（api.php?get=*）由解析链按歌曲 id 重取，绝不再交给下载流。
+        // #622：这条出口同时是 URL 编码归一的唯一落点——汽水直链里未编码的 `|`
+        // 在 core 出口处补成 `%7C`（`java.net.URI` 判它非法）。汽水不再单开一条
+        // `getSodaAudioUrl` 旁路：旁路 = 第二个取 URL 的地方，也就是第二份会漂的口径。
         try {
           const resolved = await resolvePlayableSongRouted(task.song);
           realUrl = resolved?.url || '';

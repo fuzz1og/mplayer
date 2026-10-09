@@ -56,9 +56,9 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 链路的现状与口径只在下面几处维护，改动前按需读，不要在本文件里另记一份：
 
 - **模块与常量**：`docs/agents/architecture.md` 的 `api/` / `shared/` / `tier3/` 三节 —— 路由、四层时限与解析链总预算（`playbackBudgets` / `resolutionBudget`）、健康度定序（`sourceSchedule`）、出网闸门（`outboundGate`）、预取缓存（`prefetchCache`）。
-- **语义词汇**：`GLOSSARY.md` —— 播放时限层次 / tier3 交付 / 跳歌护栏 / 初始化窗口 / 直连 / 按 ID 直取歌词源。
+- **语义词汇**：`GLOSSARY.md` —— 播放时限层次 / tier3 交付 / 跳歌护栏 / 初始化窗口 / 直连 / 按 ID 直取歌词源 / 直链编码归一。
 - **tier3 清单**：schema 与 `source`（源归属）合法值见 `docs/agents/tier3-manifest.md`。
-- **决策与口径**：时限 ADR `2026-09-27-playback-budget-layers.md` + `2026-09-28-resolution-chain-deadline.md` · 出网 ADR `2026-09-26-outbound-request-governance.md` · 调度 ADR `2026-09-25-tier3-source-scheduling.md` · 失败归因与交付/丢弃 ADR `2026-09-23-tier3-failure-attribution.md` · trace ADR `2026-09-23-playback-trace-sink.md` · 专辑/歌手契约 ADR `2026-09-27-album-and-artist-content-contract.md` · 网易歌单搜索 ADR `2026-09-27-netease-playlist-search.md` · 每源请求头 ADR `2026-10-08-per-source-request-headers.md` · 旧 `api.php?get=*` 死链见 core `utils/legacyUrl`。
+- **决策与口径**：时限 ADR `2026-09-27-playback-budget-layers.md` + `2026-09-28-resolution-chain-deadline.md` · 出网 ADR `2026-09-26-outbound-request-governance.md` · 调度 ADR `2026-09-25-tier3-source-scheduling.md` · 失败归因与交付/丢弃 ADR `2026-09-23-tier3-failure-attribution.md` · trace ADR `2026-09-23-playback-trace-sink.md` · 专辑/歌手契约 ADR `2026-09-27-album-and-artist-content-contract.md` · 网易歌单搜索 ADR `2026-09-27-netease-playlist-search.md` · 每源请求头 ADR `2026-10-08-per-source-request-headers.md` · 直链编码归一（取 URL 的单一落点）ADR `2026-10-09-playable-url-encoding-single-gate.md` · 旧 `api.php?get=*` 死链见 core `utils/legacyUrl`。
 
 ## Git Workflow
 
