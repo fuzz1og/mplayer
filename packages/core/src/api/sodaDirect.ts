@@ -3,6 +3,7 @@ import type { DirectSourceClient } from '../shared/sourceRouter.js';
 import type { UrlInfo } from '../shared/playability.js';
 import { request, bodyToText, type TransportCallOptions } from './transport.js';
 import { getUserAgent } from './antiScrape.js';
+import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
 import { musicApi } from './musicApi.js';
 
 /**
@@ -26,16 +27,27 @@ export const sodaDirectClient: DirectSourceClient = {
   /** 复用 musicApi 既有汽水直连搜索。`opts`（#556 评审 A1）透传墙钟与取消。 */
   searchSongs: (keyword, page = 1, opts) => musicApi.searchSongsSoda(keyword, page, opts),
 
-  /** 分享页直链优先（musicApi.getSodaAudioUrl 已实现），失败降级 track_v2。 */
-  resolvePlayableUrl: (song) => musicApi.getSodaAudioUrl(song.id),
+  /** 分享页直链优先（musicApi.getSodaAudioUrl 已实现），失败降级 track_v2。
+   *  #629：客户端入口一律先剥源前缀，`Song.id` 不带前缀出这个门（musicApi 门面自己也会
+   *  剥一次——宿主四处是直连门面的，走那条路；两边都幂等，不冲突）。 */
+  resolvePlayableUrl: (song) => musicApi.getSodaAudioUrl(stripSourceIdPrefix(String(song.id ?? ''))),
 
   /** 权威完整时长字段：track_v2 play_info_list 取最大档 size/bitrate + duration。
    *  匿名 track_v2 返回 200 空 body（2026-08 实测，需 PC 登录态 Cookie），
    *  空 body 时降级分享页（fetchSodaSharePage 的 duration 字段，免登录），
-   *  分享页也失败则返回 null（探测标不可用，不再抛错卡链路）。 */
+   *  分享页也失败则返回 null（探测标不可用，不再抛错卡链路）。
+   *
+   *  **#629**：换源产物的 `Song.id` 是 `soda:<站内 id>`（甚至嵌套 `kuwo:soda:<id>`），
+   *  汽水两个端点都只认裸 ID，且**带前缀不报错**——分享页返 HTTP 200 的软错误空壳
+   *  （`url:""`、无 `lyrics.sentences`、`status_code:1000004`），于是换到汽水的歌
+   *  同时静默丢歌词、丢可播地址、丢时长。这里自己发出的 track_v2 请求先剥成源站真实 ID
+   *  （分享页腿由 `fetchSodaSharePage` 自己剥）。 */
   async resolveUrlInfo(song: Song, opts?: TransportCallOptions) {
+    const rawTrackId = stripSourceIdPrefix(String(song.id ?? ''));
+    // 剥完是空的（脏数据 `soda:`）→ 没什么可探的，也别白打出网请求（出网治理 ADR）
+    if (!rawTrackId) return null;
     const params = new URLSearchParams({
-      track_id: song.id,
+      track_id: rawTrackId,
       media_type: 'track',
       aid: '386088',
       device_platform: 'web',
@@ -83,7 +95,7 @@ export const sodaDirectClient: DirectSourceClient = {
     }
     // 空 body / 无 track / 解析失败 → 分享页免登录降级（trackInfo.duration 权威完整时长）
     try {
-      const page = await musicApi.fetchSodaSharePage(song.id);
+      const page = await musicApi.fetchSodaSharePage(rawTrackId);
       if (!page || !page.durationMs) return null;
       return {
         url: page.audioUrl,
