@@ -72,7 +72,15 @@ export { searchSwapCandidates, applySwap } from './shared/sourceSwap.js';
 export { songUsesSongidLyrics, isSodaSource, isInlineLyrics, planLyricsFetch } from './shared/songLyrics.js';
 export type { LyricsFetchPlan } from './shared/songLyrics.js';
 // 封面按源机制要缩略图（#496）：网易 ?param=WxH / QQ 路径模板 R{size}x{size} / 其余源原样。
-export { COVER_SIZE, coverThumbUrl } from './shared/coverUrl.js';
+// 内嵌下载封面的自适应档位（#575）：降级链 + 字节上限判据是同一模块的单点。
+export {
+  COVER_SIZE,
+  coverThumbUrl,
+  EMBED_COVER_MAX_BYTES,
+  EMBED_COVER_TIERS,
+  embedCoverWithinBudget,
+  embedCoverUrlChain,
+} from './shared/coverUrl.js';
 // 歌词入队取词（#429）：可见期预取的入队 / single-flight / 取消 / 单次接纳上限单点。
 // 并发与限速不在本模块——那是 transport 双层闸门（#408）的职责。
 export {
