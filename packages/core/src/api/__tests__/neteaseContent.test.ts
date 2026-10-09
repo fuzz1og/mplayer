@@ -137,6 +137,38 @@ describe('neteaseDirect 内容能力（#278 迁移）', () => {
     expect(cacheManager.get('lyric_id_3')).toEqual({ v: '[00:01.00]词3' });
   });
 
+  it('getNeteaseLyrics：songId 带源前缀（netease:123 / 嵌套 kuwo:netease:123）→ 剥成源站真实 ID（#623）', async () => {
+    cacheManager.clearAll();
+    setTransportRetryOptions({ maxRetries: 0, baseDelayMs: 0 });
+    // 上游 /api/song/lyric 只认裸数字 id：带前缀（id=netease%3A123）实测 code=400 → 空词，
+    // 正是移动端「songid 取词返回空串」的现象（桌面取到词只因那次样本的 id 恰好是裸数字）。
+    const seen = mockTransport([
+      {
+        match: (u) => u.includes('/api/song/lyric'),
+        respond: (req) => {
+          const id = new URL(req.url).searchParams.get('id');
+          if (id !== '123') return { status: 200, body: JSON.stringify({ code: 400 }) };
+          return json({ lrc: { lyric: '[00:01.00]词123' } });
+        },
+      },
+    ]);
+
+    // 单层前缀（换源产物 `${source}:${rawId}`）→ 请求 URL 用裸 123、取到词，缓存键归一为裸 id
+    expect(await getNeteaseLyrics('netease:123')).toBe('[00:01.00]词123');
+    expect(new URL(seen[0].url).searchParams.get('id')).toBe('123');
+    expect(cacheManager.get('lyric_id_123')).toEqual({ v: '[00:01.00]词123' });
+
+    // 多层嵌套前缀 → 循环剥离到源站真实 ID
+    cacheManager.clearAll();
+    expect(await getNeteaseLyrics('kuwo:netease:123')).toBe('[00:01.00]词123');
+    expect(new URL(seen[1].url).searchParams.get('id')).toBe('123');
+
+    // 裸数字 id 向后兼容（不受剥前缀影响）
+    cacheManager.clearAll();
+    expect(await getNeteaseLyrics('123')).toBe('[00:01.00]词123');
+    expect(new URL(seen[2].url).searchParams.get('id')).toBe('123');
+  });
+
   it('searchSongs：搜索结果不带歌词、零取词请求（#409）', async () => {
     const seen = mockTransport([
       {
