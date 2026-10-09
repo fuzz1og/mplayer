@@ -144,7 +144,7 @@ TS + Vite + Electron（`electron/` 目录：`main.ts`/`preload.ts`/`smtcSync.ts`
 - **逐行 vs 逐字（karaoke）**：MPlayer core `parseLRC`（`packages/core/src/utils/lyricsParser.ts:11`）只解析行级 `[mm:ss.xx]`，产出 `LyricLine{time,text}`，**不认**逐字内联时间戳（AMLL/Apple Music 那种 `<mm:ss.xx>` 逐字高亮需要扩展解析器 + 逐字插值）。`amadoncy` 有 `wordKaraoke` 开关但依赖 QQ 侧数据。
 - **偏移校正（offset）**：标准 LRC 支持全局 `[offset:±ms]` 与逐行微调；MPlayer 现 `parseLRC` **不读 offset**（正则只抓时戳+文本，`:15`）。桌面歌词工具（`tcrrry` 有 `LyricOffsetMemoryActivity`）普遍把「按歌曲记忆偏移」作为一等功能。
 - **双语/译文**：core 有 `hasTranslation` 字段但**恒 false、未真正拆译**（`:8/:36`）。覆盖层若要双语需先补这里。
-- **无歌词兜底**：两端都已有「暂无歌词」态（桌面 `LyricsDisplay.tsx:62`，移动 `showLyrics` 空态）；`planLyricsFetch` 的 `none` 分支是唯一允许搜索补全的场景（`packages/core/src/shared/songLyrics.ts:54`、移动 `resolveLyricsText` `services/lyrics.ts:13`）。覆盖层应沿用「无词=隐藏或占位」，不新造逻辑。
+- **无歌词兜底**：两端都已有「暂无歌词」态（桌面 `LyricsDisplay.tsx:79`，移动 `showLyrics` 空态）；`planLyricsFetch` 的 `none` 分支是唯一允许搜索补全的场景（`packages/core/src/shared/songLyrics.ts:54`、移动 `resolveLyricsText` `services/lyrics.ts:14`）。覆盖层应沿用「无词=隐藏或占位」，不新造逻辑。
 
 ---
 
@@ -157,7 +157,7 @@ TS + Vite + Electron（`electron/` 目录：`main.ts`/`preload.ts`/`smtcSync.ts`
 | 主窗建窗 | `src/main/main.ts:143` `createWindow()`（`frame:false, show:false`, 安全基线 `contextIsolation:true`+preload `:149-159`）| 新增 `createLyricOverlayWindow()`，选项照 §1.1（`transparent/hasShadow:false/alwaysOnTop/skipTaskbar/resizable:false/fullscreenable:false/backgroundThrottling:false`），**复用同一 preload**（不抄 lx-music 的 `nodeIntegration:true`） |
 | 现成「推送另一窗」模板 | 托盘：渲染层 `src/renderer/store/playerStore.ts:1040` `ipcRenderer.send('tray:state', {songName,artist,isPlaying})` → 主进程 `src/main/main.ts:428` 收并更新 TrayManager | 桌面歌词同构：新增语义通道（如 `lyricOverlay:line`）由渲染层 `send` 当前行、主进程转发给覆盖层窗 `webContents.send`；若嫌主进程中转，可上 §1.1 的 `MessageChannelMain`（MPlayer 是单窗，直传收益有限，先用简单语义通道） |
 | 歌词文本源 | 播放歌词在 `playerStore.lyrics`（声明 `:114`，装载 `loadLyricsWithRetry:46`→`set({lyrics})` `:628`）；取词 I/O 走 `callMusicApi('getLyrics'/'getNeteaseLyrics'/'getSodaLyrics')`（`musicApiContract.ts:24-37` BASE_METHODS） | 覆盖层不需要重新取词——从同一 `lyrics` 走。**桌面取词决策已收敛**：`loadLyricsWithRetry` 在 `:63` 消费 core `planLyricsFetch`（#608 / PR #614，术语见 `GLOSSARY.md`「取词单点」），覆盖层只订阅同一份 `lyrics`，**不得在覆盖层里另判一次源**，否则就成了第 5 处漂移 |
-| 逐行当前句 | `LyricsDisplay.tsx:21` `parseLRC` + `:34` `usePlaybackSelector` 订阅 `playbackClock`（`playbackClock.ts`，采样 `DEFAULT_PLAYBACK_INTERVAL_MS=250` `:55`）派生 `findCurrentLyricIndex` | 覆盖层窗内同样 `parseLRC`+按 position 选行；position 用 IPC 从主窗随 `lyricOverlay:line` 带上，或覆盖层自持一份时钟。**换行才推**，250ms 采样落到覆盖层只画最终文本，无高频负担 |
+| 逐行当前句 | `LyricsDisplay.tsx:26` `parseLRC` + `:34` `usePlaybackSelector` 订阅 `playbackClock`（`playbackClock.ts`，采样 `DEFAULT_PLAYBACK_INTERVAL_MS=250` `:55`）派生 `findCurrentLyricIndex` | 覆盖层窗内同样 `parseLRC`+按 position 选行；position 用 IPC 从主窗随 `lyricOverlay:line` 带上，或覆盖层自持一份时钟。**换行才推**，250ms 采样落到覆盖层只画最终文本，无高频负担 |
 | IPC/preload 契约 | `src/shared/electronAPI.ts:9` 只有 `invoke/send/on/removeListener`（channel 字符串驱动，`:11` 渲染层按通道断言类型）| 新通道是纯字符串语义通道，preload 桥不用动；只需主进程注册 handler + 覆盖层 `on`。sender 校验沿用 `checkIpcSender`（`main.ts:111`）——覆盖层页 URL 须纳入可信白名单 |
 
 **桌面最小落地骨架（不在本调研实现）**：主进程加 `winLyric.ts`（仿 lx-music 模块）建覆盖层窗 + 一组 `setIgnoreMouseEvents/setAlwaysOnTop/setBounds` 导出；渲染层加一个极薄的 `lyric.html` 页组件（只画当前行 + 下一行 + 锁定/字号本地态）；`playerStore` 在换行处 `electronAPI.send('lyricOverlay:line', {cur,next,enabled})`；设置页加「桌面歌词：开/锁/置顶」开关（对齐现有设置 IPC 域 `src/main/ipc/appSettingsUpdate.ts`）。
