@@ -63,7 +63,7 @@ describe('#410 存储按域分表', () => {
     const storage = new FileStorage();
     await storage.addFavorite(song('netease:1'));
     const playlistId = await storage.createPlaylist('测试');
-    await storage.addSongToPlaylist(playlistId, song('netease:2'));
+    await storage.addSongsToPlaylist(playlistId, [song('netease:2')]);
     await storage.addToPlayHistory(song('netease:3'));
     await storage.flushSave();
 

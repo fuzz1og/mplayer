@@ -112,7 +112,7 @@ _Avoid_: 无结果、空态（空态是**取到了但确实为空**，与这两�
 _Avoid_: 匿名 track_v2、汽水歌词源、soda 歌词（匿名直连取不回）
 
 **内嵌元数据**:
-写进音频文件字节自身的曲目信息（标题/歌手/专辑/时长/封面），随文件被复制到任何位置都带着，不依赖本 App 的数据记录。与**歌词侧车**是两个不同机制——歌词不内嵌。本项目只对 MP3 承诺内嵌（ID3v2）；M4A 经 mp3tag 写出的是 ID3v2-in-MP4 的 `ID32` box，而非 iTunes `ilst`/`covr`，media3/ExoPlayer 与 Apple 系读取方看不到，因此不构成 m4a 的内嵌承诺；FLAC/Ogg 不写（灌 ID3 会损坏文件）。
+写进音频文件字节自身的曲目信息（标题/歌手/专辑/时长/封面），随文件被复制到任何位置都带着，不依赖本 App 的数据记录。与**歌词侧车**是两个不同机制——歌词不内嵌。本项目只对 MP3 承诺内嵌（ID3v2）；M4A 经 mp3tag 写出的是 ID3v2-in-MP4 的 `ID32` box，而非 iTunes `ilst`/`covr`，media3/ExoPlayer 与 Apple 系读取方看不到，因此不构成 m4a 的内嵌承诺；FLAC/Ogg 不写（灌 ID3 会损坏文件）。写/不写的判定收敛在 core `planAudioTagging` 单点，两端下载 adapter 消费同一份计划（#607）；实测原文与取舍见 `docs/adr/2026-10-08-download-tag-write-boundary.md`。
 _Avoid_: 元数据（单称）、标签、ID3（它是 MP3 的载体格式，不是概念）
 
 **歌词侧车**:

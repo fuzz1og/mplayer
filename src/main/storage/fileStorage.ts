@@ -617,59 +617,12 @@ export class FileStorage {
   }
 
   // Playlist Songs
-  async addSongToPlaylist(playlistId: number, song: Song): Promise<number> {
-    await this.ensureLoaded();
-    // 验证歌单是否存在
-    const playlist = this.data.playlists.find(p => p.id === playlistId);
-    if (!playlist) {
-      throw new Error(`歌单不存在: ${playlistId}`);
-    }
-
-    // 验证歌曲数据完整性（#556 评审 C：判据单点在 core `songWriteRejection`，
-    // 本层不再各留一份 validateSongData）。
-    if (songWriteRejection(song) !== null) {
-      throw new Error('歌曲数据不完整');
-    }
-
-    // 检查歌曲是否已经存在于歌单中（#553：判据 = 身份键，不是裸 Song.id——
-    // 跨源同 id 是两首不同的歌，裸 id 会把它们静默当成同一首）。
-    const songKey = identityKeyFrom(song.sourceType, song.id);
-    const existing = this.data.playlistSongs.find(
-      ps => ps.playlistId === playlistId && playlistSongKey(ps) === songKey
-    );
-    if (existing) {
-      return existing.id!;
-    }
-
-    // 容量上限：**逐首版满则抛错**（单个操作无法「部分成功」，调用方需要显式失败信号）。
-    // 与批量版的静默截断不同——批量版有 truncated 显式通道（#554），逐首版没有，
-    // 所以这里只能抛。两版语义的差异是刻意的，见 addSongsToPlaylist 的注释。
-    const currentSongs = this.data.playlistSongs.filter(ps => ps.playlistId === playlistId);
-    if (currentSongs.length >= DEFAULT_PLAYLIST_CAPACITY) { // 容量上限的唯一来源在 core
-      throw new Error('歌单已达到最大容量限制');
-    }
-
-    const maxOrder = currentSongs.reduce((max, ps) => Math.max(max, ps.order), -1);
-
-    const id = nextId();
-    const playlistSong: PlaylistSong = {
-      id,
-      playlistId,
-      songId: song.id,
-      song: song as Song,
-      order: maxOrder + 1
-    };
-
-    this.data.playlistSongs.push(playlistSong);
-    await this.saveData('playlistSongs');
-    return id;
-  }
-
   /**
    * 批量加入歌单（#493）——整批**只落一次盘**（一次 saveData('playlistSongs')），
-   * 供榜单页「保存全部到新歌单」这类大列表使用；逐首 addSongToPlaylist 会 N 次全量重写 JSON。
+   * 供榜单页「保存全部到新歌单」这类大列表使用。**#610 起这是歌单写入的唯一存储腿**
+   * （逐首单曲通道 `playlist:addSong` / `addSongToPlaylist` 已删——批量腿是唯一写入口）。
    *
-   * 契约（与调用方约定，刻意与逐首版不同）：
+   * 契约（与调用方约定）：
    * - 歌单存在校验一次；逐首用 core `songWriteRejection` 判定，**不合法/重复的跳过**，不整批抛错；
    * - 按**歌曲身份键**去重（对歌单已有 + 本批内部，`identityKeyFrom`），返回真正新增的
    *   PlaylistSong id 列表；跨源同 id 是两首不同的歌，不再被当成同一首（#553）；
@@ -678,7 +631,6 @@ export class FileStorage {
    *   并负责回滚空歌单（#493 验收：绝不允许既没报错又留下空歌单）。
    * - 容量满时**静默截断**（只写到上限为止）；截断事实由调用方按「返回的新增数 < 指派数」
    *   判定并形成显式通道（#554：core `PlaylistWriteResult.truncated`）。
-   *   逐首版本模块满则**抛错**——单个操作没有「部分成功」这回事，必须给出失败信号。
    * - **不做跨源同名裁决**：本层只按**身份键**去重（存量数据的安全网，跨源同名同歌手会并存）。
    *   「同名异源要不要并入」是**调用方**的事：core 写入编排（#553）在写入前用
    *   `classifySong` 产出 NEW / DUPLICATE / NAME_CONFLICT 三类落点，桌面

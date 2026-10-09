@@ -653,8 +653,8 @@ describe('#591 原生结算：源码契约守卫（不替代 Kotlin 编译/设�
     expect(patch).not.toContain('if (addedCount == 0)');
     expect(patch).not.toContain('input.refillEmpty');
 
-    const finish = body('  private fun finishAtTail(', '  private fun isExhaustedAtCurrent(');
-    expect(finish).toContain('markExhausted()');
+    const finish = body('  private fun finishAtTail(', '  /**\n   * 「下一首播放」（#494）');
+    expect(finish).toContain('exhaustion.mark(store.currentRevision(), store.currentIndex())');
     expect(finish).toContain('EndReason.EXHAUSTED');
   });
 
@@ -667,20 +667,20 @@ describe('#591 原生结算：源码契约守卫（不替代 Kotlin 编译/设�
 
   it('LOW_WATER 在当前 (revision,index) 已闩住时直接返回（终结 ~2s 重问）', () => {
     const maybe = body('  private fun maybeRequestTracks(', '  /** 发 needTracks');
-    expect(maybe).toContain('isExhaustedAtCurrent()');
+    expect(maybe).toContain('exhaustion.isLatchedAt(store.currentRevision(), store.currentIndex())');
     expect(maybe).toContain('NeedReason.LOW_WATER');
     // 闩检查必须在真正发 needTracks 之前
-    expect(maybe.indexOf('isExhaustedAtCurrent()')).toBeLessThan(maybe.indexOf('requestTracks(reason)'));
+    expect(maybe.indexOf('exhaustion.isLatchedAt(store.currentRevision(), store.currentIndex())')).toBeLessThan(maybe.indexOf('requestTracks(reason)'));
   });
 
   it('显式用户意图 / 曲目切换 / 新队列都会清除终局闩', () => {
-    expect(body('  fun play(', '  fun pause(')).toContain('clearExhausted()');
-    expect(body('  fun next(', '  fun prev(')).toContain('clearExhausted()');
-    expect(body('  fun prev(', '  fun seek(')).toContain('clearExhausted()');
+    expect(body('  fun play(', '  fun pause(')).toContain('exhaustion.clear()');
+    expect(body('  fun next(', '  fun prev(')).toContain('exhaustion.clear()');
+    expect(body('  fun prev(', '  fun seek(')).toContain('exhaustion.clear()');
     expect(
       body('  override fun onMediaItemTransition(', '  override fun onPlaybackStateChanged(')
-    ).toContain('clearExhausted()');
-    expect(body('  fun loadQueue(', '  fun patchQueue(')).toContain('clearExhausted()');
+    ).toContain('exhaustion.clear()');
+    expect(body('  fun loadQueue(', '  fun patchQueue(')).toContain('exhaustion.clear()');
   });
 
   it('JS 每轮如实上报 outcome，refillEmpty 与第二次回执轮一起退场', () => {
@@ -696,7 +696,7 @@ describe('#591 原生结算：源码契约守卫（不替代 Kotlin 编译/设�
     expect(from, '找不到 #574 的稳态水位分支').toBeGreaterThan(-1);
     const branch = patch.slice(from);
     expect(branch).toContain('settled == SettleOutcome.EMPTY');
-    expect(branch).toContain('markExhausted()');
+    expect(branch).toContain('exhaustion.mark(store.currentRevision(), store.currentIndex())');
     // 只闩 LOW_WATER：不暂停、不发 QUEUE_ENDED——播放没结束，曲末仍由原生 repeatMode 绕回
     expect(branch).not.toContain('finishAtTail(ctrl)');
     expect(branch).not.toContain('EndReason.EXHAUSTED');

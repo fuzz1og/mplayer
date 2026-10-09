@@ -81,19 +81,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   @Volatile
   private var pendingUserNext = false
 
-  /**
-   * 终局闩（#563）：在当前 (revision, index) 上已判定「补窗也推进不了」。
-   *
-   * 窗口尾部零新增补窗若只是把 [pendingUserNext] 丢掉，用户意图既没推进也没结束，
-   * 且每 1s 的 LOW_WATER tick 会永远重复要歌。这里把它钉在当前 (revision, index) 上，
-   * 让 maybeRequestTracks(LOW_WATER) 直接返回；显式用户意图（play/next/prev）、
-   * 曲目切换与新队列（revision 变）都会让它失效。
-   */
-  @Volatile
-  private var exhaustedAtRevision = -1L
-
-  @Volatile
-  private var exhaustedAtIndex = -1
+  /** 终局闩（#563）：置位 / 清除 / 查询的单一落点，语义见 [ExhaustionLatch]。 */
+  private val exhaustion = ExhaustionLatch()
 
   private var windowHoleDeadline: Runnable? = null
   private var errorRetry: Runnable? = null
@@ -303,7 +292,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     store.load(tracks, startIndex)
     userWantsPlay = playWhenReady
     holePending = false
-    clearExhausted()
+    exhaustion.clear()
     skippedThisSession = 0
     lastKey = store.current()?.key
     cancelWindowHoleDeadline()
@@ -414,7 +403,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
           // 队尾还有格（'grown' 的新项就追加在当前之后）→ 推进，与旧行为一致
           ctrl.player.seekToNextMediaItem()
           ctrl.player.playWhenReady = userWantsPlay
-          clearExhausted()
+          exhaustion.clear()
           Log.i(TAG, "pendingUserNext → advanced to index=${at + 1}/${ctrl.player.mediaItemCount}")
         } else {
           // 末项：只有「投出的候选全已在 store 里」（'deduped'）才可能绕回——列表循环/随机
@@ -424,7 +413,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
             store.moveTo(existing)
             ctrl.player.seekTo(existing, 0L)
             ctrl.player.playWhenReady = userWantsPlay
-            clearExhausted()
+            exhaustion.clear()
             Log.i(
               TAG,
               "pendingUserNext → wrapped to existing index=$existing (outcome=deduped added=$addedCount)"
@@ -435,7 +424,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
           }
         }
       } else if ((settled == SettleOutcome.DEDUPED || settled == SettleOutcome.EMPTY) &&
-        !isExhaustedAtCurrent() && ctrl.player.mediaItemCount > 0 &&
+        !exhaustion.isLatchedAt(store.currentRevision(), store.currentIndex()) &&
+        ctrl.player.mediaItemCount > 0 &&
         ctrl.currentIndex() >= ctrl.player.mediaItemCount - 1
       ) {
         // #574 的稳态水位终止条件，现在由 outcome 驱动：整个歌单都已在原生队列里、当前又停在
@@ -443,8 +433,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
         // （'empty'）——旧实现只有 #574 补的那条「append 非空且零新增」特例有终止条件，其余
         // 每 ~2s 重问一次（真机实测 25s / 13 次 headless）。这里只对**本轮事实**上闩：不暂停、
         // 不发 QUEUE_ENDED——播放没有结束，曲末仍由原生 repeatMode 绕回；闩按 (revision,index)
-        // 失效，任何真正的切歌 / 显式 play·next·prev 都会自动解开（见 isExhaustedAtCurrent）。
-        markExhausted()
+        // 失效，任何真正的切歌 / 显式 play·next·prev 都会自动解开（见 ExhaustionLatch.isLatchedAt）。
+        exhaustion.mark(store.currentRevision(), store.currentIndex())
         Log.i(
           TAG,
           "no growth at window tail (outcome=$settled added=$addedCount " +
@@ -523,7 +513,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     holePending = false
     cancelWindowHoleDeadline()
     ctrl.player.pause()
-    markExhausted()
+    exhaustion.mark(store.currentRevision(), store.currentIndex())
     Log.i(
       TAG,
       "no advanceable item at tail (revision=${store.currentRevision()} index=${store.currentIndex()}) → exhausted"
@@ -532,23 +522,6 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       Events.QUEUE_ENDED,
       mapOf("reason" to EndReason.EXHAUSTED, "index" to ctrl.currentIndex(), "revision" to store.currentRevision())
     )
-  }
-
-  /**
-   * #563：当前 (revision, index) 是否已判定「补窗也推进不了」。
-   * revision / index 一变，旧闩自然失效（无需显式清）。
-   */
-  private fun isExhaustedAtCurrent(): Boolean =
-    exhaustedAtRevision == store.currentRevision() && exhaustedAtIndex == store.currentIndex()
-
-  private fun markExhausted() {
-    exhaustedAtRevision = store.currentRevision()
-    exhaustedAtIndex = store.currentIndex()
-  }
-
-  private fun clearExhausted() {
-    exhaustedAtRevision = -1L
-    exhaustedAtIndex = -1
   }
 
   /**
@@ -660,7 +633,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   fun play() {
     userWantsPlay = true
-    clearExhausted()
+    exhaustion.clear()
     val ctrl = controller ?: return
     main.post {
       if (ctrl.player.mediaItemCount == 0 && store.size() > 0) {
@@ -685,7 +658,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   fun next() {
     val ctrl = controller ?: return
     userWantsPlay = true
-    clearExhausted()
+    exhaustion.clear()
     main.post {
       if (ctrl.player.mediaItemCount == 0) {
         pendingUserNext = true
@@ -706,7 +679,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   fun prev() {
     val ctrl = controller ?: return
-    clearExhausted()
+    exhaustion.clear()
     main.post {
       if (ctrl.player.mediaItemCount > 0) ctrl.player.seekToPreviousMediaItem()
       refreshState()
@@ -765,7 +738,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
     val ctrl = controller ?: return
     pendingUserNext = false
-    clearExhausted()
+    exhaustion.clear()
     if (mediaItem == null) return
     val index = ctrl.currentIndex()
     store.moveTo(index)
@@ -919,7 +892,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     if (controller == null) return
     // #563：当前 (revision,index) 已判定「补窗也推进不了」→ 不再自动要歌，终结 ~2s 重问循环。
     // HOLE 是显式用户动作（next）直接调 requestTracks，不经过这里，天然放行。
-    if (reason == NeedReason.LOW_WATER && isExhaustedAtCurrent()) return
+    if (reason == NeedReason.LOW_WATER &&
+      exhaustion.isLatchedAt(store.currentRevision(), store.currentIndex())
+    ) return
     if (reason == NeedReason.LOW_WATER && !policy.isLowWater(store.aheadCount())) return
     // 水位事件去重：同一水位只发一次，补进来后由 aheadCount 复位
     if (reason == NeedReason.LOW_WATER && store.aheadCount() > policy.prefetchAhead) return
@@ -1323,6 +1298,11 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val json = JSONObject()
     try {
       val queue = store.snapshot()
+      // 已知边界（#592，本票**不修**）：落盘快照里的 headers 被显式清空 → 服务从快照
+      // restore 出来的队列**不带** per-item UA/Referer（内存态 record 仍有头）。
+      // 若 restore 后由原生直接推进播放（JS 还没把队列重新 patch 回来），这一段请求无头。
+      // 改动面比本票大（落盘契约 + restore 路径验收），见 ADR
+      // `docs/adr/2026-10-08-per-source-request-headers.md` 的「已知边界」。
       val tracks = queue.optJSONArray("tracks") ?: org.json.JSONArray()
       for (i in 0 until tracks.length()) {
         tracks.optJSONObject(i)?.put("headers", JSONObject())

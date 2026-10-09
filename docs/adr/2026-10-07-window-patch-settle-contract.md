@@ -1,6 +1,6 @@
 # ADR: 补窗结算契约——`patchQueue` 的 outcome 是显式入参
 
-- 状态：已接受（**决策；本轮未落地实现**）
+- 状态：已接受（**决策；已由 #600 部分落地**——下列 1-4 项已实现，5-6 项仍待办）
 - 日期：2026-10-07
 - 关联：**#591**（本决策票）· #563（原生窗口末项 + 补窗零新增）· #574（tail lowwater latch）· #518（基准稳定性）· #519（稳定随机序）· 上游 ADR `2026-09-29-native-playback-ownership.md`（原生持队列 + 原生推进；I1/I2 事件只当通知、I6 推进不依赖 JS 定时器）· 术语见 `GLOSSARY.md`（初始化窗口）
 
@@ -109,16 +109,16 @@ patchQueue(input: { baseRevision: number; append?: Track[]; upsert?: Track[]; re
 
 ## 后果
 
-### 未落地（如实记录——本轮**没有**改任何代码）
+### 落地情况（#600 之后）
 
-本 ADR 只交付决策与取证；下列全部**待实现**，按依赖顺序：
+本 ADR 交付决策与取证。**1-4 项已由 #600 落地**（提交 `b178c78`、PR #600；含独立复核与反例对照）；**5-6 项仍未落地**：
 
-1. **类型与原生入参**：`index.ts` 加 `PatchOutcome`，`patchQueue` input 加 `outcome` 并删 `refillEmpty`；`PlayerModule.kt` 的 `PatchQueueInput` 加同名字段（`refillEmpty` 同步退场）；`nativePlayer.ts:645` 的 `acknowledgeEmptyRefill` 改为带 outcome 的一次投喂。**这是跨端类型改动**，需同步 `__tests__` 里的假原生桥。
-2. **原生结算收拢**：`PlayerService.kt:397-442` 的三条分支按 outcome 重写为「`'deduped'` / `'empty'`」两条；`422-426` 的注释与分支语义一并修正；`maybeRequestTracks` 的闩检查（`876-884`）保持不变（outcome 是上游，闩是下游）。
-3. **用例**：#563 与 #574 的场景各一条**修前会红**的行为用例（尾项 + 零新增；稳态水位末项绕回）。注意既有测试的形状是「JS 假原生桥 + Kotlin 源码文本守卫」（`packages/mobile/__tests__/nativePlayNext.test.ts`），**源码文本守卫不等于行为验收**——Kotlin 侧的 outcome 分支必须有用例（真机或 Robolectric 级），否则只是把守卫换成新字符串。
-4. **真机复现**：窗口末项 / 补窗零新增时行为明确且不重复补窗（#591 验收第 3 条）。属原生改动：**PR / push 不编译原生**（ADR `2026-09-29-ci-verification-boundary.md`），本机 `./gradlew assembleDebug` 与设备实测见 `mobile-device-debugging` skill 与 `docs/agents/testing.md`。
-5. **实现期需重新确认的一处**：删掉「第二次回执轮」后，零候选的 `patchQueue` 轮会**同时**携带 `outcome: 'empty'` 与空 `append`——须确认 store 的 revision 不会因空 append 而推进（否则原生 revision 会无谓地变，导致别的在飞轮被判 `stale`）。门禁线索：`QueueStore.kt:115`（`patch`）与 `212`（`currentRevision`）。
-6. **文档同步**（下一步的独立提交）：`GLOSSARY.md` 增加「补窗结算 outcome」词条；`docs/agents/architecture.md` 的原生模块节指向本 ADR；本索引的状态从「已接受」按落地进度更新。
+1. **[已落地 #600]** **类型与原生入参**：`index.ts` 加 `PatchOutcome`，`patchQueue` input 加 `outcome` 并删 `refillEmpty`；`PlayerModule.kt` 的 `PatchQueueInput` 加同名字段（`refillEmpty` 同步退场）；`nativePlayer.ts:645` 的 `acknowledgeEmptyRefill` 改为带 outcome 的一次投喂。**这是跨端类型改动**，需同步 `__tests__` 里的假原生桥。
+2. **[已落地 #600]** **原生结算收拢**：`PlayerService.kt:397-442` 的三条分支按 outcome 重写为「`'deduped'` / `'empty'`」两条；`422-426` 的注释与分支语义一并修正；`maybeRequestTracks` 的闩检查（`876-884`）保持不变（outcome 是上游，闩是下游）。
+3. **[已落地 #600]** **用例**：#563 与 #574 的场景各一条**修前会红**的行为用例（尾项 + 零新增；稳态水位末项绕回）。注意既有测试的形状是「JS 假原生桥 + Kotlin 源码文本守卫」（`packages/mobile/__tests__/nativePlayNext.test.ts`），**源码文本守卫不等于行为验收**——Kotlin 侧的 outcome 分支必须有用例（真机或 Robolectric 级），否则只是把守卫换成新字符串。
+4. **[已落地 #600]** **真机复现**：窗口末项 / 补窗零新增时行为明确且不重复补窗（#591 验收第 3 条）。属原生改动：**PR / push 不编译原生**（ADR `2026-09-29-ci-verification-boundary.md`），本机 `./gradlew assembleDebug` 与设备实测见 `mobile-device-debugging` skill 与 `docs/agents/testing.md`。
+5. **[仍未落地]** **实现期需重新确认的一处**：删掉「第二次回执轮」后，零候选的 `patchQueue` 轮会**同时**携带 `outcome: 'empty'` 与空 `append`——须确认 store 的 revision 不会因空 append 而推进（否则原生 revision 会无谓地变，导致别的在飞轮被判 `stale`）。门禁线索：`QueueStore.kt:115`（`patch`）与 `212`（`currentRevision`）。
+6. **[仍未落地]** **文档同步**（下一步的独立提交）：`GLOSSARY.md` 增加「补窗结算 outcome」词条；`docs/agents/architecture.md` 的原生模块节指向本 ADR；本索引的状态从「已接受」按落地进度更新。
 
 ### 得到与代价
 
