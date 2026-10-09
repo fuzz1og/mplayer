@@ -296,6 +296,24 @@ describe('DownloadService 按身份解析（resolve-by-identity）', () => {
     expect(calledWith.url).not.toBe(deadUrl);
   });
 
+  it('⭐ 汽水下载同样只走解析出口（#622：不再有 getSodaAudioUrl 旁路，编码归一在那一处）', async () => {
+    const song = makeSong({ sourceType: 'soda', id: '7679694801201334312', url: '' });
+    routedResolveMock.resolve.mockResolvedValue({
+      url: 'https://v5-se-ex-alismart-luna.douyinvod.com/x.mp3?cd=0%7C0%7C0%7C5',
+      nonFull: false,
+    });
+    serveDownload('audio/mpeg');
+
+    const tasks = await service.addBatchDownloads([song]);
+    await ticks();
+
+    expect(tasks[0].status).toBe('completed');
+    expect(routedResolveMock.resolve).toHaveBeenCalledTimes(1);
+    expect(axiosMock.download).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://v5-se-ex-alismart-luna.douyinvod.com/x.mp3?cd=0%7C0%7C0%7C5' })
+    );
+  });
+
   it('解析失败（无直链）任务进 error 态并给出可读错误', async () => {
     const song = makeSong({ url: '' });
     routedResolveMock.resolve.mockResolvedValue({ url: '', nonFull: false });

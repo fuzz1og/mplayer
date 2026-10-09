@@ -25,6 +25,7 @@ import {
   TIER3_CHAIN_BUDGET_MS,
 } from './playbackBudgets.js';
 import { createResolutionBudget, type ResolutionBudget } from './resolutionBudget.js';
+import { normalizeUrlEncoding } from '../utils/urlEncoding.js';
 
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
@@ -1352,13 +1353,31 @@ async function validateDirectLeg(
 }
 
 /**
+ * 可播 URL 的**唯一出口**（#622）：四条腿（直连 / 权威时长 / tier3 / 严格搜索）与预取命中
+ * 都从这里出去，所以 URL 的编码归一只做在这一处。
+ *
+ * 成因：汽水 CDN 直链把 `cd=0|0|0|5` 原样吐出来，未编码的 `|` 在 JS 侧一路放行（WHATWG URL
+ * 允许 query 里出现它），但 `java.net.URI` 按 RFC 3986 判它非法——移动端
+ * `File.downloadFileAsync` 与 ExoPlayer 都在原生层抛转换失败。播放链与两条下载链都吃本出口，
+ * 所以宿主侧不再各自补一遍（补在调用点＝两处口径，迟早漂）。
+ */
+async function resolveRoutedInner(
+  song: Song,
+  ctx: TraceCtx | null,
+  budget: ResolutionBudget,
+): Promise<RoutedPlayable> {
+  const playable = await resolveChainInner(song, ctx, budget);
+  return { ...playable, url: normalizeUrlEncoding(playable.url) };
+}
+
+/**
  * 模式感知播放解析（带完整时长校验，T12 #158）：
  * 直连客户端若有 resolveUrlInfo（权威 playTime/size/br/fee/payed），用它做
  * 试听版判定（时长比 <0.5 → nonFull）；否则退回 resolvePlayableUrl。
  * 空 URL（无版权/VIP）原样上抛（nonFull=false），由换元层处理；
  * 直连失败且 tier3 未命中 = 上抛（D2 语义）。
  */
-async function resolveRoutedInner(
+async function resolveChainInner(
   song: Song,
   ctx: TraceCtx | null,
   budget: ResolutionBudget,
