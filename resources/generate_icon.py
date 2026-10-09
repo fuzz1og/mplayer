@@ -257,8 +257,9 @@ def write_ico(render, path, sizes=(16, 32, 48, 256)):
     """手写 ICO。<=48 用 BMP 条目（32 位 + AND 掩码，老工具也认），256 用 PNG 条目
     （Vista+ 支持；不压缩的话单这一张就 262KB，整个 ico 会胖十倍）。
 
-    BMP 条目的像素顺序是 **BGRA**（Windows 的 DIB 约定），不是 Pillow 的 RGBA。
-    写反的后果不是「稍微不对」而是**红蓝互换**：蓝砖直接变橙棕（1.8.6 就这么错的）。
+    BMP 条目有两处字节序和 Pillow 不一样，写错都不是「稍微不对」而是肉眼可见：
+    通道是 **BGRA**（写反 = 红蓝互换，蓝砖变橙棕，1.8.6 就这么错的）；
+    行序是 **bottom-up**（写反 = 整张垂直翻转，音符倒过来，1.8.7 就这么错的）。
     每个尺寸都由 render(sz) 按目标像素原生渲染，而不是从 1024 母版缩下来 ——
     16px 上两者差别肉眼可见。
     """
@@ -272,7 +273,10 @@ def write_ico(render, path, sizes=(16, 32, 48, 256)):
             small.save(buf, 'PNG')
             entries.append((sz, buf.getvalue()))
         else:
-            r, g, b, a = small.convert('RGBA').split()
+            # Pillow 的 tobytes() 是 top-down，DIB 要的是 bottom-up（biHeight 写正值就是在
+            # 声明这件事）—— 不翻转的话 Windows 按规范解出来就是一张上下颠倒的图。
+            rows = small.convert('RGBA').transpose(Image.FLIP_TOP_BOTTOM)
+            r, g, b, a = rows.split()
             bgra = Image.merge('RGBA', (b, g, r, a)).tobytes()      # RGBA -> BGRA
             mask_len = ((sz + 31) // 32) * 4 * sz                    # 1bpp 掩码，按 4 字节对齐
             header = struct.pack('<IiiHHIIiiII', 40, sz, sz * 2, 1, 32, 0,
@@ -298,8 +302,10 @@ def verify_ico(path, render, sizes):
     通道顺序写反这类错误结构完全合法、尺寸也齐全，唯有解码回像素才露馅 ——
     1.8.6 的橙棕 installer 图标就是漏在这里。
 
-    注意：行序按写出的原样解（top-down）。1.8.6 的 installer 实际渲染出来音符是正的、
-    只有颜色反了，说明 Windows 这一路就是按 top-down 读的；本校验因此管不住行序，只管通道。
+    解码口径按 **DIB 头的 biHeight 符号** 定，不复刻 write_ico 的假设：#535 的回读校验把行序
+    按写方原样（top-down）解，于是写方和校验方共享同一个错误，永远自洽、永远绿 —— 1.8.7 的
+    安装器图标上下颠倒就是这么漏过去的（当时注释里推断「Windows 这一路按 top-down 读」，
+    实测是错的：System.Drawing.Icon 与 Pillow 的 BMP 解码器都按 biHeight>0 = bottom-up 解）。
     """
     data = open(path, 'rb').read()
     count = struct.unpack('<HHH', data[:6])[2]
@@ -314,16 +320,23 @@ def verify_ico(path, render, sizes):
         if blob[:8] == b'\x89PNG\r\n\x1a\n':
             got = Image.open(io.BytesIO(blob)).convert('RGBA')
         else:
+            bi_h = struct.unpack('<i', blob[8:12])[0]
+            if bi_h != sz * 2:
+                raise SystemExit('icon.ico 的 %dpx 条目 biHeight 是 %d，应为 %d（图像 + AND 掩码）'
+                                 % (sz, bi_h, sz * 2))
             px = blob[40:40 + sz * sz * 4]
             got = Image.merge('RGBA', tuple(
                 Image.frombytes('L', (sz, sz), px[c::4]) for c in (2, 1, 0, 3)))   # BGRA -> RGBA
+            got = got.transpose(Image.FLIP_TOP_BOTTOM)          # biHeight > 0 → 行是 bottom-up 存的
         ref = render(sz)
         if got.size != ref.size:
             raise SystemExit('icon.ico 的 %dpx 条目尺寸是 %s，应为 %s' % (sz, got.size, ref.size))
         # 逐字节比较，别用 ImageChops.difference(...).getbbox() —— getbbox 默认
         # alpha_only=True，两张 alpha 相同的图差值恒为 None，颜色全错也报「一致」（踩过）。
         if got.tobytes() != ref.tobytes():
-            raise SystemExit('icon.ico 的 %dpx 条目与设计稿不一致（十有八九是通道顺序写反了）' % sz)
+            hint = '垂直翻转' if got.tobytes() == ref.transpose(Image.FLIP_TOP_BOTTOM).tobytes() \
+                else '通道顺序写反'
+            raise SystemExit('icon.ico 的 %dpx 条目与设计稿不一致（十有八九是%s）' % (sz, hint))
         checked.append(sz)
     print('  %-72s %s' % ('resources/icon.ico 回读校验',
                           '%d 条逐像素一致（%s）' % (len(checked), '/'.join(str(c) for c in checked))))
