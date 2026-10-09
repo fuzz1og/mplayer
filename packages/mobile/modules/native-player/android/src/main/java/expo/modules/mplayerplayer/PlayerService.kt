@@ -1298,6 +1298,11 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val json = JSONObject()
     try {
       val queue = store.snapshot()
+      // 已知边界（#592，本票**不修**）：落盘快照里的 headers 被显式清空 → 服务从快照
+      // restore 出来的队列**不带** per-item UA/Referer（内存态 record 仍有头）。
+      // 若 restore 后由原生直接推进播放（JS 还没把队列重新 patch 回来），这一段请求无头。
+      // 改动面比本票大（落盘契约 + restore 路径验收），见 ADR
+      // `docs/adr/2026-10-08-per-source-request-headers.md` 的「已知边界」。
       val tracks = queue.optJSONArray("tracks") ?: org.json.JSONArray()
       for (i in 0 until tracks.length()) {
         tracks.optJSONObject(i)?.put("headers", JSONObject())

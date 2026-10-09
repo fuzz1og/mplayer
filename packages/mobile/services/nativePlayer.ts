@@ -1,4 +1,5 @@
 import { AppRegistry } from 'react-native';
+import { requestHeadersFor } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import {
   NativePlayer,
@@ -92,9 +93,17 @@ export function currentPolicy(): Policy {
   };
 }
 
-function headersFor(song: Song): Record<string, string> | undefined {
-  if (song.sourceType === 'local') return undefined;
-  return undefined;
+/**
+ * 每源请求头（#592）：单点在 core `requestHeadersFor`（UA + 按源 Referer），
+ * 与 expo-audio 回落路径、内嵌封面同源。
+ *
+ * `local` / `file://` 走的是本地字节（DefaultDataSource → FileDataSource），没有
+ * 可冒用的源域名，也不发 HTTP → 不带头（原来这里是恒 `undefined` 的空壳，
+ * 让原生 `ExpiryGuard.withRequestHeaders` 完全空转）。
+ */
+function headersFor(song: Song, url: string): Record<string, string> | undefined {
+  if (song.sourceType === 'local' || url.startsWith('file://')) return undefined;
+  return requestHeadersFor(song.sourceType);
 }
 
 function expiryFor(url: string): number {
@@ -102,12 +111,13 @@ function expiryFor(url: string): number {
   return Date.now() + EXPIRY_FALLBACK_MS;
 }
 
-function buildTrack(song: Song, url: string, nonFull: boolean): Track {
+/** 组装交给原生的队列项（导出供单测断言 headers；#592） */
+export function buildTrack(song: Song, url: string, nonFull: boolean): Track {
   return {
     songId: song.id || songKey(song),
     url,
     expiresAtEpochMs: expiryFor(url),
-    headers: headersFor(song),
+    headers: headersFor(song, url),
     meta: {
       key: songKey(song),
       title: song.name,
