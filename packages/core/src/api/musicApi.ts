@@ -3,6 +3,7 @@ import type { Song, SourceKey, SongGroup } from '../types/index.js';
 import { cacheManager } from './memoryCacheManager.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
+import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
 import { looksLikeLyrics } from '../download/lyrics.js';
 import { request, bodyToText, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
@@ -216,6 +217,12 @@ export const musicApi = {
    * - trackInfo.duration：权威完整时长（ms），供探测 resolveUrlInfo 时长校验
    *
    * 返回 lyrics 为 LRC 文本（[mm:ss.xxx]行），无歌词返回空串。
+   *
+   * **#629**：`trackId` 先剥成源站真实 ID 再进 URL。换源产物的 `Song.id` 是
+   * `soda:<站内 id>`（甚至嵌套 `kuwo:soda:<id>`），而分享页**只认裸 ID 且不报错**——
+   * 实测带前缀返 HTTP 200 + 19KB 软错误空壳（`url:""`、无 `lyrics.sentences`、
+   * `status_code:1000004`），歌词/地址/时长三条腿同时静默失效。本方法是三条腿共用
+   * 的出网点，剥在这里 = 换源歌不会静默降级成「这首歌没有词、没有地址」。
    */
   async fetchSodaSharePage(trackId: string): Promise<{
     audioUrl: string;
@@ -225,7 +232,9 @@ export const musicApi = {
     lyrics: string;
     durationMs: number;
   } | null> {
-    const shareUrl = `https://music.douyin.com/qishui/share/track?track_id=${trackId}`;
+    const rawTrackId = stripSourceIdPrefix(String(trackId ?? ''));
+    if (!rawTrackId) return null;
+    const shareUrl = `https://music.douyin.com/qishui/share/track?track_id=${rawTrackId}`;
     try {
       const response = await axios.get(shareUrl, {
         headers: {
@@ -267,14 +276,20 @@ export const musicApi = {
   /**
    * 获取汽水音乐音频直链（用于下载）
    * 优先用分享页 _ROUTER_DATA（无需Cookie），fallback 到 track_v2
+   *
+   * **#629**：入口先剥源前缀（`soda:<id>` / 嵌套 `kuwo:soda:<id>` → 站内裸 ID）——
+   * 两条腿（分享页、track_v2 兜底）的请求参数与地址缓存键都用剥后的 ID，
+   * 于是裸 id 与换源产物命中同一条缓存，且不再拿到生产的软错误空壳（`url:""`）。
    */
   async getSodaAudioUrl(trackId: string): Promise<string> {
-    const cached = sodaAudioUrlCache.get(trackId);
+    const rawTrackId = stripSourceIdPrefix(String(trackId ?? ''));
+    if (!rawTrackId) return '';
+    const cached = sodaAudioUrlCache.get(rawTrackId);
     if (cached && cached.expires > Date.now()) return cached.url;
 
-    const page = await this.fetchSodaSharePage(trackId);
+    const page = await this.fetchSodaSharePage(rawTrackId);
     if (page?.audioUrl) {
-      this.cacheSodaAudioUrl(trackId, page.audioUrl);
+      this.cacheSodaAudioUrl(rawTrackId, page.audioUrl);
       return page.audioUrl;
     }
 
@@ -282,7 +297,7 @@ export const musicApi = {
     // Cookie，见 CONTEXT.md「汽水歌词」），下述 fallback 基本必空，保留仅为历史
     // 兼容（若未来接入登录态凭证可复用此段）；分享页失败时返回 '' 由调用方兜底。
     const params = new URLSearchParams();
-    params.set('track_id', trackId);
+    params.set('track_id', rawTrackId);
     params.set('media_type', 'track');
     params.set('aid', '386088');
     params.set('device_platform', 'web');
@@ -312,7 +327,7 @@ export const musicApi = {
 
       const auth = best.play_auth || '';
       const result = auth ? `${audioUrl}?play_auth=${encodeURIComponent(auth)}` : audioUrl;
-      this.cacheSodaAudioUrl(trackId, result);
+      this.cacheSodaAudioUrl(rawTrackId, result);
       return result;
     } catch (error) {
       console.error('获取汽水音乐音频 URL 失败:', error);
@@ -336,11 +351,15 @@ export const musicApi = {
 
   async getSodaLyrics(trackId: string): Promise<string> {
     if (!trackId) return '';
-    const cacheKey = `soda_lyric_${trackId}`;
+    // #629：缓存键按源站真实 ID 归一（与 #623 的网易 lyric_id_<id> 同形）——
+    // 否则裸 id 与换源产物的 soda:<id> 各占一条缓存，同一首歌取两次词。
+    const rawTrackId = stripSourceIdPrefix(String(trackId));
+    if (!rawTrackId) return '';
+    const cacheKey = `soda_lyric_${rawTrackId}`;
     const cached = cacheManager.getLyricsCache(cacheKey);
     if (cached !== null) return cached;
     try {
-      const page = await this.fetchSodaSharePage(trackId);
+      const page = await this.fetchSodaSharePage(rawTrackId);
       const lyrics = page?.lyrics || '';
       if (lyrics) cacheManager.setLyricsCache(cacheKey, lyrics);
       return lyrics;

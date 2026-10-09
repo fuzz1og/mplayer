@@ -2,6 +2,7 @@ import type { Album, AlbumDetail, Artist, DiscoverPlaylist, Song } from '../type
 import type { ArtistAlbumsPage, ContentCache, DirectSourceClient, ToplistDetail, ToplistGroup } from '../shared/sourceRouter.js';
 import type { UrlInfo } from '../shared/playability.js';
 import { normalizePublishTime } from '../utils/publishTime.js';
+import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
 import { request, bodyToText, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
 import { weapiRequest } from './neteaseWeapi.js';
 import { getUserAgent } from './antiScrape.js';
@@ -247,17 +248,24 @@ async function fetchLyricBySongId(songId: string, options?: TransportCallOptions
  *
  * `options.signal`（#429）：预取入队的取消语义——取消 = 这次不取，**失败语义不变**
  * （取消也走 catch 返回空串，调用方靠自己的 signal 区分「没取」与「取不到」）。
+ *
+ * **#623**：换源产物 / 持久化数据里的网易歌 `Song.id` 可能带源前缀（`netease:123`、
+ * 嵌套 `kuwo:netease:123`），而 `/api/song/lyric` 只认裸数字 id——前缀进 URL 后上游
+ * `code=400` → 空词（移动端 songid 直取返空串的根因）。取词前先剥成源站真实 ID，
+ * 缓存键随之归一（裸 id 与前缀 id 命中同一条缓存）。
  */
 export async function getNeteaseLyrics(
   songId: string,
   options?: TransportCallOptions
 ): Promise<string> {
   if (!songId) return '';
-  const cacheKey = `lyric_id_${songId}`;
+  const rawId = stripSourceIdPrefix(String(songId));
+  if (!rawId) return '';
+  const cacheKey = `lyric_id_${rawId}`;
   const hit = cacheManager.get<{ v: string }>(cacheKey);
   if (hit) return hit.v;
   try {
-    const lrc = await fetchLyricBySongId(songId, options);
+    const lrc = await fetchLyricBySongId(rawId, options);
     cacheManager.set(cacheKey, { v: lrc }, LYRIC_TTL_MS);
     return lrc;
   } catch {
