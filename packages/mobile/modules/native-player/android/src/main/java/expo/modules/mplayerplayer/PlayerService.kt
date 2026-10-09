@@ -1298,15 +1298,14 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val json = JSONObject()
     try {
       val queue = store.snapshot()
-      // 已知边界（#592，本票**不修**）：落盘快照里的 headers 被显式清空 → 服务从快照
-      // restore 出来的队列**不带** per-item UA/Referer（内存态 record 仍有头）。
-      // 若 restore 后由原生直接推进播放（JS 还没把队列重新 patch 回来），这一段请求无头。
-      // 改动面比本票大（落盘契约 + restore 路径验收），见 ADR
-      // `docs/adr/2026-10-08-per-source-request-headers.md` 的「已知边界」。
+      // 已知边界 3b（ADR 2026-10-08-per-source-request-headers）由 #606 关掉：这里**保留**
+      // `TrackRecord.toJson()` 写好的 per-item headers。此前落盘前逐条清空，于是进程被杀 /
+      // 服务重启后 restore 出来的队列没有 UA/Referer，而「原生直接推进、JS 还没重新投喂」那一段
+      // 恰好是酷狗/QQ 校验 Referer 的裸窗口 → 403 跳歌。头只有 core `requestHeadersFor` 的
+      // 静态常量（BROWSER_UA + 官方源域名），不含凭据，落盘不新增敏感信息。
+      // 旧快照没有 headers 键：`TrackRecord.fromJson` 用 optJSONObject 读，缺键得空 map，
+      // 仍走 ExpiryGuard 的 `headers.isEmpty()` 分支 —— 与改前行为一致，不需要版本迁移。
       val tracks = queue.optJSONArray("tracks") ?: org.json.JSONArray()
-      for (i in 0 until tracks.length()) {
-        tracks.optJSONObject(i)?.put("headers", JSONObject())
-      }
       json.put("tracks", tracks)
       json.put("index", store.currentIndex())
       json.put("revision", store.currentRevision())
