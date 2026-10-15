@@ -4,6 +4,7 @@ import { cacheManager } from './memoryCacheManager.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
+import { normalizeUrlEncoding } from '../utils/urlEncoding.js';
 import { looksLikeLyrics } from '../download/lyrics.js';
 import { request, bodyToText, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
@@ -279,7 +280,12 @@ export const musicApi = {
    *
    * **#629**：入口先剥源前缀（`soda:<id>` / 嵌套 `kuwo:soda:<id>` → 站内裸 ID）——
    * 两条腿（分享页、track_v2 兜底）的请求参数与地址缓存键都用剥后的 ID，
-   * 于是裸 id 与换源产物命中同一条缓存，且不再拿到生产的软错误空壳（`url:""`）。
+   * 于是裸 id 与换源产物命中同一条缓存，且不再拿到生产的软错误空壳（`url:""`）。   *
+   * **#635**：返回值做编码归一。本腿是 `sodaDirectClient.resolvePlayableUrl` 的直连本体，
+   * 经路由时 `shared/sourceRouter.ts` 的出口已归一遍；但桌面主进程 `getSodaPlayableUrl`
+   * 直调本方法取裸直链（IPC 缓存腿，见 ADR `2026-10-09-playable-url-encoding-single-gate.md`
+   * 的残留清单），那条腿不经出口——所以归一必须落在**本腿的出口**上，而不是只靠路由。
+   * 归一幂等：经路由时第二次调用逐字不变，两份口径不会漂。
    */
   async getSodaAudioUrl(trackId: string): Promise<string> {
     const rawTrackId = stripSourceIdPrefix(String(trackId ?? ''));
@@ -290,7 +296,7 @@ export const musicApi = {
     const page = await this.fetchSodaSharePage(rawTrackId);
     if (page?.audioUrl) {
       this.cacheSodaAudioUrl(rawTrackId, page.audioUrl);
-      return page.audioUrl;
+      return normalizeUrlEncoding(page.audioUrl);
     }
 
     // 注意：track_v2 匿名请求 2026-08 实测返回 200 空 body（需 PC 客户端登录态
@@ -328,7 +334,7 @@ export const musicApi = {
       const auth = best.play_auth || '';
       const result = auth ? `${audioUrl}?play_auth=${encodeURIComponent(auth)}` : audioUrl;
       this.cacheSodaAudioUrl(rawTrackId, result);
-      return result;
+      return normalizeUrlEncoding(result);
     } catch (error) {
       console.error('获取汽水音乐音频 URL 失败:', error);
       return '';
@@ -342,7 +348,8 @@ export const musicApi = {
    */
   /**
    * 获取网易歌词（#409：取代内容方法的列表内联批量取词）。
-   * 播放期按 songId 直取，缓存 key `lyric_id_${songId}`、TTL 1 天、空词也缓存。
+   * 播放期按 songId 直取，缓存 key `lyric_id_<剥完源前缀的裸 id>`、TTL 1 天、空词也缓存
+   * （#623 起入参先过 `stripSourceIdPrefix`，键随之一并归一——裸 id 与换源产物命中同一条）。
    * 与 getSodaLyrics 同形：拿不到返回空串，不上抛（歌词缺失不该让播放失败）。
    */
   async getNeteaseLyrics(songId: string): Promise<string> {
@@ -368,7 +375,17 @@ export const musicApi = {
     }
   },
 
+  /**
+   * 汽水音频直链的内存缓存写入（`getSodaAudioUrl` 的读侧按**剥完前缀的裸 ID** 取，见 #629）。
+   *
+   * **#635**：这里也剥一次。桌面主进程 `getSodaPlayableUrl` 直调 `getSodaAudioUrl(song.id)`
+   * 时会带 `soda:<id>`（甚至嵌套）进来，写侧若原样记账，键就与读侧的裸 ID 不是同一条：
+   * 同一首歌在内存里占两条缓存、每次直调都重新出网，且旧的 `bin:soda:<id>` 落盘键与
+   * 内存键形状分叉。剥在这里（唯一的写入口）比在每个调用方各记一遍可靠。
+   */
   cacheSodaAudioUrl(trackId: string, url: string): void {
+    const rawTrackId = stripSourceIdPrefix(String(trackId ?? ''));
+    if (!rawTrackId) return;
     // 顺带清理过期项，防 Map 无界增长（每首歌一个 entry，长期会话会积累）
     if (sodaAudioUrlCache.size >= 500) {
       const now = Date.now();
@@ -376,7 +393,7 @@ export const musicApi = {
         if (v.expires < now) sodaAudioUrlCache.delete(k);
       }
     }
-    sodaAudioUrlCache.set(trackId, { url, expires: Date.now() + SODA_URL_CACHE_TTL });
+    sodaAudioUrlCache.set(rawTrackId, { url, expires: Date.now() + SODA_URL_CACHE_TTL });
   },
 
   /**

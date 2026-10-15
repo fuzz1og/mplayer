@@ -60,4 +60,22 @@ describe('normalizeUrlEncoding（#622 汽水 CDN 直链）', () => {
   it('空串原样返回（空 URL 是「没解析出来」，不是「需要编码」）', () => {
     expect(normalizeUrlEncoding('')).toBe('');
   });
+
+  it('⭐ 孤代理字符不再抛（#635）：畸形 URL 交回不可播，而不是炸掉解析出口', () => {
+    // encodeURIComponent 对代理对之外的代理码元抛 URIError: URI malformed；归一走在解析链
+    // 唯一出口上，抛出来等于一条脏数据把整条链路的退出路径掀掉。
+    const lone = 'https://x/y?a=' + '\uD800';
+    expect(() => normalizeUrlEncoding(lone)).not.toThrow();
+    expect(normalizeUrlEncoding(lone)).toBe(lone);
+
+    // 低代理 / 混在正常字符里同样不抛，且其余字符照旧归一（只放过 encodeURIComponent 拒收的那个）
+    expect(() => normalizeUrlEncoding('https://x/\uDC00?a=b|c')).not.toThrow();
+    expect(normalizeUrlEncoding('https://x/\uDC00?a=b|c')).toBe('https://x/\uDC00?a=b%7Cc');
+  });
+
+  it('合法代理对仍按 UTF-8 逐字节转义（放过孤代理不等于放过多字节）', () => {
+    expect(normalizeUrlEncoding('https://cdn.example.com/\uD83D\uDE00.mp3')).toBe(
+      'https://cdn.example.com/%F0%9F%98%80.mp3'
+    );
+  });
 });
