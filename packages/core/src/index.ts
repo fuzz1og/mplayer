@@ -123,6 +123,10 @@ export { stripSourceIdPrefix } from './utils/sourceIdPrefix.js';
 export { rawSongId, identityKey, identityKeyFrom } from './utils/songIdentity.js';
 export { refreshSongResource } from './shared/songResourceRefresh.js';
 export type { SongResourceRefreshDeps, LegOptions } from './shared/songResourceRefresh.js';
+// 「补一个可播版本」（#639 C3）：缺播放地址时按歌名+歌手补一个的**单一实现**，
+// 双端同一份判据（GLOSSARY「跨源录音身份」= 歌名 + 歌手精确匹配）。
+export { resolvePlayableVersion, searchPlayableMatch } from './shared/playableVersion.js';
+export type { PlayableVersionDeps, PlayableVersionResult } from './shared/playableVersion.js';
 export { parsePlaylistUrl, importFromLink, importDepsFor } from './api/playlistImport.js';
 export { writeSongsToPlaylist, songWriteRejection, NAME_CONFLICT_COPY } from './shared/playlistWrite.js';
 export type {

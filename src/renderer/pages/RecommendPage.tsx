@@ -6,6 +6,7 @@ import DailyRecommend from '@/renderer/components/DailyRecommend';
 import PlaylistGrid from '@/renderer/components/PlaylistGrid';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
+import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
 import { pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 
 const RecommendPage: React.FC = () => {
@@ -53,15 +54,11 @@ const RecommendPage: React.FC = () => {
 
   const handlePlay = async (song: Song) => {
     try {
-      if (!song.url && song.name) {
-        const result = await callMusicApi('searchSongsRouted', `${song.name} ${song.artist}`, 1, song.sourceType);
-        if (result?.length > 0) {
-          await play(result[0]);
-          return;
-        }
-        message.warning('未找到可播放版本，尝试直接播放');
-      }
-      await play(song);
+      // #639 C3：缺地址时补一个**精确匹配**的可播版本（判据在 core）。此前直接取
+      // `result[0]` 整首顶替 —— 会播同名不同歌手的歌，还会换掉歌名/封面。
+      // 未命中时返回原歌，交给 play 内部的解析链与失败归因（不再预先 warning，
+      // 那条提示与实际结果无关，且会与失败 toast 叠成两条）。
+      await play(await resolvePlayableVersionForDesktop(song));
     } catch (error) {
       console.error('播放失败:', error);
       message.error('播放失败，请检查网络连接或稍后重试');

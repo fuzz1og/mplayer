@@ -26,6 +26,7 @@ import {
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
+import { resolvePlaybackUrl, type ResolvePlaybackUrlDeps } from '@/renderer/services/resolvePlaybackUrl';
 import { insertAfter, moveItem } from '@/renderer/utils/reorder';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode, getAutoSkipOnError } from '@/renderer/utils/queueUtils';
 import { useSearchStore } from '@/renderer/store/searchStore';
@@ -379,6 +380,25 @@ interface PlayAttempt {
 let activeAttempt: PlayAttempt | null = null;
 
 /**
+ * C2 解析模块的桌面端口（#639 C2）：把 IPC 与「试听版」的 UI 副作用接进去。
+ * 解析逻辑本身不认识 store / IPC，因此可零 mock 单测（见 `__tests__/resolvePlaybackUrl.test.ts`）。
+ */
+const desktopResolveDeps: ResolvePlaybackUrlDeps = {
+  resolveRouted: (song) => callMusicApi('resolvePlayableSongRouted', song),
+  sodaPlayableUrl: (songId) => callMusicApi('getSodaPlayableUrl', songId),
+  // #390：遗忘必须打到主进程那份缓存（渲染层那份没人读）
+  forgetPrefetched: async (song) => { await callMusicApi('forgetPrefetchedSong', song); },
+  explainFailure: (song) => callMusicApi('explainPlaybackFailure', song).catch(() => null),
+  onNonFull: (song) => {
+    console.warn(`[player] 《${song.name}》解析结果为试听版（non-full），可换源获取完整版`);
+    // preview 立即播直连试听（秒出声），不再等 tier3
+    useSearchStore.getState().setAudioTag(song.id, 'preview');
+    message.info('当前为试听版，可换源获取完整版');
+  },
+  log: (level, message) => console[level === 'warn' ? 'warn' : 'error'](message),
+};
+
+/**
  * 解析链穷尽（直连 + tier3 都没拿到 URL）错误（#357）：携带 core 的失败归因。
  * 归因由 core `explainPlaybackFailure` 按当前配置给出（无声明源 / 全被归属跳过 /
  * 源都试了没命中 / tier3 未开启…），桌面经 IPC 取回，与移动端共用同一份文案。
@@ -559,39 +579,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       // 位置读模型归零（时长保留旧值到新曲加载完成，与旧 store 行为一致）
       playbackClock.setPosition(0);
 
-      let realUrl = song.url;
-      let playbackNonFull = false;
-
-      if (song.sourceType === 'soda' && !song.url) {
-        try {
-          realUrl = await callMusicApi('getSodaPlayableUrl', song.id);
-        } catch (urlError) {
-          console.error('获取汽水音乐可播放 URL 失败:', urlError);
-        }
-      } else if (song.sourceType !== 'local') {
-        // fresh 重试语义：先遗忘该曲预取条目——里面是刚被证明失败的直链，
-        // 0 等待命中只会原地连败两次（core 预取缓存 30min TTL + 失败可遗忘）。
-        // #390：遗忘经 IPC 打到主进程那份缓存（渲染层那份没人读）。
-        if (fresh) await callMusicApi('forgetPrefetchedSong', song).catch(() => {});
-        try {
-          // T12：带试听版检测的播放解析（nonFull 标记驱动换元提示）。
-          // 预取命中在 core 内部完成，这里不再自建缓存分支。
-          const resolved = await callMusicApi('resolvePlayableSongRouted', song);
-          realUrl = resolved?.url || '';
-          if (resolved?.nonFull && realUrl) {
-            console.warn(`[player] 《${song.name}》解析结果为试听版（non-full），可换源获取完整版`);
-            song.nonFull = true;
-            playbackNonFull = true;
-            // preview 立即播直连试听（秒出声），不再等 tier3
-            useSearchStore.getState().setAudioTag(song.id, 'preview');
-            message.info('当前为试听版，可换源获取完整版');
-          }
-        } catch (urlError) {
-          // 失败反馈与「重试 / 跳歌」决策统一交给 handlePlaybackFailure，避免重复 Toast
-          console.error('获取真实音频 URL 失败:', urlError);
-          realUrl = '';
-        }
-      }
+      // #639 C2：解析腿收进零副作用模块（`services/resolvePlaybackUrl`）——
+      // 分支（本地 / 汽水 / 路由链）与失败归因都在那里，这里只管编排。
+      // 该模块不抛错：失败以 `url` 为空 + `advice` 表达，异常语义留在这一层。
+      const resolved = await resolvePlaybackUrl(song, desktopResolveDeps, { fresh });
+      const realUrl = resolved.url;
+      const playbackNonFull = resolved.nonFull;
 
       // #556：这里此前补着一份「搜索腿」适配器——core 的搜索腿只覆盖「直连返回空串」
       // 分支，且其 writeCache 走 prefetchPlayableSong 会**再跑一整条解析链**（直连 3s
@@ -604,12 +597,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       if (!realUrl) {
         set({ isLoading: false });
-        // 失败归因（#357）：core 按当前配置给出可操作文案（没有声明对应 source 的源 /
-        // 全部因归属被跳过 / 源都试了没命中 / tier3 未开启…），双端共用同一份，
-        // 不再把用户引向「可能为 VIP/无版权」的错误方向。归因失败退回原通用文案。
-        const advice = await callMusicApi('explainPlaybackFailure', song).catch(() => null);
-        // 「不可播」徽标回写与重试 / 跳歌决策统一在 handlePlaybackFailure
-        throw new PlayableUrlMissingError(advice);
+        // 「不可播」徽标回写与重试 / 跳歌决策统一在 handlePlaybackFailure；
+        // 归因文案由 C2 模块取（core 单一来源），这里只负责把它包成异常 ——
+        // `failureReasonText` 靠 `instanceof` 区分「解析链穷尽」与「播放器/网络失败」。
+        throw new PlayableUrlMissingError(resolved.advice);
       }
 
       const songWithRealUrl = { ...song, url: realUrl };
