@@ -60,11 +60,13 @@ export function refererForSourceKey(sourceKey: string): string | undefined {
  * `downloadService.ts`（内嵌封面）各自手拼一份，core `shared/directValidation.ts`
  * （直连腿时长取证）再手拼一份。拼装点一多，「源表加了新源」这种事就只会修到其中几处。
  *
- * 已知但**不在本函数范围内**的结构空洞：`packages/mobile/services/nativePlayer.ts`
- * 的 `headersFor(song)` 仍是恒 `undefined` 的空壳 → Android 原生主引擎（media3）这条
- * 路上每源请求头实际没被应用，原生 `ExpiryGuard.withRequestHeaders` 因此空转。
- * 「让它也取这一份」是 #592 的另一半：**网络行为变更，需真机取证后再决策**，
- * 见 ADR `2026-10-08-per-source-request-headers.md`。
+ * **Android 原生主引擎也已接本单点**（#602，已合入 master）：`packages/mobile/services/
+ * nativePlayer.ts` 的 `headersFor(song, url)` 取的就是 `requestHeadersFor`（`local` /
+ * `file://` 仍返回 `undefined`）→ `Track.headers` 非空 → Kotlin `TrackInput.toRecord()`
+ * 拿到非空 `Map` → 原生 `ExpiryGuard` 命中 `dataSpec.withRequestHeaders`，per-item
+ * UA/Referer 真的会出现在 media3 的请求上。**这段的取证仍开口**（可解析的 QQ/酷狗样本
+ * A/B、302 跟跳抓包都没做，见 ADR `2026-10-08-per-source-request-headers.md` §3 与
+ * 「后果」），但代码路径已不再是空壳——别按「原生从不应用头」读它。回退方式见该 ADR。
  *
  * 语义（调用方不要再叠加、也不要改写）：
  * - `User-Agent` 恒为 [BROWSER_UA]：部分 CDN 拒非浏览器 UA。

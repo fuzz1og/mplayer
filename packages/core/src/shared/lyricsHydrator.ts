@@ -37,8 +37,9 @@ import { getNeteaseLyrics } from '../api/neteaseDirect.js';
  * 把「点开就播」的手感拖慢——本模块的「失败不重试」只作用于自身，不改变 transport 层的重试。
  * 缓解方向（另开票）：预取在播放解析在飞时让路、或给取词一个与预取语义相称的更小 timeoutMs。
  *
- * 取词实现复用既有链路（网易 `getNeteaseLyrics`：key `lyric_id_${songId}`、TTL 1 天、
- * 空词也缓存），本模块**不新写网络请求**。汽水虽同属「按 ID 直取歌词源」，但它的取词
+ * 取词实现复用既有链路（网易 `getNeteaseLyrics`：key `lyric_id_<剥完源前缀的裸 id>`、TTL 1 天、
+ * 空词也缓存；#623 起入参先剥前缀，裸 id 与换源产物命中同一条缓存），
+ * 本模块**不新写网络请求**。汽水虽同属「按 ID 直取歌词源」，但它的取词
  * 入口是分享页 track_id（`getSodaLyrics`），列表行的 id 不足以定位，故不在预取范围。
  */
 

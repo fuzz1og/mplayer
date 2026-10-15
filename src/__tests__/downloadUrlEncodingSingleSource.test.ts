@@ -13,6 +13,10 @@ import path from 'path';
  * 1. core 里 `normalizeUrlEncoding` 的实现一份、调用点**恰好一处**，且就在解析链出口；
  * 2. 两条下载链都只从那个出口取 URL（桌面不得再留 `getSodaAudioUrl` 这种旁路）；
  * 3. 任何宿主侧文件不得自带补码（`%7C` / `encodeURI` / `replace(/\|/…)`）——那是第二处归一。
+ *
+ * **#635 收紧**：第 1 条原先是「文件列表」粒度，在同一文件内按腿各调一次仍全绿——正是
+ * `musicApi.getSodaAudioUrl` 那条同文件第二条腿（分享页腿 + track_v2 兜底腿）能长期不在
+ * 覆盖范围内的成因。现在改成**数调用点**，并在 core 侧显式钉住那条例外旁腿的归一落点。
  */
 const ROOT = path.resolve(__dirname, '../..');
 
@@ -49,6 +53,36 @@ const DOWNLOAD_CONSUMERS = [
 /** 归一自身的实现形状：宿主侧出现任一形状就是「第二处归一」。 */
 const LOCAL_NORMALIZATION = [/normalizeUrlEncoding/, /encodeURI/, /%7C/];
 
+/**
+ * 按大括号配对切出方法体（签名定位定义处，不依赖缩进与局部变量名——后者会随重构漂移）。
+ * 与 `src/__tests__/main/syncIoDiscipline.test.ts` 同一手法：钉结构，不钉写法。
+ */
+function methodBody(source: string, signature: string): string {
+  const start = source.indexOf(signature);
+  expect(start, `源码里找不到 ${signature}`).toBeGreaterThanOrEqual(0);
+  const open = source.indexOf('{', start);
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}' && --depth === 0) return source.slice(start, i + 1);
+  }
+  throw new Error(`无法切出 ${signature} 的方法体`);
+}
+
+/**
+ * 允许的 `normalizeUrlEncoding(` 调用点全集（**含同文件多处**）：
+ * - `shared/sourceRouter.ts` 一处：解析链唯一出口（#622 决策 2）；
+ * - `api/musicApi.ts` 两处：汽水门面腿的出口（#635）。桌面主进程 `getSodaPlayableUrl`
+ *   直调 `musicApi.getSodaAudioUrl` 取裸直链、不经路由出口，归一落在这一层才兜得住那条
+ *   旁腿；与出口那份幂等相容（同一 URL 第二次逐字不变），不会漂成两份口径。
+ *
+ * 新增任何一处都必须先在这里登记并写清理由——否则就是第二份会漂的归一。
+ */
+const ALLOWED_CALL_SITES: ReadonlyArray<readonly [string, number]> = [
+  [path.join('packages', 'core', 'src', 'shared', 'sourceRouter.ts'), 1],
+  [path.join('packages', 'core', 'src', 'api', 'musicApi.ts'), 2],
+];
+
 describe('URL 编码归一的单一落点 = core 解析链出口（#622）', () => {
   it('⭐ core 里归一只有一份实现、一处调用，且调用点在解析链出口', () => {
     const files = coreSourceFiles(path.join(ROOT, 'packages', 'core', 'src'));
@@ -57,11 +91,41 @@ describe('URL 编码归一的单一落点 = core 解析链出口（#622）', () 
       path.join('packages', 'core', 'src', 'utils', 'urlEncoding.ts'),
     ]);
 
-    const callers = files.filter((f) => !definition.includes(f) && /normalizeUrlEncoding\(/.test(codeOnly(f)));
-    // 只允许解析链出口（sourceRouter）这一处；新增第二处 = 新增一份会漂的口径。
-    expect(callers.map((f) => path.relative(ROOT, f))).toEqual([
-      path.join('packages', 'core', 'src', 'shared', 'sourceRouter.ts'),
-    ]);
+    // 按**调用点**数，不按文件数（#635）：同文件第二条腿漏归一，旧判据看不见。
+    const callSites: Array<{ file: string; count: number }> = [];
+    for (const f of files) {
+      if (definition.includes(f)) continue;
+      const count = (codeOnly(f).match(/normalizeUrlEncoding\(/g) ?? []).length;
+      if (count > 0) callSites.push({ file: path.relative(ROOT, f), count });
+    }
+
+    const actual = callSites.map((c) => [c.file, c.count] as const).sort();
+    const expected = [...ALLOWED_CALL_SITES].sort();
+    expect(actual, 'normalizeUrlEncoding 调用点与登记表不符（新增一处必须先在 ALLOWED_CALL_SITES 登记理由）').toEqual(expected);
+  });
+
+  it('⭐ 汽水门面腿（不经路由出口的那条旁腿）自己出口处有归一', () => {
+    // #630 真机复现过：直调 musicApi.getSodaAudioUrl 拿到的直链 hasRawPipe=true，
+    // 交给 File.downloadFileAsync 被 java.net.URI 拒。它不经 resolveRoutedInner，
+    // 所以归一必须在门面腿的出口上——这里钉的是「两条腿都归一」而不是「只归一其中一条」。
+    const soda = codeOnly(path.join(ROOT, 'packages', 'core', 'src', 'api', 'musicApi.ts'));
+    const body = methodBody(soda, 'async getSodaAudioUrl(');
+    // 只看**直链类**返回（带 URL 的那个变量），不数 return 总数——后者会随别的兜底分支漂。
+    // 判据：凡返回的是「可能带 CDN 直链」的表达式，就必须已经过归一。
+    const urlReturns = [...body.matchAll(/return\s+([^;\n]*?(?:audioUrl|result)[^;\n]*);/g)].map((m) =>
+      m[1].trim(),
+    );
+    expect(urlReturns.length, '汽水门面腿返回直链的位置数量变了，请逐条核对是否都过归一').toBe(2);
+    for (const r of urlReturns) {
+      expect(r, `汽水门面腿返回未归一的直链：return ${r}`).toMatch(/^normalizeUrlEncoding\(/);
+    }
+  });
+
+  it('⭐ 同文件第二处调用点也能被拦住（旧判据只看文件列表，看不见它）', () => {
+    // 这条钉「判据本身」：在 sourceRouter.ts 里再加一处调用点，数调用点必须变红。
+    const router = codeOnly(path.join(ROOT, 'packages', 'core', 'src', 'shared', 'sourceRouter.ts'));
+    const count = (router.match(/normalizeUrlEncoding\(/g) ?? []).length;
+    expect(count, 'sourceRouter.ts 的归一调用点数量变了——新增腿请走同一处出口，而不是各调一次').toBe(1);
   });
 
   it('两条下载链都从解析出口取 URL，桌面不再留汽水直连旁路', () => {
