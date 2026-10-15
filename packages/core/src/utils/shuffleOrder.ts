@@ -199,28 +199,53 @@ export function replaceShuffleSongId(state: ShuffleState, fromId: string, toId: 
 }
 
 /**
- * 按随机序重排队列（**纯展示/取窗用**，不改成员）：不在序列里的歌按原队列顺序补在末尾，
- * 保证返回值与 `queue` 等长。队列页据此显示随机序，移动端据此切预取窗口。
+ * 按随机序取成员**下标**（**纯展示/取窗用**，不改成员）：同一 id 出现多次时按出现顺序
+ * **FIFO 位置化匹配**（不去重——队列允许同一首歌占多格，去重会少行、标题对不上）；
+ * 序列里没有的成员（新加的歌 / 无 id 的歌）按成员序补在末尾。
+ *
+ * 不变量：返回值与 `queue` **等长**，且是 `0..queue.length-1` 的一个排列。
+ * 这是本模块唯一的位置化匹配实现——`applyShuffleOrder` 与两端「显示序 → 成员下标」
+ * 的映射都走它（此前移动端另写一份 `shuffleDisplayIndexes`，桌面队列页按 id 反查会删错歌）。
+ */
+export function applyShuffleIndexes(
+  order: readonly string[],
+  queue: readonly Song[],
+): number[] {
+  if (order.length === 0) return queue.map((_, index) => index);
+  // 同一 id → 它在队列里的所有成员下标（FIFO 取出）
+  const byId = new Map<string, number[]>();
+  queue.forEach((song, index) => {
+    const list = byId.get(song.id);
+    if (list) list.push(index);
+    else byId.set(song.id, [index]);
+  });
+  const used = new Set<number>();
+  const indexes: number[] = [];
+  for (const id of order) {
+    const at = byId.get(id)?.find((index) => !used.has(index));
+    if (at === undefined) continue;
+    used.add(at);
+    indexes.push(at);
+  }
+  for (let index = 0; index < queue.length; index += 1) {
+    if (!used.has(index)) indexes.push(index);
+  }
+  return indexes;
+}
+
+/**
+ * 按随机序重排队列（**纯展示/取窗用**，不改成员）：不在序列里的歌按原队列顺序补在末尾。
+ *
+ * 契约：返回值与 `queue` **等长**（`applyShuffleIndexes` 的不变量）。重复 id 的队列
+ * 按 FIFO 位置化匹配——此前按 id 建 Map 去重，`[a, a, b]` 会返回 2 条，队列页少一行、
+ * 那首歌永远看不到也拖不到（#639 R2）。
  */
 export function applyShuffleOrder(
   queue: readonly Song[],
   state: ShuffleState | null | undefined,
 ): Song[] {
   if (!state || state.order.length === 0) return [...queue];
-  const byId = new Map(queue.map((song) => [song.id, song]));
-  const ordered: Song[] = [];
-  const seen = new Set<string>();
-  for (const id of state.order) {
-    const song = byId.get(id);
-    if (song && !seen.has(id)) {
-      ordered.push(song);
-      seen.add(id);
-    }
-  }
-  for (const song of queue) {
-    if (!seen.has(song.id)) ordered.push(song);
-  }
-  return ordered;
+  return applyShuffleIndexes(state.order, queue).map((index) => queue[index]);
 }
 
 /**

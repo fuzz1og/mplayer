@@ -329,6 +329,15 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val beforeKeys = store.all().map { it.key }.toHashSet()
     val patchResult = store.patch(baseRevision, append, upsert, removeKeys)
     if (!patchResult.accepted) {
+      // #639 R4.5：**结算结论必须独立于补丁数据处置**。
+      // `baseRevision` 是写侧乐观并发控制（防旧基准的补丁覆盖新状态），而 `outcome`
+      // 是「本轮事实」的结论（零候选 / 稳态绕回）。二者语义不同——此前 stale 直接
+      // return 把 outcome 一起丢了：用户按 next 踩空 → JS 本轮零候选 → 上报被 stale
+      // 丢弃 → 原生 `pendingUserNext` 悬空到 `WINDOW_HOLE_TIMEOUT_MS`（60s）才停。
+      // 补丁照旧丢弃（数据不能落），但结论必须消费。
+      if (outcome != null) {
+        consumeStaleSettlement(ctrl, outcome, append, upsert)
+      }
       return mapOf("accepted" to false, "revision" to patchResult.revision, "stale" to patchResult.stale)
     }
 
@@ -464,6 +473,34 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
    * 不丢数据），返回 null 并按「未结算」处理，同时记一条 warn —— 标注错是调用方的责任，
    * 原生不再替它二次校验（那正是旧 `refillEmpty` 的空洞来源）。
    */
+  /**
+   * stale 轮次的结算消费（#639 R4.5）：补丁数据被丢弃，但**结论必须落地**。
+   *
+   * `store.patch` 拒绝 stale 是写侧并发控制，与「本轮事实」无关。此前 stale 直接
+   * return，`outcome` 从未被消费：用户按 next 踩空 → JS 上报零候选 → 被判 stale 丢弃
+   * → `pendingUserNext` 一直为 true 且播放器已 pause，只能等 `WINDOW_HOLE_TIMEOUT_MS`
+   * （60s）→ 用户侧「点了下一首，60 秒没反应然后自己停了」。
+   *
+   * 这里只能在**没有补丁数据**的前提下收口，所以：
+   * - `'empty'` + 用户在等歌 → 确实没有可推进项，诚实结束（不再等 60s）；
+   * - `'deduped'` 需要 append 才能绕回，数据已丢 → 不绕回，但同样收口为诚实结束，
+   *   避免悬空（换基准的那条路径会再触发一轮补窗，若真有可播项会被重新规划）。
+   * - `'grown'` 不做终局判定（与正常路径一致）。
+   */
+  private fun consumeStaleSettlement(
+    ctrl: PlaybackController,
+    outcome: String,
+    append: List<TrackRecord>?,
+    upsert: List<TrackRecord>?
+  ) {
+    val settled = settleOutcomeOf(outcome, append, upsert) ?: return
+    if (settled != SettleOutcome.EMPTY && settled != SettleOutcome.DEDUPED) return
+    if (!pendingUserNext || ctrl.player.mediaItemCount == 0) return
+    // 补丁没落地 ⇒ 队尾没有新格可推进，也没有可绕回的项 → 诚实结束
+    Log.w(TAG, "stale settlement outcome=$settled → finishAtTail (no patch data to advance into)")
+    finishAtTail(ctrl)
+  }
+
   private fun settleOutcomeOf(
     outcome: String?,
     append: List<TrackRecord>?,
@@ -821,8 +858,17 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   private fun handleEnded() {
     val ctrl = controller ?: return
-    if (policy.loopMode == AdvancePolicy.LOOP_ALL || policy.loopMode == AdvancePolicy.LOOP_SINGLE) {
-      // ExoPlayer 的 repeatMode 已经接管，正常不会走到 ENDED
+    // #639 R4.1：只对**单曲循环**早退——只有它对 `repeatMode()` 返回 REPEAT_MODE_ONE，
+    // ExoPlayer 在播放器内部循环，正常不会走到 ENDED。
+    //
+    // 此前这里把 LOOP_ALL 也算进来（注释写「ExoPlayer 的 repeatMode 已经接管」），
+    // 但 `AdvancePolicy.repeatMode()` 对 LOOP_ALL **刻意**返回 REPEAT_MODE_OFF
+    //（绝不用 REPEAT_MODE_ALL：原生列表只是 JS 队列的窗口，绕回自己会把早播过的歌重播）。
+    // 两处对同一份 loopMode 的语义相反 ⇒ LOOP_ALL 走到这里时 `seekTo(0)` 播**窗口首项**
+    //（长歌单裁剪后是随机序中段的一首歌）→ 用户听到「随机模式曲末跳回已播过的歌」，
+    // 且 `syncShuffleCursorToCurrent()` 把游标倒退；同时下面「向 JS 要歌」那条路
+    //（holePending / requestTracks）在真实取值域内**永不可达**。
+    if (policy.loopMode == AdvancePolicy.LOOP_SINGLE) {
       ctrl.player.seekTo(0, 0L)
       if (userWantsPlay) ctrl.player.play()
       return

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { alignShuffleOrder, createShuffleState } from '@mplayer/core';
-import type { ShuffleState, Song } from '@mplayer/core';
+import type { ShuffleScope, ShuffleState, Song } from '@mplayer/core';
 
 /**
  * 随机播放的**移动端接线**（#519 = #511 方案 A 的移动端消费 / #520 评审修订）。
@@ -70,22 +70,29 @@ export function alignShuffleForMembers(
 }
 
 /**
- * 建/对齐序列：
- * - 已有序列且**覆盖**这批歌（窗口、子集、同批）→ 窗口态只补不丢（不重洗、不裁剪）；
+ * 建/对齐序列（#639 R1：作用域**显式**）：
+ * - 已有序列且**覆盖**这批歌（窗口、子集、同批）→ 只补不丢（不重洗、不裁剪）；
  * - 队列里出现了序列没有的歌（整批换队列 / 新歌单）→ 按 ADR 重洗一份；
+ * - **没有**序列时：只有 `authoritative`（队列是完整成员集）才现洗；
+ *   `window`（队列只是原生预取窗口）返回 `null`——拿窗口当全集洗出的是窗口那几首，
+ *   store 订阅会立刻落盘 ⇒ 随机序**永久截断**（#639 R1）；
  * - 队列里有歌缺 id 时返回 null：id 序列放不下无身份的歌，调用方退回顺序路径。
  */
 export function ensureShuffleFor(
   queue: Song[],
   currentIndex: number,
   existing: ShuffleState | null,
+  scope: ShuffleScope = 'authoritative',
 ): ShuffleState | null {
   if (!canShuffle(queue)) return null;
-  if (!existing) return createShuffleState(queue, { currentIndex });
+  if (!existing) {
+    return scope === 'window' ? null : createShuffleState(queue, { currentIndex });
+  }
   if (orderCoversQueue(existing.order, queue)) {
     return alignShuffleForWindow(existing, queue, currentIndex);
   }
-  return createShuffleState(queue, { currentIndex });
+  // 序列不覆盖队列：可能真是整批换歌单，也可能序列被裁过而队列是窗口 —— 窗口态不得重洗
+  return scope === 'window' ? existing : createShuffleState(queue, { currentIndex });
 }
 
 /**
