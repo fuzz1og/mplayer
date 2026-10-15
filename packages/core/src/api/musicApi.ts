@@ -4,7 +4,6 @@ import { cacheManager } from './memoryCacheManager.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
 import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
-import { normalizeUrlEncoding } from '../utils/urlEncoding.js';
 import { looksLikeLyrics } from '../download/lyrics.js';
 import { request, bodyToText, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
 import { groupIntoSongGroups as groupIntoSongGroupsUtil } from '../utils/groupIntoSongGroups.js';
@@ -280,23 +279,25 @@ export const musicApi = {
    *
    * **#629**：入口先剥源前缀（`soda:<id>` / 嵌套 `kuwo:soda:<id>` → 站内裸 ID）——
    * 两条腿（分享页、track_v2 兜底）的请求参数与地址缓存键都用剥后的 ID，
-   * 于是裸 id 与换源产物命中同一条缓存，且不再拿到生产的软错误空壳（`url:""`）。   *
-   * **#635**：返回值做编码归一。本腿是 `sodaDirectClient.resolvePlayableUrl` 的直连本体，
-   * 经路由时 `shared/sourceRouter.ts` 的出口已归一遍；但桌面主进程 `getSodaPlayableUrl`
-   * 直调本方法取裸直链（IPC 缓存腿，见 ADR `2026-10-09-playable-url-encoding-single-gate.md`
-   * 的残留清单），那条腿不经出口——所以归一必须落在**本腿的出口**上，而不是只靠路由。
-   * 归一幂等：经路由时第二次调用逐字不变，两份口径不会漂。
+   * 于是裸 id 与换源产物命中同一条缓存，且不再拿到生产的软错误空壳（`url:""`）。
+   *
+   * 本方法是「生产者」，返回**未归一**的裸直链——与其余源的 resolveUrlInfo 同形。
+   * 归一只在解析链出口做一次（ADR `2026-10-09-playable-url-encoding-single-gate.md` §2，
+   * 其否决表明确否掉「补在汽水 URL 的生产者」这条路）。桌面主进程 `getSodaPlayableUrl`
+   * 直调本方法的那条旁腿，其归一位于**调用方**（见 src/main/main.ts），不在这里补——
+   * 补在这里既违反 ADR，又漏掉缓存命中返回的 `cached.url`（#635 评审发现的那处）。
    */
   async getSodaAudioUrl(trackId: string): Promise<string> {
     const rawTrackId = stripSourceIdPrefix(String(trackId ?? ''));
     if (!rawTrackId) return '';
+    // 未归一的裸直链：本方法不补码，补码在调用方 getSodaPlayableUrl（见上）。
     const cached = sodaAudioUrlCache.get(rawTrackId);
     if (cached && cached.expires > Date.now()) return cached.url;
 
     const page = await this.fetchSodaSharePage(rawTrackId);
     if (page?.audioUrl) {
       this.cacheSodaAudioUrl(rawTrackId, page.audioUrl);
-      return normalizeUrlEncoding(page.audioUrl);
+      return page.audioUrl;
     }
 
     // 注意：track_v2 匿名请求 2026-08 实测返回 200 空 body（需 PC 客户端登录态
@@ -334,7 +335,7 @@ export const musicApi = {
       const auth = best.play_auth || '';
       const result = auth ? `${audioUrl}?play_auth=${encodeURIComponent(auth)}` : audioUrl;
       this.cacheSodaAudioUrl(rawTrackId, result);
-      return normalizeUrlEncoding(result);
+      return result;
     } catch (error) {
       console.error('获取汽水音乐音频 URL 失败:', error);
       return '';

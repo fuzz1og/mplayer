@@ -14,9 +14,15 @@ import path from 'path';
  * 2. 两条下载链都只从那个出口取 URL（桌面不得再留 `getSodaAudioUrl` 这种旁路）；
  * 3. 任何宿主侧文件不得自带补码（`%7C` / `encodeURI` / `replace(/\|/…)`）——那是第二处归一。
  *
- * **#635 收紧**：第 1 条原先是「文件列表」粒度，在同一文件内按腿各调一次仍全绿——正是
- * `musicApi.getSodaAudioUrl` 那条同文件第二条腿（分享页腿 + track_v2 兜底腿）能长期不在
- * 覆盖范围内的成因。现在改成**数调用点**，并在 core 侧显式钉住那条例外旁腿的归一落点。
+ * **#635 收紧**：第 1 条原先是「文件列表」粒度，在同一文件内按腿各调一次仍全绿。现在改成
+ * **数调用点**，同文件第二条腿也会红。
+ *
+ * **#635 另修一处 + 明确一处不修**：曾一度把 `normalizeUrlEncoding` 补进汽水「生产者」
+ * `musicApi.getSodaAudioUrl`（含缓存命中返回的 `cached.url`）——但 ADR 的否决表**明确否掉**
+ * 「补在汽水 URL 的生产者」，且那版只归一了新解析路径、缓存命中仍漏 `|`（评审实证）。
+ * 现按 ADR 归位：归一只在 core 出口一处；桌面 IPC 缓存腿 `getSodaPlayableUrl` 不经出口、
+ * 拿到未归一裸直链，是 ADR 后果 1 记录的**已知边界**（Node/axios 栈自己转义，不走
+ * `java.net.URI` 原生解析），宿主侧不得为其补码（第 3 条）。
  */
 const ROOT = path.resolve(__dirname, '../..');
 
@@ -70,21 +76,16 @@ function methodBody(source: string, signature: string): string {
 }
 
 /**
- * 允许的 `normalizeUrlEncoding(` 调用点全集（**含同文件多处**）：
- * - `shared/sourceRouter.ts` 一处：解析链唯一出口（#622 决策 2）；
- * - `api/musicApi.ts` 两处：汽水门面腿的出口（#635）。桌面主进程 `getSodaPlayableUrl`
- *   直调 `musicApi.getSodaAudioUrl` 取裸直链、不经路由出口，归一落在这一层才兜得住那条
- *   旁腿；与出口那份幂等相容（同一 URL 第二次逐字不变），不会漂成两份口径。
- *
- * 新增任何一处都必须先在这里登记并写清理由——否则就是第二份会漂的归一。
+ * 允许的 `normalizeUrlEncoding(` 调用点全集：**只有** `shared/sourceRouter.ts` 一处
+ * （解析链唯一出口，#622 决策 2）。新增任何一处都必须先在这里登记并写清理由——
+ * 否则就是第二份会漂的归一。
  */
 const ALLOWED_CALL_SITES: ReadonlyArray<readonly [string, number]> = [
   [path.join('packages', 'core', 'src', 'shared', 'sourceRouter.ts'), 1],
-  [path.join('packages', 'core', 'src', 'api', 'musicApi.ts'), 2],
 ];
 
 describe('URL 编码归一的单一落点 = core 解析链出口（#622）', () => {
-  it('⭐ core 里归一只有一份实现、一处调用，且调用点在解析链出口', () => {
+  it('⭐ core 里归一只有一份实现、调用点恰好一处（同文件多处也拦得住），且在解析链出口', () => {
     const files = coreSourceFiles(path.join(ROOT, 'packages', 'core', 'src'));
     const definition = files.filter((f) => /export function normalizeUrlEncoding/.test(codeOnly(f)));
     expect(definition.map((f) => path.relative(ROOT, f))).toEqual([
@@ -104,21 +105,18 @@ describe('URL 编码归一的单一落点 = core 解析链出口（#622）', () 
     expect(actual, 'normalizeUrlEncoding 调用点与登记表不符（新增一处必须先在 ALLOWED_CALL_SITES 登记理由）').toEqual(expected);
   });
 
-  it('⭐ 汽水门面腿（不经路由出口的那条旁腿）自己出口处有归一', () => {
-    // #630 真机复现过：直调 musicApi.getSodaAudioUrl 拿到的直链 hasRawPipe=true，
-    // 交给 File.downloadFileAsync 被 java.net.URI 拒。它不经 resolveRoutedInner，
-    // 所以归一必须在门面腿的出口上——这里钉的是「两条腿都归一」而不是「只归一其中一条」。
+  it('⭐ 汽水生产者 getSodaAudioUrl 不补码（补码被 ADR 否决表否掉，只在出口做一次）', () => {
+    // ADR 否决表明确否掉「补在汽水 URL 的生产者」——补在这里既违反单点，又只归一新解析路径、
+    // 缓存命中返回的 cached.url 仍漏 `|`（#635 评审实证）。故生产者保持返回**未归一**裸直链
+    // （与其余源 resolveUrlInfo 同形），归一只在 core 出口；桌面 IPC 腿是已知边界，不为其补码。
     const soda = codeOnly(path.join(ROOT, 'packages', 'core', 'src', 'api', 'musicApi.ts'));
     const body = methodBody(soda, 'async getSodaAudioUrl(');
-    // 只看**直链类**返回（带 URL 的那个变量），不数 return 总数——后者会随别的兜底分支漂。
-    // 判据：凡返回的是「可能带 CDN 直链」的表达式，就必须已经过归一。
-    const urlReturns = [...body.matchAll(/return\s+([^;\n]*?(?:audioUrl|result)[^;\n]*);/g)].map((m) =>
-      m[1].trim(),
+    expect(body, '汽水生产者又被塞进补码了——ADR 否决表否掉这条路，请走 core 出口').not.toMatch(
+      /normalizeUrlEncoding\(/,
     );
-    expect(urlReturns.length, '汽水门面腿返回直链的位置数量变了，请逐条核对是否都过归一').toBe(2);
-    for (const r of urlReturns) {
-      expect(r, `汽水门面腿返回未归一的直链：return ${r}`).toMatch(/^normalizeUrlEncoding\(/);
-    }
+    // 缓存命中返回的是裸 cached.url（未经归一）：这正是「生产者不补码」的落点，也说明
+    // 桌面 IPC 腿拿到的是未归一直链这一已知边界。
+    expect(body).toMatch(/return\s+cached\.url/);
   });
 
   it('⭐ 同文件第二处调用点也能被拦住（旧判据只看文件列表，看不见它）', () => {

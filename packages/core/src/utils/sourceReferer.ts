@@ -65,8 +65,11 @@ export function refererForSourceKey(sourceKey: string): string | undefined {
  * `file://` 仍返回 `undefined`）→ `Track.headers` 非空 → Kotlin `TrackInput.toRecord()`
  * 拿到非空 `Map` → 原生 `ExpiryGuard` 命中 `dataSpec.withRequestHeaders`，per-item
  * UA/Referer 真的会出现在 media3 的请求上。**这段的取证仍开口**（可解析的 QQ/酷狗样本
- * A/B、302 跟跳抓包都没做，见 ADR `2026-10-08-per-source-request-headers.md` §3 与
- * 「后果」），但代码路径已不再是空壳——别按「原生从不应用头」读它。回退方式见该 ADR。
+ * 注入 + 302 跟跳存活）**已由 #634 在雷电模拟器真机上取证**（受控 probe 抓包 + 原生
+ * logcat 的 `dataspecHeaders` 与注入逐字相同）；**仍开口的只剩**「QQ/酷狗真实 CDN 带头 vs
+ * 不带头成功率对照」——它需要真实出口 IP + 可用签名直链，见 ADR
+ * `2026-10-08-per-source-request-headers.md`「真机取证（#634）」一节的边界。代码路径不再是
+ * 空壳——别按「原生从不应用头」读它。回退方式见该 ADR。
  *
  * 语义（调用方不要再叠加、也不要改写）：
  * - `User-Agent` 恒为 [BROWSER_UA]：部分 CDN 拒非浏览器 UA。
