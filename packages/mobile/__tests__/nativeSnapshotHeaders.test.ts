@@ -43,7 +43,9 @@ function body(source: string, start: string, end: string): string {
   return source.slice(from, to);
 }
 
-const PERSIST = body(service, '  private fun persist()', '  /** 点击通知回 App');
+// 锚点取**代码形状**（下一个私有成员签名），不取注释文案：中文注释是文档、随时会被改写，
+// 拿它当边界会让「改一句注释」变成一次难以理解的红（#635）。
+const PERSIST = body(service, '  private fun persist()', '  private fun launchIntent(');
 
 describe('#606 快照保留 per-item 请求头：源码契约守卫（不替代 Kotlin 编译/设备验证）', () => {
   it('persist() 不再把 headers 写成空对象，落盘取 store.snapshot() 的那份带头序列化', () => {

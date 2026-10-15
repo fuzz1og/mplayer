@@ -64,7 +64,7 @@ async function loadLyricsWithRetry(song: Song): Promise<string> {
   if (plan.kind === 'inline') return plan.text;
   if (plan.kind === 'songid') {
     // 按 ID 直取源：列表结果不带歌词，播放期按源内 ID 直取
-    // - 网易（#409）：getNeteaseLyrics(songId) → 歌词端点，key lyric_id_<id>、TTL 1 天
+    // - 网易（#409）：getNeteaseLyrics(songId) → 歌词端点，key lyric_id_<剥完前缀的裸 id>、TTL 1 天
     // - 汽水：分享页免登录结构化歌词（track_v2 需登录态），getSodaLyrics 转 LRC 文本
     return plan.source === 'soda'
       ? callMusicApi('getSodaLyrics', plan.id)

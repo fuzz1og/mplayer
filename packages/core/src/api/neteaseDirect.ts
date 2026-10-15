@@ -22,7 +22,8 @@ import { cacheManager } from './memoryCacheManager.js';
  * （cloudsearch 实测无 lrc）。原实现在**每个内容方法返回前**对列表中每一首歌各发一次
  * 取词请求（`fillLyrics`，并发 8、窗口 10s）——代价是打开发现页/推荐页一次就打出
  * 数百次上游请求，而界面只用得到歌名/歌手/封面。现改为**播放期按 songId 直取**：
- * `getNeteaseLyrics(songId)`，key `lyric_id_${songId}`、TTL 1 天、命中零请求、空词也缓存。
+ * `getNeteaseLyrics(songId)`，key `lyric_id_<剥完源前缀的裸 id>`、TTL 1 天、命中零请求、
+ * 空词也缓存（#623 起入参先剥前缀，键随之一并归一）。
  * 列表结果里的 `Song.lrc` 因此**恒为空**，消费端不得再假设它带词（双端决策见 core
  * `shared/songLyrics.ts`）。
  *
@@ -241,7 +242,7 @@ async function fetchLyricBySongId(songId: string, options?: TransportCallOptions
  * 按 songId 取网易歌词（#409 取代 #242 的列表内联批量取词）。
  *
  * 语义与原地批量实现逐条保持一致，只是**调用时机从「列表返回前」改成「播放期按需」**：
- * - key `lyric_id_${songId}`、TTL 1 天；命中零请求；
+ * - key `lyric_id_<剥完源前缀的裸 id>`、TTL 1 天；命中零请求；
  * - **空词也缓存**（值包 `{v}` 对象以区分「无缓存」与「确认无词」——纯音乐/无词歌
  *   不再反复请求；此为 #242 对 #246「空歌词不入库」的显式反转，继续沿用）；
  * - 拉取失败不缓存（保留重试机会）、失败返回空串（不上抛：歌词拿不到不该让播放失败）。
@@ -253,6 +254,9 @@ async function fetchLyricBySongId(songId: string, options?: TransportCallOptions
  * 嵌套 `kuwo:netease:123`），而 `/api/song/lyric` 只认裸数字 id——前缀进 URL 后上游
  * `code=400` → 空词（移动端 songid 直取返空串的根因）。取词前先剥成源站真实 ID，
  * 缓存键随之归一（裸 id 与前缀 id 命中同一条缓存）。
+ *
+ * 于是上面「key」那行的口径是：`lyric_id_${rawId}`（`rawId` = 剥完前缀的结果，见下面实现），
+ * **不是** `${songId}` 原值。#635 把四处的旧注释口径统一成「剥完前缀的裸 id」。
  */
 export async function getNeteaseLyrics(
   songId: string,
