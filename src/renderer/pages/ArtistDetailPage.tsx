@@ -10,6 +10,7 @@ import { searchService } from '@/renderer/services/searchService';
 import { getCachedArtistMeta } from '@/renderer/services/artistMetaCache';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
+import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
 import type { Song, Album } from '@mplayer/core';
 const ipcRenderer = window.electronAPI;
 
@@ -121,11 +122,11 @@ const ArtistDetailPage: React.FC = () => {
   });
 
   const handlePlay = async (song: Song) => {
-    const keyword = `${song.name} ${song.artist}`;
-    const searchResults = await callMusicApi('searchSongsRouted', keyword, 1, 'netease');
-    if (searchResults.length > 0) {
-      await play(searchResults[0]);
-    }
+    // #639 C3：补一个**精确匹配**的可播版本（判据在 core）。
+    // 此前把搜索源写死 `'netease'` 并直接取 `searchResults[0]`：换源后列表里会出现
+    // 非网易源的歌（换源候选本就无 url，必然走这条分支），拿它去网易搜是错的。
+    // 现在用歌曲自身来源，配合精确匹配守卫。
+    await play(await resolvePlayableVersionForDesktop(song));
   };
 
   const handleToggleFavorite = async (song: Song) => {
