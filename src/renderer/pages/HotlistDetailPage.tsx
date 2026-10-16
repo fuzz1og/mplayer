@@ -9,6 +9,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
+import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
 import type { Song, SourceKey } from '@mplayer/core';
 import { pickToplistSongs, TOPLIST_SOURCE_IDS } from '@mplayer/core';
 
@@ -99,11 +100,10 @@ const HotlistDetailPage: React.FC = () => {
   };
 
   const handlePlay = async (song: Song) => {
-    const keyword = `${song.name} ${song.artist}`;
-    const searchResults = await callMusicApi('searchSongsRouted', keyword, 1, config.source);
-    if (searchResults.length > 0) {
-      await play(searchResults[0]);
-    }
+    // #639 C3：补一个**精确匹配**的可播版本（判据在 core）。此前无条件搜索并取
+    // `searchResults[0]`：歌已有 url 时也白搜一次，且会整首顶替成同名不同歌手的歌。
+    // 搜索源用歌曲自身来源（等价于 `config.source`，但不依赖页面上下文）。
+    await play(await resolvePlayableVersionForDesktop(song));
   };
 
   return (

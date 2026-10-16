@@ -1,4 +1,4 @@
-import { AppRegistry } from 'react-native';
+import { AppRegistry, AppState } from 'react-native';
 import { requestHeadersFor } from '@mplayer/core';
 import type { Song } from '@mplayer/core';
 import {
@@ -59,6 +59,9 @@ export type NativePlayerHooks = {
 
 let hooks: NativePlayerHooks = {};
 let started = false;
+/** #639 R4.4：AppState 订阅（回前台对账用）与上一次的前后台态。 */
+let appStateSub: { remove: () => void } | null = null;
+let appState: string = AppState?.currentState ?? 'active';
 let headlessRegistered = false;
 
 /** 原生列表的本地镜像（key/songId，顺序与原生一致）——用于补窗去重与随机定序 */
@@ -216,6 +219,16 @@ export function initNativePlayer(next: NativePlayerHooks): void {
   NativePlayer.addListener('serviceState', () => {
     // 诊断用途：仅记录，不驱动任何状态机
   });
+
+  // #639 R4.4：回前台**单向对账**（ADR 2026-09-29 决策 3）。后台期间原生继续推进，若 JS 上下文被销毁过（事件丢弃），
+  // store 的 currentSong/index/cursor 会停在进后台那一刻——UI 显示旧歌、按「下一首」还会用过期的当前曲算落点。
+  // 回前台用原生权威快照覆盖一次即可（`reconcileFromNative` 内部走单向写）。
+  appStateSub?.remove();
+  appStateSub = AppState?.addEventListener?.('change', (next) => {
+    const becameActive = next === 'active' && appState !== 'active';
+    appState = next;
+    if (becameActive) reconcileFromNative();
+  }) ?? null;
 }
 
 function findSong(songId?: string | null, key?: string | null): Song | null {
@@ -271,6 +284,9 @@ function reconcileQueueFromNative(state: PlayerState | null, force = false): boo
     queue: songs,
     currentSong: songs[index],
     currentIndex: index,
+    // #639 R1：原生 tracks 是**裁剪过的窗口**（`dropLeading` 会丢掉当前项前的历史），
+    // 不是完整成员集 → 标记为 window，随机序只补不丢、且不得据此现洗。
+    queueScope: 'window',
     hasPlayed: true,
   });
   // 随机序（#519）：队列被整体重建（冷启/裁剪后对账）→ 把游标对到实际在播的那首。
@@ -297,9 +313,11 @@ function syncMirrorFromNative(): void {
  */
 function nativeAheadKeys(state: PlayerState | null): Set<string> {
   const tracks = state?.tracks;
-  if (!tracks || tracks.length === 0) {
-    // 快照里没有队列（服务刚起/未对账）→ 退回镜像全集，宁可少喂也不重复喂
-    return new Set(nativeMirror.map((entry) => entry.key));
+  if (!tracks) {
+    // #639 R4.6：**服务不在**（`idleState()` 无 `tracks`）与**队列为空**（`tracks: []`）是两件事，此前混成同一兜底分支：
+    // 前者退回「位置无关的镜像全集」，排在当前曲**之前**的历史也算「已投喂」→ 绕回队首的候选被整体跳过 → 窗口空掉、原生踩空
+    // （#495 修掉的老 bug 在快照缺失时原样恢复）。服务不在时**不排除任何 key**：重复投喂安全（按 key 去重），少喂才让窗口塌陷。
+    return new Set();
   }
   const index = Math.min(Math.max(state?.index ?? 0, 0), tracks.length - 1);
   return new Set(tracks.slice(index).map((track) => track.key));
@@ -310,9 +328,11 @@ function nativeAheadKeys(state: PlayerState | null): Set<string> {
  */
 function nativeStoreKeys(state: PlayerState | null): Set<string> {
   const tracks = state?.tracks;
-  if (!tracks || tracks.length === 0) {
-    // 快照里没有队列（服务刚起/未对账）→ 退回镜像全集（与 nativeAheadKeys 同口径）
-    return new Set(nativeMirror.map((entry) => entry.key));
+  if (!tracks) {
+    // #639 R4.6：服务不在（`idleState()` 无 `tracks`）时**没有权威信息**可判「候选在不在原生手里」。退回镜像全集会把候选
+    // 一律判成「已在」→ outcome 落 `deduped` → 触发终局、提前停播。返回空集 = 候选都算新项 → outcome 落 `grown`，
+    // 把决定权留给下一轮补窗——服务不在时「先不终局」是唯一安全的默认。
+    return new Set();
   }
   return new Set(tracks.map((track) => track.key));
 }
@@ -495,6 +515,17 @@ export function nativeStop(): void {
 export function nativeSyncLoopMode(): void {
   NativePlayer?.setLoop(toLoopMode(useSettingsStore.getState().playMode));
   NativePlayer?.setPolicy(currentPolicy());
+}
+
+/**
+ * 切换播放模式后同步原生（#639 R4.2/R4.3）。模式是**双份数据**（JS `settingsStore.playMode` 与原生 `AdvancePolicy.loopMode`），
+ * 而原生 next/prev 走**播放列表相邻格**、UI next/prev 走 core `planAdvance`——随机序 ≠ 成员序 ⇒ 只下发 loopMode 不够，必须
+ * **按新模式重喂窗口**，否则锁屏/耳机 next 与 App 内 next 落点分叉。顺序：先下发 loopMode，再重喂窗口；非原生引擎 no-op。
+ */
+export async function applyPlayModeToNative(): Promise<void> {
+  if (!isNativePlayerAvailable) return;
+  nativeSyncLoopMode();
+  await feedWindow();
 }
 
 export function nativeState(): PlayerState | null {

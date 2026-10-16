@@ -266,6 +266,8 @@ function pickNextPlayableSong(current: Song): { index: number; song: Song } | nu
     useSettingsStore.getState().playMode,
     current.id,
     s.shuffle ?? null,
+    // #639 R1：scope 与队列来源相符——窗口态下不得裁掉窗口外的 id（会永久截断随机序）
+    s.queueScope,
   );
 }
 
@@ -418,14 +420,15 @@ function prefetchNextSong(): void {
     if (st.queue.length <= 1 || st.currentIndex < 0) return;
     // 与真实切歌同一套索引逻辑（随机模式预取随机位置，避免总预取同一首）
     const playMode = useSettingsStore.getState().playMode;
-    // #541：预取必须与真实切歌同一套推进语义——此前漏传 shuffle，
-    // 随机模式下预取的是「现抽」位置，与实际播放的下一首不是同一首（预取白做）。
+    // #541 / #639 R1：预取必须与真实切歌同一套推进语义与 scope（`advance` 传 `queueScope`）——此前漏传 shuffle（随机模式下
+    // 预取的是「现抽」位置，与实际下一首不是同一首）且缺省 authoritative（预取裁掉窗口外 id 而 advance 不裁）⇒ 两者落点分叉。
     const nextIdx = planAdvance({
       queue: st.queue,
       currentIndex: st.currentIndex,
       playMode,
       shuffle: st.shuffle ?? null,
       direction: 1,
+      shuffleScope: st.queueScope,
     }).index;
     if (nextIdx < 0) return;
     const next = st.queue[nextIdx];

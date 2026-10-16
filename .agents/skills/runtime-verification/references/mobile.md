@@ -62,6 +62,15 @@ node scripts/mobile-debug.mjs --no-cold-start # 不杀 App，热拉起
 
    实测：dex 里 `insertAfterCurrent` NOT FOUND + `lastUpdateTime` 没变 → 设备上是旧 APK（deploy 时撞了 `INSTALL_FAILED_NO_MATCHING_ABIS`，之后没人复核），上一轮「日志说 changed=true」的验收整轮作废。
 
+4. **多会话 / 多设备时，先确认设备上跑的是「你的」分支**（前三条都过了也可能栽在这条）：同机多开时，另一会话会把自己的 bundle / APK 装到同一台设备上，包名与版本号可能完全一样。判据是 grep 设备 bundle 里**你本分支独有的新符号**（如 `applyPlayModeToNative` / `applyShuffleIndexes`），而不是只看 `versionName`：
+
+   ```powershell
+   adb -s <serial> shell "run-as com.mplayer.mobile.dev cat /data/data/com.mplayer.mobile.dev/files/DevLauncherApp-BridgelessReactNativeDevBundle.js" > "$env:TEMP\devbundle.js"
+   node -e "const s=require('fs').readFileSync(process.argv[1],'utf8');for(const k of process.argv.slice(2))console.log(k,'=',s.split(k).length-1)" "$env:TEMP\devbundle.js" applyPlayModeToNative applyShuffleIndexes
+   ```
+
+   实测（#639 R4）：设备上跑的是**另一条分支**的 bundle（本分支的 `applyPlayModeToNative` 计数为 0，而出现的是那条分支独有的 `headersFor` / `sourceReferer`），导致在此之前取得的 T2/T3 证据**整轮作废**——症状恰好长得像代码 bug（UI 白屏、`undefined is not a function`），极易误判成本分支的问题。**换到独立设备 + 验完这条再开始取证。**
+
 ## 取证
 
 下面的次序就是 `SKILL.md` §3 强度阶梯在移动端的具体化：**能读日志就不 dump，能 dump 就不截图**。
@@ -83,6 +92,8 @@ node scripts/mobile-debug.mjs --no-cold-start # 不杀 App，热拉起
 ## 验收准备别靠点触摸应用内 UI
 
 RN 的 `ScalePress` 对注入触摸**时灵时不灵**：同一实例上，设置齿轮 / 「+ 添加 URL 订阅」/ 播放模式按钮对 `input tap`、长按式 `input swipe x y x y 200`、5 次连点**全无响应**（齿轮有 ripple 却不导航；按钮连 Alert 都不弹，说明 handler 压根没跑），而同屏原生 `Switch` / `TextInput` 正常。**点不动且没有任何状态变化（无 Alert、无导航、无日志）时，先怀疑「这个控件不吃注入触摸」**，别继续换坐标试。
+
+> **反例（2026-10-16，#639 R4，雷电模拟器 2160×3840）**：同一批控件在**雷电模拟器**上 `input tap` 是生效的——全屏播放器控制排的「模式」按钮连点能把 `playMode` 从「列表循环」推到「随机播放」（`settings-storage` 落盘可验），「下一首」按钮与媒体键 next 的落点逐次一致。所以这条是**设备相关**的，别把上面那台真机的结论当通则：**换了设备就重新自检一次**（拿一个有唯一可验状态的控件做对照）。
 
 **先自检注入本身有没有效**：拿一个**已知可长按**的控件做对照（本机实测：长按「我的歌单」页的歌单卡片 → 弹「删除歌单」确认）。`input swipe x y x y <ms>`（同点、>=500ms）与 `input motionevent DOWN/…/UP` 都能触发长按；**对照组生效而目标不响应**时，才轮到怀疑「这个控件不吃注入触摸」或「手势被组件树吞掉」——2026-10-01 就是靠这条把「注入无效」与「外层 Pressable 被内层吞掉」分开，才定性到 responder 归属（#514）。
 
@@ -139,6 +150,11 @@ node .agents/skills/runtime-verification/scripts/dev-build.mjs
 - **CMake 250 字符对象路径上限（含绕开后的第二层坑）**：在深层 worktree（如 `.claude/worktrees/<name>`）里跑 `./gradlew assembleDebug` 会因原生模块对象路径过长失败，症状是 CMake 警告 `CMAKE_OBJECT_PATH_MAX` + `ninja: error: manifest 'build.ninja' still dirty after 100 tries`（或 `Filename longer than 260 characters`）。修法：**在短路径检出构建**（主克隆、`subst` 短盘符、`D:\npw` 这种），别在 `.claude/worktrees/<长名>` 里硬试。⚠️ **绕开它的第二层坑**：把源码复制到短路径（游离副本）构建出的 APK **启动即崩** `ClassNotFoundException: expo.modules.splashscreen`——autolinking 认的是检出结构，副本里模块收不全。**正解是在主克隆里建临时分支构建**，不是复制目录。
 - **验证隧道别用手机侧 nc**：Android toybox nc 静默失败。以 Metro bundling 日志 + ReactNativeJS 日志为准。
 - **`uiautomator dump` 在动画界面必失败**：报 `ERROR: could not get idle state`，dump 恒空。已知触发：**播放页**（唱片动画）、**底部弹层入场动画期间**。这不是坐标写错，别反复重试——改用 logcat 断言（如 `[player] 补窗 mode=… 计划=[…]`）或截图裁切判读。#514 的长按选择模式、#515 的 `moved` 分支两条验收因此**无法**用合成输入完成，需要真人手指。
+  - **播放页要在暂停态 dump**：唱片动画停住后 `uiautomator dump` 就正常了——暂停 → dump 取几何（SeekBar / 控制排坐标）→ 恢复播放。本机实测暂停态稳定拿到 `android.widget.SeekBar bounds=[144,3036][2016,3144]`、控制排 `mode=264, prev=642, play=1080, next=1518, queue=1896 @ y=3528`（2160×3840）。
+- **`scripts/mobile-ui.mjs dump` 会静默返回「上一页」的过期快照**（假 PASS 的来源，已用哨兵复现）：`dumpTo()` 用**固定远端文件名** `/sdcard/mobile-ui-dump.xml`，且 dump 前只删本地输出文件、**不删远端**；而 `uiautomator dump` 失败时**不写文件**。于是 dump 失败后 `cat /sdcard/mobile-ui-dump.xml` 读到的是上一页留下的旧内容（含 `<node`）→ 脚本判为「成功」并 `exit=0`。
+  - **决定性复现**（往固定远端文件塞哨兵）：① 打开全屏播放页（dump 必失败）；② `adb shell "printf '<hierarchy…text=\"ZZSENTINEL\"…/>' > /sdcard/mobile-ui-dump.xml"`；③ `node scripts/mobile-ui.mjs dump --out x.xml`。实测产出 `exit=0`、139 字节，且**内容就是那个哨兵** —— 它把旧文件当成了本次结果。同一轮里 dump 到**另一个**文件名则 `ERROR: could not get idle state` 且**文件不生成**，可作对照。
+  - **判据**：拿到的树里若出现**当前页不可能有**的特征（播放页却全是列表页文案 / 没有 `SeekBar`），就是过期快照，别采信。绕过：自己 dump 前 `adb shell rm -f /sdcard/mobile-ui-dump.xml`，或按上一条「暂停态 dump」取几何。
+- **全屏播放页的进度条只能 `tap`，`swipe` 会被横向分页吃掉**：全屏播放器用 `horizontal + pagingEnabled` 的 ScrollView 做「词/封」分页，横向 swipe 被 pager 抢走 —— 实测 `input swipe x1 y x2 y <ms>`（含从拇指当前位置起手、含从轨道最左起手）**位置完全不变**，而 `input tap <目标x> <SeekBar y>` 走 Slider 自己的轨道点击 → `onSlidingComplete`，位置立刻跟着变。**判据**用 `dumpsys media_session` 的 `position=`（实测暂停态也会跟着 seek 刷新，218219 → 146162，可以直接用它判 seek 生效与否）。
 - **「进程被杀后恢复」用 `am force-stop`，不要用 `am kill`**：`am kill` 对**带前台服务的进程是空操作**（pid 不变）——这本身可当「FGS 真的生效」的旁证，但验不了恢复路径；模拟器又没有 `su`，`kill -9` 用不了。`am force-stop` 更狠（连服务一起停），验出来更硬。
 - **多步 adb 编排写成脚本再跑**：内联进 `pwsh -Command` 会被吃掉引号 / 反斜杠 / `$`（实测踩过 `unknown command adb`）。脚本连同**探针**都写 `$env:TEMP`，别落在 worktree 根——`git add -A` 会把它带进提交（实测补了一个 `chore:` 才删掉）。
 - **无线调试（不用 USB 的备用路线）**：镜像网络下手机可直连开发机局域网 IP 拉 bundle（Hyper-V 防火墙需放行 8081）；无线 adb 端口每次重连随机，`adb mdns services` 扫 `_adb-tls-connect._tcp`，配对码 30 秒过期。适合临时看 UI，长会话仍走 USB。

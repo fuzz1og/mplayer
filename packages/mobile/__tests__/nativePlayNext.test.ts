@@ -140,7 +140,7 @@ vi.mock('../services/sourceSwap', () => ({
   searchSwapCandidates: vi.fn(async () => []),
 }));
 
-import { feedWindow, nativePlayNext, nativeStop } from '../services/nativePlayer';
+import { applyPlayModeToNative, feedWindow, nativePlayNext, nativeStop } from '../services/nativePlayer';
 import { playNextInQueue } from '../services/audioPlayer';
 import { planPlayNext } from '../services/queueInsert';
 import { nativeSongActionEffects } from '../services/songActionEffects';
@@ -791,5 +791,42 @@ describe('#520 blocker 2：原位换源就地换 id（不重洗、不留旧 id�
     expect(st.shuffle?.order).toEqual(['C2', 'B', 'A']);
     expect(st.shuffle?.order).not.toContain('C');
     expect(st.shuffle?.cursor).toBe(2);
+  });
+});
+
+/**
+ * #639 R4：JS↔原生双份状态的接线缺口。模式/队列/落点存在两份（JS store 与原生），此前只有「加载歌曲」那条路径同步——
+ * 于是切模式后锁屏 next 与 App 内 next 落点分叉；原生 idle 时补窗退回「位置无关全集」会把绕回候选全跳过（#495 老 bug 复现）。
+ */
+describe('#639 R4：模式切换同步原生 + 快照缺失的补窗口径', () => {
+  it('R4.2/R4.3 applyPlayModeToNative：下发 loopMode 且重喂窗口', async () => {
+    const queue = setQueue(['A', 'B', 'C'], 0);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['A', 'C', 'B'], cursor: 0 } });
+    fake.state.tracks = [{ key: prefetchKey(queue[0]), songId: 'A' }];
+    fake.state.index = 0;
+    fake.patchCalls.length = 0;
+
+    await applyPlayModeToNative();
+
+    // 重喂窗口的首项就是**随机序**里 A 之后的那首（C），不是成员序的邻居 B ——
+    // 这保证原生相邻格 == core 落点，锁屏 next 与 App 内 next 一致。
+    const appended = (fake.patchCalls.at(-1)?.append ?? []).map((t) => t.songId);
+    expect(appended[0]).toBe('C');
+  });
+
+  it('R4.6 原生 idle（快照无 tracks）时补窗不排除任何候选', async () => {
+    const queue = setQueue(['A', 'B', 'C'], 0);
+    useSettingsStore.setState({ playMode: '列表循环' });
+    // 服务不在：idleState 无 `tracks` 字段（区别于 tracks: []）
+    fake.state.tracks = undefined as unknown as typeof fake.state.tracks;
+    fake.patchCalls.length = 0;
+
+    await feedWindow(2);
+
+    // 修前：退回「位置无关的镜像全集」→ 队列里的 key 全算「已投喂」→ append 为空（窗口塌陷）
+    const appended = (fake.patchCalls.at(-1)?.append ?? []).map((t) => t.songId);
+    expect(appended.length).toBeGreaterThan(0);
+    expect(appended).toContain(queue[1].id);
   });
 });

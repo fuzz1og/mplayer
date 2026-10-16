@@ -35,3 +35,42 @@ export function reorderIndices<T extends { id: string }>(
   if (from === -1 || to === -1 || from === to) return null;
   return { from, to };
 }
+
+/**
+ * 删除 `removedAt` 之后的**游标新位**（#639 C1）。与 `moveItem` / `insertAfter` 同属「列表索引数学只此一处」：
+ * 队列删歌时「当前曲下标」与随机序游标必须**同步**变（分开写就是那三次游标脱节 bug 的来源）；
+ * 返回的 `{ playlist, index }` 是**原子产出**，调用方没有机会配错。
+ */
+export function removeAt<T>(
+  list: readonly T[],
+  removedAt: number,
+  currentIndex: number,
+): { playlist: T[]; index: number } {
+  const playlist = list.filter((_, i) => i !== removedAt);
+  if (playlist.length === 0) return { playlist, index: -1 };
+  let index = currentIndex;
+  if (removedAt < currentIndex) index = currentIndex - 1;
+  else if (removedAt === currentIndex) index = removedAt < playlist.length ? removedAt : 0;
+  return { playlist, index };
+}
+
+/**
+ * 把 `from` 挪到 `to` 之后的**游标新位**（#639 C1）。
+ *
+ * 与 `moveItem` 同源（数组数学复用它），额外负责「当前曲下标随移动平移」——
+ * 三分支与 `playerStore.reorderQueue` 原先内联的实现逐条一致。
+ */
+export function moveTo<T>(
+  list: readonly T[],
+  from: number,
+  to: number,
+  currentIndex: number,
+): { playlist: T[]; index: number } {
+  const playlist = moveItem(list, from, to);
+  if (from === to) return { playlist, index: currentIndex };
+  let index = currentIndex;
+  if (currentIndex === from) index = to;
+  else if (from < currentIndex && to >= currentIndex) index = currentIndex - 1;
+  else if (from > currentIndex && to <= currentIndex) index = currentIndex + 1;
+  return { playlist, index };
+}

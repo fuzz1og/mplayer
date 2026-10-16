@@ -7,11 +7,10 @@ import type { PlayMode } from '@mplayer/core';
 import {
   findExactMatch,
   planAdvance,
-  createShuffleState,
+  stepShuffle,
+  alignShuffleOrder,
   normalizeShuffleOrder,
-  syncShuffleCursor,
   insertNextInShuffle,
-  replaceShuffleSongId,
   isInlineLyrics,
   planLyricsFetch,
   decideAfterPlaybackFailure,
@@ -24,7 +23,9 @@ import {
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
-import { insertAfter, moveItem } from '@/renderer/utils/reorder';
+import { resolvePlaybackUrl, type ResolvePlaybackUrlDeps } from '@/renderer/services/resolvePlaybackUrl';
+import { planQueueState } from '@/renderer/store/queueState';
+import { insertAfter, moveItem, removeAt, moveTo } from '@/renderer/utils/reorder';
 import { getNextSong, persistQueue, loadQueue, getInitialPlayMode, persistPlayMode, getAutoSkipOnError } from '@/renderer/utils/queueUtils';
 import { useSearchStore } from '@/renderer/store/searchStore';
 const ipcRenderer = window.electronAPI;
@@ -225,49 +226,48 @@ export function getNextSongInQueue(state: PlayerStoreState): Song | null {
 }
 
 /** 两份队列是否同一批歌（只看 id 集合）——区分「整批换队列」与「同一队列原地改」（封面回填等）。 */
-function sameSongIdSet(a: readonly Song[], b: readonly Song[]): boolean {
-  if (a.length !== b.length) return false;
-  const ids = new Set(a.map((s) => s.id));
-  return b.every((s) => ids.has(s.id));
-}
-
-/** `syncShuffle` 的选项。 */
-interface ShuffleSyncOptions {
-  /** 队列被整批替换（setCurrentPlaylist）：id 集合变了才允许重洗，同一批歌保持既有顺序。 */
-  reseed?: boolean;
-  /** 原位换源：先在序列里把 fromId 就地换成 toId（同一格），再对齐。 */
-  replaceId?: { from: string; to: string };
-  /**
-   * 没有序列时是否现洗一份（默认 **false** = 保持 `null`）。
-   * 只有**建立播放落点**的路径传 true（play 定位 / 进随机 / 跳歌 / insertNext / 换整批队列）；
-   * 纯粹的成员增删与 stop 不传——没有序列就保持没有（与 #511 之前 `shuffleAfterQueueChange` 同语义）。
-   */
-  ensure?: boolean;
-}
-
 /**
- * 随机序的**唯一同步入口**（#511）：所有会改队列成员或播放落点的路径都调它，游标语义只在这一处维护
- * ——避免各 set 点手抄 create/sync 而漏同步（评审实测：失败跳歌就曾漏过一次，游标停在坏歌上）。
- * - `replaceId`：先把 fromId 就地换成 toId（顺序与格位不变），再按上面规则对齐。
+ * 随机序同步（#639 C1）——**薄封装** `queueState.planQueueState`。语义已收进 `queueState.ts`（游标怎么跟、何时重洗、
+ * 何时不建序列都在那一处）。**新代码请直接用 `applyQueueState`**（它同时产出 index，避免下标与随机序分开写）。
  */
 function syncShuffle(
   state: PlayerStoreState,
   playlist: Song[],
   cursorIndex: number,
-  options: ShuffleSyncOptions = {},
+  options: { reseed?: boolean; replaceId?: { from: string; to: string }; ensure?: boolean } = {},
 ): ShuffleState | null {
-  let base = state.shuffle;
-  if (base && options.replaceId) {
-    base = replaceShuffleSongId(base, options.replaceId.from, options.replaceId.to);
-  }
-  const reseed = options.reseed === true && !sameSongIdSet(state.currentPlaylist, playlist);
-  if (!base || reseed) {
-    const establish = options.ensure === true || reseed;
-    return establish && state.playMode === '随机播放' && playlist.length > 0
-      ? createShuffleState(playlist, { currentIndex: cursorIndex })
-      : null;
-  }
-  return syncShuffleCursor(base, playlist, cursorIndex);
+  const policy = options.replaceId
+    ? 'replace-id'
+    : options.reseed
+      ? 'reseed'
+      : options.ensure
+        ? 'locate'
+        : 'align';
+  return planQueueState(
+    { playlist: state.currentPlaylist, index: cursorIndex, shuffle: state.shuffle, playMode: state.playMode },
+    { playlist, index: cursorIndex, policy, replaceId: options.replaceId },
+  ).shuffle;
+}
+
+/**
+ * 应用一次队列状态转移（#639 C1）：规划 + set。
+ * **调用点只描述变更意图**——`planQueueState` 同时产出 `playlist` / `index` / `shuffle` 三元组，调用方没有机会把下标与随机序配错
+ * （那正是本仓修过三次的 bug 形状）。落盘不在这里：store 订阅是唯一出口。
+ */
+function applyQueueState(
+  set: (patch: Partial<PlayerStoreState>) => void,
+  state: PlayerStoreState,
+  change: Parameters<typeof planQueueState>[1],
+): void {
+  const next = planQueueState(
+    { playlist: state.currentPlaylist, index: state.currentPlaylistIndex, shuffle: state.shuffle, playMode: state.playMode },
+    change,
+  );
+  set({
+    currentPlaylist: next.playlist,
+    currentPlaylistIndex: next.index,
+    shuffle: next.shuffle,
+  });
 }
 
 /**
@@ -346,6 +346,25 @@ interface PlayAttempt {
 }
 
 let activeAttempt: PlayAttempt | null = null;
+
+/**
+ * C2 解析模块的桌面端口（#639 C2）：把 IPC 与「试听版」的 UI 副作用接进去。
+ * 解析逻辑本身不认识 store / IPC，因此可零 mock 单测（见 `__tests__/resolvePlaybackUrl.test.ts`）。
+ */
+const desktopResolveDeps: ResolvePlaybackUrlDeps = {
+  resolveRouted: (song) => callMusicApi('resolvePlayableSongRouted', song),
+  sodaPlayableUrl: (songId) => callMusicApi('getSodaPlayableUrl', songId),
+  // #390：遗忘必须打到主进程那份缓存（渲染层那份没人读）
+  forgetPrefetched: async (song) => { await callMusicApi('forgetPrefetchedSong', song); },
+  explainFailure: (song) => callMusicApi('explainPlaybackFailure', song).catch(() => null),
+  onNonFull: (song) => {
+    console.warn(`[player] 《${song.name}》解析结果为试听版（non-full），可换源获取完整版`);
+    // preview 立即播直连试听（秒出声），不再等 tier3
+    useSearchStore.getState().setAudioTag(song.id, 'preview');
+    message.info('当前为试听版，可换源获取完整版');
+  },
+  log: (level, message) => console[level === 'warn' ? 'warn' : 'error'](message),
+};
 
 /**
  * 解析链穷尽（直连 + tier3 都没拿到 URL）错误（#357）：携带 core 的失败归因。
@@ -437,9 +456,12 @@ async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Prom
 
   // 跳歌也是「播放落点」：游标必须跟着走，否则稳定序列当场失效
   //（预取会按坏歌位置算下一首、再点下一首会重播正在播的这首）
-  const nextShuffle = syncShuffle(store, store.currentPlaylist, next.index, { ensure: true });
-  usePlayerStore.setState({ currentPlaylistIndex: next.index, shuffle: nextShuffle });
-  persistQueue(store.currentPlaylist, next.index, nextShuffle);
+  // #639 C1：走同一处规划器（原先手写 set，是 `syncShuffle` 的另一个入口）
+  const nextState = planQueueState(
+    { playlist: store.currentPlaylist, index: store.currentPlaylistIndex, shuffle: store.shuffle, playMode: store.playMode },
+    { playlist: store.currentPlaylist, index: next.index, policy: 'locate' },
+  );
+  usePlayerStore.setState({ currentPlaylistIndex: nextState.index, shuffle: nextState.shuffle });
   message.warning(decision.copy);
   await store.play(next.song);
 }
@@ -477,7 +499,24 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       // 00:05 / 05:19」——歌名换了、进度没换，一次「已停止」说了假话（与 #328 同源）。
       // 时长保留旧值到新曲加载完成，与下方正常路径同一口径。
       playbackClock.setPosition(0);
-      set({ error: OFFLINE_COPY, isLoading: false, isPlaying: false, currentSong: song });
+      // #639 R3.3：落点也要跟着走。此前只换 currentSong，`currentPlaylistIndex` 与随机游标
+      // 仍指上一首 —— 恢复网络后按「下一首」会从**旧位置**推进（跳回已播过的位置）。
+      // 口径与下方正常路径的队列同步段一致（队列外点歌 → 追加进队并置尾）。
+      const playlist = get().currentPlaylist;
+      const at = playlist.findIndex(s => s.id === song.id);
+      // 队列外点歌 → 追加进队并置尾；否则只改落点。两者都走同一处规划器。
+      const nextPlaylist = at === -1 ? [...playlist, song] : playlist;
+      const nextIndex = at === -1 ? nextPlaylist.length - 1 : at;
+      const nextState = planQueueState(
+        { playlist, index: get().currentPlaylistIndex, shuffle: get().shuffle, playMode: get().playMode },
+        { playlist: nextPlaylist, index: nextIndex, policy: 'locate' },
+      );
+      set({
+        error: OFFLINE_COPY, isLoading: false, isPlaying: false, currentSong: song,
+        currentPlaylist: nextState.playlist,
+        currentPlaylistIndex: nextState.index,
+        shuffle: nextState.shuffle,
+      });
       message.error(OFFLINE_COPY);
       return;
     }
@@ -503,39 +542,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       // 位置读模型归零（时长保留旧值到新曲加载完成，与旧 store 行为一致）
       playbackClock.setPosition(0);
 
-      let realUrl = song.url;
-      let playbackNonFull = false;
-
-      if (song.sourceType === 'soda' && !song.url) {
-        try {
-          realUrl = await callMusicApi('getSodaPlayableUrl', song.id);
-        } catch (urlError) {
-          console.error('获取汽水音乐可播放 URL 失败:', urlError);
-        }
-      } else if (song.sourceType !== 'local') {
-        // fresh 重试语义：先遗忘该曲预取条目——里面是刚被证明失败的直链，
-        // 0 等待命中只会原地连败两次（core 预取缓存 30min TTL + 失败可遗忘）。
-        // #390：遗忘经 IPC 打到主进程那份缓存（渲染层那份没人读）。
-        if (fresh) await callMusicApi('forgetPrefetchedSong', song).catch(() => {});
-        try {
-          // T12：带试听版检测的播放解析（nonFull 标记驱动换元提示）。
-          // 预取命中在 core 内部完成，这里不再自建缓存分支。
-          const resolved = await callMusicApi('resolvePlayableSongRouted', song);
-          realUrl = resolved?.url || '';
-          if (resolved?.nonFull && realUrl) {
-            console.warn(`[player] 《${song.name}》解析结果为试听版（non-full），可换源获取完整版`);
-            song.nonFull = true;
-            playbackNonFull = true;
-            // preview 立即播直连试听（秒出声），不再等 tier3
-            useSearchStore.getState().setAudioTag(song.id, 'preview');
-            message.info('当前为试听版，可换源获取完整版');
-          }
-        } catch (urlError) {
-          // 失败反馈与「重试 / 跳歌」决策统一交给 handlePlaybackFailure，避免重复 Toast
-          console.error('获取真实音频 URL 失败:', urlError);
-          realUrl = '';
-        }
-      }
+      // #639 C2：解析腿收进零副作用模块（`services/resolvePlaybackUrl`）——
+      // 分支（本地 / 汽水 / 路由链）与失败归因都在那里，这里只管编排。
+      // 该模块不抛错：失败以 `url` 为空 + `advice` 表达，异常语义留在这一层。
+      const resolved = await resolvePlaybackUrl(song, desktopResolveDeps, { fresh });
+      const realUrl = resolved.url;
+      const playbackNonFull = resolved.nonFull;
 
       // 现在 core 的两个分支（空串 / 抛错）都落到同一条尾巴并写回预取缓存，桌面不需要任何适配器，删
       // 掉整块（含那次保证落空的二次搜索）。
@@ -546,12 +558,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       if (!realUrl) {
         set({ isLoading: false });
-        // 失败归因（#357）：core 按当前配置给出可操作文案（没有声明对应 source 的源 /
-        // 全部因归属被跳过 / 源都试了没命中 / tier3 未开启…），双端共用同一份，
-        // 不再把用户引向「可能为 VIP/无版权」的错误方向。归因失败退回原通用文案。
-        const advice = await callMusicApi('explainPlaybackFailure', song).catch(() => null);
-        // 「不可播」徽标回写与重试 / 跳歌决策统一在 handlePlaybackFailure
-        throw new PlayableUrlMissingError(advice);
+        // 「不可播」徽标回写与重试 / 跳歌决策统一在 handlePlaybackFailure；
+        // 归因文案由 C2 模块取（core 单一来源），这里只负责把它包成异常 ——
+        // `failureReasonText` 靠 `instanceof` 区分「解析链穷尽」与「播放器/网络失败」。
+        throw new PlayableUrlMissingError(resolved.advice);
       }
 
       const songWithRealUrl = { ...song, url: realUrl };
@@ -608,21 +618,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       // 同步更新队列（本地操作，无 IPC 开销）
       const playlist = get().currentPlaylist;
       const index = playlist.findIndex(s => s.id === song.id);
-      if (index === -1) {
-        const newPlaylist = [...playlist, song];
-        const appendedIndex = newPlaylist.length - 1;
-        set({
-          currentPlaylist: newPlaylist,
-          currentPlaylistIndex: appendedIndex,
-          shuffle: syncShuffle(get(), newPlaylist, appendedIndex, { ensure: true }),
-        });
-      } else {
-        set({
-          currentPlaylistIndex: index,
-          shuffle: syncShuffle(get(), playlist, index, { ensure: true }),
-        });
-      }
-      persistQueue(get().currentPlaylist, get().currentPlaylistIndex, get().shuffle);
+      // #639 C1：队列外点歌 → 追加进队并置尾；否则只改落点。同一处规划器 'locate'。
+      const nextPlaylist = index === -1 ? [...playlist, song] : playlist;
+      const nextIndex = index === -1 ? nextPlaylist.length - 1 : index;
+      applyQueueState(set, get(), { playlist: nextPlaylist, index: nextIndex, policy: 'locate' });
 
       // 预取必须放在队列 index 同步之后（#318）：手动点播路径（QueuePage 双击行、历史/本地/发现页单
       // 曲点播）不先同步 index，若在 set({ currentSong }) 后立即预取，会基于「新 currentSong + 旧 
@@ -671,14 +670,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   stop: () => {
     audioPlayer.stop();
     playbackClock.reset();
-    set((state) => ({
-      currentSong: null,
-      isPlaying: false,
-      currentPlaylistIndex: -1,
-      // 序列保留、游标归位：没有当前曲了，next 从序列开头起
-      shuffle: syncShuffle(state, state.currentPlaylist, -1),
-    }));
-    persistQueue(get().currentPlaylist, get().currentPlaylistIndex, get().shuffle);
+    set((state) => {
+      // #639 C1：同一处规划器；「序列保留、游标归位（-1）」由 policy 'align' 表达
+      const next = planQueueState(
+        { playlist: state.currentPlaylist, index: state.currentPlaylistIndex, shuffle: state.shuffle, playMode: state.playMode },
+        { playlist: state.currentPlaylist, index: -1, policy: 'align' },
+      );
+      return { currentSong: null, isPlaying: false, currentPlaylistIndex: next.index, shuffle: next.shuffle };
+    });
   },
 
   seek: (position: number) => {
@@ -713,18 +712,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   setPlayMode: (mode: PlayMode) => {
-    set((state) => ({
-      playMode: mode,
+    set((state) => {
       // 进随机：把游标对到当前曲（没有序列就现洗一份）；换回列表/单曲：序列保留但不参与。
-      // 注意用 `{...state, playMode: mode}` 传"新模式"——set 回调里的 state 还是旧的，
-      // 否则 syncShuffle 会按旧的列表模式判定"不建序列"。
-      shuffle:
-        mode === '随机播放'
-          ? syncShuffle({ ...state, playMode: mode }, state.currentPlaylist, state.currentPlaylistIndex, { ensure: true })
-          : state.shuffle,
-    }));
+      // `planQueueState` 收 `playMode` 入参，不再靠「把新模式塞进 state 副本」的老技巧
+      // （那个技巧的存在本身就是「模式与序列的判定散在闭包里」的症状）。
+      if (mode !== '随机播放') return { playMode: mode, shuffle: state.shuffle };
+      const next = planQueueState(
+        { playlist: state.currentPlaylist, index: state.currentPlaylistIndex, shuffle: state.shuffle, playMode: mode },
+        { playlist: state.currentPlaylist, index: state.currentPlaylistIndex, policy: 'mode', playMode: mode },
+      );
+      return { playMode: mode, shuffle: next.shuffle };
+    });
     persistPlayMode(mode);
-    persistQueue(get().currentPlaylist, get().currentPlaylistIndex, get().shuffle);
   },
 
   playNext: () => {
@@ -777,7 +776,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (currentPlaylist.length === 0) {
       const nextShuffle = syncShuffle(get(), [song], 0, { ensure: true });
       set({ currentPlaylist: [song], currentPlaylistIndex: 0, shuffle: nextShuffle });
-      persistQueue([song], 0, nextShuffle);
       await get().play(song);
       return;
     }
@@ -804,8 +802,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const nextQueue = existingIndex === -1 ? [...currentPlaylist, song] : currentPlaylist;
       const base = syncShuffle(get(), nextQueue, currentPlaylistIndex, { ensure: true });
       const nextShuffle = base ? insertNextInShuffle(base, nextQueue, song.id, currentPlaylistIndex) : null;
-      set({ currentPlaylist: nextQueue, shuffle: nextShuffle });
-      persistQueue(nextQueue, currentPlaylistIndex, nextShuffle);
+      // #639 C1：core 算好的序列是**权威值** → policy 'settle' 原样接受（不再二次推导游标）
+      applyQueueState(set, get(), {
+        playlist: nextQueue, index: currentPlaylistIndex, policy: 'settle', settled: nextShuffle,
+      });
 
       if (existingIndex === -1 && !currentSong) await get().play(song);
       return;
@@ -813,6 +813,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // 幂等：它已经在「当前曲之后」这一位 → 什么都不做（连点两次结果稳定、队列长度不变）
     if (existingIndex === currentPlaylistIndex + 1) return;
+    // #639 R3.1：点的是**当前播放曲本身** → no-op（与随机分支 `song.id === currentId` 同口径）。缺这条守卫会落进移动分支，
+    // 把当前曲往后挪一格而 `currentPlaylistIndex` 不动——指针与当前曲脱节，再按「下一首」会重复加载正在播的这首。
+    if (existingIndex === currentPlaylistIndex) return;
 
     let nextQueue: Song[];
     let nextIndex = currentPlaylistIndex;
@@ -828,22 +831,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     // 移动分支若当前曲本身被挪动才需要改指针；上面 nextIndex 已按此算好，插入分支恒等于原值。
-    const nextShuffle = syncShuffle(get(), nextQueue, nextIndex);
-    set({ currentPlaylist: nextQueue, currentPlaylistIndex: nextIndex, shuffle: nextShuffle });
-    persistQueue(nextQueue, nextIndex, nextShuffle);
+    applyQueueState(set, get(), { playlist: nextQueue, index: nextIndex, policy: 'align' });
 
     // 队列里没这首、且当前没有在播的曲目 → 直接开始播它（有在播的曲子则**绝不打断**，这是本动作的核心承诺）
     if (existingIndex === -1 && !currentSong) await get().play(song);
   },
 
   setCurrentPlaylist: (playlist: Song[], currentIndex: number = -1) => {
-    const nextShuffle = syncShuffle(get(), playlist, currentIndex, { reseed: true, ensure: true });
-    set({
-      currentPlaylist: playlist,
-      currentPlaylistIndex: currentIndex,
-      shuffle: nextShuffle,
-    });
-    persistQueue(playlist, currentIndex, nextShuffle);
+    // #639 C1：整批换队列（id 集合变了才重洗）
+    applyQueueState(set, get(), { playlist, index: currentIndex, policy: 'reseed' });
   },
 
   /**
@@ -863,22 +859,22 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     queue[idx] = swapped;
 
     // 换源换的是同一格的条目：序列里就地改 id（顺序与格位不变），游标仍对到当前曲
-    const nextShuffle = syncShuffle(get(), queue, currentSong?.id === originalId ? idx : currentPlaylistIndex, {
+    const locIdx = currentSong?.id === originalId ? idx : currentPlaylistIndex;
+    applyQueueState(set, get(), {
+      playlist: queue,
+      index: locIdx,
+      policy: 'replace-id',
       replaceId: { from: originalId, to: swapped.id },
     });
 
     if (currentSong?.id === originalId) {
-      set({ currentPlaylist: queue, currentPlaylistIndex: idx, currentSong: swapped, shuffle: nextShuffle });
-      persistQueue(queue, idx, nextShuffle);
+      set({ currentSong: swapped });
       await get().play(swapped);
-    } else {
-      set({ currentPlaylist: queue, shuffle: nextShuffle });
-      persistQueue(queue, currentPlaylistIndex, nextShuffle);
     }
   },
 
   removeFromQueue: (index: number) => {
-    const { currentPlaylist, currentPlaylistIndex } = get();
+    const { currentPlaylist, currentPlaylistIndex, playMode, shuffle } = get();
     if (index < 0 || index >= currentPlaylist.length) return;
 
     const newPlaylist = currentPlaylist.filter((_, i) => i !== index);
@@ -886,36 +882,40 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     if (newPlaylist.length === 0) {
       get().stop();
-      persistQueue([], -1, null);
       return;
     }
 
     if (index === currentPlaylistIndex) {
-      // 移除的是当前播放歌曲，播放下一首
-      const nextSong = newPlaylist[index] || newPlaylist[0];
-      const resumedIndex = index < newPlaylist.length ? index : 0;
-      const nextShuffle = syncShuffle(get(), newPlaylist, resumedIndex);
-      set({
-        currentPlaylist: newPlaylist,
-        currentPlaylistIndex: resumedIndex,
-        shuffle: nextShuffle,
-      });
-      persistQueue(newPlaylist, resumedIndex, nextShuffle);
+      // 移除的是当前播放歌曲 → 续播它的「下一首」。#639 R3.2：随机模式下「下一首」是**随机序**里的后继（队列页显示的就是随机序，
+      // 用户看到当前行下面是 D 就该播 D）；此前一律取成员序邻居 `newPlaylist[index]`，播出的歌与界面显示不符。
+      let resumedIndex = index < newPlaylist.length ? index : 0;
+      if (playMode === '随机播放' && shuffle) {
+        // 在**旧**队列上把游标对到当前曲、前进一格，拿到后继 id，再在新队列里定位
+        const stepped = stepShuffle(
+          alignShuffleOrder(shuffle, currentPlaylist, index),
+          currentPlaylist,
+          1,
+        );
+        const nextId = stepped.index >= 0 ? currentPlaylist[stepped.index]?.id : undefined;
+        const at = nextId ? newPlaylist.findIndex(s => s.id === nextId) : -1;
+        if (at >= 0) resumedIndex = at;
+      }
+      const nextSong = newPlaylist[resumedIndex] || newPlaylist[0];
+      // #639 C1：游标与下标一起产出（原先是 syncShuffle + set 两处分开写）
+      applyQueueState(set, get(), { playlist: newPlaylist, index: resumedIndex, policy: 'align' });
       get().play(nextSong);
       return;
     }
 
-    if (index < currentPlaylistIndex) {
-      newIndex = currentPlaylistIndex - 1;
-    }
-
-    const nextShuffle = syncShuffle(get(), newPlaylist, newIndex);
+    // 删非当前曲：下标平移与游标同步**原子产出**（`removeAt` 不让人把两者配错）
+    const removed = removeAt(currentPlaylist, index, currentPlaylistIndex);
+    newIndex = removed.index;
+    const nextShuffle = syncShuffle(get(), removed.playlist, newIndex);
     set({
-      currentPlaylist: newPlaylist,
+      currentPlaylist: removed.playlist,
       currentPlaylistIndex: newIndex,
       shuffle: nextShuffle,
     });
-    persistQueue(newPlaylist, newIndex, nextShuffle);
   },
 
   reorderQueue: (fromIndex: number, toIndex: number) => {
@@ -924,27 +924,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (toIndex < 0 || toIndex >= currentPlaylist.length) return;
     if (fromIndex === toIndex) return;
 
-    // 索引数学走共享 moveItem：队列拖拽、本地歌单拖拽、store 内部同一份实现
-    const newPlaylist = moveItem(currentPlaylist, fromIndex, toIndex);
-
-    // 同步更新 currentPlaylistIndex
-    let newIndex = currentPlaylistIndex;
-    if (currentPlaylistIndex === fromIndex) {
-      newIndex = toIndex;
-    } else if (fromIndex < currentPlaylistIndex && toIndex >= currentPlaylistIndex) {
-      newIndex = currentPlaylistIndex - 1;
-    } else if (fromIndex > currentPlaylistIndex && toIndex <= currentPlaylistIndex) {
-      newIndex = currentPlaylistIndex + 1;
-    }
-
-    // 成员顺序变了：序列增量对齐即可（顺序不重洗，游标跟随当前曲）
-    const nextShuffle = syncShuffle(get(), newPlaylist, newIndex);
-    set({
-      currentPlaylist: newPlaylist,
-      currentPlaylistIndex: newIndex,
-      shuffle: nextShuffle,
-    });
-    persistQueue(newPlaylist, newIndex, nextShuffle);
+    // #639 C1：数组数学（moveItem）与「当前曲下标随移动平移」的数学合在 `moveTo` 里
+    // **原子产出** —— 原先把这两份分开写（moveItem + 三分支），是「下标变了、游标没跟」的温床。
+    const moved = moveTo(currentPlaylist, fromIndex, toIndex, currentPlaylistIndex);
+    applyQueueState(set, get(), { playlist: moved.playlist, index: moved.index, policy: 'align' });
   },
 
   /**
@@ -967,7 +950,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const currentId = currentPlaylist[currentPlaylistIndex]?.id;
     const nextShuffle = { order, cursor: currentId ? order.indexOf(currentId) : -1 };
     set({ shuffle: nextShuffle });
-    persistQueue(currentPlaylist, currentPlaylistIndex, nextShuffle);
   },
 
   clearQueue: () => {
@@ -977,9 +959,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentPlaylistIndex: -1,
       shuffle: null,
     });
-    persistQueue([], -1, null);
   },
 }));
+
+/**
+ * 队列落盘的**单一出口**（#639 C1）：此前 16 个 action 各写一遍 `persistQueue(...)`，新增 action 忘写一次就静默丢落盘
+ * （移动端早已是订阅单一出口，这里对齐它）。只在**队列这三份数据**真的变化时写，`currentSong` / `isPlaying` 等高频字段不落盘。
+ */
+let lastPersisted = { playlist: usePlayerStore.getState().currentPlaylist, index: usePlayerStore.getState().currentPlaylistIndex, shuffle: usePlayerStore.getState().shuffle };
+usePlayerStore.subscribe((state) => {
+  if (
+    state.currentPlaylist === lastPersisted.playlist &&
+    state.currentPlaylistIndex === lastPersisted.index &&
+    state.shuffle === lastPersisted.shuffle
+  ) return;
+  lastPersisted = { playlist: state.currentPlaylist, index: state.currentPlaylistIndex, shuffle: state.shuffle };
+  persistQueue(state.currentPlaylist, state.currentPlaylistIndex, state.shuffle);
+});
 
 // Sync state to tray when currentSong or isPlaying changes
 // NOTE: ipcRenderer is already imported at line 6

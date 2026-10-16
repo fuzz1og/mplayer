@@ -9,6 +9,12 @@ vi.mock('react-native', () => ({
     registerComponent: vi.fn(),
     runApplication: vi.fn(),
   },
+  // #639 R4.4：`nativePlayer` 顶层读 AppState.currentState、initNativePlayer 挂 change 监听
+  // （回前台单向对账）。替身需支持 addEventListener 返回可 remove 的订阅。
+  AppState: {
+    currentState: 'active',
+    addEventListener: vi.fn(() => ({ remove: vi.fn() })),
+  },
   Share: { share: vi.fn(async () => ({ action: 'dismissedAction' })) },
   Platform: { OS: 'android', select: (options: Record<string, unknown>) => options?.android ?? options?.default },
   NativeModules: {},

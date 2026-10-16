@@ -70,8 +70,11 @@ for (const root of SCAN_ROOTS) {
     lines.forEach((raw, i) => {
       const t = raw.trim();
       const isComment = t.startsWith('//') || t.startsWith('/*') || t.startsWith('{/*') || t.startsWith('*') || t === '*/' || t === '*/}';
-      if (isComment) cur.push({ line: i + 1, content: stripComment(t) });
-      else flush();
+      if (isComment) {
+        cur.push({ line: i + 1, content: stripComment(t) });
+        // A block comment ends at its closer: flush so two adjacent blocks stay separate.
+        if (t.endsWith('*/') || t.endsWith('*/}')) flush();
+      } else flush();
     });
     flush();
   }
