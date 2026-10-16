@@ -134,33 +134,60 @@ node .agents/skills/runtime-verification/scripts/dev-build.mjs
 
 ## 陷阱速查
 
+### 设备连接
+
 - **attach 报 `Device busy (exported)`**：Windows 正占用设备。两个来源：手机处于「文件传输 / MTP」模式（下拉通知切成「仅充电」，USB 调试保持开）；或另一条回路的 adb 被拉起（`/mnt/c/Users/<用户名>/scoop/shims/adb.exe kill-server`）。切换 USB 模式会让设备重新枚举，bind 可能要重做——重跑 `usb-attach.mjs`。
 - **之前能用，突然 `no devices`**：usbipd 透传掉了（拔插、省电、重新枚举都会）。重跑 `usb-attach.mjs` 即可。
 - **模拟器实例掉线 / 报废**（不只是 usbipd 掉线）：雷电实例会自己从 `adb devices` 里消失或变 `offline`，`ldconsole quit` 再 `launch --index <i>` 常常**起不回来**（adbd 不回来）。重建：`ldconsole add --name <n>` + `launch --index <i>`；**端口 = 5555 + 2×index**（index 1 → 5557），且**新实例默认 720×1280**，坐标要重新 `wm size` 取。特例：**飞行模式会连 adb 一起断且不可恢复**（`cmd connectivity airplane-mode enable` 后 `adb shell` 立即返空、`127.0.0.1:5555` 变 offline）——**断网类验收一律走真机 USB**（`svc wifi disable && svc data disable` 不影响 USB adb）。
+
+### 运行时选择（Expo Go vs dev build）
+
 - **开发态验收用 Expo Go，不是装机 APK**：`com.mplayer.mobile` 是 release 构建（无 DEBUGGABLE），跑打包 JS、不连 Metro——看不到 `Running "main"` 与 bundling 日志就是这个原因。
 - **原生能力必须 dev client**：Expo Go 下 `setActiveForLockScreen` 被跳过（`services/audioPlayer.ts` 的 `if (!isExpoGo)`）、`enableBackgroundPlayback` 插件不生效（#327）——后台播放 / 锁屏 / 通知栏类验收在 Expo Go 上得到的结论无效，别写进 PR。
+
+### 打包与 Metro
+
 - **改了 core 必须重建**：移动端 Metro 吃 `packages/core/dist` 产物。dist 过期的典型症状是启动即 `undefined is not a function`（core 新导出不存在）——`npm run core:build` 后冷启 App；行为诡异时 `node scripts/mobile-debug.mjs -c` 清 Metro 缓存。
 - **core 新增/改名导出时，只 `core:build` 还会红屏（#576 实测）**：设备的 bundle URL 带 `lazy=true&transform.bytecode=1`，被**按需加载**的那个 chunk 仍是旧转换缓存——`core:build` + 冷启之后，一打开用到新导出的页面照样红屏 `undefined is not a function`（实测：master 上开全屏播放页，`PlayerOverlay.tsx` 的 `planLyricsFetch`）。修法：`npx expo start --clear` 重起 Metro（或 `node scripts/mobile-debug.mjs -c`）再冷启。取证按「身份锚」第 1 条：curl 设备 manifest 的 `launchAsset.url`（追加 `&lazy=false`）grep 新符号。**别把这种红屏当成「刚合的 PR 把 master 弄炸了」**。
 - **worktree 里调真机**：`packages/mobile/node_modules` 软链到主克隆时，`expo-router` 的 babel 插件按「被转换文件的真实路径」反推 app root（`babel-preset-expo` 的 `getExpoRouterAppRoot`），`_ctx.android.js` 的真实路径落在主克隆 → **打包的是主克隆的 `app/`**，worktree 的改动全部不生效（症状：改了没反应）。修法：worktree 就地 `npm install`；临时救急用 `cp -al` 硬链主克隆的 `node_modules` 与 `packages/mobile/node_modules`（硬链的真实路径落在 worktree 内，app root 推导才正确）。
 - **`expo start` 启动即崩 `Cannot find module 'expo-router/_ctx-shared'`（2026-10-16 实测）**：与上一条不同，这条**Metro 根本起不来**（8099/8081 不监听），所以真机停在 DevLauncher、点 RECENTLY OPENED 弹 `Error loading app: unexpected end of stream`。成因是 `expo-router` 只装在 `packages/mobile/node_modules`，而 CLI 是**根提升**的那份（`node_modules/expo/node_modules/@expo/cli`，其内嵌 `@expo/router-server` 的 typed-routes 会 `require('expo-router/_ctx-shared')`），从根目录解析不到。修法（只动 `node_modules`，不入库）：`cp -r packages/mobile/node_modules/expo-router node_modules/expo-router`，再起 `npx expo start --port <p>` + `adb reverse tcp:<p> tcp:<p>`。判据：`Get-NetTCPConnection -LocalPort <p> -State Listen` 有输出，且 logcat 里 `topResumedActivity` 变成 `com.mplayer.mobile.MainActivity`（不是 `DevLauncherActivity`）。
 - **Metro 报 500**：先 curl bundle URL 看错误体。常见根因是 Metro 实例的 projectRoot 不是 `packages/mobile`（陈年残留进程，解析到仓库根）——杀掉它重起。App 收到的 manifest 里 `projectRoot` 字段可直接验（身份锚第 1 条）。
+
+### 多会话与 adb 争抢
+
 - **多会话共抢一台手机**：其他 worktree 会话可能也在调试（各自 Metro 占 8082 等端口、互相拉起 App）。`adb kill-server` 会打掉**所有人**的 reverse 隧道——动过 server 后跑 `adb reverse --list` 确认自己的端口还在，App 的 `initialUri` 要指向自己的端口。
 - **归属对照：同一台设备上再起一个 Metro（8082）跑 master**：分支上某控件不响应 / 行为可疑时，用 master 的 bundle 复现一次（`adb reverse tcp:8082 tcp:8082` → `am start … exp://127.0.0.1:8082`），就能把「本 PR 引入」与「既有行为」分开——#514 的长按吞手势就是这样定性为既有模式（对照图进了 PR 评论）。用完记得 `adb reverse tcp:8081 tcp:8081` 切回自己的端口并冷启。
 - **双 transport 串线**：设备同时挂 USB + 无线两条 transport 时 reverse 静默不通（App 拉起但 JS 永远不跑、Metro 无 bundling 记录）。修法：`adb disconnect` 只留 USB，重建 reverse，冷启。`mobile-debug.mjs` 已内置该检查。
 - **adb server / 5037 争抢（同一处置的三个子情形）**：症状是任何 `adb` 命令挂住、`adb devices` 超时，或 80MB 的 `adb install` 把 server 卡死。① 雷电自带 `D:\leidian\LDPlayer14\adb.exe` 与 scoop 的 `…\scoop\shims\adb.exe` 都会抢 5037，多个 server 互踢；② `adb install` 走流式安装，比 `adb push` + `adb shell pm install -r` 脆弱得多；③ **daemon 重启会清空所有 reverse 隧道**（实测别的会话的 daemon 崩掉，把 8099 一起带走）。处置：**杀光所有 adb 进程 → 只用一份 `adb start-server`（scoop 的 `android-clt` 或 WSL 侧 `~/.local/bin/adb`）→ 重新 `adb reverse`**；查占用者 `Get-NetTCPConnection -LocalPort 5037 -State Listen`；装包改 `adb push` + `pm install -r`；「App 突然连不上 Metro」先查 `adb reverse --list`，别先怀疑 App。**别** `adb connect 127.0.0.1:5555`——会造出同一台设备的**重复 transport**。
+
+### 构建产物
+
 - **CMake 250 字符对象路径上限（含绕开后的第二层坑）**：在深层 worktree（如 `.claude/worktrees/<name>`）里跑 `./gradlew assembleDebug` 会因原生模块对象路径过长失败，症状是 CMake 警告 `CMAKE_OBJECT_PATH_MAX` + `ninja: error: manifest 'build.ninja' still dirty after 100 tries`（或 `Filename longer than 260 characters`）。修法：**在短路径检出构建**（主克隆、`subst` 短盘符、`D:\npw` 这种），别在 `.claude/worktrees/<长名>` 里硬试。⚠️ **绕开它的第二层坑**：把源码复制到短路径（游离副本）构建出的 APK **启动即崩** `ClassNotFoundException: expo.modules.splashscreen`——autolinking 认的是检出结构，副本里模块收不全。**正解是在主克隆里建临时分支构建**，不是复制目录。
 - **验证隧道别用手机侧 nc**：Android toybox nc 静默失败。以 Metro bundling 日志 + ReactNativeJS 日志为准。
+
+### 取证：dump / 手势 / 生命周期
+
 - **`uiautomator dump` 在动画界面必失败**：报 `ERROR: could not get idle state`，dump 恒空。已知触发：**播放页**（唱片动画）、**底部弹层入场动画期间**。这不是坐标写错，别反复重试——改用 logcat 断言（如 `[player] 补窗 mode=… 计划=[…]`）或截图裁切判读。#514 的长按选择模式、#515 的 `moved` 分支两条验收因此**无法**用合成输入完成，需要真人手指。
   - **播放页要在暂停态 dump**：唱片动画停住后 `uiautomator dump` 就正常了——暂停 → dump 取几何（SeekBar / 控制排坐标）→ 恢复播放。本机实测暂停态稳定拿到 `android.widget.SeekBar bounds=[144,3036][2016,3144]`、控制排 `mode=264, prev=642, play=1080, next=1518, queue=1896 @ y=3528`（2160×3840）。
 - **`scripts/mobile-ui.mjs dump` 会静默返回「上一页」的过期快照**（假 PASS 的来源，已用哨兵复现）：`dumpTo()` 用**固定远端文件名** `/sdcard/mobile-ui-dump.xml`，且 dump 前只删本地输出文件、**不删远端**；而 `uiautomator dump` 失败时**不写文件**。于是 dump 失败后 `cat /sdcard/mobile-ui-dump.xml` 读到的是上一页留下的旧内容（含 `<node`）→ 脚本判为「成功」并 `exit=0`。
   - **决定性复现**（往固定远端文件塞哨兵）：① 打开全屏播放页（dump 必失败）；② `adb shell "printf '<hierarchy…text=\"ZZSENTINEL\"…/>' > /sdcard/mobile-ui-dump.xml"`；③ `node scripts/mobile-ui.mjs dump --out x.xml`。实测产出 `exit=0`、139 字节，且**内容就是那个哨兵** —— 它把旧文件当成了本次结果。同一轮里 dump 到**另一个**文件名则 `ERROR: could not get idle state` 且**文件不生成**，可作对照。
   - **判据**：拿到的树里若出现**当前页不可能有**的特征（播放页却全是列表页文案 / 没有 `SeekBar`），就是过期快照，别采信。绕过：自己 dump 前 `adb shell rm -f /sdcard/mobile-ui-dump.xml`，或按上一条「暂停态 dump」取几何。
 - **全屏播放页的进度条只能 `tap`，`swipe` 会被横向分页吃掉**：全屏播放器用 `horizontal + pagingEnabled` 的 ScrollView 做「词/封」分页，横向 swipe 被 pager 抢走 —— 实测 `input swipe x1 y x2 y <ms>`（含从拇指当前位置起手、含从轨道最左起手）**位置完全不变**，而 `input tap <目标x> <SeekBar y>` 走 Slider 自己的轨道点击 → `onSlidingComplete`，位置立刻跟着变。**判据**用 `dumpsys media_session` 的 `position=`（实测暂停态也会跟着 seek 刷新，218219 → 146162，可以直接用它判 seek 生效与否）。
+- **别等播放自然结束**：验收连播 / 跳歌链路时，直接 `tap` 进度条到末尾前 5 秒再放开——一次完整的「播完 → 自动切下一首」要等一整首歌，用 seek 把等待压到秒级，判据仍是 `dumpsys media_session` 的 `position=` 与队列变化。
 - **「进程被杀后恢复」用 `am force-stop`，不要用 `am kill`**：`am kill` 对**带前台服务的进程是空操作**（pid 不变）——这本身可当「FGS 真的生效」的旁证，但验不了恢复路径；模拟器又没有 `su`，`kill -9` 用不了。`am force-stop` 更狠（连服务一起停），验出来更硬。
+
+### 脚本与命令行
+
 - **多步 adb 编排写成脚本再跑**：内联进 `pwsh -Command` 会被吃掉引号 / 反斜杠 / `$`（实测踩过 `unknown command adb`）。脚本连同**探针**都写 `$env:TEMP`，别落在 worktree 根——`git add -A` 会把它带进提交（实测补了一个 `chore:` 才删掉）。
 - **无线调试（不用 USB 的备用路线）**：镜像网络下手机可直连开发机局域网 IP 拉 bundle（Hyper-V 防火墙需放行 8081）；无线 adb 端口每次重连随机，`adb mdns services` 扫 `_adb-tls-connect._tcp`，配对码 30 秒过期。适合临时看 UI，长会话仍走 USB。
 - **Metro 起错目录**：在 worktree **根**跑 `npx expo start` 会 `ConfigError: Cannot resolve entry file`；更阴的是 Expo 会**顺手改写根 `tsconfig.json`**（`extends` 变成 `expo/tsconfig.base`），当轮验完要 `git checkout -- tsconfig.json` 收尾。工作目录必须是 `packages/mobile`。
 - **多设备**：`adb` 不带 `-s` 在多于一台设备时必报 `more than one device/emulator`；`mobile-debug.mjs` 的 adb 调用**不带 `-s`**，多设备时直接死在设备检查那步。处置：只留一台在线（关掉另一个模拟器 / `adb disconnect`），或改用能选设备的入口——`dev-build.mjs --serial <serial>`、`MOBILE_E2E_SERIAL` / `MOBILE_FRAME_SERIAL` 环境变量。
+
+### 安装
+
 - **原生包架构要与设备匹配**：真机 arm64-v8a、雷电模拟器 x86_64 → 装错报 `INSTALL_FAILED_NO_MATCHING_ABIS`。构建加 `-PreactNativeArchitectures=<abi>`；工作区现成的 `app-debug.apk` 往往是模拟器用的 x86_64，别直接往真机上装（`dev-build.mjs` 会按设备 ABI 出包）。
 - **`pm install` 报 `Failed to restorecon`**（`INSTALL_FAILED_MEDIA_UNAVAILABLE`）：从 `/data/local/tmp` 装会撞（SELinux 上下文还原失败）。改 `adb push` 到 **`/sdcard/`** 再 `pm install -r`。
+
+### 日志
+
 - **现场日志要在起 App 之前就开始录**：`adb -s <serial> logcat -v time > <全路径>` 挂后台任务。本轮「随机模式歌不换」正是靠 51MB 现场里 `计划=[120,72,68]→[93,170,87]` 的横跳定位的；PowerShell 里 **`%TEMP%` 不会展开**，必须写全路径。
