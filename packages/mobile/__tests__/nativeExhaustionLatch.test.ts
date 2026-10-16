@@ -4,17 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
- * #609 终局闩（#563）的**单一落点**守卫。
- *
- * 背景：闩在 #591 落地后散出 7 个手动 clear 点
- * （`PlayerService.kt:306 / 417 / 427 / 663 / 688 / 709 / 768`），而坐标是服务自己的两个
- * 并列字段 `exhaustedAtRevision` / `exhaustedAtIndex` —— 任何一处只写一个，
- * `isExhaustedAtCurrent()` 就退化成永假/永真，且**不会有任何编译错误**。
- *
- * Vitest 是 Node 环境 + 假原生桥，跑不了 Kotlin（也断言不了 private 字段），所以这里的守卫是
- * **源码契约**：坐标只能存在于 `ExhaustionLatch`，`PlayerService` 只能经
- * `exhaustion.mark/clear/isLatchedAt` 读写。**它不替代 Kotlin 编译与真机验收** ——
- * #609 的行为证据是 PR 正文里 #591 两个场景 + 阳性对照的 logcat 原文。
+ * Vitest 是 Node 环境 + 假原生桥，跑不了 Kotlin（也断言不了 private 字段），所以这里的守卫是**源码
+ * 契约**：坐标只能存在于 `ExhaustionLatch`，`PlayerService` 只能经
+ * `exhaustion.mark/clear/isLatchedAt` 读写。
  */
 
 /** `__tests__/` 的上一级 = packages/mobile */

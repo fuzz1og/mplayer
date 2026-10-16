@@ -2,23 +2,8 @@ import { useCallback, useRef, useSyncExternalStore } from 'react';
 
 /**
  * 播放时钟：桌面渲染进程的传输读模型。
- *
- * 播放位置/时长是高频值（250ms 一发），以前它们是 playerStore 的全局字段——
- * 任何模块都能订阅，于是每个采样 tick 都要过一遍全局订阅面（PlayerBar、
- * LyricsPage、全量歌词行的重渲染）。这里把三件事收进一个模块：
- *
- * - 采样节奏（唯一的 setInterval，只读传输层当前位置）
- * - 暂停/seek 语义（暂停冻结快照；seek 立即改写并通知，暂停中同样立即反映）
- * - 窄订阅（subscribe + getSnapshot；React 侧经 usePlaybackSelector 按
- *   Object.is 比较派生值，派生值没变就不重渲染）
- *
- * 谁用谁订阅：进度条订阅 position/duration，歌词高亮只订阅「当前行序号」。
- * 传输层（audioPlayer）只保留 play/pause/seek/getPosition，不再自己轮询。
- *
- * seek 后不回跳：HTML5 media 的 `currentTime` 赋值是异步的（本项目 Howler 走
- * `html5: true`），采样在 seek 真正生效前会读到旧位置。没有这道防，拖动/点击进度条
- * 后下一个 tick 会把刚拖到的位置拽回去（视觉回跳）。到传输层追上目标前保持乐观值，
- * 并留超时兜底（传输层 seek 失败时不至于把进度条冻在目标位置）。
+ * 这里把三件事收进一个模块：
+ * 到传输层追上目标前保持乐观值，并留超时兜底（传输层 seek 失败时不至于把进度条冻在目标位置）。
  */
 
 export interface PlaybackSnapshot {

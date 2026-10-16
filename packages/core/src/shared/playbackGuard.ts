@@ -2,24 +2,8 @@ import type { Song } from '../types/index.js';
 import { isExactMatch, normalize } from '../utils/songMatcher.js';
 
 /**
- * 播放护栏（#361，ADR `2026-09-21-tier3-url-substitution.md`）。
- *
- * tier3 兜底只替换**流 URL**、绝不铸造新身份；但第三方源返回的音频不保证就是
- * 用户点的那一首（翻唱 / Live / 混音 / 同名不同歌手）。本模块是护栏的**决策单点**：
- * 输入一首歌与候选音频的**证据**，输出「是否接受」与**证据等级** `guard`。
- *
- * 分级（参考值 = 歌曲标称 `Song.duration`，**不是**直连试听返回的 playTime——
- * 那是片段长度，会把完整版误判掉）：
- * - L1 `source-duration`：源自带时长（搜索条目 / 解析响应自带）；
- * - L2 `audio-header`：音频头解析（music-metadata；仅"全局头"容器可信，
- *   见 `audioDuration.ts` 的 trusted 规则）；
- * - L3 `size-bitrate`：`体积 × 8 ÷ 码率`（优先源自称码率，缺失才用帧实测）；
- *   **L1–L3 有文本证据时三指标（歌名 + 歌手 + 时长）必须全达标**（ADR 决策 3）；
- * - L4 `text-only`：以上全无 → **只验歌名 + 歌手精确匹配**（临时特例，待更好方案）；
- * - L5 `none`：连文本都没有（url-resolver 且响应无 name/artist）→ 只剩 `source`
- *   声明这一条**信任**（契约不是证据，如实标注）。
- *
- * 不过护栏**不静默播**：调用方换下一个候选源；全不过走既有失败链路。
+ * tier3 兜底只替换**流 URL**、绝不铸造新身份；但第三方源返回的音频不保证就是用户点的那一首（翻唱 / 
+ * Live / 混音 / 同名不同歌手）。
  * 标称时长缺失（0）时不做时长判定——「我们无法预校验」不该牺牲一首正常的歌。
  */
 
@@ -33,10 +17,7 @@ export type PlaybackVia = 'direct' | 'tier3';
 export const GUARD_TOLERANCE_SEC = 2;
 
 /**
- * L3「帧实测码率」分支的放宽容差（秒）。ADR 实测：真值 166.416s 的 ADTS，
- * `体积 ÷ 帧实测码率` = 168.1s（相对标称 166 = 2.1s），按 ±2s 会**误拒**；
- * ADR 明确该分支「要么不用、要么单独放宽阈值」——这里选放宽：该分支仍能挡住
- * 30s 试听片段/明显错歌，又不会因为 ±0.1s 的估算误差牺牲一首正常的歌。
+ * L3「帧实测码率」分支的放宽容差（秒）。
  */
 export const MEASURED_BITRATE_TOLERANCE_SEC = 3;
 

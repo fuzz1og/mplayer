@@ -1,17 +1,8 @@
 #!/usr/bin/env node
 /**
- * usb-attach.mjs — 把 Android 真机从 Windows 侧 attach 进 WSL（usbipd-win 架构）。
- * 移植自 scripts/mobile-device/usb-attach.sh（#502）：流程、文案与退出码一致。
- *
- * 背景：WSL 里只允许存在一个 adb server（原生 Linux 版）。手机插在 Windows 上，
- * 需要 usbipd 把这个 USB 设备透传进 WSL 内核，WSL 的原生 adb 才能看到它。
- * 每次重新插拔都要重跑本脚本（bind 只需每台设备做一次，会弹一次 UAC）。
- *
- * 用法：node scripts/mobile-device/usb-attach.mjs
- * 之后跑 node scripts/mobile-debug.mjs 进入调试回路。
- *
- * 注意：路径按 WSL 约定硬编码（/mnt/c/...），因此**只在 WSL 里有意义** —— 这是原脚本的语义，
- * 移植不改。Windows 原生 adb 回路（runtime-verification skill 第二条）不走本脚本。
+ * 背景：WSL 里只允许存在一个 adb server（原生 Linux 版）。
+ * 注意：路径按 WSL 约定硬编码（/mnt/c/...），因此**只在 WSL 里有意义** —— 这是原脚本的语义，移植
+ * 不改。
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';

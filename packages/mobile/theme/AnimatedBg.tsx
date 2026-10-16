@@ -1,14 +1,7 @@
 /**
  * 主题切换平滑过渡背景（M3）：根级共享的 Animated 背景色。
- *
- * 背景：RN 导航容器（expo-router 内部）默认以 React Navigation DefaultTheme
- * 的 background rgb(242,242,242) 绘制各屏 SceneView 容器——屏容器一旦透明，
- * 深色主题下会露出浅色底。因此不做「根 Animated + 全透明」链路，改为：
- * 根级 provider 持有动画插值与过渡逻辑，各 tab 屏根部 Animated.View 应用
- * 同一插值（不透明，盖住 SceneView 浅底，同时随主题 200ms 平滑渐变）。
- *
- * 局限：栈页面（settings 等）自带底色仍瞬切；chrome（TopBar/PlayerBar）
- * 为 bgPlayer 材质随主题瞬切，不参与本过渡。
+ * 因此不做「根 Animated + 全透明」链路，改为：根级 provider 持有动画插值与过渡逻辑，各 tab 屏根部 
+ * Animated.View 应用同一插值（不透明，盖住 SceneView 浅底，同时随主题 200ms 平滑渐变）。
  */
 import React, { createContext, useContext, useLayoutEffect, useMemo, useRef } from 'react';
 import { Animated } from 'react-native';

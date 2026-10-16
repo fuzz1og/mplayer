@@ -8,18 +8,9 @@ import { getUserAgent } from './antiScrape.js';
 import { cacheManager } from './memoryCacheManager.js';
 
 /**
- * QQ 音乐直连客户端（T06 #152）。
- *
- * 直连替代自建 API（匿名免费/低音质档起步，更高音质不承诺）：
- * - 搜索 / 播放 URL：`POST u.y.qq.com/cgi-bin/musicu.fcg` 统一网关
- *   （DoSearchForQQMusicMobile / UrlGetVkey），comm 携带 QIMEI36 设备指纹。
- * - QIMEI：`POST api.tencentmusic.com/tme/trpc/proxy`，RSA-PKCS1v15 包 AES-CBC
- *   密钥 + MD5 签名（musicdl qqutils 算法，纯 JS 双端可用）；失败兜底静态 q36。
- * - 歌词：fcg_query_lyric_new.fcg（songmid 键控，`lyric` 为 base64 LRC）→ 构造为
- *   `Song.lrc` URL，由 `musicApi.getLyrics` 增强（补 Referer + 解码 base64 JSON）消费。
- * - 榜单：v8 fcg toplist（热歌榜 26 / 新歌榜 27，#279 自门面迁入）。
- *
- * 出网统一经 transport.request（T01 接缝），测试注入 mock 传输；双端（Node/RN）可用。
+ * QQ 音乐直连客户端（T06 #152）。搜索 / 播放 URL 走 `POST u.y.qq.com/cgi-bin/musicu.fcg` 统一网关（comm 带 QIMEI36 指纹）；
+ * QIMEI 由 `POST api.tencentmusic.com/tme/trpc/proxy` 获取（RSA-PKCS1v15 包 AES-CBC 密钥 + MD5 签名，纯 JS 双端可用），失败兜底静态 q36；
+ * 歌词走 fcg_query_lyric_new.fcg（base64 LRC），榜单走 v8 fcg toplist（热歌榜 26 / 新歌榜 27）。出网统一经 transport.request。
  */
 
 const MUSICU_URL = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
@@ -284,12 +275,9 @@ export async function musicuPost(body: Record<string, unknown>, opts?: Transport
   return JSON.parse(typeof res.body === 'string' ? res.body : new TextDecoder().decode(res.body));
 }
 
-// ── 榜单（#279 自门面 getQQToplist/getQQHotlist/getQQNewSongList 迁入）──────
-//
-// 端点 = v8 fcg toplist（GET c.y.qq.com，匿名可用，2026-08 实测）。musicu 网关的
-// musicToplist.ToplistInfoServer.GetToplist 匿名恒拒（code 500005，实测），故榜单
-// id 沿用 v8 端点的 topid（热歌榜 26 / 新歌榜 27），即 `qq:26` / `qq:27`。
-// 请求走 qqDirect 现有 transport 接缝（桌面 axios 代理/RN 网络栈统一，可 mock）。
+// 端点 = v8 fcg toplist（GET c.y.qq.com，匿名可用，2026-08 实测）。
+// musicu 网关的 musicToplist.ToplistInfoServer.GetToplist 匿名恒拒（code 500005，实测），故榜单 id 
+// 沿用 v8 端点的 topid（热歌榜 26 / 新歌榜 27），即 `qq:26` / `qq:27`。
 
 const TOPLIST_URL = 'https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg';
 const TOPLIST_TTL_MS = 24 * 60 * 60 * 1000; // 榜单日更，与原门面 hotlist 缓存 TTL 一致
@@ -334,12 +322,9 @@ function toCount(value: unknown): number | undefined {
 }
 
 /**
- * 榜单元数据（#332 决策 3「通用组件 + 可选列」）。
- * 名次三件套在 **item 上**（与 data 同级，不在 data 内——item keys:
- * Franking_value/cur_count/data/in_count/old_count）；QQ 是三源中唯一提供
- * 「上期名次 / 在榜周数」的源，此前被本函数整批丢弃。
- * 当前名次不落结构（消费方按数组索引推导）；`old_count === 0` = 新进榜 → null；
- * `in_count === 0` = 本周新进、无「在榜 N 周」可言 → 不落值。
+ * 名次三件套在 **item 上**（与 data 同级，不在 data 内——item 
+ * keys:Franking_value/cur_count/data/in_count/old_count）；QQ 是三源中唯一提供「上期名次 / 在榜周数
+ * 」的源，此前被本函数整批丢弃。
  */
 function toRankMeta(item: any): RankMeta | undefined {
   const prev = toCount(item?.old_count);
@@ -352,10 +337,9 @@ function toRankMeta(item: any): RankMeta | undefined {
 }
 
 /**
- * v8 榜单单曲 → Song（原门面 mapQQToplistItem 语义，HotlistSong 视图废）。
- * id **优先取 songmid**：GetVkey 直连腿按 songmid 键控，数字 id 走直连恒为空
- * （与无版权/VIP 无关），整榜 100% 依赖 tier3、探测预取全部无效（#172）。
- * 数字 id 仅在响应缺失 mid 时兜底。rank 不落结构——消费方按索引推导。
+ * id **优先取 songmid**：GetVkey 直连腿按 songmid 键控，数字 id 走直连恒为空（与无版权/VIP 无关），
+ * 整榜 100% 依赖 tier3、探测预取全部无效（#172）。
+ * 数字 id 仅在响应缺失 mid 时兜底。
  */
 function mapToplistTrack(item: any): Song | null {
   const songData = item?.data;
@@ -472,17 +456,9 @@ export const qqDirectClient: DirectSourceClient = {
   },
 
   /**
-   * 榜单全集（热歌榜 26 / 新歌榜 27；#279 自门面迁入）。
-   * 单榜失败返回空组（保持原门面失败不抛语义）；至少一榜有歌才写缓存。
-   */
-  /**
-   * 榜单元数据：**只给得起名字**，其余如实留空。
-   *
-   * 封面与播放量拿不到——Q 音榜单索引接口 `musicToplist.ToplistInfoServer.GetToplist`
-   * 匿名恒拒（code 500005，见本文件顶部注释），日更接口 `fcg_v8_toplist_cp` 只回
-   * `update_time`/`comment_num`/`total_song_num`，**没有封面字段**。
-   * 所以 `coverImgUrl` 恒为 ''、`playCount` 为 null —— 消费端据此走生成兜底封面，
-   * 而不是把「拿不到」渲染成失败。名字取自榜单 id 契约表（与榜单页同源，不二次请求）。
+   * 所以 `coverImgUrl` 恒为 ''、`playCount` 为 null —— 消费端据此走生成兜底封面，而不是把「拿不到
+   * 」渲染成失败。
+   * 名字取自榜单 id 契约表（与榜单页同源，不二次请求）。
    */
   async getToplistDetail(sourceId: number | string): Promise<ToplistDetail | null> {
     const known = QQ_TOPLISTS.find((t) => String(t.topid) === String(sourceId));
@@ -515,14 +491,9 @@ export const qqDirectClient: DirectSourceClient = {
 };
 
 /**
- * 网关取歌词（GetPlayLyricInfo）：与搜索/GetVkey 同一 musicu POST 通道，
- * 服务端不做 Referer 防盗链校验（实测：缺 Referer 时真机被拒，retcode=-1310）——
- * c.y.qq.com fcg GET 强制 Referer，而 RN
- * 网络栈发出的该请求在真机上被拒（桌面 Chromium/Node 栈正常），移动端歌词
- * 因此拿不到；此函数是 getLyrics 的 QQ 兜底腿（真机已验证该通道可用）。
- * 注意：param 里 songID 键必须整个省略——服务端按 songMID 自查数字 id，
- * 显式传 0/空串/字符串都会被拒（实测 10006/24001）。qrc/crypt 关掉才返回
- * base64 明文 LRC（开启返回加密 QRC hex）。
+ * 网关取歌词（GetPlayLyricInfo）：与搜索/GetVkey 同一 musicu POST 通道，服务端不做 Referer 校验（缺 Referer 时真机被拒 retcode=-1310，桌面正常），
+ * 此函数是 getLyrics 的 QQ 兜底腿（真机已验证可用）。param 里 songID 键必须**整个省略**（显式传 0/空串/字符串都被拒，实测 10006/24001）；
+ * qrc/crypt 关掉才返回 base64 明文 LRC（开启返回加密 QRC hex）。
  */
 export async function fetchLyricViaGateway(mid: string): Promise<string> {
   if (!mid) return '';

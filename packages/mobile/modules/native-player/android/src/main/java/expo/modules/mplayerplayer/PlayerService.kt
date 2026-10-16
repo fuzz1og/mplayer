@@ -24,11 +24,9 @@ import com.google.common.util.concurrent.ListenableFuture
 import org.json.JSONObject
 
 /**
- * 原生播放服务：ExoPlayer 持队列 + 原生推进 + media3 媒体会话。
- *
- * - `onTaskRemoved` 不重写（继承 media3 默认：播放中保活，未播放时 pauseAllPlayersAndStopSelf）——§9.2
- * - 禁止 `exitProcess`/`Runtime.halt`（I7：RN 宿主同进程）
- * - 事件只当通知（I1/I2），任何 emit 都不作为推进前提
+ * - `onTaskRemoved` 不重写（继承 media3 默认：播放中保活，未播放时 pauseAllPlayersAndStopSelf）
+ * ——§9.2- 禁止 `exitProcess`/`Runtime.halt`（I7：RN 宿主同进程）- 事件只当通知（I1/I2），任何 
+ * emit 都不作为推进前提
  */
 class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
@@ -71,12 +69,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   private var awaitingRefreshKey: String? = null
 
   /**
-   * 用户在窗口边界按了「下一首」但在原生列表里已经没有下一项。
-   *
-   * 此时 `next()` 会走「踩空」分支向 JS 要歌，但**播放器是 PLAYING 而不是 ENDED**，
-   * 所以补窗落地时不会触发续播逻辑 —— 新补进来的歌只会躺在列表里，锁屏/UI 的
-   * 「下一首」表现为静默失灵（真机 T2 实测）。用这个标志记住「这一跳是用户要的」，
-   * 等新项到了再真正切过去。
+   * 此时 `next()` 会走「踩空」分支向 JS 要歌，但**播放器是 PLAYING 而不是 ENDED**，所以补窗落地时不
+   * 会触发续播逻辑 —— 新补进来的歌只会躺在列表里，锁屏/UI 的「下一首」表现为静默失灵（真机 T2 实
+   * 测）。
    */
   @Volatile
   private var pendingUserNext = false
@@ -329,13 +324,16 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val beforeKeys = store.all().map { it.key }.toHashSet()
     val patchResult = store.patch(baseRevision, append, upsert, removeKeys)
     if (!patchResult.accepted) {
+      // #639 R4.5：**结算结论必须独立于补丁数据处置**。`baseRevision` 是写侧乐观并发控制，`outcome` 是「本轮事实」的结论，
+      // 二者语义不同——此前 stale 直接 return 把 outcome 一起丢了（用户按 next 踩空 → JS 零候选 → 上报被 stale 丢弃 →
+      // 原生 `pendingUserNext` 悬空到 60s 才停）。补丁照旧丢弃（数据不能落），但结论必须消费。
+      if (outcome != null) {
+        consumeStaleSettlement(ctrl, outcome, append, upsert)
+      }
       return mapOf("accepted" to false, "revision" to patchResult.revision, "stale" to patchResult.stale)
     }
 
     // #591：结算的入参前置条件（'deduped' 必须真投了候选；'empty' 必须一个都没投）。
-    // 非法组合**只拒绝结算**（补丁照常落地，不丢数据）——原 `refillEmpty` 留下的语义空洞
-    // 就藏在这种「同一份入参在两条分支里含义不同」的地方，这里让它无处可藏：调用方标注错，
-    // 原生记一条 warn 并按「未结算」处理，绝不替它猜。
     val settled = settleOutcomeOf(outcome, append, upsert)
 
     // store 里已经去重过：这里只按「补丁前是否已存在」区分「新增」与「替换」
@@ -390,12 +388,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
         ctrl.player.playWhenReady = userWantsPlay
       }
 
-      // ── 补窗结算（#591 契约）────────────────────────────────────────────
-      // outcome 是 JS 的显式入参，原生**只读它**：不再数 `addedCount` 推断「零新增算不算终局」，
-      // 也不再看 `reason`（已退化为诊断标签）。原先的三条分支收拢成两条：
-      //   'deduped'：候选全被去重 → 本轮唯一的终局信号（绕回 / 诚实结束 / 只闩水位）
-      //   'empty'  ：一个候选都没投出 → 终局只对「用户踩空」有意义
-      //   'grown' / 未结算：有新增（或清理轮）→ 不做终局判定，只在几何位置上维持既有推进。
+      // 原先的三条分支收拢成两条：'deduped'：候选全被去重 → 本轮唯一的终局信号（绕回 / 诚实结束 / 
+      // 只闩水位）'empty'  ：一个候选都没投出 → 终局只对「用户踩空」有意义'grown' / 未结算：有新增
+      // （或清理轮）→ 不做终局判定，只在几何位置上维持既有推进。
       if (pendingUserNext && ctrl.player.mediaItemCount > 0) {
         pendingUserNext = false
         val at = ctrl.currentIndex()
@@ -428,12 +423,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
         ctrl.player.mediaItemCount > 0 &&
         ctrl.currentIndex() >= ctrl.player.mediaItemCount - 1
       ) {
-        // #574 的稳态水位终止条件，现在由 outcome 驱动：整个歌单都已在原生队列里、当前又停在
-        // 窗口末项时，JS 的计划只能绕回到「已在队列里」的歌（'deduped'），或压根规划不出候选
-        // （'empty'）——旧实现只有 #574 补的那条「append 非空且零新增」特例有终止条件，其余
-        // 每 ~2s 重问一次（真机实测 25s / 13 次 headless）。这里只对**本轮事实**上闩：不暂停、
-        // 不发 QUEUE_ENDED——播放没有结束，曲末仍由原生 repeatMode 绕回；闩按 (revision,index)
-        // 失效，任何真正的切歌 / 显式 play·next·prev 都会自动解开（见 ExhaustionLatch.isLatchedAt）。
+        // 这里只对**本轮事实**上闩：不暂停、不发 QUEUE_ENDED——播放没有结束，曲末仍由原生 
+        // repeatMode 绕回；闩按 (revision,index)失效，任何真正的切歌 / 显式 play·next·prev 都会自动
+        // 解开（见 ExhaustionLatch.isLatchedAt）。
         exhaustion.mark(store.currentRevision(), store.currentIndex())
         Log.i(
           TAG,
@@ -457,13 +449,28 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   }
 
   /**
-   * #591：结算入参的**前置条件**校验（契约的一部分）。
-   *
-   * 合法组合：`'deduped'` 必须真投了候选（append/upsert 非空）；`'empty'` 必须一个都没投；
-   * `'grown'` 不额外约束；`null` = 调用方没做结算。非法组合**只拒绝结算**（补丁照常落地，
-   * 不丢数据），返回 null 并按「未结算」处理，同时记一条 warn —— 标注错是调用方的责任，
-   * 原生不再替它二次校验（那正是旧 `refillEmpty` 的空洞来源）。
+   * #591：结算入参的**前置条件**校验（契约的一部分）。合法组合：`'deduped'` 必须真投了候选（append/upsert 非空）；`'empty'`
+   * 必须一个都没投；`'grown'` 不额外约束；`null` = 调用方没做结算。
    */
+  /**
+   * stale 轮次的结算消费（#639 R4.5）：补丁数据被丢弃，但**结论必须落地**。`store.patch` 拒绝 stale 是写侧并发控制，与「本轮事实」
+   * 无关；此前 stale 直接 return，`outcome` 从未被消费（用户按 next 踩空 → JS 零候选 → 被判 stale 丢弃 → `pendingUserNext` 悬空到 60s）。
+   * 只能在**没有补丁数据**前提下收口：`'empty'` / `'deduped'` 诚实结束避免悬空，`'grown'` 不做终局判定。
+   */
+  private fun consumeStaleSettlement(
+    ctrl: PlaybackController,
+    outcome: String,
+    append: List<TrackRecord>?,
+    upsert: List<TrackRecord>?
+  ) {
+    val settled = settleOutcomeOf(outcome, append, upsert) ?: return
+    if (settled != SettleOutcome.EMPTY && settled != SettleOutcome.DEDUPED) return
+    if (!pendingUserNext || ctrl.player.mediaItemCount == 0) return
+    // 补丁没落地 ⇒ 队尾没有新格可推进，也没有可绕回的项 → 诚实结束
+    Log.w(TAG, "stale settlement outcome=$settled → finishAtTail (no patch data to advance into)")
+    finishAtTail(ctrl)
+  }
+
   private fun settleOutcomeOf(
     outcome: String?,
     append: List<TrackRecord>?,
@@ -489,10 +496,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   /**
    * 本轮 append 里**已经在 store 中**的第一项下标（#563 的列表循环绕回）。
-   *
-   * JS 的候选按 core 计划（含绕回）算出；store.patch 去重后它们可能一条都没新增
-   * ——因为已经在窗口的别处（通常排在当前曲之前）。返回它，调用方 seek 过去即完成
-   * 「下一首」，不需要重复入队。
+   * JS 的候选按 core 计划（含绕回）算出；store.patch 去重后它们可能一条都没新增——因为已经在窗口的
+   * 别处（通常排在当前曲之前）。
    */
   private fun firstExistingAppendIndex(append: List<TrackRecord>?): Int {
     append.orEmpty().forEach { record ->
@@ -526,12 +531,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   /**
    * 「下一首播放」（#494）：已入队 → 移动到 index+1；未入队 → 插入 index+1；当前 index 不动。
-   *
-   * 三步：① 主线程**先问一次** COMMAND_CHANGE_MEDIA_ITEMS（不可用时 media3 是裸 return，
-   * 插入会被静默丢弃）→ 变成可观测的失败；② QueueStore 同步落语义；③ 主线程落到 player。
-   *
-   * 时序：只在**已 in-flight 的队列**上增删（store 已经非空），不在 `replaceQueue` 之后紧跟
-   * add —— 那是 androidx/media#3272 的窗口。
+   * 三步：① 主线程**先问一次** COMMAND_CHANGE_MEDIA_ITEMS（不可用时 media3 是裸 return，插入会被静
+   * 默丢弃）→ 变成可观测的失败；② QueueStore 同步落语义；③ 主线程落到 player。
    */
   private fun applyInsertAfterCurrent(
     ctrl: PlaybackController,
@@ -780,11 +781,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   override fun onIsPlayingChanged(isPlaying: Boolean) {
     emitStateChanged()
-    // media3 在「没有 controller 连接」的场景下不会自己触发通知更新：
-    // `onUpdateNotification`/`onUpdateNotificationInternal` 只由 public 的
-    // `triggerNotificationUpdate()` 驱动（1.9.0 字节码实测：jar 内无任何调用点）。
-    // 我们的 JS 走自写 bridge 而不是 MediaController，所以必须自己叫一次
-    // —— 否则会话没有媒体通知，也就没有 FGS 提升（会被系统 idle 停掉）。
+    // 我们的 JS 走自写 bridge 而不是 MediaController，所以必须自己叫一次—— 否则会话没有媒体通知，
+    // 也就没有 FGS 提升（会被系统 idle 停掉）。
     triggerNotificationUpdate()
     if (isPlaying) {
       Log.i(TAG, "onIsPlayingChanged(true) → triggerNotificationUpdate")
@@ -821,8 +819,10 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   private fun handleEnded() {
     val ctrl = controller ?: return
-    if (policy.loopMode == AdvancePolicy.LOOP_ALL || policy.loopMode == AdvancePolicy.LOOP_SINGLE) {
-      // ExoPlayer 的 repeatMode 已经接管，正常不会走到 ENDED
+    // #639 R4.1：只对**单曲循环**早退（只有它对 `repeatMode()` 返回 REPEAT_MODE_ONE，ExoPlayer 内部循环、正常不走 ENDED）。
+    // 此前把 LOOP_ALL 也算进来，但 `AdvancePolicy.repeatMode()` 对 LOOP_ALL **刻意**返回 REPEAT_MODE_OFF（原生列表只是 JS 队列的
+    // 窗口，绕回自己会把早播过的歌重播）——语义相反 ⇒ LOOP_ALL 走到这里 `seekTo(0)` 播**窗口首项**，用户听到「随机模式曲末跳回已播过的歌」。
+    if (policy.loopMode == AdvancePolicy.LOOP_SINGLE) {
       ctrl.player.seekTo(0, 0L)
       if (userWantsPlay) ctrl.player.play()
       return
@@ -971,9 +971,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
     when (classification.kind) {
       ErrorKind.EXPIRED -> {
-        // §6.2：标记失效 → 发 playbackError{retrying} → **等 JS 用 patchQueue({upsert}) 灌新 URL**。
-        // 原生只发 1s 就盲重试是错的：core 解析链要 3~9s（#424），必然来不及，
-        // 真机上表现为「恢复出来的旧直链过期 → 3 次重试全失败 → 直接跳过」。
+        // §6.2：标记失效 → 发 playbackError{retrying} → **等 JS 用 patchQueue({upsert}) 灌新 
+        // URL**。
         // 这里把 1s 当**下限**，真正等到 upsert 到达就立刻换源重播；10s 兜底再盲试一次。
         record?.invalidated = true
         awaitingRefreshKey = key
@@ -1137,18 +1136,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   // ---------------------------------------------------------------- session callback
 
   /**
-   * 交给 [MediaLibrarySession] 的 Player 包装（#561）。
-   *
-   * 会话的「上一首/下一首」命令由 media3 经 Player 下推（`MediaSessionStub` →
-   * `PlayerWrapper : ForwardingPlayer` → 本包装），默认会直接调 ExoPlayer 的
-   * `seekToNext[MediaItem]()`，绕过 `next()`/`prev()` 承载的窗口边界策略
-   * （踩空 → `pendingUserNext` + 暂停 + `QUEUE_ENDED(WINDOW_HOLE)` + 补窗）。
-   * 这里把**用户发起的**会话跳曲改道到 `next()`/`prev()`，与 UI 入口走同一条路。
-   *
-   * 双跳防护：覆写后**不调 super**——被接管的命令不会再落到播放器默认路径；
-   * 内部代码一律持原始 `ctrl.player`（见 `next()`/`prev()`/`handleEnded()`），
-   * 所以服务自己发起的 `seekToNextMediaItem()` 不会再经过本包装。
-   * 曲末 AUTO 推进是 ExoPlayer 的内部行为，不经过 `Player.seekTo*`，不会被误当用户 next。
+   * 双跳防护：覆写后**不调 super**——被接管的命令不会再落到播放器默认路径；内部代码一律持原始 
+   * `ctrl.player`（见 `next()`/`prev()`/`handleEnded()`），所以服务自己发起的 
+   * `seekToNextMediaItem()` 不会再经过本包装。
    */
   private inner class SessionPlayer(player: Player) : ForwardingPlayer(player) {
     override fun seekToNext() { next() }
@@ -1161,15 +1151,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
     /**
      * media3 的命令可用性**前置检查**（#561 真机 FAIL 的根因）。
-     *
-     * 下推链不只看我们覆写的 seek 方法：MediaSessionStub 在跑 SessionTask **之前**先经
-     * ConnectedControllersManager.isPlayerCommandAvailable(...) 判命令是否可用
-     * （反编译 1.9.0：不可用即回 SessionResult(-4) 直接返回，**不进 SessionTask**），
-     * 而该判定取的是 PlayerWrapper.getAvailableCommands() 是否含该命令。
-     * 底层 ExoPlayer 在原生窗口最后一项（列表循环/随机恒 REPEAT_MODE_OFF）把
-     * COMMAND_SEEK_TO_NEXT 报为不可用 —— 于是上面四个覆写根本不会被调用，表现为空操作。
-     * 这里显式声明这四个命令可用（getAvailableCommands 同步包含，通知栏/锁屏按钮才显示）；
-     * **只放开这四个**，其余一律沿用底层 ExoPlayer 的判定。
+     * 底层 ExoPlayer 在原生窗口最后一项（列表循环/随机恒 REPEAT_MODE_OFF）把 COMMAND_SEEK_TO_NEXT 报为不可用，
+     * 于是上面四个覆写根本不会被调用，表现为空操作（反编译 1.9.0：不可用即回 `SessionResult(-4)` 直接返回，**不进 SessionTask**）。
      */
     override fun isCommandAvailable(command: Int): Boolean {
       return when (command) {
@@ -1286,28 +1269,16 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   }
 
 /**
-   * 落盘（§9.3）。
-   *
-   * **禁止在这里读 ExoPlayer**：`persist()` 会被 `loadQueue`/`patchQueue`（expo
-   * AsyncFunction 的后台线程）直接调用，而 ExoPlayer 只能在其 application looper
-   * 上访问 —— 真机实测会打 `Expected thread: 'main'` 警告（
-   * `player-accessed-on-wrong-thread`），并可能读到不一致状态。
-   * 位置一律取主线程维护的 `stateCache`（progress tick / 各事件里刷新）。
-   */
+ * 落盘（§9.3）。
+ * 位置一律取主线程维护的 `stateCache`（progress tick / 各事件里刷新）。
+ */
   private fun persist() {
     val json = JSONObject()
     try {
       val queue = store.snapshot()
-      // 已知边界 3b（ADR 2026-10-08-per-source-request-headers）由 #606 关掉：这里**保留**
-      // `TrackRecord.toJson()` 写好的 per-item headers。此前落盘前逐条清空，于是进程被杀 /
-      // 服务重启后 restore 出来的队列没有 UA/Referer，而「原生直接推进、JS 还没重新投喂」那一段
-      // 恰好是「原生裸请求、头部缺失」的窗口。⚠️ 原先这里写着「酷狗/QQ 校验 Referer → 403 跳歌」
-      // ——那条断言没有出处（#647 五臂实测未复现），别当事实读；保留 headers 的理由是
-      // 「restore 段与常态段发同一份头」这一致性，不是「不带头会被拒」。
-      // 头只有 core `requestHeadersFor` 的静态常量（BROWSER_UA + 官方源域名），不含凭据，
-      // 落盘不新增敏感信息。
-      // 旧快照没有 headers 键：`TrackRecord.fromJson` 用 optJSONObject 读，缺键得空 map，
-      // 仍走 ExpiryGuard 的 `headers.isEmpty()` 分支 —— 与改前行为一致，不需要版本迁移。
+      // 已知边界 3b（ADR 2026-10-08）由 #606 关掉：这里**保留** TrackRecord.toJson() 写好的 per-item headers（此前落盘前逐条清空，
+      // restore 出来的队列在「原生直接推进、JS 还没重新投喂」那段会缺 UA/Referer）。头只有 core equestHeadersFor 的静态常量（BROWSER_UA + 官方源域名），
+      // 不含凭据、落盘不新增敏感信息；旧快照无 headers 键 → 空 map → 走 isEmpty() 分支，与改前一致（#647：原先「酷狗/QQ 校验 Referer → 403」的断言无出处，别当事实读）。
       val tracks = queue.optJSONArray("tracks") ?: org.json.JSONArray()
       json.put("tracks", tracks)
       json.put("index", store.currentIndex())

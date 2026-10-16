@@ -1,13 +1,6 @@
 /**
  * 系统「减弱动效」偏好的共享订阅（#304）：全应用一份缓存值 + 一个监听器。
- *
- * 旧实现（hooks/useReducedMotion.ts）每个组件实例各拉一次
- * AccessibilityInfo.isReduceMotionEnabled() 并各挂一个 reduceMotionChanged
- * 监听器：一屏 15 行（每行 3 个 ScalePress + 3 个 BottomSheet）≈ 90 个监听器。
  * 这里把「取值 + 监听」收成模块级单例，hook 退化为纯订阅。
- *
- * 纯模块（零 react-native import）：无障碍源从接口注入，node 环境可直接单测；
- * RN 适配见 hooks/useReducedMotion.ts。
  */
 
 /** 无障碍偏好源：RN 侧是 AccessibilityInfo，测试注入假源 */

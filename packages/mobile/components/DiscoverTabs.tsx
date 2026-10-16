@@ -212,10 +212,9 @@ const ALBUM_AREAS = [
 ];
 
 /**
- * 二级分类选择器：Apple Music「资料库」式文字 tabs——纯文字横滑，
- * 选中项加粗变深 + accent 下划线；零底色零圆角，层级让给一级分段控件。
+ * 二级分类选择器：Apple Music「资料库」式文字 tabs——纯文字横滑，选中项加粗变深 + accent 下划线；
+ * 零底色零圆角，层级让给一级分段控件。
  * 左缘 16pt 与一级分段控件轨道对齐（同一页面沟槽 spacing[4]）。
- * 选中身份按 value 寻址（label 仅渲染层展示，不参与状态主键）。
  */
 function CategoryPills({ items, activeValue, onSelect }: {
   items: { label: string; value: string }[];

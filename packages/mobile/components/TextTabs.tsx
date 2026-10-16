@@ -8,9 +8,6 @@ import ScalePress from './ScalePress';
 /**
  * 文字 tabs + 选中下划线——Apple Music「资料库」式次级选择器。
  * 未选中次级色常规字重；选中加粗变深 + 2dp accent 下划线。
- * 零底色零圆角，视觉层级低于分段控件（SegmentedTabs），
- * 用于二级分类（发现页曲风/地区、搜索页歌曲/歌手）。
- *
  * scrollable：条目多时横向滑动（分类行）；固定两三项用同行布局（搜索页）。
  */
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({

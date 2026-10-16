@@ -6,11 +6,6 @@ import type { BaseMethod, MusicApiMethodMap, MainOnlyMethods } from '@/shared/mu
 
 /**
  * music 域 IPC 单通道分发（ADR-0001）：`musicApi:call` 查表分发。
- *
- * - 基础方法 + MainOnly：手写分发表 `satisfies Omit<MusicApiMethodMap, ContentMethod>`
- *   （方法名拼错 / 签名不符 / 漏方法 → 编译期必报错）；
- * - 内容方法（#240）：CONTENT_METHODS 清单循环泛型分派到 `getDirectClient(source)`，
- *   能力探测 = 客户端方法存在性，未实现源明确抛错。
  */
 
 /**
@@ -24,11 +19,9 @@ type MusicApi = Pick<CoreMusicApi, BaseMethod> & {
 };
 
 /**
- * 注册单个 `musicApi:call` 分发通道。
- * 旧 `musicApi:*` / `lyrics:get` / `api:getThrottleWait` 通道已删除，music 域收敛为
- * `musicApi:call` 单通道；core 方法通过 MUSIC_API_METHODS 收编，内容方法经
- * CONTENT_METHODS 循环接线（#278 契约派生），MainOnly 方法
- * （getSodaPlayableUrl / resolvePlaylistLink）在分发表内单独接线。
+ * 旧 `musicApi:*` / `lyrics:get` / `api:getThrottleWait` 通道已删除，music 域收敛为`musicApi:call` 
+ * 单通道；core 方法通过 MUSIC_API_METHODS 收编，内容方法经 CONTENT_METHODS 循环接线（#278 契约派生
+ * ），MainOnly 方法（getSodaPlayableUrl / resolvePlaylistLink）在分发表内单独接线。
  */
 export function registerMusicApiCall(api: MusicApi): void {
   // ── 基础方法 + main 独有组合方法（手写表，satisfies 钉死签名）──────

@@ -4,13 +4,8 @@ import { createPlaybackTraceRing, setPlaybackTraceSink, type PlaybackTrace } fro
 
 /**
  * 桌面播放解析链诊断 sink（#363 / ADR `2026-09-23-playback-trace-sink`）。
- *
- * 职责与 cookieAdapter / musicApi 的接缝同构：core 只出结构化 trace（零 I/O），
- * 本模块在主进程常驻内存环形缓冲、注册 sink，并在用户点击「导出诊断」时写文件。
- *
- * - 缓冲**会话内、不落盘、不外传**（容量 200，超出丢最旧）；
- * - 模块加载即 `setPlaybackTraceSink(ring.sink)`——core 热路径据此开始产出；
- *   sink 为空时 core 不构造任何记录（关掉即零开销）。
+ * 职责与 cookieAdapter / musicApi 的接缝同构：core 只出结构化 trace（零 I/O），本模块在主进程常驻内
+ * 存环形缓冲、注册 sink，并在用户点击「导出诊断」时写文件。
  */
 
 /** 环形缓冲容量：足够回看一次连续播放会话，又不至于长期占用内存。 */

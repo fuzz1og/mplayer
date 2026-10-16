@@ -1,24 +1,8 @@
 #!/usr/bin/env node
 /**
- * docs-gate.mjs — 文档与源码的三条机械门禁（#523 / #647）。
- *
- * 文档里最容易腐烂、或最不该出现的几处恰好都是机械可判的，所以交给脚本，不写进评审标准
- * （规则 1/2 针对活文档；规则 3 是敏感内容扫描，与它们相反、必须扫历史存档**与源码**，
- * 见 checkSensitiveContent）：
- *
- * 1. shim 指针：scripts/*.sh 现在全是两行 shim（各自 exec node 同名 .mjs，#500 / #502）。
- *    把 .sh 当入口推荐，等于让读者在 Windows 上撞 WSL 的 Linux bash —— 这正是 #500 修掉、
- *    却在 release skill 里残留过一次的坑。规则：活文档里出现 scripts/X.sh（存在同名 .mjs）
- *    的行，必须同句标注 shim / 兼容 / 等价写法。
- * 2. 文件表漂移：docs/agents/architecture.md 的文件表靠人肉核对，1.8.5 复盘一次就漏了 10 处
- *    （binCacheBudget / fsAsync / outboundGate / 移动端 6 个 services …）。规则：配置目录里的
- *    每个实现文件名都必须在该文档出现过。
- *
- * 有意不扫（**仅限规则 1/2**）：.github/workflows/**（有意走 shim，顺带把 shim 本身验证掉）、
- * 历史存档 docs/{adr,research,specs,wayfinder}（不回改）、*.test.* 与 TABLE_ALLOW（有意不记的实现）。
- * **规则 3 反过来 —— 必须扫历史存档与源码**，理由见 checkSensitiveContent。
- *
- * 用法: node scripts/docs-gate.mjs    （static 分片的第一步，CI 的 check job 顺带覆盖）
+ * docs-gate.mjs — 文档与源码的三条机械门禁（#523 / #647）。① shim 指针：活文档出现 scripts/X.sh（有同名 .mjs）必须同句标 shim/兼容/等价写法；
+ * ② 文件表漂移：配置目录的每个实现文件都要在 architecture.md 出现（规则 1/2 有意不扫 .github/workflows/**、历史存档、*.test.*）；
+ * ③ 敏感内容扫描反过来**必须扫历史存档与源码**（.ts/.tsx/.kt…），命中一律打码输出，见 checkSensitiveContent。
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -146,28 +130,16 @@ function checkTableDrift() {
 
 /**
  * 规则 3：文档不得出现真实个人信息 / 会话凭证（#526）。
- *
  * 与规则 1/2 相反：**本规则必须扫历史存档**（docs/{adr,research,specs,wayfinder}）。
- * 「存档不回改」是漂移类检查的理由（不想逼人回改历史措辞），对「这段内容本就不该存在」不成立 ——
- * 2026-07-29 的咪咕抓包文档里躺着一个 base64 手机号，正因为门禁只看活文档，
- * 它在公开仓库里放了约两个月，最后靠人工复盘才翻出来。
- *
- * 规则刻意**窄而确定**，不做熵 / 通用 hex 扫描：本仓 32 位 hex 有 251 处（提交号、哈希），
- * 那种规则第一天就会被关掉。这四条在 101 个 tracked 文档上 0 误报，且对事故版本必抓
- * （复现：git show cdb2ad9:docs/research/2026-07-29-multi-source-api-research.md 喂给本脚本）。
  * 命中一律**打码**输出 —— 门禁把泄露值打进 CI 日志，等于再泄露一次。
  */
 const SENSITIVE_ROOTS = ['AGENTS.md', 'README.md', 'GLOSSARY.md', 'CODING_STANDARDS.md', 'SECURITY.md', 'docs', '.github', '.agents'];
 const SENSITIVE_EXT = ['.md', '.yml', '.yaml', '.json'];
 
 /**
- * 源码也必须扫（#647）。规则 3 起初只扫文档类扩展名，源码 `.ts/.tsx/.kt` 完全不看 ——
- * 而 AGENTS.md 明写「tier3 订阅地址、API key 不入库」，那些最可能就写在源码里。
- * 实测盲区：同一个假密钥放 `docs/` 下报红、放 `packages/core/src/` 下无声通过。
- * 历史佐证：`9c2cf47 docs(security)` 只清过文档里的密钥，源码里的字面量一直没动。
- *
- * 与文档扫描的差别：**不跳过 `__tests__` 与 `*.test.*`**——测试里同样会抄一份真值
- * （`qianqianDirect.test.ts` 就是）。跳过 `node_modules/dist/coverage` 等生成物。
+ * 源码也必须扫（#647）：规则 3 起初只扫文档类扩展名，源码 `.ts/.tsx/.kt` 完全不看，而 AGENTS.md 明写「tier3 订阅地址、API key 不入库」——
+ * 那些最可能就写在源码里（实测盲区：假密钥放 `docs/` 报红、放 `packages/core/src/` 无声通过）。与文档扫描的差别：**不跳过 `__tests__`
+ * 与 `*.test.*`**（测试里同样会抄一份真值），只跳 `node_modules/dist/coverage` 等生成物。
  */
 const SENSITIVE_SOURCE_ROOTS = ['src', 'packages', 'scripts', 'e2e', 'resources', 'public', 'examples'];
 const SENSITIVE_SOURCE_EXT = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.kt', '.java'];

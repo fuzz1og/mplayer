@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AdvanceEffect, ShuffleState, Song } from '@mplayer/core'
+import type { AdvanceEffect, ShuffleScope, ShuffleState, Song } from '@mplayer/core'
 import {
   createShuffleState,
   planAdvance,
@@ -48,50 +48,42 @@ interface PlayerState {
   hasPlayed: boolean;
   /**
    * 稳定随机序列（#511 方案 A / #519 移动端消费）：`null` = 尚无序列（进随机时按当前队列现洗）。
-   *
-   * 与 `queue`（成员 + 列表循环序）是**两份数据**：随机模式下播放推进（next/prev）、
-   * 预取窗口定序、队列页展示、「下一首播放」的落点都由它说了算；换回列表循环时**保留但不参与**。
    * 契约唯一出处：ADR `2026-09-30-stable-shuffle-order.md`。
    */
   shuffle: ShuffleState | null;
+  /**
+   * 当前 `queue` 的**来源作用域**（#639 R1）：`authoritative` = 完整成员集，`window` = 原生预取窗口的子集。由 `setQueue`
+   * 与原生对账写入，随机序相关入口（`ensureShuffle` / `advance`）据此决定「能不能现洗 / 能不能裁」——不再靠调用点自己传。
+   */
+  queueScope: ShuffleScope;
   // actions
   play: (song: Song) => void;
   pause: () => void;
   resume: () => void;
   next: () => Song | null;
   prev: () => void;
-  setQueue: (songs: Song[], startIndex?: number) => void;
+  /**
+   * 换队列。`scope`（#639 R1）**必须**与 `songs` 的真实身份相符：`authoritative`（缺省）= 完整成员集（整张歌单 / 搜索整批）；
+   * `window` = 原生预取窗口（冷启对账、队列弹层回灌）。传错会把窗口当全集——随机序被裁到窗口那几首并立刻落盘 ⇒ **永久截断**
+   * （重启也回不来）；`window` 下只补不丢、不重洗。
+   */
+  setQueue: (songs: Song[], startIndex?: number, scope?: ShuffleScope) => void;
   /**
    * 「下一首播放」（#495）：把 `song` 放到当前曲之后。
-   *
-   * 与桌面 #506（`playerStore.insertNext`）和 Android `QueueStore.insertAfterCurrent`
-   * 同一套语义：已在队列 → **移动**（不复制、保留队列里那份对象、长度不变）；不在 → 插入；
-   * 已在下一首位置 / 就是当前曲 → no-op（连点幂等）；当前曲不被打断。
-   *
-   * `started = true`：队列为空 / 没有当前曲（currentIndex < 0）→ **等价于开始播放这首**
-   * （与桌面 #506 同口径），调用方据此决定要不要真正起播。
-   * `moved` = 从队列别处移动过来。
+   * `started = true`：队列为空 / 没有当前曲（currentIndex < 0）→ **等价于开始播放这首**（与桌面 
+   * #506 同口径），调用方据此决定要不要真正起播。
    */
   insertNext: (song: Song) => { started: boolean; moved: boolean; noop: boolean };
   /**
    * 推进一格（#555：`next` / `prev` / `nativePrev` 的**唯一实现**）。
-   *
-   * 随机模式下先按窗口态对齐序列——没有序列就现洗一份（前置步骤）
-   * （#520 minor 2/3：此前 store 与 nativePlayer 各复制了一份「步进游标 + 落 store」；
-   * 且盘上/内存里的游标损坏或陈旧不得让推进失效），落点与 effect 一律由 core `planAdvance`
-   * 决定，这里只执行 effect：`none` → 不动；`restart-current` → 重播当前曲（不换歌）；
-   * `load-target` → 换到 `queue[index]`。
-   *
-   * 返回 `{ index, effect }`：JS 引擎按 effect 直接落地；原生引擎还要把这个 effect 交给
-   * `nativePlayer.nativeStep` 决定**交付方式**（交原生顺序推进 / 起播目标曲 / seek 0 重播），
-   * 所以 effect 必须随落点一起回来，不能让原生宿主自己猜（#555）。
    */
   advance: (direction: 1 | -1) => AdvanceOutcome;
   /**
-   * 确保有一份覆盖当前队列的随机序（进随机、换队列、喂窗口前调用）。
-   * 已有且仍是**这批歌**的排列 → 窗口态只补不丢地把游标对到当前曲（不重洗，会话内顺序稳定）。
+   * 确保有一份覆盖当前队列的随机序（进随机、换队列、喂窗口前调用）。已有且仍是**这批歌**的排列 → 窗口态只补不丢地把游标对到当前曲。
+   * `scope`（#639 R1）与队列身份相符：`window` 时**没有序列就什么都不做**（拿窗口当全集现洗会落盘一份短序列、永久截断）；
+   * 喂窗口走缺省 `authoritative`（那时能走到这里说明已有序列，只对齐不重洗）。
    */
-  ensureShuffle: () => void;
+  ensureShuffle: (scope?: ShuffleScope) => void;
   /** 原位换源（#520 blocker 2）：随机序里把 `fromId` **就地**换成 `toId`（同格换 id、顺序与游标不动）。 */
   replaceShuffleSongId: (fromId: string, toId: string) => void;
   /** 把游标对到**当前曲**（原生推进 / 对账之后调用）；没有序列或没有当前曲时不动。 */
@@ -127,6 +119,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   preparing: false,
   hasPlayed: false,
   shuffle: null,
+  // 初始无队列：按权威态起步（空队列下两个作用域等价，首次 setQueue 会写入真实来源）
+  queueScope: 'authoritative',
 
   play: (song) => set({ currentSong: song, isPlaying: true, currentTime: 0, hasPlayed: true }),
   pause: () => set({ isPlaying: false }),
@@ -189,25 +183,30 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     return { started: false, moved: plan.moved, noop: false };
   },
 
-  setQueue: (songs, startIndex = 0) => {
+  setQueue: (songs, startIndex = 0, scope = 'authoritative') => {
     if (songs.length === 0) return;
     const idx = Math.max(0, Math.min(startIndex, songs.length - 1));
     const playMode = useSettingsStore.getState().playMode;
     const { shuffle } = get();
-    // #519 / #520 blocker 1：`setQueue` 是**权威态**（入参是整张歌单，不是原生窗口），
-    // 所以只有这里允许裁剪幽灵 id（已从歌单移除的歌）——否则「只补不丢」会让序列无限膨胀。
-    let nextShuffle: ShuffleState | null = null;
-    if (shuffle && orderCoversQueue(shuffle.order, songs)) {
+    // #639 R1：作用域**显式**。此前一律当权威成员集，但冷启对账与队列弹层回灌传的正是**窗口** ⇒ 窗口外 id 被裁掉并立刻落盘，
+    // 随机序永久截断（#520 实测 12 → 5）。`window` 只补不丢（不裁、不重洗）；`authoritative` 允许裁幽灵 id，序列不覆盖即整批换队列 → 重洗。
+    let nextShuffle: ShuffleState | null = shuffle;
+    if (scope === 'window') {
+      nextShuffle = shuffle ? alignShuffleForWindow(shuffle, songs, idx) : null;
+    } else if (shuffle && orderCoversQueue(shuffle.order, songs)) {
       nextShuffle = alignShuffleForMembers(shuffle, songs, idx);
     } else if (playMode === '随机播放') {
       // 队列里出现了序列没有的歌 = 整批换歌单 → 按 ADR 重洗一份（此时旧序列整体作废）
       nextShuffle = ensureShuffleFor(songs, idx, null);
+    } else {
+      nextShuffle = null;
     }
     set({
       queue: songs,
       currentSong: songs[idx],
       currentIndex: idx,
       shuffle: nextShuffle,
+      queueScope: scope,
       isPlaying: true,
       currentTime: 0,
       hasPlayed: true,
@@ -241,10 +240,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  ensureShuffle: () => {
-    const { queue, currentIndex, shuffle } = get();
+  ensureShuffle: (scope) => {
+    const { queue, currentIndex, shuffle, queueScope } = get();
     if (queue.length === 0) return;
-    const next = ensureShuffleFor(queue, currentIndex, shuffle);
+    // #639 R1：作用域缺省取**队列自己的来源**（`setQueue` / 原生对账写入），不再靠调用点记得传。窗口态下**没有序列就不得现洗**
+    // （拿窗口当全集洗出的是窗口那几首，落盘 ⇒ 随机序永久截断），只能等 `hydrateShuffle` 从盘恢复、或等一次**权威**入队再建。
+    const effectiveScope = scope ?? queueScope;
+    const next = ensureShuffleFor(queue, currentIndex, shuffle, effectiveScope);
     if (next === shuffle) return;
     if (shuffle && next && sameOrder(shuffle.order, next.order) && shuffle.cursor === next.cursor) return;
     set({ shuffle: next });
@@ -275,14 +277,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   advance: (direction) => {
-    const { queue, currentIndex, currentSong, shuffle } = get();
+    const { queue, currentIndex, currentSong, shuffle, queueScope } = get();
     if (queue.length === 0 || currentIndex < 0) return { index: -1, effect: 'none' };
     const playMode = useSettingsStore.getState().playMode;
     // 当前曲的成员下标：优先按 key 反查（`play()` 只写 currentSong、不写 currentIndex）。
     const at = playMode === '随机播放' ? currentMemberIndex(queue, currentIndex, currentSong) : currentIndex;
-    // 前置步骤：随机模式没有序列就现洗一份；序列本身的对齐（含「游标对到当前曲」）在 core 里，
-    // 作用域显式传 window —— JS 队列可能只是原生预取窗口，对齐只能补、不能丢（#520 blocker 1）。
-    const base = shuffle ?? (playMode === '随机播放' ? createShuffleState(queue, { currentIndex: at }) : null);
+    // 前置步骤：随机模式没有序列时——**权威队列**才现洗（窗口队列现洗 = 落盘短序列、永久截断，
+    // #639 R1）；窗口态把 `null` 交给 core 走兼容路径（不落盘、不建序列）。
+    const base = shuffle
+      ?? (playMode === '随机播放' && queueScope === 'authoritative'
+        ? createShuffleState(queue, { currentIndex: at })
+        : null);
     const plan = planAdvance({
       queue,
       currentIndex: at,

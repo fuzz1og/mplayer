@@ -1,20 +1,7 @@
 /**
- * 反爬工具模块（T11 spec #157 G2 P1 请求硬化）
- *
- * 提供 User-Agent 轮换（扩池至 50 条 + 反同源连续）、速率限制、随机延迟、增强请求头等能力。
- *
- * T11 变更点（对照 r2-robustness-gap G2 决策）：
- * - UA 池从硬编码 10 条扩至 50 条真实浏览器 UA（近 3 年各版本/内核覆盖）；
- * - 「反同源连续」：同一源相邻请求尽量不重复同一 UA（按 `sourceKey` 独立轨道，
- *   不带 sourceKey 走默认轨道，保证跨源也不连续）；循环一轮耗尽后按轮转补位；
- * - 请求头「两态」：
- *   - 浏览器态 `getAntiScrapeHeaders(referer?, sourceKey?)` —— 源站直连用，携带 sec-ch 满套
- *     + 按 referer 的 `Sec-Fetch-Site`（防盗链收益未被证实，见 #647）；
- *   - API 态 `getApiRequestHeaders(sourceKey?)` —— 自建搜索 API / 稳定 JSON 端点用，
- *     最小头、不带 sec-ch 套、默认不带 Referer（不污染直连/自有 API）；
- * - `safeParseJSON(text)`：非 JSON/HTML 包裹/尾逗号等脆弱响应三级降级，失败返回 null
- *   不抛（源站偶发非 JSON 不炸链路）。决策：默认启用但保守——不启用随机 IP 头、
- *   XFF 不采纳（见 r2 §5b）。
+ * 反爬工具模块（T11 spec #157 G2 P1 请求硬化）：UA 轮换（池 50 条真实浏览器 UA + 「反同源连续」按 sourceKey 独立轨道）、速率限制、随机延迟、增强请求头。
+ * 请求头「两态」：浏览器态 getAntiScrapeHeaders（源站直连，sec-ch 满套 + 按 referer 的 Sec-Fetch-Site，防盗链收益见 #647）；
+ * API 态 getApiRequestHeaders（稳定 JSON 端点，最小头、默认不带 Referer）。safeParseJSON 三级降级、失败返 null 不抛。
  */
 
 // ── User-Agent 池（50 条真实浏览器 UA，T11 扩池至 30–50，取满 50）─────
@@ -95,12 +82,9 @@ if (USER_AGENTS.length !== UA_POOL_SIZE) {
   throw new Error(`UA 池长度${USER_AGENTS.length}与 ${UA_POOL_SIZE} 不符，请补齐`);
 }
 
-// ── 反同源连续（T11）─────────────────────────────────────────────
-//
-// 每个 sourceKey（含默认轨道 DEFAULT_TRACK）维护一份打乱后的轮换队列 + 游标：
-// 从队列头依次取，取尽后重新打乱（保证新模式首元 ≠ 上一轮末元，避免跨界重复）。
+// 每个 sourceKey（含默认轨道 DEFAULT_TRACK）维护一份打乱后的轮换队列 + 游标：从队列头依次取，取尽后
+// 重新打乱（保证新模式首元 ≠ 上一轮末元，避免跨界重复）。
 // 这样同一源相邻请求必不重复；不同源各自独立轨道，互不影响。
-// 游标单调递增（不回退），所以 50 次连续调用返回 50 个互异 UA。
 
 const DEFAULT_TRACK = '__default__';
 
@@ -232,10 +216,8 @@ function getSecChUa(ua: string): string {
 }
 
 /**
- * 浏览器态请求头（T11「两态」之一）：需要完整浏览器特征时使用（无害；防盗链收益见 #647）。
- * - `referer` 存在 → `Sec-Fetch-Site: same-origin`（按「同源」语义设，非实测结论）；
- * - `sourceKey` 用于反同源连续（可选，不带则走默认轨道）；
- * - 保持 T11 前兼容：`getAntiScrapeHeaders()` / `getAntiScrapeHeaders(referer)` 仍可用。
+ * 浏览器态请求头（T11「两态」之一）：需要完整浏览器特征时使用（无害；防盗链收益见 #647）。`referer` 存在 → `Sec-Fetch-Site: same-origin`；
+ * `sourceKey` 用于反同源连续（可选，不带走默认轨道）；保持 T11 前兼容：`getAntiScrapeHeaders()` / `(referer)` 仍可用。
  */
 export function getAntiScrapeHeaders(referer?: string, sourceKey?: string): AntiScrapeHeaders {
   const ua = getUserAgent(sourceKey);
@@ -266,9 +248,8 @@ export function getAntiScrapeHeaders(referer?: string, sourceKey?: string): Anti
 
 /**
  * API 态请求头（T11「两态」之二）：自建搜索 API / 稳定的 JSON 端点。
- * - 最小 JSON 头，不含浏览器态 sec-ch 满套 / `Upgrade-Insecure-Requests`；
- * - 默认不带 Referer（不污染自建 API / 直连的 Host 校验）；
- * - `sourceKey` 用于反同源连续（可选）。
+ * - 最小 JSON 头，不含浏览器态 sec-ch 满套 / `Upgrade-Insecure-Requests`；- 默认不带 Referer（不污
+ * 染自建 API / 直连的 Host 校验）；- `sourceKey` 用于反同源连续（可选）。
  */
 export function getApiRequestHeaders(sourceKey?: string): AntiScrapeHeaders {
   return {
@@ -286,14 +267,8 @@ export async function beforeRequest(): Promise<void> {
 }
 
 // ── 容错 JSON 解析（T11 / r2 §5c）─────────────────────────────
-//
-// sourceUrl 源站偶发非 JSON（HTML 包裹 / 尾逗号 / 单引号 / 前导垃圾）时，
-// 直接 JSON.parse 会让整链路炸掉。此处做两级降级，失败返回 null 不抛：
-//   JSON.parse → 从首个 `{`/`[` 裁到最后一个 `}`/`]`（顺带去尾逗号）→ 返回 null。
-// 决策：默认启用但保守——不引入第三方 jsonrepair（避免 RN 打包体积/依赖）；
-// 也不做 `<script>` 正则剥离——那条正则既漏 `</script >`（CodeQL js/bad-tag-filter），
-// 又对整串不可信响应可多项式回溯（js/polynomial-redos），而 script 体本身极少
-// 是合法 JSON；「HTML 包里裹 JSON」由括号裁剪覆盖（首尾垃圾照样能裁出来）。
+// 源站偶发非 JSON（HTML 包裹 / 尾逗号 / 单引号 / 前导垃圾）时直接 JSON.parse 会让整链路炸掉。
+// 不做 `<script>` 正则剥离：那条正则会漏 `</script >`（CodeQL js/bad-tag-filter），且对整串不可信响应可多项式回溯（js/polynomial-redos）。
 
 export function safeParseJSON(text: string): unknown {
   if (typeof text !== 'string' || text.trim() === '') return null;

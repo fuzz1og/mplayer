@@ -52,11 +52,8 @@ const PlaylistDetailPage: React.FC = () => {
   const detailCoverSrc = (playlist?.cover || songs[0]?.cover) || '';
 
   /**
-   * 歌单内过滤（#488）：**只影响展示集合**——不重排、不改 `order`、过滤态一次都不发
-   * `playlist:reorderFull`（连拖拽入口都不渲染，见 renderStaticRow）。
-   *
-   * `songs` 永远是全量有序的那一份，`visibleSongs` 只是它的派生视图，所以清空输入回到全量时
-   * 顺序与过滤前逐项相同（单测钉住）。
+   * `songs` 永远是全量有序的那一份，`visibleSongs` 只是它的派生视图，所以清空输入回到全量时顺序与过
+   * 滤前逐项相同（单测钉住）。
    */
   const [filterQuery, setFilterQuery] = useState('');
   const isFiltering = filterQuery.trim().length > 0;

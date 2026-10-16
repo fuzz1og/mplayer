@@ -4,15 +4,8 @@ import { request, type TransportCallOptions } from './transport.js';
 
 /**
  * 网易云 weapi 加密请求(参考 NeteaseCloudMusicApi 的 weapi 算法)
- *
- * 请求体构造:
- * - params:    AES-128-CBC 双重加密(固定 presetKey → 随机 16 位 secretKey)
- * - encSecKey: secretKey 反转后 RSA 无填充(raw)加密,输出 256 位 hex
- *
- * 纯 JS 实现(crypto-js + BigInt),兼容 Node / Electron / React Native。
- * 相比官方旧接口 music.163.com/api/playlist/detail:
- * - 匿名可用,无需登录 cookie,不受 20001/404 限制
- * - 一次请求可拿全量 trackIds(n=100000),超过 1000 首的歌单也能完整获取
+ * 相比官方旧接口 music.163.com/api/playlist/detail:- 匿名可用,无需登录 cookie,不受 20001/404 限制- 
+ * 一次请求可拿全量 trackIds(n=100000),超过 1000 首的歌单也能完整获取
  */
 
 const NETEASE_WEAPI_BASE = 'https://music.163.com/weapi';

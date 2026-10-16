@@ -58,11 +58,7 @@ export interface SongSwapSession {
 
 /**
  * 单曲换源两阶段状态机（语义对齐桌面 src/renderer/hooks/useSongSwap.ts）。
- *
- * 序号守卫：open / selectSource / back / close 每次让 intent 自增；异步搜索
- * 结果回来时 intent 已变即丢弃——QQ→酷我快速切源时，QQ 的慢搜索结果不会覆盖
- * 酷我的候选；关闭后再回来的结果也不会把弹层重新点亮。成功后的延时关闭同样
- * 带序号，不会误关期间新开的会话。
+ * 成功后的延时关闭同样带序号，不会误关期间新开的会话。
  */
 export function createSwapSession(deps: SongSwapDeps): SongSwapSession {
   let snapshot: SwapSnapshot = IDLE_SWAP_SNAPSHOT;

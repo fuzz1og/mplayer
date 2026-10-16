@@ -1,16 +1,7 @@
 /**
- * version-bump.js 的执行级测试（#524）。
- *
- * 用 node:test 跑（`node --test scripts/__tests__/version-bump.test.js`），**零依赖、
- * 零真实仓库写入**：每个用例把 scripts/version-bump.js 连同一份 5 件套 fixture 复制进
- * 临时沙箱，在沙箱里起子进程——断言的是「人真正跑脚本时发生什么」，不是内部函数。
- *
- * 回归对象：bump 必须同步 package-lock.json 的 workspace 条目（packages/mobile、
- * packages/core），且**只动版本号字面量**——不能整份重序列化 lock（那会重排整个
- * 文件、产出与改动无关的巨量 diff，见 #523 的 worktree 噪音）。
- *
- * 子进程入参用显式 flag：node --test 会把裸的 --check / 1.9.0 当成自己的参数吞掉，
- * 所以走 `-- --check` / `-- --bump 1.9.0`，本文件里 parseArgs 再翻译回去。
+ * 回归对象：bump 必须同步 package-lock.json 的 workspace 条目（packages/mobile、packages/core），且
+ * **只动版本号字面量**——不能整份重序列化 lock（那会重排整个文件、产出与改动无关的巨量 diff，见 
+ * #523 的 worktree 噪音）。
  */
 
 const { test } = require('node:test');

@@ -7,16 +7,9 @@ import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
 import { musicApi } from './musicApi.js';
 
 /**
- * 汽水直连客户端（T03 #149，收尾）。
- *
- * 汽水已全直连（musicApi 的 api.qishui.com 搜索 / _ROUTER_DATA 分享页直链 /
- * track_v2 兜底），本客户端把这些既有直连注册进 sourceRouter，并补齐：
- * - resolvePlayableUrl：**分享页直链优先**（musicApi.getSodaAudioUrl 已实现
- *   分享页 → track_v2 降级），这里薄包装。
- * - resolveUrlInfo：track_v2 的权威完整时长字段（duration/play_info_list.size/
- *   bitrate，供 T12 预检做完整版 vs 试听版判定），经 transport 接缝实现。
- *
- * 注册后设置页「汽水=直连可用」，且 auto 模式播放 URL 经路由直连。
+ * 汽水已全直连（musicApi 的 api.qishui.com 搜索 / _ROUTER_DATA 分享页直链 /track_v2 兜底），本客户
+ * 端把这些既有直连注册进 sourceRouter，并补齐：- resolvePlayableUrl：**分享页直链优先**（
+ * musicApi.getSodaAudioUrl 已实现分享页 → track_v2 降级），这里薄包装。
  */
 
 const TRACK_V2_URL = 'https://api.qishui.com/luna/pc/track_v2';
@@ -32,16 +25,11 @@ export const sodaDirectClient: DirectSourceClient = {
    *  剥一次——宿主四处是直连门面的，走那条路；两边都幂等，不冲突）。 */
   resolvePlayableUrl: (song) => musicApi.getSodaAudioUrl(stripSourceIdPrefix(String(song.id ?? ''))),
 
-  /** 权威完整时长字段：track_v2 play_info_list 取最大档 size/bitrate + duration。
-   *  匿名 track_v2 返回 200 空 body（2026-08 实测，需 PC 登录态 Cookie），
-   *  空 body 时降级分享页（fetchSodaSharePage 的 duration 字段，免登录），
-   *  分享页也失败则返回 null（探测标不可用，不再抛错卡链路）。
-   *
-   *  **#629**：换源产物的 `Song.id` 是 `soda:<站内 id>`（甚至嵌套 `kuwo:soda:<id>`），
-   *  汽水两个端点都只认裸 ID，且**带前缀不报错**——分享页返 HTTP 200 的软错误空壳
-   *  （`url:""`、无 `lyrics.sentences`、`status_code:1000004`），于是换到汽水的歌
-   *  同时静默丢歌词、丢可播地址、丢时长。这里自己发出的 track_v2 请求先剥成源站真实 ID
-   *  （分享页腿由 `fetchSodaSharePage` 自己剥）。 */
+  /**
+   * 匿名 track_v2 返回 200 空 body（2026-08 实测，需 PC 登录态 Cookie），空 body 时降级分享页（
+   * fetchSodaSharePage 的 duration 字段，免登录），分享页也失败则返回 null（探测标不可用，不再抛错
+   * 卡链路）。
+   */
   async resolveUrlInfo(song: Song, opts?: TransportCallOptions) {
     const rawTrackId = stripSourceIdPrefix(String(song.id ?? ''));
     // 剥完是空的（脏数据 `soda:`）→ 没什么可探的，也别白打出网请求（出网治理 ADR）

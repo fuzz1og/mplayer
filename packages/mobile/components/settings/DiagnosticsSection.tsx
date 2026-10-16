@@ -65,13 +65,9 @@ function formatTraceTime(ts: number): string {
 }
 
 /**
- * 播放诊断区段（#363 / ADR-2026-09-23-playback-trace-sink）：会话内最近 20 条解析链 trace
- * + 应用内日志查看器（#477：最近 100 条 logsStore 缓冲 + 清空日志）。
+ * 播放诊断区段（#363 / ADR-2026-09-23-playback-trace-sink）：会话内最近 20 条解析链 trace+ 应用内日
+ * 志查看器（#477：最近 100 条 logsStore 缓冲 + 清空日志）。
  * 自治组件：自持 traces 快照与导出/清空副作用，页面不再持有诊断状态（#425）。
- *
- * **本区段不再被设置页无条件挂载**：ADR 决策 6 改为「默认折叠在开发者模式之后」，
- * `app/settings.tsx` 只在 `devMode` 打开时渲染它（#477）。组件本身不自判开关，
- * 便于测试直接挂载两种内容。
  */
 export default function DiagnosticsSection() {
   const { colors } = useTheme();

@@ -7,19 +7,8 @@ import { getUserAgent } from './antiScrape.js';
 
 /**
  * 酷我直连客户端（T08 #154）。
- *
- * 直连替代自建 API（全匿名）：
- * - 搜索：`GET www.kuwo.cn/search/searchMusicBykeyWord`（明文 JSON，abslist[]）。
- * - 播放 URL：`GET mobi.kuwo.cn/mobi.s?f=kuwo&q=<encrypted>`，query 经
- *   **自实现 DES**（key 'ylzsxkwm'，musicdl kuwoutils 位运算移植，纯 JS 双端）
- *   + base64 后传入；响应文本正则提取 http 直链。MP3 主力，无损不承诺。
- * - 歌词：`GET newlyric.kuwo.cn/newlyric.lrc?<params>`，params =
- *   base64(XOR("user=12345,...&rid=MUSIC_<id>&lrcx=1", 'yeelion'))；
- *   响应 `tp=content` 头后 zlib 压缩 → inflate → base64 → XOR('yeelion')
- *   → gb18030 解码（decodeKuwoLyricBody，pako + iconv-lite）。
- *   移动端依赖 Buffer polyfill（iconv-lite 需要），RN 侧已随依赖引入。
- *
- * 出网统一经 transport.request（T01 接缝），测试注入 mock 传输。
+ * MP3 主力，无损不承诺。
+ * 移动端依赖 Buffer polyfill（iconv-lite 需要），RN 侧已随依赖引入。
  */
 
 const SEARCH_URL = 'http://www.kuwo.cn/search/searchMusicBykeyWord';

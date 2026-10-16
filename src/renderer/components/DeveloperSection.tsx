@@ -12,11 +12,7 @@ import { isDevMode, setDevMode, subscribeDevMode } from '@/renderer/services/dev
 
 /**
  * 开发者模式设置区（#477 B 方案第一片）。
- *
- * 一个**显式开关**（不是连点手势）+ 开启后的渲染层日志查看器（全局 console 捕获，
- * 环形缓冲约 30 行，零调用点改动）。播放解析 trace 仍在 `PlaybackDiagnosticsSection`，
- * 由设置页与本区同受开关控制。
- *
+ * 播放解析 trace 仍在 `PlaybackDiagnosticsSection`，由设置页与本区同受开关控制。
  * 「默认不暴露」由设置页实现：关闭时本区只留开关行，诊断区整段不渲染。
  */
 

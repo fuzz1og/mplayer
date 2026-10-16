@@ -51,10 +51,7 @@ beforeEach(() => {
 
 /**
  * #560：移动端「批量加入已有歌单」遇同名异源时必须**问用户**，且与桌面问的是同一句话。
- *
  * 修前：批量腿不传 resolveNameConflict → core 走默认并入，用户没得拒绝（桌面会问）。
- * 这组用例同时钉住「问什么」（文案取自 core，不各自硬编码）与「答什么」
- * （继续添加 = add / 取消 = skip），以及「弹层被吃掉也要 resolve，不把写入挂死」。
  */
 describe('#560：移动端同名异源确认（resolveNameConflict 的 RN 渲染）', () => {
   it('文案逐字取自 core NAME_CONFLICT_COPY，冲突条数进正文', async () => {

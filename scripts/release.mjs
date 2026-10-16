@@ -1,17 +1,7 @@
 #!/usr/bin/env node
 /**
- * release.mjs — 一键发布新版（对齐当前工作流：version-bump.js 同步 5 文件 + CI 构建发布）
- * 移植自 scripts/release.sh（#502）：步骤、输出与退出码一致，只是不再需要 bash。
- *
- * 用法: node scripts/release.mjs 1.7.2        # 指定完整版本号
- *       node scripts/release.mjs patch        # 递增 patch（1.7.1 → 1.7.2）
- *       node scripts/release.mjs minor        # 递增 minor（1.7.1 → 1.8.0）
- *       node scripts/release.mjs 1.7.2 --skip-verify   # 跳过本地验证（CI 也会验证）
- *
- * 流程: 验证 → version-bump → commit → push master → tag → push tag（触发 GitHub Actions 发布）
- *
- * 跨平台要点：全程用**数组参数**起子进程（不拼命令行），用户给的目标版本因此没有注入面；
- * node 一律用 process.execPath（不依赖 PATH 里的 node），git 用 git。
+ * 跨平台要点：全程用**数组参数**起子进程（不拼命令行），用户给的目标版本因此没有注入面；node 一律用
+ * process.execPath（不依赖 PATH 里的 node），git 用 git。
  */
 
 import { spawnSync } from 'node:child_process';

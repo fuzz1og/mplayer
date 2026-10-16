@@ -2,12 +2,8 @@ import { requireOptionalNativeModule } from 'expo';
 
 /**
  * MPlayer 原生播放器桥（仅 Android）。
- *
  * iOS/Web 上没有这个模块 → 必须用 `requireOptionalNativeModule`（决策 #11：
  * `expo-module.config.json` 只声明 android，iOS 回落 expo-audio 老路径）。
- *
- * 设计口径（规格 §2.3/§4.3）：**权威队列在原生**；事件是「通知」性质，
- * JS 回前台用 `getState()` 单向对账，禁止双向写。
  */
 
 export type TrackMeta = {
@@ -48,11 +44,8 @@ export type Policy = {
 export type LoopMode = 'off' | 'all' | 'single';
 
 /**
- * 补窗（`feedWindow` → `patchQueue`）的**结算结论**（#591）。
- *
- * 契约：JS 每轮如实上报 outcome，原生只读 outcome 结算「这一轮算不算终局」，
- * 两端不再各自从旁证（`append.length` / `addedCount` / `reason`）推断。
- * 三值互斥；缺失 = 调用方没做结算（仅 `removeKeys` 的清理轮）。
+ * 契约：JS 每轮如实上报 outcome，原生只读 outcome 结算「这一轮算不算终局」，两端不再各自从旁证（
+ * `append.length` / `addedCount` / `reason`）推断。
  * 见 ADR `docs/adr/2026-10-07-window-patch-settle-contract.md`。
  */
 export type PatchOutcome =
@@ -65,10 +58,6 @@ export type PatchOutcome =
 
 /**
  * `patchQueue` 的回执。
- *
- * `stale` = baseRevision 落后（本轮丢弃，调用方重读 revision 后重试）；
- * `error` 只在「下一首播放」（#494）路径上出现：media3 的命令级失败过去是**静默丢弃**的，
- * 这里把它变成调用方能看见、能提示用户的原因（`unsupported` / `failed`）。
  */
 export type PatchQueueResult = {
   accepted: boolean;

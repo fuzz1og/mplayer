@@ -5,19 +5,8 @@ import { dedupeSongs } from '../utils/songDedupe.js';
 
 /**
  * SearchOrchestrator —— 多源搜索编排深模块（ADR-0003）。
- *
- * 自持状态 + subscribe（~内部 observable，零第三方依赖），接口零 store 形状：
- * 不含 getState/setState 的 Record 桥，两端 store 只做 subscribe 镜像 + source 路由，
- * seq 防 stale / 组内合并 / loadingMore 防御全部单一事实来源地存在于本模块。
- *
- * 语义：
- * - `search(query, route)`：route = 'all' | SourceKey。
- *   - 单源 = 单次调用吐一批（results = [{ key: source, name: source, artist: '', songs }]）。
- *   - 'all' = 按源逐源渐进（concurrency 参数化），每源完成即重组吐结果
- *     （固定源序拼装 → groupIntoSongGroups，与一次性全量分组一致）。
- * - `loadMore()`：在当前 route 上翻页；同源分页去重（跨源同名保留）。
+ * 语义：- `search(query, route)`：route = 'all' | SourceKey。
  * - `reset()`：递增 seq 使在途 search/loadMore 失效并清空状态。
- * - `getState()` / `subscribe()`：只读镜像访问（subscribe 返回退订函数）。
  */
 export type SearchRoute<S extends string = SourceKey> = 'all' | S;
 

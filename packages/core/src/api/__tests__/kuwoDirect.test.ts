@@ -13,9 +13,8 @@ import {
 
 /**
  * 酷我直连客户端测试（T08 #154）。
- * 接缝：transport.request（T01）——mock 传输断言外部行为（搜索映射 / mobi.s URL 解析 /
- * 歌词响应解码 / 失败回退）。DES 为自实现位运算移植，用加密↔解密回环 + 结构断言验证；
- * 歌词管线（zlib + XOR + gb18030）用构建-解码回环验证，gb18030 由 iconv-lite 独立解码。
+ * 接缝：transport.request（T01）——mock 传输断言外部行为（搜索映射 / mobi.s URL 解析 /歌词响应解码
+ * / 失败回退）。
  */
 
 function textResponse(body: string): any {

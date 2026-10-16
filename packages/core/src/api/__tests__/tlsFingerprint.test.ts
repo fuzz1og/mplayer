@@ -12,12 +12,8 @@ import {
 
 /**
  * T10 险情开关（spec #156）：TLS 指纹伪装，默认关，仅桌面，weapi 先行试点。
- * 接缝 = core `tlsFingerprint` 模块的状态 + 桌面 agent 提供者 + weapi 头/装配配置：
- * - 开关持久化（仿 T01 sourceRouter 的 persister 钩子，core 零 I/O）；
- * - 默认关，开启后 weapi 走指纹伪装（agent + 附加请求头）；
- * - 仅桌面：agent 提供者只由桌面 main 注入；未注入/RN 不产生任何行为变化。
- * 能力边界：Node 层无法伪造完整 JA3/JA4，此处为 best-effort 特征调整，
- * 承载"开关 + 接线 + 文档化边界"（验收以开关与接线为主）。
+ * 能力边界：Node 层无法伪造完整 JA3/JA4，此处为 best-effort 特征调整，承载"开关 + 接线 + 文档化边界
+ * "（验收以开关与接线为主）。
  */
 
 beforeEach(() => {

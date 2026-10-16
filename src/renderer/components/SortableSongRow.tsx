@@ -12,10 +12,8 @@ export type SortableSongRowProps = Omit<
 > & {
   /**
    * 行尾操作**用渲染函数而不是现成的元素**（#412）。
-   *
-   * `actions={<QueueRowActions song={song} .../>}` 这种写法每次父组件渲染都会新建一个
-   * React 元素，`React.memo` 的浅比较永远不相等——于是「滚动/播放状态变化 → 整个队列
-   * 每一行都重渲染」。换成渲染函数后引用稳定，元素只在本行自己重渲染时才建。
+   * `actions={<QueueRowActions song={song} .../>}` 这种写法每次父组件渲染都会新建一个 React 元素，
+   * `React.memo` 的浅比较永远不相等——于是「滚动/播放状态变化 → 整个队列每一行都重渲染」。
    */
   renderActions?: (song: Song, index: number) => React.ReactNode;
 };

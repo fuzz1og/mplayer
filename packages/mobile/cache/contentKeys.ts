@@ -1,13 +1,7 @@
 /**
  * 内容元数据缓存（#498）的键约定——**唯一落点**。
- *
- * 内核（\`core/cache/cacheKernel\`）的真键格式是 \`\${namespace}:\${type}:\${key}\`，
- * 移动端 namespace 取默认空串 → 内容条目真键形如
- * \`:json:content:<core ContentCache 的原键>\`（\`:\` 开头，不是 \`content:\` 开头，
- * issue 评审第 1 条踩的就是这个）。
- *
- * 写穿侧（\`services/contentCache\`）与统计侧（\`cache/fileBackend\`）都从这里取，
- * 避免同一个字符串在两处各写一份、日后只改一处。
+ * 写穿侧（\`services/contentCache\`）与统计侧（\`cache/fileBackend\`）都从这里取，避免同一个字符串
+ * 在两处各写一份、日后只改一处。
  */
 
 /** 内核键里 JSON 类型段的字面量（namespace 为空时键以此为前缀）。 */

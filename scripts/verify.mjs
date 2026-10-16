@@ -1,26 +1,8 @@
 #!/usr/bin/env node
 /**
  * verify.mjs — 验证的唯一入口（本地全量与 CI 分片都调这个脚本）。
- *
- * **为什么是 Node 而不是 bash（#500）**：Windows 上 `bash` 常常解析到 WSL 的 Linux bash，
- * 于是 WSL 的 Linux node 去跑 Windows 装的 node_modules → 在 `core:build` 里报
- * `Cannot find module @rollup/rollup-linux-x64-gnu`（长得像 rollup 的问题，其实是平台错配）。
- * Node 是本项目的硬依赖，脚本因此跨 pwsh / cmd / Git Bash / WSL / CI 行为一致。
- * `scripts/verify.sh` 只剩两行 shim（`exec node ...`），CI 与文档里的既有调用串零改动。
- *
- * **验证顺序的唯一出处就是本文件**：CI 每个 job 只写 `verify.mjs <scope>`，不在 workflow 里另拼命令；
- * 文档只引用脚本，不复述步骤序列。边界与理由见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`。
- *
- * 用法:
- *   npm run verify                     # all：static + renderer + main + core + mobile + expo
- *   npm run verify -- static           # docs 门禁 + core:build + lint + design-lint + claim-lint + 双端 typecheck + build
- *   npm run verify -- renderer         # 根 vitest（renderer + src/__tests__ 顶层）
- *   npm run verify -- main             # 主进程 vitest（node env，独立 config）
- *   npm run verify -- core             # @mplayer/core vitest
- *   npm run verify -- mobile           # packages/mobile vitest
- *   npm run verify -- expo             # Expo SDK 依赖一致性（expo install --check）
- *   npm run verify -- stack            # 只跑堆叠自检（本分支是否基于 origin/master + 相对 master 的文件集合）
- *   npm run verify -- fast             # = static（兼容旧用法：跳过全部测试）
+ * **验证顺序的唯一出处就是本文件**：CI 每个 job 只写 `verify.mjs <scope>`，不在 workflow 里另拼命令；文档只引用脚本、不复述步骤。用 Node 而非 bash（#500）——
+ * Windows 的 `bash` 常解析到 WSL Linux bash，会拿 WSL 的 node 跑 Windows 装的依赖、报 rollup 平台错配。用法：`npm run verify [-- <scope>]`。
  */
 
 import { spawnSync } from 'node:child_process';
@@ -129,15 +111,8 @@ const SHARDS = {
 
 /**
  * 运行前自检：**验证实际读到的 core dist，必须存在且不落后于本 checkout 的 core 源码**（#521）。
- *
- * 一条规则同时覆盖两种真实踩过的坑：
- * 1. worktree 用 junction 共享 node_modules 时，`@mplayer/core` 解析到**主 clone** 的 dist ——
- *    你在本树改的 core（含新导出）根本没进验证；症状是移动端报 `TS2305 has no exported member`
- *    或测试找不到新导出，看着像代码错。
- * 2. 改了 core 忘了 `core:build`：dist 是旧的，测试全绿但验的是旧代码（更危险）。
- *
- * `requireDist: false`（启动时）只提示、不拦：`core` 分片走源码 alias，本就不需要 dist。
- * `requireDist: true`（每次 core:build 之后）必须存在且不落后 —— 要证的就是「消费者读到的是刚构建的这份」。
+ * `requireDist: true`（每次 core:build 之后）必须存在且不落后 —— 要证的就是「消费者读到的是刚构建
+ * 的这份」。
  */
 function assertCoreIsFromThisCheckout({ requireDist }) {
   const localCore = path.join(ROOT, 'packages', 'core');
@@ -194,14 +169,8 @@ function newestMtime(dir) {
 
 /**
  * 运行前自检：node_modules 的版本必须与 package-lock.json 一致（#523）。
- *
- * 依赖 PR 合并后本机 node_modules 必然落后，症状却落在别处：lint 报
- * Cannot find module 'eslint-plugin-react-hooks'、core:build 报 pako 的 TS7016 ——
- * 两条都不指向「该 npm ci 了」。这里拿 npm 自己写的 node_modules/.package-lock.json
- * 对账（它就是「实际装了什么」的账本），非可选依赖缺失或版本不同即拦下。
- *
- * 跳过 link（workspace 链接）、optional（按平台装的），以及**workspace 清单条目**（packages/* 只有 name/version，
- * 没有 resolved/integrity —— 那是 manifest 的镜像，不是「装出来的包」；它的版本漂移是 version-bump 的事，见 #524）。
+ * 依赖 PR 合并后本机 node_modules 必然落后，症状却落在别处：lint 报 Cannot find module 
+ * 'eslint-plugin-react-hooks'、core:build 报 pako 的 TS7016 ——两条都不指向「该 npm ci 了」。
  */
 function assertNodeModulesMatchLockfile() {
   const readJson = (p) => {
@@ -237,14 +206,9 @@ function assertNodeModulesMatchLockfile() {
 }
 
 /**
- * 堆叠 PR 的合入前自检（#520 / #517 实测）。
- *
- * 本仓允许「base 写 master、分支堆叠在别的分支上」（`ci.yml` 只对 base=master 跑 CI），
- * 但合入前**必须确认基座已合**——否则本分支会把基座那份**旧拷贝**一起带进 master
- * （#520 实测：栈底带着 #516 的旧版 core/desktop 改动；先合 #520 就会把旧版桌面改动写回 master）。
- *
- * 判据是**确定性**的：HEAD 是否以 `origin/master` 为祖先。不是 → 提示并列出相对 master 的
- * 文件集合，供逐项确认「是否都属于本票」。**只提示、不失败**：堆叠本身是合法形态。
+ * 本仓允许「base 写 master、分支堆叠在别的分支上」（`ci.yml` 只对 base=master 跑 CI），但合入前**必
+ * 须确认基座已合**——否则本分支会把基座那份**旧拷贝**一起带进 master（#520 实测：栈底带着 #516 的
+ * 旧版 core/desktop 改动；先合 #520 就会把旧版桌面改动写回 master）。
  */
 function reportBranchBase() {
   const git = (args) => spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });

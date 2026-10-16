@@ -4,19 +4,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * #635 守卫：**「id 进源站端点前必须先 `stripSourceIdPrefix`」不能只靠 review 记忆。**
- *
- * #623（网易歌词）与 #629（汽水三条腿）都是这条规则漏接线的实证：换源产物 / 持久化数据里的
- * `Song.id` 是 `<source>:<站内 id>`（甚至嵌套 `kuwo:soda:<id>`），各源端点**只认裸 ID**，
- * 且**带前缀不报错**——汽水分享页返 HTTP 200 的软错误空壳（`url:""`、无 `lyrics.sentences`），
- * 网易歌词返 `code=400`。于是漏接线不是「报错」而是**静默**丢歌词 / 丢可播地址 / 丢时长。
- * #629 修完四处接线，但没有任何东西阻止第五处漏掉——这正是本守卫要补的洞。
- *
- * 判据分两层，缺一层都会漏（这也是为什么「只枚举端点」不够）：
- * 1. **端点写法不得直接用入参名**（`trackId` / `songId` 原值进 URL / 参数 / 缓存键）——直接漏剥；
- * 2. **端点写法里用到的 `raw*` 局部量，其声明必须是一次 `stripSourceIdPrefix(...)`**——
- *    间接漏剥。这一层才是「删掉一处调用就红」的钳子：删掉调用后那个局部量就变成
- *    `= trackId ?? ''`（一次普通赋值），第 2 条立刻抓到。
+ * #635 守卫：「id 进源站端点前必须先 `stripSourceIdPrefix`」不能只靠 review 记忆。#623（网易歌词）与 #629（汽水三条腿）都是漏接线的实证——
+ * `Song.id` 是 `<source>:<站内 id>`（甚至嵌套），各源端点**只认裸 ID**且**带前缀不报错**（汽水返 200 软错误空壳、网易返 `code=400`），
+ * 漏接线是**静默**丢歌词/地址/时长。判据两层：① 端点写法不得直接用入参名（`trackId`/`songId` 原值进 URL/参数/缓存键）；② 端点里用的 `raw*` 局部量必须来自一次 `stripSourceIdPrefix(...)`。
  */
 
 const testDir = dirname(fileURLToPath(String(import.meta.url)));

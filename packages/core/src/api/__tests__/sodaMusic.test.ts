@@ -2,10 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { musicApi, sodaSentencesToLrc } from '../musicApi.js';
 
 /**
- * 汽水音乐搜索/歌词（#181 收尾续作）：
- * - 搜索路径：luna/search/track（无 pc 段，免登录；旧 luna/pc/search/track 已失效空 body）
- * - 分享页歌词：_ROUTER_DATA.lyrics.sentences[] 结构化 → LRC（sodaSentencesToLrc 纯函数）
- * - getSodaLyrics：分享页免登录取歌词 + 缓存
+ * 汽水音乐搜索/歌词（#181 收尾续作）：- 搜索路径：luna/search/track（无 pc 段，免登录；旧 
+ * luna/pc/search/track 已失效空 body）- 分享页歌词：_ROUTER_DATA.lyrics.sentences[] 结构化 → LRC（
+ * sodaSentencesToLrc 纯函数）- getSodaLyrics：分享页免登录取歌词 + 缓存
  */
 
 describe('sodaSentencesToLrc（分享页结构化歌词 → LRC 纯函数）', () => {

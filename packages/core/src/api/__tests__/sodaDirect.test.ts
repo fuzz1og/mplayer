@@ -6,9 +6,6 @@ import { musicApi } from '../musicApi.js';
 
 /**
  * 汽水直连客户端测试（T03 #149）。
- * search / resolvePlayableUrl 复用 musicApi 既有直连（分享页直链优先 → track_v2），
- * 薄包装；resolveUrlInfo 为新增的权威完整时长字段（track_v2 的 play_info_list，
- * 供 T12 预检），经 transport 接缝测试。
  */
 
 function textResponse(body: string): any {

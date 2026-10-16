@@ -28,10 +28,9 @@ import { registerCookiePersister, loadCookiesFromDisk } from './cookies/cookieAd
 // 需在 app ready 前读取 Windows DPI 并强制缩放系数（详见 hidpi.ts）
 applyWslHidpiFix();
 
-// 禁用 QUIC/HTTP3（#262 联调，仅 dev 生效）：Cloudflare 系更新镜像会经 Alt-Svc 把
-// Chromium 升级到 QUIC(UDP 443)，WSL2 镜像网络的 UDP 转发不可靠 → 大文件下载 0% 停滞
-// （curl/TCP 对照实测 11MB/s；disable-quic 后应用内下载成功完成，见 PR 联调记录）。
-// 打包产物跑在真实桌面网络栈上，QUIC 行为未实测，保持默认以零回归；后续按平台实测再放开。
+// 禁用 QUIC/HTTP3（#262 联调，仅 dev 生效）：Cloudflare 系更新镜像会经 Alt-Svc 把 Chromium 升级到 
+// QUIC(UDP 443)，WSL2 镜像网络的 UDP 转发不可靠 → 大文件下载 0% 停滞（curl/TCP 对照实测 11MB/s；
+// disable-quic 后应用内下载成功完成，见 PR 联调记录）。
 if (!app.isPackaged) {
   app.commandLine.appendSwitch('disable-quic');
 }
@@ -53,10 +52,8 @@ const audioCacheBackend = new DiskCacheBackend(path.join(app.getPath('userData')
 const musicApi = {
   ...coreMusicApi,
   async getSodaPlayableUrl(trackId: string): Promise<string> {
-    // 桌面 IPC 缓存腿：不经 core 解析链出口，故拿到的是未归一裸直链。这是 ADR
-    // `2026-10-09-playable-url-encoding-single-gate.md` 后果 1 记录的已知边界——本腿只在
-    // Node/axios 栈里发请求（栈自己转义），不走 `java.net.URI` 那条原生解析，故裸 `|` 不会
-    // 在此炸；且宿主侧禁止自带补码（守卫第 3 条），归一只在 core 出口。
+    // 桌面 IPC 缓存腿：不经 core 解析链出口，拿到的是未归一裸直链——ADR `2026-10-09-playable-url-encoding-single-gate.md` 后果 1 的已知边界。
+    // 本腿只在 Node/axios 栈里发请求（栈自己转义），不走 `java.net.URI` 原生解析，故裸 `|` 不会在此炸；宿主侧禁止自带补码（守卫第 3 条）。
     const remoteUrl = await coreMusicApi.getSodaAudioUrl(trackId);
     if (!remoteUrl) return '';
     const cacheKey = `bin:soda:${trackId}`
@@ -67,10 +64,8 @@ const musicApi = {
         httpAgent: getHttpAgent(),
         httpsAgent: getHttpsAgent(),
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        // 流式（#426）：此前 responseType: 'arraybuffer' 把**整首歌**先抱进内存再落盘，
-        // 一首无损几十 MB 就是主进程里几十 MB 的常驻峰值（#412 只把三份拷贝降到一份）。
-        // 现在边下边落盘，内存里只过 64KB 级的 chunk；timeout 仍是 30s，作用在流的静默上
-        //（卡住不动即中断，不会因为文件大而误杀）。
+        // 流式（#426）：此前 responseType: 'arraybuffer' 把**整首歌**先抱进内存再落盘，一首无损几十
+        // MB 就是主进程里几十 MB 的常驻峰值（#412 只把三份拷贝降到一份）。
         responseType: 'stream',
         timeout: 30000,
       });
@@ -117,14 +112,9 @@ export function checkIpcSender(frame: Electron.WebFrameMain | null | undefined):
 }
 
 /**
- * 启动检查更新（#579 / ADR `2026-10-05-update-prompt-and-silent-desktop-download.md` 决策 1、4、5）。
- *
- * 首帧后延时触发，避开首屏请求高峰。**不假设时序**：`registerUpdateIpc` 之前有一次
- * `await db.getSetting()`，若窗口在那之前就加载完，`once('did-finish-load')` 会永远等不到——
- * 所以按 `isLoading()` 分开处理（对齐 Electron 的 `ready-to-show`/`did-finish-load` 惯例）。
- * **一次性守卫**：dev 下 HMR、以及 macOS `activate` 重建窗口，都会让加载事件再次触发，只排期第一次。
- * 流程本身全程静默（失败只记日志、绝不 throw），所以这里既不 await 也不 catch。
- * 渲染层也不依赖它的时序：`update:getStatus` 会在首帧补一次快照。
+ * **不假设时序**：`registerUpdateIpc` 之前有一次`await db.getSetting()`，若窗口在那之前就加载完，
+ * `once('did-finish-load')` 会永远等不到——所以按 `isLoading()` 分开处理（对齐 Electron 的 
+ * `ready-to-show`/`did-finish-load` 惯例）。
  */
 let startupUpdateFlowStarted = false;
 function scheduleStartupUpdateFlow(mainWindow: BrowserWindow): void {
@@ -151,11 +141,7 @@ function createWindow() {
     height: 900,
     icon: iconPath,
     webPreferences: {
-      // 审查修复：收紧为 Electron 安全基线。
-      // - contextIsolation: true + nodeIntegration: false：渲染层不再拥有 Node/require
-      //   能力（经 preload 暴露的 window.electronAPI 通信），XSS 无法再直接升级为 RCE；
-      // - webSecurity: true：恢复同源策略/CORS 保护（渲染层跨域 fetch 已改走主进程）；
-      // - preload：唯一 IPC 桥（src/main/preload.ts）。
+      // 审查修复：收紧为 Electron 安全基线（preload 是唯一 IPC 桥：src/main/preload.ts）。
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,

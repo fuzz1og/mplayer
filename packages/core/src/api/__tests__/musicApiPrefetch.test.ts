@@ -6,10 +6,8 @@ import { clearDirectClients, registerDirectClient, setDirectValidator } from '..
 
 /**
  * musicApi.prefetchPlayableSong / forgetPrefetchedSong（#390）。
- *
- * 这层是「预取必须写到**读路径那一份**缓存」的落点：桌面经 `musicApi:call` 在
- * 主进程执行本方法，写的正是播放解析（`resolvePlayableSongRouted`）读的那份
- * `prefetchCache`。这里用同一个模块实例直接验证「写 → 读命中 0 上游请求」。
+ * 这层是「预取必须写到**读路径那一份**缓存」的落点：桌面经 `musicApi:call` 在主进程执行本方法，写的
+ * 正是播放解析（`resolvePlayableSongRouted`）读的那份`prefetchCache`。
  */
 
 const song = (overrides: Partial<Song> = {}): Song => ({

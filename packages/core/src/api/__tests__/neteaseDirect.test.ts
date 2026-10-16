@@ -8,8 +8,6 @@ import type { Song } from '../../types/index.js';
 /**
  * 网易直连客户端测试（T02 #148）。
  * 接缝 = transport（注入 mock 传输驱动全部出网，不真实请求源站）。
- * 覆盖：cloudsearch 搜索映射、weapi URL 解析（含字段映射）、VIP/无版权空 URL、
- *       失败时错误上抛（供 sourceRouter auto 回退自建 API）。
  */
 
 // #498：searchSongs / resolvePlayableUrls 接上了内容缓存（默认 cacheManager）。

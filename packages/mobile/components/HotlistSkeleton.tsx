@@ -10,11 +10,6 @@ import { HOTLIST_SECTION } from './hotlistMetrics';
 
 /**
  * 发现页榜单 tab 的加载骨架屏 —— **`SectionCard` 的同形替身**（#416）。
- *
- * 与真实结构逐项对齐：N 张分组卡片（左右外边距 / 上间距 / 圆角 / 裁切）→
- * 卡内标题行（同内距与行高）→ 每卡 `previewRows` 首歌行（同 `SONG_ROW` 度量，
- * 含榜位列；该 tab 的歌曲行**没有**收藏/更多两列，故 `showActions` 关闭）。
- *
  * 卡片数由调用方传入（真实 `SECTIONS.length`），不在这里写死。
  */
 export default function HotlistSkeleton({ sections, rows = HOTLIST_SECTION.previewRows }: { sections: number; rows?: number }) {

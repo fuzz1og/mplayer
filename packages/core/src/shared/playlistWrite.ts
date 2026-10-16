@@ -8,18 +8,8 @@ import { identityKey } from '../utils/songIdentity.js';
 
 /**
  * 歌单写入编排（#542：**双端唯一的写入语义**；#553/#554：判据与结果契约）。
- *
- * 此前「往目标歌单写入一批歌」这件事散在 8 处（桌面 4 份渲染层编排 + 移动 4 处），
- * 各写各的回滚、去重与冲突口径，后果是 #493 的验收标准「失败不留空歌单」
- * **只在 2/4 处成立**——另两处 create 之后 add 抛错，新歌单留下来了但是空的。
- *
- * 深 module 的形状：interface 是「给我一批歌、一个目标快照、一个同名裁决」，
- * implementation 里藏着四条决策（新建失败/写入失败怎么回滚、四类落点怎么分、
- * 部分成功与容量截断怎么报、同名异源怎么问），**每首歌的落点由本模块产出**，
- * 宿主只留两个 adapter 回调：「读目标歌单」与「同名时怎么办」。
- *
- * #554：`added` 是宿主回报的**真实新增数**，不是请求数；容量截断走 `truncated`
- * 显式通道（宿主返回的新增数少于指派数即截断），不再静默。
+ * #554：`added` 是宿主回报的**真实新增数**，不是请求数；容量截断走 `truncated`显式通道（宿主返回的
+ * 新增数少于指派数即截断），不再静默。
  */
 
 /** 目标歌单快照与构造器（#553：判据模块是唯一来源，这里转出给写入编排的调用方）。
@@ -49,15 +39,8 @@ export type NameConflictDecisions = NameConflictResolution | readonly NameConfli
 
 /**
  * 宿主向用户问「同名异源怎么处置」时的文案——**双端同一份**（#560）。
- *
- * 为什么放 core：桌面与移动是同一个动作的两种渲染（antd `Modal.confirm` / RN `Alert`），
- * 问的却必须是同一句话。各自写一份 = 迟早分叉，而分叉后没人会同时看两端。
- * 与 `OFFLINE_COPY`（core/shared/skipGuard）同一条纪律：跨端共用的用户可见文案，
- * 落点只有一个。
- *
- * 只覆盖 **adapter 的 `resolveNameConflict` 接缝**（整批一次裁决）：
- * 单曲腿的同名确认在两端各有各的交互（桌面「是否继续添加」/ 移动「替换为新版」），
- * 不在本常量范围内。
+ * 为什么放 core：桌面与移动是同一个动作的两种渲染（antd `Modal.confirm` / RN `Alert`），问的却必须
+ * 是同一句话。
  */
 export const NAME_CONFLICT_COPY = {
   title: '同名歌曲',
@@ -71,13 +54,7 @@ export const NAME_CONFLICT_COPY = {
 export interface PlaylistWriteDeps {
   /**
    * **唯一的写入端口**：一次性写入整批歌曲。
-   *
-   * 返回**真正新增的歌数**（#554）——宿主报不出真值时给 `songs.length` 是撒谎，
-   * 给 0 会让编排把写入当失败；确实不知道就让宿主自己报（而不是编一个值）。
-   *
-   * #556 评审 B2：此前的逐首回落腿（`addSong`）在产线上不可达——桌面与移动两个
-   * adapter 都有批量能力、都必给 addSongs，只有测试 fake 才会只给 addSong。留着
-   * 它等于给「只有 fake 走得到的分支」发许可证，本模块只保留唯一被走到的批量腿。
+   * 留着它等于给「只有 fake 走得到的分支」发许可证，本模块只保留唯一被走到的批量腿。
    * 缺少本端口时写入直接失败（不静默降级逐首）。
    */
   addSongs: (playlistId: string | number, songs: Song[]) => Promise<number>;
@@ -87,12 +64,8 @@ export interface PlaylistWriteDeps {
   deletePlaylist?: (playlistId: string | number) => Promise<void>;
   /**
    * 同名异源怎么处置（宿主 adapter 的第二个回调）。
-   * 一次收到**整批**冲突，宿主可以合成一个弹层问一次；返回单个决议 = 整批同处置，
-   * 返回数组 = 逐首处置；'skip' 的歌被本编排丢弃。
-   *
-   * **不提供 = 默认并入**（#556 评审 A4）：跨源同名同歌手是同一段录音的另一个来源，
-   * 默认口径是「并进去」，绝不静默丢弃。想「问用户」或「跳过」的宿主必须显式给回调
-   * ——桌面两个弹窗都给了（弹同名确认）；不显式给 = 接受默认并入。
+   * 想「问用户」或「跳过」的宿主必须显式给回调——桌面两个弹窗都给了（弹同名确认）；不显式给 = 接受
+   * 默认并入。
    */
   resolveNameConflict?: (
     conflicts: readonly PlaylistNameConflict[],
@@ -136,9 +109,8 @@ export type SongWriteRejection = 'missing-fields' | 'local-without-url' | null;
 
 /**
  * 宿主写入路径会不会收下这首歌（#553 判据单点下沉；#556 评审 C：跨端唯一来源）。
- * 桌面 `fileStorage` 的写入路径（逐首与批量两处）直接消费本函数，不再各留一份
- * `validateSongData`——两端判据因此不可能分叉。不合格的歌在编排里就被摘出来，
- * 免得「建了歌单才发现一首都不合法」。
+ * 桌面 `fileStorage` 的写入路径（逐首与批量两处）直接消费本函数，不再各留一份`validateSongData`——
+ * 两端判据因此不可能分叉。
  */
 export function songWriteRejection(song: Song | null | undefined): SongWriteRejection {
   if (!song || !song.id || !song.name || !song.artist) return 'missing-fields';
@@ -168,13 +140,6 @@ function dedupeBatch(songs: readonly Song[]): { unique: Song[]; duplicates: Song
 
 /**
  * 往目标歌单写入一批歌（#542 / #553 / #554）。
- *
- * - 目标歌单快照（已有曲目 + 容量）由调用方传入；就地新建时快照是空的；
- * - 已有目标歌单：整批一次写入（唯一写入口 `addSongs`，不再有逐首回落腿）；
- * - 就地新建（`createName` 非空）：先建 → 再写 → **任一步失败即删除新歌单**，
- *   保证 #493 的「失败不留空歌单」在**所有**入口成立；
- * - 每首歌的落点由 `classifySong` 产出：duplicate 跳过、nameConflict 问宿主、其余写入；
- * - 批内重复与非法歌在编排里摘掉并各自计数，不与宿主侧的落点混淆。
  */
 export async function writeSongsToPlaylist(
   params: {
@@ -369,10 +334,8 @@ export async function writeSongsToPlaylist(
 
 /**
  * 实际落写：一次整批写入（一次持久化 + 一次渲染）。
- * 返回宿主**真实接纳**的歌数（#554）。
- *
- * #556 评审 B2：逐首回落腿因产线不可达已删（见 `PlaylistWriteDeps.addSongs` 注释）；
- * 本函数只剩唯一一条被产线走到的批量腿。
+ * #556 评审 B2：逐首回落腿因产线不可达已删（见 `PlaylistWriteDeps.addSongs` 注释）；本函数只剩唯一
+ * 一条被产线走到的批量腿。
  */
 async function writeBatch(
   playlistId: string | number,

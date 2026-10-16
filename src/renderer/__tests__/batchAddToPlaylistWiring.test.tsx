@@ -5,17 +5,8 @@ import type { Song } from '@mplayer/core';
 
 /**
  * #562 回归：**开了「批量加入歌单」开关，按钮就必须点得动**。
- *
- * 四个页面（History / AlbumDetail / HotlistDetail / DiscoverPlaylistDetail）只传了
- * enableBatchAddToPlaylist、没传 onBatchAddToPlaylist，于是按钮渲染出来但点击
- * 在 SongList 的第一行就被 `!onBatchAddToPlaylist` 挡掉——弹窗永远不开。
- *
- * 弹窗与写入本来就在 SongList 内部闭环（BatchAddToPlaylistModal 自己走桌面 adapter），
- * 页面回调只是「成功通知」。所以这条用例断言的行为是：**只传开关、不传回调，
- * 点「批量加入歌单」也要开出弹窗**——修复前必红，修复后转绿。
- *
- * 对照 batchAddToPlaylistFeedback.test.tsx：那条钉的是弹窗内部的成功反馈，
- * 这条钉的是「入口没被回调卡死」。
+ * 弹窗与写入本来就在 SongList 内部闭环（BatchAddToPlaylistModal 自己走桌面 adapter），页面回调只是
+ * 「成功通知」。
  */
 
 const h = vi.hoisted(() => ({ invoke: vi.fn() }));

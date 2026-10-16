@@ -1,18 +1,7 @@
 /**
- * 封面组件（#496）。
- *
  * **不做在飞闸门**（同日提出、实测后撤销，见 ADR `docs/adr/2026-09-30-mobile-cover-loading.md`）。
- * 只做三件事：
- * 1. `uri` 为空时渲染同 style 的空 `View`——与「Image 已挂、图还没到」同形，不产生二次布局跳动；
- * 2. 加载失败**重试一次**（`key` 变化强制重发请求，间隔 `COVER_RETRY_DELAY_MS`），仍失败才回调 `onError`；
- * 3. 封面埋点的单一入口（调用方传 `onError`）。
- *
- * 为什么不设闸门：闸门「先拿槽位再挂图、靠 onLoad/onError 释放」的前提在 Android 上不成立——
- * 被裁剪的离屏 cell 根本不回调；请求失败/悬挂也不回调。槽位被占到墙钟超时，队列一长，真正可见的
- * 封面（尤其新 push 页面的首屏）就被饿死：实测「发现页 → 歌手 → 专辑时间线」整页灰。
- * 并发控制交给列表窗口化（`components/listWindow.ts`）与 Fresco/OkHttp 自身的连接上限。
- *
- * **不经过它**的是首屏关键封面：Hero、迷你播放栏、全屏播放器（一屏只有一张，无需占位/重试）。
+ * 为什么不设闸门：闸门「先拿槽位再挂图、靠 onLoad/onError 释放」的前提在 Android 上不成立——被裁剪
+ * 的离屏 cell 根本不回调；请求失败/悬挂也不回调。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';

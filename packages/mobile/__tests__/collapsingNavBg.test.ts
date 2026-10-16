@@ -10,20 +10,7 @@ import {
 
 /**
  * 折叠头部导航条背景色防回归（#372）。
- *
- * RN 0.86 原生驱动里两条插值路径对 extrapolate 的处理**不一致**：
- *   - 数值：InterpolationAnimatedNode::interpolateValue → interpolate()
- *     （ReactCommon/react/renderer/animated/drivers/AnimationDriverUtils.h）结算
- *     extrapolate:'clamp'；
- *   - 颜色：InterpolationAnimatedNode::interpolateColor()
- *     （ReactCommon/react/renderer/animated/nodes/InterpolationAnimatedNode.cpp:104-152）
- *     **忽略 extrapolate**，直接 ratio = (value - inputMin)/(inputMax - inputMin)，
- *     再逐通道 static_cast<uint8_t>（超界即回绕）。
- *
- * 所以颜色节点必须吃「数值 clamp 节点」的输出。下面按原生算法逐值复算，锁死
- * 「颜色节点 ratio 恒 ∈ [0,1]」这条契约：一旦接线退回把原始 scrollY 直接喂给
- * 颜色节点，ratio 就会 > 1 并回绕 —— scrollY = collapseAt + 1 时 alpha 从 255
- * 掉到 0，条身整条消失、随后周期性闪烁偏色。
+ * 所以颜色节点必须吃「数值 clamp 节点」的输出。
  */
 
 /** darkColors.bgSurface（packages/mobile/theme/tokens.ts:475 → palette.gray900） */

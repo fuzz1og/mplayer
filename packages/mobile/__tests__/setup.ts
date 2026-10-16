@@ -9,6 +9,12 @@ vi.mock('react-native', () => ({
     registerComponent: vi.fn(),
     runApplication: vi.fn(),
   },
+  // #639 R4.4：`nativePlayer` 顶层读 AppState.currentState、initNativePlayer 挂 change 监听
+  // （回前台单向对账）。替身需支持 addEventListener 返回可 remove 的订阅。
+  AppState: {
+    currentState: 'active',
+    addEventListener: vi.fn(() => ({ remove: vi.fn() })),
+  },
   Share: { share: vi.fn(async () => ({ action: 'dismissedAction' })) },
   Platform: { OS: 'android', select: (options: Record<string, unknown>) => options?.android ?? options?.default },
   NativeModules: {},
@@ -20,10 +26,8 @@ vi.mock('react-native', () => ({
   },
 }));
 
-// 方案 C：`modules/native-player` 用 `requireOptionalNativeModule('MPlayerNativePlayer')` 拿桥
-// （iOS/Web 无该模块 → 回落 expo-audio）。node 测试环境里没有原生模块：
-// 默认返回 null（= 回落引擎路径，既有 42 例 audioPlayer 测试继续跑）；
-// 需要验原生引擎的用例在自己文件里 `vi.mock('expo', ...)` 覆盖成假原生模块。
+// 方案 C：`modules/native-player` 用 `requireOptionalNativeModule('MPlayerNativePlayer')` 拿桥（
+// iOS/Web 无该模块 → 回落 expo-audio）。
 vi.mock('expo', () => ({
   requireOptionalNativeModule: () => null,
   requireNativeModule: (name: string) => {

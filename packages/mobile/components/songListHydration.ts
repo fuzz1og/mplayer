@@ -3,30 +3,9 @@ import { cancelLyricsHydration, enqueueLyricsHydration } from '@mplayer/core';
 import type { SongListRow } from './songListLayout';
 
 /**
- * 「行进入视口」→ 歌词预取（#429）的**停稳闸 + 可见集合差集**。
- *
- * 为什么不能见到可见行就入队：#421 的教训是滚动期抢帧，而一次性甩动会让 FlatList
- * 连续报出十几屏行——照单全收等于把整份歌单打出去（#409 刚从「列表内联取词」把这个
- * 请求量收回来）。所以这里只认**停稳**：可见集合 `VIEWPORT_SETTLE_MS` 内不再变化，
- * 才在停稳那一拍做两件事——把**当前这一屏**交给 core `lyricsHydrator`，并算出
- * **本次离开可见集合的 key** 交给 `cancelLyricsHydration`。滑动中的中间集合一律丢弃
- * （用户滑过去没停下来看的行，本来也不会点开）。
- *
- * **刻意严于票面的一处语义**：票面写的是「行进入视口即入队」，实现取的是
- * 「**可见集合停稳 `VIEWPORT_SETTLE_MS` 后按整屏请求**」——滑过但未停稳的行不会请求。
- * 这是 #421 防抢帧的取舍（每帧入队会把甩动经过的整份歌单打出去），代价是「快速滑过去
- * 又马上点开」的那几行没有预取，兜底仍是播放期取词。
- *
- * 差集只在**停稳那一拍**算，绝不在滚动每帧算：取消成本 O(离开行数)，已结算的 key 在
- * hydrator 里本就跳过。`delivered` 只记「上一次停稳时交付过的候选」，所以收回的是
- * **真的滑出可见集合**的那些行，滑动途中的中间集合不参与。
- *
- * 闸设在**入队**这一侧（消费端的可见性策略），不是出网侧：并发上限与每 host 限速
- * 仍然只有 transport 双层闸门（#408）一套。
- *
- * 抽成零 react-native 依赖的纯函数 + 可注入 `enqueue`/`cancel`，是为了「视口 → 候选 →
- * 停稳 → 入队/收回」几步都能在 node 下直接测（mobile 的 vitest 是 node 环境，
- * 渲染 FlatList 不在范围内）。
+ * 为什么不能见到可见行就入队：#421 的教训是滚动期抢帧，而一次性甩动会让 FlatList 连续报出十几屏行
+ * ——照单全收等于把整份歌单打出去（#409 刚从「列表内联取词」把这个请求量收回来）。
+ * 滑动中的中间集合一律丢弃（用户滑过去没停下来看的行，本来也不会点开）。
  */
 
 /** 可见集合稳定多久才算「停稳」。取 300ms：短于人的「停下来看一眼」节奏，长于滑动帧间隔。 */
@@ -45,11 +24,8 @@ export function lyricsCandidatesOfRows(
 }
 
 /**
- * 候选身份键（`源:id`）——**与 `SongList` 卸载收回账本用的是同一个键**，
- * 也是可见集合差集的比较单位。
- *
- * 缺源或缺 id 返回 null：这种候选 hydrator 本来就不认（`hydratableId`），
- * 更不该参与差集（否则一堆 null 会被当成「同一个 key」）。
+ * 缺源或缺 id 返回 null：这种候选 hydrator 本来就不认（`hydratableId`），更不该参与差集（否则一堆 
+ * null 会被当成「同一个 key」）。
  */
 export function lyricsCandidateKey(candidate: LyricsHydrationCandidate): string | null {
   const id = candidate.id === undefined || candidate.id === null ? '' : String(candidate.id);

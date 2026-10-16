@@ -11,23 +11,9 @@ import {
 } from '../cookies/cookieManager.js';
 
 /**
- * 酷狗直连客户端（T07 #153；内容能力 #278）。
- *
- * 直连替代自建 API（匿名设备 cookie 程序化自建）：
- * - 搜索：`GET songsearch.kugou.com/song_search_v2`（明文 JSON，lists[] 带 hash）。
  * - 播放 URL：**免签名端点**（#393，ADR 2026-09-21 决策后果）：
- *   `m.kugou.com/app/i/getSongInfo.php?cmd=playInfo&hash=`，取 `url` / `backup_url` 族字段
- *   （旧 `trackercdn i/v2` + MD5(hash+'kgcloudv2') 已被上游风控闸住，实测 22/22 恒空）。
- * - 歌词：两步（lyrics.kugou.com/search 拿 candidates → download 拿 base64 content），
- *   Song.lrc 记为 search URL（hash+keyword），由 musicApi.getLyrics 经
- *   `resolveKugouLyricUrl` 两步解析。
- * - 内容能力（#278 自桌面 kugouApi 私有路径并入）：`GET mobilecdn.kugou.com/api/v3/rank/song`
- *   榜单歌曲（热歌榜 8888 / 新歌榜 74534），ToplistGroup.id = `kugou:${rankid}`，
- *   rank 由消费方按索引推导。
- * - 设备 cookie：T13 cookieManager 生成/轮换（KUGOU_API_GUID/MID/MAC/DEV + dfid），
- *   请求自动携带；宿主可注入持久化 cookie。
- *
- * 出网统一经 transport.request（T01 接缝），测试注入 mock 传输。
+ * `m.kugou.com/app/i/getSongInfo.php?cmd=playInfo&hash=`，取 `url` / `backup_url` 族字段（旧 
+ * `trackercdn i/v2` + MD5(hash+'kgcloudv2') 已被上游风控闸住，实测 22/22 恒空）。
  */
 
 const SEARCH_URL = 'https://songsearch.kugou.com/song_search_v2';
@@ -37,11 +23,7 @@ const LYRIC_SEARCH_URL = 'https://lyrics.kugou.com/search';
 const LYRIC_DOWNLOAD_URL = 'https://lyrics.kugou.com/download';
 /**
  * 榜单歌曲接口 host（原 mobilecdn 老接口，#278 自桌面 kugouApi 挪入）。
- * 2026-09-16 实测：`mobilecdn.kugou.com` 的 https 证书是腾讯云 CDN 默认证书
- * （`*.cdn.myqcloud.com`），**不含该域名** → 任何校验证书的客户端都报
- * `ERR_TLS_CERT_ALTNAME_INVALID`，榜单腿恒空（UI 显示「暂无排行榜数据」）。
- * `mobiles.kugou.com` 同路径、同响应结构（`status=1` / `data.info[]`，50 首齐）、
- * 证书 `*.kugou.com` 有效。原 host 明文 http 仍可取数，但不做 HTTPS 降级。
+ * 原 host（mobilecdn）证书不含该域名 → `ERR_TLS_CERT_ALTNAME_INVALID`、榜单腿恒空；mobiles 证书 `*.kugou.com` 有效。不做 HTTPS 降级。
  */
 const RANK_SONGS_URL = 'https://mobiles.kugou.com/api/v3/rank/song';
 
@@ -90,12 +72,8 @@ function mapTrack(t: any): Song {  const hash = String(t.hash || t.FileHash || '
 }
 
 /**
- * 取响应里第一个**非空字符串**播放地址（#393 修正，见 resolvePlayableUrl）。
- * 不能写成 `data.url || data.backup_url || …`：付费/无版权歌实测回
- * `{ url: '', backup_url: {} }`，而 `{}` 是 truthy → 会被 `String()` 成
- * 字面量 `"[object Object]"` 当直链返回，路由层据此判「直连成功」（via=direct），
- * tier3 兜底与失败归因**全被跳过**，表现为整源歌单点不可播（#394 验收暴露出）。
- * 允许数组形态（上游字段有时是字符串数组），取第一个非空字符串。
+ * 取响应里第一个**非空字符串**播放地址（#393）。**不能写成 `data.url || data.backup_url || …`**：付费/无版权歌实测回
+ * `{ url: '', backup_url: {} }`，`{}` truthy → 被 `String()` 成 `"[object Object]"` 当直链返回、判「直连成功」（#394）。
  */
 function pickPlayableUrl(...values: unknown[]): string {
   for (const value of values) {

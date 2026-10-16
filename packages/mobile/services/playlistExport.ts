@@ -15,15 +15,8 @@ import { usePlaylistStore } from '../stores/playlistStore';
 
 /**
  * 移动端歌单写入 adapter（#552：双端各留一个 adapter）。
- *
- * 桌面走 IPC、移动走 `usePlaylistStore`——**编排与判据都在 core**，
- * 两端只提供两个回调：「读目标歌单」与「同名时怎么办」。
- * 顺带把 #554 的「added 是真值」在移动侧兑现：`addSongs`
- * 回报**真实新增数**（本地 store 去重后实际 append 的条数）；#559 起本地
- * `playlistStore.addSongs` 直接返回该条数，这里只做透传，不再估算。
- *
- * #556 评审 B2：本地 store 有批量能力，逐首回落端口已删（只有测试 fake 才会只给
- * `addSong`）。链接导入的写入依赖另见 `createMobileImportDeps`（#556 评审 B6）。
+ * #556 评审 B2：本地 store 有批量能力，逐首回落端口已删（只有测试 fake 才会只给`addSong`）。
+ * 链接导入的写入依赖另见 `createMobileImportDeps`（#556 评审 B6）。
  */
 
 /** 移动端 adapter 依赖的本地 store 面（测试可注入假实现）。 */
@@ -153,10 +146,8 @@ export function exportSongsToLocalPlaylist(
 
 /**
  * 移动端链接导入的写入依赖（#556 评审 B6 抽出；#594 装配下沉 core）。
- *
- * 装配本体在 core `importDepsFor`——移动端**不再持有第二份**：这里只把
- * 「默认 writer」接上（缺省 writer 每次调用读 `usePlaylistStore.getState()`，
- * 见 `createMobilePlaylistWriter`）。口径（默认并入、回报真实新增数）见 core 注释。
+ * 装配本体在 core `importDepsFor`——移动端**不再持有第二份**：这里只把「默认 writer」接上（缺省 writer 每次调用读
+ * `usePlaylistStore.getState()`，见 `createMobilePlaylistWriter`）。口径（默认并入、回报真实新增数）见 core 注释。
  */
 export function createMobileImportDeps(
   writer: MobilePlaylistWriter = createMobilePlaylistWriter(),

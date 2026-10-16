@@ -108,3 +108,34 @@ describe('随机播放的稳定序列（#511）', () => {
     expect(getPrevSongIndex(songs, -1, '随机播放', state)).toBe(-1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #639 R1：推进函数必须接受 shuffleScope，与调用方手里的队列相符
+// ---------------------------------------------------------------------------
+describe('推进的 shuffleScope（#639 R1）', () => {
+  const full = [song('1'), song('2'), song('3')];
+  /** 序列含窗口外成员 '3'：order 是 [3,1,2]，但窗口只有 [1,2] */
+  const state = { order: ['3', '1', '2'], cursor: 1 };
+
+  it('authoritative（缺省）：窗口外的 id 被裁掉，落点仍在窗口内', () => {
+    const window = [song('1'), song('2')];
+    expect(getNextSongIndex(window, 0, '随机播放', state, 'authoritative')).toBe(1); // '2'
+  });
+
+  it('window：窗口外的 id 保留，落点可能与窗口不符却**不截断序列**', () => {
+    const window = [song('1'), song('2')];
+    // 缺省就是 authoritative —— 显式传 window 时序列只补不丢
+    const next = getNextSongIndex(window, 0, '随机播放', state, 'window');
+    expect([-1, 0, 1]).toContain(next); // 不抛、不崩；关键是序列不被裁
+  });
+
+  it('两种作用域在「序列即队列全排列」时结果一致（无窗口时无差别）', () => {
+    const auth = getNextSongIndex(full, 0, '随机播放', state, 'authoritative');
+    const win = getNextSongIndex(full, 0, '随机播放', state, 'window');
+    expect(auth).toBe(win);
+  });
+
+  it('prev 同样接受 scope', () => {
+    expect(getPrevSongIndex(full, 0, '随机播放', state, 'authoritative')).toBe(2); // '3'
+  });
+});

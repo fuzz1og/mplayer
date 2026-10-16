@@ -101,14 +101,9 @@ beforeEach(() => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // #328：冷启还原态点播放必须真的出声
-//
-// 冷启时队列从 localStorage 还原（currentSong 有值、isPlaying=false），
-// 但传输层没有 Howl（state='idle'）。旧实现 resume() 直接
-// audioPlayer.play()（内部 howl 守卫 → 静默空操作）并置 isPlaying=true，
-// 结果：不出声 + 声波动画空转 + 进度条说谎。
-// ---------------------------------------------------------------------------
+// 冷启时队列从 localStorage 还原（currentSong 有值、isPlaying=false），但传输层没有 Howl（
+// state='idle'）。
 describe('冷启还原态：resume 必须重走全链解析（#328）', () => {
   it('传输层 idle 时，resume 走 play() 全链解析并从头播，而非空操作', async () => {
     const restored = song('1');

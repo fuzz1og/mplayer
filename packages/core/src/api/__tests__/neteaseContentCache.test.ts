@@ -6,13 +6,8 @@ import type { Song } from '../../types/index.js';
 
 /**
  * #498 方案 C：两条此前**零缓存**的内容腿接上缓存。
- *
- * 修前形态：
- * - `searchSongs` 直接 `return neteaseSearchSongs(...)` —— 同一关键词搜两次 = 两次上游；
- * - `resolvePlayableUrls` 每次专辑/歌单详情 cache miss 都重打一次批量 URL 腿。
- *
- * 这条用例从**出网次数**上钉住（transport 接缝），而不是断言内部有没有调 cache——
- * 「命中零请求」才是 issue 的验收口径。
+ * 修前形态：- `searchSongs` 直接 `return neteaseSearchSongs(...)` —— 同一关键词搜两次 = 两次上游
+ * ；- `resolvePlayableUrls` 每次专辑/歌单详情 cache miss 都重打一次批量 URL 腿。
  */
 
 /** 每次用例一份全新的内存内容缓存：互不串味，也不需要动 core 的单例。 */

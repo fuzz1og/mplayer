@@ -13,9 +13,8 @@ import { registerPlaybackTraceSink } from '../services/playbackTrace';
 import { setProxyUrl as setCoreProxyUrl, registerDirectClient, createNeteaseDirectClient, qianqianDirectClient, miguDirectClient, qqDirectClient, kuwoDirectClient, sodaDirectClient, kugouDirectClient } from '@mplayer/core';
 import { mobileContentCache, backfillContentCache } from '../services/contentCache';
 
-// 启动即注册直连客户端（T02 网易 / T03 汽水 / T04 千千 / T05 咪咕 / T06 QQ / T07 酷狗 / T08 酷我）。
-// 必须在模块顶层注册：发现页首屏数据请求（getToplists 等）早于任何 useEffect 执行，
-// 注册若放在 effect 里会撞上未注册窗口期（getDirectClient 返回 undefined 直接崩溃）。
+// 必须在模块顶层注册：发现页首屏数据请求（getToplists 等）早于任何 useEffect 执行，注册若放在 
+// effect 里会撞上未注册窗口期（getDirectClient 返回 undefined 直接崩溃）。
 // #498：网易客户端注入移动端内容缓存（L1 内存 + L2 磁盘写穿）——桌面用 core 默认的那份
 registerDirectClient(createNeteaseDirectClient(mobileContentCache));
 registerDirectClient(sodaDirectClient);
@@ -40,11 +39,9 @@ import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
 import * as SystemUI from 'expo-system-ui';
 import type { ThemeColors } from '../theme/tokens';
 
-// core 的搜索诊断 console.warn（单源识别失败等）在真机 dev 上会触发
-// LogBox 横幅盖住底部播放栏；诊断信息 Metro 终端可见，无需上屏
-// [player] 的「加载失败」等 error 日志同样走内部重试逻辑，属预期内错误
-// [qqPlaylist] 的「超出导入上限已截断」是预期行为（core 上限 1000），
-// 但它会在歌单导入向导解析 QQ 歌单时弹横幅挡住底部按钮（#383 真机验收发现）
+// 真机 dev 上 LogBox 横幅会盖住底部播放栏，而诊断信息 Metro 终端可见、无需上屏：
+// core 搜索诊断 console.warn、[player]「加载失败」（走内部重试，预期内）、
+// [qqPlaylist]「超出导入上限已截断」（core 上限 1000，预期行为；#383 真机验收发现）。
 LogBox.ignoreLogs(['[search]', '[player]', '[qqPlaylist]']);
 
 /** 全局瞬态提示（真机上无法看终端 console，用 Toast 直接展示）：
@@ -128,10 +125,9 @@ export default function RootLayout() {
     setTimeout(() => {
       void backfillContentCache().catch(() => {});
     }, 0);
-    // 注意：WebView 网络桥已移除——常驻隐藏 WebView 在 Android
-    // （Expo Go + Fabric + Android 16）下会破坏 react-native-screens 的
-    // 布局（Stack 内容被压缩到屏幕一半）。请求走 RN 原生栈；
-    // 旧 apiClient 会话机件与耗时日志设施已随 #276 归零删除。
+    // 注意：WebView 网络桥已移除——常驻隐藏 WebView 在 Android（Expo Go + Fabric + Android 16）下
+    // 会破坏 react-native-screens 的布局（Stack 内容被压缩到屏幕一半）。
+    // 请求走 RN 原生栈；旧 apiClient 会话机件与耗时日志设施已随 #276 归零删除。
 
   }, []);
 

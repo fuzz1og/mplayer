@@ -15,9 +15,8 @@ export interface PlaylistUrlInfo {
 
 /**
  * 识别歌单分享链接来源（网易云/短链/QQ 音乐）。
- * QQ 链接尽量带出歌单 id（直链形态）；短链只有 `__=` token，
- * disstid 需经 getQqPlaylistSongs 内的 302 解析提取。
- * 无法识别的链接返回 null。
+ * QQ 链接尽量带出歌单 id（直链形态）；短链只有 `__=` token，disstid 需经 getQqPlaylistSongs 内的 
+ * 302 解析提取。
  */
 export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
   if (!url || typeof url !== 'string') {
@@ -26,11 +25,9 @@ export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
 
   const trimmedUrl = url.trim();
 
-  // Full NetEase URL: https://music.163.com/#/playlist?id=xxx or https://music.163.com/playlist?id=xxx
-  // 必须匹配 /playlist 路径：song/album/artist 链接同样带 id=，不校验路径会导入错歌单。
-  // 先定位 `/playlist` 再在尾巴上取首个 query id：`[^\s?]*\?id=` 里通配类与 `?` 不相交，
-  // 无回溯歧义；旧的 `music\.163\.com.*\/playlist[^?\s]*[?&]id=` 在「重复 music.163.com
-  // 前缀」的粘贴文本上是 O(n²)（CodeQL js/polynomial-redos）。
+  // Full NetEase URL: https://music.163.com/#/playlist?id=xxx or 
+  // https://music.163.com/playlist?id=xxx 必须匹配 /playlist 路径：song/album/artist 链接同样带 id=
+  // ，不校验路径会导入错歌单。
   const neteaseHostAt = trimmedUrl.indexOf('music.163.com');
   const neteasePathAt = neteaseHostAt === -1 ? -1 : trimmedUrl.indexOf('/playlist', neteaseHostAt);
   const neteaseMatch =
@@ -45,11 +42,8 @@ export function parsePlaylistUrl(url: string): PlaylistUrlInfo | null {
     return { type: 'netease-short', url: trimmedUrl };
   }
 
-  // QQ Music（#280 原生化，判定与 qqPlaylist 共用防漂移）：
-  // - web 歌单页直链 y.qq.com/n/ryqq{,_v2}/playlist/{id} 与 H5 分享页
-  //   taoge.html?id= / playlist.html?id= → 带出歌单 id；
-  // - App 分享短链 c6.y.qq.com/base/fcgi-bin/u?__=xxx → 返回 url，播放侧解析 302；
-  // - 歌曲链接（playsong.html?songmid=）不匹配任何形态 → null（歌单导入不收）。
+  // QQ Music（#280，判定与 qqPlaylist 共用防漂移）：web 歌单页直链与 H5 分享页（taoge.html/playlist.html?id=）→ 带出歌单 id；
+  // App 分享短链 c6.y.qq.com/base/fcgi-bin/u?__=xxx → 返回 url，播放侧解析 302；歌曲链接（playsong.html?songmid=）→ null（不收）。
   const qqId = extractQqPlaylistIdFromUrl(trimmedUrl);
   if (qqId !== null) {
     return { type: 'qq', id: String(qqId) };
@@ -86,23 +80,14 @@ export interface PlaylistImportDeps {
   addSong: (playlistId: string | number, song: Song) => Promise<number | void>;
   /**
    * 可选：一次性批量写入（移动端本地 store）。
-   *
-   * 提供时整批只写一次：宿主只需一次持久化 + 一次渲染。
-   * 逐首 addSong 会让宿主每首写一次库、重渲染一次，长歌单下是 O(N²) 级开销
-   * （#383 真机实测：150 首逐首写 ≈ 45s，写库本身只占 192ms）。
-   *
-   * 返回**真实新增条数**或 void（确知不了，按整批成功计）——#556 评审 B6：
-   * 宿主调了写入却丢掉结果（哪怕只写进去一半），编排仍把整批记 success 就是谎报。
+   * 逐首 addSong 会让宿主每首写一次库、重渲染一次，长歌单下是 O(N²) 级开销（#383 真机实测：150 首逐
+   * 首写 ≈ 45s，写库本身只占 192ms）。
    */
   addSongs?: (playlistId: string | number, songs: Song[]) => Promise<number | void>;
 }
 
 /**
  * 链接导入写入腿需要的最小宿主面（#594）。
- *
- * 桌面 DesktopPlaylistWriter 与移动 MobilePlaylistWriter 都满足它——两端写入
- * adapter 的差异（IPC / 本地 store）藏在各自的 add 后面，本模块只认「给我歌单 id
- * 和一批歌，返回 core 的写入结果」这一件事。
  */
 export interface PlaylistImportWriterPort {
   add(params: {
@@ -113,16 +98,8 @@ export interface PlaylistImportWriterPort {
 
 /**
  * 由「歌单写入 adapter」装配链接导入的写入依赖（#594：双端**唯一一份**装配）。
- *
- * 此前这段在两个宿主里逐字各写一份（renderer importService.importDepsFor 与
- * mobile playlistExport.createMobileImportDeps），删掉任意一份另一份原样可用
- * ——是复制品而非被复用的能力。现在装配在本模块，两端只注入各自的 I/O。
- *
- * 口径（#556 评审 A4/B6，原因见实现处注释）：
- * - **不传 resolveNameConflict**：导入是无人值守的整批操作，跨源同名走 core 的
- *   「默认并入」，绝不静默丢弃。
- * - **回报宿主的真实新增数**：宿主说没写进去的歌不能在编排里记 success；
- *   ok=false 一律抛错，由编排如实记 failure。
+ * - **回报宿主的真实新增数**：宿主说没写进去的歌不能在编排里记 success；ok=false 一律抛错，由编排如
+ * 实记 failure。
  */
 export function importDepsFor(writer: PlaylistImportWriterPort): PlaylistImportDeps {
   return {

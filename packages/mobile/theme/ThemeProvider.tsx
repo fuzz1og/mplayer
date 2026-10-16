@@ -1,10 +1,6 @@
 /**
  * 主题上下文（#173）：把 lightColors / darkColors 按用户设置注入组件树。
- *
  * themeMode 存 settingsStore（AsyncStorage 持久化）；system 跟随系统深浅色。
- * 组件内用法：
- *   const { colors, isDark } = useTheme();
- *   const styles = useMemo(() => makeStyles(colors), [colors]);
  */
 
 import React, { createContext, useContext, useMemo } from 'react';

@@ -385,6 +385,32 @@ describe('随机序的编辑（拖拽 / 删除 / 换源）', () => {
     expect(s.shuffle!.cursor).toBe(1);
   });
 
+  // #639 R3.2：随机模式删**当前曲**，续播的是随机序的后继（队列页显示的就是随机序）
+  it('removeFromQueue 删当前曲：续播随机序的后继，不是成员序邻居', () => {
+    // 队列 [A,B,C,D]，随机序 [C,B,D,A]，当前 C（成员下标 2、游标 0）
+    // 随机序里 C 的后继是 B；而成员序里 C 的邻居是 D —— 两者不同，正是判别力所在
+    seed([C, B, D, A], 0);
+
+    usePlayerStore.getState().removeFromQueue(2); // 删掉正在播的 C
+
+    const s = usePlayerStore.getState();
+    expect(s.currentPlaylist.map((p) => p.id)).toEqual([A, B, D]);
+    // 修前：resumedIndex = 2 → 新队列 [A,B,D] 的下标 2 = D（成员序邻居，与界面显示不符）
+    expect(s.currentSong?.id).toBe(B);
+    expect(s.currentPlaylistIndex).toBe(1);
+  });
+
+  it('removeFromQueue 删当前曲（列表循环）：仍是成员序邻居', () => {
+    seed([C, B, D, A], 0);
+    usePlayerStore.setState({ playMode: '列表循环' });
+
+    usePlayerStore.getState().removeFromQueue(2); // 删 C
+
+    const s = usePlayerStore.getState();
+    expect(s.currentPlaylist.map((p) => p.id)).toEqual([A, B, D]);
+    expect(s.currentSong?.id).toBe('netease:4'); // D —— 成员序里 C 的邻居
+  });
+
   it('replaceQueueSong：序列里同格换 id，顺序与游标位置不变', async () => {
     seed([A, B, C, D], 1);
 
@@ -396,14 +422,9 @@ describe('随机序的编辑（拖拽 / 删除 / 换源）', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // #511 评审 blocker：失败跳歌也要同步游标（否则序列当场失效、预取按坏歌算下一首）
-//
-// 陷阱：跳歌路径末尾的 play() 在**正常成功路径**里还会再 sync 一次游标（幂等），
-// 会掩盖跳歌路径自己那次写入——所以回归测试必须走 play() **早退**的路径。
-// 本测试在「跳歌落定瞬间断网」，让随后的 play(B) 在离线快速失败分支同步早退，
-// 于是只有跳歌路径写的游标能留下来：修前代码上本测试变红。
-// ---------------------------------------------------------------------------
+// 陷阱：跳歌路径末尾的 play() 在**正常成功路径**里还会再 sync 一次游标（幂等），会掩盖跳歌路径自己
+// 那次写入——所以回归测试必须走 play() **早退**的路径。
 describe('失败跳歌同步随机游标（#511 评审 blocker）', () => {
   it('跳歌后 play() 早退（离线）→ 游标与落盘仍跟随新 index（修前代码上本测试红）', async () => {
     const songs = baseSongs();

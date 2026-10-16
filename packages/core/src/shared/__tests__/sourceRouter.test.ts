@@ -44,9 +44,7 @@ import { resetOutboundGate } from '../../api/outboundGate.js';
 
 /**
  * 来源开关与回退链测试（T01 切片 2；#277 SourceMode 收窄为 auto|direct 两态）。
- * 接缝 = core 路由层（searchSongsRouted / resolvePlayableUrlRouted）：
- * 注入 fake 直连客户端，验证 auto/direct 两态路由矩阵。自建 API 已退役：
- * 无客户端/无能力 = 「暂无直连实现」，直连失败且 tier3 未命中 = 上抛（D2）。
+ * 自建 API 已退役：无客户端/无能力 = 「暂无直连实现」，直连失败且 tier3 未命中 = 上抛（D2）。
  * legacy 'api' 由 sanitizeSourceModes 在加载边界洗白（见对应 describe）。
  */
 
@@ -1005,14 +1003,8 @@ const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(
 
 /**
  * 腿墙持有者唯一（#593）。
- *
- * clamp + AbortController + budget.onExpire + race + timer 这套「腿墙」此前在四条腿上
- * 逐字各持一份：直连腿（timedDirectCall）、tier3 腿（tryTier3）、严格搜索腿（trySearchLeg）、
- * 直连取证腿（validateDirectLeg）。腿数从 3 涨到 4 后，墙的语义改一次要改四处且极易漂移。
- *
- * 本块是这次抽取的守卫：钉死「墙的持有者」在 sourceRouter.ts 里只有一处，四条腿的墙常量
- * 都必须交给同一个 runWithLegWall。抽取前此块为红（AbortController ×4、budget.onExpire ×4、
- * 无 runWithLegWall），抽取后为绿。
+ * 本块是这次抽取的守卫：钉死「墙的持有者」在 sourceRouter.ts 里只有一处，四条腿的墙常量都必须交给同
+ * 一个 runWithLegWall。
  */
 describe('腿墙持有者唯一（#593）', () => {
   const source = stripComments(readSource('../sourceRouter.ts'));

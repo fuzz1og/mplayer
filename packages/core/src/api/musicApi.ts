@@ -65,11 +65,8 @@ function decodeBase64(input: string): string {
 }
 
 /**
- * 补全 URL，确保返回完整的绝对 URL
- * （自建 API 已退役：API_BASE_URL 恒空，歌词 URL 均为源站绝对地址，
- * 仅保留绝对/协议相对 URL 归一化）
- * @param url 可能是相对路径或绝对 URL
- * @returns 完整的绝对 URL
+ * 补全 URL，确保返回完整的绝对 URL（自建 API 已退役：API_BASE_URL 恒空，歌词 URL 均为源站绝对地址，
+ * 仅保留绝对/协议相对 URL 归一化）@param url 可能是相对路径或绝对 URL@returns 完整的绝对 URL
  */
 function normalizeUrl(url: string | undefined): string {
   if (!url) return '';
@@ -208,21 +205,9 @@ export const musicApi = {
 
 
   /**
-   * 解析汽水分享页（music.douyin.com/qishui/share/track，免登录）。
-   *
-   * _ROUTER_DATA.audioWithLyricsOption 同时含：
-   * - url：音频直链（encrypt=false，未加密；付费歌为试听段）
-   * - lyrics.sentences[]：结构化歌词（startMs/endMs/text/words，lyricType=krc），
-   *   免登录即可拿，无需 track_v2 的登录态 Cookie
-   * - trackInfo.duration：权威完整时长（ms），供探测 resolveUrlInfo 时长校验
-   *
-   * 返回 lyrics 为 LRC 文本（[mm:ss.xxx]行），无歌词返回空串。
-   *
-   * **#629**：`trackId` 先剥成源站真实 ID 再进 URL。换源产物的 `Song.id` 是
-   * `soda:<站内 id>`（甚至嵌套 `kuwo:soda:<id>`），而分享页**只认裸 ID 且不报错**——
-   * 实测带前缀返 HTTP 200 + 19KB 软错误空壳（`url:""`、无 `lyrics.sentences`、
-   * `status_code:1000004`），歌词/地址/时长三条腿同时静默失效。本方法是三条腿共用
-   * 的出网点，剥在这里 = 换源歌不会静默降级成「这首歌没有词、没有地址」。
+   * 换源产物的 `Song.id` 是`soda:<站内 id>`（甚至嵌套 `kuwo:soda:<id>`），而分享页**只认裸 ID 且不
+   * 报错**——实测带前缀返 HTTP 200 + 19KB 软错误空壳（`url:""`、无 
+   * `lyrics.sentences`、`status_code:1000004`），歌词/地址/时长三条腿同时静默失效。
    */
   async fetchSodaSharePage(trackId: string): Promise<{
     audioUrl: string;
@@ -274,18 +259,9 @@ export const musicApi = {
   },
 
   /**
-   * 获取汽水音乐音频直链（用于下载）
-   * 优先用分享页 _ROUTER_DATA（无需Cookie），fallback 到 track_v2
-   *
-   * **#629**：入口先剥源前缀（`soda:<id>` / 嵌套 `kuwo:soda:<id>` → 站内裸 ID）——
-   * 两条腿（分享页、track_v2 兜底）的请求参数与地址缓存键都用剥后的 ID，
-   * 于是裸 id 与换源产物命中同一条缓存，且不再拿到生产的软错误空壳（`url:""`）。
-   *
-   * 本方法是「生产者」，返回**未归一**的裸直链——与其余源的 resolveUrlInfo 同形。
-   * 归一只在解析链出口做一次（ADR `2026-10-09-playable-url-encoding-single-gate.md` §2，
-   * 其否决表明确否掉「补在汽水 URL 的生产者」这条路）。桌面主进程 `getSodaPlayableUrl`
-   * 直调本方法的那条旁腿，其归一位于**调用方**（见 src/main/main.ts），不在这里补——
-   * 补在这里既违反 ADR，又漏掉缓存命中返回的 `cached.url`（#635 评审发现的那处）。
+   * 获取汽水音乐音频直链（用于下载）：优先分享页 _ROUTER_DATA（无需 Cookie），fallback 到 track_v2。
+   * **#629**：入口先剥源前缀（`soda:<id>` / 嵌套 `kuwo:soda:<id>` → 站内裸 ID），两条腿的请求参数与缓存键都用剥后 ID。
+   * 本方法是「生产者」，返回**未归一**裸直链；归一只在解析链出口做一次（ADR 2026-10-09 §2 否决「补在生产者」），旁腿归一在调用方（#635）。
    */
   async getSodaAudioUrl(trackId: string): Promise<string> {
     const rawTrackId = stripSourceIdPrefix(String(trackId ?? ''));
@@ -343,15 +319,8 @@ export const musicApi = {
   },
 
   /**
-   * 获取汽水音乐歌词（分享页免登录结构化歌词 → LRC 文本）。
-   * 分享页 audioWithLyricsOption.lyrics.sentences 已是结构化时间轴，
-   * 无需 track_v2 的登录态 Cookie；无歌词返回空串。
-   */
-  /**
-   * 获取网易歌词（#409：取代内容方法的列表内联批量取词）。
-   * 播放期按 songId 直取，缓存 key `lyric_id_<剥完源前缀的裸 id>`、TTL 1 天、空词也缓存
-   * （#623 起入参先过 `stripSourceIdPrefix`，键随之一并归一——裸 id 与换源产物命中同一条）。
-   * 与 getSodaLyrics 同形：拿不到返回空串，不上抛（歌词缺失不该让播放失败）。
+   * 获取网易歌词（#409：取代内容方法的列表内联批量取词）。播放期按 songId 直取，缓存 key `lyric_id_<剥完源前缀的裸 id>`、
+   * TTL 1 天、空词也缓存（#623 起入参先过 `stripSourceIdPrefix`，键随之一并归一）。与 getSodaLyrics 同形：拿不到返回空串，不上抛。
    */
   async getNeteaseLyrics(songId: string): Promise<string> {
     return fetchNeteaseLyrics(songId);
@@ -377,12 +346,9 @@ export const musicApi = {
   },
 
   /**
-   * 汽水音频直链的内存缓存写入（`getSodaAudioUrl` 的读侧按**剥完前缀的裸 ID** 取，见 #629）。
-   *
-   * **#635**：这里也剥一次。桌面主进程 `getSodaPlayableUrl` 直调 `getSodaAudioUrl(song.id)`
-   * 时会带 `soda:<id>`（甚至嵌套）进来，写侧若原样记账，键就与读侧的裸 ID 不是同一条：
-   * 同一首歌在内存里占两条缓存、每次直调都重新出网，且旧的 `bin:soda:<id>` 落盘键与
-   * 内存键形状分叉。剥在这里（唯一的写入口）比在每个调用方各记一遍可靠。
+   * 汽水音频直链的内存缓存写入（读侧按**剥完前缀的裸 ID** 取，见 #629）。**#635**：这里也剥一次——桌面主进程直调时会带
+   * `soda:<id>`（甚至嵌套）进来，写侧若原样记账，键就与读侧的裸 ID 不是同一条（同一首歌占两条缓存、每次直调重新出网）。
+   * 剥在这里（唯一写入口）比在每个调用方各记一遍可靠。
    */
   cacheSodaAudioUrl(trackId: string, url: string): void {
     const rawTrackId = stripSourceIdPrefix(String(trackId ?? ''));
@@ -467,10 +433,8 @@ export const musicApi = {
       return cachedData;
     }
 
-    // 第三方歌词 URL（QQ fcg / 酷我 newlyric / 酷狗两步）需要浏览器 UA + 官方 Referer。
-    // ⚠️ 强度分源，别一概而论：QQ fcg 确有实测——RN 网络栈缺 Referer 时真机被拒
-    // （retcode=-1310，见 qqDirect.ts fetchLyricViaGateway 注释与 qqLyricGateway.test.ts）；
-    // 酷狗/酷我歌词端点的防盗链收益则未被证实（同 #647：五臂实测未复现）。
+    // 第三方歌词 URL（QQ fcg / 酷我 newlyric / 酷狗两步）需要浏览器 UA + 官方 Referer。⚠️ 强度分源：QQ fcg 确有实测——
+    // RN 网络栈缺 Referer 时真机被拒（retcode=-1310，见 qqDirect.ts 与 qqLyricGateway.test.ts）；酷狗/酷我端点的防盗链收益未被证实（#647）。
     const referer = refererForUrl(fullUrl);
     const isKuwoLyric = fullUrl.includes('newlyric.kuwo.cn');
     const isKugouLyric = fullUrl.includes('lyrics.kugou.com/search');
@@ -543,9 +507,8 @@ export const musicApi = {
 
   /**
    * QQ 歌单全量曲目（#280 链接导入原生化；与旧 getNeteasePlaylistSongs 对位）。
-   * 入参兼容：disstid（number）/ 数字串 / 歌单链接（ryqq/taoge 直链或 `__=` 短链，
-   * 短链经 transport 302 解析）。实现与缓存在 qqPlaylist 模块（10min，空不缓存）；
-   * 不进 DirectSourceClient 能力面——歌单导入是 musicApi 层关注点，与网易对位实现对称。
+   * 入参兼容：disstid（number）/ 数字串 / 歌单链接（ryqq/taoge 直链或 `__=` 短链，短链经 transport 
+   * 302 解析）。
    */
   getQqPlaylistSongs: (source: string | number): Promise<Song[]> => fetchQqPlaylistSongs(source),
 
@@ -569,13 +532,8 @@ export const musicApi = {
 
   /**
    * 解析并写入**读路径那一份**预取缓存（#390）。
-   *
-   * 桌面端 `@mplayer/core` 被分别打包进主进程与渲染进程，各自一份模块级
-   * `prefetchCache`——播放解析经 IPC 打的是**主进程那份**。所以预取必须经
-   * `musicApi:call` 在主进程执行（本方法在主进程跑，写的正是读路径）；移动端
-   * 单进程直调，天然同一份。
-   *
-   * 已有未过期条目直接返回（TTL 30min），不重复解析；解析失败上抛由调用方静默。
+   * 所以预取必须经`musicApi:call` 在主进程执行（本方法在主进程跑，写的正是读路径）；移动端单进程直
+   * 调，天然同一份。
    */
   async prefetchPlayableSong(song: Song): Promise<{ url: string; nonFull: boolean } | null> {
     const cached = getPrefetchedUrl(song);

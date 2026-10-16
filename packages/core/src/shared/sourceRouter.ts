@@ -29,17 +29,8 @@ import { normalizeUrlEncoding } from '../utils/urlEncoding.js';
 
 /**
  * 来源开关 + 直连客户端注册表 + 路由（T01 切片 2，spec #146 决策 1/2/3）。
- *
- * 单一回退链（请求层）：官方直连 → tier3 订阅源兜底 → 上抛
- * （换元在调用方/store 层，本模块不实现；直连返回空串 = 无版权/VIP，原样上抛）。
- * 自建 API 已退役：路由不再有 api 腿，直连失败且 tier3 未命中 = 上抛（D2 语义）。
- *
- * - 每源来源开关 `auto | direct`（#277 收窄，legacy `'api'` 已出类型），默认 auto；
- *   存量持久化 'api' 值由 sanitizeSourceModes 洗白为 auto（双端加载处调用）；
- * - 直连客户端由 T02+ 各源 ticket 注册（纯 JS，双端共用）；
- * - 路由函数（searchSongsRouted / resolvePlayableUrlRouted）供 SearchOrchestrator
- *   的 searchOneSource 注入（ADR-0003）与播放 URL 解析使用；
- * - 持久化钩子：宿主（桌面主进程/移动端设置存储）注册 persister，core 内零 I/O。
+ * 单一回退链（请求层）：官方直连 → tier3 订阅源兜底 → 上抛（换元在调用方/store 层，本模块不实现；
+ * 直连返回空串 = 无版权/VIP，原样上抛）。
  */
 
 export type SourceMode = 'auto' | 'direct';
@@ -54,11 +45,8 @@ export interface ArtistAlbumsPage {
 
 /**
  * 来源中文名（双端唯一一份：设置页 / 状态展示 / 列表来源标签 / 搜索结果分组共用）。
- *
- * #556 评审 C 续：移动端 `stores/sourceStore.ts` 的 `SOURCE_LABELS` 改为引用本表，不再各自
- * 维护字面量。收敛时按「真实中文名」取值：QQ 用全名 `QQ音乐`（徽标里的缩写 `QQ` 仍由各自
- * 紧凑组件自带表），并补上移动端有、core 曾缺的 `local`。`Record<string, string>` 的宽索引
- * 是给「按任意字符串查表」的调用点（未知来源回退），不改类型以免破坏这些调用点。
+ * #556 评审 C 续：移动端 `stores/sourceStore.ts` 的 `SOURCE_LABELS` 改为引用本表，不再各自维护字面
+ * 量。
  */
 export const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   netease: '网易云',
@@ -131,11 +119,8 @@ export async function getToplistSongs(source: SourceKey, sourceId: number | stri
 }
 
 /**
- * 榜单元数据（#465）：榜单详情页 Hero 用。榜单是**源内实体**（身份 = 源 + 源内 id），与专辑同构。
- *
- * `coverImgUrl` 允许空串——**那是「该源拿不到封面」，不是失败**：Q 音榜单索引接口
- * `musicToplist.ToplistInfoServer.GetToplist` 匿名恒拒（code 500005，qqDirect 实测记录），
- * 日更接口只回 `update_time`/`comment_num`，没有封面字段。消费端必须自带**兜底封面**
+ * 榜单元数据（#465）：榜单详情页 Hero 用。榜单是**源内实体**（身份 = 源 + 源内 id），与专辑同构。`coverImgUrl` 允许空串——
+ * 那是「该源拿不到封面」（QQ GetToplist 匿名恒拒 code 500005、日更接口无封面字段），不是失败；消费端必须自带**兜底封面**
  * （移动端 components/CoverFallback），不得把空封面渲染成加载失败。
  */
 export interface ToplistDetail {
@@ -179,22 +164,9 @@ export async function getToplistDetailRouted(
 }
 
 /**
- * 单源专辑详情腿（#407 P0）：能力缺失与抓取失败给**可区分**语义。
- *
- * 旧形态是页面里写死 `getDirectClient('netease')!.getAlbumDetail!(id)`（双重断言）——
- * 无客户端、无能力、返回 null 三种情况静默降级成同一屏「路由参数 + 暂无歌曲」，
- * 与「专辑真的没歌」「链接坏了」不可区分，也没有重试入口。
- *
- * 与 `getToplistSongs` 的差异：那条腿没有 UI 三态需求（抛错即可），而专辑页要**按
- * 失败原因选文案**（「该来源暂不支持专辑详情」vs「加载失败，重试」），所以这里返回
- * 判别联合而不是抛错。
- *
- * 未做（P0 之外）：#407 方案 7 的「按专辑名 + 歌手走各源 searchSongs 严格匹配补曲目」
- * 兜底——当前只有网易实现专辑详情，`unsupported` 在真实链路上不可达；等逐源专辑腿
- * （P1+）落地时一并实现（届时签名需要带上专辑名/歌手，不再只有 id）。
- */
-/**
- * 按 id 取歌手信息（#417）：未实现该能力的源返回 null（调用方保留入口带来的名字/头像）。
+ * 旧形态是页面里写死 `getDirectClient('netease')!.getAlbumDetail!(id)`（双重断言）——无客户端、无
+ * 能力、返回 null 三种情况静默降级成同一屏「路由参数 + 暂无歌曲」，与「专辑真的没歌」「链接坏了」不
+ * 可区分，也没有重试入口。
  */
 export async function getArtistInfoRouted(source: SourceKey, artistId: string): Promise<Artist | null> {
   const client = getDirectClient(source);
@@ -238,29 +210,21 @@ export interface ContentCache {
 }
 
 /**
- * 单源直连客户端能力面（#239/#240）：
- * - 基础三能力（searchSongs / resolvePlayableUrl / resolveUrlInfo）；
- * - 内容能力平铺进客户端，**不设 content 子对象**（search 本身也是内容能力）；
- *   能力探测 = 方法存在性（`client.getToplists?`），与 hasCapability 同构；
- * - 命名规则：搜索 `search<实体>s` / 列表 `get<实体>s` / 详情 `get<实体>Detail` /
- *   播放 `resolve*`（批量加复数）；
- * - 内容方法统一返回 `Song`（rank 由消费方按索引推导，HotlistSong 已废）。
- * 全部可选：各源按自身能力实现子集。
+ * 单源直连客户端能力面（#239/#240）：基础三能力（searchSongs / resolvePlayableUrl / resolveUrlInfo）+ 内容能力平铺进客户端
+ * （**不设 content 子对象**）。内容方法统一返回 `Song`（rank 由消费方按索引推导，HotlistSong 已废）。全部可选：各源按自身能力实现子集。
  */
 export interface DirectSourceClient {
   key: SourceKey;
-  // ── 基础能力 ─────────────────────────────────────────────────────
-  /** 源站搜索（直连）。未实现则不提供。
-   *  `opts.signal`（#556）：可选的取消信号——由**墙的持有者**（解析链尾巴的
-   *  严格搜索腿）传入，腿到点或链总预算耗尽即 abort。未声明该参数的源不受影响
-   *  （函数形参少在 TS 里仍满足本签名，与 resolvePlayableUrl 同一约定）。 */
+  /**
+   * ── 基础能力 
+   * ─────────────────────────────────────────────────────
+   * 源站搜索（直连）。
+   */
   searchSongs?: (keyword: string, page: number, opts?: TransportCallOptions) => Promise<Song[]>;
   /**
    * 播放 URL 直连解析；无版权/VIP 返回 ''（交给换元层）。
-   * `opts.signal`：可选的取消信号——由**墙的持有者**（directCall 的 3s 直连墙）传入，
-   * 墙到点即 abort，把「放弃等待」变成真的停掉底层请求（#408）。
-   * 未实现该参数的源（如汽水：其分享页不经 transport 接缝）不受影响，函数形参少
-   * 在 TS 里仍满足本签名。
+   * `opts.signal`：可选的取消信号——由**墙的持有者**（directCall 的 3s 直连墙）传入，墙到点即 
+   * abort，把「放弃等待」变成真的停掉底层请求（#408）。
    */
   resolvePlayableUrl?: (song: Song, opts?: TransportCallOptions) => Promise<string>;
   /** 权威完整时长验证字段（T12 预检使用；按源覆盖，可不提供）。 */
@@ -269,11 +233,9 @@ export interface DirectSourceClient {
   /** 歌手搜索（searchNeteaseArtists 迁入）。 */
   searchArtists?: (keyword: string, limit: number) => Promise<Artist[]>;
   /**
-   * 关键词搜索歌单（#415）。与 `getPlaylists`（广场分类列表，无关键词）能力不重叠。
-   *
-   * `offset` 不是可选装饰：网易 `cloudsearch/pc` **不返回 `hasMore`**，翻页终止只能由
-   * `offset + limit < playlistCount` 推导，返回值里的 `more` 就是该推导的落点
-   * （形状与同族 `getPlaylists` 逐字一致）；`offset` 越界 = `more:false`，**不是错误**。
+   * `offset` 不是可选装饰：网易 `cloudsearch/pc` **不返回 `hasMore`**，翻页终止只能由`offset + 
+   * limit < playlistCount` 推导，返回值里的 `more` 就是该推导的落点（形状与同族 `getPlaylists` 逐字
+   * 一致）；`offset` 越界 = `more:false`，**不是错误**。
    */
   searchPlaylists?: (
     keyword: string,
@@ -308,14 +270,10 @@ export interface DirectSourceClient {
   /** 歌手歌曲（分页；order: hot|time）。 */
   getArtistSongs?: (artistId: string, offset: number, limit: number, order?: string) => Promise<{ songs: Song[]; total: number }>;
 /**
-   * 歌手专辑（分页；#278 保留独立方法：桌面歌手页专辑年表需无限滚动）。
-   *
-   * #417：**翻页只以 `more` 为准**。上游 `total` 在 `more=true` 时被 limit 截断或直接
-   * 缺失（实测 `/api/artist/albums/5196?limit=3` 根本没有 `total` 字段），拿它渲染
-   * 「共 N 张专辑」必然偏小；故 `total` 用 `number | null` 区分「未知」与「确实是 0」
-   * ——`more=false` 时是精确值，`more=true` 时为 `null`。
-   * `ok` 区分「失败」与「该歌手确实零专辑」：前者页面给「加载失败，重试」。
-   */
+ * 上游 `total` 在 `more=true` 时被 limit 截断或直接缺失（实测 `/api/artist/albums/5196?limit=3` 根
+ * 本没有 `total` 字段），拿它渲染「共 N 张专辑」必然偏小；故 `total` 用 `number | null` 区分「未知
+ * 」与「确实是 0」——`more=false` 时是精确值，`more=true` 时为 `null`。
+ */
   getArtistAlbums?: (artistId: string, offset: number, limit: number) => Promise<ArtistAlbumsPage>;
   /** 歌单列表（cat + order + 分页）。 */
   getPlaylists?: (cat: string, order: string, offset: number, limit: number) => Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }>;
@@ -329,9 +287,8 @@ export interface DirectSourceClient {
 
 /**
  * IPC 暴露的内容方法清单（#240：契约从客户端接口派生的唯一手写物）。
- * 每方法在 IPC 层带 `source: SourceKey` 首参（`musicApi:call('getToplists', 'netease')`），
- * 主进程分发表按清单循环泛型分派到 `getDirectClient(source)`（未实现源抛错）。
- * `satisfies` 钉死清单 ⊆ 客户端接口方法名（加方法漏登记 → 编译期必报错）。
+ * 每方法在 IPC 层带 `source: SourceKey` 首参（`musicApi:call('getToplists', 'netease')`），主进程分
+ * 发表按清单循环泛型分派到 `getDirectClient(source)`（未实现源抛错）。
  */
 export const CONTENT_METHODS = [
   'searchSongs',
@@ -357,11 +314,9 @@ export const CONTENT_METHODS = [
 export type ContentMethod = (typeof CONTENT_METHODS)[number];
 
 /**
- * 反向断言（#407 顺手补的守卫）：上面的 `satisfies` 只保证「清单 ⊆ 接口」——
- * **接口加了方法却漏登记清单不报错**，该方法会静默不进桌面 IPC
- * （`src/main/ipc/musicApiHandlers.ts` 按这份清单循环分派）。
- * 这里断言「接口方法 = 清单 ∪ 基础能力」的差集为空，把漏登记变成编译期错误。
- * 新增**非内容**的基础能力时，把名字加进 `BasicCapability` 即可。
+ * 反向断言（#407 顺手补的守卫）：上面的 `satisfies` 只保证「清单 ⊆ 接口」——**接口加了方法却漏登
+ * 记清单不报错**，该方法会静默不进桌面 IPC（`src/main/ipc/musicApiHandlers.ts` 按这份清单循环分派）
+ * 。
  */
 type BasicCapability = 'key' | 'resolvePlayableUrl' | 'resolveUrlInfo';
 type AssertNever<T extends never> = T;
@@ -448,20 +403,12 @@ export function sanitizeSourceModes(
 // ── 路由（单一回退链） ───────────────────────────────────────────────
 
 // ── tier3 插槽（spec #146 决策 2：预留，不实现；#144 独立立项实施）────────
-//
-// tier3 第三方解析源（订阅执行器）在「官方直连失败」与「换元」之间插槽，
-// 默认关闭。本 spec 只预留开关位与插槽 hook，不实现解析逻辑；#144 落地时
-// 注入 resolver 并开启开关即可，回退链无需再改。
+// tier3 第三方解析源（订阅执行器）在「官方直连失败」与「换元」之间插槽，默认关闭。
 
 /**
  * tier3 解析产物（#361）：URL + 护栏**证据等级**。
- * 护栏决策在 tier3 执行器内按源逐条应用（不过就换下一个源），路由层只记录
- * 结果等级用于诊断 / 后续 UI 决策，不重复判定。
- *
- * `commit`（#362）：交付回调——路由层在 tier3 腿预算内真正采纳该候选时调用一次。
- * resolver 内部不再直接自增「命中」：预算超时被丢弃的迟到命中只有产出、没有交付，
- * 否则设置页会出现「命中数 > 实际交付数」（实测 hits=17 / 实际 0）。
- * 自定义 resolver（测试/宿主）可省略。
+ * resolver 内部不再直接自增「命中」：预算超时被丢弃的迟到命中只有产出、没有交付，否则设置页会出现「
+ * 命中数 > 实际交付数」（实测 hits=17 / 实际 0）。
  */
 export interface Tier3Resolution {
   url: string;
@@ -532,13 +479,8 @@ function newTraceCtx(): TraceCtx {
   };
 }
 
-// ── 腿墙（#593）────────────────────────────────────────────────────────────
-//
-// clamp + AbortController + budget.onExpire + race + timer 这套「腿墙」此前在四条腿上
-// 逐字各持一份（直连腿 / tier3 腿 / 严格搜索腿 / 直连取证腿；腿数从 3 涨到 4）。
-// 墙的语义从此只在这里维护一次：**本腿墙钟 = min(本腿局部墙, 解析链总预算剩余)**，
-// 到点或预算耗尽都按各腿的「放弃」语义收口。各腿的语义差异保留为显式入口
-// （见 runWithLegWall 的 options）——它们是口径不同，不是同一个模板的特例。
+// ── 腿墙（#593）
+// ────────────────────────────────────────────────────────────
 
 /** 交给腿的「墙的持有者」：本腿可用墙钟（已 clamp 总预算）与到点/预算耗尽即 abort 的信号。 */
 interface LegWall {
@@ -563,12 +505,8 @@ interface LegWallAbandon {
 interface LegWallOptions {
   /**
    * **排队不计时、槽位到手才起计**（tier3 腿；ADR 2026-09-25 决策 8）。
-   *
-   * 在 controller 建好后**同步**调用，返回「墙才开始计时」的那个 promise：墙与 clamp 都等它
-   * 结算。被排队的调用方若从调用那刻起计墙，会在没打过任何上游的情况下先超时（切歌场景
-   * P50 反而退化）。其余三条腿没有排队闸门，走默认「调用即起计」——那是**另一条口径**，
-   * 不是这个模板的特例。注意解析链总预算（墙钟、不暂停）仍照走排队时间，由 budget 自己的
-   * timer 负责；排队期间耗尽时本模块已挂好的 onBudgetExpire 仍会 abort 在飞源。
+   * 注意解析链总预算（墙钟、不暂停）仍照走排队时间，由 budget 自己的 timer 负责；排队期间耗尽时本模
+   * 块已挂好的 onBudgetExpire 仍会 abort 在飞源。
    */
   startGate?: (signal: AbortSignal) => Promise<unknown>;
   /**
@@ -635,12 +573,11 @@ async function runWithLegWall<T>(
 
 const DIRECT_TIMED_OUT = Symbol('direct-timed-out');
 
-/** 直连腿计时 + 墙钟包装：到点即视为该腿失败（进 tier3 兜底），底层请求自然结束、
- *  结果丢弃——与 tier3 单源超时同一语义（withSourceDeadline）。ctx 为 null 时
- *  仍施加墙（护栏不能因关闭 trace 而消失），只是不做计时。
- *
- *  #424 / #593：本腿墙 = min(DIRECT_WALL_MS, 解析链总预算剩余)，预算已尽则不发起调用；
- *  墙的持有者、abort 与计时统一由 runWithLegWall 持有（四条腿共用）。 */
+/**
+ * 直连腿计时 + 墙钟包装：到点即视为该腿失败（进 tier3 兜底），底层请求自然结束、结果丢弃——与 
+ * tier3 单源超时同一语义（withSourceDeadline）。
+ * ctx 为 null 时仍施加墙（护栏不能因关闭 trace 而消失），只是不做计时。
+ */
 async function timedDirectCall<T>(
   ctx: TraceCtx | null,
   client: DirectSourceClient,
@@ -757,14 +694,8 @@ async function tryTier3Search(keyword: string, page: number, source: SourceKey, 
 //（超时按未命中处理，结果丢弃）。
 
 // ── tier3 同歌去重（#172 评论：同歌并行重复解析）──────────────────────
-//
-// 前台播放解析与后台预取（prefetchNextSong）会并行解析同一首歌，各自独立
-// 等满预算：后台 3s 已命中，前台还在等自己那条 6s 预算且中途不查缓存，
-// 实测《我好想你》白等 ~10s。以歌曲身份为键共享同一条底层 resolver
-// Promise：先到先得、后来者直接 join，第三方上游只被打一次。
-//
-// 键在**底层 Promise 结束**（含失败）后才移除——预算超时的调用方放弃等待
-// 后，迟到的命中仍能被同键后续调用方（如 fresh 重试的 tier3 腿）接住。
+// 前台播放解析与后台预取（prefetchNextSong）会并行解析同一首歌，各自独立等满预算：后台 3s 已命中，
+// 前台还在等自己那条 6s 预算且中途不查缓存，实测《我好想你》白等 ~10s。
 interface Tier3InflightRun {
   /** 槽位到手（排队结束）时 resolve；调用方的 6s 预算从这里开始计（ADR 决策 8）。 */
   started: Promise<void>;
@@ -778,13 +709,8 @@ interface Tier3InflightRun {
 const tier3Inflight = new Map<string, Tier3InflightRun>();
 
 // ── 跨歌全局在飞上限 K=3（ADR 2026-09-25 决策 8）────────────────────
-//
 // 并发会放大「多首并发解析」这个既有乘数：串行下上游在飞数 = 在飞歌曲数。
-// 批量下载（并发 3）、快速连续切歌、失败跳歌链都能同时压多条解析，而此前
-// **跨歌上界不存在**（只有 `tier3Inflight` 的同歌去重）。#388 实测 qq 搜索在
-// 200ms 间隔下 12 次里 10 次撞 `code=2001` 速率墙——单源速率上限是真实约束。
-// 取 3 与既有下载并发 `DEFAULT_MAX_CONCURRENT` 同量级（第三方主机通常 2–3 台，
-// 「每台一条在飞」即可）。
+// #388 实测 qq 搜索在 200ms 间隔下 12 次里 10 次撞 `code=2001` 速率墙——单源速率上限是真实约束。
 const MAX_TIER3_IN_FLIGHT = 3;
 let tier3InFlightCount = 0;
 const tier3Queue: (() => void)[] = [];
@@ -937,9 +863,8 @@ async function tryTier3(
         });
       },
       // 腿预算再取 min(6s, 解析链总预算的剩余)，于是「试听换完整版」的第二条 tier3 腿只吃剩余额度。
-      // #424：但**解析链总预算是墙钟、照走排队时间**——否则三个槽位被占满时整链会无界等待，
-      // 「链总在 T 毫秒内结算」就不成立了。两条口径各管一层：排队期间预算耗尽时，模块里已挂好的
-      // onBudgetExpire 仍会 abort 在飞源并记「放弃观测」。
+      // #424：但**解析链总预算是墙钟、照走排队时间**——否则三个槽位被占满时整链会无界等待，「链总
+      // 在 T 毫秒内结算」就不成立了。
       abandon: {
         // 腿预算到点 = 「放弃观测」（resolver 里仍在跑的源按 abandoned 记账，#398 决策 6；迟到命中
         // 丢弃）——它**不硬停源**（硬停源是解析链总预算的语义），故覆盖缺省的 abort。
@@ -984,25 +909,8 @@ async function tryTier3Full(
 
 /**
  * **严格搜索腿**（#544 / #556）：直连与 tier3 都没拿到 URL 时解析链的最后一条腿。
- *
- * 这条规则此前在桌面的 4 个调用点各抄了一份弱化版
- * （`playerStore` 的播放与歌词、`DiscoverPageV2`、`songCoverRefresh`）：
- * 「搜索 → findExactMatch → 取 hit.url」，**没有**下面这三条守卫，也不写缓存。
- * core 的 `refreshSongResource` 一直有完整规则，但只有 1 个消费者（移动端），
- * 深 module 被绕过了。
- *
- * 现在守卫收敛到 `songResourceRefresh`：非 http / 旧签名死链 / audioTag=invalid
- * 一律不采用；采用后写回预取缓存（下次 0 等待）；nonFull 保留。
- *
- * **#556 的两处收口**：
- * - **零适配器**：主机此前要 `setStrictSearch` 注入一份「搜索」实现，但那两份实现
- *   与 core 自己的 `searchSongsRouted` 逐字等价（桌面 `resolvePlayableSongRouted`
- *   本就在主进程跑）——删掉模块级插槽，直接用 core 的路由搜索；
- * - **纳入整链预算**：腿墙 `SEARCH_LEG_WALL_MS` 取 `min(本腿墙, 链总预算剩余)`，
- *   预算耗尽则连上游都不打（与 `tryTier3` 同口径）。
- *
- * 不变量与 `refreshSongResource` 一致：**拿不到就返回 null**，
- * 调用方继续按既有语义处理（不得用空 url 覆盖已有的有效值）。
+ * 现在守卫收敛到 `songResourceRefresh`：非 http / 旧签名死链 / audioTag=invalid 一律不采用；采用后
+ * 写回预取缓存（下次 0 等待）；nonFull 保留。
  */
 async function trySearchLeg(
   song: Song,
@@ -1071,10 +979,9 @@ async function trySearchLeg(
 }
 
 /**
- * 严格搜索（#544）：走 core 的路由搜索，与用户在搜索页看到的同一条链。
- * `opts`（#556）把链尾这次搜索的墙钟与取消信号透传下去——`searchSongsRouted`
- * 的**直连搜索跳**不套墙（#389 决策：搜索要「尽量找全」），这里约束的是**这一次**
- * 搜索的整体时限，并保证预算耗尽时不再发起新的上游调用。
+ * `opts`（#556）把链尾这次搜索的墙钟与取消信号透传下去——`searchSongsRouted`的**直连搜索跳**不套墙
+ * （#389 决策：搜索要「尽量找全」），这里约束的是**这一次**搜索的整体时限，并保证预算耗尽时不再发起
+ * 新的上游调用。
  */
 async function defaultStrictSearch(song: Song, opts?: LegOptions): Promise<Song[]> {
   const keyword = `${song.name} ${song.artist}`.trim();
@@ -1083,11 +990,10 @@ async function defaultStrictSearch(song: Song, opts?: LegOptions): Promise<Song[
   return searchSongsRouted(keyword, 1, song.sourceType, opts);
 }
 
-/** 搜索结果被探测标记为 invalid 时，即使直连返回了 URL 也优先换 tier3；
- *  tier3 未命中（未启用/未注入/全源失败）则保留直连结果，由上层按现状处理。
- *  试听版（preview/试听段）的完整版 tier3 兜底不在此函数——调用方
- *  resolvePlayableSongRouted 判定试听后统一走 tryTier3Full（命中换完整版、
- *  未命中退回直连试听并标 nonFull）。 */
+/**
+ * 试听版（preview/试听段）的完整版 tier3 兜底不在此函数——调用方 resolvePlayableSongRouted 判定试
+ * 听后统一走 tryTier3Full（命中换完整版、未命中退回直连试听并标 nonFull）。
+ */
 interface PreferredDirectUrl {
   url: string;
   /** 非空 = 该 URL 来自 tier3（护栏已过）；null = 保留直连结果。 */
@@ -1139,11 +1045,9 @@ export async function searchSongsRouted(
     throw new Error('该源暂无直连实现');
   }
   try {
-    // #389 评估结论：直连**搜索**腿暂不套墙——搜索腿语义是「尽量找全」，套墙会
-    // 静默截断列表结果（与解析腿「要么拿到 URL 要么失败」不同），需独立决策。
+    // #389 评估结论：直连**搜索**腿暂不套墙——搜索腿语义是「尽量找全」，套墙会静默截断列表结果（与
+    // 解析腿「要么拿到 URL 要么失败」不同），需独立决策。
     // 本票的墙只覆盖解析腿（resolveUrlInfo / resolvePlayableUrl）。
-    // #556：本入口只多收一个**可选**信号（链尾搜索腿的墙），不在这里施加墙——
-    // 墙的持有者是 caller（见 trySearchLeg）。
     const directSongs = await route.client.searchSongs!(query, page, opts);
     if (directSongs.length > 0) return directSongs;
     // 直连返回空也视为“未命中”，进入 tier3 搜索兜底（若启用）。
@@ -1181,14 +1085,9 @@ export async function resolvePlayableUrlRouted(song: Song, options?: ResolutionO
 }
 
 /**
- * URL 腿（IPC 暴露的另一个「直连解析腿」入口）。
- *
- * #539：此前它与 resolveRoutedInner **各写一遍**「直连 → preferTier3WhenBad → tier3 → 上抛」，
- * 并且漏了 audioTag=preview 的完整版兜底——两条入口腿的语义已经分叉。
+ * #539：此前它与 resolveRoutedInner **各写一遍**「直连 → preferTier3WhenBad → tier3 → 上抛」，并
+ * 且漏了 audioTag=preview 的完整版兜底——两条入口腿的语义已经分叉。
  * 现在它只是 resolveRoutedInner 的一层薄适配：编排只有一份，URL 腿顺带拿到完整版兜底。
- *
- * 注意：本入口不产出 nonFull / via / guard（接口只返回 URL 字符串），
- * 需要完整信息的调用方应直接用 resolvePlayableSongRouted。
  */
 async function resolvePlayableUrlInner(song: Song, budget: ResolutionBudget): Promise<string> {
   // ctx 传 null：本入口不参与 trace（保持既有行为——URL 腿从未落 trace）。
@@ -1315,12 +1214,9 @@ export function setDirectValidator(fn: DirectValidator | null): void {
 }
 
 /**
- * 直连腿播放时时长取证（#392）：仅当「该源**无权威时长**（未实现 resolveUrlInfo，
- * 即 netease / soda 之外）+ 标称时长已知」时发起**一次** Range。netease / soda
- * 有权威 playTime，走既有 classifyLength 路径，**不增加任何请求**。
+ * 直连腿播放时时长取证（#392）：仅当「该源**无权威时长**（未实现 resolveUrlInfo，即 netease / soda 
+ * 之外）+ 标称时长已知」时发起**一次** Range。
  * 结论只用于 nonFull 标记，不改播放路径；证据不足一律 fail-open（见 directValidation）。
- *
- * 成本在 **3s 直连墙之外**（成功路径追加 ≤1.5s Range）：失败路径的上界不变（3s 墙 + tier3 6s）。
  */
 async function validateDirectLeg(
   song: Song,
@@ -1353,13 +1249,9 @@ async function validateDirectLeg(
 }
 
 /**
- * 可播 URL 的**唯一出口**（#622）：四条腿（直连 / 权威时长 / tier3 / 严格搜索）与预取命中
- * 都从这里出去，所以 URL 的编码归一只做在这一处。
- *
- * 成因：汽水 CDN 直链把 `cd=0|0|0|5` 原样吐出来，未编码的 `|` 在 JS 侧一路放行（WHATWG URL
- * 允许 query 里出现它），但 `java.net.URI` 按 RFC 3986 判它非法——移动端
- * `File.downloadFileAsync` 与 ExoPlayer 都在原生层抛转换失败。播放链与两条下载链都吃本出口，
- * 所以宿主侧不再各自补一遍（补在调用点＝两处口径，迟早漂）。
+ * 可播 URL 的**唯一出口**（#622）：四条腿（直连 / 权威时长 / tier3 / 严格搜索）与预取命中都从这里出
+ * 去，所以 URL 的编码归一只做在这一处。
+ * 播放链与两条下载链都吃本出口，所以宿主侧不再各自补一遍（补在调用点＝两处口径，迟早漂）。
  */
 async function resolveRoutedInner(
   song: Song,
@@ -1371,21 +1263,17 @@ async function resolveRoutedInner(
 }
 
 /**
- * 模式感知播放解析（带完整时长校验，T12 #158）：
- * 直连客户端若有 resolveUrlInfo（权威 playTime/size/br/fee/payed），用它做
- * 试听版判定（时长比 <0.5 → nonFull）；否则退回 resolvePlayableUrl。
- * 空 URL（无版权/VIP）原样上抛（nonFull=false），由换元层处理；
- * 直连失败且 tier3 未命中 = 上抛（D2 语义）。
+ * 模式感知播放解析（带完整时长校验，T12 #158）：直连客户端若有 resolveUrlInfo（权威 
+ * playTime/size/br/fee/payed），用它做试听版判定（时长比 <0.5 → nonFull）；否则退回 
+ * resolvePlayableUrl。
  */
 async function resolveChainInner(
   song: Song,
   ctx: TraceCtx | null,
   budget: ResolutionBudget,
 ): Promise<RoutedPlayable> {
-  // 预取缓存命中（探测阶段已解析并验证过的直链，30min TTL）→ 0 等待直接播，
-  // 绝不等待预取队列；未命中才实时走完整解析链。
-  // 命中且 nonFull（试听版）→ 也走 tier3 兜底尝试拿完整版（用户决策：试听无意义，
-  // 兜底可能拿完整；tier3 未配置/未命中则退回缓存直连试听）。
+  // 命中且 nonFull（试听版）→ 也走 tier3 兜底尝试拿完整版（用户决策：试听无意义，兜底可能拿完整；
+  // tier3 未配置/未命中则退回缓存直连试听）。
   const prefetched = getPrefetchedUrl(song);
   if (prefetched) {
     if (ctx) {

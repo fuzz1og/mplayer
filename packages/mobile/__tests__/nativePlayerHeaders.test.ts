@@ -1,13 +1,7 @@
 /**
  * Android 原生主引擎的「每源请求头」传递链（#592）。
- *
- * 链：`buildTrack` → `Track.headers` → `patchQueue`/`loadQueue` → （Kotlin）
- * `TrackInput.headers` → `TrackRecord` → `QueueStore` → `ExpiryGuard` → `DataSpec.withRequestHeaders`。
- * 本文件只断言 **JS 这一端交出去的头**（Kotlin 侧无测试框架，见 ADR
- * `2026-10-08-per-source-request-headers.md`；原生入参/注入是源码文本守卫 + 真机取证的活）。
- *
- * 全局 `__tests__/setup.ts` 已把 `expo` 的 `requireOptionalNativeModule` 打成 null；
- * `buildTrack` 不碰原生桥，所以这里不需要假原生模块。
+ * 本文件只断言 **JS 这一端交出去的头**（Kotlin 侧无测试框架，见 
+ * ADR`2026-10-08-per-source-request-headers.md`；原生入参/注入是源码文本守卫 + 真机取证的活）。
  */
 import { describe, expect, it, vi } from 'vitest';
 import { BROWSER_UA } from '@mplayer/core';

@@ -21,11 +21,8 @@ beforeEach(() => { setDirectValidator(null); });
 
 /**
  * T12 试听版检测 + 可播性预检测试（#158）。
- * - classifyLength / isTrialUrlInfo：纯函数，独立边界向量（0.95 完整 / 0.5 试听分界）。
- * - resolvePlayableSongRouted：接缝矩阵（UrlInfo trial → nonFull；无 UrlInfo →
- *   resolvePlayableUrl；空 URL → 换元层；直连失败且 tier3 未命中 → 上抛）。
- * #361 起解析结果带 `via` / `guard`：直连腿恒为 `direct` / `none`，
- * tier3 腿为 `tier3` + 护栏证据等级。
+ * #361 起解析结果带 `via` / `guard`：直连腿恒为 `direct` / `none`，tier3 腿为 `tier3` + 护栏证据等
+ * 级。
  */
 
 const song = (duration = 240, overrides: Partial<Song> = {}): Song => ({
@@ -93,9 +90,8 @@ describe('classifyLength 完整时长校验', () => {
 
 /**
  * #539：试听判定的**唯一实现**。
- * 此前 sourceRouter 的三个调用点各写一套布尔式（预取 nonFull / isTrialUrlInfo||audioTag /
- * 纯 audioTag），其中一条入口腿还漏了 audioTag，两条腿语义分叉。这里用矩阵钉死：
- * 三个信号任一命中即试听，且三者互不掩盖。
+ * 此前 sourceRouter 的三个调用点各写一套布尔式（预取 nonFull / isTrialUrlInfo||audioTag /纯 
+ * audioTag），其中一条入口腿还漏了 audioTag，两条腿语义分叉。
  */
 describe('isNonFullDirect（#539 试听判定唯一来源）', () => {
   const info = (playTimeMs: number): UrlInfo => ({

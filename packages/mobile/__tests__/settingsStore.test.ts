@@ -4,9 +4,8 @@ import { setSourceModes, getSourceMode, loadSourceModes, setTier3Enabled, getTie
 import { useSettingsStore } from '../stores/settingsStore';
 
 /**
- * settingsStore ↔ core 来源开关双向同步测试（T01）：
- * - core 变更 → persister 镜像进 store（persist 中间件负责 AsyncStorage 落盘）；
- * - 启动重水合 → onRehydrateStorage 回灌 core 路由。
+ * settingsStore ↔ core 来源开关双向同步测试（T01）：- core 变更 → persister 镜像进 store（persist
+ * 中间件负责 AsyncStorage 落盘）；- 启动重水合 → onRehydrateStorage 回灌 core 路由。
  * 同时覆盖 tier3 订阅状态（#144）的双向同步。
  */
 

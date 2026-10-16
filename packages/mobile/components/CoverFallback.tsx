@@ -1,11 +1,7 @@
 /**
  * 兜底封面（#465）：给「源拿不到封面」的实体**生成**一张确定性封面。
- *
- * 为什么是生成而不是塞一张位图：需要一个处处可用、主题自适应、不随裁切比例失真的缺省视觉。
- * 典型来源是 Q 音榜单——它的榜单索引接口匿名恒拒（code 500005，qqDirect 实测记录），
- * 只有日更接口的 update_time，没有封面字段。**空封面不是加载失败**，不该渲染成破图或错误态。
- *
- * 确定性算法在 coverFallbackSeed.ts（纯内核、node 可测）；这里只做渲染。
+ * 典型来源是 Q 音榜单——它的榜单索引接口匿名恒拒（code 500005，qqDirect 实测记录），只有日更接口的
+ * update_time，没有封面字段。
  */
 import React, { useMemo } from 'react';
 import { Text, StyleSheet } from 'react-native';

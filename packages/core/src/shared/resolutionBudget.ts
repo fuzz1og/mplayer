@@ -1,31 +1,9 @@
 import { RESOLUTION_CHAIN_BUDGET_MS } from './playbackBudgets.js';
 
 /**
- * **解析链总预算**（resolution budget，#424）：一次 `resolvePlayableSongRouted` /
- * `resolvePlayableUrlRouted` 调用创建**一个** budget，作为参数贯穿整条链
- * （直连腿 → tier3 腿 → 第二条 tier3 腿），而不是模块级全局态——并发解析多首歌时
- * 各自计时、互不干扰。
- *
- * ⚠️ **术语消歧**：既有文档（ADR-0014 决策 2、`TIER3_CHAIN_BUDGET_MS`）里的
- * 「整链 6s 预算」指 **tier3 腿预算**——那是「tier3 的源遍历链」；本模块的
- * `RESOLUTION_CHAIN_BUDGET_MS`（9s）是**整条解析链**的 deadline，两层不同、叠加生效。
  * 为避免一此词两义，本模块与其文档一律称后者为「**解析链总预算**」。
- *
- * 它补的是 2026-09-27-playback-budget-layers 四层时限里缺的第五层：**一次解析链的总上界**。
- * 此前「一首歌最多让用户等多久」不存在于任何一处，只能把 5 个常量相加推出来
- * （直连 3s + tier3 6s + 第二条 tier3 腿 6s = 最坏 15s），失败后 skipGuard 还会
- * fresh 重试 + 自动跳 3 首，用户视角是约两分钟的连续无声期。
- *
- * 三条语义（与各腿的局部墙**叠加**，不取代）：
- * 1. **取小**：每条腿保留自己的局部墙，实际用 `min(本腿墙, 剩余预算)`，各腿局部墙的
- *    语义不变（单源硬墙、直连 3s 墙仍然生效）。
- * 2. **耗尽即 abort**：预算到点触发 `onExpire` 监听（直连腿 abort 底层请求；tier3 腿
- *    由 resolver 的 `control.signal` 停掉在飞源并中止遍历），链本身以
- *    {@link ResolutionBudgetExhaustedError} reject，不再无限等。
- * 3. **它是墙钟，不暂停**。K=3 槽位排队**计入**本预算——否则三个槽位被占满时整链会
- *    **无界等待**（「链总在 T 毫秒内结算」就不成立了）。ADR 2026-09-25 决策 8 的
- *    「排队不计入预算」仍然成立，但**只针对 tier3 腿预算**：腿预算从**槽位到手**起计
- *    （见 `sourceRouter.tryTier3`），两条口径各管一层、互不干扰。
+ * K=3 槽位排队**计入**本预算——否则三个槽位被占满时整链会**无界等待**（「链总在 T 毫秒内结算」就不
+ * 成立了）。
  */
 
 /** 解析链总预算耗尽的哨兵错误：与「源失败」「单源墙超时」「tier3 腿预算用尽」都不同——

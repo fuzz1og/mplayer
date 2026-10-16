@@ -12,17 +12,8 @@ import { RECOMMEND_BATCH_SIZE, RECOMMEND_GRID_COLS } from './recommendMetrics';
 
 /**
  * 推荐页冷启动骨架屏（#318）：**逐段镜像真实布局**。
- *
- * 与 `app/(tabs)/recommend.tsx` 共用同一套度量：chrome 让位
- * （topChromeHeight/bottomChromeHeight/SECTION_TAIL_PADDING）、节标题 + 两个动作位、
- * `SongRow` 行高与分隔线、猜你喜欢 2 列卡片（`gridCardWidth` 单一公式、列数取
- * recommendMetrics）。行数取 RECOMMEND_BATCH_SIZE，数据到达时不跳版。
- *
- * 背景必须自己画（`animatedBg`）：loading 分支是**早退**，不经过页面的
- * `Animated.ScrollView`——而页面底色恰恰挂在它身上。不画就会露出 expo-router
- * 导航容器自带的浅色默认底 rgb(242,242,242)（`theme/AnimatedBg.tsx` 头注释记录过
- * 同一坑），暗色模式下表现为「骨架屏没适配暗色」。真机冷启动连拍确认：
- * 修前白底 + 深色骨架块，修后与真实页面同底（含主题切换过渡）。
+ * 背景必须自己画（`animatedBg`）：loading 分支是**早退**，不经过页面的`Animated.ScrollView`——而页
+ * 面底色恰恰挂在它身上。
  */
 export default function RecommendSkeleton() {
   const insets = useSafeAreaInsets();

@@ -3,23 +3,12 @@ import { CONTENT_METHODS } from '@mplayer/core';
 
 /**
  * music 域 IPC 单通道分发契约（ADR-0001）。
- *
  * 桌面渲染↔主进程的 music 域收成一条 `musicApi:call`（方法名 + 参数）通道。
- * 方法集 = **基础方法集 ∪ 内容方法集 ∪ 主进程独有**（#240 契约派生）：
- * - 基础方法：仍由 core `musicApi` 门面提供，`Pick<typeof musicApi, ...>` 零重复；
- * - 内容方法：自 core `DirectSourceClient` 接口派生（CONTENT_METHODS 清单），
- *   每方法 IPC 签名带 `source: SourceKey` 首参，主进程分发表按清单循环泛型分派到
- *   `getDirectClient(source)`（未实现源抛错）——双端签名零重复，加方法 =
- *   core 客户端加方法 + CONTENT_METHODS 加名字，其余自动。
- *
  * 本文件只供类型与名字使用，不依赖 main / renderer。
  */
 
 /**
  * 基础方法清单（core `musicApi` 门面上的活方法，#279 收缩后全集）。
- * - QQ 榜单已迁 `qqDirectClient.getToplists`（#279，走内容方法集）；
- * - `getQqPlaylistSongs`（#280 歌单导入原生化，musicApi 层方法不进能力面）；
- * - `getNeteaseLyrics`（#409）：网易歌词改为播放期按 songId 直取，取代 #242 的列表内联批量取词。
  */
 export const BASE_METHODS = [
   'prefetchPlayableSong',

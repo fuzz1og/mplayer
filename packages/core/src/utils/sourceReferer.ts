@@ -1,22 +1,7 @@
 /**
- * 浏览器 UA 与「源 → 官方站点 Referer」映射（core 共享）。
- *
- * 302 解析、音频探测、播放器请求都带浏览器 UA + 按源推导的官方 Referer。
- *
- * ⚠️ **本文件原先的「源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格，网易云宽松）」是一条
- * 无出处的注释**，没有 A/B 证据，却撑起了 #592 立项、#602「未取证不得合并」与 ADR
- * `2026-10-08-per-source-request-headers.md` 的全部风险讨论。2026-10-16 用真实音频直链与
- * 真实封面 URL 打五臂对照（无头 / 对源 / 空串 / 跨源 / 假 API 域）：kugou / netease /
- * kuwo / migu 四源各 1 条音频 + 1 条封面、加 QQ 封面共 9 个真实 URL × 5 臂 = 45 次请求
- * **全部 200 且逐 URL 字节一致**——该前提**未被证实**（#647）。
- *
- * 所以这里的口径是：**带这份头是无害的、可能覆盖未测到的 CDN 档位**，而不是「不带就 403」。
- * 若日后要论证它有必要，须先拿出可复核的证据（见 `docs/agents/issue-tracker.md` 的
- * 「无出处的断言不得当事实传播」）。
- *
- * 统一放 core，避免 musicApi / audioProbe / 播放器三处各自复制、
- * 且 key 形状不一致（api.php type 参数 wy/kg 与 Song.sourceType
- * netease/kugou 混用）导致漏配。
+ * 浏览器 UA 与「源 → 官方站点 Referer」映射（core 共享）：302 解析、音频探测、播放器请求都带浏览器 UA + 按源推导的官方 Referer。
+ * ⚠️ 本文件原先的「源 CDN 防盗链校验 Referer 域名」**无出处**，却撑起了 #592 立项与 ADR `2026-10-08` 的全部风险讨论；2026-10-16 五臂实测（无头/对源/空串/跨源/假 API 域）
+ * 在 9 个真实 URL 上 45 次请求**全部 200 且字节一致**——该前提**未被证实**（#647）。口径：带这份头是无害的，不是「不带就 403」。
  */
 
 export const BROWSER_UA =
@@ -64,39 +49,9 @@ export function refererForSourceKey(sourceKey: string): string | undefined {
 }
 
 /**
- * **「每源播放/下载请求头」的唯一事实来源**（#592 结构半）。
- *
- * 为什么必须有单点：`BROWSER_UA` 与 `REFERER_BY_SOURCE` 都是本文件的私有事实，
- * 但拼装动作此前散在各宿主——移动端 `audioPlayer.ts`（expo-audio 回落路径）与
- * `downloadService.ts`（内嵌封面）各自手拼一份，core `shared/directValidation.ts`
- * （直连腿时长取证）再手拼一份。拼装点一多，「源表加了新源」这种事就只会修到其中几处。
- *
- * **Android 原生主引擎也已接本单点**（#602，已合入 master）：`packages/mobile/services/
- * nativePlayer.ts` 的 `headersFor(song, url)` 取的就是 `requestHeadersFor`（`local` /
- * `file://` 仍返回 `undefined`）→ `Track.headers` 非空 → Kotlin `TrackInput.toRecord()`
- * 拿到非空 `Map` → 原生 `ExpiryGuard` 命中 `dataSpec.withRequestHeaders`，per-item
- * UA/Referer 真的会出现在 media3 的请求上。**这段的取证仍开口**（可解析的 QQ/酷狗样本
- * 注入 + 302 跟跳存活）**已由 #634 在雷电模拟器真机上取证**（受控 probe 抓包 + 原生
- * logcat 的 `dataspecHeaders` 与注入逐字相同）；**仍开口的只剩**「QQ/酷狗真实 CDN 带头 vs
- * 不带头成功率对照」——它需要真实出口 IP + 可用签名直链，见 ADR
- * `2026-10-08-per-source-request-headers.md`「真机取证（#634）」一节的边界。代码路径不再是
- * 空壳——别按「原生从不应用头」读它。回退方式见该 ADR。
- *
- * 语义（调用方不要再叠加、也不要改写）：
- * - `User-Agent` 恒为 [BROWSER_UA]：部分 CDN 拒非浏览器 UA。
- * - `Referer` **按 `Song.sourceType`（netease/kugou/...）** 取官方站点域名；源表同时
- *   兼容 `api.php` 的 type 形状（`wy`/`kg`），两种 key 都能命中。
- * - **未知源 / `soda` / `local` / 缺省一律不带 `Referer`**——没有可冒用的官方域名时
- *   宁可不带头：空字符串 `Referer` 是「带错头」这一形态本身就该避免（是否真被拒见 #647）。
- *
- * 刻意不归入本函数的两类调用点（语义不同，别顺手改）：
- * - `audioProbe.ts` 的活性闸 / `musicApi.ts` 的歌词请求：Referer 由 **URL** 推导
- *   （`refererForUrl`，含 QQ 歌词页 / 酷狗 / 酷我歌词端点这类按 URL 的特例），
- *   与「按源」不是同一回事。
- * - 各源 API 客户端（`qqDirect`/`neteaseDirect`/`antiScrape` 等）自己的请求头：
- *   那是**接口调用**头（含 UA 轮换、签名、Cookie），不是播放/下载头。
- *
- * 每次返回**新对象**：调用方可以安全地摊开或改写，不会污染源表。
+ * **「每源播放/下载请求头」的唯一事实来源**（#592 结构半）：`BROWSER_UA` 与 `REFERER_BY_SOURCE` 都是本文件私有事实，拼装动作此前散在各宿主（移动端 `audioPlayer`/`downloadService`、core `directValidation`），
+ * 拼装点一多「源表加了新源」就只会修到其中几处。Android 原生主引擎也已接本单点（#602/#634 已真机取证，见 ADR `2026-10-08` 的边界）。
+ * 语义：`User-Agent` 恒为 [BROWSER_UA]；`Referer` 按 `Song.sourceType` 取官方域名；**未知源 / `soda` / `local` / 缺省一律不带 `Referer`**（空字符串是「带错头」）。每次返回**新对象**，调用方可安全改写。
  */
 export function requestHeadersFor(source?: string): Record<string, string> {
   const headers: Record<string, string> = { 'User-Agent': BROWSER_UA };

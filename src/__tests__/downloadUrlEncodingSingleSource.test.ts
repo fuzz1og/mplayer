@@ -3,26 +3,9 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * #622 守卫：URL 编码归一只有一个落点——core 播放解析链的出口 `resolveRoutedInner`。
- *
- * 汽水 CDN 直链带未编码的 `|`（实测 `...&cd=0|0|0|5&...`），`java.net.URI` 判它非法，
- * 移动端 `File.downloadFileAsync` 在原生层抛转换失败。修法是「取 URL 的单一落点归一」，
- * 不是「每个下载调用点各补一遍」——补在调用点就会有两份口径，迟早漂（#608 取词决策同款事故）。
- *
- * 于是这里钉三件事：
- * 1. core 里 `normalizeUrlEncoding` 的实现一份、调用点**恰好一处**，且就在解析链出口；
- * 2. 两条下载链都只从那个出口取 URL（桌面不得再留 `getSodaAudioUrl` 这种旁路）；
- * 3. 任何宿主侧文件不得自带补码（`%7C` / `encodeURI` / `replace(/\|/…)`）——那是第二处归一。
- *
- * **#635 收紧**：第 1 条原先是「文件列表」粒度，在同一文件内按腿各调一次仍全绿。现在改成
- * **数调用点**，同文件第二条腿也会红。
- *
- * **#635 另修一处 + 明确一处不修**：曾一度把 `normalizeUrlEncoding` 补进汽水「生产者」
- * `musicApi.getSodaAudioUrl`（含缓存命中返回的 `cached.url`）——但 ADR 的否决表**明确否掉**
- * 「补在汽水 URL 的生产者」，且那版只归一了新解析路径、缓存命中仍漏 `|`（评审实证）。
- * 现按 ADR 归位：归一只在 core 出口一处；桌面 IPC 缓存腿 `getSodaPlayableUrl` 不经出口、
- * 拿到未归一裸直链，是 ADR 后果 1 记录的**已知边界**（Node/axios 栈自己转义，不走
- * `java.net.URI` 原生解析），宿主侧不得为其补码（第 3 条）。
+ * #622 守卫：URL 编码归一只有一个落点——core 播放解析链出口 `resolveRoutedInner`。汽水 CDN 直链带未编码的 `|`（实测 `...&cd=0|0|0|5&...`），`java.net.URI` 判非法、移动端 `File.downloadFileAsync` 抛转换失败。
+ * 钉三件事：① `normalizeUrlEncoding` 实现一份、调用点**恰好一处**（#635 收紧为**数调用点**，同文件第二条腿也红）；② 两条下载链都只从该出口取 URL；③ 任何宿主侧文件不得自带补码（那是第二处归一）。
+ * **#635 另修一处 + 明确一处不修**：ADR 否决表明确否掉「补在汽水生产者 `getSodaAudioUrl`」；桌面 IPC 腿 `getSodaPlayableUrl` 不经出口、拿未归一裸直链是 ADR 后果 1 的**已知边界**（Node/axios 自转义），宿主侧不得为其补码。
  */
 const ROOT = path.resolve(__dirname, '../..');
 

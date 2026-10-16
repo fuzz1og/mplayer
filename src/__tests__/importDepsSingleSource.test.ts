@@ -4,11 +4,7 @@ import path from 'path';
 
 /**
  * #594 守卫：链接导入的写入 deps 装配只允许 core 一份。
- *
- * 判据取 issue 的「删除测试」：此前 renderer importService 与 mobile playlistExport
- * 各自内联同一段 addSong/addSongs（回报真实新增数、ok=false 抛错），删掉任意一份
- * 另一份原样可用——是复制品，不是被复用的能力。装配下沉 core importDepsFor 后，
- * 两端只准剩「注入各自 I/O」的转调；本测试把「两份」钉成「一份」。
+ * 装配下沉 core importDepsFor 后，两端只准剩「注入各自 I/O」的转调；本测试把「两份」钉成「一份」。
  */
 const ROOT = path.resolve(__dirname, '../..');
 

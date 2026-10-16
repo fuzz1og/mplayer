@@ -5,20 +5,9 @@ import { md5 } from '../utils/hash.js';
 import { getUserAgent } from './antiScrape.js';
 
 /**
- * 千千（太合）直连客户端（T04 #150）。
- *
- * 直连替代自建 API 的三类请求（匿名，只需 MD5 签名 + referer/from 头，无需 cookie）：
- * - 搜索：`GET music.91q.com/v1/search`，query `{word, type:'1', pageNo, pageSize, appid}`
- *   + sign，响应 `data.typeTrack[]`→ Song；其中 `lyric` 字段为明文 LRC URL，映射到
- *   Song.lrc，播放层沿用 musicApi.getLyrics(lrcUrl) 直连拉取歌词。
- * - 播放 URL：`GET music.91q.com/v1/song/tracklink`，query `{TSID, appid, rate}` + sign，
- *   取 `data.path` 或 `data.trail_audio_info.path`；无有效 URL（VIP/无版权）返回空串
- *   交给换元层 / 明确不可播。
- *
- * 签名（musicdl qianqian.py）：`sign = MD5(sorted_kv + secret)`，secret=
- * `0b50b02fd0d73a9c4c8c3a781c30845f`，排序键先补 `timestamp`。纯 JS RN 可用。
- *
- * 出网统一经 transport.request（T01 接缝），测试注入 mock 传输驱动，双端可用。
+ * - 播放 URL：`GET music.91q.com/v1/song/tracklink`，query `{TSID, appid, rate}` + sign，取 
+ * `data.path` 或 `data.trail_audio_info.path`；无有效 URL（VIP/无版权）返回空串交给换元层 / 明确不
+ * 可播。
  */
 
 const APPID = '16073360';

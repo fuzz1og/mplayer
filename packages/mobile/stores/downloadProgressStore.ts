@@ -2,11 +2,8 @@ import { create } from 'zustand';
 
 /**
  * 下载进度的瞬时读模型（刻意不进 persist）。
- *
- * 进度是高频值：以前每个 onProgress 都写回持久化的 items 数组，一次进度 =
- * 全量 JSON 序列化 + AsyncStorage 写 + 下载页整列表重渲染。现在进度只在这里
- * 聚合，同一 key 在节流窗口内只保留一次（进度是粗粒度读模型）；持久化的
- * downloadStore 只记录状态迁移（downloading/done/error、文件名、公共目录 uri）。
+ * 进度是高频值：以前每个 onProgress 都写回持久化的 items 数组，一次进度 =全量 JSON 序列化 + 
+ * AsyncStorage 写 + 下载页整列表重渲染。
  */
 
 /** 进度上报最小间隔（毫秒）：窗口内的中间值直接丢弃，100（完成）永远放行 */

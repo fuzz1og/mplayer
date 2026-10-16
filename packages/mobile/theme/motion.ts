@@ -1,15 +1,7 @@
 /**
  * 动效弹簧预设 —— 契约见 ADR-0004（docs/adr/2026-08-23-design-motion-presets.md）
- *
- * 语义参数为 Apple 的 (ζ 阻尼比, response 秒)，RN core Animated (mass=1) 换算：
- *   stiffness = (2π/response)²    damping = 2ζ·(2π/response)
- *
- * 使用规则：
- *   - 默认 uiDefault（临界阻尼无过冲）；
- *   - 欠阻尼（sheet，轻微回弹）只随真实手势动量出现；
- *   - 可触摸动效从当前呈现值启动（Animated.stopAnimation 读值后重启），松手速度经 spring velocity 继承。
- *
- * 本文件保持零 react-native 依赖（纯数值），便于 node 环境单测。
+ * 语义参数为 Apple 的 (ζ 阻尼比, response 秒)，RN core Animated (mass=1) 换算：stiffness = 
+ * (2π/response)²    damping = 2ζ·(2π/response)
  */
 
 export interface SpringPreset {
@@ -36,9 +28,8 @@ export const DISMISS_PROJECT_RATIO = 0.35;
 
 /**
  * 位置兜底判关比例：拖动距离越过「面板高度 × 此比例」即判关，不依赖速度。
- * 与 DISMISS_PROJECT_RATIO（动量投影判关）相互独立、取或：位置判据给中低速长拖一个
- * 确定性下限，速度自采样在真机事件密度下不可靠时也不至于「整段拉不动」。
- * 缺省不启用（调用点按需传）：全屏播放器沿用原手感，只有底部弹层传它。
+ * 与 DISMISS_PROJECT_RATIO（动量投影判关）相互独立、取或：位置判据给中低速长拖一个确定性下限，速度
+ * 自采样在真机事件密度下不可靠时也不至于「整段拉不动」。
  */
 export const DISMISS_POSITION_RATIO = 0.4;
 

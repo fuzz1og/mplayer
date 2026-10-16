@@ -1,15 +1,9 @@
 import { create } from 'zustand';
 
 /**
- * 桌面端更新状态的渲染层单一来源（#579）。
- *
- * 为什么需要它：更新状态原先只存在于设置页组件内部（`UpdateSection` 的局部 state），
- * 而徽标挂在侧边栏——两个组件看不到彼此的状态。同时主进程的启动检查可能早于渲染层订阅，
- * 只靠 `update:status` push 会丢事件，所以这里再补一次 `update:getStatus` 快照。
- *
- * 合并规则（ADR `2026-10-05-update-prompt-and-silent-desktop-download.md` 不变量 I3）：
- * 首帧拉一次快照**整体覆盖**；此后只认 push。快照若晚于 push 到达，整份丢弃——
- * 否则会把更新的状态覆盖回旧值。
+ * 合并规则（ADR `2026-10-05-update-prompt-and-silent-desktop-download.md` 不变量 I3）：首帧拉一次快
+ * 照**整体覆盖**；此后只认 push。
+ * 快照若晚于 push 到达，整份丢弃——否则会把更新的状态覆盖回旧值。
  */
 
 const ipcRenderer = window.electronAPI;

@@ -4,27 +4,8 @@ import { mapTrack, musicuPost } from './qqDirect.js';
 import { cacheManager } from './memoryCacheManager.js';
 
 /**
- * QQ 音乐歌单原生模块（#280，链接导入直连化）。
- *
- * 调研依据：`docs/research/qq-playlist-api-research.md`（分支 research/qq-playlist-api，
- * 2026-08-28 当日实测）。匿名直连方案：
- * - 歌单详情：`POST u.y.qq.com/cgi-bin/musicu.fcg` + module `music.srfDissInfo.DissInfo`
- *   / `CgiGetDiss`——无登录/无 cookie/无签名/无 Referer 校验，comm 用最小头
- *   `{ct:24, cv:0}`（对 QIMEI 不敏感，本模块不依赖 QIMEI 机件）。
- *   **需签名的同族接口（srfDissDetail.SIGetDissInfo / playlist.PlaylistInfo /
- *   playlist.PlaylistSonglistPage）实测 500003，禁用**。
- * - 分页：`song_begin`/`song_num` + `hasmore` 兜底翻页；实测大 `song_num` 一枪全量，
- *   单页上限由 QQ_PLAYLIST_MAX_SONGS 封顶（超大歌单截断并告警）。
- * - 边界（外层 code 恒 0，必须看内层信号）：歌单不存在/已删除 = `data.code=-100006`；
- *   隐私歌单 = `dirinfo.title` 含「隐私」且 `songnum=0`——都映射为明确错误。
- * - 短链（`c6.y.qq.com/base/fcgi-bin/u?__=xxx`）：默认传输自动跟随重定向，落地地址取
- *   `finalUrl`；mock 传输不跟随时退回 `Location` 头。落地页按 URL 结构提取 disstid（见下方
- *   「QQ 链接识别」小节），落地为 `playsong.html` 歌曲链接则给出明确错误。
- * - 曲目 `url` 留空：播放时由 resolvePlayableSongRouted 路由解析，导入不逐首 GetVkey。
- * - 缓存照网易歌单模式（10 分钟，空结果不缓存）。
- *
- * 与 qqDirect 的关系：musicu POST 基建与新版字段映射（mid/title/singer/album.mid/
- * interval）复用——musicuPost/mapTrack/buildLyricUrl 直接 import 自 qqDirect（#279 落地后已收敛为单一实现）。
+ * QQ 音乐歌单原生模块（#280，链接导入直连化）。分页用 `song_begin`/`song_num` + `hasmore` 兜底；实测大 `song_num` 一枪全量，
+ * 单页上限由 QQ_PLAYLIST_MAX_SONGS 封顶（超大歌单截断并告警）。
  */
 
 const DISS_MODULE = 'music.srfDissInfo.DissInfo';
@@ -39,12 +20,8 @@ export const QQ_PLAYLIST_MAX_SONGS = 1000;
 const MAX_SHORT_LINK_HOPS = 3;
 
 // ── QQ 链接识别：按 URL 结构判定，不对整串文本跑正则 ──────────────
-//
-// 分享链接是用户粘贴的不受信文本：对整串跑「字面量 + 无界通配」正则，在「重复
-// `y.qq.com` 前缀」这类输入上是 O(n²)（CodeQL js/polynomial-redos #17/#18），
-// 且子串判定会把 `y.qq.com.evil.com` 也当成 QQ 域。统一改走 `new URL` 的
-// hostname / pathname / searchParams（RN 侧 URL 实现已由 core 其它模块在用），
-// 顺带把 host 判定收紧成标签级比对。
+// 统一改走 `new URL` 的 hostname / pathname / searchParams（RN 侧 URL 实现已由 core 其它模块在用）
+// ，顺带把 host 判定收紧成标签级比对。
 
 /** QQ 音乐主域（其子域同属：i.y.qq.com / c6.y.qq.com / u.y.qq.com…）。 */
 const QQ_HOST = 'y.qq.com';
@@ -73,10 +50,6 @@ function tryParseHttpUrl(token: string): URL | null {
 
 /**
  * 含 QQ 域的分享文本 → URL。
- *
- * 分享文案常把链接夹在说明文字里（旧的不锚定正则正是靠这点容忍度工作的），
- * 所以先定位 `y.qq.com`，再向两侧扩到 token 边界，最后交给 URL 解析：
- * 容忍度不变，但 host / pathname / query 的判定从此基于结构而非子串。
  */
 function parseQqUrl(raw: string): URL | null {
   const text = (raw || '').trim();
@@ -99,9 +72,8 @@ const QQ_H5_PLAYLIST_FILES = new Set(['taoge.html', 'playlist.html']);
 
 /**
  * 从 QQ 音乐 URL 提取歌单 disstid（纯函数，不发请求）。
- * 覆盖 web 歌单页直链（`/n/ryqq{,_v2}/playlist/{id}`）与 H5 分享页
- * （`taoge.html?id=` / `playlist.html?id=`）；短链与歌曲链接返回 null。
- * parsePlaylistUrl 的 QQ 直链分支与本模块共用此函数，避免双份判定漂移。
+ * 覆盖 web 歌单页直链（`/n/ryqq{,_v2}/playlist/{id}`）与 H5 分享页（`taoge.html?id=` / 
+ * `playlist.html?id=`）；短链与歌曲链接返回 null。
  */
 export function extractQqPlaylistIdFromUrl(url: string): number | null {
   const parsed = parseQqUrl(url);
@@ -142,10 +114,6 @@ function unknownLinkError(url: string): Error {
 
 /**
  * 解析 QQ 歌单链接为 disstid（#280）。
- * - 直链（ryqq playlist / taoge.html / playlist.html）：正则直接提取；
- * - 短链（`__=`）：经 transport GET（默认实现自动跟随重定向）取落地地址，
- *   不跟随的实现退回 302 Location 头；对落地地址递归解析（≤3 跳）；
- * - 落地为歌曲链接（playsong.html?songmid=）→ 明确报「歌曲链接」。
  * 无法解析抛错（调用方把 message 直接透给用户）。
  */
 export async function resolveQqPlaylistDisstid(url: string): Promise<number> {
@@ -241,8 +209,6 @@ async function fetchDissSongs(disstid: number): Promise<Song[]> {
 /**
  * QQ 歌单全量曲目（musicApi 门面对位方法，与旧 getNeteasePlaylistSongs 对称）。
  * 入参兼容三种形态：disstid（number）/ 数字串 / 歌单链接（直链或 `__=` 短链）。
- * 缓存 key `qq_playlist_songs_${disstid}`、TTL 10 分钟（空结果不缓存）；
- * 错误（不存在/隐私/歌曲链接）上抛由调用方透出。
  */
 export async function getQqPlaylistSongs(source: string | number): Promise<Song[]> {
   const disstid =

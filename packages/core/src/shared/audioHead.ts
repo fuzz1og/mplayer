@@ -2,18 +2,9 @@ import { request, bodyToBytes, type Transport, type TransportSignal } from '../a
 import { isAudioBytes } from '../utils/sniffers.js';
 
 /**
- * 音频头部 Range 取证接缝（#361 提出、#392 复用）。
- *
- * 一次 `Range: bytes=0-N` GET 同时给出：字节（喂 `isAudioBytes` 拒 text/html 错误页，
- * 以及 `extractAudioDuration` 的 L2 头解析）与**完整大小**（206 的 content-range 总量 /
- * 200 的 content-length，L3「体积 × 8 ÷ 码率」用）。
- *
- * 取 64KB 而非 1KB：ADR-0014 实测 1KB~1MB 延迟无差别（成本在连接建立 + TLS + 一个 RTT，
- * 不在字节数），而 64KB 能让 MP4 moov / MP3 Xing 等全局头更容易落在缓冲内。
- *
- * ⚠️ 已知未解决：若服务器忽略 Range（实测有主机对 bytes=0-1023 返回全量），
- * 调用方会缓冲整个响应体直至超时 → 好 URL 被误判。需 transport 支持响应字节上限/
- * 提前中断；未支持前如实记录，见 ADR-0014「后果」。
+ * ⚠️ 已知未解决：若服务器忽略 Range（实测有主机对 bytes=0-1023 返回全量），调用方会缓冲整个响应体
+ * 直至超时 → 好 URL 被误判。
+ * 需 transport 支持响应字节上限/提前中断；未支持前如实记录，见 ADR-0014「后果」。
  */
 
 /** 头部 Range 字节数（tier3 护栏取证与直连腿取证共用同一口径）。 */

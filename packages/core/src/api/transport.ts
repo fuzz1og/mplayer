@@ -8,16 +8,8 @@ import {
 
 /**
  * 传输接缝（T01）—— core 请求层底部的统一可注入传输。
- *
- * 目的：让「直接客户端」（T02+ 各源官方直连）与「预检」（T12）等新请求层代码
- * 统一经 `request()` 出网；测试注入 mock 传输即可在 core 接缝上驱动全部请求层
- * 行为（成功率/回退/重试/超时），不真实出网。默认实现 = axios（双端可用），
- * 未注入时行为与现状一致。
- *
- * 使用约定：
- * - 请求体由调用方序列化（form / JSON），本层不关心内容；
- * - `responseType: 'arraybuffer'` 供需要字节内容的调用（探测/302 解析）使用；
- * - `finalUrl` 为最终地址（重定向链终点），无则回退请求 URL。
+ * 目的：让「直接客户端」（T02+ 各源官方直连）与「预检」（T12）等新请求层代码统一经 `request()` 出网
+ * ；测试注入 mock 传输即可在 core 接缝上驱动全部请求层行为（成功率/回退/重试/超时），不真实出网。
  */
 
 /**
@@ -41,17 +33,8 @@ export type TransportSignalAcceptsAbortSignal = AbortSignal extends TransportSig
 
 /**
  * 单次出网调用的选项（能力方法的**可选尾参**，向后兼容）。
- *
- * - `signal`：墙钟到点时由**墙的持有者** abort（directCall 的 3s 直连墙、
- *   tier3 的单源墙 / 整链预算、解析链尾巴的搜索腿墙），把「放弃等待」变成
- *   真的停掉底层请求。
- * - `timeoutMs`：这次调用**可用时限的上限**（#556：墙的持有者按
- *   `min(本腿墙, 链总预算剩余)` 算出来的值）。实现用
- *   {@link cappedRequestTimeout} 取 `min(源自有时限, 本值)` 交给
- *   `TransportRequest.timeoutMs`——只收紧不放大，源自己的墙仍是上界。
- *
- * 墙的**持有权**仍在各腿（腿决定何时 abort / 给多久），transport 只消费；
- * 这是 #399 要守住的分工。
+ * 实现用{@link cappedRequestTimeout} 取 `min(源自有时限, 本值)` 交给
+ * `TransportRequest.timeoutMs`——只收紧不放大，源自己的墙仍是上界。
  */
 export interface TransportCallOptions {
   signal?: TransportSignal;
@@ -128,14 +111,9 @@ export function bodyToText(body: string | ArrayBuffer | Uint8Array): string {
 }
 
 /**
- * 传输响应体 → 字节（音频字节嗅探 / 时长头解析共用）。
- *
- * ⚠️ 必须同时吃三种形态：浏览器/RN 的 `ArrayBuffer`、**Node 的 `Buffer`**
- * （axios `responseType:'arraybuffer'` 在 Node 下返回 Buffer，`instanceof ArrayBuffer`
- * 为 **false**），以及文本。只判 `instanceof ArrayBuffer` 会让 Node 落到
- * `TextEncoder().encode(String(body))`——二进制按 UTF-8 替换字符（U+FFFD）被毁：
- * 实测 FLAC 头 STREAMINFO 被读成 sr=44795 / totalSamples=5.7e10 / 时长 25069s，
- * 于是护栏 L2 拿垃圾时长误拒一个本来完全正常的完整 FLAC。
+ * ⚠️ 必须同时吃三种形态：浏览器/RN 的 `ArrayBuffer`、**Node 的 `Buffer`**（axios 
+ * `responseType:'arraybuffer'` 在 Node 下返回 Buffer，`instanceof ArrayBuffer`为 **false**），以及
+ * 文本。
  */
 export function bodyToBytes(body: unknown): Uint8Array {
   if (body instanceof ArrayBuffer) return new Uint8Array(body);

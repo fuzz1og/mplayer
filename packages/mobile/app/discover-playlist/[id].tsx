@@ -98,11 +98,9 @@ export default function DiscoverPlaylistDetailPage() {
     }
   };
 
-  // 单曲换源后更新列表。useCallback（#411）：此前是 renderItem 里的内联箭头，
-  // 每帧新引用会把 SongRow 的 memo 击穿。
-  // ⚠️ 必须落在下面两处 early return **之前**：hook 在早返回之后被调用会改变 hook 顺序，
-  // 首屏 loading 返回骨架、数据到达后这一行才被执行 → 「Rendered more hooks than during
-  // the previous render」整页崩（#448 真机验收发现；门禁见 eslint react-hooks/rules-of-hooks）。
+  // ⚠️ 必须落在下面两处 early return **之前**：hook 在早返回之后被调用会改变 hook 顺序，首屏 
+  // loading 返回骨架、数据到达后这一行才被执行 → 「Rendered more hooks than duringthe previous 
+  // render」整页崩（#448 真机验收发现；门禁见 eslint react-hooks/rules-of-hooks）。
   const handleSwap = useCallback((original: Song, swapped: Song) => {
     setSongs((prev) => replaceSongInList(prev, original.id, swapped));
   }, []);
@@ -112,10 +110,9 @@ export default function DiscoverPlaylistDetailPage() {
    * 绝不照抄桌面的逐首 playlist:addSong。
    */
   const handleExport = async (target: { name: string; songs: Song[] }) => {
-    // 注意：**不能**在这里再判 `exporting`。取歌阶段那面旗是在 finally 里落的，
-    // 与「确认弹层渲染完成 → 用户点导出」是同一条时间线——真机实测：弹层渲染得够快时
-    // 该旗仍为 true，确认会被静默吞掉（点了「导出」什么也不发生）。
-    // 这段本身是同步落库，不需要旗；防重复由弹层「点一次即关」+ 按钮 disabled 承担。
+    // 注意：**不能**在这里再判 `exporting`。
+    // 取歌阶段那面旗是在 finally 里落的，与「确认弹层渲染完成 → 用户点导出」是同一条时间线——真机
+    // 实测：弹层渲染得够快时该旗仍为 true，确认会被静默吞掉（点了「导出」什么也不发生）。
     try {
       // #552：落库走 core 写入编排（adapter 内），失败已回滚；added 是真实新增数（#554）。
       const result = await exportSongsToLocalPlaylist(

@@ -345,12 +345,8 @@ interface ResultsListProps {
 
 /**
  * **拍平**搜索结果（#411）：把「组」拆成「组头行 + 歌曲行」。
- *
- * 此前把「组」当 cell、组内 `group.songs.map()` 全量渲染——一个 30 首的组就是一次性
- * 挂 30 行，虚拟化完全绕过去了。拍平后才是逐行虚拟化。
- *
- * 两种视图只差组头的内容与档位（多源 = 歌名 — 歌手 +「N 个版本」；单源 = 源名 +「N 首」），
- * 所以共用一个函数。key 用 `组键:歌曲 id`（歌曲 id 含源前缀，组内不会重），**不含 index**。
+ * 拍平后才是逐行虚拟化。
+ * key 用 `组键:歌曲 id`（歌曲 id 含源前缀，组内不会重），**不含 index**。
  */
 function flattenSongGroups(results: SongGroup[], mode: 'multi' | 'single'): SongListRow[] {
   const flat: SongListRow[] = [];

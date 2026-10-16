@@ -1,14 +1,7 @@
 /**
  * 专辑详情页（#406 一/二期 + #407 P0 消费端）。
- *
- * 四态齐备且互不混淆：
- * - **缺 id**（畸形深链）：独立一屏「专辑不存在」+ 原生 header 返回（不再伪装成空专辑）
- * - **加载**：Hero 常驻（封面/标题来自路由参数）+ 同屏行骨架 —— 慢网首帧也有返回按钮
- * - **失败**：「专辑加载失败 / 该来源暂不支持专辑详情」+ 重试（不再与「真的没歌」混淆，也不显示「0 首」）
- * - **成功/空**：Hero 信息区章节化 + 列表；空专辑走 EmptyState
- *
- * 契约侧：走 core `getAlbumDetailRouted(source, id)`（不再 `getDirectClient('netease')!` 双重断言），
- * source 从路由参数来、缺省 netease（#407：跨源 id 不通，一律 source + id 二元组）。
+ * 契约侧：走 core `getAlbumDetailRouted(source, id)`（不再 `getDirectClient('netease')!` 双重断言）
+ * ，source 从路由参数来、缺省 netease（#407：跨源 id 不通，一律 source + id 二元组）。
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';

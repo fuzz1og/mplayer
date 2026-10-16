@@ -1,23 +1,7 @@
 /**
  * TLS 指纹伪装险情开关（T10 spec #156）—— 仅桌面，weapi 先行试点。
- *
- * 背景：上游对自动化请求做 JA3/JA4 级 TLS 握手指纹风控。Node/Electron 主进程
- * 无法伪造完整 JA3/JA4（需要原生 TLS 基底接管 ClientHello），因此本模块交付
- * 有界的 best-effort 特征调整，落实「开关 + 桌面侧接线 + 能力边界文档化」：
- *
- * - 开关：`setTlsFingerprintEnabled`（触发 persister）/ `loadTlsFingerprint`（重水合不触发），
- *   持久化钩子仿 T01 `sourceRouter` 模式（core 零 I/O，宿主注册回调落盘）。
- * - 仅桌面：指纹 https agent 提供者（`setTlsFingerprintAgentProvider`）只由桌面
- *   主进程注入；移动端不注册（TLS 基底非 BoringSSL，伪造无收益），开关保持默认关。
- * - weapi 试点：`getTlsFingerprintConfig()` 在开启时返回附加请求头 + 指纹 agent，
- *   `neteaseWeapi.weapiRequest` 请求时装配。默认关 → 空配置，行为与现状一致。
- *
- * 能力边界（明确文档化）：
- * - Node https.Agent 仅能调整 minVersion/ciphers/keepAlive 等握手参数，无法逐
- *   字节伪造 ClientHello 顺序（JA3）或 QUIC/TLS-1.3 扩展集（JA4）。
- * - 因此开启后是一种「特征偏置」而非完整伪装；若上游仍以 JA3/ClientHello 精确
- *   比对，该开关不足以绕过。桌面侧 wiring 通过主进程 https agent 注入，且仅在
- *   用户显式开启时启用，默认行为不受影响。
+ * 背景：上游对自动化请求做 JA3/JA4 级 TLS 握手指纹风控。
+ * 默认关 → 空配置，行为与现状一致。
  */
 
 /** 桌面 db 中该开关的存储键。 */

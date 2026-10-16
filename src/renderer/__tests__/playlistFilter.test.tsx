@@ -7,10 +7,7 @@ import PlaylistDetailPage from '@/renderer/pages/PlaylistDetailPage';
 import { filterSongsByQuery } from '@/renderer/utils/songFilter';
 
 /**
- * 本地歌单页「歌单内过滤」（#488）。三条铁律各有症状级断言：
- * 1. 过滤只影响展示集合 —— 清空输入后顺序与过滤前逐项相同；
- * 2. 过滤态禁用拖拽排序 —— 行不注册 useSortable（无拖拽手柄），全程不发 playlist:reorderFull；
- * 3. 全选 / 批量操作只见可见集合 —— 落库结果与界面一致。
+ * 本地歌单页「歌单内过滤」（#488）。
  */
 
 function song(i: number): Song {

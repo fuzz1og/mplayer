@@ -6,14 +6,6 @@ import { CONTENT_METHODS, neteaseDirectClient } from '@mplayer/core';
 
 /**
  * 完整性测试（ADR-0001）：静态扫描把「music 域三份拷贝会漂移」收敛为测试期必现。
- * 校验：
- *  1. 基础方法 ⊆ core musicApi 方法（加方法漏登记 / 名字拼错 → 必报错）；
- *     内容方法 ⊆ 网易客户端（参考实现，全能力）——契约自客户端接口派生（#240）
- *  2. 渲染端无裸 `musicApi:*` 字符串（只允许 callMusicApi.ts 里的单通道 musicApi:call）
- *  3. src 全树无 `IpcMusicApi` / `ipcMusicApi` 引用（镜像代理已删除）
- *  4. 主进程 `musicApi:` 注册只有 `musicApi:call` 一处
- *  5. 分发表键集合 == 基础方法 ∪ MainOnlyMethods 键，内容方法经 CONTENT_METHODS
- *     清单循环接线（每个键都有 handler）
  */
 
 const ROOT = path.resolve(__dirname, '../..');

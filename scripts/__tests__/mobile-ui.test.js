@@ -1,18 +1,7 @@
 /**
- * mobile-ui.mjs 的解析层 + CLI 契约测试。
- *
- * 用 node:test 跑（`node --test scripts/__tests__/mobile-ui.test.js`），**零依赖、不碰 adb、不写仓库**：
- * 纯函数直接断言；CLI 用子进程跑，并且一律带 `--file <临时 fixture>`，走不到 adb 那一段。
- *
- * 回归对象是两处**实测踩出来的陷阱**（不是风格问题，见 scripts/mobile-e2e.mjs:62-65）：
- *   1. haystack = `text + NUL + content-desc`——所以 `^(发现)$` 匹配不到 text 恰好是「发现」的节点。
- *      这条行为原来躲在 mobile-e2e.mjs 的私有实现里，没有任何测试钉住；顺手「修好」它会让
- *      RANK_NODE_RE（`^[0-9]{1,3}\u0000`）这类既有模式静默失效。
- *   2. countText 只读 text，不读 content-desc——它和 find/centersOf 的模式不能互换。
- * 另外钉住「真实 dump 是**一行** XML」：fixture 全部拼成单行，按行读的实现会在这里现形。
- *
- * mobile-ui.mjs 是 ESM，本文件是 CJS（与 version-bump.test.js 同一约定）——用动态 import 拿
- * 命名空间，全用例复用同一个 promise。
+ * mobile-ui.mjs 的解析层 + CLI 契约测试（node:test 跑，零依赖、不碰 adb、不写仓库）。回归对象是两处实测陷阱：
+ * haystack = `text + NUL + content-desc`（`^(发现)$` 匹配不到 text 恰好是「发现」的节点）；countText 只读 text、
+ * 不读 content-desc（与 find/centersOf 模式不可互换）。另外钉住「真实 dump 是一行 XML」：fixture 全部拼成单行。
  */
 
 const { test } = require('node:test');

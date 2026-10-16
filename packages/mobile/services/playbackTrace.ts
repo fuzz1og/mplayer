@@ -8,11 +8,7 @@ import {
 
 /**
  * 播放解析链诊断（#363 / ADR-2026-09-23-playback-trace-sink）。
- *
- * core 只出结构化 trace，宿主落 sink：本模块持有会话内内存环形缓冲（容量 200，
- * 不落盘），在 App 启动时注册给 core；设置页「播放诊断」区读取快照、手动导出。
  * 与桌面主进程实现（IPC playbackTrace:*）共享同一份 core schema，字段不漂移。
- *
  * 开销：sink 为空时 core 热路径零构造；注册后每次解析才 push 一条。
  */
 
@@ -77,11 +73,9 @@ function exportFileName(): string {
 }
 
 /**
- * 导出诊断：把当前缓冲 JSON 写到应用文档目录（documentDirectory），再唤起系统分享
- * （React Native 内置 Share）分享 JSON 文本；返回文件路径。
- *
- * 不新增依赖：仅用已有的 expo-file-system + RN Share。写文件失败向上抛，由调用方提示；
- * 分享由用户取消不视为失败（Share.share 正常 resolve）。
+ * 导出诊断：把当前缓冲 JSON 写到应用文档目录（documentDirectory），再唤起系统分享（React Native 内
+ * 置 Share）分享 JSON 文本；返回文件路径。
+ * 不新增依赖：仅用已有的 expo-file-system + RN Share。
  */
 export async function exportPlaybackTraces(): Promise<string> {
   const json = serializePlaybackTraces();

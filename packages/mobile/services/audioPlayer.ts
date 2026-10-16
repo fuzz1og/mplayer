@@ -40,10 +40,9 @@ export { resolvePlayableUrlMobile };
 
 type Player = ReturnType<typeof createAudioPlayer>;
 
-// Expo Go 判定必须用 appOwnership（仅 Expo Go 返回 'expo'）：
-// `Constants.expoGoConfig !== null` 在 dev build（expo-dev-client）下也非 null
-// （返回整个 embedded manifest），会导致 dev build 误判为 Expo Go 而禁用
-// 锁屏控制/后台播放（#93 真机验证发现的 bug）。
+// Expo Go 判定必须用 appOwnership（仅 Expo Go 返回 'expo'）：`Constants.expoGoConfig !== null` 在 
+// dev build（expo-dev-client）下也非 null（返回整个 embedded manifest），会导致 dev build 误判为 
+// Expo Go 而禁用锁屏控制/后台播放（#93 真机验证发现的 bug）。
 const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
 
 // 追踪所有创建过的播放器：expo-audio 的原生释放是异步的，
@@ -57,10 +56,9 @@ let currentPlayId = 0;
 let preparingPlayback = false;
 
 /**
- * 解析链穷尽（#357）：直连 + tier3 都没拿到 URL。
- * 解析链**抛错**（直连/订阅源网络失败、该源暂无直连实现等）与「返回空 URL」同属
- * 穷尽——必须与播放器/网络错误区分开，否则失败归因会被降级成泛化的「音源解析失败」
- * （实测断网时直连抛 AxiosError，旧判定只认字符串 'no playable URL'，归因永远走不到）。
+ * 解析链**抛错**（直连/订阅源网络失败、该源暂无直连实现等）与「返回空 URL」同属穷尽——必须与播放器
+ * /网络错误区分开，否则失败归因会被降级成泛化的「音源解析失败」（实测断网时直连抛 AxiosError，旧判
+ * 定只认字符串 'no playable URL'，归因永远走不到）。
  */
 class ResolutionChainError extends Error {
   constructor(readonly cause: unknown) {
@@ -76,11 +74,8 @@ const URL_PROBE_FREE_MS = 10 * 60 * 1000;
 // 条目还新鲜时重解析只会重复 tier3 全链请求、与前台播放抢手机带宽。
 const PREFETCH_SKIP_FRESH_MS = 5 * 60 * 1000;
 
-// ── 单播放器复用的当前播放上下文 ──────────────────────────────
-// listener 只在播放器创建时挂一次（replace 换源复用同一 ExoPlayer），
-// 所有「当前歌曲」相关状态从 ctx 读取，不依赖闭包捕获。
-// 单例实例 = 切歌不存在「旧播放器停止 vs 新播放器启动」的叠加窗口
-// （双播放根治：ExoPlayer 实例永远只有一个）。
+// 单例实例 = 切歌不存在「旧播放器停止 vs 新播放器启动」的叠加窗口（双播放根治：ExoPlayer 实例永远只
+// 有一个）。
 interface PlaybackCtx {
   song: Song;
   playId: number;
@@ -163,11 +158,8 @@ export async function initAudio(): Promise<void> {
 
 /**
  * 暂停并释放所有已创建的播放器。
- * 每个操作独立 try/catch，保证：
- * 1) 切歌时旧音频一定停止（先 pause() 同步停音），不会两首歌同时在播；
- * 2) remove() 在异常状态下抛错也不会中断后续播放、不会留下僵尸引用。
- * pause 必须 await：expo-audio 原生暂停是异步的，不等待就创建新播放器，
- * 旧播放器可能仍在出声（换源/切歌时表现为两首歌同时播放）。
+ * 每个操作独立 try/catch，保证：1) 切歌时旧音频一定停止（先 pause() 同步停音），不会两首歌同时在播
+ * ；2) remove() 在异常状态下抛错也不会中断后续播放、不会留下僵尸引用。
  */
 async function stopAllPlayers(): Promise<void> {
   if (isNativeEngine()) {
@@ -204,10 +196,8 @@ function attachPlaybackListener(p: Player): void {
         void (async () => {
           const offline = await isOffline();
           if (!fresh && song.sourceType !== 'local' && !offline) {
-            // 同一首歌换全新 URL 重试一次（收藏/历史里的 url 可能已过期）；
-            // 本地文件不会过期，失败直接跳下一首。
-            // 先清该歌的 URL 缓存：CDN 直链带时效签名，TTL 内签名过期会
-            // 反复命中同一条死链（Source error 的典型根因）
+            // 同一首歌换全新 URL 重试一次（收藏/历史里的 url 可能已过期）；本地文件不会过期，失败直
+            // 接跳下一首。
             void deleteCachedResource(song);
             log.addLog('warn', `《${song.name}》将使用新 URL 重试`);
             setTimeout(() => { if (ctx.playId === currentPlayId) void playSong(song, retryCount, true); }, 0);
@@ -225,10 +215,8 @@ function attachPlaybackListener(p: Player): void {
 
     if (!playbackReadyLogged) {
       playbackReadyLogged = true;
-      // #385：真正加载成功（出声）→ 连续失败链中断（**只有这里**归零；手动点歌不清零，
-      // 与桌面 playerStore 同一语义——否则「断网中点歌 → 跳 3 首 → 再点」可无限循环）。
-      // 注意不能放在 startPlayback 的 player.play() 后：expo-audio 的加载错误是
-      // 异步事件，play() 返回时并不代表这首歌能出声（会误把失败歌算成成功、计数永远归零）。
+      // #385：真正加载成功（出声）→ 连续失败链中断（**只有这里**归零；手动点歌不清零，与桌面 
+      // playerStore 同一语义——否则「断网中点歌 → 跳 3 首 → 再点」可无限循环）。
       resetFailureStreak();
       log.addLog('info', `[耗时] 播放器就绪(出声): 《${song.name}》 总耗时 ${Date.now() - t0}ms`);
     }
@@ -278,16 +266,14 @@ function pickNextPlayableSong(current: Song): { index: number; song: Song } | nu
     useSettingsStore.getState().playMode,
     current.id,
     s.shuffle ?? null,
+    // #639 R1：scope 与队列来源相符——窗口态下不得裁掉窗口外的 id（会永久截断随机序）
+    s.queueScope,
   );
 }
 
 /**
- * 终局失败统一处理（#385）：**护栏语义与文案的唯一接线点**（listener 的音频加载
- * 失败与 playSong catch 的解析失败都汇到这里）。
- * 1) core 记一次终局失败（连续计数 +1、记住这首歌）；
- * 2) 选下一首时跳过会话内已证明失效的歌；
- * 3) core 决策：离线 / 关闭「失败即跳」/ 连续失败达固定上限 / 无下一首 → 停；否则跳；
- * 4) 文案一律取 `decision.copy`（不再硬编码「可长按歌曲换源」等两套失败文案）。
+ * 终局失败统一处理（#385）：**护栏语义与文案的唯一接线点**（listener 的音频加载失败与 playSong 
+ * catch 的解析失败都汇到这里）。
  * @param offline 已由调用方判定好的离线态（避免重复 NetInfo.fetch）
  */
 async function handleTerminalPlaybackFailure(
@@ -336,14 +322,9 @@ async function handleTerminalPlaybackFailure(
 }
 
 /**
- * 播放失败后为同一首歌获取全新可播 URL（fresh 重试语义）。
  * 收藏/历史里的 url 可能已过期（音乐源直链一般数小时失效）。
  * 重走完整路由解析链（直连 → tier3 兜底）。
  * 返回资源值（含 nonFull）：试听版重试同样带标记，不得被回写 valid。
- * 失败上抛，由调用方（playSong fresh 分支）兜底。
- *
- * #390：原 `forgetPrefetchedUrl(song)` 已删——移动端单进程从不写 core 预取缓存
- * （它写的是自己的 12h `songResourcesCache`），该调用本来就没有对象可清。
  */
 async function refreshPlayableUrl(song: Song): Promise<PlayableResource> {
   const routed = await musicApi.resolvePlayableSongRouted(song);
@@ -354,14 +335,9 @@ async function refreshPlayableUrl(song: Song): Promise<PlayableResource> {
 }
 
 /**
- * 后台补歌词/封面：**懒刷新**——播放时只用歌曲自带资源，不主动搜索；
- * 仅当歌曲 lrc 为空（专辑/歌单歌）或加载失败（force，PlayerOverlay 歌词
- * onError、PlayerBar/PlayerOverlay 封面 onError 触发）才搜索补全。
- * 避免每次播放都搜索导致封面/歌词 URL 伪刷新（迷你播放栏图片反复重载）。
- * @param force 资源失效（onError）时强制搜索补全
- * @param refreshCover 封面**自身**失效（封面 onError）时允许换新签名 URL；
- *   其他失效（歌词失败等）不碰封面——新签名 URL 会让迷你栏/播放器封面
- *   闪一下重载（同一张图），封面只有真失效才值得换。
+ * @param force 资源失效（onError）时强制搜索补全@param refreshCover 封面**自身**失效（封面 onError
+ * ）时允许换新签名 URL；其他失效（歌词失败等）不碰封面——新签名 URL 会让迷你栏/播放器封面闪一下重
+ * 载（同一张图），封面只有真失效才值得换。
  */
 export async function fetchLrcInBackground(song: Song, force = false, refreshCover = false): Promise<void> {
   const log = useLogsStore.getState();
@@ -393,10 +369,9 @@ export async function fetchLrcInBackground(song: Song, force = false, refreshCov
     }
     const cur = usePlayerStore.getState().currentSong;
     if (cur?.id !== song.id) return; // 已切歌，丢弃过期结果
-    // 歌词比较：普通懒刷新用归一化 key（t/sign 签名参数每次搜索都不同，
-    // 不算资源变化，避免伪刷新）；force（歌词加载失败驱动）时旧 URL 已
-    // 证明失效——签名不同（新 sign）就直接换，否则归一化 key 相同会
-    // 永远命中失效 URL，歌词再也刷新不出来。
+    // 歌词比较：普通懒刷新用归一化 key（t/sign 签名参数每次搜索都不同，不算资源变化，避免伪刷新）；
+    // force（歌词加载失败驱动）时旧 URL 已证明失效——签名不同（新 sign）就直接换，否则归一化 key 
+    // 相同会永远命中失效 URL，歌词再也刷新不出来。
     const lrcChanged = force
       ? !!fresh.lrc && fresh.lrc !== cur.lrc
       : !!fresh.lrc && resourceUrlKey(fresh.lrc) !== resourceUrlKey(cur.lrc);
@@ -424,11 +399,9 @@ export async function fetchLrcInBackground(song: Song, force = false, refreshCov
 
 /**
  * 移动端可播 URL 解析（routed-only：直连 client → tier3 订阅源兜底）。
- * 路由链失败/未命中（空 URL，无版权/VIP）不再回退旧合并解析——空结果
- * 交给调用方按「解析链穷尽」处理（no playable URL → 换源提示/跳歌）。
  * 返回 {url, lrc, nonFull}（nonFull=试听版/片段，驱动「可换源」提示与 preview 徽标）。
+ * （resolvePlayableUrlMobile 定义见 services/songResolution.ts，本文件顶部已 import + re-export）
  */
-// （resolvePlayableUrlMobile 定义见 services/songResolution.ts，本文件顶部已 import + re-export）
 
 /**
  * 资源 URL 归一化 key（shared core）：302 端点的 t/sign 等签名参数每次
@@ -447,14 +420,15 @@ function prefetchNextSong(): void {
     if (st.queue.length <= 1 || st.currentIndex < 0) return;
     // 与真实切歌同一套索引逻辑（随机模式预取随机位置，避免总预取同一首）
     const playMode = useSettingsStore.getState().playMode;
-    // #541：预取必须与真实切歌同一套推进语义——此前漏传 shuffle，
-    // 随机模式下预取的是「现抽」位置，与实际播放的下一首不是同一首（预取白做）。
+    // #541 / #639 R1：预取必须与真实切歌同一套推进语义与 scope（`advance` 传 `queueScope`）——此前漏传 shuffle（随机模式下
+    // 预取的是「现抽」位置，与实际下一首不是同一首）且缺省 authoritative（预取裁掉窗口外 id 而 advance 不裁）⇒ 两者落点分叉。
     const nextIdx = planAdvance({
       queue: st.queue,
       currentIndex: st.currentIndex,
       playMode,
       shuffle: st.shuffle ?? null,
       direction: 1,
+      shuffleScope: st.queueScope,
     }).index;
     if (nextIdx < 0) return;
     const next = st.queue[nextIdx];
@@ -477,14 +451,8 @@ function prefetchNextSong(): void {
 
 /**
  * 播放歌曲。
- * @param retryCount 级联跳歌计数（防止全部失效时无限循环）
- * @param fresh 为 true 时绕过原有 url，重新解析全新可播 URL
- */
-/**
- * 方案 C 的播放入口：解析当前曲 → `loadQueue` 起播 → `feedWindow()` 补窗。
- *
- * 失败处置与 expo-audio 路径**共用同一套 core `skipGuard`**（#385）：
- * 同曲 fresh 重试一次 → 终局失败交 `handleTerminalPlaybackFailure`。
+ * @param retryCount 级联跳歌计数（防止全部失效时无限循环）@param fresh 为 true 时绕过原有 url，重新
+ * 解析全新可播 URL
  */
 async function nativePlaySongFlow(song: Song, retryCount: number, fresh: boolean): Promise<void> {
   const log = useLogsStore.getState();
@@ -661,15 +629,9 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       );
     }
 
-    // 播放器请求头：带浏览器 UA + 按源映射的官方 Referer。
-    // ⚠️ 这里原先有一段断言 CDN 按 Referer 域名校验、并称「带错 Referer 会 403 → 播放失败跳
-    // 下一首」。**那条断言没有出处**，且正是 #592 立项 / #602 / ADR 2026-10-08 风险讨论的源头
-    // （原文已删，此处不复述其结论）。2026-10-16 五臂实测（无头/对源/空串/跨源/假 API 域）
-    // 在 9 个真实 URL 上 45 次请求全部 200 且字节一致，前提**未被证实**（#647）。保留这份头的
-    // 理由是「无害且可能覆盖未测档位」，不是「不带就 403」。
-    // #592：整份头取 core 单点 `requestHeadersFor`（未知源不再发空字符串 Referer）。
-    // 注意：Android 原生主引擎仍走 nativePlayer 的空壳——「让它也带这份头」是 #592
-    // 的另一半（网络行为变更，需真机取证），见 ADR 2026-10-08-per-source-request-headers。
+    // 播放器请求头：带浏览器 UA + 按源映射的官方 Referer。#592：整份头取 core 单点 `requestHeadersFor`（未知源不再发空字符串 Referer）。
+    // ⚠️ 原先「CDN 按 Referer 域名校验、带错会 403」的断言**无出处**（正是 #592 立项/ADR 2026-10-08 的源头，原文已删）；2026-10-16 五臂实测 45 次请求全 200 且字节一致（#647）。
+    // 注意：Android 原生主引擎仍走 nativePlayer 的空壳——「让它也带这份头」是 #592 的另一半（需真机取证），见 ADR 2026-10-08-per-source-request-headers。
     const playerHeaders = requestHeadersFor(song.sourceType);
 
     // 单播放器复用（replace 换源）：永远只有一个 ExoPlayer 实例，
@@ -743,11 +705,9 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
     const offline = await isOffline();
 
     if (!fresh && song.sourceType !== 'local') {
-      // 解析链穷尽时先回查缓存（#172）：后台预取可能恰在本轮解析期间拿到直链
-      // 写入缓存（后台 3s 命中、前台 6s 预算耗尽失败的时序差）。命中且确系本轮
-      // 开始后新写入的，直接用它重播——省掉一轮 fresh 全链重跑（实测 ~6s）。
-      // 仅限无 url 的歌（有 url 的歌 fresh 重试语义是换掉过期 url，不能绕过）
-      // 且首轮（retryCount>0 说明已重试过，防循环）。
+      // 命中且确系本轮开始后新写入的，直接用它重播——省掉一轮 fresh 全链重跑（实测 ~6s）。
+      // 仅限无 url 的歌（有 url 的歌 fresh 重试语义是换掉过期 url，不能绕过）且首轮（retryCount>0 
+      // 说明已重试过，防循环）。
       if (exhausted && !song.url && retryCount === 0 && song.id) {
         const written = (await getCachedResource(song))?.url;
         const age = urlAgeMs(song);
@@ -781,14 +741,9 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
 }
 
 /**
- * UI「下一首」/「上一首」的引擎无关入口。
- *
- * **原生引擎下必须走 `nativeNext`/`nativePrev`**：原生播放列表是权威队列，
- * 如果这里改成 `playerStore.next() + playSong(song)`，会把原生队列整体换成一首的
- * `loadQueue`（预取窗口与曲末原生推进全部落空）。
- * 原生入口自身（#555）不再自己判断落点：`nativePlayer.nativeStep` 先用 store `advance`
- * 拿 core `planAdvance` 的 `{ index, effect }`，再按 effect 与原生窗口现状交付
- * （相邻格匹配 → 原生顺序推进；否则起播目标曲；`restart-current` → `seek(0)` 重播）。
+ * **原生引擎下必须走 `nativeNext`/`nativePrev`**：原生播放列表是权威队列，如果这里改成 
+ * `playerStore.next() + playSong(song)`，会把原生队列整体换成一首的`loadQueue`（预取窗口与曲末原生
+ * 推进全部落空）。
  */
 export function skipNext(): void {
   if (isNativeEngine()) {
@@ -821,13 +776,8 @@ export type PlayNextOutcome = {
 
 /**
  * 行菜单「下一首播放」的**引擎无关**入口（#495）。
- *
- * - 先落 `playerStore.insertNext`（iOS/回落引擎的队列 100% 在 JS，这一步就是全部；
- *   原生引擎下它同时让 UI 立刻看到插队结果，原生侧随后由 trackChanged 对账）；
- * - 原生引擎再走 `nativePlayNext`（解析 → patchQueue({insertAfterCurrent})）。
- *
- * 与 [skipNext] 同一条分派约定：**原生引擎下队列操作的权威在原生**，
- * 绝不用 `playSong(song)` 去换一个只有一首的原生队列。
+ * 与 [skipNext] 同一条分派约定：**原生引擎下队列操作的权威在原生**，绝不用 `playSong(song)` 去换一
+ * 个只有一首的原生队列。
  */
 export async function playNextInQueue(song: Song): Promise<PlayNextOutcome> {
   if (!isNativeEngine()) {
@@ -848,12 +798,9 @@ export async function playNextInQueue(song: Song): Promise<PlayNextOutcome> {
 
   const result = await nativePlayNext(song);
   if (!result.queued) return { queued: false, moved: false, reason: result.reason };
-  // ⚠️ 不能再用 `reconcileFromNative(true)` 重建 JS 队列（#518 的根因）：
-  // 原生队列只是 JS 队列的**预取窗口**（ADR 2026-09-29-native-playback-ownership §2：
-  // `loadQueue` 一首 + `patchQueue({append})` 追加），不是整张歌单。用窗口重建 JS 队列会
-  // ① 把用户的完整歌单缩成几首窗口歌；② 把补窗基准从「歌单下标」跳成「窗口下标」
-  // —— 真机现场 `计划=[28,29,30]` 与 `计划=[0]` 反复横跳，推进的下一首成了窗口歌。
-  // 这里改用同一套纯队列数学**就地**同步：完整队列与当前曲位置都不动，基准因此不回跳。
+  // ⚠️ 不能再用 `reconcileFromNative(true)` 重建 JS 队列（#518 的根因）：原生队列只是 JS 队列的**
+  // 预取窗口**（ADR 2026-09-29-native-playback-ownership §2：`loadQueue` 一首 + 
+  // `patchQueue({append})` 追加），不是整张歌单。
   const store = usePlayerStore.getState();
   if (store.queue.length > 0 && store.currentSong && store.currentIndex >= 0) {
     store.insertNext(song);

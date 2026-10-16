@@ -139,10 +139,8 @@ describe('useVirtualRows 症状级：list 上方内容变高（#445）', () => {
     await waitFor(() => expect(margin()).toBe('56'));
 
     // ⚠️ 与 #445 票面原文不同：首行 transform **不会**变成 translateY(-56px)。
-    // @tanstack/virtual-core 的 measurement.start 已经含 scrollMargin（3.17.11 实测），
-    // VirtualRow 再减一次 → transform = translateY(index * size)，与 scrollMargin 无关。
-    // 票面写的 translateY(-56px) 反而是「measurement 未重算却重复扣减」的错误渲染；
-    // stale scrollMargin 真正影响的只是挂载窗口（calculateRange），而 overscan=8 会吸收它。
+    // @tanstack/virtual-core 的 measurement.start 已经含 scrollMargin（3.17.11 实测），VirtualRow 
+    // 再减一次 → transform = translateY(index * size)，与 scrollMargin 无关。
     expect(firstShell().style.transform).toBe('translateY(0px)');
   });
 });

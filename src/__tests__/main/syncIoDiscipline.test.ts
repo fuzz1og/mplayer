@@ -5,10 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * #412 守卫：**主进程请求路径上不得有全量同步文件读写**。
- *
- * 这类退化肉眼很难发现（新增一行 `fs.readFileSync` 就能把主进程的事件循环连带
- * IPC / 托盘 / 封面刷新一起卡住），所以在源码层面钉住。断言必须去掉注释——
- * 注释里常常**引用**被禁掉的旧写法。
+ * 断言必须去掉注释——注释里常常**引用**被禁掉的旧写法。
  */
 const testDir = dirname(fileURLToPath(String(import.meta.url)));
 /** 仓库根：本文件在 <root>/src/__tests__/main/ 下 */
