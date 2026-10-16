@@ -16,6 +16,7 @@ import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { useFavoriteStore } from '../stores/favoriteStore';
 import { togglePlay, seekTo, skipNext, skipPrev, fetchLrcInBackground } from '../services/audioPlayer';
+import { applyPlayModeToNative } from '../services/nativePlayer';
 import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import QueueListModal from './QueueListModal';
@@ -253,6 +254,13 @@ export default function PlayerOverlay({ onClose }: Props) {
     // #519：进随机就把**稳定序列**建起来（同一会话内不重洗；已有序列只对游标）。
     // 补窗 / next / prev 也会懒建兜底，这里只是让「刚切过去」立刻有序列可用。
     if (nextMode === '随机播放') usePlayerStore.getState().ensureShuffle();
+    // #639 R4.2/R4.3：**模式是双份数据**（JS settingsStore 与原生 AdvancePolicy.loopMode），
+    // 此前只有「加载歌曲」那条路同步 → 切模式后：
+    //  · 锁屏/耳机 next 走原生相邻格（成员序），与 App 内 next（core planAdvance = 随机序）不同；
+    //  · 切到单曲循环要等下一首歌加载才生效（曲末仍顺进下一首）。
+    // 这里补上「立即下发 + 按新模式的顺序重喂窗口」——重喂是因为随机序与成员序不同，
+    // 窗口里的相邻格必须换成新模式的落点，否则原生相邻格 ≠ core 落点。
+    void applyPlayModeToNative();
   };
 
   useEffect(() => {

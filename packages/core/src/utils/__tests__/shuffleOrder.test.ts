@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyShuffleOrder,
+  applyShuffleIndexes,
   createShuffleState,
   insertNextInShuffle,
   normalizeShuffleOrder,
@@ -201,5 +202,39 @@ describe('applyShuffleOrder（按随机序重排，供队列页/移动端取窗�
     const src = [song('a'), song('b')];
     expect(ids(applyShuffleOrder(src, null))).toEqual(['a', 'b']);
     expect(applyShuffleOrder(src, null)).not.toBe(src);
+  });
+
+  // #639 R2：同一 id 占多格时按 FIFO 位置化匹配，**不减行**（此前按 id 建 Map 去重会少行）
+  it('重复 id 的队列：与队列等长，且是成员下标的一个排列', () => {
+    const dup = [song('a'), song('a'), song('b')];
+    const out = applyShuffleOrder(dup, { order: ['a', 'b', 'a'], cursor: 0 });
+    expect(out).toHaveLength(3);
+    expect(ids(out)).toEqual(['a', 'b', 'a']);
+  });
+
+  it('重复 id 且序列缺该 id：仍等长（缺失成员补末尾，不吞掉重复项）', () => {
+    const dup = [song('a'), song('a'), song('b')];
+    const out = applyShuffleOrder(dup, { order: ['a'], cursor: 0 });
+    expect(out).toHaveLength(3);
+    // 序列先给出一个 a，剩下的 a、b 按成员序补末尾
+    expect(ids(out)).toEqual(['a', 'a', 'b']);
+  });
+});
+
+describe('applyShuffleIndexes（位置化成员下标，唯一匹配实现）', () => {
+  it('无重复 id：按序列给出的顺序返回下标', () => {
+    expect(applyShuffleIndexes(['c', 'a', 'b'], [song('a'), song('b'), song('c')])).toEqual([2, 0, 1]);
+  });
+
+  it('重复 id：FIFO 匹配，结果与队列等长且为下标排列', () => {
+    const dup = [song('a'), song('a'), song('b')];
+    const indexes = applyShuffleIndexes(['a', 'b', 'a'], dup);
+    expect(indexes).toHaveLength(3);
+    expect([...indexes].sort((x, y) => x - y)).toEqual([0, 1, 2]);
+    expect(indexes).toEqual([0, 2, 1]); // 第一个 a→0、b→2、第二个 a→1
+  });
+
+  it('空序列 → 恒等下标', () => {
+    expect(applyShuffleIndexes([], [song('a'), song('b')])).toEqual([0, 1]);
   });
 });

@@ -1,7 +1,7 @@
 import type { PlayMode, Song } from '../types/index.js';
 import { identityKey } from '../utils/songIdentity.js';
 import { getNextSongIndex } from '../utils/queue.js';
-import type { ShuffleState } from '../utils/shuffleOrder.js';
+import type { ShuffleScope, ShuffleState } from '../utils/shuffleOrder.js';
 import { RESOLUTION_CHAIN_BUDGET_MS } from './playbackBudgets.js';
 
 /**
@@ -142,10 +142,16 @@ export function pickNextSongAfterFailure(
    * 表达「没有序列」请显式传 `null`。
    */
   shuffle: ShuffleState | null,
+  /**
+   * 随机序的对齐作用域（#639 R1）：与调用方手里的 `playlist` 相符。
+   * 移动端传的是**原生预取窗口**的子集时须传 `'window'`——此前缺省 authoritative
+   * 会在跳歌路径上裁掉窗口外的 id，永久截断随机序。
+   */
+  shuffleScope: ShuffleScope = 'authoritative',
 ): { index: number; song: Song } | null {
   let index = currentIndex;
   for (let step = 0; step < playlist.length; step += 1) {
-    index = getNextSongIndex(playlist, index, playMode, shuffle);
+    index = getNextSongIndex(playlist, index, playMode, shuffle, shuffleScope);
     if (index < 0) return null;
     const candidate = playlist[index];
     if (!candidate || candidate.id === currentSongId) return null;

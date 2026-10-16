@@ -2,7 +2,6 @@ import type { PlayMode, Song } from '../types/index.js';
 import {
   alignShuffleOrder,
   stepShuffle,
-  syncShuffleCursor,
   type ShuffleScope,
   type ShuffleState,
 } from './shuffleOrder.js';
@@ -108,18 +107,24 @@ export function planAdvance(input: AdvanceInput): AdvancePlan {
  *           未提供序列时退回旧的「防重复现抽」行为（无记忆、不可持久化，
  *           仅为不破坏既有调用方而保留，见 core 测试里钉住的「无序列行为」）。
  * 队列空或 index 越界 → -1（调用方处理：无下一首）。
+ *
+ * `shuffleScope`（#639 R1）：**必须**与调用方手里的 `queue` 相符——
+ * `authoritative`（队列 = 完整成员集）还是 `window`（队列 = 原生预取窗口的子集）。
+ * 此前本函数硬编码 authoritative，而 `planAdvance` 收 scope ⇒ 同一份序列两套对齐口径
+ * （预取/失败跳歌裁窗口、advance 不裁），落点会分叉。
  */
 export function getNextSongIndex(
   queue: Song[],
   currentIndex: number,
   playMode: PlayMode,
   shuffle?: ShuffleState | null,
+  shuffleScope: ShuffleScope = 'authoritative',
 ): number {
   if (queue.length === 0 || currentIndex < 0 || currentIndex >= queue.length) return -1;
   if (playMode === '单曲循环') return currentIndex;
   if (playMode === '随机播放') {
     if (!shuffle) return nextRandomIndex(queue, currentIndex);
-    return stepShuffle(syncShuffleCursor(shuffle, queue, currentIndex), queue, 1).index;
+    return stepShuffle(alignShuffleOrder(shuffle, queue, currentIndex, shuffleScope), queue, 1, shuffleScope).index;
   }
   // 列表循环（默认）
   return (currentIndex + 1) % queue.length;
@@ -133,17 +138,20 @@ export function getNextSongIndex(
  *           此前与 next 共用同一「现抽」→ 回的是一张新随机曲，从不回上一张。
  *           无序列时保留旧现抽行为。
  * 队列空或 index 越界 → -1（调用方处理：无上一首）。
+ *
+ * `shuffleScope` 语义同 {@link getNextSongIndex}。
  */
 export function getPrevSongIndex(
   queue: Song[],
   currentIndex: number,
   playMode: PlayMode,
   shuffle?: ShuffleState | null,
+  shuffleScope: ShuffleScope = 'authoritative',
 ): number {
   if (queue.length === 0 || currentIndex < 0 || currentIndex >= queue.length) return -1;
   if (playMode === '随机播放') {
     if (!shuffle) return nextRandomIndex(queue, currentIndex);
-    return stepShuffle(syncShuffleCursor(shuffle, queue, currentIndex), queue, -1).index;
+    return stepShuffle(alignShuffleOrder(shuffle, queue, currentIndex, shuffleScope), queue, -1, shuffleScope).index;
   }
   return (currentIndex - 1 + queue.length) % queue.length;
 }

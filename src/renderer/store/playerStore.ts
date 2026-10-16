@@ -10,6 +10,8 @@ import {
   createShuffleState,
   normalizeShuffleOrder,
   syncShuffleCursor,
+  stepShuffle,
+  alignShuffleOrder,
   insertNextInShuffle,
   replaceShuffleSongId,
   isInlineLyrics,
@@ -510,7 +512,28 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       // 00:05 / 05:19」——歌名换了、进度没换，一次「已停止」说了假话（与 #328 同源）。
       // 时长保留旧值到新曲加载完成，与下方正常路径同一口径。
       playbackClock.setPosition(0);
-      set({ error: OFFLINE_COPY, isLoading: false, isPlaying: false, currentSong: song });
+      // #639 R3.3：落点也要跟着走。此前只换 currentSong，`currentPlaylistIndex` 与随机游标
+      // 仍指上一首 —— 恢复网络后按「下一首」会从**旧位置**推进（跳回已播过的位置）。
+      // 口径与下方正常路径的队列同步段一致（队列外点歌 → 追加进队并置尾）。
+      const playlist = get().currentPlaylist;
+      const at = playlist.findIndex(s => s.id === song.id);
+      if (at === -1) {
+        const appended = [...playlist, song];
+        const appendedIndex = appended.length - 1;
+        set({
+          error: OFFLINE_COPY, isLoading: false, isPlaying: false, currentSong: song,
+          currentPlaylist: appended,
+          currentPlaylistIndex: appendedIndex,
+          shuffle: syncShuffle(get(), appended, appendedIndex),
+        });
+      } else {
+        set({
+          error: OFFLINE_COPY, isLoading: false, isPlaying: false, currentSong: song,
+          currentPlaylistIndex: at,
+          shuffle: syncShuffle(get(), playlist, at),
+        });
+      }
+      persistQueue(get().currentPlaylist, get().currentPlaylistIndex, get().shuffle);
       message.error(OFFLINE_COPY);
       return;
     }
@@ -858,6 +881,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // 幂等：它已经在「当前曲之后」这一位 → 什么都不做（连点两次结果稳定、队列长度不变）
     if (existingIndex === currentPlaylistIndex + 1) return;
+    // #639 R3.1：点的是**当前播放曲本身** → no-op（与随机分支 `song.id === currentId`、
+    // 与 core `insertNextInShuffle` 的「无下一格可插」同口径）。缺这条守卫时会落进下面的
+    // 移动分支，把当前曲往后挪一格而 `currentPlaylistIndex` 不动 —— 指针与当前曲脱节，
+    // 再按「下一首」会重复加载正在播的这一首。
+    if (existingIndex === currentPlaylistIndex) return;
 
     let nextQueue: Song[];
     let nextIndex = currentPlaylistIndex;
@@ -923,7 +951,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   removeFromQueue: (index: number) => {
-    const { currentPlaylist, currentPlaylistIndex } = get();
+    const { currentPlaylist, currentPlaylistIndex, playMode, shuffle } = get();
     if (index < 0 || index >= currentPlaylist.length) return;
 
     const newPlaylist = currentPlaylist.filter((_, i) => i !== index);
@@ -936,9 +964,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     if (index === currentPlaylistIndex) {
-      // 移除的是当前播放歌曲，播放下一首
-      const nextSong = newPlaylist[index] || newPlaylist[0];
-      const resumedIndex = index < newPlaylist.length ? index : 0;
+      // 移除的是当前播放歌曲 → 续播它的「下一首」。
+      // #639 R3.2：随机模式下「下一首」是**随机序**里的后继（队列页显示的就是随机序，
+      // 用户看到当前行下面是 D，就该播 D）。此前一律取成员序邻居 `newPlaylist[index]`，
+      // 于是播出的歌与界面显示不符。
+      let resumedIndex = index < newPlaylist.length ? index : 0;
+      if (playMode === '随机播放' && shuffle) {
+        // 在**旧**队列上把游标对到当前曲、前进一格，拿到后继 id，再在新队列里定位
+        const stepped = stepShuffle(
+          alignShuffleOrder(shuffle, currentPlaylist, index),
+          currentPlaylist,
+          1,
+        );
+        const nextId = stepped.index >= 0 ? currentPlaylist[stepped.index]?.id : undefined;
+        const at = nextId ? newPlaylist.findIndex(s => s.id === nextId) : -1;
+        if (at >= 0) resumedIndex = at;
+      }
+      const nextSong = newPlaylist[resumedIndex] || newPlaylist[0];
       const nextShuffle = syncShuffle(get(), newPlaylist, resumedIndex);
       set({
         currentPlaylist: newPlaylist,

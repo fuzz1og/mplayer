@@ -211,6 +211,60 @@ describe('insertNext：插入到当前曲之后（#491）', () => {
 });
 
 // ---------------------------------------------------------------------------
+// #639 R3.1：点「当前播放曲本身」→ no-op（指针不得与当前曲脱节）
+// ---------------------------------------------------------------------------
+describe('#639 R3.1：insertNext 点当前曲是 no-op', () => {
+  /** 队列 a,b,c，当前 = b（下标 1） */
+  const seed = () => {
+    const a = song('a', 'A');
+    const b = song('b', 'B');
+    const c = song('c', 'C');
+    usePlayerStore.setState({ currentPlaylist: [a, b, c], currentPlaylistIndex: 1, currentSong: b });
+    return { a, b, c };
+  };
+
+  it('列表循环下点当前曲：队列、指针、当前曲都不动', async () => {
+    const { b } = seed();
+    await usePlayerStore.getState().insertNext(b);
+
+    expect(ids()).toEqual(['a', 'b', 'c']);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(1);
+    expect(usePlayerStore.getState().currentSong?.id).toBe('b');
+  });
+
+  it('列表循环下点当前曲后再按「下一首」：落点推进到 c，不是原地重播 b', async () => {
+    const { b } = seed();
+    await usePlayerStore.getState().insertNext(b);
+
+    const before = usePlayerStore.getState().currentPlaylistIndex;
+    usePlayerStore.getState().playNext();
+
+    // 修前：insertNext 把当前曲挪到下标 2 而指针仍停在 1（队列 [a,b,c]→[a,c,b]），
+    // 于是 next 从 1 前进到 2 —— 也就是**又回到 b**（重播当前曲）。
+    // 现在 insertNext 是 no-op，next 正常从 1 → 2（成员序 = c）。
+    expect(before).toBe(1);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(2);
+    expect(usePlayerStore.getState().currentSong?.id).toBe('c');
+  });
+
+  it('单曲循环下点当前曲同样是 no-op', async () => {
+    const { b } = seed();
+    usePlayerStore.setState({ playMode: '单曲循环' });
+    await usePlayerStore.getState().insertNext(b);
+
+    expect(ids()).toEqual(['a', 'b', 'c']);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(1);
+  });
+
+  it('点别的歌仍然正常移动（守卫不误伤）', async () => {
+    const { a } = seed();
+    await usePlayerStore.getState().insertNext(a);
+
+    expect(ids()).toEqual(['b', 'a', 'c']);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // insertAfter：插入位数学只此一份（与 moveItem 同处）
 // ---------------------------------------------------------------------------
 describe('insertAfter 边界', () => {

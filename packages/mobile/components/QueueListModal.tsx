@@ -88,7 +88,9 @@ export default function QueueListModal({ visible, onClose }: Props) {
     const state = usePlayerStore.getState();
     const index = state.queue.indexOf(song);
     if (index < 0) return;
-    state.setQueue(state.queue, index);
+    // #639 R1：回灌的正是**当前队列本身**——冷启对账后它是原生预取窗口的子集，
+    // 按 authoritative 会把随机序裁到窗口那几首并立刻落盘（永久截断）。传 window 只补不丢。
+    state.setQueue(state.queue, index, 'window');
     playSong(song);
   }, []);
 

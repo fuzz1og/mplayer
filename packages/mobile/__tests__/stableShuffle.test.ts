@@ -346,3 +346,76 @@ describe('#555 宿主执行 planAdvance 的 effect', () => {
     expect(usePlayerStore.getState().currentIndex).toBe(1);
   });
 });
+
+/**
+ * #639 R1：作用域必须是**显式**的，窗口态不得当权威集处理。
+ *
+ * 根因：`setQueue` / `ensureShuffle` / `advance` 的现洗分支把「手里的队列是权威成员集
+ * 还是原生预取窗口」当成隐含前提，而 store 订阅会立刻把结果落盘 ⇒ 窗口态算出的短序列
+ * **永久覆盖**盘上那份完整序列（重启也回不来）。#543 早已把作用域做成显式参数。
+ */
+describe('#639 R1：队列作用域显式（窗口态不截断随机序）', () => {
+  const FULL = Array.from({ length: 12 }, (_, i) => `s${i}`);
+  const WINDOW = ['s2', 's3', 's4', 's5', 's6'];
+
+  beforeEach(() => {
+    useSettingsStore.setState({ playMode: '随机播放' });
+  });
+
+  it('窗口态 setQueue：序列**不被裁剪**（12 首仍是 12 首，落盘也是 12）', async () => {
+    usePlayerStore.setState({ shuffle: { order: FULL, cursor: 0 } });
+    const window = WINDOW.map(song);
+    usePlayerStore.getState().setQueue(window, 1, 'window');
+
+    const st = usePlayerStore.getState().shuffle;
+    expect(st?.order).toHaveLength(12);
+    expect(st?.order).toEqual(FULL);
+    await Promise.resolve();
+    // 落盘内容不短于调用前的序列（修前这里落的是窗口那 5 首）
+    const saved = vi.mocked(AsyncStorage.setItem).mock.calls.at(-1)?.[1];
+    expect(JSON.parse(saved as string).order).toHaveLength(12);
+  });
+
+  it('窗口态 ensureShuffle：**没有序列时不现洗**（不落盘短序列）', () => {
+    const window = WINDOW.map(song);
+    usePlayerStore.setState({
+      queue: window, currentSong: window[1], currentIndex: 1,
+      hasPlayed: true, shuffle: null, queueScope: 'window',
+    });
+    vi.mocked(AsyncStorage.setItem).mockClear();
+    usePlayerStore.getState().ensureShuffle();
+
+    // 核心断言：序列仍是「没有」——修前这里会现洗一份 5 首的窗口序
+    expect(usePlayerStore.getState().shuffle).toBeNull();
+  });
+
+  it('窗口态 advance：没有序列时不建序列（走 core 兼容路径）', () => {
+    const window = WINDOW.map(song);
+    usePlayerStore.setState({
+      queue: window, currentSong: window[0], currentIndex: 0,
+      hasPlayed: true, shuffle: null, queueScope: 'window',
+    });
+    usePlayerStore.getState().advance(1);
+
+    expect(usePlayerStore.getState().shuffle).toBeNull();
+  });
+
+  it('权威态 ensureShuffle：没有序列时正常现洗（作用域只影响窗口态）', () => {
+    const members = FULL.map(song);
+    usePlayerStore.setState({
+      queue: members, currentSong: members[0], currentIndex: 0,
+      hasPlayed: true, shuffle: null, queueScope: 'authoritative',
+    });
+    usePlayerStore.getState().ensureShuffle();
+
+    expect(usePlayerStore.getState().shuffle?.order).toHaveLength(12);
+  });
+
+  it('原生对账把队列标为窗口态（否则后续 ensureShuffle 会截断）', () => {
+    // 对账路径写 queueScope；这里钉住它的语义（不依赖原生桥）
+    const window = WINDOW.map(song);
+    usePlayerStore.setState({ queue: window, queueScope: 'window', shuffle: null, currentIndex: 0 });
+    usePlayerStore.getState().ensureShuffle();
+    expect(usePlayerStore.getState().shuffle).toBeNull();
+  });
+});
