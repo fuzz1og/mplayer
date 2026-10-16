@@ -30,10 +30,10 @@
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^4.1.10",
     "typescript": "^6.0.3",
-    "vite": "^7.3.6",
+    "vite": "^7.3.7",
     "vite-plugin-dts": "^5.1.2",
     "vitest": "^4.1.11"
   },
