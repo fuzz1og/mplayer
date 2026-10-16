@@ -100,3 +100,16 @@
 `node_modules` 落后时，症状原本落在 `lint` 的 `Cannot find module` 与 `core:build` 的 `pako` TS7016 上）；
 `.githooks/pre-commit` 在 mobile typecheck 前保证 `packages/core/dist` 新鲜（dist 落后会报假 `TS2305`）。
 
+## 更新（2026-10-16，#654）：static 增加注释门禁；pre-commit 的 staged lint 分批
+
+决策 1（验证只有一个入口）不变，`static` 再增一步 `comment-gate.mjs`（#651 的规则，秒级、不依赖安装），
+紧跟 docs-gate 之后。**它此前从未接进 `verify.mjs`**：脚本随 #653 合入 master，但没有任何 job 调它——
+`CODING_STANDARDS.md` 却已把「机械门禁 `comment-gate.mjs`」写成事实，属**假门禁**。补上后文档承诺与实现一致。
+
+同批把 pre-commit 的 staged lint 从 `xargs npx eslint` 改为 `scripts/lint-staged.mjs`：xargs 把全部暂存文件
+塞进**一条**命令，#653 提交 330 个文件（本机路径拼接后 31239 字符）时撞上 Windows 命令行上限，
+`git commit` 直接报 `The command line is too long`。新脚本按「文件数 40 / 字符数 6000」双闸门分批，
+并直接 `spawnSync(process.execPath, [...])` 绕开 shell（cmd.exe 与 CreateProcess 两条上限都碰不到）。
+边界不变：pre-commit 仍是本地加速而非闸门，闸门是 CI 的必需状态检查。
+
+
