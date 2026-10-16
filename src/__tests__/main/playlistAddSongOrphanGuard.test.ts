@@ -4,16 +4,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * #610 守卫：`playlist:addSong` 单曲通道 + `fileStorage.addSongToPlaylist`
- * （第二份容量实现）已删除，不得复活。
- *
- * 「零调用者」的实证（#610 验收）：
- * - 注册处只有 `src/main/ipc/favoriteHistoryPlaylist.ts` 一处，handler 只调
- *   `db.addSongToPlaylist`；
- * - preload 是通用 `invoke(channel, ...)` 透传（`src/main/preload.ts`），无通道白名单；
- * - 渲染层产线代码（含 `services/playlistWriteAdapter.ts`）只调批量腿
- *   `playlist:addSongs`，从未 invoke `playlist:addSong`（#552/#554 后批量腿是唯一写入口）。
- *
+ * #610 守卫：`playlist:addSong` 单曲通道 + `fileStorage.addSongToPlaylist`（第二份容量实现）已删除
+ * ，不得复活。
  * 因此任何一次回退（重新注册通道、或恢复逐首存储方法）都会让本文件变红。
  */
 const testDir = dirname(fileURLToPath(String(import.meta.url)));

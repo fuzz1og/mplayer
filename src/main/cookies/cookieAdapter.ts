@@ -1,14 +1,5 @@
 /**
  * 桌面 cookie 管理器 adapter（T13 spec #159）。
- *
- * 职责：把 core `cookieManager` 的内存态接到 Electron 主进程磁盘（db.setSetting），
- * 落实「生成逻辑在 core 纯函数、I/O 在此宿主落盘」的职责划分（仿 T01 sourceRouter /
- * T10 tlsFingerprint 的 persister 模式）：
- *
- * - `registerCookiePersister()`：core 每次 cookie 变更（生成/轮换/清除）触发回调 → 写 db；
- * - `loadCookiesFromDisk()`：冷启动把磁盘读到的 cookies 重水合进 core（不触发再落盘）；
- * - `ensureKugouDeviceCookie(reg)`：供 T07 酷狗直连消费的统一取/轮换入口。
- *
  * core 内零 I/O；移动端不接入本 adapter（core 默认即纯内存态）。
  */
 import {

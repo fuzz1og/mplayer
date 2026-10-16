@@ -236,10 +236,9 @@ describe('audioPlayer', () => {
     await playSong(first);
     emitStatus(status({ isLoaded: false, error: 'load failed' }));
 
-    // fresh 重试带路由链兜底：解析出替代 URL 会再起播一次（replace 第 2 次）；
-    // 仍失败（第二次错误事件）才跳歌——两次失败都注入，验证最终推进到下一首
-    // 首播走 createAudioPlayer（rc=0），fresh 重试走 replace（rc=1）：
-    // replace 发生 = 兜底解析完成并二次起播，此时才注入第二次失败
+    // fresh 重试带路由链兜底：解析出替代 URL 会再起播一次（replace 第 2 次）；仍失败（第二次错误事
+    // 件）才跳歌——两次失败都注入，验证最终推进到下一首首播走 createAudioPlayer（rc=0），fresh 重
+    // 试走 replace（rc=1）：replace 发生 = 兜底解析完成并二次起播，此时才注入第二次失败
     await vi.waitFor(() => expect(audioMocks.players[0].replaceCalls).toBe(1));
     emitStatus(status({ isLoaded: false, error: 'load failed' }));
     await vi.waitFor(() => expect(audioMocks.players[0].uri).toBe('https://example.com/2.mp3'), { timeout: 4000 });

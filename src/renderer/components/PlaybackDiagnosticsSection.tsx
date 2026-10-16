@@ -8,8 +8,6 @@ import { IpcClient } from '@/renderer/services/IpcClient';
  * 播放诊断设置区（#363 / ADR `2026-09-23-playback-trace-sink`）。
  * 展示本次会话最近若干条播放解析 trace，支持清空与手动导出 JSON。
  * 数据只在主进程内存环形缓冲里，不落盘、不外传；关闭应用即消失。
- *
- * #391：探测 trace 已随探测链删除，本区只剩解析 trace。
  */
 
 const { Text } = Typography;

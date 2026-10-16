@@ -21,10 +21,8 @@ const REFRESH_MAX_CONCURRENT = 3;
 let refreshInFlight = 0;
 /**
  * 等待槽位的 FIFO 队列（#412）。
- *
- * 此前是 `while (inFlight >= 3) await sleep(200)` 的**忙等轮询**：被限流的调用每 200ms
- * 醒一次、每秒白烧 5 个定时器，且唤醒顺序不保证公平。改成队列后由「释放槽位的人」
- * 直接唤醒下一个，零轮询、天然 FIFO。
+ * 此前是 `while (inFlight >= 3) await sleep(200)` 的**忙等轮询**：被限流的调用每 200ms 醒一次、每秒
+ * 白烧 5 个定时器，且唤醒顺序不保证公平。
  */
 const waitingForSlot: Array<() => void> = [];
 
@@ -70,12 +68,6 @@ export function __resetSongCoverRefreshState(): void {
 
 /**
  * 封面加载失败时刷新歌曲封面（上游 API 签名过期后同一 URL 永远失败，必须换新 URL）。
- * 策略（"失败三次才放弃"）：
- * 0. 缓存优先：缓存里已有可用封面（非死链且非刚失败的同一 URL）直接复用，零搜索上屏
- *    （收藏/历史的 cover 本不落库，空封面挂载即触发；整表扫荡退役后缓存不能只写不读）
- * 1. 名字搜索 + 精确匹配（严格匹配防翻唱/Live 误配）
- * 2. 放弃，返回 null（UI 保持默认图，5 分钟后重试）
- * 「按源站 ID 识别」首腿已删（自建 API 退役后 searchSongById 恒 null，#273）。
  * 找到新封面后同步更新 URL 缓存（只替换封面，不动已有 url/lrc）；失败静默。
  * 同歌并发触发合并为一次；60 秒冷却防刷新风暴。
  */

@@ -17,10 +17,8 @@ interface SpeedResult {
 
 /**
  * 设置页「检查更新」区段（#262 + #579）。
- *
- * 更新状态本身**不再由本组件自持**：它来自 `useUpdateStore`（主进程 push + 首帧快照），
- * 因为同一个状态还要驱动左侧栏「设置」旁的徽标，而组件局部 state 跨不过去（#579 / ADR 不变量 I2）。
- * 仍然留在组件内的只有纯页面级状态：通道选择、测速结果、浏览器下载提示。
+ * 更新状态本身**不再由本组件自持**：它来自 `useUpdateStore`（主进程 push + 首帧快照），因为同一个状
+ * 态还要驱动左侧栏「设置」旁的徽标，而组件局部 state 跨不过去（#579 / ADR 不变量 I2）。
  */
 const UpdateSection: React.FC = () => {
   const [currentVersion, setCurrentVersion] = useState('');

@@ -5,13 +5,8 @@ import type { ContentCache } from '../../shared/sourceRouter.js';
 
 /**
  * 网易歌单搜索（#415 / ADR `2026-09-27-netease-playlist-search`）单测。
- *
- * 接缝 = `setTransport`（`transport.request` 是唯一出网口），**零真实网络**；
- * 模式与 `neteaseContent.test.ts` 一致（fakeCache + mockTransport + afterEach 复位）。
- *
- * 覆盖：请求形态（URL/表单/头集合与 searchSongs 逐字一致，不新增加密）、字段映射、
- * 分页与越界、limit 钳制、`code=405/406/400` 错误路径、空关键词零请求、
- * 缓存（key/TTL 6h/空结果不入库）与单飞；以及 `searchArtists` 迁腿后的可区分失败语义。
+ * 接缝 = `setTransport`（`transport.request` 是唯一出网口），**零真实网络**；模式与 
+ * `neteaseContent.test.ts` 一致（fakeCache + mockTransport + afterEach 复位）。
  */
 
 afterEach(() => {

@@ -24,11 +24,9 @@ const getSystemDark = (): boolean =>
     : false;
 
 /**
- * 应用主题根组件（挂载在 App 根部，取代 main.tsx 里的 ConfigProvider）：
- * - 启动读取持久化的主题模式（默认跟随系统）
- * - 监听系统深浅色变化（system 模式下实时跟随）
- * - 写 html[data-theme] 驱动 global.css 深浅 token
- * - 按生效主题切换 antd darkAlgorithm / defaultAlgorithm
+ * 应用主题根组件（挂载在 App 根部，取代 main.tsx 里的 ConfigProvider）：- 启动读取持久化的主题模式
+ * （默认跟随系统）- 监听系统深浅色变化（system 模式下实时跟随）- 写 html[data-theme] 驱动 
+ * global.css 深浅 token- 按生效主题切换 antd darkAlgorithm / defaultAlgorithm
  */
 export const ThemeManager: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [mode, setModeState] = useState<ThemeMode>('system');

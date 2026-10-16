@@ -5,46 +5,16 @@ import { findExactMatch } from '../utils/songMatcher.js';
 
 /**
  * 「取缓存 → 旧签名死链判定 → 精确匹配搜索 → 写缓存」纯编排（ADR-0012 决策 3）。
- *
- * 平台各自注入端口（照 shared/sourceSwap 的接缝风格）：
- * 桌面 = IPC 缓存/DB，移动端 = 进程内 cacheService；core 只保留规则本身，
- * 规则不再散落到每个列表页。
- *
- * 规则：
- * a. 缓存命中且 url 非旧签名死链 → 直接返回，不搜索；
- * b. 未命中/死链 → 调搜索，只有 findExactMatch 判定的精确匹配才采用；
- * c. 采用结果写缓存：url 非 http、旧签名死链、candidate.audioTag === 'invalid'
- *    一律不写；nonFull（audioTag=preview 或 candidate.nonFull）必须保留；
- * d. 没有精确匹配 / 无可用 url → 返回 null；
- * e. 失败打开：搜索抛错时返回 null，不抛给调用方。
- *
- * **接口不变量（调用方约定）**：返回 null 只表示"本轮没拿到可采用的新资源"，
- * 调用方**不得用 null 覆盖本地已有的有效 url**——搜索失败/未命中时保留旧值，
- * 下次刷新再试。写缓存/写回端口抛错只记日志，不影响已采用的结果返回
- * （缓存是加速器，不是事实源）。
- */
-/**
- * 腿调用选项（#556）：墙钟由**墙的持有者**（解析链）持有，端口只消费它。
- *
- * `timeoutMs` 是这次搜索可用时限（已按 `min(本腿墙, 链总预算剩余)` 夹过）；
- * `signal` 在链总预算耗尽或本腿到点时 abort —— 端口应把它透传给底层请求，
- * 并把「已 aborted」当作正常失败（返回空候选），不要上抛。
- *
- * **与 `TransportCallOptions` 是同一个形状**（#556 评审 A1）：腿端口与 transport
- * 端口各写一份结构相同的类型，会让「端口收下了、实现没读」这种假接缝在类型上
- * 无法被发现。这里直接取别名——搜索端口能收的，正是 transport 能消费的。
+ * **接口不变量（调用方约定）**：返回 null 只表示「本轮没拿到可采用的新资源」，调用方**不得用 null 覆盖本地已有的有效 url**
+ * ——搜索失败/未命中时保留旧值，下次刷新再试。`nonFull`（audioTag=preview 或 candidate.nonFull）**必须保留**，一律不写。
  */
 export type LegOptions = TransportCallOptions;
 
 export interface SongResourceRefreshDeps {
   /**
    * 读缓存端口（可选；TTL 由各端缓存自身管控，未命中/无有效 url 返回 null）。
-   *
    * 可选的理由（#557）：不是每个调用方都持有「能交出完整 `PlayableResource`」的缓存。
-   * 解析链的严格搜索腿（`sourceRouter.trySearchLeg`）就是这种情况——它在直连与 tier3
-   * 之后才被调用，播放路径早已查过预取缓存，而预取缓存只交出 `{ url, nonFull }`（剥掉 ts）。
    * 此前端口必填，逼得那条腿塞一个假适配器（`readCache: async () => null`）。
-   * 不提供该端口 = 跳过规则 a，直接走搜索。
    */
   readCache?: (song: Song) => Promise<PlayableResource | null>;
   /** 写缓存端口：只有编排判定可采用的资源才会调用。 */

@@ -1,9 +1,7 @@
 /**
- * 「下一首播放」原生路径的首份 JS 侧测试（#495）。
- *
- * ⚠️ `__tests__/setup.ts` 全局把 `requireOptionalNativeModule` 打成 null（= 回落引擎路径），
- * 所以既有全部测试跑的都是 expo-audio；这里在本文件里 `vi.mock('expo')` 覆盖成**假原生模块**，
- * 让「原生引擎」这条路径第一次被 JS 侧测试覆盖。
+ * ⚠️ `__tests__/setup.ts` 全局把 `requireOptionalNativeModule` 打成 null（= 回落引擎路径），所以
+ * 既有全部测试跑的都是 expo-audio；这里在本文件里 `vi.mock('expo')` 覆盖成**假原生模块**，让「原生
+ * 引擎」这条路径第一次被 JS 侧测试覆盖。
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -401,13 +399,6 @@ describe('playNextInQueue：引擎无关入口（#495）', () => {
 
 /**
  * #518 的失败用例：真机现场「设为下一首的歌没有被播」。
- *
- * 现场三件事必须都在测试里钉住：
- * ① 原生只持**预取窗口**（loadQueue 一首 + 补窗追加），JS 队列才是完整歌单；
- * ② 插队成功后**不得**用原生窗口重建 JS 队列（那会把歌单缩成几首窗口歌，并让补窗基准
- *    从「歌单下标」跳成「窗口下标」——真机 `计划=[28,29,30]` ↔ `计划=[0]` 反复横跳）；
- * ③ 原生桥没报插队语义（老 APK / 未重编译原生）时，必须回**可观测失败**，
- *    不能因为 `accepted=true` 就提示「已设为下一首」（真机日志实锤的那条）。
  */
 describe('#518：插入后「下一首」= 被插入的那首；补窗基准不回跳', () => {
   /** 原生推进 = index+1（PlayerService.next → seekToNextMediaItem），故「下一首」= index+1 */
@@ -518,12 +509,8 @@ describe('#518：插入后「下一首」= 被插入的那首；补窗基准不�
 
 /**
  * #591 补窗结算契约：`feedWindow` 的每一轮必须**如实上报 outcome**，原生只读 outcome 结算。
- *
- * 两条原本各修一端的场景（#563 / #574）现在只是同一个契约的两个取值；这里钉住 JS 这一半
- * 的可观测契约（**修前会红**：旧实现根本不发 outcome，原生只能自己数 addedCount 推断）。
- *
- * ⚠️ 「原生据此绕回 / 只闩水位」那半段落在 Kotlin 的私有分支里，fake-only 的 Vitest 跑不了；
- * 文件末尾的源码契约守卫只证明形状存在，真正的行为验收必须真机（见 PR 正文的 logcat 原文）。
+ * 两条原本各修一端的场景（#563 / #574）现在只是同一个契约的两个取值；这里钉住 JS 这一半的可观测契约
+ * （**修前会红**：旧实现根本不发 outcome，原生只能自己数 addedCount 推断）。
  */
 describe('#591 补窗结算契约（JS 侧如实上报 outcome）', () => {
   /** 原生窗口 [A, B, C]，当前停在队尾 C；列表循环下 JS 的「下一首」应绕回 A/B。 */
@@ -621,10 +608,8 @@ describe('#591 补窗结算契约（JS 侧如实上报 outcome）', () => {
 
 /**
  * #591 原生结算的**源码契约守卫**。
- *
- * Vitest 是 Node 环境 + 假原生桥，无法执行 Kotlin（更无法断言私有标志）。这里的守卫只能证明
- * 「实现确实存在、形状是这段」，**不能替代 Kotlin 编译/设备验证**——#591 的行为验收在真机上
- * （PR 正文的两个场景 + 阳性对照的 logcat 原文）。
+ * 这里的守卫只能证明「实现确实存在、形状是这段」，**不能替代 Kotlin 编译/设备验证**——#591 的行为
+ * 验收在真机上（PR 正文的两个场景 + 阳性对照的 logcat 原文）。
  */
 describe('#591 原生结算：源码契约守卫（不替代 Kotlin 编译/设备验证）', () => {
   const MODULE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -775,10 +760,9 @@ describe('#519：随机模式的补窗按稳定随机序（不再自激重抽）
 });
 
 /**
- * #520 blocker 2（评审）：原位换源**必然换 id**，必须走 ADR 指定的 core
- * `replaceShuffleSongId`（同格换 id、顺序不动），否则：
- * - 换的是当前曲 → `setQueue` 后 `orderMatchesQueue` 为假 → **整条随机序重洗**；
- * - 换的不是当前曲 → 旧 id 滞留在序列里 → 下次对齐时该曲被**挪到序列末尾**。
+ * #520 blocker 2（评审）：原位换源**必然换 id**，必须走 ADR 指定的 core`replaceShuffleSongId`（同格
+ * 换 id、顺序不动），否则：- 换的是当前曲 → `setQueue` 后 `orderMatchesQueue` 为假 → **整条随机序
+ * 重洗**；- 换的不是当前曲 → 旧 id 滞留在序列里 → 下次对齐时该曲被**挪到序列末尾**。
  */
 describe('#520 blocker 2：原位换源就地换 id（不重洗、不留旧 id）', () => {
   it('换当前曲：序列就地换 id，长度/位置/顺序都不变', async () => {

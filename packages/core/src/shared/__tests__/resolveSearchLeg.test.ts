@@ -38,10 +38,6 @@ const emptyClient: DirectSourceClient = {
 
 /**
  * #544：解析链的**严格搜索腿**。
- *
- * 此前这条规则在桌面被手抄成「搜索 → findExactMatch → 取 hit.url」，
- * 缺三条守卫（非 http / 旧签名死链 / audioTag=invalid）也不写缓存；
- * core 的 `refreshSongResource` 一直有完整规则却只有 1 个消费者。
  * 这里用矩阵钉死守卫，证明「弱化手抄」与「core 唯一实现」的差别真实存在。
  */
 describe('解析链严格搜索腿（#544）', () => {

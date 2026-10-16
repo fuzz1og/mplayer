@@ -9,13 +9,9 @@ import {
 } from '../antiScrape.js';
 
 /**
- * T11 spec #157 G2 P1 请求硬化 —— UA 池扩池 + 反同源连续。
- *
- * 接缝 = `antiScrape.ts` 的公开函数：
- * - UA 池扩至 30-50，取值分布够广；
- * - `getUserAgent(sourceKey?)` 保证**同一源连续请求不重复同一 UA**（反同源连续）；
- * - `getAntiScrapeHeaders(referer?, sourceKey?)` 内部用连续性 UA；
- * - `getApiRequestHeaders` 为 API 态的最小请求头（两态中的 API 态）。
+ * 接缝 = `antiScrape.ts` 的公开函数：- UA 池扩至 30-50，取值分布够广；- `getUserAgent(sourceKey?)` 
+ * 保证**同一源连续请求不重复同一 UA**（反同源连续）；- `getAntiScrapeHeaders(referer?, sourceKey?)`
+ * 内部用连续性 UA；- `getApiRequestHeaders` 为 API 态的最小请求头（两态中的 API 态）。
  */
 
 describe('T11 UA 池扩池 + 反同源连续', () => {

@@ -4,15 +4,8 @@ import { createContentCacheLayers, isCacheable } from '../cache/contentCacheLaye
 
 /**
  * #498 方案 A：移动端内容缓存的写穿 + 启动回填。
- *
- * 这层存在的唯一理由是 core 的 `ContentCache` 是**同步**接口，而内核 `getJSON` 是
- * 异步的——所以做「L1 同步 + L2 写穿 + 启动回填」。下面五条全部零真实网络/零真实磁盘，
- * 用内存假件驱动，逐条钉住 issue 评审点名的坑：
- *
- * 1. 内核真键是 `:json:content:<原键>`（namespace 空），过滤不能用裸 `content:`；
- * 2. 回填必须把键**还原一层**，否则 L1 键与写穿键不一致、回填等于白做；
- * 3. 写穿不能绕过 `CacheManager.set` 的空值判定；
- * 4. L2 写失败不能变成 unhandled rejection（由 `.catch` 收口 —— 见「写穿失败不炸」）。
+ * 这层存在的唯一理由是 core 的 `ContentCache` 是**同步**接口，而内核 `getJSON` 是异步的——所以做
+ * 「L1 同步 + L2 写穿 + 启动回填」。
  */
 
 /** 内核真键前缀（namespace 取默认空串）：与 `cacheKernel.prefix()` 同形。 */

@@ -13,13 +13,8 @@ import com.facebook.react.jstasks.HeadlessJsTaskConfig
 import com.facebook.react.jstasks.HeadlessJsTaskEventListener
 
 /**
- * 原生 → JS 的「补窗」触发（规格 §5）。
- *
- * - 用 in-process `HeadlessJsTaskContext.startTask()`，**不用 startService**
- *   （Android 12+ 会撞 `BackgroundServiceStartNotAllowedException`）。
- * - RN 0.86 的 `HeadlessJsTaskContext` 自身不持 wakelock → 我们自己持。
- * - 任务返回值不是回传通道：回传走同一模块的 `patchQueue`。
- * - 失败降级顺序：headless 不可用 → 「预取窗口即缓冲边界」，绝不让原生去发网络请求。
+ * 原生 → JS 的「补窗」触发（规格 §5）。RN 0.86 的 `HeadlessJsTaskContext` 自身不持 wakelock → 我们自己持。
+ * 失败降级顺序：headless 不可用 → 「预取窗口即缓冲边界」，绝不让原生去发网络请求。
  */
 internal object PrefetchBridge {
   private const val TAG = "MPlayerPrefetch"

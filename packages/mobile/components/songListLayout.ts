@@ -3,18 +3,14 @@ import type { Song } from '@mplayer/core';
 
 /**
  * 歌曲列表的**布局算术**（#411）—— 与渲染分离，不依赖 react-native。
- *
- * 分开的理由：`getItemLayout` 的算术出错在真机上的表现是「滚动位置错乱」，
- * 比渲染断言难查得多；而 `components/SongList.tsx` 一 import 就会把 react-native
- * 拖进单测环境。这里只做数字。
+ * 分开的理由：`getItemLayout` 的算术出错在真机上的表现是「滚动位置错乱」，比渲染断言难查得多；而 
+ * `components/SongList.tsx` 一 import 就会把 react-native 拖进单测环境。
  */
 
 /**
  * 行内容高度 = 纵向内距 ×2 + 封面高（与 `SongRow` 的样式逐项对应）。
- *
- * **不含**底部发丝线分隔线：它的宽度按屏幕密度是 0.33–0.5px，N 行累计误差只在
- * `scrollToIndex` 这类精确跳转上体现，而本模块不提供该能力（所有迁移过来的列表
- * 都是自由滚动）。省略它换来的是「这段算术可以被单测直接覆盖」。
+ * **不含**底部发丝线分隔线：它的宽度按屏幕密度是 0.33–0.5px，N 行累计误差只在`scrollToIndex` 这类
+ * 精确跳转上体现，而本模块不提供该能力（所有迁移过来的列表都是自由滚动）。
  */
 export const SONG_ROW_LAYOUT_HEIGHT = 10 * 2 + 44;
 /** 分区头（iOS inset grouped：paddingVertical 12×2 + sectionHeader 行高）。 */

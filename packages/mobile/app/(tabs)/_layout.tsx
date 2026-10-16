@@ -27,10 +27,8 @@ const TABS: { name: string; href: Href; icon: LucideIcon; label: string }[] = [
 
 /**
  * 底部 chrome（tab 栏 + 迷你播放栏），在 TabLayout 顶层、内容区之外渲染。
- * 这样 tab 栏的 ChromeSurface / PlayerBar 的 ChromeSurface 都不是自身 blurTarget 的后代，
- * Android 上才能真 blur（BlurView 在自身 target 子树内会自包含而失效）。
- * - tab 栏收起动画 / 搜索页 tab 隐藏逻辑与原 AnimatedTabBar 一致（ADR-0008）
- * - PlayerBar 保留搜索页 tab 收起时贴底补安全区逻辑
+ * 这样 tab 栏的 ChromeSurface / PlayerBar 的 ChromeSurface 都不是自身 blurTarget 的后代，Android 上
+ * 才能真 blur（BlurView 在自身 target 子树内会自包含而失效）。
  */
 function BottomChrome() {
   const { colors } = useTheme();

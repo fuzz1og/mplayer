@@ -8,23 +8,9 @@ import { traceNow } from './playbackTrace.js';
 import { DIRECT_VALIDATION_TIMEOUT_MS } from './playbackBudgets.js';
 
 /**
- * 直连腿播放时时长取证（#392，来源：wayfinder 票 #380 决议 D3）。
- *
- * **要解决什么**：探测链删掉（#391）后，试听版判定在 qq / kugou / kuwo / migu /
- * qianqian 的直连腿上出现缺口——这五个客户端只实现 `resolvePlayableUrl`（返回裸 URL），
- * 没有权威时长字段（`resolveUrlInfo` 只有 netease / soda 实现），直连拿到试听片段会被
- * 当完整版播出去。旧探测的 1MB 体积启发式随 #391 删除，这里补上「**播放时 1 次取证、
- * 只对在播那一首**」的替代。
- *
- * **复用而非新造**：取证走 `shared/audioHead.ts`（一次 Range + 完整大小），时长结论走
- * `shared/audioDuration.ts`（容器可信性矩阵），证据选择走 `shared/playbackGuard.ts`
- * 的 `pickDurationEvidence`（与 tier3 护栏同一条 L1→L3 降级链、同一套容差）。
- *
- * **只判「比标称短」**：试听片段的定义是「短于标称」。比标称长（加长版 / 误配 / 标称
- * 本身不准）不做判定——把正常歌误标成试听版比漏标糟得多。
- *
- * **fail-open**：标称时长缺失、Range 失败、非音频字节、证据不足——一律按现状放行，
- * 不新增失败路径、不写任何缓存。
+ * 比标称长（加长版 / 误配 / 标称本身不准）不做判定——把正常歌误标成试听版比漏标糟得多。
+ * **fail-open**：标称时长缺失、Range 失败、非音频字节、证据不足——一律按现状放行，不新增失败路径、
+ * 不写任何缓存。
  */
 
 /** 取证命中的证据等级；`none` = 未取证或证据不足（fail-open）。 */

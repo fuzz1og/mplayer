@@ -5,9 +5,8 @@ import { miguDirectClient, decryptXorStream, XOR_KEY } from '../miguDirect.js';
 
 /**
  * 咪咕直连客户端测试（T05 #151）。
- * 接缝：transport.request（T01）——测试注入 mock 传输断言外部行为
- * （搜索映射 / URL 解析与 XOR 解密 / 失败上抛），不真实出网。
- * XOR 解密为纯函数（decryptXorStream），用已知向量独立验证。
+ * 接缝：transport.request（T01）——测试注入 mock 传输断言外部行为（搜索映射 / URL 解析与 XOR 解密 
+ * / 失败上抛），不真实出网。
  */
 
 const XOR_SEED = 0x03;

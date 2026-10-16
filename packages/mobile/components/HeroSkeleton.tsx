@@ -1,11 +1,7 @@
 /**
  * Hero 页骨架（#465）：与真实 Hero **同源**的占位形状。
- *
- * 此前四个 Hero 页的加载态各写各的：歌单详情页只画列表骨架、Hero 是数据到了才插进来
- * （封面占屏约 40%，必然跳一次布局）；专辑页一个 Skeleton 都没 import。
- *
- * 纪律（同 CoverGridSkeleton #318/#416）：**骨架与真实同源**——封面块高度取
- * collapsingChrome() 算出的同一个 coverH，而不是各页手抄一个魔法数。
+ * 此前四个 Hero 页的加载态各写各的：歌单详情页只画列表骨架、Hero 是数据到了才插进来（封面占屏约 40%
+ * ，必然跳一次布局）；专辑页一个 Skeleton 都没 import。
  */
 import React from 'react';
 import { View, StyleSheet } from 'react-native';

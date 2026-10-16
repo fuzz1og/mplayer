@@ -1,14 +1,7 @@
 /**
- * 桌面渲染层日志环形缓冲（#477）。桌面此前**没有**任何应用内日志缓冲
- * （`docs/wayfinder/2026-09-21-t5-playback-chain-baseline.md` 原文「桌面没有对应物」），
- * 而 release 构建**不剥 console**（双重闭合的证据见 issue #477 §①），
- * 缺的只是「开关」与「读取入口」。
- *
- * 实现取向：**全局捕获 console，零调用点改动**——不改任何现有 `console.*` 调用，
- * 只在入口 import 本模块一次即开始记录。容量按需求取小（约 30 行）：这是「最近发生了什么」
- * 的现场，不是完整日志系统（桌面主进程日志采集明确不在本片）。
- *
- * 门禁：只在 `isDiagnosticsEnabled()` 打开时记录；关闭时 console 原样放行、零缓冲。
+ * 桌面此前**没有**任何应用内日志缓冲（`docs/wayfinder/2026-09-21-t5-playback-chain-baseline.md` 原
+ * 文「桌面没有对应物」），而 release 构建**不剥 console**（双重闭合的证据见 issue #477 §①），缺的
+ * 只是「开关」与「读取入口」。
  */
 import { isDiagnosticsEnabled } from './devMode';
 

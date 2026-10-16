@@ -8,9 +8,8 @@ import {
 
 /**
  * 移动端应用更新服务（#262/#263）。
- * 与桌面端同源的通道设计：镜像在前、GitHub 直连垫底；
- * auto 通道按测速延迟择优；检查元数据优先走镜像 latest.yml，
- * 全链失败再回落 GitHub Releases API。
+ * 与桌面端同源的通道设计：镜像在前、GitHub 直连垫底；auto 通道按测速延迟择优；检查元数据优先走镜像 
+ * latest.yml，全链失败再回落 GitHub Releases API。
  */
 
 export interface ChannelSpeedResult {
@@ -118,10 +117,9 @@ async function versionFromMirrors(order: readonly UpdateSourceDef[], timeoutMs: 
 }
 
 /**
- * 检查最新版本：
- * 1. 按通道顺序逐源拉 `latest.yml`（几百字节，国内经镜像秒回）拿版本号
- * 2. 镜像链全失败 → GitHub Releases API 直连兜底（旧路径，携带富 releaseNotes）
- * 有新版时附带按获胜源拼装的 APK 直链；notes 在镜像路径下尽力补取（不阻塞结果）。
+ * 检查最新版本：1. 按通道顺序逐源拉 `latest.yml`（几百字节，国内经镜像秒回）拿版本号 2. 镜像链全失
+ * 败 → GitHub Releases API 直连兜底（旧路径，携带富 releaseNotes）有新版时附带按获胜源拼装的 APK 
+ * 直链；notes 在镜像路径下尽力补取（不阻塞结果）。
  */
 export async function checkLatestRelease(currentVersion: string, channel: string): Promise<ReleaseCheckResult> {
   const order = await resolveAttemptOrder(channel, 5000);

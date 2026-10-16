@@ -46,16 +46,8 @@ import {
 
 /**
  * tier3Api —— 第三方解析源订阅执行器（#144）。
- *
- * 设计目标（spec #144）：
- * - 用户通过订阅 JSON 音源清单，为官方直连失败的歌曲提供可播 URL 兜底；
- * - 默认关闭、失败自动降级、公开仓库零端点（本文件不含任何第三方端点）；
- * - 仅执行「可纯声明描述的源」：url-resolver（按 id 直取）与
- *   search-then-resolve（先搜再解）；
- * - 安全：schema 校验 + 版本化 + 域名白名单 + 返回 URL 字节嗅探。
- *
- * 核心零 I/O：订阅拉取走统一 transport 接缝；本地文件由桌面宿主读文件后
- * 以文本形式交给本模块；移动端手动粘贴同理。
+ * 核心零 I/O：订阅拉取走统一 transport 接缝；本地文件由桌面宿主读文件后以文本形式交给本模块；移动端
+ * 手动粘贴同理。
  */
 
 // ── 类型 ─────────────────────────────────────────────────────────────
@@ -139,22 +131,11 @@ export interface Tier3State {
   subscriptions: Tier3Subscription[];
 }
 
-/** 每源累计解析统计（设置页展示；内存计数，本次会话有效、不持久化）。
- *  - hits：**真正交付**给调用方的命中数——只有路由层在 tier3 腿预算内采纳该候选才计
- *    （#362：原先在 resolver 内部自增，预算超时被丢弃的迟到命中也被记成「命中」，
- *    实测一个源 hits=17 而同一批歌 21/21 全部超时失败，设置页与体验相反）；
- *  - resolved：resolver 产出的、过护栏的候选数（含迟到被丢弃的）；
- *  - discarded：预算超时被丢弃的迟到命中数（= resolved - hits，读取时派生）；
- *  - misses：解析腿未命中；
- *  - skipped：因 source 归属不匹配被跳过（ADR-0014：显式声明才过滤）；
- *  - searches：搜索兜底腿参与的关键词搜索次数（此前完全未统计）；
- *  - lastError：最近一次失败原因（排障用，非累计）；
- *  - guards / guardRejected：护栏（#361）按证据等级的命中与拒绝计数——与 resolved/misses
- *    一样记 resolver 内部决策，**含预算超时后仍在后台跑完的迟到工作**；只有 hits 是交付口径；
- *  - sizeBitrateDeclared / sizeBitrateMeasured：L3 两条码率分支分别计数
- *    （ADR：帧实测码率在 ±2s 下会误判，必须与自称码率分开归因）。
- *  仅会话内有效是有意为之：源健康度是时变的，昨日状态不应污染今日判断
- *  （ADR-0014「坏源只做统计」，不做熔断/降权/持久化）。 */
+/**
+ * 每源累计解析统计（设置页展示；内存计数，本次会话有效、不持久化）。
+ * 仅会话内有效是有意为之：源健康度是时变的，昨日状态不应污染今日判断（ADR-0014「坏源只做统计」，不
+ * 做熔断/降权/持久化）。
+ */
 export interface Tier3SourceStats {
   hits: number;
   /** resolver 产出（过护栏）的候选数；`hits` ≤ `resolved`。 */
@@ -187,25 +168,19 @@ export interface Tier3Deps {
   request?: (req: TransportRequest) => Promise<import('../api/transport.js').TransportResponse>;
 }
 
-// 单源墙 / tier3 腿预算 / 嗅探超时集中在 shared/playbackBudgets.ts（#399）。
-// 这里原先的 DEFAULT_TIMEOUT_MS = 15_000 远超 tier3 腿 6s 预算，使预算失去约束力——
-// 单源挂起即可吃光全链预算、饿死后续好源；且 transport 的 maxRetries=3 会对超时类
-// 错误重试，实际耗时再被放大。现在它只剩「kind 未知时的兜底」这一个身份。
+// 这里原先的 DEFAULT_TIMEOUT_MS = 15_000 远超 tier3 腿 6s 预算，使预算失去约束力——单源挂起即可吃
+// 光全链预算、饿死后续好源；且 transport 的 maxRetries=3 会对超时类错误重试，实际耗时再被放大。
+// 现在它只剩「kind 未知时的兜底」这一个身份。
 
-/** 单源硬墙**按 kind 分档**（ADR 2026-09-25 决策 7；清单里的 `timeoutMs` 只能**收紧**到它
- *  以下，不能放大）。原为扁平 2s（ADR-0014 决策 2）——但那对两步源结构性偏紧：
- *  `search-then-resolve` 的**搜索 + 解析**串行在同一个墙内（`withSourceDeadline` 包住
- *  `resolveTier3Candidate`；嗅探自 #399 起不占该墙——见 `SourceClock`），#388 实测一次
- *  **2047ms 的成功路径**与一次 2081ms 被 2s 墙切掉；一步源 2s 余量充足（max 1264ms）。
- *  3s 是 ADR 记的**安全余量（上界）**，不是目标值；本实现取 2s / 2.5s，均在该余量之内。 */
+/**
+ * 单源硬墙**按 kind 分档**（ADR 2026-09-25 决策 7；清单里的 `timeoutMs` 只能**收紧**到它以下，不能
+ * 放大）。
+ * 3s 是 ADR 记的**安全余量（上界）**，不是目标值；本实现取 2s / 2.5s，均在该余量之内。
+ */
 const MAX_SOURCE_TIMEOUT_MS_BY_KIND: Record<Tier3SourceKind, number> = TIER3_SOURCE_WALL_MS_BY_KIND;
 
 /**
  * 单源超时的**默认值**：不写 `timeoutMs` 时取该 kind 的硬墙本身（ADR 2026-09-25 决策 7 补记）。
- *
- * 决策 7 给两步源分档 2.5s 的理由是「2s 会切掉实测 2047ms 的成功路径」——若默认值仍是扁平的
- * 2s，那条理由对**任何没显式写 2500 的清单**都依然成立，分档等于白设（#394 验收时发现：
- * 用户清单的通用兜底条目写 2000，2.5s 的墙从未被碰到）。
  * 显式写 `timeoutMs` 仍然只能收紧：`effectiveSourceTimeout` 会把它夹到硬墙以下。
  */
 function defaultSourceTimeout(kind: Tier3SourceKind): number {
@@ -222,15 +197,11 @@ function effectiveSourceTimeout(source: Tier3Source, remainingBudgetMs: number):
   return Math.max(1, Math.min(configured, wall, remainingBudgetMs));
 }
 
-/** 单源墙的**可暂停**墙钟（#399）。
- *
- *  墙的语义 = 「搜索 + 解析」的硬上界。嗅探（一次 64KB Range + 头解析）是另一件事：
- *  ADR-0014 决策 3 给它的是**独立 1s**。但实现上它嵌在单源墙内，于是两步源出现
- *  「2.5s 的墙里含着 1s 嗅探」，搜索 + 解析只剩 1.5s（#388 实测 2047ms 的**成功路径**
- *  贴墙被切）。这里把墙做成可暂停：嗅探期间停表，恢复时按剩余额度续走。
- *
- *  **tier3 腿预算不受影响**：嗅探仍落在 sourceRouter 的 TIER3_CHAIN_BUDGET_MS race 之内，
- *  所以「单源上界 = 墙 + 1s」不会膨胀成「腿的上界 = 6s + N×1s」。 */
+/**
+ * 单源墙的**可暂停**墙钟（#399）。
+ * 但实现上它嵌在单源墙内，于是两步源出现「2.5s 的墙里含着 1s 嗅探」，搜索 + 解析只剩 1.5s（#388 实
+ * 测 2047ms 的**成功路径**贴墙被切）。
+ */
 interface SourceClock {
   /** 进入不计入墙的阶段（嗅探）。 */
   pause(): void;
@@ -271,11 +242,11 @@ function createSourceClock(timeoutMs: number, onExpire: () => void) {
   };
 }
 
-/** 单源墙钟上限：把 transport 的重试（maxRetries=3，超时/TLS 类错误可重试）也算在内，
- *  到点即换下一个源。计时内容 = 搜索 + 解析（嗅探由 SourceClock 暂停，见上）。
- *
- *  #408：墙的持有者持有 AbortController，到点先 abort 再结算——底层请求（含 transport 重试）
- *  立刻停掉，不再「换了下一个源，上一个还在压上游」。墙值语义未变（仍属 #399 的口径范围）。 */
+/**
+ * 单源墙钟上限：把 transport 的重试（maxRetries=3，超时/TLS 类错误可重试）也算在内，到点即换下一个
+ * 源。
+ * 计时内容 = 搜索 + 解析（嗅探由 SourceClock 暂停，见上）。
+ */
 async function withSourceDeadline<T>(
   run: (signal: TransportSignal, clock: SourceClock) => Promise<T>,
   timeoutMs: number,
@@ -335,10 +306,9 @@ function statsFor(id: string): Tier3SourceStats {
   return s;
 }
 
-/** 每源累计统计（key = source.id）。
- *  `discarded` 在读取时按 `resolved - hits` 派生：迟到命中与「路由层是否采纳」
- *  的时序无法在写入侧无竞态地判定（同歌去重下多个调用方共享一条解析），
- *  交付（hits）只由采纳方 commit，未交付的产出就是被丢弃的。 */
+/**
+ * 每源累计统计（key = source.id）。
+ */
 export function getTier3Stats(): Record<string, Tier3SourceStats> {
   // #398：健康度与会话内调度状态同源（shared/sourceSchedule），读取时派生——
   // 统计本身仍只记计数，避免两处各存一份分数而漂移。
@@ -701,10 +671,11 @@ interface CandidateProbe {
 }
 
 
-/** 探测结果缓存（#361 实现决策「探测结果按稳定 URL 缓存」）：复用 audioProbe
- *  的键归一化思路（去时间戳/token 参数，同一条链每次签名不同也命中同一键），
- *  避免同一 URL 反复付 64KB Range + 头解析成本。只缓存**成功**探测：失败多为
- *  瞬时网络/风控，缓存会把一次抖动放大成 30min 的死源。 */
+/**
+ * 探测结果缓存（#361 实现决策「探测结果按稳定 URL 缓存」）：复用 audioProbe 的键归一化思路（去时间
+ * 戳/token 参数，同一条链每次签名不同也命中同一键），避免同一 URL 反复付 64KB Range + 头解析成本。
+ * 只缓存**成功**探测：失败多为瞬时网络/风控，缓存会把一次抖动放大成 30min 的死源。
+ */
 const PROBE_CACHE_TTL_MS = 30 * 60 * 1000;
 const PROBE_CACHE_MAX = 500;
 const probeCache = new Map<string, { probe: CandidateProbe; expires: number }>();
@@ -727,10 +698,11 @@ export function clearTier3ProbeCache(): void {
   probeCache.clear();
 }
 
-/** 取头部字节：判定是否真音频（拒 text/html 错误页），并读完整大小。
- *  超时独立（ADR-0014 决策 3），**不继承** source.timeoutMs——
- *  「解析允许多慢」与「首字节该多快」是两件事。 */
-/** 单次解析的运行期依赖：注入 deps（currentDeps）+ 本次的单源墙钟（嗅探期间暂停，#399）。 */
+/**
+ * 取头部字节：判定是否真音频（拒 text/html 错误页），并读完整大小。
+ * 超时独立（ADR-0014 决策 3），**不继承** source.timeoutMs——「解析允许多慢」与「首字节该多快」是
+ * 两件事。
+ */
 interface ResolveDeps extends Tier3Deps {
   sourceClock?: SourceClock;
 }
@@ -780,11 +752,10 @@ interface Tier3Candidate {
   evidence: PlaybackEvidence;
 }
 
-/** 常见元数据字段名（源能力异构：kugou 搜索自带 Duration、hk0cc 解析响应回
- *  song_play_time、gdstudio 只回 url/br/size）。ADR 决策 4 **不把 durationPath
- *  设成契约必需**，这里按常见名自动探测：探到多一级证据，探不到就降级。 */
-// 只收语义明确的字段名：`time`/`length`/`rate` 这类在解析响应里可能是时间戳、
-// 数组长度或采样率，误当证据会**误拒**一首正常的歌（比「少一级证据」糟得多）。
+/**
+ * ADR 决策 4 **不把 durationPath 设成契约必需**，这里按常见名自动探测：探到多一级证据，探不到就降级
+ * 。
+ */
 const SOURCE_DURATION_PATHS = ['duration', 'Duration', 'song_play_time', 'play_time', 'playTime', 'interval'];
 const SOURCE_BITRATE_PATHS = ['br', 'bitrate', 'bitRate', 'bit_rate'];
 const SOURCE_NAME_PATHS = ['name', 'song', 'songname', 'songName', 'song_name', 'title'];
@@ -872,11 +843,8 @@ async function resolveFromRequestSpec(
   const jsonPath = spec.responseJsonPath || '';
   const url = toUrlCandidate(getByPath(body, jsonPath));
   // 先取值、后判封套：取到合法候选 URL 时不让封套否决。
-  // 部分上游用 `{code:200,message:"成功",url:"…"}` 表达成功（HTTP 风格 code），
-  // 先判封套会把带合法直链的响应整条拒掉——此时「响应里有没有直链」才该说了算。
-  // 只有**取不到可用 URL** 时才把业务错误封套当失败原因上报（如 vkeys 的
-  // `{code:110000,message:"…"}`），用于区分「上游挂了」与「无此歌」，
-  // 避免日志里只有空洞的“未命中”。
+  // 部分上游用 `{code:200,message:"成功",url:"…"}` 表达成功（HTTP 风格 code），先判封套会把带合法
+  // 直链的响应整条拒掉——此时「响应里有没有直链」才该说了算。
   if (!url || !isAllowedUrl(url, source.allowedDomains)) {
     warnOnBusinessError(body, source);
     return null;
@@ -960,10 +928,9 @@ async function resolveSearchThenResolve(
     if (!isRecord(item)) continue;
     const itemName = asString(getByPath(item, source.search.namePath));
     const itemArtist = source.search.artistPath ? asString(getByPath(item, source.search.artistPath)) : '';
-    // 严格匹配优先（拒绝翻唱/Live/remix/同名不同歌手）。降级仅当**目标歌手也为空**
-    // （如 tier3 搜索兜底候选本身无歌手信息）时允许歌名精确匹配；目标歌手非空时，
-    // 无歌手字段的候选一律拒绝——上游目录同名歌多（李荣浩/李寒/孟庭苇都有《恋人》），
-    // 同名不同歌手的错播比「不播」更糟。
+    // 降级仅当**目标歌手也为空**（如 tier3 搜索兜底候选本身无歌手信息）时允许歌名精确匹配；目标歌手
+    // 非空时，无歌手字段的候选一律拒绝——上游目录同名歌多（李荣浩/李寒/孟庭苇都有《恋人》），同名
+    // 不同歌手的错播比「不播」更糟。
     const target = { name: song.name || '', artist: song.artist || '' };
     const candidate = { name: itemName, artist: itemArtist };
     const nameExact = !!target.name && normalize(target.name) === normalize(itemName);
@@ -1054,13 +1021,8 @@ async function searchTier3SourceItems(
 }
 
 /**
- * 第三方订阅搜索兜底：直连搜索失败时，用订阅清单里的 search-then-resolve 源
- * 按关键词返回候选歌曲。歌曲 url 可能为空，播放时仍可走 tier3 解析链。
- *
- * 注意：搜索兜底是「关键词候选」，不存在把 A 源 id 塞给 B 源解析器的错配风险
- * （source 防护只作用于播放解析 resolveTier3），因此**不按 source 过滤搜索源**；
- * 候选的 sourceType 标记为其真实来源（tier3SourceSource 推断，如 mitu→kuwo），
- * 让点击播放时解析链的 source 防护与候选一致，而不是伪装成查询源。
+ * 第三方订阅搜索兜底：直连搜索失败时，用订阅清单里的 search-then-resolve 源按关键词返回候选歌曲。
+ * 歌曲 url 可能为空，播放时仍可走 tier3 解析链。
  */
 export async function searchTier3Songs(
   keyword: string,
@@ -1093,10 +1055,9 @@ export async function searchTier3Songs(
         clearTimeout(budgetTimer);
         return out;
       }
-      // 搜索腿**不按 source 过滤**（ADR-0014 决策 6 只要求 url-resolver 的归属约束）：
-      // 搜索是「关键词候选」，不存在把 A 源 id 塞给 B 源解析器的错配风险，
-      // 且候选自带歌名/歌手匹配过滤。多留一个源 = 多一份兜底（用户抱怨「源不够用」）。
-      // 归属只用于给候选打正确的 sourceType（经别名归一化，见 :候选构造）。
+      // 搜索腿**不按 source 过滤**（ADR-0014 决策 6 只要求 url-resolver 的归属约束）：搜索是「关键
+      // 词候选」，不存在把 A 源 id 塞给 B 源解析器的错配风险，且候选自带歌名/歌手匹配过滤。
+      // 多留一个源 = 多一份兜底（用户抱怨「源不够用」）。
       console.info(`[tier3] 源 ${source.id} 搜索请求: ${keyword}`);
       statsFor(source.id).searches++;
       // 搜索腿同款单源硬墙（ADR-0014 决策 2「搜索腿补同款预算」）：
@@ -1104,10 +1065,9 @@ export async function searchTier3Songs(
       const searchTimeoutMs = effectiveSourceTimeout(source, deadline - Date.now());
       try {
         const items = await Promise.race([searchTier3SourceItems(source, keyword, searchTimeoutMs, opts), budgetHit]);
-        // 只保留歌名与查询词强相关的候选：归一化后歌名必须等于查询词、或为查询词
-        // 的一部分（查询词更具体，如「恋人 李荣浩」可匹配「恋人」）；反向
-        // （「恋人」匹配「恋人未满」）会端上完全不同的歌，一律丢弃。
-        // 多词查询的每个词都要出现在歌名或歌手里（「恋人 李荣浩」要求歌手含李荣浩）。
+        // 只保留歌名与查询词强相关的候选：归一化后歌名必须等于查询词、或为查询词的一部分（查询词更
+        // 具体，如「恋人 李荣浩」可匹配「恋人」）；反向（「恋人」匹配「恋人未满」）会端上完全不同的
+        // 歌，一律丢弃。
         const tokens = keyword
           .trim()
           .split(/[\s,，、;；&|/]+/)
@@ -1241,11 +1201,11 @@ export function setTier3Deps(deps: Tier3Deps): void {
   currentDeps = deps;
 }
 
-/** source 字段常见写法 → MPlayer 规范源键（ADR-0014 决策 6）。
- *  生态里没有统一词汇表：同一平台在不同 API 里叫法不同（GD Studio 用 tencent、
- *  lx 用 tx、MPlayer 用 qq）。不归一化则这些值会通过校验但永不匹配，
- *  静默变成死源；更糟的是搜索候选的 sourceType 被污染成该值，播放时
- *  decideRoute 找不到客户端 → 用户看到「可能为 VIP/无版权」的错误提示。 */
+/**
+ * source 字段常见写法 → MPlayer 规范源键（ADR-0014 决策 6）。
+ * 生态里没有统一词汇表：同一平台在不同 API 里叫法不同（GD Studio 用 tencent、lx 用 tx、MPlayer 用 
+ * qq）。
+ */
 const SOURCE_ALIASES: Record<string, SourceKey> = {
   tencent: 'qq',
   tx: 'qq',
@@ -1284,11 +1244,10 @@ const TIER3_MUSIC_SOURCES: ReadonlySet<string> = new Set([
 /** 合法 source 值清单（报错/文档用）。 */
 const TIER3_SOURCE_VALUES = [...TIER3_MUSIC_SOURCES].join('/');
 
-/** 规范化 source 值：去空白/小写后查别名表，再校验是否落在规范集内。
- *  **不认识的值返回 undefined（等同未声明）**——只归一化不校验时，`tidal`/拼写错误这类
- *  值会通过清单校验但永不匹配：解析腿静默变死源，搜索腿还会把候选的 `sourceType`
- *  污染成该值 → 播放时 `decideRoute` 找不到客户端 → 用户看到「可能为 VIP/无版权」的
- *  错误提示（t6 §4.2②）。合法值见 TIER3_SOURCE_VALUES（含 `tencent`/`tx` 等别名）。 */
+/**
+ * 规范化 source 值：去空白/小写后查别名表，再校验是否落在规范集内。
+ * 合法值见 TIER3_SOURCE_VALUES（含 `tencent`/`tx` 等别名）。
+ */
 export function normalizeTier3Source(value: string): SourceKey | undefined {
   const key = value.trim().toLowerCase();
   const canonical = SOURCE_ALIASES[key] ?? key;
@@ -1297,24 +1256,14 @@ export function normalizeTier3Source(value: string): SourceKey | undefined {
 
 /**
  * 该源是否可用于解析「来源为 songSource 的歌」（ADR-0014 决策 6）。
- *
- * - 显式声明且与歌曲来源一致 → 可用；
- * - 显式声明但不一致 → 不可用（原样，防跨源错配）；
- * - **未声明**：search-then-resolve 可用（它自带 isExactMatch 歌名/歌手校验，
- *   即便源不对也由内容匹配兜住）；**url-resolver 不可用**——该腿没有任何内容级
- *   校验，放行一个不声明归属的 id 型解析器，就等于把 A 源的 id 塞给 B 源的接口，
- *   可能返回完全不同的歌（这正是 source 字段原本要防的事）。
  */
 function isSourceUsableFor(source: Tier3Source, songSource: SourceKey): boolean {
   return classifySourceOwnership(source, songSource) === 'usable';
 }
 
-/** 单源归属分类（ADR-0014 决策 6 的单一事实源；供过滤与失败归因共用，避免两处规则漂移）。
- *  - `usable`：显式声明与歌曲来源一致；或**未声明/值不认识**的 search-then-resolve
- *    （它自带歌名/歌手校验，即便源不对也由内容匹配兜住）；
- *  - `mismatch`：显式声明了另一个音乐源；
- *  - `undeclared`：未声明 source 的 url-resolver（拒绝，防跨源错配）；
- *  - `unknown`：source 值不在规范集/别名表里的 url-resolver（等同未声明，拒绝）。 */
+/**
+ * 单源归属分类（ADR-0014 决策 6 的单一事实源；供过滤与失败归因共用，避免两处规则漂移）。
+ */
 type SourceOwnership = 'usable' | 'mismatch' | 'undeclared' | 'unknown';
 
 function classifySourceOwnership(source: Tier3Source, songSource: SourceKey): SourceOwnership {
@@ -1324,15 +1273,11 @@ function classifySourceOwnership(source: Tier3Source, songSource: SourceKey): So
   return declared === songSource ? 'usable' : 'mismatch';
 }
 
-/** 源适用的原始音源：**只认显式声明的 source**（ADR-0014 决策 6，含别名归一化）。
- *
- *  原实现会在 source 缺省时按 URL host/路径推断（越权猜测），猜不出则返回
- *  undefined 让该源参与**任意源**的歌解析——而 url-resolver 这条腿没有任何
- *  内容级校验（search-then-resolve 有 isExactMatch，url-resolver 只有域名白名单
- *  + 字节嗅探），于是「猜不出」等于打开跨源错播通道：A 源的 id 被塞给 B 源的
- *  解析接口，可能返回完全不同的歌。本函数原先的注释正是声称要防这件事。
- *
- *  现在：未声明即 undefined，由调用方决定是否拒绝（见 isSourceUsableFor）。 */
+/**
+ * 源适用的原始音源：**只认显式声明的 source**（ADR-0014 决策 6，含别名归一化）。
+ * 本函数原先的注释正是声称要防这件事。
+ * 现在：未声明即 undefined，由调用方决定是否拒绝（见 isSourceUsableFor）。
+ */
 export function tier3SourceSource(source: Tier3Source): SourceKey | undefined {
   if (!source.source) return undefined;
   return normalizeTier3Source(source.source);
@@ -1342,11 +1287,6 @@ export function tier3SourceSource(source: Tier3Source): SourceKey | undefined {
 
 /**
  * 播放失败归因（#357）：把「直连没拿到 URL + tier3 兜底情况」压成可操作的一类。
- *
- * 现状是一句「无法获取音频 URL：可能为 VIP/无版权或直连暂不可用」，把四种完全
- * 不同的原因混在一起，还把用户引向「VIP/无版权」的错误方向（t6 §4.2② 实测：
- * 清单写了不认识的 source 值 → 搜索候选 sourceType 被污染 → decideRoute 抛
- * 「该源暂无直连实现」→ 用户最终看到的就是这句 VIP 提示）。
  */
 export type PlaybackFailureKind =
   /** 该源被设为「仅直连」，tier3 兜底被主动关掉（可操作：改回「自动」）。 */
@@ -1376,11 +1316,9 @@ export interface PlaybackFailureAdvice {
 }
 
 /**
- * 播放失败归因（#357）：调用方在「直连 + tier3 都没拿到 URL」后调用，得到归因与
- * 可操作文案。按**当前配置**推导（订阅清单 + 来源开关 + tier3 开关），不依赖
- * 会话累计统计——那些是全局计数，不是「本次为什么失败」（ADR-0014 决策 5）。
- *
- * 纯读，无副作用；跨端（桌面经 IPC / 移动端直调）共用同一份文案。
+ * 播放失败归因（#357）：调用方在「直连 + tier3 都没拿到 URL」后调用，得到归因与可操作文案。
+ * 按**当前配置**推导（订阅清单 + 来源开关 + tier3 开关），不依赖会话累计统计——那些是全局计数，不
+ * 是「本次为什么失败」（ADR-0014 决策 5）。
  */
 export function explainPlaybackFailure(song: Song): PlaybackFailureAdvice {
   const key = song.sourceType as string;
@@ -1443,11 +1381,11 @@ export function explainPlaybackFailure(song: Song): PlaybackFailureAdvice {
 
 // ── 护栏应用（#361）──────────────────────────────────────────────────
 
-/** 单源候选取证 + 护栏决策：不过护栏返回 null，由调用方换下一个源。
- *  取证顺序 = 护栏降级链 L1→L5（见 shared/playbackGuard.ts）：
- *  L1 源自带时长（解析响应/搜索条目自动探测）→ L2 音频头解析（已取的头部字节）
- *  → L3 体积 × 8 ÷ 码率（优先源自称 br，缺失才用帧实测）→ L4 歌名 + 歌手精确匹配
- *  → L5 仅 source 声明。 */
+/**
+ * 取证顺序 = 护栏降级链 L1→L5（见 shared/playbackGuard.ts）：L1 源自带时长（解析响应/搜索条目自动
+ * 探测）→ L2 音频头解析（已取的头部字节）→ L3 体积 × 8 ÷ 码率（优先源自称 br，缺失才用帧实测）→ 
+ * L4 歌名 + 歌手精确匹配→ L5 仅 source 声明。
+ */
 type Tier3CandidateOutcome =
   | { kind: 'hit'; resolution: Tier3Resolution }
   | { kind: 'rejected'; guard: PlaybackGuard }
@@ -1631,11 +1569,8 @@ async function runSerialSources(
 
 /**
  * 初始化窗口（决策 4/5）：**第一首进 tier3 的歌本来那次解析**，零额外探测请求。
- * 交错起手 H=600ms、在飞 ≤2、**不引入任何窗口级墙值**（单源墙沿用决策 7 的按 kind 常态墙，
- * 被墙切掉的样本按决策 6 的截尾档降权）。任一命中即交付，不等在飞的另一条（其观测记「放弃」）。
- *
- * 并发上界（ADR 决策 5 修订）：窗口内的在飞**计入 K=3**，故第二条并行在飞要额外借一个槽位；
- * 借不到就不交错起手，按单条继续——全局上游在飞上限因此恒为 3（不是「2 + K = 5」）。
+ * 并发上界（ADR 决策 5 修订）：窗口内的在飞**计入 K=3**，故第二条并行在飞要额外借一个槽位；借不到就
+ * 不交错起手，按单条继续——全局上游在飞上限因此恒为 3（不是「2 + K = 5」）。
  */
 async function runInitWindow(
   song: Song,

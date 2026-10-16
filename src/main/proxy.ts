@@ -88,10 +88,9 @@ export function getTlsDegradedHttpsAgent(): https.Agent {
   return degradedHttpsAgent;
 }
 
-// ── TLS 指纹伪装 agent（T10 spec #156，仅桌面，weapi 试点）───────────────
-// best-effort：Node https.Agent 只能调整 minVersion/keepAlive/ciphers 等握手参数，
-// 无法逐字节伪造 ClientHello（JA3）或完整扩展集（JA4）。此 agent 作为「特征偏置」，
-// 配合 weapi 附加请求头，由 `setTlsFingerprintAgentProvider` 注入 core 供 weapi 使用。
+// ── TLS 指纹伪装 agent（T10 spec #156，仅桌面，weapi 试点）
+// ───────────────best-effort：Node https.Agent 只能调整 minVersion/keepAlive/ciphers
+// 等握手参数，无法逐字节伪造 ClientHello（JA3）或完整扩展集（JA4）。
 let fingerprintHttpsAgent: https.Agent | null = null;
 
 /** 返回静态复用的指纹 https agent（桌面 weapi 伪装用）。 */

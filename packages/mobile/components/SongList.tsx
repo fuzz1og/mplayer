@@ -33,22 +33,8 @@ export type { SongListRow } from './songListLayout';
 
 /**
  * 歌曲列表深模块（#411）。
- *
- * 背景：9 个列表页 / 11 个 FlatList 各自决定虚拟化粒度——固定行高却不给
- * `getItemLayout`、行组件不 memo、回调全内联（即使加了 memo 也会被新函数击穿）、
- * key 混入 index、搜索页干脆把「组」当 cell 在组内 `map` 全量渲染（绕过虚拟化）。
- *
- * 这里把**列表该负责的事**收进来，页面只描述数据：
- * - **扁平化的行模型**（`SongListRow`：分区头 / 组头 / 歌曲行）。搜索页那种「组内
- *   map」被拍平后，虚拟化才真正生效——一个 30 首的组不再一次性挂 30 行。
- * - **`getItemLayout`**：行高固定（见 `songListLayout` 的三个常量），按行类型累加偏移。
- *   注意只有**不含 `ListHeaderComponent`** 时偏移语义才明确，所以传了就自动放弃它
- *   （错的偏移比没有更糟）。
- * - **窗口档位**：与 `CollapsingHero` 共用 `components/listWindow.ts`，页面不再各走默认。
- * - **稳定 key**：由调用方给 `row.key`；本模块从不把 index 拼进 key。
- * - **稳定回调**：对外只暴露 `onPress(song)`（**不带 index**）——带 index 就必须在
- *   `renderItem` 里包一层箭头函数，`SongRow` 的 memo 会被逐帧击穿。需要下标的页面
- *   自己用 `songs.findIndex(s => s.id === song.id)` 换算（点击是低频操作）。
+ * - **稳定回调**：对外只暴露 `onPress(song)`（**不带 index**）——带 index 就必须在`renderItem` 里
+ * 包一层箭头函数，`SongRow` 的 memo 会被逐帧击穿。
  */
 interface Props {
   rows: SongListRow[];
@@ -126,19 +112,10 @@ export default function SongList({
   const keyExtractor = useCallback((row: SongListRow) => row.key, []);
 
   /**
-   * 「行进入视口」= 预取该行歌词（#429）：点开播放器时歌词已在 core 缓存里，不必再等
-   * 一次 RTT。接线只到这里——去重 / single-flight / 取消 / 预算在 core
-   * `shared/lyricsHydrator`，并发与每 host 限速在 transport 双层闸门（#408）。
-   *
-   * - 回调**必须是稳定引用**：RN 不支持热换 `onViewableItemsChanged`（换了会重设
-   *   视口追踪），所以用 useRef 持有一份；候选只来自本次回调拿到的行，不闭包 `rows`。
-   * - 真正入队的是 `settler`：可见集合**停稳** `VIEWPORT_SETTLE_MS` 后才交付（#421），
-   *   滑动期间滚过的行不入队——一次甩动不会把整份歌单打出去。
-   * - 收回也在同一拍：停稳时算出「本次离开可见集合的 key」交给 `cancelLyricsHydration`。
-   *   滑出视口的行不该继续占着出网机会，且排队的取词会被 transport 从队列摘除。
+   * 「行进入视口」= 预取该行歌词（#429）：点开播放器时歌词已在 core 缓存里，不必再等一次 RTT。
+   * - 回调**必须是稳定引用**：RN 不支持热换 `onViewableItemsChanged`（换了会重设视口追踪），所以用 
+   * useRef 持有一份；候选只来自本次回调拿到的行，不闭包 `rows`。
    */
-  // 本列表入队过的候选（key → 候选）：卸载时要按 key 收回（hydrator 是全局单例，
-  // 不能整体清场）；行滑出可见集合时也在同一本账上划掉。
   const enqueuedRef = useRef(new Map<string, LyricsHydrationCandidate>());
   const settlerRef = useRef<ViewportLyricsSettler | null>(null);
   if (settlerRef.current === null) {
@@ -170,10 +147,7 @@ export default function SongList({
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
   // 卸载时先丢掉待交付项，再收回本列表入队过、尚未结算的预取。
-  // ⚠️ 已知取舍：hydrator 按 songId 全局在飞、**没有调用方身份**，所以「收回」是 key 级的——
-  // 若另一个列表此刻也在飞同一首歌，这次取消会一并 abort 它（代价是那次预取白做，
-  // 重新进入视口会再来一次，不会发错数据）。要按调用方隔离得给 hydrator 加 owner 维度，
-  // 本 PR 不做。
+  // 要按调用方隔离得给 hydrator 加 owner 维度，本 PR 不做。
   useEffect(
     () => () => {
       settlerRef.current?.dispose();

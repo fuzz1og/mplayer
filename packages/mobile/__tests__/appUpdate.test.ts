@@ -8,10 +8,8 @@ import {
 import { useSettingsStore } from '../stores/settingsStore';
 
 /**
- * 移动端更新通道服务（#262/#263）：
- * - 镜像 latest.yml 优先取版本号，GitHub API 仅兜底；
- * - 按通道（auto 测速 / 手动置顶）解析 APK 直链；
- * - debug→release 跨签名边界给出卸载迁移提示。
+ * 移动端更新通道服务（#262/#263）：- 镜像 latest.yml 优先取版本号，GitHub API 仅兜底；- 按通道（
+ * auto 测速 / 手动置顶）解析 APK 直链；- debug→release 跨签名边界给出卸载迁移提示。
  */
 
 const LATEST_YML = (v: string) => `version: ${v}

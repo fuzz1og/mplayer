@@ -37,13 +37,9 @@ const song = (id: string): Song => ({
 });
 
 /**
- * #551 回归：8dc86fd（#542）把歌单写入改走 core 编排时，
- * 桌面批量新建分支的成功反馈被弄丢了——只剩 setNewPlaylistName('')，
- * 丢了 message.success / onClose / onSuccess。
- *
+ * #551 回归：8dc86fd（#542）把歌单写入改走 core 编排时，桌面批量新建分支的成功反馈被弄丢了——只剩 
+ * setNewPlaylistName('')，丢了 message.success / onClose / onSuccess。
  * 这条用例在修复前会红（onClose 从不被调用），修复后转绿。
- * 它断言的是**行为**（提示 / 关闭 / 回调），不是渲染层源码文本——
- * 对照 hotlistSaveAll.test.ts 那种 readFileSync + toContain 的断言方式。
  */
 describe('批量加入歌单：新建成功后必须给出反馈并关闭（#551）', () => {
   beforeEach(() => {

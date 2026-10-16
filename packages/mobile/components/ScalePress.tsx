@@ -27,14 +27,9 @@ interface ScalePressProps {
 }
 
 /**
- * iOS 式按压缩放反馈（替代 TouchableOpacity 的 activeOpacity 变淡）：
- * - 按下即时缩放（响应在 touch-down，不在 release）
- * - 松手用 pressScale 临界阻尼弹簧回弹（ADR-0004），无过冲
- * - 系统"减弱动效"时退化为轻微变暗，不做位移动画
- *
- * 用 Animated.createAnimatedComponent(Pressable) 把布局样式与缩放变换挂在
- * 同一个节点上：双节点（Pressable>Animated.View）要么 flex 丢在外层（tab 塌缩）、
- * 要么 flexDirection 丢在内层（SongRow 竖排），单节点才两者都对。
+ * iOS 式按压缩放反馈（替代 TouchableOpacity 的 activeOpacity 变淡）：- 按下即时缩放（响应在 
+ * touch-down，不在 release）- 松手用 pressScale 临界阻尼弹簧回弹（ADR-0004），无过冲- 系统"减弱动效
+ * "时退化为轻微变暗，不做位移动画
  */
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 

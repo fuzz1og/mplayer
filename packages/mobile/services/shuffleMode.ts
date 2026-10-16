@@ -3,20 +3,9 @@ import { alignShuffleOrder, createShuffleState } from '@mplayer/core';
 import type { ShuffleState, Song } from '@mplayer/core';
 
 /**
- * 随机播放的**移动端接线**（#519 = #511 方案 A 的移动端消费 / #520 评审修订）。
- *
- * 语义唯一来源是 core `utils/shuffleOrder.ts`（洗牌序 + 游标的纯函数），
- * 契约见 ADR `docs/adr/2026-09-30-stable-shuffle-order.md` 的「移动端消费契约」。
- * 这里放移动端自己的东西：
- * ① **落盘 / 恢复**：`{ order, cursor }` 本身就是存储形态，直接 JSON 进 AsyncStorage；
- * ② **展示序**：队列页随机模式按序列展示，其它模式仍是成员序；
- * ③ **对齐的作用域**（#520 blocker 1，这条最容易写错）：
- *    - **窗口态**（对账 / 冷启 hydrate / 逐曲游标同步）：JS 队列可能只是原生**预取窗口**，
- *      所以只能`alignShuffleForWindow`（**只补不丢**）。这里若跑全量 normalize，窗口外的 id
- *      会被删掉，而 store 订阅会立刻落盘 ⇒ 随机序**永久截断**（评审实测 12 首 → 5 首）；
- *    - **权威态**（`setQueue` 拿到整张歌单）：队列是完整成员集，才允许
- *      `alignShuffleForMembers`（裁剪幽灵 id + 补新成员）。**幽灵 id 的唯一清理时机就是这里**
- *      —— 否则「只补不丢」会把截断 bug 换成膨胀 bug。
+ * 语义唯一来源是 core `utils/shuffleOrder.ts`（洗牌序 + 游标的纯函数），契约见 ADR 
+ * `docs/adr/2026-09-30-stable-shuffle-order.md` 的「移动端消费契约」。
+ * **幽灵 id 的唯一清理时机就是这里**—— 否则「只补不丢」会把截断 bug 换成膨胀 bug。
  */
 
 export const SHUFFLE_STORAGE_KEY = 'mplayer.shuffle.v1';
@@ -33,10 +22,6 @@ export function sameOrder(a: readonly string[], b: readonly string[]): boolean {
 
 /**
  * 序列是否**覆盖**这批歌：每个队列 id 都能在序列里找到。
- *
- * 序列允许有多余的 id（窗口态只补不丢留下的、或已从歌单移除的幽灵 id）——
- * 用「队列 id ⊆ 序列 id」判对齐，才对得上移动端「原生只持预取窗口」的模型
- * （#520 评审：原先用「id 集合相等」，窗口一来就判成"换歌单"→ 重洗）。
  */
 export function orderCoversQueue(order: readonly string[], queue: readonly Song[]): boolean {
   const inOrder = new Set(order);
@@ -70,10 +55,9 @@ export function alignShuffleForMembers(
 }
 
 /**
- * 建/对齐序列：
- * - 已有序列且**覆盖**这批歌（窗口、子集、同批）→ 窗口态只补不丢（不重洗、不裁剪）；
- * - 队列里出现了序列没有的歌（整批换队列 / 新歌单）→ 按 ADR 重洗一份；
- * - 队列里有歌缺 id 时返回 null：id 序列放不下无身份的歌，调用方退回顺序路径。
+ * 建/对齐序列：- 已有序列且**覆盖**这批歌（窗口、子集、同批）→ 窗口态只补不丢（不重洗、不裁剪）；-
+ * 队列里出现了序列没有的歌（整批换队列 / 新歌单）→ 按 ADR 重洗一份；- 队列里有歌缺 id 时返回 null
+ * ：id 序列放不下无身份的歌，调用方退回顺序路径。
  */
 export function ensureShuffleFor(
   queue: Song[],
@@ -126,11 +110,9 @@ export function selectQueueSongs(
 }
 
 /**
- * 从盘上读回随机序（缺省 / 损坏 / 形状不对 → null，绝不抛）。
- *
- * `cursor` 必须是 **[-1, order.length) 内的整数**：损坏值（如 0.5）会被 core 当成「尚无当前曲」，
- * 于是 `next()` 落到序列首——若序列首恰好是当前曲，用户看到的就是**点了下一首却没换歌**
- * （正是 #519 要修的症状）。所以这里直接夹取成 -1。
+ * `cursor` 必须是 **[-1, order.length) 内的整数**：损坏值（如 0.5）会被 core 当成「尚无当前曲」，于
+ * 是 `next()` 落到序列首——若序列首恰好是当前曲，用户看到的就是**点了下一首却没换歌**（正是 #519 
+ * 要修的症状）。
  */
 export async function loadShuffleState(): Promise<ShuffleState | null> {
   try {

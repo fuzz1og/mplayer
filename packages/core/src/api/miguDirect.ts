@@ -4,19 +4,6 @@ import { request, bodyToBytes, bodyToText, cappedRequestTimeout, type TransportC
 
 /**
  * 咪咕直连客户端（T05 #151）。
- *
- * 直连替代自建 API 的三类请求（均匿名，靠 ua/version/channel 伪装）：
- * - 搜索：`GET c.musicapp.migu.cn/v1.0/content/search_all.do`（明文 JSON，
- *   `text/pageNo/pageSize/isCopyright/sort/searchSwitch`，头 `ua:Android_migu、
- *   version:6.8.8、Origin/Referer: h5.nf.migu.cn`）。
- * - 播放 URL：`GET c.musicapp.migu.cn/strategy/listen-url/h5/v2.4`
- *   （`contentId/resourceType/netType/toneFlag/scene`，头 `signature:"1"、
- *   birth:"h5page"`）；响应可能是**自定义 XOR 换位流**（正文以 \xab\xcd\x01 开头、
- *   seed 在 [3]，`(byte + seed - key[i]) & 0xFF`，key 见下），解密后取 `data.url`；
- *   无版权/受限 → url 为空串，交给换元层。
- * - 歌词：搜索结果的 `lyricUrl` 是普通 LRC URL → 映射进 `Song.lrc`，
- *   由现有 `musicApi.getLyrics(lrcUrl)` 原样拉取（与 T04 千千同模式）。
- *
  * 出网统一经 transport.request（T01 接缝），测试注入 mock 传输；双端（Node/RN）可用。
  * XOR 解密为纯函数（decryptXorStream），独立导出供测试用已知向量验证。
  */

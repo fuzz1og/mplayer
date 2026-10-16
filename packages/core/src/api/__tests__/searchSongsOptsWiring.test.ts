@@ -10,14 +10,8 @@ import { createNeteaseDirectClient } from '../neteaseDirect.js';
 import type { DirectSourceClient } from '../../shared/sourceRouter.js';
 
 /**
- * #556 评审 A1：链尾搜索腿的墙钟与取消信号**真的**接进了每个直连源。
- *
- * 修前形态：`LegOptions` / `searchSongsRouted` 的第 4 参 / `DirectSourceClient.searchSongs`
- * 的第 3 参都在，7 个直连源的实现却全是 `(keyword, page)` —— 参数只有测试里的 fake 读，
- * 产线零消费者。「搜索腿纳入预算」于是只对 fake 生效：#556 的预算墙对真实上游是空话。
- *
- * 这里用 transport 接缝（`setTransport`）从**每个源的外部行为**上钉住透传：
- * 搜索路径上的每一次出网请求都必须带上这次调用的 `timeoutMs` 与 `signal`。
+ * 这里用 transport 接缝（`setTransport`）从**每个源的外部行为**上钉住透传：搜索路径上的每一次出网请
+ * 求都必须带上这次调用的 `timeoutMs` 与 `signal`。
  * 修前 7 个源全部是「源自己的固定 8000/15000 + 无 signal」→ 红。
  */
 const CLIENTS: ReadonlyArray<[string, DirectSourceClient]> = [

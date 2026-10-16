@@ -30,9 +30,7 @@ export function getNextSong(
 /**
  * 落盘队列：成员 + 当前下标 + **随机序列**（#511）。
  * 序列与游标存的是同一个可序列化对象（core `ShuffleState`），重启后顺序不变。
- *
- * `shuffle` **必填**（#511 评审 major）：省略参数曾默认写成 `null` = 静默抹掉已落盘的随机序，
- * 新增调用点忘传时编译期抓不到。表达「没有序列」请显式传 `null`。
+ * 表达「没有序列」请显式传 `null`。
  */
 export function persistQueue(playlist: Song[], index: number, shuffle: ShuffleState | null): void {
   try {

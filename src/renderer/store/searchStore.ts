@@ -89,8 +89,6 @@ export const useSearchStore = create<SearchState>((set) => ({
     }
 
     // 分组视图：**只重建真正包含这首歌的那些组**（#412）。
-    // 此前无论命中与否都把整份 groups 全量 map 一遍（每首歌都新建对象）——
-    // 一次「播放成功」事件就能让整表换新，订阅 groups 的组件全部重渲染。
     // 注意不能只取第一个命中组：同一首歌可以合法出现在多个组里。
     let hit = false;
     const newGroups = state.groups.map(group => {

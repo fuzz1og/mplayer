@@ -49,9 +49,8 @@ export interface SongActionEffects extends SongSwapDeps {
 }
 
 /**
- * song actions 控制器（#304）：独占「哪首歌的哪个弹层开着」——
- * 操作面板与加入歌单弹层任一时刻最多一个可见；换源两阶段状态机（含序号守卫）
- * 委托给 services/songSwapSession.ts 的全应用单例会话。
+ * song actions 控制器（#304）：独占「哪首歌的哪个弹层开着」——操作面板与加入歌单弹层任一时刻最多一
+ * 个可见；换源两阶段状态机（含序号守卫）委托给 services/songSwapSession.ts 的全应用单例会话。
  * 歌曲行只调 openActions(song, handlers)，不再渲染任何弹层。
  */
 export interface SongActionsState {

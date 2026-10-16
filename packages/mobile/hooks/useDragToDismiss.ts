@@ -31,11 +31,8 @@ export interface DragToDismissOptions {
    */
   enabled?: boolean;
   /**
-   * 认领模式（缺省 `'move'`）：
-   * - `'start'`：触摸 DOWN 即成为响应者 + 拒绝让出响应者。**Modal 内的必经路径**
-   *   （RN#14295：Modal 内 onMoveShouldSetPanResponder 不触发；BottomSheet 把手用这条）。
-   * - `'move'`：move 阶段按阈值认领——挂在根节点、需要把点按/横向滑动先让给子级时用
-   *   （全屏播放器）。'start' 模式下 move 认领仍保留为兜底，两者不冲突。
+   * 认领模式（缺省 `'move'`）：- `'start'`：触摸 DOWN 即成为响应者 + 拒绝让出响应者。
+   * 'start' 模式下 move 认领仍保留为兜底，两者不冲突。
    */
   claimMode?: DragClaimMode;
   /**
@@ -44,10 +41,9 @@ export interface DragToDismissOptions {
    */
   claimThreshold: number;
   /**
-   * 是否在 capture 阶段抢先认领竖直拖拽（默认关）：开启后「先横后竖」的拇指弧线也能被
-   * 纵向意图带走，不被横向分页 ScrollView 先抢。判定与 bubble 同一条 isVerticalDragClaim，
-   * 故横向拖动（Slider）与点按（ScalePress）天然不受影响。谓词在事件时刻求值（可读 ref），
-   * 不是渲染快照——页面切换（封面/歌词）要即时生效。
+   * 是否在 capture 阶段抢先认领竖直拖拽（默认关）：开启后「先横后竖」的拇指弧线也能被纵向意图带走，
+   * 不被横向分页 ScrollView 先抢。
+   * 谓词在事件时刻求值（可读 ref），不是渲染快照——页面切换（封面/歌词）要即时生效。
    */
   shouldCapture?: () => boolean;
   /** 判关：调用点编排退场动画（reducedMotion 分支两端不同，留在调用点） */
@@ -91,10 +87,8 @@ export function useDragToDismiss(options: DragToDismissOptions): GestureResponde
   if (panResponderRef.current === null) {
     panResponderRef.current = PanResponder.create({
       // 记「本层见过 DOWN」，不抢起点（两条都返回 false，对子级零影响）。
-      // 两处都接：无活跃 responder 时 renderer 的两阶段派发（accumulateTwoPhaseDispatchesSingle）
-      // 都包含目标自身，handler 挂祖先（播放器根节点）或叶子（把手热区）都能收到 start。
-      // 'start' 模式（Modal 内）：DOWN 即成为响应者，之后所有 move 必然送达；
-      // 'move' 模式（根节点）：只记「见过 DOWN」，返回 false 不抢点按
+      // 两处都接：无活跃 responder 时 renderer 的两阶段派发（accumulateTwoPhaseDispatchesSingle）都
+      // 包含目标自身，handler 挂祖先（播放器根节点）或叶子（把手热区）都能收到 start。
       onStartShouldSetPanResponder: () => {
         sequence.begin();
         return claimsOnTouchStart(optionsRef.current.claimMode ?? 'move');

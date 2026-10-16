@@ -2,20 +2,8 @@ import type { TransportSignal } from './transport.js';
 
 /**
  * 出网闸门（#408 / ADR `2026-09-26-outbound-request-governance`）。
- *
- * 位置：`transport.request()` 的**内部接缝**——不属于公开接口，调用方感知不到排队，
- * 只继承「同一时间出网请求不会失控」这条纪律。
- *
- * 形态（对齐 ADR `2026-09-25-tier3-source-scheduling` 决策 8 已确立的立场）：
- * - **双层在飞上限**：全局 + 每 host。全局必须大于任何单腿自己的上限（tier3 K=3 /
- *   下载 3 / 搜索 3），否则单腿会被外层闸门自我饿死；取 6 = 两条腿各自跑满。
- * - **每 host 2**：「同一主机不要有两条以上在飞」能覆盖绝大多数风控形态；
- *   这是起步值而非结论值，靠 `getOutboundGateStats()` 判定是否要调。
- * - **同 host 严格 FIFO**；跨 host 允许越过被 host 容量挡住的队首（避免队首阻塞）。
- * - **排队期间响应 abort**：从队列摘除并 reject；被 abort 的请求**绝不调用底层传输**。
- *
- * 不做的事（见 ADR 备选与否决）：不感知墙钟（墙的语义属各腿，见 #399）、
- * 不做每 host 最小间隔 pacing（需要按源配参数与实测数据）、队列超限不立即失败。
+ * 全局必须大于任何单腿自己的上限（tier3 K=3 / 下载 3 / 搜索 3），否则单腿会被外层闸门自我饿死；取 6 = 两条腿各自跑满。
+ * **不做**每 host 最小间隔 pacing（需按源配参数与实测数据）、队列超限不立即失败。
  */
 
 export interface OutboundGateOptions {

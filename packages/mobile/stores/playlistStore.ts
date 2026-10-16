@@ -23,9 +23,8 @@ interface PlaylistStore {
   addSong: (playlistId: string, song: Song) => void;
   /**
    * 批量加入：一次 set = 一次持久化 + 一次渲染（导入长歌单用；逐首 addSong 是 O(N²)）。
-   * 去重判据同上（core `identityKey`），**不再用裸 `Song.id`**——
-   * 跨源同 id 曾被静默当成同一首丢掉（#553）。
-   * 返回**真实新增条数**（去重后实际 append 的条数；批内重复与已存在的不计，#559）。
+   * 去重判据同上（core `identityKey`），**不再用裸 `Song.id`**——跨源同 id 曾被静默当成同一首丢掉
+   * （#553）。
    */
   addSongs: (playlistId: string, songs: Song[]) => number;
   removeSong: (playlistId: string, songId: string) => void;

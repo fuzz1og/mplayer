@@ -14,11 +14,8 @@ import { setTransport, request, type TransportRequest } from '../transport.js';
 
 /**
  * 出网闸门测试（#408 / ADR 2026-09-26-outbound-request-governance）。
- *
- * 断言的是**接口不变量**而不是实现：
- * - 并发峰值 ≤ 全局上限、同一 host 并发峰值 ≤ 每 host 上限；
- * - 同 host 严格 FIFO；跨 host 不被队首阻塞；
- * - 取消的请求**永不进入底层传输**，且从队列里消失。
+ * 断言的是**接口不变量**而不是实现：- 并发峰值 ≤ 全局上限、同一 host 并发峰值 ≤ 每 host 上限；- 
+ * 同 host 严格 FIFO；跨 host 不被队首阻塞；- 取消的请求**永不进入底层传输**，且从队列里消失。
  */
 
 /** 手搓 signal：不赌 AbortController 的全局可用性，且 abort 时机可精确控制。 */

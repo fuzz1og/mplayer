@@ -3,13 +3,9 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * LazyCover（#496）组件契约：
- * 1. `uri` 为空只渲染占位 `View`；有 uri 直接挂 `Image`（**没有闸门排队**）；
- * 2. 失败**重试一次**（间隔 `COVER_RETRY_DELAY_MS`），仍失败才回调 `onError`；
- * 3. 换 uri 重新获得一次重试机会。
- *
- * `react-native` 换成受控替身：Image 的 onError 用点击触发（不依赖 RN 原生事件）。
- * 注意替身**不给外层挂 onLoad**——避免「点 error 冒泡触发 load」把用例搅在一起。
+ * LazyCover（#496）组件契约：1. `uri` 为空只渲染占位 `View`；有 uri 直接挂 `Image`（**没有闸门排队
+ * **）；2. 失败**重试一次**（间隔 `COVER_RETRY_DELAY_MS`），仍失败才回调 `onError`；3. 换 uri 重新
+ * 获得一次重试机会。
  */
 
 vi.mock('react-native', async () => {

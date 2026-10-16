@@ -24,11 +24,8 @@ export const desktopPlaylistWriter: DesktopPlaylistWriter = createDesktopPlaylis
 
 /**
  * 链接导入的外部依赖（#552；#594 装配下沉 core）。
- *
- * 装配本体在 core `importDepsFor`——桌面**不再持有第二份**：这里只把
- * 「默认 writer」这一件事接上（桌面整批腿走 adapter 的 `playlist:addSongs`，
- * 1 + 1 次 IPC：读一次快照 + 写一次）。口径（默认并入、回报真实新增数）
- * 见 core 的注释。
+ * 装配本体在 core `importDepsFor`——桌面**不再持有第二份**：这里只把「默认 writer」这一件事接上（桌面整批腿走 adapter 的
+ * `playlist:addSongs`，1 + 1 次 IPC）。口径（默认并入、回报真实新增数）见 core 注释。
  */
 export function importDepsFor(writer: DesktopPlaylistWriter = desktopPlaylistWriter): PlaylistImportDeps {
   return coreImportDepsFor(writer);

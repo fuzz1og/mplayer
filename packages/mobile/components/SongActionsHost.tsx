@@ -24,13 +24,9 @@ interface ActionItem {
 }
 
 /**
- * 歌曲行弹层宿主（#304）：全应用单实例，替所有 SongRow 承担三套弹层
- * （操作面板 / 加入歌单 / 换源）与它们的动效资源。
- *
- * 旧形态每行挂 3 个 BottomSheet + 3 个 ScalePress：一屏 15 行 ≈ 45 个隐藏
- * BottomSheet（各跑 useSafeAreaInsets/useWindowDimensions/useReducedMotion）
- * 与 90 个 reduced-motion 订阅。现在行只调 openActions(song, handlers)，
- * 弹层与动画资源只剩这一份，可见流程不变。
+ * 歌曲行弹层宿主（#304）：全应用单实例，替所有 SongRow 承担三套弹层（操作面板 / 加入歌单 / 换源）与
+ * 它们的动效资源。
+ * 现在行只调 openActions(song, handlers)，弹层与动画资源只剩这一份，可见流程不变。
  */
 export default function SongActionsHost() {
   const { colors } = useTheme();
@@ -50,10 +46,8 @@ export default function SongActionsHost() {
   const song: Song | null = actionSheet?.song ?? null;
   const onRemove = actionSheet?.handlers.onRemove;
 
-  // 动作集合与顺序：下一首播放（#495，与桌面 #491 同款 icon/label）/ 加入歌单 / 下载 /
-  // 换源完整版 / 搜索歌手 /（可选）移除。
-  // ⚠️ 本组件是**全应用单实例**：这一项等于出现在所有列表的行菜单里（收藏/历史/本地音乐/
-  // 搜索/专辑/歌手/歌单/队列）——通用动作，刻意如此（覆盖范围见 PR 正文）。
+  // ⚠️ 本组件是**全应用单实例**：这一项等于出现在所有列表的行菜单里（收藏/历史/本地音乐/搜索/专辑
+  // /歌手/歌单/队列）——通用动作，刻意如此（覆盖范围见 PR 正文）。
   const actions = useMemo<ActionItem[]>(() => {
     if (!song) return [];
     const items: ActionItem[] = [

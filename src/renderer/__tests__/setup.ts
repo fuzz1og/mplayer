@@ -43,10 +43,9 @@ vi.mock('electron', () => ({
 }));
 
 
-// antd message/notification 静态方法内部会 ReactDOM.createRoot 挂载游离 root 到
-// document.body，RTL auto-cleanup 覆盖不到，scheduler 异步任务会在 jsdom 环境销毁后
-// 执行 → ReferenceError: window is not defined（CI node 22 偶发 flaky）。
-// 全局 stub 掉这些静态方法，避免创建游离 React root。需要验证弹层行为的测试再局部 mock。
+// antd message/notification 静态方法内部会 ReactDOM.createRoot 挂载游离 root 到 document.body，RTL 
+// auto-cleanup 覆盖不到，scheduler 异步任务会在 jsdom 环境销毁后执行 → ReferenceError: window is 
+// not defined（CI node 22 偶发 flaky）。
 vi.mock('antd', async () => {
   const actual = await vi.importActual('antd');
   const stub = () => vi.fn(() => Promise.resolve());

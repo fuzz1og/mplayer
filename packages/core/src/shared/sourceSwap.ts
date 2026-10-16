@@ -42,13 +42,9 @@ function urlIdMatchesSong(url: string, song: Song): boolean {
 }
 
 /**
- * 搜索目标源的候选版本（最多 3 个）：精确匹配（同名同歌手）排最前，
- * 其余按相似度降序（Live/remix/翻唱也会展示，用户自己决定是否接受）。
  * 识别失败的诊断日志：候选为空/请求异常通过 deps.log 上报。
- *
- * **不做任何可播性探测**（#380 决议 D1 / #391）：探测判据反向（把「直连拿不到 URL」
- * 判成失效，而实测多数歌靠 tier3 才可播）且产物无消费者。唯一保留的是**零请求**的
- * URL-ID 错位检查——错位候选直接剔除（切换过去播的是另一首歌，留着只会误导）。
+ * **不做任何可播性探测**（#380 决议 D1 / #391）：探测判据反向（把「直连拿不到 URL」判成失效，而实测
+ * 多数歌靠 tier3 才可播）且产物无消费者。
  */
 export async function searchSwapCandidates(
   song: Song,
@@ -92,9 +88,8 @@ export async function searchSwapCandidates(
 
 /**
  * 应用用户选中的候选版本：构造换源后的歌曲。
- * **完全采用用户选中版本的信息**——歌名/歌手/封面/专辑/ID 全部换成
- * 匹配到的歌曲（用户选翻唱就用翻唱的名字和封面），只把 sourceType
- * 换成目标源、id 加单层源前缀（源站真实 ID，防嵌套）。
+ * **完全采用用户选中版本的信息**——歌名/歌手/封面/专辑/ID 全部换成匹配到的歌曲（用户选翻唱就用翻唱
+ * 的名字和封面），只把 sourceType 换成目标源、id 加单层源前缀（源站真实 ID，防嵌套）。
  */
 export function applySwap(_song: Song, source: SourceKey, candidate: SwapCandidate): Song | null {
   const matched = candidate.song;

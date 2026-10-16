@@ -3,13 +3,8 @@ import type { SourceSampleKind } from './sourceSchedule.js';
 
 /**
  * 播放解析链结构化 trace（#363 / t5 埋点形态决策）。
- *
- * 形态：**core 出结构化 trace，宿主落 sink**——core 内保持零 I/O，只把一次解析
- * 的语义（命中层级、各段耗时、每源 outcome、护栏等级）交给宿主注册的 sink；
- * 宿主负责常驻环形缓冲、设置页展示与手动导出。
- *
- * 开销约束：sink 为空时热路径**零构造**——调用方先 `isPlaybackTraceEnabled()`，
- * 关闭时连 `traceNow()` 都不调用（见 sourceRouter / tier3Api 的用法）。
+ * 开销约束：sink 为空时热路径**零构造**——调用方先 `isPlaybackTraceEnabled()`，关闭时连 
+ * `traceNow()` 都不调用（见 sourceRouter / tier3Api 的用法）。
  */
 
 /** 命中层级：用户可感知的「这次从哪一层拿到 URL」。 */

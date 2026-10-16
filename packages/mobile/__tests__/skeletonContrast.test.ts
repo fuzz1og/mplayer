@@ -3,14 +3,9 @@ import { darkColors, lightColors } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 
 /**
- * 骨架屏可见度下限（#318 真机实测）：
- * 亮色原 `skeletonBase = gray100 #F5F5F7` 比页底 `bgBase #F2F2F7` 还浅，
- * 对比度 **1.02:1** —— 骨架块在亮色下基本不可见，shimmer 更看不见；
- * 真机冷启动截图里骨架帧的两种主色就是 #F2F2F2 / #F5F5F7。
- *
- * 骨架屏是装饰元素，不适用 WCAG 正文阈值；但"看得见"是它的最低职能，
- * 所以这里用**可见度下限**而不是 4.5:1：基色对页底 ≥1.25:1、shimmer 对基色 ≥1.2:1。
- * 谁把 token 调回看不见的值，这条就红。
+ * 骨架屏可见度下限（#318 真机实测）：亮色原 `skeletonBase = gray100 #F5F5F7` 比页底 `bgBase 
+ * #F2F2F7` 还浅，对比度 **1.02:1** —— 骨架块在亮色下基本不可见，shimmer 更看不见；真机冷启动截图
+ * 里骨架帧的两种主色就是 #F2F2F2 / #F5F5F7。
  */
 
 /** WCAG 相对亮度 */

@@ -1,20 +1,7 @@
 /**
  * 通用折叠 Hero — 详情页全出血封面方案（歌单 D 变体推广到专辑/歌手/网络歌单）
- *
- * 结构（自上而下）：
- *   1. 大封面全出血到状态栏/灵动岛安全区后面，随列表滚动滚出屏幕；
- *      底缘叠 bgBase 雾化条向上淡出（#259 决议转正，硬切 → 雾化渐隐）
- *   2. 悬浮导航栏：顶部透明（盖在封面上）→ 下滑盖过封面后逐渐变为
- *      实心正常标题栏（标题淡入、返回按钮变深色），上滑恢复
- *   3. 信息区在封面下方独立实心区域（不叠封面、不透明）
- *   4. 可选表头（如「歌曲 / 操作」）+ 列表
- *
- * 分层：阈值数学/边沿检测在 components/collapsingChrome.ts（纯逻辑，node 可测），
- * 滚动 → chrome 的原生驱动接线在 hooks/useCollapsingChrome.ts，本文件只剩结构与样式。
- *
- * 封面来源由调用方决定（自建歌单=第一首歌、专辑=专辑图、歌手=头像、
- * 网络歌单=自己的封面）；加载失败自动切占位图标，并回调 onCoverError
- * 供调用方做刷新。
+ * 分层：阈值数学/边沿检测在 components/collapsingChrome.ts（纯逻辑，node 可测），滚动 → chrome 的
+ * 原生驱动接线在 hooks/useCollapsingChrome.ts，本文件只剩结构与样式。
  */
 
 import React, { useEffect, useMemo, useState } from 'react';

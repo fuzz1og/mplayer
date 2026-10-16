@@ -1,16 +1,7 @@
 /**
- * 开发者模式（#477 B 方案第一片）与诊断分级的**单一判定点**。
- *
- * 三个概念在这里收口，别在调用点各写各的：
- *   - `isDevMode()` 用户显式开关（设置页「开发者模式」行），状态存 `settingsStore.devMode`，
- *     沿用既有 AsyncStorage persist（key `settings-storage`），**不新增依赖**；
- *   - `isDevBuild()` 构建期 `__DEV__`——原先私藏在 dragJankProbe 里，这里提成共享实现；
- *   - `isDiagnosticsEnabled() = isDevBuild() || isDevMode()`：**诊断能力**（trace 采集、
- *     直链调试打印、开发者面板）的总开关。
- *
- * 与日志级别的关系（见 stores/logsStore）：`isDiagnosticsEnabled()` 决定「详细度」
- * （info 级是否进缓冲），**不决定埋点是否存在**——perfMonitor / coverDiagnostics 的
- * warn/error 档与用户可见 Toast（notice）一律常开，关掉等于从用户身上删能力。
+ * 与日志级别的关系（见 stores/logsStore）：`isDiagnosticsEnabled()` 决定「详细度」（info 级是否进缓
+ * 冲），**不决定埋点是否存在**——perfMonitor / coverDiagnostics 的 warn/error 档与用户可见 Toast（
+ * notice）一律常开，关掉等于从用户身上删能力。
  */
 import { useSettingsStore } from '../stores/settingsStore';
 

@@ -1,13 +1,7 @@
 /**
  * 桌面渲染层开发者模式（#477 B 方案第一片）。
- *
- * 与移动端 `packages/mobile/services/devMode.ts` 同形：显式开关（设置页左导航「开发者模式」）、
- * 状态跨重启保持、诊断内容默认不出现。差异只有持久层——桌面的设置项历来走主进程 IPC/文件，
- * 而本票的写权限收在渲染层（`src/renderer/**`），故这里用 localStorage：
- * 键名带 app 前缀，读写各自 try/catch，不新增依赖也**不动主进程**。
- *
- * `isDiagnosticsEnabled()` 是「详细度」总开关，不 gate 埋点存在——诊断区（trace / 日志）
- * 由设置页按 `isDevMode()` 条件渲染。
+ * 与移动端 `packages/mobile/services/devMode.ts` 同形：显式开关（设置页左导航「开发者模式」）、状态
+ * 跨重启保持、诊断内容默认不出现。
  */
 
 const STORAGE_KEY = 'mplayer:devMode';

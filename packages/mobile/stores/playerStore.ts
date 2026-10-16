@@ -48,9 +48,6 @@ interface PlayerState {
   hasPlayed: boolean;
   /**
    * 稳定随机序列（#511 方案 A / #519 移动端消费）：`null` = 尚无序列（进随机时按当前队列现洗）。
-   *
-   * 与 `queue`（成员 + 列表循环序）是**两份数据**：随机模式下播放推进（next/prev）、
-   * 预取窗口定序、队列页展示、「下一首播放」的落点都由它说了算；换回列表循环时**保留但不参与**。
    * 契约唯一出处：ADR `2026-09-30-stable-shuffle-order.md`。
    */
   shuffle: ShuffleState | null;
@@ -63,28 +60,12 @@ interface PlayerState {
   setQueue: (songs: Song[], startIndex?: number) => void;
   /**
    * 「下一首播放」（#495）：把 `song` 放到当前曲之后。
-   *
-   * 与桌面 #506（`playerStore.insertNext`）和 Android `QueueStore.insertAfterCurrent`
-   * 同一套语义：已在队列 → **移动**（不复制、保留队列里那份对象、长度不变）；不在 → 插入；
-   * 已在下一首位置 / 就是当前曲 → no-op（连点幂等）；当前曲不被打断。
-   *
-   * `started = true`：队列为空 / 没有当前曲（currentIndex < 0）→ **等价于开始播放这首**
-   * （与桌面 #506 同口径），调用方据此决定要不要真正起播。
-   * `moved` = 从队列别处移动过来。
+   * `started = true`：队列为空 / 没有当前曲（currentIndex < 0）→ **等价于开始播放这首**（与桌面 
+   * #506 同口径），调用方据此决定要不要真正起播。
    */
   insertNext: (song: Song) => { started: boolean; moved: boolean; noop: boolean };
   /**
    * 推进一格（#555：`next` / `prev` / `nativePrev` 的**唯一实现**）。
-   *
-   * 随机模式下先按窗口态对齐序列——没有序列就现洗一份（前置步骤）
-   * （#520 minor 2/3：此前 store 与 nativePlayer 各复制了一份「步进游标 + 落 store」；
-   * 且盘上/内存里的游标损坏或陈旧不得让推进失效），落点与 effect 一律由 core `planAdvance`
-   * 决定，这里只执行 effect：`none` → 不动；`restart-current` → 重播当前曲（不换歌）；
-   * `load-target` → 换到 `queue[index]`。
-   *
-   * 返回 `{ index, effect }`：JS 引擎按 effect 直接落地；原生引擎还要把这个 effect 交给
-   * `nativePlayer.nativeStep` 决定**交付方式**（交原生顺序推进 / 起播目标曲 / seek 0 重播），
-   * 所以 effect 必须随落点一起回来，不能让原生宿主自己猜（#555）。
    */
   advance: (direction: 1 | -1) => AdvanceOutcome;
   /**

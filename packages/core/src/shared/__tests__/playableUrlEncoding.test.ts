@@ -15,13 +15,9 @@ import {
 import { clearPrefetchCache, setPrefetchedUrl } from '../../api/prefetchCache.js';
 
 /**
- * #622 守卫测试：编码归一只有一个落点——core 播放解析链的出口。
- *
- * 汽水 CDN 直链带未编码的 `|`（实测形态 `...&cd=0|0|0|5&...`）。JS 侧一路放行，
- * 但 `java.net.URI` 判它非法，移动端 `File.downloadFileAsync` 于是在原生层抛转换失败。
- * 下载链、播放链、预取都从 `resolvePlayableSongRouted` / `resolvePlayableUrlRouted`
- * 取 URL，所以归一做在这两条入口的共同内层——各条腿（直连 / 权威时长 / tier3 / 预取命中）
- * 都必须在出口处收敛，宿主侧不再各修一遍。
+ * 下载链、播放链、预取都从 `resolvePlayableSongRouted` / `resolvePlayableUrlRouted`取 URL，所以归一
+ * 做在这两条入口的共同内层——各条腿（直连 / 权威时长 / tier3 / 预取命中）都必须在出口处收敛，宿主
+ * 侧不再各修一遍。
  */
 
 /** 真机同形态的原始直链（签名段截短；query 里三处未编码的 `|`）。 */

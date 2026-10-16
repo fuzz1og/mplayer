@@ -29,25 +29,9 @@ interface Props {
 }
 
 /**
- * 底部弹层（ADR-0007 v3）：iOS 形态的分层动效 + 把手区拖拽关闭。
- *
- * - 遮罩不再跟着面板一起滑：旧版 `animationType="slide"` 会把整棵 Modal 内容
- *   （含遮罩底色）一起从底部滑上来；现在原生 slide 关掉，遮罩用短 timing 淡入、
- *   面板用 springs.sheet 弹簧上滑，两者 parallel 但节奏天然分层。
- * - 拖拽只挂在把手区（grabberZone），面板内容区零接管——#186 教训：整面板挂手势
- *   会点内容误关、与 FlatList 抢滚动；把手区物理与 PlayerOverlay 共用同一份实现
- *   （gestures/dragSession + hooks/useDragToDismiss：可中断抓取 / 首帧原点校准 /
- *   自采样速度 EMA+钳幅 / 动量投影阈值 / terminate 回弹），此处只声明认领阈值与
- *   判关基准（面板自身高度，onLayout 量取）。
- * - 关闭统一走「先播退场动画、finished 后再调 onClose」——父组件 visible=false
- *   会立即卸载 Modal，必须让动画先走完（PlayerOverlay dismiss 同款约束）；
- *   外部直接把 visible 置 false 的路径也会补播退场再卸载，观感一致。
- * - 退场闩（services/sheetExit.ts，#308 真机回归）：退场动画播放期间遮罩仍在接
- *   点击（Android 上 Modal 窗口是模态的，触摸不穿透下层），旧实现每点一次就重播
- *   一次退场 → Modal 寿命被点击无限拉长，表现为「关掉面板后点下一行『更多』要点
- *   两下」。现在只认第一次关闭请求，且面板一离屏就落定（不等弹簧在屏外收尾），
- *   把"点击被吞"的窗口压到最短。
- * - 减弱动效（useReducedMotion）：无大位移，遮罩+面板 200ms 交叉淡化。
+ * - 关闭统一走「先播退场动画、finished 后再调 onClose」——父组件 visible=false 会立即卸载 Modal，
+ * 必须让动画先走完（PlayerOverlay dismiss 同款约束）；外部直接把 visible 置 false 的路径也会补播退
+ * 场再卸载，观感一致。
  */
 export default function BottomSheet({
   visible, onClose, radiusTop = radius.sheet, maxHeightRatio = DEFAULT_MAX_HEIGHT, style, children,
@@ -254,10 +238,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgSurface,
     paddingHorizontal: spacing[5],
   },
-  // 把手拖拽热区：48dp 命中区（Apple HIG 建议 ≥44pt；真机第三轮原总高仅 22dp，
-  // 命中率低是「拉不到把手」体感的一部分；研究结论见
-  // docs/research/2026-09-10-mobile-bottom-sheet-drag-research.md）。JSX 侧再叠 hitSlop 上下各 8dp。
-  // 视觉不变——handle 仍 4dp、在热区内居中，多出来的是透明命中范围
+  // 把手拖拽热区：48dp 命中区（Apple HIG 建议 ≥44pt；真机第三轮原总高仅 22dp，命中率低是「拉不到把
+  // 手」体感的一部分；研究结论见 docs/research/2026-09-10-mobile-bottom-sheet-drag-research.md）。
+  // JSX 侧再叠 hitSlop 上下各 8dp。
   grabberZone: {
     alignItems: 'center',
     justifyContent: 'center',

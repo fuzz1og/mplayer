@@ -38,11 +38,8 @@ import {
 
 /**
  * 原生播放引擎（规格 §2.1/§4.3/§5）。
- *
- * 权威队列在原生；JS 只在活着时**预解析并喂窗口**。事件是通知性质的
- * （I1/I2），回前台用 `getState()` 单向对账，禁止双向写。
- *
- * 本文件不 import `audioPlayer.ts`（避免循环依赖）：需要引擎外的东西时走 hooks。
+ * 权威队列在原生；JS 只在活着时**预解析并喂窗口**。
+ * 事件是通知性质的（I1/I2），回前台用 `getState()` 单向对账，禁止双向写。
  */
 
 /** 无过期信息的直链给一个保守上限（§6.1 / R8），避免「一路播到 403 才发现」 */
@@ -94,12 +91,9 @@ export function currentPolicy(): Policy {
 }
 
 /**
- * 每源请求头（#592）：单点在 core `requestHeadersFor`（UA + 按源 Referer），
- * 与 expo-audio 回落路径、内嵌封面同源。
- *
- * `local` / `file://` 走的是本地字节（DefaultDataSource → FileDataSource），没有
- * 可冒用的源域名，也不发 HTTP → 不带头（原来这里是恒 `undefined` 的空壳，
- * 让原生 `ExpiryGuard.withRequestHeaders` 完全空转）。
+ * `local` / `file://` 走的是本地字节（DefaultDataSource → FileDataSource），没有可冒用的源域名，也
+ * 不发 HTTP → 不带头（原来这里是恒 `undefined` 的空壳，让原生 `ExpiryGuard.withRequestHeaders` 完
+ * 全空转）。
  */
 function headersFor(song: Song, url: string): Record<string, string> | undefined {
   if (song.sourceType === 'local' || url.startsWith('file://')) return undefined;
@@ -248,13 +242,9 @@ function pruneMirror(toKey: string): void {
 }
 
 /**
- * 用原生的权威队列重建 JS 的 playerStore（§4.3 的**单向对账**）。
- *
- * 为什么必须做：`playerStore` 不持久化，进程被系统杀掉后 JS 的 queue 是空的，
- * 而原生已经按落盘快照恢复了队列。此时若不对账：
- * ① UI 显示空播放器；② `findSong` 反查不到 Song → 过期项无法重解析 → 只能跳歌。
- *
- * 只在「JS 队列为空」或「与原生队列不一致」时重建，避免覆盖前台刚设好的队列。
+ * 为什么必须做：`playerStore` 不持久化，进程被系统杀掉后 JS 的 queue 是空的，而原生已经按落盘快照恢
+ * 复了队列。
+ * 此时若不对账：① UI 显示空播放器；② `findSong` 反查不到 Song → 过期项无法重解析 → 只能跳歌。
  */
 function reconcileQueueFromNative(state: PlayerState | null, force = false): boolean {
   const tracks = state?.tracks;
@@ -302,15 +292,8 @@ function syncMirrorFromNative(): void {
 
 /**
  * 「已经在原生手里」的 key 集合——**按原生当前位置切片**（#495 第 3 条的补窗坑）。
- *
- * 旧的 `new Set(nativeMirror.map(k => k.key))` 是**与位置无关的 key 集合**：它把排在当前曲
- * **之前**的历史也算成「已投喂」。补窗走到队尾绕回队首时，这些 key 会被逐个跳过 → 窗口
- * 整个空掉（连续插队/长会话后尤其明显），原生只能在缓冲边界停下踩空。
- * 按 `state.index` 之后切片后，历史不再挡住绕回的候选。
- *
- * 用原生快照而不是 `nativeMirror` 还有一个原因：插队是**移动**，原生顺序会与 JS 队列顺序
- * 分叉（如 JS [A,B,C,D] vs 原生 [A,C,B]），任何「按 JS 位置去镜像里找」的匹配都会错位。
- * 快照的 `tracks` / `index` 是原生自己的坐标系，天然正确。
+ * 补窗走到队尾绕回队首时，这些 key 会被逐个跳过 → 窗口整个空掉（连续插队/长会话后尤其明显），原生
+ * 只能在缓冲边界停下踩空。
  */
 function nativeAheadKeys(state: PlayerState | null): Set<string> {
   const tracks = state?.tracks;
@@ -324,11 +307,6 @@ function nativeAheadKeys(state: PlayerState | null): Set<string> {
 
 /**
  * 「已经在原生 store 里」的 key 集合（#591 的 outcome 判定用）——**全量**，不按位置切片。
- *
- * 与 [nativeAheadKeys] 的区别是刻意的：补窗的「要不要投喂」看的是**当前位置之后**缺什么
- * （绕回队首的候选必须重新投喂）；而 outcome 的 `'deduped'` 看的是「投出去的候选是不是
- * 全已在原生手里」——列表循环/随机的绕回候选恰恰排在当前曲**之前**，按位置切片会漏判成
- * `'grown'`，让 #563 的「末项 + 零新增」重新退回「意图悬空、每 2s 空转」。
  */
 function nativeStoreKeys(state: PlayerState | null): Set<string> {
   const tracks = state?.tracks;
@@ -388,19 +366,8 @@ export function nativeSeekTo(seconds: number): void {
 
 /**
  * 原生引擎的推进交付（#555）：**落点由 core planAdvance 单点决定**。
- *
- * `playerStore.advance` 是 planAdvance 的唯一执行者，返回 `{ index, effect }`；
- * 本函数只把「core 决定的落点」落到原生队列上，按 effect + 原生窗口现状选交付方式：
- *
- * - `none`：JS 队列还不可用（冷启对账前的空队列）→ 交回原生按它自己的队列走一步；
- * - `restart-current`：目标就是当前曲（单曲循环 / 单元素队列）→ `seek(0)` 回起点重播，
- *   **不重新解析 URL**（core effect 的契约）；
- * - `load-target`：原生窗口的下一格/上一格恰好就是 core 落点 → 交原生顺序推进
- *   （不打断当前播放、无重缓冲）；否则（会话开头 / 已被裁剪 / 队列与窗口分叉）起播目标曲
- *   ——没有 prepend / 跳项原语，硬走原生 prev 在队首会变成空操作（真机观感「上一首没反应」）。
- *
- * 注：锁屏/媒体会话的 next/prev 由 media3 直接顺序推进，不经本函数；它的正确性来自
- * **原生列表的顺序本身就是 JS 按 core 计划喂出来的窗口**（见 ADR 2026-09-29-native-playback-ownership）。
+ * `playerStore.advance` 是 planAdvance 的唯一执行者，返回 `{ index, effect }`；本函数只把「core 决
+ * 定的落点」落到原生队列上，按 effect + 原生窗口现状选交付方式：
  */
 function nativeStep(direction: 1 | -1): void {
   const NP = NativePlayer;
@@ -452,14 +419,9 @@ export type NativePlayNextResult = {
 };
 
 /**
- * 「下一首播放」（#495）：把 [song] 放到原生队列的**当前曲之后**。
- *
- * 顺序（真机 T2/T9 的教训，别调换）：**先解析**（可能要跑整条 core 解析链，期间原生
- * revision 会因补窗推进）→ **再拿新 revision** patch → `stale` 时重读 revision **重试一次**
- * （用户点了就要落地，不能像补窗那样等下一轮水位事件）→ 成功后**按位置重建镜像**。
- *
- * `stale` 重试的空档如果不重读 revision：正巧撞上原生自动推进/补窗落地，插入会被丢弃，
- * 用户侧表现为「点了下一首播放但没生效」。
+ * 顺序（真机 T2/T9 的教训，别调换）：**先解析**（可能要跑整条 core 解析链，期间原生 revision 会因补
+ * 窗推进）→ **再拿新 revision** patch → `stale` 时重读 revision **重试一次**（用户点了就要落地，
+ * 不能像补窗那样等下一轮水位事件）→ 成功后**按位置重建镜像**。
  */
 export async function nativePlayNext(song: Song): Promise<NativePlayNextResult> {
   const NP = NativePlayer;
@@ -495,10 +457,6 @@ export async function nativePlayNext(song: Song): Promise<NativePlayNextResult> 
   }
 
   // 桥必须给出**正面证据**（changed/queued/moved 任一个是 boolean）才能算落地。
-  // 老原生模块（APK 未含 #494 原语）对未知的 `insertAfterCurrent` 字段静默忽略，
-  // 回包只有 accepted/revision/stale；旧代码用 `result.changed !== false` 判断，
-  // `undefined !== false` 恒真 → 于是提示「已设为下一首」而原生队列一字未改
-  // （#518 真机现场：插队后对账仍是 4 首，推进下一首播的是原来的窗口歌）。
   // 宁可报可观测的失败，也不能给用户看「假成功」（#494 验收标准同款要求）。
   const spokeInsert =
     typeof result.changed === 'boolean' ||
@@ -621,9 +579,8 @@ export async function feedWindow(need?: number, reason?: NeedReason): Promise<vo
     })
   );
   // 基准稳定性（#518）：本轮计划是在上面那份 `queue` **快照**上算出来的，而解析要花数秒。
-  // 期间队列若被整体替换（插队就地同步 / 切歌单 / 对账重建），旧基准算出来的候选绝不能落地
-  // —— 真机上「补窗换了基准」正是这么来的：`计划=[28,29,30]` 与 `计划=[0]` 反复横跳。
-  // 丢弃是安全的：换基准的那条路径一定会再触发一轮补窗（水位事件 / playSong / 插队）。
+  // 期间队列若被整体替换（插队就地同步 / 切歌单 / 对账重建），旧基准算出来的候选绝不能落地—— 真机
+  // 上「补窗换了基准」正是这么来的：`计划=[28,29,30]` 与 `计划=[0]` 反复横跳。
   if (usePlayerStore.getState().queue !== queue) {
     console.log('[player] 补窗丢弃：解析期间队列基准已变更');
     return;
@@ -737,12 +694,9 @@ export function registerNativeHeadless(): boolean {
   }
 }
 
-/** 供诊断/日志用：原生是否可用 + headless 通道是否拿到 */
 /**
+ * 供诊断/日志用：原生是否可用 + headless 通道是否拿到
  * 回前台/冷启对账入口（§4.3）：原生是唯一权威，单向覆盖 store。
- *
- * `force = true` 用于「下一首播放」成功之后：移动分支**队列长度不变但顺序变了**，
- * 默认的「长度相同就不重建」会留下一个顺序错误的 JS 队列（队列页会显示错序）。
  */
 export function reconcileFromNative(force = false): void {
   const state = safeState();

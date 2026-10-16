@@ -1,20 +1,8 @@
 #!/usr/bin/env node
 /**
- * mobile-debug.mjs — MPlayer 真机调试一条龙（usbipd 架构：WSL 原生 adb 单 server）：
- *   重置 adb → 设备/双 transport 检查 → USB reverse → 起 Metro → 冷启 App → logcat
- * 移植自 scripts/mobile-debug.sh（#502）：步骤、文案与退出码一致。
- *
  * 前置：手机已通过 scripts/mobile-device/usb-attach.sh attach 进 WSL。
- * 用法：node scripts/mobile-debug.mjs                     # 完整回路（含冷启）
- *       node scripts/mobile-debug.mjs --no-cold-start    # 不杀 App，直接热拉起
- *       node scripts/mobile-debug.mjs -c                 # 清 Metro 缓存启动
- *
- * 完成标准：logcat 出现 Running "main" + 存量数据迁移完成；
- *          Metro 日志（packages/mobile/.expo/dev/logs/start.log）出现 metro:bundling:done。
- *
  * 与原脚本的唯一差异：仓库根改为**脚本自身位置**推导，不再用 git rev-parse --show-toplevel。
- * 后者在「Windows 建的 worktree + WSL 侧跑」时解析 Windows 绝对路径会失败（mobile-e2e.sh 的
- * 已知环境限制）；mobile-frame-stats.sh 已经这么做。对正常克隆两者等价。
+ * 对正常克隆两者等价。
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, openSync, writeFileSync } from 'node:fs';
@@ -51,10 +39,7 @@ function capture(file, args) {
 }
 
 /**
- * 跑 adb。三类语义对齐原脚本的 shell：
- *   adb(args)                → 输出直通，失败即退出（对应 set -e）
- *   adb(args, { quiet: true }) → 输出丢弃（对应 >/dev/null）
- *   tolerate: true            → 失败不中止（对应 || true）
+ * 跑 adb。
  */
 function adb(args, { quiet = false, tolerate = false } = {}) {
   const res = spawnSync('adb', args, { stdio: quiet ? 'ignore' : 'inherit' });

@@ -1,17 +1,7 @@
 /**
- * #607 守卫：桌面标签写入的**真实载体**特征化（真 mp3tag.js + music-metadata）。
- *
- * 本文件刻意**不 mock** mp3tag.js / music-metadata——要证的正是「第三方写进去的东西，
- * 标准读取方能不能读回来」。mock 掉就只剩自说自话（同 ADR 2026-10-04 对 FLAC 的要求）。
- *
- * 两组断言：
- * 1. 桌面 `writeMetadata` 对 M4A **一个字节都不写**（core `planAudioTagging` 判 skip）；
- * 2. 把同一份文件按**修正前**的方式喂给真 mp3tag.js，它只在 `moov > udta > meta` 里插
- *    一个 `ID32`（ID3v2-in-MP4），原 `ilst` 不动 → music-metadata 读不回标题。
- *    这就是「不能写」的原始证据（ADR `2026-10-08-download-tag-write-boundary.md`）。
- *
- * 若将来 mp3tag.js 支持 iTunes `ilst`（第 2 组断言变红），说明口径可以重开——那时应
- * 先更新 ADR 再放开，而不是把断言删掉。MP3 组是阳性对照：同一路径写得进也读得回。
+ * 本文件刻意**不 mock** mp3tag.js / music-metadata——要证的正是「第三方写进去的东西，标准读取方能
+ * 不能读回来」。
+ * 这就是「不能写」的原始证据（ADR `2026-10-08-download-tag-write-boundary.md`）。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, copyFileSync, readFileSync, writeFileSync, rmSync } from 'fs';

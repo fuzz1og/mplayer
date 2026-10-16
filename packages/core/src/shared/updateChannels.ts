@@ -1,12 +1,6 @@
 /**
  * 应用更新通道常量与工具（#262/#263）——桌面端 electron-updater 与移动端 APK 直链共享。
- *
- * 设计要点：
- * - 镜像在前、GitHub 直连垫底：国内直连 github.com 不稳定，直连只作最后兜底。
- * - 镜像是「URL 前缀」型代理（gh-proxy 系），前缀拼接 releases/latest/download/<file>
- *   即得固定资产地址（302 到最新 release，跨版本有效），元数据与安装包同一套前缀。
- * - 探针用 `latest.yml`（体积仅数百字节、electron-builder 发布时必然存在）测延迟，
- *   实现零依赖注入 fetch（桌面传 netSession.fetch 同享代理会话，移动端传全局 fetch）。
+ * 设计要点：- 镜像在前、GitHub 直连垫底：国内直连 github.com 不稳定，直连只作最后兜底。
  */
 
 /** 单个更新源定义。prefix 为空串表示 GitHub 直连。 */

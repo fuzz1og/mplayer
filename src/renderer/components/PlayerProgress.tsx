@@ -14,15 +14,8 @@ const formatTime = (seconds: number): string => {
 };
 
 /**
- * 播放进度块：位置的唯一消费者在叶子这一层——position/duration 由
- * playbackClock 直接订阅，PlayerBar 不再随每 250ms 的采样重渲染。
- *
- * 交互：
- * - 点击 / 键盘沿用「百分比 × 时长」seek；
- * - **按住拖动**期间在本地持有 dragPosition 立即跟手（不等 250ms 时钟采样），
- *   松手才提交 onSeek；拖拽期间关掉填充条的 width transition，避免「越拖越滞后」；
- * - 提交后由 playbackClock 的 seek 乐观值兜住 HTML5 media 的异步 seek
- *   （见该模块注释），所以松手不会看到位置回跳。
+ * 播放进度块：位置的唯一消费者在叶子这一层——position/duration 由 playbackClock 直接订阅，
+ * PlayerBar 不再随每 250ms 的采样重渲染。
  */
 const PlayerProgress: React.FC<PlayerProgressProps> = React.memo(({
   hasCurrentSong, onSeek,

@@ -1,16 +1,7 @@
 /**
  * MPlayer mobile 设计系统 — desktop 同款浅色蓝调 token 体系（#173 起支持深色）
- *
- * 与 desktop 的 src/renderer/styles/global.css 两层 token 架构一一对应：
- *   Primitive（palette / spacing / radius / shadow / typography）
- *   Semantic（lightColors / darkColors 双套，运行时经 ThemeProvider 注入）
- *
- * 命名约定：mobile 用 camelCase，desktop 用 kebab-case（如 bgSurface ↔ --bg-surface）。
- * 完整映射表见同目录 README.md。
- *
- * 使用方式（组件内取色一律走 useTheme，禁止再静态 import colors）：
- *   const { colors } = useTheme();
- *   const styles = useMemo(() => makeStyles(colors), [colors]);
+ * 使用方式（组件内取色一律走 useTheme，禁止再静态 import colors）：const { colors } = 
+ * useTheme();const styles = useMemo(() => makeStyles(colors), [colors]);
  */
 
 import type { SourceKey } from '@mplayer/core';
@@ -85,9 +76,8 @@ export const sourceColors: Record<SourceKey | 'all', string> = {
 
 /**
  * 音乐源文字变体（ADR-0006 源色纪律）：文字徽章用色必须达 WCAG AA 4.5:1。
- * 源品牌色（sourceColors）多属中/高明度（QQ 绿/酷狗橙/酷我橙浅底仅 ≈2.1–2.9:1），
- * 故每源配文字专用色：浅色主题加深、深色主题提亮，分别随主题注入。
- * 圆点徽章仍用 sourceColors（色块无对比度要求）。键与 sourceColors 完全对齐。
+ * 圆点徽章仍用 sourceColors（色块无对比度要求）。
+ * 键与 sourceColors 完全对齐。
  */
 export const sourceTextLight: Record<SourceKey | 'all', string> = {
   all: '#7C3AED',
@@ -188,9 +178,8 @@ export const radius = {
 
 /**
  * 阴影 — 克制的深度（2025 趋势）。
- * desktop 为多层 CSS box-shadow，RN 仅支持单层，按主层近似；
- * iOS 用 shadow*，Android 用 elevation。与 desktop --shadow-* 对应；
- * 深色主题下层级主要靠 surface 与底色的明度差表达，阴影保持克制。
+ * desktop 为多层 CSS box-shadow，RN 仅支持单层，按主层近似；iOS 用 shadow*，Android 用 elevation。
+ * 与 desktop --shadow-* 对应；深色主题下层级主要靠 surface 与底色的明度差表达，阴影保持克制。
  */
 export const shadow = {
   xs: {
@@ -258,11 +247,6 @@ export const typography = {
 
 /**
  * 文字语义变体（#175）：role → 预设 TextStyle，消灭散落各屏的字号魔法数。
- *
- * 用法（在 makeStyles 工厂里展开，weight 特例展开后覆盖）：
- *   name: { ...textVariants.body, color: colors.textPrimary },
- *   playAllText: { ...textVariants.caption, fontWeight: '600', color: ... },
- *
  * 归一约定：18→title、10→micro（±1px 级视觉差）。
  * 不套变体的例外：歌词等带 lineHeight 的成对样式、一次性展示字形（如歌手占位字母）。
  */
@@ -397,10 +381,9 @@ export const lightColors: ThemeColors = {
   bgSurface: '#FFFFFF',
   bgElevated: '#FFFFFF',
   bgSidebar: '#FFFFFF',
-  // 无 blur 的纯半透明在浅色下与白底明度差为零、chrome 隐形（真机验证），
-  // 按指南 §2.2 无 backdrop-filter 兜底思路提不透明度：保留一丝材质感，
-  // 分层靠「白 chrome vs 灰底」明度差（§1 柱子一）。
-  // 真机反馈：0.96 偏透（与毛玻璃 chrome 观感不统一），提至 0.98
+  // 无 blur 的纯半透明在浅色下与白底明度差为零、chrome 隐形（真机验证），按指南 §2.2 无 
+  // backdrop-filter 兜底思路提不透明度：保留一丝材质感，分层靠「白 chrome vs 灰底」明度差（§1 柱子
+  // 一）。
   bgPlayer: 'rgba(255, 255, 255, 0.98)',
   bgHover: palette.gray100,
   bgActive: palette.gray200,
@@ -454,11 +437,11 @@ export const lightColors: ThemeColors = {
   inputBorderFocus: palette.blue500,
   inputPlaceholder: palette.gray400,
 
-  /* 骨架屏 */
-  // 骨架屏（#318 真机实测）：原 gray100 #F5F5F7 比亮色页底 #F2F2F7 还浅，
-  // 对比度只有 1.02:1 —— 亮色下骨架块基本不可见（shimmer 更看不见）。
-  // 基色改 gray300：对页底 1.36:1 / 对白卡 1.52:1；高光用 gray100 反向提亮，
-  // shimmer 相对基色 1.4:1。可见度下限由 __tests__/skeletonContrast.test.ts 守住。
+  /**
+   * 骨架屏骨架屏（#318 真机实测）：原 gray100 #F5F5F7 比亮色页底 #F2F2F7 还浅，对比度只有 1.02:1 
+   * —— 亮色下骨架块基本不可见（shimmer 更看不见）。
+   * 可见度下限由 __tests__/skeletonContrast.test.ts 守住。
+   */
   skeletonBase: palette.gray300,
   skeletonShine: palette.gray100,
 };

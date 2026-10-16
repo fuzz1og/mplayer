@@ -19,13 +19,7 @@ import {
 } from '../cookieManager.js';
 
 /**
- * T13 spec #159 轻量 cookie 管理器（spec #146 决策 5 / #126/#130）。
- *
- * 接缝 = core `cookieManager` 的纯函数生成器 + 内存态管理器：
- * - 生成逻辑全部纯函数可测（网易匿名策略 / MUSIC_U 借用开关默认关 / 酷狗设备 cookie）；
- * - 内存管理器零 I/O（任意环境可直接用 = 移动端内存态）；宿主注册 persister 落盘（桌面）；
- * - 提供统一接口：generate / get / set / refresh / ensureFresh / clear / rotate 判定。
- * - 冷启动加载 `loadCookies` 不触发持久化；变更操作触发。
+ * T13 spec #159 轻量 cookie 管理器（spec #146 决策 5 / #126/#130）：冷启动加载 `loadCookies` 不触发持久化，变更操作触发。
  */
 
 const FIXED_NOW = Date.parse('2024-06-01T00:00:00.000Z');

@@ -1,17 +1,6 @@
 /**
  * 轻量 cookie 管理器（T13 spec #159，spec #146 决策 5 / #126/#130）。
- *
  * 目标：为各源直连（T07 酷狗等）提供统一的 cookie 生成 / 落盘 / 轮换接口。
- *
- * 设计：
- * - **生成逻辑全部纯函数**（可测）：网易匿名策略、MUSIC_U 借用（内部开关默认关）、
- *   酷狗设备 cookie 生成与轮换判定；
- * - **内存态管理器零 I/O**：默认即「移动端内存态」——不注册 persister 时纯内存，
- *   无任何文件/网络依赖，RN 可直接用；
- * - **持久化钩子**（桌面 adapter）：宿主（桌面主进程）注册 persister 落盘 db，
- *   core 内零 I/O（仿 T01 sourceRouter / T10 tlsFingerprint 模式）；
- * - **统一接口**：`generateCookie` / `getCookie` / `setCookie` / `refreshCookie` /
- *   `ensureFreshCookie` / `clearCookie` / `loadCookies`。
  * - 所有 cookie 均**程序化获取/生成**，无「必须用户 cookie」的源。
  */
 
@@ -100,11 +89,9 @@ export function shouldRotateCookie(cookie: SourceCookie | null | undefined, cloc
   return nowMs(clock) >= Date.parse(cookie.expiresAt);
 }
 
-// ── MUSIC_U 借用内部开关（默认关）────────────────────────────────────
-//
+// ── MUSIC_U 借用内部开关（默认关）
+// ────────────────────────────────────
 // 网易 weapi 本身匿名可用；MUSIC_U 仅用于提升音质/VIP 检测（r1 矩阵 §1.3）。
-// 作为「内部借用开关」默认关闭——不主动借用任何用户凭据，保持纯匿名直连。
-// 若未来某源需要更高音质档可显式开启（需提供合法 MUSIC_U）。
 
 let borrowMusicUEnabled = false;
 

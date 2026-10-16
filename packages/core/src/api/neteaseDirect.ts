@@ -9,24 +9,9 @@ import { getUserAgent } from './antiScrape.js';
 import { cacheManager } from './memoryCacheManager.js';
 
 /**
- * 网易云直连客户端（T02 #148；内容能力面 #278）。
- *
- * 直连替代自建 API 的请求（均匿名，无需任何 cookie）：
- * - 搜索：明文 `POST music.163.com/api/cloudsearch/pc`（form `s/type:1/limit/offset`）。
- * - 播放 URL：weapi `/song/enhance/player/url/v1`（level standard、encodeType mp3）。
- *   VIP/无版权 → 返回空 URL，交给换元层 / 明确不可播，不走试听。
- * - 内容能力（#239/#240，自 musicApi 门面迁入）：榜单/推荐/歌单/歌手/专辑，
- *   weapi 优先、旧明文接口兜底；全部经 transport.request 接缝出网（双端可用）。
- *
- * **歌词按需直取（#409，取代 #242 的列表内联）**：网易直连接口天然不带歌词字段
- * （cloudsearch 实测无 lrc）。原实现在**每个内容方法返回前**对列表中每一首歌各发一次
- * 取词请求（`fillLyrics`，并发 8、窗口 10s）——代价是打开发现页/推荐页一次就打出
- * 数百次上游请求，而界面只用得到歌名/歌手/封面。现改为**播放期按 songId 直取**：
- * `getNeteaseLyrics(songId)`，key `lyric_id_${songId}`、TTL 1 天、命中零请求、空词也缓存。
- * 列表结果里的 `Song.lrc` 因此**恒为空**，消费端不得再假设它带词（双端决策见 core
- * `shared/songLyrics.ts`）。
- *
- * `resolveUrlInfo` 提供权威完整时长验证字段（url/br/size/playTime/fee/payed）。
+ * **歌词按需直取（#409）**：列表内联取词会为每首歌各发一次请求（打开发现页数百次上游），现改为播放期按 songId 直取。
+ * 因此列表结果里的 `Song.lrc` **恒为空**，消费端不得再假设它带词（见 `shared/songLyrics.ts`）。
+ * 播放 URL：weapi `/song/enhance/player/url/v1`；VIP/无版权 → 空 URL，交给换元层，不走试听。
  */
 
 const CLOUDSEARCH_URL = 'https://music.163.com/api/cloudsearch/pc';
@@ -121,11 +106,8 @@ function mapTrack(t: any): Song {
 }
 
 /**
- * 网易云专辑字段统一映射（weapi artist 单对象 / 旧接口 artists 数组，兼容两种形状）。
- *
- * #407：原先只取 5 个字段，上游响应里的公司/简介/子类型/曲目数全部被丢弃。
- * 字段名按 2026-09-27 实测（`/api/v1/album/267786859` 与 `/api/artist/albums/5196`
- * 的 album 对象同形状）：company / description / subType / size / tags / publishTime。
+ * 字段名按 2026-09-27 实测（`/api/v1/album/267786859` 与 `/api/artist/albums/5196`的 album 对象同形
+ * 状）：company / description / subType / size / tags / publishTime。
  * 元数据一律「有则渲染、无则省略」——取不到就不给字段，不做占位。
  */
 function normalizeNeteaseAlbum(raw: any): Album {
@@ -168,11 +150,9 @@ function mapArtist(a: any): Artist {
 const artistPicCache = new Map<string, string>();
 
 /**
- * 歌单搜索的同键在飞去重（#415 单飞）。与 `tier3Inflight` 同取向：底层 promise
- * **结算后才出表**，迟到的同键调用方仍能 join 同一条结果。
- *
- * 放在客户端（而不是各端 UI）是因为上游**只有一个**：桌面经 IPC 落在主进程的同一
- * 客户端实例、移动端在进程内。UI 侧的「切 tab 才发」管懒加载，这里管并发去重。
+ * 歌单搜索的同键在飞去重（#415 单飞）。
+ * 与 `tier3Inflight` 同取向：底层 promise**结算后才出表**，迟到的同键调用方仍能 join 同一条结果。
+ * UI 侧的「切 tab 才发」管懒加载，这里管并发去重。
  */
 const playlistSearchInflight = new Map<
   string,
@@ -238,21 +218,9 @@ async function fetchLyricBySongId(songId: string, options?: TransportCallOptions
 }
 
 /**
- * 按 songId 取网易歌词（#409 取代 #242 的列表内联批量取词）。
- *
- * 语义与原地批量实现逐条保持一致，只是**调用时机从「列表返回前」改成「播放期按需」**：
- * - key `lyric_id_${songId}`、TTL 1 天；命中零请求；
- * - **空词也缓存**（值包 `{v}` 对象以区分「无缓存」与「确认无词」——纯音乐/无词歌
- *   不再反复请求；此为 #242 对 #246「空歌词不入库」的显式反转，继续沿用）；
- * - 拉取失败不缓存（保留重试机会）、失败返回空串（不上抛：歌词拿不到不该让播放失败）。
- *
- * `options.signal`（#429）：预取入队的取消语义——取消 = 这次不取，**失败语义不变**
- * （取消也走 catch 返回空串，调用方靠自己的 signal 区分「没取」与「取不到」）。
- *
- * **#623**：换源产物 / 持久化数据里的网易歌 `Song.id` 可能带源前缀（`netease:123`、
- * 嵌套 `kuwo:netease:123`），而 `/api/song/lyric` 只认裸数字 id——前缀进 URL 后上游
- * `code=400` → 空词（移动端 songid 直取返空串的根因）。取词前先剥成源站真实 ID，
- * 缓存键随之归一（裸 id 与前缀 id 命中同一条缓存）。
+ * **#623**：换源产物 / 持久化数据里的网易歌 `Song.id` 可能带源前缀（`netease:123`、嵌套 
+ * `kuwo:netease:123`），而 `/api/song/lyric` 只认裸数字 id——前缀进 URL 后上游`code=400` → 空词（
+ * 移动端 songid 直取返空串的根因）。
  */
 export async function getNeteaseLyrics(
   songId: string,
@@ -274,12 +242,9 @@ export async function getNeteaseLyrics(
 }
 
 /**
- * 明文 cloudsearch 单次搜索（#415 起单曲 `type=1` / 歌手 `type=100` / 歌单 `type=1000`
- * 共用同一条腿）：只负责「发请求 + 校验 code」，返回上游 `result`，字段映射留给调用方。
- *
  * 请求形态与头**逐字沿用**原 `neteaseSearchSongs`（不新增头、不加签名/加密）。
- * 非 200 的 `code` 一律抛错（`405/406` 风控、`400` 参数错误、`500` 上游异常）——
- * **绝不静默返回空数组**：那会把「被限流/出错」伪装成「没有结果」。
+ * 非 200 的 `code` 一律抛错（`405/406` 风控、`400` 参数错误、`500` 上游异常）——**绝不静默返回空数
+ * 组**：那会把「被限流/出错」伪装成「没有结果」。
  */
 async function cloudsearchSearch(
   keyword: string,
@@ -337,11 +302,9 @@ async function neteaseSearchSongs(keyword: string, page = 1, opts?: TransportCal
 }
 
 /**
- * cloudsearch 原生歌单 → `DiscoverPlaylist`（#415：字段 1:1 可映射，不需要新类型）。
- * - 上游 `coverImgUrl` 实测为 `http://`：桌面 Electron 混合内容会被拦 → 统一转 https；
- * - `creator` 可能为 null、`playCount`/`trackCount` 可能缺失 → 兜底；
- * - `tags`：cloudsearch/pc 的歌单对象**没有该字段**（`officialTags` 是官方推荐位标签，
- *   语义不同，不当 tags 用）→ 补 `[]`。
+ * - 上游 `coverImgUrl` 实测为 `http://`：桌面 Electron 混合内容会被拦 → 统一转 https；- `creator` 
+ * 可能为 null、`playCount`/`trackCount` 可能缺失 → 兜底；- `tags`：cloudsearch/pc 的歌单对象**没有
+ * 该字段**（`officialTags` 是官方推荐位标签，语义不同，不当 tags 用）→ 补 `[]`。
  */
 function mapPlaylist(p: any): DiscoverPlaylist {
   return {
@@ -527,11 +490,8 @@ async function fetchArtistsByHtml(catId: number, cache: ContentCache): Promise<{
 
 /**
  * 歌手信息（明文 `/api/v1/artist/{id}`，getArtistDetail 用）。
- *
- * #417：原先用的 `/api/artist?id=` 实测 **code=404（死链，对照请求正常，非限流）**，
- * 于是 `getArtistDetail` 的 `artist` 恒为 null（hotSongs/albums 正常）。
- * 换成 `/api/v1/artist/{id}`：实测匿名 code=200，且 `albumSize` 是权威值
- * （专辑对象内嵌的 `artist.albumSize` 会偏小：陶喆实测 30 vs 31）。
+ * #417：原先用的 `/api/artist?id=` 实测 **code=404（死链，对照请求正常，非限流）**，于是 
+ * `getArtistDetail` 的 `artist` 恒为 null（hotSongs/albums 正常）。
  */
 async function fetchArtistInfo(artistId: string): Promise<Artist | null> {
   try {
@@ -558,11 +518,8 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
 
     /**
      * 明文 cloudsearch 搜索（列表不带歌词，播放期按 songId 直取，见 #409）。
-     *  `opts`（#556 评审 A1）：链尾搜索腿的墙钟与取消信号透传给 transport。
-     *
+     * `opts`（#556 评审 A1）：链尾搜索腿的墙钟与取消信号透传给 transport。
      * #498/C：本条腿此前**零缓存**——同一关键词连续搜两次就是两次上游请求。
-     * 现按「关键词 + 页」落 6h 内容缓存，与 `searchArtists` 同一条纪律：
-     * **空结果不缓存**（失败绝不伪装成「没结果」，真无命中也不占 6h、保留自愈）。
      */
     async searchSongs(keyword: string, page = 1, opts?: TransportCallOptions): Promise<Song[]> {
       const cacheKey = `search_songs_${keyword}_${page}`;
@@ -585,14 +542,8 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
 
     /**
      * 歌手搜索（#415 从 `GET /api/search/get/web?type=100` 迁到本条腿 `type=100`）。
-     *
-     * 迁移理由（两条一起解决）：
-     * 1. 旧腿是调研里**唯一被实测封禁**的腿——无间隔连打时先 `code=500` 再全 type
-     *    `code=405/406 操作频繁`、冷却量级 ≥10 分钟；`cloudsearch/pc` 同一时间窗内全程 200。
-     * 2. 旧实现 catch 后**静默 `return []`**，「被限流」与「真没这个歌手」在 UI 上
-     *    不可区分（都显示「未找到」）。迁到本条腿后与搜索/歌单共用同一份
-     *    `code !== 200 → 抛错` 逻辑：失败抛错（双端本就有错误态分支），
-     *    `code=200` + 空数组才是「真没这个歌手」。
+     * 迁移理由（两条一起解决）：1. 旧腿是调研里**唯一被实测封禁**的腿——无间隔连打时先 `code=500` 
+     * 再全 type`code=405/406 操作频繁`、冷却量级 ≥10 分钟；`cloudsearch/pc` 同一时间窗内全程 200。
      */
     async searchArtists(keyword: string, limit: number): Promise<Artist[]> {
       const kw = keyword.trim();
@@ -607,18 +558,9 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
     },
 
     /**
-     * 歌单搜索（#415）：与 `searchSongs` **同一条明文腿**（`cloudsearch/pc` `type=1000`），
-     * 复用既有 transport 接缝与头，**不新增签名 / 不新增加密 / 不新增请求头**。
-     *
-     * 分页：该端点**不返回 `hasMore`** → `more = offset + limit < playlistCount` 推导；
-     * `offset` 越界时上游返回 `code=200 + playlistCount=0` → `{ playlists: [], total: 0, more: false }`，
-     * **视为到底，不是错误**（不抛错、不弹失败）。
-     *
-     * 边界：`limit` 内部钳制 ≤100（上游 `limit>100 → code=400`）；空关键词本地拒绝
-     * （上游空 `s` 同样 `code=400`，本地拒绝省一次请求且错误语义可区分）。
-     *
+     * 边界：`limit` 内部钳制 ≤100（上游 `limit>100 → code=400`）；空关键词本地拒绝（上游空 `s` 同
+     * 样 `code=400`，本地拒绝省一次请求且错误语义可区分）。
      * 缓存：key 含关键词 + limit + offset，TTL 6h（与搜索/歌手同档）；**空结果不缓存**。
-     * 并发：同 key 单飞（见 `playlistSearchInflight`）。
      */
     async searchPlaylists(
       keyword: string,
@@ -764,11 +706,7 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
 
     /**
      * 专辑详情 + 专辑歌曲；返回前补播放 URL（点开即播）。
-     *
-     * #407：① 缓存键含源（`album_detail_netease_${id}`）——同一数字 id 在不同源语义不同；
-     * ② weapi 失败补**明文兜底腿** `/api/v1/album/{id}`（实测匿名 code=200、同响应含
-     *    company/description/subType/size/songs[].no）。注意**不是** `/api/album/{id}`：
-     *    那条实测 code=-462（风控），照旧文档写会误判成签名问题。
+     * 注意**不是** `/api/album/{id}`：那条实测 code=-462（风控），照旧文档写会误判成签名问题。
      */
     async getAlbumDetail(albumId: string): Promise<AlbumDetail | null> {
       const cacheKey = `album_detail_netease_${albumId}`;
@@ -820,10 +758,8 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
 
     /**
      * 歌手信息（按 id，明文 /api/v1/artist/{id}；#417 歌手页首屏校正）。
-     *
-     * #496 补缓存：此前这是唯一**完全不过缓存**的内容能力——歌手页每次进入都会实打一次
-     * 明文接口（入口带来的 name/pic 只够首帧，按 id 校正那一次是净请求）。TTL 与
-     * `getArtistSongs` 同档（6h）：头像/名字不是分钟级会变的数据。
+     * #496 补缓存：此前这是唯一**完全不过缓存**的内容能力——歌手页每次进入都会实打一次明文接口（入
+     * 口带来的 name/pic 只够首帧，按 id 校正那一次是净请求）。
      */
     async getArtistInfo(artistId: string): Promise<Artist | null> {
       const cacheKey = `artist_info_${artistId}`;
@@ -877,13 +813,6 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
 
     /**
      * 歌手专辑（分页；#278 保留：桌面歌手页专辑年表需无限滚动）。
-     *
-     * #417：① **翻页只以 `more` 为准**——上游 `total` 在 `more=true` 时被 limit 截断，
-     * 甚至直接缺失（实测 `/api/artist/albums/5196?limit=3` 返回体里没有 `total`），
-     * 拿它渲染「共 N 张专辑」必然偏小；故 `more=true` → `total=null`（未知），
-     * `more=false` → `offset + albums.length`（精确）。
-     * ② 失败给 `ok:false`，页面据此给「加载失败，重试」而不是静默的「暂无专辑」；
-     *    空专辑（合法）是 `ok:true + albums:[]`。
      * ③ `limit` 自控上限 1000（实测 ≥2000 → code=-460）；社区默认页大小 100。
      * ④ weapi 失败回退明文 `/api/artist/albums/{id}`（实测同数据、同 `more`、匿名可用）。
      */
@@ -1055,11 +984,7 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
 
     /**
      * 批量补齐可播放 URL（原 resolveNeteaseSongUrls：weapi by-ID 批量直连）。
-     *
      * #498/C：本条腿此前**零缓存**——专辑/歌单详情每次 cache miss 都要重打一次。
-     * 现按**排序后的 id 列表**落 10min 内容缓存（与详情同档 TTL）：同一份列表在
-     * TTL 内再补一次是 0 请求，且命中时连「一个可播项都没有」的结果一起复用
-     * （VIP/无版权歌本就不在 map 里，逐 id 缓存会让整单无歌的情况每次都重打）。
      * 列表不同（分页错位）则如实重新请求。
      */
     async resolvePlayableUrls(songs: Song[]): Promise<void> {

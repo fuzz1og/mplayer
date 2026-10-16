@@ -3,16 +3,9 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * #622 守卫：URL 编码归一只有一个落点——core 播放解析链的出口 `resolveRoutedInner`。
- *
- * 汽水 CDN 直链带未编码的 `|`（实测 `...&cd=0|0|0|5&...`），`java.net.URI` 判它非法，
- * 移动端 `File.downloadFileAsync` 在原生层抛转换失败。修法是「取 URL 的单一落点归一」，
- * 不是「每个下载调用点各补一遍」——补在调用点就会有两份口径，迟早漂（#608 取词决策同款事故）。
- *
- * 于是这里钉三件事：
- * 1. core 里 `normalizeUrlEncoding` 的实现一份、调用点**恰好一处**，且就在解析链出口；
- * 2. 两条下载链都只从那个出口取 URL（桌面不得再留 `getSodaAudioUrl` 这种旁路）；
- * 3. 任何宿主侧文件不得自带补码（`%7C` / `encodeURI` / `replace(/\|/…)`）——那是第二处归一。
+ * 于是这里钉三件事：1. core 里 `normalizeUrlEncoding` 的实现一份、调用点**恰好一处**，且就在解析链
+ * 出口；2. 两条下载链都只从那个出口取 URL（桌面不得再留 `getSodaAudioUrl` 这种旁路）；3. 任何宿主侧
+ * 文件不得自带补码（`%7C` / `encodeURI` / `replace(/\|/…)`）——那是第二处归一。
  */
 const ROOT = path.resolve(__dirname, '../..');
 

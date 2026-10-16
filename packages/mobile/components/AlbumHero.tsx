@@ -1,9 +1,7 @@
 /**
  * 专辑详情页 Hero —— 折叠方案的专辑适配层（#406 二期）。
- *
- * 与 `PlaylistHero` 同一取向：通用结构全在 `CollapsingHero`，这里只做「数据与行」——
- * 指标行（年份 · N 首 · 总时长）、章节头、行徽章语义、播放全部、缺省态下的列表替身。
- * 专辑级动作（收藏/下载/分享）按 #406 的分期属三期，本层预留 `CollapsingHero.actions` 槽但不填。
+ * 与 `PlaylistHero` 同一取向：通用结构全在 `CollapsingHero`，这里只做「数据与行」——指标行（年份 ·
+ * N 首 · 总时长）、章节头、行徽章语义、播放全部、缺省态下的列表替身。
  */
 
 import React, { useCallback, useMemo } from 'react';

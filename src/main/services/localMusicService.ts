@@ -26,13 +26,9 @@ const PARSE_CONCURRENCY = 4;
 const WATCH_DEBOUNCE_MS = 400;
 
 /**
- * 曲库落盘布局（#426）：
- * - `folders.json`：目录清单（path / name / lastScanned），不含歌曲；
- * - `songs-<md5(path)>.json`：每个目录一个分片，装该目录的歌曲。
- *
- * 此前整份曲库是一个 `local-music.json`，任何变更都 `JSON.stringify(store)` 全量重写——
- * 单次「加一首歌」的代价与曲库总规模成正比（上万首 = 每次增删串几十 MB，异步只让「写」
- * 不阻塞主线程，`stringify` 仍在主线程）。分片之后写盘量只与**受影响的那一片**成正比。
+ * 曲库落盘布局（#426）：- `folders.json`：目录清单（path / name / lastScanned），不含歌曲；- 
+ * `songs-<md5(path)>.json`：每个目录一个分片，装该目录的歌曲。
+ * 分片之后写盘量只与**受影响的那一片**成正比。
  */
 const FOLDERS_INDEX_FILE = 'folders.json';
 /** 上一版的单文件（迁移源；分表写齐之后退役） */
@@ -145,14 +141,8 @@ export class LocalMusicService {
 
   /**
    * 装载曲库（#426）。
-   *
-   * 分表之后是「`folders.json` 目录清单 + 每目录一个 `songs-<hash>.json` 分片」，
-   * **装载路径与 IPC 面不变**（对外仍是同一个 store 视图），只是数据来自 N+1 个文件。
-   * 分片缺失/损坏只让**那个目录**的歌单为空，其余照读——扫描中断/崩溃后曲库仍可读
-   *（每片都是 tmp + rename 原子替换出来的，不存在写一半的中间态）。
-   *
-   * 老用户的单文件 `local-music.json` 仍读一次（迁移源）：首次落盘时先写齐清单与所有分片，
-   * 成功后才把它退役成 `.migrated`（中途崩溃老数据还在，下次启动重新走迁移）。
+   * 分表之后是「`folders.json` 目录清单 + 每目录一个 `songs-<hash>.json` 分片」，**装载路径与 IPC 
+   * 面不变**（对外仍是同一个 store 视图），只是数据来自 N+1 个文件。
    */
   private loadStore(): void {
     fs.mkdirSync(this.dataDir, { recursive: true });
@@ -221,10 +211,8 @@ export class LocalMusicService {
 
   /**
    * 落盘（#426）：只写本次变更触及的分片。
-   *
-   * 与 #412 的两条纪律一致：**异步 + tmp→rename 原子替换**、**同一个 writeChain 串行**
-   * （并发调用按序落盘，同一个分片的 tmp 不会交错）。额外一条：**载荷在任务真正执行时才取**
-   * ——后到的写拿到的必然是最新的内存状态，不会用旧快照覆盖新数据。
+   * 与 #412 的两条纪律一致：**异步 + tmp→rename 原子替换**、**同一个 writeChain 串行**（并发调用按
+   * 序落盘，同一个分片的 tmp 不会交错）。
    */
   private persist(scope: PersistScope): Promise<void> {
     return this.enqueue(() => this.persistNow(scope));
@@ -242,16 +230,8 @@ export class LocalMusicService {
 
   /**
    * 落盘（#426）：**目录清单是提交点**，顺序本身就是崩溃安全的边界。
-   *
-   * 1. **先写数据分片**（本次触及的目录，载荷此时才从当前 store 取）——数据先于引用；
-   * 2. **再写 `folders.json`**（提交点）；
-   * 3. **提交之后**才删清单不再引用的分片。
-   *
-   * 任意两步之间崩溃都只会留下**孤儿分片**（清单不引用 → 不可见，由装载或后续落盘清扫），
-   * 不会出现「清单指向一个不存在的分片」——那等于那个目录的歌全丢（master 的单文件是全有/全无）。
-   *
-   * 清单写失败**不静默吞**：置 `indexDirty` 并上抛，下一次 persist 必然重写清单，内存与磁盘
-   * 不会永久停在「内存已变、磁盘陈旧」上。
+   * 任意两步之间崩溃都只会留下**孤儿分片**（清单不引用 → 不可见，由装载或后续落盘清扫），不会出现
+   * 「清单指向一个不存在的分片」——那等于那个目录的歌全丢（master 的单文件是全有/全无）。
    */
   private async persistNow(scope: PersistScope): Promise<void> {
     // 老单文件尚未拆片：这一次把目录清单与**所有**分片一次写齐，成功后才退役单文件
@@ -293,10 +273,8 @@ export class LocalMusicService {
 
   /**
    * 提交之后的分片删除：`pendingShardDrops` 里的目录，**拿当前 store 现算**是否还在。
-   *
-   * 还在 store 里（`removeFolder` 之后又 `addFolder` 同一路径）→ 什么都不删，消除「后到的
-   * persist 用旧快照删掉刚重建的分片」的半更新窗口。崩在删除之前 / `rm` 失败 → 只留孤儿
-   * 分片（不可见），留在集合里等下一次落盘重试，或由装载时的清扫兜底。
+   * 崩在删除之前 / `rm` 失败 → 只留孤儿分片（不可见），留在集合里等下一次落盘重试，或由装载时的清
+   * 扫兜底。
    */
   private async dropUnreferencedShards(): Promise<void> {
     for (const folderPath of [...this.pendingShardDrops]) {

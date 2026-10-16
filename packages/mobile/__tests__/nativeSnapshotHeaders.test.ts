@@ -5,21 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * #606：服务从快照 restore 的队列**必须带上** per-item 请求头（关掉 #592/ADR 的已知边界 3b）。
- *
- * `PlayerService.persist()` 落盘前曾对每条 track 写 `put("headers", JSONObject())` ——
- * 快照里的头被显式清空。进程被杀 / `MediaLibraryService` 重启后，原生按快照 restore 出来的
- * 队列没有 UA/Referer，而这一段请求正是「原生自己推进、JS 还没重新投喂」的那一段：
- * 酷狗/QQ 的 CDN 校验 Referer 域名 → 403 → 触发跳歌护栏。
- *
- * 本模块没有 Kotlin 测试框架，PR/push 也不编译原生（ADR
- * `2026-09-29-ci-verification-boundary.md`），所以这里的守卫是**源码契约**：
- * ① `persist()` 不再清空 headers，落盘的就是 `TrackRecord.toJson()` 那份带头的序列化；
- * ② restore 路径真的把它读回来（`restoreSnapshot` → `QueueStore.restoreFrom` → `fromJson`）；
- * ③ 旧版本快照没有 `headers` 键 —— 读回一律走 `optJSONObject`（缺键 = 空 map，不抛），
- *    空 map 在 `ExpiryGuard` 仍命中「不自定义头」那条分支，与改前行为一致。
- *
- * **它不替代 Kotlin 编译与真机验收**：杀进程续播的抓包证据仍要在设备到位时补
- * （`npm run mobile:e2e` / `runtime-verification` skill）。
+ * `PlayerService.persist()` 落盘前曾对每条 track 写 `put("headers", JSONObject())` ——快照里的头被
+ * 显式清空。
  */
 
 /** `__tests__/` 的上一级 = packages/mobile */

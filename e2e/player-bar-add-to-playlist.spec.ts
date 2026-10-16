@@ -3,10 +3,6 @@ import type { ElectronApplication, Page } from 'playwright';
 
 /**
  * #245 回归：播放栏「加入歌单」弹窗必须 portal 到 body 并相对视口居中。
- *
- * 背景：PlayerBar 根 div 的 backdropFilter 会为 fixed 后代建立包含块，
- * 弹窗手写遮罩被压进 72px 播放栏（bug 版特征 = 遮罩 height≈72、贴底）。
- *
  * 前置：vite dev 运行于 5174（如 `npm run electron:dev`）；未运行则整组 skip。
  * 运行：npx playwright test e2e/player-bar-add-to-playlist.spec.ts --workers=1
  */

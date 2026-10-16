@@ -2,22 +2,9 @@ import { applyShuffleOrder, getNextSongIndex } from '@mplayer/core';
 import type { ShuffleState, Song } from '@mplayer/core';
 
 /**
- * 预取窗口的状态与定序（规格 §5.5 / §7.3）。
- *
- * 只做两件事，都是纯逻辑（不碰原生、不发请求），便于单测：
- * 1. **三层预取去重**（沿用 PR #433 的常量与语义）：
- *    - 在飞去重 `inFlight`：同一首不并发解析；
- *    - 成功窗口 `PREFETCH_SKIP_FRESH_MS`：5min 内已成功的 key 不重复解析
- *      （与既有的 12h 资源缓存叠加，避免重复烧整条 tier3 链）；
- *    - 失败冷却 `PREFETCH_FAIL_COOLDOWN_MS`：失败后 30s 内不再重烧整条解析链。
- * 2. **窗口定序**：顺序模式取 index+1、+2…；随机模式按 core 的**稳定随机序列**
- *    （#511 方案 A / #519 接线：`applyShuffleOrder` 的顺序，游标由 playerStore 持有）
- *    取「当前曲之后的 N 首」——同一稳态下计划**收敛为同一批**，原生只顺序推进。
- *    这样预取窗口天然知道下一首是谁，锁屏 next 与 UI next 语义一致。
- *
- * ⚠️ 下面的**无序列兜底**分支（`playMode === '随机播放' && !shuffle`）保留的是 #511 之前的
- * 「防重复现抽」行为，只为兼容「序列还没建立」的调用方；它是每轮重抽的，不要在正常路径上走到
- * （#519 的自激循环就出在这里的旧行为上）。
+ * ⚠️ 下面的**无序列兜底**分支（`playMode === '随机播放' && !shuffle`）保留的是 #511 之前的「防重
+ * 复现抽」行为，只为兼容「序列还没建立」的调用方；它是每轮重抽的，不要在正常路径上走到（#519 的自激
+ * 循环就出在这里的旧行为上）。
  */
 
 export const PREFETCH_SKIP_FRESH_MS = 5 * 60 * 1000;
@@ -76,10 +63,6 @@ export function resetPrefetchState(): void {
 
 /**
  * 计划「接下来 count 个待播 index」。
- *
- * @param excluded 已在原生手里的 key（`nativeMirror`）——不重复投喂
- * @param playMode settingsStore 的播放模式（'单曲循环' | '随机播放' | '列表循环'）
- * @param shuffle 稳定随机序列（#519）；随机模式下**有序列就按序列定序**，不再现抽
  */
 export function planNextIndexes(
   queue: Song[],

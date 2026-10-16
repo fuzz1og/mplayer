@@ -8,12 +8,6 @@ import { SONG_ROW } from './songRowMetrics';
 
 /**
  * 单条歌曲行的骨架 —— `SongRow` 的**同形替身**（#416）。
- *
- * 抽成一行组件的原因：推荐页、各类列表页、发现页榜单卡都在重复「封面 + 两行文字
- * （+ 榜位 + 右侧动作）」这个结构，各自手写一次就会各自漂移一次——此前
- * `RecommendSkeleton` 与 `SongListSkeleton` 就是各写一套，且都漏了右侧动作列
- * （导致歌名可用宽度与真实行不同 → 数据到达时文字换行/位移）。
- *
  * 尺寸一律取自 `songRowMetrics`；真实行的每个对应部位都能在这张骨架里找到同形物。
  */
 interface Props {

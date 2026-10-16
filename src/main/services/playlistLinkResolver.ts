@@ -1,10 +1,9 @@
 import axios from 'axios';
 
 /**
- * 歌单分享短链解析（主进程独有，#274）：
- * 渲染层受 CORS 限制无法跟随跨域 302，短链（163cn.tv/*）→ 歌单落地页的
- * 重定向解析必须在主进程完成。逐跳跟随 3xx Location，返回最终落地 URL；
- * 歌单 id 由渲染层用 parsePlaylistUrl 对落地 URL 再解析。
+ * 歌单分享短链解析（主进程独有，#274）：渲染层受 CORS 限制无法跟随跨域 302，短链（163cn.tv/*）→ 歌
+ * 单落地页的重定向解析必须在主进程完成。
+ * 逐跳跟随 3xx Location，返回最终落地 URL；歌单 id 由渲染层用 parsePlaylistUrl 对落地 URL 再解析。
  */
 
 const MAX_REDIRECT_HOPS = 5;

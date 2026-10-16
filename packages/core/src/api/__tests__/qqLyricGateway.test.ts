@@ -5,12 +5,9 @@ import { fetchLyricViaGateway, resetQqDirectForTests } from '../qqDirect.js';
 import { cacheManager } from '../memoryCacheManager.js';
 
 /**
- * QQ 歌词双通道测试：
- * - 主腿：c.y.qq.com fcg GET（强制 Referer 防盗链；桌面 Chromium/Node 栈可带）。
  * - 兜底腿：musicu 网关 GetPlayLyricInfo（无 Referer 校验，与搜索/GetVkey 同通道）。
- * 背景：RN 网络栈发出的 fcg GET 在真机被拒（retcode=-1310 拒绝体），移动端
- * 歌词拿不到——兜底腿用传输缝（setTransport）模拟该拒绝场景（#276 后
- * getLyrics 主腿与网关腿共用同一 transport 接缝）。
+ * 背景：RN 网络栈发出的 fcg GET 在真机被拒（retcode=-1310 拒绝体），移动端歌词拿不到——兜底腿用传
+ * 输缝（setTransport）模拟该拒绝场景（#276 后 getLyrics 主腿与网关腿共用同一 transport 接缝）。
  */
 
 const LRC = '[ti:恋人]\n[ar:李荣浩]\n[00:01.00]恋人';

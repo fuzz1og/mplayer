@@ -1,17 +1,9 @@
 import type { Song } from '../types/index.js';
 
 /**
- * 稳定随机序列（#511 方案 A）。
- *
- * 随机播放不再是「每次实时抽一个 ≠ 当前」——那没有记忆、无法持久化，且 next/prev
- * 共用同一抽法导致「上一首」不回上一张。本模块把随机建模为一份**可序列化的
- * 洗牌序 + 游标**：洗牌一次、由游标推进/后退，双端 playerStore 各持一份。
- *
- * 设计约束：
- * - 纯函数、零 I/O、零模块级状态（同一份语义双端只有这一处实现）；
- * - 「序列 + 游标」本身即可 JSON 序列化（localStorage / AsyncStorage 直接存对象）；
- * - 队列成员变化（加歌/删歌/换源）只做**增量对齐**，不重洗——顺序在会话内稳定；
- *   只有整批换队列（进新歌单）才由调用方重新洗牌。
+ * 设计约束：- 纯函数、零 I/O、零模块级状态（同一份语义双端只有这一处实现）；- 「序列 + 游标」本身即
+ * 可 JSON 序列化（localStorage / AsyncStorage 直接存对象）；- 队列成员变化（加歌/删歌/换源）只做**
+ * 增量对齐**，不重洗——顺序在会话内稳定；只有整批换队列（进新歌单）才由调用方重新洗牌。
  */
 
 /** 洗牌序 + 游标：随机播放的完整可持久化状态。 */
@@ -65,13 +57,9 @@ export function createShuffleState(
 }
 
 /**
- * 成员对齐（作用域显式，#543/#555）：把 `state.order` 对齐成「相对 `queue` 合法」的序列，
- * 游标跟随它原先指向的那首歌；不改相对顺序——这是「会话内顺序稳定」的落点。
- *
- * - `authoritative`：队列是完整成员集 → 丢掉已不在队列的 id（幽灵 id 的唯一清理时机）、
- *   把新进队列的 id 追加到末尾；
- * - `window`：队列可能只是原生**预取窗口**（子集）→ **只补不丢**，
- *   否则窗口外的 id 会被删掉，而 store 订阅会立刻落盘 ⇒ 随机序**永久截断**（#520 实测 12 → 5）。
+ * - `authoritative`：队列是完整成员集 → 丢掉已不在队列的 id（幽灵 id 的唯一清理时机）、把新进队列
+ * 的 id 追加到末尾；- `window`：队列可能只是原生**预取窗口**（子集）→ **只补不丢**，否则窗口外的 
+ * id 会被删掉，而 store 订阅会立刻落盘 ⇒ 随机序**永久截断**（#520 实测 12 → 5）。
  */
 function alignMembers(state: ShuffleState, queue: readonly Song[], scope: ShuffleScope): ShuffleState {
   const anchoredId = itemAt(state.order, state.cursor);
@@ -127,8 +115,6 @@ export function syncShuffleCursor(
 
 /**
  * 游标推进一格（dir = 1 下一首 / -1 上一首），回绕。
- * 成员先按 `scope` 对齐（缺省 authoritative；window = 只补不丢，窗口外的 id 不裁），
- * 游标沿用对齐后的值——调用方要「先对到当前曲」请先跑 {@link alignShuffleOrder}。
  * 游标越界（持久化数据损坏等）一律当作 -1 处理：next 从序列开头起、prev 从末尾起。
  * 单元素序列两个方向都归位到该曲（与既有「队列 ≤ 1 归位」行为一致）。
  */
@@ -156,14 +142,9 @@ export function stepShuffle(
 }
 
 /**
- * 「下一首播放」在随机序里的落点：把 `songId` 放到`当前曲`的**下一格**。
- * - **先归一**（与其他导出函数同口径）：成员对齐成 `queue` 的一个排列，游标对到当前曲；
- *   否则传入残缺 order 时会把新 id 插进非全排列，落盘的序列就不守恒；
- * - 已在序列里 → 移动（不复制），幂等（已在目标格则原样返回）；
- * - 不在序列里 → 插入。**前置条件：`songId` 已在 `queue` 里**（队列成员由调用方维护）；
- * - 点的是当前曲本身 → 无「下一格」可插，原样返回；
- * - 无当前曲（currentIndex 越界）→ 插到序列开头。
- * 游标始终重算为「当前曲在新序列中的位置」，移动导致的整体平移不会算错。
+ * - **先归一**（与其他导出函数同口径）：成员对齐成 `queue` 的一个排列，游标对到当前曲；否则传入残缺
+ * order 时会把新 id 插进非全排列，落盘的序列就不守恒；- 已在序列里 → 移动（不复制），幂等（已在目
+ * 标格则原样返回）；- 不在序列里 → 插入。
  */
 export function insertNextInShuffle(
   state: ShuffleState,
@@ -225,23 +206,13 @@ export function applyShuffleOrder(
 
 /**
  * 对齐的**作用域**（#543）：调用方手里的 `queue` 是完整成员集，还是只是原生预取窗口？
- *
- * 这个区别此前只活在移动端的注释里（`services/shuffleMode.ts` 文件头），
- * 两端各写一份对齐函数，且规则**已经分叉**：
- * - `authoritative`：队列是完整成员集 → 允许裁剪幽灵 id（只在这里清理）；
- * - `window`：队列可能只是子集（原生预取窗口）→ **只补不丢**，
- *   否则窗口外的 id 会被删掉，而 store 订阅会立刻落盘 ⇒ 随机序**永久截断**
- *   （#520 评审实测：12 首 → 5 首）。
  */
 export type ShuffleScope = 'authoritative' | 'window';
 
 /**
  * 对齐序列（#543）：作用域**显式**，不再让调用方从上下文推断。
- *
- * - `window`：保留既有顺序，把队列里新出现的 id 追加到末尾，游标对到当前曲；
- * - `authoritative`：裁剪幽灵 id + 补新成员 + 对游标（= 原 `syncShuffleCursor`）。
- *
- * 两种作用域都不重洗（会话内顺序稳定的既有语义不变）。
+ * - `window`：保留既有顺序，把队列里新出现的 id 追加到末尾，游标对到当前曲；- `authoritative`：裁剪
+ * 幽灵 id + 补新成员 + 对游标（= 原 `syncShuffleCursor`）。
  */
 export function alignShuffleOrder(
   state: ShuffleState,

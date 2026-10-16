@@ -208,14 +208,9 @@ describe('playPrevious（core planAdvance 收敛）', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// #555：宿主确实执行 core planAdvance 的 effect
-// （core 的 advancePlan.test.ts 只测纯函数，测不到宿主；这里的宿主 = playerStore）
-//
-// 修前：随机分支自己 stepShuffle 后无条件 play()，绕开 planAdvance 的 effect，
-// 于是 core 判为 restart-current 的落点（单元素队列回到当前曲）在桌面被落成「重新解析 + load」。
+// #555：宿主确实执行 core planAdvance 的 effect（core 的 advancePlan.test.ts 只测纯函数，测不到宿主
+// ；这里的宿主 = playerStore）
 // 本用例在修前代码上变红（load 被调用），修后绿（seek(0) 重播）。
-// ---------------------------------------------------------------------------
 describe('宿主执行 planAdvance 的 effect（#555）', () => {
   it('随机播放 + 单元素队列 → restart-current：seek(0) 重播，不重新解析/load', async () => {
     const only = song('netease:1', '晴天', 'https://audio.example.com/1.mp3');

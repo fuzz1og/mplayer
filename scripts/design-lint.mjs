@@ -1,21 +1,8 @@
 #!/usr/bin/env node
 /**
  * design-lint.mjs — 组件内颜色/不透明度门禁（UI 重构指南 §9 + #318 审计）。
- *
- * 移植自 `scripts/design-lint.sh`（#500：Windows 上 `bash` 可能是 WSL 的，脚本不再依赖 bash）。
- * 扫描语义、输出与退出码与前者对齐；`scripts/design-lint.sh` 只剩两行 shim。
- *
- * 扫描：
- *   1) mobile 严格模式：packages/mobile/{components,app} 内四类写法一律 fail ——
- *      a. 引号包裹的 hex 色值
- *      b. rgb()/rgba() 字面量（含数字，`rgb(0,0,0)` 这类）
- *      c. 命名色（white/black/red/...；'transparent' 不在此列，它是无语义替代）
- *      d. 裸 opacity 魔数（`opacity: 0.x`）—— 改用 theme/tokens.ts 的 `opacity.*`；
- *      合法遗留在该行行尾注释 `design-lint: ok`（附原因），例如 MaskedView 的 alpha 蒙版。
- *   2) desktop 黑名单模式：src/renderer 内命中遗留 hex 黑名单（LEGACY_HEX）即 fail。
- *      桌面 P2（清账 187 hex，延后）逐项清理后把对应色值填进黑名单防回归，
- *      因此当前为空清单、恒通过——门禁随 P2 进度生效。
- * 注：正则限定引号包裹，避免误伤注释里的 GitHub issue 引用（#172/#173 等）。
+ * 桌面 P2（清账 187 hex，延后）逐项清理后把对应色值填进黑名单防回归，因此当前为空清单、恒通过——门
+ * 禁随 P2 进度生效。
  */
 
 import { readFileSync, readdirSync } from 'node:fs';

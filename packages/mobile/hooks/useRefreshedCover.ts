@@ -3,13 +3,9 @@ import type { Song } from '@mplayer/core';
 import { searchStrictMatch } from '../services/songResources';
 
 /**
- * 封面渲染 + 过期兜底刷新（与 SongRow 同一套机制）：
- * - 渲染 song.cover；若 URL 已过期（加载失败）→ 立即切回占位，
- *   后台严格匹配搜索补新封面（限并发，防列表全失效时打满带宽）
- * - 搜索完成拿到新封面后自动更新触发重渲染
- * - 返回 cover（可能 undefined，调用方显示占位）与 handleError
- *
- * 用途：歌单详情 hero 用第一首歌封面、以及其他需要"最新封面"的场景。
+ * 封面渲染 + 过期兜底刷新（与 SongRow 同一套机制）：- 渲染 song.cover；若 URL 已过期（加载失败）→ 
+ * 立即切回占位，后台严格匹配搜索补新封面（限并发，防列表全失效时打满带宽）- 搜索完成拿到新封面后自
+ * 动更新触发重渲染- 返回 cover（可能 undefined，调用方显示占位）与 handleError
  */
 
 // 封面失效兜底搜索的并发闸门（与 SongRow 共用 services/coverSearchSlot）

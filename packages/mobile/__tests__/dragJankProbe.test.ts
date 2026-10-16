@@ -5,11 +5,9 @@ import {
 import { useLogsStore } from '../stores/logsStore';
 
 /**
- * 探针的上报策略与活动描述单测。两件事是 A/B 能不能成立的关键：
- *  - 「跟手掉帧一律 warn、干净只在 dev 记 info」——干净手势若一声不吭，
- *    「零 warn」就无法区分「没卡」与「探针没跑」；
- *  - 「现场必须覆盖刚拖过」——帧率告警最早在拖拽结束后 4s 才落盘，
- *    只报瞬时状态的话那行告警永远显示没在拖。
+ * 两件事是 A/B 能不能成立的关键：- 「跟手掉帧一律 warn、干净只在 dev 记 info」——干净手势若一声不
+ * 吭，「零 warn」就无法区分「没卡」与「探针没跑」；- 「现场必须覆盖刚拖过」——帧率告警最早在拖拽结
+ * 束后 4s 才落盘，只报瞬时状态的话那行告警永远显示没在拖。
  */
 
 const dragEntries = () => useLogsStore.getState().entries.filter((e) => e.message.includes('[drag]'));

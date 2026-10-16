@@ -35,30 +35,23 @@ type ChannelValue = string;
 const PROBE_CACHE_TTL_MS = 10 * 60 * 1000;
 
 /**
- * 下载看门狗窗口（真机联调教训：原实现是一刀切 120s 硬超时，
- * 大文件慢速健康下载会被误杀——镜像对 latest.yml 快不代表大文件吞吐好）。
- * - 首字节窗口：起播后这么久没有任何进度 → 判定源不可用，快速降级换源
- * - 停滞窗口：进度开始后，两次进度事件间隔超过它 → 判定停滞
- * 只要进度持续推进就永不限时。
+ * - 首字节窗口：起播后这么久没有任何进度 → 判定源不可用，快速降级换源- 停滞窗口：进度开始后，两次
+ * 进度事件间隔超过它 → 判定停滞只要进度持续推进就永不限时。
  */
 const DOWNLOAD_FIRST_BYTE_MS = 25000;
 const DOWNLOAD_STALL_MS = 30000;
 
 /**
- * 启动检查（#579）：进入应用后自动检查一次。
- * - 超时取 8s，比设置页手动检查的默认 10s 短：启动这次不该与首屏请求抢带宽
- * - 首帧后延时 3s 再触发，避开首屏请求高峰
- * 依据：ADR `2026-10-05-update-prompt-and-silent-desktop-download.md` 决策 1 与其「后果」段。
+ * - 超时取 8s，比设置页手动检查的默认 10s 短：启动这次不该与首屏请求抢带宽- 首帧后延时 3s 再触发，
+ * 避开首屏请求高峰依据：ADR `2026-10-05-update-prompt-and-silent-desktop-download.md` 决策 1 与其「
+ * 后果」段。
  */
 export const STARTUP_CHECK_TIMEOUT_MS = 8000;
 export const STARTUP_FLOW_DELAY_MS = 3000;
 
 /**
  * 平台兜底资产名（#350）：官方 feed（latest.yml）没给出资产名时用它拼直链。
- * 必须与 electron-builder.yml 里声明的产物名逐字一致——Windows 曾用默认模板
- * `MPlayer Setup 1.8.1.exe`（空格），electron-builder 写进 feed 时改成 `MPlayer-Setup-1.8.1.exe`、
- * GitHub 收资产时改成 `MPlayer.Setup.1.8.1.exe`，三者分叉导致下载 404。
- * 产物名现已显式声明为无空格连字符形式，这里同步（一致性由测试守住）。
+ * 必须与 electron-builder.yml 里声明的产物名逐字一致——Windows 曾用默认模板（含空格，GitHub 上传时被改写成 `.`）。
  */
 export function platformAssetName(platform: NodeJS.Platform, version: string): string {
   switch (platform) {
@@ -162,10 +155,8 @@ export class UpdateService {
     try {
       const config = await db.getSetting<ProxyConfig>('proxyConfig');
 
-      // 审查修复：移除 process.env.HTTP(S)_PROXY 全局注入——污染主进程所有网络请求，
-      // 与 axios agents 双轨代理易不一致。代理仅通过 session 级 setProxy 生效：
-      // electron-updater 专用 netSession + 应用 defaultSession（defaultSession 由
-      // main.ts applyElectronProxy 统一维护，此处为更新检查触发时的二次同步）。
+      // 审查修复：移除 process.env.HTTP(S)_PROXY 全局注入——污染主进程所有网络请求，与 axios 
+      // agents 双轨代理易不一致。
       const netSession = autoUpdater.netSession;
       if (netSession) {
         if (config?.enabled && config.host) {
@@ -274,10 +265,9 @@ export class UpdateService {
   }
 
   /**
-   * 计算本轮检查/下载的尝试顺序：
-   * - 手动通道：选中源置顶，其余保持静态兜底顺序（仍可逐源降级）
-   * - auto：优先测速快照排序；无可用探针结果时回落静态兜底顺序
-   * - 末尾统一套用停滞降权（延迟快≠吞吐好，见 stalledSources）
+   * 计算本轮检查/下载的尝试顺序：- 手动通道：选中源置顶，其余保持静态兜底顺序（仍可逐源降级）- auto
+   * ：优先测速快照排序；无可用探针结果时回落静态兜底顺序- 末尾统一套用停滞降权（延迟快≠吞吐好，见 
+   * stalledSources）
    */
   private async resolveAttemptOrder(): Promise<readonly UpdateSourceDef[]> {
     const channel = await this.getChannel();
@@ -505,11 +495,7 @@ export class UpdateService {
 
   /**
    * 启动自动流程（#579 / ADR 决策 1、4）：检查 → 有新版则**静默后台下载**。
-   *
-   * 下载到这里就结束：状态推到 `downloaded` 后由渲染层弹确认框，**用户确认才退出安装**
-   * （见 `installDownloadedUpdate`）。启动流程不得自行退出应用。
-   *
-   * **全程静默**：任何一步失败都只记日志并返回，绝不 throw、不弹窗、不阻断启动。
+   * 启动流程不得自行退出应用。
    * 单飞由 `checkForUpdates` / `downloadUpdate` 各自的守卫保证。
    */
   async runStartupFlow(opts?: { checkTimeoutMs?: number }): Promise<void> {
@@ -530,15 +516,8 @@ export class UpdateService {
 
   /**
    * 退出应用并安装已下载的更新，装完自动重启（#579 / ADR 决策 4、5）。
-   *
-   * 语义 = `quitAndInstall(true, true)`：
-   * - `isSilent = true` → 给 NSIS 传 `/S`。**静默是有前提的**：用户已经在这个应用内的
-   *   确认框里点过「立即安装并重启」，所以不需要安装器再问一遍。
-   * - `isForceRunAfter = true` → 传 `--force-run`，装完自动把应用拉起来。
-   *
-   * 退出由 electron-updater 做：它先 spawn 安装器（带 `--updated`，安装器因此不会弹
-   * 「应用正在运行」提示、直接接管），再 `app.quit()`；`install()` 内部置
-   * `quitAndInstallCalled`，所以退出时 `autoInstallOnAppQuit` 不会再装第二次。
+   * **静默是有前提的**：用户已经在这个应用内的确认框里点过「立即安装并重启」，所以不需要安装器再问
+   * 一遍。
    */
   installDownloadedUpdate(): { ok: boolean; error?: string } {
     if (this.status.status !== 'downloaded' && !this.hasDownloadedInstaller()) {

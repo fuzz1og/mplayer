@@ -33,11 +33,6 @@ export async function searchStrictMatch(song: Song): Promise<Song | null> {
 }
 
 /**
- * 移动端「可播资源刷新」适配器（ADR-0012 决策 3）：把 core 纯编排
- * （取缓存 → 旧签名死链判定 → 精确匹配搜索 → 写缓存）接到移动端口——
- * 读/写 = cacheService（身份键 + 资源值），搜索 = 路由严格搜索，
- * 死链判定 = core isLegacyDeadUrl，诊断走 logsStore。
- *
  * 返回 null 的调用方约定见 core 接口不变量：**不得用 null 覆盖本地已有的有效 url**。
  */
 export async function refreshPlayableResource(song: Song): Promise<PlayableResource | null> {

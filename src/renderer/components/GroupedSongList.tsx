@@ -161,10 +161,9 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   }
 
   /**
-   * 虚拟化行的**定位**不再当 `style` prop 传给行组件（#412）。`SongRow`/`GroupHeaderRow`
-   * 都是 `React.memo`，而每行每帧都新建一个 style 对象等于给它们塞一个永远不相等的 prop，
-   * memo 形同虚设。这里把定位收进一个只吃**数字**的 memo 包裹层，行组件拿到的 props
-   * 就只剩它自己的数据。
+   * 虚拟化行的**定位**不再当 `style` prop 传给行组件（#412）。
+   * `SongRow`/`GroupHeaderRow`都是 `React.memo`，而每行每帧都新建一个 style 对象等于给它们塞一个永
+   * 远不相等的 prop，memo 形同虚设。
    */
   const renderItem = (item: FlatItem) => {
     if (item.type === 'group') {

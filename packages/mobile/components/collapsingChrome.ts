@@ -1,15 +1,7 @@
 /**
- * 折叠头部 chrome 的纯逻辑核心 —— 滚动 → chrome 映射的阈值数学 + 阈值边沿检测。
- *
- * 为什么单独成文件：这里的东西要能在 node 环境直接单测
- * （packages/mobile/vitest.config.ts 的 environment:'node'），
- * 所以**不得 import react-native / react**（由 __tests__/collapsingChrome.test.ts 把关）。
- *
- * 分工：
- *   - 本文件：阈值常量 + 进度定义（含 clamp）+ 状态栏换色的边沿判据；
- *     逐帧的进度由 useCollapsingChrome 用 chromeRanges() 的同一区间交给原生插值
- *     （extrapolate:'clamp'）计算，二者端点由测试绑定一致。
- *   - hooks/useCollapsingChrome.ts：把上面的阈值接到 RN 原生驱动上（帧内不进 JS）。
+ * 为什么单独成文件：这里的东西要能在 node 环境直接单测（packages/mobile/vitest.config.ts 的 
+ * environment:'node'），所以**不得 import react-native / react**（由 
+ * __tests__/collapsingChrome.test.ts 把关）。
  */
 
 /** 悬浮导航栏内容高度（不含 insets.top）：nav 高度 = NAV_H + insets.top */
@@ -59,18 +51,9 @@ export function chromeRanges(chrome: CollapsingChrome): ChromeRanges {
 }
 
 /**
- * 导航条背景颜色插值的输入计划（#372）。
- *
- * RN 0.86 原生驱动里两条插值路径对 extrapolate 的处理**不一致**：
- *   - 数值插值 InterpolationAnimatedNode::interpolateValue → interpolate()
- *     （ReactCommon/react/renderer/animated/drivers/AnimationDriverUtils.h）**结算** extrapolate:'clamp'；
- *   - 颜色插值 InterpolationAnimatedNode::interpolateColor()
- *     （ReactCommon/react/renderer/animated/nodes/InterpolationAnimatedNode.cpp:104-152）**忽略** extrapolate，
- *     直接 ratio = (value - inputMin)/(inputMax - inputMin)，再逐通道 static_cast<uint8_t>（超界即回绕）。
- *
- * 所以颜色节点不能直接吃原始 scrollY：滚过 collapseAt 后 ratio > 1，alpha 会在 1px 内
- * 从 255 回绕到 0（条身消失），继续滚周期性闪烁偏色（深色模式尤其明显）。计划把颜色节点
- * 串在数值 clamp 节点之后，保证颜色节点 ratio 恒 ∈ [0,1]。接线见 hooks/useCollapsingChrome.ts。
+ * 所以颜色节点不能直接吃原始 scrollY：滚过 collapseAt 后 ratio > 1，alpha 会在 1px 内从 255 回绕到 
+ * 0（条身消失），继续滚周期性闪烁偏色（深色模式尤其明显）。
+ * 计划把颜色节点串在数值 clamp 节点之后，保证颜色节点 ratio 恒 ∈ [0,1]。
  */
 export interface NavBackgroundPlan {
   /** 第 1 段（数值插值）：scrollY → clamp 到 [0, collapseAt] */

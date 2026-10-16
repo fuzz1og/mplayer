@@ -1,9 +1,7 @@
 /**
  * 渲染层 ↔ 主进程 IPC 桥类型（审查修复：contextIsolation 启用后的唯一入口）。
- *
- * preload.ts 在隔离上下文暴露 `window.electronAPI`，渲染层不再拥有 Node/require
- * 能力。签名刻意对齐 ipcRenderer（invoke/send/on/removeListener），渲染层除
- * 引用来源外零改动。
+ * preload.ts 在隔离上下文暴露 `window.electronAPI`，渲染层不再拥有 Node/require 能力。
+ * 签名刻意对齐 ipcRenderer（invoke/send/on/removeListener），渲染层除引用来源外零改动。
  */
 
 export interface ElectronAPI {

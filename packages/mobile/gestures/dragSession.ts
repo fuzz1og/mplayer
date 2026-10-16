@@ -1,26 +1,7 @@
 /**
  * 竖直拖拽关闭：手势会话纯状态机。
- *
- * PlayerOverlay（全屏面板下滑关闭）与 BottomSheet（把手热区下滑关闭）此前各自手抄了
- * 同一套 PanResponder 物理——5 个 ref、首帧原点校准、自采样速度 EMA、动量投影判决、
- * terminate 回弹；两份只有认领阈值与退场编排不同，物理本身完全一致。本模块是这份物理
- * 的唯一实现：改一处，两端同时生效（locality）。
- *
- * 接口边界（深度所在）：
- *   - 只吃手势样本流（dy / 时间戳 / 面板尺寸），只吐「当前位移值 / 速度估计 / 松手判决」；
- *     不碰 Animated、不碰 PanResponder、不碰 React —— 因此可在 node 环境直接单测
- *     （vitest environment: 'node'，见 __tests__/dragSession.test.ts）。
- *   - 绑定见 hooks/useDragToDismiss.ts；退场/回弹动画与 reducedMotion 分支留在调用点
- *     （两端编排不同，不硬塞进内核）。
- *   - 认领判定（isVerticalDragClaim / shouldCaptureDrag）也收在这里：bubble 与 capture
- *     共用同一条「竖直意图」判定，调用点只决定要不要在 capture 阶段抢先（shouldCapture）。
- *
- * Fabric 三坑（原先只活在两个调用点的注释里，收敛到此）：
- *   1. release 回调拿到的框架 gestureState 可能已被下一段触摸序列清零（vy=0）——
- *      松手判定只能用 move 阶段的自采样速度（对呈现位置差分 + EMA）。
- *   2. stopAnimation 的 getValue 走原生异步回路，回调可能晚于首个 move 到达——
- *      calibrate 之前到达的 move 一律丢弃，防止跟手从错误基准起跳。
- *   3. 抓住进行中的动画（入场/退场途中）必须从当前呈现值接续，不能从 0 起跳。
+ * 本模块是这份物理的唯一实现：改一处，两端同时生效（locality）。
+ * 3. 抓住进行中的动画（入场/退场途中）必须从当前呈现值接续，不能从 0 起跳。
  */
 import { DISMISS_PROJECT_RATIO, projectMomentum, rubberband } from '../theme/motion';
 
@@ -58,11 +39,6 @@ export interface DragSession {
   move(sample: DragSample): number | null;
   /**
    * PanResponderRelease：动量投影判决 +（可选）位置兜底判决，两者取或。
-   * `dismissSize` = 判关基准高度（现取，旋转/折叠屏不吃过期值）：
-   *   - 投影判据：`lastPos + projectMomentum(vy) ≥ dismissSize × DISMISS_PROJECT_RATIO`
-   *     （快甩从任意位置都能关）；
-   *   - 位置判据（仅当 `positionRatio > 0`）：`lastPos ≥ dismissSize × positionRatio`，
-   *     不依赖速度——真机事件密度下速度自采样可能偏低，长拖不该因此回弹。
    * 全屏面板传屏高且不传 positionRatio；底部弹层传面板自身高度 + DISMISS_POSITION_RATIO。
    */
   release(dismissSize: number, positionRatio?: number): DragVerdict;
@@ -160,31 +136,17 @@ export function createDragSession(): DragSession {
 
 /**
  * 竖直下拉的认领判定（bubble 与 capture 共用）：enabled + |dy| 过阈值且纵向占优。
- * 横向留给原生分页 / 子列表滚动——Slider 横向拖动与点按天然不满足此判定。
- * 真机教训 1：拇指弧线「先横后竖」的起始几帧 |dy| 还不占优，只有 bubble 认领时会被
- * 横向分页 ScrollView 抢走且再也拿不回来（全屏播放器从封面起手拉不动）。
- * 真机教训 2：enabled = false 表示这次触摸序列不归本层管（弹层打开期间；或事件从未在
- * 本层落下过 DOWN——Modal 卸载后残余事件会漏到下层），那种序列一律不认领，防连带关闭。
+ * 真机教训 2：enabled = false 表示这次触摸序列不归本层管（弹层打开期间；或事件从未在本层落下过 
+ * DOWN——Modal 卸载后残余事件会漏到下层），那种序列一律不认领，防连带关闭。
  */
 export function isVerticalDragClaim(dx: number, dy: number, threshold: number, enabled = true): boolean {
   return enabled && Math.abs(dy) > threshold && Math.abs(dy) > Math.abs(dx);
 }
 
 /**
- * 触摸序列归属闸：只有「在本层落下过 DOWN」的序列才归本层管。
- *
- * 真机教训 3（Modal 事件泄漏）：面板判关 → 退场 → Modal 卸载，若触摸序列尚未结束，
- * Android 会把后续事件转交下层窗口；下层根节点若认领就会「连带关闭」。那种残余序列
- * 没有在本层落下过 DOWN，被这道闸拒掉。
- *
- * 真机教训 4（叶子节点上只挂 move 认领为何整条失效）：RN Android 在 ACTION_DOWN 时锁定
- * touch target，后续 MOVE 只派发给同一个 target——认领挂在叶子（BottomSheet 把手热区）时，
- * 只有 DOWN 恰好落在那片叶子内才可能命中；再叠加本闸，认领就会全灭。
- * （曾归因于「capture 阶段不覆盖目标自身」，按 RN 0.86.2 源码不成立：无活跃 responder 时
- * 用 accumulateTwoPhaseDispatchesSingle，目标在两阶段都被包含；只有 responder 与 target 的
- * 共同祖先就是 responder 时才走 SkipTarget 变体。）
- * 因此把手路径改用「触摸开始即认领」（claimMode 'start'，见 RN#14295）；本闸只服务于挂在
- * 祖先上的 move 认领路径（全屏播放器）。begin 两处都接，覆盖两种挂载位置，只记不抢。
+ * 真机教训 4（叶子节点上只挂 move 认领为何整条失效）：RN Android 在 ACTION_DOWN 时锁定 touch target
+ * ，后续 MOVE 只派发给同一个 target——认领挂在叶子（BottomSheet 把手热区）时，只有 DOWN 恰好落在那
+ * 片叶子内才可能命中；再叠加本闸，认领就会全灭。
  */
 export interface TouchSequenceGate {
   /** 本层收到 touch start（bubble 或 capture 任一阶段）→ 该序列归本层 */
@@ -205,14 +167,9 @@ export function createTouchSequenceGate(): TouchSequenceGate {
 }
 
 /**
- * 认领模式：
- * - `'start'`：触摸 DOWN 即成为响应者（onStartShouldSetPanResponder 返回 true）。
- *   Modal 内的唯一可靠路径——RN#14295：Modal 内 onMoveShouldSetPanResponder 不触发、
- *   Modal 外正常，补上 start 认领即修复（BottomSheet 把手挂在 Modal 里，走这条）。
- * - `'move'`：move 阶段按阈值认领。挂在根节点、必须先把点按与横向滑动让给子级的
- *   场景用（全屏播放器）。
- * 参见官方 Gesture Responder System：onStartShouldSetResponder = 触摸开始即成为响应者；
- * onMoveShouldSetResponder = 仅在「尚不是响应者」时对每个 move 兜底询问。
+ * Modal 内的唯一可靠路径——RN#14295：Modal 内 onMoveShouldSetPanResponder 不触发、Modal 外正常，补
+ * 上 start 认领即修复（BottomSheet 把手挂在 Modal 里，走这条）。
+ * 挂在根节点、必须先把点按与横向滑动让给子级的场景用（全屏播放器）。
  */
 export type DragClaimMode = 'start' | 'move';
 

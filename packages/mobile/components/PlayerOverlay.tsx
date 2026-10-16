@@ -351,11 +351,8 @@ export default function PlayerOverlay({ onClose }: Props) {
   // 歌词高亮同步：下沉到 LyricSyncer 叶子组件（订阅 currentTime 的地方尽量小——
   // 每 250ms 心跳只重渲染 syncer 自己，不再打整棵全屏播放器树）
 
-  // P1-3：歌词行激活动画——改为每行独立动画（LyricRow 组件）：
-  // 共享单值方案在行切换时会「旧行瞬间回落 + 新行 setValue(0) 硬重置后再弹起」
-  // = 真机可见的跳变两次；说唱快切时反复 stop/重播 = 闪烁。
-  // LyricRow 各行持有自己的 Animated.Value，isActive 双向 spring（激活弹起 /
-  // 离场平滑回落），行间互不干扰，快切天然平滑。
+  // P1-3：歌词行激活动画——改为每行独立动画（LyricRow 组件）：共享单值方案在行切换时会「旧行瞬间回
+  // 落 + 新行 setValue(0) 硬重置后再弹起」= 真机可见的跳变两次；说唱快切时反复 stop/重播 = 闪烁。
 
   const toggleFavorite = () => {
     if (!song) return;
@@ -427,10 +424,9 @@ export default function PlayerOverlay({ onClose }: Props) {
     }).start();
   };
 
-  // ── 竖直下拉关闭（ADR-0004）：可中断、速度继承、动量投影、橡皮筋全部收在
-  //    gestures/dragSession（与 BottomSheet 共用同一实现），这里只提供实时面板尺寸、
-  //    认领阈值、纵向优先开关（封面页）与退场编排。横向分页已交给原生 ScrollView，
-  //    外层永不认领横向手势（dy 严格占优）。──
+  // ── 竖直下拉关闭（ADR-0004）：可中断、速度继承、动量投影、橡皮筋全部收在 gestures/dragSession
+  // （与 BottomSheet 共用同一实现），这里只提供实时面板尺寸、认领阈值、纵向优先开关（封面页）与退场
+  // 编排。
   const panHandlers = useDragToDismiss({
     value: panY,
     rubberbandSize: winH, // #186 #4：实时高度，旋转/折叠屏不吃模块顶层的过期值
@@ -771,9 +767,8 @@ const makeFg = (isDark: boolean): PlayerFg => (isDark ? playerForeground.dark : 
 
 /**
  * 歌词高亮同步器（无渲染）：唯一订阅 currentTime 的歌词侧组件。
- * 真机定位：根组件订阅 currentTime 时，250ms 播放心跳每 tick 重渲染整棵
- * 全屏播放器树，JS 线程被塞满——说唱快切时点暂停都要排队（暂停延迟 bug）。
- * 下沉后心跳只重渲染本组件（渲染 null，近零成本），根组件只在真正换行时更新。
+ * 真机定位：根组件订阅 currentTime 时，250ms 播放心跳每 tick 重渲染整棵全屏播放器树，JS 线程被塞满
+ * ——说唱快切时点暂停都要排队（暂停延迟 bug）。
  */
 const LyricSyncer = memo(function LyricSyncer({
   lyricLines, currentLineIdx, setCurrentLineIdx, flatListRef, lyricsFlatListRef, isPagingRef,
@@ -864,11 +859,8 @@ interface LyricRowProps {
 
 /**
  * 歌词行（每行独立动画，调研结论 = 社区标准模式）：
- * - 每行持有自己的常驻 Animated.Value，isActive 只改「目标」：激活 0→1 弹起、
- *   离场 1→0 平滑回落，弹簧从当前值继续（AMLL spring 同款语义）→ 行间互不
- *   干扰，说唱快切无共享值重置跳变
- * - 挂载即落位：惰性初始化直接取当前状态（虚拟化重挂/切歌定位不播动画不闪跳）
- * - 减弱动效：直接落值不做弹簧（§14 前庭安全）
+ * 每行持有常驻 Animated.Value，isActive 只改「目标」（激活 0→1 弹起、离场 1→0 回落，弹簧从当前值继续，AMLL 同款语义）——
+ * 行间互不干扰，说唱快切无共享值跳变；挂载即落位（虚拟化重挂/切歌定位不播动画不闪跳）；减弱动效直接落值不做弹簧（§14）。
  */
 const LyricRow = memo(function LyricRow({
   text, isActive, numberOfLines, baseStyle, activeStyle, dimColor, activeColor, scaleTo, onPress, onPressStyle,

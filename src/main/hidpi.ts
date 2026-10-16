@@ -1,14 +1,4 @@
 // WSLg 下 Electron 窗口 HiDPI 修复
-//
-// 背景：WSLg（Weston）不会把 Windows 的显示缩放透传给客户端（weston.log
-// 恒为 `scale:1, clientScale:1.00`，见 microsoft/wslg#1335、#23），导致
-// 4K 屏 + Windows 150% 缩放时 Chromium 拿到 scaleFactor=1，1400×900 的
-// 窗口以 1:1 物理像素渲染在 4K 屏上，看起来极小。
-//
-// 解法：读取 Windows 注册表 `HKCU\Control Panel\Desktop\WindowMetrics`
-// 的 AppliedDPI（144=150%），换算为缩放系数，用 --force-device-scale-factor
-// 强制 Chromium 原生按该系数光栅化（文字清晰，不是 Xwayland 事后放大）。
-//
 // 仅在 Linux + WSL 下生效；纯 Linux 桌面 Chromium 能自动检测缩放，跳过。
 // 兜底：环境变量 MPLAYER_UI_SCALE=1.5 可手动覆盖缩放系数。
 

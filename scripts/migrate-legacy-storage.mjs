@@ -1,17 +1,8 @@
 #!/usr/bin/env node
 /**
- * 自建 API 退役后的本地数据迁移脚本。
- *
- * 只做两件安全的事：
- * 1. storage.json：把歌曲 ID 统一成字符串，清掉指向旧会话签名端点
- *    （api.php?get=...）的 url/cover/lrc，删除过期的 audioTag/nonFull；
- *    不删除任何收藏/歌单/历史。
- * 2. 磁盘缓存：删除这些旧歌曲对应的 song 资源缓存，以及 key 里含旧端点的封面缓存。
- *
- * 用法：
- *   node scripts/migrate-legacy-storage.mjs [--file=C:\path\to\storage.json] [--keep-backup]
- * 不传 --file 时默认读取 %APPDATA%\mplayer\data\storage.json。
- * 默认不保留原始备份（避免旧签名端点信息残留在本机）；需要备份时传 --keep-backup。
+ * 自建 API 退役后的本地数据迁移脚本。只做两件安全的事：① storage.json 里把歌曲 ID 统一成字符串、清掉指向旧签名端点
+ * （api.php?get=...）的 url/cover/lrc、删除过期 audioTag/nonFull（不删收藏/歌单/历史）；② 删旧歌曲对应的 song 资源缓存
+ * 与含旧端点的封面缓存。用法：`node scripts/migrate-legacy-storage.mjs [--file=...] [--keep-backup]`（默认不保留备份）。
  */
 import fs from 'fs';
 import path from 'path';

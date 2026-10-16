@@ -3,13 +3,6 @@ import type { Song } from '@mplayer/core';
 
 /**
  * 歌单链接 → 歌曲列表（导入向导的取歌腿，wayfinder #382 定案）。
- *
- * 与 core 的 importFromLink 同构：编排只依赖注入的取歌能力，宿主决定真实实现，
- * 因此这一段可以脱离网络单测。三条腿：
- * - 网易完整链接：直连 getPlaylistSongs(id, 0, 0)（limit<=0 = 全量）
- * - 网易短链：先跟重定向拿落地 URL，再重新识别（桌面走主进程，RN 用 fetch）
- * - QQ 直链 / 分享短链：getQqPlaylistSongs（短链由 core 内部跟 302）
- *
  * 歌曲自带来源 ID，播放地址由播放链路路由解析，导入阶段不做搜索。
  */
 export interface PlaylistLinkDeps {

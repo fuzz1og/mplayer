@@ -29,11 +29,8 @@ interface SourceSwapModalProps {
 }
 
 /**
- * 单曲换源弹层：先选音乐源 → 显示该源匹配度高的候选版本（前 3）
- * → 用户自己选要切换到哪一首（精确匹配标「完整版」，其余显示相似度）。
- *
- * #391：探测删除后不再有「可播 / 短时长 / 失效 / 检测中」徽标——那些标记来自
- * 已被证伪的直连探测判据（把 tier3 能救的歌判成失效），产物无消费者。
+ * #391：探测删除后不再有「可播 / 短时长 / 失效 / 检测中」徽标——那些标记来自已被证伪的直连探测判据
+ * （把 tier3 能救的歌判成失效），产物无消费者。
  */
 const SourceSwapModal: React.FC<SourceSwapModalProps> = ({
   open, songName, currentSource, candidates, loading, success,

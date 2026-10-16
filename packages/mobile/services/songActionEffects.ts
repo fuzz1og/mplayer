@@ -11,9 +11,8 @@ import { applySwap, searchSwapCandidates } from './sourceSwap';
 
 /**
  * song actions 的平台效果实现（#304）：Alert / 路由 / 播放器队列 / 下载 / 日志。
- * 控制器（stores/songActionsStore.ts）与换源会话只认识注入的接口，
- * 这里是两者与 react-native 的唯一接缝——弹层内容搬出 SongRow 后，
- * 「换源怎么落到队列」「下载完弹什么」都集中在这一处。
+ * 控制器（stores/songActionsStore.ts）与换源会话只认识注入的接口，这里是两者与 react-native 的唯一
+ * 接缝——弹层内容搬出 SongRow 后，「换源怎么落到队列」「下载完弹什么」都集中在这一处。
  */
 export const nativeSongActionEffects: SongActionEffects = {
   search: searchSwapCandidates,
@@ -28,10 +27,8 @@ export const nativeSongActionEffects: SongActionEffects = {
       `换源《${song.name}》: ${song.sourceType}→${swapped.sourceType}${candidate.exact ? '(完整版)' : ''}, 队列idx=${idx}, 当前播放id=${st.currentSong?.id}, 换源歌id=${song.id}`
     );
     if (idx >= 0) {
-      // #520 blocker 2：换源换的是**同一格的条目**，随机序必须**就地换 id**
-      // （core `replaceShuffleSongId`：同格换 id、顺序与游标都不动）。
-      // 不先换 id 的后果：当前曲分支的 `setQueue` 会因为 id 集合不一致被判成「换歌单」→
-      // 随机模式整条重洗；非当前曲分支只改队列则旧 id 滞留 → 下次对齐时该曲被挪到序列末尾。
+      // #520 blocker 2：换源换的是**同一格的条目**，随机序必须**就地换 id**（core 
+      // `replaceShuffleSongId`：同格换 id、顺序与游标都不动）。
       st.replaceShuffleSongId(song.id, swapped.id);
       const queue = [...st.queue];
       queue[idx] = swapped;
@@ -76,11 +73,6 @@ export const nativeSongActionEffects: SongActionEffects = {
 
   /**
    * 「下一首播放」（#495）。
-   *
-   * 两个坑都在这里显式处理，目的是**不让用户看到静默无效**：
-   * ① 失败冷却/新鲜度是按 key 的（`queuePrefetch`），刚失败过的歌若沿用补窗闸门会在 30s 内
-   *    静默无效 → `playNextInQueue` 绕开这两个闸门，失败就立刻给文案；
-   * ② 已在下一首位置 / 就是当前曲 = no-op（幂等），要告诉用户「已就位」而不是装作做了事。
    */
   insertNext: async (song: Song) => {
     const logs = useLogsStore.getState();

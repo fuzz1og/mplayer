@@ -1,33 +1,7 @@
 /**
- * version-bump.js — Unified version number manager.
- *
- * Canon source: root package.json "version"
- *
- * Syncs to (5 files / 8 fields):
- *   package.json                      version
- *   package-lock.json                 version + packages[""].version
- *                                     + packages["<workspace dir>"].version × N
- *   packages/mobile/app.json          expo.version + expo.android.versionCode
- *   packages/mobile/package.json      version
- *   packages/core/package.json        version
- *
- * Android versionCode is stored in app.json (standard Expo practice).
- * expo prebuild generates build.gradle from app.json at build time.
- *
- * package-lock.json 用**定向文本替换**写（不做整份 JSON 重序列化）：#524 的验收
- * 要求 bump 后 lock 的 diff「只有版本号」，而整份 JSON.stringify 重写会重排整个文件、
- * 产出与本次改动无关的巨量 diff（#523 的 worktree 里出现过这种噪音）。每条替换都
- * 断言「命中且仅命中一次」，命中数不符即报错退出——绝不静默写坏 lock。
- *
- * Usage:
- *   node scripts/version-bump.js          # Dry-run: show current versions
- *   node scripts/version-bump.js 1.4.0    # Set version across all locations
- *   node scripts/version-bump.js --check  # Verify all locations match canon
- *
- * Exit codes:
- *   0 = ok
- *   1 = --check found mismatch / version bump 写入失败
- *   2 = invalid version argument
+ * package-lock.json 用**定向文本替换**写（不做整份 JSON 重序列化）：#524 的验收要求 bump 后 lock 的
+ * diff「只有版本号」，而整份 JSON.stringify 重写会重排整个文件、产出与本次改动无关的巨量 diff（#523
+ * 的 worktree 里出现过这种噪音）。
  */
 
 const fs = require('fs');
@@ -49,10 +23,8 @@ function workspaceDirs(manifest) {
 
 /**
  * workspaces 里的『packages/<名>』单层 glob → 实际子包目录名列表。
- *
- * workspaces 声明的是 glob（本仓是 'packages/*'），不能直接当成目录名——必须展开：
- * 列出 packages/ 下的真实目录，取其中有 package.json 的（与 npm 的判定同构）。
- * 更深一层的嵌套 glob 交给 npm 自己解析，本脚本不猜（猜错会写到无关条目）。
+ * workspaces 声明的是 glob（本仓是 'packages/*'），不能直接当成目录名——必须展开：列出 packages/ 
+ * 下的真实目录，取其中有 package.json 的（与 npm 的判定同构）。
  */
 function childWorkspaceNames() {
   const dirs = workspaceDirs(readJson('package.json'));
@@ -155,11 +127,8 @@ function parseVersion(str) {
 
 /**
  * package-lock.json 的版本写入。
- *
- * 用**字符串感知的括号深度扫描**定位每个要改的 version：
- * 锚点键（顶层 version / packages[""] / packages["<workspace>"]）所处深度 + 1 的那一层，
- * 取其后第一个 `"version": "…"`。扫描跳过字符串字面量，所以依赖项名里出现 {} 也不会错；
- * 取值只改「值」这一小段，缩进与行尾（CRLF/LF）原样保留——diff 里只有版本号。
+ * 用**字符串感知的括号深度扫描**定位每个要改的 version：锚点键（顶层 version / packages[""] / 
+ * packages["<workspace>"]）所处深度 + 1 的那一层，取其后第一个 `"version": "…"`。
  */
 
 /**

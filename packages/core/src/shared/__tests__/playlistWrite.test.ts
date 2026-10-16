@@ -27,10 +27,8 @@ const song = (id: string, name = `歌${id}`, artist = '歌手', sourceType: Song
 
 /**
  * #554：fakeStore 的 addSongs **返回真实新增 id**（而不是 void）。
- *
- * 旧的 fake 返回 void，于是「added = 请求数」这个编造值与真实值在结构上不可分——
- * 删除测试（把 added 删掉，两端文案各退化成 songs.length）都能过。
- * 现在宿主回报真实结果，`added` 才有可能被证伪。
+ * 旧的 fake 返回 void，于是「added = 请求数」这个编造值与真实值在结构上不可分——删除测试（把 added
+ * 删掉，两端文案各退化成 songs.length）都能过。
  */
 function fakeStore(options: { capacity?: number } = {}) {
   const playlists = new Map<string, Song[]>();
@@ -78,10 +76,7 @@ function snapshot(
 
 /**
  * #542 / #553 / #554：歌单写入编排。
- *
- * 此前「往目标歌单写入一批歌」散在 8 处，各写各的回滚、去重与冲突口径；
- * 且 `PlaylistWriteResult.added` 填的是**请求数**（两条成功路径都写 `unique.length`），
- * 宿主的真实返回值被整个丢掉。这里把四类落点、回滚、容量截断与真值 added 一起钉死。
+ * 这里把四类落点、回滚、容量截断与真值 added 一起钉死。
  */
 describe('writeSongsToPlaylist（#542 歌单写入编排）', () => {
   it('已有歌单：整批写入一次', async () => {
