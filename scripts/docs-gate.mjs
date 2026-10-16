@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * docs-gate.mjs — 活文档的两条机械门禁（#523）。
+ * docs-gate.mjs — 文档与源码的三条机械门禁（#523 / #647）。
  *
- * 文档里最容易腐烂、或最不该出现的三处恰好都是机械可判的，所以交给脚本，不写进评审标准
- * （规则 1/2 针对活文档；规则 3 是敏感内容扫描，与它们相反、必须扫历史存档，见 checkSensitiveContent）：
+ * 文档里最容易腐烂、或最不该出现的几处恰好都是机械可判的，所以交给脚本，不写进评审标准
+ * （规则 1/2 针对活文档；规则 3 是敏感内容扫描，与它们相反、必须扫历史存档**与源码**，
+ * 见 checkSensitiveContent）：
  *
  * 1. shim 指针：scripts/*.sh 现在全是两行 shim（各自 exec node 同名 .mjs，#500 / #502）。
  *    把 .sh 当入口推荐，等于让读者在 Windows 上撞 WSL 的 Linux bash —— 这正是 #500 修掉、
@@ -15,7 +16,7 @@
  *
  * 有意不扫（**仅限规则 1/2**）：.github/workflows/**（有意走 shim，顺带把 shim 本身验证掉）、
  * 历史存档 docs/{adr,research,specs,wayfinder}（不回改）、*.test.* 与 TABLE_ALLOW（有意不记的实现）。
- * **规则 3 反过来 —— 必须扫历史存档**，理由见 checkSensitiveContent。
+ * **规则 3 反过来 —— 必须扫历史存档与源码**，理由见 checkSensitiveContent。
  *
  * 用法: node scripts/docs-gate.mjs    （static 分片的第一步，CI 的 check job 顺带覆盖）
  */
@@ -60,6 +61,22 @@ function walkFiles(absDir, ext, out = []) {
     if (entry.isDirectory()) {
       if (!SKIP_DIRS.has(entry.name)) walkFiles(abs, ext, out);
     } else if (ext.some((x) => entry.name.endsWith(x)) && !entry.name.includes('.test.') && !entry.name.includes('.spec.')) {
+      out.push(abs);
+    }
+  }
+  return out;
+}
+
+/**
+ * 源码敏感扫描专用遍历：**不跳过** `__tests__` / `*.test.*`（测试里会抄一份真值），
+ * 只跳过生成物与依赖目录。与 `walkFiles` 分开，避免改动规则 2 已在用的语义。
+ */
+function walkSensitiveSource(absDir, out = []) {
+  for (const entry of readdirSync(absDir, { withFileTypes: true })) {
+    const abs = path.join(absDir, entry.name);
+    if (entry.isDirectory()) {
+      if (!SENSITIVE_SOURCE_SKIP_DIRS.has(entry.name)) walkSensitiveSource(abs, out);
+    } else if (SENSITIVE_SOURCE_EXT.some((x) => entry.name.endsWith(x))) {
       out.push(abs);
     }
   }
@@ -142,6 +159,30 @@ function checkTableDrift() {
  */
 const SENSITIVE_ROOTS = ['AGENTS.md', 'README.md', 'GLOSSARY.md', 'CODING_STANDARDS.md', 'SECURITY.md', 'docs', '.github', '.agents'];
 const SENSITIVE_EXT = ['.md', '.yml', '.yaml', '.json'];
+
+/**
+ * 源码也必须扫（#647）。规则 3 起初只扫文档类扩展名，源码 `.ts/.tsx/.kt` 完全不看 ——
+ * 而 AGENTS.md 明写「tier3 订阅地址、API key 不入库」，那些最可能就写在源码里。
+ * 实测盲区：同一个假密钥放 `docs/` 下报红、放 `packages/core/src/` 下无声通过。
+ * 历史佐证：`9c2cf47 docs(security)` 只清过文档里的密钥，源码里的字面量一直没动。
+ *
+ * 与文档扫描的差别：**不跳过 `__tests__` 与 `*.test.*`**——测试里同样会抄一份真值
+ * （`qianqianDirect.test.ts` 就是）。跳过 `node_modules/dist/coverage` 等生成物。
+ */
+const SENSITIVE_SOURCE_ROOTS = ['src', 'packages', 'scripts', 'e2e', 'resources', 'public', 'examples'];
+const SENSITIVE_SOURCE_EXT = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.kt', '.java'];
+const SENSITIVE_SOURCE_SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-electron', 'coverage', '.git', '.expo', 'build', '.gradle']);
+
+/**
+ * 已知的**公开**第三方字面量：形状命中规则，但不是本仓独有的凭据，列入豁免。
+ * 每条必须写清「为什么它不是秘密」——没有正当理由的条目应改成从环境/配置读入。
+ */
+const SENSITIVE_ALLOW = [
+  {
+    value: '0b50b02fd0d73a9c4c8c3a781c30845f',
+    reason: '千千静听(91q)网页端签名盐，出自开源项目 musicdl 的 qianqian.py，非本仓凭据（qianqianDirect.ts 注释已注明出处）',
+  },
+];
 /** 占位符 / 说明性写法：命中这些形态就不算真值（含「已打码」的占位形式）。 */
 const PLACEHOLDER = /<[^>]*>|\$\{|\{\{|\.\.\.|xxx|your[_-]|example|placeholder|redacted|占位|打码/i;
 
@@ -179,6 +220,10 @@ function checkSensitiveContent() {
     if (statSync(abs).isFile()) files.push(abs);
     else walkFiles(abs, SENSITIVE_EXT, files);
   }
+  for (const rel of SENSITIVE_SOURCE_ROOTS) {
+    const abs = path.join(ROOT, rel);
+    if (existsSync(abs)) walkSensitiveSource(abs, files);
+  }
   for (const file of files) {
     const rel = toRel(file);
     readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, i) => {
@@ -188,6 +233,7 @@ function checkSensitiveContent() {
         while ((m = rule.re.exec(line)) !== null) {
           const raw = rule.value(m);
           if (!raw || PLACEHOLDER.test(raw) || PLACEHOLDER.test(m[0])) continue;
+          if (SENSITIVE_ALLOW.some((a) => a.value === raw)) continue;
           if (!rule.hit(raw)) continue;
           violations.push(rel + ':' + (i + 1) + '  [' + rule.name + '] ' + mask(raw));
         }
