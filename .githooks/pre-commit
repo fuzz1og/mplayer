@@ -17,10 +17,9 @@ fi
 echo "→ mobile typecheck..."
 npx tsc --noEmit --project packages/mobile/tsconfig.json
 
+# staged lint 走 Node 分批（#654）：xargs 把全部文件塞进一条命令，Windows 下 300+ 文件会撞
+# 命令行长度上限报「The command line is too long」；分批调用同时绕开 cmd.exe 与 CreateProcess 两条上限。
 echo "→ lint..."
-STAGED=$(git diff --cached --name-only --diff-filter=d | grep -E '\.(ts|tsx)$' || true)
-if [ -n "$STAGED" ]; then
-  echo "$STAGED" | xargs npx eslint --no-warn-ignored --max-warnings 0
-fi
+node scripts/lint-staged.mjs
 
 echo "✓ pre-commit passed"
