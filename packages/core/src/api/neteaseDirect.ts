@@ -9,9 +9,9 @@ import { getUserAgent } from './antiScrape.js';
 import { cacheManager } from './memoryCacheManager.js';
 
 /**
- * **歌词按需直取（#409）**：列表内联取词会为每首歌各发一次请求（打开发现页数百次上游），现改为播放期按 songId 直取。
- * 因此列表结果里的 `Song.lrc` **恒为空**，消费端不得再假设它带词（见 `shared/songLyrics.ts`）。
- * 播放 URL：weapi `/song/enhance/player/url/v1`；VIP/无版权 → 空 URL，交给换元层，不走试听。
+ * 网易云直连客户端（T02 #148；内容能力面 #278）：搜索 `cloudsearch/pc`、播放 weapi `/song/enhance/player/url/v1`（VIP/无版权 → 空 URL，交给换元层，不走试听）。
+ * 内容能力（榜单/推荐/歌单/歌手/专辑）weapi 优先、旧明文兜底，全部经 transport.request 出网；`resolveUrlInfo` 提供权威完整时长验证字段。
+ * **歌词按需直取（#409）**：列表结果里的 `Song.lrc` **恒为空**（原列表内联取词会打出数百次上游请求），消费端不得再假设它带词（见 `shared/songLyrics.ts`）。
  */
 
 const CLOUDSEARCH_URL = 'https://music.163.com/api/cloudsearch/pc';
@@ -54,7 +54,7 @@ const NETEASE_CAT_MAP: Record<number, { type: number; area: number }> = {
   6001: { type: 1, area: 8 },  // 日本
 };
 
-/** 明文接口统一请求头（浏览器特征，防盗链/风控）。 */
+/** 明文接口统一请求头（浏览器特征）。防盗链/风控收益未被证实，见 #647 与 audioProbe 文件头。 */
 const PLAINTEXT_HEADERS: Record<string, string> = {
   'accept': 'application/json, text/javascript, */*; q=0.01',
   'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -218,9 +218,9 @@ async function fetchLyricBySongId(songId: string, options?: TransportCallOptions
 }
 
 /**
- * **#623**：换源产物 / 持久化数据里的网易歌 `Song.id` 可能带源前缀（`netease:123`、嵌套 
- * `kuwo:netease:123`），而 `/api/song/lyric` 只认裸数字 id——前缀进 URL 后上游`code=400` → 空词（
- * 移动端 songid 直取返空串的根因）。
+ * 按 songId 取网易歌词（#409 取代 #242 的列表内联）：key `lyric_id_<剥完源前缀的裸 id>`、TTL 1 天、命中零请求；**空词也缓存**（值包 `{v}` 以区分「无缓存」与「确认无词」）。
+ * 拉取失败不缓存（保留重试机会）、返回空串不上抛。`options.signal`（#429）：取消 = 这次不取，失败语义不变。
+ * **#623**：`Song.id` 可能带源前缀（`netease:123` / `kuwo:netease:123`），而 `/api/song/lyric` 只认裸数字 id——前缀进 URL 后上游 `code=400` → 空词；取词前先剥成源站真实 ID，缓存键随之归一。
  */
 export async function getNeteaseLyrics(
   songId: string,

@@ -3,9 +3,9 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * 于是这里钉三件事：1. core 里 `normalizeUrlEncoding` 的实现一份、调用点**恰好一处**，且就在解析链
- * 出口；2. 两条下载链都只从那个出口取 URL（桌面不得再留 `getSodaAudioUrl` 这种旁路）；3. 任何宿主侧
- * 文件不得自带补码（`%7C` / `encodeURI` / `replace(/\|/…)`）——那是第二处归一。
+ * #622 守卫：URL 编码归一只有一个落点——core 播放解析链出口 `resolveRoutedInner`。汽水 CDN 直链带未编码的 `|`（实测 `...&cd=0|0|0|5&...`），`java.net.URI` 判非法、移动端 `File.downloadFileAsync` 抛转换失败。
+ * 钉三件事：① `normalizeUrlEncoding` 实现一份、调用点**恰好一处**（#635 收紧为**数调用点**，同文件第二条腿也红）；② 两条下载链都只从该出口取 URL；③ 任何宿主侧文件不得自带补码（那是第二处归一）。
+ * **#635 另修一处 + 明确一处不修**：ADR 否决表明确否掉「补在汽水生产者 `getSodaAudioUrl`」；桌面 IPC 腿 `getSodaPlayableUrl` 不经出口、拿未归一裸直链是 ADR 后果 1 的**已知边界**（Node/axios 自转义），宿主侧不得为其补码。
  */
 const ROOT = path.resolve(__dirname, '../..');
 
@@ -42,19 +42,71 @@ const DOWNLOAD_CONSUMERS = [
 /** 归一自身的实现形状：宿主侧出现任一形状就是「第二处归一」。 */
 const LOCAL_NORMALIZATION = [/normalizeUrlEncoding/, /encodeURI/, /%7C/];
 
+/**
+ * 按大括号配对切出方法体（签名定位定义处，不依赖缩进与局部变量名——后者会随重构漂移）。
+ * 与 `src/__tests__/main/syncIoDiscipline.test.ts` 同一手法：钉结构，不钉写法。
+ */
+function methodBody(source: string, signature: string): string {
+  const start = source.indexOf(signature);
+  expect(start, `源码里找不到 ${signature}`).toBeGreaterThanOrEqual(0);
+  const open = source.indexOf('{', start);
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}' && --depth === 0) return source.slice(start, i + 1);
+  }
+  throw new Error(`无法切出 ${signature} 的方法体`);
+}
+
+/**
+ * 允许的 `normalizeUrlEncoding(` 调用点全集：**只有** `shared/sourceRouter.ts` 一处
+ * （解析链唯一出口，#622 决策 2）。新增任何一处都必须先在这里登记并写清理由——
+ * 否则就是第二份会漂的归一。
+ */
+const ALLOWED_CALL_SITES: ReadonlyArray<readonly [string, number]> = [
+  [path.join('packages', 'core', 'src', 'shared', 'sourceRouter.ts'), 1],
+];
+
 describe('URL 编码归一的单一落点 = core 解析链出口（#622）', () => {
-  it('⭐ core 里归一只有一份实现、一处调用，且调用点在解析链出口', () => {
+  it('⭐ core 里归一只有一份实现、调用点恰好一处（同文件多处也拦得住），且在解析链出口', () => {
     const files = coreSourceFiles(path.join(ROOT, 'packages', 'core', 'src'));
     const definition = files.filter((f) => /export function normalizeUrlEncoding/.test(codeOnly(f)));
     expect(definition.map((f) => path.relative(ROOT, f))).toEqual([
       path.join('packages', 'core', 'src', 'utils', 'urlEncoding.ts'),
     ]);
 
-    const callers = files.filter((f) => !definition.includes(f) && /normalizeUrlEncoding\(/.test(codeOnly(f)));
-    // 只允许解析链出口（sourceRouter）这一处；新增第二处 = 新增一份会漂的口径。
-    expect(callers.map((f) => path.relative(ROOT, f))).toEqual([
-      path.join('packages', 'core', 'src', 'shared', 'sourceRouter.ts'),
-    ]);
+    // 按**调用点**数，不按文件数（#635）：同文件第二条腿漏归一，旧判据看不见。
+    const callSites: Array<{ file: string; count: number }> = [];
+    for (const f of files) {
+      if (definition.includes(f)) continue;
+      const count = (codeOnly(f).match(/normalizeUrlEncoding\(/g) ?? []).length;
+      if (count > 0) callSites.push({ file: path.relative(ROOT, f), count });
+    }
+
+    const actual = callSites.map((c) => [c.file, c.count] as const).sort();
+    const expected = [...ALLOWED_CALL_SITES].sort();
+    expect(actual, 'normalizeUrlEncoding 调用点与登记表不符（新增一处必须先在 ALLOWED_CALL_SITES 登记理由）').toEqual(expected);
+  });
+
+  it('⭐ 汽水生产者 getSodaAudioUrl 不补码（补码被 ADR 否决表否掉，只在出口做一次）', () => {
+    // ADR 否决表明确否掉「补在汽水 URL 的生产者」——补在这里既违反单点，又只归一新解析路径、
+    // 缓存命中返回的 cached.url 仍漏 `|`（#635 评审实证）。故生产者保持返回**未归一**裸直链
+    // （与其余源 resolveUrlInfo 同形），归一只在 core 出口；桌面 IPC 腿是已知边界，不为其补码。
+    const soda = codeOnly(path.join(ROOT, 'packages', 'core', 'src', 'api', 'musicApi.ts'));
+    const body = methodBody(soda, 'async getSodaAudioUrl(');
+    expect(body, '汽水生产者又被塞进补码了——ADR 否决表否掉这条路，请走 core 出口').not.toMatch(
+      /normalizeUrlEncoding\(/,
+    );
+    // 缓存命中返回的是裸 cached.url（未经归一）：这正是「生产者不补码」的落点，也说明
+    // 桌面 IPC 腿拿到的是未归一直链这一已知边界。
+    expect(body).toMatch(/return\s+cached\.url/);
+  });
+
+  it('⭐ 同文件第二处调用点也能被拦住（旧判据只看文件列表，看不见它）', () => {
+    // 这条钉「判据本身」：在 sourceRouter.ts 里再加一处调用点，数调用点必须变红。
+    const router = codeOnly(path.join(ROOT, 'packages', 'core', 'src', 'shared', 'sourceRouter.ts'));
+    const count = (router.match(/normalizeUrlEncoding\(/g) ?? []).length;
+    expect(count, 'sourceRouter.ts 的归一调用点数量变了——新增腿请走同一处出口，而不是各调一次').toBe(1);
   });
 
   it('两条下载链都从解析出口取 URL，桌面不再留汽水直连旁路', () => {

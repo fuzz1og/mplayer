@@ -259,13 +259,14 @@ export const musicApi = {
   },
 
   /**
-   * **#629**：入口先剥源前缀（`soda:<id>` / 嵌套 `kuwo:soda:<id>` → 站内裸 ID）——两条腿（分享页
-   * 、track_v2 兜底）的请求参数与地址缓存键都用剥后的 ID，于是裸 id 与换源产物命中同一条缓存，且不
-   * 再拿到生产的软错误空壳（`url:""`）。
+   * 获取汽水音乐音频直链（用于下载）：优先分享页 _ROUTER_DATA（无需 Cookie），fallback 到 track_v2。
+   * **#629**：入口先剥源前缀（`soda:<id>` / 嵌套 `kuwo:soda:<id>` → 站内裸 ID），两条腿的请求参数与缓存键都用剥后 ID。
+   * 本方法是「生产者」，返回**未归一**裸直链；归一只在解析链出口做一次（ADR 2026-10-09 §2 否决「补在生产者」），旁腿归一在调用方（#635）。
    */
   async getSodaAudioUrl(trackId: string): Promise<string> {
     const rawTrackId = stripSourceIdPrefix(String(trackId ?? ''));
     if (!rawTrackId) return '';
+    // 未归一的裸直链：本方法不补码，补码在调用方 getSodaPlayableUrl（见上）。
     const cached = sodaAudioUrlCache.get(rawTrackId);
     if (cached && cached.expires > Date.now()) return cached.url;
 
@@ -318,9 +319,8 @@ export const musicApi = {
   },
 
   /**
-   * 获取汽水音乐歌词（分享页免登录结构化歌词 → LRC 文本）。
-   * 获取网易歌词（#409：取代内容方法的列表内联批量取词）。
-   * 播放期按 songId 直取，缓存 key `lyric_id_${songId}`、TTL 1 天、空词也缓存。
+   * 获取网易歌词（#409：取代内容方法的列表内联批量取词）。播放期按 songId 直取，缓存 key `lyric_id_<剥完源前缀的裸 id>`、
+   * TTL 1 天、空词也缓存（#623 起入参先过 `stripSourceIdPrefix`，键随之一并归一）。与 getSodaLyrics 同形：拿不到返回空串，不上抛。
    */
   async getNeteaseLyrics(songId: string): Promise<string> {
     return fetchNeteaseLyrics(songId);
@@ -345,7 +345,14 @@ export const musicApi = {
     }
   },
 
+  /**
+   * 汽水音频直链的内存缓存写入（读侧按**剥完前缀的裸 ID** 取，见 #629）。**#635**：这里也剥一次——桌面主进程直调时会带
+   * `soda:<id>`（甚至嵌套）进来，写侧若原样记账，键就与读侧的裸 ID 不是同一条（同一首歌占两条缓存、每次直调重新出网）。
+   * 剥在这里（唯一写入口）比在每个调用方各记一遍可靠。
+   */
   cacheSodaAudioUrl(trackId: string, url: string): void {
+    const rawTrackId = stripSourceIdPrefix(String(trackId ?? ''));
+    if (!rawTrackId) return;
     // 顺带清理过期项，防 Map 无界增长（每首歌一个 entry，长期会话会积累）
     if (sodaAudioUrlCache.size >= 500) {
       const now = Date.now();
@@ -353,7 +360,7 @@ export const musicApi = {
         if (v.expires < now) sodaAudioUrlCache.delete(k);
       }
     }
-    sodaAudioUrlCache.set(trackId, { url, expires: Date.now() + SODA_URL_CACHE_TTL });
+    sodaAudioUrlCache.set(rawTrackId, { url, expires: Date.now() + SODA_URL_CACHE_TTL });
   },
 
   /**
@@ -426,8 +433,8 @@ export const musicApi = {
       return cachedData;
     }
 
-    // 第三方歌词 URL（QQ fcg / 酷我 newlyric / 酷狗两步）需要浏览器 UA + 官方 Referer，
-    // 否则 CDN 防盗链会因 axios 默认 UA / 缺 Referer 返回 403 或空响应。
+    // 第三方歌词 URL（QQ fcg / 酷我 newlyric / 酷狗两步）需要浏览器 UA + 官方 Referer。⚠️ 强度分源：QQ fcg 确有实测——
+    // RN 网络栈缺 Referer 时真机被拒（retcode=-1310，见 qqDirect.ts 与 qqLyricGateway.test.ts）；酷狗/酷我端点的防盗链收益未被证实（#647）。
     const referer = refererForUrl(fullUrl);
     const isKuwoLyric = fullUrl.includes('newlyric.kuwo.cn');
     const isKugouLyric = fullUrl.includes('lyrics.kugou.com/search');

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * 规则：活文档里出现 scripts/X.sh（存在同名 .mjs）的行，必须同句标注 shim / 兼容 / 等价写法。
- * 规则：配置目录里的每个实现文件名都必须在该文档出现过。
- * **规则 3 反过来 —— 必须扫历史存档**，理由见 checkSensitiveContent。
+ * docs-gate.mjs — 文档与源码的三条机械门禁（#523 / #647）。① shim 指针：活文档出现 scripts/X.sh（有同名 .mjs）必须同句标 shim/兼容/等价写法；
+ * ② 文件表漂移：配置目录的每个实现文件都要在 architecture.md 出现（规则 1/2 有意不扫 .github/workflows/**、历史存档、*.test.*）；
+ * ③ 敏感内容扫描反过来**必须扫历史存档与源码**（.ts/.tsx/.kt…），命中一律打码输出，见 checkSensitiveContent。
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -45,6 +45,22 @@ function walkFiles(absDir, ext, out = []) {
     if (entry.isDirectory()) {
       if (!SKIP_DIRS.has(entry.name)) walkFiles(abs, ext, out);
     } else if (ext.some((x) => entry.name.endsWith(x)) && !entry.name.includes('.test.') && !entry.name.includes('.spec.')) {
+      out.push(abs);
+    }
+  }
+  return out;
+}
+
+/**
+ * 源码敏感扫描专用遍历：**不跳过** `__tests__` / `*.test.*`（测试里会抄一份真值），
+ * 只跳过生成物与依赖目录。与 `walkFiles` 分开，避免改动规则 2 已在用的语义。
+ */
+function walkSensitiveSource(absDir, out = []) {
+  for (const entry of readdirSync(absDir, { withFileTypes: true })) {
+    const abs = path.join(absDir, entry.name);
+    if (entry.isDirectory()) {
+      if (!SENSITIVE_SOURCE_SKIP_DIRS.has(entry.name)) walkSensitiveSource(abs, out);
+    } else if (SENSITIVE_SOURCE_EXT.some((x) => entry.name.endsWith(x))) {
       out.push(abs);
     }
   }
@@ -119,6 +135,26 @@ function checkTableDrift() {
  */
 const SENSITIVE_ROOTS = ['AGENTS.md', 'README.md', 'GLOSSARY.md', 'CODING_STANDARDS.md', 'SECURITY.md', 'docs', '.github', '.agents'];
 const SENSITIVE_EXT = ['.md', '.yml', '.yaml', '.json'];
+
+/**
+ * 源码也必须扫（#647）：规则 3 起初只扫文档类扩展名，源码 `.ts/.tsx/.kt` 完全不看，而 AGENTS.md 明写「tier3 订阅地址、API key 不入库」——
+ * 那些最可能就写在源码里（实测盲区：假密钥放 `docs/` 报红、放 `packages/core/src/` 无声通过）。与文档扫描的差别：**不跳过 `__tests__`
+ * 与 `*.test.*`**（测试里同样会抄一份真值），只跳 `node_modules/dist/coverage` 等生成物。
+ */
+const SENSITIVE_SOURCE_ROOTS = ['src', 'packages', 'scripts', 'e2e', 'resources', 'public', 'examples'];
+const SENSITIVE_SOURCE_EXT = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.kt', '.java'];
+const SENSITIVE_SOURCE_SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-electron', 'coverage', '.git', '.expo', 'build', '.gradle']);
+
+/**
+ * 已知的**公开**第三方字面量：形状命中规则，但不是本仓独有的凭据，列入豁免。
+ * 每条必须写清「为什么它不是秘密」——没有正当理由的条目应改成从环境/配置读入。
+ */
+const SENSITIVE_ALLOW = [
+  {
+    value: '0b50b02fd0d73a9c4c8c3a781c30845f',
+    reason: '千千静听(91q)网页端签名盐，出自开源项目 musicdl 的 qianqian.py，非本仓凭据（qianqianDirect.ts 注释已注明出处）',
+  },
+];
 /** 占位符 / 说明性写法：命中这些形态就不算真值（含「已打码」的占位形式）。 */
 const PLACEHOLDER = /<[^>]*>|\$\{|\{\{|\.\.\.|xxx|your[_-]|example|placeholder|redacted|占位|打码/i;
 
@@ -156,6 +192,10 @@ function checkSensitiveContent() {
     if (statSync(abs).isFile()) files.push(abs);
     else walkFiles(abs, SENSITIVE_EXT, files);
   }
+  for (const rel of SENSITIVE_SOURCE_ROOTS) {
+    const abs = path.join(ROOT, rel);
+    if (existsSync(abs)) walkSensitiveSource(abs, files);
+  }
   for (const file of files) {
     const rel = toRel(file);
     readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, i) => {
@@ -165,6 +205,7 @@ function checkSensitiveContent() {
         while ((m = rule.re.exec(line)) !== null) {
           const raw = rule.value(m);
           if (!raw || PLACEHOLDER.test(raw) || PLACEHOLDER.test(m[0])) continue;
+          if (SENSITIVE_ALLOW.some((a) => a.value === raw)) continue;
           if (!rule.hit(raw)) continue;
           violations.push(rel + ':' + (i + 1) + '  [' + rule.name + '] ' + mask(raw));
         }

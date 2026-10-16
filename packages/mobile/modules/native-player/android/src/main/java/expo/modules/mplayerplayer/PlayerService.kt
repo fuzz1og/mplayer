@@ -1276,8 +1276,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val json = JSONObject()
     try {
       val queue = store.snapshot()
-      // 已知边界 3b（ADR 2026-10-08-per-source-request-headers）由 #606 关掉：这里**保留
-      // **`TrackRecord.toJson()` 写好的 per-item headers。
+      // 已知边界 3b（ADR 2026-10-08）由 #606 关掉：这里**保留** TrackRecord.toJson() 写好的 per-item headers（此前落盘前逐条清空，
+      // restore 出来的队列在「原生直接推进、JS 还没重新投喂」那段会缺 UA/Referer）。头只有 core equestHeadersFor 的静态常量（BROWSER_UA + 官方源域名），
+      // 不含凭据、落盘不新增敏感信息；旧快照无 headers 键 → 空 map → 走 isEmpty() 分支，与改前一致（#647：原先「酷狗/QQ 校验 Referer → 403」的断言无出处，别当事实读）。
       val tracks = queue.optJSONArray("tracks") ?: org.json.JSONArray()
       json.put("tracks", tracks)
       json.put("index", store.currentIndex())

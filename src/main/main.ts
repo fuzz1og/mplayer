@@ -52,6 +52,8 @@ const audioCacheBackend = new DiskCacheBackend(path.join(app.getPath('userData')
 const musicApi = {
   ...coreMusicApi,
   async getSodaPlayableUrl(trackId: string): Promise<string> {
+    // 桌面 IPC 缓存腿：不经 core 解析链出口，拿到的是未归一裸直链——ADR `2026-10-09-playable-url-encoding-single-gate.md` 后果 1 的已知边界。
+    // 本腿只在 Node/axios 栈里发请求（栈自己转义），不走 `java.net.URI` 原生解析，故裸 `|` 不会在此炸；宿主侧禁止自带补码（守卫第 3 条）。
     const remoteUrl = await coreMusicApi.getSodaAudioUrl(trackId);
     if (!remoteUrl) return '';
     const cacheKey = `bin:soda:${trackId}`

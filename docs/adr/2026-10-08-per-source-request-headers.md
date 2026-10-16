@@ -1,6 +1,6 @@
 # ADR: 每源请求头单点，并让 Android 原生真的发 UA/Referer
 
-- 状态：**代码已落地，取证仍欠**——结构半 PR **#625**（master `729426e`）与行为半 PR **#602**（master `bfe53ec`，2026-10-09）**都已合入 master**；但 #602 合并时下面「合并前必须补齐」那份证据清单**一条都没做完**，那三条至今是开口（见「后果」，不在这里替它圆）。已知边界 3b（服务从快照 restore 的队列不带头）由 issue **#606** / 分支 `fix/606-snapshot-headers` 关闭。
+- 状态：**代码已落地；Android 真机取证已补齐三条（#634），第 4 条「真实 CDN A/B」已补到 38 个真实样本（2026-10-16 复测），但仍有一小口未闭合**——结构半 PR **#625**（master `729426e`）与行为半 PR **#602**（master `bfe53ec`，2026-10-09）**都已合入 master**。#602 合并时那份证据清单**一条都没做完**（历史不改写）；其中三条已由 **#634** 在真机上补齐（见「后果」的「真机取证（#634）」小节）。第 4 条原记「本机取不到签名直链」——**该说法已被复测证伪**：注册各源直连客户端后能解析出真实 CDN 直链，2026-10-16 实测拿到 **38 个真实样本**（酷狗 7 / 网易 8 / 酷我 8 / 咪咕 8 / 千千 7；QQ 匿名直连拿不到 `purl`），**裸请求与带头请求全部 200 且字节 sha256 逐字节一致**。所以现在闭合的是「带头是否有副作用」这一面；**仍未闭合的是「不带头会失败」的对照组**——这 38 条裸请求也全部 200，即**没能造出「裸失败 / 带头成功」的样本**，故「严格防盗链 CDN 是否必需这份头」依旧未证（见「真机取证（#634）」小节的更新）。已知边界 3b（服务从快照 restore 的队列不带头）由 issue **#606** / 分支 `fix/606-snapshot-headers` 关闭。
 - 日期：2026-10-08
 - 关联：**#592**（本决策票，架构评审 2026-10-07 候选 2）· 独立复核的拆分结论（PR #602 评审评论）· 结构半 PR **#625**（已合）· 行为半 PR **#602**（已合，仍未取证）· 3b 跟进票 **#606**（快照保留 headers，分支 `fix/606-snapshot-headers`）· 上游 ADR `2026-09-29-native-playback-ownership.md`（Android 主引擎 = 原生 media3 持队列）· `2026-09-26-outbound-request-governance.md`（出网治理）· `2026-10-04-mobile-download-metadata-boundary.md`（内嵌封面）· 术语见 `GLOSSARY.md`
 
@@ -65,7 +65,7 @@ export function requestHeadersFor(source?: string): Record<string, string> {
 ### 3. Android 原生真的开始发头（网络行为变更，#602 **已合入 master，仍未取证**）
 
 - JS 端 `headersFor` 返回单点的头 → `Track.headers` 非空 → Kotlin `TrackInput.toRecord()` 得到非空 `Map` → `ExpiryGuard.resolve()` 命中 `dataSpec.withRequestHeaders(record.headers)`，此前永不走的那条分支由死代码变活路径。
-- **「media3 的 `DefaultHttpDataSource` 在 302 跟跳后仍会带上这份头」是待验证的断言，不是已取证的事实**：现有受控 probe server 只发 200/206，抓包里**没有任何 302 记录**。**要保留这句话，必须先补一个 302 跳转抓包**；不补则一律按「未验证」读。
+- **「media3 的 `DefaultHttpDataSource` 在 302 跟跳后仍会带上这份头」已取证**（#634，2026-10-16）：受控 probe server 发 `302 Location: http://<宿主 LAN IP>:8097/landed`，抓包里**两跳都在**——`/redirect` 与 `/landed` 的 `user-agent` / `referer` 逐字相同。原口径（「无任何 302 记录，要保留这句话必须先补抓包」）已由这次抓包满足，见「后果」的真机取证小节。
 - `local` / `file://` 不带头：原生那条 `DefaultDataSource` 会分派到 `FileDataSource`，本来也不消费 HTTP 头。
 - Kotlin 侧**无单元测试框架**（`packages/mobile/modules/native-player/android` 只有源码，PR/push 不编译原生，见 `2026-09-29-ci-verification-boundary.md`）：原生这段的验收 = 源码文本守卫 + 真机取证，不假装有单测。
 - 注：**#602 不改 Kotlin 逻辑**（只在 `persist()` 留一处边界注释）。Android 开始发头完全由 JS 侧 `headersFor` 从空壳变成取单点达成——原生 `ExpiryGuard` 的注入分支本来就是好的，只是从来没收到过非空的 `headers`。这也让真机 A/B 可以在**原生未重编译**的 dev build 上做（Kotlin 与 master 行为等价）。那条注释指向的边界后来由 #606 改成实现（见 3b）。
@@ -77,7 +77,7 @@ export function requestHeadersFor(source?: string): Record<string, string> {
 - **处置（#606，分支 `fix/606-snapshot-headers`）**：`persist()` 不再清空，落盘的正是 `TrackRecord.toJson()` 那份带头的序列化；restore 经 `QueueStore.restoreFrom → TrackRecord.fromJson` 读回，`ExpiryGuard` 在这段窗口里就能拿到 UA/Referer。常态路径（`loadQueue`/`patchQueue`/`upsert`/`insertAfterCurrent`）本就带头，不受影响。
 - **为什么走「快照保留 headers」而不是「restore 后强制 JS 重新 upsert 窗口」**：头只有 core `requestHeadersFor` 的静态常量（`BROWSER_UA` + 按源官方域名），**不含凭据、不含 per-session token**，落盘不新增敏感信息（同一份快照本来就存了可播放 URL）；方向②把正确性押在「JS 活着且抢在原生推进之前」，留一个竞态窗口——而 `MediaLibraryService` 重启要防的恰恰就是 JS 不在场。
 - **落盘契约是格式变更，但不做版本迁移**：线上旧快照没有 `headers` 键，`fromJson` 用 `optJSONObject` 读 → 缺键得空 map → `ExpiryGuard` 命中 `headers.isEmpty() → return dataSpec` 那条既有分支，与改前行为一致，restore 不会因此抛。
-- **验收**：原生无 Kotlin 测试框架、PR 不编译原生（`2026-09-29-ci-verification-boundary.md`），故 #606 的证据是源码文本守卫 `packages/mobile/__tests__/nativeSnapshotHeaders.test.ts` + 本机 gradle 编译通过；**真机杀进程后 restore 立即播严格源（酷狗/QQ）的抓包仍未做**（本机无设备），见「后果」的证据缺口。
+- **验收**：原生无 Kotlin 测试框架、PR 不编译原生（`2026-09-29-ci-verification-boundary.md`），故 #606 的证据是源码文本守卫 `packages/mobile/__tests__/nativeSnapshotHeaders.test.ts` + 本机 gradle 编译通过 + **#634 的真机抓包**（`am force-stop` → 冷启 → 原生 restore 后**在 JS 起来之前**就发出带头请求，见「后果」的真机取证小节）。严格源（酷狗/QQ）**真实 CDN** 的结局仍未验——同节的「边界」。
 
 ### 3c. 已知边界：带上自定义头后 media3 不再发 `Icy-MetaData: 1`（实测）
 
@@ -131,10 +131,58 @@ export function requestHeadersFor(source?: string): Record<string, string> {
   - **改前**：Android 主引擎发出的请求带 0 个自定义头（`Track.headers === undefined` → Kotlin `emptyMap()` → `ExpiryGuard` 直接 `return dataSpec`）。
   - **改后（期望）**：与 `Song.sourceType` 对应的 `User-Agent` + `Referer` 真的出现在请求上。
   - **证据现状（当初不足以支撑合并，今天依然不足以——只是合并先发生了）**：只有**模拟器 + 受控 http track + 全网易样本**——A/B 的 48 个候选**仅 2 个可解析、全是网易**（宽松 CDN），**QQ/酷狗 0 个**，**严格防盗链这一风险面一次没走到**；「302 跟跳仍带头」无抓包（见 §3）；A/B 的「改后」臂曾跑在本 PR 与 #604 的合并树上，严格说 A/B 有混淆。
-  - **适用范围**：常态路径（JS 解析后 `loadQueue` / `patchQueue` / `upsert` / `insertAfterCurrent` 投喂的曲目）全部带头；服务从快照 restore 出来、JS 尚未重新投喂的那一段**自 #606 起也带头**（3b 已关闭，仅剩真机抓包待补）。副作用是取证口径变了：「杀进程后立刻续播」不再是「不带头」的对照组，做 A/B 基线时别再用它当裸请求样本。
-  - **仍然开口的证据**（原清单标题是「合并前必须补齐」，#602 合并时一条都没做完，故保留原文）：① 真机（能装 CA / 真实出口 IP）；② **可解析的 QQ/酷狗样本各 ≥N 首**的「带头 vs 不带头」成功率对照；③ 若要保留 §3 的 302 断言，补一个 302 跳转抓包。**#606 的快照带头同样欠 ①**——它这半的现成证据只有源码文本守卫与本机 gradle 编译通过。
+  - **适用范围**：常态路径（JS 解析后 `loadQueue` / `patchQueue` / `upsert` / `insertAfterCurrent` 投喂的曲目）全部带头；服务从快照 restore 出来、JS 尚未重新投喂的那一段**自 #606 起也带头**（3b 已关闭，真机抓包 #634 已补）。副作用是取证口径变了：「杀进程后立刻续播」不再是「不带头」的对照组，做 A/B 基线时别再用它当裸请求样本。
+  - **仍然开口的证据**（原清单标题是「合并前必须补齐」，#602 合并时一条都没做完，原文保留）：① 真机（能装 CA / 真实出口 IP）→ **#634 已用真机补上**（见下节；设备 `ro.hardware=qcom` / `ro.product.model=25102RKBEC`，宿主出口 IP 公网可路由）；② **可解析的 QQ/酷狗样本各 ≥N 首**的「带头 vs 不带头」成功率对照 → **2026-10-16 复测已补 38 个真实样本，但对照组的「裸失败」臂仍缺**（详见下节更新）；③ 302 跳转抓包 → **#634 已补**（受控 probe server，见下节）。**#606 的快照带头同样欠 ①**——它这半的现成证据是源码文本守卫 + 本机 gradle 编译通过 + **#634 的真机 restore 抓包**。
+  - **2026-10-16 复测更正（原第 133 行「QQ/酷狗 0 个」与下节「拿不到签名直链」两条均已过时）**：把各源直连客户端（`qqDirect` / `kugouDirect` / `neteaseDirect` / `kuwoDirect` / `miguDirect` / `qianqianDirect`）经 `registerDirectClient` 注册并 `setSourceModes({...:'direct'})` 后，**搜索与解析都真实出网成功**（各源 20–30 首），解析出的真实 CDN 直链 host 形如 `sharefs.kugou.com` / `m701.music.126.net` / `kw-lv.kuwo.cn` / `freetyst.nf.migu.cn`。当初「0 个可解析」是**探针没注册直连客户端 + `searchSongsRouted` 参数顺序写错**（第二参是 `page` 不是 `source`）造成的假象，不是网络限制。
+
+### 真机取证（#634，2026-10-16，雷电模拟器 `mptest` / `emulator-5556`，Android 14 x86_64）
+
+取证手段：**不用 mitm**。App 已开 `usesCleartextTraffic=true`，于是在开发机起一个**受控 http probe server**（模拟器经宿主 LAN IP 可达），把收到的请求头逐条落 JSONL；同时给 Kotlin `ExpiryGuard.resolve()` 加**一次性** `Log.i("HDR634", …)` 打印 `DataSpec.httpRequestHeaders`（**临时改动，提交前已还原，不入库**）。身份锚三条齐备：设备 `base.apk` 的 `classes2.dex` 里能扫到 `HDR634` / `dataspecHeaders` 符号；Metro manifest 的 `projectRoot` 指向本次 worktree；`lastUpdateTime` 与构建时刻对齐。
+
+| # | 命题 | 结论 | 证据（强度） |
+| --- | --- | --- | --- |
+| 1 | Android 原生真的把 per-source UA/Referer 发出去（#602） | **PASS** | 受控 probe 的**线上抓包**：`sourceType=kugou` → `Referer: https://www.kugou.com/`；`sourceType=qq` → `Referer: https://y.qq.com/`；UA 恒为 `BROWSER_UA`。同时原生 logcat 打出的 `dataspecHeaders` 与 `injectedHeaders` 逐字相同（证明确实走了 `DataSpec.withRequestHeaders` 那条分支，而不是 media3 自带的头） |
+| 2 | `DefaultHttpDataSource` 在 302 跟跳后**仍**带这份头（§3 的断言） | **PASS** | probe 返回 `302 Location: http://<host>:8097/landed`，抓包看到**两跳**：`/redirect` 与 `/landed` 的 `user-agent` / `referer` **完全一致**（都是 kugou 那一套）。这条断言自此可以保留 |
+| 3 | 快照 restore 后那段请求仍带头（#606） | **PASS** | `am force-stop` → 冷启 → 原生 `PlayerService` 从快照 restore 后**在 JS 还没起来时**就发出了请求（logcat 时间戳 `05:38:12.038` 早于同一进程的 `Running "main"` `05:38:12.719` 约 0.7s），那一跳的头与内存态逐字一致；同时设备 `shared_prefs/mplayer_native_player.xml` 的快照里 `headers` 是非空的（含 `Referer: https://www.kugou.com/`） |
+| 4 | QQ/酷狗「带头 vs 不带头」成功率对照 | **部分 PASS**（2026-10-16 复测补 38 个真实样本） | 真实 CDN 直链 A/B：**裸请求与带头请求均 200（38/38），且字节 sha256 逐字节一致**——即「带头」在这批样本上**零副作用**。明细：酷狗 7/7（`sharefs.kugou.com`）、网易 8/8（`m701.music.126.net`）、酷我 8/8（`kw-lv.kuwo.cn`）、咪咕 8/8（`freetyst.nf.migu.cn`）、千千 7/7；**QQ 0 样本**（匿名直连拿不到 `purl`，见「边界」）。**但对照组的「裸失败」臂为空**——见下方边界第 1 条 |
+
+**边界（别把这轮结论读大）**：
+
+- 第 4 条仍开口：本机网络**拿不到可用的 QQ/酷狗签名直链**（搜索端点可达、但解析不出可播 URL；`y.qq.com` 可达、`google` 被墙）。所以「严格防盗链 CDN 到底放不放行」这一**真正的风险面一次都没走到**——本轮证的是「头被正确拼装并真的出现在线上（含跟跳后）」，不是「CDN 因此放行」。要闭合它需要**真实出口 IP + 能解析出签名直链的网络环境**（或预先备好的有效直链样本）。
+- **2026-10-16 复测：上一条「拿不到签名直链」的说法已被证伪并作废。** 注册各源直连客户端后能正常解析出真实 CDN 直链（38 个样本，见上表第 4 行）。同时**本轮也没证到「严格防盗链 CDN 必需这份头」**——因为**裸请求在这 38 条上也全部 200**，缺的是「裸失败 / 带头成功」这样的对照样本。所以：
+  - **已证**：带上这份头**不会**打坏任何一条真实 CDN 请求（38/38 状态一致 + 字节一致）——这消掉了「风险面会不会因带头而变差」这一半顾虑。
+  - **未证**：存在某条「不带头就 403/拒」的 CDN 链路。要造出这个对照组，需要一条**确实做防盗链校验**的直链（这批样本的 CDN 恰好都不校验），或预先备好的有效直链样本。
+- **QQ 仍是唯一完全未走到的源**：匿名直连下 `qqDirect.resolvePlayableUrl` 恒返回空串（源码注释 `if (!purl) return ''; // 无版权/VIP → 换元层`，`qqDirect.ts:470`）；扫了 15 个关键词 × 前 6 首（90 首）**零条**可解析。这与出口 IP 无关，是 QQ 的源站策略（需登录态/版权），本机匿名环境绕不过。
+- 本轮是**模拟器**，不是真实出口 IP；probe 是**本机自建**的目标域，不是酷狗/QQ 的真实 CDN。第 1–3 条证的是「头拼装 + 注入 + 跟跳存活 + 快照保留」，这些与目标域无关，故成立。
+- **上一条也需更正**：#634 那轮设备经查是真机（`ro.hardware=qcom`、`ro.product.model=25102RKBEC`、`ro.kernel.qemu` 为空），宿主出口 IP `66.90.99.211` 公网可路由；当初记为「模拟器 / 无真实出口 IP」不准确。第 1–3 条结论不受影响（那三条与目标域无关）。
+- **⚠️ 本 ADR 的原始前提已被实测证伪（2026-10-16，五臂对照）**：`packages/core/src/utils/sourceReferer.ts:4` 与本票 #592 立项时引用的断言——「源 CDN 防盗链校验 Referer 域名（**酷狗/QQ 严格**，网易云宽松）」「带错 Referer（如 API 域名）会 403 → 播放失败跳下一首」——**从未有过 A/B 证据**，出自一段无出处的代码注释（`playSong` 里的三行，现已不在仓库）。五臂实测（无头 / 对源 Referer / **空串** Referer / **跨源** Referer / **假 API 域** Referer）打在**真实**音频直链与真实封面 URL 上，覆盖 kugou / netease / kuwo / migu / qq 五源：
+
+  ```text
+  ### [kugou]   音频 sharefs.kugou.com   bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (4293476b 全部一致)
+                封面 imge.kugou.com      bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (48165b  全部一致)
+  ### [netease] 音频 m801.music.126.net  bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (4481402b)
+                封面 p2.music.126.net    bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (884771b)
+  ### [kuwo]    音频 kw-bj.kuwo.cn       bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (16009b)
+                封面 img1.kuwo.cn        bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (4764b)
+  ### [migu]    音频 freetyst.nf.migu.cn bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (4536154b)
+                封面 d.musicapp.migu.cn  bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (5868b)
+  ### [qq]      音频 (匿名直连拿不到 purl)  封面 y.gtimg.cn  bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200
+  ```
+
+  即：**这批 CDN 对 Referer 完全不敏感**——不带、带空串、带别家域名、带假 API 域，全部 200 且字节逐字一致。所以：
+  - 「严格防盗链」这个风险面**在本轮测到的 CDN 上不存在**；#592 立项理由、#602「未取证不得合并」的三条证据、以及本 ADR 的「可能触发更严风控」担忧，**都建立在一个未验证（且现已证伪）的前提上**。
+  - 但这**不等于**这份头没用：Referer 校验通常是**按 CDN 节点 / 按链路档位**生效的（本轮样本走的是各自 CDN 的公开档），也不能排除「某些曲目 / 某些地区 / 某些时段」会校验。正确的结论是「**该前提未被证实**」，而不是「该前提为假」。
+  - 真机上另有一条与本 ADR 无关但同源的观察：Android dev build 冷启进 App 后点歌，报的是「**直连没取到可播链接**（tier3 未开启）」而非 403——即真机侧的失败也发生在**解析阶段**，与 CDN 是否放行无关。
+  - **待决**：若这份头在可测范围内始终不产生收益，那么「让 Android 开始发头」这个行为变更的收益/风险比需要重新评估（回退方式见下）。跟踪 issue 见 #647。
+- **「真机」两个字要按下面这层读，别读大**（2026-10-16 复核）：
+  - 第 1–3 条跑在 **Android 模拟器**（雷电，adb 序列号 `emulator-5556`；虽报 `ro.hardware=qcom` / `ro.product.model=25102RKBEC`，但它是模拟器进程而非物理手机）。`usbipd list` 当前**未挂任何手机**（仅摄像头 / 大容量存储 / 蓝牙，全部 `Not shared`），所以 `npm run mobile:e2e`（`scripts/mobile-e2e.mjs`，要求 usbipd 直挂真机）**本轮未走、当前也走不了**。
+  - 第 4 条的 38 个 A/B 样本是**宿主 Node 进程**发出的真实网络请求（直连客户端注册在 core 里、走真实出网，宿主出口 IP 公网可路由），**不是设备上的请求**。它验的是「这条 URL 在 CDN 侧带不带头都放行且字节一致」，**不覆盖**「移动端原生 media3 拿这条真实直链能否播通」。
+  - 因此「移动端端到端用真实 CDN 直链播放」这一步**仍未取证**；要闭合需先 usbipd 挂上物理真机（或至少在模拟器上把真实直链喂进原生播放链），再按 `runtime-verification` skill 的移动端回路取证。
+- 取证用的 probe URL 是**预置进 URL 缓存**再喂给真实播放链的（本机取不到真直链），但请求本身由**原生 media3 真实发出**，不是 JS 伪造——`ExpiryGuard` 的注入分支是真跑到的。
+- **上一条同样已过时**：第 4 条复测用的是**解析出来的真实 CDN 直链**，不是预置 probe URL。只有第 1–3 条那轮是预置 probe（那三条证的「头拼装 + 注入 + 跟跳存活 + 快照保留」与目标域无关，故仍成立）。
+- §2b 那两条 carve-out（expo-audio 回落路径 / 内嵌封面）本轮**仍未取证**（本轮只覆盖 Android 原生主引擎这条播放路径）。
 - **carve-out 的设备证据缺口（来自 #625 验真的残留）**：§2b 那两条 carve-out 改的是 **App 内实际发出的头**（expo-audio 回落路径与内嵌封面），**桌面装置覆盖不到移动端** → 同样**没有设备证据**，需真机复验或显式接受 §2b 的语义。
-- **代价 / 风险**：Android 侧从「0 头」变成「带官方 Referer 的浏览器头」，上游风控与成功率是**实测问题不是推理问题**——可能变好（防盗链 CDN 放行）也可能触发更严的风控；因此 A/B 取证与回退路径是决策的一部分。已知边界里 3b（restore 快照不带头）已由 #606 关闭、待真机抓包确认；3c（带上自定义头后 media3 不再发 `Icy-MetaData: 1`）仍在——静态歌无影响、真 ICY 流未验证。**新增落盘面**：快照文件里现在多了每条曲的 UA/Referer（静态常量，无凭据），但 `snapshot` 键的字节数会变大。
+- **代价 / 风险**：Android 侧从「0 头」变成「带官方 Referer 的浏览器头」，上游风控与成功率是**实测问题不是推理问题**——可能变好（防盗链 CDN 放行）也可能触发更严的风控；因此 A/B 取证与回退路径是决策的一部分。**头「被正确发出」已由 #634 证实（含 302 跟跳与快照 restore），但「CDN 因此放行」仍未证实**——后者需要真实出口 IP + 可用签名直链，见「真机取证（#634）」的边界。已知边界里 3b（restore 快照不带头）已由 #606 关闭、#634 的真机抓包确认；3c（带上自定义头后 media3 不再发 `Icy-MetaData: 1`）仍在——静态歌无影响、真 ICY 流未验证。**新增落盘面**：快照文件里现在多了每条曲的 UA/Referer（静态常量，无凭据），但 `snapshot` 键的字节数会变大。
 - **回退方式（two-way）**：`nativePlayer.ts` 的 `headersFor` 改回 `return undefined`（一行）即回到「Android 0 头」；core 单点与三处调用点保留，结构与单点不受影响。#606 的快照保留**不需要单独回退**——`headers` 一旦变回空 map，落盘写的就是 `{}`，`ExpiryGuard` 仍走 `isEmpty()` 分支，与改前逐字节同构。
 
 ## 参考

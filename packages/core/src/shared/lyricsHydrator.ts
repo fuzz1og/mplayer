@@ -3,9 +3,9 @@ import type { TransportCallOptions } from '../api/transport.js';
 import { getNeteaseLyrics } from '../api/neteaseDirect.js';
 
 /**
- * 歌词入队取词（#429）：把「取词时机」从播放期提前到**可见期**的深模块。
- * **明确不做**（边界见 #429 / ADR `2026-09-26-outbound-request-governance`）：本模块**不持有任何并发上限与出网限速**
- * ——那是 `api/transport` 双层闸门的唯一职责；这里派发的每次取词都只是 `request()` 的一个排队者。
+ * 歌词入队取词（#429）：把「取词时机」从播放期提前到**可见期**的深模块。只做四件事：**入队**（调用方丢入可见行即可）、**同 songId single-flight**（已结算含空词/失败不再重复取词）、
+ * **可取消**（行离开视口即从 transport 闸门摘除、绝不进入底层传输）、**单次入队接纳上限** `LYRICS_HYDRATION_BURST_CAP`(30)（不是时间预算、也不是吞吐上限——分批入队不受限，超出记 `dropped`）。
+ * **明确不做**（#429 / ADR 2026-09-26）：本模块**不持有任何并发上限与出网限速**，那是 `api/transport` 双层闸门的唯一职责；取词复用 `getNeteaseLyrics`，不新写网络请求。
  */
 
 /** 单个候选：`Song` 直接满足该形状（多出的字段不影响）。 */

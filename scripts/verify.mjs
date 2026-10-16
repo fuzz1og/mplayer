@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * verify.mjs — 验证的唯一入口（本地全量与 CI 分片都调这个脚本）。
- * **验证顺序的唯一出处就是本文件**：CI 每个 job 只写 `verify.mjs <scope>`，不在 workflow 里另拼命令
- * ；文档只引用脚本，不复述步骤序列。
+ * **验证顺序的唯一出处就是本文件**：CI 每个 job 只写 `verify.mjs <scope>`，不在 workflow 里另拼命令；文档只引用脚本、不复述步骤。用 Node 而非 bash（#500）——
+ * Windows 的 `bash` 常解析到 WSL Linux bash，会拿 WSL 的 node 跑 Windows 装的依赖、报 rollup 平台错配。用法：`npm run verify [-- <scope>]`。
  */
 
 import { spawnSync } from 'node:child_process';
@@ -83,6 +83,7 @@ const SHARDS = {
     ['core typecheck', 'npm run typecheck -w packages/core'],
     ['lint', 'npm run lint'],
     ['design-lint', 'node scripts/design-lint.mjs'],
+    ['claim-lint', 'node scripts/claim-lint.mjs'],
     ['root typecheck', 'npm run typecheck'],
     ['mobile typecheck', 'npm run typecheck:mobile'],
     ['build', 'npm run build'],

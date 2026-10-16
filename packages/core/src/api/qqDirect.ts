@@ -491,8 +491,8 @@ export const qqDirectClient: DirectSourceClient = {
 };
 
 /**
- * 注意：param 里 songID 键必须整个省略——服务端按 songMID 自查数字 id，显式传 0/空串/字符串都会被
- * 拒（实测 10006/24001）。
+ * 网关取歌词（GetPlayLyricInfo）：与搜索/GetVkey 同一 musicu POST 通道，服务端不做 Referer 校验（缺 Referer 时真机被拒 retcode=-1310，桌面正常），
+ * 此函数是 getLyrics 的 QQ 兜底腿（真机已验证可用）。param 里 songID 键必须**整个省略**（显式传 0/空串/字符串都被拒，实测 10006/24001）；
  * qrc/crypt 关掉才返回 base64 明文 LRC（开启返回加密 QRC hex）。
  */
 export async function fetchLyricViaGateway(mid: string): Promise<string> {

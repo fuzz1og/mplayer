@@ -629,9 +629,9 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       );
     }
 
-    // 播放器请求头：CDN 可能校验 UA/Referer。
-    // 注意：Android 原生主引擎仍走 nativePlayer 的空壳——「让它也带这份头」是 #592 的另一半（网络
-    // 行为变更，需真机取证），见 ADR 2026-10-08-per-source-request-headers。
+    // 播放器请求头：带浏览器 UA + 按源映射的官方 Referer。#592：整份头取 core 单点 `requestHeadersFor`（未知源不再发空字符串 Referer）。
+    // ⚠️ 原先「CDN 按 Referer 域名校验、带错会 403」的断言**无出处**（正是 #592 立项/ADR 2026-10-08 的源头，原文已删）；2026-10-16 五臂实测 45 次请求全 200 且字节一致（#647）。
+    // 注意：Android 原生主引擎仍走 nativePlayer 的空壳——「让它也带这份头」是 #592 的另一半（需真机取证），见 ADR 2026-10-08-per-source-request-headers。
     const playerHeaders = requestHeadersFor(song.sourceType);
 
     // 单播放器复用（replace 换源）：永远只有一个 ExoPlayer 实例，

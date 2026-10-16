@@ -1,7 +1,7 @@
 /**
- * 反爬工具模块（T11 spec #157 G2 P1 请求硬化）
- * 提供 User-Agent 轮换（扩池至 50 条 + 反同源连续）、速率限制、随机延迟、增强请求头等能力。
- * 决策：默认启用但保守——不启用随机 IP 头、XFF 不采纳（见 r2 §5b）。
+ * 反爬工具模块（T11 spec #157 G2 P1 请求硬化）：UA 轮换（池 50 条真实浏览器 UA + 「反同源连续」按 sourceKey 独立轨道）、速率限制、随机延迟、增强请求头。
+ * 请求头「两态」：浏览器态 getAntiScrapeHeaders（源站直连，sec-ch 满套 + 按 referer 的 Sec-Fetch-Site，防盗链收益见 #647）；
+ * API 态 getApiRequestHeaders（稳定 JSON 端点，最小头、默认不带 Referer）。safeParseJSON 三级降级、失败返 null 不抛。
  */
 
 // ── User-Agent 池（50 条真实浏览器 UA，T11 扩池至 30–50，取满 50）─────
@@ -216,7 +216,8 @@ function getSecChUa(ua: string): string {
 }
 
 /**
- * 浏览器态请求头（T11「两态」之一）：源站直连/CDN 防盗链需要完整浏览器特征时使用。
+ * 浏览器态请求头（T11「两态」之一）：需要完整浏览器特征时使用（无害；防盗链收益见 #647）。`referer` 存在 → `Sec-Fetch-Site: same-origin`；
+ * `sourceKey` 用于反同源连续（可选，不带走默认轨道）；保持 T11 前兼容：`getAntiScrapeHeaders()` / `(referer)` 仍可用。
  */
 export function getAntiScrapeHeaders(referer?: string, sourceKey?: string): AntiScrapeHeaders {
   const ua = getUserAgent(sourceKey);

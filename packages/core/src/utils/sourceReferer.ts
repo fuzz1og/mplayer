@@ -1,7 +1,7 @@
 /**
- * 浏览器 UA 与「源 → 官方站点 Referer」映射（core 共享）。
- * 源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格，网易云宽松）：302 解析、音频探测、播放器请求都要带
- * 官方 Referer 才会被 CDN 接受。
+ * 浏览器 UA 与「源 → 官方站点 Referer」映射（core 共享）：302 解析、音频探测、播放器请求都带浏览器 UA + 按源推导的官方 Referer。
+ * ⚠️ 本文件原先的「源 CDN 防盗链校验 Referer 域名」**无出处**，却撑起了 #592 立项与 ADR `2026-10-08` 的全部风险讨论；2026-10-16 五臂实测（无头/对源/空串/跨源/假 API 域）
+ * 在 9 个真实 URL 上 45 次请求**全部 200 且字节一致**——该前提**未被证实**（#647）。口径：带这份头是无害的，不是「不带就 403」。
  */
 
 export const BROWSER_UA =
@@ -49,9 +49,9 @@ export function refererForSourceKey(sourceKey: string): string | undefined {
 }
 
 /**
- * **「每源播放/下载请求头」的唯一事实来源**（#592 结构半）。语义（调用方不要再叠加、也不要改写）：`User-Agent` 恒为
- * [BROWSER_UA]（部分 CDN 拒非浏览器 UA）；`Referer` 按 `Song.sourceType` 取官方站点域名；**未知源 / `soda` / `local` /
- * 缺省一律不带 `Referer`**——空字符串是「带错头」，比不带更容易被防盗链拒。
+ * **「每源播放/下载请求头」的唯一事实来源**（#592 结构半）：`BROWSER_UA` 与 `REFERER_BY_SOURCE` 都是本文件私有事实，拼装动作此前散在各宿主（移动端 `audioPlayer`/`downloadService`、core `directValidation`），
+ * 拼装点一多「源表加了新源」就只会修到其中几处。Android 原生主引擎也已接本单点（#602/#634 已真机取证，见 ADR `2026-10-08` 的边界）。
+ * 语义：`User-Agent` 恒为 [BROWSER_UA]；`Referer` 按 `Song.sourceType` 取官方域名；**未知源 / `soda` / `local` / 缺省一律不带 `Referer`**（空字符串是「带错头」）。每次返回**新对象**，调用方可安全改写。
  */
 export function requestHeadersFor(source?: string): Record<string, string> {
   const headers: Record<string, string> = { 'User-Agent': BROWSER_UA };
