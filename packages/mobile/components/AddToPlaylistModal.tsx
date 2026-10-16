@@ -24,13 +24,9 @@ interface Props {
   /** 单曲模式：与 songs 互斥 */
   song?: Song | null;
   /**
-   * 批量模式：与 song 互斥。点击歌单只调一次 addSongs（整批一次 set = 一次持久化），
-   * 不逐首弹同名 Alert。
-   *
-   * #560：遇「同名异源」时**整批问一次**（`promptNameConflict`，文案与桌面同一份
-   * core `NAME_CONFLICT_COPY`）。此前这里不传 resolveNameConflict，冲突歌按 core 的
-   * 默认口径**静默并入**——同一个动作桌面会问、移动端不问。链接导入腿仍走默认并入
-   * （与桌面 importService 同一口径，见 nameConflictPrompt 的说明）。
+   * 批量模式：与 song 互斥。
+   * 点击歌单只调一次 addSongs（整批一次 set = 一次持久化），不逐首弹同名 Alert。
+   * 链接导入腿仍走默认并入（与桌面 importService 同一口径，见 nameConflictPrompt 的说明）。
    */
   songs?: Song[] | null;
   onClose: () => void;

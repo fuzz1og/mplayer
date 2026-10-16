@@ -7,14 +7,8 @@ import type { Song } from '@mplayer/core';
 
 /**
  * sticky 表头的偏移口径：贴住**内容区**上边而不是滚动视口上边。
- *
- * 写死 top: 0 时，表头会比它该在的位置高出滚动容器的 padding-top，于是浮到内容上方，
- * 列表内容从表头上方那条缝里露出半截（#564，桌面端发现歌单详情页）。
- *
- * 两组断言：
- *  1) 偏移量本身（纯函数）；
- *  2) **真实列表在带内边距的滚动容器里**渲染出来的表头偏移——这才是 issue 里量的那个量
- *     （headerTop − scrollportTop = 24）。只测常量抓不到「短列表不虚拟化就探测不到容器」这档漏网。
+ * 写死 top: 0 时，表头会比它该在的位置高出滚动容器的 padding-top，于是浮到内容上方，列表内容从表头
+ * 上方那条缝里露出半截（#564，桌面端发现歌单详情页）。
  */
 function fakeEl(paddingTop: string): HTMLElement {
   const el = document.createElement('div');

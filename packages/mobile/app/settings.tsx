@@ -14,12 +14,8 @@ import { useSettingsStore } from '../stores/settingsStore';
 
 /**
  * 设置页（#425）：**只做布局**——纵向排列各区段卡片，不持任何区段状态。
- * 每个区段是自治组件（自己订阅自己的 store / 自持局部状态），
- * 因此局部变化（切主题 / 展开更新通道 / tier3 输入 / 测速转圈）只重渲染对应区段。
- * 样式与度量统一在 components/settings/settingsStyles.ts（单一来源）。
- *
- * #477：开发者模式开关（DeveloperModeSection）常驻可见；「播放诊断」区段从**默认可见**
- * 改为**只在开发者模式打开时渲染**（ADR `2026-09-23-playback-trace-sink` 决策 6）。
+ * #477：开发者模式开关（DeveloperModeSection）常驻可见；「播放诊断」区段从**默认可见**改为**只在开
+ * 发者模式打开时渲染**（ADR `2026-09-23-playback-trace-sink` 决策 6）。
  */
 export default function SettingsPage() {
   const { colors } = useTheme();

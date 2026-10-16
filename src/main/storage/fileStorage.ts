@@ -20,13 +20,8 @@ interface StorageData {
 
 /**
  * 存储域 —— **一份独立文件**（#410）。
- *
- * 此前五个域挤在一个 `storage.json` 里：任何一处改动（加一首收藏、切一个设置开关）
- * 都 `JSON.stringify(data, null, 2)` 重写**整个**文件，还附带一次全文件 `copyFileSync`
- * 备份。收藏/历史/歌单越多，单次改动越贵；`setSetting` 更是**跳过防抖立即全量写**，
- * 用户在设置页连点几下就是几次全量重写。
- *
- * 现在每个域各自一个文件、各自原子替换（写临时文件 + rename），改动只落对应域。
+ * 此前五个域挤在一个 `storage.json` 里：任何一处改动（加一首收藏、切一个设置开关）都 
+ * `JSON.stringify(data, null, 2)` 重写**整个**文件，还附带一次全文件 `copyFileSync`备份。
  */
 type Domain = 'settings' | 'favorites' | 'history' | 'playlists' | 'playlistSongs';
 
@@ -49,10 +44,9 @@ const LEGACY_RETIRED_FILENAME = 'storage.json.migrated';
  */
 const BACKUP_INTERVAL_MS = 10 * 60 * 1000;
 
-// 审查修复：ID 唯一化。旧实现用裸 Date.now() 作主键，同毫秒内连续操作
-//（批量收藏 / 快速加歌单）会生成相同 ID，导致去重误判、按 ID 删除错乱。
-// 改为「时间戳 + 进程内单调序号」：同进程内严格递增唯一，仍为 number 类型
-// 且与历史数据兼容（ID 为不透明标识，无格式依赖）。
+// 审查修复：ID 唯一化。
+// 改为「时间戳 + 进程内单调序号」：同进程内严格递增唯一，仍为 number 类型且与历史数据兼容（ID 为不
+// 透明标识，无格式依赖）。
 let idSeq = 0;
 function nextId(): number {
   idSeq = (idSeq + 1) % 1000;
@@ -120,10 +114,9 @@ export class FileStorage {
   }
 
   /**
-   * 同步初始化。**只有 settings 走同步读**——`getSettingSync` 在 app ready 前就被
-   * `config.ts` 调用，必须同步可得。其余域（收藏 / 历史 / 歌单）由 `ensureLoaded()`
-   * 异步装载：启动路径不再同步解析整份用户数据（#410：此前 `loadData()` 同步读
-   * 并把全部域 `JSON.parse` 一遍）。
+   * 同步初始化。
+   * **只有 settings 走同步读**——`getSettingSync` 在 app ready 前就被`config.ts` 调用，必须同步可
+   * 得。
    */
   private ensureInitialized(): void {
     if (this.initialized) return;
@@ -379,10 +372,8 @@ export class FileStorage {
   }
 
   /**
-   * 一次性/幂等迁移旧数据：
-   * - 歌曲 ID 统一为字符串（旧 API 部分源返回数字）；
-   * - 清掉指向已退役旧签名端点（api.php?get=...）的 url/cover/lrc；
-   * - 不删除任何收藏/歌单/历史条目。
+   * 一次性/幂等迁移旧数据：- 歌曲 ID 统一为字符串（旧 API 部分源返回数字）；- 清掉指向已退役旧签名
+   * 端点（api.php?get=...）的 url/cover/lrc；- 不删除任何收藏/歌单/历史条目。
    */
   private migrateLegacyData(): boolean {
     let changed = false;
@@ -616,26 +607,10 @@ export class FileStorage {
     }
   }
 
-  // Playlist Songs
   /**
-   * 批量加入歌单（#493）——整批**只落一次盘**（一次 saveData('playlistSongs')），
-   * 供榜单页「保存全部到新歌单」这类大列表使用。**#610 起这是歌单写入的唯一存储腿**
-   * （逐首单曲通道 `playlist:addSong` / `addSongToPlaylist` 已删——批量腿是唯一写入口）。
-   *
-   * 契约（与调用方约定）：
-   * - 歌单存在校验一次；逐首用 core `songWriteRejection` 判定，**不合法/重复的跳过**，不整批抛错；
-   * - 按**歌曲身份键**去重（对歌单已有 + 本批内部，`identityKeyFrom`），返回真正新增的
-   *   PlaylistSong id 列表；跨源同 id 是两首不同的歌，不再被当成同一首（#553）；
-   * - 顺序按传入顺序接着当前 maxOrder 递增；容量上限 = core `DEFAULT_PLAYLIST_CAPACITY`，放不下的部分截断；
-   * - **部分成功**：一个都放不进去时返回 []（不抛错）——由调用方按「0 首成功」给文案，
-   *   并负责回滚空歌单（#493 验收：绝不允许既没报错又留下空歌单）。
-   * - 容量满时**静默截断**（只写到上限为止）；截断事实由调用方按「返回的新增数 < 指派数」
-   *   判定并形成显式通道（#554：core `PlaylistWriteResult.truncated`）。
+   * **#610 起这是歌单写入的唯一存储腿**（逐首单曲通道 `playlist:addSong` / `addSongToPlaylist` 已删
+   * ——批量腿是唯一写入口）。
    * - **不做跨源同名裁决**：本层只按**身份键**去重（存量数据的安全网，跨源同名同歌手会并存）。
-   *   「同名异源要不要并入」是**调用方**的事：core 写入编排（#553）在写入前用
-   *   `classifySong` 产出 NEW / DUPLICATE / NAME_CONFLICT 三类落点，桌面
-   *   BatchAddToPlaylistModal 会对 NAME_CONFLICT 弹同名确认。此前这条注释声称
-   *   「批量语义下直接并入」，与事实（弹确认）相反。
    */
   async addSongsToPlaylist(playlistId: number, songs: Song[]): Promise<number[]> {
     await this.ensureLoaded();

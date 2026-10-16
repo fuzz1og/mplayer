@@ -6,11 +6,8 @@ import { usePlaylistStore } from '../stores/playlistStore';
 import { useLogsStore } from '../stores/logsStore';
 
 /**
- * 存量数据迁移（对齐桌面 9725a60，幂等可重跑）：
- * 自建 API 退役后，收藏/历史/歌单里持久化的 `api.php?get=*` 旧签名
- * url/cover/lrc 全部是死链，会抢先命中刷新/播放流程。启动时清掉死链
- * 三件套与过期预测徽标（audioTag/nonFull），**不删除任何条目本身**；
- * 清空的字段由现解析链（resolvePlayableSongRouted / 兜底搜索）重新补全。
+ * 启动时清掉死链三件套与过期预测徽标（audioTag/nonFull），**不删除任何条目本身**；清空的字段由现解
+ * 析链（resolvePlayableSongRouted / 兜底搜索）重新补全。
  */
 
 /** 就地清理单首：死链三件套 + 过期预测徽标；返回是否有改动 */

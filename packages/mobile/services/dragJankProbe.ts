@@ -1,13 +1,6 @@
 /**
- * 拖拽跟手卡顿探针（#430）：把纯内核 gestures/dragJank 接到日志通道与 perf 现场。
- *
- * 上报策略（与 perfMonitor 同一哲学——常态不刷屏）：
- *   - **跟手掉帧的手势：一律 warn**，release 构建上也能从 logcat / 应用内日志拿到；
- *   - **干净的手势：只在诊断开启（dev 构建或开发者模式）记 info** —— A/B 需要「没掉帧」也有正证据，
- *     否则「零 warn」既可能是真没卡、也可能是探针根本没跑
- *     （见 runtime-verification skill 里对 perfMonitor 的同款告诫）。
- *
- * 判语本身在纯内核里（gestures/dragJank），这里只管绑定真实时钟、日志、面板归属与活动状态。
+ * 拖拽跟手卡顿探针（#430）：判语在纯内核 gestures/dragJank 里，这里只管绑定真实时钟、日志、面板归属与活动状态。
+ * **跟手掉帧的手势一律 warn**，release 构建上也能从 logcat / 应用内日志拿到。
  */
 import { createDragJankMeter, formatDragJank, isJanky } from '../gestures/dragJank';
 import { useLogsStore } from '../stores/logsStore';

@@ -50,17 +50,6 @@ function nameKey(song: Song): string {
 
 /**
  * 「这手歌落进目标歌单时算哪一类」（#553）——**写入判据的唯一实现**。
- *
- * 口径（GLOSSARY「歌曲身份」：同源判同一首，跨源不建模，只靠歌名 + 歌手文本精确匹配）：
- * 1. `identityKey` 相等 → 同一首歌（同源同 rawId；裸 id 与换源前缀 id 归一），duplicate；
- * 2. 同源且 name + artist 相等 → duplicate（换源后 id 变了，但确实是同一首）；
- * 3. 异源且 name + artist 相等 → nameConflict（同一次录音的两个来源，交宿主裁决）；
- * 4. 其余 → ok。
- *
- * 两条被旧判据误判的情形由此复位：
- * - 同源同名**不同歌手**：旧判据只看 name + sourceType，会当成已存在并**直接 return**，
- *   把合法的新歌拒之门外 → 现在落到 ok；
- * - 异源同名**不同歌手**：旧判据一律报 conflict → 现在落到 ok（两首不同的歌）。
  */
 export function classifySong(targetSongs: readonly Song[], newSong: Song): DupResult {
   const targetKey = identityKey(newSong);

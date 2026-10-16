@@ -1,23 +1,7 @@
 /**
  * 折叠头部的滚动联动驱动 —— 滚动 → chrome 映射全部交给 RN 原生驱动。
- *
- * 旧实现（CollapsingHero 内联）：onScroll + useNativeDriver:false，每帧在 JS 里
- * 结算导航条背景色 / 标题透明度 / 返回图标颜色三个插值；另有一个
- * scrollY.addListener 每帧 setStatusStyle。现在：
- *   - 视觉插值走 Animated.event({useNativeDriver:true})，滚动帧内不经过 JS；
- *   - JS 侧只剩状态栏 light/dark 的阈值**边沿**判定（纯函数见 components/collapsingChrome.ts），
- *     同侧连续帧只有一次比较、不 setState。
- *
- * 两个前提（都已按 RN 0.86 源码核对）：
- *   1. 颜色插值可以走原生驱动：NativeAnimatedAllowlist 的 SUPPORTED_COLOR_STYLES
- *      含 backgroundColor/color，三套原生实现都支持 outputType:'color'
- *      （C++/Android Kotlin/iOS ObjC）。但**颜色插值不结算 extrapolate**（与数值路径不同），
- *      所以颜色节点必须串在数值 clamp 节点之后，否则滚过 collapseAt 后通道回绕（#372）。
- *   2. FlatList 必须换成 Animated.FlatList：VirtualizedList 明确要求
- *      native onScroll 的宿主组件由 Animated.createAnimatedComponent 包一层。
- *
- * 注意：JS 仍会收到原始滚动事件（ScrollView 的 onScroll 就是这个 handler），
- * 这是 RN 的机制；本模块保证它只做一次边沿比较，不做插值与 setState。
+ * `FlatList` 必须换成 `Animated.FlatList`（`VirtualizedList` 明确要求）；颜色插值**不结算 extrapolate**（与数值路径不同），
+ * 故颜色节点必须串在数值 clamp 节点之后，否则滚过 collapseAt 后通道回绕（#372）。
  */
 
 import { useMemo, useRef, useState } from 'react';

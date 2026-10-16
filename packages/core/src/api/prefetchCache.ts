@@ -3,22 +3,8 @@ import { identityKey } from '../utils/songIdentity.js';
 
 /**
  * 预取 URL 缓存。
- *
- * 写入方 = core 门面 `prefetchPlayableSong`（#390：桌面经 `musicApi:call` 在**主进程**
- * 执行，写的正是播放解析读的那一份）；读取方 = `resolvePlayableSongRouted` 的
- * 0 等待命中；失败遗忘 = `forgetPrefetchedSong`（fresh 重试前）。
- *
- * - 键 = 歌曲身份键（utils/songIdentity：源 + 去前缀真实 ID，多层嵌套前缀按最外层源
- *   折叠）——同 id 不同源是不同版本，不能串；裸 id（直连搜索）与带前缀 id（换源后）
- *   收敛为同一键，等价 id 共享条目（预期行为，旧裸键靠各层 TTL 自净）；
- * - 条目 = PlayableResource（types/index）：url + nonFull + ts（写入时间）；
- * - TTL 30min：第三方间歇性失效/URL 过期后不会永久命中坏链接；
- * - 拿不到 URL（无版权/VIP/全链失败）不写入；preview 缓存但带 nonFull=true，
- *   播放秒出声的同时驱动「试听版 + 换源」提示。
- *
- * #391：批量探测链（probeSongsBatch / rememberProbeResult）已删除——它把「直连拿不到
- * URL」判成失效（而多数歌靠 tier3 才可播），且产物无消费者。预解析改由「队列下一首
- * 预取 / 冷启预热」承担（经 `prefetchPlayableSong`，含 tier3 兜底、覆盖 100%）。
+ * #391：批量探测链（probeSongsBatch / rememberProbeResult）已删除——它把「直连拿不到 URL」判成失效
+ * （而多数歌靠 tier3 才可播），且产物无消费者。
  */
 
 export const PREFETCH_TTL_MS = 30 * 60 * 1000;
@@ -34,9 +20,6 @@ export function setPrefetchedUrl(song: Song, url: string, nonFull: boolean): voi
 
 /**
  * 读取预取缓存；过期条目按未命中处理并顺手清理。
- *
- * 返回**剥掉时间戳**的窄形状是刻意的（由 prefetchCache.test.ts 钉住）：
- * TTL 在缓存内部自管，读取方只关心 url 与 nonFull。
  * #557 的教训：不要为了迁就某个端口而加宽它——该修的是那个端口。
  */
 export function getPrefetchedUrl(song: Song): { url: string; nonFull: boolean } | undefined {

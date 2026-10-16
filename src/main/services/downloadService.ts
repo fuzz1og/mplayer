@@ -113,11 +113,9 @@ export class DownloadService {
   }
 
   /**
-   * 写入音频元数据（title/artist/album/封面/真实时长）。**写不写由 core
-   * `planAudioTagging` 单点决定**（#607，与移动端同一份计划）：本项目只对 MP3
-   * 承诺内嵌元数据。M4A 跳过——mp3tag.js 写的是 `moov > udta > meta > ID32`
-   * （ID3v2-in-MP4），iTunes `ilst`/`covr` 一个字节不动，music-metadata /
-   * media3-ExoPlayer / Apple 系都读不到，是读不回的假标签；FLAC/Ogg 等同样跳过。
+   * 写入音频元数据（title/artist/album/封面/真实时长）。
+   * **写不写由 core`planAudioTagging` 单点决定**（#607，与移动端同一份计划）：本项目只对 MP3 承诺内
+   * 嵌元数据。
    */
   private async writeMetadata(song: Song, filePath: string): Promise<void> {
     try {
@@ -223,13 +221,8 @@ export class DownloadService {
   }
 
   /**
-   * 写入 .lrc 歌词侧车文件（与音频同目录同名）。
-   *
-   * **取词决策在 core 单点**（`planLyricsFetch`，与播放侧同一份，防两处各判一次而漂移）：
-   * 存量内联文本直接用；`song.lrc` 为取词 URL 走 getLyrics；网易/汽水按源内 ID 直取
-   * （#412：此前只认 `song.lrc`，这两源列表结果 lrc 恒空故从不写侧车）；其余源 lrc 为空
-   * 才搜索补全一次（#409 允许的唯一搜索场景）。抓取失败/内容非可用 LRC（非法请求页等）
-   * 则跳过，不影响音频下载结果。
+   * 写入 .lrc 歌词侧车文件（与音频同目录同名）。抓取失败/内容非可用 LRC（非法请求页等）则跳过，不影响音频下载结果。
+   * 只对返回真歌词的源写（#412：QQ/网易列表结果 `song.lrc` 恒空，故从不写侧车）；其余源 lrc 为空则跳过。
    */
   private async writeLyricsSidecar(song: Song, filePath: string): Promise<void> {
     const plan = planLyricsFetch(song);
@@ -331,11 +324,7 @@ export class DownloadService {
 
   /**
    * 批量下载。
-   *
-   * #391：原「下载前直连可播性预检」（probeSongsBatch → 死链直接跳过）已删除——
-   * 判据反向（把「直连拿不到 URL」判成失效，而多数歌靠 tier3 才可播），会**静默丢掉
-   * tier3 能救的歌**；且移动端本就没有这一步（两端行为不一致）。真正不可播的歌由
-   * 下载腿自己的解析（含 tier3 兜底）拦下。
+   * 真正不可播的歌由下载腿自己的解析（含 tier3 兜底）拦下。
    */
   async addBatchDownloads(songs: Song[]): Promise<DownloadTask[]> {
     const tasks: DownloadTask[] = [];
@@ -433,11 +422,8 @@ export class DownloadService {
         // 本地歌曲的 url 即文件路径，直接使用
         realUrl = task.song.url;
       } else {
-        // 按身份解析（预取缓存 → 直连 → tier3）：#171 后列表歌 url 恒空，
-        // 旧签名死链（api.php?get=*）由解析链按歌曲 id 重取，绝不再交给下载流。
-        // #622：这条出口同时是 URL 编码归一的唯一落点——汽水直链里未编码的 `|`
-        // 在 core 出口处补成 `%7C`（`java.net.URI` 判它非法）。汽水不再单开一条
-        // `getSodaAudioUrl` 旁路：旁路 = 第二个取 URL 的地方，也就是第二份会漂的口径。
+        // 按身份解析（预取缓存 → 直连 → tier3）：#171 后列表歌 url 恒空，旧签名死链（
+        // api.php?get=*）由解析链按歌曲 id 重取，绝不再交给下载流。
         try {
           const resolved = await resolvePlayableSongRouted(task.song);
           realUrl = resolved?.url || '';

@@ -13,16 +13,8 @@ interface IndexEntry {
 
 /**
  * 移动端磁盘缓存后端（L2，expo cacheDirectory）。
- *
- * #410 三条修复：
- * 1. **类型目录判定**：此前是 `key.startsWith('json:')`，而内核生成的键形如
- *    ``:json:…``——永远不匹配，于是**所有条目都落进 `bin/``**（桌面修过同一个 bug，
- *    移动端漏修）。现在走 core 的 `cacheKeyType` 单点判定。
- * 2. **TTL 真正生效**：此前 `write` 直接丢弃 `expiresAt`，L2 条目永不过期；且没有
- *    `getExpiryAt`，内核回填 L1 时只能传 0，连 L1 也跟着永不过期。现在过期时间
- *    随索引持久化，`read` 判过期即删，`getExpiryAt` 供内核回填。
- * 3. **统计 O(1)**：`getDiskStats()` 此前对**每个文件**串行 `getInfoAsync` 过桥
- *    （设置页一进去就跑一遍全目录）。现在读内存索引（启动时装载一次）。
+ * #410 三条修复：1. **类型目录判定**：此前是 `key.startsWith('json:')`，而内核生成的键形如
+ * ``:json:…``——永远不匹配，于是**所有条目都落进 `bin/``**（桌面修过同一个 bug，移动端漏修）。
  */
 export class MobileFileBackend implements CacheBackend {
   private baseDir: string
@@ -55,13 +47,9 @@ export class MobileFileBackend implements CacheBackend {
   }
 
   /**
-   * 装载索引。两种情况必须分开处理（一次 `getInfoAsync` 探测，不是逐文件）：
-   *
-   * - **索引文件不存在** = 首启，或从旧版本升级——旧版本的条目全部落在 `bin/`
-   *   （上面第 1 条 bug），新代码按类型目录去找一条也命中不了，那批缓存本来就已经
-   *   不可达；直接整目录清掉重新开始，比逐个文件过桥补判更划算。
-   * - **索引文件在但读/解析失败** = 索引坏了，**不能连缓存文件一起清**：那会把一次
-   *   瞬时读失败升级成整份缓存丢失。本次统计从 0 起，缓存读写照常（`read` 不依赖索引）。
+   * 两种情况必须分开处理（一次 `getInfoAsync` 探测，不是逐文件）：
+   * - **索引文件在但读/解析失败** = 索引坏了，**不能连缓存文件一起清**：那会把一次瞬时读失败升级成
+   * 整份缓存丢失。
    */
   private async loadIndex(): Promise<void> {
     let exists = false
@@ -224,9 +212,6 @@ export class MobileFileBackend implements CacheBackend {
   /**
    * 磁盘占用统计（设置页展示）。
    * 读内存索引 → **O(1)、零过桥**；此前对每个文件 `getInfoAsync` 串行过桥。
-   *
-   * #498：额外分出**内容元数据**条目（歌手/专辑/歌单/榜单/推荐…）——此前设置页
-   * 只看得到播放 URL 一类，内容缓存落盘后等于「占了地方但看不见」。
    */
   async getDiskStats(): Promise<{
     fileCount: number

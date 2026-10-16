@@ -3,24 +3,8 @@ import { CONTENT_KEY_PREFIX, contentCacheKeyOf, isContentCacheKey } from './cont
 
 /**
  * 内容元数据缓存的**纯逻辑**部分（#498 方案 A）：L1 同步 + L2 写穿 + 回填。
- *
- * 这里刻意不 import 任何 expo / 实例（内核与磁盘后端由调用方注入），
- * 于是单测能零 mock 地驱动全部语义；产线装配在 `services/contentCache.ts`。
- *
- * 为什么要有这一层：core 的 `ContentCache`（`shared/sourceRouter.ts`）是**同步**接口
- * （`get` 立即返回），而 `CacheKernel.getJSON` 是异步的——「内容也落盘」在现接口下
- * 没有合法实现。不改接口，改做「L1 同步 + L2 写穿 + 启动回填」。
- *
- * 已知边界（与 issue 评审的四条一一对应）：
- * 1. 内核真键是 `ns:type:key` 且 namespace 默认空串 → 形如 `:json:content:xxx`，
- *    因此按 `:json:content:` 过滤，而不是 `content:` 前缀（见 `cache/contentKeys`）；
- * 2. 回填要把键**还原一层**再交给 L1，否则 L1 键与写穿时的键不一致、回填等于白做；
- * 3. 写穿**复用** `CacheManager.set` 的空值判定（见 `isCacheable`）——内核的
- *    `setJSON` 没有空值语义，不补判定的话 L2 会存下「L1 拒写」的条目；
- * 4. `setJSON` 是异步的：用 `.catch` 收口，避免磁盘写失败变成 unhandled rejection。
- *
- * 冷启后的**第一次**访问仍会打一轮上游（回填在空闲期做、`get` 是同步的），
- * 收益从第二次访问起算——这正是 issue「验收前提」一节写明的口径。
+ * 冷启后的**第一次**访问仍会打一轮上游（回填在空闲期做、`get` 是同步的），收益从第二次访问起算——
+ * 这正是 issue「验收前提」一节写明的口径。
  */
 
 /** 回填上限：内容条目小，但启动期不宜无限过桥（issue 要求「有限量」）。 */

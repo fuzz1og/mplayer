@@ -4,10 +4,8 @@ import { useSettingsStyles } from './settingsStyles';
 
 /**
  * 开发者模式开关（#477 B 方案第一片）：**显式开关，不是连点手势**。
- *
  * 本区段只做一件事——开关本身，且**常驻可见**（若开关也藏在开关后面，用户就永远打不开）。
- * 开关之后的诊断内容（日志 + 播放诊断）由 app/settings.tsx 按 `devMode` 条件渲染，
- * 即「诊断内容默认不出现」的那道门。状态落 settingsStore（AsyncStorage persist），跨重启保持。
+ * 状态落 settingsStore（AsyncStorage persist），跨重启保持。
  */
 export default function DeveloperModeSection() {
   const styles = useSettingsStyles();

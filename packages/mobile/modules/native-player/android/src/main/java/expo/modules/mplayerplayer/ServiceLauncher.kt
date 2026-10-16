@@ -17,12 +17,6 @@ import com.google.common.util.concurrent.ListenableFuture
 
 /**
  * 拉起 [PlayerService]。
- *
- * 参照 expo-audio 已验证的做法（`BaseServiceConnection.startServiceAndBind`）：
- * **先 startService 再 bindService(BIND_AUTO_CREATE)** ——
- * ① startService 让服务处于「started」态，media3 起前台通知时 `startForeground` 才合法；
- * ② bindService 保证服务在无人播放时不被立刻回收，也给了我们 onServiceConnected 的回执。
- *
  * action 必须是 media3 的 `SERVICE_INTERFACE`，否则 `MediaSessionService.onBind` 返回 null。
  */
 internal object ServiceLauncher {
@@ -48,10 +42,8 @@ internal object ServiceLauncher {
 
   /**
    * 连一个 media3 `MediaController` 上去。
-   *
-   * 这一步是**媒体通知与前台服务的前提**：media3 只有在 controller 连接时才把
-   * session 注册进内部 stub，而通知/FGS 提升依赖 `getSessions()` 非空。
-   * 连不上不影响播放（JS 仍走自写 bridge），只是会退回「没有通知、没有 FGS」的退化态。
+   * 这一步是**媒体通知与前台服务的前提**：media3 只有在 controller 连接时才把 session 注册进内部 
+   * stub，而通知/FGS 提升依赖 `getSessions()` 非空。
    */
   private fun ensureController(context: Context) {
     if (PlayerBridge.controller != null || controllerFuture != null) return

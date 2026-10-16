@@ -4,10 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * 选择模式的两条操作条（#490）——真实挂载的交互测试。
- *
- * 环境说明：mobile 的 vitest 是 node env（全局 setup 只 mock AsyncStorage），
- * 本文件用 \`@vitest-environment jsdom\` 覆盖，并只在本文件内把 react-native 换成
- * react-native-web、mock 图标与「减弱动效」hook（与 __tests__/settingsSections.test.tsx 同款）。
  */
 vi.mock('react-native', () => vi.importActual('react-native-web'));
 

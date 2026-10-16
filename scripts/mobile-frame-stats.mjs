@@ -1,39 +1,8 @@
 #!/usr/bin/env node
 /**
- * mobile-frame-stats.mjs — 移动端帧计时取证（#430）：从**系统侧**量用户看得见的那一层掉不掉帧。
- * 移植自 scripts/mobile-frame-stats.sh（#502）：采集、解析、产物与退出码一致；
- * 原脚本的解析段是内嵌的 Python heredoc（硬依赖 python3），这里用 JS 重写，**去掉 python3 依赖**。
- *
- * 为什么不能靠 perfMonitor：它量的是 JS 线程 rAF 帧率，且要求连续 2 个 2s 窗口低于 30fps
- * 才上报——一次一两秒的拖拽在它眼皮底下结构性不可见（「零 warn」什么也证明不了）。
- * 系统侧 gfxinfo / SurfaceFlinger 是独立第三方视角：release 构建可用、不需要 App 配合、
- * 窗口天然 ≈2s（gfxinfo 环形缓冲约 120 帧 / SurfaceFlinger 128 帧 ≈ 2.13s@60Hz）。
- *
- * ⚠ 两个量必须一起看（#430 判据）：
- *   1. App 侧 [drag] 日志（services/dragJankProbe.ts）—— JS 线程被占了吗；
- *   2. 本脚本的帧计时 —— 用户看得见吗。
- * 只看 1 是拿仪器自证；只看 2 不知道是不是拖拽这条路。
- *
- * ⚠ 反直觉但关键：本 App 的拖拽跟手跑在 JS 线程（PanResponder move → value.setValue）。
- *   JS 卡住时面板是「冻住」而不是「画得慢」——UI 线程根本没被要求画新帧，帧统计可能反而
- *   很健康（帧少但每帧都准时）。故本脚本的输出**不能单独定罪**，必须与 [drag] 日志合看。
- *
- * 用法：
- *   node scripts/mobile-frame-stats.mjs                        # 注入 2s 下滑（需先设定坐标）
- *   MOBILE_FRAME_SWIPE="628 900 628 1900 2000" node scripts/mobile-frame-stats.mjs
- *   MOBILE_FRAME_WAIT=8 node scripts/mobile-frame-stats.mjs    # 不注入，留 8s 窗口给你手拖
- *   MOBILE_FRAME_PARSE_DIR=e2e/artifacts/frame-xxx node scripts/mobile-frame-stats.mjs
- *
- * 参数（环境变量）：
- *   MOBILE_FRAME_SERIAL   adb 序列号（多设备必填；默认取唯一在位设备）
- *   MOBILE_FRAME_PKG      App 包名，默认 com.mplayer.mobile
- *   MOBILE_FRAME_LABEL    本次标签（如 idle / busy），进产物文件名与摘要
- *   MOBILE_FRAME_SWIPE    "x1 y1 x2 y2 时长ms"；给了就注入，不给就等手拖
- *   MOBILE_FRAME_WAIT     等手拖的秒数，默认 6
- *   MOBILE_FRAME_LAYER    SurfaceFlinger 层名（默认按包名第一个匹配层）
- *   MOBILE_FRAME_PARSE_DIR  仅复算：读该目录下的 framestats/latency dump，不连设备
- *
- * 退出码：0 采到并解析成功；1 前置失败 / 采不到有效帧。
+ * 为什么不能靠 perfMonitor：它量的是 JS 线程 rAF 帧率，且要求连续 2 个 2s 窗口低于 30fps 才上报——
+ * 一次一两秒的拖拽在它眼皮底下结构性不可见（「零 warn」什么也证明不了）。
+ * 故本脚本的输出**不能单独定罪**，必须与 [drag] 日志合看。
  */
 
 import { spawnSync } from 'node:child_process';
@@ -108,8 +77,7 @@ function round1(x) {
 const pyFloat = (x) => (x === null || x === undefined ? 'None' : x.toFixed(1));
 
 /**
- * Python pct(xs, p)（xs 已升序）。**按原实现的实际行为对齐，而不是它注释里写的公式**：
- * 原代码是 `-(-int(p*n) // 1) - 1`，即 `int(p*n) - 1`（先向零截断），注释写的却是 ceil(p*n)-1。
+ * Python pct(xs, p)（xs 已升序）。
  * 两者在 p*n 非整数时分叉：n=48、p=0.9 → 42（ceil 会给 43）、p=0.99 → 46（ceil 给 47）。
  * 照着注释写会让 p90/p99 与历史产物不一致（对拍实测：61.2/64.9 vs 62.4/70）。
  */

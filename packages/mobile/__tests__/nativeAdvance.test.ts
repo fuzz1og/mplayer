@@ -1,14 +1,6 @@
 /**
  * #555：**原生引擎路径**的 next/prev 落点必须由 core planAdvance 决定。
- *
- * 修前（本文件建立时）：
- * - nativeNext 从不调 planAdvance，直接 NP.next()（原生顺序推进）；
- * - nativePrev 只有随机支走 advance(-1)，顺序支仍 NP.prev()。
  * 于是「移动 next/prev 由 planAdvance 决定落点」这条验收在 Android 主路径上不成立。
- *
- * 这里用假原生模块把两条真实产线分支钉住：
- * ① 原生窗口的相邻格 == core 落点 → 交原生顺序推进（不重载，稳态快路径）；
- * ② 原生窗口的相邻格 ≠ core 落点（队首回绕 / 窗口分叉 / 单曲循环）→ 按 core effect 交付。
  * setup.ts 全局把 requireOptionalNativeModule 打成 null，本文件覆盖成假原生模块。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';

@@ -37,13 +37,9 @@ export function reorderIndices<T extends { id: string }>(
 }
 
 /**
- * 删除 `removedAt` 之后的**游标新位**（#639 C1）。
- *
- * 与 `moveItem` / `insertAfter` 同属「列表索引数学只此一处」：队列删歌时，
- * 「当前曲的下标」跟着变，而随机序的游标必须**同步**跟着变——
- * 这两件事必须一起发生（分开写就是那三次游标脱节 bug 的来源）。
- *
- * 返回的 `{ playlist, index }` 是**原子产出**：调用方没有机会把两者配错。
+ * 删除 `removedAt` 之后的**游标新位**（#639 C1）。与 `moveItem` / `insertAfter` 同属「列表索引数学只此一处」：
+ * 队列删歌时「当前曲下标」与随机序游标必须**同步**变（分开写就是那三次游标脱节 bug 的来源）；
+ * 返回的 `{ playlist, index }` 是**原子产出**，调用方没有机会配错。
  */
 export function removeAt<T>(
   list: readonly T[],

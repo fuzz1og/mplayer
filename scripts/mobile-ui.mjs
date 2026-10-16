@@ -1,19 +1,8 @@
 #!/usr/bin/env node
 /**
  * mobile-ui.mjs — uiautomator dump 的「取树 / 查节点 / 点按」三件套，外加它的纯解析层。
- *
- * 为什么存在：dump → 读 bounds → input tap 这个循环在最近 8 轮真机验收会话里被手工重写了 8 次，
- * 每次都要把同一批坑再踩一遍。这里把**解析**冻结成可 import、可单测的纯函数（不碰 I/O），
- * 把 **adb 动作**冻结成一条命令；scripts/mobile-e2e.mjs 从同一份实现取解析层，不再各写一份。
- *
- * 两条必须原样保留的语义（实测踩出来的行为，不是风格问题）：
- *   1. hay = text + '\u0000' + content-desc，那个 NUL 是有意的：hay 里永远还有第二段，
- *      所以 `^(发现)$` 匹配不到 text 恰好是「发现」的节点——原 Python 实现同样匹配不到，
- *      调用方本来就备了坐标兜底。要锚定就写 `^发现\u0000`（吃掉 NUL），或干脆别锚。
- *      见 scripts/mobile-e2e.mjs:62-65 的 RANK_NODE_RE。
- *   2. countText 只读 text（不含 content-desc），所以它和 find / centersOf 的模式**不能互换**。
- *
- * 用法：见下面的 HELP（--help 直接打印）。退出码 0 = 成功，1 = 失败。
+ * 要锚定就写 `^发现\u0000`（吃掉 NUL），或干脆别锚。
+ * 2. countText 只读 text（不含 content-desc），所以它和 find / centersOf 的模式**不能互换**。
  */
 
 import { spawnSync } from 'node:child_process';
@@ -60,9 +49,8 @@ export function eachNode(xml) {
 
 /**
  * 匹配用 haystack：`text + NUL + content-desc`。
- * **NUL 是刻意的**：它让 hay 末尾永远不是字符串结尾，于是 `^(发现)$` 这类锚定模式在
- * 「text 恰好是发现」时也**不命中**（原 Python ui_center_of 就是这样）。别顺手「修」成空格——
- * 那会静默改变 mobile-e2e 的 rank 判定等一批既有模式的含义。
+ * **NUL 是刻意的**：它让 hay 末尾永远不是字符串结尾，于是 `^(发现)$` 这类锚定模式在「text 恰好是发
+ * 现」时也**不命中**（原 Python ui_center_of 就是这样）。
  */
 export function haystackOf(tag) {
   return (attrOf(tag, 'text') ?? '') + '\u0000' + (attrOf(tag, 'content-desc') ?? '');

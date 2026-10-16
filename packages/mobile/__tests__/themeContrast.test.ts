@@ -4,12 +4,9 @@ import type { ThemeColors } from '../theme/tokens';
 import { contrast } from './contrastUtils';
 
 /**
- * 主题对比度回归（#318 审计）：
- * - 小字号正文/图标用的 accent、danger 必须达到 4.5:1（审计前：暗 accent 3.34~4.08、
- *   亮 danger 4.33，均擦线不达标）；
- * - 层级顺序保持不变（disabled < tertiary < secondary < primary 亮度递增）——
- *   tertiary 刻意保持低对比（苹果式层级），所以这里**不**要求它达标，
- *   只要求它别越过上级；当正文用的地方改走 textSecondary。
+ * 主题对比度回归（#318 审计）：小字号正文/图标用的 accent、danger 必须达到 4.5:1（审计前暗 accent 3.34~4.08、亮 danger 4.33 均擦线）。
+ * 层级顺序保持不变（disabled < tertiary < secondary < primary 亮度递增）——tertiary 刻意保持低对比（苹果式层级），
+ * 这里**不**要求它达标，只要求别越过上级；当正文用则改走 textSecondary。
  */
 const THEMES: [string, ThemeColors][] = [
   ['light', lightColors],

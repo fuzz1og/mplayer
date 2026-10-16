@@ -6,16 +6,9 @@ import { useUpdateStore } from '@/renderer/store/updateStore';
 const ipcRenderer = window.electronAPI;
 
 /**
- * 「更新已下载，立即安装？」确认框（#579 / ADR 决策 4、5）。
- *
- * 为什么必须有这个框：Windows 上正在运行的 exe 被占用就装不了，所以安装**必须先退出应用**；
- * 而「退出用户正在用的应用」不能替他决定，得先问。
- *
- * 确认后走 `update:install` → `quitAndInstall(true, true)`：静默安装（`/S`）+ 装完自动重启
- * （`--force-run`）。静默的前提正是这个框已经拿到了用户同意——不再需要安装器自己再问一遍。
- *
- * 选「稍后」只是收起这个框：徽标与设置页入口都还在，而且 `autoInstallOnAppQuit` 仍然为真，
- * 用户正常退出应用时会把更新装上（只是不会自动重启）。
+ * 为什么必须有这个框：Windows 上正在运行的 exe 被占用就装不了，所以安装**必须先退出应用**；而「退出
+ * 用户正在用的应用」不能替他决定，得先问。
+ * 静默的前提正是这个框已经拿到了用户同意——不再需要安装器自己再问一遍。
  */
 const UpdateReadyDialog: React.FC = () => {
   const status = useUpdateStore((s) => s.status);

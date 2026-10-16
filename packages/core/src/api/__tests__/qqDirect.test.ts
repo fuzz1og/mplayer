@@ -14,9 +14,8 @@ import { cacheManager } from '../memoryCacheManager.js';
 
 /**
  * QQ 直连客户端测试（T06 #152）。
- * 接缝：transport.request（T01）——mock 传输按 URL 路由（QIMEI 获取 / musicu 网关 /
- * v8 榜单），断言外部行为：QIMEI 请求结构、搜索映射、GetVkey URL 解析、榜单映射、
- * 失败/空串回退。加密纯函数用独立已知向量验证（AES-CBC 向量来自 .NET 独立实现）。
+ * 接缝：transport.request（T01）——mock 传输按 URL 路由（QIMEI 获取 / musicu 网关 /v8 榜单），断言
+ * 外部行为：QIMEI 请求结构、搜索映射、GetVkey URL 解析、榜单映射、失败/空串回退。
  */
 
 const QIMEI_OK = JSON.stringify({ data: JSON.stringify({ data: { q16: 'q16x', q36: 'q36-abc123' } }) });

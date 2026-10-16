@@ -4,10 +4,6 @@ import path from 'path';
 
 /**
  * #608 守卫：桌面取词决策只允许一处——core planLyricsFetch。
- *
- * 此前同一个决策在桌面被写了两遍：播放侧（renderer playerStore）自判
- * songUsesSongidLyrics / isSodaSource / isInlineLyrics，下载侧车
- * （main downloadService）则只认 song.lrc、连既有计划都不走。
  * 两处现在都必须只消费 core 的 plan，本地不得再留取词分支判据。
  */
 const ROOT = path.resolve(__dirname, '../..');

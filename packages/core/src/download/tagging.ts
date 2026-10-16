@@ -1,18 +1,7 @@
 /**
  * 下载标签写入决策 + ID3 帧构造（纯计算，双端共用）。
- *
- * 口径（#607 实测，见 ADR `docs/adr/2026-10-08-download-tag-write-boundary.md`）：
- * **只对 MP3 承诺内嵌元数据**。mp3tag.js@3.17 对 MP4/M4A 确实有写入路径，但写的是
- * `moov > udta > meta > ID32`（ID3v2-in-MP4）——原 `ilst` 一个字节不动，
- * music-metadata / media3-ExoPlayer / Apple 系都读不到；容器虽不被毁，产出却是
- * 读不回的「假标签」。FLAC/Ogg 等同样不写：宁可不写，也不写非标准载体。
- *
- * 决策单点 = `planAudioTagging`：两端下载 adapter 只消费它，不再各自判断容器。
- * 帧构造另走 `buildID3Frames`——封面是 I/O（要发网络请求），只有确定要写时才该抓，
- * 所以计划里只放「写不写 + 不写的理由」，不放帧。
- *
- * 真实参数原则：只写能确证的字段。时长（duration）可确证 → 写 TLEN（毫秒）；
- * 拿不到的位率/大小/编码器不写伪造值（TSSE 等仅当有真实来源时再考虑）。
+ * 口径（#607 实测，见 ADR `docs/adr/2026-10-08-download-tag-write-boundary.md`）：**只对 MP3 承诺内
+ * 嵌元数据**。
  */
 
 import type { AudioContainer } from './container.js';
@@ -21,9 +10,8 @@ export type TagStrategy = 'id3' | 'skip';
 
 /**
  * 容器 → 标签写入策略。
- * - mp3：mp3tag.js ID3（唯一有标准读取方的路径）
- * - m4a：跳过（mp3tag.js 只能写 ID32，非 iTunes `ilst`/`covr`，标准读取方读不到）
- * - flac / ogg / unknown：跳过（宁可不写也不错灌）
+ * - mp3：mp3tag.js ID3（唯一有标准读取方的路径）- m4a：跳过（mp3tag.js 只能写 ID32，非 iTunes 
+ * `ilst`/`covr`，标准读取方读不到）- flac / ogg / unknown：跳过（宁可不写也不错灌）
  */
 export function tagStrategyForContainer(container: AudioContainer): TagStrategy {
   return container === 'mp3' ? 'id3' : 'skip';

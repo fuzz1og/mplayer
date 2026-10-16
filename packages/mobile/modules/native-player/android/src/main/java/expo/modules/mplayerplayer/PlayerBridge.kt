@@ -26,16 +26,7 @@ internal object PlayerBridge {
   var reactContext: ReactContext? = null
 
   /**
-   * 我们自己持有的 media3 `MediaController`（**必须**有）。
-   *
-   * media3 的 `MediaSessionService` 只在「有 controller 连上来」时才把 session 注册进
-   * 内部 stub（`onGetSession` → `getSessions()`），而媒体通知/FGS 提升完全依赖
-   * `getSessions()` 非空（1.9.0 字节码实测：`triggerNotificationUpdate()` 遍历
-   * `getSessions()`，空则静默什么都不做）。
-   *
-   * 我们的 JS 走自写 bridge 而不是 MediaController，所以必须在这里自己保持一个连接，
-   * 否则：没有媒体通知 → 没有前台服务 → App 空闲被系统 `Stopping service due to app idle`
-   * → 后台播放直接断掉（真机上表现为「连播 4 首后 PAUSED」）。
+   * 我们自己持有的 media3 `MediaController`（**必须**有；通过 `getSessions()` 拿，空则静默什么都不做）。
    */
   @Volatile
   var controller: MediaController? = null

@@ -18,9 +18,8 @@ const kernel = new CacheKernel({
 
 /**
  * 歌曲资源语义层（ADR-0002）：key/TTL 推导内聚，调用方不手拼。
- * 播放资源值（ADR-0012）走 song:<身份键>——身份键 = 音乐源 + 去源前缀真实 ID
- * （utils/songIdentity，多层嵌套前缀按最外层源折叠），同一 rawId 不同源不再串直链。
- * key 前缀（song:）留在语义层，调用方只传身份键。
+ * 播放资源值（ADR-0012）走 song:<身份键>——身份键 = 音乐源 + 去源前缀真实 ID（utils/songIdentity，
+ * 多层嵌套前缀按最外层源折叠），同一 rawId 不同源不再串直链。
  */
 export const songResources = new SongResourcesCache({ kernel });
 
@@ -45,10 +44,9 @@ export async function getCacheStats(): Promise<{
 const urlWrittenAt = new Map<string, number>();
 
 /**
- * 归一历史条目（老用户缓存不失效）：
- * - 旧版纯字符串 url → { url, nonFull:false, ts:0 }（ts=0 视为高龄，播放前探活）；
- * - 旧版三件套 { url, cover, lrc } / 早期 { url, ts } → 补 nonFull:false、ts 缺失按 0。
- * 无 http url 一律 null（走重新解析）。
+ * 归一历史条目（老用户缓存不失效）：- 旧版纯字符串 url → { url, nonFull:false, ts:0 }（ts=0 视为高
+ * 龄，播放前探活）；- 旧版三件套 { url, cover, lrc } / 早期 { url, ts } → 补 nonFull:false、ts 缺
+ * 失按 0。
  */
 function normalizePlayableResource(raw: unknown): PlayableResource | null {
   if (typeof raw === 'string') {
@@ -85,9 +83,8 @@ export async function setCachedResource(song: Song, resource: PlayableResource):
 
 /**
  * 失效单首歌的资源值（播放失败时调用）。
- * CDN 直链带时效签名（kuwo 等），12h TTL 内签名就会过期——死链若不清，
- * 每次播放都抢先命中同一个坏地址（真机复现：《恋人》隔 3 小时重播必失败）。
- * 走语义层 key 推导，调用方不手拼（ADR-0002）。
+ * CDN 直链带时效签名（kuwo 等），12h TTL 内签名就会过期——死链若不清，每次播放都抢先命中同一个坏地
+ * 址（真机复现：《恋人》隔 3 小时重播必失败）。
  */
 export async function deleteCachedResource(song: Song): Promise<void> {
   if (!song?.id) return;

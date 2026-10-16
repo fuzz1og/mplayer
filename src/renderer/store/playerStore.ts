@@ -31,18 +31,9 @@ import { useSearchStore } from '@/renderer/store/searchStore';
 const ipcRenderer = window.electronAPI;
 
 /**
- * 播放封面回填：点击播放时歌曲对象可能还没有封面（DB 里 cover 为空、
- * 或点歌发生在列表刷新完成前）。不覆盖已有封面，只补缺失的 cover。
- * Fire-and-forget，不阻塞播放。
- */
-/**
- * 歌词获取（含失败重试）。**取词决策在 core 单点**（`planLyricsFetch`，与下载侧车同一份）：
- * 这里只把 plan 的 kind 接到具体取词实现——存量内联文本直接用；`url` 走 getLyrics；
- * 网易/汽水按源内 ID 直取；`none`（非按 ID 直取源且 lrc 为空）搜索补全一次。
- *
- * 失败重试（仅 URL 腿）：getLyrics 对「非法请求」页抛错 = 签名与会话绑定、会话已轮换，
- * 旧签名 URL 永远失败 → 重搜拿新签名 lrc URL 重试一次，对齐手机端
- * fetchLrcInBackground 的 force 路径。返回空串 = 无歌词（不重试）。
+ * 播放封面回填：点击播放时歌曲对象可能还没有封面（DB 里 cover 为空、或点歌发生在列表刷新完成前）。
+ * 失败重试（仅 URL 腿）：getLyrics 对「非法请求」页抛错 = 签名与会话绑定、会话已轮换，旧签名 URL 永
+ * 远失败 → 重搜拿新签名 lrc URL 重试一次，对齐手机端 fetchLrcInBackground 的 force 路径。
  */
 async function loadLyricsWithRetry(song: Song): Promise<string> {
   // #556：只接受**精确匹配**的歌词（此前 `hit || results[0]` 在无精确匹配时取第一条，
@@ -145,9 +136,8 @@ interface PlayerStoreActions {
   playPrevious: () => void;
   /**
    * 「下一首播放」（#491）：把该曲放到**当前曲之后**，不切歌、不打断当前播放。
-   * 已在队列时**移动**（不复制）——复制会制造「同一首歌在队列出现多次」这个本仓
-   * 已知坏状态（dnd-kit 的 items.indexOf(id) 对重复项索引歧义）。
-   * 队列为空 / 尚无当前曲 → 等价于「开始播放这首」。
+   * 已在队列时**移动**（不复制）——复制会制造「同一首歌在队列出现多次」这个本仓已知坏状态（dnd-kit
+   * 的 items.indexOf(id) 对重复项索引歧义）。
    */
   insertNext: (song: Song) => Promise<void>;
   setCurrentPlaylist: (playlist: Song[], currentIndex?: number) => void;
@@ -200,24 +190,14 @@ playbackClock.connect(() => audioPlayer.getPosition());
 
 const initialQueue = loadQueue();
 
-// --- URL 预解析缓存 ---
-// 统一走 core 预取缓存（键 = `sourceType:id`，30min TTL，失败可遗忘）。
-// 桌面曾自建模块级 Map：无 TTL、失败不失效，带签名的过期直链会被无期限复用
-// 并直接喂给 Howler（onloaderror）——同一份语义不能存在两套规则。
+// --- URL 预解析缓存 ---统一走 core 预取缓存（键 = `sourceType:id`，30min TTL，失败可遗忘）。
+// 桌面曾自建模块级 Map：无 TTL、失败不失效，带签名的过期直链会被无期限复用并直接喂给 Howler（
+// onloaderror）——同一份语义不能存在两套规则。
 
 /**
- * 冷启预热：还原的当前歌曲在渲染层有歌名/封面，但传输层尚无 Howl，
- * 用户点播放要走全链重解析（见 resume 守卫）。启动后台预解析一次，
- * 让首次点播放命中预取缓存（30min TTL）0 等待出声——这正是
- * 「隔日打开软件，播放要等/要重试」的正解。
- *
- * **#390 修正**：解析必须经 `musicApi:call` 落到**主进程**那份 `prefetchCache`
- * ——播放解析经 IPC 读的是主进程的模块实例，渲染层自己写的那份没人读（此前
- * `resolvePlayableSongRouted` + 本地 `setPrefetchedUrl` 的写法等于空转）。
- * 覆盖面同时从「仅当前歌」扩到「当前歌 + 队列下一首」（限 2 首、内存、不落盘）。
- *
- * 与 prefetchNextUrl 同口径：失败静默（真正播放时再走正常失败链），
- * 不阻塞启动。由 App 挂载时调用一次（#328）。
+ * **#390 修正**：解析必须经 `musicApi:call` 落到**主进程**那份 `prefetchCache`——播放解析经 IPC 读
+ * 的是主进程的模块实例，渲染层自己写的那份没人读（此前`resolvePlayableSongRouted` + 本地 
+ * `setPrefetchedUrl` 的写法等于空转）。
  */
 export function warmupRestoredSong(): void {
   const state = usePlayerStore.getState();
@@ -247,12 +227,8 @@ export function getNextSongInQueue(state: PlayerStoreState): Song | null {
 
 /** 两份队列是否同一批歌（只看 id 集合）——区分「整批换队列」与「同一队列原地改」（封面回填等）。 */
 /**
- * 随机序同步（#639 C1）——**薄封装** `queueState.planQueueState`。
- *
- * 语义已收进 `queueState.ts`（游标怎么跟、什么时候重洗、什么时候不建序列全在那一处
- * switch 里）。这里只把 store 的 state 形状适配成规划器的入参，返回 `shuffle`。
- * 保留本函数是为了让「只关心 shuffle」的调用点少写样板；**新代码请直接用
- * `applyQueueState`**（它同时产出 index，避免下标与随机序分开写）。
+ * 随机序同步（#639 C1）——**薄封装** `queueState.planQueueState`。语义已收进 `queueState.ts`（游标怎么跟、何时重洗、
+ * 何时不建序列都在那一处）。**新代码请直接用 `applyQueueState`**（它同时产出 index，避免下标与随机序分开写）。
  */
 function syncShuffle(
   state: PlayerStoreState,
@@ -275,10 +251,8 @@ function syncShuffle(
 
 /**
  * 应用一次队列状态转移（#639 C1）：规划 + set。
- *
- * **调用点只描述变更意图**——`planQueueState` 同时产出 `playlist` / `index` / `shuffle`
- * 三元组，调用方没有机会把下标与随机序配错（那正是本仓修过三次的 bug 形状）。
- * 落盘不在这里：store 订阅是唯一出口。
+ * **调用点只描述变更意图**——`planQueueState` 同时产出 `playlist` / `index` / `shuffle` 三元组，调用方没有机会把下标与随机序配错
+ * （那正是本仓修过三次的 bug 形状）。落盘不在这里：store 订阅是唯一出口。
  */
 function applyQueueState(
   set: (patch: Partial<PlayerStoreState>) => void,
@@ -316,10 +290,8 @@ function planAdvanceFromCurrent(state: PlayerStoreState, direction: 1 | -1): Adv
 
 /**
  * 执行 core `planAdvance` 给出的 effect（#555）：宿主只负责「怎么落」。
- * - `restart-current`：目标是当前曲 → seek(0) 重播，**不重新解析 URL**
- *   （避免切走 → reload 的音轨闪烁，桌面既有行为）；
- * - `load-target`：换下标并按主链路加载播放。
- * `none` 由调用方处置（playNext = stop、playPrevious = 不动）。
+ * - `restart-current`：目标是当前曲 → seek(0) 重播，**不重新解析 URL**（避免切走 → reload 的音轨
+ * 闪烁，桌面既有行为）；- `load-target`：换下标并按主链路加载播放。
  */
 function applyAdvanceEffect(
   plan: AdvancePlan,
@@ -423,11 +395,7 @@ function isOffline(): boolean {
 }
 
 /**
- * 统一失败处理（#385：护栏语义与文案收敛到 core `skipGuard` 单一来源）：
- * 1) 同曲 fresh 重试一次（先遗忘失败直链，再重走直连 → tier3）；
- * 2) 仍失败 = **终局失败**：core 记一次（连续计数 +1、记住这首歌）；
- * 3) core 决策：离线 / 关闭「失败即跳」/ 连续失败达固定上限 / 无下一首 → 停；
- *    否则跳下一首（跳过坏歌）。文案一律取 `decision.copy`。
+ * 文案一律取 `decision.copy`。
  * 本地文件不会过期：不做 fresh 重试，失败直接进决策。
  */
 async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Promise<void> {
@@ -581,10 +549,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const realUrl = resolved.url;
       const playbackNonFull = resolved.nonFull;
 
-      // #556：这里此前补着一份「搜索腿」适配器——core 的搜索腿只覆盖「直连返回空串」
-      // 分支，且其 writeCache 走 prefetchPlayableSong 会**再跑一整条解析链**（直连 3s
-      // + tier3 6s，还被 await）。现在 core 的两个分支（空串 / 抛错）都落到同一条
-      // 尾巴并写回预取缓存，桌面不需要任何适配器，删掉整块（含那次保证落空的二次搜索）。
+      // 现在 core 的两个分支（空串 / 抛错）都落到同一条尾巴并写回预取缓存，桌面不需要任何适配器，删
+      // 掉整块（含那次保证落空的二次搜索）。
       if (generation !== playGeneration) {
         set({ isLoading: false });
         return;
@@ -657,13 +623,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const nextIndex = index === -1 ? nextPlaylist.length - 1 : index;
       applyQueueState(set, get(), { playlist: nextPlaylist, index: nextIndex, policy: 'locate' });
 
-      // 预取必须放在队列 index 同步之后（#318）：手动点播路径（QueuePage 双击行、
-      // 历史/本地/发现页单曲点播）不先同步 index，若在 set({ currentSong }) 后立即
-      // 预取，会基于「新 currentSong + 旧 index」算出刚开播的这首歌自己——当前歌被
-      // 重复解析、真正的下一首漏预取。走到这里时各路径 index 均已就位：playNext/
-      // playPrevious/onEnd 在进 play 前已同步；页面级点播为 setCurrentPlaylist + play；
-      // 队列外点歌由上方 append 进队并置尾 index。失败/被取代（generation 早退）路径
-      // 不会走到这里。
+      // 预取必须放在队列 index 同步之后（#318）：手动点播路径（QueuePage 双击行、历史/本地/发现页单
+      // 曲点播）不先同步 index，若在 set({ currentSong }) 后立即预取，会基于「新 currentSong + 旧 
+      // index」算出刚开播的这首歌自己——当前歌被重复解析、真正的下一首漏预取。
       prefetchNextUrl(get());
 
     } catch (error) {
@@ -692,14 +654,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // 且后续 togglePlay 会走进 pause 分支（同一类状态说谎，#328）。
     if (!currentSong) return;
     // 无可用音频时不能走「恢复播放」：传输层没有能出声的 Howl。
-    // 两种来源——冷启还原态（渲染层从队列还原了歌，传输层还在 idle）
-    // 与上次加载失败（error，howl 仍在但已死）。
-    // 此时 audioPlayer.play() 是静默空操作（其内部 howl/state 守卫），
-    // 而旧代码无条件 set({ isPlaying: true }) 会让声波动画空转、
-    // 进度条说谎（#328）。
-    // 改为走 play() 全链重新解析并从 0 播（位置不恢复 = #328 的裁决）。
-    // 修在这一层而非 PlayerBar：resume/togglePlay 共 5 个入口
-    // （播放栏 / 歌词页 / 全局快捷键 / 媒体键 / 托盘）。
+    // 两种来源——冷启还原态（渲染层从队列还原了歌，传输层还在 idle）与上次加载失败（error，howl 仍
+    // 在但已死）。
     const transportState = audioPlayer.getState();
     if (transportState === 'idle' || transportState === 'error') {
       // 上次是加载失败：先遗忘该曲预取条目（里面是刚被证明失败的直链），
@@ -857,10 +813,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // 幂等：它已经在「当前曲之后」这一位 → 什么都不做（连点两次结果稳定、队列长度不变）
     if (existingIndex === currentPlaylistIndex + 1) return;
-    // #639 R3.1：点的是**当前播放曲本身** → no-op（与随机分支 `song.id === currentId`、
-    // 与 core `insertNextInShuffle` 的「无下一格可插」同口径）。缺这条守卫时会落进下面的
-    // 移动分支，把当前曲往后挪一格而 `currentPlaylistIndex` 不动 —— 指针与当前曲脱节，
-    // 再按「下一首」会重复加载正在播的这一首。
+    // #639 R3.1：点的是**当前播放曲本身** → no-op（与随机分支 `song.id === currentId` 同口径）。缺这条守卫会落进移动分支，
+    // 把当前曲往后挪一格而 `currentPlaylistIndex` 不动——指针与当前曲脱节，再按「下一首」会重复加载正在播的这首。
     if (existingIndex === currentPlaylistIndex) return;
 
     let nextQueue: Song[];
@@ -932,10 +886,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     if (index === currentPlaylistIndex) {
-      // 移除的是当前播放歌曲 → 续播它的「下一首」。
-      // #639 R3.2：随机模式下「下一首」是**随机序**里的后继（队列页显示的就是随机序，
-      // 用户看到当前行下面是 D，就该播 D）。此前一律取成员序邻居 `newPlaylist[index]`，
-      // 于是播出的歌与界面显示不符。
+      // 移除的是当前播放歌曲 → 续播它的「下一首」。#639 R3.2：随机模式下「下一首」是**随机序**里的后继（队列页显示的就是随机序，
+      // 用户看到当前行下面是 D 就该播 D）；此前一律取成员序邻居 `newPlaylist[index]`，播出的歌与界面显示不符。
       let resumedIndex = index < newPlaylist.length ? index : 0;
       if (playMode === '随机播放' && shuffle) {
         // 在**旧**队列上把游标对到当前曲、前进一格，拿到后继 id，再在新队列里定位
@@ -1011,15 +963,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 }));
 
 /**
- * 队列落盘的**单一出口**（#639 C1）。
- *
- * 此前 16 个 action 各写一遍 `persistQueue(...)`（与 `syncShuffle` 三连），
- * 新增 action 时忘写一次就静默丢落盘。移动端早已是订阅单一出口
- * （`packages/mobile/stores/playerStore.ts` 的 `subscribe` 注释：「各 action 只改内存，
- * 持久化只发生在这里」）——这里对齐它。
- *
- * 只在**队列这三份数据**真的变化时写：`currentSong` / `isPlaying` 等高频字段不进落盘，
- * 避免无谓的 localStorage 写。
+ * 队列落盘的**单一出口**（#639 C1）：此前 16 个 action 各写一遍 `persistQueue(...)`，新增 action 忘写一次就静默丢落盘
+ * （移动端早已是订阅单一出口，这里对齐它）。只在**队列这三份数据**真的变化时写，`currentSong` / `isPlaying` 等高频字段不落盘。
  */
 let lastPersisted = { playlist: usePlayerStore.getState().currentPlaylist, index: usePlayerStore.getState().currentPlaylistIndex, shuffle: usePlayerStore.getState().shuffle };
 usePlayerStore.subscribe((state) => {

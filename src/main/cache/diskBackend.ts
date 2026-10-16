@@ -78,11 +78,8 @@ interface StreamedEntry {
 
 /**
  * 流式条目的分类：与 `write()` **完全一致，无例外**。
- *
- * 二进制只按文件头判定；JSON 要整份 `parse` 才分得出 `songs`/`urls`，所以这里回读**已经
- * 落盘的临时文件**、用同一个 `classifyEntry` 量一遍（临时文件本来就要写；流式的收益在大
- * 二进制腿，JSON 条目本身很小）。曾按「头部被上限截断就归 other」处理——那会让同一份 JSON
- * 经 `writeFromStream` 落盘后在 `stats()`/`keys()` 里与 `write()` 不一致（记账退化）。
+ * 曾按「头部被上限截断就归 other」处理——那会让同一份 JSON 经 `writeFromStream` 落盘后在 
+ * `stats()`/`keys()` 里与 `write()` 不一致（记账退化）。
  */
 async function classifyStreamedEntry(key: string, entry: StreamedEntry, tempPath: string): Promise<EntryKind> {
   if (cacheKeyType(key) === 'json') {
@@ -131,13 +128,8 @@ export interface WriteFromStreamOptions {
 
 /**
  * 一个缓存目录的**全进程共享状态**。
- *
- * 为什么必须共享：`main.ts` 与 `ipc/cache.ts` 各自 new 了一个 `DiskCacheBackend`，
- * 指向**同一个** `userData/cache`（前者写汽水音频 `bin:soda:*`）。索引如果按实例各持
- * 一份，A 写的条目在 B 的 `stats()`/`keys()` 里就永远看不见——而改成索引之前的实现是
- * 现遍历目录，能统计到。共享之后两个实例等价于同一份视图。
- *
- * 共享的还有写队列（两个实例写同一目录也要串行）与目录初始化。
+ * 为什么必须共享：`main.ts` 与 `ipc/cache.ts` 各自 new 了一个 `DiskCacheBackend`，指向**同一个** 
+ * `userData/cache`（前者写汽水音频 `bin:soda:*`）。
  */
 class SharedCacheIndex {
   readonly index = new Map<string, MetaRecord>()
@@ -214,13 +206,6 @@ class SharedCacheIndex {
 
   /**
    * 清扫崩溃残留的流式临时文件（#426）。
-   *
-   * 跑在索引装载这一刻：**本进程**的写入方都要先 `await ensureIndex()`，所以本进程不会
-   * 有正在写的临时文件；上一个进程被杀留下的那半个文件在这里消失，「中断不留半个文件」在
-   * 崩溃场景下也成立。
-   *
-   * 口径限定：多实例共享同一份 userData（同一 cacheDir）时不成立——另一个进程可能正写到
-   * 一半，它的临时文件会被这里误删（那次下载随即失败并由调用方回退直链，不会留下半成品）。
    * 原先注释断言的是「不可能」，而那只对**单实例**成立，故在此写明前提。
    */
   private async sweepStreamTemps(): Promise<void> {
@@ -268,10 +253,8 @@ class SharedCacheIndex {
 
   /**
    * 索引里没有该条目的兜底：直接读一次 meta 文件。
-   *
-   * 为什么需要：索引是**装载那一刻**的快照。若 meta 是装载之后才出现的
-   *（旧版本残留、外部写入、或版本交错），只看索引就会绕过 TTL 与旧格式判定，
-   * 把早该失效的签名 URL 当成命中返回。
+   * 若 meta 是装载之后才出现的（旧版本残留、外部写入、或版本交错），只看索引就会绕过 TTL 与旧格式判
+   * 定，把早该失效的签名 URL 当成命中返回。
    */
   async readMetaFromDisk(hash: string): Promise<MetaRecord | undefined> {
     try {
@@ -321,14 +304,9 @@ function sharedIndexFor(cacheDir: string): SharedCacheIndex {
 }
 
 /**
- * 桌面磁盘缓存后端（L2）。
- *
- * #410 三条纪律：
- * 1. **真异步**：此前 `async read/write` 内部全是 `fs.*Sync`——播放解析与封面刷新
- *    读的正是这条路径，与 IPC、下载、托盘抢同一个事件循环。现在一律 `fs/promises`。
- * 2. **串行写队列**：写入排队，避免并发写同一路径互相踩、元数据与数据不一致。
- * 3. **O(1) 统计**：`stats()` 从共享内存索引读取增量记账结果；索引在启动时装载一次
- *    （旧 meta 缺 `kind` 的那一批在这一趟里补判，保证与旧统计口径一致）。
+ * 现在一律 `fs/promises`。
+ * 3. **O(1) 统计**：`stats()` 从共享内存索引读取增量记账结果；索引在启动时装载一次（旧 meta 缺 
+ * `kind` 的那一批在这一趟里补判，保证与旧统计口径一致）。
  */
 export class DiskCacheBackend implements CacheBackend {
   private cacheDir: string
@@ -408,17 +386,8 @@ export class DiskCacheBackend implements CacheBackend {
 
   /**
    * 流式写入（#426）：边收边写临时文件 → 完成后**原子 rename** → 由后端写 meta 并记账。
-   *
-   * 与 `write()` 的语义对齐：同一 key 规则（同一 hash、同一 json/bin 目录）、同一份 meta
-   * 记账、同一个共享写队列。区别只在**队列只圈住收尾那一步**——整段下载若占着队列，会把
-   * 其它缓存写饿死几十秒。临时文件名带随机后缀，同一 key 的并发流式写各写各的，不互相截断。
-   *
-   * `kind`/`size`/记账与 `write()` **完全一致，无例外**：JSON 条目也由同一把 `classifyEntry`
-   * 判定（见 `classifyStreamedEntry`），不存在「只有流式才会出现」的分类。
-   *
-   * 中断（source 抛错 / 被 destroy / 磁盘写失败）只删临时文件：最终路径与 meta 一个字节
-   * 不动，于是 `stats()`/`keys()` 里既看不到半成品条目，也不留孤儿记账；目标 key 上原有
-   * 的旧条目也原样保留。
+   * 区别只在**队列只圈住收尾那一步**——整段下载若占着队列，会把其它缓存写饿死几十秒。
+   * 临时文件名带随机后缀，同一 key 的并发流式写各写各的，不互相截断。
    */
   async writeFromStream(
     key: string,

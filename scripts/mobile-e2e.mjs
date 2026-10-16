@@ -1,35 +1,8 @@
 #!/usr/bin/env node
 /**
- * mobile-e2e.mjs — MPlayer 移动端真机 e2e：把手工真机验收流程固化为一条命令（adb 驱动，非 Playwright）。
- * 移植自 scripts/mobile-e2e.sh（#502）：步骤、断言、文案与退出码一致。
- *
- * 链路：设备在位 → reverse 隧道 → Metro 健康 + 归属校验 → 冷启 App（logcat 断言）→
- *       发现页排行榜四分区 → 榜单详情页 → 点歌出声（logcat + 播放栏断言）。
- * 每步截图/日志存档到 e2e/artifacts/（已 gitignore，仅本地留档）。
- *
- * 与原脚本的差异（两处，都是**去掉环境耦合**而不是换语义）：
- *   1. 仓库根取脚本自身位置，不再 git rev-parse —— 后者在「Windows 建的 worktree + WSL 侧跑」时
- *      解析 Windows 绝对路径会 fatal: not a git repository（原脚本自己在别处记过这条限制）；
- *   2. uiautomator dump 的 XML 解析与 manifest 的 projectRoot 提取改用 JS，**不再需要 python3**。
- *
- * 用法：
- *   node scripts/mobile-e2e.mjs                       # 唯一设备 + 复用 8081 Metro（没有则自起）
- *   MOBILE_E2E_SERIAL=N7TOAIMFOJPFIV7D node scripts/mobile-e2e.mjs
- *   MOBILE_E2E_DIR=/path/to/other/packages/mobile node scripts/mobile-e2e.mjs
- *
- * 参数（环境变量）：
- *   MOBILE_E2E_SERIAL          adb 序列号（多设备必填；默认取唯一在位设备）
- *   MOBILE_E2E_PORT            Metro/Expo 端口，默认 8081
- *   MOBILE_E2E_DIR             预期 Metro projectRoot，默认本仓库 packages/mobile
- *   MOBILE_E2E_WAIT_DEVICE     无设备时轮询等待秒数，默认 20
- *   MOBILE_E2E_BOOT_TIMEOUT    冷启断言超时秒数，默认 240
- *   MOBILE_E2E_START_METRO     端口无 Metro 时是否代为拉起（1 是 / 0 否），默认 1
- *   MOBILE_E2E_HOTLIST         走查的目标榜单，默认「QQ 音乐 · 新歌榜」
- *
- * 前置：手机经 usbipd 直挂进 WSL（scripts/mobile-device/usb-attach.sh）；
- *       @mplayer/core 已构建（dist 过期症状：启动即 undefined is not a function，本脚本识别为明确 FAIL）。
- *
- * 退出码：0 全部通过；1 有 FAIL（摘要逐条列出）。
+ * 用法：node scripts/mobile-e2e.mjs                       # 唯一设备 + 复用 8081 Metro（没有则自起
+ * ）MOBILE_E2E_SERIAL=N7TOAIMFOJPFIV7D node 
+ * scripts/mobile-e2e.mjsMOBILE_E2E_DIR=/path/to/other/packages/mobile node scripts/mobile-e2e.mjs
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -545,12 +518,8 @@ if (!(await uiTapText(HOTLIST_TITLE, 3, 1))) {
 }
 await sleep(2000);
 // 详情页断言：**页面身份 + 列表行都渲染了**。
-// 不用「rank 数字节点 ≥8」——那条判据是**视口相关**的：封面 hero 按 dp 占高，逻辑视口越小占比越大。
-// 雷电 2160x3840@960 的逻辑视口只有 360x640dp，只装得下 2 行（真机参考机更多），于是同一份代码在
-// 「列表明明渲染了」的情况下被判 FAIL。改用不依赖视口的三条：
-//   · 信息块「共 N 首」——app/hotlist.tsx 里只有 songs.length > 0 才渲染，等价于列表数据已到；
-//   · 「播放全部」动作位——加载态走的是 HeroSkeleton，此时两者都不在（骨架屏不会误判成 PASS）；
-//   · 至少 1 个 rank 行——证明行真的画出来了，而不只是数据到了。
+// 不用「rank 数字节点 ≥8」——那条判据是**视口相关**的：封面 hero 按 dp 占高，逻辑视口越小占比越大
+// 。
 const detailDeadline = Date.now() + 30000;
 let detailRanks = 0;
 let detailTotal = '';
@@ -577,12 +546,8 @@ if (detailTotal !== '' && detailAction && detailRanks >= 1) {
   abortAfter(['play']);
 }
 
-// ---------- 7. 点歌出声 ----------
-// 目标是列表里的一首歌行，但第 2 行得**完整露出来**才点得中：小视口上封面 hero 把列表压到
-// 屏幕最底部，第 2 行常常只露一条边、还落在迷你播放栏底下——雷电 2160x3840@960 实测：
-// 第 1 行 rank 徽章高 108px，第 2 行只剩 18px（bounds [96,3462][264,3480]），按中心点必空。
-// 所以先上滑一屏收起 hero 把列表让出来，再按当前 dump 里的第 2 个 rank 节点定位；
-// 不用参考机固定坐标——那只是按分辨率等比缩放，而 hero 高度以 dp 计，跨设备不是固定比例。
+// 所以先上滑一屏收起 hero 把列表让出来，再按当前 dump 里的第 2 个 rank 节点定位；不用参考机固定坐标
+// ——那只是按分辨率等比缩放，而 hero 高度以 dp 计，跨设备不是固定比例。
 const SWIPE_X = Math.floor(SCREEN_W / 2);
 await adbQuiet(['shell', 'input', 'swipe',
   String(SWIPE_X), String(Math.floor(SCREEN_H * 0.55)),

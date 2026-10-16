@@ -79,10 +79,9 @@ export default function HotlistPage() {
   }, [config]);
 
   /**
-   * 榜单元数据（#465）：Hero 的封面/播放量。
-   * 与歌曲**并行**取，且**失败不影响播放**——outcome 是判别联合，
-   * `unsupported`（如 Q 音：榜单索引接口匿名恒拒）与 `failed` 都只是「这次没有元数据」，
-   * Hero 退回路由带的 title + 生成兜底封面（不是错误态，也不拖死整页）。
+   * 与歌曲**并行**取，且**失败不影响播放**——outcome 是判别联合，`unsupported`（如 Q 音：榜单索引
+   * 接口匿名恒拒）与 `failed` 都只是「这次没有元数据」，Hero 退回路由带的 title + 生成兜底封面（不
+   * 是错误态，也不拖死整页）。
    */
   useEffect(() => {
     if (!config) return;

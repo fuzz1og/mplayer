@@ -63,18 +63,9 @@ function toUint8Array(value: unknown): Uint8Array {
 }
 
 /**
- * 抓封面字节用于内嵌：按源带 Referer，按 core 降级链（`EMBED_COVER_TIERS` = 640 → 320）取图，
- * 首个「够小」（`embedCoverWithinBudget`，≤ `EMBED_COVER_MAX_BYTES`）的档位采用；全超阈值时采用
- * 链中最小的一份；最终仍受 `MAX_EMBEDDED_COVER_BYTES`（1 MB）兜底，超则 `undefined`（只写文本标签）。
- *
- * 请求次数上限 = 链长（`embedCoverUrlChain` 已对等价 URL 去重，未验证机制的源不会重复下原图）。
- * `EMBED_COVER_MAX_BYTES` 是**目标**不是硬上限：链里所有档都超阈值时仍会内嵌链中最小的一份
- * （可能 > 阈值，例如 #575 实测的 206,858 B），真正的硬顶是 1 MB。
- *
- * 失败规则（**降档不得牺牲可用性**）：
- * - 第 0 档失败（抛错 / 非 2xx / 空响应体）→ `undefined`（与改前单档语义一致，只写文本标签）；
- * - 降档失败 → 停止降档，改用**已成功取到的那一份**（若其 ≤ 1 MB），而不是把整份封面丢掉。
- * 任一支都不阻断下载。**列表封面不经过这里**——那是远端直链（见 GLOSSARY「列表封面」）。
+ * 抓封面字节用于内嵌：按源带 Referer，按 core 降级链（`EMBED_COVER_TIERS` = 640 → 320）取图，首个
+ * 「够小」（`embedCoverWithinBudget`，≤ `EMBED_COVER_MAX_BYTES`）的档位采用；全超阈值时采用链中最
+ * 小的一份；最终仍受 `MAX_EMBEDDED_COVER_BYTES`（1 MB）兜底，超则 `undefined`（只写文本标签）。
  */
 async function fetchEmbeddableCover(song: Song): Promise<{ format: string; bytes: number[] } | undefined> {
   const coverUrl = song.cover?.trim();
@@ -215,10 +206,11 @@ async function correctContainerName(
 // 进行中的下载去重：重复点击同一首歌复用同一 promise，避免并发写同一文件
 const inFlight = new Map<string, Promise<File>>();
 
-/** 下载歌曲到本地：解析直链 → 下载 → 更新下载列表。重复点击同一首自动复用进行中的下载。 */
-// 下载并发门控（T16 移动端）：同时进行的下载受 DEFAULT_MAX_CONCURRENT 约束，
-// 单首失败只影响自身（调用方各自 catch/提示），不阻塞其他任务。槽位在释放时
-// 直接转移给最早的等待者，避免惊群。
+/**
+ * 下载歌曲到本地：解析直链 → 下载 → 更新下载列表。
+ * 下载并发门控（T16 移动端）：同时进行的下载受 DEFAULT_MAX_CONCURRENT 约束，单首失败只影响自身（调
+ * 用方各自 catch/提示），不阻塞其他任务。
+ */
 let activeDownloads = 0;
 const downloadWaiters: (() => void)[] = [];
 
@@ -390,12 +382,8 @@ async function downloadWithRetry(song: Song, realUrl: string, file: File, itemKe
 
 /**
  * 把元数据内嵌进音频文件（ADR 2026-10-04 / 2026-10-08：**只承诺 MP3**）。
- *
- * 写不写由 core `planAudioTagging` 单点决定（#607，与桌面消费同一份计划）：m4a 经
- * mp3tag 写的是 ID32 box（非 iTunes ilst/covr），media3/ExoPlayer 与 Apple 系读不到，
- * 属假达标；FLAC/Ogg 灌 ID3 会毁文件——两端都跳过，理由同出 core 一句。
- * 写回走「临时文件 + 覆盖 move」原子替换，失败时原文件保持完好；整体静默——
- * 元数据写失败不得影响下载结果。
+ * 写回走「临时文件 + 覆盖 move」原子替换，失败时原文件保持完好；整体静默——元数据写失败不得影响下
+ * 载结果。
  */
 async function writeMetadata(file: File, song: Song, container: AudioContainer): Promise<void> {
   const log = useLogsStore.getState();
@@ -468,10 +456,8 @@ type LyricsSink = { kind: 'private' } | { kind: 'public'; dirUri: string };
 
 /**
  * 把**已取到**的歌词文本落到指定落点（落点参数化）。
- *
- * 取词由调用方一次完成（#611）：同一份文本按落点分别落私有侧车与公共副本，不再各取一遍。
- * 内容不可用（core `looksLikeLyrics` 判定）或写出失败一律静默——.lrc 不影响音频结果；
- * 公共落点从私有侧车复制，故须先写私有。
+ * 内容不可用（core `looksLikeLyrics` 判定）或写出失败一律静默——.lrc 不影响音频结果；公共落点从私
+ * 有侧车复制，故须先写私有。
  */
 async function writeLyricsSidecar(content: string, fileName: string, sink: LyricsSink): Promise<void> {
   if (!looksLikeLyrics(content)) return;

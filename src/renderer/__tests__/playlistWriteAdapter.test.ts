@@ -35,11 +35,7 @@ function fakeIpc(handlers: Record<string, unknown | ((...args: unknown[]) => unk
 
 /**
  * #552：桌面歌单写入 adapter。
- *
- * 这三份**逐字相同**的 helper 曾被复制在 AddToPlaylistModal / BatchAddToPlaylistModal /
- * importService 里（先 `playlist:get` 校验存在，再 `playlist:addSong`），
- * 桌面链接导入因此是**每首 2 次 IPC**（2N）。这里钉住 adapter 的 IPC 形状：
- * 批量腿一次写整批，且回传宿主真实新增数（#554）。
+ * 这里钉住 adapter 的 IPC 形状：批量腿一次写整批，且回传宿主真实新增数（#554）。
  */
 describe('createDesktopPlaylistWriter（#552 桌面写入 adapter）', () => {
   beforeEach(() => vi.clearAllMocks());

@@ -13,25 +13,9 @@ import type {
 import { IpcClient } from '@/renderer/services/IpcClient';
 
 /**
- * 桌面歌单写入 adapter（#552）。
- *
- * 此前桌面**没有 adapter 这个 module**，只有三份逐字相同的 helper
- * （AddToPlaylistModal / BatchAddToPlaylistModal / importService 各一份：
- * 先 `playlist:get` 校验存在、再 `playlist:addSong`），以及四处各写各的编排。
- * 本 module 是桌面唯一的写入落点：**IPC 形状与编排藏在 adapter 后**，
- * 调用点只留「文案与关闭时机」。
- *
- * 两个宿主回调（#553 的 interface 要求）：
- * - **读目标歌单**：`playlist:getSongs`（+ 容量上限事实），产出 `PlaylistSnapshot`；
- * - **同名时怎么办**：`resolveNameConflict`，一次收整批冲突，交调用方裁决。
- *
- * #554：`addSongs` 走 `playlist:addSongs` 并**回传宿主真实新增数**——IPC 返回的是
- * 真正写进去的 PlaylistSong id 列表，长度才是真值；返回不可解析时报失败，
- * 不拿请求数冒充（#556 评审 B2）。
- *
- * #556 评审 B2：不再给 core 的逐首回落端口 `addSong`——桌面宿主本来就只有批量能力
- * （`playlist:addSongs`），逐首腿在产线上不可达（只有测试 fake 走）。留着它等于
- * 给「只有 fake 走得到的分支」发许可证。
+ * 本 module 是桌面唯一的写入落点：**IPC 形状与编排藏在 adapter 后**，调用点只留「文案与关闭时机」。
+ * #554：`addSongs` 走 `playlist:addSongs` 并**回传宿主真实新增数**——IPC 返回的是真正写进去的 
+ * PlaylistSong id 列表，长度才是真值；返回不可解析时报失败，不拿请求数冒充（#556 评审 B2）。
  */
 
 /** 桌面 adapter 依赖的 IPC 面（只依赖这一个方法，测试可塞假实现）。 */

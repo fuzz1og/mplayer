@@ -1,18 +1,15 @@
 /**
  * 可播性判定纯函数（T12 #158）。
- *
- * 独立叶子模块（零依赖）：完整时长校验（试听版检测）的单一事实来源，
- * 供 sourceRouter（播放解析 nonFull 标记）与直连腿取证引用，
- * 避免 sourceRouter → audioProbe → musicApi 的循环导入。
+ * 独立叶子模块（零依赖）：完整时长校验（试听版检测）的单一事实来源，供 sourceRouter（播放解析 
+ * nonFull 标记）与直连腿取证引用，避免 sourceRouter → audioProbe → musicApi 的循环导入。
  */
 
 export type LengthClass = 'full' | 'trial' | 'unknown';
 
 /**
- * 完整时长校验（原型 classifyLength 落地）：
- * 返回音频时长 vs 歌曲标称时长。≥0.95 → full（完整）；<0.5 → trial（试听版/片段，
- * 换元触发条件之一）；中间段拿不准 → unknown，交给下载探测（体积启发式）。
- * playTime/标称时长缺失（0）→ unknown（数据缺失，不臆断）。
+ * 完整时长校验（原型 classifyLength 落地）：返回音频时长 vs 歌曲标称时长。
+ * ≥0.95 → full（完整）；<0.5 → trial（试听版/片段，换元触发条件之一）；中间段拿不准 → unknown，
+ * 交给下载探测（体积启发式）。
  */
 export function classifyLength(playTimeMs: number, songDurationSec: number): LengthClass {
   if (!playTimeMs || !songDurationSec) return 'unknown';
@@ -39,17 +36,8 @@ export function isTrialUrlInfo(info: UrlInfo, songDurationSec: number): boolean 
 
 /**
  * 直连结果的试听判定（#539：**唯一事实来源**）。
- *
- * 此前 sourceRouter 的三个调用点各写一套布尔式（预取缓存的 nonFull / UrlInfo 的
- * isTrialUrlInfo || audioTag==='preview' / 纯 audioTag==='preview'），其中一条腿还
- * 少算了 audioTag，导致两条入口腿语义分叉。现在全部收敛到这里：
- *
- * - **audioTag=preview**（搜索期标记，如酷我 VIP 歌的 M500 试听）→ 试听；
- * - **UrlInfo 权威时长明显短于标称**（isTrialUrlInfo）→ 试听；
- * - **直连腿播放时取证判为片段**（validatedNonFull，仅无权威时长的源会走）→ 试听。
- *
+ * 现在全部收敛到这里：
  * 三者是「或」关系：任一命中即非完整版。
- * _Avoid_: 试听版检测、nonFull 判定（分散在调用点的布尔式）
  */
 export function isNonFullDirect(params: {
   /** 歌曲的搜索期标记（audioTag==='preview' 表示已知试听片段）。 */

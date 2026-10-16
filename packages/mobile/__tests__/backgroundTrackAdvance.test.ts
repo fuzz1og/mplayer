@@ -5,13 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * I6 守卫（PR #436 的不变量，规格 §11.1 在方案 C 下语义升级）：
- *
  * 原 4 条断言 = 「剥注释后 `services/audioPlayer.ts` 不得出现 setTimeout/setInterval」。
- * C 下**推进不再在 JS**（原生 ExoPlayer 播放列表接管 #405），所以断言升级为：
- *   1. 原生引擎的推进/补窗链路（`nativePlayer.ts` + `queuePrefetch.ts`）不得用计时器；
- *   2. `audioPlayer.ts` 的原生播放流程 `nativePlaySongFlow` 不得用计时器；
- *   3. 补窗只由「原生事件 / `getState()` 对账 / headless 任务」触发（静态断言入口存在）。
- *
  * 反面对照（C 下已作废）：PR #436 的「微任务替代 setTimeout」不再需要——推进根本不在 JS。
  */
 

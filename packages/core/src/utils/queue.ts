@@ -8,11 +8,9 @@ import {
 
 
 /**
- * 宿主该执行的落点动作（#541）：core 只回答「推进到哪」，**怎么落**由宿主按它执行。
- * - `none`：无目标（队列空 / 下标越界）→ 宿主停播；
- * - `restart-current`：目标就是当前曲（单曲循环的下一首）→ 宿主 seek(0) 重播，
- *   **不要**重新解析 URL（避免切走 → reload 的音轨闪烁，桌面既有行为）；
- * - `load-target`：目标是另一首 → 宿主按 `index` 加载并播放。
+ * - `none`：无目标（队列空 / 下标越界）→ 宿主停播；- `restart-current`：目标就是当前曲（单曲循环的
+ * 下一首）→ 宿主 seek(0) 重播，**不要**重新解析 URL（避免切走 → reload 的音轨闪烁，桌面既有行为）
+ * ；- `load-target`：目标是另一首 → 宿主按 `index` 加载并播放。
  */
 export type AdvanceEffect = 'none' | 'restart-current' | 'load-target';
 
@@ -49,21 +47,7 @@ export interface AdvanceInput {
 
 /**
  * 推进计划（#541）：**一次推进的唯一事实来源**。
- *
- * 此前「推进到哪」在 core（`getNextSongIndex`）而「怎么落」散在三个宿主
- * （桌面 playerStore 约 40 行分派 / 移动 store 约 35 行 / 原生桥约 30 行），
- * 且每个入口都要各自记得「先同步游标 → 再步进 → 再把结果写回」这条纪律
- * （#520 的注释说明它靠人记）。现在组合顺序藏在这里，宿主只按 `effect` 执行。
- *
- * 语义契约（与 ADR 2026-09-30 一致）：
- * - 队列空 / 下标越界 → `{ index: -1, effect: 'none' }`；
- * - 单曲循环 + 下一首 → `restart-current`（重播当前曲，不重新解析）；
- * - 单曲循环 + **上一首** → `load-target` 回到上一首（**不**重播当前曲）。
- *   这条此前只写在注释里（「与桌面 playPrevious 保持一致」）而移动端实际是重播，
- *   现在它是可执行契约，两端同此；
- * - 随机播放 → **先按 `shuffleScope` 对齐序列**（成员增量 + 游标对到当前曲），
- *   再沿序列前进/后退一格并回绕，返回推进后的序列；
- * - 列表循环 → (i ± 1 + len) % len，序列原样返回。
+ * 现在组合顺序藏在这里，宿主只按 `effect` 执行。
  */
 export function planAdvance(input: AdvanceInput): AdvancePlan {
   const { queue, currentIndex, playMode, shuffle, direction, shuffleScope = 'authoritative' } = input;
@@ -101,17 +85,9 @@ export function planAdvance(input: AdvanceInput): AdvancePlan {
 }
 
 /**
- * 按播放模式计算下一首 index（纯函数，无副作用）。
- * 单曲循环 → currentIndex；列表循环 → (i+1) % len。
- * 随机播放：有稳定序列（#511 方案 A）时**消费序列游标**（前进一格、回绕）；
- *           未提供序列时退回旧的「防重复现抽」行为（无记忆、不可持久化，
- *           仅为不破坏既有调用方而保留，见 core 测试里钉住的「无序列行为」）。
- * 队列空或 index 越界 → -1（调用方处理：无下一首）。
- *
- * `shuffleScope`（#639 R1）：**必须**与调用方手里的 `queue` 相符——
- * `authoritative`（队列 = 完整成员集）还是 `window`（队列 = 原生预取窗口的子集）。
- * 此前本函数硬编码 authoritative，而 `planAdvance` 收 scope ⇒ 同一份序列两套对齐口径
- * （预取/失败跳歌裁窗口、advance 不裁），落点会分叉。
+ * 按播放模式计算下一首 index（纯函数）：单曲循环 → currentIndex；列表循环 → (i+1) % len；随机播放有稳定序列（#511）时消费游标、
+ * 无序列退回现抽；队列空或 index 越界 → -1。`shuffleScope`（#639 R1）**必须**与调用方手里的 `queue` 相符（`authoritative` 完整集 /
+ * `window` 预取窗口子集），否则同一份序列两套对齐口径、落点会分叉。
  */
 export function getNextSongIndex(
   queue: Song[],
@@ -132,14 +108,8 @@ export function getNextSongIndex(
 
 /**
  * 按播放模式计算上一首 index（纯函数，无副作用）。
- * 单曲循环与列表循环 → (i-1+len) % len
- * （prev 刻意不做「单曲循环重播」，与现有桌面 playPrevious 行为保持一致）。
- * 随机播放（#511 **行为变更**）：有稳定序列时游标**后退一格**，回到序列里的上一张；
- *           此前与 next 共用同一「现抽」→ 回的是一张新随机曲，从不回上一张。
- *           无序列时保留旧现抽行为。
- * 队列空或 index 越界 → -1（调用方处理：无上一首）。
- *
- * `shuffleScope` 语义同 {@link getNextSongIndex}。
+ * 单曲循环与列表循环 → (i-1+len) % len（prev 刻意不做「单曲循环重播」，与桌面 playPrevious 一致）。随机播放（#511 行为变更）：
+ * 有稳定序列时游标**后退一格**回到序列里的上一张（此前与 next 共用现抽），无序列保留旧现抽行为。`shuffleScope` 语义同 next。
  */
 export function getPrevSongIndex(
   queue: Song[],

@@ -4,13 +4,9 @@ import { radius, sourceColors, spacing, textVariants } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
 /**
- * 音乐源身份的唯一视觉出口（源色纪律 #196 M2-3）：
- * 源品牌色只允许以「圆点徽章」或「文字徽章」两种形态出现，
- * 全部引用收敛在本组件单文件——其他组件物理上拿不到 sourceColors。
- *
- * - variant="dot"（默认）：纯色圆点。size: sm=6 / md=8 / lg=10（TopBar 来源钮、
- *   源选择弹层、换源弹层列表项）。
- * - variant="badge"：半透明底色 + 彩色文字（SongRow 来源徽章）。
+ * 音乐源身份的唯一视觉出口（源色纪律 #196 M2-3）：源品牌色只允许以「圆点徽章」或「文字徽章」两种形
+ * 态出现，全部引用收敛在本组件单文件——其他组件物理上拿不到 sourceColors。
+ * - variant="dot"（默认）：纯色圆点。
  */
 export default function SourceBadge({ source, size = 'md', variant = 'dot', style, children }: {
   source: SourceKey | 'all';

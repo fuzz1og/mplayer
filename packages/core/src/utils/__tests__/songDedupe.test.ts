@@ -4,19 +4,8 @@ import { classifySong, createPlaylistSnapshot, DEFAULT_PLAYLIST_CAPACITY } from 
 
 /**
  * 歌单写入的「同一首歌」判据（#553）——**唯一一份**实现。
- *
- * 此前有 4 份互不相同的判据：
- * - songDedupe: name + sourceType（不含 artist）
- * - playlistImport: name | artist
- * - playlistWrite: 裸 song.id
- * - 移动端 AddToPlaylistModal: id + name+artist + 异源三选一
- *
- * 本文件把统一后的口径钉死：
- * - **同源**同一首歌 = `identityKey` 相等（源 + 去源前缀真实 ID），
- *   或同源 name + artist 文本相等（存量裸 id 与换源前缀 id 的合流）；
- * - **跨源**「同名」只算真冲突当且仅当 artist **也**相等（同一次录音）；
- *   异源同名不同歌手 = 两首不同的歌，既不是 duplicate 也不是 nameConflict；
- * - 同源同名但歌手不同 = 两首不同的歌（旧判据在这里会误判为已存在并拒收）。
+ * 此前有 4 份互不相同的判据：- songDedupe: name + sourceType（不含 artist）- playlistImport: name |
+ * artist- playlistWrite: 裸 song.id- 移动端 AddToPlaylistModal: id + name+artist + 异源三选一
  */
 const song = (id: string, name: string, artist: string, sourceType: Song['sourceType'] = 'netease'): Song => ({
   id,

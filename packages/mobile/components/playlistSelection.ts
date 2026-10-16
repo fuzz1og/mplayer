@@ -1,13 +1,6 @@
 /**
- * 歌单页「选择模式」的状态机（#490）—— 纯逻辑，**不得** import react / react-native，
- * 由 __tests__/playlistSelection.test.ts 在 node 环境直接单测（与 components/collapsingChrome.ts、
- * components/songListLayout.ts 同款分工：阈值/集合运算留在可测的纯模块里，组件只做接线）。
- *
- * 为什么模式与已选集合是**一个**对象：长按进入模式与选中该行是同一次用户动作，
- * 拆成两个 useState 会渲染两次，并在两次渲染之间露出「已进入模式但一行都没选」的中间态。
- *
- * 退出只有两条路：顶部条「完成」/「取消全选」清空后留在模式内，行内取消选中也不退出。
- * 退出模式统一由调用方落到 {@link NO_SELECTION}（引用恒定，React 可跳过同引用重渲染）。
+ * 歌单页「选择模式」的状态机（#490）——纯逻辑，**不得** import react / react-native。模式与已选集合是**一个**对象：
+ * 长按进入模式与选中该行是同一次用户动作，拆成两个 useState 会渲染两次并露出中间态。退出模式统一落到 {@link NO_SELECTION}（引用恒定）。
  */
 export interface PlaylistSelection {
   mode: boolean;

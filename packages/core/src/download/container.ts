@@ -1,9 +1,7 @@
 /**
  * 音频容器识别（下载管线共用，双端一致）。
- *
- * 下载产物该叫什么扩展名、该不该写 ID3 标签，都取决于「容器类型」而非播放器
- * 猜测。这里是容器判定的唯一事实来源：由文件字节头（复用 sniffers 的格式头
- * 判定）或响应 Content-Type 推断，产出统一的 AudioContainer。
+ * 这里是容器判定的唯一事实来源：由文件字节头（复用 sniffers 的格式头判定）或响应 Content-Type 推断
+ * ，产出统一的 AudioContainer。
  */
 
 export type AudioContainer = 'mp3' | 'm4a' | 'flac' | 'ogg' | 'unknown';

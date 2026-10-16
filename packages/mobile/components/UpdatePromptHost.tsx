@@ -11,13 +11,8 @@ import UpdateAvailableInfo from './settings/UpdateAvailableInfo';
 import ScalePress from './ScalePress';
 
 /**
- * 启动更新弹窗（#579 / ADR 决策 6）。
- *
- * 进入应用后延时检查一次；有新版本且该版本没被忽略过就弹窗。
- * 「叉掉 / 稍后」把**该版本号**记进 settingsStore（persist），同版本不再弹，下个版本仍会弹。
- * 「立即更新」跳浏览器下载（`Linking.openURL`）——**不做应用内下载与安装**：
- * 那需要新增原生权限与原生依赖，且 Android 的系统确认框必现，换不来静默（见 #579 out-of-scope）。
- *
+ * 「立即更新」跳浏览器下载（`Linking.openURL`）——**不做应用内下载与安装**：那需要新增原生权限与原
+ * 生依赖，且 Android 的系统确认框必现，换不来静默（见 #579 out-of-scope）。
  * 检查失败一律静默（不变量 I1）：不弹错误、不阻断启动。
  */
 type PromptState = {

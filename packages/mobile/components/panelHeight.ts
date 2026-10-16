@@ -1,15 +1,7 @@
 /**
  * 底部弹层面板高度量取（onLayout）—— 同步取值，绝不把事件对象带进 state updater。
- *
- * 真机教训（PKB110，任何 BottomSheet 打开即 Render Error 白屏）：
- * onLayout 的 `e` 只在事件回调里有效，React 稍后（渲染阶段）才执行 setState 的 updater，
- * 此时事件对象已被回收 —— `e.nativeEvent` 变成 null。把
- * `e.nativeEvent.layout.height` 写进 updater 里就会抛
- * `TypeError: Cannot read property 'layout' of null`。
- *
- * 所以纪律是：handler 内同步把高度读成数字，updater 只闭包那个数字。
- * 本模块把这条纪律钉在接口上（调用点无法再写错），且零 react-native 依赖 → node 可测，
- * 回收场景有回归测试（__tests__/panelHeight.test.ts）。
+ * 把`e.nativeEvent.layout.height` 写进 updater 里就会抛`TypeError: Cannot read property 'layout' of
+ * null`。
  */
 
 /** onLayout 事件里用得上的最小形状：不引 react-native 类型，保持 node 可测 */

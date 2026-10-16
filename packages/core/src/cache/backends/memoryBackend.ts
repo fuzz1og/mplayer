@@ -11,11 +11,7 @@ export interface MemoryBackendOptions {
 
 /**
  * L1 内存后端 —— **Map 顺序即 LRU 顺序**。
- *
- * #410 之前这只 Map 只增不减（仅在读到过期条目时删单条）：手机端单进程长驻，
- * 每播一首歌写一条 `song:<身份键>`、每看一次网易内容写一批 LRC，内存只涨不落。
  * `CacheKernel.maxMemoryEntries` 声明了容量却从未被读取。
- *
  * 现在：读命中把条目移到队尾（最近使用），写超限从队首（最久未用）淘汰。
  */
 export function createMemoryBackend(options: MemoryBackendOptions = {}): CacheBackend {

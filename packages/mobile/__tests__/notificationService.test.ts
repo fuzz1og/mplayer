@@ -1,18 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // #93：通知权限请求的 Expo Go guard
-//
-// 设计说明：notificationService 用 CJS `require('expo-notifications')` 懒加载
-// （Expo Go 下不加载该模块，避免 Android SDK 53+ Expo Go 报错）。vitest 的
-// vi.mock 只拦截 ESM import，无法拦截源码内的 require——因此 dev build 分支
-// （真实调用 requestPermissionsAsync）在单测中不可 mock，交给 #93 的
-// dev build + 真机验收路径验证（expo run:android + OnePlus PKB110）。
-// 单测聚焦 guard：Expo Go 下 requestNotificationPermission 必须安全返回 false，
-// 不加载 expo-notifications、不抛错。
-//
-// 检测方式（#93 真机验证确定）：`Constants.appOwnership === AppOwnership.Expo`。
-// `Constants.expoGoConfig !== null` 在 dev build 下也非 null，会误判；单测 mock
-// 需与实现一致地提供 AppOwnership 枚举。
+// 单测聚焦 guard：Expo Go 下 requestNotificationPermission 必须安全返回 false，不加载 
+// expo-notifications、不抛错。
 
 const constantsMocks = vi.hoisted(() => ({
   // 'expo' = Expo Go；null = dev build / standalone / bare

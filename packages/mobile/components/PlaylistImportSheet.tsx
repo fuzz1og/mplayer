@@ -34,12 +34,6 @@ function isAlreadyInPlaylist(existingSongs: readonly Song[], song: Song): boolea
 /**
  * 链接导入歌单（wayfinder #382 定案形态）：复用 BottomSheet 的分步向导。
  * 粘贴链接 → 解析 → 预览（全选/自选）→ 逐首进度 → 结果。
- *
- * 编排在 core（parsePlaylistUrl / importFromLink）；取歌腿走直连客户端：
- * - QQ：getQqPlaylistSongs（短链在 core 内跟 302）
- * - 网易：getDirectClient('netease').getPlaylistSongs（limit<=0 = 全量）
- * - 网易短链：RN 侧 fetch 跟随重定向后再 parsePlaylistUrl
- * 歌曲自带来源 ID，播放地址由播放链路路由解析，导入阶段不搜索。
  */
 export default function PlaylistImportSheet({ visible, playlistId, playlistName, existingSongs, onClose }: Props) {
   const { colors } = useTheme();
@@ -65,11 +59,8 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
   // 取歌腿（识别链接 → 歌曲列表）在 service 里，便于单测；这里只注入默认实现
   const linkDeps = useMemo(() => defaultPlaylistLinkDeps(), []);
 
-  // #552：mobile 侧是本地 store，写入统一走 adapter（判据/编排在 core）；
-  // 提供 addSongs 走批量腿——整批一次 set，即一次持久化 + 一次渲染
-  //（逐首 addSong 会让每首都写库 + 重渲染，长歌单是 O(N²)）。
-  // #556 评审 B6：deps 收进 playlistExport.createMobileImportDeps——`writer.add` 的
-  // `result.added`（宿主真实新增数）必须回传给 core，不能再丢成 void 冒充整批成功。
+  // #556 评审 B6：deps 收进 playlistExport.createMobileImportDeps——`writer.add` 的`result.added`
+  // （宿主真实新增数）必须回传给 core，不能再丢成 void 冒充整批成功。
   const deps = useMemo<PlaylistImportDeps>(() => createMobileImportDeps(), []);
 
   const reset = useCallback(() => {

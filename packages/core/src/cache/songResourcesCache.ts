@@ -2,14 +2,8 @@ import type { CachePort, CacheStats } from './types'
 
 /**
  * 歌曲资源语义层（ADR-0002）。
- *
- * 在通用 CacheKernel（L1/L2 深浅两层、TTL、可插件后端）之上收编「歌曲资源」
- * 的 key/TTL 规则，桌面主进程 / 渲染端 / 移动端共享。调用方**不许手拼
- * key / TTL**——常量与 key 推导内聚在本模块（songKey），保证
- * 「这首歌的缓存 key 长什么样」只有一个事实来源。
- *
- * 封面字节/磁盘封面缓存语义已随「封面直链直渲」整链删除（issue #273）：
- * Song.cover 现为源站 CDN 直链，由渲染层 <img> 直接加载，不再落盘缓存。
+ * 调用方**不许手拼 key / TTL**——常量与 key 推导内聚在本模块（songKey），保证「这首歌的缓存 key 长
+ * 什么样」只有一个事实来源。
  */
 
 /** 歌曲资源三件套（url + cover + lrc）TTL：签名 URL 服务端时效短，12h 过期后必须重新搜索。 */

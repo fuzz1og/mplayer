@@ -116,11 +116,9 @@ export function findBestMatch(
 
 /**
  * 精确匹配：name 与 artist 归一化后完全相等（双方多歌手都拆分，任一配对相等）。
- * 用于换源/播放兜底——findBestMatch 的 name substring 匹配会放行
- * "于是" 匹配 "于是(Live版)"，导致播放的音频与歌名歌手错位；
- * 精确匹配拒绝一切 Live/remix/翻唱变体，宁可匹配失败也不播错歌。
+ * 用于换源/播放兜底——findBestMatch 的 name substring 匹配会放行"于是" 匹配 "于是(Live版)"，导致播
+ * 放的音频与歌名歌手错位；精确匹配拒绝一切 Live/remix/翻唱变体，宁可匹配失败也不播错歌。
  */
-/** 混音署名标记：出现在候选歌手的「未匹配片段」里即判非精确（见 isExactMatch） */
 const REMIX_ARTIST_TAGS = ['montagem', 'remix', 'bootleg', 'flip', 'sped up', 'slowed', 'nightcore'];
 
 export function isExactMatch(target: MatchTarget, candidate: MatchCandidate): boolean {

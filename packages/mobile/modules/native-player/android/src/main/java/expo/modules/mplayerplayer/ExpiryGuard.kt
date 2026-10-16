@@ -11,10 +11,8 @@ internal class ExpiredUrlException(val trackKey: String) :
   IOException("mplayer: url expired for key=$trackKey")
 
 /**
- * 只做便宜的本地重写（规格 §6.3）：
- * ① 注入 per-item UA/Referer（DataSpec.withRequestHeaders）；
- * ② 读前判绝对过期 → 直接抛可重试 IOException，不发起请求。
- *
+ * 只做便宜的本地重写（规格 §6.3）：① 注入 per-item UA/Referer（DataSpec.withRequestHeaders）；② 
+ * 读前判绝对过期 → 直接抛可重试 IOException，不发起请求。
  * **禁止**在这一层做任何网络解析/刷新 —— 解析权 100% 在 JS/cory。
  */
 internal class ExpiryGuard(private val store: QueueStore) {

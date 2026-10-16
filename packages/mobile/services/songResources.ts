@@ -14,13 +14,9 @@ async function searchStrictCandidates(song: Song): Promise<Song[]> {
 }
 
 /**
- * 严格匹配搜索（防翻唱）：歌词/封面失效兜底的统一入口。
- * 按名字搜索（路由链：直连 + tier3 兜底）+ 严格匹配。未匹配时打诊断日志
- * （候选摘要）。搜索有缓存，同一首歌重复兜底不重复请求。
- *
- * #639 C3：判据与搜索端口已上收 core（`shared/playableVersion.searchPlayableMatch`），
- * 与桌面 `resolvePlayableVersion` 共用同一份——本函数只保留「返回候选本体」
- * 这个移动端特有的需要（多处要同时回填 url 与 lrc），对外签名不变。
+ * 严格匹配搜索（防翻唱）：歌词/封面失效兜底的统一入口。按名字搜索（路由链：直连 + tier3 兜底）+ 严格匹配，未匹配时打诊断
+ * 日志；搜索有缓存，同一首歌重复兜底不重复请求。判据与搜索端口已上收 core（`shared/playableVersion.searchPlayableMatch`），
+ * 与桌面共用；本函数只保留「返回候选本体」这个移动端特有需要（多处同时回填 url 与 lrc），对外签名不变。
  */
 export async function searchStrictMatch(song: Song): Promise<Song | null> {
   return searchPlayableMatch(song, {
@@ -30,11 +26,6 @@ export async function searchStrictMatch(song: Song): Promise<Song | null> {
 }
 
 /**
- * 移动端「可播资源刷新」适配器（ADR-0012 决策 3）：把 core 纯编排
- * （取缓存 → 旧签名死链判定 → 精确匹配搜索 → 写缓存）接到移动端口——
- * 读/写 = cacheService（身份键 + 资源值），搜索 = 路由严格搜索，
- * 死链判定 = core isLegacyDeadUrl，诊断走 logsStore。
- *
  * 返回 null 的调用方约定见 core 接口不变量：**不得用 null 覆盖本地已有的有效 url**。
  */
 export async function refreshPlayableResource(song: Song): Promise<PlayableResource | null> {

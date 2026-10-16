@@ -7,8 +7,6 @@ import type { Song } from '../../types/index.js';
 /**
  * 千千直连客户端测试（T04 #150）。
  * 接缝 = transport（注入 mock 传输驱动全部出网，不真实请求源站）。
- * 覆盖：search 签名与字段映射、tracklink URL 解析（data.path / trail_audio_info.path）、
- *       无 valid URL → 空串、失败时错误上抛（供 sourceRouter auto 回退自建 API）。
  */
 
 const SECRET = '0b50b02fd0d73a9c4c8c3a781c30845f';

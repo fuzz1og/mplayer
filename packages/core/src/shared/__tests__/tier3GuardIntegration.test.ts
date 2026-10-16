@@ -25,14 +25,8 @@ beforeEach(() => { setDirectValidator(null); });
 
 /**
  * tier3 兜底护栏集成测试（#361）。
- *
- * **主缝（唯一集成缝，已有）**：core 播放解析入口 `resolvePlayableSongRouted`——
- * 所有播放路径（渲染层播放 / 下一首预取 / 冷启预热 / 下载 / IPC）的唯一入口，
- * 直连腿与 tier3 腿都经过它。注入方式与既有 sourceRouter 测试一致：
- * 注入直连客户端 + `setTier3Deps` 假传输层（真实 tier3 执行器 + 真实护栏）。
- *
- * 只断言外部行为：是否接受、返回的 `via` / `guard`、是否换下一个源、
- * 是否走既有失败链路；不断言内部调用顺序或私有字段。
+ * **主缝（唯一集成缝，已有）**：core 播放解析入口 `resolvePlayableSongRouted`——所有播放路径（渲染
+ * 层播放 / 下一首预取 / 冷启预热 / 下载 / IPC）的唯一入口，直连腿与 tier3 腿都经过它。
  */
 
 const AUDIO_STUB = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]); // ID3 头

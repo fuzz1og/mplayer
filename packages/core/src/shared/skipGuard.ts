@@ -6,19 +6,8 @@ import { RESOLUTION_CHAIN_BUDGET_MS } from './playbackBudgets.js';
 
 /**
  * 跳歌护栏（#385，spec 见 issue #385）：**「一首歌失败之后怎么办」的决策单点**。
- *
- * 现状缺陷（#385）：护栏用**队列长度**当阈值（200 首队列断网会依次试 200 首）、
- * 手动点歌把计数清零（可无限循环）、没有网络态、`invalid` 标记不参与跳歌决策、
- * 两端两套实现两套文案。本模块把语义与文案收敛到 core 一处，宿主只做接线。
- *
- * 设计（对应 spec 的缝）：
- * - **决策函数是纯函数**：输入离线态 / 用户偏好 / 队列有无下一首 / 连续失败计数，
- *   输出 `skip | stop` + 一句话文案。core 零 I/O，离线判定由宿主注入 predicate。
- * - **固定绝对值上限** `SKIP_LIMIT`，与队列长度无关（D1）。
- * - **会话内状态**（模块级 Map/计数，不落盘；与 `tier3Stats`/`prefetchCache` 同取向）：
- *   连续失败计数 + 坏歌集合。计数只在**终局失败**（fresh 重试之后仍失败）+1，
- *   只在**真正开始播放**时归零——**手动点歌不清零**（修 D2 的无限循环）。
- * - **坏歌记忆**：终局失败即记住（键 = 歌曲身份键），跳歌选曲时查询跳过（D4）。
+ * 本模块把语义与文案收敛到 core 一处，宿主只做接线。
+ * core 零 I/O，离线判定由宿主注入 predicate。
  */
 
 /** 连续失败跳歌的**绝对值**上限：与队列长度无关（D1）。取 3（区间 3–5 的保守值）。 */
@@ -29,15 +18,8 @@ export const OFFLINE_COPY = '当前处于离线状态，已暂停播放';
 
 /**
  * 最坏无声窗口（#424 口径）：从「第一首开始解析」到「护栏判停」的**可断言上界**。
- *
- * 推导（每一条都是既有语义，不是新行为）：
- * - 一次尝试 = **一条解析链**，其解析链总预算（deadline）= `RESOLUTION_CHAIN_BUDGET_MS`（#424 新增的单一值）；
- * - 每首歌终局失败前会做 **第一次 + fresh 重试一次** = 2 条链（桌面 `playerStore.play` 的
- *   `fresh: true`、移动端 `refreshPlayableUrl`）；
- * - 连续失败达 {@link SKIP_LIMIT} 首才停 → 最多 `SKIP_LIMIT` 首。
- *
- * 于是上界 = `SKIP_LIMIT × 2 × 链预算`。#424 之前没有这个值：单链最坏是散落常量之和的
- * 15s，用户视角的无声期既算不出也测不了。
+ * 于是上界 = `SKIP_LIMIT × 2 × 链预算`。
+ * #424 之前没有这个值：单链最坏是散落常量之和的 15s，用户视角的无声期既算不出也测不了。
  */
 export const WORST_CASE_SILENT_MS = SKIP_LIMIT * 2 * RESOLUTION_CHAIN_BUDGET_MS;
 
@@ -124,10 +106,8 @@ export function isKnownBadSong(song: Song): boolean {
 }
 
 /**
- * 跳歌候选（#385 D4）：沿播放模式从当前索引起找，**跳过会话内已证明失效的歌**
- * （否则同一条坏歌链会被反复选中）。绕回自己 / 翻完一圈 → null，
- * 由 `decideAfterPlaybackFailure` 判「无下一首 → 停」。
- *
+ * 跳歌候选（#385 D4）：沿播放模式从当前索引起找，**跳过会话内已证明失效的歌**（否则同一条坏歌链会被
+ * 反复选中）。
  * 放 core 的理由（#385 的前提就是单一来源）：两端原本各写一份，语义极易漂移。
  */
 export function pickNextSongAfterFailure(
@@ -137,9 +117,8 @@ export function pickNextSongAfterFailure(
   currentSongId: string,
   /**
    * 稳定随机序列（#511）：随机模式下沿序列找候选，而不是每次现抽。
-   * **必填**（#541）：此前可选，移动端 audioPlayer 忘传 → 静默退回「防重复现抽」，
-   * 于是 ADR 2026-09-30 决策 5 要求的「失败跳歌沿序列找候选」在移动端从未生效。
-   * 表达「没有序列」请显式传 `null`。
+   * **必填**（#541）：此前可选，移动端 audioPlayer 忘传 → 静默退回「防重复现抽」，于是 ADR 
+   * 2026-09-30 决策 5 要求的「失败跳歌沿序列找候选」在移动端从未生效。
    */
   shuffle: ShuffleState | null,
   /**

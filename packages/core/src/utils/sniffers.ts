@@ -1,11 +1,6 @@
 /**
  * 格式头嗅探单点（wayfinder #122 的 isAudio 预检同源复用）。
- *
- * 图片/音频判定逻辑的唯一事实来源，收敛 diskBackend 与 coverCacheService
- * 各自的逐字节复制。白名单判定行为保持现状不变：
- * - 图片：JPEG / PNG / WebP / GIF / AVIF / ICO(CUR) / BMP
- * - 音频：ID3(MP3) / FLAC / Ogg / MP4 容器 / MPEG(0xFFE0 头)
- *
+ * 图片/音频判定逻辑的唯一事实来源，收敛 diskBackend 与 coverCacheService 各自的逐字节复制。
  * 传 Uint8Array / Buffer 均可（Buffer 是 Uint8Array 子类）。
  */
 

@@ -30,11 +30,8 @@ async function rangedGet(url: string, rangeEnd: number, timeoutMs: number) {
 
 /**
  * 播放期直链活性闸：缓存命中的 URL 在交给播放器前快速确认活着。
- * 网络异常/超时按**死链**处理（宁可多花一次 fresh 重解析，不赌原生播放器对死链
- * ~3s 才报 Source error）；**不写任何缓存**（活性结论时效极短，复用会误判）。
- *
- * #391：批量可播性探测（probeAudioUrl/probeAudio）已删除——判据反向（把「直连拿不到
- * URL」判成失效，而多数歌靠 tier3 才可播）且产物无消费者；本模块只保留这条活性闸。
+ * #391：批量可播性探测（probeAudioUrl/probeAudio）已删除——判据反向（把「直连拿不到 URL」判成失效
+ * ，而多数歌靠 tier3 才可播）且产物无消费者；本模块只保留这条活性闸。
  */
 export async function isUrlAlive(rawUrl: string, timeoutMs = URL_ALIVE_PROBE_TIMEOUT_MS): Promise<boolean> {
   try {

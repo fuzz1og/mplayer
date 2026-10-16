@@ -3,15 +3,9 @@ import { useLogsStore } from '../stores/logsStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 /**
- * logsStore 首份单测（#477）。此前 `entries` 零覆盖，而本票恰好给它加了级别门禁
- * （关 = normal 只记 warn/error，开 = verbose 记 info），所以这里锁三件事：
- *   1. `MAX_ENTRIES = 100` 环形截断；
- *   2. `notice`（用户可见 Toast）与 `entries`（诊断缓冲）**解耦**——
- *      info 不进缓冲时 Toast 也必须弹（否则「试听版可换源」会随日志级别被吞）；
- *   3. warn/error 不因级别门禁消失（release 侧看门狗与真实失败记录必须常开）。
- *
- * vitest 的 node 环境没有 `__DEV__`（RN 运行时才注入），故用 `vi.stubGlobal` 显式控制
- * `isDevBuild()`；用户开关走 `useSettingsStore.devMode`。
+ * logsStore 首份单测（#477）。
+ * vitest 的 node 环境没有 `__DEV__`（RN 运行时才注入），故用 `vi.stubGlobal` 显式控制`isDevBuild()`
+ * ；用户开关走 `useSettingsStore.devMode`。
  */
 
 const entries = () => useLogsStore.getState().entries;

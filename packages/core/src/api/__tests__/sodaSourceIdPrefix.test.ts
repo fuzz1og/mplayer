@@ -10,16 +10,9 @@ import { setTransport, type TransportRequest } from '../transport.js';
 import type { Song } from '../../types/index.js';
 
 /**
- * #629：汽水三条腿（分享页音频 / 分享页歌词 / track_v2 时长）的 id 形状守卫。
- *
- * 换源后 `Song.id` 是 `<source>:<站内 id>`（core `shared/sourceSwap.ts`），而汽水端点
- * 只认站内裸 ID：**实测（#629 取证）带前缀不报错**——分享页返 HTTP 200 +
- * `status_code:1000004` 的软错误空壳（`url:""`、无 `lyrics.sentences`），于是歌词、
- * 可播地址、时长探测**同时静默失效**。与 #623 同形（网易返 `code=400`，至少像个错误）。
- *
- * 接缝 = **出网请求 URL 本身**：分享页与 musicApi 的 track_v2 兜底直用 axios（不经
- * transport 接缝），`sodaDirectClient.resolveUrlInfo` 的 track_v2 走 transport，
- * 两条边界各自 mock，都不真实出网。假端点按生产行为响应：只有裸 ID 才给满壳。
+ * 与 #623 同形（网易返 `code=400`，至少像个错误）。
+ * 接缝 = **出网请求 URL 本身**：分享页与 musicApi 的 track_v2 兜底直用 axios（不经 transport 接缝）
+ * ，`sodaDirectClient.resolveUrlInfo` 的 track_v2 走 transport，两条边界各自 mock，都不真实出网。
  */
 
 /** 生产真实 track_id（#629 取证用同一首：晴天 / 董） */

@@ -3,11 +3,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 /**
- * #403：歌词页曾是「只在 App state 里开关的视图」——它的复位点只有歌词页自己的
- * 「返回」，于是打开歌词后点侧边栏 / 顶部搜索 / 前进后退全都「URL 变了、画面没变」。
- *
- * 本票的裁决：歌词是「播放器的层」（与移动端全屏播放器同构），**不注册成路由**；
- * 修法是让视图跟随导航复位。这里用桩组件把 App 的壳渲染出来，直接验这条语义。
+ * #403：歌词页曾是「只在 App state 里开关的视图」——它的复位点只有歌词页自己的「返回」，于是打开歌
+ * 词后点侧边栏 / 顶部搜索 / 前进后退全都「URL 变了、画面没变」。
+ * 这里用桩组件把 App 的壳渲染出来，直接验这条语义。
  */
 
 const audioPlayerMock = vi.hoisted(() => {

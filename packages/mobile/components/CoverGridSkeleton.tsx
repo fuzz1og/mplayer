@@ -9,20 +9,8 @@ import { GRID_GAP, gridCardWidth } from './gridMetrics';
 
 /**
  * 网格加载骨架屏 —— **真实网格的同形替身**（#416）。
- *
- * 三条纪律，都是此前踩过的坑：
- * 1. **卡片宽度走 `gridCardWidth`**。此前这里把公式抄了一遍
- *    （`(width - spacing[4]*2 - gap*(columns-1))/columns`），而 `gridMetrics` 头注释
- *    明写「统一从这里取数，**禁止在调用方重写公式**」——两份公式必然漂移。
- * 2. **两种网格是两种结构**。专辑/歌单卡 = 方图 + 左对齐两行；歌手卡 = **圆形头像 +
- *    居中一行**（真实 72 圆头像、`marginBottom: 16`）。此前只有前者，3 列歌手网格
- *    加载时形状完全不对。
- * 3. **纵向节奏要与真实网格一致**：真实网格的列间距来自 `columnWrapperStyle` 的
- *    `gap`（只作用于一行之内），行与行之间**没有**间距——所以这里用 `columnGap`
- *    而不是 `gap`，歌手卡的纵向间距由卡片自身的 `marginBottom` 提供（同真实）。
- *
- * 自带主题底色（#318，与 `SongListSkeleton` 同一条纪律）：调用点多为**早退**，
- * 不经过页面容器——页面底色挂在容器上，不画就会露出导航容器自带的浅色默认底。
+ * 此前这里把公式抄了一遍（`(width - spacing[4]*2 - gap*(columns-1))/columns`），而 `gridMetrics` 头
+ * 注释明写「统一从这里取数，**禁止在调用方重写公式**」——两份公式必然漂移。
  */
 interface Props {
   columns?: number;

@@ -57,12 +57,7 @@ function findScrollParent(from: HTMLElement | null): HTMLElement | null {
 
 /**
  * sticky 元素要让表头贴住**内容区**上边时，`top` 相对滚动视口上边应有的偏移。
- *
- * `position: sticky` 的参照系是**滚动视口**（容器的 border box）上边，而列表内容从**内容区**
- * （padding 之内）开始排布，两者差一个 padding-top。写 `top: 0` 时表头会比它该在的位置高出一个
- * padding，浮到内容上方，列表内容就从表头上方那条缝里露出半截（发现歌单详情页等带内边距的页面）。
  * 所以这里返回**负的** padding-top，把表头压回内容区上边。
- *
  * 容器没有 padding（绝大多数页面）时返回 0，行为与原先的 `top: 0` 完全一致。
  */
 export function stickyTopForContent(scrollElement: HTMLElement | null): number {
@@ -103,15 +98,9 @@ export function useVirtualRows({ count, enabled, estimateSize, overscan = 8 }: U
     initialRect,
   });
 
-  //
-  // 探测滚动祖先。**不按 enabled 门控**——短列表（< VIRTUALIZE_THRESHOLD）不虚拟化，
-  // 但照样挂在页面的滚动容器上，照样需要知道容器的 padding-top 才能把 sticky 表头
-  // 压回内容区。此前只在 enabled 时探测（且 enabled=false 时还主动置 null），于是
-  // 「带内边距的页面 + 少于 30 首」表头又会浮高一个 padding，缝重新出现（实测 12 首
-  // 时 top 回到 0px、gap 回到 24）。是否真的虚拟化仍由 canVirtualize 说了算，这里只管探测。
-  //
-  // 依赖里带 count，并用「是否已探到」兜底一次：列表可能先渲染骨架屏、行容器稍后才
-  // 挂载，mount 那一次探测会落空；节点挂上后 count 变化时会再探一次。
+  // 探测滚动祖先。
+  // 依赖里带 count，并用「是否已探到」兜底一次：列表可能先渲染骨架屏、行容器稍后才挂载，mount 那一
+  // 次探测会落空；节点挂上后 count 变化时会再探一次。
   useLayoutEffect(() => {
     if (!rowsRef.current) return;
     const found = findScrollParent(rowsRef.current);
@@ -138,11 +127,8 @@ export function useVirtualRows({ count, enabled, estimateSize, overscan = 8 }: U
       observer.observe(rowsRef.current!.parentElement ?? rowsRef.current!);
     }
     window.addEventListener('resize', measure);
-    // **不监听 scroll**（#412）：scrollMargin = rows.top - container.top + container.scrollTop，
-    // 而滚动时 scrollTop 增量与 rows.top 的减量相抵，这个和不随滚动变化。
-    // 此前把它挂在 scroll 上，等于每个滚动事件都强制两次 getBoundingClientRect（同步布局），
-    // 白白吃掉滚动帧的时间。偏移真正会变的时机（批量栏展开、头部加载、窗口尺寸）
-    // 都由上面的 ResizeObserver 与 resize 覆盖。
+    // **不监听 scroll**（#412）：scrollMargin = rows.top - container.top + container.scrollTop，而
+    // 滚动时 scrollTop 增量与 rows.top 的减量相抵，这个和不随滚动变化。
     return () => {
       observer?.disconnect();
       window.removeEventListener('resize', measure);

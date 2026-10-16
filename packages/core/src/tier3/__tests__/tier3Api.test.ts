@@ -36,11 +36,8 @@ import {
 } from '../../shared/sourceSchedule.js';
 
 /**
- * tier3Api 测试（#144）：
- * - 清单 schema 校验/版本化；
- * - url-resolver 与 search-then-resolve 的声明式执行；
- * - 域名白名单 + 字节嗅探安全边界；
- * - 订阅状态管理（默认关闭、空清单起步）。
+ * tier3Api 测试（#144）：- 清单 schema 校验/版本化；- url-resolver 与 search-then-resolve 的声明式
+ * 执行；- 域名白名单 + 字节嗅探安全边界；- 订阅状态管理（默认关闭、空清单起步）。
  */
 
 const song = (overrides: Partial<Song> = {}): Song => ({

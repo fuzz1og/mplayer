@@ -1,12 +1,6 @@
 /**
  * 稳定随机序列在移动端的消费（#519 = #511 方案 A 的移动端接线）。
- *
  * 契约唯一出处：ADR `docs/adr/2026-09-30-stable-shuffle-order.md` 的「移动端消费契约」。
- * 这里钉住四件事：
- * ① 随机序 + 游标（next 前进 / prev 回上一张 / 同会话不重洗）；
- * ② 「下一首播放」在随机序里的落点（= 当前曲的下一格）；
- * ③ 补窗不再自激：同一位置重复补窗计划收敛为同一批；
- * ④ 落盘 + 恢复（重启顺序不变）与队列页展示随机序。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -209,13 +203,9 @@ describe('#519 ④ 落盘 / 恢复 / 队列页', () => {
 });
 
 /**
- * #520 blocker 1（评审）：冷启/对账把 JS 队列换成原生快照（= 预取窗口）后，**不能**用全量
- * normalize 对齐——窗口外的 id 会被丢掉，而且 store 订阅立刻落盘 ⇒ 随机序**永久截断**
- * （评审实测 12 首 → 5 首；Android 上只要歌单 > 窗口就必现）。
- *
- * 作用域（Lead 二轮补充，避免把「截断 bug」换成「膨胀 bug」）：
- * - **窗口态**（对账 / 冷启 hydrate / 逐曲游标同步）：**只补不丢**；
- * - **权威态**（`setQueue` 拿到整张歌单）：裁剪幽灵 id + 补新成员；id 集合变化则整批重洗。
+ * #520 blocker 1（评审）：冷启/对账把 JS 队列换成原生快照（= 预取窗口）后，**不能**用全量 normalize
+ * 对齐——窗口外的 id 会被丢掉，而且 store 订阅立刻落盘 ⇒ 随机序**永久截断**（评审实测 12 首 → 5 
+ * 首；Android 上只要歌单 > 窗口就必现）。
  */
 describe('#520 blocker 1：窗口态只补不丢，权威态才裁剪', () => {
   const FULL = Array.from({ length: 12 }, (_, i) => `s${i}`);
@@ -307,11 +297,9 @@ describe('#520 minors', () => {
 });
 
 /**
- * #555：宿主确实执行 core `planAdvance` 的 effect。
- *
- * core 的 advancePlan.test.ts 只测纯函数，测不到宿主；移动端的宿主 = playerStore，
- * 这里断言的正是「落点与 effect 被宿主执行」的可观测结果——随机模式也必须走这条
- * （此前随机分支自己 stepShuffle 后 return，effect 契约对移动端不成立）。
+ * core 的 advancePlan.test.ts 只测纯函数，测不到宿主；移动端的宿主 = playerStore，这里断言的正是「
+ * 落点与 effect 被宿主执行」的可观测结果——随机模式也必须走这条（此前随机分支自己 stepShuffle 后 
+ * return，effect 契约对移动端不成立）。
  */
 describe('#555 宿主执行 planAdvance 的 effect', () => {
   it('随机播放 + 单元素队列：restart-current → 不换歌、回到播放起点', () => {
@@ -348,11 +336,8 @@ describe('#555 宿主执行 planAdvance 的 effect', () => {
 });
 
 /**
- * #639 R1：作用域必须是**显式**的，窗口态不得当权威集处理。
- *
- * 根因：`setQueue` / `ensureShuffle` / `advance` 的现洗分支把「手里的队列是权威成员集
- * 还是原生预取窗口」当成隐含前提，而 store 订阅会立刻把结果落盘 ⇒ 窗口态算出的短序列
- * **永久覆盖**盘上那份完整序列（重启也回不来）。#543 早已把作用域做成显式参数。
+ * #639 R1：作用域必须是**显式**的，窗口态不得当权威集处理。根因：`setQueue` / `ensureShuffle` / `advance` 的现洗分支把
+ * 「队列是权威成员集还是原生预取窗口」当隐含前提，而 store 订阅立刻落盘 ⇒ 窗口态算出的短序列**永久覆盖**盘上完整序列。
  */
 describe('#639 R1：队列作用域显式（窗口态不截断随机序）', () => {
   const FULL = Array.from({ length: 12 }, (_, i) => `s${i}`);

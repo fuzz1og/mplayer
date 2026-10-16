@@ -11,9 +11,6 @@ import type { Song } from '../../types/index.js';
 
 /**
  * 内容能力测试（#278）：接缝 = transport（mock 传输驱动全部出网）。
- * 覆盖：请求形态（weapi path / 明文 URL）、字段映射（ToplistGroup/统一 Song/rank 索引推导）、
- * **列表不带歌词**（#409：内容方法零取词请求）、getNeteaseLyrics 按需取词缓存语义
- * （命中零请求 / 空词也缓存 / 失败不缓存）、getPlaylistSongs 分页+全量合一、酷狗榜单 id 规则。
  */
 
 afterEach(() => {

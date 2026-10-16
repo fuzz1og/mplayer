@@ -35,14 +35,8 @@ function rankDelta(prevRank: number | null | undefined, rank: number): { label: 
 
 /**
  * 单源榜单面板（#332 选项 A）。
- *
- * 由「聚合 + 折叠展开」改为「一个源的一个榜」：名次即数组索引，
- * 不再有 `sourceRanks`/`score`/`bestSong`。
- *
- * **可选列**：榜单元数据在各源之间并不齐备（实测：三源公共只有「名次」，
- * 「上期名次/在榜周数」只有 QQ 提供）。因此不去做「按源各写一个组件」——
- * 那是 N 个组件服务 1 个字段；而是**一个通用组件 + 可选列**：
- * 有值就渲染，没值就不占位。稀疏的是数据，不是组件。
+ * **可选列**：榜单元数据在各源之间并不齐备（实测：三源公共只有「名次」，「上期名次/在榜周数」只有 
+ * QQ 提供）。
  */
 const ChartPanel: React.FC<ChartPanelProps> = ({
   title,
@@ -117,10 +111,9 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   const hasWeeks = songs.some((s) => s.rankMeta?.weeks !== undefined);
 
   /**
-   * 榜单行点播 = **整榜入队**（与 SongList 同语义）。
-   * 只调 onPlay(song) 会让 playerStore.play 的「不在队列就 append 单曲」把队列压成 1 首，
-   * 于是 getNextSongIndex 只能算出当前歌自己、prefetchNextUrl 的自我预取守卫直接吃掉预取
-   * ——下一首（尤其 QQ/酷狗）要等现场解析，换歌明显变慢。
+   * 只调 onPlay(song) 会让 playerStore.play 的「不在队列就 append 单曲」把队列压成 1 首，于是 
+   * getNextSongIndex 只能算出当前歌自己、prefetchNextUrl 的自我预取守卫直接吃掉预取——下一首（尤其
+   * QQ/酷狗）要等现场解析，换歌明显变慢。
    */
   const handlePlayRow = (song: Song, index: number): void => {
     setCurrentPlaylist(songs, index);

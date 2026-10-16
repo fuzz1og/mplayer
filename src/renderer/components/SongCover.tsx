@@ -24,10 +24,8 @@ type SongCoverProps = SongCoverBaseProps &
 
 /**
  * 封面直链直渲的纯展示形状（#286）：失败态 + 封面变化重置 + 占位。
- * 占位 variant 按形状命名（保留各调用点既有视觉）：icon = Music2 居中；
- * tinted = --cover-placeholder 底 + ListMusic；gradient = 灰阶渐变色块；
- * none = 不渲染占位（容器自有底色透出）。
- * 从旧 CoverImage 删除后内联在各调用点的形状回收而来，不含任何解析/重试机件。
+ * 占位 variant 按形状命名（保留各调用点既有视觉）：icon = Music2 居中；tinted = --cover-placeholder
+ * 底 + ListMusic；gradient = 灰阶渐变色块；none = 不渲染占位（容器自有底色透出）。
  */
 const SongCover = ({
   src,

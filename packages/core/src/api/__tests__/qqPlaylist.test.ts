@@ -11,10 +11,9 @@ import {
 } from '../qqPlaylist.js';
 
 /**
- * QQ 歌单原生模块测试（#280）。
- * 接缝：transport.request（T01）——mock 传输驱动 musicu 网关与短链 302 两类请求，
- * 断言外部行为：请求形态（module/method/param/最小 comm）、字段映射、hasmore 兜底
- * 翻页与上限截断、错误边界（不存在/隐私/歌曲链接/外层 code）、缓存（10min、空不缓存）。
+ * 接缝：transport.request（T01）——mock 传输驱动 musicu 网关与短链 302 两类请求，断言外部行为：请
+ * 求形态（module/method/param/最小 comm）、字段映射、hasmore 兜底翻页与上限截断、错误边界（不存在/
+ * 隐私/歌曲链接/外层 code）、缓存（10min、空不缓存）。
  */
 
 function jsonResponse(

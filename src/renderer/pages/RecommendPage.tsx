@@ -54,10 +54,8 @@ const RecommendPage: React.FC = () => {
 
   const handlePlay = async (song: Song) => {
     try {
-      // #639 C3：缺地址时补一个**精确匹配**的可播版本（判据在 core）。此前直接取
-      // `result[0]` 整首顶替 —— 会播同名不同歌手的歌，还会换掉歌名/封面。
-      // 未命中时返回原歌，交给 play 内部的解析链与失败归因（不再预先 warning，
-      // 那条提示与实际结果无关，且会与失败 toast 叠成两条）。
+      // #639 C3：缺地址时补一个**精确匹配**的可播版本（判据在 core）。此前直接取 `result[0]` 整首顶替——会播同名不同歌手的歌、
+      // 还换掉歌名/封面。未命中返回原歌，交给 play 的解析链与失败归因（不再预先 warning，避免与失败 toast 叠两条）。
       await play(await resolvePlayableVersionForDesktop(song));
     } catch (error) {
       console.error('播放失败:', error);

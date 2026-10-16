@@ -111,10 +111,8 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 
     setCreating(true);
     try {
-      // #542/#552：新建 + 写入走 adapter 背后的 core 编排——
-      // 写入失败会**删掉刚建的空歌单**（#493 验收标准）。
-      // 不传 resolveNameConflict：新歌单的目标快照是空的，结构上不可能有同名冲突，
-      // core 的「默认并入」缺省在这里不会被触发（#556 评审 A4）。
+      // 不传 resolveNameConflict：新歌单的目标快照是空的，结构上不可能有同名冲突，core 的「默认并入
+      // 」缺省在这里不会被触发（#556 评审 A4）。
       const result = await desktopWriter.createAndAdd({
         name: newPlaylistName.trim(),
         songs: [song],

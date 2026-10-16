@@ -7,11 +7,9 @@ import {
 } from '../audioDuration.js';
 
 /**
- * 音频头时长取证测试（#361）：字节夹具覆盖 M4A / MP3 / FLAC / Ogg / ADTS
- * 与「都拿不到」的情形，断言解析出的时长与**降级选择**（trusted）。
- *
- * 夹具为 ffmpeg 生成的 5s 静音（`__tests__/fixtures/`），提交进仓库，
- * 测试不依赖本机 ffmpeg。
+ * 音频头时长取证测试（#361）：字节夹具覆盖 M4A / MP3 / FLAC / Ogg / ADTS 与「都拿不到」的情形，断言
+ * 解析出的时长与**降级选择**（trusted）。
+ * 夹具为 ffmpeg 生成的 5s 静音（`__tests__/fixtures/`），提交进仓库，测试不依赖本机 ffmpeg。
  */
 
 const fixture = (name: string): Uint8Array =>

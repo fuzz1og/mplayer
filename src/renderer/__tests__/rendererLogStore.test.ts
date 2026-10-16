@@ -9,15 +9,9 @@ import {
 import { isDevMode, isDiagnosticsEnabled, setDevMode } from '../services/devMode';
 
 /**
- * 桌面渲染层日志环形缓冲（#477）。桌面此前**没有任何**应用内日志缓冲
- * （wayfinder 基线原文「桌面没有对应物」），本票补的是一段全局 console 捕获 +
- * 读取入口，所以这里锁三件事：
- *   1. 捕获生效且**零调用点改动**（普通 `console.log` 即被收进缓冲）；
- *   2. 容量 = `RENDERER_LOG_MAX`（约 30 行）的环形截断；
- *   3. 门禁：`isDiagnosticsEnabled()` 关闭时不记（console 仍原样放行）。
- *
- * `import.meta.env.DEV` 由 Vite 内联；测试环境若把它当 dev 会盖掉门禁的负例，
- * 故用 `vi.stubEnv` 显式设成 false，让「开关」成为唯一变量。
+ * 桌面渲染层日志环形缓冲（#477）。
+ * `import.meta.env.DEV` 由 Vite 内联；测试环境若把它当 dev 会盖掉门禁的负例，故用 `vi.stubEnv` 显式
+ * 设成 false，让「开关」成为唯一变量。
  */
 
 const logs = () => listRendererLogs();

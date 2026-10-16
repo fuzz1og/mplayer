@@ -145,10 +145,7 @@ const DiscoverPageV2: React.FC = () => {
 
   /**
    * 拉取某源的榜单（#332 选项 A：单元榜 + 源切换）。
-   *
-   * 原实现走 `getAggregatedChart(type, SOURCES)` 把三源合成一张跨源榜；
-   * 现在每个源各自成榜。一次 `getToplists(source)` 即返回该源**全部**榜
-   * （含热歌/新歌），故热歌与新歌共用一次请求，不必分别拉。
+   * 原实现走 `getAggregatedChart(type, SOURCES)` 把三源合成一张跨源榜；现在每个源各自成榜。
    */
   const fetchCharts = useCallback(async (source: ToplistSourceKey) => {
     const fetchId = ++chartsFetchIdRef.current;
@@ -337,10 +334,8 @@ const DiscoverPageV2: React.FC = () => {
   const handlePlaySong = async (song: Song, chartId?: string) => {
     if (chartId) playedChartIdRef.current = chartId;
     try {
-      // 无 url 歌曲（排行榜/推荐页）：按「歌名 歌手」补一个**精确匹配**的可播版本，
-      // 且只回填 url（歌名/歌手/封面保持点击的歌）——绝不用搜索结果第一条顶替，
-      // 否则酷我这类搜索排序差的源会播放同名不同歌手的歌（如《单车恋人》→ cover 版）。
-      // #639 C3：这段判据与编排在 core（唯一一份），这里只接 adapter。
+      // #639 C3：无 url 歌曲按「歌名 歌手」补一个**精确匹配**的可播版本，且只回填 url（歌名/歌手/封面保持点击的歌）——
+      // 绝不用搜索结果第一条顶替，否则酷我这类排序差的源会播同名不同歌手的歌（如《单车恋人》→ cover 版）。判据与编排在 core。
       await play(await resolvePlayableVersionForDesktop(song));
     } catch (error) {
       console.error('播放失败:', error);
@@ -408,9 +403,6 @@ const DiscoverPageV2: React.FC = () => {
 
   /**
    * 歌单 tab 的懒加载入口（#415）。
-   *
-   * 为什么懒：`cloudsearch/pc` **已是搜索页在用的腿**（关键词变化时网易打 1 发搜索），
-   * 歌单搜索若也随关键词无条件再打一发，该腿每页请求数直接翻倍。
    * 这里还叠了一层「同关键词只发一次」的闸门；core 侧另有 6h 缓存 + 同键单飞兜底。
    */
   const ensurePlaylistsSearch = useCallback((keyword: string, force = false) => {

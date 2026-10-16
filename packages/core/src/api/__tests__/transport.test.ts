@@ -13,10 +13,9 @@ import {
 } from '../transport.js';
 
 /**
- * 传输接缝测试（T01 切片 1）：
- * 接缝 = core 请求层底部的可注入传输（Transport）。
- * 直接客户端（T02+）与预检（T12）统一经 `request()` 出网；
- * 测试注入 mock 传输即可驱动全部请求层行为，不真实出网（默认实现除外）。
+ * 传输接缝测试（T01 切片 1）：接缝 = core 请求层底部的可注入传输（Transport）。
+ * 直接客户端（T02+）与预检（T12）统一经 `request()` 出网；测试注入 mock 传输即可驱动全部请求层行为
+ * ，不真实出网（默认实现除外）。
  */
 
 afterEach(() => {
@@ -101,12 +100,9 @@ describe('transport 接缝', () => {
 });
 
 /**
- * 统一重试 + TLS 降级（T09 spec #155）：
- * 重试接缝 = core 请求层底部的 `request()`（对新代码统一出网点生效）。
- * - 5xx / 网络错误按策略重试（maxRetries=3，指数退避）；4xx 与「会话失效」不重试；
- * - 内容直链（content 标记）在 TLS 握手失败时用降级配置重试一次（仅桌面：
- *   需先 `setTlsDegradeProvider` 注入降级 agent 提供者；RN/未注入不触发）。
- * 退避用 fake timers 确定性断言。
+ * - 5xx / 网络错误按策略重试（maxRetries=3，指数退避）；4xx 与「会话失效」不重试；- 内容直链（
+ * content 标记）在 TLS 握手失败时用降级配置重试一次（仅桌面：需先 `setTlsDegradeProvider` 注入降级 
+ * agent 提供者；RN/未注入不触发）。
  */
 describe('统一重试（T09）', () => {
   beforeEach(() => {

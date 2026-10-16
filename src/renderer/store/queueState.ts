@@ -8,29 +8,9 @@ import {
 } from '@mplayer/core';
 
 /**
- * 队列状态转移的**唯一入口**（#639 C1）。
- *
- * ## 为什么要它
- *
- * 队列状态是**一份**东西（成员序 + 当前下标 + 随机序 + 游标），但它此前从 14 个
- * action 各写一遍同一个三连：
- *
- * ```ts
- * const nextShuffle = syncShuffle(get(), next, idx, opts);
- * set({ currentPlaylist: next, currentPlaylistIndex: idx, shuffle: nextShuffle });
- * persistQueue(next, idx, nextShuffle);
- * ```
- *
- * 每一次漏掉或写错一格，游标就与当前曲**静默脱节**——本仓为此修过三次
- * （#511 评审的「失败跳歌漏同步」、`play()` 的「预取顺序反了」、#639 R3）。
- * 那些 bug 的形状都一样：**下标变了、随机序没跟上**。本模块让这两件事
- * 在类型上无法分开：`planQueueState` 同时产出 `index` 与 `shuffle`。
- *
- * ## 边界（不纳入的）
- * - `currentSong`：它不是 `playlist[index]` 的严格派生——点歌时存的是用户点的那份
- *   对象、队列里可能是另一份副本，合并会改变封面等行为。**有意留在调用方**。
- * - 落盘：走 store 的订阅单一出口（见 `playerStore` 的 `persistQueue` 订阅），
- *   不在本模块内做 I/O —— 纯函数才可零 mock 单测。
+ * 队列状态转移的**唯一入口**（#639 C1）。队列状态是**一份**东西（成员序 + 下标 + 随机序 + 游标），此前 14 个 action 各写一遍
+ * `syncShuffle` + `set` + `persistQueue` 三连；漏写/写错一格，游标就与当前曲**静默脱节**（本仓为此修过三次，形状都是「下标变了、
+ * 随机序没跟上」）。`planQueueState` 同时产出 `index` 与 `shuffle` 使其无法分开；`currentSong` 有意留调用方，落盘走 store 订阅出口。
  */
 
 /** 生成随机序列时的策略（决定「要不要游标跟随」「要不要现洗」「要不要重洗」）。 */

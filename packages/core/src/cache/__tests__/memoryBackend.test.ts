@@ -7,9 +7,6 @@ const bytes = (s: string) => new TextEncoder().encode(s)
 
 /**
  * #410 ①：L1 缓存「声明了容量却从不淘汰」。
- * `maxMemoryEntries` 全仓只有声明 / 默认值 / 赋值三处命中，没有任何读取；
- * 内存后端的 Map 只增不减 —— 手机端单进程长驻，每播一首歌写一条
- * `song:<身份键>`、每看一次网易内容写一批 LRC，内存只涨不落。
  */
 describe('L1 内存后端：容量与 LRU（#410）', () => {
   it('淘汰的是最久未用的那条，刚读过的键留下', async () => {

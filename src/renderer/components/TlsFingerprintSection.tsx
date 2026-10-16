@@ -6,8 +6,6 @@ import { IpcClient } from '@/renderer/services/IpcClient';
 /**
  * TLS 指纹伪装险情开关（T10 spec #156，仅桌面）。
  * 默认关；开启后桌面 weapi 请求附带指纹特征调整（自定义 https agent + 附加请求头）。
- * 能力边界：Node 层无法伪造完整 JA3/JA4，此为 best-effort 特征偏置，用于对抗
- * 基础 UA/头级风控；若上游做精确 ClientHello 指纹比对则不足以绕过。
  */
 const TlsFingerprintSection: React.FC = () => {
   const [enabled, setEnabled] = useState(false);

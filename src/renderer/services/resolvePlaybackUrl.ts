@@ -1,25 +1,9 @@
 import type { PlaybackFailureAdvice, Song } from '@mplayer/core';
 
 /**
- * 播放地址解析（#639 C2）：**输入一首歌，输出它的可播地址或失败归因**。
- *
- * 从 `playerStore.play()` 里提出来的一段（189 行 async 中的最密部分）——它原先混在
- * 传输层加载与四种簿记之间，没有独立接缝，于是只能靠 mock 整张 import 图来测。
- * 本模块**零副作用**：不碰 store、不碰 audioPlayer、不写日志、不弹 toast，
- * 所以它可以零 mock 单测（依赖以端口注入）。
- *
- * ## 契约
- * - 返回 `{ url, nonFull, advice }`：`url` 为空即「解析链没拿到地址」，
- *   同时给出 core 的失败归因（`advice`，可能为 null = 归因本身也失败）。
- * - **不抛错**：失败以返回值表达。异常语义（`PlayableUrlMissingError`）留在编排层
- *   ——`play()` 的 catch 与 `onLoadError` 回调靠 `instanceof` 区分「解析链穷尽」
- *   与「播放器/网络失败」，那条判据不该被搬动。
- * - `nonFull` = 解析结果为**试听片段**（驱动换源提示与徽标）。
- *
- * ## 分支（与原实现逐条对应）
- * 1. 本地文件：`song.url` 直接用，不解析；
- * 2. 汽水且无 url：走 `getSodaPlayableUrl`（分享页免登录直链）；
- * 3. 其余远程源：先（`fresh` 时）遗忘该曲预取条目，再走路由解析链。
+ * 播放地址解析（#639 C2）：**输入一首歌，输出可播地址或失败归因**。从 `playerStore.play()` 提出来的最密一段，**零副作用**
+ * （依赖以端口注入）故可零 mock 单测。契约：返回 `{ url, nonFull, advice }`（`url` 空 = 没拿到地址）；**不抛错**（异常语义留在编排层
+ * 供 `instanceof` 区分）。分支：本地文件直接用 `song.url`；汽水无 url 走 `getSodaPlayableUrl`；其余远程源走路由解析链。
  */
 
 /** 本模块的依赖端口（全部由调用方注入，便于零 mock 测试）。 */
