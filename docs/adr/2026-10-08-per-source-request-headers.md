@@ -155,6 +155,25 @@ export function requestHeadersFor(source?: string): Record<string, string> {
 - **QQ 仍是唯一完全未走到的源**：匿名直连下 `qqDirect.resolvePlayableUrl` 恒返回空串（源码注释 `if (!purl) return ''; // 无版权/VIP → 换元层`，`qqDirect.ts:470`）；扫了 15 个关键词 × 前 6 首（90 首）**零条**可解析。这与出口 IP 无关，是 QQ 的源站策略（需登录态/版权），本机匿名环境绕不过。
 - 本轮是**模拟器**，不是真实出口 IP；probe 是**本机自建**的目标域，不是酷狗/QQ 的真实 CDN。第 1–3 条证的是「头拼装 + 注入 + 跟跳存活 + 快照保留」，这些与目标域无关，故成立。
 - **上一条也需更正**：#634 那轮设备经查是真机（`ro.hardware=qcom`、`ro.product.model=25102RKBEC`、`ro.kernel.qemu` 为空），宿主出口 IP `66.90.99.211` 公网可路由；当初记为「模拟器 / 无真实出口 IP」不准确。第 1–3 条结论不受影响（那三条与目标域无关）。
+- **⚠️ 本 ADR 的原始前提已被实测证伪（2026-10-16，五臂对照）**：`packages/core/src/utils/sourceReferer.ts:4` 与本票 #592 立项时引用的断言——「源 CDN 防盗链校验 Referer 域名（**酷狗/QQ 严格**，网易云宽松）」「带错 Referer（如 API 域名）会 403 → 播放失败跳下一首」——**从未有过 A/B 证据**，出自一段无出处的代码注释（`playSong` 里的三行，现已不在仓库）。五臂实测（无头 / 对源 Referer / **空串** Referer / **跨源** Referer / **假 API 域** Referer）打在**真实**音频直链与真实封面 URL 上，覆盖 kugou / netease / kuwo / migu / qq 五源：
+
+  ```text
+  ### [kugou]   音频 sharefs.kugou.com   bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (4293476b 全部一致)
+                封面 imge.kugou.com      bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (48165b  全部一致)
+  ### [netease] 音频 m801.music.126.net  bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (4481402b)
+                封面 p2.music.126.net    bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (884771b)
+  ### [kuwo]    音频 kw-bj.kuwo.cn       bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (16009b)
+                封面 img1.kuwo.cn        bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (4764b)
+  ### [migu]    音频 freetyst.nf.migu.cn bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (4536154b)
+                封面 d.musicapp.migu.cn  bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200  (5868b)
+  ### [qq]      音频 (匿名直连拿不到 purl)  封面 y.gtimg.cn  bare=200 correct=200 emptyRef=200 wrongRef=200 apiDomain=200
+  ```
+
+  即：**这批 CDN 对 Referer 完全不敏感**——不带、带空串、带别家域名、带假 API 域，全部 200 且字节逐字一致。所以：
+  - 「严格防盗链」这个风险面**在本轮测到的 CDN 上不存在**；#592 立项理由、#602「未取证不得合并」的三条证据、以及本 ADR 的「可能触发更严风控」担忧，**都建立在一个未验证（且现已证伪）的前提上**。
+  - 但这**不等于**这份头没用：Referer 校验通常是**按 CDN 节点 / 按链路档位**生效的（本轮样本走的是各自 CDN 的公开档），也不能排除「某些曲目 / 某些地区 / 某些时段」会校验。正确的结论是「**该前提未被证实**」，而不是「该前提为假」。
+  - 真机上另有一条与本 ADR 无关但同源的观察：Android dev build 冷启进 App 后点歌，报的是「**直连没取到可播链接**（tier3 未开启）」而非 403——即真机侧的失败也发生在**解析阶段**，与 CDN 是否放行无关。
+  - **待决**：若这份头在可测范围内始终不产生收益，那么「让 Android 开始发头」这个行为变更的收益/风险比需要重新评估（回退方式见下）。跟踪 issue 见 #647。
 - **「真机」两个字要按下面这层读，别读大**（2026-10-16 复核）：
   - 第 1–3 条跑在 **Android 模拟器**（雷电，adb 序列号 `emulator-5556`；虽报 `ro.hardware=qcom` / `ro.product.model=25102RKBEC`，但它是模拟器进程而非物理手机）。`usbipd list` 当前**未挂任何手机**（仅摄像头 / 大容量存储 / 蓝牙，全部 `Not shared`），所以 `npm run mobile:e2e`（`scripts/mobile-e2e.mjs`，要求 usbipd 直挂真机）**本轮未走、当前也走不了**。
   - 第 4 条的 38 个 A/B 样本是**宿主 Node 进程**发出的真实网络请求（直连客户端注册在 core 里、走真实出网，宿主出口 IP 公网可路由），**不是设备上的请求**。它验的是「这条 URL 在 CDN 侧带不带头都放行且字节一致」，**不覆盖**「移动端原生 media3 拿这条真实直链能否播通」。
