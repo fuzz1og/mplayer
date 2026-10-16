@@ -1,8 +1,19 @@
 /**
  * 浏览器 UA 与「源 → 官方站点 Referer」映射（core 共享）。
  *
- * 源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格，网易云宽松）：
- * 302 解析、音频探测、播放器请求都要带官方 Referer 才会被 CDN 接受。
+ * 302 解析、音频探测、播放器请求都带浏览器 UA + 按源推导的官方 Referer。
+ *
+ * ⚠️ **本文件原先的「源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格，网易云宽松）」是一条
+ * 无出处的注释**，没有 A/B 证据，却撑起了 #592 立项、#602「未取证不得合并」与 ADR
+ * `2026-10-08-per-source-request-headers.md` 的全部风险讨论。2026-10-16 用真实音频直链与
+ * 真实封面 URL 打五臂对照（无头 / 对源 / 空串 / 跨源 / 假 API 域）：kugou / netease /
+ * kuwo / migu 四源各 1 条音频 + 1 条封面、加 QQ 封面共 9 个真实 URL × 5 臂 = 45 次请求
+ * **全部 200 且逐 URL 字节一致**——该前提**未被证实**（#647）。
+ *
+ * 所以这里的口径是：**带这份头是无害的、可能覆盖未测到的 CDN 档位**，而不是「不带就 403」。
+ * 若日后要论证它有必要，须先拿出可复核的证据（见 `docs/agents/issue-tracker.md` 的
+ * 「无出处的断言不得当事实传播」）。
+ *
  * 统一放 core，避免 musicApi / audioProbe / 播放器三处各自复制、
  * 且 key 形状不一致（api.php type 参数 wy/kg 与 Song.sourceType
  * netease/kugou 混用）导致漏配。
@@ -76,7 +87,7 @@ export function refererForSourceKey(sourceKey: string): string | undefined {
  * - `Referer` **按 `Song.sourceType`（netease/kugou/...）** 取官方站点域名；源表同时
  *   兼容 `api.php` 的 type 形状（`wy`/`kg`），两种 key 都能命中。
  * - **未知源 / `soda` / `local` / 缺省一律不带 `Referer`**——没有可冒用的官方域名时
- *   宁可不带头：空字符串 `Referer` 是「带错头」，比不带更容易被防盗链拒。
+ *   宁可不带头：空字符串 `Referer` 是「带错头」这一形态本身就该避免（是否真被拒见 #647）。
  *
  * 刻意不归入本函数的两类调用点（语义不同，别顺手改）：
  * - `audioProbe.ts` 的活性闸 / `musicApi.ts` 的歌词请求：Referer 由 **URL** 推导

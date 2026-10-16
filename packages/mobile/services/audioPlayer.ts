@@ -661,10 +661,12 @@ export async function playSong(song: Song, retryCount = 0, fresh = false): Promi
       );
     }
 
-    // 播放器请求头：CDN 可能校验 UA/Referer。Referer 按源映射官方域名——
-    // 网易云 CDN（music.126.net）宽松不校验，酷狗/QQ 等 CDN 防盗链校验
-    // Referer 域名，带错 Referer（如 API 域名）会 403 → 播放失败跳下一首
-    // （图片 CDN 校验宽松所以封面正常、音频失败）。UA 保持浏览器特征。
+    // 播放器请求头：带浏览器 UA + 按源映射的官方 Referer。
+    // ⚠️ 这里原先有一段断言 CDN 按 Referer 域名校验、并称「带错 Referer 会 403 → 播放失败跳
+    // 下一首」。**那条断言没有出处**，且正是 #592 立项 / #602 / ADR 2026-10-08 风险讨论的源头
+    // （原文已删，此处不复述其结论）。2026-10-16 五臂实测（无头/对源/空串/跨源/假 API 域）
+    // 在 9 个真实 URL 上 45 次请求全部 200 且字节一致，前提**未被证实**（#647）。保留这份头的
+    // 理由是「无害且可能覆盖未测档位」，不是「不带就 403」。
     // #592：整份头取 core 单点 `requestHeadersFor`（未知源不再发空字符串 Referer）。
     // 注意：Android 原生主引擎仍走 nativePlayer 的空壳——「让它也带这份头」是 #592
     // 的另一半（网络行为变更，需真机取证），见 ADR 2026-10-08-per-source-request-headers。

@@ -8,8 +8,8 @@
  * - 「反同源连续」：同一源相邻请求尽量不重复同一 UA（按 `sourceKey` 独立轨道，
  *   不带 sourceKey 走默认轨道，保证跨源也不连续）；循环一轮耗尽后按轮转补位；
  * - 请求头「两态」：
- *   - 浏览器态 `getAntiScrapeHeaders(referer?, sourceKey?)` —— 源站直连/CDN 防盗链
- *     用，携带 sec-ch 满套 + 按 referer 的 `Sec-Fetch-Site`；
+ *   - 浏览器态 `getAntiScrapeHeaders(referer?, sourceKey?)` —— 源站直连用，携带 sec-ch 满套
+ *     + 按 referer 的 `Sec-Fetch-Site`（防盗链收益未被证实，见 #647）；
  *   - API 态 `getApiRequestHeaders(sourceKey?)` —— 自建搜索 API / 稳定 JSON 端点用，
  *     最小头、不带 sec-ch 套、默认不带 Referer（不污染直连/自有 API）；
  * - `safeParseJSON(text)`：非 JSON/HTML 包裹/尾逗号等脆弱响应三级降级，失败返回 null
@@ -232,8 +232,8 @@ function getSecChUa(ua: string): string {
 }
 
 /**
- * 浏览器态请求头（T11「两态」之一）：源站直连/CDN 防盗链需要完整浏览器特征时使用。
- * - `referer` 存在 → `Sec-Fetch-Site: same-origin`（CDN 防盗链放行的「同源」语义）；
+ * 浏览器态请求头（T11「两态」之一）：需要完整浏览器特征时使用（无害；防盗链收益见 #647）。
+ * - `referer` 存在 → `Sec-Fetch-Site: same-origin`（按「同源」语义设，非实测结论）；
  * - `sourceKey` 用于反同源连续（可选，不带则走默认轨道）；
  * - 保持 T11 前兼容：`getAntiScrapeHeaders()` / `getAntiScrapeHeaders(referer)` 仍可用。
  */

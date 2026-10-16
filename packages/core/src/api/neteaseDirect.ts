@@ -70,7 +70,7 @@ const NETEASE_CAT_MAP: Record<number, { type: number; area: number }> = {
   6001: { type: 1, area: 8 },  // 日本
 };
 
-/** 明文接口统一请求头（浏览器特征，防盗链/风控）。 */
+/** 明文接口统一请求头（浏览器特征）。防盗链/风控收益未被证实，见 #647 与 audioProbe 文件头。 */
 const PLAINTEXT_HEADERS: Record<string, string> = {
   'accept': 'application/json, text/javascript, */*; q=0.01',
   'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',

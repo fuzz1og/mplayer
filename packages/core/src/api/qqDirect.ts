@@ -516,7 +516,8 @@ export const qqDirectClient: DirectSourceClient = {
 
 /**
  * 网关取歌词（GetPlayLyricInfo）：与搜索/GetVkey 同一 musicu POST 通道，
- * 服务端不做 Referer 防盗链校验——c.y.qq.com fcg GET 强制 Referer，而 RN
+ * 服务端不做 Referer 防盗链校验（实测：缺 Referer 时真机被拒，retcode=-1310）——
+ * c.y.qq.com fcg GET 强制 Referer，而 RN
  * 网络栈发出的该请求在真机上被拒（桌面 Chromium/Node 栈正常），移动端歌词
  * 因此拿不到；此函数是 getLyrics 的 QQ 兜底腿（真机已验证该通道可用）。
  * 注意：param 里 songID 键必须整个省略——服务端按 songMID 自查数字 id，

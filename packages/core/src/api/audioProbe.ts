@@ -1,8 +1,11 @@
 import { request } from './transport.js';
 import { URL_ALIVE_PROBE_TIMEOUT_MS } from '../shared/playbackBudgets.js';
 
-// 活性闸请求头：源 CDN 防盗链校验 Referer 域名（酷狗/QQ 严格），
-// 不带/带错会 403；部分 CDN 拒非浏览器 UA。
+// 活性闸请求头：带浏览器 UA + 按源推导的官方 Referer。
+// ⚠️ **不要把「不带/带错 Referer 会 403」当事实**——那句话是无出处的注释，撑过 #592/#602 的
+// 全部风险讨论；2026-10-16 五臂实测（无头/对源/空串/跨源/假 API 域）在 9 个真实 URL 上
+// 45 次请求全部 200 且字节一致，即该前提**未被证实**（#647、ADR 2026-10-08 §真机取证）。
+// 保留这份头的理由是「无害且可能覆盖未测到的档位」，不是「已证有必要」。
 // UA 与按源 Referer 映射见 utils/sourceReferer.ts（core 共享，与 musicApi/播放器同一份）。
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 
@@ -16,7 +19,8 @@ function probeRequestHeaders(url: string): Record<string, string> {
 /**
  * 播放期直链活性闸的 Range GET：统一走传输层（与直连客户端/歌词门面同一传输接缝，
  * 默认 axios 实现，重试/超时行为一致；302 由 axios 自动跟随到 CDN 直链），
- * 并带 CDN 防盗链头（Referer/UA）。网络异常直接上抛——极性由调用方定义。
+ * 并带浏览器 UA + 按源推导的 Referer（无害；是否必要见文件头 ⚠️ 与 #647）。
+ * 网络异常直接上抛——极性由调用方定义。
  */
 async function rangedGet(url: string, rangeEnd: number, timeoutMs: number) {
   return request({

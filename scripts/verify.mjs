@@ -13,7 +13,7 @@
  *
  * 用法:
  *   npm run verify                     # all：static + renderer + main + core + mobile + expo
- *   npm run verify -- static           # docs 门禁 + core:build + lint + design-lint + 双端 typecheck + build
+ *   npm run verify -- static           # docs 门禁 + core:build + lint + design-lint + claim-lint + 双端 typecheck + build
  *   npm run verify -- renderer         # 根 vitest（renderer + src/__tests__ 顶层）
  *   npm run verify -- main             # 主进程 vitest（node env，独立 config）
  *   npm run verify -- core             # @mplayer/core vitest
@@ -101,6 +101,7 @@ const SHARDS = {
     ['core typecheck', 'npm run typecheck -w packages/core'],
     ['lint', 'npm run lint'],
     ['design-lint', 'node scripts/design-lint.mjs'],
+    ['claim-lint', 'node scripts/claim-lint.mjs'],
     ['root typecheck', 'npm run typecheck'],
     ['mobile typecheck', 'npm run typecheck:mobile'],
     ['build', 'npm run build'],

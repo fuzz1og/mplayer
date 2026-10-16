@@ -467,8 +467,10 @@ export const musicApi = {
       return cachedData;
     }
 
-    // 第三方歌词 URL（QQ fcg / 酷我 newlyric / 酷狗两步）需要浏览器 UA + 官方 Referer，
-    // 否则 CDN 防盗链会因 axios 默认 UA / 缺 Referer 返回 403 或空响应。
+    // 第三方歌词 URL（QQ fcg / 酷我 newlyric / 酷狗两步）需要浏览器 UA + 官方 Referer。
+    // ⚠️ 强度分源，别一概而论：QQ fcg 确有实测——RN 网络栈缺 Referer 时真机被拒
+    // （retcode=-1310，见 qqDirect.ts fetchLyricViaGateway 注释与 qqLyricGateway.test.ts）；
+    // 酷狗/酷我歌词端点的防盗链收益则未被证实（同 #647：五臂实测未复现）。
     const referer = refererForUrl(fullUrl);
     const isKuwoLyric = fullUrl.includes('newlyric.kuwo.cn');
     const isKugouLyric = fullUrl.includes('lyrics.kugou.com/search');
