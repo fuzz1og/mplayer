@@ -23,6 +23,7 @@ cd .claude/worktrees/<slug>
 
 - 分支命名 `<type>/<slug>`：`feat/` `fix/` `docs/` `chore/` `refactor/` `perf/`（与 commit type 同表；`perf/` 是本仓既有的性能类分支前缀），slug 用短英文（如 `fix/mobile-parity-tier3`）。
 - 一个任务一个新 worktree + 新分支；不在旧分支上叠新工作。
+- **分支名要在第一次 `git push -u` 之前就定对**——推上去之后**改不了 PR 的 head**：`gh pr edit` 没有 `--head` 参数，API `PATCH /repos/{o}/{r}/pulls/{n}` 传 `head=<分支>` 也会**静默忽略**（返回 200 但 `head.ref` 不变）。实测唯一可行路子是**关掉旧 PR、用新分支名重开**，代价是丢掉原 PR 编号与它的评论线程。所以命名别指望事后补救；开 PR 前先对照上一行核一遍。
 - `.claude/worktrees/` 已 gitignore，是默认的 worktree 位置。
 - worktree 缺 node_modules 就地 `npm install`，不要从主克隆复制（依赖漂移）；软链同理——真机调试时 `expo-router` 按「被转换文件的真实路径」反推 app root，会把源码解析回主克隆、打包到主克隆的 `app/`（见 `runtime-verification` skill）。
 - **跳过 `npm install` 会让类型检查静默对着主克隆的 core 跑**：worktree 没有自己的 `node_modules` 时，`@mplayer/core` 会沿目录向上解析到主克隆的 `node_modules/@mplayer/core`（指向主克隆的 `packages/core`），于是 `typecheck` / `typecheck:mobile` 检查的是**主克隆的 core，而不是你正在改的那份**——改了 core 的公开接口却全绿（或反之报一堆莫名其妙的错）都出自这里。绕开安装只做局部验证时，**以 CI 为准**（CI 会 `npm ci` + `core:build`）。
