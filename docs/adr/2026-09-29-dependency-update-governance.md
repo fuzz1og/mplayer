@@ -52,3 +52,34 @@ GitHub 官方唯一给出的分组示例也落在低风险层：`you can combine
   - **这不是「override 有行为风险所以别动」，而是「没有目标版本」**：`shell-quote` 那条路的前置条件是存在一个「干净 + 被 `^1.x` 接受」的版本；braces 连干净版本都没有，差测根本无从谈起。为免日后误判成「还没试过」，顺手把可移植性也算清了：braces `2.3.2` 与 `3.0.3` 在 32 个 glob 模式上有 **31 个逐字节相同**，唯一差异是 `[!abc].js`（2.3.2 归一成 `[^abc./].js`，3.0.3 原样保留）——**3.0.3 才是更正确的那份**，回退到 2.x 是行为退化，不是透明降级。
   - **上游路径已堵到 SDK 之外**：`micromatch` 的 `latest` 仍是 `4.0.8`（依赖 `braces@^3.0.3`）；`metro-file-map` 从 `0.83.3` 到 `0.87.1`（含 metro `latest` `0.87.1`）**一律** `micromatch@^4.0.4`。也就是说升 metro 不会甩掉 braces，只能等 braces 自己发版。
   - **可利用性口径（勿夸大也勿当无事）**：两条 sink 里 `compile`（默认 `braces()`）被 `maxLength`（默认 10,000 字符）挡住——深度 5000 即 10,001 字符，`SyntaxError` 先抛（depth ≤ 4999 全部正常返回）；`expand()` 无字符护栏，depth 4000 即 `RangeError: Maximum call stack size exceeded`（2.3.2 更浅，depth 3500 就崩）。**而本仓实际走的那条路够不到 sink**：`metro-file-map` 只调 `micromatch.some(relativePath, globs, {dot})` → `picomatch(pattern, options)`，`picomatch/lib/parse.js` 既不 `require('braces')` 又置 `braces: 0`（关闭展开）；braces 展开只挂在 `micromatch.parse` / `.braces` / `.braceExpand` 上。实测把深度 500/2000/4000/5000 的嵌套 glob 喂给 `mm.some` **全部正常返回**（最慢 466ms）。即：**可达性上本仓不受影响，但依赖树里那条 high 是真的**，处置只能是等上游发版，或由上游维护者（GHSA 下 `jonschlinkert` 已表态需加 `maxDepth`）给出新版本。
+
+- **更新（2026-10-26，#656）：#636 的 `braces` 残余已解除——advisory 被上游撤回**。`GHSA-vfj7-8cjw-p6xm` 已于 **2026-10-23T12:53:02Z** 置 `withdrawnAt`（OSV `GET /v1/vulns/GHSA-vfj7-8cjw-p6xm` 可复核）。OSV 实测 `braces@3.0.3` 返回空，而仓库锁定在 `braces@3.0.3`（`expo → @expo/metro → metro-file-map → micromatch@4.0.8 → braces@3.0.3`）。因此上一个更新里的「两条 advisory 区间盖满全部已发布版本」**不再成立**：区间只剩 `GHSA-grv7-fg5c-xmjg`（`fixed: 3.0.3`），而 3.0.3 恰好就是修复版。`npm audit` 里整棵 `braces → micromatch → metro-file-map → @expo/metro → expo` 大树随之消失，**无需任何 override**。这与上文「解除条件」一段的预期一致——解除条件写成「上游发一版同时避开两条」，实际以**撤回一条**的方式达成，效果相同。留存教训：advisory 的 `last_affected` 不是永久事实，weekly audit 的条目会因上游撤回而自行消解，**归因结论要带复核时刻**。
+
+## 2026-10-26 残余清单（#656 周报：16 → 9）
+
+`npm audit`：**16 条（9 high / 7 moderate / 0 critical）→ 9 条（6 high / 3 moderate / 0 critical）**。修掉的 7 条全部是「声明区间内可达 → `npm update` / 同 major 内 `npm install`」，无一条需要 override、无一条是 major 跳级。
+
+### 已修（7 条，全部 devDependencies 路径，不进产物）
+
+| 包 | 修前 | 修后 | 手段 | 说明 |
+| --- | --- | --- | --- | --- |
+| `vite` | 7.3.6 | 7.3.7 | 同 major patch | advisory 区间 `>=7.0.0 <=7.3.6`，7.3.7 实测 OSV 返回空。**注意：dependabot #657 也把 vite 7.3.6 → 7.3.7**，两处同值，先合哪条都能被另一条吸收 |
+| `vitest` | 4.1.11 | 4.1.12 | 同 major patch | `GHSA-qxg6-89mg-rqv8` / `GHSA-xp26-3454-mjgp` 区间上界 `<4.1.12` |
+| `@vitest/coverage-v8` | 4.1.11 | 4.1.12 | 同 major patch | 声明在 `packages/core/package.json`，**根 manifest 里没有**，容易漏 |
+| `@vitest/mocker` | 4.1.11 | 4.1.12 | 随 vitest 精确钉版 | `vitest@4.1.12` 把 `@vitest/mocker` **精确钉**在 `4.1.12`，不需要也不能单独声明 |
+| `follow-redirects` | 1.16.0 | 1.16.2 | `npm update` | `axios@^1.20.0` 声明 `^1.16.0`，区间内可达 |
+| `fast-uri` | 3.1.8 | 3.1.9 | `npm update` | `ajv@8.20.0` 声明 `^3.0.1`，区间内可达 |
+| `undici` | 7.30.0 / 8.11.2 / 6.29.0 | 7.30.1 / 8.12.3 / 6.29.1 | `npm update` | 三个副本各升一档；各父级声明 `^7.24.4` / `^8.11.2` / `^6.25.0` 均接受 |
+
+**路径与工具约束**：`npm update vite` / `npm update vitest` 会命中 npm 10.9.8 的 arborist 崩溃（`TypeError: Cannot read properties of null (reading 'edgesOut')`，与上文「未解决：metro 家族」同族）——**必须用 `npm install -D <pkg>@<ver>`**，且 `vitest` 与 `@vitest/coverage-v8` 互为**精确 peer**（`peer vitest@4.1.11`），**单升任一包都会触发该崩溃**；可行路径是同时改根与 `packages/core` 的 manifest 到同一版本后一次解析。本次实测 **npm 10.9.8 与 10.9.9 均崩，npm 12.2.1 可解析**（`lockfileVersion` 仍为 3，`npm ci --ignore-scripts` 用 10.9.8 复核通过）。
+
+### 残余 9 条（不修，逐条归因）
+
+`dependencies`（进产物）只有 `buffer` / `electron-updater` / `mp3tag.js` / `music-metadata` 四个；下面 9 条里**只有 `electron` 与移动端 APK 那三条**在产物路径上，其余全是开发期或 Expo 打包期依赖。
+
+1. **`electron`（high）——进产物，唯一在桌面产物路径上的 high。** 安装版 41.10.7；`fixAvailable` = `electron@45.0.0`（`isSemVerMajor: true`）。**41.x 全系无修复**：advisory 上界 `<42.11.16`，而 41.x 最后一个版本是 **41.10.7**（`npm view electron versions` 实测），根本到不了 42.11.16。**不在本票做的理由**：Electron 是打包后的运行时（主进程 + 内嵌 Chromium），41 → 42 属 major，必须走 `release.yml` 的完整打包与安装包冒烟，且需逐个核 `contextIsolation` / preload 桥 / `electron-updater` 在新 Chromium 下的行为——与本票「同 major 内定点修」不同性质。**另开 issue 跟踪**（见 #656 评论的交叉引用）。可利用性：8 条 advisory 里 7 条是 low/moderate，唯一 high 是「compromised eMudhra intermediate certificates」的证书缓解（`<42.11.16`），对本仓（不加载外部证书链、不跑不可信内容）风险有限但**不归零**。
+2. **`node-forge`（high）——上游无干净版本，与 #636 同类的「真·无解」。** registry `latest` = **1.4.0**，advisory `GHSA-86w9-cpqp-85rv` 区间 `introduced: 0` → **`last_affected: 1.4.0`**（OSV 实测，未撤回）。`npm view node-forge versions` 比 1.4.0 更高的版本**不存在**，因此 override 无论钉哪一版都逃不掉——这与 braces 那次「两条区间盖满」的机理不同，**这次是单条区间就是开区间且上界 = registry 最新版**，更彻底。路径：`expo → @expo/cli → node-forge`，`@expo/cli` 声明 `^1.3.3`。可达性：RSA PKCS#1 v1.5 **签名验证**接受多余嵌套 `DigestAlgorithm`，本仓不调用 `node-forge` 做签名验证（它是 `@expo/cli` 做代码签名证书链的依赖，只在移动端构建期跑），运行时不可达。解除条件：node-forge 发 > 1.4.0。
+3. **`zod`（high）——上游有干净版但被声明区间挡住，且盲顶有风险。** 装 3.25.76；advisory `GHSA-mrhx-c7xc-m3w5` 区间 `introduced: 0` → **`fixed: 4.6.6`**（OSV 实测）。`npm view zod version` = 4.6.7，即**干净版本存在**。挡路的是声明：`@expo/cli@57.0.31` 写 `zod: ^3.25.76`（**3.x**），`eslint-plugin-react-hooks@7.1.1` 写 `^3.25.0 || ^4.0.0`（跨 major 兼容）。**override 到 `4.6.7` 实测可把 16 → 8**，但 `@expo/cli` 是 Expo 打包/开发服务器入口，zod 3 → 4 有已知 breaking（schema API 变动），**盲顶属于「用打包期崩溃换一条 high」**，不是定点修。处置：记残余，**须先有人验一遍 `npx expo` 全链路（`expo start` / `expo export` / 原生构建）在 zod 4 下可用**，才轮得到 override。
+4. **`expo` / `@expo/cli` / `@expo/code-signing-certificates`（high ×3）——纯传递，无独立 sink。** 三者的 `via` 分别指向 `@expo/cli`、`node-forge` / `zod` / `@expo/code-signing-certificates`、`node-forge`，**自身没有独立 advisory**。也就是说它们只是第 2、3 条在依赖树上的投影，随 `node-forge` 发版或 `zod` 解禁自动消解。`npm audit fix --force` 建议的 `expo@44.0.6` 是**降级到 SDK 44**（当前 SDK 57），直接违背本 ADR 决策 1，不可采。
+5. **`expo-router` / `query-string` / `decode-uri-component`（moderate ×3）——进 APK，但修复版需要 SDK 58。** `decode-uri-component` 装 0.2.2；`GHSA-vcc3-ghjq-m6fr` 区间 `<=0.4.2`。**干净版本存在**：OSV 实测 `0.5.0` / `0.5.1` 返回空（`0.2.2` 与 `0.4.2` 均命中）。挡路的是 `query-string@7.1.3` 声明 `decode-uri-component: ^0.2.2`——`^0.2.2` 在 **0.x 语义下只允许 `<0.3.0`**，`0.5.1` 出界。**实测两种 override 写法（根平铺 `overrides.decode-uri-component` 与嵌套 `overrides['query-string'].decode-uri-component`）均静默不生效**——`npm install` 后 lock 里仍是 0.2.2，且 npm 不报错。而 `expo-router` 的修复版 `58.0.26` 属 **SDK 58**，跨 SDK 大版本，按决策 1 不在本票做。可达性：exponential decoding of malformed percent-encoded input，需要攻击者控制被 `decode-uri-component` 解码的输入且重复触发；本仓 mobile 端 `expo-router` 的 query string 来自应用自身路由跳转，非外部不可信输入。处置：记残余，**随 SDK 58 推进自动消解**。
+6. **补充：`braces` 已不在列表里**——见本文开头 2026-10-26 的更新，#636 的残余已由上游撤回 advisory 解除。
