@@ -422,6 +422,76 @@ describe('随机序的编辑（拖拽 / 删除 / 换源）', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// #639 C1 收口：三处绕过 planner 的调用点改为经变体产出
+// ---------------------------------------------------------------------------
+describe('#639 C1：reorder-shuffle / stop / insertNext 空队列都经 planner', () => {
+  it('reorderShuffle：游标由 planner 对到当前曲（拖拽后 cursor 不可能是旧值）', () => {
+    seed([A, B, C, D], 1); // 当前 B
+
+    // 把 A 拖到末尾：B 从序列第 1 格升到第 0 格，游标必须跟着从 1 挪到 0
+    // （若游标不重算，它会停在 1 —— 那里现在是 C，指针与当前曲当场脱节）
+    usePlayerStore.getState().reorderShuffle(0, 3);
+
+    const s = usePlayerStore.getState();
+    expect(s.shuffle!.order).toEqual([B, C, D, A]);
+    expect(s.shuffle!.cursor).toBe(0);
+    expect(s.shuffle!.order[s.shuffle!.cursor]).toBe(s.currentPlaylist[s.currentPlaylistIndex].id);
+  });
+
+  it('reorderShuffle：落盘同步（单一出口仍生效）', () => {
+    seed([A, B, C, D], 1);
+
+    usePlayerStore.getState().reorderShuffle(0, 2);
+
+    const raw = JSON.parse(localStorage.getItem('mplayer_queue') || '{}');
+    expect(raw.shuffle).toEqual({ order: [B, C, A, D], cursor: 0 });
+  });
+
+  it('clearQueue：终止态 = 成员清空 + 下标 -1 + 序列作废，并停播', () => {
+    seed([A, B, C, D], 1);
+
+    usePlayerStore.getState().clearQueue();
+
+    const s = usePlayerStore.getState();
+    expect(s.currentPlaylist).toEqual([]);
+    expect(s.currentPlaylistIndex).toBe(-1);
+    expect(s.shuffle).toBeNull();
+    expect(s.currentSong).toBeNull();
+    expect(s.isPlaying).toBe(false);
+    expect(audioPlayerMock.player.stop).toHaveBeenCalled();
+    // 落盘：空队列 + 无序列（重启不会把旧序列捞回来）
+    expect(JSON.parse(localStorage.getItem('mplayer_queue') || '{}'))
+      .toMatchObject({ playlist: [], index: -1, shuffle: null });
+  });
+
+  it('insertNext 空队列：非随机模式不凭空造序列（与 clearQueue 后的形态对齐）', async () => {
+    usePlayerStore.setState({
+      currentPlaylist: [], currentPlaylistIndex: -1, currentSong: null,
+      playMode: '列表循环', shuffle: null,
+    });
+
+    await usePlayerStore.getState().insertNext(song('netease:9'));
+
+    const s = usePlayerStore.getState();
+    expect(s.currentPlaylist.map((p) => p.id)).toEqual(['netease:9']);
+    expect(s.currentPlaylistIndex).toBe(0);
+    expect(s.shuffle).toBeNull();
+  });
+
+  it('insertNext 空队列（随机）：现洗一份、游标落这首', async () => {
+    usePlayerStore.setState({
+      currentPlaylist: [], currentPlaylistIndex: -1, currentSong: null,
+      playMode: '随机播放', shuffle: null,
+    });
+
+    await usePlayerStore.getState().insertNext(song('netease:9'));
+
+    const s = usePlayerStore.getState();
+    expect(s.shuffle).toEqual({ order: ['netease:9'], cursor: 0 });
+  });
+});
+
 // #511 评审 blocker：失败跳歌也要同步游标（否则序列当场失效、预取按坏歌算下一首）
 // 陷阱：跳歌路径末尾的 play() 在**正常成功路径**里还会再 sync 一次游标（幂等），会掩盖跳歌路径自己
 // 那次写入——所以回归测试必须走 play() **早退**的路径。

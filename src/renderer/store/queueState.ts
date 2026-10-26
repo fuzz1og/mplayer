@@ -26,7 +26,17 @@ export type ShufflePolicy =
   /** 原位换源：先在序列里把 fromId 就地换成 toId（同一格），再对齐。 */
   | 'replace-id'
   /** 播放模式变更（进随机时现洗并落游标）。 */
-  | 'mode';
+  | 'mode'
+  /**
+   * **序列类**：拖拽改的是随机序**本身**（成员序不动）。调用方只给挪好的新顺序，
+   * 游标由本模块对到当前曲——「顺序变了、游标没跟」正是这里要堵的形状。
+   */
+  | 'reorder-shuffle'
+  /**
+   * **终止类**：队列终止（成员清空 + 无当前曲 + 序列作废）。与 {@link QueueState} 的
+   * 「落点归零」不是一回事：`playerStore.stop()` 只停播、队列与序列都保留（那是 `align` + index -1）。
+   */
+  | 'stop';
 
 export interface QueueState {
   playlist: Song[];
@@ -36,9 +46,9 @@ export interface QueueState {
 }
 
 export interface QueueChange {
-  /** 新的成员序（成员类变更传新数组；纯落点/模式变更传原数组）。 */
+  /** 新的成员序（成员类变更传新数组；纯落点/模式/序列变更传原数组；`stop` 忽略它）。 */
   playlist: Song[];
-  /** 新的当前下标（-1 = 无当前曲）。 */
+  /** 新的当前下标（-1 = 无当前曲；`stop` 忽略它，恒产出 -1）。 */
   index: number;
   policy: ShufflePolicy;
   /** `settle` 时 core 算好的权威序列。 */
@@ -47,6 +57,11 @@ export interface QueueChange {
   replaceId?: { from: string; to: string };
   /** 覆盖用的播放模式（`mode` policy）；缺省取 state.playMode。 */
   playMode?: PlayMode;
+  /**
+   * `reorder-shuffle` 的**新随机序**（调用方只负责拖拽的数组数学，游标归本模块）。
+   * 缺省/无序列时是空操作——没有序列就没有可拖拽的顺序。
+   */
+  order?: readonly string[];
 }
 
 /** 两份队列是否同一批歌（只看 id 集合）——区分「整批换队列」与「同一队列原地改」。 */
@@ -54,6 +69,13 @@ function sameSongIdSet(a: readonly Song[], b: readonly Song[]): boolean {
   if (a.length !== b.length) return false;
   const ids = new Set(a.map((s) => s.id));
   return b.every((s) => ids.has(s.id));
+}
+
+/** 随机模式下「没有序列就现洗一份、游标落当前曲」——locate / reseed / mode 三处同一口径。 */
+function shuffleOrNull(playlist: readonly Song[], index: number, playMode: PlayMode): ShuffleState | null {
+  return playMode === '随机播放' && playlist.length > 0
+    ? createShuffleState(playlist, { currentIndex: index })
+    : null;
 }
 
 /**
@@ -82,13 +104,7 @@ export function planQueueState(state: QueueState, change: QueueChange): QueueSta
     case 'reseed': {
       const reseed = !sameSongIdSet(state.playlist, playlist);
       if (!state.shuffle || reseed) {
-        return {
-          playlist, index,
-          shuffle: playMode === '随机播放' && playlist.length > 0
-            ? createShuffleState(playlist, { currentIndex: index })
-            : null,
-          playMode,
-        };
+        return { playlist, index, shuffle: shuffleOrNull(playlist, index, playMode), playMode };
       }
       return { playlist, index, shuffle: syncShuffleCursor(state.shuffle, playlist, index), playMode };
     }
@@ -96,13 +112,7 @@ export function planQueueState(state: QueueState, change: QueueChange): QueueSta
     // 落点：没有序列时按模式决定要不要现洗（随机才现洗），有则对游标
     case 'locate': {
       if (!state.shuffle) {
-        return {
-          playlist, index,
-          shuffle: playMode === '随机播放' && playlist.length > 0
-            ? createShuffleState(playlist, { currentIndex: index })
-            : null,
-          playMode,
-        };
+        return { playlist, index, shuffle: shuffleOrNull(playlist, index, playMode), playMode };
       }
       return { playlist, index, shuffle: syncShuffleCursor(state.shuffle, playlist, index), playMode };
     }
@@ -113,12 +123,25 @@ export function planQueueState(state: QueueState, change: QueueChange): QueueSta
       if (state.shuffle) {
         return { playlist, index, shuffle: syncShuffleCursor(state.shuffle, playlist, index), playMode };
       }
+      return { playlist, index, shuffle: shuffleOrNull(playlist, index, playMode), playMode };
+    }
+
+    // 序列类：接受挪好的新顺序，游标对到当前曲（成员序原样不动）
+    case 'reorder-shuffle': {
+      if (!state.shuffle || !change.order) {
+        return { playlist, index, shuffle: state.shuffle, playMode };
+      }
+      const order = [...change.order];
+      const currentId = playlist[index]?.id;
       return {
-        playlist, index,
-        shuffle: playlist.length > 0 ? createShuffleState(playlist, { currentIndex: index }) : null,
-        playMode,
+        playlist, index, playMode,
+        shuffle: { order, cursor: currentId ? order.indexOf(currentId) : -1 },
       };
     }
+
+    // 终止类：**忽略入参**产出终态——调用方没有机会留下「成员清空了但序列还在」这种半截状态
+    case 'stop':
+      return { playlist: [], index: -1, shuffle: null, playMode };
 
     // 成员增删 / 拖拽：只对齐既有序列，**不**凭空建（没有序列就保持没有）
     case 'align':

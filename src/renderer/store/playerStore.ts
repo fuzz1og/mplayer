@@ -773,9 +773,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const { currentPlaylist, currentPlaylistIndex, currentSong, playMode } = get();
 
     // 队列为空：没有「下一首」这个位置，等价于「开始播放这首」
+    // #639 C1：与「新建队列」同一条路（policy 'reseed'）——随机模式下现洗一份，非随机保持 null
     if (currentPlaylist.length === 0) {
-      const nextShuffle = syncShuffle(get(), [song], 0, { ensure: true });
-      set({ currentPlaylist: [song], currentPlaylistIndex: 0, shuffle: nextShuffle });
+      applyQueueState(set, get(), { playlist: [song], index: 0, policy: 'reseed' });
       await get().play(song);
       return;
     }
@@ -878,7 +878,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (index < 0 || index >= currentPlaylist.length) return;
 
     const newPlaylist = currentPlaylist.filter((_, i) => i !== index);
-    let newIndex = currentPlaylistIndex;
 
     if (newPlaylist.length === 0) {
       get().stop();
@@ -909,13 +908,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // 删非当前曲：下标平移与游标同步**原子产出**（`removeAt` 不让人把两者配错）
     const removed = removeAt(currentPlaylist, index, currentPlaylistIndex);
-    newIndex = removed.index;
-    const nextShuffle = syncShuffle(get(), removed.playlist, newIndex);
-    set({
-      currentPlaylist: removed.playlist,
-      currentPlaylistIndex: newIndex,
-      shuffle: nextShuffle,
-    });
+    // #639 C1：下标平移（removeAt）与游标同步由同一处规划器原子产出
+    applyQueueState(set, get(), { playlist: removed.playlist, index: removed.index, policy: 'align' });
   },
 
   reorderQueue: (fromIndex: number, toIndex: number) => {
@@ -945,20 +939,21 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (fromIndex < 0 || fromIndex >= total || toIndex < 0 || toIndex >= total) return;
     if (fromIndex === toIndex) return;
 
-    // 索引数学与列表拖拽共用 moveItem（「列表索引数学只此一份」）
-    const order = moveItem(normalized.order, fromIndex, toIndex);
-    const currentId = currentPlaylist[currentPlaylistIndex]?.id;
-    const nextShuffle = { order, cursor: currentId ? order.indexOf(currentId) : -1 };
-    set({ shuffle: nextShuffle });
+    // 索引数学与列表拖拽共用 moveItem（「列表索引数学只此一份」）；游标归规划器对到当前曲
+    // #639 C1：序列类变体——调用方只给新顺序，游标与成员序由 planner 一并产出
+    applyQueueState(set, get(), {
+      playlist: currentPlaylist,
+      index: currentPlaylistIndex,
+      policy: 'reorder-shuffle',
+      order: moveItem(normalized.order, fromIndex, toIndex),
+    });
   },
 
   clearQueue: () => {
+    // 先停传输层（stop() 自带「队列保留」的落点归零），再走**终止类**变体把队列本身也收掉
     get().stop();
-    set({
-      currentPlaylist: [],
-      currentPlaylistIndex: -1,
-      shuffle: null,
-    });
+    // #639 C1：成员清空 + 下标 -1 + 序列作废由 planner 一次产出（入参被忽略，终态固定）
+    applyQueueState(set, get(), { playlist: [], index: -1, policy: 'stop' });
   },
 }));
 
