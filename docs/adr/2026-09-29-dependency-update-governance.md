@@ -95,3 +95,21 @@ GitHub 官方唯一给出的分组示例也落在低风险层：`you can combine
 - 写归因时**必须带复核时刻**（「截至某日，OSV 实测如下」），不要写成永久结论；`npm view <pkg> version` 同理。
 - 残余清单的定期自检成本很低：`npm audit --json` + 对残余包逐个 `POST https://api.osv.dev/v1/query`，一次跑完不用改任何代码。**若某条的 OSV 返回空，直接删条目并说明解除原因**，不要让已消解的条目在清单里挂着误导下一个人去试 override。
 - 「等上游发版」不是唯一解除路径：上游**撤回 advisory** 同样生效，且这条路径不会在 npm 侧产生任何版本变动信号，只能靠主动复核发现。
+
+### override 的生命周期（2026-10-26 立，来自 #656 的 `uuid` 发现）
+
+**override 是有生命周期的：它绑定的目标包一旦从依赖树消失，override 就变成死配置。这类配置不会自己报错，只能靠「每次依赖大变动时扫一遍 overrides 的消费者」发现。**
+
+实例：根 `overrides.uuid: ^11.1.1` 是 #183 为压 electron-builder / metro 系的 `uuid` 残留漏洞加的。2026-10-26 #656 对齐 Expo SDK 补丁后，`@expo/config-plugins` 57.0.10 → 57.0.11 把 `xcode` 从 3.0.1 带到 **4.0.0**，而 xcode 4 不再依赖 `uuid`——树里最后一个消费者消失，`uuid` 整体移出。
+
+复核方式（三条都成立才算空转）：
+
+```
+node -e "const l=require('./package-lock.json');for(const [k,v] of Object.entries(l.packages)) if(/(^|\/)uuid$/.test(k)) console.log(k,v.version)"   # lock 里 0 条
+node -e "const l=require('./package-lock.json');let n=0;for(const [k,v] of Object.entries(l.packages)){const d={...(v.dependencies||{}),...(v.peerDependencies||{}),...(v.devDependencies||{})};if(d['uuid'])n++}console.log(n)"   # dependents 0
+ls node_modules/uuid 2>/dev/null || echo ABSENT   # 未安装
+```
+
+**决定性的判据是「删掉后 `npm install --package-lock-only` 零变化」**：本次删除 `overrides.uuid` 后 lock 文件 sha256 与删除前**逐字节相同**（`90349afa…`），`git status` 显示 lock 未改，`npm ci --ignore-scripts` 与 `npm run verify -- all` 全绿。若删掉后 lock 有变化，说明该 override 仍有隐藏消费者，**不能删**。
+
+**`overrides` 清理是依赖治理的常规动作，不只是 audit 周报的附属品。** 每次依赖大变动（major 升级、SDK 对齐、批量 patch）后应顺带扫一遍 `overrides` 的消费者，把死条目删掉——留着会让后来者误判「这条已被 override 挡住」，在下次 audit 出现同名包时做出错误判断。
