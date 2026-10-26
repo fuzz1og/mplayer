@@ -144,7 +144,7 @@ internal object WindowSettlement {
     when {
       policy == null -> fallbackEndedAction(loopMode, hasNextInWindow)
       policy.restartOnSingle -> EndedAction.RESTART_CURRENT
-      hasNextInWindow -> if (policy.advanceWithinWindow) EndedAction.ADVANCE_NEXT else EndedAction.HOLD
+      hasNextInWindow -> EndedAction.ADVANCE_NEXT
       policy.atWindowTail == EndOfTrackPolicy.AT_WINDOW_TAIL_HOLD -> EndedAction.HOLD
       else -> EndedAction.ASK_JS
     }

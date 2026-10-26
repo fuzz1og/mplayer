@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song } from '@mplayer/core';
-import type { PatchQueueResult, Policy } from '../modules/native-player';
+import type { PatchQueueResult } from '../modules/native-player';
 
 // ── 假原生模块（在 vi.mock 之前用 hoisted 建好，避免提升导致的 TDZ） ──
 const fake = vi.hoisted(() => {
@@ -22,8 +22,6 @@ const fake = vi.hoisted(() => {
   const state = { revision: 5, index: 0, key: 'A' as string | null, tracks: [] as FakeTrack[] };
   const patchCalls: PatchInput[] = [];
   const forced: PatchQueueResult[] = [];
-  /** #666：下推的 policy 快照（含 endOfTrack 曲末表） */
-  const policyCalls: Policy[] = [];
   const module = {
     registerHeadlessHost: () => true,
     isServiceRunning: () => true,
@@ -83,13 +81,12 @@ const fake = vi.hoisted(() => {
     seek: () => {},
     setLoop: () => {},
     setRate: () => {},
-    setPolicy: (policy: Policy) => {
-      policyCalls.push(policy);
-    },
+    // 本文件不验曲末表（见 endOfTrackPolicy.test.ts），只要接受新字段不抛错
+    setPolicy: () => {},
     stop: () => {},
     addListener: () => ({ remove: () => {} }),
   };
-  return { state, patchCalls, forced, policyCalls, module };
+  return { state, patchCalls, forced, module };
 });
 
 vi.mock('expo', () => ({
@@ -177,7 +174,6 @@ beforeEach(() => {
   nativeStop();
   fake.patchCalls.length = 0;
   fake.forced.length = 0;
-  fake.policyCalls.length = 0;
   fake.state.revision = 5;
   fake.state.index = 0;
   fake.state.key = 'A';

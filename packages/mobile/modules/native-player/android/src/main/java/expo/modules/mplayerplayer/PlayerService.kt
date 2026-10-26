@@ -724,9 +724,13 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     policy.stopWhenOffline = policyIn.stopWhenOffline
     policy.prefetchAhead = policyIn.prefetchAhead
     // 表可能与 loopMode 反着来：换表后 repeatMode 必须重算，否则 HOLD 与 REPEAT_MODE_ONE 打架。
+    val before = policy.endOfTrack
     policy.endOfTrack = policyIn.endOfTrack
     if (policy.restartOnSingleEffective() != wasRestartSingle) {
       controller?.let { ctrl -> main.post { ctrl.repeatMode(policy.repeatMode()) } }
+    }
+    if (before != policy.endOfTrack) {
+      Log.i(TAG, "policy: endOfTrack=" + (policy.endOfTrack?.toString() ?: "absent(fallback)") + " repeat=" + policy.repeatMode())
     }
   }
 
@@ -831,11 +835,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   /** 曲末处置与 `repeatMode()` 必须同源：判定在 [WindowSettlement.endedAction]，这里只执行副作用。 */
   private fun handleEnded() {
     val ctrl = controller ?: return
-    val action = WindowSettlement.endedAction(
-      policy.endOfTrack,
-      policy.loopMode,
-      store.remainingAfterCurrent() > 0
-    )
+    val remaining = store.remainingAfterCurrent()
+    val action = WindowSettlement.endedAction(policy.endOfTrack, policy.loopMode, remaining > 0)
+    Log.i(TAG, "ended → $action (loop=${policy.loopMode} remaining=$remaining table=${policy.endOfTrack != null})")
     when (action) {
       WindowSettlement.EndedAction.RESTART_CURRENT -> {
         ctrl.player.seekTo(0, 0L)

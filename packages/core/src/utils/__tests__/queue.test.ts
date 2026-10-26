@@ -267,9 +267,7 @@ describe('buildEndOfTrackPolicy：与 planEndOfTrack 同源的下推表', () => 
   it('列表循环 → 窗口尾问 JS', () => {
     expect(buildEndOfTrackPolicy({ playMode: '列表循环', shuffle: null, windowSaturated: true, shuffleEndPolicy: 'stop' })).toEqual({
       restartOnSingle: false,
-      advanceWithinWindow: true,
       atWindowTail: 'ask-js',
-      shuffleEndPolicy: 'stop',
     });
   });
 

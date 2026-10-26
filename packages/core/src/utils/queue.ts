@@ -126,7 +126,6 @@ export function getPrevSongIndex(
   return (currentIndex - 1 + queue.length) % queue.length;
 }
 
-
 // ---------------------------------------------------------------- 曲末决策（#666）
 
 /** 曲末动作。hold = 随机播到头，停在这里：不绕回、也不向 JS 要歌（与 ask-js 是两种不同的「不推进」）。 */
@@ -208,11 +207,8 @@ export function planEndOfTrack(input: EndOfTrackInput): EndOfTrackPlan {
 export interface EndOfTrackPolicy {
   /** 单曲循环 → 曲末重播当前曲（repeatMode 与 endedAction 共用这一格，拆开两者的隐式耦合）。 */
   restartOnSingle: boolean;
-  /** 窗口里有下一项时是否顺序推进（三种模式当前恒 true）。 */
-  advanceWithinWindow: boolean;
   /** 窗口尾动作：hold = 停在这里（随机到头），ask-js = 向 JS 要歌。另两个动作在窗口尾不可能出现。 */
   atWindowTail: 'ask-js' | 'hold';
-  shuffleEndPolicy: ShuffleEndPolicy;
 }
 
 /** 下推表的入参：去掉几何事实（那是原生运行时才知道的）。 */
@@ -227,11 +223,10 @@ export function buildEndOfTrackPolicy(input: EndOfTrackPolicyInput): EndOfTrackP
   const atWindowTail = planEndOfTrack({ ...input, hasNextInWindow: false }).action;
   return {
     restartOnSingle: input.playMode === '单曲循环',
-    advanceWithinWindow: true,
     atWindowTail: atWindowTail === 'hold' ? 'hold' : 'ask-js',
-    shuffleEndPolicy: input.shuffleEndPolicy,
   };
 }
+
 /** 随机防重复 index：队列 ≤ 1 归位 currentIndex，否则随机到不等于 currentIndex。
  *  **无序列时的兼容路径**：只在调用方没有稳定随机序列（#511）时走到。
  */

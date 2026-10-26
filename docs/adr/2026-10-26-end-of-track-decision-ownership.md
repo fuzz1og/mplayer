@@ -33,7 +33,8 @@ core 有 `planAdvance` / `stepShuffle` / `getNextSongIndex` 三套「下一首�
    入参 = `{ playMode, shuffle, shuffleScope, hasNextInWindow, windowSaturated, shuffleEndPolicy }`，
    出参 = `{ action: 'restart-current' | 'advance-next' | 'ask-js' | 'hold', shuffle? }`。
 2. 该函数的结论**在 JS 仍然在场时**（`loadQueue` / `patchQueue` / `setPolicy` 的常规投喂轮）算好，
-   作为 policy 快照的一部分下发原生（例如 `endOfTrack: { restartOnSingle, advanceWithinWindow, atWindowTail, shuffleEndPolicy }`），
+   作为 policy 快照的一部分下发原生（`endOfTrack: { restartOnSingle, atWindowTail }`——**只有两格**：原生没有读点的字段
+   不进表，`shuffleEndPolicy` 已由 `planEndOfTrack` 折进 `atWindowTail`，评审据此砍掉了 `advanceWithinWindow`），
    与现有 `loopMode` / `autoSkip` / `prefetchAhead` 同一条通道、同一份 revision。
 3. Kotlin 侧 `WindowSettlement.endedAction` **退化为查表**（吃下发来的表 + 原生已知的几何事实
    `remainingAfterCurrent`），`handleEnded()` 仍只做副作用。**没有表时**保留今天这份内联兜底
@@ -41,9 +42,10 @@ core 有 `planAdvance` / `stepShuffle` / `getNextSongIndex` 三套「下一首�
 4. 随机模式「播到头」从「猜 `deduped`」变成一个**显式 policy 字段** `shuffleEndPolicy`——这正是 #650 里
    `deduped` 分不清「真到头」与「本轮没新候选」的病根：那个区分不是原生能看见的事实，必须由握着完整队列与随机序的 core 明确表态。
 
-   **取值已定 = `'stop'`**（2026-10-26 拍板：随机播到头就停，不绕回）。本 ADR 待定的**不是取值，而是实现方式**——
-   怎么让 core 把「真到头」这个事实明确表态给原生，而不是让原生从 `deduped` 反推。字段保留 `'wrap'` 这个可能值
-   只是为将来的产品变更留位置，**当前唯一实现是 `'stop'`**。
+   **取值已定 = `'stop'`**（2026-10-26 拍板：随机播到头就停，不绕回）。当时待定的**不是取值，而是实现方式**——
+   怎么让 core 把「真到头」这个事实明确表态给原生，而不是让原生从 `deduped` 反推。#666 采纳了 (c)：
+   **「随机到头」= 序列末位（core 看得见）+ 本轮零新增（原生看得见）两个事实同时成立**，由 `planEndOfTrack` 裁处，
+   而不是把 `shuffleEndPolicy` 原样下推给原生去解释。`'wrap'` 仍只是类型占位，**未实现**。
 
 **为什么是 (c) 而不是 (b)（曲末发事件给 JS、JS 算完回喂）**：见下方权衡表——(b) 在后台与重启两条路径上
 直接违反 I6，且事件往返会在曲末制造可听见的空档。
@@ -92,7 +94,7 @@ R4.1/R4.4/R4.5/#650 四次都是这么来的。
   按 ADR `2026-09-29-ci-verification-boundary` 需要真机验收（本机无真机/无 AVD，验收成本落在人工）。
 - **不解决**：`deduped` 信号本身的表达力（它仍然只是「本轮没新候选」），本 ADR 只是**不再让它承担终局语义**。
 
-### 建议的实施切分（另开票，本 ADR 不动代码）
+### 实施切分（第 1-3 步已由 #666 完成；第 4 步真机取证仍开口）
 
 1. core：`planEndOfTrack` + 单测（三种 `playMode` × 窗口内有/无下一项 × 饱和/不饱和 × `shuffleEndPolicy` 当前唯一取值 `'stop'`；
    绕回不实现，测试只需覆盖 `'stop'`）。

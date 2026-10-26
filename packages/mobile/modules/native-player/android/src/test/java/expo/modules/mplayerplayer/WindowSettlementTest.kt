@@ -216,12 +216,10 @@ class WindowSettlementTest {
   private val loopModes = listOf(AdvancePolicy.LOOP_OFF, AdvancePolicy.LOOP_ALL, AdvancePolicy.LOOP_SINGLE)
   private val hasNextValues = listOf(true, false)
 
-  /** core `buildEndOfTrackPolicy` 的投影：老语义（单曲重播 / 有项推进 / 尾上问 JS）对应的表。 */
+  /** core `buildEndOfTrackPolicy` 的投影：老语义（单曲重播 / 有项推进 / 尾上问 JS）对应的两格表。 */
   private fun legacyShapedTable(loopMode: String) = EndOfTrackPolicy(
     restartOnSingle = loopMode == AdvancePolicy.LOOP_SINGLE,
-    advanceWithinWindow = true,
-    atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_ASK_JS,
-    shuffleEndPolicy = EndOfTrackPolicy.SHUFFLE_END_STOP
+    atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_ASK_JS
   )
 
   private fun tableAction(table: EndOfTrackPolicy?, loopMode: String, hasNext: Boolean) =
@@ -236,7 +234,7 @@ class WindowSettlementTest {
       tableAction(shuffleStop, AdvancePolicy.LOOP_ALL, hasNext = false)
     )
     assertEquals(
-      "窗口内 + advanceWithinWindow → 顺序推进",
+      "窗口内有项 → 一律顺序推进（表里没有否决这一格，与 core「有项就 advance」一致）",
       WindowSettlement.EndedAction.ADVANCE_NEXT,
       tableAction(shuffleStop, AdvancePolicy.LOOP_ALL, hasNext = true)
     )
@@ -260,16 +258,6 @@ class WindowSettlementTest {
       val actions = loopModes.map { tableAction(holdTable, it, hasNext) }
       assertEquals("hasNext=$hasNext: 表在场时 loopMode 不得影响结果", 1, actions.distinct().size)
     }
-  }
-
-  @Test
-  fun advanceWithinWindowFalseHoldsInsteadOfAdvancing() {
-    val noAdvance = legacyShapedTable(AdvancePolicy.LOOP_OFF).copy(advanceWithinWindow = false)
-    assertEquals(
-      "表说不推进 → 窗口内有项也 HOLD（而不是偷偷 seek 到下一项）",
-      WindowSettlement.EndedAction.HOLD,
-      tableAction(noAdvance, AdvancePolicy.LOOP_OFF, hasNext = true)
-    )
   }
 
   @Test

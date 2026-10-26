@@ -15,9 +15,7 @@ class EndOfTrackPolicyTest {
 
   private val holdTable = EndOfTrackPolicy(
     restartOnSingle = false,
-    advanceWithinWindow = true,
-    atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_HOLD,
-    shuffleEndPolicy = EndOfTrackPolicy.SHUFFLE_END_STOP
+    atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_HOLD
   )
 
   @Test
@@ -48,16 +46,13 @@ class EndOfTrackPolicyTest {
     val partial = EndOfTrackPolicy.fromJson(JSONObject("""{"restartOnSingle":true}"""))
     assertEquals(EndOfTrackPolicy.AT_WINDOW_TAIL_ASK_JS, partial?.atWindowTail)
     assertTrue(partial?.restartOnSingle == true)
-    assertTrue("advanceWithinWindow 缺省 true，与 Record 默认一致", partial?.advanceWithinWindow == true)
   }
 
   @Test
   fun defaultTableIsTheInnocuousOne() {
     val default = EndOfTrackPolicy()
     assertFalse("默认不重播（重播由 loopMode 兜底决定，不靠表）", default.restartOnSingle)
-    assertTrue(default.advanceWithinWindow)
     assertEquals(EndOfTrackPolicy.AT_WINDOW_TAIL_ASK_JS, default.atWindowTail)
-    assertEquals(EndOfTrackPolicy.SHUFFLE_END_STOP, default.shuffleEndPolicy)
   }
 
   @Test

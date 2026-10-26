@@ -92,11 +92,12 @@ export function toLoopMode(playMode: string): LoopMode {
 
 /** 曲末表唯一出处（#666）：判定在 core，原生只查表。 */
 function buildCurrentEndOfTrackPolicy(): EndOfTrackPolicy {
+  const player = usePlayerStore.getState();
   return buildEndOfTrackPolicy({
     playMode: useSettingsStore.getState().playMode,
-    shuffle: usePlayerStore.getState().shuffle,
-    // JS 手里是完整成员集（不是原生窗口的子集）→ 可据序列断言「随机到头」
-    shuffleScope: 'authoritative',
+    shuffle: player.shuffle,
+    // 必须是 store 的真实作用域：窗口态的队列被 dropLeading 裁过，「到头」不可证
+    shuffleScope: player.queueScope,
     windowSaturated: lastWindowSaturated,
     shuffleEndPolicy: 'stop',
   });
@@ -116,12 +117,7 @@ export function currentPolicy(): Policy {
 
 function sameEndOfTrackPolicy(a: EndOfTrackPolicy | null, b: EndOfTrackPolicy | null): boolean {
   if (!a || !b) return a === b;
-  return (
-    a.restartOnSingle === b.restartOnSingle &&
-    a.advanceWithinWindow === b.advanceWithinWindow &&
-    a.atWindowTail === b.atWindowTail &&
-    a.shuffleEndPolicy === b.shuffleEndPolicy
-  );
+  return a.restartOnSingle === b.restartOnSingle && a.atWindowTail === b.atWindowTail;
 }
 
 /** 下发一份 policy 并记住其中的表（loadQueue 自带 policy，不必再单独 setPolicy）。 */
@@ -137,8 +133,11 @@ function sendPolicy(policy: Policy): void {
   }
 }
 
-/** 每轮结算后调用：表没变就一个字也不发（游标走到序列末位时 atWindowTail 才会翻转）。 */
-function pushEndOfTrackPolicy(): void {
+/**
+ * 每轮结算后调用：曲末表变了才发，但发的是**整份** policy（autoSkip/skipLimit 等一并重发，
+ * setPolicy 没有字段级更新）。表没变就一个字也不发——游标走到序列末位时 atWindowTail 才会翻转。
+ */
+function pushPolicyIfEndOfTrackChanged(): void {
   if (!NativePlayer) return;
   const policy = currentPolicy();
   if (sameEndOfTrackPolicy(lastEndOfTrack, policy.endOfTrack ?? null)) return;
@@ -415,7 +414,7 @@ export async function nativePlaySong(song: Song, fresh = false): Promise<Track> 
   markSucceeded(track.meta.key);
 
   const policy = currentPolicy();
-  await NP.loadQueue({
+  const loaded = await NP.loadQueue({
     revision: (state?.revision ?? 0) + 1,
     tracks: [track],
     startIndex: 0,
@@ -423,7 +422,8 @@ export async function nativePlaySong(song: Song, fresh = false): Promise<Track> 
     loopMode: toLoopMode(useSettingsStore.getState().playMode),
     policy,
   });
-  lastEndOfTrack = policy.endOfTrack ?? null;
+  // 记账只认真的进了原生：accepted=false 与抛错同一处置，没落地就留给下一轮重发
+  lastEndOfTrack = loaded?.accepted ? policy.endOfTrack ?? null : null;
 
   void feedWindow();
   return track;
@@ -709,7 +709,7 @@ export async function feedWindow(need?: number, reason?: NeedReason): Promise<vo
     } catch {
       // 上报失败不阻塞：原生仍有 hole 超时 / 水位兜底
     }
-    pushEndOfTrackPolicy();
+    pushPolicyIfEndOfTrackChanged();
     return;
   }
 
@@ -742,7 +742,7 @@ export async function feedWindow(need?: number, reason?: NeedReason): Promise<vo
     // 补窗失败不影响播放：原生会在缓冲边界停下并等下一次补窗
   } finally {
     // 每轮结算后下发：游标走到/离开序列末位时 atWindowTail 才会翻转
-    pushEndOfTrackPolicy();
+    pushPolicyIfEndOfTrackChanged();
   }
 }
 

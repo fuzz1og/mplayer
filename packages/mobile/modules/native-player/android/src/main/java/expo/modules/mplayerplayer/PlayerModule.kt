@@ -55,19 +55,13 @@ class TrackInput : Record {
   var meta: TrackMetaInput = TrackMetaInput()
 }
 
-/** #666 曲末策略表的 Record 形状；字段与 core `EndOfTrackPolicy` 一一对应，默认值即「全走问 JS」。 */
+/** #666 曲末策略表的 Record 形状；两格与 core `EndOfTrackPolicy` 一一对应，默认即「不重播 + 尾部问 JS」。 */
 class EndOfTrackPolicyInput : Record {
   @Field
   var restartOnSingle: Boolean = false
 
   @Field
-  var advanceWithinWindow: Boolean = true
-
-  @Field
   var atWindowTail: String = EndOfTrackPolicy.AT_WINDOW_TAIL_ASK_JS
-
-  @Field
-  var shuffleEndPolicy: String = EndOfTrackPolicy.SHUFFLE_END_STOP
 }
 
 class PolicyInput : Record {
@@ -300,9 +294,7 @@ private fun PolicyInput.toSnapshot(): PolicySnapshot = PolicySnapshot(
   endOfTrack = endOfTrack?.let {
     EndOfTrackPolicy(
       restartOnSingle = it.restartOnSingle,
-      advanceWithinWindow = it.advanceWithinWindow,
-      atWindowTail = it.atWindowTail,
-      shuffleEndPolicy = it.shuffleEndPolicy
+      atWindowTail = it.atWindowTail
     )
   }
 )

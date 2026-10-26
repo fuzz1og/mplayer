@@ -106,7 +106,7 @@ vi.mock('../services/cacheService', () => ({
   urlAgeMs: () => null,
 }));
 
-import { nativeNext, nativePlaySong, nativePrev } from '../services/nativePlayer';
+import { nativeNext, nativePlaySong, nativePrev, nativeSyncLoopMode } from '../services/nativePlayer';
 import { prefetchKey } from '../services/queuePrefetch';
 import { usePlayerStore } from '../stores/playerStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -240,9 +240,7 @@ describe('#666 起播即下推曲末表', () => {
 
     expect(fake.loadQueueCalls.at(-1)?.policy.endOfTrack).toEqual({
       restartOnSingle: true,
-      advanceWithinWindow: true,
       atWindowTail: 'ask-js',
-      shuffleEndPolicy: 'stop',
     });
   });
 
@@ -255,7 +253,16 @@ describe('#666 起播即下推曲末表', () => {
     await flush();
 
     const table = fake.loadQueueCalls.at(-1)?.policy.endOfTrack;
-    expect(table?.shuffleEndPolicy).toBe('stop');
     expect(table?.atWindowTail).toBe('ask-js');
+  });
+
+  it('切换播放模式后会重发整份 policy（setPolicy 收到含表的新快照）', () => {
+    setQueue(['A', 'B'], 0);
+    useSettingsStore.setState({ playMode: '单曲循环' });
+
+    nativeSyncLoopMode();
+
+    expect(fake.policyCalls).toHaveLength(1);
+    expect(fake.policyCalls[0].endOfTrack).toEqual({ restartOnSingle: true, atWindowTail: 'ask-js' });
   });
 });

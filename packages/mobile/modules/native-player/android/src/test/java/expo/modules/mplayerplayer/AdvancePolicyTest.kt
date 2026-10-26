@@ -90,9 +90,7 @@ class AdvancePolicyTest {
 
   private val shuffleStopTable = EndOfTrackPolicy(
     restartOnSingle = false,
-    advanceWithinWindow = true,
-    atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_HOLD,
-    shuffleEndPolicy = EndOfTrackPolicy.SHUFFLE_END_STOP
+    atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_HOLD
   )
 
   @Test
