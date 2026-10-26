@@ -50,9 +50,11 @@ Latest builds live on **[Releases](https://github.com/fuzz1og/mplayer/releases/l
 | Platform | Artifact | Notes |
 | --- | --- | --- |
 | Windows | `MPlayer-Setup-<version>.exe` · `MPlayer-<version>.exe` | NSIS installer / portable |
-| macOS | `MPlayer-<version>.dmg` · `MPlayer-<version>-arm64.dmg` | Intel / Apple Silicon |
+| macOS | `MPlayer-<version>.dmg` · `MPlayer-<version>-arm64.dmg` | Intel / Apple Silicon · **macOS 13 (Ventura) or later required** |
 | Linux | `MPlayer-<version>.AppImage` · `mplayer_<version>_amd64.deb` | x64 |
 | Android | `MPlayer-v<version>.apk` · `MPlayer-v<version>.aab` | `.apk` for sideloading, `.aab` for stores |
+
+> **Desktop system requirements**: Windows 10 or later (x64); macOS 13 (Ventura) or later (Intel / Apple Silicon); Linux x64. The macOS floor comes from the Chromium embedded in Electron 44: on older systems the installer still installs but the app **will not run**.
 
 The desktop app updates itself: GitHub first, falling back to mirrors (gh-proxy / ghfast / ghproxy).
 
@@ -200,7 +202,7 @@ When neither direct sources nor tier3 produce a playable URL, core `explainPlayb
 
 | Side | Stack |
 | --- | --- |
-| Desktop | Electron 41 · React 19 · TypeScript · Vite 7 · Zustand · Ant Design 6 · Howler · electron-builder · electron-updater |
+| Desktop | Electron · React 19 · TypeScript · Vite 7 · Zustand · Ant Design 6 · Howler · electron-builder · electron-updater |
 | Mobile | Expo 57 · React Native 0.86 · expo-router · media3 / ExoPlayer (hand-written Kotlin playback module) · expo-audio (iOS fallback) · Zustand · AsyncStorage · lucide-react-native |
 | Shared | `@mplayer/core`: per-source direct clients, song identification / matching, playback URL resolution, cache kernel, tier3 executor |
 

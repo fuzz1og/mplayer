@@ -50,6 +50,10 @@ nsis:
   # src/__tests__/main/updateService.test.ts）。
   artifactName: ${productName}-Setup-${version}.${ext}
   oneClick: false
+  # 用户级安装：默认装到 %LOCALAPPDATA%\Programs，不需管理员权限，自更新不弹 UAC。
+  # electron-builder 的默认值本来就是 false（NsisTarget 用 `perMachine === true` 判定），
+  # 这里显式钉死是防止将来改动把安装模式悄悄变成 all-users。
+  perMachine: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
@@ -58,6 +62,10 @@ portable:
   artifactName: ${productName}-${version}.${ext}
 mac:
   icon: resources/icon.png
+  # Electron 44 要求 macOS 13 (Ventura)+（breaking changes 44.0 移除 macOS 12 支持；
+  # 官方 README 同款表述 "macOS (Ventura and up)"）。这里显式钉死，不依赖 Electron 自带的
+  # deployment target —— 隐式值会随 Electron 版本漂移，而 README 的下载表已对外承诺 13。
+  minimumSystemVersion: "13.0"
   # electron-builder 26 起公证不再靠 env 自动检测隐式触发，需显式开启（凭据仍走 CI 注入的
   # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三件套）。实测 26.15.7：
   # 无签名证书时公证随代码签名一并跳过（与 24 行为一致）；未来配置证书+公证凭据后自动生效

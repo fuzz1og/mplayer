@@ -202,7 +202,8 @@ function assertNodeModulesMatchLockfile() {
     '  最常见的成因：依赖相关的提交合并进来之后没重装。',
     '',
     '  处置：npm ci --ignore-scripts（与 CI 同款）；若要跑 electron:dev / electron:build，',
-    '  再补 npm rebuild electron（--ignore-scripts 会跳过它的 postinstall，见 docs/agents/testing.md）。',
+    '  再补 npx install-electron 下载 Electron 二进制（Electron 42 起已移除 postinstall，',
+    '  npm rebuild electron 会空转，见 docs/agents/testing.md）。',
   ].join('\n'));
   process.exit(1);
 }

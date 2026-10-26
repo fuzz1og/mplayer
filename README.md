@@ -54,6 +54,8 @@
 | Linux | `MPlayer-<version>.AppImage` · `mplayer_<version>_amd64.deb` | x64 |
 | Android | `MPlayer-v<version>.apk` · `MPlayer-v<version>.aab` | `.apk` 侧载安装，`.aab` 供商店 |
 
+> **桌面端系统要求**：Windows 10 及以上（x64）；macOS 13 (Ventura) 及以上（Intel / Apple Silicon）；Linux x64。macOS 13 的下限来自 Electron 44 内嵌的 Chromium —— 更早的系统上安装包能装但**无法运行**。
+
 桌面端内置应用内更新：优先 GitHub 直连，失败自动降级到加速镜像（gh-proxy / ghfast / ghproxy）。
 
 ## ✨ 特性
@@ -200,7 +202,7 @@ flowchart LR
 
 | 端 | 技术 |
 | --- | --- |
-| 桌面 | Electron 41 · React 19 · TypeScript · Vite 7 · Zustand · Ant Design 6 · Howler · electron-builder · electron-updater |
+| 桌面 | Electron · React 19 · TypeScript · Vite 7 · Zustand · Ant Design 6 · Howler · electron-builder · electron-updater |
 | 移动 | Expo 57 · React Native 0.86 · expo-router · media3 / ExoPlayer（自写 Kotlin 播放模块）· expo-audio（iOS 回落）· Zustand · AsyncStorage · lucide-react-native |
 | 共享 | `@mplayer/core`：多源直连客户端、歌曲识别 / 匹配、播放地址解析、缓存内核、tier3 执行器 |
 
