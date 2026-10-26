@@ -71,21 +71,21 @@ describe('#639 C1：队列状态转移的唯一入口与唯一出口', () => {
     expect(emptyQueueBranch).not.toMatch(/syncShuffle\(/);
   });
 
-  it('stop() 与 clearQueue 语义分开：前者保留队列，后者才是终止态', () => {
+  it('停播（stop()）与队列终止态（clear 变体）语义分开：前者保留队列', () => {
     const source = codeOnly(read('store/playerStore.ts'));
 
     const stopAction = actionBody(source, 'stop: () =>');
     expect(stopAction).toContain("policy: 'align'"); // 停播只归零落点，不动成员
-    expect(stopAction).not.toContain("policy: 'stop'");
+    expect(stopAction).not.toContain("policy: 'clear'");
 
     const clearAction = actionBody(source, 'clearQueue: () =>');
-    expect(clearAction).toContain("policy: 'stop'");
+    expect(clearAction).toContain("policy: 'clear'");
   });
 
   it('planQueueState 的变体集合覆盖票面六类（成员/落点/序列/模式/终止）', () => {
     const source = codeOnly(read('store/queueState.ts'));
     for (const policy of [
-      'align', 'locate', 'settle', 'reseed', 'replace-id', 'mode', 'reorder-shuffle', 'stop',
+      'align', 'locate', 'settle', 'reseed', 'replace-id', 'mode', 'reorder-shuffle', 'clear',
     ]) {
       expect(source, `缺变体 ${policy}`).toContain(`case '${policy}'`);
     }

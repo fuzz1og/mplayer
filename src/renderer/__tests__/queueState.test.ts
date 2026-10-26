@@ -139,11 +139,11 @@ describe('planQueueState（#639 C1：队列状态转移的唯一入口）', () =
   });
 
   // #639 C1 收口：终止类变体（清空队列）
-  describe('stop（终止类）', () => {
+  describe('clear（终止类）', () => {
     it('产出终态：成员清空 + 下标 -1 + 序列作废（忽略入参，不留半截状态）', () => {
       const s = state({ shuffle: { order: ['C', 'A', 'B'], cursor: 1 }, index: 1, playMode: '随机播放' });
       // 故意传入「非空成员 + 合法下标」：终止态的固定性由 planner 保证，不靠调用方传对
-      const next = planQueueState(s, { playlist: q('A', 'B', 'C'), index: 1, policy: 'stop' });
+      const next = planQueueState(s, { playlist: q('A', 'B', 'C'), index: 1, policy: 'clear' });
 
       expect(next.playlist).toEqual([]);
       expect(next.index).toBe(-1);

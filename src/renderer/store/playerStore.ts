@@ -950,10 +950,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   clearQueue: () => {
-    // 先停传输层（stop() 自带「队列保留」的落点归零），再走**终止类**变体把队列本身也收掉
+    // 先停传输层（stop() 只停播、队列保留），再走**终止类**变体把队列本身也收掉
     get().stop();
     // #639 C1：成员清空 + 下标 -1 + 序列作废由 planner 一次产出（入参被忽略，终态固定）
-    applyQueueState(set, get(), { playlist: [], index: -1, policy: 'stop' });
+    applyQueueState(set, get(), { playlist: [], index: -1, policy: 'clear' });
   },
 }));
 

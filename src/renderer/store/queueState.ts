@@ -33,10 +33,10 @@ export type ShufflePolicy =
    */
   | 'reorder-shuffle'
   /**
-   * **终止类**：队列终止（成员清空 + 无当前曲 + 序列作废）。与 {@link QueueState} 的
-   * 「落点归零」不是一回事：`playerStore.stop()` 只停播、队列与序列都保留（那是 `align` + index -1）。
+   * **终止类**：队列终止（成员清空 + 无当前曲 + 序列作废）。与 `playerStore.stop()` 的「停播」不同——
+   * 后者只把落点归零、队列与序列都保留（那是 `align` + index -1）。术语见 GLOSSARY「队列终止态 / 停播」。
    */
-  | 'stop';
+  | 'clear';
 
 export interface QueueState {
   playlist: Song[];
@@ -140,7 +140,7 @@ export function planQueueState(state: QueueState, change: QueueChange): QueueSta
     }
 
     // 终止类：**忽略入参**产出终态——调用方没有机会留下「成员清空了但序列还在」这种半截状态
-    case 'stop':
+    case 'clear':
       return { playlist: [], index: -1, shuffle: null, playMode };
 
     // 成员增删 / 拖拽：只对齐既有序列，**不**凭空建（没有序列就保持没有）
