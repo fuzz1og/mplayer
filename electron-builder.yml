@@ -58,6 +58,10 @@ portable:
   artifactName: ${productName}-${version}.${ext}
 mac:
   icon: resources/icon.png
+  # Electron 44 起内嵌 Chromium 要求 macOS 13 (Ventura)+（官方 breaking changes 44.0 节移除
+  # macOS 12 支持）。不声明时 dmg 不写 LSMinimumSystemVersion，用户在更早系统上装得上、
+  # 一启动就崩；显式声明后由系统在启动期给出明确提示，与 README 的下载表一致。
+  minimumSystemVersion: "13.0"
   # electron-builder 26 起公证不再靠 env 自动检测隐式触发，需显式开启（凭据仍走 CI 注入的
   # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三件套）。实测 26.15.7：
   # 无签名证书时公证随代码签名一并跳过（与 24 行为一致）；未来配置证书+公证凭据后自动生效

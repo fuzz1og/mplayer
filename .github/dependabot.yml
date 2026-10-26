@@ -33,8 +33,12 @@ updates:
           - minor
           - patch
     ignore:
-      # electron 由 electron-builder 配套版本管理，避免依赖混乱
+      # electron 与 electron-builder 是配套关系，且升级必须走真 Electron + 打包产物冒烟（#658），
+      # 机器人提 PR 只会制造无人验收的假绿。**只挡 version updates 的 minor/major**，
+      # 与下面 Expo 生态耦合集同款写法：官方明文 update-types 不影响 security updates，
+      # 所以 electron 的 patch 与安全补丁通道照常开放，不会被这条 ignore 一起挡掉。
       - dependency-name: electron
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "@types/electron*"
       # vite 8 超出 @vitejs/plugin-react@4 peer 范围（^4||^5||^6||^7），只跟踪 6.x/7.x
       - dependency-name: vite

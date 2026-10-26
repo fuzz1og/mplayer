@@ -50,9 +50,11 @@
 | 平台 | 产物 | 说明 |
 | --- | --- | --- |
 | Windows | `MPlayer-Setup-<version>.exe` · `MPlayer-<version>.exe` | NSIS 安装版 / 免安装版 |
-| macOS | `MPlayer-<version>.dmg` · `MPlayer-<version>-arm64.dmg` | Intel / Apple Silicon |
+| macOS | `MPlayer-<version>.dmg` · `MPlayer-<version>-arm64.dmg` | Intel / Apple Silicon · **需 macOS 13 (Ventura) 或更高** |
 | Linux | `MPlayer-<version>.AppImage` · `mplayer_<version>_amd64.deb` | x64 |
 | Android | `MPlayer-v<version>.apk` · `MPlayer-v<version>.aab` | `.apk` 侧载安装，`.aab` 供商店 |
+
+> **桌面端系统要求**：Windows 10 及以上（x64）；macOS 13 (Ventura) 及以上（Intel / Apple Silicon）；Linux x64。macOS 13 的下限来自 Electron 44 内嵌的 Chromium —— 更早的系统上安装包能装但**无法运行**。
 
 桌面端内置应用内更新：优先 GitHub 直连，失败自动降级到加速镜像（gh-proxy / ghfast / ghproxy）。
 
