@@ -607,9 +607,8 @@ describe('#591 补窗结算契约（JS 侧如实上报 outcome）', () => {
 });
 
 /**
- * #591 原生结算的**源码契约守卫**。
- * 这里的守卫只能证明「实现确实存在、形状是这段」，**不能替代 Kotlin 编译/设备验证**——#591 的行为
- * 验收在真机上（PR 正文的两个场景 + 阳性对照的 logcat 原文）。
+ * 原生侧剩下的**源码形状守卫**：只钉「闩的清零点 / 终态副作用挂在服务里」这类纯函数表达不了的接线。
+ * 结算 / 曲末 / 绕回 / stale 的**行为**见 Kotlin JUnit 源集（`./gradlew :mplayer-native-player:test`，ADR #640）。
  */
 describe('#591 原生结算：源码契约守卫（不替代 Kotlin 编译/设备验证）', () => {
   const MODULE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -626,28 +625,10 @@ describe('#591 原生结算：源码契约守卫（不替代 Kotlin 编译/设�
     return playerService.slice(from, to);
   }
 
-  it('patchQueue 只读 outcome 结算：deduped 绕回/结束，empty 也拉闩', () => {
-    const patch = body('  fun patchQueue(', '  /**\n   * #591：结算入参的');
-    expect(patch).toContain('settleOutcomeOf(outcome, append, upsert)');
-    expect(patch).toContain('settled == SettleOutcome.DEDUPED');
-    expect(patch).toContain('settled == SettleOutcome.EMPTY');
-    expect(patch).toContain('val addedCount = newItems.size');
-    expect(patch).toContain('firstExistingAppendIndex(append)');
-    expect(patch).toContain('finishAtTail(ctrl)');
-    // addedCount 退为诊断：不再单独充当终局判据
-    expect(patch).not.toContain('if (addedCount == 0)');
-    expect(patch).not.toContain('input.refillEmpty');
-
+  it('finishAtTail 的终态：清意图 + 上闩 + 发 EXHAUSTED（结局是终态的）', () => {
     const finish = body('  private fun finishAtTail(', '  /**\n   * 「下一首播放」（#494）');
     expect(finish).toContain('exhaustion.mark(store.currentRevision(), store.currentIndex())');
     expect(finish).toContain('EndReason.EXHAUSTED');
-  });
-
-  it('结算入参的前置条件：deduped 必须有候选、empty 必须没有', () => {
-    const validate = body('  private fun settleOutcomeOf(', '  /**\n   * 本轮 append 里');
-    expect(validate).toContain('SettleOutcome.DEDUPED -> hasCandidates');
-    expect(validate).toContain('SettleOutcome.EMPTY -> !hasCandidates');
-    expect(validate).toContain('return null');
   });
 
   it('LOW_WATER 在当前 (revision,index) 已闩住时直接返回（终结 ~2s 重问）', () => {
@@ -675,17 +656,6 @@ describe('#591 原生结算：源码契约守卫（不替代 Kotlin 编译/设�
     expect(js).not.toMatch(/refillEmpty|acknowledgeEmptyRefill/);
   });
 
-  it('#574：稳态水位末项（outcome=deduped/empty）也拉闩，且只闩水位、不冒充队列结束', () => {
-    const patch = body('  fun patchQueue(', '  /**\n   * #591：结算入参的');
-    const from = patch.indexOf('} else if ((settled == SettleOutcome.DEDUPED');
-    expect(from, '找不到 #574 的稳态水位分支').toBeGreaterThan(-1);
-    const branch = patch.slice(from);
-    expect(branch).toContain('settled == SettleOutcome.EMPTY');
-    expect(branch).toContain('exhaustion.mark(store.currentRevision(), store.currentIndex())');
-    // 只闩 LOW_WATER：不暂停、不发 QUEUE_ENDED——播放没结束，曲末仍由原生 repeatMode 绕回
-    expect(branch).not.toContain('finishAtTail(ctrl)');
-    expect(branch).not.toContain('EndReason.EXHAUSTED');
-  });
 });
 
 /**

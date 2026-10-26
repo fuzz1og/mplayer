@@ -40,4 +40,11 @@ dependencies {
   implementation "androidx.media3:media3-exoplayer:$media3Version"
   implementation "androidx.media3:media3-datasource:$media3Version"
   implementation 'androidx.core:core-ktx:1.15.0'
+
+  // #640：JVM 行为测试源集（src/test）。只跑纯 Kotlin/org.json 的判定与队列模型，
+  // 不需要 Robolectric / 设备；PlayerService 的 Android 依赖（Service/ExoPlayer）不进 testImplementation。
+  testImplementation 'junit:junit:4.13.2'
+  // android.jar 里的 org.json 是「not mocked」空壳；测试要真跑 JSONObject 往返（快照 / 落盘），
+  // 用与运行时同名的真实实现顶上（与 AGP 官方 unitTests.returnDefaultValues 的替代方案一致）。
+  testImplementation 'org.json:json:20240303'
 }
