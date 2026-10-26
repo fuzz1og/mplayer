@@ -38,6 +38,8 @@ jobs:
             echo "has_vulns=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # 分诊口径见 ADR docs/adr/2026-09-29-dependency-update-governance.md「周报分诊的复用口径」：
+      # 先与上一期残余逐条比对，相同即引用、只记新增与消解；残余只在总账票记账，本票分诊后关闭。
       - name: Create issue for vulnerabilities
         if: steps.check.outputs.has_vulns == 'true'
         uses: actions/github-script@v9

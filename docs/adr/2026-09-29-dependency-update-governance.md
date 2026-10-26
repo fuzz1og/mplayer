@@ -82,6 +82,7 @@ GitHub 官方唯一给出的分组示例也落在低风险层：`you can combine
 3. **`zod`（high）——上游有干净版但被声明区间挡住，且盲顶有风险。** 装 3.25.76；advisory `GHSA-mrhx-c7xc-m3w5` 区间 `introduced: 0` → **`fixed: 4.6.6`**（OSV 实测）。`npm view zod version` = 4.6.7，即**干净版本存在**。挡路的是声明：`@expo/cli@57.0.31` 写 `zod: ^3.25.76`（**3.x**），`eslint-plugin-react-hooks@7.1.1` 写 `^3.25.0 || ^4.0.0`（跨 major 兼容）。**override 到 `4.6.7` 实测可把 16 → 8**，但 `@expo/cli` 是 Expo 打包/开发服务器入口，zod 3 → 4 有已知 breaking（schema API 变动），**盲顶属于「用打包期崩溃换一条 high」**，不是定点修。处置：记残余，**须先有人验一遍 `npx expo` 全链路（`expo start` / `expo export` / 原生构建）在 zod 4 下可用**，才轮得到 override。
 4. **`expo` / `@expo/cli` / `@expo/code-signing-certificates`（high ×3）——纯传递，无独立 sink。** 三者的 `via` 分别指向 `@expo/cli`、`node-forge` / `zod` / `@expo/code-signing-certificates`、`node-forge`，**自身没有独立 advisory**。也就是说它们只是第 2、3 条在依赖树上的投影，随 `node-forge` 发版或 `zod` 解禁自动消解。`npm audit fix --force` 建议的 `expo@44.0.6` 是**降级到 SDK 44**（当前 SDK 57），直接违背本 ADR 决策 1，不可采。
 5. **`expo-router` / `query-string` / `decode-uri-component`（moderate ×3）——进 APK，但修复版需要 SDK 58。** `decode-uri-component` 装 0.2.2；`GHSA-vcc3-ghjq-m6fr` 区间 `<=0.4.2`。**干净版本存在**：OSV 实测 `0.5.0` / `0.5.1` 返回空（`0.2.2` 与 `0.4.2` 均命中）。挡路的是 `query-string@7.1.3` 声明 `decode-uri-component: ^0.2.2`——`^0.2.2` 在 **0.x 语义下只允许 `<0.3.0`**，`0.5.1` 出界。**实测两种 override 写法（根平铺 `overrides.decode-uri-component` 与嵌套 `overrides['query-string'].decode-uri-component`）均静默不生效**——`npm install` 后 lock 里仍是 0.2.2，且 npm 不报错。而 `expo-router` 的修复版 `58.0.26` 属 **SDK 58**，跨 SDK 大版本，按决策 1 不在本票做。可达性：exponential decoding of malformed percent-encoded input，需要攻击者控制被 `decode-uri-component` 解码的输入且重复触发；本仓 mobile 端 `expo-router` 的 query string 来自应用自身路由跳转，非外部不可信输入。处置：记残余，**随 SDK 58 推进自动消解**。
+   - **「随 SDK 58 消解」只覆盖这一条里的三条 moderate**（复核时刻 2026-10-26，`npm view` 实测）：`expo-router@58.0.26` 的 19 个 deps 里**已无 `query-string`**，故 expo-router / query-string / decode-uri-component 三条随 SDK 58 一起消失。**第 2、3 条的 `node-forge` 与 `zod` 不随 SDK 58 消解**——`@expo/cli@58.1.15` 仍声明 `zod: ^3.25.76` 与 `node-forge: ^1.4.0`，两者的 advisory 上界（`<4.6.6` / `<=1.4.0`）在 SDK 58 线内仍然命中。不要把这句读成「升到 SDK 58 就只剩 electron」。
 6. **补充：`braces` 已不在列表里**——见本文开头 2026-10-26 的更新，#636 的残余已由上游撤回 advisory 解除。
 
 ### 复核时刻原则（2026-10-26 立，来自 #656 的一次误判）
@@ -113,3 +114,14 @@ ls node_modules/uuid 2>/dev/null || echo ABSENT   # 未安装
 **决定性的判据是「删掉后 `npm install --package-lock-only` 零变化」**：本次删除 `overrides.uuid` 后 lock 文件 sha256 与删除前**逐字节相同**（`90349afa…`），`git status` 显示 lock 未改，`npm ci --ignore-scripts` 与 `npm run verify -- all` 全绿。若删掉后 lock 有变化，说明该 override 仍有隐藏消费者，**不能删**。
 
 **`overrides` 清理是依赖治理的常规动作，不只是 audit 周报的附属品。** 每次依赖大变动（major 升级、SDK 对齐、批量 patch）后应顺带扫一遍 `overrides` 的消费者，把死条目删掉——留着会让后来者误判「这条已被 override 挡住」，在下次 audit 出现同名包时做出错误判断。
+
+### 周报分诊的复用口径（2026-10-26 立，来自 #665 的一次全量重放）
+
+**周报是周期性发现，不是一次性工作项：每一期先与上一期残余清单逐条比对，相同的直接引用、只记新增与消解，不重做一遍归因。**
+
+实例：#665（2026-10-26）的 9 条与 #656（2026-10-19）的残余清单**逐条相同**，且 master 自审计点 `20bc23f` 起 lock / manifest **零变动**（`git diff 20bc23f..HEAD -- package-lock.json package.json packages/mobile/package.json packages/core/package.json` 为空），`npm audit --package-lock-only` 复现同样的 9 条（6 high / 3 moderate / 0 critical）——**0 条可定点修**。这种情况下，重新分诊一遍等于每 7 天回答同一个问题。
+
+配套两条：
+
+- **残余只在一处记账**：仓库里只保留一张「audit 残余总账」票（#667），新的周报票分诊后指向它并关闭。逐期开票会让 high 随着票的关闭失去 issue 级可见性，只剩 ADR 正文。
+- **比对口径以 lock 为准**：`npm audit` 读的是 `package-lock.json`（CI 与本地一致），所以「条目有没有变」等价于「审计点之后 lock 有没有变」。先 `git diff <审计点>..HEAD -- package-lock.json`，为空就直接复用上期结论；**不要用本机 `node_modules` 的 audit 结果下结论**（`--package-lock-only` 才是 CI 同口径）。
