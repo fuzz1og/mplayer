@@ -18,7 +18,11 @@ const semver = require('semver');
 const ADVISORY_FIXED = '4.6.6';
 /** 当前唯一「声明区间挡住修复线」的包：zod 只在它的运行产物里被 require */
 const DECLARER = '@expo/cli';
-const CLI_BUILD = path.join(ROOT, 'node_modules', 'expo', 'node_modules', DECLARER, 'build');
+// lock 里 @expo/cli 嵌在 node_modules/expo 下；跨 npm 版本若 hoist 到根，两个位置都认
+const CLI_BUILD = [
+  path.join(ROOT, 'node_modules', 'expo', 'node_modules', DECLARER, 'build'),
+  path.join(ROOT, 'node_modules', DECLARER, 'build'),
+].find((p) => existsSync(p));
 /** zod 4 已移除符号 / v3-only issue code：越界钉在 4.x 时出现即运行时炸 */
 const V3_ONLY_TOKENS = ['ZodTypeAny', 'invalid_enum_value', 'invalid_string'];
 
@@ -54,7 +58,7 @@ if (pinned) {
   }
   // 越界中：被挡声明者（现即 @expo/cli）的运行产物漂进 v3-only 符号
   if (lockZod && blocked.length > 0) {
-    if (!existsSync(CLI_BUILD)) {
+    if (!CLI_BUILD) {
       console.log('⚠ zod 漂移守卫：' + DECLARER + ' 运行产物未安装，符号检查跳过（安装期状态，不判红）');
     } else {
       const hits = [];
