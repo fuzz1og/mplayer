@@ -83,3 +83,15 @@ GitHub 官方唯一给出的分组示例也落在低风险层：`you can combine
 4. **`expo` / `@expo/cli` / `@expo/code-signing-certificates`（high ×3）——纯传递，无独立 sink。** 三者的 `via` 分别指向 `@expo/cli`、`node-forge` / `zod` / `@expo/code-signing-certificates`、`node-forge`，**自身没有独立 advisory**。也就是说它们只是第 2、3 条在依赖树上的投影，随 `node-forge` 发版或 `zod` 解禁自动消解。`npm audit fix --force` 建议的 `expo@44.0.6` 是**降级到 SDK 44**（当前 SDK 57），直接违背本 ADR 决策 1，不可采。
 5. **`expo-router` / `query-string` / `decode-uri-component`（moderate ×3）——进 APK，但修复版需要 SDK 58。** `decode-uri-component` 装 0.2.2；`GHSA-vcc3-ghjq-m6fr` 区间 `<=0.4.2`。**干净版本存在**：OSV 实测 `0.5.0` / `0.5.1` 返回空（`0.2.2` 与 `0.4.2` 均命中）。挡路的是 `query-string@7.1.3` 声明 `decode-uri-component: ^0.2.2`——`^0.2.2` 在 **0.x 语义下只允许 `<0.3.0`**，`0.5.1` 出界。**实测两种 override 写法（根平铺 `overrides.decode-uri-component` 与嵌套 `overrides['query-string'].decode-uri-component`）均静默不生效**——`npm install` 后 lock 里仍是 0.2.2，且 npm 不报错。而 `expo-router` 的修复版 `58.0.26` 属 **SDK 58**，跨 SDK 大版本，按决策 1 不在本票做。可达性：exponential decoding of malformed percent-encoded input，需要攻击者控制被 `decode-uri-component` 解码的输入且重复触发；本仓 mobile 端 `expo-router` 的 query string 来自应用自身路由跳转，非外部不可信输入。处置：记残余，**随 SDK 58 推进自动消解**。
 6. **补充：`braces` 已不在列表里**——见本文开头 2026-10-26 的更新，#636 的残余已由上游撤回 advisory 解除。
+
+### 复核时刻原则（2026-10-26 立，来自 #656 的一次误判）
+
+**残余清单的每条结论都对应一个复核时刻；advisory 的 `last_affected` 与 registry `latest` 都不是永久事实，季度或 audit 周报时重跑一次即可自检。**
+
+这次的实例：2026-10-16（#636）我们把 `braces` 归因为「两条 advisory 区间盖满全部已发布版本 → 无任何干净版本可钉」，结论是「等上游发版」。2026-10-26（#656）复核发现其中一条 `GHSA-vfj7-8cjw-p6xm` **已于 2026-10-23 被上游撤回**（`withdrawnAt` 置位），`braces@3.0.3` 在 OSV 上返回空，整棵依赖树自动消失——**解除条件以「撤回一条」而非「发新版」的方式达成了**。
+
+所以：
+
+- 写归因时**必须带复核时刻**（「截至某日，OSV 实测如下」），不要写成永久结论；`npm view <pkg> version` 同理。
+- 残余清单的定期自检成本很低：`npm audit --json` + 对残余包逐个 `POST https://api.osv.dev/v1/query`，一次跑完不用改任何代码。**若某条的 OSV 返回空，直接删条目并说明解除原因**，不要让已消解的条目在清单里挂着误导下一个人去试 override。
+- 「等上游发版」不是唯一解除路径：上游**撤回 advisory** 同样生效，且这条路径不会在 npm 侧产生任何版本变动信号，只能靠主动复核发现。
