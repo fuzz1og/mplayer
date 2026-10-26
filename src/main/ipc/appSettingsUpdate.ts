@@ -4,6 +4,7 @@ import path from 'path';
 import { registerIpcHandler, registerIpcHandlerSimple } from './registerHandler';
 import { downloadService } from '../services/downloadService';
 import { updateService } from '../services/updateService';
+import { resolveDialogDir, rememberDialogDir, type DialogPurpose } from '../services/dialogLastDir';
 import { db } from '../storage/db';
 import { applyElectronProxy, buildAgents, type ProxyConfig } from '../proxy';
 import {
@@ -32,16 +33,38 @@ const SOURCE_MODE_SET: ReadonlySet<SourceMode> = new Set<SourceMode>(['auto', 'd
 
 export const TIER3_SETTING_KEY = 'tier3State';
 
+const DIALOG_PURPOSES: ReadonlySet<DialogPurpose> = new Set<DialogPurpose>(['download', 'localMusic', 'tier3File']);
+
+/** 渲染层可以声明用途；缺省/非法值按「选下载目录」处理，避免旧调用方报文一变就崩。 */
+function toDialogPurpose(purpose: unknown): DialogPurpose {
+  return typeof purpose === 'string' && DIALOG_PURPOSES.has(purpose as DialogPurpose)
+    ? (purpose as DialogPurpose)
+    : 'download';
+}
+
 export function registerDialogIpc(): void {
-  registerIpcHandlerSimple('dialog:openDirectory', () => dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }));
+  // #670：Electron 43+ 不再由 OS 记忆上次目录，这里按用途分别记忆并显式传 defaultPath。
+  // purpose 区分「选下载目录」与「添加本地音乐文件夹」，两者共用本通道但不能共用记忆。
+  registerIpcHandlerSimple('dialog:openDirectory', async (purpose?: unknown) => {
+    const purposeKey = toDialogPurpose(purpose);
+    const defaultPath = await resolveDialogDir(purposeKey);
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], defaultPath });
+    if (!result.canceled && result.filePaths.length > 0) {
+      await rememberDialogDir(purposeKey, result.filePaths[0]);
+    }
+    return result;
+  });
 
   registerIpcHandlerSimple('dialog:openTier3File', async () => {
+    const defaultPath = await resolveDialogDir('tier3File');
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [{ name: 'JSON 音源清单', extensions: ['json'] }],
+      defaultPath,
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     const filePath = result.filePaths[0];
+    await rememberDialogDir('tier3File', path.dirname(filePath));
     const content = fs.readFileSync(filePath, 'utf-8');
     return { name: path.basename(filePath), content, source: filePath };
   });
