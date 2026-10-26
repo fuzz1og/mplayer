@@ -50,7 +50,7 @@
 | 平台 | 产物 | 说明 |
 | --- | --- | --- |
 | Windows | `MPlayer-Setup-<version>.exe` · `MPlayer-<version>.exe` | NSIS 安装版 / 免安装版 |
-| macOS | `MPlayer-<version>.dmg` · `MPlayer-<version>-arm64.dmg` | Intel / Apple Silicon · **需 macOS 13 (Ventura) 或更高** |
+| macOS | `MPlayer-<version>.dmg` · `MPlayer-<version>-arm64.dmg` | Intel / Apple Silicon |
 | Linux | `MPlayer-<version>.AppImage` · `mplayer_<version>_amd64.deb` | x64 |
 | Android | `MPlayer-v<version>.apk` · `MPlayer-v<version>.aab` | `.apk` 侧载安装，`.aab` 供商店 |
 
@@ -202,7 +202,7 @@ flowchart LR
 
 | 端 | 技术 |
 | --- | --- |
-| 桌面 | Electron 41 · React 19 · TypeScript · Vite 7 · Zustand · Ant Design 6 · Howler · electron-builder · electron-updater |
+| 桌面 | Electron · React 19 · TypeScript · Vite 7 · Zustand · Ant Design 6 · Howler · electron-builder · electron-updater |
 | 移动 | Expo 57 · React Native 0.86 · expo-router · media3 / ExoPlayer（自写 Kotlin 播放模块）· expo-audio（iOS 回落）· Zustand · AsyncStorage · lucide-react-native |
 | 共享 | `@mplayer/core`：多源直连客户端、歌曲识别 / 匹配、播放地址解析、缓存内核、tier3 执行器 |
 
