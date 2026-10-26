@@ -3,9 +3,7 @@ import os from 'os';
 import path from 'path';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// #670：Electron 43 起 dialog 不再由 OS 记忆上次目录，本仓需自己跟踪并显式传 defaultPath。
-// 顺带定住一个实现陷阱：dialog:openDirectory 同时服务「选下载目录」与「添加本地音乐文件夹」，
-// 两者记忆必须按用途分开，否则互相污染。
+// #670 见 src/main/services/dialogLastDir.ts
 
 const DOWNLOADS = '/tmp/mock-downloads';
 
@@ -41,7 +39,6 @@ function getHandler(channel: string) {
 
 const settings = new Map<string, unknown>();
 
-// 记忆失效判定走 fs.statSync，所以夹具必须是真实存在的目录，不能是字面量路径。
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mplayer-dialog-'));
 const existingDir = path.join(tmpRoot, 'music');
 fs.mkdirSync(existingDir);
@@ -143,15 +140,90 @@ describe('#670 对话框记忆上次使用的目录', () => {
 
       expect(settings.get(TIER3_KEY)).toBe(manifestDir);
     });
+
+    it('有记忆时用记忆目录作为 defaultPath', async () => {
+      settings.set(TIER3_KEY, existingDir);
+      registerDialogIpc();
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] } as never);
+
+      await getHandler('dialog:openTier3File')({});
+
+      expect(dialog.showOpenDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultPath: existingDir }),
+      );
+    });
+
+    it('用户取消时不写记忆', async () => {
+      settings.set(TIER3_KEY, existingDir);
+      registerDialogIpc();
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] } as never);
+
+      await getHandler('dialog:openTier3File')({});
+
+      expect(db.setSetting).not.toHaveBeenCalled();
+    });
+
+    it('记忆目录已不存在时回落 Downloads 且不抛错', async () => {
+      settings.set(TIER3_KEY, missingDir);
+      registerDialogIpc();
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] } as never);
+
+      await expect(getHandler('dialog:openTier3File')({})).resolves.toBeNull();
+      expect(dialog.showOpenDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultPath: DOWNLOADS }),
+      );
+    });
+  });
+
+  describe('用途参数的向后兼容', () => {
+    it.each(['bogus', 'playbackTrace', '', null])('未知用途 %j 按 download 处理', async (bad) => {
+      settings.set(DOWNLOAD_KEY, existingDir);
+      registerDialogIpc();
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] } as never);
+
+      await getHandler('dialog:openDirectory')({}, bad);
+
+      expect(dialog.showOpenDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultPath: existingDir }),
+      );
+    });
+  });
+
+  describe('设置读取失败', () => {
+    it('db.getSetting 抛错时回落 Downloads 而不是让对话框打不开', async () => {
+      vi.mocked(db.getSetting).mockRejectedValueOnce(new Error('settings.json 损坏'));
+      registerDialogIpc();
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] } as never);
+
+      await expect(getHandler('dialog:openDirectory')({})).resolves.toMatchObject({ canceled: true });
+      expect(dialog.showOpenDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultPath: DOWNLOADS }),
+      );
+    });
   });
 
   describe('记忆目录已不存在', () => {
+    // 记忆里存的可能不是目录（手工改配置 / 旧键复用）：对话框的 defaultPath 只能是目录。
+    it('记忆指向一个普通文件时同样回落', async () => {
+      const notADir = path.join(tmpRoot, 'plain.txt');
+      fs.writeFileSync(notADir, 'x', 'utf-8');
+      settings.set(DOWNLOAD_KEY, notADir);
+      registerDialogIpc();
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] } as never);
+
+      await getHandler('dialog:openDirectory')({});
+
+      expect(dialog.showOpenDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultPath: DOWNLOADS }),
+      );
+    });
+
     it('回落 Downloads 且不抛错', async () => {
       settings.set(DOWNLOAD_KEY, missingDir);
       registerDialogIpc();
       vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] } as never);
 
-      await expect(getHandler('dialog:openDirectory')({})).resolves.toBeDefined();
+      await expect(getHandler('dialog:openDirectory')({})).resolves.toMatchObject({ canceled: true });
       expect(dialog.showOpenDialog).toHaveBeenCalledWith(
         expect.objectContaining({ defaultPath: DOWNLOADS }),
       );

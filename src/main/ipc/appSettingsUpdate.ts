@@ -4,7 +4,7 @@ import path from 'path';
 import { registerIpcHandler, registerIpcHandlerSimple } from './registerHandler';
 import { downloadService } from '../services/downloadService';
 import { updateService } from '../services/updateService';
-import { resolveDialogDir, rememberDialogDir, type DialogPurpose } from '../services/dialogLastDir';
+import { isDialogPurpose, resolveDialogDir, rememberDialogDir, type DialogPurpose } from '../services/dialogLastDir';
 import { db } from '../storage/db';
 import { applyElectronProxy, buildAgents, type ProxyConfig } from '../proxy';
 import {
@@ -33,18 +33,18 @@ const SOURCE_MODE_SET: ReadonlySet<SourceMode> = new Set<SourceMode>(['auto', 'd
 
 export const TIER3_SETTING_KEY = 'tier3State';
 
-const DIALOG_PURPOSES: ReadonlySet<DialogPurpose> = new Set<DialogPurpose>(['download', 'localMusic', 'tier3File']);
+/** 本通道实际服务的用途；其余（如 playbackTrace）不属于它，防止渲染层借本通道污染别的记忆键。 */
+const OPEN_DIRECTORY_PURPOSES = ['download', 'localMusic'] as const satisfies readonly DialogPurpose[];
 
-/** 渲染层可以声明用途；缺省/非法值按「选下载目录」处理，避免旧调用方报文一变就崩。 */
+/** 缺省/未知用途按「选下载目录」处理，旧调用方报文不变也不会崩。 */
 function toDialogPurpose(purpose: unknown): DialogPurpose {
-  return typeof purpose === 'string' && DIALOG_PURPOSES.has(purpose as DialogPurpose)
-    ? (purpose as DialogPurpose)
+  return isDialogPurpose(purpose) && (OPEN_DIRECTORY_PURPOSES as readonly string[]).includes(purpose)
+    ? purpose
     : 'download';
 }
 
 export function registerDialogIpc(): void {
-  // #670：Electron 43+ 不再由 OS 记忆上次目录，这里按用途分别记忆并显式传 defaultPath。
-  // purpose 区分「选下载目录」与「添加本地音乐文件夹」，两者共用本通道但不能共用记忆。
+  // purpose 区分「选下载目录」与「添加本地音乐文件夹」：同一通道，记忆分开。
   registerIpcHandlerSimple('dialog:openDirectory', async (purpose?: unknown) => {
     const purposeKey = toDialogPurpose(purpose);
     const defaultPath = await resolveDialogDir(purposeKey);

@@ -12,7 +12,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
-  app: { getVersion: mocks.getVersion, getPath: () => '/tmp/mock-downloads' },
+  app: {
+    getVersion: mocks.getVersion,
+    getPath: (name: string) => (name === 'downloads' ? '/tmp/mock-downloads' : '/tmp/mock-user-data'),
+  },
   dialog: { showSaveDialog: mocks.showSaveDialog },
 }));
 
@@ -146,7 +149,7 @@ describe('桌面播放诊断服务（ring list/clear + export）', () => {
       await exportPlaybackTraces();
 
       const passedDefaultPath = mocks.showSaveDialog.mock.calls[0][0].defaultPath as string;
-      expect(passedDefaultPath.startsWith(exportDir)).toBe(true);
+      expect(path.dirname(passedDefaultPath)).toBe(exportDir);
       expect(path.basename(passedDefaultPath)).toMatch(/^mplayer-playback-trace-.*\.json$/);
       expect(mocks.setSetting).toHaveBeenCalledWith('dialogLastDir:playbackTrace', exportDir);
     } finally {
