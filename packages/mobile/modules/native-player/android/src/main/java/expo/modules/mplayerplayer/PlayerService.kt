@@ -282,6 +282,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     policy.skipLimit = policyIn.skipLimit
     policy.stopWhenOffline = policyIn.stopWhenOffline
     policy.prefetchAhead = policyIn.prefetchAhead
+    policy.endOfTrack = policyIn.endOfTrack
     policy.loopMode = loopMode
 
     store.load(tracks, startIndex)
@@ -717,10 +718,16 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   }
 
   fun setPolicy(policyIn: PolicySnapshot) {
+    val wasRestartSingle = policy.restartOnSingleEffective()
     policy.autoSkip = policyIn.autoSkip
     policy.skipLimit = policyIn.skipLimit
     policy.stopWhenOffline = policyIn.stopWhenOffline
     policy.prefetchAhead = policyIn.prefetchAhead
+    // 表可能与 loopMode 反着来：换表后 repeatMode 必须重算，否则 HOLD 与 REPEAT_MODE_ONE 打架。
+    policy.endOfTrack = policyIn.endOfTrack
+    if (policy.restartOnSingleEffective() != wasRestartSingle) {
+      controller?.let { ctrl -> main.post { ctrl.repeatMode(policy.repeatMode()) } }
+    }
   }
 
   fun stop() {
@@ -824,7 +831,12 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   /** 曲末处置与 `repeatMode()` 必须同源：判定在 [WindowSettlement.endedAction]，这里只执行副作用。 */
   private fun handleEnded() {
     val ctrl = controller ?: return
-    when (WindowSettlement.endedAction(policy.loopMode, store.remainingAfterCurrent())) {
+    val action = WindowSettlement.endedAction(
+      policy.endOfTrack,
+      policy.loopMode,
+      store.remainingAfterCurrent() > 0
+    )
+    when (action) {
       WindowSettlement.EndedAction.RESTART_CURRENT -> {
         ctrl.player.seekTo(0, 0L)
         if (userWantsPlay) ctrl.player.play()
@@ -835,6 +847,12 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
         // 队列里还有，但 player 没推进 → 强制 seek 到下一项
         ctrl.player.seekToNextMediaItem()
         if (userWantsPlay) ctrl.player.play()
+        return
+      }
+
+      // #666 随机播到头：后置条件与 EXHAUSTED 完全一致（复用 finishAtTail），不向 JS 要歌、不 stopSelf。
+      WindowSettlement.EndedAction.HOLD -> {
+        finishAtTail(ctrl, cause = "shuffle exhausted (endOfTrack=hold)")
         return
       }
 
@@ -1239,6 +1257,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       store.restoreFrom(json)
       if (store.size() == 0) return
       policy.loopMode = json.optString("loopMode", AdvancePolicy.LOOP_OFF)
+      // 表随 policy 落盘（ADR 权衡表第 3 行）：缺键 → null → 兜底，绝不静默当成「全 ask-js」。
+      policy.endOfTrack = EndOfTrackPolicy.fromJson(json.optJSONObject(KEY_END_OF_TRACK))
       val restoredIndex = store.currentIndex()
       val position = json.optLong("positionMs", 0L)
       restoring = true
@@ -1293,6 +1313,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       json.put("positionMs", (stateCache["positionMs"] as? Number)?.toLong() ?: 0L)
       json.put("playWhenReady", userWantsPlay)
       json.put("loopMode", policy.loopMode)
+      policy.endOfTrack?.let { json.put(KEY_END_OF_TRACK, it.toJson()) }
       prefs?.edit()?.putString(KEY_SNAPSHOT, json.toString())?.apply()
     } catch (error: Throwable) {
       Log.w(TAG, "persist failed", error)
@@ -1321,6 +1342,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     private const val PREFS_NAME = "mplayer_native_player"
     private const val KEY_SNAPSHOT = "snapshot"
 
+    /** #666 曲末策略表在快照里的键；缺键 = 缺表 = 兜底。 */
+    private const val KEY_END_OF_TRACK = "endOfTrack"
+
     /** 过期后等 JS 灌新 URL 的上限（core 解析链 3~9s，#424）。 */
     private const val REFRESH_WAIT_MS = 10_000L
 
@@ -1343,5 +1367,7 @@ class PolicySnapshot(
   val autoSkip: Boolean,
   val skipLimit: Int,
   val stopWhenOffline: Boolean,
-  val prefetchAhead: Int
+  val prefetchAhead: Int,
+  /** #666 曲末策略表；null = 缺表 → 原生走内联兜底。 */
+  val endOfTrack: EndOfTrackPolicy? = null
 )

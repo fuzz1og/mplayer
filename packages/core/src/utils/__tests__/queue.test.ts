@@ -139,3 +139,171 @@ describe('推进的 shuffleScope（#639 R1）', () => {
     expect(getPrevSongIndex(full, 0, '随机播放', state, 'authoritative')).toBe(2); // '3'
   });
 });
+
+// ---------------------------------------------------------------------------
+// #666：曲末决策上提 core —— planEndOfTrack + buildEndOfTrackPolicy
+// ---------------------------------------------------------------------------
+import { buildEndOfTrackPolicy, planEndOfTrack } from '../queue.js';
+import type { PlayMode, ShuffleState } from '../../types/index.js';
+
+type Overrides = {
+  playMode?: PlayMode;
+  shuffle?: ShuffleState | null;
+  shuffleScope?: 'authoritative' | 'window';
+  hasNextInWindow?: boolean;
+  windowSaturated?: boolean;
+};
+
+/** 曲末用例的公共入参；只覆盖默认 stop（wrap 本轮不实现，不在这里测）。 */
+function endedInput(overrides: Overrides = {}) {
+  return {
+    playMode: overrides.playMode ?? ('列表循环' as PlayMode),
+    shuffle: overrides.shuffle ?? null,
+    shuffleScope: overrides.shuffleScope,
+    hasNextInWindow: overrides.hasNextInWindow ?? false,
+    windowSaturated: overrides.windowSaturated ?? false,
+    shuffleEndPolicy: 'stop' as const,
+  };
+}
+
+const atEnd: ShuffleState = { order: ['1', '2', '3'], cursor: 2 };
+const midSeq: ShuffleState = { order: ['1', '2', '3'], cursor: 0 };
+
+describe('planEndOfTrack 单曲循环', () => {
+  it('曲末重播自己，即使窗口里还有下一项', () => {
+    expect(planEndOfTrack(endedInput({ playMode: '单曲循环' })).action).toBe('restart-current');
+    expect(planEndOfTrack(endedInput({ playMode: '单曲循环', hasNextInWindow: true })).action).toBe('restart-current');
+  });
+});
+
+describe('planEndOfTrack 列表循环', () => {
+  it('窗口内有下一项就推进，饱和与否都推进', () => {
+    expect(planEndOfTrack(endedInput({ hasNextInWindow: true })).action).toBe('advance-next');
+    expect(planEndOfTrack(endedInput({ hasNextInWindow: true, windowSaturated: true })).action).toBe('advance-next');
+  });
+
+  it('窗口尾问 JS：列表循环靠 JS 绕回，永不 hold', () => {
+    expect(planEndOfTrack(endedInput({})).action).toBe('ask-js');
+    expect(planEndOfTrack(endedInput({ windowSaturated: true })).action).toBe('ask-js');
+  });
+});
+
+describe('planEndOfTrack 随机播放（shuffleEndPolicy=stop）', () => {
+  it('窗口内有下一项就推进，序列末位也照样推进', () => {
+    expect(planEndOfTrack(endedInput({ playMode: '随机播放', shuffle: atEnd, hasNextInWindow: true })).action).toBe(
+      'advance-next'
+    );
+  });
+
+  it('序列末位 + 本轮零新增 + 窗口尾 → hold：随机播到头就停，不绕回', () => {
+    expect(
+      planEndOfTrack({ playMode: '随机播放', shuffle: atEnd, hasNextInWindow: false, windowSaturated: true, shuffleEndPolicy: 'stop' })
+        .action
+    ).toBe('hold');
+  });
+
+  it('序列末位但本轮没零新增 → ask-js（deduped 单独一个信号不足以判到头）', () => {
+    expect(
+      planEndOfTrack({ playMode: '随机播放', shuffle: atEnd, hasNextInWindow: false, windowSaturated: false, shuffleEndPolicy: 'stop' })
+        .action
+    ).toBe('ask-js');
+  });
+
+  it('本轮零新增但序列不在末位 → ask-js：还能往后走，不能停', () => {
+    expect(
+      planEndOfTrack({ playMode: '随机播放', shuffle: midSeq, hasNextInWindow: false, windowSaturated: true, shuffleEndPolicy: 'stop' })
+        .action
+    ).toBe('ask-js');
+  });
+
+  it('无序列 → ask-js：到头必须被证成，不能默认', () => {
+    expect(
+      planEndOfTrack({ playMode: '随机播放', shuffle: null, hasNextInWindow: false, windowSaturated: true, shuffleEndPolicy: 'stop' })
+        .action
+    ).toBe('ask-js');
+  });
+
+  it('空序列 / 游标 -1 都不算到头', () => {
+    expect(
+      planEndOfTrack({ playMode: '随机播放', shuffle: { order: [], cursor: -1 }, hasNextInWindow: false, windowSaturated: true, shuffleEndPolicy: 'stop' })
+        .action
+    ).toBe('ask-js');
+    expect(
+      planEndOfTrack({ playMode: '随机播放', shuffle: { order: ['1', '2'], cursor: -1 }, hasNextInWindow: false, windowSaturated: true, shuffleEndPolicy: 'stop' })
+        .action
+    ).toBe('ask-js');
+  });
+
+  it('window 作用域下不 hold：序列可能缺成员，到头不可证', () => {
+    expect(
+      planEndOfTrack({ playMode: '随机播放', shuffle: atEnd, shuffleScope: 'window', hasNextInWindow: false, windowSaturated: true, shuffleEndPolicy: 'stop' })
+        .action
+    ).toBe('ask-js');
+  });
+
+  it('单元素序列（cursor=0 即末位）走同一规则', () => {
+    expect(
+      planEndOfTrack({ playMode: '随机播放', shuffle: { order: ['1'], cursor: 0 }, hasNextInWindow: false, windowSaturated: true, shuffleEndPolicy: 'stop' })
+        .action
+    ).toBe('hold');
+  });
+});
+
+describe('planEndOfTrack 透传与缺省', () => {
+  it('shuffle 原样透传（曲末不推进游标）', () => {
+    expect(planEndOfTrack(endedInput({ playMode: '随机播放', shuffle: atEnd })).shuffle).toBe(atEnd);
+    expect(planEndOfTrack(endedInput({})).shuffle).toBeNull();
+  });
+
+  it('shuffleScope 缺省 = authoritative', () => {
+    expect(
+      planEndOfTrack({ playMode: '随机播放', shuffle: atEnd, hasNextInWindow: false, windowSaturated: true, shuffleEndPolicy: 'stop' })
+        .action
+    ).toBe('hold');
+  });
+});
+
+describe('buildEndOfTrackPolicy：与 planEndOfTrack 同源的下推表', () => {
+  it('列表循环 → 窗口尾问 JS', () => {
+    expect(buildEndOfTrackPolicy({ playMode: '列表循环', shuffle: null, windowSaturated: true, shuffleEndPolicy: 'stop' })).toEqual({
+      restartOnSingle: false,
+      advanceWithinWindow: true,
+      atWindowTail: 'ask-js',
+      shuffleEndPolicy: 'stop',
+    });
+  });
+
+  it('单曲循环 → restartOnSingle', () => {
+    expect(
+      buildEndOfTrackPolicy({ playMode: '单曲循环', shuffle: null, windowSaturated: false, shuffleEndPolicy: 'stop' }).restartOnSingle
+    ).toBe(true);
+  });
+
+  it('随机到末位 → 窗口尾 hold', () => {
+    expect(
+      buildEndOfTrackPolicy({ playMode: '随机播放', shuffle: atEnd, windowSaturated: true, shuffleEndPolicy: 'stop' }).atWindowTail
+    ).toBe('hold');
+  });
+
+  it('随机未到末位 → 窗口尾问 JS', () => {
+    expect(
+      buildEndOfTrackPolicy({ playMode: '随机播放', shuffle: midSeq, windowSaturated: true, shuffleEndPolicy: 'stop' }).atWindowTail
+    ).toBe('ask-js');
+  });
+
+  it('末位但本轮补进了新项 → 问 JS（饱和态是 hold 的硬前置，得由调用方给）', () => {
+    expect(
+      buildEndOfTrackPolicy({ playMode: '随机播放', shuffle: atEnd, windowSaturated: false, shuffleEndPolicy: 'stop' }).atWindowTail
+    ).toBe('ask-js');
+  });
+
+  it('window 作用域 / 无序列 → 问 JS（不把不可证下推成 hold）', () => {
+    expect(
+      buildEndOfTrackPolicy({ playMode: '随机播放', shuffle: atEnd, shuffleScope: 'window', windowSaturated: true, shuffleEndPolicy: 'stop' })
+        .atWindowTail
+    ).toBe('ask-js');
+    expect(
+      buildEndOfTrackPolicy({ playMode: '随机播放', shuffle: null, windowSaturated: true, shuffleEndPolicy: 'stop' }).atWindowTail
+    ).toBe('ask-js');
+  });
+});

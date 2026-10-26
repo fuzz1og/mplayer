@@ -55,6 +55,21 @@ class TrackInput : Record {
   var meta: TrackMetaInput = TrackMetaInput()
 }
 
+/** #666 曲末策略表的 Record 形状；字段与 core `EndOfTrackPolicy` 一一对应，默认值即「全走问 JS」。 */
+class EndOfTrackPolicyInput : Record {
+  @Field
+  var restartOnSingle: Boolean = false
+
+  @Field
+  var advanceWithinWindow: Boolean = true
+
+  @Field
+  var atWindowTail: String = EndOfTrackPolicy.AT_WINDOW_TAIL_ASK_JS
+
+  @Field
+  var shuffleEndPolicy: String = EndOfTrackPolicy.SHUFFLE_END_STOP
+}
+
 class PolicyInput : Record {
   @Field
   var autoSkip: Boolean = true
@@ -67,6 +82,10 @@ class PolicyInput : Record {
 
   @Field
   var prefetchAhead: Int = AdvancePolicy.DEFAULT_PREFETCH_AHEAD
+
+  /** #666 曲末策略表；null = 缺表（冷启 / 老版 JS）→ 原生走内联兜底。兜底是默认，不是例外。 */
+  @Field
+  var endOfTrack: EndOfTrackPolicyInput? = null
 }
 
 class LoadQueueInput : Record {
@@ -277,5 +296,13 @@ private fun PolicyInput.toSnapshot(): PolicySnapshot = PolicySnapshot(
   autoSkip = autoSkip,
   skipLimit = skipLimit,
   stopWhenOffline = stopWhenOffline,
-  prefetchAhead = prefetchAhead
+  prefetchAhead = prefetchAhead,
+  endOfTrack = endOfTrack?.let {
+    EndOfTrackPolicy(
+      restartOnSingle = it.restartOnSingle,
+      advanceWithinWindow = it.advanceWithinWindow,
+      atWindowTail = it.atWindowTail,
+      shuffleEndPolicy = it.shuffleEndPolicy
+    )
+  }
 )

@@ -126,6 +126,112 @@ export function getPrevSongIndex(
   return (currentIndex - 1 + queue.length) % queue.length;
 }
 
+
+// ---------------------------------------------------------------- 曲末决策（#666）
+
+/** 曲末动作。hold = 随机播到头，停在这里：不绕回、也不向 JS 要歌（与 ask-js 是两种不同的「不推进」）。 */
+export type EndOfTrackAction = 'restart-current' | 'advance-next' | 'ask-js' | 'hold';
+
+/** 随机播到序列末尾的产品语义。wrap 只是类型占位，当前不实现（ADR 2026-10-26 第 4 条）。 */
+export type ShuffleEndPolicy = 'stop' | 'wrap';
+
+/**
+ * planEndOfTrack 的入参。与 {@link AdvanceInput} 同族：只吃纯数据，不碰播放器。hasNextInWindow 是原生几何事实，
+ * windowSaturated 是本轮补窗事实——两者缺一都不能断言「随机到头」（#650 的病根就是只拿后者反推）。
+ */
+export interface EndOfTrackInput {
+  playMode: PlayMode;
+  /** 稳定随机序列；null = 没有序列 → 「随机到头」不可证，不得 hold。 */
+  shuffle: ShuffleState | null;
+  /**
+   * 序列作用域。'authoritative'（缺省）= 队列是完整成员集，可据序列断言「到头」；
+   * 'window' = 队列只是原生预取窗口的子集 → 序列可能缺成员，「到头」不可证。
+   */
+  shuffleScope?: ShuffleScope;
+  /** 原生几何：播放列表里当前曲之后还有项。 */
+  hasNextInWindow: boolean;
+  /** 本轮补窗零新增（JS 上报 outcome 为 'deduped' / 'empty'）。 */
+  windowSaturated: boolean;
+  shuffleEndPolicy: ShuffleEndPolicy;
+}
+
+/** 一次曲末处置的结论。shuffle 原样透传——曲末不是一次「下一首」推进，游标不在这里动。 */
+export interface EndOfTrackPlan {
+  action: EndOfTrackAction;
+  shuffle: ShuffleState | null;
+}
+
+/** 随机序游标是否已在序列末位；无序列/空序列一律 false（「到头」必须被证成，不能默认）。 */
+function shuffleAtEnd(shuffle: ShuffleState | null): boolean {
+  if (!shuffle || shuffle.order.length === 0) return false;
+  return shuffle.cursor >= shuffle.order.length - 1;
+}
+
+/**
+ * 曲末决策的唯一裁处（#666）：ADR 2026-10-26-end-of-track-decision-ownership 的 (c) 方案。
+ * 顺序不可调换——单曲循环先于「窗口内有项」，与改前 Kotlin 的 endedAction 一致。
+ */
+export function planEndOfTrack(input: EndOfTrackInput): EndOfTrackPlan {
+  const {
+    playMode,
+    shuffle,
+    shuffleScope = 'authoritative',
+    hasNextInWindow,
+    windowSaturated,
+    shuffleEndPolicy,
+  } = input;
+  const plan = (action: EndOfTrackAction): EndOfTrackPlan => ({ action, shuffle });
+
+  // 单曲循环：曲末重播自己（原生 REPEAT_MODE_ONE 的防御分支）
+  if (playMode === '单曲循环') return plan('restart-current');
+  // 窗口里还有项：三种模式都顺序推进，不涉及「到头」判断
+  if (hasNextInWindow) return plan('advance-next');
+  // 随机播到头 = 序列末位（只有 core 看得见）+ 本轮零新增 同时成立；任一不成立都不得 hold。
+  if (
+    playMode === '随机播放' &&
+    shuffleEndPolicy === 'stop' &&
+    shuffleScope === 'authoritative' &&
+    shuffleAtEnd(shuffle) &&
+    windowSaturated
+  ) {
+    return plan('hold');
+  }
+  // 其余：列表循环绕回 / 随机未到头 / 序列缺失 / 本轮不确定 —— 都只能问 JS。
+  // 'wrap' 刻意落在这里（= 今天的行为）：它只是类型占位，本轮不实现。
+  return plan('ask-js');
+}
+
+/**
+ * 下推原生的曲末策略表（#666 第 2 步）：把 playMode + 序列事实投影成原生可查表的形态，
+ * 原生不再自己解释 playMode。与 planEndOfTrack 同源——atWindowTail 就是窗口尾那一次的结论。
+ */
+export interface EndOfTrackPolicy {
+  /** 单曲循环 → 曲末重播当前曲（repeatMode 与 endedAction 共用这一格，拆开两者的隐式耦合）。 */
+  restartOnSingle: boolean;
+  /** 窗口里有下一项时是否顺序推进（三种模式当前恒 true）。 */
+  advanceWithinWindow: boolean;
+  /** 窗口尾动作：hold = 停在这里（随机到头），ask-js = 向 JS 要歌。另两个动作在窗口尾不可能出现。 */
+  atWindowTail: 'ask-js' | 'hold';
+  shuffleEndPolicy: ShuffleEndPolicy;
+}
+
+/** 下推表的入参：去掉几何事实（那是原生运行时才知道的）。 */
+export type EndOfTrackPolicyInput = Omit<EndOfTrackInput, 'hasNextInWindow'>;
+
+/**
+ * 投影成下推表。不另写一套判定：窗口尾结论直接问 planEndOfTrack。
+ * windowSaturated 由调用方给（那是本轮事实，只有 JS 知道），**不得在这里假定 true**——
+ * 假定成立会把「本轮其实补进了新项」也下推成 hold（#650 病根）。
+ */
+export function buildEndOfTrackPolicy(input: EndOfTrackPolicyInput): EndOfTrackPolicy {
+  const atWindowTail = planEndOfTrack({ ...input, hasNextInWindow: false }).action;
+  return {
+    restartOnSingle: input.playMode === '单曲循环',
+    advanceWithinWindow: true,
+    atWindowTail: atWindowTail === 'hold' ? 'hold' : 'ask-js',
+    shuffleEndPolicy: input.shuffleEndPolicy,
+  };
+}
 /** 随机防重复 index：队列 ≤ 1 归位 currentIndex，否则随机到不等于 currentIndex。
  *  **无序列时的兼容路径**：只在调用方没有稳定随机序列（#511）时走到。
  */

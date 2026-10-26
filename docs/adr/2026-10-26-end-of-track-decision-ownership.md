@@ -1,6 +1,6 @@
 # ADR: 曲末决策上提 core——core 出决策表，原生只执行
 
-- 状态：**提议（待拍板）**——待定的是**实现方式**（采纳 (c) 与四步切分），**不是 `shuffleEndPolicy` 的取值**：那个已定为 `'stop'`（见决策第 4 条）。本 ADR 只定取舍与建议，**代码未动**；实施另开票（#650 只修 T8 守卫）
+- 状态：**已接受（#666 已实施）**——采纳 (c) 与四步切分；`shuffleEndPolicy` 取值定为 `'stop'`（见决策第 4 条）。实施落点：core `planEndOfTrack` / `buildEndOfTrackPolicy` · policy 快照 `endOfTrack` 字段 · Kotlin `EndOfTrackPolicy` + `WindowSettlement.endedAction` 的查表/兜底双路径
 - 日期：2026-10-26
 - 关联：**#650**（本决策的触发票，T8 伪推进已修）· #639 R4（本决策的来源）· #591 / ADR `2026-10-07-window-patch-settle-contract.md`（补窗结算契约）· 上游 ADR `2026-09-29-native-playback-ownership.md`（原生持队列 / 原生推进 / I5 / I6）· `2026-09-30-stable-shuffle-order.md`（随机序的单一来源在 core）
 

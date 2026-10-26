@@ -26,13 +26,19 @@ internal class AdvancePolicy {
   @Volatile
   var loopMode: String = LOOP_OFF
 
+  /** #666 下推的曲末策略表；null = 缺表 → 曲末走内联兜底、repeat 按 loopMode 猜。 */
+  @Volatile
+  var endOfTrack: EndOfTrackPolicy? = null
+
   /**
-   * 只对「单曲循环」用原生 repeat；**绝不用 REPEAT_MODE_ALL**。
-   * 原生播放列表只是 JS 队列的一个**窗口**（loadQueue 一首 + patchQueue 追加），用 REPEAT_MODE_ALL 
-   * 会让窗口绕回自己（把早就播过的歌当成「列表循环」重播），也不会向 JS 要新歌。
+   * 「曲末该不该重播自己」的唯一读法：有表读表，缺表才退回 loopMode。
+   * 绝不用 REPEAT_MODE_ALL——原生列表只是 JS 队列的一个窗口，绕回会把早播过的歌重播。
    */
-  fun repeatMode(): Int = when (loopMode) {
-    LOOP_SINGLE -> Player.REPEAT_MODE_ONE
+  fun restartOnSingleEffective(): Boolean = endOfTrack?.restartOnSingle ?: (loopMode == LOOP_SINGLE)
+
+  /** 与 [restartOnSingleEffective] 同源；与曲末判定拆开，两者都读表、互不依赖。 */
+  fun repeatMode(): Int = when {
+    restartOnSingleEffective() -> Player.REPEAT_MODE_ONE
     else -> Player.REPEAT_MODE_OFF
   }
 

@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 模式与曲末处理的一致性（#640 / #639 R4.1）：`repeatMode()` 与曲末「下一首该是谁」必须是同一份语义，
+ * 模式与曲末处理的一致性（#640 / #639 R4.1 / #666）：`repeatMode()` 与曲末「下一首该是谁」必须同源，
  * 且真实取值域内「向 JS 要歌」这条路径必须可达——否则随机 / 列表循环到窗口尾就再也续不上。
  */
 class AdvancePolicyTest {
@@ -33,7 +33,7 @@ class AdvancePolicyTest {
   fun tailEndBehaviourNeverContradictsRepeatMode() {
     for (loopMode in loopModes) {
       val policy = policyOf(loopMode)
-      val atTail = WindowSettlement.endedAction(loopMode, remainingAfterCurrent = 0)
+      val atTail = WindowSettlement.endedAction(policy.endOfTrack, loopMode, hasNextInWindow = false)
       when (policy.repeatMode()) {
         Player.REPEAT_MODE_ONE ->
           assertEquals("$loopMode: 原生自己循环 → 曲末必须是重播当前曲", WindowSettlement.EndedAction.RESTART_CURRENT, atTail)
@@ -52,8 +52,8 @@ class AdvancePolicyTest {
 
   @Test
   fun askJsPathIsReachableInTheRealLoopModeDomain() {
-    val askJs = loopModes.filter {
-      WindowSettlement.endedAction(it, remainingAfterCurrent = 0) == WindowSettlement.EndedAction.ASK_JS
+    val askJs = loopModes.filter { loopMode ->
+      WindowSettlement.endedAction(null, loopMode, hasNextInWindow = false) == WindowSettlement.EndedAction.ASK_JS
     }
     assertTrue("'all' / 'off' 到窗口尾必须能向 JS 要歌，否则随机与列表循环永远续不上", askJs.contains(AdvancePolicy.LOOP_ALL))
     assertTrue(askJs.contains(AdvancePolicy.LOOP_OFF))
@@ -76,14 +76,69 @@ class AdvancePolicyTest {
       assertEquals(
         "$loopMode: 窗口里还有下一项 → 顺序推进",
         WindowSettlement.EndedAction.ADVANCE_NEXT,
-        WindowSettlement.endedAction(loopMode, remainingAfterCurrent = 1)
+        WindowSettlement.endedAction(null, loopMode, hasNextInWindow = true)
       )
     }
     assertEquals(
       "'single' 由 REPEAT_MODE_ONE 内部循环，走到 ENDED 只会是防御分支 → 重播当前曲",
       WindowSettlement.EndedAction.RESTART_CURRENT,
-      WindowSettlement.endedAction(AdvancePolicy.LOOP_SINGLE, remainingAfterCurrent = 1)
+      WindowSettlement.endedAction(null, AdvancePolicy.LOOP_SINGLE, hasNextInWindow = true)
     )
+  }
+
+  // ---------------------------------------------------------------- #666：repeatMode 改读表
+
+  private val shuffleStopTable = EndOfTrackPolicy(
+    restartOnSingle = false,
+    advanceWithinWindow = true,
+    atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_HOLD,
+    shuffleEndPolicy = EndOfTrackPolicy.SHUFFLE_END_STOP
+  )
+
+  @Test
+  fun tableOverridesLoopModeWhenDecidingNativeRepeat() {
+    val loopAll = AdvancePolicy().apply {
+      loopMode = AdvancePolicy.LOOP_ALL
+      endOfTrack = shuffleStopTable.copy(restartOnSingle = true)
+    }
+    assertEquals("有表时 loopMode 不作数：表说要重播就是 ONE", Player.REPEAT_MODE_ONE, loopAll.repeatMode())
+    assertTrue(loopAll.restartOnSingleEffective())
+
+    val loopSingle = AdvancePolicy().apply {
+      loopMode = AdvancePolicy.LOOP_SINGLE
+      endOfTrack = shuffleStopTable
+    }
+    assertEquals("表说不重播 → OFF，哪怕 loopMode 还是 single", Player.REPEAT_MODE_OFF, loopSingle.repeatMode())
+    assertFalse(loopSingle.restartOnSingleEffective())
+  }
+
+  @Test
+  fun repeatModeFallsBackToLoopModeOnlyWhenTheTableIsAbsent() {
+    val missing = AdvancePolicy().apply { loopMode = AdvancePolicy.LOOP_SINGLE }
+    assertTrue("缺表 → 沿用 #640 的 loopMode 猜测", missing.restartOnSingleEffective())
+    assertEquals(Player.REPEAT_MODE_ONE, missing.repeatMode())
+    missing.endOfTrack = shuffleStopTable
+    assertEquals("表一到手就接管", Player.REPEAT_MODE_OFF, missing.repeatMode())
+  }
+
+  @Test
+  fun repeatModeAndEndedActionStillAgreeWithTheTable() {
+    // 同一份表下：原生 One ↔ 曲末重播；原生 Off ↔ 曲末不是重播。两处都读表 ⇒ 不会再分叉。
+    for (restart in listOf(true, false)) {
+      val table = shuffleStopTable.copy(restartOnSingle = restart)
+      for (loopMode in loopModes) {
+        val policy = AdvancePolicy().apply {
+          this.loopMode = loopMode
+          endOfTrack = table
+        }
+        val atTail = WindowSettlement.endedAction(table, loopMode, hasNextInWindow = false)
+        if (policy.repeatMode() == Player.REPEAT_MODE_ONE) {
+          assertEquals("$loopMode/$restart: ONE 必须重播当前曲", WindowSettlement.EndedAction.RESTART_CURRENT, atTail)
+        } else {
+          assertNotEquals("$loopMode/$restart: OFF 下不许重播", WindowSettlement.EndedAction.RESTART_CURRENT, atTail)
+        }
+      }
+    }
   }
 
   // ---------------------------------------------------------------- 水位与护栏
