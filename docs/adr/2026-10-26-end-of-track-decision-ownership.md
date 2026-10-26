@@ -1,6 +1,6 @@
 # ADR: 曲末决策上提 core——core 出决策表，原生只执行
 
-- 状态：**提议（待拍板）**——本 ADR 只定取舍与建议，**代码未动**；实施另开票（#650 只修 T8 守卫）
+- 状态：**提议（待拍板）**——待定的是**实现方式**（采纳 (c) 与四步切分），**不是 `shuffleEndPolicy` 的取值**：那个已定为 `'stop'`（见决策第 4 条）。本 ADR 只定取舍与建议，**代码未动**；实施另开票（#650 只修 T8 守卫）
 - 日期：2026-10-26
 - 关联：**#650**（本决策的触发票，T8 伪推进已修）· #639 R4（本决策的来源）· #591 / ADR `2026-10-07-window-patch-settle-contract.md`（补窗结算契约）· 上游 ADR `2026-09-29-native-playback-ownership.md`（原生持队列 / 原生推进 / I5 / I6）· `2026-09-30-stable-shuffle-order.md`（随机序的单一来源在 core）
 
@@ -38,9 +38,12 @@ core 有 `planAdvance` / `stepShuffle` / `getNextSongIndex` 三套「下一首�
 3. Kotlin 侧 `WindowSettlement.endedAction` **退化为查表**（吃下发来的表 + 原生已知的几何事实
    `remainingAfterCurrent`），`handleEnded()` 仍只做副作用。**没有表时**保留今天这份内联兜底
    （冷启 / `MediaLibraryService` 重启 / JS 从未投喂过的极端路径），并用 JUnit 钉住兜底与查表两条路径同形。
-4. 随机模式「播到头」的产品语义（停下还是绕回随机序）从「猜 `deduped`」变成一个**显式 policy 字段**
-   （`shuffleEndPolicy: 'stop' | 'wrap'`）——这正是 #650 里 `deduped` 分不清「真到头」与「本轮没新候选」的病根：
-   那个区分不是原生能看见的事实，必须由握着完整队列与随机序的 core 明确表态。
+4. 随机模式「播到头」从「猜 `deduped`」变成一个**显式 policy 字段** `shuffleEndPolicy`——这正是 #650 里
+   `deduped` 分不清「真到头」与「本轮没新候选」的病根：那个区分不是原生能看见的事实，必须由握着完整队列与随机序的 core 明确表态。
+
+   **取值已定 = `'stop'`**（2026-10-26 拍板：随机播到头就停，不绕回）。本 ADR 待定的**不是取值，而是实现方式**——
+   怎么让 core 把「真到头」这个事实明确表态给原生，而不是让原生从 `deduped` 反推。字段保留 `'wrap'` 这个可能值
+   只是为将来的产品变更留位置，**当前唯一实现是 `'stop'`**。
 
 **为什么是 (c) 而不是 (b)（曲末发事件给 JS、JS 算完回喂）**：见下方权衡表——(b) 在后台与重启两条路径上
 直接违反 I6，且事件往返会在曲末制造可听见的空档。
@@ -74,8 +77,8 @@ R4.1/R4.4/R4.5/#650 四次都是这么来的。
 
 - 「曲末怎么走」只有一个作者（core），Kotlin 退化为查表 + 副作用，与 ADR `2026-09-29-native-playback-ownership`
   决策 5（策略语义单一来源在 core）重新对齐；R4 从「判定仍在 Kotlin」变成可验收。
-- 随机模式「播到头」从**猜信号**（`deduped`）变成**显式策略**（`shuffleEndPolicy`），#650 那条
-  「分不清真到头还是本轮没新候选」的注释可以整段删掉。
+- 随机模式「播到头」从**猜信号**（`deduped`）变成**显式策略**（`shuffleEndPolicy`，取值已定 `'stop'`），
+  #650 那条「分不清真到头还是本轮没新候选」的注释可以整段删掉。
 - 决策表可被 core 的单测覆盖（双端同一份），不再依赖真机摆场景。
 
 ### 代价与残余风险
@@ -91,7 +94,8 @@ R4.1/R4.4/R4.5/#650 四次都是这么来的。
 
 ### 建议的实施切分（另开票，本 ADR 不动代码）
 
-1. core：`planEndOfTrack` + 单测（三种 `playMode` × 窗口内有/无下一项 × 饱和/不饱和 × `shuffleEndPolicy` 两值）。
+1. core：`planEndOfTrack` + 单测（三种 `playMode` × 窗口内有/无下一项 × 饱和/不饱和 × `shuffleEndPolicy` 当前唯一取值 `'stop'`；
+   绕回不实现，测试只需覆盖 `'stop'`）。
 2. 契约：policy 快照加 `endOfTrack` 字段；原生入参同步；JS 假桥测试跟着改。
 3. Kotlin：`WindowSettlement.endedAction` 改为「查表优先、缺表兜底」，并补 JUnit（两条路径同形）。
 4. 真机：曲末三模式 + 后台 + 锁屏 next + 服务重启后恢复，逐条取证（本机做不了，交人工）。
