@@ -394,34 +394,43 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       if (pendingUserNext && ctrl.player.mediaItemCount > 0) {
         pendingUserNext = false
         val at = ctrl.currentIndex()
-        if (at < ctrl.player.mediaItemCount - 1) {
+        // 末项时只有「投出的候选全已在 store 里」（'deduped'）才可能绕回——列表循环/随机
+        // 会把排在当前曲**之前**的歌重新规划出来。'empty' 没有候选可绕。
+        val wrapTarget =
+          if (settled == SettleOutcome.DEDUPED) {
+            WindowSettlement.wrapTargetIndex(append.orEmpty().map { it.key }, store::indexOfKey)
+          } else {
+            -1
+          }
+        when (WindowSettlement.pendingNextAction(settled, at >= ctrl.player.mediaItemCount - 1, wrapTarget)) {
           // 队尾还有格（'grown' 的新项就追加在当前之后）→ 推进，与旧行为一致
-          ctrl.player.seekToNextMediaItem()
-          ctrl.player.playWhenReady = userWantsPlay
-          exhaustion.clear()
-          Log.i(TAG, "pendingUserNext → advanced to index=${at + 1}/${ctrl.player.mediaItemCount}")
-        } else {
-          // 末项：只有「投出的候选全已在 store 里」（'deduped'）才可能绕回——列表循环/随机
-          // 会把排在当前曲**之前**的歌重新规划出来。'empty' 没有候选可绕。
-          val existing = if (settled == SettleOutcome.DEDUPED) firstExistingAppendIndex(append) else -1
-          if (existing >= 0) {
-            store.moveTo(existing)
-            ctrl.player.seekTo(existing, 0L)
+          WindowSettlement.PendingNextAction.ADVANCE_NEXT -> {
+            ctrl.player.seekToNextMediaItem()
+            ctrl.player.playWhenReady = userWantsPlay
+            exhaustion.clear()
+            Log.i(TAG, "pendingUserNext → advanced to index=${at + 1}/${ctrl.player.mediaItemCount}")
+          }
+
+          WindowSettlement.PendingNextAction.WRAP_TO_EXISTING -> {
+            store.moveTo(wrapTarget)
+            ctrl.player.seekTo(wrapTarget, 0L)
             ctrl.player.playWhenReady = userWantsPlay
             exhaustion.clear()
             Log.i(
               TAG,
-              "pendingUserNext → wrapped to existing index=$existing (outcome=deduped added=$addedCount)"
+              "pendingUserNext → wrapped to existing index=$wrapTarget (outcome=deduped added=$addedCount)"
             )
-          } else {
-            // 真的没有可推进项 → 诚实结束，并闩住当前 (revision, index)
-            finishAtTail(ctrl)
           }
+
+          // 真的没有可推进项 → 诚实结束，并闩住当前 (revision, index)
+          WindowSettlement.PendingNextAction.FINISH_AT_TAIL -> finishAtTail(ctrl)
         }
-      } else if ((settled == SettleOutcome.DEDUPED || settled == SettleOutcome.EMPTY) &&
-        !exhaustion.isLatchedAt(store.currentRevision(), store.currentIndex()) &&
-        ctrl.player.mediaItemCount > 0 &&
-        ctrl.currentIndex() >= ctrl.player.mediaItemCount - 1
+      } else if (WindowSettlement.shouldLatch(
+          settled,
+          exhaustion.isLatchedAt(store.currentRevision(), store.currentIndex()),
+          ctrl.player.mediaItemCount,
+          ctrl.currentIndex()
+        )
       ) {
         // 这里只对**本轮事实**上闩：不暂停、不发 QUEUE_ENDED——播放没有结束，曲末仍由原生 
         // repeatMode 绕回；闩按 (revision,index)失效，任何真正的切歌 / 显式 play·next·prev 都会自动
@@ -436,7 +445,13 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
       // 补窗到位 + 之前停在缓冲边界 + 用户意图仍是「想播」 → 续播（T8）。
       // 'empty'（一个候选都没投出）不算「补窗到位」，不能借它触发「续播」。
-      if (userWantsPlay && settled != SettleOutcome.EMPTY && ctrl.player.playbackState == Player.STATE_ENDED && ctrl.player.mediaItemCount > 0) {
+      if (WindowSettlement.shouldResumeAfterPatch(
+          userWantsPlay,
+          settled,
+          ctrl.player.playbackState == Player.STATE_ENDED,
+          ctrl.player.mediaItemCount
+        )
+      ) {
         ctrl.player.seekTo(Math.min(store.currentIndex(), ctrl.player.mediaItemCount - 1), 0L)
         ctrl.player.play()
       }
@@ -464,8 +479,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     upsert: List<TrackRecord>?
   ) {
     val settled = settleOutcomeOf(outcome, append, upsert) ?: return
-    if (settled != SettleOutcome.EMPTY && settled != SettleOutcome.DEDUPED) return
-    if (!pendingUserNext || ctrl.player.mediaItemCount == 0) return
+    if (!WindowSettlement.shouldConsumeStaleSettlement(settled, pendingUserNext, ctrl.player.mediaItemCount)) return
     // 补丁没落地 ⇒ 队尾没有新格可推进，也没有可绕回的项 → 诚实结束
     Log.w(TAG, "stale settlement outcome=$settled → finishAtTail (no patch data to advance into)")
     finishAtTail(ctrl)
@@ -477,34 +491,15 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     upsert: List<TrackRecord>?
   ): String? {
     if (outcome == null) return null
-    val hasCandidates = !append.isNullOrEmpty() || !upsert.isNullOrEmpty()
-    val legal = when (outcome) {
-      SettleOutcome.DEDUPED -> hasCandidates
-      SettleOutcome.EMPTY -> !hasCandidates
-      SettleOutcome.GROWN -> true
-      else -> false
-    }
-    if (!legal) {
+    val settled = WindowSettlement.settledOutcome(outcome, !append.isNullOrEmpty() || !upsert.isNullOrEmpty())
+    if (settled == null) {
       Log.w(
         TAG,
         "patchQueue: illegal outcome=$outcome (append=${append?.size ?: 0} upsert=${upsert?.size ?: 0}) → 不结算"
       )
       return null
     }
-    return outcome
-  }
-
-  /**
-   * 本轮 append 里**已经在 store 中**的第一项下标（#563 的列表循环绕回）。
-   * JS 的候选按 core 计划（含绕回）算出；store.patch 去重后它们可能一条都没新增——因为已经在窗口的
-   * 别处（通常排在当前曲之前）。
-   */
-  private fun firstExistingAppendIndex(append: List<TrackRecord>?): Int {
-    append.orEmpty().forEach { record ->
-      val at = store.indexOfKey(record.key)
-      if (at >= 0) return at
-    }
-    return -1
+    return settled
   }
 
   /**
@@ -817,23 +812,24 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     )
   }
 
+  /** 曲末处置与 `repeatMode()` 必须同源：判定在 [WindowSettlement.endedAction]，这里只执行副作用。 */
   private fun handleEnded() {
     val ctrl = controller ?: return
-    // #639 R4.1：只对**单曲循环**早退（只有它对 `repeatMode()` 返回 REPEAT_MODE_ONE，ExoPlayer 内部循环、正常不走 ENDED）。
-    // 此前把 LOOP_ALL 也算进来，但 `AdvancePolicy.repeatMode()` 对 LOOP_ALL **刻意**返回 REPEAT_MODE_OFF（原生列表只是 JS 队列的
-    // 窗口，绕回自己会把早播过的歌重播）——语义相反 ⇒ LOOP_ALL 走到这里 `seekTo(0)` 播**窗口首项**，用户听到「随机模式曲末跳回已播过的歌」。
-    if (policy.loopMode == AdvancePolicy.LOOP_SINGLE) {
-      ctrl.player.seekTo(0, 0L)
-      if (userWantsPlay) ctrl.player.play()
-      return
-    }
+    when (WindowSettlement.endedAction(policy.loopMode, store.remainingAfterCurrent())) {
+      WindowSettlement.EndedAction.RESTART_CURRENT -> {
+        ctrl.player.seekTo(0, 0L)
+        if (userWantsPlay) ctrl.player.play()
+        return
+      }
 
-    val remaining = store.remainingAfterCurrent()
-    if (remaining > 0) {
-      // 队列里还有，但 player 没推进 → 强制 seek 到下一项
-      ctrl.player.seekToNextMediaItem()
-      if (userWantsPlay) ctrl.player.play()
-      return
+      WindowSettlement.EndedAction.ADVANCE_NEXT -> {
+        // 队列里还有，但 player 没推进 → 强制 seek 到下一项
+        ctrl.player.seekToNextMediaItem()
+        if (userWantsPlay) ctrl.player.play()
+        return
+      }
+
+      WindowSettlement.EndedAction.ASK_JS -> Unit
     }
 
     holePending = true
@@ -893,11 +889,13 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     // #563：当前 (revision,index) 已判定「补窗也推进不了」→ 不再自动要歌，终结 ~2s 重问循环。
     // HOLE 是显式用户动作（next）直接调 requestTracks，不经过这里，天然放行。
     if (reason == NeedReason.LOW_WATER &&
-      exhaustion.isLatchedAt(store.currentRevision(), store.currentIndex())
+      !WindowSettlement.shouldRequestOnLowWater(
+        exhaustion.isLatchedAt(store.currentRevision(), store.currentIndex()),
+        policy.isLowWater(store.aheadCount()),
+        store.aheadCount(),
+        policy.prefetchAhead
+      )
     ) return
-    if (reason == NeedReason.LOW_WATER && !policy.isLowWater(store.aheadCount())) return
-    // 水位事件去重：同一水位只发一次，补进来后由 aheadCount 复位
-    if (reason == NeedReason.LOW_WATER && store.aheadCount() > policy.prefetchAhead) return
     requestTracks(reason)
   }
 

@@ -26,9 +26,11 @@ flat config（`eslint.config.js`），全局 ignores 与 `--no-warn-ignored` 语
 | Core | `packages/core/vitest.config.ts`（node + v8 coverage） | `npm test -w packages/core` | ✅ | `test (core)` |
 | Mobile | `packages/mobile/vitest.config.ts`（node） | `npx vitest run --config packages/mobile/vitest.config.ts` | ✅ | `test (mobile)` |
 | Expo 依赖一致性 | 读 Expo 远端 SDK 期望版本（`api.expo.dev`） | `(cd packages/mobile && CI=1 npx expo install --check)`（`npm run verify -- expo`） | ✅ | `expo-check` |
+| Android 原生（JUnit） | 模块自带 `android/src/test`（Gradle 默认布局，无独立 config） | `cd packages/mobile/android && ./gradlew :mplayer-native-player:test` | ✅ | ❌ 不进分片（见下条） |
 
 CI 的 `check`、四个 `test` 分片与 `expo-check` 都只是 `verify.mjs <scope>` 的包装（`./scripts/verify.sh` 是它的 shim）；本地全量 = `npm run verify`（Windows 用这条——Windows 上 `bash` 可能是 WSL 的 Linux bash，见 #500）。**`expo` 是本仓唯一「上游可能让它自己变红」的检查**：Expo 发布新的期望补丁时会与仓库改动无关地变红，处置是 `npx expo install --fix`（理由见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`）。Playwright 的 `e2e/` **不在**任何自动化里（见文末）。
 
+- **Android 原生 JUnit 源集（#640）只能本地跑**：`android/src/test` 是模块级 Gradle 任务，本机需 JDK 17 + Android SDK（`ANDROID_HOME`）；ADR `docs/adr/2026-09-29-ci-verification-boundary.md` 的「原生构建留发版期」把任何 Gradle 步骤挡在 PR CI 之外，因此它没有 CI 分片——改 Kotlin 时**必须**本地跑这条。
 - **本机判定口径（#521）**：`all` 会先 `build` 再连跑四套件。本机同时开着模拟器 / Metro，或把多套件**并行**跑时，`waitFor` 型集成用例会顶到超时，表现为**每次挂不同的用例**（实测 ImportWorkflow / sourceSwapFlow / LinkPreviewTable 轮流中招），单独跑分片则稳定全绿。**判绿用分片单跑（`npm run verify -- renderer` 等），不要并行跑多套件**；CI 的四个 `test` job 是独立 runner，不受此影响。
 - **本机重装依赖后要补 Electron 二进制**：`npm ci`（不跳过脚本时）会连带跑 `electron` 自己的 postinstall 把二进制装好，`prepare` 只负责接线 pre-commit 钩子；与 CI 同款的 `npm ci --ignore-scripts` 跳过了 `electron` 的 postinstall，此后本机跑 `electron:dev` / `electron:build` 会缺 `node_modules/electron/dist` —— 补一条 `npm rebuild electron`（`release.yml` 为这条单独缓存 Electron 二进制）。
 - **`verify` 的运行前自检**（先拦，不让你从别处的报错反推环境）：平台与当前 node 一致（#500）、**依赖树与 `package-lock.json` 一致**（#523：`node_modules` 落后时直接给「先 `npm ci`」的人话处置，不让 `lint` 的 `Cannot find module` 或 `core:build` 的 `pako` TS7016 替它背锅）；`core:build` 之后还会自证消费者读到的 dist 就是刚构建的这份（#521）。
