@@ -77,16 +77,43 @@ internal object WindowSettlement {
       mediaItemCount > 0 &&
       currentIndex >= mediaItemCount - 1
 
+  /** 补窗落地后对「停在缓冲边界」的那次处置（T8）。 */
+  enum class ResumeAfterPatch {
+    /** 补窗到位 → 续播（seek 回当前项并 play）。 */
+    RESUME,
+
+    /** 窗口饱和到队尾：**不续播**，保持 STATE_ENDED + 通知（#650，语义与 [PendingNextAction.FINISH_AT_TAIL] 一致）。 */
+    HOLD_AT_END,
+
+    /** 续播前提不成立（用户没想播 / 没停在缓冲边界 / `'empty'` / 空窗口）→ 什么都不做。 */
+    NOTHING
+  }
+
   /**
-   * 补窗到位 + 之前停在缓冲边界 + 用户意图仍是「想播」→ 续播（T8）。
-   * `'empty'` 不算补窗到位。守卫形状保持原样，收紧留给 #650。
+   * 窗口饱和到队尾（#650）：续播只会把末首从头再播一遍，index/revision 都不动。
+   * 只用来**拒绝**伪推进、不驱动绕回——`'deduped'` 分不清「真到头」与「本轮没新候选」。
    */
-  fun shouldResumeAfterPatch(
+  fun saturatedAtTail(settled: String?, mediaItemCount: Int, currentIndex: Int): Boolean =
+    settled == SettleOutcome.DEDUPED && mediaItemCount > 0 && currentIndex >= mediaItemCount - 1
+
+  /**
+   * 补窗到位 + 停在缓冲边界 + 用户仍想播 → 续播（T8）；#650 插入饱和守卫。
+   * 三值而非布尔：「前提不成立」与「饱和到队尾要诚实结束」是两种不同的不续播，调用方必须分开。
+   */
+  fun resumeAfterPatch(
     userWantsPlay: Boolean,
     settled: String?,
     playbackStateEnded: Boolean,
-    mediaItemCount: Int
-  ): Boolean = userWantsPlay && settled != SettleOutcome.EMPTY && playbackStateEnded && mediaItemCount > 0
+    mediaItemCount: Int,
+    currentIndex: Int
+  ): ResumeAfterPatch = when {
+    !userWantsPlay -> ResumeAfterPatch.NOTHING
+    settled == SettleOutcome.EMPTY -> ResumeAfterPatch.NOTHING
+    !playbackStateEnded -> ResumeAfterPatch.NOTHING
+    mediaItemCount <= 0 -> ResumeAfterPatch.NOTHING
+    saturatedAtTail(settled, mediaItemCount, currentIndex) -> ResumeAfterPatch.HOLD_AT_END
+    else -> ResumeAfterPatch.RESUME
+  }
 
   /** stale 轮次的结算消费（#639 R4.5）：补丁数据被丢弃，但`'empty'`/`'deduped'`的结论必须落地。 */
   fun shouldConsumeStaleSettlement(
