@@ -79,6 +79,8 @@ const SHARDS = {
     ['docs 门禁', 'node scripts/docs-gate.mjs'],
     // #654：comment-gate 随 #653 合入却从未接进这里 —— 脚本在仓库里、CI 与 verify 都不跑它（假门禁）。
     ['注释门禁', 'node scripts/comment-gate.mjs'],
+    // #676：zod 越界 override（#673）的漂移守卫——CODING_STANDARDS.md:11 范式，复验义务句在 ADR，机械子集在这。
+    ['zod 漂移守卫', 'node scripts/zod-drift-guard.mjs'],
     ['core:build', 'npm run core:build'],
     // #557：core 自己的 typecheck 此前谁都不跑——core 是双端共享的核心，
     // 它的类型错误当时只有人肉跑 npm run typecheck -w packages/core 才能发现。
