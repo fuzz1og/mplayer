@@ -1,6 +1,8 @@
 import fs from 'fs';
+import path from 'path';
 import { app, dialog } from 'electron';
 import { createPlaybackTraceRing, setPlaybackTraceSink, type PlaybackTrace } from '@mplayer/core';
+import { resolveDialogDir, rememberDialogDir } from './dialogLastDir';
 
 /**
  * 桌面播放解析链诊断 sink（#363 / ADR `2026-09-23-playback-trace-sink`）。
@@ -53,12 +55,16 @@ function exportFileName(now: Date): string {
  */
 export async function exportPlaybackTraces(): Promise<string | null> {
   const now = new Date();
+  // #670：43+ 起 dialog 不再由 OS 记忆上次目录。defaultPath 传「目录 + 文件名」，
+  // 既保留文件名预填，又让对话框落在上次导出的位置。
+  const dir = await resolveDialogDir('playbackTrace');
   const result = await dialog.showSaveDialog({
     title: '导出播放诊断',
-    defaultPath: exportFileName(now),
+    defaultPath: path.join(dir, exportFileName(now)),
     filters: [{ name: 'JSON', extensions: ['json'] }],
   });
   if (result.canceled || !result.filePath) return null;
+  await rememberDialogDir('playbackTrace', path.dirname(result.filePath));
   const payload = buildPlaybackTraceExport(now);
   fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf-8');
   return result.filePath;

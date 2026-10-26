@@ -21,7 +21,8 @@ const DownloadSection: React.FC = () => {
 
   const handleSelectDirectory = async () => {
     try {
-      const result = await ipcRenderer.invoke('dialog:openDirectory');
+      // #670：显式声明用途 'download'，与「添加本地音乐文件夹」共用通道但分开记忆。
+      const result = await ipcRenderer.invoke('dialog:openDirectory', 'download');
       if (result && !result.canceled && result.filePaths.length > 0) {
         const newPath = result.filePaths[0];
         setDownloadPath(newPath);

@@ -4,6 +4,7 @@ import path from 'path';
 import { registerIpcHandler, registerIpcHandlerSimple } from './registerHandler';
 import { downloadService } from '../services/downloadService';
 import { updateService } from '../services/updateService';
+import { isDialogPurpose, resolveDialogDir, rememberDialogDir, type DialogPurpose } from '../services/dialogLastDir';
 import { db } from '../storage/db';
 import { applyElectronProxy, buildAgents, type ProxyConfig } from '../proxy';
 import {
@@ -32,16 +33,38 @@ const SOURCE_MODE_SET: ReadonlySet<SourceMode> = new Set<SourceMode>(['auto', 'd
 
 export const TIER3_SETTING_KEY = 'tier3State';
 
+/** 本通道实际服务的用途；其余（如 playbackTrace）不属于它，防止渲染层借本通道污染别的记忆键。 */
+const OPEN_DIRECTORY_PURPOSES = ['download', 'localMusic'] as const satisfies readonly DialogPurpose[];
+
+/** 缺省/未知用途按「选下载目录」处理，旧调用方报文不变也不会崩。 */
+function toDialogPurpose(purpose: unknown): DialogPurpose {
+  return isDialogPurpose(purpose) && (OPEN_DIRECTORY_PURPOSES as readonly string[]).includes(purpose)
+    ? purpose
+    : 'download';
+}
+
 export function registerDialogIpc(): void {
-  registerIpcHandlerSimple('dialog:openDirectory', () => dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }));
+  // purpose 区分「选下载目录」与「添加本地音乐文件夹」：同一通道，记忆分开。
+  registerIpcHandlerSimple('dialog:openDirectory', async (purpose?: unknown) => {
+    const purposeKey = toDialogPurpose(purpose);
+    const defaultPath = await resolveDialogDir(purposeKey);
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], defaultPath });
+    if (!result.canceled && result.filePaths.length > 0) {
+      await rememberDialogDir(purposeKey, result.filePaths[0]);
+    }
+    return result;
+  });
 
   registerIpcHandlerSimple('dialog:openTier3File', async () => {
+    const defaultPath = await resolveDialogDir('tier3File');
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [{ name: 'JSON 音源清单', extensions: ['json'] }],
+      defaultPath,
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     const filePath = result.filePaths[0];
+    await rememberDialogDir('tier3File', path.dirname(filePath));
     const content = fs.readFileSync(filePath, 'utf-8');
     return { name: path.basename(filePath), content, source: filePath };
   });

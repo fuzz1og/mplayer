@@ -7,11 +7,20 @@ const mocks = vi.hoisted(() => ({
   showSaveDialog: vi.fn(),
   writeFileSync: vi.fn(),
   getVersion: vi.fn(() => '9.9.9'),
+  getSetting: vi.fn(),
+  setSetting: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
-  app: { getVersion: mocks.getVersion },
+  app: {
+    getVersion: mocks.getVersion,
+    getPath: (name: string) => (name === 'downloads' ? '/tmp/mock-downloads' : '/tmp/mock-user-data'),
+  },
   dialog: { showSaveDialog: mocks.showSaveDialog },
+}));
+
+vi.mock('../../main/storage/db', () => ({
+  db: { getSetting: mocks.getSetting, setSetting: mocks.setSetting },
 }));
 
 vi.mock('fs', async (importOriginal) => {
@@ -21,6 +30,8 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { emitPlaybackTrace } from '@mplayer/core';
 import type { PlaybackTrace } from '@mplayer/core';
 import {
@@ -115,7 +126,7 @@ describe('桌面播放诊断服务（ring list/clear + export）', () => {
     expect(mocks.showSaveDialog).toHaveBeenCalledWith(
       expect.objectContaining({
         title: '导出播放诊断',
-        defaultPath: expect.stringMatching(/^mplayer-playback-trace-.*\.json$/),
+        defaultPath: expect.stringMatching(/mplayer-playback-trace-.*\.json$/),
       }),
     );
     expect(fs.writeFileSync).toHaveBeenCalledWith('/tmp/trace.json', expect.any(String), 'utf-8');
@@ -125,6 +136,33 @@ describe('桌面播放诊断服务（ring list/clear + export）', () => {
     expect(typeof written.meta.exportedAt).toBe('string');
     expect(written.resolves).toHaveLength(1);
     expect(written.resolves[0].songName).toBe('夜曲');
+  });
+
+  it('导出后记住所在目录，下次从该目录起步且文件名仍为规则生成', async () => {
+    const exportDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mplayer-trace-export-'));
+    try {
+      mocks.getSetting.mockImplementation(async (key: string) =>
+        key === 'dialogLastDir:playbackTrace' ? exportDir : undefined,
+      );
+      mocks.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: path.join(exportDir, 'trace.json') });
+
+      await exportPlaybackTraces();
+
+      const passedDefaultPath = mocks.showSaveDialog.mock.calls[0][0].defaultPath as string;
+      expect(path.dirname(passedDefaultPath)).toBe(exportDir);
+      expect(path.basename(passedDefaultPath)).toMatch(/^mplayer-playback-trace-.*\.json$/);
+      expect(mocks.setSetting).toHaveBeenCalledWith('dialogLastDir:playbackTrace', exportDir);
+    } finally {
+      fs.rmSync(exportDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exportPlaybackTraces 用户取消时不写目录记忆', async () => {
+    mocks.showSaveDialog.mockResolvedValueOnce({ canceled: true, filePath: '' });
+
+    await exportPlaybackTraces();
+
+    expect(mocks.setSetting).not.toHaveBeenCalled();
   });
 
   it('exportPlaybackTraces 用户取消时返回 null 且不写盘', async () => {
