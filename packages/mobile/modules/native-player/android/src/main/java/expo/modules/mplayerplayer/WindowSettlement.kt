@@ -7,7 +7,7 @@ package expo.modules.mplayerplayer
  */
 internal object WindowSettlement {
 
-  /** 曲末（STATE_ENDED）该做什么。必须与 [AdvancePolicy.repeatMode] 是同一份语义（#639 R4.1）。 */
+  /** 曲末（STATE_ENDED）该做什么：查表优先、缺表兜底，两条路径必须同形（#666 / #639 R4.1）。 */
   enum class EndedAction {
     /** 单曲循环：重播当前曲。REPEAT_MODE_ONE 下 ExoPlayer 正常不会走到 ENDED，这里是防御分支。 */
     RESTART_CURRENT,
@@ -16,7 +16,10 @@ internal object WindowSettlement {
     ADVANCE_NEXT,
 
     /** 窗口尾：向 JS 要歌——随机 / 列表循环唯一能续上的路径。 */
-    ASK_JS
+    ASK_JS,
+
+    /** 随机播到头（表里 atWindowTail=hold）：停在这里，不向 JS 要歌、不绕回。 */
+    HOLD
   }
 
   /** 「用户按了下一首但踩空」之后，补窗落地时该怎么推进。 */
@@ -133,10 +136,23 @@ internal object WindowSettlement {
     prefetchAhead: Int
   ): Boolean = !latchedAtCurrent && isLowWater && aheadCount <= prefetchAhead
 
-  /** 曲末处置：单曲循环重播自己；窗口内还有项就顺序推进；到窗口尾只能问 JS。 */
-  fun endedAction(loopMode: String, remainingAfterCurrent: Int): EndedAction = when {
+  /**
+   * 曲末处置：表里有答案就查表（core 算好的），缺表才走 [fallbackEndedAction]。
+   * 原生只贡献几何事实 [hasNextInWindow]，不再自己解释 loopMode。
+   */
+  fun endedAction(policy: EndOfTrackPolicy?, loopMode: String, hasNextInWindow: Boolean): EndedAction =
+    when {
+      policy == null -> fallbackEndedAction(loopMode, hasNextInWindow)
+      policy.restartOnSingle -> EndedAction.RESTART_CURRENT
+      hasNextInWindow -> EndedAction.ADVANCE_NEXT
+      policy.atWindowTail == EndOfTrackPolicy.AT_WINDOW_TAIL_HOLD -> EndedAction.HOLD
+      else -> EndedAction.ASK_JS
+    }
+
+  /** 缺表兜底：与 #640 的内联语义**逐字等价**（单曲循环重播 / 有项推进 / 否则问 JS）。 */
+  fun fallbackEndedAction(loopMode: String, hasNextInWindow: Boolean): EndedAction = when {
     loopMode == AdvancePolicy.LOOP_SINGLE -> EndedAction.RESTART_CURRENT
-    remainingAfterCurrent > 0 -> EndedAction.ADVANCE_NEXT
+    hasNextInWindow -> EndedAction.ADVANCE_NEXT
     else -> EndedAction.ASK_JS
   }
 }

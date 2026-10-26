@@ -12,8 +12,18 @@ export { dedupeSongs, filterDuplicates, classifySong, createPlaylistSnapshot, DE
 export type { DupStatus, DupResult, FilterResult, PlaylistSnapshot } from './utils/songDedupe.js';
 export { groupIntoSongGroups } from './utils/groupIntoSongGroups.js';
 export { calculateSimilarity, findBestMatch, isExactMatch, findExactMatch } from './utils/songMatcher.js';
-export { getNextSongIndex, getPrevSongIndex, planAdvance } from './utils/queue.js';
-export type { AdvancePlan, AdvanceInput, AdvanceEffect } from './utils/queue.js';
+export { getNextSongIndex, getPrevSongIndex, planAdvance, planEndOfTrack, buildEndOfTrackPolicy } from './utils/queue.js';
+export type {
+  AdvancePlan,
+  AdvanceInput,
+  AdvanceEffect,
+  EndOfTrackAction,
+  ShuffleEndPolicy,
+  EndOfTrackInput,
+  EndOfTrackPlan,
+  EndOfTrackPolicy,
+  EndOfTrackPolicyInput,
+} from './utils/queue.js';
 // 稳定随机序列（#511 方案 A）：随机播放的「洗牌序 + 游标」是跨端契约，
 // 双端 playerStore 各持一份、core 只出纯函数；语义见 ADR 2026-09-30-stable-shuffle-order。
 export {

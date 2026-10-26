@@ -1,4 +1,5 @@
 import { requireOptionalNativeModule } from 'expo';
+import type { EndOfTrackPolicy } from '@mplayer/core';
 
 /**
  * MPlayer 原生播放器桥（仅 Android）。
@@ -39,6 +40,8 @@ export type Policy = {
   stopWhenOffline: boolean;
   /** 窗口 N */
   prefetchAhead: number;
+  /** #666 曲末策略表；null = 缺表（冷启 / 老版 JS）→ 原生走内联兜底。 */
+  endOfTrack?: EndOfTrackPolicy | null;
 };
 
 export type LoopMode = 'off' | 'all' | 'single';
@@ -231,4 +234,6 @@ export const DEFAULT_POLICY: Policy = {
   skipLimit: 3,
   stopWhenOffline: false,
   prefetchAhead: 3,
+  // 缺表是默认路径：原生必须能靠内联兜底走完曲末
+  endOfTrack: null,
 };

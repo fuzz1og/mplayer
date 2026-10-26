@@ -52,7 +52,7 @@
 =======
 | 每源请求头单点（#592 结构半，已由 #625 落地）+ Android 原生开始发头（**行为变更、仍未取证**） | `2026-10-08-per-source-request-headers.md` | 两半均已合入 master（#625 `729426e`、#602 `bfe53ec`）；**#602 合并时「合并前必须补齐」的证据清单一条没做完**（真机 / 可解析 QQ·酷狗样本对照 / 302 抓包仍开口）；已知边界 3b（快照 restore 不带头）由 #606 关闭 |
 | 可播 URL 的编码归一落在 core 解析链出口（#622） | `2026-10-09-playable-url-encoding-single-gate.md` | 已接受（**真机 soda 下载已过**：雷电 emulator-5556 / Android 14 dev build；残留一条不经出口的 `getSodaAudioUrl` 旁腿） |
-| 曲末决策上提 core：core 出决策表、原生只执行（#650 / #639 R4） | `2026-10-26-end-of-track-decision-ownership.md` | **提议（待拍板）**——只定取舍与建议，代码未动；实施另开票 |
+| 曲末决策上提 core：core 出决策表、原生只执行（#650 / #639 R4） | `2026-10-26-end-of-track-decision-ownership.md` | 已接受（#666 已实施）——core `planEndOfTrack` + policy `endOfTrack` 下推 + 原生查表/兜底双路径 |
 
 ## 历史编号对照（冻结）
 

@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song } from '@mplayer/core';
+import type { Policy } from '../modules/native-player';
 
 const fake = vi.hoisted(() => {
   type FakeTrack = { key: string; songId: string };
@@ -13,6 +14,7 @@ const fake = vi.hoisted(() => {
     tracks: { songId: string; meta: { key: string } }[];
     startIndex: number;
     playWhenReady: boolean;
+    policy: Policy;
   };
   type PatchInput = {
     baseRevision: number;
@@ -27,6 +29,8 @@ const fake = vi.hoisted(() => {
   const prevCalls: number[] = [];
   const seekCalls: number[] = [];
   const playCalls: number[] = [];
+  /** #666：下推的 policy 快照（含 endOfTrack 曲末表） */
+  const policyCalls: Policy[] = [];
   const module = {
     registerHeadlessHost: () => true,
     isServiceRunning: () => true,
@@ -71,11 +75,13 @@ const fake = vi.hoisted(() => {
     },
     setLoop: () => {},
     setRate: () => {},
-    setPolicy: () => {},
+    setPolicy: (policy: Policy) => {
+      policyCalls.push(policy);
+    },
     stop: () => {},
     addListener: () => ({ remove: () => {} }),
   };
-  return { state, loadQueueCalls, patchCalls, nextCalls, prevCalls, seekCalls, playCalls, module };
+  return { state, loadQueueCalls, patchCalls, nextCalls, prevCalls, seekCalls, playCalls, policyCalls, module };
 });
 
 vi.mock('expo', () => ({
@@ -100,7 +106,7 @@ vi.mock('../services/cacheService', () => ({
   urlAgeMs: () => null,
 }));
 
-import { nativeNext, nativePrev } from '../services/nativePlayer';
+import { nativeNext, nativePlaySong, nativePrev, nativeSyncLoopMode } from '../services/nativePlayer';
 import { prefetchKey } from '../services/queuePrefetch';
 import { usePlayerStore } from '../stores/playerStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -144,6 +150,7 @@ beforeEach(() => {
   fake.prevCalls.length = 0;
   fake.seekCalls.length = 0;
   fake.playCalls.length = 0;
+  fake.policyCalls.length = 0;
   fake.state.revision = 5;
   fake.state.tracks = [];
   fake.state.index = 0;
@@ -216,5 +223,46 @@ describe('#555 原生路径的落点由 core planAdvance 决定', () => {
     expect(fake.seekCalls).toEqual([0]);
     expect(fake.playCalls).toHaveLength(1);
     expect(fake.nextCalls).toHaveLength(0);
+  });
+});
+
+/**
+ * #666：曲末决定的表随 policy 快照一起下推，起播那一刻就得在原生手里
+ * （后台 / 服务重启路径没有 JS 可问，见 ADR 2026-10-26）。
+ */
+describe('#666 起播即下推曲末表', () => {
+  it('nativePlaySong 的 loadQueue 带 endOfTrack（单曲循环 → restartOnSingle=true）', async () => {
+    setQueue(['A'], 0);
+    useSettingsStore.setState({ playMode: '单曲循环' });
+
+    await nativePlaySong(song('A'));
+    await flush();
+
+    expect(fake.loadQueueCalls.at(-1)?.policy.endOfTrack).toEqual({
+      restartOnSingle: true,
+      atWindowTail: 'ask-js',
+    });
+  });
+
+  it('随机模式起播：序列未到末位 → atWindowTail=ask-js，且表随 loadQueue 下发', async () => {
+    setQueue(['A', 'B', 'C'], 0);
+    useSettingsStore.setState({ playMode: '随机播放' });
+    usePlayerStore.setState({ shuffle: { order: ['A', 'C', 'B'], cursor: 0 } });
+
+    await nativePlaySong(song('A'));
+    await flush();
+
+    const table = fake.loadQueueCalls.at(-1)?.policy.endOfTrack;
+    expect(table?.atWindowTail).toBe('ask-js');
+  });
+
+  it('切换播放模式后会重发整份 policy（setPolicy 收到含表的新快照）', () => {
+    setQueue(['A', 'B'], 0);
+    useSettingsStore.setState({ playMode: '单曲循环' });
+
+    nativeSyncLoopMode();
+
+    expect(fake.policyCalls).toHaveLength(1);
+    expect(fake.policyCalls[0].endOfTrack).toEqual({ restartOnSingle: true, atWindowTail: 'ask-js' });
   });
 });

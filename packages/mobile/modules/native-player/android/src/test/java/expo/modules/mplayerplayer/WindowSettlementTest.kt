@@ -206,8 +206,128 @@ class WindowSettlementTest {
       WindowSettlement.ResumeAfterPatch.RESUME,
       resumeOf(null, mediaItemCount = 59, currentIndex = 58)
     )
+
     assertFalse(WindowSettlement.saturatedAtTail(SettleOutcome.GROWN, 59, 58))
     assertFalse(WindowSettlement.saturatedAtTail(null, 59, 58))
+  }
+
+  // ---------------------------------------------------------------- #666：曲末查表 vs 缺表兜底
+
+  private val loopModes = listOf(AdvancePolicy.LOOP_OFF, AdvancePolicy.LOOP_ALL, AdvancePolicy.LOOP_SINGLE)
+  private val hasNextValues = listOf(true, false)
+
+  /** core `buildEndOfTrackPolicy` 的投影：老语义（单曲重播 / 有项推进 / 尾上问 JS）对应的两格表。 */
+  private fun legacyShapedTable(loopMode: String) = EndOfTrackPolicy(
+    restartOnSingle = loopMode == AdvancePolicy.LOOP_SINGLE,
+    atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_ASK_JS
+  )
+
+  private fun tableAction(table: EndOfTrackPolicy?, loopMode: String, hasNext: Boolean) =
+    WindowSettlement.endedAction(table, loopMode, hasNext)
+
+  @Test
+  fun tablePathDecidesEveryBranchWithoutLookingAtLoopMode() {
+    val shuffleStop = legacyShapedTable(AdvancePolicy.LOOP_OFF).copy(atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_HOLD)
+    assertEquals(
+      "窗口尾 + hold → HOLD（随机播到头：不向 JS 要歌、不绕回）",
+      WindowSettlement.EndedAction.HOLD,
+      tableAction(shuffleStop, AdvancePolicy.LOOP_ALL, hasNext = false)
+    )
+    assertEquals(
+      "窗口内有项 → 一律顺序推进（表里没有否决这一格，与 core「有项就 advance」一致）",
+      WindowSettlement.EndedAction.ADVANCE_NEXT,
+      tableAction(shuffleStop, AdvancePolicy.LOOP_ALL, hasNext = true)
+    )
+    assertEquals(
+      "窗口尾 + ask-js → ASK_JS",
+      WindowSettlement.EndedAction.ASK_JS,
+      tableAction(legacyShapedTable(AdvancePolicy.LOOP_ALL), AdvancePolicy.LOOP_ALL, hasNext = false)
+    )
+    assertEquals(
+      "restartOnSingle 优先于 hasNextInWindow（单曲循环即使窗口里有项也重播自己）",
+      WindowSettlement.EndedAction.RESTART_CURRENT,
+      tableAction(legacyShapedTable(AdvancePolicy.LOOP_SINGLE), AdvancePolicy.LOOP_SINGLE, hasNext = true)
+    )
+  }
+
+  @Test
+  fun tablePathIgnoresLoopModeEntirelyOnceTheTableIsPresent() {
+    // 表是唯一语义来源：同一个表在三种 loopMode 下必须给出同一答案，否则 loopMode 又偷偷参战了。
+    val holdTable = legacyShapedTable(AdvancePolicy.LOOP_OFF).copy(atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_HOLD)
+    for (hasNext in hasNextValues) {
+      val actions = loopModes.map { tableAction(holdTable, it, hasNext) }
+      assertEquals("hasNext=$hasNext: 表在场时 loopMode 不得影响结果", 1, actions.distinct().size)
+    }
+  }
+
+  @Test
+  fun unknownAtWindowTailOnlyEverAsksJsNeverHolds() {
+    for (tail in listOf("ask-js", "", "wrap", "whatever")) {
+      assertEquals(
+        "只有 'hold' 才 HOLD；取值域外一律 ask-js（HOLD 是最强的终止结论，不能误判出来）",
+        WindowSettlement.EndedAction.ASK_JS,
+        tableAction(legacyShapedTable(AdvancePolicy.LOOP_OFF).copy(atWindowTail = tail), AdvancePolicy.LOOP_OFF, hasNext = false)
+      )
+    }
+  }
+
+  @Test
+  fun fallbackPathKeepsThePreTableSemantics() {
+    for (loopMode in loopModes) {
+      assertEquals(
+        "$loopMode: 缺表 → 与 #640 逐字等价",
+        if (loopMode == AdvancePolicy.LOOP_SINGLE) WindowSettlement.EndedAction.RESTART_CURRENT else WindowSettlement.EndedAction.ADVANCE_NEXT,
+        tableAction(null, loopMode, hasNext = true)
+      )
+      assertEquals(
+        "$loopMode: 缺表 + 窗口尾 → 重播 / 问 JS，永不 HOLD",
+        if (loopMode == AdvancePolicy.LOOP_SINGLE) WindowSettlement.EndedAction.RESTART_CURRENT else WindowSettlement.EndedAction.ASK_JS,
+        tableAction(null, loopMode, hasNext = false)
+      )
+    }
+  }
+
+  @Test
+  fun fallbackPathNeverHoldsBecauseHoldNeedsAnExplicitTable() {
+    // 冷启 / 老版 JS / 快照损坏只剩兜底：此时原生无权断言「随机播到头」，HOLD 一次都不许出现。
+    for (loopMode in loopModes) {
+      for (hasNext in hasNextValues) {
+        assertNotEquals(
+          "$loopMode hasNext=$hasNext: 缺表不许 HOLD",
+          WindowSettlement.EndedAction.HOLD,
+          tableAction(null, loopMode, hasNext)
+        )
+      }
+    }
+  }
+
+  @Test
+  fun tableAndFallbackAgreeOnTheSameInputWhenTheTableMirrorsLegacySemantics() {
+    // AC-3 同形性：core 投影出的「老语义表」在三种模式 × 有/无下一项上都必须与兜底逐格相同。
+    // 任一侧被改坏（兜底丢了重播/推进、表丢了 hold/推进）→ 这里当场红。
+    for (loopMode in loopModes) {
+      val table = legacyShapedTable(loopMode)
+      for (hasNext in hasNextValues) {
+        assertEquals(
+          "$loopMode hasNext=$hasNext: 表与兜底必须同形",
+          WindowSettlement.fallbackEndedAction(loopMode, hasNext),
+          tableAction(table, loopMode, hasNext)
+        )
+      }
+    }
+  }
+
+  @Test
+  fun tableAndFallbackDivergeExactlyWhereTheContractSaysTheyDo() {
+    // 反证：同形只在「表镜像老语义」时成立。表说 hold 时两者必须不同——否则上面的同形用例是空转的。
+    val holdTable = legacyShapedTable(AdvancePolicy.LOOP_OFF).copy(atWindowTail = EndOfTrackPolicy.AT_WINDOW_TAIL_HOLD)
+    assertEquals(WindowSettlement.EndedAction.ASK_JS, WindowSettlement.fallbackEndedAction(AdvancePolicy.LOOP_OFF, false))
+    assertEquals(WindowSettlement.EndedAction.HOLD, tableAction(holdTable, AdvancePolicy.LOOP_OFF, false))
+    assertNotEquals(
+      "若这里相等，同形用例就没在区分两条路径",
+      WindowSettlement.fallbackEndedAction(AdvancePolicy.LOOP_OFF, false),
+      tableAction(holdTable, AdvancePolicy.LOOP_OFF, false)
+    )
   }
 
   @Test

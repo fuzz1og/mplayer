@@ -81,6 +81,7 @@ const fake = vi.hoisted(() => {
     seek: () => {},
     setLoop: () => {},
     setRate: () => {},
+    // 本文件不验曲末表（见 endOfTrackPolicy.test.ts），只要接受新字段不抛错
     setPolicy: () => {},
     stop: () => {},
     addListener: () => ({ remove: () => {} }),

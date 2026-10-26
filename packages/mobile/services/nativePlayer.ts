@@ -1,6 +1,6 @@
 import { AppRegistry, AppState } from 'react-native';
-import { requestHeadersFor } from '@mplayer/core';
-import type { Song } from '@mplayer/core';
+import { buildEndOfTrackPolicy, requestHeadersFor } from '@mplayer/core';
+import type { EndOfTrackPolicy, Song } from '@mplayer/core';
 import {
   NativePlayer,
   isNativePlayerAvailable,
@@ -67,6 +67,14 @@ let headlessRegistered = false;
 /** 原生列表的本地镜像（key/songId，顺序与原生一致）——用于补窗去重与随机定序 */
 let nativeMirror: Array<{ key: string; songId: string }> = [];
 
+/** 本轮补窗是否零新增（#666）。新基准（换队列 / 起播新歌）先复位，饱和必须被证成。 */
+let lastWindowSaturated = false;
+
+/** 已下推原生的曲末表；只有表变过才 setPolicy，避免每 2s 一轮的无用跨端调用。 */
+let lastEndOfTrack: EndOfTrackPolicy | null = null;
+/** 上一轮补窗用的队列基准；换了基准 = 饱和态作废。 */
+let windowBaseline: readonly Song[] | null = null;
+
 export function isNativeEngine(): boolean {
   return isNativePlayerAvailable;
 }
@@ -82,6 +90,19 @@ export function toLoopMode(playMode: string): LoopMode {
   return 'all';
 }
 
+/** 曲末表唯一出处（#666）：判定在 core，原生只查表。 */
+function buildCurrentEndOfTrackPolicy(): EndOfTrackPolicy {
+  const player = usePlayerStore.getState();
+  return buildEndOfTrackPolicy({
+    playMode: useSettingsStore.getState().playMode,
+    shuffle: player.shuffle,
+    // 必须是 store 的真实作用域：窗口态的队列被 dropLeading 裁过，「到头」不可证
+    shuffleScope: player.queueScope,
+    windowSaturated: lastWindowSaturated,
+    shuffleEndPolicy: 'stop',
+  });
+}
+
 export function currentPolicy(): Policy {
   const settings = useSettingsStore.getState();
   return {
@@ -90,7 +111,37 @@ export function currentPolicy(): Policy {
     // core skipGuard 的「离线即停」是硬语义（OFFLINE_COPY → pause，不进解析链）
     stopWhenOffline: true,
     prefetchAhead: 3,
+    endOfTrack: buildCurrentEndOfTrackPolicy(),
   };
+}
+
+function sameEndOfTrackPolicy(a: EndOfTrackPolicy | null, b: EndOfTrackPolicy | null): boolean {
+  if (!a || !b) return a === b;
+  return a.restartOnSingle === b.restartOnSingle && a.atWindowTail === b.atWindowTail;
+}
+
+/** 下发一份 policy 并记住其中的表（loadQueue 自带 policy，不必再单独 setPolicy）。 */
+function sendPolicy(policy: Policy): void {
+  const NP = NativePlayer;
+  if (!NP) return;
+  try {
+    NP.setPolicy(policy);
+    lastEndOfTrack = policy.endOfTrack ?? null;
+  } catch {
+    // 没落地就不记账：否则去抖会把它当成「已下发」，错值被钉住不再重试
+    lastEndOfTrack = null;
+  }
+}
+
+/**
+ * 每轮结算后调用：曲末表变了才发，但发的是**整份** policy（autoSkip/skipLimit 等一并重发，
+ * setPolicy 没有字段级更新）。表没变就一个字也不发——游标走到序列末位时 atWindowTail 才会翻转。
+ */
+function pushPolicyIfEndOfTrackChanged(): void {
+  if (!NativePlayer) return;
+  const policy = currentPolicy();
+  if (sameEndOfTrackPolicy(lastEndOfTrack, policy.endOfTrack ?? null)) return;
+  sendPolicy(policy);
 }
 
 /**
@@ -358,16 +409,21 @@ export async function nativePlaySong(song: Song, fresh = false): Promise<Track> 
 
   const state = safeState();
   nativeMirror = [{ key: track.meta.key, songId: track.songId }];
+  // 新基准：这一轮还没证明「补不进新东西」
+  lastWindowSaturated = false;
   markSucceeded(track.meta.key);
 
-  await NP.loadQueue({
+  const policy = currentPolicy();
+  const loaded = await NP.loadQueue({
     revision: (state?.revision ?? 0) + 1,
     tracks: [track],
     startIndex: 0,
     playWhenReady: true,
     loopMode: toLoopMode(useSettingsStore.getState().playMode),
-    policy: currentPolicy(),
+    policy,
   });
+  // 记账只认真的进了原生：accepted=false 与抛错同一处置，没落地就留给下一轮重发
+  lastEndOfTrack = loaded?.accepted ? policy.endOfTrack ?? null : null;
 
   void feedWindow();
   return track;
@@ -510,11 +566,15 @@ export function nativePrev(): void {
 export function nativeStop(): void {
   NativePlayer?.stop();
   nativeMirror = [];
+  // 原生侧已无队列：已下推的表与饱和态都不再成立，下次投喂必须重发
+  lastWindowSaturated = false;
+  lastEndOfTrack = null;
+  windowBaseline = null;
 }
 
 export function nativeSyncLoopMode(): void {
   NativePlayer?.setLoop(toLoopMode(useSettingsStore.getState().playMode));
-  NativePlayer?.setPolicy(currentPolicy());
+  sendPolicy(currentPolicy());
 }
 
 /**
@@ -545,6 +605,12 @@ export async function feedWindow(need?: number, reason?: NeedReason): Promise<vo
   const playerState = usePlayerStore.getState();
   const queue = playerState.queue;
   if (queue.length === 0) return;
+
+  // 基准变了（换歌单 / 插队重建 / 对账）→ 新基准还没证明「补不进新东西」
+  if (windowBaseline !== queue) {
+    windowBaseline = queue;
+    lastWindowSaturated = false;
+  }
 
   const nativeStateNow = safeState();
   const nativeKey = nativeStateNow?.key ?? null;
@@ -633,6 +699,8 @@ export async function feedWindow(need?: number, reason?: NeedReason): Promise<vo
         `计划=[${wantedIndexes.join(',')}] inFlight=${plannedInFlight}`
     );
     if (plannedInFlight) return;
+    // 零候选 = 本轮零新增：与 grown/deduped 同一处结算饱和态并下发
+    lastWindowSaturated = true;
     try {
       await NP.patchQueue({
         baseRevision: nativeStateNow?.revision ?? 0,
@@ -641,6 +709,7 @@ export async function feedWindow(need?: number, reason?: NeedReason): Promise<vo
     } catch {
       // 上报失败不阻塞：原生仍有 hole 超时 / 水位兜底
     }
+    pushPolicyIfEndOfTrackChanged();
     return;
   }
 
@@ -649,6 +718,7 @@ export async function feedWindow(need?: number, reason?: NeedReason): Promise<vo
   const outcome: PatchOutcome = append.every((track) => storeKeys.has(track.meta.key))
     ? 'deduped'
     : 'grown';
+  lastWindowSaturated = outcome === 'deduped';
 
   // T9 取证：窗口定序的计划 vs 实投 vs 结算结论（顺序/随机/绕回都能从这一行看出来）
   console.log(
@@ -670,6 +740,9 @@ export async function feedWindow(need?: number, reason?: NeedReason): Promise<vo
     });
   } catch {
     // 补窗失败不影响播放：原生会在缓冲边界停下并等下一次补窗
+  } finally {
+    // 每轮结算后下发：游标走到/离开序列末位时 atWindowTail 才会翻转
+    pushPolicyIfEndOfTrackChanged();
   }
 }
 
