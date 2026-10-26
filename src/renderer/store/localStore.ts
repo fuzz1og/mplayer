@@ -74,7 +74,8 @@ export const useLocalStore = create<LocalStore>((set, get) => {
     },
 
     addFolder: async () => {
-      const result = await IpcClient.invoke<{ canceled: boolean; filePaths: string[] }>('dialog:openDirectory');
+      // #670：声明用途，让「添加音乐文件夹」与设置页「选下载目录」各自记忆上次位置，互不污染。
+      const result = await IpcClient.invoke<{ canceled: boolean; filePaths: string[] }>('dialog:openDirectory', 'localMusic');
       if (result.canceled || !result.filePaths.length) return;
 
       const folderPath = result.filePaths[0];
