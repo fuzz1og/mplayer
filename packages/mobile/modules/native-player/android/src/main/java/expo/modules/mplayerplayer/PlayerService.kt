@@ -445,15 +445,25 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
       // 补窗到位 + 之前停在缓冲边界 + 用户意图仍是「想播」 → 续播（T8）。
       // 'empty'（一个候选都没投出）不算「补窗到位」，不能借它触发「续播」。
-      if (WindowSettlement.shouldResumeAfterPatch(
+      when (WindowSettlement.resumeAfterPatch(
           userWantsPlay,
           settled,
           ctrl.player.playbackState == Player.STATE_ENDED,
-          ctrl.player.mediaItemCount
+          ctrl.player.mediaItemCount,
+          ctrl.currentIndex()
         )
       ) {
-        ctrl.player.seekTo(Math.min(store.currentIndex(), ctrl.player.mediaItemCount - 1), 0L)
-        ctrl.player.play()
+        WindowSettlement.ResumeAfterPatch.RESUME -> {
+          ctrl.player.seekTo(Math.min(store.currentIndex(), ctrl.player.mediaItemCount - 1), 0L)
+          ctrl.player.play()
+        }
+
+        // #650：饱和（deduped）+ 已在末项 = 没有下一首；旧 seekTo 会把末首从头再播一遍，
+        // 把「没有推进」伪装成「续播成功」。与 pendingUserNext 的 FINISH_AT_TAIL 同一语义。
+        WindowSettlement.ResumeAfterPatch.HOLD_AT_END ->
+          finishAtTail(ctrl, cause = "window saturated at tail (outcome=deduped)")
+
+        WindowSettlement.ResumeAfterPatch.NOTHING -> Unit
       }
       refreshState()
     }
@@ -504,11 +514,10 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
   /**
    * 诚实地结束（#563）：队尾、零新增、也没有可绕回的项 →「没有下一首」，不是「等歌」。
-   *
-   * 清掉播放意图并闩住当前 (revision, index)，让 LOW_WATER 不再重问；
-   * 这里用 EXHAUSTED 是因为 JS 的 queueEnded 监听只对非 exhausted 的 reason 再补窗。
+   * 用 EXHAUSTED 是因为 JS 的 queueEnded 监听只对非 exhausted 的 reason 再补窗。
+   * #650 起「补窗到位但窗口饱和在末项」也走这里，后置条件相同。
    */
-  private fun finishAtTail(ctrl: PlaybackController) {
+  private fun finishAtTail(ctrl: PlaybackController, cause: String = "no advanceable item at tail") {
     userWantsPlay = false
     holePending = false
     cancelWindowHoleDeadline()
@@ -516,7 +525,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     exhaustion.mark(store.currentRevision(), store.currentIndex())
     Log.i(
       TAG,
-      "no advanceable item at tail (revision=${store.currentRevision()} index=${store.currentIndex()}) → exhausted"
+      "$cause (revision=${store.currentRevision()} index=${store.currentIndex()}) → exhausted"
     )
     emit(
       Events.QUEUE_ENDED,
