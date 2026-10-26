@@ -9,7 +9,7 @@ import SortableSongRow from '@/renderer/components/SortableSongRow';
 import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { COL_INDEX, colStyle } from '@/renderer/components/songTableColumns';
-import { applyShuffleOrder, type Song } from '@mplayer/core';
+import { applyShuffleIndexes, applyShuffleOrder, type Song } from '@mplayer/core';
 
 /** 队列行的行尾操作：加入歌单 + 从队列移除（沿用队列页原有的常驻图标按钮） */
 /**
@@ -75,18 +75,21 @@ const QueuePage: React.FC = () => {
   );
 
   /**
-   * 行尾「移除」拿到的下标属于**显示序**（随机模式下 ≠ currentPlaylist 下标），
-   * 按 id 映射回成员下标再删，否则删错歌。
+   * 显示序 → 成员下标（#639 R2）：必须走 core `applyShuffleIndexes` 的 **FIFO 位置化**匹配。
+   * 按 id 反查（`findIndex`）在重复 id 队列下恒命中第一个成员 → 删错歌。
    */
+  const displayToMemberIndex = useMemo(() => {
+    const order = playMode === '随机播放' && shuffle ? shuffle.order : [];
+    return applyShuffleIndexes(order, currentPlaylist);
+  }, [playMode, shuffle, currentPlaylist]);
+
   const handleRemoveByDisplayIndex = useCallback(
     (displayIndex: number) => {
-      const target = displayPlaylist[displayIndex];
-      if (!target) return;
-      const playlistIndex = currentPlaylist.findIndex((s) => s.id === target.id);
-      if (playlistIndex === -1) return;
+      const playlistIndex = displayToMemberIndex[displayIndex];
+      if (playlistIndex === undefined) return;
       removeFromQueue(playlistIndex);
     },
-    [displayPlaylist, currentPlaylist, removeFromQueue],
+    [displayToMemberIndex, removeFromQueue],
   );
 
   /** 拖拽松手：随机模式改的是随机序本身，其余模式改成员顺序 */
