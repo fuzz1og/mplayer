@@ -41,7 +41,7 @@ function getHandler(channel: string) {
 
 const settings = new Map<string, unknown>();
 
-/** 造一个真实存在的目录，用来验证「记忆有效时直接采用」。 */
+// 记忆失效判定走 fs.statSync，所以夹具必须是真实存在的目录，不能是字面量路径。
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mplayer-dialog-'));
 const existingDir = path.join(tmpRoot, 'music');
 fs.mkdirSync(existingDir);
@@ -111,16 +111,20 @@ describe('#670 对话框记忆上次使用的目录', () => {
 
   describe('dialog:openDirectory（添加本地音乐文件夹）—— 与下载目录互不污染', () => {
     it('同一个通道按用途分开读写记忆', async () => {
+      // 两个键刻意取不同值：同值会让「未被污染」与「本来就是这个值」无法区分。
+      const musicLibrary = path.join(tmpRoot, 'library');
+      fs.mkdirSync(musicLibrary);
       settings.set(DOWNLOAD_KEY, existingDir);
       registerDialogIpc();
-      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: [existingDir] } as never);
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: [musicLibrary] } as never);
 
       await getHandler('dialog:openDirectory')({}, 'localMusic');
 
+      // 起点取自 localMusic 自己的记忆（此处无记忆）→ 回落 Downloads，而不是沿用 download 的 existingDir
       expect(dialog.showOpenDialog).toHaveBeenCalledWith(
         expect.objectContaining({ defaultPath: DOWNLOADS }),
       );
-      expect(settings.get(LOCAL_MUSIC_KEY)).toBe(existingDir);
+      expect(settings.get(LOCAL_MUSIC_KEY)).toBe(musicLibrary);
       expect(settings.get(DOWNLOAD_KEY)).toBe(existingDir);
     });
   });
