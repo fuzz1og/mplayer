@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { Palette, Database, Folder, Shield, Download, Music, Music2, Zap, FlaskConical, Activity, ChevronRight } from 'lucide-react';
 import CacheSection from '@/renderer/components/CacheSection';
 import DownloadSection from '@/renderer/components/DownloadSection';
@@ -26,9 +27,9 @@ interface SettingsGroup {
 }
 
 /**
- * 1.9.0 设置信息架构：4 组 9 页 + 开发者模式下的诊断页。
- * 原「开发者模式 / TLS 指纹伪装 / 网络代理」不再各占一页：开发者模式挂在「关于」页底部，
- * 代理与 TLS 合并进「网络」页；诊断页只在开发者模式打开时出现（#477）。
+ * 1.9.0 原型对齐 §2：3 组 7 页 + 导航底部固定区（更新/关于）。
+ * 「更新」「关于」不再是第 4 组——原型里它们钉在导航最下沿、上方一条 hairline。
+ * 诊断页仍只在开发者模式出现（#477），挂在底部固定区尾部。
  */
 const SETTINGS_GROUPS: SettingsGroup[] = [
   {
@@ -53,16 +54,20 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
       { id: 'network', label: '网络', icon: <Shield size={13} /> },
     ],
   },
-  {
-    title: '应用',
-    entries: [
-      { id: 'update', label: '更新', icon: <Download size={13} /> },
-      { id: 'about', label: '关于', icon: <Music size={13} /> },
-    ],
-  },
+];
+
+const SETTINGS_FOOTER_ENTRIES: SettingsEntry[] = [
+  { id: 'update', label: '更新', icon: <Download size={13} /> },
+  { id: 'about', label: '关于', icon: <Music size={13} /> },
 ];
 
 const DIAGNOSTICS_ENTRY: SettingsEntry = { id: 'diagnostics', label: '诊断', icon: <Activity size={13} /> };
+
+/** 可深链的分区 id（#/settings/:section）；诊断只在开发者模式下算合法。 */
+const SECTION_IDS = new Set([
+  ...SETTINGS_GROUPS.flatMap((group) => group.entries.map((entry) => entry.id)),
+  ...SETTINGS_FOOTER_ENTRIES.map((entry) => entry.id),
+]);
 
 /** 尚未迁移到新原语的分区仍用旧组件渲染，保证这一批不丢功能（#684 逐页替换）。 */
 const LEGACY_SECTIONS: Record<string, React.ReactNode> = {
@@ -88,17 +93,22 @@ const LEGACY_SECTIONS: Record<string, React.ReactNode> = {
 };
 
 const SettingsPage: React.FC = () => {
-  const [active, setActive] = useState('cache');
+  const { section } = useParams<{ section?: string }>();
+  // 深链优先（#/settings/appearance 直接落外观页）；无参数或非法 id 落「缓存」（原型默认页）。
+  const [active, setActive] = useState(() => (section && SECTION_IDS.has(section) ? section : 'cache'));
   const [devMode, setDevMode] = useState(isDevMode);
 
   useEffect(() => subscribeDevMode(setDevMode), []);
 
-  const groups = useMemo(() => {
-    if (!devMode) return SETTINGS_GROUPS;
-    return SETTINGS_GROUPS.map((group) =>
-      group.title === '应用' ? { ...group, entries: [...group.entries, DIAGNOSTICS_ENTRY] } : group,
-    );
-  }, [devMode]);
+  // 深链在已挂载时换分区（#/settings/cache → #/settings/appearance）也要跟着切页
+  useEffect(() => {
+    if (section && SECTION_IDS.has(section)) setActive(section);
+  }, [section]);
+
+  const footerEntries = useMemo(
+    () => (devMode ? [...SETTINGS_FOOTER_ENTRIES, DIAGNOSTICS_ENTRY] : SETTINGS_FOOTER_ENTRIES),
+    [devMode],
+  );
 
   // 关掉开发者模式时若正停在诊断页，退回到「关于」，否则会停在一个不存在的页
   useEffect(() => {
@@ -108,32 +118,36 @@ const SettingsPage: React.FC = () => {
   const content =
     active === 'diagnostics' && devMode ? <PlaybackDiagnosticsSection /> : LEGACY_SECTIONS[active] ?? null;
 
+  const renderItem = (entry: SettingsEntry) => {
+    const isActive = active === entry.id;
+    return (
+      <button
+        key={entry.id}
+        type="button"
+        className="settings-nav__item"
+        aria-current={isActive ? 'page' : undefined}
+        onClick={() => setActive(entry.id)}
+      >
+        <span className="settings-nav__icon" aria-hidden="true">
+          {entry.icon}
+        </span>
+        <span>{entry.label}</span>
+        <ChevronRight className="settings-nav__chevron" size={13} aria-hidden="true" />
+      </button>
+    );
+  };
+
   return (
     <div className="settings-layout">
       <nav className="settings-nav" aria-label="设置导航">
-        {groups.map((group) => (
+        {SETTINGS_GROUPS.map((group) => (
           <div key={group.title} className="settings-nav__group">
             <div className="settings-nav__group-title">{group.title}</div>
-            {group.entries.map((entry) => {
-              const isActive = active === entry.id;
-              return (
-                <button
-                  key={entry.id}
-                  type="button"
-                  className="settings-nav__item"
-                  aria-current={isActive ? 'page' : undefined}
-                  onClick={() => setActive(entry.id)}
-                >
-                  <span className="settings-nav__icon" aria-hidden="true">
-                    {entry.icon}
-                  </span>
-                  <span>{entry.label}</span>
-                  <ChevronRight className="settings-nav__chevron" size={13} aria-hidden="true" />
-                </button>
-              );
-            })}
+            {group.entries.map(renderItem)}
           </div>
         ))}
+
+        <div className="settings-nav__footer">{footerEntries.map(renderItem)}</div>
       </nav>
 
       <div className="settings-content" role="region" aria-label="设置内容">

@@ -1,149 +1,255 @@
-import React, { useEffect, useState } from 'react';
-import { Database, HardDrive } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Folder, HardDrive, Trash2 } from 'lucide-react';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { Alert, Button, Dialog, Group, Progress, Row, Section, Tag } from '@/renderer/ui';
+import { Button, Dialog, Group, Progress, Row, Section, Stepper, Switch } from '@/renderer/ui';
 
-interface CacheStats {
+/** cache:getStats 的渲染侧视图（IPC 在磁盘统计上并了每类别字节数，见 src/main/ipc/cache.ts）。 */
+interface CacheStatsView {
   totalSize: number;
   fileCount: number;
   songsCount: number;
   coversCount: number;
   audioCount: number;
   urlsCount: number;
+  bytes?: Partial<Record<'songs' | 'urls' | 'covers' | 'audio' | 'other', number>>;
 }
 
-const MAX_CACHE_SIZE = 100 * 1024 * 1024;
+interface CacheConfig {
+  limitMb: number;
+  autoClean: boolean;
+  dir: string;
+  stepMb: number;
+  minMb: number;
+  maxMb: number;
+}
+
+const FALLBACK_CONFIG: CacheConfig = { limitMb: 100, autoClean: true, dir: '', stepMb: 20, minMb: 20, maxMb: 4096 };
 
 function formatSize(bytes: number): string {
-  if (bytes <= 0) return '0 B';
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+/** 「0 B」拆成数字 + 小号单位（原型 §2 存储卡的大号读数）。 */
+function splitSize(text: string): [string, string] {
+  const match = /^([\d.,]+)\s+(\S+)$/.exec(text);
+  return match ? [match[1], match[2]] : [text, ''];
+}
+
+/** 三类构成：色点取 --chart-* token（唯一事实源在 global.css），JSON 条目统称「歌曲索引」。 */
+function buildGroups(stats: CacheStatsView) {
+  const bytes = stats.bytes ?? {};
+  const jsonCount = stats.songsCount + stats.urlsCount;
+  const jsonBytes = (bytes.songs ?? 0) + (bytes.urls ?? 0) + (bytes.other ?? 0);
+  return [
+    { key: 'index', label: '歌曲索引', count: jsonCount, bytes: jsonBytes },
+    { key: 'cover', label: '封面图片', count: stats.coversCount, bytes: bytes.covers ?? 0 },
+    { key: 'audio', label: '音频文件', count: stats.audioCount, bytes: bytes.audio ?? 0 },
+  ];
+}
+
+const EMPTY_STATS: CacheStatsView = {
+  totalSize: 0, fileCount: 0, songsCount: 0, coversCount: 0, audioCount: 0, urlsCount: 0,
+};
+
 /**
- * 缓存页（1.9.0）：一条主行讲清「已用 / 上限 / 百分比」，构成与清理动作分组列出。
- * 旧版的 2×2 统计卡与「缓存构成」列表在这里合并成一份，不再重复讲同一组数字。
+ * 缓存页（1.9.0 原型 §2）：存储卡 → 构成 → 位置。
+ * 上限/自动清理由主进程持久化：cache:getConfig / setLimitMb / setAutoClean。
  */
 const CacheSection: React.FC = () => {
-  const [stats, setStats] = useState<CacheStats>({
-    totalSize: 0,
-    fileCount: 0,
-    songsCount: 0,
-    coversCount: 0,
-    audioCount: 0,
-    urlsCount: 0,
-  });
+  const [stats, setStats] = useState<CacheStatsView | null>(null);
+  const [config, setConfig] = useState<CacheConfig>(FALLBACK_CONFIG);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const loadStats = async () => {
+  const load = useCallback(async () => {
     try {
-      const data = await IpcClient.invoke<CacheStats | undefined>('cache:getStats');
-      // IPC 未实现/首次启动可能返回 undefined：按零值处理，不要让整页崩掉
-      if (data) setStats(data);
+      const [nextStats, nextConfig] = await Promise.all([
+        IpcClient.invoke<CacheStatsView | undefined>('cache:getStats'),
+        IpcClient.invoke<Partial<CacheConfig> | undefined>('cache:getConfig'),
+      ]);
+      if (nextStats) setStats(nextStats);
+      if (nextConfig) setConfig({ ...FALLBACK_CONFIG, ...nextConfig });
     } catch (error) {
-      console.error('加载缓存统计失败:', error);
+      console.error('加载缓存信息失败:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const saveLimitMb = async (limitMb: number) => {
+    setConfig((prev) => ({ ...prev, limitMb }));
+    try {
+      const saved = await IpcClient.invoke<number>('cache:setLimitMb', limitMb);
+      if (typeof saved === 'number') setConfig((prev) => ({ ...prev, limitMb: saved }));
+      await load();
+    } catch (error) {
+      console.error('保存缓存上限失败:', error);
     }
   };
 
-  useEffect(() => {
-    loadStats();
-  }, []);
+  const saveAutoClean = async (autoClean: boolean) => {
+    setConfig((prev) => ({ ...prev, autoClean }));
+    try {
+      const saved = await IpcClient.invoke<boolean>('cache:setAutoClean', autoClean);
+      setConfig((prev) => ({ ...prev, autoClean: saved !== false }));
+    } catch (error) {
+      console.error('保存自动清理失败:', error);
+    }
+  };
 
   const handleClearCache = async () => {
     try {
       await IpcClient.invoke<void>('cache:clear');
       setShowClearConfirm(false);
-      loadStats();
+      await load();
     } catch (error) {
       console.error('清除缓存失败:', error);
     }
   };
 
-  const usagePercent = Math.min((stats.totalSize / MAX_CACHE_SIZE) * 100, 100);
-  const averageSize = stats.fileCount > 0 ? Math.round(stats.totalSize / stats.fileCount) : 0;
-  const compositions = [
-    { label: '歌曲索引', count: stats.songsCount },
-    { label: '封面图片', count: stats.coversCount },
-    { label: '音频文件', count: stats.audioCount },
-    { label: 'URL 缓存', count: stats.urlsCount },
-  ];
+  const openCacheDir = async () => {
+    if (!config.dir) return;
+    try {
+      await IpcClient.invoke('cache:openDir', config.dir);
+    } catch (error) {
+      console.error('打开缓存目录失败:', error);
+    }
+  };
+
+  const limitBytes = config.limitMb * 1024 * 1024;
+  const used = stats?.totalSize ?? 0;
+  const usagePercent = limitBytes > 0 ? Math.min((used / limitBytes) * 100, 100) : 0;
+  const [usedNumber, usedUnit] = splitSize(formatSize(used));
+  const groups = buildGroups(stats ?? EMPTY_STATS);
 
   return (
     <section id="cache">
-      <div className="settings-page__title">
-        <Database size={16} aria-hidden="true" />
+      <div className="settings-page__head">
         <h1>缓存</h1>
+        <p className="settings-page__lead">缓存封面、歌词与索引，加快重复浏览</p>
       </div>
-      <div className="settings-page__lead">缓存保存歌曲索引、封面与已解析地址，删除后首次播放会重新解析。</div>
 
       <div className="settings-page__stack">
-        <Section title="占用">
+        <Section title="存储">
           <Group>
+            <div className="cache-usage">
+              <div className="cache-usage__value">
+                {usedNumber}
+                {usedUnit ? <span className="cache-usage__unit"> {' ' + usedUnit}</span> : null}
+              </div>
+              <div className="cache-usage__limit">
+                {'上限 ' + config.limitMb + ' MB · 还剩 ' + formatSize(Math.max(limitBytes - used, 0))}
+              </div>
+              <div className="cache-usage__bar">
+                <Progress value={usagePercent} tone={usagePercent > 90 ? 'danger' : 'accent'} ariaLabel="缓存占用比例" />
+              </div>
+              <div className="cache-usage__legend">
+                {groups.map((group) => (
+                  <span className="cache-legend__item" key={group.key}>
+                    <span className={'cache-legend__dot cache-legend__dot--' + group.key} aria-hidden="true" />
+                    {group.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
             <Row
               icon={<HardDrive size={13} />}
-              label="已用空间"
-              detail={`${formatSize(stats.totalSize)} / 100 MB`}
-              trailing={<Tag tone={usagePercent > 90 ? 'danger' : 'neutral'}>{usagePercent.toFixed(1)}%</Tag>}
-            />
-            <Row label="剩余可用" detail={formatSize(Math.max(MAX_CACHE_SIZE - stats.totalSize, 0))} />
-            <Row label="文件数" detail={String(stats.fileCount)} />
-            <Row label="平均文件大小" detail={formatSize(averageSize)} />
-            <div className="settings-page__progress">
-              <Progress value={usagePercent} tone={usagePercent > 90 ? 'danger' : 'accent'} ariaLabel="缓存占用比例" />
-            </div>
-          </Group>
-        </Section>
-
-        <Section title="缓存构成" footer="按文件数量占比；点击清理只影响缓存，收藏与播放记录不变。">
-          <Group>
-            {compositions.map((item) => {
-              const share = stats.fileCount > 0 ? (item.count / stats.fileCount) * 100 : 0;
-              return (
-                <Row
-                  key={item.label}
-                  label={item.label}
-                  detail={`${item.count} 个 · ${share.toFixed(1)}%`}
-                />
-              );
-            })}
-          </Group>
-        </Section>
-
-        <Section title="清理">
-          <Group>
-            <Row
-              label="清除所有缓存"
-              detail={stats.fileCount > 0 ? `将释放 ${formatSize(stats.totalSize)}` : '当前没有可清理的缓存'}
+              label="空间上限"
               trailing={
-                <Button variant="danger" size="sm" disabled={stats.fileCount === 0} onClick={() => setShowClearConfirm(true)}>
-                  清除
+                <>
+                  <Stepper
+                    value={config.limitMb}
+                    min={config.minMb}
+                    max={config.maxMb}
+                    step={config.stepMb}
+                    label="空间上限"
+                    onChange={(value) => void saveLimitMb(value)}
+                  />
+                  <span className="cache-limit__unit">MB</span>
+                </>
+              }
+            />
+            <Row
+              label="超出上限时自动清理最早条目"
+              trailing={
+                <Switch
+                  checked={config.autoClean}
+                  onChange={(value) => void saveAutoClean(value)}
+                  ariaLabel="超出上限时自动清理最早条目"
+                />
+              }
+            />
+            <Row
+              icon={<Trash2 size={13} />}
+              label="清理全部缓存"
+              detail={stats && stats.fileCount > 0 ? '将释放 ' + formatSize(stats.totalSize) : '当前没有可清理的缓存'}
+              trailing={
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={!stats || stats.fileCount === 0}
+                  onClick={() => setShowClearConfirm(true)}
+                >
+                  清理
                 </Button>
               }
             />
           </Group>
         </Section>
 
-        {stats.fileCount === 0 && <Alert tone="info" title="缓存是空的">首次播放与浏览后会在这里看到占用。</Alert>}
+        <Section title="构成" footer="缓存按文件数量统计，超出上限时优先清理最久未访问的条目。">
+          <Group>
+            {groups.map((group) => (
+              <Row
+                key={group.key}
+                label={
+                  <span className="cache-composition__label">
+                    <span className={'cache-legend__dot cache-legend__dot--' + group.key} aria-hidden="true" />
+                    {group.label}
+                  </span>
+                }
+                detail={group.count + ' 个 · ' + formatSize(group.bytes)}
+              />
+            ))}
+          </Group>
+        </Section>
+
+        <Section title="位置">
+          <Group>
+            <Row
+              icon={<Folder size={13} />}
+              label="缓存目录"
+              chevron
+              onClick={() => void openCacheDir()}
+              ariaLabel="打开缓存目录"
+              trailing={<span className="cache-dir" title={config.dir}>{config.dir || '加载中…'}</span>}
+            />
+          </Group>
+        </Section>
       </div>
 
       <Dialog
         open={showClearConfirm}
-        title="清除缓存"
+        title="清理全部缓存"
         onClose={() => setShowClearConfirm(false)}
         footer={
           <>
             <Button variant="ghost" onClick={() => setShowClearConfirm(false)}>
               取消
             </Button>
-            <Button variant="primary" onClick={handleClearCache}>
-              确定清除
+            <Button variant="primary" onClick={() => void handleClearCache()}>
+              确定清理
             </Button>
           </>
         }
       >
-        将释放 {formatSize(stats.totalSize)}，此操作不可恢复；播放记录与收藏不受影响。
+        {'将释放 ' + formatSize(used) + '，此操作不可恢复；播放记录与收藏不受影响。'}
       </Dialog>
     </section>
   );
