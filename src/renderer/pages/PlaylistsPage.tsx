@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, FolderOpen } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
 import { Button, Dialog, Input, useConfirm } from '@/renderer/ui';
+import '@/renderer/styles/songlist.css';
 import { useNavigate } from 'react-router-dom';
 import MusicCard from '@/renderer/components/MusicCard';
 import SongCover from '@/renderer/components/SongCover';
@@ -88,49 +89,43 @@ const PlaylistsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+    <div className="playlists">
+      <div className="playlists__scroll">
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-tertiary)' }}>
-            加载中...
-          </div>
+          <div className="playlists__loading">加载中...</div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', marginBottom: '28px' }}>
-              <div style={{ width: '140px', height: '140px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="playlists__hero">
+              <div className="playlists__hero-cover">
                 <SongCover src={heroPlaylist?.cover} variant="icon" iconSize={30} />
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)', marginBottom: '6px' }}>我的歌单</div>
-                <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
-                  {playlists.length} 个歌单
-                </div>
-                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                  {totalSongs} 首歌曲 · 把喜欢的歌都收进来
-                </div>
+              <div className="playlists__hero-body">
+                <div className="playlists__hero-kind">我的歌单</div>
+                <div className="playlists__hero-title">{playlists.length} 个歌单</div>
+                <div className="playlists__hero-meta">{totalSongs} 首歌曲 · 把喜欢的歌都收进来</div>
               </div>
               <button
                 onClick={() => setIsModalVisible(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', backgroundColor: 'var(--accent)', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', fontSize: '14px', fontWeight: 500, flexShrink: 0 }}
+                className="list-page__action list-page__action--primary"
               >
                 <Plus size={16} />
                 新建歌单
               </button>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>全部歌单</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{playlists.length} 个</span>
+            <div className="playlists__head">
+              <span className="playlists__head-title">全部歌单</span>
+              <span className="playlists__head-count">{playlists.length} 个</span>
             </div>
 
             {playlists.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', color: 'var(--text-tertiary)' }}>
-                <FolderOpen size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-                <div style={{ fontSize: '16px', marginBottom: '8px' }}>暂无歌单</div>
-                <div style={{ fontSize: '13px' }}>点击上方按钮创建第一个歌单</div>
+              <div className="playlists__empty">
+                <FolderOpen size={48} className="playlists__empty-icon" />
+                <div className="playlists__empty-title">暂无歌单</div>
+                <div>点击上方按钮创建第一个歌单</div>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
+              <div className="playlists__grid">
                 {playlists.map((playlist) => (
                   <PlaylistCard
                     key={playlist.id}

@@ -2410,3 +2410,113 @@
   font-size: var(--text-sm);
   text-align: center;
 }
+/* ── 我的歌单（1.9.0）── */
+.playlists {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.playlists__scroll {
+  flex: 1;
+  padding: 24px;
+  overflow: auto;
+}
+
+.playlists__loading {
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.playlists__hero {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  padding: 24px;
+  margin-bottom: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+}
+
+.playlists__hero-cover {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  height: 140px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-card-hover);
+}
+
+.playlists__hero-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.playlists__hero-kind {
+  margin-bottom: 6px;
+  color: var(--accent-text);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.playlists__hero-title {
+  margin-bottom: 6px;
+  color: var(--text-primary);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+}
+
+.playlists__hero-meta {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.playlists__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.playlists__head-title {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+}
+
+.playlists__head-count {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.playlists__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.playlists__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+}
+
+.playlists__empty-icon {
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.playlists__empty-title {
+  margin-bottom: 8px;
+  font-size: var(--text-base);
+}
