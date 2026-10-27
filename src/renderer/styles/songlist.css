@@ -3042,3 +3042,8 @@
   line-height: var(--leading-tight);
   white-space: nowrap;
 }
+/* 徽标颜色与底色由 --badge-color 下发（来源品牌色 / 语义色） */
+.badge {
+  color: var(--badge-color, var(--text-secondary));
+  background: color-mix(in srgb, var(--badge-color, var(--text-secondary)) 12%, transparent);
+}
