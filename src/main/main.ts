@@ -139,6 +139,9 @@ function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    // 规格：最小尺寸 1024×720（不做响应式断点与缩放）
+    minWidth: 1024,
+    minHeight: 720,
     icon: iconPath,
     webPreferences: {
       // 审查修复：收紧为 Electron 安全基线（preload 是唯一 IPC 桥：src/main/preload.ts）。

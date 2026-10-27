@@ -203,7 +203,7 @@ const CacheSection: React.FC = () => {
           </Group>
         </Section>
 
-        <Section title="构成" footer="缓存按文件数量统计，超出上限时优先清理最久未访问的条目。">
+        <Section title="构成" footer="缓存按文件数量统计，超出上限时按写入时间从早到晚清理。">
           <Group>
             {groups.map((group) => (
               <Row

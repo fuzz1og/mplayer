@@ -799,3 +799,12 @@ html[data-reduce-motion='on'] *::after {
 }
 
 
+/* 系统级「减少动态效果」：与设置里的手动开关同一效果（guide §2.4/§7） */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
