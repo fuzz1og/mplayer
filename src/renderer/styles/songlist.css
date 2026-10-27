@@ -2942,3 +2942,103 @@
 .cover-abs--tinted {
   background: var(--cover-placeholder);
 }
+/* ── 行操作区（1.9.0）── */
+.row-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  width: var(--col-width);
+}
+
+.row-actions__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.row-actions__btn:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.row-actions__btn[data-active] {
+  color: var(--accent);
+}
+
+.row-actions__btn--more[data-open] {
+  background: var(--surface-card-hover);
+  color: var(--text-secondary);
+}
+
+.row-actions__more {
+  position: relative;
+}
+
+/* 行操作弹出菜单 */
+.row-menu__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+
+.row-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 160px;
+  padding: 4px;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-content);
+  box-shadow: var(--shadow-lg);
+}
+
+.row-menu__item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.row-menu__item:hover {
+  background: var(--surface-card-hover);
+}
+
+.row-menu__item[data-danger] {
+  color: var(--danger-text);
+}
+
+.row-menu__item[data-danger]:hover {
+  background: var(--danger-subtle);
+}
+
+/* 来源 / 音质徽标 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+}

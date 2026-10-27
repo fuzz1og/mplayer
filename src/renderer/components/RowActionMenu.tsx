@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import '@/renderer/styles/songlist.css';
 
 export interface RowActionItem {
   key: string;
@@ -33,20 +34,10 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ triggerRef, items, onClos
 
   return createPortal(
     <>
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }} onClick={onClose} />
+      <div className="row-menu__scrim" onClick={onClose} />
       <div
-        style={{
-          position: 'fixed',
-          top: `${pos.top}px`,
-          right: `${pos.right}px`,
-          backgroundColor: 'var(--bg-base)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-          zIndex: 10000,
-          minWidth: '120px',
-          padding: '4px',
-        }}
+        className="row-menu"
+        style={{ top: `${pos.top}px`, right: `${pos.right}px` }}
       >
         {items.map((item) => (
           <button
@@ -57,12 +48,8 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ triggerRef, items, onClos
               item.onClick(e);
               onClose(e);
             }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
-              padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer',
-              borderRadius: 'var(--radius-xs)', fontSize: 'var(--text-sm)',
-              color: item.danger ? 'var(--danger)' : 'var(--text-primary)',
-            }}
+            className="row-menu__item"
+            data-danger={item.danger || undefined}
           >
             {item.icon} {item.label}
           </button>

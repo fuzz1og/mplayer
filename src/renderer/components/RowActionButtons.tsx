@@ -2,7 +2,8 @@ import React from 'react';
 import { Heart, Download, MoreHorizontal } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import RowActionMenu, { type RowActionItem } from '@/renderer/components/RowActionMenu';
-import { COL_ACTIONS, colStyle } from '@/renderer/components/songTableColumns';
+import { COL_ACTIONS, colWidth } from '@/renderer/components/songTableColumns';
+import '@/renderer/styles/songlist.css';
 
 interface RowActionButtonsProps {
   song: Song;
@@ -15,19 +16,6 @@ interface RowActionButtonsProps {
   onCloseMore: (e: React.MouseEvent) => void;
   menuItems: RowActionItem[];
 }
-
-const iconBtn: React.CSSProperties = {
-  border: 'none',
-  background: 'transparent',
-  cursor: 'pointer',
-  padding: '6px',
-  borderRadius: '50%',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: 'var(--text-tertiary)',
-  transition: 'all 0.15s ease',
-};
 
 /**
  * 歌曲行操作区（共享）：下载 + 收藏 + 更多 三图标常驻，宽度 140px。
@@ -44,14 +32,12 @@ const RowActionButtons: React.FC<RowActionButtonsProps> = ({
   onCloseMore,
   menuItems,
 }) => (
-  <div style={{ ...colStyle(COL_ACTIONS), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+  <div className="row-actions" style={colWidth(COL_ACTIONS)}>
     {onDownload && (
       <button
         onClick={(e) => { e.stopPropagation(); onDownload(song); }}
         aria-label={`下载: ${song.name}`}
-        style={iconBtn}
-        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+        className="row-actions__btn"
       >
         <Download size={16} />
       </button>
@@ -60,19 +46,19 @@ const RowActionButtons: React.FC<RowActionButtonsProps> = ({
       <button
         onClick={(e) => { e.stopPropagation(); onToggleFavorite(song); }}
         aria-label={isFavorite ? `取消收藏: ${song.name}` : `收藏: ${song.name}`}
-        style={{ ...iconBtn, color: isFavorite ? 'var(--accent)' : 'var(--text-tertiary)' }}
-        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+        className="row-actions__btn"
+        data-active={isFavorite || undefined}
       >
         <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
       </button>
     )}
-    <div style={{ position: 'relative' }}>
+    <div className="row-actions__more">
       <button
         ref={moreTriggerRef}
         onClick={(e) => { e.stopPropagation(); onToggleMore(e); }}
         aria-label={`更多操作: ${song.name}`}
-        style={{ ...iconBtn, color: moreOpen ? 'var(--text-secondary)' : 'var(--text-tertiary)', backgroundColor: moreOpen ? 'var(--bg-hover)' : 'transparent' }}
+        className="row-actions__btn row-actions__btn--more"
+        data-open={moreOpen || undefined}
       >
         <MoreHorizontal size={16} />
       </button>
