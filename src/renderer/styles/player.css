@@ -1,92 +1,463 @@
-/* 播放器全屏层（1.9.0）：封面取色环境光 + 迷你头部。 */
+/* ============================================================
+   正在播放（1.9.0 全屏播放器）— 对齐 .proto/now-playing.png
+   整窗 fixed overlay：盖住标题栏/侧栏/播放栏，顶栏本身仍是可拖拽区。
+   ============================================================ */
+
 .lyrics-page {
+  /* 舞台上的三层表面：由主文字色向底色派生，浅色主题自动收成浅档，
+     深色主题下等于原型实测的 #1E232C / #33383F / #464B54 一档明度阶梯。 */
+  --np-surface: color-mix(in srgb, var(--text-primary) 7%, var(--surface-content));
+  --np-surface-hover: color-mix(in srgb, var(--text-primary) 13%, var(--surface-content));
+  --np-pill: color-mix(in srgb, var(--text-primary) 20%, var(--surface-content));
+  --np-hero-size: 330px;
+
+  position: fixed;
+  inset: 0;
+  /* 高于壳内 chrome（播放栏 10），低于弹层（Dialog 1000、行菜单 9999） */
+  z-index: 60;
   display: flex;
   flex-direction: column;
-  height: 100%;
   overflow: hidden;
+  /* 不透明底：环境光垫在实色表面上，不得透出下面的播放栏 */
   background: var(--surface-content);
+  color: var(--text-primary);
 }
 
-/* 环境光：取封面主色做两团极低饱和的光晕，无封面时优雅降级为纯色 */
+/* 环境光：封面取色的两团径向渐变（色相由页面以 --np-glow-* 传入），无封面时透明 = 纯色底 */
 .lyrics-page__ambient {
   position: absolute;
   inset: 0;
   z-index: 0;
-  opacity: 0.5;
   background:
-    radial-gradient(60% 50% at 22% 18%, var(--stage-glow-a, transparent) 0%, transparent 70%),
-    radial-gradient(50% 45% at 82% 78%, var(--stage-glow-b, transparent) 0%, transparent 72%);
-  filter: blur(40px) saturate(140%);
+    radial-gradient(46% 52% at 25% 28%, var(--np-glow-a, transparent) 0%, transparent 72%),
+    radial-gradient(44% 48% at 80% 78%, var(--np-glow-b, transparent) 0%, transparent 74%);
   pointer-events: none;
   transition: background var(--duration-slow) var(--ease-standard);
 }
 
-.lyrics-page__content {
+/* ── 顶栏 56：左 chevron-down 收起 / 中「正在播放」/ 右「…」菜单 ── */
+.lyrics-page__topbar {
   position: relative;
   z-index: 1;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  padding: 24px;
-}
-
-.lyrics-page__header {
-  display: flex;
+  display: grid;
   flex: none;
-  gap: 14px;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  margin-bottom: 20px;
+  height: var(--topbar-height);
+  padding: 0 var(--space-3);
+  /* 整窗遮住窗口按钮时仍要能拖动窗口；按钮自己 no-drag */
+  -webkit-app-region: drag;
 }
 
-.lyrics-page__back {
+.lyrics-page__topbar-start {
   display: flex;
-  gap: 8px;
   align-items: center;
-  padding: 8px 16px;
-  border: 0;
-  border-radius: var(--radius-xl);
-  background: var(--material-chrome);
+  justify-self: start;
+}
+
+.lyrics-page__topbar-end {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+}
+
+.lyrics-page__topbar-title {
   color: var(--text-primary);
   font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition:
-    transform var(--duration-fast) var(--ease-standard),
-    background var(--duration-fast) var(--ease-standard);
-  backdrop-filter: var(--material-blur);
+  font-weight: var(--weight-semibold);
 }
 
-.lyrics-page__back:hover {
-  transform: translateX(-2px);
-  background: var(--surface-card-hover);
+.lyrics-page__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+  -webkit-app-region: no-drag;
+}
+
+.lyrics-page__icon-btn:hover {
+  background: var(--np-surface-hover);
+  color: var(--text-primary);
+}
+
+/* 「…」菜单：形状对齐行操作菜单（发丝线 + 大圆角 + 浮层阴影），挂在顶栏内 */
+.lyrics-page__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: var(--space-3);
+  z-index: 2;
+  min-width: 160px;
+  padding: var(--space-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-content);
+  box-shadow: var(--shadow-xl);
+  -webkit-app-region: no-drag;
+}
+
+.lyrics-page__menu-item {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.lyrics-page__menu-item:hover {
+  background: var(--np-surface-hover);
+}
+
+.lyrics-page__menu-item[aria-pressed='true'] {
+  color: var(--accent-text);
+}
+
+/* ── 主体两列：左 46%（封面 + 信息 + 控件 + 进度），右 歌词/队列/详情 ── */
+.lyrics-page__body {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 1;
+  /* 原型实测：左列止于 40%（歌词左缘 x≈492），不是等分中的「约 46%」 */
+  grid-template-columns: 40% 1fr;
+  gap: 0;
+  min-height: 0;
+  padding: 6px 0 0;
+}
+
+.lyrics-page__left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  /* 封面中心落在 x≈260：左列 40% 内再留 30px 左内边距 */
+  padding-left: 23px;
 }
 
 .lyrics-page__cover {
-  flex: none;
-  width: 48px;
-  height: 48px;
+  width: var(--np-hero-size);
+  height: var(--np-hero-size);
   overflow: hidden;
-  border-radius: var(--radius-sm);
-  background: var(--surface-card-hover);
+  border-radius: var(--group-radius);
+  background: var(--np-surface);
+  box-shadow: var(--shadow-lg);
 }
 
-.lyrics-page__meta {
-  flex: 1;
-  min-width: 0;
+.lyrics-page__cover .cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lyrics-page__cover .cover-fill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-tertiary);
 }
 
 .lyrics-page__title {
+  max-width: 100%;
+  margin-top: 14px;
   overflow: hidden;
   color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.01em;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .lyrics-page__artist {
+  max-width: 100%;
   margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 控件行（复用 PlayerControls）：原型是 随机/上一/播放56/下一/循环 */
+.lyrics-page__controls {
+  margin-top: 28px;
+}
+
+.lyrics-page__controls .player-controls {
+  gap: var(--space-5);
+}
+
+.lyrics-page__controls .player-controls__skip {
+  color: var(--text-primary);
+}
+
+.lyrics-page__controls .player-controls__skip:hover {
+  color: var(--text-primary);
+}
+
+/* 全屏播放器的实心圆按原型放大到 56（播放栏仍是 38） */
+.lyrics-page__controls .player-controls__play {
+  width: 40px;
+  height: 40px;
+}
+
+/* ── 进度行：1:42 ──●──── 4:29（制表数字；填充比由 --np-progress 传入） ── */
+.np-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: var(--np-hero-size);
+  max-width: 100%;
+  margin-top: 23px;
+}
+
+.np-progress__time {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.np-progress__track {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  height: 20px;
+  outline: none;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.np-progress__track[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+.np-progress__rail {
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--np-surface-hover);
+}
+
+.np-progress__fill {
+  width: var(--np-progress, 0%);
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--text-primary);
+}
+
+.np-progress__thumb {
+  position: absolute;
+  top: 50%;
+  left: var(--np-progress, 0%);
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--radius-full);
+  background: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+}
+
+.np-progress__track--dragging .np-progress__fill,
+.np-progress__track--dragging .np-progress__thumb {
+  transition: none;
+}
+
+/* ── 右列面板：歌词 / 队列 / 详情 ── */
+.lyrics-page__panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-2) var(--space-6) var(--space-2) 0;
+}
+
+/* 短列表垂直居中（长列表可滚动时不裁掉顶部：safe center） */
+.lyrics-page__lyrics .lyrics {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  justify-content: safe center;
+}
+
+/* 歌词：字号/行高走偏好 token（原型 20 / 34 ≈ 1.625 + 行距），当前行加粗纯白，其余 60% 白 */
+.lyrics-page__lyrics {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 行距由 line-height 决定（原型 ≈34）：songlist 的 16px gap 会把节奏撑散 */
+.lyrics-page__lyrics .lyrics__lines {
+  gap: 0;
+}
+
+.lyrics-page__lyrics .lyrics__line {
+  padding: 0 3px;
+  border-radius: var(--radius-md);
+  transform: none;
+}
+
+.lyrics-page__lyrics .lyrics__line[data-active] {
+  transform: none;
+}
+
+.lyrics-page__lyrics .lyrics__line:hover:not([data-active]) {
+  background: var(--np-surface);
+}
+
+.lyrics-page__lyrics .lyrics__text {
+  color: var(--text-secondary);
+  font-size: var(--lyrics-font-size);
+  font-weight: var(--weight-medium);
+  line-height: var(--lyrics-line-height);
+  letter-spacing: 0;
+  text-shadow: none;
+}
+
+.lyrics-page__lyrics .lyrics__line[data-active] .lyrics__text {
+  color: var(--text-primary);
+  font-size: var(--lyrics-font-size);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  text-shadow: none;
+}
+
+.lyrics-page__lyrics .lyrics__empty-text {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  text-shadow: none;
+}
+
+.lyrics-page__hint {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* ── 队列页 ── */
+.np-queue {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--space-2);
+}
+
+.np-queue__head,
+.np-queue__row {
+  display: grid;
+  grid-template-columns: 22px 40px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+}
+
+.np-queue__head {
+  padding-bottom: var(--space-2);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.np-queue__row {
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.np-queue__row:hover {
+  background: var(--np-surface);
+  color: var(--text-primary);
+}
+
+.np-queue__row[aria-current='true'] {
+  background: var(--np-pill);
+  color: var(--text-primary);
+}
+
+.np-queue__index {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.np-queue__row[aria-current='true'] .np-queue__index {
+  color: var(--text-primary);
+}
+
+.np-queue__cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--np-surface);
+  color: var(--text-tertiary);
+}
+
+.np-queue__cover .cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.np-queue__main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.np-queue__name {
+  overflow: hidden;
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.np-queue__artist {
   overflow: hidden;
   color: var(--text-tertiary);
   font-size: var(--text-xs);
@@ -94,77 +465,146 @@
   white-space: nowrap;
 }
 
-.lyrics-page__controls {
-  display: flex;
-  flex: none;
-  gap: 4px;
-  align-items: center;
+.np-queue__time {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
 }
 
-.lyrics-page__play {
+.np-queue__empty {
   display: flex;
+  flex: 1;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: var(--accent);
-  color: var(--text-inverse);
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-
-.lyrics-page__play:hover {
-  background: var(--accent-hover);
-}
-
-.lyrics-page__play svg {
-  margin-left: 1px;
-}
-
-.lyrics-page__body {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.lyrics-page__loading,
-.lyrics-page__none {
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   font-size: var(--text-sm);
 }
 
-.lyrics-page__loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-}
-
-.lyrics-page__none {
-  position: absolute;
-  right: 0;
-  bottom: 20px;
-  left: 0;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  text-align: center;
-}
-
-/* 没有在播歌曲时的空态 */
-.lyrics-page__empty {
+/* ── 详情页 ── */
+.np-detail {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  padding-right: var(--space-4);
+}
+
+.np-detail__row {
+  display: flex;
+  gap: var(--space-4);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.np-detail__row:last-child {
+  border-bottom: 0;
+}
+
+.np-detail__label {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.np-detail__value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 底栏 67：左「自动混音 · 无损」/ 右 Segmented（歌词/队列/详情）+ 音量 ── */
+.lyrics-page__footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  height: var(--player-height);
+  padding: 0 30px;
+  border-top: 1px solid var(--hairline);
+}
+
+.lyrics-page__quality {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.lyrics-page__footer-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* 分段控件在舞台上用明度阶梯（原型：容器 7% 白、选中 22% 白） */
+.lyrics-page .ui-segmented {
+  background: var(--np-surface);
+}
+
+.lyrics-page .ui-segmented__option {
+  padding: 0 11px;
+  color: var(--text-tertiary);
+}
+
+.lyrics-page .ui-segmented__option:hover:not([aria-checked='true']) {
+  color: var(--text-secondary);
+}
+
+.lyrics-page .ui-segmented__option[aria-checked='true'] {
+  background: var(--np-pill);
+  color: var(--text-primary);
+}
+
+/* 音量：滑轨中性面 + 主文字色填充 */
+.lyrics-page .player-volume__slider {
+  width: 88px;
+  background: linear-gradient(
+    to right,
+    var(--text-primary) var(--volume, 0%),
+    var(--np-surface-hover) var(--volume, 0%)
+  );
+}
+
+.lyrics-page .player-volume__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+/* ── 空态 ── */
+.lyrics-page__empty {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
   align-items: center;
   justify-content: center;
-  height: 100%;
 }
 
 .lyrics-page__empty-text {
   color: var(--text-secondary);
   font-size: var(--text-base);
+}
+
+/* 浅色主题：环境光只是淡淡一层（深色文字仍可读）；深色舞台保持原型的浓蓝紫 */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) .lyrics-page__ambient {
+    opacity: 0.4;
+  }
+}
+
+:root[data-theme='light'] .lyrics-page__ambient {
+  opacity: 0.4;
 }
