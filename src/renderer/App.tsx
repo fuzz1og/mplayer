@@ -20,6 +20,7 @@ import ErrorBoundary from '@/renderer/components/ErrorBoundary';
 
 import './styles/global.css';
 import './styles/shell.css';
+import './styles/settings.css';
 
 const App: React.FC = () => {
   const navigate = useNavigate();
