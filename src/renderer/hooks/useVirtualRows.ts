@@ -45,11 +45,18 @@ function isScrollableY(node: HTMLElement): boolean {
   return SCROLLABLE_OVERFLOW_Y.has(style.overflowY) || SCROLLABLE_OVERFLOW_Y.has(style.overflow);
 }
 
-/** 向上找最近的纵向滚动祖先：列表挂靠页面已有的滚动容器，页面无需知道测量细节 */
-function findScrollParent(from: HTMLElement | null): HTMLElement | null {
+/**
+ * 向上找最近的纵向滚动祖先：列表挂靠页面已有的滚动容器，页面无需知道测量细节。
+ *
+ * 除了看 computed overflow，也认 data-scroll-container 标记：
+ * 真正决定「这是滚动容器」的是页面结构，而不是当前环境能不能读到 CSS 文件
+ * （jsdom 不加载样式表，只靠 getComputedStyle 会把虚拟化整段关掉，测试与真实
+ * 浏览器行为分叉）。页面标了这个属性就是声明式的约定。
+ */
+export function findScrollParent(from: HTMLElement | null): HTMLElement | null {
   let node = from?.parentElement ?? null;
   while (node) {
-    if (isScrollableY(node)) return node;
+    if (node.hasAttribute('data-scroll-container') || isScrollableY(node)) return node;
     node = node.parentElement;
   }
   return null;

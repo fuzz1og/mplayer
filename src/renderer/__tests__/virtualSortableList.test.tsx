@@ -27,6 +27,9 @@ function PreviewRow({ item }: { item: Item; index: number }) {
 /** jsdom 没有布局：给滚动容器造一个 900x600 的视口，@tanstack/react-virtual 才能算出窗口 */
 function mountScrollContainer(): HTMLDivElement {
   const el = document.createElement('div');
+  // 生产代码认 data-scroll-container 标记（jsdom 不加载 CSS，光有类名认不出滚动容器）；
+  // 这里两种信号都给，测试容器与真实页面结构一致。
+  el.setAttribute('data-scroll-container', '');
   el.style.overflowY = 'auto';
   Object.defineProperty(el, 'clientHeight', { value: 600, configurable: true });
   Object.defineProperty(el, 'clientWidth', { value: 900, configurable: true });

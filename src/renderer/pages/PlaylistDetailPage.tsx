@@ -25,7 +25,6 @@ const previewDragHandle = (
   </span>
 );
 
-const scrollContainerCss = '.playlist-detail__scroll { overflow: auto; }';
 
 const PlaylistDetailPage: React.FC = () => {
   const confirm = useConfirm();
@@ -335,7 +334,7 @@ const PlaylistDetailPage: React.FC = () => {
       </div>
 
       {/* 歌曲列表 */}
-      <div className="playlist-detail__scroll">
+      <div className="playlist-detail__scroll" data-scroll-container>
         {playlist && (
           <div className="playlist-detail__head">
             <div className="playlist-detail__card">
@@ -560,10 +559,6 @@ const PlaylistDetailPage: React.FC = () => {
         onClose={() => setImportModalVisible(false)}
         onImported={loadData}
       />
-      {/* scrollContainerCss 是 .playlist-detail__scroll 的 overflow 同义副本：VirtualSortableList 探测滚动祖先
-          走 getComputedStyle，单测（jsdom）不加载 CSS 文件，只有内联样式或 <style> 才认得出容器可滚动。
-          href + precedence 让 React 19 把它提升进 <head>，页面 DOM 结构与样式表内规则都不受影响。 */}
-      <style href="playlist-detail-scroll" precedence="default">{scrollContainerCss}</style>
     </div>
   );
 };
