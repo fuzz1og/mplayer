@@ -1,47 +1,58 @@
-import React from 'react';
-import {
-  Sparkles,
-  Compass,
-  Library,
-  Heart,
-  History,
-  ListMusic,
-  Settings,
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Sparkles, Compass, Library, Heart, History, ListMusic } from 'lucide-react';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import { useLocalStore } from '@/renderer/store/localStore';
+import { IpcClient } from '@/renderer/services/IpcClient';
 
 interface NavItem {
   key: string;
   icon: React.ReactNode;
   label: string;
-  /** 右侧圆点徽标（#579：「设置」项表示有可用更新） */
-  badge?: boolean;
+  /** 右侧计数（原型：全部 1,284 / 我喜欢的音乐 128 / 我的歌单 12）。 */
+  count?: number;
 }
 
 interface SidebarProps {
   currentPage: string;
   onPageChange: (page: string) => void;
-  /** 有可用更新时在左下「设置」项旁显示徽标（#579 / ADR 决策 3） */
-  updateAvailable?: boolean;
 }
 
 /**
- * 侧栏 7 项。原「本地音乐 / 下载管理 / 我的收藏 / 播放历史」四入口按 1.9.0 决策收进
- * 「资料库」分段（后两者同时保留快捷入口），队列移到播放栏与全屏播放器。
+ * 侧栏（原型）：顶部品牌，随后 推荐 / 发现 + 「资料库」组（全部 / 我喜欢的音乐 / 最近播放）
+ * + 「歌单」组（我的歌单）。设置不在这里——它是应用级动作，收进标题栏的「设置」文字按钮。
  */
-const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange, updateAvailable = false }) => {
-  const primaryItems: NavItem[] = [
+const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
+  const favoriteCount = useFavoriteStore((s) => s.favorites.length);
+  const localCount = useLocalStore((s) => s.songs.length);
+  const [playlistCount, setPlaylistCount] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    let disposed = false;
+    IpcClient.invoke<{ id: number }[]>('playlist:getAll')
+      .then((list) => {
+        if (!disposed && Array.isArray(list)) setPlaylistCount(list.length);
+      })
+      .catch(() => {
+        // 首次启动 / 通道未就绪：不显示计数，不影响导航
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  const items: NavItem[] = [
     { key: 'recommend', icon: <Sparkles size={17} />, label: '推荐' },
     { key: 'discover', icon: <Compass size={17} />, label: '发现' },
   ];
 
   const libraryItems: NavItem[] = [
-    { key: 'library', icon: <Library size={17} />, label: '资料库' },
-    { key: 'favorites', icon: <Heart size={17} />, label: '我喜欢的音乐' },
+    { key: 'library', icon: <Library size={17} />, label: '全部', count: favoriteCount + localCount },
+    { key: 'favorites', icon: <Heart size={17} />, label: '我喜欢的音乐', count: favoriteCount },
     { key: 'history', icon: <History size={17} />, label: '最近播放' },
   ];
 
   const playlistItems: NavItem[] = [
-    { key: 'playlists', icon: <ListMusic size={17} />, label: '我的歌单' },
+    { key: 'playlists', icon: <ListMusic size={17} />, label: '我的歌单', count: playlistCount },
   ];
 
   const renderNavItem = (item: NavItem) => {
@@ -53,30 +64,32 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange, updateAvai
         className="sidebar__item"
         onClick={() => onPageChange(item.key)}
         aria-current={isActive ? 'page' : undefined}
-        aria-label={item.badge ? `${item.label}（有可用更新）` : undefined}
       >
         <span className="sidebar__icon" aria-hidden="true">
           {item.icon}
         </span>
-        <span>{item.label}</span>
-        {item.badge && <span className="sidebar__badge" data-testid="update-badge" title="有新版本可更新" aria-hidden="true" />}
+        <span className="sidebar__label">{item.label}</span>
+        {item.count != null && item.count > 0 && <span className="sidebar__count">{item.count}</span>}
       </button>
     );
   };
 
   return (
     <aside className="sidebar">
-      <nav className="sidebar__nav" aria-label="主导航">
-        {primaryItems.map(renderNavItem)}
+      <div className="sidebar__brand">
+        <img className="sidebar__brand-icon" src="./icon.png" alt="" />
+        <span>MPlayer</span>
+      </div>
 
-        <div className="sidebar__group-label">我的音乐</div>
+      <nav className="sidebar__nav" aria-label="主导航">
+        {items.map(renderNavItem)}
+
+        <div className="sidebar__group-label">资料库</div>
         {libraryItems.map(renderNavItem)}
 
         <div className="sidebar__group-label">歌单</div>
         {playlistItems.map(renderNavItem)}
       </nav>
-
-      <div className="sidebar__footer">{renderNavItem({ key: 'settings', icon: <Settings size={17} />, label: '设置', badge: updateAvailable })}</div>
     </aside>
   );
 };

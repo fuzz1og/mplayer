@@ -113,6 +113,17 @@ export const router = createHashRouter([
         ),
       },
       {
+        // 深链：#/settings/cache 这类入口（ADR 要求设置可深链）
+        path: 'settings/:section',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <SettingsShell>
+              <SettingsPage />
+            </SettingsShell>
+          </Suspense>
+        ),
+      },
+      {
         path: 'library',
         element: (
           <Suspense fallback={<Loading />}>

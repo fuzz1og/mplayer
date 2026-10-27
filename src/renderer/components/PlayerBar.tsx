@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { Heart, Download, Mic, ListMusic } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Heart, Download, Mic, ListMusic, MoreHorizontal, ListEnd } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
@@ -13,28 +13,33 @@ import PlayerVolume from './PlayerVolume';
 interface PlayerBarProps {
   className?: string;
   onCoverClick?: () => void;
+  /** 队列入口；缺省用 hash 跳转（不依赖 Router，便于单测） */
+  onQueueClick?: () => void;
 }
 
-const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
-  const currentSong = usePlayerStore(s => s.currentSong);
-  const isPlaying = usePlayerStore(s => s.isPlaying);
-  const isLoading = usePlayerStore(s => s.isLoading); // #387 等待态
-  const volume = usePlayerStore(s => s.volume);
-  const playMode = usePlayerStore(s => s.playMode);
-  const pause = usePlayerStore(s => s.pause);
-  const resume = usePlayerStore(s => s.resume);
-  const seek = usePlayerStore(s => s.seek);
-  const setVolume = usePlayerStore(s => s.setVolume);
-  const setPlayMode = usePlayerStore(s => s.setPlayMode);
-  const playNext = usePlayerStore(s => s.playNext);
-  const playPrevious = usePlayerStore(s => s.playPrevious);
+/**
+ * 播放栏（原型）：左 封面/标题/艺术家/红心；中 控件 + 进度；右 歌词/队列/更多/音量。
+ * 「加入歌单」与「下载」收进更多菜单，保持原型右区只有一枚更多按钮。
+ */
+const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueClick }) => {
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const isLoading = usePlayerStore((s) => s.isLoading);
+  const volume = usePlayerStore((s) => s.volume);
+  const playMode = usePlayerStore((s) => s.playMode);
+  const pause = usePlayerStore((s) => s.pause);
+  const resume = usePlayerStore((s) => s.resume);
+  const seek = usePlayerStore((s) => s.seek);
+  const setVolume = usePlayerStore((s) => s.setVolume);
+  const setPlayMode = usePlayerStore((s) => s.setPlayMode);
+  const playNext = usePlayerStore((s) => s.playNext);
+  const playPrevious = usePlayerStore((s) => s.playPrevious);
 
-  // 收藏态必须选**数据**（原生布尔）：选 store 上的 isFavorite 方法拿到的是稳定引用，
-  // favoriteIds 变化不触发重渲染，心形永远停在旧值（#620，引入于 af107fb）。
   const fav = useFavoriteStore((s) => (currentSong ? s.favoriteIds.includes(currentSong.id) : false));
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
-  // 当前歌加入歌单弹窗（播放栏直达入口）
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   const { download } = useDownload();
 
   const handlePlayPause = useCallback(() => {
@@ -43,17 +48,17 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
     else resume();
   }, [currentSong, isPlaying, pause, resume]);
 
-  const handleVolumeChange = useCallback((vol: number) => {
-    setVolume(vol);
-  }, [setVolume]);
+  const handleVolumeChange = useCallback((vol: number) => setVolume(vol), [setVolume]);
 
   const handleDownload = useCallback(() => {
-    if (currentSong) {
-      download(currentSong);
-    }
+    if (currentSong) download(currentSong);
   }, [currentSong, download]);
 
-  // 播放栏封面加载失败 → 按 ID 重识别换新封面（上游 API 签名过期后同一 URL 永远失败）
+  const handleQueue = useCallback(() => {
+    if (onQueueClick) onQueueClick();
+    else window.location.hash = '#/queue';
+  }, [onQueueClick]);
+
   const handleCoverError = useCallback(() => {
     if (!currentSong) return;
     void refreshSongCover(currentSong).then((cover) => {
@@ -64,11 +69,19 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
     });
   }, [currentSong]);
 
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(event.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [moreOpen]);
+
   return (
     <div className={className ? `player-bar ${className}` : 'player-bar'}>
-      {/* 左侧 - 封面 + 歌曲信息 */}
+      {/* 左 - 封面 / 标题 / 艺术家 / 收藏 */}
       <div className="player-bar__now-playing">
-        {/* 封面 */}
         <button
           onClick={onCoverClick}
           aria-label="查看歌词"
@@ -83,27 +96,33 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           />
         </button>
 
-        {/* 歌曲信息 */}
         <div className="player-bar__meta">
           <div className="player-bar__title-row">
             {isPlaying && currentSong && (
-              <span className="player-bar__equalizer">
+              <span className="player-bar__equalizer" aria-hidden="true">
                 <span />
                 <span />
                 <span />
               </span>
             )}
-            <span className="player-bar__title">
-              {currentSong?.name || '未播放'}
-            </span>
+            <span className="player-bar__title">{currentSong?.name || '未播放'}</span>
+            <button
+              onClick={() => currentSong && toggleFavorite(currentSong)}
+              disabled={!currentSong}
+              aria-label={fav ? '取消收藏' : '收藏'}
+              aria-pressed={fav}
+              className="player-btn player-bar__favorite"
+            >
+              <Heart size={15} fill={fav ? 'currentColor' : 'none'} />
+            </button>
           </div>
           <div className="player-bar__artist">
-            {currentSong ? `${currentSong.artist}` : '—'}
+            {currentSong ? currentSong.artist : '—'}
           </div>
         </div>
       </div>
 
-      {/* 中间 - 控制按钮 + 进度条 */}
+      {/* 中 - 控件 + 进度 */}
       <div className="player-bar__center">
         <PlayerControls
           isPlaying={isPlaying}
@@ -115,62 +134,54 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           onNext={playNext}
           onModeChange={setPlayMode}
         />
-        {/* 位置/时长不进播放栏：进度块自己订阅 playbackClock，tick 不重渲染 PlayerBar */}
         <PlayerProgress hasCurrentSong={!!currentSong} onSeek={seek} />
       </div>
 
-      {/* 右侧 - 功能按钮 */}
+      {/* 右 - 歌词 / 队列 / 更多 / 音量 */}
       <div className="player-bar__actions">
-        {/* 收藏按钮 */}
-        <button
-          onClick={() => currentSong && toggleFavorite(currentSong)}
-          disabled={!currentSong}
-          aria-label={fav ? '取消收藏' : '收藏'}
-          aria-pressed={fav}
-          className="player-btn player-bar__favorite"
-        >
-          <Heart size={16} fill={fav ? 'currentColor' : 'none'} />
-        </button>
-
-        {/* 加入歌单 */}
-        <button
-          onClick={() => setShowAddToPlaylist(true)}
-          disabled={!currentSong}
-          aria-label="加入歌单"
-          className="player-btn"
-        >
-          <ListMusic size={16} />
-        </button>
-
-        {/* 歌词按钮 */}
-        <button
-          onClick={onCoverClick}
-          disabled={!currentSong}
-          aria-label="歌词"
-          className="player-btn"
-        >
+        <button onClick={onCoverClick} disabled={!currentSong} aria-label="歌词" className="player-btn">
           <Mic size={16} />
         </button>
-
-        {/* 下载按钮 */}
-        <button
-          onClick={handleDownload}
-          disabled={!currentSong}
-          aria-label="下载"
-          className="player-btn"
-        >
-          <Download size={16} />
+        <button onClick={handleQueue} aria-label="队列" className="player-btn">
+          <ListEnd size={16} />
         </button>
+        <div className="player-bar__more" ref={moreRef}>
+          <button
+            onClick={() => setMoreOpen((open) => !open)}
+            aria-label="更多操作"
+            aria-expanded={moreOpen}
+            className="player-btn"
+          >
+            <MoreHorizontal size={16} />
+          </button>
+          {moreOpen && (
+            <div className="player-bar__more-menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                className="player-bar__more-item"
+                onClick={() => { setMoreOpen(false); setShowAddToPlaylist(true); }}
+              >
+                <ListMusic size={14} />
+                加入歌单
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="player-bar__more-item"
+                disabled={!currentSong}
+                onClick={() => { setMoreOpen(false); handleDownload(); }}
+              >
+                <Download size={14} />
+                下载
+              </button>
+            </div>
+          )}
+        </div>
 
-        {/* 音量控制 */}
-        <PlayerVolume
-          volume={volume}
-          onVolumeChange={handleVolumeChange}
-          onToggleMute={() => setVolume(volume === 0 ? 80 : 0)}
-        />
+        <PlayerVolume volume={volume} onVolumeChange={handleVolumeChange} onToggleMute={() => setVolume(volume === 0 ? 80 : 0)} />
       </div>
 
-      {/* 加入歌单弹窗（对当前播放歌曲） */}
       {currentSong && (
         <AddToPlaylistModal
           song={currentSong}

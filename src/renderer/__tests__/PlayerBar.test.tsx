@@ -23,9 +23,6 @@ vi.mock('../components/PlayerVolume', () => ({
   default: () => <div data-testid="player-volume">PlayerVolume</div>
 }));
 
-vi.mock('../components/PlayModeButton', () => ({
-  default: () => <div data-testid="play-mode-button">PlayModeButton</div>
-}));
 
 describe('PlayerBar', () => {
   const mockPlayerStore = {
@@ -136,12 +133,14 @@ describe('PlayerBar', () => {
     render(<PlayerBar />);
     // setup 默认 invoke 返回 { success: true }（无 data），弹窗 load 歌单会拿到 undefined 渲染崩溃，覆盖为空歌单
     (window as any).electronAPI.invoke.mockResolvedValue({ success: true, data: [] });
-    fireEvent.click(screen.getByRole('button', { name: '加入歌单' }));
+    // 加入歌单收在「更多操作」菜单里
+    fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '加入歌单' }));
 
     const modalHeading = await screen.findByText('加入歌单');
     // 从播放栏内按钮上溯到渲染容器（body 直接子节点）：弹窗不应落在该子树内，
     // 否则会被 PlayerBar 的 backdropFilter 包含块捕获而定位错乱（#245）
-    let barSubtree: HTMLElement = screen.getByRole('button', { name: '加入歌单' });
+    let barSubtree: HTMLElement = screen.getByRole('button', { name: '更多操作' });
     while (barSubtree.parentElement && barSubtree.parentElement !== document.body) {
       barSubtree = barSubtree.parentElement;
     }

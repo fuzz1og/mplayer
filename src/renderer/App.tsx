@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 const ipcRenderer = window.electronAPI;
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
@@ -10,13 +10,13 @@ import { useUpdateStore, isUpdatePending } from '@/renderer/store/updateStore';
 import { useGlobalShortcuts } from '@/renderer/hooks/useGlobalShortcuts';
 import Sidebar from '@/renderer/components/Sidebar';
 import TitleBar from '@/renderer/components/TitleBar';
-import TopBar from '@/renderer/components/TopBar';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
 import DownloadNotifications from '@/renderer/components/DownloadNotifications';
 import UpdateReadyDialog from '@/renderer/components/UpdateReadyDialog';
 import LyricsPage from '@/renderer/pages/LyricsPage';
 import ErrorBoundary from '@/renderer/components/ErrorBoundary';
+import { initAppearancePrefs } from '@/renderer/theme/appearancePrefs';
 
 import './styles/global.css';
 import './styles/shell.css';
@@ -28,55 +28,11 @@ const App: React.FC = () => {
   const [showLyrics, setShowLyrics] = useState(false);
   const isSettings = location.pathname.startsWith('/settings');
 
-  // History navigation management
-  const historyStack = useRef<string[]>([location.pathname]);
-  const [historyIndex, setHistoryIndex] = useState(0);
-  const isNavigating = useRef(false);
-
-  useEffect(() => {
-    if (isNavigating.current) {
-      isNavigating.current = false;
-      return;
-    }
-    const path = location.pathname;
-    if (historyStack.current[historyIndex] !== path) {
-      historyStack.current = historyStack.current.slice(0, historyIndex + 1);
-      historyStack.current.push(path);
-      setHistoryIndex(historyStack.current.length - 1);
-    }
-  }, [location.pathname, historyIndex]);
-
   // #403：歌词是「播放器的层」（与移动端全屏播放器同构），**不是一条路由**——它不占导航栈，任何一
-  // 次导航都该把它收起来。
-  // 信号取 location.key 而非 pathname：点当前页（重复导航到同一路径）也会换 key。
+  // 次导航都该把它收起来。信号取 location.key 而非 pathname：点当前页（重复导航到同一路径）也会换 key。
   useEffect(() => {
     setShowLyrics(false);
   }, [location.key]);
-
-  const canGoBack = historyIndex > 0;
-  const canGoForward = historyIndex < historyStack.current.length - 1;
-
-  const handleBack = useCallback(() => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      isNavigating.current = true;
-      setHistoryIndex(newIndex);
-      navigate(historyStack.current[newIndex]);
-    }
-  }, [navigate, historyIndex]);
-
-  const handleForward = useCallback(() => {
-    if (historyIndex < historyStack.current.length - 1) {
-      const newIndex = historyIndex + 1;
-      isNavigating.current = true;
-      setHistoryIndex(newIndex);
-      navigate(historyStack.current[newIndex]);
-    }
-  }, [navigate, historyIndex]);
-
-  const handleRefresh = useCallback(() => {
-    navigate(0);
-  }, [navigate]);
 
   // 逐字段订阅：整 store 订阅会让搜索/收藏/下载的任何变化都重渲染 App 及整棵页面树
   const currentKeyword = useSearchStore((s) => s.currentKeyword);
@@ -86,6 +42,9 @@ const App: React.FC = () => {
   const loadFavorites = useFavoriteStore((s) => s.loadFavorites);
 
   // 组件挂载时加载收藏列表
+  // 外观偏好（密度/材质/字号/动效/歌词字号）落 <html data-*>：冷启动就应用，不必进设置页
+  useEffect(() => { void initAppearancePrefs(); }, []);
+
   useEffect(() => {
     loadFavorites();
   }, [loadFavorites]);
@@ -148,28 +107,28 @@ const App: React.FC = () => {
   useGlobalShortcuts();
 
   const dispatchSearch = (keyword: string) => {
-    const { sourceType } = useSearchStore.getState();
-    if (sourceType === 'all') {
+    const { sourceType: current } = useSearchStore.getState();
+    if (current === 'all') {
       searchService.searchAll(keyword);
     } else {
       searchService.search(keyword);
     }
   };
 
-  const handleSearch = (value: string) => {
+  const handleSearch = useCallback((value: string) => {
     dispatchSearch(value);
     if (location.pathname !== '/discover') {
       navigate('/discover');
     }
-  };
+  }, [location.pathname, navigate]);
 
-  const handleSourceTypeChange = (newType: SourceKey) => {
+  const handleSourceTypeChange = useCallback((newType: SourceKey) => {
     useSearchStore.getState().reset();
     setSourceType(newType);
     if (currentKeyword) {
       dispatchSearch(currentKeyword);
     }
-  };
+  }, [currentKeyword, setSourceType]);
 
   // 根据路径获取当前活跃的侧边栏项
   const getActiveSidebarKey = () => {
@@ -190,13 +149,22 @@ const App: React.FC = () => {
 
   return (
     <div className={isSettings ? 'app-shell app-shell--settings' : 'app-shell'}>
-      <TitleBar />
+      <TitleBar
+        title={isSettings ? '设置' : undefined}
+        onBack={() => {
+          if (window.history.length > 1) navigate(-1);
+          else navigate('/recommend');
+        }}
+        onSearch={handleSearch}
+        sourceType={sourceType}
+        onSourceTypeChange={handleSourceTypeChange}
+        onSettingsClick={() => navigate('/settings')}
+        updateAvailable={updateAvailable}
+      />
 
       <div className="app-shell__body">
-        {/* 左侧导航栏 */}
         <Sidebar
           currentPage={getActiveSidebarKey()}
-          updateAvailable={updateAvailable}
           onPageChange={(page) => {
             // 切换页面时清除搜索状态
             useSearchStore.getState().reset();
@@ -204,38 +172,20 @@ const App: React.FC = () => {
           }}
         />
 
-        {/* 主内容区域 */}
-        <div className="app-shell__main">
-          {/* 顶部导航栏 */}
-          <TopBar
-            onSearch={handleSearch}
-            sourceType={sourceType}
-            onSourceTypeChange={handleSourceTypeChange}
-            onBack={handleBack}
-            onForward={handleForward}
-            onRefresh={handleRefresh}
-            canGoBack={canGoBack}
-            canGoForward={canGoForward}
-          />
-
-          {/* 页面内容 - 由React Router渲染 */}
-          <main className="app-shell__content">
-            {/* 错误边界包住页面内容：桌面窗口没有刷新/返回键，渲染层抛错此前会整窗变白（只能重启）。
-                现在一个页面出错 = 一个页面出错，并给「重试」自救。 */}
-            <ErrorBoundary>
-              {showLyrics ? (
-                <LyricsPage onBack={() => setShowLyrics(false)} />
-              ) : (
-                <Outlet />
-              )}
-            </ErrorBoundary>
-          </main>
-
-          {/* 底部播放控制栏：封面/歌词按钮是「歌词层」开关——再点一次关灯留在当前页
-              （不做 navigate(-1)：那会把用户甩到历史上一站，不如可预测） */}
-          <PlayerBar onCoverClick={() => setShowLyrics((visible) => !visible)} />
-        </div>
+        <main className="app-shell__content">
+          {/* 错误边界包住页面内容：桌面窗口没有刷新/返回键，渲染层抛错此前会整窗变白（只能重启）。
+              现在一个页面出错 = 一个页面出错，并给「重试」自救。 */}
+          <ErrorBoundary>
+            {showLyrics ? <LyricsPage onBack={() => setShowLyrics(false)} /> : <Outlet />}
+          </ErrorBoundary>
+        </main>
       </div>
+
+      {/* 播放栏横跨整窗（原型：从 x=0 起，侧栏在其上方结束） */}
+      <PlayerBar
+        onCoverClick={() => setShowLyrics((visible) => !visible)}
+        onQueueClick={() => navigate('/queue')}
+      />
 
       {/* 下载进度弹窗（订阅面在宿主内，App 不随下载进度重渲染） */}
       <DownloadNotifications />

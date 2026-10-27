@@ -184,16 +184,22 @@
   --cover-placeholder-glow: #2A3342;
 
   /* ── 布局尺寸 ── */
-  --sidebar-width: 220px;
+  --sidebar-width: 216px;
   --sidebar-collapsed-width: 64px;
+  --titlebar-height: 44px;
   --topbar-height: 56px;
   --player-height: 68px;
   --content-max-width: 1400px;
 
   /* ── 表面层级（inset grouped，1.9.0 UI 重构） ── */
-  --surface-window: #F2F2F4;
+  /* 播放键（原型：浅底深色按钮、深底浅色按钮） */
+  --player-play-bg: var(--accent);
+  --player-play-fg: var(--text-inverse);
+
+  --surface-window: #F6F6F8;
+  --surface-sidebar: #F1F1F3;
   --surface-content: #FFFFFF;
-  --surface-card: #F7F7F9;
+  --surface-card: #FFFFFF;
   --surface-card-hover: #F1F1F4;
   --surface-selected: #E9E9EE;
   --surface-selected-hover: #E3E3E9;
@@ -282,9 +288,14 @@
     --skeleton-shine: #38383A;
 
     /* 表面层级（1.9.0 UI 重构） */
+    /* 播放键：深色主题用浅色实心圆（原型） */
+    --player-play-bg: var(--text-primary);
+    --player-play-fg: var(--text-inverse);
+
     --surface-window: #1B1B1D;
+    --surface-sidebar: #1B1B1D;
     --surface-content: #161618;
-    --surface-card: rgba(255, 255, 255, 0.055);
+    --surface-card: #222224;
     --surface-card-hover: rgba(255, 255, 255, 0.085);
     --surface-selected: rgba(255, 255, 255, 0.1);
     --surface-selected-hover: rgba(255, 255, 255, 0.14);
@@ -349,9 +360,14 @@
   --skeleton-shine: #38383A;
 
   /* 表面层级（1.9.0 UI 重构） */
+  /* 播放键：深色主题用浅色实心圆（原型） */
+  --player-play-bg: var(--text-primary);
+  --player-play-fg: var(--text-inverse);
+
   --surface-window: #1B1B1D;
+  --surface-sidebar: #1B1B1D;
   --surface-content: #161618;
-  --surface-card: rgba(255, 255, 255, 0.055);
+  --surface-card: #222224;
   --surface-card-hover: rgba(255, 255, 255, 0.085);
   --surface-selected: rgba(255, 255, 255, 0.1);
   --surface-selected-hover: rgba(255, 255, 255, 0.14);
@@ -723,6 +739,65 @@ button:focus-visible,
   :root {
     --sidebar-width: 0px;
   }
+}
+
+/* ════════════════════════════════════════════════════════════
+   外观偏好（设置·外观）— 由 renderer 写 <html data-*> 切换
+   token 定义文件，允许字面量（design-lint 豁免）
+   ════════════════════════════════════════════════════════════ */
+
+:root {
+  --lyrics-font-size: 18px;
+  --lyrics-line-height: 1.9;
+}
+
+/* 界面密度：紧凑 = 压缩分组行与列表行 */
+html[data-density='compact'] {
+  --row-height: 38px;
+  --group-gap: 16px;
+  --player-height: 60px;
+}
+
+/* 材质：关闭后不再依赖系统模糊，改为实色表面 */
+html[data-material='off'] {
+  --material-chrome: var(--surface-window);
+  --material-blur: none;
+}
+
+/* 字号三档 */
+html[data-font-scale='small'] {
+  --text-xs: 10px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 15px;
+  --text-xl: 18px;
+  --text-2xl: 21px;
+  --text-3xl: 24px;
+}
+
+html[data-font-scale='large'] {
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 17px;
+  --text-lg: 19px;
+  --text-xl: 22px;
+  --text-2xl: 27px;
+  --text-3xl: 31px;
+}
+
+/* 歌词字号 */
+html[data-lyrics-size='large'] {
+  --lyrics-font-size: 22px;
+}
+
+/* 减弱动态：把所有过渡与动画压到最短 */
+html[data-reduce-motion='on'] *,
+html[data-reduce-motion='on'] *::before,
+html[data-reduce-motion='on'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
 }
 
 
