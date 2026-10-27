@@ -83,17 +83,17 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
   return (
     <header className="titlebar">
       <div className="titlebar__leading">
-        {title && (
-          <span className="titlebar__brand">
-            <img className="titlebar__brand-icon" src="./icon.png" alt="" />
-            <span>MPlayer</span>
-          </span>
-        )}
         {title && onBack && (
           <button type="button" className="titlebar__back" onClick={onBack} aria-label="返回">
             <ChevronLeft size={15} />
             <span>返回</span>
           </button>
+        )}
+        {title && (
+          <span className="titlebar__brand">
+            <img className="titlebar__brand-icon" src="./icon.png" alt="" />
+            <span>MPlayer</span>
+          </span>
         )}
       </div>
 

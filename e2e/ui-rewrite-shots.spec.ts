@@ -45,8 +45,9 @@ test.beforeEach(async ({ page }) => {
         }
         if (channel === 'update:getVersion') return '1.9.0';
         if (channel === 'settings:getThemeMode') return 'system';
-        if (channel === 'history:get') return [];
+        if (channel === 'history:get') return songs.slice(0, 5).map((song: Record<string, unknown>) => ({ song }));
         if (channel === 'playlist:getAll') return [];
+        if (channel === 'favorite:getAll') return songs;
         if (channel === 'playlist:get') return { id: 7, name: '示例歌单', description: '示例简介', cover: '', songCount: songs.length };
         if (channel === 'playlist:getSongs') return songs;
         if (channel === 'settings:getSourceModes') return { status: {} };
