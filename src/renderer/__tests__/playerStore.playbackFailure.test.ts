@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearPrefetchCache, clearSkipGuard, getFailureStreak, getPrefetchedUrl, registerTerminalFailure, SKIP_LIMIT, type Song } from '@mplayer/core';
-import { message } from 'antd';
+import { useToastStore } from '@/renderer/services/toastStore';
 
 // --- Mock 准备：audioPlayer / callMusicApi / IpcClient / songCoverRefresh ---
 const audioPlayerMock = vi.hoisted(() => {
@@ -185,7 +185,7 @@ describe('播放失败：fresh 重试与自动跳歌（对齐移动端语义）'
 
   it('离线：不进解析链，立即停止并明确告知（#385 D3）', async () => {
     Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
-    const errSpy = vi.spyOn(message, 'error').mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(useToastStore.getState(), 'push');
     const a = song('off-1', '晴天');
     stateWith([a, song('off-2', '稻香')], 0);
     // 上一首已经播到 2:00：读模型必须跟着这次失败归零（否则播放栏停在旧进度）
@@ -197,7 +197,7 @@ describe('播放失败：fresh 重试与自动跳歌（对齐移动端语义）'
     expect(callMusicApiMock).not.toHaveBeenCalled();
     expect(playbackClock.getSnapshot().position).toBe(0);
     expect(usePlayerStore.getState().isPlaying).toBe(false);
-    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('离线'));
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('离线'), 'danger');
     errSpy.mockRestore();
   });
 
@@ -208,7 +208,7 @@ describe('播放失败：fresh 重试与自动跳歌（对齐移动端语义）'
       if (method === 'searchSongsRouted') return [];
       return undefined;
     });
-    const errSpy = vi.spyOn(message, 'error').mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(useToastStore.getState(), 'push');
     const a = song('as-1', '晴天');
     const b = song('as-2', '稻香');
     stateWith([a, b], 0);
@@ -216,7 +216,7 @@ describe('播放失败：fresh 重试与自动跳歌（对齐移动端语义）'
     await usePlayerStore.getState().play(a);
 
     expect(usePlayerStore.getState().currentPlaylistIndex).toBe(0); // 不跳
-    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('自动跳歌已关闭'));
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('自动跳歌已关闭'), 'danger');
     errSpy.mockRestore();
   });
 

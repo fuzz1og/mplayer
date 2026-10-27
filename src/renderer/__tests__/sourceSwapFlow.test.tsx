@@ -192,9 +192,9 @@ describe('SongList 单曲换源流程', () => {
     expect(await screen.findByText('正在搜索可切换版本…')).toBeInTheDocument();
 
     // 关闭弹层（onClose 递增请求序号）后，迟到的搜索结果不得写回候选
-    const closeBtn = document.querySelector('.ant-modal-close') as HTMLElement | null;
-    expect(closeBtn).not.toBeNull();
-    fireEvent.click(closeBtn!);
+    // 1.9.0 起换源弹层是自己实现的 Dialog（原生 dialog + 自绘关闭按钮）
+    const closeBtn = screen.getByRole('button', { name: '关闭对话框' });
+    fireEvent.click(closeBtn);
     resolveSlowSearch([{ ...song('1', '晴天', 'qq'), url: 'https://audio.qq.com/full.mp3' }]);
 
     await waitFor(() => {

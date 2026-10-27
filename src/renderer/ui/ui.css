@@ -445,3 +445,110 @@
   flex: none;
 }
 
+
+/* ── 换源弹层 ── */
+.swap__song {
+  padding: 0 14px 8px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swap__success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 0;
+}
+
+.swap__success-text {
+  color: var(--success);
+  font-size: var(--text-base);
+}
+
+.swap__loading {
+  padding: 24px 0;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  text-align: center;
+}
+
+.swap__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.swap__candidate {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.swap__candidate-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.swap__candidate-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swap__candidate-artist {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swap__dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--text-tertiary);
+}
+
+.swap__dot--exact {
+  background: var(--success);
+}
+
+.swap__score {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.swap__score--exact {
+  color: var(--success);
+}
+
+/* ── 更新就绪框 ── */
+.update-ready__title {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.update-ready__body {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.update-ready__error {
+  margin: 10px 0 0;
+  color: var(--danger-text);
+  font-size: var(--text-sm);
+}
