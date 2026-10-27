@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { Modal } from 'antd';
+import { ConfirmProvider } from '@/renderer/ui';
 import type { Song } from '@mplayer/core';
 import PlaylistDetailPage from '@/renderer/pages/PlaylistDetailPage';
 import { filterSongsByQuery } from '@/renderer/utils/songFilter';
@@ -43,11 +43,13 @@ function renderPage(songs: Song[]): { container: HTMLElement; calls: InvokeCall[
     return undefined;
   });
   const view = render(
+    <ConfirmProvider>
     <MemoryRouter initialEntries={['/playlist/7']}>
       <Routes>
         <Route path="/playlist/:id" element={<PlaylistDetailPage />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
+    </ConfirmProvider>,
   );
   return { container: view.container, calls };
 }
@@ -205,23 +207,15 @@ describe('本地歌单页过滤（#488）', () => {
     await waitFor(() => expect(rowTexts(container).length).toBe(1));
     await waitFor(() => expect(container.textContent).toContain('已选择 1 项'));
 
-    // jsdom 里 antd confirm 的 portal 不落地：直接接管 confirm 并执行 onOk，
-    // 验的是 handleBatchDelete 的作用域（可见集合），弹层外壳不是本票主题
-    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation(((config: {
-      onOk?: (...args: unknown[]) => unknown;
-    }) => {
-      void config.onOk?.();
-      return { destroy: () => {}, update: () => {} };
-    }) as unknown as typeof Modal.confirm);
-    try {
-      fireEvent.click(buttonByText(container, '批量移除'));
-      await waitFor(() => {
-        const removed = calls.filter(([channel]) => channel === 'playlist:removeSong');
-        expect(removed.map((call) => call[2])).toEqual(['netease:37']);
-      });
-    } finally {
-      confirmSpy.mockRestore();
-    }
+    // 1.9.0 的确认框是自建 Dialog（受控组件）：点「批量移除」后确认框真的渲染在 DOM 里，
+    // 直接点确认按钮即可——验的仍是 handleBatchDelete 的作用域（可见集合）。
+    fireEvent.click(buttonByText(container, '批量移除'));
+    const okButton = await screen.findByRole('button', { name: '移除' });
+    fireEvent.click(okButton);
+    await waitFor(() => {
+      const removed = calls.filter(([channel]) => channel === 'playlist:removeSong');
+      expect(removed.map((call) => call[2])).toEqual(['netease:37']);
+    });
 
     // 另外 39 首的选中状态没被这次移除波及（清空过滤后仍然在选）
     setFilter(container, '');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
-import { message } from 'antd';
+import { toast } from '@/renderer/services/toastStore';
 import { ArrowLeft, Flame, Disc3, ListMusic, Mic2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -339,7 +339,7 @@ const DiscoverPageV2: React.FC = () => {
       await play(await resolvePlayableVersionForDesktop(song));
     } catch (error) {
       console.error('播放失败:', error);
-      message.error('播放失败，请检查网络连接或稍后重试');
+      toast.error('播放失败，请检查网络连接或稍后重试');
     }
   };
 

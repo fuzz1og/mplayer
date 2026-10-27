@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Play, ArrowLeft, Edit2, Music, Download, Trash2, Upload, GripVertical, Search, X } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { message, Modal } from 'antd';
+import { toast } from '@/renderer/services/toastStore';
+import { useConfirm } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -24,6 +25,7 @@ const previewDragHandle = (
 );
 
 const PlaylistDetailPage: React.FC = () => {
+  const confirm = useConfirm();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const playlistId = id ? parseInt(id, 10) : undefined;
@@ -148,7 +150,7 @@ const PlaylistDetailPage: React.FC = () => {
       setSongs(prev => prev.map(s => s.id === original.id ? swapped : s));
     } catch (error) {
       console.error('换源保存到歌单失败:', error);
-      message.error('换源成功，但保存到本地歌单失败');
+      toast.error('换源成功，但保存到本地歌单失败');
     }
   }, [playlistId]);
 
@@ -157,7 +159,7 @@ const PlaylistDetailPage: React.FC = () => {
     try {
       await downloadBatch(songs);
     } catch (_error) {
-      message.error('下载全部失败，请重试');
+      toast.error('下载全部失败，请重试');
     }
   };
 
@@ -167,9 +169,9 @@ const PlaylistDetailPage: React.FC = () => {
     if (toDownload.length === 0) return;
     try {
       await downloadBatch(toDownload);
-      message.success(`已添加 ${toDownload.length} 首歌曲到下载队列`);
+      toast.success(`已添加 ${toDownload.length} 首歌曲到下载队列`);
     } catch (_error) {
-      message.error('批量下载失败');
+      toast.error('批量下载失败');
     }
   };
 
@@ -177,9 +179,9 @@ const PlaylistDetailPage: React.FC = () => {
     // 只移除**可见**的已选项（#488）：界面只显示这些，落库结果必须与界面一致
     const ids = visibleSelectedIds;
     if (ids.length === 0) return;
-    Modal.confirm({
+    confirm({
       title: '批量移除',
-      content: `确定要从歌单移除选中的 ${ids.length} 首歌曲吗？`,
+      message: `确定要从歌单移除选中的 ${ids.length} 首歌曲吗？`,
       okText: '移除',
       cancelText: '取消',
       onOk: async () => {
@@ -192,9 +194,9 @@ const PlaylistDetailPage: React.FC = () => {
           // 只摘掉被移除的这批：被过滤掉的已选项保留（#488）
           setSelectedIds((prev) => prev.filter((songId) => !removedIdSet.has(songId)));
           loadData();
-          message.success(`已移除 ${ids.length} 首歌曲`);
+          toast.success(`已移除 ${ids.length} 首歌曲`);
         } catch (_error) {
-          message.error('批量移除失败');
+          toast.error('批量移除失败');
         }
       },
     });
@@ -224,10 +226,10 @@ const PlaylistDetailPage: React.FC = () => {
     try {
       await IpcClient.invoke<void>('playlist:removeSong', playlistId, song.id);
       loadData();
-      message.success(`已从歌单移除「${song.name}」`);
+      toast.success(`已从歌单移除「${song.name}」`);
     } catch (error) {
       console.error('从歌单移除失败:', error);
-      message.error('移除失败，请重试');
+      toast.error('移除失败，请重试');
     }
     // 只依赖 playlistId：loadData 每次渲染虽是新身份，但内部只用 playlistId 与稳定的 setState
   }, [playlistId]);

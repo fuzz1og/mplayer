@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
-import { message } from 'antd';
+import { toast } from '@/renderer/services/toastStore';
 import { useNavigate } from 'react-router-dom';
 import DailyRecommend from '@/renderer/components/DailyRecommend';
 import PlaylistGrid from '@/renderer/components/PlaylistGrid';
@@ -59,7 +59,7 @@ const RecommendPage: React.FC = () => {
       await play(await resolvePlayableVersionForDesktop(song));
     } catch (error) {
       console.error('播放失败:', error);
-      message.error('播放失败，请检查网络连接或稍后重试');
+      toast.error('播放失败，请检查网络连接或稍后重试');
     }
   };
 

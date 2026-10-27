@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { History, Trash2 } from 'lucide-react';
-import { message } from 'antd';
+import { toast } from '@/renderer/services/toastStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -52,10 +52,10 @@ const HistoryPage: React.FC = () => {
     try {
       await IpcClient.invoke<void>('history:clear');
       setHistory([]);
-      message.success('播放历史已清空');
+      toast.success('播放历史已清空');
     } catch (error) {
       console.error('清空播放历史失败:', error);
-      message.error('清空失败，请重试');
+      toast.error('清空失败，请重试');
     }
   };
 

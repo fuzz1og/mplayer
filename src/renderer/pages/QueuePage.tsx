@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { Headphones, Trash2, ListMusic, GripVertical } from 'lucide-react';
-import { Modal } from 'antd';
+import { useConfirm } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
@@ -50,6 +50,7 @@ const previewDragHandle = (
 );
 
 const QueuePage: React.FC = () => {
+  const confirm = useConfirm();
   const currentPlaylist = usePlayerStore((s) => s.currentPlaylist);
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -172,12 +173,12 @@ const QueuePage: React.FC = () => {
   );
 
   const handleClearQueue = () => {
-    Modal.confirm({
+    confirm({
       title: '清空队列',
-      content: '确定要清空播放队列吗？',
+      message: '确定要清空播放队列吗？',
       okText: '清空',
       cancelText: '取消',
-      okButtonProps: { danger: true },
+      danger: true,
       onOk: () => clearQueue(),
     });
   };

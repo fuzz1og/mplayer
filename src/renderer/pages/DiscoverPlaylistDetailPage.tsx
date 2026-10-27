@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Play, Music2 } from 'lucide-react';
-import { Modal, message } from 'antd';
+import { toast } from '@/renderer/services/toastStore';
+import { useConfirm } from '@/renderer/ui';
 import SongList from '@/renderer/components/SongList';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -20,6 +21,7 @@ const PAGE_SIZE = 20;
 const desktopWriter: DesktopPlaylistWriter = createDesktopPlaylistWriter();
 
 const DiscoverPlaylistDetailPage: React.FC = () => {
+  const confirm = useConfirm();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const play = usePlayerStore((s) => s.play);
@@ -118,9 +120,9 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
 
   const handleSaveToLocal = () => {
     if (!playlist) return;
-    Modal.confirm({
+    confirm({
       title: '保存到本地',
-      content: `确定要将歌单"${playlist.name}"（${total > songs.length ? `${songs.length}/${total}` : songs.length}首歌曲）保存到本地吗？`,
+      message: `确定要将歌单"${playlist.name}"（${total > songs.length ? `${songs.length}/${total}` : songs.length}首歌曲）保存到本地吗？`,
       okText: '保存',
       cancelText: '取消',
       onOk: async () => {
@@ -144,11 +146,11 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
             description: playlist.description || `来自网易云歌单: ${playlist.name}`,
           });
           if (!result.ok) throw new Error(result.error || '保存失败');
-          message.success(`成功保存 ${result.added} 首歌曲到本地歌单`);
+          toast.success(`成功保存 ${result.added} 首歌曲到本地歌单`);
           navigate('/playlists');
         } catch (error) {
           console.error('保存到本地失败:', error);
-          message.error('保存失败，请稍后重试');
+          toast.error('保存失败，请稍后重试');
         } finally {
           setSaving(false);
         }

@@ -4,6 +4,8 @@ export { Button, IconButton } from './button';
 export type { ButtonProps, ButtonVariant, ButtonSize, IconButtonProps } from './button';
 export { Tag } from './tag';
 export type { TagProps, TagTone } from './tag';
+export { ConfirmProvider, useConfirm } from './confirm';
+export type { ConfirmOptions } from './confirm';
 export { Input } from './input';
 export type { InputProps } from './input';
 export { Switch, Segmented, Progress, Alert, Checkbox, Stepper } from './forms';

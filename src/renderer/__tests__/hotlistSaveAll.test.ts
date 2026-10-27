@@ -52,7 +52,7 @@ describe('榜单页「保存全部到新歌单」（#493 / #552）', () => {
 
   it('确认文案含榜单名与曲目数', () => {
     const code = stripComments(source);
-    expect(code).toMatch(/content: `[^`]*\$\{title\}[^`]*\$\{count\}[^`]*`/);
+    expect(code).toMatch(/message: `[^`]*\$\{title\}[^`]*\$\{count\}[^`]*`/);
   });
 });
 

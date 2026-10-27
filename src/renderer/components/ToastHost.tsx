@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ToastProvider, useToast } from '@/renderer/ui';
+import { ConfirmProvider, ToastProvider, useToast } from '@/renderer/ui';
 import { useToastStore } from '@/renderer/services/toastStore';
 
 /**
@@ -23,13 +23,15 @@ const ToastBridge: React.FC = () => {
 };
 
 /**
- * 全局 Toast 宿主（1.9.0）：替换 antd 的 message。
- * 包在应用最外层，任何组件都能 useToast 弹一条，store/hook 走 toast.success 等安全门面。
+ * 全局浮层宿主（1.9.0）：Toast 替换 antd message，ConfirmProvider 替换 Modal.confirm。
+ * 包在应用最外层，store/hook 里的提示走 toast.success 等安全门面。
  */
 const ToastHost: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <ToastProvider>
-    <ToastBridge />
-    {children}
+    <ConfirmProvider>
+      <ToastBridge />
+      {children}
+    </ConfirmProvider>
   </ToastProvider>
 );
 

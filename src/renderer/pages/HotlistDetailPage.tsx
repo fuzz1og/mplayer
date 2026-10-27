@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, ListPlus } from 'lucide-react';
-import { message, Modal } from 'antd';
+import { toast } from '@/renderer/services/toastStore';
+import { useConfirm } from '@/renderer/ui';
 import SongList from '@/renderer/components/SongList';
 import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import type { DesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
@@ -27,6 +28,7 @@ const HOTLIST_CONFIG: Record<HotlistType, { source: SourceKey; sourceId: number;
 const desktopWriter: DesktopPlaylistWriter = createDesktopPlaylistWriter();
 
 const HotlistDetailPage: React.FC = () => {
+  const confirm = useConfirm();
   const { type } = useParams<{ type: HotlistType }>();
   const navigate = useNavigate();
   const hotlistType: HotlistType = type && HOTLIST_CONFIG[type] ? type : 'netease';
@@ -71,9 +73,9 @@ const HotlistDetailPage: React.FC = () => {
     if (hotlist.length === 0) return;
     const { title } = config;
     const count = hotlist.length;
-    Modal.confirm({
+    confirm({
       title: '保存全部到新歌单',
-      content: `确定把「${title}」的 ${count} 首歌曲保存成新的本地歌单「${title}」吗？`,
+      message: `确定把「${title}」的 ${count} 首歌曲保存成新的本地歌单「${title}」吗？`,
       okText: '保存',
       cancelText: '取消',
       onOk: async () => {
@@ -87,11 +89,11 @@ const HotlistDetailPage: React.FC = () => {
             description: `来自榜单: ${title}`,
           });
           if (!result.ok) throw new Error(result.error || '保存失败');
-          message.success(`已保存 ${result.added} 首歌曲到新歌单「${title}」`);
+          toast.success(`已保存 ${result.added} 首歌曲到新歌单「${title}」`);
           navigate('/playlists');
         } catch (err) {
           console.error('保存全部到新歌单失败:', err);
-          message.error('保存失败，已取消创建歌单');
+          toast.error('保存失败，已取消创建歌单');
         } finally {
           setSavingAll(false);
         }

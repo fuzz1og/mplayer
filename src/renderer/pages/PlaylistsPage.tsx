@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, FolderOpen } from 'lucide-react';
-import { Modal, message } from 'antd';
+import { toast } from '@/renderer/services/toastStore';
+import { Button, Dialog, Input, useConfirm } from '@/renderer/ui';
 import { useNavigate } from 'react-router-dom';
 import MusicCard from '@/renderer/components/MusicCard';
 import SongCover from '@/renderer/components/SongCover';
@@ -26,6 +27,7 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({ playlist, onOpen, onDelete 
 };
 
 const PlaylistsPage: React.FC = () => {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,11 +55,11 @@ const PlaylistsPage: React.FC = () => {
   }, []);
 
   const handleDeletePlaylist = (playlist: Playlist) => {
-    Modal.confirm({
+    confirm({
       title: '删除歌单',
-      content: `确定要删除歌单「${playlist.name}」吗？此操作不可撤销。`,
+      message: `确定要删除歌单「${playlist.name}」吗？此操作不可撤销。`,
       okText: '删除',
-      okType: 'danger',
+      danger: true,
       cancelText: '取消',
       onOk: async () => {
         try {
@@ -65,7 +67,7 @@ const PlaylistsPage: React.FC = () => {
           loadData();
         } catch (error) {
           console.error('删除歌单失败:', error);
-          message.error('删除失败，请重试');
+          toast.error('删除失败，请重试');
         }
       },
     });
@@ -143,41 +145,56 @@ const PlaylistsPage: React.FC = () => {
         )}
       </div>
 
-      <Modal
-        title="新建歌单"
+      <Dialog
         open={isModalVisible}
-        onOk={handleCreatePlaylist}
-        onCancel={() => {
+        title="新建歌单"
+        onClose={() => {
           setIsModalVisible(false);
           setNewPlaylistName('');
           setNewPlaylistDesc('');
         }}
-        okText="创建"
-        cancelText="取消"
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setIsModalVisible(false);
+                setNewPlaylistName('');
+                setNewPlaylistDesc('');
+              }}
+            >
+              取消
+            </Button>
+            <Button variant="primary" onClick={handleCreatePlaylist}>
+              创建
+            </Button>
+          </>
+        }
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px 0' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>歌单名称 *</label>
-            <input
-              type="text"
+        <div className="playlist-form">
+          <label className="playlist-form__label">
+            歌单名称 *
+            <Input
               value={newPlaylistName}
               onChange={(e) => setNewPlaylistName(e.target.value)}
               placeholder="请输入歌单名称"
-              style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-default)', borderRadius: '6px', fontSize: '14px' }}
+              aria-label="歌单名称"
             />
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>歌单描述</label>
+          </label>
+          <label className="playlist-form__label">
+            歌单描述
             <textarea
+              className="playlist-form__textarea"
               value={newPlaylistDesc}
               onChange={(e) => setNewPlaylistDesc(e.target.value)}
               placeholder="请输入歌单描述（可选）"
               rows={3}
-              style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-default)', borderRadius: '6px', fontSize: '14px', resize: 'vertical' }}
+              aria-label="歌单描述"
             />
-          </div>
+          </label>
         </div>
-      </Modal>
+      </Dialog>
     </div>
   );
 };
