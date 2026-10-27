@@ -182,3 +182,259 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* ── 列表外层与表头（1.9.0）── */
+.song-list {
+  width: 100%;
+}
+
+.song-list__batch-entry {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 16px 8px;
+}
+
+.song-list__batch-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  background: transparent;
+  /* 排版在 :where 里避免与 batch-btn 的圆角/字号互相覆盖 */
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.song-list__batch-toggle[data-active] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+/* 批量栏：高度/位移用 data-visible 驱动，动效与原先的 0.3s 一致 */
+.song-list__batch-wrap {
+  height: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    height var(--duration-slow) var(--ease-standard),
+    opacity var(--duration-slow) var(--ease-standard),
+    margin-bottom var(--duration-slow) var(--ease-standard);
+}
+
+.song-list__batch-wrap[data-visible] {
+  height: 56px;
+  margin-bottom: 16px;
+  opacity: 1;
+}
+
+.song-list__batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface-card-hover);
+  transform: translateY(-10px);
+  transition: transform var(--duration-slow) var(--ease-standard);
+}
+
+.song-list__batch-wrap[data-visible] .song-list__batch-bar {
+  transform: translateY(0);
+}
+
+.song-list__batch-count {
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+}
+
+.song-list__batch-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.song-list__batch-btn {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--text-inverse);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.song-list__batch-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.song-list__batch-btn--danger {
+  background: var(--danger);
+}
+
+.song-list__batch-btn--danger:hover:not(:disabled) {
+  background: var(--danger-hover);
+}
+
+.song-list__batch-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 表头：贴住内容区上边（--sticky-top 由页面按滚动容器 padding 下发） */
+.song-list__head {
+  position: sticky;
+  top: var(--sticky-top, 0px);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-content);
+  backdrop-filter: var(--material-blur);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+
+.song-list__head-check {
+  width: var(--col-width);
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.song-list__head-check input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.song-list__head-index {
+  width: var(--col-width);
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.song-list__head-title {
+  flex: 1;
+}
+
+.song-list__head-col {
+  width: var(--col-width);
+  flex-shrink: 0;
+}
+
+.song-list__head-actions {
+  width: var(--col-width);
+  flex-shrink: 0;
+  text-align: center;
+}
+
+/* 行容器：虚拟化模式靠等高 spacer 撑高 */
+.song-list__rows[data-virtual] {
+  position: relative;
+  height: var(--total-size);
+}
+
+/* 空态 */
+.song-list__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+}
+
+.song-list__empty-icon {
+  margin-bottom: 12px;
+  color: var(--text-tertiary);
+}
+/* ── 骨架屏（与真实行同列，1.9.0）── */
+.song-skeleton {
+  padding: 8px 0;
+}
+
+.song-skeleton__row {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: var(--radius-8);
+}
+
+.song-skeleton__col {
+  text-align: center;
+}
+
+.song-skeleton__main {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.song-skeleton__lines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.song-skeleton__actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+}
+
+.skeleton-shimmer.song-skeleton__box {
+  display: inline-block;
+  border-radius: var(--radius-3);
+}
+
+.song-skeleton__box--check {
+  width: 16px;
+  height: 16px;
+}
+
+.song-skeleton__box--index {
+  width: 18px;
+  height: 12px;
+}
+
+.song-skeleton__box--cover {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-8);
+}
+
+.song-skeleton__box--title {
+  width: 45%;
+  height: 14px;
+}
+
+.song-skeleton__box--artist {
+  width: 30%;
+  height: 12px;
+}
+
+.song-skeleton__box--album {
+  width: 70%;
+  height: 12px;
+}
+
+.song-skeleton__box--action {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+}

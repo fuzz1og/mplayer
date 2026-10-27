@@ -5,25 +5,13 @@ import AddToPlaylistModal from './AddToPlaylistModal';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from './BatchAddToPlaylistModal';
 
-const batchBtnStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px',
-  padding: '8px 16px',
-  color: 'white',
-  border: 'none',
-  borderRadius: '20px',
-  fontSize: 'var(--text-sm)',
-  fontWeight: 500,
-  cursor: 'pointer',
-  transition: 'all 0.15s ease',
-};
 import SongRow from './SongRow';
 import SongListSkeleton from './SongListSkeleton';
 import VirtualRow from './VirtualRow';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
 import { useVirtualRows, stickyTopForContent, SONG_ROW_HEIGHT, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
-import { COL_CHECKBOX, COL_INDEX, COL_ALBUM, COL_ACTIONS, colStyle } from '@/renderer/components/songTableColumns';
+import { COL_CHECKBOX, COL_INDEX, COL_ALBUM, COL_ACTIONS, colWidth } from '@/renderer/components/songTableColumns';
+import '@/renderer/styles/songlist.css';
 
 interface SongListProps {
   songs: Song[];
@@ -253,18 +241,9 @@ const SongList: React.FC<SongListProps> = ({
     return <SongListSkeleton showCheckbox={showCheckbox} showIndex={showIndex} showAlbum={hasAlbum} />;
     }
     return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '60px 20px',
-          color: 'var(--text-tertiary)',
-        }}
-      >
-        <Music2 size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
-        <div style={{ fontSize: 'var(--text-base)' }}>{emptyText}</div>
+      <div className="song-list__empty">
+        <Music2 size={26} className="song-list__empty-icon" />
+        <div>{emptyText}</div>
       </div>
     );
   }
@@ -298,22 +277,14 @@ const SongList: React.FC<SongListProps> = ({
   );
 
   return (
-    <div style={{ width: '100%' }}>
+    <div className="song-list">
       {/* 批量管理入口：常驻（有批量能力且列表非空时），进入后显示勾选框与批量操作栏 */}
       {(enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 16px 8px' }}>
+        <div className="song-list__batch-entry">
           <button
             onClick={() => (batchMode ? handleExitBatchMode() : setBatchMode(true))}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '5px 14px',
-              backgroundColor: batchMode ? 'var(--accent)' : 'transparent',
-              color: batchMode ? 'white' : 'var(--text-secondary)',
-              border: `1px solid ${batchMode ? 'var(--accent)' : 'var(--border-default)'}`,
-              borderRadius: '16px',
-              cursor: 'pointer',
-              fontSize: 'var(--text-sm)',
-            }}
+            className="song-list__batch-toggle"
+            data-active={batchMode || undefined}
           >
             <CheckSquare size={14} />
             {batchMode ? '完成' : '批量管理'}
@@ -323,51 +294,18 @@ const SongList: React.FC<SongListProps> = ({
 
       {/* 批量操作按钮栏 */}
       {(enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (
-        <div
-          style={{
-            height: showBatchActionBar ? '56px' : '0px',
-            opacity: showBatchActionBar ? 1 : 0,
-            overflow: 'hidden',
-            marginBottom: showBatchActionBar ? '16px' : '0px',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 16px',
-              backgroundColor: 'var(--bg-hover)',
-              borderRadius: 'var(--radius-md)',
-              transform: showBatchActionBar ? 'translateY(0)' : 'translateY(-10px)',
-              transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-          >
-            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)' }}>
-              已选择 {selectedIds.length} 首歌曲
-            </span>
-            <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="song-list__batch-wrap" data-visible={showBatchActionBar || undefined}>
+          <div className="song-list__batch-bar">
+            <span className="song-list__batch-count">已选择 {selectedIds.length} 首歌曲</span>
+            <div className="song-list__batch-actions">
               {enableBatchDownload && (
-                <button
-                  onClick={handleBatchDownload}
-                  disabled={batchDisabled}
-                  style={{ ...batchBtnStyle, backgroundColor: 'var(--accent)', opacity: batchDisabled ? 0.5 : 1, cursor: batchDisabled ? 'not-allowed' : 'pointer' }}
-                  onMouseEnter={(e) => { if (!batchDisabled) e.currentTarget.style.backgroundColor = 'var(--accent-hover)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent)'; }}
-                >
+                <button onClick={handleBatchDownload} disabled={batchDisabled} className="song-list__batch-btn">
                   <Download size={16} />
                   批量下载
                 </button>
               )}
               {enableBatchAddToPlaylist && (
-                <button
-                  onClick={handleBatchAddToPlaylist}
-                  disabled={batchDisabled}
-                  style={{ ...batchBtnStyle, backgroundColor: 'var(--accent)', opacity: batchDisabled ? 0.5 : 1, cursor: batchDisabled ? 'not-allowed' : 'pointer' }}
-                  onMouseEnter={(e) => { if (!batchDisabled) e.currentTarget.style.backgroundColor = 'var(--accent-hover)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent)'; }}
-                >
+                <button onClick={handleBatchAddToPlaylist} disabled={batchDisabled} className="song-list__batch-btn">
                   <ListMusic size={16} />
                   批量加入歌单
                 </button>
@@ -376,9 +314,7 @@ const SongList: React.FC<SongListProps> = ({
                 <button
                   onClick={handleBatchDelete}
                   disabled={batchDisabled}
-                  style={{ ...batchBtnStyle, backgroundColor: 'var(--danger)', opacity: batchDisabled ? 0.5 : 1, cursor: batchDisabled ? 'not-allowed' : 'pointer' }}
-                  onMouseEnter={(e) => { if (!batchDisabled) e.currentTarget.style.backgroundColor = 'var(--danger-hover)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--danger)'; }}
+                  className="song-list__batch-btn song-list__batch-btn--danger"
                 >
                   <Trash2 size={16} />
                   批量删除
@@ -391,48 +327,40 @@ const SongList: React.FC<SongListProps> = ({
 
       {/* 表头 */}
       {showHeader && (
-        <div
-          style={{
-            position: 'sticky', top: headerStickyTop, zIndex: 3,
-            backgroundColor: 'var(--bg-base)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            padding: '12px 16px',
-            borderBottom: '1px solid var(--border-subtle)',
-            fontSize: 'var(--text-xs)',
-            color: 'var(--text-tertiary)',
-            fontWeight: 500,
-          }}
-        >
+        <div className="song-list__head" style={{ '--sticky-top': `${headerStickyTop}px` } as React.CSSProperties}>
           {(showCheckbox || batchMode) && (
-            <div style={{ ...colStyle(COL_CHECKBOX), textAlign: 'center' }}>
+            <div className="song-list__head-check" style={colWidth(COL_CHECKBOX)}>
               <input
                 type="checkbox"
+                aria-label="全选歌曲"
                 checked={displaySongs.length > 0 && selectedIds.length === displaySongs.length}
                 onChange={handleToggleSelectAll}
-                style={{
-                  cursor: 'pointer',
-                  width: '16px',
-                  height: '16px',
-                  accentColor: 'var(--accent)'
-                }}
               />
             </div>
           )}
           {showIndex && (
-            <div style={{ ...colStyle(COL_INDEX), textAlign: 'center' }}>#</div>
+            <div className="song-list__head-index" style={colWidth(COL_INDEX)}>
+              #
+            </div>
           )}
-          <div style={{ flex: 1 }}>标题</div>
-          {hasAlbum && <div style={colStyle(COL_ALBUM)}>专辑</div>}
-          <div style={{ ...colStyle(COL_ACTIONS), textAlign: 'center' }}>操作</div>
+          <div className="song-list__head-title">标题</div>
+          {hasAlbum && (
+            <div className="song-list__head-col" style={colWidth(COL_ALBUM)}>
+              专辑
+            </div>
+          )}
+          <div className="song-list__head-actions" style={colWidth(COL_ACTIONS)}>
+            操作
+          </div>
         </div>
       )}
 
       {/* 歌曲列表：够长时只挂窗口内的行（绝对定位在等高 spacer 上），否则整表渲染 */}
       <div
         ref={virtual.rowsRef}
-        style={virtual.mode === 'virtual' ? { position: 'relative', height: `${virtual.totalSize}px` } : undefined}
+        className="song-list__rows"
+        data-virtual={virtual.mode === 'virtual' || undefined}
+        style={{ '--total-size': `${virtual.totalSize}px` } as React.CSSProperties}
       >
         {virtual.mode === 'pending'
           ? null

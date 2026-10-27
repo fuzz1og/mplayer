@@ -46,10 +46,9 @@ async function renderInPaddedScroller(count: number) {
   );
   await waitFor(() => expect(scroller.querySelector('.song-row')).toBeTruthy());
 
-  // 选「真的是 sticky 的那个元素」，而不是按文本——文本选择器会命中包裹层。
-  const header = Array.from(scroller.querySelectorAll('div')).find(
-    (d) => getComputedStyle(d).position === 'sticky',
-  ) as HTMLElement;
+  // 1.9.0 起 sticky 由 songlist.css 的 .song-list__head 表达，jsdom 不加载 CSS 文件，
+  // getComputedStyle 拿不到 position。改为按类名定位表头，偏移量仍读内联的 --sticky-top。
+  const header = scroller.querySelector('.song-list__head') as HTMLElement;
   return { scroller, header };
 }
 
@@ -73,13 +72,14 @@ describe('带内边距的滚动容器里的表头偏移（#564 的真实量）',
   it('长列表（≥30 首，走虚拟化）：表头贴住内容区，不再浮高一个 padding', async () => {
     const { header } = await renderInPaddedScroller(45);
     expect(header).toBeTruthy();
-    expect(getComputedStyle(header).position).toBe('sticky');
-    expect(header.style.top).toBe('-24px');
+    // 类名承载 position: sticky（在 songlist.css 里），内联变量承载偏移量
+    expect(header.className).toContain('song-list__head');
+    expect(header.style.getPropertyValue('--sticky-top')).toBe('-24px');
   });
 
   it('短列表（<30 首，不虚拟化）：照样贴住内容区', async () => {
     const { header } = await renderInPaddedScroller(12);
     expect(header).toBeTruthy();
-    expect(header.style.top).toBe('-24px');
+    expect(header.style.getPropertyValue('--sticky-top')).toBe('-24px');
   });
 });
