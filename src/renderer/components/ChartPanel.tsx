@@ -50,14 +50,12 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
 }) => {
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const heading = (
-    <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
-      {title}
-    </h3>
+    <h3 className="chart__title">{title}</h3>
   );
 
   if (loading) {
     return (
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="chart__body">
         {heading}
         <SongListSkeleton rowCount={15} showIndex />
       </div>
@@ -66,25 +64,13 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
 
   if (error) {
     return (
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="chart__body">
         {heading}
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--danger)' }}>
-          <AlertCircle size={22} style={{ marginBottom: '8px' }} />
-          <div style={{ fontSize: 'var(--text-base)', marginBottom: '16px' }}>{error}</div>
+        <div className="chart__state chart__state--error">
+          <AlertCircle size={22} className="chart__state-icon" />
+          <div className="chart__state-text">{error}</div>
           {onRetry && (
-            <button
-              onClick={onRetry}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: 'var(--accent)',
-                color: 'var(--text-inverse)',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                cursor: 'pointer',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 500,
-              }}
-            >
+            <button onClick={onRetry} className="chart__retry">
               重试
             </button>
           )}
@@ -95,10 +81,10 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
 
   if (songs.length === 0) {
     return (
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="chart__body">
         {heading}
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-          <Music2 size={24} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
+        <div className="chart__state">
+          <Music2 size={24} className="chart__state-icon" />
           <div>暂无排行榜数据</div>
         </div>
       </div>
@@ -131,76 +117,57 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
       <div
         key={`${chartId}:${song.sourceType}:${song.id}`}
         onClick={() => handlePlayRow(song, index)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-2)',
-          padding: '6px 8px',
-          borderRadius: 'var(--radius-sm)',
-          cursor: 'pointer',
-          backgroundColor: current ? 'rgba(47, 95, 208, 0.10)' : 'transparent',
-          transition: 'background-color 0.15s ease',
-        }}
-        onMouseEnter={(e) => { if (!current) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
-        onMouseLeave={(e) => { if (!current) e.currentTarget.style.backgroundColor = 'transparent'; }}
+        className="chart__row"
+        data-current={current || undefined}
       >
-        <div style={{
-          width: '28px', textAlign: 'center', fontSize: 'var(--text-sm)',
-          fontVariantNumeric: 'tabular-nums', flexShrink: 0,
-          color: current ? 'var(--accent)' : 'var(--text-tertiary)',
-          fontWeight: current ? 600 : 400,
-        }}>
+        <div className="chart__rank" data-current={current || undefined}>
           {rank}
         </div>
 
         {hasPrevRank && (
-          <div style={{
-            width: '34px', textAlign: 'center', fontSize: 'var(--text-xs)',
-            fontVariantNumeric: 'tabular-nums', flexShrink: 0,
-            color: delta.color,
-          }}>
+          <div className="chart__delta" style={{ '--delta-color': delta.color } as React.CSSProperties}>
             {delta.label}
           </div>
         )}
 
-        <div style={{ position: 'relative', width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
+        <div className="chart__cover">
           {song.cover ? (
             <img
               src={coverThumbUrl(song.cover, COVER_SIZE.row)}
               alt=""
               loading="lazy"
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+              className="chart__cover-img"
               onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
           ) : null}
         </div>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-            <span style={{ fontSize: 'var(--text-base)', color: current ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div className="chart__text">
+          <div className="chart__name-row">
+            <span className="chart__name" data-current={current || undefined}>
               {song.name}
             </span>
             {/* AudioTagBadge 只认 preview/invalid（valid 无需标记） */}
             {(song.audioTag === 'preview' || song.audioTag === 'invalid') && <AudioTagBadge tag={song.audioTag} />}
           </div>
-          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div className="chart__artist">
             {song.artist}
             {hasWeeks && weeks ? ` · 在榜 ${weeks} 周` : ''}
           </div>
         </div>
 
-        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, opacity: current ? 0 : 1 }}>
-          {current ? <Play size={14} fill="currentColor" style={{ color: 'var(--accent)', opacity: 1 }} /> : null}
+        <div className="chart__current-icon" data-visible={current || undefined}>
+          {current ? <Play size={14} fill="currentColor" /> : null}
         </div>
       </div>
     );
   };
 
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+    <div className="chart">
       {heading}
       {/* 榜长可达 50（QQ 实测 song_num=100 也只回 50）/ 100+（网易整张歌单）→ 必须保留滚动容器 */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '4px' }}>
+      <div className="chart__scroll">
         {songs.map(renderRow)}
       </div>
     </div>
