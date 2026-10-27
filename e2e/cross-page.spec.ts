@@ -48,7 +48,7 @@ test.describe('跨页面交互', () => {
     await page.waitForTimeout(1000);
 
     // 5. 导航到收藏页面查看
-    await page.getByRole('complementary').getByText('我的收藏').click();
+    await page.getByRole('complementary').getByText('我喜欢的音乐').click();
     await page.waitForTimeout(2000);
 
     await expect(page.getByRole('heading', { name: '我的收藏' })).toBeVisible();
@@ -97,10 +97,10 @@ test.describe('跨页面交互', () => {
     await searchInput.press('Enter');
     await page.waitForTimeout(2000);
 
-    await page.getByText('我的收藏').click();
+    await page.getByRole('complementary').getByText('我喜欢的音乐').click();
     await page.waitForTimeout(1000);
 
-    await page.getByText('发现音乐').click();
+    await page.getByText('发现').click();
     await page.waitForTimeout(2000);
 
     await page.screenshot({ path: 'e2e/screenshots/cross-state.png' });

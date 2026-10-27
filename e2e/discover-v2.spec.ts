@@ -30,7 +30,7 @@ test.afterAll(async () => {
 });
 
 async function navigateToDiscover() {
-  const discoverBtn = page.getByText('发现音乐');
+  const discoverBtn = page.getByText('发现');
   if (await discoverBtn.isVisible().catch(() => false)) {
     await discoverBtn.click();
   }

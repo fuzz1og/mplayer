@@ -143,7 +143,7 @@ test.describe('封面多场景 e2e', () => {
   });
 
   test('场景2: 收藏页封面正常显示', async () => {
-    await page.getByText('我的收藏').click();
+    await page.getByRole('complementary').getByText('我喜欢的音乐').click();
     await page.waitForTimeout(4000);
 
     // 收藏页行（.song-row）渲染
