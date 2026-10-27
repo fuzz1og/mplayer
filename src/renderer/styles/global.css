@@ -170,6 +170,29 @@
   --topbar-height: 56px;
   --player-height: 72px;
   --content-max-width: 1400px;
+
+  /* ── 表面层级（inset grouped，1.9.0 UI 重构） ── */
+  --surface-window: #F2F2F4;
+  --surface-content: #FFFFFF;
+  --surface-card: #F7F7F9;
+  --surface-card-hover: #F1F1F4;
+  --surface-selected: #E9E9EE;
+  --surface-selected-hover: #E3E3E9;
+  --hairline: rgba(0, 0, 0, 0.08);
+  --hairline-strong: rgba(0, 0, 0, 0.12);
+  --material-chrome: rgba(255, 255, 255, 0.72);
+  --material-blur: blur(24px) saturate(180%);
+
+  /* ── 分组列表尺寸 ── */
+  --row-height: 44px;
+  --row-padding-x: 14px;
+  --group-radius: 12px;
+  --group-gap: 20px;
+  --hairline-inset: 47px;
+  --hairline-inset-plain: 14px;
+
+  /* ── 标准动效曲线 ── */
+  --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -238,6 +261,17 @@
     /* 骨架屏 */
     --skeleton-base: #2A2A2C;
     --skeleton-shine: #38383A;
+
+    /* 表面层级（1.9.0 UI 重构） */
+    --surface-window: #1B1B1D;
+    --surface-content: #161618;
+    --surface-card: rgba(255, 255, 255, 0.055);
+    --surface-card-hover: rgba(255, 255, 255, 0.085);
+    --surface-selected: rgba(255, 255, 255, 0.1);
+    --surface-selected-hover: rgba(255, 255, 255, 0.14);
+    --hairline: rgba(255, 255, 255, 0.075);
+    --hairline-strong: rgba(255, 255, 255, 0.12);
+    --material-chrome: rgba(22, 22, 24, 0.72);
   }
 }
 
@@ -294,6 +328,17 @@
 
   --skeleton-base: #2A2A2C;
   --skeleton-shine: #38383A;
+
+  /* 表面层级（1.9.0 UI 重构） */
+  --surface-window: #1B1B1D;
+  --surface-content: #161618;
+  --surface-card: rgba(255, 255, 255, 0.055);
+  --surface-card-hover: rgba(255, 255, 255, 0.085);
+  --surface-selected: rgba(255, 255, 255, 0.1);
+  --surface-selected-hover: rgba(255, 255, 255, 0.14);
+  --hairline: rgba(255, 255, 255, 0.075);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+  --material-chrome: rgba(22, 22, 24, 0.72);
 }
 
 /* ── 重置 ── */

@@ -18,6 +18,7 @@ const ArtistDetailPage = lazy(() => import('@/renderer/pages/ArtistDetailPage'))
 const AlbumDetailPage = lazy(() => import('@/renderer/pages/AlbumDetailPage'));
 const DiscoverPlaylistListPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistListPage'));
 const DiscoverPlaylistDetailPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistDetailPage'));
+const UiLabPage = lazy(() => import('@/renderer/pages/UiLabPage'));
 
 // 加载状态组件
 const Loading = () => (
@@ -189,6 +190,14 @@ export const router = createHashRouter([
         element: (
           <Suspense fallback={<Loading />}>
             <DiscoverPlaylistDetailPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'ui-lab',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <UiLabPage />
           </Suspense>
         ),
       },
