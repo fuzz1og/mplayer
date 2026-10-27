@@ -3,6 +3,7 @@ import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { X, CheckCircle, AlertCircle, Loader2, Trash2, Music2 } from 'lucide-react';
 import type { DownloadNotification } from '@/renderer/store/downloadStore';
 import { getNotificationStats, getStatusText, getStatusColor, useDownloadStore } from '@/renderer/store/downloadStore';
+import '@/renderer/styles/songlist.css';
 
 interface DownloadProgressModalProps {
   notification: DownloadNotification;
@@ -26,105 +27,23 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
     if (!task) return null;
 
     return (
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          animation: 'fadeIn 0.2s ease',
-        }}
-        onClick={handleClose}
-      >
-        <div
-          style={{
-            backgroundColor: 'var(--bg-base)',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '360px',
-            maxWidth: '90vw',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-            animation: 'slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
+      <div className="dl-modal" onClick={handleClose}>
+        <div className="dl-modal__panel" onClick={(e) => e.stopPropagation()}>
           {/* 头部 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '20px',
-            }}
-          >
-            <h3
-              style={{
-                fontSize: '16px',
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-                margin: 0,
-              }}
-            >
-              {isAllCompleted
-                ? hasError
-                  ? '下载失败'
-                  : '下载完成'
-                : '正在下载'}
+          <div className="dl-modal__head">
+            <h3 className="dl-modal__title">
+              {isAllCompleted ? (hasError ? '下载失败' : '下载完成') : '正在下载'}
             </h3>
-            <button
-              onClick={handleClose}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                padding: '4px',
-                borderRadius: '4px',
-                color: 'var(--text-tertiary)',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                e.currentTarget.style.color = 'var(--text-secondary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = 'var(--text-tertiary)';
-              }}
-            >
+            <button onClick={handleClose} className="dl-modal__close" aria-label="关闭">
               <X size={18} />
             </button>
           </div>
 
           {/* 歌曲信息 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              marginBottom: '20px',
-            }}
-          >
-            {/* 封面 */}
-            <div
-              style={{
-                position: 'relative',
-                width: '56px',
-                height: '56px',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                backgroundColor: 'var(--bg-hover)',
-                flexShrink: 0,
-              }}
-            >
-              {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Music2 size={20} style={{ color: 'var(--text-tertiary)' }} />
+          <div className="dl-modal__song">
+            <div className="dl-modal__cover">
+              <div className="dl-modal__cover-placeholder">
+                <Music2 size={20} />
               </div>
               {task.song.cover && (
                 <img
@@ -133,357 +52,122 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                   alt={task.song.name}
                   loading="lazy"
                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                  className="dl-modal__cover-img"
                 />
               )}
             </div>
 
-            {/* 歌曲信息 */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 500,
-                  color: 'var(--text-primary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {task.song.name}
-              </div>
-              <div
-                style={{
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--text-secondary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  marginTop: '4px',
-                }}
-              >
-                {task.song.artist}
-              </div>
+            <div className="dl-modal__song-text">
+              <div className="dl-modal__song-name">{task.song.name}</div>
+              <div className="dl-modal__song-artist">{task.song.artist}</div>
             </div>
 
-            {/* 状态图标 */}
-            <div>
+            <div className="dl-modal__status-icon">
               {task.status === 'completed' ? (
                 <CheckCircle size={24} color="var(--success)" />
               ) : task.status === 'error' ? (
                 <AlertCircle size={24} color="var(--danger)" />
               ) : (
-                <Loader2 size={24} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
+                <Loader2 size={24} color="var(--accent)" className="dl-modal__spin" />
               )}
             </div>
           </div>
 
           {/* 进度条 */}
-          <div style={{ marginBottom: '12px' }}>
-            <div
-              style={{
-                height: '6px',
-                backgroundColor: 'var(--bg-hover)',
-                borderRadius: '3px',
-                overflow: 'hidden',
-              }}
-            >
+          <div className="dl-modal__bar-wrap">
+            <div className="dl-modal__bar">
               <div
-                style={{
-                  height: '100%',
-                  width: `${task.progress}%`,
-                  backgroundColor: task.status === 'error' ? 'var(--danger)' : 'var(--accent)',
-                  borderRadius: '3px',
-                  transition: 'width 0.3s ease',
-                }}
+                className="dl-modal__bar-fill"
+                data-tone={task.status === 'error' ? 'danger' : undefined}
+                style={{ '--progress': `${task.progress}%` } as React.CSSProperties}
               />
             </div>
           </div>
 
           {/* 进度文字 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: '13px',
-            }}
-          >
-            <span style={{ color: getStatusColor(task.status) }}>
+          <div className="dl-modal__progress-text">
+            <span style={{ '--status-color': getStatusColor(task.status) } as React.CSSProperties}>
               {getStatusText(task.status)}
             </span>
-            <span style={{ color: 'var(--text-secondary)' }}>{task.progress}%</span>
+            <span className="dl-modal__progress-num">{task.progress}%</span>
           </div>
 
           {/* 错误信息 */}
-          {task.error && (
-            <div
-              style={{
-                marginTop: '12px',
-                padding: '10px 12px',
-                backgroundColor: 'var(--danger-subtle)',
-                border: '1px solid var(--danger)',
-                borderRadius: '6px',
-                fontSize: 'var(--text-xs)',
-                color: 'var(--danger)',
-              }}
-            >
-              {task.error}
-            </div>
-          )}
+          {task.error && <div className="dl-modal__error">{task.error}</div>}
 
           {/* 清除已完成按钮 */}
           {isAllCompleted && (
-            <button
-              onClick={() => useDownloadStore.getState().clearCompleted()}
-              style={{
-                marginTop: '16px',
-                width: '100%',
-                padding: '10px',
-                backgroundColor: 'transparent',
-                border: '1px solid var(--border-default)',
-                borderRadius: '6px',
-                color: 'var(--text-secondary)',
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--text-tertiary)';
-                e.currentTarget.style.color = 'var(--text-primary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-default)';
-                e.currentTarget.style.color = 'var(--text-secondary)';
-              }}
-            >
+            <button onClick={() => useDownloadStore.getState().clearCompleted()} className="dl-modal__clear">
               <Trash2 size={14} />
               清除并关闭
             </button>
           )}
         </div>
 
-        <style>{`
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-          @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-          }
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
       </div>
     );
   }
 
   // 批量下载模式
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        animation: 'fadeIn 0.2s ease',
-      }}
-      onClick={handleClose}
-    >
-      <div
-        style={{
-          backgroundColor: 'var(--bg-base)',
-          borderRadius: '12px',
-          padding: '24px',
-          width: '420px',
-          maxWidth: '90vw',
-          maxHeight: '80vh',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-          animation: 'slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="dl-modal" onClick={handleClose}>
+      <div className="dl-modal__panel dl-modal__panel--batch" onClick={(e) => e.stopPropagation()}>
         {/* 头部 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '20px',
-          }}
-        >
-          <h3
-            style={{
-              fontSize: '16px',
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              margin: 0,
-            }}
-          >
+        <div className="dl-modal__head">
+          <h3 className="dl-modal__title">
             {isAllCompleted
               ? `批量下载完成 (${stats.completed}成功${stats.error > 0 ? `, ${stats.error}失败` : ''})`
               : `正在批量下载 (${stats.completed}/${stats.total})`}
           </h3>
-          <button
-            onClick={handleClose}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              padding: '4px',
-              borderRadius: '4px',
-              color: 'var(--text-tertiary)',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-              e.currentTarget.style.color = 'var(--text-secondary)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = 'var(--text-tertiary)';
-            }}
-          >
+          <button onClick={handleClose} className="dl-modal__close" aria-label="关闭">
             <X size={18} />
           </button>
         </div>
 
         {/* 总体进度 */}
-        <div style={{ marginBottom: '16px' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '8px',
-              fontSize: '13px',
-            }}
-          >
-            <span style={{ color: 'var(--text-secondary)' }}>总体进度</span>
-            <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
-              {stats.averageProgress}%
-            </span>
+        <div className="dl-modal__overall">
+          <div className="dl-modal__overall-head">
+            <span>总体进度</span>
+            <span className="dl-modal__overall-value">{stats.averageProgress}%</span>
           </div>
-          <div
-            style={{
-              height: '8px',
-              backgroundColor: 'var(--bg-hover)',
-              borderRadius: '4px',
-              overflow: 'hidden',
-            }}
-          >
+          <div className="dl-modal__bar dl-modal__bar--batch">
             <div
-              style={{
-                height: '100%',
-                width: `${stats.averageProgress}%`,
-                backgroundColor: isAllCompleted
-                  ? hasError
-                    ? 'var(--danger)'
-                    : 'var(--success)'
-                  : 'var(--accent)',
-                borderRadius: '4px',
-                transition: 'width 0.3s ease',
-              }}
+              className="dl-modal__bar-fill"
+              data-tone={isAllCompleted ? (hasError ? 'danger' : 'success') : undefined}
+              style={{ '--progress': `${stats.averageProgress}%` } as React.CSSProperties}
             />
           </div>
         </div>
 
         {/* 歌曲列表 */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            maxHeight: '300px',
-            borderTop: '1px solid var(--border-subtle)',
-            borderBottom: '1px solid var(--border-subtle)',
-          }}
-        >
+        <div className="dl-modal__list">
           {tasks.map((task) => (
-            <div
-              key={task.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 0',
-                borderBottom: '1px solid var(--border-subtle)',
-              }}
-            >
+            <div key={task.id} className="dl-modal__row">
               {/* 状态图标 */}
-              <div style={{ width: '20px', flexShrink: 0 }}>
+              <div className="dl-modal__row-icon">
                 {task.status === 'completed' ? (
                   <CheckCircle size={18} color="var(--success)" />
                 ) : task.status === 'error' ? (
                   <AlertCircle size={18} color="var(--danger)" />
                 ) : task.status === 'downloading' ? (
-                  <Loader2 size={18} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
+                  <Loader2 size={18} color="var(--accent)" className="dl-modal__spin" />
                 ) : (
-                  <div
-                    style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      backgroundColor: 'var(--text-tertiary)',
-                      margin: '0 auto',
-                    }}
-                  />
+                  <div className="dl-modal__dot" />
                 )}
               </div>
 
               {/* 歌曲信息 */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: '13px',
-                    color: 'var(--text-primary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {task.song.name}
-                </div>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    color: 'var(--text-secondary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    marginTop: '2px',
-                  }}
-                >
-                  {task.song.artist}
-                </div>
+              <div className="dl-modal__row-text">
+                <div className="dl-modal__row-name">{task.song.name}</div>
+                <div className="dl-modal__row-artist">{task.song.artist}</div>
               </div>
 
               {/* 进度 */}
-              <div style={{ width: '50px', textAlign: 'right' }}>
+              <div className={`dl-modal__row-state${task.status === 'downloading' ? ' dl-modal__row-state--active' : ''}`}>
                 {task.status === 'downloading' ? (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>
-                    {task.progress}%
-                  </span>
+                  `${task.progress}%`
                 ) : (
-                  <span
-                    style={{
-                      fontSize: 'var(--text-xs)',
-                      color: getStatusColor(task.status),
-                    }}
-                  >
+                  <span style={{ '--status-color': getStatusColor(task.status) } as React.CSSProperties}>
                     {getStatusText(task.status)}
                   </span>
                 )}
@@ -493,25 +177,16 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
         </div>
 
         {/* 底部统计 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginTop: '16px',
-            paddingTop: '16px',
-            fontSize: '13px',
-          }}
-        >
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>
-              总计: <strong style={{ color: 'var(--text-primary)' }}>{stats.total}</strong>
+        <div className="dl-modal__footer">
+          <div className="dl-modal__footer-stats">
+            <span>
+              总计: <strong className="dl-modal__footer-strong">{stats.total}</strong>
             </span>
-            <span style={{ color: 'var(--success)' }}>
+            <span className="dl-modal__footer-success">
               成功: <strong>{stats.completed}</strong>
             </span>
             {stats.error > 0 && (
-              <span style={{ color: 'var(--danger)' }}>
+              <span className="dl-modal__footer-danger">
                 失败: <strong>{stats.error}</strong>
               </span>
             )}
@@ -520,52 +195,13 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
 
         {/* 清除已完成按钮 */}
         {isAllCompleted && (
-          <button
-            onClick={() => useDownloadStore.getState().clearCompleted()}
-            style={{
-              marginTop: '16px',
-              width: '100%',
-              padding: '10px',
-              backgroundColor: 'transparent',
-              border: '1px solid var(--border-default)',
-              borderRadius: '6px',
-              color: 'var(--text-secondary)',
-              fontSize: '13px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--text-tertiary)';
-              e.currentTarget.style.color = 'var(--text-primary)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border-default)';
-              e.currentTarget.style.color = 'var(--text-secondary)';
-            }}
-          >
+          <button onClick={() => useDownloadStore.getState().clearCompleted()} className="dl-modal__clear">
             <Trash2 size={14} />
             清除已完成
           </button>
         )}
       </div>
 
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideIn {
-          from { transform: translateY(-20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };
