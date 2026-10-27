@@ -252,7 +252,7 @@ global.css 新增，命名与移动端逐字对应，跨端心智一致：
 
 ## 6. P3 · 播放器体验：签名元素落地
 
-1. **环境感背景**：封面进缓存时（`coverCacheService`）顺带提取主色存入缓存元数据——24px 降采样 + 饱和度加权取众数即可，零依赖，别引 vibrant 库；运行时只读缓存，不在渲染线程算图。
+1. **环境感背景**：主进程 `coverAccent` 服务取封面图（axios + Electron `nativeImage`）→ 24px 降采样 + 饱和度加权取众数即可，零依赖，别引 vibrant 库；渲染层只经 `cover:getAccent` 读结果，不在渲染线程算图。
 2. 全屏播放器 / 歌词页：`radial-gradient(120% 90% at 50% 0%, 主色@35%, var(--bg-base))`，文字仍走标准 token 色，环境光只是氛围层。
 3. PlayerBar → 全屏播放器做**共享元素展开**（封面位移动画，`--ease-emphasized` + `--duration-scene`），这是整个应用记忆点最深的一帧。
 4. 歌词页排版：当前行 `t-titleLg` 700，非当前行 `t-body` 40% 透明度，滚动居中吸附。

@@ -22,8 +22,8 @@
 | `storage/db.ts` | 兼容壳：re-export `getFileStorage()` |
 | `cookies/cookieAdapter.ts` | core `cookieManager` 的桌面落盘 adapter |
 | `utils/fsAsync.ts` | 异步存在性检查（`fileExists`）——主进程请求路径不用 `fs.existsSync` 同步打磁盘（#412） |
-| `ipc/*.ts` | `registerHandler.ts` 的 `registerIpcHandler`/`registerIpcHandlerSimple` 辅助 + 各域注册（appSettingsUpdate / cache / favoriteHistoryPlaylist / localMusic / musicApiHandlers / playbackTrace） |
-| `services/` | downloadService(进度按 150ms 聚合后推 IPC) / localMusicService / updateService / playbackTraceService(播放解析链 trace 会话内环形缓冲 + 导出 JSON) / playlistLinkResolver(歌单链接 → 目标源歌单) / dialogLastDir(**系统对话框上次使用的目录**，#670：Electron 43 起 `dialog.showOpenDialog`/`showSaveDialog` 未传 `defaultPath` 时固定落 Downloads 且 OS 不再记忆上次目录。按**用途**（download / localMusic / tier3File / playbackTrace）分别落 `dialogLastDir:<purpose>` 设置键——`dialog:openDirectory` 同时服务「选下载目录」与「添加本地音乐文件夹」，按通道分键会让两者互相污染；记忆目录不存在时回落 Downloads 且不抛错) |
+| `ipc/*.ts` | `registerHandler.ts` 的 `registerIpcHandler`/`registerIpcHandlerSimple` 辅助 + 各域注册（appSettingsUpdate / cache / cover / favoriteHistoryPlaylist / localMusic / musicApiHandlers / playbackTrace） |
+| `services/` | downloadService(进度按 150ms 聚合后推 IPC) / coverAccent(封面 24×24 降采样后按饱和度加权取主色，供全屏播放器环境光；结果进程内 URL 缓存 300 条) / localMusicService / updateService / playbackTraceService(播放解析链 trace 会话内环形缓冲 + 导出 JSON) / playlistLinkResolver(歌单链接 → 目标源歌单) / dialogLastDir(**系统对话框上次使用的目录**，#670：Electron 43 起 `dialog.showOpenDialog`/`showSaveDialog` 未传 `defaultPath` 时固定落 Downloads 且 OS 不再记忆上次目录。按**用途**（download / localMusic / tier3File / playbackTrace）分别落 `dialogLastDir:<purpose>` 设置键——`dialog:openDirectory` 同时服务「选下载目录」与「添加本地音乐文件夹」，按通道分键会让两者互相污染；记忆目录不存在时回落 Downloads 且不抛错) |
 | `tray/trayManager.ts` | System tray + context menu |
 
 > **写盘口径**：`storage/fileStorage.ts` 的 `saveData()` 是 **200 ms 防抖的脏标记**（`markDirty → scheduleWrite`），多次调用会被 `drainDirty / writeDomains` 合并成一次原子写（写 `.tmp` + rename）。**凡是要下「N 首 = N 次落盘 / 大列表会卡在写盘」这类结论，先读这里**——实测：一次批量 IPC（200 首）与逐首 5 次 IPC 都只产生 **1** 次物理写，两次路径的差别在渲染↔主进程的调用次数，不在物理写次数（2026-10-01 实测，见 #514 验收评论）。
@@ -47,8 +47,8 @@
 主进程基础/独有方法手写表 + 内容方法按 `CONTENT_METHODS` 清单循环分派到 `getDirectClient(source)`，未知方法返回失败封套。
 加内容方法 = 直连客户端加方法 + `CONTENT_METHODS` 加字符串，其余自动（完整性测试兜底）。**不要在架构文档枚举方法清单**——那是契约文件的缓存。
 
-**语义通道**（ADR-0002）：`cache:*`（getSongResources/setSongResources/clear/getStats；1.9.0 起另有 getConfig/setLimitMb/setAutoClean/openDir 供设置页容量配置；封面磁盘字节通道已随封面直链直渲移除）、
-favorite/history/playlist/localMusic/settings/download/dialog/app/update/playbackTrace/**window** 各自的 `domain:action` 组（`window:minimize|toggleMaximize|isMaximized|close`，供自绘标题栏用）
+**语义通道**（ADR-0002）：`cache:*`（getSongResources/setSongResources/clear/clearKind/getStats；1.9.0 起另有 getConfig/setLimitMb/setAutoClean/openDir 供设置页容量配置；封面磁盘字节通道已随封面直链直渲移除）、`cover:getAccent`（全屏播放器环境光取色，主进程读封面像素）、
+favorite/history/playlist/localMusic/settings/download/dialog/app/update/playbackTrace/**window** 各自的 `domain:action` 组（`download:pause|resume|openDir|showInFolder`；`window:minimize|toggleMaximize|isMaximized|close`，供自绘标题栏用）
 （`playbackTrace:list|clear|export`，语义命名与 `settings:*` 同组）。
 Push（main→renderer）：`download:progress|complete|error`, `localMusic:folderChanged`, `tray:action`, `shortcut:action`, `update:status`, `window:maximized`。
 反向（renderer→main，`send`）：`tray:state`（当前歌/播放态，供托盘菜单显示）。
