@@ -1,8 +1,45 @@
 import React, { useState } from 'react';
 import { Database, Folder, Bell, Shield, Download } from 'lucide-react';
-import { Alert, Button, Checkbox, Group, Input, Progress, Row, Section, Segmented, Stepper, Switch, Tag } from '@/renderer/ui';
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Dialog,
+  GridList,
+  Group,
+  Input,
+  Progress,
+  Row,
+  Section,
+  Segmented,
+  Stepper,
+  Switch,
+  Tag,
+  ToastProvider,
+  useToast,
+} from '@/renderer/ui';
+import type { GridListColumn } from '@/renderer/ui';
 
 type ThemeMode = 'system' | 'light' | 'dark';
+
+interface DemoTrack {
+  id: string;
+  name: string;
+  artist: string;
+  duration: string;
+}
+
+const demoColumns: GridListColumn<DemoTrack>[] = [
+  { key: 'name', title: '歌名', render: (row) => row.name },
+  { key: 'artist', title: '歌手', render: (row) => row.artist },
+  { key: 'duration', title: '时长', width: 88, align: 'right', render: (row) => row.duration },
+];
+
+const demoRows: DemoTrack[] = [
+  { id: '1', name: '晴天', artist: '周杰伦', duration: '04:29' },
+  { id: '2', name: '普通朋友', artist: '陶喆', duration: '04:14' },
+  { id: '3', name: '富士山下', artist: '陈奕迅', duration: '04:19' },
+];
 
 const applyTheme = (mode: ThemeMode) => {
   const root = document.documentElement;
@@ -14,7 +51,7 @@ const applyTheme = (mode: ThemeMode) => {
  * 原语实验室：所有 UI 原语的单一展示位。
  * 只允许用类名表达样式——本页同时是 design-lint 严格模式的样板。
  */
-const UiLabPage: React.FC = () => {
+const UiLabContent: React.FC = () => {
   const [mode, setMode] = useState<ThemeMode>('system');
   const [checked, setChecked] = useState(true);
   const [autoUpdate, setAutoUpdate] = useState(true);
@@ -23,6 +60,8 @@ const UiLabPage: React.FC = () => {
   const [segment, setSegment] = useState('全部');
   const [viewMode, setViewMode] = useState('列表');
   const [volume, setVolume] = useState(60);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const { show } = useToast();
 
   const choose = (next: ThemeMode) => {
     setMode(next);
@@ -32,7 +71,9 @@ const UiLabPage: React.FC = () => {
   return (
     <div className="ui-lab">
       <h1 className="ui-lab__title">UI 原语</h1>
-      <p className="ui-lab__note">1.9.0 重构底座：分组卡、行、按钮、标签、输入。暗亮两套都由 token 驱动。</p>
+      <p className="ui-lab__note">
+        1.9.0 重构底座：分组卡、行、按钮、标签、输入、表单控件、浮层与网格。暗亮两套都由 token 驱动。
+      </p>
 
       <div className="ui-lab__toolbar">
         <Button size="sm" variant={mode === 'system' ? 'secondary' : 'ghost'} onClick={() => choose('system')}>
@@ -174,9 +215,6 @@ const UiLabPage: React.FC = () => {
             >
               当前歌曲没有可播放地址，已自动跳转到下一首。
             </Alert>
-            <Alert tone="success" title="缓存清理完成">
-              释放 1.24 GB，播放记录与收藏不受影响。
-            </Alert>
           </div>
         </Group>
 
@@ -185,6 +223,48 @@ const UiLabPage: React.FC = () => {
             <Stepper label="音量" value={volume} min={0} max={100} step={5} onChange={setVolume} />
           </div>
         </Group>
+      </Section>
+
+      <Section
+        title="浮层与网格"
+        footer="Dialog 由原生 dialog 承载焦点陷阱与 ESC；Toast 最多同时 3 条，超出排队；网格行高 44、表头 11px 次要色。"
+      >
+        <Group>
+          <div className="ui-lab__demo">
+            <Button onClick={() => setDialogOpen(true)}>打开对话框</Button>
+            <Button onClick={() => show('设置已保存', { tone: 'success' })}>成功提示</Button>
+            <Button
+              onClick={() =>
+                show('网络不稳定，已自动重试', {
+                  tone: 'warning',
+                  action: { label: '查看详情', onClick: () => show('已打开重试日志', { tone: 'neutral' }) },
+                })
+              }
+            >
+              警告提示
+            </Button>
+          </div>
+        </Group>
+        <Group>
+          <GridList columns={demoColumns} rows={demoRows} rowKey={(row) => row.id} ariaLabel="网格列表示例" />
+        </Group>
+        <Dialog
+          open={dialogOpen}
+          title="对话框示例"
+          onClose={() => setDialogOpen(false)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setDialogOpen(false)}>
+                取消
+              </Button>
+              <Button variant="primary" onClick={() => setDialogOpen(false)}>
+                确定
+              </Button>
+            </>
+          }
+        >
+          <p>这是基于原生 dialog 的对话框。按 ESC 或右上角关闭，焦点会回到刚才能触发它的按钮。</p>
+        </Dialog>
       </Section>
 
       <Section title="表面 token" footer="窗口 / 内容 / 卡片 / 选中 / 发丝线 / 强调色。">
@@ -220,5 +300,11 @@ const UiLabPage: React.FC = () => {
     </div>
   );
 };
+
+const UiLabPage: React.FC = () => (
+  <ToastProvider>
+    <UiLabContent />
+  </ToastProvider>
+);
 
 export default UiLabPage;

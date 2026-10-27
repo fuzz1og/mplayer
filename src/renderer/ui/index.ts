@@ -18,3 +18,15 @@ export type {
   CheckboxProps,
   StepperProps,
 } from './forms';
+export { Dialog, ToastProvider, useToast, GridList } from './overlay';
+export type {
+  DialogProps,
+  DialogSize,
+  ToastApi,
+  ToastAction,
+  ToastOptions,
+  ToastTone,
+  GridListProps,
+  GridListColumn,
+  GridListAlign,
+} from './overlay';
