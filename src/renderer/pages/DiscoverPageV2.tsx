@@ -586,12 +586,9 @@ const DiscoverPageV2: React.FC = () => {
           ) : activeSearchTab === 'playlists' ? (
             // 歌单 tab（#415）：复用发现页同一张歌单网格与既有详情页；空态文案区分
             // 「搜索歌单」与发现页一级的「歌单广场」（两者语义不同，见 PlaylistPageGrid.emptyText）
-            // 滚动轴经自定义属性传入（#415 测试按 style 里的 overflow-y 定位该容器）
-            <div
-              ref={playlistScrollRef}
-              className="discover-scroll discover-scroll--padded"
-              style={{ '--overflow-y': 'auto' } as React.CSSProperties}
-            >
+            // 滚动容器用 data 标记声明（与 useVirtualRows 的探测同口径）：测试据此定位，
+            // 不再依赖「内联 style 里写着 overflow-y」这种实现细节。
+            <div ref={playlistScrollRef} className="discover-scroll discover-scroll--padded" data-scroll-container>
               <PlaylistPageGrid
                 playlists={playlistResults}
                 loading={playlistLoading}
