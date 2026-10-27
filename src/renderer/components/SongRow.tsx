@@ -8,7 +8,8 @@ import SourceSwapModal from '@/renderer/components/SourceSwapModal';
 import SongCover from '@/renderer/components/SongCover';
 import { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import RowActionButtons from '@/renderer/components/RowActionButtons';
-import { COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_ALBUM, colStyle } from '@/renderer/components/songTableColumns';
+import { COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_ALBUM, colWidth } from '@/renderer/components/songTableColumns';
+import '@/renderer/styles/songlist.css';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -109,79 +110,55 @@ const SongRow: React.FC<SongRowProps> = ({
     // 仅挂载时触发：封面刷新后 song.cover 变化会自然进入正常渲染路径
   }, []);
 
+  // 1.9.0：结构/状态色全部走 songlist.css 的类，这里只留调用方传入的 style（拖拽位移等动态值）
   return (
     <div
       ref={rowRef}
       className="song-row"
+      data-compact={compact || undefined}
+      data-current={isCurrentSong || undefined}
       onDoubleClick={() => onPlay(song)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: compact ? '8px 12px' : '10px 16px',
-        borderRadius: 'var(--radius-sm)',
-        cursor: 'pointer',
-        transition: 'all 0.15s ease',
-        backgroundColor: isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent',
-        ...style,
-      }}
-      onMouseEnter={(e) => {
-        if (!isCurrentSong) {
-          e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isCurrentSong) {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }
-      }}
+      style={style}
     >
       {showCheckbox && (
-        <div style={{ ...colStyle(COL_CHECKBOX), textAlign: 'center' }}>
+        <div className="song-row__check" style={colWidth(COL_CHECKBOX)}>
           <input
             type="checkbox"
             checked={isSelected}
             onChange={(e) => { e.stopPropagation(); onToggleSelect?.(song.id); }}
-            style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
           />
         </div>
       )}
       {(showIndex || dragHandle) && (
-        <div style={{ ...colStyle(showIndex ? COL_INDEX : COL_INDEX_COMPACT), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+        <div className="song-row__index" style={colWidth(showIndex ? COL_INDEX : COL_INDEX_COMPACT)}>
           {dragHandle}
           {showIndex && (isCurrentSong && isPlaying ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-              <span style={{ width: '3px', height: '12px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0s' }} />
-              <span style={{ width: '3px', height: '16px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
-              <span style={{ width: '3px', height: '10px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+            <div className="song-row__bars">
+              <span className="song-row__bar" />
+              <span className="song-row__bar" />
+              <span className="song-row__bar" />
             </div>
           ) : (
-            <span style={{ fontSize: '14px', color: isCurrentSong ? 'var(--accent)' : 'var(--text-tertiary)', fontWeight: isCurrentSong ? 600 : 400 }}>
+            <span className="song-row__number" data-current={isCurrentSong || undefined}>
               {index + 1}
             </span>
           ))}
         </div>
       )}
       {/* Song info */}
-      <div style={fillTitle
-        ? { flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }
-        : { width: '38%', maxWidth: '380px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-        <div style={{ width: '44px', height: '44px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0, position: 'relative' }}>
+      <div className="song-row__main" data-fill={fillTitle ? 'true' : 'false'}>
+        <div className="song-row__cover">
           <SongCover src={song.cover} alt={song.name} variant="gradient" onError={() => onCoverError?.(song)} />
-          <div
-            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s ease' }}
-            onClick={() => onPlay(song)}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; }}
-          >
+          <div className="song-row__cover-play" onClick={() => onPlay(song)} role="presentation">
             <Play size={16} color="white" fill="white" />
           </div>
         </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: '15px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div className="song-row__text">
+          <div className="song-row__title" data-current={isCurrentSong || undefined}>
             {song.name}
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.artist}</span>
+          <div className="song-row__meta">
+            <span className="song-row__artist">{song.artist}</span>
             <SourceBadge sourceType={song.sourceType} />
             {song.audioTag === 'preview' && <AudioTagBadge tag="preview" />}
             {song.audioTag === 'invalid' && <AudioTagBadge tag="invalid" />}
@@ -189,10 +166,10 @@ const SongRow: React.FC<SongRowProps> = ({
         </div>
       </div>
       {/* 弹性占位：把专辑列和操作列推到右侧，标题区限宽后剩余空间留白（标题撑满时不需要） */}
-      {!fillTitle && <div style={{ flex: 1, minWidth: 0 }} />}
+      {!fillTitle && <div className="song-row__spacer" />}
       {/* Album */}
       {!compact && showAlbum && (
-        <div style={{ width: `${albumWidth}px`, fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        <div className="song-row__album" style={colWidth(albumWidth)}>
           {song.album}
         </div>
       )}

@@ -22,7 +22,19 @@ export const COL_ACTIONS = 140;
 /**
  * 列宽 → 固定宽度样式。表头 / 骨架屏 / 行共用，保证同一列在三处拿到同一个数字，
  * 而不是三份各写一次的数字。
+ *
+ * 1.9.0 起新代码优先用 colWidth() + CSS 变量表达列宽（内联样式门禁禁止 style={{}}）；
+ * 这个函数保留给仍在用旧契约的调用点（RowActionButtons、QueuePage 等），
+ * 两者数字同源，不存在第二份列宽定义。
  */
 export function colStyle(px: number): CSSProperties {
   return { width: px + 'px', flexShrink: 0 };
+}
+
+/**
+ * 列宽 → CSS 自定义属性。配合 CSS 的 width: var(--col-width) 使用：
+ * 组件里只传一个变量，实际宽度仍由本文件的常量决定。
+ */
+export function colWidth(px: number): CSSProperties {
+  return { '--col-width': px + 'px' } as CSSProperties;
 }

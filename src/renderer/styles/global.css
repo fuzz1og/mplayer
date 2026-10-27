@@ -162,6 +162,9 @@
 
   /* 封面占位（唱机/黑胶装饰色）— 双主题固定，类似移动端 turntable「硬件黑」 */
   --cover-placeholder: #0D1117;
+  /* 封面播放遮罩（1.9.0：从内联 rgba 收编为 token） */
+  --cover-play-scrim: rgba(0, 0, 0, 0.4);
+
   --cover-placeholder-glow: #2A3342;
 
   /* ── 布局尺寸 ── */

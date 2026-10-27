@@ -188,11 +188,20 @@ describe('列表 memo 纪律（#412）', () => {
     // 真实行高与常量不符时行会互相压叠且不报错，所以常量必须与 SongRow 的布局一致
     expect(list).not.toContain('measureElement');
     expect(stripComments(read('renderer/components/VirtualRow.tsx'))).toMatch(/height: `\$\{size\}px`/);
+    // 1.9.0 起行高不再靠内联样式表达：44px 封面盒 + 上下各 10px 内边距 = 64 这条等式
+    // 仍然成立，只是搬到了 songlist.css 的类里。断言因此从「读组件源码」改成
+    // 「组件挂了类 + 类里就是这套尺寸」，验的仍是同一个布局事实。
     const row = stripComments(read('renderer/components/SongRow.tsx'));
-    // 44px 封面盒 + 上下各 10px 内边距 = 64；标题/副标题 nowrap 不换行，专辑列可有可无
-    expect(row).toContain("width: '44px', height: '44px'");
-    expect(row).toContain("padding: compact ? '8px 12px' : '10px 16px'");
-    expect(row).toContain("whiteSpace: 'nowrap'");
+    expect(row).toContain('className="song-row"');
+    expect(row).toContain('className="song-row__cover"');
+    expect(row).toContain('className="song-row__album"');
+    expect(row).not.toContain('style={{');
+
+    const css = read('renderer/styles/songlist.css');
+    expect(css).toMatch(/\.song-row \{[^}]*padding: 10px 16px;/);
+    expect(css).toMatch(/\.song-row__cover \{[^}]*width: 44px;[^}]*height: 44px;/);
+    expect(css).toMatch(/\.song-row__title \{[^}]*white-space: nowrap;/);
+    expect(css).toMatch(/\.song-row__album \{[^}]*white-space: nowrap;/);
   });
 
   it('队列窗口化与可排序收在共享能力里（#428）', () => {
