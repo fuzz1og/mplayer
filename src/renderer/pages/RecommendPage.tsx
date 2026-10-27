@@ -3,6 +3,7 @@ import { Sparkles } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
 import { useNavigate } from 'react-router-dom';
 import DailyRecommend from '@/renderer/components/DailyRecommend';
+import '@/renderer/styles/songlist.css';
 import PlaylistGrid from '@/renderer/components/PlaylistGrid';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
@@ -70,16 +71,16 @@ const RecommendPage: React.FC = () => {
   const dailySongs = batch;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', padding: '16px 28px 14px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <div className="rec">
+      <div className="rec__head">
+        <div className="rec__title-group">
           <Sparkles size={18} color="var(--accent)" />
-          <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>推荐</h1>
+          <h1 className="rec__title">推荐</h1>
         </div>
-        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>为你找到今天值得听的歌</span>
+        <span className="rec__subtitle">为你找到今天值得听的歌</span>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div className="rec__body">
         <DailyRecommend
           songs={dailySongs}
           loading={loading && recommendedSongs.length === 0}
@@ -87,7 +88,7 @@ const RecommendPage: React.FC = () => {
           onRefresh={handleRefresh}
         />
         <div>
-          <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>猜你喜欢</h3>
+          <h3 className="rec__section-title">猜你喜欢</h3>
           <PlaylistGrid
             playlists={recommendedPlaylists}
             loading={loading && recommendedPlaylists.length === 0}

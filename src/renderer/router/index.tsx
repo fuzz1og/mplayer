@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { createHashRouter, Navigate } from 'react-router-dom';
 import App from '@/renderer/App';
 import SettingsShell from '@/renderer/components/SettingsShell';
+import '@/renderer/styles/songlist.css';
 
 // 懒加载页面组件
 const DiscoverPageV2 = lazy(() => import('@/renderer/pages/DiscoverPageV2'));
@@ -24,48 +25,18 @@ const LibraryPage = lazy(() => import('@/renderer/pages/LibraryPage'));
 
 // 加载状态组件
 const Loading = () => (
-  <div style={{
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    color: 'var(--text-tertiary)',
-  }}>
-    <div style={{
-      width: '24px',
-      height: '24px',
-      border: '2px solid var(--border-subtle)',
-      borderTopColor: 'var(--accent)',
-      borderRadius: '50%',
-      animation: 'spin 0.8s linear infinite',
-      marginRight: '12px',
-    }} />
+  <div className="route-loading">
+    <div className="route-loading__spinner" />
     加载中...
-    <style>{`
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-    `}</style>
   </div>
 );
 
 // 功能开发中页面
 const ComingSoon: React.FC = () => (
-  <div
-    style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: '100%',
-      color: 'var(--text-tertiary)',
-    }}
-  >
-    <div style={{ fontSize: '64px', marginBottom: '20px' }}>🚧</div>
-    <div style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-      功能开发中
-    </div>
-    <div style={{ fontSize: '14px' }}>该功能即将上线，敬请期待</div>
+  <div className="route-soon">
+    <div className="route-soon__icon">🚧</div>
+    <div className="route-soon__title">功能开发中</div>
+    <div>该功能即将上线，敬请期待</div>
   </div>
 );
 

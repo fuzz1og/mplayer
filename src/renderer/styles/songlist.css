@@ -3047,3 +3047,99 @@
   color: var(--badge-color, var(--text-secondary));
   background: color-mix(in srgb, var(--badge-color, var(--text-secondary)) 12%, transparent);
 }
+/* ── 推荐页（1.9.0）── */
+.rec {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.rec__head {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 16px 28px 14px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-content);
+}
+
+.rec__title-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.rec__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+}
+
+.rec__subtitle {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.rec__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px 28px;
+  overflow: auto;
+}
+
+.rec__section-title {
+  margin: 0 0 12px;
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}
+
+/* 路由加载态：整窗居中 */
+.route-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+}
+
+.route-loading__spinner {
+  width: 24px;
+  height: 24px;
+  margin-right: 12px;
+  border: 2px solid var(--hairline);
+  border-top-color: var(--accent);
+  border-radius: var(--radius-full);
+  animation: route-spin 0.8s linear infinite;
+}
+
+@keyframes route-spin {
+  to { transform: rotate(360deg); }
+}
+
+.route-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--text-tertiary);
+}
+
+.route-soon__icon {
+  margin-bottom: 12px;
+  font-size: var(--text-3xl);
+}
+
+.route-soon__title {
+  color: var(--text-secondary);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+}
