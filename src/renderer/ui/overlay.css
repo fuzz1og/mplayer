@@ -6,6 +6,10 @@
 /* ── Dialog（原生 <dialog> + showModal） ── */
 .ui-dialog {
   --dialog-width: 480px;
+  /* 显式居中：不依赖各浏览器 UA 对 <dialog> 的默认 margin，避免被其它 fixed 规则带偏 */
+  position: fixed;
+  inset: 0;
+  margin: auto;
   width: min(var(--dialog-width), calc(100vw - 48px));
   max-height: min(720px, calc(100vh - 96px));
   padding: 0;

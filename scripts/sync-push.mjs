@@ -71,20 +71,23 @@ function uploadBlob(localSha) {
   blobCache.set(localSha, res.sha);
   return res.sha;
 }
-function rebuild(treeSha, prefix, changed) {
+function rebuild(treeSha, prefix, changed, deleted, localTreeSha) {
   const entries = lsTree(treeSha);
   const payload = [];
   let dirty = false;
   for (const [name, entry] of entries) {
     const full = prefix + name;
     if (entry.type === 'tree') {
-      const touches = changed.some((p) => p === full || p.startsWith(full + '/'));
+      const touches = [...changed, ...deleted].some((p) => p === full || p.startsWith(full + '/'));
       if (touches) {
-        payload.push({ path: name, mode: entry.mode, type: 'tree', sha: rebuild(entry.sha, full + '/', changed) });
+        payload.push({ path: name, mode: entry.mode, type: 'tree', sha: rebuild(entry.sha, full + '/', changed, deleted) });
         dirty = true;
       } else {
         payload.push({ path: name, mode: entry.mode, type: 'tree', sha: entry.sha });
       }
+    } else if (deleted.includes(full)) {
+      // 删除：不能进 payload（GitHub 用缺席表达删除）
+      dirty = true;
     } else if (changed.includes(full)) {
       payload.push({ path: name, mode: entry.mode, type: 'blob', sha: uploadBlob(entry.sha) });
       dirty = true;
@@ -104,7 +107,11 @@ for (let i = 0; i < pending.length; i += 1) {
   const [sha, , subject] = pending[i];
   const parentLocal = i === 0 ? resolvedBase : pending[i - 1][0];
   const changed = git('diff', '--name-only', parentLocal, sha).split('\n').filter(Boolean);
-  const newTree = rebuild(git('rev-parse', sha + '^{tree}'), '', changed);
+  const changedSet = new Set(changed);
+  const deleted = git('diff', '--diff-filter=D', '--name-only', parentLocal, sha).split('\n').filter(Boolean);
+  // 基线用**远端 tip** 的根 tree：本地 tree 里引用的子树远端可能没有（上次是 API 重建的）
+  const baseRoot = gh(['repos/{owner}/{repo}/git/commits/' + parent]).tree.sha;
+  const newTree = rebuild(baseRoot, '', [...new Set([...changed, ...deleted])], deleted, git('rev-parse', sha + '^{tree}'));
   const [an, ae, ai] = git('show', '-s', '--format=%an%x00%ae%x00%aI', sha).split('\0');
   const created = gh(['repos/{owner}/{repo}/git/commits', '-X', 'POST'], {
     message: subject, tree: newTree, parents: [parent],
