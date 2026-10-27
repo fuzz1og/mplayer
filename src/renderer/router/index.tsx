@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { createHashRouter, Navigate } from 'react-router-dom';
 import App from '@/renderer/App';
+import SettingsShell from '@/renderer/components/SettingsShell';
 
 // 懒加载页面组件
 const DiscoverPageV2 = lazy(() => import('@/renderer/pages/DiscoverPageV2'));
@@ -19,6 +20,7 @@ const AlbumDetailPage = lazy(() => import('@/renderer/pages/AlbumDetailPage'));
 const DiscoverPlaylistListPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistListPage'));
 const DiscoverPlaylistDetailPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistDetailPage'));
 const UiLabPage = lazy(() => import('@/renderer/pages/UiLabPage'));
+const LibraryPage = lazy(() => import('@/renderer/pages/LibraryPage'));
 
 // 加载状态组件
 const Loading = () => (
@@ -133,7 +135,17 @@ export const router = createHashRouter([
         path: 'settings',
         element: (
           <Suspense fallback={<Loading />}>
-            <SettingsPage />
+            <SettingsShell>
+              <SettingsPage />
+            </SettingsShell>
+          </Suspense>
+        ),
+      },
+      {
+        path: 'library',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <LibraryPage />
           </Suspense>
         ),
       },

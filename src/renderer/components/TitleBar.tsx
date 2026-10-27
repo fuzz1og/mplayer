@@ -16,74 +16,35 @@ const TitleBar: React.FC = () => {
   }, []);
 
   return (
-    <div
-      style={{
-        height: '36px',
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: 'var(--bg-surface)',
-        borderBottom: '1px solid var(--border-subtle)',
-        userSelect: 'none',
-        WebkitAppRegion: 'drag',
-      } as React.CSSProperties}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '14px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-        <img src="./icon.png" alt="" style={{ width: '16px', height: '16px', borderRadius: '4px', objectFit: 'contain' }} />
+    <div className="titlebar">
+      <div className="titlebar__brand">
+        <img className="titlebar__brand-icon" src="./icon.png" alt="" />
         <span>MPlayer</span>
       </div>
 
-      <div style={{ display: 'flex', height: '100%', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-        <button
-          onClick={() => ipcRenderer.invoke('window:minimize')}
-          aria-label="最小化"
-          style={buttonStyle}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-        >
+      <div className="titlebar__controls">
+        <button type="button" className="titlebar__btn" onClick={() => ipcRenderer.invoke('window:minimize')} aria-label="最小化">
           <Minus size={14} />
         </button>
         <button
+          type="button"
+          className="titlebar__btn"
           onClick={() => ipcRenderer.invoke('window:toggleMaximize')}
           aria-label={maximized ? '还原' : '最大化'}
-          style={buttonStyle}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
           {maximized ? <Copy size={12} /> : <Square size={11} />}
         </button>
         <button
+          type="button"
+          className="titlebar__btn titlebar__btn--close"
           onClick={() => ipcRenderer.invoke('window:close')}
           aria-label="关闭"
-          style={buttonStyle}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--danger)';
-            e.currentTarget.style.color = '#fff';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = 'var(--text-secondary)';
-          }}
         >
           <X size={14} />
         </button>
       </div>
     </div>
   );
-};
-
-const buttonStyle: React.CSSProperties = {
-  width: '46px',
-  height: '100%',
-  border: 'none',
-  background: 'transparent',
-  color: 'var(--text-secondary)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  cursor: 'pointer',
-  transition: 'background 0.15s ease, color 0.15s ease',
 };
 
 export default TitleBar;

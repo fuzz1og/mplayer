@@ -2,13 +2,11 @@ import React from 'react';
 import {
   Sparkles,
   Compass,
+  Library,
   Heart,
   History,
   ListMusic,
   Settings,
-  Download,
-  FolderOpen,
-  Headphones
 } from 'lucide-react';
 
 interface NavItem {
@@ -26,155 +24,59 @@ interface SidebarProps {
   updateAvailable?: boolean;
 }
 
+/**
+ * 侧栏 7 项。原「本地音乐 / 下载管理 / 我的收藏 / 播放历史」四入口按 1.9.0 决策收进
+ * 「资料库」分段（后两者同时保留快捷入口），队列移到播放栏与全屏播放器。
+ */
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange, updateAvailable = false }) => {
-  const mainNavItems: NavItem[] = [
-    { key: 'recommend', icon: <Sparkles size={18} />, label: '推荐' },
-    { key: 'discover', icon: <Compass size={18} />, label: '发现音乐' },
+  const primaryItems: NavItem[] = [
+    { key: 'recommend', icon: <Sparkles size={17} />, label: '推荐' },
+    { key: 'discover', icon: <Compass size={17} />, label: '发现' },
   ];
 
-  const myMusicItems: NavItem[] = [
-    { key: 'local', icon: <FolderOpen size={18} />, label: '本地音乐' },
-    { key: 'download', icon: <Download size={18} />, label: '下载管理' },
-    { key: 'favorites', icon: <Heart size={18} />, label: '我的收藏' },
-    { key: 'history', icon: <History size={18} />, label: '播放历史' },
+  const libraryItems: NavItem[] = [
+    { key: 'library', icon: <Library size={17} />, label: '资料库' },
+    { key: 'favorites', icon: <Heart size={17} />, label: '我喜欢的音乐' },
+    { key: 'history', icon: <History size={17} />, label: '最近播放' },
   ];
 
   const playlistItems: NavItem[] = [
-    { key: 'playlists', icon: <ListMusic size={18} />, label: '我的歌单' },
-    { key: 'queue', icon: <Headphones size={18} />, label: '播放队列' },
+    { key: 'playlists', icon: <ListMusic size={17} />, label: '我的歌单' },
   ];
-
-  const navItemStyle = (isActive: boolean): React.CSSProperties => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-3)',
-    padding: '9px var(--space-4)',
-    margin: '1px var(--space-2)',
-    borderRadius: 'var(--radius-sm)',
-    cursor: 'pointer',
-    transition: 'background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)',
-    backgroundColor: 'transparent',
-    color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-    fontWeight: isActive ? 'var(--weight-medium)' : 'var(--weight-normal)',
-    fontSize: 'var(--text-sm)',
-    position: 'relative',
-    border: 'none',
-    width: 'calc(100% - var(--space-4))',
-    textAlign: 'left' as const,
-  });
-
-  const sectionLabelStyle: React.CSSProperties = {
-    padding: 'var(--space-2) var(--space-4)',
-    fontSize: 'var(--text-xs)',
-    color: 'var(--text-tertiary)',
-    fontWeight: 'var(--weight-semibold)',
-    userSelect: 'none',
-  };
 
   const renderNavItem = (item: NavItem) => {
     const isActive = currentPage === item.key;
-
     return (
       <button
         key={item.key}
+        type="button"
+        className="sidebar__item"
         onClick={() => onPageChange(item.key)}
-        style={navItemStyle(isActive)}
         aria-current={isActive ? 'page' : undefined}
         aria-label={item.badge ? `${item.label}（有可用更新）` : undefined}
-        onMouseEnter={(e) => {
-          if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-        }}
-        onMouseLeave={(e) => {
-          if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-        }}
       >
-        {isActive && (
-          <div
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              width: '3px',
-              height: '16px',
-              backgroundColor: 'var(--accent)',
-              borderRadius: 'var(--radius-full)',
-            }}
-          />
-        )}
-        <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        <span className="sidebar__icon" aria-hidden="true">
           {item.icon}
         </span>
         <span>{item.label}</span>
-        {/* 更新徽标（#579）：靠右居中的小圆点，不影响其余 nav item（badge 未设即不渲染） */}
-        {item.badge && (
-          <span
-            data-testid="update-badge"
-            title="有新版本可更新"
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              right: 'var(--space-3)',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              width: '8px',
-              height: '8px',
-              borderRadius: 'var(--radius-full)',
-              backgroundColor: 'var(--accent)',
-            }}
-          />
-        )}
+        {item.badge && <span className="sidebar__badge" data-testid="update-badge" title="有新版本可更新" aria-hidden="true" />}
       </button>
     );
   };
 
   return (
-    <aside
-      style={{
-        width: 'var(--sidebar-width)',
-        height: '100%',
-        backgroundColor: 'var(--bg-sidebar)',
-        borderRight: '1px solid var(--border-subtle)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        flexShrink: 0,
-      }}
-    >
-      {/* 导航内容 */}
-      <nav
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: 'var(--space-2) 0',
-        }}
-        aria-label="主导航"
-      >
-        {/* 发现音乐 */}
-        <div>{mainNavItems.map(renderNavItem)}</div>
+    <aside className="sidebar">
+      <nav className="sidebar__nav" aria-label="主导航">
+        {primaryItems.map(renderNavItem)}
 
-        {/* 我的音乐 */}
-        <div style={{ marginTop: 'var(--space-4)' }}>
-          <div style={sectionLabelStyle}>我的音乐</div>
-          {myMusicItems.map(renderNavItem)}
-        </div>
+        <div className="sidebar__group-label">我的音乐</div>
+        {libraryItems.map(renderNavItem)}
 
-        {/* 歌单 */}
-        <div style={{ marginTop: 'var(--space-4)' }}>
-          <div style={sectionLabelStyle}>歌单</div>
-          {playlistItems.map(renderNavItem)}
-        </div>
+        <div className="sidebar__group-label">歌单</div>
+        {playlistItems.map(renderNavItem)}
       </nav>
 
-      {/* 底部设置 */}
-      <div
-        style={{
-          padding: 'var(--space-2) 0',
-          borderTop: '1px solid var(--border-subtle)',
-        }}
-      >
-        {renderNavItem({ key: 'settings', icon: <Settings size={18} />, label: '设置', badge: updateAvailable })}
-      </div>
+      <div className="sidebar__footer">{renderNavItem({ key: 'settings', icon: <Settings size={17} />, label: '设置', badge: updateAvailable })}</div>
     </aside>
   );
 };

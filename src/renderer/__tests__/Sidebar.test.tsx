@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import Sidebar from '../components/Sidebar';
 
+/**
+ * 1.9.0 导航：9 项收敛为 7 项——本地音乐/下载管理收进「资料库」，
+ * 收藏与历史保留快捷入口，播放队列移到播放栏与全屏播放器。
+ */
 describe('Sidebar', () => {
   const defaultProps = {
     currentPage: 'discover',
@@ -12,49 +16,34 @@ describe('Sidebar', () => {
     vi.clearAllMocks();
   });
 
-  it('应该渲染侧边栏', () => {
+  it('渲染 7 个入口且顺序固定', () => {
     render(<Sidebar {...defaultProps} />);
-    expect(screen.getByText('发现音乐')).toBeInTheDocument();
-    expect(screen.getByText('我的收藏')).toBeInTheDocument();
-    expect(screen.getByText('播放历史')).toBeInTheDocument();
-    expect(screen.getByText('我的歌单')).toBeInTheDocument();
+    const labels = screen.getAllByRole('button').map((el) => el.textContent?.trim());
+    expect(labels).toEqual(['推荐', '发现', '资料库', '我喜欢的音乐', '最近播放', '我的歌单', '设置']);
   });
 
-  it('应该高亮当前页面', () => {
+  it('高亮当前页面', () => {
     render(<Sidebar {...defaultProps} currentPage="discover" />);
-    const discoverItem = screen.getByText('发现音乐').closest('button');
-    expect(discoverItem).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByText('发现').closest('button')).toHaveAttribute('aria-current', 'page');
   });
 
-  it('应该点击导航到对应页面', () => {
+  it('点击导航到对应页面', () => {
     render(<Sidebar {...defaultProps} />);
-    fireEvent.click(screen.getByText('我的收藏'));
+    fireEvent.click(screen.getByText('我喜欢的音乐'));
     expect(defaultProps.onPageChange).toHaveBeenCalledWith('favorites');
   });
-  it('应该显示所有导航项', () => {
+
+  it('资料库是合并后的单一入口', () => {
     render(<Sidebar {...defaultProps} />);
-    expect(screen.getByText('发现音乐')).toBeInTheDocument();
-    expect(screen.getByText('本地音乐')).toBeInTheDocument();
-    expect(screen.getByText('下载管理')).toBeInTheDocument();
-    expect(screen.getByText('我的收藏')).toBeInTheDocument();
-    expect(screen.getByText('播放历史')).toBeInTheDocument();
-    expect(screen.getByText('我的歌单')).toBeInTheDocument();
-    expect(screen.getByText('播放队列')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('资料库'));
+    expect(defaultProps.onPageChange).toHaveBeenCalledWith('library');
+    // 旧入口不再各自占一行
+    expect(screen.queryByText('本地音乐')).not.toBeInTheDocument();
+    expect(screen.queryByText('下载管理')).not.toBeInTheDocument();
+    expect(screen.queryByText('播放队列')).not.toBeInTheDocument();
   });
 
-  it('应该显示当前页面高亮', () => {
-    render(<Sidebar {...defaultProps} currentPage="favorites" />);
-    const favoritesItem = screen.getByText('我的收藏').closest('button');
-    expect(favoritesItem).toHaveAttribute('aria-current', 'page');
-  });
-
-  it('应该点击其他页面', () => {
-    render(<Sidebar {...defaultProps} />);
-    fireEvent.click(screen.getByText('本地音乐'));
-    expect(defaultProps.onPageChange).toHaveBeenCalledWith('local');
-  });
-
-  it('应该显示设置入口', () => {
+  it('显示设置入口', () => {
     render(<Sidebar {...defaultProps} />);
     expect(screen.getByText('设置')).toBeInTheDocument();
   });
@@ -70,7 +59,6 @@ describe('Sidebar', () => {
     it('updateAvailable 为 false（默认）时不渲染徽标', () => {
       render(<Sidebar {...defaultProps} />);
       expect(screen.queryByTestId('update-badge')).not.toBeInTheDocument();
-      // 无徽标时不加 aria-label，可访问名退回按钮文本
       expect(screen.getByRole('button', { name: '设置' })).toBeInTheDocument();
     });
   });

@@ -66,7 +66,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
 
   return (
     <div
-      className={className}
+      className={className ? `player-bar ${className}` : 'player-bar'}
       style={{
         height: 'var(--player-height)',
         backgroundColor: 'var(--bg-player)',

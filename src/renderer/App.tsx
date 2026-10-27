@@ -19,11 +19,13 @@ import LyricsPage from '@/renderer/pages/LyricsPage';
 import ErrorBoundary from '@/renderer/components/ErrorBoundary';
 
 import './styles/global.css';
+import './styles/shell.css';
 
 const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [showLyrics, setShowLyrics] = useState(false);
+  const isSettings = location.pathname.startsWith('/settings');
 
   // History navigation management
   const historyStack = useRef<string[]>([location.pathname]);
@@ -174,6 +176,7 @@ const App: React.FC = () => {
     if (path.startsWith('/recommend')) return 'recommend';
     if (path.startsWith('/discover') || path.startsWith('/hotlist') || path.startsWith('/discover-playlist')) return 'discover';
     if (path.startsWith('/artists') || path.startsWith('/artist/')) return 'artists';
+    if (path.startsWith('/library')) return 'library';
     if (path.startsWith('/local')) return 'local';
     if (path.startsWith('/favorites')) return 'favorites';
     if (path.startsWith('/history')) return 'history';
@@ -185,18 +188,10 @@ const App: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: 'var(--bg-base)',
-        overflow: 'hidden',
-      }}
-    >
+    <div className={isSettings ? 'app-shell app-shell--settings' : 'app-shell'}>
       <TitleBar />
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+      <div className="app-shell__body">
         {/* 左侧导航栏 */}
         <Sidebar
           currentPage={getActiveSidebarKey()}
@@ -209,15 +204,7 @@ const App: React.FC = () => {
         />
 
         {/* 主内容区域 */}
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            minWidth: 0,
-          }}
-        >
+        <div className="app-shell__main">
           {/* 顶部导航栏 */}
           <TopBar
             onSearch={handleSearch}
@@ -231,13 +218,7 @@ const App: React.FC = () => {
           />
 
           {/* 页面内容 - 由React Router渲染 */}
-          <main
-            style={{
-              flex: 1,
-              overflow: 'hidden',
-              backgroundColor: 'var(--bg-base)',
-            }}
-          >
+          <main className="app-shell__content">
             {/* 错误边界包住页面内容：桌面窗口没有刷新/返回键，渲染层抛错此前会整窗变白（只能重启）。
                 现在一个页面出错 = 一个页面出错，并给「重试」自救。 */}
             <ErrorBoundary>

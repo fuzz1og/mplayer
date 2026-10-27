@@ -1,0 +1,252 @@
+/* ============================================================
+   应用骨架（1.9.0）— 标题栏 / 侧栏 / 顶栏 / 播放栏 / 设置全屏壳
+   材质只在这四处使用（backdrop-filter 昂贵，列表行禁用）
+   ============================================================ */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--surface-window);
+}
+
+.app-shell__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface-content);
+}
+
+.app-shell__content {
+  flex: 1;
+  overflow: hidden;
+  background: var(--surface-content);
+}
+
+.app-shell--settings .settings-shell {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── 标题栏 ── */
+.titlebar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--material-chrome);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 14px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.titlebar__brand-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.titlebar__controls {
+  display: flex;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.titlebar__btn:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.titlebar__btn--close:hover {
+  background: var(--danger);
+  color: var(--text-inverse);
+}
+
+/* ── 侧栏 ── */
+.sidebar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: var(--sidebar-width);
+  height: 100%;
+  overflow: hidden;
+  border-right: 1px solid var(--hairline);
+  background: var(--material-chrome);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
+}
+
+.sidebar__nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  overflow-y: auto;
+}
+
+.sidebar__group-label {
+  padding: 14px 10px 6px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.sidebar__item:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.sidebar__item[aria-current='page'] {
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.sidebar__icon {
+  display: flex;
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.sidebar__item[aria-current='page'] .sidebar__icon {
+  color: var(--text-primary);
+}
+
+.sidebar__badge {
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.sidebar__footer {
+  padding: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ── 顶栏 ── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  height: var(--topbar-height);
+  padding: 0 20px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--material-chrome);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
+}
+
+/* ── 设置全屏壳 ── */
+.settings-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-content);
+}
+
+.settings-shell__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.settings-shell__title {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.settings-shell__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* 设置全屏态：骨架让位给设置壳（渲染树不卸载，播放器继续出声） */
+.app-shell--settings .sidebar,
+.app-shell--settings .topbar,
+.app-shell--settings .player-bar {
+  display: none;
+}
+
+.app-shell--settings .app-shell__main {
+  background: var(--surface-window);
+}
+
+/* 播放栏容器（材质与高度统一走 token，组件内不再写 backdrop-filter） */
+.player-bar {
+  border-top: 1px solid var(--hairline);
+  background: var(--bg-player);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
+}

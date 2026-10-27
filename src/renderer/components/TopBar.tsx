@@ -66,20 +66,7 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
   };
 
   return (
-    <header
-      style={{
-        height: 'var(--topbar-height)',
-        backgroundColor: 'var(--bg-surface)',
-        borderBottom: '1px solid var(--border-subtle)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 var(--space-6)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-      }}
-    >
+    <header className="topbar">
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flex: 1 }}>
         {/* 导航按钮 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexShrink: 0 }}>
