@@ -169,9 +169,7 @@
   /* 强调色渐变（1.9.0：封面占位块用） */
   --accent-grad: linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%);
 
-  /* 删除按钮压暗底（1.9.0：从内联 rgba 收编） */
 
-  /* 封面渐变占位（1.9.0：从内联 linear-gradient 收编） */
 
   /* 歌词文字阴影（1.9.0：从内联 textShadow 收编） */
   --lyrics-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);

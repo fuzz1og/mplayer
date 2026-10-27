@@ -47,7 +47,7 @@
 主进程基础/独有方法手写表 + 内容方法按 `CONTENT_METHODS` 清单循环分派到 `getDirectClient(source)`，未知方法返回失败封套。
 加内容方法 = 直连客户端加方法 + `CONTENT_METHODS` 加字符串，其余自动（完整性测试兜底）。**不要在架构文档枚举方法清单**——那是契约文件的缓存。
 
-**语义通道**（ADR-0002）：`cache:*`（getSongResources/setSongResources/clear/getStats；封面磁盘字节通道已随封面直链直渲移除）、
+**语义通道**（ADR-0002）：`cache:*`（getSongResources/setSongResources/clear/getStats；1.9.0 起另有 getConfig/setLimitMb/setAutoClean/openDir 供设置页容量配置；封面磁盘字节通道已随封面直链直渲移除）、
 favorite/history/playlist/localMusic/settings/download/dialog/app/update/playbackTrace/**window** 各自的 `domain:action` 组（`window:minimize|toggleMaximize|isMaximized|close`，供自绘标题栏用）
 （`playbackTrace:list|clear|export`，语义命名与 `settings:*` 同组）。
 Push（main→renderer）：`download:progress|complete|error`, `localMusic:folderChanged`, `tray:action`, `shortcut:action`, `update:status`, `window:maximized`。

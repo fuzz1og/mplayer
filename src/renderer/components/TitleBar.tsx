@@ -2,19 +2,21 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Minus, Square, Copy, X, Search, ChevronDown, ChevronLeft, Check } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import { SOURCE_COLORS, ALL_SOURCE_COLOR } from '@/renderer/constants/sourceConfig';
+import { SOURCE_DISPLAY_NAMES } from '@mplayer/core';
 
 const ipcRenderer = window.electronAPI;
 
+/** 来源中文名唯一来源是 core 的 SOURCE_DISPLAY_NAMES（docs/agents/architecture.md:74）；这里只补「全部」与色点。 */
 const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
   all: { label: '全部', accent: ALL_SOURCE_COLOR },
-  netease: { label: '网易云', accent: SOURCE_COLORS.netease },
-  qq: { label: 'QQ', accent: SOURCE_COLORS.qq },
-  kugou: { label: '酷狗', accent: SOURCE_COLORS.kugou },
-  kuwo: { label: '酷我', accent: SOURCE_COLORS.kuwo },
-  migu: { label: '咪咕', accent: SOURCE_COLORS.migu },
-  qianqian: { label: '千千', accent: SOURCE_COLORS.qianqian },
-  soda: { label: '汽水', accent: SOURCE_COLORS.soda },
-  local: { label: '本地', accent: SOURCE_COLORS.local },
+  netease: { label: SOURCE_DISPLAY_NAMES.netease, accent: SOURCE_COLORS.netease },
+  qq: { label: SOURCE_DISPLAY_NAMES.qq, accent: SOURCE_COLORS.qq },
+  kugou: { label: SOURCE_DISPLAY_NAMES.kugou, accent: SOURCE_COLORS.kugou },
+  kuwo: { label: SOURCE_DISPLAY_NAMES.kuwo, accent: SOURCE_COLORS.kuwo },
+  migu: { label: SOURCE_DISPLAY_NAMES.migu, accent: SOURCE_COLORS.migu },
+  qianqian: { label: SOURCE_DISPLAY_NAMES.qianqian, accent: SOURCE_COLORS.qianqian },
+  soda: { label: SOURCE_DISPLAY_NAMES.soda, accent: SOURCE_COLORS.soda },
+  local: { label: SOURCE_DISPLAY_NAMES.local, accent: SOURCE_COLORS.local },
 };
 
 interface TitleBarProps {
