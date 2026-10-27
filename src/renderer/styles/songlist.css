@@ -2131,3 +2131,108 @@
   0%, 100% { opacity: 0.6; }
   50% { opacity: 1; }
 }
+/* ── 本地音乐（1.9.0）：左侧文件夹栏 + 右侧曲目 ── */
+.local {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.local__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.local__main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.local__folders {
+  width: 240px;
+  padding: 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--hairline);
+}
+
+.local__folder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-weight: var(--weight-normal);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.local__folder:hover {
+  background: var(--surface-card-hover);
+}
+
+.local__folder[data-active] {
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.local__folder-name {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.local__folder-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.local__folder-count {
+  font-size: var(--text-xs);
+  opacity: 0.7;
+}
+
+.local__folders-empty {
+  padding: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.local__songs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.local__songs-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.local__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+}
+
+.local__empty-icon {
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.local__empty-title {
+  margin-bottom: 8px;
+  font-size: var(--text-base);
+}
