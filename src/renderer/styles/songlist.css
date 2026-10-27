@@ -518,3 +518,97 @@
   margin-bottom: 12px;
   color: var(--text-tertiary);
 }
+/* ── 歌单卡（横向）── */
+.pl-card {
+  display: flex;
+  gap: var(--space-4);
+  padding: 14px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.pl-card:hover {
+  background: var(--surface-card-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.pl-card__cover {
+  position: relative;
+  flex-shrink: 0;
+  width: 144px;
+  height: 144px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-card-hover);
+}
+
+.pl-card__placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.pl-card__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pl-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.pl-card__name {
+  display: -webkit-box;
+  margin-bottom: 6px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.pl-card__meta {
+  margin-bottom: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.pl-card__desc {
+  display: -webkit-box;
+  margin-bottom: 8px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.pl-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pl-card__tag {
+  padding: 2px 8px;
+  border-radius: var(--radius-10);
+  background: var(--surface-card-hover);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
