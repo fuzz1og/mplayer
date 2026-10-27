@@ -67,8 +67,9 @@ async function openWithSong(page: import('@playwright/test').Page, route: string
 
 test('弹层截图：加入歌单', async ({ page }) => {
   await openWithSong(page, '/#/recommend');
-  // 播放栏直达入口（不是行内菜单）：对当前播放歌曲加入歌单
-  await page.locator('.player-bar button[aria-label="加入歌单"]').click();
+  // 播放栏「更多操作」菜单里的加入歌单（1.9.0 右区只留一枚更多按钮）
+  await page.locator('.player-bar button[aria-label="更多操作"]').click();
+  await page.locator('.player-bar__more-item', { hasText: '加入歌单' }).click();
   await expect(page.getByRole('heading', { name: '加入歌单' })).toBeVisible({ timeout: 5000 });
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'shots/ui-16-add-to-playlist.png', animations: 'disabled' });
@@ -87,7 +88,8 @@ test('弹层截图：换源', async ({ page }) => {
 
 test('弹层截图：下载进度', async ({ page }) => {
   await openWithSong(page, '/#/recommend');
-  await page.locator('.player-bar button[aria-label="下载"]').click();
+  await page.locator('.player-bar button[aria-label="更多操作"]').click();
+  await page.locator('.player-bar__more-item', { hasText: '下载' }).click();
   await expect(page.locator('.dl-modal__panel')).toBeVisible({ timeout: 5000 });
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'shots/ui-18-download-progress.png', animations: 'disabled' });
