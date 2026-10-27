@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import router from './router';
 import { ThemeManager } from './theme/ThemeManager';
+import ToastHost from './components/ToastHost';
 import { installRendererLogCapture } from './services/rendererLogStore';
 import { initDevMode } from './services/devMode';
 import './styles/global.css';
@@ -14,7 +15,9 @@ installRendererLogCapture();
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeManager>
-      <RouterProvider router={router} />
+      <ToastHost>
+        <RouterProvider router={router} />
+      </ToastHost>
     </ThemeManager>
   </React.StrictMode>
 );

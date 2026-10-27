@@ -33,5 +33,3 @@ export function resolveTheme(mode: ThemeMode, systemPrefersDark: boolean): Resol
   return { effectiveMode: systemPrefersDark ? 'dark' : 'light', isDark: systemPrefersDark, dataTheme: '' };
 }
 
-/** antd 主色（与 global.css --accent 浅/深取值对齐） */
-export const ANTD_ACCENT = { light: '#2F5FD0', dark: '#3D7BD9' } as const;

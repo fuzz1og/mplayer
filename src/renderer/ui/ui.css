@@ -377,3 +377,71 @@
 .ui-lab__chip--selected { background: var(--surface-selected); }
 .ui-lab__chip--hairline { background: var(--hairline); }
 .ui-lab__chip--accent { background: var(--accent); }
+
+/* ── 关于区（设置页身份信息） ── */
+.ui-about {
+  margin-bottom: var(--space-8);
+  scroll-margin-top: var(--space-4);
+}
+
+/* 品牌条：占 Group 的第一格，下面的 Row 才从发丝线开始排 */
+.ui-about__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--row-padding-x);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.ui-about__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+}
+
+.ui-about__brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ui-about__name {
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.ui-about__tagline {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* 外链：落在行尾，是整行唯一的可点区域；长地址截断不换行 */
+.ui-about__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--accent-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-about__link:hover {
+  text-decoration: underline;
+}
+
+.ui-about__link svg {
+  flex: none;
+}
+

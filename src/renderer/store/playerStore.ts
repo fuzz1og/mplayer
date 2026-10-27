@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { message } from 'antd';
+import { toast } from '@/renderer/services/toastStore';
 import { getGlobalPlayer, destroyGlobalPlayer, type PlayerState } from '@/renderer/services/audioPlayer';
 import { playbackClock } from '@/renderer/services/playbackClock';
 import type { Song, PlaybackFailureAdvice, ShuffleState, AdvancePlan } from '@mplayer/core';
@@ -361,7 +361,7 @@ const desktopResolveDeps: ResolvePlaybackUrlDeps = {
     console.warn(`[player] 《${song.name}》解析结果为试听版（non-full），可换源获取完整版`);
     // preview 立即播直连试听（秒出声），不再等 tier3
     useSearchStore.getState().setAudioTag(song.id, 'preview');
-    message.info('当前为试听版，可换源获取完整版');
+    toast.info('当前为试听版，可换源获取完整版');
   },
   log: (level, message) => console[level === 'warn' ? 'warn' : 'error'](message),
 };
@@ -450,7 +450,7 @@ async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Prom
       isLoading: false,
       isPlaying: false
     });
-    message.error(decision.copy);
+    toast.error(decision.copy);
     return;
   }
 
@@ -462,7 +462,7 @@ async function handlePlaybackFailure(error: unknown, attempt: PlayAttempt): Prom
     { playlist: store.currentPlaylist, index: next.index, policy: 'locate' },
   );
   usePlayerStore.setState({ currentPlaylistIndex: nextState.index, shuffle: nextState.shuffle });
-  message.warning(decision.copy);
+  toast.warning(decision.copy);
   await store.play(next.song);
 }
 
@@ -517,7 +517,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         currentPlaylistIndex: nextState.index,
         shuffle: nextState.shuffle,
       });
-      message.error(OFFLINE_COPY);
+      toast.error(OFFLINE_COPY);
       return;
     }
 
