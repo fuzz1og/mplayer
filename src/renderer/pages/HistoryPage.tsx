@@ -8,6 +8,7 @@ import SongList from '@/renderer/components/SongList';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song, SongBase } from '@mplayer/core';
+import '@/renderer/styles/songlist.css';
 
 const HistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Song[]>([]);
@@ -64,49 +65,24 @@ const HistoryPage: React.FC = () => {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="list-page">
       {/* 页面标题 */}
-      <div
-        style={{
-          padding: '24px 24px 16px',
-          borderBottom: '1px solid var(--border-subtle)',
-          backgroundColor: 'var(--bg-surface)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <History size={24} color="var(--accent)" />
-            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-              播放历史
-            </h1>
-            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
-              {history.length} 首歌曲
-            </span>
+      <div className="list-page__head">
+        <div className="list-page__head-row">
+          <div className="list-page__title-group">
+            <History size={20} color="var(--accent)" />
+            <h1 className="list-page__title">播放历史</h1>
+            <span className="list-page__count">{history.length} 首歌曲</span>
           </div>
-          <button
-            onClick={handleClearHistory}
-            disabled={history.length === 0}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              backgroundColor: 'transparent',
-              color: history.length > 0 ? 'var(--text-secondary)' : 'var(--text-tertiary)',
-              border: '1px solid var(--border-default)',
-              borderRadius: '20px',
-              cursor: history.length > 0 ? 'pointer' : 'not-allowed',
-              fontSize: 'var(--text-base)',
-            }}
-          >
-            <Trash2 size={16} />
+          <button onClick={handleClearHistory} disabled={history.length === 0} className="list-page__action">
+            <Trash2 size={15} />
             清空历史
           </button>
         </div>
       </div>
 
       {/* 歌曲列表 */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div className="list-page__body">
         <SongList
           songs={history}
           currentSongId={currentSong?.id}

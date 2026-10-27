@@ -6,6 +6,7 @@ import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import type { Song } from '@mplayer/core';
+import '@/renderer/styles/songlist.css';
 
 const FavoritesPage: React.FC = () => {
   const favorites = useFavoriteStore((s) => s.favorites);
@@ -63,51 +64,28 @@ const FavoritesPage: React.FC = () => {
   }, []);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="list-page">
       {/* 页面标题 */}
-      <div
-        style={{
-          padding: '24px 24px 16px',
-          borderBottom: '1px solid var(--border-subtle)',
-          backgroundColor: 'var(--bg-surface)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Heart size={24} color="var(--text-secondary)" />
-            <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-              我的收藏
-            </h1>
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>
-              · {favorites.length} 首歌曲
-            </span>
+      <div className="list-page__head">
+        <div className="list-page__head-row">
+          <div className="list-page__title-group">
+            <Heart size={20} color="var(--text-secondary)" />
+            <h1 className="list-page__title">我的收藏</h1>
+            <span className="list-page__count">{favorites.length} 首歌曲</span>
           </div>
           <button
             onClick={handlePlayAll}
             disabled={favorites.length === 0}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              backgroundColor: 'var(--accent)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '20px',
-              cursor: favorites.length > 0 ? 'pointer' : 'not-allowed',
-              opacity: favorites.length > 0 ? 1 : 0.5,
-              fontSize: 'var(--text-base)',
-              fontWeight: 500,
-            }}
+            className="list-page__action list-page__action--primary"
           >
-            <Play size={16} />
+            <Play size={15} />
             播放全部
           </button>
         </div>
       </div>
 
       {/* 歌曲列表 */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div className="list-page__body">
         <SongList
           songs={favorites}
           currentSongId={currentSong?.id}

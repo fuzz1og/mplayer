@@ -1491,3 +1491,86 @@
   margin-bottom: 12px;
   color: var(--text-tertiary);
 }
+/* ── 列表页骨架（收藏 / 历史 / 本地等，1.9.0）── */
+.list-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.list-page__head {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-content);
+}
+
+.list-page__head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.list-page__title-group {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.list-page__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+}
+
+.list-page__count {
+  margin-left: 8px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.list-page__body {
+  flex: 1;
+  overflow: auto;
+}
+
+/* 头部动作按钮（清空 / 播放全部） */
+.list-page__action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xl);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.list-page__action:hover:not(:disabled) {
+  border-color: var(--text-tertiary);
+  color: var(--text-primary);
+}
+
+.list-page__action:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.list-page__action--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+.list-page__action--primary:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--text-inverse);
+}
