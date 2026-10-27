@@ -13,6 +13,7 @@ import ts from 'typescript';
 
 const ROOT = process.cwd();
 const APPLY = process.argv.includes('--apply');
+const ONLY = (process.argv.find((a) => a.startsWith('--only=')) ?? '').slice('--only='.length);
 const SCAN = 'src/renderer';
 const OUT_CSS = path.join(ROOT, 'src/renderer/styles/generated.css');
 
@@ -67,6 +68,7 @@ let skipped = 0;
 const skippedFiles = new Map();
 
 for (const file of walk(path.join(ROOT, SCAN))) {
+  if (ONLY && !file.split(path.sep).join('/').includes(ONLY)) continue;
   const source = readFileSync(file, 'utf8');
   if (!source.includes('style={{')) continue;
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
