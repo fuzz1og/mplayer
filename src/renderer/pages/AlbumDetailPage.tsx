@@ -103,11 +103,7 @@ const AlbumDetailPage: React.FC = () => {
         <h1 className="detail-page__nav-title">{displayName || '专辑'}</h1>
         <div className="album__spacer" />
       </div>
-      /**
-       * 专辑卡片区:固定不滚动(所以下面滚动容器的 padding-top 是 0)。
-       * 注意:SongList 的表头是 sticky 的,它靠 stickyTopForContent() 对齐滚动容器的**内容区**上边,所
-       * 以这里给不给 padding-top 表头都不会错位了。
-       */
+      {/* 专辑卡片区固定不滚动；SongList 表头靠 stickyTopForContent 对齐内容区，无需 padding-top */}
       <div className="album__head">
         <div className="album__card">
           <div className="album__cover">

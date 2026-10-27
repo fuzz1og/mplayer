@@ -13,18 +13,42 @@ const ROUTES: Array<[string, string, string]> = [
   ['ui-09-history', '/#/history', '最近播放'],
   ['ui-10-queue', '/#/queue', '播放队列'],
   ['ui-11-local', '/#/local', '本地音乐'],
+  ['ui-12-album', '/#/album/a1', '专辑详情'],
+  ['ui-13-artist', '/#/artist/ar1', '歌手详情'],
+  ['ui-14-hotlist', '/#/hotlist/netease:hot', '热榜详情'],
+  ['ui-15-playlist', '/#/playlist/7', '歌单详情'],
 ];
 
 test.beforeEach(async ({ page }) => {
   // 渲染层只经 window.electronAPI 通信：给最小 stub，让页面不因缺桥而白屏
   await page.addInitScript(() => {
     const noop = async () => undefined;
+    const song = (i: number) => ({ id: 'n' + i, name: '示例歌曲 ' + i, artist: '示例歌手', album: '示例专辑', duration: 240, sourceType: 'netease', url: '', cover: '', lrc: '' });
+    const songs = Array.from({ length: 12 }, (_, i) => song(i + 1));
+
     (window as unknown as { electronAPI: Record<string, unknown> }).electronAPI = {
-      invoke: async (channel: string) => {
+      invoke: async (channel: string, ...args: unknown[]) => {
+        // musicApi 单通道分发：详情页都靠它取数
+        if (channel === 'musicApi:call') {
+          const method = args[0] as string;
+          if (method === 'getAlbumDetail') return { album: { id: 'a1', name: '示例专辑', artist: '示例歌手', picUrl: '', publishTime: String(Date.now()), description: '示例专辑简介' }, songs };
+          if (method === 'getArtistSongs') return { songs, total: songs.length };
+          if (method === 'getArtistAlbums') return { albums: [], total: 0, more: false, ok: true };
+          if (method === 'getToplists') return [{ source: 'netease', sourceId: 'hot', sourceName: '网易云', groups: [{ key: 'hot', name: '热歌榜', songs }] }];
+          if (method === 'getPlaylistSongs') return { songs, total: songs.length };
+          if (method === 'getToplistSongs') return { songs, groups: [] };
+          // 按方法给精确结构：一刀切的默认值会让 playlists.map / songs[0] 这类读法抛错
+          if (method === 'getRecommendedPlaylists') return [];
+          if (method === 'getRecommendedSongs') return songs;
+          if (method === 'getDailySongs') return { songs };
+          return { songs, total: songs.length, albums: [], artists: [], more: false, ok: true };
+        }
         if (channel === 'update:getVersion') return '1.9.0';
         if (channel === 'settings:getThemeMode') return 'system';
         if (channel === 'history:get') return [];
         if (channel === 'playlist:getAll') return [];
+        if (channel === 'playlist:get') return { id: 7, name: '示例歌单', description: '示例简介', cover: '', songCount: songs.length };
+        if (channel === 'playlist:getSongs') return songs;
         if (channel === 'settings:getSourceModes') return { status: {} };
         if (channel === 'getArtists') return { artists: [], more: false };
         if (channel === 'cache:getStats') return { totalSize: 0, fileCount: 0, songsCount: 0, coversCount: 0, audioCount: 0, urlsCount: 0 };
