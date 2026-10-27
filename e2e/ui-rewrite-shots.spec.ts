@@ -15,6 +15,10 @@ const ROUTES: Array<[string, string, string]> = [
   ['ui-05-artists', '/#/artists', '歌手'],
   ['ui-06-settings', '/#/settings', '设置'],
   ['ui-07-uilab', '/#/ui-lab', 'UI 原语'],
+  ['ui-08-favorites', '/#/favorites', '我喜欢的音乐'],
+  ['ui-09-history', '/#/history', '最近播放'],
+  ['ui-10-queue', '/#/queue', '播放队列'],
+  ['ui-11-local', '/#/local', '本地音乐'],
 ];
 
 test.beforeEach(async ({ page }) => {
