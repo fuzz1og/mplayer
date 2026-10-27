@@ -1656,3 +1656,201 @@
   margin-bottom: 12px;
   color: var(--text-tertiary);
 }
+/* ── 详情页顶栏（榜单 / 歌手 / 专辑共用，1.9.0）── */
+.detail-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.detail-page__nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 60px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-content);
+}
+
+.detail-page__back {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    transform var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.detail-page__back:hover {
+  transform: translateX(-2px);
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.detail-page__nav-title {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-page__nav-action {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.detail-page__nav-action:hover:not(:disabled) {
+  border-color: var(--text-tertiary);
+}
+
+.detail-page__nav-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.detail-page__body {
+  flex: 1;
+  padding: 24px;
+  overflow: auto;
+}
+
+/* 页内标题块：封面方块 + 标题 + 副标题 */
+.detail-hero {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.detail-hero__mark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-grad);
+  color: var(--text-inverse);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+}
+
+.detail-hero__title {
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+}
+
+.detail-hero__sub {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* 骨架行 */
+.detail-skeleton__row {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+}
+
+.detail-skeleton__index {
+  width: 50px;
+  text-align: center;
+}
+
+.detail-skeleton__index-bar {
+  width: 20px;
+  height: 14px;
+  margin: 0 auto;
+}
+
+.detail-skeleton__main {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  align-items: center;
+}
+
+.detail-skeleton__cover {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-xs);
+}
+
+.detail-skeleton__lines {
+  flex: 1;
+}
+
+.detail-skeleton__title {
+  width: 70%;
+  height: 14px;
+  margin-bottom: 4px;
+}
+
+.detail-skeleton__sub {
+  width: 50%;
+  height: 12px;
+}
+
+/* 错误态 */
+.detail-error {
+  padding: 24px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-subtle);
+  color: var(--danger-text);
+  text-align: center;
+}
+
+.detail-error__icon {
+  margin-bottom: 12px;
+  color: var(--danger);
+}
+
+.detail-error__text {
+  margin-bottom: 8px;
+  font-size: var(--text-base);
+}
+
+.detail-error__retry {
+  margin-top: 16px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--danger);
+  color: var(--text-inverse);
+  cursor: pointer;
+}

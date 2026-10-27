@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, ListPlus } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
 import { useConfirm } from '@/renderer/ui';
+import '@/renderer/styles/songlist.css';
 import SongList from '@/renderer/components/SongList';
 import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import type { DesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
@@ -109,85 +110,19 @@ const HotlistDetailPage: React.FC = () => {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="detail-page">
       {/* 导航栏 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          padding: '12px 24px',
-          borderBottom: '1px solid var(--border-subtle)',
-          backgroundColor: 'var(--bg-surface)',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-          height: '60px',
-        }}
-      >
-        <button
-          onClick={() => navigate('/discover')}
-          style={{
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            padding: '10px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: 'var(--text-secondary)',
-            transition: 'all 0.2s ease',
-            fontSize: '14px',
-            fontWeight: 500,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-            e.currentTarget.style.color = 'var(--text-primary)';
-            e.currentTarget.style.transform = 'translateX(-2px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-            e.currentTarget.style.color = 'var(--text-secondary)';
-            e.currentTarget.style.transform = 'translateX(0)';
-          }}
-        >
+      <div className="detail-page__nav">
+        <button onClick={() => navigate('/discover')} className="detail-page__back">
           <ArrowLeft size={16} />
           <span>返回</span>
         </button>
-        <h1
-          style={{
-            fontSize: '20px',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            flex: 1,
-            margin: 0,
-            textAlign: 'center',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {config.title}
-        </h1>
+        <h1 className="detail-page__nav-title">{config.title}</h1>
         <button
           onClick={handleSaveAllToNewPlaylist}
           disabled={hotlist.length === 0 || savingAll}
           title={`把「${config.title}」的 ${hotlist.length} 首歌曲保存到新歌单`}
-          style={{
-            border: '1px solid var(--border-default)',
-            background: 'transparent',
-            cursor: hotlist.length === 0 || savingAll ? 'not-allowed' : 'pointer',
-            padding: '8px 12px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: 'var(--text-primary)',
-            transition: 'all 0.2s ease',
-            fontSize: '13px',
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-            opacity: hotlist.length === 0 || savingAll ? 0.5 : 1,
-          }}
+          className="detail-page__nav-action"
         >
           <ListPlus size={16} />
           <span>{savingAll ? '保存中...' : `保存全部到新歌单（${hotlist.length}）`}</span>
@@ -195,39 +130,13 @@ const HotlistDetailPage: React.FC = () => {
       </div>
 
       {/* 内容区域 */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+      <div className="detail-page__body">
         {/* 热榜标题 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            marginBottom: '32px',
-          }}
-        >
-          <div
-            style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontWeight: 600,
-              fontSize: '20px',
-            }}
-          >
-            热榜
-          </div>
+        <div className="detail-hero">
+          <div className="detail-hero__mark">热榜</div>
           <div>
-            <h2 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-              {config.title}
-            </h2>
-            <p style={{ fontSize: '14px', color: 'var(--text-tertiary)' }}>
-              实时更新，最热门的100首歌曲
-            </p>
+            <h2 className="detail-hero__title">{config.title}</h2>
+            <p className="detail-hero__sub">实时更新，最热门的100首歌曲</p>
           </div>
         </div>
 
@@ -236,102 +145,25 @@ const HotlistDetailPage: React.FC = () => {
           <div>
             {/* 骨架屏 */}
             {Array.from({ length: 10 }).map((_, index) => (
-              <div
-                key={`skeleton-${index}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '10px 16px',
-                  borderRadius: '6px',
-                  marginBottom: '8px',
-                }}
-              >
-                <div style={{ width: '50px', textAlign: 'center' }}>
-                  <div
-                    style={{
-                      width: '20px',
-                      height: '14px',
-                      borderRadius: '2px',
-                      background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
-                      backgroundSize: '200% 200%',
-                      animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                      margin: '0 auto',
-                    }}
-                  />
+              <div key={`skeleton-${index}`} className="detail-skeleton__row">
+                <div className="detail-skeleton__index">
+                  <div className="skeleton-shimmer detail-skeleton__index-bar" />
                 </div>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '4px',
-                      background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
-                      backgroundSize: '200% 200%',
-                      animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                    }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        width: '70%',
-                        height: '14px',
-                        borderRadius: '2px',
-                        background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
-                        backgroundSize: '200% 200%',
-                        animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                        marginBottom: '4px',
-                      }}
-                    />
-                    <div
-                      style={{
-                        width: '50%',
-                        height: '12px',
-                        borderRadius: '2px',
-                        background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
-                        backgroundSize: '200% 200%',
-                        animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                        animationDelay: '0.1s',
-                      }}
-                    />
+                <div className="detail-skeleton__main">
+                  <div className="skeleton-shimmer detail-skeleton__cover" />
+                  <div className="detail-skeleton__lines">
+                    <div className="skeleton-shimmer detail-skeleton__title" />
+                    <div className="skeleton-shimmer detail-skeleton__sub" />
                   </div>
                 </div>
               </div>
             ))}
-            <style>{`
-              @keyframes skeletonLoading {
-                0% {
-                  background-position: 200% 0;
-                }
-                100% {
-                  background-position: -200% 0;
-                }
-              }
-            `}</style>
           </div>
         ) : error ? (
-          <div
-            style={{
-              padding: '24px',
-              backgroundColor: 'var(--danger-subtle)',
-              borderRadius: '8px',
-              color: 'var(--danger)',
-              textAlign: 'center',
-            }}
-          >
-            <AlertCircle size={28} style={{ marginBottom: '12px', color: 'var(--danger)' }} />
-            <div style={{ fontSize: '16px', marginBottom: '8px' }}>{error}</div>
-            <button
-              onClick={() => { loadHotlist(); }}
-              style={{
-                marginTop: '16px',
-                padding: '8px 16px',
-                backgroundColor: 'var(--danger)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
+          <div className="detail-error">
+            <AlertCircle size={28} className="detail-error__icon" />
+            <div className="detail-error__text">{error}</div>
+            <button onClick={() => { loadHotlist(); }} className="detail-error__retry">
               重试
             </button>
           </div>
