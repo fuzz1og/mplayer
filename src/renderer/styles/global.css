@@ -164,6 +164,9 @@
   --cover-placeholder: #0D1117;
   /* 封面播放遮罩（1.9.0：从内联 rgba 收编为 token） */
   --cover-play-scrim: rgba(0, 0, 0, 0.4);
+  /* 主打封面压暗（1.9.0：原内联 linear-gradient 收编为 token） */
+  --featured-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.68) 82%);
+
 
   --cover-placeholder-glow: #2A3342;
 
