@@ -8,7 +8,8 @@ import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
 import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
-import { COL_INDEX, colStyle } from '@/renderer/components/songTableColumns';
+import { COL_INDEX, colWidth } from '@/renderer/components/songTableColumns';
+import '@/renderer/styles/songlist.css';
 import { applyShuffleIndexes, applyShuffleOrder, type Song } from '@mplayer/core';
 
 /** 队列行的行尾操作：加入歌单 + 从队列移除（沿用队列页原有的常驻图标按钮） */
@@ -27,16 +28,15 @@ const QueueRowActions: React.FC<{
   onAddToPlaylist: (song: Song) => void;
   onRemove: (index: number) => void;
 }> = ({ song, index, onAddToPlaylist, onRemove }) => (
-  <div style={{ width: QUEUE_ACTIONS_W + 'px', display: 'flex', justifyContent: 'center', gap: '4px', flexShrink: 0 }}>
+  <div className="queue__row-actions" style={{ '--queue-actions-w': `${QUEUE_ACTIONS_W}px` } as React.CSSProperties}>
     <button
       onClick={(e) => { e.stopPropagation(); onAddToPlaylist(song); }}
       aria-label="加入歌单"
       title="加入歌单"
-      style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
+      className="queue__icon-btn">
       <ListMusic size={14} />
     </button>
-    <button onClick={(e) => { e.stopPropagation(); onRemove(index); }}
-      style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
+    <button onClick={(e) => { e.stopPropagation(); onRemove(index); }} className="queue__icon-btn">
       <Trash2 size={14} />
     </button>
   </div>
@@ -44,7 +44,7 @@ const QueueRowActions: React.FC<{
 
 /** overlay 里的静态拖拽把手：只是视觉延续，不接 dnd（overlay 内容整体 pointer-events: none） */
 const previewDragHandle = (
-  <span aria-hidden style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>
+  <span aria-hidden className="queue__drag-handle">
     <GripVertical size={14} />
   </span>
 );
@@ -190,40 +190,42 @@ const QueuePage: React.FC = () => {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Headphones size={24} color="var(--text-secondary)" />
-            <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>播放队列</h1>
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>· {displayPlaylist.length} 首歌曲</span>
+    <div className="list-page">
+      <div className="list-page__head">
+        <div className="list-page__head-row">
+          <div className="list-page__title-group">
+            <Headphones size={20} color="var(--text-secondary)" />
+            <h1 className="list-page__title">播放队列</h1>
+            <span className="list-page__count">{displayPlaylist.length} 首歌曲</span>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={handleClearQueue} disabled={currentPlaylist.length === 0}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: 'transparent', color: currentPlaylist.length > 0 ? 'var(--text-secondary)' : 'var(--text-tertiary)', border: '1px solid var(--border-subtle)', borderRadius: '20px', cursor: currentPlaylist.length > 0 ? 'pointer' : 'not-allowed', fontSize: 'var(--text-base)', fontWeight: 500 }}>
-              <Trash2 size={16} /> 清空队列
+          <div className="queue__head-actions">
+            <button onClick={handleClearQueue} disabled={currentPlaylist.length === 0} className="list-page__action">
+              <Trash2 size={15} /> 清空队列
             </button>
-            <button onClick={handleSaveToPlaylist} disabled={currentPlaylist.length === 0}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: currentPlaylist.length > 0 ? 'var(--accent)' : 'var(--bg-hover)', color: currentPlaylist.length > 0 ? 'white' : 'var(--text-tertiary)', border: 'none', borderRadius: '20px', cursor: currentPlaylist.length > 0 ? 'pointer' : 'not-allowed', fontSize: 'var(--text-base)', fontWeight: 500 }}>
-              <ListMusic size={16} /> 保存为歌单
+            <button
+              onClick={handleSaveToPlaylist}
+              disabled={currentPlaylist.length === 0}
+              className="list-page__action list-page__action--primary"
+            >
+              <ListMusic size={15} /> 保存为歌单
             </button>
           </div>
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div className="list-page__body">
         {displayPlaylist.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', color: 'var(--text-tertiary)' }}>
-            <Headphones size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
-            <div style={{ fontSize: 'var(--text-base)' }}>暂无歌曲，去发现音乐吧</div>
+          <div className="queue__empty">
+            <Headphones size={26} className="queue__empty-icon" />
+            <div>暂无歌曲，去发现音乐吧</div>
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
-              <div style={{ ...colStyle(COL_INDEX), textAlign: 'center' }}>#</div>
-              <div style={{ flex: 1 }}>标题</div>
-              <div style={colStyle(QUEUE_ALBUM_W)}>专辑</div>
-              <div style={{ width: QUEUE_ACTIONS_W + 'px', textAlign: 'center' }}>操作</div>
+            <div className="queue__thead">
+              <div className="queue__thead-index" style={colWidth(COL_INDEX)}>#</div>
+              <div className="queue__thead-title">标题</div>
+              <div className="queue__thead-col" style={colWidth(QUEUE_ALBUM_W)}>专辑</div>
+              <div className="queue__thead-actions" style={{ '--queue-actions-w': `${QUEUE_ACTIONS_W}px` } as React.CSSProperties}>操作</div>
             </div>
             {/* 窗口化 + 可排序：挂载行数与视口成正比（#428 / ADR 2026-09-29-queue-virtualized-sortable-list） */}
             <VirtualSortableList

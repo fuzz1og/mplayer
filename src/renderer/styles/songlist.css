@@ -1574,3 +1574,85 @@
   background: var(--accent-hover);
   color: var(--text-inverse);
 }
+/* ── 队列页（1.9.0）：与收藏/历史共用 list-page 骨架 ── */
+.queue__row-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  justify-content: center;
+  width: var(--queue-actions-w, 68px);
+}
+
+.queue__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.queue__icon-btn:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.queue__drag-handle {
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+}
+
+.queue__head-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 表头：与行同列 */
+.queue__thead {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+
+.queue__thead-index {
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.queue__thead-title {
+  flex: 1;
+}
+
+.queue__thead-col {
+  flex-shrink: 0;
+}
+
+.queue__thead-actions {
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.queue__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+}
+
+.queue__empty-icon {
+  margin-bottom: 12px;
+  color: var(--text-tertiary);
+}
