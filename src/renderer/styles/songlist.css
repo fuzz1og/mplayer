@@ -2236,3 +2236,107 @@
   margin-bottom: 8px;
   font-size: var(--text-base);
 }
+/* ── 自定义下拉（1.9.0）── */
+.dd {
+  position: relative;
+  display: inline-block;
+}
+
+.dd__trigger {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 10px 4px 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--duration-normal) var(--ease-standard);
+}
+
+.dd__trigger:hover:not([data-disabled]):not([data-open]) {
+  background: var(--surface-card-hover);
+}
+
+.dd__trigger[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dd__icon {
+  display: flex;
+  align-items: center;
+}
+
+.dd__label {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.dd__chevron {
+  color: var(--text-tertiary);
+  transition: transform var(--duration-normal) var(--ease-standard);
+}
+
+.dd__menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  z-index: 1000;
+  min-width: 110px;
+  margin-top: 6px;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-content);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-50%);
+  animation: dd-fade-in var(--duration-normal) var(--ease-standard);
+}
+
+.dd__option {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 16px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.dd__option:hover:not([data-selected]) {
+  background: var(--surface-card-hover);
+}
+
+.dd__option[data-selected] {
+  background: var(--surface-selected);
+  color: var(--accent-text);
+}
+
+.dd__option-bar {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 20px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  transform: translateY(-50%);
+}
+
+.dd__option-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+}
+
+.dd__option[data-selected] .dd__option-label {
+  font-weight: var(--weight-semibold);
+}
+
+@keyframes dd-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

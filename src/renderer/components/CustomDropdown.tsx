@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import '@/renderer/styles/songlist.css';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Option {
@@ -74,145 +75,34 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
   };
 
   return (
-    <div
-      ref={dropdownRef}
-      style={{
-        position: 'relative',
-        display: 'inline-block',
-        ...(className ? {} : undefined),
-      }}
-      className={className}
-    >
+    <div ref={dropdownRef} className={className ? 'dd ' + className : 'dd'}>
       <div
         onClick={handleToggle}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '4px 10px 4px 0',
-          borderRadius: '8px',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.5 : 1,
-          transition: 'all 0.2s ease',
-          userSelect: 'none',
-        }}
-        onMouseEnter={(e) => {
-          if (!disabled && !isOpen) {
-            e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isOpen) {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }
-        }}
+        className="dd__trigger"
+        data-disabled={disabled || undefined}
+        data-open={isOpen || undefined}
       >
         {selectedOption?.icon && (
-          <span style={{ display: 'flex', alignItems: 'center' }}>
-            {selectedOption.icon}
-          </span>
+          <span className="dd__icon">{selectedOption.icon}</span>
         )}
-        <span
-          style={{
-            fontSize: '14px',
-            color: 'var(--text-primary)',
-            fontWeight: 500,
-          }}
-        >
-          {selectedOption?.label || placeholder}
-        </span>
-        {isOpen ? (
-          <ChevronUp
-            size={14}
-            style={{
-              color: 'var(--text-tertiary)',
-              transition: 'transform 0.2s ease',
-            }}
-          />
-        ) : (
-          <ChevronDown
-            size={14}
-            style={{
-              color: 'var(--text-tertiary)',
-              transition: 'transform 0.2s ease',
-            }}
-          />
-        )}
+        <span className="dd__label">{selectedOption?.label || placeholder}</span>
+        {isOpen ? <ChevronUp size={14} className="dd__chevron" /> : <ChevronDown size={14} className="dd__chevron" />}
       </div>
 
       {isOpen && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            marginTop: '6px',
-            backgroundColor: 'var(--bg-surface)',
-            borderRadius: '12px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.12)',
-            border: '1px solid var(--border-default)',
-            minWidth: '110px',
-            zIndex: 1000,
-            overflow: 'hidden',
-            animation: 'fadeIn 0.18s ease, slideIn 0.18s ease',
-          }}
-        >
+        <div className="dd__menu">
           {options.map((option) => {
             const isSelected = option.value === value;
             return (
               <div
                 key={option.value}
                 onClick={() => handleOptionClick(option.value)}
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '10px 16px',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  backgroundColor: isSelected ? 'var(--bg-active)' : 'transparent',
-                  color: isSelected ? 'var(--accent)' : 'var(--text-primary)',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSelected) {
-                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSelected) {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
+                className="dd__option"
+                data-selected={isSelected || undefined}
               >
-                {isSelected && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: '3px',
-                      height: '20px',
-                      backgroundColor: 'var(--accent)',
-                      borderRadius: '0 2px 2px 0',
-                    }}
-                  />
-                )}
-                {option.icon && (
-                  <span style={{ display: 'flex', alignItems: 'center' }}>
-                    {option.icon}
-                  </span>
-                )}
-                <span
-                  style={{
-                    fontSize: '14px',
-                    fontWeight: isSelected ? 600 : 400,
-                  }}
-                >
-                  {option.label}
-                </span>
+                {isSelected && <div className="dd__option-bar" />}
+                {option.icon && <span className="dd__icon">{option.icon}</span>}
+                <span className="dd__option-label">{option.label}</span>
               </div>
             );
           })}
