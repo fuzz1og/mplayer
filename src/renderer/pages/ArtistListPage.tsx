@@ -81,8 +81,9 @@ const ArtistListPage: React.FC = () => {
     try {
       const currentOffset = reset ? 0 : artists.length;
       const data = await callMusicApi('getArtists', 'netease', 0, currentOffset, PAGE_SIZE);
-      setArtists(prev => reset ? data.artists : [...prev, ...data.artists]);
-      setHasMore(data.more);
+      const nextArtists = data?.artists ?? [];
+      setArtists(prev => reset ? nextArtists : [...prev, ...nextArtists]);
+      setHasMore(data?.more ?? false);
     } catch (err) {
       console.error('加载歌手失败:', err);
       if (reset) setArtists([]);
@@ -98,7 +99,7 @@ const ArtistListPage: React.FC = () => {
     setLoading(true);
     try {
       const data = await callMusicApi('getArtists', 'netease', catId, 0, 100);
-      setArtists(data.artists);
+      setArtists(data?.artists ?? []);
       setHasMore(false);
     } catch (err) {
       console.error('加载歌手失败:', err);

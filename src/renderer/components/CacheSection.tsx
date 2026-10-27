@@ -39,8 +39,9 @@ const CacheSection: React.FC = () => {
 
   const loadStats = async () => {
     try {
-      const data = await IpcClient.invoke<CacheStats>('cache:getStats');
-      setStats(data);
+      const data = await IpcClient.invoke<CacheStats | undefined>('cache:getStats');
+      // IPC 未实现/首次启动可能返回 undefined：按零值处理，不要让整页崩掉
+      if (data) setStats(data);
     } catch (error) {
       console.error('加载缓存统计失败:', error);
     }

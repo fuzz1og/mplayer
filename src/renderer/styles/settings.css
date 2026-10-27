@@ -87,7 +87,9 @@
   overflow-y: auto;
 }
 
-.settings-content section {
+.settings-content > section {
+  box-sizing: border-box;
+  width: 100%;
   max-width: 720px;
   margin: 0 auto;
   padding: 20px 24px 0;
@@ -126,6 +128,9 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  /* 子项必须撑满：默认 stretch 在 column flex 里只作用于交叉轴宽度，
+     但 Section 自身是 flex 容器且宽度 auto，会被内容收缩成窄卡。 */
+  align-items: stretch;
 }
 
 .settings-page__actions {
