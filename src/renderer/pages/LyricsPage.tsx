@@ -1,14 +1,21 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ArrowLeft, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import LyricsDisplay from '@/renderer/components/LyricsDisplay';
 import SongCover from '@/renderer/components/SongCover';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { Button } from '@/renderer/ui';
+import '@/renderer/styles/player.css';
 
 interface LyricsPageProps {
   onBack: () => void;
 }
 
+/**
+ * 全屏播放器（1.9.0 的签名帧）：封面取色生成环境光，歌词是主体，头部保留返回与传输控制。
+ * 环境光只用两团低饱和径向渐变，无封面时透明——不做发光描边、不做渐变按钮。
+ */
 const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const lyrics = usePlayerStore((s) => s.lyrics);
   const lyricsLoading = usePlayerStore((s) => s.lyricsLoading);
@@ -20,7 +27,6 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const playPrevious = usePlayerStore((s) => s.playPrevious);
   const playNext = usePlayerStore((s) => s.playNext);
 
-  // Escape 键关闭歌词页面
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onBack();
@@ -33,7 +39,6 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
     seek(time);
   };
 
-  // 封面加载失败 → 按 ID 重识别换新封面（上游 API 签名过期后同一 URL 永远失败）
   const handleCoverError = () => {
     if (!currentSong) return;
     void refreshSongCover(currentSong).then((cover) => {
@@ -44,131 +49,81 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
     });
   };
 
+  /**
+   * 环境光取色：从封面 URL 的哈希推两种色相（避免为了取色引入 canvas 与跨域问题），
+   * 无封面时不设变量 → CSS 里回退 transparent，视觉上就是纯色底。
+   */
+  const ambientStyle = useMemo<CSSProperties>(() => {
+    const cover = currentSong?.cover;
+    if (!cover) return {};
+    let hash = 0;
+    for (let i = 0; i < cover.length; i += 1) hash = (hash * 31 + cover.charCodeAt(i)) % 360;
+    const hueA = hash;
+    const hueB = (hash + 48) % 360;
+    return {
+      '--stage-glow-a': `hsl(${hueA} 42% 46% / 0.55)`,
+      '--stage-glow-b': `hsl(${hueB} 38% 38% / 0.45)`,
+    } as CSSProperties;
+  }, [currentSong?.cover]);
+
   if (!currentSong) {
     return (
-      <div style={{
-        height: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexDirection: 'column',
-        gap: '16px'
-      }}>
-        <span style={{ color: 'var(--text-secondary)', fontSize: '16px' }}>暂无播放中的歌曲</span>
-        <button
-          onClick={onBack}
-          style={{
-            padding: '8px 16px',
-            background: 'var(--accent)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer'
-          }}
-        >
-          返回
-        </button>
+      <div className="lyrics-page">
+        <div className="lyrics-page__empty">
+          <span className="lyrics-page__empty-text">暂无播放中的歌曲</span>
+          <Button variant="primary" onClick={onBack}>
+            返回
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'relative',
-      overflow: 'hidden',
-      backgroundColor: 'var(--bg-base)'
-    }}>
-      {/* 内容层 */}
-      <div style={{
-        position: 'relative',
-        zIndex: 1,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '24px'
-      }}>
-        {/* 迷你播放器头部 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
-          <button
-            onClick={onBack}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              border: 'none',
-              background: 'rgba(255, 255, 255, 0.8)',
-              backdropFilter: 'blur(10px)',
-              cursor: 'pointer',
-              padding: '8px 16px',
-              borderRadius: '20px',
-              color: 'var(--text-primary)',
-              transition: 'all 0.2s ease',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.95)';
-              e.currentTarget.style.transform = 'translateX(-2px)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
-              e.currentTarget.style.transform = 'translateX(0)';
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
-            }}
-          >
-            <ArrowLeft size={18} />
-            <span style={{ fontSize: '14px', fontWeight: 500 }}>返回</span>
+    <div className="lyrics-page">
+      <div className="lyrics-page__ambient" style={ambientStyle} aria-hidden="true" />
+
+      <div className="lyrics-page__content">
+        <div className="lyrics-page__header">
+          <button onClick={onBack} className="lyrics-page__back" aria-label="返回">
+            <ArrowLeft size={16} />
+            <span>返回</span>
           </button>
-          <div style={{ width: '48px', height: '48px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
+
+          <div className="lyrics-page__cover">
             <SongCover src={currentSong.cover} variant="icon" iconSize={18} onError={handleCoverError} />
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentSong?.name}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>{currentSong?.artist}</div>
+
+          <div className="lyrics-page__meta">
+            <div className="lyrics-page__title">{currentSong.name}</div>
+            <div className="lyrics-page__artist">{currentSong.artist}</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-            <button onClick={playPrevious} className="player-btn" aria-label="上一首"><SkipBack size={16} fill="currentColor" /></button>
-            <button onClick={() => (isPlaying ? pause() : resume())} aria-label={isPlaying ? '暂停' : '播放'} style={{ width: '38px', height: '38px', borderRadius: '50%', border: 'none', backgroundColor: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}>
-              {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{ marginLeft: '1px' }} />}
+
+          <div className="lyrics-page__controls">
+            <button onClick={playPrevious} className="player-btn" aria-label="上一首">
+              <SkipBack size={16} fill="currentColor" />
             </button>
-            <button onClick={playNext} className="player-btn" aria-label="下一首"><SkipForward size={16} fill="currentColor" /></button>
+            <button
+              onClick={() => (isPlaying ? pause() : resume())}
+              aria-label={isPlaying ? '暂停' : '播放'}
+              className="lyrics-page__play"
+            >
+              {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+            </button>
+            <button onClick={playNext} className="player-btn" aria-label="下一首">
+              <SkipForward size={16} fill="currentColor" />
+            </button>
           </div>
         </div>
 
-        {/* 歌词显示区域 */}
-        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+        <div className="lyrics-page__body">
           {lyricsLoading ? (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%'
-            }}>
-              <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>歌词加载中...</span>
-            </div>
+            <div className="lyrics-page__loading">歌词加载中…</div>
           ) : (
             <>
               {/* 当前时间由 LyricsDisplay 自己订阅 playbackClock：页面不随采样 tick 重渲染 */}
-              <LyricsDisplay
-                lrcContent={lyrics || ''}
-                onLyricClick={handleLyricClick}
-              />
-              {!lyrics && (
-                <div style={{
-                  position: 'absolute',
-                  bottom: '20px',
-                  left: 0,
-                  right: 0,
-                  textAlign: 'center',
-                  fontSize: '12px',
-                  color: 'var(--text-tertiary)'
-                }}>
-                  当前歌曲暂无歌词
-                </div>
-              )}
+              <LyricsDisplay lrcContent={lyrics || ''} onLyricClick={handleLyricClick} />
+              {!lyrics && <div className="lyrics-page__none">当前歌曲暂无歌词</div>}
             </>
           )}
         </div>
