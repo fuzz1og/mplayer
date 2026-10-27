@@ -3143,3 +3143,135 @@
   font-size: var(--text-lg);
   font-weight: var(--weight-medium);
 }
+/* ── 歌词显示（1.9.0）── */
+.lyrics {
+  overflow-x: hidden;
+  height: 100%;
+  padding: 20px 0;
+}
+
+.lyrics[data-scroll] {
+  overflow-y: auto;
+}
+
+.lyrics__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.lyrics__empty-text {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  text-shadow: var(--lyrics-shadow);
+}
+
+.lyrics__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lyrics__line {
+  padding: 8px 20px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transform: scale(1);
+  transition:
+    background var(--duration-slow) var(--ease-standard),
+    transform var(--duration-slow) var(--ease-standard);
+}
+
+.lyrics__line:hover:not([data-active]) {
+  background: var(--accent-subtle);
+}
+
+.lyrics__line[data-active] {
+  transform: scale(1.02);
+}
+
+.lyrics__text {
+  color: var(--text-secondary);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  line-height: 1.8;
+  letter-spacing: 0;
+  text-shadow: var(--lyrics-shadow);
+  user-select: none;
+  transition:
+    color var(--duration-slow) var(--ease-standard),
+    font-size var(--duration-slow) var(--ease-standard),
+    letter-spacing var(--duration-slow) var(--ease-standard);
+}
+
+.lyrics__line[data-active] .lyrics__text {
+  color: var(--text-primary);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.5px;
+  text-shadow: var(--lyrics-shadow-active);
+}
+/* ── 发现页歌单卡（1.9.0）── */
+.dpcard {
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  cursor: pointer;
+  transform: translateY(0);
+  transition:
+    transform var(--duration-normal) var(--ease-standard),
+    box-shadow var(--duration-normal) var(--ease-standard);
+}
+
+.dpcard:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+
+.dpcard__cover {
+  position: relative;
+  padding-top: 100%;
+  background: var(--skeleton-base);
+}
+
+.dpcard__img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dpcard__count {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--delete-scrim);
+  color: var(--text-inverse);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(4px);
+}
+
+.dpcard__body {
+  padding: var(--space-3);
+}
+
+.dpcard__name {
+  display: -webkit-box;
+  min-height: 36px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-normal);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}

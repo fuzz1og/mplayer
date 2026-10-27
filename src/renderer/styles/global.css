@@ -172,6 +172,10 @@
   /* 删除按钮压暗底（1.9.0：从内联 rgba 收编） */
 
   /* 封面渐变占位（1.9.0：从内联 linear-gradient 收编） */
+
+  /* 歌词文字阴影（1.9.0：从内联 textShadow 收编） */
+  --lyrics-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+  --lyrics-shadow-active: 0 2px 4px rgba(255, 255, 255, 0.9), 0 0 20px rgba(47, 95, 208, 0.35);
   --cover-gradient: linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%);
   --delete-scrim: rgba(0, 0, 0, 0.5);
   --featured-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.68) 82%);
