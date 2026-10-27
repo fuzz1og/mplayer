@@ -56,7 +56,7 @@
 
 > **桌面端系统要求**：Windows 10 及以上（x64）；macOS 13 (Ventura) 及以上（Intel / Apple Silicon）；Linux x64。macOS 13 的下限来自 Electron 44 内嵌的 Chromium —— 更早的系统上安装包能装但**无法运行**。
 
-桌面端内置应用内更新：优先 GitHub 直连，失败自动降级到加速镜像（gh-proxy / ghfast / ghproxy）。
+桌面端内置应用内更新：进入应用即检查一次，有新版本就后台静默下载，下载完成后应用内确认「立即安装并重启」；下载通道按实测延迟排序——镜像在前（gh-proxy / ghfast / ghproxy.net），GitHub 直连垫底。
 
 ## ✨ 特性
 
@@ -72,7 +72,7 @@
 - **📱 双端一致** — 桌面（Electron + React）与移动端（Expo + React Native）共享 core，功能与数据语义对齐
 - **🔒 后台播放与锁屏控制** — Android 走自写 Kotlin 模块（media3 ExoPlayer 原生持队列 + 原生推进 + `MediaLibraryService` 媒体会话）：后台保活，通知栏与锁屏控制跟随换曲；iOS 回落 expo-audio
 - **🌗 深色模式** — 移动端双主题 token 体系 + textVariants 语义变体，跟随系统或手动切换
-- **⚡ 智能更新** — 桌面端更新走 GitHub 直连，失败自动降级到加速镜像（gh-proxy / ghfast / ghproxy）
+- **⚡ 智能更新** — 双端进入应用即检查一次更新；桌面端静默后台下载 + 应用内确认安装（通道按实测延迟排序，镜像在前、GitHub 直连垫底），移动端弹窗跳浏览器下载
 
 **诊断与本地**
 
@@ -167,7 +167,7 @@ flowchart LR
 - **歌单**：批量选择与批量操作、加入歌单可就地新建、发现歌单一键导出到本地歌单
 - **深色模式**：跟随系统 / 浅色 / 深色三态
 - **下载**：SAF 授权保存到公共下载目录；MP3 内嵌元数据（标题 / 歌手 / 专辑 / 封面）+ 同目录 `.lrc` 歌词侧车；下载列表显示封面
-- **设置**：直连设置（auto / direct 来源开关）、tier3 订阅 + 每源统计（含健康度）、检查更新、缓存、播放日志、播放诊断
+- **设置**：直连设置（auto / direct 来源开关）、tier3 订阅 + 每源统计（含健康度）、检查更新（下载通道 + 测速）、缓存、播放日志、播放诊断
 - **详情页**：排行榜 / 歌单 / 专辑 / 歌手 / 发现歌单
 
 完整路由表见 [docs/agents/architecture.md](docs/agents/architecture.md)（agent 视角）与 `packages/mobile/app/` 目录。
