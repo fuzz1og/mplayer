@@ -70,3 +70,6 @@ graphify-out/
 
 # dsh harness worktree 容器（勿提交）
 .dsh-worktrees/
+
+# 1.9.0 UI 原型的对照材料（原型图 + 量测脚本 + 对齐规格）：证据不入库，见 docs/specs 的几何表
+.proto/
