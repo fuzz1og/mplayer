@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Database, Folder, Bell, Shield, Download } from 'lucide-react';
-import { Button, Group, Input, Row, Section, Tag } from '@/renderer/ui';
+import { Alert, Button, Checkbox, Group, Input, Progress, Row, Section, Segmented, Stepper, Switch, Tag } from '@/renderer/ui';
 
 type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -17,6 +17,12 @@ const applyTheme = (mode: ThemeMode) => {
 const UiLabPage: React.FC = () => {
   const [mode, setMode] = useState<ThemeMode>('system');
   const [checked, setChecked] = useState(true);
+  const [autoUpdate, setAutoUpdate] = useState(true);
+  const [notify, setNotify] = useState(false);
+  const [remembersPosition, setRemembersPosition] = useState(true);
+  const [segment, setSegment] = useState('全部');
+  const [viewMode, setViewMode] = useState('列表');
+  const [volume, setVolume] = useState(60);
 
   const choose = (next: ThemeMode) => {
     setMode(next);
@@ -93,6 +99,92 @@ const UiLabPage: React.FC = () => {
           <Input placeholder="搜索歌曲、歌手、专辑" aria-label="搜索示例" />
           <Input placeholder="禁用输入" aria-label="禁用示例" disabled />
         </div>
+      </Section>
+
+      <Section
+        title="表单控件"
+        footer="开关 38×23；分段选中用表面明度差表达；Tab 聚焦、方向键切换、空格/Enter 触发，焦点环沿用强调色。"
+      >
+        <Group>
+          <Row
+            label="自动更新"
+            detail="启动时检查"
+            trailing={<Switch checked={autoUpdate} onChange={setAutoUpdate} ariaLabel="自动更新" />}
+          />
+          <Row label="桌面通知" trailing={<Switch checked={notify} onChange={setNotify} ariaLabel="桌面通知" />} />
+          <Row
+            label="禁用开关"
+            trailing={<Switch checked={false} onChange={() => undefined} ariaLabel="禁用开关" disabled />}
+          />
+        </Group>
+
+        <Group>
+          <div className="ui-lab__demo">
+            <Checkbox checked={remembersPosition} onChange={setRemembersPosition} label="记住播放位置" />
+            <Checkbox checked={false} onChange={() => undefined} label="禁用选项" disabled />
+          </div>
+          <div className="ui-lab__demo">
+            <Segmented
+              options={['全部', '歌曲', '专辑', '歌手']}
+              value={segment}
+              onChange={setSegment}
+              ariaLabel="资料库筛选"
+            />
+            <Segmented
+              size="sm"
+              options={['列表', '网格']}
+              value={viewMode}
+              onChange={setViewMode}
+              ariaLabel="视图模式"
+            />
+          </div>
+        </Group>
+
+        <Group>
+          <div className="ui-lab__form-stack">
+            <Progress value={64} label="缓存占用" ariaLabel="缓存占用" />
+            <Progress value={38} tone="success" label="下载进度" ariaLabel="下载进度" />
+          </div>
+        </Group>
+
+        <Group>
+          <div className="ui-lab__form-stack">
+            <Alert
+              tone="info"
+              title="直连可用"
+              action={
+                <Button size="sm" variant="plain">
+                  查看来源
+                </Button>
+              }
+            >
+              网易云与 QQ 音乐当前都能直连，无需走第三方解析源。
+            </Alert>
+            <Alert tone="warning" title="延迟偏高">
+              最近一次请求耗时 1.8s，建议检查网络或切换解析源。
+            </Alert>
+            <Alert
+              tone="danger"
+              title="解析失败"
+              action={
+                <Button size="sm" variant="plain">
+                  重试
+                </Button>
+              }
+            >
+              当前歌曲没有可播放地址，已自动跳转到下一首。
+            </Alert>
+            <Alert tone="success" title="缓存清理完成">
+              释放 1.24 GB，播放记录与收藏不受影响。
+            </Alert>
+          </div>
+        </Group>
+
+        <Group>
+          <div className="ui-lab__demo">
+            <Stepper label="音量" value={volume} min={0} max={100} step={5} onChange={setVolume} />
+          </div>
+        </Group>
       </Section>
 
       <Section title="表面 token" footer="窗口 / 内容 / 卡片 / 选中 / 发丝线 / 强调色。">
