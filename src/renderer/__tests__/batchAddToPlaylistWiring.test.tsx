@@ -68,7 +68,7 @@ describe('「批量加入歌单」入口不依赖页面回调（#562）', () => 
     fireEvent.click(screen.getByRole('button', { name: /批量加入歌单/ }));
 
     // 弹窗标题出现 = 入口是活的（修复前这里永远不会出现）
-    await waitFor(() => expect(screen.getByText('批量加入歌单', { selector: 'h3' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { name: '批量加入歌单' })).toBeTruthy());
     expect(h.invoke).toHaveBeenCalledWith('playlist:getAll');
   });
 
@@ -80,7 +80,7 @@ describe('「批量加入歌单」入口不依赖页面回调（#562）', () => 
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.click(screen.getByRole('button', { name: /批量加入歌单/ }));
 
-    await waitFor(() => expect(screen.getByText('批量加入歌单', { selector: 'h3' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { name: '批量加入歌单' })).toBeTruthy());
     // 通知回调是**成功之后**才调，弹窗刚开时不该被调
     expect(onBatchAddToPlaylist).not.toHaveBeenCalled();
   });

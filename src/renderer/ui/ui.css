@@ -581,3 +581,297 @@
   line-height: var(--leading-normal);
   resize: vertical;
 }
+
+/* ── 加入歌单弹层 ── */
+.add-to-playlist__song {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 0 14px 12px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-card-hover);
+}
+
+.add-to-playlist__cover {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--surface-window);
+}
+
+.add-to-playlist__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.add-to-playlist__name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-to-playlist__artist {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.add-to-playlist__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.add-to-playlist__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  padding: 32px 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.add-to-playlist__create {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 14px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.add-to-playlist__status {
+  padding: 10px 14px 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+/* ── 链接导入 ── */
+.link-import {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.link-import__lead {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.link-import__hint {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.link-import__formats {
+  margin: 0 0 4px;
+  padding-left: 18px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.link-import__error {
+  margin-top: 4px;
+}
+
+.link-import__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* ── 导入歌单弹层 ── */
+.import-playlist {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.import-playlist__title {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.import-playlist__preview {
+  margin-top: 16px;
+}
+
+.import-playlist__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.import-playlist__current {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.import-playlist__rows {
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.import-playlist__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.import-playlist__row[data-status='found'] { color: var(--success); }
+.import-playlist__row[data-status='failed'] { color: var(--danger-text); }
+
+.import-playlist__line {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-playlist__spin {
+  animation: spin 1s linear infinite;
+}
+
+.import-playlist__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 0 4px;
+}
+
+.import-playlist__summary-title {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+}
+
+.import-playlist__summary-text {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.import-playlist__failures {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.import-playlist__failures-title {
+  color: var(--danger-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.import-playlist__failure {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--danger-subtle);
+  font-size: var(--text-xs);
+}
+
+.import-playlist__failure-line {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.import-playlist__failure-reason {
+  color: var(--text-tertiary);
+}
+
+/* ── 链接导入预览网格 ── */
+.link-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.link-preview__lead {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.link-preview__grid {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--group-radius);
+  background: var(--surface-card);
+  overflow: hidden;
+}
+
+.link-preview__head,
+.link-preview__row {
+  display: grid;
+  grid-template-columns: 40px 1fr 1fr 88px;
+  gap: 8px;
+  align-items: center;
+  min-height: var(--row-height);
+  padding: 0 var(--row-padding-x);
+  font-size: var(--text-sm);
+}
+
+.link-preview__head {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.link-preview__body {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.link-preview__row + .link-preview__row {
+  border-top: 1px solid var(--hairline);
+}
+
+.link-preview__row[data-checked] {
+  background: var(--surface-selected);
+}
+
+.link-preview__cell {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-preview__cell--name {
+  font-weight: var(--weight-medium);
+}
+
+.link-preview__cell--source {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.link-preview__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -163,7 +163,8 @@ export const Dialog: React.FC<DialogProps> = ({
   const classes = ['ui-dialog', `ui-dialog--${size}`];
   if (className) classes.push(className);
 
-  return (
+  // portal 到 body：弹层不被播放栏/侧栏的 backdrop-filter 包含块捕获（#245）
+  return createPortal(
     <dialog
       ref={dialogRef}
       className={classes.join(' ')}
@@ -184,7 +185,8 @@ export const Dialog: React.FC<DialogProps> = ({
       </div>
       <div className="ui-dialog__body">{children}</div>
       {footer != null ? <div className="ui-dialog__footer">{footer}</div> : null}
-    </dialog>
+    </dialog>,
+    document.body,
   );
 };
 

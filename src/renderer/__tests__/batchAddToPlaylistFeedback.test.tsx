@@ -14,13 +14,9 @@ vi.mock('@/renderer/services/IpcClient', () => ({
   IpcClient: { invoke: (...args: unknown[]) => h.invoke(...args) },
 }));
 
-vi.mock('antd', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('antd')>();
-  return {
-    ...actual,
-    message: { success: h.success, error: h.error, info: h.info, warning: vi.fn() },
-  };
-});
+vi.mock('@/renderer/services/toastStore', () => ({
+  toast: { success: h.success, error: h.error, info: h.info, warning: vi.fn() },
+}));
 
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 
@@ -74,7 +70,7 @@ describe('批量加入歌单：新建成功后必须给出反馈并关闭（#551
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('新建歌单...'), { target: { value: '我的新歌单' } });
+    fireEvent.change(screen.getByPlaceholderText('新建歌单…'), { target: { value: '我的新歌单' } });
     fireEvent.click(screen.getByRole('button', { name: /新建并加入/ }));
 
     await waitFor(() => expect(h.invoke).toHaveBeenCalledWith('playlist:create', '我的新歌单'));
@@ -99,7 +95,7 @@ describe('批量加入歌单：新建成功后必须给出反馈并关闭（#551
       <BatchAddToPlaylistModal songs={[song('a')]} isVisible onClose={onClose} onSuccess={onSuccess} />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('新建歌单...'), { target: { value: 'X' } });
+    fireEvent.change(screen.getByPlaceholderText('新建歌单…'), { target: { value: 'X' } });
     fireEvent.click(screen.getByRole('button', { name: /新建并加入/ }));
 
     await waitFor(() => expect(h.invoke).toHaveBeenCalledWith('playlist:delete', 42));
