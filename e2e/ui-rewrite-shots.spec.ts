@@ -1,12 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-/**
- * 1.9.0 UI 验收截图（**Chromium + electronAPI stub**，不是真实 Electron 进程）。
- * 用途：核对新 UI 是否按设计落地（分组卡、发丝线、侧栏 7 项、设置全屏）。
- * 证据层级见 PR 正文：本批拿不到 Electron 二进制，故只到这一层。
- *
- * 用法：npx playwright test e2e/ui-rewrite-shots.spec.ts --workers=1
- */
+/** 1.9.0 UI 验收截图（Chromium + electronAPI stub，非真实 Electron）。用法：npx playwright test 本文件 --workers=1 */
 const ROUTES: Array<[string, string, string]> = [
   ['ui-01-recommend', '/#/recommend', '推荐'],
   ['ui-02-discover', '/#/discover', '发现'],
