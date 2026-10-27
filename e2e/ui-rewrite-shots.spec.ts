@@ -52,7 +52,9 @@ test.beforeEach(async ({ page }) => {
         if (channel === 'playlist:getSongs') return songs;
         if (channel === 'settings:getSourceModes') return { status: {} };
         if (channel === 'getArtists') return { artists: [], more: false };
-        if (channel === 'cache:getStats') return { totalSize: 0, fileCount: 0, songsCount: 0, coversCount: 0, audioCount: 0, urlsCount: 0 };
+        // 缓存页截图要有非零数据：否则「按类型清理」按钮全是 disabled，看不出改动。
+        if (channel === 'cache:getStats') return { totalSize: 52 * 1024 * 1024, fileCount: 120, songsCount: 50, coversCount: 50, audioCount: 20, urlsCount: 0, bytes: { songs: 3 * 1024 * 1024, urls: 0, covers: 20 * 1024 * 1024, audio: 29 * 1024 * 1024, other: 0 } };
+        if (channel === 'cache:getConfig') return { limitMb: 100, autoClean: true, stepMb: 20, minMb: 20, maxMb: 4096, dir: 'C:/Users/Admin/AppData/Roaming/MPlayer/cache' };
         if (channel === 'settings:getTier3State') return { enabled: false, subscriptions: [] };
         return undefined;
       },

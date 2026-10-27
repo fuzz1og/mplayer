@@ -45,6 +45,8 @@ test.beforeEach(async ({ page }) => {
         if (channel === 'history:get') return [];
         if (channel === 'favorite:getAll') return songs;
         if (channel === 'cache:getStats') return { totalSize: 0, fileCount: 0, songsCount: 0, coversCount: 0, audioCount: 0, urlsCount: 0 };
+        // 全屏播放器截图：主进程取色接口的 stub 值（真实像素计算由 coverAccent 单测覆盖）。
+        if (channel === 'cover:getAccent') return { hue: 218, saturation: 0.55, lightness: 0.32 };
         if (channel === 'settings:getThemeMode') return 'system';
         if (channel === 'update:getVersion') return '1.9.0';
         if (channel === 'download:start') {
