@@ -35,70 +35,24 @@ const PlayModeButton: React.FC<PlayModeButtonProps> = ({ mode, onModeChange, siz
   };
 
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
+    <div className="play-mode">
+      {/* hover 表现（颜色 + 底色）已移到 .play-mode__trigger:hover，不再用 onMouseOver 改内联样式 */}
       <button
         onClick={handleClick}
         aria-label={`播放模式: ${config.label}`}
         aria-expanded={showTooltip}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
-        style={{
-          border: 'none',
-          background: 'transparent',
-          cursor: 'pointer',
-          padding: '6px',
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--text-tertiary)',
-          transition: 'all 0.15s ease',
-        }}
-        onMouseOver={(e) => {
-          e.currentTarget.style.color = 'var(--text-secondary)';
-          e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-        }}
-        onMouseOut={(e) => {
-          e.currentTarget.style.color = 'var(--text-tertiary)';
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }}
+        className="play-mode__trigger"
       >
         {React.cloneElement(config.icon as React.ReactElement<{ size?: number }>, { size })}
       </button>
 
       {/* 提示框 */}
       {showTooltip && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '100%',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            marginBottom: '8px',
-            padding: '6px 10px',
-            backgroundColor: 'var(--text-primary)',
-            color: 'white',
-            fontSize: '12px',
-            borderRadius: '4px',
-            whiteSpace: 'nowrap',
-            zIndex: 100,
-            pointerEvents: 'none',
-          }}
-        >
+        <div className="play-mode__tooltip">
           {config.label}
-          <div
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: 0,
-              height: 0,
-              borderLeft: '4px solid transparent',
-              borderRight: '4px solid transparent',
-              borderTop: '4px solid var(--text-primary)',
-            }}
-          />
+          <div className="play-mode__tooltip-arrow" />
         </div>
       )}
     </div>

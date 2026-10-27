@@ -65,48 +65,14 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
   }, [currentSong]);
 
   return (
-    <div
-      className={className ? `player-bar ${className}` : 'player-bar'}
-      style={{
-        height: 'var(--player-height)',
-        backgroundColor: 'var(--bg-player)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        borderTop: '1px solid var(--border-subtle)',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 var(--space-6)',
-        gap: 'var(--space-6)',
-        position: 'relative',
-        zIndex: 10,
-      }}
-    >
+    <div className={className ? `player-bar ${className}` : 'player-bar'}>
       {/* 左侧 - 封面 + 歌曲信息 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-3)',
-          width: '240px',
-          minWidth: '240px',
-        }}
-      >
+      <div className="player-bar__now-playing">
         {/* 封面 */}
         <button
           onClick={onCoverClick}
           aria-label="查看歌词"
-          style={{
-            width: '52px',
-            height: '52px',
-            borderRadius: '8px',
-            overflow: 'hidden',
-            backgroundColor: 'var(--skeleton-base)',
-            flexShrink: 0,
-            boxShadow: 'var(--shadow-md)',
-            cursor: onCoverClick ? 'pointer' : 'default',
-            border: 'none',
-            padding: 0,
-          }}
+          className={onCoverClick ? 'player-bar__cover player-bar__cover--clickable' : 'player-bar__cover'}
         >
           <SongCover
             src={currentSong?.cover}
@@ -118,54 +84,27 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
         </button>
 
         {/* 歌曲信息 */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              fontSize: 'var(--text-sm)',
-              fontWeight: 'var(--weight-medium)',
-              color: 'var(--text-primary)',
-              lineHeight: 'var(--leading-tight)',
-              minWidth: 0,
-            }}
-          >
+        <div className="player-bar__meta">
+          <div className="player-bar__title-row">
             {isPlaying && currentSong && (
-              <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '2px', height: '12px', flexShrink: 0 }}>
-                <span style={{ width: '2px', height: '6px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite' }} />
-                <span style={{ width: '2px', height: '10px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
-                <span style={{ width: '2px', height: '7px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+              <span className="player-bar__equalizer">
+                <span />
+                <span />
+                <span />
               </span>
             )}
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span className="player-bar__title">
               {currentSong?.name || '未播放'}
             </span>
           </div>
-          <div
-            style={{
-              fontSize: 'var(--text-xs)',
-              color: 'var(--text-tertiary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              marginTop: '2px',
-            }}
-          >
+          <div className="player-bar__artist">
             {currentSong ? `${currentSong.artist}` : '—'}
           </div>
         </div>
       </div>
 
       {/* 中间 - 控制按钮 + 进度条 */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 'var(--space-1)',
-          maxWidth: '500px',
-        }}
-      >
+      <div className="player-bar__center">
         <PlayerControls
           isPlaying={isPlaying}
           loading={isLoading}
@@ -181,24 +120,14 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
       </div>
 
       {/* 右侧 - 功能按钮 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-2)',
-        }}
-      >
+      <div className="player-bar__actions">
         {/* 收藏按钮 */}
         <button
           onClick={() => currentSong && toggleFavorite(currentSong)}
           disabled={!currentSong}
           aria-label={fav ? '取消收藏' : '收藏'}
           aria-pressed={fav}
-          className="player-btn"
-          style={{
-            color: fav ? 'var(--accent)' : 'var(--text-tertiary)',
-            opacity: currentSong ? 1 : 0.3,
-          }}
+          className="player-btn player-bar__favorite"
         >
           <Heart size={16} fill={fav ? 'currentColor' : 'none'} />
         </button>
@@ -209,7 +138,6 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           disabled={!currentSong}
           aria-label="加入歌单"
           className="player-btn"
-          style={{ opacity: currentSong ? 1 : 0.3 }}
         >
           <ListMusic size={16} />
         </button>
@@ -220,7 +148,6 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           disabled={!currentSong}
           aria-label="歌词"
           className="player-btn"
-          style={{ opacity: currentSong ? 1 : 0.3 }}
         >
           <Mic size={16} />
         </button>
@@ -231,7 +158,6 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           disabled={!currentSong}
           aria-label="下载"
           className="player-btn"
-          style={{ opacity: currentSong ? 1 : 0.3 }}
         >
           <Download size={16} />
         </button>

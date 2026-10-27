@@ -19,14 +19,13 @@ const PlayerControls: React.FC<PlayerControlsProps> = React.memo(({
   isPlaying, loading = false, hasCurrentSong, playMode,
   onPlayPause, onPrev, onNext, onModeChange,
 }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+  <div className="player-controls">
     <PlayModeButton mode={playMode} onModeChange={onModeChange} size={16} />
     <button
       onClick={onPrev}
       disabled={!hasCurrentSong}
       aria-label="上一首"
-      className="player-btn"
-      style={{ color: hasCurrentSong ? 'var(--text-secondary)' : 'var(--text-disabled)' }}
+      className="player-btn player-controls__skip"
     >
       <SkipBack size={18} fill="currentColor" />
     </button>
@@ -34,20 +33,7 @@ const PlayerControls: React.FC<PlayerControlsProps> = React.memo(({
       onClick={onPlayPause}
       disabled={!hasCurrentSong}
       aria-label={loading ? '加载中' : isPlaying ? '暂停' : '播放'}
-      style={{
-        border: 'none',
-        background: hasCurrentSong ? 'var(--accent)' : 'var(--gray-300)',
-        cursor: hasCurrentSong ? 'pointer' : 'not-allowed',
-        padding: '11px',
-        borderRadius: 'var(--radius-full)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--text-inverse)',
-        boxShadow: hasCurrentSong ? 'var(--shadow-md)' : 'none',
-        transition: 'all var(--duration-fast) var(--ease-out)',
-        opacity: hasCurrentSong ? 1 : 0.5,
-      }}
+      className="player-controls__play"
     >
       {loading ? (
         // #387：等待反馈——冷启 P50 约 1s 期间界面此前完全静止（移动端已有 preparing spinner）。
@@ -55,28 +41,19 @@ const PlayerControls: React.FC<PlayerControlsProps> = React.memo(({
         <span
           aria-hidden
           data-testid="player-loading"
-          style={{
-            display: 'inline-block',
-            width: '18px',
-            height: '18px',
-            borderRadius: 'var(--radius-full)',
-            border: '2px solid var(--border-subtle)',
-            borderTopColor: 'var(--text-inverse)',
-            animation: 'spin 0.8s linear infinite',
-          }}
+          className="player-controls__spinner"
         />
       ) : isPlaying ? (
         <Pause size={20} fill="white" />
       ) : (
-        <Play size={20} fill="white" style={{ marginLeft: '2px' }} />
+        <Play size={20} fill="white" className="player-controls__play-icon" />
       )}
     </button>
     <button
       onClick={onNext}
       disabled={!hasCurrentSong}
       aria-label="下一首"
-      className="player-btn"
-      style={{ color: hasCurrentSong ? 'var(--text-secondary)' : 'var(--text-disabled)' }}
+      className="player-btn player-controls__skip"
     >
       <SkipForward size={18} fill="currentColor" />
     </button>

@@ -17,20 +17,16 @@ const PlayerVolume: React.FC<PlayerVolumeProps> = React.memo(({
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '80px', maxWidth: '140px', justifyContent: 'flex-end' }}>
-      <button onClick={onToggleMute} aria-label={volume === 0 ? '取消静音' : '静音'}
-        style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+    <div className="player-volume">
+      <button onClick={onToggleMute} aria-label={volume === 0 ? '取消静音' : '静音'} className="player-volume__mute">
         {getVolumeIcon()}
       </button>
       <input
         type="range" min={0} max={100} value={volume}
         aria-label="音量"
         onChange={(e) => onVolumeChange(Number(e.target.value))}
-        style={{
-          width: '80px', height: '4px', WebkitAppearance: 'none', appearance: 'none',
-          background: `linear-gradient(to right, var(--text-secondary) ${volume}%, var(--border-default) ${volume}%)`,
-          borderRadius: '2px', outline: 'none', cursor: 'pointer',
-        }}
+        className="player-volume__slider"
+        style={{ '--volume': `${volume}%` } as React.CSSProperties}
       />
     </div>
   );

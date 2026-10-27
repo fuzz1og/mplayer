@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, X, Check, ChevronDown, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
-import { useButtonHover } from '@/renderer/hooks/useButtonHover';
 import { SOURCE_COLORS, ALL_SOURCE_COLOR } from '@/renderer/constants/sourceConfig';
 
 interface TopBarProps {
@@ -32,7 +31,6 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
   const [isFocused, setIsFocused] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const dropdownHoverProps = useButtonHover({ hoverBg: 'var(--bg-hover)', leaveBg: 'transparent' });
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -54,28 +52,16 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
 
   const currentSource = SOURCE_CONFIG[sourceType];
 
-  const searchBoxStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    backgroundColor: isFocused ? 'var(--bg-surface)' : 'var(--input-bg)',
-    border: `1px solid ${isFocused ? 'var(--accent)' : 'var(--input-border)'}`,
-    borderRadius: 'var(--radius-full)',
-    padding: '6px 4px 6px 6px',
-    transition: 'all var(--duration-normal) var(--ease-out)',
-    boxShadow: isFocused ? '0 0 0 3px var(--accent-subtle)' : 'var(--shadow-xs)',
-  };
-
   return (
     <header className="topbar">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flex: 1 }}>
+      <div className="topbar__leading">
         {/* 导航按钮 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexShrink: 0 }}>
+        <div className="topbar__nav">
           <button
             onClick={onBack}
             disabled={!canGoBack}
             className="player-btn"
             aria-label="后退"
-            style={{ opacity: canGoBack ? 1 : 0.3, cursor: canGoBack ? 'pointer' : 'not-allowed' }}
           >
             <ArrowLeft size={16} />
           </button>
@@ -84,7 +70,6 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
             disabled={!canGoForward}
             className="player-btn"
             aria-label="前进"
-            style={{ opacity: canGoForward ? 1 : 0.3, cursor: canGoForward ? 'pointer' : 'not-allowed' }}
           >
             <ArrowRight size={16} />
           </button>
@@ -97,64 +82,28 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
           </button>
         </div>
 
-        <div style={searchBoxStyle}>
+        <div className={isFocused ? 'topbar__search topbar__search--focused' : 'topbar__search'}>
           {/* 来源选择器 */}
-          <div ref={dropdownRef} style={{ position: 'relative', flexShrink: 0 }}>
+          <div
+            ref={dropdownRef}
+            className="topbar__source"
+            style={{ '--source-accent': currentSource.accent } as React.CSSProperties}
+          >
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 10px',
-                width: '90px',
-                borderRadius: 'var(--radius-full)',
-                fontSize: 'var(--text-xs)',
-                fontWeight: 'var(--weight-semibold)',
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: 'var(--bg-hover)',
-                color: 'var(--text-primary)',
-                transition: 'all var(--duration-fast) var(--ease-out)',
-              }}
+              className="topbar__source-trigger"
             >
-              <span
-                style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: 'var(--radius-full)',
-                  backgroundColor: currentSource.accent,
-                  flexShrink: 0,
-                }}
-              />
-              <span style={{ flex: 1, textAlign: 'center' }}>{currentSource.label}</span>
+              <span className="topbar__source-dot" />
+              <span className="topbar__source-label">{currentSource.label}</span>
               <ChevronDown
                 size={12}
-                style={{
-                  transition: 'transform var(--duration-normal) var(--ease-out)',
-                  transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                  flexShrink: 0,
-                }}
+                className={dropdownOpen ? 'topbar__source-chevron topbar__source-chevron--open' : 'topbar__source-chevron'}
               />
             </button>
 
             {/* 下拉菜单 */}
             {dropdownOpen && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 6px)',
-                  left: 0,
-                  minWidth: '130px',
-                  backgroundColor: 'var(--bg-surface)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-default)',
-                  boxShadow: 'var(--shadow-xl)',
-                  padding: 'var(--space-1)',
-                  zIndex: 200,
-                  animation: 'scaleIn var(--duration-fast) var(--ease-out)',
-                }}
-              >
+              <div className="topbar__dropdown">
                 {(Object.entries(SOURCE_CONFIG) as [SourceKey, typeof SOURCE_CONFIG[SourceKey]][]).map(([key, config], idx) => {
                   const isActive = sourceType === key;
                   return (
@@ -164,35 +113,12 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
                         onSourceTypeChange(key);
                         setDropdownOpen(false);
                       }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 'var(--space-2)',
-                        width: '100%',
-                        padding: '7px var(--space-3)',
-                        border: 'none',
-                        borderRadius: 'var(--radius-xs)',
-                        cursor: 'pointer',
-                        backgroundColor: isActive ? `${config.accent}10` : 'transparent',
-                        color: isActive ? config.accent : 'var(--text-primary)',
-                        fontSize: 'var(--text-sm)',
-                        fontWeight: isActive ? 'var(--weight-semibold)' : 'var(--weight-normal)',
-                        transition: 'background var(--duration-fast)',
-                        animation: dropdownOpen ? `dropdownItemFade var(--duration-normal) var(--ease-out) ${idx * 0.04}s both` : 'none',
-                      }}
-                      {...(!isActive ? { onMouseEnter: dropdownHoverProps.handleMouseEnter, onMouseLeave: dropdownHoverProps.handleMouseLeave } : {})}
+                      className={isActive ? 'topbar__source-item topbar__source-item--active' : 'topbar__source-item'}
+                      style={{ '--source-accent': config.accent, '--item-delay': `${idx * 0.04}s` } as React.CSSProperties}
                     >
-                      <span
-                        style={{
-                          width: '6px',
-                          height: '6px',
-                          borderRadius: 'var(--radius-full)',
-                          backgroundColor: config.accent,
-                          flexShrink: 0,
-                        }}
-                      />
+                      <span className="topbar__source-dot" />
                       {config.label}
-                      {isActive && <span style={{ marginLeft: 'auto', display: 'flex', color: config.accent }}><Check size={12} /></span>}
+                      {isActive && <span className="topbar__source-check"><Check size={12} /></span>}
                     </button>
                   );
                 })}
@@ -201,22 +127,14 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
           </div>
 
           {/* 分隔线 */}
-          <div
-            style={{
-              width: '1px',
-              height: '16px',
-              backgroundColor: 'var(--border-default)',
-              margin: '0 var(--space-2)',
-              flexShrink: 0,
-            }}
-          />
+          <div className="topbar__divider" />
 
           {/* 搜索输入 */}
-          <div style={{ display: 'flex', alignItems: 'center', flex: 1, padding: '0 var(--space-2)' }}>
+          <div className="topbar__search-field">
             <Search
               size={16}
               color={isFocused ? 'var(--accent)' : 'var(--text-tertiary)'}
-              style={{ marginRight: 'var(--space-2)', flexShrink: 0, transition: 'color var(--duration-fast)' }}
+              className="topbar__search-icon"
             />
             <input
               type="text"
@@ -227,21 +145,13 @@ const TopBar: React.FC<TopBarProps> = ({ onSearch, sourceType, onSourceTypeChang
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
               aria-label="搜索音乐、歌手、专辑"
-              style={{
-                flex: 1,
-                border: 'none',
-                outline: 'none',
-                background: 'transparent',
-                fontSize: 'var(--text-sm)',
-                color: 'var(--text-primary)',
-              } as React.CSSProperties}
+              className="topbar__search-input"
             />
             {searchValue && (
               <button
                 onClick={() => setSearchValue('')}
                 aria-label="清除搜索"
-                className="player-btn"
-                style={{ padding: 'var(--space-1)' }}
+                className="player-btn topbar__clear"
               >
                 <X size={14} />
               </button>
