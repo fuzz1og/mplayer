@@ -1,6 +1,6 @@
 ---
 name: runtime-verification
-description: MPlayer 双端真机验真——把「这次改动要证明什么」变成别人能复核的证据，桌面端在真实 Electron 进程上验、移动端在真机 / 模拟器上验，并声明证据来自哪个 runtime（单元 / jsdom → Chromium+stub → Expo Go → dev build → release APK → 真 Electron → 打包产物）。当任务或 PR 待验收、要写 PR 的 Evidence、改动触及 UI / 交互 / IPC / preload / 原生能力 / 播放链 / 安装包更新器，或用户说「上真机验一下」「实测一下」「附个证据」「验一下这个 PR」时使用。纯逻辑改动（CI 的四套件已覆盖）不必走真机。
+description: MPlayer 双端真机验真：把改动声称的行为在真实 Electron 进程 / 真机上跑出来，留下别人能复核的证据，并声明证据来自哪个 runtime。待验收的 PR、要写 PR 的 Evidence、改动触及 UI / IPC / preload / 原生能力 / 播放链 / 安装包更新器时用；用户要求实测也算。纯逻辑改动（CI 四套件已覆盖）不必。
 ---
 
 # 真机验真
