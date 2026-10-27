@@ -469,3 +469,142 @@ describe('DownloadService 取词决策单点（#608）', () => {
     expect(writtenLrc()).toContain('网易计划词');
   });
 });
+
+// ---------------------------------------------------------------------------
+// #685：资料库下载分段——暂停 / 恢复 / 取消 paused
+// ---------------------------------------------------------------------------
+describe('DownloadService 暂停 / 恢复 / 取消（#685）', () => {
+  let service: DownloadService;
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mplayer-dl-pause-'));
+    service = new DownloadService({ progressThrottleMs: 0 });
+    service.initialize({ downloadPath: dir });
+    routedResolveMock.resolve.mockReset();
+    routedResolveMock.resolve.mockImplementation(async (song: Song) => ({ url: song.url, nonFull: false }));
+    axiosMock.download.mockReset();
+  });
+
+  afterEach(async () => {
+    // 关掉测试里故意不结束的流：Windows 下句柄未释放会让 rmSync 报 EBUSY
+    service.getAllTasks().forEach((task) => {
+      if (task.status === 'downloading' || task.status === 'pending' || task.status === 'paused') {
+        service.cancelDownload(task.id);
+      }
+    });
+    await ticks(10);
+    rmSync(dir, { recursive: true, force: true });
+    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([]);
+  });
+
+  /** 一直不推数据、只在 abort 时结束的流：模拟「下载进行中」。 */
+  function serveStalledDownload(): void {
+    axiosMock.download.mockImplementationOnce(async ({ signal, onDownloadProgress }: any) => {
+      const stream = new Readable({ read() {} });
+      signal.addEventListener('abort', () => {
+        stream.destroy(new Error('aborted'));
+      });
+      onDownloadProgress?.({ loaded: 1024, total: 4096 });
+      return { headers: { 'content-type': 'audio/mpeg' }, data: stream };
+    });
+  }
+
+  /** 注册假窗口，收集 download:* 推送。 */
+  function captureDownloadEvents(): Array<{ channel: string; payload: unknown }> {
+    const events: Array<{ channel: string; payload: unknown }> = [];
+    const fakeWindow = {
+      webContents: { send: (channel: string, payload: unknown) => { events.push({ channel, payload }); } },
+    };
+    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([fakeWindow as unknown as BrowserWindow]);
+    return events;
+  }
+
+  it('暂停 downloading：转 paused、删除半成品、不推 download:error', async () => {
+    const events = captureDownloadEvents();
+    serveStalledDownload();
+    const [task] = await service.addBatchDownloads([makeSong({ id: 'pause-1', name: '暂停我' })]);
+    await ticks(10);
+
+    expect(task.status).toBe('downloading');
+    expect((require('fs').readdirSync(dir) as string[])).toHaveLength(1);
+
+    expect(service.pauseDownload(task.id)).toBe(true);
+    await ticks(20);
+
+    expect(task.status).toBe('paused');
+    expect(task.error).toBeUndefined();
+    expect((require('fs').readdirSync(dir) as string[])).toHaveLength(0);
+    expect(events.filter((event) => event.channel === 'download:error')).toHaveLength(0);
+    expect(
+      events.some((event) => event.channel === 'download:progress' && (event.payload as { status?: string }).status === 'paused')
+    ).toBe(true);
+  });
+
+  it('恢复 paused：progress 归零后重新下载（重下，非断点续传）', async () => {
+    serveStalledDownload();
+    const [task] = await service.addBatchDownloads([makeSong({ id: 'resume-1', name: '恢复我' })]);
+    await ticks(10);
+    expect(service.pauseDownload(task.id)).toBe(true);
+    await ticks(20);
+    expect(task.status).toBe('paused');
+    expect(task.progress).toBeGreaterThan(0);
+
+    serveDownload('audio/mpeg');
+    expect(service.resumeDownload(task.id)).toBe(true);
+    // 恢复即重新入队（并发可用时 processQueue 会同步把它置回 downloading）
+    expect(['pending', 'downloading']).toContain(task.status);
+    expect(task.progress).toBe(0);
+    await ticks(30);
+
+    expect(task.status).toBe('completed');
+    expect(task.progress).toBe(100);
+    expect(axiosMock.download).toHaveBeenCalledTimes(2);
+    expect((require('fs').readdirSync(dir) as string[]).some((file) => file.endsWith('.mp3'))).toBe(true);
+  });
+
+  it('暂停 pending 直接转 paused；取消 paused 转 error/已取消', async () => {
+    for (let i = 0; i < 3; i++) serveStalledDownload();
+    const tasks = await service.addBatchDownloads(
+      [1, 2, 3, 4].map((index) => makeSong({ id: 'pending-' + index, name: '排队' + index }))
+    );
+    await ticks(10);
+
+    expect(tasks.slice(0, 3).map((task) => task.status)).toEqual(['downloading', 'downloading', 'downloading']);
+    const queued = tasks[3];
+    expect(queued.status).toBe('pending');
+
+    expect(service.pauseDownload(queued.id)).toBe(true);
+    expect(queued.status).toBe('paused');
+
+    expect(service.cancelDownload(queued.id)).toBe(true);
+    expect(queued.status).toBe('error');
+    expect(queued.error).toBe('已取消');
+  });
+
+  it('cancel downloading 仍只发一次 download:error（catch 不重复通知）', async () => {
+    const events = captureDownloadEvents();
+    serveStalledDownload();
+    const [task] = await service.addBatchDownloads([makeSong({ id: 'cancel-1', name: '取消我' })]);
+    await ticks(10);
+
+    expect(service.cancelDownload(task.id)).toBe(true);
+    await ticks(20);
+
+    expect(task.status).toBe('error');
+    expect(task.error).toBe('已取消');
+    expect(events.filter((event) => event.channel === 'download:error')).toHaveLength(1);
+  });
+
+  it('pause/resume 对非预期状态返回 false', async () => {
+    serveDownload('audio/mpeg');
+    const [task] = await service.addBatchDownloads([makeSong({ id: 'done-1' })]);
+    await ticks(30);
+
+    expect(task.status).toBe('completed');
+    expect(service.pauseDownload(task.id)).toBe(false);
+    expect(service.resumeDownload(task.id)).toBe(false);
+    expect(service.pauseDownload('missing-task')).toBe(false);
+    expect(service.resumeDownload('missing-task')).toBe(false);
+  });
+});

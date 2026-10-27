@@ -39,15 +39,36 @@ function splitSize(text: string): [string, string] {
   return match ? [match[1], match[2]] : [text, ''];
 }
 
+/** 按类型清理的三组（与主进程 cache:clearKind 的入参一一对应）。 */
+type CacheClearKind = 'index' | 'covers' | 'audio';
+
+interface CacheCompositionGroup {
+  /** 色点 class 后缀（沿用 --index / --cover / --audio 三套 token）。 */
+  key: 'index' | 'cover' | 'audio';
+  clearKind: CacheClearKind;
+  label: string;
+  count: number;
+  bytes: number;
+}
+
 /** 三类构成：色点取 --chart-* token（唯一事实源在 global.css），JSON 条目统称「歌曲索引」。 */
-function buildGroups(stats: CacheStatsView) {
+function buildGroups(stats: CacheStatsView): CacheCompositionGroup[] {
   const bytes = stats.bytes ?? {};
-  const jsonCount = stats.songsCount + stats.urlsCount;
-  const jsonBytes = (bytes.songs ?? 0) + (bytes.urls ?? 0) + (bytes.other ?? 0);
+  // fileCount 减去四类已归类计数 = 解析不了的 other；「歌曲索引」按 songs + urls + other 计。
+  const otherCount = Math.max(
+    stats.fileCount - stats.songsCount - stats.urlsCount - stats.coversCount - stats.audioCount,
+    0,
+  );
   return [
-    { key: 'index', label: '歌曲索引', count: jsonCount, bytes: jsonBytes },
-    { key: 'cover', label: '封面图片', count: stats.coversCount, bytes: bytes.covers ?? 0 },
-    { key: 'audio', label: '音频文件', count: stats.audioCount, bytes: bytes.audio ?? 0 },
+    {
+      key: 'index',
+      clearKind: 'index',
+      label: '歌曲索引',
+      count: stats.songsCount + stats.urlsCount + otherCount,
+      bytes: (bytes.songs ?? 0) + (bytes.urls ?? 0) + (bytes.other ?? 0),
+    },
+    { key: 'cover', clearKind: 'covers', label: '封面图片', count: stats.coversCount, bytes: bytes.covers ?? 0 },
+    { key: 'audio', clearKind: 'audio', label: '音频文件', count: stats.audioCount, bytes: bytes.audio ?? 0 },
   ];
 }
 
@@ -59,10 +80,17 @@ const EMPTY_STATS: CacheStatsView = {
  * 缓存页（1.9.0 原型 §2）：存储卡 → 构成 → 位置。
  * 上限/自动清理由主进程持久化：cache:getConfig / setLimitMb / setAutoClean。
  */
+interface PendingClear {
+  kind: CacheClearKind;
+  label: string;
+  bytes: number;
+}
+
 const CacheSection: React.FC = () => {
   const [stats, setStats] = useState<CacheStatsView | null>(null);
   const [config, setConfig] = useState<CacheConfig>(FALLBACK_CONFIG);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [pendingClear, setPendingClear] = useState<PendingClear | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -109,6 +137,18 @@ const CacheSection: React.FC = () => {
       await load();
     } catch (error) {
       console.error('清除缓存失败:', error);
+    }
+  };
+
+  const handleClearKind = async () => {
+    if (!pendingClear) return;
+    try {
+      const cleared = await IpcClient.invoke<boolean>('cache:clearKind', pendingClear.kind);
+      if (cleared === false) return;
+      setPendingClear(null);
+      await load();
+    } catch (error) {
+      console.error('按类型清理缓存失败:', error);
     }
   };
 
@@ -215,6 +255,19 @@ const CacheSection: React.FC = () => {
                   </span>
                 }
                 detail={group.count + ' 个 · ' + formatSize(group.bytes)}
+                trailing={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={'清理' + group.label}
+                    disabled={group.count === 0}
+                    onClick={() =>
+                      setPendingClear({ kind: group.clearKind, label: group.label, bytes: group.bytes })
+                    }
+                  >
+                    清理
+                  </Button>
+                }
               />
             ))}
           </Group>
@@ -250,6 +303,26 @@ const CacheSection: React.FC = () => {
         }
       >
         {'将释放 ' + formatSize(used) + '，此操作不可恢复；播放记录与收藏不受影响。'}
+      </Dialog>
+
+      <Dialog
+        open={pendingClear !== null}
+        title={pendingClear ? '清理' + pendingClear.label : '清理缓存'}
+        onClose={() => setPendingClear(null)}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setPendingClear(null)}>
+              取消
+            </Button>
+            <Button variant="primary" onClick={() => void handleClearKind()}>
+              确定清理
+            </Button>
+          </>
+        }
+      >
+        {pendingClear
+          ? '将释放 ' + formatSize(pendingClear.bytes) + '，此操作不可恢复；仅清理「' + pendingClear.label + '」，其他缓存保留。'
+          : null}
       </Dialog>
     </section>
   );

@@ -1,5 +1,3 @@
-import type { ThemeMode } from './theme';
-
 /**
  * 外观偏好走 localStorage（仅渲染层），以 html[data-*] 生效；Token 覆盖在 global.css。
  * 主题仍以主进程 db（ThemeManager）为事实源，这里只镜像 theme 字段。
@@ -18,8 +16,6 @@ export interface AppearancePrefs {
   fontScale: FontScale;
   reduceMotion: Motion;
   lyricsSize: LyricsSize;
-  /** ThemeManager 的只读镜像（true source = 主进程 db 的 themeMode）。 */
-  theme?: ThemeMode;
 }
 
 export const DEFAULT_APPEARANCE: AppearancePrefs = {
@@ -56,7 +52,6 @@ export function readPrefs(): AppearancePrefs {
     fontScale: pick(raw.fontScale, FONT_SCALES, DEFAULT_APPEARANCE.fontScale),
     reduceMotion: pick(raw.reduceMotion, MOTIONS, DEFAULT_APPEARANCE.reduceMotion),
     lyricsSize: pick(raw.lyricsSize, LYRICS_SIZES, DEFAULT_APPEARANCE.lyricsSize),
-    theme: raw.theme === 'system' || raw.theme === 'light' || raw.theme === 'dark' ? raw.theme : undefined,
   };
 }
 
@@ -81,11 +76,6 @@ export function writePrefs(patch: Partial<AppearancePrefs>): AppearancePrefs {
   applyAppearance(next);
   for (const listener of listeners) listener(next);
   return next;
-}
-
-/** ThemeManager 的 db 值镜像入口（不进 data 属性，主题由 data-theme 走 ThemeManager）。 */
-export function mirrorTheme(theme: ThemeMode): void {
-  writePrefs({ theme });
 }
 
 export function subscribeAppearance(listener: (prefs: AppearancePrefs) => void): () => void {

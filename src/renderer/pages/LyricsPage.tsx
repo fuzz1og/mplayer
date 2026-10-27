@@ -7,6 +7,7 @@ import PlayerControls from '@/renderer/components/PlayerControls';
 import PlayerVolume from '@/renderer/components/PlayerVolume';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import SongCover from '@/renderer/components/SongCover';
+import { IpcClient } from '@/renderer/services/IpcClient';
 import { Button, Segmented } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -20,6 +21,27 @@ interface LyricsPageProps {
 }
 
 type StageView = 'lyrics' | 'queue' | 'detail';
+
+/** 主进程 cover:getAccent 返回的主色（HSL，hue 0-359、saturation/lightness 0-1）。 */
+interface CoverAccent {
+  hue: number;
+  saturation: number;
+  lightness: number;
+}
+
+/** IPC 返回不可信：只接受形状完整且数值有限的 HSL 三件套，否则当作取色失败。 */
+function isCoverAccent(value: unknown): value is CoverAccent {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<CoverAccent>;
+  return (
+    typeof candidate.hue === 'number' &&
+    Number.isFinite(candidate.hue) &&
+    typeof candidate.saturation === 'number' &&
+    Number.isFinite(candidate.saturation) &&
+    typeof candidate.lightness === 'number' &&
+    Number.isFinite(candidate.lightness)
+  );
+}
 
 /** 底栏分段控件的文案 → 视图（顺序即原型：歌词 / 队列 / 详情）。 */
 const VIEW_OPTIONS = ['歌词', '队列', '详情'] as const;
@@ -73,6 +95,8 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const [view, setView] = useState<StageView>('lyrics');
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
+  const [coverAccent, setCoverAccent] = useState<CoverAccent | null>(null);
+  const coverAccentRef = useRef<CoverAccent | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const position = usePlaybackPosition();
@@ -131,23 +155,55 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
     action();
   }, []);
 
-  /**
-   * 环境光取色：从封面 URL 的哈希推两种色相（不引 canvas、不碰跨域）。
-   * 无封面时不设变量 → CSS 回退 transparent，视觉上就是纯色底。
-   */
-  const ambientStyle = useMemo<CSSProperties>(() => {
+  // 环境光取色（#688）：封面变化时让主进程读真实像素算主色；失败/无封面保持空样式，
+  // CSS 的 var(--np-glow-*, transparent) 会让环境光自然退回纯色底。
+  useEffect(() => {
     const cover = currentSong?.cover;
-    if (!cover) return {};
-    let hash = 0;
-    for (let i = 0; i < cover.length; i += 1) hash = (hash * 31 + cover.charCodeAt(i)) % 360;
-    // 原型的环境光是封面取色的蓝紫：色相收在 200–290 之间，亮度压到适合暗舞台
-    const hueA = 205 + (hash % 45);
-    const hueB = 250 + ((hash * 7) % 35);
-    return {
-      '--np-glow-a': `hsl(${hueA} 55% 28% / 0.85)`,
-      '--np-glow-b': `hsl(${hueB} 45% 22% / 0.7)`,
-    } as CSSProperties;
+    if (!cover) {
+      if (coverAccentRef.current !== null) {
+        coverAccentRef.current = null;
+        setCoverAccent(null);
+      }
+      return;
+    }
+    // 换歌先撤掉上一首的颜色，避免新封面取色期间还挂着旧主色。
+    if (coverAccentRef.current !== null) {
+      coverAccentRef.current = null;
+      setCoverAccent(null);
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const accent = await IpcClient.invoke<CoverAccent | null>('cover:getAccent', cover);
+        if (cancelled) return;
+        const next = isCoverAccent(accent) ? accent : null;
+        // 取色失败/结果非法时若本来就是空样式，不触发无意义的重渲染。
+        if (next === null && coverAccentRef.current === null) return;
+        coverAccentRef.current = next;
+        setCoverAccent(next);
+      } catch {
+        // 无 preload/桥不可用/主进程异常：静默回落纯色底。
+        if (cancelled || coverAccentRef.current === null) return;
+        coverAccentRef.current = null;
+        setCoverAccent(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [currentSong?.cover]);
+
+  /** 主色 → 两团环境光的 CSS 变量（仍是 --np-glow-a/b 形状，CSS 侧不用改）。 */
+  const ambientStyle = useMemo<CSSProperties>(() => {
+    if (!coverAccent) return {};
+    const hue = coverAccent.hue;
+    const saturation = Math.round(coverAccent.saturation * 100);
+    const lightness = Math.round(coverAccent.lightness * 100);
+    return {
+      '--np-glow-a': `hsl(${hue} ${saturation}% ${lightness}% / 0.85)`,
+      '--np-glow-b': `hsl(${hue} ${saturation}% ${Math.max(0, lightness - 8)}% / 0.7)`,
+    } as CSSProperties;
+  }, [coverAccent]);
 
   /** 队列显示顺序与队列页一致：随机模式下就是随机序（#511）。 */
   const displayQueue = useMemo(
@@ -172,6 +228,12 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const artistLine = currentSong.album
     ? `${currentSong.artist} · ${currentSong.album}`
     : currentSong.artist;
+  // 音质只认 playback 回写的 audioTag：无标记（普通）不冒充「无损」(#688 评审)。
+  const qualityLabel = currentSong.audioTag === 'preview'
+    ? '试听版'
+    : currentSong.audioTag === 'invalid'
+      ? '不可播'
+      : '标准';
 
   const detailRows: Array<{ label: string; value: string }> = [
     { label: '歌名', value: currentSong.name },
@@ -179,7 +241,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
     { label: '专辑', value: currentSong.album || '—' },
     { label: '来源', value: SOURCE_DISPLAY_NAMES[currentSong.sourceType] ?? currentSong.sourceType },
     { label: '时长', value: formatClock(totalDuration) },
-    { label: '音质', value: currentSong.audioTag === 'preview' ? '试听版' : '无损' },
+    { label: '音质', value: qualityLabel },
   ];
 
   return (
@@ -337,7 +399,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
       </div>
 
       <footer className="lyrics-page__footer">
-        <span className="lyrics-page__quality">自动混音 · 无损</span>
+        <span className="lyrics-page__quality">自动混音 · {qualityLabel}</span>
         <div className="lyrics-page__footer-end">
           <Segmented
             ariaLabel="播放视图"

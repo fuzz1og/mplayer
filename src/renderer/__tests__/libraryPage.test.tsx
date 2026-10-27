@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { Song } from '@mplayer/core';
 import LibraryPage from '@/renderer/pages/LibraryPage';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -41,6 +41,34 @@ const historyRows = [
   { song: song('netease:3', 'Charlie', '歌手丙', '专辑丙') },
 ];
 
+const downloadTasks = [
+  {
+    id: 'task-downloading',
+    song: song('netease:9', 'Downloading', '歌手丁', '专辑丁'),
+    progress: 42,
+    status: 'downloading',
+  },
+  {
+    id: 'task-paused',
+    song: song('netease:10', 'PausedSong', '歌手戊', '专辑戊'),
+    progress: 17,
+    status: 'paused',
+  },
+  {
+    id: 'task-pending',
+    song: song('netease:11', 'PendingSong', '歌手己', '专辑己'),
+    progress: 0,
+    status: 'pending',
+  },
+  {
+    id: 'task-completed',
+    song: song('netease:12', 'CompletedSong', '歌手庚', '专辑庚'),
+    progress: 100,
+    status: 'completed',
+    filePath: 'D:/Downloads/CompletedSong.mp3',
+  },
+];
+
 const invokeMock = vi.fn();
 
 const installIpc = () => {
@@ -59,21 +87,27 @@ const installIpc = () => {
       case 'settings:getDownloadPath':
         return 'D:/Downloads';
       case 'download:getTasks':
-        return [{
-          id: 'task-1',
-          song: song('netease:9', 'Downloading', '歌手丁', '专辑丁'),
-          progress: 42,
-          status: 'downloading',
-        }];
+        return downloadTasks;
+      case 'download:pause':
+      case 'download:resume':
+      case 'download:openDir':
+      case 'download:showInFolder':
+        return true;
       default:
         return { success: true };
     }
   });
 };
 
-const renderPage = () => render(
-  <MemoryRouter initialEntries={['/library']}>
+const LocationProbe = () => {
+  const location = useLocation();
+  return <span data-testid="location">{location.pathname + location.search}</span>;
+};
+
+const renderPage = (path = '/library') => render(
+  <MemoryRouter initialEntries={[path]}>
     <LibraryPage />
+    <LocationProbe />
   </MemoryRouter>,
 );
 
@@ -141,7 +175,50 @@ describe('资料库页', () => {
     expect(screen.getByText('42%')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: '取消下载: Downloading' }));
-    expect(invokeMock).toHaveBeenCalledWith('download:cancel', 'task-1');
+    expect(invokeMock).toHaveBeenCalledWith('download:cancel', 'task-downloading');
+  });
+
+  it('URL tab 参数决定初始分段：download 兼容 downloads', async () => {
+    renderPage('/library?tab=download');
+    expect(screen.getByRole('tab', { name: '下载' })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(screen.getByText('Downloading')).toBeInTheDocument());
+  });
+
+  it('非法 tab 参数回落到歌曲分段', async () => {
+    renderPage('/library?tab=bogus');
+    expect(screen.getByRole('tab', { name: '歌曲' })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(rows().getByText('Bravo')).toBeInTheDocument());
+  });
+
+  it('切换分段 replace 同步 URL（歌曲默认不带 tab）', async () => {
+    renderPage();
+    await userEvent.click(screen.getByRole('tab', { name: '下载' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/library?tab=downloads');
+    await userEvent.click(screen.getByRole('tab', { name: '歌曲' }));
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/library$/);
+  });
+
+  it('下载任务按状态提供开始/暂停/取消/打开所在文件夹，目录行可打开目录', async () => {
+    renderPage();
+    await userEvent.click(screen.getByRole('tab', { name: '下载' }));
+    await waitFor(() => expect(screen.getByText('PausedSong')).toBeInTheDocument());
+
+    expect(screen.getByRole('button', { name: '开始下载: PendingSong' })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: '开始下载: PausedSong' }));
+    expect(invokeMock).toHaveBeenCalledWith('download:resume', 'task-paused');
+
+    await userEvent.click(screen.getByRole('button', { name: '暂停下载: Downloading' }));
+    expect(invokeMock).toHaveBeenCalledWith('download:pause', 'task-downloading');
+
+    await userEvent.click(screen.getByRole('button', { name: '取消下载: PausedSong' }));
+    expect(invokeMock).toHaveBeenCalledWith('download:cancel', 'task-paused');
+
+    await userEvent.click(screen.getByRole('button', { name: '打开所在文件夹: CompletedSong' }));
+    expect(invokeMock).toHaveBeenCalledWith('download:showInFolder', 'task-completed');
+
+    await userEvent.click(screen.getByRole('button', { name: '打开目录' }));
+    expect(invokeMock).toHaveBeenCalledWith('download:openDir');
   });
 
   it('本地 tab 展示文件夹与本地歌曲', async () => {

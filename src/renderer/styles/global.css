@@ -183,7 +183,6 @@
 
   /* ── 布局尺寸 ── */
   --sidebar-width: 216px;
-  --sidebar-collapsed-width: 64px;
   --titlebar-height: 44px;
   --topbar-height: 56px;
   --player-height: 68px;
@@ -216,6 +215,9 @@
 
   /* ── 标准动效曲线 ── */
   --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
+  /* 场景转场（全屏播放器共享元素，ui-refactor-guide §6.3）：强调曲线 + 统一时长 */
+  --ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-scene: 200ms;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -724,19 +726,6 @@ button:focus-visible,
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: var(--radius-sm);
-}
-
-/* ── 响应式 ── */
-@media (max-width: 1024px) {
-  :root {
-    --sidebar-width: var(--sidebar-collapsed-width);
-  }
-}
-
-@media (max-width: 768px) {
-  :root {
-    --sidebar-width: 0px;
-  }
 }
 
 /* ════════════════════════════════════════════════════════════

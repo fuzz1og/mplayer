@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MonitorSmartphone, Moon, Play, Rows3, Sparkles, Type } from 'lucide-react';
 import { THEME_MODES, type ThemeMode } from '@/renderer/theme/theme';
 import { useThemeMode } from '@/renderer/theme/ThemeManager';
-import { mirrorTheme } from '@/renderer/theme/appearancePrefs';
 import {
   readPrefs,
   subscribeAppearance,
@@ -54,7 +53,6 @@ const AppearanceSection: React.FC = () => {
   const handleTheme = (label: string) => {
     const next = labelToTheme.get(label) ?? 'system';
     setMode(next);
-    mirrorTheme(next);
   };
 
   const handlePlay = () => {

@@ -16,6 +16,8 @@ interface FavoriteState {
   removeFavorite: (songId: string) => Promise<void>;
   /** 单曲换源：原位替换收藏（保持收藏时间与排序） */
   replaceFavorite: (originalId: string, swapped: Song) => Promise<void>;
+  /** 封面异步自愈后回填展示字段（只改内存视图，不落库）。 */
+  updateFavoriteCover: (songId: string, cover: string) => void;
 }
 
 export const useFavoriteStore = create<FavoriteState>((set, get) => ({
@@ -120,5 +122,11 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
       console.error('换源保存到收藏失败:', error);
       throw error;
     }
+  },
+
+  updateFavoriteCover: (songId: string, cover: string) => {
+    set((state) => ({
+      favorites: state.favorites.map(f => f.id === songId ? { ...f, cover } : f),
+    }));
   },
 }));

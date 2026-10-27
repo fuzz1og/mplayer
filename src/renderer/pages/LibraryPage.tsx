@@ -6,12 +6,15 @@ import {
   FolderOpen,
   FolderPlus,
   Music2,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   Trash2,
   User,
   X,
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { dedupeSongs } from '@mplayer/core';
 import type { Song, SongBase } from '@mplayer/core';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -283,15 +286,22 @@ interface DownloadTaskRow {
   id: string;
   song: Song;
   progress: number;
-  status: 'pending' | 'downloading' | 'completed' | 'error';
+  status: 'pending' | 'downloading' | 'paused' | 'completed' | 'error';
   error?: string;
 }
 
 const TASK_LABELS: Record<DownloadTaskRow['status'], string> = {
   pending: '等待中',
   downloading: '下载中',
+  paused: '已暂停',
   completed: '已完成',
   error: '失败',
+};
+
+/** URL 的 tab 参数 → 内部分段 key：downloads 是内部键，兼容旧参数 tab=download；非法值回 songs。 */
+const parseTabParam = (value: string | null): TabKey => {
+  const key = value === 'download' ? 'downloads' : value;
+  return TAB_ITEMS.some((item) => item.key === key) ? (key as TabKey) : 'songs';
 };
 
 const LibraryPage: React.FC = () => {
@@ -299,6 +309,7 @@ const LibraryPage: React.FC = () => {
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const loadFavorites = useFavoriteStore((s) => s.loadFavorites);
+  const updateFavoriteCover = useFavoriteStore((s) => s.updateFavoriteCover);
 
   const localFolders = useLocalStore((s) => s.folders);
   const localSongs = useLocalStore((s) => s.songs);
@@ -317,7 +328,18 @@ const LibraryPage: React.FC = () => {
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const { download } = useDownload();
 
-  const [tab, setTab] = useState<TabKey>('songs');
+  // 分段由 URL 单一驱动（#685）：旧路由 /local、/download 会 Navigate 到 ?tab=local|downloads。
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = parseTabParam(searchParams.get('tab'));
+  const selectTab = useCallback((next: TabKey) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'songs') {
+      params.delete('tab');
+    } else {
+      params.set('tab', next);
+    }
+    setSearchParams(params, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [sortKey, setSortKey] = useState<SortKey>('added');
   const [sortOpen, setSortOpen] = useState(false);
   const [history, setHistory] = useState<Song[]>([]);
@@ -422,12 +444,10 @@ const LibraryPage: React.FC = () => {
   const handleCoverError = useCallback((song: Song) => {
     void refreshSongCover(song).then((cover) => {
       if (!cover) return;
-      useFavoriteStore.setState((state) => ({
-        favorites: state.favorites.map((item) => (item.id === song.id ? { ...item, cover } : item)),
-      }));
+      updateFavoriteCover(song.id, cover);
       setHistory((prev) => prev.map((item) => (item.id === song.id ? { ...item, cover } : item)));
     });
-  }, []);
+  }, [updateFavoriteCover]);
 
   const handleAddToPlaylist = useCallback((song: Song) => {
     setPlaylistSong(song);
@@ -444,12 +464,12 @@ const LibraryPage: React.FC = () => {
 
   const handleAddFolder = useCallback(() => {
     void addLocalFolder()
-      .then(() => setTab('local'))
+      .then(() => selectTab('local'))
       .catch((error) => {
         console.error('导入本地文件夹失败:', error);
         toast.error('导入失败，请重试');
       });
-  }, [addLocalFolder]);
+  }, [addLocalFolder, selectTab]);
 
   const handleChangeDownloadPath = useCallback(async () => {
     try {
@@ -478,6 +498,46 @@ const LibraryPage: React.FC = () => {
       toast.error('取消下载失败');
     }
   }, [loadDownloads]);
+
+  const handlePauseTask = useCallback(async (taskId: string) => {
+    try {
+      await IpcClient.invoke('download:pause', taskId);
+      await loadDownloads();
+    } catch (error) {
+      console.error('暂停下载失败:', error);
+      toast.error('暂停下载失败');
+    }
+  }, [loadDownloads]);
+
+  const handleResumeTask = useCallback(async (taskId: string) => {
+    try {
+      await IpcClient.invoke('download:resume', taskId);
+      await loadDownloads();
+    } catch (error) {
+      console.error('继续下载失败:', error);
+      toast.error('继续下载失败');
+    }
+  }, [loadDownloads]);
+
+  const handleOpenDownloadDir = useCallback(async () => {
+    try {
+      const opened = await IpcClient.invoke<boolean>('download:openDir');
+      if (opened === false) toast.error('打开下载目录失败');
+    } catch (error) {
+      console.error('打开下载目录失败:', error);
+      toast.error('打开下载目录失败');
+    }
+  }, []);
+
+  const handleShowInFolder = useCallback(async (taskId: string) => {
+    try {
+      const shown = await IpcClient.invoke<boolean>('download:showInFolder', taskId);
+      if (shown === false) toast.error('打开所在文件夹失败');
+    } catch (error) {
+      console.error('打开所在文件夹失败:', error);
+      toast.error('打开所在文件夹失败');
+    }
+  }, []);
 
   const handleClearFinished = useCallback(async () => {
     try {
@@ -574,7 +634,7 @@ const LibraryPage: React.FC = () => {
               role="tab"
               aria-selected={tab === item.key}
               className="library__segment"
-              onClick={() => setTab(item.key)}
+              onClick={() => selectTab(item.key)}
             >
               {item.label}
             </button>
@@ -675,6 +735,15 @@ const LibraryPage: React.FC = () => {
               <button type="button" className="library__text-btn" onClick={() => void handleChangeDownloadPath()}>
                 更改
               </button>
+              <button
+                type="button"
+                className="library__text-btn"
+                aria-label="打开目录"
+                onClick={() => void handleOpenDownloadDir()}
+              >
+                <FolderOpen size={15} aria-hidden="true" />
+                打开目录
+              </button>
             </div>
             <div className="library__card">
               {tasks.length === 0 ? (
@@ -700,7 +769,29 @@ const LibraryPage: React.FC = () => {
                       <span className="library__task-state" data-tone={task.status}>
                         {task.status === 'downloading' ? Math.round(task.progress) + '%' : TASK_LABELS[task.status]}
                       </span>
-                      {(task.status === 'pending' || task.status === 'downloading') ? (
+                      {(task.status === 'pending' || task.status === 'paused') && (
+                        <button
+                          type="button"
+                          className="library__task-cancel"
+                          aria-label={'开始下载: ' + task.song.name}
+                          disabled={task.status === 'pending'}
+                          title={task.status === 'pending' ? '等待队列自动开始' : undefined}
+                          onClick={() => void handleResumeTask(task.id)}
+                        >
+                          <Play size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                      {task.status === 'downloading' && (
+                        <button
+                          type="button"
+                          className="library__task-cancel"
+                          aria-label={'暂停下载: ' + task.song.name}
+                          onClick={() => void handlePauseTask(task.id)}
+                        >
+                          <Pause size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                      {(task.status === 'pending' || task.status === 'downloading' || task.status === 'paused') && (
                         <button
                           type="button"
                           className="library__task-cancel"
@@ -709,9 +800,18 @@ const LibraryPage: React.FC = () => {
                         >
                           <X size={14} aria-hidden="true" />
                         </button>
-                      ) : (
-                        <span className="library__task-cancel" aria-hidden="true" />
                       )}
+                      {task.status === 'completed' && (
+                        <button
+                          type="button"
+                          className="library__task-cancel"
+                          aria-label={'打开所在文件夹: ' + task.song.name}
+                          onClick={() => void handleShowInFolder(task.id)}
+                        >
+                          <FolderOpen size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                      {task.status === 'error' && <span className="library__task-cancel" aria-hidden="true" />}
                     </div>
                   ))}
                   {finishedCount > 0 && (

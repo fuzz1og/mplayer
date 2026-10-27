@@ -69,8 +69,8 @@ const SECTION_IDS = new Set([
   ...SETTINGS_FOOTER_ENTRIES.map((entry) => entry.id),
 ]);
 
-/** 尚未迁移到新原语的分区仍用旧组件渲染，保证这一批不丢功能（#684 逐页替换）。 */
-const LEGACY_SECTIONS: Record<string, React.ReactNode> = {
+/** 分区 id → 页面内容。全部 9 页已迁入新壳，组件本身按需继续收敛。 */
+const SECTION_CONTENT: Record<string, React.ReactNode> = {
   appearance: <AppearanceSection />,
   cache: <CacheSection />,
   download: <DownloadSection />,
@@ -94,7 +94,7 @@ const LEGACY_SECTIONS: Record<string, React.ReactNode> = {
 
 const SettingsPage: React.FC = () => {
   const { section } = useParams<{ section?: string }>();
-  // 深链优先（#/settings/appearance 直接落外观页）；无参数或非法 id 落「缓存」（原型默认页）。
+  // 深链优先（#/settings/appearance 直接落外观页）；无参数或非法 id 落「缓存」（原型默认页，规格未另行约定）。
   const [active, setActive] = useState(() => (section && SECTION_IDS.has(section) ? section : 'cache'));
   const [devMode, setDevMode] = useState(isDevMode);
 
@@ -116,7 +116,7 @@ const SettingsPage: React.FC = () => {
   }, [devMode, active]);
 
   const content =
-    active === 'diagnostics' && devMode ? <PlaybackDiagnosticsSection /> : LEGACY_SECTIONS[active] ?? null;
+    active === 'diagnostics' && devMode ? <PlaybackDiagnosticsSection /> : SECTION_CONTENT[active] ?? null;
 
   const renderItem = (entry: SettingsEntry) => {
     const isActive = active === entry.id;

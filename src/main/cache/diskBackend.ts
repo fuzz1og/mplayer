@@ -10,7 +10,7 @@ import { cacheKeyType, isImageBytes, isAudioBytes, type CacheBackend, type Cache
  * 不再每次统计都递归遍历目录 + `JSON.parse` 每个文件 + 读每个二进制文件头（#410）。
  * `other` = 内容无法解析（旧实现里这类文件只计入 fileCount，不进四个分类）。
  */
-type EntryKind = 'songs' | 'urls' | 'covers' | 'audio' | 'other'
+export type EntryKind = 'songs' | 'urls' | 'covers' | 'audio' | 'other'
 
 const ENTRY_KINDS: readonly EntryKind[] = ['songs', 'urls', 'covers', 'audio', 'other']
 
@@ -521,6 +521,30 @@ export class DiskCacheBackend implements CacheBackend {
       await this.shared.ensureDirs()
       this.shared.index.clear()
       this.shared.recount()
+    })
+  }
+
+  /**
+   * 按条目类别清理（设置页「构成」三行的「清理」）：只删指定 kind 的数据文件与 meta，
+   * 复用共享索引的记账与串行队列，返回实际删除条数与释放字节。
+   */
+  async clearKinds(kinds: readonly EntryKind[]): Promise<{ removed: number; freed: number }> {
+    await this.shared.ensureIndex()
+    const wanted = new Set(kinds)
+    return this.shared.enqueue(async () => {
+      let removed = 0
+      let freed = 0
+      // 先快照再删：applyRecord 会同步改动 index，边遍历边删不安全。
+      for (const [hash, record] of [...this.shared.index]) {
+        if (!wanted.has(record.kind)) continue
+        const size = record.size
+        await fsp.rm(this.shared.dataPath(record.key, hash), { force: true }).catch(() => undefined)
+        await fsp.rm(this.shared.metaPath(hash), { force: true }).catch(() => undefined)
+        this.shared.applyRecord(hash, null)
+        removed++
+        freed += size
+      }
+      return { removed, freed }
     })
   }
 

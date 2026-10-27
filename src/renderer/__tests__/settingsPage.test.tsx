@@ -20,8 +20,11 @@ const cacheStats = {
   bytes: { songs: 1048576, urls: 2097152, covers: 20971520, audio: 31457280, other: 0 },
 };
 
+/** 单个用例可临时替换统计快照（如空缓存下的禁用态）。 */
+let statsOverride: typeof cacheStats | null = null;
+
 const invoke = vi.fn((channel: string, value?: unknown) => {
-  if (channel === 'cache:getStats') return Promise.resolve(cacheStats);
+  if (channel === 'cache:getStats') return Promise.resolve(statsOverride ?? cacheStats);
   if (channel === 'cache:getConfig') {
     return Promise.resolve({ ...state, dir: 'C:/AppData/MPlayer/cache', stepMb: 20, minMb: 20, maxMb: 4096 });
   }
@@ -33,6 +36,7 @@ const invoke = vi.fn((channel: string, value?: unknown) => {
     state.autoClean = value === true;
     return Promise.resolve(state.autoClean);
   }
+  if (channel === 'cache:clearKind') return Promise.resolve(true);
   return Promise.resolve(undefined);
 });
 
@@ -74,6 +78,7 @@ describe('设置页（1.9.0 原型 §2）', () => {
     invoke.mockClear();
     state.limitMb = 100;
     state.autoClean = true;
+    statsOverride = null;
     localStorage.clear();
   });
 
@@ -117,7 +122,7 @@ describe('设置页（1.9.0 原型 §2）', () => {
     expect(rows.some((t) => t?.includes('歌曲索引') && t?.includes('50 个') && t?.includes('3 MB'))).toBe(true);
     expect(rows.some((t) => t?.includes('封面图片') && t?.includes('50 个') && t?.includes('20 MB'))).toBe(true);
     expect(rows.some((t) => t?.includes('音频文件') && t?.includes('20 个') && t?.includes('30 MB'))).toBe(true);
-    expect(body().getByText('缓存按文件数量统计，超出上限时优先清理最久未访问的条目。')).toBeInTheDocument();
+    expect(body().getByText('缓存按文件数量统计，超出上限时按写入时间从早到晚清理。')).toBeInTheDocument();
   });
 
   it('空间上限步进写回主进程并刷新剩余额度', async () => {
@@ -144,6 +149,40 @@ describe('设置页（1.9.0 原型 §2）', () => {
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/此操作不可恢复/)).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: '确定清理' })).toBeInTheDocument();
+  });
+
+  it('构成三行提供按类型清理入口，二次确认后调用 cache:clearKind', async () => {
+    renderPage();
+    await body().findByRole('heading', { level: 1, name: '缓存' });
+
+    expect(body().getByRole('button', { name: '清理歌曲索引' })).toBeEnabled();
+    expect(body().getByRole('button', { name: '清理封面图片' })).toBeEnabled();
+    expect(body().getByRole('button', { name: '清理音频文件' })).toBeEnabled();
+
+    await userEvent.click(body().getByRole('button', { name: '清理封面图片' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/将释放 20 MB/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/仅清理「封面图片」/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: '确定清理' }));
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('cache:clearKind', 'covers'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('没有对应条目时按类型清理按钮禁用', async () => {
+    statsOverride = {
+      totalSize: 0,
+      fileCount: 0,
+      songsCount: 0,
+      coversCount: 0,
+      audioCount: 0,
+      urlsCount: 0,
+      bytes: { songs: 0, urls: 0, covers: 0, audio: 0, other: 0 },
+    };
+    renderPage();
+    await body().findByRole('heading', { level: 1, name: '缓存' });
+    expect(body().getByRole('button', { name: '清理歌曲索引' })).toBeDisabled();
+    expect(body().getByRole('button', { name: '清理封面图片' })).toBeDisabled();
+    expect(body().getByRole('button', { name: '清理音频文件' })).toBeDisabled();
   });
 
   it('外观页三组：主题分段用中文 label，同步项只读', async () => {

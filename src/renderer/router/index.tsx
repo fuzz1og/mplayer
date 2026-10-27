@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import { Suspense, lazy } from 'react';
 import { createHashRouter, Navigate } from 'react-router-dom';
 import App from '@/renderer/App';
 import SettingsShell from '@/renderer/components/SettingsShell';
@@ -14,7 +14,6 @@ const PlaylistsPage = lazy(() => import('@/renderer/pages/PlaylistsPage'));
 const PlaylistDetailPage = lazy(() => import('@/renderer/pages/PlaylistDetailPage'));
 const SettingsPage = lazy(() => import('@/renderer/pages/SettingsPage'));
 const QueuePage = lazy(() => import('@/renderer/pages/QueuePage'));
-const LocalMusicPage = lazy(() => import('@/renderer/pages/LocalMusicPage'));
 const ArtistListPage = lazy(() => import('@/renderer/pages/ArtistListPage'));
 const ArtistDetailPage = lazy(() => import('@/renderer/pages/ArtistDetailPage'));
 const AlbumDetailPage = lazy(() => import('@/renderer/pages/AlbumDetailPage'));
@@ -28,15 +27,6 @@ const Loading = () => (
   <div className="route-loading">
     <div className="route-loading__spinner" />
     加载中...
-  </div>
-);
-
-// 功能开发中页面
-const ComingSoon: React.FC = () => (
-  <div className="route-soon">
-    <div className="route-soon__icon">🚧</div>
-    <div className="route-soon__title">功能开发中</div>
-    <div>该功能即将上线，敬请期待</div>
   </div>
 );
 
@@ -140,12 +130,9 @@ export const router = createHashRouter([
         ),
       },
       {
+        // 旧入口（#685）：本地音乐并入资料库「本地」分段，保留原路径做重定向。
         path: 'local',
-        element: (
-          <Suspense fallback={<Loading />}>
-            <LocalMusicPage />
-          </Suspense>
-        ),
+        element: <Navigate to="/library?tab=local" replace />,
       },
       {
         path: 'artists',
@@ -196,8 +183,9 @@ export const router = createHashRouter([
         ),
       },
       {
+        // 旧入口（#685）：下载管理并入资料库「下载」分段，保留原路径做重定向。
         path: 'download',
-        element: <ComingSoon />,
+        element: <Navigate to="/library?tab=downloads" replace />,
       },
       {
         path: '',

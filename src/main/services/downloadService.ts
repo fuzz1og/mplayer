@@ -1,6 +1,7 @@
 import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
+import { pipeline } from 'stream/promises';
 import axios from 'axios';
 import MP3Tag from 'mp3tag.js';
 import { BrowserWindow } from 'electron';
@@ -30,7 +31,7 @@ export interface DownloadTask {
   id: string;
   song: Song;
   progress: number;
-  status: 'pending' | 'downloading' | 'completed' | 'error';
+  status: 'pending' | 'downloading' | 'paused' | 'completed' | 'error';
   error?: string;
   filePath?: string;
 }
@@ -83,6 +84,11 @@ export class DownloadService {
   private queue: string[] = [];
   private activeDownloads: Set<string> = new Set();
   private abortControllers: Map<string, AbortController> = new Map();
+  /**
+   * 本次中止的原因：pause = 用户暂停（转 paused、不告警、删半成品）；cancel = 用户取消
+   * （终态与通知已由 cancelDownload 完成，catch 只收尾，避免重复 download:error）。
+   */
+  private abortReasons: Map<string, 'pause' | 'cancel'> = new Map();
   private maxConcurrentDownloads: number = DEFAULT_MAX_CONCURRENT;
   private downloadPath: string = '';
   private progressThrottleMs: number;
@@ -371,8 +377,14 @@ export class DownloadService {
       if (!next) break;
 
       const task = this.tasks.get(next);
-      if (!task || task.status === 'completed' || task.status === 'error') {
-        continue; // 跳过无效任务，继续推进队列
+      if (!task || task.status === 'completed' || task.status === 'error' || task.status === 'paused') {
+        continue; // 跳过无效/已暂停任务，继续推进队列
+      }
+
+      // 暂停后立刻恢复时，上一轮中止可能还在收尾：先放回队首，等它的 finally 让出 active 槽位。
+      if (this.activeDownloads.has(next)) {
+        this.queue.unshift(next);
+        break;
       }
 
       this.activeDownloads.add(next);
@@ -437,6 +449,11 @@ export class DownloadService {
         throw new Error('无法获取音频 URL');
       }
 
+      // 解析 URL 期间用户已点暂停/取消：此时还没有 controller 可 abort，按中止原因进入 catch 统一收尾。
+      if (this.abortReasons.has(task.id)) {
+        throw new Error('下载已中止');
+      }
+
       const controller = new AbortController();
       this.abortControllers.set(task.id, controller);
 
@@ -497,26 +514,14 @@ export class DownloadService {
       task.filePath = actualFilePath;
 
       const writer = fs.createWriteStream(actualFilePath);
-      response.data.pipe(writer);
+      // pipeline 统一收尾：源流(error/abort) 会销毁目标写流并等句柄关闭后再抛，
+      // 不会像裸 pipe 那样让 Promise 永挂（activeDownloads 也就不会泄漏）。
+      await pipeline(response.data, writer);
 
-      await new Promise<void>((resolve, reject) => {
-        writer.on('finish', () => {
-          task.status = 'completed';
-          task.progress = 100;
-          this.tasks.set(task.id, task);
-          this.notifyComplete(task);
-          resolve();
-        });
-
-        writer.on('error', (error) => {
-          console.error('[DownloadService] 写入文件失败:', error);
-          task.status = 'error';
-          task.error = error.message;
-          this.tasks.set(task.id, task);
-          this.notifyError(task, error);
-          reject(error);
-        });
-      });
+      task.status = 'completed';
+      task.progress = 100;
+      this.tasks.set(task.id, task);
+      this.notifyComplete(task);
 
       // 写入标签元数据（title/artist/album/封面/真实时长）与 .lrc 歌词侧车
       // 先按字节头修正扩展名：源站 Content-Type 不可靠（FLAC 报 audio/mpeg 等）时，
@@ -526,12 +531,105 @@ export class DownloadService {
       await this.writeLyricsSidecar(task.song, actualFilePath);
 
     } catch (error) {
+      const abortReason = this.abortReasons.get(task.id);
+      this.abortReasons.delete(task.id);
+
+      if (abortReason === 'pause') {
+        // 暂停不是错误：清掉半成品，转 paused，且不推 download:error。
+        await this.discardPartialFile(task);
+        task.status = 'paused';
+        task.error = undefined;
+        this.tasks.set(task.id, task);
+        // 状态是读模型：借 progress 通道推一次，渲染层才能从「下载中」切到「已暂停」。
+        this.notifyProgress(task);
+        return;
+      }
+
+      if (abortReason === 'cancel') {
+        // cancelDownload 已写入 error 终态并通知过；这里只收尾，避免重复 download:error。
+        return;
+      }
+
       console.error('[DownloadService] 下载失败:', error);
       task.status = 'error';
       task.error = error instanceof Error ? error.message : '下载失败';
       this.tasks.set(task.id, task);
       this.notifyError(task, error instanceof Error ? error : new Error('下载失败'));
     }
+  }
+
+  /**
+   * 删除暂停时留下的半成品（部分写入的音频文件），避免下载目录攒垃圾。
+   * 清理失败不改变暂停状态——文件残留只是空间问题，不影响任务语义。
+   */
+  private async discardPartialFile(task: DownloadTask): Promise<void> {
+    const filePath = task.filePath;
+    if (!filePath) return;
+    task.filePath = undefined;
+    try {
+      await fsp.rm(filePath, { force: true });
+    } catch (error) {
+      console.warn('[DownloadService] 删除未完成文件失败:', error);
+    }
+  }
+
+  /**
+   * 暂停：pending 直接移出队列转 paused；downloading 先记中止原因再 abort，
+   * 由 downloadFile 的 catch 转 paused、删半成品且不发错误事件。
+   */
+  pauseDownload(taskId: string): boolean {
+    const task = this.tasks.get(taskId);
+    if (!task) return false;
+
+    if (task.status === 'pending') {
+      const queueIndex = this.queue.indexOf(taskId);
+      if (queueIndex > -1) {
+        this.queue.splice(queueIndex, 1);
+      }
+      task.status = 'paused';
+      this.tasks.set(taskId, task);
+      this.notifyProgress(task);
+      return true;
+    }
+
+    if (task.status === 'downloading') {
+      this.abortReasons.set(taskId, 'pause');
+      const controller = this.abortControllers.get(taskId);
+      if (controller) {
+        controller.abort();
+        this.abortControllers.delete(taskId);
+      }
+      // 尚未创建 controller（还在解析 URL）：downloadFile 拿到 URL 后按 abortReasons 自行退出。
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * 恢复：仅 paused 可恢复。**不保留断点**——暂停时半成品已删除，这里重置 progress=0
+   * 后按原任务重新下载（重新解析 URL、重新取流），而不是 Range 续传。
+   */
+  resumeDownload(taskId: string): boolean {
+    const task = this.tasks.get(taskId);
+    if (!task || task.status !== 'paused') return false;
+
+    task.progress = 0;
+    task.status = 'pending';
+    task.error = undefined;
+    task.filePath = undefined;
+    this.tasks.set(taskId, task);
+    this.notifyProgress(task);
+    if (!this.queue.includes(taskId)) {
+      this.queue.push(taskId);
+    }
+
+    // 上一轮 abort 的 finally 也会调用 processQueue；active 仍持有该 id 时先不启动，
+    // 避免同一任务并发跑两轮（processQueue 里还有 active 守卫兜底）。
+    if (!this.activeDownloads.has(taskId)) {
+      this.processQueue();
+    }
+    return true;
   }
 
   cancelDownload(taskId: string): boolean {
@@ -543,14 +641,17 @@ export class DownloadService {
       this.queue.splice(queueIndex, 1);
     }
 
-    // 中止 HTTP 流
+    // 中止 HTTP 流：记录原因，让 downloadFile 的 catch 只收尾、不重复通知
+    if (task.status === 'downloading') {
+      this.abortReasons.set(taskId, 'cancel');
+    }
     const controller = this.abortControllers.get(taskId);
     if (controller) {
       controller.abort();
       this.abortControllers.delete(taskId);
     }
 
-    if (task.status === 'downloading' || task.status === 'pending') {
+    if (task.status === 'downloading' || task.status === 'pending' || task.status === 'paused') {
       task.status = 'error';
       task.error = '已取消';
       this.tasks.set(taskId, task);

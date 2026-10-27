@@ -12,6 +12,7 @@ vi.mock('electron', () => ({
 
 import { ipcMain } from 'electron';
 import { registerCacheIpc } from '../../main/ipc/cache';
+import { DiskCacheBackend } from '../../main/cache/diskBackend';
 
 type Handler = (...args: any[]) => any;
 
@@ -94,5 +95,59 @@ describe('registerCacheIpc 语义缓存通道（ADR-0002）', () => {
     const getStats = getHandler('cache:getStats');
     const stats = await getStats({});
     expect(stats).toMatchObject({ entries: expect.any(Number), totalSize: expect.any(Number) });
+  });
+
+  it('clearKind 非法类型返回 false，且不误删缓存', async () => {
+    const backend = new DiskCacheBackend(path.join(cacheDir, 'cache'));
+    await backend.write(':json:test:keep', new TextEncoder().encode('[{"id":"keep"}]'));
+
+    const clearKind = getHandler('cache:clearKind');
+    expect(await clearKind({}, 'songs')).toBe(false);
+    expect(await clearKind({}, 'cover')).toBe(false);
+    expect(await clearKind({}, null)).toBe(false);
+    expect(await backend.read(':json:test:keep')).not.toBeNull();
+  });
+
+  it('clearKind 按类型清理：歌曲索引清空 songs/urls/other，封面与音频保留', async () => {
+    const clear = getHandler('cache:clear');
+    await clear({});
+
+    const backend = new DiskCacheBackend(path.join(cacheDir, 'cache'));
+    const cover = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const audio = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00]);
+    const encoder = new TextEncoder();
+    // songs / urls / other 都是 JSON 目录下的条目，同属「歌曲索引」组。
+    await backend.write(':json:test:songs', encoder.encode('[{"id":"s1"}]'));
+    await backend.write(':json:test:urls', encoder.encode('{"url":"https://example.com/a.mp3"}'));
+    await backend.write(':json:test:other', encoder.encode('not-json'));
+    await backend.write(':bin:test:cover', cover);
+    await backend.write(':bin:test:audio', audio);
+
+    const getStats = getHandler('cache:getStats');
+    const before = await getStats({});
+    expect(before).toMatchObject({ entries: 5, songsCount: 1, urlsCount: 1, coversCount: 1, audioCount: 1 });
+    expect(before.bytes.other).toBeGreaterThan(0);
+
+    const clearKind = getHandler('cache:clearKind');
+    expect(await clearKind({}, 'index')).toBe(true);
+
+    const afterIndex = await getStats({});
+    expect(afterIndex).toMatchObject({ entries: 2, songsCount: 0, urlsCount: 0, coversCount: 1, audioCount: 1 });
+    expect(afterIndex.bytes.songs).toBe(0);
+    expect(afterIndex.bytes.urls).toBe(0);
+    expect(afterIndex.bytes.other).toBe(0);
+    expect(afterIndex.bytes.covers).toBe(cover.byteLength);
+    expect(afterIndex.bytes.audio).toBe(audio.byteLength);
+    expect(await backend.read(':json:test:songs')).toBeNull();
+
+    expect(await clearKind({}, 'covers')).toBe(true);
+    const afterCovers = await getStats({});
+    expect(afterCovers).toMatchObject({ entries: 1, coversCount: 0, audioCount: 1 });
+    expect(afterCovers.bytes.covers).toBe(0);
+    expect(afterCovers.bytes.audio).toBe(audio.byteLength);
+
+    expect(await clearKind({}, 'audio')).toBe(true);
+    const afterAudio = await getStats({});
+    expect(afterAudio).toMatchObject({ entries: 0, coversCount: 0, audioCount: 0, totalSize: 0 });
   });
 });

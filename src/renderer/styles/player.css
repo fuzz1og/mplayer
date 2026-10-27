@@ -608,3 +608,49 @@
 :root[data-theme='light'] .lyrics-page__ambient {
   opacity: 0.4;
 }
+
+/* ── PlayerBar → 全屏播放器：封面共享元素展开（#688） ──
+   全屏封面在 DOM 里始终使用固定名字；PlayerBar 侧由 App.tsx 按时序补/撤 inline
+   view-transition-name，保证旧、新快照里同名元素永远只有一个。 */
+.lyrics-page__cover {
+  view-transition-name: player-cover;
+}
+
+/* 根快照也跟随场景时长，避免整页 crossfade 比封面 morph 拖长。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--duration-scene);
+  animation-timing-function: var(--ease-emphasized);
+}
+
+::view-transition-group(player-cover) {
+  animation-duration: var(--duration-scene);
+  animation-timing-function: var(--ease-emphasized);
+}
+
+::view-transition-old(player-cover),
+::view-transition-new(player-cover) {
+  animation-duration: var(--duration-scene);
+  animation-timing-function: var(--ease-emphasized);
+}
+
+/* 减弱动态：::view-transition-* 是伪元素，全局 * 规则覆盖不到，显式压到最短。 */
+html[data-reduce-motion='on']::view-transition-group(root),
+html[data-reduce-motion='on']::view-transition-old(root),
+html[data-reduce-motion='on']::view-transition-new(root),
+html[data-reduce-motion='on']::view-transition-group(player-cover),
+html[data-reduce-motion='on']::view-transition-old(player-cover),
+html[data-reduce-motion='on']::view-transition-new(player-cover) {
+  animation-duration: 0.001ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  ::view-transition-group(player-cover),
+  ::view-transition-old(player-cover),
+  ::view-transition-new(player-cover) {
+    animation-duration: 0.001ms !important;
+  }
+}

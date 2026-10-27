@@ -2,7 +2,7 @@ import { app, shell } from 'electron'
 import path from 'path'
 import { registerIpcHandlerSimple } from './registerHandler'
 import { CacheKernel, createMemoryBackend, SongResourcesCache, type SongResources } from '@mplayer/core'
-import { DiskCacheBackend } from '../cache/diskBackend'
+import { DiskCacheBackend, type EntryKind } from '../cache/diskBackend'
 import { isLegacyDeadUrl } from '@mplayer/core'
 import { db } from '../storage/db'
 
@@ -22,6 +22,22 @@ export const CACHE_LIMIT_MAX_MB = 4096
 /** 空间上限的步进（设置页 Stepper 一次 ±20 MB）。 */
 export const CACHE_LIMIT_STEP_MB = 20
 const MB = 1024 * 1024
+
+/**
+ * 设置页「构成」三组 → 磁盘条目类别：歌曲索引 = songs + urls + other（other 是解析不了的 JSON 脏数据），
+ * 封面 = covers，音频 = audio。只允许这三组，避免渲染层传入任意 EntryKind。
+ */
+const CACHE_CLEAR_KINDS = {
+  index: ['songs', 'urls', 'other'],
+  covers: ['covers'],
+  audio: ['audio'],
+} as const satisfies Record<string, readonly EntryKind[]>
+
+type CacheClearKind = keyof typeof CACHE_CLEAR_KINDS
+
+function isCacheClearKind(value: unknown): value is CacheClearKind {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(CACHE_CLEAR_KINDS, value)
+}
 
 /** 非法/越界的上限读数一律夹回区间，别让坏存档把淘汰逻辑变成「0 = 不清理」。 */
 function normalizeLimitMb(value: unknown): number {
@@ -98,6 +114,14 @@ export function registerCacheIpc(): void {
   })
   registerIpcHandlerSimple('cache:clear', async () => {
     await cache.clear()
+  })
+  // 按类型清理：非法入参返回 false（不抛），渲染层可安全透传用户动作；合法值返回 true。
+  registerIpcHandlerSimple('cache:clearKind', async (kind: unknown) => {
+    if (!isCacheClearKind(kind)) return false
+    const backend = getDiskBackend()
+    await backend.ensureIndexReady()
+    await backend.clearKinds(CACHE_CLEAR_KINDS[kind])
+    return true
   })
   registerIpcHandlerSimple('cache:getStats', async () => {
     // stats() 是同步契约（读的是磁盘后端增量记账的内存索引），而索引在启动时异步装载。

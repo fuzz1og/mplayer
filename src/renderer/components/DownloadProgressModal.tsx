@@ -1,6 +1,6 @@
 import React from 'react';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
-import { X, CheckCircle, AlertCircle, Loader2, Trash2, Music2 } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Loader2, Pause, Trash2, Music2 } from 'lucide-react';
 import type { DownloadNotification } from '@/renderer/store/downloadStore';
 import { getNotificationStats, getStatusText, getStatusColor, useDownloadStore } from '@/renderer/store/downloadStore';
 import '@/renderer/styles/songlist.css';
@@ -67,6 +67,8 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                 <CheckCircle size={24} color="var(--success)" />
               ) : task.status === 'error' ? (
                 <AlertCircle size={24} color="var(--danger)" />
+              ) : task.status === 'paused' ? (
+                <Pause size={24} color="var(--text-tertiary)" />
               ) : (
                 <Loader2 size={24} color="var(--accent)" className="dl-modal__spin" />
               )}
@@ -149,6 +151,8 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
                   <CheckCircle size={18} color="var(--success)" />
                 ) : task.status === 'error' ? (
                   <AlertCircle size={18} color="var(--danger)" />
+                ) : task.status === 'paused' ? (
+                  <Pause size={18} color="var(--text-tertiary)" />
                 ) : task.status === 'downloading' ? (
                   <Loader2 size={18} color="var(--accent)" className="dl-modal__spin" />
                 ) : (

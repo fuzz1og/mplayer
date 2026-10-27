@@ -36,6 +36,7 @@ vi.mock('@/renderer/components/AddToPlaylistModal', () => ({
 }));
 
 import LyricsPage from '@/renderer/pages/LyricsPage';
+import { IpcClient } from '@/renderer/services/IpcClient';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { playbackClock } from '@/renderer/services/playbackClock';
@@ -90,6 +91,8 @@ describe('正在播放 overlay（原型 §3）', () => {
     playbackClock.connect(() => 102);
     playbackClock.setDuration(269);
     playbackClock.setPosition(102);
+    vi.mocked(IpcClient.invoke).mockReset();
+    vi.mocked(IpcClient.invoke).mockResolvedValue([]);
     seed();
   });
 
@@ -134,6 +137,54 @@ describe('正在播放 overlay（原型 §3）', () => {
 
     act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('环境光：cover:getAccent 返回真实主色 → --np-glow-* 写成 hsl(hue …)', async () => {
+    vi.mocked(IpcClient.invoke).mockImplementation(async (channel) => {
+      if (channel === 'cover:getAccent') return { hue: 120, saturation: 0.6, lightness: 0.35 };
+      return [];
+    });
+
+    render(<LyricsPage onBack={vi.fn()} />);
+    const ambient = document.querySelector('.lyrics-page__ambient') as HTMLElement;
+
+    await waitFor(() => expect(ambient.getAttribute('style') ?? '').toContain('hsl(120'));
+    expect(IpcClient.invoke).toHaveBeenCalledWith('cover:getAccent', CURRENT.cover);
+    const style = ambient.getAttribute('style') ?? '';
+    expect(style).toContain('--np-glow-a');
+    expect(style).toContain('--np-glow-b');
+    expect(style).toContain('hsl(120 60% 35%');
+  });
+
+  it('环境光：无封面时不请求取色，style 为空', () => {
+    usePlayerStore.setState({ currentSong: { ...CURRENT, cover: '' } });
+
+    render(<LyricsPage onBack={vi.fn()} />);
+    const ambient = document.querySelector('.lyrics-page__ambient') as HTMLElement;
+
+    expect(IpcClient.invoke).not.toHaveBeenCalledWith('cover:getAccent', expect.anything());
+    expect(ambient.getAttribute('style') ?? '').not.toContain('--np-glow');
+  });
+
+  it('环境光：接口返回 null（无 API/取不到色）时 style 为空', async () => {
+    vi.mocked(IpcClient.invoke).mockResolvedValue(null);
+
+    render(<LyricsPage onBack={vi.fn()} />);
+    const ambient = document.querySelector('.lyrics-page__ambient') as HTMLElement;
+
+    await waitFor(() => expect(IpcClient.invoke).toHaveBeenCalledWith('cover:getAccent', CURRENT.cover));
+    expect(ambient.getAttribute('style') ?? '').not.toContain('--np-glow');
+  });
+
+  it('环境光：取色失败（IPC reject）时 style 为空，页面正常渲染', async () => {
+    vi.mocked(IpcClient.invoke).mockRejectedValue(new Error('IPC 不可用'));
+
+    render(<LyricsPage onBack={vi.fn()} />);
+    const ambient = document.querySelector('.lyrics-page__ambient') as HTMLElement;
+
+    await waitFor(() => expect(IpcClient.invoke).toHaveBeenCalledWith('cover:getAccent', CURRENT.cover));
+    expect(ambient.getAttribute('style') ?? '').not.toContain('--np-glow');
+    expect(screen.getByRole('heading', { level: 1, name: '晴天' })).toBeInTheDocument();
   });
 
   it('左列：大封面 + 歌名 + 艺术家含专辑', () => {
@@ -191,9 +242,9 @@ describe('正在播放 overlay（原型 §3）', () => {
     expect(active?.textContent).toBe('吹着前奏望着天空');
   });
 
-  it('底栏：左「自动混音 · 无损」，右 歌词/队列/详情 分段 + 音量滑杆', () => {
+  it('底栏：左「自动混音 · 标准」，右 歌词/队列/详情 分段 + 音量滑杆', () => {
     render(<LyricsPage onBack={vi.fn()} />);
-    expect(screen.getByText('自动混音 · 无损')).toBeInTheDocument();
+    expect(screen.getByText('自动混音 · 标准')).toBeInTheDocument();
     for (const label of ['歌词', '队列', '详情']) {
       expect(screen.getByRole('radio', { name: label })).toBeInTheDocument();
     }
@@ -236,7 +287,7 @@ describe('正在播放 overlay（原型 §3）', () => {
     const labels = Array.from(document.querySelectorAll('.np-detail__label')).map((l) => l.textContent);
     expect(labels).toEqual(['歌名', '歌手', '专辑', '来源', '时长', '音质']);
     const values = Array.from(document.querySelectorAll('.np-detail__value')).map((v) => v.textContent);
-    expect(values).toEqual(['晴天', '周杰伦', '叶惠美', '网易云', '4:29', '无损']);
+    expect(values).toEqual(['晴天', '周杰伦', '叶惠美', '网易云', '4:29', '标准']);
   });
 
   it('没有在播歌曲：空态 + 返回按钮，不渲染顶栏控件', () => {
