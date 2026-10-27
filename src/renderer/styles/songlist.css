@@ -1,25 +1,30 @@
-/* 歌曲行（1.9.0）：结构、间距、状态色全部由类表达，组件里不再拼内联样式。
-   列宽仍由 songTableColumns 的常量决定，通过 --col-width 下发。 */
+/* 歌曲列表（SongList / SongRow / SongListSkeleton，1.9.0 样式外置）。
+   颜色一律 var() token；字号 / 字重 / 行高 / 圆角只引用全局 token。
+   列宽由 songTableColumns 的常量经 colWidth() 下发 --col-width，类只消费变量，
+   于是表头 / 行 / 骨架屏三处共用同一份数字。 */
 
+/* ── 行 ── */
 .song-row {
   display: flex;
   align-items: center;
   padding: 10px 16px;
-  border-radius: var(--radius-8);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
   cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-standard);
+  transition: all 0.15s ease;
 }
 
 .song-row[data-compact] {
   padding: 8px 12px;
 }
 
-.song-row:hover:not([data-current]) {
-  background: var(--surface-card-hover);
+/* 当前曲目不高亮悬停，与原 onMouseEnter/Leave 的守卫一致 */
+.song-row[data-current] {
+  background-color: var(--accent-subtle);
 }
 
-.song-row[data-current] {
-  background: var(--accent-subtle);
+.song-row:hover:not([data-current]) {
+  background-color: var(--bg-hover);
 }
 
 /* 勾选列 */
@@ -55,7 +60,7 @@
 
 .song-row__bar {
   width: 3px;
-  background: var(--accent);
+  background-color: var(--accent);
   animation: soundBar 0.5s ease-in-out infinite;
 }
 
@@ -78,7 +83,6 @@
   color: var(--text-tertiary);
   font-size: var(--text-sm);
   font-weight: var(--weight-normal);
-  font-variant-numeric: tabular-nums;
 }
 
 .song-row__number[data-current] {
@@ -86,13 +90,13 @@
   font-weight: var(--weight-semibold);
 }
 
-/* 标题区 */
+/* 标题区：默认「固定标题列 + 弹性留白」，data-fill 时撑满剩余宽度 */
 .song-row__main {
   display: flex;
+  flex: 1;
   gap: 12px;
   align-items: center;
   min-width: 0;
-  flex: 1;
 }
 
 .song-row__main[data-fill='false'] {
@@ -107,25 +111,23 @@
   height: 44px;
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: var(--radius-8);
-  background: var(--surface-card-hover);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-hover);
 }
 
-/* 悬停才出现的播放遮罩：用 :hover 而不是 JS 改 style */
+/* 悬停才出现的播放遮罩：:hover 取代原先 JS 改 opacity */
 .song-row__cover-play {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--cover-play-scrim);
+  background-color: var(--bg-overlay);
   opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-standard);
-  cursor: pointer;
+  transition: opacity 0.15s ease;
 }
 
-.song-row__cover:hover .song-row__cover-play,
-.song-row__cover-play:focus-visible {
+.song-row__cover-play:hover {
   opacity: 1;
 }
 
@@ -166,7 +168,7 @@
   text-overflow: ellipsis;
 }
 
-/* 弹性留白 */
+/* 弹性留白：把专辑列和操作列推到右侧 */
 .song-row__spacer {
   flex: 1;
   min-width: 0;
@@ -182,11 +184,32 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* ── 列表外层与表头（1.9.0）── */
+
+/* ── 列表外层 ── */
 .song-list {
   width: 100%;
 }
 
+/* 空态 */
+.song-list__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+}
+
+.song-list__empty-icon {
+  margin-bottom: 12px;
+  color: var(--text-tertiary);
+}
+
+.song-list__empty-text {
+  font-size: var(--text-base);
+}
+
+/* 批量管理入口 */
 .song-list__batch-entry {
   display: flex;
   justify-content: flex-end;
@@ -199,9 +222,8 @@
   align-items: center;
   padding: 5px 14px;
   border: 1px solid var(--border-default);
-  border-radius: 16px;
-  background: transparent;
-  /* 排版在 :where 里避免与 batch-btn 的圆角/字号互相覆盖 */
+  border-radius: var(--radius-lg);
+  background-color: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   font-size: var(--text-sm);
@@ -209,20 +231,17 @@
 
 .song-list__batch-toggle[data-active] {
   border-color: var(--accent);
-  background: var(--accent);
+  background-color: var(--accent);
   color: var(--text-inverse);
 }
 
-/* 批量栏：高度/位移用 data-visible 驱动，动效与原先的 0.3s 一致 */
+/* 批量操作栏：高度 / 位移由 data-visible 驱动，过渡曲线与原先的内联值一致 */
 .song-list__batch-wrap {
   height: 0;
   margin-bottom: 0;
   overflow: hidden;
   opacity: 0;
-  transition:
-    height var(--duration-slow) var(--ease-standard),
-    opacity var(--duration-slow) var(--ease-standard),
-    margin-bottom var(--duration-slow) var(--ease-standard);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .song-list__batch-wrap[data-visible] {
@@ -237,9 +256,9 @@
   justify-content: space-between;
   padding: 12px 16px;
   border-radius: var(--radius-md);
-  background: var(--surface-card-hover);
+  background-color: var(--bg-hover);
   transform: translateY(-10px);
-  transition: transform var(--duration-slow) var(--ease-standard);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .song-list__batch-wrap[data-visible] .song-list__batch-bar {
@@ -261,25 +280,27 @@
   gap: 6px;
   align-items: center;
   padding: 8px 16px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-xl);
+  background-color: var(--accent);
   color: var(--text-inverse);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
+  transition: all 0.15s ease;
 }
 
+/* 原实现只在未禁用时改悬停色 */
 .song-list__batch-btn:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background-color: var(--accent-hover);
 }
 
 .song-list__batch-btn--danger {
-  background: var(--danger);
+  background-color: var(--danger);
 }
 
 .song-list__batch-btn--danger:hover:not(:disabled) {
-  background: var(--danger-hover);
+  background-color: var(--danger-hover);
 }
 
 .song-list__batch-btn:disabled {
@@ -287,7 +308,7 @@
   opacity: 0.5;
 }
 
-/* 表头：贴住内容区上边（--sticky-top 由页面按滚动容器 padding 下发） */
+/* ── 表头：sticky 偏移由 stickyTopForContent 经 --sticky-top 下发 ── */
 .song-list__head {
   position: sticky;
   top: var(--sticky-top, 0px);
@@ -295,9 +316,9 @@
   display: flex;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--surface-content);
-  backdrop-filter: var(--material-blur);
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-base);
+  backdrop-filter: blur(8px);
   color: var(--text-tertiary);
   font-size: var(--text-xs);
   font-weight: var(--weight-medium);
@@ -337,27 +358,13 @@
   text-align: center;
 }
 
-/* 行容器：虚拟化模式靠等高 spacer 撑高 */
+/* 行容器：虚拟化模式下由等高 spacer 撑高 */
 .song-list__rows[data-virtual] {
   position: relative;
   height: var(--total-size);
 }
 
-/* 空态 */
-.song-list__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: var(--text-tertiary);
-}
-
-.song-list__empty-icon {
-  margin-bottom: 12px;
-  color: var(--text-tertiary);
-}
-/* ── 骨架屏（与真实行同列，1.9.0）── */
+/* ── 骨架屏（与真实行同列） ── */
 .song-skeleton {
   padding: 8px 0;
 }
@@ -366,10 +373,12 @@
   display: flex;
   align-items: center;
   padding: 10px 16px;
-  border-radius: var(--radius-8);
+  border-radius: var(--radius-sm);
 }
 
 .song-skeleton__col {
+  width: var(--col-width);
+  flex-shrink: 0;
   text-align: center;
 }
 
@@ -394,11 +403,14 @@
   gap: 4px;
   align-items: center;
   justify-content: center;
+  width: var(--col-width);
+  flex-shrink: 0;
 }
 
+/* 条形只负责尺寸与圆角，渐变 / 闪烁沿用 global.css 的 .skeleton-shimmer */
 .skeleton-shimmer.song-skeleton__box {
   display: inline-block;
-  border-radius: var(--radius-3);
+  border-radius: var(--radius-xs);
 }
 
 .song-skeleton__box--check {
@@ -415,7 +427,7 @@
   width: 44px;
   height: 44px;
   flex-shrink: 0;
-  border-radius: var(--radius-8);
+  border-radius: var(--radius-md);
 }
 
 .song-skeleton__box--title {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import '../styles/page-discover.css';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { toast } from '@/renderer/services/toastStore';
 import { ArrowLeft, Flame, Disc3, ListMusic, Mic2 } from 'lucide-react';
@@ -41,21 +42,6 @@ const EMPTY_CHART: ChartEntry = { name: '', songs: [] };
 function toChartEntry(groups: ToplistGroup[] | null, source: ToplistSourceKey, sourceId: number | string): ChartEntry {
   const group = pickToplistGroup(groups || [], source, sourceId);
   return { name: group?.name ?? '', songs: group?.songs ?? [] };
-}
-
-/** 分段 pill 按钮样式（源切换与搜索结果二级 tab 共用，避免两处漂移；文字走语义 token 不写魔法色）。 */
-function pillStyle(active: boolean, extra?: React.CSSProperties): React.CSSProperties {
-  return {
-    border: 'none',
-    cursor: 'pointer',
-    borderRadius: 'var(--radius-full)',
-    fontSize: 'var(--text-sm)',
-    fontWeight: active ? 600 : 400,
-    color: active ? 'var(--text-inverse)' : 'var(--text-secondary)',
-    backgroundColor: active ? 'var(--accent)' : 'var(--bg-hover)',
-    transition: 'background-color 0.15s ease',
-    ...extra,
-  };
 }
 
 type TabKey = 'charts' | 'albums' | 'playlists' | 'artists';
@@ -517,34 +503,20 @@ const DiscoverPageV2: React.FC = () => {
   // 否则搜索失败或全空时整个视图不渲染、静默落回首页（story 20 空/错误态不可达）。
   if (currentKeyword) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
-          padding: 'var(--space-3) var(--space-6)',
-          borderBottom: '1px solid var(--border-subtle)',
-          backgroundColor: 'var(--bg-surface)', height: '60px', flexShrink: 0,
-        }}>
-          <button onClick={handleBackFromSearch} style={{
-            border: 'none', background: 'transparent', cursor: 'pointer',
-            padding: 'var(--space-3)', borderRadius: 'var(--radius-md)',
-            display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-            color: 'var(--text-secondary)', fontSize: 'var(--text-base)', fontWeight: 500,
-          }}>
+      <div className="discover-page">
+        <div className="discover-topbar">
+          <button onClick={handleBackFromSearch} className="discover-back discover-back--roomy">
             <ArrowLeft size={16} />
             <span>返回</span>
           </button>
-          <h1 style={{
-            fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text-primary)',
-            flex: 1, margin: 0, textAlign: 'center',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
+          <h1 className="discover-topbar__title">
             搜索结果: {currentKeyword}
           </h1>
-          <div style={{ width: '140px' }} />
+          <div className="discover-topbar__spacer" />
         </div>
 
         {/* 单曲 / 歌手 / 歌单二级 tab */}
-        <div style={{ display: 'flex', gap: '8px', padding: '10px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', flexShrink: 0 }}>
+        <div className="discover-subtabs">
           {([
             { key: 'songs' as const, label: '单曲', count: searchSongs.length },
             { key: 'artists' as const, label: '歌手', count: artistResults.length },
@@ -554,17 +526,11 @@ const DiscoverPageV2: React.FC = () => {
               key={tab.key}
               aria-pressed={activeSearchTab === tab.key}
               onClick={() => handleSearchTabChange(tab.key)}
-              style={pillStyle(activeSearchTab === tab.key, {
-                display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 16px',
-              })}
+              className={`discover-pill discover-pill--tab${activeSearchTab === tab.key ? ' discover-pill--active' : ''}`}
             >
               {tab.label}
               {tab.count > 0 && (
-                <span style={{
-                  fontSize: 'var(--text-2xs)', padding: '1px 6px', borderRadius: 'var(--radius-full)',
-                  backgroundColor: activeSearchTab === tab.key ? 'rgba(255,255,255,0.25)' : 'var(--bg-active)',
-                  color: activeSearchTab === tab.key ? '#fff' : 'var(--text-tertiary)',
-                }}>
+                <span className={`discover-pill__count${activeSearchTab === tab.key ? ' discover-pill__count--active' : ''}`}>
                   {tab.count}
                 </span>
               )}
@@ -572,10 +538,10 @@ const DiscoverPageV2: React.FC = () => {
           ))}
         </div>
 
-        <div style={{ flex: 1, overflow: 'hidden' }}>
+        <div className="discover-search-body">
           {activeSearchTab === 'songs' ? (
             searchError && searchSongs.length === 0 && !searchLoading ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>{searchError}</div>
+              <div className="discover-status discover-status--danger">{searchError}</div>
             ) : sourceType === 'all' ? (
               <GroupedSongList
                 groups={groupedResults}
@@ -596,7 +562,7 @@ const DiscoverPageV2: React.FC = () => {
                 onLoadMore={handleSearchLoadMore}
               />
             ) : (
-              <div ref={singleSourceScrollRef} style={{ height: '100%', overflowY: 'auto' }}>
+              <div ref={singleSourceScrollRef} className="discover-scroll">
                 <SongList
                   songs={searchSongs}
                   currentSongId={currentSong?.id}
@@ -610,17 +576,22 @@ const DiscoverPageV2: React.FC = () => {
                   emptyText="未找到相关歌曲"
                 />
                 {hasMore && (searchLoading || searchLoadingMore) && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中...</div>
+                  <div className="discover-note">加载中...</div>
                 )}
                 {!hasMore && searchSongs.length > 0 && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>没有更多歌曲了</div>
+                  <div className="discover-note">没有更多歌曲了</div>
                 )}
               </div>
             )
           ) : activeSearchTab === 'playlists' ? (
             // 歌单 tab（#415）：复用发现页同一张歌单网格与既有详情页；空态文案区分
             // 「搜索歌单」与发现页一级的「歌单广场」（两者语义不同，见 PlaylistPageGrid.emptyText）
-            <div ref={playlistScrollRef} style={{ height: '100%', overflowY: 'auto', padding: '24px' }}>
+            // 滚动轴经自定义属性传入（#415 测试按 style 里的 overflow-y 定位该容器）
+            <div
+              ref={playlistScrollRef}
+              className="discover-scroll discover-scroll--padded"
+              style={{ '--overflow-y': 'auto' } as React.CSSProperties}
+            >
               <PlaylistPageGrid
                 playlists={playlistResults}
                 loading={playlistLoading}
@@ -630,30 +601,30 @@ const DiscoverPageV2: React.FC = () => {
                 emptyText="没有搜到歌单，去发现页看看歌单广场"
               />
               {playlistLoadingMore && (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中…</div>
+                <div className="discover-note discover-note--tight">加载中…</div>
               )}
               {playlistMoreError && !playlistLoadingMore && (
-                <div style={{ padding: '16px', textAlign: 'center', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--text-tertiary)' }}>加载更多失败</span>
+                <div className="discover-more-error">
+                  <span className="discover-more-error__text">加载更多失败</span>
                   <button
                     onClick={loadMorePlaylists}
-                    style={{ marginLeft: '8px', padding: '4px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                    className="discover-retry"
                   >
                     重试
                   </button>
                 </div>
               )}
               {!playlistMore && !playlistLoadingMore && !playlistMoreError && playlistResults.length > 0 && (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>已加载全部歌单</div>
+                <div className="discover-note discover-note--tight">已加载全部歌单</div>
               )}
             </div>
           ) : artistLoading && artistResults.length === 0 ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>正在搜索歌手…</div>
+            <div className="discover-status">正在搜索歌手…</div>
           ) : artistError ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>歌手搜索失败</div>
+            <div className="discover-status discover-status--danger">歌手搜索失败</div>
           ) : artistResults.length > 0 ? (
-            <div style={{ height: '100%', overflowY: 'auto', padding: '24px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 'var(--space-5)' }}>
+            <div className="discover-scroll discover-scroll--padded">
+              <div className="discover-artist-grid">
                 {artistResults.map((a) => (
                   <button
                     key={a.id}
@@ -662,29 +633,19 @@ const DiscoverPageV2: React.FC = () => {
                       cacheArtistMeta(a.id, { name: a.name, pic: a.picUrl });
                       navigate(`/artist/${a.id}`, { state: { name: a.name, pic: a.picUrl } });
                     }}
-                    style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                      padding: '16px 8px', border: 'none', background: 'transparent', cursor: 'pointer', minWidth: 0,
-                      borderRadius: 'var(--radius-md)',
-                    }}
+                    className="discover-artist"
                   >
-                    <span
-                      style={{
-                        width: '72px', height: '72px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-                        backgroundColor: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '28px', color: 'var(--text-tertiary)', border: '1px solid var(--border-default)',
-                      }}
-                    >
+                    <span className="discover-artist__avatar">
                       {a.picUrl ? (
-                        <img src={coverThumbUrl(a.picUrl, COVER_SIZE.icon)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={coverThumbUrl(a.picUrl, COVER_SIZE.icon)} alt="" className="discover-artist__img" />
                       ) : (
                         a.name.charAt(0)
                       )}
                     </span>
-                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                    <span className="discover-artist__name">
                       {a.name}
                     </span>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                    <span className="discover-artist__meta">
                       专辑 {a.albumSize} · 歌曲 {a.musicSize}
                     </span>
                   </button>
@@ -692,7 +653,7 @@ const DiscoverPageV2: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>未找到相关歌手</div>
+            <div className="discover-status">未找到相关歌手</div>
           )}
         </div>
       </div>
@@ -700,61 +661,30 @@ const DiscoverPageV2: React.FC = () => {
   }
 
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-      } as React.CSSProperties}
-    >
-      <div style={{
-        display: 'flex', flexDirection: 'column',
-        padding: '16px 28px 0',
-        borderBottom: '1px solid var(--border-subtle)',
-        backgroundColor: 'var(--bg-surface)',
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px' }}>
-          <span style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+    <div className="discover-page">
+      <div className="discover-header">
+        <div className="discover-header__row">
+          <span className="discover-header__title">
             今天听什么
           </span>
-          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+          <span className="discover-header__meta">
             网易云 · QQ · 酷狗
           </span>
         </div>
-        <div style={{ display: 'flex', gap: '18px', marginTop: '12px', overflowX: 'auto' }}>
+        <div className="discover-tabs">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              style={{
-                position: 'relative',
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '6px 2px 14px',
-                border: 'none',
-                background: 'transparent',
-                color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: 'var(--text-sm)',
-                fontWeight: activeTab === tab.key ? 600 : 400,
-                whiteSpace: 'nowrap',
-                transition: 'color 0.15s ease',
-              }}
+              className={`discover-tab${activeTab === tab.key ? ' discover-tab--active' : ''}`}
             >
               {tab.icon}
               <span>{tab.label}</span>
               {activeTab === tab.key && (
-                <span
-                  aria-hidden
-                  style={{
-                    position: 'absolute', left: '50%', bottom: '4px', transform: 'translateX(-50%)',
-                    display: 'flex', alignItems: 'flex-end', gap: '2px', height: '10px',
-                    animation: 'fadeIn 0.2s ease-out',
-                  }}
-                >
-                  <span style={{ width: '2px', height: '6px', borderRadius: '1px', backgroundColor: 'var(--accent)' }} />
-                  <span style={{ width: '2px', height: '10px', borderRadius: '1px', backgroundColor: 'var(--accent)' }} />
-                  <span style={{ width: '2px', height: '7px', borderRadius: '1px', backgroundColor: 'var(--accent)' }} />
+                <span aria-hidden className="discover-tab__bars">
+                  <span className="discover-tab__bar discover-tab__bar--low" />
+                  <span className="discover-tab__bar discover-tab__bar--tall" />
+                  <span className="discover-tab__bar discover-tab__bar--mid" />
                 </span>
               )}
             </button>
@@ -762,25 +692,23 @@ const DiscoverPageV2: React.FC = () => {
         </div>
       </div>
 
-      <div
-        style={{ flex: 1, overflow: 'hidden', padding: activeTab === 'artists' ? 0 : 'var(--space-5) var(--space-6)' }}
-      >
+      <div className={activeTab === 'artists' ? 'discover-body discover-body--flush' : 'discover-body'}>
         {activeTab === 'charts' && (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div className="discover-panel">
             {/* 源切换（#332 选项 A）：不再把三源合成一张跨源榜，而是「切源看该源自己的榜」 */}
-            <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-5)', flexShrink: 0 }}>
+            <div className="discover-pills">
               {CHART_SOURCE_OPTIONS.map((s) => (
                 <button
                   key={s}
                   onClick={() => setChartSource(s)}
                   aria-pressed={chartSource === s}
-                  style={pillStyle(chartSource === s, { padding: '4px 14px' })}
+                  className={`discover-pill discover-pill--source${chartSource === s ? ' discover-pill--active' : ''}`}
                 >
                   {SOURCE_DISPLAY_NAMES[s]}
                 </button>
               ))}
             </div>
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 'var(--space-6)' }}>
+            <div className="discover-charts">
               <ChartPanel
                 title={chartTitle('hot', hotChart)}
                 chartId="hot"
@@ -818,29 +746,19 @@ const DiscoverPageV2: React.FC = () => {
         )}
 
         {activeTab === 'playlists' && (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-5)', flexShrink: 0 }}>
+          <div className="discover-panel">
+            <div className="discover-pills discover-pills--wrap">
               {PLAYLIST_CATEGORIES.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => handlePlaylistCategoryChange(cat)}
-                  style={{
-                    padding: '6px 16px',
-                    borderRadius: '20px',
-                    border: '1px solid var(--border-default)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--text-sm)',
-                    fontWeight: playlistCategory === cat ? 600 : 400,
-                    color: playlistCategory === cat ? 'white' : 'var(--text-secondary)',
-                    background: playlistCategory === cat ? 'var(--accent)' : 'transparent',
-                    transition: 'all 0.15s ease',
-                  }}
+                  className={`discover-chip${playlistCategory === cat ? ' discover-chip--active discover-chip--strong' : ''}`}
                 >
                   {cat}
                 </button>
               ))}
             </div>
-            <div onScroll={handlePlaylistScroll} style={{ flex: 1, overflow: 'auto' }}>
+            <div onScroll={handlePlaylistScroll} className="discover-list-scroll">
               <PlaylistPageGrid
                 playlists={playlistList}
                 loading={playlistListLoading}
@@ -849,10 +767,10 @@ const DiscoverPageV2: React.FC = () => {
                 onPlaylistSelect={handlePlaylistSelect}
               />
               {playlistListLoadingMore && (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中...</div>
+                <div className="discover-note discover-note--tight">加载中...</div>
               )}
               {!playlistListHasMore && playlistList.length > 0 && (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>没有更多歌单了</div>
+                <div className="discover-note discover-note--tight">没有更多歌单了</div>
               )}
             </div>
           </div>

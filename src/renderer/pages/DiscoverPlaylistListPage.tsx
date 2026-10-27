@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import '../styles/page-discover.css';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ListMusic } from 'lucide-react';
 import { useLazyLoad } from '@/renderer/hooks/useLazyLoad';
@@ -75,170 +76,64 @@ const DiscoverPlaylistListPage: React.FC = () => {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          padding: '12px 24px',
-          borderBottom: '1px solid var(--border-subtle)',
-          backgroundColor: 'var(--bg-surface)',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-          height: '60px',
-        }}
-      >
+    <div className="discover-page">
+      <div className="discover-topbar discover-topbar--shadow">
         <button
           onClick={() => navigate('/discover')}
-          style={{
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            padding: '10px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: 'var(--text-secondary)',
-            transition: 'all 0.2s ease',
-            fontSize: '14px',
-            fontWeight: 500,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-            e.currentTarget.style.color = 'var(--text-primary)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-            e.currentTarget.style.color = 'var(--text-secondary)';
-          }}
+          className="discover-back discover-back--action"
         >
           <ArrowLeft size={16} />
           <span>返回</span>
         </button>
-        <h1
-          style={{
-            fontSize: '20px',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            flex: 1,
-            margin: 0,
-            textAlign: 'center',
-          }}
-        >
+        <h1 className="discover-topbar__title">
           热门歌单
         </h1>
-        <div style={{ width: '140px' }} />
+        <div className="discover-topbar__spacer" />
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          gap: '8px',
-          padding: '12px 24px',
-          borderBottom: '1px solid var(--border-subtle)',
-          overflowX: 'auto',
-          backgroundColor: 'var(--bg-surface)',
-          flexShrink: 0,
-        }}
-      >
+      <div className="discover-cats">
         {CATEGORIES.map(cat => (
           <button
             key={cat}
             onClick={() => handleCategoryChange(cat)}
-            style={{
-              padding: '6px 16px',
-              borderRadius: '20px',
-              border: '1px solid var(--border-default)',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: 500,
-              whiteSpace: 'nowrap',
-              transition: 'all 0.2s ease',
-              background: currentCat === cat ? 'var(--accent)' : 'transparent',
-              color: currentCat === cat ? 'white' : 'var(--text-secondary)',
-            }}
+            className={`discover-chip discover-chip--medium${currentCat === cat ? ' discover-chip--active' : ''}`}
           >
             {cat}
           </button>
         ))}
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+      <div className="discover-scroll-area">
         {loading ? (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-              gap: '20px',
-            }}
-          >
+          <div className="discover-grid">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={`skeleton-${i}`}>
-                <div
-                  style={{
-                    paddingTop: '100%',
-                    borderRadius: '8px',
-                    background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
-                    backgroundSize: '200% 200%',
-                    animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                  }}
-                />
-                <div
-                  style={{
-                    height: '14px',
-                    marginTop: '8px',
-                    borderRadius: '2px',
-                    background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)',
-                    backgroundSize: '200% 200%',
-                    animation: 'skeletonLoading 1.5s ease-in-out infinite',
-                  }}
-                />
+                <div className="discover-sk-cover" />
+                <div className="discover-sk-line" />
               </div>
             ))}
-            <style>{`
-              @keyframes skeletonLoading {
-                0% { background-position: 200% 0; }
-                100% { background-position: -200% 0; }
-              }
-            `}</style>
           </div>
         ) : (
           <>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-                gap: '20px',
-              }}
-            >
+            <div className="discover-grid">
               {playlists.map(playlist => (
                 <DiscoverPlaylistCard key={playlist.id} playlist={playlist} />
               ))}
             </div>
 
             {hasMore && (
-              <div ref={triggerRef} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+              <div ref={triggerRef} className="discover-note">
                 {loadingMore ? '加载中...' : '上滑加载更多'}
               </div>
             )}
             {!hasMore && playlists.length > 0 && (
-              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+              <div className="discover-note">
                 没有更多歌单了
               </div>
             )}
             {!loading && playlists.length === 0 && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '60px 20px',
-                  color: 'var(--text-tertiary)',
-                }}
-              >
-                <ListMusic size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
+              <div className="discover-empty">
+                <ListMusic size={26} className="discover-empty__icon" />
                 <div>暂无歌单数据</div>
               </div>
             )}

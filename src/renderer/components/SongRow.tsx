@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import '@/renderer/styles/songlist.css';
 import { useNavigate } from 'react-router-dom';
 import { Play, Trash2, ListMusic, RefreshCw, User, ListPlus } from 'lucide-react';
 import type { Song } from '@mplayer/core';
@@ -9,7 +10,6 @@ import SongCover from '@/renderer/components/SongCover';
 import { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import RowActionButtons from '@/renderer/components/RowActionButtons';
 import { COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_ALBUM, colWidth } from '@/renderer/components/songTableColumns';
-import '@/renderer/styles/songlist.css';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -149,7 +149,7 @@ const SongRow: React.FC<SongRowProps> = ({
       <div className="song-row__main" data-fill={fillTitle ? 'true' : 'false'}>
         <div className="song-row__cover">
           <SongCover src={song.cover} alt={song.name} variant="gradient" onError={() => onCoverError?.(song)} />
-          <div className="song-row__cover-play" onClick={() => onPlay(song)} role="presentation">
+          <div className="song-row__cover-play" onClick={() => onPlay(song)}>
             <Play size={16} color="white" fill="white" />
           </div>
         </div>

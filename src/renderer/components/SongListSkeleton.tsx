@@ -1,6 +1,6 @@
 import React from 'react';
-import { COL_CHECKBOX, COL_INDEX, COL_ALBUM, COL_ACTIONS, colWidth } from '@/renderer/components/songTableColumns';
 import '@/renderer/styles/songlist.css';
+import { COL_CHECKBOX, COL_INDEX, COL_ALBUM, COL_ACTIONS, colWidth } from '@/renderer/components/songTableColumns';
 
 interface SongListSkeletonProps {
   rowCount?: number;
@@ -35,7 +35,7 @@ const SkeletonRow: React.FC<{ showCheckbox: boolean; showIndex: boolean; showAlb
       </div>
     </div>
     {showAlbum && (
-      <div style={colWidth(COL_ALBUM)}>
+      <div className="song-skeleton__col" style={colWidth(COL_ALBUM)}>
         <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--album" />
       </div>
     )}

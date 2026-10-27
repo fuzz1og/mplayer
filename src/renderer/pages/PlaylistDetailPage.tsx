@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import '@/renderer/styles/page-playlist-detail.css';
 import { Play, ArrowLeft, Edit2, Music, Download, Trash2, Upload, GripVertical, Search, X } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from '@/renderer/services/toastStore';
@@ -19,10 +20,12 @@ import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
 /** overlay 里的静态拖拽把手：只是视觉延续，不接 dnd（overlay 内容整体 pointer-events: none） */
 const previewDragHandle = (
-  <span aria-hidden style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>
+  <span aria-hidden className="playlist-detail__drag-handle">
     <GripVertical size={14} />
   </span>
 );
+
+const scrollContainerCss = '.playlist-detail__scroll { overflow: auto; }';
 
 const PlaylistDetailPage: React.FC = () => {
   const confirm = useConfirm();
@@ -304,20 +307,13 @@ const PlaylistDetailPage: React.FC = () => {
 
   if (!playlist && !loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ fontSize: '18px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+      <div className="playlist-detail__missing">
+        <div className="playlist-detail__missing-text">
           歌单不存在
         </div>
         <button
           onClick={() => navigate('/playlists')}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: 'var(--accent)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-          }}
+          className="playlist-detail__missing-action"
         >
           返回歌单列表
         </button>
@@ -326,12 +322,12 @@ const PlaylistDetailPage: React.FC = () => {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="playlist-detail">
       {/* 顶部工具栏 */}
-      <div style={{ padding: '10px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', flexShrink: 0 }}>
+      <div className="playlist-detail__toolbar">
         <button
           onClick={() => navigate('/playlists')}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '14px' }}
+          className="playlist-detail__back"
         >
           <ArrowLeft size={16} />
           返回歌单
@@ -339,39 +335,39 @@ const PlaylistDetailPage: React.FC = () => {
       </div>
 
       {/* 歌曲列表 */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div className="playlist-detail__scroll">
         {playlist && (
-          <div style={{ padding: '24px 24px 8px' }}>
-            <div style={{ display: 'flex', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}>
-              <div style={{ width: '160px', height: '160px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%)' }}>
+          <div className="playlist-detail__head">
+            <div className="playlist-detail__card">
+              <div className="playlist-detail__cover">
                 <SongCover src={detailCoverSrc} variant="none" />
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>我的歌单</div>
+              <div className="playlist-detail__info">
+                <div className="playlist-detail__kind-row">
+                  <div className="playlist-detail__kind">我的歌单</div>
                   <button
                     onClick={() => {
                       setEditName(playlist.name);
                       setEditDesc(playlist.description || '');
                       setIsEditModalVisible(true);
                     }}
-                    style={{ padding: '4px 7px', backgroundColor: 'transparent', border: '1px solid var(--border-default)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0 }}
+                    className="playlist-detail__edit"
                   >
                     <Edit2 size={13} />
                   </button>
                 </div>
-                <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', margin: '8px 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{playlist.name}</h1>
-                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginBottom: '18px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <h1 className="playlist-detail__title">{playlist.name}</h1>
+                <div className="playlist-detail__meta">
                   {songs.length} 首歌曲{playlist.description ? ` · ${playlist.description}` : ''}
                 </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button onClick={handlePlayAll} disabled={songs.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'var(--accent)', color: 'white', border: 'none', borderRadius: '20px', cursor: songs.length > 0 ? 'pointer' : 'not-allowed', opacity: songs.length > 0 ? 1 : 0.5, fontSize: '14px', fontWeight: 500 }}>
+                <div className="playlist-detail__actions">
+                  <button onClick={handlePlayAll} disabled={songs.length === 0} className="playlist-detail__action playlist-detail__action--primary">
                     <Play size={16} /> 播放全部
                   </button>
-                  <button onClick={handleDownloadAll} disabled={songs.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)', borderRadius: '20px', cursor: songs.length > 0 ? 'pointer' : 'not-allowed', opacity: songs.length > 0 ? 1 : 0.5, fontSize: '14px', fontWeight: 500 }}>
+                  <button onClick={handleDownloadAll} disabled={songs.length === 0} className="playlist-detail__action">
                     <Download size={16} /> 下载全部
                   </button>
-                  <button onClick={() => setImportModalVisible(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)', borderRadius: '20px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+                  <button onClick={() => setImportModalVisible(true)} className="playlist-detail__action">
                     <Upload size={16} /> 导入歌曲
                   </button>
                 </div>
@@ -380,43 +376,37 @@ const PlaylistDetailPage: React.FC = () => {
           </div>
         )}
         {loading && songs.length === 0 ? (
-          <div style={{ padding: '24px' }}>
+          <div className="playlist-detail__skeleton">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={`sk-${i}`} style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px', marginBottom: '8px' }}>
-                <div style={{ width: '30px', textAlign: 'center' }}>
-                  <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+              <div key={`sk-${i}`} className="playlist-detail__sk-row">
+                <div className="playlist-detail__sk-col">
+                  <div className="playlist-detail__sk-bar" />
                 </div>
-                <div style={{ width: '30px', textAlign: 'center' }}>
-                  <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+                <div className="playlist-detail__sk-col">
+                  <div className="playlist-detail__sk-bar" />
                 </div>
-                <div style={{ width: '30px', textAlign: 'center' }}>
-                  <div style={{ width: '20px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+                <div className="playlist-detail__sk-col">
+                  <div className="playlist-detail__sk-bar playlist-detail__sk-bar--num" />
                 </div>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '4px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ width: '70%', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', marginBottom: '4px' }} />
-                    <div style={{ width: '50%', height: '12px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', animationDelay: '0.1s' }} />
+                <div className="playlist-detail__sk-body">
+                  <div className="playlist-detail__sk-thumb" />
+                  <div className="playlist-detail__sk-lines">
+                    <div className="playlist-detail__sk-line" />
+                    <div className="playlist-detail__sk-line playlist-detail__sk-line--short" />
                   </div>
                 </div>
-                <div style={{ width: '100px', display: 'flex', justifyContent: 'center', gap: '4px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
+                <div className="playlist-detail__sk-actions">
+                  <div className="playlist-detail__sk-circle" />
+                  <div className="playlist-detail__sk-circle" />
                 </div>
               </div>
             ))}
-            <style>{`
-              @keyframes skeletonLoading {
-                0% { background-position: 200% 0; }
-                100% { background-position: -200% 0; }
-              }
-            `}</style>
           </div>
         ) : songs.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', color: 'var(--text-tertiary)' }}>
+          <div className="playlist-detail__empty">
             <Music size={48} />
-            <div style={{ fontSize: '14px', marginTop: '16px' }}>歌单暂无歌曲</div>
-            <div style={{ fontSize: '12px', marginTop: '8px', color: 'var(--text-tertiary)' }}>去发现音乐添加歌曲吧</div>
+            <div className="playlist-detail__empty-title">歌单暂无歌曲</div>
+            <div className="playlist-detail__empty-hint">去发现音乐添加歌曲吧</div>
           </div>
         ) : (
           /* 窗口化 + 可排序收在共享能力里（#445）：页面不再自建 DndContext/SortableContext，
@@ -430,8 +420,8 @@ const PlaylistDetailPage: React.FC = () => {
                 {/* 歌单内过滤（#488）：只改展示集合，不重排/不改 order/不碰 playlist:reorderFull。
                     输入框走 header 插槽 → 与 rowsRef 同处一个父容器，它变高不会让 scrollMargin
                     停在旧值（同 #445 口径，见 VirtualSortableList 的约束 4）。 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <Search size={14} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
+                <div className="playlist-detail__filter">
+                  <Search size={14} color="var(--text-tertiary)" className="playlist-detail__filter-icon" />
                   <input
                     type="text"
                     value={filterQuery}
@@ -439,18 +429,18 @@ const PlaylistDetailPage: React.FC = () => {
                     placeholder="按歌名或歌手过滤"
                     aria-label="按歌名或歌手过滤"
                     autoComplete="off"
-                    style={{ flex: 1, minWidth: 0, padding: '6px 10px', border: '1px solid var(--border-default)', borderRadius: '6px', backgroundColor: 'transparent', color: 'var(--text-primary)', fontSize: '13px' }}
+                    className="playlist-detail__filter-input"
                   />
                   {isFiltering && (
                     <>
-                      <span style={{ flexShrink: 0, fontSize: '12px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+                      <span className="playlist-detail__filter-count">
                         {visibleSongs.length} / {songs.length} 首
                       </span>
                       <button
                         onClick={() => setFilterQuery('')}
                         aria-label="清空过滤"
                         title="清空过滤"
-                        style={{ display: 'flex', alignItems: 'center', flexShrink: 0, padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}
+                        className="playlist-detail__filter-clear"
                       >
                         <X size={14} />
                       </button>
@@ -460,43 +450,43 @@ const PlaylistDetailPage: React.FC = () => {
                 {/* 提示条 + 批量栏 + 表头（#445）：与 rowsRef 同父由组件的真实 <div> wrapper 保证。
                     放在组件之外时 scrollMargin 会停在旧值 → 勾选一首歌整表错位一条栏高，且不报错。 */}
                 {isReordering && (
-                  <div style={{ padding: '8px 16px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                  <div className="playlist-detail__reordering">
                     正在保存排序...
                   </div>
                 )}
                 {/* Batch action bar：只统计**可见**的已选项，与批量操作的作用域一致（#488） */}
                 {visibleSelectedIds.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(47, 95, 208, 0.08)', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>已选择 {visibleSelectedIds.length} 项</span>
+                  <div className="playlist-detail__batch">
+                    <span className="playlist-detail__batch-count">已选择 {visibleSelectedIds.length} 项</span>
                     <button onClick={handleBatchDownload}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12px' }}>
+                      className="playlist-detail__batch-btn">
                       <Download size={12} /> 批量下载
                     </button>
                     <button onClick={handleBatchDelete}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--danger)', fontSize: '12px' }}>
+                      className="playlist-detail__batch-btn playlist-detail__batch-btn--danger">
                       <Trash2 size={12} /> 批量移除
                     </button>
                   </div>
                 )}
                 {/* Table header */}
-                <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                  <div style={{ width: '40px', textAlign: 'center' }}>
+                <div className="playlist-detail__thead">
+                  <div className="playlist-detail__th--check">
                     <input
                       type="checkbox"
                       checked={allVisibleSelected}
                       onChange={handleSelectAll}
                       aria-label="全选可见歌曲"
                       title={isFiltering ? '全选当前过滤结果' : '全选'}
-                      style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
+                      className="playlist-detail__thead-checkbox"
                     />
                   </div>
-                  <div style={{ width: '50px', textAlign: 'center' }}>#</div>
-                  <div style={{ flex: 1 }}>标题</div>
-                  <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
+                  <div className="playlist-detail__th--num">#</div>
+                  <div className="playlist-detail__th--title">标题</div>
+                  <div className="playlist-detail__th--actions">操作</div>
                 </div>
                 {/* 过滤态命中为空：没有可渲染的行，给一句明确的空态而不是只剩表头（#488） */}
                 {isFiltering && visibleSongs.length === 0 && (
-                  <div style={{ padding: '48px 16px', textAlign: 'center', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                  <div className="playlist-detail__nomatch">
                     没有匹配「{filterQuery.trim()}」的歌曲
                   </div>
                 )}
@@ -512,93 +502,50 @@ const PlaylistDetailPage: React.FC = () => {
       {/* 编辑歌单弹窗 */}
       {isEditModalVisible && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
+          className="playlist-detail__modal-backdrop"
           onClick={() => setIsEditModalVisible(false)}
         >
           <div
-            style={{
-              width: '400px',
-              backgroundColor: 'var(--bg-surface)',
-              borderRadius: '12px',
-              padding: '24px',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-            }}
+            className="playlist-detail__modal"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>
+            <h3 className="playlist-detail__modal-title">
               编辑歌单
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="playlist-detail__form">
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                <label className="playlist-detail__label">
                   歌单名称
                 </label>
                 <input
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                  }}
+                  className="playlist-detail__input"
                 />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                <label className="playlist-detail__label">
                   歌单描述
                 </label>
                 <textarea
                   value={editDesc}
                   onChange={(e) => setEditDesc(e.target.value)}
                   rows={3}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    resize: 'vertical',
-                  }}
+                  className="playlist-detail__textarea"
                 />
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
+            <div className="playlist-detail__modal-actions">
               <button
                 onClick={() => setIsEditModalVisible(false)}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'transparent',
-                  color: 'var(--text-secondary)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                }}
+                className="playlist-detail__modal-btn"
               >
                 取消
               </button>
               <button
                 onClick={handleEditPlaylist}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'var(--accent)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                }}
+                className="playlist-detail__modal-btn playlist-detail__modal-btn--primary"
               >
                 保存
               </button>
@@ -613,6 +560,10 @@ const PlaylistDetailPage: React.FC = () => {
         onClose={() => setImportModalVisible(false)}
         onImported={loadData}
       />
+      {/* scrollContainerCss 是 .playlist-detail__scroll 的 overflow 同义副本：VirtualSortableList 探测滚动祖先
+          走 getComputedStyle，单测（jsdom）不加载 CSS 文件，只有内联样式或 <style> 才认得出容器可滚动。
+          href + precedence 让 React 19 把它提升进 <head>，页面 DOM 结构与样式表内规则都不受影响。 */}
+      <style href="playlist-detail-scroll" precedence="default">{scrollContainerCss}</style>
     </div>
   );
 };

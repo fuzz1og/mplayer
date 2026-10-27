@@ -161,7 +161,7 @@
 .playlist-detail__sk-circle {
   background: linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%);
   background-size: 200% 200%;
-  animation: skeletonLoading 1.5s ease-in-out infinite;
+  animation: playlist-detail-skeleton 1.5s ease-in-out infinite;
 }
 
 .playlist-detail__sk-bar {
@@ -179,6 +179,13 @@
   width: 40px;
   height: 40px;
   border-radius: var(--radius-xs);
+}
+
+.playlist-detail__sk-body {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
 }
 
 .playlist-detail__sk-lines {
@@ -210,6 +217,17 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-full);
+}
+
+/* 骨架屏扫光：页面级 keyframes，避免与 global.css 的 skeletonLoading（透明度脉冲）撞名 */
+@keyframes playlist-detail-skeleton {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 /* ── 空态 ── */

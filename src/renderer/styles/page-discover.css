@@ -1,0 +1,599 @@
+/* ============================================================
+   发现页三件套（1.9.0 样式外置）— 发现页 / 热门歌单列表 / 歌单详情
+   三页共用骨架、顶栏、返回键与卡片网格；颜色只走 var() token，
+   字号 / 字重 / 行高 / 圆角只引用全局 token（global.css）。
+   ============================================================ */
+
+/* ── 页面骨架与顶栏（三页共用） ── */
+.discover-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.discover-topbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-4);
+  height: 60px;
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+}
+
+.discover-topbar--shadow {
+  box-shadow: var(--shadow-sm);
+}
+
+.discover-topbar__title {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discover-topbar__spacer {
+  width: 140px;
+}
+
+.discover-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.discover-back--action {
+  font-weight: var(--weight-medium);
+  transition: background-color var(--duration-normal) var(--ease-out),
+    color var(--duration-normal) var(--ease-out);
+}
+
+.discover-back--action:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.discover-back--roomy {
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+/* ── 状态与提示文案 ── */
+.discover-status {
+  padding: var(--space-10);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.discover-status--danger {
+  color: var(--red-500);
+}
+
+.discover-state-center {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.discover-note {
+  padding: var(--space-5);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.discover-note--tight {
+  padding: var(--space-4);
+}
+
+.discover-more-error {
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.discover-more-error__text {
+  color: var(--text-tertiary);
+}
+
+.discover-retry {
+  margin-left: var(--space-2);
+  padding: 4px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.discover-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px var(--space-5);
+  color: var(--text-tertiary);
+}
+
+.discover-empty__icon {
+  margin-bottom: var(--space-3);
+  color: var(--text-tertiary);
+}
+
+/* ── 歌单网格与骨架 ── */
+.discover-scroll-area {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-6);
+}
+
+.discover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-5);
+}
+
+.discover-sk-cover,
+.discover-sk-line {
+  background: linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%);
+  background-size: 200% 200%;
+  animation: discover-skeleton-sweep 1.5s ease-in-out infinite;
+}
+
+.discover-sk-cover {
+  padding-top: 100%;
+  border-radius: var(--radius-md);
+}
+
+.discover-sk-line {
+  height: 14px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-xs);
+}
+
+@keyframes discover-skeleton-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ── 分类胶囊（列表页顶栏条 + 发现页歌单 tab 共用） ── */
+.discover-cats {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+  overflow-x: auto;
+}
+
+.discover-pills {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.discover-pills--wrap {
+  flex-wrap: wrap;
+}
+
+.discover-chip {
+  padding: 6px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-normal) var(--ease-out),
+    color var(--duration-normal) var(--ease-out);
+}
+
+.discover-chip--medium {
+  font-weight: var(--weight-medium);
+}
+
+.discover-chip--strong {
+  font-weight: var(--weight-semibold);
+}
+
+.discover-chip--active {
+  background-color: var(--accent);
+  color: var(--text-inverse);
+}
+
+/* ── 发现页头与一级 tab ── */
+.discover-header {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  padding: var(--space-4) 28px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+}
+
+.discover-header__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.discover-header__title {
+  color: var(--text-primary);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+}
+
+.discover-header__meta {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.discover-tabs {
+  display: flex;
+  gap: 18px;
+  margin-top: var(--space-3);
+  overflow-x: auto;
+}
+
+.discover-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.discover-tab--active {
+  color: var(--accent);
+  font-weight: var(--weight-semibold);
+}
+
+.discover-tab__bars {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 10px;
+  transform: translateX(-50%);
+  animation: fadeIn var(--duration-normal) var(--ease-out);
+}
+
+.discover-tab__bar {
+  width: 2px;
+  background-color: var(--accent);
+  border-radius: var(--radius-xs);
+}
+
+.discover-tab__bar--low {
+  height: 6px;
+}
+
+.discover-tab__bar--tall {
+  height: 10px;
+}
+
+.discover-tab__bar--mid {
+  height: 7px;
+}
+
+.discover-body {
+  flex: 1;
+  overflow: hidden;
+  padding: var(--space-5) var(--space-6);
+}
+
+.discover-body--flush {
+  padding: 0;
+}
+
+.discover-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.discover-charts {
+  display: flex;
+  flex: 1;
+  gap: var(--space-6);
+  min-height: 0;
+}
+
+.discover-list-scroll {
+  flex: 1;
+  overflow: auto;
+}
+
+/* ── 搜索结果二级 tab 与分段 pill ── */
+.discover-subtabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  padding: 10px var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+}
+
+.discover-search-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 滚动轴由页面经 --overflow-y 传入：既有的 #415 测试按内联 style 里的
+   overflow-y 定位滚动容器，故该容器保留 style={{ '--overflow-y': ... }}。 */
+.discover-scroll {
+  height: 100%;
+  overflow-y: var(--overflow-y, auto);
+}
+
+.discover-scroll--padded {
+  padding: var(--space-6);
+}
+
+.discover-pill {
+  border: none;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.discover-pill--active {
+  background-color: var(--accent);
+  color: var(--text-inverse);
+  font-weight: var(--weight-semibold);
+}
+
+.discover-pill--source {
+  padding: 4px 14px;
+}
+
+.discover-pill--tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+}
+
+.discover-pill__count {
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-active);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+
+.discover-pill__count--active {
+  background-color: color-mix(in srgb, var(--text-inverse) 25%, transparent);
+  color: var(--text-inverse);
+}
+
+/* ── 歌手结果卡片 ── */
+.discover-artist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-5);
+}
+
+.discover-artist {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4) var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  cursor: pointer;
+}
+
+.discover-artist__avatar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background-color: var(--bg-hover);
+  color: var(--text-tertiary);
+  font-size: var(--text-3xl);
+}
+
+.discover-artist__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.discover-artist__name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discover-artist__meta {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+/* ── 歌单详情 ── */
+.discover-detail-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-6);
+}
+
+.discover-detail__head {
+  display: flex;
+  gap: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+.discover-detail__cover {
+  position: relative;
+  flex-shrink: 0;
+  width: 200px;
+  height: 200px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.discover-detail__cover-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.discover-detail__cover-icon {
+  color: var(--text-tertiary);
+}
+
+.discover-detail__cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.discover-detail__info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.discover-detail__title {
+  margin: 0 0 var(--space-3);
+  color: var(--text-primary);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+}
+
+.discover-detail__meta {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.discover-detail__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.discover-detail__tag {
+  padding: 2px 10px;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.discover-detail__desc {
+  display: -webkit-box;
+  margin: 0 0 var(--space-4);
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.discover-detail__actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.discover-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px var(--space-6);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: background-color var(--duration-normal) var(--ease-out),
+    opacity var(--duration-normal) var(--ease-out);
+}
+
+.discover-action--primary {
+  border: none;
+  background-color: var(--accent);
+  color: var(--text-inverse);
+}
+
+.discover-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.discover-detail__error {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--danger-subtle);
+  color: var(--danger);
+  text-align: center;
+}

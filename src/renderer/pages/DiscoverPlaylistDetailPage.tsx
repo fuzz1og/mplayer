@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import '../styles/page-discover.css';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Play, Music2 } from 'lucide-react';
@@ -160,50 +161,50 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', height: '60px' }}>
-          <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+      <div className="discover-page">
+        <div className="discover-topbar">
+          <button onClick={() => navigate(-1)} className="discover-back">
             <ArrowLeft size={16} /><span>返回</span>
           </button>
-          <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center' }}>加载中...</h1>
-          <div style={{ width: '140px' }} />
+          <h1 className="discover-topbar__title">加载中...</h1>
+          <div className="discover-topbar__spacer" />
         </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>加载中...</div>
+        <div className="discover-state-center">加载中...</div>
       </div>
     );
   }
 
   if (!playlist) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', height: '60px' }}>
-          <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+      <div className="discover-page">
+        <div className="discover-topbar">
+          <button onClick={() => navigate(-1)} className="discover-back">
             <ArrowLeft size={16} /><span>返回</span>
           </button>
-          <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center' }}>歌单不存在</h1>
-          <div style={{ width: '140px' }} />
+          <h1 className="discover-topbar__title">歌单不存在</h1>
+          <div className="discover-topbar__spacer" />
         </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>歌单不存在或加载失败</div>
+        <div className="discover-state-center">歌单不存在或加载失败</div>
       </div>
     );
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', height: '60px' }}>
-        <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', transition: 'all 0.2s ease', fontSize: '14px', fontWeight: 500 }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}>
+    <div className="discover-page">
+      <div className="discover-topbar discover-topbar--shadow">
+        <button onClick={() => navigate(-1)} className="discover-back discover-back--action">
           <ArrowLeft size={16} /><span>返回</span>
         </button>
-        <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{playlist.name}</h1>
-        <div style={{ width: '140px' }} />
+        <h1 className="discover-topbar__title">{playlist.name}</h1>
+        <div className="discover-topbar__spacer" />
       </div>
 
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
-        <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
-          <div style={{ position: 'relative', width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', backgroundColor: 'var(--bg-hover)' }}>
+      <div ref={scrollRef} className="discover-detail-scroll">
+        <div className="discover-detail__head">
+          <div className="discover-detail__cover">
             {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Music2 size={40} style={{ color: 'var(--text-tertiary)' }} />
+            <div className="discover-detail__cover-fallback">
+              <Music2 size={40} className="discover-detail__cover-icon" />
             </div>
             {playlist.coverImgUrl && (
               <img
@@ -212,32 +213,32 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
                 alt={playlist.name}
                 loading="lazy"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                className="discover-detail__cover-img"
               />
             )}
           </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px', marginTop: 0 }}>{playlist.name}</h2>
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+          <div className="discover-detail__info">
+            <h2 className="discover-detail__title">{playlist.name}</h2>
+            <div className="discover-detail__meta">
               <span>创建者: {playlist.creator.nickname}</span>
               <span>播放量: {formatPlayCount(playlist.playCount)}</span>
               <span>歌曲数: {playlist.trackCount}</span>
             </div>
             {playlist.tags.length > 0 && (
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <div className="discover-detail__tags">
                 {playlist.tags.map(tag => (
-                  <span key={tag} style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '12px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-secondary)' }}>{tag}</span>
+                  <span key={tag} className="discover-detail__tag">{tag}</span>
                 ))}
               </div>
             )}
             {playlist.description && (
-              <p style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginBottom: '16px', marginTop: 0, lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{playlist.description}</p>
+              <p className="discover-detail__desc">{playlist.description}</p>
             )}
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button onClick={handlePlayAll} disabled={songs.length === 0 || songsLoading} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px', borderRadius: '24px', border: 'none', backgroundColor: 'var(--accent)', color: 'white', fontSize: '14px', fontWeight: 500, cursor: songs.length === 0 || songsLoading ? 'not-allowed' : 'pointer', opacity: songs.length === 0 || songsLoading ? 0.6 : 1, transition: 'all 0.2s ease' }}>
+            <div className="discover-detail__actions">
+              <button onClick={handlePlayAll} disabled={songs.length === 0 || songsLoading} className="discover-action discover-action--primary">
                 <Play size={16} />播放全部
               </button>
-              <button onClick={handleSaveToLocal} disabled={songs.length === 0 || saving} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px', borderRadius: '24px', border: '1px solid var(--border-default)', backgroundColor: 'transparent', color: 'var(--text-primary)', fontSize: '14px', fontWeight: 500, cursor: songs.length === 0 || saving ? 'not-allowed' : 'pointer', opacity: songs.length === 0 || saving ? 0.6 : 1, transition: 'all 0.2s ease' }}>
+              <button onClick={handleSaveToLocal} disabled={songs.length === 0 || saving} className="discover-action">
                 <Download size={16} />{saving ? '保存中...' : '保存到本地'}
               </button>
             </div>
@@ -245,9 +246,9 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
         </div>
 
         {songsLoading ? (
-          <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '40px' }}>正在加载歌曲列表...</div>
+          <div className="discover-status">正在加载歌曲列表...</div>
         ) : songsError ? (
-          <div style={{ padding: '12px 16px', backgroundColor: 'var(--danger-subtle)', borderRadius: '8px', color: 'var(--danger)', textAlign: 'center' }}>
+          <div className="discover-detail__error">
             {songsError}
           </div>
         ) : (
@@ -269,10 +270,10 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
             emptyText="暂无歌曲数据"
           />
             {loadingMore && (
-              <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '16px' }}>加载中...</div>
+              <div className="discover-note discover-note--tight">加载中...</div>
             )}
             {!hasMore && songs.length > 0 && (
-              <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '16px' }}>
+              <div className="discover-note discover-note--tight">
                 已加载全部 {songs.length}{total > songs.length ? ` / ${total}` : ''} 首歌曲
               </div>
             )}

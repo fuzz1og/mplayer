@@ -1,17 +1,16 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import '@/renderer/styles/songlist.css';
 import { Download, Trash2, ListMusic, Music2, CheckSquare } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from './BatchAddToPlaylistModal';
-
 import SongRow from './SongRow';
 import SongListSkeleton from './SongListSkeleton';
 import VirtualRow from './VirtualRow';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
 import { useVirtualRows, stickyTopForContent, SONG_ROW_HEIGHT, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
 import { COL_CHECKBOX, COL_INDEX, COL_ALBUM, COL_ACTIONS, colWidth } from '@/renderer/components/songTableColumns';
-import '@/renderer/styles/songlist.css';
 
 interface SongListProps {
   songs: Song[];
@@ -243,7 +242,7 @@ const SongList: React.FC<SongListProps> = ({
     return (
       <div className="song-list__empty">
         <Music2 size={26} className="song-list__empty-icon" />
-        <div>{emptyText}</div>
+        <div className="song-list__empty-text">{emptyText}</div>
       </div>
     );
   }
@@ -332,7 +331,6 @@ const SongList: React.FC<SongListProps> = ({
             <div className="song-list__head-check" style={colWidth(COL_CHECKBOX)}>
               <input
                 type="checkbox"
-                aria-label="全选歌曲"
                 checked={displaySongs.length > 0 && selectedIds.length === displaySongs.length}
                 onChange={handleToggleSelectAll}
               />
