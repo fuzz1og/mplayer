@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Zap } from 'lucide-react';
-import { Tag } from 'antd';
 import { MULTI_SOURCE_LIST, SOURCE_DISPLAY_NAMES } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { Group, Row, Section, Tag } from '@/renderer/ui';
 
 /**
  * 直连状态（T01，spec #146）：设置页只展示每源直连客户端是否已注册/可用，
  * 不再提供 auto/仅直连 选项（自建 API 已退役，路由由 core 内部处理）。
- * 直连客户端由各源 ticket（T02+）注册后状态变「直连可用」。
  */
 
 interface SourceStatusData {
@@ -31,33 +30,30 @@ const SourceSection: React.FC = () => {
   }, []);
 
   return (
-    <section id="source" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-        <Zap size={15} color="var(--text-secondary)" />
-        <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>直连状态</h2>
+    <section id="source">
+      <div className="settings-page__title">
+        <Zap size={16} aria-hidden="true" />
+        <h1>直连状态</h1>
       </div>
-      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-default)' }}>
-        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 0, lineHeight: 1.6 }}>
-          各官方源的直连客户端能力状态。直连可用表示该源已接入官方直连，播放/搜索会优先走直连。
-        </p>
-        {!data ? (
-          <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>加载中…</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {MULTI_SOURCE_LIST.map((source) => (
-              <div key={source} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <span style={{ width: '56px', fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>
-                  {SOURCE_DISPLAY_NAMES[source] || source}
-                </span>
-                <Tag color={data.status[source] === 'ready' ? 'green' : 'default'} style={{ marginInlineEnd: 0 }}>
-                  {data.status[source] === 'ready' ? '直连可用' : '直连未实现'}
-                </Tag>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="settings-page__lead">
+        直连可用表示该源已接入官方直连，播放与搜索会优先走直连；未实现的源会走第三方解析兜底。
+      </div>
 
-      </div>
+      <Section title="按源">
+        <Group>
+          {MULTI_SOURCE_LIST.map((source) => {
+            const ready = data?.status[source] === 'ready';
+            return (
+              <Row
+                key={source}
+                label={SOURCE_DISPLAY_NAMES[source] || source}
+                detail={!data ? '加载中…' : ready ? '直连' : '兜底'}
+                trailing={data ? <Tag tone={ready ? 'success' : 'neutral'}>{ready ? '直连可用' : '直连未实现'}</Tag> : null}
+              />
+            );
+          })}
+        </Group>
+      </Section>
     </section>
   );
 };

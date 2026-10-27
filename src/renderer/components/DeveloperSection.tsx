@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { FlaskConical, Trash2 } from 'lucide-react';
-import { Button, Switch, Tag, Typography } from 'antd';
 import {
   RENDERER_LOG_MAX,
   clearRendererLogs,
@@ -9,20 +8,18 @@ import {
   type RendererLogLevel,
 } from '@/renderer/services/rendererLogStore';
 import { isDevMode, setDevMode, subscribeDevMode } from '@/renderer/services/devMode';
+import { Button, Group, Row, Section, Switch, Tag } from '@/renderer/ui';
 
 /**
- * 开发者模式设置区（#477 B 方案第一片）。
- * 播放解析 trace 仍在 `PlaybackDiagnosticsSection`，由设置页与本区同受开关控制。
- * 「默认不暴露」由设置页实现：关闭时本区只留开关行，诊断区整段不渲染。
+ * 开发者模式（#477）。1.9.0 起不再是独立导航项：挂在「关于」页底部。
+ * 关闭时只留开关行与一句说明，日志区整段不渲染。
  */
 
-const { Text } = Typography;
-
-const LEVEL_COLORS: Record<RendererLogLevel, string> = {
-  log: 'default',
-  info: 'blue',
-  warn: 'orange',
-  error: 'red',
+const LEVEL_TONE: Record<RendererLogLevel, 'neutral' | 'accent' | 'warning' | 'danger'> = {
+  log: 'neutral',
+  info: 'accent',
+  warn: 'warning',
+  error: 'danger',
 };
 
 /** 时间显示到秒（同会话内足够定位「刚才那一下」）。 */
@@ -32,14 +29,12 @@ function formatTime(ts: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-/** 订阅模块级开关：外部可变状态用「初值 + useEffect 订阅」读取（不引额外依赖）。 */
 function useDevModeEnabled(): boolean {
   const [enabled, setEnabled] = useState(isDevMode);
   useEffect(() => subscribeDevMode(setEnabled), []);
   return enabled;
 }
 
-/** 订阅渲染层日志缓冲（列表为空时也要能在开开关后立刻反映）。 */
 function useRendererLogs() {
   const [logs, setLogs] = useState(listRendererLogs);
   useEffect(() => subscribeRendererLogs(() => setLogs(listRendererLogs())), []);
@@ -51,68 +46,50 @@ const DeveloperSection: React.FC = () => {
   const logs = useRendererLogs();
 
   return (
-    <section id="developer" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-        <FlaskConical size={15} color="var(--text-secondary)" />
-        <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>开发者模式</h2>
-        <Tag style={{ marginInlineEnd: 0 }}>{enabled ? '已开启' : '已关闭'}</Tag>
-      </div>
-
-      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-default)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Switch checked={enabled} onChange={(next) => setDevMode(next)} />
-          <div>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>开发者模式</div>
-            <Text type="secondary" style={{ fontSize: '12px' }}>
-              打开后显示应用内日志与播放诊断（跨重启保持）。关闭时不记录详细日志，警告与错误仍照常保留。
-            </Text>
-          </div>
-        </div>
+    <section id="developer">
+      <Section title="高级" footer="打开后会记录本会话的渲染层日志并显示播放诊断页（跨重启保持）。">
+        <Group>
+          <Row
+            icon={<FlaskConical size={13} />}
+            label="开发者模式"
+            detail={enabled ? '已开启' : '已关闭'}
+            trailing={<Switch checked={enabled} onChange={(value) => setDevMode(value)} ariaLabel="开发者模式" />}
+          />
+        </Group>
 
         {enabled ? (
-          <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-default)', paddingTop: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <Text strong style={{ fontSize: '13px' }}>渲染层日志</Text>
-              <Text type="secondary" style={{ fontSize: '12px' }}>
-                最近 {logs.length} / {RENDERER_LOG_MAX} 条（console 全局捕获）
-              </Text>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-                <Button size="small" danger icon={<Trash2 size={13} />} disabled={logs.length === 0} onClick={() => clearRendererLogs()}>
-                  清空日志
+          <Group>
+            <Row
+              label="渲染层日志"
+              detail={`最近 ${logs.length} / ${RENDERER_LOG_MAX} 条`}
+              trailing={
+                <Button
+                  size="sm"
+                  variant="danger"
+                  icon={<Trash2 size={13} />}
+                  disabled={logs.length === 0}
+                  onClick={() => clearRendererLogs()}
+                >
+                  清空
                 </Button>
-              </div>
-            </div>
-
+              }
+            />
             {logs.length === 0 ? (
-              <Text type="secondary" style={{ fontSize: '13px' }}>
-                暂无日志记录。应用产生的 console 输出会在这里保留最近 {RENDERER_LOG_MAX} 条。
-              </Text>
+              <Row label="暂无日志" detail="应用产生的 console 输出会保留在这里" />
             ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px',
-                  maxHeight: '320px',
-                  overflowY: 'auto',
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-                  fontSize: '12px',
-                }}
-              >
+              <div className="settings-page__logs">
                 {logs.map((entry, index) => (
-                  <div key={`${entry.ts}-${index}`} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                    <span style={{ color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>{formatTime(entry.ts)}</span>
-                    <Tag color={LEVEL_COLORS[entry.level]} style={{ marginInlineEnd: 0, flexShrink: 0 }}>
-                      {entry.level.toUpperCase()}
-                    </Tag>
-                    <span style={{ color: 'var(--text-secondary)', wordBreak: 'break-all' }}>{entry.message}</span>
+                  <div key={`${entry.ts}-${index}`} className="settings-page__log-line">
+                    <span className="settings-page__log-time">{formatTime(entry.ts)}</span>
+                    <Tag tone={LEVEL_TONE[entry.level]}>{entry.level.toUpperCase()}</Tag>
+                    <span className="settings-page__log-text">{entry.message}</span>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Group>
         ) : null}
-      </div>
+      </Section>
     </section>
   );
 };

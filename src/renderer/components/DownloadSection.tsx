@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Folder, RefreshCw } from 'lucide-react';
-import { message } from 'antd';
+import { Button, Group, Input, Row, Section, useToast } from '@/renderer/ui';
 
 const ipcRenderer = window.electronAPI;
 
 const DownloadSection: React.FC = () => {
   const [downloadPath, setDownloadPath] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const { show } = useToast();
 
   const loadDownloadPath = async () => {
     try {
@@ -18,6 +19,20 @@ const DownloadSection: React.FC = () => {
   };
 
   useEffect(() => { loadDownloadPath(); }, []);
+
+  const handleSave = async (path: string) => {
+    setIsSaving(true);
+    try {
+      const result = await ipcRenderer.invoke('settings:setDownloadPath', path);
+      if (result.success) show('下载目录已更新', { tone: 'success' });
+      else show('更新失败: ' + result.error, { tone: 'danger' });
+    } catch (error) {
+      console.error('保存下载目录失败:', error);
+      show('保存失败', { tone: 'danger' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleSelectDirectory = async () => {
     try {
@@ -33,69 +48,58 @@ const DownloadSection: React.FC = () => {
     }
   };
 
-  const handleSave = async (path: string) => {
-    setIsSaving(true);
-    try {
-      const result = await ipcRenderer.invoke('settings:setDownloadPath', path);
-      if (result.success) {
-        message.success('下载目录已更新');
-      } else {
-        message.error('更新失败: ' + result.error);
-      }
-    } catch (error) {
-      console.error('保存下载目录失败:', error);
-      message.error('保存失败');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleReset = async () => {
     setIsSaving(true);
     try {
       const result = await ipcRenderer.invoke('settings:resetDownloadPath');
       if (result.success) {
         setDownloadPath(result.path);
-        message.success('已重置为默认下载目录');
+        show('已重置为默认下载目录', { tone: 'success' });
       } else {
-        message.error('重置失败: ' + result.error);
+        show('重置失败: ' + result.error, { tone: 'danger' });
       }
     } catch (error) {
       console.error('重置下载目录失败:', error);
-      message.error('重置失败');
+      show('重置失败', { tone: 'danger' });
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <section id="download" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-        <Folder size={20} color="var(--text-secondary)" />
-        <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>下载设置</h2>
+    <section id="download">
+      <div className="settings-page__title">
+        <Folder size={16} aria-hidden="true" />
+        <h1>下载</h1>
       </div>
-      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-default)' }}>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: 'var(--text-base)', color: 'var(--text-secondary)', marginBottom: '8px' }}>默认下载目录</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ flex: 1, padding: '10px 14px', backgroundColor: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '8px', fontSize: 'var(--text-sm)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {downloadPath || '加载中...'}
+      <div className="settings-page__lead">下载的音乐文件保存到下面的目录；选择目录后立即生效。</div>
+
+      <div className="settings-page__stack">
+        <Section title="下载目录">
+          <Group>
+            <div className="settings-page__field">
+              <Input aria-label="下载目录" value={downloadPath} readOnly placeholder="加载中…" />
             </div>
-            <button
-              onClick={handleSelectDirectory} disabled={isSaving}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: 'var(--accent)', color: 'white', border: 'none', borderRadius: '8px', fontSize: 'var(--text-base)', fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1, transition: 'all 0.15s ease' }}
-            >
-              <Folder size={16} />选择目录
-            </button>
-            <button
-              onClick={handleReset} disabled={isSaving}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)', borderRadius: '8px', fontSize: 'var(--text-base)', fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1, transition: 'all 0.15s ease' }}
-            >
-              <RefreshCw size={16} />重置
-            </button>
-          </div>
-        </div>
-        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>下载的音乐文件将保存到此目录</div>
+            <Row
+              label="选择目录"
+              detail="打开系统选择框"
+              trailing={
+                <Button size="sm" variant="primary" disabled={isSaving} onClick={handleSelectDirectory}>
+                  选择
+                </Button>
+              }
+            />
+            <Row
+              label="重置为默认目录"
+              detail="恢复到系统默认下载位置"
+              trailing={
+                <Button size="sm" icon={<RefreshCw size={13} />} disabled={isSaving} onClick={handleReset}>
+                  重置
+                </Button>
+              }
+            />
+          </Group>
+        </Section>
       </div>
     </section>
   );

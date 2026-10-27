@@ -1,33 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { FlaskConical, Plus, Trash2, RefreshCw, FileJson, Link } from 'lucide-react';
-import { Button, Input, Switch, Tag, message, Typography } from 'antd';
 import type { Tier3Source, Tier3SourceStats, Tier3State, Tier3Subscription } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { Alert, Button, Group, Input, Row, Section, Switch, Tag, useToast } from '@/renderer/ui';
 
 /**
  * tier3 第三方解析源订阅执行器（#144）设置区。
  * 默认彻底关闭；订阅源支持 URL / 本地 JSON 文件 / 手动粘贴，公开仓库零端点。
- * 实验性功能：第三方源随时可能失效，失败自动降级回官方/换元。
  */
-
-const { TextArea } = Input;
-const { Text } = Typography;
-
 const Tier3Section: React.FC = () => {
   const [state, setState] = useState<Tier3State | null>(null);
   const [stats, setStats] = useState<Record<string, Tier3SourceStats> | null>(null);
   const [url, setUrl] = useState('');
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState(false);
+  const { show } = useToast();
 
   const load = async (): Promise<void> => {
     try {
       const data = await IpcClient.invoke<Tier3State>('settings:getTier3State');
       setState(data);
-      // 仅在开关开启且有订阅时展示每源累计命中/失败统计
       if (data.enabled && data.subscriptions.length > 0) {
-        const statData = await IpcClient.invoke<Record<string, Tier3SourceStats>>('settings:getTier3Stats');
-        setStats(statData);
+        setStats(await IpcClient.invoke<Record<string, Tier3SourceStats>>('settings:getTier3Stats'));
       } else {
         setStats(null);
       }
@@ -40,27 +34,28 @@ const Tier3Section: React.FC = () => {
     void load();
   }, []);
 
+  const refresh = async (): Promise<void> => {
+    await load();
+  };
+
   const handleToggle = async (value: boolean): Promise<void> => {
     if (!state) return;
     setState({ ...state, enabled: value });
     try {
       await IpcClient.invoke('settings:setTier3Enabled', value);
-      message.success(value ? '已开启第三方解析源（实验性）' : '已关闭第三方解析源');
+      show(value ? '已开启第三方解析源（实验性）' : '已关闭第三方解析源', { tone: 'success' });
       await refresh();
     } catch (error) {
       console.error('保存 tier3 开关失败:', error);
+      show('保存失败，已恢复原状态', { tone: 'danger' });
       void load();
     }
-  };
-
-  const refresh = async (): Promise<void> => {
-    await load();
   };
 
   const addUrl = async (): Promise<void> => {
     const trimmed = url.trim();
     if (!/^https?:\/\/.+/.test(trimmed)) {
-      message.warning('请输入 http(s) 开头的订阅 URL');
+      show('请输入 http(s) 开头的订阅 URL', { tone: 'warning' });
       return;
     }
     setBusy(true);
@@ -68,10 +63,10 @@ const Tier3Section: React.FC = () => {
       await IpcClient.invoke('settings:addTier3Url', { url: trimmed });
       setUrl('');
       await refresh();
-      message.success('URL 订阅已添加');
+      show('URL 订阅已添加', { tone: 'success' });
     } catch (error) {
       console.error('添加 URL 订阅失败:', error);
-      message.error(error instanceof Error ? error.message : '添加 URL 订阅失败');
+      show(error instanceof Error ? error.message : '添加 URL 订阅失败', { tone: 'danger' });
     } finally {
       setBusy(false);
     }
@@ -89,10 +84,10 @@ const Tier3Section: React.FC = () => {
         source: file.source,
       });
       await refresh();
-      message.success('本地文件订阅已添加');
+      show('本地文件订阅已添加', { tone: 'success' });
     } catch (error) {
       console.error('添加本地文件订阅失败:', error);
-      message.error(error instanceof Error ? error.message : '添加本地文件订阅失败');
+      show(error instanceof Error ? error.message : '添加本地文件订阅失败', { tone: 'danger' });
     } finally {
       setBusy(false);
     }
@@ -100,7 +95,7 @@ const Tier3Section: React.FC = () => {
 
   const addPaste = async (): Promise<void> => {
     if (!paste.trim()) {
-      message.warning('请粘贴 JSON 音源清单');
+      show('请粘贴 JSON 音源清单', { tone: 'warning' });
       return;
     }
     setBusy(true);
@@ -108,10 +103,10 @@ const Tier3Section: React.FC = () => {
       await IpcClient.invoke('settings:addTier3Text', { text: paste });
       setPaste('');
       await refresh();
-      message.success('粘贴清单已添加');
+      show('粘贴清单已添加', { tone: 'success' });
     } catch (error) {
       console.error('添加粘贴清单失败:', error);
-      message.error(error instanceof Error ? error.message : '添加粘贴清单失败');
+      show(error instanceof Error ? error.message : '添加粘贴清单失败', { tone: 'danger' });
     } finally {
       setBusy(false);
     }
@@ -121,10 +116,10 @@ const Tier3Section: React.FC = () => {
     try {
       await IpcClient.invoke('settings:removeTier3Subscription', id);
       await refresh();
-      message.success('订阅已删除');
+      show('订阅已删除', { tone: 'success' });
     } catch (error) {
       console.error('删除订阅失败:', error);
-      message.error(error instanceof Error ? error.message : '删除订阅失败');
+      show(error instanceof Error ? error.message : '删除订阅失败', { tone: 'danger' });
     }
   };
 
@@ -132,10 +127,10 @@ const Tier3Section: React.FC = () => {
     try {
       await IpcClient.invoke('settings:refreshTier3Subscription', id);
       await refresh();
-      message.success('订阅已刷新');
+      show('订阅已刷新', { tone: 'success' });
     } catch (error) {
       console.error('刷新订阅失败:', error);
-      message.error(error instanceof Error ? error.message : '刷新订阅失败');
+      show(error instanceof Error ? error.message : '刷新订阅失败', { tone: 'danger' });
     }
   };
 
@@ -156,144 +151,152 @@ const Tier3Section: React.FC = () => {
   const sourceName = (sourceId: string): string => sourceOf(sourceId)?.name || sourceId;
 
   return (
-    <section id="tier3" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-        <FlaskConical size={15} color="var(--text-secondary)" />
-        <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>第三方解析源（tier3）</h2>
-        <Tag color="orange" style={{ marginInlineEnd: 0 }}>实验性</Tag>
+    <section id="tier3">
+      <div className="settings-page__title">
+        <FlaskConical size={16} aria-hidden="true" />
+        <h1>第三方解析源</h1>
+        <Tag tone="warning">实验性</Tag>
       </div>
-      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-default)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-          <Switch checked={!!state?.enabled} loading={!state} onChange={(v) => void handleToggle(v)} />
-          <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>
-            {state?.enabled ? '已开启' : '已关闭'}
-          </span>
-        </div>
-        <Text type="secondary" style={{ display: 'block', fontSize: '13px', lineHeight: 1.6, marginBottom: '16px' }}>
-          默认关闭。开启后，官方直连失败的歌曲会按订阅清单依次尝试第三方解析源；全部失败换元/标记不可播。
-          第三方源随时可能失效，且清单由你自行订阅，本应用不内置任何解析端点。
-        </Text>
-        <Text type="secondary" style={{ display: 'block', fontSize: '12px', lineHeight: 1.6, marginBottom: '16px' }}>
-          清单条目可写 `source` 声明它服务于哪个音乐源（合法值：netease / qq / kugou / kuwo / migu / qianqian / soda，
-          也认 tencent、tx、163、qishui 等常见别名）。<b>url-resolver 不写 source 会被拒绝</b>——它按歌曲 ID 直取，
-          跨源会把 A 源的 ID 发给 B 源的接口、可能返回另一首歌；search-then-resolve 按歌名/歌手校验，不写也能兜底。
-          一个聚合端点服务多个源时，请把它拆成多条条目，各自声明 source。
-        </Text>
+      <div className="settings-page__lead">
+        官方直连失败时按订阅清单依次尝试第三方解析；全部失败才换源或标记不可播。清单由你自行订阅，应用不内置任何端点。
+      </div>
 
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-          <Input
-            placeholder="https://example.com/manifest.json"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onPressEnter={() => void addUrl()}
-            prefix={<Link size={14} />}
-            style={{ flex: 1 }}
-          />
-          <Button icon={<Plus size={14} />} loading={busy} onClick={() => void addUrl()}>添加 URL</Button>
-          <Button icon={<FileJson size={14} />} loading={busy} onClick={() => void addFile()}>本地文件</Button>
-        </div>
-
-        <TextArea
-          rows={3}
-          placeholder="或直接粘贴 JSON 音源清单…"
-          value={paste}
-          onChange={(e) => setPaste(e.target.value)}
-          style={{ marginBottom: '8px', fontSize: '12px' }}
-        />
-        <Button icon={<Plus size={14} />} loading={busy} onClick={() => void addPaste()} style={{ marginBottom: '16px' }}>
-          添加粘贴清单
-        </Button>
-
-        {state?.subscriptions?.length ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {state.subscriptions.map((sub) => (
-              <div
-                key={sub.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '10px 12px',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: '6px',
-                  background: 'var(--bg-surface)',
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{sub.name}</span>
-                    <Tag style={{ marginInlineEnd: 0 }}>{kindLabel(sub.kind)}</Tag>
-                    <Tag color="blue" style={{ marginInlineEnd: 0 }}>{sub.manifest.sources.length} 源</Tag>
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {sub.source}
-                  </div>
-                </div>
-                {sub.kind === 'url' && (
-                  <Button
-                    size="small"
-                    icon={<RefreshCw size={13} />}
-                    onClick={() => void refreshSub(sub.id)}
-                    title="刷新远程清单"
-                  />
-                )}
-                <Button
-                  size="small"
-                  danger
-                  icon={<Trash2 size={13} />}
-                  onClick={() => void remove(sub.id)}
-                  title="删除订阅"
+      <div className="settings-page__stack">
+        <Section title="总开关">
+          <Group>
+            <Row
+              label="启用第三方解析源"
+              detail={state?.enabled ? '已开启' : '已关闭'}
+              trailing={
+                <Switch
+                  checked={!!state?.enabled}
+                  disabled={!state}
+                  onChange={(value) => void handleToggle(value)}
+                  ariaLabel="启用第三方解析源"
                 />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <Text type="secondary" style={{ fontSize: '13px' }}>暂无订阅。添加一份 JSON 音源清单后才会生效。</Text>
-        )}
+              }
+            />
+          </Group>
+        </Section>
+
+        <Section
+          title="添加订阅"
+          footer="清单条目可写 source 声明它服务于哪个音乐源（netease / qq / kugou / kuwo / migu / qianqian / soda）。url-resolver 不写 source 会被拒绝；一个聚合端点服务多个源时请拆成多条。"
+        >
+          <Group>
+            <div className="settings-page__field">
+              <div className="settings-page__field-label">订阅 URL</div>
+              <Input
+                aria-label="订阅 URL"
+                placeholder="https://example.com/manifest.json"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void addUrl();
+                }}
+              />
+            </div>
+            <Row
+              label="添加 URL 订阅"
+              detail="拉取远程 JSON 清单"
+              trailing={
+                <Button size="sm" icon={<Link size={13} />} disabled={busy} onClick={() => void addUrl()}>
+                  添加
+                </Button>
+              }
+            />
+            <Row
+              label="从本地文件添加"
+              detail="选择一份 JSON 清单"
+              trailing={
+                <Button size="sm" icon={<FileJson size={13} />} disabled={busy} onClick={() => void addFile()}>
+                  选择文件
+                </Button>
+              }
+            />
+            <div className="settings-page__field">
+              <div className="settings-page__field-label">或直接粘贴清单</div>
+              <textarea
+                className="settings-page__textarea"
+                aria-label="粘贴 JSON 清单"
+                rows={4}
+                placeholder="粘贴 JSON 音源清单…"
+                value={paste}
+                onChange={(e) => setPaste(e.target.value)}
+              />
+            </div>
+            <div className="settings-page__actions">
+              <Button size="sm" icon={<Plus size={13} />} disabled={busy} onClick={() => void addPaste()}>
+                添加粘贴清单
+              </Button>
+            </div>
+          </Group>
+        </Section>
+
+        <Section title="已订阅">
+          <Group>
+            {state?.subscriptions?.length ? (
+              state.subscriptions.map((sub) => (
+                <Row
+                  key={sub.id}
+                  label={sub.name}
+                  detail={sub.source}
+                  trailing={
+                    <>
+                      <Tag>{kindLabel(sub.kind)}</Tag>
+                      <Tag tone="accent">{sub.manifest.sources.length} 源</Tag>
+                      {sub.kind === 'url' && (
+                        <Button
+                          size="sm"
+                          icon={<RefreshCw size={13} />}
+                          aria-label={`刷新 ${sub.name}`}
+                          onClick={() => void refreshSub(sub.id)}
+                        />
+                      )}
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        icon={<Trash2 size={13} />}
+                        aria-label={`删除 ${sub.name}`}
+                        onClick={() => void remove(sub.id)}
+                      />
+                    </>
+                  }
+                />
+              ))
+            ) : (
+              <Row label="暂无订阅" detail="添加一份 JSON 音源清单后才会生效" />
+            )}
+          </Group>
+        </Section>
 
         {stats && Object.keys(stats).length > 0 && (
-          <div
-            style={{
-              marginTop: '16px',
-              padding: '12px',
-              border: '1px solid var(--border-default)',
-              borderRadius: '6px',
-              background: 'var(--bg-surface)',
-            }}
+          <Section
+            title="本会话解析统计"
+            footer="健康度按会话内样本调整遍历顺序——只改顺序，不删源、不禁用；连续失败 2 次沉底，成功一次即回归。"
           >
-            <Text type="secondary" style={{ display: 'block', fontSize: '12px', marginBottom: '8px' }}>
-              每源累计解析统计（本次会话）。健康度按会话内样本调整遍历顺序——只改顺序、
-              不删源、不禁用，连续失败 2 次沉底、成功一次即回归（订阅变更时重置）。
-            </Text>
-            {Object.entries(stats).map(([sourceId, s]) => {
-              const declared = sourceOf(sourceId)?.source;
-              return (
-                <div
+            <Group>
+              {Object.entries(stats).map(([sourceId, s]) => (
+                <Row
                   key={sourceId}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '13px',
-                    padding: '4px 0',
-                  }}
-                >
-                  <span style={{ color: 'var(--text-primary)' }}>
-                    {sourceName(sourceId)}
-                    {declared ? (
-                      <Tag style={{ marginInlineStart: 6, marginInlineEnd: 0 }}>{declared}</Tag>
-                    ) : null}
-                  </span>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-                    交付 {s.hits} · 丢弃 {s.discarded ?? 0} · 失败 {s.misses} · 跳过 {s.skipped ?? 0}
-                    {s.guardRejected ? ` · 护栏拒绝 ${s.guardRejected}` : ''}
-                    {s.healthScore != null ? ` · 健康度 ${s.healthScore.toFixed(2)}（${s.healthSamples ?? 0} 样本）` : ''}
-                    {s.demoted ? ' · 已降级' : ''}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+                  label={sourceName(sourceId)}
+                  detail={`交付 ${s.hits} · 丢弃 ${s.discarded ?? 0} · 失败 ${s.misses} · 跳过 ${s.skipped ?? 0}`}
+                  trailing={
+                    <>
+                      {sourceOf(sourceId)?.source ? <Tag>{sourceOf(sourceId)?.source}</Tag> : null}
+                      {s.demoted ? <Tag tone="danger">已降级</Tag> : null}
+                    </>
+                  }
+                />
+              ))}
+            </Group>
+          </Section>
+        )}
+
+        {!state?.enabled && (
+          <Alert tone="info" title="尚未启用">
+            开启后才会参与播放解析；关闭时所有请求仍只走官方直连。
+          </Alert>
         )}
       </div>
     </section>
