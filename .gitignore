@@ -28,6 +28,10 @@ docs/assets/
 .claude/plans/
 .claude/session-extract/
 .claude/worktrees/
+# agent 会话工作区（验证日志、临时脚本、会话状态）——非仓库内容
+.local/
+# harness 子代理克隆容器：漏了它，`npm run lint` 会扫到克隆里的 core 构建产物并整片红
+.qoder/
 .zcode/
 
 # 测试覆盖率产物
