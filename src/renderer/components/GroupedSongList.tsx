@@ -237,9 +237,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
           <div className="grouped__loading">加载中...</div>
         )}
         {!hasMore && groups.length > 0 && (
-          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-            没有更多歌曲了
-          </div>
+          <div className="grouped__loading">没有更多歌曲了</div>
         )}
       </div>
 

@@ -119,7 +119,7 @@ function VirtualSortableList<T extends { id: string }>({
       {/* 常驻挂载（官方：条件渲染 DragOverlay 会让 drop 动画失效），只有拖拽中才有 children */}
       {createPortal(
         <DragOverlay>
-          <div style={{ pointerEvents: 'none' }}>
+          <div className="no-pointer">
             {activeItem ? renderDragPreview(activeItem, activeIndex) : null}
           </div>
         </DragOverlay>,

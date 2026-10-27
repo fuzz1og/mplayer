@@ -37,7 +37,7 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ triggerRef, items, onClos
       <div className="row-menu__scrim" onClick={onClose} />
       <div
         className="row-menu"
-        style={{ top: `${pos.top}px`, right: `${pos.right}px` }}
+        style={{ '--menu-top': `${pos.top}px`, '--menu-right': `${pos.right}px` } as React.CSSProperties}
       >
         {items.map((item) => (
           <button

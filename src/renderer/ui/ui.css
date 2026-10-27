@@ -106,7 +106,7 @@
   flex: none;
   width: 22px;
   height: 22px;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: var(--surface-card-hover);
   color: var(--text-secondary);
 }
@@ -156,7 +156,7 @@
   height: 28px;
   padding: 0 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface-card-hover);
   color: var(--text-primary);
   font-family: inherit;
@@ -201,7 +201,7 @@
 .ui-btn--plain {
   height: auto;
   padding: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--accent-text);
 }
@@ -247,7 +247,7 @@
   align-items: center;
   height: 18px;
   padding: 0 6px;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: var(--surface-card-hover);
   color: var(--text-secondary);
   font-size: var(--text-2xs);
@@ -282,7 +282,7 @@
   height: 32px;
   padding: 0 10px;
   border: 1px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   outline: none;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -368,7 +368,7 @@
 
 .ui-lab__chip {
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--hairline);
 }
 .ui-lab__chip--window { background: var(--surface-window); }
@@ -515,7 +515,7 @@
   flex: none;
   width: 10px;
   height: 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--text-tertiary);
 }
 
@@ -573,7 +573,7 @@
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--input-bg);
   color: var(--text-primary);
   font-family: inherit;
@@ -589,7 +589,7 @@
   align-items: center;
   margin: 0 14px 12px;
   padding: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--surface-card-hover);
 }
 
@@ -601,7 +601,7 @@
   width: 40px;
   height: 40px;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-window);
 }
 
@@ -789,7 +789,7 @@
   gap: 8px;
   align-items: center;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--danger-subtle);
   font-size: var(--text-xs);
 }

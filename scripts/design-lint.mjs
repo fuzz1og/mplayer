@@ -92,7 +92,12 @@ for (const [hex, reason] of LEGACY_HEX) {
 //   3. 禁止颜色字面量（hex / rgb / hsl），token 文件 global.css 除外
 //   4. 禁止字号/字重/行高/圆角的字面量，必须走 token
 const DESKTOP_STRICT = process.argv.includes('--desktop-strict');
-const DESKTOP_TOKEN_FILES = new Set(['src/renderer/styles/global.css']);
+// 豁免：token 定义文件 + 音乐源品牌色唯一事实源（ADR 2026-08-23 规定源品牌色只在这里定义）。
+// 测试文件不参与样式规则——测试替身里的内联样式是夹具，不是产品样式。
+const DESKTOP_TOKEN_FILES = new Set([
+  'src/renderer/styles/global.css',
+  'src/renderer/constants/sourceConfig.ts',
+]);
 const DESKTOP_DESIGN_LINT_OK = 'design-lint: ok';
 
 /** 每条规则一个判定，返回是否命中；命中后再按规则名分组输出。 */
@@ -106,6 +111,7 @@ const DESKTOP_RULES = [
   {
     id: 'inline-style',
     extensions: ['.tsx'],
+    skipTests: true,
     test: (line) => /\bstyle=\{\{/.test(line) && !/\bstyle=\{\{\s*'--/.test(line),
     hint: "禁止内联样式，改类名或 style={{ '--x': v }} 自定义属性",
   },
@@ -125,9 +131,11 @@ const DESKTOP_RULES = [
     id: 'type-literal',
     extensions: ['.ts', '.tsx', '.css'],
     skipTests: true,
+    // 已引用 var(--…) 的声明不算字面量（如组合圆角 0 var(--radius-xs) var(--radius-xs) 0）
     test: (line) =>
-      /\b(fontSize|fontWeight|lineHeight|borderRadius)\s*:\s*['"]?\d/.test(line) ||
-      /\b(font-size|font-weight|line-height|border-radius)\s*:\s*\d/.test(line),
+      !line.includes('var(--') &&
+      (/\b(fontSize|fontWeight|lineHeight|borderRadius)\s*:\s*['"]?\d/.test(line) ||
+        /\b(font-size|font-weight|line-height|border-radius)\s*:\s*\d/.test(line)),
     hint: '禁止字号/字重/行高/圆角字面量，改用 var(--text-*/--weight-*/--radius-*)',
   },
 ];

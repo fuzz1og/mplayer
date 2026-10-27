@@ -36,7 +36,7 @@ const SortableSongRow: React.FC<SortableSongRowProps> = ({ song, renderActions, 
       {...listeners}
       aria-label={`拖拽排序: ${song.name}`}
       title="拖拽排序"
-      style={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}
+      className="drag-handle"
     >
       <GripVertical size={14} />
     </span>

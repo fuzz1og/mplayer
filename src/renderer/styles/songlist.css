@@ -2323,7 +2323,7 @@
   width: 3px;
   height: 20px;
   background: var(--accent);
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
   transform: translateY(-50%);
 }
 
@@ -3195,7 +3195,7 @@
   color: var(--text-secondary);
   font-size: var(--text-lg);
   font-weight: var(--weight-medium);
-  line-height: 1.8;
+  line-height: var(--leading-relaxed);
   letter-spacing: 0;
   text-shadow: var(--lyrics-shadow);
   user-select: none;
@@ -3274,4 +3274,24 @@
   line-height: var(--leading-normal);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+/* 拖拽把手与拖拽浮层 */
+.drag-handle {
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.no-pointer {
+  pointer-events: none;
+}
+
+.row-menu {
+  top: var(--menu-top);
+  right: var(--menu-right);
 }
