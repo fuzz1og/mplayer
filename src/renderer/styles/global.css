@@ -170,6 +170,9 @@
   --accent-grad: linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%);
 
   /* 删除按钮压暗底（1.9.0：从内联 rgba 收编） */
+
+  /* 封面渐变占位（1.9.0：从内联 linear-gradient 收编） */
+  --cover-gradient: linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%);
   --delete-scrim: rgba(0, 0, 0, 0.5);
   --featured-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.68) 82%);
 

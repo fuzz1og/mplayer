@@ -36,27 +36,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
     if (!error) return this.props.children;
     if (this.props.fallback) return this.props.fallback;
     return (
-      <div style={{
-        flex: 1, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', gap: '12px',
-        padding: '32px', color: 'var(--text-secondary)', fontSize: '14px',
-      }}>
-        <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
-          这个页面出错了
-        </div>
-        <div style={{ maxWidth: '480px', textAlign: 'center', lineHeight: 1.6 }}>
-          {error.message}
-        </div>
-        <button
-          onClick={this.handleReset}
-          style={{
-            marginTop: '4px', padding: '7px 18px',
-            backgroundColor: 'var(--accent)', color: 'white',
-            border: 'none', borderRadius: '18px', cursor: 'pointer',
-            fontSize: '13px', fontWeight: 500,
-          }}>
-          重试
-        </button>
+      <div className="errb">
+        <div className="errb__title">这个页面出错了</div>
+        <div className="errb__msg">{error.message}</div>
+        <button onClick={this.handleReset} className="errb__retry">重试</button>
       </div>
     );
   }

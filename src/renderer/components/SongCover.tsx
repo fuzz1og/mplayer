@@ -47,48 +47,21 @@ const SongCover = ({
   if (!src || failed) {
     if (variant === 'icon') {
       return (
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-tertiary)',
-            ...placeholderStyle,
-          }}
-        >
+        <div className="cover-fill cover-fill--icon" style={placeholderStyle}>
           <Music2 size={iconSize} />
         </div>
       );
     }
     if (variant === 'tinted') {
       return (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: 'var(--cover-placeholder)',
-            ...placeholderStyle,
-          }}
-        >
+        <div className="cover-abs cover-abs--tinted" style={placeholderStyle}>
           <ListMusic size={iconSize} color="var(--text-tertiary)" />
         </div>
       );
     }
     if (variant === 'gradient') {
       return (
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)',
-            ...placeholderStyle,
-          }}
-        />
+        <div className="cover-gradient" style={placeholderStyle} />
       );
     }
     return null;
@@ -103,7 +76,8 @@ const SongCover = ({
         setFailed(true);
         onError?.();
       }}
-      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', ...style }}
+      className="cover-img"
+      style={style}
     />
   );
 };
