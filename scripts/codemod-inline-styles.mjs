@@ -1,11 +1,5 @@
 #!/usr/bin/env node
-/**
- * 一次性 codemod：把「全静态」的 JSX 内联样式对象搬成生成式 CSS 类（1.9.0 #689）。
- * 只处理值全是字面量 / var() 的对象；含条件、变量、展开的对象保持原样并计入报告，
- * 由人工或后续批次处理。生成结果写进 src/renderer/styles/generated.css。
- *
- * 用法：node scripts/codemod-inline-styles.mjs [--apply]
- */
+/** 内联样式 → CSS 类 codemod（#689）。只处理全静态对象；用法：node 本文件 [--apply] */
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';

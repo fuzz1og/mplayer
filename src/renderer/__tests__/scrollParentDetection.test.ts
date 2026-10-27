@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { findScrollParent } from '@/renderer/hooks/useVirtualRows';
 
-/**
- * 滚动祖先探测的契约（#445 / 1.9.0 去内联样式）。
- * 生产页面把 overflow 写在 CSS 文件里，jsdom 读不到 → 只看 getComputedStyle 会让虚拟化
- * 在测试里整段失效、与真实浏览器分叉。所以「哪一个是滚动容器」由结构声明，
- * data-scroll-container 与 computed overflow 任一命中即可。
- */
+/** 滚动祖先探测契约：data-scroll-container 标记与 computed overflow 任一命中即可。 */
 describe('findScrollParent', () => {
   const build = (marker: boolean) => {
     const outer = document.createElement('div');

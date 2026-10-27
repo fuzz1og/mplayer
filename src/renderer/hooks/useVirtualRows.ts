@@ -45,14 +45,7 @@ function isScrollableY(node: HTMLElement): boolean {
   return SCROLLABLE_OVERFLOW_Y.has(style.overflowY) || SCROLLABLE_OVERFLOW_Y.has(style.overflow);
 }
 
-/**
- * 向上找最近的纵向滚动祖先：列表挂靠页面已有的滚动容器，页面无需知道测量细节。
- *
- * 除了看 computed overflow，也认 data-scroll-container 标记：
- * 真正决定「这是滚动容器」的是页面结构，而不是当前环境能不能读到 CSS 文件
- * （jsdom 不加载样式表，只靠 getComputedStyle 会把虚拟化整段关掉，测试与真实
- * 浏览器行为分叉）。页面标了这个属性就是声明式的约定。
- */
+/** 向上找最近的纵向滚动祖先：认 data-scroll-container 标记或 computed overflow。 */
 export function findScrollParent(from: HTMLElement | null): HTMLElement | null {
   let node = from?.parentElement ?? null;
   while (node) {
@@ -143,14 +136,7 @@ export function useVirtualRows({ count, enabled, estimateSize, overscan = 8 }: U
   }, [scrollElement]);
 
   const items = canVirtualize ? virtualizer.getVirtualItems() : EMPTY_ITEMS;
-  /**
-   * 三种状态的分工必须让消费方「永远看得到内容」：
-   * - plain：不虚拟化（行数没到阈值，或没探测到滚动祖先）→ 整表渲染
-   * - pending：到了阈值、容器已探到，但这一帧窗口还没算出来 → **也整表渲染**
-   * - virtual：窗口有值 → 只挂窗口内的行
-   * 曾经的 bug：容器未探到时返回 pending，而消费方在 pending 下渲染 null，
-   * 「行数超阈值 + 页面没有可滚动祖先」于是变成空白列表（分组搜索结果首屏即中招）。
-   */
+  // pending 也整表渲染：消费方在 pending 下渲染 null 曾导致「超阈值 + 无滚动祖先」空白列表。
   const mode: VirtualRowsMode = !enabled || !scrollElement
     ? 'plain'
     : items.length > 0
