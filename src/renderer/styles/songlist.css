@@ -1971,3 +1971,163 @@
   font-size: var(--text-sm);
   text-align: center;
 }
+/* ── 歌手列表（1.9.0）── */
+.artists {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: var(--space-5) var(--space-6);
+}
+
+.artists__cats {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.artists__cat {
+  padding: 6px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xl);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.artists__cat[data-active] {
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-weight: var(--weight-semibold);
+}
+
+.artists__scroll {
+  flex: 1;
+  overflow: auto;
+}
+
+.artists__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 16px;
+}
+
+/* 卡片 */
+.artist-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  padding: 16px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.artist-card:hover {
+  background: var(--surface-card-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.artist-card__avatar {
+  flex: none;
+  width: 80px;
+  height: 80px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--surface-card-hover);
+}
+
+.artist-card__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.artist-card__fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-tertiary);
+  font-size: var(--text-3xl);
+}
+
+.artist-card__name {
+  width: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 骨架卡 */
+.artist-card--skeleton {
+  background: var(--surface-card);
+}
+
+.artist-card__sk-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-full);
+  background: var(--surface-card-hover);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.artist-card__sk-name {
+  width: 60%;
+  height: 14px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-card-hover);
+  animation: pulse 1.5s ease-in-out infinite;
+  animation-delay: 0.1s;
+}
+
+/* 空态 */
+.artists__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+}
+
+.artists__empty-icon {
+  margin-bottom: 12px;
+  color: var(--text-tertiary);
+}
+
+.artists__empty-title {
+  margin-bottom: 6px;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+.artists__more-loading {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+}
+
+.artists__spin {
+  color: var(--text-tertiary);
+  animation: dl-spin 1s linear infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}

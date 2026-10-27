@@ -3,6 +3,7 @@ import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Mic2 } from 'lucide-react';
 import type { Artist } from '@mplayer/core';
+import '@/renderer/styles/songlist.css';
 import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 
@@ -30,56 +31,20 @@ function loadSavedCategory(): number {
 }
 
 const ArtistCard: React.FC<{ artist: Artist; onClick: () => void }> = ({ artist, onClick }) => (
-  <div
-    onClick={onClick}
-    style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-      padding: '16px 12px', borderRadius: '8px', cursor: 'pointer',
-      transition: 'background-color 0.15s ease, box-shadow 0.15s ease', backgroundColor: 'var(--bg-surface)',
-      border: '1px solid var(--border-default)',
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-      e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
-      e.currentTarget.style.boxShadow = 'none';
-    }}
-  >
-    <div
-      style={{
-        width: '80px', height: '80px', borderRadius: '50%',
-        overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0,
-      }}
-    >
+  <div onClick={onClick} className="artist-card">
+    <div className="artist-card__avatar">
       {artist.picUrl ? (
         <img
           src={coverThumbUrl(artist.picUrl, COVER_SIZE.icon)}
           alt={artist.name}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          className="artist-card__img"
           loading="lazy"
         />
       ) : (
-        <div
-          style={{
-            width: '100%', height: '100%', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', fontSize: '28px', color: 'var(--text-tertiary)',
-          }}
-        >
-          {artist.name.charAt(0)}
-        </div>
+        <div className="artist-card__fallback">{artist.name.charAt(0)}</div>
       )}
     </div>
-    <div
-      style={{
-        fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)',
-        textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap', width: '100%',
-      }}
-    >
-      {artist.name}
-    </div>
+    <div className="artist-card__name">{artist.name}</div>
   </div>
 );
 
@@ -172,68 +137,39 @@ const ArtistListPage: React.FC = () => {
   const displayed = artists;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 'var(--space-5) var(--space-6)' }}>
-      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-5)', flexShrink: 0 }}>
+    <div className="artists">
+      <div className="artists__cats">
         {CATEGORIES.map((cat, idx) => (
           <button
             key={cat.id}
             onClick={() => setCategory(idx)}
-            style={{
-              padding: '6px 16px', borderRadius: '20px',
-              border: '1px solid var(--border-default)',
-              cursor: 'pointer', fontSize: 'var(--text-sm)',
-              fontWeight: category === idx ? 600 : 400,
-              color: category === idx ? '#fff' : 'var(--text-secondary)',
-              background: category === idx ? 'var(--accent)' : 'transparent',
-              transition: 'all 0.15s',
-            }}
+            className="artists__cat"
+            data-active={category === idx || undefined}
           >
             {cat.label}
           </button>
         ))}
       </div>
 
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto' }}>
+      <div ref={scrollRef} className="artists__scroll">
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '16px' }}>
+          <div className="artists__grid">
             {Array.from({ length: 20 }).map((_, i) => (
-              <div key={i} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-                padding: '16px 12px', borderRadius: '8px',
-                backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)',
-              }}>
-                <div style={{
-                  width: '80px', height: '80px', borderRadius: '50%',
-                  backgroundColor: 'var(--bg-hover)', animation: 'pulse 1.5s ease-in-out infinite',
-                }} />
-                <div style={{
-                  width: '60%', height: '14px', borderRadius: '4px',
-                  backgroundColor: 'var(--bg-hover)', animation: 'pulse 1.5s ease-in-out infinite',
-                  animationDelay: '0.1s',
-                }} />
+              <div key={i} className="artist-card artist-card--skeleton">
+                <div className="artist-card__sk-avatar" />
+                <div className="artist-card__sk-name" />
               </div>
             ))}
-            <style>{`
-              @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
-              @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-            `}</style>
           </div>
         ) : displayed.length === 0 ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            padding: '60px 20px', color: 'var(--text-tertiary)',
-          }}>
-            <Mic2 size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
-            <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '6px' }}>
-              没有匹配的歌手
-            </div>
-            <div style={{ fontSize: '13px' }}>
-              切换分类或选择其他字母
-            </div>
+          <div className="artists__empty">
+            <Mic2 size={26} className="artists__empty-icon" />
+            <div className="artists__empty-title">没有匹配的歌手</div>
+            <div>切换分类或选择其他字母</div>
           </div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '16px' }}>
+            <div className="artists__grid">
               {displayed.map((artist) => (
                 <ArtistCard
                   key={artist.id}
@@ -246,8 +182,8 @@ const ArtistListPage: React.FC = () => {
               ))}
             </div>
             {loadingMore && (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
-                <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', color: 'var(--text-tertiary)' }} />
+              <div className="artists__more-loading">
+                <Loader2 size={20} className="artists__spin" />
               </div>
             )}
           </>
