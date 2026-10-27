@@ -2,7 +2,8 @@
 // push-via-api.mjs —— git TLS 栈坏掉时的推送兜底：走 GitHub Git Data API。
 // 同步点记在 .git/ui-sync-sha（本地最后一个已推送的提交，因为 API 重建的 sha 与本地不同）。
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const ROOT = process.cwd();
@@ -12,9 +13,19 @@ const syncFile = path.join(execFileSync('git', ['rev-parse', '--absolute-git-dir
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim();
 const gitBuf = (...a) => execFileSync('git', a, { cwd: ROOT, maxBuffer: 256 * 1024 * 1024 });
 function gh(args, payload) {
-  const input = payload === undefined ? undefined : JSON.stringify(payload);
-  const out = execFileSync('gh', ['api', ...args], { cwd: ROOT, encoding: 'utf8', input, maxBuffer: 64 * 1024 * 1024 });
-  return out.trim() ? JSON.parse(out) : null;
+  // 大 payload（40KB+ 的 blob base64）走 stdin 会被截断成 422，改为写临时文件再 --input
+  if (payload === undefined) {
+    const out = execFileSync('gh', ['api', ...args], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    return out.trim() ? JSON.parse(out) : null;
+  }
+  const tmp = path.join(os.tmpdir(), 'gh-' + process.pid + '-' + Math.random().toString(36).slice(2) + '.json');
+  writeFileSync(tmp, JSON.stringify(payload), 'utf8');
+  try {
+    const out = execFileSync('gh', ['api', ...args, '--input', tmp], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    return out.trim() ? JSON.parse(out) : null;
+  } finally {
+    try { unlinkSync(tmp); } catch {}
+  }
 }
 
 const head = git('rev-parse', branch);

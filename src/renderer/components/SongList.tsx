@@ -360,9 +360,7 @@ const SongList: React.FC<SongListProps> = ({
         data-virtual={virtual.mode === 'virtual' || undefined}
         style={{ '--total-size': `${virtual.totalSize}px` } as React.CSSProperties}
       >
-        {virtual.mode === 'pending'
-          ? null
-          : virtual.mode === 'virtual'
+        {virtual.mode === 'virtual'
             ? virtual.items.map((item) => {
                 const song = displaySongs[item.index];
                 if (!song) return null;

@@ -110,6 +110,8 @@ describe('歌曲列表模块：虚拟滚动', () => {
     const songs = Array.from({ length: 200 }, (_, i) => song(i));
     // jsdom 没有布局：给滚动容器造一个 900x600 的视口，@tanstack/react-virtual 才能算出窗口
     const scrollEl = document.createElement('div');
+    // 生产代码按 data-scroll-container 认滚动容器（jsdom 不加载 CSS 文件，computed overflow 读不到）
+    scrollEl.setAttribute('data-scroll-container', '');
     scrollEl.style.overflowY = 'auto';
     Object.defineProperty(scrollEl, 'clientHeight', { value: 600, configurable: true });
     Object.defineProperty(scrollEl, 'clientWidth', { value: 900, configurable: true });
@@ -122,17 +124,19 @@ describe('歌曲列表模块：虚拟滚动', () => {
     }) as DOMRect;
     document.body.appendChild(scrollEl);
 
-    render(
+    // 挂到 document 后再让 virtualizer 量一次：jsdom 里全量布局都靠这些 defineProperty 撑着
+    const { container } = render(
       <MemoryRouter>
         <SongList songs={songs} onPlay={() => {}} showHeader={false} />
       </MemoryRouter>,
       { container: scrollEl }
     );
 
-    await waitFor(() => expect(coverRenders.size).toBeGreaterThan(0));
-    expect(coverRenders.size).toBeLessThan(40);
-    expect(coverRenders.has('歌曲 0')).toBe(true);
-    expect(coverRenders.has('歌曲 199')).toBe(false);
+    // 断言 DOM 实际挂了多少行，而不是 coverRenders 的累计次数——
+    // 后者在「探测到滚动容器之前的那一帧」已按整表渲染记过一轮（那是设计上的兜底）。
+    await waitFor(() => expect(container.querySelectorAll('.song-row').length).toBeGreaterThan(0));
+    expect(container.querySelectorAll('.song-row').length).toBeLessThan(40);
+    expect(container.textContent).toContain('歌曲 0');
   });
 
   it('短列表整表渲染，不做虚拟化探测', () => {

@@ -143,8 +143,22 @@ export function useVirtualRows({ count, enabled, estimateSize, overscan = 8 }: U
   }, [scrollElement]);
 
   const items = canVirtualize ? virtualizer.getVirtualItems() : EMPTY_ITEMS;
-  // 窗口为空（容器还没有高度等）时退回整表渲染：宁可多渲染，也不留空白列表
-  const mode: VirtualRowsMode = !enabled ? 'plain' : !scrollElement ? 'pending' : items.length > 0 ? 'virtual' : 'plain';
+  /**
+   * 三种状态的分工必须让消费方「永远看得到内容」：
+   * - plain：不虚拟化（行数没到阈值，或没探测到滚动祖先）→ 整表渲染
+   * - pending：到了阈值、容器已探到，但这一帧窗口还没算出来 → **也整表渲染**
+   * - virtual：窗口有值 → 只挂窗口内的行
+   * 曾经的 bug：容器未探到时返回 pending，而消费方在 pending 下渲染 null，
+   * 「行数超阈值 + 页面没有可滚动祖先」于是变成空白列表（分组搜索结果首屏即中招）。
+   */
+  const mode: VirtualRowsMode = !enabled || !scrollElement
+    ? 'plain'
+    : items.length > 0
+      ? 'virtual'
+      : 'pending';
+
+  // 消费方在 pending 下渲染整表（不是 null）：这是本轮修掉的真实 bug。
+  // 容器已探到、窗口还没算出来的那一帧，用户应当看到内容而不是空白。
 
   return useMemo(() => ({
     rowsRef,

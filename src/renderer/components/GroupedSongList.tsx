@@ -153,9 +153,9 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
 
   if (!loading && groups.length === 0) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', color: 'var(--text-tertiary)' }}>
-        <Music2 size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
-        <div style={{ fontSize: '14px' }}>暂无搜索结果</div>
+      <div className="grouped__empty">
+        <Music2 size={26} className="grouped__empty-icon" />
+        <div>暂无搜索结果</div>
       </div>
     );
   }
@@ -202,26 +202,21 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 10px' }}>
-        <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>{groups.length} 组结果</span>
-        <button
-          onClick={toggleAll}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '999px', border: '1px solid var(--border-default)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 500, cursor: 'pointer', transition: 'background 0.15s ease' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-        >
+    <div className="grouped">
+      <div className="grouped__head">
+        <span className="grouped__count">{groups.length} 组结果</span>
+        <button onClick={toggleAll} className="grouped__toggle">
           {allExpanded ? '全部折叠' : '全部展开'}
         </button>
       </div>
-      <div style={{ overflow: 'auto', flex: 1 }}>
+      <div className="grouped__scroll">
         <div
           ref={virtual.rowsRef}
-          style={virtual.mode === 'virtual' ? { position: 'relative', height: `${virtual.totalSize}px`, width: '100%' } : undefined}
+          className="grouped__rows"
+          data-virtual={virtual.mode === 'virtual' || undefined}
+          style={{ '--total-size': `${virtual.totalSize}px` } as React.CSSProperties}
         >
-          {virtual.mode === 'pending'
-            ? null
-            : virtual.mode === 'virtual'
+          {virtual.mode === 'virtual'
               ? virtual.items.map((virtualItem) => {
                   const item = flatItems[virtualItem.index];
                   if (!item) return null;
@@ -239,9 +234,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
               : flatItems.map((item) => renderItem(item))}
         </div>
         {hasMore && loading && (
-          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-            加载中...
-          </div>
+          <div className="grouped__loading">加载中...</div>
         )}
         {!hasMore && groups.length > 0 && (
           <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>

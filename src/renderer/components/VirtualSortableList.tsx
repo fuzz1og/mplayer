@@ -99,9 +99,7 @@ function VirtualSortableList<T extends { id: string }>({
             ref={virtual.rowsRef}
             style={virtual.mode === 'virtual' ? { position: 'relative', height: `${virtual.totalSize}px` } : undefined}
           >
-            {virtual.mode === 'pending'
-              ? null
-              : virtual.mode === 'virtual'
+            {virtual.mode === 'virtual'
                 ? virtual.items.map((row) => {
                     const item = items[row.index];
                     if (!item) return null;
