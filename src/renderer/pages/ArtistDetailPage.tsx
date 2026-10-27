@@ -3,6 +3,7 @@ import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
+import '@/renderer/styles/songlist.css';
 import AlbumGrid from '@/renderer/components/AlbumGrid';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -148,40 +149,20 @@ const ArtistDetailPage: React.FC = () => {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+    <div className="artist">
+      <div ref={scrollRef} className="artist__scroll">
         {loading ? (
           <div>
             {Array.from({ length: 10 }).map((_, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '10px 16px',
-                  borderRadius: '6px',
-                  marginBottom: '8px',
-                }}
-              >
-                <div style={{ width: '50px', textAlign: 'center' }}>
-                  <div className="skeleton-shimmer" style={{
-                    width: '20px', height: '14px', borderRadius: '2px',
-                    margin: '0 auto',
-                  }} />
+              <div key={i} className="detail-skeleton__row">
+                <div className="detail-skeleton__index">
+                  <div className="skeleton-shimmer detail-skeleton__index-bar" />
                 </div>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div className="skeleton-shimmer" style={{
-                    width: '40px', height: '40px', borderRadius: '4px',
-                  }} />
-                  <div style={{ flex: 1 }}>
-                    <div className="skeleton-shimmer" style={{
-                      width: '70%', height: '14px', borderRadius: '2px',
-                      marginBottom: '4px',
-                    }} />
-                    <div className="skeleton-shimmer" style={{
-                      width: '50%', height: '12px', borderRadius: '2px',
-                      animationDelay: '0.1s',
-                    }} />
+                <div className="detail-skeleton__main">
+                  <div className="skeleton-shimmer detail-skeleton__cover" />
+                  <div className="detail-skeleton__lines">
+                    <div className="skeleton-shimmer detail-skeleton__title" />
+                    <div className="skeleton-shimmer detail-skeleton__sub" />
                   </div>
                 </div>
               </div>
@@ -189,38 +170,21 @@ const ArtistDetailPage: React.FC = () => {
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
-              <div
-                style={{
-                  width: '100px', height: '100px', borderRadius: '50%',
-                  overflow: 'hidden', flexShrink: 0,
-                  backgroundColor: 'var(--bg-hover)',
-                  border: '2px solid var(--border-default)',
-                }}
-              >
+            <div className="artist__head">
+              <div className="artist__avatar">
                 {displayPic ? (
                   <img
                     src={coverThumbUrl(displayPic, COVER_SIZE.thumb)}
                     alt={displayName || ''}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    className="artist__avatar-img"
                   />
                 ) : (
-                  <div
-                    style={{
-                      width: '100%', height: '100%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '32px', color: 'var(--text-tertiary)',
-                    }}
-                  >
-                    {displayName?.charAt(0) || '?'}
-                  </div>
+                  <div className="artist__avatar-fallback">{displayName?.charAt(0) || '?'}</div>
                 )}
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                  {displayName || `歌手 (ID: ${artistId})`}
-                </div>
-                <div style={{ fontSize: '14px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="artist__info">
+                <div className="artist__name">{displayName || `歌手 (ID: ${artistId})`}</div>
+                <div className="artist__meta">
                   <span>
                     {activeTab === 'albums'
                       ? albumsTotal !== null
@@ -236,17 +200,7 @@ const ArtistDetailPage: React.FC = () => {
                           navigate('/discover');
                         }
                       }}
-                      style={{
-                        border: 'none',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        color: 'var(--accent)',
-                        padding: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                      }}
+                      className="artist__search-more"
                     >
                       <Search size={12} />
                       换源获取更多歌曲
@@ -254,7 +208,7 @@ const ArtistDetailPage: React.FC = () => {
                   )}
                 </div>
               </div>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+              <div className="artist__tabs">
                 {TABS.map((tab) => (
                   <button
                     key={tab.key}
@@ -262,17 +216,8 @@ const ArtistDetailPage: React.FC = () => {
                       setActiveTab(tab.key);
                       if (tab.key !== 'albums') setOrder(tab.key);
                     }}
-                    style={{
-                      padding: '6px 16px',
-                      borderRadius: '16px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      fontWeight: activeTab === tab.key ? 600 : 400,
-                      color: activeTab === tab.key ? 'white' : 'var(--text-secondary)',
-                      backgroundColor: activeTab === tab.key ? 'var(--accent)' : 'var(--bg-hover)',
-                      transition: 'all 0.15s ease',
-                    }}
+                    className="artist__tab"
+                    data-active={activeTab === tab.key || undefined}
                   >
                     {tab.label}
                   </button>
@@ -292,12 +237,10 @@ const ArtistDetailPage: React.FC = () => {
                   groupByYear={true}
                 />
                 {albumsLoadingMore && (
-                  <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中...</div>
+                  <div className="artist__more">加载中...</div>
                 )}
                 {!albumsHasMore && albums.length > 0 && (
-                  <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-                    已加载全部 {albums.length} 张专辑
-                  </div>
+                  <div className="artist__more">已加载全部 {albums.length} 张专辑</div>
                 )}
               </div>
             ) : (
