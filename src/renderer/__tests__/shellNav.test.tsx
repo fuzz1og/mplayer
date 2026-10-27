@@ -90,10 +90,12 @@ describe('应用骨架', () => {
           <LocationProbe />
         </MemoryRouter>,
       );
-      expect(screen.getByText('本地音乐')).toBeTruthy();
-      expect(screen.getByText('下载管理')).toBeTruthy();
+      // 聚合视图（#685）：收藏与最近播放各成一节，本地/歌手/专辑在分组行里仍一次点到
       expect(screen.getByText('我喜欢的音乐')).toBeTruthy();
       expect(screen.getByText('最近播放')).toBeTruthy();
+      expect(screen.getByText('本地音乐')).toBeTruthy();
+      expect(screen.getByText('歌手')).toBeTruthy();
+      expect(screen.getByText('专辑')).toBeTruthy();
 
       await userEvent.click(screen.getByRole('button', { name: /本地音乐/ }));
       expect(screen.getByTestId('location').textContent).toBe('/local');

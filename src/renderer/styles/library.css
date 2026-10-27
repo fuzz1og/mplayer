@@ -1,0 +1,93 @@
+/* 资料库（1.9.0）：聚合视图——本地 / 收藏 / 历史 / 歌手并列，各自独立操作，
+   不做跨数据源的合并（合并后「删除」会横跨两处，用户无法判断影响的到底是什么）。 */
+
+.library {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 20px 24px 0;
+  overflow: hidden;
+}
+
+.library__header {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.library__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+}
+
+.library__subtitle {
+  margin: 2px 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.library__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+
+.library__section + .library__section {
+  margin-top: 22px;
+}
+
+.library__section-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.library__section-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+}
+
+.library__section-count {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.library__section-action {
+  color: var(--accent-text);
+  font-size: var(--text-xs);
+  text-decoration: none;
+}
+
+.library__section-action:hover {
+  text-decoration: underline;
+}
+
+.library__empty {
+  padding: 28px 16px;
+  border-radius: var(--group-radius);
+  background: var(--surface-card);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.library__section-head-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
