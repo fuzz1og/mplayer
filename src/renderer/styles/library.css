@@ -1,93 +1,631 @@
-/* 资料库（1.9.0）：聚合视图——本地 / 收藏 / 历史 / 歌手并列，各自独立操作，
-   不做跨数据源的合并（合并后「删除」会横跨两处，用户无法判断影响的到底是什么）。 */
+/* 资料库（1.9.0，#685）：对齐 .proto/library.png（2450×1576 = 1225×788 @2x，数值 ÷2 落 CSS）。
+   页头 = h1 + 同行统计 + 排序/导入；分段 pill；主体一张圆角 card 的歌单表。
+   颜色一律 var(--token)；字号 / 字重 / 行高 / 圆角只引用全局 token。 */
 
 .library {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 20px 24px 0;
+  padding: 20px 28px 0;
   overflow: hidden;
 }
 
+/* ── 页头：标题 + 统计 + 排序 + 导入 ── */
 .library__header {
   display: flex;
   flex: none;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 24px;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 6px;
 }
 
 .library__title {
   margin: 0;
   color: var(--text-primary);
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-weight: var(--weight-bold);
   letter-spacing: -0.02em;
 }
 
-.library__subtitle {
-  margin: 2px 0 0;
+.library__stats {
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
-}
-
-.library__body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-bottom: 24px;
-}
-
-.library__section + .library__section {
-  margin-top: 22px;
-}
-
-.library__section-head {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.library__section-title {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-}
-
-.library__section-count {
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
-.library__section-action {
-  color: var(--accent-text);
-  font-size: var(--text-xs);
-  text-decoration: none;
+.library__header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
 }
 
-.library__section-action:hover {
-  text-decoration: underline;
+/* 「排序」文字按钮（带图标），无底色 */
+.library__text-btn {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.library__text-btn:hover:not(:disabled) {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.library__text-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 「导入」填充按钮（原型 68×28，圆角 10） */
+.library__import {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.library__import:hover:not(:disabled) {
+  background: var(--surface-selected-hover);
+}
+
+.library__import:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.library__import:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 排序菜单 */
+.library__sort-wrap {
+  position: relative;
+}
+
+.library__menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.library__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-content);
+  box-shadow: var(--shadow-lg);
+}
+
+.library__menu-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.library__menu-item:hover {
+  background: var(--surface-card-hover);
+}
+
+.library__menu-item[aria-checked='true'] {
+  font-weight: var(--weight-semibold);
+}
+
+.library__menu-check {
+  margin-left: auto;
+  color: var(--accent);
+}
+
+/* ── 分段 pill ── */
+.library__tabs-row {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.library__segmented {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  padding: 1px;
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.library__segment {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.library__segment:hover:not([aria-selected='true']) {
+  color: var(--text-primary);
+}
+
+.library__segment[aria-selected='true'] {
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+/* 右端「按最近添加排序」：点一下轮换排序方式 */
+.library__sortlink {
+  display: inline-flex;
+  padding: 4px 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.library__sortlink:hover {
+  color: var(--text-primary);
+}
+
+/* ── 主体 ── */
+.library__scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-bottom: 24px;
+  overflow-y: auto;
+}
+
+/* 一张圆角 card 装歌单表（原型 radius 12 / 行高 46 / 封面 40） */
+.library__card {
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--group-radius);
+  background: var(--surface-card);
 }
 
 .library__empty {
-  padding: 28px 16px;
-  border-radius: var(--group-radius);
-  background: var(--surface-card);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 20px;
   color: var(--text-tertiary);
   font-size: var(--text-sm);
   text-align: center;
 }
 
-.library__section-head-actions {
-  display: flex;
-  gap: 10px;
+/* ── 歌曲表：在共享 SongRow 上落原型几何（只改尺寸与字重，不改结构） ── */
+.library__rows[data-virtual] {
+  position: relative;
+  height: var(--total-size);
+}
+
+.library__rows .song-row {
   align-items: center;
+  min-height: 46px;
+  padding: 3px 14px 3px 12px;
+  border-radius: var(--radius-xs);
+}
+
+.library__rows .song-row__index {
+  width: 32px;
+}
+
+.library__rows .song-row__main {
+  gap: 12px;
+}
+
+.library__rows .song-row__cover {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+}
+
+.library__rows .song-row__title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+/* 原型当前播放行不变底色：靠序号位的三根音柱 + 白字标题 */
+.library__rows .song-row[data-current] {
+  background-color: transparent;
+}
+
+.library__rows .song-row__title[data-current] {
+  color: var(--text-primary);
+}
+
+.library__rows .song-row__meta {
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+  color: var(--text-tertiary);
+}
+
+.library__rows .song-row__album {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+/* 原型行内只保留歌手名，不显示来源/音质徽标 */
+.library__rows .song-row__meta .badge {
+  display: none;
+}
+
+/* 行尾：时长常驻右对齐；收藏/下载/更多 hover 才出现（原型无始终可见的行操作） */
+.library__tail {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  width: 240px;
+}
+
+.library__duration {
+  flex: none;
+  width: 50px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.library__tail .row-actions {
+  width: 140px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.library__rows .song-row:hover .row-actions,
+.library__rows .song-row:focus-within .row-actions,
+.library__tail .row-actions:focus-within,
+.library__tail .row-actions:has(.row-actions__btn[data-open]) {
+  opacity: 1;
+}
+
+/* ── 专辑 / 歌手分组行 ── */
+.library__group-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 52px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.library__group-row + .library__group-row {
+  border-top: 1px solid var(--hairline);
+}
+
+.library__group-row:hover {
+  background: var(--surface-card-hover);
+}
+
+.library__group-cover {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--surface-card-hover);
+  color: var(--text-tertiary);
+}
+
+.library__group-cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.library__group-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.library__group-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__group-sub {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__group-count {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 下载 tab ── */
+.library__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.library__dir {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: var(--group-radius);
+  background: var(--surface-card);
+}
+
+.library__dir-label {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.library__dir-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__task-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 14px;
+}
+
+.library__task-row + .library__task-row {
+  border-top: 1px solid var(--hairline);
+}
+
+.library__task-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.library__task-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__task-meta {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__task-bar {
+  flex: none;
+  width: 160px;
+}
+
+.library__task-state {
+  flex: none;
+  width: 64px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.library__task-state[data-tone='completed'] {
+  color: var(--success);
+}
+
+.library__task-state[data-tone='error'] {
+  color: var(--danger-text);
+}
+
+.library__task-state[data-tone='downloading'] {
+  color: var(--accent);
+}
+
+.library__task-cancel {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.library__task-cancel:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.library__task-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 14px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ── 本地 tab ── */
+.library__chips {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.library__chip-wrap {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.library__chip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.library__chip:hover:not(:disabled) {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.library__chip[data-active] {
+  border-color: var(--hairline-strong);
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.library__chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.library__chip-count {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.library__chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.library__chip-remove:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.library__scan {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.library__footnote {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+/* 小窗口优先保行宽 */
+@media (max-width: 900px) {
+  .library__tail {
+    width: 180px;
+  }
 }
