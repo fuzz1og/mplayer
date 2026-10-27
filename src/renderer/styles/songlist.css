@@ -2630,3 +2630,134 @@
   color: var(--danger-text);
   text-align: center;
 }
+/* ── 通用音乐卡（1.9.0）── */
+.mcard {
+  cursor: default;
+  transition: transform var(--duration-normal) var(--ease-out);
+  transform: translateY(0);
+}
+
+.mcard[data-clickable] {
+  cursor: pointer;
+}
+
+.mcard[data-hovered] {
+  transform: translateY(-3px);
+}
+
+.mcard__cover {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--skeleton-base);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--duration-normal) var(--ease-out);
+}
+
+.mcard[data-hovered] .mcard__cover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* 按钮尺寸由调用方按卡片尺寸下发（--card-w / --card-img-h） */
+.mcard[data-size='small'] {
+  --card-w: 140px;
+  --card-img-h: 140px;
+}
+
+.mcard[data-size='medium'] {
+  --card-w: 180px;
+  --card-img-h: 180px;
+}
+
+.mcard[data-size='large'] {
+  --card-w: 220px;
+  --card-img-h: 220px;
+}
+
+.mcard {
+  width: var(--card-w, 180px);
+}
+
+.mcard__cover {
+  height: var(--card-img-h, 180px);
+}
+
+/* 播放遮罩：显隐由悬停控制（类名在 global 的 .play-overlay 里已有定位） */
+.mcard__play-overlay {
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.mcard[data-hovered] .mcard__play-overlay {
+  opacity: 1;
+}
+
+.mcard__play-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface-content);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  transform: scale(1);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.mcard[data-hovered] .mcard__play-btn {
+  transform: scale(1.08);
+}
+
+.mcard__play-btn svg {
+  margin-left: 2px;
+}
+
+.mcard__delete {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--delete-scrim);
+  color: var(--text-inverse);
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.mcard__delete:hover {
+  background: var(--danger);
+}
+
+.mcard__text {
+  margin-top: var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+.mcard__title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcard__subtitle {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
