@@ -138,9 +138,12 @@ const ArtistListPage: React.FC = () => {
         {loading ? (
           <div className="artists__grid">
             {Array.from({ length: 20 }).map((_, i) => (
-              <div key={i} className="artist-card artist-card--skeleton">
-                <div className="artist-card__sk-avatar" />
-                <div className="artist-card__sk-name" />
+              <div key={i} className="cover-card cover-card--skeleton">
+                <div className="cover-card__media" />
+                <div className="cover-card__text">
+                  <div className="cover-card__sk-line" />
+                  <div className="cover-card__sk-line cover-card__sk-line--meta" />
+                </div>
               </div>
             ))}
           </div>

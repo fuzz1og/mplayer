@@ -101,11 +101,11 @@ describe('本地页（#694）', () => {
   it('「专辑 / 歌手」段用同一批本地歌曲聚合，网格复用 AlbumGrid 与歌手卡', async () => {
     renderPage();
     await userEvent.click(screen.getByRole('radio', { name: '专辑' }));
-    const albumNames = Array.from(document.querySelectorAll('.album-grid__name')).map((el) => el.textContent);
+    const albumNames = Array.from(document.querySelectorAll('.cover-card__title')).map((el) => el.textContent);
     expect(albumNames.sort()).toEqual(['另一张专辑', '本地专辑'].sort());
 
     await userEvent.click(screen.getByRole('radio', { name: '歌手' }));
-    expect(Array.from(document.querySelectorAll('.artist-card__name')).map((el) => el.textContent)).toEqual(['本地歌手']);
+    expect(Array.from(document.querySelectorAll('.cover-card__title')).map((el) => el.textContent)).toEqual(['本地歌手']);
   });
 
   it('「导入文件夹」走本地音乐目录选择，导入后不丢失自己的扫描入口', async () => {

@@ -1,7 +1,7 @@
 import React from 'react';
-import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
-import { Disc3, Play } from 'lucide-react';
+import { Disc3 } from 'lucide-react';
 import type { Album } from '@mplayer/core';
+import CoverCard from '@/renderer/components/CoverCard';
 import '@/renderer/styles/songlist.css';
 
 interface AlbumGridProps {
@@ -98,29 +98,13 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
             {group.albums.map((album) => {
               const year = showYear ? albumYear(album) : '';
               return (
-                <div key={album.id} onClick={() => onAlbumClick?.(album)} className="album-grid__item">
-                  <div className="card-interactive album-grid__cover">
-                    {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-                    <div className="album-grid__placeholder">
-                      <Disc3 size={36} />
-                    </div>
-                    {album.picUrl && (
-                      <img
-                        key={album.picUrl}
-                        src={coverThumbUrl(album.picUrl, COVER_SIZE.thumb)}
-                        alt={album.name}
-                        loading="lazy"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        className="album-grid__img"
-                      />
-                    )}
-                    <div className="play-overlay">
-                      <Play size={20} color="white" fill="white" />
-                    </div>
-                  </div>
-                  <div className="album-grid__name">{album.name}</div>
-                  <div className="album-grid__sub">{year || album.artist || ''}</div>
-                </div>
+                <CoverCard
+                  key={album.id}
+                  title={album.name}
+                  subtitle={year || album.artist || undefined}
+                  cover={album.picUrl}
+                  onClick={() => onAlbumClick?.(album)}
+                />
               );
             })}
           </div>

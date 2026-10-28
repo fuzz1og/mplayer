@@ -47,18 +47,14 @@ const OWNERSHIP: Record<string, string[]> = {
   'styles/songlist.css': [
     'components/AlbumGrid.tsx',
     'components/AlbumScroll.tsx',
-    'components/ArtistCard.tsx',
     'components/AudioTagBadge.tsx',
     'components/ChartPanel.tsx',
     'components/CollectionGrid.tsx',
     'components/DailyRecommend.tsx',
-    'components/DiscoverPlaylistCard.tsx',
     'components/DownloadProgressModal.tsx',
     'components/ErrorBoundary.tsx',
     'components/GroupedSongList.tsx',
     'components/LyricsDisplay.tsx',
-    'components/MusicCard.tsx',
-    'components/PlaylistGrid.tsx',
     'components/PlaylistPageGrid.tsx',
     'components/QueuePanel.tsx',
     'components/RowActionButtons.tsx',
@@ -78,6 +74,9 @@ const OWNERSHIP: Record<string, string[]> = {
     'pages/PlaylistsPage.tsx',
     'pages/RecommendPage.tsx',
   ],
+
+  // ── 内容卡：整仓唯一的封面卡实现，谁渲染都由它自己引样式 ──
+  'styles/cover-card.css': ['components/CoverCard.tsx'],
 
   // ── 原语自带样式（ui/ 目录内，组件与样式同名同目录） ──
   'styles/queue-panel.css': ['components/QueuePanel.tsx'],
@@ -198,8 +197,7 @@ describe('样式所有权（#696）', () => {
       '.settings-',
       '.app-shell',
       '.song-row',
-      '.mcard',
-      '.lyrics',
+        '.lyrics',
       '.library-',
       '.discover-',
     ];

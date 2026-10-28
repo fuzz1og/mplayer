@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import '../styles/page-discover.css';
-import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { toast } from '@/renderer/services/toastStore';
 
 import { useNavigate } from 'react-router-dom';
@@ -18,6 +17,7 @@ import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
+import ArtistCard from '@/renderer/components/ArtistCard';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
 import { pickToplistGroup, SOURCE_DISPLAY_NAMES, TOPLIST_SOURCE_IDS } from '@mplayer/core';
@@ -649,31 +649,16 @@ const DiscoverPageV2: React.FC = () => {
             <div className="discover-status discover-status--danger">歌手搜索失败</div>
           ) : artistResults.length > 0 ? (
             <div className="discover-scroll discover-scroll--padded">
-              <div className="discover-artist-grid">
+              <div className="artists__grid">
                 {artistResults.map((a) => (
-                  <button
+                  <ArtistCard
                     key={a.id}
-                    aria-label={`查看歌手: ${a.name}`}
+                    artist={a}
                     onClick={() => {
                       cacheArtistMeta(a.id, { name: a.name, pic: a.picUrl });
                       navigate(`/artist/${a.id}`, { state: { name: a.name, pic: a.picUrl } });
                     }}
-                    className="discover-artist"
-                  >
-                    <span className="discover-artist__avatar">
-                      {a.picUrl ? (
-                        <img src={coverThumbUrl(a.picUrl, COVER_SIZE.icon)} alt="" className="discover-artist__img" />
-                      ) : (
-                        a.name.charAt(0)
-                      )}
-                    </span>
-                    <span className="discover-artist__name">
-                      {a.name}
-                    </span>
-                    <span className="discover-artist__meta">
-                      专辑 {a.albumSize} · 歌曲 {a.musicSize}
-                    </span>
-                  </button>
+                  />
                 ))}
               </div>
             </div>
