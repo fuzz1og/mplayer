@@ -67,9 +67,8 @@ export function __resetSongCoverRefreshState(): void {
 }
 
 /**
- * 封面加载失败时刷新歌曲封面（上游 API 签名过期后同一 URL 永远失败，必须换新 URL）。
- * 找到新封面后同步更新 URL 缓存（只替换封面，不动已有 url/lrc）；失败静默。
- * 同歌并发触发合并为一次；60 秒冷却防刷新风暴。
+ * 封面失败重识别：本地 URL 缓存优先且不受冷却约束（收藏/历史每轮挂载靠它水合），未命中才重搜；
+ * 同步更新 URL 缓存（只替换封面，不动已有 url/lrc）；同歌并发合并，60 秒冷却只约束上游搜索。
  */
 export function refreshSongCover(song: Song): Promise<string | null> {
   if (!song || song.sourceType === 'local' || song.sourceType === 'soda') return Promise.resolve(null);
@@ -80,24 +79,10 @@ export function refreshSongCover(song: Song): Promise<string | null> {
   const running = inFlightRefreshes.get(attemptKey);
   if (running) return running;
 
-  // 冷却中 → 跳过（新签名 URL 可能再次失败，等 60 秒再试）
-  const lastAt = lastRefreshAt.get(attemptKey) ?? 0;
-  if (Date.now() - lastAt < LAST_REFRESH_TTL) return Promise.resolve(null);
-
-  // 失败记录 5 分钟过期：瞬时故障不能永久放弃
-  const rec = attempts.get(attemptKey);
-  if (rec && Date.now() - rec.at > ATTEMPT_RESET_TTL) attempts.delete(attemptKey);
-  const count = attempts.get(attemptKey)?.count ?? 0;
-  if (count >= MAX_ATTEMPTS) return Promise.resolve(null);
-  attempts.set(attemptKey, { count: count + 1, at: Date.now() });
-  lastRefreshAt.set(attemptKey, Date.now());
-  pruneRemembered(attempts, (v) => v.at, ATTEMPT_RESET_TTL);
-  pruneRemembered(lastRefreshAt, (v) => v, LAST_REFRESH_TTL);
-
   const promise = withRefreshLimit(async () => {
-    // 缓存优先：先读 URL 缓存，已有可用封面直接复用（收藏/历史行每 session 挂载触发，
-    // 不先查缓存会对缓存里已有的封面反复打上游搜索）。排除两类必须落回搜索的情况：
-    // cover === song.cover（刚 onError 失败的同一 URL，重读会死链循环）与 legacy 死链。
+    // 缓存优先，且必须先于冷却/失败计数：收藏、历史只落 SongBase（无 cover），每次页面重挂
+    // 都靠这里水合；冷却记的是「上一轮重搜」而非缓存有效期，先过冷却会让切页返回整片变灰。
+    // 排除两类必须落回搜索：cover === song.cover（刚失败的同一 URL）与 legacy 死链。
     const cached = await IpcClient
       .invoke<{ url?: string; cover?: string; lrc?: string } | null>('cache:getSongResources', song.id)
       .catch(() => null);
@@ -114,6 +99,21 @@ export function refreshSongCover(song: Song): Promise<string | null> {
       }).catch(() => {});
       return cachedCover;
     }
+
+    // ── 以下门槛只约束上游搜索（缓存未命中才走到这里）────────────────────
+    // 冷却中 → 跳过（新签名 URL 可能再次失败，等 60 秒再试）
+    const lastAt = lastRefreshAt.get(attemptKey) ?? 0;
+    if (Date.now() - lastAt < LAST_REFRESH_TTL) return null;
+
+    // 失败记录 5 分钟过期：瞬时故障不能永久放弃
+    const rec = attempts.get(attemptKey);
+    if (rec && Date.now() - rec.at > ATTEMPT_RESET_TTL) attempts.delete(attemptKey);
+    const count = attempts.get(attemptKey)?.count ?? 0;
+    if (count >= MAX_ATTEMPTS) return null;
+    attempts.set(attemptKey, { count: count + 1, at: Date.now() });
+    lastRefreshAt.set(attemptKey, Date.now());
+    pruneRemembered(attempts, (v) => v.at, ATTEMPT_RESET_TTL);
+    pruneRemembered(lastRefreshAt, (v) => v, LAST_REFRESH_TTL);
 
     let fresh: Song | null = null;
 
