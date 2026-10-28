@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import '../styles/page-discover.css';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { toast } from '@/renderer/services/toastStore';
-import { ArrowLeft, Flame, Disc3, ListMusic, Mic2 } from 'lucide-react';
+
 import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -50,14 +51,13 @@ type AreaKey = 'ALL' | 'ZH' | 'EA' | 'KR' | 'JP';
 interface TabDef {
   key: TabKey;
   label: string;
-  icon: React.ReactNode;
 }
 
 const TABS: TabDef[] = [
-  { key: 'charts', label: '排行榜', icon: <Flame size={16} /> },
-  { key: 'albums', label: '新碟上架', icon: <Disc3 size={16} /> },
-  { key: 'playlists', label: '歌单', icon: <ListMusic size={16} /> },
-  { key: 'artists', label: '歌手', icon: <Mic2 size={16} /> },
+  { key: 'charts', label: '排行榜' },
+  { key: 'albums', label: '新碟上架' },
+  { key: 'playlists', label: '歌单' },
+  { key: 'artists', label: '歌手' },
 ];
 
 
@@ -94,7 +94,8 @@ const DiscoverPageV2: React.FC = () => {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>(loadSavedTab);
-  const [chartSource, setChartSource] = useState<ToplistSourceKey>('netease');
+  /** 发现内容来源：只影响发现内容（榜单），与标题栏的搜索来源完全独立。 */
+  const [contentSource, setContentSource] = useState<ToplistSourceKey>('netease');
   const [hotChart, setHotChart] = useState<ChartEntry>(EMPTY_CHART);
   const [newChart, setNewChart] = useState<ChartEntry>(EMPTY_CHART);
   const [hotLoading, setHotLoading] = useState(true);
@@ -252,9 +253,9 @@ const DiscoverPageV2: React.FC = () => {
 
   useEffect(() => {
     if (activeTab === 'charts') {
-      const cached = cacheRef.current[chartSource];
+      const cached = cacheRef.current[contentSource];
       if (!cached || Date.now() - cached.timestamp > CHART_TTL) {
-        fetchCharts(chartSource);
+        fetchCharts(contentSource);
       } else {
         // 命中未过期缓存：必须把该源榜单铺回状态，否则会沿用上一个源的曲目（切源串榜）
         setHotChart(cached.hot);
@@ -271,7 +272,7 @@ const DiscoverPageV2: React.FC = () => {
       setPlaylistListError(null);
       fetchPlaylistList(true);
     }
-  }, [activeTab, chartSource, albumsArea, fetchCharts, fetchAlbums, fetchPlaylistList]);
+  }, [activeTab, contentSource, albumsArea, fetchCharts, fetchAlbums, fetchPlaylistList]);
 
   const handleAlbumsAreaChange = (area: string) => {
     setAlbumsArea(area as AreaKey);
@@ -341,13 +342,13 @@ const DiscoverPageV2: React.FC = () => {
 
   /** 重试当前源的榜单（热歌与新歌共用一次请求，故共用同一个重试）。 */
   const handleRetryCharts = () => {
-    delete cacheRef.current[chartSource];
-    fetchCharts(chartSource);
+    delete cacheRef.current[contentSource];
+    fetchCharts(contentSource);
   };
 
   /** 面板标题 = 源名 · 榜单名（榜单名取自 core ToplistGroup.name，缺失时回落通用名）。 */
   const chartTitle = (kind: ChartKind, entry: ChartEntry) =>
-    `${SOURCE_DISPLAY_NAMES[chartSource]} · ${entry.name || CHART_KIND_LABELS[kind]}`;
+    `${SOURCE_DISPLAY_NAMES[contentSource]} · ${entry.name || CHART_KIND_LABELS[kind]}`;
 
   const searchLoading = useSearchStore((s) => s.loading);
   const searchLoadingMore = useSearchStore((s) => s.loadingMore);
@@ -509,16 +510,15 @@ const DiscoverPageV2: React.FC = () => {
   if (currentKeyword) {
     return (
       <div className="discover-page">
-        <div className="discover-topbar">
-          <button onClick={handleBackFromSearch} className="discover-back discover-back--roomy">
-            <ArrowLeft size={16} />
-            <span>返回</span>
-          </button>
-          <h1 className="discover-topbar__title">
-            搜索结果: {currentKeyword}
-          </h1>
-          <div className="discover-topbar__spacer" />
-        </div>
+        <PageHeader
+          title="发现"
+          lead={`搜索结果：${currentKeyword}`}
+          actions={(
+            <button type="button" className="discover-search-clear" onClick={handleBackFromSearch}>
+              退出搜索
+            </button>
+          )}
+        />
 
         {/* 单曲 / 歌手 / 歌单二级 tab */}
         <div className="discover-subtabs">
@@ -663,31 +663,32 @@ const DiscoverPageV2: React.FC = () => {
 
   return (
     <div className="discover-page">
-      <div className="discover-header">
-        <div className="discover-header__row">
-          <span className="discover-header__title">
-            今天听什么
-          </span>
-          <span className="discover-header__meta">
-            网易云 · QQ · 酷狗
-          </span>
+      <PageHeader title="发现" lead="今天听什么" />
+
+      <div className="discover-filters">
+        <div className="discover-filter-group" role="group" aria-label="发现内容来源">
+          {CHART_SOURCE_OPTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setContentSource(s)}
+              aria-pressed={contentSource === s}
+              className="discover-segment"
+            >
+              {SOURCE_DISPLAY_NAMES[s]}
+            </button>
+          ))}
         </div>
-        <div className="discover-tabs">
+        <div className="discover-filter-group" role="group" aria-label="内容分类">
           {TABS.map((tab) => (
             <button
               key={tab.key}
+              type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`discover-tab${activeTab === tab.key ? ' discover-tab--active' : ''}`}
+              aria-pressed={activeTab === tab.key}
+              className="discover-segment"
             >
-              {tab.icon}
-              <span>{tab.label}</span>
-              {activeTab === tab.key && (
-                <span aria-hidden className="discover-tab__bars">
-                  <span className="discover-tab__bar discover-tab__bar--low" />
-                  <span className="discover-tab__bar discover-tab__bar--tall" />
-                  <span className="discover-tab__bar discover-tab__bar--mid" />
-                </span>
-              )}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -696,19 +697,6 @@ const DiscoverPageV2: React.FC = () => {
       <div className={activeTab === 'artists' ? 'discover-body discover-body--flush' : 'discover-body'}>
         {activeTab === 'charts' && (
           <div className="discover-panel">
-            {/* 源切换（#332 选项 A）：不再把三源合成一张跨源榜，而是「切源看该源自己的榜」 */}
-            <div className="discover-pills">
-              {CHART_SOURCE_OPTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setChartSource(s)}
-                  aria-pressed={chartSource === s}
-                  className={`discover-pill discover-pill--source${chartSource === s ? ' discover-pill--active' : ''}`}
-                >
-                  {SOURCE_DISPLAY_NAMES[s]}
-                </button>
-              ))}
-            </div>
             <div className="discover-charts">
               <ChartPanel
                 title={chartTitle('hot', hotChart)}
