@@ -56,26 +56,27 @@ describe('本地歌单详情：按需选择模式（#694 评审）', () => {
     const { container } = renderPage();
     await waitFor(() => expect(container.querySelectorAll('.song-row').length).toBe(3));
 
-    // 普通浏览：没有常驻复选框、没有表头全选、没有批量栏
+    // 普通浏览：没有常驻复选框、没有全选、没有批量栏；表头已删（#694），只剩一行工具条
     expect(container.querySelector('.song-row__check')).toBeNull();
-    expect(container.querySelector('.playlist-detail__th--check')).toBeNull();
+    expect(container.querySelector('.playlist-detail__thead')).toBeNull();
     expect(container.querySelector('input[aria-label="全选可见歌曲"]')).toBeNull();
     expect(container.textContent).not.toContain('已选择');
+    expect(container.querySelectorAll('.playlist-detail__toolbar').length).toBe(1);
 
     // 拖拽把手仍在序号列（与 #703 的拖拽语义同源，不进选择模式也在）
     const row = container.querySelector('.song-row') as HTMLElement;
     expect(row.querySelector('.song-row__index [aria-label^="拖拽排序"]')).toBeTruthy();
 
-    // 表头与行取同一份序号列宽（COL_INDEX_LIBRARY = 28）
-    expect((container.querySelector('.playlist-detail__th--num') as HTMLElement).style.getPropertyValue('--col-width')).toBe('28px');
+    // 行序号列宽仍是 COL_INDEX_LIBRARY = 28（表头删了，行的列几何不变）
     expect((row.querySelector('.song-row__index') as HTMLElement).style.getPropertyValue('--col-width')).toBe('28px');
 
-    // 显式进入：复选框列 + 表头全选出现，按钮用 aria-pressed 表达状态
+    // 显式进入：复选框列出现，全选落在工具条内（表头删除后唯一入口），按钮用 aria-pressed 表达状态
     expect(toggleButton(container)).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(toggleButton(container));
     await waitFor(() => expect(container.querySelectorAll('.song-row__check').length).toBe(3));
-    expect(container.querySelector('.playlist-detail__th--check')).toBeTruthy();
-    expect(container.querySelector('input[aria-label="全选可见歌曲"]')).toBeTruthy();
+    const toolbar = container.querySelector('.playlist-detail__toolbar') as HTMLElement;
+    expect(toolbar.querySelector('input[aria-label="全选可见歌曲"]')).toBeTruthy();
+    expect(container.querySelector('.playlist-detail__thead')).toBeNull();
     expect(toggleButton(container)).toHaveAttribute('aria-pressed', 'true');
 
     // 退出：复选框列消失，选择集被清空

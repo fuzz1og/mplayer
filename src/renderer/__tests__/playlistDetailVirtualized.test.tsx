@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 describe('PlaylistDetailPage 窗口化（#445）', () => {
-  it('提示条 + 批量栏 + 表头 + 行容器同父：勾选后 rowsRef.parentElement 不变', async () => {
+  it('工具条 + 批量栏 + 行容器同父：勾选后 rowsRef.parentElement 不变', async () => {
     const { container } = renderPage(10);
     await waitFor(() => expect(container.querySelectorAll('.song-row').length).toBe(10));
 
@@ -57,10 +57,13 @@ describe('PlaylistDetailPage 窗口化（#445）', () => {
     const wrapper = rowsRef.parentElement as HTMLElement;
     expect(rowsRef).not.toBe(wrapper);
 
-    // 表头不一定是第一个子节点（#488 在列表上方加了过滤框），按内容定位
-    const tableHeader = Array.from(wrapper.children).find((child) => child.textContent?.includes('标题')) as HTMLElement;
-    expect(tableHeader).toBeTruthy();
-    expect(tableHeader.parentElement).toBe(wrapper);
+    // 一行工具条（#694）+ 行容器同父；表头已删，列表上方不再有第二道栏
+    const toolbar = Array.from(wrapper.children).find((child) =>
+      child.classList.contains('playlist-detail__toolbar')) as HTMLElement;
+    expect(toolbar).toBeTruthy();
+    expect(toolbar.parentElement).toBe(wrapper);
+    expect(toolbar.querySelector('.playlist-detail__filter')).toBeTruthy();
+    expect(container.querySelector('.playlist-detail__thead')).toBeNull();
     expect(rowsRef.parentElement).toBe(wrapper);
 
     // 勾选一首歌 → 批量栏出现；它必须仍在同一个 wrapper 内，否则 scrollMargin 会停在旧值
