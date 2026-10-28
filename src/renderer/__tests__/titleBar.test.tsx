@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render, screen, fireEvent, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import TitleBar from '../components/TitleBar';
 
@@ -138,6 +139,14 @@ describe('TitleBar', () => {
     const help = screen.getByRole('button', { name: '帮助' });
     expect(within(help).getByTestId('update-badge')).toBeInTheDocument();
     expect(screen.getAllByTestId('update-badge')).toHaveLength(1);
+  });
+
+  it('帮助菜单打开后 Tab 可在菜单项之间移动', async () => {
+    renderTitleBar();
+    fireEvent.click(screen.getByRole('button', { name: '帮助' }));
+    expect(screen.getByRole('menuitem', { name: '检查更新' })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('menuitem', { name: '关于' })).toHaveFocus();
   });
 
   it('帮助菜单 ESC 关闭并把焦点还给触发按钮', () => {
