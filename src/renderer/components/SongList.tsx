@@ -359,6 +359,13 @@ const SongList: React.FC<SongListProps> = ({
           <div className="song-list__batch-bar" role="toolbar" aria-label="批量操作">
             <span className="song-list__batch-count">已选择 {selectedIds.length} 首歌曲</span>
             <div className="song-list__batch-actions">
+              {/* 无表头的列表（资料库密度）没有头部复选框，全选入口必须留在批量栏里 */}
+              {!showHeader && (
+                <button onClick={handleToggleSelectAll} className="song-list__batch-btn">
+                  <CheckSquare size={16} />
+                  {displaySongs.length > 0 && selectedIds.length === displaySongs.length ? '取消全选' : '全选'}
+                </button>
+              )}
               {enableBatchDownload && (
                 <button onClick={handleBatchDownload} disabled={batchDisabled} className="song-list__batch-btn">
                   <Download size={16} />

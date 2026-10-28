@@ -91,14 +91,4 @@
 /* 计数与更新徽标共存时，徽标靠最右 */
 .sidebar__count + .sidebar__badge {
   margin-left: var(--space-2);
-}
-
-.sidebar__badge {
-  width: 8px;
-  height: 8px;
-  margin-left: auto;
-  border-radius: var(--radius-full);
-  background: var(--accent);
-}
-
-/* 旧顶栏（1.9.0 删除）：后退/前进/刷新与搜索已上移到标题栏，见 .titlebar__* */
+}/* 旧顶栏（1.9.0 删除）：后退/前进/刷新与搜索已上移到标题栏，见 .titlebar__* */

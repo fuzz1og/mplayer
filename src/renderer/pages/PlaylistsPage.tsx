@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, FolderOpen, Trash2 } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
-import { Button, Dialog, Input, PageHeader, useConfirm } from '@/renderer/ui';
+import { Button, Dialog, Input, PageHeader, Textarea, useConfirm } from '@/renderer/ui';
 import '@/renderer/styles/songlist.css';
 import { useNavigate } from 'react-router-dom';
 import CoverCard from '@/renderer/components/CoverCard';
@@ -173,8 +173,7 @@ const PlaylistsPage: React.FC = () => {
           </label>
           <label className="playlist-form__label">
             歌单描述
-            <textarea
-              className="playlist-form__textarea"
+            <Textarea
               value={newPlaylistDesc}
               onChange={(e) => setNewPlaylistDesc(e.target.value)}
               placeholder="请输入歌单描述（可选）"

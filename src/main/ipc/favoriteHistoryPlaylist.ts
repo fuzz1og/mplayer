@@ -1,19 +1,46 @@
 import { registerIpcHandler } from './registerHandler';
 import type { db } from '../storage/db';
+import { getLocalMusicService } from '../services/localMusicService';
 
 type Db = typeof db;
+
+const toFileUrl = (path: string): string => `file:///${path.replace(/\\/g, '/')}`;
+
+/**
+ * 收藏与历史只落 SongBase（无 url）。本地曲目没有可解析的源，读出来必须按 id 回查本地库补上
+ * url / 封面，否则在收藏页、历史页点播放会按网络源归因失败（#711）。
+ */
+async function withLocalPlayback<T extends { id: string; cover?: string }>(songs: T[]): Promise<(T & { url?: string })[]> {
+  if (songs.length === 0) return songs;
+  const localSongs = await getLocalMusicService().getSongs().catch(() => []);
+  if (localSongs.length === 0) return songs;
+  const byId = new Map(localSongs.map(song => [song.id, song]));
+  return songs.map((song) => {
+    const local = byId.get(song.id);
+    if (!local) return song;
+    return {
+      ...song,
+      url: toFileUrl(local.filePath),
+      cover: song.cover || (local.coverPath ? toFileUrl(local.coverPath) : ''),
+    };
+  });
+}
 
 export function registerFavoriteIpc(db: Db): void {
   registerIpcHandler('favorite:add', (song: any) => db.addFavorite(song));
   registerIpcHandler('favorite:remove', (songId: string) => db.removeFavorite(songId));
   registerIpcHandler('favorite:isFavorite', (songId: string) => db.isFavorite(songId));
-  registerIpcHandler('favorite:getAll', () => db.getFavorites());
+  registerIpcHandler('favorite:getAll', async () => withLocalPlayback(await db.getFavorites()));
   registerIpcHandler('favorite:replaceSong', (oldSongId: string, newSong: any) => db.replaceFavoriteSong(oldSongId, newSong));
 }
 
 export function registerHistoryIpc(db: Db): void {
   registerIpcHandler('history:add', (song: any) => db.addToPlayHistory(song));
-  registerIpcHandler('history:get', (limit?: number) => db.getPlayHistory(limit));
+  registerIpcHandler('history:get', async (limit?: number) => {
+    const rows = await db.getPlayHistory(limit);
+    const enriched = await withLocalPlayback(rows.map(row => row.song));
+    return rows.map((row, index) => ({ ...row, song: enriched[index] }));
+  });
   registerIpcHandler('history:clear', () => db.clearPlayHistory());
   registerIpcHandler('history:remove', (songId: string) => db.removeFromPlayHistory(songId));
 }

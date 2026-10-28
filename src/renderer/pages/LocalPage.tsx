@@ -5,7 +5,6 @@ import type { Song } from '@mplayer/core';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useLocalStore } from '@/renderer/store/localStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
-import { useDownload } from '@/renderer/hooks/useDownload';
 import { toast } from '@/renderer/services/toastStore';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import SongList from '@/renderer/components/SongList';
@@ -40,7 +39,6 @@ const LocalPage: React.FC = () => {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const play = usePlayerStore((s) => s.play);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
-  const { download, downloadBatch } = useDownload();
 
   const [view, setView] = useState(VIEW_OPTIONS[0]);
   // 旧深链 /download → /local?downloads=1：下载管理是本地页的次级入口，不再独占分段/页面。
@@ -90,10 +88,15 @@ const LocalPage: React.FC = () => {
   }, [addFolder]);
 
   const handleRefresh = useCallback(() => {
-    void refresh().catch((error) => {
-      console.error('扫描本地文件夹失败:', error);
-      toast.error('扫描失败，请重试');
-    });
+    void refresh()
+      .then(() => {
+        const total = useLocalStore.getState().songs.length;
+        toast.success(total > 0 ? `已扫描到 ${total} 首本地歌曲` : '扫描完成，没有发现本地歌曲');
+      })
+      .catch((error) => {
+        console.error('扫描本地文件夹失败:', error);
+        toast.error('扫描失败，请重试');
+      });
   }, [refresh]);
 
   const handleRemoveFolder = useCallback((folderPath: string, folderName: string) => {
@@ -192,7 +195,6 @@ const LocalPage: React.FC = () => {
           <div className="library__card">
             <SongList
               density="library"
-              showHeader
               showDuration
               songs={localDisplayed}
               currentSongId={currentSong?.id}
@@ -200,10 +202,7 @@ const LocalPage: React.FC = () => {
               favoriteIds={favoriteIds}
               onPlay={handlePlay}
               onToggleFavorite={handleToggleFavorite}
-              onDownload={download}
-              onBatchDownload={downloadBatch}
               onCoverError={handleCoverError}
-              enableBatchDownload={true}
               enableBatchAddToPlaylist={true}
               loading={isScanning && localDisplayed.length === 0}
               emptyText="还没有本地歌曲"

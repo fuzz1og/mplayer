@@ -6,8 +6,8 @@ export { Tag } from './tag';
 export type { TagProps, TagTone } from './tag';
 export { ConfirmProvider, useConfirm } from './confirm';
 export type { ConfirmOptions } from './confirm';
-export { Input } from './input';
-export type { InputProps } from './input';
+export { Input, Textarea } from './input';
+export type { InputProps, TextareaProps } from './input';
 export { Switch, Segmented, Progress, Alert, Checkbox, Stepper } from './forms';
 export type {
   SwitchProps,

@@ -140,7 +140,6 @@ const HotlistDetailPage: React.FC = () => {
   const handleBatchDownload = useCallback(() => {
     if (selectedSongs.length === 0) return;
     void downloadBatch(selectedSongs);
-    toast.success(`已添加 ${selectedSongs.length} 首歌曲到下载队列`);
   }, [selectedSongs, downloadBatch]);
 
   const handleBatchAddToPlaylist = useCallback(() => {

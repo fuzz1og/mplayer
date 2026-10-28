@@ -304,9 +304,3 @@
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
-
-.library__footnote {
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-}

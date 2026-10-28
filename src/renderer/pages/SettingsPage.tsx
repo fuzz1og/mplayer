@@ -122,8 +122,10 @@ const SettingsPage: React.FC = () => {
 
   // 关掉开发者模式时若正停在诊断页，退回到「关于」，否则会停在一个不存在的页
   useEffect(() => {
-    if (!devMode && active === 'diagnostics') setActive('about');
-  }, [devMode, active]);
+    if (devMode || active !== 'diagnostics') return;
+    setActive('about');
+    navigate('/settings/about', { replace: true });
+  }, [devMode, active, navigate]);
 
   const content =
     active === 'diagnostics' && devMode ? <PlaybackDiagnosticsSection /> : SECTION_CONTENT[active] ?? null;

@@ -676,7 +676,8 @@ const DiscoverPageV2: React.FC = () => {
       <PageHeader title="发现" />
 
       <div className="discover-filters">
-        <div className="discover-filter-group" role="group" aria-label="发现内容来源">
+        {activeTab === 'charts' && (
+          <div className="discover-filter-group" role="group" aria-label="发现内容来源">
           {CHART_SOURCE_OPTIONS.map((s) => (
             <button
               key={s}
@@ -688,7 +689,8 @@ const DiscoverPageV2: React.FC = () => {
               {SOURCE_DISPLAY_NAMES[s]}
             </button>
           ))}
-        </div>
+          </div>
+        )}
         <div className="discover-filter-group" role="group" aria-label="内容分类">
           {TABS.map((tab) => (
             <button

@@ -306,19 +306,14 @@
   cursor: not-allowed;
   opacity: 0.45;
 }
-/* ── 页面与演示容器（供新页面复用，替代内联 padding/max-width） ── */
-.ui-page {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 24px 24px 48px;
-}
 
-.ui-stack {
-  display: flex;
-  flex-direction: column;
-}
-
-.ui-lab {
+.ui-textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  line-height: var(--leading-normal);
+  resize: vertical;
+}.ui-lab {
   max-width: 720px;
   margin: 0 auto;
   padding: 24px 24px 64px;
@@ -445,7 +440,6 @@
   flex: none;
 }
 
-
 /* ── 换源弹层 ── */
 .swap__song {
   padding: 0 14px 8px;
@@ -567,22 +561,7 @@
   gap: 6px;
   color: var(--text-secondary);
   font-size: var(--text-xs);
-}
-
-.playlist-form__textarea {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--input-border);
-  border-radius: var(--radius-sm);
-  background: var(--input-bg);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  resize: vertical;
-}
-
-/* ── 加入歌单弹层 ── */
+}/* ── 加入歌单弹层 ── */
 .add-to-playlist__song {
   display: flex;
   gap: 12px;

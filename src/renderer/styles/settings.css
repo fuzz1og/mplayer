@@ -174,23 +174,7 @@
   font-weight: var(--weight-bold);
   letter-spacing: -0.02em;
   line-height: var(--leading-tight);
-}
-
-.settings-page__lead {
-  margin: 0 0 18px;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-}
-
-.settings-page__footnote {
-  margin: 10px 2px 0;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-}
-
-.settings-page__stack {
+}.settings-page__stack {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -203,13 +187,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.settings-page__progress {
-  padding: 4px 14px 14px;
-}
-
-.settings-page__field {
+}.settings-page__field {
   padding: 10px 14px;
 }
 
@@ -326,14 +304,7 @@
 .cache-legend__item {
   display: inline-flex;
   align-items: center;
-}
-
-/* 三类构成色点：分类色只用 --chart-* 语义 token（定义在 global.css，双主题各一套） */
-.cache-legend__dot--index { --legend-color: var(--chart-1); }
-.cache-legend__dot--cover { --legend-color: var(--chart-2); }
-.cache-legend__dot--audio { --legend-color: var(--chart-3); }
-
-.cache-limit__unit {
+}.cache-limit__unit {
   color: var(--text-secondary);
   font-size: var(--text-sm);
 }
@@ -436,21 +407,7 @@
   gap: 10px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--hairline);
-}
-
-.settings-shell__title {
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.settings-shell__body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-
-/* 设置全屏态：只留标题栏（左上返回 + 中部「设置」），侧栏与播放栏让位（播放器不卸载，继续出声） */
+}/* 设置全屏态：只留标题栏（左上返回 + 中部「设置」），侧栏与播放栏让位（播放器不卸载，继续出声） */
 .app-shell--settings .sidebar,
 .app-shell--settings .player-bar {
   display: none;

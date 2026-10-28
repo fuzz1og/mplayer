@@ -48,23 +48,7 @@ html, body, #root {
 ::selection {
   background: var(--accent-subtle);
   color: var(--accent-text);
-}
-
-/* ── 文本省略 ── */
-.ellipsis {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ellipsis-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-/* ── 焦点可见 ── */
+}/* ── 焦点可见 ── */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -132,14 +116,7 @@ button:focus-visible,
 @keyframes slideInDown {
   from { transform: translateY(-20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
-}
-
-.fade-in { animation: fadeIn var(--duration-normal) var(--ease-out); }
-.slide-up { animation: slideUp var(--duration-slow) var(--ease-out); }
-.slide-in { animation: slideIn var(--duration-slow) var(--ease-out); }
-.scale-in { animation: scaleIn var(--duration-normal) var(--ease-out); }
-
-/* ── 骨架屏 ── */
+}/* ── 骨架屏 ── */
 .skeleton-shimmer {
   background: linear-gradient(90deg,
     var(--skeleton-base) 25%,

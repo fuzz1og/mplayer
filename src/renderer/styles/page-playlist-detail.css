@@ -9,16 +9,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.playlist-detail__kind {
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.04em;
-}
-
-.playlist-detail__edit {
+}.playlist-detail__edit {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -155,19 +146,6 @@
   margin-bottom: 6px;
   color: var(--text-secondary);
   font-size: var(--text-sm);
-}
-
-.playlist-detail__input,
-.playlist-detail__textarea {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-}
-
-.playlist-detail__textarea {
-  resize: vertical;
 }
 
 /* ── 歌单不存在 ── */
