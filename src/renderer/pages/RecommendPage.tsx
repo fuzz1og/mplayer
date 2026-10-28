@@ -192,7 +192,6 @@ const RecommendPage: React.FC = () => {
                 songs={batch}
                 loading={loading && batch.length === 0}
                 density="library"
-                showHeader
                 showDuration
                 currentSongId={currentSong?.id}
                 isPlaying={isPlaying}

@@ -144,6 +144,7 @@ const App: React.FC = () => {
         case 'playPause': store.togglePlay(); break;
         case 'next': store.playNext(); break;
         case 'prev': store.playPrevious(); break;
+        case 'openSettings': navigate('/settings'); break;
       }
     };
 
