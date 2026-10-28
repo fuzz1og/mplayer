@@ -39,10 +39,12 @@ const SongCover = ({
   placeholderStyle,
 }: SongCoverProps) => {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
-  // 封面刷新换新 URL 后重置失败态，否则新封面永远不会显示
+  // 封面刷新换新 URL 后重置失败/加载态，否则新封面永远不会显示
   useEffect(() => {
     setFailed(false);
+    setLoaded(false);
   }, [src]);
 
   if (!src || failed) {
@@ -70,8 +72,8 @@ const SongCover = ({
 
   return (
     <>
-      {/* 取图落盘前垫骨架底，图片盖在上面：此前这里只剩容器底色，卡片会先闪一帧灰 */}
-      <div className="cover-abs cover-abs--loading" aria-hidden="true" />
+      {/* 取图落盘前垫骨架底，落盘即撤：此前这里只剩容器底色，卡片会先闪一帧灰 */}
+      {!loaded && <div className="cover-abs cover-abs--loading" aria-hidden="true" />}
       <img
         src={coverThumbUrl(src, thumbSize)}
       alt={alt}
@@ -81,6 +83,7 @@ const SongCover = ({
         onError?.();
       }}
         className="cover-img"
+        onLoad={() => setLoaded(true)}
         style={style}
       />
     </>
