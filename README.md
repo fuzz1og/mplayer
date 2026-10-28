@@ -142,7 +142,7 @@ flowchart LR
   RT -->|失败兜底<br/>按会话健康度定序| B
 ```
 
-- **Desktop**（`src/`）：`contextIsolation: true` + `nodeIntegration: false`（`sandbox: false`），渲染层经 preload 桥 `window.electronAPI` 通信、无 Node 能力。主进程（入口 / preload / 缓存 / storage / ipc / services / tray）与渲染进程（懒加载 router、Zustand、Howler、Ant Design 6）详见 [docs/agents/architecture.md](docs/agents/architecture.md)。
+- **Desktop**（`src/`）：`contextIsolation: true` + `nodeIntegration: false`（`sandbox: false`），渲染层经 preload 桥 `window.electronAPI` 通信、无 Node 能力。主进程（入口 / preload / 缓存 / storage / ipc / services / tray）与渲染进程（懒加载 router、Zustand、Howler、`src/renderer/ui/` 自建原语）详见 [docs/agents/architecture.md](docs/agents/architecture.md)。
 - **Mobile**（`packages/mobile/`）：expo-router Stack + Tabs，Zustand（AsyncStorage persist），双主题 token + textVariants。播放引擎 Android 走自写 Kotlin Expo Module `modules/native-player/`（media3 ExoPlayer 持队列 + 原生推进 + `MediaLibraryService`），iOS 回落 expo-audio。
 - **Shared**（`packages/core/`）：`api/` 多源直连客户端、cache 内核、`shared/` 源路由与解析、`tier3/` 订阅执行器、`utils/`、`cookies/`（cookie 管理器）、`download/`（下载队列 / 标签 / 歌词落盘）。
 
@@ -202,7 +202,7 @@ flowchart LR
 
 | 端 | 技术 |
 | --- | --- |
-| 桌面 | Electron · React 19 · TypeScript · Vite 7 · Zustand · Ant Design 6 · Howler · electron-builder · electron-updater |
+| 桌面 | Electron · React 19 · TypeScript · Vite 7 · Zustand · 自建 UI 原语（`src/renderer/ui/`）· Howler · electron-builder · electron-updater |
 | 移动 | Expo 57 · React Native 0.86 · expo-router · media3 / ExoPlayer（自写 Kotlin 播放模块）· expo-audio（iOS 回落）· Zustand · AsyncStorage · lucide-react-native |
 | 共享 | `@mplayer/core`：多源直连客户端、歌曲识别 / 匹配、播放地址解析、缓存内核、tier3 执行器 |
 
