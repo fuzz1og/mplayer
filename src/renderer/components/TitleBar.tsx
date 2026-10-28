@@ -24,8 +24,10 @@ const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
 };
 
 interface TitleBarProps {
-  /** 中部标题；传入时隐藏搜索框（设置页）。 */
+  /** 中部标题；传入时隐藏搜索框（设置页 / 正在播放）。 */
   title?: string;
+  /** 返回按钮的可访问名：设置页「返回」、正在播放「收起播放器」。 */
+  backLabel?: string;
   /** 兼容旧调用方：设置页返回入口；缺省用 navigate(-1)。 */
   onBack?: () => void;
   /** 设置入口；缺省用 navigate('/settings')。 */
@@ -42,7 +44,7 @@ interface TitleBarProps {
  * 品牌与 logo 已移除——应用身份由窗口标题/任务栏承担；「检查更新」收进「帮助」菜单。
  * 菜单统一由 Menu 原语承载（#709）：首项聚焦、方向键 / Home / End / ESC / Tab 与焦点归还。
  */
-const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, updateAvailable = false, onSearch, sourceType = 'all', onSourceTypeChange }) => {
+const TitleBar: React.FC<TitleBarProps> = ({ title, backLabel = '返回', onBack, onSettingsClick, updateAvailable = false, onSearch, sourceType = 'all', onSourceTypeChange }) => {
   const navigate = useNavigate();
   const [maximized, setMaximized] = useState(false);
   const [keyword, setKeyword] = useState('');
@@ -107,7 +109,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
   return (
     <header className="titlebar">
       <div className="titlebar__leading">
-        <button type="button" className="titlebar__nav" onClick={handleBack} aria-label="返回">
+        <button type="button" className="titlebar__nav" onClick={handleBack} aria-label={backLabel}>
           <ChevronLeft size={16} />
         </button>
         <button type="button" className="titlebar__nav" onClick={handleForward} aria-label="前进">

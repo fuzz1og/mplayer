@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { ChevronDown, Download, Heart, ListMusic, MoreHorizontal } from 'lucide-react';
+import { Download, Heart, ListMusic, MoreHorizontal } from 'lucide-react';
 import { SOURCE_DISPLAY_NAMES, applyShuffleOrder, type PlayMode } from '@mplayer/core';
 import LyricsDisplay from '@/renderer/components/LyricsDisplay';
 import PlayerControls from '@/renderer/components/PlayerControls';
@@ -12,6 +12,7 @@ import { Button, Menu, Segmented } from '@/renderer/ui';
 import type { MenuItem } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import { useThemeMode } from '@/renderer/theme/ThemeManager';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import { usePlaybackDuration, usePlaybackPosition } from '@/renderer/services/playbackClock';
@@ -42,6 +43,21 @@ function isCoverAccent(value: unknown): value is CoverAccent {
     typeof candidate.lightness === 'number' &&
     Number.isFinite(candidate.lightness)
   );
+}
+
+/**
+ * 封面主色 → 主题约束后的环境光变量（原型评审 §9）：色相取封面，
+ * 浅色主题压到 L62 / A0.18，暗色保持 L26 / A0.55，避免暗色发灰或浅色过艳。
+ */
+export function ambientGlowStyle(accent: CoverAccent | null, isDark: boolean): CSSProperties {
+  if (!accent) return {};
+  const hue = Math.round(accent.hue);
+  const lightness = isDark ? 26 : 62;
+  const alpha = isDark ? 0.55 : 0.18;
+  return {
+    '--np-glow-a': `hsl(${hue} 42% ${lightness}% / ${alpha})`,
+    '--np-glow-b': `hsl(${hue} 42% ${lightness + (isDark ? 4 : 3)}% / ${Number((alpha - 0.04).toFixed(2))})`,
+  } as CSSProperties;
 }
 
 /** 底栏分段控件的文案 → 视图（顺序即原型：歌词 / 队列 / 详情）。 */
@@ -93,6 +109,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download } = useDownload();
 
+  const { isDark } = useThemeMode();
   const [view, setView] = useState<StageView>('lyrics');
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
@@ -178,17 +195,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
     };
   }, [currentSong?.cover]);
 
-  /** 主色 → 两团环境光的 CSS 变量（仍是 --np-glow-a/b 形状，CSS 侧不用改）。 */
-  const ambientStyle = useMemo<CSSProperties>(() => {
-    if (!coverAccent) return {};
-    const hue = coverAccent.hue;
-    const saturation = Math.round(coverAccent.saturation * 100);
-    const lightness = Math.round(coverAccent.lightness * 100);
-    return {
-      '--np-glow-a': `hsl(${hue} ${saturation}% ${lightness}% / 0.85)`,
-      '--np-glow-b': `hsl(${hue} ${saturation}% ${Math.max(0, lightness - 8)}% / 0.7)`,
-    } as CSSProperties;
-  }, [coverAccent]);
+  const ambientStyle = useMemo(() => ambientGlowStyle(coverAccent, isDark), [coverAccent, isDark]);
 
   /** 队列显示顺序与队列页一致：随机模式下就是随机序（#511）。 */
   const displayQueue = useMemo(
@@ -198,7 +205,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
 
   if (!currentSong) {
     return (
-      <div className="lyrics-page">
+      <div className="lyrics-page" data-now-playing>
         <div className="lyrics-page__empty">
           <span className="lyrics-page__empty-text">暂无播放中的歌曲</span>
           <Button variant="primary" onClick={onBack}>
@@ -252,40 +259,8 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   ];
 
   return (
-    <div className="lyrics-page" data-view={view}>
+    <div className="lyrics-page" data-now-playing data-view={view}>
       <div className="lyrics-page__ambient" style={ambientStyle} aria-hidden="true" />
-
-      {/* 顶栏 56：整条可拖窗（遮住房间按钮时仍能移动窗口），按钮自己 no-drag */}
-      <header className="lyrics-page__topbar">
-        <div className="lyrics-page__topbar-start">
-          <button type="button" onClick={onBack} aria-label="收起播放器" className="lyrics-page__icon-btn">
-            <ChevronDown size={18} />
-          </button>
-        </div>
-        <div className="lyrics-page__topbar-title">正在播放</div>
-        <div className="lyrics-page__topbar-end">
-          <button
-            ref={menuTriggerRef}
-            type="button"
-            onClick={() => setMenuOpen((open) => !open)}
-            aria-label="更多操作"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            className="lyrics-page__icon-btn"
-          >
-            <MoreHorizontal size={18} />
-          </button>
-          <Menu
-            open={menuOpen}
-            anchorRef={menuTriggerRef}
-            items={lyricsMenuItems}
-            onClose={() => setMenuOpen(false)}
-            ariaLabel="更多操作"
-            placement="bottom-end"
-            minWidth={160}
-          />
-        </div>
-      </header>
 
       <div className="lyrics-page__body">
         <section className="lyrics-page__left">
@@ -299,7 +274,31 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
             />
           </div>
 
-          <h1 className="lyrics-page__title">{currentSong.name}</h1>
+          <div className="lyrics-page__title-row">
+            <h1 className="lyrics-page__title">{currentSong.name}</h1>
+            <div className="lyrics-page__more">
+              <button
+                ref={menuTriggerRef}
+                type="button"
+                onClick={() => setMenuOpen((open) => !open)}
+                aria-label="更多操作"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                className="lyrics-page__icon-btn"
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              <Menu
+                open={menuOpen}
+                anchorRef={menuTriggerRef}
+                items={lyricsMenuItems}
+                onClose={() => setMenuOpen(false)}
+                ariaLabel="更多操作"
+                placement="bottom-end"
+                minWidth={160}
+              />
+            </div>
+          </div>
           <p className="lyrics-page__artist">{artistLine}</p>
 
           {/* 控件行复用播放栏那套（随机/上一/播放/下一/单曲循环），只在本页把它放大 */}
@@ -385,7 +384,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
 
       <footer className="lyrics-page__footer">
         <span className="lyrics-page__quality">自动混音 · {qualityLabel}</span>
-        <div className="lyrics-page__footer-end">
+        <div className="lyrics-page__footer-view">
           <Segmented
             ariaLabel="播放视图"
             options={VIEW_OPTIONS}
@@ -395,6 +394,8 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
               if (next) setView(next);
             }}
           />
+        </div>
+        <div className="lyrics-page__footer-end">
           <PlayerVolume volume={volume} onVolumeChange={setVolume} onToggleMute={handleToggleMute} />
         </div>
       </footer>

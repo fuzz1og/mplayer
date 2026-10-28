@@ -102,6 +102,14 @@ describe('TitleBar', () => {
     expect(onBack).toHaveBeenCalled();
   });
 
+  it('backLabel 覆盖返回按钮可访问名：正在播放态是「收起播放器」', () => {
+    const onBack = vi.fn();
+    renderTitleBar({ title: '正在播放', backLabel: '收起播放器', onBack });
+    expect(document.querySelector('.titlebar__title')?.textContent).toBe('正在播放');
+    fireEvent.click(screen.getByRole('button', { name: '收起播放器' }));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
   it('返回 / 前进走 navigate(-1) / navigate(1)', () => {
     const { unmount } = renderTitleBar({}, { initialEntries: ['/recommend', '/discover'], initialIndex: 1 });
     fireEvent.click(screen.getByRole('button', { name: '返回' }));

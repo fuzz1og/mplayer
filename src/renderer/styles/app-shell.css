@@ -33,3 +33,9 @@
   overflow: hidden;
   background: var(--surface-content);
 }
+
+/* 正在播放：占满标题栏以下整幅宽度；侧栏与普通播放栏让位（footer 由本页自己承担） */
+.app-shell--nowplaying .sidebar,
+.app-shell--nowplaying .player-bar {
+  display: none;
+}

@@ -1,6 +1,6 @@
 /* ============================================================
-   正在播放（1.9.0 全屏播放器）— 对齐 .proto/now-playing.png
-   整窗 fixed overlay：盖住标题栏/侧栏/播放栏，顶栏本身仍是可拖拽区。
+   正在播放（1.9.0 全屏播放器）— 对齐 .proto/now-playing.png + 评审 §8/§9
+   位于全局标题栏之下的整幅内容区（隐藏侧栏/普通播放栏），不遮挡窗口控制。
    ============================================================ */
 
 .lyrics-page {
@@ -9,62 +9,45 @@
   --np-surface: color-mix(in srgb, var(--text-primary) 7%, var(--surface-content));
   --np-surface-hover: color-mix(in srgb, var(--text-primary) 13%, var(--surface-content));
   --np-pill: color-mix(in srgb, var(--text-primary) 20%, var(--surface-content));
-  --np-hero-size: 330px;
+  --np-hero-size: 300px;
+  --np-footer-height: 56px;
 
-  position: fixed;
-  inset: 0;
-  /* 高于壳内 chrome（播放栏 10），低于弹层（Dialog 1000、行菜单 9999） */
-  z-index: 60;
+  position: relative;
   display: flex;
+  flex: 1;
   flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
-  /* 不透明底：环境光垫在实色表面上，不得透出下面的播放栏 */
+  /* 不透明底：环境光垫在实色表面上，不得透出下面的页面 */
   background: var(--surface-content);
   color: var(--text-primary);
 }
 
-/* 环境光：封面取色的两团径向渐变（色相由页面以 --np-glow-* 传入），无封面时透明 = 纯色底 */
+/* 环境光：封面取色的一条径向渐变（色相由页面以 --np-glow-* 传入），无封面时透明 = 纯色底 */
 .lyrics-page__ambient {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background:
-    radial-gradient(46% 52% at 25% 28%, var(--np-glow-a, transparent) 0%, transparent 72%),
-    radial-gradient(44% 48% at 80% 78%, var(--np-glow-b, transparent) 0%, transparent 74%);
+  background: radial-gradient(120% 85% at 12% -12%, var(--np-glow-a, transparent) 0%, transparent 62%);
   pointer-events: none;
   transition: background var(--duration-slow) var(--ease-standard);
 }
 
-/* ── 顶栏 56：左 chevron-down 收起 / 中「正在播放」/ 右「…」菜单 ── */
-.lyrics-page__topbar {
+/* ── 标题行：页面身份与收起归全局标题栏；这里只留歌名 + 「…」菜单 ── */
+.lyrics-page__title-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  margin-top: 14px;
+}
+
+.lyrics-page__more {
   position: relative;
-  z-index: 1;
-  display: grid;
   flex: none;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  height: var(--topbar-height);
-  padding: 0 var(--space-3);
-  /* 整窗遮住窗口按钮时仍要能拖动窗口；按钮自己 no-drag */
-  -webkit-app-region: drag;
-}
-
-.lyrics-page__topbar-start {
-  display: flex;
-  align-items: center;
-  justify-self: start;
-}
-
-.lyrics-page__topbar-end {
-  display: flex;
-  align-items: center;
-  justify-self: end;
-}
-
-.lyrics-page__topbar-title {
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
 }
 
 .lyrics-page__icon-btn {
@@ -96,11 +79,11 @@
   z-index: 1;
   display: grid;
   flex: 1;
-  /* 原型实测：左列止于 40%（歌词左缘 x≈492），不是等分中的「约 46%」 */
-  grid-template-columns: 40% 1fr;
-  gap: 0;
+  /* 评审 §8：左列 clamp(380px, 40%, 460px)，右列吃满，列距 48 */
+  grid-template-columns: clamp(380px, 40%, 460px) 1fr;
+  gap: 48px;
   min-height: 0;
-  padding: 6px 0 0;
+  padding: 24px 28px 0;
 }
 
 .lyrics-page__left {
@@ -109,8 +92,6 @@
   align-items: center;
   justify-content: flex-start;
   min-width: 0;
-  /* 封面中心落在 x≈260：左列 40% 内再留 30px 左内边距 */
-  padding-left: 23px;
 }
 
 .lyrics-page__cover {
@@ -138,8 +119,9 @@
 }
 
 .lyrics-page__title {
+  min-width: 0;
   max-width: 100%;
-  margin-top: 14px;
+  margin: 0;
   overflow: hidden;
   color: var(--text-primary);
   font-size: var(--text-2xl);
@@ -480,13 +462,14 @@
 .lyrics-page__footer {
   position: relative;
   z-index: 1;
-  display: flex;
+  display: grid;
   flex: none;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-4);
-  height: var(--player-height);
-  padding: 0 30px;
+  height: var(--np-footer-height);
+  margin-top: auto;
+  padding: 0 28px;
   border-top: 1px solid var(--hairline);
 }
 
@@ -495,9 +478,16 @@
   font-size: var(--text-xs);
 }
 
+.lyrics-page__footer-view {
+  grid-column: 2;
+  justify-self: center;
+}
+
 .lyrics-page__footer-end {
   display: flex;
+  grid-column: 3;
   align-items: center;
+  justify-self: end;
   gap: var(--space-4);
 }
 
@@ -556,17 +546,6 @@
 .lyrics-page__empty-text {
   color: var(--text-secondary);
   font-size: var(--text-base);
-}
-
-/* 浅色主题：环境光只是淡淡一层（深色文字仍可读）；深色舞台保持原型的浓蓝紫 */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) .lyrics-page__ambient {
-    opacity: 0.4;
-  }
-}
-
-:root[data-theme='light'] .lyrics-page__ambient {
-  opacity: 0.4;
 }
 
 /* ── PlayerBar → 全屏播放器：封面共享元素展开（#688） ──

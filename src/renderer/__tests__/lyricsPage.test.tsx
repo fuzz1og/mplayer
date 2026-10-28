@@ -35,7 +35,7 @@ vi.mock('@/renderer/components/AddToPlaylistModal', () => ({
   default: ({ isVisible }: { isVisible: boolean }) => (isVisible ? <div data-testid="add-modal" /> : null),
 }));
 
-import LyricsPage from '@/renderer/pages/LyricsPage';
+import LyricsPage, { ambientGlowStyle } from '@/renderer/pages/LyricsPage';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -96,10 +96,12 @@ describe('正在播放 overlay（原型 §3）', () => {
     seed();
   });
 
-  it('顶栏：左 chevron-down 收起、中「正在播放」、右「…」', () => {
+  it('页面不再自带顶栏：收起与「正在播放」身份交给全局标题栏，页面只留「…」', () => {
     render(<LyricsPage onBack={vi.fn()} />);
-    expect(screen.getByRole('button', { name: '收起播放器' })).toBeInTheDocument();
-    expect(screen.getByText('正在播放')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '收起播放器' })).toBeNull();
+    expect(screen.queryByText('正在播放')).toBeNull();
+    expect(document.querySelector('.lyrics-page__topbar')).toBeNull();
+    expect(document.querySelector('.lyrics-page')).toHaveAttribute('data-now-playing');
     expect(screen.getByRole('button', { name: '更多操作' })).toBeInTheDocument();
   });
 
@@ -153,7 +155,16 @@ describe('正在播放 overlay（原型 §3）', () => {
     const style = ambient.getAttribute('style') ?? '';
     expect(style).toContain('--np-glow-a');
     expect(style).toContain('--np-glow-b');
-    expect(style).toContain('hsl(120 60% 35%');
+    // 主题约束：浅色 L62 / A0.18，色相取封面（DECISIONS §9）
+    expect(style).toContain('hsl(120 42% 62% / 0.18)');
+  });
+
+  it('环境光主题约束：暗色 L26 / A0.55，浅色 L62 / A0.18（色相仍取封面）', () => {
+    const dark = ambientGlowStyle({ hue: 238, saturation: 0.8, lightness: 0.5 }, true);
+    expect(dark['--np-glow-a']).toBe('hsl(238 42% 26% / 0.55)' as never);
+    const light = ambientGlowStyle({ hue: 238, saturation: 0.8, lightness: 0.5 }, false);
+    expect(light['--np-glow-a']).toBe('hsl(238 42% 62% / 0.18)' as never);
+    expect(ambientGlowStyle(null, false)).toEqual({});
   });
 
   it('环境光：无封面时不请求取色，style 为空', () => {
@@ -313,21 +324,19 @@ describe('正在播放 overlay（原型 §3）', () => {
     expect(screen.queryByText('正在播放')).toBeNull();
   });
 
-  it('几何契约：整窗 fixed + 不透明底 + 高于壳层 chrome + 顶栏可拖窗、按钮 no-drag', () => {
+  it('几何契约：标题栏之下的内容区（非 fixed）+ 双列 clamp + 56 footer + 不透明底', () => {
     const page = cssBlock('.lyrics-page');
-    expect(page).toMatch(/position:\s*fixed/);
-    expect(page).toMatch(/inset:\s*0/);
-    // 高于播放栏（10）与标题栏/侧栏菜单（200 之内），低于弹层
-    expect(page).toMatch(/z-index:\s*60/);
+    expect(page).not.toMatch(/position:\s*fixed/);
+    expect(page).toMatch(/position:\s*relative/);
+    expect(page).toMatch(/flex:\s*1/);
+    expect(page).toMatch(/--np-footer-height:\s*56px/);
     expect(page).toMatch(/background:\s*var\(--surface-content\)/);
     expect(page).not.toMatch(/background:\s*transparent/);
 
-    const topbar = cssBlock('.lyrics-page__topbar');
-    expect(topbar).toMatch(/-webkit-app-region:\s*drag/);
-    expect(cssBlock('.lyrics-page__icon-btn')).toMatch(/-webkit-app-region:\s*no-drag/);
-    // 顶栏 56 / 底栏 67 用布局 token，不写字面量
-    expect(topbar).toMatch(/height:\s*var\(--topbar-height\)/);
-    expect(cssBlock('.lyrics-page__footer')).toMatch(/height:\s*var\(--player-height\)/);
+    const body = cssBlock('.lyrics-page__body');
+    expect(body).toMatch(/grid-template-columns:\s*clamp\(380px, 40%, 460px\) 1fr/);
+    expect(body).toMatch(/gap:\s*48px/);
+    expect(cssBlock('.lyrics-page__footer')).toMatch(/height:\s*var\(--np-footer-height\)/);
     // 歌词走偏好 token（设置·外观的歌词字号档位对它生效）
     expect(playerCss).toMatch(/font-size:\s*var\(--lyrics-font-size\)/);
     expect(playerCss).toMatch(/line-height:\s*var\(--lyrics-line-height\)/);
