@@ -39,7 +39,7 @@ interface SongRowProps {
   onSwap?: (original: Song, swapped: Song) => void;
   onToggleSelect?: (songId: string) => void;
   onToggleDropdown?: (songId: string, e: React.MouseEvent) => void;
-  onCloseDropdown?: (e: React.MouseEvent) => void;
+  onCloseDropdown?: () => void;
   /** 封面加载失败时回调，由持有歌曲列表的层按 ID 重识别换新封面 */
   onCoverError?: (song: Song) => void;
   /** 是否显示专辑列（列表层按整列是否有专辑判断，无专辑列表整列塌缩） */

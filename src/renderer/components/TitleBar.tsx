@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Minus, Square, Copy, X, Search, ChevronDown, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { Minus, Square, Copy, X, Search, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import { SOURCE_COLORS, ALL_SOURCE_COLOR } from '@/renderer/constants/sourceConfig';
 import { SOURCE_DISPLAY_NAMES } from '@mplayer/core';
+import { Menu } from '@/renderer/ui';
+import type { MenuItem } from '@/renderer/ui';
 import '@/renderer/styles/titlebar.css';
 
 const ipcRenderer = window.electronAPI;
@@ -48,10 +50,8 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const sourceRef = useRef<HTMLDivElement>(null);
-  const helpRef = useRef<HTMLDivElement>(null);
+  const sourceTriggerRef = useRef<HTMLButtonElement>(null);
   const helpTriggerRef = useRef<HTMLButtonElement>(null);
-  const helpMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     ipcRenderer.invoke('window:isMaximized').then(setMaximized).catch(() => {});
@@ -61,54 +61,6 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
       ipcRenderer.removeListener('window:maximized', handleMaximized);
     };
   }, []);
-
-  useEffect(() => {
-    const onPointerDown = (event: MouseEvent) => {
-      if (sourceRef.current && !sourceRef.current.contains(event.target as Node)) setDropdownOpen(false);
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
-  }, []);
-
-  const closeHelp = useCallback((returnFocus = false) => {
-    setHelpOpen(false);
-    if (returnFocus) helpTriggerRef.current?.focus();
-  }, []);
-
-  // 帮助菜单：ESC / 点击外部关闭；打开时把焦点送进第一项，ESC 关闭后归还触发按钮。
-  useEffect(() => {
-    if (!helpOpen) return;
-    helpMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
-    const onPointerDown = (event: MouseEvent) => {
-      if (helpRef.current && !helpRef.current.contains(event.target as Node)) setHelpOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      closeHelp(true);
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [helpOpen, closeHelp]);
-
-  const handleHelpMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // 禁用项不参与方向键导航（ARIA 菜单惯例）
-    const items = Array.from(helpMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
-    if (items.length === 0) return;
-    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
-    let nextIndex = currentIndex;
-    if (event.key === 'ArrowDown') nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
-    else if (event.key === 'ArrowUp') nextIndex = currentIndex < 0 ? items.length - 1 : (currentIndex - 1 + items.length) % items.length;
-    else if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = items.length - 1;
-    else return;
-    event.preventDefault();
-    items[nextIndex]?.focus();
-  };
 
   const handleBack = useCallback(() => {
     if (onBack) onBack();
@@ -125,8 +77,23 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
   const handleHelpNavigate = useCallback((path: string) => {
     setHelpOpen(false);
     navigate(path);
-    helpTriggerRef.current?.focus();
   }, [navigate]);
+
+  const helpMenuItems: MenuItem[] = [
+    { key: 'update', label: '检查更新', onSelect: () => handleHelpNavigate('/settings/update') },
+    { key: 'about', label: '关于', onSelect: () => handleHelpNavigate('/settings/about') },
+  ];
+
+  const sourceMenuItems: MenuItem[] = (Object.entries(SOURCE_CONFIG) as [SourceKey, typeof SOURCE_CONFIG[SourceKey]][]).map(
+    ([key, config]) => ({
+      key,
+      label: config.label,
+      icon: <span className="titlebar__source-dot" style={{ '--source-accent': config.accent } as React.CSSProperties} />,
+      checked: sourceType === key,
+      ariaLabel: config.label,
+      onSelect: () => onSourceTypeChange?.(key),
+    }),
+  );
 
   const submit = useCallback(() => {
     const value = keyword.trim();
@@ -148,7 +115,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
         <button type="button" className="titlebar__tool" onClick={handleSettings} aria-label="设置">
           设置
         </button>
-        <div className="titlebar__help" ref={helpRef}>
+        <div className="titlebar__help">
           <button
             ref={helpTriggerRef}
             type="button"
@@ -163,16 +130,15 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
               <span className="titlebar__badge" data-testid="update-badge" title="有新版本可更新" aria-hidden="true" />
             )}
           </button>
-          {helpOpen && (
-            <div ref={helpMenuRef} className="titlebar__help-menu" role="menu" aria-label="帮助" onKeyDown={handleHelpMenuKeyDown}>
-              <button type="button" role="menuitem" className="titlebar__help-item" onClick={() => handleHelpNavigate('/settings/update')}>
-                检查更新
-              </button>
-              <button type="button" role="menuitem" className="titlebar__help-item" onClick={() => handleHelpNavigate('/settings/about')}>
-                关于
-              </button>
-            </div>
-          )}
+          <Menu
+            open={helpOpen}
+            anchorRef={helpTriggerRef}
+            items={helpMenuItems}
+            onClose={() => setHelpOpen(false)}
+            ariaLabel="帮助"
+            placement="bottom-start"
+            minWidth={132}
+          />
         </div>
       </div>
 
@@ -182,42 +148,31 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
         ) : (
           <div className={focused ? 'titlebar__search titlebar__search--focused' : 'titlebar__search'}>
             <div
-              ref={sourceRef}
               className="titlebar__source"
               style={{ '--source-accent': current.accent } as React.CSSProperties}
             >
               <button
+                ref={sourceTriggerRef}
                 type="button"
                 className="titlebar__source-trigger"
                 aria-label={`搜索来源：${current.label}`}
+                aria-haspopup="menu"
+                aria-expanded={dropdownOpen}
                 onClick={() => setDropdownOpen((open) => !open)}
               >
                 <span className="titlebar__source-dot" aria-hidden="true" />
                 <span className="titlebar__source-label">{current.label}</span>
                 <ChevronDown size={12} className={dropdownOpen ? 'titlebar__source-chevron titlebar__source-chevron--open' : 'titlebar__source-chevron'} aria-hidden="true" />
               </button>
-              {dropdownOpen && (
-                <div className="titlebar__source-menu" role="menu">
-                  {(Object.entries(SOURCE_CONFIG) as [SourceKey, typeof SOURCE_CONFIG[SourceKey]][]).map(([key, config]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={sourceType === key}
-                      className="titlebar__source-item"
-                      style={{ '--source-accent': config.accent } as React.CSSProperties}
-                      onClick={() => {
-                        onSourceTypeChange?.(key);
-                        setDropdownOpen(false);
-                      }}
-                    >
-                      <span className="titlebar__source-dot" aria-hidden="true" />
-                      <span>{config.label}</span>
-                      {sourceType === key && <Check size={12} className="titlebar__source-check" aria-hidden="true" />}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <Menu
+                open={dropdownOpen}
+                anchorRef={sourceTriggerRef}
+                items={sourceMenuItems}
+                onClose={() => setDropdownOpen(false)}
+                ariaLabel="搜索来源"
+                placement="bottom-start"
+                minWidth={132}
+              />
             </div>
             <span className="titlebar__divider" aria-hidden="true" />
             <Search size={15} className="titlebar__search-icon" aria-hidden="true" />

@@ -163,8 +163,7 @@ const SongList: React.FC<SongListProps> = ({
     setActiveDropdown(prev => prev === songId ? null : songId);
   }, []);
 
-  const handleCloseDropdown = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCloseDropdown = useCallback(() => {
     setActiveDropdown(null);
   }, []);
 

@@ -23,6 +23,8 @@ export type {
 export { PageHeader, PageSurface, PageHero, PageBack } from './page';
 export type { PageHeaderProps, PageSurfaceProps, PageHeroProps, PageBackProps } from './page';
 export { Dialog, ToastProvider, useToast, GridList } from './overlay';
+export { Menu } from './menu';
+export type { MenuItem, MenuPlacement, MenuProps } from './menu';
 export type {
   DialogProps,
   DialogSize,

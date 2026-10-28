@@ -60,7 +60,6 @@ const OWNERSHIP: Record<string, string[]> = {
     'components/PlaylistGrid.tsx',
     'components/PlaylistPageGrid.tsx',
     'components/RowActionButtons.tsx',
-    'components/RowActionMenu.tsx',
     'components/SongCover.tsx',
     'components/SongList.tsx',
     'components/SongListSkeleton.tsx',
@@ -81,7 +80,7 @@ const OWNERSHIP: Record<string, string[]> = {
 
   // ── 原语自带样式（ui/ 目录内，组件与样式同名同目录） ──
   'ui/forms.css': ['ui/forms.tsx'],
-  'ui/overlay.css': ['ui/overlay.tsx'],
+  'ui/overlay.css': ['ui/overlay.tsx', 'ui/menu.tsx'],
   'ui/page.css': ['ui/page.tsx'],
   'ui/ui.css': ['ui/button.tsx', 'ui/input.tsx', 'ui/layout.tsx', 'ui/tag.tsx'],
 };

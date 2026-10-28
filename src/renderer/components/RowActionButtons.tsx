@@ -13,7 +13,7 @@ interface RowActionButtonsProps {
   moreOpen: boolean;
   moreTriggerRef: React.RefObject<HTMLButtonElement | null>;
   onToggleMore: (e: React.MouseEvent) => void;
-  onCloseMore: (e: React.MouseEvent) => void;
+  onCloseMore: () => void;
   menuItems: RowActionItem[];
   /**
    * 紧凑模式（资料库密度）：行尾只渲染一个 28px 圆形「更多」按钮；
