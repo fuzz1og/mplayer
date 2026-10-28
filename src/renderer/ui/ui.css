@@ -180,8 +180,8 @@
 }
 
 .ui-btn--primary {
-  background: var(--accent);
-  color: var(--text-inverse);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
 }
 
 .ui-btn--primary:hover:not(:disabled) {

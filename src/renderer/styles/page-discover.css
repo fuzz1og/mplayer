@@ -223,8 +223,8 @@
 }
 
 .discover-chip--active {
-  background-color: var(--accent);
-  color: var(--text-inverse);
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
 }
 
 /* ── 发现页头与一级 tab ── */
@@ -381,8 +381,8 @@
 }
 
 .discover-pill--active {
-  background-color: var(--accent);
-  color: var(--text-inverse);
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
   font-weight: var(--weight-semibold);
 }
 
@@ -406,8 +406,8 @@
 }
 
 .discover-pill__count--active {
-  background-color: color-mix(in srgb, var(--text-inverse) 25%, transparent);
-  color: var(--text-inverse);
+  background-color: color-mix(in srgb, var(--text-on-accent) 25%, transparent);
+  color: var(--text-on-accent);
 }
 
 /* ── 歌手结果卡片 ── */
@@ -581,8 +581,8 @@
 
 .discover-action--primary {
   border: none;
-  background-color: var(--accent);
-  color: var(--text-inverse);
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
 }
 
 .discover-action:disabled {
