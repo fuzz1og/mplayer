@@ -43,32 +43,6 @@ vi.mock('electron', () => ({
 }));
 
 
-// antd message/notification 静态方法内部会 ReactDOM.createRoot 挂载游离 root 到 document.body，RTL 
-// auto-cleanup 覆盖不到，scheduler 异步任务会在 jsdom 环境销毁后执行 → ReferenceError: window is 
-// not defined（CI node 22 偶发 flaky）。
-vi.mock('antd', async () => {
-  const actual = await vi.importActual('antd');
-  const stub = () => vi.fn(() => Promise.resolve());
-  return {
-    ...actual,
-    message: {
-      info: stub(),
-      success: stub(),
-      error: stub(),
-      warning: stub(),
-      loading: stub(),
-      open: stub(),
-    },
-    notification: {
-      open: stub(),
-      success: stub(),
-      error: stub(),
-      warning: stub(),
-      info: stub(),
-    },
-  };
-});
-
 // 审查修复：contextIsolation 后渲染层经 window.electronAPI 通信（preload 桥）
 const mockIpcRenderer = {
   invoke: vi.fn().mockResolvedValue({ success: true }),
