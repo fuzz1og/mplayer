@@ -97,6 +97,8 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  /* 窄窗口左右边距；内容列自身不再重复 padding，保证 760 是真实内容宽 */
+  padding: 0 28px;
 }
 
 /* 可读内容列：页头与所有 Section 共用 760px 最大列并居中；窄窗口左右 28px 边距。 */
@@ -105,7 +107,7 @@
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
-  padding: 24px 28px 40px;
+  padding: 24px 0 40px;
 }
 
 .settings-column > section {
