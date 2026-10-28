@@ -5,9 +5,8 @@ import path from 'node:path';
 import AlbumScroll from '../components/AlbumScroll';
 
 /**
- * 1.9.0 起卡片容器不再写内联 flexFlow，改由 .album-scroll__grid 类表达。
- * 断言因此拆成两半：组件挂对了类 + 类里确实是「横向排列且允许换行」。
- * 验的仍是同一个布局事实（卡片横排、超宽换行），只是不再钉「样式写在哪」。
+ * #694：新碟上架与歌单 / 歌手共用同一个内容网格（列宽下限与间距都来自 global.css 的 token），
+ * 三个 tab 切换时栅格不跳。断言拆成两半：组件挂对类 + 类里确实是响应式网格。
  */
 const songlistCss = readFileSync(
   path.resolve(__dirname, '../styles/songlist.css'),
@@ -15,7 +14,7 @@ const songlistCss = readFileSync(
 );
 
 describe('AlbumScroll', () => {
-  it('wraps album cards instead of forcing a single horizontal row', () => {
+  it('卡片容器是与歌单 / 歌手同栅格的内容网格，而不是固定宽度的横排', () => {
     const { container } = render(
       <AlbumScroll
         albums={[
@@ -32,7 +31,8 @@ describe('AlbumScroll', () => {
 
     expect(container.querySelector('.album-scroll__grid')).not.toBeNull();
     const gridRule = /\.album-scroll__grid \{[^}]*\}/.exec(songlistCss)?.[0] ?? '';
-    expect(gridRule).toContain('display: flex');
-    expect(gridRule).toContain('row wrap');
+    expect(gridRule).toContain('display: grid');
+    expect(gridRule).toContain('repeat(auto-fill, minmax(var(--content-grid-min), 1fr))');
+    expect(gridRule).toContain('gap: var(--content-grid-row-gap) var(--content-grid-col-gap)');
   });
 });

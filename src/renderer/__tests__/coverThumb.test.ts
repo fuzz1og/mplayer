@@ -14,11 +14,11 @@ describe('桌面封面取图尺寸（#496）', () => {
   it('网格 / 卡片 / 头像 / 详情页 hero 都走 core 缩略图', () => {
     for (const [file, needle] of [
       ['components/AlbumGrid.tsx', 'coverThumbUrl(album.picUrl, COVER_SIZE.thumb)'],
-      ['components/AlbumScroll.tsx', 'coverThumbUrl(album.picUrl, COVER_SIZE.icon)'],
+      ['components/AlbumScroll.tsx', 'coverThumbUrl(album.picUrl, COVER_SIZE.thumb)'],
       ['components/PlaylistGrid.tsx', 'coverThumbUrl(pl.coverImgUrl, COVER_SIZE.thumb)'],
       ['components/PlaylistPageGrid.tsx', 'coverThumbUrl(pl.coverImgUrl, COVER_SIZE.thumb)'],
       ['components/DiscoverPlaylistCard.tsx', 'coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)'],
-      ['components/ArtistCard.tsx', 'coverThumbUrl(artist.picUrl, COVER_SIZE.icon)'],
+      ['components/ArtistCard.tsx', 'coverThumbUrl(artist.picUrl, COVER_SIZE.thumb)'],
       ['pages/DiscoverPageV2.tsx', 'coverThumbUrl(a.picUrl, COVER_SIZE.icon)'],
       ['pages/AlbumDetailPage.tsx', 'coverThumbUrl(displayPic, COVER_SIZE.thumb)'],
       ['pages/ArtistDetailPage.tsx', 'coverThumbUrl(displayPic, COVER_SIZE.thumb)'],

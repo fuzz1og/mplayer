@@ -81,6 +81,14 @@ const OWNERSHIP: Record<string, string[]> = {
 
   // ── 原语自带样式（ui/ 目录内，组件与样式同名同目录） ──
   'styles/queue-panel.css': ['components/QueuePanel.tsx'],
+  'styles/detail-toolbar.css': ['components/DetailToolbar.tsx'],
+  'styles/detail-page.css': [
+    'pages/AlbumDetailPage.tsx',
+    'pages/ArtistDetailPage.tsx',
+    'pages/DiscoverPlaylistDetailPage.tsx',
+    'pages/HotlistDetailPage.tsx',
+    'pages/PlaylistDetailPage.tsx',
+  ],
   'ui/forms.css': ['ui/forms.tsx'],
   'ui/overlay.css': ['ui/overlay.tsx', 'ui/menu.tsx'],
   'ui/page.css': ['ui/page.tsx'],

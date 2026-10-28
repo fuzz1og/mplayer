@@ -232,8 +232,8 @@ describe('本地歌单页过滤（#488）', () => {
     // 过滤框 → 工具条 → wrapper（与 rowsRef 同父），中间不再有别的插槽
     expect(filterBox).not.toBe(wrapper);
     expect(toolbar).not.toBe(wrapper);
-    expect(filterBox.classList.contains('playlist-detail__filter')).toBe(true);
-    expect(toolbar.classList.contains('playlist-detail__toolbar')).toBe(true);
+    expect(filterBox.classList.contains('detail-toolbar__filter')).toBe(true);
+    expect(toolbar.classList.contains('detail-toolbar')).toBe(true);
     expect(toolbar.parentElement).toBe(wrapper);
     expect(rowsRef.parentElement).toBe(wrapper);
   });
