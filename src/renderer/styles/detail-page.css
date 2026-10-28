@@ -47,7 +47,9 @@
   color: var(--text-tertiary);
 }
 
-.detail-page__cover-img {
+/* 双类选择器压过 ui/page.css 的 .ui-page-hero__media img { 168px }：媒体尺寸由本模板决定 */
+.detail-page__cover .cover-img,
+.detail-page__cover .detail-page__cover-img {
   position: absolute;
   inset: 0;
   width: 100%;

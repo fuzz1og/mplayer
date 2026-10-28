@@ -182,11 +182,12 @@ const HotlistDetailPage: React.FC = () => {
           title={heroTitle}
           meta={
             <>
-              <span>{hotlist.length} 首</span>
-              {chartMeta?.playCount ? <span> · {formatPlayCount(chartMeta.playCount)} 次播放</span> : null}
-              {chartMeta?.description
-                ? <p className="detail-page__hero-desc">{chartMeta.description}</p>
-                : <span> · 实时更新</span>}
+              {[
+                `${hotlist.length} 首`,
+                chartMeta?.playCount ? `${formatPlayCount(chartMeta.playCount)} 次播放` : '',
+                chartMeta?.description ? '' : '实时更新',
+              ].filter(Boolean).join(' · ')}
+              {chartMeta?.description && <p className="detail-page__hero-desc">{chartMeta.description}</p>}
             </>
           }
           actions={
@@ -254,6 +255,7 @@ const HotlistDetailPage: React.FC = () => {
                 onDownload={download}
                 density="library"
                 showDuration
+                showAlbum={false}
                 showCheckbox={batchMode}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}

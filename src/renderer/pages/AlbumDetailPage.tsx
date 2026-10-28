@@ -141,13 +141,11 @@ const AlbumDetailPage: React.FC = () => {
           }
           eyebrow="专辑"
           title={displayName || '专辑'}
-          meta={
-            <>
-              {displayArtist && <span>{displayArtist}</span>}
-              {year && <span>{year}</span>}
-              {songs.length > 0 && <span>{songs.length} 首 · 总时长 {formatDuration(totalDuration)}</span>}
-            </>
-          }
+          meta={[
+            displayArtist,
+            year,
+            songs.length > 0 ? `${songs.length} 首 · 总时长 ${formatDuration(totalDuration)}` : '',
+          ].filter(Boolean).join(' · ')}
           actions={
             <>
               <Button
@@ -199,6 +197,7 @@ const AlbumDetailPage: React.FC = () => {
                 onDownload={download}
                 density="library"
                 showDuration
+                showAlbum={false}
                 showCheckbox={batchMode}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}

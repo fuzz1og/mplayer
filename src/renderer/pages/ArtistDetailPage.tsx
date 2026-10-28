@@ -302,6 +302,7 @@ const ArtistDetailPage: React.FC = () => {
                 onDownload={download}
                 density="library"
                 showDuration
+                showAlbum={false}
                 showCheckbox={batchMode}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}

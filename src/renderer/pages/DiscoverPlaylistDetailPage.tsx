@@ -229,9 +229,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
           title={playlist.name}
           meta={
             <>
-              <span>创建者 {playlist.creator.nickname}</span>
-              <span> · {formatPlayCount(playlist.playCount)} 次播放</span>
-              <span> · {total || playlist.trackCount} 首</span>
+              {`创建者 ${playlist.creator.nickname} · ${formatPlayCount(playlist.playCount)} 次播放 · ${total || playlist.trackCount} 首`}
               {playlist.description && (
                 <p className="detail-page__hero-desc">{playlist.description}</p>
               )}
@@ -295,6 +293,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
                 onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
                 density="library"
                 showDuration
+                showAlbum={false}
                 showCheckbox={batchMode}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}

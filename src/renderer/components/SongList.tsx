@@ -70,6 +70,8 @@ interface SongListProps {
   onCoverError?: (song: Song) => void;
   /** 是否显示时长列（固定 50px；资料库密度启用） */
   showDuration?: boolean;
+  /** 专辑列：缺省按「列表里是否有专辑」自动决定；详情页传 false 收掉整列（不重复整行相同专辑名） */
+  showAlbum?: boolean;
 }
 
 /**
@@ -106,6 +108,7 @@ const SongList: React.FC<SongListProps> = ({
   onSwap,
   onCoverError,
   showDuration = false,
+  showAlbum,
 }) => {
   // library 密度默认无表头；显式 showHeader 才渲染
   const showHeader = showHeaderProp ?? density !== 'library';
@@ -134,8 +137,9 @@ const SongList: React.FC<SongListProps> = ({
     () => songs.map(song => swapOverrides.get(song.id) ?? song),
     [songs, swapOverrides],
   );
-  // 专辑列整列按需塌缩：列表内没有任何歌曲有专辑时不显示专辑列
+  // 专辑列整列按需塌缩：列表内没有任何歌曲有专辑时不显示专辑列（详情页由调用方显式收掉）
   const hasAlbum = useMemo(() => displaySongs.some(song => song.album), [displaySongs]);
+  const showAlbumColumn = showAlbum ?? hasAlbum;
   // 使用外部或内部状态
   const selectedIds = externalSelectedIds !== undefined ? externalSelectedIds : internalSelectedIds;
   const onSelectionChange = externalOnSelectionChange || setInternalSelectedIds;
@@ -272,7 +276,7 @@ const SongList: React.FC<SongListProps> = ({
       <SongListSkeleton
         showCheckbox={showCheckbox}
         showIndex={showIndex}
-        showAlbum={hasAlbum}
+        showAlbum={showAlbumColumn}
         density={density}
         showDuration={showDuration}
       />
@@ -298,7 +302,7 @@ const SongList: React.FC<SongListProps> = ({
       showCheckbox={showCheckbox || batchMode}
       isSelected={selectedIdSet.has(song.id)}
       showRemoveFromPlaylist={showRemoveFromPlaylist}
-      showAlbum={hasAlbum}
+      showAlbum={showAlbumColumn}
       variant={density === 'library' ? 'library' : 'standard'}
       compactActions={compactActions}
       showDuration={showDuration}
@@ -401,7 +405,7 @@ const SongList: React.FC<SongListProps> = ({
           )}
           <div className="song-list__head-cover" aria-hidden="true" />
           <div className="song-list__head-title">标题</div>
-          {hasAlbum && (
+          {showAlbumColumn && (
             <div className="song-list__head-col" style={colWidth(COL_ALBUM)}>
               专辑
             </div>
