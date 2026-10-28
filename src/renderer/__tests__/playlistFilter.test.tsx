@@ -226,10 +226,15 @@ describe('本地歌单页过滤（#488）', () => {
 
     const rowsRef = container.querySelector('.song-row')!.parentElement as HTMLElement;
     const wrapper = rowsRef.parentElement as HTMLElement;
-    const filterBar = filterInput(container).parentElement as HTMLElement;
+    const filterBox = filterInput(container).parentElement as HTMLElement;
+    const toolbar = filterBox.parentElement as HTMLElement;
 
-    expect(filterBar).not.toBe(wrapper);
-    expect(filterBar.parentElement).toBe(wrapper);
+    // 过滤框 → 工具条 → wrapper（与 rowsRef 同父），中间不再有别的插槽
+    expect(filterBox).not.toBe(wrapper);
+    expect(toolbar).not.toBe(wrapper);
+    expect(filterBox.classList.contains('playlist-detail__filter')).toBe(true);
+    expect(toolbar.classList.contains('playlist-detail__toolbar')).toBe(true);
+    expect(toolbar.parentElement).toBe(wrapper);
     expect(rowsRef.parentElement).toBe(wrapper);
   });
 

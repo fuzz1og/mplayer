@@ -1,8 +1,8 @@
 /* ============================================================
    本地歌单详情页（PlaylistDetailPage，1.9.0 样式外置）
    颜色一律 var() token；字号 / 字重 / 行高 / 圆角只引用全局 token。
-   结构不变量（#445 / #488）：过滤框、提示条、批量栏、表头与行容器
-   必须同处 VirtualSortableList 的 header wrapper 内，本文件只管观感。
+   结构不变量（#445 / #488 / #694）：工具条（过滤 / 批量栏 / 提示条）与行容器
+   同处 VirtualSortableList 的 header wrapper 内，本文件只管观感。
    ============================================================ */
 
 /* ── 页面骨架 ── */
@@ -188,32 +188,71 @@
   font-size: var(--text-xs);
 }
 
-/* ── 歌单内过滤（header 插槽，与 rowsRef 同父） ── */
+/* ── 页内工具条（#694）：过滤 + 计数 + 选择/完成 / 批量栏 同处一行 40px ──
+   高度恒 40 是硬约束：它是 VirtualSortableList 的 scrollMargin 测量锚点，
+   浏览 / 过滤 / 批量三态必须同高，变高会让整表错位一条栏高且不报错。 */
+.playlist-detail__toolbar {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 10px;
+  align-items: center;
+  height: 40px;
+  min-height: 40px;
+}
+
+/* 选择/完成贴右：左侧增减批量栏时按钮不跟着漂 */
+.playlist-detail__toolbar > .song-list__batch-toggle {
+  flex: none;
+  margin-left: auto;
+}
+
+/* 紧凑过滤框：260×28、圆角 6、无粗边框，聚焦才亮边；窄窗可缩不可涨 */
 .playlist-detail__filter {
   display: flex;
+  flex: 0 1 260px;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 6px;
+  width: 260px;
+  max-width: 260px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-card-hover);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.playlist-detail__filter:focus-within {
+  border-color: var(--accent);
+  background-color: var(--surface-card);
 }
 
 .playlist-detail__filter-icon {
-  flex-shrink: 0;
+  flex: none;
+  color: var(--text-tertiary);
 }
 
 .playlist-detail__filter-input {
   flex: 1;
   min-width: 0;
-  padding: 6px 10px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background-color: transparent;
+  height: 100%;
+  border: 0;
+  background: transparent;
   color: var(--text-primary);
   font-size: var(--text-sm);
+  outline: none;
 }
 
+.playlist-detail__filter-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* 计数与清空在框内右侧（#694）：与输入同一行，不另起一行 */
 .playlist-detail__filter-count {
-  flex-shrink: 0;
+  flex: none;
   color: var(--text-tertiary);
   font-size: var(--text-xs);
   white-space: nowrap;
@@ -221,83 +260,92 @@
 
 .playlist-detail__filter-clear {
   display: flex;
-  flex-shrink: 0;
+  flex: none;
   align-items: center;
-  padding: 4px;
-  border: none;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
 }
 
-/* ── 排序保存提示条 ── */
-.playlist-detail__reordering {
-  padding: 8px 16px;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
+.playlist-detail__filter-clear:hover {
+  background-color: var(--surface-card-hover);
+  color: var(--text-primary);
 }
 
-/* ── 批量操作栏 ── */
-.playlist-detail__batch {
-  display: flex;
+/* 全选：表头删除后移到工具条（#694），只在选择模式存在 */
+.playlist-detail__select-all {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  background-color: var(--accent-subtle);
-  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
 }
 
+.playlist-detail__select-all input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* 批量栏：与工具条同一行（同高 40），已选 > 0 时原地替换左半段 */
 .playlist-detail__batch-count {
+  flex: none;
   color: var(--text-secondary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.playlist-detail__batch-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
 }
 
 .playlist-detail__batch-btn {
-  display: flex;
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
+  height: 28px;
+  padding: 0 10px;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary);
   font-size: var(--text-xs);
+  white-space: nowrap;
   cursor: pointer;
+}
+
+.playlist-detail__batch-btn:hover {
+  background-color: var(--surface-card-hover);
 }
 
 .playlist-detail__batch-btn--danger {
   color: var(--danger);
 }
 
-/* ── 表头 ── */
-.playlist-detail__thead {
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle);
+/* 排序保存提示：只在重排时出现，悬浮在工具条上方（绝对定位）→ 不占位、不改 header 高度 */
+.playlist-detail__reordering {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  margin-bottom: 2px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background-color: var(--surface-card);
   color: var(--text-tertiary);
   font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-}
-
-/* 列宽由 songTableColumns 经 colWidth() 下发 --col-width：表头与行取同一组数字 */
-.playlist-detail__th--check,
-.playlist-detail__th--num,
-.playlist-detail__th--actions {
-  flex: none;
-  width: var(--col-width);
-  text-align: center;
-}
-
-.playlist-detail__th--title {
-  flex: 1;
-}
-
-.playlist-detail__thead-checkbox {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-  cursor: pointer;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .playlist-detail__nomatch {
