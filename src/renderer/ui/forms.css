@@ -257,7 +257,7 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-xs);
   background: var(--input-bg);
-  color: var(--text-inverse);
+  color: var(--text-on-accent);
   transition:
     background var(--duration-fast) var(--ease-standard),
     border-color var(--duration-fast) var(--ease-standard);

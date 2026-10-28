@@ -279,8 +279,8 @@
 
 .song-list__batch-toggle[data-active] {
   border-color: var(--accent);
-  background-color: var(--accent);
-  color: var(--text-inverse);
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
 }
 
 /* 批量操作栏：高度 / 位移由 data-visible 驱动，过渡曲线与原先的内联值一致 */
@@ -330,8 +330,8 @@
   padding: 8px 16px;
   border: none;
   border-radius: var(--radius-xl);
-  background-color: var(--accent);
-  color: var(--text-inverse);
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
@@ -794,7 +794,7 @@
   right: 20px;
   bottom: 18px;
   left: 20px;
-  color: var(--text-inverse);
+  color: var(--text-on-media);
 }
 
 .daily__badge {
@@ -945,8 +945,8 @@
 }
 
 .daily__row-play:hover {
-  background: var(--accent);
-  color: var(--text-inverse);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
 }
 
 /* 空态与骨架 */
@@ -1161,8 +1161,8 @@
   padding: 8px 16px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--text-inverse);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
   font-size: var(--text-sm);
   cursor: pointer;
 }
@@ -1189,7 +1189,7 @@
   max-width: 90vw;
   padding: 24px;
   border-radius: var(--radius-lg);
-  background: var(--surface-content);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-xl);
   animation: dl-slide-in var(--duration-slow) var(--ease-standard);
 }
@@ -1542,8 +1542,8 @@
 }
 
 .album-scroll__area[data-active] {
-  background: var(--accent);
-  color: var(--text-inverse);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
   font-weight: var(--weight-semibold);
 }
 
@@ -1713,14 +1713,14 @@
 
 .list-page__action--primary {
   border-color: var(--accent);
-  background: var(--accent);
-  color: var(--text-inverse);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
 }
 
 .list-page__action--primary:hover:not(:disabled) {
   border-color: var(--accent-hover);
-  background: var(--accent-hover);
-  color: var(--text-inverse);
+  background: var(--accent-fill-hover);
+  color: var(--text-on-accent);
 }
 /* ── 队列页（1.9.0）：与收藏/历史共用 list-page 骨架 ── */
 .queue__row-actions {
@@ -1907,7 +1907,7 @@
   height: 80px;
   border-radius: var(--radius-sm);
   background: var(--accent-grad);
-  color: var(--text-inverse);
+  color: var(--text-on-accent);
   font-size: var(--text-xl);
   font-weight: var(--weight-semibold);
 }
@@ -2108,8 +2108,8 @@
 }
 
 .artist__tab[data-active] {
-  background: var(--accent);
-  color: var(--text-inverse);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
   font-weight: var(--weight-semibold);
 }
 
@@ -2150,8 +2150,8 @@
 }
 
 .artists__cat[data-active] {
-  background: var(--accent);
-  color: var(--text-inverse);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
   font-weight: var(--weight-semibold);
 }
 
@@ -2436,7 +2436,7 @@
   overflow: hidden;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--surface-content);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
   transform: translateX(-50%);
   animation: dd-fade-in var(--duration-normal) var(--ease-standard);
@@ -2748,8 +2748,8 @@
   padding: 10px 24px;
   border: 0;
   border-radius: var(--radius-xl);
-  background: var(--accent);
-  color: var(--text-inverse);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   cursor: pointer;
@@ -2876,7 +2876,7 @@
   border: 0;
   border-radius: var(--radius-full);
   background: var(--delete-scrim);
-  color: var(--text-inverse);
+  color: var(--text-on-media);
   cursor: pointer;
   backdrop-filter: blur(4px);
   transition: background var(--duration-fast) var(--ease-standard);
@@ -3068,8 +3068,8 @@
   padding: 7px 18px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--accent);
-  color: var(--text-inverse);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
   cursor: pointer;
 }
 
@@ -3148,7 +3148,7 @@
   overflow: hidden;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--surface-content);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
 }
 
@@ -3402,7 +3402,7 @@
   padding: 2px 6px;
   border-radius: var(--radius-xs);
   background: var(--delete-scrim);
-  color: var(--text-inverse);
+  color: var(--text-on-media);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   backdrop-filter: blur(4px);

@@ -35,13 +35,13 @@ html, body, #root {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
+  background: var(--scrollbar-thumb);
   border-radius: var(--radius-full);
   transition: background var(--duration-fast);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-400);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* ── 选中文字 ── */

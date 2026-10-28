@@ -124,7 +124,7 @@
   padding: 4px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  background: var(--surface-content);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
 }
 

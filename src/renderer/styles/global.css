@@ -122,6 +122,10 @@
   --text-tertiary: var(--gray-400);
   --text-disabled: var(--gray-300);
   --text-inverse: #FFFFFF;
+  /* 媒体叠字（#698）：封面 / hero 图上叠的文字，浅色主题也必须是浅色 */
+  --text-on-media: #FFFFFF;
+  /* 真反色文字（#698）：accent / 深色实底上的白字，不随主题翻转 */
+  --text-on-accent: #FFFFFF;
   --text-link: var(--blue-600);
 
   /* 边框 */
@@ -135,6 +139,9 @@
   --accent-active: var(--blue-700);
   --accent-subtle: var(--blue-50);
   --accent-text: var(--blue-600);
+  /* accent 实底（配 --text-on-accent）：暗色也保持足够深的蓝，白字对比 ≥ 4.5 */
+  --accent-fill: var(--blue-500);
+  --accent-fill-hover: var(--blue-600);
 
   --danger: var(--red-500);
   --danger-hover: var(--red-600);
@@ -208,7 +215,12 @@
   --hairline: rgba(0, 0, 0, 0.08);
   --hairline-strong: rgba(0, 0, 0, 0.12);
   --material-chrome: rgba(255, 255, 255, 0.72);
+  --material-overlay: rgba(255, 255, 255, 0.85);
   --material-blur: blur(24px) saturate(180%);
+
+  /* 滚动条语义 token（#698）：暗色随主题提亮，不再复用 gray-300 */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.24);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.38);
 
   /* ── 分组列表尺寸 ── */
   --row-height: 44px;
@@ -249,6 +261,8 @@
     --text-tertiary: #8E8E93;
     --text-disabled: #48484A;
     --text-inverse: #1C1C1E;
+    --text-on-media: #FFFFFF;
+    --text-on-accent: #FFFFFF;
     --text-link: #6FA3EF;
 
     /* 边框 */
@@ -262,6 +276,8 @@
     --accent-active: #2F5FD0;
     --accent-subtle: rgba(61, 123, 217, 0.18);
     --accent-text: #6FA3EF;
+    --accent-fill: #2F5FD0;
+    --accent-fill-hover: #264FB8;
 
     --danger: #F87171;
     --danger-hover: #EF4444;
@@ -307,6 +323,10 @@
     --hairline: rgba(255, 255, 255, 0.075);
     --hairline-strong: rgba(255, 255, 255, 0.12);
     --material-chrome: rgba(22, 22, 24, 0.72);
+    --material-overlay: rgba(44, 44, 46, 0.85);
+
+    --scrollbar-thumb: rgba(255, 255, 255, 0.26);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.42);
   }
 }
 
@@ -326,6 +346,8 @@
   --text-tertiary: #8E8E93;
   --text-disabled: #48484A;
   --text-inverse: #1C1C1E;
+  --text-on-media: #FFFFFF;
+  --text-on-accent: #FFFFFF;
   --text-link: #6FA3EF;
 
   --border-default: #38383A;
@@ -337,6 +359,8 @@
   --accent-active: #2F5FD0;
   --accent-subtle: rgba(61, 123, 217, 0.18);
   --accent-text: #6FA3EF;
+  --accent-fill: #2F5FD0;
+  --accent-fill-hover: #264FB8;
 
   --danger: #F87171;
   --danger-hover: #EF4444;
@@ -379,6 +403,10 @@
   --hairline: rgba(255, 255, 255, 0.075);
   --hairline-strong: rgba(255, 255, 255, 0.12);
   --material-chrome: rgba(22, 22, 24, 0.72);
+  --material-overlay: rgba(44, 44, 46, 0.85);
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.26);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.42);
 }
 
 
@@ -402,6 +430,7 @@ html[data-density='compact'] {
 /* 材质：关闭后不再依赖系统模糊，改为实色表面 */
 html[data-material='off'] {
   --material-chrome: var(--surface-window);
+  --material-overlay: var(--bg-elevated);
   --material-blur: none;
 }
 
