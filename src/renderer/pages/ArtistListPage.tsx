@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Mic2 } from 'lucide-react';
 import type { Artist } from '@mplayer/core';
 import '@/renderer/styles/songlist.css';
 import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
+import ArtistCard from '@/renderer/components/ArtistCard';
 
 const CATEGORIES = [
   { label: '全部', id: 0 },
@@ -29,24 +29,6 @@ function loadSavedCategory(): number {
   const saved = Number(sessionStorage.getItem(CATEGORY_STORAGE_KEY));
   return Number.isInteger(saved) && saved >= 0 && saved < CATEGORIES.length ? saved : 0;
 }
-
-const ArtistCard: React.FC<{ artist: Artist; onClick: () => void }> = ({ artist, onClick }) => (
-  <div onClick={onClick} className="artist-card">
-    <div className="artist-card__avatar">
-      {artist.picUrl ? (
-        <img
-          src={coverThumbUrl(artist.picUrl, COVER_SIZE.icon)}
-          alt={artist.name}
-          className="artist-card__img"
-          loading="lazy"
-        />
-      ) : (
-        <div className="artist-card__fallback">{artist.name.charAt(0)}</div>
-      )}
-    </div>
-    <div className="artist-card__name">{artist.name}</div>
-  </div>
-);
 
 const ArtistListPage: React.FC = () => {
   const navigate = useNavigate();

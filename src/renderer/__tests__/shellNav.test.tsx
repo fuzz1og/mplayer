@@ -7,14 +7,21 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import Sidebar from '@/renderer/components/Sidebar';
 import SettingsShell from '@/renderer/components/SettingsShell';
-import LibraryPage from '@/renderer/pages/LibraryPage';
+import { routes } from '@/renderer/router';
 
 describe('应用骨架', () => {
-  describe('Sidebar', () => {
-    it('侧栏 6 个入口，顺序与原型一致（资料库组内叫「资料库」，设置已上移标题栏）', () => {
+  describe('Sidebar（#694 两段 IA）', () => {
+    it('分组标题恰好两个：发现 / 资料库；资料库不是可点页面', () => {
+      render(<Sidebar currentPage="recommend" onPageChange={() => undefined} />);
+      const groupLabels = Array.from(document.querySelectorAll('.sidebar__group-label')).map((el) => el.textContent?.trim());
+      expect(groupLabels).toEqual(['发现', '资料库']);
+      expect(screen.queryByRole('button', { name: '资料库' })).toBeNull();
+    });
+
+    it('六个入口，顺序与原型一致（资料库段 4 项，本地是新页面）', () => {
       render(<Sidebar currentPage="recommend" onPageChange={() => undefined} />);
       const labels = Array.from(document.querySelectorAll('.sidebar__label')).map((el) => el.textContent?.trim());
-      expect(labels).toEqual(['推荐', '发现', '资料库', '我喜欢的音乐', '最近播放', '我的歌单']);
+      expect(labels).toEqual(['推荐', '发现', '我喜欢的音乐', '最近播放', '我的歌单', '本地']);
     });
 
     it('侧栏无品牌块（品牌已从 chrome 移除）', () => {
@@ -23,21 +30,19 @@ describe('应用骨架', () => {
       expect(screen.queryByText('MPlayer')).toBeNull();
     });
 
-
     it('当前页用 aria-current 标记，不再有左侧强调条', () => {
-      const { container } = render(<Sidebar currentPage="library" onPageChange={() => undefined} />);
+      const { container } = render(<Sidebar currentPage="local" onPageChange={() => undefined} />);
       const active = container.querySelector('[aria-current="page"]');
-      expect(active?.textContent).toContain('资料库');
+      expect(active?.textContent).toContain('本地');
       expect(container.querySelector('.sidebar__item--bar')).toBeNull();
     });
 
-    it('点击「资料库」回传 library', async () => {
+    it('点击「本地」回传 local', async () => {
       const onPageChange = vi.fn();
       render(<Sidebar currentPage="recommend" onPageChange={onPageChange} />);
-      await userEvent.click(screen.getByRole('button', { name: '资料库' }));
-      expect(onPageChange).toHaveBeenCalledWith('library');
+      await userEvent.click(screen.getByRole('button', { name: '本地' }));
+      expect(onPageChange).toHaveBeenCalledWith('local');
     });
-
   });
 
   describe('SettingsShell', () => {
@@ -74,25 +79,47 @@ describe('应用骨架', () => {
     });
   });
 
-  describe('LibraryPage', () => {
+  describe('路由（#694 信息架构）', () => {
     const LocationProbe = () => {
       const location = useLocation();
-      return <div data-testid="location">{location.pathname}</div>;
+      return <span data-testid="location">{location.pathname + location.search}</span>;
     };
 
-    it('分段视图给齐五个入口，收藏/历史/本地都能一次点到', async () => {
+    const childRoute = (path: string) => {
+      const child = routes[0].children?.find((route) => route.path === path);
+      if (!child) throw new Error('缺少路由 ' + path);
+      return child;
+    };
+
+    it('/library 保留为重定向：旧深链跳到 /favorites', async () => {
       render(
         <MemoryRouter initialEntries={['/library']}>
-          <LibraryPage />
-          <LocationProbe />
+          <Routes>
+            <Route path="/library" element={childRoute('library').element} />
+            <Route path="/favorites" element={<div>我喜欢的音乐页</div>} />
+          </Routes>
         </MemoryRouter>,
       );
-      // 原型（#685）：收藏与历史汇入「歌曲」列表，本地/下载/歌手/专辑各自成段
-      const tabs = screen.getByRole('tablist', { name: '资料库视图' });
-      expect(Array.from(tabs.querySelectorAll('[role="tab"]')).map((el) => el.textContent?.trim()))
-        .toEqual(['歌曲', '专辑', '歌手', '下载', '本地']);
-      await userEvent.click(screen.getByRole('tab', { name: '本地' }));
-      expect(await screen.findByText(/添加文件夹|扫描/)).toBeTruthy();
+      expect(await screen.findByText('我喜欢的音乐页')).toBeInTheDocument();
+    });
+
+    it('/download 打开本地页的下载管理（/local?downloads=1）', async () => {
+      render(
+        <MemoryRouter initialEntries={['/download']}>
+          <Routes>
+            <Route path="/download" element={childRoute('download').element} />
+            <Route path="/local" element={<LocationProbe />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(await screen.findByTestId('location')).toHaveTextContent('/local?downloads=1');
+    });
+
+    it('/local 是本地页本体，不是重定向', () => {
+      const localRoute = childRoute('local');
+      expect(localRoute.element).toBeTruthy();
+      // 指向本地页的路由不应再是 Navigate（旧实现重定向到 /library?tab=local）
+      expect((localRoute.element as { type: { name?: string } }).type?.name).not.toBe('Navigate');
     });
   });
 });

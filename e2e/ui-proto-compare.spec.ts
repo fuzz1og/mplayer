@@ -53,10 +53,10 @@ test.beforeEach(async ({ page }) => {
   }, { songs, lrc });
 });
 
-test('current-library', async ({ page }) => {
-  await page.goto('http://[::1]:5174/#/library', { waitUntil: 'commit' });
+test('current-local', async ({ page }) => {
+  await page.goto('http://[::1]:5174/#/local', { waitUntil: 'commit' });
   await page.waitForTimeout(2500);
-  await page.screenshot({ path: '.proto/current-library.png', animations: 'disabled' });
+  await page.screenshot({ path: '.proto/current-local.png', animations: 'disabled' });
 });
 
 test('current-settings-cache', async ({ page }) => {

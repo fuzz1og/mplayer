@@ -34,7 +34,7 @@ const OWNERSHIP: Record<string, string[]> = {
 
   // ── 页面各自拥有 ──
   'styles/settings.css': ['components/SettingsShell.tsx', 'pages/SettingsPage.tsx'],
-  'styles/library.css': ['pages/LibraryPage.tsx'],
+  'styles/library.css': ['components/DownloadsDialog.tsx', 'pages/LocalPage.tsx'],
   'styles/player.css': ['pages/LyricsPage.tsx'],
   'styles/page-discover.css': [
     'pages/DiscoverPageV2.tsx',
@@ -47,8 +47,10 @@ const OWNERSHIP: Record<string, string[]> = {
   'styles/songlist.css': [
     'components/AlbumGrid.tsx',
     'components/AlbumScroll.tsx',
+    'components/ArtistCard.tsx',
     'components/AudioTagBadge.tsx',
     'components/ChartPanel.tsx',
+    'components/CollectionGrid.tsx',
     'components/DailyRecommend.tsx',
     'components/DiscoverPlaylistCard.tsx',
     'components/DownloadProgressModal.tsx',

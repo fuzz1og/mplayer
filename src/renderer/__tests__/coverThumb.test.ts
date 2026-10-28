@@ -18,7 +18,7 @@ describe('桌面封面取图尺寸（#496）', () => {
       ['components/PlaylistGrid.tsx', 'coverThumbUrl(pl.coverImgUrl, COVER_SIZE.thumb)'],
       ['components/PlaylistPageGrid.tsx', 'coverThumbUrl(pl.coverImgUrl, COVER_SIZE.thumb)'],
       ['components/DiscoverPlaylistCard.tsx', 'coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)'],
-      ['pages/ArtistListPage.tsx', 'coverThumbUrl(artist.picUrl, COVER_SIZE.icon)'],
+      ['components/ArtistCard.tsx', 'coverThumbUrl(artist.picUrl, COVER_SIZE.icon)'],
       ['pages/DiscoverPageV2.tsx', 'coverThumbUrl(a.picUrl, COVER_SIZE.icon)'],
       ['pages/AlbumDetailPage.tsx', 'coverThumbUrl(displayPic, COVER_SIZE.thumb)'],
       ['pages/ArtistDetailPage.tsx', 'coverThumbUrl(displayPic, COVER_SIZE.thumb)'],

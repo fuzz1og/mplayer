@@ -1,6 +1,8 @@
-/* 资料库（1.9.0，#685）：对齐 .proto/library.png（2450×1576 = 1225×788 @2x，数值 ÷2 落 CSS）。
-   页头 = h1 + 同行统计 + 排序/导入；分段 pill；主体一张圆角 card 的歌单表。
-   颜色一律 var(--token)；字号 / 字重 / 行高 / 圆角只引用全局 token。 */
+/* ============================================================
+   内容库页面样式（#694）：
+   consumers = LocalPage（本地页骨架 / 文件夹 chips）+ DownloadsDialog（已下载弹窗任务列表）。
+   原「资料库」聚合页已退役；分段控件改用 ui 的 Segmented，不再有页面私有的 pill 样式。
+   ============================================================ */
 
 .library {
   display: flex;
@@ -16,7 +18,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 「排序」文字按钮（带图标），无底色 */
+/* 文字按钮（下载目录行 / 清除已完成），无底色 */
 .library__text-btn {
   display: inline-flex;
   gap: 6px;
@@ -46,45 +48,7 @@
   opacity: 0.5;
 }
 
-/* 「导入」填充按钮（原型 68×28，圆角 10） */
-.library__import {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  height: 28px;
-  padding: 0 11px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface-selected);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-standard);
-}
-
-.library__import:hover:not(:disabled) {
-  background: var(--surface-selected-hover);
-}
-
-.library__import:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.library__import:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-/* 排序菜单 */
-.library__sort-wrap {
-  position: relative;
-}
-
-/* ── 分段 pill（原型 #695：28 高 / 段 24 高 / 胶囊）── */
+/* 分段行：控件本身是 ui/Segmented，这里只负责页面留白 */
 .library__tabs-row {
   display: flex;
   flex: none;
@@ -94,51 +58,12 @@
   margin-bottom: 14px;
 }
 
-.library__segmented {
-  display: inline-flex;
-  gap: 2px;
-  align-items: center;
-  height: 28px;
-  padding: 2px;
-  border-radius: var(--radius-full);
-  background: var(--surface-card-hover);
-}
-
-.library__segment {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 24px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.library__segment:hover:not([aria-selected='true']) {
-  color: var(--text-primary);
-}
-
-.library__segment[aria-selected='true'] {
-  background: var(--surface-selected);
-  box-shadow: var(--shadow-sm);
-  color: var(--text-primary);
-}
-
 /* ── 主体 ── */
 .library__scroll {
   display: flex;
   flex: 1;
   flex-direction: column;
+  gap: 16px;
   min-height: 0;
   padding: 0 28px 40px;
   overflow-y: auto;
@@ -177,85 +102,7 @@
   line-height: var(--leading-normal);
 }
 
-/* ── 专辑 / 歌手分组行 ── */
-.library__group-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  min-height: 52px;
-  padding: 6px 14px;
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-
-.library__group-row + .library__group-row {
-  border-top: 1px solid var(--hairline);
-}
-
-.library__group-row:hover {
-  background: var(--surface-card-hover);
-}
-
-.library__group-cover {
-  position: relative;
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  overflow: hidden;
-  border-radius: var(--radius-xs);
-  background: var(--surface-card-hover);
-  color: var(--text-tertiary);
-}
-
-.library__group-cover img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.library__group-main {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.library__group-name {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.library__group-sub {
-  margin-top: 2px;
-  overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.library__group-count {
-  flex: none;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── 下载 tab ── */
-.library__stack {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
+/* ── 下载管理（已下载弹窗）── */
 .library__dir {
   display: flex;
   flex: none;
@@ -263,8 +110,9 @@
   align-items: center;
   min-height: 44px;
   padding: 8px 14px;
+  margin-bottom: 12px;
   border-radius: var(--group-radius);
-  background: var(--surface-card);
+  background: var(--surface-card-hover);
 }
 
 .library__dir-label {
@@ -288,7 +136,7 @@
   gap: 12px;
   align-items: center;
   min-height: 44px;
-  padding: 6px 14px;
+  padding: 6px 2px;
 }
 
 .library__task-row + .library__task-row {
@@ -360,19 +208,24 @@
   cursor: pointer;
 }
 
-.library__task-cancel:hover {
+.library__task-cancel:hover:not(:disabled) {
   background: var(--surface-card-hover);
   color: var(--text-primary);
+}
+
+.library__task-cancel:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .library__task-foot {
   display: flex;
   justify-content: flex-end;
-  padding: 4px 14px;
+  padding-top: 8px;
   border-top: 1px solid var(--hairline);
 }
 
-/* ── 本地 tab ── */
+/* ── 本地文件夹 chips ── */
 .library__chips {
   display: flex;
   flex: none;

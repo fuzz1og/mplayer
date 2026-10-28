@@ -1,13 +1,17 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Play } from 'lucide-react';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
+import CollectionGrid from '@/renderer/components/CollectionGrid';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
-import { Button, PageHeader } from '@/renderer/ui';
+import { Button, PageHeader, Segmented } from '@/renderer/ui';
 import type { Song } from '@mplayer/core';
 import '@/renderer/styles/songlist.css';
+
+/** 内容库三视角（#694）：歌曲 / 专辑 / 歌手是同一批收藏的三种看法，不是三个内容库。 */
+const VIEW_OPTIONS = ['歌曲', '专辑', '歌手'];
 
 const FavoritesPage: React.FC = () => {
   const favorites = useFavoriteStore((s) => s.favorites);
@@ -18,6 +22,7 @@ const FavoritesPage: React.FC = () => {
   const play = usePlayerStore((s) => s.play);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const { download, downloadBatch } = useDownload();
+  const [view, setView] = useState(VIEW_OPTIONS[0]);
 
   // 收藏页的歌曲就是收藏本身：id 列表跟着 favorites 走，别在每次渲染新建数组（行 memo 会被击穿）
   const favoriteIdList = useMemo(() => favorites.map(s => s.id), [favorites]);
@@ -63,6 +68,11 @@ const FavoritesPage: React.FC = () => {
     });
   }, []);
 
+  const handlePlayCollection = useCallback((songs: Song[], index: number) => {
+    const song = songs[index];
+    if (song) void handlePlay(song, songs, index);
+  }, [handlePlay]);
+
   return (
     <div className="list-page">
       <PageHeader
@@ -81,25 +91,42 @@ const FavoritesPage: React.FC = () => {
         }
       />
 
-      <div className="list-page__body">
-        <SongList
-          density="library"
-          showDuration
-          songs={favorites}
-          currentSongId={currentSong?.id}
-          isPlaying={isPlaying}
-          favoriteIds={favoriteIdList}
-          onPlay={handlePlay}
-          onToggleFavorite={handleToggleFavorite}
-          onDownload={download}
-          onBatchDownload={downloadBatch}
-          onAddToPlaylist={handleAddToPlaylist}
-          onSwap={handleSwap}
-          onCoverError={handleCoverError}
-          enableBatchDownload={true}
-          enableBatchAddToPlaylist={true}
-          emptyText="还没有喜欢的歌曲，点歌曲行右侧的爱心收藏"
+      <div className="list-page__tabs">
+        <Segmented
+          options={VIEW_OPTIONS}
+          value={view}
+          onChange={setView}
+          ariaLabel="我喜欢的音乐视图"
         />
+      </div>
+
+      <div className="list-page__body">
+        {view === '歌曲' ? (
+          <SongList
+            density="library"
+            showDuration
+            songs={favorites}
+            currentSongId={currentSong?.id}
+            isPlaying={isPlaying}
+            favoriteIds={favoriteIdList}
+            onPlay={handlePlay}
+            onToggleFavorite={handleToggleFavorite}
+            onDownload={download}
+            onBatchDownload={downloadBatch}
+            onAddToPlaylist={handleAddToPlaylist}
+            onSwap={handleSwap}
+            onCoverError={handleCoverError}
+            enableBatchDownload={true}
+            enableBatchAddToPlaylist={true}
+            emptyText="还没有喜欢的歌曲，点歌曲行右侧的爱心收藏"
+          />
+        ) : (
+          <CollectionGrid
+            view={view === '专辑' ? 'albums' : 'artists'}
+            songs={favorites}
+            onPlayCollection={handlePlayCollection}
+          />
+        )}
       </div>
     </div>
   );
