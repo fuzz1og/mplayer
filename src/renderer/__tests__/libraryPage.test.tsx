@@ -143,7 +143,7 @@ describe('资料库页', () => {
     renderPage();
     await waitFor(() => expect(rows().getByText('Bravo')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: '排序' }));
+    await userEvent.click(screen.getByRole('button', { name: /^排序/ }));
     const options = screen.getAllByRole('menuitemradio');
     expect(options.map((item) => item.textContent)).toEqual(['按最近添加', '按标题', '按歌手']);
     await userEvent.click(screen.getByRole('menuitemradio', { name: '按标题' }));
@@ -152,7 +152,8 @@ describe('资料库页', () => {
       const titles = Array.from(document.querySelectorAll('.library__card .song-row__title')).map((el) => el.textContent);
       expect(titles).toEqual(['Alpha', 'Bravo', 'Charlie', 'Zulu']);
     });
-    expect(screen.getByText('按标题排序')).toBeInTheDocument();
+    // 页头按钮回显当前排序（原型「排序：最近添加」）
+    expect(screen.getByRole('button', { name: '排序：按标题' })).toBeInTheDocument();
   });
 
   it('导入按钮打开本地文件夹选择（真实可用）', async () => {
@@ -239,26 +240,67 @@ describe('资料库页', () => {
     expect(currentRow?.querySelectorAll('.song-row__bar').length).toBe(3);
   });
 
-  it('歌曲分段用共享 SongList 的 library 密度：无表头、时长列、单个 More 操作', async () => {
+  it('歌曲分段用共享 SongList 的 library 密度：28px 表头、46/30 行变量、单个 More 操作', async () => {
     renderPage();
     await waitFor(() => expect(rows().getByText('Bravo')).toBeInTheDocument());
 
     const list = document.querySelector('.library__card .song-list') as HTMLElement;
     expect(list).toHaveAttribute('data-density', 'library');
-    // library 密度默认无表头
-    expect(document.querySelector('.song-list__head')).toBeNull();
+    // 表头进入同一密度协议：28px 高（CSS 变量），序号列 28、时长列 44
+    const head = document.querySelector('.library__card .song-list__head') as HTMLElement;
+    expect(head).not.toBeNull();
+    expect((head.querySelector('.song-list__head-index') as HTMLElement).style.getPropertyValue('--col-width')).toBe('28px');
+    const headCols = head.querySelectorAll('.song-list__head-col');
+    expect((headCols[headCols.length - 1] as HTMLElement).style.getPropertyValue('--col-width')).toBe('44px');
 
     const firstRow = document.querySelector('.library__card .song-row') as HTMLElement;
     expect(firstRow).toHaveAttribute('data-variant', 'library');
+    // 行高协议由 songRowMetrics 单源下发（46px 行 / 30px 封面），骨架和虚拟测量读同一份
+    expect(firstRow.style.getPropertyValue('--song-row-height')).toBe('46px');
+    expect(firstRow.style.getPropertyValue('--song-row-cover')).toBe('30px');
     // 时长列常驻（240s → 4:00）
     expect(firstRow.querySelector('.song-row__duration')?.textContent).toBe('4:00');
     expect(
       (firstRow.querySelector('.song-row__duration') as HTMLElement).style.getPropertyValue('--col-width'),
-    ).toBe('50px');
+    ).toBe('44px');
     // 行尾不再并排三个图标：只留一个「更多」
     const actionButtons = firstRow.querySelectorAll('.row-actions button');
     expect(actionButtons).toHaveLength(1);
     expect(actionButtons[0]).toHaveAttribute('aria-label', '更多操作: Bravo');
+  });
+
+  it('按需选择模式：普通浏览无复选框，点「选择」后出现复选框与批量工具栏，完成即清空', async () => {
+    renderPage();
+    await waitFor(() => expect(rows().getByText('Bravo')).toBeInTheDocument());
+
+    // 普通浏览：没有复选框、没有批量工具栏
+    expect(document.querySelector('.library__card .song-row__check')).toBeNull();
+    expect(document.querySelector('.library__card .song-list__batch-wrap')).not.toHaveAttribute('data-visible');
+    expect(screen.getByRole('button', { name: '选择' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: '选择' }));
+    // 进入选择模式：每行有复选框，工具栏可见且按钮初始禁用
+    await waitFor(() => expect(document.querySelectorAll('.library__card .song-row__check').length).toBe(4));
+    const toolbar = document.querySelector('.library__card .song-list__batch-wrap') as HTMLElement;
+    expect(toolbar).toHaveAttribute('data-visible');
+    expect(screen.getByRole('toolbar', { name: '批量操作' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '批量下载' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '批量加入歌单' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '批量删除' })).toBeDisabled();
+
+    // 勾选两首后工具栏计数与可用态
+    const checks = document.querySelectorAll('.library__card .song-row__check input');
+    await userEvent.click(checks[0] as HTMLElement);
+    await userEvent.click(checks[1] as HTMLElement);
+    expect(screen.getByText('已选择 2 首歌曲')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '批量下载' })).toBeEnabled();
+
+    // 完成退出：复选框与工具栏消失，再次进入时选择已清空
+    await userEvent.click(screen.getByRole('button', { name: '完成' }));
+    await waitFor(() => expect(document.querySelector('.library__card .song-row__check')).toBeNull());
+    expect(document.querySelector('.library__card .song-list__batch-wrap')).not.toHaveAttribute('data-visible');
+    await userEvent.click(screen.getByRole('button', { name: '选择' }));
+    expect(screen.getByText('已选择 0 首歌曲')).toBeInTheDocument();
   });
 
   it('点行封面播放时用当前显示列表建立队列', async () => {

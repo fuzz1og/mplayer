@@ -9,7 +9,8 @@ import SourceSwapModal from '@/renderer/components/SourceSwapModal';
 import SongCover from '@/renderer/components/SongCover';
 import { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import RowActionButtons from '@/renderer/components/RowActionButtons';
-import { COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_ALBUM, COL_DURATION, colWidth } from '@/renderer/components/songTableColumns';
+import { COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_INDEX_LIBRARY, COL_ALBUM, COL_DURATION, COL_DURATION_LIBRARY, colWidth } from '@/renderer/components/songTableColumns';
+import { songRowCoverSize, songRowHeight } from '@/renderer/components/songRowMetrics';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -90,6 +91,12 @@ const SongRow: React.FC<SongRowProps> = ({
   const coverRefreshFired = useRef(false);
 
   const swap = useSongSwap(song, onSwap);
+  const library = variant === 'library';
+  // 列宽按密度取契约值：序号 28 / 时长 44（资料库），其余场景沿用旧列宽
+  const indexColWidth = showIndex
+    ? (library ? COL_INDEX_LIBRARY : COL_INDEX)
+    : COL_INDEX_COMPACT;
+  const durationColWidth = library ? COL_DURATION_LIBRARY : COL_DURATION;
 
   /** 查看歌手：以歌手名为关键词搜索并落在歌手 tab（与移动端一致） */
   const handleViewArtist = () => {
@@ -127,16 +134,18 @@ const SongRow: React.FC<SongRowProps> = ({
     // 仅挂载时触发：封面刷新后 song.cover 变化会自然进入正常渲染路径
   }, []);
 
-  // 1.9.0：结构/状态色全部走 songlist.css 的类，这里只留调用方传入的 style（拖拽位移等动态值）
+  // 1.9.0：结构/状态色全部走 songlist.css 的类；这里只下发密度协议的行高/封面变量
+  // （自定义属性允许内联，design-lint 白名单）与调用方传入的 style（拖拽位移等动态值）。
   return (
     <div
       ref={rowRef}
       className="song-row"
-      data-variant={variant === 'library' ? 'library' : undefined}
+      data-variant={library ? 'library' : undefined}
       data-compact={compact || undefined}
       data-current={isCurrentSong || undefined}
       onDoubleClick={() => onPlay(song, queue, index)}
-      style={style}
+      style={{ '--song-row-height': `${songRowHeight(variant)}px`,
+        '--song-row-cover': `${songRowCoverSize(variant)}px`, ...style } as React.CSSProperties}
     >
       {showCheckbox && (
         <div className="song-row__check" style={colWidth(COL_CHECKBOX)}>
@@ -148,7 +157,7 @@ const SongRow: React.FC<SongRowProps> = ({
         </div>
       )}
       {(showIndex || dragHandle) && (
-        <div className="song-row__index" style={colWidth(showIndex ? COL_INDEX : COL_INDEX_COMPACT)}>
+        <div className="song-row__index" style={colWidth(indexColWidth)}>
           {dragHandle}
           {showIndex && (isCurrentSong && isPlaying ? (
             <div className="song-row__bars">
@@ -192,7 +201,7 @@ const SongRow: React.FC<SongRowProps> = ({
         </div>
       )}
       {showDuration && (
-        <div className="song-row__duration" style={colWidth(COL_DURATION)}>
+        <div className="song-row__duration" style={colWidth(durationColWidth)}>
           {formatDuration(song.duration)}
         </div>
       )}

@@ -9,17 +9,19 @@ import SongRow from './SongRow';
 import SongListSkeleton from './SongListSkeleton';
 import VirtualRow from './VirtualRow';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
-import { useVirtualRows, stickyTopForContent, SONG_ROW_HEIGHT, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
+import { useVirtualRows, stickyTopForContent, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
 import {
   COL_CHECKBOX,
   COL_INDEX,
+  COL_INDEX_LIBRARY,
   COL_ALBUM,
   COL_ACTIONS,
   COL_ACTIONS_COMPACT,
   COL_DURATION,
-  LIBRARY_ROW_HEIGHT,
+  COL_DURATION_LIBRARY,
   colWidth,
 } from '@/renderer/components/songTableColumns';
+import { songRowCoverSize, songRowHeight } from '@/renderer/components/songRowMetrics';
 
 interface SongListProps {
   songs: Song[];
@@ -109,6 +111,10 @@ const SongList: React.FC<SongListProps> = ({
   // library 密度默认无表头；显式 showHeader 才渲染
   const showHeader = showHeaderProp ?? density !== 'library';
   const compactActions = density === 'library';
+  // 表头 / 行 / 骨架共用的列宽：资料库密度按原型收窄（序号 28 / 时长 44 / 操作 56）
+  const indexWidth = density === 'library' ? COL_INDEX_LIBRARY : COL_INDEX;
+  const durationWidth = density === 'library' ? COL_DURATION_LIBRARY : COL_DURATION;
+  const actionWidth = compactActions ? COL_ACTIONS_COMPACT : COL_ACTIONS;
   // 内部状态管理（当外部没有提供时）
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   // 换源后的行替换覆盖：key 为旧 id，组件生命周期内生效，
@@ -231,18 +237,23 @@ const SongList: React.FC<SongListProps> = ({
   const showBatchActionBar = (enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (batchMode || selectedIds.length > 0);
   const batchDisabled = selectedIds.length === 0;
 
+  /** 退出选择模式：清空选择（完成与取消同一状态机出口）。 */
   const handleExitBatchMode = () => {
     setBatchMode(false);
     onSelectionChange([]);
     setActiveDropdown(null);
   };
 
+  /** 进入选择模式：从干净选择集开始，普通浏览的复选框不常驻。 */
+  const handleEnterBatchMode = () => {
+    setBatchMode(true);
+    onSelectionChange([]);
+    setActiveDropdown(null);
+  };
+
   // 滚动/测量归模块：够长才虚拟化，挂靠页面已有的滚动容器，页面不感知。
-  // 行高是布局事实：library 46（songlist.css 的 variant）与 standard 64 各一份。
-  const estimateSongRow = useCallback(
-    () => (density === 'library' ? LIBRARY_ROW_HEIGHT : SONG_ROW_HEIGHT),
-    [density],
-  );
+  // 行高来自 songRowMetrics（#699）——与 CSS 变量、骨架屏是同一份协议，不在此另写 magic。
+  const estimateSongRow = useCallback(() => songRowHeight(density), [density]);
   const virtual = useVirtualRows({
     count: displaySongs.length,
     enabled: displaySongs.length >= VIRTUALIZE_THRESHOLD,
@@ -310,25 +321,49 @@ const SongList: React.FC<SongListProps> = ({
   );
 
   return (
-    <div className="song-list" data-density={density}>
-      {/* 批量管理入口：常驻（有批量能力且列表非空时），进入后显示勾选框与批量操作栏 */}
+    <div
+      className="song-list"
+      data-density={density}
+      style={{ '--song-row-height': `${songRowHeight(density)}px`,
+        '--song-row-cover': `${songRowCoverSize(density)}px` } as React.CSSProperties}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && batchMode) handleExitBatchMode();
+      }}
+    >
+      {/* 选择模式入口：普通浏览保持安静；显式「选择」后才出现复选框与批量工具栏，完成/取消退出 */}
       {(enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (
         <div className="song-list__batch-entry">
-          <button
-            onClick={() => (batchMode ? handleExitBatchMode() : setBatchMode(true))}
-            className="song-list__batch-toggle"
-            data-active={batchMode || undefined}
-          >
-            <CheckSquare size={14} />
-            {batchMode ? '完成' : '批量管理'}
-          </button>
+          {batchMode ? (
+            <>
+              <button type="button" className="song-list__batch-toggle" onClick={handleExitBatchMode}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="song-list__batch-toggle song-list__batch-toggle--primary"
+                onClick={handleExitBatchMode}
+              >
+                完成
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="song-list__batch-toggle"
+              aria-pressed={false}
+              onClick={handleEnterBatchMode}
+            >
+              <CheckSquare size={14} />
+              选择
+            </button>
+          )}
         </div>
       )}
 
-      {/* 批量操作按钮栏 */}
+      {/* 批量操作工具栏：只随选择模式出现 */}
       {(enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (
         <div className="song-list__batch-wrap" data-visible={showBatchActionBar || undefined}>
-          <div className="song-list__batch-bar">
+          <div className="song-list__batch-bar" role="toolbar" aria-label="批量操作">
             <span className="song-list__batch-count">已选择 {selectedIds.length} 首歌曲</span>
             <div className="song-list__batch-actions">
               {enableBatchDownload && (
@@ -371,10 +406,11 @@ const SongList: React.FC<SongListProps> = ({
             </div>
           )}
           {showIndex && (
-            <div className="song-list__head-index" style={colWidth(COL_INDEX)}>
+            <div className="song-list__head-index" style={colWidth(indexWidth)}>
               #
             </div>
           )}
+          <div className="song-list__head-cover" aria-hidden="true" />
           <div className="song-list__head-title">标题</div>
           {hasAlbum && (
             <div className="song-list__head-col" style={colWidth(COL_ALBUM)}>
@@ -382,14 +418,11 @@ const SongList: React.FC<SongListProps> = ({
             </div>
           )}
           {showDuration && (
-            <div className="song-list__head-col" style={colWidth(COL_DURATION)}>
+            <div className="song-list__head-col" style={colWidth(durationWidth)}>
               时长
             </div>
           )}
-          <div
-            className="song-list__head-actions"
-            style={colWidth(compactActions ? COL_ACTIONS_COMPACT : COL_ACTIONS)}
-          >
+          <div className="song-list__head-actions" style={colWidth(actionWidth)}>
             操作
           </div>
         </div>

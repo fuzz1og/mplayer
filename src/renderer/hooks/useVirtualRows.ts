@@ -1,9 +1,10 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 import { useLatest } from '@/renderer/hooks/useLatest';
+import { SONG_ROW_HEIGHT } from '@/renderer/components/songRowMetrics';
 
-/** SongRow 行高：44px 封面 + 上下各 10px 内边距（见 SongRow 的 padding） */
-export const SONG_ROW_HEIGHT = 64;
+/** SongRow 行高契约在 songRowMetrics（#699）；这里再导出，历史调用点不必改 import 路径。 */
+export { SONG_ROW_HEIGHT };
 
 /**
  * 行数达到该阈值才启用窗口化：短列表整表渲染，省掉测量与首帧探测。

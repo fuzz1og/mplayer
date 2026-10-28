@@ -1,9 +1,11 @@
 .ui-page-header {
   display: flex;
+  flex: none;
   flex-wrap: wrap;
   gap: 8px 12px;
   align-items: baseline;
-  padding: 0 0 18px;
+  /* 一级页面统一页头内边距（原型评审 #695）：上 24 / 左右 28 / 与内容底距 18 */
+  padding: 24px 28px 18px;
 }
 
 .ui-page-header__title {

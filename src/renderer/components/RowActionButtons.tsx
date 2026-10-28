@@ -2,7 +2,7 @@ import React from 'react';
 import { Heart, Download, MoreHorizontal } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import RowActionMenu, { type RowActionItem } from '@/renderer/components/RowActionMenu';
-import { COL_ACTIONS, colWidth } from '@/renderer/components/songTableColumns';
+import { COL_ACTIONS, COL_ACTIONS_COMPACT, colWidth } from '@/renderer/components/songTableColumns';
 import '@/renderer/styles/songlist.css';
 
 interface RowActionButtonsProps {
@@ -66,7 +66,7 @@ const RowActionButtons: React.FC<RowActionButtonsProps> = ({
   return (
     <div
       className={compact ? 'row-actions row-actions--compact' : 'row-actions'}
-      style={compact ? undefined : colWidth(COL_ACTIONS)}
+      style={colWidth(compact ? COL_ACTIONS_COMPACT : COL_ACTIONS)}
     >
       {!compact && onDownload && (
         <button

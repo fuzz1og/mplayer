@@ -3,12 +3,15 @@ import '@/renderer/styles/songlist.css';
 import {
   COL_CHECKBOX,
   COL_INDEX,
+  COL_INDEX_LIBRARY,
   COL_ALBUM,
   COL_ACTIONS,
   COL_ACTIONS_COMPACT,
   COL_DURATION,
+  COL_DURATION_LIBRARY,
   colWidth,
 } from '@/renderer/components/songTableColumns';
+import { songRowCoverSize, songRowHeight, type SongListDensity } from '@/renderer/components/songRowMetrics';
 
 interface SongListSkeletonProps {
   rowCount?: number;
@@ -20,7 +23,7 @@ interface SongListSkeletonProps {
    */
   showAlbum?: boolean;
   /** 与 SongList 的 density 一致：library 行高 46 / 封面 30 / 单个紧凑操作 */
-  density?: 'standard' | 'library';
+  density?: SongListDensity;
   /** 与 SongList 的 showDuration 一致：library 资料库行有时长列 */
   showDuration?: boolean;
 }
@@ -29,19 +32,24 @@ const SkeletonRow: React.FC<{
   showCheckbox: boolean;
   showIndex: boolean;
   showAlbum: boolean;
-  density: 'standard' | 'library';
+  density: SongListDensity;
   showDuration: boolean;
 }> = ({ showCheckbox, showIndex, showAlbum, density, showDuration }) => {
   const library = density === 'library';
   return (
-    <div className="song-skeleton__row" data-variant={library ? 'library' : undefined}>
+    <div
+      className="song-skeleton__row"
+      data-variant={library ? 'library' : undefined}
+      style={{ '--song-row-height': `${songRowHeight(density)}px`,
+        '--song-row-cover': `${songRowCoverSize(density)}px` } as React.CSSProperties}
+    >
       {showCheckbox && (
         <div className="song-skeleton__col" style={colWidth(COL_CHECKBOX)}>
           <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--check" />
         </div>
       )}
       {showIndex && (
-        <div className="song-skeleton__col" style={colWidth(COL_INDEX)}>
+        <div className="song-skeleton__col" style={colWidth(library ? COL_INDEX_LIBRARY : COL_INDEX)}>
           <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--index" />
         </div>
       )}
@@ -58,7 +66,7 @@ const SkeletonRow: React.FC<{
         </div>
       )}
       {showDuration && (
-        <div className="song-skeleton__col" style={colWidth(COL_DURATION)}>
+        <div className="song-skeleton__col" style={colWidth(library ? COL_DURATION_LIBRARY : COL_DURATION)}>
           <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--duration" />
         </div>
       )}
@@ -88,7 +96,7 @@ const SongListSkeleton: React.FC<SongListSkeletonProps> = ({
   density = 'standard',
   showDuration = false,
 }) => (
-  <div className="song-skeleton">
+  <div className="song-skeleton" data-density={density}>
     {Array.from({ length: rowCount }).map((_, i) => (
       <SkeletonRow
         key={i}

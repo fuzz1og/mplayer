@@ -178,11 +178,17 @@ describe('歌曲列表模块：资料库密度（density=library）', () => {
     const rows = container.querySelectorAll('.song-row');
     expect(rows).toHaveLength(songs.length);
     expect(rows[0]).toHaveAttribute('data-variant', 'library');
-    // 240s → 4:00，列宽由 COL_DURATION = 50 下发
+    // 行高协议由 songRowMetrics 单源下发（46px 行 / 30px 封面）
+    expect((rows[0] as HTMLElement).style.getPropertyValue('--song-row-height')).toBe('46px');
+    expect((rows[0] as HTMLElement).style.getPropertyValue('--song-row-cover')).toBe('30px');
+    // 240s → 4:00，列宽由 COL_DURATION_LIBRARY = 44 下发
     expect(rows[0].querySelector('.song-row__duration')?.textContent).toBe('4:00');
     expect(
       (rows[0].querySelector('.song-row__duration') as HTMLElement).style.getPropertyValue('--col-width'),
-    ).toBe('50px');
+    ).toBe('44px');
+    expect(
+      (rows[0].querySelector('.row-actions') as HTMLElement).style.getPropertyValue('--col-width'),
+    ).toBe('56px');
   });
 
   it('行尾只留一个 28px 圆形 More，下载/收藏按顺序收进菜单', () => {
@@ -402,5 +408,80 @@ describe('歌曲列表点播契约（#697）', () => {
     expect(state.currentPlaylist.map((s) => s.id)).toEqual(['netease:1', 'netease:2', 'netease:3']);
     expect(state.currentPlaylistIndex).toBe(1);
     expect(getNextSongInQueue(state)?.id).toBe('netease:3');
+  });
+});
+
+/**
+ * #699 歌曲行密度协议：普通 / 分组 / 可排序 / 骨架 / 虚拟测量必须同源。
+ * 断言落在 DOM 的 --song-row-* 变量与批量状态机（几何由 Playwright 在真实 Chromium 验）。
+ */
+describe('共享歌曲行密度协议与按需选择模式（#699）', () => {
+  const renderList = (props: Partial<React.ComponentProps<typeof SongList>> = {}) => render(
+    <MemoryRouter>
+      <SongList songs={[song(1), song(2)]} onPlay={() => {}} showHeader={false} {...props} />
+    </MemoryRouter>
+  );
+
+  it('standard / library 的行高与封面来自同一份协议变量', () => {
+    const standard = renderList();
+    const standardRow = standard.container.querySelector('.song-row') as HTMLElement;
+    expect(standardRow.style.getPropertyValue('--song-row-height')).toBe('64px');
+    expect(standardRow.style.getPropertyValue('--song-row-cover')).toBe('44px');
+    cleanup();
+
+    const library = renderList({ density: 'library', showDuration: true });
+    const libraryRow = library.container.querySelector('.song-row') as HTMLElement;
+    expect(libraryRow.style.getPropertyValue('--song-row-height')).toBe('46px');
+    expect(libraryRow.style.getPropertyValue('--song-row-cover')).toBe('30px');
+  });
+
+  it('骨架屏消费同一组密度变量：加载前后行高不跳', () => {
+    const { container } = renderList({ songs: [], loading: true, density: 'library' });
+    const row = container.querySelector('.song-skeleton__row') as HTMLElement;
+    expect(row).not.toBeNull();
+    expect(row.style.getPropertyValue('--song-row-height')).toBe('46px');
+    expect(row.style.getPropertyValue('--song-row-cover')).toBe('30px');
+    expect(container.querySelector('.song-row')).toBeNull();
+  });
+
+  it('选择模式状态机：默认无复选框 → 选择/勾选/批量 → 完成清空', async () => {
+    const onBatchDownload = vi.fn();
+    const onBatchDelete = vi.fn();
+    const view = renderList({
+      density: 'library',
+      enableBatchDownload: true,
+      onBatchDownload,
+      enableBatchDelete: true,
+      onBatchDelete,
+      enableBatchAddToPlaylist: true,
+    });
+    const { container } = view;
+
+    // 普通浏览：无复选框、无可见工具栏
+    expect(container.querySelector('.song-row__check')).toBeNull();
+    expect(container.querySelector('.song-list__batch-wrap')).not.toHaveAttribute('data-visible');
+
+    fireEvent.click(screen.getByRole('button', { name: '选择' }));
+    const checks = container.querySelectorAll('.song-row__check input');
+    expect(checks).toHaveLength(2);
+    expect(screen.getByRole('toolbar', { name: '批量操作' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '批量下载' })).toBeDisabled();
+
+    fireEvent.click(checks[0] as HTMLElement);
+    fireEvent.click(checks[1] as HTMLElement);
+    expect(screen.getByText('已选择 2 首歌曲')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '批量下载' }));
+    expect(onBatchDownload).toHaveBeenCalledTimes(1);
+    expect((onBatchDownload.mock.calls[0][0] as Song[]).map((item) => item.id)).toEqual(['netease:1', 'netease:2']);
+    await waitFor(() => expect(screen.getByText('已选择 0 首歌曲')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '完成' }));
+    expect(container.querySelector('.song-row__check')).toBeNull();
+    expect(container.querySelector('.song-list__batch-wrap')).not.toHaveAttribute('data-visible');
+
+    // 再次进入选择模式：退出时已清空选择
+    fireEvent.click(screen.getByRole('button', { name: '选择' }));
+    expect(screen.getByText('已选择 0 首歌曲')).toBeInTheDocument();
   });
 });

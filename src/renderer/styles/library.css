@@ -6,39 +6,14 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 20px 28px 0;
   overflow: hidden;
 }
 
-/* ── 页头：标题 + 统计 + 排序 + 导入 ── */
-.library__header {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  gap: 8px 24px;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.library__title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.02em;
-}
-
+/* 页头交给 PageHeader（28/700、上 24 / 左右 28、底 18）；这里只放页头内的统计文字 */
 .library__stats {
   color: var(--text-tertiary);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
-}
-
-.library__header-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-left: auto;
 }
 
 /* 「排序」文字按钮（带图标），无底色 */
@@ -109,30 +84,34 @@
   position: relative;
 }
 
-/* ── 分段 pill ── */
+/* ── 分段 pill（原型 #695：28 高 / 段 24 高 / 胶囊）── */
 .library__tabs-row {
   display: flex;
   flex: none;
   gap: 12px;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
+  padding: 0 28px;
+  margin-bottom: 14px;
 }
 
 .library__segmented {
   display: inline-flex;
   gap: 2px;
   align-items: center;
-  padding: 1px;
-  border-radius: var(--radius-md);
-  background: var(--surface-card);
+  height: 28px;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  background: var(--surface-card-hover);
 }
 
 .library__segment {
-  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
   padding: 0 12px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
@@ -151,25 +130,7 @@
 
 .library__segment[aria-selected='true'] {
   background: var(--surface-selected);
-  color: var(--text-primary);
-  font-weight: var(--weight-semibold);
-}
-
-/* 右端「按最近添加排序」：点一下轮换排序方式 */
-.library__sortlink {
-  display: inline-flex;
-  padding: 4px 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-tertiary);
-  font-family: inherit;
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: color var(--duration-fast) var(--ease-standard);
-}
-
-.library__sortlink:hover {
+  box-shadow: var(--shadow-sm);
   color: var(--text-primary);
 }
 
@@ -179,7 +140,7 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding-bottom: 24px;
+  padding: 0 28px 40px;
   overflow-y: auto;
 }
 
@@ -194,13 +155,26 @@
 .library__empty {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   align-items: center;
   justify-content: center;
   padding: 56px 20px;
   color: var(--text-tertiary);
   font-size: var(--text-sm);
   text-align: center;
+}
+
+.library__empty-title {
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.library__empty-sub {
+  max-width: 420px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
 }
 
 /* ── 专辑 / 歌手分组行 ── */

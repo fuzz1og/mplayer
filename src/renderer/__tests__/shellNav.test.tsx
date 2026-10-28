@@ -11,10 +11,10 @@ import LibraryPage from '@/renderer/pages/LibraryPage';
 
 describe('应用骨架', () => {
   describe('Sidebar', () => {
-    it('侧栏 6 个入口，顺序与原型一致（资料库组内叫「全部」，设置已上移标题栏）', () => {
+    it('侧栏 6 个入口，顺序与原型一致（资料库组内叫「资料库」，设置已上移标题栏）', () => {
       render(<Sidebar currentPage="recommend" onPageChange={() => undefined} />);
       const labels = Array.from(document.querySelectorAll('.sidebar__label')).map((el) => el.textContent?.trim());
-      expect(labels).toEqual(['推荐', '发现', '全部', '我喜欢的音乐', '最近播放', '我的歌单']);
+      expect(labels).toEqual(['推荐', '发现', '资料库', '我喜欢的音乐', '最近播放', '我的歌单']);
     });
 
     it('侧栏无品牌块（品牌已从 chrome 移除）', () => {
@@ -27,14 +27,14 @@ describe('应用骨架', () => {
     it('当前页用 aria-current 标记，不再有左侧强调条', () => {
       const { container } = render(<Sidebar currentPage="library" onPageChange={() => undefined} />);
       const active = container.querySelector('[aria-current="page"]');
-      expect(active?.textContent).toContain('全部');
+      expect(active?.textContent).toContain('资料库');
       expect(container.querySelector('.sidebar__item--bar')).toBeNull();
     });
 
-    it('点击「全部」回传 library', async () => {
+    it('点击「资料库」回传 library', async () => {
       const onPageChange = vi.fn();
       render(<Sidebar currentPage="recommend" onPageChange={onPageChange} />);
-      await userEvent.click(screen.getByRole('button', { name: '全部' }));
+      await userEvent.click(screen.getByRole('button', { name: '资料库' }));
       expect(onPageChange).toHaveBeenCalledWith('library');
     });
 

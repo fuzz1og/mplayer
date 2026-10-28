@@ -20,7 +20,7 @@ interface SidebarProps {
 
 /**
  * 侧栏（1.9.0 收口）：无品牌块，顶部直接是 推荐 / 发现 + 「资料库」组
- * （全部 / 我喜欢的音乐 / 最近播放）+ 「歌单」组（我的歌单）。
+ * （资料库 / 我喜欢的音乐 / 最近播放）+ 「歌单」组（我的歌单）。
  * 设置不在这里——它是应用级动作，收进标题栏的「设置」文字按钮。
  */
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
@@ -48,7 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
   ];
 
   const libraryItems: NavItem[] = [
-    { key: 'library', icon: <Library size={17} />, label: '全部', count: favoriteCount + localCount },
+    { key: 'library', icon: <Library size={17} />, label: '资料库', count: favoriteCount + localCount },
     { key: 'favorites', icon: <Heart size={17} />, label: '我喜欢的音乐', count: favoriteCount },
     { key: 'history', icon: <History size={17} />, label: '最近播放' },
   ];

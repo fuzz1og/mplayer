@@ -1,7 +1,22 @@
 /* 歌曲列表（SongList / SongRow / SongListSkeleton，1.9.0 样式外置）。
    颜色一律 var() token；字号 / 字重 / 行高 / 圆角只引用全局 token。
    列宽由 songTableColumns 的常量经 colWidth() 下发 --col-width，类只消费变量，
-   于是表头 / 行 / 骨架屏三处共用同一份数字。 */
+   于是表头 / 行 / 骨架屏三处共用同一份数字。
+
+   ── 歌曲行密度协议（#699）──
+   行高与封面边长只在 songRowMetrics.ts 定义，组件经 --song-row-height / --song-row-cover
+   下发；本文件只消费变量。标题 / meta / 序号 / 表头的字号与间距同样只在这里写一次，
+   普通列表、分组列表、可排序行、拖拽预览与骨架屏因此共用同一套密度。 */
+:root {
+  --song-row-padding-x: 14px;
+  --song-row-gap: 10px;
+  --song-row-title-size: 14px;
+  --song-row-meta-size: 13px;
+  --song-row-number-size: 13px;
+  --song-row-head-height: 28px;
+  --song-row-head-size: 11px;
+  --song-row-head-weight: 600;
+}
 
 /* ── 媒体卡片：卡片与播放浮层（AlbumGrid / MusicCard） ── */
 /* ── 卡片 ── */
@@ -45,11 +60,12 @@
 .song-row {
   display: flex;
   align-items: center;
+  min-height: var(--song-row-height);
   padding: 10px 16px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background-color: transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
 .song-row[data-compact] {
@@ -119,8 +135,9 @@
 
 .song-row__number {
   color: var(--text-tertiary);
-  font-size: var(--text-sm);
+  font-size: var(--song-row-number-size);
   font-weight: var(--weight-normal);
+  font-variant-numeric: tabular-nums;
 }
 
 .song-row__number[data-current] {
@@ -145,11 +162,11 @@
 
 .song-row__cover {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: var(--song-row-cover);
+  height: var(--song-row-cover);
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xs);
   background-color: var(--bg-hover);
 }
 
@@ -179,8 +196,9 @@
 .song-row__title {
   overflow: hidden;
   color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: var(--weight-normal);
+  font-size: var(--song-row-title-size);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -197,7 +215,8 @@
   margin-top: 2px;
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: var(--text-xs);
+  font-size: var(--song-row-meta-size);
+  line-height: var(--leading-tight);
   white-space: nowrap;
 }
 
@@ -228,7 +247,7 @@
   width: var(--col-width);
   flex-shrink: 0;
   color: var(--text-tertiary);
-  font-size: var(--text-sm);
+  font-size: var(--song-row-number-size);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -257,29 +276,42 @@
   font-size: var(--text-base);
 }
 
-/* 批量管理入口 */
+/* 选择模式入口：普通浏览只有一枚「选择」，进入后是「取消 / 完成」 */
 .song-list__batch-entry {
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
-  padding: 0 16px 8px;
+  padding: 0 var(--song-row-padding-x) 8px;
 }
 
 .song-list__batch-toggle {
-  display: flex;
+  display: inline-flex;
   gap: 6px;
   align-items: center;
-  padding: 5px 14px;
+  height: 28px;
+  padding: 0 12px;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   background-color: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
-.song-list__batch-toggle[data-active] {
-  border-color: var(--accent);
+.song-list__batch-toggle:hover {
+  background-color: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.song-list__batch-toggle--primary {
+  border-color: transparent;
   background-color: var(--accent-fill);
+  color: var(--text-on-accent);
+}
+
+.song-list__batch-toggle--primary:hover {
+  background-color: var(--accent-hover);
   color: var(--text-on-accent);
 }
 
@@ -315,7 +347,7 @@
 
 .song-list__batch-count {
   color: var(--text-secondary);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
 }
 
 .song-list__batch-actions {
@@ -324,18 +356,19 @@
 }
 
 .song-list__batch-btn {
-  display: flex;
+  display: inline-flex;
   gap: 6px;
   align-items: center;
-  padding: 8px 16px;
+  height: 28px;
+  padding: 0 12px;
   border: none;
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-sm);
   background-color: var(--accent-fill);
   color: var(--text-on-accent);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
-  transition: all 0.15s ease;
+  transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
 /* 原实现只在未禁用时改悬停色 */
@@ -363,13 +396,14 @@
   z-index: 3;
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  height: var(--song-row-head-height);
+  padding: 0 16px;
   border-bottom: 1px solid var(--border-subtle);
   background-color: var(--bg-base);
   backdrop-filter: blur(8px);
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
+  font-size: var(--song-row-head-size);
+  font-weight: var(--song-row-head-weight);
 }
 
 .song-list__head-check {
@@ -389,6 +423,12 @@
   width: var(--col-width);
   flex-shrink: 0;
   text-align: center;
+}
+
+/* 表头封面占位：让「标题」对齐行内标题文本，而不是压在封面上 */
+.song-list__head-cover {
+  width: var(--song-row-cover);
+  flex-shrink: 0;
 }
 
 .song-list__head-title {
@@ -420,8 +460,9 @@
 .song-skeleton__row {
   display: flex;
   align-items: center;
+  min-height: var(--song-row-height);
   padding: 10px 16px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
 }
 
 .song-skeleton__col {
@@ -499,15 +540,15 @@
   border-radius: var(--radius-full);
 }
 
-/* 资料库密度骨架：46px 行 / 30px 封面，单操作位与真实行对齐 */
+/* 资料库密度骨架：行高 / 封面直接消费 songRowMetrics 下发的同一组变量，与真实行逐像素对齐 */
 .song-skeleton__row[data-variant='library'] {
-  min-height: 46px;
-  padding: 3px 12px;
+  min-height: var(--song-row-height);
+  padding: 0 var(--song-row-padding-x);
 }
 
 .song-skeleton__row[data-variant='library'] .song-skeleton__box--cover {
-  width: 30px;
-  height: 30px;
+  width: var(--song-row-cover);
+  height: var(--song-row-cover);
   border-radius: var(--radius-xs);
 }
 
@@ -516,41 +557,52 @@
   height: 12px;
 }
 
-/* ── 资料库密度（density='library'，46px 行）── */
+/* ── 资料库密度（density='library'）：46px 行 / 30px 封面 / 14-13 字号 ── */
 .song-list[data-density='library'] .song-list__head {
-  padding: 8px 12px;
+  padding: 0 var(--song-row-padding-x);
+}
+
+.song-list[data-density='library'] .song-row__album {
+  color: var(--text-secondary);
 }
 
 .song-row[data-variant='library'] {
   align-items: center;
-  min-height: 46px;
-  padding: 3px 12px;
+  min-height: var(--song-row-height);
+  padding: 0 var(--song-row-padding-x);
+  gap: var(--song-row-gap);
   border-radius: var(--radius-xs);
 }
 
 .song-row[data-variant='library'] .song-row__index {
-  width: 32px;
+  width: var(--col-width);
+  justify-content: flex-end;
+  text-align: right;
 }
 
 .song-row[data-variant='library'] .song-row__main {
-  gap: 12px;
+  gap: var(--song-row-gap);
 }
 
 .song-row[data-variant='library'] .song-row__cover {
-  width: 30px;
-  height: 30px;
+  width: var(--song-row-cover);
+  height: var(--song-row-cover);
   border-radius: var(--radius-xs);
 }
 
 .song-row[data-variant='library'] .song-row__title {
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
+  font-size: var(--song-row-title-size);
+  font-weight: var(--weight-medium);
   line-height: var(--leading-tight);
 }
 
-/* 原型当前播放行不变底色：靠序号位音柱 + 主色标题表达 */
+/* 当前播放行用表面明度差表达，不用品牌蓝整行铺底 */
 .song-row[data-variant='library'][data-current] {
-  background-color: transparent;
+  background-color: var(--surface-selected);
+}
+
+.song-row[data-variant='library'][data-current]:hover {
+  background-color: var(--surface-selected-hover);
 }
 
 .song-row[data-variant='library'] .song-row__title[data-current] {
@@ -560,8 +612,8 @@
 .song-row[data-variant='library'] .song-row__meta {
   margin-top: 2px;
   overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-size: var(--song-row-meta-size);
   line-height: var(--leading-tight);
   white-space: nowrap;
 }
@@ -572,11 +624,11 @@
 }
 
 .song-row[data-variant='library'] .song-row__album {
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-size: var(--song-row-meta-size);
 }
 
-/* 行操作 hover / focus / 菜单打开时才出现 */
+/* 行操作 hover / focus / 当前行 / 菜单打开时才出现 */
 .song-row[data-variant='library'] .row-actions {
   opacity: 0;
   transition: opacity var(--duration-fast) var(--ease-standard);
@@ -584,13 +636,14 @@
 
 .song-row[data-variant='library']:hover .row-actions,
 .song-row[data-variant='library']:focus-within .row-actions,
+.song-row[data-variant='library'][data-current] .row-actions,
 .song-row[data-variant='library'] .row-actions:has(.row-actions__btn[data-open]) {
   opacity: 1;
 }
 
-/* 紧凑操作区：只有一个 28px 圆形「更多」按钮 */
+/* 紧凑操作区：保留 56px 位置，只放一个 28px 圆形「更多」按钮 */
 .row-actions--compact {
-  width: 28px;
+  justify-content: flex-end;
 }
 
 .row-actions--compact .row-actions__btn {
