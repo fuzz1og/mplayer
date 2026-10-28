@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import '../styles/page-discover.css';
+import '@/renderer/styles/page-discover.css';
+import '@/renderer/styles/detail-page.css';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Download, Play, Music2 } from 'lucide-react';
+import { CirclePlus, Download, Music2, Play } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
-import { useConfirm } from '@/renderer/ui';
+import { Button, PageHero, useConfirm } from '@/renderer/ui';
 import SongList from '@/renderer/components/SongList';
+import DetailToolbar from '@/renderer/components/DetailToolbar';
+import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
+import { useDetailSelection } from '@/renderer/hooks/useDetailSelection';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -42,8 +46,11 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
   const [hasMore, setHasMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [songsError, setSongsError] = useState<string | null>(null);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const loadingMoreRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const selection = useDetailSelection(songs, id);
+  const { visibleSongs, batchMode, selectedIds, setSelectedIds, selectedSongs, visibleSelectedCount } = selection;
 
   useEffect(() => {
     if (!id) return;
@@ -108,23 +115,37 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
     hasMore,
   });
 
-  const handlePlay = async (song: Song, queue: Song[], index: number) => {
+  const handlePlay = useCallback(async (song: Song, queue: Song[], index: number) => {
     // #697：列表只回传展示队列与索引，建队列归页面
     setCurrentPlaylist(queue, index);
     await play(song);
-  };
+  }, [play, setCurrentPlaylist]);
 
-  const handlePlayAll = async () => {
-    if (songs.length > 0) {
-      setCurrentPlaylist(songs, 0);
-      await play(songs[0]);
-    }
-  };
+  const handlePlayAll = useCallback(async () => {
+    if (songs.length === 0) return;
+    setCurrentPlaylist(songs, 0);
+    await play(songs[0]);
+  }, [songs, play, setCurrentPlaylist]);
 
-  const handleSaveToLocal = () => {
+  const handleDownloadAll = useCallback(() => {
+    if (songs.length === 0) return;
+    void downloadBatch(songs);
+  }, [songs, downloadBatch]);
+
+  const handleBatchDownload = useCallback(() => {
+    if (selectedSongs.length === 0) return;
+    void downloadBatch(selectedSongs);
+    toast.success(`已添加 ${selectedSongs.length} 首歌曲到下载队列`);
+  }, [selectedSongs, downloadBatch]);
+
+  const handleBatchAddToPlaylist = useCallback(() => {
+    if (selectedSongs.length > 0) setAddToPlaylistOpen(true);
+  }, [selectedSongs]);
+
+  const handleSaveToLocal = useCallback(() => {
     if (!playlist) return;
     confirm({
-      title: '保存到本地',
+      title: '保存全部到新歌单',
       message: `确定要将歌单"${playlist.name}"（${total > songs.length ? `${songs.length}/${total}` : songs.length}首歌曲）保存到本地吗？`,
       okText: '保存',
       cancelText: '取消',
@@ -141,8 +162,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
             }
           }
           // #552：新建 + 整批写入 + 失败回滚交给 adapter 背后的 core 编排。
-          // 本页此前逐首 addSong、**无回滚**、失败只 console.error 却照样 message.success——
-          // 现在失败会把刚建的空歌单删掉并如实报错，不再谎报成功。
+          // 成败如实回报：失败会把刚建的空歌单删掉，不再谎报成功。
           const result = await desktopWriter.createAndAdd({
             name: playlist.name,
             songs: songsToSave,
@@ -159,7 +179,12 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
         }
       },
     });
-  };
+  }, [playlist, total, songs, id, confirm, navigate]);
+
+  const batchActions = React.useMemo(() => [
+    { key: 'download', label: '批量下载', icon: <Download size={12} />, onClick: handleBatchDownload },
+    { key: 'playlist', label: '加入歌单', icon: <CirclePlus size={12} />, onClick: handleBatchAddToPlaylist },
+  ], [handleBatchDownload, handleBatchAddToPlaylist]);
 
   if (loading) {
     return (
@@ -178,88 +203,122 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="discover-page">
-      <div ref={scrollRef} className="discover-detail-scroll">
-        <div className="discover-detail__head">
-          <div className="discover-detail__cover">
-            {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-            <div className="discover-detail__cover-fallback">
-              <Music2 size={40} className="discover-detail__cover-icon" />
-            </div>
-            {playlist.coverImgUrl && (
-              <img
-                key={playlist.coverImgUrl}
-                src={coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)}
-                alt={playlist.name}
-                loading="lazy"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                className="discover-detail__cover-img"
-              />
-            )}
-          </div>
-          <div className="discover-detail__info">
-            <h1 className="discover-detail__title">{playlist.name}</h1>
-            <div className="discover-detail__meta">
-              <span>创建者: {playlist.creator.nickname}</span>
-              <span>播放量: {formatPlayCount(playlist.playCount)}</span>
-              <span>歌曲数: {playlist.trackCount}</span>
-            </div>
-            {playlist.tags.length > 0 && (
-              <div className="discover-detail__tags">
-                {playlist.tags.map(tag => (
-                  <span key={tag} className="discover-detail__tag">{tag}</span>
-                ))}
+    <div className="detail-page">
+      <div ref={scrollRef} className="detail-page__scroll" data-scroll-container>
+        <PageHero
+          className="detail-page__hero"
+          media={
+            <div className="detail-page__cover">
+              {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+              <div className="detail-page__cover-placeholder">
+                <Music2 size={56} />
               </div>
-            )}
-            {playlist.description && (
-              <p className="discover-detail__desc">{playlist.description}</p>
-            )}
-            <div className="discover-detail__actions">
-              <button onClick={handlePlayAll} disabled={songs.length === 0 || songsLoading} className="discover-action discover-action--primary">
-                <Play size={16} />播放全部
-              </button>
-              <button onClick={handleSaveToLocal} disabled={songs.length === 0 || saving} className="discover-action">
-                <Download size={16} />{saving ? '保存中...' : '保存到本地'}
-              </button>
+              {playlist.coverImgUrl && (
+                <img
+                  key={playlist.coverImgUrl}
+                  src={coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)}
+                  alt={playlist.name}
+                  loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  className="detail-page__cover-img"
+                />
+              )}
             </div>
-          </div>
-        </div>
+          }
+          eyebrow="歌单"
+          title={playlist.name}
+          meta={
+            <>
+              <span>创建者 {playlist.creator.nickname}</span>
+              <span> · {formatPlayCount(playlist.playCount)} 次播放</span>
+              <span> · {total || playlist.trackCount} 首</span>
+              {playlist.description && (
+                <p className="detail-page__hero-desc">{playlist.description}</p>
+              )}
+            </>
+          }
+          actions={
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<Play size={15} aria-hidden="true" />}
+                onClick={() => { void handlePlayAll(); }}
+                disabled={songs.length === 0 || songsLoading}
+              >
+                播放全部
+              </Button>
+              <Button
+                size="sm"
+                icon={<Download size={15} aria-hidden="true" />}
+                onClick={handleDownloadAll}
+                disabled={songs.length === 0 || songsLoading}
+              >
+                下载全部
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveToLocal}
+                disabled={songs.length === 0 || saving}
+              >
+                {saving ? '保存中...' : '保存全部到新歌单'}
+              </Button>
+            </>
+          }
+        />
 
-        {songsLoading ? (
-          <div className="discover-status">正在加载歌曲列表...</div>
-        ) : songsError ? (
-          <div className="discover-detail__error">
-            {songsError}
-          </div>
-        ) : (
-          <>
-          <SongList
-            songs={songs}
-            currentSongId={currentSong?.id}
-            isPlaying={isPlaying}
-            favoriteIds={favoriteIds}
-            onPlay={handlePlay}
-            onToggleFavorite={toggleFavorite}
-            onDownload={download}
-            onBatchDownload={downloadBatch}
-            onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
-            showHeader={true}
-            showIndex={true}
-            enableBatchDownload={true}
-            enableBatchAddToPlaylist={true}
-            emptyText="暂无歌曲数据"
-          />
-            {loadingMore && (
-              <div className="discover-note discover-note--tight">加载中...</div>
-            )}
-            {!hasMore && songs.length > 0 && (
-              <div className="discover-note discover-note--tight">
-                已加载全部 {songs.length}{total > songs.length ? ` / ${total}` : ''} 首歌曲
-              </div>
-            )}
-          </>
-        )}
+        <div className="detail-page__list">
+          {songsError && songs.length === 0 ? (
+            <div className="detail-page__error">{songsError}</div>
+          ) : (
+            <>
+              <DetailToolbar
+                filterValue={selection.filterQuery}
+                onFilterChange={selection.setFilterQuery}
+                matchedCount={visibleSongs.length}
+                totalCount={songs.length}
+                selecting={batchMode}
+                onToggleSelecting={selection.toggleBatchMode}
+                onSelectAll={selection.selectAllVisible}
+                allSelected={selection.allVisibleSelected}
+                selectedCount={visibleSelectedCount}
+                batchActions={batchActions}
+              />
+              <SongList
+                songs={songs}
+                currentSongId={currentSong?.id}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handlePlay}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
+                onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
+                density="library"
+                showDuration
+                showCheckbox={batchMode}
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+                loading={songsLoading && songs.length === 0}
+                emptyText={selection.isFiltering ? `没有匹配「${selection.filterQuery.trim()}」的歌曲` : '暂无歌曲数据'}
+              />
+              {loadingMore && <div className="detail-page__note">加载中...</div>}
+              {!hasMore && songs.length > 0 && (
+                <div className="detail-page__note">
+                  已加载全部 {songs.length}{total > songs.length ? ` / ${total}` : ''} 首歌曲
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
+      {/* 批量加入歌单：只在有可见已选项时挂载，弹窗按需加载歌单列表 */}
+      {batchMode && selectedSongs.length > 0 && (
+        <BatchAddToPlaylistModal
+          songs={selectedSongs}
+          isVisible={addToPlaylistOpen}
+          onClose={() => setAddToPlaylistOpen(false)}
+        />
+      )}
     </div>
   );
 };

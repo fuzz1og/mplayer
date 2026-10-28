@@ -1,12 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useLocation } from 'react-router-dom';
-import { Play, Disc3 } from 'lucide-react';
+import { Play, Disc3, Download, CirclePlus } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
+import DetailToolbar from '@/renderer/components/DetailToolbar';
+import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import '@/renderer/styles/songlist.css';
+import '@/renderer/styles/detail-page.css';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
+import { useDetailSelection } from '@/renderer/hooks/useDetailSelection';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { Button, PageHero } from '@/renderer/ui';
 import type { Album, Song } from '@mplayer/core';
@@ -31,6 +35,7 @@ const AlbumDetailPage: React.FC = () => {
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
 
   const play = usePlayerStore((s) => s.play);
   const currentSong = usePlayerStore((s) => s.currentSong);
@@ -39,6 +44,8 @@ const AlbumDetailPage: React.FC = () => {
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
+  const selection = useDetailSelection(songs, albumId);
+  const { visibleSongs, batchMode, selectedIds, setSelectedIds, selectedSongs, visibleSelectedCount } = selection;
 
   const displayName = album?.name || stateName || '';
   const displayPic = album?.picUrl || statePic || '';
@@ -80,22 +87,44 @@ const AlbumDetailPage: React.FC = () => {
     void play(songs[0]);
   }, [songs, setCurrentPlaylist, play]);
 
+  const handleDownloadAll = useCallback(() => {
+    if (songs.length === 0) return;
+    void downloadBatch(songs);
+  }, [songs, downloadBatch]);
+
+  const handleBatchDownload = useCallback(() => {
+    if (selectedSongs.length === 0) return;
+    void downloadBatch(selectedSongs);
+  }, [selectedSongs, downloadBatch]);
+
+  const handleBatchAddToPlaylist = useCallback(() => {
+    if (selectedSongs.length > 0) setAddToPlaylistOpen(true);
+  }, [selectedSongs]);
+
   const year = (() => {
     const t = Number(album?.publishTime || 0);
     return t > 0 ? String(new Date(t).getFullYear()) : '';
   })();
-  const totalDuration = songs.reduce((sum, s) => sum + (s.duration || 0), 0);
+  const totalDuration = useMemo(
+    () => songs.reduce((sum, s) => sum + (s.duration || 0), 0),
+    [songs],
+  );
+
+  const batchActions = useMemo(() => [
+    { key: 'download', label: '批量下载', icon: <Download size={12} />, onClick: handleBatchDownload },
+    { key: 'playlist', label: '加入歌单', icon: <CirclePlus size={12} />, onClick: handleBatchAddToPlaylist },
+  ], [handleBatchDownload, handleBatchAddToPlaylist]);
 
   return (
     <div className="detail-page">
       {/* hero 与列表同一滚动上下文（#700）：整页一个滚动容器，hero 不再固定 */}
-      <div className="detail-page__scroll">
+      <div className="detail-page__scroll" data-scroll-container>
         <PageHero
-          className="album__hero"
+          className="detail-page__hero"
           media={
-            <div className="album__cover">
+            <div className="detail-page__cover">
               {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-              <div className="album__cover-placeholder">
+              <div className="detail-page__cover-placeholder">
                 <Disc3 size={56} />
               </div>
               {displayPic && (
@@ -105,7 +134,7 @@ const AlbumDetailPage: React.FC = () => {
                   alt={displayName}
                   loading="lazy"
                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  className="album__cover-img"
+                  className="detail-page__cover-img"
                 />
               )}
             </div>
@@ -120,42 +149,74 @@ const AlbumDetailPage: React.FC = () => {
             </>
           }
           actions={
-            <Button
-              variant="primary"
-              size="sm"
-              icon={<Play size={15} aria-hidden="true" />}
-              onClick={handlePlayAll}
-              disabled={songs.length === 0 || loading}
-            >
-              播放全部
-            </Button>
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<Play size={15} aria-hidden="true" />}
+                onClick={handlePlayAll}
+                disabled={songs.length === 0 || loading}
+              >
+                播放全部
+              </Button>
+              <Button
+                size="sm"
+                icon={<Download size={15} aria-hidden="true" />}
+                onClick={handleDownloadAll}
+                disabled={songs.length === 0 || loading}
+              >
+                下载全部
+              </Button>
+            </>
           }
         />
 
-        <div className="album__list">
+        <div className="detail-page__list">
           {error && songs.length === 0 ? (
-            <div className="album__error">{error}</div>
+            <div className="detail-page__error">{error}</div>
           ) : (
-            <SongList
-              songs={songs}
-              currentSongId={currentSong?.id}
-              isPlaying={isPlaying}
-              favoriteIds={favoriteIds}
-              onPlay={handlePlay}
-              onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
-              onToggleFavorite={toggleFavorite}
-              onDownload={download}
-              onBatchDownload={downloadBatch}
-              showHeader={true}
-              showIndex={true}
-              enableBatchDownload={true}
-              enableBatchAddToPlaylist={true}
-              loading={loading && songs.length === 0}
-              emptyText="暂无歌曲数据"
-            />
+            <>
+              <DetailToolbar
+                filterValue={selection.filterQuery}
+                onFilterChange={selection.setFilterQuery}
+                matchedCount={visibleSongs.length}
+                totalCount={songs.length}
+                selecting={batchMode}
+                onToggleSelecting={selection.toggleBatchMode}
+                onSelectAll={selection.selectAllVisible}
+                allSelected={selection.allVisibleSelected}
+                selectedCount={visibleSelectedCount}
+                batchActions={batchActions}
+              />
+              <SongList
+                songs={songs}
+                currentSongId={currentSong?.id}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handlePlay}
+                onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
+                density="library"
+                showDuration
+                showCheckbox={batchMode}
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+                loading={loading && songs.length === 0}
+                emptyText={selection.isFiltering ? `没有匹配「${selection.filterQuery.trim()}」的歌曲` : '暂无歌曲数据'}
+              />
+            </>
           )}
         </div>
       </div>
+      {/* 批量加入歌单：只在有可见已选项时挂载，弹窗按需加载歌单列表 */}
+      {batchMode && selectedSongs.length > 0 && (
+        <BatchAddToPlaylistModal
+          songs={selectedSongs}
+          isVisible={addToPlaylistOpen}
+          onClose={() => setAddToPlaylistOpen(false)}
+        />
+      )}
     </div>
   );
 };

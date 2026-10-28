@@ -20,18 +20,16 @@ interface PlaylistPageGridProps {
 
 const SKELETON_COUNT = 6;
 
+/** 歌单广场 / 搜索歌单：内容网格里的方形封面卡（与专辑 / 歌手同栅格，#694）。 */
 const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading, error, onRetry, onPlaylistSelect, emptyText = '暂无歌单' }) => {
   if (loading) {
     return (
       <div className="card-grid card-grid--playlist">
         {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
-          <div key={i} className="card-skeleton card-skeleton--row">
-            <div className="skeleton-shimmer card-skeleton__cover--row" />
-            <div className="card-skeleton__lines">
-              <div className="skeleton-shimmer card-skeleton__line card-skeleton__line--title" />
-              <div className="skeleton-shimmer card-skeleton__line card-skeleton__line--desc" />
-              <div className="skeleton-shimmer card-skeleton__line card-skeleton__line--meta" />
-            </div>
+          <div key={i} className="pl-card pl-card--skeleton">
+            <div className="skeleton-shimmer pl-card__cover" />
+            <div className="skeleton-shimmer card-skeleton__title" />
+            <div className="skeleton-shimmer card-skeleton__sub" />
           </div>
         ))}
       </div>
@@ -61,11 +59,24 @@ const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading,
   return (
     <div className="card-grid card-grid--playlist">
       {playlists.map((pl) => (
-        <div key={pl.id} onClick={() => onPlaylistSelect?.(pl)} className="pl-card">
+        <div
+          key={pl.id}
+          onClick={() => onPlaylistSelect?.(pl)}
+          className="pl-card"
+          role={onPlaylistSelect ? 'button' : undefined}
+          tabIndex={onPlaylistSelect ? 0 : undefined}
+          aria-label={onPlaylistSelect ? `打开歌单 ${pl.name}` : undefined}
+          onKeyDown={onPlaylistSelect ? (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onPlaylistSelect(pl);
+            }
+          } : undefined}
+        >
           <div className="pl-card__cover">
             {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
             <div className="pl-card__placeholder">
-              <ListMusic size={34} />
+              <ListMusic size={30} />
             </div>
             {pl.coverImgUrl && (
               <img
@@ -83,16 +94,6 @@ const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading,
             <div className="pl-card__meta">
               {pl.creator.nickname} · {formatPlayCount(pl.playCount)} 次播放 · {pl.trackCount} 首
             </div>
-            {pl.description && <div className="pl-card__desc">{pl.description}</div>}
-            {pl.tags.length > 0 && (
-              <div className="pl-card__tags">
-                {pl.tags.slice(0, 3).map((tag) => (
-                  <span key={tag} className="pl-card__tag">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       ))}

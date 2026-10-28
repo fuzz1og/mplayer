@@ -1,0 +1,109 @@
+/* ============================================================
+   详情页模板（#694）：歌单 / 榜单 / 歌手 / 专辑 / 发现歌单 同一套骨架
+   PageHero（方形或圆形媒体，200 / 168）+ 单行 40px 工具条 + 46px 无表头列表。
+   hero 与列表同处一个滚动容器：标题栏是唯一返回所有者，页内不放局部返回。
+   ============================================================ */
+.detail-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.detail-page__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.detail-page__hero {
+  padding: 24px 28px 18px;
+}
+
+/* 方形媒体：专辑 / 歌单 / 榜单 */
+.detail-page__cover {
+  position: relative;
+  flex: none;
+  width: var(--detail-hero-cover);
+  height: var(--detail-hero-cover);
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--cover-gradient);
+  box-shadow: var(--shadow-lg);
+}
+
+/* 圆形媒体变体：歌手 */
+.detail-page__cover--round {
+  width: var(--detail-hero-artist);
+  height: var(--detail-hero-artist);
+  border-radius: var(--radius-full);
+}
+
+.detail-page__cover-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.detail-page__cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* hero 动作行的次级视图切换（歌手三段）贴右：与主 CTA 同一行但不抢主操作 */
+.detail-page__hero-segmented {
+  margin-left: auto;
+}
+
+.detail-page__list {
+  padding: 0 28px 40px;
+}
+
+.detail-page__hero-desc {
+  display: -webkit-box;
+  margin: var(--space-1) 0 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.detail-page__error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-4);
+  padding: var(--space-8) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--danger-subtle);
+  color: var(--danger-text);
+  text-align: center;
+}
+
+.detail-page__error-retry {
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+/* 无限滚动的加载/到底提示（发现歌单详情） */
+.detail-page__note {
+  padding: var(--space-2) 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: center;
+}

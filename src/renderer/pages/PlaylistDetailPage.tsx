@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import '@/renderer/styles/page-playlist-detail.css';
-import { Play, Edit2, Music, Download, Trash2, Upload, GripVertical, Search, X, CheckSquare, CirclePlus } from 'lucide-react';
+import '@/renderer/styles/detail-page.css';
+import { Play, Edit2, Music, Download, Trash2, Upload, GripVertical, CirclePlus } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from '@/renderer/services/toastStore';
 import { Button, PageHero, useConfirm } from '@/renderer/ui';
@@ -14,12 +15,13 @@ import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { moveItem } from '@/renderer/utils/reorder';
 import { reorderVisibleSongs } from '@/renderer/utils/playlistReorder';
 import { LIBRARY_ROW_HEIGHT } from '@/renderer/components/songRowMetrics';
-import { filterSongsByQuery } from '@/renderer/utils/songFilter';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { COVER_SIZE, type Song, type Playlist } from '@mplayer/core';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
+import DetailToolbar from '@/renderer/components/DetailToolbar';
+import { useDetailSelection } from '@/renderer/hooks/useDetailSelection';
 
 /** overlay 里的静态拖拽把手：只是视觉延续，不接 dnd（overlay 内容整体 pointer-events: none） */
 const previewDragHandle = (
@@ -50,36 +52,20 @@ const PlaylistDetailPage: React.FC = () => {
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
   const [isReordering, setIsReordering] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  // 按需选择模式（#699/#703 口径）：普通浏览不显示复选框列，点「选择」才进入批量态
-  const [batchMode, setBatchMode] = useState(false);
-  // 行级归属判断 O(1)：避免每行 selectedIds/favoriteIds includes 扫描
-  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  // 过滤 + 按需选择（#699/#703 口径）：普通浏览不显示复选框列，点「选择」才进入批量态
+  const selection = useDetailSelection(songs, playlistId);
+  const {
+    filterQuery, setFilterQuery, isFiltering, visibleSongs, batchMode, toggleBatchMode,
+    selectedIds, setSelectedIds, selectedIdSet, selectedSongs, visibleSelectedIds,
+    visibleSelectedCount, allVisibleSelected, toggleSelect, selectAllVisible,
+  } = selection;
+  // 行级归属判断 O(1)：避免每行 favoriteIds includes 扫描
   const favoriteIdSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
   const [importModalVisible, setImportModalVisible] = useState(false);
   // 批量加入歌单（#694）：弹窗自己走桌面 writer 落盘，本页只负责把**可见**的已选项递进去
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   // 歌单头图直链直渲（恒取 playlist.cover / songs[0].cover）：加载失败由容器渐变兜底
   const detailCoverSrc = (playlist?.cover || songs[0]?.cover) || '';
-
-  /**
-   * `songs` 永远是全量有序的那一份，`visibleSongs` 只是它的派生视图，所以清空输入回到全量时顺序与过
-   * 滤前逐项相同（单测钉住）。
-   */
-  const [filterQuery, setFilterQuery] = useState('');
-  const isFiltering = filterQuery.trim().length > 0;
-  const visibleSongs = useMemo<Song[]>(() => filterSongsByQuery(songs, filterQuery) as Song[], [songs, filterQuery]);
-  // 批量操作的作用域：过滤态只认**可见**的已选项；被过滤掉的选中项原样留着，清空过滤后回来
-  const visibleSelectedIds = useMemo(() => {
-    if (!isFiltering) return selectedIds;
-    const visibleIdSet = new Set(visibleSongs.map((song) => song.id));
-    return selectedIds.filter((songId) => visibleIdSet.has(songId));
-  }, [isFiltering, visibleSongs, selectedIds]);
-  const allVisibleSelected = visibleSongs.length > 0 && visibleSelectedIds.length === visibleSongs.length;
-  const selectedSongs = useMemo(
-    () => visibleSongs.filter((song) => selectedIdSet.has(song.id)),
-    [visibleSongs, selectedIdSet],
-  );
 
   // 封面加载失败 → 按 ID 重识别换新封面并更新列表状态（旧封面签名过期后同一 URL 永远失败）
   const handleCoverError = useCallback((song: Song) => {
@@ -133,12 +119,6 @@ const PlaylistDetailPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [playlistId]);
-
-  // 换歌单即退出选择模式：旧选择既不属于新歌单，也不该拖进批量操作
-  useEffect(() => {
-    setSelectedIds([]);
-    setBatchMode(false);
   }, [playlistId]);
 
   const handlePlay = useCallback(async (song: Song, queue: Song[], index: number) => {
@@ -208,7 +188,7 @@ const PlaylistDetailPage: React.FC = () => {
             await IpcClient.invoke<void>('playlist:removeSong', playlistId, songId);
           }
           // 只摘掉被移除的这批：被过滤掉的已选项保留（#488）
-          setSelectedIds((prev) => prev.filter((songId) => !removedIdSet.has(songId)));
+          setSelectedIds(selectedIds.filter((songId) => !removedIdSet.has(songId)));
           loadData();
           toast.success(`已移除 ${ids.length} 首歌曲`);
         } catch (_error) {
@@ -223,31 +203,17 @@ const PlaylistDetailPage: React.FC = () => {
     if (selectedSongs.length > 0) setAddToPlaylistOpen(true);
   };
 
-  /** 选择模式单一入口：进出都从干净选择集开始，与 SongList 的「选择 / 完成」同一套语义。 */
-  const toggleBatchMode = useCallback(() => {
-    setBatchMode((prev) => !prev);
-    setSelectedIds([]);
+  /** 进出选择模式同时收起批量弹窗：旧选择不属于新态，也不该继续挂着。 */
+  const handleToggleBatchMode = useCallback(() => {
+    toggleBatchMode();
     setAddToPlaylistOpen(false);
-  }, []);
+  }, [toggleBatchMode]);
 
-  const handleToggleSelect = useCallback((songId: string) => {
-    setSelectedIds(prev =>
-      prev.includes(songId) ? prev.filter(id => id !== songId) : [...prev, songId]
-    );
-  }, []);
-
-  /** 全选只作用于**当前可见**集合（#488）：过滤态不碰被过滤掉的项，非过滤态等价于原来的全选/全不选 */
-  const handleSelectAll = useCallback(() => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) {
-        for (const song of visibleSongs) next.delete(song.id);
-      } else {
-        for (const song of visibleSongs) next.add(song.id);
-      }
-      return [...next];
-    });
-  }, [allVisibleSelected, visibleSongs]);
+  const batchActions = useMemo(() => [
+    { key: 'download', label: '批量下载', icon: <Download size={12} />, onClick: handleBatchDownload },
+    { key: 'playlist', label: '加入歌单', icon: <CirclePlus size={12} />, onClick: handleBatchAddToPlaylist },
+    { key: 'delete', label: '批量移除', icon: <Trash2 size={12} />, danger: true, onClick: handleBatchDelete },
+  ], [handleBatchDownload, handleBatchAddToPlaylist, handleBatchDelete]);
 
   const handleRemoveFromPlaylist = useCallback(async (song: Song) => {
     if (!playlistId) return;
@@ -274,7 +240,7 @@ const PlaylistDetailPage: React.FC = () => {
     // 点播契约（#697）：当前展示队列 = 可见集合（过滤态即过滤结果），行下标是可见集合内下标
     queue: visibleSongs,
     showCheckbox: batchMode,
-    onToggleSelect: handleToggleSelect,
+    onToggleSelect: toggleSelect,
     showRemoveFromPlaylist: true,
     onRemoveFromPlaylist: handleRemoveFromPlaylist,
     showAlbum: false,
@@ -285,7 +251,7 @@ const PlaylistDetailPage: React.FC = () => {
     onToggleFavorite: toggleFavorite,
     onCoverError: handleCoverError,
   }), [
-    isPlaying, visibleSongs, batchMode, handleToggleSelect, handleRemoveFromPlaylist, handlePlay, handleDownload,
+    isPlaying, visibleSongs, batchMode, toggleSelect, handleRemoveFromPlaylist, handlePlay, handleDownload,
     handleSongSwapped, toggleFavorite, handleCoverError,
   ]);
 
@@ -341,14 +307,14 @@ const PlaylistDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="playlist-detail">
+    <div className="detail-page">
       {/* hero 与列表同一滚动上下文（#700/#703）：整页一个滚动容器，标题栏是唯一返回所有者 */}
-      <div className="playlist-detail__scroll" data-scroll-container>
+      <div className="detail-page__scroll" data-scroll-container>
         {playlist && (
           <PageHero
-            className="playlist-detail__hero"
+            className="detail-page__hero"
             media={
-              <div className="playlist-detail__cover">
+              <div className="detail-page__cover">
                 <SongCover
                   src={detailCoverSrc}
                   alt={playlist.name}
@@ -408,7 +374,7 @@ const PlaylistDetailPage: React.FC = () => {
           />
         )}
 
-        <div className="playlist-detail__list">
+        <div className="detail-page__list">
         {loading && songs.length === 0 ? (
           <div className="playlist-detail__skeleton">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -454,89 +420,22 @@ const PlaylistDetailPage: React.FC = () => {
               <>
                 {/* 页内工具条（#694）：过滤 + 计数 + 选择/完成 同处一行 40px，表头已删（行是 46px library 密度）。
                     高度必须恒定：它是 scrollMargin 的测量锚点，三态（浏览 / 过滤 / 批量）变高会让整表错位且不报错。 */}
-                <div className="playlist-detail__toolbar">
-                  <div className="playlist-detail__filter">
-                    <Search size={13} aria-hidden className="playlist-detail__filter-icon" />
-                    <input
-                      type="text"
-                      value={filterQuery}
-                      onChange={(e) => setFilterQuery(e.target.value)}
-                      placeholder="按歌名或歌手过滤"
-                      aria-label="按歌名或歌手过滤"
-                      autoComplete="off"
-                      className="playlist-detail__filter-input"
-                    />
-                    {isFiltering && (
-                      <>
-                        <span className="playlist-detail__filter-count">
-                          {visibleSongs.length} / {songs.length} 首
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setFilterQuery('')}
-                          aria-label="清空过滤"
-                          title="清空过滤"
-                          className="playlist-detail__filter-clear"
-                        >
-                          <X size={12} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  {/* 表头删除后全选只剩这一处（#694）：只作用于当前可见集合（#488） */}
-                  {batchMode && (
-                    <label className="playlist-detail__select-all">
-                      <input
-                        type="checkbox"
-                        checked={allVisibleSelected}
-                        onChange={handleSelectAll}
-                        aria-label="全选可见歌曲"
-                        title={isFiltering ? '全选当前过滤结果' : '全选'}
-                      />
-                      <span>全选</span>
-                    </label>
-                  )}
-                  {/* 批量栏与工具条同高原地替换左半段：已选 > 0 时不产生纵向跳动 */}
-                  {batchMode && visibleSelectedIds.length > 0 && (
-                    <>
-                      <span className="playlist-detail__batch-count">已选择 {visibleSelectedIds.length} 项</span>
-                      <div className="playlist-detail__batch-actions">
-                        <button onClick={handleBatchDownload} className="playlist-detail__batch-btn">
-                          <Download size={12} /> 批量下载
-                        </button>
-                        <button onClick={handleBatchAddToPlaylist} className="playlist-detail__batch-btn">
-                          <CirclePlus size={12} /> 加入歌单
-                        </button>
-                        <button
-                          onClick={handleBatchDelete}
-                          className="playlist-detail__batch-btn playlist-detail__batch-btn--danger"
-                        >
-                          <Trash2 size={12} /> 批量移除
-                        </button>
-                      </div>
-                    </>
-                  )}
-                  {isReordering && (
-                    <span className="playlist-detail__reordering" role="status">正在保存排序...</span>
-                  )}
-                  {/* 选择模式单一入口（#699）：普通浏览只有这一枚按钮，进入后才出现复选框列 */}
-                  <button
-                    type="button"
-                    className={'song-list__batch-toggle' + (batchMode ? ' song-list__batch-toggle--primary' : '')}
-                    aria-pressed={batchMode}
-                    onClick={toggleBatchMode}
-                  >
-                    {batchMode ? '完成' : (
-                      <>
-                        <CheckSquare size={14} />
-                        选择
-                      </>
-                    )}
-                  </button>
-                </div>
+                <DetailToolbar
+                  filterValue={filterQuery}
+                  onFilterChange={setFilterQuery}
+                  matchedCount={visibleSongs.length}
+                  totalCount={songs.length}
+                  selecting={batchMode}
+                  onToggleSelecting={handleToggleBatchMode}
+                  onSelectAll={selectAllVisible}
+                  allSelected={allVisibleSelected}
+                  selectedCount={visibleSelectedCount}
+                  status={isReordering ? '正在保存排序...' : undefined}
+                  batchActions={batchActions}
+                />
                 {/* 过滤态命中为空：没有可渲染的行，给一句明确的空态（#488） */}
                 {isFiltering && visibleSongs.length === 0 && (
-                  <div className="playlist-detail__nomatch">
+                  <div className="detail-toolbar__nomatch">
                     没有匹配「{filterQuery.trim()}」的歌曲
                   </div>
                 )}

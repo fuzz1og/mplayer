@@ -78,7 +78,7 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
                   {album.picUrl && (
                     <img
                       key={album.picUrl}
-                      src={coverThumbUrl(album.picUrl, COVER_SIZE.icon)}
+                      src={coverThumbUrl(album.picUrl, COVER_SIZE.thumb)}
                       alt={album.name}
                       loading="lazy"
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}

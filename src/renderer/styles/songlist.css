@@ -642,17 +642,11 @@
   padding: 0;
 }
 /* ── 卡片网格 / 空态 / 骨架（#694：AlbumGrid、PlaylistGrid 的容器类此前只有类名没有规则）── */
+/* 内容网格（#694）：专辑 / 歌单 / 歌手三个视角共用同一列宽下限与间距（token 在 global.css） */
 .card-grid {
   display: grid;
-  gap: var(--space-4);
-}
-
-.card-grid--album {
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-}
-
-.card-grid--playlist {
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--content-grid-min), 1fr));
+  gap: var(--content-grid-row-gap) var(--content-grid-col-gap);
 }
 
 .card-state {
@@ -815,30 +809,28 @@
   margin-bottom: 12px;
   color: var(--text-tertiary);
 }
-/* ── 歌单卡（横向）── */
+/* ── 歌单卡（#694：内容网格的方形封面卡，与专辑 / 歌手同栅格同间距） ── */
 .pl-card {
   display: flex;
-  gap: var(--space-4);
-  padding: 14px;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
-  background: var(--surface-card);
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: transparent;
   cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-standard),
-    box-shadow var(--duration-fast) var(--ease-standard);
+  transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
-.pl-card:hover {
+.pl-card:hover,
+.pl-card:focus-within {
   background: var(--surface-card-hover);
-  box-shadow: var(--shadow-sm);
 }
 
 .pl-card__cover {
   position: relative;
-  flex-shrink: 0;
-  width: 144px;
-  height: 144px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: var(--radius-sm);
   background: var(--surface-card-hover);
@@ -862,52 +854,27 @@
 }
 
 .pl-card__body {
-  flex: 1;
   min-width: 0;
 }
 
 .pl-card__name {
-  display: -webkit-box;
-  margin-bottom: 6px;
   overflow: hidden;
   color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
+  font-size: var(--content-card-title-size);
+  font-weight: var(--weight-medium);
   line-height: var(--leading-tight);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pl-card__meta {
-  margin-bottom: 6px;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-}
-
-.pl-card__desc {
-  display: -webkit-box;
-  margin-bottom: 8px;
+  margin-top: 2px;
   overflow: hidden;
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.pl-card__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.pl-card__tag {
-  padding: 2px 8px;
-  border-radius: var(--radius-10);
-  background: var(--surface-card-hover);
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: var(--content-card-subtitle-size);
+  line-height: var(--leading-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* ── 每日推荐（两栏：主打 + 列表）── */
 .daily {
@@ -1528,51 +1495,50 @@
   overflow: auto;
 }
 
-/* 加载骨架：横排固定 120 宽 */
+/* 加载骨架：与卡片同网格同列宽 */
 .album-scroll__sk-row {
-  display: flex;
-  gap: var(--space-4);
-  padding-bottom: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--content-grid-min), 1fr));
+  gap: var(--content-grid-row-gap) var(--content-grid-col-gap);
+  padding-bottom: var(--space-3);
 }
 
 .album-scroll__sk {
-  flex-shrink: 0;
-  width: 120px;
+  min-width: 0;
 }
 
 .album-scroll__sk-cover {
-  width: 120px;
-  height: 120px;
-  margin-bottom: 8px;
-  border-radius: var(--radius-sm);
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-md);
 }
 
 .album-scroll__sk-title {
-  width: 100px;
+  width: 70%;
   height: 14px;
-  border-radius: var(--radius-3);
+  border-radius: var(--radius-xs);
 }
 
-/* 卡片 */
+/* 卡片（#694：与歌单 / 歌手同一个内容网格） */
 .album-scroll__grid {
-  display: flex;
-  flex-flow: row wrap;
-  gap: var(--space-5);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--content-grid-min), 1fr));
+  gap: var(--content-grid-row-gap) var(--content-grid-col-gap);
 }
 
 .album-scroll__item {
-  flex-shrink: 0;
-  width: 120px;
+  min-width: 0;
   cursor: pointer;
 }
 
 .album-scroll__cover {
   position: relative;
-  width: 120px;
-  height: 120px;
-  margin-bottom: 8px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  margin-bottom: var(--space-2);
   overflow: hidden;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface-card-hover);
 }
 
@@ -1788,92 +1754,6 @@
   margin-bottom: 12px;
   color: var(--text-tertiary);
 }
-/* ── 详情页顶栏（榜单 / 歌手 / 专辑共用，1.9.0）── */
-.detail-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.detail-page__nav {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: 60px;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--surface-content);
-}
-
-.detail-page__back {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition:
-    transform var(--duration-fast) var(--ease-standard),
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.detail-page__back:hover {
-  transform: translateX(-2px);
-  background: var(--surface-card-hover);
-  color: var(--text-primary);
-}
-
-.detail-page__nav-title {
-  flex: 1;
-  margin: 0;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--text-xl);
-  font-weight: var(--weight-semibold);
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.detail-page__nav-action {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 8px 12px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    border-color var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.detail-page__nav-action:hover:not(:disabled) {
-  border-color: var(--text-tertiary);
-}
-
-.detail-page__nav-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.detail-page__body {
-  flex: 1;
-  padding: 24px;
-  overflow: auto;
-}
-
 /* 页内标题块：封面方块 + 标题 + 副标题 */
 .detail-hero {
   display: flex;
@@ -1986,123 +1866,6 @@
   color: var(--text-inverse);
   cursor: pointer;
 }
-/* ── 歌手详情（1.9.0）：头部头像 + 名称 + 排序分段 ── */
-.artist {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.artist__scroll {
-  flex: 1;
-  padding: 24px;
-  overflow: auto;
-}
-
-.artist__head {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.artist__avatar {
-  flex: none;
-  width: 100px;
-  height: 100px;
-  overflow: hidden;
-  border: 2px solid var(--hairline);
-  border-radius: var(--radius-full);
-  background: var(--surface-card-hover);
-}
-
-.artist__avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.artist__avatar-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  color: var(--text-tertiary);
-  font-size: var(--text-3xl);
-}
-
-.artist__info {
-  flex: 1;
-  min-width: 0;
-}
-
-.artist__name {
-  margin-bottom: 4px;
-  color: var(--text-primary);
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.02em;
-}
-
-.artist__meta {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-.artist__search-more {
-  display: flex;
-  gap: 3px;
-  align-items: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--accent-text);
-  font-size: var(--text-xs);
-  cursor: pointer;
-}
-
-.artist__search-more:hover {
-  text-decoration: underline;
-}
-
-.artist__tabs {
-  display: flex;
-  flex-shrink: 0;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.artist__tab {
-  padding: 6px 16px;
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: var(--surface-card-hover);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-normal);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.artist__tab[data-active] {
-  background: var(--accent-fill);
-  color: var(--text-on-accent);
-  font-weight: var(--weight-semibold);
-}
-
-.artist__more {
-  padding: 16px;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  text-align: center;
-}
 /* ── 歌手列表（1.9.0）── */
 .artists {
   display: flex;
@@ -2146,34 +1909,32 @@
 
 .artists__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--content-grid-min), 1fr));
+  gap: var(--content-grid-row-gap) var(--content-grid-col-gap);
 }
 
-/* 卡片 */
+/* 歌手卡（#694）：圆形媒体 1:1 + 名字 + 可选副行；hover 换表面明度、角落浮出播放，不位移 */
 .artist-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  align-items: center;
-  padding: 16px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-card);
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: transparent;
   cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-standard),
-    box-shadow var(--duration-fast) var(--ease-standard);
+  transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
-.artist-card:hover {
+.artist-card:hover,
+.artist-card:focus-within {
   background: var(--surface-card-hover);
-  box-shadow: var(--shadow-sm);
 }
 
-.artist-card__avatar {
-  flex: none;
-  width: 80px;
-  height: 80px;
+.artist-card__media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: var(--radius-full);
   background: var(--surface-card-hover);
@@ -2195,13 +1956,47 @@
   font-size: var(--text-3xl);
 }
 
+/* 角落播放：显隐复用通用卡片的透明度过渡，只换位置（不新造动画） */
+.artist-card__play {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface-content);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.artist-card:hover .artist-card__play,
+.artist-card:focus-within .artist-card__play {
+  opacity: 1;
+}
+
 .artist-card__name {
   width: 100%;
   overflow: hidden;
   color: var(--text-primary);
-  font-size: var(--text-sm);
+  font-size: var(--content-card-title-size);
   font-weight: var(--weight-medium);
-  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artist-card__meta {
+  width: 100%;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--content-card-subtitle-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2212,8 +2007,8 @@
 }
 
 .artist-card__sk-avatar {
-  width: 80px;
-  height: 80px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
   border-radius: var(--radius-full);
   background: var(--surface-card-hover);
   animation: pulse 1.5s ease-in-out infinite;
@@ -2608,116 +2403,6 @@
 .playlists__empty-title {
   margin-bottom: 8px;
   font-size: var(--text-base);
-}
-/* ── 专辑详情（1.9.0）：顶栏与歌手详情共用 detail-page ── */
-.album__spacer {
-  width: 140px;
-}
-
-.album__head {
-  flex-shrink: 0;
-  padding: 24px 24px 0;
-}
-
-.album__card {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 32px;
-}
-
-.album__cover {
-  position: relative;
-  flex: none;
-  width: 200px;
-  height: 200px;
-  overflow: hidden;
-  border-radius: var(--radius-lg);
-  background: var(--surface-card-hover);
-  box-shadow: var(--shadow-md);
-}
-
-.album__cover-placeholder {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-}
-
-.album__cover-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.album__info {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.album__title {
-  margin: 0 0 12px;
-  color: var(--text-primary);
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.02em;
-}
-
-.album__meta {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 12px;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-.album__actions {
-  display: flex;
-  gap: 12px;
-}
-
-.album__play {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 10px 24px;
-  border: 0;
-  border-radius: var(--radius-xl);
-  background: var(--accent-fill);
-  color: var(--text-on-accent);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition: background var(--duration-normal) var(--ease-standard);
-}
-
-.album__play:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.album__play:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.album__list {
-  flex: 1;
-  padding: 0 24px 24px;
-  overflow: auto;
-}
-
-.album__error {
-  padding: 12px 16px;
-  border-radius: var(--radius-sm);
-  background: var(--danger-subtle);
-  color: var(--danger-text);
-  text-align: center;
 }
 /* ── 通用音乐卡（1.9.0）── */
 .mcard {
@@ -3465,25 +3150,3 @@
   right: var(--menu-right);
 }
 
-/* ── 详情页滚动与 hero（#700）：hero 与列表同一滚动上下文 ── */
-.detail-page__scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-
-.album__hero {
-  padding: 24px 28px 18px;
-}
-
-.album__hero .ui-page-hero__media img {
-  width: 200px;
-  height: 200px;
-  border-radius: var(--radius-md);
-}
-
-.album__list {
-  flex: none;
-  padding: 0 0 24px;
-  overflow: visible;
-}
