@@ -83,6 +83,8 @@ const FavoritesPage: React.FC = () => {
 
       <div className="list-page__body">
         <SongList
+          density="library"
+          showDuration
           songs={favorites}
           currentSongId={currentSong?.id}
           isPlaying={isPlaying}

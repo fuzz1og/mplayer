@@ -105,6 +105,8 @@ const HistoryPage: React.FC = () => {
 
       <div className="list-page__body">
         <SongList
+          density="library"
+          showDuration
           songs={history}
           currentSongId={currentSong?.id}
           isPlaying={isPlaying}
