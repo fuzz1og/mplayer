@@ -59,6 +59,7 @@ const OWNERSHIP: Record<string, string[]> = {
     'components/MusicCard.tsx',
     'components/PlaylistGrid.tsx',
     'components/PlaylistPageGrid.tsx',
+    'components/QueuePanel.tsx',
     'components/RowActionButtons.tsx',
     'components/SongCover.tsx',
     'components/SongList.tsx',
@@ -74,11 +75,11 @@ const OWNERSHIP: Record<string, string[]> = {
     'pages/HistoryPage.tsx',
     'pages/HotlistDetailPage.tsx',
     'pages/PlaylistsPage.tsx',
-    'pages/QueuePage.tsx',
     'pages/RecommendPage.tsx',
   ],
 
   // ── 原语自带样式（ui/ 目录内，组件与样式同名同目录） ──
+  'styles/queue-panel.css': ['components/QueuePanel.tsx'],
   'ui/forms.css': ['ui/forms.tsx'],
   'ui/overlay.css': ['ui/overlay.tsx', 'ui/menu.tsx'],
   'ui/page.css': ['ui/page.tsx'],
