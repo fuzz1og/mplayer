@@ -116,14 +116,9 @@
   gap: var(--space-4);
   height: var(--player-height);
   padding: 0 var(--space-5);
-  background: var(--material-chrome);
-  backdrop-filter: var(--material-blur);
-  -webkit-backdrop-filter: var(--material-blur);
-}
-
-html[data-material='off'] .player-bar {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  border-top: 1px solid var(--hairline);
+  /* D4 实色回退：与标题栏同一克制实色，不实现滚动穿透就不拿 blur 充数 */
+  background: var(--surface-window);
 }
 
 .player-bar__more {
@@ -534,6 +529,12 @@ html[data-material='off'] .player-bar {
     var(--border-default) var(--volume, 0%)
   );
   cursor: pointer;
+}
+
+/* 键盘焦点必须可见：滑杆在 popover 内，focus-within 已展开，这里补焦点环 */
+.player-volume__slider:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 /* 原来是组件里的 onMouseOver/onMouseOut 直接改 style，改由 CSS 接管 */
