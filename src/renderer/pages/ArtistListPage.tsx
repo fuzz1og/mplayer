@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Mic2 } from 'lucide-react';
+import { PageHeader } from '@/renderer/ui';
 import type { Artist } from '@mplayer/core';
 import '@/renderer/styles/songlist.css';
 import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
-import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
-import { usePlayerStore } from '@/renderer/store/playerStore';
-import { toast } from '@/renderer/services/toastStore';
 import ArtistCard from '@/renderer/components/ArtistCard';
 
 const CATEGORIES = [
@@ -33,11 +31,14 @@ function loadSavedCategory(): number {
   return Number.isInteger(saved) && saved >= 0 && saved < CATEGORIES.length ? saved : 0;
 }
 
-const ArtistListPage: React.FC = () => {
+interface ArtistListPageProps {
+  /** 嵌在发现页「歌手」段时不重复出页标题：外层已有唯一 h1 */
+  embedded?: boolean;
+}
+
+const ArtistListPage: React.FC<ArtistListPageProps> = ({ embedded = false }) => {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const play = usePlayerStore((s) => s.play);
-  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -121,22 +122,6 @@ const ArtistListPage: React.FC = () => {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [isAllMode, loading, loadingMore, hasMore, loadAllArtists]);
 
-  /** 卡片角落播放：取该歌手热门歌曲建队列（点播契约 D2 由页面落地，列表不自写 playerStore）。 */
-  const handlePlayArtist = useCallback(async (artist: Artist) => {
-    try {
-      const data = await callMusicApi('getArtistSongs', 'netease', artist.id, 0, 50, 'hot');
-      if (!data.songs.length) {
-        toast.error('该歌手暂无可播放歌曲');
-        return;
-      }
-      setCurrentPlaylist(data.songs, 0);
-      await play(await resolvePlayableVersionForDesktop(data.songs[0]));
-    } catch (error) {
-      console.error('播放歌手热门歌曲失败:', error);
-      toast.error('播放失败，请稍后重试');
-    }
-  }, [play, setCurrentPlaylist]);
-
   const openArtist = useCallback((artist: Artist) => {
     cacheArtistMeta(artist.id, { name: artist.name, pic: artist.picUrl });
     navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } });
@@ -146,12 +131,14 @@ const ArtistListPage: React.FC = () => {
 
   return (
     <div className="artists">
+      {!embedded && <PageHeader title="歌手" />}
       <div className="artists__cats">
         {CATEGORIES.map((cat, idx) => (
           <button
             key={cat.id}
             onClick={() => setCategory(idx)}
             className="artists__cat"
+            aria-pressed={category === idx}
             data-active={category === idx || undefined}
           >
             {cat.label}
@@ -184,9 +171,7 @@ const ArtistListPage: React.FC = () => {
                 <ArtistCard
                   key={artist.id}
                   artist={artist}
-                  meta={artist.musicSize > 0 ? `${artist.musicSize} 首` : undefined}
                   onClick={() => openArtist(artist)}
-                  onPlay={() => { void handlePlayArtist(artist); }}
                 />
               ))}
             </div>

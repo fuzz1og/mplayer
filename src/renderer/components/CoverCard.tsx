@@ -1,5 +1,4 @@
 import React from 'react';
-import { Play } from 'lucide-react';
 import { COVER_SIZE } from '@mplayer/core';
 import SongCover from '@/renderer/components/SongCover';
 import '@/renderer/styles/cover-card.css';
@@ -19,10 +18,6 @@ interface CoverCardProps {
   overlay?: React.ReactNode;
   /** 卡角操作位（如删除），悬停或键盘聚焦才显形；与 badge 同位，二者不并用 */
   action?: React.ReactNode;
-  /** 角落快捷播放：悬停 / 聚焦才显形；没有播放能力时不传，按钮不渲染 */
-  onPlay?: () => void;
-  /** 播放按钮的无障碍名（缺省「播放 {title}」） */
-  onPlayLabel?: string;
   onClick?: () => void;
   /** 无障碍名称，缺省用标题 */
   ariaLabel?: string;
@@ -40,8 +35,6 @@ const CoverCard: React.FC<CoverCardProps> = ({
   badge,
   overlay,
   action,
-  onPlay,
-  onPlayLabel,
   onClick,
   ariaLabel,
 }) => {
@@ -66,20 +59,6 @@ const CoverCard: React.FC<CoverCardProps> = ({
       <div className="cover-card__media">
         <SongCover src={cover} alt="" variant="tinted" iconSize={28} thumbSize={COVER_SIZE.thumb} />
         {overlay}
-        {onPlay && (
-          <button
-            type="button"
-            className="cover-card__play"
-            aria-label={onPlayLabel ?? `播放 ${title}`}
-            title="播放"
-            onClick={(event) => {
-              event.stopPropagation();
-              onPlay();
-            }}
-          >
-            <Play size={16} aria-hidden="true" />
-          </button>
-        )}
         {badge && <span className="cover-card__badge">{badge}</span>}
         {action && (
           <span

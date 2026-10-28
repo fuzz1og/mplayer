@@ -46,6 +46,7 @@ const PlaylistsPage: React.FC = () => {
         try {
           await IpcClient.invoke<void>('playlist:delete', playlist.id);
           loadData();
+          window.dispatchEvent(new Event('playlists:changed'));
         } catch (error) {
           console.error('删除歌单失败:', error);
           toast.error('删除失败，请重试');
@@ -59,12 +60,14 @@ const PlaylistsPage: React.FC = () => {
 
     try {
       await IpcClient.invoke<number>('playlist:create', newPlaylistName.trim(), newPlaylistDesc.trim());
+      window.dispatchEvent(new Event('playlists:changed'));
       setIsModalVisible(false);
       setNewPlaylistName('');
       setNewPlaylistDesc('');
       loadData();
     } catch (error) {
       console.error('创建歌单失败:', error);
+      toast.error('创建失败，请重试');
     }
   };
 
@@ -152,7 +155,7 @@ const PlaylistsPage: React.FC = () => {
             >
               取消
             </Button>
-            <Button variant="primary" onClick={handleCreatePlaylist}>
+            <Button variant="primary" onClick={handleCreatePlaylist} disabled={!newPlaylistName.trim()}>
               创建
             </Button>
           </>

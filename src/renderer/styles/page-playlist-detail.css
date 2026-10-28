@@ -144,31 +144,6 @@
 }
 
 /* ── 编辑歌单弹层 ── */
-.playlist-detail__modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--bg-overlay);
-}
-
-.playlist-detail__modal {
-  width: 400px;
-  padding: 24px;
-  border-radius: var(--radius-md);
-  background-color: var(--bg-elevated);
-  box-shadow: var(--shadow-xl);
-}
-
-.playlist-detail__modal-title {
-  margin-bottom: 16px;
-  color: var(--text-primary);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-semibold);
-}
-
 .playlist-detail__form {
   display: flex;
   flex-direction: column;
@@ -193,29 +168,6 @@
 
 .playlist-detail__textarea {
   resize: vertical;
-}
-
-.playlist-detail__modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 20px;
-}
-
-.playlist-detail__modal-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background-color: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.playlist-detail__modal-btn--primary {
-  border: none;
-  background-color: var(--accent-fill);
-  color: var(--text-on-accent);
 }
 
 /* ── 歌单不存在 ── */

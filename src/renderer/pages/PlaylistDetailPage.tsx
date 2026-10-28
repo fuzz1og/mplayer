@@ -4,7 +4,7 @@ import '@/renderer/styles/detail-page.css';
 import { Play, Edit2, Music, Download, Trash2, Upload, GripVertical, CirclePlus } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from '@/renderer/services/toastStore';
-import { Button, PageHero, useConfirm } from '@/renderer/ui';
+import { Button, Dialog, Input, PageHero, useConfirm } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -287,6 +287,7 @@ const PlaylistDetailPage: React.FC = () => {
       loadData();
     } catch (error) {
       console.error('更新歌单失败:', error);
+      toast.error('保存失败，请重试');
     }
   };
 
@@ -452,59 +453,35 @@ const PlaylistDetailPage: React.FC = () => {
       </div>
 
       {/* 编辑歌单弹窗 */}
-      {isEditModalVisible && (
-        <div
-          className="playlist-detail__modal-backdrop"
-          onClick={() => setIsEditModalVisible(false)}
-        >
-          <div
-            className="playlist-detail__modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="playlist-detail__modal-title">
-              编辑歌单
-            </h3>
-            <div className="playlist-detail__form">
-              <div>
-                <label className="playlist-detail__label">
-                  歌单名称
-                </label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="playlist-detail__input"
-                />
-              </div>
-              <div>
-                <label className="playlist-detail__label">
-                  歌单描述
-                </label>
-                <textarea
-                  value={editDesc}
-                  onChange={(e) => setEditDesc(e.target.value)}
-                  rows={3}
-                  className="playlist-detail__textarea"
-                />
-              </div>
-            </div>
-            <div className="playlist-detail__modal-actions">
-              <button
-                onClick={() => setIsEditModalVisible(false)}
-                className="playlist-detail__modal-btn"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleEditPlaylist}
-                className="playlist-detail__modal-btn playlist-detail__modal-btn--primary"
-              >
-                保存
-              </button>
-            </div>
-          </div>
+      <Dialog
+        open={isEditModalVisible}
+        title="编辑歌单"
+        onClose={() => setIsEditModalVisible(false)}
+        footer={
+          <>
+            <Button onClick={() => setIsEditModalVisible(false)}>取消</Button>
+            <Button variant="primary" onClick={handleEditPlaylist}>保存</Button>
+          </>
+        }
+      >
+        <div className="playlist-detail__form">
+          <label className="playlist-detail__label" htmlFor="playlist-edit-name">歌单名称</label>
+          <Input
+            id="playlist-edit-name"
+            value={editName}
+            onChange={(event) => setEditName(event.target.value)}
+            className="playlist-detail__input"
+          />
+          <label className="playlist-detail__label" htmlFor="playlist-edit-desc">歌单描述</label>
+          <textarea
+            id="playlist-edit-desc"
+            value={editDesc}
+            onChange={(event) => setEditDesc(event.target.value)}
+            rows={3}
+            className="playlist-detail__textarea"
+          />
         </div>
-      )}
+      </Dialog>
       {/* 批量加入歌单：只在有可见已选项时挂载，弹窗按需加载歌单列表 */}
       {batchMode && selectedSongs.length > 0 && (
         <BatchAddToPlaylistModal

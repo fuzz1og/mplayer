@@ -142,6 +142,8 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
       if (!target) return;
       if (panelRef.current?.contains(target)) return;
       if (target.closest('[data-queue-trigger]')) return;
+      // 面板自己的弹窗（加入歌单等）是 body 级原生 dialog，不算“点外面”
+      if (target.closest('dialog, [role="dialog"]')) return;
       handleClose();
     };
     document.addEventListener('keydown', onKeyDown);

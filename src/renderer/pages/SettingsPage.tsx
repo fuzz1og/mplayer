@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Palette, Database, Folder, Shield, Download, Music, Music2, Zap, FlaskConical, Activity, ChevronRight } from 'lucide-react';
 import CacheSection from '@/renderer/components/CacheSection';
 import DownloadSection from '@/renderer/components/DownloadSection';
@@ -98,6 +98,7 @@ const SECTION_CONTENT: Record<string, React.ReactNode> = {
 
 const SettingsPage: React.FC = () => {
   const { section } = useParams<{ section?: string }>();
+  const navigate = useNavigate();
   // 深链优先（#/settings/appearance 直接落外观页）；无参数或非法 id 落「缓存」（原型默认页，规格未另行约定）。
   const [active, setActive] = useState(() => (section && SECTION_IDS.has(section) ? section : 'cache'));
   const [devMode, setDevMode] = useState(isDevMode);
@@ -135,7 +136,10 @@ const SettingsPage: React.FC = () => {
         type="button"
         className="settings-nav__item"
         aria-current={isActive ? 'page' : undefined}
-        onClick={() => setActive(entry.id)}
+        onClick={() => {
+          setActive(entry.id);
+          navigate('/settings/' + entry.id, { replace: true });
+        }}
       >
         <span className="settings-nav__icon" aria-hidden="true">
           {entry.icon}
@@ -159,7 +163,7 @@ const SettingsPage: React.FC = () => {
 
       <div className="settings-content" role="region" aria-label="设置内容">
         <div className="settings-column">
-          {active === 'about' && <PageHeader title="关于" lead="版本、开源信息与开发者选项" />}
+          {active === 'about' && <PageHeader title="关于" />}
           {content}
         </div>
       </div>

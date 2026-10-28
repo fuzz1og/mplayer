@@ -20,10 +20,10 @@ export type {
   CheckboxProps,
   StepperProps,
 } from './forms';
-export { PageHeader, PageSurface, PageHero, PageBack } from './page';
+export { PageHeader, PageHero } from './page';
 export { InfoHint } from './tooltip';
 export type { InfoHintProps } from './tooltip';
-export type { PageHeaderProps, PageSurfaceProps, PageHeroProps, PageBackProps } from './page';
+export type { PageHeaderProps, PageHeroProps } from './page';
 export { Dialog, ToastProvider, useToast, GridList } from './overlay';
 export { Menu } from './menu';
 export type { MenuItem, MenuPlacement, MenuProps } from './menu';

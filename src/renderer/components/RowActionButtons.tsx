@@ -81,6 +81,7 @@ const RowActionButtons: React.FC<RowActionButtonsProps> = ({
         <button
           onClick={(e) => { e.stopPropagation(); onToggleFavorite(song); }}
           aria-label={isFavorite ? `取消收藏: ${song.name}` : `收藏: ${song.name}`}
+          aria-pressed={isFavorite}
           className="row-actions__btn"
           data-active={isFavorite || undefined}
         >
@@ -92,6 +93,8 @@ const RowActionButtons: React.FC<RowActionButtonsProps> = ({
           ref={moreTriggerRef}
           onClick={(e) => { e.stopPropagation(); onToggleMore(e); }}
           aria-label={`更多操作: ${song.name}`}
+          aria-haspopup="menu"
+          aria-expanded={moreOpen ?? false}
           className="row-actions__btn row-actions__btn--more"
           data-open={moreOpen || undefined}
         >

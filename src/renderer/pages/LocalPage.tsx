@@ -146,6 +146,7 @@ const LocalPage: React.FC = () => {
           <button
             type="button"
             className="library__chip"
+            aria-pressed={currentFolder === null}
             data-active={currentFolder === null || undefined}
             onClick={() => setCurrentFolder(null)}
           >
@@ -157,6 +158,7 @@ const LocalPage: React.FC = () => {
               <button
                 type="button"
                 className="library__chip"
+                aria-pressed={currentFolder === folder.path}
                 data-active={currentFolder === folder.path || undefined}
                 onClick={() => setCurrentFolder(folder.path)}
               >

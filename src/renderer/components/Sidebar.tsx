@@ -26,17 +26,23 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
   const favoriteCount = useFavoriteStore((s) => s.favorites.length);
   const [playlistCount, setPlaylistCount] = useState<number | undefined>(undefined);
 
+  // 歌单增删后重算计数：页面创建/删除时派发 playlists:changed，避免侧栏数字与列表不一致
   useEffect(() => {
     let disposed = false;
-    IpcClient.invoke<{ id: number }[]>('playlist:getAll')
-      .then((list) => {
-        if (!disposed && Array.isArray(list)) setPlaylistCount(list.length);
-      })
-      .catch(() => {
-        // 首次启动 / 通道未就绪：不显示计数，不影响导航
-      });
+    const sync = () => {
+      IpcClient.invoke<{ id: number }[]>('playlist:getAll')
+        .then((list) => {
+          if (!disposed && Array.isArray(list)) setPlaylistCount(list.length);
+        })
+        .catch(() => {
+          // 首次启动 / 通道未就绪：不显示计数，不影响导航
+        });
+    };
+    sync();
+    window.addEventListener('playlists:changed', sync);
     return () => {
       disposed = true;
+      window.removeEventListener('playlists:changed', sync);
     };
   }, []);
 

@@ -98,37 +98,8 @@
   margin-top: 16px;
 }
 
-.ui-page-back {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  align-self: flex-start;
-  margin: 0 0 10px -4px;
-  padding: 2px 4px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.ui-page-back:hover {
-  color: var(--text-primary);
-}
-
 .ui-page-card {
   overflow: hidden;
   border-radius: var(--group-radius);
   background: var(--surface-card);
-}
-
-.ui-page-surface {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  padding: 20px 28px 0;
-  overflow: hidden;
 }

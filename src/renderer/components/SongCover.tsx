@@ -69,17 +69,21 @@ const SongCover = ({
   }
 
   return (
-    <img
-      src={coverThumbUrl(src, thumbSize)}
+    <>
+      {/* 取图落盘前垫骨架底，图片盖在上面：此前这里只剩容器底色，卡片会先闪一帧灰 */}
+      <div className="cover-abs cover-abs--loading" aria-hidden="true" />
+      <img
+        src={coverThumbUrl(src, thumbSize)}
       alt={alt}
       loading="lazy"
       onError={() => {
         setFailed(true);
         onError?.();
       }}
-      className="cover-img"
-      style={style}
-    />
+        className="cover-img"
+        style={style}
+      />
+    </>
   );
 };
 
