@@ -337,8 +337,9 @@ describe('正在播放 overlay（原型 §3）', () => {
     expect(body).toMatch(/grid-template-columns:\s*clamp\(380px, 40%, 460px\) 1fr/);
     expect(body).toMatch(/gap:\s*48px/);
     expect(cssBlock('.lyrics-page__footer')).toMatch(/height:\s*var\(--np-footer-height\)/);
-    // 歌词走偏好 token（设置·外观的歌词字号档位对它生效）
-    expect(playerCss).toMatch(/font-size:\s*var\(--lyrics-font-size\)/);
+    // 歌词走偏好 token（设置·外观的歌词字号档位对它生效）；当前行 20 / 非当前 17 按基准 18 派生
+    expect(playerCss).toMatch(/font-size:\s*calc\(var\(--lyrics-font-size\) - 1px\)/);
+    expect(playerCss).toMatch(/font-size:\s*calc\(var\(--lyrics-font-size\) \+ 2px\)/);
     expect(playerCss).toMatch(/line-height:\s*var\(--lyrics-line-height\)/);
   });
 });

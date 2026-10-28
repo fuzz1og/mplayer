@@ -197,6 +197,12 @@ const UpdateSection: React.FC = () => {
           </Group>
         </Section>
 
+        {updateStatus === 'not-available' && (
+          <Alert tone="info" title="已是最新版本">
+            当前 v{currentVersion || '...'} 不需要更新。
+          </Alert>
+        )}
+
         {updateStatus === 'available' && (
           <Alert
             tone="success"

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Mic2 } from 'lucide-react';
+import { PageHeader } from '@/renderer/ui';
 import type { Artist } from '@mplayer/core';
 import '@/renderer/styles/songlist.css';
 import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
@@ -30,7 +31,12 @@ function loadSavedCategory(): number {
   return Number.isInteger(saved) && saved >= 0 && saved < CATEGORIES.length ? saved : 0;
 }
 
-const ArtistListPage: React.FC = () => {
+interface ArtistListPageProps {
+  /** 嵌在发现页「歌手」段时不重复出页标题：外层已有唯一 h1 */
+  embedded?: boolean;
+}
+
+const ArtistListPage: React.FC<ArtistListPageProps> = ({ embedded = false }) => {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [artists, setArtists] = useState<Artist[]>([]);
@@ -125,6 +131,7 @@ const ArtistListPage: React.FC = () => {
 
   return (
     <div className="artists">
+      {!embedded && <PageHeader title="歌手" />}
       <div className="artists__cats">
         {CATEGORIES.map((cat, idx) => (
           <button

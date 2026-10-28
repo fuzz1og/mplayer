@@ -9,13 +9,16 @@ import QueuePanel from '@/renderer/components/QueuePanel';
 const QueuePage: React.FC = () => {
   const navigate = useNavigate();
   return (
-    <QueuePanel
-      standalone
-      onClose={() => {
-        if (window.history.length > 1) navigate(-1);
-        else navigate('/recommend');
-      }}
-    />
+    <>
+      <h1 className="sr-only">播放队列</h1>
+      <QueuePanel
+        standalone
+        onClose={() => {
+          if (window.history.length > 1) navigate(-1);
+          else navigate('/recommend');
+        }}
+      />
+    </>
   );
 };
 

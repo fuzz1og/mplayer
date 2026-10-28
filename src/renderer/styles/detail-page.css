@@ -26,7 +26,7 @@
   width: var(--detail-hero-cover);
   height: var(--detail-hero-cover);
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border-radius: var(--group-radius);
   background: var(--cover-gradient);
   box-shadow: var(--shadow-lg);
 }

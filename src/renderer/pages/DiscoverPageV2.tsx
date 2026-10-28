@@ -599,6 +599,8 @@ const DiscoverPageV2: React.FC = () => {
                   onPlay={handleSearchPlay}
                   onToggleFavorite={toggleFavorite}
                   onDownload={download}
+                  density="library"
+                  showDuration
                   showCheckbox={false}
                   loading={searchLoading || searchLoadingMore}
                   emptyText="未找到相关歌曲"
@@ -788,7 +790,7 @@ const DiscoverPageV2: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'artists' && <ArtistListPage />}
+        {activeTab === 'artists' && <ArtistListPage embedded />}
       </div>
     </div>
   );

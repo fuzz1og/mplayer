@@ -283,9 +283,9 @@
 }
 
 .lyrics-page__lyrics .lyrics__text {
-  color: var(--text-secondary);
-  font-size: var(--lyrics-font-size);
-  font-weight: var(--weight-medium);
+  color: var(--text-tertiary);
+  font-size: calc(var(--lyrics-font-size) - 1px);
+  font-weight: var(--weight-normal);
   line-height: var(--lyrics-line-height);
   letter-spacing: 0;
   text-shadow: none;
@@ -293,7 +293,7 @@
 
 .lyrics-page__lyrics .lyrics__line[data-active] .lyrics__text {
   color: var(--text-primary);
-  font-size: var(--lyrics-font-size);
+  font-size: calc(var(--lyrics-font-size) + 2px);
   font-weight: var(--weight-bold);
   letter-spacing: 0;
   text-shadow: none;
