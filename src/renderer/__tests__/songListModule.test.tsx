@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { Song, SongGroup } from '@mplayer/core';
 import SongList from '@/renderer/components/SongList';
@@ -233,6 +234,38 @@ describe('歌曲列表模块：资料库密度（density=library）', () => {
     expect(container.querySelectorAll('.song-row').length).toBeLessThan(40);
     // 200 × 46 = 9200：estimate 与 CSS min-height 46 是同一份布局事实
     expect(rowsEl.style.getPropertyValue('--total-size')).toBe('9200px');
+  });
+});
+
+describe('歌曲列表模块：选择模式入口（#694 评审）', () => {
+  it('进入/退出共用一个切换按钮：节点不卸载、焦点不落 body，取消与完成不再各挂一份相同处理器', async () => {
+    render(
+      <MemoryRouter>
+        <SongList
+          songs={[song(1), song(2)]}
+          onPlay={() => {}}
+          showHeader={false}
+          enableBatchDownload
+          onBatchDownload={() => {}}
+        />
+      </MemoryRouter>
+    );
+
+    const toggle = screen.getByRole('button', { name: '选择' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    toggle.focus();
+    await userEvent.click(toggle);
+
+    // 修前：「选择」被卸载、换成「取消」+「完成」两个按钮 → 焦点落 body，且两者绑同一个 handler
+    const done = screen.getByRole('button', { name: '完成' });
+    expect(done).toHaveAttribute('aria-pressed', 'true');
+    expect(done).toBe(toggle);
+    expect(document.activeElement).toBe(done);
+
+    await userEvent.click(done);
+    const back = screen.getByRole('button', { name: '选择' });
+    expect(back).toBe(toggle);
+    expect(document.activeElement).toBe(back);
   });
 });
 

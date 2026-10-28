@@ -330,33 +330,23 @@ const SongList: React.FC<SongListProps> = ({
         if (event.key === 'Escape' && batchMode) handleExitBatchMode();
       }}
     >
-      {/* 选择模式入口：普通浏览保持安静；显式「选择」后才出现复选框与批量工具栏，完成/取消退出 */}
+      {/* 选择模式入口：普通浏览保持安静；显式「选择」后才出现复选框与批量工具栏。
+          单一切换按钮（aria-pressed 表达状态）：进入/退出不换元素，焦点不会随卸载落到 body。 */}
       {(enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (
         <div className="song-list__batch-entry">
-          {batchMode ? (
-            <>
-              <button type="button" className="song-list__batch-toggle" onClick={handleExitBatchMode}>
-                取消
-              </button>
-              <button
-                type="button"
-                className="song-list__batch-toggle song-list__batch-toggle--primary"
-                onClick={handleExitBatchMode}
-              >
-                完成
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="song-list__batch-toggle"
-              aria-pressed={false}
-              onClick={handleEnterBatchMode}
-            >
-              <CheckSquare size={14} />
-              选择
-            </button>
-          )}
+          <button
+            type="button"
+            className={'song-list__batch-toggle' + (batchMode ? ' song-list__batch-toggle--primary' : '')}
+            aria-pressed={batchMode}
+            onClick={batchMode ? handleExitBatchMode : handleEnterBatchMode}
+          >
+            {batchMode ? '完成' : (
+              <>
+                <CheckSquare size={14} />
+                选择
+              </>
+            )}
+          </button>
         </div>
       )}
 
