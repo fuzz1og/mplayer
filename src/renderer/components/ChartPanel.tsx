@@ -5,6 +5,7 @@ import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import type { ChartKind, Song } from '@mplayer/core';
+import '@/renderer/styles/songlist.css';
 
 interface ChartPanelProps {
   title: string;

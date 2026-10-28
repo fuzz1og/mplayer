@@ -5,6 +5,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import VirtualRow from '@/renderer/components/VirtualRow';
 import { SONG_ROW_HEIGHT, VIRTUALIZE_THRESHOLD, useVirtualRows } from '@/renderer/hooks/useVirtualRows';
 import { useSortableReorder } from '@/renderer/hooks/useSortableReorder';
+import '@/renderer/styles/songlist.css';
 
 interface VirtualSortableListProps<T extends { id: string }> {
   /** 全量数据：窗口化只决定「挂了哪些行」，排序依据始终是这一份 */

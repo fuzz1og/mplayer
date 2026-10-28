@@ -20,9 +20,7 @@ import LyricsPage from '@/renderer/pages/LyricsPage';
 import ErrorBoundary from '@/renderer/components/ErrorBoundary';
 import { initAppearancePrefs } from '@/renderer/theme/appearancePrefs';
 
-import './styles/global.css';
-import './styles/shell.css';
-import './styles/settings.css';
+import './styles/app-shell.css';
 
 const PLAYER_COVER_TRANSITION_NAME = 'player-cover';
 

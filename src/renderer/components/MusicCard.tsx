@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Play, Trash2 } from 'lucide-react';
 import SongCover from '@/renderer/components/SongCover';
+import '@/renderer/styles/songlist.css';
 
 interface MusicCardProps {
   title: string;

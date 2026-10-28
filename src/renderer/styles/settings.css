@@ -386,3 +386,48 @@
 .settings-content .ui-row__trailing .ui-stepper {
   flex: none;
 }
+
+/* ── 设置全屏壳（原 shell.css，SettingsShell.tsx 的根） ── */
+.settings-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-content);
+}
+
+.settings-shell__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.settings-shell__title {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.settings-shell__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* 设置全屏态：只留标题栏（左上返回 + 中部「设置」），侧栏与播放栏让位（播放器不卸载，继续出声） */
+.app-shell--settings .sidebar,
+.app-shell--settings .player-bar {
+  display: none;
+}
+
+.app-shell--settings .app-shell__content {
+  background: var(--surface-window);
+}
+
+.app-shell--settings .settings-shell {
+  flex: 1;
+  min-height: 0;
+}

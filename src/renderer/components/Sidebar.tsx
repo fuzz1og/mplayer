@@ -3,6 +3,7 @@ import { Sparkles, Compass, Library, Heart, History, ListMusic } from 'lucide-re
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useLocalStore } from '@/renderer/store/localStore';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import '@/renderer/styles/sidebar.css';
 
 interface NavItem {
   key: string;

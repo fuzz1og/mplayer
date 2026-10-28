@@ -1,4 +1,5 @@
 import React from 'react';
+import '@/renderer/styles/songlist.css';
 
 /**
  * 渲染层错误边界。

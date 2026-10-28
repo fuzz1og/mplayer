@@ -9,6 +9,7 @@ import { useDownload } from '@/renderer/hooks/useDownload';
 import PlayerControls from './PlayerControls';
 import PlayerProgress from './PlayerProgress';
 import PlayerVolume from './PlayerVolume';
+import '@/renderer/styles/player-bar.css';
 
 interface PlayerBarProps {
   className?: string;

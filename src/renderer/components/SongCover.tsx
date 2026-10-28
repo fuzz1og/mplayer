@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { ListMusic, Music2 } from 'lucide-react';
+import '@/renderer/styles/songlist.css';
 
 interface SongCoverBaseProps {
   /** 封面直链；空值直接显示占位。 */
