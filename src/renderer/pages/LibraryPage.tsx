@@ -412,10 +412,11 @@ const LibraryPage: React.FC = () => {
     // 按需选择模式（#699）：普通浏览不显示复选框；点「选择」后才出现批量工具栏
     enableBatchDownload: true,
     onBatchDownload: handleBatchDownload,
-    enableBatchDelete: true,
-    onBatchDelete: handleBatchDelete,
     enableBatchAddToPlaylist: true,
   };
+
+  /** 批量删除按分段下发：只有「歌曲」聚合分段可删收藏项；本地歌曲不由本页删除（规格 L132）。 */
+  const batchDeleteProps = { enableBatchDelete: true, onBatchDelete: handleBatchDelete };
 
   return (
     <div className="library">
@@ -486,6 +487,7 @@ const LibraryPage: React.FC = () => {
           <div className="library__card">
             <SongList
               {...songListCommon}
+              {...batchDeleteProps}
               songs={sortedSongs}
               favoriteIds={favoriteIds}
               loading={favoritesLoading && sortedSongs.length === 0}

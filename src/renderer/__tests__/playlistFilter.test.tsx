@@ -76,6 +76,10 @@ const buttonByText = (container: HTMLElement, text: string) =>
 const setFilter = (container: HTMLElement, value: string) =>
   fireEvent.change(filterInput(container), { target: { value } });
 
+/** 进入按需选择模式（#694 评审）：普通浏览不再有复选框列 */
+const enterSelectMode = (container: HTMLElement) =>
+  fireEvent.click(buttonByText(container, '选择'));
+
 const reorderCalls = (calls: InvokeCall[]) => calls.filter(([channel]) => channel === 'playlist:reorderFull');
 
 afterEach(() => {
@@ -173,6 +177,7 @@ describe('本地歌单页过滤（#488）', () => {
     setFilter(container, ONE_HIT);
     await waitFor(() => expect(rowTexts(container).length).toBe(1));
 
+    enterSelectMode(container);
     fireEvent.click(selectAllCheckbox(container));
     await waitFor(() => expect(container.textContent).toContain('已选择 1 项'));
 
@@ -190,6 +195,7 @@ describe('本地歌单页过滤（#488）', () => {
     const { container, calls } = renderPage(LIST(40));
     await waitFor(() => expect(rowTexts(container).length).toBe(40));
 
+    enterSelectMode(container);
     fireEvent.click(selectAllCheckbox(container));
     await waitFor(() => expect(container.textContent).toContain('已选择 40 项'));
 
@@ -235,6 +241,7 @@ describe('本地歌单页过滤（#488）', () => {
     await waitFor(() => expect(rowTexts(container).length).toBe(0));
     expect(container.textContent).toContain('没有匹配「不存在的歌手」的歌曲');
 
+    enterSelectMode(container);
     fireEvent.click(selectAllCheckbox(container));
     expect(container.textContent).not.toContain('已选择');
     expect(checkedRows(container)).toBe(0);

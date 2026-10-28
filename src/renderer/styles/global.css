@@ -230,6 +230,19 @@
   --hairline-inset: 47px;
   --hairline-inset-plain: 14px;
 
+  /* ── 歌曲行尺寸与排版（#699 密度协议；行高 / 封面在 songRowMetrics.ts，虚拟测量要用 TS 值） ──
+     songlist.css 只消费这些 token。与 --text-* / --weight-* 重合的取值直接引用既有刻度；
+     原型值不在刻度上（14px 标题、14px 横内距、10px 列距、28px 表头高），登记在这里一次，
+     组件样式不得再写裸字面量。 */
+  --song-row-padding-x: 14px;
+  --song-row-gap: 10px;
+  --song-row-title-size: 14px;
+  --song-row-meta-size: var(--text-sm);
+  --song-row-number-size: var(--text-sm);
+  --song-row-head-height: 28px;
+  --song-row-head-size: var(--text-xs);
+  --song-row-head-weight: var(--weight-semibold);
+
   /* ── 标准动效曲线 ── */
   --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
   /* 场景转场（全屏播放器共享元素，ui-refactor-guide §6.3）：强调曲线 + 统一时长 */

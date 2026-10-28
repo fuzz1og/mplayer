@@ -280,23 +280,17 @@
   font-weight: var(--weight-medium);
 }
 
-.playlist-detail__th--check {
-  width: 40px;
-  text-align: center;
-}
-
-.playlist-detail__th--num {
-  width: 50px;
+/* 列宽由 songTableColumns 经 colWidth() 下发 --col-width：表头与行取同一组数字 */
+.playlist-detail__th--check,
+.playlist-detail__th--num,
+.playlist-detail__th--actions {
+  flex: none;
+  width: var(--col-width);
   text-align: center;
 }
 
 .playlist-detail__th--title {
   flex: 1;
-}
-
-.playlist-detail__th--actions {
-  width: 140px;
-  text-align: center;
 }
 
 .playlist-detail__thead-checkbox {

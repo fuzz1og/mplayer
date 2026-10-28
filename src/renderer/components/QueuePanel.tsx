@@ -9,13 +9,14 @@ import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
 import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
-import { COL_INDEX, colWidth } from '@/renderer/components/songTableColumns';
+import { colWidth, songIndexWidth } from '@/renderer/components/songTableColumns';
+import { songRowHeight } from '@/renderer/components/songRowMetrics';
 import { applyShuffleIndexes, applyShuffleOrder, type Song } from '@mplayer/core';
 import '@/renderer/styles/songlist.css';
 import '@/renderer/styles/queue-panel.css';
 
-/** 面板行高与资料库密度协议一致（#699）：46px。 */
-const QUEUE_PANEL_ROW_HEIGHT = 46;
+/** 面板行一律按资料库密度渲染：表头与行取同一个序号列宽（songIndexWidth），行高取同一份协议。 */
+const QUEUE_ROW_DENSITY = 'library' as const;
 const QUEUE_ACTIONS_W = 90;
 
 interface QueuePanelStore {
@@ -184,7 +185,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
       <SortableSongRow
         song={song}
         index={index}
-        variant="library"
+        variant={QUEUE_ROW_DENSITY}
         showDuration
         fillTitle
         showAlbum={false}
@@ -204,7 +205,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
       <SongRow
         song={song}
         index={index}
-        variant="library"
+        variant={QUEUE_ROW_DENSITY}
         showDuration
         fillTitle
         showAlbum={false}
@@ -264,7 +265,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
         ) : (
           <>
             <div className="queue-panel__thead">
-              <div className="queue-panel__thead-index" style={colWidth(COL_INDEX)}>#</div>
+              <div className="queue-panel__thead-index" style={colWidth(songIndexWidth(QUEUE_ROW_DENSITY))}>#</div>
               <div className="queue-panel__thead-title">标题</div>
               <div className="queue-panel__thead-actions" style={{ '--queue-actions-w': String(QUEUE_ACTIONS_W) + 'px' } as React.CSSProperties}>操作</div>
             </div>
@@ -273,7 +274,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
               renderRow={renderQueueRow}
               renderDragPreview={renderQueueDragPreview}
               onReorder={handleReorder}
-              estimateSize={() => QUEUE_PANEL_ROW_HEIGHT}
+              estimateSize={() => songRowHeight(QUEUE_ROW_DENSITY)}
             />
           </>
         )}

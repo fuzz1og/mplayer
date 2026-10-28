@@ -303,6 +303,19 @@ describe('资料库页', () => {
     expect(screen.getByText('已选择 0 首歌曲')).toBeInTheDocument();
   });
 
+  it('本地分段不给批量删除入口（本页只能删收藏，规格 L132 不渲染无能力的按钮）', async () => {
+    renderPage('/library?tab=local');
+    await waitFor(() => expect(document.querySelectorAll('.library__card .song-row').length).toBe(1));
+
+    await userEvent.click(screen.getByRole('button', { name: '选择' }));
+    await waitFor(() => expect(document.querySelectorAll('.library__card .song-row__check').length).toBe(1));
+    expect(document.querySelector('.library__card .song-list__batch-wrap')).toHaveAttribute('data-visible');
+
+    // 本地歌曲不在收藏里，批量删除只会在点完后弹「所选歌曲不在收藏中」——入口不该存在
+    expect(screen.queryByRole('button', { name: '批量删除' })).toBeNull();
+    expect(screen.getByRole('button', { name: '批量下载' })).toBeInTheDocument();
+  });
+
   it('点行封面播放时用当前显示列表建立队列', async () => {
     const playSpy = vi.fn().mockResolvedValue(undefined);
     const originalPlay = usePlayerStore.getState().play;

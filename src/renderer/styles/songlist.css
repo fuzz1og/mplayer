@@ -5,18 +5,8 @@
 
    ── 歌曲行密度协议（#699）──
    行高与封面边长只在 songRowMetrics.ts 定义，组件经 --song-row-height / --song-row-cover
-   下发；本文件只消费变量。标题 / meta / 序号 / 表头的字号与间距同样只在这里写一次，
+   下发；字号 / 字重 / 行距类 token 登记在 global.css（token 层），本文件只消费变量。
    普通列表、分组列表、可排序行、拖拽预览与骨架屏因此共用同一套密度。 */
-:root {
-  --song-row-padding-x: 14px;
-  --song-row-gap: 10px;
-  --song-row-title-size: 14px;
-  --song-row-meta-size: 13px;
-  --song-row-number-size: 13px;
-  --song-row-head-height: 28px;
-  --song-row-head-size: 11px;
-  --song-row-head-weight: 600;
-}
 
 /* ── 媒体卡片：卡片与播放浮层（AlbumGrid / MusicCard） ── */
 /* ── 卡片 ── */

@@ -64,6 +64,9 @@ describe('PlaylistDetailPage 窗口化（#445）', () => {
     expect(rowsRef.parentElement).toBe(wrapper);
 
     // 勾选一首歌 → 批量栏出现；它必须仍在同一个 wrapper 内，否则 scrollMargin 会停在旧值
+    // 勾选前先进入按需选择模式（#694 评审：普通浏览没有复选框列）
+    fireEvent.click(Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.trim() === '选择') as HTMLButtonElement);
     const firstCheckbox = container.querySelectorAll('.song-row input[type="checkbox"]')[0] as HTMLInputElement;
     fireEvent.click(firstCheckbox);
     await waitFor(() => expect(wrapper.textContent).toContain('已选择 1 项'));

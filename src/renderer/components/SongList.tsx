@@ -12,14 +12,13 @@ import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
 import { useVirtualRows, stickyTopForContent, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
 import {
   COL_CHECKBOX,
-  COL_INDEX,
-  COL_INDEX_LIBRARY,
   COL_ALBUM,
   COL_ACTIONS,
   COL_ACTIONS_COMPACT,
   COL_DURATION,
   COL_DURATION_LIBRARY,
   colWidth,
+  songIndexWidth,
 } from '@/renderer/components/songTableColumns';
 import { songRowCoverSize, songRowHeight } from '@/renderer/components/songRowMetrics';
 
@@ -112,7 +111,7 @@ const SongList: React.FC<SongListProps> = ({
   const showHeader = showHeaderProp ?? density !== 'library';
   const compactActions = density === 'library';
   // 表头 / 行 / 骨架共用的列宽：资料库密度按原型收窄（序号 28 / 时长 44 / 操作 56）
-  const indexWidth = density === 'library' ? COL_INDEX_LIBRARY : COL_INDEX;
+  const indexWidth = songIndexWidth(density);
   const durationWidth = density === 'library' ? COL_DURATION_LIBRARY : COL_DURATION;
   const actionWidth = compactActions ? COL_ACTIONS_COMPACT : COL_ACTIONS;
   // 内部状态管理（当外部没有提供时）
@@ -330,33 +329,23 @@ const SongList: React.FC<SongListProps> = ({
         if (event.key === 'Escape' && batchMode) handleExitBatchMode();
       }}
     >
-      {/* 选择模式入口：普通浏览保持安静；显式「选择」后才出现复选框与批量工具栏，完成/取消退出 */}
+      {/* 选择模式入口：普通浏览保持安静；显式「选择」后才出现复选框与批量工具栏。
+          单一切换按钮（aria-pressed 表达状态）：进入/退出不换元素，焦点不会随卸载落到 body。 */}
       {(enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (
         <div className="song-list__batch-entry">
-          {batchMode ? (
-            <>
-              <button type="button" className="song-list__batch-toggle" onClick={handleExitBatchMode}>
-                取消
-              </button>
-              <button
-                type="button"
-                className="song-list__batch-toggle song-list__batch-toggle--primary"
-                onClick={handleExitBatchMode}
-              >
-                完成
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="song-list__batch-toggle"
-              aria-pressed={false}
-              onClick={handleEnterBatchMode}
-            >
-              <CheckSquare size={14} />
-              选择
-            </button>
-          )}
+          <button
+            type="button"
+            className={'song-list__batch-toggle' + (batchMode ? ' song-list__batch-toggle--primary' : '')}
+            aria-pressed={batchMode}
+            onClick={batchMode ? handleExitBatchMode : handleEnterBatchMode}
+          >
+            {batchMode ? '完成' : (
+              <>
+                <CheckSquare size={14} />
+                选择
+              </>
+            )}
+          </button>
         </div>
       )}
 
