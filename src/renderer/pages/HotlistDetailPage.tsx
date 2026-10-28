@@ -244,7 +244,7 @@ const HotlistDetailPage: React.FC = () => {
                 batchActions={batchActions}
               />
               <SongList
-                songs={hotlist}
+                songs={visibleSongs}
                 currentSongId={currentSong?.id}
                 isPlaying={isPlaying}
                 favoriteIds={favoriteIds}

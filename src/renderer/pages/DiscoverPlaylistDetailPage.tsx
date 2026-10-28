@@ -280,7 +280,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
                 batchActions={batchActions}
               />
               <SongList
-                songs={songs}
+                songs={visibleSongs}
                 currentSongId={currentSong?.id}
                 isPlaying={isPlaying}
                 favoriteIds={favoriteIds}
@@ -298,10 +298,6 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
                 emptyText={selection.isFiltering ? `没有匹配「${selection.filterQuery.trim()}」的歌曲` : '暂无歌曲数据'}
               />
               {loadingMore && <div className="detail-page__note">加载中...</div>}
-              {!hasMore && songs.length > 0 && (
-                <div className="detail-page__note">
-                    </div>
-              )}
             </>
           )}
         </div>
