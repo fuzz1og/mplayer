@@ -87,7 +87,7 @@ const SongRow: React.FC<SongRowProps> = ({
 }) => {
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
-  // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
+  // 空封面自愈（StrictMode 下 effect 双跑，用 ref 防重复）
   const coverRefreshFired = useRef(false);
 
   const swap = useSongSwap(song, onSwap);
@@ -123,14 +123,17 @@ const SongRow: React.FC<SongRowProps> = ({
     menuItems.push({ key: 'remove', label: '从歌单移除', icon: <Trash2 size={14} />, danger: true, onClick: () => onRemoveFromPlaylist(song) });
   }
 
-  // cover 为空（如收藏/历史里从未存过封面）时挂载即触发一次刷新，显示层不依赖 onError
+  // cover 为空（收藏/历史只落 SongBase）时触发刷新；跟着 song.cover 走而非只在挂载触发：
+  // 切页返回在挂载后擦掉内存封面，只在挂载触发会让行永久停在灰底；封面回来即复位标记。
   useEffect(() => {
-    if (!song.cover && !coverRefreshFired.current) {
-      coverRefreshFired.current = true;
-      onCoverError?.(song);
+    if (song.cover) {
+      coverRefreshFired.current = false;
+      return;
     }
-    // 仅挂载时触发：封面刷新后 song.cover 变化会自然进入正常渲染路径
-  }, []);
+    if (coverRefreshFired.current) return;
+    coverRefreshFired.current = true;
+    onCoverError?.(song);
+  }, [song, onCoverError]);
 
   // 1.9.0：结构/状态色全部走 songlist.css 的类；这里只下发密度协议的行高/封面变量
   // （自定义属性允许内联，design-lint 白名单）与调用方传入的 style（拖拽位移等动态值）。
