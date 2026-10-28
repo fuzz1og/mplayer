@@ -49,7 +49,7 @@ describe('详情页尺寸 token（#694）', () => {
   });
 
   it('内容网格的列宽下限与间距来自同一组 token', () => {
-    expect(globalCss).toContain('--content-grid-min: 132px;');
+    expect(globalCss).toContain('--content-grid-min: 156px;');
     expect(globalCss).toContain('--content-grid-col-gap: var(--space-4);');
     for (const rule of [/\.artists__grid \{[^}]*minmax\(var\(--content-grid-min\)/, /\.card-grid \{[^}]*minmax\(var\(--content-grid-min\)/, /\.rec-playlists \{[^}]*minmax\(var\(--content-grid-min\)/]) {
       expect(songlistCss).toMatch(rule);
@@ -145,9 +145,9 @@ describe('歌手列表（#694 内容网格）', () => {
     const names = Array.from(container.querySelectorAll(circle + ' .cover-card__title')).map((el) => el.textContent);
     expect(names).toEqual(['陆行舟', '林夏']);
 
-    // 副行只在拿得到数字时渲染（任务 B 口径：「N 首」）
+    // 副行只在拿得到数字时渲染，口径与歌单 / 专辑卡一致
     const metas = Array.from(container.querySelectorAll(circle + ' .cover-card__meta')).map((el) => el.textContent);
-    expect(metas).toEqual(['42 首']);
+    expect(metas).toEqual(['专辑 3 · 歌曲 42']);
 
     const first = container.querySelector(circle) as HTMLElement;
     expect(first.getAttribute('tabindex')).toBe('0');
@@ -155,27 +155,19 @@ describe('歌手列表（#694 内容网格）', () => {
     expect(await screen.findByTestId('artist-detail')).toBeTruthy();
   });
 
-  it('歌手卡：hover 换 surface-card-hover 且不位移、不起大阴影；角落播放按钮 hover 才显形', async () => {
+  it('一张卡一套口径：圆形卡没有专属排版与角落播放，悬停只压封面亮度', () => {
     const cardCss = readFileSync(join(stylesDir, 'cover-card.css'), 'utf8');
     // 规格 line 61：不位移、不起大阴影
     expect(cardCss).not.toMatch(/transform: translateY/);
     expect(cardCss).not.toMatch(/box-shadow: var\(--shadow-lg\)/);
-    // 任务 B：背景换 --surface-card-hover，角落播放按钮同一条透明度过渡
-    expect(cardCss).toMatch(/\.cover-card\[data-shape='circle'\]\[data-clickable\]:hover,[\s\S]*?background: var\(--surface-card-hover\)/);
-    expect(cardCss).toMatch(/\.cover-card__play \{[^}]*opacity: 0;/);
-    expect(cardCss).toMatch(/\.cover-card:hover \.cover-card__play,[\s\S]*?opacity: 1;/);
-    // 排版：名字 14/500 单行、副行 12 tertiary
-    expect(cardCss).toMatch(/\.cover-card\[data-shape='circle'\] \.cover-card__title \{[^}]*font-size: var\(--content-card-title-size\);[^}]*font-weight: var\(--weight-medium\);[^}]*white-space: nowrap;/);
-    expect(cardCss).toMatch(/\.cover-card\[data-shape='circle'\] \.cover-card__meta \{[^}]*color: var\(--text-tertiary\);[^}]*font-size: var\(--content-card-subtitle-size\);/);
+    // 圆形卡不得单独换底色 / 单独改字号：形状只影响圆角与对齐
+    expect(cardCss).not.toMatch(/data-shape='circle'\]\[data-clickable\]:hover/);
+    expect(cardCss).not.toMatch(/content-card-title-size|content-card-subtitle-size/);
+    expect(cardCss).not.toMatch(/\.cover-card__play/);
+    // 唯一的悬停反馈
+    expect(cardCss).toMatch(/\.cover-card\[data-clickable\]:hover \.cover-card__media \.cover-img \{[^}]*opacity: 0\.8;/);
 
     const { container } = renderList();
-    await waitFor(() => expect(container.querySelectorAll('.cover-card[data-shape="circle"]').length).toBe(2));
-    const playButton = container.querySelector('.cover-card__play') as HTMLElement;
-    expect(playButton.getAttribute('aria-label')).toBe('播放歌手 陆行舟 的热门歌曲');
-    fireEvent.click(playButton);
-    await waitFor(() => expect(callMusicApi).toHaveBeenCalledWith('getArtistSongs', 'netease', 'ar1', 0, 50, 'hot'));
-    expect(playerState.setCurrentPlaylist).toHaveBeenCalled();
-    // 点播放不触发卡片自身的「进详情」
-    expect(screen.queryByTestId('artist-detail')).toBeNull();
+    expect(container.querySelector('.cover-card__play')).toBeNull();
   });
 });
