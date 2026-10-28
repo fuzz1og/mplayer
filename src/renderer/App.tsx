@@ -32,6 +32,8 @@ const App: React.FC = () => {
   const isSettings = location.pathname.startsWith('/settings');
   // 正在播放是标题栏之下的整幅内容区（隐藏侧栏与普通播放栏），不是盖住窗口控制的 overlay。
   const isNowPlaying = showLyrics && !isSettings;
+  // /queue 兼容页自己渲染 standalone 面板：全局面板在该路由不渲染，否则两块面板 + 双份 ESC。
+  const isQueueRoute = location.pathname.startsWith('/queue');
 
   // #682：设置页返回后恢复原页面滚动位置（进入设置时页面卸载，scrollTop 会被浏览器夹到 0）
   useScrollRestoration(location);
@@ -264,8 +266,9 @@ const App: React.FC = () => {
         onQueueClick={openQueuePanel}
       />
 
-      {/* #707：右侧非模态队列面板；打开不改变路由，页面滚动与播放状态都不受影响 */}
-      <QueuePanel />
+      {/* #707：右侧非模态队列面板；打开不改变路由，页面滚动与播放状态都不受影响。
+          /queue 兼容页自带一块（QueuePage），此处让位——同屏只允许一个面板/一份 ESC 监听。 */}
+      {!isQueueRoute && <QueuePanel />}
 
       {/* 下载进度弹窗（订阅面在宿主内，App 不随下载进度重渲染） */}
       <DownloadNotifications />
