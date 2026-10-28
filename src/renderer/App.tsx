@@ -14,7 +14,7 @@ import Sidebar from '@/renderer/components/Sidebar';
 import TitleBar from '@/renderer/components/TitleBar';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
-import QueuePanel, { closeQueuePanel, openQueuePanel } from '@/renderer/components/QueuePanel';
+import QueuePanel, { closeQueuePanel, openQueuePanel, toggleQueuePanel } from '@/renderer/components/QueuePanel';
 import DownloadNotifications from '@/renderer/components/DownloadNotifications';
 import UpdateReadyDialog from '@/renderer/components/UpdateReadyDialog';
 import LyricsPage from '@/renderer/pages/LyricsPage';
@@ -263,7 +263,7 @@ const App: React.FC = () => {
       {/* 播放栏横跨整窗（原型：从 x=0 起，侧栏在其上方结束） */}
       <PlayerBar
         onCoverClick={handleCoverClick}
-        onQueueClick={openQueuePanel}
+        onQueueClick={toggleQueuePanel}
       />
 
       {/* #707：右侧非模态队列面板；打开不改变路由，页面滚动与播放状态都不受影响。

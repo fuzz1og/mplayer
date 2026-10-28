@@ -1,20 +1,41 @@
 /* ============================================================
-   右侧非模态队列面板（#707）
-   位置：标题栏之下、播放栏之上；宽度 320，右贴边，不遮挡页面主体滚动。
+   播放队列弹出层（#707 起，改版：右侧停靠面板 → 播放栏上方的弹出层）
+   位置：贴着播放栏队列按钮上方、右对齐；宽度 420（窄窗自适应），最高 62vh。
+   关掉方式：再点队列按钮 / 右上角关闭 / ESC / 点面板外任意处。
    ============================================================ */
 .queue-panel {
   position: fixed;
-  top: var(--titlebar-height);
-  right: 0;
-  bottom: var(--player-height);
-  z-index: 20;
+  right: var(--space-3);
+  bottom: calc(var(--player-height) + var(--space-2));
+  z-index: 40;
   display: flex;
   flex-direction: column;
-  width: 320px;
+  /* 队列行不放时长列（弹出层宽度有限，优先把宽度让给歌名），所以可以比停靠面板更宽 */
+  width: min(460px, calc(100vw - 48px));
+  max-height: min(62vh, 560px);
   overflow: hidden;
-  border-left: 1px solid var(--hairline);
-  background: var(--surface-card);
-  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--material-overlay);
+  box-shadow: var(--shadow-xl);
+  animation: queue-panel-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes queue-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-panel {
+    animation: none;
+  }
 }
 
 .queue-panel__head {

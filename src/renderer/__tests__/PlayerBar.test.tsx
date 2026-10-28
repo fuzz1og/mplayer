@@ -104,7 +104,7 @@ describe('PlayerBar', () => {
 
   it('右簇只有队列、更多、音量——没有重复的「歌词」麦克风按钮', () => {
     render(<PlayerBar />);
-    expect(screen.getByRole('button', { name: '队列' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '播放队列' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '更多操作' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '静音' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '歌词' })).toBeNull();

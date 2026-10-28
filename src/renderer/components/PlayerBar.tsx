@@ -151,7 +151,14 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
 
       {/* 右 - 队列 / 更多 / 音量 */}
       <div className="player-bar__actions">
-        <button onClick={handleQueue} aria-label="队列" className="player-btn">
+        <button
+          type="button"
+          onClick={handleQueue}
+          aria-label="播放队列"
+          aria-haspopup="dialog"
+          className="player-btn"
+          data-queue-trigger
+        >
           <ListEnd size={16} />
         </button>
         <div className="player-bar__more">

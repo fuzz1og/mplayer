@@ -21,7 +21,7 @@ vi.mock('../services/audioPlayer', () => ({ getGlobalPlayer: () => audioPlayerMo
 vi.mock('../utils/songCoverRefresh', () => ({ refreshSongCover: vi.fn(async () => null) }));
 
 import { usePlayerStore } from '../store/playerStore';
-import QueuePanel, { openQueuePanel, useQueuePanelStore } from '../components/QueuePanel';
+import QueuePanel, { openQueuePanel, toggleQueuePanel, useQueuePanelStore } from '../components/QueuePanel';
 import QueuePage from '../pages/QueuePage';
 import { LIBRARY_ROW_HEIGHT } from '../components/songRowMetrics';
 
@@ -45,7 +45,7 @@ beforeEach(() => {
 describe('QueuePanel（#707）', () => {
   it('旧 /queue 路由渲染为右侧面板，而不是独立列表页', () => {
     render(<MemoryRouter><QueuePage /></MemoryRouter>);
-    expect(screen.getByRole('complementary', { name: '播放队列' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '播放队列' })).toBeInTheDocument();
     expect(document.querySelector('.list-page')).toBeNull();
     expect(document.querySelectorAll('.song-row')).toHaveLength(2);
   });
@@ -61,13 +61,36 @@ describe('QueuePanel（#707）', () => {
     const trigger = screen.getByRole('button', { name: '打开队列' });
     trigger.focus();
     fireEvent.click(trigger);
-    expect(screen.getByRole('complementary', { name: '播放队列' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '播放队列' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: '关闭队列' })).toHaveFocus());
     expect(usePlayerStore.getState().currentPlaylist).toBe(originalQueue);
 
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('complementary', { name: '播放队列' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: '播放队列' })).toBeNull();
     expect(trigger).toHaveFocus();
+  });
+
+  it('弹出层语义：再点触发按钮收回，点面板外任意处也收回', async () => {
+    render(
+      <MemoryRouter>
+        <button type="button" data-queue-trigger onClick={toggleQueuePanel}>播放队列</button>
+        <QueuePanel />
+      </MemoryRouter>,
+    );
+    const trigger = screen.getByRole('button', { name: '播放队列' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog', { name: '播放队列' })).toBeInTheDocument();
+
+    // 再点一下同一个按钮：收回（不是换路由，也不是叠第二块）
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('dialog', { name: '播放队列' })).toBeNull();
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog', { name: '播放队列' })).toBeInTheDocument();
+    // 面板外的点击：pointerdown 捕获阶段直接收回
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('dialog', { name: '播放队列' })).toBeNull();
   });
 
   it('表头序号列宽与行同源：不会把标题列推偏 22px', () => {

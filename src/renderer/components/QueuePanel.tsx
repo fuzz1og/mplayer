@@ -41,8 +41,28 @@ export const useQueuePanelStore = create<QueuePanelStore>((set, get) => ({
   },
 }));
 
-export const openQueuePanel = (): void => useQueuePanelStore.getState().open();
+/** 打开面板的触发元素：关闭后焦点回到它（弹出层的键盘闭环）。模块级保存，不依赖 effect 时序。 */
+let panelTrigger: HTMLElement | null = null;
+
+const rememberTrigger = (): void => {
+  panelTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+};
+
+export const openQueuePanel = (): void => {
+  rememberTrigger();
+  useQueuePanelStore.getState().open();
+};
 export const closeQueuePanel = (): void => useQueuePanelStore.getState().close();
+/** 播放栏队列按钮的语义：弹出层就地开关（再点一下收回），不换路由、不丢播放状态。 */
+export const toggleQueuePanel = (): void => {
+  const store = useQueuePanelStore.getState();
+  if (store.isOpen) {
+    store.close();
+    return;
+  }
+  rememberTrigger();
+  store.open();
+};
 
 /** 队列行的行尾操作：加入歌单 + 从队列移除（沿用队列页原有图标按钮）。 */
 const QueueRowActions: React.FC<{
@@ -97,6 +117,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [addToPlaylistSong, setAddToPlaylistSong] = useState<Song | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
 
   const visible = standalone || storeOpen;
 
@@ -105,7 +126,8 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
     else closePanel();
   }, [standalone, onClose, closePanel]);
 
-  // 打开时把焦点送进关闭按钮；ESC 关闭并把焦点还给打开它的队列按钮（store.close）。
+  // 弹出层语义：打开时记住触发元素并把焦点送进面板；ESC / 点击外部 / 再点触发按钮都能收回，
+  // 关闭后焦点回到触发按钮（键盘用户不会掉到 body）。
   useEffect(() => {
     if (!visible) return;
     const timer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
@@ -114,10 +136,21 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
       event.preventDefault();
       handleClose();
     };
+    // 触发按钮自己有 toggle：这里放过它，否则一次点击会「关掉又被打开」
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (panelRef.current?.contains(target)) return;
+      if (target.closest('[data-queue-trigger]')) return;
+      handleClose();
+    };
     document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown, true);
     return () => {
       window.clearTimeout(timer);
       document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      if (panelTrigger?.isConnected) panelTrigger.focus();
     };
   }, [visible, handleClose]);
 
@@ -186,7 +219,6 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
         song={song}
         index={index}
         variant={QUEUE_ROW_DENSITY}
-        showDuration
         fillTitle
         showAlbum={false}
         isCurrentSong={currentSongId === song.id}
@@ -206,7 +238,6 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
         song={song}
         index={index}
         variant={QUEUE_ROW_DENSITY}
-        showDuration
         fillTitle
         showAlbum={false}
         isCurrentSong={currentSongId === song.id}
@@ -240,7 +271,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({ standalone = false, onClose }) 
   if (!visible) return null;
 
   return (
-    <aside className="queue-panel" role="complementary" aria-label="播放队列" data-queue-panel>
+    <aside ref={panelRef} className="queue-panel" role="dialog" aria-label="播放队列" data-queue-panel>
       <header className="queue-panel__head">
         <div className="queue-panel__title-group">
           <Headphones size={16} aria-hidden="true" />
