@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -331,6 +332,33 @@ describe('分组搜索结果：默认扁平 + 就地展开其余版本（#694）
     expect(songTitle('歌曲 3')).not.toBeNull();
     // 没展开的那组仍然只有一版
     expect(songTitle('歌曲 5')).toBeNull();
+  });
+
+  it('展开/收起走同一按钮：行 memo 不能把 aria-expanded 停在旧值（#694 Electron 回归）', () => {
+    const Controlled = () => {
+      const [expanded, setExpanded] = useState<string[]>([]);
+      return (
+        <GroupedSongList
+          groups={groups}
+          expandedKeys={expanded}
+          onToggleGroup={(key) => setExpanded((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))}
+          onPlay={vi.fn()}
+          onToggleFavorite={vi.fn()}
+          selectedIds={[]}
+          onSelectionChange={vi.fn()}
+        />
+      );
+    };
+    render(<MemoryRouter><Controlled /></MemoryRouter>);
+
+    const toggle = screen.getByRole('button', { name: /3 个版本/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: /3 个版本/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(songTitle('歌曲 2')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /3 个版本/ }));
+    expect(screen.getByRole('button', { name: /3 个版本/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(songTitle('歌曲 2')).toBeNull();
   });
 
   it('单版本组不渲染「N 个版本」按钮', () => {

@@ -83,25 +83,26 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   const stableOnDownload = useStableCallback(onDownload);
   const stableOnToggleGroup = useStableCallback(onToggleGroup);
 
-  /** 行尾按钮走渲染函数 + 最新值 ref：展开态变化不让每一行都重渲染（行是 memo 的） */
-  const leadLatest = useLatest({ primaryGroupBySongId, expandedSet, stableOnToggleGroup });
+  /**
+   * 行尾按钮走渲染函数（元素每帧新建会击穿行 memo）；函数身份随 expandedSet 变，
+   * 于是展开态一变，带按钮的首版行跟着重渲染，aria-expanded 不会停在旧值。
+   */
   const renderActionsLead = useCallback((song: Song) => {
-    const { primaryGroupBySongId: bySong, expandedSet: expanded, stableOnToggleGroup: toggle } = leadLatest.current;
-    const group = bySong.get(song.id);
+    const group = primaryGroupBySongId.get(song.id);
     if (!group || group.songs.length <= 1) return null;
-    const isExpanded = expanded.has(group.key);
+    const isExpanded = expandedSet.has(group.key);
     return (
       <button
         type="button"
         className="sgroup__versions"
         aria-expanded={isExpanded}
         aria-label={`${isExpanded ? '收起' : '展开'} ${group.songs.length} 个版本`}
-        onClick={(e) => { e.stopPropagation(); toggle?.(group.key); }}
+        onClick={(e) => { e.stopPropagation(); stableOnToggleGroup?.(group.key); }}
       >
         {group.songs.length} 个版本
       </button>
     );
-  }, [leadLatest]);
+  }, [primaryGroupBySongId, expandedSet, stableOnToggleGroup]);
 
   const handleToggleDropdown = useCallback((songId: string, e: React.MouseEvent) => {
     e.stopPropagation();
