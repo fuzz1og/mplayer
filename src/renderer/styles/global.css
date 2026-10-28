@@ -195,6 +195,8 @@
 
   /* ── 布局尺寸 ── */
   --sidebar-width: 216px;
+  /* 侧栏分组标题（#694）：12px 落在 --text-xs 11 与 --text-sm 13 之间，登记一次 */
+  --sidebar-group-size: 12px;
   --titlebar-height: 44px;
   --topbar-height: 56px;
   --player-height: 68px;
