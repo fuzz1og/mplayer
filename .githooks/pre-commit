@@ -2,6 +2,11 @@
 # Pre-commit: typecheck (root + mobile) + lint staged files
 set -e
 
+# 快门禁前移（#717）：注释块与外部断言都是「写完才发现」的返工，各 <200ms，比等 verify 便宜
+echo "→ comment-gate / claim-lint..."
+node scripts/comment-gate.mjs
+node scripts/claim-lint.mjs
+
 echo "→ root typecheck..."
 npx tsc --noEmit
 
