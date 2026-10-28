@@ -30,6 +30,8 @@ const App: React.FC = () => {
   const location = useLocation();
   const [showLyrics, setShowLyrics] = useState(false);
   const isSettings = location.pathname.startsWith('/settings');
+  // 正在播放是标题栏之下的整幅内容区（隐藏侧栏与普通播放栏），不是盖住窗口控制的 overlay。
+  const isNowPlaying = showLyrics && !isSettings;
 
   // #682：设置页返回后恢复原页面滚动位置（进入设置时页面卸载，scrollTop 会被浏览器夹到 0）
   useScrollRestoration(location);
@@ -82,10 +84,28 @@ const App: React.FC = () => {
     setLyricsVisibility(!showLyrics);
   }, [setLyricsVisibility, showLyrics]);
 
-  // 关闭动画同样走这里：LyricsPage 的 ESC / 收起按钮都调用 onBack，因此不碰它自己的实现。
+  // 关闭动画同样走这里：LyricsPage 的 ESC / 标题栏收起都调用 onBack，因此不碰它自己的实现。
   const handleCloseLyrics = useCallback(() => {
     setLyricsVisibility(false);
   }, [setLyricsVisibility]);
+
+  // 进入设置必须**立刻**移除正在播放层（包括展开动画中）：先跳过 ViewTransition，
+  // 再同步收起，避免动画把旧歌词层留在设置页上方。返回时不设置回 true，旧层不会复活。
+  const handleSettingsClick = useCallback(() => {
+    activeViewTransitionRef.current?.skipTransition();
+    activeViewTransitionRef.current = null;
+    setShowLyrics(false);
+    navigate('/settings');
+  }, [navigate]);
+
+  // 路由到设置（帮助菜单深链等）时同样保证歌词层收起 —— 覆盖不是从 settings 按钮进入的路径。
+  useEffect(() => {
+    if (isSettings && showLyrics) {
+      activeViewTransitionRef.current?.skipTransition();
+      activeViewTransitionRef.current = null;
+      setShowLyrics(false);
+    }
+  }, [isSettings, showLyrics]);
 
   // 逐字段订阅：整 store 订阅会让搜索/收藏/下载的任何变化都重渲染 App 及整棵页面树
   const currentKeyword = useSearchStore((s) => s.currentKeyword);
@@ -199,17 +219,18 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={isSettings ? 'app-shell app-shell--settings' : 'app-shell'}>
+    <div className={'app-shell' + (isSettings ? ' app-shell--settings' : '') + (isNowPlaying ? ' app-shell--nowplaying' : '')}>
       <TitleBar
-        title={isSettings ? '设置' : undefined}
-        onBack={() => {
+        title={isSettings ? '设置' : isNowPlaying ? '正在播放' : undefined}
+        backLabel={isNowPlaying ? '收起播放器' : '返回'}
+        onBack={isNowPlaying ? handleCloseLyrics : () => {
           if (window.history.length > 1) navigate(-1);
           else navigate('/recommend');
         }}
         onSearch={handleSearch}
         sourceType={sourceType}
         onSourceTypeChange={handleSourceTypeChange}
-        onSettingsClick={() => navigate('/settings')}
+        onSettingsClick={handleSettingsClick}
         updateAvailable={updateAvailable}
       />
 
@@ -232,7 +253,7 @@ const App: React.FC = () => {
           {/* 错误边界包住页面内容：桌面窗口没有刷新/返回键，渲染层抛错此前会整窗变白（只能重启）。
               现在一个页面出错 = 一个页面出错，并给「重试」自救。 */}
           <ErrorBoundary>
-            {showLyrics ? <LyricsPage onBack={handleCloseLyrics} /> : <Outlet />}
+            {showLyrics && !isSettings ? <LyricsPage onBack={handleCloseLyrics} /> : <Outlet />}
           </ErrorBoundary>
         </main>
       </div>
