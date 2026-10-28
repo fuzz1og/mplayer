@@ -121,16 +121,9 @@
   -webkit-backdrop-filter: var(--material-blur);
 }
 
-html[data-material='off'] .sidebar,
-html[data-material='off'] .titlebar,
 html[data-material='off'] .player-bar {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-}
-
-/* 材质关闭：侧栏回退侧栏实色，不让它变透明 */
-html[data-material='off'] .sidebar {
-  background: var(--surface-sidebar);
 }
 
 .player-bar__more {

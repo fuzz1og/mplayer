@@ -9,11 +9,11 @@ import { useFavoriteStore } from '../store/favoriteStore';
 import { playbackClock } from '../services/playbackClock';
 
 const testDir = dirname(fileURLToPath(String(import.meta.url)));
-const shellCss = readFileSync(join(testDir, '..', 'styles', 'shell.css'), 'utf8');
+const playerBarCss = readFileSync(join(testDir, '..', 'styles', 'player-bar.css'), 'utf8');
 
 /** 取「整行只有该选择器 + {」的规则体；组选择器（行尾带逗号）不参与匹配。 */
 function cssBlock(selector: string): string {
-  const lines = shellCss.split('\n');
+  const lines = playerBarCss.split('\n');
   const start = lines.findIndex((line) => line.trim() === selector + ' {');
   if (start === -1) return '';
   const body: string[] = [];
@@ -126,8 +126,8 @@ describe('PlayerBar', () => {
     const popover = cssBlock('.player-volume__popover');
     expect(popover).toContain('opacity: 0');
     expect(popover).toContain('pointer-events: none');
-    expect(shellCss).toContain('.player-volume:hover .player-volume__popover');
-    expect(shellCss).toContain('.player-volume:focus-within .player-volume__popover');
+    expect(playerBarCss).toContain('.player-volume:hover .player-volume__popover');
+    expect(playerBarCss).toContain('.player-volume:focus-within .player-volume__popover');
   });
 
   it('静音点击保留：音量 80 → 0', () => {

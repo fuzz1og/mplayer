@@ -6,11 +6,11 @@ import { fileURLToPath } from 'node:url';
 import Sidebar from '../components/Sidebar';
 
 const testDir = dirname(fileURLToPath(String(import.meta.url)));
-const shellCss = readFileSync(join(testDir, '..', 'styles', 'shell.css'), 'utf8');
+const sidebarCss = readFileSync(join(testDir, '..', 'styles', 'sidebar.css'), 'utf8');
 
 /** 取「整行只有该选择器 + {」的规则体；组选择器（行尾带逗号）不参与匹配。 */
 function cssBlock(selector: string): string {
-  const lines = shellCss.split('\n');
+  const lines = sidebarCss.split('\n');
   const start = lines.findIndex((line) => line.trim() === selector + ' {');
   if (start === -1) return '';
   const body: string[] = [];

@@ -279,3 +279,8 @@
   background: var(--danger);
   color: var(--text-inverse);
 }
+
+html[data-material='off'] .titlebar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}

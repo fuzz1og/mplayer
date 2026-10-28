@@ -100,7 +100,7 @@ describe('应用骨架', () => {
 /** 规格 §2.3 回归：歌词层开着进设置时，播放栏靠 `.app-shell--settings .player-bar` 隐藏，
  * 前提是切到 /settings 收起 showLyrics，否则固定层「正在播放」会盖住设置页（App 重依赖用 doMock 降桩）。 */
 describe('App 壳：全屏播放器 → 设置', () => {
-  const shellCss = readFileSync(join(dirname(fileURLToPath(String(import.meta.url))), '..', 'styles', 'shell.css'), 'utf8');
+  const settingsCss = readFileSync(join(dirname(fileURLToPath(String(import.meta.url))), '..', 'styles', 'settings.css'), 'utf8');
 
   it('歌词层开着时进设置：歌词层收起、壳带 settings 类，播放栏由 CSS 让位', async () => {
     vi.resetModules();
@@ -158,6 +158,6 @@ describe('App 壳：全屏播放器 → 设置', () => {
     expect(shell).toHaveClass('app-shell--settings');
     // 播放栏不卸载（播放器继续出声），可见性完全交给下面这条规则
     expect(shell.querySelector('.player-bar')).toBeTruthy();
-    expect(shellCss).toMatch(/\.app-shell--settings[\s\S]*?\.player-bar\s*\{[^}]*display:\s*none/);
+    expect(settingsCss).toMatch(/\.app-shell--settings[\s\S]*?\.player-bar\s*\{[^}]*display:\s*none/);
   });
 });

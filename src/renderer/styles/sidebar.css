@@ -102,4 +102,11 @@
   background: var(--accent);
 }
 
+/* 材质关闭：侧栏不再依赖系统模糊，回退侧栏实色（合并同选择器规则，值不变） */
+html[data-material='off'] .sidebar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--surface-sidebar);
+}
+
 /* 旧顶栏（1.9.0 删除）：后退/前进/刷新与搜索已上移到标题栏，见 .titlebar__* */
