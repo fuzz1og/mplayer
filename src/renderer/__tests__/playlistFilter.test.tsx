@@ -151,29 +151,19 @@ describe('本地歌单页过滤（#488）', () => {
     expect(rowTexts(container)[0]).toContain('Hello World');
   });
 
-  it('过滤态禁用拖拽排序：行不注册 useSortable，拖拽手势也发不出 reorderFull', async () => {
-    const { container, calls } = renderPage(LIST(40));
+  it('过滤态仍注册拖拽排序（#703）：可见行带拖拽把手，清空过滤后恢复全量', async () => {
+    const { container } = renderPage(LIST(40));
     await waitFor(() => expect(rowTexts(container).length).toBe(40));
     expect(dragHandles(container).length).toBe(40);
 
     setFilter(container, ONE_HIT);
     await waitFor(() => expect(rowTexts(container).length).toBe(1));
-    // 拖拽入口在结构上不存在（useSortable 的把手与 role/aria 一个都没有）
-    expect(dragHandles(container).length).toBe(0);
-    expect(container.querySelectorAll('[aria-roledescription="draggable"]').length).toBe(0);
+    // #703 起过滤态也注册 sortable：拖拽只重排可见集合，再由 reorderVisibleSongs 映射回全量顺序
+    expect(dragHandles(container).length).toBe(1);
 
-    // 即便走一遍拖拽手势：没有 sensor 接在行上，落库通道也一次都不开
-    const row = container.querySelector('.song-row') as HTMLElement;
-    fireEvent.pointerDown(row, { button: 0, clientX: 10, clientY: 10 });
-    fireEvent.pointerMove(row, { clientX: 30, clientY: 200 });
-    fireEvent.pointerUp(row, { clientX: 30, clientY: 200 });
-    expect(reorderCalls(calls)).toHaveLength(0);
-
-    // 清空过滤 → 可拖拽的行回来（禁用是过滤态的属性，不是一次性降级）
     setFilter(container, '');
     await waitFor(() => expect(rowTexts(container).length).toBe(40));
     expect(dragHandles(container).length).toBe(40);
-    expect(reorderCalls(calls)).toHaveLength(0);
   });
 
   it('过滤态全选只作用于可见集合，批量下载只见可见集合', async () => {

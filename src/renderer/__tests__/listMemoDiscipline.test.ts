@@ -169,11 +169,11 @@ describe('列表 memo 纪律（#412）', () => {
     // 展示集合（#445 是全量 songs，memo 由能力内部保证；#488 起是过滤派生的 visibleSongs）交给能力层；
     // 两种形态都是 memo 化引用——窗口化与 dnd-kit 的下标来源必须是同一个数组，不能内联 .map( 新建
     expect(page).toContain('items={visibleSongs}');
-    // 三个渲染函数（sortable 行 + 非 sortable 预览 + 过滤态静态行）从**同一份** props 展开：
-    // 本页 19 个 prop，抄三份必然静默漂移
+    // 两个渲染函数（sortable 行 + 拖拽预览行）从**同一份** props 展开：本页 19 个 prop，抄两份必静默漂移。
+    // #703 起过滤态也注册 sortable（过滤后拖拽只重排可见集合），不再有第三份静态行。
     expect(page).toContain('const sharedRowProps = useMemo(');
     expect(page).toContain('const buildRowProps = useCallback(');
-    expect((page.match(/\{\.\.\.buildRowProps\(song, index\)\}/g) ?? []).length).toBe(3);
+    expect((page.match(/\{\.\.\.buildRowProps\(song, index\)\}/g) ?? []).length).toBe(2);
     expect(page).toContain('dragHandle={previewDragHandle}');
     // 提示条 / 批量栏 / 表头 / 过滤框走 header 插槽（与 rowsRef 同父由组件结构保证，见 VirtualSortableList）
     expect(page).toContain('header={');
