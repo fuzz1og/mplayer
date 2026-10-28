@@ -14,6 +14,7 @@ import Sidebar from '@/renderer/components/Sidebar';
 import TitleBar from '@/renderer/components/TitleBar';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
+import QueuePanel, { closeQueuePanel, openQueuePanel } from '@/renderer/components/QueuePanel';
 import DownloadNotifications from '@/renderer/components/DownloadNotifications';
 import UpdateReadyDialog from '@/renderer/components/UpdateReadyDialog';
 import LyricsPage from '@/renderer/pages/LyricsPage';
@@ -39,6 +40,8 @@ const App: React.FC = () => {
   // 次导航都该把它收起来。信号取 location.key 而非 pathname：点当前页（重复导航到同一路径）也会换 key。
   useEffect(() => {
     setShowLyrics(false);
+    // #707：队列面板是当前浏览上下文的一部分；路由一变就收掉，避免跨页残留 / 与 /queue 兼容页叠两套。
+    closeQueuePanel();
   }, [location.key]);
 
   // #688：PlayerBar 封面 → 全屏播放器封面的共享元素展开（Chromium View Transitions）。
@@ -237,6 +240,11 @@ const App: React.FC = () => {
           onPageChange={(page) => {
             // 切换页面时清除搜索状态
             useSearchStore.getState().reset();
+            // #707：队列不是独立页——从侧栏打开右侧面板，保留当前浏览上下文。
+            if (page === 'queue') {
+              openQueuePanel();
+              return;
+            }
             navigate(`/${page}`);
           }}
         />
@@ -253,8 +261,11 @@ const App: React.FC = () => {
       {/* 播放栏横跨整窗（原型：从 x=0 起，侧栏在其上方结束） */}
       <PlayerBar
         onCoverClick={handleCoverClick}
-        onQueueClick={() => navigate('/queue')}
+        onQueueClick={openQueuePanel}
       />
+
+      {/* #707：右侧非模态队列面板；打开不改变路由，页面滚动与播放状态都不受影响 */}
+      <QueuePanel />
 
       {/* 下载进度弹窗（订阅面在宿主内，App 不随下载进度重渲染） */}
       <DownloadNotifications />
