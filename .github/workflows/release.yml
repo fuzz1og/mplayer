@@ -369,7 +369,7 @@ jobs:
           fi
 
           # Create if not exists（用 generate-notes 兜底）；已存在的 release 不覆盖 body，
-          # 保留人工按 release-notes skill 规格写好的介绍（CI 每次 rebuild 会重复 publish）。
+          # 保留人工按 release skill 的「介绍规格」写好的介绍（CI 每次 rebuild 会重复 publish）。
           if gh release view "$TAG" &>/dev/null; then
             gh release edit "$TAG" --draft=false
           else
