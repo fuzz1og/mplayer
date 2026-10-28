@@ -55,7 +55,6 @@ const OWNERSHIP: Record<string, string[]> = {
     'components/DiscoverPlaylistCard.tsx',
     'components/DownloadProgressModal.tsx',
     'components/ErrorBoundary.tsx',
-    'components/GroupHeaderRow.tsx',
     'components/GroupedSongList.tsx',
     'components/LyricsDisplay.tsx',
     'components/MusicCard.tsx',

@@ -1157,133 +1157,60 @@
   width: 40%;
   height: 12px;
 }
-/* ── 榜单面板（1.9.0）── */
+/* ── 榜单预览（#694）：两列在同一页流里，列自身不滚动 ──
+   行是 SongRow 的资料库密度（46px / 30px 封面 / hover 才出现播放与「更多」），
+   这里只补列标题、序号列宽与列底「查看全部」。 */
 .chart {
-  display: flex;
-  flex: 1 1 0;
-  flex-direction: column;
   min-width: 0;
+}
+
+.chart__head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 var(--song-row-padding-x);
+  margin-bottom: var(--space-2);
 }
 
 .chart__title {
-  margin: 0 0 var(--space-4);
+  margin: 0;
   color: var(--text-primary);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-bold);
-}
-
-.chart__scroll {
-  flex: 1;
-  min-height: 0;
-  padding-right: 4px;
-  overflow-y: auto;
-}
-
-.chart__body {
-  flex: 1;
-  min-width: 0;
-}
-
-/* 行 */
-.chart__row {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-standard);
-}
-
-.chart__row:hover:not([data-current]) {
-  background: var(--surface-card-hover);
-}
-
-.chart__row[data-current] {
-  background: var(--accent-subtle);
-}
-
-.chart__rank {
-  flex: none;
-  width: 28px;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-.chart__rank[data-current] {
-  color: var(--accent);
+  font-size: var(--text-xl);
   font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
 }
 
-.chart__delta {
+.chart__updated {
   flex: none;
-  width: 34px;
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  color: var(--delta-color, var(--text-tertiary));
-}
-
-.chart__cover {
-  position: relative;
-  flex: none;
-  width: 36px;
-  height: 36px;
-  overflow: hidden;
-  border-radius: var(--radius-xs);
-  background: var(--surface-card-hover);
-}
-
-.chart__cover-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.chart__text {
-  flex: 1;
-  min-width: 0;
-}
-
-.chart__name-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  min-width: 0;
-}
-
-.chart__name {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--text-base);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chart__name[data-current] {
-  color: var(--accent);
-}
-
-.chart__artist {
-  overflow: hidden;
   color: var(--text-tertiary);
   font-size: var(--text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.chart__current-icon {
-  flex: none;
-  color: var(--accent);
-  opacity: 0;
+.chart__list {
+  min-width: 0;
 }
 
-.chart__current-icon[data-visible] {
-  opacity: 1;
+/* 序号列更收（24px 见 songTableColumns.COL_INDEX_CHART）、字号 12 tertiary */
+.chart__list .song-row__number {
+  color: var(--text-tertiary);
+  font-size: var(--song-row-rank-size);
+}
+
+.chart__view-all {
+  height: 32px;
+  padding: 0 var(--song-row-padding-x);
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.chart__view-all:hover {
+  color: var(--text-primary);
 }
 
 /* 错误 / 空态 */
@@ -2545,54 +2472,53 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
-/* ── 分组搜索结果（1.9.0）── */
+/* ── 分组搜索结果（#694）：默认扁平——一组一行，展开的其余版本内联缩进 ── */
 .grouped {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-.grouped__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px 10px;
-}
-
-.grouped__count {
+/* 结果区顶部只有这一行轻说明，不做标题级分隔 */
+.grouped__meta {
+  flex: none;
+  padding: var(--space-3) var(--space-6) var(--space-2);
   color: var(--text-tertiary);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
-.grouped__toggle {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 5px 12px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-
-.grouped__toggle:hover {
-  background: var(--surface-card-hover);
-}
-
 .grouped__scroll {
   flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
-.grouped__rows[data-virtual] {
-  position: relative;
-  width: 100%;
-  height: var(--total-size);
+/* 其余版本：内联展开时整体缩进 16px，行的 hover 底色随之内收 */
+.sgroup__rest {
+  padding-left: var(--space-4);
+}
+
+/* 行尾「N 个版本」：常驻轻量文字按钮，展开态由 aria-expanded 表达 */
+.sgroup__versions {
+  flex: none;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sgroup__versions:hover,
+.sgroup__versions[aria-expanded='true'] {
+  background: var(--surface-card-hover);
+  color: var(--text-secondary);
 }
 
 .grouped__empty {
@@ -2923,103 +2849,6 @@
   font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-/* ── 分组组头（1.9.0）── */
-.ghead {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--surface-content);
-  cursor: pointer;
-}
-
-.ghead__toggle {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  border: 0;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-}
-
-.ghead__chevron {
-  transition: transform var(--duration-normal) var(--ease-standard);
-}
-
-.ghead__chevron[data-expanded] {
-  transform: rotate(90deg);
-}
-
-.ghead__main {
-  display: flex;
-  flex: 1;
-  gap: 10px;
-  align-items: center;
-  min-width: 0;
-}
-
-.ghead__name {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ghead__dot {
-  flex-shrink: 0;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-}
-
-.ghead__artist {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ghead__badge {
-  display: inline-flex;
-  flex-shrink: 0;
-  gap: 4px;
-  align-items: center;
-  padding: 3px 9px;
-  border-radius: var(--radius-full);
-  background: var(--surface-card-hover);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.ghead__play {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  padding: 6px;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.ghead__play:hover {
-  background: var(--surface-card-hover);
-  color: var(--text-primary);
 }
 /* ── 零散通用组件（1.9.0）── */
 

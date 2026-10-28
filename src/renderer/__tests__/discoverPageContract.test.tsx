@@ -115,6 +115,25 @@ describe('发现页页头与来源作用域（#705）', () => {
     expect(playSpy).toHaveBeenCalledWith(expect.objectContaining({ id: '2' }));
   });
 
+  it('全源搜索默认扁平：每组只渲染第一版，结果区顶部只留「N 首 · 已按相关度排序」', () => {
+    const groups: SongGroup[] = [
+      { key: 'g1', name: '组一', artist: '', songs: [song('1'), song('2'), song('3')] },
+      { key: 'g2', name: '组二', artist: '', songs: [song('4')] },
+    ];
+    useSearchStore.setState({
+      currentKeyword: '晴天', sourceType: 'all', songs: [], groups, expandedKeys: [],
+      loading: false, hasMore: false, error: null,
+    });
+    const { container } = renderPage();
+
+    // 每组一行（2 组 = 2 行），其余版本默认不渲染，组标题行与「全部展开」都已下线
+    expect(container.querySelectorAll('.grouped .song-row')).toHaveLength(2);
+    expect(screen.getByText('2 首 · 已按相关度排序')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '全部展开' })).toBeNull();
+    // 只有多版本组（g1）带「N 个版本」入口
+    expect(screen.getAllByRole('button', { name: /个版本/ })).toHaveLength(1);
+  });
+
   it('单源搜索：队列 = 该源搜索结果，index = 结果内下标', async () => {
     const playSpy = vi.fn().mockResolvedValue(undefined);
     usePlayerStore.setState({ play: playSpy });

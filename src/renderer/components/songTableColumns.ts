@@ -14,6 +14,8 @@ export const COL_INDEX = 50;
 export const COL_INDEX_COMPACT = 30;
 /** 资料库密度的序号列宽（原型：28px、右对齐）。 */
 export const COL_INDEX_LIBRARY = 28;
+/** 榜单预览行的序号列宽：比资料库再收 4px，序号与封面在同一条 46px 行里不抢位。 */
+export const COL_INDEX_CHART = 24;
 
 /** 专辑列宽；行默认取此值，调用方可用 albumWidth 覆盖（如队列页 120） */
 export const COL_ALBUM = 180;

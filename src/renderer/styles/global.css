@@ -241,6 +241,8 @@
   --song-row-title-size: 14px;
   --song-row-meta-size: var(--text-sm);
   --song-row-number-size: var(--text-sm);
+  /* 榜单预览行的序号：12px tertiary（序列表宽 24 见 songTableColumns.COL_INDEX_CHART） */
+  --song-row-rank-size: 12px;
   --song-row-head-height: 28px;
   --song-row-head-size: var(--text-xs);
   --song-row-head-weight: var(--weight-semibold);

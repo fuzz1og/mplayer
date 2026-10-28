@@ -301,11 +301,20 @@
   height: 100%;
 }
 
+/* ── 发现页排行榜（#694）：与推荐页同一口径 ──
+   页头 PageHeader 固定；下面只有一个 [data-scroll-container] 滚动页流，
+   热歌/新歌两列只是页流里的两栏，列自身不设 overflow。 */
+.discover-flow {
+  height: 100%;
+  padding: 0 28px 40px;
+  overflow-y: auto;
+}
+
 .discover-charts {
-  display: flex;
-  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-6);
-  min-height: 0;
+  align-items: start;
 }
 
 .discover-list-scroll {

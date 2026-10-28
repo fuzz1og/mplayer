@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_ALBUM, COL_ACTIONS, colStyle,
+  COL_CHECKBOX, COL_INDEX, COL_INDEX_CHART, COL_INDEX_COMPACT, COL_INDEX_LIBRARY, COL_ALBUM, COL_ACTIONS, colStyle,
 } from '@/renderer/components/songTableColumns';
 
 /**
@@ -18,6 +18,11 @@ describe('列宽契约', () => {
     expect(COL_INDEX).toBe(50);
     expect(COL_ALBUM).toBe(180);
     expect(COL_ACTIONS).toBe(140);
+  });
+
+  it('榜单预览的序号列最收（24px），窄于资料库的 28px', () => {
+    expect(COL_INDEX_CHART).toBe(24);
+    expect(COL_INDEX_CHART).toBeLessThan(COL_INDEX_LIBRARY);
   });
 
   it('只挂拖拽句柄时序号列收窄，且窄于常规序号列', () => {

@@ -16,13 +16,15 @@ import type { Song, SourceKey } from '@mplayer/core';
 import { pickToplistSongs, TOPLIST_SOURCE_IDS } from '@mplayer/core';
 
 /** 榜单详情页配置：路由 type → 能力面来源 + 榜单组 id（id 契约取自 core，#286）。 */
-type HotlistType = 'netease' | 'netease_new' | 'qq' | 'qq_new';
+type HotlistType = 'netease' | 'netease_new' | 'qq' | 'qq_new' | 'kugou' | 'kugou_new';
 
-const HOTLIST_CONFIG: Record<HotlistType, { source: SourceKey; sourceId: number; title: string }> = {
+const HOTLIST_CONFIG: Record<HotlistType, { source: SourceKey; sourceId: number | string; title: string }> = {
   netease: { source: 'netease', sourceId: TOPLIST_SOURCE_IDS.netease.hot, title: '网易云音乐热歌榜' },
   netease_new: { source: 'netease', sourceId: TOPLIST_SOURCE_IDS.netease.new, title: '网易云音乐新歌榜' },
   qq: { source: 'qq', sourceId: TOPLIST_SOURCE_IDS.qq.hot, title: 'QQ音乐热歌榜' },
   qq_new: { source: 'qq', sourceId: TOPLIST_SOURCE_IDS.qq.new, title: 'QQ音乐新歌榜' },
+  kugou: { source: 'kugou', sourceId: TOPLIST_SOURCE_IDS.kugou.hot, title: '酷狗音乐热歌榜' },
+  kugou_new: { source: 'kugou', sourceId: TOPLIST_SOURCE_IDS.kugou.new, title: '酷狗音乐新歌榜' },
 };
 
 /** 桌面唯一的写入 adapter（#552）：新建/批量写入/失败回滚全在它后面。 */

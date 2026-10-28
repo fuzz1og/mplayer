@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -269,19 +270,18 @@ describe('歌曲列表模块：选择模式入口（#694 评审）', () => {
   });
 });
 
-describe('分组歌曲列表：数据经 props（页面做适配器）', () => {
+describe('分组搜索结果：默认扁平 + 就地展开其余版本（#694）', () => {
   const groups: SongGroup[] = [
     { key: 'sunny', name: '晴天', artist: '周杰伦', songs: [song(1), song(2), song(3)] },
     { key: 'rainy', name: '雨天', artist: '孙燕姿', songs: [song(4), song(5)] },
   ];
+  const songTitle = (name: string) => screen.queryByText(name, { selector: '.song-row__title' });
 
   const renderGrouped = (overrides: Partial<React.ComponentProps<typeof GroupedSongList>> = {}) => {
     const props = {
       groups,
-      expandedKeys: ['sunny'],
+      expandedKeys: [] as string[],
       onToggleGroup: vi.fn(),
-      onExpandAll: vi.fn(),
-      onCollapseAll: vi.fn(),
       onPlay: vi.fn(),
       onToggleFavorite: vi.fn(),
       selectedIds: [],
@@ -296,49 +296,89 @@ describe('分组歌曲列表：数据经 props（页面做适配器）', () => {
     return props;
   };
 
-  it('已展开的组渲染组内歌曲，折叠的组只留组头', () => {
+  it('默认扁平：每组只渲染最相关的一版，不再有组标题行与「全部展开」', () => {
     renderGrouped();
 
-    expect(screen.getByText('晴天')).toBeInTheDocument();
-    expect(screen.getByText('雨天')).toBeInTheDocument();
-    expect(coverRenders.size).toBe(3);
-    expect(coverRenders.has('歌曲 4')).toBe(false);
+    expect(document.querySelectorAll('.song-row')).toHaveLength(groups.length);
+    expect(songTitle('歌曲 1')).not.toBeNull();
+    expect(songTitle('歌曲 4')).not.toBeNull();
+    // 其余版本默认不渲染，顶部也没有「全部展开」大按钮
+    expect(songTitle('歌曲 2')).toBeNull();
+    expect(songTitle('歌曲 5')).toBeNull();
+    expect(screen.queryByRole('button', { name: '全部展开' })).toBeNull();
+    // 结果区顶部只有一行轻说明
+    expect(screen.getByText('2 首 · 已按相关度排序')).toBeInTheDocument();
+    // 每行都是 46px 资料库密度（与最终形态同高）
+    for (const row of Array.from(document.querySelectorAll('.song-row')) as HTMLElement[]) {
+      expect(row.style.getPropertyValue('--song-row-height')).toBe('46px');
+    }
   });
 
-  it('「全部展开 / 全部折叠」把决定权交回适配器', () => {
-    const props = renderGrouped({ expandedKeys: [] });
-
-    fireEvent.click(screen.getByRole('button', { name: '全部展开' }));
-    expect(props.onExpandAll).toHaveBeenCalledTimes(1);
-
-    cleanup();
-    const allExpanded = renderGrouped({ expandedKeys: groups.map(g => g.key) });
-    fireEvent.click(screen.getByRole('button', { name: '全部折叠' }));
-    expect(allExpanded.onCollapseAll).toHaveBeenCalledTimes(1);
-  });
-
-  it('播放分组第一首：回传该组歌曲队列与组内下标 0', () => {
+  it('行尾「N 个版本」就地展开：aria-expanded + 缩进 16px 的其余版本', () => {
     const props = renderGrouped();
 
-    fireEvent.click(screen.getAllByRole('button', { name: '播放分组第一首' })[1]);
+    const versions = screen.getAllByRole('button', { name: /个版本/ });
+    expect(versions.map((b) => b.textContent)).toEqual(['3 个版本', '2 个版本']);
+    expect(versions[0]).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(versions[0]);
+    expect(props.onToggleGroup).toHaveBeenCalledWith('sunny');
+
+    cleanup();
+    renderGrouped({ expandedKeys: ['sunny'] });
+    expect(screen.getByRole('button', { name: /3 个版本/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(document.querySelectorAll('.sgroup__rest')).toHaveLength(1);
+    expect(songTitle('歌曲 2')).not.toBeNull();
+    expect(songTitle('歌曲 3')).not.toBeNull();
+    // 没展开的那组仍然只有一版
+    expect(songTitle('歌曲 5')).toBeNull();
+  });
+
+  it('展开/收起走同一按钮：行 memo 不能把 aria-expanded 停在旧值（#694 Electron 回归）', () => {
+    const Controlled = () => {
+      const [expanded, setExpanded] = useState<string[]>([]);
+      return (
+        <GroupedSongList
+          groups={groups}
+          expandedKeys={expanded}
+          onToggleGroup={(key) => setExpanded((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))}
+          onPlay={vi.fn()}
+          onToggleFavorite={vi.fn()}
+          selectedIds={[]}
+          onSelectionChange={vi.fn()}
+        />
+      );
+    };
+    render(<MemoryRouter><Controlled /></MemoryRouter>);
+
+    const toggle = screen.getByRole('button', { name: /3 个版本/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: /3 个版本/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(songTitle('歌曲 2')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /3 个版本/ }));
+    expect(screen.getByRole('button', { name: /3 个版本/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(songTitle('歌曲 2')).toBeNull();
+  });
+
+  it('单版本组不渲染「N 个版本」按钮', () => {
+    renderGrouped({ groups: [{ key: 'only', name: '单曲', artist: '歌手', songs: [song(9)] }] });
+
+    expect(screen.queryByRole('button', { name: /个版本/ })).toBeNull();
+  });
+
+  it('展开后点其中一首：队列 = 该组版本 + 组内下标（D1）', () => {
+    const props = renderGrouped({ expandedKeys: ['sunny'] });
+
+    const rows = Array.from(document.querySelectorAll('.song-row')) as HTMLElement[];
+    const second = rows.find((row) => row.textContent?.includes('歌曲 2')) as HTMLElement;
+    fireEvent.click(second.querySelector('.song-row__cover-play') as HTMLElement);
 
     expect(props.onPlay).toHaveBeenCalledTimes(1);
     const [picked, queue, index] = (props.onPlay as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(picked.name).toBe('歌曲 4');
-    // D1：组头播放第一首 = 该组队列 + 组内下标 0，不是跨组扁平化后的全局下标
-    expect(queue.map((s: Song) => s.id)).toEqual(['netease:4', 'netease:5']);
-    expect(index).toBe(0);
-  });
-
-  it('点组头的展开/折叠按钮调用 onToggleGroup 并带上组 key', () => {
-    const props = renderGrouped();
-
-    // sunny 已展开 → 按钮语义是「折叠分组」；rainy 折叠 → 「展开分组」
-    fireEvent.click(screen.getByRole('button', { name: '折叠分组' }));
-    fireEvent.click(screen.getByRole('button', { name: '展开分组' }));
-
-    expect(props.onToggleGroup).toHaveBeenNthCalledWith(1, 'sunny');
-    expect(props.onToggleGroup).toHaveBeenNthCalledWith(2, 'rainy');
+    expect(picked.id).toBe('netease:2');
+    expect(queue.map((s: Song) => s.id)).toEqual(['netease:1', 'netease:2', 'netease:3']);
+    expect(index).toBe(1);
   });
 });
 
@@ -392,8 +432,6 @@ describe('歌曲列表点播契约（#697）', () => {
           groups={groups}
           expandedKeys={['sunny', 'rainy']}
           onToggleGroup={vi.fn()}
-          onExpandAll={vi.fn()}
-          onCollapseAll={vi.fn()}
           onPlay={onPlay}
           onToggleFavorite={vi.fn()}
           selectedIds={[]}

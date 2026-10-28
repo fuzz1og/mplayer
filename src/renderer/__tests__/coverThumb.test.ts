@@ -23,11 +23,18 @@ describe('桌面封面取图尺寸（#496）', () => {
       ['pages/AlbumDetailPage.tsx', 'coverThumbUrl(displayPic, COVER_SIZE.thumb)'],
       ['pages/ArtistDetailPage.tsx', 'coverThumbUrl(displayPic, COVER_SIZE.thumb)'],
       ['pages/DiscoverPlaylistDetailPage.tsx', 'coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)'],
-      ['components/ChartPanel.tsx', 'coverThumbUrl(song.cover, COVER_SIZE.row)'],
       ['components/DownloadProgressModal.tsx', 'coverThumbUrl(task.song.cover, COVER_SIZE.row)'],
     ] as const) {
       expect(read(file), file).toContain(needle);
     }
+  });
+
+  it('榜单预览行复用共享 SongRow：封面走 SongCover，不再自绘 36px img（#694）', () => {
+    const src = read('components/ChartPanel.tsx');
+    expect(src).toContain("import SongRow from '@/renderer/components/SongRow'");
+    expect(src).not.toContain('chart__cover-img');
+    // 共享 SongCover 是唯一取图点（内部过 coverThumbUrl）
+    expect(read('components/SongCover.tsx')).toContain('coverThumbUrl(src, thumbSize)');
   });
 
   it('共享 SongCover 默认走 icon 档，大图卡片显式提档', () => {

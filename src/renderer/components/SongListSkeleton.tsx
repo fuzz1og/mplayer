@@ -26,6 +26,8 @@ interface SongListSkeletonProps {
   density?: SongListDensity;
   /** 与 SongList 的 showDuration 一致：library 资料库行有时长列 */
   showDuration?: boolean;
+  /** 与 SongRow 的 indexWidth 一致（榜单预览 24px）；缺省按密度取 28 / 50 */
+  indexWidth?: number;
 }
 
 const SkeletonRow: React.FC<{
@@ -34,7 +36,8 @@ const SkeletonRow: React.FC<{
   showAlbum: boolean;
   density: SongListDensity;
   showDuration: boolean;
-}> = ({ showCheckbox, showIndex, showAlbum, density, showDuration }) => {
+  indexWidth?: number;
+}> = ({ showCheckbox, showIndex, showAlbum, density, showDuration, indexWidth }) => {
   const library = density === 'library';
   return (
     <div
@@ -49,7 +52,7 @@ const SkeletonRow: React.FC<{
         </div>
       )}
       {showIndex && (
-        <div className="song-skeleton__col" style={colWidth(library ? COL_INDEX_LIBRARY : COL_INDEX)}>
+        <div className="song-skeleton__col" style={colWidth(indexWidth ?? (library ? COL_INDEX_LIBRARY : COL_INDEX))}>
           <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--index" />
         </div>
       )}
@@ -95,6 +98,7 @@ const SongListSkeleton: React.FC<SongListSkeletonProps> = ({
   showAlbum = false,
   density = 'standard',
   showDuration = false,
+  indexWidth,
 }) => (
   <div className="song-skeleton" data-density={density}>
     {Array.from({ length: rowCount }).map((_, i) => (
@@ -105,6 +109,7 @@ const SongListSkeleton: React.FC<SongListSkeletonProps> = ({
         showAlbum={showAlbum}
         density={density}
         showDuration={showDuration}
+        indexWidth={indexWidth}
       />
     ))}
   </div>
