@@ -81,6 +81,25 @@ describe('Menu 原语', () => {
     expect(screen.queryByRole('menu', { name: '测试菜单' })).toBeNull();
   });
 
+  it('末项 Tab / 首项 Shift+Tab 关闭菜单后焦点回到触发按钮，不落 body', () => {
+    render(<MenuHarness />);
+    const trigger = screen.getByRole('button', { name: '打开菜单' });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    // 首项 → 末项，末项再 Tab 才关闭
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: '第一项' }), { key: 'Tab' });
+    expect(screen.getByRole('menuitem', { name: '第三项' })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: '第三项' }), { key: 'Tab' });
+    expect(screen.queryByRole('menu', { name: '测试菜单' })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: '第一项' }), { key: 'Tab', shiftKey: true });
+    expect(screen.queryByRole('menu', { name: '测试菜单' })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('选择菜单项后关闭并把焦点归还触发按钮', () => {
     const onSelect = vi.fn();
     render(<MenuHarness onSelect={onSelect} />);

@@ -144,14 +144,16 @@ export const Menu: React.FC<MenuProps> = ({
     else if (event.key === 'Home') nextIndex = 0;
     else if (event.key === 'End') nextIndex = nodes.length - 1;
     else if (event.key === 'Tab') {
-      // Tab 在菜单项之间移动；从最后一项再 Tab 才关闭。Shift+Tab 从首项退出。
+      // Tab 在菜单项之间移动；从最后一项再 Tab 才关闭，Shift+Tab 从首项退出。
+      // 关闭那一拍把焦点还给 anchor：preventDefault 之后浏览器不会再推进焦点，菜单卸载后
+      // 若不显式归还就会落到 body。
       event.preventDefault();
       event.stopPropagation();
       if (event.shiftKey) {
-        if (currentIndex <= 0) close(false);
+        if (currentIndex <= 0) close(true);
         else focusItem(currentIndex - 1);
       } else if (currentIndex < 0 || currentIndex >= nodes.length - 1) {
-        close(false);
+        close(true);
       } else {
         focusItem(currentIndex + 1);
       }
