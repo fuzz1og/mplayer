@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { usePlaybackDuration, usePlaybackPosition } from '@/renderer/services/playbackClock';
+import '@/renderer/styles/player-bar.css';
 
 interface PlayerProgressProps {
   hasCurrentSong: boolean;

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import '@/renderer/styles/settings.css';
 
 /**
  * 设置全屏壳（原型 §2）：无自带工具条，标题在标题栏中部，退出只走 ESC。

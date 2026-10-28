@@ -14,6 +14,7 @@ import PlaybackDiagnosticsSection from '@/renderer/components/PlaybackDiagnostic
 import AppearanceSection from '@/renderer/components/AppearanceSection';
 import DeveloperSection from '@/renderer/components/DeveloperSection';
 import { isDevMode, subscribeDevMode } from '@/renderer/services/devMode';
+import '@/renderer/styles/settings.css';
 
 interface SettingsEntry {
   id: string;

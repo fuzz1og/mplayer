@@ -3,6 +3,44 @@
    列宽由 songTableColumns 的常量经 colWidth() 下发 --col-width，类只消费变量，
    于是表头 / 行 / 骨架屏三处共用同一份数字。 */
 
+/* ── 媒体卡片：卡片与播放浮层（AlbumGrid / MusicCard） ── */
+/* ── 卡片 ── */
+.card {
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: box-shadow var(--duration-normal) var(--ease-out),
+              transform var(--duration-normal) var(--ease-out);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ── 播放按钮覆盖层 ── */
+.play-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+  border-radius: inherit;
+}
+
+.play-overlay:hover {
+  opacity: 1;
+}
+
+
 /* ── 行 ── */
 .song-row {
   display: flex;

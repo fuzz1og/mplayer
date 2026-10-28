@@ -1,3 +1,5 @@
+import './styles/global.css';
+import './styles/base.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
@@ -6,7 +8,6 @@ import { ThemeManager } from './theme/ThemeManager';
 import ToastHost from './components/ToastHost';
 import { installRendererLogCapture } from './services/rendererLogStore';
 import { initDevMode } from './services/devMode';
-import './styles/global.css';
 
 // #477：开发者模式的持久开关 + 渲染层 console 全局捕获，都必须在渲染前接线一次。
 initDevMode();

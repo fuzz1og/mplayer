@@ -2,7 +2,6 @@ import { Suspense, lazy } from 'react';
 import { createHashRouter, Navigate } from 'react-router-dom';
 import App from '@/renderer/App';
 import SettingsShell from '@/renderer/components/SettingsShell';
-import '@/renderer/styles/songlist.css';
 
 // 懒加载页面组件
 const DiscoverPageV2 = lazy(() => import('@/renderer/pages/DiscoverPageV2'));

@@ -4,6 +4,7 @@ import { Minus, Square, Copy, X, Search, ChevronDown, ChevronLeft, ChevronRight,
 import type { SourceKey } from '@/renderer/store/searchStore';
 import { SOURCE_COLORS, ALL_SOURCE_COLOR } from '@/renderer/constants/sourceConfig';
 import { SOURCE_DISPLAY_NAMES } from '@mplayer/core';
+import '@/renderer/styles/titlebar.css';
 
 const ipcRenderer = window.electronAPI;
 

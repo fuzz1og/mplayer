@@ -10,6 +10,7 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
 import { useVirtualRows, SONG_ROW_HEIGHT } from '@/renderer/hooks/useVirtualRows';
+import '@/renderer/styles/songlist.css';
 
 type FlatItem =
   | { type: 'group'; group: SongGroup }

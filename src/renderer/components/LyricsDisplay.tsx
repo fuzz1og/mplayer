@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import { parseLRC, findCurrentLyricIndex, type ParsedLyrics } from '@mplayer/core';
 import { usePlaybackSelector } from '@/renderer/services/playbackClock';
+import '@/renderer/styles/songlist.css';
 
 interface LyricsDisplayProps {
   lrcContent: string;

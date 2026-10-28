@@ -4,6 +4,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import SongRow from '@/renderer/components/SongRow';
 import type { Song } from '@mplayer/core';
+import '@/renderer/styles/songlist.css';
 
 /** SongRow 的能力全透传；菜单开关、拖拽句柄与位移动画由本组件接管 */
 export type SortableSongRowProps = Omit<

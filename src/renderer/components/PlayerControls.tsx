@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1 } from 'lucide-react';
 import type { PlayMode } from '@mplayer/core';
+import '@/renderer/styles/player-bar.css';
 
 interface PlayerControlsProps {
   isPlaying: boolean;

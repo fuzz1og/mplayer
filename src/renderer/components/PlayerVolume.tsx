@@ -1,5 +1,6 @@
 import React from 'react';
 import { Volume2, Volume1, VolumeX } from 'lucide-react';
+import '@/renderer/styles/player-bar.css';
 
 interface PlayerVolumeProps {
   volume: number;

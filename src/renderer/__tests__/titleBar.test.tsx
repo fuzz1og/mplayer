@@ -8,11 +8,11 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import TitleBar from '../components/TitleBar';
 
 const testDir = dirname(fileURLToPath(String(import.meta.url)));
-const shellCss = readFileSync(join(testDir, '..', 'styles', 'shell.css'), 'utf8');
+const titlebarCss = readFileSync(join(testDir, '..', 'styles', 'titlebar.css'), 'utf8');
 
 /** 取「整行只有该选择器 + {」的规则体；组选择器（行尾带逗号）不参与匹配。 */
 function cssBlock(selector: string): string {
-  const lines = shellCss.split('\n');
+  const lines = titlebarCss.split('\n');
   const start = lines.findIndex((line) => line.trim() === selector + ' {');
   if (start === -1) return '';
   const body: string[] = [];
@@ -79,7 +79,7 @@ describe('TitleBar', () => {
     expect(cssBlock('.titlebar__search')).not.toContain('var(--radius-full)');
     expect(cssBlock('.titlebar__source-trigger')).toContain('background: transparent');
     expect(cssBlock('.titlebar')).toContain('z-index: 50');
-    expect(shellCss).not.toContain('.titlebar__kbd');
+    expect(titlebarCss).not.toContain('.titlebar__kbd');
   });
 
   it('回车提交关键词', () => {
