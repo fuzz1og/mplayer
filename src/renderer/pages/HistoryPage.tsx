@@ -139,7 +139,7 @@ const HistoryPage: React.FC = () => {
             onCoverError={handleCoverError}
             enableBatchDownload={true}
             enableBatchAddToPlaylist={true}
-            emptyText="还没有播放记录，听过的歌会出现在这里"
+            emptyText="还没有播放记录"
           />
         ) : (
           <CollectionGrid

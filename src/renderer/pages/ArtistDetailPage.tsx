@@ -218,7 +218,6 @@ const ArtistDetailPage: React.FC = () => {
               )}
             </div>
           }
-          eyebrow="歌手"
           title={displayName || `歌手 (ID: ${artistId})`}
           meta={meta}
           actions={

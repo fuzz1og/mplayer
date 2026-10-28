@@ -176,7 +176,6 @@ const ArtistListPage: React.FC = () => {
           <div className="artists__empty">
             <Mic2 size={26} className="artists__empty-icon" />
             <div className="artists__empty-title">没有匹配的歌手</div>
-            <div>切换分类或选择其他字母</div>
           </div>
         ) : (
           <>

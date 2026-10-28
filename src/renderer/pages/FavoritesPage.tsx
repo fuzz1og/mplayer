@@ -118,7 +118,7 @@ const FavoritesPage: React.FC = () => {
             onCoverError={handleCoverError}
             enableBatchDownload={true}
             enableBatchAddToPlaylist={true}
-            emptyText="还没有喜欢的歌曲，点歌曲行右侧的爱心收藏"
+            emptyText="还没有喜欢的歌曲"
           />
         ) : (
           <CollectionGrid

@@ -143,12 +143,6 @@
   font-size: var(--text-base);
 }
 
-.playlist-detail__empty-hint {
-  margin-top: 8px;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-}
-
 /* ── 编辑歌单弹层 ── */
 .playlist-detail__modal-backdrop {
   position: fixed;

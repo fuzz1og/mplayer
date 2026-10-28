@@ -538,7 +538,6 @@ const DiscoverPageV2: React.FC = () => {
       <div className="discover-page">
         <PageHeader
           title="发现"
-          lead={`搜索结果：${currentKeyword}`}
           actions={(
             <button type="button" className="discover-search-clear" onClick={handleBackFromSearch}>
               退出搜索
@@ -623,7 +622,7 @@ const DiscoverPageV2: React.FC = () => {
                 error={playlistError}
                 onRetry={() => ensurePlaylistsSearch(currentKeyword, true)}
                 onPlaylistSelect={handlePlaylistSelect}
-                emptyText="没有搜到歌单，去发现页看看歌单广场"
+                emptyText="没有搜到歌单"
               />
               {playlistLoadingMore && (
                 <div className="discover-note discover-note--tight">加载中…</div>
@@ -672,7 +671,7 @@ const DiscoverPageV2: React.FC = () => {
 
   return (
     <div className="discover-page">
-      <PageHeader title="发现" lead="今天听什么" />
+      <PageHeader title="发现" />
 
       <div className="discover-filters">
         <div className="discover-filter-group" role="group" aria-label="发现内容来源">

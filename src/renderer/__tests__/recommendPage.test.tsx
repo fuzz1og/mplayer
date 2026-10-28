@@ -93,14 +93,14 @@ describe('推荐页', () => {
     expect(container.querySelectorAll('[data-scroll-container]')).toHaveLength(1);
   });
 
-  it('播放推荐歌曲建立当前批次的展示队列并从第一首开始', async () => {
+  it('推荐歌曲区块的「播放全部」建立当前批次的展示队列并从第一首开始', async () => {
     const playSpy = vi.fn().mockResolvedValue(undefined);
     const originalPlay = usePlayerStore.getState().play;
     usePlayerStore.setState({ play: playSpy });
     try {
       renderPage();
       await waitForPage();
-      await userEvent.click(screen.getByRole('button', { name: '播放推荐歌曲' }));
+      await userEvent.click(screen.getByRole('button', { name: '播放全部' }));
 
       expect(playSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'netease:1' }));
       const state = usePlayerStore.getState();

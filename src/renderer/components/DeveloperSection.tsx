@@ -8,7 +8,7 @@ import {
   type RendererLogLevel,
 } from '@/renderer/services/rendererLogStore';
 import { isDevMode, setDevMode, subscribeDevMode } from '@/renderer/services/devMode';
-import { Button, Group, Row, Section, Switch, Tag } from '@/renderer/ui';
+import { Button, Group, Row, Section, Switch, Tag, InfoHint } from '@/renderer/ui';
 
 /**
  * 开发者模式（#477）。1.9.0 起不再是独立导航项：挂在「关于」页底部。
@@ -47,7 +47,7 @@ const DeveloperSection: React.FC = () => {
 
   return (
     <section id="developer">
-      <Section title="高级" footer="打开后会记录本会话的渲染层日志并显示播放诊断页（跨重启保持）。">
+      <Section title={<>{'高级'} <InfoHint label="开发者模式">打开后会记录本会话的渲染层日志并显示播放诊断页，跨重启保持。</InfoHint></>}>
         <Group>
           <Row
             icon={<FlaskConical size={13} />}

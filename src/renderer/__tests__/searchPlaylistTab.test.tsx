@@ -127,14 +127,14 @@ describe('搜索结果 歌单 tab（#415）', () => {
     expect(await screen.findByTestId('playlist-detail')).toBeInTheDocument();
   });
 
-  it('空结果用搜索专属空态文案（与发现页一级「歌单广场」区分）', async () => {
+  it('空结果给出结论，不再附教学段落', async () => {
     searchPlaylistsMock.mockResolvedValue({ playlists: [], total: 0, more: false });
     useSearchStore.setState({ currentKeyword: 'zzz不存在', sourceType: 'all', songs: [], groups: [], loading: false, hasMore: false });
     renderPage();
 
     await gotoTab(/歌单/);
 
-    expect(await screen.findByText('没有搜到歌单，去发现页看看歌单广场')).toBeInTheDocument();
+    expect(await screen.findByText('没有搜到歌单')).toBeInTheDocument();
     expect(screen.queryByText('暂无歌单')).toBeNull();
   });
 

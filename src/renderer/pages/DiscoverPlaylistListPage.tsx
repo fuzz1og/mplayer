@@ -123,7 +123,7 @@ const DiscoverPlaylistListPage: React.FC = () => {
 
             {hasMore && (
               <div ref={triggerRef} className="discover-note">
-                {loadingMore ? '加载中...' : '上滑加载更多'}
+                {loadingMore ? '加载中...' : ''}
               </div>
             )}
             {!hasMore && playlists.length > 0 && (

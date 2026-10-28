@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Folder, RefreshCw } from 'lucide-react';
-import { Button, Group, Input, Row, Section, useToast } from '@/renderer/ui';
+import { Button, Group, Input, Row, Section, useToast, InfoHint } from '@/renderer/ui';
 
 const ipcRenderer = window.electronAPI;
 
@@ -72,10 +72,8 @@ const DownloadSection: React.FC = () => {
         <Folder size={16} aria-hidden="true" />
         <h1>下载</h1>
       </div>
-      <div className="settings-page__lead">下载的音乐文件保存到下面的目录；选择目录后立即生效。</div>
-
       <div className="settings-page__stack">
-        <Section title="下载目录">
+        <Section title={<>{'下载目录'} <InfoHint label="下载目录">目录变更后立即生效，下载中的任务保持原目录。</InfoHint></>}>
           <Group>
             <div className="settings-page__field">
               <Input aria-label="下载目录" value={downloadPath} readOnly placeholder="加载中…" />

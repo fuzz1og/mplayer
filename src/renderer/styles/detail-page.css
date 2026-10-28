@@ -66,17 +66,6 @@
   padding: 0 28px 40px;
 }
 
-.detail-page__hero-desc {
-  display: -webkit-box;
-  margin: var(--space-1) 0 0;
-  overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
 .detail-page__error {
   display: flex;
   flex-direction: column;

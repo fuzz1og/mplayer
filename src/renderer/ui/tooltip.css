@@ -1,0 +1,51 @@
+/* 补充信息浮层（#694 去伪信息）：默认收起，悬停 / 键盘聚焦展开 */
+.ui-info-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.ui-info-hint__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: help;
+}
+
+.ui-info-hint__trigger:hover,
+.ui-info-hint__trigger:focus-visible {
+  color: var(--text-secondary);
+}
+
+.ui-info-hint__bubble {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 320px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.ui-info-hint:hover .ui-info-hint__bubble,
+.ui-info-hint:focus-within .ui-info-hint__bubble {
+  opacity: 1;
+  visibility: visible;
+}

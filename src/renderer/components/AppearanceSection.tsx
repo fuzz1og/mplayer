@@ -12,7 +12,7 @@ import {
 } from '@/renderer/theme/appearancePrefs';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import SongCover from '@/renderer/components/SongCover';
-import { Button, Group, Row, Section, Segmented, Switch } from '@/renderer/ui';
+import { Button, Group, Row, Section, Segmented, Switch, InfoHint } from '@/renderer/ui';
 
 /** Segmented 只显示中文 label，值↔label 的映射留在组件内（原语只收 string 数组）。 */
 const THEME_LABELS = THEME_MODES.map((option) => option.label);
@@ -68,13 +68,11 @@ const AppearanceSection: React.FC = () => {
     <section id="appearance">
       <div className="settings-page__head">
         <h1>外观</h1>
-        <p className="settings-page__lead">主题、密度与材质</p>
       </div>
 
       <div className="settings-page__stack">
         <Section
-          title="外观"
-          footer="材质依赖系统模糊效果，关闭后改为不透明表面，性能更稳定。"
+          title={<>{'外观'} <InfoHint label="材质">材质依赖系统模糊效果，关闭后改为不透明表面，性能更稳定。</InfoHint></>}
         >
           <Group>
             <Row

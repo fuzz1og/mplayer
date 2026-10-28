@@ -139,7 +139,6 @@ const AlbumDetailPage: React.FC = () => {
               )}
             </div>
           }
-          eyebrow="专辑"
           title={displayName || '专辑'}
           meta={[
             displayArtist,

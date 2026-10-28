@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Activity, Download, Trash2, RefreshCw } from 'lucide-react';
 import type { PlaybackLayer, PlaybackTrace, PlaybackTraceOutcome } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { Button, Group, Row, Section, Tag, useToast } from '@/renderer/ui';
+import { Button, Group, Row, Section, Tag, useToast, InfoHint } from '@/renderer/ui';
 
 /**
  * 播放诊断（#363 / ADR `2026-09-23-playback-trace-sink`）。
@@ -99,12 +99,8 @@ const PlaybackDiagnosticsSection: React.FC = () => {
         <h1>诊断</h1>
         <Tag>仅本次会话</Tag>
       </div>
-      <div className="settings-page__lead">
-        记录每次播放解析命中的层级（预取 / 直连 / 第三方）、各段耗时与失败原因。数据只保存在当前会话内存中。
-      </div>
-
       <div className="settings-page__stack">
-        <Section title="操作">
+        <Section title={<>{'操作'} <InfoHint label="诊断记录">记录每次播放解析命中的层级（预取 / 直连 / 第三方）、各段耗时与失败原因；数据只保存在当前会话内存中。</InfoHint></>}>
           <Group>
             <Row
               label="导出诊断"

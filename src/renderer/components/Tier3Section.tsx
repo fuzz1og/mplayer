@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { FlaskConical, Plus, Trash2, RefreshCw, FileJson, Link } from 'lucide-react';
 import type { Tier3Source, Tier3SourceStats, Tier3State, Tier3Subscription } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { Alert, Button, Group, Input, Row, Section, Switch, Tag, useToast } from '@/renderer/ui';
+import { Alert, Button, Group, Input, Row, Section, Switch, Tag, useToast, InfoHint } from '@/renderer/ui';
 
 /**
  * tier3 第三方解析源订阅执行器（#144）设置区。
@@ -157,12 +157,8 @@ const Tier3Section: React.FC = () => {
         <h1>第三方解析源</h1>
         <Tag tone="warning">实验性</Tag>
       </div>
-      <div className="settings-page__lead">
-        官方直连失败时按订阅清单依次尝试第三方解析；全部失败才换源或标记不可播。清单由你自行订阅，应用不内置任何端点。
-      </div>
-
       <div className="settings-page__stack">
-        <Section title="总开关">
+        <Section title={<>{'总开关'} <InfoHint label="第三方解析">官方直连失败时按订阅清单依次尝试第三方解析；全部失败才换源或标记不可播。清单由你自行订阅，应用不内置任何端点。</InfoHint></>}>
           <Group>
             <Row
               label="启用第三方解析源"

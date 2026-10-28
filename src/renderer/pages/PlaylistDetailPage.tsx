@@ -329,7 +329,6 @@ const PlaylistDetailPage: React.FC = () => {
             }
             eyebrow={
               <div className="playlist-detail__kind-row">
-                <span className="playlist-detail__kind">歌单</span>
                 <button
                   type="button"
                   aria-label="编辑歌单"
@@ -410,7 +409,6 @@ const PlaylistDetailPage: React.FC = () => {
           <div className="playlist-detail__empty">
             <Music size={48} />
             <div className="playlist-detail__empty-title">歌单暂无歌曲</div>
-            <div className="playlist-detail__empty-hint">去发现音乐添加歌曲吧</div>
           </div>
         ) : (
           /* 窗口化 + 可排序收在共享能力里（#445）：页面不再自建 DndContext/SortableContext，

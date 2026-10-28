@@ -130,7 +130,7 @@ describe('设置页（1.9.0 原型 §2）', () => {
   it('默认落在缓存页：大号读数 + 上限/还剩 + 存储/构成/位置', async () => {
     renderPage();
     expect(await body().findByRole('heading', { level: 1, name: '缓存' })).toBeInTheDocument();
-    expect(body().getByText('缓存封面、歌词与索引，加快重复浏览')).toBeInTheDocument();
+    // 分区名与说明都不再常显：左栏已点名，说明改挂 info 浮层
     expect(document.querySelector('.cache-usage__value')?.textContent).toContain('52');
     expect(body().getByText('上限 100 MB · 还剩 48 MB')).toBeInTheDocument();
 
@@ -218,7 +218,7 @@ describe('设置页（1.9.0 原型 §2）', () => {
     renderPage();
     await userEvent.click(navBar().getByRole('button', { name: /^外观/ }));
     expect(await body().findByRole('heading', { level: 1, name: '外观' })).toBeInTheDocument();
-    expect(body().getByText('主题、密度与材质')).toBeInTheDocument();
+    expect(body().getByRole('heading', { level: 1, name: '外观' })).toBeInTheDocument();
 
     expect(within(body().getByRole('radiogroup', { name: '主题' })).getByRole('radio', { name: '跟随系统' })).toHaveAttribute('aria-checked', 'true');
     expect(body().getByText('外观与系统同步时，自动跟随 Windows 主题')).toBeInTheDocument();

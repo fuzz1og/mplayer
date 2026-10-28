@@ -21,6 +21,8 @@ export type {
   StepperProps,
 } from './forms';
 export { PageHeader, PageSurface, PageHero, PageBack } from './page';
+export { InfoHint } from './tooltip';
+export type { InfoHintProps } from './tooltip';
 export type { PageHeaderProps, PageSurfaceProps, PageHeroProps, PageBackProps } from './page';
 export { Dialog, ToastProvider, useToast, GridList } from './overlay';
 export { Menu } from './menu';

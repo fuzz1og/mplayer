@@ -103,7 +103,6 @@ const PlaylistsPage: React.FC = () => {
               <div className="playlists__empty">
                 <FolderOpen size={48} className="playlists__empty-icon" />
                 <div className="playlists__empty-title">暂无歌单</div>
-                <div>点击上方按钮创建第一个歌单</div>
               </div>
             ) : (
               <div className="card-grid">

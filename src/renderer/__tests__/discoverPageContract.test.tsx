@@ -61,13 +61,12 @@ beforeEach(() => {
 });
 
 describe('发现页页头与来源作用域（#705）', () => {
-  it('h1 与侧栏统一为「发现」，「今天听什么」只做 lead', () => {
+  it('页面名只留读屏用的 h1，内容区不再重复印页面名或 slogan', () => {
     renderPage();
     const headings = screen.getAllByRole('heading', { level: 1 });
     expect(headings).toHaveLength(1);
     expect(headings[0]).toHaveTextContent('发现');
-    expect(screen.getByText('今天听什么')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '今天听什么' })).toBeNull();
+    expect(screen.queryByText('今天听什么')).toBeNull();
     expect(screen.getByRole('group', { name: '内容分类' })).toBeInTheDocument();
   });
 

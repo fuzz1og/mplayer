@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertCircle, Download, ListPlus, ListMusic, Play, CirclePlus } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
-import { Button, PageHero, useConfirm } from '@/renderer/ui';
+import { Button, InfoHint, PageHero, useConfirm } from '@/renderer/ui';
 import '@/renderer/styles/songlist.css';
 import '@/renderer/styles/detail-page.css';
 import SongList from '@/renderer/components/SongList';
@@ -178,16 +178,14 @@ const HotlistDetailPage: React.FC = () => {
               )}
             </div>
           }
-          eyebrow="榜单"
           title={heroTitle}
           meta={
             <>
               {[
                 `${hotlist.length} 首`,
                 chartMeta?.playCount ? `${formatPlayCount(chartMeta.playCount)} 次播放` : '',
-                chartMeta?.description ? '' : '实时更新',
               ].filter(Boolean).join(' · ')}
-              {chartMeta?.description && <p className="detail-page__hero-desc">{chartMeta.description}</p>}
+              {chartMeta?.description && <InfoHint label="榜单说明">{chartMeta.description}</InfoHint>}
             </>
           }
           actions={
