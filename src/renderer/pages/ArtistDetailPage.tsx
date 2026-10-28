@@ -131,6 +131,12 @@ const ArtistDetailPage: React.FC = () => {
     await play(await resolvePlayableVersionForDesktop(song));
   };
 
+  const handlePlayAll = async () => {
+    if (songs.length === 0) return;
+    setCurrentPlaylist(songs, 0);
+    await play(await resolvePlayableVersionForDesktop(songs[0]));
+  };
+
   const handleToggleFavorite = async (song: Song) => {
     try {
       await toggleFavorite(song);
@@ -186,7 +192,7 @@ const ArtistDetailPage: React.FC = () => {
                 )}
               </div>
               <div className="artist__info">
-                <div className="artist__name">{displayName || `歌手 (ID: ${artistId})`}</div>
+                <h1 className="artist__name">{displayName || `歌手 (ID: ${artistId})`}</h1>
                 <div className="artist__meta">
                   <span>
                     {activeTab === 'albums'
@@ -195,6 +201,16 @@ const ArtistDetailPage: React.FC = () => {
                         : `已加载 ${albums.length} 张`
                       : `共 ${total || '--'} 首歌曲`}
                   </span>
+                  {activeTab !== 'albums' && (
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn--primary ui-btn--sm"
+                      onClick={handlePlayAll}
+                      disabled={songs.length === 0 || loading}
+                    >
+                      播放全部
+                    </button>
+                  )}
                   {activeTab !== 'albums' && (
                     <button
                       onClick={async () => {
