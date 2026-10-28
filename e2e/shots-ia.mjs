@@ -183,7 +183,7 @@ async function main() {
 
         if (view.noSegmented) {
           check(ia.segmented.length === 0, view.name + ': 歌单页不应有 segmented，实际 ' + JSON.stringify(ia.segmented));
-          const cards = await page.locator('.mcard').count();
+          const cards = await page.locator('.cover-card').count();
           check(cards > 0, view.name + ': 歌单网格应有卡片，实际 ' + cards);
         } else {
           check(JSON.stringify(ia.segmented) === JSON.stringify(['歌曲', '专辑', '歌手']), view.name + ': 页内 segmented 恒为 3 段 歌曲/专辑/歌手，实际 ' + JSON.stringify(ia.segmented));
@@ -191,11 +191,11 @@ async function main() {
           // 三视角切换真的落到现有网格组件上（专辑 AlbumGrid / 歌手卡）
           await page.getByRole('radio', { name: '专辑' }).click();
           await settle(page, 400);
-          const albumCards = await page.locator('.album-grid__item').count();
+          const albumCards = await page.locator('.cover-card').count();
           check(albumCards > 0, view.name + ': 专辑段应有聚合专辑卡，实际 ' + albumCards);
           await page.getByRole('radio', { name: '歌手' }).click();
           await settle(page, 400);
-          const artistCards = await page.locator('.artist-card').count();
+          const artistCards = await page.locator('.cover-card[data-shape="circle"]').count();
           check(artistCards > 0, view.name + ': 歌手段应有聚合歌手卡，实际 ' + artistCards);
           await page.getByRole('radio', { name: '歌曲' }).click();
           await settle(page, 400);

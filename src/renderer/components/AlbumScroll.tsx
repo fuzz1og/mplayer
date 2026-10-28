@@ -1,7 +1,7 @@
 import React from 'react';
-import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { Disc3 } from 'lucide-react';
 import type { Album } from '@mplayer/core';
+import CoverCard from '@/renderer/components/CoverCard';
 import '@/renderer/styles/songlist.css';
 
 interface AlbumScrollProps {
@@ -22,6 +22,7 @@ const AREAS = [
   { label: '日本', value: 'JP' },
 ];
 
+/** 新碟上架：与歌单 / 歌手同处一张内容卡，只保留地区筛选这条页内上下文。 */
 const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area, onAreaChange, onRetry, onAlbumClick }) => {
   if (error) {
     return (
@@ -36,7 +37,6 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
 
   return (
     <div className="album-scroll">
-      {/* Area filter tabs */}
       <div className="album-scroll__areas">
         {AREAS.map((a) => (
           <button
@@ -50,14 +50,16 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
         ))}
       </div>
 
-      {/* Scrollable album cards */}
       <div className="album-scroll__body">
         {loading ? (
-          <div className="album-scroll__sk-row">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="album-scroll__sk">
-                <div className="skeleton-shimmer album-scroll__sk-cover" />
-                <div className="skeleton-shimmer album-scroll__sk-title" />
+          <div className="card-grid">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <div key={index} className="cover-card cover-card--skeleton">
+                <div className="cover-card__media" />
+                <div className="cover-card__text">
+                  <div className="cover-card__sk-line" />
+                  <div className="cover-card__sk-line cover-card__sk-line--meta" />
+                </div>
               </div>
             ))}
           </div>
@@ -67,28 +69,15 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
             <div>暂无新碟数据</div>
           </div>
         ) : (
-          <div className="album-scroll__grid">
+          <div className="card-grid">
             {albums.map((album) => (
-              <div key={album.id} className="album-scroll__item" onClick={() => onAlbumClick?.(album)}>
-                <div className="album-scroll__cover">
-                  {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-                  <div className="album-scroll__placeholder">
-                    <Disc3 size={36} />
-                  </div>
-                  {album.picUrl && (
-                    <img
-                      key={album.picUrl}
-                      src={coverThumbUrl(album.picUrl, COVER_SIZE.thumb)}
-                      alt={album.name}
-                      loading="lazy"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      className="album-scroll__img"
-                    />
-                  )}
-                </div>
-                <div className="album-scroll__name">{album.name}</div>
-                <div className="album-scroll__artist">{album.artist || ''}</div>
-              </div>
+              <CoverCard
+                key={album.id}
+                title={album.name}
+                subtitle={album.artist || undefined}
+                cover={album.picUrl}
+                onClick={() => onAlbumClick?.(album)}
+              />
             ))}
           </div>
         )}

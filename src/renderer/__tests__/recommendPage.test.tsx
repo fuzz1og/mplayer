@@ -87,7 +87,7 @@ describe('推荐页', () => {
 
     // 推荐歌曲是 SongList 普通列表：5 行；歌单是内容网格：3 个 tile
     expect(container.querySelectorAll('.song-row')).toHaveLength(5);
-    expect(container.querySelectorAll('.rec-playlist')).toHaveLength(3);
+    expect(container.querySelectorAll('.rec-playlists .cover-card')).toHaveLength(3);
 
     // 唯一页面滚动容器（其余区块都在这一个容器里）
     expect(container.querySelectorAll('[data-scroll-container]')).toHaveLength(1);
@@ -142,5 +142,6 @@ describe('推荐页', () => {
     await waitForPage();
     expect(container.querySelector('.daily__badge')).toBeNull();
     expect(container.querySelector('.pl-card')).toBeNull();
+    expect(container.querySelector('.cover-card__media')).not.toBeNull();
   });
 });
