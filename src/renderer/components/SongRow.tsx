@@ -9,7 +9,7 @@ import SourceSwapModal from '@/renderer/components/SourceSwapModal';
 import SongCover from '@/renderer/components/SongCover';
 import { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import RowActionButtons from '@/renderer/components/RowActionButtons';
-import { COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_ALBUM, colWidth } from '@/renderer/components/songTableColumns';
+import { COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_ALBUM, COL_DURATION, colWidth } from '@/renderer/components/songTableColumns';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -56,8 +56,22 @@ interface SongRowProps {
   /** 行根节点 ref：供 dnd-kit 等外部能力挂载 */
   rowRef?: React.Ref<HTMLDivElement>;
   compact?: boolean;
+  /** 行密度变体：standard = 通用列表（64px），library = 资料库密度（46px、行操作 hover 才出现） */
+  variant?: 'standard' | 'library';
+  /** 是否显示时长列（固定 50px，library 密度资料库行使用） */
+  showDuration?: boolean;
+  /** 行尾只保留单个 28px「更多」按钮，下载 / 收藏收进菜单 */
+  compactActions?: boolean;
   style?: React.CSSProperties;
 }
+
+/** 秒 → m:ss；缺失 / 非法值显示 --:--（沿用资料库行尾原口径）。 */
+const formatDuration = (seconds?: number): string => {
+  if (!seconds || !Number.isFinite(seconds)) return '--:--';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return mins + ':' + secs.toString().padStart(2, '0');
+};
 
 const SongRow: React.FC<SongRowProps> = ({
   song, index, isCurrentSong = false, isPlaying = false, isFavorite = false,
@@ -65,7 +79,8 @@ const SongRow: React.FC<SongRowProps> = ({
   moreOpen = false, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onPlayNext, onRemoveFromPlaylist, onToggleSelect,
   onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, albumWidth = COL_ALBUM,
-  fillTitle = false, dragHandle, actions, rowRef, compact = false, style,
+  fillTitle = false, dragHandle, actions, rowRef, compact = false,
+  variant = 'standard', showDuration = false, compactActions = false, style,
 }) => {
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
@@ -115,6 +130,7 @@ const SongRow: React.FC<SongRowProps> = ({
     <div
       ref={rowRef}
       className="song-row"
+      data-variant={variant === 'library' ? 'library' : undefined}
       data-compact={compact || undefined}
       data-current={isCurrentSong || undefined}
       onDoubleClick={() => onPlay(song)}
@@ -173,6 +189,11 @@ const SongRow: React.FC<SongRowProps> = ({
           {song.album}
         </div>
       )}
+      {showDuration && (
+        <div className="song-row__duration" style={colWidth(COL_DURATION)}>
+          {formatDuration(song.duration)}
+        </div>
+      )}
       {/* Actions：缺省用共享操作区，调用方可整块替换（如队列页的加入歌单/移除） */}
       {actions ?? (
         <RowActionButtons
@@ -185,6 +206,7 @@ const SongRow: React.FC<SongRowProps> = ({
           onToggleMore={(e) => onToggleDropdown?.(song.id, e)}
           onCloseMore={onCloseDropdown ?? (() => {})}
           menuItems={menuItems}
+          compact={compactActions}
         />
       )}
       <SourceSwapModal

@@ -36,6 +36,25 @@ interface ExtraProps {
   onToggleFavorite?: (song: Song) => void;
 }
 
+/** jsdom 没有布局：给滚动容器造一个 900x600 的视口，@tanstack/react-virtual 才能算出窗口。 */
+function mountScrollContainer(): HTMLDivElement {
+  const el = document.createElement('div');
+  // 生产代码按 data-scroll-container 认滚动容器（jsdom 不加载 CSS 文件，computed overflow 读不到）
+  el.setAttribute('data-scroll-container', '');
+  el.style.overflowY = 'auto';
+  Object.defineProperty(el, 'clientHeight', { value: 600, configurable: true });
+  Object.defineProperty(el, 'clientWidth', { value: 900, configurable: true });
+  // @tanstack/react-virtual 量的是 offsetWidth/offsetHeight，jsdom 里恒为 0
+  Object.defineProperty(el, 'offsetHeight', { value: 600, configurable: true });
+  Object.defineProperty(el, 'offsetWidth', { value: 900, configurable: true });
+  el.getBoundingClientRect = () => ({
+    width: 900, height: 600, top: 0, left: 0, right: 900, bottom: 600, x: 0, y: 0,
+    toJSON: () => ({}),
+  }) as DOMRect;
+  document.body.appendChild(el);
+  return el;
+}
+
 function SongListFixture({ songs, favoriteIds, onToggleFavorite }: { songs: Song[] } & ExtraProps) {
   return (
     <MemoryRouter>
@@ -108,21 +127,7 @@ describe('歌曲列表模块：行 memo 稳定性', () => {
 describe('歌曲列表模块：虚拟滚动', () => {
   it('超过阈值的列表只挂窗口内的行，未进入窗口的行不渲染', async () => {
     const songs = Array.from({ length: 200 }, (_, i) => song(i));
-    // jsdom 没有布局：给滚动容器造一个 900x600 的视口，@tanstack/react-virtual 才能算出窗口
-    const scrollEl = document.createElement('div');
-    // 生产代码按 data-scroll-container 认滚动容器（jsdom 不加载 CSS 文件，computed overflow 读不到）
-    scrollEl.setAttribute('data-scroll-container', '');
-    scrollEl.style.overflowY = 'auto';
-    Object.defineProperty(scrollEl, 'clientHeight', { value: 600, configurable: true });
-    Object.defineProperty(scrollEl, 'clientWidth', { value: 900, configurable: true });
-    // @tanstack/react-virtual 量的是 offsetWidth/offsetHeight，jsdom 里恒为 0
-    Object.defineProperty(scrollEl, 'offsetHeight', { value: 600, configurable: true });
-    Object.defineProperty(scrollEl, 'offsetWidth', { value: 900, configurable: true });
-    scrollEl.getBoundingClientRect = () => ({
-      width: 900, height: 600, top: 0, left: 0, right: 900, bottom: 600, x: 0, y: 0,
-      toJSON: () => ({}),
-    }) as DOMRect;
-    document.body.appendChild(scrollEl);
+    const scrollEl = mountScrollContainer();
 
     // 挂到 document 后再让 virtualizer 量一次：jsdom 里全量布局都靠这些 defineProperty 撑着
     const { container } = render(
@@ -147,6 +152,80 @@ describe('歌曲列表模块：虚拟滚动', () => {
       </MemoryRouter>
     );
     expect(coverRenders.size).toBe(3);
+  });
+});
+
+describe('歌曲列表模块：资料库密度（density=library）', () => {
+  it('默认无表头，行挂 library variant，时长列常驻', () => {
+    const songs = [song(1), song(2)];
+    const { container } = render(
+      <MemoryRouter>
+        <SongList
+          songs={songs}
+          onPlay={() => {}}
+          density="library"
+          showDuration
+          onDownload={() => {}}
+          onToggleFavorite={() => {}}
+        />
+      </MemoryRouter>
+    );
+
+    expect(container.querySelector('.song-list')).toHaveAttribute('data-density', 'library');
+    expect(container.querySelector('.song-list__head')).toBeNull();
+
+    const rows = container.querySelectorAll('.song-row');
+    expect(rows).toHaveLength(songs.length);
+    expect(rows[0]).toHaveAttribute('data-variant', 'library');
+    // 240s → 4:00，列宽由 COL_DURATION = 50 下发
+    expect(rows[0].querySelector('.song-row__duration')?.textContent).toBe('4:00');
+    expect(
+      (rows[0].querySelector('.song-row__duration') as HTMLElement).style.getPropertyValue('--col-width'),
+    ).toBe('50px');
+  });
+
+  it('行尾只留一个 28px 圆形 More，下载/收藏按顺序收进菜单', () => {
+    render(
+      <MemoryRouter>
+        <SongList
+          songs={[song(1)]}
+          onPlay={() => {}}
+          density="library"
+          onDownload={() => {}}
+          onToggleFavorite={() => {}}
+          showHeader={false}
+        />
+      </MemoryRouter>
+    );
+
+    const row = document.querySelector('.song-row') as HTMLElement;
+    const actionButtons = row.querySelectorAll('.row-actions button');
+    expect(actionButtons).toHaveLength(1);
+    expect(actionButtons[0]).toHaveAttribute('aria-label', '更多操作: 歌曲 1');
+    expect(row.querySelector('.row-actions')).toHaveClass('row-actions--compact');
+
+    fireEvent.click(actionButtons[0]);
+    const labels = Array.from(document.querySelectorAll('.row-menu__item')).map((item) => item.textContent?.trim());
+    // 顺序契约：下载、收藏、原 menuItems（下一首播放、加入歌单、换源完整版、查看歌手）
+    expect(labels.slice(0, 2)).toEqual(['下载', '收藏']);
+    expect(labels.slice(2, 4)).toEqual(['下一首播放', '加入歌单']);
+  });
+
+  it('长列表虚拟滚动的行高估计按 library 密度为 46', async () => {
+    const songs = Array.from({ length: 200 }, (_, i) => song(i));
+    const scrollEl = mountScrollContainer();
+    const { container } = render(
+      <MemoryRouter>
+        <SongList songs={songs} onPlay={() => {}} density="library" showHeader={false} />
+      </MemoryRouter>,
+      { container: scrollEl }
+    );
+
+    const rowsEl = container.querySelector('.song-list__rows') as HTMLElement;
+    await waitFor(() => expect(container.querySelectorAll('.song-row').length).toBeGreaterThan(0));
+    expect(container.querySelectorAll('.song-row').length).toBeLessThan(40);
+    // 200 × 46 = 9200：estimate 与 CSS min-height 46 是同一份布局事实
+    expect(rowsEl.style.getPropertyValue('--total-size')).toBe('9200px');
   });
 });
 

@@ -15,10 +15,16 @@ interface RowActionButtonsProps {
   onToggleMore: (e: React.MouseEvent) => void;
   onCloseMore: (e: React.MouseEvent) => void;
   menuItems: RowActionItem[];
+  /**
+   * 紧凑模式（资料库密度）：行尾只渲染一个 28px 圆形「更多」按钮；
+   * 下载、收藏收进菜单，顺序为 下载 → 收藏 → 调用方 menuItems。
+   */
+  compact?: boolean;
 }
 
 /**
- * 歌曲行操作区（共享）：下载 + 收藏 + 更多 三图标常驻，宽度 140px。
+ * 歌曲行操作区（共享）：standard 为下载 + 收藏 + 更多 三图标常驻，宽度 140px；
+ * compact 只有一个「更多」按钮（28px 圆形），低频动作全部进菜单。
  * SongRow 与本地歌单行 SortableSongRow 共用，操作列改动只需改这一处。
  */
 const RowActionButtons: React.FC<RowActionButtonsProps> = ({
@@ -31,46 +37,76 @@ const RowActionButtons: React.FC<RowActionButtonsProps> = ({
   onToggleMore,
   onCloseMore,
   menuItems,
-}) => (
-  <div className="row-actions" style={colWidth(COL_ACTIONS)}>
-    {onDownload && (
-      <button
-        onClick={(e) => { e.stopPropagation(); onDownload(song); }}
-        aria-label={`下载: ${song.name}`}
-        className="row-actions__btn"
-      >
-        <Download size={16} />
-      </button>
-    )}
-    {onToggleFavorite && (
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggleFavorite(song); }}
-        aria-label={isFavorite ? `取消收藏: ${song.name}` : `收藏: ${song.name}`}
-        className="row-actions__btn"
-        data-active={isFavorite || undefined}
-      >
-        <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
-      </button>
-    )}
-    <div className="row-actions__more">
-      <button
-        ref={moreTriggerRef}
-        onClick={(e) => { e.stopPropagation(); onToggleMore(e); }}
-        aria-label={`更多操作: ${song.name}`}
-        className="row-actions__btn row-actions__btn--more"
-        data-open={moreOpen || undefined}
-      >
-        <MoreHorizontal size={16} />
-      </button>
-      {moreOpen && (
-        <RowActionMenu
-          triggerRef={moreTriggerRef}
-          items={menuItems}
-          onClose={onCloseMore}
-        />
+  compact = false,
+}) => {
+  const compactMenuItems: RowActionItem[] = compact
+    ? [
+        ...(onDownload
+          ? [{
+              key: 'download',
+              label: '下载',
+              ariaLabel: `下载: ${song.name}`,
+              icon: <Download size={14} />,
+              onClick: () => onDownload(song),
+            }]
+          : []),
+        ...(onToggleFavorite
+          ? [{
+              key: 'favorite',
+              label: isFavorite ? '取消收藏' : '收藏',
+              ariaLabel: isFavorite ? `取消收藏: ${song.name}` : `收藏: ${song.name}`,
+              icon: <Heart size={14} fill={isFavorite ? 'currentColor' : 'none'} />,
+              onClick: () => onToggleFavorite(song),
+            }]
+          : []),
+        ...menuItems,
+      ]
+    : menuItems;
+
+  return (
+    <div
+      className={compact ? 'row-actions row-actions--compact' : 'row-actions'}
+      style={compact ? undefined : colWidth(COL_ACTIONS)}
+    >
+      {!compact && onDownload && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDownload(song); }}
+          aria-label={`下载: ${song.name}`}
+          className="row-actions__btn"
+        >
+          <Download size={16} />
+        </button>
       )}
+      {!compact && onToggleFavorite && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleFavorite(song); }}
+          aria-label={isFavorite ? `取消收藏: ${song.name}` : `收藏: ${song.name}`}
+          className="row-actions__btn"
+          data-active={isFavorite || undefined}
+        >
+          <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
+        </button>
+      )}
+      <div className="row-actions__more">
+        <button
+          ref={moreTriggerRef}
+          onClick={(e) => { e.stopPropagation(); onToggleMore(e); }}
+          aria-label={`更多操作: ${song.name}`}
+          className="row-actions__btn row-actions__btn--more"
+          data-open={moreOpen || undefined}
+        >
+          <MoreHorizontal size={16} />
+        </button>
+        {moreOpen && (
+          <RowActionMenu
+            triggerRef={moreTriggerRef}
+            items={compactMenuItems}
+            onClose={onCloseMore}
+          />
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default RowActionButtons;

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Minus, Square, Copy, X, Search, ChevronDown, ChevronLeft, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Minus, Square, Copy, X, Search, ChevronDown, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import { SOURCE_COLORS, ALL_SOURCE_COLOR } from '@/renderer/constants/sourceConfig';
 import { SOURCE_DISPLAY_NAMES } from '@mplayer/core';
@@ -22,11 +23,11 @@ const SOURCE_CONFIG: Record<SourceKey, { label: string; accent: string }> = {
 interface TitleBarProps {
   /** 中部标题；传入时隐藏搜索框（设置页）。 */
   title?: string;
-  /** 有标题时的左上返回入口——spec 要求「左上返回 + ESC」两条退出口都在。 */
+  /** 兼容旧调用方：设置页返回入口；缺省用 navigate(-1)。 */
   onBack?: () => void;
-  /** 设置入口（1.9.0 从侧栏搬上来：侧栏只留内容导航，设置是应用级动作）。 */
+  /** 设置入口；缺省用 navigate('/settings')。 */
   onSettingsClick?: () => void;
-  /** 有可用更新时在「设置」右侧点一枚徽标（#579）。 */
+  /** 有可用更新时在「帮助」上点一枚红点（#579）。 */
   updateAvailable?: boolean;
   onSearch?: (keyword: string) => void;
   sourceType?: SourceKey;
@@ -34,16 +35,22 @@ interface TitleBarProps {
 }
 
 /**
- * 标题栏（1.9.0）：品牌左、中部搜索（或页面标题）、窗口控件右。
- * 搜索从旧 TopBar 上移到这里，Ctrl/Cmd+K 聚焦；来源筛选收进搜索框左侧的小下拉。
+ * 标题栏（1.9.0 收口）：左列 ‹ › 设置 帮助，中部搜索（或页面标题），右侧窗口控件。
+ * 品牌与 logo 已移除——应用身份由窗口标题/任务栏承担；「检查更新」收进「帮助」菜单。
+ * 搜索不再绑 Ctrl/Cmd+K（规格 §2.3）：不显示 kbd 提示，也不注册全局快捷键。
  */
 const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, updateAvailable = false, onSearch, sourceType = 'all', onSourceTypeChange }) => {
+  const navigate = useNavigate();
   const [maximized, setMaximized] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [focused, setFocused] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const sourceRef = useRef<HTMLDivElement>(null);
+  const helpRef = useRef<HTMLDivElement>(null);
+  const helpTriggerRef = useRef<HTMLButtonElement>(null);
+  const helpMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     ipcRenderer.invoke('window:isMaximized').then(setMaximized).catch(() => {});
@@ -54,18 +61,6 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
     };
   }, []);
 
-  // Ctrl/Cmd+K 聚焦搜索（原型里搜索框右侧的提示）
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'k') return;
-      if (!inputRef.current) return;
-      event.preventDefault();
-      inputRef.current.focus();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
-
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
       if (sourceRef.current && !sourceRef.current.contains(event.target as Node)) setDropdownOpen(false);
@@ -73,6 +68,64 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
     document.addEventListener('mousedown', onPointerDown);
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, []);
+
+  const closeHelp = useCallback((returnFocus = false) => {
+    setHelpOpen(false);
+    if (returnFocus) helpTriggerRef.current?.focus();
+  }, []);
+
+  // 帮助菜单：ESC / 点击外部关闭；打开时把焦点送进第一项，ESC 关闭后归还触发按钮。
+  useEffect(() => {
+    if (!helpOpen) return;
+    helpMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    const onPointerDown = (event: MouseEvent) => {
+      if (helpRef.current && !helpRef.current.contains(event.target as Node)) setHelpOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      closeHelp(true);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [helpOpen, closeHelp]);
+
+  const handleHelpMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // 禁用项不参与方向键导航（ARIA 菜单惯例）
+    const items = Array.from(helpMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
+    if (items.length === 0) return;
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    let nextIndex = currentIndex;
+    if (event.key === 'ArrowDown') nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+    else if (event.key === 'ArrowUp') nextIndex = currentIndex < 0 ? items.length - 1 : (currentIndex - 1 + items.length) % items.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = items.length - 1;
+    else return;
+    event.preventDefault();
+    items[nextIndex]?.focus();
+  };
+
+  const handleBack = useCallback(() => {
+    if (onBack) onBack();
+    else navigate(-1);
+  }, [navigate, onBack]);
+
+  const handleForward = useCallback(() => navigate(1), [navigate]);
+
+  const handleSettings = useCallback(() => {
+    if (onSettingsClick) onSettingsClick();
+    else navigate('/settings');
+  }, [navigate, onSettingsClick]);
+
+  const handleHelpNavigate = useCallback((path: string) => {
+    setHelpOpen(false);
+    navigate(path);
+    helpTriggerRef.current?.focus();
+  }, [navigate]);
 
   const submit = useCallback(() => {
     const value = keyword.trim();
@@ -85,18 +138,41 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
   return (
     <header className="titlebar">
       <div className="titlebar__leading">
-        {title && onBack && (
-          <button type="button" className="titlebar__back" onClick={onBack} aria-label="返回">
-            <ChevronLeft size={15} />
-            <span>返回</span>
+        <button type="button" className="titlebar__nav" onClick={handleBack} aria-label="返回">
+          <ChevronLeft size={16} />
+        </button>
+        <button type="button" className="titlebar__nav" onClick={handleForward} aria-label="前进">
+          <ChevronRight size={16} />
+        </button>
+        <button type="button" className="titlebar__tool" onClick={handleSettings} aria-label="设置">
+          设置
+        </button>
+        <div className="titlebar__help" ref={helpRef}>
+          <button
+            ref={helpTriggerRef}
+            type="button"
+            className="titlebar__tool"
+            aria-label="帮助"
+            aria-haspopup="menu"
+            aria-expanded={helpOpen}
+            onClick={() => setHelpOpen((open) => !open)}
+          >
+            帮助
+            {updateAvailable && (
+              <span className="titlebar__badge" data-testid="update-badge" title="有新版本可更新" aria-hidden="true" />
+            )}
           </button>
-        )}
-        {title && (
-          <span className="titlebar__brand">
-            <img className="titlebar__brand-icon" src="./icon.png" alt="" />
-            <span>MPlayer</span>
-          </span>
-        )}
+          {helpOpen && (
+            <div ref={helpMenuRef} className="titlebar__help-menu" role="menu" aria-label="帮助" onKeyDown={handleHelpMenuKeyDown}>
+              <button type="button" role="menuitem" className="titlebar__help-item" onClick={() => handleHelpNavigate('/settings/update')}>
+                检查更新
+              </button>
+              <button type="button" role="menuitem" className="titlebar__help-item" onClick={() => handleHelpNavigate('/settings/about')}>
+                关于
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="titlebar__center">
@@ -159,24 +235,16 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
                 if (event.key === 'Escape') setKeyword('');
               }}
             />
-            {keyword ? (
+            {keyword && (
               <button type="button" className="titlebar__search-clear" aria-label="清除搜索" onClick={() => setKeyword('')}>
                 <X size={13} />
               </button>
-            ) : (
-              <kbd className="titlebar__kbd">Ctrl K</kbd>
             )}
           </div>
         )}
       </div>
 
       <div className="titlebar__trailing">
-        {!title && onSettingsClick && (
-          <button type="button" className="titlebar__settings" onClick={onSettingsClick} aria-label="设置">
-            设置
-            {updateAvailable && <span className="titlebar__settings-badge" data-testid="update-badge" title="有新版本可更新" aria-hidden="true" />}
-          </button>
-        )}
         <div className="titlebar__controls">
           <button type="button" className="titlebar__btn" onClick={() => ipcRenderer.invoke('window:minimize')} aria-label="最小化">
           <Minus size={14} />

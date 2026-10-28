@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Heart, Download, Mic, ListMusic, MoreHorizontal, ListEnd } from 'lucide-react';
+import { Heart, Download, ListMusic, MoreHorizontal, ListEnd } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
@@ -18,8 +18,9 @@ interface PlayerBarProps {
 }
 
 /**
- * 播放栏（原型）：左 封面/标题/艺术家/红心；中 控件 + 进度；右 歌词/队列/更多/音量。
- * 「加入歌单」与「下载」收进更多菜单，保持原型右区只有一枚更多按钮。
+ * 播放栏（1.9.0 收口）：三列 grid（左右 1fr、中间 auto），播放键对准窗口中心。
+ * 左 封面/标题/艺术家/收藏；中 控件 + 进度；右 队列/更多/音量（歌词入口由封面承担，已删重复按钮）。
+ * 「加入歌单」与「下载」收进更多菜单；菜单支持 ESC / 方向键 / 焦点归还。
  */
 const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueClick }) => {
   const currentSong = usePlayerStore((s) => s.currentSong);
@@ -40,6 +41,8 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  const moreTriggerRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const { download } = useDownload();
 
   const handlePlayPause = useCallback(() => {
@@ -69,14 +72,45 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
     });
   }, [currentSong]);
 
+  const closeMore = useCallback((returnFocus = false) => {
+    setMoreOpen(false);
+    if (returnFocus) moreTriggerRef.current?.focus();
+  }, []);
+
+  // 更多菜单：ESC / 点击外部关闭；打开时焦点进第一项，ESC 关闭后归还触发按钮。
   useEffect(() => {
     if (!moreOpen) return;
+    moreMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
     const onPointerDown = (event: MouseEvent) => {
       if (moreRef.current && !moreRef.current.contains(event.target as Node)) setMoreOpen(false);
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      closeMore(true);
+    };
     document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
-  }, [moreOpen]);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [moreOpen, closeMore]);
+
+  const handleMoreMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // 禁用项不参与方向键导航（ARIA 菜单惯例）
+    const items = Array.from(moreMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
+    if (items.length === 0) return;
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    let nextIndex = currentIndex;
+    if (event.key === 'ArrowDown') nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+    else if (event.key === 'ArrowUp') nextIndex = currentIndex < 0 ? items.length - 1 : (currentIndex - 1 + items.length) % items.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = items.length - 1;
+    else return;
+    event.preventDefault();
+    items[nextIndex]?.focus();
+  };
 
   return (
     <div className={className ? `player-bar ${className}` : 'player-bar'}>
@@ -113,7 +147,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
               aria-pressed={fav}
               className="player-btn player-bar__favorite"
             >
-              <Heart size={15} fill={fav ? 'currentColor' : 'none'} />
+              <Heart size={16} fill={fav ? 'currentColor' : 'none'} />
             </button>
           </div>
           <div className="player-bar__artist">
@@ -122,7 +156,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
         </div>
       </div>
 
-      {/* 中 - 控件 + 进度 */}
+      {/* 中 - 控件 + 进度（网格 auto 列居中，播放键即窗口中心） */}
       <div className="player-bar__center">
         <PlayerControls
           isPlaying={isPlaying}
@@ -137,25 +171,24 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
         <PlayerProgress hasCurrentSong={!!currentSong} onSeek={seek} />
       </div>
 
-      {/* 右 - 歌词 / 队列 / 更多 / 音量 */}
+      {/* 右 - 队列 / 更多 / 音量 */}
       <div className="player-bar__actions">
-        <button onClick={onCoverClick} disabled={!currentSong} aria-label="歌词" className="player-btn">
-          <Mic size={16} />
-        </button>
         <button onClick={handleQueue} aria-label="队列" className="player-btn">
           <ListEnd size={16} />
         </button>
         <div className="player-bar__more" ref={moreRef}>
           <button
+            ref={moreTriggerRef}
             onClick={() => setMoreOpen((open) => !open)}
             aria-label="更多操作"
+            aria-haspopup="menu"
             aria-expanded={moreOpen}
             className="player-btn"
           >
             <MoreHorizontal size={16} />
           </button>
           {moreOpen && (
-            <div className="player-bar__more-menu" role="menu">
+            <div ref={moreMenuRef} className="player-bar__more-menu" role="menu" aria-label="更多操作" onKeyDown={handleMoreMenuKeyDown}>
               <button
                 type="button"
                 role="menuitem"
@@ -170,7 +203,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
                 role="menuitem"
                 className="player-bar__more-item"
                 disabled={!currentSong}
-                onClick={() => { setMoreOpen(false); handleDownload(); }}
+                onClick={() => { setMoreOpen(false); handleDownload(); moreTriggerRef.current?.focus(); }}
               >
                 <Download size={14} />
                 下载

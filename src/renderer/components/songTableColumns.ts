@@ -1,9 +1,9 @@
 import type { CSSProperties } from 'react';
 
 /**
- * 歌曲列表的**列宽契约**：表头、行、骨架屏三处渲染同一组列宽时的唯一事实来源。
+ * 歌曲列表的**列宽 / 行高契约**：表头、行、骨架屏三处渲染同一组布局数值时的唯一事实来源。
  * 改一处漏一处就是静默错位：队列页表头曾写 60px 而行的操作区是 90px，错 30px 且不报错。
- * 这里不是「工具函数」，而是一份**契约**：换列宽改这里，加一列也改这里。
+ * 这里不是「工具函数」，而是一份**契约**：换列宽 / 行高改这里，加一列也改这里。
  */
 
 /** 勾选列宽（表头 / 行 / 骨架屏共用） */
@@ -16,8 +16,20 @@ export const COL_INDEX_COMPACT = 30;
 /** 专辑列宽；行默认取此值，调用方可用 albumWidth 覆盖（如队列页 120） */
 export const COL_ALBUM = 180;
 
+/** 时长列宽；`showDuration` 打开时行与表头共用 */
+export const COL_DURATION = 50;
+
 /** 操作列宽；行尾操作区必须同为这个值，否则表头与行会错开半个列 */
 export const COL_ACTIONS = 140;
+
+/** 紧凑操作列宽：`compactActions` 只留单个 28px 圆形「更多」按钮 */
+export const COL_ACTIONS_COMPACT = 28;
+
+/**
+ * 资料库密度行高：`SongList density="library"` 的虚拟滚动估计与 CSS（见 songlist.css）共用。
+ * standard 密度仍用 useVirtualRows 的 `SONG_ROW_HEIGHT = 64`。
+ */
+export const LIBRARY_ROW_HEIGHT = 46;
 
 /** 旧契约：固定宽度 + 禁止收缩。新代码用 colWidth() + CSS 变量（1.9.0）。 */
 export function colStyle(px: number): CSSProperties {

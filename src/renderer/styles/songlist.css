@@ -185,6 +185,16 @@
   white-space: nowrap;
 }
 
+/* 时长列（showDuration 打开时渲染） */
+.song-row__duration {
+  width: var(--col-width);
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 /* ── 列表外层 ── */
 .song-list {
   width: 100%;
@@ -449,6 +459,106 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-full);
+}
+
+/* 资料库密度骨架：46px 行 / 30px 封面，单操作位与真实行对齐 */
+.song-skeleton__row[data-variant='library'] {
+  min-height: 46px;
+  padding: 3px 12px;
+}
+
+.song-skeleton__row[data-variant='library'] .song-skeleton__box--cover {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+}
+
+.song-skeleton__box--duration {
+  width: 30px;
+  height: 12px;
+}
+
+/* ── 资料库密度（density='library'，46px 行）── */
+.song-list[data-density='library'] .song-list__head {
+  padding: 8px 12px;
+}
+
+.song-row[data-variant='library'] {
+  align-items: center;
+  min-height: 46px;
+  padding: 3px 12px;
+  border-radius: var(--radius-xs);
+}
+
+.song-row[data-variant='library'] .song-row__index {
+  width: 32px;
+}
+
+.song-row[data-variant='library'] .song-row__main {
+  gap: 12px;
+}
+
+.song-row[data-variant='library'] .song-row__cover {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+}
+
+.song-row[data-variant='library'] .song-row__title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+/* 原型当前播放行不变底色：靠序号位音柱 + 主色标题表达 */
+.song-row[data-variant='library'][data-current] {
+  background-color: transparent;
+}
+
+.song-row[data-variant='library'] .song-row__title[data-current] {
+  color: var(--text-primary);
+}
+
+.song-row[data-variant='library'] .song-row__meta {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+}
+
+/* 原型行内只保留歌手名，不显示来源 / 音质徽标 */
+.song-row[data-variant='library'] .song-row__meta .badge {
+  display: none;
+}
+
+.song-row[data-variant='library'] .song-row__album {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* 行操作 hover / focus / 菜单打开时才出现 */
+.song-row[data-variant='library'] .row-actions {
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.song-row[data-variant='library']:hover .row-actions,
+.song-row[data-variant='library']:focus-within .row-actions,
+.song-row[data-variant='library'] .row-actions:has(.row-actions__btn[data-open]) {
+  opacity: 1;
+}
+
+/* 紧凑操作区：只有一个 28px 圆形「更多」按钮 */
+.row-actions--compact {
+  width: 28px;
+}
+
+.row-actions--compact .row-actions__btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
 }
 /* ── 专辑网格 ── */
 .album-grid__group + .album-grid__group {

@@ -10,7 +10,16 @@ import SongListSkeleton from './SongListSkeleton';
 import VirtualRow from './VirtualRow';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
 import { useVirtualRows, stickyTopForContent, SONG_ROW_HEIGHT, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
-import { COL_CHECKBOX, COL_INDEX, COL_ALBUM, COL_ACTIONS, colWidth } from '@/renderer/components/songTableColumns';
+import {
+  COL_CHECKBOX,
+  COL_INDEX,
+  COL_ALBUM,
+  COL_ACTIONS,
+  COL_ACTIONS_COMPACT,
+  COL_DURATION,
+  LIBRARY_ROW_HEIGHT,
+  colWidth,
+} from '@/renderer/components/songTableColumns';
 
 interface SongListProps {
   songs: Song[];
@@ -19,6 +28,12 @@ interface SongListProps {
   favoriteIds?: string[];
   onPlay: (song: Song) => void;
   onToggleFavorite?: (song: Song) => void;
+  /**
+   * 列表密度。standard（默认）= 64px 通用行；library = 资料库密度（46px、30px 封面、
+   * 无表头、行操作 hover/focus 才出现、行尾单个「更多」按钮）。
+   */
+  density?: 'standard' | 'library';
+  /** 显式表头开关；缺省 standard 显示、library 不显示 */
   showHeader?: boolean;
   showIndex?: boolean;
   showCheckbox?: boolean;
@@ -51,9 +66,9 @@ interface SongListProps {
   onSwap?: (original: Song, swapped: Song) => void;
   /** 封面加载失败时回调，由持有歌曲列表的层按 ID 重识别换新封面 */
   onCoverError?: (song: Song) => void;
+  /** 是否显示时长列（固定 50px；资料库密度启用） */
+  showDuration?: boolean;
 }
-
-const estimateSongRow = () => SONG_ROW_HEIGHT;
 
 /**
  * 歌曲列表模块（桌面）。独占：虚拟滚动与滚动测量、选中/收藏的 O(1) 索引、
@@ -67,7 +82,8 @@ const SongList: React.FC<SongListProps> = ({
   favoriteIds = [],
   onPlay,
   onToggleFavorite,
-  showHeader = true,
+  density = 'standard',
+  showHeader: showHeaderProp,
   showIndex = true,
   showCheckbox = false,
   selectedIds: externalSelectedIds,
@@ -87,7 +103,11 @@ const SongList: React.FC<SongListProps> = ({
   onRemoveFromPlaylist,
   onSwap,
   onCoverError,
+  showDuration = false,
 }) => {
+  // library 密度默认无表头；显式 showHeader 才渲染
+  const showHeader = showHeaderProp ?? density !== 'library';
+  const compactActions = density === 'library';
   // 内部状态管理（当外部没有提供时）
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   // 换源后的行替换覆盖：key 为旧 id，组件生命周期内生效，
@@ -221,7 +241,12 @@ const SongList: React.FC<SongListProps> = ({
     setActiveDropdown(null);
   };
 
-  // 滚动/测量归模块：够长才虚拟化，挂靠页面已有的滚动容器，页面不感知
+  // 滚动/测量归模块：够长才虚拟化，挂靠页面已有的滚动容器，页面不感知。
+  // 行高是布局事实：library 46（songlist.css 的 variant）与 standard 64 各一份。
+  const estimateSongRow = useCallback(
+    () => (density === 'library' ? LIBRARY_ROW_HEIGHT : SONG_ROW_HEIGHT),
+    [density],
+  );
   const virtual = useVirtualRows({
     count: displaySongs.length,
     enabled: displaySongs.length >= VIRTUALIZE_THRESHOLD,
@@ -237,7 +262,15 @@ const SongList: React.FC<SongListProps> = ({
     if (loading) {
       // 骨架屏必须与真实表头同列：专辑列是否显示由同一份 hasAlbum 决定，
     // 否则加载态的行比加载后窄，列错位在数据到达前看不出来。
-    return <SongListSkeleton showCheckbox={showCheckbox} showIndex={showIndex} showAlbum={hasAlbum} />;
+    return (
+      <SongListSkeleton
+        showCheckbox={showCheckbox}
+        showIndex={showIndex}
+        showAlbum={hasAlbum}
+        density={density}
+        showDuration={showDuration}
+      />
+    );
     }
     return (
       <div className="song-list__empty">
@@ -260,6 +293,10 @@ const SongList: React.FC<SongListProps> = ({
       isSelected={selectedIdSet.has(song.id)}
       showRemoveFromPlaylist={showRemoveFromPlaylist}
       showAlbum={hasAlbum}
+      variant={density === 'library' ? 'library' : 'standard'}
+      compactActions={compactActions}
+      showDuration={showDuration}
+      fillTitle={density === 'library'}
       moreOpen={activeDropdown === song.id}
       onPlay={handlePlaySong}
       onToggleFavorite={stableOnToggleFavorite}
@@ -276,7 +313,7 @@ const SongList: React.FC<SongListProps> = ({
   );
 
   return (
-    <div className="song-list">
+    <div className="song-list" data-density={density}>
       {/* 批量管理入口：常驻（有批量能力且列表非空时），进入后显示勾选框与批量操作栏 */}
       {(enableBatchDownload || enableBatchDelete || enableBatchAddToPlaylist) && (
         <div className="song-list__batch-entry">
@@ -347,7 +384,15 @@ const SongList: React.FC<SongListProps> = ({
               专辑
             </div>
           )}
-          <div className="song-list__head-actions" style={colWidth(COL_ACTIONS)}>
+          {showDuration && (
+            <div className="song-list__head-col" style={colWidth(COL_DURATION)}>
+              时长
+            </div>
+          )}
+          <div
+            className="song-list__head-actions"
+            style={colWidth(compactActions ? COL_ACTIONS_COMPACT : COL_ACTIONS)}
+          >
             操作
           </div>
         </div>

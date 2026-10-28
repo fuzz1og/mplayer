@@ -1,50 +1,176 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import type { ComponentProps } from 'react';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import TitleBar from '../components/TitleBar';
 
-/** 1.9.0 骨架：搜索上移到标题栏中部；有标题时中部换成标题、左上出现返回。 */
+const testDir = dirname(fileURLToPath(String(import.meta.url)));
+const shellCss = readFileSync(join(testDir, '..', 'styles', 'shell.css'), 'utf8');
+
+/** 取「整行只有该选择器 + {」的规则体；组选择器（行尾带逗号）不参与匹配。 */
+function cssBlock(selector: string): string {
+  const lines = shellCss.split('\n');
+  const start = lines.findIndex((line) => line.trim() === selector + ' {');
+  if (start === -1) return '';
+  const body: string[] = [];
+  for (let i = start + 1; i < lines.length && lines[i].trim() !== '}'; i += 1) body.push(lines[i]);
+  return body.join('\n');
+}
+
+const LocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}</div>;
+};
+
+function renderTitleBar(
+  props: ComponentProps<typeof TitleBar> = {},
+  options: { initialEntries?: string[]; initialIndex?: number } = {},
+) {
+  return render(
+    <MemoryRouter initialEntries={options.initialEntries ?? ['/discover']} initialIndex={options.initialIndex}>
+      <TitleBar {...props} />
+      <LocationProbe />
+    </MemoryRouter>,
+  );
+}
+
+/** 1.9.0 收口：左列 ‹ › 设置 帮助（无 logo），中部搜索/设置标题，右侧只有窗口三键。 */
 describe('TitleBar', () => {
-  it('默认渲染搜索框与窗口控件', () => {
-    render(<TitleBar />);
-    expect(screen.getByPlaceholderText('搜索歌曲、专辑、歌手')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '最小化' })).toBeInTheDocument();
+  beforeEach(() => {
+    // window:isMaximized 返回布尔值，避免最大化按钮标签被对象真值带偏
+    (window as unknown as { electronAPI: { invoke: ReturnType<typeof vi.fn> } }).electronAPI.invoke
+      .mockResolvedValue(false);
   });
 
-  it('Ctrl+K 聚焦搜索', () => {
-    render(<TitleBar />);
+  it('默认渲染搜索框、左列导航与窗口控件，且没有品牌 logo', () => {
+    const { container } = renderTitleBar();
+    expect(screen.getByPlaceholderText('搜索歌曲、专辑、歌手')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '返回' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '前进' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '设置' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '帮助' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '最小化' })).toBeInTheDocument();
+    expect(container.querySelector('.titlebar__brand')).toBeNull();
+    expect(screen.queryByText('MPlayer')).toBeNull();
+  });
+
+  it('右侧只保留窗口三键（设置已移到左列）', () => {
+    const { container } = renderTitleBar();
+    const trailing = container.querySelector('.titlebar__trailing') as HTMLElement;
+    const buttons = within(trailing).getAllByRole('button');
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['最小化', '最大化', '关闭']);
+  });
+
+  it('不再显示 Ctrl K 提示，也不绑定快捷键（规格 §2.3）', () => {
+    const { container } = renderTitleBar();
+    expect(container.querySelector('.titlebar__kbd')).toBeNull();
+    expect(screen.queryByText('Ctrl K')).toBeNull();
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
-    expect(screen.getByPlaceholderText('搜索歌曲、专辑、歌手')).toHaveFocus();
+    expect(screen.getByPlaceholderText('搜索歌曲、专辑、歌手')).not.toHaveFocus();
+  });
+
+  it('搜索框方角 + 几何契约：420×34、6px 圆角，来源触发器无胶囊底色', () => {
+    expect(cssBlock('.titlebar__search')).toContain('width: 420px');
+    expect(cssBlock('.titlebar__search')).toContain('height: 34px');
+    expect(cssBlock('.titlebar__search')).toContain('border-radius: var(--radius-sm)');
+    expect(cssBlock('.titlebar__search')).not.toContain('var(--radius-full)');
+    expect(cssBlock('.titlebar__source-trigger')).toContain('background: transparent');
+    expect(cssBlock('.titlebar')).toContain('z-index: 50');
+    expect(shellCss).not.toContain('.titlebar__kbd');
   });
 
   it('回车提交关键词', () => {
     const onSearch = vi.fn();
-    render(<TitleBar onSearch={onSearch} />);
+    renderTitleBar({ onSearch });
     const input = screen.getByPlaceholderText('搜索歌曲、专辑、歌手');
     fireEvent.change(input, { target: { value: '周杰伦' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onSearch).toHaveBeenCalledWith('周杰伦');
   });
 
-  it('传 title 时换成标题并给出返回入口', () => {
+  it('传 title 时中部换成标题、搜索隐藏，左列导航仍在', () => {
     const onBack = vi.fn();
-    render(<TitleBar title="设置" onBack={onBack} />);
+    renderTitleBar({ title: '设置', onBack });
     expect(screen.queryByPlaceholderText('搜索歌曲、专辑、歌手')).toBeNull();
-    expect(screen.getByText('设置')).toBeInTheDocument();
+    expect(document.querySelector('.titlebar__title')?.textContent).toBe('设置');
+    expect(screen.getByRole('button', { name: '返回' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '返回' }));
     expect(onBack).toHaveBeenCalled();
   });
-});
 
+  it('返回 / 前进走 navigate(-1) / navigate(1)', () => {
+    const { unmount } = renderTitleBar({}, { initialEntries: ['/recommend', '/discover'], initialIndex: 1 });
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/recommend');
+    unmount();
 
-  it('设置入口在标题栏：文字按钮可点，更新徽标跟着它（#579）', () => {
-    const onSettingsClick = vi.fn();
-    render(<TitleBar onSettingsClick={onSettingsClick} updateAvailable />);
+    renderTitleBar({}, { initialEntries: ['/recommend', '/discover'], initialIndex: 0 });
+    fireEvent.click(screen.getByRole('button', { name: '前进' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/discover');
+  });
+
+  it('设置进入 /settings', () => {
+    renderTitleBar();
     fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    expect(onSettingsClick).toHaveBeenCalled();
-    expect(screen.getByTestId('update-badge')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/settings');
   });
 
-  it('进入设置（有标题）时不再重复渲染设置按钮', () => {
-    render(<TitleBar title="设置" onBack={vi.fn()} onSettingsClick={vi.fn()} />);
-    expect(screen.queryByRole('button', { name: '设置' })).toBeNull();
+  it('帮助菜单含「检查更新」「关于」，分别进入设置对应分区', () => {
+    const { unmount } = renderTitleBar();
+    fireEvent.click(screen.getByRole('button', { name: '帮助' }));
+    expect(screen.getByRole('menu', { name: '帮助' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('menuitem', { name: '检查更新' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/settings/update');
+    expect(screen.queryByRole('menu', { name: '帮助' })).toBeNull();
+    unmount();
+
+    renderTitleBar();
+    fireEvent.click(screen.getByRole('button', { name: '帮助' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '关于' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/settings/about');
   });
+
+  it('更新红点挂在「帮助」上（不再单独占标题栏按钮）', () => {
+    renderTitleBar({ updateAvailable: true });
+    const help = screen.getByRole('button', { name: '帮助' });
+    expect(within(help).getByTestId('update-badge')).toBeInTheDocument();
+    expect(screen.getAllByTestId('update-badge')).toHaveLength(1);
+  });
+
+  it('帮助菜单 ESC 关闭并把焦点还给触发按钮', () => {
+    renderTitleBar();
+    const trigger = screen.getByRole('button', { name: '帮助' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('menu', { name: '帮助' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu', { name: '帮助' })).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('帮助菜单点击外部关闭', () => {
+    renderTitleBar();
+    fireEvent.click(screen.getByRole('button', { name: '帮助' }));
+    expect(screen.getByRole('menu', { name: '帮助' })).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('menu', { name: '帮助' })).toBeNull();
+  });
+
+  it('帮助菜单方向键在菜单项之间移动焦点', () => {
+    renderTitleBar();
+    fireEvent.click(screen.getByRole('button', { name: '帮助' }));
+    const checkUpdate = screen.getByRole('menuitem', { name: '检查更新' });
+    const about = screen.getByRole('menuitem', { name: '关于' });
+    expect(checkUpdate).toHaveFocus();
+
+    fireEvent.keyDown(checkUpdate, { key: 'ArrowDown' });
+    expect(about).toHaveFocus();
+    fireEvent.keyDown(about, { key: 'ArrowDown' });
+    expect(checkUpdate).toHaveFocus();
+    fireEvent.keyDown(checkUpdate, { key: 'ArrowUp' });
+    expect(about).toHaveFocus();
+  });
+});

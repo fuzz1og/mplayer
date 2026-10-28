@@ -1,6 +1,14 @@
 import React from 'react';
 import '@/renderer/styles/songlist.css';
-import { COL_CHECKBOX, COL_INDEX, COL_ALBUM, COL_ACTIONS, colWidth } from '@/renderer/components/songTableColumns';
+import {
+  COL_CHECKBOX,
+  COL_INDEX,
+  COL_ALBUM,
+  COL_ACTIONS,
+  COL_ACTIONS_COMPACT,
+  COL_DURATION,
+  colWidth,
+} from '@/renderer/components/songTableColumns';
 
 interface SongListSkeletonProps {
   rowCount?: number;
@@ -11,51 +19,85 @@ interface SongListSkeletonProps {
    * 于是「加载态比加载后窄」，这类列错位在数据到达前根本看不见。
    */
   showAlbum?: boolean;
+  /** 与 SongList 的 density 一致：library 行高 46 / 封面 30 / 单个紧凑操作 */
+  density?: 'standard' | 'library';
+  /** 与 SongList 的 showDuration 一致：library 资料库行有时长列 */
+  showDuration?: boolean;
 }
 
-const SkeletonRow: React.FC<{ showCheckbox: boolean; showIndex: boolean; showAlbum: boolean }> = ({
-  showCheckbox, showIndex, showAlbum,
-}) => (
-  <div className="song-skeleton__row">
-    {showCheckbox && (
-      <div className="song-skeleton__col" style={colWidth(COL_CHECKBOX)}>
-        <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--check" />
+const SkeletonRow: React.FC<{
+  showCheckbox: boolean;
+  showIndex: boolean;
+  showAlbum: boolean;
+  density: 'standard' | 'library';
+  showDuration: boolean;
+}> = ({ showCheckbox, showIndex, showAlbum, density, showDuration }) => {
+  const library = density === 'library';
+  return (
+    <div className="song-skeleton__row" data-variant={library ? 'library' : undefined}>
+      {showCheckbox && (
+        <div className="song-skeleton__col" style={colWidth(COL_CHECKBOX)}>
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--check" />
+        </div>
+      )}
+      {showIndex && (
+        <div className="song-skeleton__col" style={colWidth(COL_INDEX)}>
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--index" />
+        </div>
+      )}
+      <div className="song-skeleton__main">
+        <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--cover" />
+        <div className="song-skeleton__lines">
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--title" />
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--artist" />
+        </div>
       </div>
-    )}
-    {showIndex && (
-      <div className="song-skeleton__col" style={colWidth(COL_INDEX)}>
-        <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--index" />
-      </div>
-    )}
-    <div className="song-skeleton__main">
-      <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--cover" />
-      <div className="song-skeleton__lines">
-        <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--title" />
-        <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--artist" />
+      {showAlbum && (
+        <div className="song-skeleton__col" style={colWidth(COL_ALBUM)}>
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--album" />
+        </div>
+      )}
+      {showDuration && (
+        <div className="song-skeleton__col" style={colWidth(COL_DURATION)}>
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--duration" />
+        </div>
+      )}
+      <div
+        className="song-skeleton__actions"
+        style={colWidth(library ? COL_ACTIONS_COMPACT : COL_ACTIONS)}
+      >
+        {library ? (
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
+        ) : (
+          <>
+            <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
+            <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
+            <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
+          </>
+        )}
       </div>
     </div>
-    {showAlbum && (
-      <div className="song-skeleton__col" style={colWidth(COL_ALBUM)}>
-        <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--album" />
-      </div>
-    )}
-    <div className="song-skeleton__actions" style={colWidth(COL_ACTIONS)}>
-      <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
-      <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
-      <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
-    </div>
-  </div>
-);
+  );
+};
 
 const SongListSkeleton: React.FC<SongListSkeletonProps> = ({
   rowCount = 10,
   showCheckbox = false,
   showIndex = true,
   showAlbum = false,
+  density = 'standard',
+  showDuration = false,
 }) => (
   <div className="song-skeleton">
     {Array.from({ length: rowCount }).map((_, i) => (
-      <SkeletonRow key={i} showCheckbox={showCheckbox} showIndex={showIndex} showAlbum={showAlbum} />
+      <SkeletonRow
+        key={i}
+        showCheckbox={showCheckbox}
+        showIndex={showIndex}
+        showAlbum={showAlbum}
+        density={density}
+        showDuration={showDuration}
+      />
     ))}
   </div>
 );

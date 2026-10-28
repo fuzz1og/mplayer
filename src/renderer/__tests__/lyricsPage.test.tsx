@@ -196,11 +196,14 @@ describe('正在播放 overlay（原型 §3）', () => {
     expect(screen.getByText('周杰伦 · 叶惠美')).toBeInTheDocument();
   });
 
-  it('控件行复用 PlayerControls（随机/上一/播放|暂停/下一/单曲循环）', () => {
+  it('控件行复用 PlayerControls（播放模式/上一/播放|暂停/下一）', () => {
     const { rerender } = render(<LyricsPage onBack={vi.fn()} />);
-    for (const name of ['随机播放', '上一首', '暂停', '下一首', '单曲循环']) {
+    for (const name of ['播放模式：列表循环', '上一首', '暂停', '下一首']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument();
     }
+    // 随机与单曲循环已合并成一个模式键，不再并排两个按钮
+    expect(screen.queryByRole('button', { name: '随机播放' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '单曲循环' })).toBeNull();
     expect(document.querySelector('.lyrics-page__controls .player-controls')).toBeTruthy();
 
     act(() => usePlayerStore.setState({ isPlaying: false }));
@@ -215,11 +218,23 @@ describe('正在播放 overlay（原型 §3）', () => {
     expect(usePlayerStore.getState().isPlaying).toBe(false);
   });
 
-  it('随机按钮切 playMode（单一真相仍是三段式）', () => {
+  it('单一播放模式键按 列表循环 → 随机播放 → 单曲循环 循环', () => {
     render(<LyricsPage onBack={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: '随机播放' }));
+    const modeButton = () => screen.getByRole('button', { name: /^播放模式：/ });
+    expect(modeButton()).toHaveAttribute('aria-label', '播放模式：列表循环');
+    expect(modeButton()).not.toHaveAttribute('aria-pressed');
+
+    fireEvent.click(modeButton());
     expect(usePlayerStore.getState().playMode).toBe('随机播放');
-    expect(screen.getByRole('button', { name: '随机播放' })).toHaveAttribute('aria-pressed', 'true');
+    expect(modeButton()).toHaveAttribute('aria-label', '播放模式：随机播放');
+
+    fireEvent.click(modeButton());
+    expect(usePlayerStore.getState().playMode).toBe('单曲循环');
+    expect(modeButton()).toHaveAttribute('aria-label', '播放模式：单曲循环');
+
+    fireEvent.click(modeButton());
+    expect(usePlayerStore.getState().playMode).toBe('列表循环');
+    expect(modeButton()).toHaveAttribute('aria-label', '播放模式：列表循环');
   });
 
   it('进度行按原型制式显示 1:42 / 4:29（分钟不补零）', () => {

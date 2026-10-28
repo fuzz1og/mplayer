@@ -18,8 +18,9 @@ interface SidebarProps {
 }
 
 /**
- * 侧栏（原型）：顶部品牌，随后 推荐 / 发现 + 「资料库」组（全部 / 我喜欢的音乐 / 最近播放）
- * + 「歌单」组（我的歌单）。设置不在这里——它是应用级动作，收进标题栏的「设置」文字按钮。
+ * 侧栏（1.9.0 收口）：无品牌块，顶部直接是 推荐 / 发现 + 「资料库」组
+ * （全部 / 我喜欢的音乐 / 最近播放）+ 「歌单」组（我的歌单）。
+ * 设置不在这里——它是应用级动作，收进标题栏的「设置」文字按钮。
  */
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
   const favoriteCount = useFavoriteStore((s) => s.favorites.length);
@@ -76,11 +77,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar__brand">
-        <img className="sidebar__brand-icon" src="./icon.png" alt="" />
-        <span>MPlayer</span>
-      </div>
-
       <nav className="sidebar__nav" aria-label="主导航">
         {items.map(renderNavItem)}
 

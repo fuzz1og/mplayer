@@ -204,6 +204,31 @@ describe('列表 memo 纪律（#412）', () => {
     expect(css).toMatch(/\.song-row__album \{[^}]*white-space: nowrap;/);
   });
 
+  it('资料库密度 46px 是第二份布局事实：estimate 与 CSS 同源，旧私有覆盖已删（#685）', () => {
+    const columns = stripComments(read('renderer/components/songTableColumns.ts'));
+    expect(columns).toContain('export const LIBRARY_ROW_HEIGHT = 46');
+
+    const list = stripComments(read('renderer/components/SongList.tsx'));
+    expect(list).toContain("density === 'library' ? LIBRARY_ROW_HEIGHT : SONG_ROW_HEIGHT");
+    expect(list).toContain('data-density={density}');
+
+    const css = read('renderer/styles/songlist.css');
+    expect(css).toMatch(/\.song-list\[data-density='library'\]/);
+    expect(css).toMatch(/\.song-row\[data-variant='library'\] \{[^}]*min-height: 46px;/);
+    expect(css).toMatch(/\.song-row\[data-variant='library'\] \{[^}]*padding: 3px 12px;/);
+    expect(css).toMatch(/\.song-row\[data-variant='library'\] \.song-row__cover \{[^}]*width: 30px;[^}]*height: 30px;/);
+    expect(css).toMatch(/\.row-actions--compact \{[^}]*width: 28px;/);
+
+    // 骨架屏必须跟随密度，否则加载态行高错位
+    const skeleton = stripComments(read('renderer/components/SongListSkeleton.tsx'));
+    expect(skeleton).toContain("density === 'library'");
+
+    // 资料库不再维护私有行布局
+    const libraryCss = stripComments(read('renderer/styles/library.css'));
+    expect(libraryCss).not.toContain('.library__rows .song-row');
+    expect(libraryCss).not.toContain('.library__tail');
+  });
+
   it('队列窗口化与可排序收在共享能力里（#428）', () => {
     const list = stripComments(read('renderer/components/VirtualSortableList.tsx'));
     // items 必须是**全量有序 id** 且 memo 化：dnd-kit 的排序下标来自它，不是 DOM 顺序

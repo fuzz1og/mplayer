@@ -20,6 +20,8 @@ export type {
   CheckboxProps,
   StepperProps,
 } from './forms';
+export { PageHeader, PageSurface, PageHero, PageBack } from './page';
+export type { PageHeaderProps, PageSurfaceProps, PageHeroProps, PageBackProps } from './page';
 export { Dialog, ToastProvider, useToast, GridList } from './overlay';
 export type {
   DialogProps,

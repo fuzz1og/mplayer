@@ -232,7 +232,7 @@
   overflow-y: auto;
 }
 
-/* 一张圆角 card 装歌单表（原型 radius 12 / 行高 46 / 封面 40） */
+/* 一张圆角 card 装歌单表（行几何由共享 SongList 的 library 密度决定） */
 .library__card {
   flex: none;
   overflow: hidden;
@@ -250,96 +250,6 @@
   color: var(--text-tertiary);
   font-size: var(--text-sm);
   text-align: center;
-}
-
-/* ── 歌曲表：在共享 SongRow 上落原型几何（只改尺寸与字重，不改结构） ── */
-.library__rows[data-virtual] {
-  position: relative;
-  height: var(--total-size);
-}
-
-.library__rows .song-row {
-  align-items: center;
-  min-height: 46px;
-  padding: 3px 14px 3px 12px;
-  border-radius: var(--radius-xs);
-}
-
-.library__rows .song-row__index {
-  width: 32px;
-}
-
-.library__rows .song-row__main {
-  gap: 12px;
-}
-
-.library__rows .song-row__cover {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-xs);
-}
-
-.library__rows .song-row__title {
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  line-height: var(--leading-tight);
-}
-
-/* 原型当前播放行不变底色：靠序号位的三根音柱 + 白字标题 */
-.library__rows .song-row[data-current] {
-  background-color: transparent;
-}
-
-.library__rows .song-row__title[data-current] {
-  color: var(--text-primary);
-}
-
-.library__rows .song-row__meta {
-  margin-top: 2px;
-  font-size: var(--text-xs);
-  line-height: var(--leading-tight);
-  color: var(--text-tertiary);
-}
-
-.library__rows .song-row__album {
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
-
-/* 原型行内只保留歌手名，不显示来源/音质徽标 */
-.library__rows .song-row__meta .badge {
-  display: none;
-}
-
-/* 行尾：时长常驻右对齐；收藏/下载/更多 hover 才出现（原型无始终可见的行操作） */
-.library__tail {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  width: 240px;
-}
-
-.library__duration {
-  flex: none;
-  width: 50px;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.library__tail .row-actions {
-  width: 140px;
-  opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-standard);
-}
-
-.library__rows .song-row:hover .row-actions,
-.library__rows .song-row:focus-within .row-actions,
-.library__tail .row-actions:focus-within,
-.library__tail .row-actions:has(.row-actions__btn[data-open]) {
-  opacity: 1;
 }
 
 /* ── 专辑 / 歌手分组行 ── */
@@ -621,11 +531,4 @@
   color: var(--text-tertiary);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
-}
-
-/* 小窗口优先保行宽 */
-@media (max-width: 900px) {
-  .library__tail {
-    width: 180px;
-  }
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { Song } from '@mplayer/core';
@@ -111,7 +111,8 @@ const renderPage = (path = '/library') => render(
   </MemoryRouter>,
 );
 
-const rows = () => within(document.querySelector('.library__rows') as HTMLElement);
+/** 共享 SongList 的行容器（library 密度渲染在 .library__card 里）。 */
+const rows = () => within(document.querySelector('.library__card .song-list__rows') as HTMLElement);
 
 describe('资料库页', () => {
   beforeEach(() => {
@@ -119,7 +120,7 @@ describe('资料库页', () => {
     installIpc();
     useFavoriteStore.setState({ favorites: [], favoriteIds: [], loading: false, error: null });
     useLocalStore.setState({ folders: [], songs: [], currentFolder: null, isScanning: false, initialized: false });
-    usePlayerStore.setState({ currentSong: null, isPlaying: false });
+    usePlayerStore.setState({ currentSong: null, isPlaying: false, currentPlaylist: [], currentPlaylistIndex: -1 });
   });
 
   it('页头现算统计：收藏 + 本地 + 历史去重', async () => {
@@ -148,7 +149,7 @@ describe('资料库页', () => {
     await userEvent.click(screen.getByRole('menuitemradio', { name: '按标题' }));
 
     await waitFor(() => {
-      const titles = Array.from(document.querySelectorAll('.library__rows .song-row__title')).map((el) => el.textContent);
+      const titles = Array.from(document.querySelectorAll('.library__card .song-row__title')).map((el) => el.textContent);
       expect(titles).toEqual(['Alpha', 'Bravo', 'Charlie', 'Zulu']);
     });
     expect(screen.getByText('按标题排序')).toBeInTheDocument();
@@ -236,5 +237,54 @@ describe('资料库页', () => {
     const currentRow = document.querySelector('.song-row[data-current]');
     expect(currentRow).not.toBeNull();
     expect(currentRow?.querySelectorAll('.song-row__bar').length).toBe(3);
+  });
+
+  it('歌曲分段用共享 SongList 的 library 密度：无表头、时长列、单个 More 操作', async () => {
+    renderPage();
+    await waitFor(() => expect(rows().getByText('Bravo')).toBeInTheDocument());
+
+    const list = document.querySelector('.library__card .song-list') as HTMLElement;
+    expect(list).toHaveAttribute('data-density', 'library');
+    // library 密度默认无表头
+    expect(document.querySelector('.song-list__head')).toBeNull();
+
+    const firstRow = document.querySelector('.library__card .song-row') as HTMLElement;
+    expect(firstRow).toHaveAttribute('data-variant', 'library');
+    // 时长列常驻（240s → 4:00）
+    expect(firstRow.querySelector('.song-row__duration')?.textContent).toBe('4:00');
+    expect(
+      (firstRow.querySelector('.song-row__duration') as HTMLElement).style.getPropertyValue('--col-width'),
+    ).toBe('50px');
+    // 行尾不再并排三个图标：只留一个「更多」
+    const actionButtons = firstRow.querySelectorAll('.row-actions button');
+    expect(actionButtons).toHaveLength(1);
+    expect(actionButtons[0]).toHaveAttribute('aria-label', '更多操作: Bravo');
+  });
+
+  it('点行封面播放时用当前显示列表建立队列', async () => {
+    const playSpy = vi.fn().mockResolvedValue(undefined);
+    const originalPlay = usePlayerStore.getState().play;
+    usePlayerStore.setState({ play: playSpy });
+    try {
+      renderPage();
+      await waitFor(() => expect(rows().getByText('Alpha')).toBeInTheDocument());
+
+      // 行内查询必须限定在列表里：每行的换源弹窗也会把歌名 portal 到 body
+      const row = rows().getByText('Alpha').closest('.song-row') as HTMLElement;
+      fireEvent.click(row.querySelector('.song-row__cover-play') as HTMLElement);
+
+      expect(playSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'netease:2' }));
+      const state = usePlayerStore.getState();
+      // 收藏 + 本地 + 历史去重后的当前显示列表，行号 = 2
+      expect(state.currentPlaylist.map((song) => song.id)).toEqual([
+        'netease:1',
+        'netease:2',
+        'local:1',
+        'netease:3',
+      ]);
+      expect(state.currentPlaylistIndex).toBe(1);
+    } finally {
+      usePlayerStore.setState({ play: originalPlay });
+    }
   });
 });
