@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { message } from 'antd';
+import { toast } from '@/renderer/services/toastStore';
 import type { Song, SourceKey } from '@mplayer/core';
 import { SWAP_SOURCES } from '@/renderer/components/SourceSwapModal';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -55,7 +55,7 @@ export function useSongSwap(
     setLoading(false);
     if (found.length === 0) {
       const label = SWAP_SOURCES.find(s => s.key === target)?.label || target;
-      message.warning(`未在${label}找到可切换的版本`);
+      toast.warning(`未在${label}找到可切换的版本`);
       return;
     }
     setSource(target);
@@ -74,7 +74,7 @@ export function useSongSwap(
     const swapped = applySwap(song, source, candidate);
     if (!swapped) {
       setLoading(false);
-      message.error('换源失败，请重试');
+      toast.error('换源失败，请重试');
       return;
     }
     setSuccess(true);
@@ -83,7 +83,7 @@ export function useSongSwap(
       onSwapped?.(song, swapped);
     } catch (error) {
       console.error('换源应用失败（队列/列表更新）:', error);
-      message.error('换源成功但列表更新失败，请重启应用后查看');
+      toast.error('换源成功但列表更新失败，请重启应用后查看');
     } finally {
       setTimeout(() => {
         setVisible(false);

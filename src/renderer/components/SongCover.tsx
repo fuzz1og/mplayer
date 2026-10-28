@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { ListMusic, Music2 } from 'lucide-react';
+import '@/renderer/styles/songlist.css';
 
 interface SongCoverBaseProps {
   /** 封面直链；空值直接显示占位。 */
@@ -38,73 +39,54 @@ const SongCover = ({
   placeholderStyle,
 }: SongCoverProps) => {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
-  // 封面刷新换新 URL 后重置失败态，否则新封面永远不会显示
+  // 封面刷新换新 URL 后重置失败/加载态，否则新封面永远不会显示
   useEffect(() => {
     setFailed(false);
+    setLoaded(false);
   }, [src]);
 
   if (!src || failed) {
     if (variant === 'icon') {
       return (
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-tertiary)',
-            ...placeholderStyle,
-          }}
-        >
+        <div className="cover-fill cover-fill--icon" style={placeholderStyle}>
           <Music2 size={iconSize} />
         </div>
       );
     }
     if (variant === 'tinted') {
       return (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: 'var(--cover-placeholder)',
-            ...placeholderStyle,
-          }}
-        >
+        <div className="cover-abs cover-abs--tinted" style={placeholderStyle}>
           <ListMusic size={iconSize} color="var(--text-tertiary)" />
         </div>
       );
     }
     if (variant === 'gradient') {
       return (
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            background: 'linear-gradient(135deg, var(--border-default) 0%, var(--border-subtle) 100%)',
-            ...placeholderStyle,
-          }}
-        />
+        <div className="cover-gradient" style={placeholderStyle} />
       );
     }
     return null;
   }
 
   return (
-    <img
-      src={coverThumbUrl(src, thumbSize)}
+    <>
+      {/* 取图落盘前垫骨架底，落盘即撤：此前这里只剩容器底色，卡片会先闪一帧灰 */}
+      {!loaded && <div className="cover-abs cover-abs--loading" aria-hidden="true" />}
+      <img
+        src={coverThumbUrl(src, thumbSize)}
       alt={alt}
       loading="lazy"
       onError={() => {
         setFailed(true);
         onError?.();
       }}
-      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', ...style }}
-    />
+        className="cover-img"
+        onLoad={() => setLoaded(true)}
+        style={style}
+      />
+    </>
   );
 };
 

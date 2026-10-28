@@ -1,0 +1,30 @@
+/* ============================================================
+   应用骨架 — .app-shell 根布局（App.tsx 唯一消费者）
+   标题栏 / 侧栏 / 播放栏 / 设置壳各有自己的 css，不在这里。
+   ============================================================ */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--surface-window);
+}
+
+.app-shell__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}.app-shell__content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface-content);
+}
+
+/* 正在播放：占满标题栏以下整幅宽度；侧栏与普通播放栏让位（footer 由本页自己承担） */
+.app-shell--nowplaying .sidebar,
+.app-shell--nowplaying .player-bar {
+  display: none;
+}

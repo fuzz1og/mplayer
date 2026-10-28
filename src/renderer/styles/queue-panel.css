@@ -1,0 +1,188 @@
+/* ============================================================
+   播放队列弹出层（#707 起，改版：右侧停靠面板 → 播放栏上方的弹出层）
+   位置：贴着播放栏队列按钮上方、右对齐；宽度 420（窄窗自适应），最高 62vh。
+   关掉方式：再点队列按钮 / 右上角关闭 / ESC / 点面板外任意处。
+   ============================================================ */
+.queue-panel {
+  position: fixed;
+  right: var(--space-3);
+  bottom: calc(var(--player-height) + var(--space-2));
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  /* 队列行不放时长列（弹出层宽度有限，优先把宽度让给歌名），所以可以比停靠面板更宽 */
+  width: min(460px, calc(100vw - 48px));
+  max-height: min(62vh, 560px);
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  /* 弹出层要压住下面的封面/文字：用实色 elevated（D4 允许「有意实色」），不用半透明材质 */
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-xl);
+  animation: queue-panel-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes queue-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-panel {
+    animation: none;
+  }
+}
+
+.queue-panel__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  height: 48px;
+  padding: 0 10px 0 var(--row-padding-x);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.queue-panel__title-group {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.queue-panel__title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-panel__count {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-panel__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.queue-panel__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.queue-panel__close:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.queue-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.queue-panel__thead {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  align-items: center;
+  height: 28px;
+  padding: 0 var(--row-padding-x);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-card);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+
+.queue-panel__thead-index {
+  flex: none;
+  text-align: center;
+}
+
+.queue-panel__thead-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-panel__thead-actions {
+  flex: none;
+  width: var(--queue-actions-w, 90px);
+  text-align: center;
+}
+
+.queue-panel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--space-2);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.queue-panel__empty-icon {
+  color: var(--text-tertiary);
+}
+
+.queue-panel__foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 var(--row-padding-x);
+  border-top: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.queue-panel__shuffle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.queue-panel__shuffle:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.queue-panel__shuffle[aria-pressed='true'] {
+  color: var(--accent-text);
+}

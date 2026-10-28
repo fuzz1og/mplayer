@@ -1,9 +1,25 @@
 import { describe, it, expect, vi } from 'vitest';
 import { act, render, screen, fireEvent } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import PlayerBar from '../components/PlayerBar';
 import { usePlayerStore } from '../store/playerStore';
 import { useFavoriteStore } from '../store/favoriteStore';
 import { playbackClock } from '../services/playbackClock';
+
+const testDir = dirname(fileURLToPath(String(import.meta.url)));
+const playerBarCss = readFileSync(join(testDir, '..', 'styles', 'player-bar.css'), 'utf8');
+
+/** 取「整行只有该选择器 + {」的规则体；组选择器（行尾带逗号）不参与匹配。 */
+function cssBlock(selector: string): string {
+  const lines = playerBarCss.split('\n');
+  const start = lines.findIndex((line) => line.trim() === selector + ' {');
+  if (start === -1) return '';
+  const body: string[] = [];
+  for (let i = start + 1; i < lines.length && lines[i].trim() !== '}'; i += 1) body.push(lines[i]);
+  return body.join('\n');
+}
 
 // Mock stores
 vi.mock('../store/playerStore', () => ({
@@ -14,25 +30,19 @@ vi.mock('../store/favoriteStore', () => ({
   useFavoriteStore: vi.fn()
 }));
 
-// Mock 子组件
+// Mock 子组件（PlayerVolume 保留真实实现，本文件要验音量折叠结构）
 vi.mock('../components/PlayerControls', () => ({
   default: () => <div data-testid="player-controls">PlayerControls</div>
 }));
 
-vi.mock('../components/PlayerVolume', () => ({
-  default: () => <div data-testid="player-volume">PlayerVolume</div>
-}));
-
-vi.mock('../components/PlayModeButton', () => ({
-  default: () => <div data-testid="play-mode-button">PlayModeButton</div>
-}));
 
 describe('PlayerBar', () => {
   const mockPlayerStore = {
     currentSong: null,
     isPlaying: false,
+    isLoading: false,
     volume: 80,
-    playMode: 'sequence',
+    playMode: '列表循环',
     pause: vi.fn(),
     resume: vi.fn(),
     seek: vi.fn(),
@@ -89,7 +99,105 @@ describe('PlayerBar', () => {
     render(<PlayerBar />);
     expect(screen.getByTestId('player-controls')).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: '播放进度' })).toBeInTheDocument();
-    expect(screen.getByTestId('player-volume')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '静音' })).toBeInTheDocument();
+  });
+
+  it('右簇只有队列、更多、音量——没有重复的「歌词」麦克风按钮', () => {
+    render(<PlayerBar />);
+    expect(screen.getByRole('button', { name: '播放队列' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '更多操作' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '静音' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '歌词' })).toBeNull();
+  });
+
+  it('三列 grid：左右各 1fr、中间 auto，播放键落在窗口中心', () => {
+    const block = cssBlock('.player-bar');
+    expect(block).toContain('grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr)');
+    expect(block).toContain('border-top: 1px solid var(--hairline)');
+    expect(cssBlock('.player-bar__center')).toContain('width: 500px');
+  });
+
+  it('音量默认收起：滑杆在 popover 里，hover / focus-within 才展开', () => {
+    const { container } = render(<PlayerBar />);
+    const volume = container.querySelector('.player-volume') as HTMLElement;
+    expect(volume.querySelector('.player-volume__popover')).toBeTruthy();
+    expect(screen.getByRole('slider', { name: '音量' }).closest('.player-volume__popover')).toBeTruthy();
+
+    const popover = cssBlock('.player-volume__popover');
+    expect(popover).toContain('opacity: 0');
+    expect(popover).toContain('pointer-events: none');
+    expect(playerBarCss).toContain('.player-volume:hover .player-volume__popover');
+    expect(playerBarCss).toContain('.player-volume:focus-within .player-volume__popover');
+  });
+
+  it('静音点击保留：音量 80 → 0', () => {
+    render(<PlayerBar />);
+    fireEvent.click(screen.getByRole('button', { name: '静音' }));
+    expect(mockPlayerStore.setVolume).toHaveBeenCalledWith(0);
+  });
+
+  it('更多菜单 ESC 关闭并把焦点还给触发按钮', () => {
+    const storeWithSong = {
+      ...mockPlayerStore,
+      currentSong: { id: '1', name: '稻香', artist: '周杰伦', album: '魔杰座' }
+    };
+    (usePlayerStore as any).mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') return selector(storeWithSong);
+      return storeWithSong;
+    });
+
+    render(<PlayerBar />);
+    const trigger = screen.getByRole('button', { name: '更多操作' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('menu', { name: '更多操作' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '加入歌单' })).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu', { name: '更多操作' })).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('更多菜单方向键在可用菜单项之间循环移动焦点', () => {
+    const storeWithSong = {
+      ...mockPlayerStore,
+      currentSong: { id: '1', name: '稻香', artist: '周杰伦', album: '魔杰座' }
+    };
+    (usePlayerStore as any).mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') return selector(storeWithSong);
+      return storeWithSong;
+    });
+
+    render(<PlayerBar />);
+    fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
+    const add = screen.getByRole('menuitem', { name: '加入歌单' });
+    const download = screen.getByRole('menuitem', { name: '下载' });
+    expect(add).toHaveFocus();
+    fireEvent.keyDown(add, { key: 'ArrowDown' });
+    expect(download).toHaveFocus();
+    fireEvent.keyDown(download, { key: 'ArrowDown' });
+    expect(add).toHaveFocus();
+    fireEvent.keyDown(add, { key: 'ArrowUp' });
+    expect(download).toHaveFocus();
+  });
+
+  it('没有当前歌时「加入歌单」与「下载」都禁用，焦点停在触发按钮上', () => {
+    render(<PlayerBar />);
+    const trigger = screen.getByRole('button', { name: '更多操作' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('menuitem', { name: '加入歌单' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: '下载' })).toBeDisabled();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('音量滑杆支持上下键调值', () => {
+    render(<PlayerBar />);
+    const slider = screen.getByRole('slider', { name: '音量' });
+    fireEvent.keyDown(slider, { key: 'ArrowUp' });
+    expect(mockPlayerStore.setVolume).toHaveBeenLastCalledWith(81);
+    fireEvent.keyDown(slider, { key: 'ArrowDown' });
+    expect(mockPlayerStore.setVolume).toHaveBeenLastCalledWith(79);
   });
 
   it('播放位置推进只重渲染进度块，PlayerBar 自身不重渲染（位置不再经全局 store）', () => {
@@ -136,12 +244,14 @@ describe('PlayerBar', () => {
     render(<PlayerBar />);
     // setup 默认 invoke 返回 { success: true }（无 data），弹窗 load 歌单会拿到 undefined 渲染崩溃，覆盖为空歌单
     (window as any).electronAPI.invoke.mockResolvedValue({ success: true, data: [] });
-    fireEvent.click(screen.getByRole('button', { name: '加入歌单' }));
+    // 加入歌单收在「更多操作」菜单里
+    fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '加入歌单' }));
 
     const modalHeading = await screen.findByText('加入歌单');
     // 从播放栏内按钮上溯到渲染容器（body 直接子节点）：弹窗不应落在该子树内，
     // 否则会被 PlayerBar 的 backdropFilter 包含块捕获而定位错乱（#245）
-    let barSubtree: HTMLElement = screen.getByRole('button', { name: '加入歌单' });
+    let barSubtree: HTMLElement = screen.getByRole('button', { name: '更多操作' });
     while (barSubtree.parentElement && barSubtree.parentElement !== document.body) {
       barSubtree = barSubtree.parentElement;
     }

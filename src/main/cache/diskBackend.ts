@@ -10,7 +10,7 @@ import { cacheKeyType, isImageBytes, isAudioBytes, type CacheBackend, type Cache
  * 不再每次统计都递归遍历目录 + `JSON.parse` 每个文件 + 读每个二进制文件头（#410）。
  * `other` = 内容无法解析（旧实现里这类文件只计入 fileCount，不进四个分类）。
  */
-type EntryKind = 'songs' | 'urls' | 'covers' | 'audio' | 'other'
+export type EntryKind = 'songs' | 'urls' | 'covers' | 'audio' | 'other'
 
 const ENTRY_KINDS: readonly EntryKind[] = ['songs', 'urls', 'covers', 'audio', 'other']
 
@@ -20,6 +20,12 @@ interface MetaRecord {
   /** 绝对过期时间戳（ms）；0 = 永不过期。 */
   expiresAt: number
   kind: EntryKind
+  /**
+   * 写入时刻（ms）——容量淘汰按它排队（最早写入的先走）。
+   * 1.9.0 之前的 meta 没有这个字段：按 0 排序，于是**旧格式条目总是最先被清掉**，
+   * 与「淘汰最早条目」的语义一致，也省掉装载时对每个 meta 文件做一次 stat。
+   */
+  writtenAt: number
   /** meta 里没有（或不是合法）kind，需要在索引装载时按内容补判一次。 */
   needsClassify?: boolean
   /**
@@ -32,13 +38,14 @@ interface MetaRecord {
 
 /** meta 文件内容 → 索引记录（装载与兜底读取共用，避免同一解析写两遍）。 */
 function parseMetaRecord(raw: unknown): MetaRecord | null {
-  const value = raw as { key?: unknown; size?: unknown; expiresAt?: unknown; kind?: unknown } | null
+  const value = raw as { key?: unknown; size?: unknown; expiresAt?: unknown; kind?: unknown; writtenAt?: unknown } | null
   if (!value || typeof value.key !== 'string') return null
   const record: MetaRecord = {
     key: value.key,
     size: typeof value.size === 'number' ? value.size : 0,
     expiresAt: typeof value.expiresAt === 'number' && value.expiresAt > 0 ? value.expiresAt : 0,
     kind: ENTRY_KINDS.includes(value.kind as EntryKind) ? (value.kind as EntryKind) : 'other',
+    writtenAt: typeof value.writtenAt === 'number' && value.writtenAt > 0 ? value.writtenAt : 0,
   }
   if (typeof value.expiresAt !== 'number') record.legacyNoExpiry = true
   if (!ENTRY_KINDS.includes(value.kind as EntryKind)) record.needsClassify = true
@@ -135,6 +142,15 @@ class SharedCacheIndex {
   readonly index = new Map<string, MetaRecord>()
   totalSize = 0
   counts: Record<EntryKind, number> = { songs: 0, urls: 0, covers: 0, audio: 0, other: 0 }
+  /** 与 counts 同批维护的每类别字节数（设置页「构成」右侧「N 个 · X B」）。 */
+  bytes: Record<EntryKind, number> = { songs: 0, urls: 0, covers: 0, audio: 0, other: 0 }
+  /**
+   * 容量上限（字节）；0 = 不设上限。**淘汰只在写路径的记账之后发生**（见 evictOverLimitLocked），
+   * 读取/统计不触发删除，避免「读到一半东西被自己清掉」这类惊喜。
+   */
+  limitBytes = 0
+  /** 关闭时只停止淘汰，不动已落盘内容（与设置页文案「超出上限时自动清理最早条目」一致）。 */
+  autoClean = true
   private ready: Promise<void> | null = null
   private writeQueue: Promise<unknown> = Promise.resolve()
 
@@ -265,18 +281,58 @@ class SharedCacheIndex {
     }
   }
 
+  /**
+   * 淘汰到上限以内。**调用方必须已在 `enqueue` 的任务里**（本方法不排队：排队里再排队会等自己排完 → 死锁）。
+   * 顺序：先过期条目，再按写入时刻从早到晚。keepHash = 本次刚写入的条目（单条目超上限时不至于自我清空）。
+   */
+  async evictOverLimitLocked(keepHash?: string): Promise<{ removed: number; freed: number }> {
+    if (!this.autoClean || this.limitBytes <= 0) return { removed: 0, freed: 0 }
+    if (this.totalSize <= this.limitBytes) return { removed: 0, freed: 0 }
+
+    const now = Date.now()
+    const hashes = [...this.index.keys()]
+    const expired: string[] = []
+    const fresh: string[] = []
+    for (const hash of hashes) {
+      if (hash === keepHash) continue
+      const record = this.index.get(hash)
+      if (!record) continue
+      if (record.expiresAt > 0 && now >= record.expiresAt) expired.push(hash)
+      else fresh.push(hash)
+    }
+    // 旧格式 meta 没有 writtenAt（记 0）：排在最前，等于「最早写入的先清」
+    fresh.sort((a, b) => (this.index.get(a)?.writtenAt ?? 0) - (this.index.get(b)?.writtenAt ?? 0))
+
+    let removed = 0
+    let freed = 0
+    for (const hash of [...expired, ...fresh]) {
+      if (this.totalSize <= this.limitBytes) break
+      const record = this.index.get(hash)
+      if (!record) continue
+      const size = record.size
+      await fsp.rm(this.dataPath(record.key, hash), { force: true }).catch(() => undefined)
+      await fsp.rm(this.metaPath(hash), { force: true }).catch(() => undefined)
+      this.applyRecord(hash, null)
+      removed++
+      freed += size
+    }
+    return { removed, freed }
+  }
+
   /** O(1) 增量记账：摘掉旧记录的贡献，挂上新记录的贡献。 */
   applyRecord(hash: string, next: MetaRecord | null): void {
     const prev = this.index.get(hash)
     if (prev) {
       this.totalSize -= prev.size
       this.counts[prev.kind]--
+      this.bytes[prev.kind] -= prev.size
       this.index.delete(hash)
     }
     if (next) {
       this.index.set(hash, next)
       this.totalSize += next.size
       this.counts[next.kind]++
+      this.bytes[next.kind] += next.size
     }
   }
 
@@ -284,9 +340,11 @@ class SharedCacheIndex {
   recount(): void {
     this.totalSize = 0
     this.counts = { songs: 0, urls: 0, covers: 0, audio: 0, other: 0 }
+    this.bytes = { songs: 0, urls: 0, covers: 0, audio: 0, other: 0 }
     for (const record of this.index.values()) {
       this.totalSize += record.size
       this.counts[record.kind]++
+      this.bytes[record.kind] += record.size
     }
   }
 }
@@ -374,6 +432,7 @@ export class DiskCacheBackend implements CacheBackend {
         size: data.byteLength,
         expiresAt: expiresAt && expiresAt > 0 ? expiresAt : 0,
         kind: classifyEntry(key, data),
+        writtenAt: Date.now(),
       }
       try {
         await fsp.writeFile(this.metaPath(hash), JSON.stringify(record))
@@ -381,6 +440,8 @@ export class DiskCacheBackend implements CacheBackend {
         console.error('写入缓存元数据失败:', error)
       }
       this.shared.applyRecord(hash, record)
+      // 记账之后再淘汰，并把刚写入的这条留给 keepHash 兜底（单条目超上限时不至于自我清空）
+      await this.shared.evictOverLimitLocked(hash)
     })
   }
 
@@ -409,6 +470,7 @@ export class DiskCacheBackend implements CacheBackend {
         expiresAt: opts.expiresAt && opts.expiresAt > 0 ? opts.expiresAt : 0,
         // 分类在 rename 之前完成：JSON 条目要整份 parse，读的就是这个已落盘的临时文件
         kind: await classifyStreamedEntry(key, payload, tempPath),
+        writtenAt: Date.now(),
       }
     } catch (error) {
       destroySource(source)
@@ -424,6 +486,8 @@ export class DiskCacheBackend implements CacheBackend {
           console.error('写入缓存元数据失败:', error)
         }
         this.shared.applyRecord(hash, record)
+        // 记账之后再淘汰：整首歌落盘往往就是撑破上限的那一下（#412 的汽水音频走这条）
+        await this.shared.evictOverLimitLocked(hash)
       })
     } catch (error) {
       await fsp.rm(tempPath, { force: true }).catch(() => undefined)
@@ -460,6 +524,30 @@ export class DiskCacheBackend implements CacheBackend {
     })
   }
 
+  /**
+   * 按条目类别清理（设置页「构成」三行的「清理」）：只删指定 kind 的数据文件与 meta，
+   * 复用共享索引的记账与串行队列，返回实际删除条数与释放字节。
+   */
+  async clearKinds(kinds: readonly EntryKind[]): Promise<{ removed: number; freed: number }> {
+    await this.shared.ensureIndex()
+    const wanted = new Set(kinds)
+    return this.shared.enqueue(async () => {
+      let removed = 0
+      let freed = 0
+      // 先快照再删：applyRecord 会同步改动 index，边遍历边删不安全。
+      for (const [hash, record] of [...this.shared.index]) {
+        if (!wanted.has(record.kind)) continue
+        const size = record.size
+        await fsp.rm(this.shared.dataPath(record.key, hash), { force: true }).catch(() => undefined)
+        await fsp.rm(this.shared.metaPath(hash), { force: true }).catch(() => undefined)
+        this.shared.applyRecord(hash, null)
+        removed++
+        freed += size
+      }
+      return { removed, freed }
+    })
+  }
+
   async keys(): Promise<string[]> {
     await this.shared.ensureIndex()
     return [...this.shared.index.values()].map((record) => record.key)
@@ -483,5 +571,34 @@ export class DiskCacheBackend implements CacheBackend {
 
   getFilePath(key: string): string {
     return this.resolvePath(key)
+  }
+
+  /** 缓存目录（设置页「位置」一行显示用；不外露 meta 子目录）。 */
+  getCacheDir(): string {
+    return this.cacheDir
+  }
+
+  /**
+   * 容量上限（字节）与自动清理开关。0 = 不设上限。
+   * 设置在**共享索引**上，所以同一目录的多个后端实例（kernel 与汽水音频）一起生效。
+   */
+  setLimits(limitBytes: number, autoClean: boolean): void {
+    this.shared.limitBytes = Number.isFinite(limitBytes) && limitBytes > 0 ? Math.floor(limitBytes) : 0
+    this.shared.autoClean = autoClean
+  }
+
+  getLimits(): { limitBytes: number; autoClean: boolean } {
+    return { limitBytes: this.shared.limitBytes, autoClean: this.shared.autoClean }
+  }
+
+  /** 每类别字节数快照（纯内存读数，与 stats() 同口径）。 */
+  bytesByKind(): Record<EntryKind, number> {
+    return { ...this.shared.bytes }
+  }
+
+  /** 立即按当前上限回收一次（设置页调小上限后可主动触发）。 */
+  async enforceLimit(): Promise<{ removed: number; freed: number }> {
+    await this.shared.ensureIndex()
+    return this.shared.enqueue(() => this.shared.evictOverLimitLocked())
   }
 }

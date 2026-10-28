@@ -31,7 +31,7 @@ describe('LinkPreviewTable', () => {
   it('should show the song count', () => {
     render(<LinkPreviewTable {...defaultProps} />);
 
-    expect(screen.getByText('共 3 首歌曲，请选择要导入的歌曲')).toBeInTheDocument();
+    expect(screen.getByText('共 3 首歌曲，已选 3 首')).toBeInTheDocument();
   });
 
   it('should select all songs by default', () => {
@@ -49,10 +49,11 @@ describe('LinkPreviewTable', () => {
 
     // Deselect the second song
     const checkboxes = screen.getAllByRole('checkbox');
-    fireEvent.click(checkboxes[1]);
+    // 第 0 个是全选，行勾选从第 1 个开始
+    fireEvent.click(checkboxes[2]);
 
     // Click confirm
-    fireEvent.click(screen.getByText(/导入选中歌曲/));
+    fireEvent.click(screen.getByRole('button', { name: /导入选中歌曲/ }));
 
     expect(onConfirm).toHaveBeenCalledWith(new Set(['100', '102']));
   });
@@ -61,7 +62,7 @@ describe('LinkPreviewTable', () => {
     const onCancel = vi.fn();
     render(<LinkPreviewTable {...defaultProps} onCancel={onCancel} />);
 
-    fireEvent.click(screen.getByText('取 消'));
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
 
     expect(onCancel).toHaveBeenCalled();
   });

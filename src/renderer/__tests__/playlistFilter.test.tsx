@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { Modal } from 'antd';
+import { ConfirmProvider } from '@/renderer/ui';
 import type { Song } from '@mplayer/core';
 import PlaylistDetailPage from '@/renderer/pages/PlaylistDetailPage';
 import { filterSongsByQuery } from '@/renderer/utils/songFilter';
@@ -43,11 +43,13 @@ function renderPage(songs: Song[]): { container: HTMLElement; calls: InvokeCall[
     return undefined;
   });
   const view = render(
+    <ConfirmProvider>
     <MemoryRouter initialEntries={['/playlist/7']}>
       <Routes>
         <Route path="/playlist/:id" element={<PlaylistDetailPage />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
+    </ConfirmProvider>,
   );
   return { container: view.container, calls };
 }
@@ -73,6 +75,10 @@ const buttonByText = (container: HTMLElement, text: string) =>
 
 const setFilter = (container: HTMLElement, value: string) =>
   fireEvent.change(filterInput(container), { target: { value } });
+
+/** 进入按需选择模式（#694 评审）：普通浏览不再有复选框列 */
+const enterSelectMode = (container: HTMLElement) =>
+  fireEvent.click(buttonByText(container, '选择'));
 
 const reorderCalls = (calls: InvokeCall[]) => calls.filter(([channel]) => channel === 'playlist:reorderFull');
 
@@ -149,29 +155,19 @@ describe('本地歌单页过滤（#488）', () => {
     expect(rowTexts(container)[0]).toContain('Hello World');
   });
 
-  it('过滤态禁用拖拽排序：行不注册 useSortable，拖拽手势也发不出 reorderFull', async () => {
-    const { container, calls } = renderPage(LIST(40));
+  it('过滤态仍注册拖拽排序（#703）：可见行带拖拽把手，清空过滤后恢复全量', async () => {
+    const { container } = renderPage(LIST(40));
     await waitFor(() => expect(rowTexts(container).length).toBe(40));
     expect(dragHandles(container).length).toBe(40);
 
     setFilter(container, ONE_HIT);
     await waitFor(() => expect(rowTexts(container).length).toBe(1));
-    // 拖拽入口在结构上不存在（useSortable 的把手与 role/aria 一个都没有）
-    expect(dragHandles(container).length).toBe(0);
-    expect(container.querySelectorAll('[aria-roledescription="draggable"]').length).toBe(0);
+    // #703 起过滤态也注册 sortable：拖拽只重排可见集合，再由 reorderVisibleSongs 映射回全量顺序
+    expect(dragHandles(container).length).toBe(1);
 
-    // 即便走一遍拖拽手势：没有 sensor 接在行上，落库通道也一次都不开
-    const row = container.querySelector('.song-row') as HTMLElement;
-    fireEvent.pointerDown(row, { button: 0, clientX: 10, clientY: 10 });
-    fireEvent.pointerMove(row, { clientX: 30, clientY: 200 });
-    fireEvent.pointerUp(row, { clientX: 30, clientY: 200 });
-    expect(reorderCalls(calls)).toHaveLength(0);
-
-    // 清空过滤 → 可拖拽的行回来（禁用是过滤态的属性，不是一次性降级）
     setFilter(container, '');
     await waitFor(() => expect(rowTexts(container).length).toBe(40));
     expect(dragHandles(container).length).toBe(40);
-    expect(reorderCalls(calls)).toHaveLength(0);
   });
 
   it('过滤态全选只作用于可见集合，批量下载只见可见集合', async () => {
@@ -181,6 +177,7 @@ describe('本地歌单页过滤（#488）', () => {
     setFilter(container, ONE_HIT);
     await waitFor(() => expect(rowTexts(container).length).toBe(1));
 
+    enterSelectMode(container);
     fireEvent.click(selectAllCheckbox(container));
     await waitFor(() => expect(container.textContent).toContain('已选择 1 项'));
 
@@ -198,6 +195,7 @@ describe('本地歌单页过滤（#488）', () => {
     const { container, calls } = renderPage(LIST(40));
     await waitFor(() => expect(rowTexts(container).length).toBe(40));
 
+    enterSelectMode(container);
     fireEvent.click(selectAllCheckbox(container));
     await waitFor(() => expect(container.textContent).toContain('已选择 40 项'));
 
@@ -205,23 +203,15 @@ describe('本地歌单页过滤（#488）', () => {
     await waitFor(() => expect(rowTexts(container).length).toBe(1));
     await waitFor(() => expect(container.textContent).toContain('已选择 1 项'));
 
-    // jsdom 里 antd confirm 的 portal 不落地：直接接管 confirm 并执行 onOk，
-    // 验的是 handleBatchDelete 的作用域（可见集合），弹层外壳不是本票主题
-    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation(((config: {
-      onOk?: (...args: unknown[]) => unknown;
-    }) => {
-      void config.onOk?.();
-      return { destroy: () => {}, update: () => {} };
-    }) as unknown as typeof Modal.confirm);
-    try {
-      fireEvent.click(buttonByText(container, '批量移除'));
-      await waitFor(() => {
-        const removed = calls.filter(([channel]) => channel === 'playlist:removeSong');
-        expect(removed.map((call) => call[2])).toEqual(['netease:37']);
-      });
-    } finally {
-      confirmSpy.mockRestore();
-    }
+    // 1.9.0 的确认框是自建 Dialog（受控组件）：点「批量移除」后确认框真的渲染在 DOM 里，
+    // 直接点确认按钮即可——验的仍是 handleBatchDelete 的作用域（可见集合）。
+    fireEvent.click(buttonByText(container, '批量移除'));
+    const okButton = await screen.findByRole('button', { name: '移除' });
+    fireEvent.click(okButton);
+    await waitFor(() => {
+      const removed = calls.filter(([channel]) => channel === 'playlist:removeSong');
+      expect(removed.map((call) => call[2])).toEqual(['netease:37']);
+    });
 
     // 另外 39 首的选中状态没被这次移除波及（清空过滤后仍然在选）
     setFilter(container, '');
@@ -236,10 +226,15 @@ describe('本地歌单页过滤（#488）', () => {
 
     const rowsRef = container.querySelector('.song-row')!.parentElement as HTMLElement;
     const wrapper = rowsRef.parentElement as HTMLElement;
-    const filterBar = filterInput(container).parentElement as HTMLElement;
+    const filterBox = filterInput(container).parentElement as HTMLElement;
+    const toolbar = filterBox.parentElement as HTMLElement;
 
-    expect(filterBar).not.toBe(wrapper);
-    expect(filterBar.parentElement).toBe(wrapper);
+    // 过滤框 → 工具条 → wrapper（与 rowsRef 同父），中间不再有别的插槽
+    expect(filterBox).not.toBe(wrapper);
+    expect(toolbar).not.toBe(wrapper);
+    expect(filterBox.classList.contains('detail-toolbar__filter')).toBe(true);
+    expect(toolbar.classList.contains('detail-toolbar')).toBe(true);
+    expect(toolbar.parentElement).toBe(wrapper);
     expect(rowsRef.parentElement).toBe(wrapper);
   });
 
@@ -251,6 +246,7 @@ describe('本地歌单页过滤（#488）', () => {
     await waitFor(() => expect(rowTexts(container).length).toBe(0));
     expect(container.textContent).toContain('没有匹配「不存在的歌手」的歌曲');
 
+    enterSelectMode(container);
     fireEvent.click(selectAllCheckbox(container));
     expect(container.textContent).not.toContain('已选择');
     expect(checkedRows(container)).toBe(0);

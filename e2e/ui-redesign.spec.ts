@@ -23,53 +23,8 @@ test.afterAll(async () => {
 });
 
 test.describe('UI 交互验证', () => {
-  test('TopBar 后退前进导航', async () => {
-    const backBtn = page.locator('header button[aria-label="后退"]');
-    const forwardBtn = page.locator('header button[aria-label="前进"]');
-
-    // 初始状态：后退禁用，前进禁用
-    await expect(backBtn).toBeDisabled();
-    await expect(forwardBtn).toBeDisabled();
-
-    // 导航到收藏页（用 sidebar 的按钮）
-    await page.getByRole('complementary').getByText('我的收藏').click();
-    await page.waitForTimeout(1000);
-
-    // 后退可用，前进禁用
-    await expect(backBtn).toBeEnabled();
-    await expect(forwardBtn).toBeDisabled();
-
-    // 点击后退回到发现页
-    await backBtn.click();
-    await page.waitForTimeout(1000);
-    await expect(page.getByRole('complementary').getByText('发现音乐')).toBeVisible();
-
-    // 后退禁用，前进可用
-    await expect(backBtn).toBeDisabled();
-    await expect(forwardBtn).toBeEnabled();
-
-    // 点击前进回到收藏页
-    await forwardBtn.click();
-    await page.waitForTimeout(1000);
-    await expect(page.getByRole('heading', { name: '我的收藏' })).toBeVisible();
-  });
-
-  test('TopBar 刷新按钮不丢失状态', async () => {
-    // 导航回发现页
-    await page.getByRole('complementary').getByText('发现音乐').click();
-    await page.waitForTimeout(1000);
-
-    // 点击刷新
-    const refreshBtn = page.locator('header button[aria-label="刷新"]');
-    await refreshBtn.click();
-    await page.waitForTimeout(2000);
-
-    // 页面仍然在发现页
-    await expect(page.getByRole('complementary').getByText('发现音乐')).toBeVisible();
-  });
-
   test('播放器收藏按钮无歌曲时 disabled', async () => {
-    await page.getByRole('complementary').getByText('发现音乐').click();
+    await page.getByRole('complementary').getByText('发现').click();
     await page.waitForTimeout(1000);
 
     // 收藏按钮可见
@@ -82,7 +37,7 @@ test.describe('UI 交互验证', () => {
   });
 
   test('播放器下载按钮点击', async () => {
-    await page.getByRole('complementary').getByText('发现音乐').click();
+    await page.getByRole('complementary').getByText('发现').click();
     await page.waitForTimeout(1000);
 
     const downloadBtn = page.locator('button[aria-label="下载"]').first();
@@ -94,7 +49,7 @@ test.describe('UI 交互验证', () => {
   });
 
   test('播放器歌词按钮跳转', async () => {
-    await page.getByRole('complementary').getByText('发现音乐').click();
+    await page.getByRole('complementary').getByText('发现').click();
     await page.waitForTimeout(1000);
 
     const lyricsBtn = page.locator('button[aria-label="歌词"]').first();
@@ -107,7 +62,7 @@ test.describe('UI 交互验证', () => {
 
   test('侧边栏导航切换', async () => {
     // 点击各个导航项
-    const navItems = ['发现音乐', '我的收藏', '播放历史', '我的歌单'];
+    const navItems = ['发现', '我喜欢的音乐', '最近播放', '我的歌单'];
 
     for (const item of navItems) {
       await page.getByRole('complementary').getByText(item).click();
@@ -120,7 +75,7 @@ test.describe('UI 交互验证', () => {
   });
 
   test('发现页排行榜歌曲点击有反馈', async () => {
-    await page.getByRole('complementary').getByText('发现音乐').click();
+    await page.getByRole('complementary').getByText('发现').click();
     await page.waitForTimeout(2000);
 
     // 滚动到排行榜
@@ -138,7 +93,7 @@ test.describe('UI 交互验证', () => {
 
       // 验证有反馈：要么播放成功（播放器显示歌名），要么显示错误提示
       const playerHasSong = await page.getByText('未播放').isHidden().catch(() => false);
-      const hasWarning = await page.locator('.ant-message-notice').isVisible().catch(() => false);
+      const hasWarning = await page.locator('.ui-toast').isVisible().catch(() => false);
       const hasErrorMsg = await page.getByText('未找到可播放的音源').isVisible().catch(() => false)
         || await page.getByText('播放失败').isVisible().catch(() => false);
 
@@ -152,7 +107,7 @@ test.describe('UI 交互验证', () => {
     const progressBar = page.locator('[role="slider"][aria-label="播放进度"]');
 
     // 导航到发现页，确保页面干净
-    await page.getByRole('complementary').getByText('发现音乐').click();
+    await page.getByRole('complementary').getByText('发现').click();
     await page.waitForTimeout(1000);
 
     // 如果当前无歌曲播放，验证无歌曲状态
@@ -164,7 +119,7 @@ test.describe('UI 交互验证', () => {
     }
 
     // 确保有歌曲在播放（搜索并播放）
-    const searchInput = page.getByPlaceholder('搜索音乐、歌手、专辑');
+    const searchInput = page.getByPlaceholder('搜索歌曲、专辑、歌手');
     await searchInput.fill('周杰伦');
     await searchInput.press('Enter');
     await page.waitForTimeout(3000);
@@ -240,11 +195,11 @@ test.describe('UI 交互验证', () => {
   });
 
   test('播放器进度条点击跳转', async () => {
-    await page.getByRole('complementary').getByText('发现音乐').click();
+    await page.getByRole('complementary').getByText('发现').click();
     await page.waitForTimeout(1000);
 
     // 搜索播放
-    const searchInput = page.getByPlaceholder('搜索音乐、歌手、专辑');
+    const searchInput = page.getByPlaceholder('搜索歌曲、专辑、歌手');
     await searchInput.fill('周杰伦');
     await searchInput.press('Enter');
     await page.waitForTimeout(3000);

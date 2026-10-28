@@ -1,0 +1,180 @@
+/* ============================================================
+   本地歌单详情页（PlaylistDetailPage，1.9.0 样式外置）
+   颜色一律 var() token；字号 / 字重 / 行高 / 圆角只引用全局 token。
+   结构不变量（#445 / #488 / #694）：工具条与行容器同处 VirtualSortableList 的
+   header wrapper 内；工具条本身的样式在 detail-toolbar.css，本文件只管本页观感。
+   ============================================================ */
+
+.playlist-detail__kind-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}.playlist-detail__edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.playlist-detail__edit:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+/* ── 加载骨架 ── */
+.playlist-detail__skeleton {
+  padding: 24px;
+}
+
+.playlist-detail__sk-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+}
+
+.playlist-detail__sk-col {
+  width: 30px;
+  text-align: center;
+}
+
+.playlist-detail__sk-bar,
+.playlist-detail__sk-thumb,
+.playlist-detail__sk-line,
+.playlist-detail__sk-circle {
+  background: linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%);
+  background-size: 200% 200%;
+  animation: playlist-detail-skeleton 1.5s ease-in-out infinite;
+}
+
+.playlist-detail__sk-bar {
+  width: 14px;
+  height: 14px;
+  margin: 0 auto;
+  border-radius: var(--radius-xs);
+}
+
+.playlist-detail__sk-bar--num {
+  width: 20px;
+}
+
+.playlist-detail__sk-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-xs);
+}
+
+.playlist-detail__sk-body {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+}
+
+.playlist-detail__sk-lines {
+  flex: 1;
+}
+
+.playlist-detail__sk-line {
+  width: 70%;
+  height: 14px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-xs);
+}
+
+.playlist-detail__sk-line--short {
+  width: 50%;
+  height: 12px;
+  margin-bottom: 0;
+  animation-delay: 0.1s;
+}
+
+.playlist-detail__sk-actions {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  width: 100px;
+}
+
+.playlist-detail__sk-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+}
+
+/* 骨架屏扫光：页面级 keyframes，避免与 global.css 的 skeletonLoading（透明度脉冲）撞名 */
+@keyframes playlist-detail-skeleton {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ── 空态 ── */
+.playlist-detail__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  color: var(--text-tertiary);
+}
+
+.playlist-detail__empty-title {
+  margin-top: 16px;
+  font-size: var(--text-base);
+}
+
+/* ── 编辑歌单弹层 ── */
+.playlist-detail__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.playlist-detail__label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* ── 歌单不存在 ── */
+.playlist-detail__missing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.playlist-detail__missing-text {
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+  font-size: var(--text-lg);
+}
+
+.playlist-detail__missing-action {
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
+  cursor: pointer;
+}
+
+/* ── 拖拽 overlay 的静态把手 ── */
+.playlist-detail__drag-handle {
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+}

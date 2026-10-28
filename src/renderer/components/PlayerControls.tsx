@@ -1,7 +1,7 @@
 import React from 'react';
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
-import PlayModeButton from './PlayModeButton';
+import { Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1 } from 'lucide-react';
 import type { PlayMode } from '@mplayer/core';
+import '@/renderer/styles/player-bar.css';
 
 interface PlayerControlsProps {
   isPlaying: boolean;
@@ -15,72 +15,78 @@ interface PlayerControlsProps {
   onModeChange: (mode: PlayMode) => void;
 }
 
+/** 播放模式循环顺序：列表循环 → 随机播放 → 单曲循环 → 列表循环。 */
+const PLAY_MODE_ORDER: PlayMode[] = ['列表循环', '随机播放', '单曲循环'];
+
+const getNextPlayMode = (mode: PlayMode): PlayMode => {
+  const index = PLAY_MODE_ORDER.indexOf(mode);
+  return PLAY_MODE_ORDER[(index + 1) % PLAY_MODE_ORDER.length];
+};
+
+const ModeIcon: React.FC<{ mode: PlayMode }> = ({ mode }) => {
+  if (mode === '随机播放') return <Shuffle size={16} />;
+  if (mode === '单曲循环') return <Repeat1 size={16} />;
+  return <Repeat size={16} />;
+};
+
+/**
+ * 播放控件（1.9.0 收口）：上一 / 播放 / 下一，外加**一个**播放模式按钮。
+ * 模式按钮按 列表循环 → 随机播放 → 单曲循环 循环；图标 Repeat / Shuffle / Repeat1。
+ * 布局用 1fr auto 1fr：播放键永远落在控件行的几何中心（与窗口中心对齐）。
+ */
 const PlayerControls: React.FC<PlayerControlsProps> = React.memo(({
   isPlaying, loading = false, hasCurrentSong, playMode,
   onPlayPause, onPrev, onNext, onModeChange,
-}) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-    <PlayModeButton mode={playMode} onModeChange={onModeChange} size={16} />
-    <button
-      onClick={onPrev}
-      disabled={!hasCurrentSong}
-      aria-label="上一首"
-      className="player-btn"
-      style={{ color: hasCurrentSong ? 'var(--text-secondary)' : 'var(--text-disabled)' }}
-    >
-      <SkipBack size={18} fill="currentColor" />
-    </button>
-    <button
-      onClick={onPlayPause}
-      disabled={!hasCurrentSong}
-      aria-label={loading ? '加载中' : isPlaying ? '暂停' : '播放'}
-      style={{
-        border: 'none',
-        background: hasCurrentSong ? 'var(--accent)' : 'var(--gray-300)',
-        cursor: hasCurrentSong ? 'pointer' : 'not-allowed',
-        padding: '11px',
-        borderRadius: 'var(--radius-full)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--text-inverse)',
-        boxShadow: hasCurrentSong ? 'var(--shadow-md)' : 'none',
-        transition: 'all var(--duration-fast) var(--ease-out)',
-        opacity: hasCurrentSong ? 1 : 0.5,
-      }}
-    >
-      {loading ? (
-        // #387：等待反馈——冷启 P50 约 1s 期间界面此前完全静止（移动端已有 preparing spinner）。
-        // 用全局 @keyframes spin（styles 里已定义），不引入新依赖。
-        <span
-          aria-hidden
-          data-testid="player-loading"
-          style={{
-            display: 'inline-block',
-            width: '18px',
-            height: '18px',
-            borderRadius: 'var(--radius-full)',
-            border: '2px solid var(--border-subtle)',
-            borderTopColor: 'var(--text-inverse)',
-            animation: 'spin 0.8s linear infinite',
-          }}
-        />
-      ) : isPlaying ? (
-        <Pause size={20} fill="white" />
-      ) : (
-        <Play size={20} fill="white" style={{ marginLeft: '2px' }} />
-      )}
-    </button>
-    <button
-      onClick={onNext}
-      disabled={!hasCurrentSong}
-      aria-label="下一首"
-      className="player-btn"
-      style={{ color: hasCurrentSong ? 'var(--text-secondary)' : 'var(--text-disabled)' }}
-    >
-      <SkipForward size={18} fill="currentColor" />
-    </button>
-  </div>
-));
+}) => {
+  const nextMode = getNextPlayMode(playMode);
+
+  return (
+    <div className="player-controls">
+      <div className="player-controls__side player-controls__side--start">
+        <button
+          type="button"
+          onClick={() => onModeChange(nextMode)}
+          aria-label={`播放模式：${playMode}`}
+          title={`切换到${nextMode}`}
+          className="player-btn player-controls__mode"
+        >
+          <ModeIcon mode={playMode} />
+        </button>
+        <button
+          onClick={onPrev}
+          disabled={!hasCurrentSong}
+          aria-label="上一首"
+          className="player-btn player-controls__skip"
+        >
+          <SkipBack size={18} fill="currentColor" />
+        </button>
+      </div>
+      <button
+        onClick={onPlayPause}
+        disabled={!hasCurrentSong}
+        aria-label={loading ? '加载中' : isPlaying ? '暂停' : '播放'}
+        className="player-controls__play"
+      >
+        {loading ? (
+          <span aria-hidden data-testid="player-loading" className="player-controls__spinner" />
+        ) : isPlaying ? (
+          <Pause size={20} fill="currentColor" />
+        ) : (
+          <Play size={20} fill="currentColor" className="player-controls__play-icon" />
+        )}
+      </button>
+      <div className="player-controls__side player-controls__side--end">
+        <button
+          onClick={onNext}
+          disabled={!hasCurrentSong}
+          aria-label="下一首"
+          className="player-btn player-controls__skip"
+        >
+          <SkipForward size={18} fill="currentColor" />
+        </button>
+      </div>
+    </div>
+  );
+});
 
 export default PlayerControls;

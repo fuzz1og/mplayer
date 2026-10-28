@@ -15,7 +15,7 @@ MPlayer 是一个跨平台音乐播放器（桌面 Electron + React，移动端 
 
 ## Architecture
 
-- **Desktop** (`src/`): `contextIsolation: true` + `nodeIntegration: false`（`sandbox: false`），渲染层经 preload 桥 `window.electronAPI` 通信、无 Node 能力。主进程（入口/preload/缓存/storage/ipc/services/tray）与渲染进程（懒加载 router、Zustand、Howler、Ant Design 6）详见 `docs/agents/architecture.md`。
+- **Desktop** (`src/`): `contextIsolation: true` + `nodeIntegration: false`（`sandbox: false`），渲染层经 preload 桥 `window.electronAPI` 通信、无 Node 能力。主进程（入口/preload/缓存/storage/ipc/services/tray）与渲染进程（懒加载 router、Zustand、Howler、`src/renderer/ui/` 自建原语）详见 `docs/agents/architecture.md`。
 - **Mobile** (`packages/mobile/`): expo-router Stack+Tabs，Zustand(AsyncStorage persist)，双主题 token + textVariants。
   **播放引擎**：Android 走自写 Kotlin Expo Module `packages/mobile/modules/native-player/`（media3 ExoPlayer 持队列 + 原生推进 + `MediaLibraryService` 媒体会话/锁屏；JS 只解析并喂预取窗口）；iOS 回落 expo-audio。见 ADR `docs/adr/2026-09-29-native-playback-ownership.md`。
 - **Shared** (`packages/core/`): 双端共享 —— `api/` 多源直连客户端、cache 内核、`shared/` 源路由/解析、`tier3/` 订阅执行器、`utils/`。
@@ -25,7 +25,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 ## Key Conventions
 
 ### Desktop
-- UI: Ant Design 6 (`zhCN`) + lucide-react；虚拟滚动 `@tanstack/react-virtual`；DnD `@dnd-kit`；文案中文。
+- UI: 自建原语 `src/renderer/ui/`（1.9.0 起无 antd）+ lucide-react；虚拟滚动 `@tanstack/react-virtual`；DnD `@dnd-kit`；文案中文。
 - Path alias `@/*` → `./src/*`；主进程 import 共享件用相对路径（tsc 主进程构建不解析别名）。
 - 歌曲去重/匹配在 core（songDedupe/songMatcher）。
 

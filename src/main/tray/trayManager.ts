@@ -18,40 +18,50 @@ export class TrayManager {
   private updateMenu(mainWindow: BrowserWindow): void {
     if (!this.tray) return;
 
+    // 与桌面端 1.9.0 同一套语气：无 emoji、分组只用分隔线、动作文案与界面对齐
+    const nowPlaying = this.tooltip === 'MPlayer' ? '未在播放' : this.tooltip;
     const contextMenu = Menu.buildFromTemplate([
-      {
-        label: `🎵 ${this.tooltip}`,
-        enabled: false,
-      },
+      { label: nowPlaying, enabled: false },
       { type: 'separator' },
       {
-        label: this.isPlaying ? '⏸ 暂停' : '▶ 播放',
+        label: this.isPlaying ? '暂停' : '播放',
         click: () => {
           mainWindow.webContents.send('tray:action', { type: 'playPause' });
         },
       },
       {
-        label: '⏮ 上一首',
+        label: '上一首',
         click: () => {
           mainWindow.webContents.send('tray:action', { type: 'prev' });
         },
       },
       {
-        label: '⏭ 下一首',
+        label: '下一首',
         click: () => {
           mainWindow.webContents.send('tray:action', { type: 'next' });
         },
       },
       { type: 'separator' },
       {
-        label: '🪟 显示窗口',
+        label: '显示主窗口',
         click: () => {
+          if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.show();
           mainWindow.focus();
         },
       },
       {
-        label: '✕ 退出',
+        label: '设置…',
+        click: () => {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.webContents.send('tray:action', { type: 'openSettings' });
+        },
+      },
+      { type: 'separator' },
+      {
+        label: '退出 MPlayer',
         click: () => {
           app.quit();
         },

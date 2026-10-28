@@ -1,80 +1,25 @@
 import React from 'react';
-import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useNavigate } from 'react-router-dom';
 import type { DiscoverPlaylist } from '@mplayer/core';
 import { formatPlayCount } from '@mplayer/core';
+import CoverCard from '@/renderer/components/CoverCard';
 
 interface DiscoverPlaylistCardProps {
   playlist: DiscoverPlaylist;
 }
 
+/** 发现页歌单卡：与歌单广场、推荐歌单共用同一张内容卡，点击进入歌单详情。 */
 const DiscoverPlaylistCard: React.FC<DiscoverPlaylistCardProps> = ({ playlist }) => {
   const navigate = useNavigate();
 
   return (
-    <div
-      style={{
-        cursor: 'pointer',
-        borderRadius: 'var(--radius-md)',
-        overflow: 'hidden',
-        backgroundColor: 'var(--bg-surface)',
-        transition: 'all var(--duration-normal) var(--ease-out)',
-      }}
+    <CoverCard
+      title={playlist.name}
+      subtitle={playlist.creator.nickname || undefined}
+      cover={playlist.coverImgUrl}
+      badge={playlist.playCount ? formatPlayCount(playlist.playCount) : undefined}
       onClick={() => navigate(`/discover-playlist/${playlist.id}`)}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-3px)';
-        e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = 'var(--shadow-xs)';
-      }}
-    >
-      <div style={{ position: 'relative', paddingTop: '100%', backgroundColor: 'var(--skeleton-base)' }}>
-        <img
-          src={coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)}
-          alt={playlist.name}
-          loading="lazy"
-          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            top: 'var(--space-2)',
-            right: 'var(--space-2)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '3px',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            backdropFilter: 'blur(4px)',
-            color: 'white',
-            fontSize: 'var(--text-2xs)',
-            padding: '2px 6px',
-            borderRadius: 'var(--radius-xs)',
-          }}
-        >
-          ▶ {formatPlayCount(playlist.playCount)}
-        </div>
-      </div>
-      <div style={{ padding: 'var(--space-3) var(--space-3)' }}>
-        <div
-          style={{
-            fontSize: 'var(--text-sm)',
-            fontWeight: 'var(--weight-medium)',
-            color: 'var(--text-primary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            lineHeight: 'var(--leading-normal)',
-            minHeight: '36px',
-          }}
-        >
-          {playlist.name}
-        </div>
-      </div>
-    </div>
+    />
   );
 };
 

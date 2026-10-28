@@ -62,13 +62,13 @@ describe('「批量加入歌单」入口不依赖页面回调（#562）', () => 
   it('只传 enableBatchAddToPlaylist（不传回调）：勾选后点击能开出弹窗', async () => {
     renderList();
 
-    // 进入批量管理 → 勾一首
-    fireEvent.click(screen.getByRole('button', { name: /批量管理/ }));
+    // 进入选择模式 → 勾一首
+    fireEvent.click(screen.getByRole('button', { name: '选择' }));
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.click(screen.getByRole('button', { name: /批量加入歌单/ }));
 
     // 弹窗标题出现 = 入口是活的（修复前这里永远不会出现）
-    await waitFor(() => expect(screen.getByText('批量加入歌单', { selector: 'h3' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { name: '批量加入歌单' })).toBeTruthy());
     expect(h.invoke).toHaveBeenCalledWith('playlist:getAll');
   });
 
@@ -76,11 +76,11 @@ describe('「批量加入歌单」入口不依赖页面回调（#562）', () => 
     const onBatchAddToPlaylist = vi.fn();
     renderList({ onBatchAddToPlaylist });
 
-    fireEvent.click(screen.getByRole('button', { name: /批量管理/ }));
+    fireEvent.click(screen.getByRole('button', { name: '选择' }));
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.click(screen.getByRole('button', { name: /批量加入歌单/ }));
 
-    await waitFor(() => expect(screen.getByText('批量加入歌单', { selector: 'h3' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { name: '批量加入歌单' })).toBeTruthy());
     // 通知回调是**成功之后**才调，弹窗刚开时不该被调
     expect(onBatchAddToPlaylist).not.toHaveBeenCalled();
   });

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { usePlaybackDuration, usePlaybackPosition } from '@/renderer/services/playbackClock';
+import '@/renderer/styles/player-bar.css';
 
 interface PlayerProgressProps {
   hasCurrentSong: boolean;
@@ -124,9 +125,16 @@ const PlayerProgress: React.FC<PlayerProgressProps> = React.memo(({
     }
   }, [hasCurrentSong, position, duration, onSeek]);
 
+  const expanded = isHovered || dragging;
+  const trackClass = [
+    'player-progress__track',
+    expanded ? 'player-progress__track--expanded' : '',
+    dragging ? 'player-progress__track--dragging' : '',
+  ].filter(Boolean).join(' ');
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', minWidth: '36px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+    <div className="player-progress">
+      <span className="player-progress__time player-progress__time--start">
         {formatTime(shownPosition)}
       </span>
       <div
@@ -140,66 +148,26 @@ const PlayerProgress: React.FC<PlayerProgressProps> = React.memo(({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         tabIndex={hasCurrentSong ? 0 : -1}
-        style={{
-          flex: 1,
-          height: isHovered || dragging ? '20px' : '16px',
-          display: 'flex',
-          alignItems: 'center',
-          cursor: hasCurrentSong ? (dragging ? 'grabbing' : 'pointer') : 'not-allowed',
-          position: 'relative',
-          outline: 'none',
-          userSelect: 'none',
-          touchAction: 'none',
-        }}
+        className={trackClass}
         role="slider"
         aria-label="播放进度"
         aria-valuemin={0}
         aria-valuemax={duration || 100}
         aria-valuenow={shownPosition}
         aria-disabled={!hasCurrentSong}
+        style={{ '--progress': `${progress}%` } as React.CSSProperties}
       >
         {/* Track background */}
-        <div
-          style={{
-            width: '100%',
-            height: isHovered || dragging ? '6px' : '4px',
-            backgroundColor: 'var(--border-default)',
-            borderRadius: '2px',
-            overflow: 'hidden',
-            transition: 'height 150ms ease',
-          }}
-        >
+        <div className="player-progress__rail">
           {/* Filled portion */}
-          <div
-            style={{
-              width: `${progress}%`,
-              height: '100%',
-              backgroundColor: 'var(--accent)',
-              borderRadius: '2px',
-              // 拖动中跟手优先：transition 会让填充条落后于指针
-              transition: dragging ? 'none' : 'width 100ms linear',
-            }}
-          />
+          <div className="player-progress__fill" />
         </div>
         {/* Thumb (hover / dragging) */}
-        {(isHovered || dragging) && hasCurrentSong && (
-          <div
-            style={{
-              position: 'absolute',
-              left: `calc(${progress}% - 5px)`,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              width: '10px',
-              height: '10px',
-              backgroundColor: 'var(--accent)',
-              borderRadius: '50%',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-              pointerEvents: 'none',
-            }}
-          />
+        {expanded && hasCurrentSong && (
+          <div className="player-progress__thumb" />
         )}
       </div>
-      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', minWidth: '36px', fontVariantNumeric: 'tabular-nums' }}>
+      <span className="player-progress__time">
         {formatTime(duration)}
       </span>
     </div>

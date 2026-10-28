@@ -1,8 +1,10 @@
 import React from 'react';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
-import { X, CheckCircle, AlertCircle, Loader2, Trash2, Music2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Pause, Music2, Trash2 } from 'lucide-react';
 import type { DownloadNotification } from '@/renderer/store/downloadStore';
 import { getNotificationStats, getStatusText, getStatusColor, useDownloadStore } from '@/renderer/store/downloadStore';
+import { Button, Dialog } from '@/renderer/ui';
+import '@/renderer/styles/songlist.css';
 
 interface DownloadProgressModalProps {
   notification: DownloadNotification;
@@ -20,553 +22,169 @@ const DownloadProgressModal: React.FC<DownloadProgressModalProps> = ({
 
   const isAllCompleted = stats.completed + stats.error === stats.total;
   const hasError = stats.error > 0;
+  const clearAndClose = () => {
+    useDownloadStore.getState().clearCompleted();
+    handleClose();
+  };
 
   if (type === 'single') {
     const task = tasks[0];
     if (!task) return null;
 
     return (
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          animation: 'fadeIn 0.2s ease',
-        }}
-        onClick={handleClose}
-      >
-        <div
-          style={{
-            backgroundColor: 'var(--bg-base)',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '360px',
-            maxWidth: '90vw',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-            animation: 'slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* 头部 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '20px',
-            }}
-          >
-            <h3
-              style={{
-                fontSize: '16px',
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-                margin: 0,
-              }}
-            >
-              {isAllCompleted
-                ? hasError
-                  ? '下载失败'
-                  : '下载完成'
-                : '正在下载'}
-            </h3>
-            <button
-              onClick={handleClose}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                padding: '4px',
-                borderRadius: '4px',
-                color: 'var(--text-tertiary)',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                e.currentTarget.style.color = 'var(--text-secondary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = 'var(--text-tertiary)';
-              }}
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          {/* 歌曲信息 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              marginBottom: '20px',
-            }}
-          >
-            {/* 封面 */}
-            <div
-              style={{
-                position: 'relative',
-                width: '56px',
-                height: '56px',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                backgroundColor: 'var(--bg-hover)',
-                flexShrink: 0,
-              }}
-            >
-              {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Music2 size={20} style={{ color: 'var(--text-tertiary)' }} />
-              </div>
-              {task.song.cover && (
-                <img
-                  key={task.song.cover}
-                  src={coverThumbUrl(task.song.cover, COVER_SIZE.row)}
-                  alt={task.song.name}
-                  loading="lazy"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              )}
-            </div>
-
-            {/* 歌曲信息 */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 500,
-                  color: 'var(--text-primary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {task.song.name}
-              </div>
-              <div
-                style={{
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--text-secondary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  marginTop: '4px',
-                }}
-              >
-                {task.song.artist}
-              </div>
-            </div>
-
-            {/* 状态图标 */}
-            <div>
-              {task.status === 'completed' ? (
-                <CheckCircle size={24} color="var(--success)" />
-              ) : task.status === 'error' ? (
-                <AlertCircle size={24} color="var(--danger)" />
-              ) : (
-                <Loader2 size={24} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
-              )}
-            </div>
-          </div>
-
-          {/* 进度条 */}
-          <div style={{ marginBottom: '12px' }}>
-            <div
-              style={{
-                height: '6px',
-                backgroundColor: 'var(--bg-hover)',
-                borderRadius: '3px',
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  height: '100%',
-                  width: `${task.progress}%`,
-                  backgroundColor: task.status === 'error' ? 'var(--danger)' : 'var(--accent)',
-                  borderRadius: '3px',
-                  transition: 'width 0.3s ease',
-                }}
-              />
-            </div>
-          </div>
-
-          {/* 进度文字 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: '13px',
-            }}
-          >
-            <span style={{ color: getStatusColor(task.status) }}>
-              {getStatusText(task.status)}
-            </span>
-            <span style={{ color: 'var(--text-secondary)' }}>{task.progress}%</span>
-          </div>
-
-          {/* 错误信息 */}
-          {task.error && (
-            <div
-              style={{
-                marginTop: '12px',
-                padding: '10px 12px',
-                backgroundColor: 'var(--danger-subtle)',
-                border: '1px solid var(--danger)',
-                borderRadius: '6px',
-                fontSize: 'var(--text-xs)',
-                color: 'var(--danger)',
-              }}
-            >
-              {task.error}
-            </div>
-          )}
-
-          {/* 清除已完成按钮 */}
-          {isAllCompleted && (
-            <button
-              onClick={() => useDownloadStore.getState().clearCompleted()}
-              style={{
-                marginTop: '16px',
-                width: '100%',
-                padding: '10px',
-                backgroundColor: 'transparent',
-                border: '1px solid var(--border-default)',
-                borderRadius: '6px',
-                color: 'var(--text-secondary)',
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--text-tertiary)';
-                e.currentTarget.style.color = 'var(--text-primary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-default)';
-                e.currentTarget.style.color = 'var(--text-secondary)';
-              }}
-            >
+      <Dialog
+        open
+        title={isAllCompleted ? (hasError ? '下载失败' : '下载完成') : '正在下载'}
+        onClose={handleClose}
+        footer={
+          isAllCompleted ? (
+            <Button variant="ghost" onClick={clearAndClose}>
               <Trash2 size={14} />
               清除并关闭
-            </button>
-          )}
-        </div>
-
-        <style>{`
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-          @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-          }
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  // 批量下载模式
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        animation: 'fadeIn 0.2s ease',
-      }}
-      onClick={handleClose}
-    >
-      <div
-        style={{
-          backgroundColor: 'var(--bg-base)',
-          borderRadius: '12px',
-          padding: '24px',
-          width: '420px',
-          maxWidth: '90vw',
-          maxHeight: '80vh',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-          animation: 'slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-        onClick={(e) => e.stopPropagation()}
+            </Button>
+          ) : undefined
+        }
       >
-        {/* 头部 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '20px',
-          }}
-        >
-          <h3
-            style={{
-              fontSize: '16px',
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              margin: 0,
-            }}
-          >
-            {isAllCompleted
-              ? `批量下载完成 (${stats.completed}成功${stats.error > 0 ? `, ${stats.error}失败` : ''})`
-              : `正在批量下载 (${stats.completed}/${stats.total})`}
-          </h3>
-          <button
-            onClick={handleClose}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              padding: '4px',
-              borderRadius: '4px',
-              color: 'var(--text-tertiary)',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-              e.currentTarget.style.color = 'var(--text-secondary)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = 'var(--text-tertiary)';
-            }}
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* 总体进度 */}
-        <div style={{ marginBottom: '16px' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '8px',
-              fontSize: '13px',
-            }}
-          >
-            <span style={{ color: 'var(--text-secondary)' }}>总体进度</span>
-            <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
-              {stats.averageProgress}%
-            </span>
-          </div>
-          <div
-            style={{
-              height: '8px',
-              backgroundColor: 'var(--bg-hover)',
-              borderRadius: '4px',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                width: `${stats.averageProgress}%`,
-                backgroundColor: isAllCompleted
-                  ? hasError
-                    ? 'var(--danger)'
-                    : 'var(--success)'
-                  : 'var(--accent)',
-                borderRadius: '4px',
-                transition: 'width 0.3s ease',
-              }}
-            />
-          </div>
-        </div>
-
-        {/* 歌曲列表 */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            maxHeight: '300px',
-            borderTop: '1px solid var(--border-subtle)',
-            borderBottom: '1px solid var(--border-subtle)',
-          }}
-        >
-          {tasks.map((task) => (
-            <div
-              key={task.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 0',
-                borderBottom: '1px solid var(--border-subtle)',
-              }}
-            >
-              {/* 状态图标 */}
-              <div style={{ width: '20px', flexShrink: 0 }}>
-                {task.status === 'completed' ? (
-                  <CheckCircle size={18} color="var(--success)" />
-                ) : task.status === 'error' ? (
-                  <AlertCircle size={18} color="var(--danger)" />
-                ) : task.status === 'downloading' ? (
-                  <Loader2 size={18} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
-                ) : (
-                  <div
-                    style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      backgroundColor: 'var(--text-tertiary)',
-                      margin: '0 auto',
-                    }}
-                  />
-                )}
-              </div>
-
-              {/* 歌曲信息 */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: '13px',
-                    color: 'var(--text-primary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {task.song.name}
-                </div>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    color: 'var(--text-secondary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    marginTop: '2px',
-                  }}
-                >
-                  {task.song.artist}
-                </div>
-              </div>
-
-              {/* 进度 */}
-              <div style={{ width: '50px', textAlign: 'right' }}>
-                {task.status === 'downloading' ? (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>
-                    {task.progress}%
-                  </span>
-                ) : (
-                  <span
-                    style={{
-                      fontSize: 'var(--text-xs)',
-                      color: getStatusColor(task.status),
-                    }}
-                  >
-                    {getStatusText(task.status)}
-                  </span>
-                )}
-              </div>
+        <div className="dl-progress__song">
+          <div className="dl-progress__cover">
+            <div className="dl-progress__cover-placeholder">
+              <Music2 size={20} />
             </div>
-          ))}
-        </div>
+            {task.song.cover && (
+              <img
+                key={task.song.cover}
+                src={coverThumbUrl(task.song.cover, COVER_SIZE.row)}
+                alt={task.song.name}
+                loading="lazy"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                className="dl-progress__cover-img"
+              />
+            )}
+          </div>
 
-        {/* 底部统计 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginTop: '16px',
-            paddingTop: '16px',
-            fontSize: '13px',
-          }}
-        >
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>
-              总计: <strong style={{ color: 'var(--text-primary)' }}>{stats.total}</strong>
-            </span>
-            <span style={{ color: 'var(--success)' }}>
-              成功: <strong>{stats.completed}</strong>
-            </span>
-            {stats.error > 0 && (
-              <span style={{ color: 'var(--danger)' }}>
-                失败: <strong>{stats.error}</strong>
-              </span>
+          <div className="dl-progress__song-text">
+            <div className="dl-progress__song-name">{task.song.name}</div>
+            <div className="dl-progress__song-artist">{task.song.artist}</div>
+          </div>
+
+          <div className="dl-progress__status-icon">
+            {task.status === 'completed' ? (
+              <CheckCircle size={24} color="var(--success)" />
+            ) : task.status === 'error' ? (
+              <AlertCircle size={24} color="var(--danger)" />
+            ) : task.status === 'paused' ? (
+              <Pause size={24} color="var(--text-tertiary)" />
+            ) : (
+              <Loader2 size={24} color="var(--accent)" className="dl-progress__spin" />
             )}
           </div>
         </div>
 
-        {/* 清除已完成按钮 */}
-        {isAllCompleted && (
-          <button
-            onClick={() => useDownloadStore.getState().clearCompleted()}
-            style={{
-              marginTop: '16px',
-              width: '100%',
-              padding: '10px',
-              backgroundColor: 'transparent',
-              border: '1px solid var(--border-default)',
-              borderRadius: '6px',
-              color: 'var(--text-secondary)',
-              fontSize: '13px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--text-tertiary)';
-              e.currentTarget.style.color = 'var(--text-primary)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border-default)';
-              e.currentTarget.style.color = 'var(--text-secondary)';
-            }}
-          >
+        <div className="dl-progress__bar-wrap">
+          <div className="dl-progress__bar">
+            <div
+              className="dl-progress__bar-fill"
+              data-tone={task.status === 'error' ? 'danger' : undefined}
+              style={{ '--progress': `${task.progress}%` } as React.CSSProperties}
+            />
+          </div>
+        </div>
+
+        <div className="dl-progress__progress-text">
+          <span style={{ '--status-color': getStatusColor(task.status) } as React.CSSProperties}>
+            {getStatusText(task.status)}
+          </span>
+          <span className="dl-progress__progress-num">{task.progress}%</span>
+        </div>
+
+        {task.error && <div className="dl-progress__error">{task.error}</div>}
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog
+      open
+      title={
+        isAllCompleted
+          ? `批量下载完成 (${stats.completed}成功${stats.error > 0 ? `, ${stats.error}失败` : ''})`
+          : `正在批量下载 (${stats.completed}/${stats.total})`
+      }
+      onClose={handleClose}
+      footer={
+        isAllCompleted ? (
+          <Button variant="ghost" onClick={clearAndClose}>
             <Trash2 size={14} />
             清除已完成
-          </button>
-        )}
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className="dl-progress__overall">
+        <div className="dl-progress__overall-head">
+          <span>总体进度</span>
+          <span className="dl-progress__overall-value">{stats.averageProgress}%</span>
+        </div>
+        <div className="dl-progress__bar dl-progress__bar--batch">
+          <div
+            className="dl-progress__bar-fill"
+            data-tone={isAllCompleted ? (hasError ? 'danger' : 'success') : undefined}
+            style={{ '--progress': `${stats.averageProgress}%` } as React.CSSProperties}
+          />
+        </div>
       </div>
 
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideIn {
-          from { transform: translateY(-20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
+      <div className="dl-progress__list">
+        {tasks.map((task) => (
+          <div key={task.id} className="dl-progress__row">
+            <div className="dl-progress__row-icon">
+              {task.status === 'completed' ? (
+                <CheckCircle size={18} color="var(--success)" />
+              ) : task.status === 'error' ? (
+                <AlertCircle size={18} color="var(--danger)" />
+              ) : task.status === 'paused' ? (
+                <Pause size={18} color="var(--text-tertiary)" />
+              ) : task.status === 'downloading' ? (
+                <Loader2 size={18} color="var(--accent)" className="dl-progress__spin" />
+              ) : (
+                <div className="dl-progress__dot" />
+              )}
+            </div>
+
+            <div className="dl-progress__row-text">
+              <div className="dl-progress__row-name">{task.song.name}</div>
+              <div className="dl-progress__row-artist">{task.song.artist}</div>
+            </div>
+
+            <div className={`dl-progress__row-state${task.status === 'downloading' ? ' dl-progress__row-state--active' : ''}`}>
+              {task.status === 'downloading' ? (
+                `${task.progress}%`
+              ) : (
+                <span style={{ '--status-color': getStatusColor(task.status) } as React.CSSProperties}>
+                  {getStatusText(task.status)}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="dl-progress__footer">
+        <div className="dl-progress__footer-stats">
+          <span>
+            总计: <strong className="dl-progress__footer-strong">{stats.total}</strong>
+          </span>
+          <span className="dl-progress__footer-success">
+            成功: <strong>{stats.completed}</strong>
+          </span>
+          {stats.error > 0 && (
+            <span className="dl-progress__footer-danger">
+              失败: <strong>{stats.error}</strong>
+            </span>
+          )}
+        </div>
+      </div>
+    </Dialog>
   );
 };
 

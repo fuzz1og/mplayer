@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 const ipcRenderer = window.electronAPI;
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useSearchStore } from '@/renderer/store/searchStore';
@@ -8,72 +9,105 @@ import { usePlayerStore, warmupRestoredSong } from '@/renderer/store/playerStore
 import { useDownloadStore, type DownloadTask } from '@/renderer/store/downloadStore';
 import { useUpdateStore, isUpdatePending } from '@/renderer/store/updateStore';
 import { useGlobalShortcuts } from '@/renderer/hooks/useGlobalShortcuts';
+import { useScrollRestoration } from '@/renderer/hooks/useScrollRestoration';
 import Sidebar from '@/renderer/components/Sidebar';
 import TitleBar from '@/renderer/components/TitleBar';
-import TopBar from '@/renderer/components/TopBar';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import PlayerBar from '@/renderer/components/PlayerBar';
+import QueuePanel, { closeQueuePanel, openQueuePanel, toggleQueuePanel } from '@/renderer/components/QueuePanel';
 import DownloadNotifications from '@/renderer/components/DownloadNotifications';
 import UpdateReadyDialog from '@/renderer/components/UpdateReadyDialog';
 import LyricsPage from '@/renderer/pages/LyricsPage';
 import ErrorBoundary from '@/renderer/components/ErrorBoundary';
+import { initAppearancePrefs } from '@/renderer/theme/appearancePrefs';
 
-import './styles/global.css';
+import './styles/app-shell.css';
+
+const PLAYER_COVER_TRANSITION_NAME = 'player-cover';
 
 const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [showLyrics, setShowLyrics] = useState(false);
+  const isSettings = location.pathname.startsWith('/settings');
+  // 正在播放是标题栏之下的整幅内容区（隐藏侧栏与普通播放栏），不是盖住窗口控制的 overlay。
+  const isNowPlaying = showLyrics && !isSettings;
+  // /queue 兼容页自己渲染 standalone 面板：全局面板在该路由不渲染，否则两块面板 + 双份 ESC。
+  const isQueueRoute = location.pathname.startsWith('/queue');
 
-  // History navigation management
-  const historyStack = useRef<string[]>([location.pathname]);
-  const [historyIndex, setHistoryIndex] = useState(0);
-  const isNavigating = useRef(false);
-
-  useEffect(() => {
-    if (isNavigating.current) {
-      isNavigating.current = false;
-      return;
-    }
-    const path = location.pathname;
-    if (historyStack.current[historyIndex] !== path) {
-      historyStack.current = historyStack.current.slice(0, historyIndex + 1);
-      historyStack.current.push(path);
-      setHistoryIndex(historyStack.current.length - 1);
-    }
-  }, [location.pathname, historyIndex]);
+  // #682：设置页返回后恢复原页面滚动位置（进入设置时页面卸载，scrollTop 会被浏览器夹到 0）
+  useScrollRestoration(location);
 
   // #403：歌词是「播放器的层」（与移动端全屏播放器同构），**不是一条路由**——它不占导航栈，任何一
-  // 次导航都该把它收起来。
-  // 信号取 location.key 而非 pathname：点当前页（重复导航到同一路径）也会换 key。
+  // 次导航都该把它收起来。信号取 location.key 而非 pathname：点当前页（重复导航到同一路径）也会换 key。
   useEffect(() => {
     setShowLyrics(false);
+    // #707：队列面板是当前浏览上下文的一部分；路由一变就收掉，避免跨页残留 / 与 /queue 兼容页叠两套。
+    closeQueuePanel();
   }, [location.key]);
 
-  const canGoBack = historyIndex > 0;
-  const canGoForward = historyIndex < historyStack.current.length - 1;
+  // #688：PlayerBar 封面 → 全屏播放器封面的共享元素展开（Chromium View Transitions）。
+  // 两端封面共用一个 view-transition-name；不支持该 API 时（jsdom / 非 Chromium）直接切，行为同旧版。
+  const activeViewTransitionRef = useRef<ViewTransition | null>(null);
 
-  const handleBack = useCallback(() => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      isNavigating.current = true;
-      setHistoryIndex(newIndex);
-      navigate(historyStack.current[newIndex]);
+  const setLyricsVisibility = useCallback((visible: boolean) => {
+    const playerCover = document.querySelector<HTMLElement>('.player-bar__cover');
+
+    // 必须保持 document 作为 receiver（不能把方法摘出来裸调，Chromium 会抛 Illegal invocation）。
+    if (typeof document.startViewTransition !== 'function' || !playerCover || !usePlayerStore.getState().currentSong) {
+      setShowLyrics(visible);
+      return;
     }
-  }, [navigate, historyIndex]);
 
-  const handleForward = useCallback(() => {
-    if (historyIndex < historyStack.current.length - 1) {
-      const newIndex = historyIndex + 1;
-      isNavigating.current = true;
-      setHistoryIndex(newIndex);
-      navigate(historyStack.current[newIndex]);
-    }
-  }, [navigate, historyIndex]);
+    // 连点：收掉上一段，避免两段动画同时持有同名元素。
+    activeViewTransitionRef.current?.skipTransition();
+    activeViewTransitionRef.current = null;
+    playerCover.style.viewTransitionName = '';
 
-  const handleRefresh = useCallback(() => {
-    navigate(0);
+    // 打开：PlayerBar 封面是旧快照里的共享元素，提交后立即让位给全屏封面；
+    // 关闭：提交后 PlayerBar 封面才成为新快照的共享元素（同一快照里绝不能有两个同名元素）。
+    if (visible) playerCover.style.viewTransitionName = PLAYER_COVER_TRANSITION_NAME;
+
+    const transition = document.startViewTransition(() => {
+      flushSync(() => setShowLyrics(visible));
+      playerCover.style.viewTransitionName = visible ? '' : PLAYER_COVER_TRANSITION_NAME;
+    });
+
+    activeViewTransitionRef.current = transition;
+    const settle = () => {
+      if (activeViewTransitionRef.current !== transition) return;
+      activeViewTransitionRef.current = null;
+      playerCover.style.viewTransitionName = '';
+    };
+    transition.finished.then(settle, settle);
+  }, []);
+
+  const handleCoverClick = useCallback(() => {
+    setLyricsVisibility(!showLyrics);
+  }, [setLyricsVisibility, showLyrics]);
+
+  // 关闭动画同样走这里：LyricsPage 的 ESC / 标题栏收起都调用 onBack，因此不碰它自己的实现。
+  const handleCloseLyrics = useCallback(() => {
+    setLyricsVisibility(false);
+  }, [setLyricsVisibility]);
+
+  // 进入设置必须**立刻**移除正在播放层（包括展开动画中）：先跳过 ViewTransition，
+  // 再同步收起，避免动画把旧歌词层留在设置页上方。返回时不设置回 true，旧层不会复活。
+  const handleSettingsClick = useCallback(() => {
+    activeViewTransitionRef.current?.skipTransition();
+    activeViewTransitionRef.current = null;
+    setShowLyrics(false);
+    navigate('/settings');
   }, [navigate]);
+
+  // 路由到设置（帮助菜单深链等）时同样保证歌词层收起 —— 覆盖不是从 settings 按钮进入的路径。
+  useEffect(() => {
+    if (isSettings && showLyrics) {
+      activeViewTransitionRef.current?.skipTransition();
+      activeViewTransitionRef.current = null;
+      setShowLyrics(false);
+    }
+  }, [isSettings, showLyrics]);
 
   // 逐字段订阅：整 store 订阅会让搜索/收藏/下载的任何变化都重渲染 App 及整棵页面树
   const currentKeyword = useSearchStore((s) => s.currentKeyword);
@@ -83,6 +117,9 @@ const App: React.FC = () => {
   const loadFavorites = useFavoriteStore((s) => s.loadFavorites);
 
   // 组件挂载时加载收藏列表
+  // 外观偏好（密度/材质/字号/动效/歌词字号）落 <html data-*>：冷启动就应用，不必进设置页
+  useEffect(() => { void initAppearancePrefs(); }, []);
+
   useEffect(() => {
     loadFavorites();
   }, [loadFavorites]);
@@ -107,6 +144,7 @@ const App: React.FC = () => {
         case 'playPause': store.togglePlay(); break;
         case 'next': store.playNext(); break;
         case 'prev': store.playPrevious(); break;
+        case 'openSettings': navigate('/settings'); break;
       }
     };
 
@@ -145,28 +183,28 @@ const App: React.FC = () => {
   useGlobalShortcuts();
 
   const dispatchSearch = (keyword: string) => {
-    const { sourceType } = useSearchStore.getState();
-    if (sourceType === 'all') {
+    const { sourceType: current } = useSearchStore.getState();
+    if (current === 'all') {
       searchService.searchAll(keyword);
     } else {
       searchService.search(keyword);
     }
   };
 
-  const handleSearch = (value: string) => {
+  const handleSearch = useCallback((value: string) => {
     dispatchSearch(value);
     if (location.pathname !== '/discover') {
       navigate('/discover');
     }
-  };
+  }, [location.pathname, navigate]);
 
-  const handleSourceTypeChange = (newType: SourceKey) => {
+  const handleSourceTypeChange = useCallback((newType: SourceKey) => {
     useSearchStore.getState().reset();
     setSourceType(newType);
     if (currentKeyword) {
       dispatchSearch(currentKeyword);
     }
-  };
+  }, [currentKeyword, setSourceType]);
 
   // 根据路径获取当前活跃的侧边栏项
   const getActiveSidebarKey = () => {
@@ -174,86 +212,64 @@ const App: React.FC = () => {
     if (path.startsWith('/recommend')) return 'recommend';
     if (path.startsWith('/discover') || path.startsWith('/hotlist') || path.startsWith('/discover-playlist')) return 'discover';
     if (path.startsWith('/artists') || path.startsWith('/artist/')) return 'artists';
-    if (path.startsWith('/local')) return 'local';
     if (path.startsWith('/favorites')) return 'favorites';
+    if (path.startsWith('/local')) return 'local';
     if (path.startsWith('/history')) return 'history';
     if (path.startsWith('/playlists') || path.startsWith('/playlist/')) return 'playlists';
     if (path.startsWith('/queue')) return 'queue';
-    if (path.startsWith('/download')) return 'download';
     if (path.startsWith('/settings')) return 'settings';
     return 'discover';
   };
 
   return (
-    <div
-      style={{
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: 'var(--bg-base)',
-        overflow: 'hidden',
-      }}
-    >
-      <TitleBar />
+    <div className={'app-shell' + (isSettings ? ' app-shell--settings' : '') + (isNowPlaying ? ' app-shell--nowplaying' : '')}>
+      <TitleBar
+        title={isSettings ? '设置' : isNowPlaying ? '正在播放' : undefined}
+        backLabel={isNowPlaying ? '收起播放器' : '返回'}
+        onBack={isNowPlaying ? handleCloseLyrics : () => {
+          if (window.history.length > 1) navigate(-1);
+          else navigate('/recommend');
+        }}
+        onSearch={handleSearch}
+        sourceType={sourceType}
+        onSourceTypeChange={handleSourceTypeChange}
+        onSettingsClick={handleSettingsClick}
+        updateAvailable={updateAvailable}
+      />
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-        {/* 左侧导航栏 */}
+      <div className="app-shell__body">
         <Sidebar
           currentPage={getActiveSidebarKey()}
-          updateAvailable={updateAvailable}
           onPageChange={(page) => {
             // 切换页面时清除搜索状态
             useSearchStore.getState().reset();
+            // #707：队列不是独立页——从侧栏打开右侧面板，保留当前浏览上下文。
+            if (page === 'queue') {
+              openQueuePanel();
+              return;
+            }
             navigate(`/${page}`);
           }}
         />
 
-        {/* 主内容区域 */}
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            minWidth: 0,
-          }}
-        >
-          {/* 顶部导航栏 */}
-          <TopBar
-            onSearch={handleSearch}
-            sourceType={sourceType}
-            onSourceTypeChange={handleSourceTypeChange}
-            onBack={handleBack}
-            onForward={handleForward}
-            onRefresh={handleRefresh}
-            canGoBack={canGoBack}
-            canGoForward={canGoForward}
-          />
-
-          {/* 页面内容 - 由React Router渲染 */}
-          <main
-            style={{
-              flex: 1,
-              overflow: 'hidden',
-              backgroundColor: 'var(--bg-base)',
-            }}
-          >
-            {/* 错误边界包住页面内容：桌面窗口没有刷新/返回键，渲染层抛错此前会整窗变白（只能重启）。
-                现在一个页面出错 = 一个页面出错，并给「重试」自救。 */}
-            <ErrorBoundary>
-              {showLyrics ? (
-                <LyricsPage onBack={() => setShowLyrics(false)} />
-              ) : (
-                <Outlet />
-              )}
-            </ErrorBoundary>
-          </main>
-
-          {/* 底部播放控制栏：封面/歌词按钮是「歌词层」开关——再点一次关灯留在当前页
-              （不做 navigate(-1)：那会把用户甩到历史上一站，不如可预测） */}
-          <PlayerBar onCoverClick={() => setShowLyrics((visible) => !visible)} />
-        </div>
+        <main className="app-shell__content">
+          {/* 错误边界包住页面内容：桌面窗口没有刷新/返回键，渲染层抛错此前会整窗变白（只能重启）。
+              现在一个页面出错 = 一个页面出错，并给「重试」自救。 */}
+          <ErrorBoundary>
+            {showLyrics && !isSettings ? <LyricsPage onBack={handleCloseLyrics} /> : <Outlet />}
+          </ErrorBoundary>
+        </main>
       </div>
+
+      {/* 播放栏横跨整窗（原型：从 x=0 起，侧栏在其上方结束） */}
+      <PlayerBar
+        onCoverClick={handleCoverClick}
+        onQueueClick={toggleQueuePanel}
+      />
+
+      {/* #707：右侧非模态队列面板；打开不改变路由，页面滚动与播放状态都不受影响。
+          /queue 兼容页自带一块（QueuePage），此处让位——同屏只允许一个面板/一份 ESC 监听。 */}
+      {!isQueueRoute && <QueuePanel />}
 
       {/* 下载进度弹窗（订阅面在宿主内，App 不随下载进度重渲染） */}
       <DownloadNotifications />

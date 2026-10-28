@@ -1,7 +1,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { Play, ArrowLeft, Edit2, Music, Download, Trash2, Upload, GripVertical, Search, X } from 'lucide-react';
+import '@/renderer/styles/page-playlist-detail.css';
+import '@/renderer/styles/detail-page.css';
+import { Play, Edit2, Music, Download, Trash2, Upload, GripVertical, CirclePlus } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { message, Modal } from 'antd';
+import { toast } from '@/renderer/services/toastStore';
+import { Button, Dialog, Input, PageHero, Textarea, useConfirm } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -10,20 +13,26 @@ import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
 import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { moveItem } from '@/renderer/utils/reorder';
-import { filterSongsByQuery } from '@/renderer/utils/songFilter';
+import { reorderVisibleSongs } from '@/renderer/utils/playlistReorder';
+import { LIBRARY_ROW_HEIGHT } from '@/renderer/components/songRowMetrics';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song, Playlist } from '@mplayer/core';
+import { COVER_SIZE, type Song, type Playlist } from '@mplayer/core';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
+import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
+import DetailToolbar from '@/renderer/components/DetailToolbar';
+import { useDetailSelection } from '@/renderer/hooks/useDetailSelection';
 
 /** overlay 里的静态拖拽把手：只是视觉延续，不接 dnd（overlay 内容整体 pointer-events: none） */
 const previewDragHandle = (
-  <span aria-hidden style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>
+  <span aria-hidden className="playlist-detail__drag-handle">
     <GripVertical size={14} />
   </span>
 );
 
+
 const PlaylistDetailPage: React.FC = () => {
+  const confirm = useConfirm();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const playlistId = id ? parseInt(id, 10) : undefined;
@@ -43,28 +52,20 @@ const PlaylistDetailPage: React.FC = () => {
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
   const [isReordering, setIsReordering] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  // 行级归属判断 O(1)：避免每行 selectedIds/favoriteIds includes 扫描
-  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  // 过滤 + 按需选择（#699/#703 口径）：普通浏览不显示复选框列，点「选择」才进入批量态
+  const selection = useDetailSelection(songs, playlistId);
+  const {
+    filterQuery, setFilterQuery, isFiltering, visibleSongs, batchMode, toggleBatchMode,
+    selectedIds, setSelectedIds, selectedIdSet, selectedSongs, visibleSelectedIds,
+    visibleSelectedCount, allVisibleSelected, toggleSelect, selectAllVisible,
+  } = selection;
+  // 行级归属判断 O(1)：避免每行 favoriteIds includes 扫描
   const favoriteIdSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
   const [importModalVisible, setImportModalVisible] = useState(false);
+  // 批量加入歌单（#694）：弹窗自己走桌面 writer 落盘，本页只负责把**可见**的已选项递进去
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   // 歌单头图直链直渲（恒取 playlist.cover / songs[0].cover）：加载失败由容器渐变兜底
   const detailCoverSrc = (playlist?.cover || songs[0]?.cover) || '';
-
-  /**
-   * `songs` 永远是全量有序的那一份，`visibleSongs` 只是它的派生视图，所以清空输入回到全量时顺序与过
-   * 滤前逐项相同（单测钉住）。
-   */
-  const [filterQuery, setFilterQuery] = useState('');
-  const isFiltering = filterQuery.trim().length > 0;
-  const visibleSongs = useMemo(() => filterSongsByQuery(songs, filterQuery), [songs, filterQuery]);
-  // 批量操作的作用域：过滤态只认**可见**的已选项；被过滤掉的选中项原样留着，清空过滤后回来
-  const visibleSelectedIds = useMemo(() => {
-    if (!isFiltering) return selectedIds;
-    const visibleIdSet = new Set(visibleSongs.map((song) => song.id));
-    return selectedIds.filter((songId) => visibleIdSet.has(songId));
-  }, [isFiltering, visibleSongs, selectedIds]);
-  const allVisibleSelected = visibleSongs.length > 0 && visibleSelectedIds.length === visibleSongs.length;
 
   // 封面加载失败 → 按 ID 重识别换新封面并更新列表状态（旧封面签名过期后同一 URL 永远失败）
   const handleCoverError = useCallback((song: Song) => {
@@ -74,16 +75,18 @@ const PlaylistDetailPage: React.FC = () => {
     });
   }, []);
 
-  // 拖拽排序：dnd 事件 → (from, to) 由共享 hook 折算，本页只负责乐观更新 + 落库；
-  // 索引数学走共享 moveItem，本地歌单页不再手写 splice
+  // 拖拽排序：dnd 事件 → (from, to) 由共享 hook 折算，本页只负责映射回全量序 + 乐观更新 + 落库。
+  // 过滤态下 (from, to) 是**可见集合**下标：只重排可见行，非可见歌曲的位置与相对顺序保持不动，
+  // 再把完整的 id 序回写 playlist:reorderFull（#488/#703：过滤不应写坏整个歌单顺序）。
   const handleReorder = useCallback(async (oldIndex: number, newIndex: number) => {
-    // 过滤态下 (from, to) 是**展示集合**的下标，当成全量下标落库会写坏整个歌单的顺序（#488）。
-    // 结构上过滤态也不渲染拖拽手柄（走非 sortable 行），这里是第二道闸。
-    if (!playlistId || isFiltering) return;
-    const newSongIds = moveItem(songs.map(s => s.id), oldIndex, newIndex);
+    if (!playlistId || oldIndex === newIndex) return;
+    const nextSongs = isFiltering
+      ? reorderVisibleSongs(songs, visibleSongs, oldIndex, newIndex)
+      : moveItem(songs, oldIndex, newIndex);
+    const newSongIds = nextSongs.map(s => s.id);
 
     // Optimistically update UI
-    setSongs(prev => moveItem(prev, oldIndex, newIndex));
+    setSongs(nextSongs);
 
     setIsReordering(true);
     try {
@@ -94,7 +97,7 @@ const PlaylistDetailPage: React.FC = () => {
     } finally {
       setIsReordering(false);
     }
-  }, [playlistId, songs, isFiltering]);
+  }, [playlistId, songs, visibleSongs, isFiltering]);
 
   const loadData = async () => {
     if (!playlistId) return;
@@ -118,21 +121,16 @@ const PlaylistDetailPage: React.FC = () => {
     loadData();
   }, [playlistId]);
 
-  // Clear selections when loading new data
-  useEffect(() => {
-    setSelectedIds([]);
-  }, [playlistId]);
-
-  const handlePlay = useCallback(async (song: Song) => {
+  const handlePlay = useCallback(async (song: Song, queue: Song[], index: number) => {
+    setCurrentPlaylist(queue, index);
     await play(song);
-  }, [play]);
+  }, [play, setCurrentPlaylist]);
 
   // 「播放全部 / 下载全部」是**歌单级**动作，不受页内过滤影响（#488 只改展示集合，见上）；
   // 受过滤影响的是「勾选 + 批量栏」那条路径，作用域见 visibleSelectedIds
   const handlePlayAll = async () => {
     if (songs.length > 0) {
-      setCurrentPlaylist(songs, 0);
-      await handlePlay(songs[0]);
+      await handlePlay(songs[0], songs, 0);
     }
   };
 
@@ -148,7 +146,7 @@ const PlaylistDetailPage: React.FC = () => {
       setSongs(prev => prev.map(s => s.id === original.id ? swapped : s));
     } catch (error) {
       console.error('换源保存到歌单失败:', error);
-      message.error('换源成功，但保存到本地歌单失败');
+      toast.error('换源成功，但保存到本地歌单失败');
     }
   }, [playlistId]);
 
@@ -157,7 +155,7 @@ const PlaylistDetailPage: React.FC = () => {
     try {
       await downloadBatch(songs);
     } catch (_error) {
-      message.error('下载全部失败，请重试');
+      toast.error('下载全部失败，请重试');
     }
   };
 
@@ -167,9 +165,9 @@ const PlaylistDetailPage: React.FC = () => {
     if (toDownload.length === 0) return;
     try {
       await downloadBatch(toDownload);
-      message.success(`已添加 ${toDownload.length} 首歌曲到下载队列`);
+      toast.success(`已添加 ${toDownload.length} 首歌曲到下载队列`);
     } catch (_error) {
-      message.error('批量下载失败');
+      toast.error('批量下载失败');
     }
   };
 
@@ -177,9 +175,9 @@ const PlaylistDetailPage: React.FC = () => {
     // 只移除**可见**的已选项（#488）：界面只显示这些，落库结果必须与界面一致
     const ids = visibleSelectedIds;
     if (ids.length === 0) return;
-    Modal.confirm({
+    confirm({
       title: '批量移除',
-      content: `确定要从歌单移除选中的 ${ids.length} 首歌曲吗？`,
+      message: `确定要从歌单移除选中的 ${ids.length} 首歌曲吗？`,
       okText: '移除',
       cancelText: '取消',
       onOk: async () => {
@@ -190,44 +188,42 @@ const PlaylistDetailPage: React.FC = () => {
             await IpcClient.invoke<void>('playlist:removeSong', playlistId, songId);
           }
           // 只摘掉被移除的这批：被过滤掉的已选项保留（#488）
-          setSelectedIds((prev) => prev.filter((songId) => !removedIdSet.has(songId)));
+          setSelectedIds(selectedIds.filter((songId) => !removedIdSet.has(songId)));
           loadData();
-          message.success(`已移除 ${ids.length} 首歌曲`);
+          toast.success(`已移除 ${ids.length} 首歌曲`);
         } catch (_error) {
-          message.error('批量移除失败');
+          toast.error('批量移除失败');
         }
       },
     });
   };
 
-  const handleToggleSelect = useCallback((songId: string) => {
-    setSelectedIds(prev =>
-      prev.includes(songId) ? prev.filter(id => id !== songId) : [...prev, songId]
-    );
-  }, []);
+  /** 批量加入歌单：作用域同其他批量动作——只递交可见的已选项（#488） */
+  const handleBatchAddToPlaylist = () => {
+    if (selectedSongs.length > 0) setAddToPlaylistOpen(true);
+  };
 
-  /** 全选只作用于**当前可见**集合（#488）：过滤态不碰被过滤掉的项，非过滤态等价于原来的全选/全不选 */
-  const handleSelectAll = useCallback(() => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) {
-        for (const song of visibleSongs) next.delete(song.id);
-      } else {
-        for (const song of visibleSongs) next.add(song.id);
-      }
-      return [...next];
-    });
-  }, [allVisibleSelected, visibleSongs]);
+  /** 进出选择模式同时收起批量弹窗：旧选择不属于新态，也不该继续挂着。 */
+  const handleToggleBatchMode = useCallback(() => {
+    toggleBatchMode();
+    setAddToPlaylistOpen(false);
+  }, [toggleBatchMode]);
+
+  const batchActions = useMemo(() => [
+    { key: 'download', label: '批量下载', icon: <Download size={12} />, onClick: handleBatchDownload },
+    { key: 'playlist', label: '加入歌单', icon: <CirclePlus size={12} />, onClick: handleBatchAddToPlaylist },
+    { key: 'delete', label: '批量移除', icon: <Trash2 size={12} />, danger: true, onClick: handleBatchDelete },
+  ], [handleBatchDownload, handleBatchAddToPlaylist, handleBatchDelete]);
 
   const handleRemoveFromPlaylist = useCallback(async (song: Song) => {
     if (!playlistId) return;
     try {
       await IpcClient.invoke<void>('playlist:removeSong', playlistId, song.id);
       loadData();
-      message.success(`已从歌单移除「${song.name}」`);
+      toast.success(`已从歌单移除「${song.name}」`);
     } catch (error) {
       console.error('从歌单移除失败:', error);
-      message.error('移除失败，请重试');
+      toast.error('移除失败，请重试');
     }
     // 只依赖 playlistId：loadData 每次渲染虽是新身份，但内部只用 playlistId 与稳定的 setState
   }, [playlistId]);
@@ -239,8 +235,12 @@ const PlaylistDetailPage: React.FC = () => {
    */
   const sharedRowProps = useMemo(() => ({
     isPlaying,
-    showCheckbox: true,
-    onToggleSelect: handleToggleSelect,
+    // #699/#703：本地歌单沿用 46px 资料库密度（封面 30px），拖拽预览与虚拟测量取同一行高
+    variant: 'library' as const,
+    // 点播契约（#697）：当前展示队列 = 可见集合（过滤态即过滤结果），行下标是可见集合内下标
+    queue: visibleSongs,
+    showCheckbox: batchMode,
+    onToggleSelect: toggleSelect,
     showRemoveFromPlaylist: true,
     onRemoveFromPlaylist: handleRemoveFromPlaylist,
     showAlbum: false,
@@ -251,7 +251,7 @@ const PlaylistDetailPage: React.FC = () => {
     onToggleFavorite: toggleFavorite,
     onCoverError: handleCoverError,
   }), [
-    isPlaying, handleToggleSelect, handleRemoveFromPlaylist, handlePlay, handleDownload,
+    isPlaying, visibleSongs, batchMode, toggleSelect, handleRemoveFromPlaylist, handlePlay, handleDownload,
     handleSongSwapped, toggleFavorite, handleCoverError,
   ]);
 
@@ -276,16 +276,6 @@ const PlaylistDetailPage: React.FC = () => {
     [buildRowProps],
   );
 
-  /**
-   * 过滤态的行（#488）：**不注册 `useSortable`**、也就不带拖拽手柄——拖拽入口在结构上不存在。
-   * 过滤集合的下标不是全量下标，落点一旦被当成全量下标就会写坏 order；所以这里不给入口，
-   * 而不是让它拖完再被 `handleReorder` 拒绝（那道闸仍在，见上）。
-   */
-  const renderStaticRow = useCallback(
-    (song: Song, index: number) => <SongRow {...buildRowProps(song, index)} />,
-    [buildRowProps],
-  );
-
   const handleEditPlaylist = async () => {
     if (!playlistId || !editName.trim()) return;
 
@@ -297,25 +287,19 @@ const PlaylistDetailPage: React.FC = () => {
       loadData();
     } catch (error) {
       console.error('更新歌单失败:', error);
+      toast.error('保存失败，请重试');
     }
   };
 
   if (!playlist && !loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ fontSize: '18px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+      <div className="playlist-detail__missing">
+        <div className="playlist-detail__missing-text">
           歌单不存在
         </div>
         <button
           onClick={() => navigate('/playlists')}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: 'var(--accent)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-          }}
+          className="playlist-detail__missing-action"
         >
           返回歌单列表
         </button>
@@ -324,285 +308,186 @@ const PlaylistDetailPage: React.FC = () => {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 顶部工具栏 */}
-      <div style={{ padding: '10px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', flexShrink: 0 }}>
-        <button
-          onClick={() => navigate('/playlists')}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '14px' }}
-        >
-          <ArrowLeft size={16} />
-          返回歌单
-        </button>
-      </div>
-
-      {/* 歌曲列表 */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+    <div className="detail-page">
+      {/* hero 与列表同一滚动上下文（#700/#703）：整页一个滚动容器，标题栏是唯一返回所有者 */}
+      <div className="detail-page__scroll" data-scroll-container>
         {playlist && (
-          <div style={{ padding: '24px 24px 8px' }}>
-            <div style={{ display: 'flex', gap: '24px', padding: '24px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}>
-              <div style={{ width: '160px', height: '160px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%)' }}>
-                <SongCover src={detailCoverSrc} variant="none" />
+          <PageHero
+            className="detail-page__hero"
+            media={
+              <div className="detail-page__cover">
+                {/* 占位层（无封面/加载失败时显示），与专辑 / 发现歌单 hero 同一套 */}
+                <div className="detail-page__cover-placeholder">
+                  <Music size={56} aria-hidden="true" />
+                </div>
+                <SongCover
+                  src={detailCoverSrc}
+                  alt={playlist.name}
+                  thumbSize={COVER_SIZE.hero}
+                  variant="none"
+                />
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>我的歌单</div>
-                  <button
-                    onClick={() => {
-                      setEditName(playlist.name);
-                      setEditDesc(playlist.description || '');
-                      setIsEditModalVisible(true);
-                    }}
-                    style={{ padding: '4px 7px', backgroundColor: 'transparent', border: '1px solid var(--border-default)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0 }}
-                  >
-                    <Edit2 size={13} />
-                  </button>
-                </div>
-                <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', margin: '8px 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{playlist.name}</h1>
-                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginBottom: '18px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {songs.length} 首歌曲{playlist.description ? ` · ${playlist.description}` : ''}
-                </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button onClick={handlePlayAll} disabled={songs.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'var(--accent)', color: 'white', border: 'none', borderRadius: '20px', cursor: songs.length > 0 ? 'pointer' : 'not-allowed', opacity: songs.length > 0 ? 1 : 0.5, fontSize: '14px', fontWeight: 500 }}>
-                    <Play size={16} /> 播放全部
-                  </button>
-                  <button onClick={handleDownloadAll} disabled={songs.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)', borderRadius: '20px', cursor: songs.length > 0 ? 'pointer' : 'not-allowed', opacity: songs.length > 0 ? 1 : 0.5, fontSize: '14px', fontWeight: 500 }}>
-                    <Download size={16} /> 下载全部
-                  </button>
-                  <button onClick={() => setImportModalVisible(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)', borderRadius: '20px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
-                    <Upload size={16} /> 导入歌曲
-                  </button>
-                </div>
+            }
+            eyebrow={
+              <div className="playlist-detail__kind-row">
+                <button
+                  type="button"
+                  aria-label="编辑歌单"
+                  title="编辑歌单"
+                  onClick={() => {
+                    setEditName(playlist.name);
+                    setEditDesc(playlist.description || '');
+                    setIsEditModalVisible(true);
+                  }}
+                  className="playlist-detail__edit"
+                >
+                  <Edit2 size={13} />
+                </button>
               </div>
-            </div>
-          </div>
+            }
+            title={playlist.name}
+            meta={<>{songs.length} 首歌曲{playlist.description ? ` · ${playlist.description}` : ''}</>}
+            actions={
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<Play size={15} aria-hidden="true" />}
+                  onClick={handlePlayAll}
+                  disabled={songs.length === 0}
+                >
+                  播放全部
+                </Button>
+                <Button
+                  size="sm"
+                  icon={<Download size={15} aria-hidden="true" />}
+                  onClick={handleDownloadAll}
+                  disabled={songs.length === 0}
+                >
+                  下载全部
+                </Button>
+                <Button
+                  size="sm"
+                  icon={<Upload size={15} aria-hidden="true" />}
+                  onClick={() => setImportModalVisible(true)}
+                >
+                  导入歌曲
+                </Button>
+              </>
+            }
+          />
         )}
+
+        <div className="detail-page__list">
         {loading && songs.length === 0 ? (
-          <div style={{ padding: '24px' }}>
+          <div className="playlist-detail__skeleton">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={`sk-${i}`} style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '6px', marginBottom: '8px' }}>
-                <div style={{ width: '30px', textAlign: 'center' }}>
-                  <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+              <div key={`sk-${i}`} className="playlist-detail__sk-row">
+                <div className="playlist-detail__sk-col">
+                  <div className="playlist-detail__sk-bar" />
                 </div>
-                <div style={{ width: '30px', textAlign: 'center' }}>
-                  <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+                <div className="playlist-detail__sk-col">
+                  <div className="playlist-detail__sk-bar" />
                 </div>
-                <div style={{ width: '30px', textAlign: 'center' }}>
-                  <div style={{ width: '20px', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', margin: '0 auto' }} />
+                <div className="playlist-detail__sk-col">
+                  <div className="playlist-detail__sk-bar playlist-detail__sk-bar--num" />
                 </div>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '4px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ width: '70%', height: '14px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', marginBottom: '4px' }} />
-                    <div style={{ width: '50%', height: '12px', borderRadius: '2px', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite', animationDelay: '0.1s' }} />
+                <div className="playlist-detail__sk-body">
+                  <div className="playlist-detail__sk-thumb" />
+                  <div className="playlist-detail__sk-lines">
+                    <div className="playlist-detail__sk-line" />
+                    <div className="playlist-detail__sk-line playlist-detail__sk-line--short" />
                   </div>
                 </div>
-                <div style={{ width: '100px', display: 'flex', justifyContent: 'center', gap: '4px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--skeleton-shine) 0%, var(--skeleton-base) 50%, var(--skeleton-shine) 100%)', backgroundSize: '200% 200%', animation: 'skeletonLoading 1.5s ease-in-out infinite' }} />
+                <div className="playlist-detail__sk-actions">
+                  <div className="playlist-detail__sk-circle" />
+                  <div className="playlist-detail__sk-circle" />
                 </div>
               </div>
             ))}
-            <style>{`
-              @keyframes skeletonLoading {
-                0% { background-position: 200% 0; }
-                100% { background-position: -200% 0; }
-              }
-            `}</style>
           </div>
         ) : songs.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', color: 'var(--text-tertiary)' }}>
+          <div className="playlist-detail__empty">
             <Music size={48} />
-            <div style={{ fontSize: '14px', marginTop: '16px' }}>歌单暂无歌曲</div>
-            <div style={{ fontSize: '12px', marginTop: '8px', color: 'var(--text-tertiary)' }}>去发现音乐添加歌曲吧</div>
+            <div className="playlist-detail__empty-title">歌单暂无歌曲</div>
           </div>
         ) : (
           /* 窗口化 + 可排序收在共享能力里（#445）：页面不再自建 DndContext/SortableContext，
              也不再 items={songs.map(...)}（每帧新建数组，dnd-kit 的排序下标来源必须是稳定引用）。
-             items 传**展示集合**（#488）：窗口化与 dnd-kit 的下标来源必须是同一个 memo 化数组，
-             而过滤态行走 renderStaticRow（不注册 useSortable），可见集合的下标不会被当成全量下标。 */
+             items 传**展示集合**（#488/#703）：过滤态也注册 sortable；handleReorder 负责把可见下标
+             映射回全量序，只有可见行互换，非可见行位置不动。 */
           <VirtualSortableList
             items={visibleSongs}
+            estimateSize={() => LIBRARY_ROW_HEIGHT}
             header={
               <>
-                {/* 歌单内过滤（#488）：只改展示集合，不重排/不改 order/不碰 playlist:reorderFull。
-                    输入框走 header 插槽 → 与 rowsRef 同处一个父容器，它变高不会让 scrollMargin
-                    停在旧值（同 #445 口径，见 VirtualSortableList 的约束 4）。 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <Search size={14} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
-                  <input
-                    type="text"
-                    value={filterQuery}
-                    onChange={(e) => setFilterQuery(e.target.value)}
-                    placeholder="按歌名或歌手过滤"
-                    aria-label="按歌名或歌手过滤"
-                    autoComplete="off"
-                    style={{ flex: 1, minWidth: 0, padding: '6px 10px', border: '1px solid var(--border-default)', borderRadius: '6px', backgroundColor: 'transparent', color: 'var(--text-primary)', fontSize: '13px' }}
-                  />
-                  {isFiltering && (
-                    <>
-                      <span style={{ flexShrink: 0, fontSize: '12px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
-                        {visibleSongs.length} / {songs.length} 首
-                      </span>
-                      <button
-                        onClick={() => setFilterQuery('')}
-                        aria-label="清空过滤"
-                        title="清空过滤"
-                        style={{ display: 'flex', alignItems: 'center', flexShrink: 0, padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}
-                      >
-                        <X size={14} />
-                      </button>
-                    </>
-                  )}
-                </div>
-                {/* 提示条 + 批量栏 + 表头（#445）：与 rowsRef 同父由组件的真实 <div> wrapper 保证。
-                    放在组件之外时 scrollMargin 会停在旧值 → 勾选一首歌整表错位一条栏高，且不报错。 */}
-                {isReordering && (
-                  <div style={{ padding: '8px 16px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                    正在保存排序...
-                  </div>
-                )}
-                {/* Batch action bar：只统计**可见**的已选项，与批量操作的作用域一致（#488） */}
-                {visibleSelectedIds.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', backgroundColor: 'rgba(47, 95, 208, 0.08)', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>已选择 {visibleSelectedIds.length} 项</span>
-                    <button onClick={handleBatchDownload}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12px' }}>
-                      <Download size={12} /> 批量下载
-                    </button>
-                    <button onClick={handleBatchDelete}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', cursor: 'pointer', color: 'var(--danger)', fontSize: '12px' }}>
-                      <Trash2 size={12} /> 批量移除
-                    </button>
-                  </div>
-                )}
-                {/* Table header */}
-                <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                  <div style={{ width: '40px', textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={handleSelectAll}
-                      aria-label="全选可见歌曲"
-                      title={isFiltering ? '全选当前过滤结果' : '全选'}
-                      style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
-                    />
-                  </div>
-                  <div style={{ width: '50px', textAlign: 'center' }}>#</div>
-                  <div style={{ flex: 1 }}>标题</div>
-                  <div style={{ width: '140px', textAlign: 'center' }}>操作</div>
-                </div>
-                {/* 过滤态命中为空：没有可渲染的行，给一句明确的空态而不是只剩表头（#488） */}
+                {/* 页内工具条（#694）：过滤 + 计数 + 选择/完成 同处一行 40px，表头已删（行是 46px library 密度）。
+                    高度必须恒定：它是 scrollMargin 的测量锚点，三态（浏览 / 过滤 / 批量）变高会让整表错位且不报错。 */}
+                <DetailToolbar
+                  filterValue={filterQuery}
+                  onFilterChange={setFilterQuery}
+                  matchedCount={visibleSongs.length}
+                  totalCount={songs.length}
+                  selecting={batchMode}
+                  onToggleSelecting={handleToggleBatchMode}
+                  onSelectAll={selectAllVisible}
+                  allSelected={allVisibleSelected}
+                  selectedCount={visibleSelectedCount}
+                  status={isReordering ? '正在保存排序...' : undefined}
+                  batchActions={batchActions}
+                />
+                {/* 过滤态命中为空：没有可渲染的行，给一句明确的空态（#488） */}
                 {isFiltering && visibleSongs.length === 0 && (
-                  <div style={{ padding: '48px 16px', textAlign: 'center', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                  <div className="detail-toolbar__nomatch">
                     没有匹配「{filterQuery.trim()}」的歌曲
                   </div>
                 )}
               </>
             }
-            renderRow={isFiltering ? renderStaticRow : renderSongRow}
+            renderRow={renderSongRow}
             renderDragPreview={renderSongDragPreview}
             onReorder={handleReorder}
           />
         )}
         </div>
+      </div>
 
       {/* 编辑歌单弹窗 */}
-      {isEditModalVisible && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-          onClick={() => setIsEditModalVisible(false)}
-        >
-          <div
-            style={{
-              width: '400px',
-              backgroundColor: 'var(--bg-surface)',
-              borderRadius: '12px',
-              padding: '24px',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>
-              编辑歌单
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-                  歌单名称
-                </label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-                  歌单描述
-                </label>
-                <textarea
-                  value={editDesc}
-                  onChange={(e) => setEditDesc(e.target.value)}
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    resize: 'vertical',
-                  }}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
-              <button
-                onClick={() => setIsEditModalVisible(false)}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'transparent',
-                  color: 'var(--text-secondary)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                }}
-              >
-                取消
-              </button>
-              <button
-                onClick={handleEditPlaylist}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'var(--accent)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                }}
-              >
-                保存
-              </button>
-            </div>
-          </div>
+      <Dialog
+        open={isEditModalVisible}
+        title="编辑歌单"
+        onClose={() => setIsEditModalVisible(false)}
+        footer={
+          <>
+            <Button onClick={() => setIsEditModalVisible(false)}>取消</Button>
+            <Button variant="primary" onClick={handleEditPlaylist}>保存</Button>
+          </>
+        }
+      >
+        <div className="playlist-detail__form">
+          <label className="playlist-detail__label" htmlFor="playlist-edit-name">歌单名称</label>
+          <Input
+            id="playlist-edit-name"
+            value={editName}
+            onChange={(event) => setEditName(event.target.value)}
+            className="playlist-detail__input"
+          />
+          <label className="playlist-detail__label" htmlFor="playlist-edit-desc">歌单描述</label>
+          <Textarea
+            id="playlist-edit-desc"
+            value={editDesc}
+            onChange={(event) => setEditDesc(event.target.value)}
+            rows={3}
+          />
         </div>
+      </Dialog>
+      {/* 批量加入歌单：只在有可见已选项时挂载，弹窗按需加载歌单列表 */}
+      {batchMode && selectedSongs.length > 0 && (
+        <BatchAddToPlaylistModal
+          songs={selectedSongs}
+          isVisible={addToPlaylistOpen}
+          onClose={() => setAddToPlaylistOpen(false)}
+        />
       )}
       <ImportPlaylistModal
         open={importModalVisible}

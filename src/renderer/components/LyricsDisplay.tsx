@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import { parseLRC, findCurrentLyricIndex, type ParsedLyrics } from '@mplayer/core';
 import { usePlaybackSelector } from '@/renderer/services/playbackClock';
+import '@/renderer/styles/songlist.css';
 
 interface LyricsDisplayProps {
   lrcContent: string;
@@ -61,23 +62,8 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
 
   if (!lrcContent || parsedLyrics.lines.length === 0) {
     return (
-      <div
-        className={className}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          ...style
-        }}
-      >
-        <span style={{ 
-          color: 'var(--text-primary)', 
-          fontSize: 'var(--text-base)',
-          textShadow: '0 1px 2px rgba(255, 255, 255, 0.8)'
-        }}>
-          暂无歌词
-        </span>
+      <div className={className ? className + ' lyrics__empty' : 'lyrics__empty'} style={style}>
+        <span className="lyrics__empty-text">暂无歌词</span>
       </div>
     );
   }
@@ -85,56 +71,23 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
   return (
     <div
       ref={containerRef}
-      className={className}
-      style={{
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        height: '100%',
-        padding: '20px 0',
-        ...style
-      }}
+      className={className ? className + ' lyrics' : 'lyrics'}
+      data-scroll
+      style={style}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div className="lyrics__lines">
         {parsedLyrics.lines.map((line, index) => {
           const isActive = index === currentLineIndex;
-          const isPast = index < currentLineIndex;
 
           return (
             <div
               key={index}
               ref={isActive ? activeLineRef : null}
               onClick={() => onLyricClick?.(line.time)}
-              style={{
-                textAlign: 'center',
-                padding: '8px 20px',
-                transition: 'all 0.3s ease',
-                transform: isActive ? 'scale(1.02)' : 'scale(1)',
-                cursor: 'pointer',
-                borderRadius: '8px',
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.backgroundColor = 'rgba(47, 95, 208, 0.12)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }}
+              className="lyrics__line"
+              data-active={isActive || undefined}
             >
-              <span
-                style={{
-                  fontSize: isActive ? '20px' : '17px',
-                  fontWeight: isActive ? 700 : 500,
-                  color: isActive ? 'var(--text-primary)' : isPast ? 'var(--text-secondary)' : 'var(--text-secondary)',
-                  lineHeight: '1.8',
-                  transition: 'all 0.3s ease',
-                  textShadow: isActive 
-                    ? '0 2px 4px rgba(255, 255, 255, 0.9), 0 0 20px rgba(47, 95, 208, 0.35)' 
-                    : '0 1px 2px rgba(255, 255, 255, 0.8)',
-                  letterSpacing: isActive ? '0.5px' : '0',
-                  userSelect: 'none',
-                }}
-              >
+              <span className="lyrics__text">
                 {line.text}
               </span>
             </div>

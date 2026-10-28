@@ -33,7 +33,6 @@ vi.mock('@/renderer/hooks/useGlobalShortcuts', () => ({ useGlobalShortcuts: () =
 
 // 壳的其余部分与本语义无关：降为桩
 vi.mock('@/renderer/components/TitleBar', () => ({ default: () => null }));
-vi.mock('@/renderer/components/TopBar', () => ({ default: () => null }));
 vi.mock('@/renderer/components/DownloadNotifications', () => ({ default: () => null }));
 vi.mock('@/renderer/components/Sidebar', () => ({
   default: ({ onPageChange }: { onPageChange: (page: string) => void }) => (

@@ -1,0 +1,306 @@
+/* ============================================================
+   内容库页面样式（#694）：
+   consumers = LocalPage（本地页骨架 / 文件夹 chips）+ DownloadsDialog（已下载弹窗任务列表）。
+   原「资料库」聚合页已退役；分段控件改用 ui 的 Segmented，不再有页面私有的 pill 样式。
+   ============================================================ */
+
+.library {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 页头交给 PageHeader（28/700、上 24 / 左右 28、底 18）；这里只放页头内的统计文字 */
+.library__stats {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 文字按钮（下载目录行 / 清除已完成），无底色 */
+.library__text-btn {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.library__text-btn:hover:not(:disabled) {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.library__text-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 分段行：控件本身是 ui/Segmented，这里只负责页面留白 */
+.library__tabs-row {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  align-items: center;
+  padding: 0 28px;
+  margin-bottom: 14px;
+}
+
+/* ── 主体 ── */
+.library__scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: 0 28px 40px;
+  overflow-y: auto;
+}
+
+/* 一张圆角 card 装歌单表（行几何由共享 SongList 的 library 密度决定） */
+.library__card {
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--group-radius);
+  background: var(--surface-card);
+}
+
+.library__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 20px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.library__empty-title {
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.library__empty-sub {
+  max-width: 420px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+/* ── 下载管理（已下载弹窗）── */
+.library__dir {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--group-radius);
+  background: var(--surface-card-hover);
+}
+
+.library__dir-label {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.library__dir-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__task-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 2px;
+}
+
+.library__task-row + .library__task-row {
+  border-top: 1px solid var(--hairline);
+}
+
+.library__task-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.library__task-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__task-meta {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__task-bar {
+  flex: none;
+  width: 160px;
+}
+
+.library__task-state {
+  flex: none;
+  width: 64px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.library__task-state[data-tone='completed'] {
+  color: var(--success);
+}
+
+.library__task-state[data-tone='error'] {
+  color: var(--danger-text);
+}
+
+.library__task-state[data-tone='downloading'] {
+  color: var(--accent);
+}
+
+.library__task-cancel {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.library__task-cancel:hover:not(:disabled) {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.library__task-cancel:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.library__task-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ── 本地文件夹 chips ── */
+.library__chips {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.library__chip-wrap {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.library__chip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.library__chip:hover:not(:disabled) {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.library__chip[data-active] {
+  border-color: var(--hairline-strong);
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.library__chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.library__chip-count {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.library__chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.library__chip-remove:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.library__scan {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Shield } from 'lucide-react';
-import { message } from 'antd';
+import { Button, Group, Input, Row, Section, Segmented, Switch, useToast, InfoHint } from '@/renderer/ui';
 
 const ipcRenderer = window.electronAPI;
 
@@ -13,24 +13,26 @@ interface ProxyConfig {
   password?: string;
 }
 
+/** 网络：代理与 TLS 指纹在同一页（1.9.0 起两者不再各占导航项）。 */
 const ProxySection: React.FC = () => {
-  const [proxyEnabled, setProxyEnabled] = useState(false);
-  const [proxyProtocol, setProxyProtocol] = useState<'http' | 'https'>('http');
-  const [proxyHost, setProxyHost] = useState('');
-  const [proxyPort, setProxyPort] = useState('8080');
-  const [proxyUsername, setProxyUsername] = useState('');
-  const [proxyPassword, setProxyPassword] = useState('');
+  const [enabled, setEnabled] = useState(false);
+  const [protocol, setProtocol] = useState<'http' | 'https'>('http');
+  const [host, setHost] = useState('');
+  const [port, setPort] = useState('8080');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const { show } = useToast();
 
   const loadProxyConfig = async () => {
     try {
       const proxy: ProxyConfig = await ipcRenderer.invoke('settings:getProxy');
-      setProxyEnabled(proxy.enabled);
-      setProxyProtocol(proxy.protocol);
-      setProxyHost(proxy.host);
-      setProxyPort(String(proxy.port));
-      setProxyUsername(proxy.username || '');
-      setProxyPassword(proxy.password || '');
+      setEnabled(proxy.enabled);
+      setProtocol(proxy.protocol);
+      setHost(proxy.host);
+      setPort(String(proxy.port));
+      setUsername(proxy.username || '');
+      setPassword(proxy.password || '');
     } catch (error) {
       console.error('加载代理设置失败:', error);
     }
@@ -41,86 +43,74 @@ const ProxySection: React.FC = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const proxyConfig: ProxyConfig = {
-        enabled: proxyEnabled, protocol: proxyProtocol, host: proxyHost,
-        port: parseInt(proxyPort, 10) || 8080,
+      const config: ProxyConfig = {
+        enabled,
+        protocol,
+        host,
+        port: parseInt(port, 10) || 8080,
       };
-      if (proxyUsername) proxyConfig.username = proxyUsername;
-      if (proxyPassword) proxyConfig.password = proxyPassword;
-      const result = await ipcRenderer.invoke('settings:setProxy', proxyConfig);
-      if (result.success) {
-        message.success('代理设置已保存并立即生效');
-      } else {
-        message.error('保存失败: ' + result.error);
-      }
+      if (username) config.username = username;
+      if (password) config.password = password;
+      const result = await ipcRenderer.invoke('settings:setProxy', config);
+      if (result.success) show('代理设置已保存并立即生效', { tone: 'success' });
+      else show('保存失败: ' + result.error, { tone: 'danger' });
     } catch (error) {
       console.error('保存代理设置失败:', error);
-      message.error('保存失败');
+      show('保存失败', { tone: 'danger' });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '8px 12px', backgroundColor: 'var(--bg-base)',
-    border: '1px solid var(--border-default)', borderRadius: '8px', fontSize: 'var(--text-sm)', color: 'var(--text-primary)', outline: 'none',
-  };
-
   return (
-    <section id="proxy" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-        <Shield size={20} color="var(--text-secondary)" />
-        <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>网络代理设置</h2>
+    <section id="proxy">
+      <div className="settings-page__title">
+        <Shield size={16} aria-hidden="true" />
+        <h1>网络</h1>
       </div>
-      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '24px', border: '1px solid var(--border-default)' }}>
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '16px' }}>
-            <input type="checkbox" checked={proxyEnabled} onChange={(e) => setProxyEnabled(e.target.checked)} style={{ width: '18px', height: '18px', accentColor: 'var(--accent)', cursor: 'pointer' }} />
-            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)', fontWeight: 500 }}>启用代理</span>
-          </label>
-
-          {proxyEnabled && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <div style={{ flex: '0 0 80px' }}>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '4px' }}>协议</div>
-                  <select value={proxyProtocol} onChange={(e) => setProxyProtocol(e.target.value as 'http' | 'https')} style={inputStyle}>
-                    <option value="http">HTTP</option>
-                    <option value="https">HTTPS</option>
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '4px' }}>主机地址</div>
-                  <input type="text" value={proxyHost} onChange={(e) => setProxyHost(e.target.value)} placeholder="例如: 127.0.0.1" style={inputStyle} />
-                </div>
-                <div style={{ flex: '0 0 100px' }}>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '4px' }}>端口</div>
-                  <input type="number" value={proxyPort} onChange={(e) => setProxyPort(e.target.value)} placeholder="8080" min={1} max={65535} style={inputStyle} />
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '4px' }}>用户名 (可选)</div>
-                  <input type="text" value={proxyUsername} onChange={(e) => setProxyUsername(e.target.value)} placeholder="proxy username" style={inputStyle} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '4px' }}>密码 (可选)</div>
-                  <input type="password" value={proxyPassword} onChange={(e) => setProxyPassword(e.target.value)} placeholder="proxy password" style={inputStyle} />
-                </div>
-              </div>
+      <div className="settings-page__stack">
+        <Section title={<>{'代理'} <InfoHint label="代理">代理与 TLS 指纹都只影响出网请求，改完立即生效，无需重启。</InfoHint></>} footer="默认不使用系统代理；留空表示直连。">
+          <Group>
+            <Row
+              label="启用代理"
+              detail={enabled ? '已启用' : '未启用'}
+              trailing={<Switch checked={enabled} onChange={setEnabled} ariaLabel="启用代理" />}
+            />
+            <Row
+              label="协议"
+              trailing={
+                <Segmented
+                  options={['http', 'https'] as const}
+                  value={protocol}
+                  onChange={(value) => setProtocol(value as 'http' | 'https')}
+                  size="sm"
+                  ariaLabel="代理协议"
+                />
+              }
+            />
+            <div className="settings-page__field">
+              <div className="settings-page__field-label">主机地址</div>
+              <Input aria-label="代理主机" value={host} onChange={(e) => setHost(e.target.value)} placeholder="例如 127.0.0.1" disabled={!enabled} />
             </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button
-            onClick={handleSave} disabled={isSaving}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: 'var(--text-base)', fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1 }}
-          >
-            保存代理设置
-          </button>
-        </div>
-        <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-tertiary)' }}>配置后立即生效，无需重启应用。默认不使用系统代理。</div>
+            <div className="settings-page__field">
+              <div className="settings-page__field-label">端口</div>
+              <Input aria-label="代理端口" value={port} onChange={(e) => setPort(e.target.value)} placeholder="8080" disabled={!enabled} inputMode="numeric" />
+            </div>
+            <div className="settings-page__field">
+              <div className="settings-page__field-label">用户名（可选）</div>
+              <Input aria-label="代理用户名" value={username} onChange={(e) => setUsername(e.target.value)} disabled={!enabled} />
+            </div>
+            <div className="settings-page__field">
+              <div className="settings-page__field-label">密码（可选）</div>
+              <Input aria-label="代理密码" type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={!enabled} />
+            </div>
+            <div className="settings-page__actions">
+              <Button variant="primary" disabled={isSaving} onClick={handleSave}>
+                保存代理设置
+              </Button>
+            </div>
+          </Group>
+        </Section>
       </div>
     </section>
   );

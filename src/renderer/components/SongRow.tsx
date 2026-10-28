@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
+import '@/renderer/styles/songlist.css';
 import { useNavigate } from 'react-router-dom';
-import { Play, Trash2, ListMusic, RefreshCw, User, ListPlus } from 'lucide-react';
+import { Play, Trash2, RefreshCw, User, ListPlus, CirclePlus } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
@@ -8,7 +9,8 @@ import SourceSwapModal from '@/renderer/components/SourceSwapModal';
 import SongCover from '@/renderer/components/SongCover';
 import { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import RowActionButtons from '@/renderer/components/RowActionButtons';
-import { COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_ALBUM, colStyle } from '@/renderer/components/songTableColumns';
+import { COL_CHECKBOX, COL_ALBUM, COL_DURATION, COL_DURATION_LIBRARY, colWidth, songIndexWidth } from '@/renderer/components/songTableColumns';
+import { songRowCoverSize, songRowHeight } from '@/renderer/components/songRowMetrics';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { searchService } from '@/renderer/services/searchService';
@@ -25,7 +27,9 @@ interface SongRowProps {
   showRemoveFromPlaylist?: boolean;
   /** 「更多」菜单是否开在本行：由列表模块把 activeDropdown 折算成布尔量，避免开一个菜单重渲染整表 */
   moreOpen?: boolean;
-  onPlay: (song: Song) => void;
+  /** 当前展示队列（点播契约 #697）：行只回传，不写 playerStore */
+  queue: Song[];
+  onPlay: (song: Song, queue: Song[], index: number) => void;
   onToggleFavorite?: (song: Song) => void;
   onDownload?: (song: Song) => void;
   onAddToPlaylist?: (song: Song) => void;
@@ -36,7 +40,7 @@ interface SongRowProps {
   onSwap?: (original: Song, swapped: Song) => void;
   onToggleSelect?: (songId: string) => void;
   onToggleDropdown?: (songId: string, e: React.MouseEvent) => void;
-  onCloseDropdown?: (e: React.MouseEvent) => void;
+  onCloseDropdown?: () => void;
   /** 封面加载失败时回调，由持有歌曲列表的层按 ID 重识别换新封面 */
   onCoverError?: (song: Song) => void;
   /** 是否显示专辑列（列表层按整列是否有专辑判断，无专辑列表整列塌缩） */
@@ -55,23 +59,53 @@ interface SongRowProps {
   /** 行根节点 ref：供 dnd-kit 等外部能力挂载 */
   rowRef?: React.Ref<HTMLDivElement>;
   compact?: boolean;
+  /** 行密度变体：standard = 通用列表（64px），library = 资料库密度（46px、行操作 hover 才出现） */
+  variant?: 'standard' | 'library';
+  /** 是否显示时长列（固定 50px，library 密度资料库行使用） */
+  showDuration?: boolean;
+  /**
+   * 序号列宽（场景覆盖）：缺省按密度取 28/50，榜单预览用 24。
+   * 列宽按场景配置（规格 L127），行不改排版。
+   */
+  indexWidth?: number;
+  /**
+   * 行尾插槽（渲染函数，不是元素）：渲染在操作按钮之前，如搜索结果的「N 个版本」。
+   * 传元素会让每帧新建的 ReactNode 击穿行的 memo，与 renderActions 同理。
+   */
+  renderActionsLead?: (song: Song, index: number) => React.ReactNode;
+  /** 行尾只保留单个 28px「更多」按钮，下载 / 收藏收进菜单 */
+  compactActions?: boolean;
   style?: React.CSSProperties;
 }
+
+/** 秒 → m:ss；缺失 / 非法值显示 --:--（沿用资料库行尾原口径）。 */
+const formatDuration = (seconds?: number): string => {
+  if (!seconds || !Number.isFinite(seconds)) return '--:--';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return mins + ':' + secs.toString().padStart(2, '0');
+};
 
 const SongRow: React.FC<SongRowProps> = ({
   song, index, isCurrentSong = false, isPlaying = false, isFavorite = false,
   showIndex = true, showCheckbox = false, isSelected = false, showRemoveFromPlaylist = false,
-  moreOpen = false, onPlay, onToggleFavorite, onDownload,
+  moreOpen = false, queue, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onPlayNext, onRemoveFromPlaylist, onToggleSelect,
   onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, albumWidth = COL_ALBUM,
-  fillTitle = false, dragHandle, actions, rowRef, compact = false, style,
+  fillTitle = false, dragHandle, actions, rowRef, compact = false,
+  variant = 'standard', showDuration = false, compactActions = false, style,
+  indexWidth, renderActionsLead,
 }) => {
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
-  // 空封面挂载触发一次（StrictMode 下 effect 双跑，用 ref 防重复）
+  // 空封面自愈（StrictMode 下 effect 双跑，用 ref 防重复）
   const coverRefreshFired = useRef(false);
 
   const swap = useSongSwap(song, onSwap);
+  const library = variant === 'library';
+  // 列宽按密度取契约值：序号 28 / 时长 44（资料库），调用方可用 indexWidth 覆盖（榜单预览 24）
+  const indexColWidth = indexWidth ?? songIndexWidth(library ? 'library' : 'standard', showIndex);
+  const durationColWidth = library ? COL_DURATION_LIBRARY : COL_DURATION;
 
   /** 查看歌手：以歌手名为关键词搜索并落在歌手 tab（与移动端一致） */
   const handleViewArtist = () => {
@@ -88,7 +122,7 @@ const SongRow: React.FC<SongRowProps> = ({
     menuItems.push({ key: 'playNext', label: '下一首播放', icon: <ListPlus size={14} />, onClick: () => onPlayNext(song) });
   }
   if (onAddToPlaylist) {
-    menuItems.push({ key: 'playlist', label: '加入歌单', icon: <ListMusic size={14} />, onClick: () => onAddToPlaylist(song) });
+    menuItems.push({ key: 'playlist', label: '加入歌单', icon: <CirclePlus size={14} />, onClick: () => onAddToPlaylist(song) });
   }
   if (song.sourceType !== 'local') {
     menuItems.push({ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open });
@@ -100,88 +134,70 @@ const SongRow: React.FC<SongRowProps> = ({
     menuItems.push({ key: 'remove', label: '从歌单移除', icon: <Trash2 size={14} />, danger: true, onClick: () => onRemoveFromPlaylist(song) });
   }
 
-  // cover 为空（如收藏/历史里从未存过封面）时挂载即触发一次刷新，显示层不依赖 onError
+  // cover 为空（收藏/历史只落 SongBase）时触发刷新；跟着 song.cover 走而非只在挂载触发：
+  // 切页返回在挂载后擦掉内存封面，只在挂载触发会让行永久停在灰底；封面回来即复位标记。
   useEffect(() => {
-    if (!song.cover && !coverRefreshFired.current) {
-      coverRefreshFired.current = true;
-      onCoverError?.(song);
+    if (song.cover) {
+      coverRefreshFired.current = false;
+      return;
     }
-    // 仅挂载时触发：封面刷新后 song.cover 变化会自然进入正常渲染路径
-  }, []);
+    if (coverRefreshFired.current) return;
+    coverRefreshFired.current = true;
+    onCoverError?.(song);
+  }, [song, onCoverError]);
 
+  // 1.9.0：结构/状态色全部走 songlist.css 的类；这里只下发密度协议的行高/封面变量
+  // （自定义属性允许内联，design-lint 白名单）与调用方传入的 style（拖拽位移等动态值）。
   return (
     <div
       ref={rowRef}
       className="song-row"
-      onDoubleClick={() => onPlay(song)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: compact ? '8px 12px' : '10px 16px',
-        borderRadius: 'var(--radius-sm)',
-        cursor: 'pointer',
-        transition: 'all 0.15s ease',
-        backgroundColor: isCurrentSong ? 'rgba(47, 95, 208, 0.10)' : 'transparent',
-        ...style,
-      }}
-      onMouseEnter={(e) => {
-        if (!isCurrentSong) {
-          e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isCurrentSong) {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }
-      }}
+      data-variant={library ? 'library' : undefined}
+      data-compact={compact || undefined}
+      data-current={isCurrentSong || undefined}
+      onDoubleClick={() => onPlay(song, queue, index)}
+      style={{ '--song-row-height': `${songRowHeight(variant)}px`,
+        '--song-row-cover': `${songRowCoverSize(variant)}px`, ...style } as React.CSSProperties}
     >
       {showCheckbox && (
-        <div style={{ ...colStyle(COL_CHECKBOX), textAlign: 'center' }}>
+        <div className="song-row__check" style={colWidth(COL_CHECKBOX)}>
           <input
             type="checkbox"
             checked={isSelected}
             onChange={(e) => { e.stopPropagation(); onToggleSelect?.(song.id); }}
-            style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
           />
         </div>
       )}
       {(showIndex || dragHandle) && (
-        <div style={{ ...colStyle(showIndex ? COL_INDEX : COL_INDEX_COMPACT), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+        <div className="song-row__index" style={colWidth(indexColWidth)}>
           {dragHandle}
           {showIndex && (isCurrentSong && isPlaying ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-              <span style={{ width: '3px', height: '12px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0s' }} />
-              <span style={{ width: '3px', height: '16px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
-              <span style={{ width: '3px', height: '10px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+            <div className="song-row__bars">
+              <span className="song-row__bar" />
+              <span className="song-row__bar" />
+              <span className="song-row__bar" />
             </div>
           ) : (
-            <span style={{ fontSize: '14px', color: isCurrentSong ? 'var(--accent)' : 'var(--text-tertiary)', fontWeight: isCurrentSong ? 600 : 400 }}>
+            <span className="song-row__number" data-current={isCurrentSong || undefined}>
               {index + 1}
             </span>
           ))}
         </div>
       )}
       {/* Song info */}
-      <div style={fillTitle
-        ? { flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }
-        : { width: '38%', maxWidth: '380px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-        <div style={{ width: '44px', height: '44px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0, position: 'relative' }}>
+      <div className="song-row__main" data-fill={fillTitle ? 'true' : 'false'}>
+        <div className="song-row__cover">
           <SongCover src={song.cover} alt={song.name} variant="gradient" onError={() => onCoverError?.(song)} />
-          <div
-            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s ease' }}
-            onClick={() => onPlay(song)}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; }}
-          >
+          <div className="song-row__cover-play" onClick={() => onPlay(song, queue, index)}>
             <Play size={16} color="white" fill="white" />
           </div>
         </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: '15px', fontWeight: isCurrentSong ? 600 : 400, color: isCurrentSong ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div className="song-row__text">
+          <div className="song-row__title" data-current={isCurrentSong || undefined}>
             {song.name}
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.artist}</span>
+          <div className="song-row__meta">
+            <span className="song-row__artist">{song.artist}</span>
             <SourceBadge sourceType={song.sourceType} />
             {song.audioTag === 'preview' && <AudioTagBadge tag="preview" />}
             {song.audioTag === 'invalid' && <AudioTagBadge tag="invalid" />}
@@ -189,13 +205,20 @@ const SongRow: React.FC<SongRowProps> = ({
         </div>
       </div>
       {/* 弹性占位：把专辑列和操作列推到右侧，标题区限宽后剩余空间留白（标题撑满时不需要） */}
-      {!fillTitle && <div style={{ flex: 1, minWidth: 0 }} />}
+      {!fillTitle && <div className="song-row__spacer" />}
       {/* Album */}
       {!compact && showAlbum && (
-        <div style={{ width: `${albumWidth}px`, fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        <div className="song-row__album" style={colWidth(albumWidth)}>
           {song.album}
         </div>
       )}
+      {showDuration && (
+        <div className="song-row__duration" style={colWidth(durationColWidth)}>
+          {formatDuration(song.duration)}
+        </div>
+      )}
+      {/* 行尾轻量按钮插槽（如搜索结果「N 个版本」）：常驻可见，不进 hover 才出现的操作区 */}
+      {renderActionsLead?.(song, index)}
       {/* Actions：缺省用共享操作区，调用方可整块替换（如队列页的加入歌单/移除） */}
       {actions ?? (
         <RowActionButtons
@@ -208,6 +231,7 @@ const SongRow: React.FC<SongRowProps> = ({
           onToggleMore={(e) => onToggleDropdown?.(song.id, e)}
           onCloseMore={onCloseDropdown ?? (() => {})}
           menuItems={menuItems}
+          compact={compactActions}
         />
       )}
       <SourceSwapModal

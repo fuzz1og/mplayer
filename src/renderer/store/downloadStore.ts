@@ -5,7 +5,7 @@ export interface DownloadTask {
   id: string;
   song: Song;
   progress: number;
-  status: 'pending' | 'downloading' | 'completed' | 'error';
+  status: 'pending' | 'downloading' | 'paused' | 'completed' | 'error';
   error?: string;
   filePath?: string;
 }
@@ -165,6 +165,8 @@ export const getStatusText = (status: DownloadTask['status']): string => {
       return '等待中';
     case 'downloading':
       return '下载中';
+    case 'paused':
+      return '已暂停';
     case 'completed':
       return '已完成';
     case 'error':
@@ -180,6 +182,8 @@ export const getStatusColor = (status: DownloadTask['status']): string => {
       return 'var(--text-tertiary)';
     case 'downloading':
       return 'var(--accent)';
+    case 'paused':
+      return 'var(--text-tertiary)';
     case 'completed':
       return 'var(--success)';
     case 'error':

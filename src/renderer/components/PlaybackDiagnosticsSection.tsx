@@ -1,35 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Download, Trash2, RefreshCw } from 'lucide-react';
-import { Button, Tag, Typography, message } from 'antd';
 import type { PlaybackLayer, PlaybackTrace, PlaybackTraceOutcome } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
+import { Button, Group, Row, Section, Tag, useToast, InfoHint } from '@/renderer/ui';
 
 /**
- * 播放诊断设置区（#363 / ADR `2026-09-23-playback-trace-sink`）。
- * 展示本次会话最近若干条播放解析 trace，支持清空与手动导出 JSON。
- * 数据只在主进程内存环形缓冲里，不落盘、不外传；关闭应用即消失。
+ * 播放诊断（#363 / ADR `2026-09-23-playback-trace-sink`）。
+ * 只在开发者模式打开时出现在设置导航里；数据只存主进程内存环形缓冲，不落盘、不外传。
  */
 
-const { Text } = Typography;
-
-/** 列表最多展示的条数（缓冲里可能更多，导出始终是完整快照）。 */
 const MAX_RESOLVE_ROWS = 20;
 
-const LAYER_META: Record<PlaybackLayer, { label: string; color: string }> = {
-  prefetch: { label: '预取命中', color: 'green' },
-  direct: { label: '直连', color: 'blue' },
-  tier3: { label: '第三方', color: 'orange' },
-  fail: { label: '失败', color: 'red' },
+const LAYER_META: Record<PlaybackLayer, { label: string; tone: 'neutral' | 'accent' | 'warning' | 'danger' }> = {
+  prefetch: { label: '预取命中', tone: 'accent' },
+  direct: { label: '直连', tone: 'accent' },
+  tier3: { label: '第三方', tone: 'warning' },
+  fail: { label: '失败', tone: 'danger' },
 };
 
-const OUTCOME_META: Record<PlaybackTraceOutcome, { label: string; color: string }> = {
-  hit: { label: '命中', color: 'green' },
-  miss: { label: '未命中', color: 'default' },
-  error: { label: '错误', color: 'red' },
-  skipped: { label: '跳过', color: 'default' },
-  rejected: { label: '护栏拒绝', color: 'orange' },
-  discarded: { label: '迟到丢弃', color: 'purple' },
-  abandoned: { label: '放弃观测', color: 'default' },
+const OUTCOME_META: Record<PlaybackTraceOutcome, { label: string; tone: 'neutral' | 'accent' | 'warning' | 'danger' }> = {
+  hit: { label: '命中', tone: 'accent' },
+  miss: { label: '未命中', tone: 'neutral' },
+  error: { label: '错误', tone: 'danger' },
+  skipped: { label: '跳过', tone: 'neutral' },
+  rejected: { label: '护栏拒绝', tone: 'warning' },
+  discarded: { label: '迟到丢弃', tone: 'neutral' },
+  abandoned: { label: '放弃观测', tone: 'neutral' },
 };
 
 /** 毫秒格式化：小于 1 秒显示 ms，否则保留两位秒。 */
@@ -49,6 +45,7 @@ const PlaybackDiagnosticsSection: React.FC = () => {
   const [resolves, setResolves] = useState<PlaybackTrace[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const { show } = useToast();
 
   const load = async (): Promise<void> => {
     try {
@@ -69,12 +66,10 @@ const PlaybackDiagnosticsSection: React.FC = () => {
     setBusy(true);
     try {
       const filePath = await IpcClient.invoke<string | null>('playbackTrace:export');
-      if (filePath) {
-        message.success(`诊断已导出：${filePath}`);
-      }
+      if (filePath) show(`诊断已导出：${filePath}`, { tone: 'success' });
     } catch (error) {
       console.error('导出播放诊断失败:', error);
-      message.error(error instanceof Error ? error.message : '导出播放诊断失败');
+      show(error instanceof Error ? error.message : '导出播放诊断失败', { tone: 'danger' });
     } finally {
       setBusy(false);
     }
@@ -85,133 +80,118 @@ const PlaybackDiagnosticsSection: React.FC = () => {
     try {
       await IpcClient.invoke('playbackTrace:clear');
       setResolves([]);
-      message.success('播放诊断已清空');
+      show('播放诊断已清空', { tone: 'success' });
     } catch (error) {
       console.error('清空播放诊断失败:', error);
-      message.error(error instanceof Error ? error.message : '清空播放诊断失败');
+      show(error instanceof Error ? error.message : '清空播放诊断失败', { tone: 'danger' });
     } finally {
       setBusy(false);
     }
   };
 
-  // 缓冲最旧→最新；展示最近 N 条并从新到旧。
   const recentResolves = resolves.slice(-MAX_RESOLVE_ROWS).reverse();
   const isEmpty = resolves.length === 0;
 
   return (
-    <section id="playback-trace" style={{ marginBottom: '32px', scrollMarginTop: '16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-        <Activity size={15} color="var(--text-secondary)" />
-        <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>播放诊断</h2>
-        <Tag style={{ marginInlineEnd: 0 }}>仅本次会话</Tag>
+    <section id="playback-trace">
+      <div className="settings-page__title">
+        <Activity size={16} aria-hidden="true" />
+        <h1>诊断</h1>
+        <Tag>仅本次会话</Tag>
       </div>
-      <div style={{ backgroundColor: 'var(--bg-surface)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-default)' }}>
-        <Text type="secondary" style={{ display: 'block', fontSize: '13px', lineHeight: 1.6, marginBottom: '16px' }}>
-          记录每次播放解析命中的层级（预取 / 直连 / 第三方）、各段耗时、失败原因与每源 outcome。
-          数据只保存在当前会话内存中，不落盘、不外传；需要排查时点「导出诊断」保存为 JSON。
-        </Text>
-
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          <Button
-            icon={<Download size={14} />}
-            loading={busy}
-            onClick={() => void handleExport()}
-          >
-            导出诊断
-          </Button>
-          <Button
-            icon={<RefreshCw size={14} />}
-            loading={loading}
-            onClick={() => void load()}
-          >
-            刷新
-          </Button>
-          <Button
-            danger
-            icon={<Trash2 size={14} />}
-            loading={busy}
-            disabled={isEmpty}
-            onClick={() => void handleClear()}
-          >
-            清空
-          </Button>
-          <Text type="secondary" style={{ alignSelf: 'center', fontSize: '12px', marginLeft: 'auto' }}>
-            解析 {resolves.length} 条
-          </Text>
-        </div>
+      <div className="settings-page__stack">
+        <Section title={<>{'操作'} <InfoHint label="诊断记录">记录每次播放解析命中的层级（预取 / 直连 / 第三方）、各段耗时与失败原因；数据只保存在当前会话内存中。</InfoHint></>}>
+          <Group>
+            <Row
+              label="导出诊断"
+              detail="保存为 JSON 文件"
+              trailing={
+                <Button size="sm" icon={<Download size={13} />} disabled={busy} onClick={() => void handleExport()}>
+                  导出
+                </Button>
+              }
+            />
+            <Row
+              label="刷新"
+              detail={loading ? '读取中…' : `本次会话已记录 ${resolves.length} 条`}
+              trailing={
+                <Button size="sm" icon={<RefreshCw size={13} />} disabled={loading} onClick={() => void load()}>
+                  刷新
+                </Button>
+              }
+            />
+            <Row
+              label="清空"
+              detail="只清空当前会话缓冲"
+              trailing={
+                <Button size="sm" variant="danger" icon={<Trash2 size={13} />} disabled={busy || isEmpty} onClick={() => void handleClear()}>
+                  清空
+                </Button>
+              }
+            />
+          </Group>
+        </Section>
 
         {isEmpty ? (
-          <Text type="secondary" style={{ fontSize: '13px' }}>
-            本次会话尚未记录播放解析 trace。播放歌曲后再回到这里查看。
-          </Text>
+          <Section title="最近解析">
+            <Group>
+              <Row label="暂无记录" detail="播放一首歌后再回到这里查看" />
+            </Group>
+          </Section>
         ) : (
-          <>
-            {recentResolves.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {recentResolves.map((trace, index) => {
-                  const layer = LAYER_META[trace.layer];
-                  return (
-                    <div
-                      key={`${trace.ts}-${index}`}
-                      style={{
-                        border: '1px solid var(--border-default)',
-                        borderRadius: '6px',
-                        padding: '10px 12px',
-                        background: 'var(--bg-surface)',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <Tag color={layer.color} style={{ marginInlineEnd: 0 }}>{layer.label}</Tag>
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {trace.songName || trace.songId || '未知歌曲'}
-                        </span>
-                        {trace.artist ? (
-                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{trace.artist}</span>
-                        ) : null}
-                        {trace.sourceType ? <Tag style={{ marginInlineEnd: 0 }}>{trace.sourceType}</Tag> : null}
-                        {trace.nonFull ? <Tag color="gold" style={{ marginInlineEnd: 0 }}>试听版</Tag> : null}
-                        {trace.prefetchHit ? <Tag color="green" style={{ marginInlineEnd: 0 }}>预取命中</Tag> : null}
-                        {trace.tier3Engaged ? <Tag color="orange" style={{ marginInlineEnd: 0 }}>已进 tier3</Tag> : null}
-                        <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                          {formatTime(trace.ts)} · 总 {formatDuration(trace.totalMs)}
-                        </span>
-                      </div>
-
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>
-                        直连 {formatDuration(trace.directMs)}
-                        {trace.directTimedOut ? '（超时截断）' : ''}
-                        {trace.validateMs != null ? ` · 取证 ${formatDuration(trace.validateMs)}` : ''}
-                        {' · '}tier3 {trace.tier3Ms == null ? '—' : formatDuration(trace.tier3Ms)}
-                        {trace.tier3TimedOut ? '（超时截断）' : ''}
-                        {trace.via ? ` · 来源 ${trace.via === 'tier3' ? '第三方' : '直连'}` : ''}
-                        {trace.guard ? ` · 护栏 ${trace.guard}` : ''}
-                      </div>
-
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        原因：{trace.reason || '—'}
-                      </div>
-
-                      {trace.sources.length > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+          recentResolves.map((trace, index) => {
+            const layer = LAYER_META[trace.layer];
+            return (
+              <Section key={`${trace.ts}-${index}`} title={trace.songName || trace.songId || '未知歌曲'}>
+                <Group>
+                  <Row
+                    label="层级"
+                    detail={`${formatTime(trace.ts)} · 总 ${formatDuration(trace.totalMs)}`}
+                    trailing={
+                      <>
+                        <Tag tone={layer.tone}>{layer.label}</Tag>
+                        {trace.nonFull ? <Tag tone="warning">试听版</Tag> : null}
+                        {trace.prefetchHit ? <Tag tone="accent">预取命中</Tag> : null}
+                        {trace.tier3Engaged ? <Tag tone="warning">已进 tier3</Tag> : null}
+                        {trace.sourceType ? <Tag>{trace.sourceType}</Tag> : null}
+                      </>
+                    }
+                  />
+                  {trace.artist ? <Row label="歌手" detail={trace.artist} /> : null}
+                  <Row
+                    label="耗时"
+                    detail={`直连 ${formatDuration(trace.directMs)}${trace.directTimedOut ? '（超时截断）' : ''} · tier3 ${trace.tier3Ms == null ? '—' : formatDuration(trace.tier3Ms)}${trace.tier3TimedOut ? '（超时截断）' : ''}`}
+                  />
+                  {trace.via || trace.guard ? (
+                    <Row
+                      label="来源与护栏"
+                      detail={`${trace.via ? `来源 ${trace.via === 'tier3' ? '第三方' : '直连'}` : ''}${trace.guard ? ` · 护栏 ${trace.guard}` : ''}`}
+                    />
+                  ) : null}
+                  <Row label="原因" detail={trace.reason || '—'} />
+                  {trace.sources.length > 0 ? (
+                    <Row
+                      label="每源结果"
+                      trailing={
+                        <>
                           {trace.sources.map((leg, legIndex) => {
                             const outcome = OUTCOME_META[leg.outcome];
                             return (
-                              <Tag key={`${leg.sourceId}-${legIndex}`} color={outcome.color} style={{ marginInlineEnd: 0 }}>
+                              <Tag key={`${leg.sourceId}-${legIndex}`} tone={outcome.tone}>
                                 {leg.sourceId} · {outcome.label} · {formatDuration(leg.ms)}
                                 {leg.errorClass ? ` · ${leg.errorClass}` : ''}
                                 {leg.guard ? ` · ${leg.guard}` : ''}
                               </Tag>
                             );
                           })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-          </>
+                        </>
+                      }
+                    />
+                  ) : null}
+                </Group>
+              </Section>
+            );
+          })
         )}
       </div>
     </section>

@@ -1,7 +1,8 @@
 import React from 'react';
-import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
-import { Disc3, Play } from 'lucide-react';
+import { Disc3 } from 'lucide-react';
 import type { Album } from '@mplayer/core';
+import CoverCard from '@/renderer/components/CoverCard';
+import '@/renderer/styles/songlist.css';
 
 interface AlbumGridProps {
   albums: Album[];
@@ -31,12 +32,12 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
 }) => {
   if (loading && albums.length === 0) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 'var(--space-5)' }}>
+      <div className="card-grid">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i}>
-            <div className="skeleton-shimmer" style={{ width: '100%', aspectRatio: '1', borderRadius: '8px', marginBottom: '8px' }} />
-            <div className="skeleton-shimmer" style={{ width: '80%', height: '14px', borderRadius: '2px', marginBottom: '6px' }} />
-            <div className="skeleton-shimmer" style={{ width: '50%', height: '12px', borderRadius: '2px' }} />
+            <div className="skeleton-shimmer card-skeleton__cover" />
+            <div className="skeleton-shimmer card-skeleton__title" />
+            <div className="skeleton-shimmer card-skeleton__sub" />
           </div>
         ))}
       </div>
@@ -45,10 +46,10 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
 
   if (error && albums.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
+      <div className="card-state card-state--error">
         <div>{error}</div>
         {onRetry && (
-          <button onClick={onRetry} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+          <button onClick={onRetry} className="card-state__retry">
             重试
           </button>
         )}
@@ -58,8 +59,8 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
 
   if (albums.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-        <Disc3 size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
+      <div className="card-state">
+        <Disc3 size={26} className="album-grid__empty-icon" />
         <div>暂无专辑</div>
       </div>
     );
@@ -87,60 +88,23 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
   return (
     <div>
       {groups.map((group) => (
-        <div key={group.year ?? 'all'} style={{ marginBottom: group.year ? '32px' : 0 }}>
+        <div key={group.year ?? 'all'} className={group.year ? 'album-grid__group' : undefined}>
           {group.year && (
-            <div style={{ marginBottom: '16px' }}>
-              <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                {group.year}
-              </span>
+            <div className="album-grid__year">
+              <span>{group.year}</span>
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 'var(--space-5)' }}>
+          <div className="card-grid">
             {group.albums.map((album) => {
               const year = showYear ? albumYear(album) : '';
               return (
-                <div
+                <CoverCard
                   key={album.id}
+                  title={album.name}
+                  subtitle={year || album.artist || undefined}
+                  cover={album.picUrl}
                   onClick={() => onAlbumClick?.(album)}
-                  style={{ cursor: 'pointer', minWidth: 0 }}
-                >
-                  <div
-                    className="card-interactive"
-                    style={{
-                      position: 'relative',
-                      aspectRatio: '1',
-                      borderRadius: '8px',
-                      overflow: 'hidden',
-                      backgroundColor: 'var(--bg-hover)',
-                      marginBottom: '8px',
-                      transition: 'box-shadow 0.15s ease, transform 0.15s ease',
-                    }}
-                  >
-                    {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Disc3 size={36} style={{ color: 'var(--text-tertiary)' }} />
-                    </div>
-                    {album.picUrl && (
-                      <img
-                        key={album.picUrl}
-                        src={coverThumbUrl(album.picUrl, COVER_SIZE.thumb)}
-                        alt={album.name}
-                        loading="lazy"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    )}
-                    <div className="play-overlay">
-                      <Play size={20} color="white" fill="white" />
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {album.name}
-                  </div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {year || album.artist || ''}
-                  </div>
-                </div>
+                />
               );
             })}
           </div>

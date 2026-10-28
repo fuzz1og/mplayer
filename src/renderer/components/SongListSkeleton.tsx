@@ -1,5 +1,17 @@
 import React from 'react';
-import { COL_CHECKBOX, COL_INDEX, COL_ALBUM, COL_ACTIONS, colStyle } from '@/renderer/components/songTableColumns';
+import '@/renderer/styles/songlist.css';
+import {
+  COL_CHECKBOX,
+  COL_INDEX,
+  COL_INDEX_LIBRARY,
+  COL_ALBUM,
+  COL_ACTIONS,
+  COL_ACTIONS_COMPACT,
+  COL_DURATION,
+  COL_DURATION_LIBRARY,
+  colWidth,
+} from '@/renderer/components/songTableColumns';
+import { songRowCoverSize, songRowHeight, type SongListDensity } from '@/renderer/components/songRowMetrics';
 
 interface SongListSkeletonProps {
   rowCount?: number;
@@ -10,53 +22,95 @@ interface SongListSkeletonProps {
    * 于是「加载态比加载后窄」，这类列错位在数据到达前根本看不见。
    */
   showAlbum?: boolean;
+  /** 与 SongList 的 density 一致：library 行高 46 / 封面 30 / 单个紧凑操作 */
+  density?: SongListDensity;
+  /** 与 SongList 的 showDuration 一致：library 资料库行有时长列 */
+  showDuration?: boolean;
+  /** 与 SongRow 的 indexWidth 一致（榜单预览 24px）；缺省按密度取 28 / 50 */
+  indexWidth?: number;
 }
 
-const SkeletonRow: React.FC<{ showCheckbox: boolean; showIndex: boolean; showAlbum: boolean }> = ({
-  showCheckbox, showIndex, showAlbum,
-}) => (
-  <div style={{
-    display: 'flex', alignItems: 'center', padding: '10px 16px', borderRadius: '8px',
-  }}>
-    {showCheckbox && (
-      <div style={{ ...colStyle(COL_CHECKBOX), textAlign: 'center' }}>
-        <div className="skeleton-shimmer" style={{ width: '16px', height: '16px', borderRadius: '3px', display: 'inline-block' }} />
+const SkeletonRow: React.FC<{
+  showCheckbox: boolean;
+  showIndex: boolean;
+  showAlbum: boolean;
+  density: SongListDensity;
+  showDuration: boolean;
+  indexWidth?: number;
+}> = ({ showCheckbox, showIndex, showAlbum, density, showDuration, indexWidth }) => {
+  const library = density === 'library';
+  return (
+    <div
+      className="song-skeleton__row"
+      data-variant={library ? 'library' : undefined}
+      style={{ '--song-row-height': `${songRowHeight(density)}px`,
+        '--song-row-cover': `${songRowCoverSize(density)}px` } as React.CSSProperties}
+    >
+      {showCheckbox && (
+        <div className="song-skeleton__col" style={colWidth(COL_CHECKBOX)}>
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--check" />
+        </div>
+      )}
+      {showIndex && (
+        <div className="song-skeleton__col" style={colWidth(indexWidth ?? (library ? COL_INDEX_LIBRARY : COL_INDEX))}>
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--index" />
+        </div>
+      )}
+      <div className="song-skeleton__main">
+        <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--cover" />
+        <div className="song-skeleton__lines">
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--title" />
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--artist" />
+        </div>
       </div>
-    )}
-    {showIndex && (
-      <div style={{ ...colStyle(COL_INDEX), textAlign: 'center' }}>
-        <div className="skeleton-shimmer" style={{ width: '18px', height: '12px', borderRadius: '3px', display: 'inline-block' }} />
-      </div>
-    )}
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-      <div className="skeleton-shimmer" style={{ width: '44px', height: '44px', borderRadius: '8px', flexShrink: 0 }} />
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <div className="skeleton-shimmer" style={{ width: '45%', height: '14px', borderRadius: '3px' }} />
-        <div className="skeleton-shimmer" style={{ width: '30%', height: '12px', borderRadius: '3px' }} />
+      {showAlbum && (
+        <div className="song-skeleton__col" style={colWidth(COL_ALBUM)}>
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--album" />
+        </div>
+      )}
+      {showDuration && (
+        <div className="song-skeleton__col" style={colWidth(library ? COL_DURATION_LIBRARY : COL_DURATION)}>
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--duration" />
+        </div>
+      )}
+      <div
+        className="song-skeleton__actions"
+        style={colWidth(library ? COL_ACTIONS_COMPACT : COL_ACTIONS)}
+      >
+        {library ? (
+          <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
+        ) : (
+          <>
+            <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
+            <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
+            <div className="skeleton-shimmer song-skeleton__box song-skeleton__box--action" />
+          </>
+        )}
       </div>
     </div>
-    {showAlbum && (
-      <div style={colStyle(COL_ALBUM)}>
-        <div className="skeleton-shimmer" style={{ width: '70%', height: '12px', borderRadius: '3px' }} />
-      </div>
-    )}
-    <div style={{ ...colStyle(COL_ACTIONS), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-      <div className="skeleton-shimmer" style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
-      <div className="skeleton-shimmer" style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
-      <div className="skeleton-shimmer" style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
-    </div>
-  </div>
-);
+  );
+};
 
 const SongListSkeleton: React.FC<SongListSkeletonProps> = ({
   rowCount = 10,
   showCheckbox = false,
   showIndex = true,
   showAlbum = false,
+  density = 'standard',
+  showDuration = false,
+  indexWidth,
 }) => (
-  <div style={{ padding: '8px 0' }}>
+  <div className="song-skeleton" data-density={density}>
     {Array.from({ length: rowCount }).map((_, i) => (
-      <SkeletonRow key={i} showCheckbox={showCheckbox} showIndex={showIndex} showAlbum={showAlbum} />
+      <SkeletonRow
+        key={i}
+        showCheckbox={showCheckbox}
+        showIndex={showIndex}
+        showAlbum={showAlbum}
+        density={density}
+        showDuration={showDuration}
+        indexWidth={indexWidth}
+      />
     ))}
   </div>
 );

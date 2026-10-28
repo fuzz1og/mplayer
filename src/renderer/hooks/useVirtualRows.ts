@@ -1,9 +1,10 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 import { useLatest } from '@/renderer/hooks/useLatest';
+import { SONG_ROW_HEIGHT } from '@/renderer/components/songRowMetrics';
 
-/** SongRow 行高：44px 封面 + 上下各 10px 内边距（见 SongRow 的 padding） */
-export const SONG_ROW_HEIGHT = 64;
+/** SongRow 行高契约在 songRowMetrics（#699）；这里再导出，历史调用点不必改 import 路径。 */
+export { SONG_ROW_HEIGHT };
 
 /**
  * 行数达到该阈值才启用窗口化：短列表整表渲染，省掉测量与首帧探测。
@@ -45,11 +46,11 @@ function isScrollableY(node: HTMLElement): boolean {
   return SCROLLABLE_OVERFLOW_Y.has(style.overflowY) || SCROLLABLE_OVERFLOW_Y.has(style.overflow);
 }
 
-/** 向上找最近的纵向滚动祖先：列表挂靠页面已有的滚动容器，页面无需知道测量细节 */
-function findScrollParent(from: HTMLElement | null): HTMLElement | null {
+/** 向上找最近的纵向滚动祖先：认 data-scroll-container 标记或 computed overflow。 */
+export function findScrollParent(from: HTMLElement | null): HTMLElement | null {
   let node = from?.parentElement ?? null;
   while (node) {
-    if (isScrollableY(node)) return node;
+    if (node.hasAttribute('data-scroll-container') || isScrollableY(node)) return node;
     node = node.parentElement;
   }
   return null;
@@ -136,8 +137,15 @@ export function useVirtualRows({ count, enabled, estimateSize, overscan = 8 }: U
   }, [scrollElement]);
 
   const items = canVirtualize ? virtualizer.getVirtualItems() : EMPTY_ITEMS;
-  // 窗口为空（容器还没有高度等）时退回整表渲染：宁可多渲染，也不留空白列表
-  const mode: VirtualRowsMode = !enabled ? 'plain' : !scrollElement ? 'pending' : items.length > 0 ? 'virtual' : 'plain';
+  // pending 也整表渲染：消费方在 pending 下渲染 null 曾导致「超阈值 + 无滚动祖先」空白列表。
+  const mode: VirtualRowsMode = !enabled || !scrollElement
+    ? 'plain'
+    : items.length > 0
+      ? 'virtual'
+      : 'pending';
+
+  // 消费方在 pending 下渲染整表（不是 null）：这是本轮修掉的真实 bug。
+  // 容器已探到、窗口还没算出来的那一帧，用户应当看到内容而不是空白。
 
   return useMemo(() => ({
     rowsRef,

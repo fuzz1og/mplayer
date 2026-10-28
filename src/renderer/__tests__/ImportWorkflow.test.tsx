@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import ImportPlaylistModal from '../components/ImportPlaylistModal';
 
@@ -18,18 +18,6 @@ vi.mock('@/renderer/services/callMusicApi', () => ({
   callMusicApi: callMusicApiMock,
 }));
 
-vi.mock('antd', async () => {
-  const actual = await vi.importActual('antd');
-  return {
-    ...actual,
-    message: {
-      warning: vi.fn(),
-      error: vi.fn(),
-      success: vi.fn(),
-    },
-  };
-});
-
 import { importFromLink } from '@/renderer/services/importService';
 
 describe('ImportWorkflow Integration', () => {
@@ -41,7 +29,12 @@ describe('ImportWorkflow Integration', () => {
     onImported: vi.fn(),
   };
 
+  /** 弹层 1.9.0 起用原生 dialog 且 portal 到 body：查询限定在本次渲染的弹层内。 */
+  const dialog = () => within(screen.getAllByRole('dialog').at(-1) as HTMLElement);
+
   beforeEach(() => {
+    cleanup();
+    vi.useRealTimers();
     vi.clearAllMocks();
     callMusicApiMock.mockResolvedValue({ songs: [], total: 0 });
   });
@@ -68,32 +61,24 @@ describe('ImportWorkflow Integration', () => {
 
     render(<ImportPlaylistModal {...defaultProps} />);
 
-    // Input URL
-    const input = screen.getByPlaceholderText('请输入歌单链接（支持网易云和QQ音乐）');
+    const input = dialog().getByPlaceholderText('请输入歌单链接（支持网易云和QQ音乐）');
     fireEvent.change(input, {
       target: { value: 'https://music.163.com/#/playlist?id=123' },
     });
 
-    // Click parse
-    fireEvent.click(screen.getByText('解析链接'));
+    fireEvent.click(dialog().getByRole('button', { name: '解析链接' }));
 
-    // Wait for songs to appear in preview table
-    await waitFor(() => {
-      expect(screen.getByText(/共 1 首歌曲/)).toBeInTheDocument();
-    });
+    await dialog().findByText(/共 1 首歌曲/);
 
     // 原生接口拉全量曲目
     expect(callMusicApiMock).toHaveBeenCalledWith('getPlaylistSongs', 'netease', 123, 0, 0);
 
-    // Click import selected songs
-    fireEvent.click(screen.getByText(/导入选中歌曲/));
+    // 预览表格挂载后 useEffect 会把全部曲目设为已选，等它生效再点，否则按钮还是 disabled
+    await dialog().findByText('共 1 首歌曲，已选 1 首');
+    fireEvent.click(dialog().getByRole('button', { name: /导入选中歌曲/ }));
 
-    // Wait for import to complete
-    await waitFor(() => {
-      expect(screen.getByText('导入完成')).toBeInTheDocument();
-    }, { timeout: 5000 });
+    expect(await dialog().findByText('导入完成')).toBeInTheDocument();
 
-    // Verify import was called correctly
     expect(importFromLink).toHaveBeenCalledWith(
       1,
       mockSongs,
@@ -107,19 +92,14 @@ describe('ImportWorkflow Integration', () => {
     callMusicApiMock.mockRejectedValue(new Error('Network error'));
 
     render(<ImportPlaylistModal {...defaultProps} />);
-
-    // Input URL
-    const input = screen.getByPlaceholderText('请输入歌单链接（支持网易云和QQ音乐）');
+    const input = dialog().getByPlaceholderText('请输入歌单链接（支持网易云和QQ音乐）');
     fireEvent.change(input, {
       target: { value: 'https://music.163.com/#/playlist?id=123' },
     });
 
-    // Click parse
-    fireEvent.click(screen.getByText('解析链接'));
+    fireEvent.click(dialog().getByRole('button', { name: '解析链接' }));
 
-    // Wait for error message（IPC 错误信息原样透出）
-    await waitFor(() => {
-      expect(screen.getByText('Network error')).toBeInTheDocument();
-    });
+    // IPC 错误信息原样透出
+    expect(await dialog().findByText('Network error')).toBeInTheDocument();
   });
 });

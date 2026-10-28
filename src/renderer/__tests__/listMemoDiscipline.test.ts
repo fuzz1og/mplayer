@@ -93,12 +93,12 @@ describe('searchStore.setAudioTag 局部更新（#412）', () => {
  * 都会把 memo 击穿，表现为滚动或播放状态变化时整表重渲染。这几条把写法钉住。
  */
 describe('列表 memo 纪律（#412）', () => {
-  it('GroupedSongList 的组头回调是稳定引用，不包内联闭包', () => {
+  it('分组结果的「N 个版本」用稳定渲染函数，不在行 props 里塞每帧新建的元素', () => {
     const src = stripComments(read('renderer/components/GroupedSongList.tsx'));
-    expect(src).toContain('onToggle={stableOnToggleGroup ?? noop}');
-    expect(src).toContain('onPlayFirst={handlePlayFirst}');
-    expect(src).not.toMatch(/onToggle=\{\(\) =>/);
-    expect(src).not.toMatch(/onPlayFirst=\{\(\) =>/);
+    expect(src).toContain('const renderActionsLead = useCallback');
+    expect(src).toContain('renderActionsLead={lead ? renderActionsLead : undefined}');
+    expect(src).not.toMatch(/renderActionsLead=\{\(\) =>/);
+    expect(read('renderer/components/SongRow.tsx')).toContain('renderActionsLead?: (song: Song, index: number) => React.ReactNode');
   });
 
   it('虚拟化定位是**一份**共享实现（VirtualRow），且只吃数字', () => {
@@ -109,8 +109,8 @@ describe('列表 memo 纪律（#412）', () => {
     expect(shared).toContain('size: number;');
     expect(shared).toContain('scrollMargin: number;');
 
-    // 三个列表消费者都用它，不再各自在 map 里现场拼 style
-    for (const file of ['renderer/components/SongList.tsx', 'renderer/components/GroupedSongList.tsx', 'renderer/components/VirtualSortableList.tsx']) {
+    // 窗口化列表都走它，不再各自在 map 里现场拼 style（分组搜索结果默认扁平，不窗口化）
+    for (const file of ['renderer/components/SongList.tsx', 'renderer/components/VirtualSortableList.tsx']) {
       const src = stripComments(read(file));
       // 同目录的组件用相对路径、跨目录用 @ 别名，两种都算
       expect(src, file).toMatch(/import VirtualRow from '(\.\/|@\/renderer\/components\/)VirtualRow'/);
@@ -124,16 +124,8 @@ describe('列表 memo 纪律（#412）', () => {
     const songRowBlock = /<SongRow[\s\S]*?\/>/.exec(src)?.[0] ?? '';
     expect(songRowBlock).not.toBe('');
     expect(songRowBlock).not.toContain('style=');
-    // 组头也不再有 style 这个死 prop
-    expect(stripComments(read('renderer/components/GroupHeaderRow.tsx'))).not.toContain('style?:');
-  });
-
-  it('组头的回调自带分组，避免父组件逐行包闭包', () => {
-    const src = stripComments(read('renderer/components/GroupHeaderRow.tsx'));
-    expect(src).toContain('onToggle: (groupKey: string) => void');
-    expect(src).toContain('onPlayFirst: (group: SongGroup) => void');
-    expect(src).toContain('onToggle(group.key)');
-    expect(src).toContain('onPlayFirst(group)');
+    // #694：组头不再存在（默认扁平），组相关的定位只经稳定渲染函数下发
+    expect(src).not.toContain('GroupHeaderRow');
   });
 
   it('队列行尾操作用渲染函数传递（元素每帧新建会击穿 memo）', () => {
@@ -142,7 +134,7 @@ describe('列表 memo 纪律（#412）', () => {
     expect(row).toContain('actions={renderActions?.(song, rowProps.index)}');
     expect(row).toMatch(/const dragStyle = useMemo/);
 
-    const page = stripComments(read('renderer/pages/QueuePage.tsx'));
+    const page = stripComments(read('renderer/components/QueuePanel.tsx'));
     expect(page).toContain('renderQueueActions');
     expect(page).not.toMatch(/actions=\{\s*</);
     // #428：队列页不再自己接 dnd-kit，也不再有裸 map —— 全量 id / items / DragOverlay 收在共享能力里
@@ -169,30 +161,74 @@ describe('列表 memo 纪律（#412）', () => {
     // 展示集合（#445 是全量 songs，memo 由能力内部保证；#488 起是过滤派生的 visibleSongs）交给能力层；
     // 两种形态都是 memo 化引用——窗口化与 dnd-kit 的下标来源必须是同一个数组，不能内联 .map( 新建
     expect(page).toContain('items={visibleSongs}');
-    // 三个渲染函数（sortable 行 + 非 sortable 预览 + 过滤态静态行）从**同一份** props 展开：
-    // 本页 19 个 prop，抄三份必然静默漂移
+    // 两个渲染函数（sortable 行 + 拖拽预览行）从**同一份** props 展开：本页 19 个 prop，抄两份必静默漂移。
+    // #703 起过滤态也注册 sortable（过滤后拖拽只重排可见集合），不再有第三份静态行。
     expect(page).toContain('const sharedRowProps = useMemo(');
     expect(page).toContain('const buildRowProps = useCallback(');
-    expect((page.match(/\{\.\.\.buildRowProps\(song, index\)\}/g) ?? []).length).toBe(3);
+    expect((page.match(/\{\.\.\.buildRowProps\(song, index\)\}/g) ?? []).length).toBe(2);
     expect(page).toContain('dragHandle={previewDragHandle}');
     // 提示条 / 批量栏 / 表头 / 过滤框走 header 插槽（与 rowsRef 同父由组件结构保证，见 VirtualSortableList）
     expect(page).toContain('header={');
   });
 
   it('行高 64 是布局唯一来源：没有 measureElement，estimateSize 就是布局（#445）', () => {
+    // #699：行高单源收口到 songRowMetrics，useVirtualRows 只再导出，不再各写一份 64。
+    const metrics = stripComments(read('renderer/components/songRowMetrics.ts'));
+    expect(metrics).toContain('standard: 64');
     const hooks = stripComments(read('renderer/hooks/useVirtualRows.ts'));
-    expect(hooks).toContain('export const SONG_ROW_HEIGHT = 64');
+    expect(hooks).toContain("from '@/renderer/components/songRowMetrics'");
+    expect(hooks).toContain('export { SONG_ROW_HEIGHT }');
+    expect(hooks).not.toContain('SONG_ROW_HEIGHT = 64');
     const list = stripComments(read('renderer/components/VirtualSortableList.tsx'));
     expect(list).toContain('const estimateSongRow = () => SONG_ROW_HEIGHT');
     // 全仓没有 measureElement → virtualItem.size 永远等于 estimateSize：
     // 真实行高与常量不符时行会互相压叠且不报错，所以常量必须与 SongRow 的布局一致
     expect(list).not.toContain('measureElement');
     expect(stripComments(read('renderer/components/VirtualRow.tsx'))).toMatch(/height: `\$\{size\}px`/);
+    // 1.9.0 起行高不再靠固定像素的内联样式表达；#699 起组件只下发 --song-row-* 变量，
+    // 由 songlist.css 的类消费。断言验的仍是「行挂类 + 类里用同一协议变量」。
     const row = stripComments(read('renderer/components/SongRow.tsx'));
-    // 44px 封面盒 + 上下各 10px 内边距 = 64；标题/副标题 nowrap 不换行，专辑列可有可无
-    expect(row).toContain("width: '44px', height: '44px'");
-    expect(row).toContain("padding: compact ? '8px 12px' : '10px 16px'");
-    expect(row).toContain("whiteSpace: 'nowrap'");
+    expect(row).toContain('className="song-row"');
+    expect(row).toContain('className="song-row__cover"');
+    expect(row).toContain('className="song-row__album"');
+    expect(row).toContain("'--song-row-height'");
+    expect(row).toContain("'--song-row-cover'");
+
+    const css = read('renderer/styles/songlist.css');
+    expect(css).toMatch(/\.song-row \{[^}]*padding: 10px 16px;/);
+    expect(css).toMatch(/\.song-row__cover \{[^}]*width: var\(--song-row-cover\);[^}]*height: var\(--song-row-cover\);/);
+    expect(css).toMatch(/\.song-row__title \{[^}]*white-space: nowrap;/);
+    expect(css).toMatch(/\.song-row__album \{[^}]*white-space: nowrap;/);
+  });
+
+  it('资料库密度 46px 是第二份布局事实：estimate 与 CSS 同源，旧私有覆盖已删（#685）', () => {
+    // #699：46 / 30 只在 songRowMetrics 定义一次；songTableColumns 只做兼容再导出。
+    const metrics = stripComments(read('renderer/components/songRowMetrics.ts'));
+    expect(metrics).toContain('library: 46');
+    expect(metrics).toContain('library: 30');
+    const columns = stripComments(read('renderer/components/songTableColumns.ts'));
+    expect(columns).toContain("export { SONG_ROW_HEIGHT, LIBRARY_ROW_HEIGHT");
+
+    const list = stripComments(read('renderer/components/SongList.tsx'));
+    expect(list).toContain('songRowHeight(density)');
+    expect(list).toContain('data-density={density}');
+
+    const css = read('renderer/styles/songlist.css');
+    expect(css).toMatch(/\.song-list\[data-density='library'\]/);
+    expect(css).toMatch(/\.song-row\[data-variant='library'\] \{[^}]*min-height: var\(--song-row-height\);/);
+    expect(css).toMatch(/\.song-row\[data-variant='library'\] \{[^}]*padding: 0 var\(--song-row-padding-x\);/);
+    expect(css).toMatch(/\.song-row\[data-variant='library'\] \.song-row__cover \{[^}]*width: var\(--song-row-cover\);[^}]*height: var\(--song-row-cover\);/);
+    expect(css).toMatch(/\.row-actions--compact \.row-actions__btn \{[^}]*width: 28px;/);
+
+    // 骨架屏必须跟随密度，否则加载态行高错位
+    const skeleton = stripComments(read('renderer/components/SongListSkeleton.tsx'));
+    expect(skeleton).toContain("density === 'library'");
+    expect(skeleton).toContain("'--song-row-height'");
+
+    // 资料库不再维护私有行布局
+    const libraryCss = stripComments(read('renderer/styles/library.css'));
+    expect(libraryCss).not.toContain('.library__rows .song-row');
+    expect(libraryCss).not.toContain('.library__tail');
   });
 
   it('队列窗口化与可排序收在共享能力里（#428）', () => {

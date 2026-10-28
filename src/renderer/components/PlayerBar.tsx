@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { Heart, Download, Mic, ListMusic } from 'lucide-react';
+import React, { useCallback, useRef, useState } from 'react';
+import { Heart, Download, MoreHorizontal, ListEnd, CirclePlus } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
@@ -9,32 +9,41 @@ import { useDownload } from '@/renderer/hooks/useDownload';
 import PlayerControls from './PlayerControls';
 import PlayerProgress from './PlayerProgress';
 import PlayerVolume from './PlayerVolume';
+import { Menu } from '@/renderer/ui';
+import type { MenuItem } from '@/renderer/ui';
+import '@/renderer/styles/player-bar.css';
 
 interface PlayerBarProps {
   className?: string;
   onCoverClick?: () => void;
+  /** 队列入口；缺省用 hash 跳转（不依赖 Router，便于单测） */
+  onQueueClick?: () => void;
 }
 
-const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
-  const currentSong = usePlayerStore(s => s.currentSong);
-  const isPlaying = usePlayerStore(s => s.isPlaying);
-  const isLoading = usePlayerStore(s => s.isLoading); // #387 等待态
-  const volume = usePlayerStore(s => s.volume);
-  const playMode = usePlayerStore(s => s.playMode);
-  const pause = usePlayerStore(s => s.pause);
-  const resume = usePlayerStore(s => s.resume);
-  const seek = usePlayerStore(s => s.seek);
-  const setVolume = usePlayerStore(s => s.setVolume);
-  const setPlayMode = usePlayerStore(s => s.setPlayMode);
-  const playNext = usePlayerStore(s => s.playNext);
-  const playPrevious = usePlayerStore(s => s.playPrevious);
+/**
+ * 播放栏（1.9.0 收口）：三列 grid（左右 1fr、中间 auto），播放键对准窗口中心。
+ * 左 封面/标题/艺术家/收藏；中 控件 + 进度；右 队列/更多/音量（歌词入口由封面承担，已删重复按钮）。
+ * 「加入歌单」与「下载」收进更多菜单；菜单支持 ESC / 方向键 / 焦点归还。
+ */
+const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueClick }) => {
+  const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const isLoading = usePlayerStore((s) => s.isLoading);
+  const volume = usePlayerStore((s) => s.volume);
+  const playMode = usePlayerStore((s) => s.playMode);
+  const pause = usePlayerStore((s) => s.pause);
+  const resume = usePlayerStore((s) => s.resume);
+  const seek = usePlayerStore((s) => s.seek);
+  const setVolume = usePlayerStore((s) => s.setVolume);
+  const setPlayMode = usePlayerStore((s) => s.setPlayMode);
+  const playNext = usePlayerStore((s) => s.playNext);
+  const playPrevious = usePlayerStore((s) => s.playPrevious);
 
-  // 收藏态必须选**数据**（原生布尔）：选 store 上的 isFavorite 方法拿到的是稳定引用，
-  // favoriteIds 变化不触发重渲染，心形永远停在旧值（#620，引入于 af107fb）。
   const fav = useFavoriteStore((s) => (currentSong ? s.favoriteIds.includes(currentSong.id) : false));
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
-  // 当前歌加入歌单弹窗（播放栏直达入口）
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreTriggerRef = useRef<HTMLButtonElement>(null);
   const { download } = useDownload();
 
   const handlePlayPause = useCallback(() => {
@@ -43,17 +52,17 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
     else resume();
   }, [currentSong, isPlaying, pause, resume]);
 
-  const handleVolumeChange = useCallback((vol: number) => {
-    setVolume(vol);
-  }, [setVolume]);
+  const handleVolumeChange = useCallback((vol: number) => setVolume(vol), [setVolume]);
 
   const handleDownload = useCallback(() => {
-    if (currentSong) {
-      download(currentSong);
-    }
+    if (currentSong) download(currentSong);
   }, [currentSong, download]);
 
-  // 播放栏封面加载失败 → 按 ID 重识别换新封面（上游 API 签名过期后同一 URL 永远失败）
+  const handleQueue = useCallback(() => {
+    if (onQueueClick) onQueueClick();
+    else window.location.hash = '#/queue';
+  }, [onQueueClick]);
+
   const handleCoverError = useCallback(() => {
     if (!currentSong) return;
     void refreshSongCover(currentSong).then((cover) => {
@@ -64,49 +73,31 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
     });
   }, [currentSong]);
 
+  const moreMenuItems: MenuItem[] = [
+    {
+      key: 'playlist',
+      label: '加入歌单',
+      icon: <CirclePlus size={14} />,
+      disabled: !currentSong,
+      onSelect: () => setShowAddToPlaylist(true),
+    },
+    {
+      key: 'download',
+      label: '下载',
+      icon: <Download size={14} />,
+      disabled: !currentSong,
+      onSelect: handleDownload,
+    },
+  ];
+
   return (
-    <div
-      className={className}
-      style={{
-        height: 'var(--player-height)',
-        backgroundColor: 'var(--bg-player)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        borderTop: '1px solid var(--border-subtle)',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 var(--space-6)',
-        gap: 'var(--space-6)',
-        position: 'relative',
-        zIndex: 10,
-      }}
-    >
-      {/* 左侧 - 封面 + 歌曲信息 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-3)',
-          width: '240px',
-          minWidth: '240px',
-        }}
-      >
-        {/* 封面 */}
+    <div className={className ? `player-bar ${className}` : 'player-bar'}>
+      {/* 左 - 封面 / 标题 / 艺术家 / 收藏 */}
+      <div className="player-bar__now-playing">
         <button
           onClick={onCoverClick}
           aria-label="查看歌词"
-          style={{
-            width: '52px',
-            height: '52px',
-            borderRadius: '8px',
-            overflow: 'hidden',
-            backgroundColor: 'var(--skeleton-base)',
-            flexShrink: 0,
-            boxShadow: 'var(--shadow-md)',
-            cursor: onCoverClick ? 'pointer' : 'default',
-            border: 'none',
-            padding: 0,
-          }}
+          className={onCoverClick ? 'player-bar__cover player-bar__cover--clickable' : 'player-bar__cover'}
         >
           <SongCover
             src={currentSong?.cover}
@@ -117,55 +108,34 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           />
         </button>
 
-        {/* 歌曲信息 */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              fontSize: 'var(--text-sm)',
-              fontWeight: 'var(--weight-medium)',
-              color: 'var(--text-primary)',
-              lineHeight: 'var(--leading-tight)',
-              minWidth: 0,
-            }}
-          >
+        <div className="player-bar__meta">
+          <div className="player-bar__title-row">
             {isPlaying && currentSong && (
-              <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '2px', height: '12px', flexShrink: 0 }}>
-                <span style={{ width: '2px', height: '6px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite' }} />
-                <span style={{ width: '2px', height: '10px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.1s' }} />
-                <span style={{ width: '2px', height: '7px', backgroundColor: 'var(--accent)', animation: 'soundBar 0.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+              <span className="player-bar__equalizer" aria-hidden="true">
+                <span />
+                <span />
+                <span />
               </span>
             )}
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {currentSong?.name || '未播放'}
-            </span>
+            <span className="player-bar__title">{currentSong?.name || '未播放'}</span>
+            <button
+              onClick={() => currentSong && toggleFavorite(currentSong)}
+              disabled={!currentSong}
+              aria-label={fav ? '取消收藏' : '收藏'}
+              aria-pressed={fav}
+              className="player-btn player-bar__favorite"
+            >
+              <Heart size={16} fill={fav ? 'currentColor' : 'none'} />
+            </button>
           </div>
-          <div
-            style={{
-              fontSize: 'var(--text-xs)',
-              color: 'var(--text-tertiary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              marginTop: '2px',
-            }}
-          >
-            {currentSong ? `${currentSong.artist}` : '—'}
+          <div className="player-bar__artist">
+            {currentSong ? currentSong.artist : '—'}
           </div>
         </div>
       </div>
 
-      {/* 中间 - 控制按钮 + 进度条 */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 'var(--space-1)',
-          maxWidth: '500px',
-        }}
-      >
+      {/* 中 - 控件 + 进度（网格 auto 列居中，播放键即窗口中心） */}
+      <div className="player-bar__center">
         <PlayerControls
           isPlaying={isPlaying}
           loading={isLoading}
@@ -176,75 +146,46 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick }) => {
           onNext={playNext}
           onModeChange={setPlayMode}
         />
-        {/* 位置/时长不进播放栏：进度块自己订阅 playbackClock，tick 不重渲染 PlayerBar */}
         <PlayerProgress hasCurrentSong={!!currentSong} onSeek={seek} />
       </div>
 
-      {/* 右侧 - 功能按钮 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-2)',
-        }}
-      >
-        {/* 收藏按钮 */}
+      {/* 右 - 队列 / 更多 / 音量 */}
+      <div className="player-bar__actions">
         <button
-          onClick={() => currentSong && toggleFavorite(currentSong)}
-          disabled={!currentSong}
-          aria-label={fav ? '取消收藏' : '收藏'}
-          aria-pressed={fav}
+          type="button"
+          onClick={handleQueue}
+          aria-label="播放队列"
+          aria-haspopup="dialog"
           className="player-btn"
-          style={{
-            color: fav ? 'var(--accent)' : 'var(--text-tertiary)',
-            opacity: currentSong ? 1 : 0.3,
-          }}
+          data-queue-trigger
         >
-          <Heart size={16} fill={fav ? 'currentColor' : 'none'} />
+          <ListEnd size={16} />
         </button>
+        <div className="player-bar__more">
+          <button
+            ref={moreTriggerRef}
+            onClick={() => setMoreOpen((open) => !open)}
+            aria-label="更多操作"
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            className="player-btn"
+          >
+            <MoreHorizontal size={16} />
+          </button>
+          <Menu
+            open={moreOpen}
+            anchorRef={moreTriggerRef}
+            items={moreMenuItems}
+            onClose={() => setMoreOpen(false)}
+            ariaLabel="更多操作"
+            placement="top-end"
+            minWidth={152}
+          />
+        </div>
 
-        {/* 加入歌单 */}
-        <button
-          onClick={() => setShowAddToPlaylist(true)}
-          disabled={!currentSong}
-          aria-label="加入歌单"
-          className="player-btn"
-          style={{ opacity: currentSong ? 1 : 0.3 }}
-        >
-          <ListMusic size={16} />
-        </button>
-
-        {/* 歌词按钮 */}
-        <button
-          onClick={onCoverClick}
-          disabled={!currentSong}
-          aria-label="歌词"
-          className="player-btn"
-          style={{ opacity: currentSong ? 1 : 0.3 }}
-        >
-          <Mic size={16} />
-        </button>
-
-        {/* 下载按钮 */}
-        <button
-          onClick={handleDownload}
-          disabled={!currentSong}
-          aria-label="下载"
-          className="player-btn"
-          style={{ opacity: currentSong ? 1 : 0.3 }}
-        >
-          <Download size={16} />
-        </button>
-
-        {/* 音量控制 */}
-        <PlayerVolume
-          volume={volume}
-          onVolumeChange={handleVolumeChange}
-          onToggleMute={() => setVolume(volume === 0 ? 80 : 0)}
-        />
+        <PlayerVolume volume={volume} onVolumeChange={handleVolumeChange} onToggleMute={() => setVolume(volume === 0 ? 80 : 0)} />
       </div>
 
-      {/* 加入歌单弹窗（对当前播放歌曲） */}
       {currentSong && (
         <AddToPlaylistModal
           song={currentSong}

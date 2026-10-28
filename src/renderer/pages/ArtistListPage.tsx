@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Mic2 } from 'lucide-react';
+import { PageHeader } from '@/renderer/ui';
 import type { Artist } from '@mplayer/core';
+import '@/renderer/styles/songlist.css';
 import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
+import ArtistCard from '@/renderer/components/ArtistCard';
 
 const CATEGORIES = [
   { label: '全部', id: 0 },
@@ -29,64 +31,14 @@ function loadSavedCategory(): number {
   return Number.isInteger(saved) && saved >= 0 && saved < CATEGORIES.length ? saved : 0;
 }
 
-const ArtistCard: React.FC<{ artist: Artist; onClick: () => void }> = ({ artist, onClick }) => (
-  <div
-    onClick={onClick}
-    style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-      padding: '16px 12px', borderRadius: '8px', cursor: 'pointer',
-      transition: 'background-color 0.15s ease, box-shadow 0.15s ease', backgroundColor: 'var(--bg-surface)',
-      border: '1px solid var(--border-default)',
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-      e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
-      e.currentTarget.style.boxShadow = 'none';
-    }}
-  >
-    <div
-      style={{
-        width: '80px', height: '80px', borderRadius: '50%',
-        overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0,
-      }}
-    >
-      {artist.picUrl ? (
-        <img
-          src={coverThumbUrl(artist.picUrl, COVER_SIZE.icon)}
-          alt={artist.name}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          loading="lazy"
-        />
-      ) : (
-        <div
-          style={{
-            width: '100%', height: '100%', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', fontSize: '28px', color: 'var(--text-tertiary)',
-          }}
-        >
-          {artist.name.charAt(0)}
-        </div>
-      )}
-    </div>
-    <div
-      style={{
-        fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)',
-        textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap', width: '100%',
-      }}
-    >
-      {artist.name}
-    </div>
-  </div>
-);
+interface ArtistListPageProps {
+  /** 嵌在发现页「歌手」段时不重复出页标题：外层已有唯一 h1 */
+  embedded?: boolean;
+}
 
-const ArtistListPage: React.FC = () => {
+const ArtistListPage: React.FC<ArtistListPageProps> = ({ embedded = false }) => {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
-
   const [artists, setArtists] = useState<Artist[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -116,8 +68,9 @@ const ArtistListPage: React.FC = () => {
     try {
       const currentOffset = reset ? 0 : artists.length;
       const data = await callMusicApi('getArtists', 'netease', 0, currentOffset, PAGE_SIZE);
-      setArtists(prev => reset ? data.artists : [...prev, ...data.artists]);
-      setHasMore(data.more);
+      const nextArtists = data?.artists ?? [];
+      setArtists(prev => reset ? nextArtists : [...prev, ...nextArtists]);
+      setHasMore(data?.more ?? false);
     } catch (err) {
       console.error('加载歌手失败:', err);
       if (reset) setArtists([]);
@@ -133,7 +86,7 @@ const ArtistListPage: React.FC = () => {
     setLoading(true);
     try {
       const data = await callMusicApi('getArtists', 'netease', catId, 0, 100);
-      setArtists(data.artists);
+      setArtists(data?.artists ?? []);
       setHasMore(false);
     } catch (err) {
       console.error('加载歌手失败:', err);
@@ -169,85 +122,62 @@ const ArtistListPage: React.FC = () => {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [isAllMode, loading, loadingMore, hasMore, loadAllArtists]);
 
+  const openArtist = useCallback((artist: Artist) => {
+    cacheArtistMeta(artist.id, { name: artist.name, pic: artist.picUrl });
+    navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } });
+  }, [navigate]);
+
   const displayed = artists;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 'var(--space-5) var(--space-6)' }}>
-      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-5)', flexShrink: 0 }}>
+    <div className="artists">
+      {!embedded && <PageHeader title="歌手" />}
+      <div className="artists__cats">
         {CATEGORIES.map((cat, idx) => (
           <button
             key={cat.id}
             onClick={() => setCategory(idx)}
-            style={{
-              padding: '6px 16px', borderRadius: '20px',
-              border: '1px solid var(--border-default)',
-              cursor: 'pointer', fontSize: 'var(--text-sm)',
-              fontWeight: category === idx ? 600 : 400,
-              color: category === idx ? '#fff' : 'var(--text-secondary)',
-              background: category === idx ? 'var(--accent)' : 'transparent',
-              transition: 'all 0.15s',
-            }}
+            className="artists__cat"
+            aria-pressed={category === idx}
+            data-active={category === idx || undefined}
           >
             {cat.label}
           </button>
         ))}
       </div>
 
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto' }}>
+      <div ref={scrollRef} className="artists__scroll">
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '16px' }}>
+          <div className="artists__grid">
             {Array.from({ length: 20 }).map((_, i) => (
-              <div key={i} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-                padding: '16px 12px', borderRadius: '8px',
-                backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)',
-              }}>
-                <div style={{
-                  width: '80px', height: '80px', borderRadius: '50%',
-                  backgroundColor: 'var(--bg-hover)', animation: 'pulse 1.5s ease-in-out infinite',
-                }} />
-                <div style={{
-                  width: '60%', height: '14px', borderRadius: '4px',
-                  backgroundColor: 'var(--bg-hover)', animation: 'pulse 1.5s ease-in-out infinite',
-                  animationDelay: '0.1s',
-                }} />
+              <div key={i} className="cover-card cover-card--skeleton">
+                <div className="cover-card__media" />
+                <div className="cover-card__text">
+                  <div className="cover-card__sk-line" />
+                  <div className="cover-card__sk-line cover-card__sk-line--meta" />
+                </div>
               </div>
             ))}
-            <style>{`
-              @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
-              @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-            `}</style>
           </div>
         ) : displayed.length === 0 ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            padding: '60px 20px', color: 'var(--text-tertiary)',
-          }}>
-            <Mic2 size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
-            <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '6px' }}>
-              没有匹配的歌手
-            </div>
-            <div style={{ fontSize: '13px' }}>
-              切换分类或选择其他字母
-            </div>
+          <div className="artists__empty">
+            <Mic2 size={26} className="artists__empty-icon" />
+            <div className="artists__empty-title">没有匹配的歌手</div>
           </div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '16px' }}>
+            <div className="artists__grid">
               {displayed.map((artist) => (
                 <ArtistCard
                   key={artist.id}
                   artist={artist}
-                  onClick={() => {
-                    cacheArtistMeta(artist.id, { name: artist.name, pic: artist.picUrl });
-                    navigate(`/artist/${artist.id}`, { state: { name: artist.name, pic: artist.picUrl } });
-                  }}
+                  onClick={() => openArtist(artist)}
                 />
               ))}
             </div>
             {loadingMore && (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
-                <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', color: 'var(--text-tertiary)' }} />
+              <div className="artists__more-loading">
+                <Loader2 size={20} className="artists__spin" />
               </div>
             )}
           </>

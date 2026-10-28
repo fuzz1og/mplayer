@@ -1,4 +1,4 @@
-import { app, dialog } from 'electron';
+import { app, dialog, shell } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { registerIpcHandler, registerIpcHandlerSimple } from './registerHandler';
@@ -193,8 +193,37 @@ export function registerDownloadIpc(): void {
   registerIpcHandlerSimple('download:start', (song: any) => downloadService.addDownload(song));
   registerIpcHandler('download:startBatch', (songs: any[]) => downloadService.addBatchDownloads(songs));
   registerIpcHandlerSimple('download:cancel', (taskId: string) => downloadService.cancelDownload(taskId));
+  registerIpcHandlerSimple('download:pause', (taskId: string) => downloadService.pauseDownload(taskId));
+  registerIpcHandlerSimple('download:resume', (taskId: string) => downloadService.resumeDownload(taskId));
   registerIpcHandlerSimple('download:getTasks', () => downloadService.getAllTasks());
   registerIpcHandlerSimple('download:clearCompleted', () => downloadService.clearCompleted());
+
+  // 打开下载目录/在文件管理器中定位已完成文件（#685）：失败一律返回 false，不向渲染层抛异常
+  registerIpcHandlerSimple('download:openDir', async () => {
+    try {
+      const errorMessage = await shell.openPath(downloadService.getDownloadPath());
+      if (errorMessage) {
+        console.error('[IPC] 打开下载目录失败:', errorMessage);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('[IPC] 打开下载目录异常:', error);
+      return false;
+    }
+  });
+
+  registerIpcHandlerSimple('download:showInFolder', (taskId: string) => {
+    try {
+      const task = downloadService.getTask(taskId);
+      if (!task?.filePath || !fs.existsSync(task.filePath)) return false;
+      shell.showItemInFolder(task.filePath);
+      return true;
+    } catch (error) {
+      console.error('[IPC] 定位下载文件失败:', error);
+      return false;
+    }
+  });
 }
 
 export function registerAppIpc(): void {

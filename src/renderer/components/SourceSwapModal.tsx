@@ -1,9 +1,9 @@
 import React from 'react';
-import { Modal } from 'antd';
-import { CheckCircle2, ChevronRight, ArrowLeft } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import type { SourceKey } from '@mplayer/core';
 import type { SwapCandidate } from '@/renderer/services/sourceSwap';
 import { SOURCE_COLORS } from '@/renderer/constants/sourceConfig';
+import { Dialog, Row } from '@/renderer/ui';
 
 export const SWAP_SOURCES: { key: SourceKey; label: string; color: string }[] = [
   { key: 'netease', label: '网易云', color: SOURCE_COLORS.netease },
@@ -29,8 +29,8 @@ interface SourceSwapModalProps {
 }
 
 /**
- * #391：探测删除后不再有「可播 / 短时长 / 失效 / 检测中」徽标——那些标记来自已被证伪的直连探测判据
- * （把 tier3 能救的歌判成失效），产物无消费者。
+ * #391：探测删除后不再有「可播 / 短时长 / 失效 / 检测中」徽标——那些标记来自已被证伪的直连探测判据。
+ * 1.9.0 改自建 Dialog：焦点陷阱与 ESC 由原生 dialog 负责，候选行复用 Row。
  */
 const SourceSwapModal: React.FC<SourceSwapModalProps> = ({
   open, songName, currentSource, candidates, loading, success,
@@ -43,84 +43,65 @@ const SourceSwapModal: React.FC<SourceSwapModalProps> = ({
       : '换源完整版';
 
   return (
-    <Modal open={open} onCancel={onClose} footer={null} title={title} width={420} centered destroyOnClose>
-      {songName ? (
-        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {songName}
-        </div>
-      ) : null}
+    <Dialog open={open} title={title} onClose={onClose} size="sm">
+      {songName ? <div className="swap__song">{songName}</div> : null}
 
       {success ? (
-        <div style={{ padding: 'var(--space-6) 0', textAlign: 'center' }}>
-          <CheckCircle2 size={44} color="var(--emerald-500)" />
-          <div style={{ marginTop: 'var(--space-3)', color: 'var(--emerald-500)', fontSize: 'var(--text-base)' }}>已替换为完整版</div>
+        <div className="swap__success">
+          <CheckCircle2 size={44} color="var(--success)" aria-hidden="true" />
+          <div className="swap__success-text">已替换为完整版</div>
         </div>
       ) : loading ? (
-        <div style={{ padding: 'var(--space-6) 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 'var(--text-base)' }}>
-          正在搜索可切换版本…
-        </div>
+        <div className="swap__loading">正在搜索可切换版本…</div>
       ) : candidates.length > 0 ? (
-        <div>
+        <div className="swap__list">
           {candidates.map((c, i) => (
-            <button
+            <Row
               key={`${c.song.id}-${i}`}
-              aria-label={c.song.name}
+              ariaLabel={c.song.name}
+              label={
+                <span className="swap__candidate">
+                  <span className={`swap__dot${c.exact ? ' swap__dot--exact' : ''}`} aria-hidden="true" />
+                  <span className="swap__candidate-text">
+                    <span className="swap__candidate-name">{c.song.name}</span>
+                    <span className="swap__candidate-artist">{c.song.artist}</span>
+                  </span>
+                </span>
+              }
+              trailing={
+                <span className={c.exact ? 'swap__score swap__score--exact' : 'swap__score'}>
+                  {c.exact ? '完整版' : `${Math.round(c.score * 100)}%`}
+                </span>
+              }
+              chevron
               onClick={() => onSelectCandidate(c)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 'var(--space-3)', width: '100%',
-                padding: 'var(--space-3) 0', border: 'none', borderBottom: '1px solid var(--border-subtle)',
-                background: 'transparent', cursor: 'pointer', textAlign: 'left',
-              }}
-            >
-              <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: c.exact ? 'var(--emerald-500)' : 'var(--text-tertiary)', flexShrink: 0 }} />
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontSize: 'var(--text-base)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.song.name}</span>
-                <span style={{ display: 'block', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.song.artist}</span>
-              </span>
-              <span style={{ fontSize: 'var(--text-xs)', color: c.exact ? 'var(--emerald-500)' : 'var(--text-secondary)', flexShrink: 0 }}>
-                {c.exact ? '完整版' : `${Math.round(c.score * 100)}%`}
-              </span>
-              <ChevronRight size={18} color="var(--text-tertiary)" />
-            </button>
+            />
           ))}
-          <button
-            onClick={onBack}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-2)',
-              width: '100%', padding: 'var(--space-3) 0', marginTop: 'var(--space-2)',
-              border: 'none', background: 'transparent', cursor: 'pointer',
-              color: 'var(--text-secondary)', fontSize: 'var(--text-sm)',
-            }}
-          >
-            <ArrowLeft size={16} /> 返回选择其他音乐源
-          </button>
+          <Row label="返回选择其他音乐源" onClick={onBack} />
         </div>
       ) : (
-        <div>
+        <div className="swap__list">
           {SWAP_SOURCES.map((s) => {
             const disabled = s.key === currentSource;
             return (
-              <button
+              <Row
                 key={s.key}
-                aria-label={s.label}
+                ariaLabel={s.label}
                 disabled={disabled}
+                label={
+                  <span className="swap__candidate">
+                    <span className="swap__dot" data-source={s.key} aria-hidden="true" />
+                    <span>{s.label}{disabled ? '（当前源）' : ''}</span>
+                  </span>
+                }
+                chevron
                 onClick={() => onSelectSource(s.key)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 'var(--space-3)', width: '100%',
-                  padding: 'var(--space-3) 0', border: 'none', borderBottom: '1px solid var(--border-subtle)',
-                  background: 'transparent', cursor: disabled ? 'not-allowed' : 'pointer',
-                  opacity: disabled ? 0.4 : 1, color: 'var(--text-primary)', fontSize: 'var(--text-base)',
-                }}
-              >
-                <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: s.color, flexShrink: 0 }} />
-                <span style={{ flex: 1, textAlign: 'left' }}>{s.label}{disabled ? '（当前源）' : ''}</span>
-                <ChevronRight size={18} color="var(--text-tertiary)" />
-              </button>
+              />
             );
           })}
         </div>
       )}
-    </Modal>
+    </Dialog>
   );
 };
 

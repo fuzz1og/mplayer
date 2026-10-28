@@ -33,7 +33,7 @@ test.describe.serial('高级场景', () => {
   });
 
   test('收藏列表页面验证', async () => {
-    await page.getByRole('complementary').getByText('我的收藏').click();
+    await page.getByRole('complementary').getByText('我喜欢的音乐').click();
     await page.waitForTimeout(2000);
 
     await expect(page.getByRole('heading', { name: '我的收藏' })).toBeVisible();
@@ -87,7 +87,7 @@ test.describe.serial('高级场景', () => {
   });
 
   test('发现页热门歌单', async () => {
-    await page.getByText('发现音乐').click();
+    await page.getByText('发现').click();
     await page.waitForTimeout(2000);
 
     await page.evaluate(() => {
@@ -101,7 +101,7 @@ test.describe.serial('高级场景', () => {
 
   test('空状态验证', async () => {
     // 导航到收藏页面（空状态）
-    await page.getByRole('complementary').getByText('我的收藏').click();
+    await page.getByRole('complementary').getByText('我喜欢的音乐').click();
     await page.waitForTimeout(2000);
 
     await page.screenshot({ path: 'e2e/screenshots/adv-empty-favorites.png' });

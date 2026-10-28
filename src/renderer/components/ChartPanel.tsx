@@ -1,42 +1,54 @@
-import React from 'react';
-import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
-import { Music2, AlertCircle, Play } from 'lucide-react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { AlertCircle, Music2 } from 'lucide-react';
+import SongRow from '@/renderer/components/SongRow';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
-import AudioTagBadge from '@/renderer/components/AudioTagBadge';
-import { usePlayerStore } from '@/renderer/store/playerStore';
+import { COL_INDEX_CHART } from '@/renderer/components/songTableColumns';
 import type { ChartKind, Song } from '@mplayer/core';
+import '@/renderer/styles/songlist.css';
+
+/**
+ * 列对齐上限：10 行 × 46px ≈ 一屏，两列等高的预览优先；
+ * 超出的曲目走列底「查看全部 N 首」进榜单详情，不在本页铺 100 行。
+ */
+export const CHART_PREVIEW_ROWS = 10;
 
 interface ChartPanelProps {
+  /** 榜单名（core ToplistGroup.name 或通用兜底名）；不带来源前缀——来源已由页面级 segmented 选过 */
   title: string;
   chartId: ChartKind;
-  /** 单源榜单曲目（ADR/decision #332：回归单元榜 + 源切换，不再有跨源聚合与折叠分组）。 */
+  /** 单源榜单曲目（#332：回归单元榜 + 源切换，不再有跨源聚合与折叠分组） */
   songs: Song[];
   loading: boolean;
   error: string | null;
-  onPlay: (song: Song, chartId?: ChartKind) => void;
+  /** 数据落库时间（本地时戳），渲染「更新于 HH:mm」 */
+  updatedAt?: number | null;
+  /** 两列对齐后的渲染行数；缺省 = min(曲目数, CHART_PREVIEW_ROWS) */
+  rows?: number;
+  isPlaying?: boolean;
+  favoriteIds?: string[];
+  /** 点播契约（D2）：列表只回传歌曲、整榜队列与行下标，建队列与播放在调用方 */
+  onPlay: (song: Song, queue: Song[], index: number, chartId: ChartKind) => void;
   isCurrentSong: (songId: string, sourceType?: string, chartId?: ChartKind) => boolean;
+  onToggleFavorite?: (song: Song) => void;
+  onDownload?: (song: Song) => void;
   onRetry?: () => void;
+  /** 列底「查看全部 N 首」：跳对应榜单详情，不新增页面 */
+  onViewAll?: () => void;
+}
+
+/** 「更新于 14:32」：榜单按小时级刷新，日期在这页没有信息量。 */
+function formatUpdatedAt(ts?: number | null): string | null {
+  if (!ts) return null;
+  const date = new Date(ts);
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `更新于 ${hh}:${mm}`;
 }
 
 /**
- * 名次变化列（只有 QQ 提供 `old_count`）：
- * 文案 = `''`（该源不提供）/ `NEW`（新进榜）/ `—`（持平）/ `↑n` / `↓n`；
- * 配色沿用国内榜单惯例（红 = 名次前进，绿 = 后退）。`prevRank === null` = 新进榜。
- */
-function rankDelta(prevRank: number | null | undefined, rank: number): { label: string; color: string } {
-  if (prevRank === undefined) return { label: '', color: 'var(--text-tertiary)' };
-  if (prevRank === null) return { label: 'NEW', color: 'var(--accent)' };
-  const delta = prevRank - rank;
-  if (delta === 0) return { label: '—', color: 'var(--text-tertiary)' };
-  return delta > 0
-    ? { label: `↑${delta}`, color: 'var(--danger)' }
-    : { label: `↓${-delta}`, color: 'var(--success)' };
-}
-
-/**
- * 单源榜单面板（#332 选项 A）。
- * **可选列**：榜单元数据在各源之间并不齐备（实测：三源公共只有「名次」，「上期名次/在榜周数」只有 
- * QQ 提供）。
+ * 单源榜单面板（#332 选项 A / #694 双列预览）。
+ * 行复用 SongRow 的资料库密度（46px、30px 封面、hover 才出现播放与「更多」），
+ * 列本身不滚动——两列与页面共用一个外层 [data-scroll-container]。
  */
 const ChartPanel: React.FC<ChartPanelProps> = ({
   title,
@@ -44,166 +56,111 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   songs,
   loading,
   error,
+  updatedAt,
+  rows,
+  isPlaying = false,
+  favoriteIds = [],
   onPlay,
   isCurrentSong,
+  onToggleFavorite,
+  onDownload,
   onRetry,
+  onViewAll,
 }) => {
-  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
+
+  // 无数据（加载/空榜）时按预览上限铺骨架，与最终形态等高
+  const rowCount = rows ?? Math.min(songs.length || CHART_PREVIEW_ROWS, CHART_PREVIEW_ROWS);
+  const visibleSongs = useMemo(() => songs.slice(0, rowCount), [songs, rowCount]);
+  const hasHiddenSongs = songs.length > rowCount;
+  const updatedLabel = formatUpdatedAt(updatedAt);
+
+  const handleToggleDropdown = useCallback((songId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveDropdown((prev) => (prev === songId ? null : songId));
+  }, []);
+  const handleCloseDropdown = useCallback(() => setActiveDropdown(null), []);
+  /** 整榜入队：只有单曲会让「下一首」预取无曲可取（#332 实测换歌变慢） */
+  const handlePlayRow = useCallback((song: Song, queue: Song[], index: number) => {
+    onPlay(song, queue, index, chartId);
+  }, [onPlay, chartId]);
+
   const heading = (
-    <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}>
-      {title}
-    </h3>
+    <header className="chart__head">
+      <h3 className="chart__title" id={`chart-${chartId}-title`}>{title}</h3>
+      {updatedLabel && <span className="chart__updated">{updatedLabel}</span>}
+    </header>
+  );
+
+  const panel = (body: React.ReactNode) => (
+    <section className="chart" aria-labelledby={`chart-${chartId}-title`}>
+      {heading}
+      {body}
+    </section>
   );
 
   if (loading) {
-    return (
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {heading}
-        <SongListSkeleton rowCount={15} showIndex />
-      </div>
-    );
+    // 骨架与最终形态等高：同一行数、同一密度（46px），不另写像素
+    return panel(<SongListSkeleton rowCount={rowCount} density="library" indexWidth={COL_INDEX_CHART} />);
   }
 
   if (error) {
-    return (
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {heading}
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--danger)' }}>
-          <AlertCircle size={22} style={{ marginBottom: '8px' }} />
-          <div style={{ fontSize: 'var(--text-base)', marginBottom: '16px' }}>{error}</div>
-          {onRetry && (
-            <button
-              onClick={onRetry}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: 'var(--accent)',
-                color: 'var(--text-inverse)',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                cursor: 'pointer',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 500,
-              }}
-            >
-              重试
-            </button>
-          )}
-        </div>
-      </div>
+    return panel(
+      <div className="chart__state chart__state--error">
+        <AlertCircle size={22} className="chart__state-icon" />
+        <div className="chart__state-text">{error}</div>
+        {onRetry && (
+          <button type="button" onClick={onRetry} className="chart__retry">
+            重试
+          </button>
+        )}
+      </div>,
     );
   }
 
   if (songs.length === 0) {
-    return (
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {heading}
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-          <Music2 size={24} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
-          <div>暂无排行榜数据</div>
-        </div>
-      </div>
+    return panel(
+      <div className="chart__state">
+        <Music2 size={24} className="chart__state-icon" />
+        <div>暂无排行榜数据</div>
+      </div>,
     );
   }
 
-  /** 该榜单是否提供「上期名次」（只有 QQ 有：old_count）。任一曲目有即显示该列。 */
-  const hasPrevRank = songs.some((s) => s.rankMeta?.prevRank !== undefined);
-  /** 是否提供「在榜周数」（只有 QQ 有：in_count）。 */
-  const hasWeeks = songs.some((s) => s.rankMeta?.weeks !== undefined);
-
-  /**
-   * 只调 onPlay(song) 会让 playerStore.play 的「不在队列就 append 单曲」把队列压成 1 首，于是 
-   * getNextSongIndex 只能算出当前歌自己、prefetchNextUrl 的自我预取守卫直接吃掉预取——下一首（尤其
-   * QQ/酷狗）要等现场解析，换歌明显变慢。
-   */
-  const handlePlayRow = (song: Song, index: number): void => {
-    setCurrentPlaylist(songs, index);
-    onPlay(song, chartId);
-  };
-
-  const renderRow = (song: Song, index: number) => {
-    // 名次 = 数组索引（#332 决策 3：名次不落结构）
-    const rank = index + 1;
-    const weeks = song.rankMeta?.weeks;
-    const current = isCurrentSong(song.id, song.sourceType, chartId);
-    const delta = rankDelta(song.rankMeta?.prevRank, rank);
-
-    return (
-      <div
-        key={`${chartId}:${song.sourceType}:${song.id}`}
-        onClick={() => handlePlayRow(song, index)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-2)',
-          padding: '6px 8px',
-          borderRadius: 'var(--radius-sm)',
-          cursor: 'pointer',
-          backgroundColor: current ? 'rgba(47, 95, 208, 0.10)' : 'transparent',
-          transition: 'background-color 0.15s ease',
-        }}
-        onMouseEnter={(e) => { if (!current) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
-        onMouseLeave={(e) => { if (!current) e.currentTarget.style.backgroundColor = 'transparent'; }}
-      >
-        <div style={{
-          width: '28px', textAlign: 'center', fontSize: 'var(--text-sm)',
-          fontVariantNumeric: 'tabular-nums', flexShrink: 0,
-          color: current ? 'var(--accent)' : 'var(--text-tertiary)',
-          fontWeight: current ? 600 : 400,
-        }}>
-          {rank}
-        </div>
-
-        {hasPrevRank && (
-          <div style={{
-            width: '34px', textAlign: 'center', fontSize: 'var(--text-xs)',
-            fontVariantNumeric: 'tabular-nums', flexShrink: 0,
-            color: delta.color,
-          }}>
-            {delta.label}
-          </div>
-        )}
-
-        <div style={{ position: 'relative', width: '36px', height: '36px', borderRadius: 'var(--radius-xs)', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', flexShrink: 0 }}>
-          {song.cover ? (
-            <img
-              src={coverThumbUrl(song.cover, COVER_SIZE.row)}
-              alt=""
-              loading="lazy"
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-          ) : null}
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-            <span style={{ fontSize: 'var(--text-base)', color: current ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {song.name}
-            </span>
-            {/* AudioTagBadge 只认 preview/invalid（valid 无需标记） */}
-            {(song.audioTag === 'preview' || song.audioTag === 'invalid') && <AudioTagBadge tag={song.audioTag} />}
-          </div>
-          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {song.artist}
-            {hasWeeks && weeks ? ` · 在榜 ${weeks} 周` : ''}
-          </div>
-        </div>
-
-        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, opacity: current ? 0 : 1 }}>
-          {current ? <Play size={14} fill="currentColor" style={{ color: 'var(--accent)', opacity: 1 }} /> : null}
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {heading}
-      {/* 榜长可达 50（QQ 实测 song_num=100 也只回 50）/ 100+（网易整张歌单）→ 必须保留滚动容器 */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '4px' }}>
-        {songs.map(renderRow)}
-      </div>
-    </div>
+  return panel(
+    <div className="chart__list">
+      {visibleSongs.map((song, index) => {
+        const current = isCurrentSong(song.id, song.sourceType, chartId);
+        return (
+          <SongRow
+            key={`${chartId}:${song.sourceType}:${song.id}`}
+            song={song}
+            index={index}
+            showIndex
+            variant="library"
+            fillTitle
+            showAlbum={false}
+            indexWidth={COL_INDEX_CHART}
+            isCurrentSong={current}
+            isPlaying={isPlaying}
+            isFavorite={favoriteSet.has(song.id)}
+            moreOpen={activeDropdown === song.id}
+            queue={songs}
+            onPlay={handlePlayRow}
+            onToggleFavorite={onToggleFavorite}
+            onDownload={onDownload}
+            onToggleDropdown={handleToggleDropdown}
+            onCloseDropdown={handleCloseDropdown}
+          />
+        );
+      })}
+      {hasHiddenSongs && onViewAll && (
+        <button type="button" className="chart__view-all" onClick={onViewAll}>
+          查看全部 {songs.length} 首
+        </button>
+      )}
+    </div>,
   );
 };
 

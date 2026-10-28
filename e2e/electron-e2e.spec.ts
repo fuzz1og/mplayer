@@ -49,9 +49,9 @@ test.describe('MPlayer E2E', () => {
   });
 
   test('侧边栏导航项可见', async () => {
-    await expect(page.getByText('发现音乐')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('我的收藏')).toBeVisible();
-    await expect(page.getByText('播放历史')).toBeVisible();
+    await expect(page.getByText('发现')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('complementary').getByText('我喜欢的音乐')).toBeVisible();
+    await expect(page.getByRole('complementary').getByText('最近播放')).toBeVisible();
     await expect(page.getByText('我的歌单')).toBeVisible();
   });
 
@@ -66,13 +66,13 @@ test.describe('MPlayer E2E', () => {
   });
 
   test('导航到收藏页面', async () => {
-    await page.getByText('我的收藏').click();
+    await page.getByRole('complementary').getByText('我喜欢的音乐').click();
     await page.waitForTimeout(1000);
     await page.screenshot({ path: 'e2e/screenshots/favorites.png' });
   });
 
   test('导航到历史页面', async () => {
-    await page.getByText('播放历史').click();
+    await page.getByRole('complementary').getByText('最近播放').click();
     await page.waitForTimeout(1000);
     await page.screenshot({ path: 'e2e/screenshots/history.png' });
   });
@@ -105,7 +105,7 @@ test.describe('MPlayer E2E', () => {
 
   test('搜索功能', async () => {
     // 先导航回发现页
-    await page.getByText('发现音乐').click();
+    await page.getByText('发现').click();
     await page.waitForTimeout(1000);
 
     const searchInput = page.getByPlaceholder('搜索音乐、歌手、专辑');

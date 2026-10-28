@@ -86,7 +86,9 @@ const SHARDS = {
     // 它的类型错误当时只有人肉跑 npm run typecheck -w packages/core 才能发现。
     ['core typecheck', 'npm run typecheck -w packages/core'],
     ['lint', 'npm run lint'],
-    ['design-lint', 'node scripts/design-lint.mjs'],
+    // 桌面端严格模式与移动端同级（1.9.0 #689）：内联样式 / 色值字面量 / antd 引入 /
+    // 字号字重圆角字面量四条硬规则，无存量白名单——清到 0 之后才接线，防止回潮。
+    ['design-lint', 'node scripts/design-lint.mjs --desktop-strict'],
     ['claim-lint', 'node scripts/claim-lint.mjs'],
     ['root typecheck', 'npm run typecheck'],
     ['mobile typecheck', 'npm run typecheck:mobile'],

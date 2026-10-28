@@ -1,0 +1,423 @@
+/* 设置全屏视图（1.9.0 原型对齐 §2）：200 导航（底部固定更新/关于）+ 不限宽内容区（左右 28） */
+.settings-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 10px;
+  width: 200px;
+  padding: 14px 12px;
+  overflow-y: auto;
+  border-right: 1px solid var(--hairline);
+}
+
+.settings-nav__group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.settings-nav__group-title {
+  padding: 6px 8px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.settings-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.settings-nav__item:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+.settings-nav__item[aria-current='page'] {
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.settings-nav__icon {
+  display: flex;
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.settings-nav__item[aria-current='page'] .settings-nav__icon {
+  color: var(--accent);
+}
+
+.settings-nav__chevron {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  opacity: 0;
+}
+
+.settings-nav__item:hover .settings-nav__chevron,
+.settings-nav__item[aria-current='page'] .settings-nav__chevron {
+  opacity: 1;
+}
+
+/* 导航底部固定区：更新 / 关于（原型 §2 第 27 行——不占组标题，上方一条 hairline） */
+.settings-nav__footer {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  /* 窄窗口左右边距；内容列自身不再重复 padding，保证 760 是真实内容宽 */
+  padding: 0 28px;
+}
+
+/* 可读内容列：页头与所有 Section 共用 760px 最大列并居中；窄窗口左右 28px 边距。 */
+.settings-column {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 0 40px;
+}
+
+.settings-column > section {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.settings-column > section + section {
+  margin-top: 28px;
+}
+
+/* 浅色主题：页面走 window 底，Group 走 elevated 卡面 + hairline，不能同白假装分组。 */
+.settings-column .ui-group {
+  border: 1px solid var(--hairline);
+}
+
+/* 页头：h1 28/700 + 同行 13 三级 lead（原型 §2 第 28 行） */
+/* 分区名在左栏已经选中并点名，内容区只保留读屏可读的标题 */
+.settings-page__head {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.settings-page__head h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
+}
+
+.settings-page__head .settings-page__lead {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+/* 旧页头与 PageHeader 同一层级：28/700、无装饰图标、lead 13 tertiary。 */
+.settings-page__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.settings-page__title svg {
+  display: none;
+}
+
+.settings-page__title h1 {
+  margin: 0;
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
+}.settings-page__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  /* 子项必须撑满：默认 stretch 在 column flex 里只作用于交叉轴宽度，
+     但 Section 自身是 flex 容器且宽度 auto，会被内容收缩成窄卡。 */
+  align-items: stretch;
+}
+
+.settings-page__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}.settings-page__field {
+  padding: 10px 14px;
+}
+
+.settings-page__field-label {
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.settings-page__select {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+}
+
+.settings-page__textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  resize: vertical;
+}
+
+.settings-page__logs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.settings-page__log-line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.settings-page__log-time {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.settings-page__log-text {
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+/* ── 缓存页 · 存储卡（原型 settings-cache.png §2 存储段） ── */
+/* 大号已用容量：40/700，单位走小号基线对齐 */
+.cache-usage {
+  padding: 20px var(--row-padding-x) 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.cache-usage__value {
+  color: var(--text-primary);
+  /* 原型的大号读数 40px = 2 × --text-xl：只用 token 推导，不写裸字号 */
+  font-size: calc(var(--text-xl) * 2);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: var(--leading-tight);
+}
+
+.cache-usage__unit {
+  color: var(--text-tertiary);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.cache-usage__limit {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.cache-usage__bar {
+  margin-top: 14px;
+}
+
+.cache-usage__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.cache-legend__dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: var(--radius-full);
+  background: var(--legend-color, var(--text-tertiary));
+  vertical-align: baseline;
+}
+
+.cache-legend__item {
+  display: inline-flex;
+  align-items: center;
+}.cache-limit__unit {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* 构成行：左色点 + 名称，右侧「N 个 · X B」 */
+.cache-composition__label {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 缓存目录路径：长路径中段省略 */
+.cache-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 外观页（原型 settings-appearance.png §2 外观/文字与动效/预览） ── */
+.appearance-readout {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.appearance-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px var(--row-padding-x);
+}
+
+.appearance-preview__cover {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--cover-placeholder);
+  color: var(--text-tertiary);
+}
+
+.appearance-preview__text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.appearance-preview__title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appearance-preview__artist {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appearance-preview__empty {
+  flex: 1 1 auto;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* 设置页内的分段/步进靠右，宽度由内容决定（原型：控件贴右边缘） */
+.settings-content .ui-row__trailing .ui-segmented,
+.settings-content .ui-row__trailing .ui-stepper {
+  flex: none;
+}
+
+/* ── 设置全屏壳（原 shell.css，SettingsShell.tsx 的根） ── */
+.settings-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-window);
+}
+
+.settings-shell__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--hairline);
+}/* 设置全屏态：只留标题栏（左上返回 + 中部「设置」），侧栏与播放栏让位（播放器不卸载，继续出声） */
+.app-shell--settings .sidebar,
+.app-shell--settings .player-bar {
+  display: none;
+}
+
+.app-shell--settings .app-shell__content {
+  background: var(--surface-window);
+}
+
+.app-shell--settings .settings-shell {
+  flex: 1;
+  min-height: 0;
+}

@@ -1,25 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Disc3 } from 'lucide-react';
+import { useParams, useLocation } from 'react-router-dom';
+import { Play, Disc3, Download, CirclePlus } from 'lucide-react';
 import SongList from '@/renderer/components/SongList';
+import DetailToolbar from '@/renderer/components/DetailToolbar';
+import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
+import '@/renderer/styles/songlist.css';
+import '@/renderer/styles/detail-page.css';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
+import { useDownload } from '@/renderer/hooks/useDownload';
+import { useDetailSelection } from '@/renderer/hooks/useDetailSelection';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
+import { Button, PageHero } from '@/renderer/ui';
 import type { Album, Song } from '@mplayer/core';
-const ipcRenderer = window.electronAPI;
 
 function formatDuration(sec?: number): string {
   if (!sec || sec <= 0) return '--:--';
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
+  return m + ':' + s;
 }
 
 const AlbumDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
-  const navigate = useNavigate();
   const albumId = id || '';
   // 路由 state 带来首屏信息(封面/名称/艺人),详情返回后补齐
   const stateName = (location.state as any)?.name as string | undefined;
@@ -30,6 +35,7 @@ const AlbumDetailPage: React.FC = () => {
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
 
   const play = usePlayerStore((s) => s.play);
   const currentSong = usePlayerStore((s) => s.currentSong);
@@ -37,6 +43,9 @@ const AlbumDetailPage: React.FC = () => {
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
+  const { download, downloadBatch } = useDownload();
+  const selection = useDetailSelection(songs, albumId);
+  const { visibleSongs, batchMode, selectedIds, setSelectedIds, selectedSongs, visibleSelectedCount } = selection;
 
   const displayName = album?.name || stateName || '';
   const displayPic = album?.picUrl || statePic || '';
@@ -67,123 +76,145 @@ const AlbumDetailPage: React.FC = () => {
     load();
   }, [albumId]);
 
-  const handlePlay = useCallback((song: Song) => {
-    const index = songs.findIndex(s => s.id === song.id && s.sourceType === song.sourceType);
-    setCurrentPlaylist(songs, index >= 0 ? index : 0);
-    play(song);
-  }, [songs, setCurrentPlaylist, play]);
+  const handlePlay = useCallback((song: Song, queue: Song[], index: number) => {
+    setCurrentPlaylist(queue, index);
+    void play(song);
+  }, [setCurrentPlaylist, play]);
 
   const handlePlayAll = useCallback(() => {
     if (songs.length === 0) return;
     setCurrentPlaylist(songs, 0);
-    play(songs[0]);
+    void play(songs[0]);
   }, [songs, setCurrentPlaylist, play]);
 
-  const handleDownload = async (song: Song) => {
-    try {
-      await ipcRenderer.invoke('download:start', song);
-    } catch (e) {
-      console.error('下载失败:', e);
-    }
-  };
+  const handleDownloadAll = useCallback(() => {
+    if (songs.length === 0) return;
+    void downloadBatch(songs);
+  }, [songs, downloadBatch]);
+
+  const handleBatchDownload = useCallback(() => {
+    if (selectedSongs.length === 0) return;
+    void downloadBatch(selectedSongs);
+  }, [selectedSongs, downloadBatch]);
+
+  const handleBatchAddToPlaylist = useCallback(() => {
+    if (selectedSongs.length > 0) setAddToPlaylistOpen(true);
+  }, [selectedSongs]);
 
   const year = (() => {
     const t = Number(album?.publishTime || 0);
     return t > 0 ? String(new Date(t).getFullYear()) : '';
   })();
-  const totalDuration = songs.reduce((sum, s) => sum + (s.duration || 0), 0);
+  const totalDuration = useMemo(
+    () => songs.reduce((sum, s) => sum + (s.duration || 0), 0),
+    [songs],
+  );
+
+  const batchActions = useMemo(() => [
+    { key: 'download', label: '批量下载', icon: <Download size={12} />, onClick: handleBatchDownload },
+    { key: 'playlist', label: '加入歌单', icon: <CirclePlus size={12} />, onClick: handleBatchAddToPlaylist },
+  ], [handleBatchDownload, handleBatchAddToPlaylist]);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', height: '60px' }}>
-        <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', transition: 'all 0.2s ease', fontSize: '14px', fontWeight: 500 }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}>
-          <ArrowLeft size={16} /><span>返回</span>
-        </button>
-        <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName || '专辑'}</h1>
-        <div style={{ width: '140px' }} />
-      </div>
-      /**
-       * 专辑卡片区:固定不滚动(所以下面滚动容器的 padding-top 是 0)。
-       * 注意:SongList 的表头是 sticky 的,它靠 stickyTopForContent() 对齐滚动容器的**内容区**上边,所
-       * 以这里给不给 padding-top 表头都不会错位了。
-       */
-      <div style={{ padding: '24px 24px 0', flexShrink: 0 }}>
-        <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
-          <div style={{ position: 'relative', width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', backgroundColor: 'var(--bg-hover)' }}>
-            {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Disc3 size={56} style={{ color: 'var(--text-tertiary)' }} />
-            </div>
-            {displayPic && (
-              <img
-                key={displayPic}
-                src={coverThumbUrl(displayPic, COVER_SIZE.thumb)}
-                alt={displayName}
-                loading="lazy"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            )}
-          </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px', marginTop: 0 }}>{displayName || '专辑'}</h2>
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-              {displayArtist && <span>{displayArtist}</span>}
-              {year && <span>{year}</span>}
-              {songs.length > 0 && (
-                <>
-                  <span>{songs.length} 首</span>
-                  <span>总时长 {formatDuration(totalDuration)}</span>
-                </>
+    <div className="detail-page">
+      {/* hero 与列表同一滚动上下文（#700）：整页一个滚动容器，hero 不再固定 */}
+      <div className="detail-page__scroll" data-scroll-container>
+        <PageHero
+          className="detail-page__hero"
+          media={
+            <div className="detail-page__cover">
+              {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+              <div className="detail-page__cover-placeholder">
+                <Disc3 size={56} />
+              </div>
+              {displayPic && (
+                <img
+                  key={displayPic}
+                  src={coverThumbUrl(displayPic, COVER_SIZE.thumb)}
+                  alt={displayName}
+                  loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  className="detail-page__cover-img"
+                />
               )}
             </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
+          }
+          title={displayName || '专辑'}
+          meta={[
+            displayArtist,
+            year,
+            songs.length > 0 ? `${songs.length} 首 · 总时长 ${formatDuration(totalDuration)}` : '',
+          ].filter(Boolean).join(' · ')}
+          actions={
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<Play size={15} aria-hidden="true" />}
                 onClick={handlePlayAll}
                 disabled={songs.length === 0 || loading}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  padding: '10px 24px', borderRadius: '24px', border: 'none',
-                  backgroundColor: 'var(--accent)', color: 'white',
-                  fontSize: '14px', fontWeight: 500,
-                  cursor: songs.length === 0 || loading ? 'not-allowed' : 'pointer',
-                  opacity: songs.length === 0 || loading ? 0.6 : 1,
-                  transition: 'all 0.2s ease',
-                }}
               >
-                <Play size={16} />播放全部
-              </button>
-            </div>
-          </div>
+                播放全部
+              </Button>
+              <Button
+                size="sm"
+                icon={<Download size={15} aria-hidden="true" />}
+                onClick={handleDownloadAll}
+                disabled={songs.length === 0 || loading}
+              >
+                下载全部
+              </Button>
+            </>
+          }
+        />
+
+        <div className="detail-page__list">
+          {error && songs.length === 0 ? (
+            <div className="detail-page__error">{error}</div>
+          ) : (
+            <>
+              <DetailToolbar
+                filterValue={selection.filterQuery}
+                onFilterChange={selection.setFilterQuery}
+                matchedCount={visibleSongs.length}
+                totalCount={songs.length}
+                selecting={batchMode}
+                onToggleSelecting={selection.toggleBatchMode}
+                onSelectAll={selection.selectAllVisible}
+                allSelected={selection.allVisibleSelected}
+                selectedCount={visibleSelectedCount}
+                batchActions={batchActions}
+              />
+              <SongList
+                songs={visibleSongs}
+                currentSongId={currentSong?.id}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handlePlay}
+                onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
+                density="library"
+                showDuration
+                showAlbum={false}
+                showCheckbox={batchMode}
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+                loading={loading && songs.length === 0}
+                emptyText={selection.isFiltering ? `没有匹配「${selection.filterQuery.trim()}」的歌曲` : '暂无歌曲数据'}
+              />
+            </>
+          )}
         </div>
       </div>
-
-      {/* 歌曲列表独立容器:内部滚动,与歌单详情页一致 */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '0 24px 24px' }}>
-        {error && songs.length === 0 ? (
-          <div style={{ padding: '12px 16px', backgroundColor: 'var(--danger-subtle)', borderRadius: '8px', color: 'var(--danger)', textAlign: 'center' }}>
-            {error}
-          </div>
-        ) : (
-          <SongList
-            songs={songs}
-            currentSongId={currentSong?.id}
-            isPlaying={isPlaying}
-            favoriteIds={favoriteIds}
-            onPlay={handlePlay}
-            onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
-            onToggleFavorite={toggleFavorite}
-            onDownload={handleDownload}
-            showHeader={true}
-            showIndex={true}
-            showCheckbox={true}
-            enableBatchDownload={true}
-            enableBatchAddToPlaylist={true}
-            loading={loading && songs.length === 0}
-            emptyText="暂无歌曲数据"
-          />
-        )}
-      </div>
+      {/* 批量加入歌单：只在有可见已选项时挂载，弹窗按需加载歌单列表 */}
+      {batchMode && selectedSongs.length > 0 && (
+        <BatchAddToPlaylistModal
+          songs={selectedSongs}
+          isVisible={addToPlaylistOpen}
+          onClose={() => setAddToPlaylistOpen(false)}
+        />
+      )}
     </div>
   );
 };

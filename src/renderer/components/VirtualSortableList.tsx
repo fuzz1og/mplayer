@@ -5,6 +5,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import VirtualRow from '@/renderer/components/VirtualRow';
 import { SONG_ROW_HEIGHT, VIRTUALIZE_THRESHOLD, useVirtualRows } from '@/renderer/hooks/useVirtualRows';
 import { useSortableReorder } from '@/renderer/hooks/useSortableReorder';
+import '@/renderer/styles/songlist.css';
 
 interface VirtualSortableListProps<T extends { id: string }> {
   /** 全量数据：窗口化只决定「挂了哪些行」，排序依据始终是这一份 */
@@ -99,9 +100,7 @@ function VirtualSortableList<T extends { id: string }>({
             ref={virtual.rowsRef}
             style={virtual.mode === 'virtual' ? { position: 'relative', height: `${virtual.totalSize}px` } : undefined}
           >
-            {virtual.mode === 'pending'
-              ? null
-              : virtual.mode === 'virtual'
+            {virtual.mode === 'virtual'
                 ? virtual.items.map((row) => {
                     const item = items[row.index];
                     if (!item) return null;
@@ -121,7 +120,7 @@ function VirtualSortableList<T extends { id: string }>({
       {/* 常驻挂载（官方：条件渲染 DragOverlay 会让 drop 动画失效），只有拖拽中才有 children */}
       {createPortal(
         <DragOverlay>
-          <div style={{ pointerEvents: 'none' }}>
+          <div className="no-pointer">
             {activeItem ? renderDragPreview(activeItem, activeIndex) : null}
           </div>
         </DragOverlay>,

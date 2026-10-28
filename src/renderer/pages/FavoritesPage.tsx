@@ -1,11 +1,17 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
-import { Heart, Play } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Play } from 'lucide-react';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
+import CollectionGrid from '@/renderer/components/CollectionGrid';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
+import { Button, PageHeader, Segmented } from '@/renderer/ui';
 import type { Song } from '@mplayer/core';
+import '@/renderer/styles/songlist.css';
+
+/** 内容库三视角（#694）：歌曲 / 专辑 / 歌手是同一批收藏的三种看法，不是三个内容库。 */
+const VIEW_OPTIONS = ['歌曲', '专辑', '歌手'];
 
 const FavoritesPage: React.FC = () => {
   const favorites = useFavoriteStore((s) => s.favorites);
@@ -16,6 +22,7 @@ const FavoritesPage: React.FC = () => {
   const play = usePlayerStore((s) => s.play);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const { download, downloadBatch } = useDownload();
+  const [view, setView] = useState(VIEW_OPTIONS[0]);
 
   // 收藏页的歌曲就是收藏本身：id 列表跟着 favorites 走，别在每次渲染新建数组（行 memo 会被击穿）
   const favoriteIdList = useMemo(() => favorites.map(s => s.id), [favorites]);
@@ -32,9 +39,11 @@ const FavoritesPage: React.FC = () => {
     }
   }, [toggleFavorite]);
 
-  const handlePlay = useCallback(async (song: Song) => {
+  const handlePlay = useCallback(async (song: Song, queue: Song[], index: number) => {
+    // #697：建队列归调用方，列表只回传展示队列与索引
+    setCurrentPlaylist(queue, index);
     await play(song);
-  }, [play]);
+  }, [play, setCurrentPlaylist]);
 
   // 封面加载失败 → 按 ID 重识别换新封面并更新收藏列表（收藏封面常为空/过期）
   const handleCoverError = useCallback((song: Song) => {
@@ -46,12 +55,9 @@ const FavoritesPage: React.FC = () => {
     });
   }, []);
 
-  const handlePlayAll = async () => {
-    if (favorites.length > 0) {
-      setCurrentPlaylist(favorites, 0);
-      await handlePlay(favorites[0]);
-    }
-  };
+  const handlePlayAll = useCallback(() => {
+    if (favorites.length > 0) void handlePlay(favorites[0], favorites, 0);
+  }, [favorites, handlePlay]);
 
   // SongList 行内「加入歌单」由组件内部单曲弹窗闭环，此 prop 仅作成功通知（勿在此开弹窗）
   const handleAddToPlaylist = useCallback((_song: Song) => {}, []);
@@ -62,69 +68,65 @@ const FavoritesPage: React.FC = () => {
     });
   }, []);
 
+  const handlePlayCollection = useCallback((songs: Song[], index: number) => {
+    const song = songs[index];
+    if (song) void handlePlay(song, songs, index);
+  }, [handlePlay]);
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 页面标题 */}
-      <div
-        style={{
-          padding: '24px 24px 16px',
-          borderBottom: '1px solid var(--border-subtle)',
-          backgroundColor: 'var(--bg-surface)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Heart size={24} color="var(--text-secondary)" />
-            <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-              我的收藏
-            </h1>
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>
-              · {favorites.length} 首歌曲
-            </span>
-          </div>
-          <button
+    <div className="list-page">
+      <PageHeader
+        title="我喜欢的音乐"
+        lead={<span className="list-page__count">{favorites.length} 首歌曲</span>}
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Play size={15} aria-hidden="true" />}
             onClick={handlePlayAll}
             disabled={favorites.length === 0}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              backgroundColor: 'var(--accent)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '20px',
-              cursor: favorites.length > 0 ? 'pointer' : 'not-allowed',
-              opacity: favorites.length > 0 ? 1 : 0.5,
-              fontSize: 'var(--text-base)',
-              fontWeight: 500,
-            }}
           >
-            <Play size={16} />
             播放全部
-          </button>
-        </div>
+          </Button>
+        }
+      />
+
+      <div className="list-page__tabs">
+        <Segmented
+          options={VIEW_OPTIONS}
+          value={view}
+          onChange={setView}
+          ariaLabel="我喜欢的音乐视图"
+        />
       </div>
 
-      {/* 歌曲列表 */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        <SongList
-          songs={favorites}
-          currentSongId={currentSong?.id}
-          isPlaying={isPlaying}
-          favoriteIds={favoriteIdList}
-          onPlay={handlePlay}
-          onToggleFavorite={handleToggleFavorite}
-          onDownload={download}
-          onBatchDownload={downloadBatch}
-          onAddToPlaylist={handleAddToPlaylist}
-          onSwap={handleSwap}
-          onCoverError={handleCoverError}
-          showCheckbox={true}
-          enableBatchDownload={true}
-          enableBatchAddToPlaylist={true}
-          emptyText="暂无收藏歌曲"
-        />
+      <div className="list-page__body">
+        {view === '歌曲' ? (
+          <SongList
+            density="library"
+            showDuration
+            songs={favorites}
+            currentSongId={currentSong?.id}
+            isPlaying={isPlaying}
+            favoriteIds={favoriteIdList}
+            onPlay={handlePlay}
+            onToggleFavorite={handleToggleFavorite}
+            onDownload={download}
+            onBatchDownload={downloadBatch}
+            onAddToPlaylist={handleAddToPlaylist}
+            onSwap={handleSwap}
+            onCoverError={handleCoverError}
+            enableBatchDownload={true}
+            enableBatchAddToPlaylist={true}
+            emptyText="还没有喜欢的歌曲"
+          />
+        ) : (
+          <CollectionGrid
+            view={view === '专辑' ? 'albums' : 'artists'}
+            songs={favorites}
+            onPlayCollection={handlePlayCollection}
+          />
+        )}
       </div>
     </div>
   );

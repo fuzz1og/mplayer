@@ -127,14 +127,14 @@ describe('搜索结果 歌单 tab（#415）', () => {
     expect(await screen.findByTestId('playlist-detail')).toBeInTheDocument();
   });
 
-  it('空结果用搜索专属空态文案（与发现页一级「歌单广场」区分）', async () => {
+  it('空结果给出结论，不再附教学段落', async () => {
     searchPlaylistsMock.mockResolvedValue({ playlists: [], total: 0, more: false });
     useSearchStore.setState({ currentKeyword: 'zzz不存在', sourceType: 'all', songs: [], groups: [], loading: false, hasMore: false });
     renderPage();
 
     await gotoTab(/歌单/);
 
-    expect(await screen.findByText('没有搜到歌单，去发现页看看歌单广场')).toBeInTheDocument();
+    expect(await screen.findByText('没有搜到歌单')).toBeInTheDocument();
     expect(screen.queryByText('暂无歌单')).toBeNull();
   });
 
@@ -168,8 +168,8 @@ describe('搜索结果 歌单 tab（#415）', () => {
     // 没滚之前不发第二页（懒加载的第二半）
     expect(playlistCalls()).toHaveLength(1);
 
-    // 滚动容器 = 歌单 tab 那个 overflowY:auto 的 div（useInfiniteScroll 挂它）
-    const scroller = container.querySelector('div[style*="overflow-y: auto"]');
+    // 滚动容器 = 歌单 tab 那个带 data-scroll-container 标记的 div（useInfiniteScroll 挂它）
+    const scroller = container.querySelector('[data-scroll-container]');
     expect(scroller).not.toBeNull();
     fireEvent.scroll(scroller!);
 
@@ -193,7 +193,7 @@ describe('搜索结果 歌单 tab（#415）', () => {
     await waitFor(() => expect(playlistCalls()).toHaveLength(1));
     expect(await screen.findByText('助眠精选')).toBeInTheDocument();
 
-    fireEvent.scroll(container.querySelector('div[style*="overflow-y: auto"]')!);
+    fireEvent.scroll(container.querySelector('[data-scroll-container]')!);
 
     expect(await screen.findByText('加载更多失败')).toBeInTheDocument();
     // 首屏结果没有被错误态顶掉

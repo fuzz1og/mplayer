@@ -30,7 +30,7 @@ test.afterAll(async () => {
 });
 
 async function navigateToDiscover() {
-  const discoverBtn = page.getByText('发现音乐');
+  const discoverBtn = page.getByText('发现');
   if (await discoverBtn.isVisible().catch(() => false)) {
     await discoverBtn.click();
   }
@@ -61,13 +61,13 @@ async function expectAnyState(locator: Locator, states: ExpectedState[]): Promis
 
 test.describe('发现页 V2 - 排行榜', () => {
 
-  // 榜单行是 div（源切换控件是 button，故限定 div 以免把按钮当成行）
-  const getFirstSongRow = () => page.locator('main div[style*="cursor: pointer"]').first();
+  // #694：榜单行复用 SongRow（.chart 下的 .song-row）
+  const getFirstSongRow = () => page.locator('.chart .song-row').first();
 
-  test('加载后显示当前源的热歌榜与新歌榜标题', async () => {
+  test('加载后显示热歌榜与新歌榜列标题（不带来源前缀）', async () => {
     await navigateToDiscover();
-    await expect(page.getByText('网易云 · 热歌榜')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('网易云 · 新歌榜')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '热歌榜' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: '新歌榜' })).toBeVisible();
   });
 
   test('加载后显示歌曲行', async () => {
@@ -75,21 +75,24 @@ test.describe('发现页 V2 - 排行榜', () => {
     await expect(getFirstSongRow()).toBeVisible({ timeout: 15000 });
   });
 
-  test('源切换：点 QQ 后面板标题随源变化', async () => {
+  test('源切换：点 QQ 音乐后两列仍是榜单预览（来源只由 segmented 表达）', async () => {
     await navigateToDiscover();
     await expect(getFirstSongRow()).toBeVisible({ timeout: 15000 });
 
-    await page.locator('main').getByRole('button', { name: 'QQ', exact: true }).click();
-    await expect(page.getByText('QQ · 热歌榜')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('QQ · 新歌榜')).toBeVisible();
+    await page.locator('main').getByRole('button', { name: 'QQ音乐', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'QQ音乐', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(getFirstSongRow()).toBeVisible({ timeout: 15000 });
+    // 列标题不再带来源前缀
+    expect(await page.locator('.chart__title').allTextContents()).toEqual(['热歌榜', '新歌榜']);
   });
 
   test('点击排行榜歌曲行播放', async () => {
     await navigateToDiscover();
     await expect(getFirstSongRow()).toBeVisible({ timeout: 15000 });
 
-    // 单源榜没有行内播放按钮：整行可点即播放
-    await getFirstSongRow().click();
+    // 46px 行 hover 才出现播放遮罩：点封面播放
+    await getFirstSongRow().hover();
+    await getFirstSongRow().locator('.song-row__cover-play').click();
     await page.waitForTimeout(3000);
 
     const playerText = await page.evaluate(() => {

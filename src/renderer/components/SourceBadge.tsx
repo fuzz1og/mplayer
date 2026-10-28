@@ -1,4 +1,5 @@
 import React from 'react';
+import '@/renderer/styles/songlist.css';
 import type { SourceKey } from '@mplayer/core';
 import { SOURCE_COLORS } from '@/renderer/constants/sourceConfig';
 
@@ -25,17 +26,8 @@ const SourceBadge: React.FC<SourceBadgeProps> = ({ sourceType, style }) => {
 
   return (
     <span
-      style={{
-        fontSize: 'var(--text-2xs)',
-        fontWeight: 'var(--weight-medium)',
-        padding: '1px 6px',
-        borderRadius: 'var(--radius-xs)',
-        backgroundColor: `${color}14`,
-        color,
-        flexShrink: 0,
-        lineHeight: '1.4',
-        ...style,
-      }}
+      className="badge"
+      style={{ '--badge-color': color, ...style } as React.CSSProperties}
     >
       {label}
     </span>

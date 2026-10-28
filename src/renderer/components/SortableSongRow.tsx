@@ -4,6 +4,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import SongRow from '@/renderer/components/SongRow';
 import type { Song } from '@mplayer/core';
+import '@/renderer/styles/songlist.css';
 
 /** SongRow 的能力全透传；菜单开关、拖拽句柄与位移动画由本组件接管 */
 export type SortableSongRowProps = Omit<
@@ -36,7 +37,7 @@ const SortableSongRow: React.FC<SortableSongRowProps> = ({ song, renderActions, 
       {...listeners}
       aria-label={`拖拽排序: ${song.name}`}
       title="拖拽排序"
-      style={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}
+      className="drag-handle"
     >
       <GripVertical size={14} />
     </span>

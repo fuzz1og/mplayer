@@ -84,6 +84,104 @@ for (const [hex, reason] of LEGACY_HEX) {
   }
 }
 
+
+// ── 桌面端严格模式（#689）：四条硬规则，无存量白名单
+// antd 引入 / 内联样式（自定义属性除外）/ 颜色字面量 / 字号字重圆角字面量
+const DESKTOP_STRICT = process.argv.includes('--desktop-strict');
+// 豁免：token 定义文件 + 音乐源品牌色唯一事实源（ADR 2026-08-23 规定源品牌色只在这里定义）。
+// 测试文件不参与样式规则——测试替身里的内联样式是夹具，不是产品样式。
+const DESKTOP_TOKEN_FILES = new Set([
+  'src/renderer/styles/global.css',
+  'src/renderer/constants/sourceConfig.ts',
+]);
+const DESKTOP_DESIGN_LINT_OK = 'design-lint: ok';
+
+/** 每条规则一个判定，返回是否命中；命中后再按规则名分组输出。 */
+const DESKTOP_RULES = [
+  {
+    id: 'antd',
+    extensions: ['.ts', '.tsx'],
+    test: (line) => /\bfrom\s+['"]antd['"]|require\(\s*['"]antd['"]/.test(line),
+    hint: '禁止引入 antd，改用 src/renderer/ui 原语',
+  },
+  {
+    id: 'inline-style',
+    extensions: ['.tsx'],
+    skipTests: true,
+    test: (line) => /\bstyle=\{\{/.test(line) && !/\bstyle=\{\{\s*'--/.test(line),
+    hint: "禁止内联样式，改类名或 style={{ '--x': v }} 自定义属性",
+  },
+  {
+    id: 'color-literal',
+    extensions: ['.ts', '.tsx', '.css'],
+    // 只认「写成颜色」的形态：TS 里必须带引号，CSS 里必须在声明值位置。
+    // 否则 issue 号（#280）与注释里的 #403 会被误判成 3 位色值。
+    test: (line, ext) =>
+      ext === '.css'
+        ? /:[^;{}]*#[0-9a-fA-F]{3,8}\b/.test(line) || /:[^;{}]*rgba?\(\s*\d/.test(line)
+        : /(['"`])#[0-9a-fA-F]{3,8}\1/.test(line) || /(['"`])rgba?\(\s*\d/.test(line),
+    skipTests: true,
+    hint: '禁止颜色字面量，改用 var(--token)（token 只在 global.css 定义）',
+  },
+  {
+    id: 'type-literal',
+    extensions: ['.ts', '.tsx', '.css'],
+    skipTests: true,
+    // 已引用 var(--…) 的声明不算字面量（如组合圆角 0 var(--radius-xs) var(--radius-xs) 0）
+    test: (line) =>
+      !line.includes('var(--') &&
+      (/\b(fontSize|fontWeight|lineHeight|borderRadius)\s*:\s*['"]?\d/.test(line) ||
+        /\b(font-size|font-weight|line-height|border-radius)\s*:\s*\d/.test(line)),
+    hint: '禁止字号/字重/行高/圆角字面量，改用 var(--text-*/--weight-*/--radius-*)',
+  },
+];
+
+function scanDesktopStrict() {
+  if (!DESKTOP_STRICT) return;
+  const offenders = new Map();
+  for (const file of walk('src/renderer')) {
+    const rel = file.split(path.sep).join('/');
+    if (DESKTOP_TOKEN_FILES.has(rel)) continue;
+    const ext = path.extname(file);
+    if (!['.ts', '.tsx', '.css'].includes(ext)) continue;
+    let text;
+    try { text = readFileSync(file, 'utf8'); } catch { continue; }
+    const rows = text.split(/\r?\n/);
+    const isTest = rel.includes('/__tests__/');
+    for (let i = 0; i < rows.length; i++) {
+      const raw = rows[i];
+      if (raw.includes(DESKTOP_DESIGN_LINT_OK)) continue;
+      // 注释里的 issue 号与说明不参与判定（保留 https:// 里的 //）
+      const row = raw.replace(/\/\/.*$/, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const rule of DESKTOP_RULES) {
+        if (!rule.extensions.includes(ext)) continue;
+        if (rule.skipTests && isTest) continue;
+        if (!rule.test(row, ext)) continue;
+        if (!offenders.has(rule.id)) offenders.set(rule.id, []);
+        offenders.get(rule.id).push(rel + ':' + (i + 1) + '  ' + row.trim().slice(0, 110));
+      }
+    }
+  }
+
+  let total = 0;
+  for (const rule of DESKTOP_RULES) {
+    const rows = offenders.get(rule.id) ?? [];
+    total += rows.length;
+    if (rows.length === 0) continue;
+    console.log('  ✗ desktop ' + rule.id + '（' + rows.length + ' 处）：' + rule.hint);
+    for (const row of rows.slice(0, 8)) console.log('      ' + row);
+    if (rows.length > 8) console.log('      …其余 ' + (rows.length - 8) + ' 处');
+  }
+  if (total > 0) {
+    console.log('✗ design-lint desktop 严格模式未通过：共 ' + total + ' 处');
+    failed = true;
+  } else {
+    console.log('✓ design-lint desktop 严格模式通过');
+  }
+}
+
+scanDesktopStrict();
+
 if (failed) {
   console.log('✗ design-lint 未通过：存在非 token 颜色/不透明度写法');
   process.exit(1);

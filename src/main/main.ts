@@ -22,6 +22,7 @@ import { resolvePlaylistLink } from './services/playlistLinkResolver';
 import { updateService, STARTUP_FLOW_DELAY_MS } from './services/updateService';
 import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDownloadIpc, registerAppIpc, TIER3_SETTING_KEY } from './ipc/appSettingsUpdate';
 import { registerPlaybackTraceIpc } from './ipc/playbackTrace';
+import { registerCoverIpc } from './ipc/cover';
 import { registerCookiePersister, loadCookiesFromDisk } from './cookies/cookieAdapter';
 
 // WSLg HiDPI 修复：WSL 下 Windows 缩放（如 4K 屏 150%）不会透传给 Chromium，
@@ -139,6 +140,9 @@ function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    // 规格：最小尺寸 1024×720（不做响应式断点与缩放）
+    minWidth: 1024,
+    minHeight: 720,
     icon: iconPath,
     webPreferences: {
       // 审查修复：收紧为 Electron 安全基线（preload 是唯一 IPC 桥：src/main/preload.ts）。
@@ -397,6 +401,8 @@ app.whenReady().then(async () => {
   registerAppIpc();
   // 播放解析链诊断（#363）：模块加载即注册 sink 环形缓冲，这里接线 IPC 暴露给设置页
   registerPlaybackTraceIpc();
+  // 全屏播放器环境光取色（#688）：主进程读封面像素，渲染层只拿 HSL 主色
+  registerCoverIpc();
 
   // 对每个已有文件夹单独启动监视，确保 folderPath 正确传递
   getLocalMusicService().getFolders().then((existingFolders) => {

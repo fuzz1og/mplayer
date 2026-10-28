@@ -1,7 +1,8 @@
 import React from 'react';
-import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { Disc3 } from 'lucide-react';
 import type { Album } from '@mplayer/core';
+import CoverCard from '@/renderer/components/CoverCard';
+import '@/renderer/styles/songlist.css';
 
 interface AlbumScrollProps {
   albums: Album[];
@@ -21,12 +22,13 @@ const AREAS = [
   { label: '日本', value: 'JP' },
 ];
 
+/** 新碟上架：与歌单 / 歌手同处一张内容卡，只保留地区筛选这条页内上下文。 */
 const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area, onAreaChange, onRetry, onAlbumClick }) => {
   if (error) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
+      <div className="card-state card-state--error">
         <div>{error}</div>
-        <button onClick={onRetry} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+        <button onClick={onRetry} className="card-state__retry">
           重试
         </button>
       </div>
@@ -34,73 +36,49 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Area filter tabs */}
-      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-5)', flexShrink: 0 }}>
+    <div className="album-scroll">
+      <div className="album-scroll__areas">
         {AREAS.map((a) => (
           <button
             key={a.value}
             onClick={() => onAreaChange(a.value)}
-            style={{
-              padding: '6px 16px',
-              border: '1px solid var(--border-default)',
-              borderRadius: '20px',
-              background: area === a.value ? 'var(--accent)' : 'transparent',
-              color: area === a.value ? '#fff' : 'var(--text-secondary)',
-              cursor: 'pointer',
-              fontSize: 'var(--text-sm)',
-              fontWeight: area === a.value ? 600 : 400,
-              transition: 'all 0.15s',
-            }}
+            className="album-scroll__area"
+            aria-pressed={area === a.value}
+            data-active={area === a.value || undefined}
           >
             {a.label}
           </button>
         ))}
       </div>
 
-      {/* Scrollable album cards */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div className="album-scroll__body">
         {loading ? (
-          <div style={{ display: 'flex', gap: 'var(--space-4)', paddingBottom: '12px' }}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} style={{ flexShrink: 0, width: '120px' }}>
-                <div className="skeleton-shimmer" style={{ width: '120px', height: '120px', borderRadius: '8px', marginBottom: '8px' }} />
-                <div className="skeleton-shimmer" style={{ width: '100px', height: '14px', borderRadius: '2px' }} />
+          <div className="card-grid">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <div key={index} className="cover-card cover-card--skeleton">
+                <div className="cover-card__media" />
+                <div className="cover-card__text">
+                  <div className="cover-card__sk-line" />
+                  <div className="cover-card__sk-line cover-card__sk-line--meta" />
+                </div>
               </div>
             ))}
           </div>
         ) : albums.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-            <Disc3 size={26} style={{ marginBottom: '12px', color: 'var(--text-tertiary)' }} />
+          <div className="card-state">
+            <Disc3 size={26} className="album-scroll__empty-icon" />
             <div>暂无新碟数据</div>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 'var(--space-5)', flexFlow: 'row wrap' }}>
+          <div className="card-grid">
             {albums.map((album) => (
-              <div key={album.id} style={{ flexShrink: 0, width: '120px', cursor: 'pointer' }} onClick={() => onAlbumClick?.(album)}>
-                <div style={{ position: 'relative', width: '120px', height: '120px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-hover)', marginBottom: '8px' }}>
-                  {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Disc3 size={36} style={{ color: 'var(--text-tertiary)' }} />
-                  </div>
-                  {album.picUrl && (
-                    <img
-                      key={album.picUrl}
-                      src={coverThumbUrl(album.picUrl, COVER_SIZE.icon)}
-                      alt={album.name}
-                      loading="lazy"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  )}
-                </div>
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
-                  {album.name}
-                </div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {album.artist || ''}
-                </div>
-              </div>
+              <CoverCard
+                key={album.id}
+                title={album.name}
+                subtitle={album.artist || undefined}
+                cover={album.picUrl}
+                onClick={() => onAlbumClick?.(album)}
+              />
             ))}
           </div>
         )}

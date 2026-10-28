@@ -1,0 +1,138 @@
+/* 统一内容卡（#694）：歌单 / 专辑 / 歌手共用一套封面 + 标题 + 副标题。
+   卡片不位移、不起大阴影（规格 line 61）：悬停只压封面亮度，靠标题维持焦点。 */
+.cover-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.cover-card[data-clickable] {
+  cursor: pointer;
+}
+
+.cover-card__media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--surface-card-hover);
+}
+
+.cover-card[data-shape='circle'] .cover-card__media {
+  border-radius: var(--radius-full);
+}
+
+.cover-card__media .cover-img {
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.cover-card[data-shape='circle'] .cover-card__media .cover-abs {
+  border-radius: var(--radius-full);
+}
+
+.cover-card[data-clickable]:hover .cover-card__media .cover-img {
+  opacity: 0.8;
+}
+
+.cover-card__badge {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  display: flex;
+  align-items: center;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--delete-scrim);
+  color: var(--text-on-media);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.cover-card__text {
+  min-width: 0;
+}
+
+.cover-card[data-shape='circle'] .cover-card__text {
+  text-align: center;
+}
+
+.cover-card__title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-normal);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.cover-card__meta {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 卡角操作位：常驻会抢封面的注意力，悬停或键盘聚焦才显形 */
+.cover-card__action {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.cover-card:hover .cover-card__action,
+.cover-card:focus-within .cover-card__action {
+  opacity: 1;
+}
+
+.cover-card__action > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--delete-scrim);
+  color: var(--text-on-media);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.cover-card__action > button:hover {
+  background: var(--danger);
+}
+
+/* 骨架卡：网格加载态与卡片同构，占位块尺寸跟封面一致 */
+.cover-card--skeleton .cover-card__media {
+  background: var(--skeleton-base);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.cover-card__sk-line {
+  width: 70%;
+  height: var(--text-sm);
+  border-radius: var(--radius-xs);
+  background: var(--skeleton-base);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.cover-card__sk-line--meta {
+  width: 45%;
+  height: var(--text-xs);
+  animation-delay: 0.1s;
+}

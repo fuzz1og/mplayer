@@ -1,9 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import '@/renderer/styles/page-discover.css';
+import '@/renderer/styles/detail-page.css';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Play, Music2 } from 'lucide-react';
-import { Modal, message } from 'antd';
+import { CirclePlus, Download, Music2, Play } from 'lucide-react';
+import { toast } from '@/renderer/services/toastStore';
+import { Button, InfoHint, PageHero, useConfirm } from '@/renderer/ui';
 import SongList from '@/renderer/components/SongList';
+import DetailToolbar from '@/renderer/components/DetailToolbar';
+import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
+import { useDetailSelection } from '@/renderer/hooks/useDetailSelection';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -20,6 +26,7 @@ const PAGE_SIZE = 20;
 const desktopWriter: DesktopPlaylistWriter = createDesktopPlaylistWriter();
 
 const DiscoverPlaylistDetailPage: React.FC = () => {
+  const confirm = useConfirm();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const play = usePlayerStore((s) => s.play);
@@ -28,7 +35,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
-  const { download } = useDownload();
+  const { download, downloadBatch } = useDownload();
 
   const [playlist, setPlaylist] = useState<DiscoverPlaylist | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -39,8 +46,11 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
   const [hasMore, setHasMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [songsError, setSongsError] = useState<string | null>(null);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const loadingMoreRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const selection = useDetailSelection(songs, id);
+  const { visibleSongs, batchMode, selectedIds, setSelectedIds, selectedSongs, visibleSelectedCount } = selection;
 
   useEffect(() => {
     if (!id) return;
@@ -105,22 +115,37 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
     hasMore,
   });
 
-  const handlePlay = async (song: Song) => {
+  const handlePlay = useCallback(async (song: Song, queue: Song[], index: number) => {
+    // #697：列表只回传展示队列与索引，建队列归页面
+    setCurrentPlaylist(queue, index);
     await play(song);
-  };
+  }, [play, setCurrentPlaylist]);
 
-  const handlePlayAll = async () => {
-    if (songs.length > 0) {
-      setCurrentPlaylist(songs, 0);
-      await play(songs[0]);
-    }
-  };
+  const handlePlayAll = useCallback(async () => {
+    if (songs.length === 0) return;
+    setCurrentPlaylist(songs, 0);
+    await play(songs[0]);
+  }, [songs, play, setCurrentPlaylist]);
 
-  const handleSaveToLocal = () => {
+  const handleDownloadAll = useCallback(() => {
+    if (songs.length === 0) return;
+    void downloadBatch(songs);
+  }, [songs, downloadBatch]);
+
+  const handleBatchDownload = useCallback(() => {
+    if (selectedSongs.length === 0) return;
+    void downloadBatch(selectedSongs);
+  }, [selectedSongs, downloadBatch]);
+
+  const handleBatchAddToPlaylist = useCallback(() => {
+    if (selectedSongs.length > 0) setAddToPlaylistOpen(true);
+  }, [selectedSongs]);
+
+  const handleSaveToLocal = useCallback(() => {
     if (!playlist) return;
-    Modal.confirm({
-      title: '保存到本地',
-      content: `确定要将歌单"${playlist.name}"（${total > songs.length ? `${songs.length}/${total}` : songs.length}首歌曲）保存到本地吗？`,
+    confirm({
+      title: '保存全部到新歌单',
+      message: `确定要将歌单"${playlist.name}"（${total > songs.length ? `${songs.length}/${total}` : songs.length}首歌曲）保存到本地吗？`,
       okText: '保存',
       cancelText: '取消',
       onOk: async () => {
@@ -136,147 +161,154 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
             }
           }
           // #552：新建 + 整批写入 + 失败回滚交给 adapter 背后的 core 编排。
-          // 本页此前逐首 addSong、**无回滚**、失败只 console.error 却照样 message.success——
-          // 现在失败会把刚建的空歌单删掉并如实报错，不再谎报成功。
+          // 成败如实回报：失败会把刚建的空歌单删掉，不再谎报成功。
           const result = await desktopWriter.createAndAdd({
             name: playlist.name,
             songs: songsToSave,
             description: playlist.description || `来自网易云歌单: ${playlist.name}`,
           });
           if (!result.ok) throw new Error(result.error || '保存失败');
-          message.success(`成功保存 ${result.added} 首歌曲到本地歌单`);
+          toast.success(`成功保存 ${result.added} 首歌曲到本地歌单`);
           navigate('/playlists');
         } catch (error) {
           console.error('保存到本地失败:', error);
-          message.error('保存失败，请稍后重试');
+          toast.error('保存失败，请稍后重试');
         } finally {
           setSaving(false);
         }
       },
     });
-  };
+  }, [playlist, total, songs, id, confirm, navigate]);
+
+  const batchActions = React.useMemo(() => [
+    { key: 'download', label: '批量下载', icon: <Download size={12} />, onClick: handleBatchDownload },
+    { key: 'playlist', label: '加入歌单', icon: <CirclePlus size={12} />, onClick: handleBatchAddToPlaylist },
+  ], [handleBatchDownload, handleBatchAddToPlaylist]);
 
   if (loading) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', height: '60px' }}>
-          <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '14px' }}>
-            <ArrowLeft size={16} /><span>返回</span>
-          </button>
-          <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center' }}>加载中...</h1>
-          <div style={{ width: '140px' }} />
-        </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>加载中...</div>
+      <div className="discover-page">
+        <div className="discover-state-center">加载中...</div>
       </div>
     );
   }
 
   if (!playlist) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', height: '60px' }}>
-          <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '14px' }}>
-            <ArrowLeft size={16} /><span>返回</span>
-          </button>
-          <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center' }}>歌单不存在</h1>
-          <div style={{ width: '140px' }} />
-        </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>歌单不存在或加载失败</div>
+      <div className="discover-page">
+        <div className="discover-state-center">歌单不存在或加载失败</div>
       </div>
     );
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', height: '60px' }}>
-        <button onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', transition: 'all 0.2s ease', fontSize: '14px', fontWeight: 500 }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}>
-          <ArrowLeft size={16} /><span>返回</span>
-        </button>
-        <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{playlist.name}</h1>
-        <div style={{ width: '140px' }} />
-      </div>
-
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
-        <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
-          <div style={{ position: 'relative', width: '200px', height: '200px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', backgroundColor: 'var(--bg-hover)' }}>
-            {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Music2 size={40} style={{ color: 'var(--text-tertiary)' }} />
+    <div className="detail-page">
+      <div ref={scrollRef} className="detail-page__scroll" data-scroll-container>
+        <PageHero
+          className="detail-page__hero"
+          media={
+            <div className="detail-page__cover">
+              {/* 占位层（无封面/加载失败时显示），img 成功后覆盖其上 */}
+              <div className="detail-page__cover-placeholder">
+                <Music2 size={56} />
+              </div>
+              {playlist.coverImgUrl && (
+                <img
+                  key={playlist.coverImgUrl}
+                  src={coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)}
+                  alt={playlist.name}
+                  loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  className="detail-page__cover-img"
+                />
+              )}
             </div>
-            {playlist.coverImgUrl && (
-              <img
-                key={playlist.coverImgUrl}
-                src={coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)}
-                alt={playlist.name}
-                loading="lazy"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          }
+          title={playlist.name}
+          meta={
+            <>
+              {`创建者 ${playlist.creator.nickname} · ${formatPlayCount(playlist.playCount)} 次播放 · ${total || playlist.trackCount} 首`}
+              {playlist.description && <InfoHint label="歌单简介">{playlist.description}</InfoHint>}
+            </>
+          }
+          actions={
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<Play size={15} aria-hidden="true" />}
+                onClick={() => { void handlePlayAll(); }}
+                disabled={songs.length === 0 || songsLoading}
+              >
+                播放全部
+              </Button>
+              <Button
+                size="sm"
+                icon={<Download size={15} aria-hidden="true" />}
+                onClick={handleDownloadAll}
+                disabled={songs.length === 0 || songsLoading}
+              >
+                下载全部
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveToLocal}
+                disabled={songs.length === 0 || saving}
+              >
+                {saving ? '保存中...' : '保存全部到新歌单'}
+              </Button>
+            </>
+          }
+        />
+
+        <div className="detail-page__list">
+          {songsError && songs.length === 0 ? (
+            <div className="detail-page__error">{songsError}</div>
+          ) : (
+            <>
+              <DetailToolbar
+                filterValue={selection.filterQuery}
+                onFilterChange={selection.setFilterQuery}
+                matchedCount={visibleSongs.length}
+                totalCount={songs.length}
+                selecting={batchMode}
+                onToggleSelecting={selection.toggleBatchMode}
+                onSelectAll={selection.selectAllVisible}
+                allSelected={selection.allVisibleSelected}
+                selectedCount={visibleSelectedCount}
+                batchActions={batchActions}
               />
-            )}
-          </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px', marginTop: 0 }}>{playlist.name}</h2>
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-              <span>创建者: {playlist.creator.nickname}</span>
-              <span>播放量: {formatPlayCount(playlist.playCount)}</span>
-              <span>歌曲数: {playlist.trackCount}</span>
-            </div>
-            {playlist.tags.length > 0 && (
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                {playlist.tags.map(tag => (
-                  <span key={tag} style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '12px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-secondary)' }}>{tag}</span>
-                ))}
-              </div>
-            )}
-            {playlist.description && (
-              <p style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginBottom: '16px', marginTop: 0, lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{playlist.description}</p>
-            )}
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button onClick={handlePlayAll} disabled={songs.length === 0 || songsLoading} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px', borderRadius: '24px', border: 'none', backgroundColor: 'var(--accent)', color: 'white', fontSize: '14px', fontWeight: 500, cursor: songs.length === 0 || songsLoading ? 'not-allowed' : 'pointer', opacity: songs.length === 0 || songsLoading ? 0.6 : 1, transition: 'all 0.2s ease' }}>
-                <Play size={16} />播放全部
-              </button>
-              <button onClick={handleSaveToLocal} disabled={songs.length === 0 || saving} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px', borderRadius: '24px', border: '1px solid var(--border-default)', backgroundColor: 'transparent', color: 'var(--text-primary)', fontSize: '14px', fontWeight: 500, cursor: songs.length === 0 || saving ? 'not-allowed' : 'pointer', opacity: songs.length === 0 || saving ? 0.6 : 1, transition: 'all 0.2s ease' }}>
-                <Download size={16} />{saving ? '保存中...' : '保存到本地'}
-              </button>
-            </div>
-          </div>
+              <SongList
+                songs={visibleSongs}
+                currentSongId={currentSong?.id}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handlePlay}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
+                onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
+                density="library"
+                showDuration
+                showAlbum={false}
+                showCheckbox={batchMode}
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+                loading={songsLoading && songs.length === 0}
+                emptyText={selection.isFiltering ? `没有匹配「${selection.filterQuery.trim()}」的歌曲` : '暂无歌曲数据'}
+              />
+              {loadingMore && <div className="detail-page__note">加载中...</div>}
+            </>
+          )}
         </div>
-
-        {songsLoading ? (
-          <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '40px' }}>正在加载歌曲列表...</div>
-        ) : songsError ? (
-          <div style={{ padding: '12px 16px', backgroundColor: 'var(--danger-subtle)', borderRadius: '8px', color: 'var(--danger)', textAlign: 'center' }}>
-            {songsError}
-          </div>
-        ) : (
-          <>
-          <SongList
-            songs={songs}
-            currentSongId={currentSong?.id}
-            isPlaying={isPlaying}
-            favoriteIds={favoriteIds}
-            onPlay={handlePlay}
-            onToggleFavorite={toggleFavorite}
-            onDownload={download}
-            onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
-            showHeader={true}
-            showIndex={true}
-            showCheckbox={true}
-            enableBatchDownload={true}
-            enableBatchAddToPlaylist={true}
-            emptyText="暂无歌曲数据"
-          />
-            {loadingMore && (
-              <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '16px' }}>加载中...</div>
-            )}
-            {!hasMore && songs.length > 0 && (
-              <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '16px' }}>
-                已加载全部 {songs.length}{total > songs.length ? ` / ${total}` : ''} 首歌曲
-              </div>
-            )}
-          </>
-        )}
       </div>
+      {/* 批量加入歌单：只在有可见已选项时挂载，弹窗按需加载歌单列表 */}
+      {batchMode && selectedSongs.length > 0 && (
+        <BatchAddToPlaylistModal
+          songs={selectedSongs}
+          isVisible={addToPlaylistOpen}
+          onClose={() => setAddToPlaylistOpen(false)}
+        />
+      )}
     </div>
   );
 };

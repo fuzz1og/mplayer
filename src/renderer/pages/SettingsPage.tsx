@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Settings, Database, Folder, Shield, Download, Music, Music2, Zap, Fingerprint, FlaskConical, Palette, Activity } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Palette, Database, Folder, Shield, Download, Music, Music2, Zap, FlaskConical, Activity, ChevronRight } from 'lucide-react';
 import CacheSection from '@/renderer/components/CacheSection';
 import DownloadSection from '@/renderer/components/DownloadSection';
 import ProxySection from '@/renderer/components/ProxySection';
@@ -13,123 +14,161 @@ import PlaybackDiagnosticsSection from '@/renderer/components/PlaybackDiagnostic
 import AppearanceSection from '@/renderer/components/AppearanceSection';
 import DeveloperSection from '@/renderer/components/DeveloperSection';
 import { isDevMode, subscribeDevMode } from '@/renderer/services/devMode';
+import { PageHeader } from '@/renderer/ui';
+import '@/renderer/styles/settings.css';
 
-/** 左导航项（顺序 = 正文里各 <section> 的渲染顺序，锚点才滚得准）。 */
-interface NavItem {
+interface SettingsEntry {
   id: string;
   label: string;
   icon: React.ReactNode;
 }
 
-/** 常驻导航项。#477 的诊断两项与「开发者模式」开关在正文里位于 tier3 与 TLS 之间。 */
-const BASE_NAV_ITEMS: NavItem[] = [
-  { id: 'appearance', label: '外观', icon: <Palette size={15} /> },
-  { id: 'cache', label: '缓存管理', icon: <Database size={15} /> },
-  { id: 'download', label: '下载设置', icon: <Folder size={15} /> },
-  { id: 'playback', label: '播放', icon: <Music2 size={15} /> },
-  { id: 'source', label: '直连状态', icon: <Zap size={15} /> },
-  { id: 'tier3', label: '第三方解析源', icon: <FlaskConical size={15} /> },
-  { id: 'developer', label: '开发者模式', icon: <FlaskConical size={15} /> },
-  { id: 'tls-fingerprint', label: 'TLS 指纹伪装', icon: <Fingerprint size={15} /> },
-  { id: 'proxy', label: '网络代理', icon: <Shield size={15} /> },
-  { id: 'update', label: '检查更新', icon: <Download size={15} /> },
-  { id: 'about', label: '关于', icon: <Music size={15} /> },
+interface SettingsGroup {
+  title: string;
+  entries: SettingsEntry[];
+}
+
+/**
+ * 1.9.0 设置分组（#708）：按语义合并成 5 组，设置仍是独立全屏路由。
+ * 更新/关于不再单独占底栏，并入「关于与更新」；诊断只在开发者模式出现（#477）。
+ */
+const SETTINGS_GROUPS: SettingsGroup[] = [
+  {
+    title: '音频与播放',
+    entries: [{ id: 'playback', label: '播放', icon: <Music2 size={13} /> }],
+  },
+  {
+    title: '外观',
+    entries: [{ id: 'appearance', label: '外观', icon: <Palette size={13} /> }],
+  },
+  {
+    title: '存储与下载',
+    entries: [
+      { id: 'cache', label: '缓存', icon: <Database size={13} /> },
+      { id: 'download', label: '下载', icon: <Folder size={13} /> },
+    ],
+  },
+  {
+    title: '网络与来源',
+    entries: [
+      { id: 'source', label: '直连状态', icon: <Zap size={13} /> },
+      { id: 'tier3', label: '第三方解析源', icon: <FlaskConical size={13} /> },
+      { id: 'network', label: '网络', icon: <Shield size={13} /> },
+    ],
+  },
+  {
+    title: '关于与更新',
+    entries: [
+      { id: 'update', label: '更新', icon: <Download size={13} /> },
+      { id: 'about', label: '关于', icon: <Music size={13} /> },
+    ],
+  },
 ];
 
-/** 诊断导航项只在开发者模式打开时挂——关闭时它整段不渲染，留着会「滚不到东西」（#477）。 */
-const DIAGNOSTICS_NAV_ITEMS: NavItem[] = [
-  { id: 'playback-trace', label: '播放诊断', icon: <Activity size={15} /> },
-];
+const DIAGNOSTICS_ENTRY: SettingsEntry = { id: 'diagnostics', label: '诊断', icon: <Activity size={13} /> };
+
+/** 可深链的分区 id（#/settings/:section）；诊断只在开发者模式下有内容。 */
+const SECTION_IDS = new Set([
+  ...SETTINGS_GROUPS.flatMap((group) => group.entries.map((entry) => entry.id)),
+  DIAGNOSTICS_ENTRY.id,
+]);
+
+/** 分区 id → 页面内容。全部 9 页已迁入新壳，组件本身按需继续收敛。 */
+const SECTION_CONTENT: Record<string, React.ReactNode> = {
+  appearance: <AppearanceSection />,
+  cache: <CacheSection />,
+  download: <DownloadSection />,
+  playback: <PlaybackSection />,
+  source: <SourceSection />,
+  tier3: <Tier3Section />,
+  network: (
+    <>
+      <ProxySection />
+      <TlsFingerprintSection />
+    </>
+  ),
+  update: <UpdateSection />,
+  about: (
+    <>
+      <AboutSection />
+      <DeveloperSection />
+    </>
+  ),
+};
 
 const SettingsPage: React.FC = () => {
-  const [active, setActive] = useState('cache');
-  const [devMode, setDevModeState] = useState(isDevMode);
-  useEffect(() => subscribeDevMode(setDevModeState), []);
+  const { section } = useParams<{ section?: string }>();
+  const navigate = useNavigate();
+  // 深链优先（#/settings/appearance 直接落外观页）；无参数或非法 id 落「缓存」（原型默认页，规格未另行约定）。
+  const [active, setActive] = useState(() => (section && SECTION_IDS.has(section) ? section : 'cache'));
+  const [devMode, setDevMode] = useState(isDevMode);
 
-  /**
-   * 导航项与正文渲染同受开关控制。切到「开发者模式」时本区常驻、无需额外处理；
-   * 诊断项只在打开后存在，锚点因此在渲染完成后才能滚动——见 handleNav 的延后一帧。
-   */
-  const navItems = devMode
-    ? [
-        ...BASE_NAV_ITEMS.slice(0, BASE_NAV_ITEMS.findIndex((i) => i.id === 'tls-fingerprint')),
-        ...DIAGNOSTICS_NAV_ITEMS,
-        ...BASE_NAV_ITEMS.slice(BASE_NAV_ITEMS.findIndex((i) => i.id === 'tls-fingerprint')),
-      ]
-    : BASE_NAV_ITEMS;
+  useEffect(() => subscribeDevMode(setDevMode), []);
 
-  const handleNav = (id: string) => {
-    setActive(id);
-    // 目标 section 可能因本次点击才刚挂载（诊断区随开关显隐），等 React 提交后再滚，
-    // 否则 document.getElementById 拿到 null——「收起后滚不到东西」的本体。
-    requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  };
-
-  // 关闭开发者模式时若正停在诊断锚点，把高亮挪回开关所在区，避免选中一个不存在的项
+  // 深链在已挂载时换分区（#/settings/cache → #/settings/appearance）也要跟着切页
   useEffect(() => {
-    if (!devMode && active === 'playback-trace') setActive('developer');
-  }, [devMode, active]);
+    if (section && SECTION_IDS.has(section)) setActive(section);
+  }, [section]);
 
-  return (
-    <div style={{ height: '100%', display: 'flex', overflow: 'hidden' }}>
-      <aside
-        style={{
-          width: '220px',
-          borderRight: '1px solid var(--border-subtle)',
-          backgroundColor: 'var(--bg-surface)',
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: 'column',
+  /** 诊断只在开发者模式追加到「关于与更新」组尾，关闭时整项不渲染。 */
+  const groups = useMemo(
+    () => (devMode
+      ? SETTINGS_GROUPS.map((group, index) => (index === SETTINGS_GROUPS.length - 1
+        ? { ...group, entries: [...group.entries, DIAGNOSTICS_ENTRY] }
+        : group))
+      : SETTINGS_GROUPS),
+    [devMode],
+  );
+
+  // 关掉开发者模式时若正停在诊断页，退回到「关于」，否则会停在一个不存在的页
+  useEffect(() => {
+    if (devMode || active !== 'diagnostics') return;
+    setActive('about');
+    navigate('/settings/about', { replace: true });
+  }, [devMode, active, navigate]);
+
+  const content =
+    active === 'diagnostics' && devMode ? <PlaybackDiagnosticsSection /> : SECTION_CONTENT[active] ?? null;
+
+  const renderItem = (entry: SettingsEntry) => {
+    const isActive = active === entry.id;
+    return (
+      <button
+        key={entry.id}
+        type="button"
+        className="settings-nav__item"
+        aria-current={isActive ? 'page' : undefined}
+        onClick={() => {
+          setActive(entry.id);
+          navigate('/settings/' + entry.id, { replace: true });
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '20px 20px 12px' }}>
-          <Settings size={18} color="var(--text-secondary)" />
-          <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>设置</span>
-        </div>
-        <nav style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => handleNav(item.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '9px 12px',
-                border: 'none',
-                background: active === item.id ? 'var(--bg-hover)' : 'transparent',
-                color: active === item.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: active === item.id ? 600 : 400,
-                textAlign: 'left',
-                transition: 'background 0.15s ease, color 0.15s ease',
-              }}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-      </aside>
+        <span className="settings-nav__icon" aria-hidden="true">
+          {entry.icon}
+        </span>
+        <span>{entry.label}</span>
+        <ChevronRight className="settings-nav__chevron" size={13} aria-hidden="true" />
+      </button>
+    );
+  };
 
-      <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
-        <AppearanceSection />
-        <CacheSection />
-        <DownloadSection />
-        <PlaybackSection />
-        <SourceSection />
-        <Tier3Section />
-        <DeveloperSection />
-        {devMode ? <PlaybackDiagnosticsSection /> : null}
-        <TlsFingerprintSection />
-        <ProxySection />
-        <UpdateSection />
-        <AboutSection />
-      </main>
+  return (
+    <div className="settings-layout">
+      <nav className="settings-nav" aria-label="设置导航">
+        {groups.map((group) => (
+          <div key={group.title} className="settings-nav__group">
+            <div className="settings-nav__group-title">{group.title}</div>
+            {group.entries.map(renderItem)}
+          </div>
+        ))}
+      </nav>
+
+      <div className="settings-content" role="region" aria-label="设置内容">
+        <div className="settings-column">
+          {active === 'about' && <PageHeader title="关于" />}
+          {content}
+        </div>
+      </div>
     </div>
   );
 };

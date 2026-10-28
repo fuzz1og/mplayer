@@ -1,21 +1,23 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
-import { message } from 'antd';
-import { ArrowLeft, Flame, Disc3, ListMusic, Mic2 } from 'lucide-react';
+import '../styles/page-discover.css';
+import { toast } from '@/renderer/services/toastStore';
+
 import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useSearchStore } from '@/renderer/store/searchStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { searchService } from '@/renderer/services/searchService';
 import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
-import ChartPanel from '@/renderer/components/ChartPanel';
+import ChartPanel, { CHART_PREVIEW_ROWS } from '@/renderer/components/ChartPanel';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
 import SongList from '@/renderer/components/SongList';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
+import ArtistCard from '@/renderer/components/ArtistCard';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
 import { pickToplistGroup, SOURCE_DISPLAY_NAMES, TOPLIST_SOURCE_IDS } from '@mplayer/core';
@@ -43,35 +45,19 @@ function toChartEntry(groups: ToplistGroup[] | null, source: ToplistSourceKey, s
   return { name: group?.name ?? '', songs: group?.songs ?? [] };
 }
 
-/** 分段 pill 按钮样式（源切换与搜索结果二级 tab 共用，避免两处漂移；文字走语义 token 不写魔法色）。 */
-function pillStyle(active: boolean, extra?: React.CSSProperties): React.CSSProperties {
-  return {
-    border: 'none',
-    cursor: 'pointer',
-    borderRadius: 'var(--radius-full)',
-    fontSize: 'var(--text-sm)',
-    fontWeight: active ? 600 : 400,
-    color: active ? 'var(--text-inverse)' : 'var(--text-secondary)',
-    backgroundColor: active ? 'var(--accent)' : 'var(--bg-hover)',
-    transition: 'background-color 0.15s ease',
-    ...extra,
-  };
-}
-
 type TabKey = 'charts' | 'albums' | 'playlists' | 'artists';
 type AreaKey = 'ALL' | 'ZH' | 'EA' | 'KR' | 'JP';
 
 interface TabDef {
   key: TabKey;
   label: string;
-  icon: React.ReactNode;
 }
 
 const TABS: TabDef[] = [
-  { key: 'charts', label: '排行榜', icon: <Flame size={16} /> },
-  { key: 'albums', label: '新碟上架', icon: <Disc3 size={16} /> },
-  { key: 'playlists', label: '歌单', icon: <ListMusic size={16} /> },
-  { key: 'artists', label: '歌手', icon: <Mic2 size={16} /> },
+  { key: 'charts', label: '排行榜' },
+  { key: 'albums', label: '新碟上架' },
+  { key: 'playlists', label: '歌单' },
+  { key: 'artists', label: '歌手' },
 ];
 
 
@@ -104,14 +90,18 @@ const DiscoverPageV2: React.FC = () => {
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const play = usePlayerStore((s) => s.play);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>(loadSavedTab);
-  const [chartSource, setChartSource] = useState<ToplistSourceKey>('netease');
+  /** 发现内容来源：只影响发现内容（榜单），与标题栏的搜索来源完全独立。 */
+  const [contentSource, setContentSource] = useState<ToplistSourceKey>('netease');
   const [hotChart, setHotChart] = useState<ChartEntry>(EMPTY_CHART);
   const [newChart, setNewChart] = useState<ChartEntry>(EMPTY_CHART);
   const [hotLoading, setHotLoading] = useState(true);
   const [newLoading, setNewLoading] = useState(true);
+  /** 榜单落库时间（本地时戳）：两列共用一个源，只记一份，渲染「更新于 HH:mm」 */
+  const [chartUpdatedAt, setChartUpdatedAt] = useState<number | null>(null);
   const [hotError, setHotError] = useState<string | null>(null);
   const [newError, setNewError] = useState<string | null>(null);
 
@@ -155,6 +145,7 @@ const DiscoverPageV2: React.FC = () => {
     if (cached) {
       setHotChart(cached.hot); setNewChart(cached.new);
       setHotLoading(false); setNewLoading(false);
+      setChartUpdatedAt(cached.timestamp);
     } else {
       setHotLoading(true); setNewLoading(true);
       setHotError(null); setNewError(null);
@@ -171,7 +162,9 @@ const DiscoverPageV2: React.FC = () => {
       const fresh = toChartEntry(groups, source, ids.new);
       setHotChart(hot);
       setNewChart(fresh);
-      cacheRef.current[source] = { hot, new: fresh, timestamp: Date.now() };
+      const timestamp = Date.now();
+      cacheRef.current[source] = { hot, new: fresh, timestamp };
+      setChartUpdatedAt(timestamp);
     } catch (err: any) {
       if (!mountedRef.current || !isCurrentFetch()) return;
       if (!cached) {
@@ -265,9 +258,9 @@ const DiscoverPageV2: React.FC = () => {
 
   useEffect(() => {
     if (activeTab === 'charts') {
-      const cached = cacheRef.current[chartSource];
+      const cached = cacheRef.current[contentSource];
       if (!cached || Date.now() - cached.timestamp > CHART_TTL) {
-        fetchCharts(chartSource);
+        fetchCharts(contentSource);
       } else {
         // 命中未过期缓存：必须把该源榜单铺回状态，否则会沿用上一个源的曲目（切源串榜）
         setHotChart(cached.hot);
@@ -276,6 +269,7 @@ const DiscoverPageV2: React.FC = () => {
         setNewError(null);
         setHotLoading(false);
         setNewLoading(false);
+        setChartUpdatedAt(cached.timestamp);
       }
     } else if (activeTab === 'albums') {
       setAlbumsError(null);
@@ -284,7 +278,7 @@ const DiscoverPageV2: React.FC = () => {
       setPlaylistListError(null);
       fetchPlaylistList(true);
     }
-  }, [activeTab, chartSource, albumsArea, fetchCharts, fetchAlbums, fetchPlaylistList]);
+  }, [activeTab, contentSource, albumsArea, fetchCharts, fetchAlbums, fetchPlaylistList]);
 
   const handleAlbumsAreaChange = (area: string) => {
     setAlbumsArea(area as AreaKey);
@@ -321,26 +315,46 @@ const DiscoverPageV2: React.FC = () => {
   };
 
   /**
-   * 搜索结果列表的播放回调（#412）：此前两处都是内联箭头 `(song) => void play(song)`，
-   * 每次渲染新建引用。行组件是 memo 的，回调引用必须稳定。
+   * 搜索结果列表的播放回调（#412/#697）：列表只回传歌曲、当前展示队列与索引，
+   * 建队列归本页；回调必须稳定（行组件是 memo 的）。
+   * 分组视图的 queue 是该组 songs、index 是组内下标（D1），不跨组扁平化。
    */
-  const handleSearchPlay = useCallback((song: Song) => { void play(song); }, [play]);
+  const handleSearchPlay = useCallback((song: Song, queue: Song[], index: number) => {
+    setCurrentPlaylist(queue, index);
+    void play(song);
+  }, [play, setCurrentPlaylist]);
   /** 搜索多源视图不提供多选：稳定的空数组/空实现，避免每帧新建引用 */
   const EMPTY_SELECTION = useRef<string[]>([]).current;
   /** 搜索多源视图不提供分页：稳定空实现，避免每帧新建 */
   const handleNoSelectionChange = useCallback((_ids: string[]) => {}, []);
   const handleSearchLoadMore = useCallback(() => { void searchService.loadMore(); }, []);
 
-  const handlePlaySong = async (song: Song, chartId?: string) => {
-    if (chartId) playedChartIdRef.current = chartId;
+  /**
+   * 播放单曲：无 url 时按「歌名 歌手」补一个**精确匹配**的可播版本，且只回填 url——
+   * 绝不用搜索结果第一条顶替，否则排序差的源会播同名不同歌手的歌（#639 C3，判据与编排在 core）。
+   */
+  const playSongExact = useCallback(async (song: Song) => {
     try {
-      // #639 C3：无 url 歌曲按「歌名 歌手」补一个**精确匹配**的可播版本，且只回填 url（歌名/歌手/封面保持点击的歌）——
-      // 绝不用搜索结果第一条顶替，否则酷我这类排序差的源会播同名不同歌手的歌（如《单车恋人》→ cover 版）。判据与编排在 core。
       await play(await resolvePlayableVersionForDesktop(song));
     } catch (error) {
       console.error('播放失败:', error);
-      message.error('播放失败，请检查网络连接或稍后重试');
+      toast.error('播放失败，请检查网络连接或稍后重试');
     }
+  }, [play]);
+
+  /**
+   * 榜单点播（D1/D2）：列表只回传歌曲、整榜队列与行下标，建队列与播放在本页。
+   * 整榜入队而不是单曲——队列恒 1 首时「下一首」预取无曲可取，换歌明显变慢。
+   */
+  const handleChartPlay = useCallback((song: Song, queue: Song[], index: number, chartId: ChartKind) => {
+    playedChartIdRef.current = chartId;
+    setCurrentPlaylist(queue, index);
+    void playSongExact(song);
+  }, [playSongExact, setCurrentPlaylist]);
+
+  /** 榜单详情路由的 type 段：`<source>` 是热歌、`<source>_new` 是新歌（键域同 HotlistDetailPage） */
+  const openChartDetail = (kind: ChartKind) => {
+    navigate(`/hotlist/${kind === 'hot' ? contentSource : `${contentSource}_new`}`);
   };
 
   const isCurrentSong = (songId: string, sourceType?: string, chartId?: string) =>
@@ -350,13 +364,19 @@ const DiscoverPageV2: React.FC = () => {
 
   /** 重试当前源的榜单（热歌与新歌共用一次请求，故共用同一个重试）。 */
   const handleRetryCharts = () => {
-    delete cacheRef.current[chartSource];
-    fetchCharts(chartSource);
+    delete cacheRef.current[contentSource];
+    fetchCharts(contentSource);
   };
 
-  /** 面板标题 = 源名 · 榜单名（榜单名取自 core ToplistGroup.name，缺失时回落通用名）。 */
-  const chartTitle = (kind: ChartKind, entry: ChartEntry) =>
-    `${SOURCE_DISPLAY_NAMES[chartSource]} · ${entry.name || CHART_KIND_LABELS[kind]}`;
+  /** 列标题 = 榜单名（core ToplistGroup.name，缺失时回落通用名）；不带来源前缀——来源已由页面 segmented 选过。 */
+  const chartTitle = (kind: ChartKind, entry: ChartEntry) => entry.name || CHART_KIND_LABELS[kind];
+
+  /** 两列行数取较小者（且不超过预览上限），保证同一列高；某列空着时不拖累另一列 */
+  const chartRows = Math.min(
+    hotChart.songs.length || CHART_PREVIEW_ROWS,
+    newChart.songs.length || CHART_PREVIEW_ROWS,
+    CHART_PREVIEW_ROWS,
+  );
 
   const searchLoading = useSearchStore((s) => s.loading);
   const searchLoadingMore = useSearchStore((s) => s.loadingMore);
@@ -369,8 +389,6 @@ const DiscoverPageV2: React.FC = () => {
   const groupedResults = useSearchStore((s) => s.groups);
   const expandedKeys = useSearchStore((s) => s.expandedKeys);
   const toggleGroup = useSearchStore((s) => s.toggleGroup);
-  const expandAll = useSearchStore((s) => s.expandAll);
-  const collapseAll = useSearchStore((s) => s.collapseAll);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const { download } = useDownload();
@@ -517,34 +535,18 @@ const DiscoverPageV2: React.FC = () => {
   // 否则搜索失败或全空时整个视图不渲染、静默落回首页（story 20 空/错误态不可达）。
   if (currentKeyword) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
-          padding: 'var(--space-3) var(--space-6)',
-          borderBottom: '1px solid var(--border-subtle)',
-          backgroundColor: 'var(--bg-surface)', height: '60px', flexShrink: 0,
-        }}>
-          <button onClick={handleBackFromSearch} style={{
-            border: 'none', background: 'transparent', cursor: 'pointer',
-            padding: 'var(--space-3)', borderRadius: 'var(--radius-md)',
-            display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-            color: 'var(--text-secondary)', fontSize: 'var(--text-base)', fontWeight: 500,
-          }}>
-            <ArrowLeft size={16} />
-            <span>返回</span>
-          </button>
-          <h1 style={{
-            fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text-primary)',
-            flex: 1, margin: 0, textAlign: 'center',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            搜索结果: {currentKeyword}
-          </h1>
-          <div style={{ width: '140px' }} />
-        </div>
+      <div className="discover-page">
+        <PageHeader
+          title="发现"
+          actions={(
+            <button type="button" className="discover-search-clear" onClick={handleBackFromSearch}>
+              退出搜索
+            </button>
+          )}
+        />
 
         {/* 单曲 / 歌手 / 歌单二级 tab */}
-        <div style={{ display: 'flex', gap: '8px', padding: '10px 24px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', flexShrink: 0 }}>
+        <div className="discover-subtabs">
           {([
             { key: 'songs' as const, label: '单曲', count: searchSongs.length },
             { key: 'artists' as const, label: '歌手', count: artistResults.length },
@@ -554,17 +556,11 @@ const DiscoverPageV2: React.FC = () => {
               key={tab.key}
               aria-pressed={activeSearchTab === tab.key}
               onClick={() => handleSearchTabChange(tab.key)}
-              style={pillStyle(activeSearchTab === tab.key, {
-                display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 16px',
-              })}
+              className={`discover-pill discover-pill--tab${activeSearchTab === tab.key ? ' discover-pill--active' : ''}`}
             >
               {tab.label}
               {tab.count > 0 && (
-                <span style={{
-                  fontSize: 'var(--text-2xs)', padding: '1px 6px', borderRadius: 'var(--radius-full)',
-                  backgroundColor: activeSearchTab === tab.key ? 'rgba(255,255,255,0.25)' : 'var(--bg-active)',
-                  color: activeSearchTab === tab.key ? '#fff' : 'var(--text-tertiary)',
-                }}>
+                <span className={`discover-pill__count${activeSearchTab === tab.key ? ' discover-pill__count--active' : ''}`}>
                   {tab.count}
                 </span>
               )}
@@ -572,17 +568,15 @@ const DiscoverPageV2: React.FC = () => {
           ))}
         </div>
 
-        <div style={{ flex: 1, overflow: 'hidden' }}>
+        <div className="discover-search-body">
           {activeSearchTab === 'songs' ? (
             searchError && searchSongs.length === 0 && !searchLoading ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>{searchError}</div>
+              <div className="discover-status discover-status--danger">{searchError}</div>
             ) : sourceType === 'all' ? (
               <GroupedSongList
                 groups={groupedResults}
                 expandedKeys={expandedKeys}
                 onToggleGroup={toggleGroup}
-                onExpandAll={expandAll}
-                onCollapseAll={collapseAll}
                 currentSongId={currentSong?.id}
                 isPlaying={isPlaying}
                 favoriteIds={favoriteIds}
@@ -596,7 +590,7 @@ const DiscoverPageV2: React.FC = () => {
                 onLoadMore={handleSearchLoadMore}
               />
             ) : (
-              <div ref={singleSourceScrollRef} style={{ height: '100%', overflowY: 'auto' }}>
+              <div ref={singleSourceScrollRef} className="discover-scroll">
                 <SongList
                   songs={searchSongs}
                   currentSongId={currentSong?.id}
@@ -605,94 +599,72 @@ const DiscoverPageV2: React.FC = () => {
                   onPlay={handleSearchPlay}
                   onToggleFavorite={toggleFavorite}
                   onDownload={download}
+                  density="library"
+                  showDuration
                   showCheckbox={false}
                   loading={searchLoading || searchLoadingMore}
                   emptyText="未找到相关歌曲"
                 />
                 {hasMore && (searchLoading || searchLoadingMore) && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中...</div>
+                  <div className="discover-note">加载中...</div>
                 )}
                 {!hasMore && searchSongs.length > 0 && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>没有更多歌曲了</div>
+                  <div className="discover-note">没有更多歌曲了</div>
                 )}
               </div>
             )
           ) : activeSearchTab === 'playlists' ? (
             // 歌单 tab（#415）：复用发现页同一张歌单网格与既有详情页；空态文案区分
             // 「搜索歌单」与发现页一级的「歌单广场」（两者语义不同，见 PlaylistPageGrid.emptyText）
-            <div ref={playlistScrollRef} style={{ height: '100%', overflowY: 'auto', padding: '24px' }}>
+            // 滚动容器用 data 标记声明（与 useVirtualRows 同口径），测试据此定位。
+            <div ref={playlistScrollRef} className="discover-scroll discover-scroll--padded" data-scroll-container>
               <PlaylistPageGrid
                 playlists={playlistResults}
                 loading={playlistLoading}
                 error={playlistError}
                 onRetry={() => ensurePlaylistsSearch(currentKeyword, true)}
                 onPlaylistSelect={handlePlaylistSelect}
-                emptyText="没有搜到歌单，去发现页看看歌单广场"
+                emptyText="没有搜到歌单"
               />
               {playlistLoadingMore && (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中…</div>
+                <div className="discover-note discover-note--tight">加载中…</div>
               )}
               {playlistMoreError && !playlistLoadingMore && (
-                <div style={{ padding: '16px', textAlign: 'center', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--text-tertiary)' }}>加载更多失败</span>
+                <div className="discover-more-error">
+                  <span className="discover-more-error__text">加载更多失败</span>
                   <button
                     onClick={loadMorePlaylists}
-                    style={{ marginLeft: '8px', padding: '4px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                    className="discover-retry"
                   >
                     重试
                   </button>
                 </div>
               )}
               {!playlistMore && !playlistLoadingMore && !playlistMoreError && playlistResults.length > 0 && (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>已加载全部歌单</div>
+                <div className="discover-note discover-note--tight">已加载全部歌单</div>
               )}
             </div>
           ) : artistLoading && artistResults.length === 0 ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>正在搜索歌手…</div>
+            <div className="discover-status">正在搜索歌手…</div>
           ) : artistError ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red-500)' }}>歌手搜索失败</div>
+            <div className="discover-status discover-status--danger">歌手搜索失败</div>
           ) : artistResults.length > 0 ? (
-            <div style={{ height: '100%', overflowY: 'auto', padding: '24px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 'var(--space-5)' }}>
+            <div className="discover-scroll discover-scroll--padded">
+              <div className="artists__grid">
                 {artistResults.map((a) => (
-                  <button
+                  <ArtistCard
                     key={a.id}
-                    aria-label={`查看歌手: ${a.name}`}
+                    artist={a}
                     onClick={() => {
                       cacheArtistMeta(a.id, { name: a.name, pic: a.picUrl });
                       navigate(`/artist/${a.id}`, { state: { name: a.name, pic: a.picUrl } });
                     }}
-                    style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                      padding: '16px 8px', border: 'none', background: 'transparent', cursor: 'pointer', minWidth: 0,
-                      borderRadius: 'var(--radius-md)',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '72px', height: '72px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-                        backgroundColor: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '28px', color: 'var(--text-tertiary)', border: '1px solid var(--border-default)',
-                      }}
-                    >
-                      {a.picUrl ? (
-                        <img src={coverThumbUrl(a.picUrl, COVER_SIZE.icon)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        a.name.charAt(0)
-                      )}
-                    </span>
-                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                      {a.name}
-                    </span>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                      专辑 {a.albumSize} · 歌曲 {a.musicSize}
-                    </span>
-                  </button>
+                  />
                 ))}
               </div>
             </div>
           ) : (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>未找到相关歌手</div>
+            <div className="discover-status">未找到相关歌手</div>
           )}
         </div>
       </div>
@@ -700,96 +672,61 @@ const DiscoverPageV2: React.FC = () => {
   }
 
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-      } as React.CSSProperties}
-    >
-      <div style={{
-        display: 'flex', flexDirection: 'column',
-        padding: '16px 28px 0',
-        borderBottom: '1px solid var(--border-subtle)',
-        backgroundColor: 'var(--bg-surface)',
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px' }}>
-          <span style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-            今天听什么
-          </span>
-          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
-            网易云 · QQ · 酷狗
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: '18px', marginTop: '12px', overflowX: 'auto' }}>
+    <div className="discover-page">
+      <PageHeader title="发现" />
+
+      <div className="discover-filters">
+        {activeTab === 'charts' && (
+          <div className="discover-filter-group" role="group" aria-label="发现内容来源">
+          {CHART_SOURCE_OPTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setContentSource(s)}
+              aria-pressed={contentSource === s}
+              className="discover-segment"
+            >
+              {SOURCE_DISPLAY_NAMES[s]}
+            </button>
+          ))}
+          </div>
+        )}
+        <div className="discover-filter-group" role="group" aria-label="内容分类">
           {TABS.map((tab) => (
             <button
               key={tab.key}
+              type="button"
               onClick={() => setActiveTab(tab.key)}
-              style={{
-                position: 'relative',
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '6px 2px 14px',
-                border: 'none',
-                background: 'transparent',
-                color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: 'var(--text-sm)',
-                fontWeight: activeTab === tab.key ? 600 : 400,
-                whiteSpace: 'nowrap',
-                transition: 'color 0.15s ease',
-              }}
+              aria-pressed={activeTab === tab.key}
+              className="discover-segment"
             >
-              {tab.icon}
-              <span>{tab.label}</span>
-              {activeTab === tab.key && (
-                <span
-                  aria-hidden
-                  style={{
-                    position: 'absolute', left: '50%', bottom: '4px', transform: 'translateX(-50%)',
-                    display: 'flex', alignItems: 'flex-end', gap: '2px', height: '10px',
-                    animation: 'fadeIn 0.2s ease-out',
-                  }}
-                >
-                  <span style={{ width: '2px', height: '6px', borderRadius: '1px', backgroundColor: 'var(--accent)' }} />
-                  <span style={{ width: '2px', height: '10px', borderRadius: '1px', backgroundColor: 'var(--accent)' }} />
-                  <span style={{ width: '2px', height: '7px', borderRadius: '1px', backgroundColor: 'var(--accent)' }} />
-                </span>
-              )}
+              {tab.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div
-        style={{ flex: 1, overflow: 'hidden', padding: activeTab === 'artists' ? 0 : 'var(--space-5) var(--space-6)' }}
-      >
+      <div className={(activeTab === 'charts' || activeTab === 'artists') ? 'discover-body discover-body--flush' : 'discover-body'}>
+        {/* 排行榜两列与页面共用一个滚动上下文（与推荐页/资料库同口径），列自身不滚动 */}
         {activeTab === 'charts' && (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            {/* 源切换（#332 选项 A）：不再把三源合成一张跨源榜，而是「切源看该源自己的榜」 */}
-            <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-5)', flexShrink: 0 }}>
-              {CHART_SOURCE_OPTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setChartSource(s)}
-                  aria-pressed={chartSource === s}
-                  style={pillStyle(chartSource === s, { padding: '4px 14px' })}
-                >
-                  {SOURCE_DISPLAY_NAMES[s]}
-                </button>
-              ))}
-            </div>
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 'var(--space-6)' }}>
+          <div className="discover-flow" data-scroll-container>
+            <div className="discover-charts">
               <ChartPanel
                 title={chartTitle('hot', hotChart)}
                 chartId="hot"
                 songs={hotChart.songs}
                 loading={hotLoading}
                 error={hotError}
-                onPlay={handlePlaySong}
+                updatedAt={chartUpdatedAt}
+                rows={chartRows}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handleChartPlay}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
                 isCurrentSong={isCurrentSong}
                 onRetry={handleRetryCharts}
+                onViewAll={() => openChartDetail('hot')}
               />
               <ChartPanel
                 title={chartTitle('new', newChart)}
@@ -797,9 +734,16 @@ const DiscoverPageV2: React.FC = () => {
                 songs={newChart.songs}
                 loading={newLoading}
                 error={newError}
-                onPlay={handlePlaySong}
+                updatedAt={chartUpdatedAt}
+                rows={chartRows}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handleChartPlay}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
                 isCurrentSong={isCurrentSong}
                 onRetry={handleRetryCharts}
+                onViewAll={() => openChartDetail('new')}
               />
             </div>
           </div>
@@ -818,29 +762,19 @@ const DiscoverPageV2: React.FC = () => {
         )}
 
         {activeTab === 'playlists' && (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-5)', flexShrink: 0 }}>
+          <div className="discover-panel">
+            <div className="discover-pills discover-pills--wrap">
               {PLAYLIST_CATEGORIES.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => handlePlaylistCategoryChange(cat)}
-                  style={{
-                    padding: '6px 16px',
-                    borderRadius: '20px',
-                    border: '1px solid var(--border-default)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--text-sm)',
-                    fontWeight: playlistCategory === cat ? 600 : 400,
-                    color: playlistCategory === cat ? 'white' : 'var(--text-secondary)',
-                    background: playlistCategory === cat ? 'var(--accent)' : 'transparent',
-                    transition: 'all 0.15s ease',
-                  }}
+                  className={`discover-chip${playlistCategory === cat ? ' discover-chip--active discover-chip--strong' : ''}`}
                 >
                   {cat}
                 </button>
               ))}
             </div>
-            <div onScroll={handlePlaylistScroll} style={{ flex: 1, overflow: 'auto' }}>
+            <div onScroll={handlePlaylistScroll} className="discover-list-scroll">
               <PlaylistPageGrid
                 playlists={playlistList}
                 loading={playlistListLoading}
@@ -849,16 +783,16 @@ const DiscoverPageV2: React.FC = () => {
                 onPlaylistSelect={handlePlaylistSelect}
               />
               {playlistListLoadingMore && (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>加载中...</div>
+                <div className="discover-note discover-note--tight">加载中...</div>
               )}
               {!playlistListHasMore && playlistList.length > 0 && (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>没有更多歌单了</div>
+                <div className="discover-note discover-note--tight">没有更多歌单了</div>
               )}
             </div>
           </div>
         )}
 
-        {activeTab === 'artists' && <ArtistListPage />}
+        {activeTab === 'artists' && <ArtistListPage embedded />}
       </div>
     </div>
   );
