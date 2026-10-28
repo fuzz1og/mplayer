@@ -23,14 +23,7 @@
 
 .card:hover {
   box-shadow: var(--shadow-md);
-}
-
-.card-interactive:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-/* ── 行 ── */
+}/* ── 行 ── */
 
 .song-row {
   display: flex;
@@ -712,46 +705,7 @@
   height: 12px;
   margin-top: 6px;
   border-radius: var(--radius-xs);
-}
-
-.card-skeleton--row {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-}
-
-.card-skeleton__cover--row {
-  flex: none;
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-sm);
-}
-
-.card-skeleton__lines {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.card-skeleton__line {
-  height: 12px;
-  border-radius: var(--radius-xs);
-}
-
-.card-skeleton__line--title {
-  width: 70%;
-}
-
-.card-skeleton__line--desc {
-  width: 90%;
-}
-
-.card-skeleton__line--meta {
-  width: 45%;
-}
-
-/* ── 专辑网格 ── */
+}/* ── 专辑网格 ── */
 
 .album-grid__group + .album-grid__group {
   margin-top: 32px;
@@ -1158,35 +1112,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-}
-
-.list-page__head {
-  padding: 24px 24px 16px;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--surface-content);
-}
-
-.list-page__head-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.list-page__title-group {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.list-page__title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.02em;
-}
-
-.list-page__count {
+}.list-page__count {
   margin-left: 8px;
   color: var(--text-tertiary);
   font-size: var(--text-sm);
@@ -1204,49 +1130,7 @@
   flex: 1;
   padding: 0 28px 40px;
   overflow: auto;
-}
-
-/* 头部动作按钮（清空 / 播放全部） */
-
-.list-page__action {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 16px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-xl);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition:
-    color var(--duration-fast) var(--ease-standard),
-    border-color var(--duration-fast) var(--ease-standard);
-}
-
-.list-page__action:hover:not(:disabled) {
-  border-color: var(--text-tertiary);
-  color: var(--text-primary);
-}
-
-.list-page__action:disabled {
-  color: var(--text-disabled);
-  cursor: not-allowed;
-}
-
-.list-page__action--primary {
-  border-color: var(--accent);
-  background: var(--accent-fill);
-  color: var(--text-on-accent);
-}
-
-.list-page__action--primary:hover:not(:disabled) {
-  border-color: var(--accent-hover);
-  background: var(--accent-fill-hover);
-  color: var(--text-on-accent);
-}
-
-/* ── 队列页（1.9.0）：与收藏/历史共用 list-page 骨架 ── */
+}/* ── 队列页（1.9.0）：与收藏/历史共用 list-page 骨架 ── */
 
 .queue__row-actions {
   display: flex;
@@ -1280,212 +1164,13 @@
   display: flex;
   align-items: center;
   color: var(--text-tertiary);
-}
-
-.queue__head-actions {
-  display: flex;
-  gap: 8px;
-}
-
-/* 表头：与行同列 */
-
-.queue__thead {
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-}
-
-.queue__thead-index {
-  flex-shrink: 0;
-  text-align: center;
-}
-
-.queue__thead-title {
-  flex: 1;
-}
-
-.queue__thead-col {
-  flex-shrink: 0;
-}
-
-.queue__thead-actions {
-  flex-shrink: 0;
-  text-align: center;
-}
-
-.queue__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: var(--text-tertiary);
-}
-
-.queue__empty-icon {
-  margin-bottom: 12px;
-  color: var(--text-tertiary);
-}
-
-/* ── 详情页顶栏（榜单 / 歌手 / 专辑共用，1.9.0）── */
+}/* ── 详情页顶栏（榜单 / 歌手 / 专辑共用，1.9.0）── */
 
 .detail-page {
   display: flex;
   flex-direction: column;
   height: 100%;
-}
-
-.detail-page__back {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition:
-    transform var(--duration-fast) var(--ease-standard),
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.detail-page__back:hover {
-  transform: translateX(-2px);
-  background: var(--surface-card-hover);
-  color: var(--text-primary);
-}
-
-.detail-page__body {
-  flex: 1;
-  padding: 24px;
-  overflow: auto;
-}
-
-/* 页内标题块：封面方块 + 标题 + 副标题 */
-
-.detail-hero {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 32px;
-}
-
-.detail-hero__mark {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-grad);
-  color: var(--text-on-accent);
-  font-size: var(--text-xl);
-  font-weight: var(--weight-semibold);
-}
-
-.detail-hero__title {
-  margin: 0 0 8px;
-  color: var(--text-primary);
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.02em;
-}
-
-.detail-hero__sub {
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-}
-
-/* 骨架行 */
-
-.detail-skeleton__row {
-  display: flex;
-  align-items: center;
-  padding: 10px 16px;
-  margin-bottom: 8px;
-  border-radius: var(--radius-sm);
-}
-
-.detail-skeleton__index {
-  width: 50px;
-  text-align: center;
-}
-
-.detail-skeleton__index-bar {
-  width: 20px;
-  height: 14px;
-  margin: 0 auto;
-}
-
-.detail-skeleton__main {
-  display: flex;
-  flex: 1;
-  gap: 12px;
-  align-items: center;
-}
-
-.detail-skeleton__cover {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-xs);
-}
-
-.detail-skeleton__lines {
-  flex: 1;
-}
-
-.detail-skeleton__title {
-  width: 70%;
-  height: 14px;
-  margin-bottom: 4px;
-}
-
-.detail-skeleton__sub {
-  width: 50%;
-  height: 12px;
-}
-
-/* 错误态 */
-
-.detail-error {
-  padding: 24px;
-  border-radius: var(--radius-sm);
-  background: var(--danger-subtle);
-  color: var(--danger-text);
-  text-align: center;
-}
-
-.detail-error__icon {
-  margin-bottom: 12px;
-  color: var(--danger);
-}
-
-.detail-error__text {
-  margin-bottom: 8px;
-  font-size: var(--text-base);
-}
-
-.detail-error__retry {
-  margin-top: 16px;
-  padding: 8px 16px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: var(--danger);
-  color: var(--text-inverse);
-  cursor: pointer;
-}
-
-/* ── 歌手详情（1.9.0）：头部头像 + 名称 + 排序分段 ── */
+}/* ── 歌手详情（1.9.0）：头部头像 + 名称 + 排序分段 ── */
 
 .artist {
   display: flex;
@@ -1589,209 +1274,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-}
-
-.local__head-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.local__main {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-.local__folders {
-  width: 240px;
-  padding: 16px;
-  overflow-y: auto;
-  border-right: 1px solid var(--hairline);
-}
-
-.local__folder {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  margin-bottom: 4px;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-weight: var(--weight-normal);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.local__folder:hover {
-  background: var(--surface-card-hover);
-}
-
-.local__folder[data-active] {
-  background: var(--surface-selected);
-  color: var(--text-primary);
-  font-weight: var(--weight-medium);
-}
-
-.local__folder-name {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  min-width: 0;
-}
-
-.local__folder-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.local__folder-count {
-  font-size: var(--text-xs);
-  opacity: 0.7;
-}
-
-.local__folders-empty {
-  padding: 12px;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-}
-
-.local__songs {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.local__songs-scroll {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.local__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-tertiary);
-}
-
-.local__empty-icon {
-  margin-bottom: 16px;
-  opacity: 0.5;
-}
-
-.local__empty-title {
-  margin-bottom: 8px;
-  font-size: var(--text-base);
-}
-
-/* ── 自定义下拉（1.9.0）── */
-
-.dd {
-  position: relative;
-  display: inline-block;
-}
-
-.dd__trigger {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 4px 10px 4px 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  user-select: none;
-  transition: background var(--duration-normal) var(--ease-standard);
-}
-
-.dd__trigger:hover:not([data-disabled]):not([data-open]) {
-  background: var(--surface-card-hover);
-}
-
-.dd__trigger[data-disabled] {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.dd__icon {
-  display: flex;
-  align-items: center;
-}
-
-.dd__label {
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-}
-
-.dd__chevron {
-  color: var(--text-tertiary);
-  transition: transform var(--duration-normal) var(--ease-standard);
-}
-
-.dd__menu {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  z-index: 1000;
-  min-width: 110px;
-  margin-top: 6px;
-  overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-lg);
-  transform: translateX(-50%);
-  animation: dd-fade-in var(--duration-normal) var(--ease-standard);
-}
-
-.dd__option {
-  position: relative;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 10px 16px;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.dd__option:hover:not([data-selected]) {
-  background: var(--surface-card-hover);
-}
-
-.dd__option[data-selected] {
-  background: var(--surface-selected);
-  color: var(--accent-text);
-}
-
-.dd__option-bar {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 3px;
-  height: 20px;
-  background: var(--accent);
-  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
-  transform: translateY(-50%);
-}
-
-.dd__option-label {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-normal);
-}
-
-.dd__option[data-selected] .dd__option-label {
-  font-weight: var(--weight-semibold);
-}
-
-@keyframes dd-fade-in {
+}@keyframes dd-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
@@ -1992,17 +1475,7 @@
 
 .errb__retry:hover {
   background: var(--accent-hover);
-}
-
-/* 行操作菜单的点击外罩 */
-
-.menu-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-}
-
-.cover-fill--icon {
+}.cover-fill--icon {
   color: var(--text-tertiary);
 }
 
@@ -2052,29 +1525,7 @@
 
 .row-actions__more {
   position: relative;
-}
-
-/* 行操作弹出菜单 */
-
-.row-menu__scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-}
-
-.row-menu {
-  position: fixed;
-  z-index: 10000;
-  min-width: 160px;
-  padding: 4px;
-  overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-lg);
-}
-
-.row-menu__item {
+}.row-menu__item {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -2327,30 +1778,7 @@
 
 @keyframes route-spin {
   to { transform: rotate(360deg); }
-}
-
-.route-soon {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 100%;
-  color: var(--text-tertiary);
-}
-
-.route-soon__icon {
-  margin-bottom: 12px;
-  font-size: var(--text-3xl);
-}
-
-.route-soon__title {
-  color: var(--text-secondary);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-medium);
-}
-
-/* ── 歌词显示（1.9.0）── */
+}/* ── 歌词显示（1.9.0）── */
 
 .lyrics {
   overflow-x: hidden;
@@ -2436,14 +1864,7 @@
 
 .no-pointer {
   pointer-events: none;
-}
-
-.row-menu {
-  top: var(--menu-top);
-  right: var(--menu-right);
-}
-
-/* ── 详情页滚动与 hero（#700）：hero 与列表同一滚动上下文 ── */
+}/* ── 详情页滚动与 hero（#700）：hero 与列表同一滚动上下文 ── */
 
 .detail-page__scroll {
   flex: 1;

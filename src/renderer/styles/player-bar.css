@@ -1,70 +1,3 @@
-/* ============================================================
-   播放栏一族 — 容器 / 播放栏内容 / 控件 / 进度 / 音量 / 按钮
-   消费者：PlayerBar / PlayerControls / PlayerProgress / PlayerVolume
-   前半段来自 global.css，后半段来自 shell.css，逐条搬移，未改值。
-   ============================================================ */
-
-/* ── 进度条 ── */
-.progress-bar {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  background: var(--border-default);
-  border-radius: var(--radius-full);
-  outline: none;
-  cursor: pointer;
-  transition: height var(--duration-fast) var(--ease-out);
-}
-
-.progress-bar:hover {
-  height: 6px;
-}
-
-.progress-bar::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  background: var(--accent);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-out),
-              transform var(--duration-fast) var(--ease-out);
-  box-shadow: var(--shadow-sm);
-}
-
-.progress-bar:hover::-webkit-slider-thumb {
-  opacity: 1;
-  transform: scale(1.1);
-}
-
-/* ── 音量条 ── */
-.volume-bar {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  background: var(--border-default);
-  border-radius: var(--radius-full);
-  outline: none;
-  cursor: pointer;
-}
-
-.volume-bar::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 10px;
-  height: 10px;
-  background: var(--text-secondary);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: background var(--duration-fast);
-}
-
-.volume-bar::-webkit-slider-thumb:hover {
-  background: var(--accent);
-}
-
 /* ── PlayerBar 按钮 ── */
 .player-btn {
   border: none;
@@ -93,18 +26,7 @@
   cursor: not-allowed;
   opacity: 0.3;
   transform: none;
-}
-
-.player-btn-accent {
-  color: var(--accent);
-}
-
-.player-btn-accent:hover {
-  color: var(--accent-hover);
-  background-color: var(--accent-subtle);
-}
-
-/* 播放栏容器（材质与高度统一走 token，组件内不再写 backdrop-filter） */
+}/* 播放栏容器（材质与高度统一走 token，组件内不再写 backdrop-filter） */
 /* 播放栏（1.9.0 收口）：三列 grid，左右各 1fr、中间 auto——播放键对准窗口光学中心 */
 .player-bar {
   position: relative;

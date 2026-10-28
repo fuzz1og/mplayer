@@ -97,9 +97,3 @@
   align-items: center;
   margin-top: 16px;
 }
-
-.ui-page-card {
-  overflow: hidden;
-  border-radius: var(--group-radius);
-  background: var(--surface-card);
-}

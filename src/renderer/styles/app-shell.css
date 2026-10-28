@@ -16,18 +16,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-
-.app-shell__main {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-  background: var(--surface-content);
-}
-
-.app-shell__content {
+}.app-shell__content {
   flex: 1;
   min-width: 0;
   overflow: hidden;

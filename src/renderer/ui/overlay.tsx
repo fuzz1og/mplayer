@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Button, IconButton } from './button';
 import './overlay.css';
+import { getLastStableFocus } from './focusMemory';
 
 /* ============================================================
    浮层与数据展示原语（#681）：Dialog / Toast / GridList
@@ -125,7 +126,9 @@ export const Dialog: React.FC<DialogProps> = ({
     if (open) return;
     const trigger = triggerRef.current;
     triggerRef.current = null;
-    if (trigger?.isConnected) trigger.focus();
+    // 触发元素可能已随菜单卸载：回落到打开前最后一个稳定焦点
+    const target = trigger?.isConnected ? trigger : getLastStableFocus();
+    target?.focus();
   }, [open]);
 
   // cancel（ESC）与 close（浏览器主动关闭）都同步回父组件；程序性 close 不重复回调。

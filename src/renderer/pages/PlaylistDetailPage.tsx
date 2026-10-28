@@ -4,7 +4,7 @@ import '@/renderer/styles/detail-page.css';
 import { Play, Edit2, Music, Download, Trash2, Upload, GripVertical, CirclePlus } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from '@/renderer/services/toastStore';
-import { Button, Dialog, Input, PageHero, useConfirm } from '@/renderer/ui';
+import { Button, Dialog, Input, PageHero, Textarea, useConfirm } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -473,12 +473,11 @@ const PlaylistDetailPage: React.FC = () => {
             className="playlist-detail__input"
           />
           <label className="playlist-detail__label" htmlFor="playlist-edit-desc">歌单描述</label>
-          <textarea
+          <Textarea
             id="playlist-edit-desc"
             value={editDesc}
             onChange={(event) => setEditDesc(event.target.value)}
             rows={3}
-            className="playlist-detail__textarea"
           />
         </div>
       </Dialog>
