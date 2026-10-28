@@ -97,12 +97,43 @@ describe('refreshSongCover 封面失败刷新', () => {
       if (channel === 'musicApi:call' && method === 'searchSongsRouted') return [];
       return null;
     });
+    const searchCalls = () =>
+      invoke.mock.calls.filter(([channel, method]) => channel === 'musicApi:call' && method === 'searchSongsRouted').length;
 
     await refreshSongCover(baseSong);
-    const callsAfterFirst = invoke.mock.calls.length;
-    // 刚刷新过（60s 冷却）：第二次触发直接跳过，不再发起搜索
-    await refreshSongCover(baseSong);
-    expect(invoke.mock.calls.length).toBe(callsAfterFirst);
+    const searchesAfterFirst = searchCalls();
+    // 刚刷新过（60s 冷却）：第二次触发不再发起搜索；缓存读仍允许（本地、无上游成本）
+    expect(await refreshSongCover(baseSong)).toBeNull();
+    expect(searchCalls()).toBe(searchesAfterFirst);
+  });
+
+  it('冷却期内切页重挂仍从缓存水合封面（不因冷却整片回落灰底）', async () => {
+    const invoke = vi.mocked(IpcClient.invoke);
+    const freshCover = 'https://img.example.com/cached-cover.jpg';
+    let cached: { url: string; cover: string; lrc: string } | null = null;
+    invoke.mockImplementation(async (channel: string, method?: string, arg?: unknown) => {
+      if (channel === 'cache:getSongResources') return cached;
+      if (channel === 'cache:setSongResources') {
+        cached = arg as { url: string; cover: string; lrc: string };
+        return null;
+      }
+      if (channel === 'musicApi:call' && method === 'searchSongsRouted') {
+        return [{ ...baseSong, cover: freshCover }];
+      }
+      return null;
+    });
+
+    // 首次挂载：缓存空 → 上游搜索成功并写缓存
+    expect(await refreshSongCover(baseSong)).toBe(freshCover);
+    const commitsAfterFirst = invoke.mock.calls.length;
+
+    // 切页返回：收藏重读只给 SongBase（cover 为空），仍在 60s 冷却内
+    // 关键断言：缓存水合不受冷却影响，能直接把封面还给列表
+    expect(await refreshSongCover({ ...baseSong, cover: '' })).toBe(freshCover);
+    const searchCalls = invoke.mock.calls
+      .slice(commitsAfterFirst)
+      .filter(([channel, method]) => channel === 'musicApi:call' && method === 'searchSongsRouted').length;
+    expect(searchCalls).toBe(0);
   });
 
   it('缓存已有可用封面直接复用零搜索（收藏/历史 cover 不落库，挂载触发不打上游）', async () => {
