@@ -92,6 +92,7 @@
 .titlebar__trailing {
   display: flex;
   align-items: center;
+  height: 100%;
   -webkit-app-region: no-drag;
 }
 
@@ -209,11 +210,10 @@
   transform: rotate(180deg);
 }
 
-}
-
+/* 右列：窗口控制（三枚按钮横排，高度铺满标题栏） */
 .titlebar__controls {
   display: flex;
-  height: 100%;
+  height: var(--titlebar-height);
   -webkit-app-region: no-drag;
 }
 

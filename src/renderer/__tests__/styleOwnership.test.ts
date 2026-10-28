@@ -170,6 +170,24 @@ describe('样式所有权（#696）', () => {
     expect(css).toContain(':root {');
   });
 
+  // #694 回归护栏：拆分样式时漏掉一个「}」不会让 lint 变红，但会让后续规则被解析成嵌套规则而静默失效
+  // （标题栏窗口控制就是这样从横排变成竖排的）。这里逐文件校验花括号配平。
+  it('每个样式文件的花括号都配平（漏/多一个 } 会让后续规则静默丢失）', () => {
+    const dirs = ['styles', 'ui'];
+    const offenders: string[] = [];
+    for (const dir of dirs) {
+      for (const file of readdirSync(join(rendererRoot, dir))) {
+        if (!file.endsWith('.css')) continue;
+        const rel = dir + '/' + file;
+        const css = readFileSync(join(rendererRoot, rel), 'utf8');
+        const open = (css.match(/\{/g) ?? []).length;
+        const close = (css.match(/\}/g) ?? []).length;
+        if (open !== close) offenders.push(rel + ' {' + open + ' / }' + close);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('base.css 只放跨页面底座，不夹带单组件/单页面样式', () => {
     const css = stripComments(read('renderer/styles/base.css'));
     const forbidden = [
