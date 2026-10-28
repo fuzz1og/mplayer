@@ -108,7 +108,9 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
     hasMore,
   });
 
-  const handlePlay = async (song: Song) => {
+  const handlePlay = async (song: Song, queue: Song[], index: number) => {
+    // #697：列表只回传展示队列与索引，建队列归页面
+    setCurrentPlaylist(queue, index);
     await play(song);
   };
 

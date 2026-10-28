@@ -61,7 +61,7 @@ const PlaylistDetailPage: React.FC = () => {
    */
   const [filterQuery, setFilterQuery] = useState('');
   const isFiltering = filterQuery.trim().length > 0;
-  const visibleSongs = useMemo(() => filterSongsByQuery(songs, filterQuery), [songs, filterQuery]);
+  const visibleSongs = useMemo<Song[]>(() => filterSongsByQuery(songs, filterQuery) as Song[], [songs, filterQuery]);
   // 批量操作的作用域：过滤态只认**可见**的已选项；被过滤掉的选中项原样留着，清空过滤后回来
   const visibleSelectedIds = useMemo(() => {
     if (!isFiltering) return selectedIds;
@@ -127,16 +127,16 @@ const PlaylistDetailPage: React.FC = () => {
     setSelectedIds([]);
   }, [playlistId]);
 
-  const handlePlay = useCallback(async (song: Song) => {
+  const handlePlay = useCallback(async (song: Song, queue: Song[], index: number) => {
+    setCurrentPlaylist(queue, index);
     await play(song);
-  }, [play]);
+  }, [play, setCurrentPlaylist]);
 
   // 「播放全部 / 下载全部」是**歌单级**动作，不受页内过滤影响（#488 只改展示集合，见上）；
   // 受过滤影响的是「勾选 + 批量栏」那条路径，作用域见 visibleSelectedIds
   const handlePlayAll = async () => {
     if (songs.length > 0) {
-      setCurrentPlaylist(songs, 0);
-      await handlePlay(songs[0]);
+      await handlePlay(songs[0], songs, 0);
     }
   };
 
@@ -243,6 +243,8 @@ const PlaylistDetailPage: React.FC = () => {
    */
   const sharedRowProps = useMemo(() => ({
     isPlaying,
+    // 点播契约（#697）：当前展示队列 = 可见集合（过滤态即过滤结果），行下标是可见集合内下标
+    queue: visibleSongs,
     showCheckbox: true,
     onToggleSelect: handleToggleSelect,
     showRemoveFromPlaylist: true,
@@ -255,7 +257,7 @@ const PlaylistDetailPage: React.FC = () => {
     onToggleFavorite: toggleFavorite,
     onCoverError: handleCoverError,
   }), [
-    isPlaying, handleToggleSelect, handleRemoveFromPlaylist, handlePlay, handleDownload,
+    isPlaying, visibleSongs, handleToggleSelect, handleRemoveFromPlaylist, handlePlay, handleDownload,
     handleSongSwapped, toggleFavorite, handleCoverError,
   ]);
 

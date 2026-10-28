@@ -26,7 +26,9 @@ interface SongRowProps {
   showRemoveFromPlaylist?: boolean;
   /** 「更多」菜单是否开在本行：由列表模块把 activeDropdown 折算成布尔量，避免开一个菜单重渲染整表 */
   moreOpen?: boolean;
-  onPlay: (song: Song) => void;
+  /** 当前展示队列（点播契约 #697）：行只回传，不写 playerStore */
+  queue: Song[];
+  onPlay: (song: Song, queue: Song[], index: number) => void;
   onToggleFavorite?: (song: Song) => void;
   onDownload?: (song: Song) => void;
   onAddToPlaylist?: (song: Song) => void;
@@ -76,7 +78,7 @@ const formatDuration = (seconds?: number): string => {
 const SongRow: React.FC<SongRowProps> = ({
   song, index, isCurrentSong = false, isPlaying = false, isFavorite = false,
   showIndex = true, showCheckbox = false, isSelected = false, showRemoveFromPlaylist = false,
-  moreOpen = false, onPlay, onToggleFavorite, onDownload,
+  moreOpen = false, queue, onPlay, onToggleFavorite, onDownload,
   onAddToPlaylist, onPlayNext, onRemoveFromPlaylist, onToggleSelect,
   onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, albumWidth = COL_ALBUM,
   fillTitle = false, dragHandle, actions, rowRef, compact = false,
@@ -133,7 +135,7 @@ const SongRow: React.FC<SongRowProps> = ({
       data-variant={variant === 'library' ? 'library' : undefined}
       data-compact={compact || undefined}
       data-current={isCurrentSong || undefined}
-      onDoubleClick={() => onPlay(song)}
+      onDoubleClick={() => onPlay(song, queue, index)}
       style={style}
     >
       {showCheckbox && (
@@ -165,7 +167,7 @@ const SongRow: React.FC<SongRowProps> = ({
       <div className="song-row__main" data-fill={fillTitle ? 'true' : 'false'}>
         <div className="song-row__cover">
           <SongCover src={song.cover} alt={song.name} variant="gradient" onError={() => onCoverError?.(song)} />
-          <div className="song-row__cover-play" onClick={() => onPlay(song)}>
+          <div className="song-row__cover-play" onClick={() => onPlay(song, queue, index)}>
             <Play size={16} color="white" fill="white" />
           </div>
         </div>

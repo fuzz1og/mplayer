@@ -225,12 +225,13 @@ const LibraryPage: React.FC = () => {
   const artistGroups = useMemo(() => buildGroups(sortedSongs, 'artist'), [sortedSongs]);
 
   /**
-   * 列表点播：SongList 内部先把「当前展示列表 + 行号」写进播放队列（handlePlaySong），
-   * 页面只负责真正的播放动作。专辑 / 歌手分组行走 handlePlayGroup 自己建队列。
+   * 列表点播（#697）：SongList 只回传歌曲、当前展示队列与行下标，建队列归本页。
+   * 专辑 / 歌手分组行走 handlePlayGroup 自己建队列。
    */
-  const handlePlaySong = useCallback((song: Song) => {
+  const handlePlaySong = useCallback((song: Song, queue: Song[], index: number) => {
+    setCurrentPlaylist(queue, index);
     void play(song);
-  }, [play]);
+  }, [play, setCurrentPlaylist]);
 
   const handleDownload = useCallback((song: Song) => {
     void download(song);

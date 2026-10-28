@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { Song, SongGroup } from '@mplayer/core';
 import SongList from '@/renderer/components/SongList';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
+import { getNextSongInQueue, usePlayerStore } from '@/renderer/store/playerStore';
 
 // 用 SongCover 的渲染次数当「这一行是否重渲染」的探针：
 // SongRow 是 React.memo，行内封面若没重渲染，说明该行的 props 身份稳定。
@@ -277,13 +278,17 @@ describe('分组歌曲列表：数据经 props（页面做适配器）', () => {
     expect(allExpanded.onCollapseAll).toHaveBeenCalledTimes(1);
   });
 
-  it('播放分组第一首：用组内第一首回调页面', () => {
+  it('播放分组第一首：回传该组歌曲队列与组内下标 0', () => {
     const props = renderGrouped();
 
     fireEvent.click(screen.getAllByRole('button', { name: '播放分组第一首' })[1]);
 
     expect(props.onPlay).toHaveBeenCalledTimes(1);
-    expect((props.onPlay as ReturnType<typeof vi.fn>).mock.calls[0][0].name).toBe('歌曲 4');
+    const [picked, queue, index] = (props.onPlay as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(picked.name).toBe('歌曲 4');
+    // D1：组头播放第一首 = 该组队列 + 组内下标 0，不是跨组扁平化后的全局下标
+    expect(queue.map((s: Song) => s.id)).toEqual(['netease:4', 'netease:5']);
+    expect(index).toBe(0);
   });
 
   it('点组头的展开/折叠按钮调用 onToggleGroup 并带上组 key', () => {
@@ -295,5 +300,107 @@ describe('分组歌曲列表：数据经 props（页面做适配器）', () => {
 
     expect(props.onToggleGroup).toHaveBeenNthCalledWith(1, 'sunny');
     expect(props.onToggleGroup).toHaveBeenNthCalledWith(2, 'rainy');
+  });
+});
+
+/**
+ * #697 点播契约：列表只回传 (song, 展示队列, 下标)，绝不隐式写 playerStore。
+ * 队列与播放由调用方负责（D2）；分组列表的队列是该组 songs（D1）。
+ */
+describe('歌曲列表点播契约（#697）', () => {
+  const oldQueue = [song(99)];
+
+  const rowPlayButton = (rowIndex: number): HTMLElement => {
+    const row = document.querySelectorAll('.song-row')[rowIndex] as HTMLElement;
+    expect(row, `第 ${rowIndex} 行不存在`).toBeTruthy();
+    return row.querySelector('.song-row__cover-play') as HTMLElement;
+  };
+
+  beforeEach(() => {
+    usePlayerStore.setState({ currentPlaylist: oldQueue, currentPlaylistIndex: 0, currentSong: null });
+  });
+
+  it('普通列表：回传歌曲 + 当前展示队列 + 行下标，自身不改播放队列', () => {
+    const songs = [song(1), song(2), song(3)];
+    const onPlay = vi.fn();
+    render(
+      <MemoryRouter>
+        <SongList songs={songs} onPlay={onPlay} showHeader={false} />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(rowPlayButton(1));
+
+    expect(onPlay).toHaveBeenCalledTimes(1);
+    const [picked, queue, index] = onPlay.mock.calls[0];
+    expect(picked.id).toBe('netease:2');
+    expect(queue.map((s: Song) => s.id)).toEqual(['netease:1', 'netease:2', 'netease:3']);
+    expect(index).toBe(1);
+    // 列表不再隐式写 playerStore：旧队列原样保留（唯一写队列的是调用方）
+    expect(usePlayerStore.getState().currentPlaylist).toBe(oldQueue);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(0);
+  });
+
+  it('分组列表：队列长度等于组内歌曲数、下标是组内下标，且不残留旧歌单', () => {
+    const groups: SongGroup[] = [
+      { key: 'sunny', name: '晴天', artist: '周杰伦', songs: [song(1), song(2), song(3)] },
+      { key: 'rainy', name: '雨天', artist: '孙燕姿', songs: [song(4), song(5)] },
+    ];
+    const onPlay = vi.fn();
+    render(
+      <MemoryRouter>
+        <GroupedSongList
+          groups={groups}
+          expandedKeys={['sunny', 'rainy']}
+          onToggleGroup={vi.fn()}
+          onExpandAll={vi.fn()}
+          onCollapseAll={vi.fn()}
+          onPlay={onPlay}
+          onToggleFavorite={vi.fn()}
+          selectedIds={[]}
+          onSelectionChange={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    // 组内第 2 首（歌曲 2）：queue 必须是 sunny 组，而不是跨组扁平化的全部结果
+    fireEvent.click(rowPlayButton(1));
+
+    expect(onPlay).toHaveBeenCalledTimes(1);
+    const [picked, queue, index] = onPlay.mock.calls[0];
+    expect(picked.id).toBe('netease:2');
+    expect(queue).toHaveLength(groups[0].songs.length);
+    expect(queue.map((s: Song) => s.id)).toEqual(['netease:1', 'netease:2', 'netease:3']);
+    expect(index).toBe(1);
+    expect(usePlayerStore.getState().currentPlaylist).toBe(oldQueue);
+
+    // 换到 rainy 组：队列换成该组自己的两首，绝不残留上一次的旧歌单
+    fireEvent.click(rowPlayButton(3));
+    const [, rainyQueue, rainyIndex] = onPlay.mock.calls[1];
+    expect(rainyQueue).toHaveLength(groups[1].songs.length);
+    expect(rainyQueue.map((s: Song) => s.id)).toEqual(['netease:4', 'netease:5']);
+    expect(rainyIndex).toBe(0);
+    expect(usePlayerStore.getState().currentPlaylist).toBe(oldQueue);
+  });
+
+  it('调用方按契约写法建立队列后，下一首语义保持（回归）', () => {
+    const songs = [song(1), song(2), song(3)];
+    const onPlay = vi.fn((picked: Song, queue: Song[], index: number) => {
+      usePlayerStore.getState().setCurrentPlaylist(queue, index);
+      // 真实 play() 会同步 currentSong；这里只替换队列写入，手动补上以验证推进语义
+      usePlayerStore.setState({ currentSong: picked });
+    });
+    render(
+      <MemoryRouter>
+        <SongList songs={songs} onPlay={onPlay} showHeader={false} />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(rowPlayButton(1));
+
+    const state = usePlayerStore.getState();
+    expect(state.currentPlaylist.map((s) => s.id)).toEqual(['netease:1', 'netease:2', 'netease:3']);
+    expect(state.currentPlaylistIndex).toBe(1);
+    expect(getNextSongInQueue(state)?.id).toBe('netease:3');
   });
 });

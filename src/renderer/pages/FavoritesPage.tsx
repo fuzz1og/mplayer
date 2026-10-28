@@ -33,9 +33,11 @@ const FavoritesPage: React.FC = () => {
     }
   }, [toggleFavorite]);
 
-  const handlePlay = useCallback(async (song: Song) => {
+  const handlePlay = useCallback(async (song: Song, queue: Song[], index: number) => {
+    // #697：建队列归调用方，列表只回传展示队列与索引
+    setCurrentPlaylist(queue, index);
     await play(song);
-  }, [play]);
+  }, [play, setCurrentPlaylist]);
 
   // 封面加载失败 → 按 ID 重识别换新封面并更新收藏列表（收藏封面常为空/过期）
   const handleCoverError = useCallback((song: Song) => {
@@ -49,8 +51,7 @@ const FavoritesPage: React.FC = () => {
 
   const handlePlayAll = async () => {
     if (favorites.length > 0) {
-      setCurrentPlaylist(favorites, 0);
-      await handlePlay(favorites[0]);
+      await handlePlay(favorites[0], favorites, 0);
     }
   };
 

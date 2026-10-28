@@ -15,6 +15,7 @@ const HistoryPage: React.FC = () => {
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const play = usePlayerStore((s) => s.play);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
@@ -37,7 +38,9 @@ const HistoryPage: React.FC = () => {
     loadHistory();
   }, []);
 
-  const handlePlay = async (song: Song) => {
+  const handlePlay = async (song: Song, queue: Song[], index: number) => {
+    // #697：列表只回传展示队列与索引，建队列归页面
+    setCurrentPlaylist(queue, index);
     await play(song);
   };
 

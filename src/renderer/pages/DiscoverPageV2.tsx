@@ -90,6 +90,7 @@ const DiscoverPageV2: React.FC = () => {
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const play = usePlayerStore((s) => s.play);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>(loadSavedTab);
@@ -307,10 +308,14 @@ const DiscoverPageV2: React.FC = () => {
   };
 
   /**
-   * 搜索结果列表的播放回调（#412）：此前两处都是内联箭头 `(song) => void play(song)`，
-   * 每次渲染新建引用。行组件是 memo 的，回调引用必须稳定。
+   * 搜索结果列表的播放回调（#412/#697）：列表只回传歌曲、当前展示队列与索引，
+   * 建队列归本页；回调必须稳定（行组件是 memo 的）。
+   * 分组视图的 queue 是该组 songs、index 是组内下标（D1），不跨组扁平化。
    */
-  const handleSearchPlay = useCallback((song: Song) => { void play(song); }, [play]);
+  const handleSearchPlay = useCallback((song: Song, queue: Song[], index: number) => {
+    setCurrentPlaylist(queue, index);
+    void play(song);
+  }, [play, setCurrentPlaylist]);
   /** 搜索多源视图不提供多选：稳定的空数组/空实现，避免每帧新建引用 */
   const EMPTY_SELECTION = useRef<string[]>([]).current;
   /** 搜索多源视图不提供分页：稳定空实现，避免每帧新建 */

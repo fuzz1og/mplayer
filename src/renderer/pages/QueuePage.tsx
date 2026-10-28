@@ -135,6 +135,14 @@ const QueuePage: React.FC = () => {
 
   const currentSongId = currentSong?.id;
 
+  /**
+   * 队列页的行点播：队列本来就是 playerStore 的 currentPlaylist，无需再 setQueue
+   * （随机模式下 displayPlaylist 是随机序，写回成员序反而会毁掉稳定随机序列）。
+   */
+  const handleQueuePlay = useCallback((song: Song) => {
+    void play(song);
+  }, [play]);
+
   /** 窗口内可排序行：内部用 useSortable 注册，index 由列表给的是**全量下标** */
   const renderQueueRow = useCallback(
     (song: Song, index: number) => (
@@ -145,12 +153,13 @@ const QueuePage: React.FC = () => {
         isPlaying={isPlaying}
         fillTitle
         albumWidth={QUEUE_ALBUM_W}
-        onPlay={play}
+        queue={displayPlaylist}
+        onPlay={handleQueuePlay}
         onCoverError={handleCoverError}
         renderActions={renderQueueActions}
       />
     ),
-    [currentSongId, isPlaying, play, handleCoverError, renderQueueActions],
+    [currentSongId, isPlaying, displayPlaylist, handleQueuePlay, handleCoverError, renderQueueActions],
   );
 
   /** 拖拽 overlay 里的同一行：**非 sortable**（同一 id 二次注册会冲突） */
@@ -164,12 +173,13 @@ const QueuePage: React.FC = () => {
         fillTitle
         albumWidth={QUEUE_ALBUM_W}
         dragHandle={previewDragHandle}
-        onPlay={play}
+        queue={displayPlaylist}
+        onPlay={handleQueuePlay}
         onCoverError={handleCoverError}
         actions={renderQueueActions(song, index)}
       />
     ),
-    [currentSongId, isPlaying, play, handleCoverError, renderQueueActions],
+    [currentSongId, isPlaying, displayPlaylist, handleQueuePlay, handleCoverError, renderQueueActions],
   );
 
   const handleClearQueue = () => {

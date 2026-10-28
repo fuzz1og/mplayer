@@ -26,7 +26,8 @@ interface SongListProps {
   currentSongId?: string;
   isPlaying?: boolean;
   favoriteIds?: string[];
-  onPlay: (song: Song) => void;
+  /** 点播契约（#697）：回传歌曲、当前展示队列与行下标；列表自身不碰 playerStore */
+  onPlay: (song: Song, queue: Song[], index: number) => void;
   onToggleFavorite?: (song: Song) => void;
   /**
    * 列表密度。standard（默认）= 64px 通用行；library = 资料库密度（46px、30px 封面、
@@ -123,7 +124,6 @@ const SongList: React.FC<SongListProps> = ({
   const [selectedSongsForPlaylist, setSelectedSongsForPlaylist] = useState<Song[]>([]);
   // 批量管理模式：常驻「批量管理」按钮进入，勾选框与批量操作栏随之显示，「完成」退出
   const [batchMode, setBatchMode] = useState(false);
-  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
 
   const displaySongs = useMemo(
     () => songs.map(song => swapOverrides.get(song.id) ?? song),
@@ -139,18 +139,15 @@ const SongList: React.FC<SongListProps> = ({
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   // 稳定回调的「最新值」来源：行是 React.memo，回调身份一变整表 memo 即失效
-  const latest = useLatest({ displaySongs, selectedIds, onSelectionChange, onSwap, onPlay });
+  const latest = useLatest({ selectedIds, onSelectionChange, onSwap, onPlay });
   const stableOnToggleFavorite = useStableCallback(onToggleFavorite);
   const stableOnDownload = useStableCallback(onDownload);
   const stableOnRemoveFromPlaylist = useStableCallback(onRemoveFromPlaylist);
   const stableOnCoverError = useStableCallback(onCoverError);
 
-  const handlePlaySong = useCallback((song: Song) => {
-    const { displaySongs: list, onPlay: play } = latest.current;
-    const index = list.findIndex(s => s.id === song.id && s.sourceType === song.sourceType);
-    setCurrentPlaylist(list, index >= 0 ? index : 0);
-    play(song);
-  }, [latest, setCurrentPlaylist]);
+  const handlePlaySong = useCallback((song: Song, queue: Song[], index: number) => {
+    latest.current.onPlay(song, queue, index);
+  }, [latest]);
 
   const handleSwap = useCallback((original: Song, swapped: Song) => {
     setSwapOverrides(prev => {
@@ -298,6 +295,7 @@ const SongList: React.FC<SongListProps> = ({
       showDuration={showDuration}
       fillTitle={density === 'library'}
       moreOpen={activeDropdown === song.id}
+      queue={displaySongs}
       onPlay={handlePlaySong}
       onToggleFavorite={stableOnToggleFavorite}
       onDownload={stableOnDownload}
