@@ -81,7 +81,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
   // 更多菜单：ESC / 点击外部关闭；打开时焦点进第一项，ESC 关闭后归还触发按钮。
   useEffect(() => {
     if (!moreOpen) return;
-    moreMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    moreMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])')?.focus();
     const onPointerDown = (event: MouseEvent) => {
       if (moreRef.current && !moreRef.current.contains(event.target as Node)) setMoreOpen(false);
     };
@@ -194,6 +194,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
                 type="button"
                 role="menuitem"
                 className="player-bar__more-item"
+                disabled={!currentSong}
                 onClick={() => { setMoreOpen(false); setShowAddToPlaylist(true); }}
               >
                 <ListMusic size={14} />

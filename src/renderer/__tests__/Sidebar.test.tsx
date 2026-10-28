@@ -46,16 +46,11 @@ describe('Sidebar', () => {
     expect(screen.queryByText('MPlayer')).toBeNull();
   });
 
-  it('材质契约：侧栏用 --material-chrome + --material-blur，且没有右边框', () => {
+  it('材质契约：侧栏用 --surface-sidebar 有意实色，不依赖 blur，且没有右边框', () => {
     const block = cssBlock('.sidebar');
-    expect(block).toContain('var(--material-chrome)');
-    expect(block).toContain('var(--material-blur)');
+    expect(block).toContain('var(--surface-sidebar)');
+    expect(block).not.toContain('backdrop-filter');
     expect(block).not.toContain('border-right');
-    expect(block).not.toContain('var(--surface-sidebar)');
-  });
-
-  it('材质关闭时侧栏回退实色（data-material=off）', () => {
-    expect(cssBlock("html[data-material='off'] .sidebar")).toContain('var(--surface-sidebar)');
   });
 
   it('导航从侧栏顶部开始（不再为品牌块留 44px 高度）', () => {

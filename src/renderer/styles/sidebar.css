@@ -11,9 +11,8 @@
   width: var(--sidebar-width);
   height: 100%;
   overflow: hidden;
-  background: var(--material-chrome);
-  backdrop-filter: var(--material-blur);
-  -webkit-backdrop-filter: var(--material-blur);
+  /* 侧栏没有内容穿透：按 D4 使用有意实色，不用 blur 扮材质 */
+  background: var(--surface-sidebar);
 }
 
 /* 无品牌块：导航直接从侧栏顶部开始 */
@@ -100,13 +99,6 @@
   margin-left: auto;
   border-radius: var(--radius-full);
   background: var(--accent);
-}
-
-/* 材质关闭：侧栏不再依赖系统模糊，回退侧栏实色（合并同选择器规则，值不变） */
-html[data-material='off'] .sidebar {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  background: var(--surface-sidebar);
 }
 
 /* 旧顶栏（1.9.0 删除）：后退/前进/刷新与搜索已上移到标题栏，见 .titlebar__* */
