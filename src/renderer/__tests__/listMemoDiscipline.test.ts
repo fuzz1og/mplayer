@@ -142,7 +142,7 @@ describe('列表 memo 纪律（#412）', () => {
     expect(row).toContain('actions={renderActions?.(song, rowProps.index)}');
     expect(row).toMatch(/const dragStyle = useMemo/);
 
-    const page = stripComments(read('renderer/pages/QueuePage.tsx'));
+    const page = stripComments(read('renderer/components/QueuePanel.tsx'));
     expect(page).toContain('renderQueueActions');
     expect(page).not.toMatch(/actions=\{\s*</);
     // #428：队列页不再自己接 dnd-kit，也不再有裸 map —— 全量 id / items / DragOverlay 收在共享能力里
