@@ -97,12 +97,31 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  /* 窄窗口左右边距；内容列自身不再重复 padding，保证 760 是真实内容宽 */
+  padding: 0 28px;
 }
 
-.settings-content > section {
+/* 可读内容列：页头与所有 Section 共用 760px 最大列并居中；窄窗口左右 28px 边距。 */
+.settings-column {
   box-sizing: border-box;
   width: 100%;
-  padding: 24px 28px 40px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 0 40px;
+}
+
+.settings-column > section {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.settings-column > section + section {
+  margin-top: 28px;
+}
+
+/* 浅色主题：页面走 window 底，Group 走 elevated 卡面 + hairline，不能同白假装分组。 */
+.settings-column .ui-group {
+  border: 1px solid var(--hairline);
 }
 
 /* 页头：h1 28/700 + 同行 13 三级 lead（原型 §2 第 28 行） */
@@ -110,14 +129,16 @@
   display: flex;
   align-items: baseline;
   gap: 12px;
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 
 .settings-page__head h1 {
+  margin: 0;
   color: var(--text-primary);
   font-size: var(--text-3xl);
   font-weight: var(--weight-bold);
   letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
 }
 
 .settings-page__head .settings-page__lead {
@@ -127,13 +148,17 @@
   line-height: var(--leading-normal);
 }
 
-/* 尚未改页头的分区（#684 逐页替换）保持「标题 + 说明」两行 */
+/* 旧页头与 PageHeader 同一层级：28/700、无装饰图标、lead 13 tertiary。 */
 .settings-page__title {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 18px;
   color: var(--text-primary);
+}
+
+.settings-page__title svg {
+  display: none;
 }
 
 .settings-page__title h1 {
@@ -141,11 +166,12 @@
   font-size: var(--text-3xl);
   font-weight: var(--weight-bold);
   letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
 }
 
 .settings-page__lead {
-  margin-bottom: 18px;
-  color: var(--text-secondary);
+  margin: 0 0 18px;
+  color: var(--text-tertiary);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -247,7 +273,7 @@
 .cache-usage__value {
   color: var(--text-primary);
   /* 原型的大号读数 40px = 2 × --text-xl：只用 token 推导，不写裸字号 */
-  font-size: calc(var({{SECRET_m8m7vemm}}) * 2);
+  font-size: calc(var(--text-xl) * 2);
   font-weight: var(--weight-bold);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.03em;
@@ -393,7 +419,7 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: var(--surface-content);
+  background: var(--surface-window);
 }
 
 .settings-shell__bar {

@@ -113,7 +113,7 @@ describe('PlayerBar', () => {
   it('三列 grid：左右各 1fr、中间 auto，播放键落在窗口中心', () => {
     const block = cssBlock('.player-bar');
     expect(block).toContain('grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr)');
-    expect(block).not.toContain('border-top');
+    expect(block).toContain('border-top: 1px solid var(--hairline)');
     expect(cssBlock('.player-bar__center')).toContain('width: 500px');
   });
 
@@ -137,6 +137,15 @@ describe('PlayerBar', () => {
   });
 
   it('更多菜单 ESC 关闭并把焦点还给触发按钮', () => {
+    const storeWithSong = {
+      ...mockPlayerStore,
+      currentSong: { id: '1', name: '稻香', artist: '周杰伦', album: '魔杰座' }
+    };
+    (usePlayerStore as any).mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') return selector(storeWithSong);
+      return storeWithSong;
+    });
+
     render(<PlayerBar />);
     const trigger = screen.getByRole('button', { name: '更多操作' });
     trigger.focus();
@@ -172,13 +181,23 @@ describe('PlayerBar', () => {
     expect(download).toHaveFocus();
   });
 
-  it('没有当前歌时下载项禁用，方向键停在可用项上', () => {
+  it('没有当前歌时「加入歌单」与「下载」都禁用，焦点停在触发按钮上', () => {
     render(<PlayerBar />);
-    fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
-    const add = screen.getByRole('menuitem', { name: '加入歌单' });
+    const trigger = screen.getByRole('button', { name: '更多操作' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('menuitem', { name: '加入歌单' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: '下载' })).toBeDisabled();
-    fireEvent.keyDown(add, { key: 'ArrowDown' });
-    expect(add).toHaveFocus();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('音量滑杆支持上下键调值', () => {
+    render(<PlayerBar />);
+    const slider = screen.getByRole('slider', { name: '音量' });
+    fireEvent.keyDown(slider, { key: 'ArrowUp' });
+    expect(mockPlayerStore.setVolume).toHaveBeenLastCalledWith(81);
+    fireEvent.keyDown(slider, { key: 'ArrowDown' });
+    expect(mockPlayerStore.setVolume).toHaveBeenLastCalledWith(79);
   });
 
   it('播放位置推进只重渲染进度块，PlayerBar 自身不重渲染（位置不再经全局 store）', () => {

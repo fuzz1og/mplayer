@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import SettingsPage from '@/renderer/pages/SettingsPage';
+import { ToastProvider } from '@/renderer/ui';
 
 /** 主进程替身：容量配置可变，setLimitMb / setAutoClean 写回同一份 state（等价 db 持久化）。 */
 const state = {
@@ -44,8 +45,9 @@ vi.mock('@/renderer/services/IpcClient', () => ({
   IpcClient: { invoke: (channel: string, ...args: unknown[]) => invoke(channel, ...args) },
 }));
 
+const devModeState = vi.hoisted(() => ({ enabled: false }));
 vi.mock('@/renderer/services/devMode', () => ({
-  isDevMode: () => false,
+  isDevMode: () => devModeState.enabled,
   subscribeDevMode: () => () => undefined,
 }));
 
@@ -65,12 +67,14 @@ const body = () => within(screen.getByRole('region', { name: '设置内容' }));
 
 /** SettingsPage 用 useParams 读深链分区，必须在匹配了 /settings/:section 的 Router 里渲染。 */
 const renderPage = (path = '/settings') => render(
-  <MemoryRouter initialEntries={[path]}>
-    <Routes>
-      <Route path="/settings" element={<SettingsPage />} />
-      <Route path="/settings/:section" element={<SettingsPage />} />
-    </Routes>
-  </MemoryRouter>,
+  <ToastProvider>
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/:section" element={<SettingsPage />} />
+      </Routes>
+    </MemoryRouter>
+  </ToastProvider>,
 );
 
 describe('设置页（1.9.0 原型 §2）', () => {
@@ -79,23 +83,48 @@ describe('设置页（1.9.0 原型 §2）', () => {
     state.limitMb = 100;
     state.autoClean = true;
     statsOverride = null;
+    devModeState.enabled = false;
     localStorage.clear();
+    // electronAPI 的默认桩返回 {success:true}，下载目录必须是字符串
+    const api = (window as unknown as { electronAPI: { invoke: ReturnType<typeof vi.fn> } }).electronAPI;
+    api.invoke.mockResolvedValue('D:/Downloads');
   });
 
-  it('3 组 7 页，更新/关于钉在导航底部', () => {
+  it('五个分组承载全部设置页（更新/关于并入「关于与更新」）', () => {
     renderPage();
     expect(
-      navBar().getAllByText(/^(通用|资料库|音乐源)$/).map((el) => el.textContent),
-    ).toEqual(['通用', '资料库', '音乐源']);
+      Array.from(document.querySelectorAll('.settings-nav__group-title')).map((el) => el.textContent),
+    ).toEqual(['音频与播放', '外观', '存储与下载', '网络与来源', '关于与更新']);
 
     expect(
       navBar().getAllByRole('button').map((el) => el.textContent?.trim()),
-    ).toEqual(['外观', '播放', '缓存', '下载', '直连状态', '第三方解析源', '网络', '更新', '关于']);
+    ).toEqual(['播放', '外观', '缓存', '下载', '直连状态', '第三方解析源', '网络', '更新', '关于']);
 
-    const footer = document.querySelector('.settings-nav__footer');
-    expect(footer?.textContent).toContain('更新');
-    expect(footer?.textContent).toContain('关于');
-    expect(navBar().queryByText('应用')).toBeNull();
+    // 旧底栏已并入分组：不再有独立 footer，更新/关于是同组页面项
+    expect(document.querySelector('.settings-nav__footer')).toBeNull();
+  });
+
+  it('每个设置页有且只有一个一级标题（旧页头统一）', async () => {
+    const pages: Array<[string, string]> = [
+      ['playback', '播放'],
+      ['appearance', '外观'],
+      ['cache', '缓存'],
+      ['download', '下载'],
+      ['source', '直连状态'],
+      ['tier3', '第三方解析源'],
+      ['network', '网络'],
+      ['update', '更新'],
+      ['about', '关于'],
+    ];
+    const { unmount } = renderPage('/settings/cache');
+    for (const [, title] of pages) {
+      // 切页走导航项（深链映射另有用例）
+      await userEvent.click(navBar().getByRole('button', { name: new RegExp('^' + title) }));
+      const headings = await body().findAllByRole('heading', { level: 1 });
+      expect(headings, title).toHaveLength(1);
+      expect(headings[0].textContent).toBe(title);
+    }
+    unmount();
   });
 
   it('默认落在缓存页：大号读数 + 上限/还剩 + 存储/构成/位置', async () => {
@@ -225,6 +254,15 @@ describe('设置页（1.9.0 原型 §2）', () => {
 
     const saved = JSON.parse(localStorage.getItem('mplayer.appearance') ?? '{}');
     expect(saved).toMatchObject({ density: 'compact', fontScale: 'large', material: 'off' });
+  });
+
+  it('开发者模式下「关于与更新」组尾出现诊断页，路径可达', async () => {
+    devModeState.enabled = true;
+    renderPage();
+    const diagnostics = navBar().getByRole('button', { name: /^诊断/ });
+    expect(diagnostics).toBeInTheDocument();
+    await userEvent.click(diagnostics);
+    expect(await body().findByRole('heading', { level: 1, name: '诊断' })).toBeInTheDocument();
   });
 
   it('设置页不再自带返回条', async () => {

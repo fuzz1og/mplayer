@@ -14,6 +14,7 @@ import PlaybackDiagnosticsSection from '@/renderer/components/PlaybackDiagnostic
 import AppearanceSection from '@/renderer/components/AppearanceSection';
 import DeveloperSection from '@/renderer/components/DeveloperSection';
 import { isDevMode, subscribeDevMode } from '@/renderer/services/devMode';
+import { PageHeader } from '@/renderer/ui';
 import '@/renderer/styles/settings.css';
 
 interface SettingsEntry {
@@ -28,46 +29,48 @@ interface SettingsGroup {
 }
 
 /**
- * 1.9.0 原型对齐 §2：3 组 7 页 + 导航底部固定区（更新/关于）。
- * 「更新」「关于」不再是第 4 组——原型里它们钉在导航最下沿、上方一条 hairline。
- * 诊断页仍只在开发者模式出现（#477），挂在底部固定区尾部。
+ * 1.9.0 设置分组（#708）：按语义合并成 5 组，设置仍是独立全屏路由。
+ * 更新/关于不再单独占底栏，并入「关于与更新」；诊断只在开发者模式出现（#477）。
  */
 const SETTINGS_GROUPS: SettingsGroup[] = [
   {
-    title: '通用',
-    entries: [
-      { id: 'appearance', label: '外观', icon: <Palette size={13} /> },
-      { id: 'playback', label: '播放', icon: <Music2 size={13} /> },
-    ],
+    title: '音频与播放',
+    entries: [{ id: 'playback', label: '播放', icon: <Music2 size={13} /> }],
   },
   {
-    title: '资料库',
+    title: '外观',
+    entries: [{ id: 'appearance', label: '外观', icon: <Palette size={13} /> }],
+  },
+  {
+    title: '存储与下载',
     entries: [
       { id: 'cache', label: '缓存', icon: <Database size={13} /> },
       { id: 'download', label: '下载', icon: <Folder size={13} /> },
     ],
   },
   {
-    title: '音乐源',
+    title: '网络与来源',
     entries: [
       { id: 'source', label: '直连状态', icon: <Zap size={13} /> },
       { id: 'tier3', label: '第三方解析源', icon: <FlaskConical size={13} /> },
       { id: 'network', label: '网络', icon: <Shield size={13} /> },
     ],
   },
-];
-
-const SETTINGS_FOOTER_ENTRIES: SettingsEntry[] = [
-  { id: 'update', label: '更新', icon: <Download size={13} /> },
-  { id: 'about', label: '关于', icon: <Music size={13} /> },
+  {
+    title: '关于与更新',
+    entries: [
+      { id: 'update', label: '更新', icon: <Download size={13} /> },
+      { id: 'about', label: '关于', icon: <Music size={13} /> },
+    ],
+  },
 ];
 
 const DIAGNOSTICS_ENTRY: SettingsEntry = { id: 'diagnostics', label: '诊断', icon: <Activity size={13} /> };
 
-/** 可深链的分区 id（#/settings/:section）；诊断只在开发者模式下算合法。 */
+/** 可深链的分区 id（#/settings/:section）；诊断只在开发者模式下有内容。 */
 const SECTION_IDS = new Set([
   ...SETTINGS_GROUPS.flatMap((group) => group.entries.map((entry) => entry.id)),
-  ...SETTINGS_FOOTER_ENTRIES.map((entry) => entry.id),
+  DIAGNOSTICS_ENTRY.id,
 ]);
 
 /** 分区 id → 页面内容。全部 9 页已迁入新壳，组件本身按需继续收敛。 */
@@ -106,8 +109,13 @@ const SettingsPage: React.FC = () => {
     if (section && SECTION_IDS.has(section)) setActive(section);
   }, [section]);
 
-  const footerEntries = useMemo(
-    () => (devMode ? [...SETTINGS_FOOTER_ENTRIES, DIAGNOSTICS_ENTRY] : SETTINGS_FOOTER_ENTRIES),
+  /** 诊断只在开发者模式追加到「关于与更新」组尾，关闭时整项不渲染。 */
+  const groups = useMemo(
+    () => (devMode
+      ? SETTINGS_GROUPS.map((group, index) => (index === SETTINGS_GROUPS.length - 1
+        ? { ...group, entries: [...group.entries, DIAGNOSTICS_ENTRY] }
+        : group))
+      : SETTINGS_GROUPS),
     [devMode],
   );
 
@@ -141,18 +149,19 @@ const SettingsPage: React.FC = () => {
   return (
     <div className="settings-layout">
       <nav className="settings-nav" aria-label="设置导航">
-        {SETTINGS_GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.title} className="settings-nav__group">
             <div className="settings-nav__group-title">{group.title}</div>
             {group.entries.map(renderItem)}
           </div>
         ))}
-
-        <div className="settings-nav__footer">{footerEntries.map(renderItem)}</div>
       </nav>
 
       <div className="settings-content" role="region" aria-label="设置内容">
-        {content}
+        <div className="settings-column">
+          {active === 'about' && <PageHeader title="关于" lead="版本、开源信息与开发者选项" />}
+          {content}
+        </div>
       </div>
     </div>
   );

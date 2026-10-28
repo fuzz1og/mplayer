@@ -21,6 +21,18 @@ const PlayerVolume: React.FC<PlayerVolumeProps> = React.memo(({
     return <Volume2 size={16} />;
   };
 
+  /** 上下/左右方向键各调 1%，静音后也能用键盘恢复；Home/End 跳到 0/100。 */
+  const handleSliderKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    let next: number | null = null;
+    if (event.key === 'ArrowUp' || event.key === 'ArrowRight') next = Math.min(100, volume + 1);
+    else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') next = Math.max(0, volume - 1);
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = 100;
+    if (next === null) return;
+    event.preventDefault();
+    onVolumeChange(next);
+  };
+
   return (
     <div className="player-volume">
       <button type="button" onClick={onToggleMute} aria-label={volume === 0 ? '取消静音' : '静音'} className="player-volume__mute">
@@ -31,6 +43,7 @@ const PlayerVolume: React.FC<PlayerVolumeProps> = React.memo(({
           type="range" min={0} max={100} value={volume}
           aria-label="音量"
           onChange={(e) => onVolumeChange(Number(e.target.value))}
+          onKeyDown={handleSliderKeyDown}
           className="player-volume__slider"
           style={{ '--volume': `${volume}%` } as React.CSSProperties}
         />

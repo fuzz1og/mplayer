@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render, screen, fireEvent, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import TitleBar from '../components/TitleBar';
 
@@ -140,6 +141,14 @@ describe('TitleBar', () => {
     expect(screen.getAllByTestId('update-badge')).toHaveLength(1);
   });
 
+  it('帮助菜单打开后 Tab 可在菜单项之间移动', async () => {
+    renderTitleBar();
+    fireEvent.click(screen.getByRole('button', { name: '帮助' }));
+    expect(screen.getByRole('menuitem', { name: '检查更新' })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('menuitem', { name: '关于' })).toHaveFocus();
+  });
+
   it('帮助菜单 ESC 关闭并把焦点还给触发按钮', () => {
     renderTitleBar();
     const trigger = screen.getByRole('button', { name: '帮助' });
@@ -159,7 +168,7 @@ describe('TitleBar', () => {
     expect(screen.queryByRole('menu', { name: '帮助' })).toBeNull();
   });
 
-  it('帮助菜单方向键在菜单项之间移动焦点', () => {
+  it('帮助菜单方向键 / Home / End 在菜单项之间移动焦点', () => {
     renderTitleBar();
     fireEvent.click(screen.getByRole('button', { name: '帮助' }));
     const checkUpdate = screen.getByRole('menuitem', { name: '检查更新' });
@@ -172,5 +181,52 @@ describe('TitleBar', () => {
     expect(checkUpdate).toHaveFocus();
     fireEvent.keyDown(checkUpdate, { key: 'ArrowUp' });
     expect(about).toHaveFocus();
+    fireEvent.keyDown(about, { key: 'Home' });
+    expect(checkUpdate).toHaveFocus();
+    fireEvent.keyDown(checkUpdate, { key: 'End' });
+    expect(about).toHaveFocus();
+  });
+
+  it('搜索来源菜单：方向键打开、Home / End / 方向键移动、ESC 关闭并归还焦点', () => {
+    const onSourceTypeChange = vi.fn();
+    renderTitleBar({ onSourceTypeChange });
+    const trigger = screen.getByRole('button', { name: '搜索来源：全部' });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+
+    const menu = screen.getByRole('menu', { name: '搜索来源' });
+    const items = within(menu).getAllByRole('menuitemradio');
+    expect(items[0]).toHaveFocus();
+
+    fireEvent.keyDown(items[0], { key: 'End' });
+    expect(items[items.length - 1]).toHaveFocus();
+    fireEvent.keyDown(items[items.length - 1], { key: 'Home' });
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(items[0], { key: 'ArrowDown' });
+    expect(items[1]).toHaveFocus();
+    fireEvent.keyDown(items[1], { key: 'ArrowUp' });
+    expect(items[0]).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu', { name: '搜索来源' })).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('搜索来源菜单项可实际选择并关闭菜单', () => {
+    const onSourceTypeChange = vi.fn();
+    renderTitleBar({ onSourceTypeChange });
+    fireEvent.click(screen.getByRole('button', { name: '搜索来源：全部' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'QQ音乐' }));
+    expect(onSourceTypeChange).toHaveBeenCalledWith('qq');
+    expect(screen.queryByRole('menu', { name: '搜索来源' })).toBeNull();
+  });
+
+  it('搜索框无竖线分隔，结构为搜索图标 → 输入框 → 来源选择', () => {
+    const { container } = renderTitleBar();
+    expect(container.querySelector('.titlebar__divider')).toBeNull();
+    const search = container.querySelector('.titlebar__search') as HTMLElement;
+    expect(search.firstElementChild?.classList.contains('titlebar__search-icon')).toBe(true);
+    expect(search.querySelector('.titlebar__search-input')).toBeTruthy();
+    expect(search.lastElementChild?.classList.contains('titlebar__source')).toBe(true);
   });
 });
