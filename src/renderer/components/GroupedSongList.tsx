@@ -13,7 +13,7 @@ import { useVirtualRows, SONG_ROW_HEIGHT } from '@/renderer/hooks/useVirtualRows
 
 type FlatItem =
   | { type: 'group'; group: SongGroup }
-  | { type: 'song'; groupKey: string; song: Song; index: number };
+  | { type: 'song'; groupKey: string; groupSongs: Song[]; song: Song; index: number };
 
 const GROUP_HEADER_HEIGHT = 44;
 const noop = () => {};
@@ -28,7 +28,8 @@ interface GroupedSongListProps {
   currentSongId?: string;
   isPlaying?: boolean;
   favoriteIds?: string[];
-  onPlay: (song: Song) => void;
+  /** 点播契约（#697）：回传歌曲、该组歌曲（D1 组内队列）与组内下标；列表自身不碰 playerStore */
+  onPlay: (song: Song, queue: Song[], index: number) => void;
   /** 「下一首播放」（#491）：缺省直接用 playerStore.insertNext（与 SongList 同一缺省） */
   onPlayNext?: (song: Song) => void;
   onToggleFavorite: (song: Song) => void;
@@ -82,7 +83,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
       items.push({ type: 'group', group });
       if (expandedSet.has(group.key)) {
         for (let i = 0; i < group.songs.length; i++) {
-          items.push({ type: 'song', groupKey: group.key, song: group.songs[i], index: i });
+          items.push({ type: 'song', groupKey: group.key, groupSongs: group.songs, song: group.songs[i], index: i });
         }
       }
     }
@@ -115,7 +116,8 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
 
   const handlePlayFirst = useCallback((group: SongGroup) => {
     if (group.songs.length > 0) {
-      latest.current.onPlay(group.songs[0]);
+      // D1：组头「播放第一首」= 该组队列 + 组内下标 0
+      latest.current.onPlay(group.songs[0], group.songs, 0);
     }
   }, [latest]);
 
@@ -188,6 +190,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
         showIndex={false}
         isSelected={selectedSet.has(item.song.id)}
         moreOpen={activeDropdown === item.song.id}
+        queue={item.groupSongs}
         onPlay={onPlay}
         onToggleFavorite={stableOnToggleFavorite}
         onDownload={stableOnDownload}

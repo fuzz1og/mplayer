@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { Song } from '@mplayer/core';
 import PlaylistDetailPage from '@/renderer/pages/PlaylistDetailPage';
 import { useVirtualRows } from '@/renderer/hooks/useVirtualRows';
+import { usePlayerStore } from '@/renderer/store/playerStore';
 
 /** 本地歌单页接入窗口化排序列表（#445）的结构不变量与 scrollMargin 症状级单测。 */
 
@@ -117,6 +118,50 @@ function MarginProbe({ count }: { count: number }) {
     </div>
   );
 }
+
+/** #697：拖拽列表（本页直接渲染 SongRow）也必须回传当前展示队列与下标。 */
+describe('本地歌单页点播契约（#697）', () => {
+  const shownIds = () => usePlayerStore.getState().currentPlaylist.map((s) => s.id);
+
+  afterEach(() => {
+    usePlayerStore.setState({ currentPlaylist: [], currentPlaylistIndex: -1, currentSong: null });
+  });
+
+  function stubPlay() {
+    const playSpy = vi.fn().mockResolvedValue(undefined);
+    usePlayerStore.setState({ play: playSpy, currentPlaylist: [], currentPlaylistIndex: -1, currentSong: null });
+    return playSpy;
+  }
+
+  it('点行播放：用当前展示队列与行下标建立队列', async () => {
+    const playSpy = stubPlay();
+    const { container } = renderPage(3);
+    await waitFor(() => expect(container.querySelectorAll('.song-row').length).toBe(3));
+
+    fireEvent.click(container.querySelectorAll('.song-row')[1].querySelector('.song-row__cover-play') as HTMLElement);
+
+    expect(playSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'netease:1' }));
+    expect(shownIds()).toEqual(['netease:0', 'netease:1', 'netease:2']);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(1);
+  });
+
+  it('过滤态：队列按可见集合建立，下标是可见集合内下标', async () => {
+    const playSpy = stubPlay();
+    const { container } = renderPage(3);
+    await waitFor(() => expect(container.querySelectorAll('.song-row').length).toBe(3));
+
+    fireEvent.change(container.querySelector('input[aria-label="按歌名或歌手过滤"]') as HTMLInputElement, {
+      target: { value: '歌曲 1' },
+    });
+    await waitFor(() => expect(container.querySelectorAll('.song-row').length).toBe(1));
+
+    fireEvent.click(container.querySelector('.song-row__cover-play') as HTMLElement);
+
+    expect(playSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'netease:1' }));
+    expect(shownIds()).toEqual(['netease:1']);
+    expect(usePlayerStore.getState().currentPlaylistIndex).toBe(0);
+  });
+});
 
 describe('useVirtualRows 症状级：list 上方内容变高（#445）', () => {
   it('父节点 top 0 → 56 后 resize 会重测 scrollMargin（0 → 56）', async () => {

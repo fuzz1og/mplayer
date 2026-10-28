@@ -45,6 +45,7 @@ const ArtistDetailPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('hot');
 
   const play = usePlayerStore((s) => s.play);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
@@ -122,7 +123,9 @@ const ArtistDetailPage: React.FC = () => {
     hasMore: activeTab === 'albums' && albumsHasMore,
   });
 
-  const handlePlay = async (song: Song) => {
+  const handlePlay = async (song: Song, queue: Song[], index: number) => {
+    // #697：队列与索引由列表回传，页面统一负责 setQueue + 播放
+    setCurrentPlaylist(queue, index);
     // #639 C3：补一个**精确匹配**的可播版本（判据在 core）。此前把搜索源写死 `'netease'` 并直接取
     // `searchResults[0]`——换源后的歌（本无 url）会被拿去网易搜，是错的；现在用歌曲自身来源 + 精确匹配守卫。
     await play(await resolvePlayableVersionForDesktop(song));

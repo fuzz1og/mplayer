@@ -41,6 +41,7 @@ const HotlistDetailPage: React.FC = () => {
   const [savingAll, setSavingAll] = useState(false);
 
   const play = usePlayerStore((s) => s.play);
+  const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
@@ -102,7 +103,9 @@ const HotlistDetailPage: React.FC = () => {
     });
   };
 
-  const handlePlay = async (song: Song) => {
+  const handlePlay = async (song: Song, queue: Song[], index: number) => {
+    // #697：队列与索引由列表回传，页面统一负责 setQueue + 播放
+    setCurrentPlaylist(queue, index);
     // #639 C3：补一个**精确匹配**的可播版本（判据在 core）。此前无条件搜索并取
     // `searchResults[0]`：歌已有 url 时也白搜一次，且会整首顶替成同名不同歌手的歌。
     // 搜索源用歌曲自身来源（等价于 `config.source`，但不依赖页面上下文）。

@@ -68,11 +68,10 @@ const AlbumDetailPage: React.FC = () => {
     load();
   }, [albumId]);
 
-  const handlePlay = useCallback((song: Song) => {
-    const index = songs.findIndex(s => s.id === song.id && s.sourceType === song.sourceType);
-    setCurrentPlaylist(songs, index >= 0 ? index : 0);
+  const handlePlay = useCallback((song: Song, queue: Song[], index: number) => {
+    setCurrentPlaylist(queue, index);
     play(song);
-  }, [songs, setCurrentPlaylist, play]);
+  }, [setCurrentPlaylist, play]);
 
   const handlePlayAll = useCallback(() => {
     if (songs.length === 0) return;
