@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import '@/renderer/styles/page-playlist-detail.css';
-import { Play, ArrowLeft, Edit2, Music, Download, Trash2, Upload, GripVertical, Search, X } from 'lucide-react';
+import { Play, Edit2, Music, Download, Trash2, Upload, GripVertical, Search, X } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from '@/renderer/services/toastStore';
-import { useConfirm } from '@/renderer/ui';
+import { Button, PageHero, useConfirm } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -12,9 +12,11 @@ import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
 import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { moveItem } from '@/renderer/utils/reorder';
+import { reorderVisibleSongs } from '@/renderer/utils/playlistReorder';
+import { LIBRARY_ROW_HEIGHT } from '@/renderer/components/songRowMetrics';
 import { filterSongsByQuery } from '@/renderer/utils/songFilter';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import type { Song, Playlist } from '@mplayer/core';
+import { COVER_SIZE, type Song, type Playlist } from '@mplayer/core';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import ImportPlaylistModal from '@/renderer/components/ImportPlaylistModal';
 
@@ -78,16 +80,18 @@ const PlaylistDetailPage: React.FC = () => {
     });
   }, []);
 
-  // 拖拽排序：dnd 事件 → (from, to) 由共享 hook 折算，本页只负责乐观更新 + 落库；
-  // 索引数学走共享 moveItem，本地歌单页不再手写 splice
+  // 拖拽排序：dnd 事件 → (from, to) 由共享 hook 折算，本页只负责映射回全量序 + 乐观更新 + 落库。
+  // 过滤态下 (from, to) 是**可见集合**下标：只重排可见行，非可见歌曲的位置与相对顺序保持不动，
+  // 再把完整的 id 序回写 playlist:reorderFull（#488/#703：过滤不应写坏整个歌单顺序）。
   const handleReorder = useCallback(async (oldIndex: number, newIndex: number) => {
-    // 过滤态下 (from, to) 是**展示集合**的下标，当成全量下标落库会写坏整个歌单的顺序（#488）。
-    // 结构上过滤态也不渲染拖拽手柄（走非 sortable 行），这里是第二道闸。
-    if (!playlistId || isFiltering) return;
-    const newSongIds = moveItem(songs.map(s => s.id), oldIndex, newIndex);
+    if (!playlistId || oldIndex === newIndex) return;
+    const nextSongs = isFiltering
+      ? reorderVisibleSongs(songs, visibleSongs, oldIndex, newIndex)
+      : moveItem(songs, oldIndex, newIndex);
+    const newSongIds = nextSongs.map(s => s.id);
 
     // Optimistically update UI
-    setSongs(prev => moveItem(prev, oldIndex, newIndex));
+    setSongs(nextSongs);
 
     setIsReordering(true);
     try {
@@ -98,7 +102,7 @@ const PlaylistDetailPage: React.FC = () => {
     } finally {
       setIsReordering(false);
     }
-  }, [playlistId, songs, isFiltering]);
+  }, [playlistId, songs, visibleSongs, isFiltering]);
 
   const loadData = async () => {
     if (!playlistId) return;
@@ -243,6 +247,8 @@ const PlaylistDetailPage: React.FC = () => {
    */
   const sharedRowProps = useMemo(() => ({
     isPlaying,
+    // #699/#703：本地歌单沿用 46px 资料库密度（封面 30px），拖拽预览与虚拟测量取同一行高
+    variant: 'library' as const,
     // 点播契约（#697）：当前展示队列 = 可见集合（过滤态即过滤结果），行下标是可见集合内下标
     queue: visibleSongs,
     showCheckbox: true,
@@ -282,16 +288,6 @@ const PlaylistDetailPage: React.FC = () => {
     [buildRowProps],
   );
 
-  /**
-   * 过滤态的行（#488）：**不注册 `useSortable`**、也就不带拖拽手柄——拖拽入口在结构上不存在。
-   * 过滤集合的下标不是全量下标，落点一旦被当成全量下标就会写坏 order；所以这里不给入口，
-   * 而不是让它拖完再被 `handleReorder` 拒绝（那道闸仍在，见上）。
-   */
-  const renderStaticRow = useCallback(
-    (song: Song, index: number) => <SongRow {...buildRowProps(song, index)} />,
-    [buildRowProps],
-  );
-
   const handleEditPlaylist = async () => {
     if (!playlistId || !editName.trim()) return;
 
@@ -324,58 +320,73 @@ const PlaylistDetailPage: React.FC = () => {
 
   return (
     <div className="playlist-detail">
-      {/* 顶部工具栏 */}
-      <div className="playlist-detail__toolbar">
-        <button
-          onClick={() => navigate('/playlists')}
-          className="playlist-detail__back"
-        >
-          <ArrowLeft size={16} />
-          返回歌单
-        </button>
-      </div>
-
-      {/* 歌曲列表 */}
+      {/* hero 与列表同一滚动上下文（#700/#703）：整页一个滚动容器，标题栏是唯一返回所有者 */}
       <div className="playlist-detail__scroll" data-scroll-container>
         {playlist && (
-          <div className="playlist-detail__head">
-            <div className="playlist-detail__card">
+          <PageHero
+            className="playlist-detail__hero"
+            media={
               <div className="playlist-detail__cover">
-                <SongCover src={detailCoverSrc} variant="none" />
+                <SongCover
+                  src={detailCoverSrc}
+                  alt={playlist.name}
+                  thumbSize={COVER_SIZE.hero}
+                  variant="none"
+                />
               </div>
-              <div className="playlist-detail__info">
-                <div className="playlist-detail__kind-row">
-                  <div className="playlist-detail__kind">我的歌单</div>
-                  <button
-                    onClick={() => {
-                      setEditName(playlist.name);
-                      setEditDesc(playlist.description || '');
-                      setIsEditModalVisible(true);
-                    }}
-                    className="playlist-detail__edit"
-                  >
-                    <Edit2 size={13} />
-                  </button>
-                </div>
-                <h1 className="playlist-detail__title">{playlist.name}</h1>
-                <div className="playlist-detail__meta">
-                  {songs.length} 首歌曲{playlist.description ? ` · ${playlist.description}` : ''}
-                </div>
-                <div className="playlist-detail__actions">
-                  <button onClick={handlePlayAll} disabled={songs.length === 0} className="playlist-detail__action playlist-detail__action--primary">
-                    <Play size={16} /> 播放全部
-                  </button>
-                  <button onClick={handleDownloadAll} disabled={songs.length === 0} className="playlist-detail__action">
-                    <Download size={16} /> 下载全部
-                  </button>
-                  <button onClick={() => setImportModalVisible(true)} className="playlist-detail__action">
-                    <Upload size={16} /> 导入歌曲
-                  </button>
-                </div>
+            }
+            eyebrow={
+              <div className="playlist-detail__kind-row">
+                <span className="playlist-detail__kind">歌单</span>
+                <button
+                  type="button"
+                  aria-label="编辑歌单"
+                  title="编辑歌单"
+                  onClick={() => {
+                    setEditName(playlist.name);
+                    setEditDesc(playlist.description || '');
+                    setIsEditModalVisible(true);
+                  }}
+                  className="playlist-detail__edit"
+                >
+                  <Edit2 size={13} />
+                </button>
               </div>
-            </div>
-          </div>
+            }
+            title={playlist.name}
+            meta={<>{songs.length} 首歌曲{playlist.description ? ` · ${playlist.description}` : ''}</>}
+            actions={
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<Play size={15} aria-hidden="true" />}
+                  onClick={handlePlayAll}
+                  disabled={songs.length === 0}
+                >
+                  播放全部
+                </Button>
+                <Button
+                  size="sm"
+                  icon={<Download size={15} aria-hidden="true" />}
+                  onClick={handleDownloadAll}
+                  disabled={songs.length === 0}
+                >
+                  下载全部
+                </Button>
+                <Button
+                  size="sm"
+                  icon={<Upload size={15} aria-hidden="true" />}
+                  onClick={() => setImportModalVisible(true)}
+                >
+                  导入歌曲
+                </Button>
+              </>
+            }
+          />
         )}
+
+        <div className="playlist-detail__list">
         {loading && songs.length === 0 ? (
           <div className="playlist-detail__skeleton">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -412,10 +423,11 @@ const PlaylistDetailPage: React.FC = () => {
         ) : (
           /* 窗口化 + 可排序收在共享能力里（#445）：页面不再自建 DndContext/SortableContext，
              也不再 items={songs.map(...)}（每帧新建数组，dnd-kit 的排序下标来源必须是稳定引用）。
-             items 传**展示集合**（#488）：窗口化与 dnd-kit 的下标来源必须是同一个 memo 化数组，
-             而过滤态行走 renderStaticRow（不注册 useSortable），可见集合的下标不会被当成全量下标。 */
+             items 传**展示集合**（#488/#703）：过滤态也注册 sortable；handleReorder 负责把可见下标
+             映射回全量序，只有可见行互换，非可见行位置不动。 */
           <VirtualSortableList
             items={visibleSongs}
+            estimateSize={() => LIBRARY_ROW_HEIGHT}
             header={
               <>
                 {/* 歌单内过滤（#488）：只改展示集合，不重排/不改 order/不碰 playlist:reorderFull。
@@ -493,12 +505,13 @@ const PlaylistDetailPage: React.FC = () => {
                 )}
               </>
             }
-            renderRow={isFiltering ? renderStaticRow : renderSongRow}
+            renderRow={renderSongRow}
             renderDragPreview={renderSongDragPreview}
             onReorder={handleReorder}
           />
         )}
         </div>
+      </div>
 
       {/* 编辑歌单弹窗 */}
       {isEditModalVisible && (
