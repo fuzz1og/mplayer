@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import '../styles/page-discover.css';
 import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Play, Music2 } from 'lucide-react';
+import { Download, Play, Music2 } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
 import { useConfirm } from '@/renderer/ui';
 import SongList from '@/renderer/components/SongList';
@@ -31,7 +31,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
-  const { download } = useDownload();
+  const { download, downloadBatch } = useDownload();
 
   const [playlist, setPlaylist] = useState<DiscoverPlaylist | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -164,13 +164,6 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
   if (loading) {
     return (
       <div className="discover-page">
-        <div className="discover-topbar">
-          <button onClick={() => navigate(-1)} className="discover-back">
-            <ArrowLeft size={16} /><span>返回</span>
-          </button>
-          <h1 className="discover-topbar__title">加载中...</h1>
-          <div className="discover-topbar__spacer" />
-        </div>
         <div className="discover-state-center">加载中...</div>
       </div>
     );
@@ -179,13 +172,6 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
   if (!playlist) {
     return (
       <div className="discover-page">
-        <div className="discover-topbar">
-          <button onClick={() => navigate(-1)} className="discover-back">
-            <ArrowLeft size={16} /><span>返回</span>
-          </button>
-          <h1 className="discover-topbar__title">歌单不存在</h1>
-          <div className="discover-topbar__spacer" />
-        </div>
         <div className="discover-state-center">歌单不存在或加载失败</div>
       </div>
     );
@@ -193,14 +179,6 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
 
   return (
     <div className="discover-page">
-      <div className="discover-topbar discover-topbar--shadow">
-        <button onClick={() => navigate(-1)} className="discover-back discover-back--action">
-          <ArrowLeft size={16} /><span>返回</span>
-        </button>
-        <h1 className="discover-topbar__title">{playlist.name}</h1>
-        <div className="discover-topbar__spacer" />
-      </div>
-
       <div ref={scrollRef} className="discover-detail-scroll">
         <div className="discover-detail__head">
           <div className="discover-detail__cover">
@@ -220,7 +198,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
             )}
           </div>
           <div className="discover-detail__info">
-            <h2 className="discover-detail__title">{playlist.name}</h2>
+            <h1 className="discover-detail__title">{playlist.name}</h1>
             <div className="discover-detail__meta">
               <span>创建者: {playlist.creator.nickname}</span>
               <span>播放量: {formatPlayCount(playlist.playCount)}</span>
@@ -263,10 +241,10 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
             onPlay={handlePlay}
             onToggleFavorite={toggleFavorite}
             onDownload={download}
+            onBatchDownload={downloadBatch}
             onSwap={(original, swapped) => setSongs(prev => prev.map(s => s.id === original.id ? swapped : s))}
             showHeader={true}
             showIndex={true}
-            showCheckbox={true}
             enableBatchDownload={true}
             enableBatchAddToPlaylist={true}
             emptyText="暂无歌曲数据"
