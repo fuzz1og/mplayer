@@ -5,14 +5,19 @@ import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
+import CollectionGrid from '@/renderer/components/CollectionGrid';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
-import { Button, Dialog, PageHeader } from '@/renderer/ui';
+import { Button, Dialog, PageHeader, Segmented } from '@/renderer/ui';
 import type { Song, SongBase } from '@mplayer/core';
 import '@/renderer/styles/songlist.css';
 
+/** 内容库三视角（#694）：歌曲 / 专辑 / 歌手是同一批历史的三种看法。 */
+const VIEW_OPTIONS = ['歌曲', '专辑', '歌手'];
+
 const HistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Song[]>([]);
+  const [view, setView] = useState(VIEW_OPTIONS[0]);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -40,11 +45,11 @@ const HistoryPage: React.FC = () => {
     loadHistory();
   }, []);
 
-  const handlePlay = async (song: Song, queue: Song[], index: number) => {
+  const handlePlay = useCallback(async (song: Song, queue: Song[], index: number) => {
     // #697：列表只回传展示队列与索引，建队列归页面
     setCurrentPlaylist(queue, index);
     await play(song);
-  };
+  }, [play, setCurrentPlaylist]);
 
   // 封面加载失败 → 按 ID 重识别换新封面（历史歌曲封面常为过期签名）
   const handleCoverError = (song: Song) => {
@@ -57,6 +62,11 @@ const HistoryPage: React.FC = () => {
   const handlePlayAll = useCallback(() => {
     if (history.length > 0) void handlePlay(history[0], history, 0);
   }, [history, handlePlay]);
+
+  const handlePlayCollection = useCallback((songs: Song[], index: number) => {
+    const song = songs[index];
+    if (song) void handlePlay(song, songs, index);
+  }, [handlePlay]);
 
   const handleClearHistory = async () => {
     try {
@@ -103,24 +113,41 @@ const HistoryPage: React.FC = () => {
         }
       />
 
-      <div className="list-page__body">
-        <SongList
-          density="library"
-          showDuration
-          songs={history}
-          currentSongId={currentSong?.id}
-          isPlaying={isPlaying}
-          favoriteIds={favoriteIds}
-          onPlay={handlePlay}
-          onToggleFavorite={toggleFavorite}
-          onDownload={download}
-          onBatchDownload={downloadBatch}
-          onAddToPlaylist={handleAddToPlaylist}
-          onCoverError={handleCoverError}
-          enableBatchDownload={true}
-          enableBatchAddToPlaylist={true}
-          emptyText="还没有播放记录，听过的歌会出现在这里"
+      <div className="list-page__tabs">
+        <Segmented
+          options={VIEW_OPTIONS}
+          value={view}
+          onChange={setView}
+          ariaLabel="最近播放视图"
         />
+      </div>
+
+      <div className="list-page__body">
+        {view === '歌曲' ? (
+          <SongList
+            density="library"
+            showDuration
+            songs={history}
+            currentSongId={currentSong?.id}
+            isPlaying={isPlaying}
+            favoriteIds={favoriteIds}
+            onPlay={handlePlay}
+            onToggleFavorite={toggleFavorite}
+            onDownload={download}
+            onBatchDownload={downloadBatch}
+            onAddToPlaylist={handleAddToPlaylist}
+            onCoverError={handleCoverError}
+            enableBatchDownload={true}
+            enableBatchAddToPlaylist={true}
+            emptyText="还没有播放记录，听过的歌会出现在这里"
+          />
+        ) : (
+          <CollectionGrid
+            view={view === '专辑' ? 'albums' : 'artists'}
+            songs={history}
+            onPlayCollection={handlePlayCollection}
+          />
+        )}
       </div>
 
       <Dialog

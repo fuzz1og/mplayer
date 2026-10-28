@@ -212,8 +212,8 @@ const App: React.FC = () => {
     if (path.startsWith('/recommend')) return 'recommend';
     if (path.startsWith('/discover') || path.startsWith('/hotlist') || path.startsWith('/discover-playlist')) return 'discover';
     if (path.startsWith('/artists') || path.startsWith('/artist/')) return 'artists';
-    if (path.startsWith('/library')) return 'library';
     if (path.startsWith('/favorites')) return 'favorites';
+    if (path.startsWith('/local')) return 'local';
     if (path.startsWith('/history')) return 'history';
     if (path.startsWith('/playlists') || path.startsWith('/playlist/')) return 'playlists';
     if (path.startsWith('/queue')) return 'queue';

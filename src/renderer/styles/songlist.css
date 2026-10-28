@@ -641,6 +641,112 @@
   height: 28px;
   padding: 0;
 }
+/* ── 卡片网格 / 空态 / 骨架（#694：AlbumGrid、PlaylistGrid 的容器类此前只有类名没有规则）── */
+.card-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.card-grid--album {
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+}
+
+.card-grid--playlist {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.card-state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12) var(--space-5);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: center;
+}
+
+.card-state--error {
+  color: var(--danger-text);
+}
+
+.card-state__icon {
+  color: var(--text-tertiary);
+}
+
+.card-state__retry {
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.card-state__retry:hover {
+  background: var(--surface-selected-hover);
+}
+
+.card-skeleton__cover {
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+}
+
+.card-skeleton__title {
+  height: 14px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-xs);
+}
+
+.card-skeleton__sub {
+  width: 60%;
+  height: 12px;
+  margin-top: 6px;
+  border-radius: var(--radius-xs);
+}
+
+.card-skeleton--row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.card-skeleton__cover--row {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+}
+
+.card-skeleton__lines {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card-skeleton__line {
+  height: 12px;
+  border-radius: var(--radius-xs);
+}
+
+.card-skeleton__line--title {
+  width: 70%;
+}
+
+.card-skeleton__line--desc {
+  width: 90%;
+}
+
+.card-skeleton__line--meta {
+  width: 45%;
+}
+
 /* ── 专辑网格 ── */
 .album-grid__group + .album-grid__group {
   margin-top: 32px;
@@ -1622,8 +1728,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+.list-page__tabs {
+  display: flex;
+  flex: none;
+  padding: 0 28px;
+  margin-bottom: 14px;
+}
+
 .list-page__body {
   flex: 1;
+  padding: 0 28px 40px;
   overflow: auto;
 }
 
@@ -2501,7 +2615,13 @@
   font-size: var(--text-sm);
   text-align: center;
 }
-/* ── 我的歌单（1.9.0）── */
+/* ── 我的歌单（1.9.0；#694 统一 PageHeader，保持网格、不加内容视角分段）── */
+
+.playlists__lead {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
 .playlists {
   display: flex;
   flex-direction: column;
@@ -2510,7 +2630,7 @@
 
 .playlists__scroll {
   flex: 1;
-  padding: 24px;
+  padding: 0 28px 40px;
   overflow: auto;
 }
 
@@ -2518,54 +2638,6 @@
   padding: 60px 20px;
   color: var(--text-tertiary);
   text-align: center;
-}
-
-.playlists__hero {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  padding: 24px;
-  margin-bottom: 28px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-card);
-}
-
-.playlists__hero-cover {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 140px;
-  height: 140px;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
-  background: var(--surface-card-hover);
-}
-
-.playlists__hero-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.playlists__hero-kind {
-  margin-bottom: 6px;
-  color: var(--accent-text);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-}
-
-.playlists__hero-title {
-  margin-bottom: 6px;
-  color: var(--text-primary);
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.02em;
-}
-
-.playlists__hero-meta {
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
 }
 
 .playlists__head {

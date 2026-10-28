@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, FolderOpen } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
-import { Button, Dialog, Input, useConfirm } from '@/renderer/ui';
+import { Button, Dialog, Input, PageHeader, useConfirm } from '@/renderer/ui';
 import '@/renderer/styles/songlist.css';
 import { useNavigate } from 'react-router-dom';
 import MusicCard from '@/renderer/components/MusicCard';
-import SongCover from '@/renderer/components/SongCover';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Playlist } from '@mplayer/core';
 
@@ -36,7 +35,6 @@ const PlaylistsPage: React.FC = () => {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
 
-  const heroPlaylist = playlists[0];
   const totalSongs = playlists.reduce((sum, playlist) => sum + (playlist.songCount || 0), 0);
 
   const loadData = async () => {
@@ -90,29 +88,25 @@ const PlaylistsPage: React.FC = () => {
 
   return (
     <div className="playlists">
+      <PageHeader
+        title="我的歌单"
+        lead={<span className="playlists__lead">{playlists.length} 个歌单 · {totalSongs} 首歌曲</span>}
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Plus size={15} aria-hidden="true" />}
+            onClick={() => setIsModalVisible(true)}
+          >
+            新建歌单
+          </Button>
+        }
+      />
       <div className="playlists__scroll">
         {loading ? (
           <div className="playlists__loading">加载中...</div>
         ) : (
           <>
-            <div className="playlists__hero">
-              <div className="playlists__hero-cover">
-                <SongCover src={heroPlaylist?.cover} variant="icon" iconSize={30} />
-              </div>
-              <div className="playlists__hero-body">
-                <div className="playlists__hero-kind">我的歌单</div>
-                <div className="playlists__hero-title">{playlists.length} 个歌单</div>
-                <div className="playlists__hero-meta">{totalSongs} 首歌曲 · 把喜欢的歌都收进来</div>
-              </div>
-              <button
-                onClick={() => setIsModalVisible(true)}
-                className="list-page__action list-page__action--primary"
-              >
-                <Plus size={16} />
-                新建歌单
-              </button>
-            </div>
-
             <div className="playlists__head">
               <span className="playlists__head-title">全部歌单</span>
               <span className="playlists__head-count">{playlists.length} 个</span>

@@ -1,6 +1,6 @@
 /* ============================================================
    侧栏（Sidebar.tsx 唯一消费者）
-   原 shell.css 的 .sidebar / .sidebar__* 段，逐条搬移，未改值。
+   #694 信息架构：两段分组（发现 / 资料库）；分组标题样式唯一来源。
    ============================================================ */
 
 /* ── 侧栏 ── */
@@ -26,9 +26,9 @@
 }
 
 .sidebar__group-label {
-  padding: 14px 10px 6px;
+  padding: var(--space-4) 10px 6px;
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: var(--sidebar-group-size);
   font-weight: var(--weight-semibold);
 }
 

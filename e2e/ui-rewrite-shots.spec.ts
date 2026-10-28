@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 const ROUTES: Array<[string, string, string]> = [
   ['ui-01-recommend', '/#/recommend', '推荐'],
   ['ui-02-discover', '/#/discover', '发现'],
-  ['ui-03-library', '/#/library', '资料库'],
+  ['ui-03-local', '/#/local', '本地'],
   ['ui-04-playlists', '/#/playlists', '我的歌单'],
   ['ui-05-artists', '/#/artists', '歌手'],
   ['ui-06-settings', '/#/settings', '设置'],
@@ -12,7 +12,6 @@ const ROUTES: Array<[string, string, string]> = [
   ['ui-08-favorites', '/#/favorites', '我喜欢的音乐'],
   ['ui-09-history', '/#/history', '最近播放'],
   ['ui-10-queue', '/#/queue', '播放队列'],
-  ['ui-11-local', '/#/local', '本地音乐'],
   ['ui-12-album', '/#/album/a1', '专辑详情'],
   ['ui-13-artist', '/#/artist/ar1', '歌手详情'],
   ['ui-14-hotlist', '/#/hotlist/netease:hot', '热榜详情'],

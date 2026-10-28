@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { createHashRouter, Navigate } from 'react-router-dom';
+import type { RouteObject } from 'react-router-dom';
 import App from '@/renderer/App';
 import SettingsShell from '@/renderer/components/SettingsShell';
 
@@ -19,7 +20,7 @@ const AlbumDetailPage = lazy(() => import('@/renderer/pages/AlbumDetailPage'));
 const DiscoverPlaylistListPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistListPage'));
 const DiscoverPlaylistDetailPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistDetailPage'));
 const UiLabPage = lazy(() => import('@/renderer/pages/UiLabPage'));
-const LibraryPage = lazy(() => import('@/renderer/pages/LibraryPage'));
+const LocalPage = lazy(() => import('@/renderer/pages/LocalPage'));
 
 // 加载状态组件
 const Loading = () => (
@@ -29,8 +30,8 @@ const Loading = () => (
   </div>
 );
 
-// 路由配置
-export const router = createHashRouter([
+// 路由配置（具名导出便于测试断言重定向；应用本身只用 router）
+export const routes: RouteObject[] = [
   {
     path: '/',
     element: <App />,
@@ -113,12 +114,9 @@ export const router = createHashRouter([
         ),
       },
       {
+        // #694：「资料库」只是侧栏分组标题，聚合页退役；旧深链落到「我喜欢的音乐」。
         path: 'library',
-        element: (
-          <Suspense fallback={<Loading />}>
-            <LibraryPage />
-          </Suspense>
-        ),
+        element: <Navigate to="/favorites" replace />,
       },
       {
         path: 'queue',
@@ -129,9 +127,12 @@ export const router = createHashRouter([
         ),
       },
       {
-        // 旧入口（#685）：本地音乐并入资料库「本地」分段，保留原路径做重定向。
         path: 'local',
-        element: <Navigate to="/library?tab=local" replace />,
+        element: (
+          <Suspense fallback={<Loading />}>
+            <LocalPage />
+          </Suspense>
+        ),
       },
       {
         path: 'artists',
@@ -182,9 +183,9 @@ export const router = createHashRouter([
         ),
       },
       {
-        // 旧入口（#685）：下载管理并入资料库「下载」分段，保留原路径做重定向。
+        // #694：下载管理是「本地」页的次级入口（页头「已下载」），旧路径打开同一个弹窗。
         path: 'download',
-        element: <Navigate to="/library?tab=downloads" replace />,
+        element: <Navigate to="/local?downloads=1" replace />,
       },
       {
         path: '',
@@ -192,6 +193,8 @@ export const router = createHashRouter([
       },
     ],
   },
-]);
+];
+
+export const router = createHashRouter(routes);
 
 export default router;
