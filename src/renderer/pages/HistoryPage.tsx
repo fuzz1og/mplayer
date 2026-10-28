@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { History, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Play, Trash2 } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
@@ -7,11 +7,13 @@ import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
+import { Button, Dialog, PageHeader } from '@/renderer/ui';
 import type { Song, SongBase } from '@mplayer/core';
 import '@/renderer/styles/songlist.css';
 
 const HistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Song[]>([]);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const play = usePlayerStore((s) => s.play);
@@ -22,8 +24,8 @@ const HistoryPage: React.FC = () => {
 
   const loadHistory = async () => {
     try {
-      const history = await IpcClient.invoke<any[]>('history:get', 100);
-      const songBases = history.map((h: any) => h.song as SongBase);
+      const rows = await IpcClient.invoke<any[]>('history:get', 100);
+      const songBases = rows.map((h: any) => h.song as SongBase);
       const uniqueMap = new Map<string, SongBase>();
       songBases.forEach((s: SongBase) => uniqueMap.set(s.id, s));
       // 挂载整表扫荡已退役（#317）：去重后直接上屏——播放/歌词懒解析补 url/lrc，
@@ -52,10 +54,15 @@ const HistoryPage: React.FC = () => {
     });
   };
 
+  const handlePlayAll = useCallback(() => {
+    if (history.length > 0) void handlePlay(history[0], history, 0);
+  }, [history, handlePlay]);
+
   const handleClearHistory = async () => {
     try {
       await IpcClient.invoke<void>('history:clear');
       setHistory([]);
+      setConfirmClearOpen(false);
       toast.success('播放历史已清空');
     } catch (error) {
       console.error('清空播放历史失败:', error);
@@ -69,22 +76,33 @@ const HistoryPage: React.FC = () => {
 
   return (
     <div className="list-page">
-      {/* 页面标题 */}
-      <div className="list-page__head">
-        <div className="list-page__head-row">
-          <div className="list-page__title-group">
-            <History size={20} color="var(--accent)" />
-            <h1 className="list-page__title">播放历史</h1>
-            <span className="list-page__count">{history.length} 首歌曲</span>
-          </div>
-          <button onClick={handleClearHistory} disabled={history.length === 0} className="list-page__action">
-            <Trash2 size={15} />
-            清空历史
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="最近播放"
+        lead={<span className="list-page__count">{history.length} 首歌曲</span>}
+        actions={
+          <>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<Play size={15} aria-hidden="true" />}
+              onClick={handlePlayAll}
+              disabled={history.length === 0}
+            >
+              播放全部
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              icon={<Trash2 size={15} aria-hidden="true" />}
+              onClick={() => setConfirmClearOpen(true)}
+              disabled={history.length === 0}
+            >
+              清空历史
+            </Button>
+          </>
+        }
+      />
 
-      {/* 歌曲列表 */}
       <div className="list-page__body">
         <SongList
           songs={history}
@@ -97,12 +115,28 @@ const HistoryPage: React.FC = () => {
           onBatchDownload={downloadBatch}
           onAddToPlaylist={handleAddToPlaylist}
           onCoverError={handleCoverError}
-          showCheckbox={true}
           enableBatchDownload={true}
           enableBatchAddToPlaylist={true}
-          emptyText="暂无播放历史"
+          emptyText="还没有播放记录，听过的歌会出现在这里"
         />
       </div>
+
+      <Dialog
+        open={confirmClearOpen}
+        title="清空播放历史"
+        size="sm"
+        onClose={() => setConfirmClearOpen(false)}
+        footer={
+          <>
+            <Button onClick={() => setConfirmClearOpen(false)}>取消</Button>
+            <Button variant="danger" onClick={handleClearHistory}>
+              清空
+            </Button>
+          </>
+        }
+      >
+        清空后无法恢复。播放历史只影响「最近播放」列表，不会删除收藏或歌单。
+      </Dialog>
     </div>
   );
 };

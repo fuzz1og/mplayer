@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, ListPlus } from 'lucide-react';
+import { AlertCircle, ListPlus } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
-import { useConfirm } from '@/renderer/ui';
+import { Button, PageHeader, useConfirm } from '@/renderer/ui';
 import '@/renderer/styles/songlist.css';
 import SongList from '@/renderer/components/SongList';
 import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
@@ -103,6 +103,12 @@ const HotlistDetailPage: React.FC = () => {
     });
   };
 
+  const handlePlayAll = async () => {
+    if (hotlist.length === 0) return;
+    setCurrentPlaylist(hotlist, 0);
+    await play(await resolvePlayableVersionForDesktop(hotlist[0]));
+  };
+
   const handlePlay = async (song: Song, queue: Song[], index: number) => {
     // #697：队列与索引由列表回传，页面统一负责 setQueue + 播放
     setCurrentPlaylist(queue, index);
@@ -114,34 +120,34 @@ const HotlistDetailPage: React.FC = () => {
 
   return (
     <div className="detail-page">
-      {/* 导航栏 */}
-      <div className="detail-page__nav">
-        <button onClick={() => navigate('/discover')} className="detail-page__back">
-          <ArrowLeft size={16} />
-          <span>返回</span>
-        </button>
-        <h1 className="detail-page__nav-title">{config.title}</h1>
-        <button
-          onClick={handleSaveAllToNewPlaylist}
-          disabled={hotlist.length === 0 || savingAll}
-          title={`把「${config.title}」的 ${hotlist.length} 首歌曲保存到新歌单`}
-          className="detail-page__nav-action"
-        >
-          <ListPlus size={16} />
-          <span>{savingAll ? '保存中...' : `保存全部到新歌单（${hotlist.length}）`}</span>
-        </button>
-      </div>
 
       {/* 内容区域 */}
       <div className="detail-page__body">
-        {/* 热榜标题 */}
-        <div className="detail-hero">
-          <div className="detail-hero__mark">热榜</div>
-          <div>
-            <h2 className="detail-hero__title">{config.title}</h2>
-            <p className="detail-hero__sub">实时更新，最热门的100首歌曲</p>
-          </div>
-        </div>
+        <PageHeader
+          title={config.title}
+          lead="实时更新，最热门的 100 首歌曲"
+          actions={
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handlePlayAll}
+                disabled={hotlist.length === 0 || loading}
+              >
+                播放全部
+              </Button>
+              <Button
+                size="sm"
+                icon={<ListPlus size={15} aria-hidden="true" />}
+                onClick={handleSaveAllToNewPlaylist}
+                disabled={hotlist.length === 0 || savingAll}
+                title={`把「${config.title}」的 ${hotlist.length} 首歌曲保存到新歌单`}
+              >
+                {savingAll ? '保存中...' : `保存全部到新歌单（${hotlist.length}）`}
+              </Button>
+            </>
+          }
+        />
 
         {/* 热榜歌曲列表 */}
         {loading ? (
@@ -180,7 +186,6 @@ const HotlistDetailPage: React.FC = () => {
             onToggleFavorite={toggleFavorite}
             showHeader={true}
             showIndex={true}
-            showCheckbox={true}
             enableBatchDownload={true}
             onDownload={download}
             onBatchDownload={downloadBatch}

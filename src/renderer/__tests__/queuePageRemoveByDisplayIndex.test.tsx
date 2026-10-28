@@ -43,7 +43,7 @@ vi.mock('../services/IpcClient', () => ({ IpcClient: { invoke: ipcInvokeMock } }
 vi.mock('../utils/songCoverRefresh', () => ({ refreshSongCover: vi.fn(async () => null) }));
 
 import { usePlayerStore } from '../store/playerStore';
-import QueuePage from '../pages/QueuePage';
+import QueuePanel from '../components/QueuePanel';
 
 /** 同一个 id 的两条成员靠 name 区分（队列允许同一首歌占多格）。 */
 function song(id: string, name: string): Song {
@@ -73,7 +73,7 @@ const names = () => usePlayerStore.getState().currentPlaylist.map((s) => s.name)
 function renderPage() {
   return render(
     <MemoryRouter>
-      <QueuePage />
+      <QueuePanel standalone />
     </MemoryRouter>,
   );
 }

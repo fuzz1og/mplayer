@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { Heart, Play } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import SongList from '@/renderer/components/SongList';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
+import { Button, PageHeader } from '@/renderer/ui';
 import type { Song } from '@mplayer/core';
 import '@/renderer/styles/songlist.css';
 
@@ -49,11 +50,9 @@ const FavoritesPage: React.FC = () => {
     });
   }, []);
 
-  const handlePlayAll = async () => {
-    if (favorites.length > 0) {
-      await handlePlay(favorites[0], favorites, 0);
-    }
-  };
+  const handlePlayAll = useCallback(() => {
+    if (favorites.length > 0) void handlePlay(favorites[0], favorites, 0);
+  }, [favorites, handlePlay]);
 
   // SongList 行内「加入歌单」由组件内部单曲弹窗闭环，此 prop 仅作成功通知（勿在此开弹窗）
   const handleAddToPlaylist = useCallback((_song: Song) => {}, []);
@@ -66,26 +65,22 @@ const FavoritesPage: React.FC = () => {
 
   return (
     <div className="list-page">
-      {/* 页面标题 */}
-      <div className="list-page__head">
-        <div className="list-page__head-row">
-          <div className="list-page__title-group">
-            <Heart size={20} color="var(--text-secondary)" />
-            <h1 className="list-page__title">我的收藏</h1>
-            <span className="list-page__count">{favorites.length} 首歌曲</span>
-          </div>
-          <button
+      <PageHeader
+        title="我喜欢的音乐"
+        lead={<span className="list-page__count">{favorites.length} 首歌曲</span>}
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Play size={15} aria-hidden="true" />}
             onClick={handlePlayAll}
             disabled={favorites.length === 0}
-            className="list-page__action list-page__action--primary"
           >
-            <Play size={15} />
             播放全部
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
-      {/* 歌曲列表 */}
       <div className="list-page__body">
         <SongList
           songs={favorites}
@@ -99,10 +94,9 @@ const FavoritesPage: React.FC = () => {
           onAddToPlaylist={handleAddToPlaylist}
           onSwap={handleSwap}
           onCoverError={handleCoverError}
-          showCheckbox={true}
           enableBatchDownload={true}
           enableBatchAddToPlaylist={true}
-          emptyText="暂无收藏歌曲"
+          emptyText="还没有喜欢的歌曲，点歌曲行右侧的爱心收藏"
         />
       </div>
     </div>
