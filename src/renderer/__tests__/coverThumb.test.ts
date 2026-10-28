@@ -11,21 +11,31 @@ const read = (rel: string) => readFileSync(join(testDir, '..', rel), 'utf8');
  * 一个 100 张的专辑网格拉原图是 ~27 MB；漏一个点就等于整页回退到原图。
  */
 describe('桌面封面取图尺寸（#496）', () => {
-  it('网格 / 卡片 / 头像 / 详情页 hero 都走 core 缩略图', () => {
+  it('内容卡统一经 CoverCard 取图，详情页 hero 与下载弹窗各自显式提档', () => {
     for (const [file, needle] of [
-      ['components/AlbumGrid.tsx', 'coverThumbUrl(album.picUrl, COVER_SIZE.thumb)'],
+      ['components/CoverCard.tsx', 'thumbSize={COVER_SIZE.thumb}'],
       ['components/AlbumScroll.tsx', 'coverThumbUrl(album.picUrl, COVER_SIZE.icon)'],
-      ['components/PlaylistGrid.tsx', 'coverThumbUrl(pl.coverImgUrl, COVER_SIZE.thumb)'],
-      ['components/PlaylistPageGrid.tsx', 'coverThumbUrl(pl.coverImgUrl, COVER_SIZE.thumb)'],
-      ['components/DiscoverPlaylistCard.tsx', 'coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)'],
-      ['components/ArtistCard.tsx', 'coverThumbUrl(artist.picUrl, COVER_SIZE.icon)'],
-      ['pages/DiscoverPageV2.tsx', 'coverThumbUrl(a.picUrl, COVER_SIZE.icon)'],
       ['pages/AlbumDetailPage.tsx', 'coverThumbUrl(displayPic, COVER_SIZE.thumb)'],
       ['pages/ArtistDetailPage.tsx', 'coverThumbUrl(displayPic, COVER_SIZE.thumb)'],
       ['pages/DiscoverPlaylistDetailPage.tsx', 'coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)'],
       ['components/DownloadProgressModal.tsx', 'coverThumbUrl(task.song.cover, COVER_SIZE.row)'],
     ] as const) {
       expect(read(file), file).toContain(needle);
+    }
+  });
+
+  it('卡片网格不再自绘封面 img：歌单 / 专辑 / 歌手共用 CoverCard（#694）', () => {
+    for (const file of [
+      'components/AlbumGrid.tsx',
+      'components/PlaylistPageGrid.tsx',
+      'components/DiscoverPlaylistCard.tsx',
+      'components/ArtistCard.tsx',
+      'pages/RecommendPage.tsx',
+      'pages/PlaylistsPage.tsx',
+    ]) {
+      const src = read(file);
+      expect(src, file).toContain("import CoverCard from '@/renderer/components/CoverCard'");
+      expect(src, file).not.toContain('coverThumbUrl(');
     }
   });
 

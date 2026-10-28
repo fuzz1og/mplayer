@@ -1,30 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, FolderOpen } from 'lucide-react';
+import { Plus, FolderOpen, Trash2 } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
 import { Button, Dialog, Input, PageHeader, useConfirm } from '@/renderer/ui';
 import '@/renderer/styles/songlist.css';
 import { useNavigate } from 'react-router-dom';
-import MusicCard from '@/renderer/components/MusicCard';
+import CoverCard from '@/renderer/components/CoverCard';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import type { Playlist } from '@mplayer/core';
-
-interface PlaylistCardProps {
-  playlist: Playlist;
-  onOpen: () => void;
-  onDelete: () => void;
-}
-
-const PlaylistCard: React.FC<PlaylistCardProps> = ({ playlist, onOpen, onDelete }) => {
-  return (
-    <MusicCard
-      title={playlist.name}
-      subtitle={playlist.description || `${playlist.songCount ?? 0} 首歌曲`}
-      cover={playlist.cover || ''}
-      onClick={onOpen}
-      onDelete={onDelete}
-    />
-  );
-};
 
 const PlaylistsPage: React.FC = () => {
   const confirm = useConfirm();
@@ -104,14 +86,19 @@ const PlaylistsPage: React.FC = () => {
       />
       <div className="playlists__scroll">
         {loading ? (
-          <div className="playlists__loading">加载中...</div>
+          <div className="card-grid card-grid--playlist">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <div key={index} className="cover-card cover-card--skeleton">
+                <div className="cover-card__media" />
+                <div className="cover-card__text">
+                  <div className="cover-card__sk-line" />
+                  <div className="cover-card__sk-line cover-card__sk-line--meta" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <>
-            <div className="playlists__head">
-              <span className="playlists__head-title">全部歌单</span>
-              <span className="playlists__head-count">{playlists.length} 个</span>
-            </div>
-
             {playlists.length === 0 ? (
               <div className="playlists__empty">
                 <FolderOpen size={48} className="playlists__empty-icon" />
@@ -119,13 +106,24 @@ const PlaylistsPage: React.FC = () => {
                 <div>点击上方按钮创建第一个歌单</div>
               </div>
             ) : (
-              <div className="playlists__grid">
+              <div className="card-grid card-grid--playlist">
                 {playlists.map((playlist) => (
-                  <PlaylistCard
+                  <CoverCard
                     key={playlist.id}
-                    playlist={playlist}
-                    onOpen={() => navigate(`/playlist/${playlist.id}`)}
-                    onDelete={() => handleDeletePlaylist(playlist)}
+                    title={playlist.name}
+                    subtitle={playlist.description || `${playlist.songCount ?? 0} 首歌曲`}
+                    cover={playlist.cover || undefined}
+                    onClick={() => navigate(`/playlist/${playlist.id}`)}
+                    action={
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePlaylist(playlist)}
+                        aria-label={`删除歌单 ${playlist.name}`}
+                        title="删除歌单"
+                      >
+                        <Trash2 size={13} aria-hidden="true" />
+                      </button>
+                    }
                   />
                 ))}
               </div>

@@ -11,6 +11,7 @@ import {
 import { Button, PageHeader } from '@/renderer/ui';
 import SongList from '@/renderer/components/SongList';
 import SongCover from '@/renderer/components/SongCover';
+import CoverCard from '@/renderer/components/CoverCard';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
@@ -205,10 +206,12 @@ const RecommendPage: React.FC = () => {
               {loading && visiblePlaylists.length === 0 ? (
                 <div className="rec-playlists" aria-hidden="true">
                   {Array.from({ length: 6 }).map((_, item) => (
-                    <div className="rec-playlist" key={item}>
-                      <span className="skeleton-shimmer rec-playlist__cover" />
-                      <span className="skeleton-shimmer rec-playlist__line" />
-                      <span className="skeleton-shimmer rec-playlist__line rec-playlist__line--short" />
+                    <div className="cover-card cover-card--skeleton" key={item}>
+                      <div className="cover-card__media" />
+                      <div className="cover-card__text">
+                        <div className="cover-card__sk-line" />
+                        <div className="cover-card__sk-line cover-card__sk-line--meta" />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -219,24 +222,14 @@ const RecommendPage: React.FC = () => {
                       .filter(Boolean)
                       .join(' · ');
                     return (
-                      <button
+                      <CoverCard
                         key={playlist.id}
-                        type="button"
-                        className="rec-playlist"
-                        aria-label={`打开歌单 ${playlist.name}`}
+                        title={playlist.name}
+                        subtitle={meta || undefined}
+                        cover={playlist.coverImgUrl}
                         onClick={() => handlePlaylistSelect(playlist)}
-                      >
-                        <span className="rec-playlist__cover">
-                          <SongCover
-                            src={playlist.coverImgUrl}
-                            alt={playlist.name}
-                            variant="gradient"
-                            thumbSize={COVER_SIZE.thumb}
-                          />
-                        </span>
-                        <span className="rec-playlist__name">{playlist.name}</span>
-                        {meta && <span className="rec-playlist__meta">{meta}</span>}
-                      </button>
+                        ariaLabel={`打开歌单 ${playlist.name}`}
+                      />
                     );
                   })}
                 </div>

@@ -57,7 +57,7 @@ beforeEach(() => {
 });
 
 describe('搜索结果 单曲/歌手 tab', () => {
-  it('查看歌手入口落在歌手 tab，歌手卡片可进入详情页', async () => {
+  it('歌手 tab 的歌手卡可进入详情页', async () => {
     useSearchStore.setState({ currentKeyword: '周杰伦', preferredTab: 'artists', sourceType: 'all', songs: [song('1')], groups: [], loading: false, hasMore: false });
 
     render(
@@ -70,7 +70,7 @@ describe('搜索结果 单曲/歌手 tab', () => {
     );
 
     expect(screen.getByRole('button', { name: /歌手/ })).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: '查看歌手: 周杰伦' }));
+    fireEvent.click(await screen.findByRole('button', { name: '歌手 周杰伦' }));
 
     expect(await screen.findByTestId('artist-detail')).toBeInTheDocument();
   });
@@ -91,7 +91,7 @@ describe('搜索结果 单曲/歌手 tab', () => {
     );
 
     expect(screen.getByRole('button', { name: /单曲/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByRole('button', { name: '查看歌手: 周杰伦' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '歌手 周杰伦' })).toBeNull();
   });
 
   it('慢响应的旧关键词不覆盖新关键词的歌手结果（序号守卫）', async () => {
@@ -126,14 +126,14 @@ describe('搜索结果 单曲/歌手 tab', () => {
     // 新关键词默认重置回单曲 tab，再切到歌手 tab 查看结果
     await waitFor(() => expect(screen.getByRole('button', { name: /单曲/ })).toHaveAttribute('aria-pressed', 'true'));
     fireEvent.click(screen.getByRole('button', { name: /歌手/ }));
-    expect(await screen.findByRole('button', { name: '查看歌手: 林俊杰' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '歌手 林俊杰' })).toBeInTheDocument();
 
     // 旧响应姗姗来迟：序号守卫应丢弃，不覆盖新结果
     resolveOld([
       { id: '123', name: '周杰伦', picUrl: '', alias: [], albumSize: 10, musicSize: 100, sourceType: 'netease' },
     ]);
-    await waitFor(() => expect(screen.queryByRole('button', { name: '查看歌手: 周杰伦' })).toBeNull());
-    expect(screen.getByRole('button', { name: '查看歌手: 林俊杰' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('button', { name: '歌手 周杰伦' })).toBeNull());
+    expect(screen.getByRole('button', { name: '歌手 林俊杰' })).toBeInTheDocument();
   });
 
   it('单曲 tab 搜索失败时显示错误态', async () => {
