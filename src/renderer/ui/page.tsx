@@ -47,27 +47,3 @@ export const PageHero: React.FC<PageHeroProps> = ({ media, eyebrow, title, meta,
     </div>
   </section>
 );
-
-export interface PageBackProps {
-  onClick: () => void;
-  label?: string;
-  className?: string;
-}
-
-/** 详情页左上返回：文字 + chevron，统一 13/二级色。 */
-export const PageBack: React.FC<PageBackProps> = ({ onClick, label = '返回', className }) => (
-  <button type="button" onClick={onClick} className={className ? 'ui-page-back ' + className : 'ui-page-back'}>
-    <span aria-hidden="true">‹</span>
-    {label}
-  </button>
-);
-
-export interface PageSurfaceProps {
-  children: React.ReactNode;
-  className?: string;
-}
-
-/** 页面内容面：统一内容区留白；分组卡片由调用方的 Group/Section 负责。 */
-export const PageSurface: React.FC<PageSurfaceProps> = ({ children, className }) => (
-  <div className={className ? 'ui-page-surface ' + className : 'ui-page-surface'}>{children}</div>
-);

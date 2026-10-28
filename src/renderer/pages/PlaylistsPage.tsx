@@ -65,6 +65,7 @@ const PlaylistsPage: React.FC = () => {
       loadData();
     } catch (error) {
       console.error('创建歌单失败:', error);
+      toast.error('创建失败，请重试');
     }
   };
 

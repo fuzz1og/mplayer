@@ -50,6 +50,10 @@ describe('桌面封面取图尺寸（#496）', () => {
   it('共享 SongCover 默认走 icon 档，大图卡片显式提档', () => {
     expect(read('components/SongCover.tsx')).toContain('thumbSize = COVER_SIZE.icon');
     expect(read('components/SongCover.tsx')).toContain('coverThumbUrl(src, thumbSize)');
-    expect(read('components/DailyRecommend.tsx')).toContain('coverThumbUrl(featured.cover, COVER_SIZE.hero)');
+  });
+
+  it('取图落盘前有骨架层，不再是容器底色（#694 图片变灰）', () => {
+    expect(read('components/SongCover.tsx')).toContain('cover-abs cover-abs--loading');
+    expect(read('styles/songlist.css')).toMatch(/\.cover-abs--loading \{[^}]*background: var\(--skeleton-base\)/);
   });
 });

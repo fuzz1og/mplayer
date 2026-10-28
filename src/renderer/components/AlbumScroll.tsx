@@ -43,6 +43,7 @@ const AlbumScroll: React.FC<AlbumScrollProps> = ({ albums, loading, error, area,
             key={a.value}
             onClick={() => onAreaChange(a.value)}
             className="album-scroll__area"
+            aria-pressed={area === a.value}
             data-active={area === a.value || undefined}
           >
             {a.label}

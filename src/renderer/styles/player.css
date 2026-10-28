@@ -200,6 +200,12 @@
   cursor: not-allowed;
 }
 
+/* 键盘焦点必须可见：与播放栏进度条同一套焦点环 */
+.np-progress__track:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .np-progress__rail {
   width: 100%;
   height: 4px;

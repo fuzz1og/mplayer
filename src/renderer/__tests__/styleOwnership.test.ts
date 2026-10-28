@@ -50,7 +50,6 @@ const OWNERSHIP: Record<string, string[]> = {
     'components/AudioTagBadge.tsx',
     'components/ChartPanel.tsx',
     'components/CollectionGrid.tsx',
-    'components/DailyRecommend.tsx',
     'components/DownloadProgressModal.tsx',
     'components/ErrorBoundary.tsx',
     'components/GroupedSongList.tsx',

@@ -131,6 +131,7 @@ const ArtistListPage: React.FC = () => {
             key={cat.id}
             onClick={() => setCategory(idx)}
             className="artists__cat"
+            aria-pressed={category === idx}
             data-active={category === idx || undefined}
           >
             {cat.label}

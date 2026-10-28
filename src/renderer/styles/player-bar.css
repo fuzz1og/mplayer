@@ -374,6 +374,12 @@
   cursor: pointer;
 }
 
+/* 键盘焦点必须可见：role=slider 的进度条不能只剩 cursor */
+.player-progress__track:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 /* 拖动中：aria-disabled='false' 的 cursor 优先级更高，必须带同一个属性选择器才压得住 */
 .player-progress__track[aria-disabled='false'].player-progress__track--dragging {
   cursor: grabbing;
