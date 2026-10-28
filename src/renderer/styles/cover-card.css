@@ -64,6 +64,33 @@
   text-align: center;
 }
 
+/* 歌手卡（#694 任务 B）：hover 换表面明度（不位移、不起大阴影），内边距用负外边距抵掉，
+   媒体边缘与专辑 / 歌单卡保持同一栅格对齐 */
+.cover-card[data-shape='circle'] {
+  padding: var(--space-2);
+  margin: calc(var(--space-2) * -1);
+  border-radius: var(--radius-md);
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.cover-card[data-shape='circle'][data-clickable]:hover,
+.cover-card[data-shape='circle'][data-clickable]:focus-within {
+  background: var(--surface-card-hover);
+}
+
+.cover-card[data-shape='circle'] .cover-card__title {
+  display: block;
+  font-size: var(--content-card-title-size);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cover-card[data-shape='circle'] .cover-card__meta {
+  color: var(--text-tertiary);
+  font-size: var(--content-card-subtitle-size);
+}
+
 .cover-card__title {
   display: -webkit-box;
   overflow: hidden;
@@ -115,6 +142,32 @@
 
 .cover-card__action > button:hover {
   background: var(--danger);
+}
+
+/* 角落播放：悬停 / 键盘聚焦才显形，位置在封面右下角（右上角留给 badge / action） */
+.cover-card__play {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface-content);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.cover-card:hover .cover-card__play,
+.cover-card:focus-within .cover-card__play {
+  opacity: 1;
 }
 
 /* 骨架卡：网格加载态与卡片同构，占位块尺寸跟封面一致 */

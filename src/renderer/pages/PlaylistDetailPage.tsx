@@ -315,6 +315,10 @@ const PlaylistDetailPage: React.FC = () => {
             className="detail-page__hero"
             media={
               <div className="detail-page__cover">
+                {/* 占位层（无封面/加载失败时显示），与专辑 / 发现歌单 hero 同一套 */}
+                <div className="detail-page__cover-placeholder">
+                  <Music size={56} aria-hidden="true" />
+                </div>
                 <SongCover
                   src={detailCoverSrc}
                   alt={playlist.name}

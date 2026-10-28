@@ -248,8 +248,9 @@
   --song-row-head-weight: var(--weight-semibold);
 
   /* ── 内容网格（#694）：发现「新碟上架 / 歌单 / 歌手」三个 tab 同栅格、同间距 ──
-     132px 下限 + 16px 列距：内容宽 760（1024）→ 5 列，1016（1280）→ 6 列。 */
-  --content-grid-min: 156px;
+     132px 下限 + 16px 列距：内容宽约 745（1024）→ 5 列，1001（1280）→ 6 列；
+     auto-fill 自己算列数，不写死断点。 */
+  --content-grid-min: 132px;
   --content-grid-col-gap: var(--space-4);
   --content-grid-row-gap: var(--space-5);
   /* 内容卡文字：名字 14/500、副行 12 tertiary（不在 --text-* 刻度上的 14 登记一次） */
