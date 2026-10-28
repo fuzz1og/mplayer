@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Minus, Square, Copy, X, Search, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Minus, Square, Copy, X, Search, ChevronDown, ChevronLeft, ChevronRight, Settings, HelpCircle } from 'lucide-react';
 import type { SourceKey } from '@/renderer/store/searchStore';
 import { SOURCE_COLORS, ALL_SOURCE_COLOR } from '@/renderer/constants/sourceConfig';
 import { SOURCE_DISPLAY_NAMES } from '@mplayer/core';
@@ -40,7 +40,7 @@ interface TitleBarProps {
 /**
  * 标题栏（1.9.0 收口）：左列 ‹ › 设置 帮助，中部搜索（或页面标题），右侧窗口控件。
  * 品牌与 logo 已移除——应用身份由窗口标题/任务栏承担；「检查更新」收进「帮助」菜单。
- * 搜索不再绑 Ctrl/Cmd+K（规格 §2.3）：不显示 kbd 提示，也不注册全局快捷键。
+ * 菜单统一由 Menu 原语承载（#709）：首项聚焦、方向键 / Home / End / ESC / Tab 与焦点归还。
  */
 const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, updateAvailable = false, onSearch, sourceType = 'all', onSourceTypeChange }) => {
   const navigate = useNavigate();
@@ -49,6 +49,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
   const [focused, setFocused] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [sourceMenuInitialFocus, setSourceMenuInitialFocus] = useState<'first' | 'last'>('first');
   const inputRef = useRef<HTMLInputElement>(null);
   const sourceTriggerRef = useRef<HTMLButtonElement>(null);
   const helpTriggerRef = useRef<HTMLButtonElement>(null);
@@ -113,7 +114,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
           <ChevronRight size={16} />
         </button>
         <button type="button" className="titlebar__tool" onClick={handleSettings} aria-label="设置">
-          设置
+          <Settings size={16} />
         </button>
         <div className="titlebar__help">
           <button
@@ -125,7 +126,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
             aria-expanded={helpOpen}
             onClick={() => setHelpOpen((open) => !open)}
           >
-            帮助
+            <HelpCircle size={16} />
             {updateAvailable && (
               <span className="titlebar__badge" data-testid="update-badge" title="有新版本可更新" aria-hidden="true" />
             )}
@@ -147,34 +148,6 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
           <span className="titlebar__title">{title}</span>
         ) : (
           <div className={focused ? 'titlebar__search titlebar__search--focused' : 'titlebar__search'}>
-            <div
-              className="titlebar__source"
-              style={{ '--source-accent': current.accent } as React.CSSProperties}
-            >
-              <button
-                ref={sourceTriggerRef}
-                type="button"
-                className="titlebar__source-trigger"
-                aria-label={`搜索来源：${current.label}`}
-                aria-haspopup="menu"
-                aria-expanded={dropdownOpen}
-                onClick={() => setDropdownOpen((open) => !open)}
-              >
-                <span className="titlebar__source-dot" aria-hidden="true" />
-                <span className="titlebar__source-label">{current.label}</span>
-                <ChevronDown size={12} className={dropdownOpen ? 'titlebar__source-chevron titlebar__source-chevron--open' : 'titlebar__source-chevron'} aria-hidden="true" />
-              </button>
-              <Menu
-                open={dropdownOpen}
-                anchorRef={sourceTriggerRef}
-                items={sourceMenuItems}
-                onClose={() => setDropdownOpen(false)}
-                ariaLabel="搜索来源"
-                placement="bottom-start"
-                minWidth={132}
-              />
-            </div>
-            <span className="titlebar__divider" aria-hidden="true" />
             <Search size={15} className="titlebar__search-icon" aria-hidden="true" />
             <input
               ref={inputRef}
@@ -196,6 +169,43 @@ const TitleBar: React.FC<TitleBarProps> = ({ title, onBack, onSettingsClick, upd
                 <X size={13} />
               </button>
             )}
+            <div
+              className="titlebar__source"
+              style={{ '--source-accent': current.accent } as React.CSSProperties}
+            >
+              <button
+                ref={sourceTriggerRef}
+                type="button"
+                className="titlebar__source-trigger"
+                aria-label={`搜索来源：${current.label}`}
+                aria-haspopup="menu"
+                aria-expanded={dropdownOpen}
+                onClick={() => {
+                  setSourceMenuInitialFocus('first');
+                  setDropdownOpen((open) => !open);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                  event.preventDefault();
+                  setSourceMenuInitialFocus(event.key === 'ArrowUp' ? 'last' : 'first');
+                  setDropdownOpen(true);
+                }}
+              >
+                <span className="titlebar__source-dot" aria-hidden="true" />
+                <span className="titlebar__source-label">{current.label}</span>
+                <ChevronDown size={12} className={dropdownOpen ? 'titlebar__source-chevron titlebar__source-chevron--open' : 'titlebar__source-chevron'} aria-hidden="true" />
+              </button>
+              <Menu
+                open={dropdownOpen}
+                anchorRef={sourceTriggerRef}
+                items={sourceMenuItems}
+                onClose={() => setDropdownOpen(false)}
+                ariaLabel="搜索来源"
+                placement="bottom-start"
+                minWidth={132}
+                initialFocus={sourceMenuInitialFocus}
+              />
+            </div>
           </div>
         )}
       </div>

@@ -72,10 +72,12 @@ describe('Menu 原语', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('Tab 关闭菜单（不拦截浏览器焦点移动）', () => {
+  it('Tab 在菜单项之间移动，最后一项再 Tab 关闭菜单', () => {
     render(<MenuHarness />);
     fireEvent.click(screen.getByRole('button', { name: '打开菜单' }));
     fireEvent.keyDown(screen.getByRole('menuitem', { name: '第一项' }), { key: 'Tab' });
+    expect(screen.getByRole('menuitem', { name: '第三项' })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: '第三项' }), { key: 'Tab' });
     expect(screen.queryByRole('menu', { name: '测试菜单' })).toBeNull();
   });
 

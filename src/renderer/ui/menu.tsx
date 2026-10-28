@@ -35,6 +35,8 @@ export interface MenuProps {
   onClose: () => void;
   ariaLabel?: string;
   placement?: MenuPlacement;
+  /** 打开时首焦点：默认第一项；ArrowUp 打开等场景可指定最后一项。 */
+  initialFocus?: 'first' | 'last';
   className?: string;
   minWidth?: number;
 }
@@ -52,6 +54,7 @@ export const Menu: React.FC<MenuProps> = ({
   onClose,
   ariaLabel,
   placement = 'bottom-start',
+  initialFocus = 'first',
   className,
   minWidth = 160,
 }) => {
@@ -97,11 +100,12 @@ export const Menu: React.FC<MenuProps> = ({
   // 否则真实浏览器里点击触发按钮后的默认焦点会留在触发元素上。
   useLayoutEffect(() => {
     if (!open) return;
-    focusItem(0);
+    const index = initialFocus === 'last' ? -1 : 0;
+    focusItem(index);
     // 真实浏览器里鼠标点击的默认聚焦发生在 click 派发之后：下一拍再确认一次首焦点。
-    const timer = window.setTimeout(() => focusItem(0), 0);
+    const timer = window.setTimeout(() => focusItem(index), 0);
     return () => window.clearTimeout(timer);
-  }, [open, focusItem]);
+  }, [open, focusItem, initialFocus]);
 
   useEffect(() => {
     if (!open) return;
@@ -139,7 +143,20 @@ export const Menu: React.FC<MenuProps> = ({
     else if (event.key === 'ArrowUp') nextIndex = currentIndex < 0 ? nodes.length - 1 : currentIndex - 1;
     else if (event.key === 'Home') nextIndex = 0;
     else if (event.key === 'End') nextIndex = nodes.length - 1;
-    else return;
+    else if (event.key === 'Tab') {
+      // Tab 在菜单项之间移动；从最后一项再 Tab 才关闭。Shift+Tab 从首项退出。
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.shiftKey) {
+        if (currentIndex <= 0) close(false);
+        else focusItem(currentIndex - 1);
+      } else if (currentIndex < 0 || currentIndex >= nodes.length - 1) {
+        close(false);
+      } else {
+        focusItem(currentIndex + 1);
+      }
+      return;
+    } else return;
     event.preventDefault();
     focusItem(nextIndex);
   };

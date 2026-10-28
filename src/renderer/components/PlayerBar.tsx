@@ -78,6 +78,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
       key: 'playlist',
       label: '加入歌单',
       icon: <ListMusic size={14} />,
+      disabled: !currentSong,
       onSelect: () => setShowAddToPlaylist(true),
     },
     {
