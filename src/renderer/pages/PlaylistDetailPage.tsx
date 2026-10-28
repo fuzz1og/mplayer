@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import '@/renderer/styles/page-playlist-detail.css';
-import { Play, Edit2, Music, Download, Trash2, Upload, GripVertical, Search, X } from 'lucide-react';
+import { Play, Edit2, Music, Download, Trash2, Upload, GripVertical, Search, X, CheckSquare } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from '@/renderer/services/toastStore';
 import { Button, PageHero, useConfirm } from '@/renderer/ui';
@@ -12,6 +12,7 @@ import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
 import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { moveItem } from '@/renderer/utils/reorder';
+import { COL_ACTIONS, COL_CHECKBOX, COL_INDEX_LIBRARY, colWidth } from '@/renderer/components/songTableColumns';
 import { reorderVisibleSongs } from '@/renderer/utils/playlistReorder';
 import { LIBRARY_ROW_HEIGHT } from '@/renderer/components/songRowMetrics';
 import { filterSongsByQuery } from '@/renderer/utils/songFilter';
@@ -50,6 +51,8 @@ const PlaylistDetailPage: React.FC = () => {
   const { download, downloadBatch } = useDownload();
   const [isReordering, setIsReordering] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // 按需选择模式（#699/#703 口径）：普通浏览不显示复选框列，点「选择」才进入批量态
+  const [batchMode, setBatchMode] = useState(false);
   // 行级归属判断 O(1)：避免每行 selectedIds/favoriteIds includes 扫描
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const favoriteIdSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
@@ -126,9 +129,10 @@ const PlaylistDetailPage: React.FC = () => {
     loadData();
   }, [playlistId]);
 
-  // Clear selections when loading new data
+  // 换歌单即退出选择模式：旧选择既不属于新歌单，也不该拖进批量操作
   useEffect(() => {
     setSelectedIds([]);
+    setBatchMode(false);
   }, [playlistId]);
 
   const handlePlay = useCallback(async (song: Song, queue: Song[], index: number) => {
@@ -208,6 +212,12 @@ const PlaylistDetailPage: React.FC = () => {
     });
   };
 
+  /** 选择模式单一入口：进出都从干净选择集开始，与 SongList 的「选择 / 完成」同一套语义。 */
+  const toggleBatchMode = useCallback(() => {
+    setBatchMode((prev) => !prev);
+    setSelectedIds([]);
+  }, []);
+
   const handleToggleSelect = useCallback((songId: string) => {
     setSelectedIds(prev =>
       prev.includes(songId) ? prev.filter(id => id !== songId) : [...prev, songId]
@@ -251,7 +261,7 @@ const PlaylistDetailPage: React.FC = () => {
     variant: 'library' as const,
     // 点播契约（#697）：当前展示队列 = 可见集合（过滤态即过滤结果），行下标是可见集合内下标
     queue: visibleSongs,
-    showCheckbox: true,
+    showCheckbox: batchMode,
     onToggleSelect: handleToggleSelect,
     showRemoveFromPlaylist: true,
     onRemoveFromPlaylist: handleRemoveFromPlaylist,
@@ -263,7 +273,7 @@ const PlaylistDetailPage: React.FC = () => {
     onToggleFavorite: toggleFavorite,
     onCoverError: handleCoverError,
   }), [
-    isPlaying, visibleSongs, handleToggleSelect, handleRemoveFromPlaylist, handlePlay, handleDownload,
+    isPlaying, visibleSongs, batchMode, handleToggleSelect, handleRemoveFromPlaylist, handlePlay, handleDownload,
     handleSongSwapped, toggleFavorite, handleCoverError,
   ]);
 
@@ -467,8 +477,24 @@ const PlaylistDetailPage: React.FC = () => {
                     正在保存排序...
                   </div>
                 )}
-                {/* Batch action bar：只统计**可见**的已选项，与批量操作的作用域一致（#488） */}
-                {visibleSelectedIds.length > 0 && (
+                {/* 选择模式入口（#699 口径）：普通浏览只有这一枚按钮，进入后才出现复选框列 */}
+                <div className="song-list__batch-entry">
+                  <button
+                    type="button"
+                    className={'song-list__batch-toggle' + (batchMode ? ' song-list__batch-toggle--primary' : '')}
+                    aria-pressed={batchMode}
+                    onClick={toggleBatchMode}
+                  >
+                    {batchMode ? '完成' : (
+                      <>
+                        <CheckSquare size={14} />
+                        选择
+                      </>
+                    )}
+                  </button>
+                </div>
+                {/* Batch action bar：只在选择模式出现；只统计**可见**的已选项（#488） */}
+                {batchMode && visibleSelectedIds.length > 0 && (
                   <div className="playlist-detail__batch">
                     <span className="playlist-detail__batch-count">已选择 {visibleSelectedIds.length} 项</span>
                     <button onClick={handleBatchDownload}
@@ -481,21 +507,23 @@ const PlaylistDetailPage: React.FC = () => {
                     </button>
                   </div>
                 )}
-                {/* Table header */}
+                {/* Table header：列宽走 songTableColumns 的同一组常量，勾选列只在选择模式存在 */}
                 <div className="playlist-detail__thead">
-                  <div className="playlist-detail__th--check">
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={handleSelectAll}
-                      aria-label="全选可见歌曲"
-                      title={isFiltering ? '全选当前过滤结果' : '全选'}
-                      className="playlist-detail__thead-checkbox"
-                    />
-                  </div>
-                  <div className="playlist-detail__th--num">#</div>
+                  {batchMode && (
+                    <div className="playlist-detail__th--check" style={colWidth(COL_CHECKBOX)}>
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={handleSelectAll}
+                        aria-label="全选可见歌曲"
+                        title={isFiltering ? '全选当前过滤结果' : '全选'}
+                        className="playlist-detail__thead-checkbox"
+                      />
+                    </div>
+                  )}
+                  <div className="playlist-detail__th--num" style={colWidth(COL_INDEX_LIBRARY)}>#</div>
                   <div className="playlist-detail__th--title">标题</div>
-                  <div className="playlist-detail__th--actions">操作</div>
+                  <div className="playlist-detail__th--actions" style={colWidth(COL_ACTIONS)}>操作</div>
                 </div>
                 {/* 过滤态命中为空：没有可渲染的行，给一句明确的空态而不是只剩表头（#488） */}
                 {isFiltering && visibleSongs.length === 0 && (
