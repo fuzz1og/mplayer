@@ -362,7 +362,8 @@
   display: flex;
   flex: 1;
   align-items: center;
-  height: 16px;
+  /* 高度固定为展开态：hover 只放大轨道与圆点，不改变块高度，否则整列会重排、控件跟着上下跳 */
+  height: 20px;
   outline: none;
   user-select: none;
   touch-action: none;
@@ -371,10 +372,6 @@
 
 .player-progress__track[aria-disabled='false'] {
   cursor: pointer;
-}
-
-.player-progress__track--expanded {
-  height: 20px;
 }
 
 /* 拖动中：aria-disabled='false' 的 cursor 优先级更高，必须带同一个属性选择器才压得住 */
