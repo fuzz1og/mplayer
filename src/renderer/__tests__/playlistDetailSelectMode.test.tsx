@@ -84,4 +84,29 @@ describe('本地歌单详情：按需选择模式（#694 评审）', () => {
     await waitFor(() => expect(container.querySelector('.song-row__check')).toBeNull());
     expect(container.textContent).not.toContain('已选择');
   });
+
+  it('批量栏与全选同处一条工具条：已选后不新起一行，退出入口仍在', async () => {
+    const { container } = renderPage();
+    await waitFor(() => expect(container.querySelectorAll('.song-row').length).toBe(3));
+    fireEvent.click(toggleButton(container));
+    await waitFor(() => expect(container.querySelectorAll('.song-row__check').length).toBe(3));
+
+    const toolbar = container.querySelector('.playlist-detail__toolbar') as HTMLElement;
+    const selectAll = toolbar.querySelector('input[aria-label="全选可见歌曲"]') as HTMLInputElement;
+    expect(selectAll).toBeTruthy();
+    fireEvent.click(selectAll);
+    await waitFor(() => expect(container.textContent).toContain('已选择 3 项'));
+
+    // 批量栏没有另起一条容器：全站仍只有一条工具条，三个动作都在它里面
+    expect(container.querySelectorAll('.playlist-detail__toolbar').length).toBe(1);
+    const batchLabels = Array.from(toolbar.querySelectorAll('.playlist-detail__batch-btn'))
+      .map((button) => button.textContent?.trim());
+    expect(batchLabels).toEqual(['批量下载', '加入歌单', '批量移除']);
+
+    // 「完成」不会因批量栏出现而消失（否则只能逐首取消才能退出）
+    expect(toggleButton(container).textContent?.trim()).toBe('完成');
+    fireEvent.click(toggleButton(container));
+    await waitFor(() => expect(container.querySelectorAll('.song-row__check').length).toBe(0));
+    expect(container.textContent).not.toContain('已选择');
+  });
 });
