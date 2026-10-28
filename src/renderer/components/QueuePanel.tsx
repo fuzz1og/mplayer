@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
-import { Headphones, ListMusic, Shuffle, Trash2, GripVertical, X } from 'lucide-react';
+import { Headphones, ListMusic, Shuffle, Trash2, GripVertical, X, CirclePlus } from 'lucide-react';
 import { useConfirm, IconButton } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
@@ -77,7 +77,7 @@ const QueueRowActions: React.FC<{
       aria-label="加入歌单"
       title="加入歌单"
       className="queue__icon-btn">
-      <ListMusic size={14} />
+      <CirclePlus size={14} />
     </button>
     <button onClick={(e) => { e.stopPropagation(); onRemove(index); }} aria-label="从队列移除" title="从队列移除" className="queue__icon-btn">
       <Trash2 size={14} />

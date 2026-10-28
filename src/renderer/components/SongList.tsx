@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import '@/renderer/styles/songlist.css';
-import { Download, Trash2, ListMusic, Music2, CheckSquare } from 'lucide-react';
+import { Download, Trash2, Music2, CheckSquare, CirclePlus } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -363,7 +363,7 @@ const SongList: React.FC<SongListProps> = ({
               )}
               {enableBatchAddToPlaylist && (
                 <button onClick={handleBatchAddToPlaylist} disabled={batchDisabled} className="song-list__batch-btn">
-                  <ListMusic size={16} />
+                  <CirclePlus size={16} />
                   批量加入歌单
                 </button>
               )}

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import '@/renderer/styles/songlist.css';
 import { useNavigate } from 'react-router-dom';
-import { Play, Trash2, ListMusic, RefreshCw, User, ListPlus } from 'lucide-react';
+import { Play, Trash2, RefreshCw, User, ListPlus, CirclePlus } from 'lucide-react';
 import type { Song } from '@mplayer/core';
 import SourceBadge from '@/renderer/components/SourceBadge';
 import AudioTagBadge from '@/renderer/components/AudioTagBadge';
@@ -111,7 +111,7 @@ const SongRow: React.FC<SongRowProps> = ({
     menuItems.push({ key: 'playNext', label: '下一首播放', icon: <ListPlus size={14} />, onClick: () => onPlayNext(song) });
   }
   if (onAddToPlaylist) {
-    menuItems.push({ key: 'playlist', label: '加入歌单', icon: <ListMusic size={14} />, onClick: () => onAddToPlaylist(song) });
+    menuItems.push({ key: 'playlist', label: '加入歌单', icon: <CirclePlus size={14} />, onClick: () => onAddToPlaylist(song) });
   }
   if (song.sourceType !== 'local') {
     menuItems.push({ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open });

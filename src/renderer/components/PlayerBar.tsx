@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Heart, Download, ListMusic, MoreHorizontal, ListEnd } from 'lucide-react';
+import { Heart, Download, MoreHorizontal, ListEnd, CirclePlus } from 'lucide-react';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
@@ -77,7 +77,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
     {
       key: 'playlist',
       label: '加入歌单',
-      icon: <ListMusic size={14} />,
+      icon: <CirclePlus size={14} />,
       disabled: !currentSong,
       onSelect: () => setShowAddToPlaylist(true),
     },

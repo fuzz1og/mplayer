@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ListMusic } from 'lucide-react';
+import { ListMusic, CirclePlus } from 'lucide-react';
 import { classifySong, SOURCE_DISPLAY_NAMES, type DupResult } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
 import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
@@ -150,7 +150,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
           <div className="add-to-playlist__empty">加载中…</div>
         ) : playlists.length === 0 ? (
           <div className="add-to-playlist__empty">
-            <ListMusic size={28} aria-hidden="true" />
+            <CirclePlus size={28} aria-hidden="true" />
             <span>暂无歌单，先新建一个</span>
           </div>
         ) : (

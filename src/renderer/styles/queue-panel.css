@@ -16,7 +16,8 @@
   overflow: hidden;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  background: var(--material-overlay);
+  /* 弹出层要压住下面的封面/文字：用实色 elevated（D4 允许「有意实色」），不用半透明材质 */
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-xl);
   animation: queue-panel-in var(--duration-fast) var(--ease-out);
 }
