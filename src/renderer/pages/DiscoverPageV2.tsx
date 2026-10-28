@@ -389,8 +389,6 @@ const DiscoverPageV2: React.FC = () => {
   const groupedResults = useSearchStore((s) => s.groups);
   const expandedKeys = useSearchStore((s) => s.expandedKeys);
   const toggleGroup = useSearchStore((s) => s.toggleGroup);
-  const expandAll = useSearchStore((s) => s.expandAll);
-  const collapseAll = useSearchStore((s) => s.collapseAll);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const { download } = useDownload();
@@ -580,8 +578,6 @@ const DiscoverPageV2: React.FC = () => {
                 groups={groupedResults}
                 expandedKeys={expandedKeys}
                 onToggleGroup={toggleGroup}
-                onExpandAll={expandAll}
-                onCollapseAll={collapseAll}
                 currentSongId={currentSong?.id}
                 isPlaying={isPlaying}
                 favoriteIds={favoriteIds}

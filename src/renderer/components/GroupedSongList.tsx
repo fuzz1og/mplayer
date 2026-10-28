@@ -1,35 +1,26 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Music2 } from 'lucide-react';
 import type { Song, SongGroup } from '@mplayer/core';
-import GroupHeaderRow from '@/renderer/components/GroupHeaderRow';
 import SongRow from '@/renderer/components/SongRow';
-import VirtualRow from '@/renderer/components/VirtualRow';
 import SongListSkeleton from '@/renderer/components/SongListSkeleton';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
-import { useVirtualRows, SONG_ROW_HEIGHT } from '@/renderer/hooks/useVirtualRows';
 import '@/renderer/styles/songlist.css';
 
-type FlatItem =
-  | { type: 'group'; group: SongGroup }
-  | { type: 'song'; groupKey: string; groupSongs: Song[]; song: Song; index: number };
-
-const GROUP_HEADER_HEIGHT = 44;
 const noop = () => {};
 
 interface GroupedSongListProps {
   /** 分组数据经 props 提供（页面做 searchStore 的适配器），组件不再自己订阅数据源 */
   groups: SongGroup[];
+  /** 已展开其余版本的组 key：默认扁平，一组只占一行 */
   expandedKeys: string[];
   onToggleGroup: (key: string) => void;
-  onExpandAll: () => void;
-  onCollapseAll: () => void;
   currentSongId?: string;
   isPlaying?: boolean;
   favoriteIds?: string[];
-  /** 点播契约（#697）：回传歌曲、该组歌曲（D1 组内队列）与组内下标；列表自身不碰 playerStore */
+  /** 点播契约（#697/D1）：回传歌曲、该组歌曲（组内队列）与组内下标；列表自身不碰 playerStore */
   onPlay: (song: Song, queue: Song[], index: number) => void;
   /** 「下一首播放」（#491）：缺省直接用 playerStore.insertNext（与 SongList 同一缺省） */
   onPlayNext?: (song: Song) => void;
@@ -43,15 +34,13 @@ interface GroupedSongListProps {
 }
 
 /**
- * 分组歌曲列表：与 SongList 共用同一套滚动/测量（useVirtualRows）与行实现（SongRow），
- * 只多一层「组头 + 组内歌曲」的扁平化数据。
+ * 分组搜索结果（#694）：默认扁平——每组只渲染最相关的一版（46px 行，双击/封面播放），
+ * 行尾「N 个版本」就地展开其余版本（缩进 16px）；组内点播队列 = 该组版本（D1）。
  */
 const GroupedSongList: React.FC<GroupedSongListProps> = ({
   groups,
   expandedKeys,
   onToggleGroup,
-  onExpandAll,
-  onCollapseAll,
   currentSongId,
   isPlaying = false,
   favoriteIds = [],
@@ -66,91 +55,100 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   onLoadMore,
 }) => {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<Song | null>(null);
+  const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   /** 与 SongList 同一缺省：队列真相源在 playerStore，不要求每个页面各写一遍 */
   const handlePlayNext = useMemo(
     () => onPlayNext ?? ((target: Song) => { void usePlayerStore.getState().insertNext(target); }),
     [onPlayNext],
   );
-  const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<Song | null>(null);
-  const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
 
   const expandedSet = useMemo(() => new Set(expandedKeys), [expandedKeys]);
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-
-  const flatItems = useMemo(() => {
-    const items: FlatItem[] = [];
+  /** 首版歌曲 id → 所属分组：行尾「N 个版本」按钮按首版行定位自己的组 */
+  const primaryGroupBySongId = useMemo(() => {
+    const map = new Map<string, SongGroup>();
     for (const group of groups) {
-      items.push({ type: 'group', group });
-      if (expandedSet.has(group.key)) {
-        for (let i = 0; i < group.songs.length; i++) {
-          items.push({ type: 'song', groupKey: group.key, groupSongs: group.songs, song: group.songs[i], index: i });
-        }
-      }
+      const first = group.songs[0];
+      if (first) map.set(first.id, group);
     }
-    return items;
-  }, [groups, expandedSet]);
+    return map;
+  }, [groups]);
 
   const latest = useLatest({ selectedIds, onSelectionChange, onPlay });
-
-  const stableOnToggleGroup = useStableCallback(onToggleGroup);
-  const stableOnExpandAll = useStableCallback(onExpandAll);
-  const stableOnCollapseAll = useStableCallback(onCollapseAll);
   const stableOnToggleFavorite = useStableCallback(onToggleFavorite);
   const stableOnDownload = useStableCallback(onDownload);
+  const stableOnToggleGroup = useStableCallback(onToggleGroup);
+
+  /** 行尾按钮走渲染函数 + 最新值 ref：展开态变化不让每一行都重渲染（行是 memo 的） */
+  const leadLatest = useLatest({ primaryGroupBySongId, expandedSet, stableOnToggleGroup });
+  const renderActionsLead = useCallback((song: Song) => {
+    const { primaryGroupBySongId: bySong, expandedSet: expanded, stableOnToggleGroup: toggle } = leadLatest.current;
+    const group = bySong.get(song.id);
+    if (!group || group.songs.length <= 1) return null;
+    const isExpanded = expanded.has(group.key);
+    return (
+      <button
+        type="button"
+        className="sgroup__versions"
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? '收起' : '展开'} ${group.songs.length} 个版本`}
+        onClick={(e) => { e.stopPropagation(); toggle?.(group.key); }}
+      >
+        {group.songs.length} 个版本
+      </button>
+    );
+  }, [leadLatest]);
 
   const handleToggleDropdown = useCallback((songId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setActiveDropdown(prev => prev === songId ? null : songId);
+    setActiveDropdown((prev) => (prev === songId ? null : songId));
   }, []);
-
-  const handleCloseDropdown = useCallback(() => {
-    setActiveDropdown(null);
-  }, []);
-
+  const handleCloseDropdown = useCallback(() => setActiveDropdown(null), []);
   const handleAddToPlaylistClick = useCallback((song: Song) => {
     setSelectedSongForPlaylist(song);
     setShowAddToPlaylistModal(true);
     setActiveDropdown(null);
   }, []);
-
-  const handlePlayFirst = useCallback((group: SongGroup) => {
-    if (group.songs.length > 0) {
-      // D1：组头「播放第一首」= 该组队列 + 组内下标 0
-      latest.current.onPlay(group.songs[0], group.songs, 0);
-    }
-  }, [latest]);
-
   const handleToggleSelect = useCallback((songId: string) => {
     const { selectedIds: current, onSelectionChange: change } = latest.current;
-    change(current.includes(songId) ? current.filter(id => id !== songId) : [...current, songId]);
+    change(current.includes(songId) ? current.filter((id) => id !== songId) : [...current, songId]);
   }, [latest]);
 
-  const allExpanded = groups.length > 0 && expandedKeys.length === groups.length;
+  useInfiniteScroll(scrollRef, { onLoadMore: onLoadMore ?? noop, loading, hasMore });
 
-  const toggleAll = useCallback(() => {
-    if (allExpanded) {
-      stableOnCollapseAll?.();
-    } else {
-      stableOnExpandAll?.();
-    }
-  }, [allExpanded, stableOnExpandAll, stableOnCollapseAll]);
-
-  // 滚动/测量归模块：挂靠页面已有的滚动容器（本组件的 overflow:auto 容器），并按组头/歌曲高度虚拟化
-  const virtual = useVirtualRows({
-    count: flatItems.length,
-    enabled: flatItems.length > 0,
-    estimateSize: useCallback(
-      (index: number) => (flatItems[index]?.type === 'group' ? GROUP_HEADER_HEIGHT : SONG_ROW_HEIGHT),
-      [flatItems],
-    ),
-    overscan: 5,
-  });
-
-  useInfiniteScroll(virtual.scrollElement, { onLoadMore: onLoadMore ?? noop, loading, hasMore });
+  const renderRow = (group: SongGroup, song: Song, index: number, lead: boolean) => (
+    <SongRow
+      key={`${group.key}:${song.id}`}
+      song={song}
+      index={index}
+      isCurrentSong={currentSongId === song.id}
+      isPlaying={currentSongId === song.id && isPlaying}
+      isFavorite={favoriteSet.has(song.id)}
+      showIndex={false}
+      isSelected={selectedSet.has(song.id)}
+      variant="library"
+      fillTitle
+      compactActions
+      moreOpen={activeDropdown === song.id}
+      queue={group.songs}
+      onPlay={onPlay}
+      onToggleFavorite={stableOnToggleFavorite}
+      onDownload={stableOnDownload}
+      onAddToPlaylist={handleAddToPlaylistClick}
+      onPlayNext={handlePlayNext}
+      onToggleSelect={handleToggleSelect}
+      onToggleDropdown={handleToggleDropdown}
+      onCloseDropdown={handleCloseDropdown}
+      renderActionsLead={lead ? renderActionsLead : undefined}
+    />
+  );
 
   if (loading && groups.length === 0) {
-    return <SongListSkeleton showCheckbox={true} showIndex={false} />;
+    return <SongListSkeleton density="library" showIndex={false} />;
   }
 
   if (!loading && groups.length === 0) {
@@ -162,89 +160,30 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
     );
   }
 
-  /**
-   * 虚拟化行的**定位**不再当 `style` prop 传给行组件（#412）。
-   * `SongRow`/`GroupHeaderRow`都是 `React.memo`，而每行每帧都新建一个 style 对象等于给它们塞一个永
-   * 远不相等的 prop，memo 形同虚设。
-   */
-  const renderItem = (item: FlatItem) => {
-    if (item.type === 'group') {
-      return (
-        <GroupHeaderRow
-          key={item.group.key}
-          group={item.group}
-          isExpanded={expandedSet.has(item.group.key)}
-          onToggle={stableOnToggleGroup ?? noop}
-          onPlayFirst={handlePlayFirst}
-        />
-      );
-    }
-    return (
-      <SongRow
-        key={`${item.groupKey}-${item.song.id}`}
-        song={item.song}
-        index={item.index}
-        isCurrentSong={currentSongId === item.song.id}
-        isPlaying={currentSongId === item.song.id && isPlaying}
-        isFavorite={favoriteSet.has(item.song.id)}
-        showIndex={false}
-        isSelected={selectedSet.has(item.song.id)}
-        moreOpen={activeDropdown === item.song.id}
-        queue={item.groupSongs}
-        onPlay={onPlay}
-        onToggleFavorite={stableOnToggleFavorite}
-        onDownload={stableOnDownload}
-        onAddToPlaylist={handleAddToPlaylistClick}
-        onPlayNext={handlePlayNext}
-        onToggleSelect={handleToggleSelect}
-        onToggleDropdown={handleToggleDropdown}
-        onCloseDropdown={handleCloseDropdown}
-        compact={false}
-      />
-    );
-  };
-
   return (
     <div className="grouped">
-      <div className="grouped__head">
-        <span className="grouped__count">{groups.length} 组结果</span>
-        <button onClick={toggleAll} className="grouped__toggle">
-          {allExpanded ? '全部折叠' : '全部展开'}
-        </button>
-      </div>
-      <div className="grouped__scroll">
-        <div
-          ref={virtual.rowsRef}
-          className="grouped__rows"
-          data-virtual={virtual.mode === 'virtual' || undefined}
-          style={{ '--total-size': `${virtual.totalSize}px` } as React.CSSProperties}
-        >
-          {virtual.mode === 'virtual'
-              ? virtual.items.map((virtualItem) => {
-                  const item = flatItems[virtualItem.index];
-                  if (!item) return null;
-                  return (
-                    <VirtualRow
-                      key={item.type === 'group' ? item.group.key : `${item.groupKey}-${item.song.id}`}
-                      start={virtualItem.start}
-                      size={virtualItem.size}
-                      scrollMargin={virtual.scrollMargin}
-                    >
-                      {renderItem(item)}
-                    </VirtualRow>
-                  );
-                })
-              : flatItems.map((item) => renderItem(item))}
-        </div>
-        {hasMore && loading && (
-          <div className="grouped__loading">加载中...</div>
-        )}
-        {!hasMore && groups.length > 0 && (
-          <div className="grouped__loading">没有更多歌曲了</div>
-        )}
+      {/* 结果区顶部只留一行轻说明：不做标题级分隔，也不再有「全部展开」大按钮 */}
+      <div className="grouped__meta">{groups.length} 首 · 已按相关度排序</div>
+      <div ref={scrollRef} className="grouped__scroll" data-scroll-container>
+        {groups.map((group) => {
+          const [primary, ...rest] = group.songs;
+          if (!primary) return null;
+          const expanded = expandedSet.has(group.key);
+          return (
+            <div className="sgroup" key={group.key}>
+              {renderRow(group, primary, 0, true)}
+              {expanded && rest.length > 0 && (
+                <div className="sgroup__rest">
+                  {rest.map((song, i) => renderRow(group, song, i + 1, false))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {hasMore && loading && <div className="grouped__loading">加载中...</div>}
+        {!hasMore && groups.length > 0 && <div className="grouped__loading">没有更多歌曲了</div>}
       </div>
 
-      {/* 加入歌单弹窗 */}
       {selectedSongForPlaylist && (
         <AddToPlaylistModal
           song={selectedSongForPlaylist}

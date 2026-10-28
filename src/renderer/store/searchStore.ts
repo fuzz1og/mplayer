@@ -29,8 +29,6 @@ export interface SearchState {
   setGroups: (groups: SongGroup[], replace?: boolean) => void;
   setAudioTag: (songId: string, tag: AudioTag) => void;
   toggleGroup: (key: string) => void;
-  expandAll: () => void;
-  collapseAll: () => void;
   reset: () => void;
 }
 
@@ -108,8 +106,6 @@ export const useSearchStore = create<SearchState>((set) => ({
       ? state.expandedKeys.filter(k => k !== key)
       : [...state.expandedKeys, key],
   })),
-  expandAll: () => set((state) => ({ expandedKeys: state.groups.map(g => g.key) })),
-  collapseAll: () => set({ expandedKeys: [] }),
   reset: () => set((state) => ({
     songs: [],
     groups: [],

@@ -93,12 +93,12 @@ describe('searchStore.setAudioTag 局部更新（#412）', () => {
  * 都会把 memo 击穿，表现为滚动或播放状态变化时整表重渲染。这几条把写法钉住。
  */
 describe('列表 memo 纪律（#412）', () => {
-  it('GroupedSongList 的组头回调是稳定引用，不包内联闭包', () => {
+  it('分组结果的「N 个版本」用稳定渲染函数，不在行 props 里塞每帧新建的元素', () => {
     const src = stripComments(read('renderer/components/GroupedSongList.tsx'));
-    expect(src).toContain('onToggle={stableOnToggleGroup ?? noop}');
-    expect(src).toContain('onPlayFirst={handlePlayFirst}');
-    expect(src).not.toMatch(/onToggle=\{\(\) =>/);
-    expect(src).not.toMatch(/onPlayFirst=\{\(\) =>/);
+    expect(src).toContain('const renderActionsLead = useCallback');
+    expect(src).toContain('renderActionsLead={lead ? renderActionsLead : undefined}');
+    expect(src).not.toMatch(/renderActionsLead=\{\(\) =>/);
+    expect(read('renderer/components/SongRow.tsx')).toContain('renderActionsLead?: (song: Song, index: number) => React.ReactNode');
   });
 
   it('虚拟化定位是**一份**共享实现（VirtualRow），且只吃数字', () => {
@@ -109,8 +109,8 @@ describe('列表 memo 纪律（#412）', () => {
     expect(shared).toContain('size: number;');
     expect(shared).toContain('scrollMargin: number;');
 
-    // 三个列表消费者都用它，不再各自在 map 里现场拼 style
-    for (const file of ['renderer/components/SongList.tsx', 'renderer/components/GroupedSongList.tsx', 'renderer/components/VirtualSortableList.tsx']) {
+    // 窗口化列表都走它，不再各自在 map 里现场拼 style（分组搜索结果默认扁平，不窗口化）
+    for (const file of ['renderer/components/SongList.tsx', 'renderer/components/VirtualSortableList.tsx']) {
       const src = stripComments(read(file));
       // 同目录的组件用相对路径、跨目录用 @ 别名，两种都算
       expect(src, file).toMatch(/import VirtualRow from '(\.\/|@\/renderer\/components\/)VirtualRow'/);
@@ -124,16 +124,8 @@ describe('列表 memo 纪律（#412）', () => {
     const songRowBlock = /<SongRow[\s\S]*?\/>/.exec(src)?.[0] ?? '';
     expect(songRowBlock).not.toBe('');
     expect(songRowBlock).not.toContain('style=');
-    // 组头也不再有 style 这个死 prop
-    expect(stripComments(read('renderer/components/GroupHeaderRow.tsx'))).not.toContain('style?:');
-  });
-
-  it('组头的回调自带分组，避免父组件逐行包闭包', () => {
-    const src = stripComments(read('renderer/components/GroupHeaderRow.tsx'));
-    expect(src).toContain('onToggle: (groupKey: string) => void');
-    expect(src).toContain('onPlayFirst: (group: SongGroup) => void');
-    expect(src).toContain('onToggle(group.key)');
-    expect(src).toContain('onPlayFirst(group)');
+    // #694：组头不再存在（默认扁平），组相关的定位只经稳定渲染函数下发
+    expect(src).not.toContain('GroupHeaderRow');
   });
 
   it('队列行尾操作用渲染函数传递（元素每帧新建会击穿 memo）', () => {

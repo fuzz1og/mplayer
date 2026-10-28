@@ -1,9 +1,8 @@
 import React, { useMemo } from 'react';
 
 /**
- * 此前两处列表（`SongList` 与 `GroupedSongList`）各自在 map 里现场拼这个 style 对象——每行每帧一个
- * 新对象，而行组件（`SongRow`/`GroupHeaderRow`）都是 `React.memo`，等于给它们塞了一个永远不相等的 
- * prop，memo 形同虚设。
+ * 列表若各自在 map 里现场拼这个 style 对象——每行每帧一个新对象，而行组件（`SongRow`）是
+ * `React.memo`，等于给它塞了一个永远不相等的 prop，memo 形同虚设。定位只该是一份共享实现。
  */
 const VirtualRow = React.memo(function VirtualRow({
   start,
