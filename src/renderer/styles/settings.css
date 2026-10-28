@@ -125,11 +125,15 @@
 }
 
 /* 页头：h1 28/700 + 同行 13 三级 lead（原型 §2 第 28 行） */
+/* 分区名在左栏已经选中并点名，内容区只保留读屏可读的标题 */
 .settings-page__head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 18px;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .settings-page__head h1 {
@@ -150,10 +154,13 @@
 
 /* 旧页头与 PageHeader 同一层级：28/700、无装饰图标、lead 13 tertiary。 */
 .settings-page__title {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 18px;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
   color: var(--text-primary);
 }
 

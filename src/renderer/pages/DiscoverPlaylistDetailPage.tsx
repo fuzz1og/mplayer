@@ -5,7 +5,7 @@ import { COVER_SIZE, coverThumbUrl } from '@mplayer/core';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CirclePlus, Download, Music2, Play } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
-import { Button, PageHero, useConfirm } from '@/renderer/ui';
+import { Button, InfoHint, PageHero, useConfirm } from '@/renderer/ui';
 import SongList from '@/renderer/components/SongList';
 import DetailToolbar from '@/renderer/components/DetailToolbar';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
@@ -225,14 +225,11 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
               )}
             </div>
           }
-          eyebrow="歌单"
           title={playlist.name}
           meta={
             <>
               {`创建者 ${playlist.creator.nickname} · ${formatPlayCount(playlist.playCount)} 次播放 · ${total || playlist.trackCount} 首`}
-              {playlist.description && (
-                <p className="detail-page__hero-desc">{playlist.description}</p>
-              )}
+              {playlist.description && <InfoHint label="歌单简介">{playlist.description}</InfoHint>}
             </>
           }
           actions={
@@ -303,8 +300,7 @@ const DiscoverPlaylistDetailPage: React.FC = () => {
               {loadingMore && <div className="detail-page__note">加载中...</div>}
               {!hasMore && songs.length > 0 && (
                 <div className="detail-page__note">
-                  已加载全部 {songs.length}{total > songs.length ? ` / ${total}` : ''} 首歌曲
-                </div>
+                    </div>
               )}
             </>
           )}

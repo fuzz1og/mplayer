@@ -2375,14 +2375,10 @@
   overflow: hidden;
 }
 
-.rec__header {
-  flex: none;
-}
-
 .rec__flow {
   flex: 1;
   min-height: 0;
-  padding: 0 28px 40px;
+  padding: var(--space-6) 28px 40px;
   overflow-y: auto;
 }
 
@@ -2394,8 +2390,17 @@
   margin-top: 0;
 }
 
+/* 区块标题行：标题在左，动作跟在它真正作用的区块上，而不是悬在页头 */
+.rec__section-head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
 .rec__section-title {
-  margin: 0 0 var(--space-3);
+  margin: 0;
   color: var(--text-primary);
   font-size: var(--text-lg);
   font-weight: var(--weight-semibold);

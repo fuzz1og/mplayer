@@ -142,10 +142,6 @@ const UpdateSection: React.FC = () => {
         <Download size={16} aria-hidden="true" />
         <h1>更新</h1>
       </div>
-      <div className="settings-page__lead">
-        当前版本 v{currentVersion || '...'}。更新通道默认自动测速择优，也可以手动指定某个镜像。
-      </div>
-
       <div className="settings-page__stack">
         <Section
           title="更新通道"

@@ -101,31 +101,7 @@ const RecommendPage: React.FC = () => {
 
   return (
     <div className="rec">
-      <PageHeader
-        className="rec__header"
-        title="推荐"
-        lead="每天 6:00 按你的口味更新"
-        actions={
-          <>
-            <Button
-              variant="ghost"
-              icon={<RefreshCw size={14} />}
-              onClick={handleRefresh}
-              disabled={loading || recommendedSongs.length === 0}
-            >
-              换一批
-            </Button>
-            <Button
-              variant="primary"
-              icon={<Play size={14} fill="currentColor" />}
-              onClick={handlePlayAll}
-              disabled={batch.length === 0}
-            >
-              播放推荐歌曲
-            </Button>
-          </>
-        }
-      />
+      <PageHeader title="推荐" />
 
       <div className="rec__flow" data-scroll-container>
         {showEmptyError ? (
@@ -188,7 +164,18 @@ const RecommendPage: React.FC = () => {
             </section>
 
             <section className="rec__section" aria-labelledby="rec-songs-title">
-              <h2 id="rec-songs-title" className="rec__section-title">推荐歌曲</h2>
+              <div className="rec__section-head">
+                <h2 id="rec-songs-title" className="rec__section-title">推荐歌曲</h2>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<Play size={14} fill="currentColor" />}
+                  onClick={handlePlayAll}
+                  disabled={batch.length === 0}
+                >
+                  播放全部
+                </Button>
+              </div>
               <SongList
                 songs={batch}
                 loading={loading && batch.length === 0}
@@ -202,7 +189,18 @@ const RecommendPage: React.FC = () => {
             </section>
 
             <section className="rec__section" aria-labelledby="rec-playlists-title">
-              <h2 id="rec-playlists-title" className="rec__section-title">推荐歌单</h2>
+              <div className="rec__section-head">
+                <h2 id="rec-playlists-title" className="rec__section-title">推荐歌单</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<RefreshCw size={14} />}
+                  onClick={handleRefresh}
+                  disabled={loading || recommendedSongs.length === 0}
+                >
+                  换一批
+                </Button>
+              </div>
               {loading && visiblePlaylists.length === 0 ? (
                 <div className="rec-playlists" aria-hidden="true">
                   {Array.from({ length: 6 }).map((_, item) => (

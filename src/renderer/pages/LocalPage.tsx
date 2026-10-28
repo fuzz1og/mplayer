@@ -168,16 +168,13 @@ const LocalPage: React.FC = () => {
                 type="button"
                 className="library__chip-remove"
                 aria-label={'移除文件夹: ' + folder.name}
+                title="只从本地库移除索引，不删除磁盘上的文件"
                 onClick={() => handleRemoveFolder(folder.path, folder.name)}
               >
                 <X size={12} aria-hidden="true" />
               </button>
             </span>
           ))}
-          <button type="button" className="library__chip" onClick={handleAddFolder} disabled={isScanning}>
-            <FolderPlus size={14} aria-hidden="true" />
-            添加文件夹
-          </button>
           <button type="button" className="library__chip" onClick={handleRefresh} disabled={isScanning}>
             <RefreshCw size={14} aria-hidden="true" />
             扫描
@@ -207,7 +204,7 @@ const LocalPage: React.FC = () => {
               enableBatchDownload={true}
               enableBatchAddToPlaylist={true}
               loading={isScanning && localDisplayed.length === 0}
-              emptyText="还没有本地歌曲——导入一个音乐目录后会自动出现在这里。"
+              emptyText="还没有本地歌曲"
             />
           </div>
         ) : (
@@ -218,7 +215,6 @@ const LocalPage: React.FC = () => {
           />
         )}
 
-        <div className="library__footnote">移除文件夹只会从本地库移除索引，不会删除磁盘上的文件。</div>
       </div>
 
       <DownloadsDialog open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />

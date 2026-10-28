@@ -39,7 +39,7 @@ const AboutSection: React.FC = () => {
 
   return (
     <section id="about" className="ui-about">
-      <Section title="关于" footer="开源项目，欢迎反馈与建议。">
+      <Section title="关于">
         <Group>
           <div className="ui-about__brand">
             <span className="ui-about__mark" aria-hidden="true">

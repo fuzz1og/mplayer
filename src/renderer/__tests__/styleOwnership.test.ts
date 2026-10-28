@@ -89,6 +89,7 @@ const OWNERSHIP: Record<string, string[]> = {
     'pages/PlaylistDetailPage.tsx',
   ],
   'ui/forms.css': ['ui/forms.tsx'],
+  'ui/tooltip.css': ['ui/tooltip.tsx'],
   'ui/overlay.css': ['ui/overlay.tsx', 'ui/menu.tsx'],
   'ui/page.css': ['ui/page.tsx'],
   'ui/ui.css': ['ui/button.tsx', 'ui/input.tsx', 'ui/layout.tsx', 'ui/tag.tsx'],

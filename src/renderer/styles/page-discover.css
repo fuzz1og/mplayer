@@ -239,7 +239,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
-  padding: 0 28px var(--space-5);
+  padding: var(--space-6) 28px var(--space-5);
 }
 
 .discover-filter-group {

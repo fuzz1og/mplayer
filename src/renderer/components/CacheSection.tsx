@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Folder, HardDrive, Trash2 } from 'lucide-react';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { Button, Dialog, Group, Progress, Row, Section, Stepper, Switch } from '@/renderer/ui';
+import { Button, Dialog, Group, Progress, Row, Section, Stepper, Switch, InfoHint } from '@/renderer/ui';
 
 /** cache:getStats 的渲染侧视图（IPC 在磁盘统计上并了每类别字节数，见 src/main/ipc/cache.ts）。 */
 interface CacheStatsView {
@@ -171,7 +171,6 @@ const CacheSection: React.FC = () => {
     <section id="cache">
       <div className="settings-page__head">
         <h1>缓存</h1>
-        <p className="settings-page__lead">缓存封面、歌词与索引，加快重复浏览</p>
       </div>
 
       <div className="settings-page__stack">
@@ -243,7 +242,7 @@ const CacheSection: React.FC = () => {
           </Group>
         </Section>
 
-        <Section title="构成" footer="缓存按文件数量统计，超出上限时按写入时间从早到晚清理。">
+        <Section title={<>{'构成'} <InfoHint label="清理顺序">缓存按文件数量统计，超出上限时按写入时间从早到晚清理。</InfoHint></>}>
           <Group>
             {groups.map((group) => (
               <Row

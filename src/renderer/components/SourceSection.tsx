@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Zap } from 'lucide-react';
 import { MULTI_SOURCE_LIST, SOURCE_DISPLAY_NAMES } from '@mplayer/core';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { Group, Row, Section, Tag } from '@/renderer/ui';
+import { Group, Row, Section, Tag, InfoHint } from '@/renderer/ui';
 
 /**
  * 直连状态（T01，spec #146）：设置页只展示每源直连客户端是否已注册/可用，
@@ -35,11 +35,7 @@ const SourceSection: React.FC = () => {
         <Zap size={16} aria-hidden="true" />
         <h1>直连状态</h1>
       </div>
-      <div className="settings-page__lead">
-        直连可用表示该源已接入官方直连，播放与搜索会优先走直连；未实现的源会走第三方解析兜底。
-      </div>
-
-      <Section title="按源">
+      <Section title={<>{'按源'} <InfoHint label="直连">直连可用表示该源已接入官方直连，播放与搜索会优先走直连；未实现的源走第三方解析兜底。</InfoHint></>}>
         <Group>
           {MULTI_SOURCE_LIST.map((source) => {
             const ready = data?.status[source] === 'ready';

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Shield } from 'lucide-react';
-import { Button, Group, Input, Row, Section, Segmented, Switch, useToast } from '@/renderer/ui';
+import { Button, Group, Input, Row, Section, Segmented, Switch, useToast, InfoHint } from '@/renderer/ui';
 
 const ipcRenderer = window.electronAPI;
 
@@ -68,10 +68,8 @@ const ProxySection: React.FC = () => {
         <Shield size={16} aria-hidden="true" />
         <h1>网络</h1>
       </div>
-      <div className="settings-page__lead">代理与 TLS 指纹都只影响出网请求，改完立即生效，无需重启。</div>
-
       <div className="settings-page__stack">
-        <Section title="代理" footer="默认不使用系统代理；留空表示直连。">
+        <Section title={<>{'代理'} <InfoHint label="代理">代理与 TLS 指纹都只影响出网请求，改完立即生效，无需重启。</InfoHint></>} footer="默认不使用系统代理；留空表示直连。">
           <Group>
             <Row
               label="启用代理"

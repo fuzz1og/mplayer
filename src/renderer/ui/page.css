@@ -1,20 +1,26 @@
 .ui-page-header {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: baseline;
-  /* 一级页面统一页头内边距（原型评审 #695）：上 24 / 左右 28 / 与内容底距 18 */
-  padding: 24px 28px 18px;
+  gap: 12px;
+  align-items: center;
+  padding: 18px 28px 10px;
 }
 
+/* 页面名只服务读屏与路由标题：视觉上不重复侧栏已经写过的字 */
 .ui-page-header__title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.02em;
-  line-height: var(--leading-tight);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ui-page-header[data-bare] {
+  padding: 0;
 }
 
 .ui-page-header__lead {

@@ -26,7 +26,6 @@ const CollectionGrid: React.FC<CollectionGridProps> = ({ view, songs, onPlayColl
       return (
         <div className="card-state">
           <div>还没有可归组的专辑</div>
-          <div>这批歌曲补齐专辑信息后会自动出现在这里。</div>
         </div>
       );
     }
@@ -48,7 +47,6 @@ const CollectionGrid: React.FC<CollectionGridProps> = ({ view, songs, onPlayColl
       <div className="card-state">
         <User size={26} className="card-state__icon" aria-hidden="true" />
         <div>还没有可归组的歌手</div>
-        <div>这批歌曲补齐歌手信息后会自动出现在这里。</div>
       </div>
     );
   }
