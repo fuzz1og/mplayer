@@ -97,12 +97,8 @@ describe('应用骨架', () => {
   });
 });
 
-/**
- * 规格 §2.3 回归：进入全屏播放器（歌词层）后再进设置，底部播放栏必须隐藏。
- * 播放栏靠 `.app-shell--settings .player-bar { display: none }` 让位，
- * 前提是路由切到 /settings 时 showLyrics 收起（否则固定层的「正在播放」会盖住设置页）。
- * App 的重依赖降为桩（与 lyricsView.test.tsx 同一手法），用 doMock 只影响本用例。
- */
+/** 规格 §2.3 回归：歌词层开着进设置时，播放栏靠 `.app-shell--settings .player-bar` 隐藏，
+ * 前提是切到 /settings 收起 showLyrics，否则固定层「正在播放」会盖住设置页（App 重依赖用 doMock 降桩）。 */
 describe('App 壳：全屏播放器 → 设置', () => {
   const shellCss = readFileSync(join(dirname(fileURLToPath(String(import.meta.url))), '..', 'styles', 'shell.css'), 'utf8');
 

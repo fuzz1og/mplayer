@@ -28,12 +28,8 @@ import SongList from '@/renderer/components/SongList';
 import { Progress } from '@/renderer/ui';
 import '@/renderer/styles/library.css';
 
-/**
- * 资料库（1.9.0，#685）：收藏 / 本地 / 历史去重后的聚合列表，对齐 .proto/library.png（规格 .proto/ALIGN.md §1）。
- * 列表统一走共享 SongList 的 library 密度（无表头 / 46px 行 / 时长列 / 行尾单个「更多」），
- * 不再维护私有 LibrarySongTable。下载走 settings:getDownloadPath + download:getTasks；
- * 本地复用 localStore 的扫描 / 播放 / 删除。
- */
+/** 资料库（#685）：收藏 / 本地 / 历史去重后的聚合列表，走共享 SongList 的 library 密度（无表头 / 时长列 / 行尾「更多」）。
+ * 下载走 settings:getDownloadPath + download:getTasks；本地复用 localStore 的扫描 / 播放 / 删除。 */
 
 type TabKey = 'songs' | 'albums' | 'artists' | 'downloads' | 'local';
 type SortKey = 'added' | 'title' | 'artist';
