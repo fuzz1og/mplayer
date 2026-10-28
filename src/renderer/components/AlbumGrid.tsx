@@ -32,7 +32,7 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
 }) => {
   if (loading && albums.length === 0) {
     return (
-      <div className="card-grid card-grid--album">
+      <div className="card-grid">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i}>
             <div className="skeleton-shimmer card-skeleton__cover" />
@@ -94,7 +94,7 @@ const AlbumGrid: React.FC<AlbumGridProps> = ({
               <span>{group.year}</span>
             </div>
           )}
-          <div className="card-grid card-grid--album">
+          <div className="card-grid">
             {group.albums.map((album) => {
               const year = showYear ? albumYear(album) : '';
               return (

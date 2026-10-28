@@ -14,7 +14,6 @@ describe('桌面封面取图尺寸（#496）', () => {
   it('内容卡统一经 CoverCard 取图，详情页 hero 与下载弹窗各自显式提档', () => {
     for (const [file, needle] of [
       ['components/CoverCard.tsx', 'thumbSize={COVER_SIZE.thumb}'],
-      ['components/AlbumScroll.tsx', 'coverThumbUrl(album.picUrl, COVER_SIZE.icon)'],
       ['pages/AlbumDetailPage.tsx', 'coverThumbUrl(displayPic, COVER_SIZE.thumb)'],
       ['pages/ArtistDetailPage.tsx', 'coverThumbUrl(displayPic, COVER_SIZE.thumb)'],
       ['pages/DiscoverPlaylistDetailPage.tsx', 'coverThumbUrl(playlist.coverImgUrl, COVER_SIZE.thumb)'],
@@ -27,6 +26,7 @@ describe('桌面封面取图尺寸（#496）', () => {
   it('卡片网格不再自绘封面 img：歌单 / 专辑 / 歌手共用 CoverCard（#694）', () => {
     for (const file of [
       'components/AlbumGrid.tsx',
+      'components/AlbumScroll.tsx',
       'components/PlaylistPageGrid.tsx',
       'components/DiscoverPlaylistCard.tsx',
       'components/ArtistCard.tsx',

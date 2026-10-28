@@ -44,7 +44,7 @@ function renderPage() {
 }
 
 const toggleButton = (container: HTMLElement) =>
-  container.querySelector('.song-list__batch-toggle') as HTMLElement;
+  container.querySelector('.detail-toolbar__toggle') as HTMLElement;
 
 afterEach(() => {
   cleanup();
@@ -61,7 +61,7 @@ describe('本地歌单详情：按需选择模式（#694 评审）', () => {
     expect(container.querySelector('.playlist-detail__thead')).toBeNull();
     expect(container.querySelector('input[aria-label="全选可见歌曲"]')).toBeNull();
     expect(container.textContent).not.toContain('已选择');
-    expect(container.querySelectorAll('.playlist-detail__toolbar').length).toBe(1);
+    expect(container.querySelectorAll('.detail-toolbar').length).toBe(1);
 
     // 拖拽把手仍在序号列（与 #703 的拖拽语义同源，不进选择模式也在）
     const row = container.querySelector('.song-row') as HTMLElement;
@@ -74,7 +74,7 @@ describe('本地歌单详情：按需选择模式（#694 评审）', () => {
     expect(toggleButton(container)).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(toggleButton(container));
     await waitFor(() => expect(container.querySelectorAll('.song-row__check').length).toBe(3));
-    const toolbar = container.querySelector('.playlist-detail__toolbar') as HTMLElement;
+    const toolbar = container.querySelector('.detail-toolbar') as HTMLElement;
     expect(toolbar.querySelector('input[aria-label="全选可见歌曲"]')).toBeTruthy();
     expect(container.querySelector('.playlist-detail__thead')).toBeNull();
     expect(toggleButton(container)).toHaveAttribute('aria-pressed', 'true');
@@ -91,15 +91,15 @@ describe('本地歌单详情：按需选择模式（#694 评审）', () => {
     fireEvent.click(toggleButton(container));
     await waitFor(() => expect(container.querySelectorAll('.song-row__check').length).toBe(3));
 
-    const toolbar = container.querySelector('.playlist-detail__toolbar') as HTMLElement;
+    const toolbar = container.querySelector('.detail-toolbar') as HTMLElement;
     const selectAll = toolbar.querySelector('input[aria-label="全选可见歌曲"]') as HTMLInputElement;
     expect(selectAll).toBeTruthy();
     fireEvent.click(selectAll);
     await waitFor(() => expect(container.textContent).toContain('已选择 3 项'));
 
     // 批量栏没有另起一条容器：全站仍只有一条工具条，三个动作都在它里面
-    expect(container.querySelectorAll('.playlist-detail__toolbar').length).toBe(1);
-    const batchLabels = Array.from(toolbar.querySelectorAll('.playlist-detail__batch-btn'))
+    expect(container.querySelectorAll('.detail-toolbar').length).toBe(1);
+    const batchLabels = Array.from(toolbar.querySelectorAll('.detail-toolbar__batch-btn'))
       .map((button) => button.textContent?.trim());
     expect(batchLabels).toEqual(['批量下载', '加入歌单', '批量移除']);
 

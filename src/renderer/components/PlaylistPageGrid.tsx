@@ -23,7 +23,7 @@ const SKELETON_COUNT = 6;
 const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading, error, onRetry, onPlaylistSelect, emptyText = '暂无歌单' }) => {
   if (loading) {
     return (
-      <div className="card-grid card-grid--playlist">
+      <div className="card-grid">
         {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
           <div key={i} className="cover-card cover-card--skeleton">
             <div className="cover-card__media" />
@@ -58,7 +58,7 @@ const PlaylistPageGrid: React.FC<PlaylistPageGridProps> = ({ playlists, loading,
   }
 
   return (
-    <div className="card-grid card-grid--playlist">
+    <div className="card-grid">
       {playlists.map((pl) => (
         <CoverCard
           key={pl.id}

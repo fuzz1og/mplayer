@@ -86,7 +86,7 @@ const PlaylistsPage: React.FC = () => {
       />
       <div className="playlists__scroll">
         {loading ? (
-          <div className="card-grid card-grid--playlist">
+          <div className="card-grid">
             {Array.from({ length: 12 }).map((_, index) => (
               <div key={index} className="cover-card cover-card--skeleton">
                 <div className="cover-card__media" />
@@ -106,7 +106,7 @@ const PlaylistsPage: React.FC = () => {
                 <div>点击上方按钮创建第一个歌单</div>
               </div>
             ) : (
-              <div className="card-grid card-grid--playlist">
+              <div className="card-grid">
                 {playlists.map((playlist) => (
                   <CoverCard
                     key={playlist.id}

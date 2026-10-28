@@ -1,10 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertCircle, ListPlus } from 'lucide-react';
+import { AlertCircle, Download, ListPlus, ListMusic, Play, CirclePlus } from 'lucide-react';
 import { toast } from '@/renderer/services/toastStore';
-import { Button, PageHeader, useConfirm } from '@/renderer/ui';
+import { Button, PageHero, useConfirm } from '@/renderer/ui';
 import '@/renderer/styles/songlist.css';
+import '@/renderer/styles/detail-page.css';
 import SongList from '@/renderer/components/SongList';
+import DetailToolbar from '@/renderer/components/DetailToolbar';
+import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
+import { useDetailSelection } from '@/renderer/hooks/useDetailSelection';
 import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import type { DesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import { usePlayerStore } from '@/renderer/store/playerStore';
@@ -12,8 +16,8 @@ import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
-import type { Song, SourceKey } from '@mplayer/core';
-import { pickToplistSongs, TOPLIST_SOURCE_IDS } from '@mplayer/core';
+import type { Song, SourceKey, ToplistDetail } from '@mplayer/core';
+import { formatPlayCount, pickToplistSongs, TOPLIST_SOURCE_IDS } from '@mplayer/core';
 
 /** 榜单详情页配置：路由 type → 能力面来源 + 榜单组 id（id 契约取自 core，#286）。 */
 type HotlistType = 'netease' | 'netease_new' | 'qq' | 'qq_new' | 'kugou' | 'kugou_new';
@@ -38,9 +42,12 @@ const HotlistDetailPage: React.FC = () => {
   const config = HOTLIST_CONFIG[hotlistType];
 
   const [hotlist, setHotlist] = useState<Song[]>([]);
+  // 榜单元数据（#465 的 getToplistDetail）：Hero 的封面 / 名称 / 简介走这里，缺了再回落到榜首封面
+  const [chartMeta, setChartMeta] = useState<ToplistDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingAll, setSavingAll] = useState(false);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
 
   const play = usePlayerStore((s) => s.play);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
@@ -49,14 +56,21 @@ const HotlistDetailPage: React.FC = () => {
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
+  const selection = useDetailSelection(hotlist, hotlistType);
+  const { visibleSongs, batchMode, selectedIds, setSelectedIds, selectedSongs, visibleSelectedCount } = selection;
 
   // 加载热榜数据：统一走 IPC 内容方法 getToplists（一次取全组，按 id 拆榜）
   const loadHotlist = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const groups = await callMusicApi('getToplists', config.source);
+      const [groups, detail] = await Promise.all([
+        callMusicApi('getToplists', config.source),
+        // 元数据失败不影响曲目：榜单页先能听，封面/简介缺失走兜底
+        callMusicApi('getToplistDetail', config.source, config.sourceId).catch(() => null),
+      ]);
       setHotlist(pickToplistSongs(groups, config.source, config.sourceId));
+      setChartMeta(detail ?? null);
     } catch (error) {
       console.error(`加载热榜失败:`, error);
       setError('加载热榜失败，请稍后重试');
@@ -73,7 +87,7 @@ const HotlistDetailPage: React.FC = () => {
    * 「保存全部到新歌单」（#493）：确认弹层写明榜单名 + 曲目数，确认后新建本地歌单并一次写入全部曲目。
    * 失败时**删除刚建的空歌单**再报错——不留空歌单（验收标准）。
    */
-  const handleSaveAllToNewPlaylist = () => {
+  const handleSaveAllToNewPlaylist = useCallback(() => {
     if (hotlist.length === 0) return;
     const { title } = config;
     const count = hotlist.length;
@@ -103,40 +117,97 @@ const HotlistDetailPage: React.FC = () => {
         }
       },
     });
-  };
+  }, [config, hotlist, confirm, navigate]);
 
-  const handlePlayAll = async () => {
+  const handlePlayAll = useCallback(async () => {
     if (hotlist.length === 0) return;
     setCurrentPlaylist(hotlist, 0);
     await play(await resolvePlayableVersionForDesktop(hotlist[0]));
-  };
+  }, [hotlist, play, setCurrentPlaylist]);
 
-  const handlePlay = async (song: Song, queue: Song[], index: number) => {
+  const handlePlay = useCallback(async (song: Song, queue: Song[], index: number) => {
     // #697：队列与索引由列表回传，页面统一负责 setQueue + 播放
     setCurrentPlaylist(queue, index);
-    // #639 C3：补一个**精确匹配**的可播版本（判据在 core）。此前无条件搜索并取
-    // `searchResults[0]`：歌已有 url 时也白搜一次，且会整首顶替成同名不同歌手的歌。
-    // 搜索源用歌曲自身来源（等价于 `config.source`，但不依赖页面上下文）。
+    // #639 C3：补一个**精确匹配**的可播版本（判据在 core），不再无条件取搜索首条
     await play(await resolvePlayableVersionForDesktop(song));
-  };
+  }, [play, setCurrentPlaylist]);
+
+  const handleDownloadAll = useCallback(() => {
+    if (hotlist.length === 0) return;
+    void downloadBatch(hotlist);
+  }, [hotlist, downloadBatch]);
+
+  const handleBatchDownload = useCallback(() => {
+    if (selectedSongs.length === 0) return;
+    void downloadBatch(selectedSongs);
+    toast.success(`已添加 ${selectedSongs.length} 首歌曲到下载队列`);
+  }, [selectedSongs, downloadBatch]);
+
+  const handleBatchAddToPlaylist = useCallback(() => {
+    if (selectedSongs.length > 0) setAddToPlaylistOpen(true);
+  }, [selectedSongs]);
+
+  const batchActions = useMemo(() => [
+    { key: 'download', label: '批量下载', icon: <Download size={12} />, onClick: handleBatchDownload },
+    { key: 'playlist', label: '加入歌单', icon: <CirclePlus size={12} />, onClick: handleBatchAddToPlaylist },
+  ], [handleBatchDownload, handleBatchAddToPlaylist]);
+
+  // 封面优先取榜单元数据；该源不给封面时回落到榜首曲目封面，再缺就给榜单图标兜底
+  const coverSrc = chartMeta?.coverImgUrl || hotlist[0]?.cover || '';
+  const heroTitle = chartMeta?.name || config.title;
 
   return (
     <div className="detail-page">
-
-      {/* 内容区域 */}
-      <div className="detail-page__body">
-        <PageHeader
-          title={config.title}
-          lead="实时更新，最热门的 100 首歌曲"
+      <div className="detail-page__scroll" data-scroll-container>
+        <PageHero
+          className="detail-page__hero"
+          media={
+            <div className="detail-page__cover">
+              <div className="detail-page__cover-placeholder">
+                <ListMusic size={56} />
+              </div>
+              {coverSrc && (
+                <img
+                  key={coverSrc}
+                  src={coverSrc}
+                  alt={config.title}
+                  loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  className="detail-page__cover-img"
+                />
+              )}
+            </div>
+          }
+          eyebrow="榜单"
+          title={heroTitle}
+          meta={
+            <>
+              {[
+                `${hotlist.length} 首`,
+                chartMeta?.playCount ? `${formatPlayCount(chartMeta.playCount)} 次播放` : '',
+                chartMeta?.description ? '' : '实时更新',
+              ].filter(Boolean).join(' · ')}
+              {chartMeta?.description && <p className="detail-page__hero-desc">{chartMeta.description}</p>}
+            </>
+          }
           actions={
             <>
               <Button
                 variant="primary"
                 size="sm"
-                onClick={handlePlayAll}
+                icon={<Play size={15} aria-hidden="true" />}
+                onClick={() => { void handlePlayAll(); }}
                 disabled={hotlist.length === 0 || loading}
               >
                 播放全部
+              </Button>
+              <Button
+                size="sm"
+                icon={<Download size={15} aria-hidden="true" />}
+                onClick={handleDownloadAll}
+                disabled={hotlist.length === 0 || loading}
+              >
+                下载全部
               </Button>
               <Button
                 size="sm"
@@ -145,57 +216,64 @@ const HotlistDetailPage: React.FC = () => {
                 disabled={hotlist.length === 0 || savingAll}
                 title={`把「${config.title}」的 ${hotlist.length} 首歌曲保存到新歌单`}
               >
-                {savingAll ? '保存中...' : `保存全部到新歌单（${hotlist.length}）`}
+                {savingAll ? '保存中...' : '保存全部到新歌单'}
               </Button>
             </>
           }
         />
 
-        {/* 热榜歌曲列表 */}
-        {loading ? (
-          <div>
-            {/* 骨架屏 */}
-            {Array.from({ length: 10 }).map((_, index) => (
-              <div key={`skeleton-${index}`} className="detail-skeleton__row">
-                <div className="detail-skeleton__index">
-                  <div className="skeleton-shimmer detail-skeleton__index-bar" />
-                </div>
-                <div className="detail-skeleton__main">
-                  <div className="skeleton-shimmer detail-skeleton__cover" />
-                  <div className="detail-skeleton__lines">
-                    <div className="skeleton-shimmer detail-skeleton__title" />
-                    <div className="skeleton-shimmer detail-skeleton__sub" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          <div className="detail-error">
-            <AlertCircle size={28} className="detail-error__icon" />
-            <div className="detail-error__text">{error}</div>
-            <button onClick={() => { loadHotlist(); }} className="detail-error__retry">
-              重试
-            </button>
-          </div>
-        ) : (
-          <SongList
-            songs={hotlist}
-            currentSongId={currentSong?.id}
-            isPlaying={isPlaying}
-            favoriteIds={favoriteIds}
-            onPlay={handlePlay}
-            onToggleFavorite={toggleFavorite}
-            showHeader={true}
-            showIndex={true}
-            enableBatchDownload={true}
-            onDownload={download}
-            onBatchDownload={downloadBatch}
-            enableBatchAddToPlaylist={true}
-            emptyText="暂无热榜歌曲"
-          />
-        )}
+        <div className="detail-page__list">
+          {error && hotlist.length === 0 ? (
+            <div className="detail-page__error">
+              <AlertCircle size={28} className="detail-page__error-icon" />
+              <div>{error}</div>
+              <button type="button" onClick={() => { void loadHotlist(); }} className="detail-page__error-retry">
+                重试
+              </button>
+            </div>
+          ) : (
+            <>
+              <DetailToolbar
+                filterValue={selection.filterQuery}
+                onFilterChange={selection.setFilterQuery}
+                matchedCount={visibleSongs.length}
+                totalCount={hotlist.length}
+                selecting={batchMode}
+                onToggleSelecting={selection.toggleBatchMode}
+                onSelectAll={selection.selectAllVisible}
+                allSelected={selection.allVisibleSelected}
+                selectedCount={visibleSelectedCount}
+                batchActions={batchActions}
+              />
+              <SongList
+                songs={hotlist}
+                currentSongId={currentSong?.id}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handlePlay}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
+                density="library"
+                showDuration
+                showAlbum={false}
+                showCheckbox={batchMode}
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+                loading={loading && hotlist.length === 0}
+                emptyText={selection.isFiltering ? `没有匹配「${selection.filterQuery.trim()}」的歌曲` : '暂无热榜歌曲'}
+              />
+            </>
+          )}
+        </div>
       </div>
+      {/* 批量加入歌单：只在有可见已选项时挂载，弹窗按需加载歌单列表 */}
+      {batchMode && selectedSongs.length > 0 && (
+        <BatchAddToPlaylistModal
+          songs={selectedSongs}
+          isVisible={addToPlaylistOpen}
+          onClose={() => setAddToPlaylistOpen(false)}
+        />
+      )}
     </div>
   );
 };

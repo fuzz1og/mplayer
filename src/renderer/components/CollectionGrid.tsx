@@ -58,6 +58,7 @@ const CollectionGrid: React.FC<CollectionGridProps> = ({ view, songs, onPlayColl
         <ArtistCard
           key={group.id}
           artist={group.artist}
+          meta={`${group.songs.length} 首`}
           onClick={() => onPlayCollection(group.songs, 0)}
         />
       ))}

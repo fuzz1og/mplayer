@@ -59,10 +59,10 @@ describe('PlaylistDetailPage 窗口化（#445）', () => {
 
     // 一行工具条（#694）+ 行容器同父；表头已删，列表上方不再有第二道栏
     const toolbar = Array.from(wrapper.children).find((child) =>
-      child.classList.contains('playlist-detail__toolbar')) as HTMLElement;
+      child.classList.contains('detail-toolbar')) as HTMLElement;
     expect(toolbar).toBeTruthy();
     expect(toolbar.parentElement).toBe(wrapper);
-    expect(toolbar.querySelector('.playlist-detail__filter')).toBeTruthy();
+    expect(toolbar.querySelector('.detail-toolbar__filter')).toBeTruthy();
     expect(container.querySelector('.playlist-detail__thead')).toBeNull();
     expect(rowsRef.parentElement).toBe(wrapper);
 
