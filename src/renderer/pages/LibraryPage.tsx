@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownUp,
-  Check,
   Disc3,
   FolderOpen,
   FolderPlus,
@@ -25,7 +24,8 @@ import { IpcClient } from '@/renderer/services/IpcClient';
 import { toast } from '@/renderer/services/toastStore';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import SongList from '@/renderer/components/SongList';
-import { Progress } from '@/renderer/ui';
+import { Menu, Progress } from '@/renderer/ui';
+import type { MenuItem } from '@/renderer/ui';
 import '@/renderer/styles/library.css';
 
 /** 资料库（#685）：收藏 / 本地 / 历史去重后的聚合列表，走共享 SongList 的 library 密度（无表头 / 时长列 / 行尾「更多」）。
@@ -146,6 +146,7 @@ const LibraryPage: React.FC = () => {
   }, [searchParams, setSearchParams]);
   const [sortKey, setSortKey] = useState<SortKey>('added');
   const [sortOpen, setSortOpen] = useState(false);
+  const sortTriggerRef = useRef<HTMLButtonElement>(null);
   const [history, setHistory] = useState<Song[]>([]);
   const [downloadPath, setDownloadPath] = useState('');
   const [tasks, setTasks] = useState<DownloadTaskRow[]>([]);
@@ -367,6 +368,12 @@ const LibraryPage: React.FC = () => {
 
   const finishedCount = tasks.filter((task) => task.status === 'completed' || task.status === 'error').length;
   const sortText = SORT_ITEMS.find((item) => item.key === sortKey)?.text ?? '按最近添加排序';
+  const sortMenuItems: MenuItem[] = SORT_ITEMS.map((item) => ({
+    key: item.key,
+    label: item.label,
+    checked: sortKey === item.key,
+    onSelect: () => chooseSort(item.key),
+  }));
 
   /**
    * 两个歌曲分段（聚合 / 本地）共用同一份列表口径：density / 表头 / 时长列 / 回调只写一次，
@@ -394,6 +401,7 @@ const LibraryPage: React.FC = () => {
         <div className="library__header-actions">
           <div className="library__sort-wrap">
             <button
+              ref={sortTriggerRef}
               type="button"
               className="library__text-btn"
               aria-haspopup="menu"
@@ -403,26 +411,15 @@ const LibraryPage: React.FC = () => {
               <ArrowDownUp size={15} aria-hidden="true" />
               排序
             </button>
-            {sortOpen && (
-              <>
-                <div className="library__menu-scrim" onClick={() => setSortOpen(false)} aria-hidden="true" />
-                <div className="library__menu" role="menu">
-                  {SORT_ITEMS.map((item) => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={sortKey === item.key}
-                      className="library__menu-item"
-                      onClick={() => chooseSort(item.key)}
-                    >
-                      {item.label}
-                      {sortKey === item.key && <Check size={14} className="library__menu-check" aria-hidden="true" />}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            <Menu
+              open={sortOpen}
+              anchorRef={sortTriggerRef}
+              items={sortMenuItems}
+              onClose={() => setSortOpen(false)}
+              ariaLabel="排序"
+              placement="bottom-end"
+              minWidth={168}
+            />
           </div>
           <button
             type="button"

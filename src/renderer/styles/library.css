@@ -109,55 +109,6 @@
   position: relative;
 }
 
-.library__menu-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-}
-
-.library__menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 60;
-  min-width: 168px;
-  padding: 4px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-lg);
-}
-
-.library__menu-item {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  width: 100%;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-
-.library__menu-item:hover {
-  background: var(--surface-card-hover);
-}
-
-.library__menu-item[aria-checked='true'] {
-  font-weight: var(--weight-semibold);
-}
-
-.library__menu-check {
-  margin-left: auto;
-  color: var(--accent);
-}
-
 /* ── 分段 pill ── */
 .library__tabs-row {
   display: flex;

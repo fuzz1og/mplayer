@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Dialog, GridList, ToastProvider, useToast } from '@/renderer/ui';
 import type { GridListColumn, ToastApi } from '@/renderer/ui';
@@ -51,8 +51,9 @@ describe('Dialog', () => {
 
     const title = screen.getByRole('heading', { name: '演示对话框' });
     expect(dialog?.getAttribute('aria-labelledby')).toBe(title.id);
-    // 原生 modal 会把焦点移进 dialog；jsdom 走 fallback，聚焦首个可聚焦元素
+    // 原生 modal 会把焦点移进 dialog；显式首焦点策略让 jsdom 与真实浏览器一致
     expect(dialog?.contains(document.activeElement)).toBe(true);
+    expect(dialog?.getAttribute('aria-modal')).toBe('true');
 
     await user.keyboard('{Escape}');
 
@@ -88,6 +89,26 @@ function renderToastHarness(): { current: () => ToastApi } {
     },
   };
 }
+
+describe('Dialog 键盘循环', () => {
+  it('Tab / Shift+Tab 在对话框可聚焦元素之间循环', async () => {
+    const user = userEvent.setup();
+    render(<DialogHarness onClose={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: '打开对话框' }));
+    const dialog = document.querySelector('dialog');
+    await waitFor(() => expect(dialog?.open).toBe(true));
+
+    const closeButton = screen.getByRole('button', { name: '关闭对话框' });
+    const doneButton = screen.getByRole('button', { name: '完成' });
+    expect(closeButton).toHaveFocus();
+
+    fireEvent.keyDown(closeButton, { key: 'Tab', shiftKey: true });
+    expect(doneButton).toHaveFocus();
+
+    fireEvent.keyDown(doneButton, { key: 'Tab' });
+    expect(closeButton).toHaveFocus();
+  });
+});
 
 describe('Toast', () => {
   it('最多同时显示 3 条，关闭一条后排队中的下一条补位，容器可播报', async () => {

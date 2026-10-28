@@ -14,7 +14,7 @@
   max-height: min(720px, calc(100vh - 96px));
   padding: 0;
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--bg-elevated);
   color: var(--text-primary);
   box-shadow: var(--shadow-xl);
@@ -155,6 +155,94 @@
   from {
     opacity: 0;
     transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+/* ── Menu（#709）：与 Dialog 共享浮层语义，10px 圆角 ── */
+.ui-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--material-overlay);
+  backdrop-filter: var(--material-blur);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  animation: ui-menu-in var(--duration-fast) var(--ease-standard);
+}
+
+.ui-menu__item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.ui-menu__item:hover:not(:disabled) {
+  background: var(--surface-card-hover);
+}
+
+.ui-menu__item:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.ui-menu__item[data-danger] {
+  color: var(--danger-text);
+}
+
+.ui-menu__item[data-danger]:hover:not(:disabled) {
+  background: var(--danger-subtle);
+}
+
+.ui-menu__item[aria-checked='true'],
+.ui-menu__item[aria-pressed='true'] {
+  background: var(--surface-selected);
+}
+
+.ui-menu__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.ui-menu__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ui-menu__check {
+  flex: none;
+  color: var(--accent-text);
+}
+
+@keyframes ui-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
   }
   to {
     opacity: 1;

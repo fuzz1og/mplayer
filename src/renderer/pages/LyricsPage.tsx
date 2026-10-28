@@ -8,7 +8,8 @@ import PlayerVolume from '@/renderer/components/PlayerVolume';
 import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import SongCover from '@/renderer/components/SongCover';
 import { IpcClient } from '@/renderer/services/IpcClient';
-import { Button, Segmented } from '@/renderer/ui';
+import { Button, Menu, Segmented } from '@/renderer/ui';
+import type { MenuItem } from '@/renderer/ui';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
@@ -97,7 +98,7 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [coverAccent, setCoverAccent] = useState<CoverAccent | null>(null);
   const coverAccentRef = useRef<CoverAccent | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   const position = usePlaybackPosition();
   const duration = usePlaybackDuration();
@@ -115,17 +116,6 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onBack, menuOpen]);
-
-  // 「…」菜单：点到外面就收起
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handlePointerDown = (e: MouseEvent) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
-      setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [menuOpen]);
 
   const handleLyricClick = useCallback((time: number) => seek(time), [seek]);
 
@@ -149,11 +139,6 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
   const handleToggleMute = useCallback(() => {
     setVolume(volume === 0 ? 80 : 0);
   }, [setVolume, volume]);
-
-  const handleMenuAction = useCallback((action: () => void) => {
-    setMenuOpen(false);
-    action();
-  }, []);
 
   // 环境光取色（#688）：封面变化时让主进程读真实像素算主色；失败/无封面保持空样式，
   // CSS 的 var(--np-glow-*, transparent) 会让环境光自然退回纯色底。
@@ -244,6 +229,28 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
     { label: '音质', value: qualityLabel },
   ];
 
+  const lyricsMenuItems: MenuItem[] = [
+    {
+      key: 'favorite',
+      label: fav ? '取消收藏' : '收藏',
+      icon: <Heart size={14} fill={fav ? 'currentColor' : 'none'} />,
+      pressed: fav,
+      onSelect: () => void toggleFavorite(currentSong),
+    },
+    {
+      key: 'playlist',
+      label: '加入歌单',
+      icon: <ListMusic size={14} />,
+      onSelect: () => setShowAddToPlaylist(true),
+    },
+    {
+      key: 'download',
+      label: '下载',
+      icon: <Download size={14} />,
+      onSelect: () => void download(currentSong),
+    },
+  ];
+
   return (
     <div className="lyrics-page" data-view={view}>
       <div className="lyrics-page__ambient" style={ambientStyle} aria-hidden="true" />
@@ -258,48 +265,26 @@ const LyricsPage: React.FC<LyricsPageProps> = ({ onBack }) => {
         <div className="lyrics-page__topbar-title">正在播放</div>
         <div className="lyrics-page__topbar-end">
           <button
+            ref={menuTriggerRef}
             type="button"
             onClick={() => setMenuOpen((open) => !open)}
             aria-label="更多操作"
+            aria-haspopup="menu"
             aria-expanded={menuOpen}
             className="lyrics-page__icon-btn"
           >
             <MoreHorizontal size={18} />
           </button>
+          <Menu
+            open={menuOpen}
+            anchorRef={menuTriggerRef}
+            items={lyricsMenuItems}
+            onClose={() => setMenuOpen(false)}
+            ariaLabel="更多操作"
+            placement="bottom-end"
+            minWidth={160}
+          />
         </div>
-
-        {menuOpen && (
-          <div ref={menuRef} className="lyrics-page__menu" role="menu">
-            <button
-              type="button"
-              role="menuitem"
-              aria-pressed={fav}
-              className="lyrics-page__menu-item"
-              onClick={() => handleMenuAction(() => void toggleFavorite(currentSong))}
-            >
-              <Heart size={14} fill={fav ? 'currentColor' : 'none'} />
-              {fav ? '取消收藏' : '收藏'}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="lyrics-page__menu-item"
-              onClick={() => handleMenuAction(() => setShowAddToPlaylist(true))}
-            >
-              <ListMusic size={14} />
-              加入歌单
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="lyrics-page__menu-item"
-              onClick={() => handleMenuAction(() => void download(currentSong))}
-            >
-              <Download size={14} />
-              下载
-            </button>
-          </div>
-        )}
       </header>
 
       <div className="lyrics-page__body">

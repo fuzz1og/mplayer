@@ -1170,75 +1170,15 @@
 .chart__retry:hover {
   background: var(--accent-hover);
 }
-/* ── 下载进度弹层（1.9.0）：单曲与被复用为批量，共用一套外壳与行样式 ── */
-.dl-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-overlay);
-  animation: dl-fade-in var(--duration-normal) var(--ease-standard);
-}
-
-.dl-modal__panel {
-  display: flex;
-  flex-direction: column;
-  width: 360px;
-  max-width: 90vw;
-  padding: 24px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-xl);
-  animation: dl-slide-in var(--duration-slow) var(--ease-standard);
-}
-
-.dl-modal__panel--batch {
-  width: 420px;
-  max-height: 80vh;
-}
-
-.dl-modal__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.dl-modal__title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-}
-
-.dl-modal__close {
-  padding: 4px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.dl-modal__close:hover {
-  background: var(--surface-card-hover);
-  color: var(--text-secondary);
-}
-
-/* 单曲：歌曲信息行 */
-.dl-modal__song {
+/* ── 下载进度（#709）：外壳走统一 Dialog，这里只保留内容排版 ── */
+.dl-progress__song {
   display: flex;
   gap: 12px;
   align-items: center;
   margin-bottom: 20px;
 }
 
-.dl-modal__cover {
+.dl-progress__cover {
   position: relative;
   flex: none;
   width: 56px;
@@ -1248,7 +1188,7 @@
   background: var(--surface-card-hover);
 }
 
-.dl-modal__cover-placeholder {
+.dl-progress__cover-placeholder {
   position: absolute;
   inset: 0;
   display: flex;
@@ -1257,7 +1197,7 @@
   color: var(--text-tertiary);
 }
 
-.dl-modal__cover-img {
+.dl-progress__cover-img {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1265,12 +1205,12 @@
   object-fit: cover;
 }
 
-.dl-modal__song-text {
+.dl-progress__song-text {
   flex: 1;
   min-width: 0;
 }
 
-.dl-modal__song-name {
+.dl-progress__song-name {
   overflow: hidden;
   color: var(--text-primary);
   font-size: var(--text-base);
@@ -1279,7 +1219,7 @@
   white-space: nowrap;
 }
 
-.dl-modal__song-artist {
+.dl-progress__song-artist {
   margin-top: 4px;
   overflow: hidden;
   color: var(--text-secondary);
@@ -1288,32 +1228,32 @@
   white-space: nowrap;
 }
 
-.dl-modal__status-icon {
+.dl-progress__status-icon {
   flex: none;
 }
 
-.dl-modal__spin {
+.dl-progress__spin {
   animation: dl-spin 1s linear infinite;
 }
 
 /* 进度条 */
-.dl-modal__bar-wrap {
+.dl-progress__bar-wrap {
   margin-bottom: 12px;
 }
 
-.dl-modal__bar {
+.dl-progress__bar {
   height: 6px;
   overflow: hidden;
   border-radius: var(--radius-sm);
   background: var(--surface-card-hover);
 }
 
-.dl-modal__bar--batch {
+.dl-progress__bar--batch {
   height: 8px;
   border-radius: var(--radius-sm);
 }
 
-.dl-modal__bar-fill {
+.dl-progress__bar-fill {
   height: 100%;
   width: var(--progress, 0%);
   border-radius: var(--radius-sm);
@@ -1321,30 +1261,30 @@
   transition: width var(--duration-slow) var(--ease-standard);
 }
 
-.dl-modal__bar-fill[data-tone='danger'] {
+.dl-progress__bar-fill[data-tone='danger'] {
   background: var(--danger);
 }
 
-.dl-modal__bar-fill[data-tone='success'] {
+.dl-progress__bar-fill[data-tone='success'] {
   background: var(--success);
 }
 
-.dl-modal__progress-text {
+.dl-progress__progress-text {
   display: flex;
   align-items: center;
   justify-content: space-between;
   font-size: var(--text-sm);
 }
 
-.dl-modal__progress-text > span:first-child {
+.dl-progress__progress-text > span:first-child {
   color: var(--status-color, var(--text-secondary));
 }
 
-.dl-modal__progress-num {
+.dl-progress__progress-num {
   color: var(--text-secondary);
 }
 
-.dl-modal__error {
+.dl-progress__error {
   margin-top: 12px;
   padding: 10px 12px;
   border: 1px solid var(--danger);
@@ -1354,36 +1294,11 @@
   font-size: var(--text-xs);
 }
 
-.dl-modal__clear {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  margin-top: 16px;
-  padding: 10px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition:
-    border-color var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.dl-modal__clear:hover {
-  border-color: var(--text-tertiary);
-  color: var(--text-primary);
-}
-
-/* 批量：总体进度 + 列表 + 统计 */
-.dl-modal__overall {
+.dl-progress__overall {
   margin-bottom: 16px;
 }
 
-.dl-modal__overall-head {
+.dl-progress__overall-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1392,13 +1307,13 @@
   font-size: var(--text-sm);
 }
 
-.dl-modal__overall-value {
+.dl-progress__overall-value {
   color: var(--text-primary);
   font-weight: var(--weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
-.dl-modal__list {
+.dl-progress__list {
   flex: 1;
   max-height: 300px;
   overflow-y: auto;
@@ -1406,7 +1321,7 @@
   border-bottom: 1px solid var(--hairline);
 }
 
-.dl-modal__row {
+.dl-progress__row {
   display: flex;
   gap: 12px;
   align-items: center;
@@ -1414,26 +1329,26 @@
   border-bottom: 1px solid var(--hairline);
 }
 
-.dl-modal__row-icon {
+.dl-progress__row-icon {
   flex: none;
   display: flex;
   width: 20px;
   justify-content: center;
 }
 
-.dl-modal__dot {
+.dl-progress__dot {
   width: 8px;
   height: 8px;
   border-radius: var(--radius-full);
   background: var(--text-tertiary);
 }
 
-.dl-modal__row-text {
+.dl-progress__row-text {
   flex: 1;
   min-width: 0;
 }
 
-.dl-modal__row-name {
+.dl-progress__row-name {
   overflow: hidden;
   color: var(--text-primary);
   font-size: var(--text-sm);
@@ -1441,7 +1356,7 @@
   white-space: nowrap;
 }
 
-.dl-modal__row-artist {
+.dl-progress__row-artist {
   margin-top: 2px;
   overflow: hidden;
   color: var(--text-secondary);
@@ -1450,7 +1365,7 @@
   white-space: nowrap;
 }
 
-.dl-modal__row-state {
+.dl-progress__row-state {
   flex: none;
   width: 50px;
   color: var(--text-secondary);
@@ -1459,15 +1374,15 @@
   text-align: right;
 }
 
-.dl-modal__row-state--active {
+.dl-progress__row-state--active {
   color: var(--accent);
 }
 
-.dl-modal__row-state > span {
+.dl-progress__row-state > span {
   color: var(--status-color, var(--text-secondary));
 }
 
-.dl-modal__footer {
+.dl-progress__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1477,42 +1392,27 @@
   font-size: var(--text-sm);
 }
 
-.dl-modal__footer-stats {
+.dl-progress__footer-stats {
   display: flex;
   gap: 16px;
 }
 
-.dl-modal__footer-strong {
+.dl-progress__footer-strong {
   color: var(--text-primary);
 }
 
-.dl-modal__footer-success {
+.dl-progress__footer-success {
   color: var(--success);
 }
 
-.dl-modal__footer-danger {
+.dl-progress__footer-danger {
   color: var(--danger-text);
 }
 
-@keyframes dl-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes dl-slide-in {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes dl-spin {
+@keyframes dl-progress-spin {
   to { transform: rotate(360deg); }
 }
+
 /* ── 新碟速递（横向专辑卡，1.9.0）── */
 .album-scroll {
   display: flex;

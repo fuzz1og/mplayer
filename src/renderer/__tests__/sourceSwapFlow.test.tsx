@@ -97,7 +97,7 @@ describe('SongList 单曲换源流程', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '更多操作: 晴天' }));
-    fireEvent.click(screen.getByRole('button', { name: '换源完整版' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '换源完整版' }));
     fireEvent.click(screen.getByRole('button', { name: 'QQ音乐' }));
     // 候选返回后直接选择（#391 后候选不再带可播性徽标）
     fireEvent.click(await screen.findByRole('button', { name: '晴天' }));
@@ -136,7 +136,7 @@ describe('SongList 单曲换源流程', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: '更多操作: 晴天' }));
-    fireEvent.click(screen.getByRole('button', { name: '换源完整版' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '换源完整版' }));
     fireEvent.click(screen.getByRole('button', { name: 'QQ音乐' }));
     fireEvent.click(await screen.findByRole('button', { name: '晴天' }));
 
@@ -162,7 +162,7 @@ describe('SongList 单曲换源流程', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '更多操作: 晴天' }));
-    fireEvent.click(screen.getByRole('button', { name: '查看歌手' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '查看歌手' }));
 
     await waitFor(() => {
       expect(useSearchStore.getState().preferredTab).toBe('artists');
@@ -186,7 +186,7 @@ describe('SongList 单曲换源流程', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '更多操作: 晴天' }));
-    fireEvent.click(screen.getByRole('button', { name: '换源完整版' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '换源完整版' }));
     fireEvent.click(screen.getByRole('button', { name: 'QQ音乐' }));
     // 搜索在途：弹层停在 loading 分支（无候选可选）
     expect(await screen.findByText('正在搜索可切换版本…')).toBeInTheDocument();
@@ -213,6 +213,6 @@ describe('SongList 单曲换源流程', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '更多操作: 本地歌曲' }));
     expect(screen.queryByRole('button', { name: '换源完整版' })).toBeNull();
-    expect(screen.getByRole('button', { name: '查看歌手' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '查看歌手' })).toBeInTheDocument();
   });
 });

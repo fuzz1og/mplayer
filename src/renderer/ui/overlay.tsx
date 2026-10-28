@@ -115,10 +115,9 @@ export const Dialog: React.FC<DialogProps> = ({
     if (dialog.open) return;
 
     nativeModalRef.current = openModal(dialog);
-    if (!nativeModalRef.current) {
-      const focusTarget = dialog.querySelector<HTMLElement>(DIALOG_FOCUSABLE) ?? dialog;
-      focusTarget.focus();
-    }
+    // 原生 showModal 在部分宿主不会自动落首焦点；统一显式聚焦第一个可聚焦元素。
+    const focusTarget = dialog.querySelector<HTMLElement>(DIALOG_FOCUSABLE) ?? dialog;
+    focusTarget.focus();
   }, [open]);
 
   // 关闭后把焦点还给触发元素（原生 modal 也会归还一次，这里保证 fallback 与受控关闭一致）。
@@ -160,6 +159,29 @@ export const Dialog: React.FC<DialogProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open, requestClose]);
 
+  /** Tab / Shift+Tab 在 Dialog 内循环；jsdom 与真实浏览器走同一套逻辑。 */
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDialogElement>) => {
+    if (event.key !== 'Tab') return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const nodes = Array.from(dialog.querySelectorAll<HTMLElement>(DIALOG_FOCUSABLE));
+    if (nodes.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === dialog)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   const classes = ['ui-dialog', `ui-dialog--${size}`];
   if (className) classes.push(className);
 
@@ -171,6 +193,7 @@ export const Dialog: React.FC<DialogProps> = ({
       aria-labelledby={titleId}
       aria-modal="true"
       tabIndex={-1}
+      onKeyDown={handleDialogKeyDown}
     >
       <div className="ui-dialog__header">
         <h2 id={titleId} className="ui-dialog__title">

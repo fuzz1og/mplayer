@@ -91,8 +91,8 @@ test('弹层截图：换源', async ({ page }) => {
 test('弹层截图：下载进度', async ({ page }) => {
   await openWithSong(page, '/#/recommend');
   await page.locator('.player-bar button[aria-label="更多操作"]').click();
-  await page.locator('.player-bar__more-item', { hasText: '下载' }).click();
-  await expect(page.locator('.dl-modal__panel')).toBeVisible({ timeout: 5000 });
+  await page.locator('.ui-menu__item', { hasText: '下载' }).click();
+  await expect(page.locator('.ui-dialog')).toBeVisible({ timeout: 5000 });
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'shots/ui-18-download-progress.png', animations: 'disabled' });
   expect(await page.locator('.errb__msg').count()).toBe(0);

@@ -90,46 +90,6 @@
   color: var(--text-primary);
 }
 
-/* 「…」菜单：形状对齐行操作菜单（发丝线 + 大圆角 + 浮层阴影），挂在顶栏内 */
-.lyrics-page__menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: var(--space-3);
-  z-index: 2;
-  min-width: 160px;
-  padding: var(--space-1);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-xl);
-  -webkit-app-region: no-drag;
-}
-
-.lyrics-page__menu-item {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--text-sm);
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-
-.lyrics-page__menu-item:hover {
-  background: var(--np-surface-hover);
-}
-
-.lyrics-page__menu-item[aria-pressed='true'] {
-  color: var(--accent-text);
-}
-
 /* ── 主体两列：左 46%（封面 + 信息 + 控件 + 进度），右 歌词/队列/详情 ── */
 .lyrics-page__body {
   position: relative;

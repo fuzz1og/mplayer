@@ -125,44 +125,6 @@
   position: relative;
 }
 
-.player-bar__more-menu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 8px);
-  z-index: 200;
-  min-width: 152px;
-  padding: 4px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-xl);
-}
-
-.player-bar__more-item {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  width: 100%;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  text-align: left;
-  cursor: pointer;
-}
-
-.player-bar__more-item:hover {
-  background: var(--bg-hover);
-}
-
-.player-bar__more-item:disabled {
-  color: var(--text-disabled);
-  cursor: not-allowed;
-}
-
 /* ============================================================
    1.9.0 内联样式收编（播放栏 / 播放控件 / 进度 / 音量）
    颜色一律 var(--…)；字号/字重/行高/圆角只引用 token；

@@ -206,7 +206,7 @@ describe('歌曲列表模块：资料库密度（density=library）', () => {
     expect(row.querySelector('.row-actions')).toHaveClass('row-actions--compact');
 
     fireEvent.click(actionButtons[0]);
-    const labels = Array.from(document.querySelectorAll('.row-menu__item')).map((item) => item.textContent?.trim());
+    const labels = Array.from(document.querySelectorAll('.ui-menu__item')).map((item) => item.textContent?.trim());
     // 顺序契约：下载、收藏、原 menuItems（下一首播放、加入歌单、换源完整版、查看歌手）
     expect(labels.slice(0, 2)).toEqual(['下载', '收藏']);
     expect(labels.slice(2, 4)).toEqual(['下一首播放', '加入歌单']);
