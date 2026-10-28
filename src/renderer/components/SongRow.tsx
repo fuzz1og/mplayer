@@ -63,6 +63,13 @@ interface SongRowProps {
   variant?: 'standard' | 'library';
   /** 是否显示时长列（固定 50px，library 密度资料库行使用） */
   showDuration?: boolean;
+  /**
+   * 序号列宽（场景覆盖）：缺省按密度取 28/50，榜单预览用 24。
+   * 列宽按场景配置（规格 L127），行不改排版。
+   */
+  indexWidth?: number;
+  /** 行尾插槽：渲染在操作按钮之前（如搜索结果的「N 个版本」展开按钮） */
+  actionsLead?: React.ReactNode;
   /** 行尾只保留单个 28px「更多」按钮，下载 / 收藏收进菜单 */
   compactActions?: boolean;
   style?: React.CSSProperties;
@@ -84,6 +91,7 @@ const SongRow: React.FC<SongRowProps> = ({
   onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, albumWidth = COL_ALBUM,
   fillTitle = false, dragHandle, actions, rowRef, compact = false,
   variant = 'standard', showDuration = false, compactActions = false, style,
+  indexWidth, actionsLead,
 }) => {
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
@@ -92,8 +100,8 @@ const SongRow: React.FC<SongRowProps> = ({
 
   const swap = useSongSwap(song, onSwap);
   const library = variant === 'library';
-  // 列宽按密度取契约值：序号 28 / 时长 44（资料库），其余场景沿用旧列宽
-  const indexColWidth = songIndexWidth(library ? 'library' : 'standard', showIndex);
+  // 列宽按密度取契约值：序号 28 / 时长 44（资料库），调用方可用 indexWidth 覆盖（榜单预览 24）
+  const indexColWidth = indexWidth ?? songIndexWidth(library ? 'library' : 'standard', showIndex);
   const durationColWidth = library ? COL_DURATION_LIBRARY : COL_DURATION;
 
   /** 查看歌手：以歌手名为关键词搜索并落在歌手 tab（与移动端一致） */
@@ -203,6 +211,8 @@ const SongRow: React.FC<SongRowProps> = ({
           {formatDuration(song.duration)}
         </div>
       )}
+      {/* 行尾轻量按钮插槽（如搜索结果「N 个版本」）：常驻可见，不进 hover 才出现的操作区 */}
+      {actionsLead}
       {/* Actions：缺省用共享操作区，调用方可整块替换（如队列页的加入歌单/移除） */}
       {actions ?? (
         <RowActionButtons

@@ -27,4 +27,10 @@ describe('歌曲行排版 token（#699 密度协议）', () => {
     expect(globalCss).toContain('--song-row-gap: 10px;');
     expect(globalCss).toContain('--song-row-head-height: 28px;');
   });
+
+  it('榜单预览行的序号字号只登记一次，组件样式只消费变量（#694）', () => {
+    expect(globalCss).toContain('--song-row-rank-size: 12px;');
+    expect(songlistCss).toMatch(/\.chart__list \.song-row__number \{[^}]*font-size: var\(--song-row-rank-size\);/);
+    expect(songlistCss).toMatch(/\.chart__title \{[^}]*font-size: var\(--text-xl\);[^}]*font-weight: var\(--weight-semibold\);/);
+  });
 });

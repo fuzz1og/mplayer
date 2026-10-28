@@ -11,7 +11,7 @@ import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { searchService } from '@/renderer/services/searchService';
 import { cacheArtistMeta } from '@/renderer/services/artistMetaCache';
-import ChartPanel from '@/renderer/components/ChartPanel';
+import ChartPanel, { CHART_PREVIEW_ROWS } from '@/renderer/components/ChartPanel';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
 import SongList from '@/renderer/components/SongList';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
@@ -100,6 +100,8 @@ const DiscoverPageV2: React.FC = () => {
   const [newChart, setNewChart] = useState<ChartEntry>(EMPTY_CHART);
   const [hotLoading, setHotLoading] = useState(true);
   const [newLoading, setNewLoading] = useState(true);
+  /** 榜单落库时间（本地时戳）：两列共用一个源，只记一份，渲染「更新于 HH:mm」 */
+  const [chartUpdatedAt, setChartUpdatedAt] = useState<number | null>(null);
   const [hotError, setHotError] = useState<string | null>(null);
   const [newError, setNewError] = useState<string | null>(null);
 
@@ -143,6 +145,7 @@ const DiscoverPageV2: React.FC = () => {
     if (cached) {
       setHotChart(cached.hot); setNewChart(cached.new);
       setHotLoading(false); setNewLoading(false);
+      setChartUpdatedAt(cached.timestamp);
     } else {
       setHotLoading(true); setNewLoading(true);
       setHotError(null); setNewError(null);
@@ -159,7 +162,9 @@ const DiscoverPageV2: React.FC = () => {
       const fresh = toChartEntry(groups, source, ids.new);
       setHotChart(hot);
       setNewChart(fresh);
-      cacheRef.current[source] = { hot, new: fresh, timestamp: Date.now() };
+      const timestamp = Date.now();
+      cacheRef.current[source] = { hot, new: fresh, timestamp };
+      setChartUpdatedAt(timestamp);
     } catch (err: any) {
       if (!mountedRef.current || !isCurrentFetch()) return;
       if (!cached) {
@@ -264,6 +269,7 @@ const DiscoverPageV2: React.FC = () => {
         setNewError(null);
         setHotLoading(false);
         setNewLoading(false);
+        setChartUpdatedAt(cached.timestamp);
       }
     } else if (activeTab === 'albums') {
       setAlbumsError(null);
@@ -323,16 +329,32 @@ const DiscoverPageV2: React.FC = () => {
   const handleNoSelectionChange = useCallback((_ids: string[]) => {}, []);
   const handleSearchLoadMore = useCallback(() => { void searchService.loadMore(); }, []);
 
-  const handlePlaySong = async (song: Song, chartId?: string) => {
-    if (chartId) playedChartIdRef.current = chartId;
+  /**
+   * 播放单曲：无 url 时按「歌名 歌手」补一个**精确匹配**的可播版本，且只回填 url——
+   * 绝不用搜索结果第一条顶替，否则排序差的源会播同名不同歌手的歌（#639 C3，判据与编排在 core）。
+   */
+  const playSongExact = useCallback(async (song: Song) => {
     try {
-      // #639 C3：无 url 歌曲按「歌名 歌手」补一个**精确匹配**的可播版本，且只回填 url（歌名/歌手/封面保持点击的歌）——
-      // 绝不用搜索结果第一条顶替，否则酷我这类排序差的源会播同名不同歌手的歌（如《单车恋人》→ cover 版）。判据与编排在 core。
       await play(await resolvePlayableVersionForDesktop(song));
     } catch (error) {
       console.error('播放失败:', error);
       toast.error('播放失败，请检查网络连接或稍后重试');
     }
+  }, [play]);
+
+  /**
+   * 榜单点播（D1/D2）：列表只回传歌曲、整榜队列与行下标，建队列与播放在本页。
+   * 整榜入队而不是单曲——队列恒 1 首时「下一首」预取无曲可取，换歌明显变慢。
+   */
+  const handleChartPlay = useCallback((song: Song, queue: Song[], index: number, chartId: ChartKind) => {
+    playedChartIdRef.current = chartId;
+    setCurrentPlaylist(queue, index);
+    void playSongExact(song);
+  }, [playSongExact, setCurrentPlaylist]);
+
+  /** 榜单详情路由的 type 段：`<source>` 是热歌、`<source>_new` 是新歌（键域同 HotlistDetailPage） */
+  const openChartDetail = (kind: ChartKind) => {
+    navigate(`/hotlist/${kind === 'hot' ? contentSource : `${contentSource}_new`}`);
   };
 
   const isCurrentSong = (songId: string, sourceType?: string, chartId?: string) =>
@@ -346,9 +368,15 @@ const DiscoverPageV2: React.FC = () => {
     fetchCharts(contentSource);
   };
 
-  /** 面板标题 = 源名 · 榜单名（榜单名取自 core ToplistGroup.name，缺失时回落通用名）。 */
-  const chartTitle = (kind: ChartKind, entry: ChartEntry) =>
-    `${SOURCE_DISPLAY_NAMES[contentSource]} · ${entry.name || CHART_KIND_LABELS[kind]}`;
+  /** 列标题 = 榜单名（core ToplistGroup.name，缺失时回落通用名）；不带来源前缀——来源已由页面 segmented 选过。 */
+  const chartTitle = (kind: ChartKind, entry: ChartEntry) => entry.name || CHART_KIND_LABELS[kind];
+
+  /** 两列行数取较小者（且不超过预览上限），保证同一列高；某列空着时不拖累另一列 */
+  const chartRows = Math.min(
+    hotChart.songs.length || CHART_PREVIEW_ROWS,
+    newChart.songs.length || CHART_PREVIEW_ROWS,
+    CHART_PREVIEW_ROWS,
+  );
 
   const searchLoading = useSearchStore((s) => s.loading);
   const searchLoadingMore = useSearchStore((s) => s.loadingMore);
@@ -694,9 +722,10 @@ const DiscoverPageV2: React.FC = () => {
         </div>
       </div>
 
-      <div className={activeTab === 'artists' ? 'discover-body discover-body--flush' : 'discover-body'}>
+      <div className={(activeTab === 'charts' || activeTab === 'artists') ? 'discover-body discover-body--flush' : 'discover-body'}>
+        {/* 排行榜两列与页面共用一个滚动上下文（与推荐页/资料库同口径），列自身不滚动 */}
         {activeTab === 'charts' && (
-          <div className="discover-panel">
+          <div className="discover-flow" data-scroll-container>
             <div className="discover-charts">
               <ChartPanel
                 title={chartTitle('hot', hotChart)}
@@ -704,9 +733,16 @@ const DiscoverPageV2: React.FC = () => {
                 songs={hotChart.songs}
                 loading={hotLoading}
                 error={hotError}
-                onPlay={handlePlaySong}
+                updatedAt={chartUpdatedAt}
+                rows={chartRows}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handleChartPlay}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
                 isCurrentSong={isCurrentSong}
                 onRetry={handleRetryCharts}
+                onViewAll={() => openChartDetail('hot')}
               />
               <ChartPanel
                 title={chartTitle('new', newChart)}
@@ -714,9 +750,16 @@ const DiscoverPageV2: React.FC = () => {
                 songs={newChart.songs}
                 loading={newLoading}
                 error={newError}
-                onPlay={handlePlaySong}
+                updatedAt={chartUpdatedAt}
+                rows={chartRows}
+                isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
+                onPlay={handleChartPlay}
+                onToggleFavorite={toggleFavorite}
+                onDownload={download}
                 isCurrentSong={isCurrentSong}
                 onRetry={handleRetryCharts}
+                onViewAll={() => openChartDetail('new')}
               />
             </div>
           </div>
