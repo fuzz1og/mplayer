@@ -186,7 +186,7 @@ const AlbumDetailPage: React.FC = () => {
                 batchActions={batchActions}
               />
               <SongList
-                songs={songs}
+                songs={visibleSongs}
                 currentSongId={currentSong?.id}
                 isPlaying={isPlaying}
                 favoriteIds={favoriteIds}
