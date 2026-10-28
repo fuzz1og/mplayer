@@ -12,14 +12,13 @@ import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
 import { useVirtualRows, stickyTopForContent, VIRTUALIZE_THRESHOLD } from '@/renderer/hooks/useVirtualRows';
 import {
   COL_CHECKBOX,
-  COL_INDEX,
-  COL_INDEX_LIBRARY,
   COL_ALBUM,
   COL_ACTIONS,
   COL_ACTIONS_COMPACT,
   COL_DURATION,
   COL_DURATION_LIBRARY,
   colWidth,
+  songIndexWidth,
 } from '@/renderer/components/songTableColumns';
 import { songRowCoverSize, songRowHeight } from '@/renderer/components/songRowMetrics';
 
@@ -112,7 +111,7 @@ const SongList: React.FC<SongListProps> = ({
   const showHeader = showHeaderProp ?? density !== 'library';
   const compactActions = density === 'library';
   // 表头 / 行 / 骨架共用的列宽：资料库密度按原型收窄（序号 28 / 时长 44 / 操作 56）
-  const indexWidth = density === 'library' ? COL_INDEX_LIBRARY : COL_INDEX;
+  const indexWidth = songIndexWidth(density);
   const durationWidth = density === 'library' ? COL_DURATION_LIBRARY : COL_DURATION;
   const actionWidth = compactActions ? COL_ACTIONS_COMPACT : COL_ACTIONS;
   // 内部状态管理（当外部没有提供时）

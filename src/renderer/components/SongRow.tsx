@@ -9,7 +9,7 @@ import SourceSwapModal from '@/renderer/components/SourceSwapModal';
 import SongCover from '@/renderer/components/SongCover';
 import { type RowActionItem } from '@/renderer/components/RowActionMenu';
 import RowActionButtons from '@/renderer/components/RowActionButtons';
-import { COL_CHECKBOX, COL_INDEX, COL_INDEX_COMPACT, COL_INDEX_LIBRARY, COL_ALBUM, COL_DURATION, COL_DURATION_LIBRARY, colWidth } from '@/renderer/components/songTableColumns';
+import { COL_CHECKBOX, COL_ALBUM, COL_DURATION, COL_DURATION_LIBRARY, colWidth, songIndexWidth } from '@/renderer/components/songTableColumns';
 import { songRowCoverSize, songRowHeight } from '@/renderer/components/songRowMetrics';
 import { useSongSwap } from '@/renderer/hooks/useSongSwap';
 import { useSearchStore } from '@/renderer/store/searchStore';
@@ -93,9 +93,7 @@ const SongRow: React.FC<SongRowProps> = ({
   const swap = useSongSwap(song, onSwap);
   const library = variant === 'library';
   // 列宽按密度取契约值：序号 28 / 时长 44（资料库），其余场景沿用旧列宽
-  const indexColWidth = showIndex
-    ? (library ? COL_INDEX_LIBRARY : COL_INDEX)
-    : COL_INDEX_COMPACT;
+  const indexColWidth = songIndexWidth(library ? 'library' : 'standard', showIndex);
   const durationColWidth = library ? COL_DURATION_LIBRARY : COL_DURATION;
 
   /** 查看歌手：以歌手名为关键词搜索并落在歌手 tab（与移动端一致） */

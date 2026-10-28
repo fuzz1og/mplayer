@@ -12,7 +12,7 @@ import SongRow from '@/renderer/components/SongRow';
 import SortableSongRow from '@/renderer/components/SortableSongRow';
 import VirtualSortableList from '@/renderer/components/VirtualSortableList';
 import { moveItem } from '@/renderer/utils/reorder';
-import { COL_ACTIONS, COL_CHECKBOX, COL_INDEX_LIBRARY, colWidth } from '@/renderer/components/songTableColumns';
+import { COL_ACTIONS, COL_CHECKBOX, colWidth, songIndexWidth } from '@/renderer/components/songTableColumns';
 import { reorderVisibleSongs } from '@/renderer/utils/playlistReorder';
 import { LIBRARY_ROW_HEIGHT } from '@/renderer/components/songRowMetrics';
 import { filterSongsByQuery } from '@/renderer/utils/songFilter';
@@ -521,7 +521,7 @@ const PlaylistDetailPage: React.FC = () => {
                       />
                     </div>
                   )}
-                  <div className="playlist-detail__th--num" style={colWidth(COL_INDEX_LIBRARY)}>#</div>
+                  <div className="playlist-detail__th--num" style={colWidth(songIndexWidth('library'))}>#</div>
                   <div className="playlist-detail__th--title">标题</div>
                   <div className="playlist-detail__th--actions" style={colWidth(COL_ACTIONS)}>操作</div>
                 </div>

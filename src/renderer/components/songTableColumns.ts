@@ -29,6 +29,15 @@ export const COL_ACTIONS = 140;
 /** 紧凑操作列宽：`compactActions` 只留单个 28px 圆形「更多」按钮（保留 56px 悬停位） */
 export const COL_ACTIONS_COMPACT = 56;
 
+/**
+ * 序号列宽（表头 / 行共用）：资料库密度 28、通用密度 50；不显示序号但挂拖拽句柄时收窄到 30。
+ * 表头与行各自算一遍就会错位——队列面板曾表头 50、行 28，标题列整列错 22px。
+ */
+export function songIndexWidth(density: 'standard' | 'library', showIndex = true): number {
+  if (!showIndex) return COL_INDEX_COMPACT;
+  return density === 'library' ? COL_INDEX_LIBRARY : COL_INDEX;
+}
+
 /** 行高常量已收口到 songRowMetrics（#699）：这里只做兼容再导出，避免三处各写一份 magic。 */
 export { SONG_ROW_HEIGHT, LIBRARY_ROW_HEIGHT, SONG_ROW_HEIGHTS, SONG_ROW_COVER_SIZES } from './songRowMetrics';
 export type { SongListDensity } from './songRowMetrics';
