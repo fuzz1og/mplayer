@@ -19,7 +19,7 @@ function cssBlock(selector: string): string {
 }
 
 /**
- * 1.9.0 导航：本地音乐/下载管理收进「资料库」的「全部」，收藏与历史保留快捷入口；
+ * 1.9.0 导航：本地音乐/下载管理收进「资料库」入口，收藏与历史保留快捷入口；
  * 设置不再是侧栏项——它上移标题栏（用例见 titleBar.test.tsx）。
  */
 describe('Sidebar', () => {
@@ -35,7 +35,7 @@ describe('Sidebar', () => {
   it('渲染 6 个入口且顺序固定', () => {
     render(<Sidebar {...defaultProps} />);
     const labels = Array.from(document.querySelectorAll('.sidebar__label')).map((el) => el.textContent?.trim());
-    expect(labels).toEqual(['推荐', '发现', '全部', '我喜欢的音乐', '最近播放', '我的歌单']);
+    expect(labels).toEqual(['推荐', '发现', '资料库', '我喜欢的音乐', '最近播放', '我的歌单']);
     expect(screen.queryByText('设置')).not.toBeInTheDocument();
   });
 
@@ -74,9 +74,9 @@ describe('Sidebar', () => {
     expect(defaultProps.onPageChange).toHaveBeenCalledWith('favorites');
   });
 
-  it('「全部」是合并后的单一入口', () => {
+  it('「资料库」是合并后的单一入口', () => {
     render(<Sidebar {...defaultProps} />);
-    fireEvent.click(screen.getByText('全部'));
+    fireEvent.click(screen.getByRole('button', { name: '资料库' }));
     expect(defaultProps.onPageChange).toHaveBeenCalledWith('library');
     // 旧入口不再各自占一行
     expect(screen.queryByText('本地音乐')).not.toBeInTheDocument();

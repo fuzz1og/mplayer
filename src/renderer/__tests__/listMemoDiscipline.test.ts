@@ -180,48 +180,58 @@ describe('列表 memo 纪律（#412）', () => {
   });
 
   it('行高 64 是布局唯一来源：没有 measureElement，estimateSize 就是布局（#445）', () => {
+    // #699：行高单源收口到 songRowMetrics，useVirtualRows 只再导出，不再各写一份 64。
+    const metrics = stripComments(read('renderer/components/songRowMetrics.ts'));
+    expect(metrics).toContain('standard: 64');
     const hooks = stripComments(read('renderer/hooks/useVirtualRows.ts'));
-    expect(hooks).toContain('export const SONG_ROW_HEIGHT = 64');
+    expect(hooks).toContain("from '@/renderer/components/songRowMetrics'");
+    expect(hooks).toContain('export { SONG_ROW_HEIGHT }');
+    expect(hooks).not.toContain('SONG_ROW_HEIGHT = 64');
     const list = stripComments(read('renderer/components/VirtualSortableList.tsx'));
     expect(list).toContain('const estimateSongRow = () => SONG_ROW_HEIGHT');
     // 全仓没有 measureElement → virtualItem.size 永远等于 estimateSize：
     // 真实行高与常量不符时行会互相压叠且不报错，所以常量必须与 SongRow 的布局一致
     expect(list).not.toContain('measureElement');
     expect(stripComments(read('renderer/components/VirtualRow.tsx'))).toMatch(/height: `\$\{size\}px`/);
-    // 1.9.0 起行高不再靠内联样式表达：44px 封面盒 + 上下各 10px 内边距 = 64 这条等式
-    // 仍然成立，只是搬到了 songlist.css 的类里。断言因此从「读组件源码」改成
-    // 「组件挂了类 + 类里就是这套尺寸」，验的仍是同一个布局事实。
+    // 1.9.0 起行高不再靠固定像素的内联样式表达；#699 起组件只下发 --song-row-* 变量，
+    // 由 songlist.css 的类消费。断言验的仍是「行挂类 + 类里用同一协议变量」。
     const row = stripComments(read('renderer/components/SongRow.tsx'));
     expect(row).toContain('className="song-row"');
     expect(row).toContain('className="song-row__cover"');
     expect(row).toContain('className="song-row__album"');
-    expect(row).not.toContain('style={{');
+    expect(row).toContain("'--song-row-height'");
+    expect(row).toContain("'--song-row-cover'");
 
     const css = read('renderer/styles/songlist.css');
     expect(css).toMatch(/\.song-row \{[^}]*padding: 10px 16px;/);
-    expect(css).toMatch(/\.song-row__cover \{[^}]*width: 44px;[^}]*height: 44px;/);
+    expect(css).toMatch(/\.song-row__cover \{[^}]*width: var\(--song-row-cover\);[^}]*height: var\(--song-row-cover\);/);
     expect(css).toMatch(/\.song-row__title \{[^}]*white-space: nowrap;/);
     expect(css).toMatch(/\.song-row__album \{[^}]*white-space: nowrap;/);
   });
 
   it('资料库密度 46px 是第二份布局事实：estimate 与 CSS 同源，旧私有覆盖已删（#685）', () => {
+    // #699：46 / 30 只在 songRowMetrics 定义一次；songTableColumns 只做兼容再导出。
+    const metrics = stripComments(read('renderer/components/songRowMetrics.ts'));
+    expect(metrics).toContain('library: 46');
+    expect(metrics).toContain('library: 30');
     const columns = stripComments(read('renderer/components/songTableColumns.ts'));
-    expect(columns).toContain('export const LIBRARY_ROW_HEIGHT = 46');
+    expect(columns).toContain("export { SONG_ROW_HEIGHT, LIBRARY_ROW_HEIGHT");
 
     const list = stripComments(read('renderer/components/SongList.tsx'));
-    expect(list).toContain("density === 'library' ? LIBRARY_ROW_HEIGHT : SONG_ROW_HEIGHT");
+    expect(list).toContain('songRowHeight(density)');
     expect(list).toContain('data-density={density}');
 
     const css = read('renderer/styles/songlist.css');
     expect(css).toMatch(/\.song-list\[data-density='library'\]/);
-    expect(css).toMatch(/\.song-row\[data-variant='library'\] \{[^}]*min-height: 46px;/);
-    expect(css).toMatch(/\.song-row\[data-variant='library'\] \{[^}]*padding: 3px 12px;/);
-    expect(css).toMatch(/\.song-row\[data-variant='library'\] \.song-row__cover \{[^}]*width: 30px;[^}]*height: 30px;/);
-    expect(css).toMatch(/\.row-actions--compact \{[^}]*width: 28px;/);
+    expect(css).toMatch(/\.song-row\[data-variant='library'\] \{[^}]*min-height: var\(--song-row-height\);/);
+    expect(css).toMatch(/\.song-row\[data-variant='library'\] \{[^}]*padding: 0 var\(--song-row-padding-x\);/);
+    expect(css).toMatch(/\.song-row\[data-variant='library'\] \.song-row__cover \{[^}]*width: var\(--song-row-cover\);[^}]*height: var\(--song-row-cover\);/);
+    expect(css).toMatch(/\.row-actions--compact \.row-actions__btn \{[^}]*width: 28px;/);
 
     // 骨架屏必须跟随密度，否则加载态行高错位
     const skeleton = stripComments(read('renderer/components/SongListSkeleton.tsx'));
     expect(skeleton).toContain("density === 'library'");
+    expect(skeleton).toContain("'--song-row-height'");
 
     // 资料库不再维护私有行布局
     const libraryCss = stripComments(read('renderer/styles/library.css'));

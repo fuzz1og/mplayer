@@ -25,7 +25,7 @@ import { IpcClient } from '@/renderer/services/IpcClient';
 import { toast } from '@/renderer/services/toastStore';
 import { refreshSongCover } from '@/renderer/utils/songCoverRefresh';
 import SongList from '@/renderer/components/SongList';
-import { Progress } from '@/renderer/ui';
+import { PageHeader, Progress } from '@/renderer/ui';
 import '@/renderer/styles/library.css';
 
 /** 资料库（#685）：收藏 / 本地 / 历史去重后的聚合列表，走共享 SongList 的 library 密度（无表头 / 时长列 / 行尾「更多」）。
@@ -111,9 +111,11 @@ const parseTabParam = (value: string | null): TabKey => {
 const LibraryPage: React.FC = () => {
   const favorites = useFavoriteStore((s) => s.favorites);
   const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const favoritesLoading = useFavoriteStore((s) => s.loading);
   const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const loadFavorites = useFavoriteStore((s) => s.loadFavorites);
   const updateFavoriteCover = useFavoriteStore((s) => s.updateFavoriteCover);
+  const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
 
   const localFolders = useLocalStore((s) => s.folders);
   const localSongs = useLocalStore((s) => s.songs);
@@ -130,7 +132,7 @@ const LibraryPage: React.FC = () => {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const play = usePlayerStore((s) => s.play);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
-  const { download } = useDownload();
+  const { download, downloadBatch } = useDownload();
 
   // 分段由 URL 单一驱动（#685）：旧路由 /local、/download 会 Navigate 到 ?tab=local|downloads。
   const [searchParams, setSearchParams] = useSearchParams();
@@ -237,6 +239,27 @@ const LibraryPage: React.FC = () => {
     void download(song);
   }, [download]);
 
+  /** 选择模式 · 批量下载：走真实 batch 通道（不是逐首 start）。 */
+  const handleBatchDownload = useCallback((songs: Song[]) => {
+    void downloadBatch(songs);
+  }, [downloadBatch]);
+
+  /** 选择模式 · 批量删除：资料库里可持久移除的是收藏项；本地文件与历史不由本页删除。 */
+  const handleBatchDelete = useCallback((songs: Song[]) => {
+    const favoriteIdSet = new Set(favorites.map((song) => song.id));
+    const removable = songs.filter((song) => favoriteIdSet.has(song.id));
+    if (removable.length === 0) {
+      toast.error('所选歌曲不在收藏中，无法从资料库删除');
+      return;
+    }
+    void Promise.all(removable.map((song) => removeFavorite(song.id)))
+      .then(() => toast.success('已从资料库移除 ' + removable.length + ' 首'))
+      .catch((error) => {
+        console.error('批量删除失败:', error);
+        toast.error('批量删除失败');
+      });
+  }, [favorites, removeFavorite]);
+
   const handlePlayGroup = useCallback((group: GroupRow) => {
     setCurrentPlaylist(group.songs, 0);
     void play(group.firstSong);
@@ -263,9 +286,7 @@ const LibraryPage: React.FC = () => {
     setSortOpen(false);
   }, []);
 
-  const cycleSort = useCallback(() => {
-    setSortKey((prev) => (prev === 'added' ? 'title' : prev === 'title' ? 'artist' : 'added'));
-  }, []);
+  const sortLabel = SORT_ITEMS.find((item) => item.key === sortKey)?.label ?? '按最近添加';
 
   const handleAddFolder = useCallback(() => {
     void addLocalFolder()
@@ -366,7 +387,6 @@ const LibraryPage: React.FC = () => {
   );
 
   const finishedCount = tasks.filter((task) => task.status === 'completed' || task.status === 'error').length;
-  const sortText = SORT_ITEMS.find((item) => item.key === sortKey)?.text ?? '按最近添加排序';
 
   /**
    * 两个歌曲分段（聚合 / 本地）共用同一份列表口径：density / 表头 / 时长列 / 回调只写一次，
@@ -374,7 +394,7 @@ const LibraryPage: React.FC = () => {
    */
   const songListCommon = {
     density: 'library' as const,
-    showHeader: false,
+    showHeader: true,
     showDuration: true,
     currentSongId: currentSong?.id,
     isPlaying,
@@ -382,59 +402,70 @@ const LibraryPage: React.FC = () => {
     onToggleFavorite: handleToggleFavorite,
     onDownload: handleDownload,
     onCoverError: handleCoverError,
+    // 按需选择模式（#699）：普通浏览不显示复选框；点「选择」后才出现批量工具栏
+    enableBatchDownload: true,
+    onBatchDownload: handleBatchDownload,
+    enableBatchDelete: true,
+    onBatchDelete: handleBatchDelete,
+    enableBatchAddToPlaylist: true,
   };
 
   return (
     <div className="library">
-      <header className="library__header">
-        <h1 className="library__title">资料库</h1>
-        <span className="library__stats">
-          {formatCount(librarySongs.length)} 首 · {formatCount(albumCount)} 张专辑 · 本地 {formatCount(localSongs.length)} 首
-        </span>
-        <div className="library__header-actions">
-          <div className="library__sort-wrap">
+      <PageHeader
+        className="library__header"
+        title="资料库"
+        lead={
+          <span className="library__stats">
+            {formatCount(librarySongs.length)} 首 · {formatCount(albumCount)} 张专辑 · 本地 {formatCount(localSongs.length)} 首
+          </span>
+        }
+        actions={
+          <>
+            <div className="library__sort-wrap">
+              <button
+                type="button"
+                className="library__text-btn"
+                aria-haspopup="menu"
+                aria-expanded={sortOpen}
+                onClick={() => setSortOpen((prev) => !prev)}
+              >
+                <ArrowDownUp size={15} aria-hidden="true" />
+                排序：{sortLabel}
+              </button>
+              {sortOpen && (
+                <>
+                  <div className="library__menu-scrim" onClick={() => setSortOpen(false)} aria-hidden="true" />
+                  <div className="library__menu" role="menu">
+                    {SORT_ITEMS.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={sortKey === item.key}
+                        className="library__menu-item"
+                        onClick={() => chooseSort(item.key)}
+                      >
+                        {item.label}
+                        {sortKey === item.key && <Check size={14} className="library__menu-check" aria-hidden="true" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <button
               type="button"
-              className="library__text-btn"
-              aria-haspopup="menu"
-              aria-expanded={sortOpen}
-              onClick={() => setSortOpen((prev) => !prev)}
+              className="library__import"
+              onClick={handleAddFolder}
+              disabled={localScanning}
             >
-              <ArrowDownUp size={15} aria-hidden="true" />
-              排序
+              <Plus size={15} aria-hidden="true" />
+              导入
             </button>
-            {sortOpen && (
-              <>
-                <div className="library__menu-scrim" onClick={() => setSortOpen(false)} aria-hidden="true" />
-                <div className="library__menu" role="menu">
-                  {SORT_ITEMS.map((item) => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={sortKey === item.key}
-                      className="library__menu-item"
-                      onClick={() => chooseSort(item.key)}
-                    >
-                      {item.label}
-                      {sortKey === item.key && <Check size={14} className="library__menu-check" aria-hidden="true" />}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-          <button
-            type="button"
-            className="library__import"
-            onClick={handleAddFolder}
-            disabled={localScanning}
-          >
-            <Plus size={15} aria-hidden="true" />
-            导入
-          </button>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <div className="library__tabs-row">
         <div className="library__segmented" role="tablist" aria-label="资料库视图">
@@ -451,9 +482,6 @@ const LibraryPage: React.FC = () => {
             </button>
           ))}
         </div>
-        <button type="button" className="library__sortlink" onClick={cycleSort}>
-          {sortText}
-        </button>
       </div>
 
       <div className="library__scroll" role="tabpanel">
@@ -463,6 +491,7 @@ const LibraryPage: React.FC = () => {
               {...songListCommon}
               songs={sortedSongs}
               favoriteIds={favoriteIds}
+              loading={favoritesLoading && sortedSongs.length === 0}
               emptyText="资料库还是空的——导入本地文件夹，或在任意列表点小心心。"
             />
           </div>
@@ -473,7 +502,8 @@ const LibraryPage: React.FC = () => {
             {albumGroups.length === 0 ? (
               <div className="library__empty">
                 <Disc3 size={26} aria-hidden="true" />
-                <div>还没有可聚合的专辑。</div>
+                <div className="library__empty-title">还没有可聚合的专辑</div>
+                <div className="library__empty-sub">收藏、本地或最近播放里的专辑信息会归到这里。</div>
               </div>
             ) : albumGroups.map((group) => (
               <div
@@ -508,7 +538,8 @@ const LibraryPage: React.FC = () => {
             {artistGroups.length === 0 ? (
               <div className="library__empty">
                 <User size={26} aria-hidden="true" />
-                <div>还没有可聚合的歌手。</div>
+                <div className="library__empty-title">还没有可聚合的歌手</div>
+                <div className="library__empty-sub">收藏、本地或最近播放里的歌手信息会归到这里。</div>
               </div>
             ) : artistGroups.map((group) => (
               <div
@@ -560,7 +591,14 @@ const LibraryPage: React.FC = () => {
               {tasks.length === 0 ? (
                 <div className="library__empty">
                   <Music2 size={26} aria-hidden="true" />
-                  <div>{loadingDownloads ? '加载中…' : '暂无下载任务。'}</div>
+                  {loadingDownloads ? (
+                    <div className="library__empty-title">加载中…</div>
+                  ) : (
+                    <>
+                      <div className="library__empty-title">暂无下载任务</div>
+                      <div className="library__empty-sub">在歌曲「更多」菜单里选择下载，任务会出现在这里。</div>
+                    </>
+                  )}
                 </div>
               ) : (
                 <>
@@ -692,6 +730,7 @@ const LibraryPage: React.FC = () => {
                 {...songListCommon}
                 songs={localDisplayed}
                 favoriteIds={favoriteIds}
+                loading={localScanning && localDisplayed.length === 0}
                 emptyText="还没有本地歌曲——导入一个音乐目录后会自动出现在这里。"
               />
             </div>
