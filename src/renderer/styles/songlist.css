@@ -3396,3 +3396,26 @@
   top: var(--menu-top);
   right: var(--menu-right);
 }
+
+/* ── 详情页滚动与 hero（#700）：hero 与列表同一滚动上下文 ── */
+.detail-page__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.album__hero {
+  padding: 24px 28px 18px;
+}
+
+.album__hero .ui-page-hero__media img {
+  width: 200px;
+  height: 200px;
+  border-radius: var(--radius-md);
+}
+
+.album__list {
+  flex: none;
+  padding: 0 0 24px;
+  overflow: visible;
+}
