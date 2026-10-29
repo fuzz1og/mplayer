@@ -38,6 +38,17 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
     return findCurrentLyricIndex(parsedLyrics.lines, currentTime);
   });
 
+  // 逐字歌词（#722）同理只在换字时重渲染：返回原生数字，未变化不打扰订阅者
+  const currentWordIndex = usePlaybackSelector((snapshot) => {
+    const lines = parsedLyrics?.lines;
+    if (!lines || lines.length === 0) return -1;
+    const currentTime = typeof snapshot.position === 'number' && !isNaN(snapshot.position) ? snapshot.position : 0;
+    const lineIndex = findCurrentLyricIndex(lines, currentTime);
+    const words = lineIndex >= 0 ? lines[lineIndex].words : undefined;
+    if (!words || words.length === 0) return -1;
+    return findCurrentLyricIndex(words, currentTime);
+  });
+
   useEffect(() => {
     if (currentLineIndex < 0 || !activeLineRef.current || !containerRef.current) {
       return;
@@ -88,7 +99,17 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
               data-active={isActive || undefined}
             >
               <span className="lyrics__text">
-                {line.text}
+                {line.words && line.words.length > 0
+                  ? line.words.map((word, wordIndex) => (
+                      <span
+                        key={wordIndex}
+                        className="lyrics__word"
+                        data-active={(isActive && wordIndex === currentWordIndex) || undefined}
+                      >
+                        {word.text}
+                      </span>
+                    ))
+                  : line.text}
               </span>
             </div>
           );
