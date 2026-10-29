@@ -96,7 +96,7 @@ describe('列表 memo 纪律（#412）', () => {
   it('分组结果的「N 个版本」用稳定渲染函数，不在行 props 里塞每帧新建的元素', () => {
     const src = stripComments(read('renderer/components/GroupedSongList.tsx'));
     expect(src).toContain('const renderActionsLead = useCallback');
-    expect(src).toContain('renderActionsLead={lead ? renderActionsLead : undefined}');
+    expect(src).toContain('renderActionsLead={renderActionsLead}');
     expect(src).not.toMatch(/renderActionsLead=\{\(\) =>/);
     expect(read('renderer/components/SongRow.tsx')).toContain('renderActionsLead?: (song: Song, index: number) => React.ReactNode');
   });

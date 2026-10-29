@@ -1309,6 +1309,18 @@
   padding-left: var(--space-4);
 }
 
+/* 行尾「N 个版本」的槽：每行都占同一列宽（没有版本按钮时留空）。
+   按钮若直接做行的 flex 兄弟节点，宽度会从弹性标题区扣走、把专辑列按行推向左侧，
+   同一列表里就出现「有些行有、有些行没」的锯齿错位。 */
+
+.sgroup__versions-slot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  width: var(--col-width);
+}
+
 /* 行尾「N 个版本」：常驻轻量文字按钮，展开态由 aria-expanded 表达 */
 
 .sgroup__versions {
