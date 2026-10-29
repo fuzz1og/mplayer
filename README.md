@@ -84,13 +84,13 @@
 ### 桌面端（Electron）
 
 <p align="center">
-  <img src="docs/assets/readme/desktop-recommend.jpg" width="92%" alt="推荐" />
+  <img src="docs/assets/readme/desktop-recommend.jpg" width="92%" alt="推荐 · 今日主打与推荐歌单" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/readme/desktop-discover.jpg" width="31%" alt="发现音乐 · 多源榜单" />
+  <img src="docs/assets/readme/desktop-discover.jpg" width="31%" alt="发现 · 多源热榜" />
   <img src="docs/assets/readme/desktop-search.jpg" width="31%" alt="搜索 · 版本聚合" />
-  <img src="docs/assets/readme/desktop-settings.jpg" width="31%" alt="设置 · 更新与关于" />
+  <img src="docs/assets/readme/desktop-settings.jpg" width="31%" alt="设置 · 外观（主题 / 密度 / 材质）" />
 </p>
 
 ### 移动端（Expo / React Native）

@@ -84,13 +84,13 @@ The desktop app checks for updates on launch and silently downloads a new versio
 ### Desktop (Electron)
 
 <p align="center">
-  <img src="docs/assets/readme/desktop-recommend.jpg" width="92%" alt="Recommendations" />
+  <img src="docs/assets/readme/desktop-recommend.jpg" width="92%" alt="Recommendations · today's picks and playlists" />
 </p>
 
 <p align="center">
   <img src="docs/assets/readme/desktop-discover.jpg" width="31%" alt="Discover · multi-source charts" />
   <img src="docs/assets/readme/desktop-search.jpg" width="31%" alt="Search · version grouping" />
-  <img src="docs/assets/readme/desktop-settings.jpg" width="31%" alt="Settings · updates and about" />
+  <img src="docs/assets/readme/desktop-settings.jpg" width="31%" alt="Settings · appearance (theme / density / material)" />
 </p>
 
 ### Mobile (Expo / React Native)
