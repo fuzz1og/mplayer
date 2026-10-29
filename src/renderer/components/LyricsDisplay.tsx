@@ -84,6 +84,14 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
     return () => cancelAnimationFrame(frame);
   }, [playing, activeWords]);
 
+  // 一次性同步绘制：暂停/刚打开或换词时当前词还没有 --word-fill，先按当前位置画一帧，
+  // 否则已唱区段是白的、当前字却整字灰。播放中由上面的 rAF 每帧覆盖同一个 var。
+  useEffect(() => {
+    const element = currentWordElRef.current;
+    const fill = wordFillAt(activeWords, playbackClock.getPositionNow());
+    if (element && fill) element.style.setProperty('--word-fill', `${(fill.progress * 100).toFixed(2)}%`);
+  }, [playing, currentLineIndex, currentWordIndex, activeWords]);
+
   useEffect(() => {
     if (currentLineIndex < 0 || !activeLineRef.current || !containerRef.current) {
       return;

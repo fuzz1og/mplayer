@@ -132,11 +132,12 @@ describe('歌词逐字 sweep + 字内填充（#722）', () => {
     expect(container.querySelectorAll('.lyrics__line[data-active]')).toHaveLength(1);
   });
 
-  it('暂停时不起 rAF 循环；恢复播放后每帧把当前词的 --word-fill 写大', () => {
+  it('暂停时不跑 rAF，但当前词按当前位置同步画一帧（不是 0%）；恢复后每帧继续写大', () => {
     playbackClock.setPlaying(false);
     const { container } = render(<LyricsDisplay lrcContent={kuwoLrcx} />);
     expect(scheduled).toBe(0);
-    expect(fillPercent(currentWord(container))).toBeNull();
+    // 1.6s 落在「- 」（1516~1817ms）内：暂停态也要画出 27.9%，而不是默认 0% 的整字灰
+    expect(fillPercent(currentWord(container))).toBeCloseTo(27.91, 1);
 
     const nowSpy = vi.spyOn(playbackClock, 'getPositionNow');
     act(() => {
@@ -170,13 +171,27 @@ describe('歌词逐字 sweep + 字内填充（#722）', () => {
     runFrame();
     expect(fillPercent(currentWord(container))).toBeCloseTo(27.91, 1);
 
+    nowSpy.mockReturnValue(2.0);
     seek(2.0);
     expect(currentWord(container)?.textContent).toBe('旺');
-    expect(fillPercent(currentWord(container))).toBeNull();
+    // 换词后的新元素由一次性同步绘制填上：(2.0-1.817)/0.301 ≈ 60.8%，不是空/0%
+    expect(fillPercent(currentWord(container))).toBeCloseTo(60.8, 1);
     nowSpy.mockReturnValue(1.9);
     runFrame();
     expect(fillPercent(currentWord(container))).toBeCloseTo(27.57, 1);
     expect(sungWords(container)).toHaveLength(5);
+  });
+
+  it('暂停中 seek 换词，新当前词也有填充值（不跑循环）', () => {
+    playbackClock.setPlaying(false);
+    const { container } = render(<LyricsDisplay lrcContent={kuwoLrcx} />);
+    expect(currentWord(container)?.textContent).toBe('- ');
+
+    seek(0.5);
+    expect(currentWord(container)?.textContent).toBe('起');
+    // 0.5 / 0.901 ≈ 55.5%
+    expect(fillPercent(currentWord(container))).toBeCloseTo(55.49, 1);
+    expect(scheduled).toBe(0);
   });
 
   it('卸载时取消 rAF 循环', () => {
