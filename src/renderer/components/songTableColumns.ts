@@ -28,6 +28,12 @@ export const COL_DURATION_LIBRARY = 44;
 /** 操作列宽；行尾操作区必须同为这个值，否则表头与行会错开半个列 */
 export const COL_ACTIONS = 140;
 
+/**
+ * 分组搜索行尾「N 个版本」的槽宽：**每一行都占满这个宽度**（没有版本按钮时留空），
+ * 否则按钮宽度会从弹性标题区扣走空间、把专辑列按行推向左侧，同一列表里的专辑文字左右错位。
+ */
+export const COL_VERSIONS = 80;
+
 /** 紧凑操作列宽：`compactActions` 只留单个 28px 圆形「更多」按钮（保留 56px 悬停位） */
 export const COL_ACTIONS_COMPACT = 56;
 

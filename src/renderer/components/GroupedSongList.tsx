@@ -7,6 +7,7 @@ import AddToPlaylistModal from '@/renderer/components/AddToPlaylistModal';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import { useLatest, useStableCallback } from '@/renderer/hooks/useLatest';
+import { COL_VERSIONS, colWidth } from '@/renderer/components/songTableColumns';
 import '@/renderer/styles/songlist.css';
 
 const noop = () => {};
@@ -84,23 +85,27 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
   const stableOnToggleGroup = useStableCallback(onToggleGroup);
 
   /**
-   * 行尾按钮走渲染函数（元素每帧新建会击穿行 memo）；函数身份随 expandedSet 变，
+   * 行尾「N 个版本」走渲染函数（元素每帧新建会击穿行 memo）；函数身份随 expandedSet 变，
    * 于是展开态一变，带按钮的首版行跟着重渲染，aria-expanded 不会停在旧值。
+   * 槽位**每行都占**同一列宽：按钮有无、文案「3 个版本」还是「10 个版本」都不能挪动专辑列。
    */
   const renderActionsLead = useCallback((song: Song) => {
     const group = primaryGroupBySongId.get(song.id);
-    if (!group || group.songs.length <= 1) return null;
-    const isExpanded = expandedSet.has(group.key);
+    const isExpanded = group ? expandedSet.has(group.key) : false;
     return (
-      <button
-        type="button"
-        className="sgroup__versions"
-        aria-expanded={isExpanded}
-        aria-label={`${isExpanded ? '收起' : '展开'} ${group.songs.length} 个版本`}
-        onClick={(e) => { e.stopPropagation(); stableOnToggleGroup?.(group.key); }}
-      >
-        {group.songs.length} 个版本
-      </button>
+      <div className="sgroup__versions-slot" style={colWidth(COL_VERSIONS)}>
+        {group && group.songs.length > 1 && (
+          <button
+            type="button"
+            className="sgroup__versions"
+            aria-expanded={isExpanded}
+            aria-label={`${isExpanded ? '收起' : '展开'} ${group.songs.length} 个版本`}
+            onClick={(e) => { e.stopPropagation(); stableOnToggleGroup?.(group.key); }}
+          >
+            {group.songs.length} 个版本
+          </button>
+        )}
+      </div>
     );
   }, [primaryGroupBySongId, expandedSet, stableOnToggleGroup]);
 
@@ -121,7 +126,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
 
   useInfiniteScroll(scrollRef, { onLoadMore: onLoadMore ?? noop, loading, hasMore });
 
-  const renderRow = (group: SongGroup, song: Song, index: number, lead: boolean) => (
+  const renderRow = (group: SongGroup, song: Song, index: number) => (
     <SongRow
       key={`${group.key}:${song.id}`}
       song={song}
@@ -144,7 +149,7 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
       onToggleSelect={handleToggleSelect}
       onToggleDropdown={handleToggleDropdown}
       onCloseDropdown={handleCloseDropdown}
-      renderActionsLead={lead ? renderActionsLead : undefined}
+      renderActionsLead={renderActionsLead}
     />
   );
 
@@ -172,10 +177,10 @@ const GroupedSongList: React.FC<GroupedSongListProps> = ({
           const expanded = expandedSet.has(group.key);
           return (
             <div className="sgroup" key={group.key}>
-              {renderRow(group, primary, 0, true)}
+              {renderRow(group, primary, 0)}
               {expanded && rest.length > 0 && (
                 <div className="sgroup__rest">
-                  {rest.map((song, i) => renderRow(group, song, i + 1, false))}
+                  {rest.map((song, i) => renderRow(group, song, i + 1))}
                 </div>
               )}
             </div>

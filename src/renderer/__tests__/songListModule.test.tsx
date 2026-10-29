@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { Song, SongGroup } from '@mplayer/core';
 import SongList from '@/renderer/components/SongList';
 import GroupedSongList from '@/renderer/components/GroupedSongList';
+import { COL_VERSIONS } from '@/renderer/components/songTableColumns';
 import { getNextSongInQueue, usePlayerStore } from '@/renderer/store/playerStore';
 
 // 用 SongCover 的渲染次数当「这一行是否重渲染」的探针：
@@ -365,6 +366,22 @@ describe('分组搜索结果：默认扁平 + 就地展开其余版本（#694）
     renderGrouped({ groups: [{ key: 'only', name: '单曲', artist: '歌手', songs: [song(9)] }] });
 
     expect(screen.queryByRole('button', { name: /个版本/ })).toBeNull();
+  });
+
+  // #721：按钮曾是行的 flex 兄弟节点，宽度直接从弹性标题区扣，专辑列被按行推向左侧。
+  // 现在每行都占一个固定列宽的槽（含单版本组与展开的其余版本），专辑列落点与按钮无关。
+  it('版本槽每行都占同一列宽：单版本组、展开的其余版本也保留列位', () => {
+    renderGrouped({ expandedKeys: ['sunny'] });
+
+    const rows = Array.from(document.querySelectorAll('.song-row')) as HTMLElement[];
+    expect(rows).toHaveLength(4);
+    const slots = rows.map((row) => row.querySelector('.sgroup__versions-slot') as HTMLElement | null);
+    expect(slots.filter(Boolean)).toHaveLength(rows.length);
+
+    const widths = new Set(slots.map((slot) => slot!.style.getPropertyValue('--col-width')));
+    expect(widths).toEqual(new Set([`${COL_VERSIONS}px`]));
+    // 按钮仍只出现在多版本组的首行
+    expect(screen.getAllByRole('button', { name: /个版本/ })).toHaveLength(2);
   });
 
   it('展开后点其中一首：队列 = 该组版本 + 组内下标（D1）', () => {
