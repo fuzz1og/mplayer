@@ -21,7 +21,13 @@ function seek(position: number): void {
   });
 }
 
-describe('歌词逐字高亮（#722）', () => {
+/** 当前行里带 data-sung 的词（行首 → 当前字，卡拉 OK 已唱区段） */
+function sungWords(container: HTMLElement): string[] {
+  return [...container.querySelectorAll('.lyrics__line[data-active] .lyrics__word[data-sung]')]
+    .map((word) => word.textContent ?? '');
+}
+
+describe('歌词逐字 sweep（#722）', () => {
   beforeEach(() => {
     playbackClock.destroy();
     sampledPosition = 1.6;
@@ -30,25 +36,32 @@ describe('歌词逐字高亮（#722）', () => {
     playbackClock.setPosition(1.6);
   });
 
-  it('当前行正文不含行内标签，当前词单独标 data-active', () => {
+  it('当前行正文不含行内标签，已唱区段从行首连续到当前字', () => {
     const { container } = render(<LyricsDisplay lrcContent={kuwoLrcx} />);
 
     expect(container.textContent).not.toContain('<');
     const activeLines = container.querySelectorAll('.lyrics__line[data-active]');
     expect(activeLines).toHaveLength(1);
     expect(activeLines[0].textContent).toBe('起风了 - 旺仔小乔');
-    // 1.6s 落在「- 」（1516~1817ms）
-    const activeWords = container.querySelectorAll('.lyrics__word[data-active]');
-    expect(activeWords).toHaveLength(1);
-    expect(activeWords[0].textContent).toBe('- ');
+
+    // 1.6s 落在第 4 个词「- 」（1516~1817ms）内：行首到它共 4 个词标已唱
+    expect(sungWords(container)).toEqual(['起', '风', '了 ', '- ']);
+
+    const flags = [...activeLines[0].querySelectorAll('.lyrics__word')].map((word) => word.hasAttribute('data-sung'));
+    expect(flags).toEqual([true, true, true, true, false, false, false, false]);
+    // 非当前行一个都不标
+    expect(container.querySelectorAll('.lyrics__line:not([data-active]) .lyrics__word[data-sung]')).toHaveLength(0);
   });
 
-  it('同一行内换字只挪 data-active 的位置', () => {
+  it('时间推进/回退时已唱区段随之变长/变短', () => {
     const { container } = render(<LyricsDisplay lrcContent={kuwoLrcx} />);
-    expect(container.querySelector('.lyrics__word[data-active]')?.textContent).toBe('- ');
+    expect(sungWords(container)).toHaveLength(4);
+
+    seek(0.5);
+    expect(sungWords(container)).toEqual(['起']);
 
     seek(2.0);
-    expect(container.querySelector('.lyrics__word[data-active]')?.textContent).toBe('旺');
+    expect(sungWords(container)).toEqual(['起', '风', '了 ', '- ', '旺']);
     expect(container.querySelectorAll('.lyrics__line[data-active]')).toHaveLength(1);
   });
 
@@ -56,6 +69,7 @@ describe('歌词逐字高亮（#722）', () => {
     const { container } = render(<LyricsDisplay lrcContent={PLAIN_LRC} />);
 
     expect(container.querySelectorAll('.lyrics__word')).toHaveLength(0);
+    expect(container.querySelector('[data-sung]')).toBeNull();
     expect(container.querySelector('.lyrics__line[data-active]')?.textContent).toBe('故事的小黄花');
   });
 });

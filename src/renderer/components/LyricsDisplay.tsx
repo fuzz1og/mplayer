@@ -38,7 +38,8 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
     return findCurrentLyricIndex(parsedLyrics.lines, currentTime);
   });
 
-  // 逐字歌词（#722）同理只在换字时重渲染：返回原生数字，未变化不打扰订阅者
+  // 逐字歌词（#722）同理只在换字时重渲染：返回原生数字，未变化不打扰订阅者。
+  // 返回的是「已唱到第几个词」，渲染时行首到它整段标已唱（卡拉 OK sweep）。
   const currentWordIndex = usePlaybackSelector((snapshot) => {
     const lines = parsedLyrics?.lines;
     if (!lines || lines.length === 0) return -1;
@@ -104,7 +105,7 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
                       <span
                         key={wordIndex}
                         className="lyrics__word"
-                        data-active={(isActive && wordIndex === currentWordIndex) || undefined}
+                        data-sung={(isActive && wordIndex <= currentWordIndex) || undefined}
                       >
                         {word.text}
                       </span>

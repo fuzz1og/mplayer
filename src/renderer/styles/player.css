@@ -299,11 +299,6 @@
   text-shadow: none;
 }
 
-/* 逐字时间轴（酷我 lrcx，#722）：当前行里正在唱的那个词 */
-.lyrics-page__lyrics .lyrics__word[data-active] {
-  color: var(--accent);
-}
-
 .lyrics-page__lyrics .lyrics__empty-text {
   color: var(--text-tertiary);
   font-size: var(--text-sm);
